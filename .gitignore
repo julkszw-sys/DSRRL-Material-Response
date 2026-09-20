@@ -1,0 +1,16 @@
+# Generated binaries and release packages
+*.addon64
+*.dll
+*.exe
+*.bin
+*.zip
+
+# Local build inputs / outputs
+development_basis.addon64
+reference/loader_bytes.bin
+__pycache__/
+*.pyc
+
+# Game-derived assets are release inputs, not source-control content
+DSRRL/
+PTDE_GI_ENVSPEC_PACK_RGBA.bin
