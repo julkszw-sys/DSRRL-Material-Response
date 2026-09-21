@@ -1,0 +1,44 @@
+{
+  "build": "Material Response 1.45 P_Metal PTDE Domain Bridge V4B runtime candidate",
+  "basis": "V3 exact EnvSpec island",
+  "basis_addon_sha256": "def236254e8baf3727582f28d9fc24c03f16181e874b4bd922cbbe190782ed74",
+  "output_addon_sha256": "68402c2bb784385b88157234216c48f3a1605ab916b5290c0c3174d3b768cf16",
+  "construction_status": "PASS",
+  "runtime_status": "NOT_TESTED",
+  "pixel_status": "OPEN",
+  "operator_scope": "shared no-PointLight P_Metal atmosphere-domain + terminal",
+  "reason": "Build108/V3 removes hard-black starvation but globally cyan-tints equipment P_Metal. V4B repairs the proven DSR-vs-PTDE ordinary HemEnv domain mismatch rather than applying a gain.",
+  "mutation": {
+    "prefog": "recover PTDE-linear FogRGB q from DSR cb12.rgb=abs(q)^2.2 using log/mul(1/2.2)/exp; keep surface result linear",
+    "fog": "blend linear surface against recovered linear FogRGB with existing homologous Fog weight",
+    "lightscattering": "retain existing cb13..20 LightScattering kernel",
+    "post_lightscattering": "remove DSR-only abs(x)^2.2 continuation entirely (NOP 21 dwords)",
+    "terminal": "set SAT modifier on final separate RGB MOV; alpha untouched"
+  },
+  "unchanged": [
+    "V3 PTDE EnvSpec t12/t14 resources",
+    "direct reflection R",
+    "LOD0",
+    "RGB/A decode",
+    "PTDE A/B source and beta",
+    "PTDE c101/SpecRGB/COLOR0 path",
+    "exact PTDE s12/s14 sampler",
+    "Upper/Lower authored inputs",
+    "PointLight",
+    "Fog Begin/End/strength",
+    "LightScattering authored constants",
+    "routing/material gate"
+  ],
+  "known_residual": "PTDE c135.x/c135.y scene-encoding scale is not hardcoded or guessed in V4B; terminal SAT is exact, c135 dynamic scale remains OPEN. This candidate is intended to test the now-closed atmosphere-domain mismatch without conflating it with an unproven 0.5 constant.",
+  "changed_dxbc_indices": [33,34,35],
+  "embedded_dxbc_count": 78,
+  "all_dxbc_checksums_valid": true,
+  "targets": [
+    {"index":33,"old_sha256":"222eac38b60b49ca9ff781c70453a3b11d9d567cc7d130f01170aa460094f950","new_sha256":"fc4868f81857e4afd1091c586d16d5f9c6fbda10706473f4aa6c93a32d1698a1","terminal_sat":true,"checksum_valid":true},
+    {"index":34,"old_sha256":"c1ec33fa97b16c36ddfa07da6026bc8f86ffb99c599c7c14a1a49677060c5d87","new_sha256":"b7c863c097045fb40d89f6d6faf1c4c8b50efb189dab5e5b004a66fd218ece03","terminal_sat":true,"checksum_valid":true},
+    {"index":35,"old_sha256":"28ba1ea82d405eec1a07e55c043494dd440fd3f092d5c29418be4c3577fa3727","new_sha256":"2619ef92199d5d8ac7dd25404c50b46ff425f22c911ef86e2b7c7f300deff618","terminal_sat":true,"checksum_valid":true}
+  ],
+  "runtime_zip_sha256": "589aec55b3428ebd67ffdd8c8c45c47abf817c615c8d9ad22dd98afe145088df",
+  "supabase_addon_build_id": 110,
+  "supabase_package_artifact_id": 1243
+}
