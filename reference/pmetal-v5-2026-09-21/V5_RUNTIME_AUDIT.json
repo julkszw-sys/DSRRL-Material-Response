@@ -1,0 +1,23 @@
+{
+  "build": "Material Response 1.45 P_Metal Fresh SpecRGB V5",
+  "basis": "V3 exact EnvSpec island (build107)",
+  "basis_addon_sha256": "def236254e8baf3727582f28d9fc24c03f16181e874b4bd922cbbe190782ed74",
+  "output_addon_sha256": "c1ec95e7942121a19173f6fceb391a5c4be9543bff3b58a1cad7e4e532833444",
+  "construction_status": "PASS",
+  "runtime_status": "NOT_TESTED",
+  "pixel_status": "OPEN",
+  "root_cause": "V3 final material multiply consumed stale DSR temp r11/r10/r9 after original t10 SpecRGB sample had been overwritten.",
+  "fix": "reacquire t10 at final material cut into r2.xyz; then fresh SpecRGB * cb12[0].xyz(c101) * COLOR0; terminal RGB SAT",
+  "changed_dxbc_indices": [33,34,35],
+  "all_78_dxbc_checksums_valid": true,
+  "addon_diff_confined_to_target_dxbc": true,
+  "v4b_atmosphere_domain_patch_inherited": false,
+  "ul_changed": false,
+  "pointlight_changed": false,
+  "envdiffuse_changed": false,
+  "targets": [
+    {"index":33,"old_sample_word":1316,"fresh_sample_word":1652,"final_material_mul_word":1667,"old_wrong_material_register":"r11","new_material_register":"r2 fresh t10 SpecRGB","terminal_word":2822,"terminal_sat":true,"sha256_before":"222eac38b60b49ca9ff781c70453a3b11d9d567cc7d130f01170aa460094f950","sha256_after":"c898173cc7c63cf94453aaaf0478e5999021972c5c6e4270188316c13fa040e6","checksum_valid":true},
+    {"index":34,"old_sample_word":1225,"fresh_sample_word":1561,"final_material_mul_word":1576,"old_wrong_material_register":"r10","new_material_register":"r2 fresh t10 SpecRGB","terminal_word":2741,"terminal_sat":true,"sha256_before":"c1ec33fa97b16c36ddfa07da6026bc8f86ffb99c599c7c14a1a49677060c5d87","sha256_after":"f77770b944e913c9c248495ab7738117f97f0d453839fa264bc37edb4e5c1df7","checksum_valid":true},
+    {"index":35,"old_sample_word":885,"fresh_sample_word":1221,"final_material_mul_word":1236,"old_wrong_material_register":"r9","new_material_register":"r2 fresh t10 SpecRGB","terminal_word":2394,"terminal_sat":true,"sha256_before":"28ba1ea82d405eec1a07e55c043494dd440fd3f092d5c29418be4c3577fa3727","sha256_after":"61d28e36aa41ec61ac5070c899eb5ea31bb9a652d2037ea889e3e11598d5979e","checksum_valid":true}
+  ]
+}
