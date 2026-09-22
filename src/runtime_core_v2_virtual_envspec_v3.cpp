@@ -653,6 +653,32 @@ bool create_virtual_cube(
     return true;
 }
 
+void on_destroy_device_cache(reshade::api::device *device)
+{
+    if (device == nullptr)
+        return;
+
+    std::lock_guard lock(g_mutex);
+    g_virtual_cube_cache.erase(device);
+
+    for (auto it = g_replacements_by_resource.begin();
+         it != g_replacements_by_resource.end();) {
+        if (it->second.device == device)
+            it = g_replacements_by_resource.erase(it);
+        else
+            ++it;
+    }
+
+    for (auto it = g_source_resource_by_view.begin();
+         it != g_source_resource_by_view.end();) {
+        if (g_replacements_by_resource.find(it->second) ==
+            g_replacements_by_resource.end())
+            it = g_source_resource_by_view.erase(it);
+        else
+            ++it;
+    }
+}
+
 void on_init_resource(
     reshade::api::device *device,
     const reshade::api::resource_desc &desc,
@@ -990,6 +1016,8 @@ extern "C" __declspec(dllexport) bool AddonInit(
     set_snapshot_sink(log_snapshot);
     register_reshade_events();
 
+    reshade::register_event<reshade::addon_event::destroy_device>(
+        on_destroy_device_cache);
     reshade::register_event<reshade::addon_event::init_resource>(
         on_init_resource);
     reshade::register_event<reshade::addon_event::destroy_resource>(
@@ -1013,6 +1041,8 @@ extern "C" __declspec(dllexport) void AddonUninit(
 
     reshade::unregister_event<reshade::addon_event::push_descriptors>(
         on_push_descriptors);
+    reshade::unregister_event<reshade::addon_event::destroy_device>(
+        on_destroy_device_cache);
     reshade::unregister_event<reshade::addon_event::destroy_resource_view>(
         on_destroy_resource_view);
     reshade::unregister_event<reshade::addon_event::init_resource_view>(
