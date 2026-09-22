@@ -32,8 +32,8 @@ jobs:
           Copy-Item src/runtime_core_v2_full_envspec_carrier_v3_8.cpp src/runtime_core_v2_full_envspec_carrier_v3_6.cpp -Force
       - name: Configure
         run: cmake -S . -B build -DRESHade_INCLUDE_DIR="${{ github.workspace }}/_reshade/include"
-      - name: Build
-        run: cmake --build build --config Release --target dsrrl_runtime_core_v2_full_envspec_carrier_v36
+      - name: Build addon and tests
+        run: cmake --build build --config Release --target dsrrl_runtime_core_v2_full_envspec_carrier_v36 dsrrl_runtime_core_v2_tests
       - name: Test
         run: ctest --test-dir build -C Release --output-on-failure
       - name: Verify V3.8 addon
