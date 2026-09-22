@@ -89,9 +89,8 @@ Every activation must produce one restore.
 At a frame boundary, an active transaction is treated as a restore invariant violation:
 
 - `unrestored += 1`
-- `fail_open += 1`
 
-The tracker then clears the transaction marker so the diagnostic state itself cannot cascade.
+It is deliberately **not** counted as fail-open. Fail-open means the bridge refused to mutate and stock DSR remained intact. A missing restore happens after activation and is therefore a distinct integrity fault. The tracker clears only its bookkeeping marker; operator-specific state restoration is still mandatory.
 
 The state-restoration implementation remains operator-specific. Runtime Core V2 records the invariant; it does not pretend that all operators touch the same D3D state.
 
@@ -115,6 +114,7 @@ Each operator exposes:
 - `rejected`
 - `stale_view`
 - `unrestored`
+- `restore_faults`
 
 This allows a runtime report to answer a concrete question such as:
 
