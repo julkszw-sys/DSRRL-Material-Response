@@ -1,5 +1,7 @@
 #include "runtime_core_v2.hpp"
 
+#include <algorithm>
+
 namespace dsrrl::runtime_v2 {
 
 route_decision tracker::evaluate_route(route_contract contract, route_observation observation) const noexcept {
@@ -17,6 +19,31 @@ void tracker::index_logical_locked(
     logical_index_[logical_hash].push_back(resource_ref{handle, generation});
 }
 
+void tracker::remove_logical_locked(
+    std::uint64_t handle,
+    std::uint32_t generation,
+    std::uint64_t logical_hash) {
+    if (logical_hash == 0)
+        return;
+
+    const auto iit = logical_index_.find(logical_hash);
+    if (iit == logical_index_.end())
+        return;
+
+    auto &refs = iit->second;
+    refs.erase(
+        std::remove_if(
+            refs.begin(),
+            refs.end(),
+            [handle, generation](const resource_ref &ref) {
+                return ref.handle == handle && ref.generation == generation;
+            }),
+        refs.end());
+
+    if (refs.empty())
+        logical_index_.erase(iit);
+}
+
 std::uint32_t tracker::init_resource(std::uint64_t handle, std::uint64_t desc_hash, std::uint64_t logical_hash) {
     if (handle == 0) return 0;
     std::lock_guard lock(mutex_);
@@ -28,6 +55,9 @@ std::uint32_t tracker::init_resource(std::uint64_t handle, std::uint64_t desc_ha
         ++r.generation;
         if (r.generation == 0) ++r.generation;
     }
+
+    if (was_alive && old_logical_hash != 0 && old_logical_hash != logical_hash)
+        remove_logical_locked(handle, r.generation, old_logical_hash);
 
     r.desc_hash = desc_hash;
     r.logical_hash = logical_hash;
@@ -47,6 +77,10 @@ bool tracker::annotate_resource(std::uint64_t handle, std::uint64_t desc_hash, s
         return false;
 
     const std::uint64_t old_logical_hash = it->second.logical_hash;
+
+    if (old_logical_hash != 0 && old_logical_hash != logical_hash)
+        remove_logical_locked(handle, it->second.generation, old_logical_hash);
+
     it->second.desc_hash = desc_hash;
     it->second.logical_hash = logical_hash;
 
@@ -64,6 +98,12 @@ bool tracker::annotate_resource_logical(std::uint64_t handle, std::uint64_t logi
         return false;
 
     if (it->second.logical_hash != logical_hash) {
+        if (it->second.logical_hash != 0)
+            remove_logical_locked(
+                handle,
+                it->second.generation,
+                it->second.logical_hash);
+
         it->second.logical_hash = logical_hash;
         index_logical_locked(handle, it->second.generation, logical_hash);
     }
@@ -74,8 +114,15 @@ bool tracker::annotate_resource_logical(std::uint64_t handle, std::uint64_t logi
 void tracker::destroy_resource(std::uint64_t handle) {
     if (handle == 0) return;
     std::lock_guard lock(mutex_);
-    if (auto it = resources_.find(handle); it != resources_.end())
+    if (auto it = resources_.find(handle); it != resources_.end()) {
+        if (it->second.alive && it->second.logical_hash != 0)
+            remove_logical_locked(
+                handle,
+                it->second.generation,
+                it->second.logical_hash);
+
         it->second.alive = false;
+    }
 }
 
 bool tracker::init_view(std::uint64_t view, std::uint64_t resource) {
