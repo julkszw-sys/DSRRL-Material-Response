@@ -14,12 +14,31 @@ from pathlib import Path
 
 EXPECTED_BASE_SHA256 = "db2e6547b5fb5516d4ad6559173e66421315d1635ca0c08e8141b0de2f57f966"
 EXPECTED_OUTPUT_SIZE = 1_803_264
-EXPECTED_OUTPUT_SHA256 = "13e722f9472e00c1922baecefe121bf1b7b9dd6129f1d2028d64568d74bb5ab7"
+EXPECTED_OUTPUT_SHA256 = "3dcb50bee7d4a1ffcb47c2e9d116cbad5da322f6719e3cf2ecdbe6846db63000"
 
 LOADER_RVA = 0x1BC100
 LOADER_SIZE = 1501
 
 PATCHES = {
+    # Release telemetry shutdown: remove the startup shader-count log, never
+    # register the periodic telemetry callback, and make the callback inert as
+    # a second fail-safe. Error/fail-open logging is intentionally preserved.
+    0x006A67: (
+        bytes.fromhex("e8 c4 f2 ff ff"),
+        bytes.fromhex("90 90 90 90 90"),
+        "disable startup shader-count telemetry log",
+    ),
+    0x006EF0: (
+        bytes.fromhex("48 89 7c 24 08"),
+        bytes.fromhex("c3 90 90 90 90"),
+        "hard-disable periodic telemetry callback",
+    ),
+    0x008E37: (
+        bytes.fromhex("48 8d 15 b2 e0 ff ff"),
+        bytes.fromhex("e9 0d 00 00 00 90 90"),
+        "skip periodic telemetry callback registration",
+    ),
+    # Keep the functional continuation, bypass only one-shot release telemetry.
     0x10B245: (
         bytes.fromhex("b8 01 00 00 00"),
         bytes.fromhex("e9 3f 00 00 00"),
@@ -40,6 +59,8 @@ PATCHES = {
         bytes.fromhex("e9 44 00 00 00"),
         "bypass Diffuse activation telemetry",
     ),
+    # EnvSpec release cut: skip external loader, then force a null resource at
+    # the bridge gate. The existing code immediately follows its fail-open path.
     0x1B919C: (
         bytes.fromhex("e8 5f 2f 00 00 eb 3a"),
         bytes.fromhex("e9 3c 00 00 00 90 90"),
@@ -58,6 +79,8 @@ TELEMETRY_STRINGS = (
     b"[DSRRL 1.45 TELEMETRY] NORMAL t2 ACTIVE",
     b"[DSRRL 1.45 TELEMETRY] DIFFUSE t0 ACTIVE",
     b"[DSRRL 1.45 TELEMETRY] ENVSPEC t12+t14 ACTIVE",
+    b"/24 c101 shaders ",
+    b": diffuse shaders ",
 )
 
 TITLE_OFF, TITLE_CAP = 0xDC58, 0x48
