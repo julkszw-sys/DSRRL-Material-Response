@@ -14,12 +14,13 @@ int main()
     assert(g1 == 1);
     assert(t.init_resource(0x100, 0xBBB, 0x222) == g1);
     assert(t.init_view(0x200, 0x100));
+    assert(t.annotate_resource(0x100, 0xBEE, 0x223));
 
     auto r = t.resolve_view(0x200, operator_kind::envspec);
     assert(r);
     assert(r->generation == 1);
-    assert(r->desc_hash == 0xBBB);
-    assert(r->logical_hash == 0x222);
+    assert(r->desc_hash == 0xBEE);
+    assert(r->logical_hash == 0x223);
 
     t.destroy_resource(0x100);
     assert(!t.resolve_view(0x200, operator_kind::envspec));
@@ -38,6 +39,27 @@ int main()
     assert(t.bind_pipeline(0x402, 0x302));
     assert(t.begin_draw(0x401) == 1);
     assert(t.begin_draw(0x402) == 1);
+
+    const std::uint64_t slot12_view = 0x200;
+    assert(t.bind_pixel_shader_views(0x401, 12, 1, &slot12_view));
+
+    // The original view still points at resource generation 1, while handle
+    // 0x100 was reused as generation 2 above.
+    assert(!t.resolve_bound_pixel_shader_resource(
+        0x401, 12, operator_kind::envspec));
+
+    t.destroy_view(0x200);
+    assert(t.init_view(0x200, 0x100));
+
+    // The command still references the old view generation until it is rebound.
+    assert(!t.resolve_bound_pixel_shader_resource(
+        0x401, 12, operator_kind::envspec));
+
+    assert(t.bind_pixel_shader_views(0x401, 12, 1, &slot12_view));
+    const auto bound_resource = t.resolve_bound_pixel_shader_resource(
+        0x401, 12, operator_kind::envspec);
+    assert(bound_resource);
+    assert(bound_resource->generation == 2);
 
     const auto c1 = t.command_state(0x401);
     const auto c2 = t.command_state(0x402);
