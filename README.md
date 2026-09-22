@@ -1,64 +1,57 @@
 # DSRRL Material Response
 
-Source and build files for the Material Response component of **Dark Souls Remastered – Restored Lighting**.
+Source/build material for the **Material Response 1.45 clean release** of Dark Souls Remastered – Restored Lighting.
 
-The addon is loaded through ReShade and changes selected renderer/material paths inside Dark Souls Remastered. DSR remains the host renderer; unsupported or unknown routes fall back to the stock game path.
+The addon is loaded by ReShade and changes only selected verified renderer/material paths inside Dark Souls Remastered. DSR remains the host renderer; unsupported or unmapped routes fail open to the stock game path.
 
-## Current release
+## Release branch scope
 
-**Material Response 1.45**
+This branch intentionally ships **without PTDE EnvSpec/cubemap replacement**.
 
-`DSRRL_Material_Response_1.45.addon64`
-
-SHA-256:
-
-`41690c6212157eb772ae0c75c055d0bb7a842709f65f02c3689b87714151e1f7`
-
-Size:
-
-`1,803,264 bytes`
-
-## What it contains
-
-The current addon includes renderer-side support for:
+Included runtime features:
 
 - material-response corrections
 - PTDE SpecRGB transport
 - subsurface material handling
 - equipment diffuse and normal resource bridges
-- PTDE PackedGI EnvSpec cubemap substitution
-- guarded fail-open behaviour when a resource or route cannot be verified
+- guarded fail-open behaviour for unsupported/unmapped routes
 
-The EnvSpec cubemap data is stored outside the addon at:
+Removed/disabled for release:
 
-`DSRRL\EnvSpec\PackedGI\PTDE_GI_ENVSPEC_PACK_RGBA.bin`
+- EnvSpec/cubemap substitution
+- external PackedGI loader and PackedGI dependency
+- development/activation telemetry for SpecRGB, Subsurf, Normal, Diffuse and EnvSpec
 
-The addon checks the file size and SHA-256 before enabling that resource path.
+The exact release addon remains a ReShade addon (`.addon64`). ReShade itself remains a separate `dxgi.dll`; this branch does not fork or embed ReShade.
+
+## Current clean binary
+
+`DSRRL_Material_Response_1.45.addon64`
+
+Size: `1,803,264 bytes`
+
+SHA-256: `13e722f9472e00c1922baecefe121bf1b7b9dd6129f1d2028d64568d74bb5ab7`
+
+Version: `1.45.0.0`
 
 ## Building
 
 See [BUILD.md](BUILD.md).
 
-The final 1.45 packaging/build step is reproducible from the exact development basis and the exact PackedGI resource file. The expected output hash is checked by the build script.
+The clean release is reproduced from the exact integrated 1.45 basis listed there. No EnvSpec/PackedGI sidecar is required for this build step.
 
-## Source
+## Release verification
 
-The readable EnvSpec loader implementation is in:
+Run:
 
-`src/envspec_loader.c`
+```text
+python tools/verify_release.py DSRRL_Material_Response_1.45.addon64
+```
 
-The shipped release uses the equivalent fixed Win64 loader bytes stored in:
-
-`reference/loader_bytes.hex`
-
-Those bytes can be materialized with:
-
-`python tools/materialize_loader.py`
+The verifier checks exact identity plus release invariants: telemetry absent, EnvSpec loader removed, and the EnvSpec resource path forced fail-open.
 
 ## Security
 
-The addon runs in-process with the game and therefore uses APIs that can look unusual to heuristic antivirus engines, including renderer hooks, resource tracking and controlled memory-protection changes.
-
-It does not intentionally provide networking, downloading, persistence, services, drivers or process-launching functionality.
+The addon runs in-process with the game and uses renderer hooks/resource tracking. It does not intentionally provide networking, downloading, persistence, services, drivers or process-launching functionality.
 
 See [SECURITY.md](SECURITY.md) and [docs/NEXUS_REVIEW.md](docs/NEXUS_REVIEW.md).
