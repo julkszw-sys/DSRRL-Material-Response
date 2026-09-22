@@ -13,6 +13,7 @@ on:
       - src/runtime_core_v2_reshade.cpp
       - src/runtime_core_v2_diagnostic_addon.cpp
       - src/runtime_core_v2_virtual_envspec.cpp
+      - src/runtime_core_v2_virtual_envspec_v2.cpp
       - tests/runtime_core_v2_tests.cpp
       - .github/workflows/runtime-core-v2.yml
 
@@ -69,4 +70,17 @@ jobs:
         with:
           name: DSRRL_PTDE_Virtual_EnvSpec_V1
           path: build/Release/DSRRL_PTDE_Virtual_EnvSpec_V1.addon64
+          if-no-files-found: error
+      - name: Verify PTDE virtual EnvSpec V2 addon
+        shell: pwsh
+        run: |
+          $path = "build/Release/DSRRL_PTDE_Virtual_EnvSpec_V2.addon64"
+          if (!(Test-Path $path)) { throw "Virtual EnvSpec V2 addon not produced" }
+          Get-Item $path | Format-List Name,Length
+          Get-FileHash $path -Algorithm SHA256 | Format-List
+      - name: Upload PTDE virtual EnvSpec V2 addon
+        uses: actions/upload-artifact@v4
+        with:
+          name: DSRRL_PTDE_Virtual_EnvSpec_V2
+          path: build/Release/DSRRL_PTDE_Virtual_EnvSpec_V2.addon64
           if-no-files-found: error
