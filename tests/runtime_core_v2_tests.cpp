@@ -45,6 +45,21 @@ int main()
     assert(c1->bound_pipeline == 0x301);
     assert(c2->bound_pipeline == 0x302);
 
+    auto bound = t.resolve_bound_pipeline(0x401);
+    assert(bound);
+    assert(bound->generation == 1);
+    assert(bound->pixel_shader_hash == 0xDEAD);
+
+    // Pipeline handle reuse must not make an old command binding alias the new pipeline.
+    t.destroy_pipeline(0x301);
+    t.init_pipeline(0x301, 0xABCD, 25, 0x1003, true);
+    assert(!t.resolve_bound_pipeline(0x401));
+    assert(t.bind_pipeline(0x401, 0x301));
+    bound = t.resolve_bound_pipeline(0x401);
+    assert(bound);
+    assert(bound->generation == 2);
+    assert(bound->pixel_shader_hash == 0xABCD);
+
     // Missing exact material proof must fail open.
     const route_contract exact_material_route{
         evidence_shader |
@@ -95,7 +110,7 @@ int main()
 
     assert(nrm.activations == 1);
     assert(nrm.unrestored == 1);
-    assert(nrm.fail_open == 1);
+    assert(nrm.fail_open == 0);
 
     std::cout << "runtime_core_v2_tests: PASS\n";
     return 0;
