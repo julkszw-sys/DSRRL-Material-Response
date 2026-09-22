@@ -64,7 +64,8 @@ ReShade-dependent targets require:
 Optional source targets are separated by intent:
 
 - `DSRRL_BUILD_DIAGNOSTICS=ON`
-- `DSRRL_BUILD_EXPERIMENTS=ON`
+- `DSRRL_BUILD_EXPERIMENTS=ON` — current experiments only
+- `DSRRL_BUILD_LEGACY_EXPERIMENTS=ON` — superseded experiments for compatibility/compile checks only
 
 Example:
 
