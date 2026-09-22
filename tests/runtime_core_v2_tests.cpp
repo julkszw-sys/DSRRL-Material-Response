@@ -22,6 +22,21 @@ int main()
     assert(r->desc_hash == 0xBEE);
     assert(r->logical_hash == 0x223);
 
+    // Logical identity is generation-safe and exact. A unique live logical
+    // resource resolves; ambiguous identities fail open instead of guessing.
+    auto logical = t.resolve_logical_resource(0x223, operator_kind::normal);
+    assert(logical);
+    assert(logical->handle == 0x100);
+    assert(logical->generation == 1);
+
+    assert(t.init_resource(0x110, 0xDDD, 0x444) == 1);
+    assert(t.init_resource(0x111, 0xEEE, 0x444) == 1);
+    assert(!t.resolve_logical_resource(0x444, operator_kind::diffuse));
+    t.destroy_resource(0x111);
+    logical = t.resolve_logical_resource(0x444, operator_kind::diffuse);
+    assert(logical);
+    assert(logical->handle == 0x110);
+
     t.destroy_resource(0x100);
     assert(!t.resolve_view(0x200, operator_kind::envspec));
 
@@ -61,6 +76,15 @@ int main()
     assert(bound_resource);
     assert(bound_resource->generation == 2);
 
+    // Re-annotation moves the live resource to a new logical identity without
+    // letting stale reverse-index entries alias it.
+    assert(t.annotate_resource_logical(0x100, 0x555));
+    assert(!t.resolve_logical_resource(0x333, operator_kind::normal));
+    logical = t.resolve_logical_resource(0x555, operator_kind::normal);
+    assert(logical);
+    assert(logical->handle == 0x100);
+    assert(logical->generation == 2);
+
     const auto c1 = t.command_state(0x401);
     const auto c2 = t.command_state(0x402);
     assert(c1 && c2);
@@ -81,6 +105,15 @@ int main()
     assert(bound);
     assert(bound->generation == 2);
     assert(bound->pixel_shader_hash == 0xABCD);
+
+    // Source-level staged telemetry replaces the old binary one-shot flags.
+    t.note_stage(operator_kind::diffuse, route_stage::capture);
+    t.note_stage(operator_kind::diffuse, route_stage::receiver);
+    t.note_stage(operator_kind::diffuse, route_stage::resource_lookup);
+    t.note_stage(operator_kind::diffuse, route_stage::route_gate);
+    t.note_stage(operator_kind::diffuse, route_stage::sidecar_ready);
+    t.note_stage(operator_kind::diffuse, route_stage::final_bind);
+    t.note_stage(operator_kind::diffuse, route_stage::restore);
 
     // Missing exact material proof must fail open.
     const route_contract exact_material_route{
@@ -125,10 +158,32 @@ int main()
     const auto &nrm = snap.operators[
         static_cast<std::size_t>(operator_kind::normal)];
 
+    const auto &dif_stages = snap.stages[
+        static_cast<std::size_t>(operator_kind::diffuse)];
+
+    assert(dif_stages.hits[static_cast<std::size_t>(route_stage::capture)] == 1);
+    assert(dif_stages.hits[static_cast<std::size_t>(route_stage::receiver)] == 1);
+    assert(dif_stages.hits[static_cast<std::size_t>(route_stage::resource_lookup)] == 1);
+    assert(dif_stages.hits[static_cast<std::size_t>(route_stage::route_gate)] == 1);
+    assert(dif_stages.hits[static_cast<std::size_t>(route_stage::sidecar_ready)] == 1);
+    assert(dif_stages.hits[static_cast<std::size_t>(route_stage::final_bind)] == 1);
+    assert(dif_stages.hits[static_cast<std::size_t>(route_stage::restore)] == 1);
+
+    assert(snap.live_logical_resources == 2);
+
     assert(env.activations == 1);
     assert(env.restores == 1);
     assert(env.fail_open == 1);
     assert(env.rejected == 1);
+    assert(env.logical_miss == 0);
+
+    const auto &dif = snap.operators[
+        static_cast<std::size_t>(operator_kind::diffuse)];
+    assert(dif.logical_ambiguous == 1);
+
+    const auto &normal = snap.operators[
+        static_cast<std::size_t>(operator_kind::normal)];
+    assert(normal.logical_miss == 1);
 
     assert(nrm.activations == 1);
     assert(nrm.unrestored == 1);
