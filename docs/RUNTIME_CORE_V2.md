@@ -44,9 +44,9 @@ The tracker stores a generation for:
 - resources;
 - pipelines.
 
-A resource view records the resource generation it was created against. If the resource is destroyed and the handle later reappears, an old view no longer resolves to the new resource.
+A resource view has its own generation and also records the resource generation it was created against. If either a view handle or resource handle is destroyed and later reused, an old command-list binding no longer resolves to the new object.
 
-This prevents accidental cross-resource activation caused by handle reuse.
+Pixel-shader SRV slots are tracked as `(view handle, view generation)`, then resolved through the live resource generation and logical identity. This prevents accidental cross-resource activation caused by either view-handle or resource-handle reuse.
 
 ### Route contracts
 
@@ -132,6 +132,7 @@ The shipping addon already targets ReShade API 20. The intended adapter uses the
 - `init_resource_view / destroy_resource_view`
 - `init_pipeline / destroy_pipeline`
 - `bind_pipeline`
+- `push_descriptors` for D3D11 pixel-shader SRV slots
 - descriptor-binding events already used by the bridge
 - draw events already used by the bridge
 - `present` as a bounded proof/report boundary
@@ -179,7 +180,8 @@ The initial test set covers:
 
 - repeated resource init without false generation change;
 - resource handle reuse;
-- stale resource-view rejection;
+- resource-view handle reuse;
+- stale command-list SRV rejection;
 - two independent command-list states;
 - route rejection when exact material evidence is missing;
 - successful activation + restore;
