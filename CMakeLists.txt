@@ -74,6 +74,32 @@ if(RESHade_INCLUDE_DIR)
             OUTPUT_NAME "DSRRL_Runtime_Core_V2_Diagnostic"
             SUFFIX ".addon64"
         )
+
+        add_library(dsrrl_runtime_core_v2_virtual_envspec SHARED
+            src/runtime_core_v2_virtual_envspec.cpp
+            $<TARGET_OBJECTS:dsrrl_runtime_core_v2_reshade>
+        )
+
+        target_include_directories(dsrrl_runtime_core_v2_virtual_envspec
+            PRIVATE
+                ${CMAKE_CURRENT_SOURCE_DIR}/src
+                ${RESHade_INCLUDE_DIR}
+        )
+
+        target_link_libraries(dsrrl_runtime_core_v2_virtual_envspec
+            PRIVATE
+                dsrrl_runtime_core_v2
+                bcrypt
+        )
+
+        target_compile_features(dsrrl_runtime_core_v2_virtual_envspec PRIVATE cxx_std_17)
+        target_compile_options(dsrrl_runtime_core_v2_virtual_envspec PRIVATE /W4 /WX)
+
+        set_target_properties(dsrrl_runtime_core_v2_virtual_envspec PROPERTIES
+            PREFIX ""
+            OUTPUT_NAME "DSRRL_PTDE_Virtual_EnvSpec_V1"
+            SUFFIX ".addon64"
+        )
     endif()
 
 endif()
