@@ -1,5 +1,7 @@
 #include "runtime_core_v2.hpp"
 
+#include <algorithm>
+
 namespace dsrrl::runtime_v2 {
 
 route_decision tracker::evaluate_route(route_contract contract, route_observation observation) const noexcept {
@@ -7,17 +9,63 @@ route_decision tracker::evaluate_route(route_contract contract, route_observatio
     return {missing == evidence_none, missing};
 }
 
+void tracker::index_logical_locked(
+    std::uint64_t handle,
+    std::uint32_t generation,
+    std::uint64_t logical_hash) {
+    if (logical_hash == 0)
+        return;
+
+    logical_index_[logical_hash].push_back(resource_ref{handle, generation});
+}
+
+void tracker::remove_logical_locked(
+    std::uint64_t handle,
+    std::uint32_t generation,
+    std::uint64_t logical_hash) {
+    if (logical_hash == 0)
+        return;
+
+    const auto iit = logical_index_.find(logical_hash);
+    if (iit == logical_index_.end())
+        return;
+
+    auto &refs = iit->second;
+    refs.erase(
+        std::remove_if(
+            refs.begin(),
+            refs.end(),
+            [handle, generation](const resource_ref &ref) {
+                return ref.handle == handle && ref.generation == generation;
+            }),
+        refs.end());
+
+    if (refs.empty())
+        logical_index_.erase(iit);
+}
+
 std::uint32_t tracker::init_resource(std::uint64_t handle, std::uint64_t desc_hash, std::uint64_t logical_hash) {
     if (handle == 0) return 0;
     std::lock_guard lock(mutex_);
     auto &r = resources_[handle];
+    const bool was_alive = r.alive;
+    const std::uint64_t old_logical_hash = r.logical_hash;
+
     if (!r.alive) {
         ++r.generation;
         if (r.generation == 0) ++r.generation;
     }
+
+    if (was_alive && old_logical_hash != 0 && old_logical_hash != logical_hash)
+        remove_logical_locked(handle, r.generation, old_logical_hash);
+
     r.desc_hash = desc_hash;
     r.logical_hash = logical_hash;
     r.alive = true;
+
+    if (logical_hash != 0 && (!was_alive || old_logical_hash != logical_hash))
+        index_logical_locked(handle, r.generation, logical_hash);
+
     return r.generation;
 }
 
@@ -28,16 +76,53 @@ bool tracker::annotate_resource(std::uint64_t handle, std::uint64_t desc_hash, s
     if (it == resources_.end() || !it->second.alive)
         return false;
 
+    const std::uint64_t old_logical_hash = it->second.logical_hash;
+
+    if (old_logical_hash != 0 && old_logical_hash != logical_hash)
+        remove_logical_locked(handle, it->second.generation, old_logical_hash);
+
     it->second.desc_hash = desc_hash;
     it->second.logical_hash = logical_hash;
+
+    if (logical_hash != 0 && old_logical_hash != logical_hash)
+        index_logical_locked(handle, it->second.generation, logical_hash);
+
+    return true;
+}
+
+bool tracker::annotate_resource_logical(std::uint64_t handle, std::uint64_t logical_hash) {
+    if (handle == 0 || logical_hash == 0) return false;
+    std::lock_guard lock(mutex_);
+    const auto it = resources_.find(handle);
+    if (it == resources_.end() || !it->second.alive)
+        return false;
+
+    if (it->second.logical_hash != logical_hash) {
+        if (it->second.logical_hash != 0)
+            remove_logical_locked(
+                handle,
+                it->second.generation,
+                it->second.logical_hash);
+
+        it->second.logical_hash = logical_hash;
+        index_logical_locked(handle, it->second.generation, logical_hash);
+    }
+
     return true;
 }
 
 void tracker::destroy_resource(std::uint64_t handle) {
     if (handle == 0) return;
     std::lock_guard lock(mutex_);
-    if (auto it = resources_.find(handle); it != resources_.end())
+    if (auto it = resources_.find(handle); it != resources_.end()) {
+        if (it->second.alive && it->second.logical_hash != 0)
+            remove_logical_locked(
+                handle,
+                it->second.generation,
+                it->second.logical_hash);
+
         it->second.alive = false;
+    }
 }
 
 bool tracker::init_view(std::uint64_t view, std::uint64_t resource) {
@@ -85,6 +170,53 @@ std::optional<resource_identity> tracker::resolve_view(std::uint64_t view, opera
         rit->second.desc_hash,
         rit->second.logical_hash
     };
+}
+
+std::optional<resource_identity> tracker::resolve_logical_resource(
+    std::uint64_t logical_hash,
+    operator_kind op) {
+    std::lock_guard lock(mutex_);
+    auto &counter = counters_[op_index(op)];
+
+    if (logical_hash == 0) {
+        ++counter.logical_miss;
+        return std::nullopt;
+    }
+
+    const auto iit = logical_index_.find(logical_hash);
+    if (iit == logical_index_.end()) {
+        ++counter.logical_miss;
+        return std::nullopt;
+    }
+
+    std::optional<resource_identity> result;
+
+    for (const resource_ref ref : iit->second) {
+        const auto rit = resources_.find(ref.handle);
+        if (rit == resources_.end() ||
+            !rit->second.alive ||
+            rit->second.generation != ref.generation ||
+            rit->second.logical_hash != logical_hash)
+            continue;
+
+        if (result.has_value() &&
+            (result->handle != ref.handle || result->generation != ref.generation)) {
+            ++counter.logical_ambiguous;
+            return std::nullopt;
+        }
+
+        result = resource_identity{
+            ref.handle,
+            rit->second.generation,
+            rit->second.desc_hash,
+            rit->second.logical_hash
+        };
+    }
+
+    if (!result.has_value())
+        ++counter.logical_miss;
+
+    return result;
 }
 
 std::uint32_t tracker::init_pipeline(std::uint64_t handle, std::uint64_t pixel_shader_hash,
@@ -302,6 +434,15 @@ void tracker::note_resource_match(operator_kind op) {
     ++counters_[op_index(op)].resource_matches;
 }
 
+void tracker::note_stage(operator_kind op, route_stage stage) {
+    const std::size_t stage_index = static_cast<std::size_t>(stage);
+    if (stage_index >= route_stage_count)
+        return;
+
+    std::lock_guard lock(mutex_);
+    ++stages_[op_index(op)].hits[stage_index];
+}
+
 bool tracker::begin_transaction(std::uint64_t command, operator_kind op,
                                 route_contract contract, route_observation observation) {
     std::lock_guard lock(mutex_);
@@ -350,9 +491,16 @@ void tracker::note_fail_open(operator_kind op) {
 runtime_snapshot tracker::snapshot_locked() const {
     runtime_snapshot out{};
     out.operators = counters_;
+    out.stages = stages_;
 
-    for (const auto &[_, r] : resources_)
-        if (r.alive) ++out.live_resources;
+    for (const auto &[_, r] : resources_) {
+        if (!r.alive)
+            continue;
+
+        ++out.live_resources;
+        if (r.logical_hash != 0)
+            ++out.live_logical_resources;
+    }
     for (const auto &[_, v] : views_)
         if (v.alive) ++out.live_views;
     for (const auto &[_, p] : pipelines_)
@@ -385,15 +533,18 @@ runtime_snapshot tracker::snapshot() const {
 void tracker::reset_frame_counters() {
     std::lock_guard lock(mutex_);
     counters_ = {};
+    stages_ = {};
 }
 
 void tracker::reset_all() {
     std::lock_guard lock(mutex_);
     resources_.clear();
+    logical_index_.clear();
     views_.clear();
     pipelines_.clear();
     commands_.clear();
     counters_ = {};
+    stages_ = {};
 }
 
 } // namespace dsrrl::runtime_v2

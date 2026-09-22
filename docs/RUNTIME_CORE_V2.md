@@ -46,6 +46,10 @@ The tracker stores a generation for:
 
 A resource view has its own generation and also records the resource generation it was created against. If either a view handle or resource handle is destroyed and later reused, an old command-list binding no longer resolves to the new object.
 
+The ReShade adapter now fingerprints the semantic `resource_desc` fields at `init_resource` time, before any draw. It deliberately hashes descriptor fields rather than raw struct bytes, so padding is not part of the identity.
+
+Logical resource identity is attached separately only after an operator-specific route proves it. The core maintains a generation-safe reverse index from `logical_hash` to live resources. A lookup succeeds only when exactly one live resource owns that logical identity. Missing or ambiguous logical identities fail open and are counted separately; the core never guesses between candidates.
+
 Pixel-shader SRV slots are tracked as `(view handle, view generation)`, then resolved through the live resource generation and logical identity. This prevents accidental cross-resource activation caused by either view-handle or resource-handle reuse.
 
 ### Route contracts
@@ -115,6 +119,14 @@ Each operator exposes:
 - `stale_view`
 - `unrestored`
 - `restore_faults`
+- `logical_miss`
+- `logical_ambiguous`
+
+The snapshot also contains source-level staged routing counters for each operator:
+
+`capture -> receiver -> resource_lookup -> route_gate -> sidecar_ready -> final_bind -> restore`
+
+These replace the old binary-only V8/V12 one-shot stage flags. Operator code records a stage only after that stage has actually succeeded. The first stage that remains at zero therefore identifies the current activation boundary without changing rendering.
 
 This allows a runtime report to answer a concrete question such as:
 
@@ -187,3 +199,52 @@ The initial test set covers:
 - successful activation + restore;
 - frame-boundary detection of an unrestored transaction.
 
+
+
+## Resource-routing stage migration contract
+
+The legacy Normal/Diffuse V12 runtime path established the useful diagnostic sequence:
+
+```text
+capture
+  -> verified receiver
+  -> exact logical SRV/resource lookup
+  -> route gate
+  -> sidecar/replacement ready
+  -> final slot bind
+  -> restore
+```
+
+Runtime Core V2 exposes the same semantic stages generically through `route_stage` and `tracker::note_stage`. This is intentionally not tied to old RVAs or binary flag storage.
+
+Recommended migration pattern for an operator:
+
+```cpp
+auto &rt = global_tracker();
+
+rt.note_stage(op, route_stage::capture);          // exact logical identity captured
+rt.note_receiver_match(op);                       // certified consumer/receiver
+rt.note_stage(op, route_stage::receiver);
+
+const auto host = rt.resolve_bound_pixel_shader_resource(command, slot, op);
+if (!host || host->logical_hash == 0) {
+    rt.note_fail_open(op);
+    return;
+}
+rt.note_resource_match(op);
+rt.note_stage(op, route_stage::resource_lookup);
+
+// Exact operator-specific pair/triple/material gate passed.
+rt.note_stage(op, route_stage::route_gate);
+
+// Replacement exists, has exact identity and is safe to bind.
+rt.note_stage(op, route_stage::sidecar_ready);
+
+// Perform the operator-local D3D transaction, then:
+rt.note_stage(op, route_stage::final_bind);
+
+// Restore complete relevant state, then:
+rt.note_stage(op, route_stage::restore);
+```
+
+The example is ordering guidance, not authorization to activate a bridge. Each operator still needs its own verified receiver/material/resource contract.
