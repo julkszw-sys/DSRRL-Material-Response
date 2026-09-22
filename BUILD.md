@@ -22,6 +22,8 @@ cmake --build build --config Release
 ctest --test-dir build -C Release --output-on-failure
 ```
 
+Legacy/superseded experiments are excluded unless `-DDSRRL_BUILD_LEGACY_EXPERIMENTS=ON` is explicitly requested.
+
 The goal of this path is a complete source-built addon.
 
 ## Historical Material Response 1.45 release reproduction
