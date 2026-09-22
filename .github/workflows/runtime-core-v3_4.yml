@@ -1,0 +1,57 @@
+name: Runtime Core V3.4 Native PS Gate
+
+on:
+  push:
+    branches:
+      - dev/runtime-core-v2-full-envspec-carrier-v3_4-native-ps-gate
+  pull_request:
+    paths:
+      - src/runtime_core_v2_full_envspec_carrier_v3.cpp
+      - src/runtime_core_v2_full_envspec_carrier_v3_part1.inc
+      - src/runtime_core_v2_full_envspec_carrier_v3_part2.inc
+      - src/runtime_core_v2_full_envspec_carrier_v3_part3.inc
+      - src/runtime_core_v2_full_envspec_carrier_v3_part4.inc
+      - tools/generate_v34_native_ps_gate.py
+      - .github/workflows/runtime-core-v3_4.yml
+      - CMakeLists.txt
+
+jobs:
+  v34-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Checkout pinned ReShade API
+        uses: actions/checkout@v4
+        with:
+          repository: crosire/reshade
+          ref: 3645e3025d1d98a90e318278858931f034d5d1f6
+          path: _reshade
+      - name: Generate V3.4 native-PS source
+        shell: pwsh
+        run: |
+          python tools/generate_v34_native_ps_gate.py --input src/runtime_core_v2_full_envspec_carrier_v3.cpp --output src/runtime_core_v2_full_envspec_carrier_v3.cpp
+          $text = Get-Content src/runtime_core_v2_full_envspec_carrier_v3.cpp -Raw
+          if ($text -notmatch 'PSGetShader') { throw 'V3.4 PSGetShader gate missing' }
+          if ($text -notmatch '0x112308, 0x112328, 0x112348') { throw 'build131 native PS pointer table missing' }
+          if ($text -notmatch 'r8g8b8a8_unorm') { throw 'raw RGBA carrier missing' }
+      - name: Configure
+        run: cmake -S . -B build -DRESHade_INCLUDE_DIR="${{ github.workspace }}/_reshade/include"
+      - name: Build
+        run: cmake --build build --config Release
+      - name: Test
+        run: ctest --test-dir build -C Release --output-on-failure
+      - name: Verify V3.4 addon
+        shell: pwsh
+        run: |
+          $src = 'build/Release/DSRRL_PTDE_Full_EnvSpec_Carrier_V3_1.addon64'
+          $dst = 'build/Release/DSRRL_PTDE_Full_EnvSpec_Carrier_V3_4_NATIVE_PS.addon64'
+          if (!(Test-Path $src)) { throw 'V3.4 carrier binary not produced' }
+          Copy-Item $src $dst -Force
+          Get-Item $dst | Format-List Name,Length
+          Get-FileHash $dst -Algorithm SHA256 | Format-List
+      - name: Upload V3.4 addon
+        uses: actions/upload-artifact@v4
+        with:
+          name: DSRRL_PTDE_Full_EnvSpec_Carrier_V3_4_NATIVE_PS
+          path: build/Release/DSRRL_PTDE_Full_EnvSpec_Carrier_V3_4_NATIVE_PS.addon64
+          if-no-files-found: error
