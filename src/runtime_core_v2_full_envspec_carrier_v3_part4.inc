@@ -1,4 +1,3 @@
-}
 
 bool push_srv_binding(reshade::api::command_list *cmd, std::uint32_t slot,
                       const srv_binding &binding, reshade::api::resource_view view,
@@ -125,6 +124,9 @@ bool on_draw(reshade::api::command_list *cmd, std::uint32_t vertex_count,
 {
     if (g_internal_replay) return false;
     const auto plan = build_plan(cmd);
+    // One selector token belongs to one outer draw only. Clear on both activation
+    // and fail-open so an unsupported draw can never leak material identity.
+    g_active_material = 0;
     if (!plan.has_value() || !apply_plan(cmd, *plan)) return false;
     g_internal_replay = true;
     cmd->draw(vertex_count, instance_count, first_vertex, first_instance);
@@ -140,6 +142,9 @@ bool on_draw_indexed(reshade::api::command_list *cmd, std::uint32_t index_count,
 {
     if (g_internal_replay) return false;
     const auto plan = build_plan(cmd);
+    // One selector token belongs to one outer draw only. Clear on both activation
+    // and fail-open so an unsupported draw can never leak material identity.
+    g_active_material = 0;
     if (!plan.has_value() || !apply_plan(cmd, *plan)) return false;
     g_internal_replay = true;
     cmd->draw_indexed(index_count, instance_count, first_index, vertex_offset, first_instance);
