@@ -1,0 +1,57 @@
+name: Runtime Core V4.0 Operator Isolated EnvSpec
+
+on:
+  push:
+    branches:
+      - dev/runtime-core-v2-full-envspec-carrier-v4_0-operator-isolated
+
+jobs:
+  v40-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Checkout pinned ReShade API
+        uses: actions/checkout@v4
+        with:
+          repository: crosire/reshade
+          ref: 3645e3025d1d98a90e318278858931f034d5d1f6
+          path: _reshade
+      - name: Generate V3.6 base source
+        shell: pwsh
+        run: python tools/generate_v36_owned_dedicated_ps.py --input src/runtime_core_v2_full_envspec_carrier_v3_4.cpp --output src/runtime_core_v2_full_envspec_carrier_v3_6.cpp
+      - name: Apply V3.8 shader-index gate
+        shell: pwsh
+        run: python tools/generate_v38_shader_index_gate.py --input src/runtime_core_v2_full_envspec_carrier_v3_6.cpp --output src/runtime_core_v2_full_envspec_carrier_v3_8.cpp
+      - name: Apply V4.0 operator-isolated consumer
+        shell: pwsh
+        run: |
+          python tools/generate_v40_operator_isolated.py --input src/runtime_core_v2_full_envspec_carrier_v3_8.cpp --output src/runtime_core_v2_full_envspec_carrier_v3_6.cpp
+          $text = Get-Content src/runtime_core_v2_full_envspec_carrier_v3_6.cpp -Raw
+          if ($text -notmatch 'V4.0 Operator-Isolated EnvSpec') { throw 'V4.0 identity missing' }
+          if ($text -match 'base\+k_dedicated_blob_rvas') { throw 'legacy dedicated build131 body still active' }
+          if ($text -notmatch '088adca8ed2d6d13e3452a68f1e447af43e23b149679c9bc77ebb8f4b0ac7e35') { throw 'V4 stock33 island SHA missing' }
+          if ($text -notmatch 'ce63f9722960b324fcc3bf41708b0896129f7099a6b785827e3c0c628f5fb604') { throw 'V4 stock34 island SHA missing' }
+          if ($text -notmatch 'a74826ac6f92cd1e38d6e9d45728e6f2901bd1f91204d14bd8c099ab5d6e585d') { throw 'V4 stock35 island SHA missing' }
+      - name: Configure
+        run: cmake -S . -B build -DRESHade_INCLUDE_DIR="${{ github.workspace }}/_reshade/include"
+      - name: Build addon and tests
+        run: cmake --build build --config Release --target dsrrl_runtime_core_v2_full_envspec_carrier_v36 dsrrl_runtime_core_v2_tests
+      - name: Test
+        run: ctest --test-dir build -C Release --output-on-failure
+      - name: Verify V4.0 addon
+        shell: pwsh
+        run: |
+          $src = 'build/Release/DSRRL_PTDE_Full_EnvSpec_Carrier_V3_6.addon64'
+          $dst = 'build/Release/DSRRL_PTDE_Full_EnvSpec_Carrier_V4_0.addon64'
+          if (!(Test-Path $src)) { throw 'V4.0 carrier binary not produced' }
+          Copy-Item $src $dst -Force
+          $ascii = [System.Text.Encoding]::ASCII.GetString([System.IO.File]::ReadAllBytes($dst))
+          if ($ascii -notmatch 'V4.0 Operator-Isolated EnvSpec') { throw 'V4.0 identity string missing from binary' }
+          Get-Item $dst | Format-List Name,Length
+          Get-FileHash $dst -Algorithm SHA256 | Format-List
+      - name: Upload V4.0 addon
+        uses: actions/upload-artifact@v4
+        with:
+          name: DSRRL_PTDE_Full_EnvSpec_Carrier_V4_0_OPERATOR_ISOLATED
+          path: build/Release/DSRRL_PTDE_Full_EnvSpec_Carrier_V4_0.addon64
+          if-no-files-found: error
