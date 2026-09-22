@@ -85,28 +85,57 @@ bool load_router_sidecars(HMODULE addon_module)
 }
 
 
-std::uint64_t fnv1a_utf16_lower_ascii(const wchar_t *s) noexcept
+std::uint64_t fnv1a_utf16_basename_lower_ascii(const wchar_t *s) noexcept
 {
     if (s == nullptr) return 0;
+    const wchar_t *base = s;
+    std::size_t length = 0;
+    for (; length < 512; ++length) {
+        const wchar_t c = s[length];
+        if (c == 0) break;
+        if (c == L'\\' || c == L'/') base = s + length + 1;
+    }
+    if (length == 512) return 0;
+
     constexpr std::uint64_t offset = 14695981039346656037ull;
     constexpr std::uint64_t prime = 1099511628211ull;
     std::uint64_t hash = offset;
-    for (std::size_t i = 0; i < 512; ++i) {
-        wchar_t c = s[i];
-        if (c == 0) return hash;
+    for (const wchar_t *p = base; *p != 0; ++p) {
+        wchar_t c = *p;
         if (c >= L'A' && c <= L'Z') c = static_cast<wchar_t>(c + (L'a' - L'A'));
         const std::uint16_t u = static_cast<std::uint16_t>(c);
         hash ^= static_cast<std::uint8_t>(u & 0xFFu); hash *= prime;
         hash ^= static_cast<std::uint8_t>((u >> 8) & 0xFFu); hash *= prime;
     }
-    return 0;
+    return hash;
+}
+
+bool material_response_equivalent(const material_record &a, const material_record &b) noexcept
+{
+    return a.state == b.state && a.slot == b.slot &&
+           a.explicit_none_safe == b.explicit_none_safe &&
+           std::memcmp(a.c101, b.c101, sizeof(a.c101)) == 0 &&
+           std::memcmp(&a.c102, &b.c102, sizeof(a.c102)) == 0 &&
+           std::memcmp(a.c100, b.c100, sizeof(a.c100)) == 0;
 }
 
 const material_record *find_material(std::uint64_t name_hash, const std::array<std::uint8_t,32> &sha) noexcept
 {
-    for (const auto &r : g_material_registry)
-        if (r.name_hash == name_hash && r.raw_sha == sha)
-            return &r;
+    const material_record *first = nullptr;
+    std::uint32_t matches = 0;
+    bool response_equivalent = true;
+
+    for (const auto &r : g_material_registry) {
+        if (r.raw_sha != sha) continue;
+        if (r.name_hash == name_hash && name_hash != 0) return &r;
+        if (first == nullptr) first = &r;
+        else if (!material_response_equivalent(*first, r)) response_equivalent = false;
+        ++matches;
+    }
+
+    // Raw MTD SHA is the primary identity. Semantic key is only required when
+    // one raw SHA aliases materially different PTDE responses.
+    if (matches == 1 || (matches > 1 && response_equivalent)) return first;
     return nullptr;
 }
 
@@ -190,10 +219,10 @@ void __fastcall parser_hook(void *material, const void *raw, std::uint32_t size,
 {
     ++g_parser_seen;
     material_binding binding{};
-    if (material != nullptr && raw != nullptr && size != 0 && size <= (1u << 20) && semantic_key != nullptr) {
+    if (material != nullptr && raw != nullptr && size != 0 && size <= (1u << 20)) {
         std::array<std::uint8_t,32> sha{};
-        const std::uint64_t name_hash = fnv1a_utf16_lower_ascii(semantic_key);
-        if (name_hash != 0 && sha256_bytes(raw, size, sha)) {
+        const std::uint64_t name_hash = fnv1a_utf16_basename_lower_ascii(semantic_key);
+        if (sha256_bytes(raw, size, sha)) {
             binding.record = find_material(name_hash, sha);
             if (binding.record != nullptr && binding.record->state == material_envspec_state::explicit_none)
                 binding.explicit_none_safe = binding.record->explicit_none_safe;
