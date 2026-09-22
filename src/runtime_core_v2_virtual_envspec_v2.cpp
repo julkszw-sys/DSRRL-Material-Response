@@ -38,9 +38,19 @@ constexpr std::uint32_t k_target_size = 256;
 constexpr std::uint32_t k_target_levels = 8;
 constexpr std::uint32_t k_target_subresources = k_faces * k_target_levels;
 
-constexpr std::uint32_t k_pmetal_route = 345;
-constexpr std::uint32_t k_pmetal_local_min = 9;
-constexpr std::uint32_t k_pmetal_local_max = 11;
+struct material_profile {
+    const char *name;
+    std::uint32_t route;
+    std::uint32_t local_min;
+    std::uint32_t local_max;
+    std::uint32_t ptde_slot;
+    bool enabled;
+};
+
+constexpr std::array<material_profile, 1> k_material_profiles = {{
+    {"P_Metal[DSB].mtd", 345u, 9u, 11u, 2u, true},
+}};
+
 constexpr std::uintptr_t k_mr_tls_index_rva = 0x107B50;
 constexpr std::uintptr_t k_mr_prepare_gate_rva = 0x19ABD3;
 
@@ -83,8 +93,8 @@ std::atomic<std::uint64_t> g_present_count{0};
 std::atomic<std::uint64_t> g_companion_found{0};
 std::atomic<std::uint64_t> g_companion_miss{0};
 std::atomic<std::uint64_t> g_tls_null{0};
-std::atomic<std::uint64_t> g_route345_hits{0};
-std::atomic<std::uint64_t> g_non_pmetal_reject{0};
+std::atomic<std::uint64_t> g_profile_hits{0};
+std::atomic<std::uint64_t> g_profile_reject{0};
 std::atomic<std::uint64_t> g_host_reject{0};
 
 thread_local bool g_internal_resource_create = false;
@@ -166,34 +176,38 @@ bool try_bind_material_response_companion()
     return found;
 }
 
-bool exact_pmetal_draw()
+const material_profile *active_material_profile()
 {
     if (!g_companion.ready && !try_bind_material_response_companion())
-        return false;
+        return nullptr;
 
     void *tls = TlsGetValue(g_companion.tls_index);
     if (tls == nullptr) {
         ++g_tls_null;
-        return false;
+        return nullptr;
     }
 
     const auto *state = static_cast<const std::uint8_t *>(tls);
     const std::uint32_t route =
         *reinterpret_cast<const std::uint32_t *>(state + 0x10);
-    if (route != k_pmetal_route) {
-        ++g_non_pmetal_reject;
-        return false;
-    }
-
     const std::uint32_t local =
         *reinterpret_cast<const std::uint32_t *>(state + 0x14);
-    if (local < k_pmetal_local_min || local > k_pmetal_local_max) {
-        ++g_host_reject;
-        return false;
+
+    for (const material_profile &profile : k_material_profiles) {
+        if (!profile.enabled || route != profile.route)
+            continue;
+
+        if (local < profile.local_min || local > profile.local_max) {
+            ++g_host_reject;
+            return nullptr;
+        }
+
+        ++g_profile_hits;
+        return &profile;
     }
 
-    ++g_route345_hits;
-    return true;
+    ++g_profile_reject;
+    return nullptr;
 }
 
 std::uint64_t fnv1a64(const std::uint8_t *data, std::size_t size) noexcept
@@ -847,7 +861,11 @@ void on_destroy_resource_view(
 std::optional<reshade::api::resource_view> replacement_for(
     reshade::api::resource_view source_view)
 {
-    if (source_view.handle == 0 || !exact_pmetal_draw())
+    if (source_view.handle == 0)
+        return std::nullopt;
+
+    const material_profile *profile = active_material_profile();
+    if (profile == nullptr)
         return std::nullopt;
 
     replacement_resource record{};
@@ -862,6 +880,9 @@ std::optional<reshade::api::resource_view> replacement_for(
         source_handle = vit->second;
         const auto rit = g_replacements_by_resource.find(source_handle);
         if (rit == g_replacements_by_resource.end())
+            return std::nullopt;
+
+        if (rit->second.slot != profile->ptde_slot)
             return std::nullopt;
 
         if (rit->second.virtual_view.handle != 0)
@@ -1006,7 +1027,7 @@ void log_snapshot(const runtime_snapshot &snapshot)
         sizeof(line),
         "[DSRRL VIRTUAL ENVSPEC V2] P=%llu PACK=%u candidates=%llu "
         "slot2_exact=%llu virtual=%llu create_fail=%llu "
-        "companion=%u route345=%llu route_reject=%llu host_reject=%llu tls_null=%llu "
+        "companion=%u profile_hit=%llu profile_reject=%llu host_reject=%llu tls_null=%llu "
         "t12=%llu t14=%llu LIVE res=%llu view=%llu cmd=%llu",
         static_cast<unsigned long long>(present),
         g_pack_ready.load() ? 1u : 0u,
@@ -1015,8 +1036,8 @@ void log_snapshot(const runtime_snapshot &snapshot)
         static_cast<unsigned long long>(g_virtual_created.load()),
         static_cast<unsigned long long>(g_virtual_create_fail.load()),
         g_companion.ready ? 1u : 0u,
-        static_cast<unsigned long long>(g_route345_hits.load()),
-        static_cast<unsigned long long>(g_non_pmetal_reject.load()),
+        static_cast<unsigned long long>(g_profile_hits.load()),
+        static_cast<unsigned long long>(g_profile_reject.load()),
         static_cast<unsigned long long>(g_host_reject.load()),
         static_cast<unsigned long long>(g_tls_null.load()),
         static_cast<unsigned long long>(g_t12_replaced.load()),
@@ -1061,7 +1082,7 @@ void cleanup_virtual_resources()
 extern "C" __declspec(dllexport) const char *NAME =
     "DSRRL PTDE Virtual EnvSpec V2";
 extern "C" __declspec(dllexport) const char *DESCRIPTION =
-    "Exact-P_Metal PTDE slot2 to DSR-topology 256x256 8-mip R11G11B10_FLOAT virtual EnvSpec carrier.";
+    "Material-profile PTDE-to-DSR-topology virtual EnvSpec carrier; P_Metal profile enabled initially.";
 
 extern "C" __declspec(dllexport) bool AddonInit(
     HMODULE addon_module,
