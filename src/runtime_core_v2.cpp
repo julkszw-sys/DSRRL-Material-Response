@@ -272,4 +272,13 @@ void tracker::reset_frame_counters() {
     counters_ = {};
 }
 
+void tracker::reset_all() {
+    std::lock_guard lock(mutex_);
+    resources_.clear();
+    views_.clear();
+    pipelines_.clear();
+    commands_.clear();
+    counters_ = {};
+}
+
 } // namespace dsrrl::runtime_v2
