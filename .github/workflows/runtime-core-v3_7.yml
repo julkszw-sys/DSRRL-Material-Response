@@ -1,0 +1,49 @@
+name: Runtime Core V3.7 P_Metal Receiver Census
+
+on:
+  push:
+    branches:
+      - dev/runtime-core-v2-full-envspec-carrier-v3_7-pmetal-receiver-census
+
+jobs:
+  v37-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Checkout pinned ReShade API
+        uses: actions/checkout@v4
+        with:
+          repository: crosire/reshade
+          ref: 3645e3025d1d98a90e318278858931f034d5d1f6
+          path: _reshade
+      - name: Generate V3.6 source
+        shell: pwsh
+        run: python tools/generate_v36_owned_dedicated_ps.py --input src/runtime_core_v2_full_envspec_carrier_v3_4.cpp --output src/runtime_core_v2_full_envspec_carrier_v3_6.cpp
+      - name: Generate V3.7 census source
+        shell: pwsh
+        run: |
+          python tools/generate_v37_pmetal_receiver_census.py --input src/runtime_core_v2_full_envspec_carrier_v3_6.cpp --output src/runtime_core_v2_full_envspec_carrier_v3_7.cpp
+          $text = Get-Content src/runtime_core_v2_full_envspec_carrier_v3_7.cpp -Raw
+          if ($text -notmatch 'PMETAL RECEIVER CENSUS V3.7') { throw 'census telemetry missing' }
+          if ($text -notmatch 'r->id>=24u&&r->id<=47u') { throw 'bounded receiver census missing' }
+          if ($text -match 'r->id<33u\|\|r->id>35u') { throw 'obsolete 33/34/35 PRESENT gate still active' }
+          if ($text -notmatch 'PRESENT fail-open') { throw 'diagnostic fail-open identity missing' }
+      - name: Configure
+        run: cmake -S . -B build -DRESHade_INCLUDE_DIR="${{ github.workspace }}/_reshade/include"
+      - name: Build
+        run: cmake --build build --config Release
+      - name: Test
+        run: ctest --test-dir build -C Release --output-on-failure
+      - name: Verify V3.7 addon
+        shell: pwsh
+        run: |
+          $path = 'build/Release/DSRRL_PTDE_Full_EnvSpec_Carrier_V3_7.addon64'
+          if (!(Test-Path $path)) { throw 'V3.7 carrier binary not produced' }
+          Get-Item $path | Format-List Name,Length
+          Get-FileHash $path -Algorithm SHA256 | Format-List
+      - name: Upload V3.7 addon
+        uses: actions/upload-artifact@v4
+        with:
+          name: DSRRL_PTDE_Full_EnvSpec_Carrier_V3_7_PMETAL_RECEIVER_CENSUS
+          path: build/Release/DSRRL_PTDE_Full_EnvSpec_Carrier_V3_7.addon64
+          if-no-files-found: error
