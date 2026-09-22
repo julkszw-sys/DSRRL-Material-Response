@@ -21,6 +21,18 @@ std::uint32_t tracker::init_resource(std::uint64_t handle, std::uint64_t desc_ha
     return r.generation;
 }
 
+bool tracker::annotate_resource(std::uint64_t handle, std::uint64_t desc_hash, std::uint64_t logical_hash) {
+    if (handle == 0) return false;
+    std::lock_guard lock(mutex_);
+    const auto it = resources_.find(handle);
+    if (it == resources_.end() || !it->second.alive)
+        return false;
+
+    it->second.desc_hash = desc_hash;
+    it->second.logical_hash = logical_hash;
+    return true;
+}
+
 void tracker::destroy_resource(std::uint64_t handle) {
     if (handle == 0) return;
     std::lock_guard lock(mutex_);
@@ -34,7 +46,16 @@ bool tracker::init_view(std::uint64_t view, std::uint64_t resource) {
     const auto rit = resources_.find(resource);
     if (rit == resources_.end() || !rit->second.alive)
         return false;
-    views_[view] = view_record{resource, rit->second.generation, true};
+
+    auto &v = views_[view];
+    if (!v.alive) {
+        ++v.generation;
+        if (v.generation == 0) ++v.generation;
+    }
+
+    v.resource = resource;
+    v.resource_generation = rit->second.generation;
+    v.alive = true;
     return true;
 }
 
@@ -188,6 +209,86 @@ std::optional<pipeline_identity> tracker::resolve_bound_pipeline(std::uint64_t c
         p.receiver_id,
         p.consumer_family_hash,
         p.confirmed
+    };
+}
+
+bool tracker::bind_pixel_shader_views(
+    std::uint64_t command,
+    std::uint32_t first,
+    std::uint32_t count,
+    const std::uint64_t *views) {
+    if (command == 0 ||
+        (count != 0 && views == nullptr) ||
+        first > max_pixel_shader_resource_slots ||
+        count > max_pixel_shader_resource_slots - first)
+        return false;
+
+    std::lock_guard lock(mutex_);
+    const auto cit = commands_.find(command);
+    if (cit == commands_.end())
+        return false;
+
+    bool complete = true;
+
+    for (std::uint32_t i = 0; i < count; ++i) {
+        auto &dst = cit->second.pixel_shader_views[first + i];
+        const std::uint64_t view = views[i];
+
+        if (view == 0) {
+            dst = {};
+            continue;
+        }
+
+        const auto vit = views_.find(view);
+        if (vit == views_.end() || !vit->second.alive) {
+            dst = {};
+            complete = false;
+            continue;
+        }
+
+        dst = bound_view_ref{view, vit->second.generation};
+    }
+
+    return complete;
+}
+
+std::optional<resource_identity> tracker::resolve_bound_pixel_shader_resource(
+    std::uint64_t command,
+    std::uint32_t slot,
+    operator_kind op) {
+    if (slot >= max_pixel_shader_resource_slots)
+        return std::nullopt;
+
+    std::lock_guard lock(mutex_);
+    const auto cit = commands_.find(command);
+    if (cit == commands_.end())
+        return std::nullopt;
+
+    const bound_view_ref ref = cit->second.pixel_shader_views[slot];
+    if (ref.handle == 0)
+        return std::nullopt;
+
+    const auto vit = views_.find(ref.handle);
+    if (vit == views_.end() ||
+        !vit->second.alive ||
+        vit->second.generation != ref.generation) {
+        ++counters_[op_index(op)].stale_view;
+        return std::nullopt;
+    }
+
+    const auto rit = resources_.find(vit->second.resource);
+    if (rit == resources_.end() ||
+        !rit->second.alive ||
+        rit->second.generation != vit->second.resource_generation) {
+        ++counters_[op_index(op)].stale_view;
+        return std::nullopt;
+    }
+
+    return resource_identity{
+        vit->second.resource,
+        rit->second.generation,
+        rit->second.desc_hash,
+        rit->second.logical_hash
     };
 }
 
