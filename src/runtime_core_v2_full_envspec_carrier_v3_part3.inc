@@ -1,4 +1,3 @@
-            const std::uint32_t sub = face * k_dsr_levels + level;
             const auto &src = initial_data[sub];
             if (src.data == nullptr) return false;
             const std::uint32_t width = std::max(1u, k_dsr_size >> level);
@@ -288,3 +287,4 @@ std::optional<std::uint16_t> probe_for_view(reshade::api::resource_view view)
     const auto rit = g_native_resources.find(vit->second);
     if (rit == g_native_resources.end()) return std::nullopt;
     return rit->second.probe_index;
+}
