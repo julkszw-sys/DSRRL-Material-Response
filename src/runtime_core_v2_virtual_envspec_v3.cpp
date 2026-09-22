@@ -43,11 +43,17 @@ constexpr char k_expected_pack_sha256[] =
 struct replacement_resource {
     reshade::api::device *device = nullptr;
     reshade::api::resource source{};
-    reshade::api::resource virtual_resource{};
-    reshade::api::resource_view virtual_view{};
     std::uint32_t packed_index = 0;
     std::uint32_t probe_index = 0;
     std::uint32_t slot = 0;
+};
+
+struct virtual_cube {
+    reshade::api::device *device = nullptr;
+    reshade::api::resource resource{};
+    reshade::api::resource_view view{};
+    std::uint32_t packed_index = 0;
+    std::uint32_t probe_index = 0;
 };
 
 std::mutex g_mutex;
@@ -55,6 +61,9 @@ std::vector<std::uint8_t> g_pack;
 std::unordered_map<std::string, std::uint32_t> g_native_hash_to_probe;
 std::unordered_map<std::uint64_t, replacement_resource> g_replacements_by_resource;
 std::unordered_map<std::uint64_t, std::uint64_t> g_source_resource_by_view;
+std::unordered_map<
+    reshade::api::device *,
+    std::unordered_map<std::uint32_t, virtual_cube>> g_virtual_cube_cache;
 
 std::atomic<bool> g_pack_ready{false};
 std::atomic<std::uint64_t> g_native_desc_candidates{0};
@@ -484,7 +493,7 @@ bool create_virtual_cube(
     reshade::api::device *device,
     const std::vector<std::uint8_t> &source_cube,
     std::uint32_t probe_index,
-    replacement_resource &out)
+    virtual_cube &out)
 {
     std::array<std::vector<std::uint32_t>, k_target_subresources> storage;
     std::array<reshade::api::subresource_data, k_target_subresources> subresources{};
@@ -638,10 +647,9 @@ bool create_virtual_cube(
         return false;
 
     out.device = device;
-    out.virtual_resource = resource;
-    out.virtual_view = view;
+    out.resource = resource;
+    out.view = view;
     out.probe_index = probe_index;
-    out.slot = 2;
     return true;
 }
 
@@ -685,42 +693,22 @@ void on_init_resource(
 }
 
 void on_destroy_resource(
-    reshade::api::device *device,
+    reshade::api::device *,
     reshade::api::resource source)
 {
     if (g_internal_resource_create || source.handle == 0)
         return;
 
-    replacement_resource replacement{};
-    bool found = false;
+    std::lock_guard lock(g_mutex);
+    g_replacements_by_resource.erase(source.handle);
 
-    {
-        std::lock_guard lock(g_mutex);
-        const auto it = g_replacements_by_resource.find(source.handle);
-        if (it != g_replacements_by_resource.end()) {
-            replacement = it->second;
-            g_replacements_by_resource.erase(it);
-            found = true;
-        }
-
-        for (auto vit = g_source_resource_by_view.begin();
-             vit != g_source_resource_by_view.end();) {
-            if (vit->second == source.handle)
-                vit = g_source_resource_by_view.erase(vit);
-            else
-                ++vit;
-        }
+    for (auto vit = g_source_resource_by_view.begin();
+         vit != g_source_resource_by_view.end();) {
+        if (vit->second == source.handle)
+            vit = g_source_resource_by_view.erase(vit);
+        else
+            ++vit;
     }
-
-    if (!found)
-        return;
-
-    g_internal_resource_create = true;
-    if (replacement.virtual_view.handle != 0)
-        device->destroy_resource_view(replacement.virtual_view);
-    if (replacement.virtual_resource.handle != 0)
-        device->destroy_resource(replacement.virtual_resource);
-    g_internal_resource_create = false;
 }
 
 void on_init_resource_view(
@@ -776,10 +764,14 @@ std::optional<reshade::api::resource_view> replacement_for(
         if (rit == g_replacements_by_resource.end())
             return std::nullopt;
 
-        if (rit->second.virtual_view.handle != 0)
-            return rit->second.virtual_view;
-
         record = rit->second;
+
+        const auto dit = g_virtual_cube_cache.find(record.device);
+        if (dit != g_virtual_cube_cache.end()) {
+            const auto cit = dit->second.find(record.packed_index);
+            if (cit != dit->second.end())
+                return cit->second.view;
+        }
     }
 
     const std::uint8_t *cube =
@@ -789,7 +781,8 @@ std::optional<reshade::api::resource_view> replacement_for(
     std::vector<std::uint8_t> source_cube(
         cube, cube + k_source_bytes_per_cube);
 
-    replacement_resource created = record;
+    virtual_cube created{};
+    created.packed_index = record.packed_index;
     if (!create_virtual_cube(
             record.device,
             source_cube,
@@ -801,31 +794,32 @@ std::optional<reshade::api::resource_view> replacement_for(
 
     {
         std::lock_guard lock(g_mutex);
-        const auto it = g_replacements_by_resource.find(source_handle);
-        if (it == g_replacements_by_resource.end()) {
+        const auto source_it = g_replacements_by_resource.find(source_handle);
+        if (source_it == g_replacements_by_resource.end()) {
             g_internal_resource_create = true;
-            record.device->destroy_resource_view(created.virtual_view);
-            record.device->destroy_resource(created.virtual_resource);
+            record.device->destroy_resource_view(created.view);
+            record.device->destroy_resource(created.resource);
             g_internal_resource_create = false;
             return std::nullopt;
         }
 
-        if (it->second.virtual_view.handle != 0) {
-            const reshade::api::resource_view existing =
-                it->second.virtual_view;
+        auto &device_cache = g_virtual_cube_cache[record.device];
+        const auto existing = device_cache.find(record.packed_index);
+        if (existing != device_cache.end()) {
+            const reshade::api::resource_view existing_view =
+                existing->second.view;
             g_internal_resource_create = true;
-            record.device->destroy_resource_view(created.virtual_view);
-            record.device->destroy_resource(created.virtual_resource);
+            record.device->destroy_resource_view(created.view);
+            record.device->destroy_resource(created.resource);
             g_internal_resource_create = false;
-            return existing;
+            return existing_view;
         }
 
-        it->second.virtual_resource = created.virtual_resource;
-        it->second.virtual_view = created.virtual_view;
+        device_cache.emplace(record.packed_index, created);
     }
 
     ++g_virtual_created;
-    return created.virtual_view;
+    return created.view;
 }
 
 void on_push_descriptors(
@@ -939,27 +933,27 @@ void log_snapshot(const runtime_snapshot &snapshot)
 
 void cleanup_virtual_resources()
 {
-    std::vector<replacement_resource> replacements;
+    std::vector<virtual_cube> cubes;
     {
         std::lock_guard lock(g_mutex);
-        replacements.reserve(g_replacements_by_resource.size());
-        for (const auto &[_, replacement] : g_replacements_by_resource)
-            replacements.push_back(replacement);
+        for (const auto &[_, device_cache] : g_virtual_cube_cache) {
+            for (const auto &[__, cube] : device_cache)
+                cubes.push_back(cube);
+        }
 
+        g_virtual_cube_cache.clear();
         g_source_resource_by_view.clear();
         g_replacements_by_resource.clear();
     }
 
     g_internal_resource_create = true;
-    for (const replacement_resource &replacement : replacements) {
-        if (replacement.device == nullptr)
+    for (const virtual_cube &cube : cubes) {
+        if (cube.device == nullptr)
             continue;
-        if (replacement.virtual_view.handle != 0)
-            replacement.device->destroy_resource_view(
-                replacement.virtual_view);
-        if (replacement.virtual_resource.handle != 0)
-            replacement.device->destroy_resource(
-                replacement.virtual_resource);
+        if (cube.view.handle != 0)
+            cube.device->destroy_resource_view(cube.view);
+        if (cube.resource.handle != 0)
+            cube.device->destroy_resource(cube.resource);
     }
     g_internal_resource_create = false;
 }
