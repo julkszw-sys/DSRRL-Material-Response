@@ -18,6 +18,7 @@ enum class operator_kind : std::uint8_t {
 };
 
 constexpr std::size_t operator_count = static_cast<std::size_t>(operator_kind::count);
+constexpr std::size_t max_pixel_shader_resource_slots = 128;
 
 enum route_evidence : std::uint32_t {
     evidence_none       = 0,
@@ -95,6 +96,7 @@ public:
     route_decision evaluate_route(route_contract contract, route_observation observation) const noexcept;
 
     std::uint32_t init_resource(std::uint64_t handle, std::uint64_t desc_hash, std::uint64_t logical_hash = 0);
+    bool annotate_resource(std::uint64_t handle, std::uint64_t desc_hash, std::uint64_t logical_hash);
     void destroy_resource(std::uint64_t handle);
     bool init_view(std::uint64_t view, std::uint64_t resource);
     void destroy_view(std::uint64_t view);
@@ -112,6 +114,8 @@ public:
     std::uint64_t begin_draw(std::uint64_t command);
     std::optional<command_snapshot> command_state(std::uint64_t command) const;
     std::optional<pipeline_identity> resolve_bound_pipeline(std::uint64_t command) const;
+    bool bind_pixel_shader_views(std::uint64_t command, std::uint32_t first, std::uint32_t count, const std::uint64_t *views);
+    std::optional<resource_identity> resolve_bound_pixel_shader_resource(std::uint64_t command, std::uint32_t slot, operator_kind op);
 
     void note_receiver_match(operator_kind op);
     void note_resource_match(operator_kind op);
@@ -135,6 +139,7 @@ private:
     };
 
     struct view_record {
+        std::uint32_t generation = 0;
         std::uint64_t resource = 0;
         std::uint32_t resource_generation = 0;
         bool alive = false;
@@ -149,6 +154,11 @@ private:
         bool alive = false;
     };
 
+    struct bound_view_ref {
+        std::uint64_t handle = 0;
+        std::uint32_t generation = 0;
+    };
+
     struct transaction_record {
         bool active = false;
         operator_kind op = operator_kind::specrgb;
@@ -158,6 +168,7 @@ private:
         std::uint64_t bound_pipeline = 0;
         std::uint32_t bound_pipeline_generation = 0;
         std::uint64_t draw_serial = 0;
+        std::array<bound_view_ref, max_pixel_shader_resource_slots> pixel_shader_views{};
         transaction_record transaction{};
     };
 
