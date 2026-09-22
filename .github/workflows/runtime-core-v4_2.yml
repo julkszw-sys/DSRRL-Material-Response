@@ -1,0 +1,65 @@
+name: Runtime Core V4.2 Full Input Stitch EnvSpec
+
+on:
+  push:
+    branches:
+      - dev/runtime-core-v2-full-envspec-carrier-v4_2-full-input-stitch
+
+jobs:
+  v42-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Checkout pinned ReShade API
+        uses: actions/checkout@v4
+        with:
+          repository: crosire/reshade
+          ref: 3645e3025d1d98a90e318278858931f034d5d1f6
+          path: _reshade
+      - name: Generate V3.6 base source
+        shell: pwsh
+        run: python tools/generate_v36_owned_dedicated_ps.py --input src/runtime_core_v2_full_envspec_carrier_v3_4.cpp --output src/runtime_core_v2_full_envspec_carrier_v3_6.cpp
+      - name: Apply V3.8 shader-index gate
+        shell: pwsh
+        run: python tools/generate_v38_shader_index_gate.py --input src/runtime_core_v2_full_envspec_carrier_v3_6.cpp --output src/runtime_core_v2_full_envspec_carrier_v3_8.cpp
+      - name: Apply V4.0 operator-isolated carrier
+        shell: pwsh
+        run: python tools/generate_v40_operator_isolated.py --input src/runtime_core_v2_full_envspec_carrier_v3_8.cpp --output src/runtime_core_v2_full_envspec_carrier_v4_0.cpp
+      - name: Apply V4.1 preserve-r1.x sidecars
+        shell: pwsh
+        run: python tools/generate_v41_preserve_r1x.py --input src/runtime_core_v2_full_envspec_carrier_v4_0.cpp --output src/runtime_core_v2_full_envspec_carrier_v4_1.cpp
+      - name: Apply V4.2 full input-contract stitch
+        shell: pwsh
+        run: |
+          python tools/generate_v42_full_input_stitch.py --input src/runtime_core_v2_full_envspec_carrier_v4_1.cpp --output src/runtime_core_v2_full_envspec_carrier_v3_6.cpp
+          $text = Get-Content src/runtime_core_v2_full_envspec_carrier_v3_6.cpp -Raw
+          if ($text -notmatch 'V4.2 Full Input Stitch EnvSpec') { throw 'V4.2 identity missing' }
+          if ($text -notmatch 'DSRRL V4.2 INPUT STITCH') { throw 'V4.2 telemetry missing' }
+          if ($text -notmatch 'PSGetConstantBuffers\(12,1,&s.b12\)') { throw 'V4.2 b12 capture missing' }
+          if ($text -notmatch 'PSSetConstantBuffers\(12,1,&v\)') { throw 'V4.2 b12 bind/restore missing' }
+          if ($text -notmatch 'descriptor_type::constant_buffer') { throw 'V4.2 constant-buffer observer missing' }
+          if ($text -notmatch 'PSSetShaderResources\(10,1,&v\)') { throw 'V4.2 t10 stitch missing' }
+      - name: Configure
+        run: cmake -S . -B build -DRESHade_INCLUDE_DIR="${{ github.workspace }}/_reshade/include"
+      - name: Build addon and tests
+        run: cmake --build build --config Release --target dsrrl_runtime_core_v2_full_envspec_carrier_v36 dsrrl_runtime_core_v2_tests
+      - name: Test
+        run: ctest --test-dir build -C Release --output-on-failure
+      - name: Verify V4.2 addon
+        shell: pwsh
+        run: |
+          $src = 'build/Release/DSRRL_PTDE_Full_EnvSpec_Carrier_V3_6.addon64'
+          $dst = 'build/Release/DSRRL_PTDE_Full_EnvSpec_Carrier_V4_2.addon64'
+          if (!(Test-Path $src)) { throw 'V4.2 carrier binary not produced' }
+          Copy-Item $src $dst -Force
+          $ascii = [System.Text.Encoding]::ASCII.GetString([System.IO.File]::ReadAllBytes($dst))
+          if ($ascii -notmatch 'V4.2 Full Input Stitch EnvSpec') { throw 'V4.2 identity string missing from binary' }
+          if ($ascii -notmatch 'DSRRL V4.2 INPUT STITCH') { throw 'V4.2 telemetry string missing from binary' }
+          Get-Item $dst | Format-List Name,Length
+          Get-FileHash $dst -Algorithm SHA256 | Format-List
+      - name: Upload V4.2 addon
+        uses: actions/upload-artifact@v4
+        with:
+          name: DSRRL_PTDE_Full_EnvSpec_Carrier_V4_2_FULL_INPUT_STITCH
+          path: build/Release/DSRRL_PTDE_Full_EnvSpec_Carrier_V4_2.addon64
+          if-no-files-found: error
