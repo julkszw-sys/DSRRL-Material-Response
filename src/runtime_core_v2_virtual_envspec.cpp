@@ -1,3 +1,4 @@
+#define NOMINMAX
 #include "runtime_core_v2_reshade.hpp"
 
 #include <reshade.hpp>
