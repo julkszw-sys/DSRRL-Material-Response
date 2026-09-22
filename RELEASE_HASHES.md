@@ -1,49 +1,27 @@
 # Release hashes
 
-## Material Response 1.45
+## Material Response 1.45 clean release
 
 ### Addon
 
 `DSRRL_Material_Response_1.45.addon64`
 
-Size:
-
-`1,803,264 bytes`
+Size: `1,803,264 bytes`
 
 SHA-256:
 
-`41690c6212157eb772ae0c75c055d0bb7a842709f65f02c3689b87714151e1f7`
+`13e722f9472e00c1922baecefe121bf1b7b9dd6129f1d2028d64568d74bb5ab7`
 
-Version:
+Version: `1.45.0.0`
 
-`1.45.0.0`
+PE checksum: `0x001BA126`
 
-### PackedGI EnvSpec resource
-
-Runtime path:
-
-`DSRRL\EnvSpec\PackedGI\PTDE_GI_ENVSPEC_PACK_RGBA.bin`
-
-Size:
-
-`33,619,968 bytes`
+### Integrated basis used by the release builder
 
 SHA-256:
 
-`c16c3fd75bcf34f3cc075da6da1ad10c9440ee4a3ca580fe7f74d07a2ce4eac3`
+`db2e6547b5fb5516d4ad6559173e66421315d1635ca0c08e8141b0de2f57f966`
 
-### Development basis used by the release builder
+### Release exclusions
 
-SHA-256:
-
-`cfd1fe585710497a411adad8dc7edd9b46ae187133ee0625abeed2ab1ab96f09`
-
-### External loader bytes
-
-Size:
-
-`1,501 bytes`
-
-SHA-256:
-
-`819f9cda297b09a24cb3eb2a9f6699dc5bb7807ac47ba2a94dbbdf50419d9405`
+No PackedGI/EnvSpec resource or EnvSpec loader is part of this release build.
