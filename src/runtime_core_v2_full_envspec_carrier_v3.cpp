@@ -15,7 +15,8 @@ namespace dsrrl::runtime_v2::full_envspec_v3 {
 namespace {
 
 // V3.3 keeps the V3.2 callsite coexistence architecture so Material Response
-// can retain ownership of its parser/selector entry hooks.
+// can retain ownership of its parser/selector entry hooks. Raw PTDE RGBA is
+// intentionally preserved through texture filtering and decoded by build131.
 constexpr std::uintptr_t k_parser_thunk_rva = 0x29DFC0;
 constexpr std::array<std::uintptr_t, 4> k_compat_call_rvas = {
     0x291D9C, 0x20E014, 0x20EB7A, 0x20FB99
@@ -254,8 +255,6 @@ bool verify_and_install_compat_hooks_v33()
     return true;
 }
 
-// Build131 dedicated P_Metal consumers. Synthetic IDs deliberately cannot
-// collide with retail PhnShaderBin indices.
 struct dedicated_identity {
     std::uint32_t receiver_id;
     std::uint32_t code_size;
@@ -317,58 +316,39 @@ std::optional<reshade::api::resource_view> get_raw_rgba_cube_v33(
     {
         std::lock_guard lock(g_mutex);
         const auto it = g_virtual_cubes.find(key);
-        if (it != g_virtual_cubes.end())
-            return it->second.view;
+        if (it != g_virtual_cubes.end()) return it->second.view;
     }
 
-    const std::size_t cube_offset =
-        static_cast<std::size_t>(key) * k_ptde_bytes_per_cube;
-    const std::size_t face_bytes =
-        static_cast<std::size_t>(k_ptde_size) * k_ptde_size * 4u;
-
+    const std::size_t cube_offset = static_cast<std::size_t>(key) * k_ptde_bytes_per_cube;
+    const std::size_t face_bytes = static_cast<std::size_t>(k_ptde_size) * k_ptde_size * 4u;
     std::array<reshade::api::subresource_data,k_faces> sub{};
     for (std::uint32_t face = 0; face < k_faces; ++face) {
-        sub[face].data = g_ptde_pack.data() + cube_offset +
-                         static_cast<std::size_t>(face) * face_bytes;
+        sub[face].data = g_ptde_pack.data() + cube_offset + static_cast<std::size_t>(face) * face_bytes;
         sub[face].row_pitch = k_ptde_size * 4u;
         sub[face].slice_pitch = static_cast<std::uint32_t>(face_bytes);
     }
 
     const reshade::api::resource_desc desc(
-        reshade::api::resource_type::texture_2d,
-        k_ptde_size, k_ptde_size, k_faces, 1,
+        reshade::api::resource_type::texture_2d, k_ptde_size, k_ptde_size, k_faces, 1,
         reshade::api::format::r8g8b8a8_unorm, 1,
-        reshade::api::memory_heap::default_,
-        reshade::api::resource_usage::shader_resource,
+        reshade::api::memory_heap::default_, reshade::api::resource_usage::shader_resource,
         reshade::api::resource_flags::cube_compatible);
 
-    virtual_cube cube{};
-    cube.probe_index = probe;
-    cube.slot = slot;
-
+    virtual_cube cube{}; cube.probe_index = probe; cube.slot = slot;
     g_internal_resource_create = true;
     const bool resource_ok = g_device->create_resource(
-        desc, sub.data(), reshade::api::resource_usage::shader_resource,
-        &cube.resource);
-
+        desc, sub.data(), reshade::api::resource_usage::shader_resource, &cube.resource);
     bool view_ok = false;
     if (resource_ok) {
         const reshade::api::resource_view_desc vd(
             reshade::api::resource_view_type::texture_cube,
-            reshade::api::format::r8g8b8a8_unorm,
-            0, 1, 0, k_faces);
+            reshade::api::format::r8g8b8a8_unorm, 0, 1, 0, k_faces);
         view_ok = g_device->create_resource_view(
-            cube.resource, reshade::api::resource_usage::shader_resource,
-            vd, &cube.view);
+            cube.resource, reshade::api::resource_usage::shader_resource, vd, &cube.view);
     }
-    if (!view_ok && cube.resource.handle != 0)
-        g_device->destroy_resource(cube.resource);
+    if (!view_ok && cube.resource.handle != 0) g_device->destroy_resource(cube.resource);
     g_internal_resource_create = false;
-
-    if (!resource_ok || !view_ok) {
-        ++g_virtual_create_fail;
-        return std::nullopt;
-    }
+    if (!resource_ok || !view_ok) { ++g_virtual_create_fail; return std::nullopt; }
 
     {
         std::lock_guard lock(g_mutex);
@@ -381,7 +361,6 @@ std::optional<reshade::api::resource_view> get_raw_rgba_cube_v33(
             return it->second.view;
         }
     }
-
     ++g_virtual_created;
     ++g_v33_raw_rgba_created;
     return cube.view;
@@ -396,21 +375,14 @@ struct replacement_plan_v33 {
 
 std::optional<replacement_plan_v33> build_plan_v33(reshade::api::command_list *cmd)
 {
-    const auto pipeline =
-        global_tracker().resolve_bound_pipeline(command_id(cmd));
-    if (!pipeline.has_value() || !pipeline->confirmed) {
-        ++g_receiver_reject;
-        return std::nullopt;
-    }
+    const auto pipeline = global_tracker().resolve_bound_pipeline(command_id(cmd));
+    if (!pipeline.has_value() || !pipeline->confirmed) { ++g_receiver_reject; return std::nullopt; }
     ++g_receiver_match;
 
     const auto binding = active_binding();
     if (!binding.has_value() || binding->record == nullptr) {
-        ++g_material_unknown;
-        ++g_fail_open;
-        return std::nullopt;
+        ++g_material_unknown; ++g_fail_open; return std::nullopt;
     }
-
     const material_record &m = *binding->record;
     const bool dedicated = is_dedicated_pmetal_receiver(pipeline->receiver_id);
 
@@ -418,78 +390,47 @@ std::optional<replacement_plan_v33> build_plan_v33(reshade::api::command_list *c
     {
         std::lock_guard lock(g_mutex);
         const auto it = g_command_bindings.find(command_id(cmd));
-        if (it == g_command_bindings.end()) {
-            ++g_fail_open;
-            return std::nullopt;
-        }
+        if (it == g_command_bindings.end()) { ++g_fail_open; return std::nullopt; }
         current = it->second;
     }
 
-    replacement_plan_v33 plan{};
-    plan.original = current;
-
+    replacement_plan_v33 plan{}; plan.original = current;
     if (m.state == material_envspec_state::present) {
-        // V3.3 is intentionally narrow: only exact P_Metal on build131's
-        // dedicated PTDE consumer island may consume raw PTDE RGBA.
         if (!is_exact_pmetal(m)) {
-            ++g_v33_nonpmetal_present_failopen;
-            ++g_material_unknown;
-            ++g_fail_open;
+            ++g_v33_nonpmetal_present_failopen; ++g_material_unknown; ++g_fail_open;
             return std::nullopt;
         }
         if (!dedicated) {
-            ++g_v33_present_consumer_reject;
-            ++g_fail_open;
+            ++g_v33_present_consumer_reject; ++g_fail_open;
             return std::nullopt;
         }
         ++g_v33_dedicated_match;
-
-        // The build131 P_Metal island consumes both endpoints. Never create
-        // a half-PTDE/half-DSR pair.
         if (!current.srv[0].valid || !current.srv[1].valid) {
-            ++g_resource_route_miss;
-            ++g_fail_open;
-            return std::nullopt;
+            ++g_resource_route_miss; ++g_fail_open; return std::nullopt;
         }
-
         const auto probe_a = probe_for_view(current.srv[0].view);
         const auto probe_b = probe_for_view(current.srv[1].view);
         if (!probe_a.has_value() || !probe_b.has_value()) {
-            ++g_resource_route_miss;
-            ++g_fail_open;
-            return std::nullopt;
+            ++g_resource_route_miss; ++g_fail_open; return std::nullopt;
         }
-
         const auto raw_a = get_raw_rgba_cube_v33(*probe_a, m.slot);
         const auto raw_b = get_raw_rgba_cube_v33(*probe_b, m.slot);
         if (!raw_a.has_value() || !raw_b.has_value()) {
-            ++g_resource_route_miss;
-            ++g_fail_open;
-            return std::nullopt;
+            ++g_resource_route_miss; ++g_fail_open; return std::nullopt;
         }
-
         plan.replacement[0] = *raw_a;
         plan.replacement[1] = *raw_b;
         plan.replace[0] = true;
         plan.replace[1] = true;
         plan.use_exact_sampler = true;
-        ++g_resource_route_hit;
-        ++g_resource_route_hit;
+        ++g_resource_route_hit; ++g_resource_route_hit;
         ++g_material_present;
         return plan;
     }
 
-    if (m.state == material_envspec_state::explicit_none &&
-        binding->explicit_none_safe) {
-        // Explicit-none is valid only on the certified stock receiver family.
-        if (dedicated) {
-            ++g_fail_open;
-            return std::nullopt;
-        }
-        if (g_black_view.handle == 0 && !create_black_cube()) {
-            ++g_fail_open;
-            return std::nullopt;
-        }
+    if (m.state == material_envspec_state::explicit_none && binding->explicit_none_safe) {
+        if (dedicated) { ++g_fail_open; return std::nullopt; }
+        if (g_black_view.handle == 0 && !create_black_cube()) { ++g_fail_open; return std::nullopt; }
         bool any = false;
         for (int i = 0; i < 2; ++i) {
             if (!current.srv[i].valid) continue;
@@ -497,17 +438,12 @@ std::optional<replacement_plan_v33> build_plan_v33(reshade::api::command_list *c
             plan.replace[i] = true;
             any = true;
         }
-        if (!any) {
-            ++g_resource_route_miss;
-            ++g_fail_open;
-            return std::nullopt;
-        }
+        if (!any) { ++g_resource_route_miss; ++g_fail_open; return std::nullopt; }
         ++g_material_explicit_none;
         return plan;
     }
 
-    ++g_material_unknown;
-    ++g_fail_open;
+    ++g_material_unknown; ++g_fail_open;
     return std::nullopt;
 }
 
@@ -517,16 +453,12 @@ bool apply_plan_v33(reshade::api::command_list *cmd, const replacement_plan_v33 
     for (int i = 0; i < 2; ++i) {
         if (!plan.replace[i]) continue;
         const std::uint32_t slot = i == 0 ? 12u : 14u;
-        if (push_srv_binding(cmd, slot, plan.original.srv[i],
-                             plan.replacement[i], plan.use_exact_sampler)) {
+        if (push_srv_binding(cmd, slot, plan.original.srv[i], plan.replacement[i], plan.use_exact_sampler)) {
             any = true;
             if (slot == 12) ++g_t12_rebind; else ++g_t14_rebind;
         }
-        if (plan.use_exact_sampler &&
-            plan.original.sampler[i].valid &&
-            g_ptde_sampler.handle != 0) {
-            if (push_sampler_binding(cmd, slot, plan.original.sampler[i], g_ptde_sampler))
-                ++g_sampler_rebind;
+        if (plan.use_exact_sampler && plan.original.sampler[i].valid && g_ptde_sampler.handle != 0) {
+            if (push_sampler_binding(cmd, slot, plan.original.sampler[i], g_ptde_sampler)) ++g_sampler_rebind;
         }
     }
     return any;
@@ -538,13 +470,9 @@ bool restore_plan_v33(reshade::api::command_list *cmd, const replacement_plan_v3
     for (int i = 0; i < 2; ++i) {
         if (!plan.replace[i]) continue;
         const std::uint32_t slot = i == 0 ? 12u : 14u;
-        ok = push_srv_binding(cmd, slot, plan.original.srv[i],
-                              plan.original.srv[i].view, false) && ok;
-        if (plan.original.sampler[i].valid) {
-            ok = push_sampler_binding(cmd, slot,
-                                      plan.original.sampler[i],
-                                      plan.original.sampler[i].sampler) && ok;
-        }
+        ok = push_srv_binding(cmd, slot, plan.original.srv[i], plan.original.srv[i].view, false) && ok;
+        if (plan.original.sampler[i].valid)
+            ok = push_sampler_binding(cmd, slot, plan.original.sampler[i], plan.original.sampler[i].sampler) && ok;
     }
     if (ok) ++g_restore_pass; else ++g_restore_fail;
     return ok;
@@ -557,13 +485,10 @@ bool on_draw_v33(reshade::api::command_list *cmd, std::uint32_t vertex_count,
     if (g_internal_replay) return false;
     const auto plan = build_plan_v33(cmd);
     g_active_material = 0;
-    if (!plan.has_value() || !apply_plan_v33(cmd, *plan))
-        return false;
-
+    if (!plan.has_value() || !apply_plan_v33(cmd, *plan)) return false;
     g_internal_replay = true;
     cmd->draw(vertex_count, instance_count, first_vertex, first_instance);
     g_internal_replay = false;
-
     restore_plan_v33(cmd, *plan);
     ++g_replay_pass;
     return true;
@@ -576,13 +501,10 @@ bool on_draw_indexed_v33(reshade::api::command_list *cmd, std::uint32_t index_co
     if (g_internal_replay) return false;
     const auto plan = build_plan_v33(cmd);
     g_active_material = 0;
-    if (!plan.has_value() || !apply_plan_v33(cmd, *plan))
-        return false;
-
+    if (!plan.has_value() || !apply_plan_v33(cmd, *plan)) return false;
     g_internal_replay = true;
     cmd->draw_indexed(index_count, instance_count, first_index, vertex_offset, first_instance);
     g_internal_replay = false;
-
     restore_plan_v33(cmd, *plan);
     ++g_replay_pass;
     return true;
@@ -592,7 +514,6 @@ void log_snapshot_v33(const runtime_snapshot &snapshot)
 {
     const std::uint64_t p = ++g_present_count;
     if (p != 1 && (p % 300) != 0) return;
-
     char line[1900] = {};
     std::snprintf(line, sizeof(line),
         "[DSRRL FULL ENVSPEC V3.3] P=%llu EXE=%llu/%llu HOOK=%llu/%llu "
@@ -637,7 +558,6 @@ void log_snapshot_v33(const runtime_snapshot &snapshot)
         static_cast<unsigned long long>(snapshot.live_views),
         static_cast<unsigned long long>(snapshot.live_pipelines),
         static_cast<unsigned long long>(snapshot.live_commands));
-
     reshade::log::message(reshade::log::level::info, line);
 }
 
@@ -684,12 +604,10 @@ extern "C" __declspec(dllexport) bool AddonInit(HMODULE addon_module, HMODULE re
     if (!reshade::register_addon(addon_module, reshade_module)) return false;
     using namespace dsrrl::runtime_v2;
     using namespace dsrrl::runtime_v2::full_envspec_v3;
-
     set_receiver_classifier(classify_receiver_v33);
     set_snapshot_sink(log_snapshot_v33);
     register_reshade_events();
     register_v33_events();
-
     if (!load_pack(addon_module)) {
         reshade::log::message(reshade::log::level::error,
             "[DSRRL FULL ENVSPEC V3.3] canonical PTDE pack load/SHA failed; PRESENT stays fail-open");
@@ -712,13 +630,11 @@ extern "C" __declspec(dllexport) void AddonUninit(HMODULE addon_module, HMODULE 
 {
     using namespace dsrrl::runtime_v2;
     using namespace dsrrl::runtime_v2::full_envspec_v3;
-
     unpatch_callsites();
     unregister_v33_events();
     unregister_reshade_events();
     set_receiver_classifier(nullptr);
     set_snapshot_sink(nullptr);
-
     {
         std::lock_guard lock(g_mutex);
         g_materials.clear();
@@ -729,6 +645,5 @@ extern "C" __declspec(dllexport) void AddonUninit(HMODULE addon_module, HMODULE 
     g_ptde_pack.clear();
     g_material_registry.clear();
     g_native_probe_registry.clear();
-
     reshade::unregister_addon(addon_module, reshade_module);
 }
