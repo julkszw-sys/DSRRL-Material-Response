@@ -30,9 +30,13 @@ target_link_libraries(dsrrl_runtime_core_v2_tests
 enable_testing()
 add_test(NAME runtime_core_v2 COMMAND dsrrl_runtime_core_v2_tests)
 
-set(RESHade_INCLUDE_DIR "" CACHE PATH "Path to the ReShade include directory")
+set(RESHADE_INCLUDE_DIR "" CACHE PATH "Path to the ReShade include directory")
+# Backward compatibility with the historical mixed-case cache variable.
+if(NOT RESHADE_INCLUDE_DIR AND DEFINED RESHADE_INCLUDE_DIR AND RESHADE_INCLUDE_DIR)
+    set(RESHADE_INCLUDE_DIR "${RESHADE_INCLUDE_DIR}")
+endif()
 
-if(RESHade_INCLUDE_DIR)
+if(RESHADE_INCLUDE_DIR)
     add_library(dsrrl_runtime_core_v2_reshade OBJECT
         src/runtime_core_v2_reshade.cpp
     )
@@ -40,7 +44,7 @@ if(RESHade_INCLUDE_DIR)
     target_include_directories(dsrrl_runtime_core_v2_reshade
         PRIVATE
             ${CMAKE_CURRENT_SOURCE_DIR}/src
-            ${RESHade_INCLUDE_DIR}
+            ${RESHADE_INCLUDE_DIR}
     )
 
     target_compile_features(dsrrl_runtime_core_v2_reshade PRIVATE cxx_std_17)
@@ -59,7 +63,7 @@ if(RESHade_INCLUDE_DIR)
         target_include_directories(dsrrl_runtime_core_v2_diagnostic
             PRIVATE
                 ${CMAKE_CURRENT_SOURCE_DIR}/src
-                ${RESHade_INCLUDE_DIR}
+                ${RESHADE_INCLUDE_DIR}
         )
 
         target_link_libraries(dsrrl_runtime_core_v2_diagnostic
@@ -83,7 +87,7 @@ if(RESHade_INCLUDE_DIR)
         target_include_directories(dsrrl_runtime_core_v2_virtual_envspec
             PRIVATE
                 ${CMAKE_CURRENT_SOURCE_DIR}/src
-                ${RESHade_INCLUDE_DIR}
+                ${RESHADE_INCLUDE_DIR}
         )
 
         target_link_libraries(dsrrl_runtime_core_v2_virtual_envspec
@@ -109,7 +113,7 @@ if(RESHade_INCLUDE_DIR)
         target_include_directories(dsrrl_runtime_core_v2_virtual_envspec_v2
             PRIVATE
                 ${CMAKE_CURRENT_SOURCE_DIR}/src
-                ${RESHade_INCLUDE_DIR}
+                ${RESHADE_INCLUDE_DIR}
         )
 
         target_link_libraries(dsrrl_runtime_core_v2_virtual_envspec_v2
@@ -135,7 +139,7 @@ if(RESHade_INCLUDE_DIR)
         target_include_directories(dsrrl_runtime_core_v2_virtual_envspec_v3
             PRIVATE
                 ${CMAKE_CURRENT_SOURCE_DIR}/src
-                ${RESHade_INCLUDE_DIR}
+                ${RESHADE_INCLUDE_DIR}
         )
 
         target_link_libraries(dsrrl_runtime_core_v2_virtual_envspec_v3
