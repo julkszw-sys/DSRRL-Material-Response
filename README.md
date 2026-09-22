@@ -4,6 +4,18 @@ Source and build files for the Material Response component of **Dark Souls Remas
 
 The addon is loaded through ReShade and changes selected renderer/material paths inside Dark Souls Remastered. DSR remains the host renderer; unsupported or unknown routes fall back to the stock game path.
 
+## Development
+
+The repository now has an explicit split between release reproduction and source-first renderer development:
+
+- `main` — shipped release and exact release-reproduction material
+- `develop` — canonical Runtime Core V2 / source-first integration line
+- short-lived experimental branches — isolated operator hypotheses only
+
+The historical 1.45 release builder remains intentionally frozen around its SHA-pinned development basis. New renderer work should converge on a complete source build rather than adding further opaque binary patch stages.
+
+See [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) and [CONTRIBUTING.md](CONTRIBUTING.md).
+
 ## Current release
 
 **Material Response 1.45**
