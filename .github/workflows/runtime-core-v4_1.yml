@@ -1,5 +1,6 @@
 name: Runtime Core V4.1 Preserve r1.x EnvSpec
 
+# Retrigger after relaxing a non-semantic identity-string guard in the V4.1 generator.
 on:
   push:
     branches:
