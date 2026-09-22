@@ -11,8 +11,7 @@ The addon may:
 - select verified material/resource routes
 - temporarily replace shader-resource bindings for a draw
 - restore the original bindings afterwards
-- read DSRRL assets from the game directory
-- change memory protection for the addon's own reserved resource area during local asset loading
+- read DSRRL material/equipment sidecar assets from the game directory when required by the enabled bridge
 
 ## It does not intentionally
 
@@ -26,24 +25,16 @@ The addon may:
 - inspect browsers, email or unrelated applications
 - modify `DarkSoulsRemastered.exe` on disk
 
-## External EnvSpec resource
+## EnvSpec/cubemap status
 
-The addon reads:
+PTDE EnvSpec/cubemap replacement is disabled in this clean release. The previous external PackedGI loader is not invoked, its injected loader cave is cleared, and the EnvSpec substitution gate is forced to fail open before the resource-replacement path.
 
-`DSRRL\EnvSpec\PackedGI\PTDE_GI_ENVSPEC_PACK_RGBA.bin`
+No PackedGI EnvSpec file is required by this release build.
 
-Expected size:
+## Telemetry
 
-`33,619,968 bytes`
-
-Expected SHA-256:
-
-`c16c3fd75bcf34f3cc075da6da1ad10c9440ee4a3ca580fe7f74d07a2ce4eac3`
-
-If validation fails, the EnvSpec resource path does not activate and the game keeps the stock DSR path.
+Development/activation telemetry for SpecRGB, Subsurf, equipment Normal/Diffuse and EnvSpec is disabled and its release strings are removed.
 
 ## Antivirus detections
 
-The public 1.45 addon has produced generic heuristic detections from several antivirus engines, mainly the Barys family, with a Microsoft ML Wacatac label also observed.
-
-The repository contains the release builder, exact loader bytes, readable loader logic and release hashes so the binary's behaviour can be inspected directly.
+In-process renderer hooks and resource substitution can overlap with generic malware heuristics. The release branch keeps the transformation auditable and provides an exact SHA-256 plus a verifier for the shipped binary.
