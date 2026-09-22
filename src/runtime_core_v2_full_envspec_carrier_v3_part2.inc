@@ -230,12 +230,11 @@ std::uintptr_t __fastcall selector_hook(
         }
     }
     if (actual != 0) ++g_selector_resolved;
-    const std::uintptr_t previous = g_active_material;
+    // The selector submits PS state and returns before the caller issues the draw.
+    // Keep one exact material token pending until the next draw callback consumes it.
     g_active_material = actual;
-    const std::uintptr_t result = g_selector_original(
+    return g_selector_original(
         container, arg2, material_index, arg4, arg5, arg6, arg7, arg8, arg9, arg10);
-    g_active_material = previous;
-    return result;
 }
 
 bool verify_and_install_hooks()
@@ -288,3 +287,4 @@ bool extract_tight_bc6h(const reshade::api::resource_desc &desc,
     out.clear(); out.reserve(k_dsr_tight_bc6h_bytes);
     for (std::uint32_t face = 0; face < k_faces; ++face) {
         for (std::uint32_t level = 0; level < k_dsr_levels; ++level) {
+            const std::uint32_t sub = face * k_dsr_levels + level;
