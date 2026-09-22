@@ -36,6 +36,9 @@ if(NOT RESHADE_INCLUDE_DIR AND DEFINED RESHade_INCLUDE_DIR AND RESHade_INCLUDE_D
     set(RESHADE_INCLUDE_DIR "${RESHade_INCLUDE_DIR}")
 endif()
 
+option(DSRRL_BUILD_DIAGNOSTICS "Build diagnostic ReShade addons" OFF)
+option(DSRRL_BUILD_EXPERIMENTS "Build experimental renderer addons" OFF)
+
 if(RESHADE_INCLUDE_DIR)
     add_library(dsrrl_runtime_core_v2_reshade OBJECT
         src/runtime_core_v2_reshade.cpp
@@ -54,7 +57,7 @@ if(RESHADE_INCLUDE_DIR)
     else()
         target_compile_options(dsrrl_runtime_core_v2_reshade PRIVATE -Wall -Wextra -Werror)
     endif()
-    if(WIN32)
+    if(WIN32 AND DSRRL_BUILD_DIAGNOSTICS)
         add_library(dsrrl_runtime_core_v2_diagnostic SHARED
             src/runtime_core_v2_diagnostic_addon.cpp
             $<TARGET_OBJECTS:dsrrl_runtime_core_v2_reshade>
@@ -79,6 +82,9 @@ if(RESHADE_INCLUDE_DIR)
             SUFFIX ".addon64"
         )
 
+    endif()
+
+    if(WIN32 AND DSRRL_BUILD_EXPERIMENTS)
         add_library(dsrrl_runtime_core_v2_virtual_envspec SHARED
             src/runtime_core_v2_virtual_envspec.cpp
             $<TARGET_OBJECTS:dsrrl_runtime_core_v2_reshade>
