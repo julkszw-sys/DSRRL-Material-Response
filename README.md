@@ -20,7 +20,11 @@ Removed/disabled for release:
 
 - EnvSpec/cubemap substitution
 - external PackedGI loader and PackedGI dependency
-- development/activation telemetry for SpecRGB, Subsurf, Normal, Diffuse and EnvSpec
+- one-shot bridge activation telemetry
+- inherited periodic counter/status telemetry callback
+- startup shader-count telemetry
+
+Safety/error/fail-open logging is retained.
 
 The exact release addon remains a ReShade addon (`.addon64`). ReShade itself remains a separate `dxgi.dll`; this branch does not fork or embed ReShade.
 
@@ -30,7 +34,7 @@ The exact release addon remains a ReShade addon (`.addon64`). ReShade itself rem
 
 Size: `1,803,264 bytes`
 
-SHA-256: `13e722f9472e00c1922baecefe121bf1b7b9dd6129f1d2028d64568d74bb5ab7`
+SHA-256: `3dcb50bee7d4a1ffcb47c2e9d116cbad5da322f6719e3cf2ecdbe6846db63000`
 
 Version: `1.45.0.0`
 
@@ -48,7 +52,7 @@ Run:
 python tools/verify_release.py DSRRL_Material_Response_1.45.addon64
 ```
 
-The verifier checks exact identity plus release invariants: telemetry absent, EnvSpec loader removed, and the EnvSpec resource path forced fail-open.
+The verifier checks exact identity plus release invariants: telemetry paths inactive, EnvSpec loader removed, and the EnvSpec resource path forced fail-open.
 
 ## Security
 
