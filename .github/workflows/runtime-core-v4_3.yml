@@ -1,0 +1,65 @@
+name: Runtime Core V4.3 Owned Host Providers EnvSpec
+
+on:
+  push:
+    branches:
+      - dev/runtime-core-v2-full-envspec-carrier-v4_3-owned-host-providers
+
+jobs:
+  v43-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Checkout pinned ReShade API
+        uses: actions/checkout@v4
+        with:
+          repository: crosire/reshade
+          ref: 3645e3025d1d98a90e318278858931f034d5d1f6
+          path: _reshade
+      - name: Generate V3.6 base source
+        shell: pwsh
+        run: python tools/generate_v36_owned_dedicated_ps.py --input src/runtime_core_v2_full_envspec_carrier_v3_4.cpp --output src/runtime_core_v2_full_envspec_carrier_v3_6.cpp
+      - name: Apply V3.8 shader-index gate
+        shell: pwsh
+        run: python tools/generate_v38_shader_index_gate.py --input src/runtime_core_v2_full_envspec_carrier_v3_6.cpp --output src/runtime_core_v2_full_envspec_carrier_v3_8.cpp
+      - name: Apply V4.0 operator-isolated carrier
+        shell: pwsh
+        run: python tools/generate_v40_operator_isolated.py --input src/runtime_core_v2_full_envspec_carrier_v3_8.cpp --output src/runtime_core_v2_full_envspec_carrier_v4_0.cpp
+      - name: Apply V4.1 preserve-r1.x sidecars
+        shell: pwsh
+        run: python tools/generate_v41_preserve_r1x.py --input src/runtime_core_v2_full_envspec_carrier_v4_0.cpp --output src/runtime_core_v2_full_envspec_carrier_v4_1.cpp
+      - name: Apply V4.2 full input stitch basis
+        shell: pwsh
+        run: python tools/generate_v42_full_input_stitch.py --input src/runtime_core_v2_full_envspec_carrier_v4_1.cpp --output src/runtime_core_v2_full_envspec_carrier_v4_2.cpp
+      - name: Apply V4.3 deterministic owned providers
+        shell: pwsh
+        run: |
+          python tools/generate_v43_owned_host_providers.py --input src/runtime_core_v2_full_envspec_carrier_v4_2.cpp --output src/runtime_core_v2_full_envspec_carrier_v3_6.cpp
+          $text = Get-Content src/runtime_core_v2_full_envspec_carrier_v3_6.cpp -Raw
+          foreach ($tok in @('V4.3 Owned Host Providers EnvSpec','DSRRL V4.3 OWNED PROVIDERS','k_host_spec_prepare_rva = 0x11350Cu','k_host_spec_bind_rva = 0x113B45u','k_host_b12_provider_rva = 0x77A0u','k_exact_pmetal_route = 345','acquire_owned_host_t10','acquire_owned_host_b12','PSSetShaderResources(10,1,&nullv)')) { if ($text -notmatch [regex]::Escape($tok)) { throw "V4.3 token missing: $tok" } }
+          if ($text -match 'install_host_t10_stitch\(\)') { throw 'V4.2 passive t10 hook dependency remains' }
+          if ($text -match 'observe_host_b12\(') { throw 'V4.2 passive b12 observer dependency remains' }
+      - name: Configure
+        run: cmake -S . -B build -DRESHade_INCLUDE_DIR="${{ github.workspace }}/_reshade/include"
+      - name: Build addon and tests
+        run: cmake --build build --config Release --target dsrrl_runtime_core_v2_full_envspec_carrier_v36 dsrrl_runtime_core_v2_tests
+      - name: Test
+        run: ctest --test-dir build -C Release --output-on-failure
+      - name: Verify V4.3 addon
+        shell: pwsh
+        run: |
+          $src = 'build/Release/DSRRL_PTDE_Full_EnvSpec_Carrier_V3_6.addon64'
+          $dst = 'build/Release/DSRRL_PTDE_Full_EnvSpec_Carrier_V4_3.addon64'
+          if (!(Test-Path $src)) { throw 'V4.3 carrier binary not produced' }
+          Copy-Item $src $dst -Force
+          $ascii = [System.Text.Encoding]::ASCII.GetString([System.IO.File]::ReadAllBytes($dst))
+          if ($ascii -notmatch 'V4.3 Owned Host Providers EnvSpec') { throw 'V4.3 identity string missing from binary' }
+          if ($ascii -notmatch 'DSRRL V4.3 OWNED PROVIDERS') { throw 'V4.3 telemetry string missing from binary' }
+          Get-Item $dst | Format-List Name,Length
+          Get-FileHash $dst -Algorithm SHA256 | Format-List
+      - name: Upload V4.3 addon
+        uses: actions/upload-artifact@v4
+        with:
+          name: DSRRL_PTDE_Full_EnvSpec_Carrier_V4_3_OWNED_HOST_PROVIDERS
+          path: build/Release/DSRRL_PTDE_Full_EnvSpec_Carrier_V4_3.addon64
+          if-no-files-found: error
