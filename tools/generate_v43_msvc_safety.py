@@ -35,8 +35,18 @@ def main() -> None:
         'auto *dst=reinterpret_cast<wchar_t *>(static_cast<std::uint8_t *>(state)+0xB38u);\n    std::memset(dst,0,k_host_spec_path_wchars*sizeof(wchar_t));\n    std::memcpy(dst,s.data(),s.size()*sizeof(wchar_t));',
         'remove SEH from filesystem function path write')
 
+    # The provider generator intentionally avoids depending on a source-level escaped wchar literal here.
+    # Replace the generated single-backslash token with an unambiguous numeric wchar value.
+    text = one(
+        text,
+        "std::wstring s=chosen.wstring();if(s.empty())return false;if(s.back()!=L'\\'&&s.back()!=L'/')s.push_back(L'\\');",
+        "std::wstring s=chosen.wstring();if(s.empty())return false;if(s.back()!=static_cast<wchar_t>(0x5C)&&s.back()!=L'/')s.push_back(static_cast<wchar_t>(0x5C));",
+        'fix path separator wchar')
+
     if '__try{state=g_host_spec_state' in text:
         raise SystemExit('unsafe state SEH remains')
+    if "s.back()!=L'\\'" in text:
+        raise SystemExit('ambiguous backslash wchar remains')
     a.output.write_text(text, encoding='utf-8')
     print('PASS V4.3 MSVC safety transform')
 
