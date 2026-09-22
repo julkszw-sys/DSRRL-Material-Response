@@ -122,6 +122,7 @@ public:
     runtime_snapshot seal_frame();
     runtime_snapshot snapshot() const;
     void reset_frame_counters();
+    void reset_all();
 
 private:
     struct resource_record {
