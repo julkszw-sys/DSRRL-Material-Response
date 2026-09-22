@@ -10,6 +10,7 @@
 #include <atomic>
 #include <cmath>
 #include <cstdint>
+#include <cstring>
 #include <cstdio>
 #include <filesystem>
 #include <fstream>
