@@ -284,7 +284,11 @@ void tracker::destroy_command(std::uint64_t command) {
 bool tracker::bind_pipeline(std::uint64_t command, std::uint64_t pipeline) {
     if (command == 0) return false;
     std::lock_guard lock(mutex_);
-    auto &cmd = commands_[command];
+    const auto cit = commands_.find(command);
+    if (cit == commands_.end())
+        return false;
+
+    auto &cmd = cit->second;
     const auto pit = pipelines_.find(pipeline);
 
     if (pit == pipelines_.end() || !pit->second.alive) {
@@ -301,8 +305,11 @@ bool tracker::bind_pipeline(std::uint64_t command, std::uint64_t pipeline) {
 std::uint64_t tracker::begin_draw(std::uint64_t command) {
     if (command == 0) return 0;
     std::lock_guard lock(mutex_);
-    auto &cmd = commands_[command];
-    return ++cmd.draw_serial;
+    const auto it = commands_.find(command);
+    if (it == commands_.end())
+        return 0;
+
+    return ++it->second.draw_serial;
 }
 
 std::optional<command_snapshot> tracker::command_state(std::uint64_t command) const {
