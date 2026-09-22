@@ -207,6 +207,7 @@ private:
     }
 
     void index_logical_locked(std::uint64_t handle, std::uint32_t generation, std::uint64_t logical_hash);
+    void remove_logical_locked(std::uint64_t handle, std::uint32_t generation, std::uint64_t logical_hash);
     runtime_snapshot snapshot_locked() const;
 
     mutable std::recursive_mutex mutex_;
