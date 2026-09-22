@@ -123,7 +123,6 @@ void tracker::destroy_command(std::uint64_t command) {
     if (it->second.transaction.active) {
         auto &c = counters_[op_index(it->second.transaction.op)];
         ++c.unrestored;
-        ++c.fail_open;
     }
 
     commands_.erase(it);
@@ -169,6 +168,29 @@ std::optional<command_snapshot> tracker::command_state(std::uint64_t command) co
     };
 }
 
+std::optional<pipeline_identity> tracker::resolve_bound_pipeline(std::uint64_t command) const {
+    std::lock_guard lock(mutex_);
+    const auto cit = commands_.find(command);
+    if (cit == commands_.end() || cit->second.bound_pipeline == 0)
+        return std::nullopt;
+
+    const auto pit = pipelines_.find(cit->second.bound_pipeline);
+    if (pit == pipelines_.end() ||
+        !pit->second.alive ||
+        pit->second.generation != cit->second.bound_pipeline_generation)
+        return std::nullopt;
+
+    const auto &p = pit->second;
+    return pipeline_identity{
+        cit->second.bound_pipeline,
+        p.generation,
+        p.pixel_shader_hash,
+        p.receiver_id,
+        p.consumer_family_hash,
+        p.confirmed
+    };
+}
+
 void tracker::note_receiver_match(operator_kind op) {
     std::lock_guard lock(mutex_);
     ++counters_[op_index(op)].receiver_matches;
@@ -210,7 +232,7 @@ bool tracker::restore_transaction(std::uint64_t command, operator_kind op) {
     if (it == commands_.end() ||
         !it->second.transaction.active ||
         it->second.transaction.op != op) {
-        ++counters_[op_index(op)].fail_open;
+        ++counters_[op_index(op)].restore_faults;
         return false;
     }
 
@@ -219,16 +241,9 @@ bool tracker::restore_transaction(std::uint64_t command, operator_kind op) {
     return true;
 }
 
-void tracker::fail_open(std::uint64_t command, operator_kind op) {
+void tracker::note_fail_open(operator_kind op) {
     std::lock_guard lock(mutex_);
     ++counters_[op_index(op)].fail_open;
-
-    if (auto it = commands_.find(command);
-        it != commands_.end() &&
-        it->second.transaction.active &&
-        it->second.transaction.op == op) {
-        it->second.transaction.active = false;
-    }
 }
 
 runtime_snapshot tracker::snapshot_locked() const {
@@ -255,7 +270,6 @@ runtime_snapshot tracker::seal_frame() {
 
         auto &counter = counters_[op_index(cmd.transaction.op)];
         ++counter.unrestored;
-        ++counter.fail_open;
         cmd.transaction.active = false;
     }
 
