@@ -9,6 +9,15 @@ HOST_SLOT_BLOCK = r'''
 inline constexpr std::array<std::uintptr_t,3> k_build131_ps_slot_rvas = {
     0x112308u, 0x112328u, 0x112348u
 };
+
+std::uintptr_t read_build131_ps_slot(std::uintptr_t address) noexcept
+{
+    __try {
+        return *reinterpret_cast<const std::uintptr_t *>(address);
+    } __except(EXCEPTION_EXECUTE_HANDLER) {
+        return 0;
+    }
+}
 '''.strip()
 
 NATIVE_RECEIVER = r'''
@@ -30,12 +39,7 @@ std::optional<receiver_rec> native_receiver(reshade::api::command_list *cmd)
         const auto base=reinterpret_cast<std::uintptr_t>(host);
         std::uint64_t ready=0;
         for(std::size_t i=0;i<k_build131_ps_slot_rvas.size();++i){
-            std::uintptr_t candidate=0;
-            __try{
-                candidate=*reinterpret_cast<const std::uintptr_t *>(base+k_build131_ps_slot_rvas[i]);
-            }__except(EXCEPTION_EXECUTE_HANDLER){
-                candidate=0;
-            }
+            const std::uintptr_t candidate=read_build131_ps_slot(base+k_build131_ps_slot_rvas[i]);
             if(candidate!=0)++ready;
             if(candidate!=0&&candidate==actual){
                 g_ps_dedicated_created.store(ready,std::memory_order_relaxed);
@@ -88,6 +92,7 @@ def main() -> None:
 
     required=(
         '0x112308u, 0x112328u, 0x112348u',
+        'read_build131_ps_slot',
         'GetModuleHandleW(L"DSRRL_Material_Response_1.45.addon64")',
         'PSGetShader',
         'candidate==actual',
