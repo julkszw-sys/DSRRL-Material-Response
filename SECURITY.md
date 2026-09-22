@@ -31,9 +31,17 @@ PTDE EnvSpec/cubemap replacement is disabled in this clean release. The previous
 
 No PackedGI EnvSpec file is required by this release build.
 
-## Telemetry
+## Telemetry and logging
 
-Development/activation telemetry for SpecRGB, Subsurf, equipment Normal/Diffuse and EnvSpec is disabled and its release strings are removed.
+Release telemetry is disabled at the code path, not merely hidden by label removal:
+
+- one-shot SpecRGB/Subsurf/Normal/Diffuse activation telemetry is bypassed
+- the periodic counter/status callback is not registered
+- the periodic callback entrypoint is inert as a second guard
+- startup shader-count telemetry is disabled
+- associated release telemetry strings are removed
+
+Safety/error/fail-open logging is intentionally retained so incompatible or rejected routes remain diagnosable without collecting periodic runtime statistics.
 
 ## Antivirus detections
 
