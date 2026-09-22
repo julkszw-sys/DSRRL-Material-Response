@@ -11,6 +11,7 @@ on:
       - src/runtime_core_v2.cpp
       - src/runtime_core_v2_reshade.hpp
       - src/runtime_core_v2_reshade.cpp
+      - src/runtime_core_v2_diagnostic_addon.cpp
       - tests/runtime_core_v2_tests.cpp
       - .github/workflows/runtime-core-v2.yml
 
@@ -42,3 +43,16 @@ jobs:
         run: cmake --build build --config Release
       - name: Test
         run: ctest --test-dir build -C Release --output-on-failure
+      - name: Verify diagnostic addon
+        shell: pwsh
+        run: |
+          $path = "build/Release/DSRRL_Runtime_Core_V2_Diagnostic.addon64"
+          if (!(Test-Path $path)) { throw "Diagnostic addon not produced" }
+          Get-Item $path | Format-List Name,Length
+          Get-FileHash $path -Algorithm SHA256 | Format-List
+      - name: Upload diagnostic addon
+        uses: actions/upload-artifact@v4
+        with:
+          name: DSRRL_Runtime_Core_V2_Diagnostic
+          path: build/Release/DSRRL_Runtime_Core_V2_Diagnostic.addon64
+          if-no-files-found: error
