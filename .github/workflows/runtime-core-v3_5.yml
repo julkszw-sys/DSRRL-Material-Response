@@ -1,0 +1,56 @@
+name: Runtime Core V3.5 Host PS Slots
+
+on:
+  push:
+    branches:
+      - dev/runtime-core-v2-full-envspec-carrier-v3_5-host-ps-slots
+  pull_request:
+    paths:
+      - src/runtime_core_v2_full_envspec_carrier_v3_4.cpp
+      - src/runtime_core_v2_full_envspec_carrier_v3_part1.inc
+      - src/runtime_core_v2_full_envspec_carrier_v3_part2.inc
+      - src/runtime_core_v2_full_envspec_carrier_v3_part3.inc
+      - src/runtime_core_v2_full_envspec_carrier_v3_part4.inc
+      - tools/generate_v35_host_ps_slots.py
+      - .github/workflows/runtime-core-v3_5.yml
+      - CMakeLists.txt
+
+jobs:
+  v35-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Checkout pinned ReShade API
+        uses: actions/checkout@v4
+        with:
+          repository: crosire/reshade
+          ref: 3645e3025d1d98a90e318278858931f034d5d1f6
+          path: _reshade
+      - name: Generate V3.5 source
+        shell: pwsh
+        run: |
+          python tools/generate_v35_host_ps_slots.py --input src/runtime_core_v2_full_envspec_carrier_v3_4.cpp --output src/runtime_core_v2_full_envspec_carrier_v3_5.cpp
+          $text = Get-Content src/runtime_core_v2_full_envspec_carrier_v3_5.cpp -Raw
+          if ($text -notmatch '0x112308u, 0x112328u, 0x112348u') { throw 'build131 PS slot RVAs missing' }
+          if ($text -notmatch 'candidate==actual') { throw 'direct native PS pointer comparison missing' }
+          if ($text -notmatch 'V3.5 Host PS Slots') { throw 'V3.5 identity missing' }
+          if ($text -notmatch 'r8g8b8a8_unorm') { throw 'raw RGBA carrier missing' }
+      - name: Configure
+        run: cmake -S . -B build -DRESHade_INCLUDE_DIR="${{ github.workspace }}/_reshade/include"
+      - name: Build
+        run: cmake --build build --config Release
+      - name: Test
+        run: ctest --test-dir build -C Release --output-on-failure
+      - name: Verify V3.5 addon
+        shell: pwsh
+        run: |
+          $path = 'build/Release/DSRRL_PTDE_Full_EnvSpec_Carrier_V3_5.addon64'
+          if (!(Test-Path $path)) { throw 'V3.5 carrier binary not produced' }
+          Get-Item $path | Format-List Name,Length
+          Get-FileHash $path -Algorithm SHA256 | Format-List
+      - name: Upload V3.5 addon
+        uses: actions/upload-artifact@v4
+        with:
+          name: DSRRL_PTDE_Full_EnvSpec_Carrier_V3_5_HOST_PS_SLOTS
+          path: build/Release/DSRRL_PTDE_Full_EnvSpec_Carrier_V3_5.addon64
+          if-no-files-found: error
