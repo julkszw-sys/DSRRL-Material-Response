@@ -149,7 +149,7 @@ if(RESHade_INCLUDE_DIR)
 
         set_target_properties(dsrrl_runtime_core_v2_full_envspec_carrier_v3 PROPERTIES
             PREFIX ""
-            OUTPUT_NAME "DSRRL_PTDE_Full_EnvSpec_Carrier_V3"
+            OUTPUT_NAME "DSRRL_PTDE_Full_EnvSpec_Carrier_V3_1"
             SUFFIX ".addon64"
         )
     endif()

@@ -5,6 +5,7 @@ on:
     branches:
       - dev/runtime-core-v2
       - dev/runtime-core-v2-full-envspec-carrier-v3
+      - dev/runtime-core-v2-full-envspec-carrier-v3_1-material-sha-primary
   pull_request:
     paths:
       - CMakeLists.txt
@@ -91,16 +92,16 @@ jobs:
           name: DSRRL_PTDE_Virtual_EnvSpec_V2
           path: build/Release/DSRRL_PTDE_Virtual_EnvSpec_V2.addon64
           if-no-files-found: error
-      - name: Verify PTDE full EnvSpec carrier V3 addon
+      - name: Verify PTDE full EnvSpec carrier V3.1 addon
         shell: pwsh
         run: |
-          $path = "build/Release/DSRRL_PTDE_Full_EnvSpec_Carrier_V3.addon64"
-          if (!(Test-Path $path)) { throw "Full EnvSpec carrier V3 addon not produced" }
+          $path = "build/Release/DSRRL_PTDE_Full_EnvSpec_Carrier_V3_1.addon64"
+          if (!(Test-Path $path)) { throw "Full EnvSpec carrier V3.1 addon not produced" }
           Get-Item $path | Format-List Name,Length
           Get-FileHash $path -Algorithm SHA256 | Format-List
-      - name: Upload PTDE full EnvSpec carrier V3 addon
+      - name: Upload PTDE full EnvSpec carrier V3.1 addon
         uses: actions/upload-artifact@v4
         with:
-          name: DSRRL_PTDE_Full_EnvSpec_Carrier_V3
-          path: build/Release/DSRRL_PTDE_Full_EnvSpec_Carrier_V3.addon64
+          name: DSRRL_PTDE_Full_EnvSpec_Carrier_V3_1
+          path: build/Release/DSRRL_PTDE_Full_EnvSpec_Carrier_V3_1.addon64
           if-no-files-found: error
