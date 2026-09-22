@@ -10,7 +10,7 @@ Component: **Material Response 1.45 clean release**
 
 SHA-256:
 
-`13e722f9472e00c1922baecefe121bf1b7b9dd6129f1d2028d64568d74bb5ab7`
+`3dcb50bee7d4a1ffcb47c2e9d116cbad5da322f6719e3cf2ecdbe6846db63000`
 
 Size: `1,803,264 bytes`
 
@@ -28,7 +28,10 @@ It is not a launcher or installer.
 
 Compared with the integrated development basis, the public clean release:
 
-- removes the SpecRGB/Subsurf/Normal/Diffuse/EnvSpec activation telemetry paths and strings
+- bypasses/removes SpecRGB/Subsurf/Normal/Diffuse activation telemetry
+- disables the inherited startup shader-count telemetry log
+- does not register the inherited periodic counter/status telemetry callback and makes its entrypoint inert as a second guard
+- retains only safety/error/fail-open logging
 - skips the external EnvSpec loader
 - forces the EnvSpec replacement gate to fail open
 - clears the now-unreferenced injected EnvSpec loader cave
