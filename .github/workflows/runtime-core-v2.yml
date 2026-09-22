@@ -5,18 +5,13 @@ on:
     branches:
       - develop
   pull_request:
-    paths:
-      - CMakeLists.txt
-      - src/runtime_core_v2.hpp
-      - src/runtime_core_v2.cpp
-      - src/runtime_core_v2_reshade.hpp
-      - src/runtime_core_v2_reshade.cpp
-      - src/runtime_core_v2_diagnostic_addon.cpp
-      - src/runtime_core_v2_virtual_envspec.cpp
-      - src/runtime_core_v2_virtual_envspec_v2.cpp
-      - src/runtime_core_v2_virtual_envspec_v3.cpp
-      - tests/runtime_core_v2_tests.cpp
-      - .github/workflows/runtime-core-v2.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: runtime-core-v2-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   core-linux:
