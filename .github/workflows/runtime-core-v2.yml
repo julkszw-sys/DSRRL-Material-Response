@@ -6,6 +6,7 @@ on:
       - dev/runtime-core-v2
       - dev/runtime-core-v2-full-envspec-carrier-v3
       - dev/runtime-core-v2-full-envspec-carrier-v3_1-material-sha-primary
+      - dev/runtime-core-v2-full-envspec-carrier-v3_3-raw-rgba-dedicated-pmetal
   pull_request:
     paths:
       - CMakeLists.txt
