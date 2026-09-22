@@ -21,6 +21,16 @@ bool stock_pmetal_host_code(const void *code,std::size_t size,std::uint32_t &rec
     for(const auto &r:k_stock_pmetal_hosts)if(r.size==size&&std::memcmp(b+4,r.checksum.data(),16)==0){receiver_id=r.receiver_id;return true;}return false;
 }
 
+bool validate_dedicated_blob_seh(const std::uint8_t *code,std::uint32_t expected_size,const std::uint8_t *checksum)noexcept
+{
+    if(code==nullptr||checksum==nullptr)return false;
+    __try{
+        return std::memcmp(code,"DXBC",4)==0&&
+               *reinterpret_cast<const std::uint32_t *>(code+24)==expected_size&&
+               std::memcmp(code+4,checksum,16)==0;
+    }__except(EXCEPTION_EXECUTE_HANDLER){return false;}
+}
+
 bool ensure_owned_dedicated(ID3D11Device *dev)
 {
     if(dev==nullptr)return false;std::lock_guard lock(g_owned_ps_mutex);
@@ -30,9 +40,7 @@ bool ensure_owned_dedicated(ID3D11Device *dev)
     const auto base=reinterpret_cast<std::uintptr_t>(host);
     for(std::size_t i=0;i<3;++i){
         const auto *code=reinterpret_cast<const std::uint8_t *>(base+k_dedicated_blob_rvas[i]);
-        __try{
-            if(std::memcmp(code,"DXBC",4)!=0||*reinterpret_cast<const std::uint32_t *>(code+24)!=k_dedicated[i].size||std::memcmp(code+4,k_dedicated[i].checksum.data(),16)!=0){++g_owned_ps_create_fail;return false;}
-        }__except(EXCEPTION_EXECUTE_HANDLER){++g_owned_ps_create_fail;return false;}
+        if(!validate_dedicated_blob_seh(code,k_dedicated[i].size,k_dedicated[i].checksum.data())){++g_owned_ps_create_fail;return false;}
         if(FAILED(dev->CreatePixelShader(code,k_dedicated[i].size,nullptr,&g_owned_dedicated_ps[i]))||g_owned_dedicated_ps[i]==nullptr){++g_owned_ps_create_fail;for(auto *&p:g_owned_dedicated_ps){if(p){p->Release();p=nullptr;}}return false;}
     }
     g_ps_dedicated_created.store(3,std::memory_order_relaxed);return true;
