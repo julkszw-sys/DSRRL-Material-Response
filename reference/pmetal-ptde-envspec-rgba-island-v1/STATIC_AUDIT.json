@@ -1,0 +1,70 @@
+{
+  "build": "DSRRL Material Response 1.45 P_Metal PTDE EnvSpec RGBA Island V1",
+  "basis": {
+    "build_key": "material_response_1_45_resource_routing_stage_telemetry_v2",
+    "sha256": "e15747f4920bd5f40db9019e4e45110ad4655b4defab1ad3027b039fc022d98b",
+    "size_bytes": 1803264
+  },
+  "output": {
+    "sha256": "db2e6547b5fb5516d4ad6559173e66421315d1635ca0c08e8141b0de2f57f966",
+    "size_bytes": 1803264
+  },
+  "carrier": {
+    "pack_path": "DSRRL/EnvSpec/PackedGI/PTDE_GI_ENVSPEC_PACK_RGBA.bin",
+    "pack_sha256": "c16c3fd75bcf34f3cc075da6da1ad10c9440ee4a3ca580fe7f74d07a2ce4eac3",
+    "pack_size_bytes": 33619968,
+    "representation": "PTDE PackedGI raw RGBA8 32x32x6 one mip; per-sample RGB/alpha decode in dedicated receiver"
+  },
+  "scope": {
+    "actual_material": "P_Metal[DSB].mtd",
+    "route_index": 345,
+    "raw_mtd_sha256": "ece70f36bd2517d28c8495e276cea537f8b519d6bed981788e79a409ffbf763b",
+    "source_indices": [9, 10, 11],
+    "dedicated_dxbc_indices": [72, 73, 74],
+    "shared_dxbc_indices_unchanged": [33, 34, 35]
+  },
+  "operator": {
+    "reflection_vector": "direct PTDE-style R inherited from dedicated exact-P_Metal island",
+    "envspec_A": "t12 SAMPLE_L LOD0 full RGBA then RGB/alpha decode",
+    "envspec_B": "t14 SAMPLE_L LOD0 full RGBA then RGB/alpha decode when HemEnvLerp B is active",
+    "source_factors": "existing PTDE A/B endpoint donor factors and beta retained",
+    "material_tail": "fresh t10 SpecRGB * cb12[0].rgb (PTDE c101) * COLOR0, exactly once",
+    "dsr_pbl_envspec_tail": "bypassed in dedicated receiver; no t9 BRDF-LUT reference",
+    "terminal_rgb_sat": "retained"
+  },
+  "invariants": {
+    "changed_embedded_dxbc": [72, 73, 74],
+    "unchanged_shared_dxbc": [33, 34, 35],
+    "route_table": "unchanged from basis",
+    "diffuse_bridge": "unchanged from basis",
+    "normal_bridge": "unchanged from basis",
+    "specrgb_resource_bridge": "unchanged from basis; receiver consumes fresh t10",
+    "envdiffuse": "unchanged",
+    "pointlight": "unchanged",
+    "subsurface": "unchanged from basis",
+    "param_postprocess": "unchanged",
+    "separate_addon_required": false
+  },
+  "dedicated_shader_sha256": {
+    "72_before": "bf5da767361e5d3d4354de2c30b67e68029ac865fe4823c61ae6d25d273da49f",
+    "72_after": "159e9bbcb36c110e0e6e223f740986844cc8f0882d472afaf5b65abee4301e98",
+    "73_before": "4c79a8eb7b8aa744f756a04b1af968a1da105726914ed420feb7424334c31566",
+    "73_after": "726461e5308788f75e7dba4e0e7c85e9fcc801faec38c060635dff40fb9ae877",
+    "74_before": "3c0660946fa93a6c1a4b744a7fe31348ae0b62b19b1e7da3372782fd337530e9",
+    "74_after": "11a405536a0600037b11817579a29cf5663bc62e8b17955af255d279e03417c7"
+  },
+  "validation": {
+    "embedded_dxbc_count": 78,
+    "changed_dxbc_exact_set": [72, 73, 74],
+    "all_output_dxbc_checksums_valid": true,
+    "file_size_unchanged": true,
+    "deterministic_rebuild_byte_identical": true,
+    "zip_crc": "PASS",
+    "construction_status": "PASS",
+    "runtime_status": "NOT_TESTED",
+    "pixel_status": "OPEN"
+  },
+  "known_residual": {
+    "exact_ptde_s12_s14_sampler": "NOT reintroduced in this current-line V1; the receiver/resource/operator mismatch is repaired, but the exact PTDE mixed MIRROR/MIRROR/WRAP anisotropic sampler remains a separate known residual."
+  }
+}
