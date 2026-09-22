@@ -2,6 +2,7 @@
 
 #include <reshade.hpp>
 
+#include <array>
 #include <cstdint>
 
 namespace dsrrl::runtime_v2 {
@@ -182,6 +183,55 @@ void on_bind_pipeline(
     g_tracker.bind_pipeline(command_id(cmd_list), pipeline.handle);
 }
 
+void on_push_descriptors(
+    reshade::api::command_list *cmd_list,
+    reshade::api::shader_stage stages,
+    reshade::api::pipeline_layout,
+    std::uint32_t,
+    const reshade::api::descriptor_table_update &update)
+{
+    if ((stages & reshade::api::shader_stage::pixel) !=
+        reshade::api::shader_stage::pixel)
+        return;
+
+    if (update.type != reshade::api::descriptor_type::shader_resource_view &&
+        update.type != reshade::api::descriptor_type::sampler_with_resource_view)
+        return;
+
+    if (update.binding >= max_pixel_shader_resource_slots)
+        return;
+
+    const std::uint32_t available =
+        static_cast<std::uint32_t>(max_pixel_shader_resource_slots) -
+        update.binding;
+    const std::uint32_t count =
+        update.count < available ? update.count : available;
+
+    std::array<std::uint64_t, max_pixel_shader_resource_slots> views{};
+
+    if (update.type == reshade::api::descriptor_type::shader_resource_view) {
+        const auto *descriptors =
+            static_cast<const reshade::api::resource_view *>(update.descriptors);
+
+        for (std::uint32_t i = 0; i < count; ++i)
+            views[i] = descriptors[i].handle;
+    }
+    else {
+        const auto *descriptors =
+            static_cast<const reshade::api::sampler_with_resource_view *>(
+                update.descriptors);
+
+        for (std::uint32_t i = 0; i < count; ++i)
+            views[i] = descriptors[i].view.handle;
+    }
+
+    g_tracker.bind_pixel_shader_views(
+        command_id(cmd_list),
+        update.binding,
+        count,
+        views.data());
+}
+
 bool on_draw(
     reshade::api::command_list *cmd_list,
     std::uint32_t,
@@ -250,6 +300,7 @@ void register_reshade_events()
     reshade::register_event<reshade::addon_event::init_pipeline>(on_init_pipeline);
     reshade::register_event<reshade::addon_event::destroy_pipeline>(on_destroy_pipeline);
     reshade::register_event<reshade::addon_event::bind_pipeline>(on_bind_pipeline);
+    reshade::register_event<reshade::addon_event::push_descriptors>(on_push_descriptors);
     reshade::register_event<reshade::addon_event::draw>(on_draw);
     reshade::register_event<reshade::addon_event::draw_indexed>(on_draw_indexed);
     reshade::register_event<reshade::addon_event::present>(on_present);
@@ -260,6 +311,7 @@ void unregister_reshade_events()
     reshade::unregister_event<reshade::addon_event::present>(on_present);
     reshade::unregister_event<reshade::addon_event::draw_indexed>(on_draw_indexed);
     reshade::unregister_event<reshade::addon_event::draw>(on_draw);
+    reshade::unregister_event<reshade::addon_event::push_descriptors>(on_push_descriptors);
     reshade::unregister_event<reshade::addon_event::bind_pipeline>(on_bind_pipeline);
     reshade::unregister_event<reshade::addon_event::destroy_pipeline>(on_destroy_pipeline);
     reshade::unregister_event<reshade::addon_event::init_pipeline>(on_init_pipeline);
