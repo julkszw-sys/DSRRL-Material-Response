@@ -75,6 +75,7 @@ struct material_response_companion {
 };
 
 std::mutex g_mutex;
+std::mutex g_companion_mutex;
 std::vector<std::uint8_t> g_pack;
 std::unordered_map<std::uint64_t, std::vector<std::uint32_t>> g_slot2_hash_index;
 std::unordered_map<std::uint64_t, replacement_resource> g_replacements_by_resource;
@@ -115,6 +116,7 @@ bool has_supported_prepare_signature(const std::uint8_t *p) noexcept
 
 bool try_bind_material_response_companion()
 {
+    std::lock_guard companion_lock(g_companion_mutex);
     if (g_companion.ready)
         return true;
 
@@ -178,10 +180,24 @@ bool try_bind_material_response_companion()
 
 const material_profile *active_material_profile()
 {
-    if (!g_companion.ready && !try_bind_material_response_companion())
-        return nullptr;
+    DWORD tls_index = TLS_OUT_OF_INDEXES;
+    {
+        std::lock_guard companion_lock(g_companion_mutex);
+        if (g_companion.ready)
+            tls_index = g_companion.tls_index;
+    }
 
-    void *tls = TlsGetValue(g_companion.tls_index);
+    if (tls_index == TLS_OUT_OF_INDEXES) {
+        if (!try_bind_material_response_companion())
+            return nullptr;
+
+        std::lock_guard companion_lock(g_companion_mutex);
+        if (!g_companion.ready)
+            return nullptr;
+        tls_index = g_companion.tls_index;
+    }
+
+    void *tls = TlsGetValue(tls_index);
     if (tls == nullptr) {
         ++g_tls_null;
         return nullptr;
@@ -1015,6 +1031,12 @@ void on_push_descriptors(
     }
 }
 
+bool material_response_companion_ready()
+{
+    std::lock_guard companion_lock(g_companion_mutex);
+    return g_companion.ready;
+}
+
 void log_snapshot(const runtime_snapshot &snapshot)
 {
     const std::uint64_t present = ++g_present_count;
@@ -1035,7 +1057,7 @@ void log_snapshot(const runtime_snapshot &snapshot)
         static_cast<unsigned long long>(g_exact_slot2_matches.load()),
         static_cast<unsigned long long>(g_virtual_created.load()),
         static_cast<unsigned long long>(g_virtual_create_fail.load()),
-        g_companion.ready ? 1u : 0u,
+        material_response_companion_ready() ? 1u : 0u,
         static_cast<unsigned long long>(g_profile_hits.load()),
         static_cast<unsigned long long>(g_profile_reject.load()),
         static_cast<unsigned long long>(g_host_reject.load()),
