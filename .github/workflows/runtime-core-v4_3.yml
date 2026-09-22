@@ -33,12 +33,16 @@ jobs:
         run: python tools/generate_v42_full_input_stitch.py --input src/runtime_core_v2_full_envspec_carrier_v4_1.cpp --output src/runtime_core_v2_full_envspec_carrier_v4_2.cpp
       - name: Apply V4.3 deterministic owned providers
         shell: pwsh
+        run: python tools/generate_v43_owned_host_providers.py --input src/runtime_core_v2_full_envspec_carrier_v4_2.cpp --output src/runtime_core_v2_full_envspec_carrier_v4_3.cpp
+      - name: Apply V4.3 MSVC safety transform
+        shell: pwsh
         run: |
-          python tools/generate_v43_owned_host_providers.py --input src/runtime_core_v2_full_envspec_carrier_v4_2.cpp --output src/runtime_core_v2_full_envspec_carrier_v3_6.cpp
+          python tools/generate_v43_msvc_safety.py --input src/runtime_core_v2_full_envspec_carrier_v4_3.cpp --output src/runtime_core_v2_full_envspec_carrier_v3_6.cpp
           $text = Get-Content src/runtime_core_v2_full_envspec_carrier_v3_6.cpp -Raw
           foreach ($tok in @('V4.3 Owned Host Providers EnvSpec','DSRRL V4.3 OWNED PROVIDERS','k_host_spec_prepare_rva = 0x11350Cu','k_host_spec_bind_rva = 0x113B45u','k_host_b12_provider_rva = 0x77A0u','k_exact_pmetal_route = 345','acquire_owned_host_t10','acquire_owned_host_b12','PSSetShaderResources(10,1,&nullv)')) { if ($text -notmatch [regex]::Escape($tok)) { throw "V4.3 token missing: $tok" } }
           if ($text -match 'install_host_t10_stitch\(\)') { throw 'V4.2 passive t10 hook dependency remains' }
           if ($text -match 'observe_host_b12\(') { throw 'V4.2 passive b12 observer dependency remains' }
+          if ($text -match '__try\{state=g_host_spec_state') { throw 'unsafe filesystem/SEH combination remains' }
       - name: Configure
         run: cmake -S . -B build -DRESHade_INCLUDE_DIR="${{ github.workspace }}/_reshade/include"
       - name: Build addon and tests
