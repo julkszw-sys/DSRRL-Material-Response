@@ -14,3 +14,13 @@ __pycache__/
 # Game-derived assets are release inputs, not source-control content
 DSRRL/
 PTDE_GI_ENVSPEC_PACK_RGBA.bin
+
+# CMake / local development trees
+build/
+build-*/
+out/
+CMakeFiles/
+CMakeCache.txt
+CTestTestfile.cmake
+Testing/
+compile_commands.json
