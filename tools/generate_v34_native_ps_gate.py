@@ -28,8 +28,8 @@ def main() -> int:
 
     src = replace_once(
         src,
-        "#include <windows.h>\n#include <bcrypt.h>",
-        "#include <windows.h>\n#include <d3d11.h>\n#include <bcrypt.h>",
+        "#undef AddonInit\n\nnamespace dsrrl::runtime_v2::full_envspec_v3 {",
+        "#undef AddonInit\n\n#include <d3d11.h>\n\nnamespace dsrrl::runtime_v2::full_envspec_v3 {",
         "d3d11 include",
     )
 
