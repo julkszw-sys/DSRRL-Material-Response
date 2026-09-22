@@ -50,4 +50,30 @@ if(RESHade_INCLUDE_DIR)
     else()
         target_compile_options(dsrrl_runtime_core_v2_reshade PRIVATE -Wall -Wextra -Werror)
     endif()
+    if(WIN32)
+        add_library(dsrrl_runtime_core_v2_diagnostic SHARED
+            src/runtime_core_v2_diagnostic_addon.cpp
+            $<TARGET_OBJECTS:dsrrl_runtime_core_v2_reshade>
+        )
+
+        target_include_directories(dsrrl_runtime_core_v2_diagnostic
+            PRIVATE
+                ${CMAKE_CURRENT_SOURCE_DIR}/src
+                ${RESHade_INCLUDE_DIR}
+        )
+
+        target_link_libraries(dsrrl_runtime_core_v2_diagnostic
+            PRIVATE dsrrl_runtime_core_v2
+        )
+
+        target_compile_features(dsrrl_runtime_core_v2_diagnostic PRIVATE cxx_std_17)
+        target_compile_options(dsrrl_runtime_core_v2_diagnostic PRIVATE /W4 /WX)
+
+        set_target_properties(dsrrl_runtime_core_v2_diagnostic PROPERTIES
+            PREFIX ""
+            OUTPUT_NAME "DSRRL_Runtime_Core_V2_Diagnostic"
+            SUFFIX ".addon64"
+        )
+    endif()
+
 endif()
