@@ -2,7 +2,7 @@
 
 Mod: **Dark Souls Remastered – Restored Lighting**  
 Nexus mod ID: **1423**  
-Component: **Material Response 1.45**
+Component: **Material Response 1.45 clean release**
 
 ## File under review
 
@@ -10,59 +10,44 @@ Component: **Material Response 1.45**
 
 SHA-256:
 
-`41690c6212157eb772ae0c75c055d0bb7a842709f65f02c3689b87714151e1f7`
+`13e722f9472e00c1922baecefe121bf1b7b9dd6129f1d2028d64568d74bb5ab7`
 
-Size:
+Size: `1,803,264 bytes`
 
-`1,803,264 bytes`
-
-Type:
-
-64-bit ReShade addon / PE DLL.
+Type: 64-bit ReShade addon / PE DLL.
 
 ## Purpose
 
-The addon changes selected rendering behaviour inside Dark Souls Remastered. It handles material response and a small number of verified texture/resource paths, including PTDE-derived SpecRGB, diffuse/normal assets and EnvSpec cubemaps.
+The addon changes selected rendering behaviour inside Dark Souls Remastered. This release contains Material Response, PTDE SpecRGB transport, subsurface handling, and equipment Normal/Diffuse bridges.
+
+PTDE EnvSpec/cubemap replacement is intentionally not included in the active release path.
 
 It is not a launcher or installer.
 
+## Release hardening
+
+Compared with the integrated development basis, the public clean release:
+
+- removes the SpecRGB/Subsurf/Normal/Diffuse/EnvSpec activation telemetry paths and strings
+- skips the external EnvSpec loader
+- forces the EnvSpec replacement gate to fail open
+- clears the now-unreferenced injected EnvSpec loader cave
+- does not require a PackedGI EnvSpec sidecar
+
+The transformation is reproducible with `tools/build_release.py` and verified by `tools/verify_release.py`.
+
 ## Why heuristic scanners may flag it
 
-The addon runs in-process with the game and performs renderer hooks, D3D11 resource tracking, draw-scoped resource substitution/restoration and controlled memory-protection changes. Those operations are normal for this mod but can overlap with generic malware heuristics.
+The addon runs in-process with the game and performs renderer hooks, D3D11 resource tracking, draw-scoped resource substitution/restoration and controlled renderer-state work. Those operations are normal for this mod but can overlap with generic malware heuristics.
 
-Observed labels include:
-
-- `Gen:Variant.Barys.441135`
-- `Trojan.Barys.D6BB2F`
-- `Dll.unknown.barys`
-- `Trojan:Win32/Wacatac.B!ml`
-
-I also tested a build with the external EnvSpec loader disabled; the general detection pattern remained.
-
-## Source/build material
+## Build material
 
 Relevant files in this repository:
 
 - [BUILD.md](../BUILD.md)
 - [SECURITY.md](../SECURITY.md)
-- [src/envspec_loader.c](../src/envspec_loader.c)
 - [tools/build_release.py](../tools/build_release.py)
 - [tools/verify_release.py](../tools/verify_release.py)
-- [reference/loader_bytes.hex](../reference/loader_bytes.hex)
 - [RELEASE_HASHES.md](../RELEASE_HASHES.md)
 
-The release build step is reproducible from the exact development basis and exact PackedGI resource listed in `BUILD.md`. The resulting file is checked against the public release SHA-256.
-
-The development basis itself is an intermediate addon binary from the project's incremental development process and is not stored in this repository. I can provide that exact basis to Nexus staff if required.
-
-## External asset access
-
-Material Response 1.45 reads one fixed EnvSpec resource from the DSRRL directory:
-
-`DSRRL\EnvSpec\PackedGI\PTDE_GI_ENVSPEC_PACK_RGBA.bin`
-
-The file must match both the expected size and SHA-256 before the EnvSpec path is enabled.
-
-## Review request
-
-I am requesting a manual review of the quarantined file. I can provide the exact development basis, VirusTotal report or any additional build material if needed.
+The clean release is reproduced from the exact integrated 1.45 basis identified in `BUILD.md`.
