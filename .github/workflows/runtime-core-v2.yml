@@ -21,14 +21,17 @@ on:
 jobs:
   core-linux:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        build_type: [Debug, Release]
     steps:
       - uses: actions/checkout@v4
       - name: Configure
-        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=${{ matrix.build_type }}
       - name: Build
-        run: cmake --build build --config Release
+        run: cmake --build build --config ${{ matrix.build_type }}
       - name: Test
-        run: ctest --test-dir build -C Release --output-on-failure
+        run: ctest --test-dir build -C ${{ matrix.build_type }} --output-on-failure
 
   core-and-reshade-api20-windows:
     runs-on: windows-latest
@@ -41,7 +44,7 @@ jobs:
           ref: 3645e3025d1d98a90e318278858931f034d5d1f6
           path: _reshade
       - name: Configure
-        run: cmake -S . -B build -DRESHADE_INCLUDE_DIR="${{ github.workspace }}/_reshade/include"
+        run: cmake -S . -B build -DRESHADE_INCLUDE_DIR="${{ github.workspace }}/_reshade/include" -DDSRRL_BUILD_DIAGNOSTICS=ON -DDSRRL_BUILD_EXPERIMENTS=ON
       - name: Build
         run: cmake --build build --config Release
       - name: Test
