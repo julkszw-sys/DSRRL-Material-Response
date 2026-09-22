@@ -44,7 +44,7 @@ jobs:
           ref: 3645e3025d1d98a90e318278858931f034d5d1f6
           path: _reshade
       - name: Configure
-        run: cmake -S . -B build -DRESHADE_INCLUDE_DIR="${{ github.workspace }}/_reshade/include" -DDSRRL_BUILD_DIAGNOSTICS=ON -DDSRRL_BUILD_EXPERIMENTS=ON
+        run: cmake -S . -B build -DRESHADE_INCLUDE_DIR="${{ github.workspace }}/_reshade/include" -DDSRRL_BUILD_DIAGNOSTICS=ON -DDSRRL_BUILD_EXPERIMENTS=ON -DDSRRL_BUILD_LEGACY_EXPERIMENTS=ON
       - name: Build
         run: cmake --build build --config Release
       - name: Test
