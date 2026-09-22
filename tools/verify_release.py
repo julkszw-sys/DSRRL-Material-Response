@@ -9,11 +9,14 @@ import struct
 from pathlib import Path
 
 EXPECTED_SIZE = 1_803_264
-EXPECTED_SHA256 = "13e722f9472e00c1922baecefe121bf1b7b9dd6129f1d2028d64568d74bb5ab7"
+EXPECTED_SHA256 = "3dcb50bee7d4a1ffcb47c2e9d116cbad5da322f6719e3cf2ecdbe6846db63000"
 LOADER_RVA = 0x1BC100
 LOADER_SIZE = 1501
 
 EXPECTED_PATCHES = {
+    0x006A67: bytes.fromhex("90 90 90 90 90"),
+    0x006EF0: bytes.fromhex("c3 90 90 90 90"),
+    0x008E37: bytes.fromhex("e9 0d 00 00 00 90 90"),
     0x10B245: bytes.fromhex("e9 3f 00 00 00"),
     0x1142C9: bytes.fromhex("e9 3e 00 00 00 90 90"),
     0x19BD03: bytes.fromhex("e9 44 00 00 00"),
@@ -26,6 +29,8 @@ FORBIDDEN = (
     b"[DSRRL 1.45 TELEMETRY]",
     b"PTDE_GI_ENVSPEC",
     b"exact-slot EnvSpec",
+    b"/24 c101 shaders ",
+    b": diffuse shaders ",
     "PTDE_GI_ENVSPEC".encode("utf-16le"),
 )
 
