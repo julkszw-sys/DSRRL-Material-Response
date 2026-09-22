@@ -43,7 +43,10 @@ It adds:
 
 - per-command-list state instead of process-global draw state
 - generation-safe resource/view and pipeline lifetime tracking
+- early semantic resource-descriptor fingerprints at resource creation
+- generation-safe logical-resource lookup with fail-open on missing or ambiguous identity
 - explicit route contracts for shader / receiver / material / resource / logical-ID / format / state proof
+- source-level staged routing telemetry from capture through final bind/restore
 - fail-open when a required identity is missing
 - per-operator `matched / activated / restored / fail-open` counters
 - frame-boundary detection of incomplete draw-state restore
