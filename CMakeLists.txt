@@ -32,8 +32,8 @@ add_test(NAME runtime_core_v2 COMMAND dsrrl_runtime_core_v2_tests)
 
 set(RESHADE_INCLUDE_DIR "" CACHE PATH "Path to the ReShade include directory")
 # Backward compatibility with the historical mixed-case cache variable.
-if(NOT RESHADE_INCLUDE_DIR AND DEFINED RESHADE_INCLUDE_DIR AND RESHADE_INCLUDE_DIR)
-    set(RESHADE_INCLUDE_DIR "${RESHADE_INCLUDE_DIR}")
+if(NOT RESHADE_INCLUDE_DIR AND DEFINED RESHade_INCLUDE_DIR AND RESHade_INCLUDE_DIR)
+    set(RESHADE_INCLUDE_DIR "${RESHade_INCLUDE_DIR}")
 endif()
 
 if(RESHADE_INCLUDE_DIR)
