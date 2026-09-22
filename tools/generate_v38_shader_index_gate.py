@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# V3.8 maps Runtime Core shader_index identity to the owned build131 dedicated PS triplet.
 from __future__ import annotations
 import argparse
 from pathlib import Path
