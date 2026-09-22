@@ -1,0 +1,55 @@
+name: Runtime Core V3.4 Native PS Gate
+
+on:
+  push:
+    branches:
+      - dev/runtime-core-v2-full-envspec-carrier-v3_4-native-ps-gate
+  pull_request:
+    paths:
+      - src/runtime_core_v2_full_envspec_carrier_v3_4.cpp
+      - src/runtime_core_v2_full_envspec_carrier_v3_part1.inc
+      - src/runtime_core_v2_full_envspec_carrier_v3_part2.inc
+      - src/runtime_core_v2_full_envspec_carrier_v3_part3.inc
+      - src/runtime_core_v2_full_envspec_carrier_v3_part4.inc
+      - src/generated/envspec_receivers.hpp
+      - CMakeLists.txt
+      - .github/workflows/runtime-core-v3_4.yml
+
+jobs:
+  v34-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Checkout pinned ReShade API
+        uses: actions/checkout@v4
+        with:
+          repository: crosire/reshade
+          ref: 3645e3025d1d98a90e318278858931f034d5d1f6
+          path: _reshade
+      - name: Verify committed V3.4 source
+        shell: pwsh
+        run: |
+          $text = Get-Content src/runtime_core_v2_full_envspec_carrier_v3_4.cpp -Raw
+          if ($text -notmatch 'PSGetShader') { throw 'native PS gate missing' }
+          if ($text -notmatch 'PSSetShaderResources') { throw 'native SRV transaction missing' }
+          if ($text -notmatch 'r8g8b8a8_unorm') { throw 'raw RGBA carrier missing' }
+          if ($text -notmatch 'db2e6547b5fb5516d4ad6559173e66421315d1635ca0c08e8141b0de2f57f966') { throw 'build131 SHA guard missing' }
+      - name: Configure
+        run: cmake -S . -B build -DRESHade_INCLUDE_DIR="${{ github.workspace }}/_reshade/include"
+      - name: Build
+        run: cmake --build build --config Release
+      - name: Test
+        run: ctest --test-dir build -C Release --output-on-failure
+      - name: Verify V3.4 addon
+        shell: pwsh
+        run: |
+          $path = 'build/Release/DSRRL_PTDE_Full_EnvSpec_Carrier_V3_4.addon64'
+          if (!(Test-Path $path)) { throw 'V3.4 carrier binary not produced' }
+          Get-Item $path | Format-List Name,Length
+          Get-FileHash $path -Algorithm SHA256 | Format-List
+      - name: Upload V3.4 addon
+        uses: actions/upload-artifact@v4
+        with:
+          name: DSRRL_PTDE_Full_EnvSpec_Carrier_V3_4_NATIVE_PS
+          path: build/Release/DSRRL_PTDE_Full_EnvSpec_Carrier_V3_4.addon64
+          if-no-files-found: error
