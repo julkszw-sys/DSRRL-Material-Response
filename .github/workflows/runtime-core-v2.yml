@@ -1,0 +1,44 @@
+name: Runtime Core V2
+
+on:
+  push:
+    branches:
+      - dev/runtime-core-v2
+  pull_request:
+    paths:
+      - CMakeLists.txt
+      - src/runtime_core_v2.hpp
+      - src/runtime_core_v2.cpp
+      - src/runtime_core_v2_reshade.hpp
+      - src/runtime_core_v2_reshade.cpp
+      - tests/runtime_core_v2_tests.cpp
+      - .github/workflows/runtime-core-v2.yml
+
+jobs:
+  core-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+      - name: Build
+        run: cmake --build build --config Release
+      - name: Test
+        run: ctest --test-dir build -C Release --output-on-failure
+
+  core-and-reshade-api20-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Checkout pinned ReShade API
+        uses: actions/checkout@v4
+        with:
+          repository: crosire/reshade
+          ref: 3645e3025d1d98a90e318278858931f034d5d1f6
+          path: _reshade
+      - name: Configure
+        run: cmake -S . -B build -DRESHade_INCLUDE_DIR="${{ github.workspace }}/_reshade/include"
+      - name: Build
+        run: cmake --build build --config Release
+      - name: Test
+        run: ctest --test-dir build -C Release --output-on-failure
