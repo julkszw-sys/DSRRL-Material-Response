@@ -52,6 +52,7 @@ struct operator_counters {
     std::uint64_t rejected = 0;
     std::uint64_t stale_view = 0;
     std::uint64_t unrestored = 0;
+    std::uint64_t restore_faults = 0;
 };
 
 struct resource_identity {
@@ -110,6 +111,7 @@ public:
     bool bind_pipeline(std::uint64_t command, std::uint64_t pipeline);
     std::uint64_t begin_draw(std::uint64_t command);
     std::optional<command_snapshot> command_state(std::uint64_t command) const;
+    std::optional<pipeline_identity> resolve_bound_pipeline(std::uint64_t command) const;
 
     void note_receiver_match(operator_kind op);
     void note_resource_match(operator_kind op);
@@ -117,7 +119,7 @@ public:
     bool begin_transaction(std::uint64_t command, operator_kind op,
                            route_contract contract, route_observation observation);
     bool restore_transaction(std::uint64_t command, operator_kind op);
-    void fail_open(std::uint64_t command, operator_kind op);
+    void note_fail_open(operator_kind op);
 
     runtime_snapshot seal_frame();
     runtime_snapshot snapshot() const;
