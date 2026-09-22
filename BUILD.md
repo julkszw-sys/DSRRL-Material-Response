@@ -29,8 +29,11 @@ python tools/build_release.py \
 
 The release builder:
 
-- bypasses the five activation/development telemetry paths while preserving their functional continuations
-- removes the telemetry strings
+- bypasses the one-shot SpecRGB/Subsurf/Normal/Diffuse activation telemetry paths while preserving their functional continuations
+- removes their telemetry strings
+- disables the inherited startup shader-count telemetry log
+- skips registration of the periodic counter/status telemetry callback and hard-disables the callback entrypoint as a second guard
+- preserves safety/error/fail-open logging
 - skips EnvSpec external-loader initialization
 - forces the EnvSpec resource pointer to null at the bridge gate so the path fails open before substitution work
 - clears the now-unreferenced 1,501-byte injected EnvSpec loader cave
@@ -51,7 +54,11 @@ Size:
 
 SHA-256:
 
-`13e722f9472e00c1922baecefe121bf1b7b9dd6129f1d2028d64568d74bb5ab7`
+`3dcb50bee7d4a1ffcb47c2e9d116cbad5da322f6719e3cf2ecdbe6846db63000`
+
+PE checksum:
+
+`0x001BE0F4`
 
 Version:
 
