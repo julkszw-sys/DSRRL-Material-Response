@@ -69,5 +69,16 @@ if(RESHade_INCLUDE_DIR)
             target_compile_options(dsrrl_runtime_core_v2_full_envspec_carrier_v35 PRIVATE /W4 /WX)
             set_target_properties(dsrrl_runtime_core_v2_full_envspec_carrier_v35 PROPERTIES PREFIX "" OUTPUT_NAME "DSRRL_PTDE_Full_EnvSpec_Carrier_V3_5" SUFFIX ".addon64")
         endif()
+
+        if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/runtime_core_v2_full_envspec_carrier_v3_6.cpp")
+            add_library(dsrrl_runtime_core_v2_full_envspec_carrier_v36 SHARED
+                src/runtime_core_v2_full_envspec_carrier_v3_6.cpp
+                $<TARGET_OBJECTS:dsrrl_runtime_core_v2_reshade>)
+            target_include_directories(dsrrl_runtime_core_v2_full_envspec_carrier_v36 PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src ${RESHade_INCLUDE_DIR})
+            target_link_libraries(dsrrl_runtime_core_v2_full_envspec_carrier_v36 PRIVATE dsrrl_runtime_core_v2 bcrypt)
+            target_compile_features(dsrrl_runtime_core_v2_full_envspec_carrier_v36 PRIVATE cxx_std_17)
+            target_compile_options(dsrrl_runtime_core_v2_full_envspec_carrier_v36 PRIVATE /W4 /WX)
+            set_target_properties(dsrrl_runtime_core_v2_full_envspec_carrier_v36 PROPERTIES PREFIX "" OUTPUT_NAME "DSRRL_PTDE_Full_EnvSpec_Carrier_V3_6" SUFFIX ".addon64")
+        endif()
     endif()
 endif()
