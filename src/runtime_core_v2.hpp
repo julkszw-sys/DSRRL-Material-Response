@@ -5,6 +5,7 @@
 #include <mutex>
 #include <optional>
 #include <unordered_map>
+#include <vector>
 
 namespace dsrrl::runtime_v2 {
 
@@ -18,6 +19,19 @@ enum class operator_kind : std::uint8_t {
 };
 
 constexpr std::size_t operator_count = static_cast<std::size_t>(operator_kind::count);
+
+enum class route_stage : std::uint8_t {
+    capture = 0,
+    receiver,
+    resource_lookup,
+    route_gate,
+    sidecar_ready,
+    final_bind,
+    restore,
+    count
+};
+
+constexpr std::size_t route_stage_count = static_cast<std::size_t>(route_stage::count);
 constexpr std::size_t max_pixel_shader_resource_slots = 128;
 
 enum route_evidence : std::uint32_t {
@@ -54,6 +68,12 @@ struct operator_counters {
     std::uint64_t stale_view = 0;
     std::uint64_t unrestored = 0;
     std::uint64_t restore_faults = 0;
+    std::uint64_t logical_miss = 0;
+    std::uint64_t logical_ambiguous = 0;
+};
+
+struct stage_counters {
+    std::array<std::uint64_t, route_stage_count> hits{};
 };
 
 struct resource_identity {
@@ -83,7 +103,9 @@ struct command_snapshot {
 
 struct runtime_snapshot {
     std::array<operator_counters, operator_count> operators{};
+    std::array<stage_counters, operator_count> stages{};
     std::uint64_t live_resources = 0;
+    std::uint64_t live_logical_resources = 0;
     std::uint64_t live_views = 0;
     std::uint64_t live_pipelines = 0;
     std::uint64_t live_commands = 0;
@@ -97,10 +119,12 @@ public:
 
     std::uint32_t init_resource(std::uint64_t handle, std::uint64_t desc_hash, std::uint64_t logical_hash = 0);
     bool annotate_resource(std::uint64_t handle, std::uint64_t desc_hash, std::uint64_t logical_hash);
+    bool annotate_resource_logical(std::uint64_t handle, std::uint64_t logical_hash);
     void destroy_resource(std::uint64_t handle);
     bool init_view(std::uint64_t view, std::uint64_t resource);
     void destroy_view(std::uint64_t view);
     std::optional<resource_identity> resolve_view(std::uint64_t view, operator_kind op);
+    std::optional<resource_identity> resolve_logical_resource(std::uint64_t logical_hash, operator_kind op);
 
     std::uint32_t init_pipeline(std::uint64_t handle, std::uint64_t pixel_shader_hash,
                                 std::uint32_t receiver_id, std::uint64_t consumer_family_hash,
@@ -119,6 +143,7 @@ public:
 
     void note_receiver_match(operator_kind op);
     void note_resource_match(operator_kind op);
+    void note_stage(operator_kind op, route_stage stage);
 
     bool begin_transaction(std::uint64_t command, operator_kind op,
                            route_contract contract, route_observation observation);
@@ -136,6 +161,11 @@ private:
         std::uint64_t desc_hash = 0;
         std::uint64_t logical_hash = 0;
         bool alive = false;
+    };
+
+    struct resource_ref {
+        std::uint64_t handle = 0;
+        std::uint32_t generation = 0;
     };
 
     struct view_record {
@@ -176,14 +206,17 @@ private:
         return static_cast<std::size_t>(op);
     }
 
+    void index_logical_locked(std::uint64_t handle, std::uint32_t generation, std::uint64_t logical_hash);
     runtime_snapshot snapshot_locked() const;
 
     mutable std::recursive_mutex mutex_;
     std::unordered_map<std::uint64_t, resource_record> resources_;
+    std::unordered_map<std::uint64_t, std::vector<resource_ref>> logical_index_;
     std::unordered_map<std::uint64_t, view_record> views_;
     std::unordered_map<std::uint64_t, pipeline_record> pipelines_;
     std::unordered_map<std::uint64_t, command_record> commands_;
     std::array<operator_counters, operator_count> counters_{};
+    std::array<stage_counters, operator_count> stages_{};
 };
 
 } // namespace dsrrl::runtime_v2
