@@ -35,6 +35,43 @@ std::uint64_t fnv1a64(const void *data, std::size_t size) noexcept
     return hash;
 }
 
+void fnv1a64_append_u64(std::uint64_t &hash, std::uint64_t value) noexcept
+{
+    constexpr std::uint64_t prime = 1099511628211ull;
+
+    for (std::uint32_t i = 0; i < 8; ++i) {
+        hash ^= static_cast<std::uint8_t>(value & 0xFFu);
+        hash *= prime;
+        value >>= 8;
+    }
+}
+
+std::uint64_t hash_resource_desc(const reshade::api::resource_desc &desc) noexcept
+{
+    constexpr std::uint64_t offset = 14695981039346656037ull;
+    std::uint64_t hash = offset;
+
+    fnv1a64_append_u64(hash, static_cast<std::uint64_t>(desc.type));
+
+    if (desc.type == reshade::api::resource_type::buffer) {
+        fnv1a64_append_u64(hash, desc.buffer.size);
+        fnv1a64_append_u64(hash, desc.buffer.structured.stride);
+    }
+    else {
+        fnv1a64_append_u64(hash, desc.texture.width);
+        fnv1a64_append_u64(hash, desc.texture.height);
+        fnv1a64_append_u64(hash, desc.texture.depth_or_layers);
+        fnv1a64_append_u64(hash, desc.texture.levels);
+        fnv1a64_append_u64(hash, static_cast<std::uint64_t>(desc.texture.format));
+        fnv1a64_append_u64(hash, desc.texture.samples);
+    }
+
+    fnv1a64_append_u64(hash, static_cast<std::uint64_t>(desc.heap));
+    fnv1a64_append_u64(hash, static_cast<std::uint64_t>(desc.usage));
+    fnv1a64_append_u64(hash, static_cast<std::uint64_t>(desc.flags));
+    return hash;
+}
+
 bool accepts(reshade::api::device *device) noexcept
 {
     return g_device == nullptr || g_device == device;
@@ -68,7 +105,7 @@ void on_destroy_command_list(reshade::api::command_list *cmd_list)
 
 void on_init_resource(
     reshade::api::device *device,
-    const reshade::api::resource_desc &,
+    const reshade::api::resource_desc &desc,
     const reshade::api::subresource_data *,
     reshade::api::resource_usage,
     reshade::api::resource resource)
@@ -76,9 +113,10 @@ void on_init_resource(
     if (!accepts(device))
         return;
 
-    // Description/logical identity are filled by operator-specific routing.
-    // The common layer owns lifetime/generation only.
-    g_tracker.init_resource(resource.handle, 0, 0);
+    // Descriptor identity is captured at resource creation, before any draw.
+    // Logical identity remains operator-specific and is attached later through
+    // annotate_resource_logical() once exact DSRRL routing proves it.
+    g_tracker.init_resource(resource.handle, hash_resource_desc(desc), 0);
 }
 
 void on_destroy_resource(
