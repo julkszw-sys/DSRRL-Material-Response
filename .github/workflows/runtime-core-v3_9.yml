@@ -1,0 +1,62 @@
+name: Runtime Core V3.9 SpecRGB T10 Stitch
+
+on:
+  push:
+    branches:
+      - dev/runtime-core-v2-full-envspec-carrier-v3_9-specrgb-t10-stitch
+
+jobs:
+  v39-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Checkout pinned ReShade API
+        uses: actions/checkout@v4
+        with:
+          repository: crosire/reshade
+          ref: 3645e3025d1d98a90e318278858931f034d5d1f6
+          path: _reshade
+      - name: Generate V3.6 source
+        shell: pwsh
+        run: python tools/generate_v36_owned_dedicated_ps.py --input src/runtime_core_v2_full_envspec_carrier_v3_4.cpp --output src/runtime_core_v2_full_envspec_carrier_v3_6.cpp
+      - name: Generate V3.8 shader-index source
+        shell: pwsh
+        run: python tools/generate_v38_shader_index_gate.py --input src/runtime_core_v2_full_envspec_carrier_v3_6.cpp --output src/runtime_core_v2_full_envspec_carrier_v3_8.cpp
+      - name: Generate V3.9 t10 stitch source
+        shell: pwsh
+        run: |
+          python tools/generate_v39_specrgb_t10_stitch.py --input src/runtime_core_v2_full_envspec_carrier_v3_8.cpp --output src/runtime_core_v2_full_envspec_carrier_v3_9.cpp
+          $text = Get-Content src/runtime_core_v2_full_envspec_carrier_v3_9.cpp -Raw
+          if ($text -notmatch 'k_host_t10_bind_rva = 0x113B23u') { throw 'host t10 helper RVA missing' }
+          if ($text -notmatch 'g_host_t10_candidate_material') { throw 'material-correlated t10 capture missing' }
+          if ($text -notmatch 'PSGetShaderResources\(10,1,&s.t10\)') { throw 'old t10 capture missing' }
+          if ($text -notmatch 'PSSetShaderResources\(10,1,&v\)') { throw 't10 bind/restore missing' }
+          if ($text -notmatch 'r->id==894u') { throw 'shader_index 894 gate missing' }
+          if ($text -notmatch 'r->id==913u') { throw 'shader_index 913 gate missing' }
+          if ($text -notmatch 'r->id==932u') { throw 'shader_index 932 gate missing' }
+          if ($text -notmatch 'V3.9 SpecRGB T10 Stitch') { throw 'V3.9 identity missing' }
+          Copy-Item src/runtime_core_v2_full_envspec_carrier_v3_9.cpp src/runtime_core_v2_full_envspec_carrier_v3_6.cpp -Force
+      - name: Configure
+        run: cmake -S . -B build -DRESHade_INCLUDE_DIR="${{ github.workspace }}/_reshade/include"
+      - name: Build addon and tests
+        run: cmake --build build --config Release --target dsrrl_runtime_core_v2_full_envspec_carrier_v36 dsrrl_runtime_core_v2_tests
+      - name: Test
+        run: ctest --test-dir build -C Release --output-on-failure
+      - name: Verify V3.9 addon
+        shell: pwsh
+        run: |
+          $src = 'build/Release/DSRRL_PTDE_Full_EnvSpec_Carrier_V3_6.addon64'
+          $dst = 'build/Release/DSRRL_PTDE_Full_EnvSpec_Carrier_V3_9.addon64'
+          if (!(Test-Path $src)) { throw 'V3.9 carrier binary not produced through v36 target' }
+          Copy-Item $src $dst -Force
+          $bytes = [System.IO.File]::ReadAllBytes($dst)
+          $ascii = [System.Text.Encoding]::ASCII.GetString($bytes)
+          if ($ascii -notmatch 'V3.9 SpecRGB T10 Stitch') { throw 'V3.9 identity string missing from binary' }
+          Get-Item $dst | Format-List Name,Length
+          Get-FileHash $dst -Algorithm SHA256 | Format-List
+      - name: Upload V3.9 addon
+        uses: actions/upload-artifact@v4
+        with:
+          name: DSRRL_PTDE_Full_EnvSpec_Carrier_V3_9_SPECRGB_T10_STITCH
+          path: build/Release/DSRRL_PTDE_Full_EnvSpec_Carrier_V3_9.addon64
+          if-no-files-found: error
