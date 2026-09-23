@@ -651,3 +651,43 @@ Observed DSR material-domain structure:
 Therefore PTDE `Non` direct `(D+S)*Gate` and DSR `Non` are mathematically different material operators even when the same texture assets are bound. This strengthens the bridge classification to **shader/material-response**, with shadow state as a separate sub-operator for Sdw/Csd.
 
 PTDE Bmp/non-Bmp remains **24/24 byte-identical**. DSR Bmp/non-Bmp payloads are byte-different because the inspected pairs use different input-varying layouts; representative arithmetic is otherwise equivalent, but a complete semantic-normalized 24/24 DSR proof remains OPEN. Do not promote “Bmp is globally a DSR no-op” without that census.
+
+
+---
+
+## HARD PROTECT — preserve DSR 60 Hz temporal semantics
+
+Status: **CONFIRMED project-wide PROTECT**
+
+Supabase protect key: `protect.project.temporal_preserve_dsr_60hz_host_semantics`
+
+Revision: **8731** (finding correction promoted at revision **8732**).
+
+Dark Souls Remastered remains the 60 fps / 60 Hz host. PTDE's native 30 Hz cadence must **not** be reintroduced merely because PTDE contains constants such as ~1/30 s where DSR contains ~1/60 s.
+
+The Noise Filter c68 producer is the motivating cross-version example: PTDE and DSR retain homologous RNG, transport and final overlay consumption, while the producer timing constants differ by exactly 2x, consistent with 30 Hz versus 60 Hz normalization.
+
+Protected unless exact evidence proves a real wall-clock mismatch:
+- 1/60 timing constants;
+- 60 Hz update cadence;
+- per-frame temporal normalization;
+- frame-rate-scaled accumulators;
+- history stepping tied to the DSR 60 Hz host;
+- temporal noise/update periods;
+- any renderer producer/consumer timing whose dependence on 60 Hz may be structural.
+
+Forbidden:
+- blind replacement of 1/60 with 1/30;
+- copying PTDE frame-step constants solely for raw producer equality;
+- forcing PTDE 30 Hz update cadence;
+- patching DSR temporal scheduling without proving non-equivalent wall-clock behavior;
+- treating producer-value equality as sufficient evidence.
+
+Reopen requirements:
+1. exact `source -> producer -> transport -> consumer` closure;
+2. proof that DSR 60 Hz normalization does not preserve PTDE-equivalent wall-clock behavior;
+3. proof that the proposed bridge does not reintroduce a 30 fps dependency;
+4. operator-local downstream verification;
+5. runtime validation at DSR 60 fps.
+
+Otherwise: **fail-open to stock DSR 60 Hz temporal behavior**.
