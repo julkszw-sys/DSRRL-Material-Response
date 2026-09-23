@@ -7,7 +7,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[3]
 A3 = ROOT / "experimental" / "expanded-a3"
 
-REQUIRED = [
+LINEAGE_REQUIRED = [
     "README.md",
     "SOURCE_COMPLETENESS.md",
     "SOURCE_MANIFEST.json",
@@ -25,35 +25,64 @@ REQUIRED = [
     "predecessors/ul/scripts/build_windows_real_ptde_ul.ps1",
 ]
 
-def main() -> int:
-    missing = [p for p in REQUIRED if not (A3 / p).is_file()]
-    if missing:
-        print("SOURCE-COMPLETENESS FAIL: missing committed source:")
-        for p in missing:
-            print(" -", p)
-        return 1
+CURRENT_IMPLEMENTATION_REQUIRED = [
+    "CURRENT_IMPLEMENTATION_MANIFEST.json",
+    "BUILD_AUDIT.json",
+]
 
-    manifest_path = A3 / "SOURCE_MANIFEST.json"
-    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+SHIPPING_145_SHA = "e44183ef10fc7921f7741eb16d54ec30e814f580421ac6c83be18b5308b73342"
+UL_INPUT_SHA = "2c99a74b45cbc9627a9d3181063cfa6138ca1b6668a7a923d02aa3aa40c569fb"
+
+def fail(message: str, items: list[str] | None = None) -> int:
+    print("SOURCE-COMPLETENESS FAIL:", message)
+    for item in items or []:
+        print(" -", item)
+    return 1
+
+def main() -> int:
+    missing = [p for p in LINEAGE_REQUIRED if not (A3 / p).is_file()]
+    if missing:
+        return fail("missing committed predecessor/provenance source", missing)
+
+    manifest = json.loads((A3 / "SOURCE_MANIFEST.json").read_text(encoding="utf-8"))
     if manifest.get("schema") != 1:
-        print("SOURCE-COMPLETENESS FAIL: unsupported SOURCE_MANIFEST schema")
-        return 1
+        return fail("unsupported SOURCE_MANIFEST schema")
 
     external = {x.get("role"): x for x in manifest.get("external_inputs", [])}
     release = external.get("shipping_1_45_basis")
-    if not release or release.get("sha256") != "e44183ef10fc7921f7741eb16d54ec30e814f580421ac6c83be18b5308b73342":
-        print("SOURCE-COMPLETENESS FAIL: exact 1.45 basis identity is not locked")
-        return 1
+    if not release or release.get("sha256") != SHIPPING_145_SHA:
+        return fail("shipping 1.45 compatibility-oracle identity is not locked")
 
     ul_input = external.get("ul_param_input_artifact267")
-    if not ul_input or ul_input.get("sha256") != "2c99a74b45cbc9627a9d3181063cfa6138ca1b6668a7a923d02aa3aa40c569fb":
-        print("SOURCE-COMPLETENESS FAIL: U/L external input identity is not locked")
-        return 1
+    if not ul_input or ul_input.get("sha256") != UL_INPUT_SHA:
+        return fail("U/L external input identity is not locked")
+
+    print("LINEAGE-PROVENANCE PASS")
+    print(f"predecessor_required_files={len(LINEAGE_REQUIRED)}")
+    print(f"shipping_1_45_compatibility_oracle={SHIPPING_145_SHA}")
+
+    missing_current = [p for p in CURRENT_IMPLEMENTATION_REQUIRED if not (A3 / p).is_file()]
+    if missing_current:
+        return fail(
+            "A3 does not yet contain a committed monolithic current implementation/build audit; "
+            "the shipping 1.45 addon cannot satisfy the implementation-source requirement",
+            missing_current,
+        )
+
+    current = json.loads((A3 / "CURRENT_IMPLEMENTATION_MANIFEST.json").read_text(encoding="utf-8"))
+    if current.get("uses_shipping_addon_as_implementation_basis") is not False:
+        return fail("current implementation manifest does not explicitly reject shipping-binary implementation inheritance")
+
+    source_paths = current.get("implementation_source_paths") or []
+    if not source_paths:
+        return fail("no current implementation source paths declared")
+
+    missing_impl = [p for p in source_paths if not (A3 / p).is_file()]
+    if missing_impl:
+        return fail("declared current implementation source is missing", missing_impl)
 
     print("SOURCE-COMPLETENESS PASS")
-    print(f"required_committed_files={len(REQUIRED)}")
-    print("shipping_1_45_basis=e44183ef10fc7921f7741eb16d54ec30e814f580421ac6c83be18b5308b73342")
-    print("ul_input_artifact267=2c99a74b45cbc9627a9d3181063cfa6138ca1b6668a7a923d02aa3aa40c569fb")
+    print(f"current_implementation_files={len(source_paths)}")
     return 0
 
 if __name__ == "__main__":
