@@ -258,3 +258,122 @@ Again the velocity RGB is upstream; the pixel shader only applies the material a
 5. The depth producer math is sufficiently closed to serve as a reference formula in the shader-math table.
 
 Next target: identify the DSR counterparts' depth/velocity representation and compare the semantic cut, then continue to another PTDE legacy material family with incomplete math.
+
+
+---
+
+## 2026-09-23 — correction: DLRuntimeClass slot semantics
+
+Status: **CONFIRMED; supersedes the earlier "managed-block/payload footprint" interpretation above**
+
+Direct RTTI/reflection RE proves the vtable previously followed belongs to `DLRF::DLRuntimeClassImpl<T>`, not the runtime `ShaderConstant_*Entity` object vtable. Embedded provenance points to `ClassLibrary/Core/Reflection/Source/DLRuntimeClass.cpp`.
+
+The relevant virtual slot returns **`sizeof(T)` for the reflected class**. Primitive template specializations prove the semantic directly:
+
+- signed char -> 1
+- short -> 2
+- int / float -> 4
+- int64 / double -> 8
+- bool -> 1
+
+Therefore values such as PointLight `0xE0`, DirLight `0x3B0`, ToneMap `0x70`, etc. are reflected **class instance sizes**, not GPU CB sizes and not staging-payload sizes.
+
+Numeric census remains valid; its earlier semantic label is rejected.
+
+## 2026-09-23 — CONFIRMED PTDE shader-float state domains
+
+Direct D3D9 dispatch closes the state-bank identity:
+
+- context `+0x10` -> VS float state -> flush `0x00431650` -> `IDirect3DDevice9::SetVertexShaderConstantF`
+- context `+0x1050` -> PS float state -> flush `0x00431760` -> `IDirect3DDevice9::SetPixelShaderConstantF`
+
+Register numbers are therefore always stage-qualified. `VS c135` and `PS c135` are unrelated slots.
+
+## 2026-09-23 — CONFIRMED exact producer transports
+
+### PointLight
+
+`ShaderConstant_PointLightEntity::update 0x0042A100` / helper `0x00F902F0`:
+
+- `entity+0x60+0x10*i -> PS c112+i`
+- `entity+0xA0+0x10*i -> PS c116+i`
+- `i=0..3`
+
+This closes the four fixed legacy PointLight slots.
+
+### ToneMap / terminal c135
+
+`ShaderConstant_ToneMapEntity::update 0x0042B0E0`:
+
+- `entity+0x60 -> PS c135`
+
+Upstream DrawEnv/ToneMap provenance into `entity+0x60` remains OPEN.
+
+### Fog
+
+`ShaderConstant_FogEntity::update 0x00427210`, helper `0x00F92B60`:
+
+- `entity+0x70 = Begin`
+- `entity+0x74 = Range=End-Begin`
+- `entity+0x78 = 0` on ordinary path
+- `entity+0x7C = strength`
+- these form `VS c128=(Begin, Range!=0 ? 1/Range : 0, 0, strength)`
+- `entity+0x80 -> PS c103=(FogRGB,strength)`
+
+### LightScattering
+
+Builder `0x00FF2F90`, basis constructor `0x00FF34F0`, entity setter/update `0x00428340 / 0x00428330`:
+
+| lane | semantic | PS | VS |
+|---:|---|---|---|
+| 0 | Beta1PlusBeta2 | c104 | c129 |
+| 1 | TerrainReflectance | c105 | c130 |
+| 2 | OneOverBeta1PlusBeta2 | c106 | c131 |
+| 3 | HGg | c107 | c132 |
+| 4 | BetaDash1 | c108 | c133 |
+| 5 | BetaDash2 | c109 | c134 |
+| 6 | SunColor.rgb + blendCoef/100 in w | c110 | c135 |
+| 7 | LightDir.xyz + distanceMul/100 in w | c111 | c136 |
+
+`SunColor.rgb=(SunRGB/255)*(SunA/100)`.
+
+`LightDir.xyz=(cos(rx)*sin(ry), -sin(rx), cos(rx)*cos(ry))`, with authored rotations converted from degrees to radians.
+
+### Camera / WorldViewClip
+
+- CameraMtx `entity+0x60 -> transform -> VS c4-c7`
+- WorldViewClipMtx `entity+0x60 -> transform -> VS c0-c3 + PS c165-c168`
+
+## 2026-09-23 — CONFIRMED DirLightEntity transport map
+
+`ShaderConstant_DirLightEntity::update 0x00424060` is the central legacy surface-state carrier.
+
+Known semantic core:
+
+- `+0x70/+0x80/+0x90 -> PS c92/c93/c94`: D1-D3 direction
+- `+0xA0/+0xB0/+0xC0 -> PS c95/c96/c97`: D1-D3 color
+- `+0xD0 -> PS c98`, `+0xE0 -> PS c99`: Upper/Lower
+- `+0x110 -> PS c86`: EnvDiffuse A
+- `+0x120 -> PS c87`: EnvSpec A
+- `+0x130 -> PS c84`: EnvDiffuse B
+- `+0x140 -> PS c85`: EnvSpec B
+- `+0x150/+0x160/+0x170 -> PS c100/c101/c102`: diffuse material / specular material / legacy specular exponent
+- `+0x180 -> PS c139`: model/common material multiplier
+- `+0x380 -> PS c156`: additive diffuse/skin carrier
+
+Additional transport is directly mapped but semantic naming remains OPEN for parts of it:
+
+- `+0xF0/+0x100 -> PS c88/c89`
+- `+0x190/+0x1A0/+0x1B0 -> VS c246-c248`
+- transformed `+0x1C0 -> VS c137-c140`
+- four transformed matrices `+0x200/+0x240/+0x280/+0x2C0 -> PS c140-c155`
+- `+0x300/+0x310/+0x320/+0x330 -> PS c121/c122/c123/c175`
+- `+0x340..+0x370 -> PS c157-c160`
+- `+0x390 -> PS c174`
+- `+0x3A0 -> PS c182`
+
+Do not assign meanings to the OPEN auxiliary registers without consumer/callsite proof.
+
+## Current next target
+
+Close the remaining DirLight auxiliary lanes and then continue the still-OPEN producer rows in `dsrrl.renderer_producer_map`: ClipPlane, DofParam, LocalWorldMtx, LocalWorldMtx_WithPrev, Normal2Alpha and Water. DSR-only DeferredLighting/Glow/WindParam remain a separate consumer-routing census before any decision to preserve/bypass them.
