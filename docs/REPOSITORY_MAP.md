@@ -17,7 +17,7 @@ Exact Nexus 1.45 binary reproduction/review lane. It reproduces the shipping fil
 Canonical historical source-recovery lane. Recovered originals are immutable provenance objects. This is the only 1.45 recovery branch that should receive new recovery work.
 
 **`dev/material-response-expanded-a3-monolith`**  
-Canonical Expanded A3 experiment/source-completeness lane. It is not a substitute for the missing historical 1.45 source chain and is not the shipping release source.
+Canonical Expanded A3 experiment lane. It is not a substitute for the missing historical 1.45 source chain and is not the shipping release source. Its source-completeness guard now treats shipping 1.45 only as a compatibility oracle and intentionally fails until a committed monolithic current implementation + build audit exist.
 
 ## Frozen/legacy duplicates
 
