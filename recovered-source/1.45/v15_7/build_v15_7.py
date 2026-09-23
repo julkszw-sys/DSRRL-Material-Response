@@ -108,35 +108,7 @@ audit={
  'status':{'construction':'PASS','runtime':'OPEN','bridge_activation':'OPEN','resource_substitution':'OPEN','pixel_behavior':'OPEN_DIAGNOSTIC'}
 }
 AUD.write_text(json.dumps(audit,indent=2)+"\n")
-README.write_text('''DSRRL Material Response 1.3 — V15.7 EnvSpec exact-slot t12/t14 ACTIVE BIND BSS-SAFE RC
-
-Purpose
-- First reactivation of the exact-slot PTDE PackedGI EnvSpec t12/t14 draw transaction after the V15 startup crash was causally closed to a .v13d static-state collision.
-- Uses runtime-PASS V15.6 as the binary base.
-- Changes only three V12 draw call targets back to the already-present V15.1 transaction wrappers, plus the diagnostic banner.
-
-Inherited safety
-- complete BSS relocation: no extension references to V12-owned 0x112300..0x112316, including unload path
-- per-thread A/B semantic state
-- 368/368 exact EnvSpcSlotNo; no default slot
-- two-hit stock SRV identity confirmation; ambiguous/mismatched identity fails open
-- exact PS t12/t14 save -> PTDE bind -> restore
-- missed-post cleanup before next pre and unload restore hardening
-
-Scope
-- ordinary DifSpcBmp local receiver ordinal 0..22
-- stock DSR receiver equation and sampler remain unchanged
-- embedded PTDE cubemap pack remains for diagnostic isolation
-
-Expected healthy runtime markers after gameplay begins
-- GPU_IDENTITY LEARN1 fail-open / CONFIRM2 fail-open during identity establishment
-- SLOT0/1/2/3 exact (as encountered)
-- T12_T14_BIND PASS
-- RESTORE PASS
-No crash and no persistent CONFLICT/MISMATCH/TXN fail-open should occur.
-
-This is a resource-substitution diagnostic, NOT PTDE pixel-equivalence certification.
-''')
+README.write_text('''DSRRL Material Response 1.3 — V15.7 EnvSpec exact-slot t12/t14 ACTIVE BIND BSS-SAFE RC\n\nPurpose\n- First reactivation of the exact-slot PTDE PackedGI EnvSpec t12/t14 draw transaction after the V15 startup crash was causally closed to a .v13d static-state collision.\n- Uses runtime-PASS V15.6 as the binary base.\n- Changes only three V12 draw call targets back to the already-present V15.1 transaction wrappers, plus the diagnostic banner.\n\nInherited safety\n- complete BSS relocation: no extension references to V12-owned 0x112300..0x112316, including unload path\n- per-thread A/B semantic state\n- 368/368 exact EnvSpcSlotNo; no default slot\n- two-hit stock SRV identity confirmation; ambiguous/mismatched identity fails open\n- exact PS t12/t14 save -> PTDE bind -> restore\n- missed-post cleanup before next pre and unload restore hardening\n\nScope\n- ordinary DifSpcBmp local receiver ordinal 0..22\n- stock DSR receiver equation and sampler remain unchanged\n- embedded PTDE cubemap pack remains for diagnostic isolation\n\nExpected healthy runtime markers after gameplay begins\n- GPU_IDENTITY LEARN1 fail-open / CONFIRM2 fail-open during identity establishment\n- SLOT0/1/2/3 exact (as encountered)\n- T12_T14_BIND PASS\n- RESTORE PASS\nNo crash and no persistent CONFLICT/MISMATCH/TXN fail-open should occur.\n\nThis is a resource-substitution diagnostic, NOT PTDE pixel-equivalence certification.\n''')
 # Deterministic ZIP
 files=[OUT,AUD,README,SLOTMAP]
 with zipfile.ZipFile(ZIP,'w',compression=zipfile.ZIP_DEFLATED,compresslevel=9) as z:
