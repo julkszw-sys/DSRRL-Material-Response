@@ -13,5 +13,82 @@
     "client145/build_client145.py": "e0fec5dca605f94ea0c532cff5e555d7fdb07824a67e89fecc791b4f87f23db3",
     "client145/build_client145_final.py": "09c17dfefe536ee2bf10c2ef51ec2652bb2cba672ab98fe921ff2e00d02ccea6"
   },
-  "source_complete": false
+  "source_complete": false,
+  "files": [
+    {
+      "path": "README.md",
+      "size": 3300,
+      "sha256": "da62964215e5c94c051e90e7678ccc9b04a100733d53b38c2de0f9a900bf6440"
+    },
+    {
+      "path": "client145/build_client145.py",
+      "size": 14200,
+      "sha256": "e0fec5dca605f94ea0c532cff5e555d7fdb07824a67e89fecc791b4f87f23db3"
+    },
+    {
+      "path": "client145/build_client145_final.py",
+      "size": 4083,
+      "sha256": "09c17dfefe536ee2bf10c2ef51ec2652bb2cba672ab98fe921ff2e00d02ccea6"
+    },
+    {
+      "path": "evidence/DSRRL_HANDOFF_2026-09-20_MATERIAL_RESPONSE_1.45_ENVSPEC_NEXT.md",
+      "size": 16613,
+      "sha256": "1edf8d6a1d6961baa98626e18607bcef60bbd15721c40511b26eaad2a9c2a7d8"
+    },
+    {
+      "path": "evidence/DSRRL_MR13_RENDERER_ASSET_BRIDGE_V12_STATIC_AUDIT.json",
+      "size": 4468,
+      "sha256": "ef1ac29417de03551247f349cdf76b4213cc31b0f8c657e2c5dc837edfda0feb"
+    },
+    {
+      "path": "evidence/DSRRL_Material_Response_1.45_FINAL_RELEASE_AUDIT.json",
+      "size": 1736,
+      "sha256": "40b00b703fbb185135febb3e80e4ef255942afe9a77cace0d8664dc7b290457a"
+    },
+    {
+      "path": "evidence/DSRRL_V12_INDEPENDENT_AUDIT.json",
+      "size": 3278,
+      "sha256": "b710654c44ca6e98a95e174a9a8b0bad93ebb941f9404ca991f4c19b54c4c5c5"
+    },
+    {
+      "path": "evidence/DSRRL_V15_7_ENVSPEC_ACTIVE_BIND_BSS_SAFE_STATIC_AUDIT.json",
+      "size": 3512,
+      "sha256": "313d69aa473ff421b151e211361b40a9f51e059f99706d71df5a07b53b80f402"
+    },
+    {
+      "path": "v12/README_V12_RECEIVER_ORDINAL_FIX.txt",
+      "size": 1580,
+      "sha256": "d969b57ad14f2b12c18ed843addd790f7fe82b6cb58cdd70f28f2abae08413ad"
+    },
+    {
+      "path": "v12/asset_integrated_v12.c",
+      "size": 231644,
+      "sha256": "879b3ec251c36969cf7eabcc5b63164da7c17b6577e74b013e47f7866b3236e2"
+    },
+    {
+      "path": "v12/asset_stubs_v12.s",
+      "size": 2308,
+      "sha256": "c7e8634e3fd37730f8ee052c2cdc763448dfd408cd023492a6d472ab285c89a9"
+    },
+    {
+      "path": "v12/audit_v12_independent.py",
+      "size": 14068,
+      "sha256": "f6e10a914e5313e1cc28501bcde6ec1783a8f6c5ab03ef64c9024330430f9f2c"
+    },
+    {
+      "path": "v12/build_v12.py",
+      "size": 13957,
+      "sha256": "c330b710ed4cede81dcb873f6ad56f7ef798c31f667e3d61bf90edcc412061a3"
+    },
+    {
+      "path": "v15_7/V12_ROUTE_ENVSPC_SLOT_MAP_COMPLETE.json",
+      "size": 44619,
+      "sha256": "046fcbc32781f37475fb9a101b0483bb2fb4b969bf14438201a128c01b45440f"
+    },
+    {
+      "path": "v15_7/build_v15_7.py",
+      "size": 7872,
+      "sha256": "99f9108c2eea2b90632506d46d47ec4180ac657269970e6193f8a2a2305e151e"
+    }
+  ]
 }
