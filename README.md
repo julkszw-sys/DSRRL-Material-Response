@@ -35,6 +35,26 @@ The EnvSpec cubemap data is stored outside the addon at:
 
 The addon checks the file size and SHA-256 before enabling that resource path.
 
+## Runtime Core V2 development
+
+The `dev/runtime-core-v2` branch adds a clean-room runtime state/proof layer intended to consolidate routing used by SpecRGB, Diffuse, Normal, EnvSpec and Subsurf.
+
+It adds:
+
+- per-command-list state instead of process-global draw state
+- generation-safe resource/view and pipeline lifetime tracking
+- early semantic resource-descriptor fingerprints at resource creation
+- generation-safe logical-resource lookup with fail-open on missing or ambiguous identity
+- explicit route contracts for shader / receiver / material / resource / logical-ID / format / state proof
+- source-level staged routing telemetry from capture through final bind/restore
+- fail-open when a required identity is missing
+- per-operator `matched / activated / restored / fail-open` counters
+- frame-boundary detection of incomplete draw-state restore
+
+The core is intentionally pixel-inert until individual existing bridges are migrated onto it.
+
+See [Runtime Core V2](docs/RUNTIME_CORE_V2.md) and the [reference architecture audit](docs/DXGI7_ARCHITECTURE_AUDIT.md).
+
 ## Building
 
 See [BUILD.md](BUILD.md).

@@ -1,0 +1,106 @@
+name: Runtime Core V2
+
+on:
+  push:
+    branches:
+      - dev/runtime-core-v2
+      - dev/runtime-core-v2-full-envspec-carrier-v3
+  pull_request:
+    paths:
+      - CMakeLists.txt
+      - src/runtime_core_v2.hpp
+      - src/runtime_core_v2.cpp
+      - src/runtime_core_v2_reshade.hpp
+      - src/runtime_core_v2_reshade.cpp
+      - src/runtime_core_v2_diagnostic_addon.cpp
+      - src/runtime_core_v2_virtual_envspec.cpp
+      - src/runtime_core_v2_virtual_envspec_v2.cpp
+      - src/runtime_core_v2_full_envspec_carrier_v3.cpp
+      - src/runtime_core_v2_full_envspec_carrier_v3_part1.inc
+      - src/runtime_core_v2_full_envspec_carrier_v3_part2.inc
+      - src/runtime_core_v2_full_envspec_carrier_v3_part3.inc
+      - src/runtime_core_v2_full_envspec_carrier_v3_part4.inc
+      - src/generated/envspec_receivers.hpp
+      - tests/runtime_core_v2_tests.cpp
+      - .github/workflows/runtime-core-v2.yml
+
+jobs:
+  core-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+      - name: Build
+        run: cmake --build build --config Release
+      - name: Test
+        run: ctest --test-dir build -C Release --output-on-failure
+
+  core-and-reshade-api20-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Checkout pinned ReShade API
+        uses: actions/checkout@v4
+        with:
+          repository: crosire/reshade
+          ref: 3645e3025d1d98a90e318278858931f034d5d1f6
+          path: _reshade
+      - name: Configure
+        run: cmake -S . -B build -DRESHade_INCLUDE_DIR="${{ github.workspace }}/_reshade/include"
+      - name: Build
+        run: cmake --build build --config Release
+      - name: Test
+        run: ctest --test-dir build -C Release --output-on-failure
+      - name: Verify diagnostic addon
+        shell: pwsh
+        run: |
+          $path = "build/Release/DSRRL_Runtime_Core_V2_Diagnostic.addon64"
+          if (!(Test-Path $path)) { throw "Diagnostic addon not produced" }
+          Get-Item $path | Format-List Name,Length
+          Get-FileHash $path -Algorithm SHA256 | Format-List
+      - name: Upload diagnostic addon
+        uses: actions/upload-artifact@v4
+        with:
+          name: DSRRL_Runtime_Core_V2_Diagnostic
+          path: build/Release/DSRRL_Runtime_Core_V2_Diagnostic.addon64
+          if-no-files-found: error
+      - name: Verify PTDE virtual EnvSpec addon
+        shell: pwsh
+        run: |
+          $path = "build/Release/DSRRL_PTDE_Virtual_EnvSpec_V1.addon64"
+          if (!(Test-Path $path)) { throw "Virtual EnvSpec addon not produced" }
+          Get-Item $path | Format-List Name,Length
+          Get-FileHash $path -Algorithm SHA256 | Format-List
+      - name: Upload PTDE virtual EnvSpec addon
+        uses: actions/upload-artifact@v4
+        with:
+          name: DSRRL_PTDE_Virtual_EnvSpec_V1
+          path: build/Release/DSRRL_PTDE_Virtual_EnvSpec_V1.addon64
+          if-no-files-found: error
+      - name: Verify PTDE virtual EnvSpec V2 addon
+        shell: pwsh
+        run: |
+          $path = "build/Release/DSRRL_PTDE_Virtual_EnvSpec_V2.addon64"
+          if (!(Test-Path $path)) { throw "Virtual EnvSpec V2 addon not produced" }
+          Get-Item $path | Format-List Name,Length
+          Get-FileHash $path -Algorithm SHA256 | Format-List
+      - name: Upload PTDE virtual EnvSpec V2 addon
+        uses: actions/upload-artifact@v4
+        with:
+          name: DSRRL_PTDE_Virtual_EnvSpec_V2
+          path: build/Release/DSRRL_PTDE_Virtual_EnvSpec_V2.addon64
+          if-no-files-found: error
+      - name: Verify PTDE full EnvSpec carrier V3 addon
+        shell: pwsh
+        run: |
+          $path = "build/Release/DSRRL_PTDE_Full_EnvSpec_Carrier_V3.addon64"
+          if (!(Test-Path $path)) { throw "Full EnvSpec carrier V3 addon not produced" }
+          Get-Item $path | Format-List Name,Length
+          Get-FileHash $path -Algorithm SHA256 | Format-List
+      - name: Upload PTDE full EnvSpec carrier V3 addon
+        uses: actions/upload-artifact@v4
+        with:
+          name: DSRRL_PTDE_Full_EnvSpec_Carrier_V3
+          path: build/Release/DSRRL_PTDE_Full_EnvSpec_Carrier_V3.addon64
+          if-no-files-found: error
