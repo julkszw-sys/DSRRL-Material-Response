@@ -48,7 +48,7 @@ set_target_properties(dsrrl_nexus_source_review PROPERTIES
 add_executable(dsrrl_review_tests tests/runtime_core_v2_tests.cpp)
 target_link_libraries(dsrrl_review_tests PRIVATE dsrrl_review_core)
 target_compile_features(dsrrl_review_tests PRIVATE cxx_std_17)
-target_compile_options(dsrrl_review_tests PRIVATE /W4 /WX)
+target_compile_options(dsrrl_review_tests PRIVATE /W4 /WX /wd4189)
 
 enable_testing()
 add_test(NAME dsrrl_review_tests COMMAND dsrrl_review_tests)
