@@ -1,0 +1,54 @@
+{
+  "schema": "dsrrl.a3.producer_contract_hotfix5.v1",
+  "status": "CONSTRUCTION_PASS_DIAGNOSTIC",
+  "base_sha256": "a17031743c48dfa27c8dabd07673320ba4b22b61c3d55287ad0f436db406327b",
+  "output_sha256": "6fde1cf09a283ec1bd5a966690dc3407b48c757257d5d79c3fba07a948293f34",
+  "output_size": 2642944,
+  "pe_checksum": "0x0028AF7B",
+  "source_alignment_commit": "f4ac43a385e5d12efc4c7797302c7138f8eece21",
+  "patch_generator_commit": "e39f5e30d972e9fe1b9e9ea648be7557cb1849a4",
+  "canonical_basis": {
+    "key": "project.branch.renderer_edition_ul_real_producer_capture_contract_v1",
+    "revision_seq": 4401,
+    "steady_single_packer": "0x140563B80",
+    "obsolete_cache_builder_helper": "0x140564510",
+    "blend_helper": "0x1405642F0"
+  },
+  "mechanism": "Remove obsolete A3 hook installation for EXE 0x564510 and restore a guarded 8-byte post-wrapper assignment tuple read through shipping 1.45 safe-read8. True interior blend capture remains active. Steady U/L deliberately fails open until the canonical 0x563B80 single-packer path is integrated.",
+  "patches": [
+    {
+      "rva": "0x1C0EEE",
+      "old": "488d050be5ffff",
+      "new": "e9260000009090",
+      "purpose": "skip obsolete 0x564510 hook installation"
+    },
+    {
+      "rva": "0x1BF297",
+      "old": "f30f1041088b490c",
+      "new": "e9a42c0000909090",
+      "target_rva": "0x1C1F40",
+      "purpose": "guard producer assignment A/B/beta tuple read"
+    },
+    {
+      "rva": "0x1C1F40",
+      "size": 56,
+      "safe_read8_rva": "0x2A60",
+      "resume_rva": "0x1BF29F",
+      "fail_open_rva": "0x1BF380"
+    }
+  ],
+  "invariants": [
+    "HF4 selector safety retained",
+    "shipping 1.45 selector resolver retained",
+    "RAX Hotfix1 retained",
+    "wrapper5/wrapper6 capture retained",
+    "true blend capture retained",
+    "draw callsites unchanged",
+    "EnvDiffuse OFF",
+    "steady path fail-open rather than guessed"
+  ],
+  "exact_reproduction": "PASS",
+  "runtime_status": "NOT_TESTED",
+  "bridge_activation_status": "PARTIAL_BY_CONSTRUCTION",
+  "pixel_status": "OPEN"
+}
