@@ -15,6 +15,7 @@ PATCHES={
  'pre': (0x65E7, bytes.fromhex('e87c5a1900'), 'a3_pre_stub', 'call5'),
  'draw_indexed': (0x6641, bytes.fromhex('ff15017f0000'), 'a3_draw_indexed_stub', 'call6'),
  'draw_instanced': (0x6664, bytes.fromhex('ff15de7e0000'), 'a3_draw_instanced_stub', 'call6'),
+ 'selector_chain': (0x9697, bytes.fromhex('e8e4fcffff'), 'a3_selector_chain', 'call5'),
 }
 
 
