@@ -572,3 +572,59 @@ HF4 status:
 - EnvDiffuse: OFF
 
 Safest confirmed runtime rollback remains build141 / HF1. HF4 is the next diagnostic construction, not a promoted runtime PASS.
+
+
+---
+
+## 16. HF4 runtime FAIL and HF5 producer-contract correction
+
+Owner runtime log confirms build144 / HF4 is also **RUNTIME FAIL**. It loads/registers, arms the A3 U/L producer, creates the swapchain, then terminates at the same first-ResizeBuffers/runtime-recreation startup boundary as HF2/HF3. Therefore selector tuple safe-read placement was not sufficient to restore liveness.
+
+A deeper lineage audit changed the interpretation of build141 vs build142:
+- build141's selector preflight failure runs `restore_hooks()`, so its runtime PASS is a fail-open control where the newly installed A3 producer hooks are removed;
+- build142 skips the conflicting selector install and therefore is the first monolithic successor that leaves A3 producer hooks live;
+- the common HF2-HF4 crash interval therefore does **not** isolate the selector chain by itself.
+
+More importantly, builds142-144 were still using a producer model superseded by canonical finding
+`project.branch.renderer_edition_ul_real_producer_capture_contract_v1` rev4401:
+- EXE `0x140564510` + returns `0x140563642/659` are cache-builder calls, not ordinary steady U/L;
+- ordinary steady U/L is selected by `0x140563460` from cached 0x110-byte records and should be recovered through the already-routed single packer `0x140563B80`;
+- true interior blend capture at `0x1405642F0` remains valid.
+
+### Build145 — Producer Contract Hotfix5
+
+Build key:
+`material_response_1_45_a3_ul_producer_contract_hotfix5`
+
+SHA256:
+`6fde1cf09a283ec1bd5a966690dc3407b48c757257d5d79c3fba07a948293f34`
+
+Construction:
+PASS, exact deterministic reproduction PASS.
+
+HF5:
+- removes installation of the obsolete `0x140564510` A3 SINGLE hook;
+- restores guarded 8-byte post-wrapper assignment A/B/beta read through shipping 1.45 safe-read8;
+- retains wrapper5/wrapper6 capture;
+- retains true interior blend capture `0x1405642F0`;
+- retains HF4 selector safety and shipping selector resolver;
+- leaves steady U/L fail-open until canonical `0x140563B80` integration is materialized;
+- keeps EnvDiffuse OFF.
+
+Source alignment commit:
+`f4ac43a385e5d12efc4c7797302c7138f8eece21`
+
+Patch generator commit:
+`e39f5e30d972e9fe1b9e9ea648be7557cb1849a4`
+
+Audit commit:
+`0591b208a0736aa6cbc6d58689c335c9d40df922`
+
+Status:
+- CONSTRUCTION: PASS
+- NATIVE: PASS
+- RUNTIME: NOT_TESTED
+- BRIDGE ACTIVATION: PARTIAL_BY_CONSTRUCTION
+- PIXEL: OPEN
+
+Do not promote HF5 to runtime PASS from construction alone. Build141 remains the last confirmed runtime-live fail-open rollback.
