@@ -15,7 +15,7 @@ Produce one installable `.addon64` that preserves the shipping Material Response
 
 The user should not need a stack of companion addons.
 
-## Immutable basis
+## Compatibility oracle — not implementation source
 
 Shipping 1.45:
 
@@ -25,7 +25,7 @@ Shipping 1.45:
 - source/release branch: `nexus-review/material-response-1.45-source`
 - source head used as branch basis: `b1a61bac857d50dd1a5c4a51c85d106583d38b24`
 
-Any A3 build must verify this exact basis before integration.
+Any A3 compatibility audit may verify this exact basis. **It must not use the shipping addon binary as the canonical implementation of a new A3 RC/release.** A source-complete A3 successor must build the preserved 1.45 behavior from committed source/reconstructed source modules and deterministic generators.
 
 ## Integrated scope
 
@@ -115,6 +115,8 @@ and exact input hashes rather than hand-edited.
 ## Current status
 
 Construction of the monolithic A3 successor is in progress.
+
+**SOURCE-COMPLETENESS: INCOMPLETE.** The branch currently preserves predecessor source/provenance, but it does not yet contain one committed monolithic implementation that rebuilds the 1.45 behavior without using the shipping `.addon64` as implementation basis. The source-completeness verifier must therefore fail the release gate until that condition changes.
 
 Do not tag or publish this branch as a release until:
 
