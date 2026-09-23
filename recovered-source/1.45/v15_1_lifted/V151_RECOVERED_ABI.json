@@ -1,0 +1,153 @@
+{
+  "schema": "dsrrl.material_response.v15_1.recovered_lifted_abi.v1",
+  "status": "RECOVERED_LIFTED_EXACT_BYTES_NOT_ORIGINAL_C",
+  "text_rva": "0x1b7000",
+  "text_size": 24576,
+  "rdata_rva": "0x1bd000",
+  "rdata_size": 8192,
+  "pack_rva": "0x1bf000",
+  "entrypoints": [
+    {
+      "offset": "0x0",
+      "rva": "0x1b7000",
+      "name": "envcube_formatter_detour",
+      "description": "CPU formatter A/B semantic capture and per-thread probe state"
+    },
+    {
+      "offset": "0x3d0",
+      "rva": "0x1b73d0",
+      "name": "envcube_module_base",
+      "description": "Resolve addon image base from fixed wrapper anchor"
+    },
+    {
+      "offset": "0x3f0",
+      "rva": "0x1b73f0",
+      "name": "envcube_prepare_wrapper",
+      "description": "Inherited V12 prepare + per-thread receiver ordinal staging"
+    },
+    {
+      "offset": "0x4c0",
+      "rva": "0x1b74c0",
+      "name": "envcube_pre_wrapper",
+      "description": "Main exact-slot route gate, cache/identity/transaction and t12/t14 bind"
+    },
+    {
+      "offset": "0x10e0",
+      "rva": "0x1b80e0",
+      "name": "envcube_restore_transaction",
+      "description": "Restore saved stock t12/t14, release COM refs, clear transaction"
+    },
+    {
+      "offset": "0x1250",
+      "rva": "0x1b8250",
+      "name": "envcube_ensure_cache",
+      "description": "Realize/cache 342x4 PTDE TextureCube SRVs from embedded pack"
+    },
+    {
+      "offset": "0x1860",
+      "rva": "0x1b8860",
+      "name": "envcube_gpu_identity_observe",
+      "description": "Two-observation stock-SRV identity learn/confirm/refresh/conflict logic"
+    },
+    {
+      "offset": "0x1a90",
+      "rva": "0x1b8a90",
+      "name": "envcube_txn_find_or_alloc",
+      "description": "32-slot native-context transaction lookup/allocation helper"
+    },
+    {
+      "offset": "0x1e10",
+      "rva": "0x1b8e10",
+      "name": "envcube_post_wrapper",
+      "description": "Restore EnvSpec transaction then invoke inherited V12 asset_post"
+    },
+    {
+      "offset": "0x1e50",
+      "rva": "0x1b8e50",
+      "name": "envcube_init_wrapper",
+      "description": "Addon init, host signature verification, formatter hook and cache setup"
+    },
+    {
+      "offset": "0x21f0",
+      "rva": "0x1b91f0",
+      "name": "envcube_uninit_wrapper",
+      "description": "Full teardown: restore hooks/transactions, release SRVs/textures and state"
+    }
+  ],
+  "rdata_layout": [
+    {
+      "offset": "0x0000",
+      "size": 368,
+      "name": "route_slots_368",
+      "evidence": "byte values exactly equal V12_ROUTE_ENVSPC_SLOT_MAP_COMPLETE.json rows[].slot"
+    },
+    {
+      "offset": "0x0170",
+      "size": 4104,
+      "name": "probe_semantic_records_342",
+      "record": "<u32 semantic_key,u32 probe_key,u32 canonical_probe_ordinal>"
+    },
+    {
+      "offset": "0x1178",
+      "size": 8,
+      "name": "alignment_pad_zero"
+    },
+    {
+      "offset": "0x1180",
+      "size": 3712,
+      "name": "descriptor_strings_jump_tables_tail",
+      "status": "exact bytes; partially semantically named in README"
+    }
+  ],
+  "state_offsets": [
+    "0x112008",
+    "0x112010",
+    "0x112280",
+    "0x112288",
+    "0x112290",
+    "0x112298",
+    "0x1122a0",
+    "0x1122a4",
+    "0x1122a8",
+    "0x1122ac",
+    "0x1122b0",
+    "0x1122b4",
+    "0x1122b8",
+    "0x1122bc",
+    "0x1122c0",
+    "0x1122c4",
+    "0x1122c8",
+    "0x1122cc",
+    "0x1122e4",
+    "0x1122fc",
+    "0x112300",
+    "0x112304",
+    "0x112308",
+    "0x112309",
+    "0x11230a",
+    "0x11230b",
+    "0x11230c",
+    "0x11230d",
+    "0x11230e",
+    "0x11230f",
+    "0x112310",
+    "0x112311",
+    "0x112312",
+    "0x112313",
+    "0x112314",
+    "0x112315",
+    "0x112316"
+  ],
+  "known_callsites": {
+    "prepare": "0x19c0f7",
+    "pre": "0x19c06f",
+    "post": "0x19c084",
+    "init_stub_file_offset": "0x8080",
+    "uninit_stub_file_offset": "0x8660"
+  },
+  "hashes": {
+    "ext_text_sha256": "f8b474277787f9ae81cffc0c64f5586532bb804366accc3cbc8d877ea44852ac",
+    "ext_rdata_sha256": "5c7ceaee061d03218923b630ba984b3f1c23350dd861dc4072cab6871e468e7e",
+    "v15_1_sha256": "7f10f908d598f8d6b952e2c78bce6eb97a8b84a297f956a069c439b7977b65cc"
+  }
+}
