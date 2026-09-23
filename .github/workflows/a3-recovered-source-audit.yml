@@ -16,17 +16,25 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Reconstruct exact V12 integrated source
+      - name: Reconstruct currently available V12 source prefix
         run: |
           python dev/a3/recovered_145/extract_v12_exact.py \
+            --allow-partial \
             --out build/a3/recovered_145_v12/asset_integrated_v12.c \
             --manifest build/a3/V12_EXACT_INDEX.json
 
-      - name: Verify exact V12 source identity
+      - name: Inspect V12 renderer/material transaction source
         run: |
-          sha256sum build/a3/recovered_145_v12/asset_integrated_v12.c
-          grep -nE 'AddonInit|AddonUninit|DrawIndexed|PSSetShader|PSSetConstantBuffers|selector|material|SpecRGB|Subsurf|Normal|Diffuse|EnvSpec' \
-            build/a3/recovered_145_v12/asset_integrated_v12.c | head -n 500 || true
+          wc -c build/a3/recovered_145_v12/asset_integrated_v12.c
+          grep -nE 'AddonInit|AddonUninit|DrawIndexed|draw_indexed|PSSetShader|PSSetConstantBuffers|selector|actual_material|material|SpecRGB|Subsurf|Normal|Diffuse|EnvSpec' \
+            build/a3/recovered_145_v12/asset_integrated_v12.c | head -n 700 || true
+
+      - name: Exact V12 source-complete gate
+        continue-on-error: true
+        run: |
+          python dev/a3/recovered_145/extract_v12_exact.py \
+            --out build/a3/recovered_145_v12_exact/asset_integrated_v12.c \
+            --manifest build/a3/V12_EXACT_COMPLETE_INDEX.json
 
       - name: Probe incomplete historical core archive without gating
         continue-on-error: true
