@@ -39,7 +39,7 @@ See `docs/REPOSITORY_MAP.md` and `docs/BRANCH_POLICY.md`.
 
 Original V12 runtime source/stubs/build tooling and the final V15.7 / client-1.45 builders have been recovered byte-for-byte and committed on the canonical recovery branch.
 
-The historical source chain is **not yet source-complete**. The principal remaining gap is the source-level EnvSpec chain between V12 and V15.7, including V15.1 and the V15.5/V15.6 BSS/thread-state corrections, plus binary-only predecessor inputs before V12.
+The historical source chain is **not yet source-complete**. V15.4→V15.6 binary deltas have now been independently reconstructed and reproduce the preserved binaries byte-for-byte, but they are explicitly `RECONSTRUCTED`, not recovered originals. The principal remaining handwritten-source gap is the EnvSpec implementation around V15/V15.1 (`envcube_ext_v15_active_bind.c`) and earlier source-to-binary lineage, plus binary-only predecessor inputs before V12.
 
 See `docs/SOURCE_RECOVERY_STATUS.md`.
 
