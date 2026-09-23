@@ -1,0 +1,15 @@
+{
+  "schema": "dsrrl.material_response_1_45.envspec_v151_v157_exact_reconstruction.v1",
+  "base_v151_sha256": "7f10f908d598f8d6b952e2c78bce6eb97a8b84a297f956a069c439b7977b65cc",
+  "stages": [
+    {"stage":"v153","sha256":"4641d2f9d66e879cc86c05aa403a6f9fcfe96c5f9486c15cdae4339f15d50d68","size":35423232,"patch_count":5},
+    {"stage":"v154","sha256":"4ddf2b270b09efcc57c4cf680ac0da78ebc3f0a5f58fd7d242b87b90aa6168cc","size":35423232,"patch_count":1},
+    {"stage":"v155","sha256":"bf552c8606e27ab1bf3535b27509e91d8692fe553993a0e80b767cd30c1dd283","size":35423232,"patch_count":19},
+    {"stage":"v156","sha256":"9f112214a7cfc058775df26c58d4e8afaaa40fa22015613520bcaafcc9d5d21b","size":35423232,"patch_count":16},
+    {"stage":"v157","sha256":"cfd1fe585710497a411adad8dc7edd9b46ae187133ee0625abeed2ab1ab96f09","size":35423232,"patch_count":5}
+  ],
+  "status": "EXACT_BINARY_RECONSTRUCTION_PASS",
+  "source_complete": false,
+  "validation": "Reconstructed outputs were compared by SHA-256 to the owner archival V15.3/V15.4/V15.5/V15.6/V15.7 addon binaries and all five matched exactly.",
+  "remaining_gap": "Original V15.1 C source body and pre-V12 source chain are still missing; reconstruction patchers are exact provenance, not a replacement for full handwritten source."
+}
