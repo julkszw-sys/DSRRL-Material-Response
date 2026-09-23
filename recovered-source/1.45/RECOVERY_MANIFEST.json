@@ -1,5 +1,5 @@
 {
-  "schema": 3,
+  "schema": 4,
   "status": "PARTIAL_SOURCE_RECOVERY",
   "date": "2026-09-23",
   "branch": "recovery/material-response-1.45-source-chain-2026-09-23",
@@ -35,5 +35,26 @@
     "v15_7/V12_ROUTE_ENVSPC_SLOT_MAP_COMPLETE.json": "1aab6a5f667bfad6c9694502d1736870f1129420"
   },
   "github_recovered_files_byte_exact": true,
-  "source_complete": false
+  "source_complete": false,
+  "reconstructed_byte_exact": {
+    "reconstructed/1.45/v15_4_to_v15_6/build_v15_4_reconstructed.py": {
+      "parent_sha256": "4641d2f9d66e879cc86c05aa403a6f9fcfe96c5f9486c15cdae4339f15d50d68",
+      "output_sha256": "4ddf2b270b09efcc57c4cf680ac0da78ebc3f0a5f58fd7d242b87b90aa6168cc",
+      "verification": "BYTE_EXACT_CMP_PASS",
+      "original_source_recovered": false
+    },
+    "reconstructed/1.45/v15_4_to_v15_6/build_v15_5_reconstructed.py": {
+      "parent_sha256": "4ddf2b270b09efcc57c4cf680ac0da78ebc3f0a5f58fd7d242b87b90aa6168cc",
+      "output_sha256": "bf552c8606e27ab1bf3535b27509e91d8692fe553993a0e80b767cd30c1dd283",
+      "verification": "BYTE_EXACT_CMP_PASS",
+      "original_source_recovered": false
+    },
+    "reconstructed/1.45/v15_4_to_v15_6/build_v15_6_reconstructed.py": {
+      "parent_sha256": "bf552c8606e27ab1bf3535b27509e91d8692fe553993a0e80b767cd30c1dd283",
+      "output_sha256": "9f112214a7cfc058775df26c58d4e8afaaa40fa22015613520bcaafcc9d5d21b",
+      "verification": "BYTE_EXACT_CMP_PASS",
+      "original_source_recovered": false
+    }
+  },
+  "remaining_primary_gap": "Handwritten EnvSpec implementation/source-to-binary path around V15/V15.1 (envcube_ext_v15_active_bind.c) and earlier pre-V12 binary-only predecessors."
 }
