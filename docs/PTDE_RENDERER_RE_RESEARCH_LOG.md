@@ -620,3 +620,34 @@ A future `Non` bridge should be treated as its own receiver family with exact sh
 7. fail-open for non-`Non` receivers.
 
 The likely narrowest carrier is a shader/material-response island, with shadow resource-state work only for Sdw/Csd variants. Global LightBank/PARAM compensation would target the wrong operator.
+
+
+### DSR `Non` representative material-domain delta — supplemental
+
+Representative DSR `Non` DXBC disassembly sharpens the family mismatch beyond the shadow kernel.
+
+Relevant RDEF mappings observed in the simple `Non` host include:
+- `cb0[9] = gFC_DifMapMulCol`
+- `cb0[10] = gFC_SpcMapMulCol`
+- `cb0[12] = gFC_FogCol`
+- `cb0[13] = gFC_LsBeta1PlusBeta2`
+- `cb0[14] = gFC_LsTerrainReflectance`
+- `cb0[15] = gFC_LsOneOverBeta1PlusBeta2`
+- `cb0[16] = gFC_LsHGg`
+- `cb0[17] = gFC_LsBetaDash1`
+- `cb0[18] = gFC_LsBetaDash2`
+- `cb0[19] = gFC_LsSunColor`
+- `cb0[20] = gFC_LsLightDir`
+- `cb0[60] = gFC_FgSkinAddColor`
+- `cb0[101] = gFC_DebugPointLightParams`.
+
+Observed DSR material-domain structure:
+- simple diffuse product still samples diffuse, adds `gFC_FgSkinAddColor`, and multiplies `gFC_DifMapMulCol * VertexColor`;
+- DSR then uses explicit LOG/MUL/EXP exponent transforms instead of keeping the PTDE legacy-domain material product;
+- in `Spc`, diffuse is first mapped through the 2.2-domain path, the spec material contribution is added in that domain, then the result is mapped through the reciprocal exponent before common fog/scattering and later re-encoded;
+- in `Lit`, the diffuse material enters the 2.2-domain path and the lightmap sample is independently transformed by the exponent carried through `gFC_DebugPointLightParams.z` before multiplication;
+- in `Sdw/Csd`, DSR uses the previously documented 9-tap comparison-sampler shadow plus the additional shadow-color exponent before material composition.
+
+Therefore PTDE `Non` direct `(D+S)*Gate` and DSR `Non` are mathematically different material operators even when the same texture assets are bound. This strengthens the bridge classification to **shader/material-response**, with shadow state as a separate sub-operator for Sdw/Csd.
+
+PTDE Bmp/non-Bmp remains **24/24 byte-identical**. DSR Bmp/non-Bmp payloads are byte-different because the inspected pairs use different input-varying layouts; representative arithmetic is otherwise equivalent, but a complete semantic-normalized 24/24 DSR proof remains OPEN. Do not promote “Bmp is globally a DSR no-op” without that census.
