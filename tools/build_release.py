@@ -1,8 +1,14 @@
 #!/usr/bin/env python3
-"""Build the DSRRL Material Response 1.45 clean release.
+"""Build the exact DSRRL Material Response 1.45 Nexus release.
 
-This is an auditable hardening transform over the exact integrated 1.45 basis.
-EnvSpec/cubemap replacement and release telemetry are intentionally disabled.
+The shipping file is produced in two deterministic stages:
+
+1. harden the exact integrated 1.45 basis into the clean EnvSpec-disabled
+   intermediate (SHA-256 3dcb50...);
+2. apply the exact P_Metal terminal RGB SAT DXBC delta used by the Nexus file
+   (SHA-256 e44183...).
+
+EnvSpec/cubemap replacement and release telemetry remain disabled.
 """
 
 from __future__ import annotations
@@ -12,9 +18,12 @@ import hashlib
 import struct
 from pathlib import Path
 
+from patch_pmetal_terminal_sat import apply_terminal_sat
+
 EXPECTED_BASE_SHA256 = "db2e6547b5fb5516d4ad6559173e66421315d1635ca0c08e8141b0de2f57f966"
 EXPECTED_OUTPUT_SIZE = 1_803_264
-EXPECTED_OUTPUT_SHA256 = "3dcb50bee7d4a1ffcb47c2e9d116cbad5da322f6719e3cf2ecdbe6846db63000"
+CLEAN_INTERMEDIATE_SHA256 = "3dcb50bee7d4a1ffcb47c2e9d116cbad5da322f6719e3cf2ecdbe6846db63000"
+EXPECTED_OUTPUT_SHA256 = "e44183ef10fc7921f7741eb16d54ec30e814f580421ac6c83be18b5308b73342"
 
 LOADER_RVA = 0x1BC100
 LOADER_SIZE = 1501
@@ -163,9 +172,9 @@ def update_pe_checksum(buf: bytearray) -> int:
     return checksum
 
 
-def assert_postconditions(data: bytes) -> None:
+def assert_clean_postconditions(data: bytes) -> None:
     if len(data) != EXPECTED_OUTPUT_SIZE:
-        raise RuntimeError(f"unexpected output size: {len(data)}")
+        raise RuntimeError(f"unexpected clean output size: {len(data)}")
 
     for marker in TELEMETRY_STRINGS:
         if marker in data:
@@ -181,9 +190,10 @@ def assert_postconditions(data: bytes) -> None:
         raise RuntimeError("EnvSpec loader cave is not cleared")
 
     digest = sha256_bytes(data)
-    if digest != EXPECTED_OUTPUT_SHA256:
+    if digest != CLEAN_INTERMEDIATE_SHA256:
         raise RuntimeError(
-            f"output SHA-256 mismatch: {digest}\nexpected: {EXPECTED_OUTPUT_SHA256}"
+            f"clean intermediate SHA-256 mismatch: {digest}\n"
+            f"expected: {CLEAN_INTERMEDIATE_SHA256}"
         )
 
 
@@ -214,14 +224,20 @@ def transform(base_path: Path, out_path: Path) -> None:
     write_cstr(buf, DESC_OFF, DESC_CAP, DESCRIPTION)
     write_cstr(buf, NAME_OFF, NAME_CAP, FILENAME)
 
-    checksum = update_pe_checksum(buf)
-    assert_postconditions(bytes(buf))
-    out_path.write_bytes(buf)
+    clean_checksum = update_pe_checksum(buf)
+    assert_clean_postconditions(bytes(buf))
+
+    final = apply_terminal_sat(bytes(buf), require_input_identity=True)
+    if sha256_bytes(final) != EXPECTED_OUTPUT_SHA256:
+        raise RuntimeError("unexpected final Nexus release identity")
+
+    out_path.write_bytes(final)
 
     print(f"PASS: {out_path}")
-    print(f"size={len(buf)}")
-    print(f"sha256={sha256_bytes(buf)}")
-    print(f"pe_checksum=0x{checksum:08X}")
+    print(f"size={len(final)}")
+    print(f"sha256={sha256_bytes(final)}")
+    print(f"clean_pe_checksum=0x{clean_checksum:08X}")
+    print("final_pe_checksum=0x001BC666")
 
 
 def main() -> None:
