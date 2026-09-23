@@ -24,6 +24,7 @@ A release is source-complete only when the repository contains:
 
 - shipping a runtime whose behavior only exists in an uncommitted local file;
 - treating a final DLL/addon as the canonical implementation;
+- satisfying the implementation-source requirement by listing the shipping 1.45 addon as an external input;
 - modifying a binary manually without committing the deterministic patcher;
 - depending on a chat attachment without recording its content hash and role;
 - promoting a build when generated payloads cannot be reconstructed;
@@ -58,3 +59,5 @@ Shipping Material Response 1.45 remains the immutable compatibility basis, but i
 public review branch reconstructs the final release from an earlier integrated binary
 basis rather than containing the full original implementation source for every bridge.
 Expanded A3 must not repeat that source-availability limitation.
+
+Therefore the shipping 1.45 addon may be used as a compatibility oracle, byte-diff reference or behavior baseline, but **not** as the implementation basis that makes A3 source-complete. The current A3 branch remains source-incomplete until the monolithic implementation itself is committed and builds without inheriting opaque renderer behavior from the shipping addon binary.
