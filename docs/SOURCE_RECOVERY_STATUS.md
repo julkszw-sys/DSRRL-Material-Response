@@ -25,10 +25,10 @@ Supabase provenance retains file names, roles, sizes and SHA-256 identities for 
 
 The historical runtime archives for V13.1, V14, V14.1, V14.2, V14.3, V15.1 and V15.2 were re-inspected. They contain binaries/audits/readmes but not the original C bodies, so those files are not claimed as recovered.
 
-The source-level V15.5/V15.6 BSS/thread-state corrections leading into V15.7 are also still unresolved, and V12 itself still has binary-only predecessor inputs in its historical build chain.
+The original V15.5/V15.6 builder sources were not recovered, but their exact binary deltas are no longer unresolved: preserved V15.3→V15.4→V15.5→V15.6 binaries were differentially audited and new `RECONSTRUCTED_BYTE_EXACT` builders reproduce all three outputs byte-for-byte. These reconstructed builders live under `reconstructed/1.45/v15_4_to_v15_6/` and are deliberately not represented as historical originals. The main remaining handwritten-source gap is the V15/V15.1 EnvSpec implementation and earlier source-to-binary chain. V12 itself also still has binary-only predecessor inputs in its historical build chain.
 
 ## Consequence
 
-Exact Nexus 1.45 binary reproduction exists, and a substantial part of the original implementation source is now preserved in GitHub, but a full source-to-release rebuild is not yet proven.
+Exact Nexus 1.45 binary reproduction exists, a substantial part of the original implementation source is now preserved in GitHub, and V15.4→V15.6 are now reproducible as verified reconstructed deltas. A full handwritten-source-to-release rebuild is still not proven.
 
 The project-wide release gate therefore remains closed for any new release derived from this incomplete historical chain until the missing layers are recovered or reconstructed and independently verified.
