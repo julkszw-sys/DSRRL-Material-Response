@@ -168,3 +168,93 @@ After the common PHN fog/scattering tail all 12 end in terminal RGB SAT through 
 5. Exact FaceEye receiver identity is mandatory; fail-open for non-FaceEye draws.
 
 Next FaceEye RE target: exact DSR FaceEye material/BRDF equation and PTDE↔DSR delta beyond the already-censused PntS attenuation mismatch.
+
+
+---
+
+## 2026-09-23 — PTDE PHN Dep / DepAlp / Vel / VelAlp shader math
+
+Status: **CONFIRMED PTDE math / pending Supabase backfill**
+
+Corpus: the five PTDE PHN special-output shaders outside the main Hem*/FaceEye material families:
+- `FRPG_Phn_Dif________________Dep.fpo`
+- `FRPG_Phn_Dif________________DepAlp.fpo`
+- `FRPG_Phn_Dif______Mul_______DepAlp.fpo`
+- `FRPG_Phn_Dif________________Vel.fpo`
+- `FRPG_Phn_Dif________________VelAlp.fpo`
+
+### Depth producer: exact RGB packing
+
+Let:
+`d = v0.x / v0.y`
+`K = 255.99998474121094`
+`T(x) = truncation toward zero` as implemented by the shader's FRC + CMP correction.
+
+Then:
+`a = K*d`
+`i0 = T(a)`
+`f0 = a-i0`
+`b = 256*f0`
+`i1 = T(b)`
+`f1 = b-i1`
+
+The PTDE depth shader writes:
+`R = i0/255`
+`G = i1/255`
+`B = 256*f1/255`
+
+Thus:
+`DepthRGB(d) = (i0/255, i1/255, 256*f1/255)`.
+
+For the ordinary non-negative projective depth domain, `T` reduces to floor.
+
+### Exact producer -> FaceEye shadow consumer closure
+
+The FaceEye Sdw/Csd consumer previously recovered:
+`Decode(RGB)=dot(RGB,(255/256,255/65536,255/16777216))`.
+
+Substituting the producer output gives:
+`Decode(DepthRGB(d)) = K*d/256`
+`= 0.9999999403953552*d`.
+
+So the PTDE Dep producer and PHN shadow PCF consumer form an explicit matched transport pair. The tiny scale below 1 is not an arbitrary bridge gain; it follows directly from the compiled `K=255.99998474121094` constant.
+
+This closes a source -> encoding -> texture transport -> shadow consumer segment of the PTDE forward.
+
+### Depth alpha semantics are route-specific
+
+`FRPG_Phn_Dif________________Dep.fpo`:
+`oC0.a = 1`.
+
+`FRPG_Phn_Dif________________DepAlp.fpo`:
+`oC0.a = tex2D(s0,uv).a * c100.w * v1.w`.
+
+`FRPG_Phn_Dif______Mul_______DepAlp.fpo`:
+the pixel shader performs no diffuse texture sample and writes
+`oC0.a = c100.w`.
+
+Therefore `DepAlp` is not one universal alpha formula; the exact material/shader route must select the correct alpha behavior.
+
+### Velocity producer
+
+`FRPG_Phn_Dif________________Vel.fpo`:
+`oC0.xyz = v0.xyz`
+`oC0.a = 1`.
+
+The pixel shader performs no velocity computation. Its RGB is an upstream varying payload, so reconstruction of the actual motion-vector equation belongs to the vertex/producer path rather than this pixel shader.
+
+`FRPG_Phn_Dif________________VelAlp.fpo`:
+`oC0.xyz = v2.xyz`
+`oC0.a = tex2D(s0,v1.xy).a * c100.w * v0.w`.
+
+Again the velocity RGB is upstream; the pixel shader only applies the material alpha mask.
+
+### Bridge impact
+
+1. PTDE shadow-depth compatibility cannot be reduced to a generic depth texture replacement; the exact packed RGB representation and its consumer decode are a matched operator pair.
+2. Any PTDE shadow island on DSR must either preserve this pair or convert explicitly at the semantic cut. Do not inject packed PTDE depth into a DSR consumer that expects a different representation.
+3. DepAlp alpha behavior is receiver/material-route specific and must fail-open when the exact shader route is not known.
+4. Vel/VelAlp pixel shaders do not reveal the PTDE motion-vector equation; next RE must move upstream to the vertex/varying producer before a velocity bridge can be canonical.
+5. The depth producer math is sufficiently closed to serve as a reference formula in the shader-math table.
+
+Next target: identify the DSR counterparts' depth/velocity representation and compare the semantic cut, then continue to another PTDE legacy material family with incomplete math.
