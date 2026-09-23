@@ -1,0 +1,106 @@
+{
+  "stock_ul48_count": 48,
+  "stock_base": "VANILLA_DSR_UL_ONLY",
+  "pmetal_count": 3,
+  "pmetal_base": "SHIPPING_1_45_ALTERNATES_33_34_35_UL_ONLY",
+  "pmetal": [
+    {
+      "embedded_index": 33,
+      "shader_index": 894,
+      "base_sha256": "ee2511b2c3c6a822c921ad0ca5ef9eaf78b05d1992ce88851b5ecae95601c872",
+      "ul_sha256": "f3bc203c77788669a7f4221b3787def4043fe5af57fd2c927403b4ec42fc2fb8",
+      "audit": {
+        "island_instruction_index": 256,
+        "changed_refs": [
+          {"instruction": "ADD", "old_cb": 0, "old_index": 7, "new_cb": 13, "new_index": 6},
+          {"instruction": "ADD", "old_cb": 0, "old_index": 8, "new_cb": 13, "new_index": 7},
+          {"instruction": "MAD", "old_cb": 0, "old_index": 8, "new_cb": 13, "new_index": 7}
+        ],
+        "b13_refs": [6, 7, 7],
+        "rdef_stripped": true
+      }
+    },
+    {
+      "embedded_index": 34,
+      "shader_index": 913,
+      "base_sha256": "3cb53c033f61ef7664be097373c87d1a5f0933c2d3342feb6c50a63b5e3b49dd",
+      "ul_sha256": "98f9c817baf880d499c7ae5ceee3295eb549b9fcb388fd682a4809f538784aba",
+      "audit": {
+        "island_instruction_index": 246,
+        "changed_refs": [
+          {"instruction": "ADD", "old_cb": 0, "old_index": 7, "new_cb": 13, "new_index": 6},
+          {"instruction": "ADD", "old_cb": 0, "old_index": 8, "new_cb": 13, "new_index": 7},
+          {"instruction": "MAD", "old_cb": 0, "old_index": 8, "new_cb": 13, "new_index": 7}
+        ],
+        "b13_refs": [6, 7, 7],
+        "rdef_stripped": true
+      }
+    },
+    {
+      "embedded_index": 35,
+      "shader_index": 932,
+      "base_sha256": "71b973e36cb2ebbabc05455c1f882653ad39532644051d7d1e2e045874d427d3",
+      "ul_sha256": "1bfd2a562115b9283e5ac1a1114bf40295e88f27095a599e4eff92b511970e7b",
+      "audit": {
+        "island_instruction_index": 208,
+        "changed_refs": [
+          {"instruction": "ADD", "old_cb": 0, "old_index": 7, "new_cb": 13, "new_index": 6},
+          {"instruction": "ADD", "old_cb": 0, "old_index": 8, "new_cb": 13, "new_index": 7},
+          {"instruction": "MAD", "old_cb": 0, "old_index": 8, "new_cb": 13, "new_index": 7}
+        ],
+        "b13_refs": [6, 7, 7],
+        "rdef_stripped": true
+      }
+    }
+  ],
+  "stock": [
+    {"id":723,"name":"FRPG_Phn_DifSpcBmpMulLitCsd_HemEnv.fpo","original_sha256":"4e1621be5caa251782e7dab08b2aeddc033dcab6352edd4ed022cdeda8328083","ul_sha256":"77ba63e16a4c3c2c713768cf3d618934f7a4e10bf33f167d582bde9147a772d8","ul_size":13444},
+    {"id":725,"name":"FRPG_Phn_DifSpcBmpMulLitCsd_HemEnvLerp.fpo","original_sha256":"2dec61db609109cf856505add0561cb96837b776eb68c6dc68328eddb994dd7d","ul_sha256":"e1c719437d7ec45493d86a9b2bbf4bdb58190dde682804c89ced981e47f6b490","ul_size":13772},
+    {"id":742,"name":"FRPG_Phn_DifSpcBmpMulLitSdw_HemEnv.fpo","original_sha256":"a6d599351b3e14acf65aa26ca81e358fd691b13b684021399fa59bd174397b7d","ul_sha256":"41c2ab74b5594b1c946238eb9feb1f639fa38e37d60730089113c619dc7a823e","ul_size":13144},
+    {"id":744,"name":"FRPG_Phn_DifSpcBmpMulLitSdw_HemEnvLerp.fpo","original_sha256":"d23134ad7300feb326999c404496280e318ae7d1fded8bfdcb07f6870b5ae0ad","ul_sha256":"7e4c88411300794d5700e9a59d225827447da5475ccf6a5a813589cc2b1c7b04","ul_size":13472},
+    {"id":761,"name":"FRPG_Phn_DifSpcBmpMulLit____HemEnv.fpo","original_sha256":"3c733a0f7b3ad4e9b7af042cfb27380a79b595123b6a3fe43b81ccfc9e0f6d0a","ul_sha256":"01950f9cd7efb9d0630f43008dbe6742fb584364916cbd4724a6b79db8ce8fc4","ul_size":11744},
+    {"id":763,"name":"FRPG_Phn_DifSpcBmpMulLit____HemEnvLerp.fpo","original_sha256":"8d39fafa8fafc0515b8225e72eba3a128352f813469abe18877dd550a35d68c9","ul_sha256":"c2aedc89c65db510e8ce638eb934f32adc425bc4212a004934b5ddb292844cfb","ul_size":12072},
+    {"id":780,"name":"FRPG_Phn_DifSpcBmpMul___Csd_HemEnv.fpo","original_sha256":"26a804f746b95199070951b8f17e9e4fa170de9c284727d33b9687a74121a397","ul_sha256":"53cbb0e38f2a4f1d16ea2f01ab7fb8277f8eef69b29f769dcc93895ab470fe8b","ul_size":13024},
+    {"id":782,"name":"FRPG_Phn_DifSpcBmpMul___Csd_HemEnvLerp.fpo","original_sha256":"3d693cb4a4ea671a0dc22b7d055a9c0537ab60783a960486000bed5cef1dfc9b","ul_sha256":"eb33eb44a2610519a075aa30301d898e8105354acde6a6682d101f2f487ae705","ul_size":13352},
+    {"id":799,"name":"FRPG_Phn_DifSpcBmpMul___Sdw_HemEnv.fpo","original_sha256":"792d99628b2a84f88ef94b04361022eb277851c093d2b83fc2ba8c738fc32cf4","ul_sha256":"fe553e556b941886feb97f14ba0db501d5cf486c14689471d878fc72763a4761","ul_size":12724},
+    {"id":801,"name":"FRPG_Phn_DifSpcBmpMul___Sdw_HemEnvLerp.fpo","original_sha256":"8019f3bee9d249387d95c4c3dd1a07042c5fde6feeee82b64a429f36e3532b10","ul_sha256":"243386f2980dd66d94bf562c568326be46145afb324312db89b56765f61854cb","ul_size":13052},
+    {"id":818,"name":"FRPG_Phn_DifSpcBmpMul_______HemEnv.fpo","original_sha256":"6b2b0708dc6fdc6954b9ccd7ba3c26d4522e0ad0808de59a6a226e9682c36865","ul_sha256":"77c994e83044056ac6b6b14623bcf973bbfe324983b63504512756ec7da6cc5f","ul_size":11312},
+    {"id":820,"name":"FRPG_Phn_DifSpcBmpMul_______HemEnvLerp.fpo","original_sha256":"1d6e6484fc9dbd8720f9649fc2d921d9f905f0821b6876600d6dc3aededbb18e","ul_sha256":"030906a56b3fa840cb8127b2729ca747441d27b651332f0ab640751212a103c3","ul_size":11640},
+    {"id":837,"name":"FRPG_Phn_DifSpcBmp___LitCsd_HemEnv.fpo","original_sha256":"45f6a12363da9146626f97bfbb9f87d7ff37375cc70e7e07df4e34aaefe8bd20","ul_sha256":"793556d3c74d2b6dcf65e25694b2e586edcf45d85c637fae4857c38652bdcf47","ul_size":12280},
+    {"id":839,"name":"FRPG_Phn_DifSpcBmp___LitCsd_HemEnvLerp.fpo","original_sha256":"f76551a54acb84bc6e4bf39f7b267e9f3e70ccf6f6361a42820dd176a8fc82f7","ul_sha256":"1804b74c83749448ee78cc29467e791f751d5ba72d61e754856058e1ad533ec0","ul_size":12608},
+    {"id":856,"name":"FRPG_Phn_DifSpcBmp___LitSdw_HemEnv.fpo","original_sha256":"9d677cebd791c86c105ee6b9a24edef5699cc7fb3c96f2b6362a4216d296b402","ul_sha256":"e24440a8e177bf6ef45a6c68a576c1bbe41b4e9a73114ed09e6fe573b9e28a3e","ul_size":11980},
+    {"id":858,"name":"FRPG_Phn_DifSpcBmp___LitSdw_HemEnvLerp.fpo","original_sha256":"9bf243a4fb85115dd7d90e8721ec81a9e52139d76e4a78247b87c737ff360c3d","ul_sha256":"faed49933b17d04b10d55111dbe1f6f62db419556b49f38b8d44a1b46fb314fa","ul_size":12308},
+    {"id":875,"name":"FRPG_Phn_DifSpcBmp___Lit____HemEnv.fpo","original_sha256":"b16982cc2f94c0f20e84cb0d81b79bd75ce474327c74c5db9515b0955719dfff","ul_sha256":"5de0f01f2968e55f3abc353ad8beea0bf0c903d00636567fda7a32cdaeefca10","ul_size":10580},
+    {"id":877,"name":"FRPG_Phn_DifSpcBmp___Lit____HemEnvLerp.fpo","original_sha256":"0acf2a9735ef8792383ca94c43673e367feffbde1f47155e045e66a322dc6201","ul_sha256":"080d6843ff308bb66963c50c7bbd4f212dee1b53feb7fa32550ceaa8d77e4877","ul_size":10908},
+    {"id":894,"name":"FRPG_Phn_DifSpcBmp______Csd_HemEnv.fpo","original_sha256":"35880c0b2f2330208dfc21af6dd3d944218fcc4540cd8e59404a0aefc13c0b24","ul_sha256":"2861a7357d84e9095cdcf9f108e9def1fce6698f6c5c094a591388280f49ff81","ul_size":11896},
+    {"id":896,"name":"FRPG_Phn_DifSpcBmp______Csd_HemEnvLerp.fpo","original_sha256":"7f113b3614f401de8f03cbc03f004fd71152f606cf58c86232c423479257fd85","ul_sha256":"28bf1af1ee2dff92a3fd6d4daafbcc0b9bedc7e8077d50baf0ca434b17d1ceae","ul_size":12224},
+    {"id":913,"name":"FRPG_Phn_DifSpcBmp______Sdw_HemEnv.fpo","original_sha256":"d6038de494509e7cbcbfb904c4046e9427f3b921f6a35735a0b0d316f9976837","ul_sha256":"20c49e6775dfce491a92018dbc50cc422a29deb2304fe5f8420738c03748fef8","ul_size":11596},
+    {"id":915,"name":"FRPG_Phn_DifSpcBmp______Sdw_HemEnvLerp.fpo","original_sha256":"857aa73d1d2f7ab839d4e9feae29be5b9462e18a34305ade219e5ee2a85af9db","ul_sha256":"c1db47006c957266cb752e1c7185bd5b2513ca00cafae440869a9a56fda98cde","ul_size":11924},
+    {"id":932,"name":"FRPG_Phn_DifSpcBmp__________HemEnv.fpo","original_sha256":"7d03c75b69f5730eb741a4d327189d0bbed8a8450fb0ac04e1505f7b91763701","ul_sha256":"4409b9df2e6a1309804fef22e51dfa9c9011ac3055b952d98cc456001a08e088","ul_size":10184},
+    {"id":934,"name":"FRPG_Phn_DifSpcBmp__________HemEnvLerp.fpo","original_sha256":"9075b0806f0a8560977f096780aa68f44ef02be25d71be05bd51d802dca6d7e8","ul_sha256":"573a2d807c2d81e9cf913eb0d6933cacc2bf80519a1be39e0fe500e6940f313e","ul_size":10512},
+    {"id":960,"name":"FRPG_Phn_DifSpc___MulLitCsd_HemEnv.fpo","original_sha256":"366b6f19034b995db64413a07b8556cf36f1ab9654e17950e66e5bed3ae2e412","ul_sha256":"71e0589a07cc3e21af604d467c6c29a3df60cfdb15f055ec35584387de6f858d","ul_size":11572},
+    {"id":953,"name":"FRPG_Phn_DifSpc___MulLitCsd_HemEnvLerp.fpo","original_sha256":"a5831ca3cd472188851f4a9b641f172706dba07d50f7d6e287831cbaa4c0fc03","ul_sha256":"081df360d7ba10c9312b547c9f2f099e8cfb82baff9d1bcda0019301aa6e9edf","ul_size":11900},
+    {"id":979,"name":"FRPG_Phn_DifSpc___MulLitSdw_HemEnv.fpo","original_sha256":"1af91fe9c65cdbe6de2a9465690c441dffc3d49f207b26a49043b7d88a7e73d9","ul_sha256":"cb0977c112f9593ff4a673bad3741fa4ab04f8c9cb84e2a10fa6bf1c949f4c94","ul_size":11272},
+    {"id":972,"name":"FRPG_Phn_DifSpc___MulLitSdw_HemEnvLerp.fpo","original_sha256":"68f61f4dd8acef143fce844e517f0fc613f59b352e4314316c496afa897cc992","ul_sha256":"44aa66c84984c2b252fd94940d388b10f436e315ec548aa799dcf8a378887f4e","ul_size":11600},
+    {"id":998,"name":"FRPG_Phn_DifSpc___MulLit____HemEnv.fpo","original_sha256":"10aac239a29f68a0c146bd3c34bcde9cda2bdab2af4ffccfb5401f7948cab8b2","ul_sha256":"a8ecb0e6cf0542907abed482059fdf1460948d515c836a4fdd3592926bcbb89c","ul_size":9872},
+    {"id":991,"name":"FRPG_Phn_DifSpc___MulLit____HemEnvLerp.fpo","original_sha256":"5b88adbbc4722b5e18659f35722ce3c27d3d43f7572b8010f7df304c65fd9456","ul_sha256":"e1747e5ad9ab669690e419902b07d177daadedf302c2bfa6c2025560e105bb33","ul_size":10200},
+    {"id":1017,"name":"FRPG_Phn_DifSpc___Mul___Csd_HemEnv.fpo","original_sha256":"d0f5a05bde4bbbfe37f63dfa87cbb6a72647613520648705d74600b2278a4c1d","ul_sha256":"a546130ef14b2c5db8b8e36fae3398035587ba3c9dd9bfbdcc96e3996ec2059a","ul_size":11152},
+    {"id":1010,"name":"FRPG_Phn_DifSpc___Mul___Csd_HemEnvLerp.fpo","original_sha256":"f9d8ba63e775115eafaf92684ee33f9ea1708c5e542531b0c541a159958ec81c","ul_sha256":"ffbe0f8fba042722435bb22328665e61ba442dfb2fd9dfe377cdd01641bb4c0b","ul_size":11480},
+    {"id":1036,"name":"FRPG_Phn_DifSpc___Mul___Sdw_HemEnv.fpo","original_sha256":"a2b0634d39addc1b3d7557a4a1f3237512c6d490f2ea4cf7ae44fa68688140b7","ul_sha256":"0b4f5e6e95d62ffbb3a516d59ad656357b23129c446d9c526ff58782cf00455e","ul_size":10852},
+    {"id":1029,"name":"FRPG_Phn_DifSpc___Mul___Sdw_HemEnvLerp.fpo","original_sha256":"49b57335bf3270a64c449b16a6782f04f936251207b4525e2453dd4308194687","ul_sha256":"51790067c9187490b6e0962c6ba2d17d3889a84ddb3deeafaea5693f8ba95727","ul_size":11180},
+    {"id":1055,"name":"FRPG_Phn_DifSpc___Mul_______HemEnv.fpo","original_sha256":"46c09d580e56f5281cff062678cc5156a665b253864a5d04ad53246671296de0","ul_sha256":"742b32713cbc65ca7d5d91947c94688df81dfbf3b4526cdd60103712b80e9493","ul_size":9440},
+    {"id":1048,"name":"FRPG_Phn_DifSpc___Mul_______HemEnvLerp.fpo","original_sha256":"5b14ed0b3fe6124a8ecdc96c2b9e06f360cad628df245a2c528abe4980b30166","ul_sha256":"b4d971152d4830240513dfdcd5638aa0e9c8f7b285a5b64fd7cc1ce608923d83","ul_size":9768},
+    {"id":1074,"name":"FRPG_Phn_DifSpc______LitCsd_HemEnv.fpo","original_sha256":"6a6e4ca937fb3ec1308e2a6500148841c5d60bb5dfbd06ae5385dcc38843444e","ul_sha256":"a2f88a084e4d3c8382c9e89d17475880c5cbabfc422565ccdbd0d5ac5f2f65c1","ul_size":11204},
+    {"id":1067,"name":"FRPG_Phn_DifSpc______LitCsd_HemEnvLerp.fpo","original_sha256":"a8288c1e83fd75d55124780c3bfbbcfa96b827d2db88307a2f91a8585e4bfa26","ul_sha256":"7446e54f2a3ac60b01890ae8bf8c4a3e3ae5d2b41eb0d901d1b273c5a6a80b4c","ul_size":11532},
+    {"id":1093,"name":"FRPG_Phn_DifSpc______LitSdw_HemEnv.fpo","original_sha256":"a927579c36b9c037b644dafec34e49d5fb4f549ae22674259d1efa051adbd779","ul_sha256":"b78532db5529e590fbbcb32b831a940a7626ce115c8be14c405605a4592bd2ed","ul_size":10904},
+    {"id":1086,"name":"FRPG_Phn_DifSpc______LitSdw_HemEnvLerp.fpo","original_sha256":"ff2beb1489b457415bd0ff5ad705e664d40d0ac2d6f705c137afc388fc558d2c","ul_sha256":"dcf204dd6ba4f696476132b552e206338d2f67ab4a8d0594847a27801b1343c4","ul_size":11232},
+    {"id":1112,"name":"FRPG_Phn_DifSpc______Lit____HemEnv.fpo","original_sha256":"a1c56ba86c0e0e8204560b5907371ba57966199521b6b6204e2adaa4009bb02e","ul_sha256":"35e50e5a30e1289526990dac79bf359dceb3018e9de160988d7eb606d3290143","ul_size":9504},
+    {"id":1105,"name":"FRPG_Phn_DifSpc______Lit____HemEnvLerp.fpo","original_sha256":"4fb909fff77ed0cae13196938dddf53fb4df49d5c7039c190dcb024741951dd9","ul_sha256":"5cacfc143fe82d4041366b90a76351b2ac4e8b3f5dd454b88bf3ecadca9d7528","ul_size":9832},
+    {"id":1131,"name":"FRPG_Phn_DifSpc_________Csd_HemEnv.fpo","original_sha256":"dc67d66eb8c116929032fa14a5f6a989fc9c57df211aeb89e37c9e52bca2e934","ul_sha256":"754166c04ae4bc67fed7b593dfe5f962c42a008c3ad926b59061ee1534322b49","ul_size":10820},
+    {"id":1124,"name":"FRPG_Phn_DifSpc_________Csd_HemEnvLerp.fpo","original_sha256":"663a6dfda501d473214687c8d96ff88977e2a9e53be849ee95e08a2e4e5bcb06","ul_sha256":"20c91acf271265596a57c7a4170ef09d310a5f142dab1b329e167ab872a092f9","ul_size":11148},
+    {"id":1150,"name":"FRPG_Phn_DifSpc_________Sdw_HemEnv.fpo","original_sha256":"6a55311ea94f9fe4fd274336f41eb1808e7a75bd39cf4fb0fbd2c86a60a6cb2b","ul_sha256":"63b3e58d6d7755fe9b92960ffd05bb8040e3c8392cf589aa8e8f4843a1afaf0d","ul_size":10520},
+    {"id":1143,"name":"FRPG_Phn_DifSpc_________Sdw_HemEnvLerp.fpo","original_sha256":"080751b9317ce817d2165e6b26a868b024095884c34925d521d4fc89d784bef9","ul_sha256":"eaaad993336a8e5d508cc4b7e83712f2f84f8ee614d84ac4e67b223793df174f","ul_size":10848},
+    {"id":1169,"name":"FRPG_Phn_DifSpc_____________HemEnv.fpo","original_sha256":"1574e296e30b5477dea327c0a0e674e2671f791ec6e6e855a464e6e84dbf6274","ul_sha256":"f17aa731e6fc67151694d28c27f087f5e9a2a252040c47d389b43a3b822d2939","ul_size":9108},
+    {"id":1162,"name":"FRPG_Phn_DifSpc_____________HemEnvLerp.fpo","original_sha256":"7ea84766aa9ca950bfe40b74f615c2a8b78ed5afec3a73dc9cf6e9f6babd85fc","ul_sha256":"ad461e0c61087d854fcb4aa69107578d368893ac4f636dd43174651be5ebfb26","ul_size":9436}
+  ]
+}
