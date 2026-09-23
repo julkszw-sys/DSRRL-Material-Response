@@ -1,5 +1,5 @@
 {
-  "schema": 2,
+  "schema": 3,
   "status": "PARTIAL_SOURCE_RECOVERY",
   "date": "2026-09-23",
   "branch": "recovery/material-response-1.45-source-chain-2026-09-23",
@@ -21,11 +21,19 @@
     "v12/audit_v12_independent.py": "f6e10a914e5313e1cc28501bcde6ec1783a8f6c5ab03ef64c9024330430f9f2c",
     "v15_7/build_v15_7.py": "99f9108c2eea2b90632506d46d47ec4180ac657269970e6193f8a2a2305e151e",
     "client145/build_client145.py": "e0fec5dca605f94ea0c532cff5e555d7fdb07824a67e89fecc791b4f87f23db3",
-    "client145/build_client145_final.py": "09c17dfefe536ee2bf10c2ef51ec2652bb2cba672ab98fe921ff2e00d02ccea6"
+    "client145/build_client145_final.py": "09c17dfefe536ee2bf10c2ef51ec2652bb2cba672ab98fe921ff2e00d02ccea6",
+    "v15_7/V12_ROUTE_ENVSPC_SLOT_MAP_COMPLETE.json": "046fcbc32781f37475fb9a101b0483bb2fb4b969bf14438201a128c01b45440f"
   },
-  "github_text_copies": {
-    "byte_exact_provenance": false,
-    "role": "BROWSABLE_NORMALIZED_CONVENIENCE_ONLY"
+  "git_blob_verification": {
+    "v12/asset_integrated_v12.c": "9a16ba5942f71274d76a86fadc0966a39f318abc",
+    "v12/build_v12.py": "ffb7625aac4433a69d7e8b8ed5985eeeec29a31f",
+    "v12/audit_v12_independent.py": "1ffa0a743d5c6b14a5ed3a950d3d3f6f5fd49d04",
+    "v12/asset_stubs_v12.s": "e368c12fa912599aabac09053b43abc7c1d8847b",
+    "client145/build_client145.py": "78a87a7465c58cd3eabe18a32136aea5e498c0fa",
+    "client145/build_client145_final.py": "81559a5a93a8228948b2af13d76e92c30ebdf607",
+    "v15_7/build_v15_7.py": "810c513459e83016ede73f25c9bf183098163ba3",
+    "v15_7/V12_ROUTE_ENVSPC_SLOT_MAP_COMPLETE.json": "1aab6a5f667bfad6c9694502d1736870f1129420"
   },
+  "github_recovered_files_byte_exact": true,
   "source_complete": false
 }
