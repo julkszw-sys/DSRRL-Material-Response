@@ -1,0 +1,10 @@
+{
+  "schema": "dsrrl.a3.runtime_crash_root_cause.v1",
+  "crashing_build_sha256": "75d90c5ed02511f66a37e9265b5be72b94ef4a5e03dbfe939b5fe392700c40f0",
+  "runtime_log_sha256": "668fa93cfd4907a28426c465c629c01bc2a02ce9b4effabb9da8e6c70ff2e768",
+  "finding": "CONFIRMED",
+  "root_cause": "A3 PRE stub failed to preserve the live RAX return from shipping 1.45 legacy_pre before invoking a3_capture_pre_ps. The caller immediately dereferences [RAX+0x48].",
+  "runtime_context": "U/L producer preflight failed and U/L was nominally fail-open, but the static PRE wrapper remained active, so the ABI corruption still occurred.",
+  "fix": "Preserve/restore RAX across a3_capture_pre_ps. Source also gates capture when U/L is disabled.",
+  "hotfix_sha256": "9009b75e28fdd427b7e3329176178f696a2af7ca675138abcd715deb576ca8d0"
+}
