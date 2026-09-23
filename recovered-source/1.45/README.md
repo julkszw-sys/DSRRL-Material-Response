@@ -42,13 +42,13 @@ Supabase provenance records original source identities for the missing EnvSpec d
 - V15.1 hardened `envcube_ext_v15_active_bind.c` — `627a6f7c5a977f80f1b109e6cc03218bc9db97ca54ad045028bbc41e2b412a49`
 - V15.2 `envcube_ext_v15_2_callsite.c` — `bb6a522b8e333a811bf7bcd414e15d583e8b12f899a69afc8c81b09c2032f3ec`
 
-Historical runtime ZIPs V13.1, V14, V14.1, V14.2, V14.3, V15.1 and V15.2 were re-inspected. They contain binaries/audits/readmes but not these original C files. Their provenance is therefore retained, but the C bodies are not falsely claimed as recovered.
+Historical runtime ZIPs V13.1, V14, V14.1, V14.2, V14.3, V15.1 and V15.2 were re-inspected. They contain binaries/audits/readmes but not these original C files. Their provenance is therefore retained, but the C bodies are not falsely claimed as recovered. Separately, exact preserved V15.3/V15.4/V15.5/V15.6 binaries were differentially audited; reconstructed builders now reproduce V15.4, V15.5 and V15.6 byte-for-byte from their exact parents.
 
 ## Source-complete gate is intentionally NOT passed
 
 Remaining blockers:
 
-1. recover or reconstruct and independently verify the missing EnvSpec source-level chain, including the V15.5/V15.6 BSS/thread-state corrections that lead into V15.7;
+1. recover or reconstruct and independently verify the missing handwritten EnvSpec source-level chain, especially the V15/V15.1 `envcube_ext_v15_active_bind.c` lineage and earlier producers; V15.4→V15.6 binary deltas are now independently reconstructed byte-exact under `reconstructed/1.45/v15_4_to_v15_6/` but are not claimed as recovered original source;
 2. consolidate the pre-V12 integrated basis so V12 no longer depends on historical binary-only predecessor inputs;
 3. make the final Nexus 1.45 materializer derive its integrated basis from committed source rather than a previous addon binary;
 4. deterministic rebuild + binary/semantic audit before any source-complete promotion.
