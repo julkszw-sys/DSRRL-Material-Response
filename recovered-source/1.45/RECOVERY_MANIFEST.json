@@ -1,0 +1,17 @@
+{
+  "schema": 1,
+  "status": "PARTIAL_SOURCE_RECOVERY",
+  "date": "2026-09-23",
+  "release": {
+    "version": "1.45",
+    "addon_size": 1803264,
+    "addon_sha256": "e44183ef10fc7921f7741eb16d54ec30e814f580421ac6c83be18b5308b73342"
+  },
+  "known_supabase_matches": {
+    "v12/asset_integrated_v12.c": "879b3ec251c36969cf7eabcc5b63164da7c17b6577e74b013e47f7866b3236e2",
+    "v15_7/build_v15_7.py": "99f9108c2eea2b90632506d46d47ec4180ac657269970e6193f8a2a2305e151e",
+    "client145/build_client145.py": "e0fec5dca605f94ea0c532cff5e555d7fdb07824a67e89fecc791b4f87f23db3",
+    "client145/build_client145_final.py": "09c17dfefe536ee2bf10c2ef51ec2652bb2cba672ab98fe921ff2e00d02ccea6"
+  },
+  "source_complete": false
+}
