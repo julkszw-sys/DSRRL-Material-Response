@@ -1,0 +1,24 @@
+name: A3 source completeness
+
+on:
+  push:
+    branches:
+      - dev/material-response-expanded-a3-monolith
+    paths:
+      - "experimental/expanded-a3/**"
+      - ".github/workflows/a3-source-completeness.yml"
+  pull_request:
+    paths:
+      - "experimental/expanded-a3/**"
+      - ".github/workflows/a3-source-completeness.yml"
+
+jobs:
+  source-completeness:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Verify committed A3 source lineage
+        run: python experimental/expanded-a3/tools/verify_source_complete.py
