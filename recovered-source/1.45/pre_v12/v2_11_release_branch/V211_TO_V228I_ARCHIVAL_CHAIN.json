@@ -1,0 +1,167 @@
+{
+  "schema": "DSRRL_V211_TO_V228I_ARCHIVAL_CHAIN_V1",
+  "v211_sha256": "1cfa2154059575d2dbf3f34124e7d51c4c63e8ab8f22347ae56755bc1e5f697a",
+  "owner_release_v228i_sha256": "262839ff5b0312128bd3870a2cba8836a7b94a4cc070cdd9168ae191daf11b71",
+  "stages": [
+    {
+      "package": "V219A.zip",
+      "package_sha256": "554d88c9bbce1e921bac7a53338fa8bd982901126e128979328d46d6ede2cbcb",
+      "builder": "build_v219a_ce18_gate_v3.py",
+      "builder_sha256": "31feace038d4507c82060133781774fccfc48fc1879cfb65a578f3ea9558f252",
+      "audit": "DSRRL_PTDE_MATERIAL_RESPONSE_V2_19A_CE18_DIFFUSE_GATE_AUDIT.json",
+      "audit_sha256": "c993b4417bd7494366cb3bf728d69db39bb07bbc8fa9672199d3dd64cbef8427",
+      "output": "DSRRL_PTDE_MATERIAL_RESPONSE_V2_19A_CE18_DIFFUSE_GATE.addon64",
+      "output_sha256": "3bfb47c3b0ffe1ed48db856fe1a0228610e7e07f2f78b4351065faa99233702c"
+    },
+    {
+      "package": "V220A.zip",
+      "package_sha256": "ee6b85f9ed91fda3578acd24b698f902a7158ea2db0858b4e6038a76e85bb1ac",
+      "builder": "build_v220a_pmetal_legacy_material_response.py",
+      "builder_sha256": "1e8e046bef11030515911288002d879d126cfa935edc73d884918d6a0e6b3e3e",
+      "audit": "DSRRL_PTDE_MATERIAL_RESPONSE_V2_20A_PMETAL_LEGACY_SPEC_RESPONSE_AUDIT.json",
+      "audit_sha256": "53a5fe4d1b914cd3333310fc6f7d40702a855fce74a91c800f1b63cf7cf91753",
+      "output": "DSRRL_PTDE_MATERIAL_RESPONSE_V2_20A_PMETAL_LEGACY_SPEC_RESPONSE.addon64",
+      "output_sha256": "68458b4277d50c8e712ed754d5d6ead8a2b6021d7260cac0928d005f01b0d8c4"
+    },
+    {
+      "package": "V220B.zip",
+      "package_sha256": "20adb6661dd748ec4a12e94463226805f82b34b7c056c5774eccdb0668322c21",
+      "builder": "build_v220b_terminal_sat.py",
+      "builder_sha256": "e18ee8e21ada022136b5119312c2055438786f71c1c3bfdac6072334c56b2d6f",
+      "audit": "DSRRL_PTDE_MATERIAL_RESPONSE_V2_20B_PMETAL_TERMINAL_SAT_AUDIT.json",
+      "audit_sha256": "a28f7f27bf0d9a75ad0e43734d4cf47e474fa89d34bf20dd2ef824a8cf8eec81",
+      "output": "DSRRL_PTDE_MATERIAL_RESPONSE_V2_20B_PMETAL_TERMINAL_SAT.addon64",
+      "output_sha256": "6776f44451faaf635be8b4873916b73d3cc6ff3c761c903f580c496d8692cbb1"
+    },
+    {
+      "package": "V221A.zip",
+      "package_sha256": "7248cd4f225e05cc59f3f225e3c44086f15fade4fd0e07b4a1424ed52a387cfc",
+      "builder": "build_v221a_pmetal_fixed_lod3.py",
+      "builder_sha256": "96e7418024795682d1c17f223e5189ea1069d7e3d31a400927f79fd81ca9e121",
+      "audit": "DSRRL_PTDE_MATERIAL_RESPONSE_V2_21A_PMETAL_FIXED_LOD3_LEGACY_RECEIVER_AUDIT.json",
+      "audit_sha256": "f7bbc1980faa8be358aa22eb4b230ccea5eb31799a874a6db2a21f1c2e095d30",
+      "output": "DSRRL_PTDE_MATERIAL_RESPONSE_V2_21A_PMETAL_FIXED_LOD3_LEGACY_RECEIVER.addon64",
+      "output_sha256": "99914198bd5c515807312e32abfa3120da6270ce3f8dc0322819afe07d8b30dc"
+    },
+    {
+      "package": "V222B_FIRST.zip",
+      "package_sha256": "00eb96fc0d5a72de172ee0104583d5d38d5c51dc3f3d006ec87899cd5fa6df47",
+      "builder": "build_v222_chroma_isolators.py",
+      "builder_sha256": "757593590add9ac7d175a72dd401f5758064f3454575b70fe07ac398635760c0",
+      "audit": "DSRRL_PTDE_MATERIAL_RESPONSE_V2_22B_PMETAL_MATERIAL_CHROMA_ISOLATOR_AUDIT.json",
+      "audit_sha256": "8a146031248800c3804a27e1abc77996b5c773fb711f2e4f3a10573c3cfd1446",
+      "output": "DSRRL_PTDE_MATERIAL_RESPONSE_V2_22B_PMETAL_MATERIAL_CHROMA_ISOLATOR.addon64",
+      "output_sha256": "9d30c083ff892a152f671c32bb330daa398451ce191aed1c1837bdb3ec8c45af"
+    },
+    {
+      "package": "V225.zip",
+      "package_sha256": "9beeb955dedaabf5dcbd9a822a40442421eafc8fe501d9b06eda62df04f8783d",
+      "builder": "build_v225_correct_live_specmap.py",
+      "builder_sha256": "985f2f6c95e8f083e34044a33ea46b4e8fe7048d356c1136574b0f9f1cc74ffe",
+      "audit": "DSRRL_PTDE_MATERIAL_RESPONSE_V2_25_PMETAL_CORRECT_LIVE_SPECMAP_LEGACY_RECEIVER_AUDIT.json",
+      "audit_sha256": "7f459d484b7b9f166080055bf7375b6f4d52a973d1b3c7c6a13cc814eb664454",
+      "output": "DSRRL_PTDE_MATERIAL_RESPONSE_V2_25_PMETAL_CORRECT_LIVE_SPECMAP_LEGACY_RECEIVER.addon64",
+      "output_sha256": "9b07a62d10d49df184742342321e10ba69f8d1191512b61d8bde8debfdf1baac"
+    },
+    {
+      "package": "V226A.zip",
+      "package_sha256": "a786a374f135f6c85978ecee95aae5ced3e0d9a029e97cec23adc20c645148d1",
+      "builder": "build_v226a_v291_fixedlod3.py",
+      "builder_sha256": "d9b054a41f63d402fe29cabc361dd955fa6563c88c2c5ae3254e2ecb480c21e6",
+      "audit": "DSRRL_PTDE_MATERIAL_RESPONSE_V2_26A_PMETAL_V291_PBL_FIXED_LOD3_ONLY_AUDIT.json",
+      "audit_sha256": "b0fbd428860d43ec17701e84dcb77be32b840fbc1d5f54a612361353f98c29a2",
+      "output": "DSRRL_PTDE_MATERIAL_RESPONSE_V2_26A_PMETAL_V291_PBL_FIXED_LOD3_ONLY.addon64",
+      "output_sha256": "838796041467ae74cf9fe5cc90746f7d8785bd8a47b957ff509d98911bbaa1de"
+    },
+    {
+      "package": "V227B.zip",
+      "package_sha256": "27b4a44fb7cc2acb93cc78d59c1ff6f29e20f55dc771f57095d4403a0ae05a38",
+      "builder": "build_v227b_ce18_stock_envspec.py",
+      "builder_sha256": "560a73feae0e9f28069c523e32824feee4e5931a9918ce6a9aadc37777711049",
+      "audit": "DSRRL_PTDE_MATERIAL_RESPONSE_V2_27B_CE18_STOCK_DSR_ENVSPEC_DYNAMIC_LOD_AUDIT.json",
+      "audit_sha256": "73ca3cf0817f2f1098594e22a5a3424aedf42e2841a76f831652d151162ce83c",
+      "output": "DSRRL_PTDE_MATERIAL_RESPONSE_V2_27B_CE18_STOCK_DSR_ENVSPEC_DYNAMIC_LOD.addon64",
+      "output_sha256": "34632a72b7220b8b82466ceb2a4cfbd8c6507004f2416322fb28ef95777443b8"
+    },
+    {
+      "package": "V228A.zip",
+      "package_sha256": "e83d3f0967398b087d56e3673808ad432e18b8d27c5f467783a2ca0d90639a78",
+      "builder": "build_v228a_ce18_pmetal_spec_linear_pbl.py",
+      "builder_sha256": "3f7cb89c753227d50a3caf3999be1fc9b212ec2c22f3de1f4381ef678efdb61c",
+      "audit": "DSRRL_PTDE_MATERIAL_RESPONSE_V2_28A_CE18_PMETAL_LINEAR_F0_STOCK_PBL_DYNAMIC_LOD_AUDIT.json",
+      "audit_sha256": "1804da422381209ce6c7833de6d492acb822c44dcdbaa71d77b62ce05085946a",
+      "output": "DSRRL_PTDE_MATERIAL_RESPONSE_V2_28A_CE18_PMETAL_LINEAR_F0_STOCK_PBL_DYNAMIC_LOD.addon64",
+      "output_sha256": "276446a80b7adb57b7118c700df040298ef160bd363ebda1cc3ffd7a2c8a7b83"
+    },
+    {
+      "package": "V228B.zip",
+      "package_sha256": "a8590f5a10378bac5686e2c48ff4d95d1f06b6fa1da9810ab2eec736092d9d17",
+      "builder": "build_v228b_ce18_pmetal_linearF0_noangular.py",
+      "builder_sha256": "c30eb85aee3114c7f9e513d8f5f5609267071f4db7b57fc5ce2fa2c6a4a00466",
+      "audit": "DSRRL_PTDE_MATERIAL_RESPONSE_V2_28B_CE18_PMETAL_LINEAR_F0_NO_ANGULAR_STOCK_BRDF_DYNAMIC_LOD_AUDIT.json",
+      "audit_sha256": "110598b4acb2c2a93890d32a5533129464b9f77080877cee66172d62a933b7cc",
+      "output": "DSRRL_PTDE_MATERIAL_RESPONSE_V2_28B_CE18_PMETAL_LINEAR_F0_NO_ANGULAR_STOCK_BRDF_DYNAMIC_LOD.addon64",
+      "output_sha256": "9b56b02f17f915d49c5e3baa51655a230ef6c2eeeb56342643499d83aa16144e"
+    },
+    {
+      "package": "V228C.zip",
+      "package_sha256": "1b13b7ed9d3de9eb0addb86bcfd601d71d9e1df374e34aae5ff36cc23733a8bd",
+      "builder": "build_v228c_ce18_pmetal_linearF0_noangular_not9.py",
+      "builder_sha256": "0631b767c965c59612448eb2b445752363d77e675366140c9aa19b357eb00e5b",
+      "audit": "DSRRL_PTDE_MATERIAL_RESPONSE_V2_28C_CE18_PMETAL_LINEAR_F0_NO_ANGULAR_NO_T9_DYNAMIC_LOD_AUDIT.json",
+      "audit_sha256": "18fd1c74a149538bbab2679147fbb494656679c83d4536733bf985d0d954d8da",
+      "output": "DSRRL_PTDE_MATERIAL_RESPONSE_V2_28C_CE18_PMETAL_LINEAR_F0_NO_ANGULAR_NO_T9_DYNAMIC_LOD.addon64",
+      "output_sha256": "4f04557c5cc1706624997486840bde743a0ad887455d22e576082272df01e85c"
+    },
+    {
+      "package": "V228D.zip",
+      "package_sha256": "e8314be723be5eb976a1eba95b8b5375135e279112bada0a1c94ce486852db7c",
+      "builder": "build_v228d_ce18_pmetal_linearF0_noangular_not9_c101.py",
+      "builder_sha256": "10bccc6a13b3524f6050ffd1376d979875904286eb914a3ea6207a007f541834",
+      "audit": "DSRRL_PTDE_MATERIAL_RESPONSE_V2_28D_CE18_PMETAL_PTDE_C101_ON_LINEAR_CARRIER_NO_ANGULAR_NO_T9_DYNAMIC_LOD_AUDIT.json",
+      "audit_sha256": "18765d5efd7c452ec971d757a96f8f7e6e176a2e284cd03585400cd69f023079",
+      "output": "DSRRL_PTDE_MATERIAL_RESPONSE_V2_28D_CE18_PMETAL_PTDE_C101_ON_LINEAR_CARRIER_NO_ANGULAR_NO_T9_DYNAMIC_LOD.addon64",
+      "output_sha256": "044154563c15d6f15f8f7c20a270f949d94135ee9e9c05fc8fb8fafa5b6a5139"
+    },
+    {
+      "package": "V228E.zip",
+      "package_sha256": "5c69747fb99f6cc214a08739d4fb956197c085ad594b580420583d564245254b",
+      "builder": "build_v228e_ce18_all_materials_ptde_c101.py",
+      "builder_sha256": "11beb0c2e525cf5bccd8752e7ade2525241a2afc76bd9c8f1a04ed2f33eff292",
+      "audit": "DSRRL_PTDE_MATERIAL_RESPONSE_V2_28E_CE18_ALL_EXACT_PTDE_C101_LINEAR_CARRIER_NO_ANGULAR_NO_T9_DYNAMIC_LOD_AUDIT.json",
+      "audit_sha256": "7c93100defede1910fde667d2d29af776d48956698281909d2690c43766ab2c4",
+      "output": "DSRRL_PTDE_MATERIAL_RESPONSE_V2_28E_CE18_ALL_EXACT_PTDE_C101_LINEAR_CARRIER_NO_ANGULAR_NO_T9_DYNAMIC_LOD.addon64",
+      "output_sha256": "0aabdfc8bee6bd63691e24288b9a17457c029bf90bb329d7517cf51adb0dba01"
+    },
+    {
+      "package": "V228F.zip",
+      "package_sha256": "ab4f58bb6c1e60a8c389c26999e1da3ffeca0fb4dee831386aec60e8c7097eab",
+      "builder": "build_v228f_ce18_all_materials_c101_color0.py",
+      "builder_sha256": "d861003cddfc495ef5460608bfcaac467b1664367688474b7b394eda86313f6a",
+      "audit": "DSRRL_PTDE_MATERIAL_RESPONSE_V2_28F_CE18_ALL_EXACT_PTDE_C101_COLOR0_LINEAR_CARRIER_NO_ANGULAR_NO_T9_DYNAMIC_LOD_AUDIT.json",
+      "audit_sha256": "991e8c57343de29325e8c2a800417095ffe60c0cc394752b9483cbdd9fa17287",
+      "output": "DSRRL_PTDE_MATERIAL_RESPONSE_V2_28F_CE18_ALL_EXACT_PTDE_C101_COLOR0_LINEAR_CARRIER_NO_ANGULAR_NO_T9_DYNAMIC_LOD.addon64",
+      "output_sha256": "bb93827bba95c344f39f84048b2bd928c7f23340c1f7c3341d03c7939e432793"
+    },
+    {
+      "package": "V228G.zip",
+      "package_sha256": "eafc00063d54627aae7f9b0732629dd91ffc98f4e06a4dbe6331a493cf91ef55",
+      "builder": "build_v228g_ce18_exact_c101_transport_color0.py",
+      "builder_sha256": "d99c05271f374e8bb6877763c88a6c43ac5ddde29e2cb8f25a5e9acc4206479a",
+      "audit": "DSRRL_PTDE_MATERIAL_RESPONSE_V2_28G_CE18_EXACT_C101_TRANSPORT_COLOR0_LINEAR_CARRIER_NO_ANGULAR_NO_T9_DYNAMIC_LOD_AUDIT.json",
+      "audit_sha256": "1ef4e1fe8c729806b42dd3675e3277890841bdbb9cdb79ed8a4d08fc210dcde1",
+      "output": "DSRRL_PTDE_MATERIAL_RESPONSE_V2_28G_CE18_EXACT_C101_TRANSPORT_COLOR0_LINEAR_CARRIER_NO_ANGULAR_NO_T9_DYNAMIC_LOD.addon64",
+      "output_sha256": "b716e995b2366857db265af1c5c44f7bd22c7195572921006baa27ec5aa18144"
+    },
+    {
+      "package": "V228I.zip",
+      "package_sha256": "2497ab712145a4e4a134daf63b1c03804683355bd9aafccdef185ddfeb4527f7",
+      "builder": "build_v228i_ce18_class_routed_slot2_corridor.py",
+      "builder_sha256": "b8ce90a7e0f6e4d0c28759bde48653683d43843b147e915e0e19afd1440a08e5",
+      "audit": "DSRRL_PTDE_MATERIAL_RESPONSE_V2_28I_CE18_CLASS_ROUTED_EXACT_C101_COLOR0_SLOT2_DYNAMIC_LOD_CORRIDOR_OTHER_CLASSES_STOCK_LOD_AUDIT.json",
+      "audit_sha256": "66d92436561a33428d9709205e02667c5cbc6f3b3781781158d0fac42b033a0b",
+      "output": "DSRRL_PTDE_MATERIAL_RESPONSE_V2_28I_CE18_CLASS_ROUTED_EXACT_C101_COLOR0_SLOT2_DYNAMIC_LOD_CORRIDOR_OTHER_CLASSES_STOCK_LOD.addon64",
+      "output_sha256": "262839ff5b0312128bd3870a2cba8836a7b94a4cc070cdd9168ae191daf11b71"
+    }
+  ]
+}
