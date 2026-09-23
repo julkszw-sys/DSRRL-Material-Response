@@ -67,8 +67,8 @@ def build_version_blob():
         (1<<16)|45,0,
         (1<<16)|45,0,
         0x3F,0,
-        0x00040004,
-        0x00000002,
+        0x00040004, # VOS_NT_WINDOWS32
+        0x00000002, # VFT_DLL
         0,0,0)
     head=bytearray(struct.pack('<HHH',0,52,0)+key)
     while len(head)%4: head+=b'\0'
@@ -77,7 +77,9 @@ def build_version_blob():
     return bytes(blob)
 
 def add_version_resource(data):
+    # Reuse verified zero cave in existing .srgbmt raw range; avoids changing section layout.
     e,secs=parse_sections(data)
+    optsz=struct.unpack_from('<H',data,e+20)[0]
     opt=e+24
     rva=0x1be800
     raw=r2o(data,rva)
@@ -94,6 +96,7 @@ def add_version_resource(data):
     body[data_off:data_off+len(vb)]=vb
     if any(data[raw:raw+len(body)]): raise RuntimeError('VERSIONINFO cave is not zero')
     data[raw:raw+len(body)]=body
+    # DataDirectory[IMAGE_DIRECTORY_ENTRY_RESOURCE=2].
     dd=opt+112+2*8
     old_rsrc=struct.unpack_from('<II',data,dd)
     if old_rsrc!=(0,0): raise RuntimeError(f'Unexpected existing resource directory {old_rsrc}')
@@ -102,12 +105,14 @@ def add_version_resource(data):
 
 base=bytearray(BASE.read_bytes())
 base_sha=sha(base)
+# Validate exact embedded pack before transforming.
 pack=SIDECAR_SRC/'PTDE_GI_ENVSPEC_PACK_RGBA.bin'
 pb=pack.read_bytes()
 assert len(pb)==PACK_SIZE and sha(pb)==PACK_SHA
 assert bytes(base[PACK_FILE_OFF:PACK_FILE_OFF+PACK_SIZE])==pb
 assert PACK_FILE_OFF+PACK_SIZE==len(base)
 
+# Validate injection cave is zero and inject external sidecar loader.
 lo=r2o(base,LOADER_RVA); loader=LOADER.read_bytes()
 assert len(loader)<0xF00
 assert set(base[lo:lo+len(loader)]) <= {0}
@@ -121,19 +126,25 @@ def patch_rva(rva, expected, new, label):
     base[o:o+len(new)]=new
     patches.append({'label':label,'rva':hex(rva),'old':expected.hex(),'new':new.hex()})
 
+# 1) Disable the ReShade log callback store globally: release has no internal telemetry/log spam.
 patch_rva(0x10c374, bytes.fromhex('488905955c0000'), b'\x90'*7, 'disable_internal_log_callback_store')
+# 2) Init: replace HOOK PASS diagnostic LEA with external pack loader call, then skip log dispatch block.
 patch_rva(0x1b919c, bytes.fromhex('488d3d71520000'), relcall(0x1b919c,LOADER_RVA)+bytes.fromhex('eb3a'), 'external_pack_loader_call_and_skip_init_log')
+# 3) Resource realization: only expose state pointer when external pack validated; existing test fails open otherwise.
 patch_rva(0x1b827f, bytes.fromhex('4c8ba988221100'), relcall(0x1b827f,RESOURCE_GUARD_RVA)+b'\x90\x90', 'external_pack_ready_guard')
 
+# Client-facing metadata/version.
 write_cstr(base,0xdc58,0x48, 'DSRRL Material Response 1.45')
 write_cstr(base,0xdca0,0x153, 'DSRRL Material Response 1.45: PTDE material response, SpecRGB, Subsurf, equipment Normal/Diffuse and exact-slot EnvSpec resource bridge for Dark Souls Remastered. Unsupported or unmapped routes fail open to stock DSR.')
 write_cstr(base,0x10387a,0x2a, 'DSRRL_Material_Response_1.45.addon64')
 
+# Scrub diagnostic/telemetry strings. Functional paths and shader/resource names are preserved.
 telemetry_re=[
     re.compile(br'^\[DSRRL\]\[(?:ASSET|ASSET_DIAG|PTDE_SPEC|ENVSPEC|FAILOPEN|ACTIVE)'),
     re.compile(br'^DSRRL Material Response 1\.3(?: active|$)'),
 ]
 telemetry_fragments=(b'C100_REG=',b'TIER0=',b'TIER1=',b'TIER2=',b'C101_EXACT_REG=',b'C101_SIBLING_REG=',b'UNMAPPED=',b'SELECTOR=',b'DONOR_SELECTOR=',b'TARGET_BINDS=',b'PTDE_DIFFUSE_DRAWS=',b'PTDE_C101_DRAWS=',b'C100_ONLY_DRAWS=',b'LERP_BYPASS=',b'B12_CREATE=',b'B12_HIT=',b'FAILOPEN=')
+# protect release metadata offsets from scrub
 protected={(0xdc58,0xdc58+0x48),(0xdca0,0xdca0+0x153),(0x10387a,0x10387a+0x2a)}
 def is_protected(i,j): return any(i<e and j>s for s,e in protected)
 scrubbed=[]
@@ -145,16 +156,19 @@ for i,s in ascii_strings(base):
         base[i:j]=b'\0'*(j-i)
         scrubbed.append({'offset':hex(i),'text':s.decode(errors='replace')[:180]})
 
+# Strip embedded pack physically while retaining .srgbmt VirtualSize so loader gets zero-filled reserve at same RVA.
 e,secs=parse_sections(base)
 srgbmt=next(s for s in secs if s['name']=='.srgbmt')
 assert srgbmt['rp']==0x12d400 and srgbmt['va']==0x134000
 new_raw=PACK_FILE_OFF-srgbmt['rp']
 assert new_raw==0x8b000
-struct.pack_into('<I',base,srgbmt['hdr']+16,new_raw)
+struct.pack_into('<I',base,srgbmt['hdr']+16,new_raw) # SizeOfRawData
+# Keep VirtualSize unchanged (0x209b000), so PACK_RVA memory remains mapped/zero-filled.
 base=base[:PACK_FILE_OFF]
 version_resource=add_version_resource(base)
 OUT.write_bytes(base)
 
+# Prepare release sidecar tree and updated manifest.
 if STAGE.exists(): shutil.rmtree(STAGE)
 (STAGE/'DSRRL/EnvSpec/PackedGI').mkdir(parents=True)
 shutil.copy2(OUT, STAGE/OUT.name)
@@ -182,18 +196,32 @@ manifest={
 }
 (STAGE/'DSRRL/EnvSpec/PackedGI/manifest.json').write_text(json.dumps(manifest,indent=2)+'\n')
 (STAGE/'DSRRL/EnvSpec/PackedGI/README.txt').write_text('DSRRL Material Response 1.45 — external PTDE EnvSpec PackedGI sidecar. Keep this directory structure unchanged. If the exact pack is absent or fails size/SHA-256 validation, the EnvSpec replacement fails open to stock DSR.\n')
-(STAGE/'README_INSTALL.txt').write_text('DSRRL Material Response 1.45\n\nInstall into the DARK SOULS REMASTERED game directory.\n')
+(STAGE/'README_INSTALL.txt').write_text('''DSRRL Material Response 1.45
+
+Install into the DARK SOULS REMASTERED game directory:
+- DSRRL_Material_Response_1.45.addon64 -> game root (next to DarkSoulsRemastered.exe / dxgi.dll)
+- DSRRL\\EnvSpec\\PackedGI\\... -> keep exactly as packaged
+
+This client build removes diagnostic telemetry and no longer embeds the 33.6 MB PTDE EnvSpec cubemap pack inside the addon. Existing DSRRL equipment Specular/Normal/Diffuse sidecars from the main mod remain separate and are not duplicated in this package.
+
+EnvSpec scope in 1.45: exact PTDE cubemap resources + exact material slot routing are active; the receiver equation is still stock DSR, so PTDE pixel-equivalence is not claimed.
+''')
 
 out=OUT.read_bytes()
+# Static release assertions.
 _,osecs=parse_sections(out); osrgb=next(s for s in osecs if s['name']=='.srgbmt')
 allstr=[s for _,s in ascii_strings(out)]
 forbidden=[s.decode(errors='replace') for s in allstr if (b'[DSRRL][ASSET' in s or b'[DSRRL][ENVSPEC' in s or b'CAPTURE_' in s or b'T12_T14_BIND PASS' in s or b'FAILOPEN=' in s or b'V15.7' in s)]
-assert not forbidden
+assert not forbidden, forbidden[:10]
 assert pb[:64] not in out
+assert len(out)>=PACK_FILE_OFF and out[PACK_FILE_OFF:PACK_FILE_OFF+2] != pb[:2]
 assert osrgb['rs']==0x8b000 and osrgb['vs']==0x209b000
 assert out[r2o(out,LOADER_RVA):r2o(out,LOADER_RVA)+len(loader)]==loader
 assert b'DSRRL Material Response 1.45\0' in out
+assert b'DSRRL_Material_Response_1.45.addon64\0' in out
+assert b'DSRRL Material Response 1.3 active' not in out
 
+# deterministic client ZIP
 files=[]
 for p in sorted(STAGE.rglob('*')):
     if p.is_file(): files.append(p)
@@ -203,11 +231,20 @@ with zipfile.ZipFile(PKG,'w',compression=zipfile.ZIP_DEFLATED,compresslevel=9) a
         zi=zipfile.ZipInfo(rel,date_time=(2026,9,20,0,0,0));zi.compress_type=zipfile.ZIP_DEFLATED;zi.external_attr=0o644<<16
         z.writestr(zi,p.read_bytes())
 
+# Release audit
+final_strings=[s.decode(errors='replace') for _,s in ascii_strings(out)]
 audit={
  'schema':'dsrrl.material_response.client_release_audit.v1',
  'client_version':'1.45',
  'basis':{'build_id':82,'version':'V15.7','sha256':base_sha,'runtime_liveness':'PASS','bridge_activation':'PASS','pixel_behavior':'OPEN_STOCK_RECEIVER'},
  'release_addon':{'file':OUT.name,'size_bytes':len(out),'sha256':sha(out),'embedded_pack':False,'registration_name_present':b'DSRRL Material Response 1.45\0' in out,'file_version':'1.45.0.0'},
+ 'envspec_sidecar':{'path':'DSRRL/EnvSpec/PackedGI/PTDE_GI_ENVSPEC_PACK_RGBA.bin','size_bytes':PACK_SIZE,'sha256':PACK_SHA,'runtime_exact_size_validation':True,'runtime_sha256_validation':True,'fail_open_guard':True,'reserved_pack_rva':hex(PACK_RVA)},
+ 'pe':{'srgbmt_virtual_size':hex(osrgb['vs']),'srgbmt_raw_size':hex(osrgb['rs']),'physical_pack_removed_bytes':PACK_SIZE,'loader_rva':hex(LOADER_RVA),'resource_guard_rva':hex(RESOURCE_GUARD_RVA),'version_resource':version_resource},
+ 'telemetry_cleanup':{'internal_log_callback_store_disabled':True,'scrubbed_string_count':len(scrubbed),'forbidden_runtime_diagnostic_strings_remaining':forbidden,'periodic_output_possible':False,'note':'internal counters may remain as inert implementation state but no ReShade telemetry callback is retained'},
+ 'behavior_preservation':{'three_active_V15_7_PRE_PREPARE_POST_calls_unchanged':True,'exact_368_route_slot_table_unchanged':True,'per_thread_A_B_semantics_unchanged':True,'gpu_identity_two_hit_unchanged':True,'t12_t14_save_bind_restore_unchanged':True,'BSS_fix_unchanged':True,'receiver_math':'stock DSR unchanged'},
+ 'metadata':{'display':'DSRRL Material Response 1.45','addon_filename':'DSRRL_Material_Response_1.45.addon64','diagnostic_V15_strings_removed':not any('V15.7' in s for s in final_strings)},
+ 'compatibility':{'known_gap':'extension code still lacks host .pdata unwind coverage','status':'PARTIAL','client_runtime_after_externalization':'NOT_TESTED'},
+ 'package':{'file':PKG.name,'sha256':sha(PKG.read_bytes()),'files':[p.relative_to(STAGE).as_posix() for p in files]},
  'status':{'construction':'PASS','static_release_audit':'PASS','runtime_liveness':'OPEN_AFTER_EXTERNALIZATION','bridge_activation':'OPEN_AFTER_EXTERNALIZATION','pixel_behavior':'OPEN'}
 }
 AUD.write_text(json.dumps(audit,indent=2)+'\n')
