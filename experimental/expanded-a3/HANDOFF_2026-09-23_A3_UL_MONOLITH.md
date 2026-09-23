@@ -536,3 +536,39 @@ OFF beyond existing shipping policy.
 
 Next target:
 **stabilize selector freshness / U/L activation first. Do not expand operator scope until that is done.**
+
+---
+
+## 15. HF3 runtime result and HF4 source/runtime repair
+
+Owner runtime log for build143 / HF3 is **FAIL**. ReShade 6.8.0.1 and the addon load/register correctly, the A3 producer arms, swapchain creation succeeds, then the process terminates immediately after the first ResizeBuffers/runtime recreation boundary. This matches build142 and differs from build141, which survives the same boundary.
+
+Confirmed source/runtime mismatch in HF3:
+- current source `a3_selector_observer` uses `a3_safe_selector_tuple()`;
+- the actual HF3 binary still contains raw tuple loads at addon RVA `0x1BFD7F`: `[rdi+0x4C]`, `[rdi+0x4E]`, `[rdi+0x50]`;
+- HF3 only added an outer wrapper precheck, then entered the old raw-reading observer body.
+
+HF4 construction therefore patches the observer itself:
+- base HF3 SHA256: `052dc7d277d67a006e6df57c5da86d94438858479056a7418190d9bff8b07b0b`
+- output SHA256: `a17031743c48dfa27c8dabd07673320ba4b22b61c3d55287ad0f436db406327b`
+- observer redirect: RVA `0x1BFD7F` -> executable cave RVA `0x1C1F00`
+- trampoline calls shipping safe-read8 RVA `0x2A60`
+- success resumes at `0x1BFD8B`
+- failed read branches to existing fail-open RVA `0x1BFE18`
+- PE checksum: `0x0028D10C`
+
+Reproducer:
+`experimental/expanded-a3/tools/hotfix_safe_tuple_observer4.py`
+(commit `235a2acfc1b36c66ddfe68c988a3ffacd7f7900c`)
+
+Audit:
+`experimental/expanded-a3/audit/SAFE_TUPLE_HOTFIX4.json`
+
+HF4 status:
+- CONSTRUCTION: PASS
+- RUNTIME LIVENESS: NOT_TESTED
+- BRIDGE ACTIVATION: OPEN
+- PIXEL BEHAVIOR: OPEN
+- EnvDiffuse: OFF
+
+Safest confirmed runtime rollback remains build141 / HF1. HF4 is the next diagnostic construction, not a promoted runtime PASS.
