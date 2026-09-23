@@ -1,0 +1,50 @@
+{
+  "schema": 1,
+  "status": "BYTE_EXACT_LIFTED_SOURCE_NOT_ORIGINAL_HANDWRITTEN_ASM",
+  "historical_artifact": {
+    "name": "loader_sha.bin",
+    "size": 1504,
+    "sha256": "6dad44e0b8beef0420fe2d9c88d5004a52d81906ea176a4884a0bb8f1a9d6a60",
+    "registered_source_name": "loader_sha.s",
+    "registered_source_size": 8209,
+    "registered_source_sha256": "01d6587924928f63601c4e58ae153ebe15183f3a9a734ddf3bcf16c2831d3fe4"
+  },
+  "placement": {
+    "rva": "0x1BC100",
+    "historical_code_bytes": 1501,
+    "padded_payload_bytes": 1504
+  },
+  "state": {
+    "ready_flag": "module_base+0x112277",
+    "pack_pointer": "module_base+0x112288",
+    "reserved_pack_base": "module_base+0x1BF000",
+    "exact_pack_size": 33619968
+  },
+  "functions": [
+    {
+      "offset": "0x000",
+      "label": "loader_init_entry",
+      "role": "load external PackedGI, validate exact size and SHA-256, leave READY false on failure"
+    },
+    {
+      "offset": "0x4AE",
+      "label": "loader_pack_pointer_gate",
+      "role": "expose pack pointer only when READY==1"
+    }
+  ],
+  "dynamic_apis": [
+    "ReadFile",
+    "LoadLibraryW",
+    "CryptAcquireContextW",
+    "CryptCreateHash",
+    "CryptHashData",
+    "CryptGetHashParam",
+    "CryptDestroyHash",
+    "CryptReleaseContext"
+  ],
+  "path": "DSRRL\\EnvSpec\\PackedGI\\PTDE_GI_ENVSPEC_PACK_RGBA.bin",
+  "limitations": [
+    "Lost original handwritten loader_sha.s is not recovered.",
+    "Lifted .S preserves exact historical bytes and named semantic boundaries; labels are reconstructed."
+  ]
+}
