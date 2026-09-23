@@ -1,0 +1,42 @@
+name: A3 recovered 1.45 source audit
+
+on:
+  push:
+    branches:
+      - dev/material-response-expanded-a3-monolithic
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  source-audit:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Reconstruct recovered 1.45 core source
+        run: |
+          python dev/a3/recovered_145/extract_core_source.py \
+            --out-dir build/a3/recovered_145_core \
+            --manifest build/a3/RECOVERED_CORE_INDEX.json
+
+      - name: Show recovered source tree
+        run: |
+          find build/a3/recovered_145_core -maxdepth 4 -type f -printf '%p %s bytes\n' | sort
+
+      - name: Locate renderer hooks and material transaction code
+        run: |
+          grep -RInE 'AddonInit|AddonUninit|draw_indexed|DrawIndexed|PSSetShader|PSSetConstantBuffers|selector|material|EnvSpec|SpecRGB|Subsurf|Normal|Diffuse' \
+            build/a3/recovered_145_core | head -n 500 || true
+
+      - name: Validate A3 source snapshots are present
+        run: |
+          test -f dev/a3/legacy_a1/material_response_expanded.cpp
+          test -f dev/a3/legacy_a1/closed_plan.hpp
+          test -f dev/a3/legacy_a2/a2_receiver_telemetry.cpp
+          test -f dev/a3/legacy_a2/receiver_census.hpp
+          test -f dev/a3/ul/generate_ul_payloads.py
+          test -f dev/a3/ul/UL48_CANONICAL_HOSTS.json
+          echo A3_SOURCE_SNAPSHOTS_OK
