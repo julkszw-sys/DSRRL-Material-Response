@@ -1,0 +1,43 @@
+name: A3 U-L integrated bridge compile
+
+on:
+  push:
+    branches:
+      - dev/material-response-expanded-a3-monolithic
+    paths:
+      - "dev/a3/source/**"
+      - ".github/workflows/a3-ul-compile.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  compile:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure MSVC
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+
+      - name: Compile integrated U-L transaction
+        shell: cmd
+        run: |
+          if not exist build\a3 mkdir build\a3
+          cl /nologo /std:c++20 /EHsc /W4 /WX /c /Fo:build\a3\ul_integrated_bridge.obj dev\a3\source\ul_integrated_bridge.cpp
+          ml64 /nologo /c /Fo build\a3\selector_hook.obj dev\a3\source\selector_hook.asm
+
+      - name: Verify no draw replay exists in integrated module
+        shell: pwsh
+        run: |
+          $src = Get-Content dev/a3/source/ul_integrated_bridge.cpp -Raw
+          if ($src -match '\bDrawIndexed(?:Instanced)?\s*\(') {
+            throw "A3 integrated U/L module must not issue DrawIndexed/DrawIndexedInstanced"
+          }
+          if ($src -notmatch 'prepare_draw' -or $src -notmatch 'finish_draw') {
+            throw "A3 integrated U/L pre/post API missing"
+          }
+          Write-Host "A3_UL_NO_REPLAY_CONTRACT_PASS"
