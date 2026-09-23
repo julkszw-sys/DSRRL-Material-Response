@@ -1,0 +1,31 @@
+{
+  "schema": 2,
+  "status": "PARTIAL_SOURCE_RECOVERY",
+  "date": "2026-09-23",
+  "branch": "recovery/material-response-1.45-source-chain-2026-09-23",
+  "release": {
+    "version": "1.45",
+    "addon_size": 1803264,
+    "addon_sha256": "e44183ef10fc7921f7741eb16d54ec30e814f580421ac6c83be18b5308b73342",
+    "owner_upload_payload_match": true
+  },
+  "source_snapshot": {
+    "filename": "DSRRL_Material_Response_1.45_SOURCE_RECOVERY_2026-09-23.zip",
+    "sha256": "56c2bc30b4ecc791495a82a9dd214d9d619411a40c204ed26222741778c54546",
+    "status": "EXACT_RECOVERED_ORIGINALS_PLUS_PROVENANCE"
+  },
+  "exact_originals": {
+    "v12/asset_integrated_v12.c": "879b3ec251c36969cf7eabcc5b63164da7c17b6577e74b013e47f7866b3236e2",
+    "v12/asset_stubs_v12.s": "c7e8634e3fd37730f8ee052c2cdc763448dfd408cd023492a6d472ab285c89a9",
+    "v12/build_v12.py": "c330b710ed4cede81dcb873f6ad56f7ef798c31f667e3d61bf90edcc412061a3",
+    "v12/audit_v12_independent.py": "f6e10a914e5313e1cc28501bcde6ec1783a8f6c5ab03ef64c9024330430f9f2c",
+    "v15_7/build_v15_7.py": "99f9108c2eea2b90632506d46d47ec4180ac657269970e6193f8a2a2305e151e",
+    "client145/build_client145.py": "e0fec5dca605f94ea0c532cff5e555d7fdb07824a67e89fecc791b4f87f23db3",
+    "client145/build_client145_final.py": "09c17dfefe536ee2bf10c2ef51ec2652bb2cba672ab98fe921ff2e00d02ccea6"
+  },
+  "github_text_copies": {
+    "byte_exact_provenance": false,
+    "role": "BROWSABLE_NORMALIZED_CONVENIENCE_ONLY"
+  },
+  "source_complete": false
+}
