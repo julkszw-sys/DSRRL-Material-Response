@@ -1,0 +1,109 @@
+{
+  "schema": "dsrrl.a3.ul_monolith_injection.v1",
+  "status": "CONSTRUCTION_PASS_DIAGNOSTIC",
+  "source_complete": false,
+  "release_eligible": false,
+  "host_sha256": "e44183ef10fc7921f7741eb16d54ec30e814f580421ac6c83be18b5308b73342",
+  "host_size": 1803264,
+  "extension_sha256": "b250086565421ac1d2a6387d42a5e5169b639d3ea615cbe0d6432b025dd008b4",
+  "extension_size": 824832,
+  "output_sha256": "75d90c5ed02511f66a37e9265b5be72b94ef4a5e03dbfe939b5fe392700c40f0",
+  "output_size": 2642944,
+  "pe_checksum": "0x0028F78B",
+  "extension_delta_rva": "0x1BE000",
+  "srgbmt_old_raw_size": 569344,
+  "srgbmt_new_raw_size": 1409024,
+  "copied_sections": [
+    {
+      "name": ".text",
+      "target_rva": "0x1BF000",
+      "virtual_size": 11430,
+      "raw_size": 11776
+    },
+    {
+      "name": ".rdata",
+      "target_rva": "0x1C2000",
+      "virtual_size": 811304,
+      "raw_size": 811520
+    },
+    {
+      "name": ".data",
+      "target_rva": "0x289000",
+      "virtual_size": 64,
+      "raw_size": 0
+    },
+    {
+      "name": ".pdata",
+      "target_rva": "0x28A000",
+      "virtual_size": 180,
+      "raw_size": 512
+    }
+  ],
+  "exception_table": {
+    "old_rva": "0x109000",
+    "old_count": 314,
+    "new_rva": "0x28B000",
+    "new_count": 329,
+    "new_size": 3948
+  },
+  "patches": [
+    {
+      "rva": "0x8C80",
+      "old": "e9cb011b00",
+      "new": "e98b7f1b00",
+      "target_rva": "0x1C0C10",
+      "label": "addon_init",
+      "symbol": "a3_init_wrapper"
+    },
+    {
+      "rva": "0x9260",
+      "old": "e98bff1a00",
+      "new": "e92b7e1b00",
+      "target_rva": "0x1C1090",
+      "label": "addon_uninit",
+      "symbol": "a3_uninit_wrapper"
+    },
+    {
+      "rva": "0x632E",
+      "old": "e8ae5d1900",
+      "new": "e8e5b71b00",
+      "target_rva": "0x1C1B18",
+      "label": "gate",
+      "symbol": "a3_gate_stub"
+    },
+    {
+      "rva": "0x65E7",
+      "old": "e87c5a1900",
+      "new": "e856b51b00",
+      "target_rva": "0x1C1B42",
+      "label": "pre",
+      "symbol": "a3_pre_stub"
+    },
+    {
+      "rva": "0x6641",
+      "old": "ff15017f0000",
+      "new": "e812b51b0090",
+      "target_rva": "0x1C1B58",
+      "label": "draw_indexed",
+      "symbol": "a3_draw_indexed_stub"
+    },
+    {
+      "rva": "0x6664",
+      "old": "ff15de7e0000",
+      "new": "e83bb51b0090",
+      "target_rva": "0x1C1BA4",
+      "label": "draw_instanced",
+      "symbol": "a3_draw_instanced_stub"
+    }
+  ],
+  "invariants": [
+    "exact shipping 1.45 preimage required",
+    "extension importless",
+    "extension relocation-free via addon_base+RVA addressing",
+    "single native DrawIndexed/DrawIndexedInstanced retained; call target wrapped only",
+    "existing POST/PS/CB12 restore unmodified",
+    "EnvDiffuse resource bridge OFF",
+    "EnvSpec replacement OFF beyond shipping policy",
+    "diagnostic build is not source-complete RC/release"
+  ]
+}
