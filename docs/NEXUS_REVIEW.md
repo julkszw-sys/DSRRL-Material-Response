@@ -54,3 +54,16 @@ Relevant files in this repository:
 - [RELEASE_HASHES.md](../RELEASE_HASHES.md)
 
 The clean release is reproduced from the exact integrated 1.45 basis identified in `BUILD.md`.
+
+
+## Public source review branch
+
+Nexus staff can inspect and build the public source-review target here:
+
+`nexus-review/material-response-1.45-source`
+
+Full build/review instructions:
+
+`docs/NEXUS_SOURCE_REVIEW.md`
+
+The source-review branch also contains the exact clean-release materializer and verifier. The shipping binary was developed incrementally, so the public C++ review target is explicitly separated from the exact SHA-256 reproduction path; the exact integrated basis can be supplied directly to Nexus staff if requested.
