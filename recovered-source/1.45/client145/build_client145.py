@@ -196,16 +196,7 @@ manifest={
 }
 (STAGE/'DSRRL/EnvSpec/PackedGI/manifest.json').write_text(json.dumps(manifest,indent=2)+'\n')
 (STAGE/'DSRRL/EnvSpec/PackedGI/README.txt').write_text('DSRRL Material Response 1.45 — external PTDE EnvSpec PackedGI sidecar. Keep this directory structure unchanged. If the exact pack is absent or fails size/SHA-256 validation, the EnvSpec replacement fails open to stock DSR.\n')
-(STAGE/'README_INSTALL.txt').write_text('''DSRRL Material Response 1.45
-
-Install into the DARK SOULS REMASTERED game directory:
-- DSRRL_Material_Response_1.45.addon64 -> game root (next to DarkSoulsRemastered.exe / dxgi.dll)
-- DSRRL\\EnvSpec\\PackedGI\\... -> keep exactly as packaged
-
-This client build removes diagnostic telemetry and no longer embeds the 33.6 MB PTDE EnvSpec cubemap pack inside the addon. Existing DSRRL equipment Specular/Normal/Diffuse sidecars from the main mod remain separate and are not duplicated in this package.
-
-EnvSpec scope in 1.45: exact PTDE cubemap resources + exact material slot routing are active; the receiver equation is still stock DSR, so PTDE pixel-equivalence is not claimed.
-''')
+(STAGE/'README_INSTALL.txt').write_text('''DSRRL Material Response 1.45\n\nInstall into the DARK SOULS REMASTERED game directory:\n- DSRRL_Material_Response_1.45.addon64 -> game root (next to DarkSoulsRemastered.exe / dxgi.dll)\n- DSRRL\\EnvSpec\\PackedGI\\... -> keep exactly as packaged\n\nThis client build removes diagnostic telemetry and no longer embeds the 33.6 MB PTDE EnvSpec cubemap pack inside the addon. Existing DSRRL equipment Specular/Normal/Diffuse sidecars from the main mod remain separate and are not duplicated in this package.\n\nEnvSpec scope in 1.45: exact PTDE cubemap resources + exact material slot routing are active; the receiver equation is still stock DSR, so PTDE pixel-equivalence is not claimed.\n''')
 
 out=OUT.read_bytes()
 # Static release assertions.
