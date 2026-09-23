@@ -1,0 +1,38 @@
+{
+  "schema": "dsrrl.material_response.pre_v12_source_recovery.v2",
+  "status": "BYTE_EXACT_CHAIN_CLOSED_FROM_CLEAN_MR10_FORWARD__CLEAN_MR10_ORIGIN_STILL_OPEN",
+  "notes": [
+    "Every listed historical addon from clean MR1.0 through build52 is now reproducible byte-for-byte from the preceding listed stage using preserved original source/builders or explicitly labelled reconstructed guarded builders.",
+    "Reconstructed guarded builders are provenance lifts, not claims that the lost original handwritten builder was recovered.",
+    "V13 companion bridge is stronger: its original C source is preserved and the recovered Clang/LLD recipe reproduces the historical DLL exactly after restoring the historical COFF timestamp.",
+    "Source-complete release PROTECT remains closed because the exact source/build lineage producing clean MR1.0 73fedd... has not yet been joined to the earlier fully preserved V2.9.1 source package."
+  ],
+  "stages": [
+    {"name":"clean_mr10","sha256":"73fedd95873fc08020e17b266d75228b517685ac519447fd0bfb05f024569652","status":"ANCHOR_ORIGIN_OPEN"},
+    {"name":"v13_main","sha256":"498960ef3cd899435d2a7438d538e17dd7accc0fd89e8fa033ad0bde4d77eded","builder":"build_v13_main_from_mr10_reconstructed.py","builder_class":"RECONSTRUCTED_GUARDED_EXACT","result":"0_BYTE_DIFF"},
+    {"name":"v13_companion_bridge","sha256":"1992ab7c5fee340b1f5ea07cf13b60811afde50b0257f34b3f6dff1c87e4b365","source":"SOURCE_V13_PTDE_DONOR.cpp","builder":"build_v13_bridge_exact.py","builder_class":"ORIGINAL_C_PLUS_RECOVERED_EXACT_TOOLCHAIN","result":"0_BYTE_DIFF"},
+    {"name":"v13_fused_single_addon","sha256":"9f98b52b5f71491b00c63640d9608a57ef12217fb6fdbc37abded3315ef568d3","builder":"fuse_v13_single_addon_reconstructed.py","builder_class":"RECONSTRUCTED_GUARDED_EXACT","result":"0_BYTE_DIFF"},
+    {"name":"v14_shader","sha256":"828c013875064522c619fb3250ba4a915516cd96fe38dff229952af25b9b4c94","builder":"build_v14_shader_reconstructed.py","builder_class":"RECONSTRUCTED_GUARDED_EXACT","result":"0_BYTE_DIFF"},
+    {"name":"mr11_full_safe","sha256":"bb23eefb0d4a1c48330c6001d1c3108c1a0610a798e31a1caf4b37c7f0d325e4","builder":"build_mr11_full_safe_reconstructed.py","builder_class":"RECONSTRUCTED_GUARDED_EXACT","result":"0_BYTE_DIFF"},
+    {"name":"mr12_full_safe_internal_t10_side_branch","sha256":"fea208ab11baf075d1d99f17771938384090a8102c36096e2d85d86cab2cf1f5","builder":"build_mr12_full_safe_t10_reconstructed.py","builder_class":"RECONSTRUCTED_GUARDED_EXACT","result":"0_BYTE_DIFF","lineage_note":"historical side branch; canonical 1.2R is based on MR1.1 FULL_SAFE, not this stage"},
+    {"name":"mr12r_m10_failopen","sha256":"6711b90ddd3c92fcf5450eed55f8b0b447bdf51fe9ef5a1784adf61886fed6d4","builder":"build_mr12r_m10_failopen_reconstructed.py","builder_class":"SEMANTIC_RECONSTRUCTION_FROM_AUDIT","result":"0_BYTE_DIFF"},
+    {"name":"mr13_late_release","sha256":"d29173139f0ec14b2718f8c22774053fb9aeadd400088f72b3693f3156c890b2","builder":"build_mr13_release_from_12r_reconstructed.py","builder_class":"RECONSTRUCTED_GUARDED_EXACT","result":"0_BYTE_DIFF"},
+    {"name":"spec_bridge_rc","sha256":"5e26eb50ff7c6632350c1e6c752e406c1e858cd06c6d847d44d719a3ec252abc","builder":"build_spec_bridge_rc_reconstructed.py","builder_class":"RECONSTRUCTED_GUARDED_EXACT","result":"0_BYTE_DIFF"},
+    {"name":"spec_bridge_telemetry","sha256":"633d50b92e12e406acbca300220030034cfe7db08744737ceb76e224dccd3e09","builder":"build_spec_bridge_telemetry_reconstructed.py","builder_class":"RECONSTRUCTED_GUARDED_EXACT","result":"0_BYTE_DIFF"},
+    {"name":"lit_expansion","sha256":"dfd361981f1639fc2bf1b227f5fbe8def90bf2a3ca482efd8cf4fd2856999e91","builder":"reconstruct_split.py","builder_class":"SEMANTIC_DXBC_RECONSTRUCTION","result":"0_BYTE_DIFF"},
+    {"name":"mul_expansion","sha256":"0f2c8c2ea5831cc865c55bf413c7913c30773630071ea921bd2f58932ba7efbb","builder":"reconstruct_split.py","builder_class":"SEMANTIC_DXBC_RECONSTRUCTION","result":"0_BYTE_DIFF"},
+    {"name":"mullit_expansion","sha256":"b8f0ebe477e1bc18c6b6d30f6381e7523ac3560df1fd6b31d25374ba7dd2bbdf","builder":"reconstruct_split.py","builder_class":"SEMANTIC_DXBC_RECONSTRUCTION","result":"0_BYTE_DIFF"},
+    {"name":"full24","sha256":"cb95e2332c2d2dfd2184fe8ea04a882ea6f5ff4ea314e421e7eedcf768d5609d","builder":"reconstruct_split.py","builder_class":"SEMANTIC_DXBC_RECONSTRUCTION","result":"0_BYTE_DIFF"},
+    {"name":"plain_route","sha256":"ad23449c0f79638a878ed857bcb7220544a7b1526a33e77588336e526658608b","builder":"build_plain_route_reconstructed.py","builder_class":"RECONSTRUCTED_GUARDED_EXACT","result":"0_BYTE_DIFF"},
+    {"name":"spec_only","sha256":"5794623c639017a7c0f75cdfece80810c45576996dc788abfb5b05e07c914915","builder":"build_specrgb_spec_only_third_class.py + make_spec_only_receivers_reconstructed.py","builder_class":"ORIGINAL_BUILDER_PLUS_SEMANTIC_RECONSTRUCTED_DXBC_INPUTS","result":"0_BYTE_DIFF"},
+    {"name":"subsurf_build52","sha256":"deb7dbba483512c570f8d02ed6aee8a4fed4489b7312de260680e669aeee92a2","builder":"build_specrgb_subsurf_spec_only.py + make_subsurf_spec_only_receivers.py","builder_class":"PRESERVED_ORIGINAL_TRANSFORMER_AND_BUILDER","result":"0_BYTE_DIFF"}
+  ],
+  "earlier_source_evidence": {
+    "v291_source_package":"DSRRL_PTDE_DIFFUSE_MATERIAL_RESPONSE_V2_9_1_TIER2_STOCK_ENVSPEC_WINDOWS_COMPILE_PACKAGE_2026-09-15.zip",
+    "addon_cpp_sha256":"6c3a0bf782f6f90a2c6537258e350a491fa7e9eddfcea3855ec0824a05090ae3",
+    "selector_hook_asm_sha256":"a861fac8d354754e60f1e80fc9264f78475e2defbe06d145114049aa3eb414de",
+    "generated_shader_header_sha256":"1458180458dddd6dada0e1af7aa83543cd8c77c4fbf51bf146b0adcdeb221a20",
+    "c100_registry_sha256":"1c8080090e2d29eb39b5803026539e635e0daa33308abf2320105d43c7ab19ec",
+    "lineage_join_to_clean_mr10":"OPEN"
+  }
+}
