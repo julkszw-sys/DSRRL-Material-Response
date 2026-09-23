@@ -61,18 +61,23 @@ src[pos:pos+len(old_banner)]=new_text+b'\x00'*(len(old_banner)-len(new_text))
 
 OUT.write_bytes(src)
 out=OUT.read_bytes()
+# independent call verification
 calls={}
 for r,_,target,label in patches:
     t,b=read_call_target(out,r)
     calls[hex(r)]={'target':hex(t),'bytes':b,'expected':hex(target),'pass':t==target}
 
+# hard safety checks inherited from V15.6
+# extension range where V15.6 audit asserted zero old-conflict refs; since only callsites/banner changed, byte search via known little-endian displacements is supplemental.
 old_conflict=[x for x in range(0x112300,0x112317)]
 safe=[x for x in range(0x112260,0x112277)]
+# Count literal 32-bit occurrences only as a supplemental check, not semantic disasm proof.
 ext=out[r2o(out,0x1b7000):r2o(out,0x1bc000)]
 lit_old=sum(ext.count(struct.pack('<I',x)) for x in old_conflict)
 lit_safe=sum(ext.count(struct.pack('<I',x)) for x in safe)
 
 slot=json.loads(SLOTMAP.read_text())
+# accept either list or mapping schema and extract summary if present
 entries=slot.get('rows',slot.get('routes',slot if isinstance(slot,list) else [])) if isinstance(slot,(dict,list)) else []
 if isinstance(slot,dict):
     route_count=slot.get('registry_count',slot.get('route_count',len(entries) if isinstance(entries,list) else 368))
@@ -132,6 +137,7 @@ No crash and no persistent CONFLICT/MISMATCH/TXN fail-open should occur.
 
 This is a resource-substitution diagnostic, NOT PTDE pixel-equivalence certification.
 ''')
+# Deterministic ZIP
 files=[OUT,AUD,README,SLOTMAP]
 with zipfile.ZipFile(ZIP,'w',compression=zipfile.ZIP_DEFLATED,compresslevel=9) as z:
     for p in files:
