@@ -1,64 +1,54 @@
 # DSRRL Material Response
 
-Source and build files for the Material Response component of **Dark Souls Remastered – Restored Lighting**.
+Renderer/material bridge source and reproducibility material for **Dark Souls Remastered – Restored Lighting**.
 
-The addon is loaded through ReShade and changes selected renderer/material paths inside Dark Souls Remastered. DSR remains the host renderer; unsupported or unknown routes fall back to the stock game path.
+DSR remains the host renderer. Bridges are scoped to verified renderer/material/resource routes and unsupported or unidentified routes fail open to stock DSR.
 
-## Current release
+## Current public release
 
 **Material Response 1.45**
 
 `DSRRL_Material_Response_1.45.addon64`
 
-SHA-256:
+- SHA-256: `e44183ef10fc7921f7741eb16d54ec30e814f580421ac6c83be18b5308b73342`
+- size: `1,803,264 bytes`
+- PE checksum: `0x001BC666`
+- version: `1.45.0.0`
 
-`41690c6212157eb772ae0c75c055d0bb7a842709f65f02c3689b87714151e1f7`
+Exact Nexus archive:
 
-Size:
+- SHA-256: `2439d24644a0dc5bef6e29b1d980bab5b421a08c6bc71fca93d4c88859ad0893`
+- size: `244,154 bytes`
 
-`1,803,264 bytes`
+The release intentionally ships with **PTDE EnvSpec/PackedGI replacement disabled**. The final release delta adds terminal RGB saturation to embedded DXBC 33/34/35; alpha is unchanged.
 
-## What it contains
+See `RELEASE_HASHES.md` and `BUILD.md`.
 
-The current addon includes renderer-side support for:
+## Repository lanes
 
-- material-response corrections
-- PTDE SpecRGB transport
-- subsurface material handling
-- equipment diffuse and normal resource bridges
-- PTDE PackedGI EnvSpec cubemap substitution
-- guarded fail-open behaviour when a resource or route cannot be verified
+- `main` — canonical release-facing metadata, reproducibility docs and stable review material.
+- `develop` — integration lane for work that is not yet a release.
+- `nexus-review/material-response-1.45-source` — exact Nexus 1.45 binary-review/reproduction lane.
+- `recovery/material-response-1.45-source-chain-2026-09-23` — canonical historical source-recovery lane for 1.45.
+- `dev/material-response-expanded-a3-monolith` — source-completeness experimental lane; not the shipping 1.45 source.
+- other `dev/*`, `pmetal-*`, `resource-routing-*` and legacy recovery branches — diagnostics/history unless explicitly promoted.
 
-The EnvSpec cubemap data is stored outside the addon at:
+See `docs/REPOSITORY_MAP.md` and `docs/BRANCH_POLICY.md`.
 
-`DSRRL\EnvSpec\PackedGI\PTDE_GI_ENVSPEC_PACK_RGBA.bin`
+## Source recovery status
 
-The addon checks the file size and SHA-256 before enabling that resource path.
+Original V12 runtime source/stubs/build tooling and the final V15.7 / client-1.45 builders have been recovered byte-for-byte and committed on the canonical recovery branch.
 
-## Building
+The historical source chain is **not yet source-complete**. The principal remaining gap is the source-level EnvSpec chain between V12 and V15.7, including V15.1 and the V15.5/V15.6 BSS/thread-state corrections, plus binary-only predecessor inputs before V12.
 
-See [BUILD.md](BUILD.md).
+See `docs/SOURCE_RECOVERY_STATUS.md`.
 
-The final 1.45 packaging/build step is reproducible from the exact development basis and the exact PackedGI resource file. The expected output hash is checked by the build script.
+## Mandatory release rule
 
-## Source
+No new Renderer Edition / Material Response runtime may be promoted to RC or RELEASE unless the exact handwritten source, generators, immutable external-input hashes, deterministic build path, build audit, source commit SHA and parent/rollback lineage are committed.
 
-The readable EnvSpec loader implementation is in:
+A previous addon binary may be retained as historical evidence or compatibility input, but it is not accepted as the canonical implementation of a new release.
 
-`src/envspec_loader.c`
+## Validation levels
 
-The shipped release uses the equivalent fixed Win64 loader bytes stored in:
-
-`reference/loader_bytes.hex`
-
-Those bytes can be materialized with:
-
-`python tools/materialize_loader.py`
-
-## Security
-
-The addon runs in-process with the game and therefore uses APIs that can look unusual to heuristic antivirus engines, including renderer hooks, resource tracking and controlled memory-protection changes.
-
-It does not intentionally provide networking, downloading, persistence, services, drivers or process-launching functionality.
-
-See [SECURITY.md](SECURITY.md) and [docs/NEXUS_REVIEW.md](docs/NEXUS_REVIEW.md).
+Construction, compatibility, runtime liveness, bridge activation and PTDE-visible pixel behavior are separate statuses. A successful build does not by itself prove renderer equivalence.
