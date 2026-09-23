@@ -31,8 +31,12 @@ a3_gate_stub:
 a3_pre_stub:
   sub rsp, 0x28
   call a3_call_legacy_pre
+  # legacy_pre returns a live pointer in RAX; shipping 1.45 consumes it
+  # immediately after this callsite. Preserve it across A3 telemetry/capture.
+  mov [rsp+0x20], rax
   mov rcx, rbx
   call a3_capture_pre_ps
+  mov rax, [rsp+0x20]
   add rsp, 0x28
   ret
 
