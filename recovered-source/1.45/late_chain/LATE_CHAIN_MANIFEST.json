@@ -1,0 +1,52 @@
+{
+  "schema": 1,
+  "status": "BYTE_EXACT_LATE_CHAIN_RECOVERED",
+  "hashes": {
+    "41690": "41690c6212157eb772ae0c75c055d0bb7a842709f65f02c3689b87714151e1f7",
+    "a5dc": "a5dc6f817e75e157bd92ee945830d0dd3028ba887f544ebf6cff9976e149c900",
+    "6df": "6df899936098ac3a22751224958090c5860294e80769e8cc6afd8e0ae316da0a",
+    "f869": "f869e518bd6fd319f7039bd1cb33766abcf4ddc40a86ac922a159f495f75d7a1",
+    "d02": "d02af39ae6c0dc38525dac930ded3030a3440491028072cb8db111316c4a4442",
+    "45c": "45c7023cb6d2c1680712ca32dae6af25c3c406e7ce233d2555a441be67653928",
+    "e157": "e15747f4920bd5f40db9019e4e45110ad4655b4defab1ad3027b039fc022d98b",
+    "db2e": "db2e6547b5fb5516d4ad6559173e66421315d1635ca0c08e8141b0de2f57f966"
+  },
+  "safe_rc2_windows": [
+    {
+      "offset": 1582466,
+      "length": 1264,
+      "basis_window_sha256": "13aae15282dc969c69b6dc2f25f1b029422a09f983b42cf35b3553b1f1d39b83",
+      "target_window_sha256": "8b01237a1934da3272804384d967cf9e0e992ddc82bd724277ef348b890cc1c1",
+      "file": "safe_rc2_payloads/window0_target.hex"
+    },
+    {
+      "offset": 1590276,
+      "length": 61045,
+      "basis_window_sha256": "5cc1d6e0b043d1dbc24723373b783d60179e08553bb7c19c5cdb74b37bf983ed",
+      "target_window_sha256": "cae980a7fc4f5ccbd62f5949361972e6c85aae5496fa5ef07f340373685adab9",
+      "file": "safe_rc2_payloads/window1_target.hex"
+    },
+    {
+      "offset": 1654742,
+      "length": 17,
+      "basis_window_sha256": "c8821e19f8b20c13f75156dbc0192c04aebe7736de254d32174be89b886fe6ea",
+      "target_window_sha256": "1ef4e85460100a4b8575f7eecd85caf42e09a1a91f31ae3aa4d16813757f2182",
+      "file": "safe_rc2_payloads/window2_target.hex"
+    },
+    {
+      "offset": 1792768,
+      "length": 68,
+      "basis_window_sha256": "1751ac12e70e15b4f76c16775cd329ae55973b612521dab2de828a5cdb6c8ab3",
+      "target_window_sha256": "bdbcd208e37cd28f72d8f8ffa1b1ab829a74b078fd007bf927a62b0d73dcf048",
+      "file": "safe_rc2_payloads/window3_target.hex"
+    }
+  ],
+  "small_patch_changed_bytes": {
+    "41690_to_a5dc": 36,
+    "6df_to_f869": 296,
+    "f869_to_d02": 122,
+    "d02_to_45c": 10,
+    "45c_to_e157": 89
+  },
+  "source_complete": false
+}
