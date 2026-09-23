@@ -1,0 +1,37 @@
+name: Nexus Source Review Build
+
+on:
+  push:
+    branches:
+      - "nexus-review/material-response-1.45-source"
+  workflow_dispatch:
+
+jobs:
+  windows-source-build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Checkout pinned ReShade API
+        uses: actions/checkout@v4
+        with:
+          repository: crosire/reshade
+          ref: 3645e3025d1d98a90e318278858931f034d5d1f6
+          path: _reshade
+
+      - name: Configure review target
+        run: cmake -S review-src -B build-review -A x64 -DRESHade_INCLUDE_DIR="${{ github.workspace }}/_reshade/include"
+
+      - name: Build review addon and tests
+        run: cmake --build build-review --config Release
+
+      - name: Run tests
+        run: ctest --test-dir build-review -C Release --output-on-failure
+
+      - name: Show review addon identity
+        shell: pwsh
+        run: |
+          $path = "build-review/Release/DSRRL_Nexus_Source_Review.addon64"
+          if (!(Test-Path $path)) { throw "Review addon not produced" }
+          Get-Item $path | Format-List Name,Length
+          Get-FileHash $path -Algorithm SHA256 | Format-List
