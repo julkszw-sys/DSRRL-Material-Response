@@ -377,3 +377,120 @@ Do not assign meanings to the OPEN auxiliary registers without consumer/callsite
 ## Current next target
 
 Close the remaining DirLight auxiliary lanes and then continue the still-OPEN producer rows in `dsrrl.renderer_producer_map`: ClipPlane, DofParam, LocalWorldMtx, LocalWorldMtx_WithPrev, Normal2Alpha and Water. DSR-only DeferredLighting/Glow/WindParam remain a separate consumer-routing census before any decision to preserve/bypass them.
+
+
+---
+
+## 2026-09-23 — DSR comparison: depth transport, shadow PCF and velocity
+
+Status: **CONFIRMED shader-bytecode delta / pending Supabase backfill**
+
+Source: exact DSR `FRPG_FlverPBL_fpo_DX11.shaderbnd.dcx` extracted from the project evidence pack and parsed as BND3/DXBC.
+
+### DSR depth producer no longer emits PTDE packed RGB depth
+
+Exact DSR counterparts:
+- index 1498 `FRPG_Phn_Dif______Mul_______DepAlp.fpo`, SHA-256 `5a0a6b872a697ad70bf3c35612eca1e1b2633bceb222b0b6f832ffed4bdfef6a`
+- index 1613 `FRPG_Phn_Dif________________Dep.fpo`, same SHA-256
+- index 1614 `FRPG_Phn_Dif________________DepAlp.fpo`, SHA-256 `6f4cb00e2320f553611120adae0af442ed017dbe32482e642bf6b945eb787eb5`
+
+The first two payloads contain only `dcl_global_flags; ret`. They perform no color packing at all.
+
+The DSR `DepAlp` shader performs only alpha-test logic and also emits no packed depth RGB. RDEF identifies `AlphaTestBuffer` containing `AlphaTest` and `AlphaTestRef`. Its effective pixel-side gate is:
+
+`A = sampled_alpha * v2.w`
+
+When `AlphaTest == 1`, pixels satisfying `A <= AlphaTestRef` are discarded. Exact upstream meaning of `v2.w` remains an upstream/VS routing question; do not label it `c100.w` without that RE.
+
+Therefore the DSR shadow-depth producer path is structurally nonhomologous to PTDE's RGB-packed color-depth producer. DSR relies on raster/depth state rather than reconstructing the PTDE color payload in these pixel shaders.
+
+### DSR FaceEye Sdw/Csd shadow consumer
+
+Exact DSR FaceEye Sdw/Csd DXBC uses resource `t7/s7` with hardware comparison sampling:
+
+`PCF_DSR = (1/9) * sum_{u=-1..1,v=-1..1} sample_c(t7,s7,shadowUV,receiverDepth,offset(u,v))`
+
+The compiled offsets are exactly the 3x3 integer grid:
+`(-1,-1),(0,-1),(1,-1),(-1,0),(0,0),(1,0),(-1,1),(0,1),(1,1)`.
+
+This is not the PTDE 16-tap 4x4 manual packed-depth comparison kernel.
+
+RDEF maps the relevant DSR constants:
+- `cb0[21] = gFC_ShadowMapParam`
+- `cb0[22] = gFC_ShadowColor`
+- `cb0[56..59] = gFC_ShadowMapClamp`
+- `cb0[73] = gFC_ShadowLightDir`
+- `cb0[101] = gFC_DebugPointLightParams`
+
+The DSR post-PCF response is:
+
+`Bias = saturate((dot(gFC_ShadowLightDir.xyz,N)+gFC_ShadowMapParam.x)*gFC_ShadowMapParam.w)`
+
+`Fade = saturate((gFC_ShadowMapParam.y-viewDistance)*gFC_ShadowMapParam.z)`
+
+`S = min(1, PCF_DSR + Bias)`
+
+`ShadowBase = 1 - S*Fade*gFC_ShadowColor.rgb`
+
+Then DSR applies an additional component-wise power encoded by LOG/MUL/EXP:
+
+`ShadowRGB_DSR = abs(ShadowBase) ^ gFC_DebugPointLightParams.z`.
+
+For the expected non-negative shadow-color range, this reduces to `ShadowBase ^ gFC_DebugPointLightParams.z`.
+
+The exact hardware comparison function bound to `s7` is state outside the shader bytecode and remains to be named explicitly; the shader proves comparison sampling and the 9-tap kernel, not by itself the sampler-state inequality.
+
+### PTDE vs DSR shadow operator delta
+
+PTDE FaceEye:
+- depth producer: RGB-packed 24-bit-like representation in color output;
+- consumer decode: manual `dot(RGB,[255/256,255/65536,255/16777216])`;
+- PCF: 16 taps on a 4x4 grid with offsets `{-3,-1,+1,+3}/4096`;
+- colored shadow response;
+- no corresponding post-shadow `pow(ShadowRGB,k)` in the recovered FaceEye path.
+
+DSR FaceEye:
+- producer pixel shader does not pack color depth;
+- consumer: hardware `sample_c`;
+- PCF: 9 taps on a 3x3 integer-offset grid;
+- same broad bias/fade/colored-shadow structure;
+- additional `ShadowRGB ^ gFC_DebugPointLightParams.z` transform.
+
+This is a **structural shadow-operator mismatch**, not a PARAM-only scalar mismatch and not an asset-only mismatch.
+
+### Bridge consequence
+
+A canonical PTDE shadow bridge should be treated as a shader/resource-state operator island. The narrowest plausible implementation is the exact routed Sdw/Csd receiver family plus the existing DSR depth resource, reproducing PTDE's comparison/kernel/colored response at the consumer cut. Exact equality still requires the DSR depth semantic and sampler comparison state to be closed; injecting PTDE packed RGB blindly into the DSR `sample_c` path would be wrong.
+
+The PTDE pack/decode pair reconstructs stored shadow depth as:
+`d_stored = (255.99998474121094/256)*d = 0.9999999403953552*d`.
+
+If an exact bridge retains DSR hardware depth rather than PTDE packed color, this tiny compiled PTDE scaling belongs to the comparison semantics and must be handled explicitly if it is decision-relevant; it is not permission for an arbitrary bias.
+
+### DSR velocity path
+
+Exact DSR `FRPG_Phn_Dif________________Vel.fpo`, index 1634, SHA-256 `d5705d1b01f9b9dc3ca2e468642e99c526758c2a0f0b0e7d59b69a1965468e46`.
+
+Input signature:
+- `v1 = TEXCOORD0`
+- `v2 = TEXCOORD1`
+
+Pixel shader computes:
+
+`CurrentUV = 0.5*(v1.xy/v1.w) + 0.5`
+`PreviousUV = 0.5*(v2.xy/v2.w) + 0.5`
+`o0.xy = CurrentUV - PreviousUV`
+`o0.z = 0`
+`o0.w = 1`.
+
+So unlike PTDE `Vel`, which simply passes through an upstream velocity payload, DSR moves the clip-position-to-motion-vector conversion into the pixel shader.
+
+DSR `VelAlp`, index 1635, SHA-256 `bcbb999aa5a9e9c5cf8da4560d53dd195ea44f04e1c5bbcb11a1731e9d4f592a`, performs the same velocity math after its AlphaTestBuffer gate and exports the surviving alpha in `o0.w`.
+
+### Velocity bridge consequence
+
+PTDE and DSR do not expose the same semantic input at the pixel-shader cut:
+- PTDE PS consumes an already-produced velocity vector;
+- DSR PS consumes current/previous clip-position varyings and derives velocity.
+
+Therefore the correct comparison/bridge must move one stage upstream and reconstruct the PTDE velocity producer before choosing PS vs VS/transport as carrier. A pixel-shader-only PTDE port would otherwise reproduce the visible formula without proving equivalent source semantics.
