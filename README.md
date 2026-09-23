@@ -4,6 +4,18 @@ Source and build files for the Material Response component of **Dark Souls Remas
 
 The addon is loaded through ReShade and changes selected renderer/material paths inside Dark Souls Remastered. DSR remains the host renderer; unsupported or unknown routes fall back to the stock game path.
 
+## Development
+
+The repository now has an explicit split between release reproduction and source-first renderer development:
+
+- `main` — shipped release and exact release-reproduction material
+- `develop` — canonical Runtime Core V2 / source-first integration line
+- short-lived experimental branches — isolated operator hypotheses only
+
+The historical 1.45 release builder remains intentionally frozen around its SHA-pinned development basis. New renderer work should converge on a complete source build rather than adding further opaque binary patch stages.
+
+See [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) and [CONTRIBUTING.md](CONTRIBUTING.md).
+
 ## Current release
 
 **Material Response 1.45**
@@ -34,6 +46,26 @@ The EnvSpec cubemap data is stored outside the addon at:
 `DSRRL\EnvSpec\PackedGI\PTDE_GI_ENVSPEC_PACK_RGBA.bin`
 
 The addon checks the file size and SHA-256 before enabling that resource path.
+
+## Runtime Core V2 development
+
+The `dev/runtime-core-v2` branch adds a clean-room runtime state/proof layer intended to consolidate routing used by SpecRGB, Diffuse, Normal, EnvSpec and Subsurf.
+
+It adds:
+
+- per-command-list state instead of process-global draw state
+- generation-safe resource/view and pipeline lifetime tracking
+- early semantic resource-descriptor fingerprints at resource creation
+- generation-safe logical-resource lookup with fail-open on missing or ambiguous identity
+- explicit route contracts for shader / receiver / material / resource / logical-ID / format / state proof
+- source-level staged routing telemetry from capture through final bind/restore
+- fail-open when a required identity is missing
+- per-operator `matched / activated / restored / fail-open` counters
+- frame-boundary detection of incomplete draw-state restore
+
+The core is intentionally pixel-inert until individual existing bridges are migrated onto it.
+
+See [Runtime Core V2](docs/RUNTIME_CORE_V2.md) and the [reference architecture audit](docs/DXGI7_ARCHITECTURE_AUDIT.md).
 
 ## Building
 

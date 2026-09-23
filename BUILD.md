@@ -1,4 +1,34 @@
-# Building Material Response 1.45
+# Building and development
+
+This branch contains two distinct build paths.
+
+## Source-first development build
+
+Runtime Core V2 and the current source experiments build with CMake.
+
+Pure core:
+
+```text
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build --config Release
+ctest --test-dir build -C Release --output-on-failure
+```
+
+With ReShade API 20 headers and optional targets:
+
+```text
+cmake -S . -B build -DRESHADE_INCLUDE_DIR="PATH/TO/reshade/include" -DDSRRL_BUILD_DIAGNOSTICS=ON -DDSRRL_BUILD_EXPERIMENTS=ON
+cmake --build build --config Release
+ctest --test-dir build -C Release --output-on-failure
+```
+
+Legacy/superseded experiments are excluded unless `-DDSRRL_BUILD_LEGACY_EXPERIMENTS=ON` is explicitly requested.
+
+The goal of this path is a complete source-built addon.
+
+## Historical Material Response 1.45 release reproduction
+
+The section below documents the exact frozen 1.45 reproduction path. It intentionally starts from the SHA-pinned development basis and should not be extended with new renderer experiments.
 
 ## Requirements
 
