@@ -144,6 +144,7 @@ telemetry_re=[
     re.compile(br'^DSRRL Material Response 1\.3(?: active|$)'),
 ]
 telemetry_fragments=(b'C100_REG=',b'TIER0=',b'TIER1=',b'TIER2=',b'C101_EXACT_REG=',b'C101_SIBLING_REG=',b'UNMAPPED=',b'SELECTOR=',b'DONOR_SELECTOR=',b'TARGET_BINDS=',b'PTDE_DIFFUSE_DRAWS=',b'PTDE_C101_DRAWS=',b'C100_ONLY_DRAWS=',b'LERP_BYPASS=',b'B12_CREATE=',b'B12_HIT=',b'FAILOPEN=')
+# protect release metadata offsets from scrub
 protected={(0xdc58,0xdc58+0x48),(0xdca0,0xdca0+0x153),(0x10387a,0x10387a+0x2a)}
 def is_protected(i,j): return any(i<e and j>s for s,e in protected)
 scrubbed=[]
@@ -161,11 +162,13 @@ srgbmt=next(s for s in secs if s['name']=='.srgbmt')
 assert srgbmt['rp']==0x12d400 and srgbmt['va']==0x134000
 new_raw=PACK_FILE_OFF-srgbmt['rp']
 assert new_raw==0x8b000
-struct.pack_into('<I',base,srgbmt['hdr']+16,new_raw)
+struct.pack_into('<I',base,srgbmt['hdr']+16,new_raw) # SizeOfRawData
+# Keep VirtualSize unchanged (0x209b000), so PACK_RVA memory remains mapped/zero-filled.
 base=base[:PACK_FILE_OFF]
 version_resource=add_version_resource(base)
 OUT.write_bytes(base)
 
+# Prepare release sidecar tree and updated manifest.
 if STAGE.exists(): shutil.rmtree(STAGE)
 (STAGE/'DSRRL/EnvSpec/PackedGI').mkdir(parents=True)
 shutil.copy2(OUT, STAGE/OUT.name)
@@ -193,18 +196,10 @@ manifest={
 }
 (STAGE/'DSRRL/EnvSpec/PackedGI/manifest.json').write_text(json.dumps(manifest,indent=2)+'\n')
 (STAGE/'DSRRL/EnvSpec/PackedGI/README.txt').write_text('DSRRL Material Response 1.45 — external PTDE EnvSpec PackedGI sidecar. Keep this directory structure unchanged. If the exact pack is absent or fails size/SHA-256 validation, the EnvSpec replacement fails open to stock DSR.\n')
-(STAGE/'README_INSTALL.txt').write_text('''DSRRL Material Response 1.45
-
-Install into the DARK SOULS REMASTERED game directory:
-- DSRRL_Material_Response_1.45.addon64 -> game root (next to DarkSoulsRemastered.exe / dxgi.dll)
-- DSRRL\\EnvSpec\\PackedGI\\... -> keep exactly as packaged
-
-This client build removes diagnostic telemetry and no longer embeds the 33.6 MB PTDE EnvSpec cubemap pack inside the addon. Existing DSRRL equipment Specular/Normal/Diffuse sidecars from the main mod remain separate and are not duplicated in this package.
-
-EnvSpec scope in 1.45: exact PTDE cubemap resources + exact material slot routing are active; the receiver equation is still stock DSR, so PTDE pixel-equivalence is not claimed.
-''')
+(STAGE/'README_INSTALL.txt').write_text('''DSRRL Material Response 1.45\n\nInstall into the DARK SOULS REMASTERED game directory:\n- DSRRL_Material_Response_1.45.addon64 -> game root (next to DarkSoulsRemastered.exe / dxgi.dll)\n- DSRRL\\EnvSpec\\PackedGI\\... -> keep exactly as packaged\n\nThis client build removes diagnostic telemetry and no longer embeds the 33.6 MB PTDE EnvSpec cubemap pack inside the addon. Existing DSRRL equipment Specular/Normal/Diffuse sidecars from the main mod remain separate and are not duplicated in this package.\n\nEnvSpec scope in 1.45: exact PTDE cubemap resources + exact material slot routing are active; the receiver equation is still stock DSR, so PTDE pixel-equivalence is not claimed.\n''')
 
 out=OUT.read_bytes()
+# Static release assertions.
 _,osecs=parse_sections(out); osrgb=next(s for s in osecs if s['name']=='.srgbmt')
 allstr=[s for _,s in ascii_strings(out)]
 forbidden=[s.decode(errors='replace') for s in allstr if (b'[DSRRL][ASSET' in s or b'[DSRRL][ENVSPEC' in s or b'CAPTURE_' in s or b'T12_T14_BIND PASS' in s or b'FAILOPEN=' in s or b'V15.7' in s)]
@@ -217,6 +212,7 @@ assert b'DSRRL Material Response 1.45\0' in out
 assert b'DSRRL_Material_Response_1.45.addon64\0' in out
 assert b'DSRRL Material Response 1.3 active' not in out
 
+# deterministic client ZIP
 files=[]
 for p in sorted(STAGE.rglob('*')):
     if p.is_file(): files.append(p)
@@ -226,6 +222,7 @@ with zipfile.ZipFile(PKG,'w',compression=zipfile.ZIP_DEFLATED,compresslevel=9) a
         zi=zipfile.ZipInfo(rel,date_time=(2026,9,20,0,0,0));zi.compress_type=zipfile.ZIP_DEFLATED;zi.external_attr=0o644<<16
         z.writestr(zi,p.read_bytes())
 
+# Release audit
 final_strings=[s.decode(errors='replace') for _,s in ascii_strings(out)]
 audit={
  'schema':'dsrrl.material_response.client_release_audit.v1',
