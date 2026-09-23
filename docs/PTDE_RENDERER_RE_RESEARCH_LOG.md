@@ -494,3 +494,129 @@ PTDE and DSR do not expose the same semantic input at the pixel-shader cut:
 - DSR PS consumes current/previous clip-position varyings and derives velocity.
 
 Therefore the correct comparison/bridge must move one stage upstream and reconstruct the PTDE velocity producer before choosing PS vs VS/transport as carrier. A pixel-shader-only PTDE port would otherwise reproduce the visible formula without proving equivalent source semantics.
+
+
+---
+
+## 2026-09-23 — PTDE PHN `Non` family census (48 shaders)
+
+Status: **CONFIRMED PTDE family structure and core math / DSR delta partially closed / pending Supabase backfill**
+
+Corpus: all 48 PTDE `FRPG_Phn_*_Non.fpo` shaders. The family is the full product of:
+- Spc off/on,
+- Bmp off/on,
+- Mul off/on,
+- Lit off/on,
+- shadow route: none / Sdw / Csd.
+
+There are 48 filenames but only **24 unique PTDE payloads**.
+
+### Bmp is an exact PTDE pixel-shader no-op in `Non`
+
+Every Bmp variant has a byte-identical non-Bmp counterpart:
+**24/24 exact binary pairs**.
+
+Examples include all combinations of Spc/Mul/Lit and all none/Sdw/Csd routes.
+
+Therefore the PTDE `Non` pixel shader does not consume bump/normal-map math at all. A future normal bridge must not expand into this family merely because the filename contains `Bmp`.
+
+DSR still has 48 distinct payload bytes for the same 48 names. Representative DSR Bmp/non-Bmp diffs show shifted input-register ABI while retaining the same pixel math in the inspected pairs; a complete DSR semantic-equivalence census is still OPEN, so only the PTDE 24/24 binary identity is canonical here.
+
+### Base `Non` material cut
+
+The family has no PTDE Upper/Lower, EnvDiffuse probe, EnvSpec probe or local PointLight term in the recovered pixel-shader core.
+
+For ordinary non-Mul diffuse:
+`D = (tex2D(s0,uv).rgb + c156.rgb) * c100.rgb * VertexColor.rgb`.
+
+Alpha follows the ordinary diffuse/material route; exact route differs for Mul and is kept separate below.
+
+For `Spc`:
+`S = tex2D(s1,uv).rgb * c101.rgb * VertexColor.rgb`.
+
+PTDE `Non` combines this directly:
+`MaterialRGB = D + S`.
+
+There is no directional/specular BRDF evaluation around this `S` term in the `Non` pixel shader. In this family the SpecRGB/Spc texture behaves as a direct additive material-color contribution before common fog/light-scattering.
+
+This makes `Non` a separate material-response class from HemEnv/HemDir3/FaceEye.
+
+### Mul route is texture blending, not a scalar multiply
+
+For `Mul`, PTDE samples a second diffuse resource at `s3` and uses vertex-color alpha as the blend coordinate:
+
+`D0 = tex2D(s0,uv0).rgb`
+`D1 = tex2D(s3,uv1).rgb + c156.rgb`
+`Dmix = lerp(D0,D1,VertexColor.a)`
+`D = Dmix * c100.rgb * VertexColor.rgb`.
+
+When `Spc+Mul` is present:
+`S0 = tex2D(s1,uv0).rgb`
+`S1 = tex2D(s4,uv1).rgb`
+`Smix = lerp(S0,S1,VertexColor.a)`
+`S = Smix * c101.rgb * VertexColor.rgb`.
+
+So the `Mul` name must not be interpreted as a generic post-lighting multiplier. It selects a two-resource vertex-alpha blend subgraph.
+
+### Lit route
+
+`Lit` samples `s6`.
+
+Without a shadow route:
+`Gate = tex2D(s6,lightUV).rgb`.
+
+The material cut becomes:
+`SurfaceRGB = (D + S) * Gate`
+with absent `S` treated as zero.
+
+### Sdw/Csd route
+
+The `Non` family reuses the same PTDE packed-depth 16-tap 4x4 shadow kernel recovered for FaceEye:
+- packed RGB depth decode;
+- 16 manual comparisons;
+- bias from `c175/c121`;
+- distance fade from `c121`;
+- colored `ShadowRGB = 1 - ShadowAmount*ShadowFade*c122.rgb`.
+
+For shadowed `Non` without `Lit`:
+`Gate = ShadowRGB`.
+
+For `Lit + Sdw/Csd`, the composition is not multiplicative:
+`Gate = min(LightMap.rgb, ShadowRGB)`
+component-wise.
+
+Then:
+`SurfaceRGB = (D + S) * Gate`.
+
+This `min` composition is an operator-level behavior and must be preserved if `Non` is ported. Replacing it by `LightMap*Shadow` changes the PTDE response.
+
+### Common downstream
+
+After the `Non` material cut, the family enters the same legacy fog/light-scattering style tail and terminal PTDE scene encoding already identified elsewhere. The bridge-relevant narrow cut is the material/gate output before that shared downstream.
+
+### Initial DSR delta from exact counterparts
+
+All 48 DSR `*_Non` counterparts exist in the audited binder (indices 737..1633).
+
+Representative DSR disassembly shows:
+- explicit AlphaTestBuffer gate;
+- gamma/domain transforms around diffuse/spec/lightmap/shadow terms;
+- DSR Sdw/Csd uses the 9-tap 3x3 hardware `sample_c` shadow operator documented above;
+- shadow RGB is additionally transformed by `gFC_DebugPointLightParams.z`;
+- Spc is no longer simply added in the PTDE legacy domain: DSR wraps material terms through explicit `pow(2.2)` / `pow(1/2.2)`-equivalent LOG/MUL/EXP sequences;
+- Lit similarly raises the lightmap by the DSR exponent path before composition.
+
+This establishes a real PTDE↔DSR material/domain mismatch in `Non`; it is not reducible to restoring one texture or one global gain.
+
+### Bridge consequence
+
+A future `Non` bridge should be treated as its own receiver family with exact shader identity:
+1. preserve PTDE direct additive Spc behavior;
+2. preserve `Mul` as the two-resource vertex-alpha blend graph;
+3. preserve Lit gate semantics;
+4. preserve `min(LightMap,ShadowRGB)` for Lit+shadow;
+5. keep Bmp inactive in the PTDE pixel-material operator;
+6. keep common fog/light-scattering downstream independent;
+7. fail-open for non-`Non` receivers.
+
+The likely narrowest carrier is a shader/material-response island, with shadow resource-state work only for Sdw/Csd variants. Global LightBank/PARAM compensation would target the wrong operator.
