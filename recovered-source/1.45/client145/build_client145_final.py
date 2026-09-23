@@ -15,21 +15,7 @@ i=b.find(needle)
 if i < 0: raise RuntimeError('expected final leftover diagnostic string not found')
 b[i:i+len(needle)]=b'\0'*len(needle)
 OUT.write_bytes(b)
-README.write_text('''DSRRL Material Response 1.45
-
-Install:
-1. Put DSRRL_Material_Response_1.45.addon64 in the DARK SOULS REMASTERED game root.
-2. Keep the existing external EnvSpec pack at:
-   DSRRL\\EnvSpec\\PackedGI\\PTDE_GI_ENVSPEC_PACK_RGBA.bin
-
-Required EnvSpec pack:
-- size: 33,619,968 bytes
-- SHA-256: c16c3fd75bcf34f3cc075da6da1ad10c9440ee4a3ca580fe7f74d07a2ce4eac3
-
-The addon validates exact size and SHA-256 at startup. If the pack is absent or invalid, EnvSpec replacement fails open to stock DSR.
-
-1.45 contains no embedded PTDE cubemap payload and no client telemetry/diagnostic logging. It preserves Material Response, PTDE SpecRGB, Subsurf, equipment Normal/Diffuse and the exact-slot PTDE EnvSpec resource bridge from the runtime-proven V15.7 lineage. The EnvSpec receiver equation remains stock DSR in this release stage, so PTDE pixel equivalence is not claimed.
-''')
+README.write_text('''DSRRL Material Response 1.45\n\nInstall:\n1. Put DSRRL_Material_Response_1.45.addon64 in the DARK SOULS REMASTERED game root.\n2. Keep the existing external EnvSpec pack at:\n   DSRRL\\EnvSpec\\PackedGI\\PTDE_GI_ENVSPEC_PACK_RGBA.bin\n\nRequired EnvSpec pack:\n- size: 33,619,968 bytes\n- SHA-256: c16c3fd75bcf34f3cc075da6da1ad10c9440ee4a3ca580fe7f74d07a2ce4eac3\n\nThe addon validates exact size and SHA-256 at startup. If the pack is absent or invalid, EnvSpec replacement fails open to stock DSR.\n\n1.45 contains no embedded PTDE cubemap payload and no client telemetry/diagnostic logging. It preserves Material Response, PTDE SpecRGB, Subsurf, equipment Normal/Diffuse and the exact-slot PTDE EnvSpec resource bridge from the runtime-proven V15.7 lineage. The EnvSpec receiver equation remains stock DSR in this release stage, so PTDE pixel equivalence is not claimed.\n''')
 with zipfile.ZipFile(PKG,'w',compression=zipfile.ZIP_DEFLATED,compresslevel=9) as z:
     for p,arc in [(OUT,OUT.name),(README,'README.txt')]:
         zi=zipfile.ZipInfo(arc,date_time=(2026,9,20,0,0,0)); zi.compress_type=zipfile.ZIP_DEFLATED; zi.external_attr=0o644<<16
