@@ -997,7 +997,8 @@ static const struct pair_hash k_diffuse_pairs[] = {
     { 0xa13eb0c737c99a47ULL, 0xcc1abbc736b07b85ULL }, /* HD_M_9370_s + HD_M_9370 (4) */
     { 0xa173d6c0bf8dac82ULL, 0xa0b6f0c71e172f38ULL }, /* HD_M_9430_s + HD_M_9430 (4) */
     { 0xa1ff577f04bbd9d1ULL, 0x68f12290e72887d7ULL }, /* LG_F_9540_LG_M_9540_s + LG_F_9540_LG_M_9540 (4) */
-    { 0xa2b1f01e51e81531ULL, 0x6bc75e00d244d077ULL }, /* LG_F_9440_LG_M_9440_s + LG_F_9440_LG_M_9440 (6) */    { 0xa3de2737bd5707ddULL, 0x5e4fae58eb8db06bULL }, /* BD_M_body_M_L_s + BD_M_body_M_L (1) */
+    { 0xa2b1f01e51e81531ULL, 0x6bc75e00d244d077ULL }, /* LG_F_9440_LG_M_9440_s + LG_F_9440_LG_M_9440 (6) */
+    { 0xa3de2737bd5707ddULL, 0x5e4fae58eb8db06bULL }, /* BD_M_body_M_L_s + BD_M_body_M_L (1) */
     { 0xa512678e62825b6fULL, 0x3b1bc3ea5d8a031dULL }, /* BD_F_9341_2_s + BD_F_9341_2 (6) */
     { 0xa53dd88b5de3439dULL, 0x1e1c0ee70776882bULL }, /* HD_F_9260_HD_M_9260_s + HD_F_9260_HD_M_9260 (8) */
     { 0xa5c1295e35050ae4ULL, 0x9845d1d29feabadaULL }, /* BD_F_9371_2_s + BD_F_9371_2 (8) */
@@ -1996,7 +1997,8 @@ static const u64 k_normal_names[] = {
     0x1917a872615dfc94ULL, /* bd_m_9450_2_n */
     0x1a4872131d3c6094ULL, /* lg_f_9341_n */
     0x1a97e51cc4eb792aULL, /* hd_m_9480_hd_f_9480_n */
-    0x1ae26f2d8a600640ULL, /* bd_m_9371_2_n */    0x1b1c152c9fd1a815ULL, /* hd_f_9530_n */
+    0x1ae26f2d8a600640ULL, /* bd_m_9371_2_n */
+    0x1b1c152c9fd1a815ULL, /* hd_f_9530_n */
     0x1b8e3d14a8c3f256ULL, /* hd_f_9340_hd_m_9340_n */
     0x1bfeea5b681a01d5ULL, /* hd_a_4150_n */
     0x1d0da727245f9f8dULL, /* am_m_9450_n */
@@ -2995,7 +2997,8 @@ static const u64 k_diffuse_names[] = {
     0xe65ad75b3b8dc757ULL, /* bd_f_9740_bd_m_9740_1 */
     0xe65ad85b3b8dc90aULL, /* bd_f_9740_bd_m_9740_2 */
     0xe66554841c252387ULL, /* bd_m_9720_2 */
-    0xe66555841c25253aULL, /* bd_m_9720_1 */    0xe78f050e212497f0ULL, /* hd_f_9529_hd_f_9521 */
+    0xe66555841c25253aULL, /* bd_m_9720_1 */
+    0xe78f050e212497f0ULL, /* hd_f_9529_hd_f_9521 */
     0xe92ecaafe44b865fULL, /* hd_m_9349_hd_m_9340 */
     0xeb92e77308960c4bULL, /* lg_f_9270_lg_m_9270 */
     0xee9996d91900afc8ULL, /* bd_f_9360_2 */
