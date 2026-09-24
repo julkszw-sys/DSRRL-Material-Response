@@ -71,6 +71,7 @@ if(WIN32 AND RESHade_INCLUDE_DIR)
     src/engine_hooks.cpp
     src/mr_island.cpp
     src/asset_bridges.cpp
+    src/upper_lower_runtime.cpp
     "${CMAKE_CURRENT_SOURCE_DIR}/../renderer-core/src/runtime/a1_create_pipeline_bridge.cpp"
     src/selector_hook.asm
     src/texture_name_hook.asm
