@@ -700,6 +700,82 @@ int main()
     CHECK(operators::resource_bridges::spec_rgb.id() == core::operator_id::spec_rgb);
     CHECK(operators::resource_bridges::diffuse.id() == core::operator_id::diffuse);
     CHECK(operators::resource_bridges::normal.id() == core::operator_id::normal);
+    // Ps_Body Subsurf final target: exact Subsurf receiver identity routes
+    // variant-preservingly to the ABI-compatible ordinary DifSpcBmp receiver,
+    // but only after the complete PTDE ordinary surface route and bypass
+    // carrier are ready.
+    CHECK(gates.set(core::operator_id::subsurface, true));
+    activation = operators::resource_bridges::subsurface.evaluate(gates, verified);
+    CHECK(activation.state == core::island_state::active);
+
+    operators::resource_bridges::subsurface_route_context subsurf_ctx;
+    subsurf_ctx.actual_material_verified = true;
+    subsurf_ctx.actual_material_name =
+        operators::resource_bridges::k_dsr_body_subsurf_material;
+    subsurf_ctx.actual_material_sha256 =
+        operators::resource_bridges::k_dsr_body_subsurf_material_sha256;
+    subsurf_ctx.actual_receiver_verified = true;
+    subsurf_ctx.actual_receiver_name =
+        "FRPG_Phn_DifSpcBmp______Csd_HemEnvSubsurf.fpo";
+    subsurf_ctx.actual_receiver_sha256 =
+        "0b8288d686c8f349ad87352946be51ffd007462f25357326bf47e736e690e511";
+    subsurf_ctx.actual_body_texture_verified = true;
+    subsurf_ctx.body_spec_texture =
+        operators::resource_bridges::subsurface_body_texture::bd_f_body_s;
+    subsurf_ctx.stable_hemenv_no_pointlight_draw_verified = true;
+    subsurf_ctx.ptde_slot_mapping_verified = true;
+    subsurf_ctx.ptde_donor_verified = true;
+    subsurf_ctx.ptde_material_name =
+        operators::resource_bridges::k_ptde_body_plain_material;
+    subsurf_ctx.ptde_material_sha256 =
+        operators::resource_bridges::k_ptde_body_plain_material_sha256;
+    subsurf_ctx.ptde_plain_surface_target_verified = true;
+    subsurf_ctx.target_plain_receiver_ready = true;
+    subsurf_ctx.spec_rgb_route_ready = true;
+    subsurf_ctx.diffuse_route_ready = true;
+    subsurf_ctx.normal_route_ready = true;
+    subsurf_ctx.material_response_route_ready = true;
+    subsurf_ctx.dsr_subsurf_bypass_carrier_ready = true;
+
+    auto subsurf_route =
+        operators::resource_bridges::evaluate_subsurface_route(subsurf_ctx);
+    CHECK(subsurf_route.action ==
+          operators::resource_bridges::subsurface_route_action::
+              route_to_ptde_plain_difspcbmp_surface);
+    CHECK(subsurf_route.reason ==
+          operators::resource_bridges::subsurface_route_reason::active);
+    CHECK(subsurf_route.target_plain_receiver_id == 33u);
+    CHECK(subsurf_route.target_plain_receiver_name ==
+          "FRPG_Phn_DifSpcBmp______Csd_HemEnv.fpo");
+    CHECK(subsurf_route.target_plain_receiver_sha256 ==
+          "35880c0b2f2330208dfc21af6dd3d944218fcc4540cd8e59404a0aefc13c0b24");
+    CHECK(subsurf_route.carrier ==
+          operators::resource_bridges::subsurface_bypass_carrier::
+              create_time_pixel_shader_substitution);
+    CHECK(subsurf_route.bypass_dsr_subsurf);
+    CHECK(!subsurf_route.preserve_dsr_sss);
+
+    auto subsurf_no_carrier = subsurf_ctx;
+    subsurf_no_carrier.dsr_subsurf_bypass_carrier_ready = false;
+    subsurf_route =
+        operators::resource_bridges::evaluate_subsurface_route(subsurf_no_carrier);
+    CHECK(subsurf_route.action ==
+          operators::resource_bridges::subsurface_route_action::preserve_host);
+    CHECK(subsurf_route.reason ==
+          operators::resource_bridges::subsurface_route_reason::
+              dsr_subsurf_bypass_carrier_not_ready);
+
+    auto subsurf_wrong_hash = subsurf_ctx;
+    subsurf_wrong_hash.actual_receiver_sha256 =
+        "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff";
+    subsurf_route =
+        operators::resource_bridges::evaluate_subsurface_route(subsurf_wrong_hash);
+    CHECK(subsurf_route.action ==
+          operators::resource_bridges::subsurface_route_action::preserve_host);
+    CHECK(subsurf_route.reason ==
+          operators::resource_bridges::subsurface_route_reason::
+              unsupported_receiver_identity);
+
     CHECK(operators::resource_bridges::subsurface.id() == core::operator_id::subsurface);
     CHECK(operators::lightbank::upper_lower.id() == core::operator_id::upper_lower);
     CHECK(operators::lightbank::hemdir3.id() == core::operator_id::hemdir3);
