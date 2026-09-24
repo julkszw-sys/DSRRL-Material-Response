@@ -32,6 +32,7 @@ jobs:
           c++ -std=c++17 -Wall -Wextra -Wpedantic -Werror \
             -Irenderer-core/include \
             renderer-core/tests/a1_create_time_materializer_tests.cpp \
+            renderer-core/src/feature_registry.cpp \
             -o /tmp/a1_create_time_materializer_tests
 
       - name: Run create-time materializer tests
