@@ -15,6 +15,7 @@
 #include <array>
 #include <cstring>
 #include <iostream>
+#include <limits>
 #include <optional>
 
 using namespace dsrrl;
@@ -235,6 +236,35 @@ int main()
         shader_bytes.data(), shader_bytes.size(), out_of_bounds);
     CHECK(sat_result == operators::surface::terminal_sat_patch_result::fail_open_out_of_bounds);
     CHECK(shader_bytes == before_mismatch);
+
+    // Exact PntS attenuation cut: DSR cubes the normalized distance term,
+    // while PTDE consumes the same x linearly before saturation.
+    CHECK(gates.set(core::operator_id::pointlight_pnts_attenuation, true));
+    activation = operators::point_light::pnts_attenuation.evaluate(gates, verified);
+    CHECK(activation.state == core::island_state::active);
+
+    auto pnts = operators::point_light::evaluate_pnts_attenuation(5.0f, 0.0f, 10.0f);
+    CHECK(pnts.result == operators::point_light::pnts_attenuation_result::exact);
+    CHECK(pnts.normalized_x == 0.5f);
+    CHECK(pnts.stock_dsr == 0.125f);
+    CHECK(pnts.ptde == 0.5f);
+
+    pnts = operators::point_light::evaluate_pnts_attenuation(-10.0f, 0.0f, 10.0f);
+    CHECK(pnts.result == operators::point_light::pnts_attenuation_result::exact);
+    CHECK(pnts.stock_dsr == 1.0f);
+    CHECK(pnts.ptde == 1.0f);
+
+    pnts = operators::point_light::evaluate_pnts_attenuation(15.0f, 0.0f, 10.0f);
+    CHECK(pnts.result == operators::point_light::pnts_attenuation_result::exact);
+    CHECK(pnts.stock_dsr == 0.0f);
+    CHECK(pnts.ptde == 0.0f);
+
+    pnts = operators::point_light::evaluate_pnts_attenuation(5.0f, 10.0f, 10.0f);
+    CHECK(pnts.result == operators::point_light::pnts_attenuation_result::fail_open_invalid_range);
+
+    pnts = operators::point_light::evaluate_pnts_attenuation(
+        std::numeric_limits<float>::quiet_NaN(), 0.0f, 10.0f);
+    CHECK(pnts.result == operators::point_light::pnts_attenuation_result::fail_open_nonfinite_input);
 
     CHECK(gates.set(core::operator_id::post_hdr, true));
     activation = operators::postprocess::hdr.evaluate(gates, verified);

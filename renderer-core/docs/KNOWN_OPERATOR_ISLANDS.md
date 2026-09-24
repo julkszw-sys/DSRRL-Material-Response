@@ -75,6 +75,33 @@ identity recipes still have to be imported or reconstructed under the source-com
 provenance rules before runtime activation. It does not claim whole-shader or
 final-pixel equivalence.
 
+## Source-complete semantic primitive: PntS attenuation
+
+`surface.pointlight_pnts_attenuation` now has a handwritten operator-local forward
+primitive matching the confirmed cross-render RE cut for the 72 substantive DSR PBL
+HemEnv/HemEnvLerp PntS bodies:
+
+```text
+x = (End - distance) / (End - Begin)
+DSR stock: A_D = sat(x^3)
+PTDE target: A_P = sat(x)
+```
+
+The primitive computes both the retained host result and the PTDE target from the same
+semantic inputs, and fails open on non-finite inputs or an invalid `End <= Begin`
+range. It owns attenuation only. PointLight source RGB/intensity, authored Begin/End,
+material response, local diffuse/specular equations and downstream composition are
+not modified or compensated here.
+
+PntSS/PntSSSS fixed families are deliberately outside this patch: RE shows their
+local attenuation is already linear-x and therefore does not require this operator
+translation. The remaining construction step before create-time runtime
+materialization is importing/reconstructing the exact per-DXBC instruction recipes
+for the certified PntS receiver set from the canonical P2.2 plan source.
+
+This is a CONSTRUCTION-level operator implementation, not a claim of full PointLight
+or final-pixel equivalence.
+
 ## Legacy A1/P2.2 decomposition
 
 The old combined mask is decomposed by ownership:

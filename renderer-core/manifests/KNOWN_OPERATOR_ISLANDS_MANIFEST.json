@@ -26,6 +26,24 @@
       "identity_recipe_import": "PENDING",
       "runtime_activation": "NOT_TESTED",
       "pixel": "OPEN"
+    },
+    "pointlight_pnts_attenuation": {
+      "local_operator_forward": "SOURCE_COMPLETE",
+      "canonical_operator": "renderer.cross.pointlight.pnts_linear72_shader_translation_v1",
+      "scope": "72 substantive DSR PBL HemEnv/HemEnvLerp PntS bodies",
+      "equation": "x=(End-distance)/(End-Begin); DSR=sat(x^3); PTDE=sat(x)",
+      "owns": "attenuation only",
+      "preserves": [
+        "PointLight source RGB/intensity",
+        "Begin/End authored values",
+        "material response",
+        "local diffuse/specular",
+        "downstream"
+      ],
+      "pntss_pntssss": "NO_PATCH_ALREADY_LINEAR",
+      "identity_recipe_import": "PENDING",
+      "runtime_activation": "NOT_TESTED",
+      "pixel": "OPEN"
     }
   },
   "legacy_a1": {
