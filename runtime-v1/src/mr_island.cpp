@@ -323,8 +323,11 @@ bool on_draw_indexed(command_list *cmd,std::uint32_t index_count,std::uint32_t i
     if(!ctx){++g_fail_open;return false;}
 
     core::render_patch_plan plan{};
-    plan.patch_count=1;
-    plan.patches[0]={core::operator_id::material_response,0u,true,false};
+    plan.patches[plan.patch_count++]={core::operator_id::material_response,0u,true,false};
+    if(g_core->features().enabled(core::operator_id::diffuse))
+        plan.patches[plan.patch_count++]={core::operator_id::diffuse,0u,false,true};
+    if(g_core->features().enabled(core::operator_id::normal))
+        plan.patches[plan.patch_count++]={core::operator_id::normal,0u,false,true};
     plan.carrier_write_mask=0;
     const auto type=ctx->GetType()==D3D11_DEVICE_CONTEXT_DEFERRED ?
         core::context_kind::deferred : core::context_kind::immediate;
