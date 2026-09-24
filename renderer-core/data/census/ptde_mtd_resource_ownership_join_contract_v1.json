@@ -1,0 +1,36 @@
+{
+  "schema": 1,
+  "artifact": "PTDE/DSR exact MTD to resource ownership join contract",
+  "parent_census": "renderer-core/data/census/ptde_mtd_semantic_census_v1.json",
+  "basis_git_head": "4749ec64be7db47dd36a12ea6b87d32d6700c408",
+  "claim_scope": "CONSTRUCTION_AND_STATIC_ROUTING_ONLY",
+  "runtime_activation": "OPEN",
+  "pixel_equivalence": "OPEN",
+  "inputs": [
+    {"path":"renderer-core/data/provenance/diffuse_routes_v12.tsv","rows":528,"identity":"spec_hash + diffuse_hash + logical_names"},
+    {"path":"renderer-core/data/provenance/normal_routes_v12.tsv","rows":557,"identity":"diffuse_hash + spec_hash + normal_hash + logical_names"},
+    {"artifact_id":943,"role":"equipment material-slot MTD receiver census"},
+    {"artifact_id":571,"role":"PTDE/DSR MTD homology registry"}
+  ],
+  "required_join_key": [
+    "exact FLVER/model identity",
+    "exact material-slot index or equivalent stable slot identity",
+    "exact semantic MTD identity",
+    "raw MTD SHA256",
+    "exact routed logical texture/resource hash"
+  ],
+  "promotion_rule": "Diffuse or Normal/Bump may be promoted to USE on an exact MTD record only when a source row proves material-slot ownership of the exact routed resource. Resource-route presence without MTD ownership remains RESOURCE_USE_ONLY and must not classify the whole MTD.",
+  "absence_rule": "Absence from diffuse_routes_v12.tsv or normal_routes_v12.tsv never implies NO_USE. NO_USE requires independent exact positive evidence that the corresponding PTDE material/consumer does not use the operator/resource.",
+  "current_state": {
+    "diffuse_resource_routes": {"state":"USE","rows":528,"mtd_owned_rows":"PENDING_JOIN"},
+    "normal_bump_resource_routes": {"state":"USE","rows":557,"mtd_owned_rows":"PENDING_JOIN"}
+  },
+  "blocked_by": "The checked-in v12 route corpora carry logical resource identities and row-use counts but not FLVER/material-slot/MTD ownership columns. The ownership relation must be recovered from artifact 943 or its reproducible source before exact MTD promotion.",
+  "fail_open": "Keep unified MTD diffuse/normal_bump columns UNKNOWN until ownership is proven.",
+  "forbidden": [
+    "joining by texture/logical name similarity alone",
+    "joining by MTD family name alone",
+    "promoting NO_USE from corpus absence",
+    "claiming runtime activation or pixel equivalence from this join"
+  ]
+}
