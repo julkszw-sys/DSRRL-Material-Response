@@ -29,7 +29,7 @@ jobs:
           python3 renderer-core/tools/verify_operator_catalog.py \
             --input renderer-core/data/operator_catalog_v1.json \
             --stamp /tmp/operator_catalog_stamp.json
-          test "$(python3 -c 'import json; print(json.load(open("/tmp/operator_catalog_stamp.json"))["operator_count"])')" = "24"
+          test "$(python3 -c 'import json; print(json.load(open("/tmp/operator_catalog_stamp.json"))["operator_count"])')" = "25"
       - name: Verify recovered exact A1 patch recipes
         run: |
           python3 renderer-core/tools/verify_a1_exact_recipes.py \
