@@ -45,12 +45,20 @@ bool draw_transaction_manager::begin(
     if (seen_mask != plan.carrier_write_mask)
         return false;
 
-    std::lock_guard lock(mutex_);
-    if (active_.find(command) != active_.end())
-        return false;
+    try {
+        std::lock_guard lock(mutex_);
+        if (active_.find(command) != active_.end())
+            return false;
 
-    active_.emplace(command, transaction_state{command, draw_serial, context, plan});
-    return true;
+        active_.emplace(
+            command,
+            transaction_state{command, draw_serial, context, plan});
+        return true;
+    } catch (...) {
+        // A transaction that cannot be recorded must never mutate native
+        // draw state. The caller will execute the untouched stock draw.
+        return false;
+    }
 }
 
 bool draw_transaction_manager::restore(std::uint64_t command)
