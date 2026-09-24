@@ -43,6 +43,34 @@ inline constexpr override_seed k_overrides[] = {
     }
 };
 
+struct exact_binding_seed {
+    const char *name;
+    const char *sha256;
+    const char *material_family;
+    std::uint32_t receiver0;
+    std::uint32_t receiver1;
+    std::uint32_t receiver2;
+    mtd_gate_policy gate_policy;
+};
+
+inline constexpr exact_binding_seed k_exact_bindings[] = {
+    {"P_Metal[DSB]_Spec.mtd","c8504bfa64c84d5035bc56ab63e43d319ef69af08c5044e0260b639ab1b78ffc","DifSpcBmp",33u,34u,35u,mtd_gate_policy::direct_exact},
+    {"P_DullLeather[DSB]_Edge_Spec.mtd","9d24347d2bfa90df062f39a281fd0ae07f160203f1dc8c5d114ac218a6daa4c2","DifSpcBmp",33u,34u,35u,mtd_gate_policy::direct_exact},
+    {"P_DullLeather[DSB]_Spec.mtd","4def97828f95a75b64641fa9f64ba1fc58e909e69479c0d4460aaaf9cd466ee5","DifSpcBmp",33u,34u,35u,mtd_gate_policy::direct_exact},
+    {"P_Leather[DSB]_Alp_Spec.mtd","deeb55a8e4d50767aeaba98ba9bfa97b0fb404f901249f5ca13fa762610debda","DifSpcBmp",33u,34u,35u,mtd_gate_policy::direct_exact},
+    {"P_Leather[DS].mtd","53819ead337c1ecd8593d8535c1fc1fdde589f00eb8ea015a8ae347da71073ea","DifSpcBmp",33u,34u,35u,mtd_gate_policy::direct_exact},
+    {"P_Leather[DSB].mtd","0f2b9a1012b83c4dfc909c311d29a11147de8c15191bc62398ce0d5e1cc6757e","DifSpcBmp",33u,34u,35u,mtd_gate_policy::ptde_companion_required},
+    {"C_DullLeather[DSB].mtd","613a3296e7906b2dea5c0cd48bda37c8628b850bad9988688a40595c4c49eaad","DifSpcBmp",33u,34u,35u,mtd_gate_policy::ptde_companion_required},
+    {"C_Wet[DSB].mtd","d3885a4c00b844cdb1a09b571cb037343e5bad31249e7ec80ed5e7da195b9e6f","DifSpcBmp",33u,34u,35u,mtd_gate_policy::ptde_companion_required}
+};
+
+constexpr std::uint32_t k_exact_binding_use_mask =
+    op_bit(mtd_semantic_operator::material_response) |
+    op_bit(mtd_semantic_operator::hemenv);
+
+constexpr std::uint32_t k_exact_binding_no_use_mask =
+    op_bit(mtd_semantic_operator::pointlight);
+
 int hex_value(char c) noexcept
 {
     if(c>='0'&&c<='9') return c-'0';
@@ -121,8 +149,33 @@ mtd_semantic_decision classify_mtd_semantic(
 
         const auto state=state_from_masks(op,seed.use_mask,seed.no_use_mask);
         if(state!=mtd_semantic_state::unknown)
-            return {state,mtd_semantic_source::exact_override,true};
+            return {
+                state,
+                mtd_semantic_source::exact_override,
+                mtd_gate_policy::exact_material,
+                true
+            };
         break;
+    }
+
+    for(const auto &seed:k_exact_bindings){
+        if(!receiver_matches(
+               query.receiver_id,seed.receiver0,seed.receiver1,seed.receiver2) ||
+           !exact_identity(query.material,seed.name,seed.sha256) ||
+           query.material.material_family_hash==0u ||
+           query.material.material_family_hash!=
+               mtd_semantic_hash(seed.material_family))
+            continue;
+
+        return {
+            state_from_masks(
+                op,
+                k_exact_binding_use_mask,
+                k_exact_binding_no_use_mask),
+            mtd_semantic_source::exact_binding_extension,
+            seed.gate_policy,
+            true
+        };
     }
 
     for(const auto &seed:generated::k_material_routes_v1){
@@ -139,6 +192,7 @@ mtd_semantic_decision classify_mtd_semantic(
         return {
             state_from_masks(op,k_full24_use_mask,k_full24_no_use_mask),
             mtd_semantic_source::full24_exact_cohort,
+            mtd_gate_policy::exact_material,
             true
         };
     }
