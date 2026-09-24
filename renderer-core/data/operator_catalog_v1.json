@@ -607,6 +607,31 @@
       "default_port_state": "OFF",
       "fail_open_behavior": "PRESERVE_PRIOR_CORE_ROUTE",
       "operator_id": "pmetal_black_safe_source"
+    },
+    {
+      "status": "CONFIRMED",
+      "metadata": {
+        "raw_mtd_sha256": "ece70f36bd2517d28c8495e276cea537f8b519d6bed981788e79a409ffbf763b",
+        "stable_receiver_ids": [
+          33,
+          34,
+          35
+        ],
+        "paired_lerp_receivers": 24,
+        "causal_cut": "gFC_EnvSpcMapMulCol neutralized; LightProbeParam.x retained",
+        "resource_carrier": "native DSR t12/t14",
+        "runtime_owner_result": "PASS_SUPER",
+        "fallback": "PRESERVE_PRIOR_CORE_MATERIAL_RESPONSE_ROUTE"
+      },
+      "description": "Owner-accepted V10 P_Metal blackspot correction: exact V9A shader-local neutralization of gFC_EnvSpcMapMulCol on the three P_Metal stable alternates plus paired HemEnvLerp routing to the repaired stable alternate.",
+      "display_name": "P_Metal V10 black-safe paired Lerp",
+      "operator_key": "surface.pmetal_black_safe_v10",
+      "canonical_key": "project.runtime.pmetal_blackspot_v10_paired_lerp_fix_v1",
+      "operator_class": "MATERIAL_ENV_SOURCE",
+      "canonical_revision": 6822,
+      "default_port_state": "ACTIVE",
+      "fail_open_behavior": "PRESERVE_PRIOR_CORE_ROUTE",
+      "operator_id": "pmetal_black_safe_v10"
     }
   ]
 }
