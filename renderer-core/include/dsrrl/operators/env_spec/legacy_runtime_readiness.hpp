@@ -23,6 +23,8 @@ enum class legacy_runtime_reason : std::uint8_t {
     material_response_b12_not_ready,
     sampler_not_verified,
     sidecar_lookup_not_ready,
+    envspc_slot_map_not_ready,
+    stock_srv_identity_not_established,
     packed_gi_resource_not_ready,
     packed_gi_alpha_not_preserved,
     classic_resource_not_ready,
@@ -43,6 +45,8 @@ struct legacy_runtime_context {
     bool material_response_b12_ready = false;
     bool sampler_descriptor_verified = false;
     bool semantic_sidecar_lookup_ready = false;
+    bool envspc_slot_map_ready = false;
+    bool stock_srv_identity_established = false;
 
     bool packed_gi_resource_ready = false;
     bool packed_gi_stored_alpha_preserved = false;
@@ -109,6 +113,15 @@ inline legacy_runtime_plan evaluate_legacy_runtime_readiness(
     }
     if (!context.semantic_sidecar_lookup_ready) {
         out.reason = legacy_runtime_reason::sidecar_lookup_not_ready;
+        return out;
+    }
+    if (!context.envspc_slot_map_ready) {
+        out.reason = legacy_runtime_reason::envspc_slot_map_not_ready;
+        return out;
+    }
+    if (!context.stock_srv_identity_established) {
+        out.reason =
+            legacy_runtime_reason::stock_srv_identity_not_established;
         return out;
     }
 
