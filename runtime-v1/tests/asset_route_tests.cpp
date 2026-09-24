@@ -1,5 +1,8 @@
 #include "dsrrl/runtime/generated_normal_routes_v12.hpp"
 #include "dsrrl/runtime/generated_diffuse_routes_v12.hpp"
+#include "dsrrl/runtime/generated_spec_routes_v12.hpp"
+#include "dsrrl/runtime/generated_spec_material_routes.hpp"
+#include "dsrrl/runtime/generated_ul_stable_hashes.hpp"
 
 #include <cstdint>
 
@@ -15,6 +18,9 @@ int main()
     static_assert(k_diffuse_pair_count_v12 == 528u);
     static_assert(k_diffuse_target_count_v12 == 524u);
     static_assert(k_diffuse_safe_row_count_v12 == 3446u);
+    static_assert(k_spec_name_count_v12 == 769u);
+    static_assert(k_spec_material_route_count == 34u);
+    static_assert(k_ul_stable_hash_count == 24u);
 
     const auto &n0 = k_normal_tuples_v12.front();
     const auto &n1 = k_normal_tuples_v12.back();
@@ -33,6 +39,25 @@ int main()
         diffuse_pair_allowed_v12(0u, 0u) ||
         diffuse_target_hash_allowed_v12(0u))
         return 2;
+
+    const auto spec0 = k_spec_name_hashes_v12.front();
+    const auto spec1 = k_spec_name_hashes_v12.back();
+    if (!spec_name_hash_allowed_v12(spec0) ||
+        !spec_name_hash_allowed_v12(spec1) ||
+        spec_name_hash_allowed_v12(0u))
+        return 3;
+
+    const auto &route0 = k_spec_material_routes.front();
+    if (!spec_material_route_allowed(route0.sha256, route0.receivers[0]) ||
+        spec_material_route_allowed(route0.sha256, 0u) ||
+        spec_material_route_allowed("nope", route0.receivers[0]))
+        return 4;
+
+    if (k_ul_stable_hashes.front().v29.size() != 64u ||
+        k_ul_stable_hashes.front().v29_ul.size() != 64u ||
+        k_ul_stable_hashes.back().v29.size() != 64u ||
+        k_ul_stable_hashes.back().v29_ul.size() != 64u)
+        return 5;
 
     return 0;
 }
