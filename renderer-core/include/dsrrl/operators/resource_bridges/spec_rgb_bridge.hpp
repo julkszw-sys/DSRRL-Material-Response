@@ -1,5 +1,7 @@
 #pragma once
 
+#include "dsrrl/operators/material_response/mtd_semantic_census.hpp"
+
 #include <cstdint>
 
 namespace dsrrl::operators::resource_bridges {
@@ -23,7 +25,8 @@ enum class spec_rgb_reason : std::uint8_t {
     ptde_companion_not_verified,
     sidecar_not_ready,
     t10_transport_not_ready,
-    stock_t1_not_preserved
+    stock_t1_not_preserved,
+    mtd_census_not_authorized
 };
 
 struct spec_rgb_context {
@@ -56,5 +59,9 @@ struct spec_rgb_decision {
 // route fails open to the stock DSR resource state.
 spec_rgb_decision evaluate_spec_rgb_route(
     const spec_rgb_context &context) noexcept;
+
+spec_rgb_decision evaluate_spec_rgb_route(
+    const spec_rgb_context &context,
+    const material_response::mtd_semantic_query &query) noexcept;
 
 } // namespace dsrrl::operators::resource_bridges
