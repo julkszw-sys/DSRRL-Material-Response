@@ -91,6 +91,8 @@ operators::lightbank::hemdir3_runtime_context ready_hemdir3()
 {
     operators::lightbank::hemdir3_runtime_context c;
     c.semantic_mode=2;
+    c.semantic_mode_provenance=
+        operators::lightbank::hemdir3_semantic_mode_provenance::exact_effective_mode2;
     c.upper_lower_source_ready=true;
     c.d123_source_ready=true;
     c.b13_carrier_ready=true;
@@ -259,6 +261,31 @@ int main()
     CHECK(hemdir3_plan.suppress_host_envdiffuse);
     CHECK(hemdir3_plan.use_ptde_linear_d123);
     CHECK(!hemdir3_plan.apply_source_gamma_compensation);
+
+    // Ordinary/direct selector state cannot authorize HemDir3. Cross-render
+    // RE establishes ordinary direct producer values only in {0,1}; even a
+    // synthetic mode2 value must fail open without exact effective provenance.
+    hemdir3=ready_hemdir3();
+    hemdir3.semantic_mode_provenance=
+        operators::lightbank::hemdir3_semantic_mode_provenance::ordinary_direct;
+    hemdir3_plan=
+        operators::lightbank::evaluate_hemdir3_runtime_readiness(
+            features,activation,hemdir3);
+    CHECK(!hemdir3_plan.ready);
+    CHECK(hemdir3_plan.reason==
+          operators::lightbank::hemdir3_runtime_reason::
+              semantic_mode_provenance_not_verified);
+
+    hemdir3=ready_hemdir3();
+    hemdir3.semantic_mode_provenance=
+        operators::lightbank::hemdir3_semantic_mode_provenance::unknown;
+    hemdir3_plan=
+        operators::lightbank::evaluate_hemdir3_runtime_readiness(
+            features,activation,hemdir3);
+    CHECK(!hemdir3_plan.ready);
+    CHECK(hemdir3_plan.reason==
+          operators::lightbank::hemdir3_runtime_reason::
+              semantic_mode_provenance_not_verified);
 
     hemdir3.host_envdiffuse_source_suppressed=false;
     hemdir3_plan=
