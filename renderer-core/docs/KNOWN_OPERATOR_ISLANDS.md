@@ -143,6 +143,27 @@ Exact per-DXBC create-time recipes are still pending import from the canonical P
 plan source, so this is a CONSTRUCTION/local-forward closure rather than runtime or
 pixel-equivalence evidence.
 
+## Source-complete semantic gate: certified no-Spc EnvSpec deletion
+
+`surface.envspec_nospc_delete` now has an explicit fail-open semantic gate for the
+confirmed 48 substantive PBL no-Spc homologs whose exact PTDE counterparts lack the
+active EnvSpec lane:
+
+```text
+certified target: EnvSpec_term := 0
+```
+
+Deletion is authorized only when all four facts are already established for the
+receiver: exact PTDE↔DSR homolog identity, substantive PBL no-Spc receiver class,
+proven PTDE EnvSpec-lane absence, and alias-safe scope. Any missing condition preserves
+the stock DSR EnvSpec term. This makes the broader-hash alias warning executable policy
+rather than prose.
+
+The island deletes only the DSR-only local EnvSpec contribution. It does not replace a
+cubemap/probe, infer a material, alter diffuse/specular gains or claim final-pixel
+equivalence. Exact DXBC identity/patch recipes remain pending import from the canonical
+P2.2 plan source.
+
 ## Legacy A1/P2.2 decomposition
 
 The old combined mask is decomposed by ownership:

@@ -315,6 +315,43 @@ int main()
         0.25f, std::numeric_limits<float>::quiet_NaN());
     CHECK(postfog.result == operators::surface::fixed_postfog_result::fail_open_nonfinite_input);
 
+    // No-Spc EnvSpec deletion is authorized only after the complete
+    // exact-homolog + receiver-class + PTDE-absence + alias-safety cut closes.
+    CHECK(gates.set(core::operator_id::envspec_nospc_delete, true));
+    activation = operators::env_spec::no_spc_delete.evaluate(gates, verified);
+    CHECK(activation.state == core::island_state::active);
+
+    operators::env_spec::no_spc_delete_context no_spc_ctx;
+    no_spc_ctx.exact_homolog_verified = true;
+    no_spc_ctx.substantive_pbl_no_spc = true;
+    no_spc_ctx.ptde_envspec_lane_absent = true;
+    no_spc_ctx.alias_scope_safe = true;
+
+    auto no_spc = operators::env_spec::evaluate_no_spc_envspec_delete(0.75f, no_spc_ctx);
+    CHECK(no_spc.action == operators::env_spec::no_spc_delete_action::delete_dsr_only_envspec);
+    CHECK(no_spc.reason == operators::env_spec::no_spc_delete_reason::exact_certified);
+    CHECK(no_spc.stock_dsr_envspec_term == 0.75f);
+    CHECK(no_spc.bridge_envspec_term == 0.0f);
+
+    auto unsafe_alias = no_spc_ctx;
+    unsafe_alias.alias_scope_safe = false;
+    no_spc = operators::env_spec::evaluate_no_spc_envspec_delete(0.75f, unsafe_alias);
+    CHECK(no_spc.action == operators::env_spec::no_spc_delete_action::preserve_host);
+    CHECK(no_spc.reason == operators::env_spec::no_spc_delete_reason::alias_scope_not_safe);
+    CHECK(no_spc.bridge_envspec_term == 0.75f);
+
+    auto unverified_pair = no_spc_ctx;
+    unverified_pair.exact_homolog_verified = false;
+    no_spc = operators::env_spec::evaluate_no_spc_envspec_delete(0.75f, unverified_pair);
+    CHECK(no_spc.action == operators::env_spec::no_spc_delete_action::preserve_host);
+    CHECK(no_spc.reason == operators::env_spec::no_spc_delete_reason::homolog_not_verified);
+
+    auto ptde_present_or_unknown = no_spc_ctx;
+    ptde_present_or_unknown.ptde_envspec_lane_absent = false;
+    no_spc = operators::env_spec::evaluate_no_spc_envspec_delete(0.75f, ptde_present_or_unknown);
+    CHECK(no_spc.action == operators::env_spec::no_spc_delete_action::preserve_host);
+    CHECK(no_spc.reason == operators::env_spec::no_spc_delete_reason::ptde_lane_not_proven_absent);
+
     CHECK(gates.set(core::operator_id::post_hdr, true));
     activation = operators::postprocess::hdr.evaluate(gates, verified);
     CHECK(activation.state == core::island_state::fail_open);

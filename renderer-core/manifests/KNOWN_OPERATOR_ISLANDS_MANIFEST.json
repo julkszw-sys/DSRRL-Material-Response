@@ -78,6 +78,23 @@
       "identity_recipe_import": "PENDING",
       "runtime_activation": "NOT_TESTED",
       "pixel": "OPEN"
+    },
+    "envspec_nospc_delete": {
+      "local_semantic_gate": "SOURCE_COMPLETE",
+      "canonical_operator": "renderer.cross.hemenv_shaderonly_bridge_census_v1",
+      "scope": "48 substantive PBL no-Spc exact homologs",
+      "target": "EnvSpec_term := 0",
+      "required_guards": [
+        "exact_homolog_verified",
+        "substantive_pbl_no_spc",
+        "ptde_envspec_lane_absent",
+        "alias_scope_safe"
+      ],
+      "fail_open": "PRESERVE_STOCK_DSR_ENVSPEC_TERM",
+      "owns": "DSR-only local EnvSpec contribution only",
+      "identity_recipe_import": "PENDING",
+      "runtime_activation": "NOT_TESTED",
+      "pixel": "OPEN"
     }
   },
   "legacy_a1": {
