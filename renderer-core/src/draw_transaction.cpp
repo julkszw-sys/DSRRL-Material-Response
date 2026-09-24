@@ -1,4 +1,7 @@
 #include "dsrrl/core/draw_transaction.hpp"
+#include "dsrrl/core/carrier_abi.hpp"
+
+#include <cstddef>
 
 namespace dsrrl::core {
 
@@ -8,13 +11,33 @@ bool draw_transaction_manager::begin(
     context_kind context,
     const render_patch_plan &plan)
 {
-    if (command == 0 || plan.empty())
+    if (command == 0 ||
+        plan.empty() ||
+        plan.patch_count > plan.patches.size())
+        return false;
+
+    constexpr std::uint32_t valid_carrier_mask =
+        (1u << carrier_v1_lane_count) - 1u;
+
+    if ((plan.carrier_write_mask & ~valid_carrier_mask) != 0u)
         return false;
 
     std::uint32_t seen_mask = 0;
+    std::uint32_t seen_operators = 0;
     for (std::uint32_t i = 0; i < plan.patch_count; ++i) {
+        const auto op = plan.patches[i].op;
+        const auto op_index = static_cast<std::size_t>(op);
+        if (op_index >= operator_count)
+            return false;
+
+        const std::uint32_t op_mask = operator_bit(op);
+        if ((seen_operators & op_mask) != 0u)
+            return false;
+        seen_operators |= op_mask;
+
         const std::uint32_t mask = plan.patches[i].carrier_write_mask;
-        if ((seen_mask & mask) != 0)
+        if ((mask & ~valid_carrier_mask) != 0u ||
+            (seen_mask & mask) != 0u)
             return false;
         seen_mask |= mask;
     }
