@@ -41,6 +41,19 @@ render_patch_plan renderer_core::build_plan(
         if (gate.state != island_state::active)
             continue;
 
+        const auto contract = find_operator_contract(request.op);
+        if (!contract.has_value())
+            continue;
+
+        const bool requires_operator_readiness =
+            contract->default_state == port_state::partial ||
+            contract->default_state == port_state::active_candidate ||
+            contract->default_state == port_state::diagnostic;
+
+        if (requires_operator_readiness &&
+            !request.operator_readiness_verified)
+            continue;
+
         if ((receiver->capabilities & operator_bit(request.op)) == 0)
             continue;
 
