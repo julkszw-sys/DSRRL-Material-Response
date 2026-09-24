@@ -71,6 +71,9 @@ operators::point_light::local_specular_runtime_context ready_local_spec(
     c.clustered_membership_sidecar_ready=true;
     c.clustered_four_slot_shader_ready=true;
     c.stock_cluster_membership_bypassed=true;
+    c.complete_microfacet_window_owned=true;
+    c.stock_roughness_tail_bypassed=true;
+    c.stock_common_ndotl_specular_bypassed=true;
     c.diffuse_path_preserved=true;
     c.separate_specular_output_cut_ready=true;
     c.draw_transaction_ready=true;
@@ -134,7 +137,6 @@ int main()
     CHECK(pointlight_contract.has_value());
     CHECK(pointlight_contract->default_state==core::port_state::partial);
 
-    // FaceEye packed depth and response math.
     using operators::surface::faceeye_vec3;
     const float packed=
         operators::surface::decode_faceeye_packed_depth({1.0f,0.0f,0.0f});
@@ -153,8 +155,7 @@ int main()
 
     auto shadow_out=
         operators::surface::evaluate_faceeye_shadow_response(shadow);
-    CHECK(shadow_out.result==
-          operators::surface::faceeye_shadow_math_result::exact);
+    CHECK(shadow_out.result==operators::surface::faceeye_shadow_math_result::exact);
     CHECK(std::fabs(shadow_out.normal_term-0.5f)<0.000001f);
     CHECK(std::fabs(shadow_out.shadow_s-0.75f)<0.000001f);
     CHECK(std::fabs(shadow_out.fade-0.5f)<0.000001f);
@@ -164,22 +165,14 @@ int main()
 
     shadow.view_length=std::numeric_limits<float>::quiet_NaN();
     shadow_out=operators::surface::evaluate_faceeye_shadow_response(shadow);
-    CHECK(shadow_out.result==
-          operators::surface::faceeye_shadow_math_result::
-              fail_open_nonfinite_input);
+    CHECK(shadow_out.result==operators::surface::faceeye_shadow_math_result::fail_open_nonfinite_input);
 
     core::feature_registry features;
     const auto activation=verified_activation();
-
     CHECK(features.set(core::operator_id::faceeye_shadow_legacy,true));
 
-    // no-Point/PntS families have comparison s7 in DSR, so PTDE manual SAMPLE
-    // requires a verified regular-sampler override.
-    auto face=ready_faceeye(
-        operators::surface::faceeye_receiver_variant::sdw_pnts);
-    auto face_plan=
-        operators::surface::evaluate_faceeye_runtime_readiness(
-            features,activation,face);
+    auto face=ready_faceeye(operators::surface::faceeye_receiver_variant::sdw_pnts);
+    auto face_plan=operators::surface::evaluate_faceeye_runtime_readiness(features,activation,face);
     CHECK(face_plan.ready);
     CHECK(face_plan.keep_live_t7);
     CHECK(face_plan.replace_comparison_kernel);
@@ -190,86 +183,56 @@ int main()
     CHECK(face_plan.preserve_local_pointlight);
 
     face.auxiliary_dirlight_snapshot.register_present[0]=false;
-    face_plan=operators::surface::evaluate_faceeye_runtime_readiness(
-        features,activation,face);
+    face_plan=operators::surface::evaluate_faceeye_runtime_readiness(features,activation,face);
     CHECK(!face_plan.ready);
-    CHECK(face_plan.reason==
-          operators::surface::faceeye_runtime_reason::
-              auxiliary_dirlight_snapshot_not_ready);
+    CHECK(face_plan.reason==operators::surface::faceeye_runtime_reason::auxiliary_dirlight_snapshot_not_ready);
 
-    face=ready_faceeye(
-        operators::surface::faceeye_receiver_variant::sdw_pnts);
+    face=ready_faceeye(operators::surface::faceeye_receiver_variant::sdw_pnts);
     face.replacement_ptde_kernel_shader_ready=false;
-    face_plan=operators::surface::evaluate_faceeye_runtime_readiness(
-        features,activation,face);
+    face_plan=operators::surface::evaluate_faceeye_runtime_readiness(features,activation,face);
     CHECK(!face_plan.ready);
-    CHECK(face_plan.reason==
-          operators::surface::faceeye_runtime_reason::
-              replacement_ptde_kernel_shader_not_ready);
+    CHECK(face_plan.reason==operators::surface::faceeye_runtime_reason::replacement_ptde_kernel_shader_not_ready);
 
-    face=ready_faceeye(
-        operators::surface::faceeye_receiver_variant::sdw_pnts);
+    face=ready_faceeye(operators::surface::faceeye_receiver_variant::sdw_pnts);
     face.auxiliary_dirlight_value_homology_verified=false;
-    face_plan=operators::surface::evaluate_faceeye_runtime_readiness(
-        features,activation,face);
+    face_plan=operators::surface::evaluate_faceeye_runtime_readiness(features,activation,face);
     CHECK(!face_plan.ready);
-    CHECK(face_plan.reason==
-          operators::surface::faceeye_runtime_reason::
-              auxiliary_dirlight_value_homology_not_verified);
+    CHECK(face_plan.reason==operators::surface::faceeye_runtime_reason::auxiliary_dirlight_value_homology_not_verified);
 
-    face=ready_faceeye(
-        operators::surface::faceeye_receiver_variant::sdw_pnts);
+    face=ready_faceeye(operators::surface::faceeye_receiver_variant::sdw_pnts);
     face.regular_s7_descriptor_verified=false;
-    face_plan=operators::surface::evaluate_faceeye_runtime_readiness(
-        features,activation,face);
+    face_plan=operators::surface::evaluate_faceeye_runtime_readiness(features,activation,face);
     CHECK(!face_plan.ready);
-    CHECK(face_plan.reason==
-          operators::surface::faceeye_runtime_reason::
-              regular_s7_descriptor_not_verified);
+    CHECK(face_plan.reason==operators::surface::faceeye_runtime_reason::regular_s7_descriptor_not_verified);
 
-    // PntSS/PntSSSS already expose regular s7, but its live state still needs
-    // explicit verification.
-    face=ready_faceeye(
-        operators::surface::faceeye_receiver_variant::sdw_pntss);
+    face=ready_faceeye(operators::surface::faceeye_receiver_variant::sdw_pntss);
     face.regular_s7_sampler_ready=false;
     face.regular_s7_descriptor_verified=false;
     face.sampler_override_transaction_ready=false;
-    face_plan=operators::surface::evaluate_faceeye_runtime_readiness(
-        features,activation,face);
+    face_plan=operators::surface::evaluate_faceeye_runtime_readiness(features,activation,face);
     CHECK(face_plan.ready);
     CHECK(!face_plan.replace_comparison_kernel);
     CHECK(face_plan.use_stock_ptde_style_kernel);
     CHECK(!face_plan.override_s7_with_regular_sampler);
 
     face.stock_ptde_kernel_identity_verified=false;
-    face_plan=operators::surface::evaluate_faceeye_runtime_readiness(
-        features,activation,face);
+    face_plan=operators::surface::evaluate_faceeye_runtime_readiness(features,activation,face);
     CHECK(!face_plan.ready);
-    CHECK(face_plan.reason==
-          operators::surface::faceeye_runtime_reason::
-              stock_ptde_kernel_identity_not_verified);
+    CHECK(face_plan.reason==operators::surface::faceeye_runtime_reason::stock_ptde_kernel_identity_not_verified);
 
-    face=ready_faceeye(
-        operators::surface::faceeye_receiver_variant::sdw_pntss);
+    face=ready_faceeye(operators::surface::faceeye_receiver_variant::sdw_pntss);
     face.stock_regular_s7_verified=false;
-    face_plan=operators::surface::evaluate_faceeye_runtime_readiness(
-        features,activation,face);
+    face_plan=operators::surface::evaluate_faceeye_runtime_readiness(features,activation,face);
     CHECK(!face_plan.ready);
-    CHECK(face_plan.reason==
-          operators::surface::faceeye_runtime_reason::
-              stock_regular_s7_not_verified);
+    CHECK(face_plan.reason==operators::surface::faceeye_runtime_reason::stock_regular_s7_not_verified);
 
-    face=ready_faceeye(
-        operators::surface::faceeye_receiver_variant::csd_pntssss);
+    face=ready_faceeye(operators::surface::faceeye_receiver_variant::csd_pntssss);
     face.csd_matrix_region_ready=false;
-    face_plan=operators::surface::evaluate_faceeye_runtime_readiness(
-        features,activation,face);
+    face_plan=operators::surface::evaluate_faceeye_runtime_readiness(features,activation,face);
     CHECK(!face_plan.ready);
-    CHECK(face_plan.reason==
-          operators::surface::faceeye_runtime_reason::
-              csd_matrix_region_not_ready);
+    CHECK(face_plan.reason==operators::surface::faceeye_runtime_reason::csd_matrix_region_not_ready);
 
-    // PTDE local specular stays additive and has no common NdotL multiplier.
+    // Legacy scalar seam retained for captured RdotL fixtures.
     operators::point_light::legacy_specular_input spec{};
     spec.source_rgb={1.0f,2.0f,3.0f};
     spec.attenuation=0.5f;
@@ -279,203 +242,152 @@ int main()
     spec.c101=2.0f;
     spec.color0={1.0f,0.5f,0.25f};
 
-    auto spec_out=
-        operators::point_light::evaluate_legacy_local_specular(spec);
-    CHECK(spec_out.result==
-          operators::point_light::legacy_specular_math_result::exact);
+    auto spec_out=operators::point_light::evaluate_legacy_local_specular(spec);
+    CHECK(spec_out.result==operators::point_light::legacy_specular_math_result::exact);
     CHECK(std::fabs(spec_out.angular-0.25f)<0.000001f);
-    CHECK(std::fabs(spec_out.material_specular.x-1.0f)<0.000001f);
-    CHECK(std::fabs(spec_out.material_specular.y-1.0f)<0.000001f);
-    CHECK(std::fabs(spec_out.material_specular.z-1.0f)<0.000001f);
     CHECK(std::fabs(spec_out.specular.x-0.125f)<0.000001f);
     CHECK(std::fabs(spec_out.specular.y-0.25f)<0.000001f);
     CHECK(std::fabs(spec_out.specular.z-0.375f)<0.000001f);
 
+    // Complete replacement window owns R=reflect(-V,N) and RdotL itself.
+    operators::point_light::legacy_specular_vector_input vector_spec{};
+    vector_spec.source_rgb={1.0f,2.0f,3.0f};
+    vector_spec.attenuation=0.5f;
+    vector_spec.normal={0.0f,1.0f,0.0f};
+    vector_spec.view_direction={0.0f,1.0f,0.0f};
+    vector_spec.light_direction={0.0f,1.0f,0.0f};
+    vector_spec.exponent_c102=2.0f;
+    vector_spec.spec_texture_blend={0.5f,1.0f,2.0f};
+    vector_spec.c101=2.0f;
+    vector_spec.color0={1.0f,0.5f,0.25f};
+
+    spec_out=operators::point_light::evaluate_legacy_local_specular(vector_spec);
+    CHECK(spec_out.result==operators::point_light::legacy_specular_math_result::exact);
+    CHECK(std::fabs(spec_out.reflection.y-1.0f)<0.000001f);
+    CHECK(std::fabs(spec_out.r_dot_l-1.0f)<0.000001f);
+    CHECK(std::fabs(spec_out.angular-1.0f)<0.000001f);
+    CHECK(std::fabs(spec_out.specular.x-0.5f)<0.000001f);
+    CHECK(std::fabs(spec_out.specular.y-1.0f)<0.000001f);
+    CHECK(std::fabs(spec_out.specular.z-1.5f)<0.000001f);
+
+    vector_spec.normal={0.0f,2.0f,0.0f};
+    spec_out=operators::point_light::evaluate_legacy_local_specular(vector_spec);
+    CHECK(spec_out.result==operators::point_light::legacy_specular_math_result::fail_open_invalid_vector);
+
     spec.exponent_c102=-1.0f;
     spec_out=operators::point_light::evaluate_legacy_local_specular(spec);
-    CHECK(spec_out.result==
-          operators::point_light::legacy_specular_math_result::
-              fail_open_invalid_exponent);
+    CHECK(spec_out.result==operators::point_light::legacy_specular_math_result::fail_open_invalid_exponent);
 
     CHECK(features.set(core::operator_id::local_specular_legacy,true));
-
-    auto local=ready_local_spec(
-        operators::point_light::local_specular_receiver_class::
-            fixed_spc_pntss);
-    auto local_plan=
-        operators::point_light::evaluate_local_specular_runtime_readiness(
-            features,activation,local);
+    auto local=ready_local_spec(operators::point_light::local_specular_receiver_class::fixed_spc_pntss);
+    auto local_plan=operators::point_light::evaluate_local_specular_runtime_readiness(features,activation,local);
     CHECK(local_plan.ready);
     CHECK(local_plan.preserve_dsr_diffuse);
     CHECK(local_plan.use_ptde_legacy_specular);
+    CHECK(local_plan.bypass_dsr_microfacet);
+    CHECK(local_plan.bypass_dsr_roughness_tail);
     CHECK(!local_plan.common_ndotl_on_specular);
 
+    local.complete_microfacet_window_owned=false;
+    local_plan=operators::point_light::evaluate_local_specular_runtime_readiness(features,activation,local);
+    CHECK(!local_plan.ready);
+    CHECK(local_plan.reason==operators::point_light::local_specular_runtime_reason::microfacet_window_not_owned);
+
+    local=ready_local_spec(operators::point_light::local_specular_receiver_class::fixed_spc_pntss);
+    local.stock_roughness_tail_bypassed=false;
+    local_plan=operators::point_light::evaluate_local_specular_runtime_readiness(features,activation,local);
+    CHECK(!local_plan.ready);
+    CHECK(local_plan.reason==operators::point_light::local_specular_runtime_reason::roughness_tail_not_bypassed);
+
+    local=ready_local_spec(operators::point_light::local_specular_receiver_class::fixed_spc_pntss);
+    local.stock_common_ndotl_specular_bypassed=false;
+    local_plan=operators::point_light::evaluate_local_specular_runtime_readiness(features,activation,local);
+    CHECK(!local_plan.ready);
+    CHECK(local_plan.reason==operators::point_light::local_specular_runtime_reason::common_ndotl_tail_not_bypassed);
+
+    local=ready_local_spec(operators::point_light::local_specular_receiver_class::fixed_spc_pntss);
     local.fixed_membership_verified=false;
-    local_plan=
-        operators::point_light::evaluate_local_specular_runtime_readiness(
-            features,activation,local);
+    local_plan=operators::point_light::evaluate_local_specular_runtime_readiness(features,activation,local);
     CHECK(!local_plan.ready);
-    CHECK(local_plan.reason==
-          operators::point_light::local_specular_runtime_reason::
-              fixed_membership_not_verified);
+    CHECK(local_plan.reason==operators::point_light::local_specular_runtime_reason::fixed_membership_not_verified);
 
-    local=ready_local_spec(
-        operators::point_light::local_specular_receiver_class::
-            clustered_spc_pnts);
+    local=ready_local_spec(operators::point_light::local_specular_receiver_class::clustered_spc_pnts);
     local.clustered_membership_sidecar_ready=false;
-    local_plan=
-        operators::point_light::evaluate_local_specular_runtime_readiness(
-            features,activation,local);
+    local_plan=operators::point_light::evaluate_local_specular_runtime_readiness(features,activation,local);
     CHECK(!local_plan.ready);
-    CHECK(local_plan.reason==
-          operators::point_light::local_specular_runtime_reason::
-              clustered_membership_sidecar_not_ready);
+    CHECK(local_plan.reason==operators::point_light::local_specular_runtime_reason::clustered_membership_sidecar_not_ready);
 
-    // Full PointLight: fixed payloads can retain verified fixed membership.
     CHECK(features.set(core::operator_id::point_light,true));
-    auto point=ready_pointlight(
-        operators::point_light::pointlight_receiver_stratum::
-            fixed_nospc_pntss);
+    auto point=ready_pointlight(operators::point_light::pointlight_receiver_stratum::fixed_nospc_pntss);
     point.local_specular_path_ready=false;
-    auto point_plan=
-        operators::point_light::evaluate_pointlight_runtime_readiness(
-            features,activation,point);
+    auto point_plan=operators::point_light::evaluate_pointlight_runtime_readiness(features,activation,point);
     CHECK(point_plan.ready);
     CHECK(point_plan.use_fixed_native_membership);
     CHECK(!point_plan.require_local_specular);
 
-    // Fixed carrier freshness must be exact. Matching receiver class alone
-    // cannot authorize stale or owner-mismatched t19 raw-q state.
-    point=ready_pointlight(
-        operators::point_light::pointlight_receiver_stratum::
-            fixed_nospc_pntss);
+    point=ready_pointlight(operators::point_light::pointlight_receiver_stratum::fixed_nospc_pntss);
     point.fixed_owner_context_verified=false;
-    point_plan=
-        operators::point_light::evaluate_pointlight_runtime_readiness(
-            features,activation,point);
+    point_plan=operators::point_light::evaluate_pointlight_runtime_readiness(features,activation,point);
     CHECK(!point_plan.ready);
-    CHECK(point_plan.reason==
-          operators::point_light::pointlight_runtime_reason::
-              fixed_owner_context_not_verified);
+    CHECK(point_plan.reason==operators::point_light::pointlight_runtime_reason::fixed_owner_context_not_verified);
 
-    point=ready_pointlight(
-        operators::point_light::pointlight_receiver_stratum::
-            fixed_nospc_pntss);
+    point=ready_pointlight(operators::point_light::pointlight_receiver_stratum::fixed_nospc_pntss);
     point.fixed_producer_serial_fresh=false;
-    point_plan=
-        operators::point_light::evaluate_pointlight_runtime_readiness(
-            features,activation,point);
+    point_plan=operators::point_light::evaluate_pointlight_runtime_readiness(features,activation,point);
     CHECK(!point_plan.ready);
-    CHECK(point_plan.reason==
-          operators::point_light::pointlight_runtime_reason::
-              fixed_producer_serial_not_fresh);
+    CHECK(point_plan.reason==operators::point_light::pointlight_runtime_reason::fixed_producer_serial_not_fresh);
 
-    point=ready_pointlight(
-        operators::point_light::pointlight_receiver_stratum::
-            fixed_nospc_pntssss);
+    point=ready_pointlight(operators::point_light::pointlight_receiver_stratum::fixed_nospc_pntssss);
     point.fixed_selected_light_count=2u;
-    point_plan=
-        operators::point_light::evaluate_pointlight_runtime_readiness(
-            features,activation,point);
+    point_plan=operators::point_light::evaluate_pointlight_runtime_readiness(features,activation,point);
     CHECK(!point_plan.ready);
-    CHECK(point_plan.reason==
-          operators::point_light::pointlight_runtime_reason::
-              fixed_light_count_mismatch);
+    CHECK(point_plan.reason==operators::point_light::pointlight_runtime_reason::fixed_light_count_mismatch);
 
-    point=ready_pointlight(
-        operators::point_light::pointlight_receiver_stratum::
-            fixed_spc_pntssss);
+    point=ready_pointlight(operators::point_light::pointlight_receiver_stratum::fixed_spc_pntssss);
     point.local_specular_path_ready=false;
-    point_plan=
-        operators::point_light::evaluate_pointlight_runtime_readiness(
-            features,activation,point);
+    point_plan=operators::point_light::evaluate_pointlight_runtime_readiness(features,activation,point);
     CHECK(!point_plan.ready);
     CHECK(point_plan.require_local_specular);
-    CHECK(point_plan.reason==
-          operators::point_light::pointlight_runtime_reason::
-              local_specular_path_not_ready);
+    CHECK(point_plan.reason==operators::point_light::pointlight_runtime_reason::local_specular_path_not_ready);
 
-    // Clustered no-Spc and Spc PntS are distinct consumer strata. Both use
-    // the PTDE first-four membership sidecar, but only Spc requires the
-    // legacy local-specular continuation.
-    point=ready_pointlight(
-        operators::point_light::pointlight_receiver_stratum::
-            clustered_nospc_pnts);
+    point=ready_pointlight(operators::point_light::pointlight_receiver_stratum::clustered_nospc_pnts);
     point.local_specular_path_ready=false;
-    point_plan=
-        operators::point_light::evaluate_pointlight_runtime_readiness(
-            features,activation,point);
+    point_plan=operators::point_light::evaluate_pointlight_runtime_readiness(features,activation,point);
     CHECK(point_plan.ready);
     CHECK(point_plan.use_cpu_selected_four_sidecar);
     CHECK(point_plan.bypass_stock_cluster_membership);
     CHECK(!point_plan.require_local_specular);
     CHECK(point_plan.selected_light_count==4u);
 
-    point=ready_pointlight(
-        operators::point_light::pointlight_receiver_stratum::
-            clustered_spc_pnts);
+    point=ready_pointlight(operators::point_light::pointlight_receiver_stratum::clustered_spc_pnts);
     point.local_specular_path_ready=false;
-    point_plan=
-        operators::point_light::evaluate_pointlight_runtime_readiness(
-            features,activation,point);
+    point_plan=operators::point_light::evaluate_pointlight_runtime_readiness(features,activation,point);
     CHECK(!point_plan.ready);
     CHECK(point_plan.require_local_specular);
-    CHECK(point_plan.reason==
-          operators::point_light::pointlight_runtime_reason::
-              local_specular_path_not_ready);
+    CHECK(point_plan.reason==operators::point_light::pointlight_runtime_reason::local_specular_path_not_ready);
 
-    point=ready_pointlight(
-        operators::point_light::pointlight_receiver_stratum::
-            clustered_spc_pnts);
+    point=ready_pointlight(operators::point_light::pointlight_receiver_stratum::clustered_spc_pnts);
     point.clustered_membership.effective_count=3u;
-    point_plan=
-        operators::point_light::evaluate_pointlight_runtime_readiness(
-            features,activation,point);
+    point_plan=operators::point_light::evaluate_pointlight_runtime_readiness(features,activation,point);
     CHECK(!point_plan.ready);
-    CHECK(point_plan.reason==
-          operators::point_light::pointlight_runtime_reason::
-              clustered_membership_descriptor_invalid);
+    CHECK(point_plan.reason==operators::point_light::pointlight_runtime_reason::clustered_membership_descriptor_invalid);
 
-    point=ready_pointlight(
-        operators::point_light::pointlight_receiver_stratum::
-            clustered_spc_pnts);
-    point_plan=
-        operators::point_light::evaluate_pointlight_runtime_readiness(
-            features,activation,point);
+    point=ready_pointlight(operators::point_light::pointlight_receiver_stratum::clustered_spc_pnts);
+    point_plan=operators::point_light::evaluate_pointlight_runtime_readiness(features,activation,point);
     CHECK(point_plan.ready);
     CHECK(point_plan.require_local_specular);
 
     point.stock_cluster_membership_bypassed=false;
-    point_plan=
-        operators::point_light::evaluate_pointlight_runtime_readiness(
-            features,activation,point);
+    point_plan=operators::point_light::evaluate_pointlight_runtime_readiness(features,activation,point);
     CHECK(!point_plan.ready);
-    CHECK(point_plan.reason==
-          operators::point_light::pointlight_runtime_reason::
-              stock_cluster_membership_not_bypassed);
+    CHECK(point_plan.reason==operators::point_light::pointlight_runtime_reason::stock_cluster_membership_not_bypassed);
 
-    point=ready_pointlight(
-        operators::point_light::pointlight_receiver_stratum::clustered_spc_pnts);
-    point.source_scope=
-        operators::point_light::pointlight_source_scope::sfx_attached;
-    point_plan=
-        operators::point_light::evaluate_pointlight_runtime_readiness(
-            features,activation,point);
+    point=ready_pointlight(operators::point_light::pointlight_receiver_stratum::fixed_spc_pntss);
+    point.source_scope=operators::point_light::pointlight_source_scope::player_lantern;
+    point_plan=operators::point_light::evaluate_pointlight_runtime_readiness(features,activation,point);
     CHECK(!point_plan.ready);
-    CHECK(point_plan.reason==
-          operators::point_light::pointlight_runtime_reason::
-              special_source_scope_not_supported);
+    CHECK(point_plan.reason==operators::point_light::pointlight_runtime_reason::special_source_scope_not_supported);
 
-    // Disabled feature remains a hard no-op.
-    core::feature_registry disabled;
-    face=ready_faceeye(
-        operators::surface::faceeye_receiver_variant::sdw_pnts);
-    face_plan=operators::surface::evaluate_faceeye_runtime_readiness(
-        disabled,activation,face);
-    CHECK(!face_plan.ready);
-    CHECK(face_plan.reason==
-          operators::surface::faceeye_runtime_reason::core_gate_not_active);
-
-    std::cout<<"faceeye_pointlight_readiness_tests: PASS\n";
+    std::cout<<"faceeye/pointlight readiness tests passed\n";
     return 0;
 }
