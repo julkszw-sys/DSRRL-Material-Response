@@ -3,6 +3,7 @@
 #include "dsrrl/operators/material_response/material_response_island.hpp"
 #include "dsrrl/operators/known_operator_island.hpp"
 #include "dsrrl/operators/env_spec/no_spc_envspec_delete.hpp"
+#include "dsrrl/operators/env_spec/legacy_runtime_readiness.hpp"
 
 #include <cstdint>
 
