@@ -36,6 +36,9 @@ enum class pointlight_runtime_reason : std::uint8_t {
     fixed_receiver_payload_not_ready,
     fixed_membership_not_verified,
     clustered_cpu_membership_sidecar_not_ready,
+    clustered_membership_order_not_verified,
+    clustered_count_provenance_not_ready,
+    clustered_effective_count_invalid,
     clustered_four_slot_shader_not_ready,
     stock_cluster_membership_not_bypassed,
     diffuse_material_path_not_ready,
@@ -60,7 +63,16 @@ struct pointlight_runtime_context {
     bool fixed_receiver_payload_ready=false;
     bool fixed_membership_verified=false;
 
+    // Ordinary PTDE FrpgModel selection is not a DSR-style cluster lookup.
+    // The sidecar must preserve the ordered first-four bucket/list-overlap set,
+    // then preserve the material clamp N=min(N_raw,g_MaxPntLitNum).  Do not
+    // authorize this island from stock DSR t16/t17 membership or count64.
     bool clustered_cpu_membership_sidecar_ready=false;
+    bool clustered_membership_order_verified=false;
+    bool clustered_count_provenance_ready=false;
+    std::uint8_t clustered_raw_selected_count=0;
+    std::uint8_t clustered_material_max_count=0;
+    std::uint8_t clustered_effective_count=0;
     bool clustered_four_slot_shader_ready=false;
     bool stock_cluster_membership_bypassed=false;
 
@@ -79,6 +91,7 @@ struct pointlight_runtime_plan {
     bool use_fixed_native_membership=false;
     bool use_cpu_selected_four_sidecar=false;
     bool bypass_stock_cluster_membership=false;
+    std::uint8_t selected_light_count=0;
     bool require_local_specular=false;
 };
 
@@ -164,6 +177,29 @@ inline pointlight_runtime_plan evaluate_pointlight_runtime_readiness(
                     clustered_cpu_membership_sidecar_not_ready;
             return out;
         }
+        if(!context.clustered_membership_order_verified){
+            out.reason=
+                pointlight_runtime_reason::
+                    clustered_membership_order_not_verified;
+            return out;
+        }
+        if(!context.clustered_count_provenance_ready){
+            out.reason=
+                pointlight_runtime_reason::
+                    clustered_count_provenance_not_ready;
+            return out;
+        }
+        const auto raw=context.clustered_raw_selected_count;
+        const auto material_max=context.clustered_material_max_count;
+        const auto expected=
+            static_cast<std::uint8_t>(raw<material_max?raw:material_max);
+        if(raw>4u || material_max>4u ||
+           context.clustered_effective_count!=expected){
+            out.reason=
+                pointlight_runtime_reason::clustered_effective_count_invalid;
+            return out;
+        }
+        out.selected_light_count=context.clustered_effective_count;
         if(!context.clustered_four_slot_shader_ready){
             out.reason=
                 pointlight_runtime_reason::
