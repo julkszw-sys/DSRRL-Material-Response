@@ -7,7 +7,9 @@ bool snapshot_bus::publish(
     std::uint64_t producer_epoch,
     const semantic_payload &payload)
 {
-    if (key.owner == 0 || payload.lane_count > max_snapshot_lanes)
+    if (!valid_operator_id(key.op) ||
+        key.owner == 0 ||
+        payload.lane_count > max_snapshot_lanes)
         return false;
 
     std::lock_guard lock(mutex_);

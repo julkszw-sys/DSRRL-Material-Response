@@ -9,6 +9,7 @@
 #include "dsrrl/runtime/mr_dxbc_transform.hpp"
 #include "dsrrl/runtime/engine_hooks.hpp"
 #include "dsrrl/runtime/asset_bridges.hpp"
+#include "dsrrl/runtime/draw_replay.hpp"
 #include "dsrrl/runtime/upper_lower_runtime.hpp"
 #include "dsrrl/runtime/generated_ul_stable_hashes.hpp"
 #include "dsrrl/runtime/generated_spec_material_routes.hpp"
@@ -87,12 +88,12 @@ thread_local int g_bound_host=-1;
 thread_local const command_list *g_bound_command=nullptr;
 
 struct pending_pipeline {
-    const shader_desc *descriptor=nullptr;
     std::size_t size=0;
     std::string sha;
     std::uint8_t host=0;
 };
-thread_local std::vector<pending_pipeline> g_pending;
+std::mutex g_pending_mutex;
+std::vector<pending_pipeline> g_pending;
 
 std::mutex g_pipeline_mutex;
 std::unordered_map<std::uint64_t,std::uint8_t> g_pipelines;
@@ -232,34 +233,42 @@ bool ensure_shader_pair(device *d,const plan &p,std::span<const std::uint8_t> st
     return true;
 }
 
-ID3D11Buffer *realize_b12(ID3D11Device *device,int donor_index)
+ID3D11Buffer *realize_b12(ID3D11Device *device,int donor_index) noexcept
 {
     if(!device || donor_index<0 ||
        static_cast<std::size_t>(donor_index)>=dsrrl::materialdonor::k_donors.size())
         return nullptr;
 
-    std::lock_guard lock(g_device_mutex);
-    if(g_device.device!=device) return nullptr;
-
-    const auto key=static_cast<std::uint16_t>(donor_index);
-    if(const auto it=g_device.b12.find(key);it!=g_device.b12.end() && it->second){
-        it->second->AddRef(); ++g_b12_hit; return it->second;
-    }
-
-    const auto &d=dsrrl::materialdonor::k_donors[static_cast<std::size_t>(donor_index)];
-    struct f4{float x,y,z,w;};
-    const std::array<f4,4> payload={{
-        {d.c101_f0q[0],d.c101_f0q[1],d.c101_f0q[2],d.has_c101?1.0f:0.0f},
-        {d.c100[0],d.c100[1],d.c100[2],1.0f},
-        {0,0,0,0},{0,0,0,0}
-    }};
-    D3D11_BUFFER_DESC desc{}; desc.ByteWidth=64; desc.Usage=D3D11_USAGE_IMMUTABLE;
-    desc.BindFlags=D3D11_BIND_CONSTANT_BUFFER;
-    D3D11_SUBRESOURCE_DATA init{}; init.pSysMem=payload.data();
     ID3D11Buffer *buffer=nullptr;
-    if(FAILED(device->CreateBuffer(&desc,&init,&buffer)) || !buffer) return nullptr;
-    g_device.b12.emplace(key,buffer);
-    buffer->AddRef(); ++g_b12_create; return buffer;
+    try {
+        std::lock_guard lock(g_device_mutex);
+        if(g_device.device!=device) return nullptr;
+
+        const auto key=static_cast<std::uint16_t>(donor_index);
+        if(const auto it=g_device.b12.find(key);it!=g_device.b12.end() && it->second){
+            it->second->AddRef(); ++g_b12_hit; return it->second;
+        }
+
+        const auto &d=dsrrl::materialdonor::k_donors[static_cast<std::size_t>(donor_index)];
+        struct f4{float x,y,z,w;};
+        const std::array<f4,4> payload={{
+            {d.c101_f0q[0],d.c101_f0q[1],d.c101_f0q[2],d.has_c101?1.0f:0.0f},
+            {d.c100[0],d.c100[1],d.c100[2],1.0f},
+            {0,0,0,0},{0,0,0,0}
+        }};
+        D3D11_BUFFER_DESC desc{}; desc.ByteWidth=64; desc.Usage=D3D11_USAGE_IMMUTABLE;
+        desc.BindFlags=D3D11_BIND_CONSTANT_BUFFER;
+        D3D11_SUBRESOURCE_DATA init{}; init.pSysMem=payload.data();
+        if(FAILED(device->CreateBuffer(&desc,&init,&buffer)) || !buffer) return nullptr;
+
+        g_device.b12.emplace(key,buffer);
+        buffer->AddRef();
+        ++g_b12_create;
+        return buffer;
+    } catch (...) {
+        if(buffer) buffer->Release();
+        return nullptr;
+    }
 }
 
 struct cb_capture {
@@ -322,49 +331,90 @@ void on_destroy_device(device *d)
         if(g_device.device!=native) return;
     }
     release_device_state();
+    {
+        std::lock_guard lock(g_pending_mutex);
+        g_pending.clear();
+    }
+    {
+        std::lock_guard lock(g_pipeline_mutex);
+        g_pipelines.clear();
+    }
 }
 
 bool on_create_pipeline(device *d,pipeline_layout,std::uint32_t count,const pipeline_subobject *sub)
 {
-    if(!g_enabled.load() || g_quarantined.load() || !d || d->get_api()!=device_api::d3d11) return false;
-    const auto *ps=find_ps(count,sub);
-    if(!ps || !ps->code || !ps->code_size) return false;
-    ++g_pipeline_seen;
+    try {
+        if(!g_enabled.load() || g_quarantined.load() || !d || d->get_api()!=device_api::d3d11) return false;
+        const auto *ps=find_ps(count,sub);
+        if(!ps || !ps->code || !ps->code_size) return false;
+        ++g_pipeline_seen;
 
-    const auto *bytes=static_cast<const std::uint8_t*>(ps->code);
-    const auto sha=dsrrl::to_hex(dsrrl::sha256({
-        reinterpret_cast<const std::byte*>(bytes),ps->code_size
-    }));
-    const auto *p=find_plan(ps->code_size,sha);
-    if(!p) return false;
+        const auto *bytes=static_cast<const std::uint8_t*>(ps->code);
+        const auto sha=dsrrl::to_hex(dsrrl::sha256({
+            reinterpret_cast<const std::byte*>(bytes),ps->code_size
+        }));
+        const auto *p=find_plan(ps->code_size,sha);
+        if(!p) return false;
 
-    if(!ensure_shader_pair(d,*p,{bytes,ps->code_size})){
-        ++g_fail_open; g_quarantined.store(true);
-        log_error("DSRRL Runtime v1 MR: exact V2.11 shader transform failed; MR quarantined.");
+        if(!ensure_shader_pair(d,*p,{bytes,ps->code_size})){
+            ++g_fail_open; g_quarantined.store(true);
+            log_error("DSRRL Runtime v1 MR: exact V2.11 shader transform failed; MR quarantined.");
+            return false;
+        }
+
+        {
+            std::lock_guard lock(g_pending_mutex);
+            g_pending.push_back({ps->code_size,sha,p->index});
+        }
+        return false;
+    } catch (...) {
+        ++g_fail_open;
+        g_quarantined.store(true);
+        reshade::log::message(
+            reshade::log::level::error,
+            "DSRRL Runtime v1 MR: create_pipeline exception; MR quarantined fail-open.");
         return false;
     }
-
-    g_pending.push_back({ps,ps->code_size,sha,p->index});
-    return false;
 }
 
 void on_init_pipeline(device *d,pipeline_layout,std::uint32_t count,const pipeline_subobject *sub,pipeline p)
 {
-    if(!d || d->get_api()!=device_api::d3d11 || !p.handle) return;
-    const auto *ps=find_ps(count,sub); if(!ps) return;
-    for(auto it=g_pending.begin();it!=g_pending.end();++it){
-        if(it->descriptor!=ps) continue;
+    try {
+        if(!d || d->get_api()!=device_api::d3d11 || !p.handle) return;
+        const auto *ps=find_ps(count,sub);
+        if(!ps || !ps->code || !ps->code_size) return;
+
         const auto sha=dsrrl::to_hex(dsrrl::sha256({
             reinterpret_cast<const std::byte*>(ps->code),ps->code_size
         }));
-        if(ps->code_size==it->size && sha==it->sha){
-            std::lock_guard lock(g_pipeline_mutex);
-            g_pipelines[p.handle]=it->host;
-        }else{
-            g_quarantined.store(true); ++g_fail_open;
-            log_error("DSRRL Runtime v1 MR: create/init pipeline attestation mismatch.");
+
+        // Do not depend on callback-local shader_desc object identity. The API
+        // may present a different descriptor object at init_pipeline or dispatch
+        // the callback from another worker thread. Correlate by certified full
+        // source SHA-256 + size.
+        std::uint8_t host=0;
+        bool matched=false;
+        {
+            std::lock_guard lock(g_pending_mutex);
+            for(auto it=g_pending.begin();it!=g_pending.end();++it){
+                if(ps->code_size!=it->size || sha!=it->sha)
+                    continue;
+                host=it->host;
+                g_pending.erase(it);
+                matched=true;
+                break;
+            }
         }
-        g_pending.erase(it); break;
+        if(matched){
+            std::lock_guard lock(g_pipeline_mutex);
+            g_pipelines[p.handle]=host;
+        }
+    } catch (...) {
+        ++g_fail_open;
+        g_quarantined.store(true);
+        reshade::log::message(
+            reshade::log::level::error,
+            "DSRRL Runtime v1 MR: init_pipeline exception; MR quarantined fail-open.");
     }
 }
 
@@ -491,8 +541,13 @@ bool on_draw_indexed(command_list *cmd,std::uint32_t index_count,std::uint32_t i
             if(spec_active)
                 plan.patches[plan.patch_count++]={core::operator_id::spec_rgb,0u,true,true};
             if(intended_ul)
-                plan.patches[plan.patch_count++]={core::operator_id::upper_lower,0u,true,false};
-            plan.carrier_write_mask=0;
+                plan.patches[plan.patch_count++]={
+                    core::operator_id::upper_lower,
+                    core::carrier_ul_mask,
+                    true,
+                    false};
+            plan.carrier_write_mask =
+                intended_ul ? core::carrier_ul_mask : 0u;
 
             const auto type=ctx->GetType()==D3D11_DEVICE_CONTEXT_DEFERRED ?
                 core::context_kind::deferred : core::context_kind::immediate;
@@ -511,10 +566,22 @@ bool on_draw_indexed(command_list *cmd,std::uint32_t index_count,std::uint32_t i
 
                     const bool assets_ok=assets::apply_draw(ctx,route,receiver_id,asset_state);
                     if(assets_ok){
-                        if(instance_count<=1)
-                            ctx->DrawIndexed(index_count,first_index,vertex_offset);
+                        const auto replay =
+                            choose_indexed_replay(
+                                instance_count,
+                                first_instance);
+                        if(replay==indexed_replay_kind::draw_indexed)
+                            ctx->DrawIndexed(
+                                index_count,
+                                first_index,
+                                vertex_offset);
                         else
-                            ctx->DrawIndexedInstanced(index_count,instance_count,first_index,vertex_offset,first_instance);
+                            ctx->DrawIndexedInstanced(
+                                index_count,
+                                instance_count,
+                                first_index,
+                                vertex_offset,
+                                first_instance);
                         issued=true;
                     }
                 }else{
@@ -570,22 +637,26 @@ bool on_draw_indexed(command_list *cmd,std::uint32_t index_count,std::uint32_t i
 }
 void on_present(command_queue *,swapchain *,const rect *,const rect *,std::uint32_t,const rect *)
 {
-    const auto n=++g_present;
-    if(n==300 || (n>300 && (n%1200)==0)){
-        std::ostringstream os;
-        os<<"DSRRL Runtime v1 MR: present="<<n
-          <<" MTD="<<g_mtd_seen.load()<<" mapped="<<g_mapped.load()<<" unmapped="<<g_unmapped.load()
-          <<" selector="<<g_selector_seen.load()<<" selector_mapped="<<g_selector_mapped.load()
-          <<" pipelines="<<g_pipeline_seen.load()<<" shader_pair_pass="<<g_shader_pair_pass.load()
-          <<" shader_pair_fail="<<g_shader_pair_fail.load()
-          <<" ul_shader_pass="<<g_shader_ul_pass.load()<<" ul_shader_fail="<<g_shader_ul_fail.load()
-          <<" spec_shader_pass="<<g_shader_spec_pass.load()<<" spec_shader_fail="<<g_shader_spec_fail.load()
-          <<" ul_spec_shader_pass="<<g_shader_ul_spec_pass.load()<<" ul_spec_shader_fail="<<g_shader_ul_spec_fail.load()
-          <<" binds="<<g_target_binds.load()
-          <<" replay="<<g_replays.load()<<" b12_create="<<g_b12_create.load()
-          <<" b12_hit="<<g_b12_hit.load()<<" failopen="<<g_fail_open.load()
-          <<" restore_fail="<<g_restore_fail.load()<<" quarantined="<<(g_quarantined.load()?1:0);
-        log_info(os.str());
+    try {
+        const auto n=++g_present;
+        if(n==300 || (n>300 && (n%1200)==0)){
+            std::ostringstream os;
+            os<<"DSRRL Runtime v1 MR: present="<<n
+              <<" MTD="<<g_mtd_seen.load()<<" mapped="<<g_mapped.load()<<" unmapped="<<g_unmapped.load()
+              <<" selector="<<g_selector_seen.load()<<" selector_mapped="<<g_selector_mapped.load()
+              <<" pipelines="<<g_pipeline_seen.load()<<" shader_pair_pass="<<g_shader_pair_pass.load()
+              <<" shader_pair_fail="<<g_shader_pair_fail.load()
+              <<" ul_shader_pass="<<g_shader_ul_pass.load()<<" ul_shader_fail="<<g_shader_ul_fail.load()
+              <<" spec_shader_pass="<<g_shader_spec_pass.load()<<" spec_shader_fail="<<g_shader_spec_fail.load()
+              <<" ul_spec_shader_pass="<<g_shader_ul_spec_pass.load()<<" ul_spec_shader_fail="<<g_shader_ul_spec_fail.load()
+              <<" binds="<<g_target_binds.load()
+              <<" replay="<<g_replays.load()<<" b12_create="<<g_b12_create.load()
+              <<" b12_hit="<<g_b12_hit.load()<<" failopen="<<g_fail_open.load()
+              <<" restore_fail="<<g_restore_fail.load()<<" quarantined="<<(g_quarantined.load()?1:0);
+            log_info(os.str());
+        }
+    } catch (...) {
+        // Telemetry is non-authoritative and must never escape the callback ABI.
     }
 }
 
@@ -648,6 +719,7 @@ void unregister_runtime() noexcept
     reshade::unregister_event<reshade::addon_event::destroy_device>(on_destroy_device);
     reshade::unregister_event<reshade::addon_event::init_device>(on_init_device);
     release_device_state();
+    {std::lock_guard lock(g_pending_mutex);g_pending.clear();}
     {std::lock_guard lock(g_pipeline_mutex);g_pipelines.clear();}
     {std::lock_guard lock(g_material_mutex);g_material_donor.clear();}
     g_core=nullptr;

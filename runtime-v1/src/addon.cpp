@@ -159,6 +159,8 @@ extern "C" __declspec(dllexport) bool AddonInit(HMODULE addon,HMODULE reshade_mo
     g_a1_bridge.reset();
     g_a1_present_count.store(0);
     if(!apply_manifest_boot_state()){
+        disable_manifest_features();
+        g_a1_bridge.reset();
         reshade::unregister_addon(addon,reshade_module);
         return false;
     }
@@ -171,6 +173,7 @@ extern "C" __declspec(dllexport) bool AddonInit(HMODULE addon,HMODULE reshade_mo
         dsrrl::runtime::mr::unregister_runtime();
         unregister_a1_events();
         g_a1_bridge.reset();
+        disable_manifest_features();
         reshade::unregister_addon(addon,reshade_module);
         return false;
     }
@@ -191,6 +194,7 @@ extern "C" __declspec(dllexport) bool AddonInit(HMODULE addon,HMODULE reshade_mo
         dsrrl::runtime::assets::unregister_runtime();
         unregister_a1_events();
         g_a1_bridge.reset();
+        disable_manifest_features();
         reshade::log::message(reshade::log::level::error,
             "DSRRL Runtime v1: EngineBridge hook install failed; fail-open/unload.");
         reshade::unregister_addon(addon,reshade_module);

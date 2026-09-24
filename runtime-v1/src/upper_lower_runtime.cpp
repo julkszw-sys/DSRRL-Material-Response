@@ -267,16 +267,22 @@ void publish_snapshot(const producer_tls &p) noexcept
     if(!safe_read(p.assignment+8,a) || !safe_read(p.assignment+10,b) || !safe_read(p.assignment+12,beta))
         return;
 
-    auto s=std::make_shared<snapshot>();
-    s->owner=p.owner;
-    s->a=a; s->b=b; s->beta_bits=beta;
-    s->payload[6]=p.upper;
-    s->payload[7]=p.lower;
-    {
-        std::lock_guard lock(g_snapshot_mutex);
-        g_snapshots[p.owner]=s;
+    try {
+        auto s=std::make_shared<snapshot>();
+        s->owner=p.owner;
+        s->a=a; s->b=b; s->beta_bits=beta;
+        s->payload[6]=p.upper;
+        s->payload[7]=p.lower;
+        {
+            std::lock_guard lock(g_snapshot_mutex);
+            g_snapshots[p.owner]=std::move(s);
+        }
+        ++g_snapshot_publish;
+    } catch (...) {
+        // Producer capture is observational. Allocation/bookkeeping failure must
+        // never terminate the host from inside an inline game hook; simply omit
+        // this snapshot and let the draw path fail open to stock DSR.
     }
-    ++g_snapshot_publish;
 }
 
 void *run_wrapper(wrapper_fn original,std::atomic<std::uint64_t> &counter,
@@ -370,6 +376,19 @@ bool install_hooks() noexcept
     return true;
 }
 
+void on_destroy_device(reshade::api::device *device)
+{
+    if(!device || device->get_api()!=reshade::api::device_api::d3d11)
+        return;
+
+    // b13 buffers are device-owned. Never retain COM references or a selected
+    // snapshot across a D3D11 device teardown/recreation boundary; fail open
+    // until the producer publishes a fresh semantic snapshot.
+    g_draw_snapshot.reset();
+    std::lock_guard lock(g_snapshot_mutex);
+    g_snapshots.clear();
+}
+
 ID3D11Buffer *realize_b13(const std::shared_ptr<const snapshot> &s,ID3D11Device *device) noexcept
 {
     if(!s || !device) return nullptr;
@@ -421,6 +440,8 @@ bool register_runtime(core::renderer_core &core) noexcept
         return false;
     }
 
+    reshade::register_event<reshade::addon_event::destroy_device>(
+        on_destroy_device);
     g_enabled.store(true);
     log_info("DSRRL Runtime U/L: steady 0x563B80 + blend 0x5642F0 producer capture armed; shared selector only.");
     return true;
@@ -429,6 +450,8 @@ bool register_runtime(core::renderer_core &core) noexcept
 void unregister_runtime() noexcept
 {
     g_enabled.store(false);
+    reshade::unregister_event<reshade::addon_event::destroy_device>(
+        on_destroy_device);
     restore_hooks();
     consume_draw_selection();
     {

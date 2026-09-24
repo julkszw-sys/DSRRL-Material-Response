@@ -4,18 +4,24 @@ namespace dsrrl::core {
 
 bool hook_registry::claim(hook_claim claim) noexcept
 {
-    if (claim.site == 0 || claim.semantic == hook_semantic::unknown)
+    if (claim.site == 0 ||
+        claim.semantic == hook_semantic::unknown ||
+        !valid_operator_id(claim.owner))
         return false;
 
-    std::lock_guard lock(mutex_);
-    const auto it = claims_.find(claim.site);
-    if (it == claims_.end()) {
-        claims_.emplace(claim.site, claim);
-        return true;
-    }
+    try {
+        std::lock_guard lock(mutex_);
+        const auto it = claims_.find(claim.site);
+        if (it == claims_.end()) {
+            claims_.emplace(claim.site, claim);
+            return true;
+        }
 
-    return it->second.owner == claim.owner &&
-           it->second.semantic == claim.semantic;
+        return it->second.owner == claim.owner &&
+               it->second.semantic == claim.semantic;
+    } catch (...) {
+        return false;
+    }
 }
 
 bool hook_registry::release(std::uint64_t site, operator_id owner) noexcept

@@ -4,6 +4,7 @@
 #include "draw_transaction.hpp"
 #include "feature_registry.hpp"
 #include "hook_registry.hpp"
+#include "island_policy.hpp"
 #include "receiver_registry.hpp"
 #include "shader_registry.hpp"
 #include "snapshot_bus.hpp"
@@ -18,6 +19,12 @@ struct island_request {
     std::uint32_t carrier_write_mask = 0;
     bool shader_replacement = false;
     bool resource_replacement = false;
+
+    // PARTIAL / ACTIVE_CANDIDATE / DIAGNOSTIC islands have operator-local
+    // readiness contracts beyond the generic Core activation_context. They
+    // may enter a generic draw plan only after the owning island has closed
+    // those extra gates explicitly.
+    bool operator_readiness_verified = false;
 };
 
 struct draw_context {
@@ -26,6 +33,7 @@ struct draw_context {
     context_kind context = context_kind::unknown;
     std::uint64_t shader_fast_hash = 0;
     sha256_digest shader_sha256{};
+    activation_context activation{};
 };
 
 class renderer_core {

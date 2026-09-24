@@ -178,17 +178,18 @@ void release_set(companion_set &set) noexcept
 
 void release_cache() noexcept
 {
-    std::vector<companion_set> pending;
-    {
+    // Destruction must not allocate: this path runs from device teardown and
+    // unregister callbacks, where an allocation failure must never terminate
+    // the host process through a noexcept boundary.
+    try {
         std::lock_guard lock(g_cache_mutex);
-        pending.reserve(g_cache.size());
         for (auto &[_, set] : g_cache)
-            pending.push_back(set);
+            release_set(set);
         g_cache.clear();
+    } catch (...) {
+        // Fail open during teardown. Leaking a sidecar reference is preferable
+        // to propagating an exception across the ReShade/host callback ABI.
     }
-
-    for (auto &set : pending)
-        release_set(set);
 }
 
 std::filesystem::path process_dir()
@@ -310,15 +311,16 @@ load_result load_dds(
                 (dx10.misc_flag & k_misc_texturecube) != 0u)
                 return {nullptr, load_status::unsupported};
 
+            // Material sidecars are authored for the renderer's explicit
+            // shader-domain transfer. Binding an *_SRGB SRV would add an
+            // implicit hardware decode and double-transform the material
+            // signal. BC7 remains supported by the certified SpecRGB loader,
+            // but only in the non-sRGB view class.
             switch (static_cast<DXGI_FORMAT>(dx10.dxgi_format)) {
             case DXGI_FORMAT_BC1_UNORM:
-            case DXGI_FORMAT_BC1_UNORM_SRGB:
             case DXGI_FORMAT_BC2_UNORM:
-            case DXGI_FORMAT_BC2_UNORM_SRGB:
             case DXGI_FORMAT_BC3_UNORM:
-            case DXGI_FORMAT_BC3_UNORM_SRGB:
             case DXGI_FORMAT_BC7_UNORM:
-            case DXGI_FORMAT_BC7_UNORM_SRGB:
                 format = static_cast<DXGI_FORMAT>(dx10.dxgi_format);
                 break;
             default:
@@ -506,29 +508,33 @@ void log_first_bind(
     const material_route_scope &route,
     std::uint32_t receiver_id) noexcept
 {
-    std::atomic<bool> *flag = nullptr;
-    const char *name = nullptr;
+    try {
+        std::atomic<bool> *flag = nullptr;
+        const char *name = nullptr;
 
-    switch (cls) {
-    case asset_class::specular:
-        flag = &g_first_spec; name = "SPEC"; break;
-    case asset_class::diffuse:
-        flag = &g_first_diff; name = "DIFF"; break;
-    case asset_class::normal:
-        flag = &g_first_norm; name = "NORMAL"; break;
-    }
+        switch (cls) {
+        case asset_class::specular:
+            flag = &g_first_spec; name = "SPEC"; break;
+        case asset_class::diffuse:
+            flag = &g_first_diff; name = "DIFF"; break;
+        case asset_class::normal:
+            flag = &g_first_norm; name = "NORMAL"; break;
+        }
 
-    bool expected = false;
-    if (flag != nullptr &&
-        flag->compare_exchange_strong(expected, true)) {
-        std::ostringstream os;
-        os << "[DSRRL A2 ASSET] FIRST_BIND island="
-           << name
-           << " route=" << route.route_index
-           << " receiver=" << receiver_id;
-        reshade::log::message(
-            reshade::log::level::info,
-            os.str().c_str());
+        bool expected = false;
+        if (flag != nullptr &&
+            flag->compare_exchange_strong(expected, true)) {
+            std::ostringstream os;
+            os << "[DSRRL A2 ASSET] FIRST_BIND island="
+               << name
+               << " route=" << route.route_index
+               << " receiver=" << receiver_id;
+            reshade::log::message(
+                reshade::log::level::info,
+                os.str().c_str());
+        }
+    } catch (...) {
+        // Telemetry is non-authoritative. Never let logging break a draw.
     }
 }
 
@@ -570,65 +576,76 @@ void on_init_resource_view(
         g_logical_name.empty())
         return;
 
-    const auto logical_hash = fnv_name(g_logical_name);
-    const bool normal_member =
-        generated::normal_name_hash_allowed_v12(logical_hash);
-    const bool diffuse_member =
-        generated::diffuse_name_hash_allowed_v12(logical_hash);
-    const bool spec_member =
-        generated::spec_name_hash_allowed_v12(logical_hash);
-
-    // Exact V12 corpora are the authority. Unknown logical identities are never
-    // associated with a bridge resource, even if a similarly named DDS exists.
-    if (!normal_member && !diffuse_member && !spec_member)
-        return;
-
-    auto *native =
-        reinterpret_cast<ID3D11Device *>(device->get_native());
-    if (native == nullptr)
-        return;
-
-    ++g_named_srv;
     companion_set set{};
-    set.logical_hash = logical_hash;
+    try {
+        const auto logical_hash = fnv_name(g_logical_name);
+        const bool normal_member =
+            generated::normal_name_hash_allowed_v12(logical_hash);
+        const bool diffuse_member =
+            generated::diffuse_name_hash_allowed_v12(logical_hash);
+        const bool spec_member =
+            generated::spec_name_hash_allowed_v12(logical_hash);
 
-    if (spec_member) {
-        const auto spec =
-            load_dds(native, sidecar_path(asset_class::specular, g_logical_name));
-        account_load(asset_class::specular, spec.status);
-        set.specular = spec.view;
-    }
+        // Exact V12 corpora are the authority. Unknown logical identities are
+        // never associated with a bridge resource, even if a similarly named
+        // DDS exists.
+        if (!normal_member && !diffuse_member && !spec_member)
+            return;
 
-    if (generated::diffuse_target_hash_allowed_v12(logical_hash)) {
-        const auto diff =
-            load_dds(native, sidecar_path(asset_class::diffuse, g_logical_name));
-        account_load(asset_class::diffuse, diff.status);
-        set.diffuse = diff.view;
-    }
+        auto *native =
+            reinterpret_cast<ID3D11Device *>(device->get_native());
+        if (native == nullptr)
+            return;
 
-    if (generated::normal_target_hash_allowed_v12(logical_hash)) {
-        const auto normal =
-            load_dds(native, sidecar_path(asset_class::normal, g_logical_name));
-        account_load(asset_class::normal, normal.status);
-        set.normal = normal.view;
-    }
+        ++g_named_srv;
+        set.logical_hash = logical_hash;
 
-    const auto key = static_cast<std::uint64_t>(view.handle);
-    companion_set old{};
-    bool had_old = false;
-    {
-        std::lock_guard lock(g_cache_mutex);
-        const auto it = g_cache.find(key);
-        if (it != g_cache.end()) {
-            old = it->second;
-            it->second = set;
-            had_old = true;
-        } else {
-            g_cache.emplace(key, set);
+        if (spec_member) {
+            const auto spec =
+                load_dds(native, sidecar_path(asset_class::specular, g_logical_name));
+            account_load(asset_class::specular, spec.status);
+            set.specular = spec.view;
         }
+
+        if (generated::diffuse_target_hash_allowed_v12(logical_hash)) {
+            const auto diff =
+                load_dds(native, sidecar_path(asset_class::diffuse, g_logical_name));
+            account_load(asset_class::diffuse, diff.status);
+            set.diffuse = diff.view;
+        }
+
+        if (generated::normal_target_hash_allowed_v12(logical_hash)) {
+            const auto normal =
+                load_dds(native, sidecar_path(asset_class::normal, g_logical_name));
+            account_load(asset_class::normal, normal.status);
+            set.normal = normal.view;
+        }
+
+        const auto key = static_cast<std::uint64_t>(view.handle);
+        companion_set old{};
+        bool had_old = false;
+        {
+            std::lock_guard lock(g_cache_mutex);
+            const auto it = g_cache.find(key);
+            if (it != g_cache.end()) {
+                old = it->second;
+                it->second = set;
+                had_old = true;
+            } else {
+                g_cache.emplace(key, set);
+            }
+        }
+
+        // Ownership transferred to the cache.
+        set = {};
+        if (had_old)
+            release_set(old);
+    } catch (...) {
+        release_set(set);
+        ++g_create_fail;
+        // Resource-side bridge discovery is optional. Any failure leaves the
+        // stock SRV path untouched instead of escaping through the callback ABI.
     }
-    if (had_old)
-        release_set(old);
 }
 void on_destroy_resource_view(
     device *,
@@ -668,7 +685,8 @@ void on_present(
     std::uint32_t,
     const rect *)
 {
-    const auto n = ++g_present;
+    try {
+        const auto n = ++g_present;
     if (n != 1u &&
         (n % 300u) != 0u)
         return;
@@ -700,9 +718,12 @@ void on_present(
        << " restore_fail=" << g_restore_fail.load()
        << " quarantine=" << (g_quarantined.load() ? 1 : 0);
 
-    reshade::log::message(
-        reshade::log::level::info,
-        os.str().c_str());
+        reshade::log::message(
+            reshade::log::level::info,
+            os.str().c_str());
+    } catch (...) {
+        // Telemetry must never cross the host callback ABI with an exception.
+    }
 }
 
 } // namespace

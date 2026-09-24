@@ -10,8 +10,6 @@
 
 namespace dsrrl::core {
 
-using sha256_digest = std::array<std::uint8_t, 32>;
-
 struct receiver_descriptor {
     std::uint32_t receiver_id = 0;
     std::uint64_t fast_hash = 0;
