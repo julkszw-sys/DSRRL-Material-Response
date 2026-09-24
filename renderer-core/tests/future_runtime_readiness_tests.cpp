@@ -102,6 +102,8 @@ operators::lightbank::hemdir3_runtime_context ready_hemdir3()
     c.d123_source_ready=true;
     c.b13_carrier_ready=true;
     c.receiver_verified=true;
+    c.receiver_stratum=
+        operators::lightbank::hemdir3_receiver_stratum::nospc;
     c.host_envdiffuse_source_suppressed=true;
     c.material_continuation_ready=true;
     c.downstream_material_domain_ready=true;
