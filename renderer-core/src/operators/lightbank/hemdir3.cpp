@@ -73,6 +73,15 @@ hemdir3_runtime_plan evaluate_hemdir3_runtime_readiness(
         out.reason = hemdir3_runtime_reason::semantic_mode_not_hemdir3;
         return out;
     }
+    // Mode 2 is not legal to infer from ordinary FrpgModel/MapModel state:
+    // audited direct producers establish only {0,1}. Arm HemDir3 only when
+    // runtime supplies an independently exact effective-mode2 observation.
+    if (context.semantic_mode_provenance !=
+        hemdir3_semantic_mode_provenance::exact_effective_mode2) {
+        out.reason =
+            hemdir3_runtime_reason::semantic_mode_provenance_not_verified;
+        return out;
+    }
     if (!context.upper_lower_source_ready) {
         out.reason = hemdir3_runtime_reason::upper_lower_source_not_ready;
         return out;
