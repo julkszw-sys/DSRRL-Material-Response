@@ -325,6 +325,7 @@ int main()
           operators::lightbank::hemdir3_runtime_reason::
               semantic_mode_provenance_not_verified);
 
+    hemdir3=ready_hemdir3();
     hemdir3.host_envdiffuse_source_suppressed=false;
     hemdir3_plan=
         operators::lightbank::evaluate_hemdir3_runtime_readiness(
