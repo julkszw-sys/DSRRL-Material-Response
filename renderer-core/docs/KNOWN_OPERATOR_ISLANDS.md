@@ -389,3 +389,31 @@ of this Renderer Core path and PTDE-visible pixel equivalence remain open.
 The reproducible binary audit is
 `tools/audit_subsurface_plain_bypass_abi.py` with compact provenance in
 `data/audits/subsurface_plain_bypass_abi_v1.json`.
+
+
+## FaceEye shadow: resource/sampler boundary
+
+Canonical revision 8881 narrows the remaining FaceEye shadow bridge boundary without
+promoting activation. Across all eight DSR `FRPG_Phn_FaceEye` Sdw/Csd shadow
+variants, RDEF exposes the same `gSMP_7` texture declaration at `t7`. The exact
+split is at `s7`: no-Point and PntS declare `gSMP_7Sampler` as comparison,
+while PntSS/PntSSSS declare the same sampler slot/name as regular.
+
+The exact `Ps_Eye[DS].mtd` routes to `FRPG_Phn_FaceEye.spx` and does not carry
+a material-authored `gSMP_7`/shadow texture parameter. Static shader/material ABI
+therefore does not justify a separate RESOURCE sidecar for this mismatch.
+
+The narrow carrier candidate is **SHADER + SAMPLER**:
+
+- replace only exact FaceEye Sdw/Csd no-Point/PntS comparison-PCF kernels with the
+  PTDE-style packed-RGB 16-tap kernel;
+- preserve PntSS/PntSSSS, whose kernel already matches the PTDE PCF core;
+- preserve stock DSR unless the actual `t7` route and a compatible regular `s7`
+  sampler state are proven;
+- do not treat the comparison sampler object as interchangeable with a regular
+  sampler by assumption.
+
+The actual runtime sampler descriptor/object remains OPEN, so
+`surface.faceeye_shadow_legacy` remains BLOCKED. The reproducible declaration
+audit is stored in `tools/audit_faceeye_shadow_binding.py` and
+`data/audits/faceeye_shadow_binding_v1.json`.
