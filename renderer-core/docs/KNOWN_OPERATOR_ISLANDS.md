@@ -188,6 +188,29 @@ runtime producer/selector/freshness sidecar remains a separate activation proble
 the historical A3 producer-hook failures therefore do not invalidate this pure
 operator implementation and are not promoted to runtime success here.
 
+## Source-complete routing contract: PTDE SpecRGB split resource
+
+`bridge.specrgb` now has an explicit FULL24 routing gate for the confirmed stable
+no-PointLight Phn Spc HemEnv alternate receiver set:
+
+```text
+receivers 24..35 -> DifSpcBmp
+receivers 36..47 -> DifSpc
+PTDE SpecRGB.rgb -> independent t10
+stock DSR t1 -> preserved unchanged, including alpha/roughness
+```
+
+Receiver identity alone is intentionally insufficient. Activation also requires an
+exact actual-material route with a verified specular consumer, exact-name PTDE
+SpecRGB companion identity, a ready sidecar, native t10 transport, and proof that
+stock t1 remains intact. Missing any coordinate fails open to stock DSR. This keeps
+shared materials on the existing `PTDE_COMPANION_REQUIRED` policy and naturally
+excludes nonhomologous/no-spec routes such as `P[D].mtd`.
+
+This closes the bridge's core routing policy, not the resource-loader implementation
+or per-route runtime attestation. The existing FULL24/Spec-only lineage remains
+provenance for those later integration layers.
+
 ## Legacy A1/P2.2 decomposition
 
 The old combined mask is decomposed by ownership:

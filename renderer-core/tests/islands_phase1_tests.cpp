@@ -391,6 +391,54 @@ int main()
         bad_upper, lower_a, upper_b, lower_b, 0.25f, 0.0f);
     CHECK(ul.result == operators::lightbank::upper_lower_result::fail_open_nonfinite_input);
 
+    // SpecRGB split-resource bridge requires the complete receiver/material/
+    // logical-companion/t10/t1-preservation route. Shared hosts fail open.
+    CHECK(gates.set(core::operator_id::spec_rgb, true));
+    activation = operators::resource_bridges::spec_rgb.evaluate(gates, verified);
+    CHECK(activation.state == core::island_state::active);
+
+    operators::resource_bridges::spec_rgb_context spec_ctx;
+    spec_ctx.receiver_id = 33;
+    spec_ctx.actual_material_verified = true;
+    spec_ctx.material_specular_consumer_verified = true;
+    spec_ctx.exact_name_ptde_companion_verified = true;
+    spec_ctx.ptde_sidecar_ready = true;
+    spec_ctx.native_t10_transport_ready = true;
+    spec_ctx.stock_t1_preserved = true;
+
+    auto spec_route = operators::resource_bridges::evaluate_spec_rgb_route(spec_ctx);
+    CHECK(spec_route.action == operators::resource_bridges::spec_rgb_action::bind_ptde_t10_rgb);
+    CHECK(spec_route.reason == operators::resource_bridges::spec_rgb_reason::active);
+    CHECK(spec_route.family == operators::resource_bridges::spec_rgb_receiver_family::dif_spc_bmp);
+    CHECK(spec_route.ptde_rgb_srv_slot == 10u);
+    CHECK(spec_route.preserve_stock_t1);
+
+    spec_ctx.receiver_id = 40;
+    spec_route = operators::resource_bridges::evaluate_spec_rgb_route(spec_ctx);
+    CHECK(spec_route.action == operators::resource_bridges::spec_rgb_action::bind_ptde_t10_rgb);
+    CHECK(spec_route.family == operators::resource_bridges::spec_rgb_receiver_family::dif_spc);
+
+    spec_ctx.receiver_id = 48;
+    spec_route = operators::resource_bridges::evaluate_spec_rgb_route(spec_ctx);
+    CHECK(spec_route.action == operators::resource_bridges::spec_rgb_action::preserve_host);
+    CHECK(spec_route.reason == operators::resource_bridges::spec_rgb_reason::unsupported_receiver);
+
+    spec_ctx.receiver_id = 33;
+    spec_ctx.material_specular_consumer_verified = false;
+    spec_route = operators::resource_bridges::evaluate_spec_rgb_route(spec_ctx);
+    CHECK(spec_route.action == operators::resource_bridges::spec_rgb_action::preserve_host);
+    CHECK(spec_route.reason == operators::resource_bridges::spec_rgb_reason::no_specular_consumer);
+
+    spec_ctx.material_specular_consumer_verified = true;
+    spec_ctx.exact_name_ptde_companion_verified = false;
+    spec_route = operators::resource_bridges::evaluate_spec_rgb_route(spec_ctx);
+    CHECK(spec_route.reason == operators::resource_bridges::spec_rgb_reason::ptde_companion_not_verified);
+
+    spec_ctx.exact_name_ptde_companion_verified = true;
+    spec_ctx.stock_t1_preserved = false;
+    spec_route = operators::resource_bridges::evaluate_spec_rgb_route(spec_ctx);
+    CHECK(spec_route.reason == operators::resource_bridges::spec_rgb_reason::stock_t1_not_preserved);
+
     CHECK(gates.set(core::operator_id::post_hdr, true));
     activation = operators::postprocess::hdr.evaluate(gates, verified);
     CHECK(activation.state == core::island_state::fail_open);

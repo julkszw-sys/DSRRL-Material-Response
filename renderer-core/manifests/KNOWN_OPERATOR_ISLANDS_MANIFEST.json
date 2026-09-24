@@ -115,6 +115,29 @@
       "runtime_producer_sidecar": "OPEN",
       "runtime_activation": "NOT_TESTED_IN_RENDERER_CORE",
       "pixel": "OPEN"
+    },
+    "spec_rgb": {
+      "routing_contract": "SOURCE_COMPLETE",
+      "canonical_basis": "project.materialization.ptde_specrgb_bridge_full24_stable_hemenv_v1",
+      "receiver_partition": {
+        "24..35": "DifSpcBmp",
+        "36..47": "DifSpc"
+      },
+      "ptde_rgb_srv_slot": 10,
+      "stock_t1": "PRESERVE_FULL_RESOURCE_INCLUDING_ALPHA_ROUGHNESS",
+      "required_guards": [
+        "receiver_supported",
+        "actual_material_verified",
+        "material_specular_consumer_verified",
+        "exact_name_ptde_companion_verified",
+        "ptde_sidecar_ready",
+        "native_t10_transport_ready",
+        "stock_t1_preserved"
+      ],
+      "fail_open": "PRESERVE_STOCK_DSR",
+      "resource_loader_port": "PENDING",
+      "per_route_runtime_attestation": "PARTIAL_LINEAGE_NOT_CORE",
+      "pixel": "OPEN"
     }
   },
   "legacy_a1": {
