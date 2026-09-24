@@ -49,3 +49,36 @@ endif()
 
 enable_testing()
 add_test(NAME dsrrl_runtime_v1_tests COMMAND dsrrl_runtime_v1_tests)
+
+set(RESHade_INCLUDE_DIR "" CACHE PATH "Path to pinned ReShade include directory")
+
+if(WIN32 AND RESHade_INCLUDE_DIR)
+  enable_language(ASM_MASM)
+  add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/../renderer-core"
+                   "${CMAKE_CURRENT_BINARY_DIR}/renderer-core")
+
+  add_library(dsrrl_renderer_runtime_v1_addon SHARED
+    src/addon.cpp
+    src/engine_hooks.cpp
+    src/mr_island.cpp
+    src/selector_hook.asm
+  )
+  add_dependencies(dsrrl_renderer_runtime_v1_addon dsrrl_mr_manifest)
+  target_include_directories(dsrrl_renderer_runtime_v1_addon PRIVATE
+    include
+    "${GEN_DIR}"
+    "${CMAKE_CURRENT_SOURCE_DIR}/provenance/mr_v211"
+    "${RESHade_INCLUDE_DIR}"
+  )
+  target_link_libraries(dsrrl_renderer_runtime_v1_addon PRIVATE
+    dsrrl_runtime_v1
+    dsrrl_renderer_core
+  )
+  target_compile_features(dsrrl_renderer_runtime_v1_addon PRIVATE cxx_std_20)
+  target_compile_options(dsrrl_renderer_runtime_v1_addon PRIVATE /W4 /WX /permissive-)
+  set_target_properties(dsrrl_renderer_runtime_v1_addon PROPERTIES
+    PREFIX ""
+    OUTPUT_NAME "DSRRL_Renderer_Core_Runtime_v1"
+    SUFFIX ".addon64"
+  )
+endif()
