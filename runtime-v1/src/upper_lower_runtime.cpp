@@ -21,6 +21,7 @@
 #include <memory>
 #include <mutex>
 #include <sstream>
+#include <string>
 #include <unordered_map>
 
 namespace dsrrl::runtime::upper_lower {
