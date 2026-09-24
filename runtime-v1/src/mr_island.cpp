@@ -720,29 +720,70 @@ bool on_draw_indexed(command_list *cmd,std::uint32_t index_count,std::uint32_t i
         ctx->QueryInterface(__uuidof(ID3D11DeviceContext1),reinterpret_cast<void**>(&ctx1));
         oldcb=capture_cb(ctx,ctx1);
 
+        bool pmetal_v10_active=false;
         {
             std::lock_guard lock(g_device_mutex);
             if(g_device.device==dev){
                 const auto i=static_cast<std::size_t>(g_bound_host);
+
+                // Ordinary selection follows the exact stock receiver family:
+                // stable HemEnv stays stable; HemEnvLerp uses its own exact
+                // Build151 V2.11 materialization.
+                ID3D11PixelShader *base_diffuse =
+                    g_bound_lerp ? g_device.lerp_diffuse[i] : g_device.diffuse[i];
+                ID3D11PixelShader *base_full =
+                    g_bound_lerp ? g_device.lerp_full[i] : g_device.full[i];
+                ID3D11PixelShader *base_diffuse_ul =
+                    g_bound_lerp ? g_device.lerp_diffuse_ul[i] : g_device.diffuse_ul[i];
+                ID3D11PixelShader *base_full_ul =
+                    g_bound_lerp ? g_device.lerp_full_ul[i] : g_device.full_ul[i];
+                ID3D11PixelShader *base_full_spec =
+                    g_bound_lerp ? g_device.lerp_full_spec[i] : g_device.full_spec[i];
+                ID3D11PixelShader *base_full_ul_spec =
+                    g_bound_lerp ? g_device.lerp_full_ul_spec[i] : g_device.full_ul_spec[i];
+
                 ID3D11PixelShader *ul_shader =
-                    don.has_c101 ? g_device.full_ul[i] : g_device.diffuse_ul[i];
+                    don.has_c101 ? base_full_ul : base_diffuse_ul;
                 intended_ul=ul_candidate && ul_shader!=nullptr;
 
                 if(spec_candidate){
                     ID3D11PixelShader *spec_shader =
-                        intended_ul ? g_device.full_ul_spec[i] : g_device.full_spec[i];
+                        intended_ul ? base_full_ul_spec : base_full_spec;
                     spec_active=spec_shader!=nullptr;
                 }
 
                 if(don.has_c101){
                     replacement =
-                        intended_ul && spec_active ? g_device.full_ul_spec[i] :
-                        intended_ul ? g_device.full_ul[i] :
-                        spec_active ? g_device.full_spec[i] :
-                                      g_device.full[i];
+                        intended_ul && spec_active ? base_full_ul_spec :
+                        intended_ul ? base_full_ul :
+                        spec_active ? base_full_spec :
+                                      base_full;
                 }else{
-                    replacement=intended_ul ? g_device.diffuse_ul[i] : g_device.diffuse[i];
+                    replacement=intended_ul ? base_diffuse_ul : base_diffuse;
                 }
+
+                // Owner-accepted V10 scope: exact raw-MTD route345 and only
+                // paired receiver indices 9/10/11. HemEnvLerp intentionally
+                // reuses the repaired stable V9A alternate, reproducing the
+                // validated V10 paired-Lerp architecture instead of bypassing
+                // back to stock DSR.
+                const bool v10_candidate =
+                    donor==k_pmetal_route &&
+                    i>=9u && i<=11u &&
+                    g_core->features().enabled(core::operator_id::pmetal_black_safe_v10);
+
+                if(v10_candidate){
+                    ID3D11PixelShader *v10 =
+                        intended_ul && spec_active ? g_device.v9a_full_ul_spec[i] :
+                        intended_ul ? g_device.v9a_full_ul[i] :
+                        spec_active ? g_device.v9a_full_spec[i] :
+                                      g_device.v9a_full[i];
+                    if(v10){
+                        replacement=v10;
+                        pmetal_v10_active=true;
+                    }
+                }
+
                 if(replacement) replacement->AddRef();
             }
         }
@@ -754,6 +795,9 @@ bool on_draw_indexed(command_list *cmd,std::uint32_t index_count,std::uint32_t i
             body_material,g_core->features().enabled(core::operator_id::subsurface),true,spec_active))){
             core::render_patch_plan plan{};
             plan.patches[plan.patch_count++]={core::operator_id::material_response,0u,true,false};
+            if(pmetal_v10_active)
+                plan.patches[plan.patch_count++]={
+                    core::operator_id::pmetal_black_safe_v10,0u,true,false};
             if(g_core->features().enabled(core::operator_id::diffuse))
                 plan.patches[plan.patch_count++]={core::operator_id::diffuse,0u,false,true};
             if(g_core->features().enabled(core::operator_id::normal))
@@ -850,6 +894,8 @@ bool on_draw_indexed(command_list *cmd,std::uint32_t index_count,std::uint32_t i
         }
     }else{
         ++g_replays;
+        if(g_bound_lerp) ++g_lerp_replays;
+        if(pmetal_v10_active) ++g_v10_replays;
         if(body_route) ++g_subsurface_replays;
     }
 
