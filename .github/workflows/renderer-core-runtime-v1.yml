@@ -1,0 +1,36 @@
+name: Renderer Core Runtime v1
+
+on:
+  push:
+    branches:
+      - dev/renderer-core-v1-runtime1
+    paths:
+      - "runtime-v1/**"
+      - ".github/workflows/renderer-core-runtime-v1.yml"
+  pull_request:
+    paths:
+      - "runtime-v1/**"
+      - ".github/workflows/renderer-core-runtime-v1.yml"
+
+jobs:
+  core-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure runtime core
+        run: cmake -S runtime-v1 -B build/runtime-v1 -DCMAKE_BUILD_TYPE=Release
+      - name: Build runtime core
+        run: cmake --build build/runtime-v1 --config Release --parallel
+      - name: Test runtime core
+        run: ctest --test-dir build/runtime-v1 --output-on-failure
+
+  core-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure runtime core
+        run: cmake -S runtime-v1 -B build/runtime-v1
+      - name: Build runtime core
+        run: cmake --build build/runtime-v1 --config Release --parallel
+      - name: Test runtime core
+        run: ctest --test-dir build/runtime-v1 -C Release --output-on-failure
