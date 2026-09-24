@@ -9,7 +9,12 @@
 
 namespace dsrrl::runtime::mr {
 
-enum class variant : std::uint8_t { diffuse_v29 = 0, full_v211 };
+enum class variant : std::uint8_t {
+    diffuse_v29 = 0,
+    full_v211,
+    diffuse_v29_specrgb,
+    full_v211_specrgb
+};
 
 struct transform_result {
     bool ok = false;
