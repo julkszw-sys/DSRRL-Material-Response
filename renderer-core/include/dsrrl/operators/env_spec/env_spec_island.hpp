@@ -1,6 +1,7 @@
 #pragma once
 
 #include "dsrrl/operators/material_response/material_response_island.hpp"
+#include "dsrrl/operators/material_response/mtd_semantic_census.hpp"
 #include "dsrrl/operators/known_operator_island.hpp"
 #include "dsrrl/operators/env_spec/no_spc_envspec_delete.hpp"
 #include "dsrrl/operators/env_spec/legacy_runtime_readiness.hpp"
@@ -24,6 +25,10 @@ class env_spec_island {
 public:
     static decision gate(
         material_response::ptde_envspec_presence presence,
+        bool ptde_bridge_ready) noexcept;
+
+    static decision gate(
+        const material_response::mtd_semantic_query &query,
         bool ptde_bridge_ready) noexcept;
 };
 
