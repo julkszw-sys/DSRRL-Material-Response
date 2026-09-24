@@ -698,6 +698,7 @@ bool on_draw_indexed(command_list *cmd,std::uint32_t index_count,std::uint32_t i
     bool restore_ok=true;
     bool intended_ul=false;
     bool spec_active=false;
+    bool pmetal_v10_active=false;
     bool tx_started=false;
     std::uint64_t command=0;
 
@@ -720,7 +721,6 @@ bool on_draw_indexed(command_list *cmd,std::uint32_t index_count,std::uint32_t i
         ctx->QueryInterface(__uuidof(ID3D11DeviceContext1),reinterpret_cast<void**>(&ctx1));
         oldcb=capture_cb(ctx,ctx1);
 
-        bool pmetal_v10_active=false;
         {
             std::lock_guard lock(g_device_mutex);
             if(g_device.device==dev){
