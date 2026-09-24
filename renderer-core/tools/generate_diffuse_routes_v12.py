@@ -2,12 +2,17 @@
 from __future__ import annotations
 import argparse,csv,hashlib
 from pathlib import Path
+EXPECTED_CANONICAL_DATA_SHA256="977a38a3a28228a81a836c238282b34fd718428a98cb5e5008f56892e537bbd9"
 EXPECTED_PAIRS=528
 EXPECTED_SAFE_ROWS=3446
 EXPECTED_TARGETS=524
 
 def load(path:Path):
     lines=[x for x in path.read_text(encoding="utf-8").splitlines() if x and not x.startswith("#")]
+    canonical=("\n".join(lines)+"\n").encode("utf-8")
+    actual=hashlib.sha256(canonical).hexdigest()
+    if actual!=EXPECTED_CANONICAL_DATA_SHA256:
+        raise SystemExit(f"canonical data SHA256 mismatch: {actual} != {EXPECTED_CANONICAL_DATA_SHA256}")
     rows=list(csv.DictReader(lines,delimiter="\t"))
     pairs=[]; safe=0
     for r in rows:
