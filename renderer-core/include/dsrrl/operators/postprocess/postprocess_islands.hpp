@@ -1,6 +1,7 @@
 #pragma once
 
 #include "dsrrl/operators/known_operator_island.hpp"
+#include "dsrrl/operators/postprocess/future_runtime_preflight.hpp"
 
 namespace dsrrl::operators::postprocess {
 
