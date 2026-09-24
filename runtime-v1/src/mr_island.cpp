@@ -92,7 +92,8 @@ struct pending_pipeline {
     std::string sha;
     std::uint8_t host=0;
 };
-thread_local std::vector<pending_pipeline> g_pending;
+std::mutex g_pending_mutex;
+std::vector<pending_pipeline> g_pending;
 
 std::mutex g_pipeline_mutex;
 std::unordered_map<std::uint64_t,std::uint8_t> g_pipelines;
@@ -344,7 +345,10 @@ bool on_create_pipeline(device *d,pipeline_layout,std::uint32_t count,const pipe
         return false;
     }
 
-    g_pending.push_back({ps->code_size,sha,p->index});
+    {
+        std::lock_guard lock(g_pending_mutex);
+        g_pending.push_back({ps->code_size,sha,p->index});
+    }
     return false;
 }
 
@@ -359,17 +363,26 @@ void on_init_pipeline(device *d,pipeline_layout,std::uint32_t count,const pipeli
     }));
 
     // Do not depend on callback-local shader_desc object identity. The API may
-    // present a different descriptor object at init_pipeline even though the
-    // shader bytes are the same. Correlate by the already certified full
-    // source SHA-256 + size instead; equal SHA implies the same stable host.
-    for(auto it=g_pending.begin();it!=g_pending.end();++it){
-        if(ps->code_size!=it->size || sha!=it->sha)
-            continue;
-
+    // present a different descriptor object at init_pipeline or dispatch the
+    // callback from another worker thread. Correlate by the already certified
+    // full source SHA-256 + size instead; equal SHA implies the same stable
+    // host. Global pending ownership keeps cross-thread create/init safe.
+    std::uint8_t host=0;
+    bool matched=false;
+    {
+        std::lock_guard lock(g_pending_mutex);
+        for(auto it=g_pending.begin();it!=g_pending.end();++it){
+            if(ps->code_size!=it->size || sha!=it->sha)
+                continue;
+            host=it->host;
+            g_pending.erase(it);
+            matched=true;
+            break;
+        }
+    }
+    if(matched){
         std::lock_guard lock(g_pipeline_mutex);
-        g_pipelines[p.handle]=it->host;
-        g_pending.erase(it);
-        return;
+        g_pipelines[p.handle]=host;
     }
 }
 
@@ -670,6 +683,7 @@ void unregister_runtime() noexcept
     reshade::unregister_event<reshade::addon_event::destroy_device>(on_destroy_device);
     reshade::unregister_event<reshade::addon_event::init_device>(on_init_device);
     release_device_state();
+    {std::lock_guard lock(g_pending_mutex);g_pending.clear();}
     {std::lock_guard lock(g_pipeline_mutex);g_pipelines.clear();}
     {std::lock_guard lock(g_material_mutex);g_material_donor.clear();}
     g_core=nullptr;
