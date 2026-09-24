@@ -75,7 +75,18 @@ if(WIN32 AND RESHade_INCLUDE_DIR)
     dsrrl_renderer_core
   )
   target_compile_features(dsrrl_renderer_runtime_v1_addon PRIVATE cxx_std_20)
-  target_compile_options(dsrrl_renderer_runtime_v1_addon PRIVATE /W4 /WX /permissive-)
+
+  # C++ warning/conformance switches must never leak into ml64/MASM.
+  # MASM receives its own defaults; /WX remains C++-only here so the
+  # mixed-language addon can build deterministically on Windows runners.
+  if(MSVC)
+    target_compile_options(dsrrl_renderer_runtime_v1_addon PRIVATE
+      $<$<COMPILE_LANGUAGE:CXX>:/W4>
+      $<$<COMPILE_LANGUAGE:CXX>:/WX>
+      $<$<COMPILE_LANGUAGE:CXX>:/permissive->
+    )
+  endif()
+
   set_target_properties(dsrrl_renderer_runtime_v1_addon PROPERTIES
     PREFIX ""
     OUTPUT_NAME "DSRRL_Renderer_Core_Runtime_v1"
