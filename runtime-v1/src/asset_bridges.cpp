@@ -8,6 +8,8 @@
 #include "dsrrl/runtime/asset_bridges.hpp"
 #include "dsrrl/runtime/engine_hooks.hpp"
 #include "dsrrl/core/renderer_core.hpp"
+#include "dsrrl/runtime/generated_normal_routes_v12.hpp"
+#include "dsrrl/runtime/generated_diffuse_routes_v12.hpp"
 
 #include <reshade.hpp>
 
@@ -42,6 +44,7 @@ enum class load_status : std::uint8_t {
 };
 
 struct companion_set {
+    std::uint64_t logical_hash = 0;
     ID3D11ShaderResourceView *specular = nullptr;
     ID3D11ShaderResourceView *diffuse = nullptr;
     ID3D11ShaderResourceView *normal = nullptr;
@@ -96,6 +99,8 @@ static_assert(sizeof(dds_header_dx10) == 20);
 
 constexpr std::uint32_t k_dds_magic = 0x20534444u;
 constexpr std::uint32_t k_fourcc_dxt1 = 0x31545844u;
+constexpr std::uint32_t k_fourcc_dxt3 = 0x33545844u;
+constexpr std::uint32_t k_fourcc_dxt5 = 0x35545844u;
 constexpr std::uint32_t k_fourcc_dx10 = 0x30315844u;
 constexpr std::uint32_t k_resource_dimension_texture2d = 3u;
 constexpr std::uint32_t k_misc_texturecube = 0x4u;
@@ -124,6 +129,8 @@ std::atomic<std::uint64_t> g_create_fail{0};
 std::atomic<std::uint64_t> g_spec_gate{0};
 std::atomic<std::uint64_t> g_diff_gate{0};
 std::atomic<std::uint64_t> g_norm_gate{0};
+std::atomic<std::uint64_t> g_diff_pair_reject{0};
+std::atomic<std::uint64_t> g_norm_tuple_reject{0};
 std::atomic<std::uint64_t> g_spec_bind{0};
 std::atomic<std::uint64_t> g_diff_bind{0};
 std::atomic<std::uint64_t> g_norm_bind{0};
@@ -137,6 +144,20 @@ std::atomic<bool> g_quarantined{false};
 std::atomic<bool> g_first_spec{false};
 std::atomic<bool> g_first_diff{false};
 std::atomic<bool> g_first_norm{false};
+
+std::uint64_t fnv_name(const std::wstring &name) noexcept
+{
+    std::uint64_t h = 14695981039346656037ull;
+    for (wchar_t ch : name) {
+        std::uint32_t c = static_cast<std::uint32_t>(ch);
+        if (c >= static_cast<std::uint32_t>(L'A') &&
+            c <= static_cast<std::uint32_t>(L'Z'))
+            c += 32u;
+        h ^= static_cast<std::uint64_t>(c);
+        h *= 1099511628211ull;
+    }
+    return h;
+}
 
 void release_view(ID3D11ShaderResourceView *&view) noexcept
 {
@@ -270,6 +291,10 @@ load_result load_dds(
 
         if (header.pixel_format.fourcc == k_fourcc_dxt1) {
             format = DXGI_FORMAT_BC1_UNORM;
+        } else if (header.pixel_format.fourcc == k_fourcc_dxt3) {
+            format = DXGI_FORMAT_BC2_UNORM;
+        } else if (header.pixel_format.fourcc == k_fourcc_dxt5) {
+            format = DXGI_FORMAT_BC3_UNORM;
         } else if (header.pixel_format.fourcc == k_fourcc_dx10) {
             dds_header_dx10 dx10{};
             if (!read_struct(bytes, data_offset, dx10))
@@ -286,6 +311,10 @@ load_result load_dds(
             switch (static_cast<DXGI_FORMAT>(dx10.dxgi_format)) {
             case DXGI_FORMAT_BC1_UNORM:
             case DXGI_FORMAT_BC1_UNORM_SRGB:
+            case DXGI_FORMAT_BC2_UNORM:
+            case DXGI_FORMAT_BC2_UNORM_SRGB:
+            case DXGI_FORMAT_BC3_UNORM:
+            case DXGI_FORMAT_BC3_UNORM_SRGB:
             case DXGI_FORMAT_BC7_UNORM:
             case DXGI_FORMAT_BC7_UNORM_SRGB:
                 format = static_cast<DXGI_FORMAT>(dx10.dxgi_format);
@@ -447,6 +476,19 @@ ID3D11ShaderResourceView *lookup(
     return result;
 }
 
+std::uint64_t logical_hash_for(ID3D11ShaderResourceView *stock) noexcept
+{
+    if (stock == nullptr)
+        return 0;
+
+    const auto key = static_cast<std::uint64_t>(
+        reinterpret_cast<std::uintptr_t>(stock));
+
+    std::lock_guard lock(g_cache_mutex);
+    const auto it = g_cache.find(key);
+    return it == g_cache.end() ? 0ull : it->second.logical_hash;
+}
+
 bool receiver_allowed(
     const material_route_scope &route,
     std::uint32_t receiver_id) noexcept
@@ -526,52 +568,41 @@ void on_init_resource_view(
         g_logical_name.empty())
         return;
 
-    auto *native =
-        reinterpret_cast<ID3D11Device *>(
-            device->get_native());
+    const auto logical_hash = fnv_name(g_logical_name);
+    const bool normal_member =
+        generated::normal_name_hash_allowed_v12(logical_hash);
+    const bool diffuse_member =
+        generated::diffuse_name_hash_allowed_v12(logical_hash);
 
+    // Exact V12 corpora are the authority. Unknown logical identities are never
+    // associated with a bridge resource, even if a similarly named DDS exists.
+    if (!normal_member && !diffuse_member)
+        return;
+
+    auto *native =
+        reinterpret_cast<ID3D11Device *>(device->get_native());
     if (native == nullptr)
         return;
 
     ++g_named_srv;
-
     companion_set set{};
+    set.logical_hash = logical_hash;
 
-    const auto spec =
-        load_dds(
-            native,
-            sidecar_path(
-                asset_class::specular,
-                g_logical_name));
-    account_load(asset_class::specular, spec.status);
-    set.specular = spec.view;
+    if (generated::diffuse_target_hash_allowed_v12(logical_hash)) {
+        const auto diff =
+            load_dds(native, sidecar_path(asset_class::diffuse, g_logical_name));
+        account_load(asset_class::diffuse, diff.status);
+        set.diffuse = diff.view;
+    }
 
-    const auto diff =
-        load_dds(
-            native,
-            sidecar_path(
-                asset_class::diffuse,
-                g_logical_name));
-    account_load(asset_class::diffuse, diff.status);
-    set.diffuse = diff.view;
+    if (generated::normal_target_hash_allowed_v12(logical_hash)) {
+        const auto normal =
+            load_dds(native, sidecar_path(asset_class::normal, g_logical_name));
+        account_load(asset_class::normal, normal.status);
+        set.normal = normal.view;
+    }
 
-    const auto normal =
-        load_dds(
-            native,
-            sidecar_path(
-                asset_class::normal,
-                g_logical_name));
-    account_load(asset_class::normal, normal.status);
-    set.normal = normal.view;
-
-    if (set.specular == nullptr &&
-        set.diffuse == nullptr &&
-        set.normal == nullptr)
-        return;
-
-    const auto key =
-        static_cast<std::uint64_t>(view.handle);
-
+    const auto key = static_cast<std::uint64_t>(view.handle);
     companion_set old{};
     bool had_old = false;
     {
@@ -585,11 +616,9 @@ void on_init_resource_view(
             g_cache.emplace(key, set);
         }
     }
-
     if (had_old)
         release_set(old);
 }
-
 void on_destroy_resource_view(
     device *,
     resource_view view)
@@ -644,6 +673,8 @@ void on_present(
        << " spec_gate=" << g_spec_gate.load()
        << " diff_gate=" << g_diff_gate.load()
        << " norm_gate=" << g_norm_gate.load()
+       << " diff_pair_reject=" << g_diff_pair_reject.load()
+       << " norm_tuple_reject=" << g_norm_tuple_reject.load()
        << " spec_bind=" << g_spec_bind.load()
        << " diff_bind=" << g_diff_bind.load()
        << " norm_bind=" << g_norm_bind.load()
@@ -722,107 +753,71 @@ bool apply_draw(
         !receiver_allowed(route, receiver_id))
         return true;
 
-    const bool want_spec =
-        g_core->features().enabled(
-            core::operator_id::spec_rgb);
+    // SpecRGB stays disabled until an exact t10-consuming receiver is integrated.
+    const bool want_spec = false;
 
+    const bool bmp_receiver = receiver_id >= 24u && receiver_id <= 35u;
     const bool want_diff =
         route.diffuse_normal_eligible &&
-        receiver_id >= 24u &&
-        receiver_id <= 35u &&
-        g_core->features().enabled(
-            core::operator_id::diffuse);
+        route.diffuse_c100_carrier_active &&
+        bmp_receiver &&
+        g_core->features().enabled(core::operator_id::diffuse);
 
     const bool want_norm =
         route.diffuse_normal_eligible &&
-        receiver_id >= 24u &&
-        receiver_id <= 35u &&
-        g_core->features().enabled(
-            core::operator_id::normal);
+        bmp_receiver &&
+        g_core->features().enabled(core::operator_id::normal);
 
-    if (!want_spec &&
-        !want_diff &&
-        !want_norm)
+    if (!want_spec && !want_diff && !want_norm)
         return true;
 
-    context->PSGetShaderResources(
-        0u, 1u, &state.old_t0);
-    context->PSGetShaderResources(
-        1u, 1u, &state.old_t1);
-    context->PSGetShaderResources(
-        2u, 1u, &state.old_t2);
-    context->PSGetShaderResources(
-        10u, 1u, &state.old_t10);
+    context->PSGetShaderResources(0u, 1u, &state.old_t0);
+    context->PSGetShaderResources(1u, 1u, &state.old_t1);
+    context->PSGetShaderResources(2u, 1u, &state.old_t2);
+    context->PSGetShaderResources(10u, 1u, &state.old_t10);
 
-    if (want_spec) {
-        ++g_spec_gate;
-        ID3D11ShaderResourceView *replacement =
-            lookup(
-                state.old_t1,
-                asset_class::specular);
-
-        if (replacement != nullptr) {
-            context->PSSetShaderResources(
-                10u,
-                1u,
-                &replacement);
-            replacement->Release();
-            state.changed_t10 = true;
-            ++g_spec_bind;
-            log_first_bind(
-                asset_class::specular,
-                route,
-                receiver_id);
-        }
-    }
+    const auto h0 = logical_hash_for(state.old_t0);
+    const auto h1 = logical_hash_for(state.old_t1);
+    const auto h2 = logical_hash_for(state.old_t2);
 
     if (want_diff) {
         ++g_diff_gate;
-        ID3D11ShaderResourceView *replacement =
-            lookup(
-                state.old_t0,
-                asset_class::diffuse);
-
-        if (replacement != nullptr) {
-            context->PSSetShaderResources(
-                0u,
-                1u,
-                &replacement);
-            replacement->Release();
-            state.changed_t0 = true;
-            ++g_diff_bind;
-            log_first_bind(
-                asset_class::diffuse,
-                route,
-                receiver_id);
+        if (h0 == 0u || h1 == 0u ||
+            !generated::diffuse_pair_allowed_v12(h1, h0)) {
+            ++g_diff_pair_reject;
+        } else {
+            ID3D11ShaderResourceView *replacement =
+                lookup(state.old_t0, asset_class::diffuse);
+            if (replacement != nullptr) {
+                context->PSSetShaderResources(0u, 1u, &replacement);
+                replacement->Release();
+                state.changed_t0 = true;
+                ++g_diff_bind;
+                log_first_bind(asset_class::diffuse, route, receiver_id);
+            }
         }
     }
 
     if (want_norm) {
         ++g_norm_gate;
-        ID3D11ShaderResourceView *replacement =
-            lookup(
-                state.old_t2,
-                asset_class::normal);
-
-        if (replacement != nullptr) {
-            context->PSSetShaderResources(
-                2u,
-                1u,
-                &replacement);
-            replacement->Release();
-            state.changed_t2 = true;
-            ++g_norm_bind;
-            log_first_bind(
-                asset_class::normal,
-                route,
-                receiver_id);
+        if (h0 == 0u || h1 == 0u || h2 == 0u ||
+            !generated::normal_tuple_allowed_v12(h0, h1, h2)) {
+            ++g_norm_tuple_reject;
+        } else {
+            ID3D11ShaderResourceView *replacement =
+                lookup(state.old_t2, asset_class::normal);
+            if (replacement != nullptr) {
+                context->PSSetShaderResources(2u, 1u, &replacement);
+                replacement->Release();
+                state.changed_t2 = true;
+                ++g_norm_bind;
+                log_first_bind(asset_class::normal, route, receiver_id);
+            }
         }
     }
 
     return true;
 }
-
 bool restore_draw(
     ID3D11DeviceContext *context,
     draw_state &state) noexcept
