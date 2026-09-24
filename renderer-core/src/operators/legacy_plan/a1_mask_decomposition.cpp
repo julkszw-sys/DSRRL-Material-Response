@@ -31,7 +31,7 @@ constexpr bit_owner k_map[] = {
     {2048u, core::operator_id::terminal_sat_rgb, bit_state::nonclosed, true},
     {4096u, core::operator_id::envspec_pmetal_diagnostic, bit_state::rejected, true},
     {8192u, core::operator_id::terminal_sat_rgb, bit_state::nonclosed, true},
-    {16384u, core::operator_id::terminal_sat_rgba, bit_state::nonclosed, true}
+    {16384u, core::operator_id::terminal_sat_rgba, bit_state::rejected, true}
 };
 
 bool contains(const decomposition &d, core::operator_id id) noexcept
