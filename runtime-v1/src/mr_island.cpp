@@ -26,11 +26,13 @@
 #include <array>
 #include <atomic>
 #include <cstddef>
+#include <cmath>
 #include <cstring>
 #include <memory>
 #include <mutex>
 #include <sstream>
 #include <string>
+#include <string_view>
 #include <unordered_map>
 #include <vector>
 
@@ -54,8 +56,16 @@ std::atomic<std::uint64_t> g_pipeline_seen{0}, g_shader_pair_pass{0}, g_shader_p
 std::atomic<std::uint64_t> g_shader_ul_pass{0}, g_shader_ul_fail{0};
 std::atomic<std::uint64_t> g_shader_spec_pass{0}, g_shader_spec_fail{0};
 std::atomic<std::uint64_t> g_shader_ul_spec_pass{0}, g_shader_ul_spec_fail{0};
+std::atomic<std::uint64_t> g_shader_v13_pass{0}, g_shader_v13_fail{0};
+std::atomic<std::uint64_t> g_v13_source_ready{0}, g_v13_source_miss{0};
+std::atomic<std::uint64_t> g_v13_resource_ready{0}, g_v13_resource_miss{0};
+std::atomic<std::uint64_t> g_v13_b12_update{0}, g_v13_b12_fail{0}, g_v13_replay{0};
+std::atomic<bool> g_v13_first_draw_logged{false};
 std::atomic<std::uint64_t> g_target_binds{0}, g_replays{0}, g_fail_open{0};
 std::atomic<std::uint64_t> g_b12_create{0}, g_b12_hit{0}, g_restore_fail{0}, g_present{0};
+
+constexpr std::string_view k_pmetal_raw_mtd_sha256 =
+    "ece70f36bd2517d28c8495e276cea537f8b519d6bed981788e79a409ffbf763b";
 
 void log_info(const std::string &s){ reshade::log::message(reshade::log::level::info,s.c_str()); }
 void log_error(const std::string &s){ reshade::log::message(reshade::log::level::error,s.c_str()); }
@@ -111,7 +121,12 @@ struct device_state {
     std::array<ID3D11PixelShader*,24> full_ul{};
     std::array<ID3D11PixelShader*,24> full_spec{};
     std::array<ID3D11PixelShader*,24> full_ul_spec{};
+    std::array<ID3D11PixelShader*,24> full_v13{};
+    std::array<ID3D11PixelShader*,24> full_v13_ul{};
+    std::array<ID3D11PixelShader*,24> full_v13_spec{};
+    std::array<ID3D11PixelShader*,24> full_v13_ul_spec{};
     std::unordered_map<std::uint16_t,ID3D11Buffer*> b12;
+    std::unordered_map<std::uintptr_t,ID3D11Buffer*> pmetal_b12;
 };
 device_state g_device;
 std::mutex g_device_mutex;
@@ -125,8 +140,14 @@ void release_device_state()
     for(auto *&p:g_device.full_ul){ if(p){p->Release();p=nullptr;} }
     for(auto *&p:g_device.full_spec){ if(p){p->Release();p=nullptr;} }
     for(auto *&p:g_device.full_ul_spec){ if(p){p->Release();p=nullptr;} }
+    for(auto *&p:g_device.full_v13){ if(p){p->Release();p=nullptr;} }
+    for(auto *&p:g_device.full_v13_ul){ if(p){p->Release();p=nullptr;} }
+    for(auto *&p:g_device.full_v13_spec){ if(p){p->Release();p=nullptr;} }
+    for(auto *&p:g_device.full_v13_ul_spec){ if(p){p->Release();p=nullptr;} }
     for(auto &[_,b]:g_device.b12) if(b) b->Release();
     g_device.b12.clear();
+    for(auto &[_,b]:g_device.pmetal_b12) if(b) b->Release();
+    g_device.pmetal_b12.clear();
     if(g_device.device){g_device.device->Release();g_device.device=nullptr;}
 }
 
@@ -235,7 +256,146 @@ bool ensure_shader_pair(device *d,const plan &p,std::span<const std::uint8_t> st
         ++g_shader_spec_fail;
     }
 
+    // Exact V13 P_Metal consumer exists only for the three stable P_Metal
+    // receivers 33/34/35 => host indices 9/10/11. Failure is isolated: the
+    // ordinary MR/SpecRGB/U/L variants above remain valid and are used fail-open.
+    if(i>=9u && i<=11u){
+        const auto v13=transform_pmetal_v13(full.code);
+        const auto v13_ul=v13.ok ? transform_upper_lower(v13.code) : transform_result{};
+        const auto v13_spec=v13.ok ? transform_spec_rgb(v13.code) : transform_result{};
+        const auto v13_ul_spec=v13_ul.ok ? transform_spec_rgb(v13_ul.code) : transform_result{};
+
+        ID3D11PixelShader *ps_v13=nullptr,*ps_v13_ul=nullptr;
+        ID3D11PixelShader *ps_v13_spec=nullptr,*ps_v13_ul_spec=nullptr;
+        const bool ok =
+            create_shader(native,v13,ps_v13) &&
+            create_shader(native,v13_ul,ps_v13_ul) &&
+            create_shader(native,v13_spec,ps_v13_spec) &&
+            create_shader(native,v13_ul_spec,ps_v13_ul_spec);
+
+        if(ok){
+            if(g_device.full_v13[i]) g_device.full_v13[i]->Release();
+            if(g_device.full_v13_ul[i]) g_device.full_v13_ul[i]->Release();
+            if(g_device.full_v13_spec[i]) g_device.full_v13_spec[i]->Release();
+            if(g_device.full_v13_ul_spec[i]) g_device.full_v13_ul_spec[i]->Release();
+            g_device.full_v13[i]=ps_v13;
+            g_device.full_v13_ul[i]=ps_v13_ul;
+            g_device.full_v13_spec[i]=ps_v13_spec;
+            g_device.full_v13_ul_spec[i]=ps_v13_ul_spec;
+            ++g_shader_v13_pass;
+        }else{
+            if(ps_v13) ps_v13->Release();
+            if(ps_v13_ul) ps_v13_ul->Release();
+            if(ps_v13_spec) ps_v13_spec->Release();
+            if(ps_v13_ul_spec) ps_v13_ul_spec->Release();
+            ++g_shader_v13_fail;
+        }
+    }
+
     return true;
+}
+
+bool pmetal_native_env_ready(
+    ID3D11DeviceContext *ctx,
+    float beta) noexcept
+{
+    if(!ctx || !std::isfinite(beta)) return false;
+
+    ID3D11ShaderResourceView *t12=nullptr,*t14=nullptr;
+    ID3D11SamplerState *s12=nullptr,*s14=nullptr;
+    ctx->PSGetShaderResources(12,1,&t12);
+    ctx->PSGetSamplers(12,1,&s12);
+    const bool need_b=beta!=0.0f;
+    if(need_b){
+        ctx->PSGetShaderResources(14,1,&t14);
+        ctx->PSGetSamplers(14,1,&s14);
+    }
+
+    bool t12_cube=false,t14_cube=!need_b;
+    if(t12){
+        D3D11_SHADER_RESOURCE_VIEW_DESC desc{};
+        t12->GetDesc(&desc);
+        t12_cube=desc.ViewDimension==D3D11_SRV_DIMENSION_TEXTURECUBE;
+    }
+    if(t14){
+        D3D11_SHADER_RESOURCE_VIEW_DESC desc{};
+        t14->GetDesc(&desc);
+        t14_cube=desc.ViewDimension==D3D11_SRV_DIMENSION_TEXTURECUBE;
+    }
+
+    const bool ok=t12 && s12 && t12_cube &&
+                  (!need_b || (t14 && s14 && t14_cube));
+    if(t12) t12->Release();
+    if(t14) t14->Release();
+    if(s12) s12->Release();
+    if(s14) s14->Release();
+    if(ok) ++g_v13_resource_ready;
+    else ++g_v13_resource_miss;
+    return ok;
+}
+
+ID3D11Buffer *realize_pmetal_b12(
+    ID3D11DeviceContext *ctx,
+    ID3D11Device *device,
+    int donor_index,
+    const upper_lower::pmetal_env_source &source) noexcept
+{
+    if(!ctx || !device || donor_index<0 ||
+       static_cast<std::size_t>(donor_index)>=dsrrl::materialdonor::k_donors.size() ||
+       !std::isfinite(source.a[0]) || !std::isfinite(source.a[1]) ||
+       !std::isfinite(source.a[2]) || !std::isfinite(source.b[0]) ||
+       !std::isfinite(source.b[1]) || !std::isfinite(source.b[2]) ||
+       !std::isfinite(source.beta))
+        return nullptr;
+
+    ID3D11Buffer *buffer=nullptr;
+    try {
+        {
+            std::lock_guard lock(g_device_mutex);
+            if(g_device.device!=device) return nullptr;
+            const auto key=reinterpret_cast<std::uintptr_t>(ctx);
+            if(const auto it=g_device.pmetal_b12.find(key);
+               it!=g_device.pmetal_b12.end() && it->second){
+                buffer=it->second;
+                buffer->AddRef();
+            }else{
+                D3D11_BUFFER_DESC desc{};
+                desc.ByteWidth=64;
+                desc.Usage=D3D11_USAGE_DYNAMIC;
+                desc.BindFlags=D3D11_BIND_CONSTANT_BUFFER;
+                desc.CPUAccessFlags=D3D11_CPU_ACCESS_WRITE;
+                if(FAILED(device->CreateBuffer(&desc,nullptr,&buffer)) || !buffer)
+                    return nullptr;
+                g_device.pmetal_b12.emplace(key,buffer);
+                buffer->AddRef();
+            }
+        }
+
+        D3D11_MAPPED_SUBRESOURCE mapped{};
+        if(FAILED(ctx->Map(buffer,0,D3D11_MAP_WRITE_DISCARD,0,&mapped)) ||
+           !mapped.pData){
+            buffer->Release();
+            return nullptr;
+        }
+
+        const auto &d=dsrrl::materialdonor::k_donors[
+            static_cast<std::size_t>(donor_index)];
+        struct f4{float x,y,z,w;};
+        const std::array<f4,4> payload={{
+            {d.c101_f0q[0],d.c101_f0q[1],d.c101_f0q[2],
+             d.has_c101?1.0f:0.0f},
+            {d.c100[0],d.c100[1],d.c100[2],1.0f},
+            {source.a[0],source.a[1],source.a[2],0.0f},
+            {source.b[0],source.b[1],source.b[2],source.beta}
+        }};
+        std::memcpy(mapped.pData,payload.data(),sizeof(payload));
+        ctx->Unmap(buffer,0);
+        ++g_v13_b12_update;
+        return buffer;
+    } catch (...) {
+        if(buffer) buffer->Release();
+        return nullptr;
+    }
 }
 
 ID3D11Buffer *realize_b12(ID3D11Device *device,int donor_index) noexcept
@@ -512,16 +672,36 @@ bool on_draw_indexed(command_list *cmd,std::uint32_t index_count,std::uint32_t i
         g_core->features().enabled(core::operator_id::spec_rgb) &&
         assets::spec_ready(ctx,route,receiver_id);
 
+    const bool pmetal_exact_route =
+        !body_route &&
+        std::string_view(don.sha256)==k_pmetal_raw_mtd_sha256 &&
+        receiver_id>=33u && receiver_id<=35u;
+    const bool pmetal_feature =
+        pmetal_exact_route &&
+        g_core->features().enabled(core::operator_id::pmetal_black_safe_source);
+
+    upper_lower::pmetal_env_source pmetal_source{};
+    bool pmetal_candidate=false;
+    if(pmetal_feature){
+        if(upper_lower::selected_pmetal_env_source(pmetal_source)){
+            ++g_v13_source_ready;
+            pmetal_candidate=pmetal_native_env_ready(ctx,pmetal_source.beta);
+        }else{
+            ++g_v13_source_miss;
+        }
+    }
+
     bool issued=false;
     bool restore_ok=true;
     bool intended_ul=false;
     bool spec_active=false;
+    bool pmetal_active=false;
     bool tx_started=false;
     std::uint64_t command=0;
 
     ID3D11Device *dev=nullptr;
     ctx->GetDevice(&dev);
-    ID3D11PixelShader *oldps=nullptr,*replacement=nullptr;
+    ID3D11PixelShader *oldps=nullptr,*replacement=nullptr,*fallback_replacement=nullptr;
     ID3D11Buffer *b12=nullptr;
     ID3D11DeviceContext1 *ctx1=nullptr;
     cb_capture oldcb{};
@@ -534,7 +714,6 @@ bool on_draw_indexed(command_list *cmd,std::uint32_t index_count,std::uint32_t i
     if(dev){
         ctx->PSGetShader(&oldps,old_classes.data(),&old_class_count);
         captured=true;
-        b12=realize_b12(dev,donor);
         ctx->QueryInterface(__uuidof(ID3D11DeviceContext1),reinterpret_cast<void**>(&ctx1));
         oldcb=capture_cb(ctx,ctx1);
 
@@ -553,16 +732,51 @@ bool on_draw_indexed(command_list *cmd,std::uint32_t index_count,std::uint32_t i
                 }
 
                 if(don.has_c101){
-                    replacement =
+                    fallback_replacement =
                         intended_ul && spec_active ? g_device.full_ul_spec[i] :
                         intended_ul ? g_device.full_ul[i] :
                         spec_active ? g_device.full_spec[i] :
                                       g_device.full[i];
                 }else{
-                    replacement=intended_ul ? g_device.diffuse_ul[i] : g_device.diffuse[i];
+                    fallback_replacement =
+                        intended_ul ? g_device.diffuse_ul[i] : g_device.diffuse[i];
                 }
-                if(replacement) replacement->AddRef();
+                if(fallback_replacement) fallback_replacement->AddRef();
+
+                if(pmetal_candidate && don.has_c101){
+                    ID3D11PixelShader *v13 =
+                        intended_ul && spec_active ? g_device.full_v13_ul_spec[i] :
+                        intended_ul ? g_device.full_v13_ul[i] :
+                        spec_active ? g_device.full_v13_spec[i] :
+                                      g_device.full_v13[i];
+                    if(v13){
+                        replacement=v13;
+                        replacement->AddRef();
+                        pmetal_active=true;
+                    }
+                }
+
+                if(!replacement && fallback_replacement){
+                    replacement=fallback_replacement;
+                    fallback_replacement=nullptr;
+                }
             }
+        }
+
+        if(pmetal_active){
+            b12=realize_pmetal_b12(ctx,dev,donor,pmetal_source);
+            if(!b12){
+                ++g_v13_b12_fail;
+                pmetal_active=false;
+                if(replacement){replacement->Release();replacement=nullptr;}
+                if(fallback_replacement){
+                    replacement=fallback_replacement;
+                    fallback_replacement=nullptr;
+                }
+                b12=realize_b12(dev,donor);
+            }
+        }else{
+            b12=realize_b12(dev,donor);
         }
 
         // Exact stock DXBC has no dynamic class linkage. Unknown linkage
@@ -580,6 +794,12 @@ bool on_draw_indexed(command_list *cmd,std::uint32_t index_count,std::uint32_t i
                 plan.patches[plan.patch_count++]={core::operator_id::subsurface,0u,true,false};
             if(spec_active)
                 plan.patches[plan.patch_count++]={core::operator_id::spec_rgb,0u,true,true};
+            if(pmetal_active)
+                plan.patches[plan.patch_count++]={
+                    core::operator_id::pmetal_black_safe_source,
+                    0u,
+                    true,
+                    false};
             if(intended_ul)
                 plan.patches[plan.patch_count++]={
                     core::operator_id::upper_lower,
@@ -643,7 +863,7 @@ bool on_draw_indexed(command_list *cmd,std::uint32_t index_count,std::uint32_t i
                 if(!tx_restored || !restore_ok){
                     ++g_restore_fail;
                     g_quarantined.store(true);
-                    log_error("DSRRL Runtime v1 MR: unified draw restore fault; MR/SpecRGB/U/L transaction quarantined.");
+                    log_error("DSRRL Runtime v1 MR: unified draw restore fault; MR/SpecRGB/U/L/V13 transaction quarantined.");
                 }
             }else{
                 ++g_fail_open;
@@ -669,6 +889,21 @@ bool on_draw_indexed(command_list *cmd,std::uint32_t index_count,std::uint32_t i
     }else{
         ++g_replays;
         if(body_route) ++g_subsurface_replays;
+        if(pmetal_active){
+            ++g_v13_replay;
+            if(!g_v13_first_draw_logged.exchange(true)){
+                std::ostringstream os;
+                os<<"[DSRRL V13 PMETAL] FIRST_DRAW receiver="<<receiver_id
+                  <<" beta="<<pmetal_source.beta
+                  <<" bankA=0x"<<std::hex<<pmetal_source.bank_signature_a
+                  <<" rowA="<<std::dec<<pmetal_source.row_id_a
+                  <<" bankB=0x"<<std::hex<<pmetal_source.bank_signature_b
+                  <<" rowB="<<std::dec<<pmetal_source.row_id_b
+                  <<" ul="<<(intended_ul?1:0)
+                  <<" spec="<<(spec_active?1:0);
+                log_info(os.str());
+            }
+        }
     }
 
     for(auto *instance:old_classes) if(instance) instance->Release();
@@ -677,6 +912,7 @@ bool on_draw_indexed(command_list *cmd,std::uint32_t index_count,std::uint32_t i
     if(ctx1)ctx1->Release();
     if(b12)b12->Release();
     if(replacement)replacement->Release();
+    if(fallback_replacement)fallback_replacement->Release();
     if(oldps)oldps->Release();
     if(dev)dev->Release();
 
@@ -696,6 +932,11 @@ void on_present(command_queue *,swapchain *,const rect *,const rect *,std::uint3
               <<" ul_shader_pass="<<g_shader_ul_pass.load()<<" ul_shader_fail="<<g_shader_ul_fail.load()
               <<" spec_shader_pass="<<g_shader_spec_pass.load()<<" spec_shader_fail="<<g_shader_spec_fail.load()
               <<" ul_spec_shader_pass="<<g_shader_ul_spec_pass.load()<<" ul_spec_shader_fail="<<g_shader_ul_spec_fail.load()
+              <<" v13_shader_pass="<<g_shader_v13_pass.load()<<" v13_shader_fail="<<g_shader_v13_fail.load()
+              <<" v13_source_ready="<<g_v13_source_ready.load()<<" v13_source_miss="<<g_v13_source_miss.load()
+              <<" v13_resource_ready="<<g_v13_resource_ready.load()<<" v13_resource_miss="<<g_v13_resource_miss.load()
+              <<" v13_b12_update="<<g_v13_b12_update.load()<<" v13_b12_fail="<<g_v13_b12_fail.load()
+              <<" v13_replay="<<g_v13_replay.load()
               <<" binds="<<g_target_binds.load()
               <<" replay="<<g_replays.load()<<" subsurface_replay="<<g_subsurface_replays.load()<<" b12_create="<<g_b12_create.load()
               <<" b12_hit="<<g_b12_hit.load()<<" failopen="<<g_fail_open.load()
@@ -744,6 +985,7 @@ bool register_runtime(core::renderer_core &core) noexcept
 {
     g_core=&core;
     g_quarantined.store(false);
+    g_v13_first_draw_logged.store(false);
     g_draw_donor=-1; g_bound_host=-1; g_bound_subsurface=false; g_bound_command=nullptr;
     g_enabled.store(true);
     reshade::register_event<reshade::addon_event::init_device>(on_init_device);

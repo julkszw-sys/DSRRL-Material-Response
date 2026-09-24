@@ -163,7 +163,7 @@ int main()
 
     const auto &catalog = core::known_operator_catalog();
     CHECK(catalog.size() == core::operator_count);
-    CHECK(core::operator_count == 23);
+    CHECK(core::operator_count == 24);
 
     for (std::size_t i = 0; i < catalog.size(); ++i) {
         CHECK(static_cast<std::size_t>(catalog[i].id) == i);
@@ -172,6 +172,18 @@ int main()
         CHECK(catalog[i].display_name != nullptr);
         CHECK(catalog[i].fail_open_stock);
     }
+
+    const auto pmetal_black_safe_contract =
+        core::find_operator_contract(core::operator_id::pmetal_black_safe_source);
+    CHECK(pmetal_black_safe_contract.has_value());
+    CHECK(pmetal_black_safe_contract->status == core::canonical_status::confirmed);
+    CHECK(pmetal_black_safe_contract->default_state == core::port_state::off);
+    CHECK(pmetal_black_safe_contract->carrier == core::carrier_kind::hybrid);
+    CHECK((pmetal_black_safe_contract->requirements & core::require_receiver) != 0u);
+    CHECK((pmetal_black_safe_contract->requirements & core::require_material) != 0u);
+    CHECK((pmetal_black_safe_contract->requirements & core::require_resource) != 0u);
+    CHECK((pmetal_black_safe_contract->requirements & core::require_producer) != 0u);
+    CHECK((pmetal_black_safe_contract->requirements & core::require_consumer) != 0u);
 
     core::feature_registry gates;
     core::activation_context verified;

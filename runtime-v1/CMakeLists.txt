@@ -107,6 +107,7 @@ if(WIN32 AND RESHade_INCLUDE_DIR)
   target_include_directories(dsrrl_renderer_runtime_v1_addon PRIVATE
     include
     "${GEN_DIR}"
+    "${CMAKE_CURRENT_SOURCE_DIR}/generated"
     "${CMAKE_CURRENT_SOURCE_DIR}/provenance/mr_v211"
     "${RESHade_INCLUDE_DIR}"
   )

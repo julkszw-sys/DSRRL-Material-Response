@@ -8,6 +8,7 @@
 #include "dsrrl/runtime/upper_lower_runtime.hpp"
 #include "dsrrl/runtime/engine_hooks.hpp"
 #include "dsrrl/core/renderer_core.hpp"
+#include "v13_pmetal_donors.hpp"
 
 #include <reshade.hpp>
 
@@ -35,6 +36,14 @@ struct snapshot {
     std::uint16_t a = 0;
     std::uint16_t b = 0;
     std::uint32_t beta_bits = 0;
+    bool pmetal_env_ready = false;
+    f4 pmetal_env_a{};
+    f4 pmetal_env_b{};
+    float pmetal_env_beta = 0.0f;
+    std::uint64_t pmetal_bank_a = 0;
+    std::uint64_t pmetal_bank_b = 0;
+    std::uint32_t pmetal_row_a = 0;
+    std::uint32_t pmetal_row_b = 0;
     alignas(16) std::array<f4,8> payload{};
     mutable std::mutex gpu_mutex;
     mutable ID3D11Device *device = nullptr;
@@ -58,6 +67,7 @@ constexpr std::uintptr_t k_rva_wrapper_type5 = 0x1C0BE0;
 constexpr std::uintptr_t k_rva_wrapper_type6 = 0x1C0C10;
 constexpr std::uintptr_t k_rva_blend_helper  = 0x5642F0;
 constexpr std::uintptr_t k_rva_steady_packer = 0x563B80;
+constexpr std::uintptr_t k_rva_v13_env_blend = 0x563C30;
 
 constexpr std::uintptr_t k_ret_blend_upper = 0x5639BA;
 constexpr std::uintptr_t k_ret_blend_lower = 0x5639D5;
@@ -73,6 +83,9 @@ constexpr std::array<std::uint8_t,19> k_blend_bytes = {
 };
 constexpr std::array<std::uint8_t,14> k_steady_packer_bytes = {
     0x48,0x89,0x5C,0x24,0x08,0x57,0x48,0x83,0xEC,0x40,0x48,0x8B,0x41,0x18
+};
+constexpr std::array<std::uint8_t,14> k_v13_env_blend_bytes = {
+    0x40,0x53,0x48,0x83,0xEC,0x50,0x44,0x8B,0x94,0x24,0x80,0x00,0x00,0x00
 };
 
 constexpr std::size_t k_record_stride = 0x110u;
@@ -90,8 +103,16 @@ struct producer_tls {
     const std::uint8_t *assignment = nullptr;
     bool have_upper = false;
     bool have_lower = false;
+    bool have_pmetal_env = false;
     f4 upper{};
     f4 lower{};
+    f4 pmetal_env_a{};
+    f4 pmetal_env_b{};
+    float pmetal_env_beta = 0.0f;
+    std::uint64_t pmetal_bank_a = 0;
+    std::uint64_t pmetal_bank_b = 0;
+    std::uint32_t pmetal_row_a = 0;
+    std::uint32_t pmetal_row_b = 0;
 };
 
 struct inline_hook {
@@ -106,15 +127,18 @@ struct inline_hook {
 using wrapper_fn = void *(__fastcall *)(void *,void *,void *,float);
 using blend_fn = void *(__fastcall *)(void *,const raw_rgbm *,const raw_rgbm *,float);
 using steady_packer_fn = void (__fastcall *)(void *,void *,std::int32_t);
+using v13_env_blend_fn = void (__fastcall *)(float *,void *,std::int32_t,void *,std::int32_t,float);
 
 core::renderer_core *g_core = nullptr;
 std::uintptr_t g_base = 0;
 std::array<inline_hook,4> g_hooks{};
+inline_hook g_v13_env_hook{};
 
 wrapper_fn g_wrapper5_orig = nullptr;
 wrapper_fn g_wrapper6_orig = nullptr;
 blend_fn g_blend_orig = nullptr;
 steady_packer_fn g_steady_packer_orig = nullptr;
+v13_env_blend_fn g_v13_env_blend_orig = nullptr;
 
 std::mutex g_snapshot_mutex;
 std::unordered_map<std::uintptr_t,std::shared_ptr<const snapshot>> g_snapshots;
@@ -123,11 +147,13 @@ thread_local std::shared_ptr<const snapshot> g_draw_snapshot;
 
 std::atomic<bool> g_enabled{false};
 std::atomic<bool> g_quarantined{false};
+std::atomic<bool> g_pmetal_env_enabled{false};
 std::atomic<std::uint64_t> g_wrapper5{0},g_wrapper6{0},g_steady_seen{0},g_steady_pass{0};
 std::atomic<std::uint64_t> g_blend_seen{0},g_blend_upper{0},g_blend_lower{0};
 std::atomic<std::uint64_t> g_snapshot_publish{0},g_selector_seen{0},g_selector_match{0};
 std::atomic<std::uint64_t> g_selector_miss{0},g_tuple_mismatch{0};
 std::atomic<std::uint64_t> g_b13_create{0},g_b13_hit{0},g_bind{0},g_restore_fail{0};
+std::atomic<std::uint64_t> g_pmetal_env_steady{0},g_pmetal_env_blend{0},g_pmetal_env_miss{0};
 
 void log_info(const std::string &s){ reshade::log::message(reshade::log::level::info,s.c_str()); }
 void log_warn(const std::string &s){ reshade::log::message(reshade::log::level::warning,s.c_str()); }
@@ -136,6 +162,91 @@ template<class T>
 bool safe_read(const void *p,T &out) noexcept
 {
     return p && engine::safe_read_bytes(p,&out,sizeof(out));
+}
+
+std::uint64_t fnv_byte(std::uint64_t h,std::uint8_t x) noexcept
+{
+    h^=x;
+    return h*0x100000001b3ULL;
+}
+
+bool v13_bank_signature(const std::uint8_t *base,std::uint64_t &signature) noexcept
+{
+    if(!base) return false;
+    std::uint16_t version=0,count=0;
+    if(!safe_read(base+8,version) || version!=4u ||
+       !safe_read(base+10,count) || count==0u || count>256u)
+        return false;
+
+    std::uint64_t h=0xcbf29ce484222325ULL;
+    h=fnv_byte(h,static_cast<std::uint8_t>(count));
+    h=fnv_byte(h,static_cast<std::uint8_t>(count>>8));
+
+    const std::uint32_t minimum_name=0x30u+static_cast<std::uint32_t>(count)*12u;
+    for(std::uint32_t i=0;i<count;++i){
+        const auto *entry=base+0x30u+static_cast<std::size_t>(i)*12u;
+        std::uint32_t id=0,name_offset=0;
+        if(!safe_read(entry,id) || !safe_read(entry+8,name_offset) ||
+           name_offset<minimum_name || name_offset>0x100000u)
+            return false;
+        h=fnv_byte(h,static_cast<std::uint8_t>(id));
+        h=fnv_byte(h,static_cast<std::uint8_t>(id>>8));
+        h=fnv_byte(h,static_cast<std::uint8_t>(id>>16));
+        h=fnv_byte(h,static_cast<std::uint8_t>(id>>24));
+
+        bool terminated=false;
+        for(std::uint32_t j=0;j<256u;++j){
+            std::uint8_t c=0;
+            if(!safe_read(base+name_offset+j,c)) return false;
+            if(c==0u){
+                h=fnv_byte(h,0u);
+                terminated=true;
+                break;
+            }
+            h=fnv_byte(h,c);
+        }
+        if(!terminated) return false;
+    }
+    signature=h;
+    return true;
+}
+
+bool read_exact_v13_pmetal_env(
+    void *source,
+    std::int32_t selector,
+    f4 &out,
+    std::uint64_t &bank_signature,
+    std::uint32_t &row_id) noexcept
+{
+    if(!source || selector<0 || selector>255) return false;
+    const std::uint8_t *base=nullptr;
+    if(!safe_read(static_cast<const std::uint8_t *>(source)+0x18,base) || !base)
+        return false;
+
+    std::uint16_t version=0,count=0;
+    if(!safe_read(base+8,version) || version!=4u ||
+       !safe_read(base+10,count) || count==0u || count>256u)
+        return false;
+
+    const auto index=static_cast<std::uint8_t>(selector);
+    if(static_cast<std::uint32_t>(index)>=count) return false;
+    const auto *entry=base+0x30u+static_cast<std::size_t>(index)*12u;
+    if(!safe_read(entry,row_id)) return false;
+
+    if(!v13_bank_signature(base,bank_signature)) return false;
+    const auto *bank=dsrrl::runtime::pmetal145::find_bank(bank_signature);
+    if(!bank) return false;
+    const auto *row=dsrrl::runtime::pmetal145::find_row(*bank,row_id);
+    if(!row) return false;
+
+    const float scale=static_cast<float>(row->m)*0.01f;
+    out={
+        static_cast<float>(row->r)/255.0f*scale,
+        static_cast<float>(row->g)/255.0f*scale,
+        static_cast<float>(row->b)/255.0f*scale,
+        0.0f
+    };
+    return std::isfinite(out.x) && std::isfinite(out.y) && std::isfinite(out.z);
 }
 
 bool write_bytes(void *at,const void *src,std::size_t n) noexcept
@@ -204,11 +315,14 @@ void restore_hook(inline_hook &h) noexcept
 
 void restore_hooks() noexcept
 {
+    restore_hook(g_v13_env_hook);
     for(auto &h:g_hooks) restore_hook(h);
     g_wrapper5_orig=nullptr;
     g_wrapper6_orig=nullptr;
     g_blend_orig=nullptr;
     g_steady_packer_orig=nullptr;
+    g_v13_env_blend_orig=nullptr;
+    g_pmetal_env_enabled.store(false);
 }
 
 bool inverse_q(float q,float &out) noexcept
@@ -279,6 +393,14 @@ void publish_snapshot(const producer_tls &p) noexcept
         auto s=std::make_shared<snapshot>();
         s->owner=p.owner;
         s->a=a; s->b=b; s->beta_bits=beta;
+        s->pmetal_env_ready=p.have_pmetal_env;
+        s->pmetal_env_a=p.pmetal_env_a;
+        s->pmetal_env_b=p.pmetal_env_b;
+        s->pmetal_env_beta=p.pmetal_env_beta;
+        s->pmetal_bank_a=p.pmetal_bank_a;
+        s->pmetal_bank_b=p.pmetal_bank_b;
+        s->pmetal_row_a=p.pmetal_row_a;
+        s->pmetal_row_b=p.pmetal_row_b;
         s->payload[6]=p.upper;
         s->payload[7]=p.lower;
         {
@@ -298,8 +420,10 @@ void *run_wrapper(wrapper_fn original,std::atomic<std::uint64_t> &counter,
 {
     ++counter;
     const auto previous=g_prod;
-    g_prod={true,reinterpret_cast<std::uintptr_t>(owner),
-            static_cast<const std::uint8_t *>(assignment),false,false,{},{}};
+    g_prod={};
+    g_prod.active=true;
+    g_prod.owner=reinterpret_cast<std::uintptr_t>(owner);
+    g_prod.assignment=static_cast<const std::uint8_t *>(assignment);
     void *result=original ? original(rcx,owner,assignment,x) : nullptr;
     const auto completed=g_prod;
     g_prod=previous;
@@ -327,6 +451,26 @@ void __fastcall hook_steady_packer(void *source,void *dst,std::int32_t selector)
     if(g_steady_packer_orig) g_steady_packer_orig(source,dst,selector);
 
     if(!g_prod.active) return;
+
+    if(g_pmetal_env_enabled.load()){
+        f4 env{};
+        std::uint64_t bank=0;
+        std::uint32_t row=0;
+        if(read_exact_v13_pmetal_env(source,selector,env,bank,row)){
+            g_prod.have_pmetal_env=true;
+            g_prod.pmetal_env_a=env;
+            g_prod.pmetal_env_b=env;
+            g_prod.pmetal_env_beta=0.0f;
+            g_prod.pmetal_bank_a=bank;
+            g_prod.pmetal_bank_b=bank;
+            g_prod.pmetal_row_a=row;
+            g_prod.pmetal_row_b=row;
+            ++g_pmetal_env_steady;
+        }else{
+            ++g_pmetal_env_miss;
+        }
+    }
+
     f4 upper{},lower{};
     if(read_selected_ptde(source,selector,upper,lower)){
         g_prod.upper=upper;
@@ -362,6 +506,65 @@ void *__fastcall hook_blend(void *dst,const raw_rgbm *a,const raw_rgbm *b,float 
     return g_blend_orig ? g_blend_orig(dst,a,b,beta) : nullptr;
 }
 
+
+void __fastcall hook_v13_env_blend(
+    float *out,
+    void *source_a,
+    std::int32_t selector_a,
+    void *source_b,
+    std::int32_t selector_b,
+    float beta) noexcept
+{
+    if(g_v13_env_blend_orig)
+        g_v13_env_blend_orig(out,source_a,selector_a,source_b,selector_b,beta);
+
+    if(!g_prod.active || !g_pmetal_env_enabled.load())
+        return;
+    if(!std::isfinite(beta)){
+        g_prod.have_pmetal_env=false;
+        ++g_pmetal_env_miss;
+        return;
+    }
+
+    f4 a{},b{};
+    std::uint64_t bank_a=0,bank_b=0;
+    std::uint32_t row_a=0,row_b=0;
+    if(read_exact_v13_pmetal_env(source_a,selector_a,a,bank_a,row_a) &&
+       read_exact_v13_pmetal_env(source_b,selector_b,b,bank_b,row_b)){
+        g_prod.have_pmetal_env=true;
+        g_prod.pmetal_env_a=a;
+        g_prod.pmetal_env_b=b;
+        g_prod.pmetal_env_beta=std::clamp(beta,0.0f,1.0f);
+        g_prod.pmetal_bank_a=bank_a;
+        g_prod.pmetal_bank_b=bank_b;
+        g_prod.pmetal_row_a=row_a;
+        g_prod.pmetal_row_b=row_b;
+        ++g_pmetal_env_blend;
+    }else{
+        g_prod.have_pmetal_env=false;
+        ++g_pmetal_env_miss;
+    }
+}
+
+bool install_v13_env_hook() noexcept
+{
+    if(!prepare_hook(
+           g_v13_env_hook,
+           k_rva_v13_env_blend,
+           k_v13_env_blend_bytes,
+           reinterpret_cast<void *>(&hook_v13_env_blend)))
+        return false;
+
+    g_v13_env_blend_orig=
+        reinterpret_cast<v13_env_blend_fn>(g_v13_env_hook.trampoline);
+    if(!patch_hook(g_v13_env_hook)){
+        restore_hook(g_v13_env_hook);
+        g_v13_env_blend_orig=nullptr;
+        return false;
+    }
+    return true;
+}
+
 bool install_hooks() noexcept
 {
     if(!g_base) return false;
@@ -388,6 +591,14 @@ bool install_hooks() noexcept
             return false;
         }
     }
+
+    // V13 P_Metal source capture is an independent optional producer.
+    // Its preflight failure must never disable the already-certified U/L path.
+    if(install_v13_env_hook())
+        g_pmetal_env_enabled.store(true);
+    else
+        g_pmetal_env_enabled.store(false);
+
     return true;
 }
 
@@ -458,7 +669,10 @@ bool register_runtime(core::renderer_core &core) noexcept
     reshade::register_event<reshade::addon_event::destroy_device>(
         on_destroy_device);
     g_enabled.store(true);
-    log_info("DSRRL Runtime U/L: steady 0x563B80 + blend 0x5642F0 producer capture armed; shared selector only.");
+    log_info(
+        g_pmetal_env_enabled.load() ?
+        "DSRRL Runtime U/L: steady 0x563B80 + blend 0x5642F0 producer capture armed; V13 P_Metal A/B producer 0x563C30 preflight PASS; shared selector only." :
+        "DSRRL Runtime U/L: steady 0x563B80 + blend 0x5642F0 producer capture armed; V13 P_Metal A/B producer preflight FAIL-OPEN-OFF; shared selector only.");
     return true;
 }
 
@@ -516,6 +730,33 @@ void selector_event(void *,void *owner,void *ret,void *r14,void *r15,std::int32_
 bool selected_snapshot_ready() noexcept
 {
     return g_enabled.load() && !g_quarantined.load() && static_cast<bool>(g_draw_snapshot);
+}
+
+bool pmetal_env_producer_ready() noexcept
+{
+    return g_enabled.load() && !g_quarantined.load() && g_pmetal_env_enabled.load();
+}
+
+bool selected_pmetal_env_source(pmetal_env_source &out) noexcept
+{
+    out={};
+    if(!g_enabled.load() || g_quarantined.load() ||
+       !g_pmetal_env_enabled.load() || !g_draw_snapshot ||
+       !g_draw_snapshot->pmetal_env_ready)
+        return false;
+
+    out.a={g_draw_snapshot->pmetal_env_a.x,
+           g_draw_snapshot->pmetal_env_a.y,
+           g_draw_snapshot->pmetal_env_a.z};
+    out.b={g_draw_snapshot->pmetal_env_b.x,
+           g_draw_snapshot->pmetal_env_b.y,
+           g_draw_snapshot->pmetal_env_b.z};
+    out.beta=g_draw_snapshot->pmetal_env_beta;
+    out.bank_signature_a=g_draw_snapshot->pmetal_bank_a;
+    out.bank_signature_b=g_draw_snapshot->pmetal_bank_b;
+    out.row_id_a=g_draw_snapshot->pmetal_row_a;
+    out.row_id_b=g_draw_snapshot->pmetal_row_b;
+    return true;
 }
 
 bool bind_draw(ID3D11DeviceContext *context,draw_state &state) noexcept

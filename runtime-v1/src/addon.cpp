@@ -184,6 +184,17 @@ extern "C" __declspec(dllexport) bool AddonInit(HMODULE addon,HMODULE reshade_mo
         reshade::log::message(reshade::log::level::warning,
             "DSRRL Runtime v1 A3: U/L producer guards failed; U/L fail-open OFF.");
 
+    const bool pmetal_v13_ready =
+        ul_ready && dsrrl::runtime::upper_lower::pmetal_env_producer_ready();
+    g_core.features().set(
+        dsrrl::core::operator_id::pmetal_black_safe_source,
+        pmetal_v13_ready);
+    reshade::log::message(
+        pmetal_v13_ready ? reshade::log::level::info : reshade::log::level::warning,
+        pmetal_v13_ready ?
+        "DSRRL Runtime V13: P_Metal A/B producer preflight PASS." :
+        "DSRRL Runtime V13: P_Metal A/B producer preflight FAIL-OPEN-OFF.");
+
     if(!dsrrl::runtime::engine::install(
             &selector_dispatch,
             &dsrrl::runtime::mr::mtd_event,

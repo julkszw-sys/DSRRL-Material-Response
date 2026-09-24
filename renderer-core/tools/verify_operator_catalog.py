@@ -27,6 +27,7 @@ REQUIRED_IDS = {
     "post_hdr",
     "dsr_native_sfx",
     "dsr_sfx_inverse_tonemap",
+    "pmetal_black_safe_source",
 }
 
 def main() -> int:

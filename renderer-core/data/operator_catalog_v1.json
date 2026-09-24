@@ -581,6 +581,32 @@
         "pixel_behavior": "OPEN"
       },
       "operator_id": "subsurface"
+    },
+    {
+      "status": "CONFIRMED",
+      "metadata": {
+        "raw_mtd_sha256": "ece70f36bd2517d28c8495e276cea537f8b519d6bed981788e79a409ffbf763b",
+        "receivers": [
+          33,
+          34,
+          35
+        ],
+        "source_payload": "b12[2].rgb=p_A; b12[3].rgb=p_B; b12[3].w=beta",
+        "resource_carrier": "native DSR t12/t14 + s12/s14",
+        "dsr_g_draw": "EXCLUDED",
+        "light_probe_param_x": "EXCLUDED",
+        "runtime_policy": "EXACT_PRODUCER_PREFLIGHT_PLUS_PER_DRAW_RESOURCE_GATE",
+        "fallback": "PRESERVE_PRIOR_CORE_MATERIAL_RESPONSE_ROUTE"
+      },
+      "description": "Exact P_Metal black-safe V13 source/receiver island using PTDE-authored LightBank A/B donors over the native DSR cubemap carrier while excluding the DSR collision-authored g_draw/LightProbeParam source gain.",
+      "display_name": "P_Metal V13 black-safe source",
+      "operator_key": "surface.pmetal_black_safe_source",
+      "canonical_key": "project.materialization.pmetal_envspec_v13_ptde_donor_ab_v1",
+      "operator_class": "MATERIAL_ENV_SOURCE",
+      "canonical_revision": 6834,
+      "default_port_state": "OFF",
+      "fail_open_behavior": "PRESERVE_PRIOR_CORE_ROUTE",
+      "operator_id": "pmetal_black_safe_source"
     }
   ]
 }
