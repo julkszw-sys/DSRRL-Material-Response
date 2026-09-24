@@ -11,6 +11,9 @@ activation_decision evaluate_operator_activation(
     if (!contract.has_value())
         return {island_state::fail_open, activation_reason::blocked};
 
+    if (contract->status == canonical_status::rejected)
+        return {island_state::fail_open, activation_reason::blocked};
+
     if (contract->default_state == port_state::stock_host)
         return {island_state::fail_open, activation_reason::stock_host_preserved};
 
