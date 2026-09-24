@@ -250,6 +250,52 @@
       "fail_open": "PRESERVE_STOCK_DSR_SUBSURF",
       "runtime": "NOT_TESTED",
       "pixel": "OPEN"
+    },
+    "faceeye_shadow_legacy": {
+      "target_operator": "renderer.ptde.faceeye_shadow_operator_v1",
+      "kernel_split": "renderer.cross.faceeye_shadow_kernel_split_v1",
+      "resource_sampler_boundary": "renderer.cross.faceeye_shadow_resource_sampler_boundary_v1",
+      "boundary_revision": 8881,
+      "target_status": "CONFIRMED",
+      "port_state": "BLOCKED",
+      "scope": {
+        "family": "FRPG_Phn_FaceEye",
+        "shadow_modes": [
+          "Sdw",
+          "Csd"
+        ],
+        "patch_suffixes": [
+          "no-point",
+          "PntS"
+        ],
+        "preserve_suffixes": [
+          "PntSS",
+          "PntSSSS"
+        ]
+      },
+      "t7": {
+        "declaration": "gSMP_7 slot7 invariant across 8/8",
+        "static_resource_abi": "COMPATIBLE",
+        "actual_runtime_resource_identity": "OPEN"
+      },
+      "s7": {
+        "declaration": "gSMP_7Sampler slot7",
+        "comparison_suffixes": [
+          "no-point",
+          "PntS"
+        ],
+        "regular_suffixes": [
+          "PntSS",
+          "PntSSSS"
+        ],
+        "exact_runtime_descriptor": "OPEN"
+      },
+      "candidate_carrier": "SHADER+SAMPLER",
+      "resource_sidecar_required_by_static_abi": false,
+      "activation_blocker": "PROVE_OR_SUPPLY_EXACT_REGULAR_S7_SAMPLER",
+      "fail_open": "STOCK_DSR",
+      "runtime": "NOT_TESTED",
+      "pixel": "OPEN"
     }
   },
   "legacy_a1": {
