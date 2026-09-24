@@ -18,6 +18,41 @@ struct hemdir3_lobe {
     hemdir3_vec3 color{};
 };
 
+struct hemdir3_raw_direction {
+    float x_degrees = 0.0f;
+    float y_degrees = 0.0f;
+};
+
+struct hemdir3_raw_color {
+    hemdir3_vec3 rgb_255{};
+    float multiplier_percent = 0.0f;
+};
+
+struct hemdir3_raw_lobe_endpoint {
+    hemdir3_raw_direction direction{};
+    hemdir3_raw_color color{};
+};
+
+enum class hemdir3_profile_result : std::uint8_t {
+    exact = 0,
+    fail_open_nonfinite_input
+};
+
+struct hemdir3_profile_sample {
+    hemdir3_profile_result result =
+        hemdir3_profile_result::fail_open_nonfinite_input;
+    std::array<hemdir3_lobe, 3> lobes{};
+};
+
+// Exact PTDE LightBank D123 producer operators. Directions are interpolated
+// in angle space on the shortest 2*pi arc before vector construction; colors
+// are decoded per endpoint and then linearly interpolated. Cartesian direction
+// vectors must never be lerped directly.
+hemdir3_profile_sample evaluate_hemdir3_profile(
+    const std::array<hemdir3_raw_lobe_endpoint, 3> &endpoint_a,
+    const std::array<hemdir3_raw_lobe_endpoint, 3> &endpoint_b,
+    float beta) noexcept;
+
 enum class hemdir3_math_result : std::uint8_t {
     exact = 0,
     fail_open_nonfinite_input
