@@ -13,6 +13,7 @@
 #include "dsrrl/runtime/engine_hooks.hpp"
 #include "dsrrl/runtime/mr_island.hpp"
 #include "dsrrl/runtime/asset_bridges.hpp"
+#include "dsrrl/runtime/upper_lower_runtime.hpp"
 
 #include <atomic>
 #include <cstdio>
@@ -121,7 +122,7 @@ void selector_dispatch(void *container,void *owner,void *ret,void *r14,void *r15
                        std::int32_t material_index) noexcept
 {
     dsrrl::runtime::mr::selector_event(container,owner,ret,r14,r15,material_index);
-    // Upper/Lower will subscribe here; no second selector detour is permitted.
+    dsrrl::runtime::upper_lower::selector_event(container,owner,ret,r14,r15,material_index);
 }
 
 } // namespace
@@ -136,8 +137,8 @@ __declspec(dllexport) const char *NAME="DSRRL Renderer Core Runtime v1";
 __declspec(dllexport) const char *AUTHOR="DSR Restored Lighting";
 __declspec(dllexport) const char *DESCRIPTION=
     "Renderer Core v1 A2 unified runtime. Proven A1 create-time islands plus "
-    "Material Response V2.11 and exact V12-gated PTDE Diffuse t0 / Normal t2 "
-    "resource islands in one addon. SpecRGB and Upper/Lower remain fail-open.";
+    "Material Response V2.11, exact V12 Diffuse/Normal/SpecRGB and corrected "
+    "PTDE Upper/Lower operator islands in one audited draw transaction.";
 }
 
 extern "C" __declspec(dllexport) bool AddonInit(HMODULE addon,HMODULE reshade_module)
@@ -160,7 +161,7 @@ extern "C" __declspec(dllexport) bool AddonInit(HMODULE addon,HMODULE reshade_mo
     }
 
     g_core.features().set(dsrrl::core::operator_id::material_response,true);
-    g_core.features().set(dsrrl::core::operator_id::spec_rgb,false);
+    g_core.features().set(dsrrl::core::operator_id::spec_rgb,true);
     g_core.features().set(dsrrl::core::operator_id::diffuse,true);
     g_core.features().set(dsrrl::core::operator_id::normal,true);
     g_core.features().set(dsrrl::core::operator_id::upper_lower,false);
@@ -177,11 +178,18 @@ extern "C" __declspec(dllexport) bool AddonInit(HMODULE addon,HMODULE reshade_mo
         return false;
     }
 
+    const bool ul_ready=dsrrl::runtime::upper_lower::register_runtime(g_core);
+    g_core.features().set(dsrrl::core::operator_id::upper_lower,ul_ready);
+    if(!ul_ready)
+        reshade::log::message(reshade::log::level::warning,
+            "DSRRL Runtime v1 A3: U/L producer guards failed; U/L fail-open OFF.");
+
     if(!dsrrl::runtime::engine::install(
             &selector_dispatch,
             &dsrrl::runtime::mr::mtd_event,
             &dsrrl::runtime::assets::texture_name_event,
             &dsrrl::runtime::assets::texture_name_clear_event)){
+        dsrrl::runtime::upper_lower::unregister_runtime();
         dsrrl::runtime::mr::unregister_runtime();
         dsrrl::runtime::assets::unregister_runtime();
         unregister_a1_events();
@@ -193,22 +201,26 @@ extern "C" __declspec(dllexport) bool AddonInit(HMODULE addon,HMODULE reshade_mo
     }
 
     reshade::log::message(reshade::log::level::info,
-        "DSRRL Runtime v1 A2: CORE ACTIVE; A1x5=ON MR=ON SPECRGB=OFF DIFFUSE=ON NORMAL=ON UL=OFF; "
-        "single EngineBridge hook owner; A1/MR exact-SHA sets disjoint; exact EXE+binder provenance PASS.");
+        ul_ready ?
+        "DSRRL Runtime v1 A3: CORE ACTIVE; A1x5=ON MR=ON SPECRGB=ON DIFFUSE=ON NORMAL=ON UL=ON; single EngineBridge selector owner." :
+        "DSRRL Runtime v1 A3: CORE ACTIVE; A1x5=ON MR=ON SPECRGB=ON DIFFUSE=ON NORMAL=ON UL=FAIL-OPEN-OFF; single EngineBridge selector owner.");
     return true;
 }
 
 extern "C" __declspec(dllexport) void AddonUninit(HMODULE addon,HMODULE reshade_module)
 {
     dsrrl::runtime::engine::uninstall();
+    dsrrl::runtime::upper_lower::unregister_runtime();
     dsrrl::runtime::mr::unregister_runtime();
     dsrrl::runtime::assets::unregister_runtime();
     unregister_a1_events();
     log_a1_state("UNLOAD");
     g_a1_bridge.reset();
     g_core.features().set(dsrrl::core::operator_id::material_response,false);
+    g_core.features().set(dsrrl::core::operator_id::spec_rgb,false);
     g_core.features().set(dsrrl::core::operator_id::diffuse,false);
     g_core.features().set(dsrrl::core::operator_id::normal,false);
+    g_core.features().set(dsrrl::core::operator_id::upper_lower,false);
     reshade::unregister_addon(addon,reshade_module);
 }
 
