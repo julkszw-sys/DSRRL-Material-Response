@@ -87,6 +87,27 @@ int main()
     CHECK(core.receivers().resolve(rx.fast_hash, rx.exact_sha256).has_value());
     CHECK(!core.receivers().resolve(rx.fast_hash, digest(8)).has_value());
 
+    // Shader cache identity is full-SHA exact; the 64-bit hash is a prefilter.
+    shader_recipe recipe;
+    recipe.key.source_hash = 0x1234u;
+    recipe.key.source_sha256 = digest(9);
+    recipe.key.receiver_id = 33;
+    recipe.key.enabled_operators = operator_bit(operator_id::upper_lower);
+    recipe.replacement_hash = 0x5678u;
+    recipe.replacement_sha256 = digest(19);
+    recipe.carrier_abi = carrier_abi_v1;
+    CHECK(core.shaders().register_recipe(recipe));
+    CHECK(core.shaders().resolve(recipe.key).has_value());
+
+    shader_key fast_collision = recipe.key;
+    fast_collision.source_sha256 = digest(10);
+    CHECK(!core.shaders().resolve(fast_collision).has_value());
+
+    shader_recipe nonexact_recipe = recipe;
+    nonexact_recipe.key.source_hash = 0x9999u;
+    nonexact_recipe.key.source_sha256 = {};
+    CHECK(!core.shaders().register_recipe(nonexact_recipe));
+
     // Snapshot bus copies semantic values and carries no game pointer.
     semantic_payload ul_payload;
     ul_payload.lane_count = 2;
