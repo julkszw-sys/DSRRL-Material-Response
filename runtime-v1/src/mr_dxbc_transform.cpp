@@ -164,7 +164,7 @@ std::vector<std::uint8_t> rebuild(std::span<const std::uint8_t> original,
     write_u32(out.data()+24,static_cast<std::uint32_t>(out.size()));
     write_u32(out.data()+28,static_cast<std::uint32_t>(chunks.size()));
     for(std::size_t i=0;i<offsets.size();++i) write_u32(out.data()+32+i*4,offsets[i]);
-    std::fill(out.begin()+4,out.begin()+20,0);
+    std::fill(out.begin()+4,out.begin()+20,std::uint8_t{0});
     const auto sum=dxbc_checksum(out);
     std::copy(sum.begin(),sum.end(),out.begin()+4);
     return out;
