@@ -1,5 +1,7 @@
 #include "dsrrl/operators/material_response/mtd_semantic_census.hpp"
 #include "dsrrl/operators/material_response/material_response_seed.hpp"
+#include "dsrrl/operators/env_spec/env_spec_island.hpp"
+#include "dsrrl/operators/resource_bridges/spec_rgb_bridge.hpp"
 
 #include <cstddef>
 #include <cstdint>
@@ -157,6 +159,38 @@ int main()
         bad_binding,mtd_semantic_operator::material_response);
     CHECK(d.state==mtd_semantic_state::unknown);
     CHECK(!d.exact_identity_match);
+
+    operators::resource_bridges::spec_rgb_context spec_ctx;
+    spec_ctx.receiver_id=33u;
+    spec_ctx.actual_material_verified=true;
+    spec_ctx.material_specular_consumer_verified=true;
+    spec_ctx.exact_name_ptde_companion_verified=true;
+    spec_ctx.ptde_sidecar_ready=true;
+    spec_ctx.native_t10_transport_ready=true;
+    spec_ctx.stock_t1_preserved=true;
+
+    auto spec_route=
+        operators::resource_bridges::evaluate_spec_rgb_route(spec_ctx,q);
+    CHECK(spec_route.action==
+          operators::resource_bridges::spec_rgb_action::bind_ptde_t10_rgb);
+
+    spec_route=
+        operators::resource_bridges::evaluate_spec_rgb_route(spec_ctx,binding_q);
+    CHECK(spec_route.action==
+          operators::resource_bridges::spec_rgb_action::preserve_host);
+    CHECK(spec_route.reason==
+          operators::resource_bridges::spec_rgb_reason::
+              mtd_census_not_authorized);
+
+    auto env=operators::env_spec::env_spec_island::gate(q,false);
+    CHECK(env.selected==operators::env_spec::action::preserve_host);
+    CHECK(env.ptde_bridge_required);
+    env=operators::env_spec::env_spec_island::gate(q,true);
+    CHECK(env.selected==operators::env_spec::action::activate_ptde_bridge);
+
+    env=operators::env_spec::env_spec_island::gate(leather_q,true);
+    CHECK(env.selected==operators::env_spec::action::preserve_host);
+    CHECK(!env.ptde_bridge_required);
 
     material_response_island seeded;
     CHECK(register_confirmed_material_routes_v1(seeded)==35u);
