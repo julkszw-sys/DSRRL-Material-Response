@@ -2,6 +2,7 @@
 
 #include "dsrrl/operators/known_operator_island.hpp"
 #include "dsrrl/operators/lightbank/upper_lower.hpp"
+#include "dsrrl/operators/lightbank/hemdir3.hpp"
 
 namespace dsrrl::operators::lightbank {
 
