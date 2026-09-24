@@ -95,6 +95,26 @@
       "identity_recipe_import": "PENDING",
       "runtime_activation": "NOT_TESTED",
       "pixel": "OPEN"
+    },
+    "upper_lower": {
+      "operator_math": "SOURCE_COMPLETE",
+      "canonical_operator": "project.branch.renderer_edition_ul_ptde_operator_port_contract",
+      "endpoint_decode": "P(RGB,M)=(RGB/255)*(M/100)",
+      "endpoint_blend": "U=(1-beta)U_A+beta U_B; L=(1-beta)L_A+beta L_B",
+      "hemisphere": "t=0.5*N_final.y+0.5; H=L+t*(U-L)",
+      "carrier_abi": {
+        "b13[6].xyz": "Upper_PTDE",
+        "b13[7].xyz": "Lower_PTDE"
+      },
+      "forbidden_compensation": [
+        "DSR U/L x1.5",
+        "DSR U/L pow(2.2)",
+        "endpoint inverse/root",
+        "pre-distort for downstream pre-Fog root"
+      ],
+      "runtime_producer_sidecar": "OPEN",
+      "runtime_activation": "NOT_TESTED_IN_RENDERER_CORE",
+      "pixel": "OPEN"
     }
   },
   "legacy_a1": {

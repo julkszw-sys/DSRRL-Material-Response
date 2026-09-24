@@ -164,6 +164,30 @@ cubemap/probe, infer a material, alter diffuse/specular gains or claim final-pix
 equivalence. Exact DXBC identity/patch recipes remain pending import from the canonical
 P2.2 plan source.
 
+## Source-complete operator math: Upper/Lower Ambient
+
+`surface.upper_lower` now has a handwritten exact implementation of the CONFIRMED
+PTDE endpoint reconstruction, LightBank A/B blend and hemispheric source join:
+
+```text
+P(RGB,M) = (RGB / 255) * (M / 100)
+U = (1-beta) U_A + beta U_B
+L = (1-beta) L_A + beta L_B
+t = 0.5 * N_final.y + 0.5
+H = L + t * (U - L)
+```
+
+The reconstructed vectors correspond to the frozen carrier ABI semantics
+`b13[6].xyz = Upper_PTDE` and `b13[7].xyz = Lower_PTDE`. The implementation is
+deliberately PTDE-linear: it does not apply the stock DSR U/L x1.5, pow(2.2),
+endpoint inverse/post-blend root, and it does not pre-distort the payload to cancel
+the common downstream pre-Fog root.
+
+This closes the operator mathematics and semantic payload construction only. The
+runtime producer/selector/freshness sidecar remains a separate activation problem;
+the historical A3 producer-hook failures therefore do not invalidate this pure
+operator implementation and are not promoted to runtime success here.
+
 ## Legacy A1/P2.2 decomposition
 
 The old combined mask is decomposed by ownership:

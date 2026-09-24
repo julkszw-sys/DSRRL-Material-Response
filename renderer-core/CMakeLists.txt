@@ -23,6 +23,7 @@ add_library(dsrrl_renderer_core STATIC
     src/operators/point_light/pnts_attenuation.cpp
     src/operators/surface/diffuse_material_domain.cpp
     src/operators/surface/fixed_postfog_identity.cpp
+    src/operators/lightbank/upper_lower.cpp
 )
 target_include_directories(dsrrl_renderer_core PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
 target_compile_features(dsrrl_renderer_core PUBLIC cxx_std_17)

@@ -352,6 +352,45 @@ int main()
     CHECK(no_spc.action == operators::env_spec::no_spc_delete_action::preserve_host);
     CHECK(no_spc.reason == operators::env_spec::no_spc_delete_reason::ptde_lane_not_proven_absent);
 
+    // Upper/Lower exact operator math is independent of the still-open
+    // runtime producer/sidecar path.
+    CHECK(gates.set(core::operator_id::upper_lower, true));
+    activation = operators::lightbank::upper_lower.evaluate(gates, verified);
+    CHECK(activation.state == core::island_state::active);
+
+    operators::lightbank::ul_raw_endpoint upper_a{{255.0f, 0.0f, 0.0f}, 100.0f};
+    operators::lightbank::ul_raw_endpoint lower_a{{0.0f, 255.0f, 0.0f}, 100.0f};
+    operators::lightbank::ul_raw_endpoint upper_b{{0.0f, 0.0f, 255.0f}, 100.0f};
+    operators::lightbank::ul_raw_endpoint lower_b{{0.0f, 0.0f, 0.0f}, 100.0f};
+
+    auto ul = operators::lightbank::evaluate_upper_lower(
+        upper_a, lower_a, upper_b, lower_b, 0.25f, 0.0f);
+    CHECK(ul.result == operators::lightbank::upper_lower_result::exact);
+    CHECK(std::fabs(ul.upper_ptde.r - 0.75f) < 0.000001f);
+    CHECK(std::fabs(ul.upper_ptde.b - 0.25f) < 0.000001f);
+    CHECK(std::fabs(ul.lower_ptde.g - 0.75f) < 0.000001f);
+    CHECK(ul.hemisphere_t == 0.5f);
+    CHECK(std::fabs(ul.hemisphere.r - 0.375f) < 0.000001f);
+    CHECK(std::fabs(ul.hemisphere.g - 0.375f) < 0.000001f);
+    CHECK(std::fabs(ul.hemisphere.b - 0.125f) < 0.000001f);
+
+    ul = operators::lightbank::evaluate_upper_lower(
+        upper_a, lower_a, upper_b, lower_b, 0.25f, 1.0f);
+    CHECK(ul.hemisphere_t == 1.0f);
+    CHECK(std::fabs(ul.hemisphere.r - ul.upper_ptde.r) < 0.000001f);
+    CHECK(std::fabs(ul.hemisphere.b - ul.upper_ptde.b) < 0.000001f);
+
+    ul = operators::lightbank::evaluate_upper_lower(
+        upper_a, lower_a, upper_b, lower_b, 0.25f, -1.0f);
+    CHECK(ul.hemisphere_t == 0.0f);
+    CHECK(std::fabs(ul.hemisphere.g - ul.lower_ptde.g) < 0.000001f);
+
+    auto bad_upper = upper_a;
+    bad_upper.multiplier_percent = std::numeric_limits<float>::quiet_NaN();
+    ul = operators::lightbank::evaluate_upper_lower(
+        bad_upper, lower_a, upper_b, lower_b, 0.25f, 0.0f);
+    CHECK(ul.result == operators::lightbank::upper_lower_result::fail_open_nonfinite_input);
+
     CHECK(gates.set(core::operator_id::post_hdr, true));
     activation = operators::postprocess::hdr.evaluate(gates, verified);
     CHECK(activation.state == core::island_state::fail_open);

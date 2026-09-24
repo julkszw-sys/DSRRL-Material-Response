@@ -1,6 +1,7 @@
 #pragma once
 
 #include "dsrrl/operators/known_operator_island.hpp"
+#include "dsrrl/operators/lightbank/upper_lower.hpp"
 
 namespace dsrrl::operators::lightbank {
 
