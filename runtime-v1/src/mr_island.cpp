@@ -9,6 +9,8 @@
 #include "dsrrl/runtime/mr_dxbc_transform.hpp"
 #include "dsrrl/runtime/engine_hooks.hpp"
 #include "dsrrl/runtime/asset_bridges.hpp"
+#include "dsrrl/runtime/upper_lower_runtime.hpp"
+#include "dsrrl/runtime/generated_ul_stable_hashes.hpp"
 #include "dsrrl/core/renderer_core.hpp"
 #include "dsrrl/sha256.hpp"
 #include "ptde_material_donor_registry.hpp"
@@ -46,6 +48,9 @@ std::atomic<std::uint64_t> g_draw_serial{0};
 std::atomic<std::uint64_t> g_mtd_seen{0}, g_mapped{0}, g_unmapped{0};
 std::atomic<std::uint64_t> g_selector_seen{0}, g_selector_mapped{0};
 std::atomic<std::uint64_t> g_pipeline_seen{0}, g_shader_pair_pass{0}, g_shader_pair_fail{0};
+std::atomic<std::uint64_t> g_shader_ul_pass{0}, g_shader_ul_fail{0};
+std::atomic<std::uint64_t> g_shader_spec_pass{0}, g_shader_spec_fail{0};
+std::atomic<std::uint64_t> g_shader_ul_spec_pass{0}, g_shader_ul_spec_fail{0};
 std::atomic<std::uint64_t> g_target_binds{0}, g_replays{0}, g_fail_open{0};
 std::atomic<std::uint64_t> g_b12_create{0}, g_b12_hit{0}, g_restore_fail{0}, g_present{0};
 
@@ -95,6 +100,10 @@ struct device_state {
     ID3D11Device *device=nullptr;
     std::array<ID3D11PixelShader*,24> diffuse{};
     std::array<ID3D11PixelShader*,24> full{};
+    std::array<ID3D11PixelShader*,24> diffuse_ul{};
+    std::array<ID3D11PixelShader*,24> full_ul{};
+    std::array<ID3D11PixelShader*,24> full_spec{};
+    std::array<ID3D11PixelShader*,24> full_ul_spec{};
     std::unordered_map<std::uint16_t,ID3D11Buffer*> b12;
 };
 device_state g_device;
@@ -105,6 +114,10 @@ void release_device_state()
     std::lock_guard lock(g_device_mutex);
     for(auto *&p:g_device.diffuse){ if(p){p->Release();p=nullptr;} }
     for(auto *&p:g_device.full){ if(p){p->Release();p=nullptr;} }
+    for(auto *&p:g_device.diffuse_ul){ if(p){p->Release();p=nullptr;} }
+    for(auto *&p:g_device.full_ul){ if(p){p->Release();p=nullptr;} }
+    for(auto *&p:g_device.full_spec){ if(p){p->Release();p=nullptr;} }
+    for(auto *&p:g_device.full_ul_spec){ if(p){p->Release();p=nullptr;} }
     for(auto &[_,b]:g_device.b12) if(b) b->Release();
     g_device.b12.clear();
     if(g_device.device){g_device.device->Release();g_device.device=nullptr;}
@@ -117,6 +130,16 @@ const shader_desc *find_ps(std::uint32_t count,const pipeline_subobject *sub) no
         if(sub[i].type==pipeline_subobject_type::pixel_shader && sub[i].count==1 && sub[i].data)
             return static_cast<const shader_desc*>(sub[i].data);
     return nullptr;
+}
+
+bool create_shader(
+    ID3D11Device *native,
+    const transform_result &code,
+    ID3D11PixelShader *&out) noexcept
+{
+    if(!code.ok || code.code.empty()) return false;
+    return SUCCEEDED(native->CreatePixelShader(
+        code.code.data(),code.code.size(),nullptr,&out)) && out!=nullptr;
 }
 
 bool ensure_shader_pair(device *d,const plan &p,std::span<const std::uint8_t> stock)
@@ -137,10 +160,10 @@ bool ensure_shader_pair(device *d,const plan &p,std::span<const std::uint8_t> st
     }
 
     ID3D11PixelShader *ps_diffuse=nullptr,*ps_full=nullptr;
-    if(FAILED(native->CreatePixelShader(diffuse.code.data(),diffuse.code.size(),nullptr,&ps_diffuse)) || !ps_diffuse){
+    if(!create_shader(native,diffuse,ps_diffuse)){
         ++g_shader_pair_fail; return false;
     }
-    if(FAILED(native->CreatePixelShader(full.code.data(),full.code.size(),nullptr,&ps_full)) || !ps_full){
+    if(!create_shader(native,full,ps_full)){
         ps_diffuse->Release(); ++g_shader_pair_fail; return false;
     }
 
@@ -149,6 +172,62 @@ bool ensure_shader_pair(device *d,const plan &p,std::span<const std::uint8_t> st
     g_device.diffuse[i]=ps_diffuse;
     g_device.full[i]=ps_full;
     ++g_shader_pair_pass;
+
+    // U/L is compositional over the exact V29/V2.11 variants. The historical
+    // V29 -> U/L output hash is pinned for all 24 stable hosts.
+    const auto &ul_expected=generated::k_ul_stable_hashes[i];
+    const auto diffuse_sha=dsrrl::to_hex(dsrrl::sha256({
+        reinterpret_cast<const std::byte*>(diffuse.code.data()),diffuse.code.size()
+    }));
+    if(diffuse_sha==ul_expected.v29){
+        const auto diffuse_ul=transform_upper_lower(diffuse.code,ul_expected.v29_ul);
+        const auto full_ul=transform_upper_lower(full.code);
+        ID3D11PixelShader *ps_diffuse_ul=nullptr,*ps_full_ul=nullptr;
+        if(create_shader(native,diffuse_ul,ps_diffuse_ul) &&
+           create_shader(native,full_ul,ps_full_ul)){
+            if(g_device.diffuse_ul[i]) g_device.diffuse_ul[i]->Release();
+            if(g_device.full_ul[i]) g_device.full_ul[i]->Release();
+            g_device.diffuse_ul[i]=ps_diffuse_ul;
+            g_device.full_ul[i]=ps_full_ul;
+            ++g_shader_ul_pass;
+        }else{
+            if(ps_diffuse_ul) ps_diffuse_ul->Release();
+            if(ps_full_ul) ps_full_ul->Release();
+            ++g_shader_ul_fail;
+        }
+
+        // The combined U/L + SpecRGB variant is built from the already exact
+        // U/L V2.11 payload so both operator islands share one pixel shader.
+        if(full_ul.ok){
+            const auto ul_spec=transform_spec_rgb(full_ul.code);
+            ID3D11PixelShader *ps_ul_spec=nullptr;
+            if(create_shader(native,ul_spec,ps_ul_spec)){
+                if(g_device.full_ul_spec[i]) g_device.full_ul_spec[i]->Release();
+                g_device.full_ul_spec[i]=ps_ul_spec;
+                ++g_shader_ul_spec_pass;
+            }else{
+                if(ps_ul_spec) ps_ul_spec->Release();
+                ++g_shader_ul_spec_fail;
+            }
+        }else{
+            ++g_shader_ul_spec_fail;
+        }
+    }else{
+        ++g_shader_ul_fail;
+        ++g_shader_ul_spec_fail;
+    }
+
+    const auto spec=transform_spec_rgb(full.code);
+    ID3D11PixelShader *ps_spec=nullptr;
+    if(create_shader(native,spec,ps_spec)){
+        if(g_device.full_spec[i]) g_device.full_spec[i]->Release();
+        g_device.full_spec[i]=ps_spec;
+        ++g_shader_spec_pass;
+    }else{
+        if(ps_spec) ps_spec->Release();
+        ++g_shader_spec_fail;
+    }
+
     return true;
 }
 
@@ -304,7 +383,11 @@ void on_bind_pipeline(command_list *cmd,pipeline_stage stages,pipeline p)
         if(const auto it=g_pipelines.find(p.handle);it!=g_pipelines.end()) host=it->second;
     }
     g_bound_host=host; g_bound_command=host>=0?cmd:nullptr;
-    if(host>=0) ++g_target_binds; else g_draw_donor=-1;
+    if(host>=0) ++g_target_binds;
+    else {
+        g_draw_donor=-1;
+        upper_lower::consume_draw_selection();
+    }
 }
 
 bool on_draw_indexed(command_list *cmd,std::uint32_t index_count,std::uint32_t instance_count,
@@ -316,28 +399,40 @@ bool on_draw_indexed(command_list *cmd,std::uint32_t index_count,std::uint32_t i
     if(!g_core || !g_core->features().enabled(core::operator_id::material_response) ||
        !g_enabled.load() || g_quarantined.load() || !cmd || cmd!=g_bound_command ||
        g_bound_host<0 || g_bound_host>=24 || donor<0 ||
-       static_cast<std::size_t>(donor)>=dsrrl::materialdonor::k_donors.size())
+       static_cast<std::size_t>(donor)>=dsrrl::materialdonor::k_donors.size()){
+        upper_lower::consume_draw_selection();
         return false;
+    }
 
     auto *ctx=reinterpret_cast<ID3D11DeviceContext*>(cmd->get_native());
-    if(!ctx){++g_fail_open;return false;}
-
-    core::render_patch_plan plan{};
-    plan.patches[plan.patch_count++]={core::operator_id::material_response,0u,true,false};
-    if(g_core->features().enabled(core::operator_id::diffuse))
-        plan.patches[plan.patch_count++]={core::operator_id::diffuse,0u,false,true};
-    if(g_core->features().enabled(core::operator_id::normal))
-        plan.patches[plan.patch_count++]={core::operator_id::normal,0u,false,true};
-    plan.carrier_write_mask=0;
-    const auto type=ctx->GetType()==D3D11_DEVICE_CONTEXT_DEFERRED ?
-        core::context_kind::deferred : core::context_kind::immediate;
-    const auto command=reinterpret_cast<std::uint64_t>(cmd);
-    if(!g_core->transactions().begin(command,++g_draw_serial,type,plan)){
-        ++g_fail_open; return false;
+    if(!ctx){
+        ++g_fail_open;
+        upper_lower::consume_draw_selection();
+        return false;
     }
+
+    const auto &don=dsrrl::materialdonor::k_donors[static_cast<std::size_t>(donor)];
+    const std::uint32_t receiver_id=24u+static_cast<std::uint32_t>(g_bound_host);
+    assets::material_route_scope route{};
+    route.exact=true;
+    route.diffuse_normal_eligible=g_bound_host<12;
+    route.diffuse_c100_carrier_active=true;
+    route.specular_material_verified=don.has_c101;
+    route.route_index=static_cast<std::uint32_t>(donor);
+    route.receivers={receiver_id,0u,0u};
+
+    const bool ul_candidate =
+        g_core->features().enabled(core::operator_id::upper_lower) &&
+        upper_lower::selected_snapshot_ready();
+    const bool spec_candidate =
+        don.has_c101 &&
+        g_core->features().enabled(core::operator_id::spec_rgb) &&
+        assets::spec_ready(ctx,route,receiver_id);
 
     bool issued=false;
     bool restore_ok=true;
+    bool ul_active=false;
+    bool spec_active=false;
     ID3D11Device *dev=nullptr;
     ctx->GetDevice(&dev);
     ID3D11PixelShader *oldps=nullptr,*replacement=nullptr;
@@ -345,77 +440,119 @@ bool on_draw_indexed(command_list *cmd,std::uint32_t index_count,std::uint32_t i
     ID3D11DeviceContext1 *ctx1=nullptr;
     cb_capture oldcb{};
     assets::draw_state asset_state{};
+    upper_lower::draw_state ul_state{};
 
     if(dev){
         ctx->PSGetShader(&oldps,nullptr,nullptr);
-        const auto &don=dsrrl::materialdonor::k_donors[static_cast<std::size_t>(donor)];
-        {
-            std::lock_guard lock(g_device_mutex);
-            if(g_device.device==dev){
-                replacement=don.has_c101?g_device.full[static_cast<std::size_t>(g_bound_host)]:
-                                          g_device.diffuse[static_cast<std::size_t>(g_bound_host)];
-                if(replacement) replacement->AddRef();
-            }
-        }
-
         b12=realize_b12(dev,donor);
         ctx->QueryInterface(__uuidof(ID3D11DeviceContext1),reinterpret_cast<void**>(&ctx1));
         oldcb=capture_cb(ctx,ctx1);
 
-        if(oldps && replacement && b12 && oldcb.coherent){
-            ctx->PSSetShader(replacement,nullptr,0);
-            ctx->PSSetConstantBuffers(12,1,&b12);
+        {
+            std::lock_guard lock(g_device_mutex);
+            if(g_device.device==dev){
+                const auto i=static_cast<std::size_t>(g_bound_host);
 
-            const std::uint32_t receiver_id=24u+static_cast<std::uint32_t>(g_bound_host);
-            assets::material_route_scope route{};
-            route.exact=true;
-            route.diffuse_normal_eligible=g_bound_host<12;
-            route.diffuse_c100_carrier_active=true;
-            route.route_index=static_cast<std::uint32_t>(donor);
-            route.receivers={receiver_id,0u,0u};
+                // U/L is only considered active if both a fresh semantic
+                // snapshot and the exact composed shader variant exist.
+                if(ul_candidate){
+                    ID3D11PixelShader *ul_shader =
+                        don.has_c101 ? g_device.full_ul[i] : g_device.diffuse_ul[i];
+                    if(ul_shader && upper_lower::bind_draw(ctx,ul_state))
+                        ul_active=true;
+                }
 
-            const bool assets_ok=assets::apply_draw(ctx,route,receiver_id,asset_state);
-            if(assets_ok){
-                if(instance_count<=1)
-                    ctx->DrawIndexed(index_count,first_index,vertex_offset);
-                else
-                    ctx->DrawIndexedInstanced(index_count,instance_count,first_index,vertex_offset,first_instance);
-                issued=true;
+                // SpecRGB requires exact actual material, exact t1 sidecar
+                // readiness and a shader that truly consumes t10.
+                if(spec_candidate){
+                    ID3D11PixelShader *spec_shader =
+                        ul_active ? g_device.full_ul_spec[i] : g_device.full_spec[i];
+                    if(spec_shader) spec_active=true;
+                }
+
+                if(don.has_c101){
+                    replacement =
+                        ul_active && spec_active ? g_device.full_ul_spec[i] :
+                        ul_active ? g_device.full_ul[i] :
+                        spec_active ? g_device.full_spec[i] :
+                                      g_device.full[i];
+                }else{
+                    replacement = ul_active ? g_device.diffuse_ul[i] : g_device.diffuse[i];
+                }
+                if(replacement) replacement->AddRef();
             }
+        }
 
-            const bool assets_restored=assets::restore_draw(ctx,asset_state);
-            ctx->PSSetShader(oldps,nullptr,0);
-            restore_cb(ctx,ctx1,oldcb);
-            const bool mr_restored=verify_restore(ctx,ctx1,oldcb);
-            restore_ok=assets_restored && mr_restored;
+        if(oldps && replacement && b12 && oldcb.coherent){
+            core::render_patch_plan plan{};
+            plan.patches[plan.patch_count++]={core::operator_id::material_response,0u,true,false};
+            if(g_core->features().enabled(core::operator_id::diffuse))
+                plan.patches[plan.patch_count++]={core::operator_id::diffuse,0u,false,true};
+            if(g_core->features().enabled(core::operator_id::normal))
+                plan.patches[plan.patch_count++]={core::operator_id::normal,0u,false,true};
+            if(spec_active)
+                plan.patches[plan.patch_count++]={core::operator_id::spec_rgb,0u,true,true};
+            if(ul_active)
+                plan.patches[plan.patch_count++]={core::operator_id::upper_lower,0u,true,false};
+            plan.carrier_write_mask=0;
+
+            const auto type=ctx->GetType()==D3D11_DEVICE_CONTEXT_DEFERRED ?
+                core::context_kind::deferred : core::context_kind::immediate;
+            const auto command=reinterpret_cast<std::uint64_t>(cmd);
+
+            if(g_core->transactions().begin(command,++g_draw_serial,type,plan)){
+                ctx->PSSetShader(replacement,nullptr,0);
+                ctx->PSSetConstantBuffers(12,1,&b12);
+                route.spec_t10_consumer_active=spec_active;
+
+                const bool assets_ok=assets::apply_draw(ctx,route,receiver_id,asset_state);
+                if(assets_ok){
+                    if(instance_count<=1)
+                        ctx->DrawIndexed(index_count,first_index,vertex_offset);
+                    else
+                        ctx->DrawIndexedInstanced(index_count,instance_count,first_index,vertex_offset,first_instance);
+                    issued=true;
+                }
+
+                const bool assets_restored=assets::restore_draw(ctx,asset_state);
+                const bool ul_restored=upper_lower::restore_draw(ctx,ul_state);
+                ctx->PSSetShader(oldps,nullptr,0);
+                restore_cb(ctx,ctx1,oldcb);
+                const bool mr_restored=verify_restore(ctx,ctx1,oldcb);
+                restore_ok=assets_restored && ul_restored && mr_restored;
+
+                const bool tx_restored=g_core->transactions().restore(command);
+                if(!tx_restored || !restore_ok){
+                    ++g_restore_fail;
+                    g_quarantined.store(true);
+                    log_error("DSRRL Runtime v1 MR: unified draw restore fault; MR/SpecRGB/U/L transaction quarantined.");
+                }
+            }else{
+                ++g_fail_open;
+                (void)upper_lower::restore_draw(ctx,ul_state);
+            }
         }
     }
 
-    // If the draw was not issued, restore any partially changed state and let
-    // ReShade execute the original draw. If it was issued, always consume the
-    // event; returning false after a restore fault would duplicate the draw.
+    // If the native draw was not issued, restore every possibly touched lane
+    // and let ReShade execute the untouched stock draw exactly once.
     if(!issued){
         ++g_fail_open;
         (void)assets::restore_draw(ctx,asset_state);
+        (void)upper_lower::restore_draw(ctx,ul_state);
         if(oldps) ctx->PSSetShader(oldps,nullptr,0);
         restore_cb(ctx,ctx1,oldcb);
     }else{
         ++g_replays;
     }
 
+    upper_lower::consume_draw_selection();
     release_cb(oldcb);
     if(ctx1)ctx1->Release();
     if(b12)b12->Release();
     if(replacement)replacement->Release();
     if(oldps)oldps->Release();
     if(dev)dev->Release();
-
-    const bool tx_restored=g_core->transactions().restore(command);
-    if(!tx_restored || !restore_ok){
-        ++g_restore_fail;
-        g_quarantined.store(true);
-        log_error("DSRRL Runtime v1 MR: draw restore fault; MR quarantined after issued transaction.");
-    }
 
     return issued;
 }
@@ -428,7 +565,11 @@ void on_present(command_queue *,swapchain *,const rect *,const rect *,std::uint3
           <<" MTD="<<g_mtd_seen.load()<<" mapped="<<g_mapped.load()<<" unmapped="<<g_unmapped.load()
           <<" selector="<<g_selector_seen.load()<<" selector_mapped="<<g_selector_mapped.load()
           <<" pipelines="<<g_pipeline_seen.load()<<" shader_pair_pass="<<g_shader_pair_pass.load()
-          <<" shader_pair_fail="<<g_shader_pair_fail.load()<<" binds="<<g_target_binds.load()
+          <<" shader_pair_fail="<<g_shader_pair_fail.load()
+          <<" ul_shader_pass="<<g_shader_ul_pass.load()<<" ul_shader_fail="<<g_shader_ul_fail.load()
+          <<" spec_shader_pass="<<g_shader_spec_pass.load()<<" spec_shader_fail="<<g_shader_spec_fail.load()
+          <<" ul_spec_shader_pass="<<g_shader_ul_spec_pass.load()<<" ul_spec_shader_fail="<<g_shader_ul_spec_fail.load()
+          <<" binds="<<g_target_binds.load()
           <<" replay="<<g_replays.load()<<" b12_create="<<g_b12_create.load()
           <<" b12_hit="<<g_b12_hit.load()<<" failopen="<<g_fail_open.load()
           <<" restore_fail="<<g_restore_fail.load()<<" quarantined="<<(g_quarantined.load()?1:0);
