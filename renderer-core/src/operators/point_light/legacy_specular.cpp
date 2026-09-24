@@ -38,7 +38,7 @@ legacy_specular_sample evaluate_legacy_local_specular(
        !finite(input.color0))
         return out;
 
-    if(input.exponent_c102<0.0f){
+    if(input.exponent_c102<=0.0f){
         out.result=legacy_specular_math_result::fail_open_invalid_exponent;
         return out;
     }
@@ -48,10 +48,7 @@ legacy_specular_sample evaluate_legacy_local_specular(
         input.c101);
 
     const float r=std::max(input.r_dot_l,0.0f);
-    if(r==0.0f && input.exponent_c102==0.0f)
-        out.angular=1.0f;
-    else
-        out.angular=std::pow(r,input.exponent_c102);
+    out.angular=std::pow(r,input.exponent_c102);
 
     if(!std::isfinite(out.angular))
         return legacy_specular_sample{};
