@@ -4,7 +4,9 @@ namespace dsrrl::core {
 
 bool hook_registry::claim(hook_claim claim) noexcept
 {
-    if (claim.site == 0 || claim.semantic == hook_semantic::unknown)
+    if (claim.site == 0 ||
+        claim.semantic == hook_semantic::unknown ||
+        !valid_operator_id(claim.owner))
         return false;
 
     std::lock_guard lock(mutex_);
