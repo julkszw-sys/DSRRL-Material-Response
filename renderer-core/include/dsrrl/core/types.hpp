@@ -51,10 +51,19 @@ enum class island_state : std::uint8_t {
 
 using operator_mask = std::uint32_t;
 
+constexpr bool valid_operator_id(operator_id op) noexcept
+{
+    return static_cast<std::size_t>(op) < operator_count;
+}
+
 constexpr operator_mask operator_bit(operator_id op) noexcept
 {
-    return 1u << static_cast<std::uint32_t>(op);
+    const auto index = static_cast<std::uint32_t>(op);
+    return index < operator_count ? (1u << index) : 0u;
 }
+
+inline constexpr operator_mask all_operator_bits =
+    ~operator_mask{0} >> (32u - static_cast<unsigned>(operator_count));
 
 struct alignas(16) float4 {
     float x = 0.0f;
