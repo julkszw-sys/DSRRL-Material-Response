@@ -108,8 +108,14 @@ int main()
     auto plan = core.build_plan(draw, requests, 2);
     CHECK(plan.empty());
 
-    // Enabling only U/L cannot activate SpecRGB.
+    // Enabling a feature is not enough: Core must also enforce the
+    // canonical operator-local producer/consumer readiness gates.
     CHECK(core.features().set(operator_id::upper_lower, true));
+    plan = core.build_plan(draw, requests, 2);
+    CHECK(plan.empty());
+
+    draw.activation.producer_ready = true;
+    draw.activation.consumer_verified = true;
     plan = core.build_plan(draw, requests, 2);
     CHECK(plan.patch_count == 1);
     CHECK(plan.patches[0].op == operator_id::upper_lower);
@@ -134,6 +140,31 @@ int main()
     invalid.carrier_write_mask = carrier_ul_mask;
     CHECK(!core.transactions().begin(
         draw.command, 3, context_kind::immediate, invalid));
+
+    // Malformed plans must fail before any array walk or native mutation.
+    render_patch_plan oversized;
+    oversized.patch_count =
+        static_cast<std::uint32_t>(oversized.patches.size() + 1u);
+    CHECK(!core.transactions().begin(
+        draw.command, 4, context_kind::immediate, oversized));
+
+    render_patch_plan invalid_lane;
+    invalid_lane.patch_count = 1;
+    invalid_lane.patches[0] = island_patch{
+        operator_id::upper_lower, 0x80000000u, true, false};
+    invalid_lane.carrier_write_mask = 0x80000000u;
+    CHECK(!core.transactions().begin(
+        draw.command, 5, context_kind::immediate, invalid_lane));
+
+    render_patch_plan duplicate_owner;
+    duplicate_owner.patch_count = 2;
+    duplicate_owner.patches[0] = island_patch{
+        operator_id::upper_lower, carrier_ul_mask, true, false};
+    duplicate_owner.patches[1] = island_patch{
+        operator_id::upper_lower, 0u, false, true};
+    duplicate_owner.carrier_write_mask = carrier_ul_mask;
+    CHECK(!core.transactions().begin(
+        draw.command, 6, context_kind::immediate, duplicate_owner));
 
     // Restore Phase 0 invariant.
     CHECK(core.features().set(operator_id::upper_lower, false));
