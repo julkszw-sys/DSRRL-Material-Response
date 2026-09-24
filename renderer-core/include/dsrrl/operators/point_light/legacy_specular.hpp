@@ -15,7 +15,8 @@ struct pointlight_vec3 {
 enum class legacy_specular_math_result : std::uint8_t {
     exact=0,
     fail_open_nonfinite_input,
-    fail_open_invalid_exponent
+    fail_open_invalid_exponent,
+    fail_open_invalid_vector
 };
 
 struct legacy_specular_input {
@@ -28,20 +29,43 @@ struct legacy_specular_input {
     pointlight_vec3 color0{};
 };
 
+// Complete operator input for the DSR-microfacet -> PTDE legacy-specular cut.
+// V and L are directions from the shaded point toward viewer/light.
+struct legacy_specular_vector_input {
+    pointlight_vec3 source_rgb{};
+    float attenuation=0.0f;
+    pointlight_vec3 normal{};
+    pointlight_vec3 view_direction{};
+    pointlight_vec3 light_direction{};
+    float exponent_c102=0.0f;
+    pointlight_vec3 spec_texture_blend{};
+    float c101=1.0f;
+    pointlight_vec3 color0{};
+};
+
 struct legacy_specular_sample {
     legacy_specular_math_result result=
         legacy_specular_math_result::fail_open_nonfinite_input;
     pointlight_vec3 material_specular{};
+    pointlight_vec3 reflection{};
+    float r_dot_l=0.0f;
     float angular=0.0f;
     pointlight_vec3 specular{};
 };
 
 // PTDE local PointLight specular branch:
+//   R     = 2 * dot(N,V) * N - V
 //   Mspec = SpecTex_blend * c101 * COLOR0
-//   Cspec = Csrc * A * pow(max(RdotL,0), c102) * Mspec
-// No common NdotL multiply is applied here.
+//   Cspec = Csrc * A * pow(max(dot(R,L),0), c102) * Mspec
+// No common NdotL multiply and no DSR GGX/Schlick/roughness tail are applied.
 legacy_specular_sample evaluate_legacy_local_specular(
     const legacy_specular_input &input) noexcept;
+
+// Preferred complete replacement-window evaluator. It owns the intermediate
+// reflection-vector and RdotL operators instead of accepting a value produced
+// by the stock DSR microfacet path.
+legacy_specular_sample evaluate_legacy_local_specular(
+    const legacy_specular_vector_input &input) noexcept;
 
 enum class local_specular_receiver_class : std::uint8_t {
     unsupported=0,
@@ -63,6 +87,9 @@ enum class local_specular_runtime_reason : std::uint8_t {
     clustered_membership_sidecar_not_ready,
     clustered_four_slot_shader_not_ready,
     stock_cluster_membership_not_bypassed,
+    microfacet_window_not_owned,
+    roughness_tail_not_bypassed,
+    common_ndotl_tail_not_bypassed,
     diffuse_path_not_preserved,
     separate_output_cut_not_ready,
     draw_transaction_not_ready
@@ -83,6 +110,13 @@ struct local_specular_runtime_context {
     bool clustered_four_slot_shader_ready=false;
     bool stock_cluster_membership_bypassed=false;
 
+    // Anti-hybrid cut: all three must be true before the PTDE branch may
+    // replace DSR local specular. This prevents feeding PTDE terms into a
+    // surviving GGX/Schlick, SpecTex-alpha roughness, or common-NdotL tail.
+    bool complete_microfacet_window_owned=false;
+    bool stock_roughness_tail_bypassed=false;
+    bool stock_common_ndotl_specular_bypassed=false;
+
     bool diffuse_path_preserved=false;
     bool separate_specular_output_cut_ready=false;
     bool draw_transaction_ready=false;
@@ -94,6 +128,8 @@ struct local_specular_runtime_plan {
         local_specular_runtime_reason::core_gate_not_active;
     bool preserve_dsr_diffuse=true;
     bool use_ptde_legacy_specular=true;
+    bool bypass_dsr_microfacet=true;
+    bool bypass_dsr_roughness_tail=true;
     bool common_ndotl_on_specular=false;
 };
 
