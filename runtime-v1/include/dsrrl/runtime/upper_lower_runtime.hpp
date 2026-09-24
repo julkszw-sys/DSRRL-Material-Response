@@ -51,6 +51,7 @@ void selector_event(
     std::int32_t material_index) noexcept;
 
 bool selected_snapshot_ready() noexcept;
+bool pmetal_env_producer_ready() noexcept;
 bool selected_pmetal_env_source(pmetal_env_source &out) noexcept;
 bool bind_draw(ID3D11DeviceContext *context, draw_state &state) noexcept;
 bool restore_draw(ID3D11DeviceContext *context, draw_state &state) noexcept;
