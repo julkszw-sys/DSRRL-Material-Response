@@ -132,6 +132,7 @@ std::atomic<std::uint64_t> g_spec_gate{0};
 std::atomic<std::uint64_t> g_diff_gate{0};
 std::atomic<std::uint64_t> g_norm_gate{0};
 std::atomic<std::uint64_t> g_spec_name_reject{0};
+std::atomic<std::uint64_t> g_spec_sidecar_miss_draw{0};
 std::atomic<std::uint64_t> g_diff_pair_reject{0};
 std::atomic<std::uint64_t> g_norm_tuple_reject{0};
 std::atomic<std::uint64_t> g_spec_bind{0};
@@ -686,6 +687,7 @@ void on_present(
        << " diff_gate=" << g_diff_gate.load()
        << " norm_gate=" << g_norm_gate.load()
        << " spec_name_reject=" << g_spec_name_reject.load()
+       << " spec_sidecar_miss_draw=" << g_spec_sidecar_miss_draw.load()
        << " diff_pair_reject=" << g_diff_pair_reject.load()
        << " norm_tuple_reject=" << g_norm_tuple_reject.load()
        << " spec_bind=" << g_spec_bind.load()
@@ -752,6 +754,50 @@ void texture_name_clear_event() noexcept
     ++g_name_clear;
 }
 
+bool spec_ready_for_draw(
+    ID3D11DeviceContext *context,
+    const material_route_scope &route,
+    std::uint32_t receiver_id) noexcept
+{
+    if (context == nullptr ||
+        g_core == nullptr ||
+        g_quarantined.load() ||
+        !receiver_allowed(route, receiver_id) ||
+        receiver_id < 24u ||
+        receiver_id > 47u ||
+        !g_core->features().enabled(core::operator_id::spec_rgb))
+        return false;
+
+    ++g_spec_gate;
+
+    ID3D11ShaderResourceView *stock_t1 = nullptr;
+    context->PSGetShaderResources(1u, 1u, &stock_t1);
+    if (stock_t1 == nullptr) {
+        ++g_spec_name_reject;
+        return false;
+    }
+
+    const auto h1 = logical_hash_for(stock_t1);
+    if (h1 == 0u ||
+        !generated::spec_name_hash_allowed_v12(h1)) {
+        ++g_spec_name_reject;
+        stock_t1->Release();
+        return false;
+    }
+
+    ID3D11ShaderResourceView *replacement =
+        lookup(stock_t1, asset_class::specular);
+    stock_t1->Release();
+
+    if (replacement == nullptr) {
+        ++g_spec_sidecar_miss_draw;
+        return false;
+    }
+
+    replacement->Release();
+    return true;
+}
+
 bool apply_draw(
     ID3D11DeviceContext *context,
     const material_route_scope &route,
@@ -767,6 +813,7 @@ bool apply_draw(
         return true;
 
     const bool want_spec =
+        route.spec_rgb_consumer_active &&
         receiver_id >= 24u &&
         receiver_id <= 47u &&
         g_core->features().enabled(core::operator_id::spec_rgb);
@@ -796,7 +843,6 @@ bool apply_draw(
     const auto h2 = logical_hash_for(state.old_t2);
 
     if (want_spec) {
-        ++g_spec_gate;
         if (h1 == 0u || !generated::spec_name_hash_allowed_v12(h1)) {
             ++g_spec_name_reject;
         } else {
