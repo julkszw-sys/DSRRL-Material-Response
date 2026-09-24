@@ -39,7 +39,8 @@ operators::surface::faceeye_runtime_context ready_faceeye(
     faceeye_runtime_context c;
     c.receiver_verified=true;
     c.variant=variant;
-    c.ptde_kernel_shader_ready=true;
+    c.replacement_ptde_kernel_shader_ready=true;
+    c.stock_ptde_kernel_identity_verified=true;
     c.runtime_t7_identity_verified=true;
     c.auxiliary_dirlight_snapshot.immutable_draw_local=true;
     c.auxiliary_dirlight_snapshot.register_present.fill(true);
@@ -94,7 +95,13 @@ operators::point_light::pointlight_runtime_context ready_pointlight(
     c.fixed_selected_light_count=
         pointlight_fixed_expected_light_count(stratum);
     c.fixed_membership_verified=true;
-    c.clustered_cpu_membership_sidecar_ready=true;
+    c.clustered_membership.immutable_draw_local=true;
+    c.clustered_membership.ordered_source_identity_ready=true;
+    c.clustered_membership.ordered_source_geometry_ready=true;
+    c.clustered_membership.ordered_raw_q_ready=true;
+    c.clustered_membership.raw_selected_count=4u;
+    c.clustered_membership.material_max_pnt_lit_num=4u;
+    c.clustered_membership.effective_count=4u;
     c.clustered_four_slot_shader_ready=true;
     c.stock_cluster_membership_bypassed=true;
     c.diffuse_material_path_ready=true;
@@ -367,7 +374,7 @@ int main()
     // Clustered PntS must use independently captured PTDE-selected four-slot
     // membership; stock DSR t16/t17 membership is not a valid selector.
     point=ready_pointlight(
-        operators::point_light::pointlight_receiver_stratum::clustered_pnts);
+        operators::point_light::pointlight_receiver_stratum::clustered_spc_pnts);
     point_plan=
         operators::point_light::evaluate_pointlight_runtime_readiness(
             features,activation,point);
@@ -385,7 +392,7 @@ int main()
               stock_cluster_membership_not_bypassed);
 
     point=ready_pointlight(
-        operators::point_light::pointlight_receiver_stratum::clustered_pnts);
+        operators::point_light::pointlight_receiver_stratum::clustered_spc_pnts);
     point.source_scope=
         operators::point_light::pointlight_source_scope::sfx_attached;
     point_plan=
