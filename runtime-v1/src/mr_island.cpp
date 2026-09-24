@@ -141,6 +141,12 @@ bool ensure_shader_pair(device *d,const plan &p,std::span<const std::uint8_t> st
     const auto full=transform(stock,p,variant::full_v211);
     if(!diffuse.ok || !full.ok){
         ++g_shader_pair_fail;
+        std::ostringstream os;
+        os<<"[DSRRL A2 MR] SHADER_TRANSFORM_FAIL host="<<static_cast<unsigned>(p.index)
+          <<" label="<<p.label
+          <<" diffuse_err="<<(diffuse.ok?"OK":diffuse.error)
+          <<" full_err="<<(full.ok?"OK":full.error);
+        log_error(os.str());
         return false;
     }
 
@@ -148,6 +154,15 @@ bool ensure_shader_pair(device *d,const plan &p,std::span<const std::uint8_t> st
     const auto full_spec=transform(stock,p,variant::full_v211_specrgb);
     if(!diffuse_spec.ok || !full_spec.ok){
         ++g_spec_shader_pair_fail;
+        std::ostringstream os;
+        os<<"[DSRRL A2 MR] SPEC_TRANSFORM_FAIL host="<<static_cast<unsigned>(p.index)
+          <<" label="<<p.label
+          <<" expected_size="<<p.specrgb_replacement_size
+          <<" diffuse_size="<<diffuse_spec.code.size()
+          <<" full_size="<<full_spec.code.size()
+          <<" diffuse_err="<<(diffuse_spec.ok?"OK":diffuse_spec.error)
+          <<" full_err="<<(full_spec.ok?"OK":full_spec.error);
+        log_error(os.str());
         return false;
     }
 
@@ -161,13 +176,27 @@ bool ensure_shader_pair(device *d,const plan &p,std::span<const std::uint8_t> st
         if(ps_full_spec){ps_full_spec->Release();ps_full_spec=nullptr;}
     };
 
-    if(FAILED(native->CreatePixelShader(diffuse.code.data(),diffuse.code.size(),nullptr,&ps_diffuse)) || !ps_diffuse ||
-       FAILED(native->CreatePixelShader(full.code.data(),full.code.size(),nullptr,&ps_full)) || !ps_full){
+    const HRESULT hr_diffuse=native->CreatePixelShader(diffuse.code.data(),diffuse.code.size(),nullptr,&ps_diffuse);
+    const HRESULT hr_full=native->CreatePixelShader(full.code.data(),full.code.size(),nullptr,&ps_full);
+    if(FAILED(hr_diffuse) || !ps_diffuse || FAILED(hr_full) || !ps_full){
+        std::ostringstream os;
+        os<<"[DSRRL A2 MR] CREATE_PS_FAIL host="<<static_cast<unsigned>(p.index)
+          <<" label="<<p.label
+          <<" hr_diffuse=0x"<<std::hex<<static_cast<unsigned long>(hr_diffuse)
+          <<" hr_full=0x"<<std::hex<<static_cast<unsigned long>(hr_full);
+        log_error(os.str());
         release_local(); ++g_shader_pair_fail; return false;
     }
 
-    if(FAILED(native->CreatePixelShader(diffuse_spec.code.data(),diffuse_spec.code.size(),nullptr,&ps_diffuse_spec)) || !ps_diffuse_spec ||
-       FAILED(native->CreatePixelShader(full_spec.code.data(),full_spec.code.size(),nullptr,&ps_full_spec)) || !ps_full_spec){
+    const HRESULT hr_diffuse_spec=native->CreatePixelShader(diffuse_spec.code.data(),diffuse_spec.code.size(),nullptr,&ps_diffuse_spec);
+    const HRESULT hr_full_spec=native->CreatePixelShader(full_spec.code.data(),full_spec.code.size(),nullptr,&ps_full_spec);
+    if(FAILED(hr_diffuse_spec) || !ps_diffuse_spec || FAILED(hr_full_spec) || !ps_full_spec){
+        std::ostringstream os;
+        os<<"[DSRRL A2 MR] CREATE_SPEC_PS_FAIL host="<<static_cast<unsigned>(p.index)
+          <<" label="<<p.label
+          <<" hr_diffuse_spec=0x"<<std::hex<<static_cast<unsigned long>(hr_diffuse_spec)
+          <<" hr_full_spec=0x"<<std::hex<<static_cast<unsigned long>(hr_full_spec);
+        log_error(os.str());
         release_local(); ++g_spec_shader_pair_fail; return false;
     }
 
