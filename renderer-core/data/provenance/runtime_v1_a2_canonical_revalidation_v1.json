@@ -1,0 +1,17 @@
+{
+  "schema": "dsrrl.renderer_core_a2_canonical_revalidation.v1",
+  "canonical_branch": "dev/renderer-core-v1-islands",
+  "canonical_merge_commit": "fc3b62b5066dc4800e84389c2090f8fd2575dccc",
+  "a2_source_head": "af69c567478a90bd9d344b7e00c41699d3df9dcd",
+  "canonical_finding_revision": 8905,
+  "canonical_addon_sha256": "b966d486f91b00cf62705d274b7c6fc7370e95560ce7723a9cf3920d2ecc9a77",
+  "reshade_commit": "3645e3025d1d98a90e318278858931f034d5d1f6",
+  "purpose": "Revalidate exact canonical HEAD after concurrent Renderer Core changes landed between PR merge-ref validation and final merge.",
+  "status": {
+    "construction": "PASS_PENDING_CANONICAL_REVALIDATION",
+    "compatibility": "PASS_PENDING_CANONICAL_REVALIDATION",
+    "runtime_liveness": "OPEN",
+    "bridge_activation": "OPEN",
+    "pixel_behavior": "OPEN"
+  }
+}
