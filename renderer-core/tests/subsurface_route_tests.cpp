@@ -156,6 +156,26 @@ int main()
     context = valid_context(
         0u,
         subsurface_body_texture::bd_f_body_s);
+    context.ptde_subsurface_usage_verified = false;
+    decision = evaluate_subsurface_route(context);
+    CHECK(decision.reason ==
+          subsurface_route_reason::ptde_subsurface_usage_not_verified);
+    CHECK(decision.action == subsurface_route_action::preserve_host);
+    CHECK(decision.preserve_dsr_sss);
+
+    context = valid_context(
+        0u,
+        subsurface_body_texture::bd_f_body_s);
+    context.ptde_uses_subsurface = true;
+    decision = evaluate_subsurface_route(context);
+    CHECK(decision.reason ==
+          subsurface_route_reason::ptde_subsurface_used);
+    CHECK(decision.action == subsurface_route_action::preserve_host);
+    CHECK(decision.preserve_dsr_sss);
+
+    context = valid_context(
+        0u,
+        subsurface_body_texture::bd_f_body_s);
     context.ptde_plain_surface_target_verified = false;
     decision = evaluate_subsurface_route(context);
     CHECK(decision.reason ==
