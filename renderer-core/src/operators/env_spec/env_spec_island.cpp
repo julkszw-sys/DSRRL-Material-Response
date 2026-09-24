@@ -23,4 +23,13 @@ decision env_spec_island::gate(
     }
 }
 
+decision env_spec_island::gate(
+    const material_response::mtd_semantic_query &query,
+    bool ptde_bridge_ready) noexcept
+{
+    return gate(
+        material_response::mtd_envspec_presence(query),
+        ptde_bridge_ready);
+}
+
 } // namespace dsrrl::operators::env_spec
