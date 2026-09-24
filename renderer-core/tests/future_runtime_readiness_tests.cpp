@@ -230,8 +230,8 @@ int main()
     std::array<operators::lightbank::hemdir3_raw_lobe_endpoint,3> d123_b{};
     d123_a[0].direction={170.0f,0.0f};
     d123_b[0].direction={-170.0f,0.0f};
-    d123_a[0].color={{{255.0f,0.0f,0.0f}},100.0f};
-    d123_b[0].color={{{0.0f,0.0f,255.0f}},100.0f};
+    d123_a[0].color={{255.0f,0.0f,0.0f},100.0f};
+    d123_b[0].color={{0.0f,0.0f,255.0f},100.0f};
     auto d123=operators::lightbank::evaluate_hemdir3_profile(
         d123_a,d123_b,0.5f);
     CHECK(d123.result==
@@ -325,6 +325,7 @@ int main()
           operators::lightbank::hemdir3_runtime_reason::
               semantic_mode_provenance_not_verified);
 
+    hemdir3=ready_hemdir3();
     hemdir3.host_envdiffuse_source_suppressed=false;
     hemdir3_plan=
         operators::lightbank::evaluate_hemdir3_runtime_readiness(

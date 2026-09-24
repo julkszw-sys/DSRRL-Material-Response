@@ -23,7 +23,7 @@ int main()
 
     CHECK(runtime_feature_manifest_is_ordered_complete());
     CHECK(k_runtime_feature_manifest.size()==core::operator_count);
-    CHECK(runtime_boot_enabled_count()==10u);
+    CHECK(runtime_boot_enabled_count()==11u);
     CHECK(runtime_boot_preflight_count()==2u);
 
     std::size_t current=0;
@@ -49,7 +49,7 @@ int main()
             CHECK(entry.boot_policy==runtime_boot_policy::hold_off);
     }
 
-    CHECK(current==12u);
+    CHECK(current==13u);
     CHECK(future_candidate==0u);
     CHECK(future_partial==6u);
     CHECK(blocked==2u);
@@ -66,6 +66,10 @@ int main()
     CHECK(!runtime_feature_boot_enabled(core::operator_id::upper_lower));
     CHECK(runtime_feature_needs_boot_preflight(core::operator_id::pmetal_black_safe_source));
     CHECK(!runtime_feature_boot_enabled(core::operator_id::pmetal_black_safe_source));
+
+    CHECK(runtime_feature_boot_enabled(core::operator_id::pmetal_black_safe_v10));
+    CHECK(runtime_feature_entry_for(core::operator_id::pmetal_black_safe_v10).stage==
+          runtime_feature_stage::current_wired);
 
     CHECK(runtime_feature_boot_enabled(core::operator_id::subsurface));
     CHECK(runtime_feature_entry_for(core::operator_id::subsurface).stage==

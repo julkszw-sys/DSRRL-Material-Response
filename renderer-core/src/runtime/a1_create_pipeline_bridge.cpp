@@ -130,23 +130,25 @@ void a1_create_pipeline_bridge::on_destroy_device(
 std::shared_ptr<
     const a1_create_pipeline_bridge::
         replacement_record>
-a1_create_pipeline_bridge::cache_replacement(
-    const operators::legacy_plan::
-        a1_create_time_outcome &outcome,
+a1_create_pipeline_bridge::cache_replacement_record(
+    std::uint16_t plan_index,
+    core::operator_mask selected_owners,
+    std::uint16_t selected_ops,
+    bool full_plan_materialized,
+    const operators::legacy_plan::hashing::
+        sha256_digest &output_sha256,
     std::vector<std::uint8_t> replacement)
 {
-    const std::uint16_t plan_index =
-        plan_index_of(outcome.plan);
-
     if (plan_index == 0xFFFFu ||
+        plan_index >= first_bind_seen_.size() ||
         replacement.empty() ||
-        outcome.selected_owners == 0u ||
-        outcome.selected_ops == 0u)
+        selected_owners == 0u ||
+        selected_ops == 0u)
         return {};
 
     const cache_key key{
         plan_index,
-        outcome.selected_owners
+        selected_owners
     };
 
     std::lock_guard<std::mutex> lock(mutex_);
@@ -161,7 +163,7 @@ a1_create_pipeline_bridge::cache_replacement(
             record->bytes->size() !=
                 replacement.size() ||
             record->output_sha256 !=
-                outcome.output_sha256) {
+                output_sha256) {
             quarantined_.store(true);
             return {};
         }
@@ -180,14 +182,14 @@ a1_create_pipeline_bridge::cache_replacement(
 
     mutable_record->bytes = mutable_bytes;
     mutable_record->output_sha256 =
-        outcome.output_sha256;
+        output_sha256;
     mutable_record->plan_index = plan_index;
     mutable_record->selected_ops =
-        outcome.selected_ops;
+        selected_ops;
     mutable_record->selected_owners =
-        outcome.selected_owners;
+        selected_owners;
     mutable_record->full_plan_materialized =
-        outcome.full_plan_materialized;
+        full_plan_materialized;
 
     const std::shared_ptr<
         const replacement_record> record =
@@ -199,6 +201,26 @@ a1_create_pipeline_bridge::cache_replacement(
         record);
 
     return record;
+}
+
+std::shared_ptr<
+    const a1_create_pipeline_bridge::
+        replacement_record>
+a1_create_pipeline_bridge::cache_replacement(
+    const operators::legacy_plan::
+        a1_create_time_outcome &outcome,
+    std::vector<std::uint8_t> replacement)
+{
+    const std::uint16_t plan_index =
+        plan_index_of(outcome.plan);
+
+    return cache_replacement_record(
+        plan_index,
+        outcome.selected_owners,
+        outcome.selected_ops,
+        outcome.full_plan_materialized,
+        outcome.output_sha256,
+        std::move(replacement));
 }
 
 bool a1_create_pipeline_bridge::on_create_pipeline(
@@ -223,45 +245,114 @@ bool a1_create_pipeline_bridge::on_create_pipeline(
         pixel_shader->code_size == 0u)
         return false;
 
-    if (!operators::legacy_plan::
+    const bool historical_candidate =
+        operators::legacy_plan::
             a1_candidate_code_size(
-                pixel_shader->code_size))
+                pixel_shader->code_size);
+
+    const bool build151_candidate =
+        operators::legacy_plan::build151::
+            candidate_code_size(
+                pixel_shader->code_size);
+
+    if (!historical_candidate &&
+        !build151_candidate)
         return false;
 
     ++candidate_size_hits_;
 
     try {
+        const auto *source =
+            static_cast<const std::uint8_t *>(
+                pixel_shader->code);
+
         std::vector<std::uint8_t> replacement;
 
-        const auto outcome =
-            operators::legacy_plan::
-                materialize_a1_create_time(
+        if (historical_candidate) {
+            const auto outcome =
+                operators::legacy_plan::
+                    materialize_a1_create_time(
+                        features_,
+                        source,
+                        pixel_shader->code_size,
+                        replacement);
+
+            if (outcome.plan != nullptr)
+                ++exact_identity_hits_;
+
+            switch (outcome.result) {
+            case a1_create_time_result::applied: {
+                auto record =
+                    cache_replacement(
+                        outcome,
+                        std::move(replacement));
+
+                if (record == nullptr ||
+                    record->bytes == nullptr ||
+                    record->bytes->empty()) {
+                    ++fail_open_;
+                    return false;
+                }
+
+                pixel_shader->code =
+                    record->bytes->data();
+                pixel_shader->code_size =
+                    record->bytes->size();
+
+                ++materialized_;
+                return true;
+            }
+
+            case a1_create_time_result::
+                    pass_through_no_enabled_owner:
+                ++pass_no_enabled_owner_;
+                return false;
+
+            case a1_create_time_result::
+                    pass_through_unknown_exact_sha:
+            case a1_create_time_result::
+                    pass_through_not_candidate_size:
+                break;
+
+            default:
+                ++fail_open_;
+                return false;
+            }
+        }
+
+        replacement.clear();
+
+        const auto ext =
+            operators::legacy_plan::build151::
+                materialize(
                     features_,
-                    static_cast<
-                        const std::uint8_t *>(
-                            pixel_shader->code),
+                    source,
                     pixel_shader->code_size,
                     replacement);
 
-        if (outcome.plan != nullptr)
-            ++exact_identity_hits_;
+        using ext_result =
+            operators::legacy_plan::build151::
+                nospc_result;
 
-        switch (outcome.result) {
-        case a1_create_time_result::applied:
+        if (ext.plan_index != 0xFFFFu) {
+            ++exact_identity_hits_;
+            ++build151_nospc_exact_hits_;
+        }
+
+        switch (ext.result) {
+        case ext_result::applied:
             break;
 
-        case a1_create_time_result::
-                pass_through_unknown_exact_sha:
-            ++pass_unknown_identity_;
-            return false;
-
-        case a1_create_time_result::
+        case ext_result::
                 pass_through_no_enabled_owner:
             ++pass_no_enabled_owner_;
             return false;
 
-        case a1_create_time_result::
+        case ext_result::
+                pass_through_unknown_exact_sha:
+        case ext_result::
                 pass_through_not_candidate_size:
+            ++pass_unknown_identity_;
             return false;
 
         default:
@@ -270,8 +361,14 @@ bool a1_create_pipeline_bridge::on_create_pipeline(
         }
 
         auto record =
-            cache_replacement(
-                outcome,
+            cache_replacement_record(
+                ext.plan_index,
+                core::operator_bit(
+                    core::operator_id::
+                        envspec_nospc_delete),
+                1u,
+                true,
+                ext.output_sha256,
                 std::move(replacement));
 
         if (record == nullptr ||
@@ -287,6 +384,7 @@ bool a1_create_pipeline_bridge::on_create_pipeline(
             record->bytes->size();
 
         ++materialized_;
+        ++build151_nospc_materialized_;
         return true;
     }
     catch (...) {
@@ -420,6 +518,11 @@ bool a1_create_pipeline_bridge::on_bind_pipeline(
 
     ++target_binds_;
 
+    if (record->plan_index >=
+        operators::legacy_plan::build151::
+            k_plan_index_base)
+        ++build151_nospc_binds_;
+
     const bool first =
         !first_bind_seen_[
             record->plan_index].exchange(true);
@@ -446,6 +549,9 @@ a1_create_pipeline_bridge::telemetry() const noexcept
         init_attested_.load(),
         init_mismatch_.load(),
         target_binds_.load(),
+        build151_nospc_exact_hits_.load(),
+        build151_nospc_materialized_.load(),
+        build151_nospc_binds_.load(),
         quarantined_.load()
     };
 }
@@ -474,6 +580,9 @@ void a1_create_pipeline_bridge::reset() noexcept
     init_attested_.store(0);
     init_mismatch_.store(0);
     target_binds_.store(0);
+    build151_nospc_exact_hits_.store(0);
+    build151_nospc_materialized_.store(0);
+    build151_nospc_binds_.store(0);
 }
 
 } // namespace dsrrl::runtime

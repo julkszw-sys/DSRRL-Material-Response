@@ -57,6 +57,10 @@ std::atomic<std::uint64_t> g_shader_ul_pass{0}, g_shader_ul_fail{0};
 std::atomic<std::uint64_t> g_shader_spec_pass{0}, g_shader_spec_fail{0};
 std::atomic<std::uint64_t> g_shader_ul_spec_pass{0}, g_shader_ul_spec_fail{0};
 std::atomic<std::uint64_t> g_shader_v13_pass{0}, g_shader_v13_fail{0};
+std::atomic<std::uint64_t> g_lerp_shader_pass{0}, g_lerp_shader_fail{0};
+std::atomic<std::uint64_t> g_v9a_shader_pass{0}, g_v9a_shader_fail{0};
+std::atomic<std::uint64_t> g_lerp_binds{0}, g_lerp_replays{0}, g_v10_replays{0};
+std::atomic<bool> g_v10_first_draw_logged{false};
 std::atomic<std::uint64_t> g_v13_source_ready{0}, g_v13_source_miss{0};
 std::atomic<std::uint64_t> g_v13_resource_ready{0}, g_v13_resource_miss{0};
 std::atomic<std::uint64_t> g_v13_b12_update{0}, g_v13_b12_fail{0}, g_v13_replay{0};
@@ -96,35 +100,67 @@ void *resolve_material(void *container,std::int32_t index) noexcept
 
 thread_local int g_draw_donor=-1;
 thread_local int g_bound_host=-1;
+thread_local bool g_bound_lerp=false;
 thread_local bool g_bound_subsurface=false;
 constexpr int k_subsurface_material=static_cast<int>(dsrrl::materialdonor::k_donors.size());
+constexpr int k_pmetal_route=345;
+static_assert(
+    dsrrl::materialdonor::k_donors[345].sha256 ==
+        k_pmetal_raw_mtd_sha256,
+    "Build151 route345 must remain exact P_Metal[DSB].mtd.");
 namespace subsurface=dsrrl::operators::resource_bridges;
 std::atomic<std::uint64_t> g_subsurface_replays{0};
 thread_local const command_list *g_bound_command=nullptr;
 
+enum class pipeline_kind : std::uint8_t {
+    stable = 0,
+    lerp,
+    subsurface
+};
+
+struct pipeline_target {
+    std::uint8_t pair=0;
+    pipeline_kind kind=pipeline_kind::stable;
+};
+
 struct pending_pipeline {
     std::size_t size=0;
     std::string sha;
-    std::uint8_t host=0;
+    pipeline_target target{};
 };
 std::mutex g_pending_mutex;
 std::vector<pending_pipeline> g_pending;
 
 std::mutex g_pipeline_mutex;
-std::unordered_map<std::uint64_t,std::uint8_t> g_pipelines;
+std::unordered_map<std::uint64_t,pipeline_target> g_pipelines;
 
 struct device_state {
     ID3D11Device *device=nullptr;
+
     std::array<ID3D11PixelShader*,24> diffuse{};
     std::array<ID3D11PixelShader*,24> full{};
     std::array<ID3D11PixelShader*,24> diffuse_ul{};
     std::array<ID3D11PixelShader*,24> full_ul{};
     std::array<ID3D11PixelShader*,24> full_spec{};
     std::array<ID3D11PixelShader*,24> full_ul_spec{};
+
+    std::array<ID3D11PixelShader*,24> lerp_diffuse{};
+    std::array<ID3D11PixelShader*,24> lerp_full{};
+    std::array<ID3D11PixelShader*,24> lerp_diffuse_ul{};
+    std::array<ID3D11PixelShader*,24> lerp_full_ul{};
+    std::array<ID3D11PixelShader*,24> lerp_full_spec{};
+    std::array<ID3D11PixelShader*,24> lerp_full_ul_spec{};
+
+    std::array<ID3D11PixelShader*,24> v9a_full{};
+    std::array<ID3D11PixelShader*,24> v9a_full_ul{};
+    std::array<ID3D11PixelShader*,24> v9a_full_spec{};
+    std::array<ID3D11PixelShader*,24> v9a_full_ul_spec{};
+
     std::array<ID3D11PixelShader*,24> full_v13{};
     std::array<ID3D11PixelShader*,24> full_v13_ul{};
     std::array<ID3D11PixelShader*,24> full_v13_spec{};
     std::array<ID3D11PixelShader*,24> full_v13_ul_spec{};
+
     std::unordered_map<std::uint16_t,ID3D11Buffer*> b12;
     std::unordered_map<std::uintptr_t,ID3D11Buffer*> pmetal_b12;
 };
@@ -140,6 +176,19 @@ void release_device_state()
     for(auto *&p:g_device.full_ul){ if(p){p->Release();p=nullptr;} }
     for(auto *&p:g_device.full_spec){ if(p){p->Release();p=nullptr;} }
     for(auto *&p:g_device.full_ul_spec){ if(p){p->Release();p=nullptr;} }
+
+    for(auto *&p:g_device.lerp_diffuse){ if(p){p->Release();p=nullptr;} }
+    for(auto *&p:g_device.lerp_full){ if(p){p->Release();p=nullptr;} }
+    for(auto *&p:g_device.lerp_diffuse_ul){ if(p){p->Release();p=nullptr;} }
+    for(auto *&p:g_device.lerp_full_ul){ if(p){p->Release();p=nullptr;} }
+    for(auto *&p:g_device.lerp_full_spec){ if(p){p->Release();p=nullptr;} }
+    for(auto *&p:g_device.lerp_full_ul_spec){ if(p){p->Release();p=nullptr;} }
+
+    for(auto *&p:g_device.v9a_full){ if(p){p->Release();p=nullptr;} }
+    for(auto *&p:g_device.v9a_full_ul){ if(p){p->Release();p=nullptr;} }
+    for(auto *&p:g_device.v9a_full_spec){ if(p){p->Release();p=nullptr;} }
+    for(auto *&p:g_device.v9a_full_ul_spec){ if(p){p->Release();p=nullptr;} }
+
     for(auto *&p:g_device.full_v13){ if(p){p->Release();p=nullptr;} }
     for(auto *&p:g_device.full_v13_ul){ if(p){p->Release();p=nullptr;} }
     for(auto *&p:g_device.full_v13_spec){ if(p){p->Release();p=nullptr;} }
@@ -292,6 +341,108 @@ bool ensure_shader_pair(device *d,const plan &p,std::span<const std::uint8_t> st
         }
     }
 
+    // Owner-accepted V9A math is an additional exact variant over current
+    // V2.11. It is materialized only for the three P_Metal stable pairs.
+    if(i>=9u && i<=11u){
+        const auto v9a=transform_v9a(full.code);
+        const auto v9a_ul=v9a.ok ? transform_upper_lower(v9a.code) : transform_result{};
+        const auto v9a_spec=v9a.ok ? transform_spec_rgb(v9a.code) : transform_result{};
+        const auto v9a_ul_spec=v9a_ul.ok ? transform_spec_rgb(v9a_ul.code) : transform_result{};
+
+        ID3D11PixelShader *ps_v9a=nullptr,*ps_v9a_ul=nullptr;
+        ID3D11PixelShader *ps_v9a_spec=nullptr,*ps_v9a_ul_spec=nullptr;
+        const bool ok =
+            create_shader(native,v9a,ps_v9a) &&
+            create_shader(native,v9a_ul,ps_v9a_ul) &&
+            create_shader(native,v9a_spec,ps_v9a_spec) &&
+            create_shader(native,v9a_ul_spec,ps_v9a_ul_spec);
+
+        if(ok){
+            if(g_device.v9a_full[i]) g_device.v9a_full[i]->Release();
+            if(g_device.v9a_full_ul[i]) g_device.v9a_full_ul[i]->Release();
+            if(g_device.v9a_full_spec[i]) g_device.v9a_full_spec[i]->Release();
+            if(g_device.v9a_full_ul_spec[i]) g_device.v9a_full_ul_spec[i]->Release();
+            g_device.v9a_full[i]=ps_v9a;
+            g_device.v9a_full_ul[i]=ps_v9a_ul;
+            g_device.v9a_full_spec[i]=ps_v9a_spec;
+            g_device.v9a_full_ul_spec[i]=ps_v9a_ul_spec;
+            ++g_v9a_shader_pass;
+        }else{
+            if(ps_v9a) ps_v9a->Release();
+            if(ps_v9a_ul) ps_v9a_ul->Release();
+            if(ps_v9a_spec) ps_v9a_spec->Release();
+            if(ps_v9a_ul_spec) ps_v9a_ul_spec->Release();
+            ++g_v9a_shader_fail;
+        }
+    }
+
+    return true;
+}
+
+bool ensure_lerp_shader_pair(
+    device *d,
+    const build151::lerp_plan &p,
+    std::span<const std::uint8_t> stock)
+{
+    auto *native=reinterpret_cast<ID3D11Device*>(d->get_native());
+    if(!native) return false;
+
+    std::lock_guard lock(g_device_mutex);
+    if(g_device.device!=native) return false;
+
+    const auto i=static_cast<std::size_t>(p.pair_index);
+    if(i>=24u) return false;
+    if(g_device.lerp_diffuse[i] && g_device.lerp_full[i]) return true;
+
+    const auto diffuse=transform_lerp(stock,p,variant::diffuse_v29);
+    const auto full=transform_lerp(stock,p,variant::full_v211);
+    if(!diffuse.ok || !full.ok){
+        ++g_lerp_shader_fail;
+        return false;
+    }
+
+    const auto diffuse_ul=transform_upper_lower(diffuse.code);
+    const auto full_ul=transform_upper_lower(full.code);
+    const auto full_spec=transform_spec_rgb(full.code);
+    const auto full_ul_spec=full_ul.ok ? transform_spec_rgb(full_ul.code) : transform_result{};
+
+    ID3D11PixelShader *ps_diffuse=nullptr,*ps_full=nullptr;
+    ID3D11PixelShader *ps_diffuse_ul=nullptr,*ps_full_ul=nullptr;
+    ID3D11PixelShader *ps_full_spec=nullptr,*ps_full_ul_spec=nullptr;
+
+    const bool ok =
+        create_shader(native,diffuse,ps_diffuse) &&
+        create_shader(native,full,ps_full) &&
+        create_shader(native,diffuse_ul,ps_diffuse_ul) &&
+        create_shader(native,full_ul,ps_full_ul) &&
+        create_shader(native,full_spec,ps_full_spec) &&
+        create_shader(native,full_ul_spec,ps_full_ul_spec);
+
+    if(!ok){
+        if(ps_diffuse) ps_diffuse->Release();
+        if(ps_full) ps_full->Release();
+        if(ps_diffuse_ul) ps_diffuse_ul->Release();
+        if(ps_full_ul) ps_full_ul->Release();
+        if(ps_full_spec) ps_full_spec->Release();
+        if(ps_full_ul_spec) ps_full_ul_spec->Release();
+        ++g_lerp_shader_fail;
+        return false;
+    }
+
+    if(g_device.lerp_diffuse[i]) g_device.lerp_diffuse[i]->Release();
+    if(g_device.lerp_full[i]) g_device.lerp_full[i]->Release();
+    if(g_device.lerp_diffuse_ul[i]) g_device.lerp_diffuse_ul[i]->Release();
+    if(g_device.lerp_full_ul[i]) g_device.lerp_full_ul[i]->Release();
+    if(g_device.lerp_full_spec[i]) g_device.lerp_full_spec[i]->Release();
+    if(g_device.lerp_full_ul_spec[i]) g_device.lerp_full_ul_spec[i]->Release();
+
+    g_device.lerp_diffuse[i]=ps_diffuse;
+    g_device.lerp_full[i]=ps_full;
+    g_device.lerp_diffuse_ul[i]=ps_diffuse_ul;
+    g_device.lerp_full_ul[i]=ps_full_ul;
+    g_device.lerp_full_spec[i]=ps_full_spec;
+    g_device.lerp_full_ul_spec[i]=ps_full_ul_spec;
+    ++g_lerp_shader_pass;
     return true;
 }
 
@@ -518,27 +669,49 @@ bool on_create_pipeline(device *d,pipeline_layout,std::uint32_t count,const pipe
         const auto sha=dsrrl::to_hex(dsrrl::sha256({
             reinterpret_cast<const std::byte*>(bytes),ps->code_size
         }));
-        // Record the exact Subsurf source independently of target creation
-        // order. Ordinary shaders are materialized once when DSR creates them.
+
         const int body_target=subsurface_target(sha);
         if(body_target>=0){
+            if(body_target<33 || body_target>35){
+                ++g_fail_open;
+                return false;
+            }
             std::lock_guard lock(g_pending_mutex);
-            g_pending.push_back({ps->code_size,sha,static_cast<std::uint8_t>(body_target)});
+            g_pending.push_back({
+                ps->code_size,sha,
+                {static_cast<std::uint8_t>(body_target-24),pipeline_kind::subsurface}
+            });
             return false;
         }
-        const auto *p=find_plan(ps->code_size,sha);
-        if(!p) return false;
 
-        if(!ensure_shader_pair(d,*p,{bytes,ps->code_size})){
-            ++g_fail_open; g_quarantined.store(true);
-            log_error("DSRRL Runtime v1 MR: exact V2.11 shader transform failed; MR quarantined.");
+        if(const auto *p=find_plan(ps->code_size,sha)){
+            if(!ensure_shader_pair(d,*p,{bytes,ps->code_size})){
+                ++g_fail_open;
+                g_quarantined.store(true);
+                log_error("DSRRL Runtime v1 MR: exact stable V2.11 shader transform failed; MR quarantined.");
+                return false;
+            }
+            std::lock_guard lock(g_pending_mutex);
+            g_pending.push_back({
+                ps->code_size,sha,{p->index,pipeline_kind::stable}
+            });
             return false;
         }
 
-        {
+        if(const auto *p=find_lerp_plan(ps->code_size,sha)){
+            if(!ensure_lerp_shader_pair(d,*p,{bytes,ps->code_size})){
+                // Build151 Lerp coverage is additive. Exact-transform failure
+                // is isolated to this stock receiver and fails open.
+                ++g_fail_open;
+                return false;
+            }
             std::lock_guard lock(g_pending_mutex);
-            g_pending.push_back({ps->code_size,sha,p->index});
+            g_pending.push_back({
+                ps->code_size,sha,{p->pair_index,pipeline_kind::lerp}
+            });
+            return false;
         }
+
         return false;
     } catch (...) {
         ++g_fail_open;
@@ -565,14 +738,14 @@ void on_init_pipeline(device *d,pipeline_layout,std::uint32_t count,const pipeli
         // may present a different descriptor object at init_pipeline or dispatch
         // the callback from another worker thread. Correlate by certified full
         // source SHA-256 + size.
-        std::uint8_t host=0;
+        pipeline_target target{};
         bool matched=false;
         {
             std::lock_guard lock(g_pending_mutex);
             for(auto it=g_pending.begin();it!=g_pending.end();++it){
                 if(ps->code_size!=it->size || sha!=it->sha)
                     continue;
-                host=it->host;
+                target=it->target;
                 g_pending.erase(it);
                 matched=true;
                 break;
@@ -580,7 +753,7 @@ void on_init_pipeline(device *d,pipeline_layout,std::uint32_t count,const pipeli
         }
         if(matched){
             std::lock_guard lock(g_pipeline_mutex);
-            g_pipelines[p.handle]=host;
+            g_pipelines[p.handle]=target;
         }
     } catch (...) {
         ++g_fail_open;
@@ -601,16 +774,29 @@ void on_bind_pipeline(command_list *cmd,pipeline_stage stages,pipeline p)
 {
     if(!cmd || (static_cast<std::uint32_t>(stages)&static_cast<std::uint32_t>(pipeline_stage::pixel_shader))==0)
         return;
-    int host=-1;
+
+    pipeline_target target{};
+    bool matched=false;
     {
         std::lock_guard lock(g_pipeline_mutex);
-        if(const auto it=g_pipelines.find(p.handle);it!=g_pipelines.end()) host=it->second;
+        if(const auto it=g_pipelines.find(p.handle);it!=g_pipelines.end()){
+            target=it->second;
+            matched=true;
+        }
     }
-    g_bound_subsurface=host>=33 && host<=35;
-    g_bound_host=g_bound_subsurface ? host-24 : host;
-    g_bound_command=host>=0?cmd:nullptr;
-    if(host>=0) ++g_target_binds;
-    else {
+
+    if(matched){
+        g_bound_host=static_cast<int>(target.pair);
+        g_bound_lerp=target.kind==pipeline_kind::lerp;
+        g_bound_subsurface=target.kind==pipeline_kind::subsurface;
+        g_bound_command=cmd;
+        ++g_target_binds;
+        if(g_bound_lerp) ++g_lerp_binds;
+    }else{
+        g_bound_host=-1;
+        g_bound_lerp=false;
+        g_bound_subsurface=false;
+        g_bound_command=nullptr;
         g_draw_donor=-1;
         upper_lower::consume_draw_selection();
     }
@@ -674,15 +860,26 @@ bool on_draw_indexed(command_list *cmd,std::uint32_t index_count,std::uint32_t i
 
     const bool pmetal_exact_route =
         !body_route &&
+        donor==k_pmetal_route &&
         std::string_view(don.sha256)==k_pmetal_raw_mtd_sha256 &&
         receiver_id>=33u && receiver_id<=35u;
-    const bool pmetal_feature =
+
+    const bool pmetal_v10_feature =
         pmetal_exact_route &&
+        g_core->features().enabled(core::operator_id::pmetal_black_safe_v10);
+
+    // V13 remains preserved as a separately preflighted research/runtime path,
+    // but it must not supersede the owner-accepted V10 result. It is also a
+    // stable-receiver island, not a generic HemEnvLerp consumer.
+    const bool pmetal_v13_feature =
+        pmetal_exact_route &&
+        !g_bound_lerp &&
+        !pmetal_v10_feature &&
         g_core->features().enabled(core::operator_id::pmetal_black_safe_source);
 
     upper_lower::pmetal_env_source pmetal_source{};
     bool pmetal_candidate=false;
-    if(pmetal_feature){
+    if(pmetal_v13_feature){
         if(upper_lower::selected_pmetal_env_source(pmetal_source)){
             ++g_v13_source_ready;
             pmetal_candidate=pmetal_native_env_ready(ctx,pmetal_source.beta);
@@ -695,6 +892,7 @@ bool on_draw_indexed(command_list *cmd,std::uint32_t index_count,std::uint32_t i
     bool restore_ok=true;
     bool intended_ul=false;
     bool spec_active=false;
+    bool pmetal_v10_active=false;
     bool pmetal_active=false;
     bool tx_started=false;
     std::uint64_t command=0;
@@ -721,29 +919,54 @@ bool on_draw_indexed(command_list *cmd,std::uint32_t index_count,std::uint32_t i
             std::lock_guard lock(g_device_mutex);
             if(g_device.device==dev){
                 const auto i=static_cast<std::size_t>(g_bound_host);
+
+                ID3D11PixelShader *base_diffuse =
+                    g_bound_lerp ? g_device.lerp_diffuse[i] : g_device.diffuse[i];
+                ID3D11PixelShader *base_full =
+                    g_bound_lerp ? g_device.lerp_full[i] : g_device.full[i];
+                ID3D11PixelShader *base_diffuse_ul =
+                    g_bound_lerp ? g_device.lerp_diffuse_ul[i] : g_device.diffuse_ul[i];
+                ID3D11PixelShader *base_full_ul =
+                    g_bound_lerp ? g_device.lerp_full_ul[i] : g_device.full_ul[i];
+                ID3D11PixelShader *base_full_spec =
+                    g_bound_lerp ? g_device.lerp_full_spec[i] : g_device.full_spec[i];
+                ID3D11PixelShader *base_full_ul_spec =
+                    g_bound_lerp ? g_device.lerp_full_ul_spec[i] : g_device.full_ul_spec[i];
+
                 ID3D11PixelShader *ul_shader =
-                    don.has_c101 ? g_device.full_ul[i] : g_device.diffuse_ul[i];
+                    don.has_c101 ? base_full_ul : base_diffuse_ul;
                 intended_ul=ul_candidate && ul_shader!=nullptr;
 
                 if(spec_candidate){
                     ID3D11PixelShader *spec_shader =
-                        intended_ul ? g_device.full_ul_spec[i] : g_device.full_spec[i];
+                        intended_ul ? base_full_ul_spec : base_full_spec;
                     spec_active=spec_shader!=nullptr;
                 }
 
                 if(don.has_c101){
                     fallback_replacement =
-                        intended_ul && spec_active ? g_device.full_ul_spec[i] :
-                        intended_ul ? g_device.full_ul[i] :
-                        spec_active ? g_device.full_spec[i] :
-                                      g_device.full[i];
+                        intended_ul && spec_active ? base_full_ul_spec :
+                        intended_ul ? base_full_ul :
+                        spec_active ? base_full_spec :
+                                      base_full;
                 }else{
                     fallback_replacement =
-                        intended_ul ? g_device.diffuse_ul[i] : g_device.diffuse[i];
+                        intended_ul ? base_diffuse_ul : base_diffuse;
                 }
                 if(fallback_replacement) fallback_replacement->AddRef();
 
-                if(pmetal_candidate && don.has_c101){
+                if(pmetal_v10_feature && don.has_c101){
+                    ID3D11PixelShader *v10 =
+                        intended_ul && spec_active ? g_device.v9a_full_ul_spec[i] :
+                        intended_ul ? g_device.v9a_full_ul[i] :
+                        spec_active ? g_device.v9a_full_spec[i] :
+                                      g_device.v9a_full[i];
+                    if(v10){
+                        replacement=v10;
+                        replacement->AddRef();
+                        pmetal_v10_active=true;
+                    }
+                }else if(pmetal_candidate && don.has_c101){
                     ID3D11PixelShader *v13 =
                         intended_ul && spec_active ? g_device.full_v13_ul_spec[i] :
                         intended_ul ? g_device.full_v13_ul[i] :
@@ -756,6 +979,8 @@ bool on_draw_indexed(command_list *cmd,std::uint32_t index_count,std::uint32_t i
                     }
                 }
 
+                // V10 failure is deliberately ordinary-MR fail-open, not a
+                // fallback into the less-proven V13 consumer.
                 if(!replacement && fallback_replacement){
                     replacement=fallback_replacement;
                     fallback_replacement=nullptr;
@@ -794,6 +1019,12 @@ bool on_draw_indexed(command_list *cmd,std::uint32_t index_count,std::uint32_t i
                 plan.patches[plan.patch_count++]={core::operator_id::subsurface,0u,true,false};
             if(spec_active)
                 plan.patches[plan.patch_count++]={core::operator_id::spec_rgb,0u,true,true};
+            if(pmetal_v10_active)
+                plan.patches[plan.patch_count++]={
+                    core::operator_id::pmetal_black_safe_v10,
+                    0u,
+                    true,
+                    false};
             if(pmetal_active)
                 plan.patches[plan.patch_count++]={
                     core::operator_id::pmetal_black_safe_source,
@@ -863,7 +1094,7 @@ bool on_draw_indexed(command_list *cmd,std::uint32_t index_count,std::uint32_t i
                 if(!tx_restored || !restore_ok){
                     ++g_restore_fail;
                     g_quarantined.store(true);
-                    log_error("DSRRL Runtime v1 MR: unified draw restore fault; MR/SpecRGB/U/L/V13 transaction quarantined.");
+                    log_error("DSRRL Runtime v1 MR: unified draw restore fault; MR/SpecRGB/U/L/PMetal transaction quarantined.");
                 }
             }else{
                 ++g_fail_open;
@@ -888,7 +1119,21 @@ bool on_draw_indexed(command_list *cmd,std::uint32_t index_count,std::uint32_t i
         }
     }else{
         ++g_replays;
+        if(g_bound_lerp) ++g_lerp_replays;
         if(body_route) ++g_subsurface_replays;
+
+        if(pmetal_v10_active){
+            ++g_v10_replays;
+            if(!g_v10_first_draw_logged.exchange(true)){
+                std::ostringstream os;
+                os<<"[DSRRL V10 PMETAL] FIRST_DRAW receiver="<<receiver_id
+                  <<" lerp="<<(g_bound_lerp?1:0)
+                  <<" ul="<<(intended_ul?1:0)
+                  <<" spec="<<(spec_active?1:0);
+                log_info(os.str());
+            }
+        }
+
         if(pmetal_active){
             ++g_v13_replay;
             if(!g_v13_first_draw_logged.exchange(true)){
@@ -932,13 +1177,17 @@ void on_present(command_queue *,swapchain *,const rect *,const rect *,std::uint3
               <<" ul_shader_pass="<<g_shader_ul_pass.load()<<" ul_shader_fail="<<g_shader_ul_fail.load()
               <<" spec_shader_pass="<<g_shader_spec_pass.load()<<" spec_shader_fail="<<g_shader_spec_fail.load()
               <<" ul_spec_shader_pass="<<g_shader_ul_spec_pass.load()<<" ul_spec_shader_fail="<<g_shader_ul_spec_fail.load()
+              <<" lerp_shader_pass="<<g_lerp_shader_pass.load()<<" lerp_shader_fail="<<g_lerp_shader_fail.load()
+              <<" v9a_shader_pass="<<g_v9a_shader_pass.load()<<" v9a_shader_fail="<<g_v9a_shader_fail.load()
               <<" v13_shader_pass="<<g_shader_v13_pass.load()<<" v13_shader_fail="<<g_shader_v13_fail.load()
               <<" v13_source_ready="<<g_v13_source_ready.load()<<" v13_source_miss="<<g_v13_source_miss.load()
               <<" v13_resource_ready="<<g_v13_resource_ready.load()<<" v13_resource_miss="<<g_v13_resource_miss.load()
               <<" v13_b12_update="<<g_v13_b12_update.load()<<" v13_b12_fail="<<g_v13_b12_fail.load()
               <<" v13_replay="<<g_v13_replay.load()
-              <<" binds="<<g_target_binds.load()
-              <<" replay="<<g_replays.load()<<" subsurface_replay="<<g_subsurface_replays.load()<<" b12_create="<<g_b12_create.load()
+              <<" binds="<<g_target_binds.load()<<" lerp_binds="<<g_lerp_binds.load()
+              <<" replay="<<g_replays.load()<<" lerp_replay="<<g_lerp_replays.load()
+              <<" v10_replay="<<g_v10_replays.load()
+              <<" subsurface_replay="<<g_subsurface_replays.load()<<" b12_create="<<g_b12_create.load()
               <<" b12_hit="<<g_b12_hit.load()<<" failopen="<<g_fail_open.load()
               <<" restore_fail="<<g_restore_fail.load()<<" quarantined="<<(g_quarantined.load()?1:0);
             log_info(os.str());
@@ -986,7 +1235,8 @@ bool register_runtime(core::renderer_core &core) noexcept
     g_core=&core;
     g_quarantined.store(false);
     g_v13_first_draw_logged.store(false);
-    g_draw_donor=-1; g_bound_host=-1; g_bound_subsurface=false; g_bound_command=nullptr;
+    g_v10_first_draw_logged.store(false);
+    g_draw_donor=-1; g_bound_host=-1; g_bound_lerp=false; g_bound_subsurface=false; g_bound_command=nullptr;
     g_enabled.store(true);
     reshade::register_event<reshade::addon_event::init_device>(on_init_device);
     reshade::register_event<reshade::addon_event::destroy_device>(on_destroy_device);
@@ -1014,7 +1264,7 @@ void unregister_runtime() noexcept
     {std::lock_guard lock(g_pending_mutex);g_pending.clear();}
     {std::lock_guard lock(g_pipeline_mutex);g_pipelines.clear();}
     {std::lock_guard lock(g_material_mutex);g_material_donor.clear();}
-    g_draw_donor=-1; g_bound_host=-1; g_bound_subsurface=false; g_bound_command=nullptr;
+    g_draw_donor=-1; g_bound_host=-1; g_bound_lerp=false; g_bound_subsurface=false; g_bound_command=nullptr;
     g_core=nullptr;
 }
 
