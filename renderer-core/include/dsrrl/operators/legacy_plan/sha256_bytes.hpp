@@ -1,7 +1,5 @@
 #pragma once
 
-#include "dsrrl/core/types.hpp"
-
 #include <algorithm>
 #include <array>
 #include <cstddef>
@@ -9,6 +7,9 @@
 #include <string_view>
 
 namespace dsrrl::operators::legacy_plan::hashing {
+
+using sha256_digest = std::array<std::uint8_t, 32>;
+
 namespace detail {
 
 inline constexpr std::array<std::uint32_t, 64> k_sha256 = {
@@ -130,7 +131,7 @@ struct sha256_context {
         }
     }
 
-    core::sha256_digest finish() noexcept
+    sha256_digest finish() noexcept
     {
         const std::uint64_t bit_count = total * 8ull;
 
@@ -154,7 +155,7 @@ struct sha256_context {
 
         block(buffer.data());
 
-        core::sha256_digest out{};
+        sha256_digest out{};
         for (std::uint32_t i = 0; i < 8u; ++i) {
             out[4u * i] =
                 static_cast<std::uint8_t>(state[i] >> 24u);
@@ -183,7 +184,7 @@ inline int hex_value(char c) noexcept
 
 } // namespace detail
 
-inline core::sha256_digest sha256(
+inline sha256_digest sha256(
     const std::uint8_t *bytes,
     std::size_t size) noexcept
 {
@@ -196,7 +197,7 @@ inline core::sha256_digest sha256(
 }
 
 inline bool matches_hex(
-    const core::sha256_digest &digest,
+    const sha256_digest &digest,
     std::string_view text) noexcept
 {
     if (text.size() != 64u)
