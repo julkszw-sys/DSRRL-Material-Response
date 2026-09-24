@@ -23,7 +23,7 @@ int main()
 
     CHECK(runtime_feature_manifest_is_ordered_complete());
     CHECK(k_runtime_feature_manifest.size()==core::operator_count);
-    CHECK(runtime_boot_enabled_count()==9u);
+    CHECK(runtime_boot_enabled_count()==10u);
     CHECK(runtime_boot_preflight_count()==1u);
 
     std::size_t current=0;
@@ -49,8 +49,8 @@ int main()
             CHECK(entry.boot_policy==runtime_boot_policy::hold_off);
     }
 
-    CHECK(current==10u);
-    CHECK(future_candidate==1u);
+    CHECK(current==11u);
+    CHECK(future_candidate==0u);
     CHECK(future_partial==6u);
     CHECK(blocked==2u);
     CHECK(diagnostic==1u);
@@ -65,9 +65,9 @@ int main()
     CHECK(runtime_feature_needs_boot_preflight(core::operator_id::upper_lower));
     CHECK(!runtime_feature_boot_enabled(core::operator_id::upper_lower));
 
-    CHECK(runtime_feature_requires_detailed_readiness(core::operator_id::subsurface));
+    CHECK(runtime_feature_boot_enabled(core::operator_id::subsurface));
     CHECK(runtime_feature_entry_for(core::operator_id::subsurface).stage==
-          runtime_feature_stage::future_candidate);
+          runtime_feature_stage::current_wired);
 
     CHECK(runtime_feature_requires_detailed_readiness(core::operator_id::hemdir3));
     CHECK(runtime_feature_requires_detailed_readiness(core::operator_id::env_spec));

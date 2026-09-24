@@ -342,6 +342,14 @@ load_result load_dds(
                 ? 8u
                 : 16u;
 
+        if(header.width>16384u || header.height>16384u || header.depth>1u)
+            return {nullptr,load_status::unsupported};
+        std::uint32_t max_mips=1u;
+        for(auto extent=std::max(header.width,header.height);extent>1u;extent>>=1u)
+            ++max_mips;
+        if(mip_count>max_mips)
+            return {nullptr,load_status::unsupported};
+
         std::vector<D3D11_SUBRESOURCE_DATA> initial;
         initial.reserve(mip_count);
 
@@ -798,6 +806,32 @@ bool spec_ready(
     ready = replacement != nullptr;
     if (replacement) replacement->Release();
     t1->Release();
+    return ready;
+}
+
+bool body_surface_ready(ID3D11DeviceContext *context) noexcept
+{
+    if(!context || !g_core || g_quarantined.load() ||
+       !g_core->features().enabled(core::operator_id::spec_rgb) ||
+       !g_core->features().enabled(core::operator_id::diffuse) ||
+       !g_core->features().enabled(core::operator_id::normal)) return false;
+    ID3D11ShaderResourceView *views[3]{};
+    context->PSGetShaderResources(0,3,views);
+    const auto h0=logical_hash_for(views[0]);
+    const auto h1=logical_hash_for(views[1]);
+    const auto h2=logical_hash_for(views[2]);
+    bool ready=(h1==0x724f5fe11b342205ull || h1==0x777ede2aecc3d102ull) &&
+        generated::diffuse_pair_allowed_v12(h1,h0) &&
+        generated::normal_tuple_allowed_v12(h0,h1,h2) &&
+        generated::spec_name_hash_allowed_v12(h1);
+    if(ready){
+        auto *diff=lookup(views[0],asset_class::diffuse);
+        auto *spec=lookup(views[1],asset_class::specular);
+        auto *norm=lookup(views[2],asset_class::normal);
+        ready=diff && spec && norm;
+        release_view(diff); release_view(spec); release_view(norm);
+    }
+    for(auto *&view:views) release_view(view);
     return ready;
 }
 

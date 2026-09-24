@@ -203,8 +203,8 @@ extern "C" __declspec(dllexport) bool AddonInit(HMODULE addon,HMODULE reshade_mo
 
     reshade::log::message(reshade::log::level::info,
         ul_ready ?
-        "DSRRL Runtime v1 A7: CORE ACTIVE; manifest boot=9 immediate + UL preflight PASS; future islands OFF; single EngineBridge selector owner." :
-        "DSRRL Runtime v1 A7: CORE ACTIVE; manifest boot=9 immediate + UL preflight FAIL-OPEN-OFF; future islands OFF; single EngineBridge selector owner.");
+        "DSRRL Runtime v1 A7: CORE ACTIVE; manifest boot=10 immediate (exact Subsurface draw gate) + UL preflight PASS; future islands OFF; single EngineBridge selector owner." :
+        "DSRRL Runtime v1 A7: CORE ACTIVE; manifest boot=10 immediate (exact Subsurface draw gate) + UL preflight FAIL-OPEN-OFF; future islands OFF; single EngineBridge selector owner.");
     return true;
 }
 

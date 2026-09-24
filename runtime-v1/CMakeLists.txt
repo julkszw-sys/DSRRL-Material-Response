@@ -146,3 +146,9 @@ if(WIN32 AND RESHade_INCLUDE_DIR)
     VERBATIM
   )
 endif()
+
+add_executable(dsrrl_runtime_subsurface_tests tests/subsurface_dispatch_tests.cpp)
+target_include_directories(dsrrl_runtime_subsurface_tests PRIVATE include
+  "${CMAKE_CURRENT_SOURCE_DIR}/../renderer-core/include" "${PROV}")
+target_compile_features(dsrrl_runtime_subsurface_tests PRIVATE cxx_std_20)
+add_test(NAME dsrrl_runtime_subsurface_tests COMMAND dsrrl_runtime_subsurface_tests)

@@ -56,7 +56,7 @@ k_runtime_feature_manifest = {{
     {core::operator_id::local_specular_legacy,
      runtime_feature_stage::future_partial,runtime_boot_policy::hold_off,"local_specular_legacy"},
     {core::operator_id::subsurface,
-     runtime_feature_stage::future_candidate,runtime_boot_policy::hold_off,"subsurface"},
+     runtime_feature_stage::current_wired,runtime_boot_policy::enable_immediately,"subsurface"},
     {core::operator_id::diffuse,
      runtime_feature_stage::current_wired,runtime_boot_policy::enable_immediately,"diffuse"},
     {core::operator_id::normal,
@@ -161,8 +161,8 @@ constexpr std::size_t runtime_boot_preflight_count() noexcept
 }
 
 static_assert(
-    runtime_boot_enabled_count() == 9u,
-    "A7 must preserve the nine immediately enabled A1+A3 runtime islands.");
+    runtime_boot_enabled_count() == 10u,
+    "Ten islands are armed; Subsurface still requires its complete exact draw route.");
 static_assert(
     runtime_boot_preflight_count() == 1u,
     "A7 must preserve U/L as the sole boot-time runtime-preflight island.");

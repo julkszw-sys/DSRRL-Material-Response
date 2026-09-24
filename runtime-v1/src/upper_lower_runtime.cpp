@@ -176,9 +176,8 @@ bool patch_hook(inline_hook &h) noexcept
     std::uint32_t zero=0; std::memcpy(patch.data()+2,&zero,4);
     const std::uint64_t dest=reinterpret_cast<std::uint64_t>(h.detour);
     std::memcpy(patch.data()+6,&dest,8);
-    if(!write_bytes(h.target,patch.data(),h.stolen)) return false;
-    h.patched=true;
-    return true;
+    h.patched=true; // Roll back even when the post-write cache flush fails.
+    return write_bytes(h.target,patch.data(),h.stolen);
 }
 
 void restore_hook(inline_hook &h) noexcept
@@ -295,7 +294,12 @@ void *run_wrapper(wrapper_fn original,std::atomic<std::uint64_t> &counter,
     void *result=original ? original(rcx,owner,assignment,x) : nullptr;
     const auto completed=g_prod;
     g_prod=previous;
-    publish_snapshot(completed);
+    // A failed producer must revoke the previous same-owner snapshot. A
+    // matching selector tuple alone cannot make stale lighting current again.
+    if(!completed.have_upper || !completed.have_lower){
+        std::lock_guard lock(g_snapshot_mutex);
+        g_snapshots.erase(completed.owner);
+    }else publish_snapshot(completed);
     return result;
 }
 
@@ -337,6 +341,8 @@ void *__fastcall hook_blend(void *dst,const raw_rgbm *a,const raw_rgbm *b,float 
         raw_rgbm ra{},rb{};
         if(safe_read(a,ra) && safe_read(b,rb)){
             const auto value=lerp4(decode_rgbm(ra),decode_rgbm(rb),beta);
+            if(!std::isfinite(value.x) || !std::isfinite(value.y) || !std::isfinite(value.z))
+                return g_blend_orig ? g_blend_orig(dst,a,b,beta) : nullptr;
             if(ret==k_ret_blend_upper){
                 g_prod.upper=value; g_prod.have_upper=true; ++g_blend_upper;
             }else{

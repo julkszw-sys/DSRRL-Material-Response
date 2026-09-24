@@ -3,6 +3,7 @@ name: Renderer Core Islands
 on:
   push:
     branches:
+      - main
       - dev/renderer-core-v1-islands
     paths:
       - "renderer-core/**"

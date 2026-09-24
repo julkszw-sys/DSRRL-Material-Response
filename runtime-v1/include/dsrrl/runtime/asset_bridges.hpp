@@ -51,6 +51,9 @@ bool spec_ready(
     const material_route_scope &route,
     std::uint32_t receiver_id) noexcept;
 
+// Exact body identities and complete three-sidecar tuple, without mutation.
+bool body_surface_ready(ID3D11DeviceContext *context) noexcept;
+
 // Called only from the Core-owned draw transaction. The caller must set
 // diffuse_c100_carrier_active only after exact PTDE c100 is available, and
 // spec_t10_consumer_active only after selecting a shader that really reads t10.

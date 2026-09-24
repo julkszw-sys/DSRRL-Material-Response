@@ -3,6 +3,7 @@ name: Renderer Core Runtime v1 A2
 on:
   push:
     branches:
+      - main
       - agent/renderer-core-a2-runtime-ready-20260924
       - agent/a3-specrgb-ul-canonical-20260924
       - dev/renderer-core-v1-islands

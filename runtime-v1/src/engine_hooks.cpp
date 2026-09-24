@@ -141,9 +141,8 @@ bool patch_hook(hook &h) noexcept
     std::uint32_t zero = 0; std::memcpy(patch.data() + 2, &zero, 4);
     const std::uint64_t dest = reinterpret_cast<std::uint64_t>(h.detour);
     std::memcpy(patch.data() + 6, &dest, 8);
-    if (!write_bytes(h.target, patch.data(), h.stolen)) return false;
-    h.patched = true;
-    return true;
+    h.patched = true; // Track possible mutation even if instruction-cache flush fails.
+    return write_bytes(h.target, patch.data(), h.stolen);
 }
 
 void restore_hook(hook &h) noexcept
