@@ -9,6 +9,7 @@
 #include "dsrrl/runtime/mr_dxbc_transform.hpp"
 #include "dsrrl/runtime/engine_hooks.hpp"
 #include "dsrrl/runtime/asset_bridges.hpp"
+#include "dsrrl/runtime/draw_replay.hpp"
 #include "dsrrl/runtime/upper_lower_runtime.hpp"
 #include "dsrrl/runtime/generated_ul_stable_hashes.hpp"
 #include "dsrrl/runtime/generated_spec_material_routes.hpp"
@@ -87,7 +88,6 @@ thread_local int g_bound_host=-1;
 thread_local const command_list *g_bound_command=nullptr;
 
 struct pending_pipeline {
-    const shader_desc *descriptor=nullptr;
     std::size_t size=0;
     std::string sha;
     std::uint8_t host=0;
@@ -344,27 +344,32 @@ bool on_create_pipeline(device *d,pipeline_layout,std::uint32_t count,const pipe
         return false;
     }
 
-    g_pending.push_back({ps,ps->code_size,sha,p->index});
+    g_pending.push_back({ps->code_size,sha,p->index});
     return false;
 }
 
 void on_init_pipeline(device *d,pipeline_layout,std::uint32_t count,const pipeline_subobject *sub,pipeline p)
 {
     if(!d || d->get_api()!=device_api::d3d11 || !p.handle) return;
-    const auto *ps=find_ps(count,sub); if(!ps) return;
+    const auto *ps=find_ps(count,sub);
+    if(!ps || !ps->code || !ps->code_size) return;
+
+    const auto sha=dsrrl::to_hex(dsrrl::sha256({
+        reinterpret_cast<const std::byte*>(ps->code),ps->code_size
+    }));
+
+    // Do not depend on callback-local shader_desc object identity. The API may
+    // present a different descriptor object at init_pipeline even though the
+    // shader bytes are the same. Correlate by the already certified full
+    // source SHA-256 + size instead; equal SHA implies the same stable host.
     for(auto it=g_pending.begin();it!=g_pending.end();++it){
-        if(it->descriptor!=ps) continue;
-        const auto sha=dsrrl::to_hex(dsrrl::sha256({
-            reinterpret_cast<const std::byte*>(ps->code),ps->code_size
-        }));
-        if(ps->code_size==it->size && sha==it->sha){
-            std::lock_guard lock(g_pipeline_mutex);
-            g_pipelines[p.handle]=it->host;
-        }else{
-            g_quarantined.store(true); ++g_fail_open;
-            log_error("DSRRL Runtime v1 MR: create/init pipeline attestation mismatch.");
-        }
-        g_pending.erase(it); break;
+        if(ps->code_size!=it->size || sha!=it->sha)
+            continue;
+
+        std::lock_guard lock(g_pipeline_mutex);
+        g_pipelines[p.handle]=it->host;
+        g_pending.erase(it);
+        return;
     }
 }
 
@@ -491,8 +496,13 @@ bool on_draw_indexed(command_list *cmd,std::uint32_t index_count,std::uint32_t i
             if(spec_active)
                 plan.patches[plan.patch_count++]={core::operator_id::spec_rgb,0u,true,true};
             if(intended_ul)
-                plan.patches[plan.patch_count++]={core::operator_id::upper_lower,0u,true,false};
-            plan.carrier_write_mask=0;
+                plan.patches[plan.patch_count++]={
+                    core::operator_id::upper_lower,
+                    core::carrier_ul_mask,
+                    true,
+                    false};
+            plan.carrier_write_mask =
+                intended_ul ? core::carrier_ul_mask : 0u;
 
             const auto type=ctx->GetType()==D3D11_DEVICE_CONTEXT_DEFERRED ?
                 core::context_kind::deferred : core::context_kind::immediate;
@@ -511,10 +521,22 @@ bool on_draw_indexed(command_list *cmd,std::uint32_t index_count,std::uint32_t i
 
                     const bool assets_ok=assets::apply_draw(ctx,route,receiver_id,asset_state);
                     if(assets_ok){
-                        if(instance_count<=1)
-                            ctx->DrawIndexed(index_count,first_index,vertex_offset);
+                        const auto replay =
+                            choose_indexed_replay(
+                                instance_count,
+                                first_instance);
+                        if(replay==indexed_replay_kind::draw_indexed)
+                            ctx->DrawIndexed(
+                                index_count,
+                                first_index,
+                                vertex_offset);
                         else
-                            ctx->DrawIndexedInstanced(index_count,instance_count,first_index,vertex_offset,first_instance);
+                            ctx->DrawIndexedInstanced(
+                                index_count,
+                                instance_count,
+                                first_index,
+                                vertex_offset,
+                                first_instance);
                         issued=true;
                     }
                 }else{
