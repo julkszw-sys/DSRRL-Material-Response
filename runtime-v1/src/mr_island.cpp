@@ -669,27 +669,49 @@ bool on_create_pipeline(device *d,pipeline_layout,std::uint32_t count,const pipe
         const auto sha=dsrrl::to_hex(dsrrl::sha256({
             reinterpret_cast<const std::byte*>(bytes),ps->code_size
         }));
-        // Record the exact Subsurf source independently of target creation
-        // order. Ordinary shaders are materialized once when DSR creates them.
+
         const int body_target=subsurface_target(sha);
         if(body_target>=0){
+            if(body_target<33 || body_target>35){
+                ++g_fail_open;
+                return false;
+            }
             std::lock_guard lock(g_pending_mutex);
-            g_pending.push_back({ps->code_size,sha,static_cast<std::uint8_t>(body_target)});
+            g_pending.push_back({
+                ps->code_size,sha,
+                {static_cast<std::uint8_t>(body_target-24),pipeline_kind::subsurface}
+            });
             return false;
         }
-        const auto *p=find_plan(ps->code_size,sha);
-        if(!p) return false;
 
-        if(!ensure_shader_pair(d,*p,{bytes,ps->code_size})){
-            ++g_fail_open; g_quarantined.store(true);
-            log_error("DSRRL Runtime v1 MR: exact V2.11 shader transform failed; MR quarantined.");
+        if(const auto *p=find_plan(ps->code_size,sha)){
+            if(!ensure_shader_pair(d,*p,{bytes,ps->code_size})){
+                ++g_fail_open;
+                g_quarantined.store(true);
+                log_error("DSRRL Runtime v1 MR: exact stable V2.11 shader transform failed; MR quarantined.");
+                return false;
+            }
+            std::lock_guard lock(g_pending_mutex);
+            g_pending.push_back({
+                ps->code_size,sha,{p->index,pipeline_kind::stable}
+            });
             return false;
         }
 
-        {
+        if(const auto *p=find_lerp_plan(ps->code_size,sha)){
+            if(!ensure_lerp_shader_pair(d,*p,{bytes,ps->code_size})){
+                // Build151 Lerp coverage is additive. Exact-transform failure
+                // is isolated to this stock receiver and fails open.
+                ++g_fail_open;
+                return false;
+            }
             std::lock_guard lock(g_pending_mutex);
-            g_pending.push_back({ps->code_size,sha,p->index});
+            g_pending.push_back({
+                ps->code_size,sha,{p->pair_index,pipeline_kind::lerp}
+            });
+            return false;
         }
+
         return false;
     } catch (...) {
         ++g_fail_open;
@@ -716,14 +738,14 @@ void on_init_pipeline(device *d,pipeline_layout,std::uint32_t count,const pipeli
         // may present a different descriptor object at init_pipeline or dispatch
         // the callback from another worker thread. Correlate by certified full
         // source SHA-256 + size.
-        std::uint8_t host=0;
+        pipeline_target target{};
         bool matched=false;
         {
             std::lock_guard lock(g_pending_mutex);
             for(auto it=g_pending.begin();it!=g_pending.end();++it){
                 if(ps->code_size!=it->size || sha!=it->sha)
                     continue;
-                host=it->host;
+                target=it->target;
                 g_pending.erase(it);
                 matched=true;
                 break;
@@ -731,7 +753,7 @@ void on_init_pipeline(device *d,pipeline_layout,std::uint32_t count,const pipeli
         }
         if(matched){
             std::lock_guard lock(g_pipeline_mutex);
-            g_pipelines[p.handle]=host;
+            g_pipelines[p.handle]=target;
         }
     } catch (...) {
         ++g_fail_open;
@@ -752,16 +774,29 @@ void on_bind_pipeline(command_list *cmd,pipeline_stage stages,pipeline p)
 {
     if(!cmd || (static_cast<std::uint32_t>(stages)&static_cast<std::uint32_t>(pipeline_stage::pixel_shader))==0)
         return;
-    int host=-1;
+
+    pipeline_target target{};
+    bool matched=false;
     {
         std::lock_guard lock(g_pipeline_mutex);
-        if(const auto it=g_pipelines.find(p.handle);it!=g_pipelines.end()) host=it->second;
+        if(const auto it=g_pipelines.find(p.handle);it!=g_pipelines.end()){
+            target=it->second;
+            matched=true;
+        }
     }
-    g_bound_subsurface=host>=33 && host<=35;
-    g_bound_host=g_bound_subsurface ? host-24 : host;
-    g_bound_command=host>=0?cmd:nullptr;
-    if(host>=0) ++g_target_binds;
-    else {
+
+    if(matched){
+        g_bound_host=static_cast<int>(target.pair);
+        g_bound_lerp=target.kind==pipeline_kind::lerp;
+        g_bound_subsurface=target.kind==pipeline_kind::subsurface;
+        g_bound_command=cmd;
+        ++g_target_binds;
+        if(g_bound_lerp) ++g_lerp_binds;
+    }else{
+        g_bound_host=-1;
+        g_bound_lerp=false;
+        g_bound_subsurface=false;
+        g_bound_command=nullptr;
         g_draw_donor=-1;
         upper_lower::consume_draw_selection();
     }
