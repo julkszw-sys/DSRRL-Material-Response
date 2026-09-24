@@ -163,7 +163,7 @@ int main()
 
     const auto &catalog = core::known_operator_catalog();
     CHECK(catalog.size() == core::operator_count);
-    CHECK(core::operator_count == 23);
+    CHECK(core::operator_count == 24);
 
     for (std::size_t i = 0; i < catalog.size(); ++i) {
         CHECK(static_cast<std::size_t>(catalog[i].id) == i);
