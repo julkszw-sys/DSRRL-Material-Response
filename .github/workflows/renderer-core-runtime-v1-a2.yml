@@ -22,6 +22,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Verify recovered 1.45 V13 P_Metal donor materialization
+        run: |
+          python3 runtime-v1/tools/generate_v13_pmetal_donors.py
+          git diff --exit-code -- runtime-v1/generated/v13_pmetal_donors.hpp
+          python3 runtime-v1/tools/audit_v13_pmetal_donors.py
       - name: Verify exact Normal route generation
         run: |
           python3 renderer-core/tools/generate_normal_routes_v12.py --input renderer-core/data/provenance/normal_routes_v12.tsv --output /tmp/generated_normal_routes_v12.hpp
