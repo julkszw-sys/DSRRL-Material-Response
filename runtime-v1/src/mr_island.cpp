@@ -60,6 +60,7 @@ std::atomic<std::uint64_t> g_shader_v13_pass{0}, g_shader_v13_fail{0};
 std::atomic<std::uint64_t> g_v13_source_ready{0}, g_v13_source_miss{0};
 std::atomic<std::uint64_t> g_v13_resource_ready{0}, g_v13_resource_miss{0};
 std::atomic<std::uint64_t> g_v13_b12_update{0}, g_v13_b12_fail{0}, g_v13_replay{0};
+std::atomic<bool> g_v13_first_draw_logged{false};
 std::atomic<std::uint64_t> g_target_binds{0}, g_replays{0}, g_fail_open{0};
 std::atomic<std::uint64_t> g_b12_create{0}, g_b12_hit{0}, g_restore_fail{0}, g_present{0};
 
@@ -310,7 +311,20 @@ bool pmetal_native_env_ready(
         ctx->PSGetSamplers(14,1,&s14);
     }
 
-    const bool ok=t12 && s12 && (!need_b || (t14 && s14));
+    bool t12_cube=false,t14_cube=!need_b;
+    if(t12){
+        D3D11_SHADER_RESOURCE_VIEW_DESC desc{};
+        t12->GetDesc(&desc);
+        t12_cube=desc.ViewDimension==D3D11_SRV_DIMENSION_TEXTURECUBE;
+    }
+    if(t14){
+        D3D11_SHADER_RESOURCE_VIEW_DESC desc{};
+        t14->GetDesc(&desc);
+        t14_cube=desc.ViewDimension==D3D11_SRV_DIMENSION_TEXTURECUBE;
+    }
+
+    const bool ok=t12 && s12 && t12_cube &&
+                  (!need_b || (t14 && s14 && t14_cube));
     if(t12) t12->Release();
     if(t14) t14->Release();
     if(s12) s12->Release();
@@ -875,7 +889,21 @@ bool on_draw_indexed(command_list *cmd,std::uint32_t index_count,std::uint32_t i
     }else{
         ++g_replays;
         if(body_route) ++g_subsurface_replays;
-        if(pmetal_active) ++g_v13_replay;
+        if(pmetal_active){
+            ++g_v13_replay;
+            if(!g_v13_first_draw_logged.exchange(true)){
+                std::ostringstream os;
+                os<<"[DSRRL V13 PMETAL] FIRST_DRAW receiver="<<receiver_id
+                  <<" beta="<<pmetal_source.beta
+                  <<" bankA=0x"<<std::hex<<pmetal_source.bank_signature_a
+                  <<" rowA="<<std::dec<<pmetal_source.row_id_a
+                  <<" bankB=0x"<<std::hex<<pmetal_source.bank_signature_b
+                  <<" rowB="<<std::dec<<pmetal_source.row_id_b
+                  <<" ul="<<(intended_ul?1:0)
+                  <<" spec="<<(spec_active?1:0);
+                log_info(os.str());
+            }
+        }
     }
 
     for(auto *instance:old_classes) if(instance) instance->Release();
@@ -957,6 +985,7 @@ bool register_runtime(core::renderer_core &core) noexcept
 {
     g_core=&core;
     g_quarantined.store(false);
+    g_v13_first_draw_logged.store(false);
     g_draw_donor=-1; g_bound_host=-1; g_bound_subsurface=false; g_bound_command=nullptr;
     g_enabled.store(true);
     reshade::register_event<reshade::addon_event::init_device>(on_init_device);
