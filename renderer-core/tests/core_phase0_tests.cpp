@@ -35,6 +35,7 @@ int main()
     CHECK(core.phase0_pass_through());
     CHECK(sizeof(carrier_v1) == 128);
     CHECK(carrier_ul_mask == ((1u << 6) | (1u << 7)));
+    CHECK(operator_bit(static_cast<operator_id>(0xffu)) == 0u);
 
     // One hook site has exactly one semantic owner.
     const hook_claim ul_single{
@@ -51,6 +52,14 @@ int main()
         hook_semantic::lightbank_single_packer
     };
     CHECK(!core.hooks().claim(illegal_second_owner));
+
+    const hook_claim invalid_owner{
+        0x140563B90ull,
+        static_cast<operator_id>(0xffu),
+        hook_semantic::lightbank_single_packer
+    };
+    CHECK(!core.hooks().claim(invalid_owner));
+
     CHECK(core.hooks().release(0x140563B80ull, operator_id::upper_lower));
     CHECK(core.phase0_pass_through());
 
@@ -69,6 +78,11 @@ int main()
     nonexact.exact_sha256 = {};
     CHECK(!core.receivers().register_receiver(nonexact));
 
+    receiver_descriptor invalid_caps = rx;
+    invalid_caps.receiver_id = 35;
+    invalid_caps.capabilities = 0x80000000u;
+    CHECK(!core.receivers().register_receiver(invalid_caps));
+
     CHECK(core.receivers().register_receiver(rx));
     CHECK(core.receivers().resolve(rx.fast_hash, rx.exact_sha256).has_value());
     CHECK(!core.receivers().resolve(rx.fast_hash, digest(8)).has_value());
@@ -84,6 +98,13 @@ int main()
         0xABCDEF,
         4
     };
+
+    semantic_key invalid_key{
+        static_cast<operator_id>(0xffu),
+        0xABCDEF,
+        4
+    };
+    CHECK(!core.snapshots().publish(invalid_key, 9, ul_payload));
 
     CHECK(core.snapshots().publish(ul_key, 10, ul_payload));
     auto snap = core.snapshots().latest(ul_key);
