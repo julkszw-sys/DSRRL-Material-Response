@@ -175,7 +175,8 @@ bool get_shex_words(std::span<const std::uint8_t> d,std::vector<chunk> &chunks,
 {
     if(!parse_dxbc(d,chunks,err)) return false;
     for(std::size_t i=0;i<chunks.size();++i){
-        if(std::memcmp(chunks[i].tag.data(),"SHEX",4)==0){
+        if(std::memcmp(chunks[i].tag.data(),"SHEX",4)==0 ||
+           std::memcmp(chunks[i].tag.data(),"SHDR",4)==0){
             if((chunks[i].payload.size()%4)!=0){err="SHEX alignment";return false;}
             shex=i; words.resize(chunks[i].payload.size()/4);
             for(std::size_t w=0;w<words.size();++w) words[w]=read_u32(chunks[i].payload.data()+w*4);
@@ -248,6 +249,234 @@ transform_result transform(std::span<const std::uint8_t> stock,const plan &p,var
         r.error="V211 output SHA";return r;
     }
     r.ok=true; r.code=std::move(v211); return r;
+}
+
+const ul_plan *find_ul_plan(std::string_view sha256) noexcept
+{
+    for(const auto &p : k_ul_plans)
+        if(p.original_sha256 == sha256) return &p;
+    return nullptr;
+}
+
+namespace {
+
+constexpr std::array<std::uint32_t,4> k_cb13_decl = {
+    0x04000059u, 0x00208e46u, 0x0000000du, 0x00000008u
+};
+
+struct instruction_view {
+    std::size_t offset = 0;
+    std::uint32_t opcode = 0;
+    std::size_t length = 0;
+};
+
+struct cb_ref {
+    std::size_t slot_word = 0;
+    std::size_t index_word = 0;
+    std::uint32_t slot = 0;
+    std::uint32_t index = 0;
+};
+
+bool decode_instructions(
+    const std::vector<std::uint32_t> &words,
+    std::vector<instruction_view> &out,
+    std::string &err)
+{
+    if(words.size() < 2 || words[1] != words.size()){
+        err = "UL SHEX length token";
+        return false;
+    }
+
+    out.clear();
+    for(std::size_t p = 2; p < words.size();){
+        const std::uint32_t token = words[p];
+        const std::size_t length = (token >> 24u) & 0x7fu;
+        if(length == 0 || p + length > words.size()){
+            err = "UL instruction length";
+            return false;
+        }
+        out.push_back({p, token & 0x7ffu, length});
+        p += length;
+    }
+    return true;
+}
+
+std::vector<cb_ref> cb_refs(
+    const std::vector<std::uint32_t> &words,
+    const instruction_view &ins)
+{
+    std::vector<cb_ref> out;
+    std::size_t i = 1;
+    while(i < ins.length){
+        const std::uint32_t token = words[ins.offset + i];
+        const std::uint32_t base = token & 0x7fffffffu;
+        if((base & 0x00fff00fu) == 0x00208006u){
+            const bool extended = (token & 0x80000000u) != 0;
+            const std::size_t j = i + 1 + (extended ? 1u : 0u);
+            if(j + 1 < ins.length){
+                out.push_back({
+                    ins.offset + j,
+                    ins.offset + j + 1,
+                    words[ins.offset + j],
+                    words[ins.offset + j + 1]
+                });
+            }
+            i = j + 2;
+            continue;
+        }
+        ++i;
+    }
+    return out;
+}
+
+bool has_cb(const std::vector<cb_ref> &refs,std::uint32_t slot,std::uint32_t index)
+{
+    for(const auto &r : refs)
+        if(r.slot == slot && r.index == index) return true;
+    return false;
+}
+
+bool tag_is(const chunk &c,const char *tag) noexcept
+{
+    return std::memcmp(c.tag.data(),tag,4)==0;
+}
+
+} // namespace
+
+transform_result transform_upper_lower(std::span<const std::uint8_t> base)
+{
+    transform_result r;
+
+    std::vector<chunk> chunks;
+    std::vector<std::uint32_t> words;
+    std::size_t shex = 0;
+    if(!get_shex_words(base,chunks,shex,words,r.error))
+        return r;
+
+    std::vector<instruction_view> instructions;
+    if(!decode_instructions(words,instructions,r.error))
+        return r;
+
+    struct candidate {
+        std::size_t mid = 0;
+        std::vector<cb_ref> mid_refs;
+        std::vector<cb_ref> next_refs;
+    };
+    std::vector<candidate> candidates;
+
+    for(std::size_t i = 1; i + 1 < instructions.size(); ++i){
+        const auto &prev = instructions[i - 1];
+        const auto &mid  = instructions[i];
+        const auto &next = instructions[i + 1];
+
+        if(prev.opcode != 0x32u || mid.opcode != 0x00u || next.opcode != 0x32u)
+            continue;
+
+        auto mr = cb_refs(words,mid);
+        auto nr = cb_refs(words,next);
+        if(has_cb(mr,0u,7u) && has_cb(mr,0u,8u) && has_cb(nr,0u,8u))
+            candidates.push_back({i,std::move(mr),std::move(nr)});
+    }
+
+    if(candidates.size() != 1u){
+        r.error = "UL canonical hemisphere island count";
+        return r;
+    }
+
+    std::size_t changed = 0;
+    auto rewrite = [&](const std::vector<cb_ref> &refs){
+        for(const auto &ref : refs){
+            if(ref.slot != 0u || (ref.index != 7u && ref.index != 8u))
+                continue;
+            words[ref.slot_word] = 13u;
+            words[ref.index_word] = ref.index == 7u ? 6u : 7u;
+            ++changed;
+        }
+    };
+
+    rewrite(candidates[0].mid_refs);
+    rewrite(candidates[0].next_refs);
+    if(changed != 3u){
+        r.error = "UL expected exactly three U/L references";
+        return r;
+    }
+
+    std::vector<instruction_view> patched_instructions;
+    if(!decode_instructions(words,patched_instructions,r.error))
+        return r;
+
+    std::optional<std::size_t> insert_at;
+    for(const auto &ins : patched_instructions)
+        if(ins.opcode == 0x59u)
+            insert_at = ins.offset + ins.length;
+
+    if(!insert_at.has_value()){
+        r.error = "UL constant-buffer declaration missing";
+        return r;
+    }
+
+    words.insert(words.begin() + static_cast<std::ptrdiff_t>(*insert_at),
+                 k_cb13_decl.begin(),k_cb13_decl.end());
+    words[1] = static_cast<std::uint32_t>(words.size());
+
+    chunks[shex].payload.resize(words.size() * 4u);
+    for(std::size_t i=0;i<words.size();++i)
+        write_u32(chunks[shex].payload.data()+i*4u,words[i]);
+
+    std::vector<chunk> filtered;
+    filtered.reserve(chunks.size());
+    for(auto &part : chunks)
+        if(!tag_is(part,"RDEF"))
+            filtered.push_back(std::move(part));
+
+    auto out = rebuild(base,filtered,r.error);
+    if(out.empty())
+        return r;
+
+    // Postcondition: RDEF is absent; b13[8] declared exactly once; dynamic
+    // references are exactly b13[6], b13[7], b13[7].
+    std::vector<chunk> verify_chunks;
+    std::vector<std::uint32_t> verify_words;
+    std::size_t verify_shex = 0;
+    if(!get_shex_words(out,verify_chunks,verify_shex,verify_words,r.error))
+        return r;
+
+    for(const auto &part : verify_chunks){
+        if(tag_is(part,"RDEF")){
+            r.error = "UL stale RDEF retained";
+            return r;
+        }
+    }
+
+    std::vector<instruction_view> verify_instructions;
+    if(!decode_instructions(verify_words,verify_instructions,r.error))
+        return r;
+
+    std::size_t declaration_count = 0;
+    std::vector<std::uint32_t> b13_indices;
+    for(const auto &ins : verify_instructions){
+        if(ins.opcode == 0x59u && ins.length == 4u &&
+           verify_words[ins.offset + 1] == 0x00208e46u &&
+           verify_words[ins.offset + 2] == 13u &&
+           verify_words[ins.offset + 3] == 8u){
+            ++declaration_count;
+            continue;
+        }
+        for(const auto &ref : cb_refs(verify_words,ins))
+            if(ref.slot == 13u)
+                b13_indices.push_back(ref.index);
+    }
+
+    std::sort(b13_indices.begin(),b13_indices.end());
+    if(declaration_count != 1u ||
+       b13_indices != std::vector<std::uint32_t>{6u,7u,7u}){
+        r.error = "UL b13 postcondition";
+        return r;
+    }
+
+    r.ok = true;
+    r.code = std::move(out);
+    return r;
 }
 
 } // namespace dsrrl::runtime::mr
