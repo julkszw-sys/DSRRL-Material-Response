@@ -46,6 +46,7 @@ std::atomic<std::uint64_t> g_draw_serial{0};
 std::atomic<std::uint64_t> g_mtd_seen{0}, g_mapped{0}, g_unmapped{0};
 std::atomic<std::uint64_t> g_selector_seen{0}, g_selector_mapped{0};
 std::atomic<std::uint64_t> g_pipeline_seen{0}, g_shader_pair_pass{0}, g_shader_pair_fail{0};
+std::atomic<std::uint64_t> g_spec_shader_pair_pass{0}, g_spec_shader_pair_fail{0};
 std::atomic<std::uint64_t> g_target_binds{0}, g_replays{0}, g_fail_open{0};
 std::atomic<std::uint64_t> g_b12_create{0}, g_b12_hit{0}, g_restore_fail{0}, g_present{0};
 
@@ -95,6 +96,8 @@ struct device_state {
     ID3D11Device *device=nullptr;
     std::array<ID3D11PixelShader*,24> diffuse{};
     std::array<ID3D11PixelShader*,24> full{};
+    std::array<ID3D11PixelShader*,24> diffuse_specrgb{};
+    std::array<ID3D11PixelShader*,24> full_specrgb{};
     std::unordered_map<std::uint16_t,ID3D11Buffer*> b12;
 };
 device_state g_device;
@@ -105,6 +108,8 @@ void release_device_state()
     std::lock_guard lock(g_device_mutex);
     for(auto *&p:g_device.diffuse){ if(p){p->Release();p=nullptr;} }
     for(auto *&p:g_device.full){ if(p){p->Release();p=nullptr;} }
+    for(auto *&p:g_device.diffuse_specrgb){ if(p){p->Release();p=nullptr;} }
+    for(auto *&p:g_device.full_specrgb){ if(p){p->Release();p=nullptr;} }
     for(auto &[_,b]:g_device.b12) if(b) b->Release();
     g_device.b12.clear();
     if(g_device.device){g_device.device->Release();g_device.device=nullptr;}
@@ -127,7 +132,9 @@ bool ensure_shader_pair(device *d,const plan &p,std::span<const std::uint8_t> st
     std::lock_guard lock(g_device_mutex);
     if(g_device.device!=native) return false;
     const auto i=static_cast<std::size_t>(p.index);
-    if(g_device.diffuse[i] && g_device.full[i]) return true;
+    if(g_device.diffuse[i] && g_device.full[i] &&
+       g_device.diffuse_specrgb[i] && g_device.full_specrgb[i])
+        return true;
 
     const auto diffuse=transform(stock,p,variant::diffuse_v29);
     const auto full=transform(stock,p,variant::full_v211);
@@ -136,19 +143,44 @@ bool ensure_shader_pair(device *d,const plan &p,std::span<const std::uint8_t> st
         return false;
     }
 
-    ID3D11PixelShader *ps_diffuse=nullptr,*ps_full=nullptr;
-    if(FAILED(native->CreatePixelShader(diffuse.code.data(),diffuse.code.size(),nullptr,&ps_diffuse)) || !ps_diffuse){
-        ++g_shader_pair_fail; return false;
+    const auto diffuse_spec=transform(stock,p,variant::diffuse_v29_specrgb);
+    const auto full_spec=transform(stock,p,variant::full_v211_specrgb);
+    if(!diffuse_spec.ok || !full_spec.ok){
+        ++g_spec_shader_pair_fail;
+        return false;
     }
-    if(FAILED(native->CreatePixelShader(full.code.data(),full.code.size(),nullptr,&ps_full)) || !ps_full){
-        ps_diffuse->Release(); ++g_shader_pair_fail; return false;
+
+    ID3D11PixelShader *ps_diffuse=nullptr,*ps_full=nullptr;
+    ID3D11PixelShader *ps_diffuse_spec=nullptr,*ps_full_spec=nullptr;
+
+    auto release_local=[&]() noexcept {
+        if(ps_diffuse){ps_diffuse->Release();ps_diffuse=nullptr;}
+        if(ps_full){ps_full->Release();ps_full=nullptr;}
+        if(ps_diffuse_spec){ps_diffuse_spec->Release();ps_diffuse_spec=nullptr;}
+        if(ps_full_spec){ps_full_spec->Release();ps_full_spec=nullptr;}
+    };
+
+    if(FAILED(native->CreatePixelShader(diffuse.code.data(),diffuse.code.size(),nullptr,&ps_diffuse)) || !ps_diffuse ||
+       FAILED(native->CreatePixelShader(full.code.data(),full.code.size(),nullptr,&ps_full)) || !ps_full){
+        release_local(); ++g_shader_pair_fail; return false;
+    }
+
+    if(FAILED(native->CreatePixelShader(diffuse_spec.code.data(),diffuse_spec.code.size(),nullptr,&ps_diffuse_spec)) || !ps_diffuse_spec ||
+       FAILED(native->CreatePixelShader(full_spec.code.data(),full_spec.code.size(),nullptr,&ps_full_spec)) || !ps_full_spec){
+        release_local(); ++g_spec_shader_pair_fail; return false;
     }
 
     if(g_device.diffuse[i]) g_device.diffuse[i]->Release();
     if(g_device.full[i]) g_device.full[i]->Release();
+    if(g_device.diffuse_specrgb[i]) g_device.diffuse_specrgb[i]->Release();
+    if(g_device.full_specrgb[i]) g_device.full_specrgb[i]->Release();
+
     g_device.diffuse[i]=ps_diffuse;
     g_device.full[i]=ps_full;
+    g_device.diffuse_specrgb[i]=ps_diffuse_spec;
+    g_device.full_specrgb[i]=ps_full_spec;
     ++g_shader_pair_pass;
+    ++g_spec_shader_pair_pass;
     return true;
 }
 
@@ -324,6 +356,8 @@ bool on_draw_indexed(command_list *cmd,std::uint32_t index_count,std::uint32_t i
 
     core::render_patch_plan plan{};
     plan.patches[plan.patch_count++]={core::operator_id::material_response,0u,true,false};
+    if(g_core->features().enabled(core::operator_id::spec_rgb))
+        plan.patches[plan.patch_count++]={core::operator_id::spec_rgb,0u,false,true};
     if(g_core->features().enabled(core::operator_id::diffuse))
         plan.patches[plan.patch_count++]={core::operator_id::diffuse,0u,false,true};
     if(g_core->features().enabled(core::operator_id::normal))
@@ -352,8 +386,14 @@ bool on_draw_indexed(command_list *cmd,std::uint32_t index_count,std::uint32_t i
         {
             std::lock_guard lock(g_device_mutex);
             if(g_device.device==dev){
-                replacement=don.has_c101?g_device.full[static_cast<std::size_t>(g_bound_host)]:
-                                          g_device.diffuse[static_cast<std::size_t>(g_bound_host)];
+                const auto host=static_cast<std::size_t>(g_bound_host);
+                const bool spec_enabled=g_core->features().enabled(core::operator_id::spec_rgb);
+                if(spec_enabled)
+                    replacement=don.has_c101?g_device.full_specrgb[host]:
+                                              g_device.diffuse_specrgb[host];
+                else
+                    replacement=don.has_c101?g_device.full[host]:
+                                              g_device.diffuse[host];
                 if(replacement) replacement->AddRef();
             }
         }
@@ -428,7 +468,11 @@ void on_present(command_queue *,swapchain *,const rect *,const rect *,std::uint3
           <<" MTD="<<g_mtd_seen.load()<<" mapped="<<g_mapped.load()<<" unmapped="<<g_unmapped.load()
           <<" selector="<<g_selector_seen.load()<<" selector_mapped="<<g_selector_mapped.load()
           <<" pipelines="<<g_pipeline_seen.load()<<" shader_pair_pass="<<g_shader_pair_pass.load()
-          <<" shader_pair_fail="<<g_shader_pair_fail.load()<<" binds="<<g_target_binds.load()
+          <<" shader_pair_fail="<<g_shader_pair_fail.load()
+          <<" spec_shader_pair_pass="<<g_spec_shader_pair_pass.load()
+          <<" spec_shader_pair_fail="<<g_spec_shader_pair_fail.load()
+          <<" spec_feature="<<(g_core && g_core->features().enabled(core::operator_id::spec_rgb)?1:0)
+          <<" binds="<<g_target_binds.load()
           <<" replay="<<g_replays.load()<<" b12_create="<<g_b12_create.load()
           <<" b12_hit="<<g_b12_hit.load()<<" failopen="<<g_fail_open.load()
           <<" restore_fail="<<g_restore_fail.load()<<" quarantined="<<(g_quarantined.load()?1:0);
