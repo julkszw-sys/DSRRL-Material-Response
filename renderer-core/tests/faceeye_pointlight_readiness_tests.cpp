@@ -182,6 +182,8 @@ int main()
             features,activation,face);
     CHECK(face_plan.ready);
     CHECK(face_plan.keep_live_t7);
+    CHECK(face_plan.replace_comparison_kernel);
+    CHECK(!face_plan.use_stock_ptde_style_kernel);
     CHECK(face_plan.override_s7_with_regular_sampler);
     CHECK(face_plan.apply_shadow_only_to_envdiffuse_envspec);
     CHECK(face_plan.preserve_upper_lower);
@@ -194,6 +196,16 @@ int main()
     CHECK(face_plan.reason==
           operators::surface::faceeye_runtime_reason::
               auxiliary_dirlight_snapshot_not_ready);
+
+    face=ready_faceeye(
+        operators::surface::faceeye_receiver_variant::sdw_pnts);
+    face.replacement_ptde_kernel_shader_ready=false;
+    face_plan=operators::surface::evaluate_faceeye_runtime_readiness(
+        features,activation,face);
+    CHECK(!face_plan.ready);
+    CHECK(face_plan.reason==
+          operators::surface::faceeye_runtime_reason::
+              replacement_ptde_kernel_shader_not_ready);
 
     face=ready_faceeye(
         operators::surface::faceeye_receiver_variant::sdw_pnts);
@@ -225,8 +237,20 @@ int main()
     face_plan=operators::surface::evaluate_faceeye_runtime_readiness(
         features,activation,face);
     CHECK(face_plan.ready);
+    CHECK(!face_plan.replace_comparison_kernel);
+    CHECK(face_plan.use_stock_ptde_style_kernel);
     CHECK(!face_plan.override_s7_with_regular_sampler);
 
+    face.stock_ptde_kernel_identity_verified=false;
+    face_plan=operators::surface::evaluate_faceeye_runtime_readiness(
+        features,activation,face);
+    CHECK(!face_plan.ready);
+    CHECK(face_plan.reason==
+          operators::surface::faceeye_runtime_reason::
+              stock_ptde_kernel_identity_not_verified);
+
+    face=ready_faceeye(
+        operators::surface::faceeye_receiver_variant::sdw_pntss);
     face.stock_regular_s7_verified=false;
     face_plan=operators::surface::evaluate_faceeye_runtime_readiness(
         features,activation,face);
@@ -371,16 +395,55 @@ int main()
           operators::point_light::pointlight_runtime_reason::
               local_specular_path_not_ready);
 
-    // Clustered PntS must use independently captured PTDE-selected four-slot
-    // membership; stock DSR t16/t17 membership is not a valid selector.
+    // Clustered no-Spc and Spc PntS are distinct consumer strata. Both use
+    // the PTDE first-four membership sidecar, but only Spc requires the
+    // legacy local-specular continuation.
     point=ready_pointlight(
-        operators::point_light::pointlight_receiver_stratum::clustered_spc_pnts);
+        operators::point_light::pointlight_receiver_stratum::
+            clustered_nospc_pnts);
+    point.local_specular_path_ready=false;
     point_plan=
         operators::point_light::evaluate_pointlight_runtime_readiness(
             features,activation,point);
     CHECK(point_plan.ready);
     CHECK(point_plan.use_cpu_selected_four_sidecar);
     CHECK(point_plan.bypass_stock_cluster_membership);
+    CHECK(!point_plan.require_local_specular);
+    CHECK(point_plan.selected_light_count==4u);
+
+    point=ready_pointlight(
+        operators::point_light::pointlight_receiver_stratum::
+            clustered_spc_pnts);
+    point.local_specular_path_ready=false;
+    point_plan=
+        operators::point_light::evaluate_pointlight_runtime_readiness(
+            features,activation,point);
+    CHECK(!point_plan.ready);
+    CHECK(point_plan.require_local_specular);
+    CHECK(point_plan.reason==
+          operators::point_light::pointlight_runtime_reason::
+              local_specular_path_not_ready);
+
+    point=ready_pointlight(
+        operators::point_light::pointlight_receiver_stratum::
+            clustered_spc_pnts);
+    point.clustered_membership.effective_count=3u;
+    point_plan=
+        operators::point_light::evaluate_pointlight_runtime_readiness(
+            features,activation,point);
+    CHECK(!point_plan.ready);
+    CHECK(point_plan.reason==
+          operators::point_light::pointlight_runtime_reason::
+              clustered_membership_descriptor_invalid);
+
+    point=ready_pointlight(
+        operators::point_light::pointlight_receiver_stratum::
+            clustered_spc_pnts);
+    point_plan=
+        operators::point_light::evaluate_pointlight_runtime_readiness(
+            features,activation,point);
+    CHECK(point_plan.ready);
+    CHECK(point_plan.require_local_specular);
 
     point.stock_cluster_membership_bypassed=false;
     point_plan=
