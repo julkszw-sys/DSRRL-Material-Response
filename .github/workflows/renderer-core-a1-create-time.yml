@@ -1,0 +1,39 @@
+name: Renderer Core A1 Create-Time Materializer
+
+on:
+  push:
+    branches:
+      - dev/renderer-core-v1-islands
+      - agent/a1-create-time-materializer-20260924
+    paths:
+      - "renderer-core/include/dsrrl/operators/legacy_plan/sha256_bytes.hpp"
+      - "renderer-core/include/dsrrl/operators/legacy_plan/a1_create_time_materializer.hpp"
+      - "renderer-core/include/dsrrl/operators/legacy_plan/dxbc_checksum.hpp"
+      - "renderer-core/include/dsrrl/operators/legacy_plan/generated_a1_exact_patch_recipes_v1.hpp"
+      - "renderer-core/tests/a1_create_time_materializer_tests.cpp"
+      - ".github/workflows/renderer-core-a1-create-time.yml"
+  pull_request:
+    paths:
+      - "renderer-core/include/dsrrl/operators/legacy_plan/sha256_bytes.hpp"
+      - "renderer-core/include/dsrrl/operators/legacy_plan/a1_create_time_materializer.hpp"
+      - "renderer-core/include/dsrrl/operators/legacy_plan/dxbc_checksum.hpp"
+      - "renderer-core/include/dsrrl/operators/legacy_plan/generated_a1_exact_patch_recipes_v1.hpp"
+      - "renderer-core/tests/a1_create_time_materializer_tests.cpp"
+      - ".github/workflows/renderer-core-a1-create-time.yml"
+
+jobs:
+  create-time-materializer:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Compile create-time materializer tests
+        run: |
+          c++ -std=c++17 -Wall -Wextra -Wpedantic -Werror \
+            -Irenderer-core/include \
+            renderer-core/tests/a1_create_time_materializer_tests.cpp \
+            renderer-core/src/feature_registry.cpp \
+            -o /tmp/a1_create_time_materializer_tests
+
+      - name: Run create-time materializer tests
+        run: /tmp/a1_create_time_materializer_tests
