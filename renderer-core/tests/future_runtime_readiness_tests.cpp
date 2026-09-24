@@ -403,6 +403,36 @@ int main()
     CHECK(hemdir3_plan.suppress_host_envdiffuse);
     CHECK(hemdir3_plan.use_ptde_linear_d123);
     CHECK(!hemdir3_plan.apply_source_gamma_compensation);
+    CHECK(!hemdir3_plan.require_b12_material_donor);
+    CHECK(!hemdir3_plan.require_directional_legacy_specular);
+
+    hemdir3=ready_hemdir3();
+    hemdir3.receiver_stratum=
+        operators::lightbank::hemdir3_receiver_stratum::spc;
+    hemdir3_plan=
+        operators::lightbank::evaluate_hemdir3_runtime_readiness(
+            features,activation,hemdir3);
+    CHECK(!hemdir3_plan.ready);
+    CHECK(hemdir3_plan.require_b12_material_donor);
+    CHECK(hemdir3_plan.require_directional_legacy_specular);
+    CHECK(hemdir3_plan.reason==
+          operators::lightbank::hemdir3_runtime_reason::
+              spc_b12_material_donor_not_ready);
+
+    hemdir3.spc_b12_material_donor_ready=true;
+    hemdir3_plan=
+        operators::lightbank::evaluate_hemdir3_runtime_readiness(
+            features,activation,hemdir3);
+    CHECK(!hemdir3_plan.ready);
+    CHECK(hemdir3_plan.reason==
+          operators::lightbank::hemdir3_runtime_reason::
+              directional_specular_continuation_not_ready);
+
+    hemdir3.directional_specular_continuation_ready=true;
+    hemdir3_plan=
+        operators::lightbank::evaluate_hemdir3_runtime_readiness(
+            features,activation,hemdir3);
+    CHECK(hemdir3_plan.ready);
 
     // Ordinary/direct selector state cannot authorize HemDir3. Cross-render
     // RE establishes ordinary direct producer values only in {0,1}; even a
