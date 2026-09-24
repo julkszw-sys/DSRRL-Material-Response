@@ -6,7 +6,7 @@ on:
       - dev/renderer-core-v1-islands
       - agent/a1-exact-recipes-20260924
     paths:
-      - "renderer-core/data/provenance/p2_2_PORT_PLAN.json.gz"
+      - "renderer-core/data/provenance/a1_exact_recipes_v1.part*.tsv"
       - "renderer-core/data/a1_island_plan_index_v1.json"
       - "renderer-core/tools/generate_a1_exact_patch_recipes.py"
       - "renderer-core/include/dsrrl/operators/legacy_plan/a1_exact_patch_recipes.hpp"
@@ -15,7 +15,7 @@ on:
       - ".github/workflows/renderer-core-exact-recipes.yml"
   pull_request:
     paths:
-      - "renderer-core/data/provenance/p2_2_PORT_PLAN.json.gz"
+      - "renderer-core/data/provenance/a1_exact_recipes_v1.part*.tsv"
       - "renderer-core/data/a1_island_plan_index_v1.json"
       - "renderer-core/tools/generate_a1_exact_patch_recipes.py"
       - "renderer-core/include/dsrrl/operators/legacy_plan/a1_exact_patch_recipes.hpp"
@@ -29,11 +29,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Regenerate exact recipe header from recovered P2.2 source
+      - name: Regenerate exact recipe header
         run: |
           python3 renderer-core/tools/generate_a1_exact_patch_recipes.py \
-            --source-gzip renderer-core/data/provenance/p2_2_PORT_PLAN.json.gz \
             --index renderer-core/data/a1_island_plan_index_v1.json \
+            --part renderer-core/data/provenance/a1_exact_recipes_v1.part1.tsv \
+            --part renderer-core/data/provenance/a1_exact_recipes_v1.part2.tsv \
+            --part renderer-core/data/provenance/a1_exact_recipes_v1.part3.tsv \
             --output /tmp/generated_a1_exact_patch_recipes_v1.hpp
           cmp /tmp/generated_a1_exact_patch_recipes_v1.hpp \
             renderer-core/include/dsrrl/operators/legacy_plan/generated_a1_exact_patch_recipes_v1.hpp
