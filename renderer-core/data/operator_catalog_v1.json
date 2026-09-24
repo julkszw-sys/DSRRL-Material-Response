@@ -416,19 +416,24 @@
       "operator_id": "terminal_sat_rgb"
     },
     {
-      "status": "HYPOTHESIS",
+      "status": "REJECTED",
       "metadata": {
         "p2_2_mask_bits": [
           16384
-        ]
+        ],
+        "generic_combined_rgba_translation": "REJECTED_REV8857",
+        "ptde_exact_phn_terminal": "RGB_ONLY_SAT_384_OF_384",
+        "alpha_preservation_required": true,
+        "dsr_only_hash_aliases": "FAIL_OPEN",
+        "future_narrow_exception": "RGB_ONLY_BODY_REWRITE_OR_DIRECT_ALPHA_EQUIVALENCE_PROOF"
       },
-      "description": "Combined-RGBA terminal saturation expansion; complete semantic class remains diagnostic.",
+      "description": "Generic combined-RGBA terminal SAT is rejected as an exact PTDE translator: PTDE exact Phn HemEnv targets clamp RGB only, so a one-bit combined write would add an unproven alpha clamp. Keep fail-open unless a narrower RGB-preserving body rewrite or direct subclass alpha-equivalence proof exists.",
       "display_name": "Terminal RGBA SAT expansion",
       "operator_key": "surface.terminal_sat_rgba",
       "canonical_key": "renderer.diagnostic.combined_rgba_terminal_sat_expansion_candidate",
       "operator_class": "OUTPUT_TRANSFER",
-      "canonical_revision": 3758,
-      "default_port_state": "DIAGNOSTIC",
+      "canonical_revision": 8857,
+      "default_port_state": "BLOCKED",
       "fail_open_behavior": "STOCK_DSR",
       "operator_id": "terminal_sat_rgba"
     },
