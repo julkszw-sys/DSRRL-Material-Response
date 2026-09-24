@@ -230,8 +230,8 @@ int main()
     std::array<operators::lightbank::hemdir3_raw_lobe_endpoint,3> d123_b{};
     d123_a[0].direction={170.0f,0.0f};
     d123_b[0].direction={-170.0f,0.0f};
-    d123_a[0].color={{{255.0f,0.0f,0.0f}},100.0f};
-    d123_b[0].color={{{0.0f,0.0f,255.0f}},100.0f};
+    d123_a[0].color={{255.0f,0.0f,0.0f},100.0f};
+    d123_b[0].color={{0.0f,0.0f,255.0f},100.0f};
     auto d123=operators::lightbank::evaluate_hemdir3_profile(
         d123_a,d123_b,0.5f);
     CHECK(d123.result==
