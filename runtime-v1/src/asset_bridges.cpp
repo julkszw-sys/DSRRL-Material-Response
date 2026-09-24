@@ -845,17 +845,23 @@ bool apply_draw(
     if (want_spec) {
         if (h1 == 0u || !generated::spec_name_hash_allowed_v12(h1)) {
             ++g_spec_name_reject;
-        } else {
-            ID3D11ShaderResourceView *replacement =
-                lookup(state.old_t1, asset_class::specular);
-            if (replacement != nullptr) {
-                context->PSSetShaderResources(10u, 1u, &replacement);
-                replacement->Release();
-                state.changed_t10 = true;
-                ++g_spec_bind;
-                log_first_bind(asset_class::specular, route, receiver_id);
-            }
+            release_draw_state(state);
+            return false;
         }
+
+        ID3D11ShaderResourceView *replacement =
+            lookup(state.old_t1, asset_class::specular);
+        if (replacement == nullptr) {
+            ++g_spec_sidecar_miss_draw;
+            release_draw_state(state);
+            return false;
+        }
+
+        context->PSSetShaderResources(10u, 1u, &replacement);
+        replacement->Release();
+        state.changed_t10 = true;
+        ++g_spec_bind;
+        log_first_bind(asset_class::specular, route, receiver_id);
     }
 
     if (want_diff) {
