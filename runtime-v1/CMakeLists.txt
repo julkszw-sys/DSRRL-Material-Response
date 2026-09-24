@@ -109,4 +109,12 @@ if(WIN32 AND RESHade_INCLUDE_DIR)
     OUTPUT_NAME "DSRRL_Renderer_Core_Runtime_v1"
     SUFFIX ".addon64"
   )
+
+  add_custom_command(TARGET dsrrl_renderer_runtime_v1_addon POST_BUILD
+    COMMAND "${Python3_EXECUTABLE}"
+            "${CMAKE_CURRENT_SOURCE_DIR}/tools/canonicalize_pe.py"
+            "$<TARGET_FILE:dsrrl_renderer_runtime_v1_addon>"
+    COMMENT "Canonicalizing PE metadata for reproducible addon bytes"
+    VERBATIM
+  )
 endif()
