@@ -43,6 +43,8 @@ enum class subsurface_route_reason : std::uint8_t {
     ptde_slot_mapping_not_verified,
     ptde_donor_not_verified,
     wrong_ptde_donor_identity,
+    ptde_subsurface_usage_not_verified,
+    ptde_subsurface_used,
     ptde_plain_surface_target_not_verified,
     target_plain_receiver_not_ready,
     spec_rgb_route_not_ready,
@@ -75,7 +77,7 @@ struct subsurface_route_context {
     std::string_view ptde_material_name{};
     std::string_view ptde_material_sha256{};
 
-    // Newer route-partition target: PTDE body is plain ColDifSpcBmp.
+    // Explicit PTDE-use partition. Bypass DSR Subsurf only where the mapped\n    // PTDE route is verified not to use the subsurface operator. Unknown or\n    // PTDE-Subsurf-positive routes preserve the host path.\n    bool ptde_subsurface_usage_verified = false;\n    bool ptde_uses_subsurface = true;\n\n    // Newer route-partition target: PTDE body is plain ColDifSpcBmp.
     // This explicit gate prevents the older compatibility-only
     // preserve-DSR-SSS route from becoming the final target by accident.
     bool ptde_plain_surface_target_verified = false;
@@ -262,7 +264,7 @@ inline subsurface_route_decision evaluate_subsurface_route(
         return decision;
     }
 
-    if (!context.ptde_plain_surface_target_verified) {
+    if (!context.ptde_subsurface_usage_verified) {\n        decision.reason =\n            subsurface_route_reason::ptde_subsurface_usage_not_verified;\n        return decision;\n    }\n\n    if (context.ptde_uses_subsurface) {\n        decision.reason =\n            subsurface_route_reason::ptde_subsurface_used;\n        return decision;\n    }\n\n    if (!context.ptde_plain_surface_target_verified) {
         decision.reason =
             subsurface_route_reason::ptde_plain_surface_target_not_verified;
         return decision;

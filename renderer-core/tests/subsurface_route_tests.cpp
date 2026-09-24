@@ -44,7 +44,7 @@ subsurface_route_context valid_context(
     context.ptde_material_name = k_ptde_body_plain_material;
     context.ptde_material_sha256 =
         k_ptde_body_plain_material_sha256;
-    context.ptde_plain_surface_target_verified = true;
+    context.ptde_subsurface_usage_verified = true;\n    context.ptde_uses_subsurface = false;\n    context.ptde_plain_surface_target_verified = true;
 
     context.target_plain_receiver_ready = true;
     context.spec_rgb_route_ready = true;
