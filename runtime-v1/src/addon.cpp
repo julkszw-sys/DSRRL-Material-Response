@@ -136,8 +136,8 @@ __declspec(dllexport) const char *NAME="DSRRL Renderer Core Runtime v1";
 __declspec(dllexport) const char *AUTHOR="DSR Restored Lighting";
 __declspec(dllexport) const char *DESCRIPTION=
     "Renderer Core v1 A2 unified runtime. Proven A1 create-time islands plus "
-    "Material Response V2.11 and exact V12-gated PTDE Diffuse t0 / Normal t2 "
-    "resource islands in one addon. SpecRGB and Upper/Lower remain fail-open.";
+    "Material Response V2.11 and exact V12-gated PTDE SpecRGB t10 / Diffuse t0 / Normal t2 "
+    "resource islands in one addon. Upper/Lower remains fail-open.";
 }
 
 extern "C" __declspec(dllexport) bool AddonInit(HMODULE addon,HMODULE reshade_module)
@@ -207,6 +207,7 @@ extern "C" __declspec(dllexport) void AddonUninit(HMODULE addon,HMODULE reshade_
     log_a1_state("UNLOAD");
     g_a1_bridge.reset();
     g_core.features().set(dsrrl::core::operator_id::material_response,false);
+    g_core.features().set(dsrrl::core::operator_id::spec_rgb,false);
     g_core.features().set(dsrrl::core::operator_id::diffuse,false);
     g_core.features().set(dsrrl::core::operator_id::normal,false);
     reshade::unregister_addon(addon,reshade_module);
