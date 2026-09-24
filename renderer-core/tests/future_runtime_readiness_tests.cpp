@@ -3,6 +3,7 @@
 #include "dsrrl/operators/resource_bridges/envdiffuse_runtime_readiness.hpp"
 #include "dsrrl/operators/lightbank/hemdir3.hpp"
 #include "dsrrl/operators/env_spec/legacy_runtime_readiness.hpp"
+#include "dsrrl/operators/env_spec/legacy_resource_bridge.hpp"
 
 #include <array>
 #include <cmath>
@@ -122,6 +123,8 @@ operators::env_spec::legacy_runtime_context ready_packed_envspec()
     c.material_response_b12_ready=true;
     c.sampler_descriptor_verified=true;
     c.semantic_sidecar_lookup_ready=true;
+    c.envspc_slot_map_ready=true;
+    c.stock_srv_identity_established=true;
     c.packed_gi_resource_ready=true;
     c.packed_gi_stored_alpha_preserved=true;
     c.draw_transaction_ready=true;
@@ -151,6 +154,77 @@ int main()
         core::find_operator_contract(core::operator_id::env_spec);
     CHECK(envspec_contract.has_value());
     CHECK(envspec_contract->default_state==core::port_state::partial);
+
+    // Material Response 1.45 carried an exact 368-route EnvSpcSlotNo map and
+    // required two consistent fresh stock-SRV observations before a PackedGI
+    // identity could participate in a draw. Preserve that authority as a
+    // dormant resource-routing contract without enabling the island.
+    using namespace operators::env_spec;
+    CHECK(k_legacy_envspec_slot_by_route.size()==368u);
+    std::array<std::size_t,4> envspec_slot_counts{};
+    for(const auto slot:k_legacy_envspec_slot_by_route){
+        CHECK(slot<envspec_slot_counts.size());
+        ++envspec_slot_counts[slot];
+    }
+    CHECK(envspec_slot_counts[0]==195u);
+    CHECK(envspec_slot_counts[1]==59u);
+    CHECK(envspec_slot_counts[2]==62u);
+    CHECK(envspec_slot_counts[3]==52u);
+    CHECK(legacy_envspec_slot_for_route(0u).value()==1u);
+    CHECK(legacy_envspec_slot_for_route(2u).value()==2u);
+    CHECK(!legacy_envspec_slot_for_route(368u).has_value());
+    CHECK(k_legacy_packed_gi_size==33619968ull);
+    CHECK(k_legacy_packed_gi_sha256.front()==0xc1u);
+    CHECK(k_legacy_packed_gi_sha256.back()==0xc3u);
+
+    legacy_envspec_identity_tracker envspec_identity;
+    legacy_envspec_identity_observation observation;
+    observation.canonical_probe_ordinal=7u;
+    observation.semantic_a=0x100u;
+    observation.semantic_b=0x200u;
+    observation.stock_t12=0x1000u;
+    observation.stock_t14=0x2000u;
+    observation.fresh=true;
+
+    CHECK(envspec_identity.observe(observation)==
+          legacy_envspec_identity_observe_result::learning);
+    CHECK(envspec_identity.resolve(0x1000u,0x2000u).state==
+          legacy_envspec_identity_resolution_state::not_found);
+    CHECK(envspec_identity.observe(observation)==
+          legacy_envspec_identity_observe_result::established);
+    auto identity_resolution=envspec_identity.resolve(0x1000u,0x2000u);
+    CHECK(identity_resolution.state==
+          legacy_envspec_identity_resolution_state::unique);
+    CHECK(identity_resolution.canonical_probe_ordinal==7u);
+
+    observation.stock_t14=0x3000u;
+    CHECK(envspec_identity.observe(observation)==
+          legacy_envspec_identity_observe_result::refreshing);
+    CHECK(envspec_identity.resolve(0x1000u,0x2000u).state==
+          legacy_envspec_identity_resolution_state::not_found);
+    CHECK(envspec_identity.observe(observation)==
+          legacy_envspec_identity_observe_result::established);
+
+    auto same_endpoint=observation;
+    same_endpoint.canonical_probe_ordinal=8u;
+    same_endpoint.semantic_b=same_endpoint.semantic_a;
+    same_endpoint.stock_t14=0x4000u;
+    CHECK(envspec_identity.observe(same_endpoint)==
+          legacy_envspec_identity_observe_result::invalid);
+    same_endpoint.stock_t12=0x4000u;
+    CHECK(envspec_identity.observe(same_endpoint)==
+          legacy_envspec_identity_observe_result::learning);
+    CHECK(envspec_identity.observe(same_endpoint)==
+          legacy_envspec_identity_observe_result::established);
+
+    auto duplicate=observation;
+    duplicate.canonical_probe_ordinal=9u;
+    CHECK(envspec_identity.observe(duplicate)==
+          legacy_envspec_identity_observe_result::learning);
+    CHECK(envspec_identity.observe(duplicate)==
+          legacy_envspec_identity_observe_result::established);
+    CHECK(envspec_identity.resolve(observation.stock_t12,observation.stock_t14).state==
+          legacy_envspec_identity_resolution_state::ambiguous);
 
     auto activation=verified_activation();
     core::feature_registry features;
@@ -405,6 +479,27 @@ int main()
     CHECK(envspec_plan.bypass_dsr_pbl_tail);
     CHECK(envspec_plan.preserve_ptde_sample_alpha);
 
+    envspec=ready_packed_envspec();
+    envspec.envspc_slot_map_ready=false;
+    envspec_plan=
+        operators::env_spec::evaluate_legacy_runtime_readiness(
+            features,activation,envspec);
+    CHECK(!envspec_plan.ready);
+    CHECK(envspec_plan.reason==
+          operators::env_spec::legacy_runtime_reason::
+              envspc_slot_map_not_ready);
+
+    envspec=ready_packed_envspec();
+    envspec.stock_srv_identity_established=false;
+    envspec_plan=
+        operators::env_spec::evaluate_legacy_runtime_readiness(
+            features,activation,envspec);
+    CHECK(!envspec_plan.ready);
+    CHECK(envspec_plan.reason==
+          operators::env_spec::legacy_runtime_reason::
+              stock_srv_identity_not_established);
+
+    envspec=ready_packed_envspec();
     envspec.resource_class=
         operators::env_spec::legacy_resource_class::classic_rgb24;
     envspec.packed_gi_resource_ready=false;
