@@ -13,7 +13,8 @@ bool check(bool condition, const char *expression, int line)
         return true;
 
     std::cerr << "CHECK FAILED line " << line << ": "
-              << expression << '\n';
+              << expression << '
+';
     return false;
 }
 
@@ -44,7 +45,9 @@ subsurface_route_context valid_context(
     context.ptde_material_name = k_ptde_body_plain_material;
     context.ptde_material_sha256 =
         k_ptde_body_plain_material_sha256;
-    context.ptde_subsurface_usage_verified = true;\n    context.ptde_uses_subsurface = false;\n    context.ptde_plain_surface_target_verified = true;
+    context.ptde_subsurface_usage_verified = true;
+    context.ptde_uses_subsurface = false;
+    context.ptde_plain_surface_target_verified = true;
 
     context.target_plain_receiver_ready = true;
     context.spec_rgb_route_ready = true;
@@ -208,6 +211,7 @@ int main()
           subsurface_route_reason::dsr_subsurf_bypass_carrier_not_ready);
     CHECK(decision.action == subsurface_route_action::preserve_host);
 
-    std::cout << "subsurface_route_tests: PASS\n";
+    std::cout << "subsurface_route_tests: PASS
+";
     return 0;
 }
