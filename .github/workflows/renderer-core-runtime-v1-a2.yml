@@ -47,9 +47,9 @@ jobs:
       - name: Configure x64 addon
         shell: pwsh
         run: cmake -S runtime-v1 -B build/runtime-v1 -A x64 -DRESHade_INCLUDE_DIR="${{ github.workspace }}\_deps\reshade\include"
-      - name: Build single addon
+      - name: Build addon and tests
         shell: pwsh
-        run: cmake --build build/runtime-v1 --config Release --target dsrrl_renderer_runtime_v1_addon --parallel
+        run: cmake --build build/runtime-v1 --config Release --parallel
       - name: Audit single-addon output
         shell: pwsh
         run: |
