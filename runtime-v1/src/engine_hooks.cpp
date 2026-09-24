@@ -9,6 +9,10 @@
 #include "dsrrl/sha256.hpp"
 
 #include <Windows.h>
+#if defined(_MSC_VER)
+#include <intrin.h>
+#pragma intrinsic(_ReturnAddress)
+#endif
 
 #include <array>
 #include <atomic>
@@ -30,12 +34,25 @@ constexpr std::string_view k_binder_sha256 =
 
 constexpr std::uintptr_t k_rva_selector = 0x22BA20;
 constexpr std::uintptr_t k_rva_mtd_parse = 0x295ED0;
+constexpr std::uintptr_t k_rva_wrapper_type5 = 0x1C0BE0;
+constexpr std::uintptr_t k_rva_wrapper_type6 = 0x1C0C10;
+constexpr std::uintptr_t k_rva_true_blend = 0x5642F0;
+constexpr std::uintptr_t k_rva_steady_packer = 0x563B80;
 
 constexpr std::array<std::uint8_t,15> k_selector_bytes = {
     0x40,0x53,0x48,0x83,0xEC,0x30,0x49,0x63,0xC0,0x45,0x8B,0xD1,0x48,0x8B,0xDA
 };
 constexpr std::array<std::uint8_t,15> k_mtd_bytes = {
     0x40,0x57,0x48,0x83,0xEC,0x40,0x48,0xC7,0x44,0x24,0x20,0xFE,0xFF,0xFF,0xFF
+};
+constexpr std::array<std::uint8_t,17> k_wrapper_bytes = {
+    0x48,0x83,0xEC,0x38,0x4D,0x8B,0xC8,0xF3,0x0F,0x11,0x5C,0x24,0x20,0x4C,0x8B,0x41,0x40
+};
+constexpr std::array<std::uint8_t,19> k_blend_bytes = {
+    0x48,0x8B,0xC4,0x48,0x89,0x58,0x08,0x48,0x89,0x70,0x10,0x57,0x48,0x81,0xEC,0xC0,0x00,0x00,0x00
+};
+constexpr std::array<std::uint8_t,14> k_steady_bytes = {
+    0x48,0x89,0x5C,0x24,0x08,0x57,0x48,0x83,0xEC,0x40,0x48,0x8B,0x41,0x18
 };
 
 struct hook {
@@ -49,11 +66,21 @@ struct hook {
 
 std::uintptr_t g_base = 0;
 hook g_selector_hook{}, g_mtd_hook{};
+hook g_wrapper5_hook{}, g_wrapper6_hook{}, g_blend_hook{}, g_steady_hook{};
 selector_callback g_selector_cb = nullptr;
 mtd_callback g_mtd_cb = nullptr;
+upper_lower_callbacks g_ul_callbacks{};
 
 using mtd_parse_fn = void(__fastcall *)(void *, const void *, std::uint32_t, void *);
+using wrapper_fn = void *(__fastcall *)(void *, void *, void *, float);
+using blend_fn = void *(__fastcall *)(void *, const void *, const void *, float);
+using steady_fn = void(__fastcall *)(void *, void *, std::int32_t);
+
 mtd_parse_fn g_mtd_original = nullptr;
+wrapper_fn g_wrapper5_original = nullptr;
+wrapper_fn g_wrapper6_original = nullptr;
+blend_fn g_blend_original = nullptr;
+steady_fn g_steady_original = nullptr;
 
 std::filesystem::path process_path()
 {
@@ -138,6 +165,58 @@ void __fastcall mtd_hook_entry(void *material, const void *raw, std::uint32_t le
     if (g_mtd_original) g_mtd_original(material, raw, len, arg4);
 }
 
+void *run_wrapper(
+    wrapper_fn original,
+    void *self,
+    void *owner,
+    void *assignment,
+    float blend) noexcept
+{
+    if(g_ul_callbacks.wrapper_enter)
+        g_ul_callbacks.wrapper_enter(owner,assignment);
+
+    void *result = original ? original(self,owner,assignment,blend) : nullptr;
+
+    if(g_ul_callbacks.wrapper_exit)
+        g_ul_callbacks.wrapper_exit();
+    return result;
+}
+
+void *__fastcall wrapper5_hook_entry(
+    void *self,void *owner,void *assignment,float blend) noexcept
+{
+    return run_wrapper(g_wrapper5_original,self,owner,assignment,blend);
+}
+
+void *__fastcall wrapper6_hook_entry(
+    void *self,void *owner,void *assignment,float blend) noexcept
+{
+    return run_wrapper(g_wrapper6_original,self,owner,assignment,blend);
+}
+
+void *__fastcall blend_hook_entry(
+    void *dst,const void *a,const void *b,float beta) noexcept
+{
+    std::uintptr_t return_rva = 0;
+#if defined(_MSC_VER)
+    return_rva = reinterpret_cast<std::uintptr_t>(_ReturnAddress()) - g_base;
+#else
+    return_rva = reinterpret_cast<std::uintptr_t>(__builtin_return_address(0)) - g_base;
+#endif
+    if(g_ul_callbacks.true_blend)
+        g_ul_callbacks.true_blend(a,b,beta,return_rva);
+    return g_blend_original ? g_blend_original(dst,a,b,beta) : dst;
+}
+
+void __fastcall steady_hook_entry(
+    void *source,void *dst,std::int32_t selector) noexcept
+{
+    if(g_ul_callbacks.steady_cache)
+        g_ul_callbacks.steady_cache(source,selector);
+    if(g_steady_original)
+        g_steady_original(source,dst,selector);
+}
+
 } // namespace
 
 bool safe_read_bytes(const void *src, void *dst, std::size_t size) noexcept
@@ -193,8 +272,62 @@ bool install(selector_callback selector, mtd_callback mtd) noexcept
     return true;
 }
 
+bool install_upper_lower(const upper_lower_callbacks &callbacks) noexcept
+{
+    if(!g_base ||
+       g_wrapper5_hook.target || g_wrapper6_hook.target ||
+       g_blend_hook.target || g_steady_hook.target)
+        return false;
+
+    if(!callbacks.wrapper_enter || !callbacks.wrapper_exit ||
+       !callbacks.steady_cache || !callbacks.true_blend)
+        return false;
+
+    g_ul_callbacks = callbacks;
+
+    if(!prepare_hook(g_wrapper5_hook,k_rva_wrapper_type5,k_wrapper_bytes,
+                     reinterpret_cast<void *>(&wrapper5_hook_entry)) ||
+       !prepare_hook(g_wrapper6_hook,k_rva_wrapper_type6,k_wrapper_bytes,
+                     reinterpret_cast<void *>(&wrapper6_hook_entry)) ||
+       !prepare_hook(g_blend_hook,k_rva_true_blend,k_blend_bytes,
+                     reinterpret_cast<void *>(&blend_hook_entry)) ||
+       !prepare_hook(g_steady_hook,k_rva_steady_packer,k_steady_bytes,
+                     reinterpret_cast<void *>(&steady_hook_entry))){
+        uninstall_upper_lower();
+        return false;
+    }
+
+    g_wrapper5_original = reinterpret_cast<wrapper_fn>(g_wrapper5_hook.trampoline);
+    g_wrapper6_original = reinterpret_cast<wrapper_fn>(g_wrapper6_hook.trampoline);
+    g_blend_original = reinterpret_cast<blend_fn>(g_blend_hook.trampoline);
+    g_steady_original = reinterpret_cast<steady_fn>(g_steady_hook.trampoline);
+
+    if(!patch_hook(g_wrapper5_hook) ||
+       !patch_hook(g_wrapper6_hook) ||
+       !patch_hook(g_blend_hook) ||
+       !patch_hook(g_steady_hook)){
+        uninstall_upper_lower();
+        return false;
+    }
+    return true;
+}
+
+void uninstall_upper_lower() noexcept
+{
+    restore_hook(g_steady_hook);
+    restore_hook(g_blend_hook);
+    restore_hook(g_wrapper6_hook);
+    restore_hook(g_wrapper5_hook);
+    g_wrapper5_original = nullptr;
+    g_wrapper6_original = nullptr;
+    g_blend_original = nullptr;
+    g_steady_original = nullptr;
+    g_ul_callbacks = {};
+}
+
 void uninstall() noexcept
 {
+    uninstall_upper_lower();
     restore_hook(g_selector_hook);
     restore_hook(g_mtd_hook);
     g_selector_trampoline = nullptr;
