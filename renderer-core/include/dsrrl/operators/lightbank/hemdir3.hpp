@@ -44,6 +44,7 @@ enum class hemdir3_runtime_reason : std::uint8_t {
     ready = 0,
     core_gate_not_active,
     semantic_mode_not_hemdir3,
+    semantic_mode_provenance_not_verified,
     upper_lower_source_not_ready,
     d123_source_not_ready,
     b13_carrier_not_ready,
@@ -56,8 +57,16 @@ enum class hemdir3_runtime_reason : std::uint8_t {
     draw_transaction_not_ready
 };
 
+enum class hemdir3_semantic_mode_provenance : std::uint8_t {
+    unknown = 0,
+    ordinary_direct,
+    exact_effective_mode2
+};
+
 struct hemdir3_runtime_context {
     std::uint32_t semantic_mode = 0;
+    hemdir3_semantic_mode_provenance semantic_mode_provenance =
+        hemdir3_semantic_mode_provenance::unknown;
     bool upper_lower_source_ready = false;
     bool d123_source_ready = false;
     bool b13_carrier_ready = false;
