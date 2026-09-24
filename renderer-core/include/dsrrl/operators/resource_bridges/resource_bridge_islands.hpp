@@ -2,6 +2,7 @@
 
 #include "dsrrl/operators/known_operator_island.hpp"
 #include "dsrrl/operators/resource_bridges/spec_rgb_bridge.hpp"
+#include "dsrrl/operators/resource_bridges/normal_bridge.hpp"
 
 namespace dsrrl::operators::resource_bridges {
 

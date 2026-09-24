@@ -439,6 +439,102 @@ int main()
     spec_route = operators::resource_bridges::evaluate_spec_rgb_route(spec_ctx);
     CHECK(spec_route.reason == operators::resource_bridges::spec_rgb_reason::stock_t1_not_preserved);
 
+    // Normal bridge: exact receiver + actual bound t2 identity + exact
+    // PTDE sidecar, authorized either by homologous Bmp material route or by a
+    // pre-certified application-bound t0+t1+t2 tuple.
+    CHECK(gates.set(core::operator_id::normal, true));
+    activation = operators::resource_bridges::normal.evaluate(gates, verified);
+    CHECK(activation.state == core::island_state::active);
+
+    operators::resource_bridges::normal_bridge_context normal_ctx;
+    normal_ctx.receiver_id = 24;
+    normal_ctx.authority =
+        operators::resource_bridges::normal_route_authority::homologous_material_route;
+    normal_ctx.homologous_bmp_material_route = true;
+    normal_ctx.target_unambiguous = true;
+    normal_ctx.actual_bound_t2_verified = true;
+    normal_ctx.exact_ptde_normal_sidecar_verified = true;
+    normal_ctx.ptde_srv_ready = true;
+    normal_ctx.preserve_stock_s2 = true;
+
+    auto normal_route =
+        operators::resource_bridges::evaluate_normal_route(normal_ctx);
+    CHECK(normal_route.action ==
+          operators::resource_bridges::normal_action::bind_ptde_t2);
+    CHECK(normal_route.reason ==
+          operators::resource_bridges::normal_reason::active);
+    CHECK(normal_route.srv_slot == 2u);
+    CHECK(normal_route.sampler_slot == 2u);
+    CHECK(normal_route.preserve_stock_sampler);
+
+    normal_ctx.receiver_id = 35;
+    normal_route =
+        operators::resource_bridges::evaluate_normal_route(normal_ctx);
+    CHECK(normal_route.action ==
+          operators::resource_bridges::normal_action::bind_ptde_t2);
+
+    normal_ctx.receiver_id = 36;
+    normal_route =
+        operators::resource_bridges::evaluate_normal_route(normal_ctx);
+    CHECK(normal_route.action ==
+          operators::resource_bridges::normal_action::preserve_host);
+    CHECK(normal_route.reason ==
+          operators::resource_bridges::normal_reason::unsupported_receiver);
+
+    normal_ctx.receiver_id = 24;
+    normal_ctx.authority =
+        operators::resource_bridges::normal_route_authority::safe_exact_resource_tuple;
+    normal_ctx.homologous_bmp_material_route = false;
+    normal_ctx.safe_exact_t0_t1_t2_tuple = true;
+    normal_route =
+        operators::resource_bridges::evaluate_normal_route(normal_ctx);
+    CHECK(normal_route.action ==
+          operators::resource_bridges::normal_action::bind_ptde_t2);
+
+    normal_ctx.safe_exact_t0_t1_t2_tuple = false;
+    normal_route =
+        operators::resource_bridges::evaluate_normal_route(normal_ctx);
+    CHECK(normal_route.action ==
+          operators::resource_bridges::normal_action::preserve_host);
+    CHECK(normal_route.reason ==
+          operators::resource_bridges::normal_reason::route_not_authorized);
+
+    normal_ctx.authority =
+        operators::resource_bridges::normal_route_authority::homologous_material_route;
+    normal_ctx.homologous_bmp_material_route = false;
+    normal_route =
+        operators::resource_bridges::evaluate_normal_route(normal_ctx);
+    CHECK(normal_route.reason ==
+          operators::resource_bridges::normal_reason::nonhomologous_route);
+
+    normal_ctx.homologous_bmp_material_route = true;
+    normal_ctx.actual_bound_t2_verified = false;
+    normal_route =
+        operators::resource_bridges::evaluate_normal_route(normal_ctx);
+    CHECK(normal_route.reason ==
+          operators::resource_bridges::normal_reason::actual_t2_not_verified);
+
+    normal_ctx.actual_bound_t2_verified = true;
+    normal_ctx.target_unambiguous = false;
+    normal_route =
+        operators::resource_bridges::evaluate_normal_route(normal_ctx);
+    CHECK(normal_route.reason ==
+          operators::resource_bridges::normal_reason::ambiguous_target);
+
+    normal_ctx.target_unambiguous = true;
+    normal_ctx.exact_ptde_normal_sidecar_verified = false;
+    normal_route =
+        operators::resource_bridges::evaluate_normal_route(normal_ctx);
+    CHECK(normal_route.reason ==
+          operators::resource_bridges::normal_reason::ptde_sidecar_not_verified);
+
+    normal_ctx.exact_ptde_normal_sidecar_verified = true;
+    normal_ctx.preserve_stock_s2 = false;
+    normal_route =
+        operators::resource_bridges::evaluate_normal_route(normal_ctx);
+    CHECK(normal_route.reason ==
+          operators::resource_bridges::normal_reason::sampler_contract_not_preserved);
+
     CHECK(gates.set(core::operator_id::post_hdr, true));
     activation = operators::postprocess::hdr.evaluate(gates, verified);
     CHECK(activation.state == core::island_state::fail_open);

@@ -211,6 +211,33 @@ This closes the bridge's core routing policy, not the resource-loader implementa
 or per-route runtime attestation. The existing FULL24/Spec-only lineage remains
 provenance for those later integration layers.
 
+## Source-complete routing contract: PTDE equipment Normal
+
+`bridge.normal_resource` now has an explicit conservative routing contract for the
+stable no-PointLight DifSpcBmp HemEnv receiver family 24..35. The bridge may replace
+only the actually bound DSR `t2/g_Bumpmap` resource, and authorization must come from
+one of two already-certified semantic cuts:
+
+1. an exact homologous PTDE Bmp material route; or
+2. a pre-certified exact application-bound `t0+t1+t2` resource-signature tuple.
+
+Both paths additionally require an unambiguous logical target, exact PTDE normal
+sidecar identity and a ready PTDE SRV. The host `s2` sampler contract is preserved;
+the core does not guess a replacement sampler. Any mismatch fails open to stock DSR
+`t2`.
+
+Filename-derived `_s -> _n` inference is intentionally absent because retained FLVER
+evidence falsifies that shortcut. DSR-added NONHOMOLOGOUS bump routes such as
+`P[D].mtd` and `P_Leather[DS].mtd` therefore receive no authorization.
+`Ps_Body[DSBT].mtd` remains a separate Subsurf path and non-stable receivers are
+outside this island.
+
+The prior V12 single-addon lineage already demonstrated runtime liveness and t2
+activation for the tested ordinary DifSpcBmp equipment path. This core addition
+reconstructs the routing policy source-completely; it does not claim that the new
+Renderer Core integration has itself been runtime-tested or that PTDE pixel
+equivalence is closed.
+
 ## Legacy A1/P2.2 decomposition
 
 The old combined mask is decomposed by ownership:

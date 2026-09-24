@@ -138,6 +138,39 @@
       "resource_loader_port": "PENDING",
       "per_route_runtime_attestation": "PARTIAL_LINEAGE_NOT_CORE",
       "pixel": "OPEN"
+    },
+    "normal": {
+      "routing_contract": "SOURCE_COMPLETE",
+      "canonical_basis": [
+        "project.renderer.equipment_normal_material_route_gate_v1",
+        "project.renderer.equipment_normal_resource_tuple_route_gate_v1"
+      ],
+      "receiver_range": [
+        24,
+        35
+      ],
+      "srv_slot": 2,
+      "sampler_slot": 2,
+      "authorization": [
+        "HOMOLOGOUS_BMP_MATERIAL_ROUTE",
+        "SAFE_EXACT_APPLICATION_BOUND_T0_T1_T2_TUPLE"
+      ],
+      "required_guards": [
+        "actual_bound_t2_verified",
+        "target_unambiguous",
+        "exact_ptde_normal_sidecar_verified",
+        "ptde_srv_ready",
+        "preserve_stock_s2"
+      ],
+      "forbidden_inference": "SPEC_NAME_TO_NORMAL_NAME",
+      "explicit_fail_open_nonhomologous": [
+        "P[D].mtd",
+        "P_Leather[DS].mtd"
+      ],
+      "separate_subsurf": "Ps_Body[DSBT].mtd",
+      "prior_runtime_lineage": "V12 ordinary DifSpcBmp activation PASS",
+      "renderer_core_runtime": "NOT_TESTED",
+      "pixel": "OPEN"
     }
   },
   "legacy_a1": {
