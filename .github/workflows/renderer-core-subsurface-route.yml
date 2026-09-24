@@ -1,0 +1,32 @@
+name: Renderer Core Subsurface Route Contract
+
+on:
+  push:
+    branches:
+      - agent/subsurf-route-contract-20260924
+      - dev/renderer-core-v1-islands
+    paths:
+      - "renderer-core/include/dsrrl/operators/resource_bridges/subsurface_route.hpp"
+      - "renderer-core/tests/subsurface_route_tests.cpp"
+      - "renderer-core/docs/SUBSURFACE_PTDE_PLAIN_ROUTE.md"
+      - ".github/workflows/renderer-core-subsurface-route.yml"
+  pull_request:
+    paths:
+      - "renderer-core/include/dsrrl/operators/resource_bridges/subsurface_route.hpp"
+      - "renderer-core/tests/subsurface_route_tests.cpp"
+      - "renderer-core/docs/SUBSURFACE_PTDE_PLAIN_ROUTE.md"
+      - ".github/workflows/renderer-core-subsurface-route.yml"
+
+jobs:
+  subsurface-route-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile Subsurface route contract tests
+        run: |
+          c++ -std=c++17 -Wall -Wextra -Wpedantic -Werror \
+            -Irenderer-core/include \
+            renderer-core/tests/subsurface_route_tests.cpp \
+            -o /tmp/subsurface_route_tests
+      - name: Run Subsurface route contract tests
+        run: /tmp/subsurface_route_tests
