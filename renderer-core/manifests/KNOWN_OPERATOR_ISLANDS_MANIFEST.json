@@ -207,6 +207,49 @@
       "future_reopen_condition": "NARROW_RGB_ONLY_BODY_REWRITE_OR_DIRECT_ALPHA_EQUIVALENCE_PROOF_FOR_EXACT_GATED_SUBCLASS",
       "default": "BLOCKED_FAIL_OPEN",
       "pixel": "OPEN"
+    },
+    "subsurface": {
+      "target_contract": "renderer.core.islands.subsurface_plain_route_contract_v1",
+      "target_status": "HIGH CONFIDENCE",
+      "carrier_contract": "renderer.core.islands.subsurface_create_time_bypass_carrier_v1",
+      "carrier_revision": 8873,
+      "carrier_status": "CONFIRMED",
+      "carrier": "CREATE_TIME_PIXEL_SHADER_SUBSTITUTION",
+      "source_material": "Ps_Body[DSBT].mtd",
+      "ptde_donor": "Ps_Body[DSB].mtd",
+      "receiver_pairs": 3,
+      "target_receiver_ids": [
+        33,
+        34,
+        35
+      ],
+      "abi": {
+        "isgn": "IDENTICAL_3_OF_3",
+        "osgn": "IDENTICAL_3_OF_3",
+        "constant_buffers": "SEMANTIC_LAYOUT_IDENTICAL_3_OF_3",
+        "target_resources": "STRICT_SUBSET_3_OF_3",
+        "removed_only": [
+          "t10 gSMP_10",
+          "s10 gSMP_10Sampler"
+        ]
+      },
+      "required_before_route": [
+        "exact DSR material identity",
+        "exact HemEnvSubsurf source receiver identity",
+        "body texture identity",
+        "stable no-PointLight draw path",
+        "exact PTDE slot/donor identity",
+        "explicit plain-surface target verification",
+        "target ordinary receiver ready",
+        "SpecRGB route ready",
+        "Diffuse route ready",
+        "Normal route ready",
+        "Material Response route ready",
+        "bypass carrier ready"
+      ],
+      "fail_open": "PRESERVE_STOCK_DSR_SUBSURF",
+      "runtime": "NOT_TESTED",
+      "pixel": "OPEN"
     }
   },
   "legacy_a1": {
