@@ -80,7 +80,9 @@ k_runtime_feature_manifest = {{
     {core::operator_id::dsr_sfx_inverse_tonemap,
      runtime_feature_stage::host_preserve,runtime_boot_policy::hold_off,"dsr_sfx_inverse_tonemap"},
     {core::operator_id::pmetal_black_safe_source,
-     runtime_feature_stage::current_wired,runtime_boot_policy::runtime_preflight,"pmetal_black_safe_source"}
+     runtime_feature_stage::current_wired,runtime_boot_policy::runtime_preflight,"pmetal_black_safe_source"},
+    {core::operator_id::pmetal_black_safe_v10,
+     runtime_feature_stage::current_wired,runtime_boot_policy::enable_immediately,"pmetal_black_safe_v10"}
 }};
 
 constexpr bool runtime_feature_manifest_is_ordered_complete() noexcept
@@ -163,8 +165,8 @@ constexpr std::size_t runtime_boot_preflight_count() noexcept
 }
 
 static_assert(
-    runtime_boot_enabled_count() == 10u,
-    "Ten islands are armed; Subsurface still requires its complete exact draw route.");
+    runtime_boot_enabled_count() == 11u,
+    "Eleven islands are armed; P_Metal V10 remains exact-material/exact-receiver gated.");
 static_assert(
     runtime_boot_preflight_count() == 2u,
     "U/L and exact P_Metal black-safe source are the two runtime-preflight islands.");
