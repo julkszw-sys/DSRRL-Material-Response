@@ -82,6 +82,8 @@ operators::resource_bridges::envdiffuse_runtime_context ready_envdiffuse()
     c.probe_b_srv_ready=true;
     c.sampler_s11_verified=true;
     c.sampler_s13_verified=true;
+    c.sampler_s11=ptde_envdiffuse_sampler();
+    c.sampler_s13=ptde_envdiffuse_sampler();
     c.resource_ownership_ready=true;
     c.draw_restore_ready=true;
     return c;
@@ -214,11 +216,35 @@ int main()
           operators::resource_bridges::envdiffuse_runtime_reason::
               sampler_s13_not_verified);
 
+    // A boolean identity assertion is insufficient: the observed descriptor
+    // itself must match the confirmed PTDE ordinary environment preset.
+    envdiffuse=ready_envdiffuse();
+    envdiffuse.sampler_s11.address_u=
+        operators::resource_bridges::envdiffuse_address_mode::wrap;
+    envdiffuse_plan=
+        operators::resource_bridges::evaluate_envdiffuse_runtime_readiness(
+            features,activation,envdiffuse);
+    CHECK(!envdiffuse_plan.ready);
+    CHECK(envdiffuse_plan.reason==
+          operators::resource_bridges::envdiffuse_runtime_reason::
+              sampler_s11_not_verified);
+
+    envdiffuse=ready_envdiffuse();
+    envdiffuse.sampler_s13.max_anisotropy=2u;
+    envdiffuse_plan=
+        operators::resource_bridges::evaluate_envdiffuse_runtime_readiness(
+            features,activation,envdiffuse);
+    CHECK(!envdiffuse_plan.ready);
+    CHECK(envdiffuse_plan.reason==
+          operators::resource_bridges::envdiffuse_runtime_reason::
+              sampler_s13_not_verified);
+
     envdiffuse=ready_envdiffuse();
     envdiffuse.receiver_family=
         operators::resource_bridges::envdiffuse_receiver_family::heme_env;
     envdiffuse.probe_b_srv_ready=false;
     envdiffuse.sampler_s13_verified=false;
+    envdiffuse.sampler_s13={};
     envdiffuse_plan=
         operators::resource_bridges::evaluate_envdiffuse_runtime_readiness(
             features,activation,envdiffuse);

@@ -12,6 +12,66 @@ enum class envdiffuse_receiver_family : std::uint8_t {
     heme_env_lerp
 };
 
+enum class envdiffuse_filter_mode : std::uint8_t {
+    unknown = 0,
+    point,
+    linear,
+    anisotropic
+};
+
+enum class envdiffuse_address_mode : std::uint8_t {
+    unknown = 0,
+    wrap,
+    mirror,
+    clamp,
+    border
+};
+
+struct envdiffuse_sampler_descriptor {
+    bool observed = false;
+    envdiffuse_filter_mode min_filter = envdiffuse_filter_mode::unknown;
+    envdiffuse_filter_mode mag_filter = envdiffuse_filter_mode::unknown;
+    envdiffuse_filter_mode mip_filter = envdiffuse_filter_mode::unknown;
+    envdiffuse_address_mode address_u = envdiffuse_address_mode::unknown;
+    envdiffuse_address_mode address_v = envdiffuse_address_mode::unknown;
+    envdiffuse_address_mode address_w = envdiffuse_address_mode::unknown;
+    std::uint32_t max_anisotropy = 0u;
+    bool mip0_only = false;
+};
+
+// Exact ordinary PTDE environment-cube sampler used by EnvDiffuse s11/s13.
+// This is a semantic descriptor, not a D3D9/D3D11 ABI struct, so runtime
+// capture can normalize API-specific state before authorizing the bridge.
+inline constexpr envdiffuse_sampler_descriptor ptde_envdiffuse_sampler() noexcept
+{
+    return {
+        true,
+        envdiffuse_filter_mode::anisotropic,
+        envdiffuse_filter_mode::anisotropic,
+        envdiffuse_filter_mode::linear,
+        envdiffuse_address_mode::mirror,
+        envdiffuse_address_mode::mirror,
+        envdiffuse_address_mode::wrap,
+        1u,
+        true
+    };
+}
+
+inline constexpr bool matches_ptde_envdiffuse_sampler(
+    const envdiffuse_sampler_descriptor &sampler) noexcept
+{
+    return sampler.observed &&
+           sampler.min_filter == envdiffuse_filter_mode::anisotropic &&
+           sampler.mag_filter == envdiffuse_filter_mode::anisotropic &&
+           sampler.mip_filter == envdiffuse_filter_mode::linear &&
+           sampler.address_u == envdiffuse_address_mode::mirror &&
+           sampler.address_v == envdiffuse_address_mode::mirror &&
+           sampler.address_w == envdiffuse_address_mode::wrap &&
+           sampler.max_anisotropy == 1u &&
+           sampler.mip0_only;
+}
+
+
 enum class envdiffuse_runtime_reason : std::uint8_t {
     ready = 0,
     core_gate_not_active,
@@ -47,6 +107,8 @@ struct envdiffuse_runtime_context {
     bool probe_b_srv_ready = false;
     bool sampler_s11_verified = false;
     bool sampler_s13_verified = false;
+    envdiffuse_sampler_descriptor sampler_s11{};
+    envdiffuse_sampler_descriptor sampler_s13{};
     bool resource_ownership_ready = false;
     bool draw_restore_ready = false;
 };
@@ -125,12 +187,14 @@ inline envdiffuse_runtime_plan evaluate_envdiffuse_runtime_readiness(
         out.reason = envdiffuse_runtime_reason::probe_b_not_ready;
         return out;
     }
-    if (!context.sampler_s11_verified) {
+    if (!context.sampler_s11_verified ||
+        !matches_ptde_envdiffuse_sampler(context.sampler_s11)) {
         out.reason = envdiffuse_runtime_reason::sampler_s11_not_verified;
         return out;
     }
     if (context.receiver_family == envdiffuse_receiver_family::heme_env_lerp &&
-        !context.sampler_s13_verified) {
+        (!context.sampler_s13_verified ||
+         !matches_ptde_envdiffuse_sampler(context.sampler_s13))) {
         out.reason = envdiffuse_runtime_reason::sampler_s13_not_verified;
         return out;
     }
