@@ -860,15 +860,26 @@ bool on_draw_indexed(command_list *cmd,std::uint32_t index_count,std::uint32_t i
 
     const bool pmetal_exact_route =
         !body_route &&
+        donor==k_pmetal_route &&
         std::string_view(don.sha256)==k_pmetal_raw_mtd_sha256 &&
         receiver_id>=33u && receiver_id<=35u;
-    const bool pmetal_feature =
+
+    const bool pmetal_v10_feature =
         pmetal_exact_route &&
+        g_core->features().enabled(core::operator_id::pmetal_black_safe_v10);
+
+    // V13 remains preserved as a separately preflighted research/runtime path,
+    // but it must not supersede the owner-accepted V10 result. It is also a
+    // stable-receiver island, not a generic HemEnvLerp consumer.
+    const bool pmetal_v13_feature =
+        pmetal_exact_route &&
+        !g_bound_lerp &&
+        !pmetal_v10_feature &&
         g_core->features().enabled(core::operator_id::pmetal_black_safe_source);
 
     upper_lower::pmetal_env_source pmetal_source{};
     bool pmetal_candidate=false;
-    if(pmetal_feature){
+    if(pmetal_v13_feature){
         if(upper_lower::selected_pmetal_env_source(pmetal_source)){
             ++g_v13_source_ready;
             pmetal_candidate=pmetal_native_env_ready(ctx,pmetal_source.beta);
@@ -881,6 +892,7 @@ bool on_draw_indexed(command_list *cmd,std::uint32_t index_count,std::uint32_t i
     bool restore_ok=true;
     bool intended_ul=false;
     bool spec_active=false;
+    bool pmetal_v10_active=false;
     bool pmetal_active=false;
     bool tx_started=false;
     std::uint64_t command=0;
@@ -907,29 +919,54 @@ bool on_draw_indexed(command_list *cmd,std::uint32_t index_count,std::uint32_t i
             std::lock_guard lock(g_device_mutex);
             if(g_device.device==dev){
                 const auto i=static_cast<std::size_t>(g_bound_host);
+
+                ID3D11PixelShader *base_diffuse =
+                    g_bound_lerp ? g_device.lerp_diffuse[i] : g_device.diffuse[i];
+                ID3D11PixelShader *base_full =
+                    g_bound_lerp ? g_device.lerp_full[i] : g_device.full[i];
+                ID3D11PixelShader *base_diffuse_ul =
+                    g_bound_lerp ? g_device.lerp_diffuse_ul[i] : g_device.diffuse_ul[i];
+                ID3D11PixelShader *base_full_ul =
+                    g_bound_lerp ? g_device.lerp_full_ul[i] : g_device.full_ul[i];
+                ID3D11PixelShader *base_full_spec =
+                    g_bound_lerp ? g_device.lerp_full_spec[i] : g_device.full_spec[i];
+                ID3D11PixelShader *base_full_ul_spec =
+                    g_bound_lerp ? g_device.lerp_full_ul_spec[i] : g_device.full_ul_spec[i];
+
                 ID3D11PixelShader *ul_shader =
-                    don.has_c101 ? g_device.full_ul[i] : g_device.diffuse_ul[i];
+                    don.has_c101 ? base_full_ul : base_diffuse_ul;
                 intended_ul=ul_candidate && ul_shader!=nullptr;
 
                 if(spec_candidate){
                     ID3D11PixelShader *spec_shader =
-                        intended_ul ? g_device.full_ul_spec[i] : g_device.full_spec[i];
+                        intended_ul ? base_full_ul_spec : base_full_spec;
                     spec_active=spec_shader!=nullptr;
                 }
 
                 if(don.has_c101){
                     fallback_replacement =
-                        intended_ul && spec_active ? g_device.full_ul_spec[i] :
-                        intended_ul ? g_device.full_ul[i] :
-                        spec_active ? g_device.full_spec[i] :
-                                      g_device.full[i];
+                        intended_ul && spec_active ? base_full_ul_spec :
+                        intended_ul ? base_full_ul :
+                        spec_active ? base_full_spec :
+                                      base_full;
                 }else{
                     fallback_replacement =
-                        intended_ul ? g_device.diffuse_ul[i] : g_device.diffuse[i];
+                        intended_ul ? base_diffuse_ul : base_diffuse;
                 }
                 if(fallback_replacement) fallback_replacement->AddRef();
 
-                if(pmetal_candidate && don.has_c101){
+                if(pmetal_v10_feature && don.has_c101){
+                    ID3D11PixelShader *v10 =
+                        intended_ul && spec_active ? g_device.v9a_full_ul_spec[i] :
+                        intended_ul ? g_device.v9a_full_ul[i] :
+                        spec_active ? g_device.v9a_full_spec[i] :
+                                      g_device.v9a_full[i];
+                    if(v10){
+                        replacement=v10;
+                        replacement->AddRef();
+                        pmetal_v10_active=true;
+                    }
+                }else if(pmetal_candidate && don.has_c101){
                     ID3D11PixelShader *v13 =
                         intended_ul && spec_active ? g_device.full_v13_ul_spec[i] :
                         intended_ul ? g_device.full_v13_ul[i] :
@@ -942,6 +979,8 @@ bool on_draw_indexed(command_list *cmd,std::uint32_t index_count,std::uint32_t i
                     }
                 }
 
+                // V10 failure is deliberately ordinary-MR fail-open, not a
+                // fallback into the less-proven V13 consumer.
                 if(!replacement && fallback_replacement){
                     replacement=fallback_replacement;
                     fallback_replacement=nullptr;
@@ -980,6 +1019,12 @@ bool on_draw_indexed(command_list *cmd,std::uint32_t index_count,std::uint32_t i
                 plan.patches[plan.patch_count++]={core::operator_id::subsurface,0u,true,false};
             if(spec_active)
                 plan.patches[plan.patch_count++]={core::operator_id::spec_rgb,0u,true,true};
+            if(pmetal_v10_active)
+                plan.patches[plan.patch_count++]={
+                    core::operator_id::pmetal_black_safe_v10,
+                    0u,
+                    true,
+                    false};
             if(pmetal_active)
                 plan.patches[plan.patch_count++]={
                     core::operator_id::pmetal_black_safe_source,
@@ -1049,7 +1094,7 @@ bool on_draw_indexed(command_list *cmd,std::uint32_t index_count,std::uint32_t i
                 if(!tx_restored || !restore_ok){
                     ++g_restore_fail;
                     g_quarantined.store(true);
-                    log_error("DSRRL Runtime v1 MR: unified draw restore fault; MR/SpecRGB/U/L/V13 transaction quarantined.");
+                    log_error("DSRRL Runtime v1 MR: unified draw restore fault; MR/SpecRGB/U/L/PMetal transaction quarantined.");
                 }
             }else{
                 ++g_fail_open;
@@ -1074,7 +1119,21 @@ bool on_draw_indexed(command_list *cmd,std::uint32_t index_count,std::uint32_t i
         }
     }else{
         ++g_replays;
+        if(g_bound_lerp) ++g_lerp_replays;
         if(body_route) ++g_subsurface_replays;
+
+        if(pmetal_v10_active){
+            ++g_v10_replays;
+            if(!g_v10_first_draw_logged.exchange(true)){
+                std::ostringstream os;
+                os<<"[DSRRL V10 PMETAL] FIRST_DRAW receiver="<<receiver_id
+                  <<" lerp="<<(g_bound_lerp?1:0)
+                  <<" ul="<<(intended_ul?1:0)
+                  <<" spec="<<(spec_active?1:0);
+                log_info(os.str());
+            }
+        }
+
         if(pmetal_active){
             ++g_v13_replay;
             if(!g_v13_first_draw_logged.exchange(true)){
