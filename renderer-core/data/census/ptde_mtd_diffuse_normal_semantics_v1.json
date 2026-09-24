@@ -1,0 +1,58 @@
+{
+  "schema": 1,
+  "census": "PTDE/DSR Diffuse + Normal/Bump exact-resource semantic census",
+  "basis_git_head": "ad1819451cb7d4503f53a699c6acbe207ecdc30c",
+  "states": ["USE", "NO_USE", "UNKNOWN"],
+  "runtime_activation": "OPEN",
+  "pixel_equivalence": "OPEN",
+  "identity_policy": "Resource presence is classified only from exact recovered route tuples. This census does not infer operator absence from MTD or texture names. Missing exact identity is UNKNOWN/fail-open.",
+  "sources": [
+    {
+      "path": "renderer-core/data/provenance/diffuse_routes_v12.tsv",
+      "recovered_source": "recovered-source/1.45/v12/asset_integrated_v12.c",
+      "recovered_source_sha256": "879b3ec251c36969cf7eabcc5b63164da7c17b6577e74b013e47f7866b3236e2",
+      "canonical_pair_count": 528,
+      "represented_safe_flver_rows": 3446,
+      "unique_diffuse_target_hashes": 524
+    },
+    {
+      "path": "renderer-core/data/provenance/normal_routes_v12.tsv",
+      "recovered_source": "recovered-source/1.45/v12/asset_integrated_v12.c",
+      "recovered_source_sha256": "879b3ec251c36969cf7eabcc5b63164da7c17b6577e74b013e47f7866b3236e2",
+      "normal_triples_block_sha256": "c1e3e4f93f67c73ce638b4952f5ee028747a3364a7c0254d950e931ee1942764",
+      "canonical_tuple_count": 557,
+      "represented_safe_flver_rows": 3872,
+      "unique_logical_name_hashes_t0_t1_t2": 1664
+    }
+  ],
+  "classifications": {
+    "diffuse_exact_resource_route": {
+      "state": "USE",
+      "confidence": "CONFIRMED",
+      "scope": "each of the 528 exact spec_hash + diffuse_hash route rows in diffuse_routes_v12.tsv",
+      "meaning": "the exact routed material slot consumes the recovered diffuse resource target",
+      "does_not_prove": ["runtime bridge activation", "pixel equivalence", "NO_USE for resources absent from this corpus"]
+    },
+    "normal_bump_exact_resource_route": {
+      "state": "USE",
+      "confidence": "CONFIRMED",
+      "scope": "each of the 557 exact diffuse_hash + spec_hash + normal_hash route rows in normal_routes_v12.tsv",
+      "meaning": "the exact routed material slot consumes the recovered normal/bump resource target",
+      "does_not_prove": ["normal-space equivalence", "runtime bridge activation", "pixel equivalence", "NO_USE for resources absent from this corpus"]
+    }
+  },
+  "coverage": {
+    "diffuse_exact_pairs": 528,
+    "diffuse_safe_flver_rows": 3446,
+    "diffuse_unique_targets": 524,
+    "normal_exact_tuples": 557,
+    "normal_safe_flver_rows": 3872,
+    "normal_unique_logical_hashes": 1664
+  },
+  "default": {
+    "diffuse": "UNKNOWN",
+    "normal_bump": "UNKNOWN",
+    "action": "preserve host / fail-open"
+  },
+  "integration_policy": "Join these resource-route facts into the unified MTD census only when the exact material-slot/FLVER ownership route is available. Do not upgrade a whole MTD family to USE or NO_USE from a texture-name heuristic."
+}
