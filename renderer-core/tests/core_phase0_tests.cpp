@@ -63,6 +63,12 @@ int main()
     rx.capabilities = operator_bit(operator_id::upper_lower) |
                       operator_bit(operator_id::spec_rgb) |
                       operator_bit(operator_id::hemdir3);
+
+    receiver_descriptor nonexact = rx;
+    nonexact.receiver_id = 34;
+    nonexact.exact_sha256 = {};
+    CHECK(!core.receivers().register_receiver(nonexact));
+
     CHECK(core.receivers().register_receiver(rx));
     CHECK(core.receivers().resolve(rx.fast_hash, rx.exact_sha256).has_value());
     CHECK(!core.receivers().resolve(rx.fast_hash, digest(8)).has_value());
