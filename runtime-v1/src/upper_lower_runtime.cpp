@@ -520,6 +520,11 @@ void __fastcall hook_v13_env_blend(
 
     if(!g_prod.active || !g_pmetal_env_enabled.load())
         return;
+    if(!std::isfinite(beta)){
+        g_prod.have_pmetal_env=false;
+        ++g_pmetal_env_miss;
+        return;
+    }
 
     f4 a{},b{};
     std::uint64_t bank_a=0,bank_b=0;
