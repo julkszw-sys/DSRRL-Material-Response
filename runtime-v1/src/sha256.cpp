@@ -30,10 +30,13 @@ struct ctx {
  }
  void update(const std::uint8_t *p,std::size_t n){ total += n; while(n){ auto take=std::min(n,64-used); std::copy_n(p,take,buf.data()+used); used+=take;p+=take;n-=take; if(used==64){block(buf.data());used=0;} } }
  sha256_digest finish(){
-  const std::uint64_t bits=total*8; buf[used++]=0x80; if(used>56){std::fill(buf.begin()+used,buf.end(),0);block(buf.data());used=0;} std::fill(buf.begin()+used,buf.begin()+56,0);
+  const std::uint64_t bits=total*8; buf[used++]=0x80; if(used>56){std::fill(buf.begin()+used,buf.end(),std::uint8_t{0});block(buf.data());used=0;} std::fill(buf.begin()+used,buf.begin()+56,std::uint8_t{0});
   for(int i=0;i<8;++i) { buf[63-i]=std::uint8_t(bits>>(8*i)); }
   block(buf.data());
-  sha256_digest out{}; for(int i=0;i<8;++i){out[4*i]=h[i]>>24;out[4*i+1]=h[i]>>16;out[4*i+2]=h[i]>>8;out[4*i+3]=h[i];} return out;
+  sha256_digest out{}; for(int i=0;i<8;++i){out[4*i]=static_cast<std::uint8_t>(h[i]>>24);
+   out[4*i+1]=static_cast<std::uint8_t>(h[i]>>16);
+   out[4*i+2]=static_cast<std::uint8_t>(h[i]>>8);
+   out[4*i+3]=static_cast<std::uint8_t>(h[i]);} return out;
  }
 };
 int hexv(char c){ if(c>='0'&&c<='9')return c-'0'; if(c>='a'&&c<='f')return c-'a'+10; if(c>='A'&&c<='F')return c-'A'+10; return -1; }
