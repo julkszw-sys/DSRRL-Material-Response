@@ -12,14 +12,29 @@ enum class operator_id : std::uint8_t {
     hemdir3,
     spec_rgb,
     env_spec,
+    envspec_nospc_delete,
+    envspec_pmetal_diagnostic,
+    env_diffuse,
     point_light,
+    pointlight_pnts_attenuation,
+    local_specular_legacy,
     subsurface,
     diffuse,
     normal,
+    diffuse_material_domain,
+    terminal_sat_rgb,
+    terminal_sat_rgba,
+    fixed_postfog_identity,
+    faceeye_shadow_legacy,
+    post_bloom,
+    post_hdr,
+    dsr_native_sfx,
+    dsr_sfx_inverse_tonemap,
     count
 };
 
 constexpr std::size_t operator_count = static_cast<std::size_t>(operator_id::count);
+static_assert(operator_count <= 32, "operator_mask is a 32-bit ABI.");
 
 enum class context_kind : std::uint8_t {
     unknown = 0,

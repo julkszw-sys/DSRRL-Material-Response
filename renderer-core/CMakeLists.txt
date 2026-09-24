@@ -12,6 +12,9 @@ add_library(dsrrl_renderer_core STATIC
     src/shader_registry.cpp
     src/draw_transaction.cpp
     src/renderer_core.cpp
+    src/operator_catalog.cpp
+    src/island_policy.cpp
+    src/operators/legacy_plan/a1_mask_decomposition.cpp
     src/operators/material_response/material_response_island.cpp
     src/operators/material_response/material_response_seed.cpp
     src/operators/env_spec/env_spec_island.cpp

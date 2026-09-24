@@ -1,6 +1,7 @@
 #pragma once
 
 #include "dsrrl/operators/material_response/material_response_island.hpp"
+#include "dsrrl/operators/known_operator_island.hpp"
 
 #include <cstdint>
 
@@ -23,5 +24,9 @@ public:
         material_response::ptde_envspec_presence presence,
         bool ptde_bridge_ready) noexcept;
 };
+
+inline constexpr known_operator_island legacy{core::operator_id::env_spec};
+inline constexpr known_operator_island no_spc_delete{core::operator_id::envspec_nospc_delete};
+inline constexpr known_operator_island pmetal_diagnostic{core::operator_id::envspec_pmetal_diagnostic};
 
 } // namespace dsrrl::operators::env_spec

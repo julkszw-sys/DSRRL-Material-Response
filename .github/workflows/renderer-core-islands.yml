@@ -23,6 +23,18 @@ jobs:
             --input renderer-core/data/material_response_routes_v1.json \
             --output /tmp/generated_routes_v1.hpp
           cmp /tmp/generated_routes_v1.hpp renderer-core/include/dsrrl/operators/material_response/generated_routes_v1.hpp
+      - name: Verify operator catalog
+        run: |
+          python3 renderer-core/tools/verify_operator_catalog.py \
+            --input renderer-core/data/operator_catalog_v1.json \
+            --stamp /tmp/operator_catalog_stamp.json
+          test "$(python3 -c 'import json; print(json.load(open("/tmp/operator_catalog_stamp.json"))["operator_count"])')" = "23"
+      - name: Verify A1 island plan index
+        run: |
+          python3 renderer-core/tools/generate_a1_island_plan_index.py \
+            --input renderer-core/data/a1_island_plan_index_v1.json \
+            --output /tmp/generated_a1_plan_index_v1.hpp
+          cmp /tmp/generated_a1_plan_index_v1.hpp renderer-core/include/dsrrl/operators/legacy_plan/generated_a1_plan_index_v1.hpp
       - name: Configure
         run: cmake -S renderer-core -B build/renderer-core -DCMAKE_BUILD_TYPE=Release
       - name: Build

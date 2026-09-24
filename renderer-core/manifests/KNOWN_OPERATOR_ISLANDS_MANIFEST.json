@@ -1,0 +1,74 @@
+{
+  "schema": 1,
+  "component": "DSRRL Renderer Core v1",
+  "phase": "Known Operators + A1 Decomposition",
+  "branch": "dev/renderer-core-v1-islands",
+  "operator_islands": 23,
+  "architecture_contract": "architecture.host_cut",
+  "catalog_source": "dsrrl.shader_math_operators snapshot + five canonical resource/material bridge findings",
+  "safety": {
+    "blocked": "always fail-open to stock DSR",
+    "stock_host": "always preserve DSR",
+    "diagnostic": "requires explicit allow_diagnostic",
+    "nonclosed_legacy_mask_bits": "not automatically migrated",
+    "rejected_legacy_mask_bits": "not automatically migrated",
+    "unknown_legacy_mask_bits": "fail-open / not automatically migrated"
+  },
+  "legacy_a1": {
+    "historical_build_key": "material_response_1_45_expanded_a1_global_materials",
+    "plan_identities": 144,
+    "aliases": 252,
+    "patch_ops_expected": 312,
+    "mask_counts": {
+      "0x0008": 72,
+      "0x0027": 12,
+      "0x00C1": 24,
+      "0x0100": 36
+    },
+    "identity_index": "renderer-core/data/a1_island_plan_index_v1.json",
+    "ops_source": {
+      "source_artifact_id": 253,
+      "source_artifact_sha256": "70b2d91aec619ad2df99a161151d974d8d52269f4040acdd6288ff586a9f8fed",
+      "source_member": "data/PORT_PLAN.json",
+      "source_plan_sha256": "5cc15f8084fb75cb33c27be3f0e94be7fd186f07c16274b33ee09735b747a1ec",
+      "embedded_in_repo": false
+    },
+    "runtime_materialization_source_complete": false
+  },
+  "legacy_a1_mask_owners": {
+    "terminal_sat_rgb": [
+      "0x0001",
+      "0x0008",
+      "0x0100"
+    ],
+    "diffuse_material_domain": [
+      "0x0002",
+      "0x0040"
+    ],
+    "pointlight_pnts_attenuation": [
+      "0x0004"
+    ],
+    "envspec_nospc_delete": [
+      "0x0020"
+    ],
+    "fixed_postfog_identity": [
+      "0x0080"
+    ]
+  },
+  "nonclosed_catalog_bits": {
+    "0x0200": "terminal_sat_rgb HYPOTHESIS/PARTIAL",
+    "0x0400": "diffuse_material_domain HYPOTHESIS/PARTIAL",
+    "0x0800": "terminal_sat_rgb HIGH_CONFIDENCE/PARTIAL",
+    "0x2000": "terminal_sat_rgb HYPOTHESIS/PARTIAL",
+    "0x4000": "terminal_sat_rgba HYPOTHESIS/PARTIAL"
+  },
+  "rejected_catalog_bits": {
+    "0x0010": "WORKFLOW_RAW rejected",
+    "0x1000": "P_Metal fixed-LOD EnvSpec proxy rejected for shared-host automatic migration"
+  },
+  "default_activation": "OFF_OR_CANONICAL_BLOCKED_STOCK",
+  "construction": "PASS_PENDING_FINAL_ATOMIC_CI",
+  "runtime": "NOT_TESTED",
+  "bridge_activation": "NOT_TESTED",
+  "pixel": "OPEN"
+}

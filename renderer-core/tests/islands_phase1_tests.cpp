@@ -1,6 +1,16 @@
 #include "dsrrl/operators/env_spec/env_spec_island.hpp"
 #include "dsrrl/operators/material_response/material_response_island.hpp"
 #include "dsrrl/operators/material_response/material_response_seed.hpp"
+#include "dsrrl/core/island_policy.hpp"
+#include "dsrrl/core/operator_catalog.hpp"
+#include "dsrrl/operators/legacy_plan/a1_mask_decomposition.hpp"
+#include "dsrrl/operators/legacy_plan/generated_a1_plan_index_v1.hpp"
+#include "dsrrl/operators/lightbank/lightbank_islands.hpp"
+#include "dsrrl/operators/point_light/point_light_islands.hpp"
+#include "dsrrl/operators/postprocess/postprocess_islands.hpp"
+#include "dsrrl/operators/resource_bridges/resource_bridge_islands.hpp"
+#include "dsrrl/operators/sfx/sfx_islands.hpp"
+#include "dsrrl/operators/surface/surface_shader_islands.hpp"
 
 #include <iostream>
 #include <optional>
@@ -141,6 +151,120 @@ int main()
     material_response_island seeded;
     CHECK(register_confirmed_material_routes_v1(seeded) == 35);
     CHECK(seeded.material_profile_count() == 35);
+
+    // Complete operator catalog: every operator_id has exactly one contract.
+    const auto &catalog = core::known_operator_catalog();
+    CHECK(catalog.size() == core::operator_count);
+    CHECK(core::operator_count == 23);
+
+    for (std::size_t i = 0; i < catalog.size(); ++i) {
+        CHECK(static_cast<std::size_t>(catalog[i].id) == i);
+        CHECK(catalog[i].operator_key != nullptr);
+        CHECK(catalog[i].canonical_key != nullptr);
+        CHECK(catalog[i].display_name != nullptr);
+        CHECK(catalog[i].fail_open_stock);
+    }
+
+    // Known canonical safety states must remain enforceable independently of
+    // user feature toggles.
+    core::feature_registry gates;
+    core::activation_context verified;
+    verified.receiver_verified = true;
+    verified.material_verified = true;
+    verified.resource_ready = true;
+    verified.producer_ready = true;
+    verified.consumer_verified = true;
+    verified.immediate_context = true;
+    verified.graph_ready = true;
+
+    CHECK(gates.set(core::operator_id::terminal_sat_rgb, true));
+    auto activation = operators::surface::terminal_sat_rgb.evaluate(gates, verified);
+    CHECK(activation.state == core::island_state::active);
+
+    CHECK(gates.set(core::operator_id::post_hdr, true));
+    activation = operators::postprocess::hdr.evaluate(gates, verified);
+    CHECK(activation.state == core::island_state::fail_open);
+    CHECK(activation.reason == core::activation_reason::blocked);
+
+    CHECK(gates.set(core::operator_id::dsr_native_sfx, true));
+    activation = operators::sfx::native_boundary.evaluate(gates, verified);
+    CHECK(activation.state == core::island_state::fail_open);
+    CHECK(activation.reason == core::activation_reason::stock_host_preserved);
+
+    CHECK(gates.set(core::operator_id::terminal_sat_rgba, true));
+    activation = operators::surface::terminal_sat_rgba.evaluate(gates, verified);
+    CHECK(activation.state == core::island_state::fail_open);
+    CHECK(activation.reason == core::activation_reason::diagnostic_not_allowed);
+    verified.allow_diagnostic = true;
+    activation = operators::surface::terminal_sat_rgba.evaluate(gates, verified);
+    CHECK(activation.state == core::island_state::active);
+    verified.allow_diagnostic = false;
+
+    // A1/P2.2 monolithic mask ownership is decomposed into independent islands.
+    auto dec = operators::legacy_plan::decompose_p22_mask(0x27u);
+    CHECK(dec.automatic_migration_safe());
+    CHECK(dec.unknown_bits == 0u);
+    CHECK(dec.nonclosed_bits == 0u);
+    CHECK(dec.rejected_bits == 0u);
+    CHECK(dec.owner_count == 4u);
+    CHECK((dec.closed_bits & 0x01u) != 0u);
+    CHECK((dec.closed_bits & 0x02u) != 0u);
+    CHECK((dec.closed_bits & 0x04u) != 0u);
+    CHECK((dec.closed_bits & 0x20u) != 0u);
+
+    dec = operators::legacy_plan::decompose_p22_mask(0x80000000u);
+    CHECK(dec.owner_count == 0u);
+    CHECK(dec.unknown_bits == 0x80000000u);
+    CHECK(!dec.automatic_migration_safe());
+
+    dec = operators::legacy_plan::decompose_p22_mask(4096u);
+    CHECK(dec.rejected_bits == 4096u);
+    CHECK(!dec.automatic_migration_safe());
+
+    dec = operators::legacy_plan::decompose_p22_mask(512u);
+    CHECK(dec.nonclosed_bits == 512u);
+    CHECK(!dec.automatic_migration_safe());
+
+    CHECK(operators::legacy_plan::legacy_bits_for(core::operator_id::terminal_sat_rgb) ==
+          (1u | 8u | 256u | 512u | 2048u | 8192u));
+    CHECK(operators::legacy_plan::legacy_bits_for(core::operator_id::diffuse_material_domain) ==
+          (2u | 64u | 1024u));
+
+    // Historical Expanded A1 plan identity surface is reproduced exactly at
+    // routing/decomposition level: 144 unique bodies / 252 aliases.
+    CHECK(operators::legacy_plan::generated::k_a1_plan_count_v1 == 144u);
+    std::size_t a1_aliases = 0;
+    std::size_t mask8 = 0;
+    std::size_t mask39 = 0;
+    std::size_t mask193 = 0;
+    std::size_t mask256 = 0;
+    for (const auto &plan : operators::legacy_plan::generated::k_a1_plan_index_v1) {
+        a1_aliases += plan.alias_count;
+        const auto parts = operators::legacy_plan::decompose_p22_mask(plan.legacy_mask);
+        CHECK(parts.automatic_migration_safe());
+        switch (plan.legacy_mask) {
+        case 8u: ++mask8; break;
+        case 39u: ++mask39; break;
+        case 193u: ++mask193; break;
+        case 256u: ++mask256; break;
+        default: CHECK(false);
+        }
+    }
+    CHECK(a1_aliases == 252u);
+    CHECK(mask8 == 72u);
+    CHECK(mask39 == 12u);
+    CHECK(mask193 == 24u);
+    CHECK(mask256 == 36u);
+
+    // Resource/light/point islands resolve to their independent operator IDs.
+    CHECK(operators::resource_bridges::spec_rgb.id() == core::operator_id::spec_rgb);
+    CHECK(operators::resource_bridges::diffuse.id() == core::operator_id::diffuse);
+    CHECK(operators::resource_bridges::normal.id() == core::operator_id::normal);
+    CHECK(operators::resource_bridges::subsurface.id() == core::operator_id::subsurface);
+    CHECK(operators::lightbank::upper_lower.id() == core::operator_id::upper_lower);
+    CHECK(operators::lightbank::hemdir3.id() == core::operator_id::hemdir3);
+    CHECK(operators::point_light::pnts_attenuation.id() ==
+          core::operator_id::pointlight_pnts_attenuation);
 
     std::cout << "dsrrl_renderer_island_tests: PASS\n";
     return 0;
