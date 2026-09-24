@@ -12,7 +12,8 @@ enum class pointlight_receiver_stratum : std::uint8_t {
     fixed_nospc_pntssss,
     fixed_spc_pntss,
     fixed_spc_pntssss,
-    clustered_pnts
+    clustered_nospc_pnts,
+    clustered_spc_pnts
 };
 
 enum class pointlight_source_scope : std::uint8_t {
@@ -38,7 +39,7 @@ enum class pointlight_runtime_reason : std::uint8_t {
     fixed_raw_q_sidecar_not_ready,
     fixed_light_count_mismatch,
     fixed_membership_not_verified,
-    clustered_cpu_membership_sidecar_not_ready,
+    clustered_membership_descriptor_invalid,
     clustered_four_slot_shader_not_ready,
     stock_cluster_membership_not_bypassed,
     diffuse_material_path_not_ready,
@@ -47,6 +48,38 @@ enum class pointlight_runtime_reason : std::uint8_t {
     downstream_atmosphere_not_ready,
     draw_transaction_not_ready
 };
+
+struct clustered_membership_descriptor {
+    bool immutable_draw_local=false;
+    bool ordered_source_identity_ready=false;
+    bool ordered_source_geometry_ready=false;
+    bool ordered_raw_q_ready=false;
+    std::uint8_t raw_selected_count=0;
+    std::uint8_t material_max_pnt_lit_num=0;
+    std::uint8_t effective_count=0;
+};
+
+inline bool clustered_membership_descriptor_ready(
+    const clustered_membership_descriptor &descriptor) noexcept
+{
+    if(!descriptor.immutable_draw_local ||
+       !descriptor.ordered_source_identity_ready ||
+       !descriptor.ordered_source_geometry_ready ||
+       !descriptor.ordered_raw_q_ready)
+        return false;
+
+    if(descriptor.raw_selected_count==0u ||
+       descriptor.raw_selected_count>4u)
+        return false;
+
+    const auto expected=
+        descriptor.raw_selected_count<descriptor.material_max_pnt_lit_num ?
+        descriptor.raw_selected_count :
+        descriptor.material_max_pnt_lit_num;
+
+    return expected>0u &&
+           descriptor.effective_count==expected;
+}
 
 struct pointlight_runtime_context {
     bool receiver_verified=false;
@@ -70,7 +103,10 @@ struct pointlight_runtime_context {
     std::uint8_t fixed_selected_light_count=0;
     bool fixed_membership_verified=false;
 
-    bool clustered_cpu_membership_sidecar_ready=false;
+    // Clustered PntS cannot reuse stock DSR t16/t17 membership. The PTDE
+    // carrier is the immutable first-four ordered overlap result plus the raw
+    // selected count and material g_MaxPntLitNum/effective-count provenance.
+    clustered_membership_descriptor clustered_membership{};
     bool clustered_four_slot_shader_ready=false;
     bool stock_cluster_membership_bypassed=false;
 
@@ -90,6 +126,7 @@ struct pointlight_runtime_plan {
     bool use_cpu_selected_four_sidecar=false;
     bool bypass_stock_cluster_membership=false;
     bool require_local_specular=false;
+    std::uint8_t selected_light_count=0;
 };
 
 inline bool pointlight_receiver_is_fixed(
@@ -116,12 +153,19 @@ inline std::uint8_t pointlight_fixed_expected_light_count(
     }
 }
 
+inline bool pointlight_receiver_is_clustered(
+    pointlight_receiver_stratum stratum) noexcept
+{
+    return stratum==pointlight_receiver_stratum::clustered_nospc_pnts ||
+           stratum==pointlight_receiver_stratum::clustered_spc_pnts;
+}
+
 inline bool pointlight_receiver_has_specular(
     pointlight_receiver_stratum stratum) noexcept
 {
     return stratum==pointlight_receiver_stratum::fixed_spc_pntss ||
            stratum==pointlight_receiver_stratum::fixed_spc_pntssss ||
-           stratum==pointlight_receiver_stratum::clustered_pnts;
+           stratum==pointlight_receiver_stratum::clustered_spc_pnts;
 }
 
 inline pointlight_runtime_plan evaluate_pointlight_runtime_readiness(
@@ -196,15 +240,20 @@ inline pointlight_runtime_plan evaluate_pointlight_runtime_readiness(
                 pointlight_runtime_reason::fixed_membership_not_verified;
             return out;
         }
-    }else{
+        out.selected_light_count=
+            context.fixed_selected_light_count;
+    }else if(pointlight_receiver_is_clustered(context.receiver_stratum)){
         out.use_cpu_selected_four_sidecar=true;
         out.bypass_stock_cluster_membership=true;
-        if(!context.clustered_cpu_membership_sidecar_ready){
+        if(!clustered_membership_descriptor_ready(
+               context.clustered_membership)){
             out.reason=
                 pointlight_runtime_reason::
-                    clustered_cpu_membership_sidecar_not_ready;
+                    clustered_membership_descriptor_invalid;
             return out;
         }
+        out.selected_light_count=
+            context.clustered_membership.effective_count;
         if(!context.clustered_four_slot_shader_ready){
             out.reason=
                 pointlight_runtime_reason::
@@ -217,6 +266,9 @@ inline pointlight_runtime_plan evaluate_pointlight_runtime_readiness(
                     stock_cluster_membership_not_bypassed;
             return out;
         }
+    }else{
+        out.reason=pointlight_runtime_reason::unsupported_receiver;
+        return out;
     }
 
     if(!context.diffuse_material_path_ready){
