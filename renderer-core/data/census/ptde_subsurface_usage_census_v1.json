@@ -1,0 +1,48 @@
+{
+  "schema": 1,
+  "census": "PTDE Subsurface Usage Census",
+  "classification": ["USES_SUBSURFACE", "NO_SUBSURFACE", "UNKNOWN"],
+  "policy": {
+    "unit": "exact PTDE material identity + shader family + receiver scope",
+    "disable_dsr_subsurface_only_when": "classification == NO_SUBSURFACE && evidence_level >= HIGH_CONFIDENCE && exact route identity matches",
+    "uses_subsurface": "preserve host Subsurface path",
+    "unknown": "preserve host Subsurface path",
+    "no_name_only_inference": true,
+    "runtime_activation": "NOT_AUTHORIZED_BY_CENSUS_ALONE",
+    "pixel_equivalence": "OPEN"
+  },
+  "source_evidence": [
+    {"artifact_id":99,"sha256":"57314b36812dfa2867512052278a08dc0da8a41ea0414c1fbbe4ccdf45838076","role":"DSR MTD/shader + PTDE PHN source corpus"},
+    {"artifact_id":571,"sha256":"009a7b72ea92389ee7f0da6ab3c370a7255897fed98698d45ae01ddd2ebee503","role":"full PTDE<->DSR MTD homology registry"},
+    {"artifact_id":920,"sha256":"de3d49a67ddc7b1e8ff89f18817a77ca5d21b845c007e10fb1f2eba692a7413a","role":"exact MTD -> SPX -> stable receiver census"},
+    {"artifact_id":943,"sha256":"2006aff1a18d436f08d71ff491cd618f558ec263499ad038ac31556304af091e","role":"equipment material-slot -> MTD -> receiver census"},
+    {"artifact_id":944,"sha256":"e34e395b110d247b745cd54dc7a2ce9f088866017767b2bb570fb14af8ed45e8","role":"PTDE-vs-DSR exact MTD residual audit"}
+  ],
+  "records": [
+    {
+      "key":"ptde.ps_body_dsb.stable_hemenv",
+      "ptde_mtd_name":"Ps_Body[DSB].mtd",
+      "ptde_mtd_sha256":"af2f108831b783a43b0e02f047919719d14f38e68d6c5a97b80678d593ba1c95",
+      "ptde_shader_family":"ColDifSpcBmp",
+      "ptde_c101":1.0,
+      "receiver_scope":[33,34,35],
+      "classification":"NO_SUBSURFACE",
+      "confidence":"HIGH_CONFIDENCE",
+      "mapped_dsr_material":"Ps_Body[DSBT].mtd",
+      "mapped_dsr_mtd_sha256":"2706080f2b306245b90bf9d3fdfa38624b2ed0452a9b1aff830cf59de69b37d4",
+      "basis":"Canonical slot-for-slot body route maps DSR ColDifSpcBmpSubsurf to PTDE plain ColDifSpcBmp. Exact three DSR Subsurf -> ordinary receiver pairs are ABI-certified separately.",
+      "authorized_effect":"May set ptde_subsurface_usage_verified=true and ptde_uses_subsurface=false only after exact material/donor/receiver/draw-path gates pass."
+    }
+  ],
+  "default_record": {
+    "classification":"UNKNOWN",
+    "confidence":"OPEN",
+    "authorized_effect":"ptde_subsurface_usage_verified=false; preserve host"
+  },
+  "coverage": {
+    "classified_no_subsurface_records":1,
+    "classified_uses_subsurface_records":0,
+    "all_other_routes":"UNKNOWN",
+    "note":"This first source-complete census intentionally records only routes supported by current canonical evidence. It does not infer absence of Subsurface from material names or missing DSR-only variants."
+  }
+}
