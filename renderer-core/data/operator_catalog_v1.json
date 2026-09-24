@@ -534,15 +534,34 @@
       "operator_key": "bridge.subsurface",
       "display_name": "PTDE Subsurface route island",
       "operator_class": "RESOURCE_MATERIAL",
-      "description": "Dedicated Ps_Body[DSBT] Subsurf route remains separate from ordinary diffuse/normal resource bridges.",
-      "canonical_key": "project.renderer.material_response_single_addon_subsurf_normal_diffuse_v1",
-      "canonical_revision": 7628,
-      "status": "CONFIRMED",
+      "description": "Ps_Body[DSBT] DSR-only Subsurf route targets the corresponding ordinary PTDE DifSpcBmp surface only under exact material/donor/body/draw/ordinary-route gates. The narrow create-time pixel-shader substitution carrier is CONFIRMED at rev8873 for the exact three receiver pairs.",
+      "canonical_key": "renderer.core.islands.subsurface_plain_route_contract_v1",
+      "canonical_revision": 8866,
+      "status": "HIGH CONFIDENCE",
       "default_port_state": "OFF",
       "fail_open_behavior": "STOCK_DSR",
       "metadata": {
-        "carrier": "RESOURCE+MATERIAL",
-        "route": "Ps_Body[DSBT]",
+        "carrier": "SHADER+MATERIAL+RESOURCE",
+        "route": "Ps_Body[DSBT].mtd -> PTDE Ps_Body[DSB].mtd plain ColDifSpcBmp",
+        "target_status": "HIGH CONFIDENCE",
+        "target_receiver_ids": [
+          33,
+          34,
+          35
+        ],
+        "create_time_bypass_carrier": "CONFIRMED_REV8873",
+        "bypass_mapping_pairs": 3,
+        "abi_proof": [
+          "ISGN_IDENTICAL",
+          "OSGN_IDENTICAL",
+          "CB_LAYOUT_IDENTICAL",
+          "PLAIN_RESOURCE_SET_STRICT_SUBSET"
+        ],
+        "removed_dsr_only_bindings": [
+          "t10",
+          "s10"
+        ],
+        "runtime": "NOT_TESTED",
         "pixel_behavior": "OPEN"
       },
       "operator_id": "subsurface"
