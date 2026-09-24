@@ -11,6 +11,7 @@
 #include "dsrrl/runtime/asset_bridges.hpp"
 #include "dsrrl/runtime/upper_lower_runtime.hpp"
 #include "dsrrl/runtime/generated_ul_stable_hashes.hpp"
+#include "dsrrl/runtime/generated_spec_material_routes.hpp"
 #include "dsrrl/core/renderer_core.hpp"
 #include "dsrrl/sha256.hpp"
 #include "ptde_material_donor_registry.hpp"
@@ -417,7 +418,9 @@ bool on_draw_indexed(command_list *cmd,std::uint32_t index_count,std::uint32_t i
     route.exact=true;
     route.diffuse_normal_eligible=g_bound_host<12;
     route.diffuse_c100_carrier_active=true;
-    route.specular_material_verified=don.has_c101;
+    route.specular_material_verified=
+        don.has_c101 &&
+        generated::spec_material_route_allowed(don.sha256,receiver_id);
     route.route_index=static_cast<std::uint32_t>(donor);
     route.receivers={receiver_id,0u,0u};
 
