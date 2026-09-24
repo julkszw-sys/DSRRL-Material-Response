@@ -97,7 +97,7 @@ local_specular_runtime_plan evaluate_local_specular_runtime_readiness(
         return out;
     }
 
-    if(context.receiver_class==local_specular_receiver_class::clustered_pnts){
+    if(context.receiver_class==local_specular_receiver_class::clustered_spc_pnts){
         if(!context.clustered_membership_sidecar_ready){
             out.reason=
                 local_specular_runtime_reason::
