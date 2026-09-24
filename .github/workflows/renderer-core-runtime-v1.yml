@@ -28,9 +28,28 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Configure runtime core
-        run: cmake -S runtime-v1 -B build/runtime-v1
-      - name: Build runtime core
+      - name: Checkout pinned ReShade API
+        uses: actions/checkout@v4
+        with:
+          repository: crosire/reshade
+          ref: 3645e3025d1d98a90e318278858931f034d5d1f6
+          path: _reshade
+      - name: Configure runtime core + addon
+        run: cmake -S runtime-v1 -B build/runtime-v1 -DRESHade_INCLUDE_DIR="${{ github.workspace }}/_reshade/include"
+      - name: Build runtime core + addon
         run: cmake --build build/runtime-v1 --config Release --parallel
       - name: Test runtime core
         run: ctest --test-dir build/runtime-v1 -C Release --output-on-failure
+      - name: Verify addon artifact
+        shell: pwsh
+        run: |
+          $path = "build/runtime-v1/Release/DSRRL_Renderer_Core_Runtime_v1.addon64"
+          if (!(Test-Path $path)) { throw "Runtime v1 addon not produced" }
+          Get-Item $path | Format-List Name,Length
+          Get-FileHash $path -Algorithm SHA256 | Format-List
+      - name: Upload addon artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: DSRRL_Renderer_Core_Runtime_v1
+          path: build/runtime-v1/Release/DSRRL_Renderer_Core_Runtime_v1.addon64
+          if-no-files-found: error
