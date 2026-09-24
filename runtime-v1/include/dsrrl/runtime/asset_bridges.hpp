@@ -21,6 +21,7 @@ struct material_route_scope {
     bool exact = false;
     bool diffuse_normal_eligible = false;
     bool diffuse_c100_carrier_active = false;
+    bool spec_rgb_consumer_active = false;
     std::uint32_t route_index = 0;
     std::array<std::uint32_t, 3> receivers{};
 };
@@ -40,6 +41,14 @@ void unregister_runtime() noexcept;
 
 void texture_name_event(const wchar_t *logical_name) noexcept;
 void texture_name_clear_event() noexcept;
+
+// Preflight is read-only: it proves that the current stock t1 has an exact
+// logical SpecRGB identity and a realized PTDE sidecar before a t10-consuming
+// shader variant may be selected. Missing/ambiguous resources fail open.
+bool spec_ready_for_draw(
+    ID3D11DeviceContext *context,
+    const material_route_scope &route,
+    std::uint32_t receiver_id) noexcept;
 
 // Called only from the Core-owned draw transaction. The caller must set
 // diffuse_c100_carrier_active only after the exact MR receiver and PTDE c100
