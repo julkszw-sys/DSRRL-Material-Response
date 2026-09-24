@@ -11,14 +11,20 @@
 #include <Windows.h>
 
 #include <array>
-#include <atomic>
 #include <cstddef>
 #include <cstring>
 #include <filesystem>
 #include <string_view>
 
 extern "C" void selector_hook_entry();
-extern "C" { void *g_selector_trampoline = nullptr; }
+extern "C" void texture_name_hook_entry();
+extern "C" void texture_name_clear_hook_entry();
+
+extern "C" {
+void *g_selector_trampoline = nullptr;
+void *g_texture_name_resume = nullptr;
+void *g_texture_name_clear_resume = nullptr;
+}
 
 namespace dsrrl::runtime::engine {
 namespace {
@@ -30,12 +36,24 @@ constexpr std::string_view k_binder_sha256 =
 
 constexpr std::uintptr_t k_rva_selector = 0x22BA20;
 constexpr std::uintptr_t k_rva_mtd_parse = 0x295ED0;
+constexpr std::uintptr_t k_rva_texture_name = 0x583AA6;
+constexpr std::uintptr_t k_rva_texture_name_clear = 0x583E81;
 
 constexpr std::array<std::uint8_t,15> k_selector_bytes = {
     0x40,0x53,0x48,0x83,0xEC,0x30,0x49,0x63,0xC0,0x45,0x8B,0xD1,0x48,0x8B,0xDA
 };
 constexpr std::array<std::uint8_t,15> k_mtd_bytes = {
     0x40,0x57,0x48,0x83,0xEC,0x40,0x48,0xC7,0x44,0x24,0x20,0xFE,0xFF,0xFF,0xFF
+};
+// Retail a45aaa... exact bytes at 0x140583AA6..0x140583AB3.
+// The MASM detour replays these instructions and resumes at 0x140583AB4.
+constexpr std::array<std::uint8_t,14> k_texture_name_bytes = {
+    0x4C,0x8D,0x75,0xE7,0x48,0x83,0x7D,0xFF,0x08,0x4C,0x0F,0x43,0x75,0xE7
+};
+// Retail a45aaa... exact bytes at 0x140583E81..0x140583E8F.
+// The MASM detour replays them after the callback and resumes at 0x140583E90.
+constexpr std::array<std::uint8_t,15> k_texture_name_clear_bytes = {
+    0x48,0x8B,0x9C,0x24,0xF0,0x00,0x00,0x00,0x48,0x81,0xC4,0xA0,0x00,0x00,0x00
 };
 
 struct hook {
@@ -48,9 +66,11 @@ struct hook {
 };
 
 std::uintptr_t g_base = 0;
-hook g_selector_hook{}, g_mtd_hook{};
+hook g_selector_hook{}, g_mtd_hook{}, g_texture_name_hook{}, g_texture_name_clear_hook{};
 selector_callback g_selector_cb = nullptr;
 mtd_callback g_mtd_cb = nullptr;
+texture_name_callback g_texture_name_cb = nullptr;
+texture_clear_callback g_texture_clear_cb = nullptr;
 
 using mtd_parse_fn = void(__fastcall *)(void *, const void *, std::uint32_t, void *);
 mtd_parse_fn g_mtd_original = nullptr;
@@ -101,15 +121,21 @@ bool prepare_hook(hook &h, std::uintptr_t rva, const std::array<std::uint8_t,N> 
     std::memcpy(tail + 6, &back, 8);
     FlushInstructionCache(GetCurrentProcess(), tr, N + 14);
 
-    h.target = target; h.trampoline = tr; h.detour = detour; h.stolen = N;
+    h.target = target;
+    h.trampoline = tr;
+    h.detour = detour;
+    h.stolen = N;
     std::copy(got.begin(), got.end(), h.original.begin());
     return true;
 }
 
 bool patch_hook(hook &h) noexcept
 {
-    if (!h.target || !h.trampoline || !h.detour) return false;
-    std::array<std::uint8_t,32> patch{}; patch.fill(0x90);
+    if (!h.target || !h.trampoline || !h.detour || h.stolen < 14 || h.stolen > h.original.size())
+        return false;
+
+    std::array<std::uint8_t,32> patch{};
+    patch.fill(0x90);
     patch[0] = 0xFF; patch[1] = 0x25;
     std::uint32_t zero = 0; std::memcpy(patch.data() + 2, &zero, 4);
     const std::uint64_t dest = reinterpret_cast<std::uint64_t>(h.detour);
@@ -129,7 +155,17 @@ void restore_hook(hook &h) noexcept
         VirtualFree(h.trampoline, 0, MEM_RELEASE);
         h.trampoline = nullptr;
     }
-    h.target = nullptr; h.detour = nullptr; h.stolen = 0;
+    h.target = nullptr;
+    h.detour = nullptr;
+    h.stolen = 0;
+}
+
+void clear_callbacks() noexcept
+{
+    g_selector_cb = nullptr;
+    g_mtd_cb = nullptr;
+    g_texture_name_cb = nullptr;
+    g_texture_clear_cb = nullptr;
 }
 
 void __fastcall mtd_hook_entry(void *material, const void *raw, std::uint32_t len, void *arg4) noexcept
@@ -171,49 +207,90 @@ bool verify_provenance() noexcept
     }
 }
 
-bool install(selector_callback selector, mtd_callback mtd) noexcept
+bool install(
+    selector_callback selector,
+    mtd_callback mtd,
+    texture_name_callback texture_name,
+    texture_clear_callback texture_clear) noexcept
 {
-    if (!g_base || g_selector_hook.patched || g_mtd_hook.patched) return false;
-    g_selector_cb = selector; g_mtd_cb = mtd;
+    if (!g_base || g_selector_hook.patched || g_mtd_hook.patched ||
+        g_texture_name_hook.patched || g_texture_name_clear_hook.patched)
+        return false;
+
+    g_selector_cb = selector;
+    g_mtd_cb = mtd;
+    g_texture_name_cb = texture_name;
+    g_texture_clear_cb = texture_clear;
 
     if (!prepare_hook(g_selector_hook, k_rva_selector, k_selector_bytes,
                       reinterpret_cast<void *>(&selector_hook_entry)))
-        return false;
+        goto fail;
     g_selector_trampoline = g_selector_hook.trampoline;
 
     if (!prepare_hook(g_mtd_hook, k_rva_mtd_parse, k_mtd_bytes,
-                      reinterpret_cast<void *>(&mtd_hook_entry))) {
-        restore_hook(g_selector_hook); g_selector_trampoline = nullptr; return false;
-    }
+                      reinterpret_cast<void *>(&mtd_hook_entry)))
+        goto fail;
     g_mtd_original = reinterpret_cast<mtd_parse_fn>(g_mtd_hook.trampoline);
 
-    if (!patch_hook(g_mtd_hook) || !patch_hook(g_selector_hook)) {
-        uninstall(); return false;
-    }
+    if (!prepare_hook(g_texture_name_hook, k_rva_texture_name, k_texture_name_bytes,
+                      reinterpret_cast<void *>(&texture_name_hook_entry)))
+        goto fail;
+    g_texture_name_resume = static_cast<std::uint8_t *>(g_texture_name_hook.target) + g_texture_name_hook.stolen;
+
+    if (!prepare_hook(g_texture_name_clear_hook, k_rva_texture_name_clear, k_texture_name_clear_bytes,
+                      reinterpret_cast<void *>(&texture_name_clear_hook_entry)))
+        goto fail;
+    g_texture_name_clear_resume =
+        static_cast<std::uint8_t *>(g_texture_name_clear_hook.target) + g_texture_name_clear_hook.stolen;
+
+    // Patch the passive/resource hooks first, then the material hooks. Any fault
+    // restores all already-patched sites below, so partial activation is impossible.
+    if (!patch_hook(g_texture_name_hook) ||
+        !patch_hook(g_texture_name_clear_hook) ||
+        !patch_hook(g_mtd_hook) ||
+        !patch_hook(g_selector_hook))
+        goto fail;
+
     return true;
+
+fail:
+    uninstall();
+    return false;
 }
 
 void uninstall() noexcept
 {
     restore_hook(g_selector_hook);
     restore_hook(g_mtd_hook);
+    restore_hook(g_texture_name_hook);
+    restore_hook(g_texture_name_clear_hook);
+
     g_selector_trampoline = nullptr;
+    g_texture_name_resume = nullptr;
+    g_texture_name_clear_resume = nullptr;
     g_mtd_original = nullptr;
-    g_selector_cb = nullptr;
-    g_mtd_cb = nullptr;
+    clear_callbacks();
 }
 
 std::uintptr_t image_base() noexcept { return g_base; }
 
-} // namespace dsrrl::runtime::engine
-
 extern "C" void selector_observer(
     void *container, void *owner, void *ret, void *r14, void *r15, std::int32_t material_index) noexcept
 {
-    // Single Core-owned selector interception. Operator islands subscribe through
-    // the runtime coordinator rather than installing competing detours.
-    using namespace dsrrl::runtime::engine;
-    extern selector_callback dsrrl_runtime_selector_dispatch() noexcept;
-    if (auto cb = dsrrl_runtime_selector_dispatch())
-        cb(container, owner, ret, r14, r15, material_index);
+    if (g_selector_cb)
+        g_selector_cb(container, owner, ret, r14, r15, material_index);
 }
+
+extern "C" void texture_name_observer(const wchar_t *logical_name) noexcept
+{
+    if (g_texture_name_cb)
+        g_texture_name_cb(logical_name);
+}
+
+extern "C" void texture_name_clear_observer() noexcept
+{
+    if (g_texture_clear_cb)
+        g_texture_clear_cb();
+}
+
+} // namespace dsrrl::runtime::engine
