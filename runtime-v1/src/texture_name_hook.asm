@@ -14,6 +14,9 @@ texture_name_hook_entry PROC
     cmp qword ptr [rbp-1], 8
     cmovae r14, qword ptr [rbp-19h]
 
+    ; At this mid-function site retail RSP is already 16-byte aligned.
+    ; Eight pushes preserve that alignment; reserve A0h (not A8h) so the
+    ; callback obeys the Windows x64 call-site alignment requirement.
     ; Preserve the architectural state that must reach 0x140583AB4.
     pushfq
     push rax
@@ -23,7 +26,7 @@ texture_name_hook_entry PROC
     push r9
     push r10
     push r11
-    sub rsp, 0A8h
+    sub rsp, 0A0h
 
     movdqu xmmword ptr [rsp+30h], xmm0
     movdqu xmmword ptr [rsp+40h], xmm1
@@ -42,7 +45,7 @@ texture_name_hook_entry PROC
     movdqu xmm4, xmmword ptr [rsp+70h]
     movdqu xmm5, xmmword ptr [rsp+80h]
 
-    add rsp, 0A8h
+    add rsp, 0A0h
     pop r11
     pop r10
     pop r9
@@ -58,6 +61,8 @@ texture_name_hook_entry ENDP
 PUBLIC texture_name_clear_hook_entry
 texture_name_clear_hook_entry PROC
     ; Clear the exact logical-name scope at the certified 0x140583E81 boundary.
+    ; This is also a mid-function body site with aligned retail RSP, so A0h
+    ; keeps the observer call ABI-correct after eight pushes.
     pushfq
     push rax
     push rcx
@@ -66,7 +71,7 @@ texture_name_clear_hook_entry PROC
     push r9
     push r10
     push r11
-    sub rsp, 0A8h
+    sub rsp, 0A0h
 
     movdqu xmmword ptr [rsp+30h], xmm0
     movdqu xmmword ptr [rsp+40h], xmm1
@@ -84,7 +89,7 @@ texture_name_clear_hook_entry PROC
     movdqu xmm4, xmmword ptr [rsp+70h]
     movdqu xmm5, xmmword ptr [rsp+80h]
 
-    add rsp, 0A8h
+    add rsp, 0A0h
     pop r11
     pop r10
     pop r9
