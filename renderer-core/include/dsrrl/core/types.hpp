@@ -30,6 +30,7 @@ enum class operator_id : std::uint8_t {
     post_hdr,
     dsr_native_sfx,
     dsr_sfx_inverse_tonemap,
+    pmetal_black_safe_source,
     count
 };
 
