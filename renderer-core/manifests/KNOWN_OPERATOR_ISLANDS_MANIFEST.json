@@ -196,6 +196,17 @@
       "prior_runtime_lineage": "V12 ordinary DifSpcBmp t0 activation PASS",
       "renderer_core_runtime": "NOT_TESTED",
       "pixel": "OPEN"
+    },
+    "terminal_sat_rgba": {
+      "canonical_operator": "renderer.diagnostic.combined_rgba_terminal_sat_expansion_candidate",
+      "canonical_revision": 8857,
+      "generic_one_bit_combined_rgba_patch": "REJECTED",
+      "ptde_exact_phn_terminal": "RGB_ONLY_SAT_384_OF_384",
+      "combined_rgba_side_effect": "WOULD_CLAMP_ALPHA",
+      "dsr_only_hash_aliases": "FAIL_OPEN",
+      "future_reopen_condition": "NARROW_RGB_ONLY_BODY_REWRITE_OR_DIRECT_ALPHA_EQUIVALENCE_PROOF_FOR_EXACT_GATED_SUBCLASS",
+      "default": "BLOCKED_FAIL_OPEN",
+      "pixel": "OPEN"
     }
   },
   "legacy_a1": {
@@ -268,12 +279,12 @@
     "0x0200": "terminal_sat_rgb HYPOTHESIS/PARTIAL",
     "0x0400": "diffuse_material_domain HYPOTHESIS/PARTIAL",
     "0x0800": "terminal_sat_rgb HIGH_CONFIDENCE/PARTIAL",
-    "0x2000": "terminal_sat_rgb HYPOTHESIS/PARTIAL",
-    "0x4000": "terminal_sat_rgba HYPOTHESIS/PARTIAL"
+    "0x2000": "terminal_sat_rgb HYPOTHESIS/PARTIAL"
   },
   "rejected_catalog_bits": {
     "0x0010": "WORKFLOW_RAW rejected",
-    "0x1000": "P_Metal fixed-LOD EnvSpec proxy rejected for shared-host automatic migration"
+    "0x1000": "P_Metal fixed-LOD EnvSpec proxy rejected for shared-host automatic migration",
+    "0x4000": "terminal_sat_rgba generic combined-write SAT rejected rev8857; PTDE exact Phn target is RGB-only SAT"
   },
   "default_activation": "OFF_OR_CANONICAL_BLOCKED_STOCK",
   "construction": "PASS_PENDING_FINAL_ATOMIC_CI",
