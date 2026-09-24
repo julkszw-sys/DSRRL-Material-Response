@@ -160,7 +160,7 @@ extern "C" __declspec(dllexport) bool AddonInit(HMODULE addon,HMODULE reshade_mo
     }
 
     g_core.features().set(dsrrl::core::operator_id::material_response,true);
-    g_core.features().set(dsrrl::core::operator_id::spec_rgb,false);
+    g_core.features().set(dsrrl::core::operator_id::spec_rgb,true);
     g_core.features().set(dsrrl::core::operator_id::diffuse,true);
     g_core.features().set(dsrrl::core::operator_id::normal,true);
     g_core.features().set(dsrrl::core::operator_id::upper_lower,false);
@@ -193,7 +193,7 @@ extern "C" __declspec(dllexport) bool AddonInit(HMODULE addon,HMODULE reshade_mo
     }
 
     reshade::log::message(reshade::log::level::info,
-        "DSRRL Runtime v1 A2: CORE ACTIVE; A1x5=ON MR=ON SPECRGB=OFF DIFFUSE=ON NORMAL=ON UL=OFF; "
+        "DSRRL Runtime v1 A2: CORE ACTIVE; A1x5=ON MR=ON SPECRGB=ON DIFFUSE=ON NORMAL=ON UL=OFF; "
         "single EngineBridge hook owner; A1/MR exact-SHA sets disjoint; exact EXE+binder provenance PASS.");
     return true;
 }
