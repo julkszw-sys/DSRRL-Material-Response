@@ -39,6 +39,69 @@ The stable core owns infrastructure, not PTDE equations:
 Operator implementations will live outside the core and request services through these
 interfaces. An operator may fail open without disabling unrelated islands.
 
+## Operator-window homology invariant
+
+An island is not integration-ready merely because its PTDE input/resource can be fed to
+a DSR receiver. Resource substitution is not operator substitution.
+
+Every enabled island MUST define and verify an explicit replacement window:
+
+    replacement_entry
+        -> PTDE-owned intermediate operators
+        -> replacement_exit
+        -> first homologous downstream DSR operation
+
+The window is valid only when all of the following hold:
+
+1. `replacement_entry` is the earliest point at which the island intentionally diverges
+   from stock DSR semantics.
+2. Every operation between entry and exit has been classified as PTDE-owned,
+   semantically shared/homologous, or explicitly suppressed.
+3. No active DSR-only transform, selector, BRDF term, decode/encode, exponent/root,
+   roughness response, visibility response, cluster filter, host-light contribution,
+   or other non-homologous operator survives inside the replacement window.
+4. `replacement_exit` reconnects only at the first downstream operation whose semantics
+   are proven homologous between PTDE and DSR.
+5. A new PTDE resource/value MUST NOT be consumed by an unverified stock DSR tail.
+6. If any intermediate operation is unknown, ambiguous, or only inferred, homology is
+   not verified.
+
+Accordingly, `downstream_homology_verified` means proof of the complete operator window,
+not merely proof that a compatible downstream consumer exists.
+
+For each island the integration record SHOULD carry at least:
+
+- `replacement_entry`;
+- `replacement_exit`;
+- `first_homologous_downstream`;
+- `owned_intermediate_operators`;
+- `suppressed_dsr_only_operators`;
+- `shared_homologous_operators`;
+- `unresolved_intermediate_operators`;
+- `downstream_homology_verified`.
+
+Activation rule:
+
+    island_active = feature_enabled
+                 && receiver_identity_verified
+                 && replacement_entry_verified
+                 && replacement_exit_verified
+                 && downstream_homology_verified
+                 && unresolved_intermediate_operators.empty()
+
+If this rule is not satisfied, the island MUST fail open to the native DSR path for that
+receiver/draw. It must not partially inject PTDE state into a stock DSR consumer.
+
+This is the anti-hybrid invariant: a draw may execute the verified PTDE island or the
+native DSR island, but must never accidentally execute a PTDE input followed by
+unaccounted DSR-only operators. Intentional composition with a proven homologous DSR
+suffix is allowed only after `replacement_exit`.
+
+RE/audit work for an island is therefore incomplete until the full entry-to-exit
+operator chain has been classified. Known high-risk examples include EnvSpec and
+PointLight specular, where resource-only substitution can leave DSR PBL/roughness or
+microfacet tails active; the same rule applies to every current and future island.
+
 ## Carrier ABI v1
 
 The first eight float4 lanes are frozen:
