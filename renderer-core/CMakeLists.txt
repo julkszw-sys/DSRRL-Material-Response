@@ -24,6 +24,7 @@ add_library(dsrrl_renderer_core STATIC
     src/operators/surface/diffuse_material_domain.cpp
     src/operators/surface/fixed_postfog_identity.cpp
     src/operators/lightbank/upper_lower.cpp
+    src/operators/lightbank/hemdir3.cpp
     src/operators/resource_bridges/spec_rgb_bridge.cpp
     src/operators/resource_bridges/normal_bridge.cpp
     src/operators/resource_bridges/diffuse_bridge.cpp
@@ -44,6 +45,11 @@ target_compile_features(dsrrl_renderer_core_tests PRIVATE cxx_std_17)
 add_executable(dsrrl_renderer_island_tests tests/islands_phase1_tests.cpp)
 target_link_libraries(dsrrl_renderer_island_tests PRIVATE dsrrl_renderer_core)
 target_compile_features(dsrrl_renderer_island_tests PRIVATE cxx_std_17)
+
+add_executable(dsrrl_renderer_future_runtime_tests
+    tests/future_runtime_readiness_tests.cpp)
+target_link_libraries(dsrrl_renderer_future_runtime_tests PRIVATE dsrrl_renderer_core)
+target_compile_features(dsrrl_renderer_future_runtime_tests PRIVATE cxx_std_17)
 
 if(MSVC)
     target_compile_options(dsrrl_renderer_core_tests PRIVATE /W4 /WX)
@@ -81,3 +87,4 @@ endif()
 enable_testing()
 add_test(NAME dsrrl_renderer_core_tests COMMAND dsrrl_renderer_core_tests)
 add_test(NAME dsrrl_renderer_island_tests COMMAND dsrrl_renderer_island_tests)
+add_test(NAME dsrrl_renderer_future_runtime_tests COMMAND dsrrl_renderer_future_runtime_tests)
