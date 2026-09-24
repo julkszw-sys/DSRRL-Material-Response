@@ -78,7 +78,9 @@ k_runtime_feature_manifest = {{
     {core::operator_id::dsr_native_sfx,
      runtime_feature_stage::host_preserve,runtime_boot_policy::hold_off,"dsr_native_sfx"},
     {core::operator_id::dsr_sfx_inverse_tonemap,
-     runtime_feature_stage::host_preserve,runtime_boot_policy::hold_off,"dsr_sfx_inverse_tonemap"}
+     runtime_feature_stage::host_preserve,runtime_boot_policy::hold_off,"dsr_sfx_inverse_tonemap"},
+    {core::operator_id::pmetal_black_safe_source,
+     runtime_feature_stage::current_wired,runtime_boot_policy::runtime_preflight,"pmetal_black_safe_source"}
 }};
 
 constexpr bool runtime_feature_manifest_is_ordered_complete() noexcept
@@ -164,10 +166,13 @@ static_assert(
     runtime_boot_enabled_count() == 10u,
     "Ten islands are armed; Subsurface still requires its complete exact draw route.");
 static_assert(
-    runtime_boot_preflight_count() == 1u,
-    "A7 must preserve U/L as the sole boot-time runtime-preflight island.");
+    runtime_boot_preflight_count() == 2u,
+    "U/L and exact P_Metal black-safe source are the two runtime-preflight islands.");
 static_assert(
     runtime_feature_needs_boot_preflight(core::operator_id::upper_lower),
     "Upper/Lower must remain fail-open OFF until its exact producer hooks pass.");
+static_assert(
+    runtime_feature_needs_boot_preflight(core::operator_id::pmetal_black_safe_source),
+    "P_Metal black-safe source must remain fail-open OFF until the V13 producer guard passes.");
 
 } // namespace dsrrl::runtime
