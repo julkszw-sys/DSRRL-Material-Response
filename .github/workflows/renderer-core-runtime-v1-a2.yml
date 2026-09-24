@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - agent/renderer-core-a2-runtime-ready-20260924
+      - agent/renderer-core-a2-specrgb-20260924
       - dev/renderer-core-v1-islands
     paths:
       - "runtime-v1/**"
@@ -28,6 +29,13 @@ jobs:
         run: |
           python3 renderer-core/tools/generate_diffuse_routes_v12.py --input renderer-core/data/provenance/diffuse_routes_v12.tsv --output /tmp/generated_diffuse_routes_v12.hpp
           cmp /tmp/generated_diffuse_routes_v12.hpp renderer-core/include/dsrrl/runtime/generated_diffuse_routes_v12.hpp
+      - name: Audit SpecRGB construction contract
+        run: |
+          grep -q 'SPECRGB=ON' runtime-v1/src/addon.cpp
+          grep -q 'DSRRL_PTDE_SPEC_RGB' runtime-v1/src/mr_dxbc_transform.cpp
+          grep -q 'variant::full_v211_specrgb' runtime-v1/src/mr_island.cpp
+          grep -q 'PSSetShaderResources(10u' runtime-v1/src/asset_bridges.cpp
+          ! grep -q 'const bool want_spec = false' runtime-v1/src/asset_bridges.cpp
       - name: Configure runtime tests
         run: cmake -S runtime-v1 -B build/runtime-v1 -DCMAKE_BUILD_TYPE=Release
       - name: Build runtime tests
