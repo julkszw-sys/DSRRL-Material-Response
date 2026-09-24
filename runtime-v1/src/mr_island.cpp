@@ -26,6 +26,7 @@
 #include <array>
 #include <atomic>
 #include <cstddef>
+#include <cmath>
 #include <cstring>
 #include <memory>
 #include <mutex>
@@ -659,16 +660,36 @@ bool on_draw_indexed(command_list *cmd,std::uint32_t index_count,std::uint32_t i
         g_core->features().enabled(core::operator_id::spec_rgb) &&
         assets::spec_ready(ctx,route,receiver_id);
 
+    const bool pmetal_exact_route =
+        !body_route &&
+        std::string_view(don.sha256)==k_pmetal_raw_mtd_sha256 &&
+        receiver_id>=33u && receiver_id<=35u;
+    const bool pmetal_feature =
+        pmetal_exact_route &&
+        g_core->features().enabled(core::operator_id::pmetal_black_safe_source);
+
+    upper_lower::pmetal_env_source pmetal_source{};
+    bool pmetal_candidate=false;
+    if(pmetal_feature){
+        if(upper_lower::selected_pmetal_env_source(pmetal_source)){
+            ++g_v13_source_ready;
+            pmetal_candidate=pmetal_native_env_ready(ctx,pmetal_source.beta);
+        }else{
+            ++g_v13_source_miss;
+        }
+    }
+
     bool issued=false;
     bool restore_ok=true;
     bool intended_ul=false;
     bool spec_active=false;
+    bool pmetal_active=false;
     bool tx_started=false;
     std::uint64_t command=0;
 
     ID3D11Device *dev=nullptr;
     ctx->GetDevice(&dev);
-    ID3D11PixelShader *oldps=nullptr,*replacement=nullptr;
+    ID3D11PixelShader *oldps=nullptr,*replacement=nullptr,*fallback_replacement=nullptr;
     ID3D11Buffer *b12=nullptr;
     ID3D11DeviceContext1 *ctx1=nullptr;
     cb_capture oldcb{};
@@ -681,7 +702,6 @@ bool on_draw_indexed(command_list *cmd,std::uint32_t index_count,std::uint32_t i
     if(dev){
         ctx->PSGetShader(&oldps,old_classes.data(),&old_class_count);
         captured=true;
-        b12=realize_b12(dev,donor);
         ctx->QueryInterface(__uuidof(ID3D11DeviceContext1),reinterpret_cast<void**>(&ctx1));
         oldcb=capture_cb(ctx,ctx1);
 
@@ -700,16 +720,51 @@ bool on_draw_indexed(command_list *cmd,std::uint32_t index_count,std::uint32_t i
                 }
 
                 if(don.has_c101){
-                    replacement =
+                    fallback_replacement =
                         intended_ul && spec_active ? g_device.full_ul_spec[i] :
                         intended_ul ? g_device.full_ul[i] :
                         spec_active ? g_device.full_spec[i] :
                                       g_device.full[i];
                 }else{
-                    replacement=intended_ul ? g_device.diffuse_ul[i] : g_device.diffuse[i];
+                    fallback_replacement =
+                        intended_ul ? g_device.diffuse_ul[i] : g_device.diffuse[i];
                 }
-                if(replacement) replacement->AddRef();
+                if(fallback_replacement) fallback_replacement->AddRef();
+
+                if(pmetal_candidate && don.has_c101){
+                    ID3D11PixelShader *v13 =
+                        intended_ul && spec_active ? g_device.full_v13_ul_spec[i] :
+                        intended_ul ? g_device.full_v13_ul[i] :
+                        spec_active ? g_device.full_v13_spec[i] :
+                                      g_device.full_v13[i];
+                    if(v13){
+                        replacement=v13;
+                        replacement->AddRef();
+                        pmetal_active=true;
+                    }
+                }
+
+                if(!replacement && fallback_replacement){
+                    replacement=fallback_replacement;
+                    fallback_replacement=nullptr;
+                }
             }
+        }
+
+        if(pmetal_active){
+            b12=realize_pmetal_b12(ctx,dev,donor,pmetal_source);
+            if(!b12){
+                ++g_v13_b12_fail;
+                pmetal_active=false;
+                if(replacement){replacement->Release();replacement=nullptr;}
+                if(fallback_replacement){
+                    replacement=fallback_replacement;
+                    fallback_replacement=nullptr;
+                }
+                b12=realize_b12(dev,donor);
+            }
+        }else{
+            b12=realize_b12(dev,donor);
         }
 
         // Exact stock DXBC has no dynamic class linkage. Unknown linkage
@@ -727,6 +782,12 @@ bool on_draw_indexed(command_list *cmd,std::uint32_t index_count,std::uint32_t i
                 plan.patches[plan.patch_count++]={core::operator_id::subsurface,0u,true,false};
             if(spec_active)
                 plan.patches[plan.patch_count++]={core::operator_id::spec_rgb,0u,true,true};
+            if(pmetal_active)
+                plan.patches[plan.patch_count++]={
+                    core::operator_id::pmetal_black_safe_source,
+                    0u,
+                    true,
+                    false};
             if(intended_ul)
                 plan.patches[plan.patch_count++]={
                     core::operator_id::upper_lower,
@@ -790,7 +851,7 @@ bool on_draw_indexed(command_list *cmd,std::uint32_t index_count,std::uint32_t i
                 if(!tx_restored || !restore_ok){
                     ++g_restore_fail;
                     g_quarantined.store(true);
-                    log_error("DSRRL Runtime v1 MR: unified draw restore fault; MR/SpecRGB/U/L transaction quarantined.");
+                    log_error("DSRRL Runtime v1 MR: unified draw restore fault; MR/SpecRGB/U/L/V13 transaction quarantined.");
                 }
             }else{
                 ++g_fail_open;
@@ -816,6 +877,7 @@ bool on_draw_indexed(command_list *cmd,std::uint32_t index_count,std::uint32_t i
     }else{
         ++g_replays;
         if(body_route) ++g_subsurface_replays;
+        if(pmetal_active) ++g_v13_replay;
     }
 
     for(auto *instance:old_classes) if(instance) instance->Release();
@@ -824,6 +886,7 @@ bool on_draw_indexed(command_list *cmd,std::uint32_t index_count,std::uint32_t i
     if(ctx1)ctx1->Release();
     if(b12)b12->Release();
     if(replacement)replacement->Release();
+    if(fallback_replacement)fallback_replacement->Release();
     if(oldps)oldps->Release();
     if(dev)dev->Release();
 
