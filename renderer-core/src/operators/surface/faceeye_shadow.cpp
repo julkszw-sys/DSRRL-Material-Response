@@ -108,8 +108,8 @@ faceeye_runtime_plan evaluate_faceeye_runtime_readiness(
         out.reason=faceeye_runtime_reason::runtime_t7_identity_not_verified;
         return out;
     }
-    if(!context.drawparam_roles_verified){
-        out.reason=faceeye_runtime_reason::drawparam_roles_not_verified;
+    if(!context.auxiliary_dirlight_snapshot_ready){
+        out.reason=faceeye_runtime_reason::auxiliary_dirlight_snapshot_not_ready;
         return out;
     }
     if(is_csd(context.variant) && !context.csd_matrix_region_ready){

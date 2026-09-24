@@ -41,7 +41,7 @@ operators::surface::faceeye_runtime_context ready_faceeye(
     c.variant=variant;
     c.ptde_kernel_shader_ready=true;
     c.runtime_t7_identity_verified=true;
-    c.drawparam_roles_verified=true;
+    c.auxiliary_dirlight_snapshot_ready=true;
     c.csd_matrix_region_ready=true;
     c.stock_regular_s7_verified=true;
     c.regular_s7_sampler_ready=true;
@@ -173,6 +173,15 @@ int main()
     CHECK(face_plan.apply_shadow_only_to_envdiffuse_envspec);
     CHECK(face_plan.preserve_upper_lower);
     CHECK(face_plan.preserve_local_pointlight);
+
+    face.auxiliary_dirlight_snapshot_ready=false;
+    face_plan=operators::surface::evaluate_faceeye_runtime_readiness(
+        features,activation,face);
+    CHECK(!face_plan.ready);
+    CHECK(face_plan.reason==
+          operators::surface::faceeye_runtime_reason::
+              auxiliary_dirlight_snapshot_not_ready);
+    face.auxiliary_dirlight_snapshot_ready=true;
 
     face.regular_s7_descriptor_verified=false;
     face_plan=operators::surface::evaluate_faceeye_runtime_readiness(

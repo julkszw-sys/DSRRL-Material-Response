@@ -1,6 +1,6 @@
 # Renderer Core v1 — EnvDiffuse Narrow Carrier Contract
 
-Status: **HIGH CONFIDENCE carrier boundary; activation BLOCKED**  
+Status: **HIGH CONFIDENCE carrier boundary; assignment-gated**  
 Canonical: `renderer.core.islands.envdiffuse_narrow_carrier_v1` (rev 8913)
 
 ## Scope

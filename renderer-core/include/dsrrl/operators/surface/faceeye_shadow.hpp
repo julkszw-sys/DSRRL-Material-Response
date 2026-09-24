@@ -68,7 +68,7 @@ enum class faceeye_runtime_reason : std::uint8_t {
     unsupported_receiver,
     ptde_kernel_shader_not_ready,
     runtime_t7_identity_not_verified,
-    drawparam_roles_not_verified,
+    auxiliary_dirlight_snapshot_not_ready,
     csd_matrix_region_not_ready,
     stock_regular_s7_not_verified,
     regular_s7_sampler_not_ready,
@@ -84,7 +84,11 @@ struct faceeye_runtime_context {
     faceeye_receiver_variant variant=faceeye_receiver_variant::unsupported;
     bool ptde_kernel_shader_ready=false;
     bool runtime_t7_identity_verified=false;
-    bool drawparam_roles_verified=false;
+    // PTDE FaceEye consumes auxiliary ShaderConstant_DirLightEntity lanes
+    // (c121-c123, c140-c155, c157-c160, c174/c175/c182). Their authored
+    // field names remain open; readiness requires an immutable draw-local
+    // snapshot rather than a generic DrawParam-role assertion.
+    bool auxiliary_dirlight_snapshot_ready=false;
     bool csd_matrix_region_ready=false;
 
     bool stock_regular_s7_verified=false;
