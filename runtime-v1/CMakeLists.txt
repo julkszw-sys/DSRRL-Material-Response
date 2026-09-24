@@ -46,6 +46,15 @@ target_compile_features(dsrrl_runtime_v1_tests PRIVATE cxx_std_20)
 
 add_executable(dsrrl_runtime_v1_asset_route_tests tests/asset_route_tests.cpp)
 add_dependencies(dsrrl_runtime_v1_asset_route_tests dsrrl_a3_route_headers)
+
+add_executable(dsrrl_runtime_v1_feature_manifest_tests
+  tests/feature_manifest_tests.cpp
+)
+target_include_directories(dsrrl_runtime_v1_feature_manifest_tests PRIVATE
+  "${CMAKE_CURRENT_SOURCE_DIR}/include"
+  "${CMAKE_CURRENT_SOURCE_DIR}/../renderer-core/include"
+)
+target_compile_features(dsrrl_runtime_v1_feature_manifest_tests PRIVATE cxx_std_20)
 target_include_directories(dsrrl_runtime_v1_asset_route_tests PRIVATE
   "${GEN_DIR}"
   "${CMAKE_CURRENT_SOURCE_DIR}/../renderer-core/include"
@@ -54,14 +63,17 @@ target_compile_features(dsrrl_runtime_v1_asset_route_tests PRIVATE cxx_std_20)
 if(MSVC)
   target_compile_options(dsrrl_runtime_v1_tests PRIVATE /W4 /WX)
   target_compile_options(dsrrl_runtime_v1_asset_route_tests PRIVATE /W4 /WX)
+  target_compile_options(dsrrl_runtime_v1_feature_manifest_tests PRIVATE /W4 /WX)
 else()
   target_compile_options(dsrrl_runtime_v1_tests PRIVATE -Wall -Wextra -Wpedantic -Werror)
   target_compile_options(dsrrl_runtime_v1_asset_route_tests PRIVATE -Wall -Wextra -Wpedantic -Werror)
+  target_compile_options(dsrrl_runtime_v1_feature_manifest_tests PRIVATE -Wall -Wextra -Wpedantic -Werror)
 endif()
 
 enable_testing()
 add_test(NAME dsrrl_runtime_v1_tests COMMAND dsrrl_runtime_v1_tests)
 add_test(NAME dsrrl_runtime_v1_asset_route_tests COMMAND dsrrl_runtime_v1_asset_route_tests)
+add_test(NAME dsrrl_runtime_v1_feature_manifest_tests COMMAND dsrrl_runtime_v1_feature_manifest_tests)
 
 set(RESHade_INCLUDE_DIR "" CACHE PATH "Path to pinned ReShade include directory")
 
