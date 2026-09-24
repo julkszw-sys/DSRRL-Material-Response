@@ -50,6 +50,14 @@ SPEC_HASHES = {
 23:("36e4b4e0efc30ce4e24b2f90fa6dcca7f212efeb272538b1f6638a05618126c4","6cc35f29cf05fbdff84274ca16fa79987b86d56040a0facbcfddad1f4cb88ae7"),
 }
 
+# Exact stock-DXR RDEF texture-binding counts for the 24 stable FULL24 hosts.
+# SpecRGB appends: 20-byte name + duplicated binding table with one extra 32-byte
+# t10 record + 60-byte SHEX delta, therefore growth = 112 + 32 * binding_count.
+SPEC_RDEF_BINDING_COUNTS = {
+0:31,1:31,2:29,3:29,4:29,5:27,6:25,7:25,8:23,9:23,10:23,11:21,
+12:27,13:27,14:25,15:25,16:25,17:23,18:23,19:23,20:21,21:21,22:21,23:19,
+}
+
 def q(s: str) -> str:
     return '"' + s.replace('\\','\\\\').replace('"','\\"') + '"'
 
@@ -86,7 +94,7 @@ def main() -> int:
           q(h210['c101_sha256']),
           f"{{{h211['chain_mul_word']}u,{int(h211['old_instruction_token'],16)}u,{int(h211['new_instruction_token'],16)}u}}",
           q(h211['v211_sha256']),f"{h211['size']}u",
-          f'{sdcl}u',f'{ssample}u',q(sh29),q(sh211),f"{h211['size']+1104}u"
+          f'{sdcl}u',f'{ssample}u',q(sh29),q(sh211),f"{h211['size'] + 112 + 32*SPEC_RDEF_BINDING_COUNTS[i]}u"
         ])+'},\n'
       )
     lines += [
