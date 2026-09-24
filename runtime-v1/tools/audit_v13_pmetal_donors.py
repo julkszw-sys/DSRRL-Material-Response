@@ -38,9 +38,21 @@ if banks!=hbanks:
     errors.append('generated bank table differs from preserved V13 source')
 if len({sig for sig,_,_ in banks})!=len(banks):
     errors.append('duplicate V13 bank signature')
+cursor=0
 for sig,first,count in banks:
     if count<=0 or first<0 or first+count>len(rows):
         errors.append(f'bank {sig} has invalid row range first={first} count={count}')
+        continue
+    if first!=cursor:
+        errors.append(f'bank {sig} is non-contiguous: expected first={cursor}, got {first}')
+    bank_ids=[row[0] for row in rows[first:first+count]]
+    if bank_ids!=list(range(count)):
+        errors.append(f'bank {sig} row IDs are not exact 0..{count-1}')
+    cursor=first+count
+if cursor!=len(rows):
+    errors.append(f'bank ranges cover {cursor} rows, expected {len(rows)}')
+if sum(count for _,_,count in banks)!=len(rows):
+    errors.append('bank count sum does not equal donor row count')
 if 'b12[2]=A, b12[3]=B' not in source:
     errors.append('V13 source no longer contains the exact A/B carrier declaration')
 if 'no DSR g_draw or LightProbeParam.x' not in source:
