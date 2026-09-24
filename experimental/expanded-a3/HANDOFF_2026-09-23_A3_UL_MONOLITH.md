@@ -628,3 +628,39 @@ Status:
 - PIXEL: OPEN
 
 Do not promote HF5 to runtime PASS from construction alone. Build141 remains the last confirmed runtime-live fail-open rollback.
+
+
+---
+
+## 17. HF5 runtime result — later loading-screen failure
+
+Owner runtime on build145 / HF5:
+**FAIL — crash on loading screen.**
+
+This is not the same observed boundary as HF2-HF4.
+
+Log chronology:
+- addon loads and registers;
+- A3 U/L producer arms;
+- first fullscreen/ResizeBuffers cycle completes;
+- ReShade runtime is destroyed and recreated successfully;
+- process continues for approximately 11.8 seconds;
+- loading phase creates a burst of deferred D3D11 contexts;
+- log then terminates.
+
+No `FIRST PTDE U/L DRAW ACTIVE` line appears before termination.
+
+Interpretation:
+- HF5 did not achieve runtime liveness;
+- the earlier immediate post-ResizeBuffers failure boundary is no longer the observed failure point;
+- removal of the obsolete `0x140564510` hook / producer guard correction therefore changed runtime behavior materially;
+- exact crash instruction remains OPEN;
+- the final `CreateDeferredContext` lines are temporal markers only, not proof that context creation itself is causal.
+
+Current residual crash surface is after A3 is armed and before a confirmed successful PTDE U/L draw transaction. Candidate domains to isolate next are:
+1. wrapper/blend producer execution under real area loading,
+2. selector freshness chain under live LightBank traffic,
+3. receiver/pre-draw capture and first materialization,
+4. D3D11 immediate-vs-deferred-context assumptions in shader/CB13 state handling.
+
+Build145 remains DIAGNOSTIC. Rollback remains build141.
