@@ -1,0 +1,42 @@
+{
+  "schema": 1,
+  "audit": "DSR Ps_Body Subsurf -> ordinary DifSpcBmp create-time shader bypass ABI",
+  "source_artifact_id": 99,
+  "source_artifact_sha256": "57314b36812dfa2867512052278a08dc0da8a41ea0414c1fbbe4ccdf45838076",
+  "source_member": "DSR/shader/FRPG_FlverPBL_fpo_DX11.shaderbnd.dcx",
+  "audit_script_sha256": "d749386b6859ce8e167648c5062ef1859dcc83eee33b71a0922b23a9fe0ec204",
+  "local_report_sha256": "5efa7f46626f9412d12d63cd605fe659035aa773f8e906ab9493187d03e641a7",
+  "pass": true,
+  "pairs": [
+    {
+      "variant": "Csd",
+      "source_subsurf_sha256": "0b8288d686c8f349ad87352946be51ffd007462f25357326bf47e736e690e511",
+      "target_plain_sha256": "35880c0b2f2330208dfc21af6dd3d944218fcc4540cd8e59404a0aefc13c0b24",
+      "target_plain_receiver_id": 33
+    },
+    {
+      "variant": "Sdw",
+      "source_subsurf_sha256": "885337e50f3d29f086fd18e1f7524f28712031d0264964aef5f37037df7d7bcb",
+      "target_plain_sha256": "d6038de494509e7cbcbfb904c4046e9427f3b921f6a35735a0b0d316f9976837",
+      "target_plain_receiver_id": 34
+    },
+    {
+      "variant": "Plain",
+      "source_subsurf_sha256": "3002cfb9aee6835412399c3be267ab94c5706d7d5030fc4cafc82bc54c55a860",
+      "target_plain_sha256": "7d03c75b69f5730eb741a4d327189d0bbed8a8450fb0ac04e1505f7b91763701",
+      "target_plain_receiver_id": 35
+    }
+  ],
+  "invariants": {
+    "isgn_identical": "3/3",
+    "osgn_identical": "3/3",
+    "constant_buffer_semantics_identical": "3/3",
+    "ordinary_resources_strict_subset": "3/3",
+    "removed_bindings": [
+      "t10 gSMP_10",
+      "s10 gSMP_10Sampler"
+    ],
+    "added_bindings": []
+  },
+  "conclusion": "CREATE_TIME_PIXEL_SHADER_SUBSTITUTION_OR_REUSE is statically ABI-compatible for the exact three certified Subsurf->ordinary pairs; runtime/pixel remain separate."
+}
