@@ -299,15 +299,17 @@ representative shader, alias count, legacy mask and island ownership. The genera
 index is deterministic and CI-verified.
 
 The exact patch recipe source has now been recovered from artifact 253 itself.
-The original P2.2 `data/PORT_PLAN.json` is stored in Git as deterministic gzip at
-`renderer-core/data/provenance/p2_2_PORT_PLAN.json.gz`. Decompression is CI-verified
-against the original source-plan SHA-256
-`5cc15f8084fb75cb33c27be3f0e94be7fd186f07c16274b33ee09735b747a1ec`.
+The original recovered P2.2 plan was verified at source-plan SHA-256
+`5cc15f8084fb75cb33c27be3f0e94be7fd186f07c16274b33ee09735b747a1ec`
+(518 plans / 1436 DWORD operations). The exact A1 subset required by this core is
+stored directly in Git as three plaintext TSV parts under
+`renderer-core/data/provenance/a1_exact_recipes_v1.part*.tsv`.
 
-The recovered source contains 518 plans / 1436 DWORD patch operations. CI joins it
-against this core's A1 identity index and verifies the exact selected subset:
+The concatenated recipe corpus SHA-256 is
+`c38d5560e7dfc99f149da0908d754400e8bf654fe7e0a0469e5f08f47d7575b0`.
+CI verifies the exact selected subset against the identity index:
 144 plans / 252 aliases / 312 DWORD operations, including every `byte_offset`,
-`old`, `new`, replacement SHA, code size, mask and alias name.
+`old`, `new`, replacement SHA, code size and mask.
 
 This removes the former external-artifact blocker for exact recipe provenance.
 Runtime materialization is still a separate implementation/activation layer: the

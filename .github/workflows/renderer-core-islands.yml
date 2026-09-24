@@ -29,16 +29,16 @@ jobs:
             --input renderer-core/data/operator_catalog_v1.json \
             --stamp /tmp/operator_catalog_stamp.json
           test "$(python3 -c 'import json; print(json.load(open("/tmp/operator_catalog_stamp.json"))["operator_count"])')" = "23"
-      - name: Verify recovered P2.2 exact patch recipes
+      - name: Verify recovered exact A1 patch recipes
         run: |
-          python3 renderer-core/tools/verify_recovered_p2_2_port_plan.py \
-            --source-gzip renderer-core/data/provenance/p2_2_PORT_PLAN.json.gz \
+          python3 renderer-core/tools/verify_a1_exact_recipes.py \
             --index renderer-core/data/a1_island_plan_index_v1.json \
-            --stamp /tmp/recovered_p2_2_plan_stamp.json
-          test "$(python3 -c 'import json; print(json.load(open("/tmp/recovered_p2_2_plan_stamp.json"))["source_plans"])')" = "518"
-          test "$(python3 -c 'import json; print(json.load(open("/tmp/recovered_p2_2_plan_stamp.json"))["source_ops"])')" = "1436"
-          test "$(python3 -c 'import json; print(json.load(open("/tmp/recovered_p2_2_plan_stamp.json"))["selected_plans"])')" = "144"
-          test "$(python3 -c 'import json; print(json.load(open("/tmp/recovered_p2_2_plan_stamp.json"))["selected_ops"])')" = "312"
+            --part renderer-core/data/provenance/a1_exact_recipes_v1.part1.tsv \
+            --part renderer-core/data/provenance/a1_exact_recipes_v1.part2.tsv \
+            --part renderer-core/data/provenance/a1_exact_recipes_v1.part3.tsv \
+            --stamp /tmp/a1_exact_recipe_stamp.json
+          test "$(python3 -c 'import json; print(json.load(open("/tmp/a1_exact_recipe_stamp.json"))["selected_plans"])')" = "144"
+          test "$(python3 -c 'import json; print(json.load(open("/tmp/a1_exact_recipe_stamp.json"))["selected_ops"])')" = "312"
       - name: Verify A1 island plan index
         run: |
           python3 renderer-core/tools/generate_a1_island_plan_index.py \

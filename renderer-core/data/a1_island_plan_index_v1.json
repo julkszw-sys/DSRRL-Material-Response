@@ -7,9 +7,13 @@
     "source_member": "data/PORT_PLAN.json",
     "source_plan_sha256": "5cc15f8084fb75cb33c27be3f0e94be7fd186f07c16274b33ee09735b747a1ec",
     "ops_embedded_in_core": true,
-    "ops_policy": "artifact 253 exact PORT_PLAN recovered into Git as deterministic gzip; CI verifies uncompressed source SHA and the exact 144-plan/312-op selection",
-    "ops_repository_path": "renderer-core/data/provenance/p2_2_PORT_PLAN.json.gz",
-    "source_gzip_sha256": "7319778b1fb973419410a0e23f408c94946233b678916c0617de6bb1598b3b49"
+    "ops_policy": "artifact 253 exact selected recipes recovered into Git as 3 plaintext TSV parts; CI validates 144 identities and all 312 DWORD operations against this index",
+    "ops_repository_parts": [
+      "renderer-core/data/provenance/a1_exact_recipes_v1.part1.tsv",
+      "renderer-core/data/provenance/a1_exact_recipes_v1.part2.tsv",
+      "renderer-core/data/provenance/a1_exact_recipes_v1.part3.tsv"
+    ],
+    "exact_recipe_corpus_sha256": "c38d5560e7dfc99f149da0908d754400e8bf654fe7e0a0469e5f08f47d7575b0"
   },
   "selection": {
     "historical_build_key": "material_response_1_45_expanded_a1_global_materials",
@@ -2090,4 +2094,4 @@
       ]
     }
   ]
-}\n
+}
