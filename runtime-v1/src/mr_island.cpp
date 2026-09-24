@@ -49,6 +49,7 @@ std::atomic<std::uint64_t> g_pipeline_seen{0}, g_shader_pair_pass{0}, g_shader_p
 std::atomic<std::uint64_t> g_spec_shader_pair_pass{0}, g_spec_shader_pair_fail{0};
 std::atomic<std::uint64_t> g_target_binds{0}, g_replays{0}, g_fail_open{0};
 std::atomic<std::uint64_t> g_b12_create{0}, g_b12_hit{0}, g_restore_fail{0}, g_present{0};
+std::atomic<bool> g_first_mr_draw{false};
 
 void log_info(const std::string &s){ reshade::log::message(reshade::log::level::info,s.c_str()); }
 void log_error(const std::string &s){ reshade::log::message(reshade::log::level::error,s.c_str()); }
@@ -354,15 +355,29 @@ bool on_draw_indexed(command_list *cmd,std::uint32_t index_count,std::uint32_t i
     auto *ctx=reinterpret_cast<ID3D11DeviceContext*>(cmd->get_native());
     if(!ctx){++g_fail_open;return false;}
 
+    const std::uint32_t receiver_id=24u+static_cast<std::uint32_t>(g_bound_host);
+    assets::material_route_scope route{};
+    route.exact=true;
+    route.diffuse_normal_eligible=g_bound_host<12;
+    route.diffuse_c100_carrier_active=true;
+    route.route_index=static_cast<std::uint32_t>(donor);
+    route.receivers={receiver_id,0u,0u};
+
+    // Critical fail-open cut: a t10-consuming shader may only be selected
+    // after the exact stock t1 identity resolves to a realized PTDE sidecar.
+    route.spec_rgb_consumer_active=
+        assets::spec_ready_for_draw(ctx,route,receiver_id);
+
     core::render_patch_plan plan{};
     plan.patches[plan.patch_count++]={core::operator_id::material_response,0u,true,false};
-    if(g_core->features().enabled(core::operator_id::spec_rgb))
+    if(route.spec_rgb_consumer_active)
         plan.patches[plan.patch_count++]={core::operator_id::spec_rgb,0u,false,true};
     if(g_core->features().enabled(core::operator_id::diffuse))
         plan.patches[plan.patch_count++]={core::operator_id::diffuse,0u,false,true};
     if(g_core->features().enabled(core::operator_id::normal))
         plan.patches[plan.patch_count++]={core::operator_id::normal,0u,false,true};
     plan.carrier_write_mask=0;
+
     const auto type=ctx->GetType()==D3D11_DEVICE_CONTEXT_DEFERRED ?
         core::context_kind::deferred : core::context_kind::immediate;
     const auto command=reinterpret_cast<std::uint64_t>(cmd);
@@ -387,8 +402,7 @@ bool on_draw_indexed(command_list *cmd,std::uint32_t index_count,std::uint32_t i
             std::lock_guard lock(g_device_mutex);
             if(g_device.device==dev){
                 const auto host=static_cast<std::size_t>(g_bound_host);
-                const bool spec_enabled=g_core->features().enabled(core::operator_id::spec_rgb);
-                if(spec_enabled)
+                if(route.spec_rgb_consumer_active)
                     replacement=don.has_c101?g_device.full_specrgb[host]:
                                               g_device.diffuse_specrgb[host];
                 else
@@ -406,14 +420,6 @@ bool on_draw_indexed(command_list *cmd,std::uint32_t index_count,std::uint32_t i
             ctx->PSSetShader(replacement,nullptr,0);
             ctx->PSSetConstantBuffers(12,1,&b12);
 
-            const std::uint32_t receiver_id=24u+static_cast<std::uint32_t>(g_bound_host);
-            assets::material_route_scope route{};
-            route.exact=true;
-            route.diffuse_normal_eligible=g_bound_host<12;
-            route.diffuse_c100_carrier_active=true;
-            route.route_index=static_cast<std::uint32_t>(donor);
-            route.receivers={receiver_id,0u,0u};
-
             const bool assets_ok=assets::apply_draw(ctx,route,receiver_id,asset_state);
             if(assets_ok){
                 if(instance_count<=1)
@@ -421,6 +427,17 @@ bool on_draw_indexed(command_list *cmd,std::uint32_t index_count,std::uint32_t i
                 else
                     ctx->DrawIndexedInstanced(index_count,instance_count,first_index,vertex_offset,first_instance);
                 issued=true;
+
+                bool expected=false;
+                if(g_first_mr_draw.compare_exchange_strong(expected,true)){
+                    std::ostringstream os;
+                    os<<"[DSRRL A2 MR] FIRST_DRAW route="<<donor
+                      <<" receiver="<<receiver_id
+                      <<" host="<<g_bound_host
+                      <<" c101="<<(don.has_c101?1:0)
+                      <<" specrgb="<<(route.spec_rgb_consumer_active?1:0);
+                    log_info(os.str());
+                }
             }
 
             const bool assets_restored=assets::restore_draw(ctx,asset_state);
@@ -431,9 +448,9 @@ bool on_draw_indexed(command_list *cmd,std::uint32_t index_count,std::uint32_t i
         }
     }
 
-    // If the draw was not issued, restore any partially changed state and let
-    // ReShade execute the original draw. If it was issued, always consume the
-    // event; returning false after a restore fault would duplicate the draw.
+    // If the bridge could not issue safely, restore every touched slot and let
+    // the original game draw execute. If issued, consume the event even if a
+    // later verification quarantines the bridge, avoiding duplicate geometry.
     if(!issued){
         ++g_fail_open;
         (void)assets::restore_draw(ctx,asset_state);
