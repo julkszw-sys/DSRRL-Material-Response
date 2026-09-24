@@ -1,0 +1,51 @@
+name: Renderer Core Exact A1 Recipes
+
+on:
+  push:
+    branches:
+      - dev/renderer-core-v1-islands
+      - agent/a1-exact-recipes-20260924
+    paths:
+      - "renderer-core/data/provenance/a1_exact_recipes_v1.part*.tsv"
+      - "renderer-core/data/a1_island_plan_index_v1.json"
+      - "renderer-core/tools/generate_a1_exact_patch_recipes.py"
+      - "renderer-core/include/dsrrl/operators/legacy_plan/a1_exact_patch_recipes.hpp"
+      - "renderer-core/include/dsrrl/operators/legacy_plan/generated_a1_exact_patch_recipes_v1.hpp"
+      - "renderer-core/tests/a1_exact_recipe_tests.cpp"
+      - ".github/workflows/renderer-core-exact-recipes.yml"
+  pull_request:
+    paths:
+      - "renderer-core/data/provenance/a1_exact_recipes_v1.part*.tsv"
+      - "renderer-core/data/a1_island_plan_index_v1.json"
+      - "renderer-core/tools/generate_a1_exact_patch_recipes.py"
+      - "renderer-core/include/dsrrl/operators/legacy_plan/a1_exact_patch_recipes.hpp"
+      - "renderer-core/include/dsrrl/operators/legacy_plan/generated_a1_exact_patch_recipes_v1.hpp"
+      - "renderer-core/tests/a1_exact_recipe_tests.cpp"
+      - ".github/workflows/renderer-core-exact-recipes.yml"
+
+jobs:
+  exact-recipes:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Regenerate exact recipe header
+        run: |
+          python3 renderer-core/tools/generate_a1_exact_patch_recipes.py \
+            --index renderer-core/data/a1_island_plan_index_v1.json \
+            --part renderer-core/data/provenance/a1_exact_recipes_v1.part1.tsv \
+            --part renderer-core/data/provenance/a1_exact_recipes_v1.part2.tsv \
+            --part renderer-core/data/provenance/a1_exact_recipes_v1.part3.tsv \
+            --output /tmp/generated_a1_exact_patch_recipes_v1.hpp
+          cmp /tmp/generated_a1_exact_patch_recipes_v1.hpp \
+            renderer-core/include/dsrrl/operators/legacy_plan/generated_a1_exact_patch_recipes_v1.hpp
+
+      - name: Compile exact recipe transaction test
+        run: |
+          c++ -std=c++17 -Wall -Wextra -Wpedantic -Werror \
+            -Irenderer-core/include \
+            renderer-core/tests/a1_exact_recipe_tests.cpp \
+            -o /tmp/a1_exact_recipe_tests
+
+      - name: Run exact recipe transaction test
+        run: /tmp/a1_exact_recipe_tests
