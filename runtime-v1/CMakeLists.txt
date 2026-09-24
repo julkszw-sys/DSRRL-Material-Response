@@ -61,7 +61,9 @@ if(WIN32 AND RESHade_INCLUDE_DIR)
     src/addon.cpp
     src/engine_hooks.cpp
     src/mr_island.cpp
+    src/asset_bridges.cpp
     src/selector_hook.asm
+    src/texture_name_hook.asm
   )
   add_dependencies(dsrrl_renderer_runtime_v1_addon dsrrl_mr_manifest)
   target_include_directories(dsrrl_renderer_runtime_v1_addon PRIVATE
