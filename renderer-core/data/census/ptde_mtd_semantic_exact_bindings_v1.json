@@ -1,0 +1,27 @@
+{
+  "schema": 1,
+  "artifact": "PTDE/DSR MTD Semantic Census exact binding extension",
+  "parent_census": "renderer-core/data/census/ptde_mtd_semantic_census_v1.json",
+  "source": "dsrrl.bridge_resource_bindings rows 40..47",
+  "claim_scope": "CONSTRUCTION_AND_STATIC_ROUTING_ONLY",
+  "runtime_activation": "OPEN",
+  "pixel_equivalence": "OPEN",
+  "identity_policy": "exact MTD name + raw SHA + normalized binding; UNKNOWN is fail-open",
+  "records": [
+    {"bridge_binding_id":40,"mtd_name":"P_Metal[DSB]_Spec.mtd","raw_sha256":"c8504bfa64c84d5035bc56ab63e43d319ef69af08c5044e0260b639ab1b78ffc","c101":2.5,"material_family":"DifSpcBmp","receiver_scope":[33,34,35],"gate_policy":"DIRECT_EXACT","operators":{"material_response":"USE","hemenv":"USE","pointlight":"NO_USE","spec_rgb":"UNKNOWN","env_spec":"UNKNOWN","subsurface":"UNKNOWN"}},
+    {"bridge_binding_id":41,"mtd_name":"P_DullLeather[DSB]_Edge_Spec.mtd","raw_sha256":"9d24347d2bfa90df062f39a281fd0ae07f160203f1dc8c5d114ac218a6daa4c2","c101":1.0,"material_family":"DifSpcBmp","receiver_scope":[33,34,35],"gate_policy":"DIRECT_EXACT","operators":{"material_response":"USE","hemenv":"USE","pointlight":"NO_USE","spec_rgb":"UNKNOWN","env_spec":"UNKNOWN","subsurface":"UNKNOWN"}},
+    {"bridge_binding_id":42,"mtd_name":"P_DullLeather[DSB]_Spec.mtd","raw_sha256":"4def97828f95a75b64641fa9f64ba1fc58e909e69479c0d4460aaaf9cd466ee5","c101":1.0,"material_family":"DifSpcBmp","receiver_scope":[33,34,35],"gate_policy":"DIRECT_EXACT","operators":{"material_response":"USE","hemenv":"USE","pointlight":"NO_USE","spec_rgb":"UNKNOWN","env_spec":"UNKNOWN","subsurface":"UNKNOWN"}},
+    {"bridge_binding_id":43,"mtd_name":"P_Leather[DSB]_Alp_Spec.mtd","raw_sha256":"deeb55a8e4d50767aeaba98ba9bfa97b0fb404f901249f5ca13fa762610debda","c101":1.5,"material_family":"DifSpcBmp","receiver_scope":[33,34,35],"gate_policy":"DIRECT_EXACT","operators":{"material_response":"USE","hemenv":"USE","pointlight":"NO_USE","spec_rgb":"UNKNOWN","env_spec":"UNKNOWN","subsurface":"UNKNOWN"}},
+    {"bridge_binding_id":44,"mtd_name":"P_Leather[DS].mtd","raw_sha256":"53819ead337c1ecd8593d8535c1fc1fdde589f00eb8ea015a8ae347da71073ea","c101":1.5,"material_family":"DifSpcBmp","receiver_scope":[33,34,35],"gate_policy":"DIRECT_EXACT","operators":{"material_response":"USE","hemenv":"USE","pointlight":"NO_USE","spec_rgb":"UNKNOWN","env_spec":"UNKNOWN","subsurface":"UNKNOWN"}},
+    {"bridge_binding_id":45,"mtd_name":"P_Leather[DSB].mtd","raw_sha256":"0f2b9a1012b83c4dfc909c311d29a11147de8c15191bc62398ce0d5e1cc6757e","c101":1.5,"material_family":"DifSpcBmp","receiver_scope":[33,34,35],"gate_policy":"PTDE_COMPANION_REQUIRED","operators":{"material_response":"USE","hemenv":"USE","pointlight":"NO_USE","spec_rgb":"UNKNOWN","env_spec":"UNKNOWN","subsurface":"UNKNOWN"}},
+    {"bridge_binding_id":46,"mtd_name":"C_DullLeather[DSB].mtd","raw_sha256":"613a3296e7906b2dea5c0cd48bda37c8628b850bad9988688a40595c4c49eaad","c101":1.0,"material_family":"DifSpcBmp","receiver_scope":[33,34,35],"gate_policy":"PTDE_COMPANION_REQUIRED","operators":{"material_response":"USE","hemenv":"USE","pointlight":"NO_USE","spec_rgb":"UNKNOWN","env_spec":"UNKNOWN","subsurface":"UNKNOWN"}},
+    {"bridge_binding_id":47,"mtd_name":"C_Wet[DSB].mtd","raw_sha256":"d3885a4c00b844cdb1a09b571cb037343e5bad31249e7ec80ed5e7da195b9e6f","c101":2.0,"material_family":"DifSpcBmp","receiver_scope":[33,34,35],"gate_policy":"PTDE_COMPANION_REQUIRED","operators":{"material_response":"USE","hemenv":"USE","pointlight":"NO_USE","spec_rgb":"UNKNOWN","env_spec":"UNKNOWN","subsurface":"UNKNOWN"}}
+  ],
+  "semantics": {
+    "material_response_USE": "normalized exact/equivalent-plain binding carries c101 and receiver family",
+    "hemenv_USE": "receiver family 33/34/35 is the certified stable no-PointLight HemEnv family",
+    "pointlight_NO_USE": "only this exact stable HemEnv route; does not classify sibling PntS/PntSS routes",
+    "spec_rgb_UNKNOWN": "material-route identity alone does not prove PTDE donor/resource liveness",
+    "unknown_policy": "preserve host/fail-open"
+  }
+}
