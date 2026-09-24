@@ -972,7 +972,7 @@ bool register_runtime(core::renderer_core &core) noexcept
 {
     g_core=&core;
     g_quarantined.store(false);
-    g_draw_donor=-1; g_bound_host=-1; g_bound_subsurface=false; g_bound_command=nullptr;
+    g_draw_donor=-1; g_bound_host=-1; g_bound_lerp=false; g_bound_subsurface=false; g_bound_command=nullptr;
     g_enabled.store(true);
     reshade::register_event<reshade::addon_event::init_device>(on_init_device);
     reshade::register_event<reshade::addon_event::destroy_device>(on_destroy_device);
