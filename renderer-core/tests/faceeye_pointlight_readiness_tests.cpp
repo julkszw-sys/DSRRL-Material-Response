@@ -321,7 +321,7 @@ int main()
 
     local=ready_local_spec(
         operators::point_light::local_specular_receiver_class::
-            clustered_pnts);
+            clustered_spc_pnts);
     local.clustered_membership_sidecar_ready=false;
     local_plan=
         operators::point_light::evaluate_local_specular_runtime_readiness(
