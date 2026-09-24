@@ -1,5 +1,6 @@
 #include "dsrrl/operators/material_response/mtd_semantic_census.hpp"
 #include "dsrrl/operators/material_response/generated_routes_v1.hpp"
+#include "dsrrl/operators/material_response/generated_envspec_router_v1.hpp"
 
 #include <cstddef>
 
@@ -121,6 +122,50 @@ bool exact_identity(
 
 } // namespace
 
+mtd_envspec_semantics classify_mtd_envspec_semantics(
+    const mtd_semantic_query &query) noexcept
+{
+    mtd_envspec_semantics out;
+    if(!query.material.valid || query.material.semantic_name_hash==0u)
+        return out;
+
+    for(const auto &seed:generated::k_envspec_router_v1){
+        if(query.material.semantic_name_hash!=seed.semantic_name_hash ||
+           query.material.raw_mtd_sha256!=seed.raw_mtd_sha256)
+            continue;
+
+        out.exact_identity_match=true;
+        out.envspc_slot_valid=seed.envspc_slot<4u;
+        out.envspc_slot=seed.envspc_slot;
+        out.suppress_dsr_only_safe=seed.explicit_none_safe;
+
+        switch(seed.state){
+        case generated::envspec_router_state::present:
+            out.presence=ptde_envspec_presence::present;
+            out.router_state=mtd_envspec_router_state::present;
+            break;
+        case generated::envspec_router_state::explicit_none:
+            out.presence=ptde_envspec_presence::absent;
+            out.router_state=mtd_envspec_router_state::explicit_none;
+            break;
+        case generated::envspec_router_state::nospc_host:
+            out.presence=ptde_envspec_presence::absent;
+            out.router_state=mtd_envspec_router_state::nospc_host;
+            out.suppress_dsr_only_safe=false;
+            break;
+        case generated::envspec_router_state::unknown:
+        default:
+            out.presence=ptde_envspec_presence::unknown;
+            out.router_state=mtd_envspec_router_state::unknown;
+            out.suppress_dsr_only_safe=false;
+            break;
+        }
+        return out;
+    }
+
+    return out;
+}
+
 std::uint64_t mtd_semantic_hash(const char *text) noexcept
 {
     constexpr std::uint64_t offset=14695981039346656037ull;
@@ -140,6 +185,24 @@ mtd_semantic_decision classify_mtd_semantic(
 {
     if(!query.material.valid||query.receiver_id==0u)
         return {};
+
+    if(op==mtd_semantic_operator::env_spec){
+        const auto envspec=classify_mtd_envspec_semantics(query);
+        if(envspec.exact_identity_match){
+            const auto state=
+                envspec.presence==ptde_envspec_presence::present
+                    ? mtd_semantic_state::use
+                    : envspec.presence==ptde_envspec_presence::absent
+                        ? mtd_semantic_state::no_use
+                        : mtd_semantic_state::unknown;
+            return {
+                state,
+                mtd_semantic_source::envspec_router_exact,
+                mtd_gate_policy::exact_material,
+                true
+            };
+        }
+    }
 
     for(const auto &seed:k_overrides){
         if(!receiver_matches(
@@ -203,6 +266,10 @@ mtd_semantic_decision classify_mtd_semantic(
 ptde_envspec_presence mtd_envspec_presence(
     const mtd_semantic_query &query) noexcept
 {
+    const auto exact=classify_mtd_envspec_semantics(query);
+    if(exact.exact_identity_match)
+        return exact.presence;
+
     const auto result=classify_mtd_semantic(
         query,mtd_semantic_operator::env_spec);
 

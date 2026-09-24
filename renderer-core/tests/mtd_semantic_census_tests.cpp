@@ -1,8 +1,10 @@
 #include "dsrrl/operators/material_response/mtd_semantic_census.hpp"
 #include "dsrrl/operators/material_response/material_response_seed.hpp"
+#include "dsrrl/operators/material_response/generated_envspec_router_v1.hpp"
 #include "dsrrl/operators/env_spec/env_spec_island.hpp"
 #include "dsrrl/operators/resource_bridges/spec_rgb_bridge.hpp"
 
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <iostream>
@@ -76,8 +78,14 @@ int main()
 
     d=classify_mtd_semantic(q,mtd_semantic_operator::env_spec);
     CHECK(d.state==mtd_semantic_state::use);
-    CHECK(d.source==mtd_semantic_source::exact_override);
+    CHECK(d.source==mtd_semantic_source::envspec_router_exact);
     CHECK(mtd_envspec_presence(q)==ptde_envspec_presence::present);
+    const auto pmetal_env=classify_mtd_envspec_semantics(q);
+    CHECK(pmetal_env.exact_identity_match);
+    CHECK(pmetal_env.router_state==mtd_envspec_router_state::present);
+    CHECK(pmetal_env.envspc_slot_valid);
+    CHECK(pmetal_env.envspc_slot==2u);
+    CHECK(!pmetal_env.suppress_dsr_only_safe);
 
     d=classify_mtd_semantic(q,mtd_semantic_operator::diffuse);
     CHECK(d.state==mtd_semantic_state::unknown);
@@ -98,8 +106,8 @@ int main()
         "DifSpcBmp");
     mtd_semantic_query leather_q{leather,35u};
     d=classify_mtd_semantic(leather_q,mtd_semantic_operator::env_spec);
-    CHECK(d.state==mtd_semantic_state::unknown);
-    CHECK(d.source==mtd_semantic_source::full24_exact_cohort);
+    CHECK(d.state==mtd_semantic_state::use);
+    CHECK(d.source==mtd_semantic_source::envspec_router_exact);
     CHECK(d.exact_identity_match);
 
     auto wrong=q;
@@ -189,8 +197,94 @@ int main()
     CHECK(env.selected==operators::env_spec::action::activate_ptde_bridge);
 
     env=operators::env_spec::env_spec_island::gate(leather_q,true);
+    CHECK(env.selected==operators::env_spec::action::activate_ptde_bridge);
+    CHECK(env.ptde_bridge_required);
+
+    // The exact 325-record router separates PTDE semantic absence from the
+    // narrower carrier-safe explicit-none cohort.
+    const auto mdb=make_identity(
+        0u,"M[DB].mtd",
+        "afe70656efd6c7797fccce5a43e7c4738eb3fec5177dd2c787f68438332d238f",
+        "DifSpcBmp");
+    mtd_semantic_query mdb_q{mdb,33u};
+    d=classify_mtd_semantic(mdb_q,mtd_semantic_operator::env_spec);
+    CHECK(d.state==mtd_semantic_state::no_use);
+    CHECK(d.source==mtd_semantic_source::envspec_router_exact);
+    const auto mdb_env=classify_mtd_envspec_semantics(mdb_q);
+    CHECK(mdb_env.router_state==mtd_envspec_router_state::explicit_none);
+    CHECK(mdb_env.suppress_dsr_only_safe);
+    CHECK(mdb_env.envspc_slot_valid);
+    CHECK(mdb_env.envspc_slot==0u);
+    env=operators::env_spec::env_spec_island::gate(mdb_q,false);
+    CHECK(env.selected==operators::env_spec::action::suppress_dsr_only);
+
+    const auto unsafe_none=make_identity(
+        0u,"A01[D]_Alp.mtd",
+        "89076b688246989ed9d7c65da4df4508fd2c1ec13c8f929fd1ec852507f7e4ad",
+        "DifSpcBmp");
+    mtd_semantic_query unsafe_none_q{unsafe_none,33u};
+    d=classify_mtd_semantic(
+        unsafe_none_q,mtd_semantic_operator::env_spec);
+    CHECK(d.state==mtd_semantic_state::no_use);
+    const auto unsafe_env=
+        classify_mtd_envspec_semantics(unsafe_none_q);
+    CHECK(unsafe_env.router_state==
+          mtd_envspec_router_state::explicit_none);
+    CHECK(!unsafe_env.suppress_dsr_only_safe);
+    env=operators::env_spec::env_spec_island::gate(
+        unsafe_none_q,false);
     CHECK(env.selected==operators::env_spec::action::preserve_host);
-    CHECK(!env.ptde_bridge_required);
+
+    const auto nospc=make_identity(
+        0u,"A10_BG_cloud[Dn]_Add.mtd",
+        "b3ec0ccf59bfdac94db7eb6292484c43755c09252a711b4aa2f2131b32c33543",
+        "DifSpcBmp");
+    mtd_semantic_query nospc_q{nospc,33u};
+    d=classify_mtd_semantic(nospc_q,mtd_semantic_operator::env_spec);
+    CHECK(d.state==mtd_semantic_state::no_use);
+    const auto nospc_env=classify_mtd_envspec_semantics(nospc_q);
+    CHECK(nospc_env.router_state==mtd_envspec_router_state::nospc_host);
+    CHECK(!nospc_env.suppress_dsr_only_safe);
+    env=operators::env_spec::env_spec_island::gate(nospc_q,false);
+    CHECK(env.selected==operators::env_spec::action::preserve_host);
+
+    // Source-level census integrity: 325 exact material identities,
+    // 213 PRESENT, 87 EXPLICIT_NONE, 25 NOSPC_HOST and exactly 20
+    // carrier-safe explicit-none rows.
+    CHECK(generated::k_envspec_router_v1.size()==325u);
+    std::size_t present_count=0u;
+    std::size_t explicit_none_count=0u;
+    std::size_t nospc_count=0u;
+    std::size_t safe_none_count=0u;
+    std::array<std::size_t,4> slot_counts{};
+    for(const auto &record:generated::k_envspec_router_v1){
+        CHECK(record.envspc_slot<slot_counts.size());
+        ++slot_counts[record.envspc_slot];
+        if(record.explicit_none_safe)
+            ++safe_none_count;
+        switch(record.state){
+        case generated::envspec_router_state::present:
+            ++present_count;
+            break;
+        case generated::envspec_router_state::explicit_none:
+            ++explicit_none_count;
+            break;
+        case generated::envspec_router_state::nospc_host:
+            ++nospc_count;
+            break;
+        case generated::envspec_router_state::unknown:
+        default:
+            CHECK(false);
+        }
+    }
+    CHECK(present_count==213u);
+    CHECK(explicit_none_count==87u);
+    CHECK(nospc_count==25u);
+    CHECK(safe_none_count==20u);
+    CHECK(slot_counts[0]==179u);
+    CHECK(slot_counts[1]==48u);
+    CHECK(slot_counts[2]==54u);
+    CHECK(slot_counts[3]==44u);
 
     material_response_island seeded;
     CHECK(register_confirmed_material_routes_v1(seeded)==35u);

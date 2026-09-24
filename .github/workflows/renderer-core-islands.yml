@@ -24,6 +24,9 @@ jobs:
             --input renderer-core/data/material_response_routes_v1.json \
             --output /tmp/generated_routes_v1.hpp
           cmp /tmp/generated_routes_v1.hpp renderer-core/include/dsrrl/operators/material_response/generated_routes_v1.hpp
+      - name: Verify exact MTD EnvSpec router
+        run: |
+          python3 renderer-core/tools/generate_mtd_envspec_router.py
       - name: Verify operator catalog
         run: |
           python3 renderer-core/tools/verify_operator_catalog.py \
