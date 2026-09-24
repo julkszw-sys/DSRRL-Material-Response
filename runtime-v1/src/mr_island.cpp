@@ -233,34 +233,42 @@ bool ensure_shader_pair(device *d,const plan &p,std::span<const std::uint8_t> st
     return true;
 }
 
-ID3D11Buffer *realize_b12(ID3D11Device *device,int donor_index)
+ID3D11Buffer *realize_b12(ID3D11Device *device,int donor_index) noexcept
 {
     if(!device || donor_index<0 ||
        static_cast<std::size_t>(donor_index)>=dsrrl::materialdonor::k_donors.size())
         return nullptr;
 
-    std::lock_guard lock(g_device_mutex);
-    if(g_device.device!=device) return nullptr;
-
-    const auto key=static_cast<std::uint16_t>(donor_index);
-    if(const auto it=g_device.b12.find(key);it!=g_device.b12.end() && it->second){
-        it->second->AddRef(); ++g_b12_hit; return it->second;
-    }
-
-    const auto &d=dsrrl::materialdonor::k_donors[static_cast<std::size_t>(donor_index)];
-    struct f4{float x,y,z,w;};
-    const std::array<f4,4> payload={{
-        {d.c101_f0q[0],d.c101_f0q[1],d.c101_f0q[2],d.has_c101?1.0f:0.0f},
-        {d.c100[0],d.c100[1],d.c100[2],1.0f},
-        {0,0,0,0},{0,0,0,0}
-    }};
-    D3D11_BUFFER_DESC desc{}; desc.ByteWidth=64; desc.Usage=D3D11_USAGE_IMMUTABLE;
-    desc.BindFlags=D3D11_BIND_CONSTANT_BUFFER;
-    D3D11_SUBRESOURCE_DATA init{}; init.pSysMem=payload.data();
     ID3D11Buffer *buffer=nullptr;
-    if(FAILED(device->CreateBuffer(&desc,&init,&buffer)) || !buffer) return nullptr;
-    g_device.b12.emplace(key,buffer);
-    buffer->AddRef(); ++g_b12_create; return buffer;
+    try {
+        std::lock_guard lock(g_device_mutex);
+        if(g_device.device!=device) return nullptr;
+
+        const auto key=static_cast<std::uint16_t>(donor_index);
+        if(const auto it=g_device.b12.find(key);it!=g_device.b12.end() && it->second){
+            it->second->AddRef(); ++g_b12_hit; return it->second;
+        }
+
+        const auto &d=dsrrl::materialdonor::k_donors[static_cast<std::size_t>(donor_index)];
+        struct f4{float x,y,z,w;};
+        const std::array<f4,4> payload={{
+            {d.c101_f0q[0],d.c101_f0q[1],d.c101_f0q[2],d.has_c101?1.0f:0.0f},
+            {d.c100[0],d.c100[1],d.c100[2],1.0f},
+            {0,0,0,0},{0,0,0,0}
+        }};
+        D3D11_BUFFER_DESC desc{}; desc.ByteWidth=64; desc.Usage=D3D11_USAGE_IMMUTABLE;
+        desc.BindFlags=D3D11_BIND_CONSTANT_BUFFER;
+        D3D11_SUBRESOURCE_DATA init{}; init.pSysMem=payload.data();
+        if(FAILED(device->CreateBuffer(&desc,&init,&buffer)) || !buffer) return nullptr;
+
+        g_device.b12.emplace(key,buffer);
+        buffer->AddRef();
+        ++g_b12_create;
+        return buffer;
+    } catch (...) {
+        if(buffer) buffer->Release();
+        return nullptr;
+    }
 }
 
 struct cb_capture {
@@ -335,62 +343,78 @@ void on_destroy_device(device *d)
 
 bool on_create_pipeline(device *d,pipeline_layout,std::uint32_t count,const pipeline_subobject *sub)
 {
-    if(!g_enabled.load() || g_quarantined.load() || !d || d->get_api()!=device_api::d3d11) return false;
-    const auto *ps=find_ps(count,sub);
-    if(!ps || !ps->code || !ps->code_size) return false;
-    ++g_pipeline_seen;
+    try {
+        if(!g_enabled.load() || g_quarantined.load() || !d || d->get_api()!=device_api::d3d11) return false;
+        const auto *ps=find_ps(count,sub);
+        if(!ps || !ps->code || !ps->code_size) return false;
+        ++g_pipeline_seen;
 
-    const auto *bytes=static_cast<const std::uint8_t*>(ps->code);
-    const auto sha=dsrrl::to_hex(dsrrl::sha256({
-        reinterpret_cast<const std::byte*>(bytes),ps->code_size
-    }));
-    const auto *p=find_plan(ps->code_size,sha);
-    if(!p) return false;
+        const auto *bytes=static_cast<const std::uint8_t*>(ps->code);
+        const auto sha=dsrrl::to_hex(dsrrl::sha256({
+            reinterpret_cast<const std::byte*>(bytes),ps->code_size
+        }));
+        const auto *p=find_plan(ps->code_size,sha);
+        if(!p) return false;
 
-    if(!ensure_shader_pair(d,*p,{bytes,ps->code_size})){
-        ++g_fail_open; g_quarantined.store(true);
-        log_error("DSRRL Runtime v1 MR: exact V2.11 shader transform failed; MR quarantined.");
+        if(!ensure_shader_pair(d,*p,{bytes,ps->code_size})){
+            ++g_fail_open; g_quarantined.store(true);
+            log_error("DSRRL Runtime v1 MR: exact V2.11 shader transform failed; MR quarantined.");
+            return false;
+        }
+
+        {
+            std::lock_guard lock(g_pending_mutex);
+            g_pending.push_back({ps->code_size,sha,p->index});
+        }
+        return false;
+    } catch (...) {
+        ++g_fail_open;
+        g_quarantined.store(true);
+        reshade::log::message(
+            reshade::log::level::error,
+            "DSRRL Runtime v1 MR: create_pipeline exception; MR quarantined fail-open.");
         return false;
     }
-
-    {
-        std::lock_guard lock(g_pending_mutex);
-        g_pending.push_back({ps->code_size,sha,p->index});
-    }
-    return false;
 }
 
 void on_init_pipeline(device *d,pipeline_layout,std::uint32_t count,const pipeline_subobject *sub,pipeline p)
 {
-    if(!d || d->get_api()!=device_api::d3d11 || !p.handle) return;
-    const auto *ps=find_ps(count,sub);
-    if(!ps || !ps->code || !ps->code_size) return;
+    try {
+        if(!d || d->get_api()!=device_api::d3d11 || !p.handle) return;
+        const auto *ps=find_ps(count,sub);
+        if(!ps || !ps->code || !ps->code_size) return;
 
-    const auto sha=dsrrl::to_hex(dsrrl::sha256({
-        reinterpret_cast<const std::byte*>(ps->code),ps->code_size
-    }));
+        const auto sha=dsrrl::to_hex(dsrrl::sha256({
+            reinterpret_cast<const std::byte*>(ps->code),ps->code_size
+        }));
 
-    // Do not depend on callback-local shader_desc object identity. The API may
-    // present a different descriptor object at init_pipeline or dispatch the
-    // callback from another worker thread. Correlate by the already certified
-    // full source SHA-256 + size instead; equal SHA implies the same stable
-    // host. Global pending ownership keeps cross-thread create/init safe.
-    std::uint8_t host=0;
-    bool matched=false;
-    {
-        std::lock_guard lock(g_pending_mutex);
-        for(auto it=g_pending.begin();it!=g_pending.end();++it){
-            if(ps->code_size!=it->size || sha!=it->sha)
-                continue;
-            host=it->host;
-            g_pending.erase(it);
-            matched=true;
-            break;
+        // Do not depend on callback-local shader_desc object identity. The API
+        // may present a different descriptor object at init_pipeline or dispatch
+        // the callback from another worker thread. Correlate by certified full
+        // source SHA-256 + size.
+        std::uint8_t host=0;
+        bool matched=false;
+        {
+            std::lock_guard lock(g_pending_mutex);
+            for(auto it=g_pending.begin();it!=g_pending.end();++it){
+                if(ps->code_size!=it->size || sha!=it->sha)
+                    continue;
+                host=it->host;
+                g_pending.erase(it);
+                matched=true;
+                break;
+            }
         }
-    }
-    if(matched){
-        std::lock_guard lock(g_pipeline_mutex);
-        g_pipelines[p.handle]=host;
+        if(matched){
+            std::lock_guard lock(g_pipeline_mutex);
+            g_pipelines[p.handle]=host;
+        }
+    } catch (...) {
+        ++g_fail_open;
+        g_quarantined.store(true);
+        reshade::log::message(
+            reshade::log::level::error,
+            "DSRRL Runtime v1 MR: init_pipeline exception; MR quarantined fail-open.");
     }
 }
 
@@ -613,6 +637,7 @@ bool on_draw_indexed(command_list *cmd,std::uint32_t index_count,std::uint32_t i
 }
 void on_present(command_queue *,swapchain *,const rect *,const rect *,std::uint32_t,const rect *)
 {
+    try {
     const auto n=++g_present;
     if(n==300 || (n>300 && (n%1200)==0)){
         std::ostringstream os;
@@ -629,6 +654,10 @@ void on_present(command_queue *,swapchain *,const rect *,const rect *,std::uint3
           <<" b12_hit="<<g_b12_hit.load()<<" failopen="<<g_fail_open.load()
           <<" restore_fail="<<g_restore_fail.load()<<" quarantined="<<(g_quarantined.load()?1:0);
         log_info(os.str());
+    }
+}
+    } catch (...) {
+        // Telemetry is non-authoritative and must never escape the callback ABI.
     }
 }
 
