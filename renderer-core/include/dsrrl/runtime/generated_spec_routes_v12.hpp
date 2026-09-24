@@ -775,7 +775,7 @@ inline constexpr std::array<std::uint64_t, 769> k_spec_name_hashes_v12 = {{
     0xffbcb13fecfb12d8ull, // wp_a_0600_club_s
     0xffbfb013405b3b3cull, // bd_m_9389_bd_m_9380_2_s
     0xffc52a7253366a7aull, // bd_m_9450_1_s
-};
+}};
 
 inline bool spec_name_hash_allowed_v12(std::uint64_t value) noexcept
 {
