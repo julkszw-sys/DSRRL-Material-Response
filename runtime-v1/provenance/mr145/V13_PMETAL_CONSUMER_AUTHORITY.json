@@ -1,0 +1,59 @@
+{
+  "schema": 1,
+  "title": "Core151 exact P_Metal V13 consumer authority",
+  "basis": {
+    "stock_binder_sha256": "ad180732ac79d5d98783aa504c789c2bab15e515c3b0f66b237d8b8c69113394",
+    "current_v211": "runtime-v1 exact V2.11 material response transform",
+    "historical_operator": "Material Response 1.45 V13 P_Metal A/B source chain",
+    "equation": "A=Sample(t12)*p_A; B=Sample(t14)*p_B; E=A+beta*(B-A)",
+    "carrier": "native DSR t12/t14; b12[2].rgb=p_A; b12[3].rgb=p_B; b12[3].w=beta",
+    "removed_dsr_receiver": "roughness/angular/g_draw-dependent EnvSpec tail through legacy t9 BRDF LUT",
+    "merge_preserved": "first EnvSpec+EnvDiffuse MAD"
+  },
+  "receivers": [
+    {
+      "receiver_id": 33,
+      "host_index": 9,
+      "label": "FRPG_Phn_DifSpcBmp______Csd_HemEnv.fpo",
+      "input_v211_sha256": "70b85d49cea116ff1f72a3fd5bb7726ee72aee5a0655cc81718a83a659ee03f5",
+      "output_v13_sha256": "f6340b44edb4364a23690d13f6d0539c4c2daf99ce98c2ae5c901121e0c8f926",
+      "size_bytes": 19872,
+      "t12_word": 1605,
+      "merge_word": 1720,
+      "replaced_dwords": 102
+    },
+    {
+      "receiver_id": 34,
+      "host_index": 10,
+      "label": "FRPG_Phn_DifSpcBmp______Sdw_HemEnv.fpo",
+      "input_v211_sha256": "ec7f133592462d58c2715c84a398f70f60cecaec8eaaa436ace62b5a262a3ae3",
+      "output_v13_sha256": "411900aadafb9ccd3bb777aff6382c7e3c938807274526aa4adaa5bb6cb2fc20",
+      "size_bytes": 19572,
+      "t12_word": 1514,
+      "merge_word": 1629,
+      "replaced_dwords": 102
+    },
+    {
+      "receiver_id": 35,
+      "host_index": 11,
+      "label": "FRPG_Phn_DifSpcBmp__________HemEnv.fpo",
+      "input_v211_sha256": "ae69bfe343cb913c4eac4e1d07d1280e4c4dcf02080d1cd55305841e21f76757",
+      "output_v13_sha256": "098f5d364413bb9ae5519d58e5ee92f90dd5d63d4c7f8179759aeccbb635b00a",
+      "size_bytes": 18076,
+      "t12_word": 1174,
+      "merge_word": 1289,
+      "replaced_dwords": 102
+    }
+  ],
+  "structural_postconditions": {
+    "input_t12_sample_count": 1,
+    "input_t9_s9_sample_count": 1,
+    "input_t14_declaration_count": 0,
+    "output_s14_count": 1,
+    "output_t14_cube_count": 1,
+    "output_t14_sample_count": 1,
+    "output_t9_sample_count": 0,
+    "output_size_unchanged": true,
+    "canonical_merge_word_unchanged": true
+  }
+}
