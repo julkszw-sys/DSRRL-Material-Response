@@ -428,14 +428,17 @@ bool on_draw_indexed(command_list *cmd,std::uint32_t index_count,std::uint32_t i
         g_core->features().enabled(core::operator_id::upper_lower) &&
         upper_lower::selected_snapshot_ready();
     const bool spec_candidate =
-        don.has_c101 &&
+        route.specular_material_verified &&
         g_core->features().enabled(core::operator_id::spec_rgb) &&
         assets::spec_ready(ctx,route,receiver_id);
 
     bool issued=false;
     bool restore_ok=true;
-    bool ul_active=false;
+    bool intended_ul=false;
     bool spec_active=false;
+    bool tx_started=false;
+    std::uint64_t command=0;
+
     ID3D11Device *dev=nullptr;
     ctx->GetDevice(&dev);
     ID3D11PixelShader *oldps=nullptr,*replacement=nullptr;
@@ -455,32 +458,24 @@ bool on_draw_indexed(command_list *cmd,std::uint32_t index_count,std::uint32_t i
             std::lock_guard lock(g_device_mutex);
             if(g_device.device==dev){
                 const auto i=static_cast<std::size_t>(g_bound_host);
+                ID3D11PixelShader *ul_shader =
+                    don.has_c101 ? g_device.full_ul[i] : g_device.diffuse_ul[i];
+                intended_ul=ul_candidate && ul_shader!=nullptr;
 
-                // U/L is only considered active if both a fresh semantic
-                // snapshot and the exact composed shader variant exist.
-                if(ul_candidate){
-                    ID3D11PixelShader *ul_shader =
-                        don.has_c101 ? g_device.full_ul[i] : g_device.diffuse_ul[i];
-                    if(ul_shader && upper_lower::bind_draw(ctx,ul_state))
-                        ul_active=true;
-                }
-
-                // SpecRGB requires exact actual material, exact t1 sidecar
-                // readiness and a shader that truly consumes t10.
                 if(spec_candidate){
                     ID3D11PixelShader *spec_shader =
-                        ul_active ? g_device.full_ul_spec[i] : g_device.full_spec[i];
-                    if(spec_shader) spec_active=true;
+                        intended_ul ? g_device.full_ul_spec[i] : g_device.full_spec[i];
+                    spec_active=spec_shader!=nullptr;
                 }
 
                 if(don.has_c101){
                     replacement =
-                        ul_active && spec_active ? g_device.full_ul_spec[i] :
-                        ul_active ? g_device.full_ul[i] :
+                        intended_ul && spec_active ? g_device.full_ul_spec[i] :
+                        intended_ul ? g_device.full_ul[i] :
                         spec_active ? g_device.full_spec[i] :
                                       g_device.full[i];
                 }else{
-                    replacement = ul_active ? g_device.diffuse_ul[i] : g_device.diffuse[i];
+                    replacement=intended_ul ? g_device.diffuse_ul[i] : g_device.diffuse[i];
                 }
                 if(replacement) replacement->AddRef();
             }
@@ -495,26 +490,35 @@ bool on_draw_indexed(command_list *cmd,std::uint32_t index_count,std::uint32_t i
                 plan.patches[plan.patch_count++]={core::operator_id::normal,0u,false,true};
             if(spec_active)
                 plan.patches[plan.patch_count++]={core::operator_id::spec_rgb,0u,true,true};
-            if(ul_active)
+            if(intended_ul)
                 plan.patches[plan.patch_count++]={core::operator_id::upper_lower,0u,true,false};
             plan.carrier_write_mask=0;
 
             const auto type=ctx->GetType()==D3D11_DEVICE_CONTEXT_DEFERRED ?
                 core::context_kind::deferred : core::context_kind::immediate;
-            const auto command=reinterpret_cast<std::uint64_t>(cmd);
+            command=reinterpret_cast<std::uint64_t>(cmd);
+            tx_started=g_core->transactions().begin(command,++g_draw_serial,type,plan);
 
-            if(g_core->transactions().begin(command,++g_draw_serial,type,plan)){
-                ctx->PSSetShader(replacement,nullptr,0);
-                ctx->PSSetConstantBuffers(12,1,&b12);
-                route.spec_t10_consumer_active=spec_active;
+            if(tx_started){
+                bool ul_bound=true;
+                if(intended_ul)
+                    ul_bound=upper_lower::bind_draw(ctx,ul_state);
 
-                const bool assets_ok=assets::apply_draw(ctx,route,receiver_id,asset_state);
-                if(assets_ok){
-                    if(instance_count<=1)
-                        ctx->DrawIndexed(index_count,first_index,vertex_offset);
-                    else
-                        ctx->DrawIndexedInstanced(index_count,instance_count,first_index,vertex_offset,first_instance);
-                    issued=true;
+                if(ul_bound){
+                    ctx->PSSetShader(replacement,nullptr,0);
+                    ctx->PSSetConstantBuffers(12,1,&b12);
+                    route.spec_t10_consumer_active=spec_active;
+
+                    const bool assets_ok=assets::apply_draw(ctx,route,receiver_id,asset_state);
+                    if(assets_ok){
+                        if(instance_count<=1)
+                            ctx->DrawIndexed(index_count,first_index,vertex_offset);
+                        else
+                            ctx->DrawIndexedInstanced(index_count,instance_count,first_index,vertex_offset,first_instance);
+                        issued=true;
+                    }
+                }else{
+                    ++g_fail_open;
                 }
 
                 const bool assets_restored=assets::restore_draw(ctx,asset_state);
@@ -525,6 +529,7 @@ bool on_draw_indexed(command_list *cmd,std::uint32_t index_count,std::uint32_t i
                 restore_ok=assets_restored && ul_restored && mr_restored;
 
                 const bool tx_restored=g_core->transactions().restore(command);
+                tx_started=false;
                 if(!tx_restored || !restore_ok){
                     ++g_restore_fail;
                     g_quarantined.store(true);
@@ -532,13 +537,17 @@ bool on_draw_indexed(command_list *cmd,std::uint32_t index_count,std::uint32_t i
                 }
             }else{
                 ++g_fail_open;
-                (void)upper_lower::restore_draw(ctx,ul_state);
             }
         }
     }
 
-    // If the native draw was not issued, restore every possibly touched lane
-    // and let ReShade execute the untouched stock draw exactly once.
+    // No mutation is allowed outside the transaction. If no native draw was
+    // issued, every locally captured state is restored and ReShade executes the
+    // original stock draw exactly once.
+    if(tx_started){
+        (void)g_core->transactions().restore(command);
+        tx_started=false;
+    }
     if(!issued){
         ++g_fail_open;
         (void)assets::restore_draw(ctx,asset_state);
