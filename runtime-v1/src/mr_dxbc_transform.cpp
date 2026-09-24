@@ -16,6 +16,8 @@ constexpr std::array<std::uint32_t,4> k_cb12_decl = {
     0x04000059u, 0x00208e46u, 0x0000000cu, 0x00000004u
 };
 
+constexpr char k_specrgb_rdef_name[] = "DSRRL_PTDE_SPEC_RGB";
+
 std::uint32_t read_u32(const std::uint8_t *p) noexcept
 {
     std::uint32_t v = 0;
@@ -309,6 +311,102 @@ bool verify_upper_lower_payload(
     return true;
 }
 
+
+bool patch_rdef_specrgb_if_present(
+    std::vector<chunk> &chunks,
+    std::string &err)
+{
+    std::size_t rdef_index=chunks.size();
+    for(std::size_t i=0;i<chunks.size();++i){
+        if(std::memcmp(chunks[i].tag.data(),"RDEF",4)==0){
+            if(rdef_index!=chunks.size()){
+                err="SpecRGB duplicate RDEF";
+                return false;
+            }
+            rdef_index=i;
+        }
+    }
+
+    // Upper/Lower deliberately strips stale reflection metadata after its
+    // structural CB rewrite. Do not invent a new RDEF in that composition.
+    if(rdef_index==chunks.size())
+        return true;
+
+    auto &rdef=chunks[rdef_index].payload;
+    if(rdef.size()<16u){
+        err="SpecRGB RDEF header";
+        return false;
+    }
+
+    const std::uint32_t binding_count=read_u32(rdef.data()+8u);
+    const std::uint32_t binding_offset=read_u32(rdef.data()+12u);
+    constexpr std::uint32_t binding_size=32u;
+
+    if(binding_count==0u || binding_count>256u ||
+       binding_offset>rdef.size() ||
+       static_cast<std::uint64_t>(binding_count)*binding_size>
+           rdef.size()-binding_offset){
+        err="SpecRGB RDEF binding table";
+        return false;
+    }
+
+    std::uint32_t t1_offset=0u;
+    std::uint32_t t1_count=0u;
+    for(std::uint32_t i=0;i<binding_count;++i){
+        const std::uint32_t off=binding_offset+i*binding_size;
+        const std::uint32_t type=read_u32(rdef.data()+off+4u);
+        const std::uint32_t bind_point=read_u32(rdef.data()+off+20u);
+        const std::uint32_t bind_count=read_u32(rdef.data()+off+24u);
+
+        if(type==2u && bind_point==10u){
+            err="SpecRGB RDEF t10 already declared";
+            return false;
+        }
+        if(type==2u && bind_point==1u && bind_count==1u){
+            t1_offset=off;
+            ++t1_count;
+        }
+    }
+
+    if(t1_count!=1u){
+        err="SpecRGB RDEF exact t1 texture binding";
+        return false;
+    }
+
+    const std::uint32_t name_offset=
+        static_cast<std::uint32_t>(rdef.size());
+    rdef.insert(
+        rdef.end(),
+        reinterpret_cast<const std::uint8_t*>(k_specrgb_rdef_name),
+        reinterpret_cast<const std::uint8_t*>(k_specrgb_rdef_name)+
+            sizeof(k_specrgb_rdef_name));
+    while((rdef.size()&3u)!=0u)
+        rdef.push_back(0u);
+
+    const std::uint32_t new_table_offset=
+        static_cast<std::uint32_t>(rdef.size());
+
+    const auto old_table_begin=rdef.begin()+binding_offset;
+    const auto old_table_end=old_table_begin+
+        static_cast<std::ptrdiff_t>(binding_count*binding_size);
+    std::vector<std::uint8_t> table(old_table_begin,old_table_end);
+
+    std::array<std::uint8_t,binding_size> t10{};
+    std::copy_n(
+        rdef.begin()+t1_offset,
+        binding_size,
+        t10.begin());
+    write_u32(t10.data()+0u,name_offset);
+    write_u32(t10.data()+20u,10u);
+
+    table.insert(table.end(),t10.begin(),t10.end());
+    rdef.insert(rdef.end(),table.begin(),table.end());
+
+    write_u32(rdef.data()+8u,binding_count+1u);
+    write_u32(rdef.data()+12u,new_table_offset);
+    return true;
+}
+
 } // namespace
 
 const plan *find_plan(std::size_t size,std::string_view sha256) noexcept
@@ -463,7 +561,7 @@ transform_result transform_spec_rgb(std::span<const std::uint8_t> base)
     std::vector<instruction_view> dcls;
     std::vector<instruction_view> samples;
     for(const auto &ins:instructions){
-        if(ins.opcode==0x58u && ins.length==4u && words[ins.offset+3u]==1u)
+        if(ins.opcode==0x58u && ins.length==4u && words[ins.offset+2u]==1u)
             dcls.push_back(ins);
         if(ins.opcode>=0x45u && ins.opcode<=0x4au && ins.length==11u &&
            words[ins.offset+8u]==1u)
@@ -479,7 +577,7 @@ transform_result transform_spec_rgb(std::span<const std::uint8_t> base)
 
     std::array<std::uint32_t,4> new_dcl{};
     std::copy_n(words.begin()+static_cast<std::ptrdiff_t>(dcl.offset),4,new_dcl.begin());
-    new_dcl[3]=10u;
+    new_dcl[2]=10u;
 
     std::array<std::uint32_t,11> new_sample{};
     std::copy_n(words.begin()+static_cast<std::ptrdiff_t>(sample.offset),11,new_sample.begin());
@@ -495,7 +593,14 @@ transform_result transform_spec_rgb(std::span<const std::uint8_t> base)
         new_sample.begin(),new_sample.end());
     words[1]=static_cast<std::uint32_t>(words.size());
 
-    auto out=rebuild_words(base,std::move(chunks),shex,words,r.error);
+    chunks[shex].payload.resize(words.size()*4u);
+    for(std::size_t i=0;i<words.size();++i)
+        write_u32(chunks[shex].payload.data()+i*4u,words[i]);
+
+    if(!patch_rdef_specrgb_if_present(chunks,r.error))
+        return r;
+
+    auto out=rebuild(base,chunks,r.error);
     if(out.empty()) return r;
 
     if(!get_shex_words(out,chunks,shex,words,r.error)) return r;
@@ -503,8 +608,8 @@ transform_result transform_spec_rgb(std::span<const std::uint8_t> base)
     std::size_t t1_dcl=0,t10_dcl=0,t1_sample=0,t10_sample=0;
     for(const auto &ins:instructions){
         if(ins.opcode==0x58u && ins.length==4u){
-            if(words[ins.offset+3u]==1u) ++t1_dcl;
-            if(words[ins.offset+3u]==10u) ++t10_dcl;
+            if(words[ins.offset+2u]==1u) ++t1_dcl;
+            if(words[ins.offset+2u]==10u) ++t10_dcl;
         }
         if(ins.opcode>=0x45u && ins.opcode<=0x4au && ins.length==11u){
             if(words[ins.offset+8u]==1u) ++t1_sample;

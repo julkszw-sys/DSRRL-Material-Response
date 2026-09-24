@@ -73,9 +73,28 @@ jobs:
           $hash = (Get-FileHash $addons[0].FullName -Algorithm SHA256).Hash.ToLowerInvariant()
           Write-Host "ADDON=$($addons[0].FullName)"
           Write-Host "SHA256=$hash"
+          "DSRRL_FIRST_ADDON_SHA=$hash" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
       - name: Run Windows tests
         shell: pwsh
         run: ctest --test-dir build/runtime-v1 -C Release --output-on-failure
+      - name: Rebuild addon and verify byte reproducibility
+        shell: pwsh
+        run: |
+          cmake --build build/runtime-v1 --config Release --target dsrrl_renderer_runtime_v1_addon --clean-first
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $addons = @(Get-ChildItem build/runtime-v1 -Recurse -Filter *.addon64)
+          if ($addons.Count -ne 1) {
+            Write-Error "Expected exactly one .addon64 after rebuild, found $($addons.Count)"
+            exit 1
+          }
+          python runtime-v1/tools/canonicalize_pe.py --check $addons[0].FullName
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $second = (Get-FileHash $addons[0].FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+          Write-Host "REBUILD_SHA256=$second"
+          if ($second -ne $env:DSRRL_FIRST_ADDON_SHA) {
+            Write-Error "Reproducibility failure: first=$env:DSRRL_FIRST_ADDON_SHA second=$second"
+            exit 1
+          }
       - uses: actions/upload-artifact@v4
         with:
           name: dsrrl-renderer-core-runtime-v1-a2

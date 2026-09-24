@@ -25,7 +25,34 @@
 #include <unordered_map>
 
 namespace dsrrl::runtime::upper_lower {
+
+namespace detail {
+
+struct f4 { float x=0.0f,y=0.0f,z=0.0f,w=0.0f; };
+
+struct snapshot {
+    std::uintptr_t owner = 0;
+    std::uint16_t a = 0;
+    std::uint16_t b = 0;
+    std::uint32_t beta_bits = 0;
+    alignas(16) std::array<f4,8> payload{};
+    mutable std::mutex gpu_mutex;
+    mutable ID3D11Device *device = nullptr;
+    mutable ID3D11Buffer *buffer = nullptr;
+
+    ~snapshot()
+    {
+        if(buffer) buffer->Release();
+        if(device) device->Release();
+    }
+};
+
+} // namespace detail
+
 namespace {
+
+using detail::f4;
+using detail::snapshot;
 
 constexpr std::uintptr_t k_rva_wrapper_type5 = 0x1C0BE0;
 constexpr std::uintptr_t k_rva_wrapper_type6 = 0x1C0C10;
@@ -53,27 +80,9 @@ constexpr std::size_t k_q_upper_offset = 0x60u;
 constexpr std::size_t k_q_lower_offset = 0x70u;
 constexpr float k_inv_pow = 1.0f / 2.2f;
 
-struct f4 { float x=0.0f,y=0.0f,z=0.0f,w=0.0f; };
 #pragma pack(push,1)
 struct raw_rgbm { std::int16_t r,g,b,m; };
 #pragma pack(pop)
-
-struct snapshot {
-    std::uintptr_t owner = 0;
-    std::uint16_t a = 0;
-    std::uint16_t b = 0;
-    std::uint32_t beta_bits = 0;
-    alignas(16) std::array<f4,8> payload{};
-    mutable std::mutex gpu_mutex;
-    mutable ID3D11Device *device = nullptr;
-    mutable ID3D11Buffer *buffer = nullptr;
-
-    ~snapshot()
-    {
-        if(buffer) buffer->Release();
-        if(device) device->Release();
-    }
-};
 
 struct producer_tls {
     bool active = false;
