@@ -361,7 +361,6 @@ ID3D11Buffer *realize_pmetal_b12(
         if(FAILED(ctx->Map(buffer,0,D3D11_MAP_WRITE_DISCARD,0,&mapped)) ||
            !mapped.pData){
             buffer->Release();
-            ++g_v13_b12_fail;
             return nullptr;
         }
 
@@ -381,7 +380,6 @@ ID3D11Buffer *realize_pmetal_b12(
         return buffer;
     } catch (...) {
         if(buffer) buffer->Release();
-        ++g_v13_b12_fail;
         return nullptr;
     }
 }
@@ -906,6 +904,11 @@ void on_present(command_queue *,swapchain *,const rect *,const rect *,std::uint3
               <<" ul_shader_pass="<<g_shader_ul_pass.load()<<" ul_shader_fail="<<g_shader_ul_fail.load()
               <<" spec_shader_pass="<<g_shader_spec_pass.load()<<" spec_shader_fail="<<g_shader_spec_fail.load()
               <<" ul_spec_shader_pass="<<g_shader_ul_spec_pass.load()<<" ul_spec_shader_fail="<<g_shader_ul_spec_fail.load()
+              <<" v13_shader_pass="<<g_shader_v13_pass.load()<<" v13_shader_fail="<<g_shader_v13_fail.load()
+              <<" v13_source_ready="<<g_v13_source_ready.load()<<" v13_source_miss="<<g_v13_source_miss.load()
+              <<" v13_resource_ready="<<g_v13_resource_ready.load()<<" v13_resource_miss="<<g_v13_resource_miss.load()
+              <<" v13_b12_update="<<g_v13_b12_update.load()<<" v13_b12_fail="<<g_v13_b12_fail.load()
+              <<" v13_replay="<<g_v13_replay.load()
               <<" binds="<<g_target_binds.load()
               <<" replay="<<g_replays.load()<<" subsurface_replay="<<g_subsurface_replays.load()<<" b12_create="<<g_b12_create.load()
               <<" b12_hit="<<g_b12_hit.load()<<" failopen="<<g_fail_open.load()
