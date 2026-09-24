@@ -351,3 +351,41 @@ Consequences for Renderer Core:
 Reproducible audit metadata is stored in
 `data/audits/terminal_sat_rgba_revalidation_rev8857.json`; the parser is
 `tools/audit_ptde_phn_terminal_write.py`.
+
+
+## Ps_Body Subsurface: exact create-time bypass carrier
+
+The current Ps_Body target remains a **HIGH CONFIDENCE** semantic route: exact DSR
+`Ps_Body[DSBT].mtd` maps to PTDE `Ps_Body[DSB].mtd`, whose target surface is the
+ordinary plain `ColDifSpcBmp` path rather than DSR's added Subsurf/SSS operator.
+
+Revision 8873 separately closes the **carrier** at CONSTRUCTION level. The three
+certified stable no-PointLight source bodies map variant-preservingly:
+
+| Source Subsurf | Target ordinary | Core receiver |
+| --- | --- | ---: |
+| `FRPG_Phn_DifSpcBmp______Csd_HemEnvSubsurf.fpo` | `FRPG_Phn_DifSpcBmp______Csd_HemEnv.fpo` | 33 |
+| `FRPG_Phn_DifSpcBmp______Sdw_HemEnvSubsurf.fpo` | `FRPG_Phn_DifSpcBmp______Sdw_HemEnv.fpo` | 34 |
+| `FRPG_Phn_DifSpcBmp__________HemEnvSubsurf.fpo` | `FRPG_Phn_DifSpcBmp__________HemEnv.fpo` | 35 |
+
+Pairwise DXBC RE proves, for all 3/3 pairs:
+
+- ISGN is byte-identical;
+- OSGN is byte-identical;
+- all five constant-buffer semantic layouts are identical;
+- shader-model token is identical;
+- the ordinary target resource set is a strict subset of the Subsurf source;
+- the only removed declarations are `t10 gSMP_10` and `s10 gSMP_10Sampler`.
+
+Therefore the narrow bypass carrier is create-time pixel-shader substitution/reuse;
+no EXE hook, draw replay, vertex-stage rewrite, output-stage rewrite or expanded host
+resource binding is required for the bypass itself.
+
+This does **not** authorize a bare Subsurf->vanilla-plain swap. The route remains
+fail-open until exact material/donor/body/draw identity and the complete ordinary PTDE
+SpecRGB + Diffuse + Normal + Material Response target are ready. Runtime activation
+of this Renderer Core path and PTDE-visible pixel equivalence remain open.
+
+The reproducible binary audit is
+`tools/audit_subsurface_plain_bypass_abi.py` with compact provenance in
+`data/audits/subsurface_plain_bypass_abi_v1.json`.
