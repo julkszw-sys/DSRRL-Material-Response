@@ -1,9 +1,11 @@
 #include "dsrrl/runtime/mr_dxbc_transform.hpp"
 #include "dsrrl/sha256.hpp"
 
+#include <algorithm>
 #include <array>
 #include <cstring>
 #include <limits>
+#include <optional>
 #include <utility>
 
 namespace dsrrl::runtime::mr {
@@ -429,14 +431,14 @@ transform_result transform_upper_lower(
     words[1]=static_cast<std::uint32_t>(words.size());
 
     chunks=without_rdef(std::move(chunks));
-    if(shex>=chunks.size() || std::memcmp(chunks[shex].tag.data(),"RDEF",4)==0){
-        shex=0;
-        bool found=false;
-        for(std::size_t i=0;i<chunks.size();++i)
-            if(std::memcmp(chunks[i].tag.data(),"SHEX",4)==0 ||
-               std::memcmp(chunks[i].tag.data(),"SHDR",4)==0){shex=i;found=true;break;}
-        if(!found){r.error="U/L code chunk lost after RDEF filter";return r;}
-    }
+    shex=0;
+    bool found_code=false;
+    for(std::size_t i=0;i<chunks.size();++i)
+        if(std::memcmp(chunks[i].tag.data(),"SHEX",4)==0 ||
+           std::memcmp(chunks[i].tag.data(),"SHDR",4)==0){
+            shex=i; found_code=true; break;
+        }
+    if(!found_code){r.error="U/L code chunk lost after RDEF filter";return r;}
 
     auto out=rebuild_words(base,std::move(chunks),shex,words,r.error);
     if(out.empty()) return r;
