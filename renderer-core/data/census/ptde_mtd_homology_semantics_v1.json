@@ -1,0 +1,55 @@
+{
+  "schema": 1,
+  "artifact": "PTDE/DSR full PHN MTD homology semantic cohort",
+  "parent_census": "renderer-core/data/census/ptde_mtd_semantic_census_v1.json",
+  "claim_scope": "CONSTRUCTION_AND_STATIC_ROUTING_ONLY",
+  "runtime_activation": "OPEN",
+  "pixel_equivalence": "OPEN",
+  "source_artifact_id": 571,
+  "identity_policy": "exact material semantic identity plus raw DSR MTD SHA; hash-only only when class-unambiguous",
+  "paired_phn_records": 325,
+  "classes": {
+    "HOMOLOGOUS_SPC": 213,
+    "HOMOLOGOUS_NOSPC": 25,
+    "NONHOMOLOGOUS_ADDED_SPC": 87,
+    "NONHOMOLOGOUS_LOST_SPC": 0
+  },
+  "added_spc_subclasses": {
+    "SPC_INSERT_ONLY": 20,
+    "SPC_PLUS_OTHER_FAMILY_CHANGE": 67
+  },
+  "raw_hashes": {
+    "full_dsr_mtd_count": 581,
+    "full_ptde_mtd_count": 436,
+    "class_ambiguous_dsr_hashes": 7,
+    "runtime_safe_paired_phn_unique_hashes": 302
+  },
+  "semantic_classification": {
+    "HOMOLOGOUS_SPC": {
+      "specular_family": {"state":"USE","confidence":"CONFIRMED","basis":"PTDE and DSR paired PHN both declare Spc consumer family"},
+      "material_response": {"state":"UNKNOWN","confidence":"OPEN","basis":"homology alone does not establish a specific c101/material-response route"},
+      "env_spec": {"state":"UNKNOWN","confidence":"OPEN"},
+      "subsurface": {"state":"UNKNOWN","confidence":"OPEN"}
+    },
+    "HOMOLOGOUS_NOSPC": {
+      "specular_family": {"state":"NO_USE","confidence":"CONFIRMED","basis":"PTDE and DSR paired PHN both declare no-Spc consumer family"},
+      "material_response": {"state":"UNKNOWN","confidence":"OPEN"},
+      "env_spec": {"state":"UNKNOWN","confidence":"OPEN"},
+      "subsurface": {"state":"UNKNOWN","confidence":"OPEN"}
+    },
+    "NONHOMOLOGOUS_ADDED_SPC": {
+      "ptde_specular_family": {"state":"NO_USE","confidence":"CONFIRMED","basis":"exact paired PTDE PHN is no-Spc while DSR paired PHN adds Spc"},
+      "dsr_specular_family": {"state":"USE","confidence":"CONFIRMED","basis":"exact paired DSR PHN declares Spc"},
+      "compatibility_action": "KEEP_DSR_HOST_AND_BINDINGS; exact-material draw-selective receiver logic only",
+      "env_spec": {"state":"UNKNOWN","confidence":"OPEN"},
+      "subsurface": {"state":"UNKNOWN","confidence":"OPEN"}
+    }
+  },
+  "guardrails": [
+    "Do not infer EnvSpec, Subsurface, alpha/blend, parallax, emissive/lightmap or texture-resource liveness from Spc homology alone.",
+    "The 20 SPC_INSERT_ONLY records are classification evidence, not authorization for literal MTD/SPX rollback; that implementation was runtime-falsified.",
+    "The 67 SPC_PLUS_OTHER_FAMILY_CHANGE records remain quarantined from blanket compatibility logic.",
+    "UNKNOWN preserves stock DSR behavior.",
+    "Construction/static routing does not establish runtime activation or PTDE-visible pixel equivalence."
+  ]
+}
