@@ -53,7 +53,7 @@ constexpr std::size_t k_q_upper_offset = 0x60u;
 constexpr std::size_t k_q_lower_offset = 0x70u;
 constexpr float k_inv_pow = 1.0f / 2.2f;
 
-struct alignas(16) f4 { float x=0.0f,y=0.0f,z=0.0f,w=0.0f; };
+struct f4 { float x=0.0f,y=0.0f,z=0.0f,w=0.0f; };
 #pragma pack(push,1)
 struct raw_rgbm { std::int16_t r,g,b,m; };
 #pragma pack(pop)
