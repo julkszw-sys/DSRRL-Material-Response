@@ -32,7 +32,15 @@ enum class mtd_semantic_operator : std::uint8_t {
 enum class mtd_semantic_source : std::uint8_t {
     none = 0,
     full24_exact_cohort,
-    exact_override
+    exact_override,
+    exact_binding_extension
+};
+
+enum class mtd_gate_policy : std::uint8_t {
+    none = 0,
+    exact_material,
+    direct_exact,
+    ptde_companion_required
 };
 
 struct mtd_semantic_query {
@@ -43,6 +51,7 @@ struct mtd_semantic_query {
 struct mtd_semantic_decision {
     mtd_semantic_state state = mtd_semantic_state::unknown;
     mtd_semantic_source source = mtd_semantic_source::none;
+    mtd_gate_policy gate_policy = mtd_gate_policy::none;
     bool exact_identity_match = false;
 };
 
