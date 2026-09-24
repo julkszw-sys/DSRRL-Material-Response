@@ -10,16 +10,8 @@
 
 namespace dsrrl::runtime::pmetal145 {
 
-struct donor_row {
-    std::uint32_t id;
-    std::uint16_t r, g, b, m;
-};
-
-struct bank_donor {
-    std::uint64_t signature;
-    std::uint32_t first;
-    std::uint32_t count;
-};
+struct donor_row { std::uint32_t id; std::uint16_t r, g, b, m; };
+struct bank_donor { std::uint64_t signature; std::uint32_t first; std::uint32_t count; };
 
 inline constexpr std::array<donor_row, 1246> k_rows = {{
     donor_row{0u,255u,255u,255u,300u},
@@ -1290,24 +1282,20 @@ inline constexpr std::array<bank_donor, 20> k_banks = {{
     bank_donor{0xe28e459ed303b5b0ULL,1054u,64u},
     bank_donor{0x1ecfd1e617c59071ULL,1118u,64u},
     bank_donor{0x4bf694db53edacc5ULL,1182u,64u},
-};
+}};
 
 constexpr const bank_donor *find_bank(std::uint64_t signature) noexcept
 {
-    for (const auto &b : k_banks)
-        if (b.signature == signature)
-            return &b;
+    for (const auto &b : k_banks) if (b.signature == signature) return &b;
     return nullptr;
 }
 
 constexpr const donor_row *find_row(const bank_donor &bank,std::uint32_t id) noexcept
 {
-    if (bank.first > k_rows.size() || bank.count > k_rows.size() - bank.first)
-        return nullptr;
+    if (bank.first > k_rows.size() || bank.count > k_rows.size() - bank.first) return nullptr;
     for (std::uint32_t i=0;i<bank.count;++i) {
         const auto &r=k_rows[bank.first+i];
-        if (r.id==id)
-            return &r;
+        if (r.id==id) return &r;
     }
     return nullptr;
 }
