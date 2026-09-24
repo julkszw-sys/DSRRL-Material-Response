@@ -76,6 +76,7 @@ if(WIN32 AND RESHade_INCLUDE_DIR)
     src/addon.cpp
     src/engine_hooks.cpp
     src/mr_island.cpp
+    src/ul_island.cpp
     src/selector_hook.asm
   )
   add_dependencies(dsrrl_renderer_runtime_v1_addon dsrrl_mr_manifest)
