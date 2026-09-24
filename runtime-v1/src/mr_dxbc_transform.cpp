@@ -416,6 +416,13 @@ const plan *find_plan(std::size_t size,std::string_view sha256) noexcept
     return nullptr;
 }
 
+const build151::lerp_plan *find_lerp_plan(
+    std::size_t size,
+    std::string_view sha256) noexcept
+{
+    return build151::find_lerp(size,sha256);
+}
+
 transform_result transform(std::span<const std::uint8_t> stock,const plan &p,variant v)
 {
     transform_result r;
@@ -456,6 +463,129 @@ transform_result transform(std::span<const std::uint8_t> stock,const plan &p,var
         r.error="V211 output SHA";return r;
     }
     r.ok=true; r.code=std::move(v211); return r;
+}
+
+
+transform_result transform_lerp(
+    std::span<const std::uint8_t> stock,
+    const build151::lerp_plan &p,
+    variant v)
+{
+    transform_result r;
+    if(stock.size()!=p.stock_size){r.error="Lerp stock size mismatch";return r;}
+    if(!hash_is(stock,p.original_sha256)){r.error="Lerp stock SHA mismatch";return r;}
+
+    std::vector<chunk> chunks;
+    std::vector<std::uint32_t> words;
+    std::size_t shex=0;
+    if(!get_shex_words(stock,chunks,shex,words,r.error)) return r;
+    if(words.size()<12 || words[1]!=words.size()){
+        r.error="Lerp SHEX length token"; return r;
+    }
+
+    for(const auto site:p.cb_sites){
+        if(site+1u>=words.size() || words[site]!=0u || words[site+1u]!=9u){
+            r.error="Lerp V29 cb0[9] site"; return r;
+        }
+    }
+    if(p.pow_site+2u>=words.size() ||
+       words[p.pow_site]!=0x400ccccdu ||
+       words[p.pow_site+1u]!=0x400ccccdu ||
+       words[p.pow_site+2u]!=0x400ccccdu){
+        r.error="Lerp V29 diffuse pow site"; return r;
+    }
+
+    for(const auto site:p.cb_sites){
+        words[site]=12u;
+        words[site+1u]=1u;
+    }
+    words[p.pow_site]=words[p.pow_site+1u]=words[p.pow_site+2u]=0x3f800000u;
+    words.insert(words.begin()+11,k_cb12_decl.begin(),k_cb12_decl.end());
+    words[1]+=4u;
+
+    auto v29=rebuild_words(stock,chunks,shex,words,r.error);
+    if(v29.empty() || !hash_is(v29,p.v29_sha256)){
+        r.error="Lerp V29 output SHA"; return r;
+    }
+    if(v==variant::diffuse_v29){
+        r.ok=true; r.code=std::move(v29); return r;
+    }
+
+    if(!get_shex_words(v29,chunks,shex,words,r.error)) return r;
+    if(p.v210_sites[0]>=words.size() || p.v210_sites[1]>=words.size() ||
+       words[p.v210_sites[0]]!=0u || words[p.v210_sites[1]]!=10u){
+        r.error="Lerp V210 patch precondition"; return r;
+    }
+    words[p.v210_sites[0]]=12u;
+    words[p.v210_sites[1]]=0u;
+
+    auto v210=rebuild_words(v29,chunks,shex,words,r.error);
+    if(v210.empty() || !hash_is(v210,p.v210_sha256)){
+        r.error="Lerp V210 output SHA"; return r;
+    }
+
+    if(!get_shex_words(v210,chunks,shex,words,r.error)) return r;
+    if(p.v211_word>=words.size() || words[p.v211_word]!=0x08002038u){
+        r.error="Lerp V211 patch precondition"; return r;
+    }
+    words[p.v211_word]=0x08000038u;
+
+    auto v211=rebuild_words(v210,chunks,shex,words,r.error);
+    if(v211.empty() || v211.size()!=p.replacement_size ||
+       !hash_is(v211,p.v211_sha256)){
+        r.error="Lerp V211 output SHA"; return r;
+    }
+
+    r.ok=true;
+    r.code=std::move(v211);
+    return r;
+}
+
+transform_result transform_v9a(std::span<const std::uint8_t> v211)
+{
+    transform_result r;
+    const auto sha=sha_hex(v211);
+    const auto *p=build151::find_v9a(sha);
+    if(!p){
+        r.error="V9A input SHA"; return r;
+    }
+
+    std::vector<chunk> chunks;
+    std::vector<std::uint32_t> words;
+    std::size_t shex=0;
+    if(!get_shex_words(v211,chunks,shex,words,r.error)) return r;
+
+    constexpr std::array<std::uint32_t,9> k_old = {{
+        0x09000038u,0x00100072u,0x00000003u,
+        0x00208246u,0x00000000u,0x00000004u,
+        0x00208006u,0x00000000u,0x0000004fu
+    }};
+    constexpr std::array<std::uint32_t,9> k_new = {{
+        0x06000036u,0x00100072u,0x00000003u,
+        0x00208006u,0x00000000u,0x0000004fu,
+        0x0100003au,0x0100003au,0x0100003au
+    }};
+
+    if(p->word_site+k_old.size()>words.size() ||
+       !std::equal(
+           k_old.begin(),k_old.end(),
+           words.begin()+static_cast<std::ptrdiff_t>(p->word_site))){
+        r.error="V9A exact gain-product precondition"; return r;
+    }
+
+    std::copy(
+        k_new.begin(),k_new.end(),
+        words.begin()+static_cast<std::ptrdiff_t>(p->word_site));
+
+    auto out=rebuild_words(v211,std::move(chunks),shex,words,r.error);
+    if(out.empty() || out.size()!=v211.size() ||
+       !hash_is(out,p->output_sha256)){
+        r.error="V9A exact output SHA"; return r;
+    }
+
+    r.ok=true;
+    r.code=std::move(out);
+    return r;
 }
 
 transform_result transform_upper_lower(
