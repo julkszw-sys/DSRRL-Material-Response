@@ -287,8 +287,18 @@
     "0x4000": "terminal_sat_rgba generic combined-write SAT rejected rev8857; PTDE exact Phn target is RGB-only SAT"
   },
   "default_activation": "OFF_OR_CANONICAL_BLOCKED_STOCK",
-  "construction": "PASS_PENDING_FINAL_ATOMIC_CI",
+  "construction": "PASS",
   "runtime": "NOT_TESTED",
   "bridge_activation": "NOT_TESTED",
-  "pixel": "OPEN"
+  "pixel": "OPEN",
+  "terminal_sat_rgba_revalidation": {
+    "canonical_revision": 8857,
+    "source_commit": "2db38314a9d86f741753a02534ce6dacfc42d439",
+    "ci_run_id": 35949930186,
+    "ci_job": "islands-tests",
+    "ci_conclusion": "success",
+    "runtime": "NOT_TESTED",
+    "bridge_activation": "BLOCKED_BY_CANONICAL_REJECTION",
+    "pixel": "OPEN_NOT_APPLICABLE_TO_REJECTED_GENERIC_TRANSLATOR"
+  }
 }
