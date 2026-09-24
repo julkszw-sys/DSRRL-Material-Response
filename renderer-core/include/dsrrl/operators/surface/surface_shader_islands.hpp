@@ -3,6 +3,7 @@
 #include "dsrrl/operators/known_operator_island.hpp"
 #include "dsrrl/operators/surface/terminal_sat_rgb_patch.hpp"
 #include "dsrrl/operators/surface/diffuse_material_domain.hpp"
+#include "dsrrl/operators/surface/fixed_postfog_identity.hpp"
 
 namespace dsrrl::operators::surface {
 

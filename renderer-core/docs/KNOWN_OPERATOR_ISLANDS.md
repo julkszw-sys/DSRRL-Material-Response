@@ -123,6 +123,26 @@ The primitive fails open for non-finite input. Exact create-time DXBC recipe imp
 still pending the canonical P2.2 plan source, so this closes the semantic/local-forward
 construction layer rather than runtime activation or final-pixel equivalence.
 
+## Source-complete semantic primitive: fixed-family post-Fog identity
+
+`surface.fixed_postfog_identity` now has a handwritten exact forward for the
+certified fixed PntSS/PntSSSS homolog family:
+
+```text
+DSR stock: Y = (s > 0.5) ? abs(C)^(1/2.2) : C
+PTDE/bridge: Y = C
+```
+
+The bridge removes only the DSR conditional post-Fog root and therefore preserves
+the signed post-Fog value on the PTDE path. Fog generation/mixing itself, upstream
+material/light operators, terminal SAT and later HDR/postprocess remain separate
+owners. The primitive fails open on non-finite inputs.
+
+The canonical scope is 72 unique shader hashes / 144 substantive fixed-family aliases.
+Exact per-DXBC create-time recipes are still pending import from the canonical P2.2
+plan source, so this is a CONSTRUCTION/local-forward closure rather than runtime or
+pixel-equivalence evidence.
+
 ## Legacy A1/P2.2 decomposition
 
 The old combined mask is decomposed by ownership:

@@ -62,6 +62,22 @@
       "identity_recipe_import": "PENDING",
       "runtime_activation": "NOT_TESTED",
       "pixel": "OPEN"
+    },
+    "fixed_postfog_identity": {
+      "local_operator_forward": "SOURCE_COMPLETE",
+      "canonical_operator": "renderer.cross.hemenv.fixed_postfog_identity_shader_bridge_v1",
+      "scope": "72 unique hashes / 144 substantive Phn fixed PntSS/PntSSSS aliases",
+      "equation": "DSR Y=(s>0.5)?abs(C)^(1/2.2):C; PTDE/bridge Y=C",
+      "owns": "conditional post-Fog root only",
+      "preserves": [
+        "Fog operator",
+        "pre-Fog material/light composition",
+        "terminal SAT",
+        "HDR/postprocess"
+      ],
+      "identity_recipe_import": "PENDING",
+      "runtime_activation": "NOT_TESTED",
+      "pixel": "OPEN"
     }
   },
   "legacy_a1": {

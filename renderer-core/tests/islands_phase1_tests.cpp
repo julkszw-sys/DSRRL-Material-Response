@@ -292,6 +292,29 @@ int main()
     CHECK(diffuse_domain.result ==
           operators::surface::diffuse_material_domain_result::fail_open_nonfinite_input);
 
+    // Fixed-family post-Fog island: remove only the DSR conditional root.
+    CHECK(gates.set(core::operator_id::fixed_postfog_identity, true));
+    activation = operators::surface::fixed_postfog_identity.evaluate(gates, verified);
+    CHECK(activation.state == core::island_state::active);
+
+    auto postfog = operators::surface::evaluate_fixed_postfog(0.25f, 1.0f);
+    CHECK(postfog.result == operators::surface::fixed_postfog_result::exact);
+    CHECK(std::fabs(postfog.stock_dsr - std::pow(0.25f, 1.0f / 2.2f)) < 0.000001f);
+    CHECK(postfog.ptde_bridge == 0.25f);
+
+    postfog = operators::surface::evaluate_fixed_postfog(-0.25f, 1.0f);
+    CHECK(postfog.result == operators::surface::fixed_postfog_result::exact);
+    CHECK(postfog.stock_dsr > 0.0f);
+    CHECK(postfog.ptde_bridge == -0.25f);
+
+    postfog = operators::surface::evaluate_fixed_postfog(-0.25f, 0.5f);
+    CHECK(postfog.stock_dsr == -0.25f);
+    CHECK(postfog.ptde_bridge == -0.25f);
+
+    postfog = operators::surface::evaluate_fixed_postfog(
+        0.25f, std::numeric_limits<float>::quiet_NaN());
+    CHECK(postfog.result == operators::surface::fixed_postfog_result::fail_open_nonfinite_input);
+
     CHECK(gates.set(core::operator_id::post_hdr, true));
     activation = operators::postprocess::hdr.evaluate(gates, verified);
     CHECK(activation.state == core::island_state::fail_open);
