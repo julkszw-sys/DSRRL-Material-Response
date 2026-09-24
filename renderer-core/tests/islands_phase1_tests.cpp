@@ -163,7 +163,7 @@ int main()
 
     const auto &catalog = core::known_operator_catalog();
     CHECK(catalog.size() == core::operator_count);
-    CHECK(core::operator_count == 24);
+    CHECK(core::operator_count == 25);
 
     for (std::size_t i = 0; i < catalog.size(); ++i) {
         CHECK(static_cast<std::size_t>(catalog[i].id) == i);
@@ -184,6 +184,16 @@ int main()
     CHECK((pmetal_black_safe_contract->requirements & core::require_resource) != 0u);
     CHECK((pmetal_black_safe_contract->requirements & core::require_producer) != 0u);
     CHECK((pmetal_black_safe_contract->requirements & core::require_consumer) != 0u);
+
+    const auto pmetal_v10_contract =
+        core::find_operator_contract(core::operator_id::pmetal_black_safe_v10);
+    CHECK(pmetal_v10_contract.has_value());
+    CHECK(pmetal_v10_contract->status == core::canonical_status::confirmed);
+    CHECK(pmetal_v10_contract->default_state == core::port_state::active_candidate);
+    CHECK(pmetal_v10_contract->carrier == core::carrier_kind::shader);
+    CHECK((pmetal_v10_contract->requirements & core::require_receiver) != 0u);
+    CHECK((pmetal_v10_contract->requirements & core::require_material) != 0u);
+    CHECK((pmetal_v10_contract->requirements & core::require_consumer) != 0u);
 
     core::feature_registry gates;
     core::activation_context verified;
