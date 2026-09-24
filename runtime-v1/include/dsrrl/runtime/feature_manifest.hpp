@@ -18,61 +18,67 @@ enum class runtime_feature_stage : std::uint8_t {
     rejected
 };
 
+enum class runtime_boot_policy : std::uint8_t {
+    hold_off = 0,
+    enable_immediately,
+    runtime_preflight
+};
+
 struct runtime_feature_entry {
     core::operator_id op = core::operator_id::material_response;
     runtime_feature_stage stage = runtime_feature_stage::rejected;
-    bool default_enabled = false;
+    runtime_boot_policy boot_policy = runtime_boot_policy::hold_off;
     const char *name = "";
 };
 
 inline constexpr std::array<runtime_feature_entry, core::operator_count>
 k_runtime_feature_manifest = {{
     {core::operator_id::material_response,
-     runtime_feature_stage::current_wired,true,"material_response"},
+     runtime_feature_stage::current_wired,runtime_boot_policy::enable_immediately,"material_response"},
     {core::operator_id::upper_lower,
-     runtime_feature_stage::current_wired,true,"upper_lower"},
+     runtime_feature_stage::current_wired,runtime_boot_policy::runtime_preflight,"upper_lower"},
     {core::operator_id::hemdir3,
-     runtime_feature_stage::future_partial,false,"hemdir3"},
+     runtime_feature_stage::future_partial,runtime_boot_policy::hold_off,"hemdir3"},
     {core::operator_id::spec_rgb,
-     runtime_feature_stage::current_wired,true,"spec_rgb"},
+     runtime_feature_stage::current_wired,runtime_boot_policy::enable_immediately,"spec_rgb"},
     {core::operator_id::env_spec,
-     runtime_feature_stage::future_partial,false,"env_spec"},
+     runtime_feature_stage::future_partial,runtime_boot_policy::hold_off,"env_spec"},
     {core::operator_id::envspec_nospc_delete,
-     runtime_feature_stage::current_wired,true,"envspec_nospc_delete"},
+     runtime_feature_stage::current_wired,runtime_boot_policy::enable_immediately,"envspec_nospc_delete"},
     {core::operator_id::envspec_pmetal_diagnostic,
-     runtime_feature_stage::diagnostic_only,false,"envspec_pmetal_diagnostic"},
+     runtime_feature_stage::diagnostic_only,runtime_boot_policy::hold_off,"envspec_pmetal_diagnostic"},
     {core::operator_id::env_diffuse,
-     runtime_feature_stage::future_partial,false,"env_diffuse"},
+     runtime_feature_stage::future_partial,runtime_boot_policy::hold_off,"env_diffuse"},
     {core::operator_id::point_light,
-     runtime_feature_stage::future_partial,false,"point_light"},
+     runtime_feature_stage::future_partial,runtime_boot_policy::hold_off,"point_light"},
     {core::operator_id::pointlight_pnts_attenuation,
-     runtime_feature_stage::current_wired,true,"pointlight_pnts_attenuation"},
+     runtime_feature_stage::current_wired,runtime_boot_policy::enable_immediately,"pointlight_pnts_attenuation"},
     {core::operator_id::local_specular_legacy,
-     runtime_feature_stage::future_partial,false,"local_specular_legacy"},
+     runtime_feature_stage::future_partial,runtime_boot_policy::hold_off,"local_specular_legacy"},
     {core::operator_id::subsurface,
-     runtime_feature_stage::future_candidate,false,"subsurface"},
+     runtime_feature_stage::future_candidate,runtime_boot_policy::hold_off,"subsurface"},
     {core::operator_id::diffuse,
-     runtime_feature_stage::current_wired,true,"diffuse"},
+     runtime_feature_stage::current_wired,runtime_boot_policy::enable_immediately,"diffuse"},
     {core::operator_id::normal,
-     runtime_feature_stage::current_wired,true,"normal"},
+     runtime_feature_stage::current_wired,runtime_boot_policy::enable_immediately,"normal"},
     {core::operator_id::diffuse_material_domain,
-     runtime_feature_stage::current_wired,true,"diffuse_material_domain"},
+     runtime_feature_stage::current_wired,runtime_boot_policy::enable_immediately,"diffuse_material_domain"},
     {core::operator_id::terminal_sat_rgb,
-     runtime_feature_stage::current_wired,true,"terminal_sat_rgb"},
+     runtime_feature_stage::current_wired,runtime_boot_policy::enable_immediately,"terminal_sat_rgb"},
     {core::operator_id::terminal_sat_rgba,
-     runtime_feature_stage::rejected,false,"terminal_sat_rgba"},
+     runtime_feature_stage::rejected,runtime_boot_policy::hold_off,"terminal_sat_rgba"},
     {core::operator_id::fixed_postfog_identity,
-     runtime_feature_stage::current_wired,true,"fixed_postfog_identity"},
+     runtime_feature_stage::current_wired,runtime_boot_policy::enable_immediately,"fixed_postfog_identity"},
     {core::operator_id::faceeye_shadow_legacy,
-     runtime_feature_stage::future_partial,false,"faceeye_shadow_legacy"},
+     runtime_feature_stage::future_partial,runtime_boot_policy::hold_off,"faceeye_shadow_legacy"},
     {core::operator_id::post_bloom,
-     runtime_feature_stage::blocked_preflight,false,"post_bloom"},
+     runtime_feature_stage::blocked_preflight,runtime_boot_policy::hold_off,"post_bloom"},
     {core::operator_id::post_hdr,
-     runtime_feature_stage::blocked_preflight,false,"post_hdr"},
+     runtime_feature_stage::blocked_preflight,runtime_boot_policy::hold_off,"post_hdr"},
     {core::operator_id::dsr_native_sfx,
-     runtime_feature_stage::host_preserve,false,"dsr_native_sfx"},
+     runtime_feature_stage::host_preserve,runtime_boot_policy::hold_off,"dsr_native_sfx"},
     {core::operator_id::dsr_sfx_inverse_tonemap,
-     runtime_feature_stage::host_preserve,false,"dsr_sfx_inverse_tonemap"}
+     runtime_feature_stage::host_preserve,runtime_boot_policy::hold_off,"dsr_sfx_inverse_tonemap"}
 }};
 
 constexpr bool runtime_feature_manifest_is_ordered_complete() noexcept
@@ -122,17 +128,46 @@ constexpr bool runtime_feature_is_hard_blocked(
            stage == runtime_feature_stage::rejected;
 }
 
-constexpr std::size_t runtime_default_enabled_count() noexcept
+constexpr bool runtime_feature_boot_enabled(
+    core::operator_id op) noexcept
+{
+    return runtime_feature_entry_for(op).boot_policy ==
+        runtime_boot_policy::enable_immediately;
+}
+
+constexpr bool runtime_feature_needs_boot_preflight(
+    core::operator_id op) noexcept
+{
+    return runtime_feature_entry_for(op).boot_policy ==
+        runtime_boot_policy::runtime_preflight;
+}
+
+constexpr std::size_t runtime_boot_enabled_count() noexcept
 {
     std::size_t count = 0;
     for (const auto &entry : k_runtime_feature_manifest)
-        if (entry.default_enabled)
+        if (entry.boot_policy == runtime_boot_policy::enable_immediately)
+            ++count;
+    return count;
+}
+
+constexpr std::size_t runtime_boot_preflight_count() noexcept
+{
+    std::size_t count = 0;
+    for (const auto &entry : k_runtime_feature_manifest)
+        if (entry.boot_policy == runtime_boot_policy::runtime_preflight)
             ++count;
     return count;
 }
 
 static_assert(
-    runtime_default_enabled_count() == 10u,
-    "A7 must not silently change the ten A1+A3 default-enabled runtime islands.");
+    runtime_boot_enabled_count() == 9u,
+    "A7 must preserve the nine immediately enabled A1+A3 runtime islands.");
+static_assert(
+    runtime_boot_preflight_count() == 1u,
+    "A7 must preserve U/L as the sole boot-time runtime-preflight island.");
+static_assert(
+    runtime_feature_needs_boot_preflight(core::operator_id::upper_lower),
+    "Upper/Lower must remain fail-open OFF until its exact producer hooks pass.");
 
 } // namespace dsrrl::runtime
