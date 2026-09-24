@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - agent/renderer-core-a2-runtime-ready-20260924
+      - agent/a2-specrgb-ul-close-20260924
       - dev/renderer-core-v1-islands
     paths:
       - "runtime-v1/**"
@@ -28,6 +29,18 @@ jobs:
         run: |
           python3 renderer-core/tools/generate_diffuse_routes_v12.py --input renderer-core/data/provenance/diffuse_routes_v12.tsv --output /tmp/generated_diffuse_routes_v12.hpp
           cmp /tmp/generated_diffuse_routes_v12.hpp renderer-core/include/dsrrl/runtime/generated_diffuse_routes_v12.hpp
+      - name: Verify exact SpecRGB name generation
+        run: |
+          python3 renderer-core/tools/generate_spec_routes_v12.py --input renderer-core/data/provenance/spec_routes_v12.tsv --output /tmp/generated_spec_routes_v12.hpp
+          cmp /tmp/generated_spec_routes_v12.hpp renderer-core/include/dsrrl/runtime/generated_spec_routes_v12.hpp
+      - name: Verify exact SpecRGB material-route generation
+        run: |
+          python3 renderer-core/tools/generate_spec_material_routes.py --input renderer-core/data/provenance/spec_material_routes_v1.tsv --output /tmp/generated_spec_material_routes.hpp
+          cmp /tmp/generated_spec_material_routes.hpp renderer-core/include/dsrrl/runtime/generated_spec_material_routes.hpp
+      - name: Verify exact Upper/Lower stable-hash generation
+        run: |
+          python3 renderer-core/tools/generate_ul_stable_hashes.py --input renderer-core/data/provenance/ul_stable_v29_hashes_v1.tsv --output /tmp/generated_ul_stable_hashes.hpp
+          cmp /tmp/generated_ul_stable_hashes.hpp renderer-core/include/dsrrl/runtime/generated_ul_stable_hashes.hpp
       - name: Configure runtime tests
         run: cmake -S runtime-v1 -B build/runtime-v1 -DCMAKE_BUILD_TYPE=Release
       - name: Build runtime tests
