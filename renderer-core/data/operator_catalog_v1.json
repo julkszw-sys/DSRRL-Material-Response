@@ -278,10 +278,26 @@
           2,
           4
         ],
-        "dsr_equation_comparison": "OPEN",
-        "bridge_carrier_candidate": "SHADER"
+        "dsr_kernel_split": "CONFIRMED_REV8691",
+        "resource_sampler_boundary": "CONFIRMED_REV8881",
+        "t7_resource_declaration": "INVARIANT_gSMP_7_SLOT7_8_OF_8",
+        "s7_sampler_partition": {
+          "comparison": [
+            "no-point",
+            "PntS"
+          ],
+          "regular": [
+            "PntSS",
+            "PntSSSS"
+          ]
+        },
+        "bridge_carrier_candidate": "SHADER+SAMPLER",
+        "resource_sidecar_required_by_static_abi": false,
+        "runtime_t7_identity": "OPEN",
+        "runtime_s7_descriptor": "OPEN",
+        "activation": "BLOCKED"
       },
-      "description": "Exact PTDE FaceEye Sdw/Csd packed-depth 16-tap shadow operator and its narrow composition into legacy EnvDiffuse/EnvSpec probe terms.",
+      "description": "Exact PTDE FaceEye Sdw/Csd packed-depth 16-tap shadow operator. DSR no-Point/PntS require a shader-kernel replacement plus a proven regular s7 sampler; static eight-variant RE shows t7 resource declaration compatibility and no material-authored shadow resource split.",
       "display_name": "PTDE FaceEye legacy shadow/environment operator",
       "operator_key": "surface.faceeye_shadow_legacy",
       "canonical_key": "renderer.ptde.faceeye_shadow_operator_v1",
