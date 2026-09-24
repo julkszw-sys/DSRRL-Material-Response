@@ -39,8 +39,8 @@ struct a1_create_time_outcome {
     std::uint16_t selected_ops = 0;
     bool full_plan_materialized = false;
 
-    core::sha256_digest source_sha256{};
-    core::sha256_digest output_sha256{};
+    hashing::sha256_digest source_sha256{};
+    hashing::sha256_digest output_sha256{};
 
     const generated::a1_exact_patch_plan *plan = nullptr;
 };
@@ -56,7 +56,7 @@ inline bool a1_candidate_code_size(std::size_t size) noexcept
 
 inline const generated::a1_exact_patch_plan *find_a1_plan_by_exact_digest(
     std::size_t size,
-    const core::sha256_digest &digest) noexcept
+    const hashing::sha256_digest &digest) noexcept
 {
     for (const auto &plan : generated::k_a1_exact_patch_plans_v1) {
         if (plan.code_size != size)
