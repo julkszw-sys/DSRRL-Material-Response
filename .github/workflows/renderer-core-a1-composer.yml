@@ -1,0 +1,31 @@
+name: Renderer Core A1 Island Composer
+
+on:
+  push:
+    branches:
+      - agent/a1-island-composer-20260924
+      - dev/renderer-core-v1-islands
+    paths:
+      - "renderer-core/include/dsrrl/operators/legacy_plan/dxbc_checksum.hpp"
+      - "renderer-core/include/dsrrl/operators/legacy_plan/a1_exact_island_composer.hpp"
+      - "renderer-core/include/dsrrl/operators/legacy_plan/generated_a1_exact_patch_recipes_v1.hpp"
+      - "renderer-core/tests/a1_island_composer_tests.cpp"
+      - ".github/workflows/renderer-core-a1-composer.yml"
+  pull_request:
+    paths:
+      - "renderer-core/include/dsrrl/operators/legacy_plan/dxbc_checksum.hpp"
+      - "renderer-core/include/dsrrl/operators/legacy_plan/a1_exact_island_composer.hpp"
+      - "renderer-core/include/dsrrl/operators/legacy_plan/generated_a1_exact_patch_recipes_v1.hpp"
+      - "renderer-core/tests/a1_island_composer_tests.cpp"
+      - ".github/workflows/renderer-core-a1-composer.yml"
+
+jobs:
+  composer-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile A1 island composer tests
+        run: |
+          c++ -std=c++17 -Wall -Wextra -Wpedantic -Werror             -Irenderer-core/include             renderer-core/tests/a1_island_composer_tests.cpp             -o /tmp/a1_island_composer_tests
+      - name: Run A1 island composer tests
+        run: /tmp/a1_island_composer_tests

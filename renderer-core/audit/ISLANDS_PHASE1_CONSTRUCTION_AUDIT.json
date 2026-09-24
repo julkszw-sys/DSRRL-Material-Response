@@ -1,0 +1,56 @@
+{
+  "schema": 1,
+  "component": "DSRRL Renderer Core v1",
+  "phase": "Islands Phase 1",
+  "branch": "dev/renderer-core-v1-islands",
+  "parent_phase0_head": "6ef1146c417d3c8aebd4dc104ceffa47ba37cc6c",
+  "implementation_source_commit": "be4728fa59368a1c5b18414f79d5e7ea25cb8207",
+  "construction_status": "PASS",
+  "validation": {
+    "github_actions_workflow": "Renderer Core Islands",
+    "workflow_run_id": 35939909280,
+    "workflow_run_url": "https://github.com/julkszw-sys/DSRRL-Material-Response/actions/runs/35939909280",
+    "generated_route_table_reproduction": "PASS",
+    "configure": "PASS",
+    "build": "PASS",
+    "core_phase0_tests": "PASS",
+    "islands_phase1_tests": "PASS",
+    "warnings_as_errors": true
+  },
+  "material_response": {
+    "asset_scope": "GLOBAL_NOT_EQUIPMENT_ONLY",
+    "receiver_modes": [
+      "GLOBAL_RECEIVER_SAFE",
+      "EXACT_MATERIAL_REQUIRED"
+    ],
+    "confirmed_route_seed_rows": 35,
+    "distinct_route_indices": 34,
+    "semantic_material_name_required": true,
+    "known_route5_hash_name_collision_safe": true,
+    "seeded_operation": "specular_factor_c101",
+    "receiver_recipe_activation": "SEPARATE_CERTIFICATION_REQUIRED"
+  },
+  "envspec": {
+    "ownership": "SEPARATE_ISLAND",
+    "unknown": "PRESERVE_HOST",
+    "ptde_absent": "SUPPRESS_DSR_ONLY",
+    "ptde_present_bridge_not_ready": "PRESERVE_HOST",
+    "ptde_present_bridge_ready": "ACTIVATE_PTDE_BRIDGE"
+  },
+  "operator_isolation": {
+    "pointlight_attenuation_owned_by_material_response": false,
+    "terminal_scene_clamp_owned_by_material_response": false,
+    "upper_lower_owned_by_material_response": false,
+    "hemdir3_owned_by_material_response": false
+  },
+  "activation": {
+    "default": "OFF",
+    "windows_dsr_runtime": "NOT_TESTED",
+    "bridge_activation": "NOT_TESTED",
+    "pixel_behavior": "OPEN"
+  },
+  "promotion": {
+    "rc_release_eligible": false,
+    "next_gate": "materialize certified receiver recipes/create-time replacements and then Windows runtime activation proof"
+  }
+}

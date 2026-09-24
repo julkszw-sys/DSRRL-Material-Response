@@ -1,0 +1,43 @@
+{
+  "schema": 1,
+  "component": "DSRRL Renderer Core v1",
+  "phase": "Islands Phase 1",
+  "branch": "dev/renderer-core-v1-islands",
+  "parent_branch": "dev/renderer-core-v1-phase0",
+  "activation_default": "OFF",
+  "material_response": {
+    "asset_scope": "GLOBAL_NOT_EQUIPMENT_ONLY",
+    "activation_classes": [
+      "GLOBAL_RECEIVER_SAFE",
+      "EXACT_MATERIAL_REQUIRED"
+    ],
+    "owned_semantics": [
+      "diffuse_material_domain_linear",
+      "specular_factor_c101"
+    ],
+    "explicitly_not_owned": [
+      "PointLight attenuation",
+      "terminal scene clamp",
+      "EnvSpec resource/sampling operator",
+      "Upper/Lower",
+      "HemDir3"
+    ]
+  },
+  "envspec_gate": {
+    "PTDE_ABSENT": "SUPPRESS_DSR_ONLY",
+    "PTDE_PRESENT_BRIDGE_READY": "ACTIVATE_PTDE_BRIDGE",
+    "PTDE_PRESENT_BRIDGE_NOT_READY": "PRESERVE_HOST",
+    "UNKNOWN": "PRESERVE_HOST"
+  },
+  "evidence_basis": {
+    "a1_global_safe_plan_hashes": 144,
+    "a1_aliases": 252,
+    "a2_unique_receiver_bodies": 249,
+    "a2_aliases": 609,
+    "a2_shared_specular_bodies": 72,
+    "confirmed_mtd_rows": 35,
+    "distinct_route_indices": 34
+  },
+  "runtime": "NOT_TESTED",
+  "pixel": "OPEN"
+}

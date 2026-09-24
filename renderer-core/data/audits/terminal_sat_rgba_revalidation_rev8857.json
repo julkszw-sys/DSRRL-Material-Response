@@ -1,0 +1,65 @@
+{
+  "schema": 1,
+  "audit": "PTDE FRPG_Phn HemEnv terminal write revalidation",
+  "canonical_revision": 8857,
+  "source_artifact_id": 99,
+  "source_sha256": "57314b36812dfa2867512052278a08dc0da8a41ea0414c1fbbe4ccdf45838076",
+  "input_root": "dvdbnd1_dcx_0000631D9390",
+  "audit_script_sha256": "d77a2db61c5d89c0465c064fa878d3eb9872f7216b2d8505d79e35fa5419ca57",
+  "full_local_audit_sha256": "37aa03b2070e138020905ca920339a69cabfa7084e154a597b8f4454c5e46294",
+  "shader_count": 384,
+  "rgb_only_sat_count": 384,
+  "combined_rgba_terminal_count": 0,
+  "special_exact_name_counts": {
+    "Alp": 0,
+    "Parallax": 0,
+    "Subsurf": 0
+  },
+  "breakdown": [
+    {
+      "class": "BASE",
+      "opcode": "MUL",
+      "write_mask": 7,
+      "sat": true,
+      "partial_precision": true,
+      "count": 96
+    },
+    {
+      "class": "PNTS",
+      "opcode": "MUL",
+      "write_mask": 7,
+      "sat": true,
+      "partial_precision": true,
+      "count": 96
+    },
+    {
+      "class": "PNTSS",
+      "opcode": "MUL",
+      "write_mask": 7,
+      "sat": true,
+      "partial_precision": true,
+      "count": 96
+    },
+    {
+      "class": "PNTSSSS",
+      "opcode": "MUL",
+      "write_mask": 7,
+      "sat": true,
+      "partial_precision": true,
+      "count": 96
+    }
+  ],
+  "historical_dsr_combined_rgba_class": {
+    "unique_hashes": 60,
+    "physical_aliases": 312,
+    "direct_target_aliases": 192,
+    "collateral_aliases": 120
+  },
+  "conclusion": {
+    "generic_combined_rgba_sat_exact_for_phn": false,
+    "generic_core_island_status": "REJECTED_BLOCKED",
+    "reason": "PTDE exact Phn HemEnv terminal clamp is RGB-only; combined RGBA SAT would additionally clamp alpha.",
+    "hash_alias_authorization": "Exact semantic identity required; DSR-only Alp/Parallax/Subsurf aliases do not inherit PTDE authorization from byte-identical payload hashes.",
+    "reopen_condition": "RGB-only body rewrite preserving alpha or direct alpha-equivalence proof for one exact gated subclass."
+  }
+}

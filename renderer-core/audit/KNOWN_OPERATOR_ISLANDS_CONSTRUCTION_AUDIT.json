@@ -1,0 +1,64 @@
+{
+  "schema": 1,
+  "component": "DSRRL Renderer Core v1",
+  "phase": "Complete Known Operator Islands + A1 Decomposition",
+  "branch": "dev/renderer-core-v1-islands",
+  "parent_phase1_head": "6eb0443d544696a0a334c345435436f4401b75fa",
+  "implementation_commit": "396c56354d074f93ebc9830f92b295ac92d4fe1d",
+  "construction_status": "PASS",
+  "validation": {
+    "workflow": "Renderer Core Islands",
+    "workflow_run_id": 35941349328,
+    "workflow_run_url": "https://github.com/julkszw-sys/DSRRL-Material-Response/actions/runs/35941349328",
+    "material_route_generation": "PASS",
+    "operator_catalog_verification": "PASS",
+    "a1_identity_index_generation": "PASS",
+    "configure": "PASS",
+    "build": "PASS",
+    "tests": "PASS",
+    "warnings_as_errors": true
+  },
+  "operator_catalog": {
+    "architecture_contract": "architecture.host_cut",
+    "operator_islands": 23,
+    "source": "dsrrl.shader_math_operators snapshot plus canonical resource/material bridge findings",
+    "blocked_policy": "FAIL_OPEN_STOCK_DSR",
+    "stock_host_policy": "PRESERVE_DSR",
+    "diagnostic_policy": "EXPLICIT_OPT_IN_REQUIRED"
+  },
+  "a1_decomposition": {
+    "historical_build_key": "material_response_1_45_expanded_a1_global_materials",
+    "identity_plans": 144,
+    "aliases": 252,
+    "expected_patch_ops": 312,
+    "mask_counts": {
+      "0x0008": 72,
+      "0x0027": 12,
+      "0x00C1": 24,
+      "0x0100": 36
+    },
+    "automatic_migration_bits": [1,2,4,8,32,64,128,256],
+    "nonclosed_bits_not_auto_migrated": [512,1024,2048,8192,16384],
+    "rejected_bits_not_auto_migrated": [16,4096],
+    "unknown_bits_policy": "FAIL_OPEN"
+  },
+  "a1_byte_ops_source": {
+    "source_artifact_id": 253,
+    "source_artifact_sha256": "70b2d91aec619ad2df99a161151d974d8d52269f4040acdd6288ff586a9f8fed",
+    "source_member": "data/PORT_PLAN.json",
+    "source_plan_sha256": "5cc15f8084fb75cb33c27be3f0e94be7fd186f07c16274b33ee09735b747a1ec",
+    "embedded_in_git": false,
+    "runtime_materializer_source_complete": false,
+    "release_gate": "CLOSED_UNTIL_EXACT_OPS_SOURCE_IS_COMMITTED_OR_RECONSTRUCTED_AND_VERIFIED"
+  },
+  "runtime": {
+    "windows_dsr_runtime": "NOT_TESTED",
+    "bridge_activation": "NOT_TESTED",
+    "pixel_behavior": "OPEN",
+    "operators_default_active": false
+  },
+  "promotion": {
+    "catalog_and_routing_construction": "ELIGIBLE_FOR_CONFIRMED_CONSTRUCTION_FINDING",
+    "runtime_materialization": "NOT_RELEASE_ELIGIBLE"
+  }
+}

@@ -1,0 +1,586 @@
+{
+  "schema": 1,
+  "generated_from": {
+    "supabase_table": "dsrrl.shader_math_operators",
+    "canonical_revision_floor": 483,
+    "supplemental_bridge_findings": [
+      "renderer.core.islands.phase1.material_response_envspec_gate_v1",
+      "project.materialization.ptde_specrgb_bridge_full24_stable_hemenv_v1",
+      "project.renderer.equipment_diffuse_bridge_architecture_v1",
+      "project.renderer.equipment_normal_material_route_gate_v1",
+      "project.renderer.material_response_single_addon_subsurf_normal_diffuse_v1"
+    ]
+  },
+  "architecture_contract": {
+    "status": "HIGH CONFIDENCE",
+    "metadata": {
+      "baseline": "P2.2_SURFACE_PLUS_STOCK_HDR"
+    },
+    "description": "Guard -> B_in -> PTDE operator island -> B_out -> preserved DSR downstream.",
+    "display_name": "Host-cut capsule contract",
+    "operator_key": "architecture.host_cut",
+    "canonical_key": "project.branch.renderer_edition_current_shader_host_cut_architecture_v1",
+    "operator_class": "ARCHITECTURE",
+    "canonical_revision": 3798,
+    "default_port_state": "STOCK",
+    "fail_open_behavior": "STOCK_DSR"
+  },
+  "operators": [
+    {
+      "status": "HIGH CONFIDENCE",
+      "metadata": {
+        "graph_helper": "0x140164AF0",
+        "sfx_accessor": "0x140452000",
+        "graph_command": "class 0x16 / word 0x00030001",
+        "graph_callsite": "0x1402D107D",
+        "subtype4_exhaustive": false,
+        "graph_edge_confirmed": true,
+        "confirmed_coordinates": [
+          "FrpgFxClusterAppearance_Model",
+          "FrpgFxParticleAppearance_Model",
+          "FRPG_SfxPBL SimpleSprite Type1/Type3/DepthType3",
+          "FrpgFxDrawEntityHostPointLight",
+          "ImageProcessMan+0x90 ImageProcessCompositeOffscreenSFX"
+        ],
+        "global_postprocess_ptde_port": "BLOCKED_UNTIL_COMPOSITE_ORDER_CLOSED",
+        "composite_order_vs_tonemap_hdr": "OPEN",
+        "pointlight_category1_exclusive": false
+      },
+      "description": "Preserves stock DSR spell/magic/VFX behavior while PTDE operators are ported into the rest of the renderer. This is a multi-coordinate boundary spanning FX draw provenance, dedicated SfxPBL receivers, SFX-hosted PointLights and ImageProcessCompositeOffscreenSFX.",
+      "display_name": "DSR Native Spell / VFX Island",
+      "operator_key": "dsr_native_sfx_island",
+      "canonical_key": "renderer.bridge.dsr_native_sfx_island_multigate_boundary_v1",
+      "operator_class": "COMPOSITE_ROUTING_BOUNDARY",
+      "canonical_revision": 8625,
+      "default_port_state": "STOCK",
+      "fail_open_behavior": "If an SFX identity/provenance/resource/composite gate is positive or ambiguous, preserve stock DSR behavior; never route the draw/light/pass through a PTDE operator by guess.",
+      "operator_id": "dsr_native_sfx"
+    },
+    {
+      "status": "CONFIRMED",
+      "metadata": {
+        "enable": "cb0[31].x",
+        "formula": "C*inverseToneMapMul*(Lc+0.0001)/grayKey",
+        "ps_total": 34,
+        "consumers": 20,
+        "sample_uv": [
+          0.5,
+          0.5
+        ],
+        "cpu_writer": "0x140500860",
+        "adapt_param": "cb0[30]",
+        "lum_texture": "t4/s4",
+        "bridge_target": "DSR-native spell/VFX island",
+        "sfx_srv_binder": "0x1404FFBB0 -> 0x1400BADC0 slot4",
+        "lumtex_provider": "RenderTargetManImp+0x130",
+        "tone_map_getter": "0x1404521D0 -> 0x140462B50",
+        "provider_route_status": "CONFIRMED"
+      },
+      "description": "Stock DSR SFX inverse-exposure operator that precompensates selected SfxPBL RGB for the DSR adapted-luminance/tone-map exposure path.",
+      "display_name": "DSR dedicated SfxPBL inverse-tonemap",
+      "operator_key": "dsr.sfxpbl.inverse_tonemap",
+      "canonical_key": "renderer.dsr.sfxpbl.dedicated_inverse_tonemap_operator_v1",
+      "operator_class": "DOMAIN_BRIDGE",
+      "canonical_revision": 8681,
+      "default_port_state": "STOCK",
+      "fail_open_behavior": "STOCK_DSR",
+      "operator_id": "dsr_sfx_inverse_tonemap"
+    },
+    {
+      "status": "CONFIRMED",
+      "metadata": {
+        "c8_operator": "CONFIRMED_REV3604",
+        "port_status": "BLOCKED_NARROWED",
+        "pass0x04_sampler": "CLOSED_REV3851",
+        "open_dependencies": [
+          "BrightPass exact cross-version c8/t2 state certification",
+          "fixed-size A8R8G8B8 full-RGBA sidecar materialization",
+          "sidecar insertion/synchronization/ownership/resource lifetime",
+          "end-to-end reconstructed RGBA validation at HDR t1"
+        ],
+        "runtime_activation": false,
+        "pass0x04_color_edge": "SHADER_AND_RASTER_MAPPING_CLOSED",
+        "overall_bloom_status": "BLOCKED_BY_OTHER_GRAPH_SIDECAR_DEPENDENCIES",
+        "pass0x04_operator_math": "CLOSED_REV3851_REV3854",
+        "required_intermediates": [
+          "256x180_A8R8G8B8",
+          "128x90_A8R8G8B8"
+        ],
+        "brightpass_c8_semantics": "NEAR_FAR_CLOSED_REV3888",
+        "t2_cross_representation": "HIGH_CONFIDENCE",
+        "pass0x04_halfpixel_mapping": "CLOSED_REV3854",
+        "t2_main_image_producer_order": "CONFIRMED_REV3809",
+        "t2_representation_quantization": "SEPARATE",
+        "brightpass_depth_reconstruction": "VIEW_SPACE_Z_EXACT_REV3888",
+        "cross_version_near_far_numeric_identity_required": false
+      },
+      "description": "PTDE Bloom requires a fixed-size graph/resource sidecar and remains blocked-narrowed.",
+      "display_name": "Bloom graph sidecar",
+      "operator_key": "post.bloom",
+      "canonical_key": "project.branch.renderer_edition_bloom_portability_status",
+      "operator_class": "POSTPROCESS_BLOOM",
+      "canonical_revision": 3867,
+      "default_port_state": "BLOCKED",
+      "fail_open_behavior": "STOCK_DSR",
+      "operator_id": "post_bloom"
+    },
+    {
+      "status": "CONFIRMED",
+      "metadata": {
+        "r24_full_swap": "FORBIDDEN",
+        "stock_dsr_hdr": "ON",
+        "output_mismatch_revision": 3792
+      },
+      "description": "PTDE HDR requires explicit input scene-code and output transfer bridges; R24 full-payload replacement is forbidden.",
+      "display_name": "HDR semantic bridge",
+      "operator_key": "post.hdr",
+      "canonical_key": "project.branch.renderer_edition_hdr_r24_input_scene_domain_mismatch",
+      "operator_class": "POSTPROCESS_HDR",
+      "canonical_revision": 3790,
+      "default_port_state": "BLOCKED",
+      "fail_open_behavior": "STOCK_DSR",
+      "operator_id": "post_hdr"
+    },
+    {
+      "status": "CONFIRMED",
+      "metadata": {
+        "spec_raw": false,
+        "p2_2_mask_bits": [
+          2,
+          64,
+          1024
+        ]
+      },
+      "description": "PTDE linear material factor versus DSR abs(x)^2.2 material-domain transform.",
+      "display_name": "Diffuse material-domain bridge",
+      "operator_key": "surface.diffuse_material_domain",
+      "canonical_key": "renderer.cross.hemenv_fixed_phn_material_domain_family_census",
+      "operator_class": "MATERIAL_DOMAIN",
+      "canonical_revision": 1374,
+      "default_port_state": "ACTIVE",
+      "fail_open_behavior": "STOCK_DSR",
+      "operator_id": "diffuse_material_domain"
+    },
+    {
+      "status": "HIGH CONFIDENCE",
+      "metadata": {
+        "sampler": "OPEN",
+        "legacy_route": "OPEN",
+        "resource_sidecar": "OFF"
+      },
+      "description": "PTDE EnvDiffuse probe/source/receiver forward; Renderer Edition resource sidecar remains blocked.",
+      "display_name": "EnvDiffuse full causal operator",
+      "operator_key": "surface.envdiffuse",
+      "canonical_key": "renderer.ptde.envdiffuse.end_to_end_forward_v1",
+      "operator_class": "ENVDIFFUSE",
+      "canonical_revision": 483,
+      "default_port_state": "BLOCKED",
+      "fail_open_behavior": "STOCK_DSR",
+      "operator_id": "env_diffuse"
+    },
+    {
+      "status": "CONFIRMED",
+      "metadata": {
+        "math": "CLOSED",
+        "sampler_core": "CLOSED_REV3858",
+        "fixed_lod_exact": false,
+        "sampler_blocker": "CLOSED",
+        "material_sidecar": {
+          "layout": "b12[0].xyz=c101_P.rgb; b12[0].w=c102_P; b12[1].x=EnvSpcSlotNo_P",
+          "binding": "b12",
+          "revision": 3834,
+          "runtime_validation": "OPEN"
+        },
+        "resource_classes": {
+          "packed_gi": {
+            "coverage": 342,
+            "stored_alpha": true,
+            "representation": "four one-mip RGBA/BGRA8 cubes"
+          },
+          "classic_legacy": {
+            "stored_alpha": false,
+            "representation": "RGB24 one-mip cubes",
+            "envspec_resources": 132,
+            "unsupported_policy": "FAIL_OPEN",
+            "complete_probe_sets": 33
+          }
+        },
+        "runtime_activation": false,
+        "sampler_descriptor": "CLOSED_REV3858",
+        "alpha_extension_hosts": "OPEN_SEPARATE_CERTIFICATION",
+        "latest_sampler_revision": 3858,
+        "specmap_color0_topology": "CLOSED_192_OF_192_REV3837",
+        "latest_resource_lookup_revision": 3848,
+        "specmap_vertex_content_equality": "OPEN",
+        "d3d11_sampler_runtime_validation": "OPEN",
+        "classic_dynamic_assignment_homology": "OPEN",
+        "classic_rgb24_implicit_alpha_parity": "OPEN"
+      },
+      "description": "Exact local PTDE EnvSpec legacy receiver for retained Phn Spc no-PointLight HemEnv/HemEnvLerp. Resource input is route-classed: packed GI uses raw stored-alpha RGBA/BGRA8 sidecars; classic legacy uses RGB24 semantic resources. The bridge applies PTDE sampling/endpoint/profile/material receiver semantics and bypasses the DSR PBL EnvSpec tail.",
+      "display_name": "EnvSpec exact legacy bridge",
+      "operator_key": "surface.envspec_legacy",
+      "canonical_key": "project.branch.renderer_edition_envspec_exact_legacy_bridge_contract_v1",
+      "operator_class": "ENVSPEC",
+      "canonical_revision": 3864,
+      "default_port_state": "BLOCKED",
+      "fail_open_behavior": "STOCK_DSR",
+      "operator_id": "env_spec"
+    },
+    {
+      "status": "CONFIRMED",
+      "metadata": {
+        "p2_2_mask_bits": [
+          32
+        ],
+        "final_pixel_equivalence": false
+      },
+      "description": "Delete DSR-only EnvSpec lane on certified no-Spc homologs where PTDE counterpart lacks that lane.",
+      "display_name": "No-Spc EnvSpec deletion",
+      "operator_key": "surface.envspec_nospc_delete",
+      "canonical_key": "renderer.cross.hemenv_shaderonly_bridge_census_v1",
+      "operator_class": "ENVSPEC",
+      "canonical_revision": 973,
+      "default_port_state": "ACTIVE",
+      "fail_open_behavior": "STOCK_DSR",
+      "operator_id": "envspec_nospc_delete"
+    },
+    {
+      "status": "CONFIRMED",
+      "metadata": {
+        "role": "HISTORICAL_SPATIAL_PROXY",
+        "fixed_lod_exact": false,
+        "current_p2_2_enabled": false,
+        "superseded_exact_math_by": "surface.envspec_legacy"
+      },
+      "description": "Historical/diagnostic material-gated fixed-LOD P_Metal EnvSpec proxy. Fixed LOD3/4 is not exact PTDE EnvSpec translation and is disabled in current P2.2 shared hosts.",
+      "display_name": "P_Metal fixed-LOD EnvSpec proxy",
+      "operator_key": "surface.envspec_pmetal",
+      "canonical_key": "project.branch.renderer_edition_r06_pmetal_ptde_envspec_receiver_construction",
+      "operator_class": "ENVSPEC",
+      "canonical_revision": 3479,
+      "default_port_state": "DIAGNOSTIC",
+      "fail_open_behavior": "STOCK_DSR",
+      "operator_id": "envspec_pmetal_diagnostic"
+    },
+    {
+      "status": "CONFIRMED",
+      "metadata": {
+        "variants": [
+          "Sdw",
+          "Csd"
+        ],
+        "operator_cut": "pre-material diffuse/specular lighting accumulators",
+        "platform_target": "PTDE",
+        "receiver_family": "FRPG_Phn_FaceEye",
+        "pointlight_counts": [
+          0,
+          1,
+          2,
+          4
+        ],
+        "dsr_kernel_split": "CONFIRMED_REV8691",
+        "resource_sampler_boundary": "CONFIRMED_REV8881",
+        "t7_resource_declaration": "INVARIANT_gSMP_7_SLOT7_8_OF_8",
+        "s7_sampler_partition": {
+          "comparison": [
+            "no-point",
+            "PntS"
+          ],
+          "regular": [
+            "PntSS",
+            "PntSSSS"
+          ]
+        },
+        "bridge_carrier_candidate": "SHADER+SAMPLER",
+        "resource_sidecar_required_by_static_abi": false,
+        "runtime_t7_identity": "OPEN",
+        "runtime_s7_descriptor": "OPEN",
+        "activation": "BLOCKED"
+      },
+      "description": "Exact PTDE FaceEye Sdw/Csd packed-depth 16-tap shadow operator. DSR no-Point/PntS require a shader-kernel replacement plus a proven regular s7 sampler; static eight-variant RE shows t7 resource declaration compatibility and no material-authored shadow resource split.",
+      "display_name": "PTDE FaceEye legacy shadow/environment operator",
+      "operator_key": "surface.faceeye_shadow_legacy",
+      "canonical_key": "renderer.ptde.faceeye_shadow_operator_v1",
+      "operator_class": "SHADOW_ENVIRONMENT",
+      "canonical_revision": 8673,
+      "default_port_state": "BLOCKED",
+      "fail_open_behavior": "STOCK_DSR",
+      "operator_id": "faceeye_shadow_legacy"
+    },
+    {
+      "status": "CONFIRMED",
+      "metadata": {
+        "p2_2_mask_bits": [
+          128
+        ]
+      },
+      "description": "Replace conditional DSR post-Fog root with PTDE identity continuation for certified fixed families.",
+      "display_name": "Fixed-family post-Fog identity",
+      "operator_key": "surface.fixed_postfog_identity",
+      "canonical_key": "renderer.cross.hemenv.fixed_postfog_identity_shader_bridge_v1",
+      "operator_class": "POST_FOG_TRANSFER",
+      "canonical_revision": 3687,
+      "default_port_state": "ACTIVE",
+      "fail_open_behavior": "STOCK_DSR",
+      "operator_id": "fixed_postfog_identity"
+    },
+    {
+      "status": "CONFIRMED",
+      "metadata": {
+        "bridge_cb": "b13[0..7]",
+        "semantic_activation": "MODE2_OR_EQUIVALENT_OPEN"
+      },
+      "description": "PTDE HemDir3 source island inside a DSR HemEnv host ABI using b13[0..7].",
+      "display_name": "HemDir3 D1/D2/D3 + U/L source",
+      "operator_key": "surface.hemdir3",
+      "canonical_key": "project.branch.renderer_edition_hemdir3_source_join_contract",
+      "operator_class": "LIGHTBANK_SOURCE",
+      "canonical_revision": 2971,
+      "default_port_state": "BLOCKED",
+      "fail_open_behavior": "STOCK_DSR",
+      "operator_id": "hemdir3"
+    },
+    {
+      "status": "CONFIRMED",
+      "metadata": {
+        "target_manifest": {
+          "aliases": 144,
+          "revision": 3813,
+          "unique_hashes": 72
+        },
+        "material_sidecar": {
+          "layout": "b12[0].xyz=c101_P.rgb; b12[0].w=c102_P; b12[1].x=EnvSpcSlotNo_P",
+          "binding": "b12",
+          "revision": 3834,
+          "runtime_validation": "OPEN"
+        },
+        "cb11_sidecar_role": "HISTORICAL_FEASIBLE_NOT_PREFERRED",
+        "preferred_sidecar": "b12",
+        "raw_q_carrier_srv": 19,
+        "source_amplitude_bridge": "STATIC_CARRIER_CLOSED_RUNTIME_OPEN",
+        "specmap_color0_topology": "CLOSED_192_OF_192_REV3837",
+        "raw_q_canonical_revision": 4003,
+        "runtime_sidecar_validation": "OPEN",
+        "latest_input_topology_revision": 3837,
+        "specmap_vertex_content_equality": "OPEN"
+      },
+      "description": "PTDE local PointLight specular is restored as a separate additive branch at the correct output cut, using PTDE c101/c102 material donor sidecar; it must not be substituted inside the DSR common-NdotL microfacet bracket.",
+      "display_name": "Legacy local PointLight specular",
+      "operator_key": "surface.local_specular_legacy",
+      "canonical_key": "renderer.cross.pointlight.ptde_specular_branch_output_cut",
+      "operator_class": "SPECULAR_LOCAL",
+      "canonical_revision": 3824,
+      "default_port_state": "BLOCKED",
+      "fail_open_behavior": "STOCK_DSR",
+      "operator_id": "local_specular_legacy"
+    },
+    {
+      "status": "HIGH CONFIDENCE",
+      "metadata": {
+        "pntss_body_specific": true,
+        "pntssss_body_specific": true,
+        "pnts_attenuation_suboperator": "surface.pointlight_pnts_attenuation"
+      },
+      "description": "Full PTDE PointLight source->attenuation->receiver->stored-scene->postprocess target.",
+      "display_name": "PTDE PointLight full causal forward",
+      "operator_key": "surface.pointlight_full",
+      "canonical_key": "renderer.ptde.pointlight.end_to_end_forward_v1",
+      "operator_class": "POINTLIGHT_FULL",
+      "canonical_revision": 492,
+      "default_port_state": "PARTIAL",
+      "fail_open_behavior": "STOCK_DSR",
+      "operator_id": "point_light"
+    },
+    {
+      "status": "CONFIRMED",
+      "metadata": {
+        "scope": "72 active substantive PBL PntS bodies",
+        "p2_2_mask_bits": [
+          4
+        ]
+      },
+      "description": "Exact local PntS attenuation translation from DSR cubic SAT(x^3) to PTDE linear SAT(x).",
+      "display_name": "PntS attenuation bridge",
+      "operator_key": "surface.pointlight_pnts_attenuation",
+      "canonical_key": "renderer.cross.pointlight.pnts_linear72_shader_translation_v1",
+      "operator_class": "POINTLIGHT_ATTENUATION",
+      "canonical_revision": 985,
+      "default_port_state": "ACTIVE",
+      "fail_open_behavior": "STOCK_DSR",
+      "operator_id": "pointlight_pnts_attenuation"
+    },
+    {
+      "status": "CONFIRMED",
+      "metadata": {
+        "p2_2_mask_bits": [
+          1,
+          8,
+          256,
+          512,
+          2048,
+          8192
+        ]
+      },
+      "description": "PTDE terminal RGB saturation on certified surface families.",
+      "display_name": "Terminal RGB SAT",
+      "operator_key": "surface.terminal_sat_rgb",
+      "canonical_key": "renderer.cross.phn_non_faceeye_terminal_sat_bridge_v1",
+      "operator_class": "OUTPUT_TRANSFER",
+      "canonical_revision": 3697,
+      "default_port_state": "ACTIVE",
+      "fail_open_behavior": "STOCK_DSR",
+      "operator_id": "terminal_sat_rgb"
+    },
+    {
+      "status": "REJECTED",
+      "metadata": {
+        "p2_2_mask_bits": [
+          16384
+        ],
+        "generic_combined_rgba_translation": "REJECTED_REV8857",
+        "ptde_exact_phn_terminal": "RGB_ONLY_SAT_384_OF_384",
+        "alpha_preservation_required": true,
+        "dsr_only_hash_aliases": "FAIL_OPEN",
+        "future_narrow_exception": "RGB_ONLY_BODY_REWRITE_OR_DIRECT_ALPHA_EQUIVALENCE_PROOF"
+      },
+      "description": "Generic combined-RGBA terminal SAT is rejected as an exact PTDE translator: PTDE exact Phn HemEnv targets clamp RGB only, so a one-bit combined write would add an unproven alpha clamp. Keep fail-open unless a narrower RGB-preserving body rewrite or direct subclass alpha-equivalence proof exists.",
+      "display_name": "Terminal RGBA SAT expansion",
+      "operator_key": "surface.terminal_sat_rgba",
+      "canonical_key": "renderer.diagnostic.combined_rgba_terminal_sat_expansion_candidate",
+      "operator_class": "OUTPUT_TRANSFER",
+      "canonical_revision": 8857,
+      "default_port_state": "BLOCKED",
+      "fail_open_behavior": "STOCK_DSR",
+      "operator_id": "terminal_sat_rgba"
+    },
+    {
+      "status": "CONFIRMED",
+      "metadata": {
+        "bridge_cb": "b13[6..7]",
+        "runtime_sidecar": "OPEN"
+      },
+      "description": "Exact PTDE-authored Upper/Lower endpoint reconstruction and hemisphere source island.",
+      "display_name": "Upper/Lower Ambient",
+      "operator_key": "surface.upper_lower",
+      "canonical_key": "project.branch.renderer_edition_ul_ptde_operator_port_contract",
+      "operator_class": "LIGHTBANK_SOURCE",
+      "canonical_revision": 3748,
+      "default_port_state": "OFF",
+      "fail_open_behavior": "STOCK_DSR",
+      "operator_id": "upper_lower"
+    },
+    {
+      "operator_key": "bridge.material_response",
+      "display_name": "Material Response route island",
+      "operator_class": "MATERIAL_ROUTING",
+      "description": "Global material-response routing with exact receiver/material gates and c101/specular-factor donor transport.",
+      "canonical_key": "renderer.core.islands.phase1.material_response_envspec_gate_v1",
+      "canonical_revision": 8817,
+      "status": "CONFIRMED",
+      "default_port_state": "OFF",
+      "fail_open_behavior": "STOCK_DSR",
+      "metadata": {
+        "carrier": "MATERIAL+SHADER",
+        "scope": "GLOBAL_NOT_EQUIPMENT_ONLY"
+      },
+      "operator_id": "material_response"
+    },
+    {
+      "operator_key": "bridge.specrgb",
+      "display_name": "PTDE SpecRGB split-resource bridge",
+      "operator_class": "RESOURCE_MATERIAL",
+      "description": "PTDE SpecRGB is supplied independently through t10 while DSR t1 alpha/roughness remains live.",
+      "canonical_key": "project.materialization.ptde_specrgb_bridge_full24_stable_hemenv_v1",
+      "canonical_revision": 7343,
+      "status": "CONFIRMED",
+      "default_port_state": "OFF",
+      "fail_open_behavior": "STOCK_DSR",
+      "metadata": {
+        "carrier": "RESOURCE",
+        "slot": "t10",
+        "receiver_range": [
+          24,
+          47
+        ]
+      },
+      "operator_id": "spec_rgb"
+    },
+    {
+      "operator_key": "bridge.diffuse_resource",
+      "display_name": "PTDE Diffuse resource bridge",
+      "operator_class": "RESOURCE_MATERIAL",
+      "description": "Exact PTDE diffuse companion at t0 plus PTDE c100 donor and diffuse-linear receiver semantics.",
+      "canonical_key": "project.renderer.equipment_diffuse_bridge_architecture_v1",
+      "canonical_revision": 7550,
+      "status": "CONFIRMED",
+      "default_port_state": "OFF",
+      "fail_open_behavior": "STOCK_DSR",
+      "metadata": {
+        "carrier": "RESOURCE+MATERIAL",
+        "slot": "t0",
+        "receiver_range": [
+          24,
+          35
+        ]
+      },
+      "operator_id": "diffuse"
+    },
+    {
+      "operator_key": "bridge.normal_resource",
+      "display_name": "PTDE Normal resource bridge",
+      "operator_class": "RESOURCE_MATERIAL",
+      "description": "Exact PTDE g_Bumpmap/t2 substitution only on homologous Bmp material routes and verified receivers.",
+      "canonical_key": "project.renderer.equipment_normal_material_route_gate_v1",
+      "canonical_revision": 7561,
+      "status": "CONFIRMED",
+      "default_port_state": "OFF",
+      "fail_open_behavior": "STOCK_DSR",
+      "metadata": {
+        "carrier": "RESOURCE",
+        "slot": "t2",
+        "receiver_range": [
+          24,
+          35
+        ],
+        "homologous_mtd_route_classes": 24
+      },
+      "operator_id": "normal"
+    },
+    {
+      "operator_key": "bridge.subsurface",
+      "display_name": "PTDE Subsurface route island",
+      "operator_class": "RESOURCE_MATERIAL",
+      "description": "Ps_Body[DSBT] DSR-only Subsurf route targets the corresponding ordinary PTDE DifSpcBmp surface only under exact material/donor/body/draw/ordinary-route gates. The narrow create-time pixel-shader substitution carrier is CONFIRMED at rev8873 for the exact three receiver pairs.",
+      "canonical_key": "renderer.core.islands.subsurface_plain_route_contract_v1",
+      "canonical_revision": 8866,
+      "status": "HIGH CONFIDENCE",
+      "default_port_state": "OFF",
+      "fail_open_behavior": "STOCK_DSR",
+      "metadata": {
+        "carrier": "SHADER+MATERIAL+RESOURCE",
+        "route": "Ps_Body[DSBT].mtd -> PTDE Ps_Body[DSB].mtd plain ColDifSpcBmp",
+        "target_status": "HIGH CONFIDENCE",
+        "target_receiver_ids": [
+          33,
+          34,
+          35
+        ],
+        "create_time_bypass_carrier": "CONFIRMED_REV8873",
+        "bypass_mapping_pairs": 3,
+        "abi_proof": [
+          "ISGN_IDENTICAL",
+          "OSGN_IDENTICAL",
+          "CB_LAYOUT_IDENTICAL",
+          "PLAIN_RESOURCE_SET_STRICT_SUBSET"
+        ],
+        "removed_dsr_only_bindings": [
+          "t10",
+          "s10"
+        ],
+        "runtime": "NOT_TESTED",
+        "pixel_behavior": "OPEN"
+      },
+      "operator_id": "subsurface"
+    }
+  ]
+}

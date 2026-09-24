@@ -1,0 +1,39 @@
+{
+  "schema": 1,
+  "component": "DSRRL Renderer Core v1",
+  "phase": "Phase 0",
+  "branch": "dev/renderer-core-v1-phase0",
+  "implementation_source_commit": "a77dc5105365935bb2e2d5e14655766572cc4bfd",
+  "base_commit": "b73de1c683d5f1cb1eda77d4162e567cadce0b89",
+  "construction_status": "PASS",
+  "validation": {
+    "github_actions_workflow": "Renderer Core Phase 0",
+    "workflow_run_id": 35938675862,
+    "workflow_run_url": "https://github.com/julkszw-sys/DSRRL-Material-Response/actions/runs/35938675862",
+    "configure": "PASS",
+    "pure_core_build": "PASS",
+    "unit_tests": "PASS",
+    "warnings_as_errors": true
+  },
+  "scope": {
+    "files_added_vs_base": 24,
+    "existing_files_modified_vs_base_before_audit": 0,
+    "phase0_probe_built": false,
+    "windows_runtime_tested": false,
+    "material_response_1_45_integration_tested": false,
+    "bridge_activation": "NOT_APPLICABLE",
+    "pixel_behavior": "NOT_TESTED"
+  },
+  "invariants": {
+    "features_default_off": true,
+    "exe_hooks_phase0": 0,
+    "shader_replacements_phase0": 0,
+    "resource_replacements_phase0": 0,
+    "draw_replay_phase0": false,
+    "carrier_abi_v1_bytes": 128
+  },
+  "promotion": {
+    "rc_release_eligible": false,
+    "next_gate": "Windows runtime liveness and Material Response 1.45 behavior-preserving integration"
+  }
+}

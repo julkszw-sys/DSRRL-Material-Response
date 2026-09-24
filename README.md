@@ -4,6 +4,13 @@ Renderer/material bridge source and reproducibility material for **Dark Souls Re
 
 DSR remains the host renderer. Bridges are scoped to verified renderer/material/resource routes and unsupported or unidentified routes fail open to stock DSR.
 
+## Integrated core and islands
+
+`runtime-v1/` builds the source-complete single-addon Renderer Core runtime.
+See [runtime build and island status](runtime-v1/README.md).
+This runtime candidate is distinct from the historical public release below;
+construction success does not establish in-game liveness or pixel equivalence.
+
 ## Current public release
 
 **Material Response 1.45**

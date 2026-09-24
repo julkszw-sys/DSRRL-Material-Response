@@ -1,0 +1,393 @@
+{
+  "schema": 1,
+  "component": "DSRRL Renderer Core v1",
+  "phase": "Known Operators + A1 Decomposition",
+  "branch": "dev/renderer-core-v1-islands",
+  "operator_islands": 23,
+  "architecture_contract": "architecture.host_cut",
+  "catalog_source": "dsrrl.shader_math_operators snapshot + five canonical resource/material bridge findings",
+  "safety": {
+    "blocked": "always fail-open to stock DSR",
+    "stock_host": "always preserve DSR",
+    "diagnostic": "requires explicit allow_diagnostic",
+    "nonclosed_legacy_mask_bits": "not automatically migrated",
+    "rejected_legacy_mask_bits": "not automatically migrated",
+    "unknown_legacy_mask_bits": "fail-open / not automatically migrated"
+  },
+  "source_completion": {
+    "terminal_sat_rgb": {
+      "local_patcher": "SOURCE_COMPLETE",
+      "canonical_operator": "renderer.cross.phn_non_faceeye_terminal_sat_bridge_v1",
+      "operation": "final separate RGB instruction word |= 0x00002000",
+      "length_preserving": true,
+      "alpha_untouched": true,
+      "token_identity_check": true,
+      "combined_rgba_write": "FAIL_OPEN",
+      "identity_recipe_import": "RECOVERED_EXACT_SELECTED_RECIPES_IN_REPO_NOT_YET_WIRED",
+      "runtime_activation": "NOT_TESTED",
+      "pixel": "OPEN"
+    },
+    "pointlight_pnts_attenuation": {
+      "local_operator_forward": "SOURCE_COMPLETE",
+      "canonical_operator": "renderer.cross.pointlight.pnts_linear72_shader_translation_v1",
+      "scope": "72 substantive DSR PBL HemEnv/HemEnvLerp PntS bodies",
+      "equation": "x=(End-distance)/(End-Begin); DSR=sat(x^3); PTDE=sat(x)",
+      "owns": "attenuation only",
+      "preserves": [
+        "PointLight source RGB/intensity",
+        "Begin/End authored values",
+        "material response",
+        "local diffuse/specular",
+        "downstream"
+      ],
+      "pntss_pntssss": "NO_PATCH_ALREADY_LINEAR",
+      "identity_recipe_import": "RECOVERED_EXACT_SELECTED_RECIPES_IN_REPO_NOT_YET_WIRED",
+      "runtime_activation": "NOT_TESTED",
+      "pixel": "OPEN"
+    },
+    "diffuse_material_domain": {
+      "local_operator_forward": "SOURCE_COMPLETE",
+      "canonical_operator": "renderer.cross.hemenv_fixed_phn_material_domain_family_census",
+      "equation": "stock DSR M=abs(Z_D)^2.2; local bridge M=Z_D; PTDE reference M=Z_P",
+      "exactness": "HOST_EQUIVALENT_LOCAL_OPERATOR",
+      "owns": "targeted diffuse material-domain transform only",
+      "preserves": [
+        "SPEC path",
+        "WORKFLOW path",
+        "atmosphere",
+        "texture/vertex identity",
+        "downstream"
+      ],
+      "cross_platform_z_equality": false,
+      "identity_recipe_import": "RECOVERED_EXACT_SELECTED_RECIPES_IN_REPO_NOT_YET_WIRED",
+      "runtime_activation": "NOT_TESTED",
+      "pixel": "OPEN"
+    },
+    "fixed_postfog_identity": {
+      "local_operator_forward": "SOURCE_COMPLETE",
+      "canonical_operator": "renderer.cross.hemenv.fixed_postfog_identity_shader_bridge_v1",
+      "scope": "72 unique hashes / 144 substantive Phn fixed PntSS/PntSSSS aliases",
+      "equation": "DSR Y=(s>0.5)?abs(C)^(1/2.2):C; PTDE/bridge Y=C",
+      "owns": "conditional post-Fog root only",
+      "preserves": [
+        "Fog operator",
+        "pre-Fog material/light composition",
+        "terminal SAT",
+        "HDR/postprocess"
+      ],
+      "identity_recipe_import": "RECOVERED_EXACT_SELECTED_RECIPES_IN_REPO_NOT_YET_WIRED",
+      "runtime_activation": "NOT_TESTED",
+      "pixel": "OPEN"
+    },
+    "envspec_nospc_delete": {
+      "local_semantic_gate": "SOURCE_COMPLETE",
+      "canonical_operator": "renderer.cross.hemenv_shaderonly_bridge_census_v1",
+      "scope": "48 substantive PBL no-Spc exact homologs",
+      "target": "EnvSpec_term := 0",
+      "required_guards": [
+        "exact_homolog_verified",
+        "substantive_pbl_no_spc",
+        "ptde_envspec_lane_absent",
+        "alias_scope_safe"
+      ],
+      "fail_open": "PRESERVE_STOCK_DSR_ENVSPEC_TERM",
+      "owns": "DSR-only local EnvSpec contribution only",
+      "identity_recipe_import": "RECOVERED_EXACT_SELECTED_RECIPES_IN_REPO_NOT_YET_WIRED",
+      "runtime_activation": "NOT_TESTED",
+      "pixel": "OPEN"
+    },
+    "upper_lower": {
+      "operator_math": "SOURCE_COMPLETE",
+      "canonical_operator": "project.branch.renderer_edition_ul_ptde_operator_port_contract",
+      "endpoint_decode": "P(RGB,M)=(RGB/255)*(M/100)",
+      "endpoint_blend": "U=(1-beta)U_A+beta U_B; L=(1-beta)L_A+beta L_B",
+      "hemisphere": "t=0.5*N_final.y+0.5; H=L+t*(U-L)",
+      "carrier_abi": {
+        "b13[6].xyz": "Upper_PTDE",
+        "b13[7].xyz": "Lower_PTDE"
+      },
+      "forbidden_compensation": [
+        "DSR U/L x1.5",
+        "DSR U/L pow(2.2)",
+        "endpoint inverse/root",
+        "pre-distort for downstream pre-Fog root"
+      ],
+      "runtime_producer_sidecar": "OPEN",
+      "runtime_activation": "NOT_TESTED_IN_RENDERER_CORE",
+      "pixel": "OPEN"
+    },
+    "spec_rgb": {
+      "routing_contract": "SOURCE_COMPLETE",
+      "canonical_basis": "project.materialization.ptde_specrgb_bridge_full24_stable_hemenv_v1",
+      "receiver_partition": {
+        "24..35": "DifSpcBmp",
+        "36..47": "DifSpc"
+      },
+      "ptde_rgb_srv_slot": 10,
+      "stock_t1": "PRESERVE_FULL_RESOURCE_INCLUDING_ALPHA_ROUGHNESS",
+      "required_guards": [
+        "receiver_supported",
+        "actual_material_verified",
+        "material_specular_consumer_verified",
+        "exact_name_ptde_companion_verified",
+        "ptde_sidecar_ready",
+        "native_t10_transport_ready",
+        "stock_t1_preserved"
+      ],
+      "fail_open": "PRESERVE_STOCK_DSR",
+      "resource_loader_port": "PENDING",
+      "per_route_runtime_attestation": "PARTIAL_LINEAGE_NOT_CORE",
+      "pixel": "OPEN"
+    },
+    "normal": {
+      "routing_contract": "SOURCE_COMPLETE",
+      "canonical_basis": [
+        "project.renderer.equipment_normal_material_route_gate_v1",
+        "project.renderer.equipment_normal_resource_tuple_route_gate_v1"
+      ],
+      "receiver_range": [
+        24,
+        35
+      ],
+      "srv_slot": 2,
+      "sampler_slot": 2,
+      "authorization": [
+        "HOMOLOGOUS_BMP_MATERIAL_ROUTE",
+        "SAFE_EXACT_APPLICATION_BOUND_T0_T1_T2_TUPLE"
+      ],
+      "required_guards": [
+        "actual_bound_t2_verified",
+        "target_unambiguous",
+        "exact_ptde_normal_sidecar_verified",
+        "ptde_srv_ready",
+        "preserve_stock_s2"
+      ],
+      "forbidden_inference": "SPEC_NAME_TO_NORMAL_NAME",
+      "explicit_fail_open_nonhomologous": [
+        "P[D].mtd",
+        "P_Leather[DS].mtd"
+      ],
+      "separate_subsurf": "Ps_Body[DSBT].mtd",
+      "prior_runtime_lineage": "V12 ordinary DifSpcBmp activation PASS",
+      "renderer_core_runtime": "NOT_TESTED",
+      "pixel": "OPEN"
+    },
+    "diffuse_resource": {
+      "routing_contract": "SOURCE_COMPLETE",
+      "canonical_basis": "project.renderer.equipment_diffuse_bridge_architecture_v1",
+      "receiver_range": [
+        24,
+        35
+      ],
+      "srv_slot": 0,
+      "complete_target": [
+        "EXACT_PTDE_DIFFUSE_COMPANION_T0",
+        "EXACT_PTDE_C100_DONOR",
+        "CERTIFIED_DIFFUSE_LINEAR_RECEIVER"
+      ],
+      "required_guards": [
+        "actual_material_verified",
+        "actual_bound_t0_verified",
+        "ptde_srv_ready"
+      ],
+      "shared_mtd_gate": "EXACT_TEXTURE_IDENTITY_CONJUNCTION",
+      "fail_open": "PRESERVE_EXISTING_ROUTE_INCLUDING_VALID_SPEC_ONLY",
+      "dispatch_when_complete": "FULL_C100_C101_MATERIAL_RESPONSE",
+      "prior_runtime_lineage": "V12 ordinary DifSpcBmp t0 activation PASS",
+      "renderer_core_runtime": "NOT_TESTED",
+      "pixel": "OPEN"
+    },
+    "terminal_sat_rgba": {
+      "canonical_operator": "renderer.diagnostic.combined_rgba_terminal_sat_expansion_candidate",
+      "canonical_revision": 8857,
+      "generic_one_bit_combined_rgba_patch": "REJECTED",
+      "ptde_exact_phn_terminal": "RGB_ONLY_SAT_384_OF_384",
+      "combined_rgba_side_effect": "WOULD_CLAMP_ALPHA",
+      "dsr_only_hash_aliases": "FAIL_OPEN",
+      "future_reopen_condition": "NARROW_RGB_ONLY_BODY_REWRITE_OR_DIRECT_ALPHA_EQUIVALENCE_PROOF_FOR_EXACT_GATED_SUBCLASS",
+      "default": "BLOCKED_FAIL_OPEN",
+      "pixel": "OPEN"
+    },
+    "subsurface": {
+      "target_contract": "renderer.core.islands.subsurface_plain_route_contract_v1",
+      "target_status": "HIGH CONFIDENCE",
+      "carrier_contract": "renderer.core.islands.subsurface_create_time_bypass_carrier_v1",
+      "carrier_revision": 8873,
+      "carrier_status": "CONFIRMED",
+      "carrier": "CREATE_TIME_PIXEL_SHADER_SUBSTITUTION",
+      "source_material": "Ps_Body[DSBT].mtd",
+      "ptde_donor": "Ps_Body[DSB].mtd",
+      "receiver_pairs": 3,
+      "target_receiver_ids": [
+        33,
+        34,
+        35
+      ],
+      "abi": {
+        "isgn": "IDENTICAL_3_OF_3",
+        "osgn": "IDENTICAL_3_OF_3",
+        "constant_buffers": "SEMANTIC_LAYOUT_IDENTICAL_3_OF_3",
+        "target_resources": "STRICT_SUBSET_3_OF_3",
+        "removed_only": [
+          "t10 gSMP_10",
+          "s10 gSMP_10Sampler"
+        ]
+      },
+      "required_before_route": [
+        "exact DSR material identity",
+        "exact HemEnvSubsurf source receiver identity",
+        "body texture identity",
+        "stable no-PointLight draw path",
+        "exact PTDE slot/donor identity",
+        "explicit plain-surface target verification",
+        "target ordinary receiver ready",
+        "SpecRGB route ready",
+        "Diffuse route ready",
+        "Normal route ready",
+        "Material Response route ready",
+        "bypass carrier ready"
+      ],
+      "fail_open": "PRESERVE_STOCK_DSR_SUBSURF",
+      "runtime": "NOT_TESTED",
+      "pixel": "OPEN"
+    },
+    "faceeye_shadow_legacy": {
+      "target_operator": "renderer.ptde.faceeye_shadow_operator_v1",
+      "kernel_split": "renderer.cross.faceeye_shadow_kernel_split_v1",
+      "resource_sampler_boundary": "renderer.cross.faceeye_shadow_resource_sampler_boundary_v1",
+      "boundary_revision": 8881,
+      "target_status": "CONFIRMED",
+      "port_state": "BLOCKED",
+      "scope": {
+        "family": "FRPG_Phn_FaceEye",
+        "shadow_modes": [
+          "Sdw",
+          "Csd"
+        ],
+        "patch_suffixes": [
+          "no-point",
+          "PntS"
+        ],
+        "preserve_suffixes": [
+          "PntSS",
+          "PntSSSS"
+        ]
+      },
+      "t7": {
+        "declaration": "gSMP_7 slot7 invariant across 8/8",
+        "static_resource_abi": "COMPATIBLE",
+        "actual_runtime_resource_identity": "OPEN"
+      },
+      "s7": {
+        "declaration": "gSMP_7Sampler slot7",
+        "comparison_suffixes": [
+          "no-point",
+          "PntS"
+        ],
+        "regular_suffixes": [
+          "PntSS",
+          "PntSSSS"
+        ],
+        "exact_runtime_descriptor": "OPEN"
+      },
+      "candidate_carrier": "SHADER+SAMPLER",
+      "resource_sidecar_required_by_static_abi": false,
+      "activation_blocker": "PROVE_OR_SUPPLY_EXACT_REGULAR_S7_SAMPLER",
+      "fail_open": "STOCK_DSR",
+      "runtime": "NOT_TESTED",
+      "pixel": "OPEN"
+    }
+  },
+  "legacy_a1": {
+    "historical_build_key": "material_response_1_45_expanded_a1_global_materials",
+    "plan_identities": 144,
+    "aliases": 252,
+    "patch_ops_expected": 312,
+    "mask_counts": {
+      "0x0008": 72,
+      "0x0027": 12,
+      "0x00C1": 24,
+      "0x0100": 36
+    },
+    "identity_index": "renderer-core/data/a1_island_plan_index_v1.json",
+    "ops_source": {
+      "source_artifact_id": 253,
+      "source_artifact_sha256": "70b2d91aec619ad2df99a161151d974d8d52269f4040acdd6288ff586a9f8fed",
+      "source_member": "data/PORT_PLAN.json",
+      "source_plan_sha256": "5cc15f8084fb75cb33c27be3f0e94be7fd186f07c16274b33ee09735b747a1ec",
+      "embedded_in_repo": true,
+      "repository_parts": [
+        "renderer-core/data/provenance/a1_exact_recipes_v1.part1.tsv",
+        "renderer-core/data/provenance/a1_exact_recipes_v1.part2.tsv",
+        "renderer-core/data/provenance/a1_exact_recipes_v1.part3.tsv"
+      ],
+      "exact_recipe_corpus_sha256": "c38d5560e7dfc99f149da0908d754400e8bf654fe7e0a0469e5f08f47d7575b0"
+    },
+    "runtime_materialization_source_complete": false,
+    "exact_recipe_source_complete": true,
+    "recovered_source_counts": {
+      "plans": 518,
+      "patch_ops": 1436
+    },
+    "selected_recipe_counts": {
+      "plans": 144,
+      "aliases": 252,
+      "patch_ops": 312
+    },
+    "recovered_source_artifact_counts": {
+      "plans": 518,
+      "patch_ops": 1436
+    },
+    "embedded_selected_recipe_counts": {
+      "plans": 144,
+      "aliases": 252,
+      "patch_ops": 312
+    }
+  },
+  "legacy_a1_mask_owners": {
+    "terminal_sat_rgb": [
+      "0x0001",
+      "0x0008",
+      "0x0100"
+    ],
+    "diffuse_material_domain": [
+      "0x0002",
+      "0x0040"
+    ],
+    "pointlight_pnts_attenuation": [
+      "0x0004"
+    ],
+    "envspec_nospc_delete": [
+      "0x0020"
+    ],
+    "fixed_postfog_identity": [
+      "0x0080"
+    ]
+  },
+  "nonclosed_catalog_bits": {
+    "0x0200": "terminal_sat_rgb HYPOTHESIS/PARTIAL",
+    "0x0400": "diffuse_material_domain HYPOTHESIS/PARTIAL",
+    "0x0800": "terminal_sat_rgb HIGH_CONFIDENCE/PARTIAL",
+    "0x2000": "terminal_sat_rgb HYPOTHESIS/PARTIAL"
+  },
+  "rejected_catalog_bits": {
+    "0x0010": "WORKFLOW_RAW rejected",
+    "0x1000": "P_Metal fixed-LOD EnvSpec proxy rejected for shared-host automatic migration",
+    "0x4000": "terminal_sat_rgba generic combined-write SAT rejected rev8857; PTDE exact Phn target is RGB-only SAT"
+  },
+  "default_activation": "OFF_OR_CANONICAL_BLOCKED_STOCK",
+  "construction": "PASS",
+  "runtime": "NOT_TESTED",
+  "bridge_activation": "NOT_TESTED",
+  "pixel": "OPEN",
+  "terminal_sat_rgba_revalidation": {
+    "canonical_revision": 8857,
+    "source_commit": "2db38314a9d86f741753a02534ce6dacfc42d439",
+    "ci_run_id": 35949930186,
+    "ci_job": "islands-tests",
+    "ci_conclusion": "success",
+    "runtime": "NOT_TESTED",
+    "bridge_activation": "BLOCKED_BY_CANONICAL_REJECTION",
+    "pixel": "OPEN_NOT_APPLICABLE_TO_REJECTED_GENERIC_TRANSLATOR"
+  }
+}

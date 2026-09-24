@@ -1,0 +1,83 @@
+name: Renderer Core Runtime v1 A2
+
+on:
+  push:
+    branches:
+      - main
+      - agent/renderer-core-a2-runtime-ready-20260924
+      - agent/a3-specrgb-ul-canonical-20260924
+      - dev/renderer-core-v1-islands
+    paths:
+      - "runtime-v1/**"
+      - "renderer-core/**"
+      - ".github/workflows/renderer-core-runtime-v1-a2.yml"
+  pull_request:
+    paths:
+      - "runtime-v1/**"
+      - "renderer-core/**"
+      - ".github/workflows/renderer-core-runtime-v1-a2.yml"
+
+jobs:
+  provenance-and-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify exact Normal route generation
+        run: |
+          python3 renderer-core/tools/generate_normal_routes_v12.py --input renderer-core/data/provenance/normal_routes_v12.tsv --output /tmp/generated_normal_routes_v12.hpp
+          cmp /tmp/generated_normal_routes_v12.hpp renderer-core/include/dsrrl/runtime/generated_normal_routes_v12.hpp
+      - name: Verify exact Diffuse route generation
+        run: |
+          python3 renderer-core/tools/generate_diffuse_routes_v12.py --input renderer-core/data/provenance/diffuse_routes_v12.tsv --output /tmp/generated_diffuse_routes_v12.hpp
+          cmp /tmp/generated_diffuse_routes_v12.hpp renderer-core/include/dsrrl/runtime/generated_diffuse_routes_v12.hpp
+      - name: Generate exact A3 SpecRGB and Upper/Lower authority headers
+        run: |
+          python3 renderer-core/tools/generate_spec_routes_v12.py --input renderer-core/data/provenance/spec_routes_v12.tsv --output /tmp/generated_spec_routes_v12.hpp
+          python3 renderer-core/tools/generate_spec_material_routes.py --input renderer-core/data/provenance/spec_material_routes_v1.tsv --output /tmp/generated_spec_material_routes.hpp
+          python3 renderer-core/tools/generate_ul_stable_hashes.py --input renderer-core/data/provenance/ul_stable_v29_hashes_v1.tsv --output /tmp/generated_ul_stable_hashes.hpp
+          sha256sum /tmp/generated_spec_routes_v12.hpp /tmp/generated_spec_material_routes.hpp /tmp/generated_ul_stable_hashes.hpp
+      - name: Configure runtime tests
+        run: cmake -S runtime-v1 -B build/runtime-v1 -DCMAKE_BUILD_TYPE=Release
+      - name: Build runtime tests
+        run: cmake --build build/runtime-v1 --parallel
+      - name: Run runtime tests
+        run: ctest --test-dir build/runtime-v1 --output-on-failure
+
+  windows-addon:
+    runs-on: windows-2022
+    needs: provenance-and-tests
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fetch pinned ReShade API20 headers
+        shell: pwsh
+        run: |
+          git clone --filter=blob:none https://github.com/crosire/reshade.git _deps/reshade
+          git -C _deps/reshade checkout 3645e3025d1d98a90e318278858931f034d5d1f6
+      - name: Configure x64 addon
+        shell: pwsh
+        run: cmake -S runtime-v1 -B build/runtime-v1 -A x64 -DRESHade_INCLUDE_DIR="${{ github.workspace }}\_deps\reshade\include"
+      - name: Build addon and tests
+        shell: pwsh
+        run: cmake --build build/runtime-v1 --config Release --parallel
+      - name: Audit single-addon output
+        shell: pwsh
+        run: |
+          $addons = @(Get-ChildItem build/runtime-v1 -Recurse -Filter *.addon64)
+          if ($addons.Count -ne 1) {
+            Write-Error "Expected exactly one .addon64, found $($addons.Count)"
+            $addons | ForEach-Object { Write-Host $_.FullName }
+            exit 1
+          }
+          python runtime-v1/tools/canonicalize_pe.py --check $addons[0].FullName
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $hash = (Get-FileHash $addons[0].FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+          Write-Host "ADDON=$($addons[0].FullName)"
+          Write-Host "SHA256=$hash"
+      - name: Run Windows tests
+        shell: pwsh
+        run: ctest --test-dir build/runtime-v1 -C Release --output-on-failure
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dsrrl-renderer-core-runtime-v1-a2
+          path: build/runtime-v1/**/*.addon64
+          if-no-files-found: error

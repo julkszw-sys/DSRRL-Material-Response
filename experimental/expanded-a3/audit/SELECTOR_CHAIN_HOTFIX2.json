@@ -1,0 +1,26 @@
+{
+  "schema": "dsrrl.a3.selector_chain_hotfix2.v1",
+  "status": "CONSTRUCTION_PASS_DIAGNOSTIC",
+  "base_sha256": "9009b75e28fdd427b7e3329176178f696a2af7ca675138abcd715deb576ca8d0",
+  "output_sha256": "81f0012dc967f2480d1cf42a4f3fec1acb6798fa2ae55864d7e367fd41475ad8",
+  "output_size": 2642944,
+  "pe_checksum": "0x0028A77F",
+  "mechanism": "Reuse shipping 1.45 selector hook at EXE RVA 0x22BA20. The existing selector detour now calls the original 1.45 selector resolver first and the A3 U/L freshness observer second. A3 no longer installs a second selector hook.",
+  "proof": {
+    "shipping_145_installs_selector_hook": true,
+    "shipping_selector_install_site_addon_rva": "0x58FD",
+    "shipping_selector_target_exe_rva": "0x22BA20",
+    "shipping_selector_detour_addon_rva": "0x9630",
+    "shipping_selector_resolver_addon_rva": "0x9380",
+    "selector_resolver_callsite_addon_rva": "0x9697",
+    "a3_observer_rva_in_build141": "0x1BFC50"
+  },
+  "invariants": [
+    "Build141 RAX hotfix retained",
+    "Shipping 1.45 selector resolver executes before A3 observer",
+    "No second selector hook is installed at DarkSoulsRemastered.exe+0x22BA20",
+    "Four LightBank producer hooks remain unchanged",
+    "Draw callsites remain unchanged",
+    "EnvDiffuse resource bridge remains OFF"
+  ]
+}

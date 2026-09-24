@@ -1,0 +1,32 @@
+{
+  "schema": "dsrrl.a3.safe_tuple_hotfix4.v1",
+  "status": "CONSTRUCTION_PASS_DIAGNOSTIC",
+  "base_sha256": "052dc7d277d67a006e6df57c5da86d94438858479056a7418190d9bff8b07b0b",
+  "output_sha256": "a17031743c48dfa27c8dabd07673320ba4b22b61c3d55287ad0f436db406327b",
+  "output_size": 2642944,
+  "pe_checksum": "0x0028D10C",
+  "patch_script_commit": "235a2acfc1b36c66ddfe68c988a3ffacd7f7900c",
+  "source_runtime_mismatch": {
+    "source": "a3_selector_observer uses a3_safe_selector_tuple() on the active branch",
+    "hf3_binary": "observer at RVA 0x1BFD7F still performs raw reads [rdi+0x4C], [rdi+0x4E], [rdi+0x50]",
+    "status": "CONFIRMED"
+  },
+  "mechanism": "Replace those 12 raw-read bytes with a jump to a 63-byte trampoline at RVA 0x1C1F00. The trampoline preserves ThreadState* in r14, calls shipping 1.45 safe-read8 at RVA 0x2A60 into the observer's existing stack local, decodes the same u16/u16/u32 tuple and resumes at 0x1BFD8B; read failure restores ThreadState* and branches to observer fail-open RVA 0x1BFE18.",
+  "binary_diff_vs_hf3": [
+    {"file_offset_start":"0x158","file_offset_end":"0x159","purpose":"PE checksum bytes"},
+    {"file_offset_start":"0x1B917F","file_offset_end":"0x1B918A","rva_start":"0x1BFD7F","rva_end":"0x1BFD8A","purpose":"observer tuple-read redirect"},
+    {"file_offset_start":"0x1BB300","file_offset_end":"0x1BB33E","rva_start":"0x1C1F00","rva_end":"0x1C1F3E","purpose":"safe tuple trampoline"}
+  ],
+  "invariants": [
+    "HF3 selector-chain wrapper retained",
+    "shipping 1.45 legacy selector resolver unchanged",
+    "RAX Hotfix1 retained",
+    "four A3 producer hooks unchanged",
+    "draw callsites unchanged",
+    "U/L payloads unchanged",
+    "EnvDiffuse bridge OFF"
+  ],
+  "runtime_status": "NOT_TESTED",
+  "bridge_activation_status": "OPEN",
+  "pixel_status": "OPEN"
+}

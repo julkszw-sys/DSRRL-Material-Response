@@ -1,0 +1,42 @@
+{
+  "schema": 1,
+  "component": "DSRRL Renderer Core v1",
+  "phase": "Phase 0",
+  "branch": "dev/renderer-core-v1-phase0",
+  "status": "CONSTRUCTION_SOURCE",
+  "purpose": "stability-first pixel-inert core foundation",
+  "baseline": {
+    "name": "DSRRL Material Response 1.45",
+    "sha256": "e44183ef10fc7921f7741eb16d54ec30e814f580421ac6c83be18b5308b73342"
+  },
+  "runtime_contract": {
+    "reshade_api": 20,
+    "operators_enabled_by_default": 0,
+    "exe_hooks": 0,
+    "shader_replacements": 0,
+    "resource_replacements": 0,
+    "draw_replay": false,
+    "pixel_delta_expected": false
+  },
+  "carrier_abi": {
+    "version": 1,
+    "bytes": 128,
+    "float4_lanes": 8,
+    "slots": {
+      "0": "D1_direction",
+      "1": "D2_direction",
+      "2": "D3_direction",
+      "3": "D1_PTDE_color",
+      "4": "D2_PTDE_color",
+      "5": "D3_PTDE_color",
+      "6": "Upper_PTDE",
+      "7": "Lower_PTDE"
+    }
+  },
+  "promotion": {
+    "rc_release_eligible": false,
+    "requires_runtime_acceptance": true,
+    "requires_build_audit": true,
+    "requires_source_commit": true
+  }
+}
