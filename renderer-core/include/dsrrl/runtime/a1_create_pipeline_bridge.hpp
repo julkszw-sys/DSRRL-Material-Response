@@ -2,6 +2,7 @@
 
 #include "dsrrl/core/feature_registry.hpp"
 #include "dsrrl/operators/legacy_plan/a1_create_time_materializer.hpp"
+#include "dsrrl/operators/legacy_plan/build151_nospc_extension.hpp"
 
 #include <reshade.hpp>
 
@@ -31,6 +32,9 @@ struct a1_runtime_telemetry {
     std::uint64_t init_attested = 0;
     std::uint64_t init_mismatch = 0;
     std::uint64_t target_binds = 0;
+    std::uint64_t build151_nospc_exact_hits = 0;
+    std::uint64_t build151_nospc_materialized = 0;
+    std::uint64_t build151_nospc_binds = 0;
     bool quarantined = false;
 };
 
@@ -128,6 +132,17 @@ private:
             a1_create_time_outcome &outcome,
         std::vector<std::uint8_t> replacement);
 
+    std::shared_ptr<
+        const replacement_record>
+    cache_replacement_record(
+        std::uint16_t plan_index,
+        core::operator_mask selected_owners,
+        std::uint16_t selected_ops,
+        bool full_plan_materialized,
+        const operators::legacy_plan::hashing::
+            sha256_digest &output_sha256,
+        std::vector<std::uint8_t> replacement);
+
     static reshade::api::shader_desc *
     find_mutable_pixel_shader(
         std::uint32_t subobject_count,
@@ -165,7 +180,9 @@ private:
 
     reshade::api::device *device_ = nullptr;
 
-    std::array<std::atomic_bool, 144>
+    static constexpr std::size_t k_total_exact_plans = 168u;
+
+    std::array<std::atomic_bool, k_total_exact_plans>
         first_bind_seen_{};
 
     std::atomic_bool quarantined_{false};
@@ -180,6 +197,9 @@ private:
     std::atomic<std::uint64_t> init_attested_{0};
     std::atomic<std::uint64_t> init_mismatch_{0};
     std::atomic<std::uint64_t> target_binds_{0};
+    std::atomic<std::uint64_t> build151_nospc_exact_hits_{0};
+    std::atomic<std::uint64_t> build151_nospc_materialized_{0};
+    std::atomic<std::uint64_t> build151_nospc_binds_{0};
 };
 
 } // namespace dsrrl::runtime
