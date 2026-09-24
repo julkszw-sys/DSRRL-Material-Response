@@ -27,6 +27,10 @@ jobs:
           python3 runtime-v1/tools/generate_v13_pmetal_donors.py
           git diff --exit-code -- runtime-v1/generated/v13_pmetal_donors.hpp
           python3 runtime-v1/tools/audit_v13_pmetal_donors.py
+      - name: Verify exact V13 P_Metal consumer authority
+        run: |
+          python3 runtime-v1/tools/generate_v13_pmetal_consumer_authority.py --input runtime-v1/provenance/mr145/V13_PMETAL_CONSUMER_AUTHORITY.json --output /tmp/v13_pmetal_consumer_authority.hpp
+          cmp /tmp/v13_pmetal_consumer_authority.hpp runtime-v1/include/dsrrl/runtime/v13_pmetal_consumer_authority.hpp
       - name: Verify exact Normal route generation
         run: |
           python3 renderer-core/tools/generate_normal_routes_v12.py --input renderer-core/data/provenance/normal_routes_v12.tsv --output /tmp/generated_normal_routes_v12.hpp
