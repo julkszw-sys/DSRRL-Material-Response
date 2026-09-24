@@ -45,7 +45,9 @@ target_link_libraries(dsrrl_runtime_v1_tests PRIVATE dsrrl_runtime_v1)
 target_compile_features(dsrrl_runtime_v1_tests PRIVATE cxx_std_20)
 
 add_executable(dsrrl_runtime_v1_asset_route_tests tests/asset_route_tests.cpp)
+add_dependencies(dsrrl_runtime_v1_asset_route_tests dsrrl_a3_route_headers)
 target_include_directories(dsrrl_runtime_v1_asset_route_tests PRIVATE
+  "${GEN_DIR}"
   "${CMAKE_CURRENT_SOURCE_DIR}/../renderer-core/include"
 )
 target_compile_features(dsrrl_runtime_v1_asset_route_tests PRIVATE cxx_std_20)
