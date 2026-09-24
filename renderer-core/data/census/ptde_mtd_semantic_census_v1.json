@@ -1,0 +1,69 @@
+{
+  "schema": 1,
+  "census": "PTDE/DSR MTD Semantic Census",
+  "identity_policy": "exact semantic MTD identity plus raw payload SHA and routed consumer; UNKNOWN is fail-open",
+  "states": ["USE", "NO_USE", "UNKNOWN"],
+  "claim_scope": "CONSTRUCTION_AND_STATIC_ROUTING_ONLY",
+  "runtime_activation": "OPEN",
+  "pixel_equivalence": "OPEN",
+  "sources": [
+    {"artifact_id":571,"sha256":"009a7b72ea92389ee7f0da6ab3c370a7255897fed98698d45ae01ddd2ebee503","role":"PTDE-DSR MTD homology registry"},
+    {"artifact_id":920,"sha256":"de3d49a67ddc7b1e8ff89f18817a77ca5d21b845c007e10fb1f2eba692a7413a","role":"exact MTD to SPX to receiver census"},
+    {"artifact_id":943,"sha256":"2006aff1a18d436f08d71ff491cd618f558ec263499ad038ac31556304af091e","role":"equipment material-slot MTD receiver census"},
+    {"artifact_id":944,"sha256":"e34e395b110d247b745cd54dc7a2ce9f088866017767b2bb570fb14af8ed45e8","role":"SpecRGB residual exact-MTD audit"},
+    {"artifact_id":1322,"sha256":"0701154f5fa683aae95094a65bad32320baa74a3f8855183b750fd7383d28b8a","role":"325-record EnvSpec tristate router; row-level import pending"},
+    {"path":"renderer-core/data/material_response_routes_v1.json","role":"35 exact names / 34 raw SHA keys; c101, family and receiver triplets"},
+    {"path":"renderer-core/data/census/ptde_subsurface_usage_census_v1.json","role":"verified Subsurface classification seed"}
+  ],
+  "operator_columns": ["material_response","spec_rgb","env_spec","subsurface","diffuse","normal_bump","upper_lower","hemenv","hemenv_lerp","pointlight","alpha_blend","parallax","emissive_lightmap","texture_resource_consumers"],
+  "cohorts": [
+    {
+      "key":"mr_full24_exact_cohort_v1",
+      "exact_mtd_names":35,
+      "exact_raw_sha_keys":34,
+      "families":{"DifSpcBmp":31,"DifSpcBmp_Lit":2,"DifSpcBmp_Mul":2,"DifSpcBmp_MulLit":0},
+      "receiver_triplets":{"DifSpcBmp":[33,34,35],"DifSpcBmp_Lit":[30,31,32],"DifSpcBmp_Mul":[27,28,29],"DifSpcBmp_MulLit":[24,25,26]},
+      "classification":{
+        "material_response":{"state":"USE","confidence":"CONFIRMED","basis":"exact MTD route registry supplies PTDE c101 and receiver family"},
+        "spec_rgb":{"state":"USE","confidence":"CONFIRMED","basis":"exact actual-material SpecRGB t10 route gate on stable FULL24 consumers"},
+        "hemenv":{"state":"USE","confidence":"CONFIRMED","basis":"stable no-PointLight receiver-family routing"},
+        "pointlight":{"state":"NO_USE","confidence":"CONFIRMED","basis":"this cohort is specifically stable no-PointLight HemEnv receiver routing; does not classify sibling PntS/PntSS routes"},
+        "env_spec":{"state":"UNKNOWN","confidence":"OPEN","basis":"must join row-by-row against artifact 1322; do not infer from material name"},
+        "subsurface":{"state":"UNKNOWN","confidence":"OPEN"},
+        "diffuse":{"state":"UNKNOWN","confidence":"OPEN"},
+        "normal_bump":{"state":"UNKNOWN","confidence":"OPEN"},
+        "upper_lower":{"state":"UNKNOWN","confidence":"OPEN"},
+        "hemenv_lerp":{"state":"UNKNOWN","confidence":"OPEN"},
+        "alpha_blend":{"state":"UNKNOWN","confidence":"OPEN"},
+        "parallax":{"state":"UNKNOWN","confidence":"OPEN"},
+        "emissive_lightmap":{"state":"UNKNOWN","confidence":"OPEN"},
+        "texture_resource_consumers":{"state":"USE","confidence":"CONFIRMED","basis":"SpecRGB carrier uses PTDE RGB companion at t10 while stock t1 alpha/roughness remains live"}
+      }
+    }
+  ],
+  "exact_overrides": [
+    {
+      "ptde_mtd_name":"Ps_Body[DSB].mtd",
+      "ptde_mtd_sha256":"af2f108831b783a43b0e02f047919719d14f38e68d6c5a97b80678d593ba1c95",
+      "receiver_scope":[33,34,35],
+      "operators":{"subsurface":{"state":"NO_USE","confidence":"HIGH_CONFIDENCE","basis":"verified PTDE plain ColDifSpcBmp homolog versus DSR Ps_Body[DSBT] Subsurf route"}}
+    },
+    {
+      "ptde_mtd_name":"P_Metal[DSB].mtd",
+      "ptde_mtd_sha256":"ece70f36bd2517d28c8495e276cea537f8b519d6bed981788e79a409ffbf763b",
+      "receiver_scope":[33,34,35],
+      "operators":{"env_spec":{"state":"USE","confidence":"CONFIRMED","basis":"P_Metal exact-material EnvSpec route is independently certified; selector/value and pixel equivalence remain separate"}}
+    }
+  ],
+  "pending_imports": [
+    {"source_artifact_id":1322,"records":325,"purpose":"row-level EnvSpec USE/NO_USE/UNKNOWN classification by semantic-name hash plus raw MTD SHA"},
+    {"source":"bridge_resource_bindings 40..47","records":8,"purpose":"DSR-only/equivalent-plain material identities and gate policy"},
+    {"source":"full PTDE/DSR MTD homology registry artifact 571","purpose":"expand beyond current FULL24 cohort to all exact common and one-sided MTD identities"}
+  ],
+  "guardrails": [
+    "Never infer NO_USE from an MTD name or missing suffix alone.",
+    "A cohort classification may not override a contradictory exact record.",
+    "UNKNOWN preserves stock DSR behavior.",
+    "Construction/static routing evidence does not establish runtime activation or PTDE-visible pixel equivalence."
+  ]
+}
