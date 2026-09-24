@@ -18,6 +18,7 @@ add_library(dsrrl_renderer_core STATIC
     src/operators/material_response/material_response_island.cpp
     src/operators/material_response/material_response_seed.cpp
     src/operators/env_spec/env_spec_island.cpp
+    src/operators/surface/terminal_sat_rgb_patch.cpp
 )
 target_include_directories(dsrrl_renderer_core PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
 target_compile_features(dsrrl_renderer_core PUBLIC cxx_std_17)

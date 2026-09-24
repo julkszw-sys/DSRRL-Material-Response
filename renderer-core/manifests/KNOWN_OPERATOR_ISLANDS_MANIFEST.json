@@ -14,6 +14,20 @@
     "rejected_legacy_mask_bits": "not automatically migrated",
     "unknown_legacy_mask_bits": "fail-open / not automatically migrated"
   },
+  "source_completion": {
+    "terminal_sat_rgb": {
+      "local_patcher": "SOURCE_COMPLETE",
+      "canonical_operator": "renderer.cross.phn_non_faceeye_terminal_sat_bridge_v1",
+      "operation": "final separate RGB instruction word |= 0x00002000",
+      "length_preserving": true,
+      "alpha_untouched": true,
+      "token_identity_check": true,
+      "combined_rgba_write": "FAIL_OPEN",
+      "identity_recipe_import": "PENDING",
+      "runtime_activation": "NOT_TESTED",
+      "pixel": "OPEN"
+    }
+  },
   "legacy_a1": {
     "historical_build_key": "material_response_1_45_expanded_a1_global_materials",
     "plan_identities": 144,

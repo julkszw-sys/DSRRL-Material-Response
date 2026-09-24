@@ -48,6 +48,33 @@ producer/consumer gates.
 
 No island is activated merely because it exists in this catalog.
 
+## First source-complete operator primitive: terminal RGB SAT
+
+`surface.terminal_sat_rgb` now has a handwritten, auditable local DXBC mutation
+primitive in Renderer Core. It implements only the RE-confirmed terminal-output
+translation:
+
+```text
+final separate RGB instruction word |= 0x00002000
+```
+
+The primitive is deliberately recipe-driven. The caller must supply the exact byte
+offset and exact unsaturated instruction token recovered for an already verified
+receiver. Before mutation it checks alignment, bounds, token identity and the explicit
+`verified_separate_rgb_write` gate. Any mismatch fails open and leaves the shader
+bytes unchanged. Reapplying the same recipe is idempotent.
+
+This preserves the proven scope of the operator: the one-bit SAT modifier is
+length-preserving and does not touch alpha on the supported separate RGB terminal
+write. Combined RGBA terminal writes (including the known non-substantive/stub class)
+are not accepted by this primitive because the same SAT modifier would clamp alpha;
+those remain a separate diagnostic/body-rewrite problem.
+
+This source addition closes the local mutation mechanism only. Exact shader/receiver
+identity recipes still have to be imported or reconstructed under the source-complete
+provenance rules before runtime activation. It does not claim whole-shader or
+final-pixel equivalence.
+
 ## Legacy A1/P2.2 decomposition
 
 The old combined mask is decomposed by ownership:

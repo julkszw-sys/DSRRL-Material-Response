@@ -12,6 +12,8 @@
 #include "dsrrl/operators/sfx/sfx_islands.hpp"
 #include "dsrrl/operators/surface/surface_shader_islands.hpp"
 
+#include <array>
+#include <cstring>
 #include <iostream>
 #include <optional>
 
@@ -39,14 +41,24 @@ core::sha256_digest digest(std::uint8_t seed)
     return out;
 }
 
+void write_u32(std::array<std::uint8_t, 16> &bytes, std::size_t offset, std::uint32_t value)
+{
+    std::memcpy(bytes.data() + offset, &value, sizeof(value));
+}
+
+std::uint32_t read_u32(const std::array<std::uint8_t, 16> &bytes, std::size_t offset)
+{
+    std::uint32_t value = 0;
+    std::memcpy(&value, bytes.data() + offset, sizeof(value));
+    return value;
+}
+
 } // namespace
 
 int main()
 {
     material_response_island mr;
 
-    // A globally safe exact receiver may apply Material Response independent
-    // of asset category. This is intentionally not equipment-only.
     CHECK(mr.register_receiver_recipe(receiver_recipe{
         500,
         material_scope_policy::global_receiver_safe,
@@ -63,8 +75,6 @@ int main()
     CHECK(env.selected == operators::env_spec::action::suppress_dsr_only);
     CHECK(!env.ptde_bridge_required);
 
-    // Shared specular receivers are not globally classified by shader identity.
-    // They require exact actual-material routing.
     CHECK(mr.register_receiver_recipe(receiver_recipe{
         33,
         material_scope_policy::exact_material_required,
@@ -106,7 +116,6 @@ int main()
     CHECK(d.lod_min == 3 && d.lod_max == 4);
     CHECK(d.envspec == ptde_envspec_presence::present);
 
-    // PTDE has EnvSpec here. Until its island is ready, preserve the DSR host.
     env = operators::env_spec::env_spec_island::gate(d.envspec, false);
     CHECK(env.selected == operators::env_spec::action::preserve_host);
     CHECK(env.ptde_bridge_required);
@@ -114,7 +123,6 @@ int main()
     env = operators::env_spec::env_spec_island::gate(d.envspec, true);
     CHECK(env.selected == operators::env_spec::action::activate_ptde_bridge);
 
-    // A known hash collision must not be resolved by route/SHA alone.
     material_profile edge_p = pmetal;
     edge_p.route_index = 5;
     edge_p.semantic_name_hash = 0x504D4554414C4544ull;
@@ -142,7 +150,6 @@ int main()
     CHECK(d.active);
     CHECK(d.route_index == 5);
 
-    // Unknown PTDE EnvSpec status never causes deletion.
     env = operators::env_spec::env_spec_island::gate(
         ptde_envspec_presence::unknown,
         false);
@@ -152,7 +159,6 @@ int main()
     CHECK(register_confirmed_material_routes_v1(seeded) == 35);
     CHECK(seeded.material_profile_count() == 35);
 
-    // Complete operator catalog: every operator_id has exactly one contract.
     const auto &catalog = core::known_operator_catalog();
     CHECK(catalog.size() == core::operator_count);
     CHECK(core::operator_count == 23);
@@ -165,8 +171,6 @@ int main()
         CHECK(catalog[i].fail_open_stock);
     }
 
-    // Known canonical safety states must remain enforceable independently of
-    // user feature toggles.
     core::feature_registry gates;
     core::activation_context verified;
     verified.receiver_verified = true;
@@ -180,6 +184,57 @@ int main()
     CHECK(gates.set(core::operator_id::terminal_sat_rgb, true));
     auto activation = operators::surface::terminal_sat_rgb.evaluate(gates, verified);
     CHECK(activation.state == core::island_state::active);
+
+    // RE-closed terminal RGB SAT: the one-bit modifier is legal only on a
+    // verified final separate RGB write; all mismatches fail open.
+    std::array<std::uint8_t, 16> shader_bytes{};
+    constexpr std::uint32_t terminal_mov_rgb = 0x05000036u;
+    constexpr std::uint32_t terminal_mov_sat_rgb = 0x05002036u;
+    write_u32(shader_bytes, 4u, terminal_mov_rgb);
+
+    operators::surface::terminal_sat_patch_recipe sat_recipe{
+        4u,
+        terminal_mov_rgb,
+        true
+    };
+
+    auto sat_result = operators::surface::apply_terminal_rgb_sat(
+        shader_bytes.data(), shader_bytes.size(), sat_recipe);
+    CHECK(sat_result == operators::surface::terminal_sat_patch_result::applied);
+    CHECK(read_u32(shader_bytes, 4u) == terminal_mov_sat_rgb);
+
+    sat_result = operators::surface::apply_terminal_rgb_sat(
+        shader_bytes.data(), shader_bytes.size(), sat_recipe);
+    CHECK(sat_result == operators::surface::terminal_sat_patch_result::already_saturated);
+
+    const auto before_mismatch = shader_bytes;
+    auto mismatch_recipe = sat_recipe;
+    mismatch_recipe.expected_unsaturated_token = 0x01000000u;
+    sat_result = operators::surface::apply_terminal_rgb_sat(
+        shader_bytes.data(), shader_bytes.size(), mismatch_recipe);
+    CHECK(sat_result == operators::surface::terminal_sat_patch_result::fail_open_token_mismatch);
+    CHECK(shader_bytes == before_mismatch);
+
+    auto rgba_recipe = sat_recipe;
+    rgba_recipe.verified_separate_rgb_write = false;
+    sat_result = operators::surface::apply_terminal_rgb_sat(
+        shader_bytes.data(), shader_bytes.size(), rgba_recipe);
+    CHECK(sat_result == operators::surface::terminal_sat_patch_result::fail_open_unverified_write_shape);
+    CHECK(shader_bytes == before_mismatch);
+
+    auto invalid_recipe = sat_recipe;
+    invalid_recipe.instruction_byte_offset = 3u;
+    sat_result = operators::surface::apply_terminal_rgb_sat(
+        shader_bytes.data(), shader_bytes.size(), invalid_recipe);
+    CHECK(sat_result == operators::surface::terminal_sat_patch_result::fail_open_invalid_recipe);
+    CHECK(shader_bytes == before_mismatch);
+
+    auto out_of_bounds = sat_recipe;
+    out_of_bounds.instruction_byte_offset = shader_bytes.size();
+    sat_result = operators::surface::apply_terminal_rgb_sat(
+        shader_bytes.data(), shader_bytes.size(), out_of_bounds);
+    CHECK(sat_result == operators::surface::terminal_sat_patch_result::fail_open_out_of_bounds);
+    CHECK(shader_bytes == before_mismatch);
 
     CHECK(gates.set(core::operator_id::post_hdr, true));
     activation = operators::postprocess::hdr.evaluate(gates, verified);
@@ -200,7 +255,6 @@ int main()
     CHECK(activation.state == core::island_state::active);
     verified.allow_diagnostic = false;
 
-    // A1/P2.2 monolithic mask ownership is decomposed into independent islands.
     auto dec = operators::legacy_plan::decompose_p22_mask(0x27u);
     CHECK(dec.automatic_migration_safe());
     CHECK(dec.unknown_bits == 0u);
@@ -230,8 +284,6 @@ int main()
     CHECK(operators::legacy_plan::legacy_bits_for(core::operator_id::diffuse_material_domain) ==
           (2u | 64u | 1024u));
 
-    // Historical Expanded A1 plan identity surface is reproduced exactly at
-    // routing/decomposition level: 144 unique bodies / 252 aliases.
     CHECK(operators::legacy_plan::generated::k_a1_plan_count_v1 == 144u);
     std::size_t a1_aliases = 0;
     std::size_t mask8 = 0;
@@ -256,7 +308,6 @@ int main()
     CHECK(mask193 == 24u);
     CHECK(mask256 == 36u);
 
-    // Resource/light/point islands resolve to their independent operator IDs.
     CHECK(operators::resource_bridges::spec_rgb.id() == core::operator_id::spec_rgb);
     CHECK(operators::resource_bridges::diffuse.id() == core::operator_id::diffuse);
     CHECK(operators::resource_bridges::normal.id() == core::operator_id::normal);
