@@ -13,8 +13,7 @@ bool check(bool condition, const char *expression, int line)
         return true;
 
     std::cerr << "CHECK FAILED line " << line << ": "
-              << expression << '
-';
+              << expression << '\n';
     return false;
 }
 
@@ -231,7 +230,6 @@ int main()
           subsurface_route_reason::dsr_subsurf_bypass_carrier_not_ready);
     CHECK(decision.action == subsurface_route_action::preserve_host);
 
-    std::cout << "subsurface_route_tests: PASS
-";
+    std::cout << "subsurface_route_tests: PASS\n";
     return 0;
 }
