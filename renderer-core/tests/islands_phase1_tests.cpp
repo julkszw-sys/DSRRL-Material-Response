@@ -621,13 +621,20 @@ int main()
     CHECK(activation.state == core::island_state::fail_open);
     CHECK(activation.reason == core::activation_reason::stock_host_preserved);
 
+    const auto rejected_rgba =
+        core::find_operator_contract(core::operator_id::terminal_sat_rgba);
+    CHECK(rejected_rgba.has_value());
+    CHECK(rejected_rgba->status == core::canonical_status::rejected);
+    CHECK(rejected_rgba->default_state == core::port_state::blocked);
+
     CHECK(gates.set(core::operator_id::terminal_sat_rgba, true));
     activation = operators::surface::terminal_sat_rgba.evaluate(gates, verified);
     CHECK(activation.state == core::island_state::fail_open);
-    CHECK(activation.reason == core::activation_reason::diagnostic_not_allowed);
+    CHECK(activation.reason == core::activation_reason::blocked);
     verified.allow_diagnostic = true;
     activation = operators::surface::terminal_sat_rgba.evaluate(gates, verified);
-    CHECK(activation.state == core::island_state::active);
+    CHECK(activation.state == core::island_state::fail_open);
+    CHECK(activation.reason == core::activation_reason::blocked);
     verified.allow_diagnostic = false;
 
     auto dec = operators::legacy_plan::decompose_p22_mask(0x27u);
@@ -648,6 +655,13 @@ int main()
 
     dec = operators::legacy_plan::decompose_p22_mask(4096u);
     CHECK(dec.rejected_bits == 4096u);
+    CHECK(!dec.automatic_migration_safe());
+
+    dec = operators::legacy_plan::decompose_p22_mask(16384u);
+    CHECK(dec.rejected_bits == 16384u);
+    CHECK(dec.nonclosed_bits == 0u);
+    CHECK(dec.owner_count == 1u);
+    CHECK(dec.owners[0] == core::operator_id::terminal_sat_rgba);
     CHECK(!dec.automatic_migration_safe());
 
     dec = operators::legacy_plan::decompose_p22_mask(512u);
