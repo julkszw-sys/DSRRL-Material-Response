@@ -64,4 +64,23 @@ spec_rgb_decision evaluate_spec_rgb_route(
     };
 }
 
+spec_rgb_decision evaluate_spec_rgb_route(
+    const spec_rgb_context &context,
+    const material_response::mtd_semantic_query &query) noexcept
+{
+    const auto family=classify_receiver(context.receiver_id);
+    const auto semantic=
+        material_response::classify_mtd_semantic(
+            query,
+            material_response::mtd_semantic_operator::spec_rgb);
+
+    if(semantic.state!=material_response::mtd_semantic_state::use)
+        return fail(
+            context,
+            family,
+            spec_rgb_reason::mtd_census_not_authorized);
+
+    return evaluate_spec_rgb_route(context);
+}
+
 } // namespace dsrrl::operators::resource_bridges
