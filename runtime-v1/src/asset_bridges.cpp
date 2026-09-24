@@ -10,6 +10,7 @@
 #include "dsrrl/core/renderer_core.hpp"
 #include "dsrrl/runtime/generated_normal_routes_v12.hpp"
 #include "dsrrl/runtime/generated_diffuse_routes_v12.hpp"
+#include "dsrrl/runtime/generated_spec_routes_v12.hpp"
 
 #include <reshade.hpp>
 
@@ -574,10 +575,12 @@ void on_init_resource_view(
         generated::normal_name_hash_allowed_v12(logical_hash);
     const bool diffuse_member =
         generated::diffuse_name_hash_allowed_v12(logical_hash);
+    const bool spec_member =
+        generated::spec_name_hash_allowed_v12(logical_hash);
 
     // Exact V12 corpora are the authority. Unknown logical identities are never
     // associated with a bridge resource, even if a similarly named DDS exists.
-    if (!normal_member && !diffuse_member)
+    if (!normal_member && !diffuse_member && !spec_member)
         return;
 
     auto *native =
@@ -588,6 +591,13 @@ void on_init_resource_view(
     ++g_named_srv;
     companion_set set{};
     set.logical_hash = logical_hash;
+
+    if (spec_member) {
+        const auto spec =
+            load_dds(native, sidecar_path(asset_class::specular, g_logical_name));
+        account_load(asset_class::specular, spec.status);
+        set.specular = spec.view;
+    }
 
     if (generated::diffuse_target_hash_allowed_v12(logical_hash)) {
         const auto diff =
@@ -740,6 +750,36 @@ void texture_name_clear_event() noexcept
     ++g_name_clear;
 }
 
+bool spec_ready(
+    ID3D11DeviceContext *context,
+    const material_route_scope &route,
+    std::uint32_t receiver_id) noexcept
+{
+    if (context == nullptr ||
+        g_core == nullptr ||
+        g_quarantined.load() ||
+        !receiver_allowed(route, receiver_id) ||
+        !route.specular_material_verified ||
+        receiver_id < 24u || receiver_id > 47u ||
+        !g_core->features().enabled(core::operator_id::spec_rgb))
+        return false;
+
+    ID3D11ShaderResourceView *t1 = nullptr;
+    context->PSGetShaderResources(1u, 1u, &t1);
+    if (t1 == nullptr)
+        return false;
+
+    const auto h1 = logical_hash_for(t1);
+    bool ready = h1 != 0u && generated::spec_name_hash_allowed_v12(h1);
+    ID3D11ShaderResourceView *replacement = nullptr;
+    if (ready)
+        replacement = lookup(t1, asset_class::specular);
+    ready = replacement != nullptr;
+    if (replacement) replacement->Release();
+    t1->Release();
+    return ready;
+}
+
 bool apply_draw(
     ID3D11DeviceContext *context,
     const material_route_scope &route,
@@ -754,8 +794,11 @@ bool apply_draw(
         !receiver_allowed(route, receiver_id))
         return true;
 
-    // SpecRGB stays disabled until an exact t10-consuming receiver is integrated.
-    const bool want_spec = false;
+    const bool want_spec =
+        route.specular_material_verified &&
+        route.spec_t10_consumer_active &&
+        receiver_id >= 24u && receiver_id <= 47u &&
+        g_core->features().enabled(core::operator_id::spec_rgb);
 
     const bool bmp_receiver = receiver_id >= 24u && receiver_id <= 35u;
     const bool want_diff =
@@ -780,6 +823,25 @@ bool apply_draw(
     const auto h0 = logical_hash_for(state.old_t0);
     const auto h1 = logical_hash_for(state.old_t1);
     const auto h2 = logical_hash_for(state.old_t2);
+
+    if (want_spec) {
+        ++g_spec_gate;
+        if (h1 == 0u || !generated::spec_name_hash_allowed_v12(h1)) {
+            release_draw_state(state);
+            return false;
+        }
+        ID3D11ShaderResourceView *replacement =
+            lookup(state.old_t1, asset_class::specular);
+        if (replacement == nullptr) {
+            release_draw_state(state);
+            return false;
+        }
+        context->PSSetShaderResources(10u, 1u, &replacement);
+        replacement->Release();
+        state.changed_t10 = true;
+        ++g_spec_bind;
+        log_first_bind(asset_class::specular, route, receiver_id);
+    }
 
     if (want_diff) {
         ++g_diff_gate;

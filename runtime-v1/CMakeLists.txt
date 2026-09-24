@@ -24,6 +24,8 @@ add_custom_command(
 
 add_custom_target(dsrrl_mr_manifest DEPENDS "${GEN_DIR}/mr_runtime_manifest.hpp")
 
+include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/A3RouteHeaders.cmake")
+
 add_library(dsrrl_runtime_v1 STATIC
   src/sha256.cpp
   src/mr_dxbc_transform.cpp
@@ -43,7 +45,9 @@ target_link_libraries(dsrrl_runtime_v1_tests PRIVATE dsrrl_runtime_v1)
 target_compile_features(dsrrl_runtime_v1_tests PRIVATE cxx_std_20)
 
 add_executable(dsrrl_runtime_v1_asset_route_tests tests/asset_route_tests.cpp)
+add_dependencies(dsrrl_runtime_v1_asset_route_tests dsrrl_a3_route_headers)
 target_include_directories(dsrrl_runtime_v1_asset_route_tests PRIVATE
+  "${GEN_DIR}"
   "${CMAKE_CURRENT_SOURCE_DIR}/../renderer-core/include"
 )
 target_compile_features(dsrrl_runtime_v1_asset_route_tests PRIVATE cxx_std_20)
@@ -71,11 +75,12 @@ if(WIN32 AND RESHade_INCLUDE_DIR)
     src/engine_hooks.cpp
     src/mr_island.cpp
     src/asset_bridges.cpp
+    src/upper_lower_runtime.cpp
     "${CMAKE_CURRENT_SOURCE_DIR}/../renderer-core/src/runtime/a1_create_pipeline_bridge.cpp"
     src/selector_hook.asm
     src/texture_name_hook.asm
   )
-  add_dependencies(dsrrl_renderer_runtime_v1_addon dsrrl_mr_manifest)
+  add_dependencies(dsrrl_renderer_runtime_v1_addon dsrrl_mr_manifest dsrrl_a3_route_headers)
   target_include_directories(dsrrl_renderer_runtime_v1_addon PRIVATE
     include
     "${GEN_DIR}"
