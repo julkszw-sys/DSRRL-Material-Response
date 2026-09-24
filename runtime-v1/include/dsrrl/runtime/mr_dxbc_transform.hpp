@@ -6,6 +6,7 @@
 #include <vector>
 
 #include "mr_runtime_manifest.hpp"
+#include "dsrrl/runtime/build151_mr_authority.hpp"
 
 namespace dsrrl::runtime::mr {
 
@@ -18,7 +19,13 @@ struct transform_result {
 };
 
 const plan *find_plan(std::size_t size, std::string_view sha256) noexcept;
+const build151::lerp_plan *find_lerp_plan(std::size_t size, std::string_view sha256) noexcept;
 transform_result transform(std::span<const std::uint8_t> stock, const plan &p, variant v);
+transform_result transform_lerp(
+    std::span<const std::uint8_t> stock,
+    const build151::lerp_plan &p,
+    variant v);
+transform_result transform_v9a(std::span<const std::uint8_t> v211);
 transform_result transform_upper_lower(
     std::span<const std::uint8_t> base,
     std::string_view expected_output_sha256 = {});
