@@ -138,7 +138,7 @@ struct sha256_context {
         buffer[used++] = 0x80u;
 
         if (used > 56u) {
-            std::fill(buffer.begin() + used, buffer.end(), 0u);
+            std::fill(buffer.begin() + used, buffer.end(), std::uint8_t{0});
             block(buffer.data());
             used = 0;
         }
@@ -146,7 +146,7 @@ struct sha256_context {
         std::fill(
             buffer.begin() + used,
             buffer.begin() + 56u,
-            0u);
+            std::uint8_t{0});
 
         for (std::uint32_t i = 0; i < 8u; ++i)
             buffer[63u - i] =
