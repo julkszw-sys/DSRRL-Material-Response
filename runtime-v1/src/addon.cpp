@@ -53,7 +53,8 @@ void log_a1_state(const char *tag) noexcept
     char line[512]{};
     std::snprintf(line,sizeof(line),
         "[DSRRL Runtime v1 A1] %s create=%llu candidate=%llu exact=%llu materialized=%llu "
-        "unknown=%llu no_owner=%llu failopen=%llu init_ok=%llu init_bad=%llu binds=%llu quarantine=%u",
+        "unknown=%llu no_owner=%llu failopen=%llu init_ok=%llu init_bad=%llu binds=%llu "
+        "nospc24_exact=%llu nospc24_materialized=%llu nospc24_bind=%llu quarantine=%u",
         tag,
         static_cast<unsigned long long>(t.create_events),
         static_cast<unsigned long long>(t.candidate_size_hits),
@@ -65,6 +66,9 @@ void log_a1_state(const char *tag) noexcept
         static_cast<unsigned long long>(t.init_attested),
         static_cast<unsigned long long>(t.init_mismatch),
         static_cast<unsigned long long>(t.target_binds),
+        static_cast<unsigned long long>(t.build151_nospc_exact_hits),
+        static_cast<unsigned long long>(t.build151_nospc_materialized),
+        static_cast<unsigned long long>(t.build151_nospc_binds),
         t.quarantined?1u:0u);
     reshade::log::message(reshade::log::level::info,line);
 }
