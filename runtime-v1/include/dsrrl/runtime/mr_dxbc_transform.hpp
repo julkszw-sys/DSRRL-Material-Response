@@ -23,5 +23,6 @@ transform_result transform_upper_lower(
     std::span<const std::uint8_t> base,
     std::string_view expected_output_sha256 = {});
 transform_result transform_spec_rgb(std::span<const std::uint8_t> base);
+transform_result transform_pmetal_v13(std::span<const std::uint8_t> base);
 
 } // namespace dsrrl::runtime::mr
