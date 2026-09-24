@@ -11,7 +11,7 @@ on:
 
 jobs:
   reproduce-v211:
-    runs-on: windows-2025
+    runs-on: windows-2022
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
