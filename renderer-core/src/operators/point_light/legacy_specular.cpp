@@ -23,10 +23,24 @@ pointlight_vec3 scale(const pointlight_vec3 &a,float s) noexcept
     return {a.x*s,a.y*s,a.z*s};
 }
 
-} // namespace
+pointlight_vec3 sub(const pointlight_vec3 &a,const pointlight_vec3 &b) noexcept
+{
+    return {a.x-b.x,a.y-b.y,a.z-b.z};
+}
 
-legacy_specular_sample evaluate_legacy_local_specular(
-    const legacy_specular_input &input) noexcept
+float dot(const pointlight_vec3 &a,const pointlight_vec3 &b) noexcept
+{
+    return a.x*b.x+a.y*b.y+a.z*b.z;
+}
+
+float length_sq(const pointlight_vec3 &v) noexcept
+{
+    return dot(v,v);
+}
+
+legacy_specular_sample evaluate_from_rdotl(
+    const legacy_specular_input &input,
+    const pointlight_vec3 &reflection) noexcept
 {
     legacy_specular_sample out;
     if(!finite(input.source_rgb) ||
@@ -46,6 +60,8 @@ legacy_specular_sample evaluate_legacy_local_specular(
     out.material_specular=scale(
         mul(input.spec_texture_blend,input.color0),
         input.c101);
+    out.reflection=reflection;
+    out.r_dot_l=input.r_dot_l;
 
     const float r=std::max(input.r_dot_l,0.0f);
     out.angular=std::pow(r,input.exponent_c102);
@@ -58,6 +74,58 @@ legacy_specular_sample evaluate_legacy_local_specular(
         out.material_specular);
     out.result=legacy_specular_math_result::exact;
     return out;
+}
+
+} // namespace
+
+legacy_specular_sample evaluate_legacy_local_specular(
+    const legacy_specular_input &input) noexcept
+{
+    return evaluate_from_rdotl(input,{});
+}
+
+legacy_specular_sample evaluate_legacy_local_specular(
+    const legacy_specular_vector_input &input) noexcept
+{
+    if(!finite(input.source_rgb) ||
+       !std::isfinite(input.attenuation) ||
+       !finite(input.normal) ||
+       !finite(input.view_direction) ||
+       !finite(input.light_direction) ||
+       !std::isfinite(input.exponent_c102) ||
+       !finite(input.spec_texture_blend) ||
+       !std::isfinite(input.c101) ||
+       !finite(input.color0))
+        return {};
+
+    // The replacement window requires normalized N/V/L. Do not silently
+    // normalize arbitrary host intermediates: a bad carrier must fail open.
+    constexpr float unit_tolerance=0.0025f;
+    const float n2=length_sq(input.normal);
+    const float v2=length_sq(input.view_direction);
+    const float l2=length_sq(input.light_direction);
+    if(std::fabs(n2-1.0f)>unit_tolerance ||
+       std::fabs(v2-1.0f)>unit_tolerance ||
+       std::fabs(l2-1.0f)>unit_tolerance){
+        legacy_specular_sample out;
+        out.result=legacy_specular_math_result::fail_open_invalid_vector;
+        return out;
+    }
+
+    const float n_dot_v=dot(input.normal,input.view_direction);
+    const pointlight_vec3 reflection=
+        sub(scale(input.normal,2.0f*n_dot_v),input.view_direction);
+    const float r_dot_l=dot(reflection,input.light_direction);
+
+    legacy_specular_input scalar{};
+    scalar.source_rgb=input.source_rgb;
+    scalar.attenuation=input.attenuation;
+    scalar.r_dot_l=r_dot_l;
+    scalar.exponent_c102=input.exponent_c102;
+    scalar.spec_texture_blend=input.spec_texture_blend;
+    scalar.c101=input.c101;
+    scalar.color0=input.color0;
+    return evaluate_from_rdotl(scalar,reflection);
 }
 
 local_specular_runtime_plan evaluate_local_specular_runtime_readiness(
@@ -122,6 +190,18 @@ local_specular_runtime_plan evaluate_local_specular_runtime_readiness(
         return out;
     }
 
+    if(!context.complete_microfacet_window_owned){
+        out.reason=local_specular_runtime_reason::microfacet_window_not_owned;
+        return out;
+    }
+    if(!context.stock_roughness_tail_bypassed){
+        out.reason=local_specular_runtime_reason::roughness_tail_not_bypassed;
+        return out;
+    }
+    if(!context.stock_common_ndotl_specular_bypassed){
+        out.reason=local_specular_runtime_reason::common_ndotl_tail_not_bypassed;
+        return out;
+    }
     if(!context.diffuse_path_preserved){
         out.reason=local_specular_runtime_reason::diffuse_path_not_preserved;
         return out;
