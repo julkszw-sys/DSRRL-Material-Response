@@ -615,14 +615,14 @@ int main()
         core::find_operator_contract(core::operator_id::faceeye_shadow_legacy);
     CHECK(faceeye_contract.has_value());
     CHECK(faceeye_contract->status == core::canonical_status::confirmed);
-    CHECK(faceeye_contract->default_state == core::port_state::blocked);
+    CHECK(faceeye_contract->default_state == core::port_state::partial);
     CHECK(faceeye_contract->carrier == core::carrier_kind::hybrid);
     CHECK((faceeye_contract->requirements & core::require_resource) != 0u);
 
     CHECK(gates.set(core::operator_id::faceeye_shadow_legacy, true));
     activation = operators::surface::faceeye_shadow_legacy.evaluate(gates, verified);
-    CHECK(activation.state == core::island_state::fail_open);
-    CHECK(activation.reason == core::activation_reason::blocked);
+    CHECK(activation.state == core::island_state::active);
+    CHECK(activation.reason == core::activation_reason::active);
 
     CHECK(gates.set(core::operator_id::post_hdr, true));
     activation = operators::postprocess::hdr.evaluate(gates, verified);
