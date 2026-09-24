@@ -8,6 +8,7 @@
 #include "dsrrl/runtime/mr_island.hpp"
 #include "dsrrl/runtime/mr_dxbc_transform.hpp"
 #include "dsrrl/runtime/engine_hooks.hpp"
+#include "dsrrl/runtime/envspec_runtime.hpp"
 #include "dsrrl/runtime/asset_bridges.hpp"
 #include "dsrrl/runtime/draw_replay.hpp"
 #include "dsrrl/runtime/upper_lower_runtime.hpp"
@@ -857,6 +858,16 @@ bool on_draw_indexed(command_list *cmd,std::uint32_t index_count,std::uint32_t i
     const bool draw_envspec_exact=g_draw_envspec_exact;
     g_draw_envspec={};
     g_draw_envspec_exact=false;
+
+    // Pixel-inert live preflight: join the exact parser/selector material token
+    // with the currently bound stock t12/t14 native-probe identities. The
+    // returned snapshot is intentionally not used for mutation yet.
+    const auto envspec_identity=
+        envspec::observe_draw(
+            cmd,
+            draw_envspec,
+            draw_envspec_exact);
+    (void)envspec_identity;
 
     if(draw_envspec_exact){
         ++g_envspec_draw_exact;

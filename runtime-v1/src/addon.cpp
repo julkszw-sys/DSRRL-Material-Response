@@ -11,6 +11,7 @@
 #include "dsrrl/core/renderer_core.hpp"
 #include "dsrrl/runtime/a1_create_pipeline_bridge.hpp"
 #include "dsrrl/runtime/engine_hooks.hpp"
+#include "dsrrl/runtime/envspec_runtime.hpp"
 #include "dsrrl/runtime/mr_island.hpp"
 #include "dsrrl/runtime/asset_bridges.hpp"
 #include "dsrrl/runtime/upper_lower_runtime.hpp"
@@ -172,7 +173,9 @@ extern "C" __declspec(dllexport) bool AddonInit(HMODULE addon,HMODULE reshade_mo
     register_a1_events();
 
     if(!dsrrl::runtime::assets::register_runtime(g_core) ||
-       !dsrrl::runtime::mr::register_runtime(g_core)){
+       !dsrrl::runtime::mr::register_runtime(g_core) ||
+       !dsrrl::runtime::envspec::register_runtime()){
+        dsrrl::runtime::envspec::unregister_runtime();
         dsrrl::runtime::assets::unregister_runtime();
         dsrrl::runtime::mr::unregister_runtime();
         unregister_a1_events();
@@ -205,6 +208,7 @@ extern "C" __declspec(dllexport) bool AddonInit(HMODULE addon,HMODULE reshade_mo
             &dsrrl::runtime::assets::texture_name_event,
             &dsrrl::runtime::assets::texture_name_clear_event)){
         dsrrl::runtime::upper_lower::unregister_runtime();
+        dsrrl::runtime::envspec::unregister_runtime();
         dsrrl::runtime::mr::unregister_runtime();
         dsrrl::runtime::assets::unregister_runtime();
         unregister_a1_events();
@@ -227,6 +231,7 @@ extern "C" __declspec(dllexport) void AddonUninit(HMODULE addon,HMODULE reshade_
 {
     dsrrl::runtime::engine::uninstall();
     dsrrl::runtime::upper_lower::unregister_runtime();
+    dsrrl::runtime::envspec::unregister_runtime();
     dsrrl::runtime::mr::unregister_runtime();
     dsrrl::runtime::assets::unregister_runtime();
     unregister_a1_events();
