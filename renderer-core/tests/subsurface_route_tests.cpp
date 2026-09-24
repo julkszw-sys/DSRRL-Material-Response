@@ -44,7 +44,9 @@ subsurface_route_context valid_context(
     context.ptde_material_name = k_ptde_body_plain_material;
     context.ptde_material_sha256 =
         k_ptde_body_plain_material_sha256;
-    context.ptde_subsurface_usage_verified = true;\n    context.ptde_uses_subsurface = false;\n    context.ptde_plain_surface_target_verified = true;
+    context.ptde_subsurface_usage_verified = true;
+    context.ptde_uses_subsurface = false;
+    context.ptde_plain_surface_target_verified = true;
 
     context.target_plain_receiver_ready = true;
     context.spec_rgb_route_ready = true;
@@ -149,6 +151,26 @@ int main()
     decision = evaluate_subsurface_route(context);
     CHECK(decision.reason ==
           subsurface_route_reason::wrong_ptde_donor_identity);
+
+    context = valid_context(
+        0u,
+        subsurface_body_texture::bd_f_body_s);
+    context.ptde_subsurface_usage_verified = false;
+    decision = evaluate_subsurface_route(context);
+    CHECK(decision.reason ==
+          subsurface_route_reason::ptde_subsurface_usage_not_verified);
+    CHECK(decision.action == subsurface_route_action::preserve_host);
+    CHECK(decision.preserve_dsr_sss);
+
+    context = valid_context(
+        0u,
+        subsurface_body_texture::bd_f_body_s);
+    context.ptde_uses_subsurface = true;
+    decision = evaluate_subsurface_route(context);
+    CHECK(decision.reason ==
+          subsurface_route_reason::ptde_subsurface_used);
+    CHECK(decision.action == subsurface_route_action::preserve_host);
+    CHECK(decision.preserve_dsr_sss);
 
     context = valid_context(
         0u,

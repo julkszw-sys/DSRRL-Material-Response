@@ -742,6 +742,8 @@ int main()
         operators::resource_bridges::k_ptde_body_plain_material;
     subsurf_ctx.ptde_material_sha256 =
         operators::resource_bridges::k_ptde_body_plain_material_sha256;
+    subsurf_ctx.ptde_subsurface_usage_verified = true;
+    subsurf_ctx.ptde_uses_subsurface = false;
     subsurf_ctx.ptde_plain_surface_target_verified = true;
     subsurf_ctx.target_plain_receiver_ready = true;
     subsurf_ctx.spec_rgb_route_ready = true;
