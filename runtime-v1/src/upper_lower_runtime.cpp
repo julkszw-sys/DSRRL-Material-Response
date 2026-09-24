@@ -370,6 +370,19 @@ bool install_hooks() noexcept
     return true;
 }
 
+void on_destroy_device(reshade::api::device *device)
+{
+    if(!device || device->get_api()!=reshade::api::device_api::d3d11)
+        return;
+
+    // b13 buffers are device-owned. Never retain COM references or a selected
+    // snapshot across a D3D11 device teardown/recreation boundary; fail open
+    // until the producer publishes a fresh semantic snapshot.
+    g_draw_snapshot.reset();
+    std::lock_guard lock(g_snapshot_mutex);
+    g_snapshots.clear();
+}
+
 ID3D11Buffer *realize_b13(const std::shared_ptr<const snapshot> &s,ID3D11Device *device) noexcept
 {
     if(!s || !device) return nullptr;
@@ -421,6 +434,8 @@ bool register_runtime(core::renderer_core &core) noexcept
         return false;
     }
 
+    reshade::register_event<reshade::addon_event::destroy_device>(
+        on_destroy_device);
     g_enabled.store(true);
     log_info("DSRRL Runtime U/L: steady 0x563B80 + blend 0x5642F0 producer capture armed; shared selector only.");
     return true;
@@ -429,6 +444,8 @@ bool register_runtime(core::renderer_core &core) noexcept
 void unregister_runtime() noexcept
 {
     g_enabled.store(false);
+    reshade::unregister_event<reshade::addon_event::destroy_device>(
+        on_destroy_device);
     restore_hooks();
     consume_draw_selection();
     {
