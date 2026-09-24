@@ -120,6 +120,44 @@ int main()
         edge_q,mtd_semantic_operator::material_response).state==
         mtd_semantic_state::unknown);
 
+    const auto pmetal_spec=make_identity(
+        0u,"P_Metal[DSB]_Spec.mtd",
+        "c8504bfa64c84d5035bc56ab63e43d319ef69af08c5044e0260b639ab1b78ffc",
+        "DifSpcBmp");
+    mtd_semantic_query binding_q{pmetal_spec,33u};
+
+    d=classify_mtd_semantic(
+        binding_q,mtd_semantic_operator::material_response);
+    CHECK(d.state==mtd_semantic_state::use);
+    CHECK(d.source==mtd_semantic_source::exact_binding_extension);
+    CHECK(d.gate_policy==mtd_gate_policy::direct_exact);
+    CHECK(d.exact_identity_match);
+
+    d=classify_mtd_semantic(binding_q,mtd_semantic_operator::pointlight);
+    CHECK(d.state==mtd_semantic_state::no_use);
+
+    d=classify_mtd_semantic(binding_q,mtd_semantic_operator::spec_rgb);
+    CHECK(d.state==mtd_semantic_state::unknown);
+    CHECK(d.exact_identity_match);
+
+    const auto shared_leather=make_identity(
+        0u,"P_Leather[DSB].mtd",
+        "0f2b9a1012b83c4dfc909c311d29a11147de8c15191bc62398ce0d5e1cc6757e",
+        "DifSpcBmp");
+    mtd_semantic_query shared_q{shared_leather,35u};
+    d=classify_mtd_semantic(
+        shared_q,mtd_semantic_operator::material_response);
+    CHECK(d.state==mtd_semantic_state::use);
+    CHECK(d.source==mtd_semantic_source::exact_binding_extension);
+    CHECK(d.gate_policy==mtd_gate_policy::ptde_companion_required);
+
+    auto bad_binding=shared_q;
+    bad_binding.material.raw_mtd_sha256[0]^=0xffu;
+    d=classify_mtd_semantic(
+        bad_binding,mtd_semantic_operator::material_response);
+    CHECK(d.state==mtd_semantic_state::unknown);
+    CHECK(!d.exact_identity_match);
+
     material_response_island seeded;
     CHECK(register_confirmed_material_routes_v1(seeded)==35u);
     CHECK(seeded.register_receiver_recipe(receiver_recipe{
