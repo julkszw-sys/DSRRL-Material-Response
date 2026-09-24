@@ -4,6 +4,7 @@
 #include "draw_transaction.hpp"
 #include "feature_registry.hpp"
 #include "hook_registry.hpp"
+#include "island_policy.hpp"
 #include "receiver_registry.hpp"
 #include "shader_registry.hpp"
 #include "snapshot_bus.hpp"
@@ -26,6 +27,7 @@ struct draw_context {
     context_kind context = context_kind::unknown;
     std::uint64_t shader_fast_hash = 0;
     sha256_digest shader_sha256{};
+    activation_context activation{};
 };
 
 class renderer_core {
