@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - agent/renderer-core-a2-runtime-ready-20260924
+      - dev/renderer-core-v1-islands
     paths:
       - "runtime-v1/**"
       - "renderer-core/**"
