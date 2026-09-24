@@ -92,7 +92,8 @@ enum class faceeye_runtime_reason : std::uint8_t {
     core_gate_not_active,
     receiver_not_verified,
     unsupported_receiver,
-    ptde_kernel_shader_not_ready,
+    replacement_ptde_kernel_shader_not_ready,
+    stock_ptde_kernel_identity_not_verified,
     runtime_t7_identity_not_verified,
     auxiliary_dirlight_snapshot_not_ready,
     auxiliary_dirlight_value_homology_not_verified,
@@ -109,7 +110,14 @@ enum class faceeye_runtime_reason : std::uint8_t {
 struct faceeye_runtime_context {
     bool receiver_verified=false;
     faceeye_receiver_variant variant=faceeye_receiver_variant::unsupported;
-    bool ptde_kernel_shader_ready=false;
+
+    // DSR no-Point/PntS changed to a comparison-sampler 3x3 kernel and needs
+    // an operator-local PTDE 4x4/manual-sample replacement. Fixed
+    // PntSS/PntSSSS already retain the PTDE-style 16-tap kernel and should
+    // preserve it rather than route through the replacement path.
+    bool replacement_ptde_kernel_shader_ready=false;
+    bool stock_ptde_kernel_identity_verified=false;
+
     bool runtime_t7_identity_verified=false;
     // PTDE FaceEye consumes exactly 26 auxiliary DirLightEntity registers.
     // Presence/immutability of the draw-local carrier does not prove that DSR
@@ -132,6 +140,8 @@ struct faceeye_runtime_plan {
     bool ready=false;
     faceeye_runtime_reason reason=faceeye_runtime_reason::core_gate_not_active;
     bool keep_live_t7=true;
+    bool replace_comparison_kernel=false;
+    bool use_stock_ptde_style_kernel=false;
     bool override_s7_with_regular_sampler=false;
     bool apply_shadow_only_to_envdiffuse_envspec=true;
     bool preserve_upper_lower=true;

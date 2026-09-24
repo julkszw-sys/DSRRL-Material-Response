@@ -207,6 +207,28 @@ hemdir3_runtime_plan evaluate_hemdir3_runtime_readiness(
         out.reason = hemdir3_runtime_reason::receiver_not_verified;
         return out;
     }
+    if (context.receiver_stratum == hemdir3_receiver_stratum::unsupported) {
+        out.reason = hemdir3_runtime_reason::unsupported_receiver;
+        return out;
+    }
+
+    if (context.receiver_stratum == hemdir3_receiver_stratum::spc) {
+        out.require_b12_material_donor = true;
+        out.require_directional_legacy_specular = true;
+
+        if (!context.spc_b12_material_donor_ready) {
+            out.reason =
+                hemdir3_runtime_reason::spc_b12_material_donor_not_ready;
+            return out;
+        }
+        if (!context.directional_specular_continuation_ready) {
+            out.reason =
+                hemdir3_runtime_reason::
+                    directional_specular_continuation_not_ready;
+            return out;
+        }
+    }
+
     if (!context.host_envdiffuse_source_suppressed) {
         out.reason = hemdir3_runtime_reason::host_envdiffuse_not_suppressed;
         return out;

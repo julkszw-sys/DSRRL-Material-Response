@@ -47,7 +47,7 @@ enum class local_specular_receiver_class : std::uint8_t {
     unsupported=0,
     fixed_spc_pntss,
     fixed_spc_pntssss,
-    clustered_pnts
+    clustered_spc_pnts
 };
 
 enum class local_specular_runtime_reason : std::uint8_t {

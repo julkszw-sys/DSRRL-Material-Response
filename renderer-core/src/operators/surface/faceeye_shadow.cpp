@@ -100,10 +100,6 @@ faceeye_runtime_plan evaluate_faceeye_runtime_readiness(
         out.reason=faceeye_runtime_reason::unsupported_receiver;
         return out;
     }
-    if(!context.ptde_kernel_shader_ready){
-        out.reason=faceeye_runtime_reason::ptde_kernel_shader_not_ready;
-        return out;
-    }
     if(!context.runtime_t7_identity_verified){
         out.reason=faceeye_runtime_reason::runtime_t7_identity_not_verified;
         return out;
@@ -126,11 +122,24 @@ faceeye_runtime_plan evaluate_faceeye_runtime_readiness(
 
     const bool native_regular=stock_regular_sampler_family(context.variant);
     if(native_regular){
+        out.use_stock_ptde_style_kernel=true;
+        if(!context.stock_ptde_kernel_identity_verified){
+            out.reason=
+                faceeye_runtime_reason::stock_ptde_kernel_identity_not_verified;
+            return out;
+        }
         if(!context.stock_regular_s7_verified){
             out.reason=faceeye_runtime_reason::stock_regular_s7_not_verified;
             return out;
         }
     }else{
+        out.replace_comparison_kernel=true;
+        if(!context.replacement_ptde_kernel_shader_ready){
+            out.reason=
+                faceeye_runtime_reason::
+                    replacement_ptde_kernel_shader_not_ready;
+            return out;
+        }
         out.override_s7_with_regular_sampler=true;
         if(!context.regular_s7_sampler_ready){
             out.reason=faceeye_runtime_reason::regular_s7_sampler_not_ready;
