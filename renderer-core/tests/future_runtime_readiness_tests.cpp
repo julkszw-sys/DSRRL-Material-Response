@@ -224,6 +224,44 @@ int main()
             features,activation,envdiffuse);
     CHECK(envdiffuse_plan.ready);
 
+    // HemDir3 D123 producer: PTDE interpolates direction angles on the
+    // shortest arc, not Cartesian vectors, while decoded colors lerp linearly.
+    std::array<operators::lightbank::hemdir3_raw_lobe_endpoint,3> d123_a{};
+    std::array<operators::lightbank::hemdir3_raw_lobe_endpoint,3> d123_b{};
+    d123_a[0].direction={170.0f,0.0f};
+    d123_b[0].direction={-170.0f,0.0f};
+    d123_a[0].color={{{255.0f,0.0f,0.0f}},100.0f};
+    d123_b[0].color={{{0.0f,0.0f,255.0f}},100.0f};
+    auto d123=operators::lightbank::evaluate_hemdir3_profile(
+        d123_a,d123_b,0.5f);
+    CHECK(d123.result==
+          operators::lightbank::hemdir3_profile_result::exact);
+    CHECK(std::fabs(d123.lobes[0].direction.y)<0.000001f);
+    CHECK(d123.lobes[0].direction.z < -0.9999f);
+    CHECK(std::fabs(d123.lobes[0].color.x-0.5f)<0.000001f);
+    CHECK(std::fabs(d123.lobes[0].color.z-0.5f)<0.000001f);
+
+    d123=operators::lightbank::evaluate_hemdir3_profile(
+        d123_a,d123_b,0.0f);
+    CHECK(d123.result==
+          operators::lightbank::hemdir3_profile_result::exact);
+    CHECK(d123.lobes[0].color.x==1.0f);
+    CHECK(d123.lobes[0].color.z==0.0f);
+
+    d123=operators::lightbank::evaluate_hemdir3_profile(
+        d123_a,d123_b,1.0f);
+    CHECK(d123.lobes[0].color.x==0.0f);
+    CHECK(d123.lobes[0].color.z==1.0f);
+
+    auto bad_d123=d123_a;
+    bad_d123[1].direction.x_degrees=
+        std::numeric_limits<float>::quiet_NaN();
+    d123=operators::lightbank::evaluate_hemdir3_profile(
+        bad_d123,d123_b,0.5f);
+    CHECK(d123.result==
+          operators::lightbank::hemdir3_profile_result::
+              fail_open_nonfinite_input);
+
     // HemDir3 local source algebra is exact and remains linear.
     using operators::lightbank::hemdir3_lobe;
     using operators::lightbank::hemdir3_vec3;
