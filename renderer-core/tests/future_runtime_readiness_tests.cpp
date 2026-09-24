@@ -179,6 +179,26 @@ int main()
     CHECK(k_legacy_packed_gi_sha256.front()==0xc1u);
     CHECK(k_legacy_packed_gi_sha256.back()==0xc3u);
 
+    CHECK(generated::k_native_probe_hash_v1.size()==342u);
+    std::array<bool,k_legacy_envspec_probe_count> probe_ordinals{};
+    for(const auto &record:generated::k_native_probe_hash_v1){
+        CHECK(record.probe_ordinal<probe_ordinals.size());
+        CHECK(!probe_ordinals[record.probe_ordinal]);
+        probe_ordinals[record.probe_ordinal]=true;
+    }
+    for(const bool seen:probe_ordinals) CHECK(seen);
+
+    const auto first_probe=
+        legacy_native_probe_for_sha(
+            generated::k_native_probe_hash_v1.front().sha256);
+    CHECK(first_probe.has_value());
+    CHECK(first_probe.value()==
+          generated::k_native_probe_hash_v1.front().probe_ordinal);
+
+    auto bad_probe_sha=generated::k_native_probe_hash_v1.front().sha256;
+    bad_probe_sha[0]^=0xffu;
+    CHECK(!legacy_native_probe_for_sha(bad_probe_sha).has_value());
+
     legacy_envspec_identity_tracker envspec_identity;
     legacy_envspec_identity_observation observation;
     observation.canonical_probe_ordinal=7u;

@@ -10,6 +10,7 @@ void unregister_runtime() noexcept;
 
 void selector_event(void *container, void *owner, void *ret, void *r14, void *r15,
                     std::int32_t material_index) noexcept;
-void mtd_event(void *material, const void *raw, std::uint32_t len) noexcept;
+void mtd_event(void *material, const void *raw, std::uint32_t len,
+               const wchar_t *semantic_key) noexcept;
 
 } // namespace dsrrl::runtime::mr

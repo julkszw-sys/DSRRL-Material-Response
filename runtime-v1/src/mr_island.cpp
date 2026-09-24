@@ -14,6 +14,7 @@
 #include "dsrrl/runtime/generated_ul_stable_hashes.hpp"
 #include "dsrrl/runtime/generated_spec_material_routes.hpp"
 #include "dsrrl/core/renderer_core.hpp"
+#include "dsrrl/operators/material_response/mtd_semantic_census.hpp"
 #include "dsrrl/sha256.hpp"
 #include "dsrrl/runtime/subsurface_dispatch.hpp"
 #include "ptde_material_donor_registry.hpp"
@@ -67,6 +68,13 @@ std::atomic<std::uint64_t> g_v13_b12_update{0}, g_v13_b12_fail{0}, g_v13_replay{
 std::atomic<bool> g_v13_first_draw_logged{false};
 std::atomic<std::uint64_t> g_target_binds{0}, g_replays{0}, g_fail_open{0};
 std::atomic<std::uint64_t> g_b12_create{0}, g_b12_hit{0}, g_restore_fail{0}, g_present{0};
+std::atomic<std::uint64_t> g_envspec_key_valid{0}, g_envspec_key_fail{0};
+std::atomic<std::uint64_t> g_envspec_mtd_exact{0}, g_envspec_selector_exact{0};
+std::atomic<std::uint64_t> g_envspec_draw_exact{0}, g_envspec_draw_present{0};
+std::atomic<std::uint64_t> g_envspec_draw_none_safe{0}, g_envspec_draw_none_unsafe{0};
+std::atomic<std::uint64_t> g_envspec_draw_nospc{0};
+
+namespace mtd_sem=dsrrl::operators::material_response;
 
 constexpr std::string_view k_pmetal_raw_mtd_sha256 =
     "ece70f36bd2517d28c8495e276cea537f8b519d6bed981788e79a409ffbf763b";
@@ -76,6 +84,32 @@ void log_error(const std::string &s){ reshade::log::message(reshade::log::level:
 
 std::mutex g_material_mutex;
 std::unordered_map<void*,std::uint16_t> g_material_donor;
+std::unordered_map<void*,mtd_sem::mtd_envspec_semantics> g_material_envspec;
+
+std::uint64_t legacy_semantic_key_hash(const wchar_t *semantic_key) noexcept
+{
+    if(!semantic_key) return 0u;
+    constexpr std::uint64_t offset=14695981039346656037ull;
+    constexpr std::uint64_t prime=1099511628211ull;
+    std::uint64_t hash=offset;
+    const auto *bytes=reinterpret_cast<const std::uint8_t*>(semantic_key);
+
+    for(std::size_t i=0;i<512u;++i){
+        std::uint16_t u=0u;
+        if(!engine::safe_read_bytes(bytes+i*2u,&u,sizeof(u)))
+            return 0u;
+        if(u==0u) return hash;
+        if(u>=static_cast<std::uint16_t>(L'A') &&
+           u<=static_cast<std::uint16_t>(L'Z'))
+            u=static_cast<std::uint16_t>(
+                u+static_cast<std::uint16_t>(L'a'-L'A'));
+        hash^=static_cast<std::uint8_t>(u&0xffu);
+        hash*=prime;
+        hash^=static_cast<std::uint8_t>((u>>8u)&0xffu);
+        hash*=prime;
+    }
+    return 0u;
+}
 
 int donor_for(void *material)
 {
@@ -83,6 +117,16 @@ int donor_for(void *material)
     std::lock_guard lock(g_material_mutex);
     const auto it=g_material_donor.find(material);
     return it==g_material_donor.end() ? -1 : static_cast<int>(it->second);
+}
+
+mtd_sem::mtd_envspec_semantics envspec_for(void *material)
+{
+    if(!material) return {};
+    std::lock_guard lock(g_material_mutex);
+    const auto it=g_material_envspec.find(material);
+    return it==g_material_envspec.end()
+        ? mtd_sem::mtd_envspec_semantics{}
+        : it->second;
 }
 
 void *resolve_material(void *container,std::int32_t index) noexcept
@@ -99,6 +143,8 @@ void *resolve_material(void *container,std::int32_t index) noexcept
 }
 
 thread_local int g_draw_donor=-1;
+thread_local mtd_sem::mtd_envspec_semantics g_draw_envspec{};
+thread_local bool g_draw_envspec_exact=false;
 thread_local int g_bound_host=-1;
 thread_local bool g_bound_lerp=false;
 thread_local bool g_bound_subsurface=false;
@@ -798,6 +844,8 @@ void on_bind_pipeline(command_list *cmd,pipeline_stage stages,pipeline p)
         g_bound_subsurface=false;
         g_bound_command=nullptr;
         g_draw_donor=-1;
+        g_draw_envspec={};
+        g_draw_envspec_exact=false;
         upper_lower::consume_draw_selection();
     }
 }
@@ -805,6 +853,32 @@ void on_bind_pipeline(command_list *cmd,pipeline_stage stages,pipeline p)
 bool on_draw_indexed(command_list *cmd,std::uint32_t index_count,std::uint32_t instance_count,
                      std::uint32_t first_index,std::int32_t vertex_offset,std::uint32_t first_instance)
 {
+    const auto draw_envspec=g_draw_envspec;
+    const bool draw_envspec_exact=g_draw_envspec_exact;
+    g_draw_envspec={};
+    g_draw_envspec_exact=false;
+
+    if(draw_envspec_exact){
+        ++g_envspec_draw_exact;
+        switch(draw_envspec.router_state){
+        case mtd_sem::mtd_envspec_router_state::present:
+            ++g_envspec_draw_present;
+            break;
+        case mtd_sem::mtd_envspec_router_state::explicit_none:
+            if(draw_envspec.suppress_dsr_only_safe)
+                ++g_envspec_draw_none_safe;
+            else
+                ++g_envspec_draw_none_unsafe;
+            break;
+        case mtd_sem::mtd_envspec_router_state::nospc_host:
+            ++g_envspec_draw_nospc;
+            break;
+        case mtd_sem::mtd_envspec_router_state::unknown:
+        default:
+            break;
+        }
+    }
+
     const bool body_material=g_draw_donor==k_subsurface_material;
     const bool body_route=g_bound_subsurface && body_material;
     const int donor=body_route ? dsrrl::materialdonor::find_sha256(
@@ -1188,7 +1262,16 @@ void on_present(command_queue *,swapchain *,const rect *,const rect *,std::uint3
               <<" replay="<<g_replays.load()<<" lerp_replay="<<g_lerp_replays.load()
               <<" v10_replay="<<g_v10_replays.load()
               <<" subsurface_replay="<<g_subsurface_replays.load()<<" b12_create="<<g_b12_create.load()
-              <<" b12_hit="<<g_b12_hit.load()<<" failopen="<<g_fail_open.load()
+              <<" b12_hit="<<g_b12_hit.load()
+               <<" envkey_ok="<<g_envspec_key_valid.load()<<" envkey_fail="<<g_envspec_key_fail.load()
+               <<" env_mtd_exact="<<g_envspec_mtd_exact.load()
+               <<" env_sel_exact="<<g_envspec_selector_exact.load()
+               <<" env_draw_exact="<<g_envspec_draw_exact.load()
+               <<" env_present="<<g_envspec_draw_present.load()
+               <<" env_none_safe="<<g_envspec_draw_none_safe.load()
+               <<" env_none_hold="<<g_envspec_draw_none_unsafe.load()
+               <<" env_nospc="<<g_envspec_draw_nospc.load()
+               <<" failopen="<<g_fail_open.load()
               <<" restore_fail="<<g_restore_fail.load()<<" quarantined="<<(g_quarantined.load()?1:0);
             log_info(os.str());
         }
@@ -1199,21 +1282,47 @@ void on_present(command_queue *,swapchain *,const rect *,const rect *,std::uint3
 
 } // namespace
 
-void mtd_event(void *material,const void *raw,std::uint32_t len) noexcept
+void mtd_event(
+    void *material,
+    const void *raw,
+    std::uint32_t len,
+    const wchar_t *semantic_key) noexcept
 {
     if(!material || !raw || !len) return;
     ++g_mtd_seen;
     try{
-        const auto hash=dsrrl::to_hex(dsrrl::sha256({
+        const auto digest=dsrrl::sha256({
             reinterpret_cast<const std::byte*>(raw),len
-        }));
+        });
+        const auto hash=dsrrl::to_hex(digest);
         const int idx=hash==subsurface::k_dsr_body_subsurf_material_sha256 ?
             k_subsurface_material : dsrrl::materialdonor::find_sha256(hash);
+
+        const std::uint64_t legacy_key=
+            legacy_semantic_key_hash(semantic_key);
+        if(legacy_key!=0u) ++g_envspec_key_valid;
+        else ++g_envspec_key_fail;
+
+        const auto envspec=
+            mtd_sem::classify_mtd_envspec_semantics_legacy(
+                legacy_key,
+                digest);
+
         std::lock_guard lock(g_material_mutex);
         g_material_donor.erase(material);
+        g_material_envspec.erase(material);
+
         if(idx>=0){
-            g_material_donor[material]=static_cast<std::uint16_t>(idx); ++g_mapped;
-        }else ++g_unmapped;
+            g_material_donor[material]=static_cast<std::uint16_t>(idx);
+            ++g_mapped;
+        }else{
+            ++g_unmapped;
+        }
+
+        if(envspec.exact_identity_match){
+            g_material_envspec[material]=envspec;
+            ++g_envspec_mtd_exact;
+        }
     }catch(...){++g_fail_open;}
 }
 
@@ -1221,13 +1330,25 @@ void selector_event(void *container,void *,void *ret,void *,void *,std::int32_t 
 {
     ++g_selector_seen;
     const auto base=engine::image_base();
-    if(!base){g_draw_donor=-1;return;}
+    if(!base){
+        g_draw_donor=-1;
+        g_draw_envspec={};
+        g_draw_envspec_exact=false;
+        return;
+    }
     const auto rva=reinterpret_cast<std::uintptr_t>(ret)-base;
     if(rva!=k_ret_sel_1 && rva!=k_ret_sel_2 && rva!=k_ret_sel_3){
-        g_draw_donor=-1; return;
+        g_draw_donor=-1;
+        g_draw_envspec={};
+        g_draw_envspec_exact=false;
+        return;
     }
-    g_draw_donor=donor_for(resolve_material(container,material_index));
+    void *actual=resolve_material(container,material_index);
+    g_draw_donor=donor_for(actual);
+    g_draw_envspec=envspec_for(actual);
+    g_draw_envspec_exact=g_draw_envspec.exact_identity_match;
     if(g_draw_donor>=0) ++g_selector_mapped;
+    if(g_draw_envspec_exact) ++g_envspec_selector_exact;
 }
 
 bool register_runtime(core::renderer_core &core) noexcept
@@ -1236,7 +1357,8 @@ bool register_runtime(core::renderer_core &core) noexcept
     g_quarantined.store(false);
     g_v13_first_draw_logged.store(false);
     g_v10_first_draw_logged.store(false);
-    g_draw_donor=-1; g_bound_host=-1; g_bound_lerp=false; g_bound_subsurface=false; g_bound_command=nullptr;
+    g_draw_donor=-1; g_draw_envspec={}; g_draw_envspec_exact=false;
+    g_bound_host=-1; g_bound_lerp=false; g_bound_subsurface=false; g_bound_command=nullptr;
     g_enabled.store(true);
     reshade::register_event<reshade::addon_event::init_device>(on_init_device);
     reshade::register_event<reshade::addon_event::destroy_device>(on_destroy_device);
@@ -1263,8 +1385,13 @@ void unregister_runtime() noexcept
     release_device_state();
     {std::lock_guard lock(g_pending_mutex);g_pending.clear();}
     {std::lock_guard lock(g_pipeline_mutex);g_pipelines.clear();}
-    {std::lock_guard lock(g_material_mutex);g_material_donor.clear();}
-    g_draw_donor=-1; g_bound_host=-1; g_bound_lerp=false; g_bound_subsurface=false; g_bound_command=nullptr;
+    {
+        std::lock_guard lock(g_material_mutex);
+        g_material_donor.clear();
+        g_material_envspec.clear();
+    }
+    g_draw_donor=-1; g_draw_envspec={}; g_draw_envspec_exact=false;
+    g_bound_host=-1; g_bound_lerp=false; g_bound_subsurface=false; g_bound_command=nullptr;
     g_core=nullptr;
 }
 

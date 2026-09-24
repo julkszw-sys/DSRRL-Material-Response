@@ -166,6 +166,50 @@ mtd_envspec_semantics classify_mtd_envspec_semantics(
     return out;
 }
 
+mtd_envspec_semantics classify_mtd_envspec_semantics_legacy(
+    std::uint64_t legacy_name_hash_utf16_lower,
+    const core::sha256_digest &raw_mtd_sha256) noexcept
+{
+    mtd_envspec_semantics out;
+    if(legacy_name_hash_utf16_lower==0u)
+        return out;
+
+    for(const auto &seed:generated::k_envspec_router_v1){
+        if(seed.legacy_name_hash_utf16_lower!=legacy_name_hash_utf16_lower ||
+           seed.raw_mtd_sha256!=raw_mtd_sha256)
+            continue;
+
+        out.exact_identity_match=true;
+        out.envspc_slot_valid=seed.envspc_slot<4u;
+        out.envspc_slot=seed.envspc_slot;
+        out.suppress_dsr_only_safe=seed.explicit_none_safe;
+
+        switch(seed.state){
+        case generated::envspec_router_state::present:
+            out.presence=ptde_envspec_presence::present;
+            out.router_state=mtd_envspec_router_state::present;
+            break;
+        case generated::envspec_router_state::explicit_none:
+            out.presence=ptde_envspec_presence::absent;
+            out.router_state=mtd_envspec_router_state::explicit_none;
+            break;
+        case generated::envspec_router_state::nospc_host:
+            out.presence=ptde_envspec_presence::absent;
+            out.router_state=mtd_envspec_router_state::nospc_host;
+            out.suppress_dsr_only_safe=false;
+            break;
+        case generated::envspec_router_state::unknown:
+        default:
+            out.presence=ptde_envspec_presence::unknown;
+            out.router_state=mtd_envspec_router_state::unknown;
+            out.suppress_dsr_only_safe=false;
+            break;
+        }
+        return out;
+    }
+    return out;
+}
+
 std::uint64_t mtd_semantic_hash(const char *text) noexcept
 {
     constexpr std::uint64_t offset=14695981039346656037ull;

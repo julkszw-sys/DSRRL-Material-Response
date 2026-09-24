@@ -87,6 +87,19 @@ int main()
     CHECK(pmetal_env.envspc_slot==2u);
     CHECK(!pmetal_env.suppress_dsr_only_safe);
 
+    const auto pmetal_legacy=classify_mtd_envspec_semantics_legacy(
+        0x1755dba68cb5e9a3ull,
+        pmetal.raw_mtd_sha256);
+    CHECK(pmetal_legacy.exact_identity_match);
+    CHECK(pmetal_legacy.router_state==mtd_envspec_router_state::present);
+    CHECK(pmetal_legacy.envspc_slot_valid);
+    CHECK(pmetal_legacy.envspc_slot==2u);
+
+    const auto wrong_legacy=classify_mtd_envspec_semantics_legacy(
+        0x1755dba68cb5e9a2ull,
+        pmetal.raw_mtd_sha256);
+    CHECK(!wrong_legacy.exact_identity_match);
+
     d=classify_mtd_semantic(q,mtd_semantic_operator::diffuse);
     CHECK(d.state==mtd_semantic_state::unknown);
     CHECK(d.exact_identity_match);

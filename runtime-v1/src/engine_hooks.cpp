@@ -73,7 +73,7 @@ mtd_callback g_mtd_cb = nullptr;
 texture_name_callback g_texture_name_cb = nullptr;
 texture_clear_callback g_texture_clear_cb = nullptr;
 
-using mtd_parse_fn = void(__fastcall *)(void *, const void *, std::uint32_t, void *);
+using mtd_parse_fn = void(__fastcall *)(void *, const void *, std::uint32_t, const wchar_t *);
 mtd_parse_fn g_mtd_original = nullptr;
 
 std::filesystem::path process_path()
@@ -168,10 +168,17 @@ void clear_callbacks() noexcept
     g_texture_clear_cb = nullptr;
 }
 
-void __fastcall mtd_hook_entry(void *material, const void *raw, std::uint32_t len, void *arg4) noexcept
+void __fastcall mtd_hook_entry(
+    void *material,
+    const void *raw,
+    std::uint32_t len,
+    const wchar_t *semantic_key) noexcept
 {
-    if (g_mtd_cb) g_mtd_cb(material, raw, len);
-    if (g_mtd_original) g_mtd_original(material, raw, len, arg4);
+    // Retail 0x140295ED0 receives the exact MTD BND entry name in R9.
+    // Preserve that discriminator for exact (semantic name, raw SHA) routing;
+    // the original parser still receives the untouched pointer afterward.
+    if (g_mtd_cb) g_mtd_cb(material, raw, len, semantic_key);
+    if (g_mtd_original) g_mtd_original(material, raw, len, semantic_key);
 }
 
 } // namespace

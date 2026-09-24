@@ -1,6 +1,25 @@
 cmake_minimum_required(VERSION 3.20)
 project(DSRRLRendererCoreV1 LANGUAGES CXX)
 
+find_package(Python3 REQUIRED COMPONENTS Interpreter)
+
+set(DSRRL_GENERATED_DIR "${CMAKE_CURRENT_BINARY_DIR}/generated")
+set(DSRRL_NATIVE_PROBE_HEADER
+    "${DSRRL_GENERATED_DIR}/dsrrl/operators/env_spec/generated_native_probe_hash_v1.hpp")
+add_custom_command(
+    OUTPUT "${DSRRL_NATIVE_PROBE_HEADER}"
+    COMMAND "${Python3_EXECUTABLE}"
+            "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_native_envspec_probe_hash.py"
+            --input "${CMAKE_CURRENT_SOURCE_DIR}/data/census/DSR_NATIVE_ENVSPEC_PROBE_HASH_V1.bin"
+            --output "${DSRRL_NATIVE_PROBE_HEADER}"
+    DEPENDS
+        "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_native_envspec_probe_hash.py"
+        "${CMAKE_CURRENT_SOURCE_DIR}/data/census/DSR_NATIVE_ENVSPEC_PROBE_HASH_V1.bin"
+    VERBATIM
+)
+add_custom_target(dsrrl_native_envspec_probe_header
+    DEPENDS "${DSRRL_NATIVE_PROBE_HEADER}")
+
 option(DSRRL_BUILD_PHASE0_PROBE "Build the pixel-inert ReShade API20 Phase 0 probe addon" OFF)
 set(RESHade_INCLUDE_DIR "" CACHE PATH "Path to pinned ReShade include directory")
 
@@ -31,8 +50,12 @@ add_library(dsrrl_renderer_core STATIC
     src/operators/resource_bridges/spec_rgb_bridge.cpp
     src/operators/resource_bridges/normal_bridge.cpp
     src/operators/resource_bridges/diffuse_bridge.cpp
+    "${DSRRL_NATIVE_PROBE_HEADER}"
 )
-target_include_directories(dsrrl_renderer_core PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
+add_dependencies(dsrrl_renderer_core dsrrl_native_envspec_probe_header)
+target_include_directories(dsrrl_renderer_core PUBLIC
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
+    ${DSRRL_GENERATED_DIR})
 target_compile_features(dsrrl_renderer_core PUBLIC cxx_std_17)
 
 if(MSVC)

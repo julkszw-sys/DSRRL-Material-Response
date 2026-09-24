@@ -27,6 +27,12 @@ jobs:
       - name: Verify exact MTD EnvSpec router
         run: |
           python3 renderer-core/tools/generate_mtd_envspec_router.py
+      - name: Verify exact native EnvSpec probe registry
+        run: |
+          python3 renderer-core/tools/generate_native_envspec_probe_hash.py \
+            --input renderer-core/data/census/DSR_NATIVE_ENVSPEC_PROBE_HASH_V1.bin \
+            --output /tmp/generated_native_probe_hash_v1.hpp
+          test "$(grep -c 'probe_ordinal' /tmp/generated_native_probe_hash_v1.hpp)" -ge 1
       - name: Verify operator catalog
         run: |
           python3 renderer-core/tools/verify_operator_catalog.py \

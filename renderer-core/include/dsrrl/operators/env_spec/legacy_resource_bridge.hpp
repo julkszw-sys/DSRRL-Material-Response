@@ -1,5 +1,7 @@
 #pragma once
 
+#include "dsrrl/operators/env_spec/generated_native_probe_hash_v1.hpp"
+
 #include <array>
 #include <cstddef>
 #include <cstdint>
@@ -54,6 +56,19 @@ inline std::optional<std::uint8_t> legacy_envspec_slot_for_route(
     if(route_index>=k_legacy_envspec_slot_by_route.size())
         return std::nullopt;
     return k_legacy_envspec_slot_by_route[route_index];
+}
+
+static_assert(
+    generated::k_native_probe_hash_record_count==k_legacy_envspec_probe_count,
+    "Native EnvSpec fingerprint corpus must cover all 342 canonical probes.");
+
+inline std::optional<std::uint16_t> legacy_native_probe_for_sha(
+    const std::array<std::uint8_t,32> &sha256) noexcept
+{
+    for(const auto &record:generated::k_native_probe_hash_v1)
+        if(record.sha256==sha256)
+            return record.probe_ordinal;
+    return std::nullopt;
 }
 
 // Exact external resource contract recovered from the 1.45 PackedGI loader.

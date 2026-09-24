@@ -5,7 +5,8 @@
 namespace dsrrl::runtime::engine {
 
 using selector_callback = void(*)(void *container, void *owner, void *ret, void *r14, void *r15, std::int32_t material_index) noexcept;
-using mtd_callback = void(*)(void *material, const void *raw, std::uint32_t len) noexcept;
+using mtd_callback = void(*)(void *material, const void *raw, std::uint32_t len,
+                             const wchar_t *semantic_key) noexcept;
 using texture_name_callback = void(*)(const wchar_t *logical_name) noexcept;
 using texture_clear_callback = void(*)() noexcept;
 

@@ -86,6 +86,14 @@ mtd_semantic_decision classify_mtd_semantic(
 mtd_envspec_semantics classify_mtd_envspec_semantics(
     const mtd_semantic_query &query) noexcept;
 
+// Runtime parser equivalent of the exact router identity. Retail DSR provides
+// the UTF-16 BND entry name concurrently with raw MTD bytes at 0x140295ED0.
+// The generated router preserves the historical lowercase UTF-16 FNV-1a key,
+// so runtime does not need a lossy name conversion.
+mtd_envspec_semantics classify_mtd_envspec_semantics_legacy(
+    std::uint64_t legacy_name_hash_utf16_lower,
+    const core::sha256_digest &raw_mtd_sha256) noexcept;
+
 ptde_envspec_presence mtd_envspec_presence(
     const mtd_semantic_query &query) noexcept;
 
