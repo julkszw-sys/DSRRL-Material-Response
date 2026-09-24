@@ -19,6 +19,12 @@ struct island_request {
     std::uint32_t carrier_write_mask = 0;
     bool shader_replacement = false;
     bool resource_replacement = false;
+
+    // PARTIAL / ACTIVE_CANDIDATE / DIAGNOSTIC islands have operator-local
+    // readiness contracts beyond the generic Core activation_context. They
+    // may enter a generic draw plan only after the owning island has closed
+    // those extra gates explicitly.
+    bool operator_readiness_verified = false;
 };
 
 struct draw_context {
