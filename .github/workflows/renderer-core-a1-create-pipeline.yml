@@ -1,0 +1,113 @@
+name: Renderer Core A1 Create-Pipeline Diagnostic
+
+on:
+  push:
+    branches:
+      - dev/renderer-core-v1-islands
+      - agent/a1-create-pipeline-glue-20260924
+    paths:
+      - "renderer-core/diagnostics/a1-create-time/**"
+      - "renderer-core/include/dsrrl/operators/legacy_plan/a1_create_time_materializer.hpp"
+      - "renderer-core/include/dsrrl/operators/legacy_plan/sha256_bytes.hpp"
+      - "renderer-core/include/dsrrl/operators/legacy_plan/dxbc_checksum.hpp"
+      - "renderer-core/include/dsrrl/operators/legacy_plan/generated_a1_exact_patch_recipes_v1.hpp"
+      - "renderer-core/src/feature_registry.cpp"
+      - ".github/workflows/renderer-core-a1-create-pipeline.yml"
+  pull_request:
+    paths:
+      - "renderer-core/diagnostics/a1-create-time/**"
+      - "renderer-core/include/dsrrl/operators/legacy_plan/a1_create_time_materializer.hpp"
+      - "renderer-core/include/dsrrl/operators/legacy_plan/sha256_bytes.hpp"
+      - "renderer-core/include/dsrrl/operators/legacy_plan/dxbc_checksum.hpp"
+      - "renderer-core/include/dsrrl/operators/legacy_plan/generated_a1_exact_patch_recipes_v1.hpp"
+      - "renderer-core/src/feature_registry.cpp"
+      - ".github/workflows/renderer-core-a1-create-pipeline.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  windows-diagnostic-build:
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Checkout pinned ReShade API
+        uses: actions/checkout@v4
+        with:
+          repository: crosire/reshade
+          ref: 3645e3025d1d98a90e318278858931f034d5d1f6
+          path: _reshade
+
+      - name: Configure diagnostic addon
+        run: >
+          cmake
+          -S renderer-core/diagnostics/a1-create-time
+          -B build-a1-create-time
+          -A x64
+          -DRESHade_INCLUDE_DIR="${{ github.workspace }}/_reshade/include"
+
+      - name: Build diagnostic addon
+        run: cmake --build build-a1-create-time --config Release
+
+      - name: Audit no draw replay or draw-time mutation
+        shell: pwsh
+        run: |
+          $src = Get-Content renderer-core/diagnostics/a1-create-time/a1_create_time_diagnostic_addon.cpp -Raw
+          if ($src -match 'addon_event::draw(?:_indexed)?') {
+            throw "Create-time diagnostic must not register draw callbacks"
+          }
+          if ($src -match '\bDraw(?:Indexed|Instanced|IndexedInstanced)?\s*\(') {
+            throw "Create-time diagnostic must not issue native draw replay"
+          }
+          if ($src -match 'P_Metal|P_METAL|pmetal') {
+            throw "Create-time A1 diagnostic must not contain P_Metal shared-host special casing"
+          }
+          Write-Host "A1_CREATE_TIME_OPERATOR_ISOLATION_PASS"
+
+      - name: Build audit and package
+        shell: pwsh
+        run: |
+          $addon = "build-a1-create-time/Release/DSRRL_Renderer_Core_A1_CreateTime_Diagnostic.addon64"
+          if (!(Test-Path $addon)) { throw "Diagnostic addon not produced" }
+
+          $addonHash = (Get-FileHash $addon -Algorithm SHA256).Hash.ToLowerInvariant()
+          $sourceHash = (Get-FileHash "renderer-core/diagnostics/a1-create-time/a1_create_time_diagnostic_addon.cpp" -Algorithm SHA256).Hash.ToLowerInvariant()
+          $materializerHash = (Get-FileHash "renderer-core/include/dsrrl/operators/legacy_plan/a1_create_time_materializer.hpp" -Algorithm SHA256).Hash.ToLowerInvariant()
+          $recipesHash = (Get-FileHash "renderer-core/include/dsrrl/operators/legacy_plan/generated_a1_exact_patch_recipes_v1.hpp" -Algorithm SHA256).Hash.ToLowerInvariant()
+
+          $audit = [ordered]@{
+            schema = "DSRRL_A1_CREATE_PIPELINE_DIAGNOSTIC_BUILD_AUDIT_V1"
+            build_kind = "DIAGNOSTIC"
+            source_commit = $env:GITHUB_SHA
+            reshade_commit = "3645e3025d1d98a90e318278858931f034d5d1f6"
+            reshade_api = 20
+            target = "DSRRL_Renderer_Core_A1_CreateTime_Diagnostic.addon64"
+            addon_sha256 = $addonHash
+            addon_source_sha256 = $sourceHash
+            materializer_header_sha256 = $materializerHash
+            generated_recipe_header_sha256 = $recipesHash
+            source_plan_sha256 = "5cc15f8084fb75cb33c27be3f0e94be7fd186f07c16274b33ee09735b747a1ec"
+            exact_recipe_corpus_sha256 = "c38d5560e7dfc99f149da0908d754400e8bf654fe7e0a0469e5f08f47d7575b0"
+            plans = 144
+            ops = 312
+            runtime_status = "NOT_TESTED"
+            bridge_activation = "NOT_TESTED"
+            pixel_status = "OPEN"
+          }
+
+          New-Item -ItemType Directory -Force -Path package-a1 | Out-Null
+          Copy-Item $addon package-a1/
+          Copy-Item renderer-core/diagnostics/a1-create-time/README.md package-a1/
+          $audit | ConvertTo-Json -Depth 4 | Set-Content package-a1/BUILD_AUDIT.json -Encoding UTF8
+
+          Compress-Archive -Path package-a1/* -DestinationPath DSRRL_A1_CreateTime_Diagnostic.zip -Force
+          Get-FileHash DSRRL_A1_CreateTime_Diagnostic.zip -Algorithm SHA256
+
+      - name: Upload diagnostic package
+        uses: actions/upload-artifact@v4
+        with:
+          name: DSRRL_A1_CreateTime_Diagnostic
+          path: DSRRL_A1_CreateTime_Diagnostic.zip
+          if-no-files-found: error
