@@ -19,9 +19,26 @@ render_patch_plan renderer_core::build_plan(
     if (!receiver.has_value())
         return plan;
 
+    // Exact receiver resolution is owned by Core. All remaining operator-local
+    // requirements must still pass the canonical activation policy before an
+    // island can enter a patch plan. This prevents a future caller from
+    // bypassing BLOCKED/REJECTED/diagnostic/material/resource/producer/
+    // consumer/context/graph gates by calling build_plan directly.
+    auto activation = context.activation;
+    activation.receiver_verified = true;
+    activation.immediate_context =
+        context.context == context_kind::immediate;
+
     for (std::uint32_t i = 0; i < request_count; ++i) {
         const auto &request = requests[i];
-        if (!features_.enabled(request.op))
+
+        const auto gate =
+            evaluate_operator_activation(
+                features_,
+                request.op,
+                activation);
+
+        if (gate.state != island_state::active)
             continue;
 
         if ((receiver->capabilities & operator_bit(request.op)) == 0)
