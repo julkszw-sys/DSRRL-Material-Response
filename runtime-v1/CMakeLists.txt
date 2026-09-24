@@ -80,7 +80,7 @@ if(WIN32 AND RESHade_INCLUDE_DIR)
     src/selector_hook.asm
     src/texture_name_hook.asm
   )
-  add_dependencies(dsrrl_renderer_runtime_v1_addon dsrrl_mr_manifest)
+  add_dependencies(dsrrl_renderer_runtime_v1_addon dsrrl_mr_manifest dsrrl_a3_route_headers)
   target_include_directories(dsrrl_renderer_runtime_v1_addon PRIVATE
     include
     "${GEN_DIR}"
