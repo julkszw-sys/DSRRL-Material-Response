@@ -21,6 +21,8 @@ struct material_route_scope {
     bool exact = false;
     bool diffuse_normal_eligible = false;
     bool diffuse_c100_carrier_active = false;
+    bool specular_material_verified = false;
+    bool spec_t10_consumer_active = false;
     std::uint32_t route_index = 0;
     std::array<std::uint32_t, 3> receivers{};
 };
@@ -41,9 +43,17 @@ void unregister_runtime() noexcept;
 void texture_name_event(const wchar_t *logical_name) noexcept;
 void texture_name_clear_event() noexcept;
 
+// Preflight used before shader selection. It requires the exact receiver,
+// an actual-material SpecRGB route, exact t1 logical identity and a ready
+// PTDE sidecar; it never mutates D3D state.
+bool spec_ready(
+    ID3D11DeviceContext *context,
+    const material_route_scope &route,
+    std::uint32_t receiver_id) noexcept;
+
 // Called only from the Core-owned draw transaction. The caller must set
-// diffuse_c100_carrier_active only after the exact MR receiver and PTDE c100
-// CB12 have both been bound for the current draw.
+// diffuse_c100_carrier_active only after exact PTDE c100 is available, and
+// spec_t10_consumer_active only after selecting a shader that really reads t10.
 bool apply_draw(
     ID3D11DeviceContext *context,
     const material_route_scope &route,
