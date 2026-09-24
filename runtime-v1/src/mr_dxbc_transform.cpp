@@ -1,4 +1,5 @@
 #include "dsrrl/runtime/mr_dxbc_transform.hpp"
+#include "dsrrl/runtime/v13_pmetal_consumer_authority.hpp"
 #include "dsrrl/sha256.hpp"
 
 #include <algorithm>
@@ -407,6 +408,97 @@ bool patch_rdef_specrgb_if_present(
     return true;
 }
 
+
+bool patch_rdef_pmetal_v13(
+    std::vector<chunk> &chunks,
+    std::string &err)
+{
+    std::size_t rdef_index=chunks.size();
+    for(std::size_t i=0;i<chunks.size();++i){
+        if(std::memcmp(chunks[i].tag.data(),"RDEF",4)==0){
+            if(rdef_index!=chunks.size()){
+                err="V13 duplicate RDEF";
+                return false;
+            }
+            rdef_index=i;
+        }
+    }
+    if(rdef_index==chunks.size()){
+        err="V13 RDEF missing on exact V2.11 base";
+        return false;
+    }
+
+    auto &rdef=chunks[rdef_index].payload;
+    if(rdef.size()<16u){
+        err="V13 RDEF header";
+        return false;
+    }
+
+    const std::uint32_t binding_count=read_u32(rdef.data()+8u);
+    const std::uint32_t binding_offset=read_u32(rdef.data()+12u);
+    constexpr std::uint32_t binding_size=32u;
+    if(binding_count==0u || binding_count>256u ||
+       binding_offset>rdef.size() ||
+       static_cast<std::uint64_t>(binding_count)*binding_size>
+           rdef.size()-binding_offset){
+        err="V13 RDEF binding table";
+        return false;
+    }
+
+    std::uint32_t sampler9=0u,texture9=0u;
+    for(std::uint32_t i=0;i<binding_count;++i){
+        const std::uint32_t off=binding_offset+i*binding_size;
+        const std::uint32_t type=read_u32(rdef.data()+off+4u);
+        const std::uint32_t dimension=read_u32(rdef.data()+off+12u);
+        const std::uint32_t bind_point=read_u32(rdef.data()+off+20u);
+        const std::uint32_t bind_count=read_u32(rdef.data()+off+24u);
+
+        if(bind_point==14u){
+            err="V13 RDEF t14/s14 already declared";
+            return false;
+        }
+        if(bind_point!=9u || bind_count!=1u)
+            continue;
+
+        if(type==3u){
+            write_u32(rdef.data()+off+20u,14u);
+            ++sampler9;
+        }else if(type==2u && dimension==4u){
+            // D3D_SRV_DIMENSION_TEXTURE2D -> TEXTURECUBE.
+            write_u32(rdef.data()+off+12u,9u);
+            write_u32(rdef.data()+off+20u,14u);
+            ++texture9;
+        }
+    }
+    if(sampler9!=1u || texture9!=1u){
+        err="V13 RDEF exact t9/s9 binding pair";
+        return false;
+    }
+    return true;
+}
+
+constexpr std::array<std::uint32_t,47> k_v13_pmetal_chain = {{
+    // A = sample(t12) * pA
+    0x08000038u,0x001000e2u,0x00000001u,0x00100e56u,
+    0x00000001u,0x00208246u,0x0000000cu,0x00000002u,
+    // if (beta)
+    0x0404001fu,0x0020803au,0x0000000cu,0x00000003u,
+    // Braw = sample(t14)
+    0x8d000048u,0x80000182u,0x00155543u,0x001000e2u,
+    0x0000000cu,0x00100796u,0x00000001u,0x00107936u,
+    0x0000000eu,0x00106000u,0x0000000eu,0x0010003au,
+    0x00000002u,
+    // delta = Braw * pB - A
+    0x0b000032u,0x001000e2u,0x0000000cu,0x00100e56u,
+    0x0000000cu,0x00208246u,0x0000000cu,0x00000003u,
+    0x80100e56u,0x00000041u,0x00000001u,
+    // A = delta * beta + A
+    0x0a000032u,0x001000e2u,0x00000001u,0x00100e56u,
+    0x0000000cu,0x0020803au,0x0000000cu,0x00000003u,
+    0x00100e56u,0x00000001u,
+    0x01000015u
+}};
+
 } // namespace
 
 const plan *find_plan(std::size_t size,std::string_view sha256) noexcept
@@ -620,6 +712,196 @@ transform_result transform_spec_rgb(std::span<const std::uint8_t> base)
         r.error="SpecRGB t1/t10 postcondition"; return r;
     }
     r.ok=true; r.code=std::move(out); return r;
+}
+
+
+transform_result transform_pmetal_v13(std::span<const std::uint8_t> base)
+{
+    transform_result r;
+    const auto base_sha=sha_hex(base);
+    const auto *authority=v13_authority::find(base_sha);
+    if(!authority){
+        r.error="V13 exact V2.11 identity";
+        return r;
+    }
+
+    std::vector<chunk> chunks;
+    std::vector<std::uint32_t> words;
+    std::size_t shex=0;
+    if(!get_shex_words(base,chunks,shex,words,r.error))
+        return r;
+
+    std::vector<instruction_view> instructions;
+    if(!decode_instructions(words,instructions,r.error))
+        return r;
+
+    std::optional<instruction_view> sampler9;
+    std::optional<instruction_view> texture9;
+    std::optional<instruction_view> t12_sample;
+    std::size_t t9_sample_count=0u;
+    std::size_t t14_decl_count=0u;
+
+    for(const auto &ins:instructions){
+        if(ins.opcode==0x5au && ins.length==3u){
+            const auto slot=words[ins.offset+2u];
+            if(slot==9u){
+                if(sampler9){r.error="V13 duplicate s9 declaration";return r;}
+                sampler9=ins;
+            }
+            if(slot==14u) ++t14_decl_count;
+        }
+        if(ins.opcode==0x58u && ins.length==4u){
+            const auto slot=words[ins.offset+2u];
+            if(slot==9u){
+                if(texture9){r.error="V13 duplicate t9 declaration";return r;}
+                texture9=ins;
+            }
+            if(slot==14u) ++t14_decl_count;
+        }
+        if(ins.opcode>=0x45u && ins.opcode<=0x4au && ins.length==13u){
+            const auto resource=words[ins.offset+8u];
+            const auto sampler=words[ins.offset+10u];
+            if(resource==12u && sampler==12u){
+                if(t12_sample){r.error="V13 duplicate t12 sample";return r;}
+                t12_sample=ins;
+            }
+            if(resource==9u || sampler==9u)
+                ++t9_sample_count;
+        }
+    }
+
+    if(!sampler9 || !texture9 || !t12_sample || t14_decl_count!=0u){
+        r.error="V13 exact t9/s9/t12 declarations";
+        return r;
+    }
+    if(words[sampler9->offset]!=0x0300005au ||
+       words[sampler9->offset+1u]!=0x00106000u ||
+       words[sampler9->offset+2u]!=9u){
+        r.error="V13 exact s9 declaration";
+        return r;
+    }
+    if(words[texture9->offset]!=0x04001858u ||
+       words[texture9->offset+1u]!=0x00107000u ||
+       words[texture9->offset+2u]!=9u ||
+       words[texture9->offset+3u]!=0x00005555u){
+        r.error="V13 exact t9 2D declaration";
+        return r;
+    }
+
+    constexpr std::array<std::uint32_t,13> k_t12_sample = {{
+        0x8d000048u,0x80000182u,0x00155543u,0x001000e2u,
+        0x00000001u,0x00100796u,0x00000001u,0x00107936u,
+        0x0000000cu,0x00106000u,0x0000000cu,0x0010003au,
+        0x00000002u
+    }};
+    if(t12_sample->offset!=authority->t12_word ||
+       !std::equal(
+           k_t12_sample.begin(),k_t12_sample.end(),
+           words.begin()+static_cast<std::ptrdiff_t>(t12_sample->offset))){
+        r.error="V13 exact t12 sample";
+        return r;
+    }
+
+    const std::size_t replace_begin=t12_sample->offset+t12_sample->length;
+    const std::size_t merge=authority->merge_word;
+    if(merge<=replace_begin || merge-replace_begin!=102u ||
+       merge>=words.size()){
+        r.error="V13 canonical receiver window";
+        return r;
+    }
+
+    const auto merge_it=std::find_if(
+        instructions.begin(),instructions.end(),
+        [merge](const instruction_view &ins){return ins.offset==merge;});
+    if(merge_it==instructions.end() || merge_it->opcode!=0x32u ||
+       merge_it->length!=9u){
+        r.error="V13 canonical EnvSpec+EnvDiffuse merge MAD";
+        return r;
+    }
+    if(t9_sample_count!=1u){
+        r.error="V13 expected exactly one t9/s9 sample";
+        return r;
+    }
+
+    // The only legacy t9/s9 sample must live inside the operator-local DSR
+    // EnvSpec receiver island that is about to be removed.
+    for(const auto &ins:instructions){
+        if(ins.opcode<0x45u || ins.opcode>0x4au || ins.length!=13u)
+            continue;
+        const auto resource=words[ins.offset+8u];
+        const auto sampler=words[ins.offset+10u];
+        if(resource==9u || sampler==9u){
+            if(ins.offset<replace_begin || ins.offset>=merge){
+                r.error="V13 t9/s9 sample outside canonical receiver island";
+                return r;
+            }
+        }
+    }
+
+    // Historical V13 reuses the now-dead DSR BRDF LUT binding as the native
+    // second cube endpoint. This changes only the exact P_Metal replacement
+    // shader; stock DSR state remains untouched for every other material.
+    words[sampler9->offset+2u]=14u;
+    words[texture9->offset]=0x04003058u; // dcl_resource_texturecube
+    words[texture9->offset+2u]=14u;
+
+    std::copy(
+        k_v13_pmetal_chain.begin(),
+        k_v13_pmetal_chain.end(),
+        words.begin()+static_cast<std::ptrdiff_t>(replace_begin));
+    std::fill(
+        words.begin()+static_cast<std::ptrdiff_t>(
+            replace_begin+k_v13_pmetal_chain.size()),
+        words.begin()+static_cast<std::ptrdiff_t>(merge),
+        0x0100003au); // NOP
+
+    chunks[shex].payload.resize(words.size()*4u);
+    for(std::size_t i=0;i<words.size();++i)
+        write_u32(chunks[shex].payload.data()+i*4u,words[i]);
+
+    if(!patch_rdef_pmetal_v13(chunks,r.error))
+        return r;
+
+    auto out=rebuild(base,chunks,r.error);
+    if(out.empty())
+        return r;
+    if(out.size()!=base.size() ||
+       !hash_is(out,authority->output_v13_sha256)){
+        r.error="V13 exact output SHA";
+        return r;
+    }
+
+    // Reparse the final payload so a future refactor cannot accidentally pass
+    // only the preconditions while emitting a malformed resource/branch island.
+    if(!get_shex_words(out,chunks,shex,words,r.error) ||
+       !decode_instructions(words,instructions,r.error))
+        return r;
+
+    std::size_t s14=0u,t14=0u,t14_sample=0u,t9_sample=0u;
+    for(const auto &ins:instructions){
+        if(ins.opcode==0x5au && ins.length==3u &&
+           words[ins.offset+2u]==14u) ++s14;
+        if(ins.opcode==0x58u && ins.length==4u &&
+           words[ins.offset]==0x04003058u &&
+           words[ins.offset+2u]==14u) ++t14;
+        if(ins.opcode>=0x45u && ins.opcode<=0x4au && ins.length==13u){
+            if(words[ins.offset+8u]==14u && words[ins.offset+10u]==14u)
+                ++t14_sample;
+            if(words[ins.offset+8u]==9u || words[ins.offset+10u]==9u)
+                ++t9_sample;
+        }
+    }
+    if(s14!=1u || t14!=1u || t14_sample!=1u || t9_sample!=0u ||
+       !std::equal(
+           k_v13_pmetal_chain.begin(),k_v13_pmetal_chain.end(),
+           words.begin()+static_cast<std::ptrdiff_t>(replace_begin))){
+        r.error="V13 structural postcondition";
+        return r;
+    }
+
+    r.ok=true;
+    r.code=std::move(out);
+    return r;
 }
 
 } // namespace dsrrl::runtime::mr
