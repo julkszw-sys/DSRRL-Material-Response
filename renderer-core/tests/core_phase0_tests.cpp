@@ -61,7 +61,8 @@ int main()
     rx.exact_sha256 = digest(7);
     rx.consumer_family_hash = 0xAA55;
     rx.capabilities = operator_bit(operator_id::upper_lower) |
-                      operator_bit(operator_id::spec_rgb);
+                      operator_bit(operator_id::spec_rgb) |
+                      operator_bit(operator_id::hemdir3);
     CHECK(core.receivers().register_receiver(rx));
     CHECK(core.receivers().resolve(rx.fast_hash, rx.exact_sha256).has_value());
     CHECK(!core.receivers().resolve(rx.fast_hash, digest(8)).has_value());
@@ -120,6 +121,35 @@ int main()
     CHECK(plan.patch_count == 1);
     CHECK(plan.patches[0].op == operator_id::upper_lower);
     CHECK(plan.carrier_write_mask == carrier_ul_mask);
+
+    // PARTIAL/ACTIVE_CANDIDATE/DIAGNOSTIC islands need their own exact
+    // readiness contract in addition to generic Core gates.
+    CHECK(core.features().set(operator_id::hemdir3, true));
+    const island_request hemdir_unverified{
+        operator_id::hemdir3,
+        carrier_hemdir3_mask,
+        true,
+        false,
+        false
+    };
+    plan = core.build_plan(draw, &hemdir_unverified, 1);
+    CHECK(plan.empty());
+
+    const island_request hemdir_verified{
+        operator_id::hemdir3,
+        carrier_hemdir3_mask,
+        true,
+        false,
+        true
+    };
+    plan = core.build_plan(draw, &hemdir_verified, 1);
+    CHECK(plan.patch_count == 1);
+    CHECK(plan.patches[0].op == operator_id::hemdir3);
+    CHECK(core.features().set(operator_id::hemdir3, false));
+
+    // Restore the U/L plan used by the transaction ownership tests.
+    plan = core.build_plan(draw, requests, 2);
+    CHECK(plan.patch_count == 1);
 
     // Exactly one draw transaction owns a command until restore.
     CHECK(core.transactions().begin(
