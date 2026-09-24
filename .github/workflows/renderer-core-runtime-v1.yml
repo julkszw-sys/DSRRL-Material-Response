@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - dev/renderer-core-v1-runtime1
+      - dev/renderer-core-v1-runtime1-integration
     paths:
       - "runtime-v1/**"
       - ".github/workflows/renderer-core-runtime-v1.yml"
