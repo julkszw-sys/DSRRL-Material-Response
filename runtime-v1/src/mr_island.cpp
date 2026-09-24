@@ -31,6 +31,7 @@
 #include <mutex>
 #include <sstream>
 #include <string>
+#include <string_view>
 #include <unordered_map>
 #include <vector>
 
@@ -54,8 +55,15 @@ std::atomic<std::uint64_t> g_pipeline_seen{0}, g_shader_pair_pass{0}, g_shader_p
 std::atomic<std::uint64_t> g_shader_ul_pass{0}, g_shader_ul_fail{0};
 std::atomic<std::uint64_t> g_shader_spec_pass{0}, g_shader_spec_fail{0};
 std::atomic<std::uint64_t> g_shader_ul_spec_pass{0}, g_shader_ul_spec_fail{0};
+std::atomic<std::uint64_t> g_shader_v13_pass{0}, g_shader_v13_fail{0};
+std::atomic<std::uint64_t> g_v13_source_ready{0}, g_v13_source_miss{0};
+std::atomic<std::uint64_t> g_v13_resource_ready{0}, g_v13_resource_miss{0};
+std::atomic<std::uint64_t> g_v13_b12_update{0}, g_v13_b12_fail{0}, g_v13_replay{0};
 std::atomic<std::uint64_t> g_target_binds{0}, g_replays{0}, g_fail_open{0};
 std::atomic<std::uint64_t> g_b12_create{0}, g_b12_hit{0}, g_restore_fail{0}, g_present{0};
+
+constexpr std::string_view k_pmetal_raw_mtd_sha256 =
+    "ece70f36bd2517d28c8495e276cea537f8b519d6bed981788e79a409ffbf763b";
 
 void log_info(const std::string &s){ reshade::log::message(reshade::log::level::info,s.c_str()); }
 void log_error(const std::string &s){ reshade::log::message(reshade::log::level::error,s.c_str()); }
@@ -111,7 +119,12 @@ struct device_state {
     std::array<ID3D11PixelShader*,24> full_ul{};
     std::array<ID3D11PixelShader*,24> full_spec{};
     std::array<ID3D11PixelShader*,24> full_ul_spec{};
+    std::array<ID3D11PixelShader*,24> full_v13{};
+    std::array<ID3D11PixelShader*,24> full_v13_ul{};
+    std::array<ID3D11PixelShader*,24> full_v13_spec{};
+    std::array<ID3D11PixelShader*,24> full_v13_ul_spec{};
     std::unordered_map<std::uint16_t,ID3D11Buffer*> b12;
+    std::unordered_map<std::uintptr_t,ID3D11Buffer*> pmetal_b12;
 };
 device_state g_device;
 std::mutex g_device_mutex;
@@ -125,8 +138,14 @@ void release_device_state()
     for(auto *&p:g_device.full_ul){ if(p){p->Release();p=nullptr;} }
     for(auto *&p:g_device.full_spec){ if(p){p->Release();p=nullptr;} }
     for(auto *&p:g_device.full_ul_spec){ if(p){p->Release();p=nullptr;} }
+    for(auto *&p:g_device.full_v13){ if(p){p->Release();p=nullptr;} }
+    for(auto *&p:g_device.full_v13_ul){ if(p){p->Release();p=nullptr;} }
+    for(auto *&p:g_device.full_v13_spec){ if(p){p->Release();p=nullptr;} }
+    for(auto *&p:g_device.full_v13_ul_spec){ if(p){p->Release();p=nullptr;} }
     for(auto &[_,b]:g_device.b12) if(b) b->Release();
     g_device.b12.clear();
+    for(auto &[_,b]:g_device.pmetal_b12) if(b) b->Release();
+    g_device.pmetal_b12.clear();
     if(g_device.device){g_device.device->Release();g_device.device=nullptr;}
 }
 
@@ -235,7 +254,135 @@ bool ensure_shader_pair(device *d,const plan &p,std::span<const std::uint8_t> st
         ++g_shader_spec_fail;
     }
 
+    // Exact V13 P_Metal consumer exists only for the three stable P_Metal
+    // receivers 33/34/35 => host indices 9/10/11. Failure is isolated: the
+    // ordinary MR/SpecRGB/U/L variants above remain valid and are used fail-open.
+    if(i>=9u && i<=11u){
+        const auto v13=transform_pmetal_v13(full.code);
+        const auto v13_ul=v13.ok ? transform_upper_lower(v13.code) : transform_result{};
+        const auto v13_spec=v13.ok ? transform_spec_rgb(v13.code) : transform_result{};
+        const auto v13_ul_spec=v13_ul.ok ? transform_spec_rgb(v13_ul.code) : transform_result{};
+
+        ID3D11PixelShader *ps_v13=nullptr,*ps_v13_ul=nullptr;
+        ID3D11PixelShader *ps_v13_spec=nullptr,*ps_v13_ul_spec=nullptr;
+        const bool ok =
+            create_shader(native,v13,ps_v13) &&
+            create_shader(native,v13_ul,ps_v13_ul) &&
+            create_shader(native,v13_spec,ps_v13_spec) &&
+            create_shader(native,v13_ul_spec,ps_v13_ul_spec);
+
+        if(ok){
+            if(g_device.full_v13[i]) g_device.full_v13[i]->Release();
+            if(g_device.full_v13_ul[i]) g_device.full_v13_ul[i]->Release();
+            if(g_device.full_v13_spec[i]) g_device.full_v13_spec[i]->Release();
+            if(g_device.full_v13_ul_spec[i]) g_device.full_v13_ul_spec[i]->Release();
+            g_device.full_v13[i]=ps_v13;
+            g_device.full_v13_ul[i]=ps_v13_ul;
+            g_device.full_v13_spec[i]=ps_v13_spec;
+            g_device.full_v13_ul_spec[i]=ps_v13_ul_spec;
+            ++g_shader_v13_pass;
+        }else{
+            if(ps_v13) ps_v13->Release();
+            if(ps_v13_ul) ps_v13_ul->Release();
+            if(ps_v13_spec) ps_v13_spec->Release();
+            if(ps_v13_ul_spec) ps_v13_ul_spec->Release();
+            ++g_shader_v13_fail;
+        }
+    }
+
     return true;
+}
+
+bool pmetal_native_env_ready(
+    ID3D11DeviceContext *ctx,
+    float beta) noexcept
+{
+    if(!ctx || !std::isfinite(beta)) return false;
+
+    ID3D11ShaderResourceView *t12=nullptr,*t14=nullptr;
+    ID3D11SamplerState *s12=nullptr,*s14=nullptr;
+    ctx->PSGetShaderResources(12,1,&t12);
+    ctx->PSGetSamplers(12,1,&s12);
+    const bool need_b=beta!=0.0f;
+    if(need_b){
+        ctx->PSGetShaderResources(14,1,&t14);
+        ctx->PSGetSamplers(14,1,&s14);
+    }
+
+    const bool ok=t12 && s12 && (!need_b || (t14 && s14));
+    if(t12) t12->Release();
+    if(t14) t14->Release();
+    if(s12) s12->Release();
+    if(s14) s14->Release();
+    if(ok) ++g_v13_resource_ready;
+    else ++g_v13_resource_miss;
+    return ok;
+}
+
+ID3D11Buffer *realize_pmetal_b12(
+    ID3D11DeviceContext *ctx,
+    ID3D11Device *device,
+    int donor_index,
+    const upper_lower::pmetal_env_source &source) noexcept
+{
+    if(!ctx || !device || donor_index<0 ||
+       static_cast<std::size_t>(donor_index)>=dsrrl::materialdonor::k_donors.size() ||
+       !std::isfinite(source.a[0]) || !std::isfinite(source.a[1]) ||
+       !std::isfinite(source.a[2]) || !std::isfinite(source.b[0]) ||
+       !std::isfinite(source.b[1]) || !std::isfinite(source.b[2]) ||
+       !std::isfinite(source.beta))
+        return nullptr;
+
+    ID3D11Buffer *buffer=nullptr;
+    try {
+        {
+            std::lock_guard lock(g_device_mutex);
+            if(g_device.device!=device) return nullptr;
+            const auto key=reinterpret_cast<std::uintptr_t>(ctx);
+            if(const auto it=g_device.pmetal_b12.find(key);
+               it!=g_device.pmetal_b12.end() && it->second){
+                buffer=it->second;
+                buffer->AddRef();
+            }else{
+                D3D11_BUFFER_DESC desc{};
+                desc.ByteWidth=64;
+                desc.Usage=D3D11_USAGE_DYNAMIC;
+                desc.BindFlags=D3D11_BIND_CONSTANT_BUFFER;
+                desc.CPUAccessFlags=D3D11_CPU_ACCESS_WRITE;
+                if(FAILED(device->CreateBuffer(&desc,nullptr,&buffer)) || !buffer)
+                    return nullptr;
+                g_device.pmetal_b12.emplace(key,buffer);
+                buffer->AddRef();
+            }
+        }
+
+        D3D11_MAPPED_SUBRESOURCE mapped{};
+        if(FAILED(ctx->Map(buffer,0,D3D11_MAP_WRITE_DISCARD,0,&mapped)) ||
+           !mapped.pData){
+            buffer->Release();
+            ++g_v13_b12_fail;
+            return nullptr;
+        }
+
+        const auto &d=dsrrl::materialdonor::k_donors[
+            static_cast<std::size_t>(donor_index)];
+        struct f4{float x,y,z,w;};
+        const std::array<f4,4> payload={{
+            {d.c101_f0q[0],d.c101_f0q[1],d.c101_f0q[2],
+             d.has_c101?1.0f:0.0f},
+            {d.c100[0],d.c100[1],d.c100[2],1.0f},
+            {source.a[0],source.a[1],source.a[2],0.0f},
+            {source.b[0],source.b[1],source.b[2],source.beta}
+        }};
+        std::memcpy(mapped.pData,payload.data(),sizeof(payload));
+        ctx->Unmap(buffer,0);
+        ++g_v13_b12_update;
+        return buffer;
+    } catch (...) {
+        if(buffer) buffer->Release();
+        ++g_v13_b12_fail;
+        return nullptr;
+    }
 }
 
 ID3D11Buffer *realize_b12(ID3D11Device *device,int donor_index) noexcept
