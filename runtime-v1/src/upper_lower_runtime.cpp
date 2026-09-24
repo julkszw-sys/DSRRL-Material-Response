@@ -218,7 +218,7 @@ bool read_exact_v13_pmetal_env(
     std::uint64_t &bank_signature,
     std::uint32_t &row_id) noexcept
 {
-    if(!source || selector<0) return false;
+    if(!source || selector<0 || selector>255) return false;
     const std::uint8_t *base=nullptr;
     if(!safe_read(static_cast<const std::uint8_t *>(source)+0x18,base) || !base)
         return false;
