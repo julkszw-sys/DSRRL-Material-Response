@@ -20,6 +20,7 @@ namespace dsrrl::runtime::assets {
 struct material_route_scope {
     bool exact = false;
     bool diffuse_normal_eligible = false;
+    bool diffuse_c100_carrier_active = false;
     std::uint32_t route_index = 0;
     std::array<std::uint32_t, 3> receivers{};
 };
@@ -40,6 +41,9 @@ void unregister_runtime() noexcept;
 void texture_name_event(const wchar_t *logical_name) noexcept;
 void texture_name_clear_event() noexcept;
 
+// Called only from the Core-owned draw transaction. The caller must set
+// diffuse_c100_carrier_active only after the exact MR receiver and PTDE c100
+// CB12 have both been bound for the current draw.
 bool apply_draw(
     ID3D11DeviceContext *context,
     const material_route_scope &route,
