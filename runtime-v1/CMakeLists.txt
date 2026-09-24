@@ -96,6 +96,11 @@ if(WIN32 AND RESHade_INCLUDE_DIR)
       $<$<COMPILE_LANGUAGE:CXX>:/W4>
       $<$<COMPILE_LANGUAGE:CXX>:/WX>
       $<$<COMPILE_LANGUAGE:CXX>:/permissive->
+      $<$<COMPILE_LANGUAGE:CXX>:/Brepro>
+    )
+    target_link_options(dsrrl_renderer_runtime_v1_addon PRIVATE
+      /Brepro
+      /INCREMENTAL:NO
     )
   endif()
 
