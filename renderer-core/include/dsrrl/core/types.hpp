@@ -50,6 +50,7 @@ enum class island_state : std::uint8_t {
 };
 
 using operator_mask = std::uint32_t;
+using sha256_digest = std::array<std::uint8_t, 32>;
 
 constexpr bool valid_operator_id(operator_id op) noexcept
 {
