@@ -727,6 +727,11 @@ bool selected_snapshot_ready() noexcept
     return g_enabled.load() && !g_quarantined.load() && static_cast<bool>(g_draw_snapshot);
 }
 
+bool pmetal_env_producer_ready() noexcept
+{
+    return g_enabled.load() && !g_quarantined.load() && g_pmetal_env_enabled.load();
+}
+
 bool selected_pmetal_env_source(pmetal_env_source &out) noexcept
 {
     out={};
