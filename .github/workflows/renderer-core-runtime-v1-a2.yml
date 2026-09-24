@@ -29,6 +29,10 @@ jobs:
         run: |
           python3 renderer-core/tools/generate_diffuse_routes_v12.py --input renderer-core/data/provenance/diffuse_routes_v12.tsv --output /tmp/generated_diffuse_routes_v12.hpp
           cmp /tmp/generated_diffuse_routes_v12.hpp renderer-core/include/dsrrl/runtime/generated_diffuse_routes_v12.hpp
+      - name: Verify exact SpecRGB route generation
+        run: |
+          python3 renderer-core/tools/generate_spec_routes_v12.py --input renderer-core/data/provenance/spec_names_v12.tsv --output /tmp/generated_spec_routes_v12.hpp
+          cmp /tmp/generated_spec_routes_v12.hpp renderer-core/include/dsrrl/runtime/generated_spec_routes_v12.hpp
       - name: Audit SpecRGB construction contract
         run: |
           grep -q 'SPECRGB=ON' runtime-v1/src/addon.cpp

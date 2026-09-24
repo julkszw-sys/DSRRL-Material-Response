@@ -1,5 +1,6 @@
 #include "dsrrl/runtime/generated_normal_routes_v12.hpp"
 #include "dsrrl/runtime/generated_diffuse_routes_v12.hpp"
+#include "dsrrl/runtime/generated_spec_routes_v12.hpp"
 
 #include <cstdint>
 
@@ -15,6 +16,12 @@ int main()
     static_assert(k_diffuse_pair_count_v12 == 528u);
     static_assert(k_diffuse_target_count_v12 == 524u);
     static_assert(k_diffuse_safe_row_count_v12 == 3446u);
+    static_assert(k_spec_name_count_v12 == 769u);
+
+    if (!spec_name_hash_allowed_v12(k_spec_name_hashes_v12.front()) ||
+        !spec_name_hash_allowed_v12(k_spec_name_hashes_v12.back()) ||
+        spec_name_hash_allowed_v12(0u))
+        return 3;
 
     const auto &n0 = k_normal_tuples_v12.front();
     const auto &n1 = k_normal_tuples_v12.back();

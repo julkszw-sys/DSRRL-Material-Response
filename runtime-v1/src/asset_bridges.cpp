@@ -10,6 +10,7 @@
 #include "dsrrl/core/renderer_core.hpp"
 #include "dsrrl/runtime/generated_normal_routes_v12.hpp"
 #include "dsrrl/runtime/generated_diffuse_routes_v12.hpp"
+#include "dsrrl/runtime/generated_spec_routes_v12.hpp"
 
 #include <reshade.hpp>
 
@@ -159,19 +160,6 @@ std::uint64_t fnv_name(const std::wstring &name) noexcept
         h *= 1099511628211ull;
     }
     return h;
-}
-
-bool spec_name_hash_allowed_v12(std::uint64_t value) noexcept
-{
-    std::size_t lo=0,hi=generated::k_diffuse_pairs_v12.size();
-    while(lo<hi){
-        const auto mid=lo+((hi-lo)>>1u);
-        const auto at=generated::k_diffuse_pairs_v12[mid].spec_hash;
-        if(value<at) hi=mid;
-        else if(value>at) lo=mid+1u;
-        else return true;
-    }
-    return false;
 }
 
 void release_view(ID3D11ShaderResourceView *&view) noexcept
@@ -585,7 +573,7 @@ void on_init_resource_view(
 
     const auto logical_hash = fnv_name(g_logical_name);
     const bool spec_member =
-        spec_name_hash_allowed_v12(logical_hash);
+        generated::spec_name_hash_allowed_v12(logical_hash);
     const bool normal_member =
         generated::normal_name_hash_allowed_v12(logical_hash);
     const bool diffuse_member =
@@ -809,7 +797,7 @@ bool apply_draw(
 
     if (want_spec) {
         ++g_spec_gate;
-        if (h1 == 0u || !spec_name_hash_allowed_v12(h1)) {
+        if (h1 == 0u || !generated::spec_name_hash_allowed_v12(h1)) {
             ++g_spec_name_reject;
         } else {
             ID3D11ShaderResourceView *replacement =
