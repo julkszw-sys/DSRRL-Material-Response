@@ -21,7 +21,7 @@ inline constexpr std::array<entry,3> k_pmetal = {{
      1514u,1629u},
     {"ae69bfe343cb913c4eac4e1d07d1280e4c4dcf02080d1cd55305841e21f76757",
      "098f5d364413bb9ae5519d58e5ee92f90dd5d63d4c7f8179759aeccbb635b00a",
-     1174u,1289u}
+     1174u,1289u},
 }};
 
 constexpr const entry *find(std::string_view sha) noexcept
