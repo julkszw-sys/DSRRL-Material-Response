@@ -26,6 +26,11 @@ enum class subsurface_route_action : std::uint8_t {
     route_to_ptde_plain_difspcbmp_surface
 };
 
+enum class subsurface_bypass_carrier : std::uint8_t {
+    none = 0,
+    create_time_pixel_shader_substitution
+};
+
 enum class subsurface_route_reason : std::uint8_t {
     active = 0,
     material_not_verified,
@@ -94,6 +99,10 @@ struct subsurface_route_decision {
         subsurface_route_reason::material_not_verified;
 
     std::uint32_t target_plain_receiver_id = 0;
+    std::string_view target_plain_receiver_name{};
+    std::string_view target_plain_receiver_sha256{};
+    subsurface_bypass_carrier carrier =
+        subsurface_bypass_carrier::none;
 
     // Current PTDE route-partition target invariants.
     float ptde_c101 = 1.0f;
@@ -105,23 +114,31 @@ struct subsurface_receiver_route {
     std::string_view dsr_receiver_name;
     std::string_view dsr_receiver_sha256;
     std::uint32_t target_plain_receiver_id;
+    std::string_view target_plain_receiver_name;
+    std::string_view target_plain_receiver_sha256;
 };
 
 inline constexpr subsurface_receiver_route k_subsurface_receiver_routes[] = {
     {
         "FRPG_Phn_DifSpcBmp______Csd_HemEnvSubsurf.fpo",
         "0b8288d686c8f349ad87352946be51ffd007462f25357326bf47e736e690e511",
-        33u
+        33u,
+        "FRPG_Phn_DifSpcBmp______Csd_HemEnv.fpo",
+        "35880c0b2f2330208dfc21af6dd3d944218fcc4540cd8e59404a0aefc13c0b24"
     },
     {
         "FRPG_Phn_DifSpcBmp______Sdw_HemEnvSubsurf.fpo",
         "885337e50f3d29f086fd18e1f7524f28712031d0264964aef5f37037df7d7bcb",
-        34u
+        34u,
+        "FRPG_Phn_DifSpcBmp______Sdw_HemEnv.fpo",
+        "d6038de494509e7cbcbfb904c4046e9427f3b921f6a35735a0b0d316f9976837"
     },
     {
         "FRPG_Phn_DifSpcBmp__________HemEnvSubsurf.fpo",
         "3002cfb9aee6835412399c3be267ab94c5706d7d5030fc4cafc82bc54c55a860",
-        35u
+        35u,
+        "FRPG_Phn_DifSpcBmp__________HemEnv.fpo",
+        "7d03c75b69f5730eb741a4d327189d0bbed8a8450fb0ac04e1505f7b91763701"
     }
 };
 
@@ -151,6 +168,14 @@ inline const subsurface_receiver_route *find_subsurface_receiver_route(
 // Subsurf/SSS contribution bypassed. Because that final route is currently
 // HIGH CONFIDENCE rather than runtime/pixel-confirmed, the caller must provide
 // an explicit target-verification gate.
+//
+// Static DXBC RE additionally proves the exact three Subsurf -> ordinary pairs
+// are create-time pixel-shader ABI compatible: pairwise ISGN/OSGN are
+// byte-identical, all five constant-buffer semantic layouts match, and the
+// ordinary target resource declarations are a strict subset that removes only
+// t10/s10 (gSMP_10 / gSMP_10Sampler). This authorizes create-time PS
+// substitution/reuse as the narrow bypass carrier. It does NOT authorize the
+// route unless the complete ordinary PTDE surface path is ready.
 //
 // Any incomplete identity, draw-path, surface-route or bypass carrier state
 // fails open to the host path.
@@ -191,6 +216,10 @@ inline subsurface_route_decision evaluate_subsurface_route(
 
     decision.target_plain_receiver_id =
         receiver->target_plain_receiver_id;
+    decision.target_plain_receiver_name =
+        receiver->target_plain_receiver_name;
+    decision.target_plain_receiver_sha256 =
+        receiver->target_plain_receiver_sha256;
 
     if (!context.actual_body_texture_verified) {
         decision.reason =
@@ -278,6 +307,8 @@ inline subsurface_route_decision evaluate_subsurface_route(
     decision.action =
         subsurface_route_action::route_to_ptde_plain_difspcbmp_surface;
     decision.reason = subsurface_route_reason::active;
+    decision.carrier =
+        subsurface_bypass_carrier::create_time_pixel_shader_substitution;
     decision.bypass_dsr_subsurf = true;
     decision.preserve_dsr_sss = false;
     return decision;
