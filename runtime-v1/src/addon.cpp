@@ -30,7 +30,7 @@ void selector_dispatch(void *container,void *owner,void *ret,void *r14,void *r15
 
 } // namespace
 
-dsrrl::runtime::engine::selector_callback dsrrl_runtime_selector_dispatch() noexcept
+extern "C" dsrrl::runtime::engine::selector_callback dsrrl_runtime_selector_dispatch() noexcept
 {
     return &selector_dispatch;
 }
