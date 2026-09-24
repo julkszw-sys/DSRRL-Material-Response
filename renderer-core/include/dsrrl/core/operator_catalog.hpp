@@ -11,7 +11,8 @@ namespace dsrrl::core {
 enum class canonical_status : std::uint8_t {
     confirmed = 0,
     high_confidence,
-    hypothesis
+    hypothesis,
+    rejected
 };
 
 enum class port_state : std::uint8_t {
