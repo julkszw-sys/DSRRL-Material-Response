@@ -33,7 +33,10 @@ enum class pointlight_runtime_reason : std::uint8_t {
     source_instance_state_not_ready,
     source_amplitude_category_not_ready,
     attenuation_not_ready,
-    fixed_receiver_payload_not_ready,
+    fixed_owner_context_not_verified,
+    fixed_producer_serial_not_fresh,
+    fixed_raw_q_sidecar_not_ready,
+    fixed_light_count_mismatch,
     fixed_membership_not_verified,
     clustered_cpu_membership_sidecar_not_ready,
     clustered_four_slot_shader_not_ready,
@@ -57,7 +60,14 @@ struct pointlight_runtime_context {
     bool source_amplitude_category_ready=false;
     bool attenuation_ready=false;
 
-    bool fixed_receiver_payload_ready=false;
+    // Fixed PntSS/PntSSSS direct-PTDE island transport contract.
+    // Raw source q is delivered through draw-scoped t19 rather than mutating
+    // stock DSR c112..c119. Association is exact owner_context + producer
+    // serial, and the receiver suffix fixes the legal selected count (2/4).
+    bool fixed_owner_context_verified=false;
+    bool fixed_producer_serial_fresh=false;
+    bool fixed_raw_q_t19_sidecar_ready=false;
+    std::uint8_t fixed_selected_light_count=0;
     bool fixed_membership_verified=false;
 
     bool clustered_cpu_membership_sidecar_ready=false;
@@ -89,6 +99,21 @@ inline bool pointlight_receiver_is_fixed(
            stratum==pointlight_receiver_stratum::fixed_nospc_pntssss ||
            stratum==pointlight_receiver_stratum::fixed_spc_pntss ||
            stratum==pointlight_receiver_stratum::fixed_spc_pntssss;
+}
+
+inline std::uint8_t pointlight_fixed_expected_light_count(
+    pointlight_receiver_stratum stratum) noexcept
+{
+    switch(stratum){
+    case pointlight_receiver_stratum::fixed_nospc_pntss:
+    case pointlight_receiver_stratum::fixed_spc_pntss:
+        return 2u;
+    case pointlight_receiver_stratum::fixed_nospc_pntssss:
+    case pointlight_receiver_stratum::fixed_spc_pntssss:
+        return 4u;
+    default:
+        return 0u;
+    }
 }
 
 inline bool pointlight_receiver_has_specular(
@@ -145,9 +170,25 @@ inline pointlight_runtime_plan evaluate_pointlight_runtime_readiness(
 
     if(pointlight_receiver_is_fixed(context.receiver_stratum)){
         out.use_fixed_native_membership=true;
-        if(!context.fixed_receiver_payload_ready){
+        if(!context.fixed_owner_context_verified){
             out.reason=
-                pointlight_runtime_reason::fixed_receiver_payload_not_ready;
+                pointlight_runtime_reason::fixed_owner_context_not_verified;
+            return out;
+        }
+        if(!context.fixed_producer_serial_fresh){
+            out.reason=
+                pointlight_runtime_reason::fixed_producer_serial_not_fresh;
+            return out;
+        }
+        if(!context.fixed_raw_q_t19_sidecar_ready){
+            out.reason=
+                pointlight_runtime_reason::fixed_raw_q_sidecar_not_ready;
+            return out;
+        }
+        if(context.fixed_selected_light_count !=
+           pointlight_fixed_expected_light_count(context.receiver_stratum)){
+            out.reason=
+                pointlight_runtime_reason::fixed_light_count_mismatch;
             return out;
         }
         if(!context.fixed_membership_verified){

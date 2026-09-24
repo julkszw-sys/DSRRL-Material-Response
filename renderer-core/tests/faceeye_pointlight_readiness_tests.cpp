@@ -88,7 +88,11 @@ operators::point_light::pointlight_runtime_context ready_pointlight(
     c.source_instance_state_ready=true;
     c.source_amplitude_category_ready=true;
     c.attenuation_ready=true;
-    c.fixed_receiver_payload_ready=true;
+    c.fixed_owner_context_verified=true;
+    c.fixed_producer_serial_fresh=true;
+    c.fixed_raw_q_t19_sidecar_ready=true;
+    c.fixed_selected_light_count=
+        pointlight_fixed_expected_light_count(stratum);
     c.fixed_membership_verified=true;
     c.clustered_cpu_membership_sidecar_ready=true;
     c.clustered_four_slot_shader_ready=true;
@@ -308,6 +312,44 @@ int main()
     CHECK(point_plan.ready);
     CHECK(point_plan.use_fixed_native_membership);
     CHECK(!point_plan.require_local_specular);
+
+    // Fixed carrier freshness must be exact. Matching receiver class alone
+    // cannot authorize stale or owner-mismatched t19 raw-q state.
+    point=ready_pointlight(
+        operators::point_light::pointlight_receiver_stratum::
+            fixed_nospc_pntss);
+    point.fixed_owner_context_verified=false;
+    point_plan=
+        operators::point_light::evaluate_pointlight_runtime_readiness(
+            features,activation,point);
+    CHECK(!point_plan.ready);
+    CHECK(point_plan.reason==
+          operators::point_light::pointlight_runtime_reason::
+              fixed_owner_context_not_verified);
+
+    point=ready_pointlight(
+        operators::point_light::pointlight_receiver_stratum::
+            fixed_nospc_pntss);
+    point.fixed_producer_serial_fresh=false;
+    point_plan=
+        operators::point_light::evaluate_pointlight_runtime_readiness(
+            features,activation,point);
+    CHECK(!point_plan.ready);
+    CHECK(point_plan.reason==
+          operators::point_light::pointlight_runtime_reason::
+              fixed_producer_serial_not_fresh);
+
+    point=ready_pointlight(
+        operators::point_light::pointlight_receiver_stratum::
+            fixed_nospc_pntssss);
+    point.fixed_selected_light_count=2u;
+    point_plan=
+        operators::point_light::evaluate_pointlight_runtime_readiness(
+            features,activation,point);
+    CHECK(!point_plan.ready);
+    CHECK(point_plan.reason==
+          operators::point_light::pointlight_runtime_reason::
+              fixed_light_count_mismatch);
 
     point=ready_pointlight(
         operators::point_light::pointlight_receiver_stratum::
