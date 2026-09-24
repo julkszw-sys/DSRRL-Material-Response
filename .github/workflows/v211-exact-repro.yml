@@ -37,14 +37,14 @@ jobs:
           $vcvars = Join-Path $vs 'VC\Auxiliary\Build\vcvars64.bat'
           $root = (Resolve-Path 'recovered-source/1.45/pre_v12/v2_11').Path
           $builder = Join-Path $root 'scripts\build_windows_ptde_material_response_v2_11.ps1'
-          $cmd = 'call "' + $vcvars + '" -vcvars_ver=14.44 && where cl && cl /Bv && powershell -NoProfile -ExecutionPolicy Bypass -File "' + $builder + '"'
+          $bv = (& $env:ComSpec /d /s /c ('call "' + $vcvars + '" -vcvars_ver=14.44 >nul && cl /Bv 2>&1') | Out-String)
+          Write-Host $bv
+          if ($bv -notmatch 'Compiler Version 19\.44\.35228' -or $bv -notmatch 'link\.exe:\s+Version 14\.44\.35228') { throw "Exact MSVC 14.44.35228 binaries are not active" }
+          $cmd = 'call "' + $vcvars + '" -vcvars_ver=14.44 >nul && powershell -NoProfile -ExecutionPolicy Bypass -File "' + $builder + '"'
           & $env:ComSpec /d /s /c $cmd
           if ($LASTEXITCODE -ne 0) { throw "native V2.11 build failed: $LASTEXITCODE" }
           $raw = Join-Path $root 'build-msvc\bin\DSRRL_PTDE_MATERIAL_RESPONSE_V2_11.addon64'
           if (-not (Test-Path $raw)) { throw 'V2.11 output missing' }
-          $clPath = (& $env:ComSpec /d /s /c ('call "' + $vcvars + '" -vcvars_ver=14.44 >nul && where cl') | Select-Object -First 1).Trim()
-          Write-Host "Resolved cl: $clPath"
-          if ($clPath -notmatch '14\.44\.35228') { throw "Exact MSVC 14.44.35228 not active: $clPath" }
 
       - name: Normalize historical linker timestamp and assert exact SHA
         shell: pwsh
