@@ -1,0 +1,906 @@
+{
+  "schema": "DSRRL_V2_10_C101_MATERIAL_RESPONSE_AUDIT",
+  "status": "PASS",
+  "architecture": "V2.9.1 accepted PTDE c100 + diffuse linear baseline preserved; optional c101 variant changes only stock DSR SPEC F0 material multiplier input cb0[10]->b12[0]; b12[0]=c101_P^(1/2.2), while stock MUL_SAT and stock x^2.2 are retained; all downstream stock DSR PBL/EnvSpec retained",
+  "material_registry": {
+    "entries": 368,
+    "c100_tier0": 307,
+    "c100_tier1": 28,
+    "c100_tier2": 33,
+    "c101_exact": 278,
+    "c101_sibling": 28,
+    "c101_enabled": 306,
+    "c101_disabled": 62,
+    "tier2_c101_enabled": 0,
+    "policy": "c101 exact paired relevant-spc + exact-sibling only; c100 deterministic-signature Tier2 remains c100-only; unsupported/ambiguous c101 uses byte-identical V2.9.1 diffuse-only shader"
+  },
+  "tier1_sibling_full_donor_trace": [
+    {
+      "dsr_only_hash": "f572f05874a7f8f9c311a340bf31d5a1ebea3f2d59b735f625db72046b64cd95",
+      "dsr_only_name": "A10_Wet[DSB]_Alp_Spec.mtd",
+      "common_sibling": "A10_Wet[DSB]_Alp.mtd",
+      "common_sibling_hash": "4c311ce6f9eacc52368d638218d548cc1c308187176577de32a49c5e287663c1",
+      "c101": [
+        2.0,
+        2.0,
+        2.0
+      ],
+      "c102": 15.0,
+      "slot": 3
+    },
+    {
+      "dsr_only_hash": "cdcb582977c906256a7305d42b77e74b7647515e52246e0b72724853ee0492ed",
+      "dsr_only_name": "C_3500_Slime[DSB]_Spec.mtd",
+      "common_sibling": "C_3500_Slime[DSB].mtd",
+      "common_sibling_hash": "3a9d511ca4c1452d617b055a55dfe4b8f76761df4529e8db2b35f27f7a31a095",
+      "c101": [
+        2.40196094,
+        2.30392173,
+        2.30392173
+      ],
+      "c102": 70.0,
+      "slot": 2
+    },
+    {
+      "dsr_only_hash": "1a14893dc2106fb404125c22291321fd470ca91018a07868fa0282e1f1477a4f",
+      "dsr_only_name": "C_5250_Fire_DullLeather[DSB]_Spec.mtd",
+      "common_sibling": "C_5250_Fire_DullLeather[DSB].mtd",
+      "common_sibling_hash": "23dbc2903320f8ccc56fb42b3c7c9377e71f9366c914b1d1619b2dad60174faa",
+      "c101": [
+        0.5,
+        0.5,
+        0.5
+      ],
+      "c102": 2.0,
+      "slot": 0
+    },
+    {
+      "dsr_only_hash": "019ef82fb90699232f03352628f2362a8b701af5ff564074e3a10247144613e1",
+      "dsr_only_name": "C_5350_body[DSB]_Spec.mtd",
+      "common_sibling": "C_5350_body[DSB].mtd",
+      "common_sibling_hash": "2e14e4f8b7db61eb15a8682c577ae74842dfe680cc677063e8b31ca385b0902f",
+      "c101": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "c102": 2.0,
+      "slot": 0
+    },
+    {
+      "dsr_only_hash": "8e9a2c7891672feb264ffb28bb09dc24e7366eefedeed042b98c45b598f757de",
+      "dsr_only_name": "C_DullLeather[DSB]_Alp_Spec.mtd",
+      "common_sibling": "C_DullLeather[DSB]_Alp.mtd",
+      "common_sibling_hash": "c1b1baca69cc33b449f7ff06bb08a959a1b74c90862d67acd003194062306dff",
+      "c101": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "c102": 2.0,
+      "slot": 0
+    },
+    {
+      "dsr_only_hash": "16be2b79e4b2b0c1efcbc45ee32a49ab535faae873d621b4316b37170f280d11",
+      "dsr_only_name": "C_DullLeather[DSB]_Edge_Spec.mtd",
+      "common_sibling": "C_DullLeather[DSB]_Edge.mtd",
+      "common_sibling_hash": "e2d819b90e8201a93e67e84e1179e9c3bf3f57988d5f86b44c5e024d05dee1a1",
+      "c101": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "c102": 2.0,
+      "slot": 0
+    },
+    {
+      "dsr_only_hash": "3943230db12bd7d03295227d700a1d448f85c15d679a2be56522a44b6b195ae9",
+      "dsr_only_name": "C_DullLeather[DSB]_Spec.mtd",
+      "common_sibling": "C_DullLeather[DSB].mtd",
+      "common_sibling_hash": "613a3296e7906b2dea5c0cd48bda37c8628b850bad9988688a40595c4c49eaad",
+      "c101": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "c102": 2.0,
+      "slot": 0
+    },
+    {
+      "dsr_only_hash": "10c7e6706d64039f90952eaaaad06243ceaa1ba30672a5f39b882ec4327bd1a0",
+      "dsr_only_name": "C_Metal[DSB]_Alp_Spec.mtd",
+      "common_sibling": "C_Metal[DSB]_Alp.mtd",
+      "common_sibling_hash": "45eb950965998f67d2d2b62fbcfc841f07e71e24097e1c6ceb97758752a651f0",
+      "c101": [
+        2.5,
+        2.5,
+        2.5
+      ],
+      "c102": 8.5,
+      "slot": 2
+    },
+    {
+      "dsr_only_hash": "c72bf689e998147c4a7b9bce414a21561c74a48953314691b2b4af148acb8937",
+      "dsr_only_name": "C_Metal[DSB]_Edge_Spec.mtd",
+      "common_sibling": "C_Metal[DSB]_Edge.mtd",
+      "common_sibling_hash": "f797c63ac4f476ab7ebb7bc150ecc2a9c61851999f5051ceb864b62c95d924d9",
+      "c101": [
+        2.5,
+        2.5,
+        2.5
+      ],
+      "c102": 8.5,
+      "slot": 2
+    },
+    {
+      "dsr_only_hash": "d532ac74aab106b25a599896ab171a1c29b95d0a4166c06d55baacc7af0be926",
+      "dsr_only_name": "C_Metal[DSB]_Spec.mtd",
+      "common_sibling": "C_Metal[DSB].mtd",
+      "common_sibling_hash": "ae2e8df867fe2859eef37104c13c939e7e7fe4f703b7fe49c408d0230fc71d85",
+      "c101": [
+        2.5,
+        2.5,
+        2.5
+      ],
+      "c102": 8.5,
+      "slot": 2
+    },
+    {
+      "dsr_only_hash": "8ee1cea69f35c5440dac1cd039fd7b0cb3849cf527b7291e4cf4c19267b4be9d",
+      "dsr_only_name": "C_Wet[DSB][M]_Spec.mtd",
+      "common_sibling": "C_Wet[DSB][M].mtd",
+      "common_sibling_hash": "5910889ba3c575a33593b4035a3b50351c95ba7e687039424fa9d317b0ea788b",
+      "c101": [
+        2.0,
+        2.0,
+        2.0
+      ],
+      "c102": 15.0,
+      "slot": 3
+    },
+    {
+      "dsr_only_hash": "1328a41ed3ef1070520f8008ca6d8904ffd624c108393a3813a60fc7028db528",
+      "dsr_only_name": "C_Wet[DSB]_Alp_Spec.mtd",
+      "common_sibling": "C_Wet[DSB]_Alp.mtd",
+      "common_sibling_hash": "9c46069d7ee8c7e964704d5e805594d1cdf0263123e0f68c65ff38ef4420e7d9",
+      "c101": [
+        2.0,
+        2.0,
+        2.0
+      ],
+      "c102": 15.0,
+      "slot": 3
+    },
+    {
+      "dsr_only_hash": "36cdfb00462616a2ef19d58b64b2573fe8e5d5808b96d9d659be8be1b0964fe5",
+      "dsr_only_name": "C_Wet[DSB]_Spec.mtd",
+      "common_sibling": "C_Wet[DSB].mtd",
+      "common_sibling_hash": "d3885a4c00b844cdb1a09b571cb037343e5bad31249e7ec80ed5e7da195b9e6f",
+      "c101": [
+        2.0,
+        2.0,
+        2.0
+      ],
+      "c102": 15.0,
+      "slot": 3
+    },
+    {
+      "dsr_only_hash": "9ab47f6f57d36a86d1e7c1611658c8af6b7138420ef4be5d9cf795629cb27575",
+      "dsr_only_name": "M_4Stone[DSB][M]_Spec.mtd",
+      "common_sibling": "M_4Stone[DSB][M].mtd",
+      "common_sibling_hash": "d7e50b3c335c437c72620209059f9e3c99ccaab04eb0167b45b3035001f0f611",
+      "c101": [
+        1.5,
+        1.5,
+        1.5
+      ],
+      "c102": 4.0,
+      "slot": 1
+    },
+    {
+      "dsr_only_hash": "9bec3a167cd324a2228f41f71dd87d3aede58f34d92250c70eda1484e8083abd",
+      "dsr_only_name": "M_4Stone[DSB]_Spec.mtd",
+      "common_sibling": "M_4Stone[DSB].mtd",
+      "common_sibling_hash": "b0fa86806e8c6b6249660971dba7ac0dfcc76e11b14c31f16216a4fde3ab6d70",
+      "c101": [
+        1.5,
+        1.5,
+        1.5
+      ],
+      "c102": 4.0,
+      "slot": 1
+    },
+    {
+      "dsr_only_hash": "9d24347d2bfa90df062f39a281fd0ae07f160203f1dc8c5d114ac218a6daa4c2",
+      "dsr_only_name": "P_DullLeather[DSB]_Edge_Spec.mtd",
+      "common_sibling": "P_DullLeather[DSB]_Edge.mtd",
+      "common_sibling_hash": "44e1188bafa99d49349883dcc2052c13365f196e341ca5e7c788cbad0a4e058d",
+      "c101": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "c102": 2.0,
+      "slot": 0
+    },
+    {
+      "dsr_only_hash": "4def97828f95a75b64641fa9f64ba1fc58e909e69479c0d4460aaaf9cd466ee5",
+      "dsr_only_name": "P_DullLeather[DSB]_Spec.mtd",
+      "common_sibling": "P_DullLeather[DSB].mtd",
+      "common_sibling_hash": "7ea7d6ce9bb7148db62e8c27ee45edefb9547018d0b723dd4753d4c37e29f293",
+      "c101": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "c102": 2.0,
+      "slot": 0
+    },
+    {
+      "dsr_only_hash": "deeb55a8e4d50767aeaba98ba9bfa97b0fb404f901249f5ca13fa762610debda",
+      "dsr_only_name": "P_Leather[DSB]_Alp_Spec.mtd",
+      "common_sibling": "P_Leather[DSB]_Alp.mtd",
+      "common_sibling_hash": "4c728a9b5957a75d0eb82b2b77b800829e1973632c7c0690a7e31a074c85e7fb",
+      "c101": [
+        1.5,
+        1.5,
+        1.5
+      ],
+      "c102": 4.0,
+      "slot": 1
+    },
+    {
+      "dsr_only_hash": "be759aef68b829f2ca67dcd31e68b0d1673c63ab6c9c9a3c2d62d1e8293869e7",
+      "dsr_only_name": "P_Leather[DSB]_Edge_Spec.mtd",
+      "common_sibling": "P_Leather[DSB]_Edge.mtd",
+      "common_sibling_hash": "cf968a22722667777d10429a03a2e4a87f867412949a7fe5590cb8cefaa2bfa4",
+      "c101": [
+        1.5,
+        1.5,
+        1.5
+      ],
+      "c102": 4.0,
+      "slot": 1
+    },
+    {
+      "dsr_only_hash": "31c245e4cfc0857fdbffac1c2d4f81a97abac230369efec432553d42649656eb",
+      "dsr_only_name": "P_Leather[DSB]_Spec.mtd",
+      "common_sibling": "P_Leather[DSB].mtd",
+      "common_sibling_hash": "0f2b9a1012b83c4dfc909c311d29a11147de8c15191bc62398ce0d5e1cc6757e",
+      "c101": [
+        1.5,
+        1.5,
+        1.5
+      ],
+      "c102": 4.0,
+      "slot": 1
+    },
+    {
+      "dsr_only_hash": "7fcd03ca13cf0114f13f0cd88f08bf03fcd98d16098508a1d451024a4755a10b",
+      "dsr_only_name": "P_Metal[DSB]_Alp_Spec.mtd",
+      "common_sibling": "P_Metal[DSB]_Alp.mtd",
+      "common_sibling_hash": "45b985a46381199775b0089e9ac6ad5ea14a97b215421bfe29c29bd7ad97535a",
+      "c101": [
+        2.5,
+        2.5,
+        2.5
+      ],
+      "c102": 8.5,
+      "slot": 2
+    },
+    {
+      "dsr_only_hash": "6a282a6ed51ca84e8c3cf2e7e84302890838af6baa5424b000d247a5a187b79c",
+      "dsr_only_name": "P_Metal[DSB]_Edge_Spec.mtd",
+      "common_sibling": "P_Metal[DSB]_Edge.mtd",
+      "common_sibling_hash": "8b730ce8655401c5cae694ba5535efb088d9d67db2a157d8f142cb5629293485",
+      "c101": [
+        2.5,
+        2.5,
+        2.5
+      ],
+      "c102": 8.5,
+      "slot": 2
+    },
+    {
+      "dsr_only_hash": "c8504bfa64c84d5035bc56ab63e43d319ef69af08c5044e0260b639ab1b78ffc",
+      "dsr_only_name": "P_Metal[DSB]_Spec.mtd",
+      "common_sibling": "P_Metal[DSB].mtd",
+      "common_sibling_hash": "ece70f36bd2517d28c8495e276cea537f8b519d6bed981788e79a409ffbf763b",
+      "c101": [
+        2.5,
+        2.5,
+        2.5
+      ],
+      "c102": 8.5,
+      "slot": 2
+    },
+    {
+      "dsr_only_hash": "f431fffcbd285263509b51e364ad4d636277b50d12bbbf0db7c199c9a4a4819e",
+      "dsr_only_name": "P_Wet[DSB]_Edge_Spec.mtd",
+      "common_sibling": "P_Wet[DSB]_Edge.mtd",
+      "common_sibling_hash": "a7f73fd656797fea6eeb59131a5bd5c25198ad5c654524dadf76798c57aebb86",
+      "c101": [
+        2.0,
+        2.0,
+        2.0
+      ],
+      "c102": 60.0,
+      "slot": 3
+    },
+    {
+      "dsr_only_hash": "2977b322325bd5e6d14ef5785ff857c0f88b2adc31c9772cc6ae9e8ad6da0c00",
+      "dsr_only_name": "P_Wet[DSB]_Spec.mtd",
+      "common_sibling": "P_Wet[DSB].mtd",
+      "common_sibling_hash": "7af76c9ed5adbb22a574b2afa382a10dfec37dc17470a3d9ea47be3bfb1ea97b",
+      "c101": [
+        2.0,
+        2.0,
+        2.0
+      ],
+      "c102": 60.0,
+      "slot": 3
+    },
+    {
+      "dsr_only_hash": "db144369d5d53b84841af144fdc65b5e1c7850e79d841f45e9c6d9aaeafac738",
+      "dsr_only_name": "Ps_Hair[DS]_Alp_Spec.mtd",
+      "common_sibling": "Ps_Hair[DS]_Alp.mtd",
+      "common_sibling_hash": "43ef07edf1fa3ae392aecc2bc02add7ef51f16538eb6b60e438c05a045a8a36e",
+      "c101": [
+        2.0,
+        2.0,
+        2.0
+      ],
+      "c102": 5.0,
+      "slot": 2
+    },
+    {
+      "dsr_only_hash": "b678725bdd45befb56780d5c92b27ee2cf32c53d2a361083d8efa57fb64a0ed3",
+      "dsr_only_name": "Ps_Hair[DS]_Edge_Spec.mtd",
+      "common_sibling": "Ps_Hair[DS]_Edge.mtd",
+      "common_sibling_hash": "4eaa551380c3943be768de1e78eca9a43c5a9356ea13e401274ad6c8faef749c",
+      "c101": [
+        2.0,
+        2.0,
+        2.0
+      ],
+      "c102": 5.0,
+      "slot": 2
+    },
+    {
+      "dsr_only_hash": "fbe84b40013814f5ae4036904def991a0d3e0692ebf18ab9768190cc461f2019",
+      "dsr_only_name": "Ps_Hair[DS]_Spec.mtd",
+      "common_sibling": "Ps_Hair[DS].mtd",
+      "common_sibling_hash": "c628feb3773af7edb0bec7276f80d7bdb41220aa0c2754dad198b2398b4e82c3",
+      "c101": [
+        2.0,
+        2.0,
+        2.0
+      ],
+      "c102": 5.0,
+      "slot": 2
+    }
+  ],
+  "shader": {
+    "stable_hosts": 24,
+    "canonical_spec_chain_unique": "24/24",
+    "per_host_semantic_patch_dwords": 2,
+    "patch": "cb0[10] -> cb12[0] in unique MUL_SAT F0 chain (2 dwords); stock RGB exponent 2.2 remains byte-identical",
+    "mul_sat_preserved": true,
+    "stock_envspec_after_f0_preserved": true,
+    "hemenvlerp_replacements": 0,
+    "hosts": [
+      {
+        "index": 0,
+        "size": 21760,
+        "source_sha256": "b760ad4be25ba083a6c3202690ca05c2e44a16d1025e4472080ef4b130be09bb",
+        "c101_sha256": "76db11d38480f48e5a6ed2e87a6c491cbd12f3bf708c7a97ad96fb57c81bc6b4",
+        "chain_mul_word": 1644,
+        "chain_exp_word": 1657,
+        "shex_patch_dwords": [
+          {
+            "word": 1650,
+            "old": "0x00000000",
+            "new": "0x0000000c"
+          },
+          {
+            "word": 1651,
+            "old": "0x0000000a",
+            "new": "0x00000000"
+          }
+        ],
+        "byte_diff_count": 18
+      },
+      {
+        "index": 1,
+        "size": 21460,
+        "source_sha256": "5a42ab70f97b7fd55d61effc88b113a2dad741a43c1ae1a7988fa8b042a96e11",
+        "c101_sha256": "52d5067beb37828112ec8804b7f24f3cdf799d7218145efcfc784019cfaff5e2",
+        "chain_mul_word": 1553,
+        "chain_exp_word": 1566,
+        "shex_patch_dwords": [
+          {
+            "word": 1559,
+            "old": "0x00000000",
+            "new": "0x0000000c"
+          },
+          {
+            "word": 1560,
+            "old": "0x0000000a",
+            "new": "0x00000000"
+          }
+        ],
+        "byte_diff_count": 18
+      },
+      {
+        "index": 2,
+        "size": 19976,
+        "source_sha256": "a0526d1adf5abd64451bda0818f9c87724ed1dac8ba0db328cccafb0ebf14951",
+        "c101_sha256": "c285b4f2ae8a89d53f18ef0ef2489b545cbda3c58b2cbc9028b8893498542d83",
+        "chain_mul_word": 1209,
+        "chain_exp_word": 1222,
+        "shex_patch_dwords": [
+          {
+            "word": 1215,
+            "old": "0x00000000",
+            "new": "0x0000000c"
+          },
+          {
+            "word": 1216,
+            "old": "0x0000000a",
+            "new": "0x00000000"
+          }
+        ],
+        "byte_diff_count": 18
+      },
+      {
+        "index": 3,
+        "size": 21256,
+        "source_sha256": "db43dd55827fe62c53b00585f507c2c5065b0ef1185c4c6c153d44b654c60d86",
+        "c101_sha256": "3a59fc94f14b99e845a0afdd4be80ca0be7c9ab550aa78a7605417ef85ae3127",
+        "chain_mul_word": 1582,
+        "chain_exp_word": 1595,
+        "shex_patch_dwords": [
+          {
+            "word": 1588,
+            "old": "0x00000000",
+            "new": "0x0000000c"
+          },
+          {
+            "word": 1589,
+            "old": "0x0000000a",
+            "new": "0x00000000"
+          }
+        ],
+        "byte_diff_count": 18
+      },
+      {
+        "index": 4,
+        "size": 20956,
+        "source_sha256": "3b4f35e5f8aeb733f7297a981560987320237a3d1c35cdf92db97507d8c20d11",
+        "c101_sha256": "e07fab9f0cdc744c9a75a1939d19e212fabb947b1fc9552b53640ddf689f76b0",
+        "chain_mul_word": 1491,
+        "chain_exp_word": 1504,
+        "shex_patch_dwords": [
+          {
+            "word": 1497,
+            "old": "0x00000000",
+            "new": "0x0000000c"
+          },
+          {
+            "word": 1498,
+            "old": "0x0000000a",
+            "new": "0x00000000"
+          }
+        ],
+        "byte_diff_count": 18
+      },
+      {
+        "index": 5,
+        "size": 19460,
+        "source_sha256": "6e6784e59b33c3d1a76ca59b38ed1c3dcfa6ba4eed36b8f722cc0cf16e51fa4c",
+        "c101_sha256": "7a34d5f29ebcaf8881877d9eb7df21bb822db5c75a9409f9417c8245315c9358",
+        "chain_mul_word": 1151,
+        "chain_exp_word": 1164,
+        "shex_patch_dwords": [
+          {
+            "word": 1157,
+            "old": "0x00000000",
+            "new": "0x0000000c"
+          },
+          {
+            "word": 1158,
+            "old": "0x0000000a",
+            "new": "0x00000000"
+          }
+        ],
+        "byte_diff_count": 18
+      },
+      {
+        "index": 6,
+        "size": 20340,
+        "source_sha256": "193b80c80b04906a886a23e3dc2db8afa05938c7f94f69ab43a3b57f72590827",
+        "c101_sha256": "08782744a3b0b06cbd038aef3ecdedef6abf4f87e6bd051dfea5cb2b245e7f5d",
+        "chain_mul_word": 1371,
+        "chain_exp_word": 1384,
+        "shex_patch_dwords": [
+          {
+            "word": 1377,
+            "old": "0x00000000",
+            "new": "0x0000000c"
+          },
+          {
+            "word": 1378,
+            "old": "0x0000000a",
+            "new": "0x00000000"
+          }
+        ],
+        "byte_diff_count": 17
+      },
+      {
+        "index": 7,
+        "size": 20040,
+        "source_sha256": "2ce2bdbf096f7d369f1b876be0fdd49ae8aaa097a63065b565cfa5428e631ec2",
+        "c101_sha256": "1ceea44ff153ab7881884271ba00d4b7f6a42276a63c5d2c280c8925369c4ed0",
+        "chain_mul_word": 1280,
+        "chain_exp_word": 1293,
+        "shex_patch_dwords": [
+          {
+            "word": 1286,
+            "old": "0x00000000",
+            "new": "0x0000000c"
+          },
+          {
+            "word": 1287,
+            "old": "0x0000000a",
+            "new": "0x00000000"
+          }
+        ],
+        "byte_diff_count": 18
+      },
+      {
+        "index": 8,
+        "size": 18556,
+        "source_sha256": "082ba455969b000b3fa2bf706dddc27776078c9cbb192c32e973588bce4eb82b",
+        "c101_sha256": "ea7ba14e68d034ad98feadc8d51891669f33e573987e4ea54300984eb5c53a40",
+        "chain_mul_word": 936,
+        "chain_exp_word": 949,
+        "shex_patch_dwords": [
+          {
+            "word": 942,
+            "old": "0x00000000",
+            "new": "0x0000000c"
+          },
+          {
+            "word": 943,
+            "old": "0x0000000a",
+            "new": "0x00000000"
+          }
+        ],
+        "byte_diff_count": 18
+      },
+      {
+        "index": 9,
+        "size": 19872,
+        "source_sha256": "cc5cd7cf4e57b53c006b4e99536e57752b9b660c29519330af8d3f17555a1184",
+        "c101_sha256": "3c8f03d0f936f4524953cece84e9589ac0239d70754f96da6d14ebc4253b8db4",
+        "chain_mul_word": 1312,
+        "chain_exp_word": 1325,
+        "shex_patch_dwords": [
+          {
+            "word": 1318,
+            "old": "0x00000000",
+            "new": "0x0000000c"
+          },
+          {
+            "word": 1319,
+            "old": "0x0000000a",
+            "new": "0x00000000"
+          }
+        ],
+        "byte_diff_count": 18
+      },
+      {
+        "index": 10,
+        "size": 19572,
+        "source_sha256": "be1e6ef94f2723b657db0eec0eca2b0cd81e2742094b9e919878189e76af2e46",
+        "c101_sha256": "f7566fda2afa35c5281dc9584b5c8d5b6484e9791ac98411ef9791c3ed8e74e4",
+        "chain_mul_word": 1221,
+        "chain_exp_word": 1234,
+        "shex_patch_dwords": [
+          {
+            "word": 1227,
+            "old": "0x00000000",
+            "new": "0x0000000c"
+          },
+          {
+            "word": 1228,
+            "old": "0x0000000a",
+            "new": "0x00000000"
+          }
+        ],
+        "byte_diff_count": 18
+      },
+      {
+        "index": 11,
+        "size": 18076,
+        "source_sha256": "4280e5cc026ea2605457a238452731527a0d48c913e5430ba06d7ea0c30a18c1",
+        "c101_sha256": "cd179b8f5d1e5cac5cd4572c36aa71992ea4581ba8772ddcb4a6f4409cfc1756",
+        "chain_mul_word": 881,
+        "chain_exp_word": 894,
+        "shex_patch_dwords": [
+          {
+            "word": 887,
+            "old": "0x00000000",
+            "new": "0x0000000c"
+          },
+          {
+            "word": 888,
+            "old": "0x0000000a",
+            "new": "0x00000000"
+          }
+        ],
+        "byte_diff_count": 18
+      },
+      {
+        "index": 12,
+        "size": 19720,
+        "source_sha256": "32c9af132b24046dc46c820d1a571050fdfed2b847e64bb611e1081b0aa07808",
+        "c101_sha256": "35f8e7a14d2f0b081994ecfc86acce90e4df6e1060a16be16f8cc985dfc072be",
+        "chain_mul_word": 1200,
+        "chain_exp_word": 1213,
+        "shex_patch_dwords": [
+          {
+            "word": 1206,
+            "old": "0x00000000",
+            "new": "0x0000000c"
+          },
+          {
+            "word": 1207,
+            "old": "0x0000000a",
+            "new": "0x00000000"
+          }
+        ],
+        "byte_diff_count": 18
+      },
+      {
+        "index": 13,
+        "size": 19420,
+        "source_sha256": "5df4016d73e2c5a8cdebc01cd705b0a0387b04db4bf458a44a88f893d4d049ee",
+        "c101_sha256": "3ae56dc3f6e13dcaf84ae7ae6ed681273729ac1d536cacc7ef85d923dae44f47",
+        "chain_mul_word": 1109,
+        "chain_exp_word": 1122,
+        "shex_patch_dwords": [
+          {
+            "word": 1115,
+            "old": "0x00000000",
+            "new": "0x0000000c"
+          },
+          {
+            "word": 1116,
+            "old": "0x0000000a",
+            "new": "0x00000000"
+          }
+        ],
+        "byte_diff_count": 18
+      },
+      {
+        "index": 14,
+        "size": 17932,
+        "source_sha256": "dc578f0a985f5c729f9ce2dace8f44ece16bf1411d0cdc8ddd6edd82a73f370a",
+        "c101_sha256": "a4695313f8b25f9edc3ffe39ae744582fad350671f9b88d9caa01b6a25cf0d6b",
+        "chain_mul_word": 765,
+        "chain_exp_word": 778,
+        "shex_patch_dwords": [
+          {
+            "word": 771,
+            "old": "0x00000000",
+            "new": "0x0000000c"
+          },
+          {
+            "word": 772,
+            "old": "0x0000000a",
+            "new": "0x00000000"
+          }
+        ],
+        "byte_diff_count": 18
+      },
+      {
+        "index": 15,
+        "size": 19212,
+        "source_sha256": "d0509811b215a49e1c52f2e81b7e41e4270d4eef83c59006dcdfa745d954a337",
+        "c101_sha256": "f8d7a3fbd0357024544a7a00e3153a8465ae4493d72a4eaa2f7bece84ad3233b",
+        "chain_mul_word": 1138,
+        "chain_exp_word": 1151,
+        "shex_patch_dwords": [
+          {
+            "word": 1144,
+            "old": "0x00000000",
+            "new": "0x0000000c"
+          },
+          {
+            "word": 1145,
+            "old": "0x0000000a",
+            "new": "0x00000000"
+          }
+        ],
+        "byte_diff_count": 18
+      },
+      {
+        "index": 16,
+        "size": 18912,
+        "source_sha256": "07e21818dea3905c0d6f97bac27097c6a59885a2d34f62f4b084470bcee50363",
+        "c101_sha256": "f17551b03e0fa54461361fe69695f6ae8a779c8cb836812b28d7629821b57d6d",
+        "chain_mul_word": 1047,
+        "chain_exp_word": 1060,
+        "shex_patch_dwords": [
+          {
+            "word": 1053,
+            "old": "0x00000000",
+            "new": "0x0000000c"
+          },
+          {
+            "word": 1054,
+            "old": "0x0000000a",
+            "new": "0x00000000"
+          }
+        ],
+        "byte_diff_count": 18
+      },
+      {
+        "index": 17,
+        "size": 17416,
+        "source_sha256": "4b894f89e161de79fdd09fe03fe21510e8dddea060b48c3ebfaf0d83719dbb91",
+        "c101_sha256": "cbe05d1f8e09a717c29d87f04be5f8f150e782676f1c609a2a34cedb6d02f2af",
+        "chain_mul_word": 707,
+        "chain_exp_word": 720,
+        "shex_patch_dwords": [
+          {
+            "word": 713,
+            "old": "0x00000000",
+            "new": "0x0000000c"
+          },
+          {
+            "word": 714,
+            "old": "0x0000000a",
+            "new": "0x00000000"
+          }
+        ],
+        "byte_diff_count": 17
+      },
+      {
+        "index": 18,
+        "size": 19180,
+        "source_sha256": "fce5bccec49b0944953d5c8e4dbe1ea75cc5963bcf8843b70234e8fe20b54054",
+        "c101_sha256": "6e5a8401166d2df60932e1bf22b61b10779f8340a559431491a5c4163d3fda5f",
+        "chain_mul_word": 1114,
+        "chain_exp_word": 1127,
+        "shex_patch_dwords": [
+          {
+            "word": 1120,
+            "old": "0x00000000",
+            "new": "0x0000000c"
+          },
+          {
+            "word": 1121,
+            "old": "0x0000000a",
+            "new": "0x00000000"
+          }
+        ],
+        "byte_diff_count": 18
+      },
+      {
+        "index": 19,
+        "size": 18880,
+        "source_sha256": "f4926322602f849c5f386d261bc7dd77a177cbd77bea26e334790bf280642512",
+        "c101_sha256": "c0c210128c91ceeef82fbce46a154ee0d232939fc1a15fae4ae9756e7fd97dae",
+        "chain_mul_word": 1023,
+        "chain_exp_word": 1036,
+        "shex_patch_dwords": [
+          {
+            "word": 1029,
+            "old": "0x00000000",
+            "new": "0x0000000c"
+          },
+          {
+            "word": 1030,
+            "old": "0x0000000a",
+            "new": "0x00000000"
+          }
+        ],
+        "byte_diff_count": 18
+      },
+      {
+        "index": 20,
+        "size": 17396,
+        "source_sha256": "643d9dc7784017eac905e2bed0bfd48ab691ee1cf2c4bce4320c83df20641d4c",
+        "c101_sha256": "4e70c69489a7ca965e478ddeaa493102ed4e1d238c513686b18271e787172b88",
+        "chain_mul_word": 679,
+        "chain_exp_word": 692,
+        "shex_patch_dwords": [
+          {
+            "word": 685,
+            "old": "0x00000000",
+            "new": "0x0000000c"
+          },
+          {
+            "word": 686,
+            "old": "0x0000000a",
+            "new": "0x00000000"
+          }
+        ],
+        "byte_diff_count": 18
+      },
+      {
+        "index": 21,
+        "size": 18712,
+        "source_sha256": "6de36c915c504d49c9291fe919740734d99efd5e691a680de4e3f105d4a30c35",
+        "c101_sha256": "64e6bc01ea6fee44aa6536b29a4a975fd27964afb1dd1cd34e68f959b2586820",
+        "chain_mul_word": 1055,
+        "chain_exp_word": 1068,
+        "shex_patch_dwords": [
+          {
+            "word": 1061,
+            "old": "0x00000000",
+            "new": "0x0000000c"
+          },
+          {
+            "word": 1062,
+            "old": "0x0000000a",
+            "new": "0x00000000"
+          }
+        ],
+        "byte_diff_count": 18
+      },
+      {
+        "index": 22,
+        "size": 18412,
+        "source_sha256": "dfa01fcfc8d0a5b09f770a025ea4ee1dff7936b55c2cbd7860865fbef392b0c2",
+        "c101_sha256": "cc2796054132556f44cf39415c89ed6d4515d6f6d74293119c372f8dfc78426f",
+        "chain_mul_word": 964,
+        "chain_exp_word": 977,
+        "shex_patch_dwords": [
+          {
+            "word": 970,
+            "old": "0x00000000",
+            "new": "0x0000000c"
+          },
+          {
+            "word": 971,
+            "old": "0x0000000a",
+            "new": "0x00000000"
+          }
+        ],
+        "byte_diff_count": 18
+      },
+      {
+        "index": 23,
+        "size": 16916,
+        "source_sha256": "36007bd9d4ddc86a8065e70c0e9102893115e0536352f08b0f3723d6fcb0d081",
+        "c101_sha256": "fef2cf7785afcc1b66d57110d37267559a78536bb2f5e42c3350e826c6d45d0f",
+        "chain_mul_word": 624,
+        "chain_exp_word": 637,
+        "shex_patch_dwords": [
+          {
+            "word": 630,
+            "old": "0x00000000",
+            "new": "0x0000000c"
+          },
+          {
+            "word": 631,
+            "old": "0x0000000a",
+            "new": "0x00000000"
+          }
+        ],
+        "byte_diff_count": 18
+      }
+    ]
+  },
+  "mathematical_model": {
+    "ptde_material_signal": "M_P = SpecTex.rgb * c101_P * COLOR0 (linear legacy material gain)",
+    "stock_dsr_f0": "F0_D = SAT(SpecTex.rgb * cb10_D)^2.2",
+    "v210_pre_pow_material": "q_D* = max(c101_P,0)^(1/2.2) channelwise",
+    "v210_f0": "F0_D* = SAT(SpecTex.rgb * q_D*)^2.2; below SAT, F0_D* = SpecTex.rgb^2.2 * c101_P",
+    "exact_material_gain_property": "Below the native SAT boundary, PTDE linear c101 gain is reproduced exactly as a multiplicative gain on the DSR-linearized SpecTex signal while retaining stock DSR texture exponent and PBL receiver.",
+    "projection_residual": "SAT is retained as native legal DSR F0-domain projection; c101_P and/or texture values that require pre-pow product >1 saturate and therefore retain an explicit material-only reachability residual; stock DSR split-sum/roughness/LOD remain downstream renderer identity."
+  }
+}
