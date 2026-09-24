@@ -561,7 +561,7 @@ transform_result transform_spec_rgb(std::span<const std::uint8_t> base)
     std::vector<instruction_view> dcls;
     std::vector<instruction_view> samples;
     for(const auto &ins:instructions){
-        if(ins.opcode==0x58u && ins.length==4u && words[ins.offset+3u]==1u)
+        if(ins.opcode==0x58u && ins.length==4u && words[ins.offset+2u]==1u)
             dcls.push_back(ins);
         if(ins.opcode>=0x45u && ins.opcode<=0x4au && ins.length==11u &&
            words[ins.offset+8u]==1u)
@@ -577,7 +577,7 @@ transform_result transform_spec_rgb(std::span<const std::uint8_t> base)
 
     std::array<std::uint32_t,4> new_dcl{};
     std::copy_n(words.begin()+static_cast<std::ptrdiff_t>(dcl.offset),4,new_dcl.begin());
-    new_dcl[3]=10u;
+    new_dcl[2]=10u;
 
     std::array<std::uint32_t,11> new_sample{};
     std::copy_n(words.begin()+static_cast<std::ptrdiff_t>(sample.offset),11,new_sample.begin());
@@ -608,8 +608,8 @@ transform_result transform_spec_rgb(std::span<const std::uint8_t> base)
     std::size_t t1_dcl=0,t10_dcl=0,t1_sample=0,t10_sample=0;
     for(const auto &ins:instructions){
         if(ins.opcode==0x58u && ins.length==4u){
-            if(words[ins.offset+3u]==1u) ++t1_dcl;
-            if(words[ins.offset+3u]==10u) ++t10_dcl;
+            if(words[ins.offset+2u]==1u) ++t1_dcl;
+            if(words[ins.offset+2u]==10u) ++t10_dcl;
         }
         if(ins.opcode>=0x45u && ins.opcode<=0x4au && ins.length==11u){
             if(words[ins.offset+8u]==1u) ++t1_sample;
