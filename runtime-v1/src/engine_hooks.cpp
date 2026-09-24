@@ -10,6 +10,7 @@
 
 #include <Windows.h>
 
+#include <algorithm>
 #include <array>
 #include <cstddef>
 #include <cstring>
