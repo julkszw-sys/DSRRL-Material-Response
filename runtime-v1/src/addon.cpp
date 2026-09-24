@@ -11,6 +11,7 @@
 #include "dsrrl/core/renderer_core.hpp"
 #include "dsrrl/runtime/engine_hooks.hpp"
 #include "dsrrl/runtime/mr_island.hpp"
+#include "dsrrl/runtime/asset_bridges.hpp"
 
 #include <sstream>
 
@@ -39,9 +40,9 @@ extern "C" {
 __declspec(dllexport) const char *NAME="DSRRL Renderer Core Runtime v1";
 __declspec(dllexport) const char *AUTHOR="DSR Restored Lighting";
 __declspec(dllexport) const char *DESCRIPTION=
-    "Renderer Core v1 runtime integration. Material Response V2.11 active through "
-    "Core-owned hooks and transaction manager. SpecRGB/Diffuse/Normal/UpperLower "
-    "remain feature-gated until their runtime islands are integrated.";
+    "Renderer Core v1 A2 runtime integration. Material Response V2.11 plus exact "
+    "V12-gated PTDE Diffuse t0 and Normal t2 resource islands in one addon. "
+    "SpecRGB and Upper/Lower remain fail-open feature-gated.";
 }
 
 extern "C" __declspec(dllexport) bool AddonInit(HMODULE addon,HMODULE reshade_module)
@@ -58,17 +59,25 @@ extern "C" __declspec(dllexport) bool AddonInit(HMODULE addon,HMODULE reshade_mo
 
     g_core.features().set(dsrrl::core::operator_id::material_response,true);
     g_core.features().set(dsrrl::core::operator_id::spec_rgb,false);
-    g_core.features().set(dsrrl::core::operator_id::diffuse,false);
-    g_core.features().set(dsrrl::core::operator_id::normal,false);
+    g_core.features().set(dsrrl::core::operator_id::diffuse,true);
+    g_core.features().set(dsrrl::core::operator_id::normal,true);
     g_core.features().set(dsrrl::core::operator_id::upper_lower,false);
 
-    if(!dsrrl::runtime::mr::register_runtime(g_core)){
+    if(!dsrrl::runtime::assets::register_runtime(g_core) ||
+       !dsrrl::runtime::mr::register_runtime(g_core)){
+        dsrrl::runtime::assets::unregister_runtime();
+        dsrrl::runtime::mr::unregister_runtime();
         reshade::unregister_addon(addon,reshade_module);
         return false;
     }
 
-    if(!dsrrl::runtime::engine::install(&selector_dispatch,&dsrrl::runtime::mr::mtd_event)){
+    if(!dsrrl::runtime::engine::install(
+            &selector_dispatch,
+            &dsrrl::runtime::mr::mtd_event,
+            &dsrrl::runtime::assets::texture_name_event,
+            &dsrrl::runtime::assets::texture_name_clear_event)){
         dsrrl::runtime::mr::unregister_runtime();
+        dsrrl::runtime::assets::unregister_runtime();
         reshade::log::message(reshade::log::level::error,
             "DSRRL Runtime v1: EngineBridge hook install failed; fail-open/unload.");
         reshade::unregister_addon(addon,reshade_module);
@@ -76,8 +85,8 @@ extern "C" __declspec(dllexport) bool AddonInit(HMODULE addon,HMODULE reshade_mo
     }
 
     reshade::log::message(reshade::log::level::info,
-        "DSRRL Runtime v1: CORE ACTIVE; MR=ON SPECRGB=OFF DIFFUSE=OFF NORMAL=OFF UL=OFF; "
-        "single selector owner; exact EXE+binder provenance PASS.");
+        "DSRRL Runtime v1 A2: CORE ACTIVE; MR=ON SPECRGB=OFF DIFFUSE=ON NORMAL=ON UL=OFF; "
+        "single hook owner; exact EXE+binder provenance PASS; exact V12 asset gates armed.");
     return true;
 }
 
@@ -85,7 +94,10 @@ extern "C" __declspec(dllexport) void AddonUninit(HMODULE addon,HMODULE reshade_
 {
     dsrrl::runtime::engine::uninstall();
     dsrrl::runtime::mr::unregister_runtime();
+    dsrrl::runtime::assets::unregister_runtime();
     g_core.features().set(dsrrl::core::operator_id::material_response,false);
+    g_core.features().set(dsrrl::core::operator_id::diffuse,false);
+    g_core.features().set(dsrrl::core::operator_id::normal,false);
     reshade::unregister_addon(addon,reshade_module);
 }
 
