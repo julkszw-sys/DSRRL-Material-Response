@@ -41,7 +41,9 @@ operators::surface::faceeye_runtime_context ready_faceeye(
     c.variant=variant;
     c.ptde_kernel_shader_ready=true;
     c.runtime_t7_identity_verified=true;
-    c.auxiliary_dirlight_snapshot_ready=true;
+    c.auxiliary_dirlight_snapshot.immutable_draw_local=true;
+    c.auxiliary_dirlight_snapshot.register_present.fill(true);
+    c.auxiliary_dirlight_value_homology_verified=true;
     c.csd_matrix_region_ready=true;
     c.stock_regular_s7_verified=true;
     c.regular_s7_sampler_ready=true;
@@ -174,15 +176,26 @@ int main()
     CHECK(face_plan.preserve_upper_lower);
     CHECK(face_plan.preserve_local_pointlight);
 
-    face.auxiliary_dirlight_snapshot_ready=false;
+    face.auxiliary_dirlight_snapshot.register_present[0]=false;
     face_plan=operators::surface::evaluate_faceeye_runtime_readiness(
         features,activation,face);
     CHECK(!face_plan.ready);
     CHECK(face_plan.reason==
           operators::surface::faceeye_runtime_reason::
               auxiliary_dirlight_snapshot_not_ready);
-    face.auxiliary_dirlight_snapshot_ready=true;
 
+    face=ready_faceeye(
+        operators::surface::faceeye_receiver_variant::sdw_pnts);
+    face.auxiliary_dirlight_value_homology_verified=false;
+    face_plan=operators::surface::evaluate_faceeye_runtime_readiness(
+        features,activation,face);
+    CHECK(!face_plan.ready);
+    CHECK(face_plan.reason==
+          operators::surface::faceeye_runtime_reason::
+              auxiliary_dirlight_value_homology_not_verified);
+
+    face=ready_faceeye(
+        operators::surface::faceeye_receiver_variant::sdw_pnts);
     face.regular_s7_descriptor_verified=false;
     face_plan=operators::surface::evaluate_faceeye_runtime_readiness(
         features,activation,face);

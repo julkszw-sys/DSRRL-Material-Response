@@ -1,6 +1,7 @@
 #pragma once
 
 #include "dsrrl/core/island_policy.hpp"
+#include "dsrrl/operators/lightbank/snapshot_freshness.hpp"
 
 #include <array>
 #include <cstdint>
@@ -80,6 +81,8 @@ enum class hemdir3_runtime_reason : std::uint8_t {
     core_gate_not_active,
     semantic_mode_not_hemdir3,
     semantic_mode_provenance_not_verified,
+    snapshot_owner_not_verified,
+    snapshot_assignment_tuple_not_fresh,
     upper_lower_source_not_ready,
     d123_source_not_ready,
     b13_carrier_not_ready,
@@ -102,6 +105,10 @@ struct hemdir3_runtime_context {
     std::uint32_t semantic_mode = 0;
     hemdir3_semantic_mode_provenance semantic_mode_provenance =
         hemdir3_semantic_mode_provenance::unknown;
+    // Canonical freshness contract: exact owner identity and exact
+    // {selector_A, selector_B, beta_bits} equality are independent gates.
+    lightbank_snapshot_fingerprint producer_snapshot{};
+    lightbank_snapshot_fingerprint draw_snapshot{};
     bool upper_lower_source_ready = false;
     bool d123_source_ready = false;
     bool b13_carrier_ready = false;

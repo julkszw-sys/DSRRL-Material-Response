@@ -95,6 +95,8 @@ operators::lightbank::hemdir3_runtime_context ready_hemdir3()
     c.semantic_mode=2;
     c.semantic_mode_provenance=
         operators::lightbank::hemdir3_semantic_mode_provenance::exact_effective_mode2;
+    c.producer_snapshot={0x1234u,7u,9u,0x3f000000u};
+    c.draw_snapshot=c.producer_snapshot;
     c.upper_lower_source_ready=true;
     c.d123_source_ready=true;
     c.b13_carrier_ready=true;
@@ -350,6 +352,27 @@ int main()
     CHECK(hemdir3_plan.reason==
           operators::lightbank::hemdir3_runtime_reason::
               semantic_mode_provenance_not_verified);
+
+    // Snapshot identity and freshness are separate from semantic-mode proof.
+    hemdir3=ready_hemdir3();
+    hemdir3.draw_snapshot.owner=0x5678u;
+    hemdir3_plan=
+        operators::lightbank::evaluate_hemdir3_runtime_readiness(
+            features,activation,hemdir3);
+    CHECK(!hemdir3_plan.ready);
+    CHECK(hemdir3_plan.reason==
+          operators::lightbank::hemdir3_runtime_reason::
+              snapshot_owner_not_verified);
+
+    hemdir3=ready_hemdir3();
+    ++hemdir3.draw_snapshot.selector_b;
+    hemdir3_plan=
+        operators::lightbank::evaluate_hemdir3_runtime_readiness(
+            features,activation,hemdir3);
+    CHECK(!hemdir3_plan.ready);
+    CHECK(hemdir3_plan.reason==
+          operators::lightbank::hemdir3_runtime_reason::
+              snapshot_assignment_tuple_not_fresh);
 
     hemdir3=ready_hemdir3();
     hemdir3.host_envdiffuse_source_suppressed=false;

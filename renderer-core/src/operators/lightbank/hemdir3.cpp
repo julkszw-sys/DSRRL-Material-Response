@@ -178,6 +178,19 @@ hemdir3_runtime_plan evaluate_hemdir3_runtime_readiness(
             hemdir3_runtime_reason::semantic_mode_provenance_not_verified;
         return out;
     }
+    if (context.producer_snapshot.owner == 0u ||
+        context.draw_snapshot.owner == 0u ||
+        context.producer_snapshot.owner != context.draw_snapshot.owner) {
+        out.reason = hemdir3_runtime_reason::snapshot_owner_not_verified;
+        return out;
+    }
+    if (!lightbank_assignment_tuple_matches(
+            context.producer_snapshot,
+            context.draw_snapshot)) {
+        out.reason =
+            hemdir3_runtime_reason::snapshot_assignment_tuple_not_fresh;
+        return out;
+    }
     if (!context.upper_lower_source_ready) {
         out.reason = hemdir3_runtime_reason::upper_lower_source_not_ready;
         return out;

@@ -7,6 +7,7 @@
 
 #include "dsrrl/runtime/upper_lower_runtime.hpp"
 #include "dsrrl/runtime/engine_hooks.hpp"
+#include "dsrrl/operators/lightbank/snapshot_freshness.hpp"
 #include "dsrrl/core/renderer_core.hpp"
 #include "v13_pmetal_donors.hpp"
 
@@ -32,10 +33,7 @@ namespace detail {
 struct f4 { float x=0.0f,y=0.0f,z=0.0f,w=0.0f; };
 
 struct snapshot {
-    std::uintptr_t owner = 0;
-    std::uint16_t a = 0;
-    std::uint16_t b = 0;
-    std::uint32_t beta_bits = 0;
+    dsrrl::operators::lightbank::lightbank_snapshot_fingerprint fingerprint{};
     bool pmetal_env_ready = false;
     f4 pmetal_env_a{};
     f4 pmetal_env_b{};
@@ -391,8 +389,7 @@ void publish_snapshot(const producer_tls &p) noexcept
 
     try {
         auto s=std::make_shared<snapshot>();
-        s->owner=p.owner;
-        s->a=a; s->b=b; s->beta_bits=beta;
+        s->fingerprint={p.owner,a,b,beta};
         s->pmetal_env_ready=p.have_pmetal_env;
         s->pmetal_env_a=p.pmetal_env_a;
         s->pmetal_env_b=p.pmetal_env_b;
@@ -720,7 +717,11 @@ void selector_event(void *,void *owner,void *ret,void *r14,void *r15,std::int32_
         if(it!=g_snapshots.end()) s=it->second;
     }
     if(!s){++g_selector_miss;return;}
-    if(s->a!=a || s->b!=b || s->beta_bits!=beta){
+    const dsrrl::operators::lightbank::lightbank_snapshot_fingerprint
+        draw_fingerprint{
+            reinterpret_cast<std::uintptr_t>(owner),a,b,beta};
+    if(!dsrrl::operators::lightbank::lightbank_snapshot_matches_draw(
+           s->fingerprint,draw_fingerprint)){
         ++g_tuple_mismatch; return;
     }
     g_draw_snapshot=std::move(s);

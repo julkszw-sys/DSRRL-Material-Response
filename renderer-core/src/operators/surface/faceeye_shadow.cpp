@@ -108,8 +108,15 @@ faceeye_runtime_plan evaluate_faceeye_runtime_readiness(
         out.reason=faceeye_runtime_reason::runtime_t7_identity_not_verified;
         return out;
     }
-    if(!context.auxiliary_dirlight_snapshot_ready){
+    if(!faceeye_auxiliary_snapshot_complete(
+           context.auxiliary_dirlight_snapshot)){
         out.reason=faceeye_runtime_reason::auxiliary_dirlight_snapshot_not_ready;
+        return out;
+    }
+    if(!context.auxiliary_dirlight_value_homology_verified){
+        out.reason=
+            faceeye_runtime_reason::
+                auxiliary_dirlight_value_homology_not_verified;
         return out;
     }
     if(is_csd(context.variant) && !context.csd_matrix_region_ready){

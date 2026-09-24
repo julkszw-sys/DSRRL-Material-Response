@@ -44,6 +44,32 @@ inline constexpr std::array<float,4> k_faceeye_pcf_offsets={{
 }};
 inline constexpr float k_faceeye_shadow_texel_scale=1.0f/2048.0f;
 
+// Exact PTDE FaceEye auxiliary ShaderConstant_DirLightEntity register set.
+// This is a carrier/layout contract only; CPU-authored field meanings and
+// PTDE<->DSR value homology remain an independent readiness gate.
+inline constexpr std::array<std::uint16_t,26> k_faceeye_auxiliary_registers={{
+    121,122,123,
+    140,141,142,143,144,145,146,147,148,149,150,151,152,153,154,155,
+    157,158,159,160,
+    174,175,182
+}};
+
+struct faceeye_auxiliary_snapshot_descriptor {
+    bool immutable_draw_local=false;
+    std::array<bool,k_faceeye_auxiliary_registers.size()> register_present{};
+};
+
+inline bool faceeye_auxiliary_snapshot_complete(
+    const faceeye_auxiliary_snapshot_descriptor &snapshot) noexcept
+{
+    if(!snapshot.immutable_draw_local)
+        return false;
+    for(const bool present : snapshot.register_present)
+        if(!present)
+            return false;
+    return true;
+}
+
 float decode_faceeye_packed_depth(const faceeye_vec3 &sample_rgb) noexcept;
 
 faceeye_shadow_sample evaluate_faceeye_shadow_response(
@@ -69,6 +95,7 @@ enum class faceeye_runtime_reason : std::uint8_t {
     ptde_kernel_shader_not_ready,
     runtime_t7_identity_not_verified,
     auxiliary_dirlight_snapshot_not_ready,
+    auxiliary_dirlight_value_homology_not_verified,
     csd_matrix_region_not_ready,
     stock_regular_s7_not_verified,
     regular_s7_sampler_not_ready,
@@ -84,11 +111,11 @@ struct faceeye_runtime_context {
     faceeye_receiver_variant variant=faceeye_receiver_variant::unsupported;
     bool ptde_kernel_shader_ready=false;
     bool runtime_t7_identity_verified=false;
-    // PTDE FaceEye consumes auxiliary ShaderConstant_DirLightEntity lanes
-    // (c121-c123, c140-c155, c157-c160, c174/c175/c182). Their authored
-    // field names remain open; readiness requires an immutable draw-local
-    // snapshot rather than a generic DrawParam-role assertion.
-    bool auxiliary_dirlight_snapshot_ready=false;
+    // PTDE FaceEye consumes exactly 26 auxiliary DirLightEntity registers.
+    // Presence/immutability of the draw-local carrier does not prove that DSR
+    // values have PTDE semantics, so homology stays a distinct hard gate.
+    faceeye_auxiliary_snapshot_descriptor auxiliary_dirlight_snapshot{};
+    bool auxiliary_dirlight_value_homology_verified=false;
     bool csd_matrix_region_ready=false;
 
     bool stock_regular_s7_verified=false;
