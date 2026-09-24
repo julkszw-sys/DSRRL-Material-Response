@@ -310,15 +310,16 @@ load_result load_dds(
                 (dx10.misc_flag & k_misc_texturecube) != 0u)
                 return {nullptr, load_status::unsupported};
 
+            // Material sidecars are authored for the renderer's explicit
+            // shader-domain transfer. Binding an *_SRGB SRV would add an
+            // implicit hardware decode and double-transform the material
+            // signal. BC7 remains supported by the certified SpecRGB loader,
+            // but only in the non-sRGB view class.
             switch (static_cast<DXGI_FORMAT>(dx10.dxgi_format)) {
             case DXGI_FORMAT_BC1_UNORM:
-            case DXGI_FORMAT_BC1_UNORM_SRGB:
             case DXGI_FORMAT_BC2_UNORM:
-            case DXGI_FORMAT_BC2_UNORM_SRGB:
             case DXGI_FORMAT_BC3_UNORM:
-            case DXGI_FORMAT_BC3_UNORM_SRGB:
             case DXGI_FORMAT_BC7_UNORM:
-            case DXGI_FORMAT_BC7_UNORM_SRGB:
                 format = static_cast<DXGI_FORMAT>(dx10.dxgi_format);
                 break;
             default:
