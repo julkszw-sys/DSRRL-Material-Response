@@ -1,0 +1,72 @@
+name: Renderer Core Runtime v1 A2
+
+on:
+  push:
+    branches:
+      - agent/renderer-core-a2-runtime-ready-20260924
+    paths:
+      - "runtime-v1/**"
+      - "renderer-core/**"
+      - ".github/workflows/renderer-core-runtime-v1-a2.yml"
+  pull_request:
+    paths:
+      - "runtime-v1/**"
+      - "renderer-core/**"
+      - ".github/workflows/renderer-core-runtime-v1-a2.yml"
+
+jobs:
+  provenance-and-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify exact Normal route generation
+        run: |
+          python3 renderer-core/tools/generate_normal_routes_v12.py --input renderer-core/data/provenance/normal_routes_v12.tsv --output /tmp/generated_normal_routes_v12.hpp
+          cmp /tmp/generated_normal_routes_v12.hpp renderer-core/include/dsrrl/runtime/generated_normal_routes_v12.hpp
+      - name: Verify exact Diffuse route generation
+        run: |
+          python3 renderer-core/tools/generate_diffuse_routes_v12.py --input renderer-core/data/provenance/diffuse_routes_v12.tsv --output /tmp/generated_diffuse_routes_v12.hpp
+          cmp /tmp/generated_diffuse_routes_v12.hpp renderer-core/include/dsrrl/runtime/generated_diffuse_routes_v12.hpp
+      - name: Configure runtime tests
+        run: cmake -S runtime-v1 -B build/runtime-v1 -DCMAKE_BUILD_TYPE=Release
+      - name: Build runtime tests
+        run: cmake --build build/runtime-v1 --parallel
+      - name: Run runtime tests
+        run: ctest --test-dir build/runtime-v1 --output-on-failure
+
+  windows-addon:
+    runs-on: windows-2022
+    needs: provenance-and-tests
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fetch pinned ReShade API20 headers
+        shell: pwsh
+        run: |
+          git clone --filter=blob:none https://github.com/crosire/reshade.git _deps/reshade
+          git -C _deps/reshade checkout 3645e3025d1d98a90e318278858931f034d5d1f6
+      - name: Configure x64 addon
+        shell: pwsh
+        run: cmake -S runtime-v1 -B build/runtime-v1 -A x64 -DRESHade_INCLUDE_DIR="${{ github.workspace }}\_deps\reshade\include"
+      - name: Build single addon
+        shell: pwsh
+        run: cmake --build build/runtime-v1 --config Release --target dsrrl_renderer_runtime_v1_addon --parallel
+      - name: Audit single-addon output
+        shell: pwsh
+        run: |
+          $addons = @(Get-ChildItem build/runtime-v1 -Recurse -Filter *.addon64)
+          if ($addons.Count -ne 1) {
+            Write-Error "Expected exactly one .addon64, found $($addons.Count)"
+            $addons | ForEach-Object { Write-Host $_.FullName }
+            exit 1
+          }
+          $hash = (Get-FileHash $addons[0].FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+          Write-Host "ADDON=$($addons[0].FullName)"
+          Write-Host "SHA256=$hash"
+      - name: Run Windows tests
+        shell: pwsh
+        run: ctest --test-dir build/runtime-v1 -C Release --output-on-failure
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dsrrl-renderer-core-runtime-v1-a2
+          path: build/runtime-v1/**/*.addon64
+          if-no-files-found: error
