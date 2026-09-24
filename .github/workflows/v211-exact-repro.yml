@@ -1,0 +1,66 @@
+name: V2.11 exact source reproduction
+
+on:
+  push:
+    branches:
+      - recovery/material-response-1.45-source-chain-2026-09-23
+    paths:
+      - 'recovered-source/1.45/pre_v12/v2_11/**'
+      - '.github/workflows/v211-exact-repro.yml'
+  workflow_dispatch:
+
+jobs:
+  reproduce-v211:
+    runs-on: windows-2025
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Verify recovered generated headers
+        shell: pwsh
+        run: |
+          $root = 'recovered-source/1.45/pre_v12/v2_11'
+          $d = (Get-FileHash "$root/include/dsrrl/generated_ptde_diffuse_material_response.hpp" -Algorithm SHA256).Hash.ToLowerInvariant()
+          $c = (Get-FileHash "$root/include/dsrrl/generated_ptde_c101_material_response.hpp" -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($d -ne '1458180458dddd6dada0e1af7aa83543cd8c77c4fbf51bf146b0adcdeb221a20') { throw "diffuse header mismatch: $d" }
+          if ($c -ne '5f5bb82fffce98b37d87021e3a10829eb2b189e66b4818c83fe8d82947cfcfd3') { throw "c101 header mismatch: $c" }
+
+      - name: Build with exact recovered MSVC 14.44 toolset
+        shell: pwsh
+        run: |
+          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+          $vs = & $vswhere -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath | Select-Object -First 1
+          if (-not $vs) { throw 'Visual Studio toolchain not found' }
+          $vcvars = Join-Path $vs 'VC\Auxiliary\Build\vcvars64.bat'
+          $root = (Resolve-Path 'recovered-source/1.45/pre_v12/v2_11').Path
+          $builder = Join-Path $root 'scripts\build_windows_ptde_material_response_v2_11.ps1'
+          $cmd = 'call "' + $vcvars + '" -vcvars_ver=14.44 && where cl && cl /Bv && powershell -NoProfile -ExecutionPolicy Bypass -File "' + $builder + '"'
+          & $env:ComSpec /d /s /c $cmd
+          if ($LASTEXITCODE -ne 0) { throw "native V2.11 build failed: $LASTEXITCODE" }
+          $raw = Join-Path $root 'build-msvc\bin\DSRRL_PTDE_MATERIAL_RESPONSE_V2_11.addon64'
+          if (-not (Test-Path $raw)) { throw 'V2.11 output missing' }
+          $clPath = (& $env:ComSpec /d /s /c ('call "' + $vcvars + '" -vcvars_ver=14.44 >nul && where cl') | Select-Object -First 1).Trim()
+          Write-Host "Resolved cl: $clPath"
+          if ($clPath -notmatch '14\.44\.35228') { throw "Exact MSVC 14.44.35228 not active: $clPath" }
+
+      - name: Normalize historical linker timestamp and assert exact SHA
+        shell: pwsh
+        run: |
+          $root = (Resolve-Path 'recovered-source/1.45/pre_v12/v2_11').Path
+          $raw = Join-Path $root 'build-msvc\bin\DSRRL_PTDE_MATERIAL_RESPONSE_V2_11.addon64'
+          $exact = Join-Path $root 'build-msvc\bin\DSRRL_PTDE_MATERIAL_RESPONSE_V2_11_EXACT.addon64'
+          python (Join-Path $root 'tools\normalize_v211_pe_timestamp.py') $raw $exact --expect-exact
+          $h = (Get-FileHash $exact -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($h -ne '1cfa2154059575d2dbf3f34124e7d51c4c63e8ab8f22347ae56755bc1e5f697a') { throw "V2.11 exact SHA mismatch: $h" }
+          Write-Host "PASS BYTE-EXACT V2.11: $h"
+
+      - name: Upload reproduction evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: v211-exact-reproduction
+          path: |
+            recovered-source/1.45/pre_v12/v2_11/BUILD_PTDE_MATERIAL_RESPONSE_V2_11.log
+            recovered-source/1.45/pre_v12/v2_11/build-msvc/BUILD_RESULT.json
+            recovered-source/1.45/pre_v12/v2_11/build-msvc/bin/*.addon64
+          if-no-files-found: warn
