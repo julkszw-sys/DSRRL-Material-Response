@@ -536,7 +536,7 @@ inline constexpr std::array<diffuse_pair_v12, 528> k_diffuse_pairs_v12 = {{
     {0xffa0bd9c057005ddull, 0x83ef99eede2c7e6bull},
     {0xffbfb013405b3b3cull, 0x30d8f07eae2c1e62ull},
     {0xffc52a7253366a7aull, 0xbe4ff522130c9080ull},
-};
+}};
 
 inline constexpr std::array<std::uint64_t, 1048> k_diffuse_pair_member_hashes_v12 = {{
     0x00178fc6032dce64ull,
@@ -1587,7 +1587,7 @@ inline constexpr std::array<std::uint64_t, 1048> k_diffuse_pair_member_hashes_v1
     0xffa0bd9c057005ddull,
     0xffbfb013405b3b3cull,
     0xffc52a7253366a7aull,
-};
+}};
 
 inline constexpr std::array<std::uint64_t, 524> k_diffuse_target_hashes_v12 = {{
     0x003edc3c61d5b42bull,
@@ -2114,7 +2114,7 @@ inline constexpr std::array<std::uint64_t, 524> k_diffuse_target_hashes_v12 = {{
     0xfa45412c0413919aull,
     0xfd796866f3c7a5f3ull,
     0xfd796966f3c7a7a6ull,
-};
+}};
 
 template <std::size_t N>
 inline bool diffuse_sorted_hash_contains(const std::array<std::uint64_t,N>&v,std::uint64_t x) noexcept
