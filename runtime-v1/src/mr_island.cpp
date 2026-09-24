@@ -57,6 +57,10 @@ std::atomic<std::uint64_t> g_shader_ul_pass{0}, g_shader_ul_fail{0};
 std::atomic<std::uint64_t> g_shader_spec_pass{0}, g_shader_spec_fail{0};
 std::atomic<std::uint64_t> g_shader_ul_spec_pass{0}, g_shader_ul_spec_fail{0};
 std::atomic<std::uint64_t> g_shader_v13_pass{0}, g_shader_v13_fail{0};
+std::atomic<std::uint64_t> g_lerp_shader_pass{0}, g_lerp_shader_fail{0};
+std::atomic<std::uint64_t> g_v9a_shader_pass{0}, g_v9a_shader_fail{0};
+std::atomic<std::uint64_t> g_lerp_binds{0}, g_lerp_replays{0}, g_v10_replays{0};
+std::atomic<bool> g_v10_first_draw_logged{false};
 std::atomic<std::uint64_t> g_v13_source_ready{0}, g_v13_source_miss{0};
 std::atomic<std::uint64_t> g_v13_resource_ready{0}, g_v13_resource_miss{0};
 std::atomic<std::uint64_t> g_v13_b12_update{0}, g_v13_b12_fail{0}, g_v13_replay{0};
@@ -96,35 +100,67 @@ void *resolve_material(void *container,std::int32_t index) noexcept
 
 thread_local int g_draw_donor=-1;
 thread_local int g_bound_host=-1;
+thread_local bool g_bound_lerp=false;
 thread_local bool g_bound_subsurface=false;
 constexpr int k_subsurface_material=static_cast<int>(dsrrl::materialdonor::k_donors.size());
+constexpr int k_pmetal_route=345;
+static_assert(
+    dsrrl::materialdonor::k_donors[345].sha256 ==
+        k_pmetal_raw_mtd_sha256,
+    "Build151 route345 must remain exact P_Metal[DSB].mtd.");
 namespace subsurface=dsrrl::operators::resource_bridges;
 std::atomic<std::uint64_t> g_subsurface_replays{0};
 thread_local const command_list *g_bound_command=nullptr;
 
+enum class pipeline_kind : std::uint8_t {
+    stable = 0,
+    lerp,
+    subsurface
+};
+
+struct pipeline_target {
+    std::uint8_t pair=0;
+    pipeline_kind kind=pipeline_kind::stable;
+};
+
 struct pending_pipeline {
     std::size_t size=0;
     std::string sha;
-    std::uint8_t host=0;
+    pipeline_target target{};
 };
 std::mutex g_pending_mutex;
 std::vector<pending_pipeline> g_pending;
 
 std::mutex g_pipeline_mutex;
-std::unordered_map<std::uint64_t,std::uint8_t> g_pipelines;
+std::unordered_map<std::uint64_t,pipeline_target> g_pipelines;
 
 struct device_state {
     ID3D11Device *device=nullptr;
+
     std::array<ID3D11PixelShader*,24> diffuse{};
     std::array<ID3D11PixelShader*,24> full{};
     std::array<ID3D11PixelShader*,24> diffuse_ul{};
     std::array<ID3D11PixelShader*,24> full_ul{};
     std::array<ID3D11PixelShader*,24> full_spec{};
     std::array<ID3D11PixelShader*,24> full_ul_spec{};
+
+    std::array<ID3D11PixelShader*,24> lerp_diffuse{};
+    std::array<ID3D11PixelShader*,24> lerp_full{};
+    std::array<ID3D11PixelShader*,24> lerp_diffuse_ul{};
+    std::array<ID3D11PixelShader*,24> lerp_full_ul{};
+    std::array<ID3D11PixelShader*,24> lerp_full_spec{};
+    std::array<ID3D11PixelShader*,24> lerp_full_ul_spec{};
+
+    std::array<ID3D11PixelShader*,24> v9a_full{};
+    std::array<ID3D11PixelShader*,24> v9a_full_ul{};
+    std::array<ID3D11PixelShader*,24> v9a_full_spec{};
+    std::array<ID3D11PixelShader*,24> v9a_full_ul_spec{};
+
     std::array<ID3D11PixelShader*,24> full_v13{};
     std::array<ID3D11PixelShader*,24> full_v13_ul{};
     std::array<ID3D11PixelShader*,24> full_v13_spec{};
     std::array<ID3D11PixelShader*,24> full_v13_ul_spec{};
+
     std::unordered_map<std::uint16_t,ID3D11Buffer*> b12;
     std::unordered_map<std::uintptr_t,ID3D11Buffer*> pmetal_b12;
 };
@@ -140,6 +176,19 @@ void release_device_state()
     for(auto *&p:g_device.full_ul){ if(p){p->Release();p=nullptr;} }
     for(auto *&p:g_device.full_spec){ if(p){p->Release();p=nullptr;} }
     for(auto *&p:g_device.full_ul_spec){ if(p){p->Release();p=nullptr;} }
+
+    for(auto *&p:g_device.lerp_diffuse){ if(p){p->Release();p=nullptr;} }
+    for(auto *&p:g_device.lerp_full){ if(p){p->Release();p=nullptr;} }
+    for(auto *&p:g_device.lerp_diffuse_ul){ if(p){p->Release();p=nullptr;} }
+    for(auto *&p:g_device.lerp_full_ul){ if(p){p->Release();p=nullptr;} }
+    for(auto *&p:g_device.lerp_full_spec){ if(p){p->Release();p=nullptr;} }
+    for(auto *&p:g_device.lerp_full_ul_spec){ if(p){p->Release();p=nullptr;} }
+
+    for(auto *&p:g_device.v9a_full){ if(p){p->Release();p=nullptr;} }
+    for(auto *&p:g_device.v9a_full_ul){ if(p){p->Release();p=nullptr;} }
+    for(auto *&p:g_device.v9a_full_spec){ if(p){p->Release();p=nullptr;} }
+    for(auto *&p:g_device.v9a_full_ul_spec){ if(p){p->Release();p=nullptr;} }
+
     for(auto *&p:g_device.full_v13){ if(p){p->Release();p=nullptr;} }
     for(auto *&p:g_device.full_v13_ul){ if(p){p->Release();p=nullptr;} }
     for(auto *&p:g_device.full_v13_spec){ if(p){p->Release();p=nullptr;} }
