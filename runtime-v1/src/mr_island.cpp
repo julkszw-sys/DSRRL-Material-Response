@@ -323,6 +323,14 @@ void on_destroy_device(device *d)
         if(g_device.device!=native) return;
     }
     release_device_state();
+    {
+        std::lock_guard lock(g_pending_mutex);
+        g_pending.clear();
+    }
+    {
+        std::lock_guard lock(g_pipeline_mutex);
+        g_pipelines.clear();
+    }
 }
 
 bool on_create_pipeline(device *d,pipeline_layout,std::uint32_t count,const pipeline_subobject *sub)
