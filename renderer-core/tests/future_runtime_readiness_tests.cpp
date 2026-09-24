@@ -118,6 +118,7 @@ operators::env_spec::legacy_runtime_context ready_packed_envspec()
     using namespace operators::env_spec;
     legacy_runtime_context c;
     c.resource_class=legacy_resource_class::packed_gi;
+    c.receiver_family=legacy_receiver_family::hem_env_lerp;
     c.receiver_verified=true;
     c.material_verified=true;
     c.material_semantics_exact=true;
@@ -538,9 +539,23 @@ int main()
     CHECK(envspec_plan.ready);
     CHECK(envspec_plan.bypass_dsr_pbl_tail);
     CHECK(envspec_plan.preserve_ptde_sample_alpha);
+    CHECK(envspec_plan.probe_b_required);
     CHECK(envspec_plan.envspc_slot==2u);
     CHECK(envspec_plan.probe_a_ordinal==17u);
     CHECK(envspec_plan.probe_b_ordinal==23u);
+
+    // Pure HemEnv is a one-endpoint consumer: exact B identity is not a
+    // readiness requirement. HemEnvLerp remains two-endpoint exact.
+    envspec=ready_packed_envspec();
+    envspec.receiver_family=
+        operators::env_spec::legacy_receiver_family::hem_env;
+    envspec.probe_b_identity_established=false;
+    envspec.probe_b_ordinal=0u;
+    envspec_plan=
+        operators::env_spec::evaluate_legacy_runtime_readiness(
+            features,activation,envspec);
+    CHECK(envspec_plan.ready);
+    CHECK(!envspec_plan.probe_b_required);
 
     envspec=ready_packed_envspec();
     envspec.material_semantics_exact=false;

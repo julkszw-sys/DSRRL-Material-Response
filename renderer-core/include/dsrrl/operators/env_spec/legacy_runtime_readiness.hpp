@@ -12,10 +12,17 @@ enum class legacy_resource_class : std::uint8_t {
     classic_rgb24
 };
 
+enum class legacy_receiver_family : std::uint8_t {
+    unsupported = 0,
+    hem_env,
+    hem_env_lerp
+};
+
 enum class legacy_runtime_reason : std::uint8_t {
     ready = 0,
     core_gate_not_active,
     unsupported_resource_class,
+    unsupported_receiver_family,
     receiver_not_verified,
     material_not_verified,
     material_semantics_not_exact,
@@ -42,6 +49,8 @@ enum class legacy_runtime_reason : std::uint8_t {
 struct legacy_runtime_context {
     legacy_resource_class resource_class =
         legacy_resource_class::unsupported;
+    legacy_receiver_family receiver_family =
+        legacy_receiver_family::unsupported;
 
     bool receiver_verified = false;
     bool material_verified = false;
@@ -83,6 +92,7 @@ struct legacy_runtime_plan {
         legacy_runtime_reason::core_gate_not_active;
     bool bypass_dsr_pbl_tail = true;
     bool preserve_ptde_sample_alpha = true;
+    bool probe_b_required = false;
     std::uint8_t envspc_slot = 0;
     std::uint16_t probe_a_ordinal = 0;
     std::uint16_t probe_b_ordinal = 0;
@@ -106,6 +116,10 @@ inline legacy_runtime_plan evaluate_legacy_runtime_readiness(
     }
     if (context.resource_class == legacy_resource_class::unsupported) {
         out.reason = legacy_runtime_reason::unsupported_resource_class;
+        return out;
+    }
+    if (context.receiver_family == legacy_receiver_family::unsupported) {
+        out.reason = legacy_runtime_reason::unsupported_receiver_family;
         return out;
     }
     if (!context.receiver_verified) {
@@ -164,7 +178,9 @@ inline legacy_runtime_plan evaluate_legacy_runtime_readiness(
             legacy_runtime_reason::probe_a_identity_not_established;
         return out;
     }
-    if (!context.probe_b_identity_established) {
+    const bool probe_b_required =
+        context.receiver_family==legacy_receiver_family::hem_env_lerp;
+    if (probe_b_required && !context.probe_b_identity_established) {
         out.reason =
             legacy_runtime_reason::probe_b_identity_not_established;
         return out;
@@ -209,6 +225,7 @@ inline legacy_runtime_plan evaluate_legacy_runtime_readiness(
 
     out.ready = true;
     out.reason = legacy_runtime_reason::ready;
+    out.probe_b_required=probe_b_required;
     out.envspc_slot=context.material_envspc_slot;
     out.probe_a_ordinal=context.probe_a_ordinal;
     out.probe_b_ordinal=context.probe_b_ordinal;

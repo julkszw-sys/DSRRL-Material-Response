@@ -866,7 +866,8 @@ bool on_draw_indexed(command_list *cmd,std::uint32_t index_count,std::uint32_t i
         envspec::observe_draw(
             cmd,
             draw_envspec,
-            draw_envspec_exact);
+            draw_envspec_exact,
+            g_bound_lerp);
     (void)envspec_identity;
 
     if(draw_envspec_exact){
