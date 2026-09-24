@@ -638,24 +638,23 @@ bool on_draw_indexed(command_list *cmd,std::uint32_t index_count,std::uint32_t i
 void on_present(command_queue *,swapchain *,const rect *,const rect *,std::uint32_t,const rect *)
 {
     try {
-    const auto n=++g_present;
-    if(n==300 || (n>300 && (n%1200)==0)){
-        std::ostringstream os;
-        os<<"DSRRL Runtime v1 MR: present="<<n
-          <<" MTD="<<g_mtd_seen.load()<<" mapped="<<g_mapped.load()<<" unmapped="<<g_unmapped.load()
-          <<" selector="<<g_selector_seen.load()<<" selector_mapped="<<g_selector_mapped.load()
-          <<" pipelines="<<g_pipeline_seen.load()<<" shader_pair_pass="<<g_shader_pair_pass.load()
-          <<" shader_pair_fail="<<g_shader_pair_fail.load()
-          <<" ul_shader_pass="<<g_shader_ul_pass.load()<<" ul_shader_fail="<<g_shader_ul_fail.load()
-          <<" spec_shader_pass="<<g_shader_spec_pass.load()<<" spec_shader_fail="<<g_shader_spec_fail.load()
-          <<" ul_spec_shader_pass="<<g_shader_ul_spec_pass.load()<<" ul_spec_shader_fail="<<g_shader_ul_spec_fail.load()
-          <<" binds="<<g_target_binds.load()
-          <<" replay="<<g_replays.load()<<" b12_create="<<g_b12_create.load()
-          <<" b12_hit="<<g_b12_hit.load()<<" failopen="<<g_fail_open.load()
-          <<" restore_fail="<<g_restore_fail.load()<<" quarantined="<<(g_quarantined.load()?1:0);
-        log_info(os.str());
-    }
-}
+        const auto n=++g_present;
+        if(n==300 || (n>300 && (n%1200)==0)){
+            std::ostringstream os;
+            os<<"DSRRL Runtime v1 MR: present="<<n
+              <<" MTD="<<g_mtd_seen.load()<<" mapped="<<g_mapped.load()<<" unmapped="<<g_unmapped.load()
+              <<" selector="<<g_selector_seen.load()<<" selector_mapped="<<g_selector_mapped.load()
+              <<" pipelines="<<g_pipeline_seen.load()<<" shader_pair_pass="<<g_shader_pair_pass.load()
+              <<" shader_pair_fail="<<g_shader_pair_fail.load()
+              <<" ul_shader_pass="<<g_shader_ul_pass.load()<<" ul_shader_fail="<<g_shader_ul_fail.load()
+              <<" spec_shader_pass="<<g_shader_spec_pass.load()<<" spec_shader_fail="<<g_shader_spec_fail.load()
+              <<" ul_spec_shader_pass="<<g_shader_ul_spec_pass.load()<<" ul_spec_shader_fail="<<g_shader_ul_spec_fail.load()
+              <<" binds="<<g_target_binds.load()
+              <<" replay="<<g_replays.load()<<" b12_create="<<g_b12_create.load()
+              <<" b12_hit="<<g_b12_hit.load()<<" failopen="<<g_fail_open.load()
+              <<" restore_fail="<<g_restore_fail.load()<<" quarantined="<<(g_quarantined.load()?1:0);
+            log_info(os.str());
+        }
     } catch (...) {
         // Telemetry is non-authoritative and must never escape the callback ABI.
     }
