@@ -23,7 +23,7 @@
       "alpha_untouched": true,
       "token_identity_check": true,
       "combined_rgba_write": "FAIL_OPEN",
-      "identity_recipe_import": "PENDING",
+      "identity_recipe_import": "RECOVERED_EXACT_SOURCE_IN_REPO_NOT_YET_WIRED",
       "runtime_activation": "NOT_TESTED",
       "pixel": "OPEN"
     },
@@ -41,7 +41,7 @@
         "downstream"
       ],
       "pntss_pntssss": "NO_PATCH_ALREADY_LINEAR",
-      "identity_recipe_import": "PENDING",
+      "identity_recipe_import": "RECOVERED_EXACT_SOURCE_IN_REPO_NOT_YET_WIRED",
       "runtime_activation": "NOT_TESTED",
       "pixel": "OPEN"
     },
@@ -59,7 +59,7 @@
         "downstream"
       ],
       "cross_platform_z_equality": false,
-      "identity_recipe_import": "PENDING",
+      "identity_recipe_import": "RECOVERED_EXACT_SOURCE_IN_REPO_NOT_YET_WIRED",
       "runtime_activation": "NOT_TESTED",
       "pixel": "OPEN"
     },
@@ -75,7 +75,7 @@
         "terminal SAT",
         "HDR/postprocess"
       ],
-      "identity_recipe_import": "PENDING",
+      "identity_recipe_import": "RECOVERED_EXACT_SOURCE_IN_REPO_NOT_YET_WIRED",
       "runtime_activation": "NOT_TESTED",
       "pixel": "OPEN"
     },
@@ -92,7 +92,7 @@
       ],
       "fail_open": "PRESERVE_STOCK_DSR_ENVSPEC_TERM",
       "owns": "DSR-only local EnvSpec contribution only",
-      "identity_recipe_import": "PENDING",
+      "identity_recipe_import": "RECOVERED_EXACT_SOURCE_IN_REPO_NOT_YET_WIRED",
       "runtime_activation": "NOT_TESTED",
       "pixel": "OPEN"
     },
@@ -215,9 +215,21 @@
       "source_artifact_sha256": "70b2d91aec619ad2df99a161151d974d8d52269f4040acdd6288ff586a9f8fed",
       "source_member": "data/PORT_PLAN.json",
       "source_plan_sha256": "5cc15f8084fb75cb33c27be3f0e94be7fd186f07c16274b33ee09735b747a1ec",
-      "embedded_in_repo": false
+      "embedded_in_repo": true,
+      "repository_path": "renderer-core/data/provenance/p2_2_PORT_PLAN.json.gz",
+      "source_gzip_sha256": "7319778b1fb973419410a0e23f408c94946233b678916c0617de6bb1598b3b49"
     },
-    "runtime_materialization_source_complete": false
+    "runtime_materialization_source_complete": false,
+    "exact_recipe_source_complete": true,
+    "recovered_source_counts": {
+      "plans": 518,
+      "patch_ops": 1436
+    },
+    "selected_recipe_counts": {
+      "plans": 144,
+      "aliases": 252,
+      "patch_ops": 312
+    }
   },
   "legacy_a1_mask_owners": {
     "terminal_sat_rgb": [
@@ -255,4 +267,4 @@
   "runtime": "NOT_TESTED",
   "bridge_activation": "NOT_TESTED",
   "pixel": "OPEN"
-}
+}\n

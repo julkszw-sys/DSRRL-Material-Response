@@ -298,13 +298,18 @@ Each identity records original SHA-256, expected replacement SHA-256, code size,
 representative shader, alias count, legacy mask and island ownership. The generated
 index is deterministic and CI-verified.
 
-This is not yet a source-complete runtime byte patcher. The canonical 312 DWORD patch
-operations are source-referenced to artifact 253,
-`data/PORT_PLAN.json`, source-plan SHA-256
+The exact patch recipe source has now been recovered from artifact 253 itself.
+The original P2.2 `data/PORT_PLAN.json` is stored in Git as deterministic gzip at
+`renderer-core/data/provenance/p2_2_PORT_PLAN.json.gz`. Decompression is CI-verified
+against the original source-plan SHA-256
 `5cc15f8084fb75cb33c27be3f0e94be7fd186f07c16274b33ee09735b747a1ec`.
-Those operation bytes must be imported into Git/reconstructed and independently
-verified before the 144-plan materializer can satisfy the project-wide release
-source-completeness gate.
 
-Until then the index is authoritative for identity, scope and operator ownership, not
-authorization to activate the legacy replacement payload at runtime.
+The recovered source contains 518 plans / 1436 DWORD patch operations. CI joins it
+against this core's A1 identity index and verifies the exact selected subset:
+144 plans / 252 aliases / 312 DWORD operations, including every `byte_offset`,
+`old`, `new`, replacement SHA, code size, mask and alias name.
+
+This removes the former external-artifact blocker for exact recipe provenance.
+Runtime materialization is still a separate implementation/activation layer: the
+presence of exact offsets in Git does not by itself authorize the legacy combined
+replacement payload or promote runtime/pixel status.

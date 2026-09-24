@@ -6,8 +6,10 @@
     "source_artifact_sha256": "70b2d91aec619ad2df99a161151d974d8d52269f4040acdd6288ff586a9f8fed",
     "source_member": "data/PORT_PLAN.json",
     "source_plan_sha256": "5cc15f8084fb75cb33c27be3f0e94be7fd186f07c16274b33ee09735b747a1ec",
-    "ops_embedded_in_core": false,
-    "ops_policy": "external source dependency required before runtime materialization"
+    "ops_embedded_in_core": true,
+    "ops_policy": "artifact 253 exact PORT_PLAN recovered into Git as deterministic gzip; CI verifies uncompressed source SHA and the exact 144-plan/312-op selection",
+    "ops_repository_path": "renderer-core/data/provenance/p2_2_PORT_PLAN.json.gz",
+    "source_gzip_sha256": "7319778b1fb973419410a0e23f408c94946233b678916c0617de6bb1598b3b49"
   },
   "selection": {
     "historical_build_key": "material_response_1_45_expanded_a1_global_materials",
@@ -2088,4 +2090,4 @@
       ]
     }
   ]
-}
+}\n
