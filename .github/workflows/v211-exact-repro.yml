@@ -20,10 +20,21 @@ jobs:
         shell: pwsh
         run: |
           $root = 'recovered-source/1.45/pre_v12/v2_11'
-          $d = (Get-FileHash "$root/include/dsrrl/generated_ptde_diffuse_material_response.hpp" -Algorithm SHA256).Hash.ToLowerInvariant()
-          $c = (Get-FileHash "$root/include/dsrrl/generated_ptde_c101_material_response.hpp" -Algorithm SHA256).Hash.ToLowerInvariant()
-          if ($d -ne '1458180458dddd6dada0e1af7aa83543cd8c77c4fbf51bf146b0adcdeb221a20') { throw "diffuse header mismatch: $d" }
-          if ($c -ne '5f5bb82fffce98b37d87021e3a10829eb2b189e66b4818c83fe8d82947cfcfd3') { throw "c101 header mismatch: $c" }
+          # Hosted Windows checkout may materialize text as CRLF. Verify the canonical LF Git/source bytes.
+          $py = @'
+from pathlib import Path
+import hashlib
+pairs = [
+    ("recovered-source/1.45/pre_v12/v2_11/include/dsrrl/generated_ptde_diffuse_material_response.hpp", "1458180458dddd6dada0e1af7aa83543cd8c77c4fbf51bf146b0adcdeb221a20"),
+    ("recovered-source/1.45/pre_v12/v2_11/include/dsrrl/generated_ptde_c101_material_response.hpp", "5f5bb82fffce98b37d87021e3a10829eb2b189e66b4818c83fe8d82947cfcfd3"),
+]
+for p,e in pairs:
+    b=Path(p).read_bytes().replace(b"\\r\\n",b"\\n")
+    h=hashlib.sha256(b).hexdigest()
+    print(p,h)
+    assert h==e,(p,h,e)
+'@
+          $py | python -
 
       - name: Build with exact recovered MSVC 14.44 toolset
         shell: pwsh
