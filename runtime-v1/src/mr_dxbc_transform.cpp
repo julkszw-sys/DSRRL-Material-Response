@@ -1,9 +1,11 @@
 #include "dsrrl/runtime/mr_dxbc_transform.hpp"
 #include "dsrrl/sha256.hpp"
 
+#include <algorithm>
 #include <array>
 #include <cstring>
 #include <limits>
+#include <optional>
 #include <utility>
 
 namespace dsrrl::runtime::mr {
