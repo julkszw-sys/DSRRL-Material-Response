@@ -1177,13 +1177,17 @@ void on_present(command_queue *,swapchain *,const rect *,const rect *,std::uint3
               <<" ul_shader_pass="<<g_shader_ul_pass.load()<<" ul_shader_fail="<<g_shader_ul_fail.load()
               <<" spec_shader_pass="<<g_shader_spec_pass.load()<<" spec_shader_fail="<<g_shader_spec_fail.load()
               <<" ul_spec_shader_pass="<<g_shader_ul_spec_pass.load()<<" ul_spec_shader_fail="<<g_shader_ul_spec_fail.load()
+              <<" lerp_shader_pass="<<g_lerp_shader_pass.load()<<" lerp_shader_fail="<<g_lerp_shader_fail.load()
+              <<" v9a_shader_pass="<<g_v9a_shader_pass.load()<<" v9a_shader_fail="<<g_v9a_shader_fail.load()
               <<" v13_shader_pass="<<g_shader_v13_pass.load()<<" v13_shader_fail="<<g_shader_v13_fail.load()
               <<" v13_source_ready="<<g_v13_source_ready.load()<<" v13_source_miss="<<g_v13_source_miss.load()
               <<" v13_resource_ready="<<g_v13_resource_ready.load()<<" v13_resource_miss="<<g_v13_resource_miss.load()
               <<" v13_b12_update="<<g_v13_b12_update.load()<<" v13_b12_fail="<<g_v13_b12_fail.load()
               <<" v13_replay="<<g_v13_replay.load()
-              <<" binds="<<g_target_binds.load()
-              <<" replay="<<g_replays.load()<<" subsurface_replay="<<g_subsurface_replays.load()<<" b12_create="<<g_b12_create.load()
+              <<" binds="<<g_target_binds.load()<<" lerp_binds="<<g_lerp_binds.load()
+              <<" replay="<<g_replays.load()<<" lerp_replay="<<g_lerp_replays.load()
+              <<" v10_replay="<<g_v10_replays.load()
+              <<" subsurface_replay="<<g_subsurface_replays.load()<<" b12_create="<<g_b12_create.load()
               <<" b12_hit="<<g_b12_hit.load()<<" failopen="<<g_fail_open.load()
               <<" restore_fail="<<g_restore_fail.load()<<" quarantined="<<(g_quarantined.load()?1:0);
             log_info(os.str());
@@ -1231,7 +1235,8 @@ bool register_runtime(core::renderer_core &core) noexcept
     g_core=&core;
     g_quarantined.store(false);
     g_v13_first_draw_logged.store(false);
-    g_draw_donor=-1; g_bound_host=-1; g_bound_subsurface=false; g_bound_command=nullptr;
+    g_v10_first_draw_logged.store(false);
+    g_draw_donor=-1; g_bound_host=-1; g_bound_lerp=false; g_bound_subsurface=false; g_bound_command=nullptr;
     g_enabled.store(true);
     reshade::register_event<reshade::addon_event::init_device>(on_init_device);
     reshade::register_event<reshade::addon_event::destroy_device>(on_destroy_device);
@@ -1259,7 +1264,7 @@ void unregister_runtime() noexcept
     {std::lock_guard lock(g_pending_mutex);g_pending.clear();}
     {std::lock_guard lock(g_pipeline_mutex);g_pipelines.clear();}
     {std::lock_guard lock(g_material_mutex);g_material_donor.clear();}
-    g_draw_donor=-1; g_bound_host=-1; g_bound_subsurface=false; g_bound_command=nullptr;
+    g_draw_donor=-1; g_bound_host=-1; g_bound_lerp=false; g_bound_subsurface=false; g_bound_command=nullptr;
     g_core=nullptr;
 }
 
