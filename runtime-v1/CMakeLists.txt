@@ -1,0 +1,51 @@
+cmake_minimum_required(VERSION 3.20)
+project(DSRRLRendererRuntimeV1 LANGUAGES CXX)
+
+find_package(Python3 REQUIRED COMPONENTS Interpreter)
+
+set(PROV "${CMAKE_CURRENT_SOURCE_DIR}/provenance/mr_v211")
+set(GEN_DIR "${CMAKE_CURRENT_BINARY_DIR}/generated")
+file(MAKE_DIRECTORY "${GEN_DIR}")
+
+add_custom_command(
+  OUTPUT "${GEN_DIR}/mr_runtime_manifest.hpp"
+  COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_mr_runtime_manifest.py"
+          --v29 "${PROV}/V29_SHADER_MANIFEST.json"
+          --v210 "${PROV}/V210_C101_MATERIAL_RESPONSE_AUDIT.json"
+          --v211 "${PROV}/V211_C101_UNBOUNDED_AUDIT.json"
+          --out "${GEN_DIR}/mr_runtime_manifest.hpp"
+  DEPENDS
+    "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_mr_runtime_manifest.py"
+    "${PROV}/V29_SHADER_MANIFEST.json"
+    "${PROV}/V210_C101_MATERIAL_RESPONSE_AUDIT.json"
+    "${PROV}/V211_C101_UNBOUNDED_AUDIT.json"
+  VERBATIM
+)
+
+add_custom_target(dsrrl_mr_manifest DEPENDS "${GEN_DIR}/mr_runtime_manifest.hpp")
+
+add_library(dsrrl_runtime_v1 STATIC
+  src/sha256.cpp
+  src/mr_dxbc_transform.cpp
+  "${GEN_DIR}/mr_runtime_manifest.hpp"
+)
+add_dependencies(dsrrl_runtime_v1 dsrrl_mr_manifest)
+target_include_directories(dsrrl_runtime_v1 PUBLIC include "${GEN_DIR}")
+target_compile_features(dsrrl_runtime_v1 PUBLIC cxx_std_20)
+if(MSVC)
+  target_compile_options(dsrrl_runtime_v1 PRIVATE /W4 /WX)
+else()
+  target_compile_options(dsrrl_runtime_v1 PRIVATE -Wall -Wextra -Wpedantic -Werror)
+endif()
+
+add_executable(dsrrl_runtime_v1_tests tests/mr_transform_tests.cpp)
+target_link_libraries(dsrrl_runtime_v1_tests PRIVATE dsrrl_runtime_v1)
+target_compile_features(dsrrl_runtime_v1_tests PRIVATE cxx_std_20)
+if(MSVC)
+  target_compile_options(dsrrl_runtime_v1_tests PRIVATE /W4 /WX)
+else()
+  target_compile_options(dsrrl_runtime_v1_tests PRIVATE -Wall -Wextra -Wpedantic -Werror)
+endif()
+
+enable_testing()
+add_test(NAME dsrrl_runtime_v1_tests COMMAND dsrrl_runtime_v1_tests)
