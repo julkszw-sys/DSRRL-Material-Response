@@ -4,6 +4,7 @@
 #include "dsrrl/operators/surface/terminal_sat_rgb_patch.hpp"
 #include "dsrrl/operators/surface/diffuse_material_domain.hpp"
 #include "dsrrl/operators/surface/fixed_postfog_identity.hpp"
+#include "dsrrl/operators/surface/faceeye_shadow.hpp"
 
 namespace dsrrl::operators::surface {
 

@@ -2,6 +2,8 @@
 
 #include "dsrrl/operators/known_operator_island.hpp"
 #include "dsrrl/operators/point_light/pnts_attenuation.hpp"
+#include "dsrrl/operators/point_light/legacy_specular.hpp"
+#include "dsrrl/operators/point_light/runtime_readiness.hpp"
 
 namespace dsrrl::operators::point_light {
 
