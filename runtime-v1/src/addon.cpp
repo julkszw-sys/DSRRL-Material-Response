@@ -14,6 +14,7 @@
 #include "dsrrl/runtime/mr_island.hpp"
 #include "dsrrl/runtime/asset_bridges.hpp"
 #include "dsrrl/runtime/upper_lower_runtime.hpp"
+#include "dsrrl/runtime/feature_manifest.hpp"
 
 #include <atomic>
 #include <cstdio>
@@ -28,20 +29,22 @@ dsrrl::core::renderer_core g_core;
 dsrrl::runtime::a1_create_pipeline_bridge g_a1_bridge(g_core.features());
 std::atomic<std::uint64_t> g_a1_present_count{0};
 
-constexpr dsrrl::core::operator_id k_a1_islands[] = {
-    dsrrl::core::operator_id::terminal_sat_rgb,
-    dsrrl::core::operator_id::diffuse_material_domain,
-    dsrrl::core::operator_id::pointlight_pnts_attenuation,
-    dsrrl::core::operator_id::envspec_nospc_delete,
-    dsrrl::core::operator_id::fixed_postfog_identity
-};
-
-bool enable_a1_islands() noexcept
+bool apply_manifest_boot_state() noexcept
 {
-    for (const auto op : k_a1_islands)
-        if (!g_core.features().set(op, true))
+    for(const auto &entry:dsrrl::runtime::k_runtime_feature_manifest){
+        const bool enable =
+            entry.boot_policy==
+            dsrrl::runtime::runtime_boot_policy::enable_immediately;
+        if(!g_core.features().set(entry.op,enable))
             return false;
+    }
     return true;
+}
+
+void disable_manifest_features() noexcept
+{
+    for(const auto &entry:dsrrl::runtime::k_runtime_feature_manifest)
+        (void)g_core.features().set(entry.op,false);
 }
 
 void log_a1_state(const char *tag) noexcept
@@ -136,9 +139,9 @@ extern "C" {
 __declspec(dllexport) const char *NAME="DSRRL Renderer Core Runtime v1";
 __declspec(dllexport) const char *AUTHOR="DSR Restored Lighting";
 __declspec(dllexport) const char *DESCRIPTION=
-    "Renderer Core v1 A2 unified runtime. Proven A1 create-time islands plus "
-    "Material Response V2.11, exact V12 Diffuse/Normal/SpecRGB and corrected "
-    "PTDE Upper/Lower operator islands in one audited draw transaction.";
+    "Renderer Core v1 unified runtime with centralized A7 feature manifest. "
+    "Current A1/A3 islands preserve exact boot gates; A4/A5/A6 future islands "
+    "remain default-OFF until their operator-local readiness contracts pass.";
 }
 
 extern "C" __declspec(dllexport) bool AddonInit(HMODULE addon,HMODULE reshade_module)
@@ -155,16 +158,10 @@ extern "C" __declspec(dllexport) bool AddonInit(HMODULE addon,HMODULE reshade_mo
 
     g_a1_bridge.reset();
     g_a1_present_count.store(0);
-    if(!enable_a1_islands()){
+    if(!apply_manifest_boot_state()){
         reshade::unregister_addon(addon,reshade_module);
         return false;
     }
-
-    g_core.features().set(dsrrl::core::operator_id::material_response,true);
-    g_core.features().set(dsrrl::core::operator_id::spec_rgb,true);
-    g_core.features().set(dsrrl::core::operator_id::diffuse,true);
-    g_core.features().set(dsrrl::core::operator_id::normal,true);
-    g_core.features().set(dsrrl::core::operator_id::upper_lower,false);
 
     register_a1_events();
 
@@ -202,8 +199,8 @@ extern "C" __declspec(dllexport) bool AddonInit(HMODULE addon,HMODULE reshade_mo
 
     reshade::log::message(reshade::log::level::info,
         ul_ready ?
-        "DSRRL Runtime v1 A3: CORE ACTIVE; A1x5=ON MR=ON SPECRGB=ON DIFFUSE=ON NORMAL=ON UL=ON; single EngineBridge selector owner." :
-        "DSRRL Runtime v1 A3: CORE ACTIVE; A1x5=ON MR=ON SPECRGB=ON DIFFUSE=ON NORMAL=ON UL=FAIL-OPEN-OFF; single EngineBridge selector owner.");
+        "DSRRL Runtime v1 A7: CORE ACTIVE; manifest boot=9 immediate + UL preflight PASS; future islands OFF; single EngineBridge selector owner." :
+        "DSRRL Runtime v1 A7: CORE ACTIVE; manifest boot=9 immediate + UL preflight FAIL-OPEN-OFF; future islands OFF; single EngineBridge selector owner.");
     return true;
 }
 
@@ -216,11 +213,7 @@ extern "C" __declspec(dllexport) void AddonUninit(HMODULE addon,HMODULE reshade_
     unregister_a1_events();
     log_a1_state("UNLOAD");
     g_a1_bridge.reset();
-    g_core.features().set(dsrrl::core::operator_id::material_response,false);
-    g_core.features().set(dsrrl::core::operator_id::spec_rgb,false);
-    g_core.features().set(dsrrl::core::operator_id::diffuse,false);
-    g_core.features().set(dsrrl::core::operator_id::normal,false);
-    g_core.features().set(dsrrl::core::operator_id::upper_lower,false);
+    disable_manifest_features();
     reshade::unregister_addon(addon,reshade_module);
 }
 
