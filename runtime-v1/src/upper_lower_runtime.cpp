@@ -267,16 +267,22 @@ void publish_snapshot(const producer_tls &p) noexcept
     if(!safe_read(p.assignment+8,a) || !safe_read(p.assignment+10,b) || !safe_read(p.assignment+12,beta))
         return;
 
-    auto s=std::make_shared<snapshot>();
-    s->owner=p.owner;
-    s->a=a; s->b=b; s->beta_bits=beta;
-    s->payload[6]=p.upper;
-    s->payload[7]=p.lower;
-    {
-        std::lock_guard lock(g_snapshot_mutex);
-        g_snapshots[p.owner]=s;
+    try {
+        auto s=std::make_shared<snapshot>();
+        s->owner=p.owner;
+        s->a=a; s->b=b; s->beta_bits=beta;
+        s->payload[6]=p.upper;
+        s->payload[7]=p.lower;
+        {
+            std::lock_guard lock(g_snapshot_mutex);
+            g_snapshots[p.owner]=std::move(s);
+        }
+        ++g_snapshot_publish;
+    } catch (...) {
+        // Producer capture is observational. Allocation/bookkeeping failure must
+        // never terminate the host from inside an inline game hook; simply omit
+        // this snapshot and let the draw path fail open to stock DSR.
     }
-    ++g_snapshot_publish;
 }
 
 void *run_wrapper(wrapper_fn original,std::atomic<std::uint64_t> &counter,
