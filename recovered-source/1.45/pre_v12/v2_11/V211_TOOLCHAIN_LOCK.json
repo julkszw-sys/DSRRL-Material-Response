@@ -1,0 +1,43 @@
+{
+  "schema": "DSRRL_V211_TOOLCHAIN_LOCK_V1",
+  "status": "RECOVERED_FROM_EXACT_PE_RICH_AND_BUILD_SCRIPT",
+  "target_sha256": "1cfa2154059575d2dbf3f34124e7d51c4c63e8ab8f22347ae56755bc1e5f697a",
+  "target_size": 1078784,
+  "pe_timestamp": 1789474613,
+  "pe_timestamp_utc": "2026-09-15T12:16:53Z",
+  "pe_checksum": 0,
+  "major_linker_version": 14,
+  "minor_linker_version": 44,
+  "msvc_toolset": {
+    "family": "MSVC v143 / 14.44",
+    "rich_build": 35228,
+    "project_products": {
+      "Utc1900_CPP": {"product_id": 261, "build": 35228, "count": 2},
+      "Masm1400": {"product_id": 259, "build": 35228, "count": 1},
+      "Linker1400": {"product_id": 258, "build": 35228, "count": 1},
+      "Export1400": {"product_id": 256, "build": 35228, "count": 1}
+    },
+    "interpretation": "two C++ translation units addon.cpp + sha256.cpp, one MASM selector_hook.asm, one linker invocation"
+  },
+  "reshade": {
+    "api": 20,
+    "commit": "aae2b7ecc18096ccddca2c073b50727541220292"
+  },
+  "vanilla_shader_binder": {
+    "logical_name": "FRPG_FlverPBL_fpo_DX11.shaderbnd.dcx",
+    "sha256": "ad180732ac79d5d98783aa504c789c2bab15e515c3b0f66b237d8b8c69113394",
+    "redistribution": "not required; generator consumes owner-provided stock game file matching SHA"
+  },
+  "generated_headers": {
+    "generated_ptde_diffuse_material_response.hpp": "1458180458dddd6dada0e1af7aa83543cd8c77c4fbf51bf146b0adcdeb221a20",
+    "generated_ptde_c101_material_response_v210.hpp": "97e0788c4fb90d305b063851b4bef87136c57303aea765bd3e4787a2619b8c76",
+    "generated_ptde_c101_material_response.hpp": "5f5bb82fffce98b37d87021e3a10829eb2b189e66b4818c83fe8d82947cfcfd3"
+  },
+  "compile_flags": ["/nologo","/c","/std:c++20","/O2","/EHsc","/W4","/permissive-","/MD","/DNDEBUG","/DNOMINMAX","/DWIN32_LEAN_AND_MEAN","/GS","/guard:cf","/Zc:__cplusplus","/utf-8"],
+  "link_flags": ["/nologo","/DLL","/MACHINE:X64","/NOIMPLIB","/NOEXP","/INCREMENTAL:NO","/DYNAMICBASE","/NXCOMPAT","/GUARD:CF","/OPT:REF","/OPT:ICF"],
+  "timestamp_normalization": {
+    "required_for_byte_exact_reproduction": true,
+    "fields": ["IMAGE_FILE_HEADER.TimeDateStamp", "IMAGE_DEBUG_DIRECTORY.TimeDateStamp"],
+    "normalizer": "tools/normalize_v211_pe_timestamp.py"
+  }
+}
