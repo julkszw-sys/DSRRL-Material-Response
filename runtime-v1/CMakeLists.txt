@@ -24,6 +24,8 @@ add_custom_command(
 
 add_custom_target(dsrrl_mr_manifest DEPENDS "${GEN_DIR}/mr_runtime_manifest.hpp")
 
+include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/A3RouteHeaders.cmake")
+
 add_library(dsrrl_runtime_v1 STATIC
   src/sha256.cpp
   src/mr_dxbc_transform.cpp
