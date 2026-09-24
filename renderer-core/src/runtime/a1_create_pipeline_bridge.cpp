@@ -303,66 +303,71 @@ void a1_create_pipeline_bridge::on_init_pipeline(
         subobjects,
     reshade::api::pipeline pipeline) noexcept
 {
-    if (!accepts_device(device) ||
-        pipeline.handle == 0u)
-        return;
-
-    const auto *pixel_shader =
-        find_pixel_shader(
-            subobject_count,
-            subobjects);
-
-    if (pixel_shader == nullptr ||
-        pixel_shader->code == nullptr ||
-        pixel_shader->code_size == 0u)
-        return;
-
-    std::shared_ptr<
-        const replacement_record> record;
-
-    {
-        std::lock_guard<std::mutex> lock(mutex_);
-
-        const auto found =
-            code_records_.find(
-                pixel_shader->code);
-
-        if (found == code_records_.end())
+    try {
+        if (!accepts_device(device) ||
+            pipeline.handle == 0u)
             return;
 
-        record = found->second;
-    }
+        const auto *pixel_shader =
+            find_pixel_shader(
+                subobject_count,
+                subobjects);
 
-    if (record == nullptr ||
-        record->bytes == nullptr ||
-        record->bytes->size() !=
-            pixel_shader->code_size) {
-        ++init_mismatch_;
+        if (pixel_shader == nullptr ||
+            pixel_shader->code == nullptr ||
+            pixel_shader->code_size == 0u)
+            return;
+
+        std::shared_ptr<
+            const replacement_record> record;
+
+        {
+            std::lock_guard<std::mutex> lock(mutex_);
+
+            const auto found =
+                code_records_.find(
+                    pixel_shader->code);
+
+            if (found == code_records_.end())
+                return;
+
+            record = found->second;
+        }
+
+        if (record == nullptr ||
+            record->bytes == nullptr ||
+            record->bytes->size() !=
+                pixel_shader->code_size) {
+            ++init_mismatch_;
+            quarantined_.store(true);
+            return;
+        }
+
+        const auto digest =
+            operators::legacy_plan::hashing::
+                sha256(
+                    static_cast<
+                        const std::uint8_t *>(
+                            pixel_shader->code),
+                    pixel_shader->code_size);
+
+        if (digest != record->output_sha256) {
+            ++init_mismatch_;
+            quarantined_.store(true);
+            return;
+        }
+
+        {
+            std::lock_guard<std::mutex> lock(mutex_);
+            pipeline_records_[pipeline.handle] =
+                record;
+        }
+
+        ++init_attested_;
+    } catch (...) {
+        ++fail_open_;
         quarantined_.store(true);
-        return;
     }
-
-    const auto digest =
-        operators::legacy_plan::hashing::
-            sha256(
-                static_cast<
-                    const std::uint8_t *>(
-                        pixel_shader->code),
-                pixel_shader->code_size);
-
-    if (digest != record->output_sha256) {
-        ++init_mismatch_;
-        quarantined_.store(true);
-        return;
-    }
-
-    {
-        std::lock_guard<std::mutex> lock(mutex_);
-        pipeline_records_[pipeline.handle] =
-            record;
-    }
-
-    ++init_attested_;
 }
 
 void a1_create_pipeline_bridge::on_destroy_pipeline(
