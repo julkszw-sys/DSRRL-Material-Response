@@ -14,6 +14,7 @@
 
 #include <array>
 #include <cstring>
+#include <cmath>
 #include <iostream>
 #include <limits>
 #include <optional>
@@ -265,6 +266,31 @@ int main()
     pnts = operators::point_light::evaluate_pnts_attenuation(
         std::numeric_limits<float>::quiet_NaN(), 0.0f, 10.0f);
     CHECK(pnts.result == operators::point_light::pnts_attenuation_result::fail_open_nonfinite_input);
+
+    // Diffuse material-domain island: preserve the DSR pretransform carrier
+    // and remove only the certified local abs(x)^2.2 dependency.
+    CHECK(gates.set(core::operator_id::diffuse_material_domain, true));
+    activation = operators::surface::diffuse_material_domain.evaluate(gates, verified);
+    CHECK(activation.state == core::island_state::active);
+
+    auto diffuse_domain =
+        operators::surface::evaluate_diffuse_material_domain_host(0.5f);
+    CHECK(diffuse_domain.result ==
+          operators::surface::diffuse_material_domain_result::exact_local_host_forward);
+    CHECK(diffuse_domain.dsr_pretransform == 0.5f);
+    CHECK(diffuse_domain.linear_bridge == 0.5f);
+    CHECK(std::fabs(diffuse_domain.stock_dsr - 0.21763764f) < 0.000001f);
+
+    diffuse_domain =
+        operators::surface::evaluate_diffuse_material_domain_host(1.0f);
+    CHECK(diffuse_domain.stock_dsr == 1.0f);
+    CHECK(diffuse_domain.linear_bridge == 1.0f);
+
+    diffuse_domain =
+        operators::surface::evaluate_diffuse_material_domain_host(
+            std::numeric_limits<float>::quiet_NaN());
+    CHECK(diffuse_domain.result ==
+          operators::surface::diffuse_material_domain_result::fail_open_nonfinite_input);
 
     CHECK(gates.set(core::operator_id::post_hdr, true));
     activation = operators::postprocess::hdr.evaluate(gates, verified);

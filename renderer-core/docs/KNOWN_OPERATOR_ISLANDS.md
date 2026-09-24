@@ -102,6 +102,27 @@ for the certified PntS receiver set from the canonical P2.2 plan source.
 This is a CONSTRUCTION-level operator implementation, not a claim of full PointLight
 or final-pixel equivalence.
 
+## Source-complete semantic primitive: Diffuse material-domain
+
+`surface.diffuse_material_domain` now has a handwritten local DSR-host forward for
+the certified material-domain mismatch:
+
+```text
+stock DSR local diffuse dependency: M_D = abs(Z_D)^2.2
+bridge local diffuse dependency:    M_bridge = Z_D
+PTDE reference operator:            M_P = Z_P
+```
+
+The important boundary is explicit: the bridge removes the DSR-local x^2.2 transform
+from the targeted diffuse dependency while retaining the actual DSR pretransform
+carrier. It does **not** assert `Z_D == Z_P`; texture, vertex and asset homology remain
+separate questions. Blanket SPEC RAW and WORKFLOW RAW are not part of this island,
+and atmosphere/postprocess are downstream owners rather than compensation surfaces.
+
+The primitive fails open for non-finite input. Exact create-time DXBC recipe import is
+still pending the canonical P2.2 plan source, so this closes the semantic/local-forward
+construction layer rather than runtime activation or final-pixel equivalence.
+
 ## Legacy A1/P2.2 decomposition
 
 The old combined mask is decomposed by ownership:

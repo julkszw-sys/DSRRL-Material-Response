@@ -44,6 +44,24 @@
       "identity_recipe_import": "PENDING",
       "runtime_activation": "NOT_TESTED",
       "pixel": "OPEN"
+    },
+    "diffuse_material_domain": {
+      "local_operator_forward": "SOURCE_COMPLETE",
+      "canonical_operator": "renderer.cross.hemenv_fixed_phn_material_domain_family_census",
+      "equation": "stock DSR M=abs(Z_D)^2.2; local bridge M=Z_D; PTDE reference M=Z_P",
+      "exactness": "HOST_EQUIVALENT_LOCAL_OPERATOR",
+      "owns": "targeted diffuse material-domain transform only",
+      "preserves": [
+        "SPEC path",
+        "WORKFLOW path",
+        "atmosphere",
+        "texture/vertex identity",
+        "downstream"
+      ],
+      "cross_platform_z_equality": false,
+      "identity_recipe_import": "PENDING",
+      "runtime_activation": "NOT_TESTED",
+      "pixel": "OPEN"
     }
   },
   "legacy_a1": {

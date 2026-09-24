@@ -20,6 +20,7 @@ add_library(dsrrl_renderer_core STATIC
     src/operators/env_spec/env_spec_island.cpp
     src/operators/surface/terminal_sat_rgb_patch.cpp
     src/operators/point_light/pnts_attenuation.cpp
+    src/operators/surface/diffuse_material_domain.cpp
 )
 target_include_directories(dsrrl_renderer_core PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
 target_compile_features(dsrrl_renderer_core PUBLIC cxx_std_17)
