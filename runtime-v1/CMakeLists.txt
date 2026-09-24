@@ -22,12 +22,27 @@ add_custom_command(
   VERBATIM
 )
 
-add_custom_target(dsrrl_mr_manifest DEPENDS "${GEN_DIR}/mr_runtime_manifest.hpp")
+add_custom_command(
+  OUTPUT "${GEN_DIR}/ul_runtime_manifest.hpp"
+  COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_ul_runtime_manifest.py"
+          --v29 "${PROV}/V29_SHADER_MANIFEST.json"
+          --out "${GEN_DIR}/ul_runtime_manifest.hpp"
+  DEPENDS
+    "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_ul_runtime_manifest.py"
+    "${PROV}/V29_SHADER_MANIFEST.json"
+  VERBATIM
+)
+
+add_custom_target(dsrrl_mr_manifest DEPENDS
+  "${GEN_DIR}/mr_runtime_manifest.hpp"
+  "${GEN_DIR}/ul_runtime_manifest.hpp"
+)
 
 add_library(dsrrl_runtime_v1 STATIC
   src/sha256.cpp
   src/mr_dxbc_transform.cpp
   "${GEN_DIR}/mr_runtime_manifest.hpp"
+  "${GEN_DIR}/ul_runtime_manifest.hpp"
 )
 add_dependencies(dsrrl_runtime_v1 dsrrl_mr_manifest)
 target_include_directories(dsrrl_runtime_v1 PUBLIC include "${GEN_DIR}")
