@@ -120,6 +120,10 @@ operators::env_spec::legacy_runtime_context ready_packed_envspec()
     c.resource_class=legacy_resource_class::packed_gi;
     c.receiver_verified=true;
     c.material_verified=true;
+    c.material_semantics_exact=true;
+    c.material_envspec_present=true;
+    c.material_envspc_slot_verified=true;
+    c.material_envspc_slot=2u;
     c.ptde_receiver_math_ready=true;
     c.dsr_pbl_bypass_ready=true;
     c.material_response_b12_ready=true;
@@ -127,6 +131,10 @@ operators::env_spec::legacy_runtime_context ready_packed_envspec()
     c.semantic_sidecar_lookup_ready=true;
     c.envspc_slot_map_ready=true;
     c.stock_srv_identity_established=true;
+    c.probe_a_identity_established=true;
+    c.probe_b_identity_established=true;
+    c.probe_a_ordinal=17u;
+    c.probe_b_ordinal=23u;
     c.packed_gi_resource_ready=true;
     c.packed_gi_stored_alpha_preserved=true;
     c.draw_transaction_ready=true;
@@ -530,6 +538,39 @@ int main()
     CHECK(envspec_plan.ready);
     CHECK(envspec_plan.bypass_dsr_pbl_tail);
     CHECK(envspec_plan.preserve_ptde_sample_alpha);
+    CHECK(envspec_plan.envspc_slot==2u);
+    CHECK(envspec_plan.probe_a_ordinal==17u);
+    CHECK(envspec_plan.probe_b_ordinal==23u);
+
+    envspec=ready_packed_envspec();
+    envspec.material_semantics_exact=false;
+    envspec_plan=
+        operators::env_spec::evaluate_legacy_runtime_readiness(
+            features,activation,envspec);
+    CHECK(!envspec_plan.ready);
+    CHECK(envspec_plan.reason==
+          operators::env_spec::legacy_runtime_reason::
+              material_semantics_not_exact);
+
+    envspec=ready_packed_envspec();
+    envspec.material_envspec_present=false;
+    envspec_plan=
+        operators::env_spec::evaluate_legacy_runtime_readiness(
+            features,activation,envspec);
+    CHECK(!envspec_plan.ready);
+    CHECK(envspec_plan.reason==
+          operators::env_spec::legacy_runtime_reason::
+              material_envspec_not_present);
+
+    envspec=ready_packed_envspec();
+    envspec.material_envspc_slot_verified=false;
+    envspec_plan=
+        operators::env_spec::evaluate_legacy_runtime_readiness(
+            features,activation,envspec);
+    CHECK(!envspec_plan.ready);
+    CHECK(envspec_plan.reason==
+          operators::env_spec::legacy_runtime_reason::
+              material_envspc_slot_not_verified);
 
     envspec=ready_packed_envspec();
     envspec.envspc_slot_map_ready=false;
@@ -550,6 +591,26 @@ int main()
     CHECK(envspec_plan.reason==
           operators::env_spec::legacy_runtime_reason::
               stock_srv_identity_not_established);
+
+    envspec=ready_packed_envspec();
+    envspec.probe_a_identity_established=false;
+    envspec_plan=
+        operators::env_spec::evaluate_legacy_runtime_readiness(
+            features,activation,envspec);
+    CHECK(!envspec_plan.ready);
+    CHECK(envspec_plan.reason==
+          operators::env_spec::legacy_runtime_reason::
+              probe_a_identity_not_established);
+
+    envspec=ready_packed_envspec();
+    envspec.probe_b_identity_established=false;
+    envspec_plan=
+        operators::env_spec::evaluate_legacy_runtime_readiness(
+            features,activation,envspec);
+    CHECK(!envspec_plan.ready);
+    CHECK(envspec_plan.reason==
+          operators::env_spec::legacy_runtime_reason::
+              probe_b_identity_not_established);
 
     envspec=ready_packed_envspec();
     envspec.resource_class=

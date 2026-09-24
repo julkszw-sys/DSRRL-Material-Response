@@ -18,6 +18,9 @@ enum class legacy_runtime_reason : std::uint8_t {
     unsupported_resource_class,
     receiver_not_verified,
     material_not_verified,
+    material_semantics_not_exact,
+    material_envspec_not_present,
+    material_envspc_slot_not_verified,
     ptde_receiver_math_not_ready,
     dsr_pbl_bypass_not_ready,
     material_response_b12_not_ready,
@@ -25,6 +28,8 @@ enum class legacy_runtime_reason : std::uint8_t {
     sidecar_lookup_not_ready,
     envspc_slot_map_not_ready,
     stock_srv_identity_not_established,
+    probe_a_identity_not_established,
+    probe_b_identity_not_established,
     packed_gi_resource_not_ready,
     packed_gi_alpha_not_preserved,
     classic_resource_not_ready,
@@ -40,6 +45,15 @@ struct legacy_runtime_context {
 
     bool receiver_verified = false;
     bool material_verified = false;
+
+    // Exact material semantic identity comes from the recovered 325-record
+    // DSREMR01 router. Semantic presence and authored EnvSpc slot are separate
+    // gates from generic material recognition.
+    bool material_semantics_exact = false;
+    bool material_envspec_present = false;
+    bool material_envspc_slot_verified = false;
+    std::uint8_t material_envspc_slot = 0;
+
     bool ptde_receiver_math_ready = false;
     bool dsr_pbl_bypass_ready = false;
     bool material_response_b12_ready = false;
@@ -47,6 +61,10 @@ struct legacy_runtime_context {
     bool semantic_sidecar_lookup_ready = false;
     bool envspc_slot_map_ready = false;
     bool stock_srv_identity_established = false;
+    bool probe_a_identity_established = false;
+    bool probe_b_identity_established = false;
+    std::uint16_t probe_a_ordinal = 0;
+    std::uint16_t probe_b_ordinal = 0;
 
     bool packed_gi_resource_ready = false;
     bool packed_gi_stored_alpha_preserved = false;
@@ -65,6 +83,9 @@ struct legacy_runtime_plan {
         legacy_runtime_reason::core_gate_not_active;
     bool bypass_dsr_pbl_tail = true;
     bool preserve_ptde_sample_alpha = true;
+    std::uint8_t envspc_slot = 0;
+    std::uint16_t probe_a_ordinal = 0;
+    std::uint16_t probe_b_ordinal = 0;
 };
 
 inline legacy_runtime_plan evaluate_legacy_runtime_readiness(
@@ -95,6 +116,20 @@ inline legacy_runtime_plan evaluate_legacy_runtime_readiness(
         out.reason = legacy_runtime_reason::material_not_verified;
         return out;
     }
+    if (!context.material_semantics_exact) {
+        out.reason = legacy_runtime_reason::material_semantics_not_exact;
+        return out;
+    }
+    if (!context.material_envspec_present) {
+        out.reason = legacy_runtime_reason::material_envspec_not_present;
+        return out;
+    }
+    if (!context.material_envspc_slot_verified ||
+        context.material_envspc_slot>=4u) {
+        out.reason =
+            legacy_runtime_reason::material_envspc_slot_not_verified;
+        return out;
+    }
     if (!context.ptde_receiver_math_ready) {
         out.reason = legacy_runtime_reason::ptde_receiver_math_not_ready;
         return out;
@@ -122,6 +157,16 @@ inline legacy_runtime_plan evaluate_legacy_runtime_readiness(
     if (!context.stock_srv_identity_established) {
         out.reason =
             legacy_runtime_reason::stock_srv_identity_not_established;
+        return out;
+    }
+    if (!context.probe_a_identity_established) {
+        out.reason =
+            legacy_runtime_reason::probe_a_identity_not_established;
+        return out;
+    }
+    if (!context.probe_b_identity_established) {
+        out.reason =
+            legacy_runtime_reason::probe_b_identity_not_established;
         return out;
     }
 
@@ -164,6 +209,9 @@ inline legacy_runtime_plan evaluate_legacy_runtime_readiness(
 
     out.ready = true;
     out.reason = legacy_runtime_reason::ready;
+    out.envspc_slot=context.material_envspc_slot;
+    out.probe_a_ordinal=context.probe_a_ordinal;
+    out.probe_b_ordinal=context.probe_b_ordinal;
     return out;
 }
 
