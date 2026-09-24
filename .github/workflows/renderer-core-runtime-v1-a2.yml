@@ -60,6 +60,8 @@ jobs:
             $addons | ForEach-Object { Write-Host $_.FullName }
             exit 1
           }
+          python runtime-v1/tools/canonicalize_pe.py --check $addons[0].FullName
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           $hash = (Get-FileHash $addons[0].FullName -Algorithm SHA256).Hash.ToLowerInvariant()
           Write-Host "ADDON=$($addons[0].FullName)"
           Write-Host "SHA256=$hash"
