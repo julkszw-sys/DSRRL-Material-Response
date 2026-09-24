@@ -238,6 +238,34 @@ reconstructs the routing policy source-completely; it does not claim that the ne
 Renderer Core integration has itself been runtime-tested or that PTDE pixel
 equivalence is closed.
 
+## Source-complete routing contract: PTDE equipment Diffuse
+
+`bridge.diffuse_resource` now models the complete narrow Diffuse augmentation for the
+stable no-PointLight DifSpcBmp HemEnv receiver family 24..35. Raw PTDE diffuse texture
+replacement is explicitly insufficient. Activation requires the three already-proven
+coordinates to converge on the same draw:
+
+```text
+exact PTDE diffuse companion -> t0
+exact paired PTDE c100 material donor
+certified diffuse-linear Material Response receiver
+```
+
+The gate also requires verified actual material and actually bound DSR `t0` identity.
+Shared-MTD routes retain the exact texture-identity conjunction rather than using the
+MTD name alone.
+
+Failure is intentionally `preserve_existing_route`, not "turn everything stock".
+That distinction preserves a separately valid SpecRGB/SPEC_ONLY route when an exact
+PTDE diffuse companion is absent. Once all Diffuse coordinates are ready, dispatch
+moves to the existing full c100+c101 material-response semantics; no new diffuse shader
+family or cross-operator compensation is introduced.
+
+The prior V12 single-addon lineage demonstrated end-to-end `t0` activation for the
+tested ordinary DifSpcBmp equipment path. This commit reconstructs the routing policy
+inside Renderer Core; new-core runtime activation and PTDE pixel equivalence remain
+separate validation layers.
+
 ## Legacy A1/P2.2 decomposition
 
 The old combined mask is decomposed by ownership:

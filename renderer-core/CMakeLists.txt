@@ -26,6 +26,7 @@ add_library(dsrrl_renderer_core STATIC
     src/operators/lightbank/upper_lower.cpp
     src/operators/resource_bridges/spec_rgb_bridge.cpp
     src/operators/resource_bridges/normal_bridge.cpp
+    src/operators/resource_bridges/diffuse_bridge.cpp
 )
 target_include_directories(dsrrl_renderer_core PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
 target_compile_features(dsrrl_renderer_core PUBLIC cxx_std_17)

@@ -535,6 +535,82 @@ int main()
     CHECK(normal_route.reason ==
           operators::resource_bridges::normal_reason::sampler_contract_not_preserved);
 
+    // Diffuse bridge is an augmentation island. Missing PTDE t0/c100 must
+    // preserve an already-valid existing route (e.g. SPEC_ONLY), not disable it.
+    CHECK(gates.set(core::operator_id::diffuse, true));
+    activation = operators::resource_bridges::diffuse.evaluate(gates, verified);
+    CHECK(activation.state == core::island_state::active);
+
+    operators::resource_bridges::diffuse_bridge_context diffuse_ctx;
+    diffuse_ctx.receiver_id = 24;
+    diffuse_ctx.actual_material_verified = true;
+    diffuse_ctx.actual_bound_t0_verified = true;
+    diffuse_ctx.exact_ptde_diffuse_companion_verified = true;
+    diffuse_ctx.ptde_srv_ready = true;
+    diffuse_ctx.ptde_c100_donor_verified = true;
+    diffuse_ctx.diffuse_linear_receiver_ready = true;
+
+    auto diffuse_route =
+        operators::resource_bridges::evaluate_diffuse_route(diffuse_ctx);
+    CHECK(diffuse_route.action ==
+          operators::resource_bridges::diffuse_action::bind_ptde_t0_and_full_material_response);
+    CHECK(diffuse_route.reason ==
+          operators::resource_bridges::diffuse_reason::active);
+    CHECK(diffuse_route.srv_slot == 0u);
+    CHECK(diffuse_route.use_ptde_c100);
+    CHECK(diffuse_route.require_diffuse_linear_receiver);
+
+    diffuse_ctx.receiver_id = 35;
+    diffuse_route =
+        operators::resource_bridges::evaluate_diffuse_route(diffuse_ctx);
+    CHECK(diffuse_route.action ==
+          operators::resource_bridges::diffuse_action::bind_ptde_t0_and_full_material_response);
+
+    diffuse_ctx.receiver_id = 36;
+    diffuse_route =
+        operators::resource_bridges::evaluate_diffuse_route(diffuse_ctx);
+    CHECK(diffuse_route.action ==
+          operators::resource_bridges::diffuse_action::preserve_existing_route);
+    CHECK(diffuse_route.reason ==
+          operators::resource_bridges::diffuse_reason::unsupported_receiver);
+
+    diffuse_ctx.receiver_id = 24;
+    diffuse_ctx.exact_ptde_diffuse_companion_verified = false;
+    diffuse_route =
+        operators::resource_bridges::evaluate_diffuse_route(diffuse_ctx);
+    CHECK(diffuse_route.action ==
+          operators::resource_bridges::diffuse_action::preserve_existing_route);
+    CHECK(diffuse_route.reason ==
+          operators::resource_bridges::diffuse_reason::ptde_companion_not_verified);
+
+    diffuse_ctx.exact_ptde_diffuse_companion_verified = true;
+    diffuse_ctx.ptde_c100_donor_verified = false;
+    diffuse_route =
+        operators::resource_bridges::evaluate_diffuse_route(diffuse_ctx);
+    CHECK(diffuse_route.reason ==
+          operators::resource_bridges::diffuse_reason::c100_donor_not_verified);
+
+    diffuse_ctx.ptde_c100_donor_verified = true;
+    diffuse_ctx.diffuse_linear_receiver_ready = false;
+    diffuse_route =
+        operators::resource_bridges::evaluate_diffuse_route(diffuse_ctx);
+    CHECK(diffuse_route.reason ==
+          operators::resource_bridges::diffuse_reason::diffuse_linear_receiver_not_ready);
+
+    diffuse_ctx.diffuse_linear_receiver_ready = true;
+    diffuse_ctx.shared_material_route = true;
+    diffuse_ctx.exact_texture_identity_conjunction = false;
+    diffuse_route =
+        operators::resource_bridges::evaluate_diffuse_route(diffuse_ctx);
+    CHECK(diffuse_route.reason ==
+          operators::resource_bridges::diffuse_reason::shared_material_texture_identity_missing);
+
+    diffuse_ctx.exact_texture_identity_conjunction = true;
+    diffuse_route =
+        operators::resource_bridges::evaluate_diffuse_route(diffuse_ctx);
+    CHECK(diffuse_route.action ==
+          operators::resource_bridges::diffuse_action::bind_ptde_t0_and_full_material_response);
+
     CHECK(gates.set(core::operator_id::post_hdr, true));
     activation = operators::postprocess::hdr.evaluate(gates, verified);
     CHECK(activation.state == core::island_state::fail_open);

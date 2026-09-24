@@ -171,6 +171,31 @@
       "prior_runtime_lineage": "V12 ordinary DifSpcBmp activation PASS",
       "renderer_core_runtime": "NOT_TESTED",
       "pixel": "OPEN"
+    },
+    "diffuse_resource": {
+      "routing_contract": "SOURCE_COMPLETE",
+      "canonical_basis": "project.renderer.equipment_diffuse_bridge_architecture_v1",
+      "receiver_range": [
+        24,
+        35
+      ],
+      "srv_slot": 0,
+      "complete_target": [
+        "EXACT_PTDE_DIFFUSE_COMPANION_T0",
+        "EXACT_PTDE_C100_DONOR",
+        "CERTIFIED_DIFFUSE_LINEAR_RECEIVER"
+      ],
+      "required_guards": [
+        "actual_material_verified",
+        "actual_bound_t0_verified",
+        "ptde_srv_ready"
+      ],
+      "shared_mtd_gate": "EXACT_TEXTURE_IDENTITY_CONJUNCTION",
+      "fail_open": "PRESERVE_EXISTING_ROUTE_INCLUDING_VALID_SPEC_ONLY",
+      "dispatch_when_complete": "FULL_C100_C101_MATERIAL_RESPONSE",
+      "prior_runtime_lineage": "V12 ordinary DifSpcBmp t0 activation PASS",
+      "renderer_core_runtime": "NOT_TESTED",
+      "pixel": "OPEN"
     }
   },
   "legacy_a1": {
