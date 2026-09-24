@@ -1,26 +1,11 @@
 #include "dsrrl/operators/material_response/material_response_seed.hpp"
 #include "dsrrl/operators/material_response/generated_routes_v1.hpp"
+#include "dsrrl/operators/material_response/mtd_semantic_census.hpp"
 
 #include <cstdint>
 
 namespace dsrrl::operators::material_response {
 namespace {
-
-std::uint64_t fnv1a64(const char *text) noexcept
-{
-    constexpr std::uint64_t offset = 14695981039346656037ull;
-    constexpr std::uint64_t prime = 1099511628211ull;
-
-    std::uint64_t hash = offset;
-    if (text == nullptr)
-        return 0;
-
-    for (; *text != '\0'; ++text) {
-        hash ^= static_cast<std::uint8_t>(*text);
-        hash *= prime;
-    }
-    return hash;
-}
 
 int hex_value(char c) noexcept
 {
@@ -55,8 +40,8 @@ std::size_t register_confirmed_material_routes_v1(material_response_island &isla
     for (const auto &seed : generated::k_material_routes_v1) {
         material_profile profile;
         profile.route_index = seed.route_index;
-        profile.semantic_name_hash = fnv1a64(seed.mtd_name);
-        profile.material_family_hash = fnv1a64(seed.material_family);
+        profile.semantic_name_hash = mtd_semantic_hash(seed.mtd_name);
+        profile.material_family_hash = mtd_semantic_hash(seed.material_family);
         profile.c101 = seed.c101;
         profile.lod_min = seed.lod_min;
         profile.lod_max = seed.lod_max;
@@ -78,6 +63,22 @@ std::size_t register_confirmed_material_routes_v1(material_response_island &isla
 
         if (!parse_sha256(seed.sha256, profile.raw_mtd_sha256))
             continue;
+
+        material_identity identity;
+        identity.valid = true;
+        identity.route_index = seed.route_index;
+        identity.semantic_name_hash = profile.semantic_name_hash;
+        identity.raw_mtd_sha256 = profile.raw_mtd_sha256;
+        identity.material_family_hash = profile.material_family_hash;
+        const mtd_semantic_query query{identity, seed.receiver0};
+
+        if (classify_mtd_semantic(
+                query,
+                mtd_semantic_operator::material_response).state !=
+            mtd_semantic_state::use)
+            continue;
+
+        profile.envspec = mtd_envspec_presence(query);
 
         if (island.register_material_profile(profile))
             ++registered;
