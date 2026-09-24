@@ -130,6 +130,7 @@ std::atomic<std::uint64_t> g_create_fail{0};
 std::atomic<std::uint64_t> g_spec_gate{0};
 std::atomic<std::uint64_t> g_diff_gate{0};
 std::atomic<std::uint64_t> g_norm_gate{0};
+std::atomic<std::uint64_t> g_spec_name_reject{0};
 std::atomic<std::uint64_t> g_diff_pair_reject{0};
 std::atomic<std::uint64_t> g_norm_tuple_reject{0};
 std::atomic<std::uint64_t> g_spec_bind{0};
@@ -158,6 +159,19 @@ std::uint64_t fnv_name(const std::wstring &name) noexcept
         h *= 1099511628211ull;
     }
     return h;
+}
+
+bool spec_name_hash_allowed_v12(std::uint64_t value) noexcept
+{
+    std::size_t lo=0,hi=generated::k_diffuse_pairs_v12.size();
+    while(lo<hi){
+        const auto mid=lo+((hi-lo)>>1u);
+        const auto at=generated::k_diffuse_pairs_v12[mid].spec_hash;
+        if(value<at) hi=mid;
+        else if(value>at) lo=mid+1u;
+        else return true;
+    }
+    return false;
 }
 
 void release_view(ID3D11ShaderResourceView *&view) noexcept
@@ -570,6 +584,8 @@ void on_init_resource_view(
         return;
 
     const auto logical_hash = fnv_name(g_logical_name);
+    const bool spec_member =
+        spec_name_hash_allowed_v12(logical_hash);
     const bool normal_member =
         generated::normal_name_hash_allowed_v12(logical_hash);
     const bool diffuse_member =
@@ -577,7 +593,7 @@ void on_init_resource_view(
 
     // Exact V12 corpora are the authority. Unknown logical identities are never
     // associated with a bridge resource, even if a similarly named DDS exists.
-    if (!normal_member && !diffuse_member)
+    if (!spec_member && !normal_member && !diffuse_member)
         return;
 
     auto *native =
@@ -588,6 +604,13 @@ void on_init_resource_view(
     ++g_named_srv;
     companion_set set{};
     set.logical_hash = logical_hash;
+
+    if (spec_member) {
+        const auto spec =
+            load_dds(native, sidecar_path(asset_class::specular, g_logical_name));
+        account_load(asset_class::specular, spec.status);
+        set.specular = spec.view;
+    }
 
     if (generated::diffuse_target_hash_allowed_v12(logical_hash)) {
         const auto diff =
@@ -674,6 +697,7 @@ void on_present(
        << " spec_gate=" << g_spec_gate.load()
        << " diff_gate=" << g_diff_gate.load()
        << " norm_gate=" << g_norm_gate.load()
+       << " spec_name_reject=" << g_spec_name_reject.load()
        << " diff_pair_reject=" << g_diff_pair_reject.load()
        << " norm_tuple_reject=" << g_norm_tuple_reject.load()
        << " spec_bind=" << g_spec_bind.load()
@@ -754,8 +778,10 @@ bool apply_draw(
         !receiver_allowed(route, receiver_id))
         return true;
 
-    // SpecRGB stays disabled until an exact t10-consuming receiver is integrated.
-    const bool want_spec = false;
+    const bool want_spec =
+        receiver_id >= 24u &&
+        receiver_id <= 47u &&
+        g_core->features().enabled(core::operator_id::spec_rgb);
 
     const bool bmp_receiver = receiver_id >= 24u && receiver_id <= 35u;
     const bool want_diff =
@@ -780,6 +806,23 @@ bool apply_draw(
     const auto h0 = logical_hash_for(state.old_t0);
     const auto h1 = logical_hash_for(state.old_t1);
     const auto h2 = logical_hash_for(state.old_t2);
+
+    if (want_spec) {
+        ++g_spec_gate;
+        if (h1 == 0u || !spec_name_hash_allowed_v12(h1)) {
+            ++g_spec_name_reject;
+        } else {
+            ID3D11ShaderResourceView *replacement =
+                lookup(state.old_t1, asset_class::specular);
+            if (replacement != nullptr) {
+                context->PSSetShaderResources(10u, 1u, &replacement);
+                replacement->Release();
+                state.changed_t10 = true;
+                ++g_spec_bind;
+                log_first_bind(asset_class::specular, route, receiver_id);
+            }
+        }
+    }
 
     if (want_diff) {
         ++g_diff_gate;
