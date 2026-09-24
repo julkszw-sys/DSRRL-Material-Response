@@ -1,9 +1,11 @@
 #include "dsrrl/runtime/mr_dxbc_transform.hpp"
 #include "dsrrl/sha256.hpp"
 
+#include <algorithm>
 #include <array>
 #include <cstring>
 #include <limits>
+#include <optional>
 #include <utility>
 
 namespace dsrrl::runtime::mr {
@@ -199,6 +201,114 @@ bool hash_is(std::span<const std::uint8_t> data,std::string_view expected)
     return sha_hex(data)==expected;
 }
 
+struct instruction_view {
+    std::size_t offset=0;
+    std::uint32_t opcode=0;
+    std::size_t length=0;
+};
+
+bool decode_instructions(
+    const std::vector<std::uint32_t> &words,
+    std::vector<instruction_view> &out,
+    std::string &err)
+{
+    out.clear();
+    if(words.size()<2){err="instruction stream header";return false;}
+    std::size_t i=2;
+    while(i<words.size()){
+        const std::size_t len=(words[i]>>24u)&0x7fu;
+        if(len==0 || i+len>words.size()){err="invalid instruction stream";return false;}
+        out.push_back({i,words[i]&0x7ffu,len});
+        i+=len;
+    }
+    if(i!=words.size()){err="instruction stream tail";return false;}
+    return true;
+}
+
+struct cb_ref {
+    std::size_t slot_word=0;
+    std::size_t index_word=0;
+    std::uint32_t slot=0;
+    std::uint32_t index=0;
+};
+
+std::vector<cb_ref> constant_buffer_refs(
+    const std::vector<std::uint32_t> &words,
+    const instruction_view &ins)
+{
+    std::vector<cb_ref> out;
+    std::size_t rel=1;
+    while(rel<ins.length){
+        const auto token=words[ins.offset+rel];
+        const auto base=token&0x7fffffffu;
+        if((base&0x00fff00fu)==0x00208006u){
+            const bool ext=(token&0x80000000u)!=0;
+            const std::size_t j=rel+1u+(ext?1u:0u);
+            if(j+1u<ins.length){
+                out.push_back({
+                    ins.offset+j,
+                    ins.offset+j+1u,
+                    words[ins.offset+j],
+                    words[ins.offset+j+1u]
+                });
+            }
+            rel=j+2u;
+            continue;
+        }
+        ++rel;
+    }
+    return out;
+}
+
+bool contains_cb_pair(const std::vector<cb_ref> &refs,std::uint32_t slot,std::uint32_t index)
+{
+    for(const auto &r:refs)
+        if(r.slot==slot && r.index==index) return true;
+    return false;
+}
+
+std::vector<chunk> without_rdef(std::vector<chunk> chunks)
+{
+    chunks.erase(
+        std::remove_if(chunks.begin(),chunks.end(),[](const chunk &c){
+            return std::memcmp(c.tag.data(),"RDEF",4)==0;
+        }),
+        chunks.end());
+    return chunks;
+}
+
+bool verify_upper_lower_payload(
+    std::span<const std::uint8_t> code,
+    std::string &err)
+{
+    std::vector<chunk> chunks;
+    std::vector<std::uint32_t> words;
+    std::size_t shex=0;
+    if(!get_shex_words(code,chunks,shex,words,err)) return false;
+    std::vector<instruction_view> instructions;
+    if(!decode_instructions(words,instructions,err)) return false;
+
+    std::size_t b13_decl=0;
+    std::vector<std::uint32_t> b13_indices;
+    for(const auto &ins:instructions){
+        if(ins.opcode==0x59u && ins.length==4u &&
+           words[ins.offset+1u]==0x00208e46u &&
+           words[ins.offset+2u]==13u && words[ins.offset+3u]==8u){
+            ++b13_decl;
+            continue;
+        }
+        if(ins.opcode==0x59u) continue;
+        for(const auto &r:constant_buffer_refs(words,ins))
+            if(r.slot==13u) b13_indices.push_back(r.index);
+    }
+    std::sort(b13_indices.begin(),b13_indices.end());
+    if(b13_decl!=1u || b13_indices!=std::vector<std::uint32_t>{6u,7u,7u}){
+        err="U/L postcondition b13 declaration/references";
+        return false;
+    }
+    return true;
+}
+
 } // namespace
 
 const plan *find_plan(std::size_t size,std::string_view sha256) noexcept
@@ -248,6 +358,163 @@ transform_result transform(std::span<const std::uint8_t> stock,const plan &p,var
         r.error="V211 output SHA";return r;
     }
     r.ok=true; r.code=std::move(v211); return r;
+}
+
+transform_result transform_upper_lower(
+    std::span<const std::uint8_t> base,
+    std::string_view expected_output_sha256)
+{
+    transform_result r;
+    std::vector<chunk> chunks;
+    std::vector<std::uint32_t> words;
+    std::size_t shex=0;
+    if(!get_shex_words(base,chunks,shex,words,r.error)) return r;
+
+    std::vector<instruction_view> instructions;
+    if(!decode_instructions(words,instructions,r.error)) return r;
+
+    struct candidate {
+        instruction_view add{};
+        instruction_view mad{};
+        std::vector<cb_ref> add_refs;
+        std::vector<cb_ref> mad_refs;
+    };
+    std::vector<candidate> candidates;
+
+    for(std::size_t i=1;i+1<instructions.size();++i){
+        const auto &prev=instructions[i-1];
+        const auto &mid=instructions[i];
+        const auto &next=instructions[i+1];
+        if(prev.opcode!=0x32u || mid.opcode!=0x0u || next.opcode!=0x32u) continue;
+        const auto mr=constant_buffer_refs(words,mid);
+        const auto nr=constant_buffer_refs(words,next);
+        if(contains_cb_pair(mr,0u,7u) &&
+           contains_cb_pair(mr,0u,8u) &&
+           contains_cb_pair(nr,0u,8u))
+            candidates.push_back({mid,next,mr,nr});
+    }
+    if(candidates.size()!=1u){r.error="U/L expected exactly one MIN-ADD-MIN island";return r;}
+
+    auto &c=candidates.front();
+    std::size_t changed=0;
+    auto rewrite=[&](const std::vector<cb_ref> &refs){
+        for(const auto &ref:refs){
+            if(ref.slot!=0u || (ref.index!=7u && ref.index!=8u)) continue;
+            words[ref.slot_word]=13u;
+            words[ref.index_word]=(ref.index==7u)?6u:7u;
+            ++changed;
+        }
+    };
+    rewrite(c.add_refs);
+    rewrite(c.mad_refs);
+    if(changed!=3u){r.error="U/L expected exactly three b0[7/8] rewrites";return r;}
+
+    if(!decode_instructions(words,instructions,r.error)) return r;
+    std::optional<instruction_view> last_cb;
+    for(const auto &ins:instructions)
+        if(ins.opcode==0x59u) last_cb=ins;
+    if(!last_cb){r.error="U/L constant-buffer declaration missing";return r;}
+
+    for(const auto &ins:instructions){
+        if(ins.opcode==0x59u && ins.length==4u &&
+           words[ins.offset+1u]==0x00208e46u &&
+           words[ins.offset+2u]==13u){
+            r.error="U/L b13 already declared"; return r;
+        }
+    }
+
+    constexpr std::array<std::uint32_t,4> b13_decl = {
+        0x04000059u,0x00208e46u,0x0000000du,0x00000008u
+    };
+    const auto insert_at=last_cb->offset+last_cb->length;
+    words.insert(words.begin()+static_cast<std::ptrdiff_t>(insert_at),b13_decl.begin(),b13_decl.end());
+    words[1]=static_cast<std::uint32_t>(words.size());
+
+    chunks=without_rdef(std::move(chunks));
+    shex=0;
+    bool found_code=false;
+    for(std::size_t i=0;i<chunks.size();++i)
+        if(std::memcmp(chunks[i].tag.data(),"SHEX",4)==0 ||
+           std::memcmp(chunks[i].tag.data(),"SHDR",4)==0){
+            shex=i; found_code=true; break;
+        }
+    if(!found_code){r.error="U/L code chunk lost after RDEF filter";return r;}
+
+    auto out=rebuild_words(base,std::move(chunks),shex,words,r.error);
+    if(out.empty()) return r;
+    if(!verify_upper_lower_payload(out,r.error)) return r;
+    if(!expected_output_sha256.empty() && !hash_is(out,expected_output_sha256)){
+        r.error="U/L output SHA"; return r;
+    }
+    r.ok=true; r.code=std::move(out); return r;
+}
+
+transform_result transform_spec_rgb(std::span<const std::uint8_t> base)
+{
+    transform_result r;
+    std::vector<chunk> chunks;
+    std::vector<std::uint32_t> words;
+    std::size_t shex=0;
+    if(!get_shex_words(base,chunks,shex,words,r.error)) return r;
+
+    std::vector<instruction_view> instructions;
+    if(!decode_instructions(words,instructions,r.error)) return r;
+
+    std::vector<instruction_view> dcls;
+    std::vector<instruction_view> samples;
+    for(const auto &ins:instructions){
+        if(ins.opcode==0x58u && ins.length==4u && words[ins.offset+3u]==1u)
+            dcls.push_back(ins);
+        if(ins.opcode>=0x45u && ins.opcode<=0x4au && ins.length==11u &&
+           words[ins.offset+8u]==1u)
+            samples.push_back(ins);
+    }
+    if(dcls.size()!=1u){r.error="SpecRGB expected exactly one dcl_resource t1";return r;}
+    if(samples.size()!=1u){r.error="SpecRGB expected exactly one 11-word t1 sample";return r;}
+
+    const auto dcl=dcls.front();
+    const auto sample=samples.front();
+    if(sample.offset<=dcl.offset){r.error="SpecRGB t1 sample precedes declaration";return r;}
+    if(words[sample.offset+3u]<0x10u){r.error="SpecRGB destination mask precondition";return r;}
+
+    std::array<std::uint32_t,4> new_dcl{};
+    std::copy_n(words.begin()+static_cast<std::ptrdiff_t>(dcl.offset),4,new_dcl.begin());
+    new_dcl[3]=10u;
+
+    std::array<std::uint32_t,11> new_sample{};
+    std::copy_n(words.begin()+static_cast<std::ptrdiff_t>(sample.offset),11,new_sample.begin());
+    new_sample[3]-=0x10u;
+    new_sample[8]=10u;
+
+    words.insert(
+        words.begin()+static_cast<std::ptrdiff_t>(dcl.offset+4u),
+        new_dcl.begin(),new_dcl.end());
+    const auto shifted_sample=sample.offset+4u;
+    words.insert(
+        words.begin()+static_cast<std::ptrdiff_t>(shifted_sample+11u),
+        new_sample.begin(),new_sample.end());
+    words[1]=static_cast<std::uint32_t>(words.size());
+
+    auto out=rebuild_words(base,std::move(chunks),shex,words,r.error);
+    if(out.empty()) return r;
+
+    if(!get_shex_words(out,chunks,shex,words,r.error)) return r;
+    if(!decode_instructions(words,instructions,r.error)) return r;
+    std::size_t t1_dcl=0,t10_dcl=0,t1_sample=0,t10_sample=0;
+    for(const auto &ins:instructions){
+        if(ins.opcode==0x58u && ins.length==4u){
+            if(words[ins.offset+3u]==1u) ++t1_dcl;
+            if(words[ins.offset+3u]==10u) ++t10_dcl;
+        }
+        if(ins.opcode>=0x45u && ins.opcode<=0x4au && ins.length==11u){
+            if(words[ins.offset+8u]==1u) ++t1_sample;
+            if(words[ins.offset+8u]==10u) ++t10_sample;
+        }
+    }
+    if(t1_dcl!=1u || t10_dcl!=1u || t1_sample!=1u || t10_sample!=1u){
+        r.error="SpecRGB t1/t10 postcondition"; return r;
+    }
+    r.ok=true; r.code=std::move(out); return r;
 }
 
 } // namespace dsrrl::runtime::mr
