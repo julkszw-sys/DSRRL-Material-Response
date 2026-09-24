@@ -795,7 +795,7 @@ int main()
         core::find_operator_contract(core::operator_id::subsurface);
     CHECK(subsurface_contract.has_value());
     CHECK(subsurface_contract->status == core::canonical_status::high_confidence);
-    CHECK(subsurface_contract->default_state == core::port_state::off);
+    CHECK(subsurface_contract->default_state == core::port_state::active_candidate);
     CHECK(operators::resource_bridges::subsurface.id() == core::operator_id::subsurface);
     CHECK(operators::lightbank::upper_lower.id() == core::operator_id::upper_lower);
     CHECK(operators::lightbank::hemdir3.id() == core::operator_id::hemdir3);
