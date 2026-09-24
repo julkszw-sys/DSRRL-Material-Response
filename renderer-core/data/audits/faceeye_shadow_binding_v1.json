@@ -1,0 +1,52 @@
+{
+  "schema": 1,
+  "audit": "DSR FaceEye shadow t7/s7 declaration partition",
+  "canonical_revision": 8881,
+  "source_artifact_id": 99,
+  "source_artifact_sha256": "57314b36812dfa2867512052278a08dc0da8a41ea0414c1fbbe4ccdf45838076",
+  "source_members": [
+    "DSR/shader/FRPG_FlverPBL_fpo_DX11.shaderbnd.dcx",
+    "DSR/mtd/Mtd.mtdbnd.dcx -> Ps_Eye[DS].mtd"
+  ],
+  "local_audit_script_sha256": "829837230b193f1c7156aecef620f0c1889b2612e604c05438542c312468d75e",
+  "local_report_sha256": "490f659caaf1a0576e75d41634f2222f6d206feb5d8ab61e81c2ca9c5d1f7088",
+  "ps_eye_mtd_sha256": "e806f10306b9e7fbeaffd3e9160a5db2f446dc3d7a9ec148abede5e609b1e5c3",
+  "pass": true,
+  "shader_count": 8,
+  "t7_descriptor_unique_count": 1,
+  "t7": {
+    "name": "gSMP_7",
+    "type": 2,
+    "return_type": 5,
+    "dimension": 4,
+    "bind_point": 7,
+    "bind_count": 1,
+    "flags": 13
+  },
+  "s7": {
+    "name": "gSMP_7Sampler",
+    "bind_point": 7,
+    "comparison_flags": 3,
+    "regular_flags": 1,
+    "comparison_suffixes": [
+      "no-point",
+      "PntS"
+    ],
+    "regular_suffixes": [
+      "PntSS",
+      "PntSSSS"
+    ]
+  },
+  "mtd": {
+    "references_faceeye_spx": true,
+    "contains_gSMP_7": false,
+    "contains_diffuse5": true,
+    "contains_specular5": true
+  },
+  "conclusion": {
+    "static_carrier_boundary": "SHADER+SAMPLER",
+    "resource_sidecar_required_by_static_abi": false,
+    "actual_runtime_t7_object": "OPEN",
+    "actual_runtime_s7_descriptor": "OPEN"
+  }
+}
