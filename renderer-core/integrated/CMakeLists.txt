@@ -69,9 +69,7 @@ if(MSVC)
     target_compile_options(
         dsrrl_renderer_core_integrated
         PRIVATE
-        /W4
-        /WX
-        /EHsc)
+        "$<$<COMPILE_LANGUAGE:CXX>:/W4;/WX;/EHsc>")
 endif()
 
 set_target_properties(
