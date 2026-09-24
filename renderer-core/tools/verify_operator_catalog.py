@@ -28,6 +28,7 @@ REQUIRED_IDS = {
     "dsr_native_sfx",
     "dsr_sfx_inverse_tonemap",
     "pmetal_black_safe_source",
+    "pmetal_black_safe_v10",
 }
 
 def main() -> int:
