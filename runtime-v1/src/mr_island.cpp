@@ -8,6 +8,7 @@
 #include "dsrrl/runtime/mr_island.hpp"
 #include "dsrrl/runtime/mr_dxbc_transform.hpp"
 #include "dsrrl/runtime/engine_hooks.hpp"
+#include "dsrrl/runtime/asset_bridges.hpp"
 #include "dsrrl/core/renderer_core.hpp"
 #include "dsrrl/sha256.hpp"
 #include "ptde_material_donor_registry.hpp"
@@ -309,7 +310,9 @@ void on_bind_pipeline(command_list *cmd,pipeline_stage stages,pipeline p)
 bool on_draw_indexed(command_list *cmd,std::uint32_t index_count,std::uint32_t instance_count,
                      std::uint32_t first_index,std::int32_t vertex_offset,std::uint32_t first_instance)
 {
-    const int donor=g_draw_donor; g_draw_donor=-1;
+    const int donor=g_draw_donor;
+    g_draw_donor=-1;
+
     if(!g_core || !g_core->features().enabled(core::operator_id::material_response) ||
        !g_enabled.load() || g_quarantined.load() || !cmd || cmd!=g_bound_command ||
        g_bound_host<0 || g_bound_host>=24 || donor<0 ||
@@ -330,12 +333,15 @@ bool on_draw_indexed(command_list *cmd,std::uint32_t index_count,std::uint32_t i
         ++g_fail_open; return false;
     }
 
-    bool replayed=false;
-    ID3D11Device *dev=nullptr; ctx->GetDevice(&dev);
+    bool issued=false;
+    bool restore_ok=true;
+    ID3D11Device *dev=nullptr;
+    ctx->GetDevice(&dev);
     ID3D11PixelShader *oldps=nullptr,*replacement=nullptr;
     ID3D11Buffer *b12=nullptr;
     ID3D11DeviceContext1 *ctx1=nullptr;
     cb_capture oldcb{};
+    assets::draw_state asset_state{};
 
     if(dev){
         ctx->PSGetShader(&oldps,nullptr,nullptr);
@@ -348,6 +354,7 @@ bool on_draw_indexed(command_list *cmd,std::uint32_t index_count,std::uint32_t i
                 if(replacement) replacement->AddRef();
             }
         }
+
         b12=realize_b12(dev,donor);
         ctx->QueryInterface(__uuidof(ID3D11DeviceContext1),reinterpret_cast<void**>(&ctx1));
         oldcb=capture_cb(ctx,ctx1);
@@ -355,20 +362,40 @@ bool on_draw_indexed(command_list *cmd,std::uint32_t index_count,std::uint32_t i
         if(oldps && replacement && b12 && oldcb.coherent){
             ctx->PSSetShader(replacement,nullptr,0);
             ctx->PSSetConstantBuffers(12,1,&b12);
-            if(instance_count<=1)
-                ctx->DrawIndexed(index_count,first_index,vertex_offset);
-            else
-                ctx->DrawIndexedInstanced(index_count,instance_count,first_index,vertex_offset,first_instance);
+
+            const std::uint32_t receiver_id=24u+static_cast<std::uint32_t>(g_bound_host);
+            assets::material_route_scope route{};
+            route.exact=true;
+            route.diffuse_normal_eligible=g_bound_host<12;
+            route.diffuse_c100_carrier_active=true;
+            route.route_index=static_cast<std::uint32_t>(donor);
+            route.receivers={receiver_id,0u,0u};
+
+            const bool assets_ok=assets::apply_draw(ctx,route,receiver_id,asset_state);
+            if(assets_ok){
+                if(instance_count<=1)
+                    ctx->DrawIndexed(index_count,first_index,vertex_offset);
+                else
+                    ctx->DrawIndexedInstanced(index_count,instance_count,first_index,vertex_offset,first_instance);
+                issued=true;
+            }
+
+            const bool assets_restored=assets::restore_draw(ctx,asset_state);
             ctx->PSSetShader(oldps,nullptr,0);
             restore_cb(ctx,ctx1,oldcb);
-            replayed=verify_restore(ctx,ctx1,oldcb);
+            const bool mr_restored=verify_restore(ctx,ctx1,oldcb);
+            restore_ok=assets_restored && mr_restored;
         }
     }
 
-    if(!replayed){
+    // If the draw was not issued, restore any partially changed state and let
+    // ReShade execute the original draw. If it was issued, always consume the
+    // event; returning false after a restore fault would duplicate the draw.
+    if(!issued){
         ++g_fail_open;
+        (void)assets::restore_draw(ctx,asset_state);
         if(oldps) ctx->PSSetShader(oldps,nullptr,0);
-        if(ctx) restore_cb(ctx,ctx1,oldcb);
+        restore_cb(ctx,ctx1,oldcb);
     }else{
         ++g_replays;
     }
@@ -380,14 +407,15 @@ bool on_draw_indexed(command_list *cmd,std::uint32_t index_count,std::uint32_t i
     if(oldps)oldps->Release();
     if(dev)dev->Release();
 
-    if(!g_core->transactions().restore(command)){
-        ++g_restore_fail; g_quarantined.store(true);
-        log_error("DSRRL Runtime v1 MR: transaction restore fault; MR quarantined.");
+    const bool tx_restored=g_core->transactions().restore(command);
+    if(!tx_restored || !restore_ok){
+        ++g_restore_fail;
+        g_quarantined.store(true);
+        log_error("DSRRL Runtime v1 MR: draw restore fault; MR quarantined after issued transaction.");
     }
-    if(!replayed) ++g_restore_fail;
-    return replayed;
-}
 
+    return issued;
+}
 void on_present(command_queue *,swapchain *,const rect *,const rect *,std::uint32_t,const rect *)
 {
     const auto n=++g_present;
