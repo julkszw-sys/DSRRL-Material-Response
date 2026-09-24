@@ -19,7 +19,8 @@ bool receiver_registry::register_receiver(const receiver_descriptor &descriptor)
 {
     if (descriptor.receiver_id == 0 ||
         descriptor.fast_hash == 0 ||
-        digest_is_zero(descriptor.exact_sha256))
+        digest_is_zero(descriptor.exact_sha256) ||
+        (descriptor.capabilities & ~all_operator_bits) != 0u)
         return false;
 
     std::lock_guard lock(mutex_);
