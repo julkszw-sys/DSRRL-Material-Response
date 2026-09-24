@@ -22,7 +22,7 @@ Current shader/operator islands include:
 - PntS attenuation;
 - local legacy PointLight specular;
 - terminal RGB SAT;
-- terminal RGBA SAT diagnostic;
+- terminal RGBA SAT generic translator — REJECTED/BLOCKED;
 - fixed-family post-Fog identity;
 - FaceEye legacy shadow/environment;
 - Bloom;
@@ -40,7 +40,7 @@ Resource/material bridges are also explicit islands:
 
 ## State policy
 
-`BLOCKED` operators always fail open even when their feature gate is enabled.
+`REJECTED` canonical operators and `BLOCKED` operators always fail open even when their feature gate is enabled.
 `STOCK` host-preservation islands always preserve DSR.
 `DIAGNOSTIC` operators require an explicit diagnostic opt-in.
 Every other island still requires its declared verified receiver/material/resource/
@@ -315,3 +315,39 @@ This removes the former external-artifact blocker for exact recipe provenance.
 Runtime materialization is still a separate implementation/activation layer: the
 presence of exact offsets in Git does not by itself authorize the legacy combined
 replacement payload or promote runtime/pixel status.
+
+
+## RE closure: generic combined-RGBA terminal SAT is rejected
+
+Canonical revision 8857 closes the weakest historical island by falsification rather
+than by expanding its patch scope. Independent re-parse of source artifact 99
+(`DSRRL_FINAL_EVIDENCE_PART02(2).zip`, SHA-256
+`57314b36812dfa2867512052278a08dc0da8a41ea0414c1fbbe4ccdf45838076`)
+covers all 384 recovered exact-name PTDE `FRPG_Phn` HemEnv/HemEnvLerp shaders:
+
+- 96 BASE, 96 PntS, 96 PntSS and 96 PntSSSS;
+- 384/384 last `COLOROUT0` writes use RGB mask `0x7` with SAT;
+- 0/384 use a combined RGBA terminal write;
+- the recovered PTDE Phn HemEnv corpus contains no exact-name `Alp`,
+  `Parallax` or `Subsurf` variants.
+
+The historical 0x4000 class selected DSR combined-RGBA writes. Setting SAT on that
+instruction therefore clamps alpha in addition to RGB, which is not the recovered
+PTDE Phn terminal operator. The same historical hash class also carries 120
+byte-identical collateral aliases, including DSR-only Parallax/Subsurf/Phn-Alp
+names; byte identity is not semantic authorization.
+
+Consequences for Renderer Core:
+
+- `surface.terminal_sat_rgba` is canonical `REJECTED` and `BLOCKED`;
+- legacy mask bit `0x4000` is a rejected migration bit;
+- diagnostic opt-in cannot activate the generic island;
+- `surface.terminal_sat_rgb` is unchanged and remains the correct primitive for
+  verified separate RGB terminal writes;
+- a future combined-write receiver can reopen only through a narrow body rewrite
+  that saturates RGB while preserving alpha, or direct alpha-equivalence proof for
+  one exact gated subclass.
+
+Reproducible audit metadata is stored in
+`data/audits/terminal_sat_rgba_revalidation_rev8857.json`; the parser is
+`tools/audit_ptde_phn_terminal_write.py`.
