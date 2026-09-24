@@ -89,6 +89,11 @@ operators::point_light::pointlight_runtime_context ready_pointlight(
     c.fixed_receiver_payload_ready=true;
     c.fixed_membership_verified=true;
     c.clustered_cpu_membership_sidecar_ready=true;
+    c.clustered_membership_order_verified=true;
+    c.clustered_count_provenance_ready=true;
+    c.clustered_raw_selected_count=4;
+    c.clustered_material_max_count=4;
+    c.clustered_effective_count=4;
     c.clustered_four_slot_shader_ready=true;
     c.stock_cluster_membership_bypassed=true;
     c.diffuse_material_path_ready=true;
@@ -121,7 +126,6 @@ int main()
     CHECK(pointlight_contract.has_value());
     CHECK(pointlight_contract->default_state==core::port_state::partial);
 
-    // FaceEye packed depth and response math.
     using operators::surface::faceeye_vec3;
     const float packed=
         operators::surface::decode_faceeye_packed_depth({1.0f,0.0f,0.0f});
@@ -157,11 +161,8 @@ int main()
 
     core::feature_registry features;
     const auto activation=verified_activation();
-
     CHECK(features.set(core::operator_id::faceeye_shadow_legacy,true));
 
-    // no-Point/PntS families have comparison s7 in DSR, so PTDE manual SAMPLE
-    // requires a verified regular-sampler override.
     auto face=ready_faceeye(
         operators::surface::faceeye_receiver_variant::sdw_pnts);
     auto face_plan=
@@ -191,8 +192,6 @@ int main()
           operators::surface::faceeye_runtime_reason::
               regular_s7_descriptor_not_verified);
 
-    // PntSS/PntSSSS already expose regular s7, but its live state still needs
-    // explicit verification.
     face=ready_faceeye(
         operators::surface::faceeye_receiver_variant::sdw_pntss);
     face.regular_s7_sampler_ready=false;
@@ -221,7 +220,6 @@ int main()
           operators::surface::faceeye_runtime_reason::
               csd_matrix_region_not_ready);
 
-    // PTDE local specular stays additive and has no common NdotL multiplier.
     operators::point_light::legacy_specular_input spec{};
     spec.source_rgb={1.0f,2.0f,3.0f};
     spec.attenuation=0.5f;
@@ -250,7 +248,6 @@ int main()
               fail_open_invalid_exponent);
 
     CHECK(features.set(core::operator_id::local_specular_legacy,true));
-
     auto local=ready_local_spec(
         operators::point_light::local_specular_receiver_class::
             fixed_spc_pntss);
@@ -272,8 +269,7 @@ int main()
               fixed_membership_not_verified);
 
     local=ready_local_spec(
-        operators::point_light::local_specular_receiver_class::
-            clustered_pnts);
+        operators::point_light::local_specular_receiver_class::clustered_pnts);
     local.clustered_membership_sidecar_ready=false;
     local_plan=
         operators::point_light::evaluate_local_specular_runtime_readiness(
@@ -283,7 +279,6 @@ int main()
           operators::point_light::local_specular_runtime_reason::
               clustered_membership_sidecar_not_ready);
 
-    // Full PointLight: fixed payloads can retain verified fixed membership.
     CHECK(features.set(core::operator_id::point_light,true));
     auto point=ready_pointlight(
         operators::point_light::pointlight_receiver_stratum::
@@ -309,17 +304,41 @@ int main()
           operators::point_light::pointlight_runtime_reason::
               local_specular_path_not_ready);
 
-    // Clustered PntS must use independently captured PTDE-selected four-slot
-    // membership; stock DSR t16/t17 membership is not a valid selector.
+    // Clustered PntS uses the PTDE first-four ordered sidecar and the exact
+    // material count clamp. Stock DSR t16/t17/count64 never authorizes it.
     point=ready_pointlight(
         operators::point_light::pointlight_receiver_stratum::clustered_pnts);
+    point.clustered_raw_selected_count=4;
+    point.clustered_material_max_count=2;
+    point.clustered_effective_count=2;
     point_plan=
         operators::point_light::evaluate_pointlight_runtime_readiness(
             features,activation,point);
     CHECK(point_plan.ready);
     CHECK(point_plan.use_cpu_selected_four_sidecar);
     CHECK(point_plan.bypass_stock_cluster_membership);
+    CHECK(point_plan.selected_light_count==2);
 
+    point.clustered_membership_order_verified=false;
+    point_plan=operators::point_light::evaluate_pointlight_runtime_readiness(
+        features,activation,point);
+    CHECK(!point_plan.ready);
+    CHECK(point_plan.reason==
+          operators::point_light::pointlight_runtime_reason::
+              clustered_membership_order_not_verified);
+
+    point=ready_pointlight(
+        operators::point_light::pointlight_receiver_stratum::clustered_pnts);
+    point.clustered_effective_count=3;
+    point_plan=operators::point_light::evaluate_pointlight_runtime_readiness(
+        features,activation,point);
+    CHECK(!point_plan.ready);
+    CHECK(point_plan.reason==
+          operators::point_light::pointlight_runtime_reason::
+              clustered_effective_count_invalid);
+
+    point=ready_pointlight(
+        operators::point_light::pointlight_receiver_stratum::clustered_pnts);
     point.stock_cluster_membership_bypassed=false;
     point_plan=
         operators::point_light::evaluate_pointlight_runtime_readiness(
@@ -341,7 +360,6 @@ int main()
           operators::point_light::pointlight_runtime_reason::
               special_source_scope_not_supported);
 
-    // Disabled feature remains a hard no-op.
     core::feature_registry disabled;
     face=ready_faceeye(
         operators::surface::faceeye_receiver_variant::sdw_pnts);
