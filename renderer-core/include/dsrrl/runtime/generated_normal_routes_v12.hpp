@@ -565,7 +565,7 @@ inline constexpr std::array<normal_tuple_v12, 557> k_normal_tuples_v12 = {{
     {0xfa45412c0413919aull, 0x819d0ad124ee1da4ull, 0x819d0fd124ee2623ull},
     {0xfd796866f3c7a5f3ull, 0x8dd965365e38f675ull, 0x8dd958365e38e05eull},
     {0xfd796966f3c7a7a6ull, 0x988e963664de34b8ull, 0x988ea33664de4acfull},
-};
+}};
 
 inline constexpr std::array<std::uint64_t, 1664> k_normal_tuple_member_hashes_v12 = {{
     0x00178fc6032dce64ull,
@@ -2232,7 +2232,7 @@ inline constexpr std::array<std::uint64_t, 1664> k_normal_tuple_member_hashes_v1
     0xffa0c09c05700af6ull,
     0xffbfa513405b288bull,
     0xffbfb013405b3b3cull,
-};
+}};
 
 inline constexpr std::array<std::uint64_t, 555> k_normal_target_hashes_v12 = {{
     0x001794c6032dd6e3ull,
@@ -2790,7 +2790,7 @@ inline constexpr std::array<std::uint64_t, 555> k_normal_target_hashes_v12 = {{
     0xff918980c71efef3ull,
     0xffa0c09c05700af6ull,
     0xffbfa513405b288bull,
-};
+}};
 
 template <std::size_t N>
 inline bool sorted_hash_contains(const std::array<std::uint64_t,N> &values, std::uint64_t value) noexcept
