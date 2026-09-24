@@ -12,6 +12,9 @@ add_library(dsrrl_renderer_core STATIC
     src/shader_registry.cpp
     src/draw_transaction.cpp
     src/renderer_core.cpp
+    src/operators/material_response/material_response_island.cpp
+    src/operators/material_response/material_response_seed.cpp
+    src/operators/env_spec/env_spec_island.cpp
 )
 target_include_directories(dsrrl_renderer_core PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
 target_compile_features(dsrrl_renderer_core PUBLIC cxx_std_17)
@@ -26,10 +29,16 @@ add_executable(dsrrl_renderer_core_tests tests/core_phase0_tests.cpp)
 target_link_libraries(dsrrl_renderer_core_tests PRIVATE dsrrl_renderer_core)
 target_compile_features(dsrrl_renderer_core_tests PRIVATE cxx_std_17)
 
+add_executable(dsrrl_renderer_island_tests tests/islands_phase1_tests.cpp)
+target_link_libraries(dsrrl_renderer_island_tests PRIVATE dsrrl_renderer_core)
+target_compile_features(dsrrl_renderer_island_tests PRIVATE cxx_std_17)
+
 if(MSVC)
     target_compile_options(dsrrl_renderer_core_tests PRIVATE /W4 /WX)
+    target_compile_options(dsrrl_renderer_island_tests PRIVATE /W4 /WX)
 else()
     target_compile_options(dsrrl_renderer_core_tests PRIVATE -Wall -Wextra -Wpedantic -Werror)
+    target_compile_options(dsrrl_renderer_island_tests PRIVATE -Wall -Wextra -Wpedantic -Werror)
 endif()
 
 if(DSRRL_BUILD_PHASE0_PROBE)
@@ -59,3 +68,4 @@ endif()
 
 enable_testing()
 add_test(NAME dsrrl_renderer_core_tests COMMAND dsrrl_renderer_core_tests)
+add_test(NAME dsrrl_renderer_island_tests COMMAND dsrrl_renderer_island_tests)

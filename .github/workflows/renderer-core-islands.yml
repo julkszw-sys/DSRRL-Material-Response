@@ -1,0 +1,31 @@
+name: Renderer Core Islands
+
+on:
+  push:
+    branches:
+      - dev/renderer-core-v1-islands
+    paths:
+      - "renderer-core/**"
+      - ".github/workflows/renderer-core-islands.yml"
+  pull_request:
+    paths:
+      - "renderer-core/**"
+      - ".github/workflows/renderer-core-islands.yml"
+
+jobs:
+  islands-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify generated material routes
+        run: |
+          python3 renderer-core/tools/generate_material_routes.py \
+            --input renderer-core/data/material_response_routes_v1.json \
+            --output /tmp/generated_routes_v1.hpp
+          cmp /tmp/generated_routes_v1.hpp renderer-core/include/dsrrl/operators/material_response/generated_routes_v1.hpp
+      - name: Configure
+        run: cmake -S renderer-core -B build/renderer-core -DCMAKE_BUILD_TYPE=Release
+      - name: Build
+        run: cmake --build build/renderer-core --config Release --parallel
+      - name: Test
+        run: ctest --test-dir build/renderer-core --output-on-failure
