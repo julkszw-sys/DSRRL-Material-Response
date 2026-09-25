@@ -19,7 +19,7 @@ inline constexpr std::array<std::uint16_t,26> k_faceeye_aux_dirlight_offsets={{0
 // c123,c140..c155,c158..c160. c174/c182 are transported producer lanes but
 // are outside the closed FaceEye pixel chain and therefore do not gate it.
 inline constexpr std::array<std::size_t,4> k_faceeye_sdw_consumed_lane_indices={{0,1,19,24}};
-inline constexpr std::array<std::size_t,19> k_faceeye_csd_only_consumed_lane_indices={{2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,20,21}};
+inline constexpr std::array<std::size_t,20> k_faceeye_csd_only_consumed_lane_indices={{2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,20,21,22}};
 inline constexpr std::array<std::size_t,2> k_faceeye_transport_only_lane_indices={{23,25}};
 struct faceeye_auxiliary_snapshot_descriptor {
  std::array<bool,26> register_present{};
