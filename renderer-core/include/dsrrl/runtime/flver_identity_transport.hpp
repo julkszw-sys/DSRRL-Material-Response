@@ -8,6 +8,7 @@ struct hook_status {
     bool parser_armed = false;
     bool selector_armed = false;
     bool destructor_armed = false;
+    bool restore_failed = false;
 };
 
 bool install() noexcept;
