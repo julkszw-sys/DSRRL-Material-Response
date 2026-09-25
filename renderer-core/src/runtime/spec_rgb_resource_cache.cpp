@@ -11,8 +11,20 @@ spec_rgb_resource_result spec_rgb_resource_cache::register_exact(const std::u16s
     if (stock_t1_srv == 0 || ptde_t10_srv == 0) return spec_rgb_resource_result::fail_open_invalid_resource;
     std::lock_guard<std::mutex> lock(mutex_);
     if (ambiguous_stock_.find(stock_t1_srv) != ambiguous_stock_.end()) return spec_rgb_resource_result::fail_open_conflicting_stock_binding;
+    if (ambiguous_companion_.find(ptde_t10_srv) != ambiguous_companion_.end()) return spec_rgb_resource_result::fail_open_conflicting_companion;
     const auto companion_owner = name_by_companion_.find(ptde_t10_srv);
-    if (companion_owner != name_by_companion_.end() && companion_owner->second != logical_name) return spec_rgb_resource_result::fail_open_conflicting_companion;
+    if (companion_owner != name_by_companion_.end() && companion_owner->second != logical_name) {
+        const auto previous=by_name_.find(companion_owner->second);
+        if(previous!=by_name_.end()){
+            name_by_stock_.erase(previous->second.stock_t1_srv);
+            previous->second.stock_t1_srv=0;
+            previous->second.ptde_t10_srv=0;
+            previous->second.ambiguous=true;
+        }
+        name_by_companion_.erase(companion_owner);
+        ambiguous_companion_.insert(ptde_t10_srv);
+        return spec_rgb_resource_result::fail_open_conflicting_companion;
+    }
     const auto stock_owner=name_by_stock_.find(stock_t1_srv);
     if(stock_owner!=name_by_stock_.end() && stock_owner->second!=logical_name){
         const auto previous=by_name_.find(stock_owner->second);
@@ -35,6 +47,7 @@ spec_rgb_bind_plan spec_rgb_resource_cache::plan_bind(const spec_rgb_bind_reques
     if(ambiguous_stock_.find(request.currently_bound_t1)!=ambiguous_stock_.end()) return out;
     const auto found=by_name_.find(request.logical_name); if(found==by_name_.end() || found->second.ambiguous) return out;
     const entry &record=found->second; if(record.stock_t1_srv==0 || record.ptde_t10_srv==0 || record.stock_t1_srv!=request.currently_bound_t1) return out;
+    if(ambiguous_companion_.find(record.ptde_t10_srv)!=ambiguous_companion_.end()) return out;
     const auto companion_owner=name_by_companion_.find(record.ptde_t10_srv); if(companion_owner==name_by_companion_.end() || companion_owner->second!=request.logical_name) return out;
     out.activate=true; out.ptde_t10_srv=record.ptde_t10_srv; return out;
 }
@@ -49,14 +62,14 @@ void spec_rgb_resource_cache::erase_stock(spec_rgb_resource_handle stock_t1_srv)
 
 void spec_rgb_resource_cache::erase_companion(spec_rgb_resource_handle ptde_t10_srv)
 {
-    if(ptde_t10_srv==0) return; std::lock_guard<std::mutex> lock(mutex_);
+    if(ptde_t10_srv==0) return; std::lock_guard<std::mutex> lock(mutex_); ambiguous_companion_.erase(ptde_t10_srv);
     const auto owner=name_by_companion_.find(ptde_t10_srv); if(owner==name_by_companion_.end()) return;
     const auto found=by_name_.find(owner->second);
     if(found!=by_name_.end() && found->second.ptde_t10_srv==ptde_t10_srv){ name_by_stock_.erase(found->second.stock_t1_srv); by_name_.erase(found); }
     name_by_companion_.erase(owner);
 }
 
-void spec_rgb_resource_cache::clear() noexcept { std::lock_guard<std::mutex> lock(mutex_); by_name_.clear(); name_by_stock_.clear(); name_by_companion_.clear(); ambiguous_stock_.clear(); }
+void spec_rgb_resource_cache::clear() noexcept { std::lock_guard<std::mutex> lock(mutex_); by_name_.clear(); name_by_stock_.clear(); name_by_companion_.clear(); ambiguous_stock_.clear(); ambiguous_companion_.clear(); }
 std::size_t spec_rgb_resource_cache::size() const noexcept { std::lock_guard<std::mutex> lock(mutex_); return by_name_.size(); }
 
 } // namespace dsrrl::runtime
