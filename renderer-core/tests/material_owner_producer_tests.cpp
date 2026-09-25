@@ -1,4 +1,5 @@
 #include "dsrrl/runtime/material_owner_producer.hpp"
+#include "dsrrl/operators/material_response/mtd_semantic_census.hpp"
 #include <cstddef>
 #include <iostream>
 using namespace dsrrl;
@@ -65,6 +66,23 @@ int main()
     const auto exact_id=runtime::make_actual_material_identity(exact);
     CHECK(exact_id.owner_tuple_exact);
     CHECK(exact_id.material_slot==0u);
+
+    runtime::actual_material_owner_observation pmetal{};
+    pmetal.flver_sha256=digest(
+        "008888370225b851bfe3aaa3799a467a208442e7ed298762a0f925f0b205fb39");
+    pmetal.material_slot=1u;
+    pmetal.material_slot_valid=true;
+    CHECK(runtime::enrich_exact_owner_mtd_identity(pmetal));
+    CHECK(pmetal.material.valid);
+    CHECK(pmetal.material.semantic_name_hash==0xfd72a0409ae13e45ull);
+    CHECK(pmetal.material.raw_mtd_sha256==digest(
+        "ece70f36bd2517d28c8495e276cea537f8b519d6bed981788e79a409ffbf763b"));
+    CHECK(pmetal.material.route_index==345u);
+    CHECK(pmetal.material.material_family_hash==
+          operators::material_response::mtd_semantic_hash("DifSpcBmp"));
+    const auto pmetal_id=runtime::make_actual_material_identity(pmetal);
+    CHECK(pmetal_id.owner_tuple_exact);
+    CHECK(pmetal_id.route_index==345u);
 
     // Wrong slot and unknown FLVER never manufacture a material identity.
     exact.material_slot=0xffffffffu;
