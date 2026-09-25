@@ -204,14 +204,17 @@ void release_cache_for_device(device *owner) noexcept
 
 void release_cache() noexcept
 {
-    // Destruction must not allocate: this path runs from device teardown and
-    // unregister callbacks, where an allocation failure must never terminate
-    // the host process through a noexcept boundary.
+    // Detach ownership under the mutex, but never execute COM Release while
+    // holding it: final SRV destruction may re-enter destroy_resource_view.
+    // unordered_map::swap is non-allocating for equal allocators.
     try {
-        std::lock_guard lock(g_cache_mutex);
-        for (auto &[_, set] : g_cache)
+        std::unordered_map<std::uint64_t, companion_set> dead;
+        {
+            std::lock_guard lock(g_cache_mutex);
+            dead.swap(g_cache);
+        }
+        for(auto &[_,set]:dead)
             release_set(set);
-        g_cache.clear();
     } catch (...) {
         // Fail open during teardown. Leaking a sidecar reference is preferable
         // to propagating an exception across the ReShade/host callback ABI.
