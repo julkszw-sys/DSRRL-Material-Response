@@ -45,7 +45,9 @@ std::size_t register_confirmed_material_receivers_v1(
         receiver_recipe recipe;
         recipe.receiver_id = receiver.receiver_id;
         recipe.scope = material_scope_policy::exact_material_required;
-        recipe.certified_operations = specular_factor_c101;
+        recipe.certified_operations =
+            diffuse_material_domain_linear |
+            specular_factor_c101;
         recipe.envspec = ptde_envspec_presence::unknown;
 
         if (island.register_receiver_recipe(recipe))
@@ -83,7 +85,9 @@ std::size_t register_confirmed_material_routes_v1(material_response_island &isla
             0u
         };
         profile.receiver_count = 3;
-        profile.certified_operations = specular_factor_c101;
+        profile.certified_operations =
+            diffuse_material_domain_linear |
+            specular_factor_c101;
         profile.envspec = ptde_envspec_presence::unknown;
 
         // Conservative exact identity on every seeded route. This is required
