@@ -13,6 +13,7 @@
 #include "dsrrl/operators/material_response/material_response_v211_materializer.hpp"
 
 #include <reshade.hpp>
+#include <d3d11.h>
 
 #if RESHADE_API_VERSION != 20
 #error DSRRL Core+Islands requires ReShade Add-on API 20
@@ -170,8 +171,10 @@ void log_state(const char *tag) noexcept
     const auto m = dsrrl::runtime::material_owner_selection_stats();
     const auto mr_tx = g_mr_draw_runtime.telemetry();
     const auto tx = g_draw_transactions.telemetry();
+    const auto resources = g_material_resources.telemetry();
+    const auto tex = dsrrl::runtime::texture_identity_transport::status();
 
-    char line[1152]{};
+    char line[1408]{};
     std::snprintf(
         line,
         sizeof(line),
@@ -188,6 +191,8 @@ void log_state(const char *tag) noexcept
         "mr_tx_eligible=%llu mr_tx_miss=%llu mr_replay=%llu mr_restore_fail=%llu mr_quarantine=%u "
         "tx_begin_ok=%llu tx_begin_fail=%llu tx_bind_fail=%llu tx_issued=%llu "
         "tx_restore_ok=%llu tx_restore_fail=%llu tx_quarantine=%u "
+        "tex_hook=%u/%u tex_restore_fail=%u res_named=%llu res_ready=%llu res_missing=%llu "
+        "res_unsupported=%llu spec_req=%llu diff_req=%llu norm_req=%llu res_fo=%llu "
         "draw=%llu draw_rx=%llu draw_owner=%llu draw_join=%llu owner_only=%llu rx_only=%llu",
         tag,
         static_cast<unsigned long long>(t.create_events),
@@ -240,6 +245,17 @@ void log_state(const char *tag) noexcept
         static_cast<unsigned long long>(tx.restore_ok),
         static_cast<unsigned long long>(tx.restore_fail),
         tx.quarantined ? 1u : 0u,
+        tex.name_hook_armed ? 1u : 0u,
+        tex.clear_hook_armed ? 1u : 0u,
+        tex.restore_failed ? 1u : 0u,
+        static_cast<unsigned long long>(resources.named_views),
+        static_cast<unsigned long long>(resources.sidecar_ready),
+        static_cast<unsigned long long>(resources.sidecar_missing),
+        static_cast<unsigned long long>(resources.sidecar_unsupported),
+        static_cast<unsigned long long>(resources.spec_requests),
+        static_cast<unsigned long long>(resources.diffuse_requests),
+        static_cast<unsigned long long>(resources.normal_requests),
+        static_cast<unsigned long long>(resources.fail_open),
         static_cast<unsigned long long>(g_draw_events.load()),
         static_cast<unsigned long long>(g_draw_receiver_hits.load()),
         static_cast<unsigned long long>(g_draw_owner_hits.load()),
@@ -632,6 +648,7 @@ bool AddonInit(
     g_a1_bridge.reset();
     g_draw_transactions.reset();
     g_mr_draw_runtime.reset();
+    g_material_resources.reset();
     g_present_count.store(0);
     g_mr_draw_eval.store(0);
     g_mr_would_activate.store(0);
@@ -670,6 +687,23 @@ bool AddonInit(
 
     register_events();
 
+    if (!g_material_resources.register_events()) {
+        unregister_events();
+        disable_integrated_islands();
+        reshade::unregister_addon(addon_module, reshade_module);
+        return false;
+    }
+
+    const bool texture_hooks =
+        dsrrl::runtime::texture_identity_transport::install();
+
+    if (!texture_hooks) {
+        reshade::log::message(
+            reshade::log::level::warning,
+            "[DSRRL CORE+ISLANDS " DSRRL_CORE_ISLANDS_VERSION
+            "] texture identity hooks FAIL-OPEN: SpecRGB/Diffuse/Normal sidecars remain stock.");
+    }
+
     const bool flver_hooks =
         dsrrl::runtime::flver_identity_transport::install();
 
@@ -684,9 +718,9 @@ bool AddonInit(
         reshade::log::level::info,
         "[DSRRL CORE+ISLANDS " DSRRL_CORE_ISLANDS_VERSION
         "] READY: shared Core draw-state transaction layer (PS/CB/SRV/sampler) "
-        "is active; Material Response V2.11 is the first migrated adapter on exact "
-        "receiver/owner routing. Other draw-specific islands fail open until their own "
-        "verified adapter payload is armed; frozen legacy monolith is not linked.");
+        "is active; Material Response, SpecRGB, Diffuse and Normal compose into one "
+        "exact receiver/owner/resource-gated replay. Other draw-specific islands fail "
+        "open until their verified adapter payload is armed; frozen legacy monolith is not linked.");
 
     return true;
 }
@@ -704,6 +738,9 @@ void AddonUninit(
         log_state("UNLOAD_RESTORE_FAIL");
 
     dsrrl::runtime::stable_receiver_pipeline_reset();
+    dsrrl::runtime::texture_identity_transport::uninstall();
+    g_material_resources.unregister_events();
+    g_material_resources.reset();
     g_mr_draw_runtime.reset();
     g_draw_transactions.reset();
     g_a1_bridge.reset();
