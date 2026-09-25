@@ -59,6 +59,11 @@ set(
     "${DSRRL_CORE_GENERATED_ROOT}/dsrrl/runtime")
 file(MAKE_DIRECTORY "${DSRRL_CORE_GENERATED_RUNTIME}")
 
+set(
+    DSRRL_CORE_GENERATED_LIGHTBANK
+    "${DSRRL_CORE_GENERATED_ROOT}/dsrrl/operators/lightbank")
+file(MAKE_DIRECTORY "${DSRRL_CORE_GENERATED_LIGHTBANK}")
+
 add_custom_command(
     OUTPUT "${DSRRL_CORE_GENERATED_RUNTIME}/generated_spec_routes_v12.hpp"
     COMMAND "${Python3_EXECUTABLE}"
@@ -99,6 +104,26 @@ add_custom_target(
         "${DSRRL_CORE_GENERATED_RUNTIME}/generated_diffuse_routes_v12.hpp"
         "${DSRRL_CORE_GENERATED_RUNTIME}/generated_normal_routes_v12.hpp")
 
+add_custom_command(
+    OUTPUT "${DSRRL_CORE_GENERATED_LIGHTBANK}/generated_hemdir3_receivers_v1.hpp"
+    COMMAND "${Python3_EXECUTABLE}"
+            "${DSRRL_RENDERER_CORE_ROOT}/tools/generate_hemdir3_receiver_registry_v1.py"
+            --receivers "${DSRRL_RENDERER_CORE_ROOT}/data/provenance/hemdir3_receivers_v1.tsv"
+            --patch-sites "${DSRRL_RENDERER_CORE_ROOT}/data/provenance/hemdir3_b13_patch_sites_v1.tsv"
+            --replacements "${DSRRL_RENDERER_CORE_ROOT}/data/provenance/hemdir3_b13_replacements_v1.tsv"
+            --out "${DSRRL_CORE_GENERATED_LIGHTBANK}/generated_hemdir3_receivers_v1.hpp"
+    DEPENDS
+        "${DSRRL_RENDERER_CORE_ROOT}/tools/generate_hemdir3_receiver_registry_v1.py"
+        "${DSRRL_RENDERER_CORE_ROOT}/data/provenance/hemdir3_receivers_v1.tsv"
+        "${DSRRL_RENDERER_CORE_ROOT}/data/provenance/hemdir3_b13_patch_sites_v1.tsv"
+        "${DSRRL_RENDERER_CORE_ROOT}/data/provenance/hemdir3_b13_replacements_v1.tsv"
+    VERBATIM)
+
+add_custom_target(
+    dsrrl_core_hemdir3_authority
+    DEPENDS
+        "${DSRRL_CORE_GENERATED_LIGHTBANK}/generated_hemdir3_receivers_v1.hpp")
+
 set(
     RESHade_INCLUDE_DIR
     "${RESHADE_INCLUDE_DIR}"
@@ -126,14 +151,18 @@ add_library(
     "${DSRRL_RENDERER_CORE_ROOT}/src/runtime/subsurface_draw_runtime.cpp"
     "${DSRRL_RENDERER_CORE_ROOT}/src/runtime/upper_lower_draw_runtime.cpp"
     "${DSRRL_RENDERER_CORE_ROOT}/src/runtime/hemdir3_mode_transport.cpp"
+    "${DSRRL_RENDERER_CORE_ROOT}/src/runtime/hemdir3_pipeline_registry.cpp"
+    "${DSRRL_RENDERER_CORE_ROOT}/src/runtime/hemdir3_draw_runtime.cpp"
     "${DSRRL_RENDERER_CORE_ROOT}/src/runtime/draw_state_transaction.cpp"
     "${DSRRL_RENDERER_CORE_ROOT}/src/runtime/island_draw_adapter.cpp"
     "${DSRRL_RENDERER_CORE_ROOT}/src/runtime/material_response_draw_transaction.cpp"
-    "${DSRRL_RENDERER_CORE_ROOT}/src/operators/material_response/material_response_v211_materializer.cpp")
+    "${DSRRL_RENDERER_CORE_ROOT}/src/operators/material_response/material_response_v211_materializer.cpp"
+    "${DSRRL_RENDERER_CORE_ROOT}/src/operators/lightbank/hemdir3_b13_materializer.cpp")
 
 add_dependencies(
     dsrrl_renderer_core_integrated
-    dsrrl_core_material_resource_routes)
+    dsrrl_core_material_resource_routes
+    dsrrl_core_hemdir3_authority)
 
 target_include_directories(
     dsrrl_renderer_core_integrated
