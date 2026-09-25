@@ -13,7 +13,10 @@ namespace dsrrl::runtime {
 namespace {
 
 constexpr std::size_t k_container_offset = 0x88u;
-constexpr std::uint64_t k_max_flver_bytes = 0x40000000ull;
+// Source-complete DSR census: max raw FLVER size is 9,341,480 bytes and
+// original_size == data_offset + declared_data_size for every provenance row.
+// Keep bounded headroom while refusing attacker/corruption-scale declarations.
+constexpr std::uint64_t k_max_flver_bytes = 16ull * 1024ull * 1024ull;
 
 struct sha256_context {
     std::array<std::uint32_t,8> h{0x6a09e667u,0xbb67ae85u,0x3c6ef372u,0xa54ff53au,0x510e527fu,0x9b05688cu,0x1f83d9abu,0x5be0cd19u};
