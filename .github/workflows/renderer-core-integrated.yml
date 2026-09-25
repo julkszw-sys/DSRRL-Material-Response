@@ -157,6 +157,10 @@ jobs:
             'PSSetConstantBuffers',
             'PSSetShaderResources',
             'PSSetSamplers',
+            'shader_owners',
+            'resource_owners',
+            'carrier_owners',
+            'draw_policy_carrier_write_mask',
             'DrawIndexed',
             'DrawIndexedInstanced',
             'restore_ps_constant_buffer_window',
@@ -170,6 +174,12 @@ jobs:
 
           foreach ($required in @(
             'build_island_draw_mutation',
+            'additional_shader_owners',
+            'additional_resource_owners',
+            'additional_carrier_owners',
+            'shader_owners',
+            'resource_owners',
+            'carrier_owners',
             'required_mutation_mask',
             'allowed_mutation_mask',
             'receiver_gate_missing',
@@ -278,9 +288,11 @@ jobs:
           foreach ($required in @(
             '0x295F9Fu',
             '0x22BA79u',
-            'incoming_mode == 2u',
+            'post-override effective EDX',
             'selector_end_hook_armed',
-            'observe_effective_mode'
+            'observe_effective_mode',
+            'g_state.lt5_hook_armed',
+            'g_state.selector_end_hook_armed'
           )) {
             if ($mode2 -notmatch [regex]::Escape($required)) { throw "HemDir3 exact effective-mode transport invariant missing: $required" }
           }
@@ -323,8 +335,11 @@ jobs:
             'operator_id::hemdir3',
             'exact_effective_mode2',
             'prepare_hemdir3_carrier',
+            'additional_shader_owners',
+            'additional_carrier_owners',
             'operator_id::upper_lower',
-            'spc_b12_hold_'
+            'spc_b12_hold_',
+            'hemdir3_native_stratum::nospc'
           )) {
             if ($h3Runtime -notmatch [regex]::Escape($required)) { throw "HemDir3 shared-batch runtime invariant missing: $required" }
           }
