@@ -7,8 +7,7 @@
 namespace dsrrl::operators::material_response::generated {
 
 // Positive PTDE texture-capability evidence recovered from owner FLVER slots.
-// IMPORTANT: this table authorizes USE only. A missing bit is UNKNOWN, not NO_USE,
-// because the source scan carrying this generation had 75 BND3 parse failures.
+// Missing bits are UNKNOWN, never NO_USE.
 enum ptde_texture_semantic_bit : std::uint8_t {
     ptde_tex_diffuse       = 1u << 0u,
     ptde_tex_bump          = 1u << 1u,
