@@ -1,0 +1,29 @@
+{
+  "schema": "dsrrl.live_flver_owner_transport_re.v1",
+  "status": "HIGH_CONFIDENCE",
+  "exe_sha256": "a45aaa36dd2f6cc151670a639ea5547043cf38ea79ff4178b963c6ed71f98d7b",
+  "selector": {
+    "rva": "0x22BA20",
+    "caller_return_rva": "0x20E019",
+    "container_expression_at_caller": "rdi + 0x88",
+    "material_index_at_call": "r8d = ebx",
+    "material_resolution": "*([container+0x10] + 24*material_index)",
+    "owner_argument_at_call": "rdx = r14",
+    "caller_owner_source": "r14 = *r15_descriptor"
+  },
+  "observations": [
+    "The selector consumes an already-parsed 24-byte material-entry array from container+0x10.",
+    "The selector call site carries the exact material slot/index but does not carry raw FLVER file bytes as an explicit argument.",
+    "The current selector detour therefore has sufficient state for exact material pointer + material slot, but not yet a proven source for the canonical raw FLVER SHA-256."
+  ],
+  "runtime_contract": {
+    "required_positive_tuple": [
+      "raw_flver_sha256",
+      "material_slot",
+      "semantic_mtd_name_hash"
+    ],
+    "current_state": "HOLD_OFF_FAIL_OPEN",
+    "next_cut": "identify and hook the upstream FLVER load/parse ownership point, or prove an existing parsed-owner field transports the canonical raw FLVER identity, then bind that identity to the selector container/owner lifetime"
+  },
+  "guardrail": "Do not substitute container pointer, owner pointer, truncated hash, MTD identity, or structural similarity for raw FLVER SHA-256."
+}
