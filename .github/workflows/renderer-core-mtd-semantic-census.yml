@@ -1,0 +1,30 @@
+name: renderer-core-mtd-semantic-census
+
+on:
+  push:
+    paths:
+      - 'renderer-core/data/census/**'
+      - 'renderer-core/tools/verify_mtd_semantic_census.py'
+      - 'renderer-core/tools/verify_ptde_flver_census_import.py'
+      - 'renderer-core/tools/generate_ptde_flver_texture_semantics.py'
+      - '.github/workflows/renderer-core-mtd-semantic-census.yml'
+  pull_request:
+    paths:
+      - 'renderer-core/data/census/**'
+      - 'renderer-core/tools/verify_mtd_semantic_census.py'
+      - 'renderer-core/tools/verify_ptde_flver_census_import.py'
+      - 'renderer-core/tools/generate_ptde_flver_texture_semantics.py'
+      - '.github/workflows/renderer-core-mtd-semantic-census.yml'
+
+jobs:
+  verify-static-census:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Verify exact MTD semantic census invariants
+        run: python renderer-core/tools/verify_mtd_semantic_census.py
+      - name: Verify PTDE FLVER census import provenance
+        run: python renderer-core/tools/verify_ptde_flver_census_import.py
