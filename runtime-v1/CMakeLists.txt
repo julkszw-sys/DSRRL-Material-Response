@@ -92,6 +92,7 @@ target_include_directories(dsrrl_runtime_v1_feature_manifest_tests PRIVATE
 target_compile_features(dsrrl_runtime_v1_feature_manifest_tests PRIVATE cxx_std_20)
 target_include_directories(dsrrl_runtime_v1_asset_route_tests PRIVATE
   "${GEN_DIR}"
+  "${CMAKE_CURRENT_SOURCE_DIR}/include"
   "${CMAKE_CURRENT_SOURCE_DIR}/../renderer-core/include"
 )
 target_compile_features(dsrrl_runtime_v1_asset_route_tests PRIVATE cxx_std_20)
