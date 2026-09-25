@@ -54,9 +54,24 @@ bool stable_receiver_observe_pipeline(
             static_cast<const std::uint8_t *>(pixel_shader_code),
             pixel_shader_size);
 
+    return stable_receiver_observe_pipeline_digest(
+        pipeline_handle,
+        digest,
+        pixel_shader_size);
+}
+
+bool stable_receiver_observe_pipeline_digest(
+    std::uint64_t pipeline_handle,
+    const std::array<std::uint8_t,32> &pixel_shader_sha256,
+    std::size_t pixel_shader_size) noexcept
+{
+    if (pipeline_handle == 0u ||
+        !generated::stable_hemenv_candidate_size(pixel_shader_size))
+        return false;
+
     const auto receiver =
         generated::stable_hemenv_receiver_id(
-            digest,
+            pixel_shader_sha256,
             pixel_shader_size);
 
     if (receiver == 0u) {
