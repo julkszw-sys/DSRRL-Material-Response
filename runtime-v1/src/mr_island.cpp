@@ -90,6 +90,7 @@ std::atomic<std::uint64_t> g_ptde_tex_mtd_exact{0};
 std::atomic<std::uint64_t> g_ptde_tex_selector_exact{0};
 std::atomic<std::uint64_t> g_diffuse_semantic_hold{0};
 std::atomic<std::uint64_t> g_normal_semantic_hold{0};
+std::atomic<std::uint64_t> g_owner_auth_hold{0};
 
 namespace mtd_sem=dsrrl::operators::material_response;
 
@@ -1279,8 +1280,24 @@ bool on_draw_indexed(command_list *cmd,std::uint32_t index_count,std::uint32_t i
     }
 
     const std::uint32_t receiver_id=24u+static_cast<std::uint32_t>(g_bound_host);
+    const bool pmetal_exact_route =
+        !body_route &&
+        donor==k_pmetal_route &&
+        std::string_view(don.sha256)==k_pmetal_raw_mtd_sha256 &&
+        receiver_id>=33u && receiver_id<=35u;
+
     assets::material_route_scope route{};
     route.exact=true;
+    // Ordinary Diffuse/Normal routes are not positively authorized until the
+    // live selector transports an authenticated FLVER/material owner tuple.
+    // Body and P_Metal retain their independently certified exact-material
+    // routes; neither claim is promoted to ordinary FLVER ownership.
+    route.owner_authorization.owner_tuple_authenticated=false;
+    route.owner_authorization.independent_exact_material_route=
+        body_route || pmetal_exact_route;
+    const bool owner_authorized=
+        assets::material_owner_authorized(route.owner_authorization);
+
     const bool ptde_diffuse_use=
         mtd_sem::ptde_flver_texture_semantic_present(
             draw_ptde_texture,
@@ -1289,17 +1306,22 @@ bool on_draw_indexed(command_list *cmd,std::uint32_t index_count,std::uint32_t i
         mtd_sem::ptde_flver_texture_semantic_present(
             draw_ptde_texture,
             mtd_sem::ptde_texture_semantic::bump);
-    route.diffuse_eligible=g_bound_host<12 && ptde_diffuse_use;
+    route.diffuse_eligible=
+        g_bound_host<12 && ptde_diffuse_use && owner_authorized;
     const std::string_view donor_sha=don.sha256;
     const bool normal_material_homologous=
         donor_sha!=k_nonhomologous_normal_pd_sha256 &&
         donor_sha!=k_nonhomologous_normal_pleather_ds_sha256;
     route.normal_eligible=
-        g_bound_host<12 && ptde_bump_use && normal_material_homologous;
+        g_bound_host<12 && ptde_bump_use &&
+        normal_material_homologous && owner_authorized;
     if(g_bound_host<12 && !ptde_diffuse_use)
         ++g_diffuse_semantic_hold;
     if(g_bound_host<12 && !ptde_bump_use)
         ++g_normal_semantic_hold;
+    if(g_bound_host<12 && (ptde_diffuse_use || ptde_bump_use) &&
+       !owner_authorized)
+        ++g_owner_auth_hold;
     route.diffuse_c100_carrier_active=false;
     route.specular_material_verified=
         don.has_c101 &&
@@ -1333,12 +1355,6 @@ bool on_draw_indexed(command_list *cmd,std::uint32_t index_count,std::uint32_t i
     if(normal_candidate) ++g_normal_candidates;
     if(spec_candidate) ++g_spec_candidates;
     if(ul_candidate) ++g_ul_candidates;
-
-    const bool pmetal_exact_route =
-        !body_route &&
-        donor==k_pmetal_route &&
-        std::string_view(don.sha256)==k_pmetal_raw_mtd_sha256 &&
-        receiver_id>=33u && receiver_id<=35u;
 
     // Full PTDE EnvSpec is independent from the Diffuse/t0 bridge. Its exact
     // dependencies are P_Metal identity, stable receiver, PTDE SpecRGB t10,
@@ -1828,6 +1844,7 @@ void on_present(command_queue *,swapchain *,const rect *,const rect *,std::uint3
                <<" ptde_tex_sel_exact="<<g_ptde_tex_selector_exact.load()
                <<" diff_sem_hold="<<g_diffuse_semantic_hold.load()
                <<" norm_sem_hold="<<g_normal_semantic_hold.load()
+               <<" owner_auth_hold="<<g_owner_auth_hold.load()
                <<" failopen="<<g_fail_open.load()
               <<" restore_fail="<<g_restore_fail.load()<<" quarantined="<<(g_quarantined.load()?1:0);
             log_info(os.str());
