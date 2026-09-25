@@ -11,6 +11,7 @@
 #include "dsrrl/runtime/envspec_runtime.hpp"
 #include "dsrrl/runtime/asset_bridges.hpp"
 #include "dsrrl/runtime/draw_replay.hpp"
+#include "dsrrl/runtime/d3d11_cb_window.hpp"
 #include "dsrrl/runtime/upper_lower_runtime.hpp"
 #include "dsrrl/runtime/generated_ul_stable_hashes.hpp"
 #include "dsrrl/runtime/generated_spec_material_routes.hpp"
@@ -727,12 +728,12 @@ cb_capture capture_cb(ID3D11DeviceContext *ctx,ID3D11DeviceContext1 *ctx1)
 void release_cb(cb_capture &x){if(x.base)x.base->Release();if(x.window)x.window->Release();x={};}
 void restore_cb(ID3D11DeviceContext *ctx,ID3D11DeviceContext1 *ctx1,const cb_capture &x)
 {
-    if(ctx1 && x.explicit_window){
-        ID3D11Buffer *b=x.window; UINT f=x.first,n=x.count;
-        ctx1->PSSetConstantBuffers1(12,1,&b,&f,&n);
-    }else{
-        ID3D11Buffer *b=x.base; ctx->PSSetConstantBuffers(12,1,&b);
-    }
+    restore_ps_constant_buffer_window(
+        ctx,ctx1,12u,
+        x.explicit_window ? x.window : x.base,
+        x.explicit_window,
+        x.first,
+        x.count);
 }
 bool verify_restore(ID3D11DeviceContext *ctx,ID3D11DeviceContext1 *ctx1,const cb_capture &x)
 {
