@@ -156,7 +156,8 @@ void log_state(const char *tag) noexcept
         "flver_hook=%u/%u/%u prov=%u owner_enrich=%u restore_fail=%u "
         "inserts=%llu lookups=%llu hits=%llu misses=%llu erases=%llu invalid=%llu "
         "owner_sel=%llu owner_enriched=%llu owner_auth=%llu owner_fo=%llu "
-        "mr_ready=%u mr_eval=%llu mr_active=%llu mr_fo=%llu",
+        "mr_ready=%u mr_eval=%llu mr_active=%llu mr_fo=%llu "
+        "draw=%llu draw_rx=%llu draw_owner=%llu draw_join=%llu owner_only=%llu rx_only=%llu",
         tag,
         static_cast<unsigned long long>(t.create_events),
         static_cast<unsigned long long>(t.candidate_size_hits),
@@ -188,7 +189,13 @@ void log_state(const char *tag) noexcept
         g_mr_ready.load() ? 1u : 0u,
         static_cast<unsigned long long>(g_mr_draw_eval.load()),
         static_cast<unsigned long long>(g_mr_active.load()),
-        static_cast<unsigned long long>(g_mr_fail_open.load()));
+        static_cast<unsigned long long>(g_mr_fail_open.load()),
+        static_cast<unsigned long long>(g_draw_events.load()),
+        static_cast<unsigned long long>(g_draw_receiver_hits.load()),
+        static_cast<unsigned long long>(g_draw_owner_hits.load()),
+        static_cast<unsigned long long>(g_draw_joins.load()),
+        static_cast<unsigned long long>(g_draw_owner_only.load()),
+        static_cast<unsigned long long>(g_draw_receiver_only.load()));
 
     reshade::log::message(reshade::log::level::info, line);
 }
