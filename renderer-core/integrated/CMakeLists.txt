@@ -39,7 +39,12 @@ add_library(
     dsrrl_renderer_core_integrated
     SHARED
     integrated_addon.cpp
-    "${DSRRL_RENDERER_CORE_ROOT}/src/runtime/a1_create_pipeline_bridge.cpp")
+    "${DSRRL_RENDERER_CORE_ROOT}/src/runtime/a1_create_pipeline_bridge.cpp"
+    # SpecRGB's exact-identity resource cache is part of the integrated
+    # construction target before live resource/draw events are enabled. This
+    # keeps the carrier available to the addon without claiming runtime or
+    # pixel equivalence; event integration remains separately fail-open.
+    "${DSRRL_RENDERER_CORE_ROOT}/src/runtime/spec_rgb_resource_cache.cpp")
 
 target_include_directories(
     dsrrl_renderer_core_integrated
