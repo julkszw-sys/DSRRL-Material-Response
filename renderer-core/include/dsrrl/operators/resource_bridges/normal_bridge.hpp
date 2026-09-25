@@ -1,8 +1,14 @@
 #pragma once
 
+#include "dsrrl/core/draw_transaction_policy.hpp"
+
 #include <cstdint>
 
 namespace dsrrl::operators::resource_bridges {
+
+static_assert(
+    core::requires_draw_transaction(core::operator_id::normal),
+    "Normal bridge must use the shared transaction layer.");
 
 enum class normal_route_authority : std::uint8_t {
     none = 0,
