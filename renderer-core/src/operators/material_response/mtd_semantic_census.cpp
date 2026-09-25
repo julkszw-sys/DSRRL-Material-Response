@@ -2,7 +2,7 @@
 #include "dsrrl/operators/material_response/generated_routes_v1.hpp"
 #include "dsrrl/operators/material_response/generated_envspec_router_v1.hpp"
 #include "dsrrl/operators/material_response/generated_ptde_flver_texture_semantics_v1.hpp"
-#include "dsrrl/operators/material_response/generated_flver_pairwise_semantics_v1.hpp"
+#include "dsrrl/operators/material_response/generated_flver_pairwise_semantics_v1.hpp"\n#include "dsrrl/operators/material_response/generated_dsr_flver_owner_tuples_v1.hpp"
 #include "dsrrl/operators/material_response/generated_mtd_spx_negative_v1.hpp"
 #include <cstddef>
 namespace dsrrl::operators::material_response { namespace {
@@ -37,8 +37,8 @@ bool exact_host_identity_for_texture_legacy(std::uint64_t h,const core::sha256_d
 }
 std::uint64_t mtd_semantic_hash(const char*t) noexcept{constexpr std::uint64_t o=14695981039346656037ull,p=1099511628211ull;if(!t)return 0;std::uint64_t h=o;for(;*t;++t){h^=static_cast<std::uint8_t>(*t);h*=p;}return h;}
 bool has_exact_flver_material_ownership(const mtd_semantic_query&q) noexcept{
-if(!q.ownership.exact||q.ownership.flver_identity_hash==0u||!q.ownership.material_slot_valid||!q.material.valid||!q.material.semantic_name_hash)return false;
-return generated::flver_pairwise_owner_tuple_authenticated(q.ownership.flver_identity_hash,q.ownership.material_slot,q.material.semantic_name_hash);
+if(!q.ownership.exact||!q.ownership.material_slot_valid||!q.material.valid||!q.material.semantic_name_hash)return false;
+return generated::dsr_flver_owner_tuple_authenticated(q.ownership.flver_sha256,q.ownership.material_slot,q.material.semantic_name_hash);
 }
 // Only semantics whose newly recovered evidence is explicitly resource/slot scoped
 // are gated here. Existing independently certified exact-MTD routes (EnvSpec,
