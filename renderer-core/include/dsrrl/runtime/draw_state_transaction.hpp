@@ -40,7 +40,14 @@ struct draw_tx_sampler_binding {
 };
 
 struct draw_tx_mutation {
+    // Aggregate participation plus operator-local ownership of each mutation
+    // class. An owner never inherits another island's shader/resource/carrier
+    // mutation merely because both are composed into one replay.
     core::operator_mask owners = 0;
+    core::operator_mask shader_owners = 0;
+    core::operator_mask resource_owners = 0;
+    core::operator_mask carrier_owners = 0;
+
     ID3D11PixelShader *pixel_shader = nullptr;
     bool replace_pixel_shader = false;
 
