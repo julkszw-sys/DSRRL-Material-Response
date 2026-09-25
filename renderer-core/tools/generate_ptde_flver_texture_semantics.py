@@ -5,6 +5,8 @@ Input is the owner-side canonical TSV emitted by ptde_full_flver_ownership_expor
 The generator deliberately makes no negative semantic claims. If the scan is not
 source-complete, observed semantic presence may still be emitted as USE evidence,
 but every absent bit remains UNKNOWN and --require-source-complete refuses output.
+Unknown non-empty texture semantics are also rejected: silently dropping one from
+positive_mask would turn observed evidence into an unrepresented runtime carrier.
 """
 from __future__ import annotations
 
@@ -84,6 +86,11 @@ def load_records(path: Path) -> tuple[list[dict], int]:
             except ValueError as e:
                 raise SystemExit("invalid material_slot") from e
             semantic = row["texture_semantic"].strip()
+            if semantic and semantic not in BITS:
+                raise SystemExit(
+                    f"unknown PTDE texture_semantic {semantic!r} for "
+                    f"{name} {sha} slot={slot}; extend the semantic ABI before import"
+                )
             slot_semantics[(name, sha, row["flver_identity"], slot)].add(semantic)
 
     identity_signatures: dict[tuple[str, str], set[tuple[str, ...]]] = defaultdict(set)
