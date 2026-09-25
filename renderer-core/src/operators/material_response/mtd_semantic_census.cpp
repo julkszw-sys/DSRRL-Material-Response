@@ -187,8 +187,6 @@ mtd_envspec_semantics classify_mtd_envspec_semantics_legacy(
     const core::sha256_digest &raw_mtd_sha256) noexcept
 {
     mtd_envspec_semantics out;
-    if(legacy_name_hash_utf16_lower==0u)
-        return out;
 
     // Primary identity remains the historical (lowercase UTF-16 name hash,
     // raw MTD SHA-256) pair. Retail runtime evidence shows the parser-side R9
