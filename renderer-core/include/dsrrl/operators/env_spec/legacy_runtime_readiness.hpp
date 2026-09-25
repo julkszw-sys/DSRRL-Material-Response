@@ -1,10 +1,15 @@
 #pragma once
 
 #include "dsrrl/core/island_policy.hpp"
+#include "dsrrl/core/draw_transaction_policy.hpp"
 
 #include <cstdint>
 
 namespace dsrrl::operators::env_spec {
+
+static_assert(
+    core::requires_draw_transaction(core::operator_id::env_spec),
+    "EnvSpec runtime readiness requires the shared draw transaction layer.");
 
 enum class legacy_resource_class : std::uint8_t {
     unsupported = 0,
