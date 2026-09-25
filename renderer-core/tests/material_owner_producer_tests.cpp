@@ -11,8 +11,6 @@ int main()
     o.material.semantic_name_hash = 0x1234u;
     o.material_slot = 7u;
     o.material_slot_valid = true;
-    o.flver_identity_hash = 0x55u;
-
     auto id = runtime::make_actual_material_identity(o);
     CHECK(!id.owner_tuple_exact);
 
