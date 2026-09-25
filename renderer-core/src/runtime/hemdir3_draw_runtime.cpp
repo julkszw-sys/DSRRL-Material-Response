@@ -122,6 +122,29 @@ bool hemdir3_draw_runtime::register_replacement(
         return false;
     }
 
+    const auto existing =
+        replacements_.find(
+            outcome.plan_index);
+
+    if (existing != replacements_.end()) {
+        const bool metadata_match =
+            existing->second.stratum ==
+                outcome.stratum &&
+            existing->second.paired_stable_receiver_id ==
+                outcome.paired_stable_receiver_id &&
+            existing->second.composed_owners ==
+                outcome.composed_owners &&
+            existing->second.shader != nullptr;
+
+        if (!metadata_match) {
+            quarantined_.store(true);
+            ++replacement_register_fail_;
+            return false;
+        }
+
+        return true;
+    }
+
     ID3D11PixelShader *shader = nullptr;
 
     if (FAILED(device_->CreatePixelShader(
@@ -141,35 +164,9 @@ bool hemdir3_draw_runtime::register_replacement(
         outcome.composed_owners
     };
 
-    const auto found =
-        replacements_.find(
-            outcome.plan_index);
-
-    if (found != replacements_.end()) {
-        const bool metadata_match =
-            found->second.stratum ==
-                record.stratum &&
-            found->second.paired_stable_receiver_id ==
-                record.paired_stable_receiver_id &&
-            found->second.composed_owners ==
-                record.composed_owners;
-
-        if (!metadata_match) {
-            shader->Release();
-            quarantined_.store(true);
-            ++replacement_register_fail_;
-            return false;
-        }
-
-        if (found->second.shader != nullptr)
-            found->second.shader->Release();
-
-        found->second = record;
-    } else {
-        replacements_.emplace(
-            outcome.plan_index,
-            record);
-    }
+    replacements_.emplace(
+        outcome.plan_index,
+        record);
 
     ++replacement_register_ok_;
     return true;
