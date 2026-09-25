@@ -2,6 +2,9 @@
 #include "dsrrl/runtime/a1_create_pipeline_bridge.hpp"
 #include "dsrrl/runtime/flver_identity_transport.hpp"
 #include "dsrrl/runtime/flver_identity_registry.hpp"
+#include "dsrrl/runtime/material_owner_selection.hpp"
+#include "dsrrl/operators/material_response/material_response_island.hpp"
+#include "dsrrl/operators/material_response/material_response_seed.hpp"
 #include "dsrrl/runtime/stable_receiver_pipeline_registry.hpp"
 #include "dsrrl/operators/material_response/material_response_island.hpp"
 #include "dsrrl/operators/material_response/material_response_seed.hpp"
@@ -29,6 +32,11 @@ namespace {
 dsrrl::core::renderer_core g_core;
 dsrrl::runtime::a1_create_pipeline_bridge
     g_a1_bridge(g_core.features());
+dsrrl::operators::material_response::material_response_island g_material_response;
+std::atomic<std::uint64_t> g_mr_draw_eval{0};
+std::atomic<std::uint64_t> g_mr_active{0};
+std::atomic<std::uint64_t> g_mr_fail_open{0};
+thread_local std::uint32_t g_bound_receiver_id = 0u;
 
 std::atomic<std::uint64_t> g_present_count{0};
 
@@ -152,6 +160,7 @@ void log_state(const char *tag) noexcept
     const auto t = g_a1_bridge.telemetry();
     const auto f = dsrrl::runtime::flver_identity_stats();
     const auto h = dsrrl::runtime::flver_identity_transport::status();
+    const auto m = dsrrl::runtime::material_owner_selection_stats();
     const auto o =
         dsrrl::runtime::flver_identity_transport::
             selector_owner_stats();
@@ -295,13 +304,17 @@ void on_bind_pipeline(
     std::uint16_t first_plan = 0xFFFFu;
     dsrrl::core::operator_mask selected_owners = 0u;
     std::uint16_t selected_ops = 0u;
+    std::uint32_t receiver_id = 0u;
     const bool target =
         g_a1_bridge.on_bind_pipeline(
             stages,
             pipeline,
             &first_plan,
             &selected_owners,
-            &selected_ops);
+            &selected_ops,
+            &receiver_id);
+
+    g_bound_receiver_id = target ? receiver_id : 0u;
 
     if (target && first_plan != 0xFFFFu) {
         char line[240]{};
@@ -340,6 +353,35 @@ bool on_draw_indexed(
     return false;
 }
 
+bool on_draw_indexed(
+    reshade::api::command_list *,
+    std::uint32_t,
+    std::uint32_t,
+    std::uint32_t,
+    std::int32_t,
+    std::uint32_t)
+{
+    const auto material =
+        dsrrl::runtime::material_owner_selection_current();
+    dsrrl::runtime::material_owner_selection_clear();
+
+    if (g_bound_receiver_id == 0u || !material.has_value()) {
+        ++g_mr_fail_open;
+        return false;
+    }
+
+    ++g_mr_draw_eval;
+    const auto decision =
+        g_material_response.evaluate(g_bound_receiver_id, material);
+
+    if (decision.active)
+        ++g_mr_active;
+    else
+        ++g_mr_fail_open;
+
+    return false;
+}
+
 void on_present(
     reshade::api::command_queue *,
     reshade::api::swapchain *,
@@ -361,6 +403,7 @@ void register_events()
     reshade::register_event<reshade::addon_event::init_pipeline>(on_init_pipeline);
     reshade::register_event<reshade::addon_event::destroy_pipeline>(on_destroy_pipeline);
     reshade::register_event<reshade::addon_event::bind_pipeline>(on_bind_pipeline);
+    reshade::register_event<reshade::addon_event::draw_indexed>(on_draw_indexed);
     reshade::register_event<reshade::addon_event::draw>(on_draw);
     reshade::register_event<reshade::addon_event::draw_indexed>(on_draw_indexed);
     reshade::register_event<reshade::addon_event::present>(on_present);
@@ -369,6 +412,7 @@ void register_events()
 void unregister_events()
 {
     reshade::unregister_event<reshade::addon_event::present>(on_present);
+    reshade::unregister_event<reshade::addon_event::draw_indexed>(on_draw_indexed);
     reshade::unregister_event<reshade::addon_event::draw_indexed>(on_draw_indexed);
     reshade::unregister_event<reshade::addon_event::draw>(on_draw);
     reshade::unregister_event<reshade::addon_event::bind_pipeline>(on_bind_pipeline);
@@ -404,6 +448,13 @@ bool AddonInit(
 
     g_a1_bridge.reset();
     g_present_count.store(0);
+    g_mr_draw_eval.store(0);
+    g_mr_active.store(0);
+    g_mr_fail_open.store(0);
+    g_bound_receiver_id = 0u;
+    dsrrl::runtime::material_owner_selection_reset_stats();
+    (void)dsrrl::operators::material_response::register_confirmed_material_receivers_v1(g_material_response);
+    (void)dsrrl::operators::material_response::register_confirmed_material_routes_v1(g_material_response);
     reset_draw_probe();
 
     const auto seeded_receivers =
