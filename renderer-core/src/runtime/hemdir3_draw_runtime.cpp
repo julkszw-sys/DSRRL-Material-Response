@@ -322,10 +322,17 @@ bool hemdir3_draw_runtime::prepare_draw_request(
     prepared.request.primary =
         core::operator_id::hemdir3;
 
-    prepared.request.additional_owners =
+    const auto upper_lower_owner =
         core::operator_bit(
-            core::operator_id::upper_lower) |
+            core::operator_id::upper_lower);
+
+    prepared.request.additional_owners =
+        upper_lower_owner |
         replacement.composed_owners;
+    prepared.request.additional_shader_owners =
+        replacement.composed_owners;
+    prepared.request.additional_carrier_owners =
+        upper_lower_owner;
 
     prepared.request.receiver_verified = true;
     prepared.request.material_verified = false;
