@@ -6,13 +6,14 @@ namespace dsrrl::runtime::hemdir3_mode_transport {
 
 struct telemetry {
     std::uint64_t selector_begin = 0;
+    std::uint64_t incoming_mode2 = 0;
     std::uint64_t effective_observed = 0;
     std::uint64_t mode2_observed = 0;
     std::uint64_t snapshot_hits = 0;
     std::uint64_t snapshot_misses = 0;
     bool provenance_ok = false;
     bool lt5_hook_armed = false;
-    bool ge5_hook_armed = false;
+    bool selector_end_hook_armed = false;
     bool quarantined = false;
     bool restore_failed = false;
 };
