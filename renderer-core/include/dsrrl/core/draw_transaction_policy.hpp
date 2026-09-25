@@ -23,6 +23,12 @@ enum draw_mutation_bit : std::uint32_t {
     draw_mutation_sampler = 1u << 3
 };
 
+inline constexpr std::uint32_t shared_draw_executor_mutation_mask =
+    draw_mutation_shader |
+    draw_mutation_constant_buffer |
+    draw_mutation_srv |
+    draw_mutation_sampler;
+
 struct draw_transaction_policy {
     operator_id op = operator_id::material_response;
     draw_transaction_mode mode =
@@ -167,6 +173,12 @@ constexpr bool draw_policy_table_valid() noexcept
             (!policy.full_restore_required ||
              policy.required_mutation_mask ==
                  draw_mutation_none))
+            return false;
+
+        if (policy.mode ==
+                draw_transaction_mode::draw_required &&
+            (policy.allowed_mutation_mask &
+             ~shared_draw_executor_mutation_mask) != 0u)
             return false;
     }
 
