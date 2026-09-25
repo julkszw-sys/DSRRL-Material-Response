@@ -1,0 +1,20 @@
+{
+  "schema": "dsrrl.renderer_core.spec_rgb_live_transport_gate.v1",
+  "island": "resource.spec_rgb",
+  "status": "OPEN_FAIL_OPEN",
+  "source_to_downstream": {
+    "source": "exact engine UTF-16 logical texture identity plus live stock t1 SRV",
+    "producer": "Core+Islands producer is not yet connected; runtime-v1 texture_name_hook.asm is legacy evidence only",
+    "transport": "spec_rgb_resource_cache exact identity / stock ownership / companion ownership",
+    "consumer": "FULL24 SpecRGB consumer expects PTDE RGB at t10 while DSR t1 remains authoritative for alpha/roughness",
+    "composition": "draw-local t10 override only after exact owner and receiver authorization",
+    "downstream": "unconditional restoration of the pre-draw host t10 binding"
+  },
+  "narrowest_carrier": ["exact logical UTF-16 texture identity","currently bound stock t1 SRV","addon-owned live PTDE companion SRV","authorized FULL24 receiver","pre-draw host t10 snapshot"],
+  "required_before_activation": ["Core+Islands exact-name producer connected","resource/view lifecycle callbacks connected to cache retirement","draw/event-local observation of current stock t1","authorized FULL24 receiver identity at draw","t10 snapshot-bind-restore transaction proven"],
+  "forbidden_inferences": ["runtime-v1 texture-name hook existence does not prove Core+Islands live producer","cache registration does not prove draw-local ownership","successful build or first consumer does not prove pixel equivalence"],
+  "fail_open": "If any producer, lifecycle, owner, receiver, or restore condition is missing, preserve all host bindings and do not bind PTDE t10.",
+  "runtime_liveness": "OPEN",
+  "pixel_equivalence": "OPEN",
+  "evidence_id": "298e5067-a3b4-4cc1-88df-0f2b571b92a4"
+}
