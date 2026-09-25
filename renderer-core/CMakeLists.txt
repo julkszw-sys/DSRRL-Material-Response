@@ -59,6 +59,10 @@ target_include_directories(dsrrl_renderer_core PUBLIC
     ${DSRRL_GENERATED_DIR})
 target_compile_features(dsrrl_renderer_core PUBLIC cxx_std_17)
 
+add_executable(dsrrl_renderer_material_owner_tests tests/material_owner_producer_tests.cpp)
+target_link_libraries(dsrrl_renderer_material_owner_tests PRIVATE dsrrl_renderer_core)
+target_compile_features(dsrrl_renderer_material_owner_tests PRIVATE cxx_std_17)
+
 if(MSVC)
     target_compile_options(dsrrl_renderer_core PRIVATE /W4 /WX)
 else()
@@ -142,6 +146,7 @@ if(DSRRL_BUILD_PHASE0_PROBE)
 endif()
 
 enable_testing()
+add_test(NAME dsrrl_renderer_material_owner_tests COMMAND dsrrl_renderer_material_owner_tests)
 add_test(NAME dsrrl_renderer_core_tests COMMAND dsrrl_renderer_core_tests)
 add_test(NAME dsrrl_renderer_island_tests COMMAND dsrrl_renderer_island_tests)
 add_test(NAME dsrrl_renderer_future_runtime_tests COMMAND dsrrl_renderer_future_runtime_tests)
