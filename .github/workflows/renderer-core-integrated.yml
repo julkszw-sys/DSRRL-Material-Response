@@ -160,7 +160,14 @@ jobs:
           $entryHash = (Get-FileHash "renderer-core/integrated/integrated_addon.cpp" -Algorithm SHA256).Hash.ToLowerInvariant()
           $cmakeHash = (Get-FileHash "renderer-core/integrated/CMakeLists.txt" -Algorithm SHA256).Hash.ToLowerInvariant()
           $versionHash = (Get-FileHash "renderer-core/integrated/VERSION.json" -Algorithm SHA256).Hash.ToLowerInvariant()
-          $bridgeHash = (Get-FileHash "renderer-core/src/runtime/a1_create_pipeline_bridge.cpp" -Algorithm SHA256).Hash.ToLowerInvariant()\n          $flverHookHash = (Get-FileHash "renderer-core/src/runtime/flver_engine_hooks.cpp" -Algorithm SHA256).Hash.ToLowerInvariant()\n          $flverDetourHash = (Get-FileHash "renderer-core/integrated/flver_identity_detour.asm" -Algorithm SHA256).Hash.ToLowerInvariant()\n          $flverRegistryHash = (Get-FileHash "renderer-core/src/runtime/flver_identity_registry.cpp" -Algorithm SHA256).Hash.ToLowerInvariant()
+          $bridgeHash = (Get-FileHash "renderer-core/src/runtime/a1_create_pipeline_bridge.cpp" -Algorithm SHA256).Hash.ToLowerInvariant()
+          $flverHookHash = (Get-FileHash "renderer-core/src/runtime/flver_engine_hooks.cpp" -Algorithm SHA256).Hash.ToLowerInvariant()
+          $flverDetourHash = (Get-FileHash "renderer-core/integrated/flver_identity_detour.asm" -Algorithm SHA256).Hash.ToLowerInvariant()
+          $flverRegistryHash = (Get-FileHash "renderer-core/src/runtime/flver_identity_registry.cpp" -Algorithm SHA256).Hash.ToLowerInvariant()
+          $receiverRegistryHash = (Get-FileHash "renderer-core/src/runtime/stable_receiver_pipeline_registry.cpp" -Algorithm SHA256).Hash.ToLowerInvariant()
+          $receiverCensusHash = (Get-FileHash "renderer-core/data/census/stable_hemenv_receiver_census_v1.json" -Algorithm SHA256).Hash.ToLowerInvariant()
+          $materialOwnerHash = (Get-FileHash "renderer-core/src/runtime/material_owner_producer.cpp" -Algorithm SHA256).Hash.ToLowerInvariant()
+          $materialSeedHash = (Get-FileHash "renderer-core/src/operators/material_response/material_response_seed.cpp" -Algorithm SHA256).Hash.ToLowerInvariant()
           $sourceRef = if ($env:GITHUB_HEAD_REF) { $env:GITHUB_HEAD_REF } else { $env:GITHUB_REF_NAME }
           $sourceRefKind = if ($env:GITHUB_HEAD_REF) { "pull_request_head" } else { "git_ref" }
           if ([string]::IsNullOrWhiteSpace($sourceRef)) { throw "Unable to resolve exact source ref" }
@@ -185,7 +192,18 @@ jobs:
             version_manifest_sha256 = $versionHash
             integrated_cmake_sha256 = $cmakeHash
             entrypoint_sha256 = $entryHash
-            a1_bridge_source_sha256 = $bridgeHash\n            flver_engine_hooks_sha256 = $flverHookHash\n            flver_identity_detour_sha256 = $flverDetourHash\n            flver_identity_registry_sha256 = $flverRegistryHash\n            flver_identity_transport = "CONSTRUCTION_IMPLEMENTED"
+            a1_bridge_source_sha256 = $bridgeHash
+            flver_engine_hooks_sha256 = $flverHookHash
+            flver_identity_detour_sha256 = $flverDetourHash
+            flver_identity_registry_sha256 = $flverRegistryHash
+            flver_identity_transport = "CONSTRUCTION_IMPLEMENTED"
+            stable_receiver_pipeline_registry_sha256 = $receiverRegistryHash
+            stable_receiver_census_sha256 = $receiverCensusHash
+            material_owner_producer_sha256 = $materialOwnerHash
+            material_response_seed_sha256 = $materialSeedHash
+            material_response_draw_probe = "TELEMETRY_ONLY_PIXEL_INERT"
+            material_response_feature_armed = $false
+            material_response_runtime_activation = "NOT_TESTED"
             boot_armed_operator_count = 5
             single_addon_entrypoint = $true
             draw_replay = $false
