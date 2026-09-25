@@ -1,0 +1,18 @@
+{
+  "schema": 1,
+  "game": "PTDE",
+  "status": "SOURCE_COMPLETE_OWNER_CORPUS",
+  "runtime_status": "OPEN",
+  "pixel_status": "OPEN",
+  "resource_byte_identity": "OPEN",
+  "cross_version_homology": "OPEN",
+  "counts": {"archive_entries_scanned":6114,"archive_pairs":2,"bnd3_binders":3479,"bnd3_entries":27814,"dcx_layers":4983,"flver_instances":4998,"unique_flver_payloads":4688,"material_instances":22063,"texture_bindings":87151,"mtd_entries":436,"unique_mtd_payloads":418,"unresolved_rows":0,"scan_errors":75},
+  "mtd_resolution": {"EXACT_BASENAME_SHA":87151},
+  "path_hash_selftests": "PASS",
+  "sha256": {"flver_material_ownership_input_v1.tsv":"f6fab999e103cb11a0c3ce50b33bde82c531f8297df81674344c1e3e9082a6f6","flver_material_ownership_raw_v1.jsonl":"c762b9a4705ed422e13d439b1a6ccf01a1778decaa5c8526dd85b3d27027eb37","flver_material_ownership_unresolved_v1.tsv":"c0450f6fc1ee78ee60f42ab0ffcff280e5d011af9a44e1118909a284251cff9d","flver_scan_errors_v1.jsonl":"1285616dfd1c4e6e1ffe9b1e24a536200ce423db346a2f9ebd4f90e0e1057c8e","ptde_mtd_index_v1.jsonl":"4166d5231b96f6b72164d9a62425092cc237ee06536d0cd0549a0e5de4f4bdd9"},
+  "confirmed_route_examples": {"P[D].mtd":{"flver_identities":12,"texture_semantics":{"g_Diffuse":13,"g_DetailBumpmap":13,"g_Specular":0,"g_Bumpmap":0},"classification":"PTDE_NO_SPC_NO_BMP","policy":"DO_NOT_INJECT_ORDINARY_SPEC_OR_NORMAL"},"Ps_Body[DSB].mtd":{"flver_identities":630,"texture_semantics":{"g_Diffuse":701,"g_Bumpmap":701,"g_DetailBumpmap":701,"g_Specular":701},"classification":"PTDE_SUBSURF_BODY_WITH_EXPLICIT_SPEC_AND_BMP","policy":"SEPARATE_SUBSURF_CONSUMER"}},
+  "activation_policy": "Census completeness removes the missing-source-corpus blocker only. Unknown cross-version resource identity or consumer homology must still fail open.",
+  "evidence_id": "937705df-dbf4-4799-9d2a-0bf3961e889d",
+  "finding_key": "project.census.ptde_full_flver_ownership_complete_v1",
+  "knowledge_revision": 9112
+}
