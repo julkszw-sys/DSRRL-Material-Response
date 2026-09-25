@@ -278,7 +278,8 @@ bool on_create_pipeline(
                 if (g_mr_draw_runtime.register_receiver_replacement(
                         mr.receiver_id,
                         mr_payload.data(),
-                        mr_payload.size()))
+                        mr_payload.size(),
+                        mr.composed_owners))
                     ++g_mr_payload_materialize_ok;
                 else
                     ++g_mr_payload_materialize_fail;
