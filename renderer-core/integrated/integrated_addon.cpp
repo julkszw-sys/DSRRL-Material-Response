@@ -108,6 +108,8 @@ bool observe_draw_identity(
             receiver_id);
 
     out_material = {};
+    out_decision = {};
+
     const bool owner_ok =
         dsrrl::runtime::material_owner_selection_consume(
             out_material);
@@ -117,20 +119,24 @@ bool observe_draw_identity(
     if (owner_ok)
         ++g_draw_owner_hits;
 
-    if (!receiver_ok || !owner_ok) {
-        if (owner_ok && !receiver_ok)
+    if (!receiver_ok) {
+        if (owner_ok)
             ++g_draw_owner_only;
-        if (receiver_ok && !owner_ok)
-            ++g_draw_receiver_only;
         ++g_mr_fail_open;
         return false;
+    }
+
+    if (!owner_ok) {
+        ++g_draw_receiver_only;
+        ++g_mr_fail_open;
+        return true;
     }
 
     ++g_draw_joins;
 
     if (!g_mr_ready.load()) {
         ++g_mr_fail_open;
-        return false;
+        return true;
     }
 
     ++g_mr_draw_eval;
@@ -139,13 +145,12 @@ bool observe_draw_identity(
             receiver_id,
             out_material);
 
-    if (out_decision.active) {
+    if (out_decision.active)
         ++g_mr_would_activate;
-        return true;
-    }
+    else
+        ++g_mr_fail_open;
 
-    ++g_mr_fail_open;
-    return false;
+    return true;
 }
 
 bool enable_integrated_islands() noexcept
@@ -411,6 +416,88 @@ void on_bind_pipeline(
     }
 }
 
+struct prepared_island_batch {
+    dsrrl::runtime::island_draw_batch batch{};
+    dsrrl::runtime::prepared_material_response_draw mr{};
+    dsrrl::runtime::prepared_material_resource_draw resources{};
+    bool mr_in_batch = false;
+};
+
+void release_prepared_island_batch(
+    prepared_island_batch &prepared) noexcept
+{
+    g_material_resources.release_prepared_draw(
+        prepared.resources);
+    g_mr_draw_runtime.release_prepared_draw(
+        prepared.mr);
+    prepared = {};
+}
+
+bool prepare_island_batch(
+    reshade::api::command_list *cmd_list,
+    std::uint32_t receiver_id,
+    const dsrrl::operators::material_response::material_identity &material,
+    const dsrrl::operators::material_response::decision &decision,
+    prepared_island_batch &prepared) noexcept
+{
+    prepared = {};
+
+    if (decision.active &&
+        g_mr_draw_runtime.prepare_draw_request(
+            decision,
+            prepared.mr)) {
+        if (dsrrl::runtime::append_island_draw_request(
+                prepared.batch,
+                prepared.mr.request) !=
+            dsrrl::runtime::island_draw_batch_result::ready) {
+            release_prepared_island_batch(prepared);
+            return false;
+        }
+        prepared.mr_in_batch = true;
+    }
+
+    dsrrl::operators::material_response::mtd_semantic_query query{};
+    query.material = material;
+    query.receiver_id = receiver_id;
+    query.ownership.flver_sha256 =
+        material.flver_sha256;
+    query.ownership.flver_identity_hash =
+        material.flver_identity_hash;
+    query.ownership.material_slot =
+        material.material_slot;
+    query.ownership.material_slot_valid =
+        material.material_slot_valid;
+    query.ownership.exact =
+        material.owner_tuple_exact;
+
+    auto *context =
+        reinterpret_cast<ID3D11DeviceContext *>(
+            cmd_list->get_native());
+
+    if (context != nullptr) {
+        (void)g_material_resources.prepare_draw_requests(
+            context,
+            receiver_id,
+            query,
+            prepared.mr_in_batch,
+            prepared.resources);
+
+        for (std::uint32_t i = 0u;
+             i < prepared.resources.request_count;
+             ++i) {
+            if (dsrrl::runtime::append_island_draw_request(
+                    prepared.batch,
+                    prepared.resources.requests[i]) !=
+                dsrrl::runtime::island_draw_batch_result::ready) {
+                release_prepared_island_batch(prepared);
+                return false;
+            }
+        }
+    }
+
+    return prepared.batch.island_count != 0u;
+}
+
 bool on_draw(
     reshade::api::command_list *cmd_list,
     std::uint32_t vertex_count,
@@ -429,68 +516,34 @@ bool on_draw(
             decision))
         return false;
 
-    dsrrl::runtime::prepared_material_response_draw mr{};
-    if (!g_mr_draw_runtime.prepare_draw_request(
-            decision,
-            mr))
-        return false;
-
-    dsrrl::runtime::island_draw_batch batch{};
-    if (dsrrl::runtime::append_island_draw_request(
-            batch,
-            mr.request) !=
-        dsrrl::runtime::island_draw_batch_result::ready) {
-        g_mr_draw_runtime.release_prepared_draw(mr);
-        return false;
-    }
-
-    dsrrl::operators::material_response::mtd_semantic_query query{};
-    query.material = material;
-    query.receiver_id = receiver_id;
-    query.ownership.flver_sha256 = material.flver_sha256;
-    query.ownership.flver_identity_hash = material.flver_identity_hash;
-    query.ownership.material_slot = material.material_slot;
-    query.ownership.material_slot_valid = material.material_slot_valid;
-    query.ownership.exact = material.owner_tuple_exact;
-
-    dsrrl::runtime::prepared_material_resource_draw resources{};
-    auto *context = reinterpret_cast<ID3D11DeviceContext *>(
-        cmd_list->get_native());
-
-    if (g_material_resources.prepare_draw_requests(
-            context,
+    prepared_island_batch prepared{};
+    if (!prepare_island_batch(
+            cmd_list,
             receiver_id,
-            query,
-            true,
-            resources)) {
-        for (std::uint32_t i = 0u;
-             i < resources.request_count;
-             ++i) {
-            if (dsrrl::runtime::append_island_draw_request(
-                    batch,
-                    resources.requests[i]) !=
-                dsrrl::runtime::island_draw_batch_result::ready) {
-                g_material_resources.release_prepared_draw(resources);
-                g_mr_draw_runtime.release_prepared_draw(mr);
-                return false;
-            }
-        }
-    }
+            material,
+            decision,
+            prepared))
+        return false;
 
     const auto dispatch =
         dsrrl::runtime::dispatch_island_draw_batch(
             g_draw_transactions,
             cmd_list,
-            batch,
+            prepared.batch,
             vertex_count,
             instance_count,
             first_vertex,
             first_instance);
 
-    g_material_resources.release_prepared_draw(resources);
-    g_mr_draw_runtime.release_prepared_draw(mr);
-    g_mr_draw_runtime.account_dispatch_result(
-        dispatch.transaction);
+    const bool mr_in_batch =
+        prepared.mr_in_batch;
+
+    release_prepared_island_batch(
+        prepared);
+
+    if (mr_in_batch)
+        g_mr_draw_runtime.account_dispatch_result(
+            dispatch.transaction);
 
     return dsrrl::runtime::draw_tx_issued(
         dispatch.transaction);
@@ -515,69 +568,35 @@ bool on_draw_indexed(
             decision))
         return false;
 
-    dsrrl::runtime::prepared_material_response_draw mr{};
-    if (!g_mr_draw_runtime.prepare_draw_request(
-            decision,
-            mr))
-        return false;
-
-    dsrrl::runtime::island_draw_batch batch{};
-    if (dsrrl::runtime::append_island_draw_request(
-            batch,
-            mr.request) !=
-        dsrrl::runtime::island_draw_batch_result::ready) {
-        g_mr_draw_runtime.release_prepared_draw(mr);
-        return false;
-    }
-
-    dsrrl::operators::material_response::mtd_semantic_query query{};
-    query.material = material;
-    query.receiver_id = receiver_id;
-    query.ownership.flver_sha256 = material.flver_sha256;
-    query.ownership.flver_identity_hash = material.flver_identity_hash;
-    query.ownership.material_slot = material.material_slot;
-    query.ownership.material_slot_valid = material.material_slot_valid;
-    query.ownership.exact = material.owner_tuple_exact;
-
-    dsrrl::runtime::prepared_material_resource_draw resources{};
-    auto *context = reinterpret_cast<ID3D11DeviceContext *>(
-        cmd_list->get_native());
-
-    if (g_material_resources.prepare_draw_requests(
-            context,
+    prepared_island_batch prepared{};
+    if (!prepare_island_batch(
+            cmd_list,
             receiver_id,
-            query,
-            true,
-            resources)) {
-        for (std::uint32_t i = 0u;
-             i < resources.request_count;
-             ++i) {
-            if (dsrrl::runtime::append_island_draw_request(
-                    batch,
-                    resources.requests[i]) !=
-                dsrrl::runtime::island_draw_batch_result::ready) {
-                g_material_resources.release_prepared_draw(resources);
-                g_mr_draw_runtime.release_prepared_draw(mr);
-                return false;
-            }
-        }
-    }
+            material,
+            decision,
+            prepared))
+        return false;
 
     const auto dispatch =
         dsrrl::runtime::dispatch_island_draw_indexed_batch(
             g_draw_transactions,
             cmd_list,
-            batch,
+            prepared.batch,
             index_count,
             instance_count,
             first_index,
             vertex_offset,
             first_instance);
 
-    g_material_resources.release_prepared_draw(resources);
-    g_mr_draw_runtime.release_prepared_draw(mr);
-    g_mr_draw_runtime.account_dispatch_result(
-        dispatch.transaction);
+    const bool mr_in_batch =
+        prepared.mr_in_batch;
+
+    release_prepared_island_batch(
+        prepared);
+
+    if (mr_in_batch)
+        g_mr_draw_runtime.account_dispatch_result(
+            dispatch.transaction);
 
     return dsrrl::runtime::draw_tx_issued(
         dispatch.transaction);
