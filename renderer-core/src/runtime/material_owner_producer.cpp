@@ -16,11 +16,11 @@ make_actual_material_identity(
 {
     auto result = observation.material;
 
-    // The producer is deliberately stricter than the consumer. A material
-    // pointer, MTD hash, or slot alone can never manufacture exact ownership.
+    // The producer requires the complete FLVER digest, material slot and
+    // semantic material identity. The legacy 64-bit FLVER token is auxiliary
+    // compatibility/telemetry only and is never an authorization requirement.
     if (!result.valid ||
         zero_digest(observation.flver_sha256) ||
-        observation.flver_identity_hash == 0u ||
         !observation.material_slot_valid ||
         result.semantic_name_hash == 0u) {
         result.owner_tuple_exact = false;
