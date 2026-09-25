@@ -1,5 +1,7 @@
 #include "dsrrl/runtime/island_draw_adapter.hpp"
 
+#include <type_traits>
+
 namespace dsrrl::runtime {
 namespace {
 
@@ -92,6 +94,167 @@ island_draw_adapter_result build_island_draw_mutation(
         request.sampler_count;
 
     return island_draw_adapter_result::ready;
+}
+
+
+namespace {
+
+template <typename Binding, std::size_t N>
+island_draw_batch_result merge_slot_bindings(
+    std::array<Binding,N> &dst,
+    std::uint32_t &dst_count,
+    const std::array<Binding,N> &src,
+    std::uint32_t src_count,
+    island_draw_batch_result conflict) noexcept
+{
+    for (std::uint32_t i = 0; i < src_count; ++i) {
+        bool matched = false;
+        for (std::uint32_t j = 0; j < dst_count; ++j) {
+            if (dst[j].slot != src[i].slot)
+                continue;
+            matched = true;
+            if constexpr (std::is_same_v<Binding, draw_tx_cb_binding>) {
+                if (dst[j].buffer != src[i].buffer)
+                    return conflict;
+            } else if constexpr (std::is_same_v<Binding, draw_tx_srv_binding>) {
+                if (dst[j].srv != src[i].srv)
+                    return conflict;
+            } else {
+                if (dst[j].sampler != src[i].sampler)
+                    return conflict;
+            }
+            break;
+        }
+
+        if (matched)
+            continue;
+
+        if (dst_count >= N)
+            return island_draw_batch_result::capacity_exceeded;
+
+        dst[dst_count++] = src[i];
+    }
+
+    return island_draw_batch_result::ready;
+}
+
+} // namespace
+
+island_draw_batch_result append_island_draw_request(
+    island_draw_batch &batch,
+    const island_draw_adapter_request &request) noexcept
+{
+    draw_tx_mutation one{};
+    const auto result =
+        build_island_draw_mutation(
+            request,
+            one);
+
+    if (result != island_draw_adapter_result::ready)
+        return island_draw_batch_result::adapter_rejected;
+
+    if (one.replace_pixel_shader) {
+        if (batch.mutation.replace_pixel_shader &&
+            batch.mutation.pixel_shader != one.pixel_shader)
+            return island_draw_batch_result::shader_conflict;
+
+        batch.mutation.replace_pixel_shader = true;
+        batch.mutation.pixel_shader = one.pixel_shader;
+    }
+
+    auto merged =
+        merge_slot_bindings(
+            batch.mutation.constant_buffers,
+            batch.mutation.constant_buffer_count,
+            one.constant_buffers,
+            one.constant_buffer_count,
+            island_draw_batch_result::constant_buffer_conflict);
+    if (merged != island_draw_batch_result::ready)
+        return merged;
+
+    merged =
+        merge_slot_bindings(
+            batch.mutation.srvs,
+            batch.mutation.srv_count,
+            one.srvs,
+            one.srv_count,
+            island_draw_batch_result::srv_conflict);
+    if (merged != island_draw_batch_result::ready)
+        return merged;
+
+    merged =
+        merge_slot_bindings(
+            batch.mutation.samplers,
+            batch.mutation.sampler_count,
+            one.samplers,
+            one.sampler_count,
+            island_draw_batch_result::sampler_conflict);
+    if (merged != island_draw_batch_result::ready)
+        return merged;
+
+    batch.mutation.owners |= one.owners;
+    ++batch.island_count;
+    return island_draw_batch_result::ready;
+}
+
+island_draw_dispatch_result dispatch_island_draw_batch(
+    draw_state_transaction_runtime &transactions,
+    reshade::api::command_list *cmd_list,
+    const island_draw_batch &batch,
+    std::uint32_t vertex_count,
+    std::uint32_t instance_count,
+    std::uint32_t first_vertex,
+    std::uint32_t first_instance) noexcept
+{
+    island_draw_dispatch_result out{};
+    out.adapter =
+        batch.island_count == 0u
+            ? island_draw_adapter_result::empty_mutation
+            : island_draw_adapter_result::ready;
+
+    if (out.adapter != island_draw_adapter_result::ready)
+        return out;
+
+    out.transaction =
+        transactions.replay_draw(
+            cmd_list,
+            batch.mutation,
+            vertex_count,
+            instance_count,
+            first_vertex,
+            first_instance);
+    return out;
+}
+
+island_draw_dispatch_result dispatch_island_draw_indexed_batch(
+    draw_state_transaction_runtime &transactions,
+    reshade::api::command_list *cmd_list,
+    const island_draw_batch &batch,
+    std::uint32_t index_count,
+    std::uint32_t instance_count,
+    std::uint32_t first_index,
+    std::int32_t vertex_offset,
+    std::uint32_t first_instance) noexcept
+{
+    island_draw_dispatch_result out{};
+    out.adapter =
+        batch.island_count == 0u
+            ? island_draw_adapter_result::empty_mutation
+            : island_draw_adapter_result::ready;
+
+    if (out.adapter != island_draw_adapter_result::ready)
+        return out;
+
+    out.transaction =
+        transactions.replay_draw_indexed(
+            cmd_list,
+            batch.mutation,
+            index_count,
+            instance_count,
+            first_index,
+            vertex_offset,
+            first_instance);
+    return out;
 }
 
 island_draw_dispatch_result dispatch_island_draw(
