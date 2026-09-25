@@ -89,7 +89,6 @@ public:
 
     bool prepare_hemdir3_carrier(
         ID3D11DeviceContext *context,
-        std::uint32_t receiver_id,
         prepared_hemdir3_carrier &prepared) noexcept;
 
     void release_hemdir3_carrier(
