@@ -271,6 +271,19 @@ void material_response_draw_runtime::release_prepared_draw(
     prepared = {};
 }
 
+void material_response_draw_runtime::account_dispatch_result(
+    draw_tx_result result) noexcept
+{
+    if (result ==
+        draw_tx_result::issued_restored) {
+        ++replay_ok_;
+    } else if (
+        result ==
+        draw_tx_result::issued_restore_failed) {
+        ++replay_restore_fail_;
+    }
+}
+
 ID3D11Buffer *material_response_draw_runtime::realize_b12(
     const operators::material_response::decision &decision) noexcept
 {
@@ -374,14 +387,8 @@ bool material_response_draw_runtime::replay_draw(
         island_draw_adapter_result::ready)
         return false;
 
-    if (dispatch.transaction ==
-        draw_tx_result::issued_restored) {
-        ++replay_ok_;
-    } else if (
-        dispatch.transaction ==
-        draw_tx_result::issued_restore_failed) {
-        ++replay_restore_fail_;
-    }
+    account_dispatch_result(
+        dispatch.transaction);
 
     return draw_tx_issued(
         dispatch.transaction);
@@ -419,14 +426,8 @@ bool material_response_draw_runtime::replay_draw_indexed(
         island_draw_adapter_result::ready)
         return false;
 
-    if (dispatch.transaction ==
-        draw_tx_result::issued_restored) {
-        ++replay_ok_;
-    } else if (
-        dispatch.transaction ==
-        draw_tx_result::issued_restore_failed) {
-        ++replay_restore_fail_;
-    }
+    account_dispatch_result(
+        dispatch.transaction);
 
     return draw_tx_issued(
         dispatch.transaction);
