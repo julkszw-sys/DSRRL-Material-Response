@@ -1,7 +1,6 @@
 #pragma once
 #include "dsrrl/operators/material_response/material_response_island.hpp"
 #include <cstdint>
-#include <optional>
 
 namespace dsrrl::runtime {
 
@@ -14,10 +13,10 @@ struct material_owner_selection_telemetry {
 };
 
 void material_owner_selection_clear() noexcept;
-void material_owner_selection_publish(
+bool material_owner_selection_publish(
     const operators::material_response::material_identity &identity) noexcept;
-std::optional<operators::material_response::material_identity>
-material_owner_selection_current() noexcept;
+bool material_owner_selection_consume(
+    operators::material_response::material_identity &identity) noexcept;
 material_owner_selection_telemetry material_owner_selection_stats() noexcept;
 void material_owner_selection_reset_stats() noexcept;
 
