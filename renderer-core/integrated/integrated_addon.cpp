@@ -122,16 +122,26 @@ void on_bind_pipeline(
     reshade::api::pipeline pipeline)
 {
     std::uint16_t first_plan = 0xFFFFu;
+    dsrrl::core::operator_mask selected_owners = 0u;
+    std::uint16_t selected_ops = 0u;
     const bool target =
-        g_a1_bridge.on_bind_pipeline(stages, pipeline, &first_plan);
+        g_a1_bridge.on_bind_pipeline(
+            stages,
+            pipeline,
+            &first_plan,
+            &selected_owners,
+            &selected_ops);
 
     if (target && first_plan != 0xFFFFu) {
-        char line[176]{};
+        char line[240]{};
         std::snprintf(
             line,
             sizeof(line),
-            "[DSRRL CORE+ISLANDS " DSRRL_CORE_ISLANDS_VERSION "] FIRST_BIND plan=%u",
-            static_cast<unsigned>(first_plan));
+            "[DSRRL CORE+ISLANDS " DSRRL_CORE_ISLANDS_VERSION "] "
+            "FIRST_BIND plan=%u owners=0x%08X ops=%u",
+            static_cast<unsigned>(first_plan),
+            static_cast<unsigned>(selected_owners),
+            static_cast<unsigned>(selected_ops));
         reshade::log::message(reshade::log::level::info, line);
     }
 }
