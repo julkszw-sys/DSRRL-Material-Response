@@ -61,6 +61,8 @@ jobs:
         run: python3 renderer-core/tests/test_dsr_flver_zip_ownership_census.py
       - name: Verify extracted-root DSR FLVER ownership exporter
         run: python3 renderer-core/tests/test_dsr_full_flver_ownership_export.py
+      - name: Verify exact DSR FLVER owner tuple materializer
+        run: python3 renderer-core/tests/test_materialize_dsr_flver_owner_tuples.py
       - name: Configure
         run: cmake -S renderer-core -B build/renderer-core -DCMAKE_BUILD_TYPE=Release
       - name: Build
