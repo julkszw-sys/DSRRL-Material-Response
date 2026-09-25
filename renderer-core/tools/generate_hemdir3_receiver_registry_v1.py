@@ -90,8 +90,10 @@ def main() -> int:
 
         source_size = int(r["code_size"])
         replacement_size = int(repl["replacement_size"])
-        if replacement_size != source_size + 16:
-            fail(f"replacement size mismatch for {sha}")
+        if replacement_size <= source_size + 16:
+            fail(f"RDEF-correct replacement must grow beyond the 16-byte SHEX declaration for {sha}")
+        if (replacement_size - source_size) % 4 != 0:
+            fail(f"replacement size delta must stay DWORD-aligned for {sha}")
 
         replacement_sha = repl["replacement_sha256"]
         if not SHA_RE.fullmatch(replacement_sha):
