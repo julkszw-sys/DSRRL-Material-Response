@@ -171,8 +171,9 @@ void log_state(const char *tag) noexcept
         "inserts=%llu lookups=%llu hits=%llu misses=%llu erases=%llu invalid=%llu "
         "owner_sel=%llu owner_enriched=%llu owner_auth=%llu owner_fo=%llu "
         "mr_ready=%u mr_eval=%llu mr_would_activate=%llu mr_fo=%llu "
-        "mr_mat_ok=%llu mr_mat_fail=%llu mr_payload_ok=%llu mr_payload_fail=%llu mr_tx_eligible=%llu mr_tx_miss=%llu "
-        "mr_replay=%llu mr_restore_fail=%llu mr_quarantine=%u "
+        "mr_mat_ok=%llu mr_mat_fail=%llu mr_payload_ok=%llu mr_payload_fail=%llu "
+        "mr_b12_create=%llu mr_b12_hit=%llu mr_b12_bind_fail=%llu "
+        "mr_tx_eligible=%llu mr_tx_miss=%llu mr_replay=%llu mr_restore_fail=%llu mr_quarantine=%u "
         "draw=%llu draw_rx=%llu draw_owner=%llu draw_join=%llu owner_only=%llu rx_only=%llu",
         tag,
         static_cast<unsigned long long>(t.create_events),
@@ -210,6 +211,9 @@ void log_state(const char *tag) noexcept
         static_cast<unsigned long long>(g_mr_payload_materialize_fail.load()),
         static_cast<unsigned long long>(mr_tx.replacement_register_ok),
         static_cast<unsigned long long>(mr_tx.replacement_register_fail),
+        static_cast<unsigned long long>(mr_tx.b12_create),
+        static_cast<unsigned long long>(mr_tx.b12_hit),
+        static_cast<unsigned long long>(mr_tx.b12_bind_fail),
         static_cast<unsigned long long>(mr_tx.eligible_draws),
         static_cast<unsigned long long>(mr_tx.replacement_miss),
         static_cast<unsigned long long>(mr_tx.replay_ok),
@@ -383,7 +387,7 @@ bool on_draw(
 
     return g_mr_draw_runtime.replay_draw(
         cmd_list,
-        receiver_id,
+        decision,
         vertex_count,
         instance_count,
         first_vertex,
@@ -405,7 +409,7 @@ bool on_draw_indexed(
 
     return g_mr_draw_runtime.replay_draw_indexed(
         cmd_list,
-        receiver_id,
+        decision,
         index_count,
         instance_count,
         first_index,
