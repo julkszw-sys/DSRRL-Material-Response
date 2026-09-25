@@ -12,6 +12,13 @@ struct actual_material_owner_observation {
     operators::material_response::material_identity material{};
 };
 
+// Resolve the exact DSR material identity carried by a source-complete
+// (raw FLVER SHA-256, material slot) owner tuple. This is a static host-identity
+// join only: no receiver/operator activation follows from it. Missing or
+// ambiguous MTD identity fails open and clears observation.material.
+bool enrich_exact_owner_mtd_identity(
+    actual_material_owner_observation &observation) noexcept;
+
 // Narrow handoff between the engine-side FLVER/material selector observer and
 // Material Response. It never infers ownership from MTD identity.
 operators::material_response::material_identity
