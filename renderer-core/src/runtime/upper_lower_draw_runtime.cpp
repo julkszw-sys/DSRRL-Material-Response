@@ -1433,7 +1433,6 @@ bool upper_lower_draw_runtime::prepare_draw_request(
 
 bool upper_lower_draw_runtime::prepare_hemdir3_carrier(
     ID3D11DeviceContext *context,
-    std::uint32_t receiver_id,
     prepared_hemdir3_carrier &prepared) noexcept
 {
     prepared = {};
@@ -1441,7 +1440,6 @@ bool upper_lower_draw_runtime::prepare_hemdir3_carrier(
     if (!g_enabled.load() ||
         g_quarantined.load() ||
         context == nullptr ||
-        receiver_id == 0u ||
         !g_draw_snapshot ||
         !g_draw_snapshot->d123_ready)
         return false;
