@@ -511,7 +511,18 @@ void on_destroy_resource_view(device *device_ptr,resource_view view)
     std::lock_guard lock(g_mutex);
     if(device_ptr==nullptr || device_ptr!=g_device)
         return;
+
     g_resource_by_view.erase(view.handle);
+
+    // A command-list snapshot must never outlive the SRV identity it refers
+    // to. Besides avoiding ordinary stale state, this blocks a destroyed
+    // handle from aliasing a later SRV that happens to reuse the same value.
+    for(auto &[_,bindings]:g_command_bindings){
+        for(auto &bound:bindings.srv){
+            if(bound.valid && bound.view.handle==view.handle)
+                bound={};
+        }
+    }
 }
 
 int tracked_slot(std::uint32_t binding) noexcept
