@@ -24,6 +24,22 @@ add_custom_command(
 
 add_custom_target(dsrrl_mr_manifest DEPENDS "${GEN_DIR}/mr_runtime_manifest.hpp")
 
+set(SEMANTIC_SPEC_DONOR_TSV "${PROV}/semantic_spec_donor_overrides_v1.tsv")
+set(SEMANTIC_SPEC_DONOR_HEADER "${GEN_DIR}/semantic_spec_donor_overrides_generated.hpp")
+add_custom_command(
+  OUTPUT "${SEMANTIC_SPEC_DONOR_HEADER}"
+  COMMAND "${Python3_EXECUTABLE}"
+          "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_semantic_spec_donor_overrides.py"
+          --input "${SEMANTIC_SPEC_DONOR_TSV}"
+          --output "${SEMANTIC_SPEC_DONOR_HEADER}"
+  DEPENDS
+    "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_semantic_spec_donor_overrides.py"
+    "${SEMANTIC_SPEC_DONOR_TSV}"
+  VERBATIM
+)
+add_custom_target(dsrrl_semantic_spec_donor_header
+  DEPENDS "${SEMANTIC_SPEC_DONOR_HEADER}")
+
 include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/A3RouteHeaders.cmake")
 
 add_library(dsrrl_runtime_v1 STATIC
@@ -31,7 +47,7 @@ add_library(dsrrl_runtime_v1 STATIC
   src/mr_dxbc_transform.cpp
   "${GEN_DIR}/mr_runtime_manifest.hpp"
 )
-add_dependencies(dsrrl_runtime_v1 dsrrl_mr_manifest)
+add_dependencies(dsrrl_runtime_v1 dsrrl_mr_manifest dsrrl_semantic_spec_donor_header)
 target_include_directories(dsrrl_runtime_v1 PUBLIC include "${GEN_DIR}")
 target_compile_features(dsrrl_runtime_v1 PUBLIC cxx_std_20)
 if(MSVC)
@@ -61,8 +77,11 @@ target_compile_features(dsrrl_runtime_v1_draw_replay_tests PRIVATE cxx_std_20)
 
 add_executable(dsrrl_runtime_v1_semantic_spec_donor_tests
   tests/semantic_spec_donor_tests.cpp
+  "${SEMANTIC_SPEC_DONOR_HEADER}"
 )
+add_dependencies(dsrrl_runtime_v1_semantic_spec_donor_tests dsrrl_semantic_spec_donor_header)
 target_include_directories(dsrrl_runtime_v1_semantic_spec_donor_tests PRIVATE
+  "${GEN_DIR}"
   "${CMAKE_CURRENT_SOURCE_DIR}/include"
 )
 target_compile_features(dsrrl_runtime_v1_semantic_spec_donor_tests PRIVATE cxx_std_20)
@@ -115,7 +134,7 @@ if(WIN32 AND RESHade_INCLUDE_DIR)
     src/selector_hook.asm
     src/texture_name_hook.asm
   )
-  add_dependencies(dsrrl_renderer_runtime_v1_addon dsrrl_mr_manifest dsrrl_a3_route_headers)
+  add_dependencies(dsrrl_renderer_runtime_v1_addon dsrrl_mr_manifest dsrrl_semantic_spec_donor_header dsrrl_a3_route_headers)
   target_include_directories(dsrrl_renderer_runtime_v1_addon PRIVATE
     include
     "${GEN_DIR}"
