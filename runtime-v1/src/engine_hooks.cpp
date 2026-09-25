@@ -217,6 +217,44 @@ bool safe_read_bytes(const void *src, void *dst, std::size_t size) noexcept
 #endif
 }
 
+bool safe_readable_range(const void *src, std::size_t size) noexcept
+{
+    if(!src) return false;
+    if(size==0u) return true;
+
+    const auto begin=reinterpret_cast<std::uintptr_t>(src);
+    const auto end=begin+size;
+    if(end<begin) return false;
+
+    auto cursor=begin;
+    while(cursor<end){
+        MEMORY_BASIC_INFORMATION mbi{};
+        if(VirtualQuery(reinterpret_cast<const void *>(cursor),&mbi,sizeof(mbi))!=sizeof(mbi))
+            return false;
+        if(mbi.State!=MEM_COMMIT || (mbi.Protect&PAGE_GUARD)!=0u)
+            return false;
+
+        const DWORD access=mbi.Protect&0xffu;
+        const bool readable=
+            access==PAGE_READONLY ||
+            access==PAGE_READWRITE ||
+            access==PAGE_WRITECOPY ||
+            access==PAGE_EXECUTE_READ ||
+            access==PAGE_EXECUTE_READWRITE ||
+            access==PAGE_EXECUTE_WRITECOPY;
+        if(!readable)
+            return false;
+
+        const auto region_begin=
+            reinterpret_cast<std::uintptr_t>(mbi.BaseAddress);
+        const auto region_end=region_begin+mbi.RegionSize;
+        if(region_end<=cursor || region_end<region_begin)
+            return false;
+        cursor=region_end<end ? region_end : end;
+    }
+    return true;
+}
+
 bool verify_provenance() noexcept
 {
     try {
