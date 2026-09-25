@@ -152,8 +152,13 @@ void log_state(const char *tag) noexcept
     const auto t = g_a1_bridge.telemetry();
     const auto f = dsrrl::runtime::flver_identity_stats();
     const auto h = dsrrl::runtime::flver_identity_transport::status();
+    const auto o =
+        dsrrl::runtime::flver_identity_transport::
+            selector_owner_stats();
+    const auto r =
+        dsrrl::runtime::stable_receiver_pipeline_stats();
 
-    char line[560]{};
+    char line[1280]{};
     std::snprintf(
         line,
         sizeof(line),
@@ -161,7 +166,11 @@ void log_state(const char *tag) noexcept
         "create=%llu candidate=%llu exact=%llu materialized=%llu "
         "unknown=%llu no_owner=%llu failopen=%llu init_ok=%llu "
         "init_bad=%llu binds=%llu quarantine=%u "
-        "flver_hook=%u/%u/%u prov=%u owner_enrich=%u restore_fail=%u inserts=%llu lookups=%llu hits=%llu misses=%llu erases=%llu invalid=%llu",
+        "flver_hook=%u/%u/%u prov=%u owner_enrich=%u restore_fail=%u "
+        "flver_ins=%llu flver_lookup=%llu flver_hit=%llu flver_miss=%llu flver_erase=%llu flver_bad=%llu "
+        "sel=%llu owner_sha=%llu owner_mtd=%llu owner_ready=%llu owner_fail=%llu owner_cons=%llu owner_cons_miss=%llu "
+        "rx_init=%llu rx_cand=%llu rx_exact=%llu rx_hash_miss=%llu rx_bind=%llu rx_exact_bind=%llu rx_unknown_bind=%llu "
+        "draw=%llu draw_rx=%llu draw_owner=%llu draw_join=%llu mr_probe_ready=%u mr_would_active=%llu mr_inactive=%llu owner_only=%llu rx_only=%llu",
         tag,
         static_cast<unsigned long long>(t.create_events),
         static_cast<unsigned long long>(t.candidate_size_hits),
@@ -185,7 +194,30 @@ void log_state(const char *tag) noexcept
         static_cast<unsigned long long>(f.hits),
         static_cast<unsigned long long>(f.misses),
         static_cast<unsigned long long>(f.erases),
-        static_cast<unsigned long long>(f.invalid_raw));
+        static_cast<unsigned long long>(f.invalid_raw),
+        static_cast<unsigned long long>(o.selector_events),
+        static_cast<unsigned long long>(o.owner_sha_hits),
+        static_cast<unsigned long long>(o.owner_mtd_hits),
+        static_cast<unsigned long long>(o.exact_owner_ready),
+        static_cast<unsigned long long>(o.owner_fail_open),
+        static_cast<unsigned long long>(o.consumed),
+        static_cast<unsigned long long>(o.consume_misses),
+        static_cast<unsigned long long>(r.pipeline_inits),
+        static_cast<unsigned long long>(r.candidate_size_hits),
+        static_cast<unsigned long long>(r.exact_receiver_hits),
+        static_cast<unsigned long long>(r.candidate_hash_misses),
+        static_cast<unsigned long long>(r.pixel_binds),
+        static_cast<unsigned long long>(r.exact_binds),
+        static_cast<unsigned long long>(r.unknown_binds),
+        static_cast<unsigned long long>(g_draw_probe_events.load()),
+        static_cast<unsigned long long>(g_draw_probe_receiver_hits.load()),
+        static_cast<unsigned long long>(g_draw_probe_owner_hits.load()),
+        static_cast<unsigned long long>(g_draw_probe_joins.load()),
+        g_mr_probe_ready.load() ? 1u : 0u,
+        static_cast<unsigned long long>(g_draw_probe_active.load()),
+        static_cast<unsigned long long>(g_draw_probe_inactive.load()),
+        static_cast<unsigned long long>(g_draw_probe_owner_only.load()),
+        static_cast<unsigned long long>(g_draw_probe_receiver_only.load()));
 
     reshade::log::message(reshade::log::level::info, line);
 }
@@ -372,6 +404,22 @@ bool AddonInit(
 
     g_a1_bridge.reset();
     g_present_count.store(0);
+    reset_draw_probe();
+
+    const auto seeded_receivers =
+        dsrrl::operators::material_response::
+            register_confirmed_material_receivers_v1(
+                g_mr_probe);
+    const auto seeded_routes =
+        dsrrl::operators::material_response::
+            register_confirmed_material_routes_v1(
+                g_mr_probe);
+
+    g_mr_probe_ready.store(
+        seeded_receivers == 24u &&
+        seeded_routes == 35u &&
+        g_mr_probe.receiver_recipe_count() == 24u &&
+        g_mr_probe.material_profile_count() == 35u);
 
     if (!enable_integrated_islands()) {
         disable_integrated_islands();
