@@ -54,7 +54,8 @@ material_response_draw_runtime::~material_response_draw_runtime()
 void material_response_draw_runtime::release_replacements() noexcept
 {
     std::lock_guard<std::mutex> lock(mutex_);
-    for (auto &[_, shader] : replacements_) {
+    for (auto &entry : replacements_) {
+        auto *shader = entry.second;
         if (shader != nullptr)
             shader->Release();
     }
@@ -101,7 +102,8 @@ void material_response_draw_runtime::on_destroy_device(
     if (native != device_)
         return;
 
-    for (auto &[_, shader] : replacements_) {
+    for (auto &entry : replacements_) {
+        auto *shader = entry.second;
         if (shader != nullptr)
             shader->Release();
     }
