@@ -1,0 +1,61 @@
+{
+  "schema": 1,
+  "artifact": "FLVER-first PTDE/DSR MTD semantic ownership census",
+  "parent_census": "renderer-core/data/census/ptde_mtd_semantic_census_v1.json",
+  "claim_scope": "CONSTRUCTION_AND_STATIC_ROUTING_ONLY",
+  "runtime_activation": "OPEN",
+  "pixel_equivalence": "OPEN",
+  "identity_model": {
+    "primary_key": ["game/version", "exact FLVER identity", "material_slot", "semantic MTD identity", "raw MTD SHA256"],
+    "resource_key_extension": ["texture/resource semantic", "logical resource hash", "SRV/sampler binding when known"],
+    "consumer_key_extension": ["shader/SPX identity", "receiver index", "consumer family", "operator route"],
+    "reason": "MTD semantics are material-slot owned. A whole-MTD classification must not erase per-FLVER/per-slot differences in texture/resource bindings or mixed materials."
+  },
+  "operator_columns": ["material_response", "spec_rgb", "env_spec", "subsurface", "diffuse", "normal_bump", "upper_lower", "hemenv", "hemenv_lerp", "pointlight", "alpha_blend", "parallax", "emissive_lightmap", "texture_resource_consumers"],
+  "sources": [
+    {"artifact_id":943,"sha256":"2006aff1a18d436f08d71ff491cd618f558ec263499ad038ac31556304af091e","role":"equipment FLVER material-slot -> exact MTD -> receiver census V2"},
+    {"artifact_id":571,"sha256":"009a7b72ea92389ee7f0da6ab3c370a7255897fed98698d45ae01ddd2ebee503","role":"PTDE/DSR MTD homology registry"},
+    {"artifact_id":920,"sha256":"de3d49a67ddc7b1e8ff89f18817a77ca5d21b845c007e10fb1f2eba692a7413a","role":"exact MTD -> SPX -> stable receiver census"},
+    {"path":"renderer-core/data/provenance/diffuse_routes_v12.tsv","role":"exact Diffuse resource routes"},
+    {"path":"renderer-core/data/provenance/normal_routes_v12.tsv","role":"exact Normal/Bump resource tuples"}
+  ],
+  "artifact943_static_coverage": {
+    "partsbnd":1245,
+    "flver":1277,
+    "declared_material_texture_slots":19003,
+    "primary_g_specular_bindings":4705,
+    "ordinary_sidecar_ownership":"552/552",
+    "bridge_mtd_names":27,
+    "confirmed_mtd_routes":17,
+    "open_mtd_routes":10,
+    "parser_errors":0
+  },
+  "row_schema": {
+    "required_identity": ["game", "flver_identity", "material_slot", "mtd_name", "mtd_sha256"],
+    "optional_routing": ["spx_sha256", "receiver_index", "consumer_family", "material_family"],
+    "resources": [{"semantic":"Diffuse|Specular|Normal|EnvSpec|other", "logical_hash":"exact hash", "srv_slot":"optional", "sampler_slot":"optional", "state":"USE|NO_USE|UNKNOWN"}],
+    "operators": "map of operator -> {state, confidence, evidence}",
+    "default_operator_state":"UNKNOWN"
+  },
+  "promotion_rules": [
+    "Promote a resource/operator to USE only on an exact FLVER+material-slot+MTD identity supported by exact route evidence.",
+    "Promote from slot rows to whole-MTD semantics only if all represented exact ownership rows agree and coverage is sufficient for the claimed scope.",
+    "Never infer NO_USE from absence in a route corpus or from MTD/texture naming.",
+    "Mixed-material FLVERs remain independently classified per material slot.",
+    "Unknown FLVER identity, slot ownership, raw MTD SHA or consumer route is fail-open and preserves the DSR host path."
+  ],
+  "current_materialization": {
+    "row_payload":"PENDING_REPRODUCIBLE_EXPORT_OF_ARTIFACT_943",
+    "known_flver_count":1277,
+    "known_material_texture_slot_count":19003,
+    "mtd_level_diffuse":"UNKNOWN_UNTIL_ROW_JOIN",
+    "mtd_level_normal_bump":"UNKNOWN_UNTIL_ROW_JOIN"
+  },
+  "forbidden": [
+    "whole-MTD classification from family/name heuristic",
+    "cross-slot propagation inside one FLVER",
+    "aggregate artifact943 counts promoted as row ownership",
+    "NO_USE from corpus absence",
+    "runtime or pixel-equivalence claims from static ownership"
+  ]
+}
