@@ -83,6 +83,7 @@ void log_state(const char *tag) noexcept
         h.selector_armed ? 1u : 0u,
         h.destructor_armed ? 1u : 0u,
         h.provenance_ok ? 1u : 0u,
+        h.selector_owner_enrichment ? 1u : 0u,
         h.restore_failed ? 1u : 0u,
         static_cast<unsigned long long>(f.inserts),
         static_cast<unsigned long long>(f.lookups),
