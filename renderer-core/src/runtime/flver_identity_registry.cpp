@@ -65,7 +65,15 @@ bool flver_identity_observe_parse(const void *model,const void *raw,std::size_t 
     const std::uint64_t total=static_cast<std::uint64_t>(data_offset)+data_length;
     if(data_offset<0x40u||total<data_offset||total>k_max_flver_bytes||total>readable_bytes){++g_invalid;return false;}
     const auto sha=digest(raw,static_cast<std::size_t>(total));
-    {std::lock_guard<std::mutex> lock(g_mutex);g_by_model[model]=sha;}++g_inserts;return true;
+    try {
+        std::lock_guard<std::mutex> lock(g_mutex);
+        g_by_model[model]=sha;
+    } catch (...) {
+        ++g_invalid;
+        return false;
+    }
+    ++g_inserts;
+    return true;
 }
 void flver_identity_observe_destroy(const void *model) noexcept {
     if (!model) {
