@@ -179,8 +179,15 @@ int main()
     CHECK(exact_mr.active);
     CHECK(exact_mr.reason==decision_reason::active);
     CHECK(exact_mr.route_index==345u);
-    CHECK(exact_mr.certified_operations==specular_factor_c101);
+    CHECK(exact_mr.certified_operations==
+          (diffuse_material_domain_linear | specular_factor_c101));
     CHECK(exact_mr.c101==2.5f);
+    CHECK(exact_mr.c100[0]==0.5f);
+    CHECK(exact_mr.c100[1]==0.5f);
+    CHECK(exact_mr.c100[2]==0.5f);
+    CHECK(exact_mr.c101_f0q[0]==1.51663761f);
+    CHECK(exact_mr.c101_f0q[1]==1.51663761f);
+    CHECK(exact_mr.c101_f0q[2]==1.51663761f);
 
     auto spoofed_pmetal=exact_pmetal;
     spoofed_pmetal.flver_sha256.fill(0xffu);
