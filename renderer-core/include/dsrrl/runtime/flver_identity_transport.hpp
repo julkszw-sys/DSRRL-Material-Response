@@ -9,6 +9,7 @@ struct hook_status {
     bool selector_armed = false;
     bool destructor_armed = false;
     bool restore_failed = false;
+    bool selector_owner_enrichment = false;
 };
 
 bool install() noexcept;
