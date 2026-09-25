@@ -856,6 +856,7 @@ bool diffuse_ready(
 {
     if(context==nullptr || g_core==nullptr || g_quarantined.load() ||
        !receiver_allowed(route,receiver_id) ||
+       !material_owner_authorized(route.owner_authorization) ||
        !route.diffuse_eligible ||
        receiver_id<24u || receiver_id>35u ||
        !g_core->features().enabled(core::operator_id::diffuse))
@@ -888,6 +889,7 @@ bool normal_ready(
 {
     if(context==nullptr || g_core==nullptr || g_quarantined.load() ||
        !receiver_allowed(route,receiver_id) ||
+       !material_owner_authorized(route.owner_authorization) ||
        !route.normal_eligible ||
        receiver_id<24u || receiver_id>35u ||
        !g_core->features().enabled(core::operator_id::normal))
@@ -959,13 +961,18 @@ bool apply_draw(
         g_core->features().enabled(core::operator_id::spec_rgb);
 
     const bool bmp_receiver = receiver_id >= 24u && receiver_id <= 35u;
+    const bool owner_authorized =
+        material_owner_authorized(route.owner_authorization);
+
     const bool want_diff =
+        owner_authorized &&
         route.diffuse_eligible &&
         route.diffuse_c100_carrier_active &&
         bmp_receiver &&
         g_core->features().enabled(core::operator_id::diffuse);
 
     const bool want_norm =
+        owner_authorized &&
         route.normal_eligible &&
         bmp_receiver &&
         g_core->features().enabled(core::operator_id::normal);
