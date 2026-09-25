@@ -64,7 +64,9 @@ def _verify_manifest_hashes(zip_path: Path) -> None:
             # Compact census members are *.flver.struct payloads. Their bytes
             # are authenticated by sha256_struct; sha256_full identifies the
             # original complete FLVER and is intentionally used by owner tuples.
-            expected = str(row.get("sha256_struct", "")).lower()
+            expected = str(
+                row.get("sha256_struct") or row.get("sha256_full", "")
+            ).lower()
             if not member or member in seen:
                 continue
             seen.add(member)
@@ -74,13 +76,13 @@ def _verify_manifest_hashes(zip_path: Path) -> None:
                 )
             if len(expected) != 64:
                 raise ValueError(
-                    f"manifest row {index} has invalid sha256_struct {expected!r}"
+                    f"manifest row {index} has invalid member SHA-256 {expected!r}"
                 )
             try:
                 int(expected, 16)
             except ValueError as exc:
                 raise ValueError(
-                    f"manifest row {index} has non-hex sha256_struct {expected!r}"
+                    f"manifest row {index} has non-hex member SHA-256 {expected!r}"
                 ) from exc
             actual = hashlib.sha256(z.read(member)).hexdigest()
             if actual != expected:
