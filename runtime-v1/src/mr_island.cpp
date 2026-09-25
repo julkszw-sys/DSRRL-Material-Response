@@ -487,56 +487,80 @@ bool ensure_lerp_shader_pair(
 
     const auto i=static_cast<std::size_t>(p.pair_index);
     if(i>=24u) return false;
-    if(g_device.lerp_diffuse[i] && g_device.lerp_full[i]) return true;
+    if(g_device.lerp_diffuse[i] && g_device.lerp_full[i] &&
+       g_device.lerp_stock_diffuse_full[i]) return true;
 
     const auto diffuse=transform_lerp(stock,p,variant::diffuse_v29);
     const auto full=transform_lerp(stock,p,variant::full_v211);
-    if(!diffuse.ok || !full.ok){
+    const auto stock_diffuse_full=
+        full.ok ? transform_stock_diffuse_material_lerp(full.code,p) : transform_result{};
+    if(!diffuse.ok || !full.ok || !stock_diffuse_full.ok){
         ++g_lerp_shader_fail;
         return false;
     }
 
     const auto diffuse_ul=transform_upper_lower(diffuse.code);
     const auto full_ul=transform_upper_lower(full.code);
+    const auto stock_diffuse_full_ul=transform_upper_lower(stock_diffuse_full.code);
     const auto full_spec=transform_spec_rgb(full.code);
+    const auto stock_diffuse_full_spec=transform_spec_rgb(stock_diffuse_full.code);
     const auto full_ul_spec=full_ul.ok ? transform_spec_rgb(full_ul.code) : transform_result{};
+    const auto stock_diffuse_full_ul_spec=
+        stock_diffuse_full_ul.ok ? transform_spec_rgb(stock_diffuse_full_ul.code) : transform_result{};
 
-    ID3D11PixelShader *ps_diffuse=nullptr,*ps_full=nullptr;
-    ID3D11PixelShader *ps_diffuse_ul=nullptr,*ps_full_ul=nullptr;
+    ID3D11PixelShader *ps_diffuse=nullptr,*ps_full=nullptr,*ps_stock_diffuse_full=nullptr;
+    ID3D11PixelShader *ps_diffuse_ul=nullptr,*ps_full_ul=nullptr,*ps_stock_diffuse_full_ul=nullptr;
     ID3D11PixelShader *ps_full_spec=nullptr,*ps_full_ul_spec=nullptr;
+    ID3D11PixelShader *ps_stock_diffuse_full_spec=nullptr,*ps_stock_diffuse_full_ul_spec=nullptr;
 
     const bool ok =
         create_shader(native,diffuse,ps_diffuse) &&
         create_shader(native,full,ps_full) &&
+        create_shader(native,stock_diffuse_full,ps_stock_diffuse_full) &&
         create_shader(native,diffuse_ul,ps_diffuse_ul) &&
         create_shader(native,full_ul,ps_full_ul) &&
+        create_shader(native,stock_diffuse_full_ul,ps_stock_diffuse_full_ul) &&
         create_shader(native,full_spec,ps_full_spec) &&
-        create_shader(native,full_ul_spec,ps_full_ul_spec);
+        create_shader(native,stock_diffuse_full_spec,ps_stock_diffuse_full_spec) &&
+        create_shader(native,full_ul_spec,ps_full_ul_spec) &&
+        create_shader(native,stock_diffuse_full_ul_spec,ps_stock_diffuse_full_ul_spec);
 
     if(!ok){
         if(ps_diffuse) ps_diffuse->Release();
         if(ps_full) ps_full->Release();
+        if(ps_stock_diffuse_full) ps_stock_diffuse_full->Release();
         if(ps_diffuse_ul) ps_diffuse_ul->Release();
         if(ps_full_ul) ps_full_ul->Release();
+        if(ps_stock_diffuse_full_ul) ps_stock_diffuse_full_ul->Release();
         if(ps_full_spec) ps_full_spec->Release();
+        if(ps_stock_diffuse_full_spec) ps_stock_diffuse_full_spec->Release();
         if(ps_full_ul_spec) ps_full_ul_spec->Release();
+        if(ps_stock_diffuse_full_ul_spec) ps_stock_diffuse_full_ul_spec->Release();
         ++g_lerp_shader_fail;
         return false;
     }
 
     if(g_device.lerp_diffuse[i]) g_device.lerp_diffuse[i]->Release();
     if(g_device.lerp_full[i]) g_device.lerp_full[i]->Release();
+    if(g_device.lerp_stock_diffuse_full[i]) g_device.lerp_stock_diffuse_full[i]->Release();
     if(g_device.lerp_diffuse_ul[i]) g_device.lerp_diffuse_ul[i]->Release();
     if(g_device.lerp_full_ul[i]) g_device.lerp_full_ul[i]->Release();
+    if(g_device.lerp_stock_diffuse_full_ul[i]) g_device.lerp_stock_diffuse_full_ul[i]->Release();
     if(g_device.lerp_full_spec[i]) g_device.lerp_full_spec[i]->Release();
     if(g_device.lerp_full_ul_spec[i]) g_device.lerp_full_ul_spec[i]->Release();
+    if(g_device.lerp_stock_diffuse_full_spec[i]) g_device.lerp_stock_diffuse_full_spec[i]->Release();
+    if(g_device.lerp_stock_diffuse_full_ul_spec[i]) g_device.lerp_stock_diffuse_full_ul_spec[i]->Release();
 
     g_device.lerp_diffuse[i]=ps_diffuse;
     g_device.lerp_full[i]=ps_full;
+    g_device.lerp_stock_diffuse_full[i]=ps_stock_diffuse_full;
     g_device.lerp_diffuse_ul[i]=ps_diffuse_ul;
     g_device.lerp_full_ul[i]=ps_full_ul;
+    g_device.lerp_stock_diffuse_full_ul[i]=ps_stock_diffuse_full_ul;
     g_device.lerp_full_spec[i]=ps_full_spec;
     g_device.lerp_full_ul_spec[i]=ps_full_ul_spec;
+    g_device.lerp_stock_diffuse_full_spec[i]=ps_stock_diffuse_full_spec;
+    g_device.lerp_stock_diffuse_full_ul_spec[i]=ps_stock_diffuse_full_ul_spec;
     ++g_lerp_shader_pass;
     return true;
 }
