@@ -8,6 +8,7 @@
 #include "dsrrl/runtime/upper_lower_draw_runtime.hpp"
 #include "dsrrl/runtime/flver_identity_transport.hpp"
 #include "dsrrl/operators/lightbank/snapshot_freshness.hpp"
+#include "dsrrl/operators/lightbank/hemdir3.hpp"
 
 #include <Windows.h>
 #include <d3d11.h>
@@ -38,15 +39,21 @@ struct f4 {
 
 struct snapshot {
     operators::lightbank::lightbank_snapshot_fingerprint fingerprint{};
-    alignas(16) std::array<f4,8> payload{};
+    alignas(16) std::array<f4,8> ul_payload{};
+    alignas(16) std::array<f4,8> hemdir3_payload{};
+    bool d123_ready = false;
+
     mutable std::mutex gpu_mutex;
     mutable ID3D11Device *device = nullptr;
-    mutable ID3D11Buffer *buffer = nullptr;
+    mutable ID3D11Buffer *ul_buffer = nullptr;
+    mutable ID3D11Buffer *hemdir3_buffer = nullptr;
 
     ~snapshot()
     {
-        if (buffer != nullptr)
-            buffer->Release();
+        if (ul_buffer != nullptr)
+            ul_buffer->Release();
+        if (hemdir3_buffer != nullptr)
+            hemdir3_buffer->Release();
         if (device != nullptr)
             device->Release();
     }
@@ -58,8 +65,10 @@ struct producer_tls {
     const std::uint8_t *assignment = nullptr;
     bool have_upper = false;
     bool have_lower = false;
+    bool have_d123 = false;
     f4 upper{};
     f4 lower{};
+    std::array<operators::lightbank::hemdir3_lobe,3> d123{};
 };
 
 struct inline_hook {
@@ -77,11 +86,20 @@ using blend_fn =
     void *(__fastcall *)(void *,const void *,const void *,float);
 using steady_packer_fn =
     void (__fastcall *)(void *,void *,std::int32_t);
+using lightbank_blend_packer_fn =
+    void *(__fastcall *)(
+        void *,
+        void *,
+        std::int32_t,
+        void *,
+        std::int32_t,
+        float);
 
 constexpr std::uintptr_t k_rva_wrapper_type5 = 0x1C0BE0u;
 constexpr std::uintptr_t k_rva_wrapper_type6 = 0x1C0C10u;
 constexpr std::uintptr_t k_rva_blend_helper = 0x5642F0u;
 constexpr std::uintptr_t k_rva_steady_packer = 0x563B80u;
+constexpr std::uintptr_t k_rva_blend_packer = 0x5637E0u;
 
 constexpr std::uintptr_t k_ret_blend_upper = 0x5639BAu;
 constexpr std::uintptr_t k_ret_blend_lower = 0x5639D5u;
@@ -97,6 +115,10 @@ constexpr std::array<std::uint8_t,19> k_blend_bytes = {
 };
 constexpr std::array<std::uint8_t,14> k_steady_packer_bytes = {
     0x48,0x89,0x5C,0x24,0x08,0x57,0x48,0x83,0xEC,0x40,0x48,0x8B,0x41,0x18
+};
+constexpr std::array<std::uint8_t,15> k_blend_packer_bytes = {
+    0x40,0x55,0x56,0x48,0x8D,0x6C,0x24,0xC1,
+    0x48,0x81,0xEC,0x88,0x00,0x00,0x00
 };
 
 constexpr std::size_t k_record_stride = 0x110u;
@@ -116,12 +138,13 @@ struct raw_rgbm {
 core::renderer_core *g_core = nullptr;
 upper_lower_draw_runtime *g_runtime = nullptr;
 std::uintptr_t g_base = 0u;
-std::array<inline_hook,4> g_hooks{};
+std::array<inline_hook,5> g_hooks{};
 
 wrapper_fn g_wrapper5_orig = nullptr;
 wrapper_fn g_wrapper6_orig = nullptr;
 blend_fn g_blend_orig = nullptr;
 steady_packer_fn g_steady_packer_orig = nullptr;
+lightbank_blend_packer_fn g_blend_packer_orig = nullptr;
 
 std::mutex g_snapshot_mutex;
 std::unordered_map<
@@ -142,6 +165,10 @@ std::atomic<std::uint64_t> g_steady_pass{0};
 std::atomic<std::uint64_t> g_blend_seen{0};
 std::atomic<std::uint64_t> g_blend_upper{0};
 std::atomic<std::uint64_t> g_blend_lower{0};
+std::atomic<std::uint64_t> g_d123_steady{0};
+std::atomic<std::uint64_t> g_d123_blend_direction{0};
+std::atomic<std::uint64_t> g_d123_blend_color{0};
+std::atomic<std::uint64_t> g_d123_snapshot_publish{0};
 std::atomic<std::uint64_t> g_snapshot_publish{0};
 std::atomic<std::uint64_t> g_selector_seen{0};
 std::atomic<std::uint64_t> g_selector_match{0};
@@ -149,7 +176,10 @@ std::atomic<std::uint64_t> g_selector_miss{0};
 std::atomic<std::uint64_t> g_tuple_mismatch{0};
 std::atomic<std::uint64_t> g_b13_create{0};
 std::atomic<std::uint64_t> g_b13_hit{0};
+std::atomic<std::uint64_t> g_hemdir3_b13_create{0};
+std::atomic<std::uint64_t> g_hemdir3_b13_hit{0};
 std::atomic<std::uint64_t> g_requests{0};
+std::atomic<std::uint64_t> g_hemdir3_carrier_requests{0};
 
 bool readable_range(
     const void *ptr,
@@ -422,6 +452,123 @@ bool restore_hook(
     return ok;
 }
 
+const std::uint8_t *resolve_raw_lightbank_record(
+    void *source,
+    std::int32_t selector) noexcept
+{
+    if (source == nullptr ||
+        selector < 0)
+        return nullptr;
+
+    const std::uint8_t *header = nullptr;
+    if (!safe_read(
+            static_cast<const std::uint8_t *>(
+                source) + 0x18u,
+            header) ||
+        header == nullptr)
+        return nullptr;
+
+    std::uint16_t type = 0u;
+    std::uint16_t count = 0u;
+    if (!safe_read(header + 0x08u, type) ||
+        !safe_read(header + 0x0Au, count) ||
+        type != 4u ||
+        static_cast<std::uint32_t>(selector) >= count)
+        return nullptr;
+
+    const std::size_t index =
+        static_cast<std::size_t>(
+            static_cast<std::uint32_t>(selector));
+
+    std::uint32_t offset = 0u;
+    if (!safe_read(
+            header + 0x34u + index * 12u,
+            offset))
+        return nullptr;
+
+    const auto *record =
+        header + offset;
+
+    return readable_range(record, 0x50u)
+        ? record
+        : nullptr;
+}
+
+bool raw_d123_endpoint(
+    const std::uint8_t *record,
+    std::array<
+        operators::lightbank::hemdir3_raw_lobe_endpoint,
+        3> &out) noexcept
+{
+    if (record == nullptr)
+        return false;
+
+    for (std::size_t i = 0u;
+         i < out.size();
+         ++i) {
+        const auto *base =
+            record + i * 0x0Cu;
+
+        std::int16_t x = 0;
+        std::int16_t y = 0;
+        raw_rgbm color{};
+
+        if (!safe_read(base + 0x00u, x) ||
+            !safe_read(base + 0x02u, y) ||
+            !safe_read(base + 0x04u, color))
+            return false;
+
+        out[i].direction.x_degrees =
+            static_cast<float>(x);
+        out[i].direction.y_degrees =
+            static_cast<float>(y);
+        out[i].color.rgb_255 = {
+            static_cast<float>(color.r),
+            static_cast<float>(color.g),
+            static_cast<float>(color.b)
+        };
+        out[i].color.multiplier_percent =
+            static_cast<float>(color.m);
+    }
+
+    return true;
+}
+
+bool evaluate_raw_d123(
+    const std::uint8_t *a,
+    const std::uint8_t *b,
+    float beta,
+    std::array<
+        operators::lightbank::hemdir3_lobe,
+        3> &out) noexcept
+{
+    std::array<
+        operators::lightbank::hemdir3_raw_lobe_endpoint,
+        3> endpoint_a{};
+    std::array<
+        operators::lightbank::hemdir3_raw_lobe_endpoint,
+        3> endpoint_b{};
+
+    if (!raw_d123_endpoint(a, endpoint_a) ||
+        !raw_d123_endpoint(b, endpoint_b))
+        return false;
+
+    const auto sample =
+        operators::lightbank::
+            evaluate_hemdir3_profile(
+                endpoint_a,
+                endpoint_b,
+                beta);
+
+    if (sample.result !=
+        operators::lightbank::
+            hemdir3_profile_result::exact)
+        return false;
+
+    out = sample.lobes;
+    return true;
+}
+
 bool inverse_q(
     float q,
     float &out) noexcept
@@ -573,10 +720,42 @@ void publish_snapshot(
             beta_bits
         };
 
-        fresh->payload[6] =
+        fresh->ul_payload[6] =
             producer.upper;
-        fresh->payload[7] =
+        fresh->ul_payload[7] =
             producer.lower;
+
+        fresh->hemdir3_payload[6] =
+            producer.upper;
+        fresh->hemdir3_payload[7] =
+            producer.lower;
+        fresh->d123_ready =
+            producer.have_d123;
+
+        if (producer.have_d123) {
+            for (std::size_t i = 0u;
+                 i < producer.d123.size();
+                 ++i) {
+                const auto &lobe =
+                    producer.d123[i];
+
+                fresh->hemdir3_payload[i] = {
+                    lobe.direction.x,
+                    lobe.direction.y,
+                    lobe.direction.z,
+                    0.0f
+                };
+
+                fresh->hemdir3_payload[3u + i] = {
+                    lobe.color.x,
+                    lobe.color.y,
+                    lobe.color.z,
+                    0.0f
+                };
+            }
+
+            ++g_d123_snapshot_publish;
+        }
 
         {
             std::lock_guard<std::mutex> lock(
@@ -700,6 +879,21 @@ void __fastcall hook_steady_packer(
     g_producer.lower = lower;
     g_producer.have_upper = true;
     g_producer.have_lower = true;
+
+    const auto *raw =
+        resolve_raw_lightbank_record(
+            source,
+            selector);
+
+    if (evaluate_raw_d123(
+            raw,
+            raw,
+            0.0f,
+            g_producer.d123)) {
+        g_producer.have_d123 = true;
+        ++g_d123_steady;
+    }
+
     ++g_steady_pass;
 }
 
@@ -768,6 +962,50 @@ void *__fastcall hook_blend(
         : nullptr;
 }
 
+void *__fastcall hook_blend_packer(
+    void *dst,
+    void *source_a,
+    std::int32_t selector_a,
+    void *source_b,
+    std::int32_t selector_b,
+    float beta) noexcept
+{
+    void *result =
+        g_blend_packer_orig != nullptr
+            ? g_blend_packer_orig(
+                dst,
+                source_a,
+                selector_a,
+                source_b,
+                selector_b,
+                beta)
+            : nullptr;
+
+    if (!g_producer.active)
+        return result;
+
+    const auto *raw_a =
+        resolve_raw_lightbank_record(
+            source_a,
+            selector_a);
+    const auto *raw_b =
+        resolve_raw_lightbank_record(
+            source_b,
+            selector_b);
+
+    if (evaluate_raw_d123(
+            raw_a,
+            raw_b,
+            beta,
+            g_producer.d123)) {
+        g_producer.have_d123 = true;
+        g_d123_blend_direction += 3u;
+        g_d123_blend_color += 3u;
+    }
+
+    return result;
+}
+
 bool install_producer_hooks() noexcept
 {
     if (g_base == 0u)
@@ -796,7 +1034,13 @@ bool install_producer_hooks() noexcept
             k_rva_steady_packer,
             k_steady_packer_bytes,
             reinterpret_cast<void *>(
-                &hook_steady_packer))) {
+                &hook_steady_packer)) ||
+        !prepare_hook(
+            g_hooks[4],
+            k_rva_blend_packer,
+            k_blend_packer_bytes,
+            reinterpret_cast<void *>(
+                &hook_blend_packer))) {
         return false;
     }
 
@@ -812,6 +1056,9 @@ bool install_producer_hooks() noexcept
     g_steady_packer_orig =
         reinterpret_cast<steady_packer_fn>(
             g_hooks[3].trampoline);
+    g_blend_packer_orig =
+        reinterpret_cast<lightbank_blend_packer_fn>(
+            g_hooks[4].trampoline);
 
     for (auto &hook : g_hooks)
         if (!arm_hook(hook))
@@ -834,6 +1081,7 @@ bool restore_producer_hooks() noexcept
         g_wrapper6_orig = nullptr;
         g_blend_orig = nullptr;
         g_steady_packer_orig = nullptr;
+        g_blend_packer_orig = nullptr;
     }
 
     return ok;
@@ -841,26 +1089,47 @@ bool restore_producer_hooks() noexcept
 
 ID3D11Buffer *realize_b13(
     const std::shared_ptr<const snapshot> &selected,
-    ID3D11Device *device) noexcept
+    ID3D11Device *device,
+    bool hemdir3_combined) noexcept
 {
     if (!selected ||
-        device == nullptr)
+        device == nullptr ||
+        (hemdir3_combined &&
+         !selected->d123_ready))
         return nullptr;
 
     std::lock_guard<std::mutex> lock(
         selected->gpu_mutex);
 
-    if (selected->buffer != nullptr) {
-        if (selected->device != device)
-            return nullptr;
+    if (selected->device != nullptr &&
+        selected->device != device)
+        return nullptr;
 
-        selected->buffer->AddRef();
-        ++g_b13_hit;
-        return selected->buffer;
+    auto *&cached =
+        hemdir3_combined
+            ? selected->hemdir3_buffer
+            : selected->ul_buffer;
+
+    if (cached != nullptr) {
+        cached->AddRef();
+
+        if (hemdir3_combined)
+            ++g_hemdir3_b13_hit;
+        else
+            ++g_b13_hit;
+
+        return cached;
     }
 
+    const auto &payload =
+        hemdir3_combined
+            ? selected->hemdir3_payload
+            : selected->ul_payload;
+
     D3D11_BUFFER_DESC desc{};
-    desc.ByteWidth = 128u;
+    desc.ByteWidth =
+        static_cast<UINT>(
+            sizeof(payload));
     desc.Usage =
         D3D11_USAGE_IMMUTABLE;
     desc.BindFlags =
@@ -868,7 +1137,7 @@ ID3D11Buffer *realize_b13(
 
     D3D11_SUBRESOURCE_DATA init{};
     init.pSysMem =
-        selected->payload.data();
+        payload.data();
 
     ID3D11Buffer *buffer = nullptr;
     if (FAILED(device->CreateBuffer(
@@ -878,12 +1147,19 @@ ID3D11Buffer *realize_b13(
         buffer == nullptr)
         return nullptr;
 
-    selected->device = device;
-    device->AddRef();
+    if (selected->device == nullptr) {
+        selected->device = device;
+        device->AddRef();
+    }
 
-    selected->buffer = buffer;
+    cached = buffer;
     buffer->AddRef();
-    ++g_b13_create;
+
+    if (hemdir3_combined)
+        ++g_hemdir3_b13_create;
+    else
+        ++g_b13_create;
+
     return buffer;
 }
 
@@ -1103,7 +1379,8 @@ bool upper_lower_draw_runtime::prepare_draw_request(
     auto *b13 =
         realize_b13(
             g_draw_snapshot,
-            device);
+            device,
+            false);
 
     device->Release();
 
@@ -1133,6 +1410,56 @@ bool upper_lower_draw_runtime::prepare_draw_request(
     prepared.ready = true;
     ++g_requests;
     return true;
+}
+
+bool upper_lower_draw_runtime::prepare_hemdir3_carrier(
+    ID3D11DeviceContext *context,
+    std::uint32_t receiver_id,
+    prepared_hemdir3_carrier &prepared) noexcept
+{
+    prepared = {};
+
+    if (!g_enabled.load() ||
+        g_quarantined.load() ||
+        context == nullptr ||
+        receiver_id == 0u ||
+        !g_draw_snapshot ||
+        !g_draw_snapshot->d123_ready)
+        return false;
+
+    ID3D11Device *device = nullptr;
+    context->GetDevice(&device);
+    if (device == nullptr)
+        return false;
+
+    auto *b13 =
+        realize_b13(
+            g_draw_snapshot,
+            device,
+            true);
+
+    device->Release();
+
+    if (b13 == nullptr)
+        return false;
+
+    prepared.b13 = b13;
+    prepared.fingerprint =
+        g_draw_snapshot->fingerprint;
+    prepared.d123_ready = true;
+    prepared.upper_lower_ready = true;
+    prepared.ready = true;
+    ++g_hemdir3_carrier_requests;
+    return true;
+}
+
+void upper_lower_draw_runtime::release_hemdir3_carrier(
+    prepared_hemdir3_carrier &prepared) noexcept
+{
+    if (prepared.b13 != nullptr)
+        prepared.b13->Release();
+
+    prepared = {};
 }
 
 void upper_lower_draw_runtime::release_prepared_draw(
@@ -1171,6 +1498,10 @@ upper_lower_draw_runtime::telemetry() const noexcept
         g_blend_seen.load(),
         g_blend_upper.load(),
         g_blend_lower.load(),
+        g_d123_steady.load(),
+        g_d123_blend_direction.load(),
+        g_d123_blend_color.load(),
+        g_d123_snapshot_publish.load(),
         g_snapshot_publish.load(),
         g_selector_seen.load(),
         g_selector_match.load(),
@@ -1178,7 +1509,10 @@ upper_lower_draw_runtime::telemetry() const noexcept
         g_tuple_mismatch.load(),
         g_b13_create.load(),
         g_b13_hit.load(),
+        g_hemdir3_b13_create.load(),
+        g_hemdir3_b13_hit.load(),
         g_requests.load(),
+        g_hemdir3_carrier_requests.load(),
         g_enabled.load(),
         g_quarantined.load(),
         g_restore_failed.load()
@@ -1196,6 +1530,10 @@ void upper_lower_draw_runtime::reset() noexcept
     g_blend_seen.store(0);
     g_blend_upper.store(0);
     g_blend_lower.store(0);
+    g_d123_steady.store(0);
+    g_d123_blend_direction.store(0);
+    g_d123_blend_color.store(0);
+    g_d123_snapshot_publish.store(0);
     g_snapshot_publish.store(0);
     g_selector_seen.store(0);
     g_selector_match.store(0);
@@ -1203,7 +1541,10 @@ void upper_lower_draw_runtime::reset() noexcept
     g_tuple_mismatch.store(0);
     g_b13_create.store(0);
     g_b13_hit.store(0);
+    g_hemdir3_b13_create.store(0);
+    g_hemdir3_b13_hit.store(0);
     g_requests.store(0);
+    g_hemdir3_carrier_requests.store(0);
 }
 
 } // namespace dsrrl::runtime
