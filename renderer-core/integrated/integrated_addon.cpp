@@ -3,6 +3,7 @@
 #include "dsrrl/runtime/flver_identity_transport.hpp"
 #include "dsrrl/runtime/flver_identity_registry.hpp"
 #include "dsrrl/runtime/material_owner_selection.hpp"
+#include "dsrrl/runtime/stable_receiver_pipeline_registry.hpp"
 #include "dsrrl/operators/material_response/material_response_island.hpp"
 #include "dsrrl/operators/material_response/material_response_seed.hpp"
 
@@ -37,8 +38,12 @@ std::atomic<std::uint64_t> g_mr_draw_eval{0};
 std::atomic<std::uint64_t> g_mr_active{0};
 std::atomic<std::uint64_t> g_mr_fail_open{0};
 std::atomic_bool g_mr_ready{false};
-
-thread_local std::uint32_t g_bound_receiver_id = 0u;
+std::atomic<std::uint64_t> g_draw_events{0};
+std::atomic<std::uint64_t> g_draw_receiver_hits{0};
+std::atomic<std::uint64_t> g_draw_owner_hits{0};
+std::atomic<std::uint64_t> g_draw_joins{0};
+std::atomic<std::uint64_t> g_draw_owner_only{0};
+std::atomic<std::uint64_t> g_draw_receiver_only{0};
 
 constexpr dsrrl::core::operator_id k_integrated_islands[] = {
     dsrrl::core::operator_id::terminal_sat_rgb,
@@ -47,6 +52,76 @@ constexpr dsrrl::core::operator_id k_integrated_islands[] = {
     dsrrl::core::operator_id::envspec_nospc_delete,
     dsrrl::core::operator_id::fixed_postfog_identity
 };
+
+const reshade::api::shader_desc *find_pixel_shader(
+    std::uint32_t subobject_count,
+    const reshade::api::pipeline_subobject *subobjects) noexcept
+{
+    if (subobjects == nullptr)
+        return nullptr;
+
+    for (std::uint32_t i = 0; i < subobject_count; ++i) {
+        if (subobjects[i].type !=
+                reshade::api::pipeline_subobject_type::pixel_shader ||
+            subobjects[i].count != 1u ||
+            subobjects[i].data == nullptr)
+            continue;
+
+        return static_cast<const reshade::api::shader_desc *>(
+            subobjects[i].data);
+    }
+
+    return nullptr;
+}
+
+void observe_material_response_identity(
+    reshade::api::command_list *cmd_list) noexcept
+{
+    ++g_draw_events;
+
+    std::uint32_t receiver_id = 0u;
+    const bool receiver_ok =
+        dsrrl::runtime::stable_receiver_bound(
+            cmd_list,
+            receiver_id);
+
+    dsrrl::operators::material_response::material_identity material{};
+    const bool owner_ok =
+        dsrrl::runtime::material_owner_selection_consume(
+            material);
+
+    if (receiver_ok)
+        ++g_draw_receiver_hits;
+    if (owner_ok)
+        ++g_draw_owner_hits;
+
+    if (!receiver_ok || !owner_ok) {
+        if (owner_ok && !receiver_ok)
+            ++g_draw_owner_only;
+        if (receiver_ok && !owner_ok)
+            ++g_draw_receiver_only;
+        ++g_mr_fail_open;
+        return;
+    }
+
+    ++g_draw_joins;
+
+    if (!g_mr_ready.load()) {
+        ++g_mr_fail_open;
+        return;
+    }
+
+    ++g_mr_draw_eval;
+    const auto decision =
+        g_material_response.evaluate(
+            receiver_id,
+            material);
+
+    if (decision.active)
+        ++g_mr_active;
+    else
+        ++g_mr_fail_open;
+}
 
 bool enable_integrated_islands() noexcept
 {
@@ -147,20 +222,47 @@ void on_init_pipeline(
 {
     g_a1_bridge.on_init_pipeline(
         device, layout, subobject_count, subobjects, pipeline);
+
+    const auto *pixel_shader =
+        find_pixel_shader(
+            subobject_count,
+            subobjects);
+
+    if (pixel_shader != nullptr &&
+        pixel_shader->code != nullptr &&
+        pixel_shader->code_size != 0u) {
+        (void)dsrrl::runtime::
+            stable_receiver_observe_pipeline(
+                pipeline.handle,
+                pixel_shader->code,
+                pixel_shader->code_size);
+    }
 }
 
 void on_destroy_pipeline(
     reshade::api::device *device,
     reshade::api::pipeline pipeline)
 {
+    dsrrl::runtime::stable_receiver_forget_pipeline(
+        pipeline.handle);
     g_a1_bridge.on_destroy_pipeline(device, pipeline);
 }
 
 void on_bind_pipeline(
-    reshade::api::command_list *,
+    reshade::api::command_list *cmd_list,
     reshade::api::pipeline_stage stages,
     reshade::api::pipeline pipeline)
 {
+    const bool pixel_stage_bound =
+        (static_cast<std::uint32_t>(stages) &
+         static_cast<std::uint32_t>(
+             reshade::api::pipeline_stage::pixel_shader)) != 0u;
+
+    dsrrl::runtime::stable_receiver_observe_bind(
+        cmd_list,
+        pixel_stage_bound,
+        pipeline.handle);
+
     std::uint16_t first_plan = 0xFFFFu;
     dsrrl::core::operator_mask selected_owners = 0u;
     std::uint16_t selected_ops = 0u;
@@ -174,8 +276,6 @@ void on_bind_pipeline(
             &selected_owners,
             &selected_ops,
             &receiver_id);
-
-    g_bound_receiver_id = target ? receiver_id : 0u;
 
     if (target && first_plan != 0xFFFFu) {
         char line[240]{};
@@ -192,38 +292,26 @@ void on_bind_pipeline(
     }
 }
 
+bool on_draw(
+    reshade::api::command_list *cmd_list,
+    std::uint32_t,
+    std::uint32_t,
+    std::uint32_t,
+    std::uint32_t)
+{
+    observe_material_response_identity(cmd_list);
+    return false;
+}
+
 bool on_draw_indexed(
-    reshade::api::command_list *,
+    reshade::api::command_list *cmd_list,
     std::uint32_t,
     std::uint32_t,
     std::uint32_t,
     std::int32_t,
     std::uint32_t)
 {
-    dsrrl::operators::material_response::material_identity material{};
-    const bool owner_ok =
-        dsrrl::runtime::material_owner_selection_consume(material);
-
-    if (!g_mr_ready.load() ||
-        g_bound_receiver_id == 0u ||
-        !owner_ok) {
-        ++g_mr_fail_open;
-        return false;
-    }
-
-    ++g_mr_draw_eval;
-    const auto decision =
-        g_material_response.evaluate(
-            g_bound_receiver_id,
-            material);
-
-    if (decision.active)
-        ++g_mr_active;
-    else
-        ++g_mr_fail_open;
-
-    // This gate is intentionally pixel-inert until a draw-specific mutation
-    // transaction is independently materialized and proven reversible.
+    observe_material_response_identity(cmd_list);
     return false;
 }
 
@@ -248,6 +336,7 @@ void register_events()
     reshade::register_event<reshade::addon_event::init_pipeline>(on_init_pipeline);
     reshade::register_event<reshade::addon_event::destroy_pipeline>(on_destroy_pipeline);
     reshade::register_event<reshade::addon_event::bind_pipeline>(on_bind_pipeline);
+    reshade::register_event<reshade::addon_event::draw>(on_draw);
     reshade::register_event<reshade::addon_event::draw_indexed>(on_draw_indexed);
     reshade::register_event<reshade::addon_event::present>(on_present);
 }
@@ -256,6 +345,7 @@ void unregister_events()
 {
     reshade::unregister_event<reshade::addon_event::present>(on_present);
     reshade::unregister_event<reshade::addon_event::draw_indexed>(on_draw_indexed);
+    reshade::unregister_event<reshade::addon_event::draw>(on_draw);
     reshade::unregister_event<reshade::addon_event::bind_pipeline>(on_bind_pipeline);
     reshade::unregister_event<reshade::addon_event::destroy_pipeline>(on_destroy_pipeline);
     reshade::unregister_event<reshade::addon_event::init_pipeline>(on_init_pipeline);
@@ -292,7 +382,13 @@ bool AddonInit(
     g_mr_draw_eval.store(0);
     g_mr_active.store(0);
     g_mr_fail_open.store(0);
-    g_bound_receiver_id = 0u;
+    g_draw_events.store(0);
+    g_draw_receiver_hits.store(0);
+    g_draw_owner_hits.store(0);
+    g_draw_joins.store(0);
+    g_draw_owner_only.store(0);
+    g_draw_receiver_only.store(0);
+    dsrrl::runtime::stable_receiver_pipeline_reset();
     dsrrl::runtime::material_owner_selection_reset_stats();
 
     const auto receivers =
@@ -331,8 +427,9 @@ bool AddonInit(
     reshade::log::message(
         reshade::log::level::info,
         "[DSRRL CORE+ISLANDS " DSRRL_CORE_ISLANDS_VERSION
-        "] READY: native Renderer Core A1 islands plus exact-owner "
-        "Material Response draw gate; frozen legacy monolith is not linked.");
+        "] READY: native Renderer Core A1 islands plus pixel-inert exact "
+        "receiver/owner Material Response identity probe; frozen legacy "
+        "monolith is not linked.");
 
     return true;
 }
@@ -349,6 +446,7 @@ void AddonUninit(
     if (dsrrl::runtime::flver_identity_transport::status().restore_failed)
         log_state("UNLOAD_RESTORE_FAIL");
 
+    dsrrl::runtime::stable_receiver_pipeline_reset();
     g_a1_bridge.reset();
     disable_integrated_islands();
 
