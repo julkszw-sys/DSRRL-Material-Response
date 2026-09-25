@@ -78,6 +78,10 @@ operators::resource_bridges::envdiffuse_runtime_context ready_envdiffuse()
     c.envspec_lanes_preserved=true;
     c.receiver_verified=true;
     c.receiver_family=envdiffuse_receiver_family::heme_env_lerp;
+    c.producer_class_verified=true;
+    c.producer_class=envdiffuse_producer_class::ordinary_mapmodel;
+    c.assignment_route=envdiffuse_assignment_route::classic_legacy_environment;
+    c.classic_assignment_homology_verified=true;
     c.exact_probe_assignment_verified=true;
     c.probe_a_srv_ready=true;
     c.probe_b_srv_ready=true;
@@ -303,7 +307,82 @@ int main()
     CHECK(envdiffuse_plan.probe_b_srv_slot==13u);
     CHECK(envdiffuse_plan.bridge_endpoint_xyz_only);
     CHECK(envdiffuse_plan.preserve_draw_multiplier);
+    CHECK(!envdiffuse_plan.consume_packed_selector);
 
+    // Producer provenance is class-scoped. Ordinary MapModel is the
+    // Classic/legacy environment route and must not borrow the ChrModel
+    // packed-GI selector.
+    envdiffuse=ready_envdiffuse();
+    envdiffuse.assignment_route=
+        operators::resource_bridges::envdiffuse_assignment_route::
+            packed_gi_selector;
+    envdiffuse.packed_selector_verified=true;
+    envdiffuse_plan=
+        operators::resource_bridges::evaluate_envdiffuse_runtime_readiness(
+            features,activation,envdiffuse);
+    CHECK(!envdiffuse_plan.ready);
+    CHECK(envdiffuse_plan.reason==
+          operators::resource_bridges::envdiffuse_runtime_reason::
+              assignment_route_mismatch);
+
+    envdiffuse=ready_envdiffuse();
+    envdiffuse.classic_assignment_homology_verified=false;
+    envdiffuse_plan=
+        operators::resource_bridges::evaluate_envdiffuse_runtime_readiness(
+            features,activation,envdiffuse);
+    CHECK(!envdiffuse_plan.ready);
+    CHECK(envdiffuse_plan.reason==
+          operators::resource_bridges::envdiffuse_runtime_reason::
+              classic_assignment_homology_not_verified);
+
+    // EnemyIns/ChrModel is the verified owner of the packed selector route.
+    envdiffuse=ready_envdiffuse();
+    envdiffuse.producer_class=
+        operators::resource_bridges::envdiffuse_producer_class::
+            enemyins_chrmodel;
+    envdiffuse.assignment_route=
+        operators::resource_bridges::envdiffuse_assignment_route::
+            packed_gi_selector;
+    envdiffuse.classic_assignment_homology_verified=false;
+    envdiffuse.packed_selector_verified=true;
+    envdiffuse_plan=
+        operators::resource_bridges::evaluate_envdiffuse_runtime_readiness(
+            features,activation,envdiffuse);
+    CHECK(envdiffuse_plan.ready);
+    CHECK(envdiffuse_plan.consume_packed_selector);
+
+    envdiffuse.packed_selector_verified=false;
+    envdiffuse_plan=
+        operators::resource_bridges::evaluate_envdiffuse_runtime_readiness(
+            features,activation,envdiffuse);
+    CHECK(!envdiffuse_plan.ready);
+    CHECK(envdiffuse_plan.reason==
+          operators::resource_bridges::envdiffuse_runtime_reason::
+              packed_selector_not_verified);
+
+    // REMO is intentionally unresolved and may not inherit gameplay routing.
+    envdiffuse=ready_envdiffuse();
+    envdiffuse.producer_class=
+        operators::resource_bridges::envdiffuse_producer_class::remo_parts;
+    envdiffuse_plan=
+        operators::resource_bridges::evaluate_envdiffuse_runtime_readiness(
+            features,activation,envdiffuse);
+    CHECK(!envdiffuse_plan.ready);
+    CHECK(envdiffuse_plan.reason==
+          operators::resource_bridges::envdiffuse_runtime_reason::
+              assignment_route_mismatch);
+
+    envdiffuse=ready_envdiffuse();
+    envdiffuse.producer_class_verified=false;
+    envdiffuse_plan=
+        operators::resource_bridges::evaluate_envdiffuse_runtime_readiness(
+            features,activation,envdiffuse);
+    CHECK(!envdiffuse_plan.ready);
+    CHECK(envdiffuse_plan.reason==
+          operators::resource_bridges::envdiffuse_runtime_reason::
+              producer_class_not_verified);
+
+    envdiffuse=ready_envdiffuse();
     envdiffuse.exact_probe_assignment_verified=false;
     envdiffuse_plan=
         operators::resource_bridges::evaluate_envdiffuse_runtime_readiness(
