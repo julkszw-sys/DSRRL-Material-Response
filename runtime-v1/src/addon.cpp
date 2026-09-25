@@ -126,7 +126,7 @@ void unregister_a1_events()
     reshade::unregister_event<reshade::addon_event::init_device>(a1_init_device);
 }
 
-void selector_dispatch(void *container,void *owner,void *ret,void *r14,void *r15,
+void flver_parse_dispatch(void *model,const void *raw) noexcept\n{\n    dsrrl::runtime::mr::flver_parse_event(model,raw);\n}\n\nvoid selector_dispatch(void *container,void *owner,void *ret,void *r14,void *r15,
                        std::int32_t material_index) noexcept
 {
     dsrrl::runtime::mr::selector_event(container,owner,ret,r14,r15,material_index);
@@ -203,7 +203,7 @@ extern "C" __declspec(dllexport) bool AddonInit(HMODULE addon,HMODULE reshade_mo
         "DSRRL Runtime V13: P_Metal A/B producer preflight FAIL-OPEN-OFF.");
 
     if(!dsrrl::runtime::engine::install(
-            &selector_dispatch,
+            &selector_dispatch,\n            &flver_parse_dispatch,
             &dsrrl::runtime::mr::mtd_event,
             &dsrrl::runtime::assets::texture_name_event,
             &dsrrl::runtime::assets::texture_name_clear_event)){
