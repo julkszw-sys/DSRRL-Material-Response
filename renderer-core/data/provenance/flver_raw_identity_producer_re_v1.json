@@ -1,0 +1,20 @@
+{
+  "schema": "dsrrl.flver_raw_identity_producer_re.v1",
+  "status": "CONFIRMED",
+  "exe_sha256": "a45aaa36dd2f6cc151670a639ea5547043cf38ea79ff4178b963c6ed71f98d7b",
+  "parser_rva": "0x20D910",
+  "entry_abi": {
+    "rcx": "parsed-model destination object",
+    "rdx": "raw FLVER image"
+  },
+  "binary_observations": [
+    "0x20D93A reads version from [RDX+0x08]",
+    "0x20D941 reads data offset from [RDX+0x0C]",
+    "0x20D93E preserves the raw-image pointer in RBX",
+    "0x20DA16 and following instructions rewrite raw-image relative offsets in place"
+  ],
+  "semantic_cut": "Observe RCX/RDX at parser entry before the original parser mutates/rebases the FLVER image.",
+  "identity_contract": "Compute canonical raw FLVER SHA-256 from the untouched image and bind it to the parser destination lifetime. Do not infer identity from selector pointers or legacy hashes.",
+  "remaining_open_edge": "Binary evidence still has to prove which selector-time object is identical to, or deterministically joins to, the parser destination object.",
+  "activation": "HOLD_OFF_FAIL_OPEN"
+}
