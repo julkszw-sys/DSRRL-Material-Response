@@ -495,6 +495,9 @@ bool prepare_island_batch(
                 prepared.subsurface))
             return false;
 
+        prepared.subsurface_in_batch = true;
+        prepared.mr_in_batch = true;
+
         if (dsrrl::runtime::append_island_draw_request(
                 prepared.batch,
                 prepared.subsurface.subsurface) !=
@@ -523,8 +526,6 @@ bool prepare_island_batch(
             }
         }
 
-        prepared.subsurface_in_batch = true;
-        prepared.mr_in_batch = true;
         return true;
     }
 
