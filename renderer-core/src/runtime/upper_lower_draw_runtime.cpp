@@ -993,10 +993,29 @@ void *__fastcall hook_blend_packer(
             source_b,
             selector_b);
 
+    const std::uint8_t *eval_a = raw_a;
+    const std::uint8_t *eval_b = raw_b;
+    float eval_beta = beta;
+
+    if (raw_a != nullptr &&
+        (selector_a == selector_b ||
+         raw_b == nullptr ||
+         beta <= 0.0f)) {
+        eval_b = raw_a;
+        eval_beta = 0.0f;
+    } else if (
+        raw_b != nullptr &&
+        (raw_a == nullptr ||
+         beta >= 1.0f)) {
+        eval_a = raw_b;
+        eval_b = raw_b;
+        eval_beta = 0.0f;
+    }
+
     if (evaluate_raw_d123(
-            raw_a,
-            raw_b,
-            beta,
+            eval_a,
+            eval_b,
+            eval_beta,
             g_producer.d123)) {
         g_producer.have_d123 = true;
         g_d123_blend_direction += 3u;
