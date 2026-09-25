@@ -191,6 +191,86 @@ bool material_response_draw_runtime::has_receiver_replacement(
         found->second.shader != nullptr;
 }
 
+bool material_response_draw_runtime::prepare_draw_request(
+    const operators::material_response::decision &decision,
+    prepared_material_response_draw &prepared) noexcept
+{
+    prepared = {};
+    ++eligible_draws_;
+
+    if (!full_material_response_decision(decision) ||
+        local_quarantine_.load() ||
+        transactions_.quarantined())
+        return false;
+
+    replacement_record replacement{};
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        const auto found =
+            replacements_.find(decision.receiver_id);
+
+        if (found != replacements_.end() &&
+            found->second.shader != nullptr) {
+            replacement = found->second;
+            replacement.shader->AddRef();
+        }
+    }
+
+    if (replacement.shader == nullptr) {
+        ++replacement_miss_;
+        return false;
+    }
+
+    auto *b12 = realize_b12(decision);
+    if (b12 == nullptr) {
+        ++b12_bind_fail_;
+        replacement.shader->Release();
+        return false;
+    }
+
+    prepared.shader = replacement.shader;
+    prepared.b12 = b12;
+    prepared.request.primary =
+        core::operator_id::material_response;
+    prepared.request.additional_owners =
+        core::operator_bit(
+            core::operator_id::diffuse_material_domain) |
+        replacement.composed_owners;
+    prepared.request.receiver_verified = true;
+    prepared.request.material_verified = true;
+    prepared.request.pixel_shader =
+        replacement.shader;
+    prepared.request.replace_pixel_shader = true;
+    prepared.request.constant_buffers[0] = {
+        12u,
+        b12
+    };
+    prepared.request.constant_buffer_count = 1u;
+
+    draw_tx_mutation verify{};
+    if (build_island_draw_mutation(
+            prepared.request,
+            verify) !=
+        island_draw_adapter_result::ready) {
+        ++b12_bind_fail_;
+        release_prepared_draw(prepared);
+        return false;
+    }
+
+    prepared.ready = true;
+    return true;
+}
+
+void material_response_draw_runtime::release_prepared_draw(
+    prepared_material_response_draw &prepared) noexcept
+{
+    if (prepared.b12 != nullptr)
+        prepared.b12->Release();
+    if (prepared.shader != nullptr)
+        prepared.shader->Release();
+    prepared = {};
+}
+
 ID3D11Buffer *material_response_draw_runtime::realize_b12(
     const operators::material_response::decision &decision) noexcept
 {
@@ -272,74 +352,27 @@ bool material_response_draw_runtime::replay_draw(
     std::uint32_t first_vertex,
     std::uint32_t first_instance) noexcept
 {
-    ++eligible_draws_;
-
-    if (!full_material_response_decision(decision) ||
-        local_quarantine_.load() ||
-        transactions_.quarantined())
+    prepared_material_response_draw prepared{};
+    if (!prepare_draw_request(
+            decision,
+            prepared))
         return false;
-
-    replacement_record replacement{};
-    {
-        std::lock_guard<std::mutex> lock(mutex_);
-        const auto found =
-            replacements_.find(decision.receiver_id);
-
-        if (found != replacements_.end() &&
-            found->second.shader != nullptr) {
-            replacement = found->second;
-            replacement.shader->AddRef();
-        }
-    }
-
-    if (replacement.shader == nullptr) {
-        ++replacement_miss_;
-        return false;
-    }
-
-    ID3D11Buffer *b12 =
-        realize_b12(decision);
-    if (b12 == nullptr) {
-        ++b12_bind_fail_;
-        replacement.shader->Release();
-        return false;
-    }
-
-    island_draw_adapter_request request{};
-    request.primary =
-        core::operator_id::material_response;
-    request.additional_owners =
-        core::operator_bit(
-            core::operator_id::diffuse_material_domain) |
-        replacement.composed_owners;
-    request.receiver_verified = true;
-    request.material_verified = true;
-    request.pixel_shader = replacement.shader;
-    request.replace_pixel_shader = true;
-    request.constant_buffers[0] = {
-        12u,
-        b12
-    };
-    request.constant_buffer_count = 1u;
 
     const auto dispatch =
         dispatch_island_draw(
             transactions_,
             cmd_list,
-            request,
+            prepared.request,
             vertex_count,
             instance_count,
             first_vertex,
             first_instance);
 
-    b12->Release();
-    replacement.shader->Release();
+    release_prepared_draw(prepared);
 
     if (dispatch.adapter !=
-        island_draw_adapter_result::ready) {
-        ++b12_bind_fail_;
+        island_draw_adapter_result::ready)
         return false;
-    }
 
     if (dispatch.transaction ==
         draw_tx_result::issued_restored) {
@@ -363,75 +396,28 @@ bool material_response_draw_runtime::replay_draw_indexed(
     std::int32_t vertex_offset,
     std::uint32_t first_instance) noexcept
 {
-    ++eligible_draws_;
-
-    if (!full_material_response_decision(decision) ||
-        local_quarantine_.load() ||
-        transactions_.quarantined())
+    prepared_material_response_draw prepared{};
+    if (!prepare_draw_request(
+            decision,
+            prepared))
         return false;
-
-    replacement_record replacement{};
-    {
-        std::lock_guard<std::mutex> lock(mutex_);
-        const auto found =
-            replacements_.find(decision.receiver_id);
-
-        if (found != replacements_.end() &&
-            found->second.shader != nullptr) {
-            replacement = found->second;
-            replacement.shader->AddRef();
-        }
-    }
-
-    if (replacement.shader == nullptr) {
-        ++replacement_miss_;
-        return false;
-    }
-
-    ID3D11Buffer *b12 =
-        realize_b12(decision);
-    if (b12 == nullptr) {
-        ++b12_bind_fail_;
-        replacement.shader->Release();
-        return false;
-    }
-
-    island_draw_adapter_request request{};
-    request.primary =
-        core::operator_id::material_response;
-    request.additional_owners =
-        core::operator_bit(
-            core::operator_id::diffuse_material_domain) |
-        replacement.composed_owners;
-    request.receiver_verified = true;
-    request.material_verified = true;
-    request.pixel_shader = replacement.shader;
-    request.replace_pixel_shader = true;
-    request.constant_buffers[0] = {
-        12u,
-        b12
-    };
-    request.constant_buffer_count = 1u;
 
     const auto dispatch =
         dispatch_island_draw_indexed(
             transactions_,
             cmd_list,
-            request,
+            prepared.request,
             index_count,
             instance_count,
             first_index,
             vertex_offset,
             first_instance);
 
-    b12->Release();
-    replacement.shader->Release();
+    release_prepared_draw(prepared);
 
     if (dispatch.adapter !=
-        island_draw_adapter_result::ready) {
-        ++b12_bind_fail_;
+        island_draw_adapter_result::ready)
         return false;
-    }
 
     if (dispatch.transaction ==
         draw_tx_result::issued_restored) {
