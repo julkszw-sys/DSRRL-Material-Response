@@ -264,40 +264,6 @@ ID3D11Buffer *material_response_draw_runtime::realize_b12(
     return buffer;
 }
 
-bool material_response_draw_runtime::build_mutation(
-    const operators::material_response::decision &decision,
-    const replacement_record &replacement,
-    ID3D11Buffer *b12,
-    draw_tx_mutation &mutation) const noexcept
-{
-    if (!full_material_response_decision(decision) ||
-        replacement.shader == nullptr ||
-        b12 == nullptr)
-        return false;
-
-    island_draw_adapter_request request{};
-    request.primary =
-        core::operator_id::material_response;
-    request.additional_owners =
-        core::operator_bit(
-            core::operator_id::diffuse_material_domain) |
-        replacement.composed_owners;
-    request.receiver_verified = true;
-    request.material_verified = true;
-    request.pixel_shader = replacement.shader;
-    request.replace_pixel_shader = true;
-    request.constant_buffers[0] = {
-        12u,
-        b12
-    };
-    request.constant_buffer_count = 1u;
-
-    return build_island_draw_mutation(
-               request,
-               mutation) ==
-           island_draw_adapter_result::ready;
-}
-
 bool material_response_draw_runtime::replay_draw(
     reshade::api::command_list *cmd_list,
     const operators::material_response::decision &decision,
@@ -339,22 +305,28 @@ bool material_response_draw_runtime::replay_draw(
         return false;
     }
 
-    draw_tx_mutation mutation{};
-    if (!build_mutation(
-            decision,
-            replacement,
-            b12,
-            mutation)) {
-        ++b12_bind_fail_;
-        b12->Release();
-        replacement.shader->Release();
-        return false;
-    }
+    island_draw_adapter_request request{};
+    request.primary =
+        core::operator_id::material_response;
+    request.additional_owners =
+        core::operator_bit(
+            core::operator_id::diffuse_material_domain) |
+        replacement.composed_owners;
+    request.receiver_verified = true;
+    request.material_verified = true;
+    request.pixel_shader = replacement.shader;
+    request.replace_pixel_shader = true;
+    request.constant_buffers[0] = {
+        12u,
+        b12
+    };
+    request.constant_buffer_count = 1u;
 
-    const auto result =
-        transactions_.replay_draw(
+    const auto dispatch =
+        dispatch_island_draw(
+            transactions_,
             cmd_list,
-            mutation,
+            request,
             vertex_count,
             instance_count,
             first_vertex,
@@ -363,16 +335,23 @@ bool material_response_draw_runtime::replay_draw(
     b12->Release();
     replacement.shader->Release();
 
-    if (result ==
+    if (dispatch.adapter !=
+        island_draw_adapter_result::ready) {
+        ++b12_bind_fail_;
+        return false;
+    }
+
+    if (dispatch.transaction ==
         draw_tx_result::issued_restored) {
         ++replay_ok_;
     } else if (
-        result ==
+        dispatch.transaction ==
         draw_tx_result::issued_restore_failed) {
         ++replay_restore_fail_;
     }
 
-    return draw_tx_issued(result);
+    return draw_tx_issued(
+        dispatch.transaction);
 }
 
 bool material_response_draw_runtime::replay_draw_indexed(
@@ -417,22 +396,28 @@ bool material_response_draw_runtime::replay_draw_indexed(
         return false;
     }
 
-    draw_tx_mutation mutation{};
-    if (!build_mutation(
-            decision,
-            replacement,
-            b12,
-            mutation)) {
-        ++b12_bind_fail_;
-        b12->Release();
-        replacement.shader->Release();
-        return false;
-    }
+    island_draw_adapter_request request{};
+    request.primary =
+        core::operator_id::material_response;
+    request.additional_owners =
+        core::operator_bit(
+            core::operator_id::diffuse_material_domain) |
+        replacement.composed_owners;
+    request.receiver_verified = true;
+    request.material_verified = true;
+    request.pixel_shader = replacement.shader;
+    request.replace_pixel_shader = true;
+    request.constant_buffers[0] = {
+        12u,
+        b12
+    };
+    request.constant_buffer_count = 1u;
 
-    const auto result =
-        transactions_.replay_draw_indexed(
+    const auto dispatch =
+        dispatch_island_draw_indexed(
+            transactions_,
             cmd_list,
-            mutation,
+            request,
             index_count,
             instance_count,
             first_index,
@@ -442,16 +427,23 @@ bool material_response_draw_runtime::replay_draw_indexed(
     b12->Release();
     replacement.shader->Release();
 
-    if (result ==
+    if (dispatch.adapter !=
+        island_draw_adapter_result::ready) {
+        ++b12_bind_fail_;
+        return false;
+    }
+
+    if (dispatch.transaction ==
         draw_tx_result::issued_restored) {
         ++replay_ok_;
     } else if (
-        result ==
+        dispatch.transaction ==
         draw_tx_result::issued_restore_failed) {
         ++replay_restore_fail_;
     }
 
-    return draw_tx_issued(result);
+    return draw_tx_issued(
+        dispatch.transaction);
 }
 
 material_response_draw_telemetry
