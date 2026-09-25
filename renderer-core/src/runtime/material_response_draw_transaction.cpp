@@ -1,5 +1,7 @@
 #include "dsrrl/runtime/material_response_draw_transaction.hpp"
 #include "dsrrl/runtime/island_draw_adapter.hpp"
+#include "dsrrl/operators/material_response/generated_routes_v1.hpp"
+#include "dsrrl/operators/material_response/generated_material_constants_v1.hpp"
 
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
@@ -259,6 +261,61 @@ bool material_response_draw_runtime::prepare_draw_request(
 
     prepared.ready = true;
     return true;
+}
+
+bool material_response_draw_runtime::prepare_prevalidated_route_request(
+    std::uint32_t receiver_id,
+    std::uint32_t route_index,
+    prepared_material_response_draw &prepared) noexcept
+{
+    namespace mr = operators::material_response;
+
+    const mr::generated::route_seed *seed = nullptr;
+    for (const auto &candidate :
+         mr::generated::k_material_routes_v1) {
+        if (candidate.route_index != route_index)
+            continue;
+
+        const bool receiver_match =
+            receiver_id == candidate.receiver0 ||
+            receiver_id == candidate.receiver1 ||
+            receiver_id == candidate.receiver2;
+
+        if (!receiver_match)
+            return false;
+
+        if (seed != nullptr)
+            return false;
+
+        seed = &candidate;
+    }
+
+    if (seed == nullptr)
+        return false;
+
+    const auto *constants =
+        mr::generated::find_material_response_constants(
+            route_index);
+    if (constants == nullptr)
+        return false;
+
+    mr::decision decision{};
+    decision.active = true;
+    decision.reason = mr::decision_reason::active;
+    decision.receiver_id = receiver_id;
+    decision.route_index = route_index;
+    decision.certified_operations =
+        mr::diffuse_material_domain_linear |
+        mr::specular_factor_c101;
+    decision.c101 = seed->c101;
+    decision.lod_min = seed->lod_min;
+    decision.lod_max = seed->lod_max;
+    decision.c100 = constants->c100;
+    decision.c101_f0q = constants->c101_f0q;
+
+    return prepare_draw_request(
+        decision,
+        prepared);
 }
 
 void material_response_draw_runtime::release_prepared_draw(
