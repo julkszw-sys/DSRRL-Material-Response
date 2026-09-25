@@ -168,11 +168,21 @@ int main()
     CHECK(d.state==mtd_semantic_state::unknown);
     CHECK(!d.exact_identity_match);
 
-    // A caller cannot self-certify FLVER ownership. The current pairwise
-    // corpus is MTD-aggregate evidence and does not yet materialize exact
-    // (DSR FLVER identity, material slot, MTD) tuples. Even a fully populated
-    // ownership struct must therefore fail open until that tuple corpus exists.
-    CHECK(!generated::k_dsr_flver_owner_tuple_source_complete);
+    // Exact owner authorization is now backed by the source-complete
+    // canonical DSR corpus. A known tuple authenticates; arbitrary caller
+    // fields still cannot self-certify ownership.
+    CHECK(generated::k_dsr_flver_owner_tuple_source_complete);
+    mtd_semantic_query exact_owner_q{};
+    exact_owner_q.receiver_id=24u;
+    exact_owner_q.material.valid=true;
+    exact_owner_q.material.semantic_name_hash=0xce91d872734184bcull;
+    exact_owner_q.ownership.flver_sha256=digest(
+        "002271e70f2b00efd4d273b3a53b711ece681e6920d22e763af5355498368e20");
+    exact_owner_q.ownership.material_slot=0u;
+    exact_owner_q.ownership.material_slot_valid=true;
+    exact_owner_q.ownership.exact=true;
+    CHECK(has_exact_flver_material_ownership(exact_owner_q));
+
     auto owned_q=q;
     owned_q.ownership.flver_sha256[0]=0x12u;
     owned_q.ownership.flver_identity_hash=0x1234u; // legacy auxiliary token only
