@@ -1,0 +1,65 @@
+{
+  "schema": 1,
+  "name": "PTDE FLVER texture semantic census V1 source manifest",
+  "coverage_state": "PARTIAL_SOURCE_COVERAGE",
+  "positive_use_only": true,
+  "absence_is_unknown": true,
+  "source": {
+    "owner_zip_sha256": "a4578a2d35e35a295ed2edd29d4439ffa04ed6e4d40379fd649176d304ef2418",
+    "input_tsv_sha256": "f6fab999e103cb11a0c3ce50b33bde82c531f8297df81674344c1e3e9082a6f6",
+    "scan_summary_sha256": "1d2d8f8fd9925c00856e4a6b888c0ecc3290aaf0cbfd75f134bc3da592e004fe",
+    "scan_errors_sha256": "1285616dfd1c4e6e1ffe9b1e24a536200ce423db346a2f9ebd4f90e0e1057c8e",
+    "raw_jsonl_sha256": "c762b9a4705ed422e13d439b1a6ccf01a1778decaa5c8526dd85b3d27027eb37",
+    "unresolved_tsv_sha256": "c0450f6fc1ee78ee60f42ab0ffcff280e5d011af9a44e1118909a284251cff9d",
+    "mtd_index_sha256": "4166d5231b96f6b72164d9a62425092cc237ee06536d0cd0549a0e5de4f4bdd9",
+    "scan_error_count": 75,
+    "unresolved_rows": 0,
+    "producer_exporter_commit": "064948c060695df52b4a3af35390615ee49edb76",
+    "corrected_exporter_commit": "12c6d69d6c66fc0be44d8af76aaf17219a696d2b"
+  },
+  "observed": {
+    "archive_pairs": 2,
+    "archive_entries_scanned": 6114,
+    "bnd3_binders": 3479,
+    "bnd3_entries": 27814,
+    "flver_instances": 4998,
+    "flver_identities": 4757,
+    "unique_flver_payloads": 4688,
+    "material_instances": 22063,
+    "canonical_rows": 87151,
+    "mtd_entries": 436,
+    "unique_mtd_payloads": 418,
+    "exact_mtd_identities": 261,
+    "exact_mtd_semantic_signature_variations": 0,
+    "positive_semantic_identity_counts": {
+      "g_Diffuse": 239,
+      "g_Bumpmap": 179,
+      "g_DetailBumpmap": 217,
+      "g_Specular": 153
+    }
+  },
+  "host_join": {
+    "host_registry": "renderer-core/data/census/ptde_mtd_envspec_router_v1.json",
+    "exact_name_hash_overlap": 204,
+    "nonjoined_ptde_identities": 57,
+    "overlap_positive_semantic_counts": {
+      "g_Diffuse": 204,
+      "g_Bumpmap": 141,
+      "g_Specular": 147
+    },
+    "raw_dsr_sha_fallback": {
+      "unique_safe_groups": 194,
+      "duplicate_safe_groups": 1,
+      "semantic_mask_disagreement_groups": 0,
+      "incomplete_alias_groups_fail_open": 9
+    }
+  },
+  "runtime_policy": {
+    "diffuse": "exact DSR host MTD identity AND positive PTDE g_Diffuse AND exact existing resource tuple/sidecar",
+    "normal_bump": "exact DSR host MTD identity AND positive PTDE g_Bumpmap AND homologous normal material AND exact existing resource tuple/sidecar",
+    "missing_capability": "UNKNOWN_FAIL_OPEN",
+    "nonjoined_identity": "UNKNOWN_FAIL_OPEN",
+    "water_effect_non_phn_expansion": false,
+    "spec_rgb_expansion": false
+  }
+}
