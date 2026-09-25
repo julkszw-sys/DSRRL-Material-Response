@@ -1,11 +1,16 @@
 #pragma once
 
 #include "dsrrl/core/island_policy.hpp"
+#include "dsrrl/core/draw_transaction_policy.hpp"
 
 #include <array>
 #include <cstdint>
 
 namespace dsrrl::operators::surface {
+
+static_assert(
+    core::requires_draw_transaction(core::operator_id::faceeye_shadow_legacy),
+    "FaceEye runtime must use the shared transaction layer.");
 
 struct faceeye_vec3 {
     float x=0.0f;
