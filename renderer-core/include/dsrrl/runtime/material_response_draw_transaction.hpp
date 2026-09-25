@@ -3,6 +3,7 @@
 #include "dsrrl/core/types.hpp"
 #include "dsrrl/operators/material_response/material_response_island.hpp"
 #include "dsrrl/runtime/draw_state_transaction.hpp"
+#include "dsrrl/runtime/island_draw_adapter.hpp"
 
 #include <reshade.hpp>
 
@@ -21,6 +22,13 @@ struct ID3D11Device;
 struct ID3D11PixelShader;
 
 namespace dsrrl::runtime {
+
+struct prepared_material_response_draw {
+    island_draw_adapter_request request{};
+    ID3D11PixelShader *shader = nullptr;
+    ID3D11Buffer *b12 = nullptr;
+    bool ready = false;
+};
 
 struct material_response_draw_telemetry {
     std::uint64_t replacement_register_ok = 0;
@@ -57,6 +65,13 @@ public:
 
     bool has_receiver_replacement(
         std::uint32_t receiver_id) const noexcept;
+
+    bool prepare_draw_request(
+        const operators::material_response::decision &decision,
+        prepared_material_response_draw &prepared) noexcept;
+
+    void release_prepared_draw(
+        prepared_material_response_draw &prepared) noexcept;
 
     bool replay_draw(
         reshade::api::command_list *cmd_list,
