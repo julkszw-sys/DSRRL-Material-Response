@@ -486,7 +486,11 @@ bool a1_create_pipeline_bridge::on_bind_pipeline(
     reshade::api::pipeline_stage stages,
     reshade::api::pipeline pipeline,
     std::uint16_t *
-        first_bind_plan_index) noexcept
+        first_bind_plan_index,
+    core::operator_mask *
+        selected_owners,
+    std::uint16_t *
+        selected_ops) noexcept
 {
     if ((static_cast<std::uint32_t>(stages) &
          static_cast<std::uint32_t>(
@@ -517,6 +521,12 @@ bool a1_create_pipeline_bridge::on_bind_pipeline(
         return false;
 
     ++target_binds_;
+
+    if (selected_owners != nullptr)
+        *selected_owners = record->selected_owners;
+
+    if (selected_ops != nullptr)
+        *selected_ops = record->selected_ops;
 
     if (record->plan_index >=
         operators::legacy_plan::build151::
