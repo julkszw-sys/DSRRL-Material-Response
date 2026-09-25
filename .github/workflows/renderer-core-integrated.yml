@@ -107,7 +107,7 @@ jobs:
             }
           }
 
-          if ($policy -notmatch 'integrated_boot_enabled_count\\(\\) == 11u') {
+          if ($policy -notmatch 'integrated_boot_enabled_count\(\) == 11u') {
             throw "Integrated policy boot-count invariant missing"
           }
 
