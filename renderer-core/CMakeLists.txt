@@ -4,7 +4,8 @@ option(DSRRL_BUILD_PHASE0_PROBE "Build the pixel-inert ReShade API20 Phase 0 pro
 set(RESHade_INCLUDE_DIR "" CACHE PATH "Path to pinned ReShade include directory")
 add_library(dsrrl_renderer_core STATIC
  src/feature_registry.cpp src/hook_registry.cpp src/receiver_registry.cpp src/snapshot_bus.cpp src/shader_registry.cpp src/draw_transaction.cpp src/renderer_core.cpp src/operator_catalog.cpp src/island_policy.cpp
- src/operators/legacy_plan/a1_mask_decomposition.cpp src/operators/material_response/material_response_island.cpp src/operators/material_response/material_response_seed.cpp src/operators/env_spec/env_spec_island.cpp src/operators/env_spec/no_spc_envspec_delete.cpp src/operators/surface/terminal_sat_rgb_patch.cpp src/operators/surface/faceeye_shadow.cpp src/operators/point_light/pnts_attenuation.cpp src/operators/point_light/legacy_specular.cpp src/operators/surface/diffuse_material_domain.cpp src/operators/surface/fixed_postfog_identity.cpp src/operators/lightbank/upper_lower.cpp src/operators/lightbank/hemdir3.cpp src/operators/resource_bridges/spec_rgb_bridge.cpp src/operators/resource_bridges/normal_bridge.cpp src/operators/resource_bridges/diffuse_bridge.cpp)
+ src/operators/legacy_plan/a1_mask_decomposition.cpp src/operators/material_response/material_response_island.cpp src/operators/material_response/material_response_seed.cpp src/operators/env_spec/env_spec_island.cpp src/operators/env_spec/no_spc_envspec_delete.cpp src/operators/surface/terminal_sat_rgb_patch.cpp src/operators/surface/faceeye_shadow.cpp src/operators/point_light/pnts_attenuation.cpp src/operators/point_light/legacy_specular.cpp src/operators/surface/diffuse_material_domain.cpp src/operators/surface/fixed_postfog_identity.cpp src/operators/lightbank/upper_lower.cpp src/operators/lightbank/hemdir3.cpp src/operators/resource_bridges/spec_rgb_bridge.cpp src/operators/resource_bridges/normal_bridge.cpp src/operators/resource_bridges/diffuse_bridge.cpp
+ src/runtime/spec_rgb_resource_cache.cpp)
 target_include_directories(dsrrl_renderer_core PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
 target_compile_features(dsrrl_renderer_core PUBLIC cxx_std_17)
 if(MSVC)
@@ -12,7 +13,7 @@ if(MSVC)
 else()
  target_compile_options(dsrrl_renderer_core PRIVATE -Wall -Wextra -Wpedantic -Werror)
 endif()
-foreach(pair IN ITEMS "dsrrl_renderer_core_tests;tests/core_phase0_tests.cpp" "dsrrl_renderer_island_tests;tests/islands_phase1_tests.cpp" "dsrrl_renderer_future_runtime_tests;tests/future_runtime_readiness_tests.cpp" "dsrrl_renderer_faceeye_pointlight_tests;tests/faceeye_pointlight_readiness_tests.cpp" "dsrrl_renderer_postprocess_unblock_tests;tests/postprocess_unblock_tests.cpp" "dsrrl_renderer_hemdir3_spc_tests;tests/hemdir3_spc_carrier_tests.cpp")
+foreach(pair IN ITEMS "dsrrl_renderer_core_tests;tests/core_phase0_tests.cpp" "dsrrl_renderer_island_tests;tests/islands_phase1_tests.cpp" "dsrrl_renderer_future_runtime_tests;tests/future_runtime_readiness_tests.cpp" "dsrrl_renderer_faceeye_pointlight_tests;tests/faceeye_pointlight_readiness_tests.cpp" "dsrrl_renderer_postprocess_unblock_tests;tests/postprocess_unblock_tests.cpp" "dsrrl_renderer_hemdir3_spc_tests;tests/hemdir3_spc_carrier_tests.cpp" "dsrrl_renderer_spec_rgb_cache_tests;tests/spec_rgb_resource_cache_tests.cpp")
  list(GET pair 0 target)
  list(GET pair 1 source)
  add_executable(${target} ${source})
@@ -45,3 +46,4 @@ add_test(NAME dsrrl_renderer_future_runtime_tests COMMAND dsrrl_renderer_future_
 add_test(NAME dsrrl_renderer_faceeye_pointlight_tests COMMAND dsrrl_renderer_faceeye_pointlight_tests)
 add_test(NAME dsrrl_renderer_postprocess_unblock_tests COMMAND dsrrl_renderer_postprocess_unblock_tests)
 add_test(NAME dsrrl_renderer_hemdir3_spc_tests COMMAND dsrrl_renderer_hemdir3_spc_tests)
+add_test(NAME dsrrl_renderer_spec_rgb_cache_tests COMMAND dsrrl_renderer_spec_rgb_cache_tests)
