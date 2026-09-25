@@ -55,6 +55,14 @@ bool spec_ready(
     const material_route_scope &route,
     std::uint32_t receiver_id) noexcept;
 
+// Pure authorization probes for the independently certified V12 application-
+// bound resource corpora. They inspect only the currently bound stock logical
+// identities and never mutate state or imply PTDE sidecar readiness.
+bool diffuse_exact_resource_tuple_authorized(
+    ID3D11DeviceContext *context) noexcept;
+bool normal_exact_resource_tuple_authorized(
+    ID3D11DeviceContext *context) noexcept;
+
 // Preflight for the complete PTDE Diffuse dependency. It proves the exact
 // application-bound t1+t0 pair and a materialized PTDE t0 sidecar without
 // mutating D3D state. Shader dispatch uses this to avoid t0_D*c100_P hybrids.
