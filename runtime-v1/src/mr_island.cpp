@@ -15,7 +15,7 @@
 #include "dsrrl/runtime/upper_lower_runtime.hpp"
 #include "dsrrl/runtime/generated_ul_stable_hashes.hpp"
 #include "dsrrl/runtime/generated_spec_material_routes.hpp"
-#include "dsrrl/runtime/semantic_spec_donor_overrides.hpp"
+#include "semantic_spec_donor_overrides_generated.hpp"
 #include "dsrrl/core/renderer_core.hpp"
 #include "dsrrl/operators/material_response/mtd_semantic_census.hpp"
 #include "dsrrl/sha256.hpp"
