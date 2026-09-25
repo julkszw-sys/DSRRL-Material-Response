@@ -31,6 +31,12 @@ jobs:
         run: |
           python3 runtime-v1/tools/generate_v13_pmetal_consumer_authority.py --input runtime-v1/provenance/mr145/V13_PMETAL_CONSUMER_AUTHORITY.json --output /tmp/v13_pmetal_consumer_authority.hpp
           cmp /tmp/v13_pmetal_consumer_authority.hpp runtime-v1/include/dsrrl/runtime/v13_pmetal_consumer_authority.hpp
+      - name: Verify source-complete Build131 P_Metal EnvSpec port
+        run: |
+          python3 runtime-v1/tools/verify_pmetal_envspec_rgba_port.py \
+            --provenance runtime-v1/provenance/envspec/build131_pmetal_ptde_envspec_rgba_island_v1.py \
+            --transform runtime-v1/src/mr_dxbc_transform.cpp \
+            --authority runtime-v1/include/dsrrl/runtime/pmetal_envspec_rgba_authority.hpp
       - name: Verify exact Normal route generation
         run: |
           python3 renderer-core/tools/generate_normal_routes_v12.py --input renderer-core/data/provenance/normal_routes_v12.tsv --output /tmp/generated_normal_routes_v12.hpp
