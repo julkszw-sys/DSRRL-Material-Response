@@ -1212,6 +1212,177 @@ prepare_draw_requests(
     return true;
 }
 
+bool material_resource_draw_runtime::
+prepare_subsurface_body_requests(
+    ID3D11DeviceContext *context,
+    std::uint32_t target_plain_receiver_id,
+    prepared_material_resource_draw &prepared,
+    operators::resource_bridges::subsurface_body_texture &body_texture) noexcept
+{
+    prepared = {};
+    body_texture =
+        operators::resource_bridges::
+            subsurface_body_texture::unknown;
+
+    if (context == nullptr ||
+        g_quarantined.load() ||
+        target_plain_receiver_id < 33u ||
+        target_plain_receiver_id > 35u ||
+        !core_.features().enabled(
+            core::operator_id::spec_rgb) ||
+        !core_.features().enabled(
+            core::operator_id::diffuse) ||
+        !core_.features().enabled(
+            core::operator_id::normal))
+        return false;
+
+    ID3D11ShaderResourceView *views[3]{};
+    context->PSGetShaderResources(
+        0u,
+        3u,
+        views);
+
+    const auto h0 =
+        logical_hash_for(views[0]);
+    const auto h1 =
+        logical_hash_for(views[1]);
+    const auto h2 =
+        logical_hash_for(views[2]);
+
+    constexpr std::uint64_t k_body_f_spec =
+        0x724f5fe11b342205ull;
+    constexpr std::uint64_t k_body_m_spec =
+        0x777ede2aecc3d102ull;
+
+    if (h1 == k_body_f_spec) {
+        body_texture =
+            operators::resource_bridges::
+                subsurface_body_texture::bd_f_body_s;
+    } else if (h1 == k_body_m_spec) {
+        body_texture =
+            operators::resource_bridges::
+                subsurface_body_texture::bd_m_body_s;
+    }
+
+    const bool tuple_ready =
+        body_texture !=
+            operators::resource_bridges::
+                subsurface_body_texture::unknown &&
+        h0 != 0u &&
+        h2 != 0u &&
+        generated::spec_name_hash_allowed_v12(h1) &&
+        generated::diffuse_pair_allowed_v12(
+            h1,
+            h0) &&
+        generated::normal_tuple_allowed_v12(
+            h0,
+            h1,
+            h2);
+
+    ID3D11ShaderResourceView *spec = nullptr;
+    ID3D11ShaderResourceView *diff = nullptr;
+    ID3D11ShaderResourceView *norm = nullptr;
+
+    if (tuple_ready) {
+        spec = lookup(
+            views[1],
+            asset_class::specular);
+        diff = lookup(
+            views[0],
+            asset_class::diffuse);
+        norm = lookup(
+            views[2],
+            asset_class::normal);
+    }
+
+    for (auto *&view : views)
+        release_view(view);
+
+    if (spec == nullptr ||
+        diff == nullptr ||
+        norm == nullptr) {
+        release_view(spec);
+        release_view(diff);
+        release_view(norm);
+        prepared = {};
+        return false;
+    }
+
+    island_draw_adapter_request spec_request{};
+    spec_request.primary =
+        core::operator_id::spec_rgb;
+    spec_request.receiver_verified = true;
+    spec_request.material_verified = true;
+    spec_request.srvs[0] = {
+        10u,
+        spec
+    };
+    spec_request.srv_count = 1u;
+
+    island_draw_adapter_request diff_request{};
+    diff_request.primary =
+        core::operator_id::diffuse;
+    diff_request.receiver_verified = true;
+    diff_request.material_verified = true;
+    diff_request.srvs[0] = {
+        0u,
+        diff
+    };
+    diff_request.srv_count = 1u;
+
+    island_draw_adapter_request norm_request{};
+    norm_request.primary =
+        core::operator_id::normal;
+    norm_request.receiver_verified = true;
+    norm_request.material_verified = true;
+    norm_request.srvs[0] = {
+        2u,
+        norm
+    };
+    norm_request.srv_count = 1u;
+
+    if (!append_retained_request(
+            prepared,
+            spec_request,
+            spec)) {
+        release_view(spec);
+        release_view(diff);
+        release_view(norm);
+        prepared = {};
+        return false;
+    }
+    spec = nullptr;
+
+    if (!append_retained_request(
+            prepared,
+            diff_request,
+            diff)) {
+        release_view(diff);
+        release_view(norm);
+        release_prepared_draw(prepared);
+        return false;
+    }
+    diff = nullptr;
+
+    if (!append_retained_request(
+            prepared,
+            norm_request,
+            norm)) {
+        release_view(norm);
+        release_prepared_draw(prepared);
+        return false;
+    }
+    norm = nullptr;
+
+    prepared.spec_rgb = true;
+    prepared.diffuse = true;
+    prepared.normal = true;
+    ++g_spec_requests;
+    ++g_diffuse_requests;
+    ++g_normal_requests;
+    return true;
+}
+
 void material_resource_draw_runtime::
 release_prepared_draw(
     prepared_material_resource_draw &prepared) noexcept
