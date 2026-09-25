@@ -29,8 +29,19 @@ spec_rgb_resource_result spec_rgb_resource_cache::register_exact(
 
     const auto stock_owner = name_by_stock_.find(stock_t1_srv);
     if (stock_owner != name_by_stock_.end() &&
-        stock_owner->second != logical_name)
+        stock_owner->second != logical_name) {
+        // A stock SRV observed under two logical identities is no longer an
+        // exact ownership carrier. Quarantine the previously accepted owner,
+        // rather than leaving a stale route that could still activate later.
+        const auto previous = by_name_.find(stock_owner->second);
+        if (previous != by_name_.end()) {
+            previous->second.stock_t1_srv = 0;
+            previous->second.ptde_t10_srv = 0;
+            previous->second.ambiguous = true;
+        }
+        name_by_stock_.erase(stock_owner);
         return spec_rgb_resource_result::fail_open_conflicting_stock_binding;
+    }
 
     const auto found = by_name_.find(logical_name);
     if (found == by_name_.end()) {
