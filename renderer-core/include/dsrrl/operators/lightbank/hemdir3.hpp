@@ -1,12 +1,17 @@
 #pragma once
 
 #include "dsrrl/core/island_policy.hpp"
+#include "dsrrl/core/draw_transaction_policy.hpp"
 #include "dsrrl/operators/lightbank/snapshot_freshness.hpp"
 
 #include <array>
 #include <cstdint>
 
 namespace dsrrl::operators::lightbank {
+
+static_assert(
+    core::requires_draw_transaction(core::operator_id::hemdir3),
+    "HemDir3 runtime must use the shared transaction layer.");
 
 struct hemdir3_vec3 {
     float x = 0.0f;
