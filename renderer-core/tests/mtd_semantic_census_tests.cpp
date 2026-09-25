@@ -95,10 +95,24 @@ int main()
     CHECK(pmetal_legacy.envspc_slot_valid);
     CHECK(pmetal_legacy.envspc_slot==2u);
 
+    // Runtime may provide a nonzero parser-side semantic discriminator that
+    // differs from the canonical basename hash. The raw SHA fallback is legal
+    // only because the generated router proves SHA -> EnvSpec semantics is
+    // unambiguous.
     const auto wrong_legacy=classify_mtd_envspec_semantics_legacy(
         0x1755dba68cb5e9a2ull,
         pmetal.raw_mtd_sha256);
-    CHECK(!wrong_legacy.exact_identity_match);
+    CHECK(wrong_legacy.exact_identity_match);
+    CHECK(wrong_legacy.router_state==mtd_envspec_router_state::present);
+    CHECK(wrong_legacy.envspc_slot_valid);
+    CHECK(wrong_legacy.envspc_slot==2u);
+
+    auto unknown_sha=pmetal.raw_mtd_sha256;
+    unknown_sha[0]^=0xffu;
+    const auto unknown_legacy=classify_mtd_envspec_semantics_legacy(
+        0x1755dba68cb5e9a2ull,
+        unknown_sha);
+    CHECK(!unknown_legacy.exact_identity_match);
 
     d=classify_mtd_semantic(q,mtd_semantic_operator::diffuse);
     CHECK(d.state==mtd_semantic_state::unknown);
@@ -298,6 +312,23 @@ int main()
     CHECK(slot_counts[1]==48u);
     CHECK(slot_counts[2]==54u);
     CHECK(slot_counts[3]==44u);
+
+
+    // Raw MTD SHA is a safe EnvSpec-semantic fallback only while every
+    // duplicate payload in the canonical router agrees on state, slot and
+    // explicit-none safety. This invariant makes future generator drift
+    // fail CI instead of broadening runtime routing silently.
+    for(std::size_t i=0;i<generated::k_envspec_router_v1.size();++i){
+        for(std::size_t j=i+1u;j<generated::k_envspec_router_v1.size();++j){
+            const auto &a=generated::k_envspec_router_v1[i];
+            const auto &b=generated::k_envspec_router_v1[j];
+            if(a.raw_mtd_sha256!=b.raw_mtd_sha256)
+                continue;
+            CHECK(a.state==b.state);
+            CHECK(a.envspc_slot==b.envspc_slot);
+            CHECK(a.explicit_none_safe==b.explicit_none_safe);
+        }
+    }
 
     material_response_island seeded;
     CHECK(register_confirmed_material_routes_v1(seeded)==35u);
