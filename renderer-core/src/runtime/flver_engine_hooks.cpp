@@ -27,6 +27,7 @@ namespace dsrrl::runtime::flver_identity_transport {
 namespace {
 constexpr char k_sha[]="a45aaa36dd2f6cc151670a639ea5547043cf38ea79ff4178b963c6ed71f98d7b";
 constexpr std::uintptr_t k_parse=0x20D910u,k_selector=0x22BA20u,k_destroy=0x20D7A0u;
+constexpr std::uintptr_t k_ret_sel_1=0x20E019u,k_ret_sel_2=0x20EB7Fu,k_ret_sel_3=0x20FB9Eu;
 constexpr std::array<std::uint8_t,16> k_parse_b={0x48,0x89,0x5C,0x24,0x18,0x55,0x56,0x57,0x41,0x54,0x41,0x55,0x41,0x56,0x41,0x57};
 constexpr std::array<std::uint8_t,15> k_selector_b={0x40,0x53,0x48,0x83,0xEC,0x30,0x49,0x63,0xC0,0x45,0x8B,0xD1,0x48,0x8B,0xDA};
 constexpr std::array<std::uint8_t,20> k_destroy_b={0x40,0x57,0x48,0x83,0xEC,0x30,0x48,0xC7,0x44,0x24,0x20,0xFE,0xFF,0xFF,0xFF,0x48,0x89,0x5C,0x24,0x40};
@@ -95,11 +96,18 @@ void __fastcall parse_entry(void*m,const void*r) noexcept {
 }
 void __fastcall destroy_entry(void*m) noexcept {flver_identity_observe_destroy(m);if(g_do)g_do(m);}
 }
-extern "C" void dsrrl_flver_selector_observer(void *c, std::int32_t i) noexcept {
+extern "C" void dsrrl_flver_selector_observer(void *c, std::int32_t i, void *ret) noexcept {
  ++g_selector_events;
  material_owner_selection_clear();
 
- if(i<0){++g_owner_fail_open;return;}
+ if(g_base==0u || ret==nullptr || i<0){++g_owner_fail_open;return;}
+ const auto ret_addr=reinterpret_cast<std::uintptr_t>(ret);
+ if(ret_addr<g_base){++g_owner_fail_open;return;}
+ const auto rva=ret_addr-g_base;
+ if(rva!=k_ret_sel_1 && rva!=k_ret_sel_2 && rva!=k_ret_sel_3){
+  ++g_owner_fail_open;
+  return;
+ }
 
  actual_material_owner_observation observation{};
  if(!flver_identity_enrich_owner(
