@@ -63,6 +63,11 @@ jobs:
         run: python3 renderer-core/tests/test_dsr_full_flver_ownership_export.py
       - name: Verify exact DSR FLVER owner tuple materializer
         run: python3 renderer-core/tests/test_materialize_dsr_flver_owner_tuples.py
+      - name: Verify source-complete DSR owner corpus payload
+        run: |
+          python3 renderer-core/tools/generate_dsr_flver_owner_tuple_header.py \
+            --input renderer-core/data/census/dsr_flver_owner_tuple_corpus_v1.bin.z \
+            --verify-only
       - name: Configure
         run: cmake -S renderer-core -B build/renderer-core -DCMAKE_BUILD_TYPE=Release
       - name: Build
