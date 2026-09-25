@@ -634,6 +634,98 @@ transform_result transform_lerp(
     return r;
 }
 
+
+namespace {
+
+template<typename Plan>
+transform_result restore_stock_diffuse_lane(
+    std::span<const std::uint8_t> v211,
+    const Plan &p,
+    std::string_view expected_v211_sha)
+{
+    transform_result r;
+    if(!hash_is(v211,expected_v211_sha)){
+        r.error="SPEC_ONLY exact V2.11 input SHA";
+        return r;
+    }
+
+    std::vector<chunk> chunks;
+    std::vector<std::uint32_t> words;
+    std::size_t shex=0;
+    if(!get_shex_words(v211,chunks,shex,words,r.error))
+        return r;
+
+    // V29 inserts the four-word b12 declaration at SHEX word 11. Every
+    // audited diffuse c100/pow site is downstream of that insertion.
+    constexpr std::uint32_t k_v29_shift=4u;
+    for(const auto site:p.cb_sites){
+        const auto at=static_cast<std::size_t>(site+k_v29_shift);
+        if(at+1u>=words.size() ||
+           words[at]!=12u || words[at+1u]!=1u){
+            r.error="SPEC_ONLY c100 carrier precondition";
+            return r;
+        }
+        words[at]=0u;
+        words[at+1u]=9u;
+    }
+
+    const auto pow_at=static_cast<std::size_t>(p.pow_site+k_v29_shift);
+    if(pow_at+2u>=words.size() ||
+       words[pow_at]!=0x3f800000u ||
+       words[pow_at+1u]!=0x3f800000u ||
+       words[pow_at+2u]!=0x3f800000u){
+        r.error="SPEC_ONLY diffuse-domain precondition";
+        return r;
+    }
+    words[pow_at]=words[pow_at+1u]=words[pow_at+2u]=0x400ccccdu;
+
+    auto out=rebuild_words(v211,std::move(chunks),shex,words,r.error);
+    if(out.empty() || out.size()!=v211.size()){
+        r.error="SPEC_ONLY rebuild";
+        return r;
+    }
+
+    // Reparse and prove that the only reverted V29 carrier sites now match
+    // stock DSR. The b12 declaration intentionally remains because c101
+    // V2.10/V2.11 still consumes b12[0].
+    if(!get_shex_words(out,chunks,shex,words,r.error))
+        return r;
+    for(const auto site:p.cb_sites){
+        const auto at=static_cast<std::size_t>(site+k_v29_shift);
+        if(at+1u>=words.size() || words[at]!=0u || words[at+1u]!=9u){
+            r.error="SPEC_ONLY c100 postcondition";
+            return r;
+        }
+    }
+    if(pow_at+2u>=words.size() ||
+       words[pow_at]!=0x400ccccdu ||
+       words[pow_at+1u]!=0x400ccccdu ||
+       words[pow_at+2u]!=0x400ccccdu){
+        r.error="SPEC_ONLY diffuse-domain postcondition";
+        return r;
+    }
+
+    r.ok=true;
+    r.code=std::move(out);
+    return r;
+}
+
+} // namespace
+
+transform_result transform_stock_diffuse_material(
+    std::span<const std::uint8_t> v211,
+    const plan &p)
+{
+    return restore_stock_diffuse_lane(v211,p,p.v211_sha256);
+}
+
+transform_result transform_stock_diffuse_material_lerp(
+    std::span<const std::uint8_t> v211,
+    const build151::lerp_plan &p)
+{
+    return restore_stock_diffuse_lane(v211,p,p.v211_sha256);
+}
+
 transform_result transform_v9a(std::span<const std::uint8_t> v211)
 {
     transform_result r;
