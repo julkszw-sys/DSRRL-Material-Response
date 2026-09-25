@@ -39,6 +39,20 @@ bool stock_regular_sampler_family(faceeye_receiver_variant v) noexcept
 
 } // namespace
 
+bool validate_faceeye_auxiliary_snapshot(
+    const faceeye_auxiliary_snapshot_descriptor &snapshot) noexcept
+{
+    if(!snapshot.immutable_draw_local ||
+       !snapshot.ptde_dsr_value_homology_verified)
+        return false;
+    for(std::size_t i=0;i<k_faceeye_aux_ps_registers.size();++i){
+        if(!snapshot.register_present[i] ||
+           snapshot.producer_offsets[i]!=k_faceeye_aux_dirlight_offsets[i])
+            return false;
+    }
+    return true;
+}
+
 float decode_faceeye_packed_depth(const faceeye_vec3 &sample_rgb) noexcept
 {
     if(!finite(sample_rgb))
@@ -110,6 +124,10 @@ faceeye_runtime_plan evaluate_faceeye_runtime_readiness(
     }
     if(!context.auxiliary_dirlight_snapshot_ready){
         out.reason=faceeye_runtime_reason::auxiliary_dirlight_snapshot_not_ready;
+        return out;
+    }
+    if(!validate_faceeye_auxiliary_snapshot(context.auxiliary_dirlight_snapshot)){
+        out.reason=faceeye_runtime_reason::auxiliary_dirlight_snapshot_incomplete;
         return out;
     }
     if(is_csd(context.variant) && !context.csd_matrix_region_ready){
