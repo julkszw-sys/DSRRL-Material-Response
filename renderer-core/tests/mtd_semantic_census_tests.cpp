@@ -154,17 +154,16 @@ int main()
     CHECK(pmetal_tex_fallback.exact_host_identity_match);
     CHECK(pmetal_tex_fallback.positive_mask==pmetal_tex.positive_mask);
 
+    // Generic semantic API remains ownership-sensitive. Runtime may use the
+    // direct positive capability classifier only at its independently exact
+    // material-pointer + certified receiver + resource-tuple cut.
     d=classify_mtd_semantic(q,mtd_semantic_operator::diffuse);
-    CHECK(d.state==mtd_semantic_state::use);
-    CHECK(d.source==
-          mtd_semantic_source::ptde_flver_texture_semantics_exact);
-    CHECK(d.exact_identity_match);
+    CHECK(d.state==mtd_semantic_state::unknown);
+    CHECK(!d.exact_identity_match);
 
     d=classify_mtd_semantic(q,mtd_semantic_operator::normal_bump);
-    CHECK(d.state==mtd_semantic_state::use);
-    CHECK(d.source==
-          mtd_semantic_source::ptde_flver_texture_semantics_exact);
-    CHECK(d.exact_identity_match);
+    CHECK(d.state==mtd_semantic_state::unknown);
+    CHECK(!d.exact_identity_match);
 
     auto owned_q=q;
     owned_q.ownership.flver_identity_hash=0x1234u;
@@ -175,6 +174,13 @@ int main()
     CHECK(d.state==mtd_semantic_state::use);
     CHECK(d.source==
           mtd_semantic_source::ptde_flver_texture_semantics_exact);
+    CHECK(d.exact_identity_match);
+
+    d=classify_mtd_semantic(owned_q,mtd_semantic_operator::normal_bump);
+    CHECK(d.state==mtd_semantic_state::use);
+    CHECK(d.source==
+          mtd_semantic_source::ptde_flver_texture_semantics_exact);
+    CHECK(d.exact_identity_match);
 
     auto wrong_tex=pmetal;
     wrong_tex.raw_mtd_sha256[0]^=0xffu;
