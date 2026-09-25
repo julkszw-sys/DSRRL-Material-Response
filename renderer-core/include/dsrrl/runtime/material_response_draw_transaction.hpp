@@ -70,6 +70,15 @@ public:
         const operators::material_response::decision &decision,
         prepared_material_response_draw &prepared) noexcept;
 
+    // Carrier preparation only. Authorization must already have been
+    // established by an operator-specific exact route (for example the
+    // certified DSBT->DSB Subsurface route). This function never infers
+    // ownership from the target PTDE donor.
+    bool prepare_prevalidated_route_request(
+        std::uint32_t receiver_id,
+        std::uint32_t route_index,
+        prepared_material_response_draw &prepared) noexcept;
+
     void release_prepared_draw(
         prepared_material_response_draw &prepared) noexcept;
 
