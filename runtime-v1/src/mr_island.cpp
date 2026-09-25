@@ -1035,6 +1035,10 @@ bool on_draw_indexed(command_list *cmd,std::uint32_t index_count,std::uint32_t i
         route.specular_material_verified &&
         g_core->features().enabled(core::operator_id::spec_rgb) &&
         assets::spec_ready(ctx,route,receiver_id);
+    const bool normal_candidate =
+        route.normal_eligible &&
+        g_core->features().enabled(core::operator_id::normal) &&
+        assets::normal_ready(ctx,route,receiver_id);
 
     const bool pmetal_exact_route =
         !body_route &&
@@ -1211,9 +1215,9 @@ bool on_draw_indexed(command_list *cmd,std::uint32_t index_count,std::uint32_t i
             body_material,g_core->features().enabled(core::operator_id::subsurface),true,spec_active))){
             core::render_patch_plan plan{};
             plan.patches[plan.patch_count++]={core::operator_id::material_response,0u,true,false};
-            if(g_core->features().enabled(core::operator_id::diffuse))
+            if(diffuse_candidate)
                 plan.patches[plan.patch_count++]={core::operator_id::diffuse,0u,false,true};
-            if(g_core->features().enabled(core::operator_id::normal))
+            if(normal_candidate)
                 plan.patches[plan.patch_count++]={core::operator_id::normal,0u,false,true};
             if(body_route)
                 plan.patches[plan.patch_count++]={core::operator_id::subsurface,0u,true,false};
