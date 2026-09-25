@@ -1,0 +1,31 @@
+{
+  "schema": "dsrrl.renderer_core.envdiffuse_dsr_ownership_acquisition_gate.v1",
+  "island": "surface.envdiffuse",
+  "status": "OPEN_FAIL_OPEN",
+  "source_chain": {
+    "source": "DSR FLVER2 material/texture tables plus exact MTD bytes",
+    "producer": "material slot and texture semantic ownership",
+    "transport": "source-complete DSR ownership export TSV",
+    "consumer": "Classic MapModel EnvDiffuse assignment/resource homology",
+    "composition": "endpoint XYZ + exact PTDE t11/t13 resources + producer-class/assignment provenance",
+    "downstream": "envdiffuse_runtime_readiness classic_assignment_homology_verified"
+  },
+  "available_capture_free_tools": [
+    "renderer-core/tools/dsr_flver_zip_ownership_census.py",
+    "renderer-core/tools/dsr_full_flver_ownership_export.py"
+  ],
+  "current_evidence": {
+    "ptde_source_complete": true,
+    "dsr_materialized_source_complete_corpus": false,
+    "cross_version_homology": "OPEN",
+    "runtime_equivalence": "OPEN",
+    "pixel_equivalence": "OPEN"
+  },
+  "activation_policy": "fail_open_until_source_complete_dsr_corpus_and_exact_same_world_join",
+  "forbidden_inference": [
+    "do_not_treat_missing_DSR_rows_as_operator_absence",
+    "do_not_promote_scanner_build_or_first_consumer_to_cross_version_homology",
+    "do_not_promote_runtime_to_pixel_equivalence"
+  ],
+  "knowledge_evidence_id": "d49e6778-5642-4fed-9be3-7e81ab707ca7"
+}
