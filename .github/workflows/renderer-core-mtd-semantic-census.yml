@@ -8,6 +8,7 @@ on:
       - 'renderer-core/tools/verify_mtd_semantic_census.py'
       - 'renderer-core/tools/verify_ptde_flver_census_import.py'
       - 'renderer-core/tools/verify_ptde_flver_source_completeness.py'
+      - 'renderer-core/tools/verify_mtd_texture_semantic_surface.py'
       - 'renderer-core/tools/generate_ptde_flver_texture_semantics.py'
       - '.github/workflows/renderer-core-mtd-semantic-census.yml'
   pull_request:
@@ -17,6 +18,7 @@ on:
       - 'renderer-core/tools/verify_mtd_semantic_census.py'
       - 'renderer-core/tools/verify_ptde_flver_census_import.py'
       - 'renderer-core/tools/verify_ptde_flver_source_completeness.py'
+      - 'renderer-core/tools/verify_mtd_texture_semantic_surface.py'
       - 'renderer-core/tools/generate_ptde_flver_texture_semantics.py'
       - '.github/workflows/renderer-core-mtd-semantic-census.yml'
 
@@ -34,3 +36,5 @@ jobs:
         run: python renderer-core/tools/verify_ptde_flver_census_import.py
       - name: Verify PTDE FLVER semantic completeness authority
         run: python renderer-core/tools/verify_ptde_flver_source_completeness.py
+      - name: Verify full FLVER texture semantic surface
+        run: python renderer-core/tools/verify_mtd_texture_semantic_surface.py
