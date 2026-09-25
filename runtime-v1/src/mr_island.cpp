@@ -15,6 +15,7 @@
 #include "dsrrl/runtime/upper_lower_runtime.hpp"
 #include "dsrrl/runtime/generated_ul_stable_hashes.hpp"
 #include "dsrrl/runtime/generated_spec_material_routes.hpp"
+#include "dsrrl/runtime/flver_identity_registry.hpp"
 #include "semantic_spec_donor_overrides_generated.hpp"
 #include "dsrrl/core/renderer_core.hpp"
 #include "dsrrl/operators/material_response/mtd_semantic_census.hpp"
@@ -113,8 +114,6 @@ std::unordered_map<void*,std::uint8_t> g_material_spec_override;
 std::unordered_map<void*,mtd_sem::mtd_envspec_semantics> g_material_envspec;
 std::unordered_map<void*,mtd_sem::ptde_flver_texture_semantics> g_material_ptde_texture;
 std::unordered_map<void*,std::uint64_t> g_material_semantic_hash;
-std::mutex g_flver_mutex;
-std::unordered_map<void*,core::sha256_digest> g_flver_sha_by_model;
 thread_local bool g_draw_owner_tuple_authenticated=false;
 
 std::uint64_t legacy_semantic_key_hash(const wchar_t *semantic_key) noexcept
@@ -1983,22 +1982,41 @@ void mtd_event(
 void flver_parse_event(void *model,const void *raw) noexcept
 {
     ++g_flver_parse_seen;
-    if(model){std::lock_guard lock(g_flver_mutex);g_flver_sha_by_model.erase(model);}
+    if(model)
+        dsrrl::runtime::flver_identity_observe_destroy(model);
     if(!model || !raw){++g_flver_identity_fail;return;}
+
     try{
         std::array<std::uint8_t,0x18> header{};
-        if(!engine::safe_read_bytes(raw,header.data(),header.size())){++g_flver_identity_fail;return;}
+        if(!engine::safe_read_bytes(raw,header.data(),header.size())){
+            ++g_flver_identity_fail;
+            return;
+        }
         constexpr std::array<std::uint8_t,6> magic={'F','L','V','E','R',0};
-        if(!std::equal(magic.begin(),magic.end(),header.begin())){++g_flver_identity_fail;return;}
+        if(!std::equal(magic.begin(),magic.end(),header.begin())){
+            ++g_flver_identity_fail;
+            return;
+        }
         std::uint32_t data_offset=0,data_length=0;
         std::memcpy(&data_offset,header.data()+0x0c,sizeof(data_offset));
         std::memcpy(&data_length,header.data()+0x10,sizeof(data_length));
-        const std::uint64_t total64=static_cast<std::uint64_t>(data_offset)+data_length;
-        if(data_offset<0x40u || total64<data_offset || total64>0x40000000ull){++g_flver_identity_fail;return;}
-        const auto digest=dsrrl::sha256({reinterpret_cast<const std::byte*>(raw),static_cast<std::size_t>(total64)});
-        {std::lock_guard lock(g_flver_mutex);g_flver_sha_by_model[model]=digest;}
-        ++g_flver_identity_ok;
-    }catch(...){++g_flver_identity_fail;++g_fail_open;}
+        const std::uint64_t total64=
+            static_cast<std::uint64_t>(data_offset)+data_length;
+        if(data_offset<0x40u || total64<data_offset ||
+           total64>0x40000000ull){
+            ++g_flver_identity_fail;
+            return;
+        }
+
+        if(dsrrl::runtime::flver_identity_observe_parse(
+               model,raw,static_cast<std::size_t>(total64)))
+            ++g_flver_identity_ok;
+        else
+            ++g_flver_identity_fail;
+    }catch(...){
+        ++g_flver_identity_fail;
+        ++g_fail_open;
+    }
 }
 
 void selector_event(void *container,void *,void *ret,void *,void *,std::int32_t material_index) noexcept
@@ -2026,9 +2044,8 @@ void selector_event(void *container,void *,void *ret,void *,void *,std::int32_t 
     void *actual=resolve_material(container,material_index);
     if(container && actual && material_index>=0){
         core::sha256_digest flver_sha{};
-        bool have_flver=false;
-        const auto model=reinterpret_cast<void*>(reinterpret_cast<std::uintptr_t>(container)-0x88u);
-        {std::lock_guard lock(g_flver_mutex);const auto it=g_flver_sha_by_model.find(model);if(it!=g_flver_sha_by_model.end()){flver_sha=it->second;have_flver=true;}}
+        const bool have_flver=
+            dsrrl::runtime::flver_identity_lookup(container,flver_sha);
         std::uint64_t semantic_hash=0u;
         {std::lock_guard lock(g_material_mutex);const auto it=g_material_semantic_hash.find(actual);if(it!=g_material_semantic_hash.end())semantic_hash=it->second;}
         if(have_flver && semantic_hash!=0u)
@@ -2093,7 +2110,7 @@ void unregister_runtime() noexcept
     }
     g_draw_donor=-1; g_draw_spec_override=-1; g_draw_envspec={}; g_draw_envspec_exact=false; g_draw_ptde_texture={};
     g_bound_host=-1; g_bound_lerp=false; g_bound_subsurface=false; g_bound_command=nullptr;
-    {std::lock_guard lock(g_flver_mutex);g_flver_sha_by_model.clear();}
+    dsrrl::runtime::flver_identity_reset();
     g_draw_owner_tuple_authenticated=false;
     g_core=nullptr;
 }
