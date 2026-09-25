@@ -1,6 +1,7 @@
 #include "dsrrl/operators/material_response/material_response_v211_materializer.hpp"
 #include "dsrrl/operators/material_response/generated_v211_plans.hpp"
 #include "dsrrl/operators/legacy_plan/dxbc_checksum.hpp"
+#include "dsrrl/operators/legacy_plan/dxbc_rdef_patch.hpp"
 #include "dsrrl/operators/legacy_plan/sha256_bytes.hpp"
 #include "dsrrl/operators/legacy_plan/a1_create_time_materializer.hpp"
 
@@ -277,6 +278,71 @@ std::size_t code_payload_offset(
     }
 
     return hit;
+}
+
+bool augment_final_rdef_b12(
+    std::vector<std::uint8_t> &bytes) noexcept
+{
+    std::vector<chunk> chunks;
+    std::vector<std::uint32_t> words;
+    std::size_t code_index = 0u;
+
+    if (!parse_dxbc(
+            bytes.data(),
+            bytes.size(),
+            chunks,
+            code_index) ||
+        !extract_words(
+            chunks,
+            code_index,
+            words))
+        return false;
+
+    chunk *rdef = nullptr;
+    for (auto &current : chunks) {
+        if (std::memcmp(
+                current.tag.data(),
+                "RDEF",
+                4u) != 0)
+            continue;
+
+        if (rdef != nullptr)
+            return false;
+
+        rdef = &current;
+    }
+
+    if (rdef == nullptr ||
+        legacy_plan::dxbc::rdef::
+            has_constant_buffer_binding(
+                rdef->payload,
+                12u))
+        return false;
+
+    if (!legacy_plan::dxbc::rdef::
+            append_constant_buffer_binding(
+                rdef->payload,
+                "DSRRL_MaterialCarrier",
+                12u,
+                64u) ||
+        !legacy_plan::dxbc::rdef::
+            has_constant_buffer_binding(
+                rdef->payload,
+                12u))
+        return false;
+
+    std::vector<std::uint8_t> rebuilt;
+    if (!rebuild(
+            bytes.data(),
+            bytes.size(),
+            std::move(chunks),
+            code_index,
+            words,
+            rebuilt))
+        return false;
+
+    bytes = std::move(rebuilt);
+    return true;
 }
 
 bool compose_enabled_a1_islands(
@@ -556,7 +622,8 @@ v211_materialize_outcome materialize_v211_stable_receiver(
             source,
             size,
             output,
-            outcome.composed_owners)) {
+            outcome.composed_owners) ||
+        !augment_final_rdef_b12(output)) {
         output.clear();
         outcome.result =
             v211_materialize_result::fail_patch_precondition;
