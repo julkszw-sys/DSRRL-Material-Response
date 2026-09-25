@@ -931,7 +931,47 @@ bool prepare_island_batch(
         return true;
     }
 
+    auto *context =
+        reinterpret_cast<ID3D11DeviceContext *>(
+            cmd_list->get_native());
+
+    const bool ul_spc =
+        upper_lower_bound &&
+        upper_lower_identity.stratum ==
+            dsrrl::operators::lightbank::
+                upper_lower_hemenv_stratum::spc;
+
     if (decision.active &&
+        ul_spc &&
+        context != nullptr &&
+        g_upper_lower.prepare_upper_lower_carrier(
+            context,
+            prepared.upper_lower.carrier)) {
+        if (g_mr_draw_runtime.
+                prepare_draw_request_with_upper_lower(
+                    decision,
+                    prepared.upper_lower.carrier.b13,
+                    prepared.mr)) {
+            if (dsrrl::runtime::append_island_draw_request(
+                    prepared.batch,
+                    prepared.mr.request) !=
+                dsrrl::runtime::island_draw_batch_result::ready) {
+                release_prepared_island_batch(prepared);
+                return false;
+            }
+
+            prepared.mr_in_batch = true;
+            prepared.upper_lower_combined = true;
+        } else {
+            g_upper_lower_hemenv.release_prepared_draw(
+                prepared.upper_lower);
+        }
+    }
+
+    // Independent fallback: if combined MR+U/L is unavailable, keep MR
+    // active by itself and leave U/L at stock DSR for this draw.
+    if (!prepared.mr_in_batch &&
+        decision.active &&
         g_mr_draw_runtime.prepare_draw_request(
             decision,
             prepared.mr)) {
@@ -946,6 +986,7 @@ bool prepare_island_batch(
     }
 
     if (upper_lower_bound &&
+        !prepared.upper_lower_combined &&
         g_upper_lower_hemenv.prepare_draw_request(
             cmd_list,
             upper_lower_identity,
@@ -973,10 +1014,6 @@ bool prepare_island_batch(
         material.material_slot_valid;
     query.ownership.exact =
         material.owner_tuple_exact;
-
-    auto *context =
-        reinterpret_cast<ID3D11DeviceContext *>(
-            cmd_list->get_native());
 
     if (context != nullptr) {
         (void)g_material_resources.prepare_draw_requests(
