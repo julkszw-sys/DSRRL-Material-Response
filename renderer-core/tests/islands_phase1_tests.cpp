@@ -2,6 +2,7 @@
 #include "dsrrl/operators/material_response/material_response_island.hpp"
 #include "dsrrl/operators/material_response/material_response_seed.hpp"
 #include "dsrrl/core/island_policy.hpp"
+#include "dsrrl/core/draw_transaction_policy.hpp"
 #include "dsrrl/core/operator_catalog.hpp"
 #include "dsrrl/operators/legacy_plan/a1_mask_decomposition.hpp"
 #include "dsrrl/operators/legacy_plan/generated_a1_plan_index_v1.hpp"
@@ -199,6 +200,91 @@ int main()
     const auto &catalog = core::known_operator_catalog();
     CHECK(catalog.size() == core::operator_count);
     CHECK(core::operator_count == 25);
+
+    std::size_t draw_required_count = 0;
+    std::size_t create_time_safe_count = 0;
+    std::size_t blocked_count = 0;
+    std::size_t host_preserve_count = 0;
+
+    for (std::size_t i = 0;
+         i < core::k_draw_transaction_policies.size();
+         ++i) {
+        const auto &policy =
+            core::k_draw_transaction_policies[i];
+
+        CHECK(static_cast<std::size_t>(policy.op) == i);
+        CHECK((policy.required_mutation_mask &
+               ~policy.allowed_mutation_mask) == 0u);
+
+        switch (policy.mode) {
+        case core::draw_transaction_mode::draw_required:
+            ++draw_required_count;
+            CHECK(policy.full_restore_required);
+            CHECK(policy.required_mutation_mask !=
+                  core::draw_mutation_none);
+            break;
+        case core::draw_transaction_mode::create_time_safe:
+            ++create_time_safe_count;
+            CHECK(!policy.full_restore_required);
+            break;
+        case core::draw_transaction_mode::blocked:
+            ++blocked_count;
+            CHECK(!policy.full_restore_required);
+            break;
+        case core::draw_transaction_mode::host_preserve:
+            ++host_preserve_count;
+            CHECK(policy.allowed_mutation_mask ==
+                  core::draw_mutation_none);
+            break;
+        default:
+            CHECK(false);
+        }
+    }
+
+    CHECK(draw_required_count == 15u);
+    CHECK(create_time_safe_count == 5u);
+    CHECK(blocked_count == 3u);
+    CHECK(host_preserve_count == 2u);
+
+    CHECK(core::requires_draw_transaction(
+        core::operator_id::material_response));
+    CHECK(core::requires_draw_transaction(
+        core::operator_id::upper_lower));
+    CHECK(core::requires_draw_transaction(
+        core::operator_id::hemdir3));
+    CHECK(core::requires_draw_transaction(
+        core::operator_id::spec_rgb));
+    CHECK(core::requires_draw_transaction(
+        core::operator_id::env_spec));
+    CHECK(core::requires_draw_transaction(
+        core::operator_id::env_diffuse));
+    CHECK(core::requires_draw_transaction(
+        core::operator_id::point_light));
+    CHECK(core::requires_draw_transaction(
+        core::operator_id::local_specular_legacy));
+    CHECK(core::requires_draw_transaction(
+        core::operator_id::subsurface));
+    CHECK(core::requires_draw_transaction(
+        core::operator_id::diffuse));
+    CHECK(core::requires_draw_transaction(
+        core::operator_id::normal));
+    CHECK(core::requires_draw_transaction(
+        core::operator_id::faceeye_shadow_legacy));
+    CHECK(core::requires_draw_transaction(
+        core::operator_id::pmetal_black_safe_source));
+    CHECK(core::requires_draw_transaction(
+        core::operator_id::pmetal_black_safe_v10));
+
+    CHECK(core::create_time_safe_operator(
+        core::operator_id::terminal_sat_rgb));
+    CHECK(core::create_time_safe_operator(
+        core::operator_id::diffuse_material_domain));
+    CHECK(core::create_time_safe_operator(
+        core::operator_id::pointlight_pnts_attenuation));
+    CHECK(core::create_time_safe_operator(
+        core::operator_id::envspec_nospc_delete));
+    CHECK(core::create_time_safe_operator(
+        core::operator_id::fixed_postfog_identity));
 
     for (std::size_t i = 0; i < catalog.size(); ++i) {
         CHECK(static_cast<std::size_t>(catalog[i].id) == i);
