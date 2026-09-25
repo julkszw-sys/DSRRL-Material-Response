@@ -202,11 +202,7 @@ extern "C" __declspec(dllexport) bool AddonInit(HMODULE addon,HMODULE reshade_mo
         "DSRRL Runtime V13: P_Metal A/B producer preflight PASS." :
         "DSRRL Runtime V13: P_Metal A/B producer preflight FAIL-OPEN-OFF.");
 
-    if(!dsrrl::runtime::engine::install(
-            &selector_dispatch,\n            &flver_parse_dispatch,
-            &dsrrl::runtime::mr::mtd_event,
-            &dsrrl::runtime::assets::texture_name_event,
-            &dsrrl::runtime::assets::texture_name_clear_event)){
+    if(!dsrrl::runtime::engine::install(\n            &selector_dispatch,\n            &dsrrl::runtime::mr::mtd_event,\n            &flver_parse_dispatch,\n            &dsrrl::runtime::assets::texture_name_event,\n            &dsrrl::runtime::assets::texture_name_clear_event)){
         dsrrl::runtime::upper_lower::unregister_runtime();
         dsrrl::runtime::envspec::unregister_runtime();
         dsrrl::runtime::mr::unregister_runtime();
