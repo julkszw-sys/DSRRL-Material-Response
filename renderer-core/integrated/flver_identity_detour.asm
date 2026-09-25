@@ -17,20 +17,19 @@ dsrrl_flver_selector_hook_entry PROC
     push r11
     sub rsp,0A8h
 
-    ; 20h..2Fh are argument 5/6 spill locations after the required shadow
-    ; space. Original S0 is rsp+0E8h after eight pushes and sub 0A8h.
-    movdqu xmmword ptr [rsp+30h],xmm0
-    movdqu xmmword ptr [rsp+40h],xmm1
-    movdqu xmmword ptr [rsp+50h],xmm2
-    movdqu xmmword ptr [rsp+60h],xmm3
-    movdqu xmmword ptr [rsp+70h],xmm4
-    movdqu xmmword ptr [rsp+80h],xmm5
+    ; 20h..2Fh are arg5/arg6; 30h is arg7. Keep XMM saves above it.
+    movdqu xmmword ptr [rsp+40h],xmm0
+    movdqu xmmword ptr [rsp+50h],xmm1
+    movdqu xmmword ptr [rsp+60h],xmm2
+    movdqu xmmword ptr [rsp+70h],xmm3
+    movdqu xmmword ptr [rsp+80h],xmm4
+    movdqu xmmword ptr [rsp+90h],xmm5
 
-    ; Exact retail selector ABI:
-    ; original RCX = material container
-    ; original RDX = LightBank/render owner
-    ; original R8D = material index
-    ; return address identifies selector caller variant
+    ; Original selector ABI at 0x14022BA20:
+    ; RCX = material container
+    ; RDX = LightBank/render owner
+    ; R8D = material index
+    ; R9D = incoming lighting semantic mode
     ; live R14/R15 carry the assignment descriptor depending on caller.
     mov rcx,qword ptr [rsp+0D0h]
     mov rdx,qword ptr [rsp+0C8h]
@@ -39,14 +38,16 @@ dsrrl_flver_selector_hook_entry PROC
     mov qword ptr [rsp+20h],r15
     mov rax,qword ptr [rsp+0C0h]
     mov qword ptr [rsp+28h],rax
+    mov rax,qword ptr [rsp+0B8h]
+    mov qword ptr [rsp+30h],rax
     call dsrrl_flver_selector_observer
 
-    movdqu xmm0,xmmword ptr [rsp+30h]
-    movdqu xmm1,xmmword ptr [rsp+40h]
-    movdqu xmm2,xmmword ptr [rsp+50h]
-    movdqu xmm3,xmmword ptr [rsp+60h]
-    movdqu xmm4,xmmword ptr [rsp+70h]
-    movdqu xmm5,xmmword ptr [rsp+80h]
+    movdqu xmm0,xmmword ptr [rsp+40h]
+    movdqu xmm1,xmmword ptr [rsp+50h]
+    movdqu xmm2,xmmword ptr [rsp+60h]
+    movdqu xmm3,xmmword ptr [rsp+70h]
+    movdqu xmm4,xmmword ptr [rsp+80h]
+    movdqu xmm5,xmmword ptr [rsp+90h]
 
     add rsp,0A8h
     pop r11
