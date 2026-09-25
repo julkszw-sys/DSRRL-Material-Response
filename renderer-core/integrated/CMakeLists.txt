@@ -65,7 +65,7 @@ add_library(
     dsrrl_renderer_core_integrated
     SHARED
     integrated_addon.cpp
-    flver_selector_hook.asm
+    flver_identity_detour.asm
     "${DSRRL_RENDERER_CORE_ROOT}/src/runtime/a1_create_pipeline_bridge.cpp"
     "${DSRRL_RENDERER_CORE_ROOT}/src/runtime/flver_engine_hooks.cpp")
 
