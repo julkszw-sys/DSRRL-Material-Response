@@ -1013,12 +1013,18 @@ bool on_draw_indexed(command_list *cmd,std::uint32_t index_count,std::uint32_t i
         donor_sha!=k_nonhomologous_normal_pd_sha256 &&
         donor_sha!=k_nonhomologous_normal_pleather_ds_sha256;
     route.normal_eligible=g_bound_host<12 && normal_material_homologous;
-    route.diffuse_c100_carrier_active=true;
+    route.diffuse_c100_carrier_active=false;
     route.specular_material_verified=
         don.has_c101 &&
         generated::spec_material_route_allowed(don.sha256,receiver_id);
     route.route_index=static_cast<std::uint32_t>(donor);
     route.receivers={receiver_id,0u,0u};
+
+    const bool diffuse_candidate =
+        route.diffuse_eligible &&
+        g_core->features().enabled(core::operator_id::diffuse) &&
+        assets::diffuse_ready(ctx,route,receiver_id);
+    route.diffuse_c100_carrier_active=diffuse_candidate;
 
     const bool ul_candidate =
         g_core->features().enabled(core::operator_id::upper_lower) &&
@@ -1036,6 +1042,7 @@ bool on_draw_indexed(command_list *cmd,std::uint32_t index_count,std::uint32_t i
 
     const bool pmetal_v10_feature =
         pmetal_exact_route &&
+        diffuse_candidate &&
         g_core->features().enabled(core::operator_id::pmetal_black_safe_v10);
 
     // V13 remains preserved as a separately preflighted research/runtime path,
@@ -1043,6 +1050,7 @@ bool on_draw_indexed(command_list *cmd,std::uint32_t index_count,std::uint32_t i
     // stable-receiver island, not a generic HemEnvLerp consumer.
     const bool pmetal_v13_feature =
         pmetal_exact_route &&
+        diffuse_candidate &&
         !g_bound_lerp &&
         !pmetal_v10_feature &&
         g_core->features().enabled(core::operator_id::pmetal_black_safe_source);
@@ -1090,18 +1098,38 @@ bool on_draw_indexed(command_list *cmd,std::uint32_t index_count,std::uint32_t i
             if(g_device.device==dev){
                 const auto i=static_cast<std::size_t>(g_bound_host);
 
+                // Full c100 + linear-diffuse variants are legal only when
+                // the exact PTDE t0 dependency is ready. Otherwise preserve
+                // the stock DSR diffuse/c100/domain lane while retaining the
+                // independently verified c101/SpecRGB/U/L islands.
                 ID3D11PixelShader *base_diffuse =
-                    g_bound_lerp ? g_device.lerp_diffuse[i] : g_device.diffuse[i];
+                    diffuse_candidate ?
+                        (g_bound_lerp ? g_device.lerp_diffuse[i] : g_device.diffuse[i]) :
+                        nullptr;
                 ID3D11PixelShader *base_full =
-                    g_bound_lerp ? g_device.lerp_full[i] : g_device.full[i];
+                    diffuse_candidate ?
+                        (g_bound_lerp ? g_device.lerp_full[i] : g_device.full[i]) :
+                        (g_bound_lerp ? g_device.lerp_stock_diffuse_full[i] :
+                                        g_device.stock_diffuse_full[i]);
                 ID3D11PixelShader *base_diffuse_ul =
-                    g_bound_lerp ? g_device.lerp_diffuse_ul[i] : g_device.diffuse_ul[i];
+                    diffuse_candidate ?
+                        (g_bound_lerp ? g_device.lerp_diffuse_ul[i] : g_device.diffuse_ul[i]) :
+                        nullptr;
                 ID3D11PixelShader *base_full_ul =
-                    g_bound_lerp ? g_device.lerp_full_ul[i] : g_device.full_ul[i];
+                    diffuse_candidate ?
+                        (g_bound_lerp ? g_device.lerp_full_ul[i] : g_device.full_ul[i]) :
+                        (g_bound_lerp ? g_device.lerp_stock_diffuse_full_ul[i] :
+                                        g_device.stock_diffuse_full_ul[i]);
                 ID3D11PixelShader *base_full_spec =
-                    g_bound_lerp ? g_device.lerp_full_spec[i] : g_device.full_spec[i];
+                    diffuse_candidate ?
+                        (g_bound_lerp ? g_device.lerp_full_spec[i] : g_device.full_spec[i]) :
+                        (g_bound_lerp ? g_device.lerp_stock_diffuse_full_spec[i] :
+                                        g_device.stock_diffuse_full_spec[i]);
                 ID3D11PixelShader *base_full_ul_spec =
-                    g_bound_lerp ? g_device.lerp_full_ul_spec[i] : g_device.full_ul_spec[i];
+                    diffuse_candidate ?
+                        (g_bound_lerp ? g_device.lerp_full_ul_spec[i] : g_device.full_ul_spec[i]) :
+                        (g_bound_lerp ? g_device.lerp_stock_diffuse_full_ul_spec[i] :
+                                        g_device.stock_diffuse_full_ul_spec[i]);
 
                 ID3D11PixelShader *ul_shader =
                     don.has_c101 ? base_full_ul : base_diffuse_ul;
