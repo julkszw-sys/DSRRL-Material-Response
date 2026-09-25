@@ -7,6 +7,7 @@
 #include "dsrrl/runtime/material_resource_draw_runtime.hpp"
 
 #include <reshade.hpp>
+#include <atomic>
 #include <cstdint>
 
 namespace dsrrl::runtime {
@@ -50,11 +51,11 @@ private:
     material_response_draw_runtime &mr_;
     material_resource_draw_runtime &resources_;
 
-    std::uint64_t candidates_ = 0;
-    std::uint64_t material_rejects_ = 0;
-    std::uint64_t pipeline_rejects_ = 0;
-    std::uint64_t surface_rejects_ = 0;
-    std::uint64_t prepared_ = 0;
+    std::atomic<std::uint64_t> candidates_{0};
+    std::atomic<std::uint64_t> material_rejects_{0};
+    std::atomic<std::uint64_t> pipeline_rejects_{0};
+    std::atomic<std::uint64_t> surface_rejects_{0};
+    std::atomic<std::uint64_t> prepared_{0};
 };
 
 } // namespace dsrrl::runtime
