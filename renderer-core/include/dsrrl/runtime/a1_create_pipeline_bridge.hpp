@@ -76,7 +76,8 @@ public:
         reshade::api::pipeline pipeline,
         std::uint16_t *first_bind_plan_index = nullptr,
         core::operator_mask *selected_owners = nullptr,
-        std::uint16_t *selected_ops = nullptr) noexcept;
+        std::uint16_t *selected_ops = nullptr,
+        std::uint32_t *receiver_id = nullptr) noexcept;
 
     a1_runtime_telemetry telemetry() const noexcept;
 
@@ -122,6 +123,7 @@ private:
         std::uint16_t selected_ops = 0;
         core::operator_mask selected_owners = 0;
         bool full_plan_materialized = false;
+        std::uint32_t receiver_id = 0;
     };
 
     bool accepts_device(
@@ -141,6 +143,7 @@ private:
         core::operator_mask selected_owners,
         std::uint16_t selected_ops,
         bool full_plan_materialized,
+        std::uint32_t receiver_id,
         const operators::legacy_plan::hashing::
             sha256_digest &output_sha256,
         std::vector<std::uint8_t> replacement);
