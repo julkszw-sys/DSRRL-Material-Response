@@ -2,6 +2,7 @@
 
 #include "dsrrl/core/renderer_core.hpp"
 #include "dsrrl/runtime/island_draw_adapter.hpp"
+#include "dsrrl/operators/lightbank/snapshot_freshness.hpp"
 
 #include <reshade.hpp>
 
