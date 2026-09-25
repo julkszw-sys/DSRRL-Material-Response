@@ -1,6 +1,7 @@
 #pragma once
 
 #include "dsrrl/core/types.hpp"
+#include "dsrrl/core/carrier_abi.hpp"
 
 #include <array>
 #include <cstdint>
@@ -151,6 +152,19 @@ constexpr bool create_time_safe_operator(
 {
     return draw_policy(op).mode ==
         draw_transaction_mode::create_time_safe;
+}
+
+constexpr std::uint32_t draw_policy_carrier_write_mask(
+    operator_id op) noexcept
+{
+    switch (op) {
+    case operator_id::upper_lower:
+        return carrier_ul_mask;
+    case operator_id::hemdir3:
+        return carrier_hemdir3_mask | carrier_ul_mask;
+    default:
+        return 0u;
+    }
 }
 
 constexpr bool draw_policy_table_valid() noexcept
