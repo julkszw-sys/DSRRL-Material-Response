@@ -71,6 +71,8 @@ std::atomic<std::uint64_t> g_mr_fail_open{0};
 std::atomic_bool g_mr_ready{false};
 std::atomic<std::uint64_t> g_mr_payload_materialize_ok{0};
 std::atomic<std::uint64_t> g_mr_payload_materialize_fail{0};
+std::atomic<std::uint64_t> g_mr_ul_payload_materialize_ok{0};
+std::atomic<std::uint64_t> g_mr_ul_payload_materialize_fail{0};
 std::atomic<std::uint64_t> g_draw_events{0};
 std::atomic<std::uint64_t> g_draw_receiver_hits{0};
 std::atomic<std::uint64_t> g_draw_owner_hits{0};
@@ -539,6 +541,52 @@ bool on_create_pipeline(
             ++g_mr_payload_materialize_fail;
         }
 
+        if (mr.result == mr_result::applied) {
+            std::vector<std::uint8_t> mr_ul_payload;
+            const auto mr_ul =
+                dsrrl::operators::lightbank::
+                    augment_upper_lower_hemenv_verified_base(
+                        source,
+                        pixel_shader->code_size,
+                        mr_payload.data(),
+                        mr_payload.size(),
+                        4u,
+                        mr_ul_payload);
+
+            if (mr_ul.result ==
+                    dsrrl::operators::lightbank::
+                        upper_lower_hemenv_materialize_result::applied &&
+                mr_ul.stratum ==
+                    dsrrl::operators::lightbank::
+                        upper_lower_hemenv_stratum::spc &&
+                mr_ul.stable_receiver_id ==
+                    mr.receiver_id) {
+                if (!g_mr_draw_runtime.
+                        has_receiver_upper_lower_replacement(
+                            mr.receiver_id)) {
+                    if (g_mr_draw_runtime.
+                            register_receiver_upper_lower_replacement(
+                                mr.receiver_id,
+                                mr_ul_payload.data(),
+                                mr_ul_payload.size(),
+                                mr.composed_owners))
+                        ++g_mr_ul_payload_materialize_ok;
+                    else
+                        ++g_mr_ul_payload_materialize_fail;
+                }
+            } else if (
+                mr_ul.result !=
+                    dsrrl::operators::lightbank::
+                        upper_lower_hemenv_materialize_result::
+                            pass_not_candidate &&
+                mr_ul.result !=
+                    dsrrl::operators::lightbank::
+                        upper_lower_hemenv_materialize_result::
+                            pass_unknown_exact_sha) {
+                ++g_mr_ul_payload_materialize_fail;
+            }
+        }
+
         std::vector<std::uint8_t> ul_payload;
         ul =
             dsrrl::operators::lightbank::
@@ -773,6 +821,7 @@ struct prepared_island_batch {
     dsrrl::runtime::prepared_hemdir3_draw hemdir3{};
     dsrrl::runtime::prepared_upper_lower_hemenv_draw upper_lower{};
     bool mr_in_batch = false;
+    bool upper_lower_combined = false;
     bool subsurface_in_batch = false;
     bool hemdir3_in_batch = false;
 };
