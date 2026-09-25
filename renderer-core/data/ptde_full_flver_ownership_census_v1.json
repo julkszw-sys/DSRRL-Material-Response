@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "game": "PTDE",
-  "status": "SOURCE_COMPLETE_OWNER_CORPUS_CORRECTED_RERUN",
+  "status": "SOURCE_COMPLETE_OWNER_CORPUS",
   "runtime_status": "OPEN",
   "pixel_status": "OPEN",
   "resource_byte_identity": "OPEN",
@@ -56,7 +56,7 @@
       "policy": "SEPARATE_SUBSURF_CONSUMER"
     }
   },
-  "activation_policy": "Corrected zero-error rerun closes the PTDE owner-source completeness blocker. Runtime USE still requires exact DSR owner/material/receiver/resource routing; source completeness alone does not prove cross-version FLVER homology or pixel equivalence. Missing runtime identity remains fail-open.",
+  "activation_policy": "Corrected variable-header BND3 rerun is source-complete with zero scan errors. This permits source-completeness claims for the owner corpus only; missing PTDE semantics remain UNKNOWN unless a separate semantic rule authorizes absence, and cross-version resource identity, live routing, runtime activation and pixel equivalence remain independent.",
   "corrected_rerun": {
     "owner_zip_sha256": "6651acb4fe995a69f1c84e5761b3d6bdcadeb39e1fc4d1087c3b82794f4d7281",
     "scan_summary_sha256": "af7331fd0eeb9959559e655253c1439731684291953f2d00fe1bf0d4ed9860c5",
@@ -67,5 +67,9 @@
     "flver_identities": 4757,
     "producer_exporter_commit": "064948c060695df52b4a3af35390615ee49edb76",
     "corrected_exporter_commit": "12c6d69d6c66fc0be44d8af76aaf17219a696d2b"
-  }
+  },
+  "source_zip_sha256": "6651acb4fe995a69f1c84e5761b3d6bdcadeb39e1fc4d1087c3b82794f4d7281",
+  "source_artifact_id": 1367,
+  "corrected_exporter_commit": "12c6d69d6c66fc0be44d8af76aaf17219a696d2b",
+  "scan_summary_sha256": "af7331fd0eeb9959559e655253c1439731684291953f2d00fe1bf0d4ed9860c5"
 }
