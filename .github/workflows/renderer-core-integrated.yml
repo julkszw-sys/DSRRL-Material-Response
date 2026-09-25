@@ -122,6 +122,10 @@ jobs:
           $textureTransport = Get-Content renderer-core/src/runtime/texture_identity_transport.cpp -Raw
           $subsurface = Get-Content renderer-core/src/runtime/subsurface_draw_runtime.cpp -Raw
           $subsurfaceRegistry = Get-Content renderer-core/src/runtime/subsurface_pipeline_registry.cpp -Raw
+          $upperLower = Get-Content renderer-core/src/runtime/upper_lower_draw_runtime.cpp -Raw
+          $mode2 = Get-Content renderer-core/src/runtime/hemdir3_mode_transport.cpp -Raw
+          $mode2Asm = Get-Content renderer-core/integrated/hemdir3_mode_detour.asm -Raw
+          $selectorAsm = Get-Content renderer-core/integrated/flver_identity_detour.asm -Raw
           $cmake = Get-Content renderer-core/integrated/CMakeLists.txt -Raw
 
           if ($entry -notmatch 'operator_id::material_response') { throw "Material Response feature is not armed in Core+Islands" }
@@ -242,6 +246,57 @@ jobs:
             throw "Integrated Subsurface batch routing is not armed"
           }
 
+          foreach ($required in @(
+            '0x1C0BE0u',
+            '0x1C0C10u',
+            '0x5642F0u',
+            '0x563B80u',
+            'lightbank_snapshot_matches_draw',
+            'operator_id::upper_lower',
+            '13u'
+          )) {
+            if ($upperLower -notmatch [regex]::Escape($required)) { throw "Upper/Lower shared-batch producer invariant missing: $required" }
+          }
+
+          foreach ($forbidden in @(
+            'Draw(',
+            'DrawIndexed(',
+            'DrawInstanced(',
+            'DrawIndexedInstanced(',
+            'PSSetConstantBuffers'
+          )) {
+            if ($upperLower -match [regex]::Escape($forbidden)) { throw "Upper/Lower runtime must prepare a request, not own draw/bind/restore: $forbidden" }
+          }
+
+          foreach ($required in @(
+            '0x295F9Fu',
+            '0x22BA79u',
+            'incoming_mode == 2u',
+            'selector_end_hook_armed',
+            'observe_effective_mode'
+          )) {
+            if ($mode2 -notmatch [regex]::Escape($required)) { throw "HemDir3 exact effective-mode transport invariant missing: $required" }
+          }
+
+          foreach ($required in @(
+            'dsrrl_hemdir3_mode_lt5_hook_entry',
+            'dsrrl_hemdir3_selector_end_hook_entry'
+          )) {
+            if ($mode2Asm -notmatch [regex]::Escape($required)) { throw "HemDir3 relocation-safe detour invariant missing: $required" }
+          }
+
+          foreach ($required in @(
+            'incoming lighting semantic mode',
+            'rsp+30h',
+            'dsrrl_flver_selector_observer'
+          )) {
+            if ($selectorAsm -notmatch [regex]::Escape($required)) { throw "Selector full-ABI semantic transport invariant missing: $required" }
+          }
+
+          if ($entry -match 'operator_id::hemdir3[,)]') {
+            throw "HemDir3 must remain disabled until exact D123 producer attachment and full readiness close"
+          }
+
           if ($entry -match 'P_Metal|P_METAL|pmetal' -or $bridge -match 'P_Metal|P_METAL|pmetal') { throw "Integrated entry/A1 bridge must not special-case P_Metal" }
           Write-Host "CORE_ISLANDS_SHARED_DRAW_TRANSACTION_BOUNDARY_PASS"
       - name: Verify material resource generated authority
@@ -306,6 +361,9 @@ jobs:
           $resourceRuntimeHash = (Get-FileHash "renderer-core/src/runtime/material_resource_draw_runtime.cpp" -Algorithm SHA256).Hash.ToLowerInvariant()
           $subsurfaceRuntimeHash = (Get-FileHash "renderer-core/src/runtime/subsurface_draw_runtime.cpp" -Algorithm SHA256).Hash.ToLowerInvariant()
           $subsurfaceRegistryHash = (Get-FileHash "renderer-core/src/runtime/subsurface_pipeline_registry.cpp" -Algorithm SHA256).Hash.ToLowerInvariant()
+          $upperLowerHash = (Get-FileHash "renderer-core/src/runtime/upper_lower_draw_runtime.cpp" -Algorithm SHA256).Hash.ToLowerInvariant()
+          $mode2Hash = (Get-FileHash "renderer-core/src/runtime/hemdir3_mode_transport.cpp" -Algorithm SHA256).Hash.ToLowerInvariant()
+          $mode2AsmHash = (Get-FileHash "renderer-core/integrated/hemdir3_mode_detour.asm" -Algorithm SHA256).Hash.ToLowerInvariant()
           $specRoutesHash = (Get-FileHash "renderer-core/data/provenance/spec_routes_v12.tsv" -Algorithm SHA256).Hash.ToLowerInvariant()
           $diffuseRoutesHash = (Get-FileHash "renderer-core/data/provenance/diffuse_routes_v12.tsv" -Algorithm SHA256).Hash.ToLowerInvariant()
           $normalRoutesHash = (Get-FileHash "renderer-core/data/provenance/normal_routes_v12.tsv" -Algorithm SHA256).Hash.ToLowerInvariant()
@@ -356,6 +414,11 @@ jobs:
             material_resource_draw_runtime_sha256 = $resourceRuntimeHash
             subsurface_draw_runtime_sha256 = $subsurfaceRuntimeHash
             subsurface_pipeline_registry_sha256 = $subsurfaceRegistryHash
+            upper_lower_draw_runtime_sha256 = $upperLowerHash
+            upper_lower_carrier = "B13_LANES_6_7_SHARED_BATCH"
+            hemdir3_mode_transport_sha256 = $mode2Hash
+            hemdir3_mode_detour_sha256 = $mode2AsmHash
+            hemdir3_activation = "DISABLED_PENDING_D123_AND_FULL_READINESS"
             subsurface_route = "EXACT_DSBT_TO_DSB_TARGET_33_34_35"
             spec_routes_v12_tsv_sha256 = $specRoutesHash
             diffuse_routes_v12_tsv_sha256 = $diffuseRoutesHash
@@ -368,7 +431,7 @@ jobs:
             material_response_draw_probe = "VISIBLE_EXACT_OWNER_RECEIVER_PS_B12_BATCH_TRANSACTION"
             material_response_feature_armed = $true
             material_response_runtime_activation = "NOT_TESTED"
-            boot_armed_operator_count = 10
+            boot_armed_operator_count = 11
             single_addon_entrypoint = $true
             draw_replay = $true
             runtime_status = "NOT_TESTED"
