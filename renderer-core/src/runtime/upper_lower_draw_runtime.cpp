@@ -20,6 +20,9 @@
 #include <cstdint>
 #include <cstring>
 #include <memory>
+#if defined(_MSC_VER)
+#include <intrin.h>
+#endif
 #include <mutex>
 #include <unordered_map>
 
