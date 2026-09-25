@@ -1,0 +1,14 @@
+# DSRRL semantic spec donor overrides v1
+# DSR Mtd.mtdbnd.dcx SHA256: 7c5a0952c1016a3efa3c6a7180bc60af81ccf7b2a4685c3c89028eda78c2d8b5
+# decoded DSR BND3 SHA256: 621f787733e8fc9cd08eaac39ef433394a57d9328342c41fec77766e793344c9
+# decoded PTDE BND3 SHA256: 857d58c36e47536086104059c5146500fd8afe5dbef90c5d29b8216d32928e56
+# c101 = g_SpecularMapColor.rgb * g_SpecularMapColorPower
+name	raw_sha256	c101	c101_f0q	c102	slot
+A03_7Metal[DSB][L].mtd	a557affd0cddeea208bdb3f1208a5a9bafd7a1dc20f7e5d194b827046c35da59	2	1.37035098	7	2
+M_7Metal[DSB][L].mtd	a557affd0cddeea208bdb3f1208a5a9bafd7a1dc20f7e5d194b827046c35da59	2.5	1.51663761	8.5	2
+P_Damage_L_DullLeather[DSB].mtd	0f8ca2b6896c9fbe81bfdb30eb0d53a48670cb4c1719ab35533a05f03c46cc00	0.25	0.532520545	0.5	0
+P_Damage_L_Leather[DSB].mtd	0f8ca2b6896c9fbe81bfdb30eb0d53a48670cb4c1719ab35533a05f03c46cc00	0.5	0.729740053	1.25	0
+P_Damage_L_Wet[DSB].mtd	28610066d4831bc7a3b4b44c3dff33bbd7cfc18b87ebaabfa5c7c0c95846e513	1	1	25	0
+P_Damage_S_Wet[DSB].mtd	28610066d4831bc7a3b4b44c3dff33bbd7cfc18b87ebaabfa5c7c0c95846e513	2	1.37035098	50	0
+P_Damage_S_DullLeather[DSB].mtd	c28d101192023595b0d41b556b04c42f30f3b65c6a0a7662a314e2c5c9b672f1	0.5	0.729740053	1	0
+P_Damage_S_Leather[DSB].mtd	c28d101192023595b0d41b556b04c42f30f3b65c6a0a7662a314e2c5c9b672f1	1	1	2.5	0
