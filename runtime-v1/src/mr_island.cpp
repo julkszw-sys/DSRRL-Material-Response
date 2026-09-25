@@ -1291,7 +1291,7 @@ bool on_draw_indexed(command_list *cmd,std::uint32_t index_count,std::uint32_t i
                 b12=realize_b12(dev,donor,don,semantic_override);
             }
         }else{
-            b12=realize_b12(dev,donor);
+            b12=realize_b12(dev,donor,don,semantic_override);
         }
 
         // Exact stock DXBC has no dynamic class linkage. Unknown linkage
@@ -1600,6 +1600,7 @@ void selector_event(void *container,void *,void *ret,void *,void *,std::int32_t 
     const auto rva=reinterpret_cast<std::uintptr_t>(ret)-base;
     if(rva!=k_ret_sel_1 && rva!=k_ret_sel_2 && rva!=k_ret_sel_3){
         g_draw_donor=-1;
+        g_draw_spec_override=-1;
         g_draw_envspec={};
         g_draw_envspec_exact=false;
         return;
