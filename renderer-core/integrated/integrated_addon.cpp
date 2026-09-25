@@ -365,6 +365,61 @@ void log_state(const char *tag) noexcept
         static_cast<unsigned long long>(g_draw_receiver_only.load()));
 
     reshade::log::message(reshade::log::level::info, line);
+
+    const auto h3_pipe =
+        dsrrl::runtime::hemdir3_receiver_pipeline_stats();
+    const auto h3_draw =
+        g_hemdir3.telemetry();
+
+    char h3_line[1024]{};
+    std::snprintf(
+        h3_line,
+        sizeof(h3_line),
+        "[DSRRL CORE+ISLANDS " DSRRL_CORE_ISLANDS_VERSION "] %s_H3 "
+        "pipe_attest=%llu pipe_conflict=%llu pipe_init=%llu exact_nospc=%llu exact_spc=%llu "
+        "init_bad=%llu binds=%llu/%llu/%llu unknown=%llu lookup=%llu/%llu/%llu q=%u "
+        "repl=%llu/%llu candidate=%llu mode2=%llu mode_reject=%llu carrier=%llu/%llu "
+        "nospc_ready=%llu spc_b12_hold=%llu readiness_reject=%llu req=%llu h3_q=%u "
+        "d123_steady=%llu d123_blend_dir=%llu d123_blend_col=%llu d123_publish=%llu "
+        "h3_b13=%llu/%llu h3_carrier_req=%llu",
+        tag,
+        static_cast<unsigned long long>(h3_pipe.created_code_attested),
+        static_cast<unsigned long long>(h3_pipe.created_code_conflict),
+        static_cast<unsigned long long>(h3_pipe.pipeline_inits),
+        static_cast<unsigned long long>(h3_pipe.exact_nospc_hits),
+        static_cast<unsigned long long>(h3_pipe.exact_spc_hits),
+        static_cast<unsigned long long>(h3_pipe.init_mismatch),
+        static_cast<unsigned long long>(h3_pipe.pixel_binds),
+        static_cast<unsigned long long>(h3_pipe.nospc_binds),
+        static_cast<unsigned long long>(h3_pipe.spc_binds),
+        static_cast<unsigned long long>(h3_pipe.unknown_binds),
+        static_cast<unsigned long long>(h3_pipe.lookups),
+        static_cast<unsigned long long>(h3_pipe.lookup_hits),
+        static_cast<unsigned long long>(h3_pipe.lookup_misses),
+        h3_pipe.quarantined ? 1u : 0u,
+        static_cast<unsigned long long>(h3_draw.replacement_register_ok),
+        static_cast<unsigned long long>(h3_draw.replacement_register_fail),
+        static_cast<unsigned long long>(h3_draw.candidates),
+        static_cast<unsigned long long>(h3_draw.mode2_hits),
+        static_cast<unsigned long long>(h3_draw.mode_rejects),
+        static_cast<unsigned long long>(h3_draw.carrier_ready),
+        static_cast<unsigned long long>(h3_draw.carrier_rejects),
+        static_cast<unsigned long long>(h3_draw.nospc_ready),
+        static_cast<unsigned long long>(h3_draw.spc_b12_hold),
+        static_cast<unsigned long long>(h3_draw.readiness_rejects),
+        static_cast<unsigned long long>(h3_draw.requests),
+        h3_draw.quarantined ? 1u : 0u,
+        static_cast<unsigned long long>(ul.d123_steady),
+        static_cast<unsigned long long>(ul.d123_blend_direction),
+        static_cast<unsigned long long>(ul.d123_blend_color),
+        static_cast<unsigned long long>(ul.d123_snapshot_publish),
+        static_cast<unsigned long long>(ul.hemdir3_b13_create),
+        static_cast<unsigned long long>(ul.hemdir3_b13_hit),
+        static_cast<unsigned long long>(ul.hemdir3_carrier_requests));
+
+    reshade::log::message(
+        reshade::log::level::info,
+        h3_line);
 }
 
 void on_init_device(reshade::api::device *device)
