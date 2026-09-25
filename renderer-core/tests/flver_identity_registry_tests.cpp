@@ -26,9 +26,18 @@ int main()
     assert(dsrrl::runtime::flver_identity_lookup(container,second));
     assert(first==second);
 
+    dsrrl::runtime::actual_material_owner_observation owner{};
+    owner.material.semantic_name_hash = 0x1234u;
+    assert(dsrrl::runtime::flver_identity_enrich_owner(container, 7u, owner));
+    assert(owner.flver_sha256 == first);
+    assert(owner.material_slot == 7u);
+    assert(owner.material_slot_valid);
+
     dsrrl::runtime::flver_identity_observe_destroy(model_key);
     std::array<std::uint8_t,32> stale{};
     assert(!dsrrl::runtime::flver_identity_lookup(container,stale));
+    assert(!dsrrl::runtime::flver_identity_enrich_owner(container, 7u, owner));
+    assert(!owner.material_slot_valid);
 
     raw[0]='X';
     assert(!dsrrl::runtime::flver_identity_observe_parse(model_key,raw.data(),raw.size()));
