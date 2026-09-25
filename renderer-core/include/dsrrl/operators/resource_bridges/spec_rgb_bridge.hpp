@@ -1,10 +1,15 @@
 #pragma once
 
 #include "dsrrl/operators/material_response/mtd_semantic_census.hpp"
+#include "dsrrl/core/draw_transaction_policy.hpp"
 
 #include <cstdint>
 
 namespace dsrrl::operators::resource_bridges {
+
+static_assert(
+    core::requires_draw_transaction(core::operator_id::spec_rgb),
+    "SpecRGB bridge must use the shared transaction layer.");
 
 enum class spec_rgb_receiver_family : std::uint8_t {
     unsupported = 0,
