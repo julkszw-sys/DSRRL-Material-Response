@@ -45,12 +45,15 @@
     }
   },
   "runtime_policy": {
-    "authorized_operators": ["diffuse", "normal_bump"],
-    "activation": "existing exact positive PTDE capability + exact DSR MTD identity + exact FLVER/material ownership + pairwise shared-stable resource",
+    "authorized_operators": [],
+    "activation": "HOLD_OFF positive Diffuse/Normal authorization until an exact DSR (FLVER identity, material slot, MTD) owner-tuple corpus is materialized and runtime-authenticated",
     "union_evidence": "never authorizes runtime activation",
     "mixed_usage": "evaluate per semantic bit; unstable bit fails open",
     "unmatched_mtd": "fail open",
-    "other_operators": "unchanged; EnvSpec/SpecRGB/Subsurface/PointLight retain independently certified routes"
+    "other_operators": "unchanged; EnvSpec/SpecRGB/Subsurface/PointLight retain independently certified routes",
+    "owner_tuple_authentication": "UNAVAILABLE_IN_V1_MTD_AGGREGATE_CORPUS",
+    "aggregate_evidence": "MTD-level shared-stable resource evidence is a negative/refinement constraint only; it cannot authenticate a caller-supplied owner tuple",
+    "negative_spx_evidence": "exact MTD/SPX DSR-only lane evidence may conservatively suppress that lane without positive owner authentication"
   },
   "generator": "renderer-core/tools/generate_flver_pairwise_material_census.py"
 }
