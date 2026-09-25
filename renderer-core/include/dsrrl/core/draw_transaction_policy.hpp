@@ -86,9 +86,8 @@ inline constexpr std::array<
      draw_mutation_shader | draw_mutation_constant_buffer,
      draw_mutation_shader | draw_mutation_constant_buffer, true, true, true},
     {operator_id::subsurface, draw_transaction_mode::draw_required,
-     draw_mutation_shader | draw_mutation_srv,
-     draw_mutation_shader | draw_mutation_constant_buffer |
-         draw_mutation_srv, true, true, true},
+     draw_mutation_shader,
+     draw_mutation_shader, true, true, true},
     {operator_id::diffuse, draw_transaction_mode::draw_required,
      draw_mutation_srv,
      draw_mutation_srv, true, true, true},
