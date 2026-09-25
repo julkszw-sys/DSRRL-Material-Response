@@ -12,7 +12,7 @@ The glue is compiled once as `dsrrl_runtime_v1_operator_glue`; the predecessor
 standalone addon and this integrated target consume the same implementation
 rather than maintaining divergent copies.
 
-Exactly ten operators are boot-armed by
+Exactly eleven operators are boot-armed by
 `dsrrl::runtime::k_integrated_feature_policy`:
 
 - Material Response;
@@ -24,10 +24,16 @@ Exactly ten operators are boot-armed by
 - diffuse material-domain;
 - PntS attenuation;
 - certified no-Spc EnvSpec deletion;
-- fixed post-Fog identity.
+- fixed post-Fog identity;
+- owner-proven P_Metal V10 black-safe source-gain correction.
 
-The first five are draw/material/resource glue. The latter five are the
-previously integrated exact create-time A1 islands.
+Material Response, SpecRGB, Diffuse, Normal, Subsurface and P_Metal V10 are
+draw/material/resource/operator glue. The other five are the previously
+integrated exact create-time A1 islands. V10 is restricted to exact route345
+P_Metal, receivers 33/34/35, requires the verified Diffuse/material path, and
+fails open to ordinary Material Response when its V9A replacement is unavailable.
+It retains native DSR t12/t14 EnvSpec resources and is not permission to activate
+the separate V13/U-L source island.
 
 ## Material/resource transaction
 
@@ -60,7 +66,7 @@ The integrated policy therefore keeps these paths OFF:
 - legacy EnvSpec / P_Metal EnvSpec source;
 - full PointLight and local legacy specular;
 - FaceEye legacy shadow;
-- P_Metal black-safe source and V10;
+- P_Metal V13/A-B black-safe source;
 - Bloom/HDR;
 - rejected RGBA SAT.
 

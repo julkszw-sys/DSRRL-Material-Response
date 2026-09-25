@@ -34,7 +34,7 @@ struct integrated_feature_entry {
 // Only islands with source-complete glue and an operator-local fail-open
 // contract are boot-armed. Presence of predecessor code is not sufficient.
 // In particular U/L, legacy EnvSpec, full PointLight/local-specular,
-// EnvDiffuse, HemDir3, FaceEye and both P_Metal source islands remain OFF
+// EnvDiffuse, HemDir3, FaceEye and the P_Metal V13/source island remain OFF
 // until their current canonical readiness/solver gates are independently
 // closed.
 inline constexpr std::array<integrated_feature_entry, core::operator_count>
@@ -112,7 +112,7 @@ k_integrated_feature_policy = {{
      integrated_stage::deferred, integrated_boot_policy::hold_off,
      "pmetal_black_safe_source"},
     {core::operator_id::pmetal_black_safe_v10,
-     integrated_stage::deferred, integrated_boot_policy::hold_off,
+     integrated_stage::wired, integrated_boot_policy::enable_immediately,
      "pmetal_black_safe_v10"}
 }};
 
@@ -154,14 +154,14 @@ static_assert(
     "Every Renderer Core operator must have exactly one integrated policy entry.");
 
 static_assert(
-    integrated_boot_enabled_count() == 10u,
-    "Integrated A2 construction intentionally boots exactly ten closed/wired islands.");
+    integrated_boot_enabled_count() == 11u,
+    "Integrated A2 construction intentionally boots exactly eleven closed/wired islands.");
 
 static_assert(!integrated_boot_enabled(core::operator_id::upper_lower));
 static_assert(!integrated_boot_enabled(core::operator_id::env_spec));
 static_assert(!integrated_boot_enabled(core::operator_id::point_light));
 static_assert(!integrated_boot_enabled(core::operator_id::local_specular_legacy));
 static_assert(!integrated_boot_enabled(core::operator_id::pmetal_black_safe_source));
-static_assert(!integrated_boot_enabled(core::operator_id::pmetal_black_safe_v10));
+static_assert(integrated_boot_enabled(core::operator_id::pmetal_black_safe_v10));
 
 } // namespace dsrrl::runtime

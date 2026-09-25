@@ -1189,8 +1189,7 @@ bool on_draw_indexed(command_list *cmd,std::uint32_t index_count,std::uint32_t i
     const bool envspec_feature_enabled=
         g_core &&
         (g_core->features().enabled(core::operator_id::env_spec) ||
-         g_core->features().enabled(core::operator_id::pmetal_black_safe_source) ||
-         g_core->features().enabled(core::operator_id::pmetal_black_safe_v10));
+         g_core->features().enabled(core::operator_id::pmetal_black_safe_source));
     const bool envspec_receiver_owned=
         envspec_feature_enabled &&
         cmd && cmd==g_bound_command &&

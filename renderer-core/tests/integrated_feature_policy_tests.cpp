@@ -11,7 +11,7 @@ int main()
     using namespace dsrrl;
 
     CHECK(runtime::integrated_feature_policy_is_ordered_complete());
-    CHECK(runtime::integrated_boot_enabled_count() == 10u);
+    CHECK(runtime::integrated_boot_enabled_count() == 11u);
 
     CHECK(runtime::integrated_boot_enabled(core::operator_id::material_response));
     CHECK(runtime::integrated_boot_enabled(core::operator_id::spec_rgb));
@@ -27,7 +27,7 @@ int main()
     CHECK(!runtime::integrated_boot_enabled(core::operator_id::local_specular_legacy));
     CHECK(!runtime::integrated_boot_enabled(core::operator_id::faceeye_shadow_legacy));
     CHECK(!runtime::integrated_boot_enabled(core::operator_id::pmetal_black_safe_source));
-    CHECK(!runtime::integrated_boot_enabled(core::operator_id::pmetal_black_safe_v10));
+    CHECK(runtime::integrated_boot_enabled(core::operator_id::pmetal_black_safe_v10));
 
     CHECK(runtime::integrated_feature_entry_for(
         core::operator_id::post_bloom).stage == runtime::integrated_stage::blocked);

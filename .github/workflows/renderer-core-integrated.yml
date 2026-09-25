@@ -75,7 +75,7 @@ jobs:
         shell: pwsh
         run: |
           $policy = Get-Content renderer-core/include/dsrrl/runtime/integrated_feature_policy.hpp -Raw
-          if ($policy -notmatch 'integrated_boot_enabled_count\(\) == 10u') {
+          if ($policy -notmatch 'integrated_boot_enabled_count\(\) == 11u') {
             throw "Integrated feature policy invariant missing"
           }
           Write-Host "Integrated policy static_asserts compiled with addon; full policy test runs in Renderer Core Islands CI."
@@ -143,7 +143,7 @@ jobs:
             material_response_glue_sha256 = $mrHash
             asset_bridge_glue_sha256 = $assetHash
             engine_bridge_sha256 = $engineHash
-            boot_armed_operator_count = 10
+            boot_armed_operator_count = 11
             single_addon_entrypoint = $true
             engine_hook_owner_count = 1
             deferred_upper_lower = $true

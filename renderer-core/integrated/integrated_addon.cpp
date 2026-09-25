@@ -285,9 +285,9 @@ bool AddonInit(
 
     reshade::log::message(
         reshade::log::level::info,
-        "[DSRRL CORE INTEGRATED A2] READY: 10 source-complete islands armed; "
-        "MR/SpecRGB/Diffuse/Normal/Subsurface glue active behind exact gates; "
-        "U/L, legacy EnvSpec, full PointLight and P_Metal source islands remain OFF.");
+        "[DSRRL CORE INTEGRATED A2] READY: 11 source-complete islands armed; "
+        "MR/SpecRGB/Diffuse/Normal/Subsurface/P_Metal V10 glue active behind exact gates; "
+        "U/L, legacy EnvSpec, full PointLight and P_Metal V13/source remain OFF.");
 
     return true;
 }
