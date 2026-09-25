@@ -2,6 +2,7 @@
 #include "dsrrl/operators/material_response/generated_v211_plans.hpp"
 #include "dsrrl/operators/legacy_plan/dxbc_checksum.hpp"
 #include "dsrrl/operators/legacy_plan/sha256_bytes.hpp"
+#include "dsrrl/operators/legacy_plan/a1_create_time_materializer.hpp"
 
 #include <algorithm>
 #include <array>
@@ -246,9 +247,112 @@ bool parse_words(
                words);
 }
 
+std::size_t code_payload_offset(
+    const std::uint8_t *source,
+    std::size_t size) noexcept
+{
+    if (source == nullptr || size < 32u)
+        return static_cast<std::size_t>(-1);
+
+    const std::uint32_t count = read_u32(source + 28u);
+    if (count == 0u || count > 64u ||
+        32ull + 4ull * count > size)
+        return static_cast<std::size_t>(-1);
+
+    std::size_t hit = static_cast<std::size_t>(-1);
+    for (std::uint32_t i = 0; i < count; ++i) {
+        const std::uint32_t off =
+            read_u32(source + 32u + i * 4u);
+        if (off > size || size - off < 8u)
+            return static_cast<std::size_t>(-1);
+
+        const bool code =
+            std::memcmp(source + off, "SHEX", 4u) == 0 ||
+            std::memcmp(source + off, "SHDR", 4u) == 0;
+        if (!code)
+            continue;
+        if (hit != static_cast<std::size_t>(-1))
+            return static_cast<std::size_t>(-1);
+        hit = static_cast<std::size_t>(off) + 8u;
+    }
+
+    return hit;
+}
+
+bool compose_enabled_a1_islands(
+    const core::feature_registry &features,
+    const std::uint8_t *stock,
+    std::size_t stock_size,
+    std::vector<std::uint8_t> &v211) noexcept
+{
+    const auto digest = hashing::sha256(stock, stock_size);
+    const auto *plan =
+        legacy_plan::find_a1_plan_by_exact_digest(
+            stock_size,
+            digest);
+
+    if (plan == nullptr)
+        return true;
+
+    const std::size_t stock_code =
+        code_payload_offset(stock, stock_size);
+    const std::size_t v211_code =
+        code_payload_offset(v211.data(), v211.size());
+
+    if (stock_code == static_cast<std::size_t>(-1) ||
+        v211_code == static_cast<std::size_t>(-1))
+        return false;
+
+    for (std::size_t i = 0; i < plan->op_count; ++i) {
+        const auto &op =
+            legacy_plan::generated::k_a1_exact_patch_ops_v1[
+                plan->first_op + i];
+
+        // V2.11 already owns this operator locally through the exact
+        // c100/domain transform. Applying the generic A1 patch again would
+        // double-own the same semantic cut.
+        if (op.owner == core::operator_id::diffuse_material_domain)
+            continue;
+
+        if (!features.enabled(op.owner))
+            continue;
+
+        if (op.byte_offset < stock_code ||
+            ((op.byte_offset - stock_code) & 3u) != 0u)
+            return false;
+
+        std::size_t word =
+            (op.byte_offset - stock_code) / 4u;
+
+        // V29 inserts dcl_constantbuffer b12 at SHEX word 11.
+        if (word >= 11u)
+            word += 4u;
+
+        const std::size_t target =
+            v211_code + word * 4u;
+
+        if (target > v211.size() ||
+            v211.size() - target < 4u)
+            return false;
+
+        if (read_u32(v211.data() + target) !=
+            op.expected_old_word)
+            return false;
+
+        write_u32(
+            v211.data() + target,
+            op.replacement_word);
+    }
+
+    return legacy_plan::dxbc::fix_checksum(
+        v211.data(),
+        v211.size());
+}
+
 } // namespace
 
 v211_materialize_outcome materialize_v211_stable_receiver(
+    const core::feature_registry &features,
     const std::uint8_t *source,
     std::size_t size,
     std::vector<std::uint8_t> &output) noexcept
@@ -441,6 +545,17 @@ v211_materialize_outcome materialize_v211_stable_receiver(
         output.clear();
         outcome.result =
             v211_materialize_result::fail_stage_sha;
+        return outcome;
+    }
+
+    if (!compose_enabled_a1_islands(
+            features,
+            source,
+            size,
+            output)) {
+        output.clear();
+        outcome.result =
+            v211_materialize_result::fail_patch_precondition;
         return outcome;
     }
 
