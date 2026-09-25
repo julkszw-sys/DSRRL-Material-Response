@@ -212,6 +212,9 @@ jobs:
           $materialOwnerHash = (Get-FileHash "renderer-core/src/runtime/material_owner_producer.cpp" -Algorithm SHA256).Hash.ToLowerInvariant()
           $materialSeedHash = (Get-FileHash "renderer-core/src/operators/material_response/material_response_seed.cpp" -Algorithm SHA256).Hash.ToLowerInvariant()
           $materialTxHash = (Get-FileHash "renderer-core/src/runtime/material_response_draw_transaction.cpp" -Algorithm SHA256).Hash.ToLowerInvariant()
+          $sharedTxHash = (Get-FileHash "renderer-core/src/runtime/draw_state_transaction.cpp" -Algorithm SHA256).Hash.ToLowerInvariant()
+          $islandAdapterHash = (Get-FileHash "renderer-core/src/runtime/island_draw_adapter.cpp" -Algorithm SHA256).Hash.ToLowerInvariant()
+          $drawPolicyHash = (Get-FileHash "renderer-core/include/dsrrl/core/draw_transaction_policy.hpp" -Algorithm SHA256).Hash.ToLowerInvariant()
           $materialV211Hash = (Get-FileHash "renderer-core/src/operators/material_response/material_response_v211_materializer.cpp" -Algorithm SHA256).Hash.ToLowerInvariant()
           $materialV211PlanHash = (Get-FileHash "renderer-core/include/dsrrl/operators/material_response/generated_v211_plans.hpp" -Algorithm SHA256).Hash.ToLowerInvariant()
           $materialConstantsHash = (Get-FileHash "renderer-core/include/dsrrl/operators/material_response/generated_material_constants_v1.hpp" -Algorithm SHA256).Hash.ToLowerInvariant()
@@ -249,6 +252,11 @@ jobs:
             material_owner_producer_sha256 = $materialOwnerHash
             material_response_seed_sha256 = $materialSeedHash
             material_response_draw_transaction_sha256 = $materialTxHash
+            shared_draw_transaction_sha256 = $sharedTxHash
+            island_draw_adapter_sha256 = $islandAdapterHash
+            draw_transaction_policy_sha256 = $drawPolicyHash
+            draw_transaction_policy_coverage = "25_OF_25"
+            shared_draw_executor_surface = "PS_CB_SRV_SAMPLER"
             material_response_v211_materializer_sha256 = $materialV211Hash
             material_response_v211_plan_sha256 = $materialV211PlanHash
             material_response_constants_sha256 = $materialConstantsHash
