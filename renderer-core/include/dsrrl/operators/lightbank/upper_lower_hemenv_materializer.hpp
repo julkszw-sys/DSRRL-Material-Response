@@ -44,4 +44,18 @@ materialize_upper_lower_hemenv_receiver(
     std::size_t size,
     std::vector<std::uint8_t> &output) noexcept;
 
+// Compose only the Upper/Lower consumer cut onto a previously verified
+// replacement derived from the same exact stock shader. The caller supplies
+// how many SHEX words the verified base inserted before stock word 11.
+// No A1 pass is repeated here: composed create-time operators must already
+// be present in the verified base.
+upper_lower_hemenv_materialize_outcome
+augment_upper_lower_hemenv_verified_base(
+    const std::uint8_t *stock_source,
+    std::size_t stock_size,
+    const std::uint8_t *verified_base,
+    std::size_t verified_base_size,
+    std::uint32_t words_inserted_at_11,
+    std::vector<std::uint8_t> &output) noexcept;
+
 } // namespace dsrrl::operators::lightbank
