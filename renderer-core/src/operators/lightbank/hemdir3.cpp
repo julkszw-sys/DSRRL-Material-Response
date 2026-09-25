@@ -5,6 +5,11 @@ namespace dsrrl::operators::lightbank { namespace {
 bool finite(const hemdir3_vec3 &v) noexcept { return std::isfinite(v.x)&&std::isfinite(v.y)&&std::isfinite(v.z); }
 float dot(const hemdir3_vec3&a,const hemdir3_vec3&b) noexcept { return a.x*b.x+a.y*b.y+a.z*b.z; }
 hemdir3_vec3 madd(const hemdir3_vec3&a,const hemdir3_vec3&b,float s) noexcept { return {a.x+b.x*s,a.y+b.y*s,a.z+b.z*s}; }
+bool proven_semantic_snapshot(const hemdir3_semantic_snapshot &s) noexcept {
+ if(!s.immutable_draw_local || !s.exact_owner_context || !s.lightbank_tuple_fresh || !s.effective_mode_observation_verified) return false;
+ return s.provenance==hemdir3_semantic_provenance::ordinary_draw_descriptor ||
+        s.provenance==hemdir3_semantic_provenance::independently_verified_special_route;
+}
 }
 hemdir3_sample evaluate_hemdir3_source_join(const hemdir3_vec3 &h,const hemdir3_vec3 &n,const std::array<hemdir3_lobe,3>&lobes) noexcept {
  hemdir3_sample out; if(!finite(h)||!finite(n)) return out; for(const auto&l:lobes) if(!finite(l.direction)||!finite(l.color)) return out; out.hemisphere=h; out.joined_source=h;
@@ -13,7 +18,8 @@ hemdir3_sample evaluate_hemdir3_source_join(const hemdir3_vec3 &h,const hemdir3_
 hemdir3_runtime_plan evaluate_hemdir3_runtime_readiness(const core::feature_registry&f,const core::activation_context&a,const hemdir3_runtime_context&c) noexcept {
  hemdir3_runtime_plan out; const auto g=core::evaluate_operator_activation(f,core::operator_id::hemdir3,a);
  if(g.state!=core::island_state::active){out.reason=hemdir3_runtime_reason::core_gate_not_active;return out;}
- if(c.semantic_mode!=2u){out.reason=hemdir3_runtime_reason::semantic_mode_not_hemdir3;return out;}
+ if(!proven_semantic_snapshot(c.semantic)){out.reason=hemdir3_runtime_reason::semantic_snapshot_not_proven;return out;}
+ if(c.semantic.mode!=2u){out.reason=hemdir3_runtime_reason::semantic_mode_not_hemdir3;return out;}
  if(!c.upper_lower_source_ready){out.reason=hemdir3_runtime_reason::upper_lower_source_not_ready;return out;}
  if(!c.d123_source_ready){out.reason=hemdir3_runtime_reason::d123_source_not_ready;return out;}
  if(!c.b13_carrier_ready){out.reason=hemdir3_runtime_reason::b13_carrier_not_ready;return out;}
