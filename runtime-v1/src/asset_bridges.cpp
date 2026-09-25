@@ -851,6 +851,37 @@ bool diffuse_ready(
     return ready;
 }
 
+bool normal_ready(
+    ID3D11DeviceContext *context,
+    const material_route_scope &route,
+    std::uint32_t receiver_id) noexcept
+{
+    if(context==nullptr || g_core==nullptr || g_quarantined.load() ||
+       !receiver_allowed(route,receiver_id) ||
+       !route.normal_eligible ||
+       receiver_id<24u || receiver_id>35u ||
+       !g_core->features().enabled(core::operator_id::normal))
+        return false;
+
+    ID3D11ShaderResourceView *views[3]{};
+    context->PSGetShaderResources(0u,3u,views);
+
+    const auto h0=logical_hash_for(views[0]);
+    const auto h1=logical_hash_for(views[1]);
+    const auto h2=logical_hash_for(views[2]);
+    bool ready=h0!=0u && h1!=0u && h2!=0u &&
+        generated::normal_tuple_allowed_v12(h0,h1,h2);
+
+    ID3D11ShaderResourceView *replacement=nullptr;
+    if(ready)
+        replacement=lookup(views[2],asset_class::normal);
+    ready=replacement!=nullptr;
+
+    if(replacement) replacement->Release();
+    for(auto *&view:views) release_view(view);
+    return ready;
+}
+
 bool body_surface_ready(ID3D11DeviceContext *context) noexcept
 {
     if(!context || !g_core || g_quarantined.load() ||
