@@ -74,7 +74,9 @@ public:
     bool on_bind_pipeline(
         reshade::api::pipeline_stage stages,
         reshade::api::pipeline pipeline,
-        std::uint16_t *first_bind_plan_index = nullptr) noexcept;
+        std::uint16_t *first_bind_plan_index = nullptr,
+        core::operator_mask *selected_owners = nullptr,
+        std::uint16_t *selected_ops = nullptr) noexcept;
 
     a1_runtime_telemetry telemetry() const noexcept;
 
