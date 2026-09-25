@@ -2,7 +2,7 @@
 #include "dsrrl/operators/material_response/material_response_seed.hpp"
 #include "dsrrl/operators/material_response/generated_envspec_router_v1.hpp"
 #include "dsrrl/operators/material_response/generated_ptde_flver_texture_semantics_v1.hpp"
-#include "dsrrl/operators/material_response/generated_flver_pairwise_semantics_v1.hpp"
+#include "dsrrl/operators/material_response/generated_flver_pairwise_semantics_v1.hpp"\n#include "dsrrl/operators/material_response/generated_dsr_flver_owner_tuples_v1.hpp"
 #include "dsrrl/operators/material_response/generated_mtd_spx_negative_v1.hpp"
 #include "dsrrl/operators/env_spec/env_spec_island.hpp"
 #include "dsrrl/operators/resource_bridges/spec_rgb_bridge.hpp"
@@ -171,9 +171,10 @@ int main()
     // corpus is MTD-aggregate evidence and does not yet materialize exact
     // (DSR FLVER identity, material slot, MTD) tuples. Even a fully populated
     // ownership struct must therefore fail open until that tuple corpus exists.
-    CHECK(!generated::k_flver_pairwise_owner_tuple_authentication_available);
+    CHECK(!generated::k_dsr_flver_owner_tuple_source_complete);
     auto owned_q=q;
-    owned_q.ownership.flver_identity_hash=0x1234u;
+    owned_q.ownership.flver_sha256[0]=0x12u;
+    owned_q.ownership.flver_identity_hash=0x1234u; // legacy auxiliary token only
     owned_q.ownership.material_slot=7u;
     owned_q.ownership.material_slot_valid=true;
     owned_q.ownership.exact=true;
@@ -190,6 +191,7 @@ int main()
     CHECK(!d.exact_identity_match);
 
     auto spoofed_owner=owned_q;
+    spoofed_owner.ownership.flver_sha256.fill(0xffu);
     spoofed_owner.ownership.flver_identity_hash=0xffffffffffffffffull;
     spoofed_owner.ownership.material_slot=0xffffffffu;
     CHECK(!has_exact_flver_material_ownership(spoofed_owner));
