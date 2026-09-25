@@ -958,6 +958,14 @@ bool apply_draw(
         }
     }
 
+    // Diffuse is a hard dependency of the FULL PTDE material-domain
+    // shader class. A preflight/cache race must never degrade into
+    // t0_DSR * c100_PTDE with the PTDE linear receiver. If the requested
+    // PTDE t0 was not actually bound, fail the replay transaction and let
+    // the caller restore state before the untouched stock draw executes.
+    if (want_diff && !state.changed_t0)
+        return false;
+
     if (want_norm) {
         ++g_norm_gate;
         if (h0 == 0u || h1 == 0u || h2 == 0u ||
