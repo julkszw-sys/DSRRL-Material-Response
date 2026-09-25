@@ -50,7 +50,8 @@ public:
     bool register_receiver_replacement(
         std::uint32_t receiver_id,
         const void *dxbc,
-        std::size_t dxbc_size) noexcept;
+        std::size_t dxbc_size,
+        core::operator_mask composed_owners) noexcept;
 
     bool has_receiver_replacement(std::uint32_t receiver_id) const noexcept;
 
@@ -84,9 +85,15 @@ private:
         bool coherent = true;
     };
 
+    struct replacement_record {
+        ID3D11PixelShader *shader = nullptr;
+        core::operator_mask composed_owners = 0;
+    };
+
     struct native_transaction {
         ID3D11PixelShader *old_shader = nullptr;
         cb_capture old_b12{};
+        std::uint64_t command = 0;
         bool core_started = false;
     };
 
@@ -96,7 +103,7 @@ private:
     bool begin_native_transaction(
         reshade::api::command_list *cmd_list,
         const operators::material_response::decision &decision,
-        ID3D11PixelShader *replacement,
+        const replacement_record &replacement,
         ID3D11Buffer *b12,
         native_transaction &state) noexcept;
 
@@ -110,7 +117,7 @@ private:
     core::renderer_core &core_;
     mutable std::mutex mutex_;
     ID3D11Device *device_ = nullptr;
-    std::unordered_map<std::uint32_t, ID3D11PixelShader *> replacements_;
+    std::unordered_map<std::uint32_t, replacement_record> replacements_;
     std::unordered_map<std::uint32_t, ID3D11Buffer *> b12_by_route_;
 
     std::atomic<std::uint64_t> draw_serial_{0};
