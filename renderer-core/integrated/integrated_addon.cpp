@@ -599,60 +599,29 @@ struct prepared_island_batch {
     dsrrl::runtime::prepared_material_response_draw mr{};
     dsrrl::runtime::prepared_material_resource_draw resources{};
     dsrrl::runtime::prepared_subsurface_draw subsurface{};
-    dsrrl::runtime::prepared_upper_lower_draw upper_lower{};
+    dsrrl::runtime::prepared_hemdir3_draw hemdir3{};
     bool mr_in_batch = false;
     bool subsurface_in_batch = false;
+    bool hemdir3_in_batch = false;
 };
 
 void release_prepared_island_batch(
     prepared_island_batch &prepared) noexcept
 {
-    g_upper_lower.release_prepared_draw(
-        prepared.upper_lower);
-
-    if (prepared.subsurface_in_batch)
+    if (prepared.hemdir3_in_batch) {
+        g_hemdir3.release_prepared_draw(
+            prepared.hemdir3);
+    } else if (prepared.subsurface_in_batch) {
         g_subsurface.release(
             prepared.subsurface);
-    else {
+    } else {
         g_material_resources.release_prepared_draw(
             prepared.resources);
         g_mr_draw_runtime.release_prepared_draw(
             prepared.mr);
     }
+
     prepared = {};
-}
-
-bool append_upper_lower_request(
-    reshade::api::command_list *cmd_list,
-    std::uint32_t receiver_id,
-    prepared_island_batch &prepared) noexcept
-{
-    if (cmd_list == nullptr)
-        return true;
-
-    auto *context =
-        reinterpret_cast<ID3D11DeviceContext *>(
-            cmd_list->get_native());
-
-    if (context == nullptr)
-        return true;
-
-    if (!g_upper_lower.prepare_draw_request(
-            context,
-            receiver_id,
-            prepared.upper_lower))
-        return true;
-
-    if (dsrrl::runtime::append_island_draw_request(
-            prepared.batch,
-            prepared.upper_lower.request) !=
-        dsrrl::runtime::island_draw_batch_result::ready) {
-        g_upper_lower.release_prepared_draw(
-            prepared.upper_lower);
-        return false;
-    }
-
-    return true;
 }
 
 struct draw_semantic_selection_guard {
@@ -668,11 +637,33 @@ bool prepare_island_batch(
     reshade::api::command_list *cmd_list,
     std::uint32_t receiver_id,
     bool subsurface_bound,
+    bool hemdir3_bound,
+    const dsrrl::runtime::hemdir3_receiver_identity &hemdir3_identity,
     const dsrrl::operators::material_response::material_identity &material,
     const dsrrl::operators::material_response::decision &decision,
     prepared_island_batch &prepared) noexcept
 {
     prepared = {};
+
+    if (hemdir3_bound) {
+        if (!g_hemdir3.prepare_draw_request(
+                cmd_list,
+                hemdir3_identity,
+                prepared.hemdir3))
+            return false;
+
+        prepared.hemdir3_in_batch = true;
+
+        if (dsrrl::runtime::append_island_draw_request(
+                prepared.batch,
+                prepared.hemdir3.request) !=
+            dsrrl::runtime::island_draw_batch_result::ready) {
+            release_prepared_island_batch(prepared);
+            return false;
+        }
+
+        return true;
+    }
 
     if (subsurface_bound) {
         if (!g_subsurface.prepare(
@@ -710,14 +701,6 @@ bool prepare_island_batch(
                 release_prepared_island_batch(prepared);
                 return false;
             }
-        }
-
-        if (!append_upper_lower_request(
-                cmd_list,
-                receiver_id,
-                prepared)) {
-            release_prepared_island_batch(prepared);
-            return false;
         }
 
         return true;
@@ -774,14 +757,6 @@ bool prepare_island_batch(
                 return false;
             }
         }
-    }
-
-    if (!append_upper_lower_request(
-            cmd_list,
-            receiver_id,
-            prepared)) {
-        release_prepared_island_batch(prepared);
-        return false;
     }
 
     return prepared.batch.island_count != 0u;
