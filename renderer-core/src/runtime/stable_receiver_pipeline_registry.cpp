@@ -76,9 +76,15 @@ bool stable_receiver_observe_pipeline_digest(
 
     if (receiver == 0u) {
         ++g_candidate_hash_misses;
-        std::lock_guard<std::mutex> lock(g_mutex);
-        g_pipeline_receiver.erase(pipeline_handle);
-        g_ambiguous_pipeline.insert(pipeline_handle);
+        try {
+            std::lock_guard<std::mutex> lock(g_mutex);
+            g_pipeline_receiver.erase(pipeline_handle);
+            g_ambiguous_pipeline.insert(pipeline_handle);
+        } catch (...) {
+            // Registration is diagnostic/authorization state only. Allocation
+            // failure must preserve stock DSR rather than terminate a noexcept
+            // callback path.
+        }
         return false;
     }
 
@@ -138,22 +144,34 @@ void stable_receiver_observe_bind(
 
     ++g_pixel_binds;
 
-    std::lock_guard<std::mutex> lock(g_mutex);
+    try {
+        std::lock_guard<std::mutex> lock(g_mutex);
 
-    const auto found =
-        g_pipeline_receiver.find(pipeline_handle);
+        const auto found =
+            g_pipeline_receiver.find(pipeline_handle);
 
-    if (found == g_pipeline_receiver.end() ||
-        g_ambiguous_pipeline.find(pipeline_handle) !=
-            g_ambiguous_pipeline.end()) {
-        g_bound_receiver.erase(command_list_key);
+        if (found == g_pipeline_receiver.end() ||
+            g_ambiguous_pipeline.find(pipeline_handle) !=
+                g_ambiguous_pipeline.end()) {
+            g_bound_receiver.erase(command_list_key);
+            ++g_unknown_binds;
+            return;
+        }
+
+        g_bound_receiver[command_list_key] =
+            bound_receiver{pipeline_handle, found->second};
+        ++g_exact_binds;
+    } catch (...) {
+        // A telemetry/identity cache allocation failure cannot be allowed to
+        // terminate the host. Drop any stale command-list receiver and fail
+        // open to unknown identity.
+        try {
+            std::lock_guard<std::mutex> lock(g_mutex);
+            g_bound_receiver.erase(command_list_key);
+        } catch (...) {
+        }
         ++g_unknown_binds;
-        return;
     }
-
-    g_bound_receiver[command_list_key] =
-        bound_receiver{pipeline_handle, found->second};
-    ++g_exact_binds;
 }
 
 bool stable_receiver_bound(
