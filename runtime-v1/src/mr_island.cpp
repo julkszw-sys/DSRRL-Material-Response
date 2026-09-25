@@ -859,16 +859,23 @@ bool on_draw_indexed(command_list *cmd,std::uint32_t index_count,std::uint32_t i
     g_draw_envspec={};
     g_draw_envspec_exact=false;
 
-    // Pixel-inert live preflight: join the exact parser/selector material token
-    // with the currently bound stock t12/t14 native-probe identities. The
-    // returned snapshot is intentionally not used for mutation yet.
-    const auto envspec_identity=
-        envspec::observe_draw(
-            cmd,
-            draw_envspec,
-            draw_envspec_exact,
-            g_bound_lerp);
-    (void)envspec_identity;
+    // Pixel-inert live preflight must obey the same receiver/command ownership
+    // boundary as any future visible EnvSpec carrier. A selector token alone is
+    // not sufficient: it may precede a non-target draw on the same thread.
+    // Unknown/unowned draws therefore remain completely stock and do not
+    // contribute EnvSpec identity/carrier telemetry.
+    const bool envspec_receiver_owned=
+        cmd && cmd==g_bound_command &&
+        g_bound_host>=0 && g_bound_host<24;
+    if(envspec_receiver_owned){
+        const auto envspec_identity=
+            envspec::observe_draw(
+                cmd,
+                draw_envspec,
+                draw_envspec_exact,
+                g_bound_lerp);
+        (void)envspec_identity;
+    }
 
     if(draw_envspec_exact){
         ++g_envspec_draw_exact;
