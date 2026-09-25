@@ -97,11 +97,11 @@ if(MSVC)
     target_compile_options(
         dsrrl_renderer_core_integrated
         PRIVATE
-        /W4
-        /WX
-        /permissive-
-        /Brepro
-        /EHsc)
+        $<$<COMPILE_LANGUAGE:CXX>:/W4>
+        $<$<COMPILE_LANGUAGE:CXX>:/WX>
+        $<$<COMPILE_LANGUAGE:CXX>:/permissive->
+        $<$<COMPILE_LANGUAGE:CXX>:/Brepro>
+        $<$<COMPILE_LANGUAGE:CXX>:/EHsc>)
     target_link_options(
         dsrrl_renderer_core_integrated
         PRIVATE
