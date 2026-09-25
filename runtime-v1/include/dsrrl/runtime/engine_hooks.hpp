@@ -23,5 +23,6 @@ bool install(
 void uninstall() noexcept;
 std::uintptr_t image_base() noexcept;
 bool safe_read_bytes(const void *src, void *dst, std::size_t size) noexcept;
+bool safe_readable_range(const void *src, std::size_t size) noexcept;
 
 } // namespace dsrrl::runtime::engine
