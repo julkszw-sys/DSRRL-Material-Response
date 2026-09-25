@@ -12,9 +12,12 @@
 #include "dsrrl/runtime/subsurface_draw_runtime.hpp"
 #include "dsrrl/runtime/upper_lower_draw_runtime.hpp"
 #include "dsrrl/runtime/hemdir3_mode_transport.hpp"
+#include "dsrrl/runtime/hemdir3_pipeline_registry.hpp"
+#include "dsrrl/runtime/hemdir3_draw_runtime.hpp"
 #include "dsrrl/operators/material_response/material_response_island.hpp"
 #include "dsrrl/operators/material_response/material_response_seed.hpp"
 #include "dsrrl/operators/material_response/material_response_v211_materializer.hpp"
+#include "dsrrl/operators/lightbank/hemdir3_b13_materializer.hpp"
 
 #include <reshade.hpp>
 #include <d3d11.h>
@@ -53,6 +56,8 @@ dsrrl::runtime::subsurface_draw_runtime
     g_subsurface(g_core, g_mr_draw_runtime, g_material_resources);
 dsrrl::runtime::upper_lower_draw_runtime
     g_upper_lower(g_core);
+dsrrl::runtime::hemdir3_draw_runtime
+    g_hemdir3(g_core, g_upper_lower);
 
 std::atomic<std::uint64_t> g_present_count{0};
 std::atomic<std::uint64_t> g_mr_draw_eval{0};
@@ -75,6 +80,7 @@ constexpr dsrrl::core::operator_id k_integrated_islands[] = {
     dsrrl::core::operator_id::normal,
     dsrrl::core::operator_id::subsurface,
     dsrrl::core::operator_id::upper_lower,
+    dsrrl::core::operator_id::hemdir3,
     dsrrl::core::operator_id::terminal_sat_rgb,
     dsrrl::core::operator_id::diffuse_material_domain,
     dsrrl::core::operator_id::pointlight_pnts_attenuation,
