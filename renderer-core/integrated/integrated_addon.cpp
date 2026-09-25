@@ -371,11 +371,13 @@ void on_init_device(reshade::api::device *device)
 {
     g_a1_bridge.on_init_device(device);
     g_mr_draw_runtime.on_init_device(device);
+    g_hemdir3.on_init_device(device);
 }
 
 void on_destroy_device(reshade::api::device *device)
 {
     g_upper_lower.on_destroy_device(device);
+    g_hemdir3.on_destroy_device(device);
     g_mr_draw_runtime.on_destroy_device(device);
     g_a1_bridge.on_destroy_device(device);
 }
@@ -390,6 +392,10 @@ bool on_create_pipeline(
         find_pixel_shader(
             subobject_count,
             subobjects);
+
+    dsrrl::operators::lightbank::
+        hemdir3_b13_materialize_outcome h3{};
+    bool h3_replacement_ready = false;
 
     if (pixel_shader != nullptr &&
         pixel_shader->code != nullptr &&
@@ -428,10 +434,63 @@ bool on_create_pipeline(
             mr.result != mr_result::pass_unknown_exact_sha) {
             ++g_mr_payload_materialize_fail;
         }
+
+        std::vector<std::uint8_t> h3_payload;
+        h3 =
+            dsrrl::operators::lightbank::
+                materialize_hemdir3_b13_receiver(
+                    g_core.features(),
+                    source,
+                    pixel_shader->code_size,
+                    h3_payload);
+
+        if (h3.result ==
+            dsrrl::operators::lightbank::
+                hemdir3_b13_materialize_result::applied) {
+            h3_replacement_ready =
+                g_hemdir3.register_replacement(
+                    h3,
+                    h3_payload.data(),
+                    h3_payload.size());
+        }
     }
 
-    return g_a1_bridge.on_create_pipeline(
-        device, layout, subobject_count, subobjects);
+    const bool a1_changed =
+        g_a1_bridge.on_create_pipeline(
+            device,
+            layout,
+            subobject_count,
+            subobjects);
+
+    if (h3_replacement_ready) {
+        const auto *created_shader =
+            find_pixel_shader(
+                subobject_count,
+                subobjects);
+
+        if (created_shader == nullptr ||
+            created_shader->code == nullptr ||
+            created_shader->code_size == 0u) {
+            h3_replacement_ready = false;
+        } else {
+            dsrrl::runtime::hemdir3_receiver_identity identity{};
+            identity.plan_index = h3.plan_index;
+            identity.shader_index = h3.shader_index;
+            identity.stratum = h3.stratum;
+            identity.paired_stable_receiver_id =
+                h3.paired_stable_receiver_id;
+
+            h3_replacement_ready =
+                dsrrl::runtime::
+                    hemdir3_receiver_attest_created_code(
+                        created_shader->code,
+                        created_shader->code_size,
+                        identity);
+        }
+    }
+
+    (void)h3_replacement_ready;
+    return a1_changed;
 }
 
 void on_init_pipeline(
@@ -462,6 +521,11 @@ void on_init_pipeline(
                 pipeline.handle,
                 pixel_shader->code,
                 pixel_shader->code_size);
+        (void)dsrrl::runtime::
+            hemdir3_receiver_observe_pipeline(
+                pipeline.handle,
+                pixel_shader->code,
+                pixel_shader->code_size);
     }
 }
 
@@ -472,6 +536,8 @@ void on_destroy_pipeline(
     dsrrl::runtime::stable_receiver_forget_pipeline(
         pipeline.handle);
     dsrrl::runtime::subsurface_receiver_forget_pipeline(
+        pipeline.handle);
+    dsrrl::runtime::hemdir3_receiver_forget_pipeline(
         pipeline.handle);
     g_a1_bridge.on_destroy_pipeline(device, pipeline);
 }
@@ -491,6 +557,10 @@ void on_bind_pipeline(
         pixel_stage_bound,
         pipeline.handle);
     dsrrl::runtime::subsurface_receiver_observe_bind(
+        cmd_list,
+        pixel_stage_bound,
+        pipeline.handle);
+    dsrrl::runtime::hemdir3_receiver_observe_bind(
         cmd_list,
         pixel_stage_bound,
         pipeline.handle);
