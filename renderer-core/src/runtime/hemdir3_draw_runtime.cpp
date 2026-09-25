@@ -108,6 +108,9 @@ bool hemdir3_draw_runtime::register_replacement(
             operators::lightbank::
                 hemdir3_b13_materialize_result::applied ||
         outcome.plan_index == 0xFFFFu ||
+        outcome.stratum !=
+            operators::lightbank::
+                hemdir3_native_stratum::nospc ||
         dxbc == nullptr ||
         dxbc_size == 0u ||
         quarantined_.load()) {
