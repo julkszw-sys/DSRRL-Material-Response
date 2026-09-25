@@ -1,6 +1,7 @@
 #pragma once
 #include <cstddef>
 #include <cstdint>
+#include <array>
 
 namespace dsrrl::runtime {
 
@@ -21,6 +22,11 @@ struct stable_receiver_pipeline_telemetry {
 bool stable_receiver_observe_pipeline(
     std::uint64_t pipeline_handle,
     const void *pixel_shader_code,
+    std::size_t pixel_shader_size) noexcept;
+
+bool stable_receiver_observe_pipeline_digest(
+    std::uint64_t pipeline_handle,
+    const std::array<std::uint8_t,32> &pixel_shader_sha256,
     std::size_t pixel_shader_size) noexcept;
 
 void stable_receiver_forget_pipeline(
