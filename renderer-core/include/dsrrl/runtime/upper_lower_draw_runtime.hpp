@@ -79,6 +79,10 @@ public:
         void *r14,
         void *r15) noexcept;
 
+    bool prepare_upper_lower_carrier(
+        ID3D11DeviceContext *context,
+        prepared_upper_lower_draw &prepared) noexcept;
+
     bool prepare_draw_request(
         ID3D11DeviceContext *context,
         std::uint32_t receiver_id,
