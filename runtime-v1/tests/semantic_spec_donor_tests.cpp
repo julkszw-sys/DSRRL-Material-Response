@@ -1,4 +1,4 @@
-#include "dsrrl/runtime/semantic_spec_donor_overrides.hpp"
+#include "semantic_spec_donor_overrides_generated.hpp"
 
 #include <cstdio>
 #include <string_view>
