@@ -531,8 +531,15 @@ int main()
         ptde_envspec_presence::unknown
     }));
     const auto mr=seeded.evaluate(33u,pmetal);
-    CHECK(mr.active);
-    CHECK(mr.envspec==ptde_envspec_presence::present);
+    CHECK(!mr.active);
+    CHECK(mr.reason==decision_reason::owner_tuple_not_authenticated);
+
+    // EnvSpec remains independently classifiable by its exact MTD router;
+    // the generic exact-material Material Response island must not manufacture
+    // owner provenance from the same MTD/profile identity.
+    const auto seeded_env=classify_mtd_envspec_semantics(q);
+    CHECK(seeded_env.exact_identity_match);
+    CHECK(seeded_env.presence==ptde_envspec_presence::present);
 
     std::cout<<"mtd_semantic_census_tests: PASS\n";
     return 0;
