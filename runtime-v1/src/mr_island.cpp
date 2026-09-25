@@ -1486,7 +1486,7 @@ bool on_draw_indexed(command_list *cmd,std::uint32_t index_count,std::uint32_t i
                 }
                 if(fallback_replacement) fallback_replacement->AddRef();
 
-                if(pmetal_envspec_candidate){
+                if(pmetal_envspec_candidate && spec_active){
                     ID3D11PixelShader *rgba =
                         intended_ul ?
                             g_device.pmetal_envspec_rgba_ul_spec[i] :
