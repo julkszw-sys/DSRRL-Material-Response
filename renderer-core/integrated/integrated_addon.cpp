@@ -11,6 +11,7 @@
 #include "dsrrl/runtime/subsurface_pipeline_registry.hpp"
 #include "dsrrl/runtime/subsurface_draw_runtime.hpp"
 #include "dsrrl/runtime/upper_lower_draw_runtime.hpp"
+#include "dsrrl/runtime/hemdir3_mode_transport.hpp"
 #include "dsrrl/operators/material_response/material_response_island.hpp"
 #include "dsrrl/operators/material_response/material_response_seed.hpp"
 #include "dsrrl/operators/material_response/material_response_v211_materializer.hpp"
@@ -211,8 +212,10 @@ void log_state(const char *tag) noexcept
     const auto tex = dsrrl::runtime::texture_identity_transport::status();
     const auto ul = g_upper_lower.telemetry();
     const auto subs = g_subsurface.telemetry();
+    const auto mode =
+        dsrrl::runtime::hemdir3_mode_transport::status();
 
-    char line[1792]{};
+    char line[1984]{};
     std::snprintf(
         line,
         sizeof(line),
@@ -234,6 +237,7 @@ void log_state(const char *tag) noexcept
         "ul_hook=%u ul_q=%u ul_restore_fail=%u ul_pub=%llu ul_sel=%llu/%llu/%llu ul_tuple_miss=%llu "
         "ul_steady=%llu/%llu ul_blend=%llu/%llu/%llu ul_b13=%llu/%llu ul_req=%llu "
         "sub_candidate=%llu sub_prepared=%llu sub_pipe_reject=%llu sub_mat_reject=%llu sub_surface_reject=%llu "
+        "mode_hook=%u/%u mode_q=%u mode_restore_fail=%u mode_begin=%llu mode_obs=%llu mode2=%llu mode_snap=%llu/%llu "
         "draw=%llu draw_rx=%llu draw_owner=%llu draw_join=%llu owner_only=%llu rx_only=%llu",
         tag,
         static_cast<unsigned long long>(t.create_events),
@@ -318,6 +322,15 @@ void log_state(const char *tag) noexcept
         static_cast<unsigned long long>(subs.pipeline_rejects),
         static_cast<unsigned long long>(subs.material_rejects),
         static_cast<unsigned long long>(subs.surface_rejects),
+        mode.lt5_hook_armed ? 1u : 0u,
+        mode.ge5_hook_armed ? 1u : 0u,
+        mode.quarantined ? 1u : 0u,
+        mode.restore_failed ? 1u : 0u,
+        static_cast<unsigned long long>(mode.selector_begin),
+        static_cast<unsigned long long>(mode.effective_observed),
+        static_cast<unsigned long long>(mode.mode2_observed),
+        static_cast<unsigned long long>(mode.snapshot_hits),
+        static_cast<unsigned long long>(mode.snapshot_misses),
         static_cast<unsigned long long>(g_draw_events.load()),
         static_cast<unsigned long long>(g_draw_receiver_hits.load()),
         static_cast<unsigned long long>(g_draw_owner_hits.load()),
@@ -546,10 +559,12 @@ bool append_upper_lower_request(
     return true;
 }
 
-struct upper_lower_selection_guard {
-    ~upper_lower_selection_guard()
+struct draw_semantic_selection_guard {
+    ~draw_semantic_selection_guard()
     {
         g_upper_lower.consume_draw_selection();
+        dsrrl::runtime::hemdir3_mode_transport::
+            consume_draw_selection();
     }
 };
 
@@ -683,7 +698,7 @@ bool on_draw(
     std::uint32_t first_vertex,
     std::uint32_t first_instance)
 {
-    upper_lower_selection_guard ul_guard{};
+    draw_semantic_selection_guard semantic_guard{};
     std::uint32_t receiver_id = 0u;
     bool subsurface_bound = false;
     dsrrl::operators::material_response::material_identity material{};
@@ -739,7 +754,7 @@ bool on_draw_indexed(
     std::int32_t vertex_offset,
     std::uint32_t first_instance)
 {
-    upper_lower_selection_guard ul_guard{};
+    draw_semantic_selection_guard semantic_guard{};
     std::uint32_t receiver_id = 0u;
     bool subsurface_bound = false;
     dsrrl::operators::material_response::material_identity material{};
@@ -855,6 +870,7 @@ bool AddonInit(
     g_mr_draw_runtime.reset();
     g_material_resources.reset();
     g_upper_lower.reset();
+    dsrrl::runtime::hemdir3_mode_transport::reset_stats();
     g_present_count.store(0);
     g_mr_draw_eval.store(0);
     g_mr_would_activate.store(0);
@@ -922,6 +938,17 @@ bool AddonInit(
             "] FLVER identity hooks FAIL-OPEN: stock DSR preserved for exact owner routing.");
     }
 
+    const bool hemdir3_mode_hooks =
+        flver_hooks &&
+        dsrrl::runtime::hemdir3_mode_transport::install();
+
+    if (!hemdir3_mode_hooks) {
+        reshade::log::message(
+            reshade::log::level::warning,
+            "[DSRRL CORE+ISLANDS " DSRRL_CORE_ISLANDS_VERSION
+            "] HemDir3 effective-mode hooks FAIL-OPEN: HemDir3 remains stock.");
+    }
+
     const bool upper_lower_hooks =
         flver_hooks &&
         g_upper_lower.install();
@@ -956,6 +983,11 @@ void AddonUninit(
 
     if (g_upper_lower.telemetry().restore_failed)
         log_state("UL_UNLOAD_RESTORE_FAIL");
+
+    dsrrl::runtime::hemdir3_mode_transport::uninstall();
+
+    if (dsrrl::runtime::hemdir3_mode_transport::status().restore_failed)
+        log_state("MODE2_UNLOAD_RESTORE_FAIL");
 
     dsrrl::runtime::flver_identity_transport::uninstall();
 
