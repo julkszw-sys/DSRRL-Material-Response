@@ -3,6 +3,7 @@
 #include "dsrrl/core/renderer_core.hpp"
 #include "dsrrl/operators/material_response/material_response_island.hpp"
 #include "dsrrl/operators/material_response/mtd_semantic_census.hpp"
+#include "dsrrl/operators/resource_bridges/subsurface_route.hpp"
 #include "dsrrl/runtime/island_draw_adapter.hpp"
 
 #include <reshade.hpp>
@@ -67,6 +68,12 @@ public:
         const operators::material_response::mtd_semantic_query &query,
         bool full_material_response_ready,
         prepared_material_resource_draw &prepared) noexcept;
+
+    bool prepare_subsurface_body_requests(
+        ID3D11DeviceContext *context,
+        std::uint32_t target_plain_receiver_id,
+        prepared_material_resource_draw &prepared,
+        operators::resource_bridges::subsurface_body_texture &body_texture) noexcept;
 
     void release_prepared_draw(
         prepared_material_resource_draw &prepared) noexcept;
