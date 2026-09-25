@@ -14,17 +14,22 @@ inline constexpr float k_faceeye_shadow_texel_scale=1.0f/2048.0f;
 inline constexpr std::array<std::uint16_t,26> k_faceeye_aux_ps_registers={{121,122,123,140,141,142,143,144,145,146,147,148,149,150,151,152,153,154,155,157,158,159,160,174,175,182}};
 inline constexpr std::array<std::uint16_t,26> k_faceeye_aux_dirlight_offsets={{0x300,0x310,0x320,0x200,0x210,0x220,0x230,0x240,0x250,0x260,0x270,0x280,0x290,0x2A0,0x2B0,0x2C0,0x2D0,0x2E0,0x2F0,0x340,0x350,0x360,0x370,0x390,0x330,0x3A0}};
 // Canonical consumed-lane carriers from direct PTDE FaceEye bytecode RE.
-// Indices address k_faceeye_aux_ps_registers / k_faceeye_aux_dirlight_offsets.
-// Sdw consumes c121,c122,c157,c175. Csd consumes that common set plus
-// c123,c140..c155,c158..c160. c174/c182 are transported producer lanes but
-// are outside the closed FaceEye pixel chain and therefore do not gate it.
 inline constexpr std::array<std::size_t,4> k_faceeye_sdw_consumed_lane_indices={{0,1,19,24}};
 inline constexpr std::array<std::size_t,20> k_faceeye_csd_only_consumed_lane_indices={{2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,20,21,22}};
 inline constexpr std::array<std::size_t,2> k_faceeye_transport_only_lane_indices={{23,25}};
+// Evidence grade is deliberately stronger than a boolean. PTDE producer/consumer
+// role closure is not cross-render value homology. Activation accepts only the
+// independently verified cross-render grade. Current capture-free evidence closes
+// c121/c122/c175; c157 and the Csd-only lanes remain below that grade.
+enum class faceeye_value_homology_grade : std::uint8_t {
+ unknown=0,
+ ptde_role_closed,
+ cross_renderer_verified
+};
 struct faceeye_auxiliary_snapshot_descriptor {
  std::array<bool,26> register_present{};
  std::array<std::uint16_t,26> producer_offsets{};
- std::array<bool,26> value_homology_verified{};
+ std::array<faceeye_value_homology_grade,26> value_homology_grade{};
  bool immutable_draw_local=false;
 };
 bool validate_faceeye_auxiliary_snapshot(const faceeye_auxiliary_snapshot_descriptor &snapshot,bool require_csd) noexcept;
