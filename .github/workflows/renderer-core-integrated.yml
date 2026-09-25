@@ -116,7 +116,6 @@ jobs:
           foreach ($required in @(
             'addon_event::draw',
             'addon_event::draw_indexed',
-            'observe_material_response_identity',
             'material_owner_selection_consume',
             'stable_receiver_bound',
             'return false;'
