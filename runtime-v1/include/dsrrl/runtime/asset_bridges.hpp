@@ -19,7 +19,8 @@ namespace dsrrl::runtime::assets {
 
 struct material_route_scope {
     bool exact = false;
-    bool diffuse_normal_eligible = false;
+    bool diffuse_eligible = false;
+    bool normal_eligible = false;
     bool diffuse_c100_carrier_active = false;
     bool specular_material_verified = false;
     bool spec_t10_consumer_active = false;
@@ -54,9 +55,12 @@ bool spec_ready(
 // Exact body identities and complete three-sidecar tuple, without mutation.
 bool body_surface_ready(ID3D11DeviceContext *context) noexcept;
 
-// Called only from the Core-owned draw transaction. The caller must set
-// diffuse_c100_carrier_active only after exact PTDE c100 is available, and
-// spec_t10_consumer_active only after selecting a shader that really reads t10.
+// Called only from the Core-owned draw transaction. Diffuse and Normal use
+// separate material-homology gates: a DSR-added Bmp route may still have a
+// homologous diffuse carrier while ordinary PTDE normal injection is forbidden.
+// The caller must set diffuse_c100_carrier_active only after exact PTDE c100 is
+// available, and spec_t10_consumer_active only after selecting a shader that
+// really reads t10.
 bool apply_draw(
     ID3D11DeviceContext *context,
     const material_route_scope &route,
