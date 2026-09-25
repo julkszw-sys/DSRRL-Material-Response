@@ -417,8 +417,12 @@ bool material_response_draw_runtime::begin_native_transaction(
         if ((replacement.composed_owners & bit) == 0u)
             continue;
 
-        if (plan.patch_count >= plan.patches.size())
+        if (plan.patch_count >= plan.patches.size()) {
+            if (ctx1 != nullptr)
+                ctx1->Release();
+            release_transaction(state);
             return false;
+        }
 
         plan.patches[plan.patch_count++] = {
             op,
