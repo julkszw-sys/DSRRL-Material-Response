@@ -4,10 +4,12 @@ on:
   push:
     paths:
       - 'renderer-core/data/census/**'
+      - 'renderer-core/data/provenance/upper_lower_hemenv_consumers_v1.tsv'
       - 'renderer-core/data/ptde_full_flver_ownership_census_v1.json'
       - 'renderer-core/include/dsrrl/operators/material_response/generated_envspec_router_v1.hpp'
       - 'renderer-core/include/dsrrl/operators/material_response/generated_dsr_mtd_identity_v1.hpp'
       - 'renderer-core/tools/export_mtd_envspec_semantic_census.py'
+      - 'renderer-core/tools/export_upper_lower_hemenv_semantic_census.py'
       - 'renderer-core/tools/verify_mtd_semantic_census.py'
       - 'renderer-core/tools/verify_mtd_semantic_census_policy.py'
       - 'renderer-core/tools/verify_ptde_flver_census_import.py'
@@ -22,10 +24,12 @@ on:
   pull_request:
     paths:
       - 'renderer-core/data/census/**'
+      - 'renderer-core/data/provenance/upper_lower_hemenv_consumers_v1.tsv'
       - 'renderer-core/data/ptde_full_flver_ownership_census_v1.json'
       - 'renderer-core/include/dsrrl/operators/material_response/generated_envspec_router_v1.hpp'
       - 'renderer-core/include/dsrrl/operators/material_response/generated_dsr_mtd_identity_v1.hpp'
       - 'renderer-core/tools/export_mtd_envspec_semantic_census.py'
+      - 'renderer-core/tools/export_upper_lower_hemenv_semantic_census.py'
       - 'renderer-core/tools/verify_mtd_semantic_census.py'
       - 'renderer-core/tools/verify_mtd_semantic_census_policy.py'
       - 'renderer-core/tools/verify_ptde_flver_census_import.py'
@@ -54,6 +58,10 @@ jobs:
         run: |
           python renderer-core/tools/export_mtd_envspec_semantic_census.py --output /tmp/mtd_envspec_exact_rows_v1.jsonl
           test $(wc -l < /tmp/mtd_envspec_exact_rows_v1.jsonl) -eq 325
+      - name: Verify exact UpperLower HemEnv receiver census is reproducible
+        run: |
+          python renderer-core/tools/export_upper_lower_hemenv_semantic_census.py --input renderer-core/data/provenance/upper_lower_hemenv_consumers_v1.tsv --output /tmp/upper_lower_hemenv_semantic_census_v1.jsonl
+          test $(wc -l < /tmp/upper_lower_hemenv_semantic_census_v1.jsonl) -eq 37
       - name: Verify PTDE FLVER census import provenance
         run: python renderer-core/tools/verify_ptde_flver_census_import.py
       - name: Verify PTDE FLVER semantic completeness authority
