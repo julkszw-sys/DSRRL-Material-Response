@@ -235,41 +235,162 @@ class BNDEntry:
     payload: bytes
 
 
+# Binder.Format values used by SoulsFormats for BND3.
+BINDER_FORMAT_BIG_ENDIAN = 0x01
+BINDER_FORMAT_IDS = 0x02
+BINDER_FORMAT_NAMES1 = 0x04
+BINDER_FORMAT_NAMES2 = 0x08
+BINDER_FORMAT_LONG_OFFSETS = 0x10
+BINDER_FORMAT_COMPRESSION = 0x20
+BINDER_FILE_COMPRESSED = 0x01
+
+
+def reverse_bits8(v: int) -> int:
+    v &= 0xFF
+    return int(f"{v:08b}"[::-1], 2)
+
+
+def binder_read_format(raw_format: int, bit_big_endian: bool) -> int:
+    # Mirrors SoulsFormats Binder.ReadFormat. Older FromSoftware PC BND3s
+    # frequently store the feature byte bit-reversed.
+    use_raw = bit_big_endian or (
+        (raw_format & 0x01) != 0 and (raw_format & 0x80) == 0
+    )
+    return raw_format if use_raw else reverse_bits8(raw_format)
+
+
+def binder_read_file_flags(raw_flags: int, bit_big_endian: bool) -> int:
+    # Mirrors SoulsFormats Binder.ReadFileFlags.
+    return raw_flags if bit_big_endian else reverse_bits8(raw_flags)
+
+
+def decompress_binder_payload(data: bytes) -> bytes:
+    """Decompress one BND3 member when its binder file flag says compressed.
+
+    SoulsFormats DCX.Decompress accepts DS1 DCP/DCX DFLT and bare zlib. Keep
+    this scanner deliberately narrow: unsupported compression is an explicit
+    parse error, never silently treated as raw bytes.
+    """
+    if data.startswith(DCX_MAGIC):
+        return decompress_ptde_dcx(data)
+    if data.startswith(b"DCP\x00"):
+        if len(data) < 0x30 or data[4:8] != b"DFLT":
+            raise ValueError("unsupported BND3 DCP compression")
+        if struct.unpack_from("<I", data, 8)[0] != 0x20:
+            raise ValueError("invalid DCP DFLT header size")
+        if data[0x20:0x24] != b"DCS\x00":
+            raise ValueError("invalid DCP DFLT DCS marker")
+        uncomp_size = struct.unpack_from("<I", data, 0x24)[0]
+        comp_size = struct.unpack_from("<I", data, 0x28)[0]
+        zoff = 0x2C
+        if comp_size <= 0 or zoff + comp_size + 8 > len(data):
+            raise ValueError("invalid DCP DFLT compressed size")
+        dec = zlib.decompress(data[zoff:zoff + comp_size])
+        if uncomp_size and len(dec) != uncomp_size:
+            raise ValueError(f"DCP size mismatch: {len(dec)} != {uncomp_size}")
+        if data[zoff + comp_size:zoff + comp_size + 4] != b"DCA\x00":
+            raise ValueError("invalid DCP DFLT DCA marker")
+        return dec
+    if len(data) >= 2 and data[0] == 0x78 and data[1] in (0x01, 0x5E, 0x9C, 0xDA):
+        return zlib.decompress(data)
+    raise ValueError("BND3 member marked compressed but compression format is unknown")
+
+
 def parse_bnd3_ptde(data: bytes) -> list[BNDEntry]:
-    """Parse the already-validated PTDE PC BND3 layout used by DSRRL tools."""
+    """Parse DS1 BND3 using the actual Binder.Format feature byte.
+
+    BND3 file-header width is NOT fixed. It depends on LongOffsets, IDs,
+    Names1/Names2 and Compression. This mirrors the relevant SoulsFormats
+    BND3/BinderFileHeader rules and fixes the old 24-byte-header assumption.
+    """
     if len(data) < 0x20 or not data.startswith(BND3_MAGIC):
         raise ValueError("not BND3")
-    count = _u32(data, 0x10)
-    table_off = 0x20
-    entry_size = 24
-    if count <= 0 or count > 100_000 or table_off + count * entry_size > len(data):
-        raise ValueError("invalid BND3 file table")
 
-    meta = []
+    raw_format = data[0x0C]
+    big_endian_flag = data[0x0D] != 0
+    bit_big_endian = data[0x0E] != 0
+    if data[0x0F] != 0:
+        raise ValueError("invalid BND3 header padding")
+
+    fmt = binder_read_format(raw_format, bit_big_endian)
+    endian = ">" if (big_endian_flag or (fmt & BINDER_FORMAT_BIG_ENDIAN)) else "<"
+    count = _i32(data, 0x10, endian)
+    headers_end = _i32(data, 0x14, endian)
+    if count < 0 or count > 100_000:
+        raise ValueError("invalid BND3 file count")
+    if headers_end < 0x20 or headers_end > len(data):
+        raise ValueError("invalid BND3 fileHeadersEnd")
+
+    has_ids = (fmt & BINDER_FORMAT_IDS) != 0
+    has_names = (fmt & (BINDER_FORMAT_NAMES1 | BINDER_FORMAT_NAMES2)) != 0
+    long_offsets = (fmt & BINDER_FORMAT_LONG_OFFSETS) != 0
+    has_compression = (fmt & BINDER_FORMAT_COMPRESSION) != 0
+
+    cursor = 0x20
+    headers = []
     for i in range(count):
-        off = table_off + i * entry_size
-        flags, size_a, data_off, file_id, name_off, size_b = struct.unpack_from("<6I", data, off)
-        if name_off >= len(data) or data_off >= len(data):
-            raise ValueError(f"BND3 entry {i}: out-of-range name/data offset")
-        name = read_cstr(data, name_off) or f"entry_{i:05d}_id_{file_id}"
-        size = size_a
-        if size <= 0 or data_off + size > len(data):
-            size = size_b
-        if size <= 0 or data_off + size > len(data):
-            # Conservative fallback to the next higher data offset, not simply next table row.
-            candidates = []
-            for k in range(count):
-                ko = table_off + k * entry_size
-                doff = _u32(data, ko + 8)
-                if data_off < doff <= len(data):
-                    candidates.append(doff)
-            if candidates:
-                size = min(candidates) - data_off
-        if size <= 0 or data_off + size > len(data):
-            raise ValueError(f"BND3 entry {i}: invalid payload range")
-        meta.append(BNDEntry(i, file_id, flags, name, data[data_off:data_off + size]))
-    return meta
+        min_size = 4 + 4 + (8 if long_offsets else 4)
+        if cursor + min_size > len(data):
+            raise ValueError(f"BND3 entry {i}: truncated file header")
+        raw_flags = data[cursor]
+        flags = binder_read_file_flags(raw_flags, bit_big_endian)
+        if data[cursor + 1:cursor + 4] != b"\x00\x00\x00":
+            raise ValueError(f"BND3 entry {i}: nonzero header padding")
+        cursor += 4
+        compressed_size = _i32(data, cursor, endian)
+        cursor += 4
+        if long_offsets:
+            data_off = _i64(data, cursor, endian)
+            cursor += 8
+        else:
+            data_off = _u32(data, cursor, endian)
+            cursor += 4
 
+        file_id = -1
+        if has_ids:
+            if cursor + 4 > len(data):
+                raise ValueError(f"BND3 entry {i}: truncated ID")
+            file_id = _i32(data, cursor, endian)
+            cursor += 4
+
+        name_off = 0
+        if has_names:
+            if cursor + 4 > len(data):
+                raise ValueError(f"BND3 entry {i}: truncated name offset")
+            name_off = _i32(data, cursor, endian)
+            cursor += 4
+
+        uncompressed_size = -1
+        if has_compression:
+            if cursor + 4 > len(data):
+                raise ValueError(f"BND3 entry {i}: truncated uncompressed size")
+            uncompressed_size = _i32(data, cursor, endian)
+            cursor += 4
+
+        if compressed_size < 0 or data_off < 0 or data_off + compressed_size > len(data):
+            raise ValueError(f"BND3 entry {i}: invalid payload range")
+        if has_names and (name_off <= 0 or name_off >= len(data)):
+            raise ValueError(f"BND3 entry {i}: invalid name offset")
+        name = read_cstr(data, name_off) if has_names else f"entry_{i:05d}_id_{file_id}"
+        headers.append((i, file_id, flags, name, data_off, compressed_size, uncompressed_size))
+
+    if cursor > headers_end:
+        raise ValueError(f"BND3 parsed headers exceed fileHeadersEnd: 0x{cursor:X} > 0x{headers_end:X}")
+
+    out = []
+    for i, file_id, flags, name, data_off, compressed_size, uncompressed_size in headers:
+        payload = data[data_off:data_off + compressed_size]
+        if (flags & BINDER_FILE_COMPRESSED) != 0:
+            try:
+                payload = decompress_binder_payload(payload)
+            except Exception as e:
+                raise ValueError(f"BND3 entry {i}: compressed member decode failed: {e}") from e
+            if uncompressed_size >= 0 and len(payload) != uncompressed_size:
+                raise ValueError(
+                    f"BND3 entry {i}: uncompressed size mismatch {len(payload)} != {uncompressed_size}"
+                )
+        out.append(BNDEntry(i, file_id, flags, name, payload))
+    return out
 
 @dataclass
 class TextureBinding:
