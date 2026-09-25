@@ -260,14 +260,27 @@ void release_ptde_carrier(device *device_ptr) noexcept
     sampler sampler_to_destroy{};
     {
         std::lock_guard lock(g_mutex);
+
+        // Every carrier/resource identity below belongs to exactly one device.
+        // A destroy callback for an unrelated auxiliary D3D device must never
+        // tear down or invalidate the primary DSR carrier.
+        if(g_device!=device_ptr)
+            return;
+
         dead.swap(g_ptde_cubes);
         sampler_to_destroy=g_ptde_sampler;
         g_ptde_sampler={};
         g_sampler_ready=false;
         g_pack_admitted=false;
         g_ptde_pack.clear();
-        if(g_device==device_ptr)
-            g_device=nullptr;
+
+        // Handles are device-scoped and may be reused after recreation.
+        // Keeping any of these maps would permit stale native-probe identity
+        // to survive into the next device lifetime.
+        g_native_resources.clear();
+        g_resource_by_view.clear();
+        g_command_bindings.clear();
+        g_device=nullptr;
     }
 
     for(const auto &[_,cube]:dead){
@@ -415,12 +428,17 @@ void on_destroy_command_list(command_list *cmd)
 }
 
 void on_init_resource(
-    device *,
+    device *device_ptr,
     const resource_desc &desc,
     const subresource_data *initial_data,
     resource_usage,
     resource resource)
 {
+    {
+        std::lock_guard lock(g_mutex);
+        if(device_ptr==nullptr || device_ptr!=g_device)
+            return;
+    }
     if(resource.handle==0u || !is_native_envspec_desc(desc))
         return;
 
@@ -449,10 +467,12 @@ void on_init_resource(
     ++g_native_matches;
 }
 
-void on_destroy_resource(device *,resource resource)
+void on_destroy_resource(device *device_ptr,resource resource)
 {
     if(resource.handle==0u) return;
     std::lock_guard lock(g_mutex);
+    if(device_ptr==nullptr || device_ptr!=g_device)
+        return;
     g_native_resources.erase(resource.handle);
     for(auto it=g_resource_by_view.begin();
         it!=g_resource_by_view.end();){
@@ -464,7 +484,7 @@ void on_destroy_resource(device *,resource resource)
 }
 
 void on_init_resource_view(
-    device *,
+    device *device_ptr,
     resource resource,
     resource_usage usage,
     const resource_view_desc &,
@@ -476,6 +496,8 @@ void on_init_resource_view(
         return;
 
     std::lock_guard lock(g_mutex);
+    if(device_ptr==nullptr || device_ptr!=g_device)
+        return;
     if(g_native_resources.find(resource.handle)!=
        g_native_resources.end()){
         g_resource_by_view[view.handle]=resource.handle;
@@ -483,10 +505,12 @@ void on_init_resource_view(
     }
 }
 
-void on_destroy_resource_view(device *,resource_view view)
+void on_destroy_resource_view(device *device_ptr,resource_view view)
 {
     if(view.handle==0u) return;
     std::lock_guard lock(g_mutex);
+    if(device_ptr==nullptr || device_ptr!=g_device)
+        return;
     g_resource_by_view.erase(view.handle);
 }
 
