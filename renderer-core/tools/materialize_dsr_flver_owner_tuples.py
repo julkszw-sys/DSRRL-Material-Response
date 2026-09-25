@@ -34,7 +34,8 @@ import generate_flver_pairwise_material_census as pairwise  # noqa: E402
 CANONICAL_DSR_ZIP_SHA256 = (
     "a9a2e0eb48625fc735dfe18f7f375105cc5f56be005022969300c778489d0891"
 )
-EXPECTED_UNIQUE_FLVER = 4161
+EXPECTED_SOURCE_FLVER = 4161
+EXPECTED_OWNER_FLVER = 3944
 EXPECTED_MATERIAL_SLOTS = 19985
 EXPECTED_MTD_BASENAMES = 367
 
@@ -148,16 +149,22 @@ def materialize_rows(
         "pixel_equivalence": "OPEN",
     }
 
+    # 4161 is the complete source FLVER population, while only 3944 FLVERs
+    # own one or more material slots. The owner tuple table must therefore
+    # contain 3944 unique FLVER SHA-256 values, not all 4161 source FLVERs.
+    # Source completeness is independently attested by the canonical ZIP hash
+    # and manifest/member integrity above.
     canonical_counts = (
         summary["tuple_count"] == EXPECTED_MATERIAL_SLOTS
-        and summary["unique_flver_sha256"] == EXPECTED_UNIQUE_FLVER
+        and summary["unique_flver_sha256"] == EXPECTED_OWNER_FLVER
         and summary["unique_mtd_basenames"] == EXPECTED_MTD_BASENAMES
     )
+    summary["source_flver_count"] = EXPECTED_SOURCE_FLVER
     if require_canonical and not canonical_counts:
         raise ValueError(
             "source-completeness invariant mismatch: "
             f"tuples={summary['tuple_count']} "
-            f"flver={summary['unique_flver_sha256']} "
+            f"owner_flver={summary['unique_flver_sha256']} "
             f"mtd={summary['unique_mtd_basenames']}"
         )
     summary["source_complete"] = bool(
