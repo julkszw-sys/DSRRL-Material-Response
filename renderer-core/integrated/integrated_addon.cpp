@@ -8,6 +8,8 @@
 #include "dsrrl/runtime/texture_identity_transport.hpp"
 #include "dsrrl/operators/material_response/mtd_semantic_census.hpp"
 #include "dsrrl/runtime/stable_receiver_pipeline_registry.hpp"
+#include "dsrrl/runtime/subsurface_pipeline_registry.hpp"
+#include "dsrrl/runtime/subsurface_draw_runtime.hpp"
 #include "dsrrl/operators/material_response/material_response_island.hpp"
 #include "dsrrl/operators/material_response/material_response_seed.hpp"
 #include "dsrrl/operators/material_response/material_response_v211_materializer.hpp"
@@ -45,6 +47,8 @@ dsrrl::runtime::material_response_draw_runtime
     g_mr_draw_runtime(g_draw_transactions);
 dsrrl::runtime::material_resource_draw_runtime
     g_material_resources(g_core);
+dsrrl::runtime::subsurface_draw_runtime
+    g_subsurface(g_core, g_mr_draw_runtime, g_material_resources);
 
 std::atomic<std::uint64_t> g_present_count{0};
 std::atomic<std::uint64_t> g_mr_draw_eval{0};
@@ -65,6 +69,7 @@ constexpr dsrrl::core::operator_id k_integrated_islands[] = {
     dsrrl::core::operator_id::spec_rgb,
     dsrrl::core::operator_id::diffuse,
     dsrrl::core::operator_id::normal,
+    dsrrl::core::operator_id::subsurface,
     dsrrl::core::operator_id::terminal_sat_rgb,
     dsrrl::core::operator_id::diffuse_material_domain,
     dsrrl::core::operator_id::pointlight_pnts_attenuation,
@@ -96,16 +101,33 @@ const reshade::api::shader_desc *find_pixel_shader(
 bool observe_draw_identity(
     reshade::api::command_list *cmd_list,
     std::uint32_t &receiver_id,
+    bool &subsurface_bound,
     dsrrl::operators::material_response::material_identity &out_material,
     dsrrl::operators::material_response::decision &out_decision) noexcept
 {
     ++g_draw_events;
 
     receiver_id = 0u;
-    const bool receiver_ok =
+    subsurface_bound = false;
+
+    const bool stable_receiver =
         dsrrl::runtime::stable_receiver_bound(
             cmd_list,
             receiver_id);
+
+    std::uint32_t subsurface_target = 0u;
+    const bool subsurface_receiver =
+        dsrrl::runtime::subsurface_receiver_bound(
+            cmd_list,
+            subsurface_target);
+
+    const bool receiver_ok =
+        stable_receiver != subsurface_receiver;
+
+    if (subsurface_receiver) {
+        receiver_id = subsurface_target;
+        subsurface_bound = true;
+    }
 
     out_material = {};
     out_decision = {};
@@ -133,6 +155,11 @@ bool observe_draw_identity(
     }
 
     ++g_draw_joins;
+
+    if (subsurface_bound) {
+        ++g_mr_fail_open;
+        return true;
+    }
 
     if (!g_mr_ready.load()) {
         ++g_mr_fail_open;
@@ -360,6 +387,11 @@ void on_init_pipeline(
                 pipeline.handle,
                 pixel_shader->code,
                 pixel_shader->code_size);
+        (void)dsrrl::runtime::
+            subsurface_receiver_observe_pipeline(
+                pipeline.handle,
+                pixel_shader->code,
+                pixel_shader->code_size);
     }
 }
 
@@ -368,6 +400,8 @@ void on_destroy_pipeline(
     reshade::api::pipeline pipeline)
 {
     dsrrl::runtime::stable_receiver_forget_pipeline(
+        pipeline.handle);
+    dsrrl::runtime::subsurface_receiver_forget_pipeline(
         pipeline.handle);
     g_a1_bridge.on_destroy_pipeline(device, pipeline);
 }
@@ -383,6 +417,10 @@ void on_bind_pipeline(
              reshade::api::pipeline_stage::pixel_shader)) != 0u;
 
     dsrrl::runtime::stable_receiver_observe_bind(
+        cmd_list,
+        pixel_stage_bound,
+        pipeline.handle);
+    dsrrl::runtime::subsurface_receiver_observe_bind(
         cmd_list,
         pixel_stage_bound,
         pipeline.handle);
@@ -420,27 +458,75 @@ struct prepared_island_batch {
     dsrrl::runtime::island_draw_batch batch{};
     dsrrl::runtime::prepared_material_response_draw mr{};
     dsrrl::runtime::prepared_material_resource_draw resources{};
+    dsrrl::runtime::prepared_subsurface_draw subsurface{};
     bool mr_in_batch = false;
+    bool subsurface_in_batch = false;
 };
 
 void release_prepared_island_batch(
     prepared_island_batch &prepared) noexcept
 {
-    g_material_resources.release_prepared_draw(
-        prepared.resources);
-    g_mr_draw_runtime.release_prepared_draw(
-        prepared.mr);
+    if (prepared.subsurface_in_batch)
+        g_subsurface.release(
+            prepared.subsurface);
+    else {
+        g_material_resources.release_prepared_draw(
+            prepared.resources);
+        g_mr_draw_runtime.release_prepared_draw(
+            prepared.mr);
+    }
     prepared = {};
 }
 
 bool prepare_island_batch(
     reshade::api::command_list *cmd_list,
     std::uint32_t receiver_id,
+    bool subsurface_bound,
     const dsrrl::operators::material_response::material_identity &material,
     const dsrrl::operators::material_response::decision &decision,
     prepared_island_batch &prepared) noexcept
 {
     prepared = {};
+
+    if (subsurface_bound) {
+        if (!g_subsurface.prepare(
+                cmd_list,
+                material,
+                prepared.subsurface))
+            return false;
+
+        if (dsrrl::runtime::append_island_draw_request(
+                prepared.batch,
+                prepared.subsurface.subsurface) !=
+            dsrrl::runtime::island_draw_batch_result::ready) {
+            release_prepared_island_batch(prepared);
+            return false;
+        }
+
+        if (dsrrl::runtime::append_island_draw_request(
+                prepared.batch,
+                prepared.subsurface.mr.request) !=
+            dsrrl::runtime::island_draw_batch_result::ready) {
+            release_prepared_island_batch(prepared);
+            return false;
+        }
+
+        for (std::uint32_t i = 0u;
+             i < prepared.subsurface.resources.request_count;
+             ++i) {
+            if (dsrrl::runtime::append_island_draw_request(
+                    prepared.batch,
+                    prepared.subsurface.resources.requests[i]) !=
+                dsrrl::runtime::island_draw_batch_result::ready) {
+                release_prepared_island_batch(prepared);
+                return false;
+            }
+        }
+
+        prepared.subsurface_in_batch = true;
+        prepared.mr_in_batch = true;
+        return true;
+    }
 
     if (decision.active &&
         g_mr_draw_runtime.prepare_draw_request(
@@ -506,12 +592,14 @@ bool on_draw(
     std::uint32_t first_instance)
 {
     std::uint32_t receiver_id = 0u;
+    bool subsurface_bound = false;
     dsrrl::operators::material_response::material_identity material{};
     dsrrl::operators::material_response::decision decision{};
 
     if (!observe_draw_identity(
             cmd_list,
             receiver_id,
+            subsurface_bound,
             material,
             decision))
         return false;
@@ -520,6 +608,7 @@ bool on_draw(
     if (!prepare_island_batch(
             cmd_list,
             receiver_id,
+            subsurface_bound,
             material,
             decision,
             prepared))
@@ -558,12 +647,14 @@ bool on_draw_indexed(
     std::uint32_t first_instance)
 {
     std::uint32_t receiver_id = 0u;
+    bool subsurface_bound = false;
     dsrrl::operators::material_response::material_identity material{};
     dsrrl::operators::material_response::decision decision{};
 
     if (!observe_draw_identity(
             cmd_list,
             receiver_id,
+            subsurface_bound,
             material,
             decision))
         return false;
@@ -572,6 +663,7 @@ bool on_draw_indexed(
     if (!prepare_island_batch(
             cmd_list,
             receiver_id,
+            subsurface_bound,
             material,
             decision,
             prepared))
@@ -681,6 +773,8 @@ bool AddonInit(
     g_draw_owner_only.store(0);
     g_draw_receiver_only.store(0);
     dsrrl::runtime::stable_receiver_pipeline_reset();
+    dsrrl::runtime::subsurface_receiver_pipeline_reset();
+    g_subsurface.reset();
     dsrrl::runtime::material_owner_selection_reset_stats();
 
     const auto receivers =
@@ -757,6 +851,7 @@ void AddonUninit(
         log_state("UNLOAD_RESTORE_FAIL");
 
     dsrrl::runtime::stable_receiver_pipeline_reset();
+    dsrrl::runtime::subsurface_receiver_pipeline_reset();
     dsrrl::runtime::texture_identity_transport::uninstall();
     g_material_resources.unregister_events();
     g_material_resources.reset();
