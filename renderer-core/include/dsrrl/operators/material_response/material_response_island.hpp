@@ -61,6 +61,8 @@ struct receiver_recipe {
     material_scope_policy scope = material_scope_policy::exact_material_required;
     std::uint32_t certified_operations = response_none;
     ptde_envspec_presence envspec = ptde_envspec_presence::unknown;
+    std::array<float, 3> c100{{1.0f, 1.0f, 1.0f}};
+    std::array<float, 3> c101_f0q{{1.0f, 1.0f, 1.0f}};
 };
 
 struct material_profile {
@@ -69,6 +71,8 @@ struct material_profile {
     core::sha256_digest raw_mtd_sha256{};
     std::uint64_t material_family_hash = 0;
     float c101 = 1.0f;
+    std::array<float, 3> c100{{1.0f, 1.0f, 1.0f}};
+    std::array<float, 3> c101_f0q{{1.0f, 1.0f, 1.0f}};
     std::uint8_t lod_min = 0;
     std::uint8_t lod_max = 7;
     std::array<std::uint32_t, 4> receiver_ids{};
