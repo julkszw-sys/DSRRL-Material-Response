@@ -2,6 +2,7 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include "dsrrl/runtime/material_owner_producer.hpp"
 
 namespace dsrrl::runtime {
 
@@ -22,6 +23,11 @@ void flver_identity_observe_destroy(const void *model) noexcept;
 bool flver_identity_lookup(
     const void *selector_container,
     std::array<std::uint8_t, 32> &sha256) noexcept;
+
+bool flver_identity_enrich_owner(
+    const void *selector_container,
+    std::uint32_t material_slot,
+    actual_material_owner_observation &observation) noexcept;
 void flver_identity_reset() noexcept;
 flver_identity_telemetry flver_identity_stats() noexcept;
 
