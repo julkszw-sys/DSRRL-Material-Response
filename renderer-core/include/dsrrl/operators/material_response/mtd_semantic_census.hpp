@@ -8,7 +8,7 @@ namespace dsrrl::operators::material_response {
 
 enum class mtd_semantic_state : std::uint8_t { unknown=0,use,no_use };
 enum class mtd_semantic_operator : std::uint8_t { material_response=0,spec_rgb,env_spec,subsurface,diffuse,normal_bump,upper_lower,hemenv,hemenv_lerp,pointlight,alpha_blend,parallax,emissive_lightmap,texture_resource_consumers };
-enum class mtd_semantic_source : std::uint8_t { none=0,full24_exact_cohort,exact_override,exact_binding_extension,envspec_router_exact };
+enum class mtd_semantic_source : std::uint8_t { none=0,full24_exact_cohort,exact_override,exact_binding_extension,envspec_router_exact,ptde_flver_texture_semantics_exact };
 enum class mtd_gate_policy : std::uint8_t { none=0,exact_material,direct_exact,ptde_companion_required };
 
 // First-class ownership identity. Zero/invalid fields mean ownership is not
@@ -43,12 +43,32 @@ struct mtd_envspec_semantics {
     std::uint8_t envspc_slot=0;
 };
 
+enum class ptde_texture_semantic : std::uint8_t {
+    diffuse=0,
+    bump,
+    detail_bump,
+    specular,
+    lightmap,
+    diffuse_2,
+    bump_2,
+    specular_2
+};
+
+struct ptde_flver_texture_semantics {
+    std::uint8_t positive_mask=0;
+    bool exact_host_identity_match=false;
+    bool source_complete=false;
+};
+
 std::uint64_t mtd_semantic_hash(const char *text) noexcept;
 bool has_exact_flver_material_ownership(const mtd_semantic_query &query) noexcept;
 bool operator_requires_flver_material_ownership(mtd_semantic_operator op) noexcept;
 mtd_semantic_decision classify_mtd_semantic(const mtd_semantic_query &query,mtd_semantic_operator op) noexcept;
 mtd_envspec_semantics classify_mtd_envspec_semantics(const mtd_semantic_query &query) noexcept;
 mtd_envspec_semantics classify_mtd_envspec_semantics_legacy(std::uint64_t legacy_name_hash_utf16_lower,const core::sha256_digest &raw_mtd_sha256) noexcept;
+ptde_flver_texture_semantics classify_ptde_flver_texture_semantics(const material_identity &material) noexcept;
+ptde_flver_texture_semantics classify_ptde_flver_texture_semantics_legacy(std::uint64_t legacy_name_hash_utf16_lower,const core::sha256_digest &raw_mtd_sha256) noexcept;
+bool ptde_flver_texture_semantic_present(const ptde_flver_texture_semantics &semantics,ptde_texture_semantic semantic) noexcept;
 ptde_envspec_presence mtd_envspec_presence(const mtd_semantic_query &query) noexcept;
 
 } // namespace dsrrl::operators::material_response
