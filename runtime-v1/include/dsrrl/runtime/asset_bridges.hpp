@@ -52,6 +52,14 @@ bool spec_ready(
     const material_route_scope &route,
     std::uint32_t receiver_id) noexcept;
 
+// Preflight for the complete PTDE Diffuse dependency. It proves the exact
+// application-bound t1+t0 pair and a materialized PTDE t0 sidecar without
+// mutating D3D state. Shader dispatch uses this to avoid t0_D*c100_P hybrids.
+bool diffuse_ready(
+    ID3D11DeviceContext *context,
+    const material_route_scope &route,
+    std::uint32_t receiver_id) noexcept;
+
 // Exact body identities and complete three-sidecar tuple, without mutation.
 bool body_surface_ready(ID3D11DeviceContext *context) noexcept;
 
