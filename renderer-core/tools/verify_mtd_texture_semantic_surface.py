@@ -23,11 +23,18 @@ REQUIRED = {
 def generator_bits() -> set[str]:
     tree = ast.parse(GEN.read_text(encoding="utf-8"), filename=str(GEN))
     for node in tree.body:
-        if isinstance(node, ast.Assign) and any(isinstance(t, ast.Name) and t.id == "BITS" for t in node.targets):
-            value = ast.literal_eval(node.value)
-            if not isinstance(value, dict):
+        value = None
+        if isinstance(node, ast.Assign) and any(
+            isinstance(t, ast.Name) and t.id == "BITS" for t in node.targets
+        ):
+            value = node.value
+        elif isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name) and node.target.id == "BITS":
+            value = node.value
+        if value is not None:
+            parsed = ast.literal_eval(value)
+            if not isinstance(parsed, dict):
                 raise SystemExit("BITS is not a dict")
-            return set(value)
+            return set(parsed)
     raise SystemExit("BITS assignment not found")
 
 
@@ -49,9 +56,6 @@ def main() -> int:
     if unknown_keys:
         raise SystemExit(f"source manifest reports semantics outside generator surface: {sorted(unknown_keys)}")
 
-    # Do not require every supported semantic to be present in the old manifest:
-    # that manifest was produced from a partial run. A future source-complete rerun
-    # can populate Lightmap/secondary-slot counts without changing this authority rule.
     print(
         "PASS texture semantic surface: "
         f"supported={len(bits)} reported={len(observed)} "
