@@ -675,6 +675,132 @@ bool ensure_lerp_shader_pair(
     return true;
 }
 
+
+struct pmetal_envspec_draw_state {
+    ID3D11ShaderResourceView *old_t12=nullptr;
+    ID3D11ShaderResourceView *old_t14=nullptr;
+    ID3D11SamplerState *old_s12=nullptr;
+    ID3D11SamplerState *old_s14=nullptr;
+    bool b_required=false;
+    bool bound=false;
+};
+
+void release_pmetal_envspec_state(
+    pmetal_envspec_draw_state &state) noexcept
+{
+    if(state.old_t12) state.old_t12->Release();
+    if(state.old_t14) state.old_t14->Release();
+    if(state.old_s12) state.old_s12->Release();
+    if(state.old_s14) state.old_s14->Release();
+    state={};
+}
+
+bool bind_pmetal_envspec(
+    ID3D11DeviceContext *ctx,
+    const envspec::identity_snapshot &snapshot,
+    pmetal_envspec_draw_state &state) noexcept
+{
+    if(!ctx || !snapshot.carrier_ready())
+        return false;
+
+    auto *new_t12=reinterpret_cast<ID3D11ShaderResourceView*>(
+        static_cast<std::uintptr_t>(snapshot.ptde_a_view.handle));
+    auto *new_s12=reinterpret_cast<ID3D11SamplerState*>(
+        static_cast<std::uintptr_t>(snapshot.ptde_sampler.handle));
+    auto *new_t14=snapshot.probe_b_required ?
+        reinterpret_cast<ID3D11ShaderResourceView*>(
+            static_cast<std::uintptr_t>(snapshot.ptde_b_view.handle)) :
+        nullptr;
+    auto *new_s14=snapshot.probe_b_required ? new_s12 : nullptr;
+
+    if(!new_t12 || !new_s12 ||
+       (snapshot.probe_b_required && (!new_t14 || !new_s14)))
+        return false;
+
+    state.b_required=snapshot.probe_b_required;
+    ctx->PSGetShaderResources(12u,1u,&state.old_t12);
+    ctx->PSGetSamplers(12u,1u,&state.old_s12);
+    if(state.b_required){
+        ctx->PSGetShaderResources(14u,1u,&state.old_t14);
+        ctx->PSGetSamplers(14u,1u,&state.old_s14);
+    }
+
+    ctx->PSSetShaderResources(12u,1u,&new_t12);
+    ctx->PSSetSamplers(12u,1u,&new_s12);
+    if(state.b_required){
+        ctx->PSSetShaderResources(14u,1u,&new_t14);
+        ctx->PSSetSamplers(14u,1u,&new_s14);
+    }
+
+    ID3D11ShaderResourceView *check_t12=nullptr,*check_t14=nullptr;
+    ID3D11SamplerState *check_s12=nullptr,*check_s14=nullptr;
+    ctx->PSGetShaderResources(12u,1u,&check_t12);
+    ctx->PSGetSamplers(12u,1u,&check_s12);
+    bool ok=check_t12==new_t12 && check_s12==new_s12;
+    if(state.b_required){
+        ctx->PSGetShaderResources(14u,1u,&check_t14);
+        ctx->PSGetSamplers(14u,1u,&check_s14);
+        ok=ok && check_t14==new_t14 && check_s14==new_s14;
+    }
+    if(check_t12) check_t12->Release();
+    if(check_t14) check_t14->Release();
+    if(check_s12) check_s12->Release();
+    if(check_s14) check_s14->Release();
+
+    if(!ok){
+        if(state.old_t12) ctx->PSSetShaderResources(12u,1u,&state.old_t12);
+        if(state.old_s12) ctx->PSSetSamplers(12u,1u,&state.old_s12);
+        if(state.b_required){
+            ctx->PSSetShaderResources(14u,1u,&state.old_t14);
+            ctx->PSSetSamplers(14u,1u,&state.old_s14);
+        }
+        release_pmetal_envspec_state(state);
+        return false;
+    }
+
+    state.bound=true;
+    return true;
+}
+
+bool restore_pmetal_envspec(
+    ID3D11DeviceContext *ctx,
+    pmetal_envspec_draw_state &state) noexcept
+{
+    if(!state.bound){
+        release_pmetal_envspec_state(state);
+        return true;
+    }
+    if(!ctx){
+        release_pmetal_envspec_state(state);
+        return false;
+    }
+
+    ctx->PSSetShaderResources(12u,1u,&state.old_t12);
+    ctx->PSSetSamplers(12u,1u,&state.old_s12);
+    if(state.b_required){
+        ctx->PSSetShaderResources(14u,1u,&state.old_t14);
+        ctx->PSSetSamplers(14u,1u,&state.old_s14);
+    }
+
+    ID3D11ShaderResourceView *check_t12=nullptr,*check_t14=nullptr;
+    ID3D11SamplerState *check_s12=nullptr,*check_s14=nullptr;
+    ctx->PSGetShaderResources(12u,1u,&check_t12);
+    ctx->PSGetSamplers(12u,1u,&check_s12);
+    bool ok=check_t12==state.old_t12 && check_s12==state.old_s12;
+    if(state.b_required){
+        ctx->PSGetShaderResources(14u,1u,&check_t14);
+        ctx->PSGetSamplers(14u,1u,&check_s14);
+        ok=ok && check_t14==state.old_t14 && check_s14==state.old_s14;
+    }
+    if(check_t12) check_t12->Release();
+    if(check_t14) check_t14->Release();
+    if(check_s12) check_s12->Release();
+    if(check_s14) check_s14->Release();
+
+    release_pmetal_envspec_state(state);
+    return ok;
+}
+
 bool pmetal_native_env_ready(
     ID3D11DeviceContext *ctx,
     float beta) noexcept
