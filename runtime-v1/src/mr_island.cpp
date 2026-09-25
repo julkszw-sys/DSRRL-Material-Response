@@ -1189,14 +1189,14 @@ bool on_draw_indexed(command_list *cmd,std::uint32_t index_count,std::uint32_t i
         cmd && cmd==g_bound_command &&
         !g_bound_subsurface &&
         g_bound_host>=0 && g_bound_host<24;
+    envspec::identity_snapshot envspec_identity{};
     if(envspec_receiver_owned){
-        const auto envspec_identity=
+        envspec_identity=
             envspec::observe_draw(
                 cmd,
                 draw_envspec,
                 draw_envspec_exact,
                 g_bound_lerp);
-        (void)envspec_identity;
     }
 
     if(envspec_receiver_owned && draw_envspec_exact){
@@ -1339,36 +1339,68 @@ bool on_draw_indexed(command_list *cmd,std::uint32_t index_count,std::uint32_t i
         std::string_view(don.sha256)==k_pmetal_raw_mtd_sha256 &&
         receiver_id>=33u && receiver_id<=35u;
 
+    // Full PTDE EnvSpec is independent from the Diffuse/t0 bridge. Its exact
+    // dependencies are P_Metal identity, stable receiver, PTDE SpecRGB t10,
+    // PTDE material/source b12, raw-RGBA probe carrier and exact sampler.
+    // The feature remains hold-off in the manifest, so this path is dormant
+    // unless explicitly armed by the control plane.
+    const bool pmetal_envspec_feature =
+        pmetal_exact_route &&
+        !g_bound_lerp &&
+        don.has_c101 &&
+        spec_candidate &&
+        g_core->features().enabled(core::operator_id::env_spec);
+
     const bool pmetal_v10_feature =
         pmetal_exact_route &&
         diffuse_candidate &&
+        !pmetal_envspec_feature &&
         g_core->features().enabled(core::operator_id::pmetal_black_safe_v10);
 
     // V13 remains preserved as a separately preflighted research/runtime path,
-    // but it must not supersede the owner-accepted V10 result. It is also a
-    // stable-receiver island, not a generic HemEnvLerp consumer.
+    // but it must not supersede either the full EnvSpec island or the
+    // owner-accepted V10 result.
     const bool pmetal_v13_feature =
         pmetal_exact_route &&
         diffuse_candidate &&
         !g_bound_lerp &&
+        !pmetal_envspec_feature &&
         !pmetal_v10_feature &&
         g_core->features().enabled(core::operator_id::pmetal_black_safe_source);
 
     upper_lower::pmetal_env_source pmetal_source{};
-    bool pmetal_candidate=false;
-    if(pmetal_v13_feature){
-        if(upper_lower::selected_pmetal_env_source(pmetal_source)){
-            ++g_v13_source_ready;
-            pmetal_candidate=pmetal_native_env_ready(ctx,pmetal_source.beta);
-        }else{
-            ++g_v13_source_miss;
+    bool pmetal_source_ready=false;
+    if(pmetal_envspec_feature || pmetal_v13_feature){
+        pmetal_source_ready=
+            upper_lower::selected_pmetal_env_source(pmetal_source);
+        if(pmetal_v13_feature){
+            if(pmetal_source_ready) ++g_v13_source_ready;
+            else ++g_v13_source_miss;
         }
     }
+
+    // Current exact consumer authority is the stable HemEnv 33/34/35 family.
+    // Its PTDE B branch is legal only when beta is zero in this one-endpoint
+    // route. Any transitional/two-endpoint case remains fail-open until the
+    // exact HemEnvLerp consumer family is independently ported.
+    const bool pmetal_envspec_candidate =
+        pmetal_envspec_feature &&
+        pmetal_source_ready &&
+        pmetal_source.beta==0.0f &&
+        envspec_identity.carrier_ready() &&
+        envspec_identity.slot==2u;
+    if(pmetal_envspec_candidate)
+        ++g_envspec_rgba_candidate;
+
+    bool pmetal_candidate=false;
+    if(pmetal_v13_feature && pmetal_source_ready)
+        pmetal_candidate=pmetal_native_env_ready(ctx,pmetal_source.beta);
 
     bool issued=false;
     bool restore_ok=true;
     bool intended_ul=false;
     bool spec_active=false;
+    bool pmetal_envspec_active=false;
     bool pmetal_v10_active=false;
     bool pmetal_active=false;
     bool tx_started=false;
@@ -1382,6 +1414,7 @@ bool on_draw_indexed(command_list *cmd,std::uint32_t index_count,std::uint32_t i
     cb_capture oldcb{};
     assets::draw_state asset_state{};
     upper_lower::draw_state ul_state{};
+    pmetal_envspec_draw_state envspec_state{};
 
     std::array<ID3D11ClassInstance*,256> old_classes{};
     UINT old_class_count=static_cast<UINT>(old_classes.size());
@@ -1452,7 +1485,17 @@ bool on_draw_indexed(command_list *cmd,std::uint32_t index_count,std::uint32_t i
                 }
                 if(fallback_replacement) fallback_replacement->AddRef();
 
-                if(pmetal_v10_feature && don.has_c101){
+                if(pmetal_envspec_candidate){
+                    ID3D11PixelShader *rgba =
+                        intended_ul ?
+                            g_device.pmetal_envspec_rgba_ul_spec[i] :
+                            g_device.pmetal_envspec_rgba_spec[i];
+                    if(rgba){
+                        replacement=rgba;
+                        replacement->AddRef();
+                        pmetal_envspec_active=true;
+                    }
+                }else if(pmetal_v10_feature && don.has_c101){
                     ID3D11PixelShader *v10 =
                         intended_ul && spec_active ? g_device.v9a_full_ul_spec[i] :
                         intended_ul ? g_device.v9a_full_ul[i] :
@@ -1485,7 +1528,19 @@ bool on_draw_indexed(command_list *cmd,std::uint32_t index_count,std::uint32_t i
             }
         }
 
-        if(pmetal_active){
+        if(pmetal_envspec_active){
+            b12=realize_pmetal_b12(ctx,dev,donor,pmetal_source);
+            if(!b12){
+                ++g_envspec_rgba_bind_fail;
+                pmetal_envspec_active=false;
+                if(replacement){replacement->Release();replacement=nullptr;}
+                if(fallback_replacement){
+                    replacement=fallback_replacement;
+                    fallback_replacement=nullptr;
+                }
+                b12=realize_b12(dev,donor,don,semantic_override);
+            }
+        }else if(pmetal_active){
             b12=realize_pmetal_b12(ctx,dev,donor,pmetal_source);
             if(!b12){
                 ++g_v13_b12_fail;
@@ -1526,6 +1581,12 @@ bool on_draw_indexed(command_list *cmd,std::uint32_t index_count,std::uint32_t i
                 plan.patches[plan.patch_count++]={core::operator_id::subsurface,0u,true,false};
             if(spec_active)
                 plan.patches[plan.patch_count++]={core::operator_id::spec_rgb,0u,true,true};
+            if(pmetal_envspec_active)
+                plan.patches[plan.patch_count++]={
+                    core::operator_id::env_spec,
+                    0u,
+                    true,
+                    true};
             if(pmetal_v10_active)
                 plan.patches[plan.patch_count++]={
                     core::operator_id::pmetal_black_safe_v10,
@@ -1563,9 +1624,16 @@ bool on_draw_indexed(command_list *cmd,std::uint32_t index_count,std::uint32_t i
                     route.spec_t10_consumer_active=spec_active;
 
                     const bool assets_ok=assets::apply_draw(ctx,route,receiver_id,asset_state);
+                    const bool envspec_ok=
+                        !pmetal_envspec_active ||
+                        bind_pmetal_envspec(ctx,envspec_identity,envspec_state);
+                    if(pmetal_envspec_active && !envspec_ok)
+                        ++g_envspec_rgba_bind_fail;
                     // Subsurf bypass is all-or-nothing: never drop SSS if a
                     // required ordinary PTDE surface dependency failed to bind.
-                    if(assets_ok && (!body_route ||
+                    // Full EnvSpec is likewise all-or-nothing with its exact
+                    // t12/t14+s12/s14 transaction.
+                    if(assets_ok && envspec_ok && (!body_route ||
                        (asset_state.changed_t0 && asset_state.changed_t2 && asset_state.changed_t10))){
                         const auto replay =
                             choose_indexed_replay(
@@ -1590,11 +1658,17 @@ bool on_draw_indexed(command_list *cmd,std::uint32_t index_count,std::uint32_t i
                 }
 
                 const bool assets_restored=assets::restore_draw(ctx,asset_state);
+                const bool envspec_restored=
+                    restore_pmetal_envspec(ctx,envspec_state);
+                if(!envspec_restored)
+                    ++g_envspec_rgba_restore_fail;
                 const bool ul_restored=upper_lower::restore_draw(ctx,ul_state);
                 ctx->PSSetShader(oldps,old_classes.data(),old_class_count);
                 restore_cb(ctx,ctx1,oldcb);
                 const bool mr_restored=verify_restore(ctx,ctx1,oldcb);
-                restore_ok=assets_restored && ul_restored && mr_restored;
+                restore_ok=
+                    assets_restored && envspec_restored &&
+                    ul_restored && mr_restored;
 
                 const bool tx_restored=g_core->transactions().restore(command);
                 tx_started=false;
@@ -1619,6 +1693,7 @@ bool on_draw_indexed(command_list *cmd,std::uint32_t index_count,std::uint32_t i
     if(!issued){
         ++g_fail_open;
         (void)assets::restore_draw(ctx,asset_state);
+        (void)restore_pmetal_envspec(ctx,envspec_state);
         (void)upper_lower::restore_draw(ctx,ul_state);
         if(captured){
             ctx->PSSetShader(oldps,old_classes.data(),old_class_count);
@@ -1633,6 +1708,20 @@ bool on_draw_indexed(command_list *cmd,std::uint32_t index_count,std::uint32_t i
         if(normal_candidate) ++g_normal_replays;
         if(spec_active) ++g_spec_replays;
         if(intended_ul) ++g_ul_replays;
+
+        if(pmetal_envspec_active){
+            ++g_envspec_rgba_replay;
+            if(!g_envspec_rgba_first_draw_logged.exchange(true)){
+                std::ostringstream os;
+                os<<"[DSRRL PMETAL ENVSPEC RGBA] FIRST_DRAW receiver="
+                  <<receiver_id
+                  <<" slot="<<static_cast<unsigned>(envspec_identity.slot)
+                  <<" probeA="<<envspec_identity.probe_a
+                  <<" ul="<<(intended_ul?1:0)
+                  <<" spec="<<(spec_active?1:0);
+                log_info(os.str());
+            }
+        }
 
         if(pmetal_v10_active){
             ++g_v10_replays;
@@ -1845,6 +1934,7 @@ bool register_runtime(core::renderer_core &core) noexcept
     g_quarantined.store(false);
     g_v13_first_draw_logged.store(false);
     g_v10_first_draw_logged.store(false);
+    g_envspec_rgba_first_draw_logged.store(false);
     g_draw_donor=-1; g_draw_spec_override=-1; g_draw_envspec={}; g_draw_envspec_exact=false; g_draw_ptde_texture={};
     g_bound_host=-1; g_bound_lerp=false; g_bound_subsurface=false; g_bound_command=nullptr;
     g_enabled.store(true);
