@@ -167,22 +167,35 @@ int main()
     CHECK(d.state==mtd_semantic_state::unknown);
     CHECK(!d.exact_identity_match);
 
+    // A caller cannot self-certify FLVER ownership. The current pairwise
+    // corpus is MTD-aggregate evidence and does not yet materialize exact
+    // (DSR FLVER identity, material slot, MTD) tuples. Even a fully populated
+    // ownership struct must therefore fail open until that tuple corpus exists.
+    CHECK(!generated::k_flver_pairwise_owner_tuple_authentication_available);
     auto owned_q=q;
     owned_q.ownership.flver_identity_hash=0x1234u;
     owned_q.ownership.material_slot=7u;
     owned_q.ownership.material_slot_valid=true;
     owned_q.ownership.exact=true;
+    CHECK(!has_exact_flver_material_ownership(owned_q));
+
     d=classify_mtd_semantic(owned_q,mtd_semantic_operator::diffuse);
-    CHECK(d.state==mtd_semantic_state::use);
-    CHECK(d.source==
-          mtd_semantic_source::flver_pairwise_stable_exact);
-    CHECK(d.exact_identity_match);
+    CHECK(d.state==mtd_semantic_state::unknown);
+    CHECK(d.source==mtd_semantic_source::none);
+    CHECK(!d.exact_identity_match);
 
     d=classify_mtd_semantic(owned_q,mtd_semantic_operator::normal_bump);
-    CHECK(d.state==mtd_semantic_state::use);
-    CHECK(d.source==
-          mtd_semantic_source::flver_pairwise_stable_exact);
-    CHECK(d.exact_identity_match);
+    CHECK(d.state==mtd_semantic_state::unknown);
+    CHECK(d.source==mtd_semantic_source::none);
+    CHECK(!d.exact_identity_match);
+
+    auto spoofed_owner=owned_q;
+    spoofed_owner.ownership.flver_identity_hash=0xffffffffffffffffull;
+    spoofed_owner.ownership.material_slot=0xffffffffu;
+    CHECK(!has_exact_flver_material_ownership(spoofed_owner));
+    CHECK(classify_mtd_semantic(
+        spoofed_owner,mtd_semantic_operator::diffuse).state==
+        mtd_semantic_state::unknown);
 
     auto wrong_tex=pmetal;
     wrong_tex.raw_mtd_sha256[0]^=0xffu;
@@ -482,10 +495,9 @@ int main()
     CHECK(d.source==mtd_semantic_source::mtd_spx_pairwise_negative_exact);
     CHECK(d.exact_identity_match);
 
-    a01_spx_q.ownership.flver_identity_hash=0xA01u;
-    a01_spx_q.ownership.material_slot=0u;
-    a01_spx_q.ownership.material_slot_valid=true;
-    a01_spx_q.ownership.exact=true;
+    // Exact negative MTD/SPX evidence is conservative and does not need an
+    // unauthenticated positive owner claim. It may still suppress a DSR-only
+    // Bump lane while positive Normal routing remains held open.
     d=classify_mtd_semantic(a01_spx_q,mtd_semantic_operator::normal_bump);
     CHECK(d.state==mtd_semantic_state::no_use);
     CHECK(d.source==mtd_semantic_source::mtd_spx_pairwise_negative_exact);
