@@ -25,6 +25,17 @@ transform_result transform_lerp(
     std::span<const std::uint8_t> stock,
     const build151::lerp_plan &p,
     variant v);
+
+// Preserve the exact V2.10/V2.11 spec-material corrections while reverting
+// only V29 diffuse c100/domain changes back to the stock DSR diffuse lane.
+// This is the source-complete equivalent of the historical SPEC_ONLY class.
+transform_result transform_stock_diffuse_material(
+    std::span<const std::uint8_t> v211,
+    const plan &p);
+transform_result transform_stock_diffuse_material_lerp(
+    std::span<const std::uint8_t> v211,
+    const build151::lerp_plan &p);
+
 transform_result transform_v9a(std::span<const std::uint8_t> v211);
 transform_result transform_upper_lower(
     std::span<const std::uint8_t> base,
