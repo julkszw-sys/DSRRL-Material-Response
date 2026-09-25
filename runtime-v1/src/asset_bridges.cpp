@@ -867,13 +867,13 @@ bool apply_draw(
 
     const bool bmp_receiver = receiver_id >= 24u && receiver_id <= 35u;
     const bool want_diff =
-        route.diffuse_normal_eligible &&
+        route.diffuse_eligible &&
         route.diffuse_c100_carrier_active &&
         bmp_receiver &&
         g_core->features().enabled(core::operator_id::diffuse);
 
     const bool want_norm =
-        route.diffuse_normal_eligible &&
+        route.normal_eligible &&
         bmp_receiver &&
         g_core->features().enabled(core::operator_id::normal);
 
