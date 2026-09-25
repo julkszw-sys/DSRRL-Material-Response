@@ -748,8 +748,9 @@ bool bind_pmetal_envspec(
     if(check_s14) check_s14->Release();
 
     if(!ok){
-        if(state.old_t12) ctx->PSSetShaderResources(12u,1u,&state.old_t12);
-        if(state.old_s12) ctx->PSSetSamplers(12u,1u,&state.old_s12);
+        // Restore exact prior state even when the prior binding was NULL.
+        ctx->PSSetShaderResources(12u,1u,&state.old_t12);
+        ctx->PSSetSamplers(12u,1u,&state.old_s12);
         if(state.b_required){
             ctx->PSSetShaderResources(14u,1u,&state.old_t14);
             ctx->PSSetSamplers(14u,1u,&state.old_s14);
