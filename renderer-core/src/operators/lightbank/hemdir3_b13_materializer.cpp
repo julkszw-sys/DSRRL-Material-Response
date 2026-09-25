@@ -1,5 +1,7 @@
 #include "dsrrl/operators/lightbank/hemdir3_b13_materializer.hpp"
 #include "dsrrl/operators/lightbank/generated_hemdir3_receivers_v1.hpp"
+#include "dsrrl/operators/lightbank/generated_hemdir3_spc_b12_authority_v1.hpp"
+#include "dsrrl/operators/legacy_plan/dxbc_rdef_patch.hpp"
 #include "dsrrl/operators/legacy_plan/a1_create_time_materializer.hpp"
 #include "dsrrl/operators/legacy_plan/dxbc_checksum.hpp"
 #include "dsrrl/operators/legacy_plan/sha256_bytes.hpp"
@@ -18,6 +20,13 @@ using legacy_plan::dxbc::read_u32;
 using legacy_plan::dxbc::write_u32;
 namespace hashing = legacy_plan::hashing;
 namespace generated_h3 = generated;
+
+constexpr std::array<std::uint32_t,4> k_cb12_decl = {
+    0x04000059u,
+    0x00208e46u,
+    0x0000000cu,
+    0x00000002u
+};
 
 constexpr std::array<std::uint32_t,4> k_cb13_decl = {
     0x04000059u,
@@ -643,6 +652,7 @@ bool compose_enabled_a1_islands(
     const std::uint8_t *stock,
     std::size_t stock_size,
     std::vector<std::uint8_t> &replacement,
+    std::size_t words_inserted_at_11,
     core::operator_mask &composed_owners) noexcept
 {
     composed_owners = 0u;
@@ -698,7 +708,7 @@ bool compose_enabled_a1_islands(
              stock_code) / 4u;
 
         if (word >= 11u)
-            word += 4u;
+            word += words_inserted_at_11;
 
         const std::size_t target =
             replacement_code +
@@ -808,6 +818,24 @@ materialize_hemdir3_b13_receiver(
             ? hemdir3_native_stratum::spc
             : hemdir3_native_stratum::nospc;
 
+    const auto *spc_plan =
+        outcome.stratum ==
+                hemdir3_native_stratum::spc
+            ? generated_h3::find_hemdir3_spc_b12_plan(
+                  plan->shader_index)
+            : nullptr;
+
+    if (outcome.stratum ==
+            hemdir3_native_stratum::spc &&
+        (spc_plan == nullptr ||
+         spc_plan->stock_sha256 !=
+             plan->stock_sha256)) {
+        outcome.result =
+            hemdir3_b13_materialize_result::
+                fail_plan_inconsistent;
+        return outcome;
+    }
+
     if (plan->first_patch >
             generated_h3::
                 k_hemdir3_b13_patch_sites.size() ||
@@ -886,29 +914,114 @@ materialize_hemdir3_b13_receiver(
                 site.source_register - 92u);
     }
 
-    try {
-        words.insert(
-            words.begin() + 11,
-            k_cb13_decl.begin(),
-            k_cb13_decl.end());
-    } catch (...) {
-        outcome.result =
-            hemdir3_b13_materialize_result::
-                fail_rebuild;
-        return outcome;
+    std::size_t inserted_words = 0u;
+
+    if (spc_plan != nullptr) {
+        if (spc_plan->c101_slot_word == 0u ||
+            spc_plan->c102_slot_word == 0u ||
+            spc_plan->c101_slot_word + 1u >= words.size() ||
+            spc_plan->c102_slot_word + 1u >= words.size() ||
+            words[spc_plan->c101_slot_word - 1u] !=
+                generated_h3::k_hemdir3_spc_c101_operand_token ||
+            words[spc_plan->c102_slot_word - 1u] !=
+                generated_h3::k_hemdir3_spc_c102_operand_token ||
+            words[spc_plan->c101_slot_word] != 0u ||
+            words[spc_plan->c101_slot_word + 1u] != 101u ||
+            words[spc_plan->c102_slot_word] != 0u ||
+            words[spc_plan->c102_slot_word + 1u] != 102u) {
+            outcome.result =
+                hemdir3_b13_materialize_result::
+                    fail_operand_precondition;
+            return outcome;
+        }
+
+        words[spc_plan->c101_slot_word] = 12u;
+        words[spc_plan->c101_slot_word + 1u] = 0u;
+        words[spc_plan->c102_slot_word] = 12u;
+        words[spc_plan->c102_slot_word + 1u] = 1u;
+
+        try {
+            words.insert(
+                words.begin() + 11,
+                k_cb12_decl.begin(),
+                k_cb12_decl.end());
+            words.insert(
+                words.begin() + 15,
+                k_cb13_decl.begin(),
+                k_cb13_decl.end());
+        } catch (...) {
+            outcome.result =
+                hemdir3_b13_materialize_result::
+                    fail_rebuild;
+            return outcome;
+        }
+
+        inserted_words =
+            k_cb12_decl.size() +
+            k_cb13_decl.size();
+
+        chunk *rdef = nullptr;
+        for (auto &current : chunks) {
+            if (std::memcmp(
+                    current.tag.data(),
+                    "RDEF",
+                    4u) != 0)
+                continue;
+            if (rdef != nullptr) {
+                outcome.result =
+                    hemdir3_b13_materialize_result::
+                        fail_rebuild;
+                return outcome;
+            }
+            rdef = &current;
+        }
+
+        if (rdef == nullptr ||
+            !legacy_plan::dxbc::rdef::
+                append_constant_buffer_binding(
+                    rdef->payload,
+                    "DSRRL_HemDir3MaterialCarrier",
+                    12u,
+                    32u) ||
+            !legacy_plan::dxbc::rdef::
+                append_constant_buffer_binding(
+                    rdef->payload,
+                    "DSRRL_LightBankCarrier",
+                    13u,
+                    128u)) {
+            outcome.result =
+                hemdir3_b13_materialize_result::
+                    fail_rebuild;
+            return outcome;
+        }
+    } else {
+        try {
+            words.insert(
+                words.begin() + 11,
+                k_cb13_decl.begin(),
+                k_cb13_decl.end());
+        } catch (...) {
+            outcome.result =
+                hemdir3_b13_materialize_result::
+                    fail_rebuild;
+            return outcome;
+        }
+
+        inserted_words =
+            k_cb13_decl.size();
+
+        if (!patch_rdef_for_b13(
+                chunks)) {
+            outcome.result =
+                hemdir3_b13_materialize_result::
+                    fail_rebuild;
+            return outcome;
+        }
     }
 
     words[1] +=
         static_cast<std::uint32_t>(
-            k_cb13_decl.size());
-
-    if (!patch_rdef_for_b13(
-            chunks)) {
-        outcome.result =
-            hemdir3_b13_materialize_result::
-                fail_rebuild;
-        return outcome;
-    }
+            inserted_words);
 
     if (!rebuild(
             source,
@@ -923,11 +1036,20 @@ materialize_hemdir3_b13_receiver(
         return outcome;
     }
 
+    const std::size_t expected_size =
+        spc_plan != nullptr
+            ? spc_plan->replacement_size
+            : plan->replacement_size;
+    const std::string_view expected_sha =
+        spc_plan != nullptr
+            ? spc_plan->replacement_sha256
+            : plan->replacement_sha256;
+
     if (output.size() !=
-            plan->replacement_size ||
+            expected_size ||
         !stage_sha_matches(
             output,
-            plan->replacement_sha256)) {
+            expected_sha)) {
         output.clear();
         outcome.result =
             hemdir3_b13_materialize_result::
@@ -940,6 +1062,7 @@ materialize_hemdir3_b13_receiver(
             source,
             size,
             output,
+            inserted_words,
             outcome.composed_owners)) {
         output.clear();
         outcome.result =
