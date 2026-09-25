@@ -177,10 +177,10 @@ def render(groups, hashes) -> str:
         "const std::array<std::uint8_t,32>&b) noexcept{"
         "for(std::size_t i=0;i<a.size();++i){"
         "if(a[i]<b[i])return -1;if(a[i]>b[i])return 1;}return 0;}\n",
-        "constexpr bool dsr_flver_owner_tuple_authenticated("
+        "constexpr bool dsr_flver_owner_mtd_hash("
         "const std::array<std::uint8_t,32>&sha,"
-        "std::uint32_t slot,std::uint64_t mtd) noexcept{"
-        "if(mtd==0u)return false;"
+        "std::uint32_t slot,std::uint64_t&out) noexcept{"
+        "out=0u;"
         "std::size_t lo=0,hi=k_dsr_flver_owner_groups.size();"
         "while(lo<hi){const auto mid=lo+(hi-lo)/2u;"
         "const auto&r=k_dsr_flver_owner_groups[mid];"
@@ -190,7 +190,14 @@ def render(groups, hashes) -> str:
         "const auto&r=k_dsr_flver_owner_groups[lo];"
         "if(compare_digest(r.flver_sha256,sha)!=0||slot>=r.material_count)"
         "return false;"
-        "return k_dsr_flver_owner_mtd_hashes[r.first_material+slot]==mtd;}\n",
+        "out=k_dsr_flver_owner_mtd_hashes[r.first_material+slot];"
+        "return out!=0u;}\n",
+        "constexpr bool dsr_flver_owner_tuple_authenticated("
+        "const std::array<std::uint8_t,32>&sha,"
+        "std::uint32_t slot,std::uint64_t mtd) noexcept{"
+        "if(mtd==0u)return false;"
+        "std::uint64_t observed=0u;"
+        "return dsr_flver_owner_mtd_hash(sha,slot,observed)&&observed==mtd;}\n",
         "} // namespace dsrrl::operators::material_response::generated\n",
     ])
     return "".join(out)
