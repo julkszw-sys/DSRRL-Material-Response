@@ -1288,15 +1288,25 @@ bool on_draw_indexed(command_list *cmd,std::uint32_t index_count,std::uint32_t i
 
     assets::material_route_scope route{};
     route.exact=true;
-    // Ordinary Diffuse/Normal routes are not positively authorized until the
-    // live selector transports an authenticated FLVER/material owner tuple.
-    // Body and P_Metal retain their independently certified exact-material
-    // routes; neither claim is promoted to ordinary FLVER ownership.
+    // Ordinary material-route authorization remains held until the live
+    // selector transports an authenticated FLVER/material owner tuple.
+    // Independently source-complete V12 application-bound resource tuples are
+    // a separate, operator-specific carrier and must not be conflated with
+    // FLVER ownership. Body/P_Metal keep their separately certified material
+    // route.
     route.owner_authorization.owner_tuple_authenticated=false;
     route.owner_authorization.independent_exact_material_route=
         body_route || pmetal_exact_route;
-    const bool owner_authorized=
-        assets::material_owner_authorized(route.owner_authorization);
+    route.owner_authorization.diffuse_safe_exact_resource_tuple=
+        g_bound_host<12 &&
+        assets::diffuse_exact_resource_tuple_authorized(ctx);
+    route.owner_authorization.normal_safe_exact_resource_tuple=
+        g_bound_host<12 &&
+        assets::normal_exact_resource_tuple_authorized(ctx);
+    const bool diffuse_authorized=
+        assets::diffuse_route_authorized(route.owner_authorization);
+    const bool normal_authorized=
+        assets::normal_route_authorized(route.owner_authorization);
 
     const bool ptde_diffuse_use=
         mtd_sem::ptde_flver_texture_semantic_present(
@@ -1307,20 +1317,21 @@ bool on_draw_indexed(command_list *cmd,std::uint32_t index_count,std::uint32_t i
             draw_ptde_texture,
             mtd_sem::ptde_texture_semantic::bump);
     route.diffuse_eligible=
-        g_bound_host<12 && ptde_diffuse_use && owner_authorized;
+        g_bound_host<12 && ptde_diffuse_use && diffuse_authorized;
     const std::string_view donor_sha=don.sha256;
     const bool normal_material_homologous=
         donor_sha!=k_nonhomologous_normal_pd_sha256 &&
         donor_sha!=k_nonhomologous_normal_pleather_ds_sha256;
     route.normal_eligible=
         g_bound_host<12 && ptde_bump_use &&
-        normal_material_homologous && owner_authorized;
+        normal_material_homologous && normal_authorized;
     if(g_bound_host<12 && !ptde_diffuse_use)
         ++g_diffuse_semantic_hold;
     if(g_bound_host<12 && !ptde_bump_use)
         ++g_normal_semantic_hold;
-    if(g_bound_host<12 && (ptde_diffuse_use || ptde_bump_use) &&
-       !owner_authorized)
+    if(g_bound_host<12 &&
+       ((ptde_diffuse_use && !diffuse_authorized) ||
+        (ptde_bump_use && !normal_authorized)))
         ++g_owner_auth_hold;
     route.diffuse_c100_carrier_active=false;
     route.specular_material_verified=
