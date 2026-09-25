@@ -1,10 +1,15 @@
 #pragma once
 
 #include "dsrrl/core/island_policy.hpp"
+#include "dsrrl/core/draw_transaction_policy.hpp"
 
 #include <cstdint>
 
 namespace dsrrl::operators::resource_bridges {
+
+static_assert(
+    core::requires_draw_transaction(core::operator_id::env_diffuse),
+    "EnvDiffuse runtime readiness requires the shared draw transaction layer.");
 
 enum class envdiffuse_receiver_family : std::uint8_t {
     unsupported = 0,
