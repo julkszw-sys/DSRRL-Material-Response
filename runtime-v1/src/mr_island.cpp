@@ -79,6 +79,10 @@ namespace mtd_sem=dsrrl::operators::material_response;
 
 constexpr std::string_view k_pmetal_raw_mtd_sha256 =
     "ece70f36bd2517d28c8495e276cea537f8b519d6bed981788e79a409ffbf763b";
+constexpr std::string_view k_nonhomologous_normal_pd_sha256 =
+    "e0e263990784d9cc118e2b3afc895f25de9b5780458a796d38447dc55b1ee17e";
+constexpr std::string_view k_nonhomologous_normal_pleather_ds_sha256 =
+    "53819ead337c1ecd8593d8535c1fc1fdde589f00eb8ea015a8ae347da71073ea";
 
 void log_info(const std::string &s){ reshade::log::message(reshade::log::level::info,s.c_str()); }
 void log_error(const std::string &s){ reshade::log::message(reshade::log::level::error,s.c_str()); }
@@ -935,7 +939,12 @@ bool on_draw_indexed(command_list *cmd,std::uint32_t index_count,std::uint32_t i
     const std::uint32_t receiver_id=24u+static_cast<std::uint32_t>(g_bound_host);
     assets::material_route_scope route{};
     route.exact=true;
-    route.diffuse_normal_eligible=g_bound_host<12;
+    route.diffuse_eligible=g_bound_host<12;
+    const std::string_view donor_sha=don.sha256;
+    const bool normal_material_homologous=
+        donor_sha!=k_nonhomologous_normal_pd_sha256 &&
+        donor_sha!=k_nonhomologous_normal_pleather_ds_sha256;
+    route.normal_eligible=g_bound_host<12 && normal_material_homologous;
     route.diffuse_c100_carrier_active=true;
     route.specular_material_verified=
         don.has_c101 &&
