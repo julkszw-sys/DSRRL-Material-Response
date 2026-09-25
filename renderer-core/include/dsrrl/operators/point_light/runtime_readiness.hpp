@@ -1,10 +1,15 @@
 #pragma once
 
 #include "dsrrl/core/island_policy.hpp"
+#include "dsrrl/core/draw_transaction_policy.hpp"
 
 #include <cstdint>
 
 namespace dsrrl::operators::point_light {
+
+static_assert(
+    core::requires_draw_transaction(core::operator_id::point_light),
+    "PointLight runtime readiness requires the shared draw transaction layer.");
 
 enum class pointlight_receiver_stratum : std::uint8_t {
     unsupported=0,
