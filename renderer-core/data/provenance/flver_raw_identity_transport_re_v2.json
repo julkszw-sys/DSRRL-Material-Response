@@ -1,0 +1,30 @@
+{
+  "schema": "dsrrl.flver_raw_identity_transport_re.v2",
+  "status": "CONFIRMED",
+  "exe_sha256": "a45aaa36dd2f6cc151670a639ea5547043cf38ea79ff4178b963c6ed71f98d7b",
+  "parser_rva": "0x20D910",
+  "selector_rva": "0x22BA20",
+  "binary_observations": [
+    "0x20D944 copies parser RCX to R13, preserving the parsed-model destination.",
+    "0x20DC50 computes RCX = R13 + 0x88 and calls 0x22A8A0 to construct the selector material container in that model.",
+    "selector caller 0x20DDD1 preserves its incoming RCX in RDI.",
+    "0x20DF00 computes RSI = RDI + 0x88.",
+    "0x20E011 passes RSI as selector RCX and 0x20E014 calls selector 0x22BA20.",
+    "Thus parser and selector use the same model-relative container contract: model + 0x88."
+  ],
+  "transport_contract": {
+    "producer_key": "parser RCX model pointer",
+    "consumer_key": "selector container - 0x88",
+    "container_offset": "0x88",
+    "material_slot": "selector R8D",
+    "actual_material": "*([container+0x10] + 24*material_slot)"
+  },
+  "guardrails": [
+    "pointer is only a lifetime join key, never asset identity",
+    "asset identity is canonical SHA-256 of untouched raw FLVER",
+    "missing/ambiguous registry entry fails open",
+    "stale pointer reuse must be prevented by certified invalidation"
+  ],
+  "remaining_open_edge": "Exact model destruction/unload invalidation point remains to be certified.",
+  "activation": "CONSTRUCTION_READY_RUNTIME_EVIDENCE_REQUIRED"
+}
