@@ -47,6 +47,9 @@ def render(doc:dict)->str:
         )
     out.extend([
         "}};\n",
+        "constexpr bool stable_hemenv_candidate_size(std::size_t byte_size) noexcept{"
+        "for(const auto&r:k_stable_hemenv_receivers_v1)if(r.byte_size==byte_size)return true;"
+        "return false;}\n",
         "constexpr std::uint32_t stable_hemenv_receiver_id("
         "const std::array<std::uint8_t,32>&sha,std::size_t byte_size) noexcept{"
         "std::uint32_t hit=0u;"
