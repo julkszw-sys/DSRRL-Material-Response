@@ -14,7 +14,7 @@
 #error DSRRL integrated construction addon requires ReShade Add-on API 20
 #endif
 
-#include <atomic>
+#include <atomic>\n\n#ifndef DSRRL_CORE_ISLANDS_VERSION\n#error DSRRL_CORE_ISLANDS_VERSION must be supplied by integrated CMake\n#endif\n\n#ifndef DSRRL_CORE_ISLANDS_PRODUCT_LINE\n#error DSRRL_CORE_ISLANDS_PRODUCT_LINE must be supplied by integrated CMake\n#endif
 #include <cstdint>
 #include <cstdio>
 
@@ -59,7 +59,7 @@ void log_state(const char *tag) noexcept
     std::snprintf(
         line,
         sizeof(line),
-        "[DSRRL CORE INTEGRATED A2] %s create=%llu candidate=%llu exact=%llu "
+        "[DSRRL CORE+ISLANDS " DSRRL_CORE_ISLANDS_VERSION "] %s create=%llu candidate=%llu exact=%llu "
         "materialized=%llu unknown=%llu no_owner=%llu failopen=%llu "
         "init_ok=%llu init_bad=%llu binds=%llu quarantine=%u boot_islands=%llu",
         tag,
@@ -145,7 +145,7 @@ void a1_bind_pipeline(
         std::snprintf(
             line,
             sizeof(line),
-            "[DSRRL CORE INTEGRATED A2] FIRST_A1_BIND plan=%u",
+            "[DSRRL CORE+ISLANDS " DSRRL_CORE_ISLANDS_VERSION "] FIRST_A1_BIND plan=%u",
             static_cast<unsigned>(first_plan));
         reshade::log::message(
             reshade::log::level::info,
@@ -257,7 +257,7 @@ bool AddonInit(
     if (!dsrrl::runtime::engine::verify_provenance()) {
         reshade::log::message(
             reshade::log::level::error,
-            "[DSRRL CORE INTEGRATED A2] EXE/binder provenance mismatch; unload/fail-open.");
+            "[DSRRL CORE+ISLANDS " DSRRL_CORE_ISLANDS_VERSION "] EXE/binder provenance mismatch; unload/fail-open.");
         reshade::unregister_addon(
             addon_module,
             reshade_module);
@@ -304,12 +304,12 @@ bool AddonInit(
     if (!g_ul_producer_preflight_registered)
         reshade::log::message(
             reshade::log::level::warning,
-            "[DSRRL CORE INTEGRATED A2] U/L producer preflight unavailable; deferred U/L/HemDir3 remain fail-open.");
+            "[DSRRL CORE+ISLANDS " DSRRL_CORE_ISLANDS_VERSION "] U/L producer preflight unavailable; deferred U/L/HemDir3 remain fail-open.");
 
     if (!g_envspec_resource_preflight_registered)
         reshade::log::message(
             reshade::log::level::warning,
-            "[DSRRL CORE INTEGRATED A2] EnvSpec identity/resource preflight unavailable; deferred EnvSpec remains fail-open.");
+            "[DSRRL CORE+ISLANDS " DSRRL_CORE_ISLANDS_VERSION "] EnvSpec identity/resource preflight unavailable; deferred EnvSpec remains fail-open.");
 
     if (!dsrrl::runtime::engine::install(
             &selector_dispatch,
@@ -323,7 +323,7 @@ bool AddonInit(
         disable_integrated_features();
         reshade::log::message(
             reshade::log::level::error,
-            "[DSRRL CORE INTEGRATED A2] EngineBridge install failed; unload/fail-open.");
+            "[DSRRL CORE+ISLANDS " DSRRL_CORE_ISLANDS_VERSION "] EngineBridge install failed; unload/fail-open.");
         reshade::unregister_addon(
             addon_module,
             reshade_module);
@@ -334,7 +334,7 @@ bool AddonInit(
     std::snprintf(
         ready_line,
         sizeof(ready_line),
-        "[DSRRL CORE INTEGRATED A2] READY: 11 visible islands armed; "
+        "[DSRRL CORE+ISLANDS " DSRRL_CORE_ISLANDS_VERSION "] READY: 11 visible islands armed; "
         "UL_producer_preflight=%s EnvSpec_resource_preflight=%s; "
         "U/L consumer, legacy EnvSpec consumer, full PointLight and P_Metal V13/source remain OFF.",
         g_ul_producer_preflight_registered ? "PASS" : "FAIL_OPEN",
