@@ -4,7 +4,7 @@
 #ifndef NOMINMAX
 #define NOMINMAX
 #endif
-#include "dsrrl/runtime/flver_engine_hooks.hpp"
+#include "dsrrl/runtime/flver_identity_transport.hpp"
 #include "dsrrl/runtime/flver_identity_registry.hpp"
 #include <Windows.h>
 #include <bcrypt.h>
@@ -21,7 +21,7 @@
 extern "C" void dsrrl_flver_selector_hook_entry();
 extern "C" { void *g_dsrrl_flver_selector_trampoline=nullptr; }
 
-namespace dsrrl::runtime::flver_engine_hooks {
+namespace dsrrl::runtime::flver_identity_transport {
 namespace {
 constexpr char k_sha[]="a45aaa36dd2f6cc151670a639ea5547043cf38ea79ff4178b963c6ed71f98d7b";
 constexpr std::uintptr_t k_parse=0x20D910u,k_selector=0x22BA20u,k_destroy=0x20D7A0u;
