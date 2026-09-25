@@ -557,20 +557,6 @@ materialize_upper_lower_hemenv_receiver(
         return outcome;
     }
 
-    // The only currently certified composed base is Material Response
-    // V2.11: it inserted dcl_constantbuffer b12[4] at stock word 11.
-    if (words_inserted_at_11 != 4u ||
-        words.size() < 15u ||
-        words[11] != 0x04000059u ||
-        words[12] != 0x00208e46u ||
-        words[13] != 12u ||
-        words[14] != 4u) {
-        outcome.result =
-            upper_lower_hemenv_materialize_result::
-                fail_operand_precondition;
-        return outcome;
-    }
-
     const std::array<
         std::pair<std::uint32_t,std::uint32_t>,
         3> patches{{
