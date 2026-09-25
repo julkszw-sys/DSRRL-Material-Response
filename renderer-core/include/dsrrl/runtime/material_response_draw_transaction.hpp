@@ -1,7 +1,8 @@
 #pragma once
 
-#include "dsrrl/core/renderer_core.hpp"
+#include "dsrrl/core/types.hpp"
 #include "dsrrl/operators/material_response/material_response_island.hpp"
+#include "dsrrl/runtime/draw_state_transaction.hpp"
 
 #include <reshade.hpp>
 
@@ -30,30 +31,32 @@ struct material_response_draw_telemetry {
     std::uint64_t eligible_draws = 0;
     std::uint64_t replacement_miss = 0;
     std::uint64_t replay_ok = 0;
-    std::uint64_t restore_fail = 0;
+    std::uint64_t replay_restore_fail = 0;
     bool quarantined = false;
 };
 
 class material_response_draw_runtime {
 public:
-    explicit material_response_draw_runtime(core::renderer_core &core) noexcept;
+    explicit material_response_draw_runtime(
+        draw_state_transaction_runtime &transactions) noexcept;
     ~material_response_draw_runtime();
 
-    material_response_draw_runtime(const material_response_draw_runtime &) = delete;
-    material_response_draw_runtime &operator=(const material_response_draw_runtime &) = delete;
+    material_response_draw_runtime(
+        const material_response_draw_runtime &) = delete;
+    material_response_draw_runtime &operator=(
+        const material_response_draw_runtime &) = delete;
 
     void on_init_device(reshade::api::device *device) noexcept;
     void on_destroy_device(reshade::api::device *device) noexcept;
 
-    // Exact-receiver payload installation only. The caller must have already
-    // attested the receiver identity and payload provenance.
     bool register_receiver_replacement(
         std::uint32_t receiver_id,
         const void *dxbc,
         std::size_t dxbc_size,
         core::operator_mask composed_owners) noexcept;
 
-    bool has_receiver_replacement(std::uint32_t receiver_id) const noexcept;
+    bool has_receiver_replacement(
+        std::uint32_t receiver_id) const noexcept;
 
     bool replay_draw(
         reshade::api::command_list *cmd_list,
@@ -76,51 +79,28 @@ public:
     void reset() noexcept;
 
 private:
-    struct cb_capture {
-        ID3D11Buffer *base = nullptr;
-        ID3D11Buffer *window = nullptr;
-        std::uint32_t first = 0;
-        std::uint32_t count = 0;
-        bool explicit_window = false;
-        bool coherent = true;
-    };
-
     struct replacement_record {
         ID3D11PixelShader *shader = nullptr;
         core::operator_mask composed_owners = 0;
     };
 
-    struct native_transaction {
-        ID3D11PixelShader *old_shader = nullptr;
-        cb_capture old_b12{};
-        std::uint64_t command = 0;
-        bool core_started = false;
-    };
-
     ID3D11Buffer *realize_b12(
         const operators::material_response::decision &decision) noexcept;
 
-    bool begin_native_transaction(
-        reshade::api::command_list *cmd_list,
+    bool build_mutation(
         const operators::material_response::decision &decision,
         const replacement_record &replacement,
         ID3D11Buffer *b12,
-        native_transaction &state) noexcept;
+        draw_tx_mutation &mutation) const noexcept;
 
-    bool restore_native_transaction(
-        reshade::api::command_list *cmd_list,
-        native_transaction &state) noexcept;
-
-    void release_transaction(native_transaction &state) noexcept;
     void release_resources() noexcept;
 
-    core::renderer_core &core_;
+    draw_state_transaction_runtime &transactions_;
     mutable std::mutex mutex_;
     ID3D11Device *device_ = nullptr;
     std::unordered_map<std::uint32_t, replacement_record> replacements_;
     std::unordered_map<std::uint32_t, ID3D11Buffer *> b12_by_route_;
 
-    std::atomic<std::uint64_t> draw_serial_{0};
     std::atomic<std::uint64_t> replacement_register_ok_{0};
     std::atomic<std::uint64_t> replacement_register_fail_{0};
     std::atomic<std::uint64_t> b12_create_{0};
@@ -129,8 +109,8 @@ private:
     std::atomic<std::uint64_t> eligible_draws_{0};
     std::atomic<std::uint64_t> replacement_miss_{0};
     std::atomic<std::uint64_t> replay_ok_{0};
-    std::atomic<std::uint64_t> restore_fail_{0};
-    std::atomic_bool quarantined_{false};
+    std::atomic<std::uint64_t> replay_restore_fail_{0};
+    std::atomic_bool local_quarantine_{false};
 };
 
 } // namespace dsrrl::runtime
