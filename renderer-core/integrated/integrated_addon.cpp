@@ -1,5 +1,7 @@
 #include "dsrrl/core/renderer_core.hpp"
 #include "dsrrl/runtime/a1_create_pipeline_bridge.hpp"
+#include "dsrrl/runtime/flver_engine_hooks.hpp"
+#include "dsrrl/runtime/flver_identity_registry.hpp"
 
 #include <reshade.hpp>
 
@@ -53,6 +55,8 @@ void disable_integrated_islands() noexcept
 void log_state(const char *tag) noexcept
 {
     const auto t = g_a1_bridge.telemetry();
+    const auto f = dsrrl::runtime::flver_identity_stats();
+    const auto h = dsrrl::runtime::flver_engine_hooks::status();
 
     char line[560]{};
     std::snprintf(
@@ -61,7 +65,8 @@ void log_state(const char *tag) noexcept
         "[DSRRL CORE+ISLANDS " DSRRL_CORE_ISLANDS_VERSION "] %s "
         "create=%llu candidate=%llu exact=%llu materialized=%llu "
         "unknown=%llu no_owner=%llu failopen=%llu init_ok=%llu "
-        "init_bad=%llu binds=%llu quarantine=%u",
+        "init_bad=%llu binds=%llu quarantine=%u "
+        "flver_hook=%u/%u/%u prov=%u inserts=%llu lookups=%llu hits=%llu misses=%llu erases=%llu invalid=%llu",
         tag,
         static_cast<unsigned long long>(t.create_events),
         static_cast<unsigned long long>(t.candidate_size_hits),
@@ -73,7 +78,17 @@ void log_state(const char *tag) noexcept
         static_cast<unsigned long long>(t.init_attested),
         static_cast<unsigned long long>(t.init_mismatch),
         static_cast<unsigned long long>(t.target_binds),
-        t.quarantined ? 1u : 0u);
+        t.quarantined ? 1u : 0u,
+        h.parser_armed ? 1u : 0u,
+        h.selector_armed ? 1u : 0u,
+        h.destructor_armed ? 1u : 0u,
+        h.provenance_ok ? 1u : 0u,
+        static_cast<unsigned long long>(f.inserts),
+        static_cast<unsigned long long>(f.lookups),
+        static_cast<unsigned long long>(f.hits),
+        static_cast<unsigned long long>(f.misses),
+        static_cast<unsigned long long>(f.erases),
+        static_cast<unsigned long long>(f.invalid_raw));
 
     reshade::log::message(reshade::log::level::info, line);
 }
@@ -215,6 +230,13 @@ bool AddonInit(
 
     register_events();
 
+    const bool flver_hooks = dsrrl::runtime::flver_engine_hooks::install();
+    if (!flver_hooks) {
+        reshade::log::message(reshade::log::level::warning,
+            "[DSRRL CORE+ISLANDS " DSRRL_CORE_ISLANDS_VERSION
+            "] FLVER identity hooks FAIL-OPEN: stock DSR preserved for exact owner routing.");
+    }
+
     reshade::log::message(
         reshade::log::level::info,
         "[DSRRL CORE+ISLANDS " DSRRL_CORE_ISLANDS_VERSION
@@ -231,6 +253,7 @@ void AddonUninit(
 {
     unregister_events();
     log_state("UNLOAD");
+    dsrrl::runtime::flver_engine_hooks::uninstall();
     g_a1_bridge.reset();
     disable_integrated_islands();
 
