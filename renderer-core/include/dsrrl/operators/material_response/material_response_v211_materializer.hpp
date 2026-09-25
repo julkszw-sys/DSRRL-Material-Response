@@ -4,6 +4,8 @@
 #include <cstdint>
 #include <vector>
 
+#include "dsrrl/core/feature_registry.hpp"
+
 namespace dsrrl::operators::material_response {
 
 enum class v211_materialize_result : std::uint8_t {
@@ -23,6 +25,7 @@ struct v211_materialize_outcome {
 };
 
 v211_materialize_outcome materialize_v211_stable_receiver(
+    const core::feature_registry &features,
     const std::uint8_t *source,
     std::size_t size,
     std::vector<std::uint8_t> &output) noexcept;
