@@ -190,17 +190,25 @@ struct device_state {
 
     std::array<ID3D11PixelShader*,24> diffuse{};
     std::array<ID3D11PixelShader*,24> full{};
+    std::array<ID3D11PixelShader*,24> stock_diffuse_full{};
     std::array<ID3D11PixelShader*,24> diffuse_ul{};
     std::array<ID3D11PixelShader*,24> full_ul{};
+    std::array<ID3D11PixelShader*,24> stock_diffuse_full_ul{};
     std::array<ID3D11PixelShader*,24> full_spec{};
     std::array<ID3D11PixelShader*,24> full_ul_spec{};
+    std::array<ID3D11PixelShader*,24> stock_diffuse_full_spec{};
+    std::array<ID3D11PixelShader*,24> stock_diffuse_full_ul_spec{};
 
     std::array<ID3D11PixelShader*,24> lerp_diffuse{};
     std::array<ID3D11PixelShader*,24> lerp_full{};
+    std::array<ID3D11PixelShader*,24> lerp_stock_diffuse_full{};
     std::array<ID3D11PixelShader*,24> lerp_diffuse_ul{};
     std::array<ID3D11PixelShader*,24> lerp_full_ul{};
+    std::array<ID3D11PixelShader*,24> lerp_stock_diffuse_full_ul{};
     std::array<ID3D11PixelShader*,24> lerp_full_spec{};
     std::array<ID3D11PixelShader*,24> lerp_full_ul_spec{};
+    std::array<ID3D11PixelShader*,24> lerp_stock_diffuse_full_spec{};
+    std::array<ID3D11PixelShader*,24> lerp_stock_diffuse_full_ul_spec{};
 
     std::array<ID3D11PixelShader*,24> v9a_full{};
     std::array<ID3D11PixelShader*,24> v9a_full_ul{};
@@ -223,17 +231,25 @@ void release_device_state()
     std::lock_guard lock(g_device_mutex);
     for(auto *&p:g_device.diffuse){ if(p){p->Release();p=nullptr;} }
     for(auto *&p:g_device.full){ if(p){p->Release();p=nullptr;} }
+    for(auto *&p:g_device.stock_diffuse_full){ if(p){p->Release();p=nullptr;} }
     for(auto *&p:g_device.diffuse_ul){ if(p){p->Release();p=nullptr;} }
     for(auto *&p:g_device.full_ul){ if(p){p->Release();p=nullptr;} }
+    for(auto *&p:g_device.stock_diffuse_full_ul){ if(p){p->Release();p=nullptr;} }
     for(auto *&p:g_device.full_spec){ if(p){p->Release();p=nullptr;} }
     for(auto *&p:g_device.full_ul_spec){ if(p){p->Release();p=nullptr;} }
+    for(auto *&p:g_device.stock_diffuse_full_spec){ if(p){p->Release();p=nullptr;} }
+    for(auto *&p:g_device.stock_diffuse_full_ul_spec){ if(p){p->Release();p=nullptr;} }
 
     for(auto *&p:g_device.lerp_diffuse){ if(p){p->Release();p=nullptr;} }
     for(auto *&p:g_device.lerp_full){ if(p){p->Release();p=nullptr;} }
+    for(auto *&p:g_device.lerp_stock_diffuse_full){ if(p){p->Release();p=nullptr;} }
     for(auto *&p:g_device.lerp_diffuse_ul){ if(p){p->Release();p=nullptr;} }
     for(auto *&p:g_device.lerp_full_ul){ if(p){p->Release();p=nullptr;} }
+    for(auto *&p:g_device.lerp_stock_diffuse_full_ul){ if(p){p->Release();p=nullptr;} }
     for(auto *&p:g_device.lerp_full_spec){ if(p){p->Release();p=nullptr;} }
     for(auto *&p:g_device.lerp_full_ul_spec){ if(p){p->Release();p=nullptr;} }
+    for(auto *&p:g_device.lerp_stock_diffuse_full_spec){ if(p){p->Release();p=nullptr;} }
+    for(auto *&p:g_device.lerp_stock_diffuse_full_ul_spec){ if(p){p->Release();p=nullptr;} }
 
     for(auto *&p:g_device.v9a_full){ if(p){p->Release();p=nullptr;} }
     for(auto *&p:g_device.v9a_full_ul){ if(p){p->Release();p=nullptr;} }
