@@ -219,20 +219,47 @@ void on_init_pipeline(
 {
     g_a1_bridge.on_init_pipeline(
         device, layout, subobject_count, subobjects, pipeline);
+
+    const auto *pixel_shader =
+        find_pixel_shader(
+            subobject_count,
+            subobjects);
+
+    if (pixel_shader != nullptr &&
+        pixel_shader->code != nullptr &&
+        pixel_shader->code_size != 0u) {
+        (void)dsrrl::runtime::
+            stable_receiver_observe_pipeline(
+                pipeline.handle,
+                pixel_shader->code,
+                pixel_shader->code_size);
+    }
 }
 
 void on_destroy_pipeline(
     reshade::api::device *device,
     reshade::api::pipeline pipeline)
 {
+    dsrrl::runtime::stable_receiver_forget_pipeline(
+        pipeline.handle);
     g_a1_bridge.on_destroy_pipeline(device, pipeline);
 }
 
 void on_bind_pipeline(
-    reshade::api::command_list *,
+    reshade::api::command_list *cmd_list,
     reshade::api::pipeline_stage stages,
     reshade::api::pipeline pipeline)
 {
+    const bool pixel_stage_bound =
+        (static_cast<std::uint32_t>(stages) &
+         static_cast<std::uint32_t>(
+             reshade::api::pipeline_stage::pixel_shader)) != 0u;
+
+    dsrrl::runtime::stable_receiver_observe_bind(
+        cmd_list,
+        pixel_stage_bound,
+        pipeline.handle);
+
     std::uint16_t first_plan = 0xFFFFu;
     dsrrl::core::operator_mask selected_owners = 0u;
     std::uint16_t selected_ops = 0u;
@@ -258,6 +285,29 @@ void on_bind_pipeline(
     }
 }
 
+bool on_draw(
+    reshade::api::command_list *cmd_list,
+    std::uint32_t,
+    std::uint32_t,
+    std::uint32_t,
+    std::uint32_t)
+{
+    observe_draw_identity(cmd_list);
+    return false;
+}
+
+bool on_draw_indexed(
+    reshade::api::command_list *cmd_list,
+    std::uint32_t,
+    std::uint32_t,
+    std::uint32_t,
+    std::int32_t,
+    std::uint32_t)
+{
+    observe_draw_identity(cmd_list);
+    return false;
+}
+
 void on_present(
     reshade::api::command_queue *,
     reshade::api::swapchain *,
@@ -279,12 +329,16 @@ void register_events()
     reshade::register_event<reshade::addon_event::init_pipeline>(on_init_pipeline);
     reshade::register_event<reshade::addon_event::destroy_pipeline>(on_destroy_pipeline);
     reshade::register_event<reshade::addon_event::bind_pipeline>(on_bind_pipeline);
+    reshade::register_event<reshade::addon_event::draw>(on_draw);
+    reshade::register_event<reshade::addon_event::draw_indexed>(on_draw_indexed);
     reshade::register_event<reshade::addon_event::present>(on_present);
 }
 
 void unregister_events()
 {
     reshade::unregister_event<reshade::addon_event::present>(on_present);
+    reshade::unregister_event<reshade::addon_event::draw_indexed>(on_draw_indexed);
+    reshade::unregister_event<reshade::addon_event::draw>(on_draw);
     reshade::unregister_event<reshade::addon_event::bind_pipeline>(on_bind_pipeline);
     reshade::unregister_event<reshade::addon_event::destroy_pipeline>(on_destroy_pipeline);
     reshade::unregister_event<reshade::addon_event::init_pipeline>(on_init_pipeline);
