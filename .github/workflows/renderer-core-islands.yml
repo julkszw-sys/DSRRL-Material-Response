@@ -7,10 +7,12 @@ on:
       - dev/renderer-core-v1-islands
     paths:
       - "renderer-core/**"
+      - "runtime-v1/**"
       - ".github/workflows/renderer-core-islands.yml"
   pull_request:
     paths:
       - "renderer-core/**"
+      - "runtime-v1/**"
       - ".github/workflows/renderer-core-islands.yml"
 
 jobs:
@@ -65,3 +67,9 @@ jobs:
         run: cmake --build build/renderer-core --config Release --parallel
       - name: Test
         run: ctest --test-dir build/renderer-core --output-on-failure
+      - name: Configure runtime regressions
+        run: cmake -S runtime-v1 -B build/runtime-v1 -DCMAKE_BUILD_TYPE=Release
+      - name: Build runtime regressions
+        run: cmake --build build/runtime-v1 --config Release --parallel
+      - name: Test runtime regressions
+        run: ctest --test-dir build/runtime-v1 --output-on-failure
