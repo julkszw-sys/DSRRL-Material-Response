@@ -66,7 +66,7 @@ void log_state(const char *tag) noexcept
         "create=%llu candidate=%llu exact=%llu materialized=%llu "
         "unknown=%llu no_owner=%llu failopen=%llu init_ok=%llu "
         "init_bad=%llu binds=%llu quarantine=%u "
-        "flver_hook=%u/%u/%u prov=%u restore_fail=%u inserts=%llu lookups=%llu hits=%llu misses=%llu erases=%llu invalid=%llu",
+        "flver_hook=%u/%u/%u prov=%u owner_enrich=%u restore_fail=%u inserts=%llu lookups=%llu hits=%llu misses=%llu erases=%llu invalid=%llu",
         tag,
         static_cast<unsigned long long>(t.create_events),
         static_cast<unsigned long long>(t.candidate_size_hits),
