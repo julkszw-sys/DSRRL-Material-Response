@@ -238,6 +238,8 @@ bool material_response_draw_runtime::prepare_draw_request(
         core::operator_bit(
             core::operator_id::diffuse_material_domain) |
         replacement.composed_owners;
+    prepared.request.additional_shader_owners =
+        prepared.request.additional_owners;
     prepared.request.receiver_verified = true;
     prepared.request.material_verified = true;
     prepared.request.pixel_shader =
