@@ -1,6 +1,7 @@
 #include "dsrrl/runtime/material_owner_selection.hpp"
 #include "dsrrl/operators/material_response/generated_dsr_flver_owner_tuples_v1.hpp"
 #include <atomic>
+#include <optional>
 
 namespace dsrrl::runtime {
 namespace {
@@ -17,7 +18,7 @@ void material_owner_selection_clear() noexcept
     g_current.reset();
 }
 
-void material_owner_selection_publish(
+bool material_owner_selection_publish(
     const operators::material_response::material_identity &identity) noexcept
 {
     ++g_selector_events;
@@ -27,7 +28,7 @@ void material_owner_selection_publish(
         identity.semantic_name_hash == 0u) {
         ++g_fail_open;
         g_current.reset();
-        return;
+        return false;
     }
 
     ++g_owner_enriched;
@@ -39,18 +40,25 @@ void material_owner_selection_publish(
                 identity.semantic_name_hash)) {
         ++g_fail_open;
         g_current.reset();
-        return;
+        return false;
     }
 
     ++g_owner_authenticated;
     ++g_accepted_callers;
     g_current = identity;
+    return true;
 }
 
-std::optional<operators::material_response::material_identity>
-material_owner_selection_current() noexcept
+bool material_owner_selection_consume(
+    operators::material_response::material_identity &identity) noexcept
 {
-    return g_current;
+    identity = {};
+    if (!g_current.has_value())
+        return false;
+
+    identity = *g_current;
+    g_current.reset();
+    return true;
 }
 
 material_owner_selection_telemetry material_owner_selection_stats() noexcept
