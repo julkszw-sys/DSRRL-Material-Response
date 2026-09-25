@@ -1,0 +1,25 @@
+{
+  "schema": 1,
+  "topic": "exact DSR FLVER owner tuple to raw MTD identity coverage",
+  "basis_commit": "cbb1917520ffe96a37d7e5f26c67f02740b755a6",
+  "claim_scope": "CONSTRUCTION_ONLY",
+  "runtime_activation": "NOT_TESTED",
+  "pixel_equivalence": "OPEN",
+  "facts": {
+    "owner_tuple_source_complete": true,
+    "owner_flver_groups": 3944,
+    "owner_material_tuples": 19985,
+    "owner_tuple_identity": "raw FLVER SHA-256 + material slot -> semantic MTD basename FNV-1a64",
+    "current_raw_mtd_enrichment_source": "generated_envspec_router_v1",
+    "envspec_router_records": 325
+  },
+  "finding": "The source-complete owner authenticator proves exact FLVER+slot ownership for 19985 material tuples, but material_owner_producer currently recovers raw DSR MTD SHA only by scanning the 325-record EnvSpec router. Therefore exact owner authentication and raw-MTD enrichment are not the same coverage domain. A source-complete owner tuple outside the EnvSpec router can be authenticated semantically yet cannot currently be promoted to an exact raw-MTD material_identity by the producer.",
+  "required_fix": "Generate a dedicated exact DSR semantic-MTD -> raw-MTD-SHA identity table from the canonical DSR MTD corpus/homology evidence, with ambiguity represented explicitly. material_owner_producer must use that table rather than EnvSpec routing as a generic MTD identity registry.",
+  "fail_open": "Until the dedicated identity table exists, enrichment misses remain UNKNOWN/preserve-host. Do not infer NO_USE and do not fall back to basename-only or pointer identity.",
+  "forbidden": [
+    "treating the EnvSpec router as a complete generic DSR MTD registry",
+    "promoting semantic basename hash alone to exact raw-MTD identity",
+    "using owner construction success as runtime activation evidence",
+    "using construction success as pixel-equivalence evidence"
+  ]
+}
