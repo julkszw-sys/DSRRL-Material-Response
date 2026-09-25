@@ -1,8 +1,14 @@
 #pragma once
 
+#include "dsrrl/core/draw_transaction_policy.hpp"
+
 #include <cstdint>
 
 namespace dsrrl::operators::env_spec {
+
+static_assert(
+    core::create_time_safe_operator(core::operator_id::envspec_nospc_delete),
+    "No-Spc EnvSpec deletion remains a certified create-time-safe island.");
 
 enum class no_spc_delete_action : std::uint8_t {
     preserve_host = 0,
