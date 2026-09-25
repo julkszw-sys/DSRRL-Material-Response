@@ -1,0 +1,178 @@
+{
+  "schema": "dsrrl.stable_hemenv_receiver_census.v1",
+  "status": "CONFIRMED",
+  "evidence_id": "59141f89-cc1d-4427-b8d2-5f02a5cdeb45",
+  "binder_dcx_sha256": "ad180732ac79d5d98783aa504c789c2bab15e515c3b0f66b237d8b8c69113394",
+  "binder_uncompressed_sha256": "9ad94df9e282e6fd559605506aa16d74eeb1ef3ebb1ed3002c5affee80018464",
+  "receiver_scope": "stable no-PointLight Phn Spc HemEnv bodies",
+  "entries": [
+    {
+      "receiver_id": 24,
+      "shader_index": 723,
+      "shader_name": "FRPG_Phn_DifSpcBmpMulLitCsd_HemEnv.fpo",
+      "code_sha256": "4e1621be5caa251782e7dab08b2aeddc033dcab6352edd4ed022cdeda8328083",
+      "byte_size": 21744
+    },
+    {
+      "receiver_id": 25,
+      "shader_index": 742,
+      "shader_name": "FRPG_Phn_DifSpcBmpMulLitSdw_HemEnv.fpo",
+      "code_sha256": "a6d599351b3e14acf65aa26ca81e358fd691b13b684021399fa59bd174397b7d",
+      "byte_size": 21444
+    },
+    {
+      "receiver_id": 26,
+      "shader_index": 761,
+      "shader_name": "FRPG_Phn_DifSpcBmpMulLit____HemEnv.fpo",
+      "code_sha256": "3c733a0f7b3ad4e9b7af042cfb27380a79b595123b6a3fe43b81ccfc9e0f6d0a",
+      "byte_size": 19960
+    },
+    {
+      "receiver_id": 27,
+      "shader_index": 780,
+      "shader_name": "FRPG_Phn_DifSpcBmpMul___Csd_HemEnv.fpo",
+      "code_sha256": "26a804f746b95199070951b8f17e9e4fa170de9c284727d33b9687a74121a397",
+      "byte_size": 21240
+    },
+    {
+      "receiver_id": 28,
+      "shader_index": 799,
+      "shader_name": "FRPG_Phn_DifSpcBmpMul___Sdw_HemEnv.fpo",
+      "code_sha256": "792d99628b2a84f88ef94b04361022eb277851c093d2b83fc2ba8c738fc32cf4",
+      "byte_size": 20940
+    },
+    {
+      "receiver_id": 29,
+      "shader_index": 818,
+      "shader_name": "FRPG_Phn_DifSpcBmpMul_______HemEnv.fpo",
+      "code_sha256": "6b2b0708dc6fdc6954b9ccd7ba3c26d4522e0ad0808de59a6a226e9682c36865",
+      "byte_size": 19444
+    },
+    {
+      "receiver_id": 30,
+      "shader_index": 837,
+      "shader_name": "FRPG_Phn_DifSpcBmp___LitCsd_HemEnv.fpo",
+      "code_sha256": "45f6a12363da9146626f97bfbb9f87d7ff37375cc70e7e07df4e34aaefe8bd20",
+      "byte_size": 20324
+    },
+    {
+      "receiver_id": 31,
+      "shader_index": 856,
+      "shader_name": "FRPG_Phn_DifSpcBmp___LitSdw_HemEnv.fpo",
+      "code_sha256": "9d677cebd791c86c105ee6b9a24edef5699cc7fb3c96f2b6362a4216d296b402",
+      "byte_size": 20024
+    },
+    {
+      "receiver_id": 32,
+      "shader_index": 875,
+      "shader_name": "FRPG_Phn_DifSpcBmp___Lit____HemEnv.fpo",
+      "code_sha256": "b16982cc2f94c0f20e84cb0d81b79bd75ce474327c74c5db9515b0955719dfff",
+      "byte_size": 18540
+    },
+    {
+      "receiver_id": 33,
+      "shader_index": 894,
+      "shader_name": "FRPG_Phn_DifSpcBmp______Csd_HemEnv.fpo",
+      "code_sha256": "35880c0b2f2330208dfc21af6dd3d944218fcc4540cd8e59404a0aefc13c0b24",
+      "byte_size": 19856
+    },
+    {
+      "receiver_id": 34,
+      "shader_index": 913,
+      "shader_name": "FRPG_Phn_DifSpcBmp______Sdw_HemEnv.fpo",
+      "code_sha256": "d6038de494509e7cbcbfb904c4046e9427f3b921f6a35735a0b0d316f9976837",
+      "byte_size": 19556
+    },
+    {
+      "receiver_id": 35,
+      "shader_index": 932,
+      "shader_name": "FRPG_Phn_DifSpcBmp__________HemEnv.fpo",
+      "code_sha256": "7d03c75b69f5730eb741a4d327189d0bbed8a8450fb0ac04e1505f7b91763701",
+      "byte_size": 18060
+    },
+    {
+      "receiver_id": 36,
+      "shader_index": 951,
+      "shader_name": "FRPG_Phn_DifSpc___MulLitCsd_HemEnv.fpo",
+      "code_sha256": "366b6f19034b995db64413a07b8556cf36f1ab9654e17950e66e5bed3ae2e412",
+      "byte_size": 19704
+    },
+    {
+      "receiver_id": 37,
+      "shader_index": 970,
+      "shader_name": "FRPG_Phn_DifSpc___MulLitSdw_HemEnv.fpo",
+      "code_sha256": "1af91fe9c65cdbe6de2a9465690c441dffc3d49f207b26a49043b7d88a7e73d9",
+      "byte_size": 19404
+    },
+    {
+      "receiver_id": 38,
+      "shader_index": 989,
+      "shader_name": "FRPG_Phn_DifSpc___MulLit____HemEnv.fpo",
+      "code_sha256": "10aac239a29f68a0c146bd3c34bcde9cda2bdab2af4ffccfb5401f7948cab8b2",
+      "byte_size": 17916
+    },
+    {
+      "receiver_id": 39,
+      "shader_index": 1008,
+      "shader_name": "FRPG_Phn_DifSpc___Mul___Csd_HemEnv.fpo",
+      "code_sha256": "d0f5a05bde4bbbfe37f63dfa87cbb6a72647613520648705d74600b2278a4c1d",
+      "byte_size": 19196
+    },
+    {
+      "receiver_id": 40,
+      "shader_index": 1027,
+      "shader_name": "FRPG_Phn_DifSpc___Mul___Sdw_HemEnv.fpo",
+      "code_sha256": "a2b0634d39addc1b3d7557a4a1f3237512c6d490f2ea4cf7ae44fa68688140b7",
+      "byte_size": 18896
+    },
+    {
+      "receiver_id": 41,
+      "shader_index": 1046,
+      "shader_name": "FRPG_Phn_DifSpc___Mul_______HemEnv.fpo",
+      "code_sha256": "46c09d580e56f5281cff062678cc5156a665b253864a5d04ad53246671296de0",
+      "byte_size": 17400
+    },
+    {
+      "receiver_id": 42,
+      "shader_index": 1065,
+      "shader_name": "FRPG_Phn_DifSpc______LitCsd_HemEnv.fpo",
+      "code_sha256": "6a6e4ca937fb3ec1308e2a6500148841c5d60bb5dfbd06ae5385dcc38843444e",
+      "byte_size": 19164
+    },
+    {
+      "receiver_id": 43,
+      "shader_index": 1084,
+      "shader_name": "FRPG_Phn_DifSpc______LitSdw_HemEnv.fpo",
+      "code_sha256": "a927579c36b9c037b644dafec34e49d5fb4f549ae22674259d1efa051adbd779",
+      "byte_size": 18864
+    },
+    {
+      "receiver_id": 44,
+      "shader_index": 1103,
+      "shader_name": "FRPG_Phn_DifSpc______Lit____HemEnv.fpo",
+      "code_sha256": "a1c56ba86c0e0e8204560b5907371ba57966199521b6b6204e2adaa4009bb02e",
+      "byte_size": 17380
+    },
+    {
+      "receiver_id": 45,
+      "shader_index": 1122,
+      "shader_name": "FRPG_Phn_DifSpc_________Csd_HemEnv.fpo",
+      "code_sha256": "dc67d66eb8c116929032fa14a5f6a989fc9c57df211aeb89e37c9e52bca2e934",
+      "byte_size": 18696
+    },
+    {
+      "receiver_id": 46,
+      "shader_index": 1141,
+      "shader_name": "FRPG_Phn_DifSpc_________Sdw_HemEnv.fpo",
+      "code_sha256": "6a55311ea94f9fe4fd274336f41eb1808e7a75bd39cf4fb0fbd2c86a60a6cb2b",
+      "byte_size": 18396
+    },
+    {
+      "receiver_id": 47,
+      "shader_index": 1160,
+      "shader_name": "FRPG_Phn_DifSpc_____________HemEnv.fpo",
+      "code_sha256": "1574e296e30b5477dea327c0a0e674e2671f791ec6e6e855a464e6e84dbf6274",
+      "byte_size": 16900
+    }
+  ]
+}
