@@ -72,7 +72,7 @@ void material_response_draw_runtime::release_resources() noexcept
     std::lock_guard<std::mutex> lock(mutex_);
 
     for (auto &entry : replacements_) {
-        auto *shader = entry.second;
+        auto *shader = entry.second.shader;
         if (shader != nullptr)
             shader->Release();
     }
@@ -129,7 +129,7 @@ void material_response_draw_runtime::on_destroy_device(
         return;
 
     for (auto &entry : replacements_) {
-        auto *shader = entry.second;
+        auto *shader = entry.second.shader;
         if (shader != nullptr)
             shader->Release();
     }
@@ -151,11 +151,18 @@ void material_response_draw_runtime::on_destroy_device(
 bool material_response_draw_runtime::register_receiver_replacement(
     std::uint32_t receiver_id,
     const void *dxbc,
-    std::size_t dxbc_size) noexcept
+    std::size_t dxbc_size,
+    core::operator_mask composed_owners) noexcept
 {
+    const core::operator_mask forbidden_owners =
+        core::operator_bit(core::operator_id::material_response) |
+        core::operator_bit(core::operator_id::diffuse_material_domain);
+
     if (receiver_id == 0u ||
         dxbc == nullptr ||
         dxbc_size == 0u ||
+        (composed_owners & ~core::all_operator_bits) != 0u ||
+        (composed_owners & forbidden_owners) != 0u ||
         quarantined_.load()) {
         ++replacement_register_fail_;
         return false;
@@ -178,13 +185,18 @@ bool material_response_draw_runtime::register_receiver_replacement(
         return false;
     }
 
+    const replacement_record record{
+        shader,
+        composed_owners
+    };
+
     const auto found = replacements_.find(receiver_id);
     if (found != replacements_.end()) {
-        if (found->second != nullptr)
-            found->second->Release();
-        found->second = shader;
+        if (found->second.shader != nullptr)
+            found->second.shader->Release();
+        found->second = record;
     } else {
-        replacements_.emplace(receiver_id, shader);
+        replacements_.emplace(receiver_id, record);
     }
 
     ++replacement_register_ok_;
@@ -198,7 +210,7 @@ bool material_response_draw_runtime::has_receiver_replacement(
     const auto found = replacements_.find(receiver_id);
     return
         found != replacements_.end() &&
-        found->second != nullptr;
+        found->second.shader != nullptr;
 }
 
 ID3D11Buffer *material_response_draw_runtime::realize_b12(
@@ -290,14 +302,14 @@ void material_response_draw_runtime::release_transaction(
 bool material_response_draw_runtime::begin_native_transaction(
     reshade::api::command_list *cmd_list,
     const operators::material_response::decision &decision,
-    ID3D11PixelShader *replacement,
+    const replacement_record &replacement,
     ID3D11Buffer *b12,
     native_transaction &state) noexcept
 {
     state = {};
 
     if (cmd_list == nullptr ||
-        replacement == nullptr ||
+        replacement.shader == nullptr ||
         b12 == nullptr ||
         !full_material_response_decision(decision) ||
         quarantined_.load())
@@ -395,6 +407,27 @@ bool material_response_draw_runtime::begin_native_transaction(
         };
     }
 
+    for (std::size_t i = 0;
+         i < core::operator_count;
+         ++i) {
+        const auto op =
+            static_cast<core::operator_id>(i);
+        const auto bit = core::operator_bit(op);
+
+        if ((replacement.composed_owners & bit) == 0u)
+            continue;
+
+        if (plan.patch_count >= plan.patches.size())
+            return false;
+
+        plan.patches[plan.patch_count++] = {
+            op,
+            0u,
+            true,
+            false
+        };
+    }
+
     const auto command = command_key(cmd_list);
     const auto serial = ++draw_serial_;
 
@@ -409,10 +442,11 @@ bool material_response_draw_runtime::begin_native_transaction(
         return false;
     }
 
+    state.command = command;
     state.core_started = true;
 
     ctx->PSSetShader(
-        replacement,
+        replacement.shader,
         nullptr,
         0u);
 
@@ -436,7 +470,7 @@ bool material_response_draw_runtime::begin_native_transaction(
         &check_b12);
 
     const bool bound =
-        check_shader == replacement &&
+        check_shader == replacement.shader &&
         check_class_count == 0u &&
         check_b12 == b12;
 
@@ -463,8 +497,16 @@ bool material_response_draw_runtime::restore_native_transaction(
     reshade::api::command_list *cmd_list,
     native_transaction &state) noexcept
 {
-    if (cmd_list == nullptr ||
-        state.old_shader == nullptr) {
+    if (state.old_shader == nullptr) {
+        if (state.core_started && state.command != 0u)
+            (void)core_.transactions().restore(state.command);
+        release_transaction(state);
+        return false;
+    }
+
+    if (cmd_list == nullptr) {
+        if (state.core_started && state.command != 0u)
+            (void)core_.transactions().restore(state.command);
         release_transaction(state);
         return false;
     }
@@ -473,6 +515,8 @@ bool material_response_draw_runtime::restore_native_transaction(
         reinterpret_cast<ID3D11DeviceContext *>(
             cmd_list->get_native());
     if (ctx == nullptr) {
+        if (state.core_started && state.command != 0u)
+            (void)core_.transactions().restore(state.command);
         release_transaction(state);
         return false;
     }
@@ -558,7 +602,7 @@ bool material_response_draw_runtime::restore_native_transaction(
     if (state.core_started) {
         core_restored =
             core_.transactions().restore(
-                command_key(cmd_list));
+                state.command);
     }
 
     release_transaction(state);
@@ -586,20 +630,20 @@ bool material_response_draw_runtime::replay_draw(
     if (!full_material_response_decision(decision))
         return false;
 
-    ID3D11PixelShader *replacement = nullptr;
+    replacement_record replacement{};
     {
         std::lock_guard<std::mutex> lock(mutex_);
         const auto found =
             replacements_.find(decision.receiver_id);
 
         if (found != replacements_.end() &&
-            found->second != nullptr) {
+            found->second.shader != nullptr) {
             replacement = found->second;
-            replacement->AddRef();
+            replacement.shader->AddRef();
         }
     }
 
-    if (replacement == nullptr) {
+    if (replacement.shader == nullptr) {
         ++replacement_miss_;
         return false;
     }
@@ -609,7 +653,7 @@ bool material_response_draw_runtime::replay_draw(
 
     if (b12 == nullptr) {
         ++b12_bind_fail_;
-        replacement->Release();
+        replacement.shader->Release();
         return false;
     }
 
@@ -621,7 +665,7 @@ bool material_response_draw_runtime::replay_draw(
             b12,
             state)) {
         b12->Release();
-        replacement->Release();
+        replacement.shader->Release();
         return false;
     }
 
@@ -648,7 +692,7 @@ bool material_response_draw_runtime::replay_draw(
             state);
 
     b12->Release();
-    replacement->Release();
+    replacement.shader->Release();
 
     if (!restored)
         return false;
@@ -671,20 +715,20 @@ bool material_response_draw_runtime::replay_draw_indexed(
     if (!full_material_response_decision(decision))
         return false;
 
-    ID3D11PixelShader *replacement = nullptr;
+    replacement_record replacement{};
     {
         std::lock_guard<std::mutex> lock(mutex_);
         const auto found =
             replacements_.find(decision.receiver_id);
 
         if (found != replacements_.end() &&
-            found->second != nullptr) {
+            found->second.shader != nullptr) {
             replacement = found->second;
-            replacement->AddRef();
+            replacement.shader->AddRef();
         }
     }
 
-    if (replacement == nullptr) {
+    if (replacement.shader == nullptr) {
         ++replacement_miss_;
         return false;
     }
@@ -694,7 +738,7 @@ bool material_response_draw_runtime::replay_draw_indexed(
 
     if (b12 == nullptr) {
         ++b12_bind_fail_;
-        replacement->Release();
+        replacement.shader->Release();
         return false;
     }
 
@@ -706,7 +750,7 @@ bool material_response_draw_runtime::replay_draw_indexed(
             b12,
             state)) {
         b12->Release();
-        replacement->Release();
+        replacement.shader->Release();
         return false;
     }
 
@@ -735,7 +779,7 @@ bool material_response_draw_runtime::replay_draw_indexed(
             state);
 
     b12->Release();
-    replacement->Release();
+    replacement.shader->Release();
 
     if (!restored)
         return false;
