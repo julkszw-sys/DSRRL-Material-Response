@@ -15,11 +15,26 @@ int main()
 
     static_assert(!material_owner_authorized(material_owner_authorization{}));
     static_assert(material_owner_authorized(
-        material_owner_authorization{true,false}));
+        material_owner_authorization{true,false,false,false}));
     static_assert(material_owner_authorized(
-        material_owner_authorization{false,true}));
-    static_assert(material_owner_authorized(
-        material_owner_authorization{true,true}));
+        material_owner_authorization{false,true,false,false}));
+    static_assert(!material_owner_authorized(
+        material_owner_authorization{false,false,true,false}));
+    static_assert(!material_owner_authorized(
+        material_owner_authorization{false,false,false,true}));
+
+    static_assert(diffuse_route_authorized(
+        material_owner_authorization{false,false,true,false}));
+    static_assert(!normal_route_authorized(
+        material_owner_authorization{false,false,true,false}));
+    static_assert(normal_route_authorized(
+        material_owner_authorization{false,false,false,true}));
+    static_assert(!diffuse_route_authorized(
+        material_owner_authorization{false,false,false,true}));
+    static_assert(diffuse_route_authorized(
+        material_owner_authorization{true,false,false,false}));
+    static_assert(normal_route_authorized(
+        material_owner_authorization{false,true,false,false}));
 
     static_assert(k_normal_tuple_count_v12 == 557u);
     static_assert(k_normal_tuple_member_count_v12 == 1664u);
