@@ -112,18 +112,12 @@ int main()
     pmetal_id.material_family_hash = pmetal.material_family_hash;
 
     d = mr.evaluate(33, pmetal_id);
-    CHECK(d.active);
-    CHECK(d.route_index == 345);
-    CHECK(d.c101 == 2.5f);
-    CHECK(d.lod_min == 3 && d.lod_max == 4);
-    CHECK(d.envspec == ptde_envspec_presence::present);
+    CHECK(!d.active);
+    CHECK(d.reason == decision_reason::owner_tuple_not_authenticated);
 
-    env = operators::env_spec::env_spec_island::gate(d.envspec, false);
-    CHECK(env.selected == operators::env_spec::action::preserve_host);
-    CHECK(env.ptde_bridge_required);
-
-    env = operators::env_spec::env_spec_island::gate(d.envspec, true);
-    CHECK(env.selected == operators::env_spec::action::activate_ptde_bridge);
+    // Exact-material routes deliberately remain fail-open until the runtime
+    // supplies an authenticated actual FLVER+slot+MTD owner tuple. EnvSpec's
+    // independently certified route is tested through its own island/census.
 
     material_profile edge_p = pmetal;
     edge_p.route_index = 5;
@@ -145,12 +139,12 @@ int main()
 
     d = mr.evaluate(33, ambiguous);
     CHECK(!d.active);
-    CHECK(d.reason == decision_reason::unknown_material);
+    CHECK(d.reason == decision_reason::owner_tuple_not_authenticated);
 
     ambiguous.semantic_name_hash = edge_s.semantic_name_hash;
     d = mr.evaluate(33, ambiguous);
-    CHECK(d.active);
-    CHECK(d.route_index == 5);
+    CHECK(!d.active);
+    CHECK(d.reason == decision_reason::owner_tuple_not_authenticated);
 
     env = operators::env_spec::env_spec_island::gate(
         ptde_envspec_presence::unknown,
