@@ -1,6 +1,7 @@
 #include "dsrrl/operators/material_response/mtd_semantic_census.hpp"
 #include "dsrrl/operators/material_response/material_response_seed.hpp"
 #include "dsrrl/operators/material_response/generated_envspec_router_v1.hpp"
+#include "dsrrl/operators/material_response/generated_ptde_flver_texture_semantics_v1.hpp"
 #include "dsrrl/operators/env_spec/env_spec_island.hpp"
 #include "dsrrl/operators/resource_bridges/spec_rgb_bridge.hpp"
 
@@ -122,11 +123,38 @@ int main()
         unknown_sha);
     CHECK(!unknown_legacy.exact_identity_match);
 
-    // Diffuse/Normal are FLVER ownership-sensitive. Exact MTD identity
-    // alone must not be promoted through the operator gate.
+    // Owner FLVER census proves positive PTDE texture capability for this
+    // exact material. Exact DSR host identity is independently joined through
+    // the homology-derived 325-record router. No per-draw FLVER guess is needed
+    // for positive USE; resource tuple checks remain downstream in runtime.
+    const auto pmetal_tex=classify_ptde_flver_texture_semantics(pmetal);
+    CHECK(pmetal_tex.exact_host_identity_match);
+    CHECK(!pmetal_tex.source_complete);
+    CHECK(ptde_flver_texture_semantic_present(
+        pmetal_tex,ptde_texture_semantic::diffuse));
+    CHECK(ptde_flver_texture_semantic_present(
+        pmetal_tex,ptde_texture_semantic::bump));
+    CHECK(ptde_flver_texture_semantic_present(
+        pmetal_tex,ptde_texture_semantic::specular));
+
+    const auto pmetal_tex_legacy=
+        classify_ptde_flver_texture_semantics_legacy(
+            0x1755dba68cb5e9a3ull,
+            pmetal.raw_mtd_sha256);
+    CHECK(pmetal_tex_legacy.exact_host_identity_match);
+    CHECK(pmetal_tex_legacy.positive_mask==pmetal_tex.positive_mask);
+
     d=classify_mtd_semantic(q,mtd_semantic_operator::diffuse);
-    CHECK(d.state==mtd_semantic_state::unknown);
-    CHECK(!d.exact_identity_match);
+    CHECK(d.state==mtd_semantic_state::use);
+    CHECK(d.source==
+          mtd_semantic_source::ptde_flver_texture_semantics_exact);
+    CHECK(d.exact_identity_match);
+
+    d=classify_mtd_semantic(q,mtd_semantic_operator::normal_bump);
+    CHECK(d.state==mtd_semantic_state::use);
+    CHECK(d.source==
+          mtd_semantic_source::ptde_flver_texture_semantics_exact);
+    CHECK(d.exact_identity_match);
 
     auto owned_q=q;
     owned_q.ownership.flver_identity_hash=0x1234u;
@@ -134,8 +162,15 @@ int main()
     owned_q.ownership.material_slot_valid=true;
     owned_q.ownership.exact=true;
     d=classify_mtd_semantic(owned_q,mtd_semantic_operator::diffuse);
-    CHECK(d.state==mtd_semantic_state::unknown);
-    CHECK(d.exact_identity_match);
+    CHECK(d.state==mtd_semantic_state::use);
+    CHECK(d.source==
+          mtd_semantic_source::ptde_flver_texture_semantics_exact);
+
+    auto wrong_tex=pmetal;
+    wrong_tex.raw_mtd_sha256[0]^=0xffu;
+    const auto wrong_tex_sem=
+        classify_ptde_flver_texture_semantics(wrong_tex);
+    CHECK(!wrong_tex_sem.exact_host_identity_match);
 
     const auto body=make_identity(
         232u,"Ps_Body[DSB].mtd",
@@ -332,6 +367,54 @@ int main()
     CHECK(slot_counts[2]==54u);
     CHECK(slot_counts[3]==44u);
 
+
+    // Imported owner FLVER census is positive-use evidence only because the
+    // source scan had 75 BND3 parse failures. The generated table must retain
+    // this provenance and never promote missing bits to NO_USE.
+    CHECK(generated::k_ptde_flver_texture_semantics_v1.size()==261u);
+    CHECK(generated::k_ptde_flver_texture_semantics_scan_error_count==75u);
+    CHECK(!generated::k_ptde_flver_texture_semantics_source_complete);
+
+    std::size_t ptde_diffuse_count=0u;
+    std::size_t ptde_bump_count=0u;
+    std::size_t ptde_spec_count=0u;
+    std::size_t exact_host_overlap=0u;
+    std::size_t exact_host_diffuse=0u;
+    std::size_t exact_host_bump=0u;
+    std::size_t exact_host_spec=0u;
+    for(std::size_t i=0;i<generated::k_ptde_flver_texture_semantics_v1.size();++i){
+        const auto &cap=generated::k_ptde_flver_texture_semantics_v1[i];
+        CHECK(cap.positive_mask!=0u);
+        if(cap.positive_mask&generated::ptde_tex_diffuse) ++ptde_diffuse_count;
+        if(cap.positive_mask&generated::ptde_tex_bump) ++ptde_bump_count;
+        if(cap.positive_mask&generated::ptde_tex_specular) ++ptde_spec_count;
+        for(std::size_t j=i+1u;j<generated::k_ptde_flver_texture_semantics_v1.size();++j){
+            const auto &other=generated::k_ptde_flver_texture_semantics_v1[j];
+            CHECK(cap.semantic_name_hash!=other.semantic_name_hash);
+            CHECK(cap.legacy_name_hash_utf16_lower!=other.legacy_name_hash_utf16_lower);
+        }
+        bool exact_host=false;
+        for(const auto &host:generated::k_envspec_router_v1){
+            if(host.legacy_name_hash_utf16_lower==
+               cap.legacy_name_hash_utf16_lower){
+                exact_host=true;
+                break;
+            }
+        }
+        if(exact_host){
+            ++exact_host_overlap;
+            if(cap.positive_mask&generated::ptde_tex_diffuse) ++exact_host_diffuse;
+            if(cap.positive_mask&generated::ptde_tex_bump) ++exact_host_bump;
+            if(cap.positive_mask&generated::ptde_tex_specular) ++exact_host_spec;
+        }
+    }
+    CHECK(ptde_diffuse_count==239u);
+    CHECK(ptde_bump_count==179u);
+    CHECK(ptde_spec_count==153u);
+    CHECK(exact_host_overlap==204u);
+    CHECK(exact_host_diffuse==204u);
+    CHECK(exact_host_bump==141u);
+    CHECK(exact_host_spec==147u);
 
     // Raw MTD SHA is a safe EnvSpec-semantic fallback only while every
     // duplicate payload in the canonical router agrees on state, slot and
