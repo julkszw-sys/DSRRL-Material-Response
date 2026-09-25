@@ -1,4 +1,5 @@
 #include "dsrrl/runtime/material_response_draw_transaction.hpp"
+#include "dsrrl/runtime/island_draw_adapter.hpp"
 
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
@@ -274,22 +275,27 @@ bool material_response_draw_runtime::build_mutation(
         b12 == nullptr)
         return false;
 
-    mutation = {};
-    mutation.owners =
-        core::operator_bit(
-            core::operator_id::material_response) |
+    island_draw_adapter_request request{};
+    request.primary =
+        core::operator_id::material_response;
+    request.additional_owners =
         core::operator_bit(
             core::operator_id::diffuse_material_domain) |
         replacement.composed_owners;
-
-    mutation.pixel_shader = replacement.shader;
-    mutation.replace_pixel_shader = true;
-    mutation.constant_buffers[0] = {
+    request.receiver_verified = true;
+    request.material_verified = true;
+    request.pixel_shader = replacement.shader;
+    request.replace_pixel_shader = true;
+    request.constant_buffers[0] = {
         12u,
         b12
     };
-    mutation.constant_buffer_count = 1u;
-    return true;
+    request.constant_buffer_count = 1u;
+
+    return build_island_draw_mutation(
+               request,
+               mutation) ==
+           island_draw_adapter_result::ready;
 }
 
 bool material_response_draw_runtime::replay_draw(
