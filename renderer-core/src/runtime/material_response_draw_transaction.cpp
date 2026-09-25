@@ -1,4 +1,5 @@
 #include "dsrrl/runtime/material_response_draw_transaction.hpp"
+#include "dsrrl/runtime/d3d11_cb_window.hpp"
 
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
@@ -8,6 +9,7 @@
 #endif
 
 #include <d3d11.h>
+#include <d3d11_1.h>
 
 #include <array>
 
@@ -38,6 +40,20 @@ void release_classes(
             instance->Release();
 }
 
+bool full_material_response_decision(
+    const operators::material_response::decision &decision) noexcept
+{
+    using namespace operators::material_response;
+
+    constexpr std::uint32_t required =
+        diffuse_material_domain_linear |
+        specular_factor_c101;
+
+    return
+        decision.active &&
+        (decision.certified_operations & required) == required;
+}
+
 } // namespace
 
 material_response_draw_runtime::material_response_draw_runtime(
@@ -48,18 +64,26 @@ material_response_draw_runtime::material_response_draw_runtime(
 
 material_response_draw_runtime::~material_response_draw_runtime()
 {
-    release_replacements();
+    release_resources();
 }
 
-void material_response_draw_runtime::release_replacements() noexcept
+void material_response_draw_runtime::release_resources() noexcept
 {
     std::lock_guard<std::mutex> lock(mutex_);
+
     for (auto &entry : replacements_) {
         auto *shader = entry.second;
         if (shader != nullptr)
             shader->Release();
     }
     replacements_.clear();
+
+    for (auto &entry : b12_by_route_) {
+        auto *buffer = entry.second;
+        if (buffer != nullptr)
+            buffer->Release();
+    }
+    b12_by_route_.clear();
 
     if (device_ != nullptr) {
         device_->Release();
@@ -74,7 +98,8 @@ void material_response_draw_runtime::on_init_device(
         device->get_api() != reshade::api::device_api::d3d11)
         return;
 
-    auto *native = reinterpret_cast<ID3D11Device *>(device->get_native());
+    auto *native =
+        reinterpret_cast<ID3D11Device *>(device->get_native());
     if (native == nullptr)
         return;
 
@@ -96,7 +121,8 @@ void material_response_draw_runtime::on_destroy_device(
         device->get_api() != reshade::api::device_api::d3d11)
         return;
 
-    auto *native = reinterpret_cast<ID3D11Device *>(device->get_native());
+    auto *native =
+        reinterpret_cast<ID3D11Device *>(device->get_native());
 
     std::lock_guard<std::mutex> lock(mutex_);
     if (native != device_)
@@ -108,6 +134,13 @@ void material_response_draw_runtime::on_destroy_device(
             shader->Release();
     }
     replacements_.clear();
+
+    for (auto &entry : b12_by_route_) {
+        auto *buffer = entry.second;
+        if (buffer != nullptr)
+            buffer->Release();
+    }
+    b12_by_route_.clear();
 
     if (device_ != nullptr) {
         device_->Release();
@@ -163,71 +196,204 @@ bool material_response_draw_runtime::has_receiver_replacement(
 {
     std::lock_guard<std::mutex> lock(mutex_);
     const auto found = replacements_.find(receiver_id);
-    return found != replacements_.end() && found->second != nullptr;
+    return
+        found != replacements_.end() &&
+        found->second != nullptr;
 }
 
-bool material_response_draw_runtime::accepts_command(
-    reshade::api::command_list *cmd_list,
-    ID3D11PixelShader *&replacement) noexcept
+ID3D11Buffer *material_response_draw_runtime::realize_b12(
+    const operators::material_response::decision &decision) noexcept
 {
-    replacement = nullptr;
-
-    if (cmd_list == nullptr ||
+    if (!full_material_response_decision(decision) ||
         quarantined_.load())
-        return false;
+        return nullptr;
 
-    auto *ctx = reinterpret_cast<ID3D11DeviceContext *>(
-        cmd_list->get_native());
-    if (ctx == nullptr)
-        return false;
+    std::lock_guard<std::mutex> lock(mutex_);
 
-    return true;
+    if (device_ == nullptr)
+        return nullptr;
+
+    const auto found =
+        b12_by_route_.find(decision.route_index);
+
+    if (found != b12_by_route_.end() &&
+        found->second != nullptr) {
+        found->second->AddRef();
+        ++b12_hit_;
+        return found->second;
+    }
+
+    struct alignas(16) f4 {
+        float x;
+        float y;
+        float z;
+        float w;
+    };
+
+    const std::array<f4, 4> payload{{
+        {
+            decision.c101_f0q[0],
+            decision.c101_f0q[1],
+            decision.c101_f0q[2],
+            1.0f
+        },
+        {
+            decision.c100[0],
+            decision.c100[1],
+            decision.c100[2],
+            1.0f
+        },
+        {0.0f, 0.0f, 0.0f, 0.0f},
+        {0.0f, 0.0f, 0.0f, 0.0f}
+    }};
+
+    D3D11_BUFFER_DESC desc{};
+    desc.ByteWidth = static_cast<UINT>(sizeof(payload));
+    desc.Usage = D3D11_USAGE_IMMUTABLE;
+    desc.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
+
+    D3D11_SUBRESOURCE_DATA init{};
+    init.pSysMem = payload.data();
+
+    ID3D11Buffer *buffer = nullptr;
+    if (FAILED(device_->CreateBuffer(
+            &desc,
+            &init,
+            &buffer)) ||
+        buffer == nullptr)
+        return nullptr;
+
+    b12_by_route_.emplace(
+        decision.route_index,
+        buffer);
+
+    buffer->AddRef();
+    ++b12_create_;
+    return buffer;
+}
+
+void material_response_draw_runtime::release_transaction(
+    native_transaction &state) noexcept
+{
+    if (state.old_shader != nullptr)
+        state.old_shader->Release();
+
+    if (state.old_b12.base != nullptr)
+        state.old_b12.base->Release();
+
+    if (state.old_b12.window != nullptr)
+        state.old_b12.window->Release();
+
+    state = {};
 }
 
 bool material_response_draw_runtime::begin_native_transaction(
     reshade::api::command_list *cmd_list,
-    std::uint32_t receiver_id,
+    const operators::material_response::decision &decision,
     ID3D11PixelShader *replacement,
-    ID3D11PixelShader *&old_shader) noexcept
+    ID3D11Buffer *b12,
+    native_transaction &state) noexcept
 {
-    old_shader = nullptr;
-    if (cmd_list == nullptr || replacement == nullptr)
+    state = {};
+
+    if (cmd_list == nullptr ||
+        replacement == nullptr ||
+        b12 == nullptr ||
+        !full_material_response_decision(decision) ||
+        quarantined_.load())
         return false;
 
-    auto *ctx = reinterpret_cast<ID3D11DeviceContext *>(
-        cmd_list->get_native());
+    auto *ctx =
+        reinterpret_cast<ID3D11DeviceContext *>(
+            cmd_list->get_native());
     if (ctx == nullptr)
         return false;
 
+    ID3D11DeviceContext1 *ctx1 = nullptr;
+    (void)ctx->QueryInterface(
+        __uuidof(ID3D11DeviceContext1),
+        reinterpret_cast<void **>(&ctx1));
+
     std::array<ID3D11ClassInstance *, 256> classes{};
-    UINT class_count = static_cast<UINT>(classes.size());
+    UINT class_count =
+        static_cast<UINT>(classes.size());
+
     ctx->PSGetShader(
-        &old_shader,
+        &state.old_shader,
         classes.data(),
         &class_count);
 
     if (class_count != 0u) {
         release_classes(classes);
-        if (old_shader != nullptr) {
-            old_shader->Release();
-            old_shader = nullptr;
-        }
+        if (ctx1 != nullptr)
+            ctx1->Release();
+        release_transaction(state);
         return false;
     }
     release_classes(classes);
 
-    if (old_shader == nullptr)
+    if (state.old_shader == nullptr) {
+        if (ctx1 != nullptr)
+            ctx1->Release();
+        release_transaction(state);
         return false;
+    }
+
+    ctx->PSGetConstantBuffers(
+        12u,
+        1u,
+        &state.old_b12.base);
+
+    if (ctx1 != nullptr) {
+        UINT first = 0u;
+        UINT count = 0u;
+
+        ctx1->PSGetConstantBuffers1(
+            12u,
+            1u,
+            &state.old_b12.window,
+            &first,
+            &count);
+
+        state.old_b12.first = first;
+        state.old_b12.count = count;
+        state.old_b12.coherent =
+            state.old_b12.base ==
+            state.old_b12.window;
+
+        state.old_b12.explicit_window =
+            state.old_b12.window != nullptr &&
+            count >= 16u &&
+            (first % 16u) == 0u &&
+            (count % 16u) == 0u;
+    }
+
+    if (!state.old_b12.coherent) {
+        if (ctx1 != nullptr)
+            ctx1->Release();
+        release_transaction(state);
+        return false;
+    }
 
     core::render_patch_plan plan{};
-    plan.patches[0] = {
+
+    plan.patches[plan.patch_count++] = {
         core::operator_id::material_response,
         0u,
         true,
         false
     };
-    plan.patch_count = 1u;
-    plan.carrier_write_mask = 0u;
+
+    if ((decision.certified_operations &
+         operators::material_response::
+             diffuse_material_domain_linear) != 0u) {
+        plan.patches[plan.patch_count++] = {
+            core::operator_id::diffuse_material_domain,
+            0u,
+            true,
+            false
+        };
+    }
 
     const auto command = command_key(cmd_list);
     const auto serial = ++draw_serial_;
@@ -237,60 +403,168 @@ bool material_response_draw_runtime::begin_native_transaction(
             serial,
             context_kind_of(ctx),
             plan)) {
-        old_shader->Release();
-        old_shader = nullptr;
+        if (ctx1 != nullptr)
+            ctx1->Release();
+        release_transaction(state);
         return false;
     }
 
-    ctx->PSSetShader(replacement, nullptr, 0u);
+    state.core_started = true;
 
-    ID3D11PixelShader *check = nullptr;
-    UINT check_count = 0u;
-    ctx->PSGetShader(&check, nullptr, &check_count);
-    const bool bound = check == replacement && check_count == 0u;
-    if (check != nullptr)
-        check->Release();
+    ctx->PSSetShader(
+        replacement,
+        nullptr,
+        0u);
+
+    ID3D11Buffer *owned_b12 = b12;
+    ctx->PSSetConstantBuffers(
+        12u,
+        1u,
+        &owned_b12);
+
+    ID3D11PixelShader *check_shader = nullptr;
+    UINT check_class_count = 0u;
+    ctx->PSGetShader(
+        &check_shader,
+        nullptr,
+        &check_class_count);
+
+    ID3D11Buffer *check_b12 = nullptr;
+    ctx->PSGetConstantBuffers(
+        12u,
+        1u,
+        &check_b12);
+
+    const bool bound =
+        check_shader == replacement &&
+        check_class_count == 0u &&
+        check_b12 == b12;
+
+    if (check_shader != nullptr)
+        check_shader->Release();
+    if (check_b12 != nullptr)
+        check_b12->Release();
+
+    if (ctx1 != nullptr)
+        ctx1->Release();
 
     if (!bound) {
-        ctx->PSSetShader(old_shader, nullptr, 0u);
-        (void)core_.transactions().restore(command);
-        old_shader->Release();
-        old_shader = nullptr;
+        ++b12_bind_fail_;
+        (void)restore_native_transaction(
+            cmd_list,
+            state);
         return false;
     }
 
-    (void)receiver_id;
     return true;
 }
 
 bool material_response_draw_runtime::restore_native_transaction(
     reshade::api::command_list *cmd_list,
-    ID3D11PixelShader *old_shader) noexcept
+    native_transaction &state) noexcept
 {
-    if (cmd_list == nullptr || old_shader == nullptr)
+    if (cmd_list == nullptr ||
+        state.old_shader == nullptr) {
+        release_transaction(state);
         return false;
+    }
 
-    auto *ctx = reinterpret_cast<ID3D11DeviceContext *>(
-        cmd_list->get_native());
-    if (ctx == nullptr)
+    auto *ctx =
+        reinterpret_cast<ID3D11DeviceContext *>(
+            cmd_list->get_native());
+    if (ctx == nullptr) {
+        release_transaction(state);
         return false;
+    }
 
-    ctx->PSSetShader(old_shader, nullptr, 0u);
+    ID3D11DeviceContext1 *ctx1 = nullptr;
+    (void)ctx->QueryInterface(
+        __uuidof(ID3D11DeviceContext1),
+        reinterpret_cast<void **>(&ctx1));
 
-    ID3D11PixelShader *check = nullptr;
-    UINT check_count = 0u;
-    ctx->PSGetShader(&check, nullptr, &check_count);
-    const bool native_restored =
-        check == old_shader && check_count == 0u;
-    if (check != nullptr)
-        check->Release();
+    ctx->PSSetShader(
+        state.old_shader,
+        nullptr,
+        0u);
 
-    const bool core_restored =
-        core_.transactions().restore(command_key(cmd_list));
+    restore_ps_constant_buffer_window(
+        ctx,
+        ctx1,
+        12u,
+        state.old_b12.explicit_window
+            ? state.old_b12.window
+            : state.old_b12.base,
+        state.old_b12.explicit_window,
+        static_cast<UINT>(state.old_b12.first),
+        static_cast<UINT>(state.old_b12.count));
 
-    old_shader->Release();
+    ID3D11PixelShader *check_shader = nullptr;
+    UINT check_class_count = 0u;
+    ctx->PSGetShader(
+        &check_shader,
+        nullptr,
+        &check_class_count);
 
-    if (!native_restored || !core_restored) {
+    bool native_restored =
+        check_shader == state.old_shader &&
+        check_class_count == 0u;
+
+    if (check_shader != nullptr)
+        check_shader->Release();
+
+    ID3D11Buffer *check_base = nullptr;
+    ctx->PSGetConstantBuffers(
+        12u,
+        1u,
+        &check_base);
+
+    native_restored =
+        native_restored &&
+        check_base == state.old_b12.base;
+
+    if (check_base != nullptr)
+        check_base->Release();
+
+    if (ctx1 != nullptr) {
+        ID3D11Buffer *check_window = nullptr;
+        UINT check_first = 0u;
+        UINT check_count = 0u;
+
+        ctx1->PSGetConstantBuffers1(
+            12u,
+            1u,
+            &check_window,
+            &check_first,
+            &check_count);
+
+        native_restored =
+            native_restored &&
+            check_window == state.old_b12.window;
+
+        if (state.old_b12.explicit_window) {
+            native_restored =
+                native_restored &&
+                check_first == state.old_b12.first &&
+                check_count == state.old_b12.count;
+        }
+
+        if (check_window != nullptr)
+            check_window->Release();
+
+        ctx1->Release();
+    }
+
+    bool core_restored = true;
+    if (state.core_started) {
+        core_restored =
+            core_.transactions().restore(
+                command_key(cmd_list));
+    }
+
+    release_transaction(state);
+
+    if (!native_restored ||
+        !core_restored) {
         ++restore_fail_;
         quarantined_.store(true);
         return false;
@@ -301,7 +575,7 @@ bool material_response_draw_runtime::restore_native_transaction(
 
 bool material_response_draw_runtime::replay_draw(
     reshade::api::command_list *cmd_list,
-    std::uint32_t receiver_id,
+    const operators::material_response::decision &decision,
     std::uint32_t vertex_count,
     std::uint32_t instance_count,
     std::uint32_t first_vertex,
@@ -309,11 +583,17 @@ bool material_response_draw_runtime::replay_draw(
 {
     ++eligible_draws_;
 
+    if (!full_material_response_decision(decision))
+        return false;
+
     ID3D11PixelShader *replacement = nullptr;
     {
         std::lock_guard<std::mutex> lock(mutex_);
-        const auto found = replacements_.find(receiver_id);
-        if (found != replacements_.end() && found->second != nullptr) {
+        const auto found =
+            replacements_.find(decision.receiver_id);
+
+        if (found != replacements_.end() &&
+            found->second != nullptr) {
             replacement = found->second;
             replacement->AddRef();
         }
@@ -324,37 +604,50 @@ bool material_response_draw_runtime::replay_draw(
         return false;
     }
 
-    ID3D11PixelShader *unused = nullptr;
-    if (!accepts_command(cmd_list, unused)) {
+    ID3D11Buffer *b12 =
+        realize_b12(decision);
+
+    if (b12 == nullptr) {
+        ++b12_bind_fail_;
         replacement->Release();
         return false;
     }
 
-    ID3D11PixelShader *old_shader = nullptr;
+    native_transaction state{};
     if (!begin_native_transaction(
             cmd_list,
-            receiver_id,
+            decision,
             replacement,
-            old_shader)) {
+            b12,
+            state)) {
+        b12->Release();
         replacement->Release();
         return false;
     }
 
-    auto *ctx = reinterpret_cast<ID3D11DeviceContext *>(
-        cmd_list->get_native());
+    auto *ctx =
+        reinterpret_cast<ID3D11DeviceContext *>(
+            cmd_list->get_native());
 
-    if (instance_count == 1u && first_instance == 0u)
-        ctx->Draw(vertex_count, first_vertex);
-    else
+    if (instance_count == 1u &&
+        first_instance == 0u) {
+        ctx->Draw(
+            vertex_count,
+            first_vertex);
+    } else {
         ctx->DrawInstanced(
             vertex_count,
             instance_count,
             first_vertex,
             first_instance);
+    }
 
     const bool restored =
-        restore_native_transaction(cmd_list, old_shader);
+        restore_native_transaction(
+            cmd_list,
+            state);
 
+    b12->Release();
     replacement->Release();
 
     if (!restored)
@@ -366,7 +659,7 @@ bool material_response_draw_runtime::replay_draw(
 
 bool material_response_draw_runtime::replay_draw_indexed(
     reshade::api::command_list *cmd_list,
-    std::uint32_t receiver_id,
+    const operators::material_response::decision &decision,
     std::uint32_t index_count,
     std::uint32_t instance_count,
     std::uint32_t first_index,
@@ -375,11 +668,17 @@ bool material_response_draw_runtime::replay_draw_indexed(
 {
     ++eligible_draws_;
 
+    if (!full_material_response_decision(decision))
+        return false;
+
     ID3D11PixelShader *replacement = nullptr;
     {
         std::lock_guard<std::mutex> lock(mutex_);
-        const auto found = replacements_.find(receiver_id);
-        if (found != replacements_.end() && found->second != nullptr) {
+        const auto found =
+            replacements_.find(decision.receiver_id);
+
+        if (found != replacements_.end() &&
+            found->second != nullptr) {
             replacement = found->second;
             replacement->AddRef();
         }
@@ -390,41 +689,52 @@ bool material_response_draw_runtime::replay_draw_indexed(
         return false;
     }
 
-    ID3D11PixelShader *unused = nullptr;
-    if (!accepts_command(cmd_list, unused)) {
+    ID3D11Buffer *b12 =
+        realize_b12(decision);
+
+    if (b12 == nullptr) {
+        ++b12_bind_fail_;
         replacement->Release();
         return false;
     }
 
-    ID3D11PixelShader *old_shader = nullptr;
+    native_transaction state{};
     if (!begin_native_transaction(
             cmd_list,
-            receiver_id,
+            decision,
             replacement,
-            old_shader)) {
+            b12,
+            state)) {
+        b12->Release();
         replacement->Release();
         return false;
     }
 
-    auto *ctx = reinterpret_cast<ID3D11DeviceContext *>(
-        cmd_list->get_native());
+    auto *ctx =
+        reinterpret_cast<ID3D11DeviceContext *>(
+            cmd_list->get_native());
 
-    if (instance_count == 1u && first_instance == 0u)
+    if (instance_count == 1u &&
+        first_instance == 0u) {
         ctx->DrawIndexed(
             index_count,
             first_index,
             vertex_offset);
-    else
+    } else {
         ctx->DrawIndexedInstanced(
             index_count,
             instance_count,
             first_index,
             vertex_offset,
             first_instance);
+    }
 
     const bool restored =
-        restore_native_transaction(cmd_list, old_shader);
+        restore_native_transaction(
+            cmd_list,
+            state);
 
+    b12->Release();
     replacement->Release();
 
     if (!restored)
@@ -440,6 +750,9 @@ material_response_draw_runtime::telemetry() const noexcept
     return {
         replacement_register_ok_.load(),
         replacement_register_fail_.load(),
+        b12_create_.load(),
+        b12_hit_.load(),
+        b12_bind_fail_.load(),
         eligible_draws_.load(),
         replacement_miss_.load(),
         replay_ok_.load(),
@@ -450,10 +763,14 @@ material_response_draw_runtime::telemetry() const noexcept
 
 void material_response_draw_runtime::reset() noexcept
 {
-    release_replacements();
+    release_resources();
+
     draw_serial_.store(0);
     replacement_register_ok_.store(0);
     replacement_register_fail_.store(0);
+    b12_create_.store(0);
+    b12_hit_.store(0);
+    b12_bind_fail_.store(0);
     eligible_draws_.store(0);
     replacement_miss_.store(0);
     replay_ok_.store(0);
