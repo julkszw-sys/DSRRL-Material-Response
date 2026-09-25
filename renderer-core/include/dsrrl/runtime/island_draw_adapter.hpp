@@ -49,6 +49,44 @@ struct island_draw_dispatch_result {
         draw_tx_result::not_issued;
 };
 
+enum class island_draw_batch_result : std::uint8_t {
+    ready = 0,
+    adapter_rejected,
+    shader_conflict,
+    constant_buffer_conflict,
+    srv_conflict,
+    sampler_conflict,
+    capacity_exceeded
+};
+
+struct island_draw_batch {
+    draw_tx_mutation mutation{};
+    std::uint32_t island_count = 0;
+};
+
+island_draw_batch_result append_island_draw_request(
+    island_draw_batch &batch,
+    const island_draw_adapter_request &request) noexcept;
+
+island_draw_dispatch_result dispatch_island_draw_batch(
+    draw_state_transaction_runtime &transactions,
+    reshade::api::command_list *cmd_list,
+    const island_draw_batch &batch,
+    std::uint32_t vertex_count,
+    std::uint32_t instance_count,
+    std::uint32_t first_vertex,
+    std::uint32_t first_instance) noexcept;
+
+island_draw_dispatch_result dispatch_island_draw_indexed_batch(
+    draw_state_transaction_runtime &transactions,
+    reshade::api::command_list *cmd_list,
+    const island_draw_batch &batch,
+    std::uint32_t index_count,
+    std::uint32_t instance_count,
+    std::uint32_t first_index,
+    std::int32_t vertex_offset,
+    std::uint32_t first_instance) noexcept;
+
 island_draw_dispatch_result dispatch_island_draw(
     draw_state_transaction_runtime &transactions,
     reshade::api::command_list *cmd_list,
