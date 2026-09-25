@@ -33,6 +33,10 @@ struct prepared_material_response_draw {
 struct material_response_draw_telemetry {
     std::uint64_t replacement_register_ok = 0;
     std::uint64_t replacement_register_fail = 0;
+    std::uint64_t combined_ul_register_ok = 0;
+    std::uint64_t combined_ul_register_fail = 0;
+    std::uint64_t combined_ul_prepare = 0;
+    std::uint64_t combined_ul_miss = 0;
     std::uint64_t b12_create = 0;
     std::uint64_t b12_hit = 0;
     std::uint64_t b12_bind_fail = 0;
@@ -66,8 +70,22 @@ public:
     bool has_receiver_replacement(
         std::uint32_t receiver_id) const noexcept;
 
+    bool register_receiver_upper_lower_replacement(
+        std::uint32_t receiver_id,
+        const void *dxbc,
+        std::size_t dxbc_size,
+        core::operator_mask composed_owners) noexcept;
+
+    bool has_receiver_upper_lower_replacement(
+        std::uint32_t receiver_id) const noexcept;
+
     bool prepare_draw_request(
         const operators::material_response::decision &decision,
+        prepared_material_response_draw &prepared) noexcept;
+
+    bool prepare_draw_request_with_upper_lower(
+        const operators::material_response::decision &decision,
+        ID3D11Buffer *b13,
         prepared_material_response_draw &prepared) noexcept;
 
     // Carrier preparation only. Authorization must already have been
@@ -120,10 +138,16 @@ private:
     mutable std::mutex mutex_;
     ID3D11Device *device_ = nullptr;
     std::unordered_map<std::uint32_t, replacement_record> replacements_;
+    std::unordered_map<std::uint32_t, replacement_record>
+        upper_lower_replacements_;
     std::unordered_map<std::uint32_t, ID3D11Buffer *> b12_by_route_;
 
     std::atomic<std::uint64_t> replacement_register_ok_{0};
     std::atomic<std::uint64_t> replacement_register_fail_{0};
+    std::atomic<std::uint64_t> combined_ul_register_ok_{0};
+    std::atomic<std::uint64_t> combined_ul_register_fail_{0};
+    std::atomic<std::uint64_t> combined_ul_prepare_{0};
+    std::atomic<std::uint64_t> combined_ul_miss_{0};
     std::atomic<std::uint64_t> b12_create_{0};
     std::atomic<std::uint64_t> b12_hit_{0};
     std::atomic<std::uint64_t> b12_bind_fail_{0};
