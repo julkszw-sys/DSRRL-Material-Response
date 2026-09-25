@@ -1,10 +1,8 @@
-# Renderer Core integrated single-addon construction target
+# DSRRL Core+Islands 2.0.0-dev — integrated single-addon target
 
-This directory is the canonical integration root for the eventual single DSRRL
-`.addon64`. It is deliberately a **construction/development target**, not an
-RC or release.
+This directory is the canonical integration root for the eventual single DSRRL `.addon64` on the active `main` line. Its product version is **Core+Islands 2.0.0-dev**, sourced from `VERSION.json`. It is deliberately a **construction/development target**, not an RC or release.\n\nMaterial Response **1.45 is a frozen legacy monolith** and belongs to a separate version namespace; it must not be used as the version identity of this target.
 
-## Current integrated A2 scope
+## Current Core+Islands 2.0.0-dev scope
 
 The integrated entrypoint now combines the exact A1 create-time bridge with the
 source-complete material/resource runtime glue recovered in `runtime-v1`.
