@@ -233,7 +233,7 @@ void selector_dispatch(
 
 extern "C" __declspec(dllexport)
 const char *NAME =
-    "DSRRL Renderer Core Integrated Construction";
+    DSRRL_CORE_ISLANDS_PRODUCT_LINE " " DSRRL_CORE_ISLANDS_VERSION;
 
 extern "C" __declspec(dllexport)
 const char *AUTHOR =
@@ -241,8 +241,9 @@ const char *AUTHOR =
 
 extern "C" __declspec(dllexport)
 const char *DESCRIPTION =
-    "Single-addon Renderer Core A2 construction: exact create-time islands plus "
-    "material/resource glue with fail-open routing.";
+    DSRRL_CORE_ISLANDS_PRODUCT_LINE " " DSRRL_CORE_ISLANDS_VERSION
+    " active main construction/development line; single-addon core + operator "
+    "islands with exact fail-open routing.";
 
 extern "C" __declspec(dllexport)
 bool AddonInit(
