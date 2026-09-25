@@ -3,6 +3,7 @@
 #include "dsrrl/operators/material_response/generated_envspec_router_v1.hpp"
 #include "dsrrl/operators/material_response/generated_ptde_flver_texture_semantics_v1.hpp"
 #include "dsrrl/operators/material_response/generated_flver_pairwise_semantics_v1.hpp"
+#include "dsrrl/operators/material_response/generated_mtd_spx_negative_v1.hpp"
 #include "dsrrl/operators/env_spec/env_spec_island.hpp"
 #include "dsrrl/operators/resource_bridges/spec_rgb_bridge.hpp"
 
@@ -454,6 +455,41 @@ int main()
     CHECK(exact_host_diffuse==204u);
     CHECK(exact_host_bump==141u);
     CHECK(exact_host_spec==147u);
+
+    // Raw PTDE<->DSR MTD/SPX census: exact negative routing gate. DSR may
+    // expose Spc/Bmp lanes that did not exist in the corresponding PTDE SPX
+    // contract. Such DSR-only lanes must not positively authorize SpecRGB or
+    // Normal/Bump islands.
+    CHECK(generated::k_mtd_spx_negative_record_count==118u);
+    std::size_t spx_added_specular=0u;
+    std::size_t spx_added_bump=0u;
+    for(const auto &record:generated::k_mtd_spx_negative_v1){
+        if(record.dsr_only_added_mask&generated::mtd_spx_feature_specular)
+            ++spx_added_specular;
+        if(record.dsr_only_added_mask&generated::mtd_spx_feature_bump)
+            ++spx_added_bump;
+    }
+    CHECK(spx_added_specular==87u);
+    CHECK(spx_added_bump==98u);
+
+    const auto a01_added_spcbmp=make_identity(
+        0u,"A01[D]_Alp.mtd",
+        "89076b688246989ed9d7c65da4df4508fd2c1ec13c8f929fd1ec852507f7e4ad",
+        "DifSpcBmp");
+    mtd_semantic_query a01_spx_q{a01_added_spcbmp,33u};
+    d=classify_mtd_semantic(a01_spx_q,mtd_semantic_operator::spec_rgb);
+    CHECK(d.state==mtd_semantic_state::no_use);
+    CHECK(d.source==mtd_semantic_source::mtd_spx_pairwise_negative_exact);
+    CHECK(d.exact_identity_match);
+
+    a01_spx_q.ownership.flver_identity_hash=0xA01u;
+    a01_spx_q.ownership.material_slot=0u;
+    a01_spx_q.ownership.material_slot_valid=true;
+    a01_spx_q.ownership.exact=true;
+    d=classify_mtd_semantic(a01_spx_q,mtd_semantic_operator::normal_bump);
+    CHECK(d.state==mtd_semantic_state::no_use);
+    CHECK(d.source==mtd_semantic_source::mtd_spx_pairwise_negative_exact);
+    CHECK(d.exact_identity_match);
 
     // Raw MTD SHA is a safe EnvSpec-semantic fallback only while every
     // duplicate payload in the canonical router agrees on state, slot and
