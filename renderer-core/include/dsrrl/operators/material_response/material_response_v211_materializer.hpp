@@ -22,6 +22,7 @@ struct v211_materialize_outcome {
     v211_materialize_result result =
         v211_materialize_result::pass_unknown_exact_sha;
     std::uint32_t receiver_id = 0;
+    core::operator_mask composed_owners = 0;
 };
 
 v211_materialize_outcome materialize_v211_stable_receiver(
