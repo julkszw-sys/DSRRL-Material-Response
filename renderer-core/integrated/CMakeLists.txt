@@ -124,6 +124,22 @@ add_custom_target(
     DEPENDS
         "${DSRRL_CORE_GENERATED_LIGHTBANK}/generated_hemdir3_receivers_v1.hpp")
 
+add_custom_command(
+    OUTPUT "${DSRRL_CORE_GENERATED_LIGHTBANK}/generated_upper_lower_hemenv_v1.hpp"
+    COMMAND "${Python3_EXECUTABLE}"
+            "${DSRRL_RENDERER_CORE_ROOT}/tools/generate_upper_lower_hemenv_v1.py"
+            --input "${DSRRL_RENDERER_CORE_ROOT}/data/provenance/upper_lower_hemenv_consumers_v1.tsv"
+            --output "${DSRRL_CORE_GENERATED_LIGHTBANK}/generated_upper_lower_hemenv_v1.hpp"
+    DEPENDS
+        "${DSRRL_RENDERER_CORE_ROOT}/tools/generate_upper_lower_hemenv_v1.py"
+        "${DSRRL_RENDERER_CORE_ROOT}/data/provenance/upper_lower_hemenv_consumers_v1.tsv"
+    VERBATIM)
+
+add_custom_target(
+    dsrrl_core_upper_lower_authority
+    DEPENDS
+        "${DSRRL_CORE_GENERATED_LIGHTBANK}/generated_upper_lower_hemenv_v1.hpp")
+
 set(
     RESHade_INCLUDE_DIR
     "${RESHADE_INCLUDE_DIR}"
@@ -157,12 +173,14 @@ add_library(
     "${DSRRL_RENDERER_CORE_ROOT}/src/runtime/island_draw_adapter.cpp"
     "${DSRRL_RENDERER_CORE_ROOT}/src/runtime/material_response_draw_transaction.cpp"
     "${DSRRL_RENDERER_CORE_ROOT}/src/operators/material_response/material_response_v211_materializer.cpp"
-    "${DSRRL_RENDERER_CORE_ROOT}/src/operators/lightbank/hemdir3_b13_materializer.cpp")
+    "${DSRRL_RENDERER_CORE_ROOT}/src/operators/lightbank/hemdir3_b13_materializer.cpp"
+    "${DSRRL_RENDERER_CORE_ROOT}/src/operators/lightbank/upper_lower_hemenv_materializer.cpp")
 
 add_dependencies(
     dsrrl_renderer_core_integrated
     dsrrl_core_material_resource_routes
-    dsrrl_core_hemdir3_authority)
+    dsrrl_core_hemdir3_authority
+    dsrrl_core_upper_lower_authority)
 
 target_include_directories(
     dsrrl_renderer_core_integrated
