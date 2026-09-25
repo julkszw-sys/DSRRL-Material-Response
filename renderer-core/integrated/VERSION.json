@@ -1,0 +1,22 @@
+{
+  "schema": "dsrrl.core_islands.version.v1",
+  "product_line": "DSRRL Core+Islands",
+  "version": "2.0.0-dev",
+  "artifact_stem": "DSRRL_Core_Islands_2_0_0_dev",
+  "branch": "main",
+  "status": "ACTIVE_DEVELOPMENT",
+  "architecture": "renderer-core+operator-islands+single-addon",
+  "legacy_monolith": {
+    "product_line": "DSRRL Material Response Monolith",
+    "version": "1.45",
+    "status": "FROZEN_LEGACY",
+    "development": false,
+    "build_key": "material_response_1_45_nexus_release_e441"
+  },
+  "version_policy": {
+    "namespace": "core_islands",
+    "monolith_namespace_separate": true,
+    "main_tracks_this_line": true,
+    "runtime_and_pixel_status_are_not_implied_by_version": true
+  }
+}
