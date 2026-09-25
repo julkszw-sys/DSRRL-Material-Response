@@ -22,6 +22,13 @@ struct island_draw_adapter_request {
 
     core::operator_mask additional_owners = 0;
 
+    // Additional owners are dependencies/composed operators. Their mutation
+    // ownership is explicit: never infer shader/resource/carrier ownership
+    // from the primary island's state changes.
+    core::operator_mask additional_shader_owners = 0;
+    core::operator_mask additional_resource_owners = 0;
+    core::operator_mask additional_carrier_owners = 0;
+
     bool receiver_verified = false;
     bool material_verified = false;
 
