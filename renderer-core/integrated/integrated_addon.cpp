@@ -4,7 +4,9 @@
 
 #include "dsrrl/runtime/asset_bridges.hpp"
 #include "dsrrl/runtime/engine_hooks.hpp"
+#include "dsrrl/runtime/envspec_runtime.hpp"
 #include "dsrrl/runtime/mr_island.hpp"
+#include "dsrrl/runtime/upper_lower_runtime.hpp"
 
 #include <reshade.hpp>
 
@@ -23,6 +25,8 @@ dsrrl::runtime::a1_create_pipeline_bridge
     g_a1_bridge(g_core.features());
 
 std::atomic<std::uint64_t> g_present_count{0};
+bool g_ul_producer_preflight_registered = false;
+bool g_envspec_resource_preflight_registered = false;
 
 bool apply_integrated_feature_policy() noexcept
 {
@@ -184,6 +188,19 @@ void unregister_a1_events()
     reshade::unregister_event<reshade::addon_event::init_device>(a1_init_device);
 }
 
+void unregister_deferred_preflights() noexcept
+{
+    if (g_envspec_resource_preflight_registered) {
+        dsrrl::runtime::envspec::unregister_runtime();
+        g_envspec_resource_preflight_registered = false;
+    }
+
+    if (g_ul_producer_preflight_registered) {
+        dsrrl::runtime::upper_lower::unregister_runtime();
+        g_ul_producer_preflight_registered = false;
+    }
+}
+
 void selector_dispatch(
     void *container,
     void *owner,
@@ -192,9 +209,18 @@ void selector_dispatch(
     void *r15,
     std::int32_t material_index) noexcept
 {
-    // One EngineBridge hook owner. Current integrated A2 forwards only to the
-    // material/resource island. U/L and P_Metal-source consumers remain OFF.
+    // One EngineBridge selector owner fans out immutable routing state.
+    // MR may consume it immediately; U/L receives only an observational
+    // producer/selector snapshot because its feature gate remains OFF.
     dsrrl::runtime::mr::selector_event(
+        container,
+        owner,
+        ret,
+        r14,
+        r15,
+        material_index);
+
+    dsrrl::runtime::upper_lower::selector_event(
         container,
         owner,
         ret,
@@ -253,6 +279,7 @@ bool AddonInit(
 
     if (!dsrrl::runtime::assets::register_runtime(g_core) ||
         !dsrrl::runtime::mr::register_runtime(g_core)) {
+        unregister_deferred_preflights();
         dsrrl::runtime::mr::unregister_runtime();
         dsrrl::runtime::assets::unregister_runtime();
         unregister_a1_events();
@@ -263,6 +290,26 @@ bool AddonInit(
             reshade_module);
         return false;
     }
+
+    // Remaining partial islands get pixel-inert producer/resource preflight
+    // only. Failure here does not disable the already-closed visible islands.
+    g_ul_producer_preflight_registered =
+        dsrrl::runtime::upper_lower::register_runtime(
+            g_core,
+            {.capture_pmetal_env_source = false});
+
+    g_envspec_resource_preflight_registered =
+        dsrrl::runtime::envspec::register_runtime();
+
+    if (!g_ul_producer_preflight_registered)
+        reshade::log::message(
+            reshade::log::level::warning,
+            "[DSRRL CORE INTEGRATED A2] U/L producer preflight unavailable; deferred U/L/HemDir3 remain fail-open.");
+
+    if (!g_envspec_resource_preflight_registered)
+        reshade::log::message(
+            reshade::log::level::warning,
+            "[DSRRL CORE INTEGRATED A2] EnvSpec identity/resource preflight unavailable; deferred EnvSpec remains fail-open.");
 
     if (!dsrrl::runtime::engine::install(
             &selector_dispatch,
@@ -283,11 +330,18 @@ bool AddonInit(
         return false;
     }
 
+    char ready_line[512]{};
+    std::snprintf(
+        ready_line,
+        sizeof(ready_line),
+        "[DSRRL CORE INTEGRATED A2] READY: 11 visible islands armed; "
+        "UL_producer_preflight=%s EnvSpec_resource_preflight=%s; "
+        "U/L consumer, legacy EnvSpec consumer, full PointLight and P_Metal V13/source remain OFF.",
+        g_ul_producer_preflight_registered ? "PASS" : "FAIL_OPEN",
+        g_envspec_resource_preflight_registered ? "PASS" : "FAIL_OPEN");
     reshade::log::message(
         reshade::log::level::info,
-        "[DSRRL CORE INTEGRATED A2] READY: 11 source-complete islands armed; "
-        "MR/SpecRGB/Diffuse/Normal/Subsurface/P_Metal V10 glue active behind exact gates; "
-        "U/L, legacy EnvSpec, full PointLight and P_Metal V13/source remain OFF.");
+        ready_line);
 
     return true;
 }
@@ -298,6 +352,7 @@ void AddonUninit(
     HMODULE reshade_module)
 {
     dsrrl::runtime::engine::uninstall();
+    unregister_deferred_preflights();
     dsrrl::runtime::mr::unregister_runtime();
     dsrrl::runtime::assets::unregister_runtime();
     unregister_a1_events();

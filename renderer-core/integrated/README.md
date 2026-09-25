@@ -55,10 +55,27 @@ logical texture, sidecar, tuple, donor, shader identity, device or restore
 state fails open to the untouched stock DSR draw. A failed restore quarantines
 the resource path rather than allowing a hybrid.
 
+## Deferred producer/readiness glue
+
+Partial operators are not promoted merely because their predecessor code exists.
+Integrated now wires two **pixel-inert preflights** while keeping the visible
+feature gates OFF:
+
+- Upper/Lower producer capture: exact producer/assignment snapshots are observed
+  and joined through the shared selector owner, but no b13 bind occurs while the
+  U/L feature remains OFF. The separate P_Metal V13/A-B producer hook is
+  explicitly disabled in this mode.
+- legacy EnvSpec resource preflight: native probe/SRV identity, exact sidecar
+  admission and PTDE sampler/resource carrier readiness may be established, but
+  no t12/t14/s12/s14 substitution occurs while EnvSpec remains OFF.
+
+Failure of either preflight is local and fail-open; it does not disable the 11
+already-wired visible islands.
+
 ## Deliberately not armed
 
-The presence of predecessor code is not authorization to activate an operator.
-The integrated policy therefore keeps these paths OFF:
+The presence of producer/readiness glue is not authorization to activate an
+operator. The integrated policy therefore keeps these paths OFF:
 
 - Upper/Lower;
 - HemDir3;

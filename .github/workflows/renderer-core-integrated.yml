@@ -91,6 +91,9 @@ jobs:
             'engine::install',
             'assets::register_runtime',
             'mr::register_runtime',
+            'upper_lower::register_runtime',
+            'envspec::register_runtime',
+            'capture_pmetal_env_source = false',
             'integrated_feature_policy'
           )) {
             if ($entry -notmatch [regex]::Escape($required)) {
@@ -99,11 +102,11 @@ jobs:
           }
 
           foreach ($forbidden in @(
-            'upper_lower::register_runtime',
-            'envspec::register_runtime'
+            'upper_lower::bind_draw',
+            'bind_pmetal_envspec'
           )) {
             if ($entry -match [regex]::Escape($forbidden)) {
-              throw "Deferred operator accidentally activated by integrated entrypoint: $forbidden"
+              throw "Deferred visible consumer accidentally activated by integrated entrypoint: $forbidden"
             }
           }
 
@@ -150,6 +153,9 @@ jobs:
             deferred_legacy_envspec = $true
             deferred_full_pointlight = $true
             deferred_pmetal_source = $true
+            ul_producer_preflight_glue = $true
+            envspec_resource_preflight_glue = $true
+            pmetal_v13_producer_capture = $false
             runtime_status = "NOT_TESTED"
             bridge_activation = "NOT_TESTED"
             pixel_status = "OPEN"
