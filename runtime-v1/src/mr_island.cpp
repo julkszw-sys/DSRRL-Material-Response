@@ -17,7 +17,7 @@
 #include "dsrrl/runtime/generated_spec_material_routes.hpp"
 #include "semantic_spec_donor_overrides_generated.hpp"
 #include "dsrrl/core/renderer_core.hpp"
-#include "dsrrl/operators/material_response/mtd_semantic_census.hpp"
+#include "dsrrl/operators/material_response/mtd_semantic_census.hpp"\n#include "dsrrl/operators/material_response/generated_dsr_flver_owner_tuples_v1.hpp"
 #include "dsrrl/sha256.hpp"
 #include "dsrrl/runtime/subsurface_dispatch.hpp"
 #include "ptde_material_donor_registry.hpp"
@@ -90,7 +90,7 @@ std::atomic<std::uint64_t> g_ptde_tex_mtd_exact{0};
 std::atomic<std::uint64_t> g_ptde_tex_selector_exact{0};
 std::atomic<std::uint64_t> g_diffuse_semantic_hold{0};
 std::atomic<std::uint64_t> g_normal_semantic_hold{0};
-std::atomic<std::uint64_t> g_owner_auth_hold{0};
+std::atomic<std::uint64_t> g_owner_auth_hold{0};\nstd::atomic<std::uint64_t> g_flver_parse_seen{0}, g_flver_identity_ok{0}, g_flver_identity_fail{0};\nstd::atomic<std::uint64_t> g_owner_tuple_auth_ok{0};
 
 namespace mtd_sem=dsrrl::operators::material_response;
 
@@ -108,7 +108,7 @@ std::mutex g_material_mutex;
 std::unordered_map<void*,std::uint16_t> g_material_donor;
 std::unordered_map<void*,std::uint8_t> g_material_spec_override;
 std::unordered_map<void*,mtd_sem::mtd_envspec_semantics> g_material_envspec;
-std::unordered_map<void*,mtd_sem::ptde_flver_texture_semantics> g_material_ptde_texture;
+std::unordered_map<void*,mtd_sem::ptde_flver_texture_semantics> g_material_ptde_texture;\nstd::unordered_map<void*,std::uint64_t> g_material_semantic_hash;\nstd::mutex g_flver_mutex;\nstd::unordered_map<void*,core::sha256_digest> g_flver_sha_by_model;\nthread_local bool g_draw_owner_tuple_authenticated=false;
 
 std::uint64_t legacy_semantic_key_hash(const wchar_t *semantic_key) noexcept
 {
@@ -1294,7 +1294,7 @@ bool on_draw_indexed(command_list *cmd,std::uint32_t index_count,std::uint32_t i
     // a separate, operator-specific carrier and must not be conflated with
     // FLVER ownership. Body/P_Metal keep their separately certified material
     // route.
-    route.owner_authorization.owner_tuple_authenticated=false;
+    route.owner_authorization.owner_tuple_authenticated=g_draw_owner_tuple_authenticated;
     route.owner_authorization.independent_exact_material_route=
         body_route || pmetal_exact_route;
     route.owner_authorization.diffuse_safe_exact_resource_tuple=
@@ -1855,7 +1855,7 @@ void on_present(command_queue *,swapchain *,const rect *,const rect *,std::uint3
                <<" ptde_tex_sel_exact="<<g_ptde_tex_selector_exact.load()
                <<" diff_sem_hold="<<g_diffuse_semantic_hold.load()
                <<" norm_sem_hold="<<g_normal_semantic_hold.load()
-               <<" owner_auth_hold="<<g_owner_auth_hold.load()
+               <<" flver_parse="<<g_flver_parse_seen.load()<<" flver_id_ok="<<g_flver_identity_ok.load()<<" flver_id_fail="<<g_flver_identity_fail.load()\n               <<" owner_auth_ok="<<g_owner_tuple_auth_ok.load()<<" owner_auth_hold="<<g_owner_auth_hold.load()
                <<" failopen="<<g_fail_open.load()
               <<" restore_fail="<<g_restore_fail.load()<<" quarantined="<<(g_quarantined.load()?1:0);
             log_info(os.str());
@@ -1916,7 +1916,7 @@ void mtd_event(
         g_material_donor.erase(material);
         g_material_spec_override.erase(material);
         g_material_envspec.erase(material);
-        g_material_ptde_texture.erase(material);
+        g_material_ptde_texture.erase(material);\n        g_material_semantic_hash.erase(material);
 
         if(idx>=0){
             g_material_donor[material]=static_cast<std::uint16_t>(idx);
@@ -1938,7 +1938,7 @@ void mtd_event(
     }catch(...){++g_fail_open;}
 }
 
-void selector_event(void *container,void *,void *ret,void *,void *,std::int32_t material_index) noexcept
+void flver_parse_event(void *model,const void *raw) noexcept\n{\n    ++g_flver_parse_seen;\n    if(!model || !raw){++g_flver_identity_fail;return;}\n    try{\n        std::array<std::uint8_t,0x18> header{};\n        if(!engine::safe_read_bytes(raw,header.data(),header.size())){++g_flver_identity_fail;return;}\n        constexpr std::array<std::uint8_t,6> magic={'F','L','V','E','R',0};\n        if(!std::equal(magic.begin(),magic.end(),header.begin())){++g_flver_identity_fail;return;}\n        std::uint32_t data_offset=0,data_length=0;\n        std::memcpy(&data_offset,header.data()+0x0c,sizeof(data_offset));\n        std::memcpy(&data_length,header.data()+0x10,sizeof(data_length));\n        const std::uint64_t total64=static_cast<std::uint64_t>(data_offset)+data_length;\n        if(data_offset<0x40u || total64<data_offset || total64>0x40000000ull){++g_flver_identity_fail;return;}\n        const auto digest=dsrrl::sha256({reinterpret_cast<const std::byte*>(raw),static_cast<std::size_t>(total64)});\n        {std::lock_guard lock(g_flver_mutex);g_flver_sha_by_model[model]=digest;}\n        ++g_flver_identity_ok;\n    }catch(...){++g_flver_identity_fail;++g_fail_open;}\n}\n\nvoid selector_event(void *container,void *,void *ret,void *,void *,std::int32_t material_index) noexcept
 {
     ++g_selector_seen;
     const auto base=engine::image_base();
@@ -1959,7 +1959,7 @@ void selector_event(void *container,void *,void *ret,void *,void *,std::int32_t 
         g_draw_ptde_texture={};
         return;
     }
-    void *actual=resolve_material(container,material_index);
+    void *actual=resolve_material(container,material_index);\n    g_draw_owner_tuple_authenticated=false;\n    if(container && actual && material_index>=0){\n        core::sha256_digest flver_sha{};\n        bool have_flver=false;\n        const auto model=reinterpret_cast<void*>(reinterpret_cast<std::uintptr_t>(container)-0x88u);\n        {std::lock_guard lock(g_flver_mutex);const auto it=g_flver_sha_by_model.find(model);if(it!=g_flver_sha_by_model.end()){flver_sha=it->second;have_flver=true;}}\n        std::uint64_t semantic_hash=0u;\n        {std::lock_guard lock(g_material_mutex);const auto it=g_material_semantic_hash.find(actual);if(it!=g_material_semantic_hash.end())semantic_hash=it->second;}\n        if(have_flver && semantic_hash!=0u)\n            g_draw_owner_tuple_authenticated=\n                mtd_sem::generated::dsr_flver_owner_tuple_authenticated(\n                    flver_sha,static_cast<std::uint32_t>(material_index),semantic_hash);\n        if(g_draw_owner_tuple_authenticated) ++g_owner_tuple_auth_ok;\n    }
     g_draw_donor=donor_for(actual);
     g_draw_spec_override=spec_override_for(actual);
     g_draw_envspec=envspec_for(actual);
@@ -1978,7 +1978,7 @@ bool register_runtime(core::renderer_core &core) noexcept
     g_v13_first_draw_logged.store(false);
     g_v10_first_draw_logged.store(false);
     g_envspec_rgba_first_draw_logged.store(false);
-    g_draw_donor=-1; g_draw_spec_override=-1; g_draw_envspec={}; g_draw_envspec_exact=false; g_draw_ptde_texture={};
+    g_draw_donor=-1; g_draw_spec_override=-1; g_draw_envspec={}; g_draw_envspec_exact=false; g_draw_ptde_texture={}; g_draw_owner_tuple_authenticated=false;
     g_bound_host=-1; g_bound_lerp=false; g_bound_subsurface=false; g_bound_command=nullptr;
     g_enabled.store(true);
     reshade::register_event<reshade::addon_event::init_device>(on_init_device);
@@ -2011,11 +2011,11 @@ void unregister_runtime() noexcept
         g_material_donor.clear();
         g_material_spec_override.clear();
         g_material_envspec.clear();
-        g_material_ptde_texture.clear();
+        g_material_ptde_texture.clear();\n        g_material_semantic_hash.clear();
     }
     g_draw_donor=-1; g_draw_spec_override=-1; g_draw_envspec={}; g_draw_envspec_exact=false; g_draw_ptde_texture={};
     g_bound_host=-1; g_bound_lerp=false; g_bound_subsurface=false; g_bound_command=nullptr;
-    g_core=nullptr;
+    {std::lock_guard lock(g_flver_mutex);g_flver_sha_by_model.clear();}\n    g_draw_owner_tuple_authenticated=false;\n    g_core=nullptr;
 }
 
 } // namespace dsrrl::runtime::mr
