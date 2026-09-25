@@ -53,6 +53,10 @@ public:
         const spec_rgb_bind_request &request) const;
 
     void erase_stock(spec_rgb_resource_handle stock_t1_srv);
+    // Companion SRVs are addon-owned live D3D11 resources. Their destruction is
+    // an independent lifetime boundary from stock t1 destruction; retaining a
+    // cache entry after it would permit a stale/reused handle to reach t10.
+    void erase_companion(spec_rgb_resource_handle ptde_t10_srv);
     void clear() noexcept;
     std::size_t size() const noexcept;
 
@@ -67,6 +71,7 @@ private:
     mutable std::mutex mutex_;
     std::unordered_map<std::u16string, entry> by_name_;
     std::unordered_map<spec_rgb_resource_handle, std::u16string> name_by_stock_;
+    std::unordered_map<spec_rgb_resource_handle, std::u16string> name_by_companion_;
     // Once one live stock handle has been observed under multiple logical
     // identities, the handle itself is ambiguous. Keep that quarantine until
     // erase_stock observes resource destruction; otherwise a third name could
