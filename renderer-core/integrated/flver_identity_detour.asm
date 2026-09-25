@@ -21,6 +21,7 @@ dsrrl_flver_selector_hook_entry PROC
  movdqu xmmword ptr [rsp+80h],xmm5
  mov rcx,qword ptr [rsp+0D0h]
  mov rdx,qword ptr [rsp+0C0h]
+ mov r8,qword ptr [rsp+0E8h]
  call dsrrl_flver_selector_observer
  movdqu xmm0,xmmword ptr [rsp+30h]
  movdqu xmm1,xmmword ptr [rsp+40h]
