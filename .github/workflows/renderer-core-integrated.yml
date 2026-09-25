@@ -102,19 +102,49 @@ jobs:
           $entry = Get-Content renderer-core/integrated/integrated_addon.cpp -Raw
           $bridge = Get-Content renderer-core/src/runtime/a1_create_pipeline_bridge.cpp -Raw
 
-          if ($entry -match 'addon_event::draw(?:_indexed)?' -or $bridge -match 'addon_event::draw(?:_indexed)?') {
-            throw "Current native integrated path must not register draw callbacks"
+          # Draw callbacks are allowed only for the pixel-inert owner/receiver
+          # identity probe. Material Response itself must remain unarmed until
+          # runtime telemetry verifies the selector->draw routing.
+          if ($entry -match 'operator_id::material_response') {
+            throw "Material Response must remain disabled in the active integrated feature set"
+          }
+
+          if ($bridge -match 'addon_event::draw(?:_indexed)?') {
+            throw "A1 create-time bridge must not own draw callbacks"
+          }
+
+          foreach ($required in @(
+            'addon_event::draw',
+            'addon_event::draw_indexed',
+            'observe_draw_identity',
+            'return false;'
+          )) {
+            if ($entry -notmatch [regex]::Escape($required)) {
+              throw "Pixel-inert draw identity probe invariant missing: $required"
+            }
           }
 
           if ($entry -match '\bDraw(?:Indexed|Instanced|IndexedInstanced)?\s*\(' -or $bridge -match '\bDraw(?:Indexed|Instanced|IndexedInstanced)?\s*\(') {
             throw "Current native integrated path must not issue draw replay"
           }
 
+          foreach ($forbidden in @(
+            'draw_transaction',
+            'bind_shader_and_resources',
+            'PSSetShaderResources',
+            'PSSetConstantBuffers',
+            'PSSetSamplers'
+          )) {
+            if ($entry -match [regex]::Escape($forbidden)) {
+              throw "Telemetry-only draw probe attempted render-state mutation: $forbidden"
+            }
+          }
+
           if ($entry -match 'P_Metal|P_METAL|pmetal' -or $bridge -match 'P_Metal|P_METAL|pmetal') {
             throw "Current A1 create-time path must not special-case P_Metal"
           }
 
-          Write-Host "CORE_ISLANDS_NATIVE_A1_BOUNDARY_PASS"
+          Write-Host "CORE_ISLANDS_NATIVE_A1_PLUS_PIXEL_INERT_IDENTITY_PROBE_BOUNDARY_PASS"
 
       - name: Build audit and package
         shell: pwsh
