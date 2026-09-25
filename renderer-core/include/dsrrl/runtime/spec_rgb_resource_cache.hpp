@@ -7,6 +7,7 @@
 #include <mutex>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 
 namespace dsrrl::runtime {
 
@@ -66,6 +67,11 @@ private:
     mutable std::mutex mutex_;
     std::unordered_map<std::u16string, entry> by_name_;
     std::unordered_map<spec_rgb_resource_handle, std::u16string> name_by_stock_;
+    // Once one live stock handle has been observed under multiple logical
+    // identities, the handle itself is ambiguous. Keep that quarantine until
+    // erase_stock observes resource destruction; otherwise a third name could
+    // silently reclaim the handle after the reverse owner was removed.
+    std::unordered_set<spec_rgb_resource_handle> ambiguous_stock_;
 };
 
 } // namespace dsrrl::runtime
