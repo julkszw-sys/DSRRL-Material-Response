@@ -108,6 +108,9 @@ jobs:
           $entry = Get-Content renderer-core/integrated/integrated_addon.cpp -Raw
           $bridge = Get-Content renderer-core/src/runtime/a1_create_pipeline_bridge.cpp -Raw
           $tx = Get-Content renderer-core/src/runtime/material_response_draw_transaction.cpp -Raw
+          $sharedTx = Get-Content renderer-core/src/runtime/draw_state_transaction.cpp -Raw
+          $adapter = Get-Content renderer-core/src/runtime/island_draw_adapter.cpp -Raw
+          $policy = Get-Content renderer-core/include/dsrrl/core/draw_transaction_policy.hpp -Raw
           $mr = Get-Content renderer-core/src/operators/material_response/material_response_v211_materializer.cpp -Raw
 
           if ($entry -notmatch 'operator_id::material_response') { throw "Material Response feature is not armed in Core+Islands" }
@@ -128,14 +131,38 @@ jobs:
           foreach ($required in @(
             'PSSetShader',
             'PSSetConstantBuffers',
+            'PSSetShaderResources',
+            'PSSetSamplers',
             'DrawIndexed',
             'DrawIndexedInstanced',
             'restore_ps_constant_buffer_window',
             'transactions().begin',
             'transactions().restore',
+            'issued_restore_failed',
             'quarantined_.store(true)'
           )) {
-            if ($tx -notmatch [regex]::Escape($required)) { throw "MR transaction/restore invariant missing: $required" }
+            if ($sharedTx -notmatch [regex]::Escape($required)) { throw "Shared draw transaction invariant missing: $required" }
+          }
+
+          foreach ($required in @(
+            'build_island_draw_mutation',
+            'required_mutation_mask',
+            'allowed_mutation_mask',
+            'receiver_gate_missing',
+            'material_gate_missing'
+          )) {
+            if (($adapter + $policy) -notmatch [regex]::Escape($required)) { throw "Shared island adapter policy invariant missing: $required" }
+          }
+
+          if ($policy -notmatch 'operator_count' -or $policy -notmatch 'draw_required' -or $policy -notmatch 'create_time_safe' -or $policy -notmatch 'host_preserve') {
+            throw "All-island transaction policy coverage is missing"
+          }
+
+          foreach ($required in @(
+            'build_island_draw_mutation',
+            'draw_tx_issued'
+          )) {
+            if ($tx -notmatch [regex]::Escape($required)) { throw "MR is not migrated onto the shared transaction layer: $required" }
           }
 
           foreach ($required in @(
@@ -148,8 +175,7 @@ jobs:
           }
 
           if ($entry -match 'P_Metal|P_METAL|pmetal' -or $bridge -match 'P_Metal|P_METAL|pmetal') { throw "Integrated entry/A1 bridge must not special-case P_Metal" }
-          Write-Host "CORE_ISLANDS_EXACT_MR_DRAW_TRANSACTION_BOUNDARY_PASS"
-
+          Write-Host "CORE_ISLANDS_SHARED_DRAW_TRANSACTION_BOUNDARY_PASS"
       - name: Verify Material Response generated authority
         shell: pwsh
         run: |
