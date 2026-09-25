@@ -1627,11 +1627,17 @@ bool on_draw_indexed(command_list *cmd,std::uint32_t index_count,std::uint32_t i
                     route.spec_t10_consumer_active=spec_active;
 
                     const bool assets_ok=assets::apply_draw(ctx,route,receiver_id,asset_state);
-                    const bool envspec_ok=
-                        !pmetal_envspec_active ||
-                        bind_pmetal_envspec(ctx,envspec_identity,envspec_state);
-                    if(pmetal_envspec_active && !envspec_ok)
-                        ++g_envspec_rgba_bind_fail;
+                    bool envspec_ok=true;
+                    if(pmetal_envspec_active){
+                        envspec_ok=
+                            assets_ok &&
+                            bind_pmetal_envspec(
+                                ctx,
+                                envspec_identity,
+                                envspec_state);
+                        if(!envspec_ok)
+                            ++g_envspec_rgba_bind_fail;
+                    }
                     // Subsurf bypass is all-or-nothing: never drop SSS if a
                     // required ordinary PTDE surface dependency failed to bind.
                     // Full EnvSpec is likewise all-or-nothing with its exact
