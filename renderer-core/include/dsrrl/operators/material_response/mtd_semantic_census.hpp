@@ -8,7 +8,7 @@ namespace dsrrl::operators::material_response {
 
 enum class mtd_semantic_state : std::uint8_t { unknown=0,use,no_use };
 enum class mtd_semantic_operator : std::uint8_t { material_response=0,spec_rgb,env_spec,subsurface,diffuse,normal_bump,upper_lower,hemenv,hemenv_lerp,pointlight,alpha_blend,parallax,emissive_lightmap,texture_resource_consumers };
-enum class mtd_semantic_source : std::uint8_t { none=0,full24_exact_cohort,exact_override,exact_binding_extension,envspec_router_exact,ptde_flver_texture_semantics_exact };
+enum class mtd_semantic_source : std::uint8_t { none=0,full24_exact_cohort,exact_override,exact_binding_extension,envspec_router_exact,ptde_flver_texture_semantics_exact,flver_pairwise_stable_exact };
 enum class mtd_gate_policy : std::uint8_t { none=0,exact_material,direct_exact,ptde_companion_required };
 
 // First-class ownership identity. Zero/invalid fields mean ownership is not

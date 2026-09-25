@@ -27,15 +27,15 @@ struct ptde_flver_texture_semantic_record {
 };
 
 inline constexpr char k_ptde_flver_texture_semantics_owner_zip_sha256[] =
-    "a4578a2d35e35a295ed2edd29d4439ffa04ed6e4d40379fd649176d304ef2418";
+    "6651acb4fe995a69f1c84e5761b3d6bdcadeb39e1fc4d1087c3b82794f4d7281";
 inline constexpr char k_ptde_flver_texture_semantics_input_tsv_sha256[] =
     "f6fab999e103cb11a0c3ce50b33bde82c531f8297df81674344c1e3e9082a6f6";
 inline constexpr char k_ptde_flver_texture_semantics_scan_summary_sha256[] =
-    "1d2d8f8fd9925c00856e4a6b888c0ecc3290aaf0cbfd75f134bc3da592e004fe";
+    "af7331fd0eeb9959559e655253c1439731684291953f2d00fe1bf0d4ed9860c5";
 inline constexpr char k_ptde_flver_texture_semantics_scan_errors_sha256[] =
-    "1285616dfd1c4e6e1ffe9b1e24a536200ce423db346a2f9ebd4f90e0e1057c8e";
-inline constexpr std::size_t k_ptde_flver_texture_semantics_scan_error_count = 75u;
-inline constexpr bool k_ptde_flver_texture_semantics_source_complete = false;
+    "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
+inline constexpr std::size_t k_ptde_flver_texture_semantics_scan_error_count = 0u;
+inline constexpr bool k_ptde_flver_texture_semantics_source_complete = true;
 inline constexpr std::size_t k_ptde_flver_texture_semantics_record_count = 261u;
 
 inline constexpr std::array<ptde_flver_texture_semantic_record,

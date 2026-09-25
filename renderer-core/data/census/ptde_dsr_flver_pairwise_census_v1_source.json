@@ -1,0 +1,56 @@
+{
+  "schema": "dsrrl.flver_pairwise_material_census.source.v1",
+  "target": "PTDE-visible material/resource routing on DSR host",
+  "scope": "static FLVER owner-slot material semantics; not pixel equivalence",
+  "inputs": {
+    "dsr_compact_zip": {
+      "filename": "DSR_FLVER_CENSUS_COMPACT.zip",
+      "sha256": "a9a2e0eb48625fc735dfe18f7f375105cc5f56be005022969300c778489d0891",
+      "flver_provenance_records": 4162,
+      "unique_full_flver_hashes": 4161,
+      "parsed_material_slots": 19985,
+      "parse_errors": 0
+    },
+    "ptde_fixed_zip": {
+      "filename": "DSRRL_PTDE_FLVER_CENSUS_FIXED.zip",
+      "sha256": "6651acb4fe995a69f1c84e5761b3d6bdcadeb39e1fc4d1087c3b82794f4d7281",
+      "canonical_rows": 87151,
+      "unique_flver_payloads": 4688,
+      "unresolved_rows": 0,
+      "scan_errors": 0,
+      "source_complete_candidate": true
+    }
+  },
+  "derived": {
+    "full_census_json_sha256": "f9f186dafd9165fc3ac5740a0c5b18dde5e89914923011082ec7ac4e802c12ea",
+    "census_artifact_zip_sha256": "beebc5d7dd55a9ffed363d634bff0d0dc690df748806ec89b8b37cf400b53362",
+    "dsr_mtds": 367,
+    "ptde_mtds": 261,
+    "overlap_mtds": 256,
+    "ptde_only_mtds": 5,
+    "dsr_only_mtds": 111,
+    "mixed_overlap_mtds": 56,
+    "stable_shared_resource": {
+      "g_Diffuse": 233,
+      "g_Bumpmap": 173,
+      "g_Specular": 149
+    },
+    "texture_signature_classes": {
+      "EXACT_TEXTURE_SIGNATURE": 130,
+      "PARTIAL_EXACT_TEXTURE_SIGNATURE": 55,
+      "SEMANTIC_SET_MATCH": 6,
+      "MTD_ONLY_MATCH": 65,
+      "DSR_ONLY": 111,
+      "PTDE_ONLY": 5
+    }
+  },
+  "runtime_policy": {
+    "authorized_operators": ["diffuse", "normal_bump"],
+    "activation": "existing exact positive PTDE capability + exact DSR MTD identity + exact FLVER/material ownership + pairwise shared-stable resource",
+    "union_evidence": "never authorizes runtime activation",
+    "mixed_usage": "evaluate per semantic bit; unstable bit fails open",
+    "unmatched_mtd": "fail open",
+    "other_operators": "unchanged; EnvSpec/SpecRGB/Subsurface/PointLight retain independently certified routes"
+  },
+  "generator": "renderer-core/tools/generate_flver_pairwise_material_census.py"
+}

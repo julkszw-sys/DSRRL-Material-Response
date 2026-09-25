@@ -2,6 +2,7 @@
 #include "dsrrl/operators/material_response/material_response_seed.hpp"
 #include "dsrrl/operators/material_response/generated_envspec_router_v1.hpp"
 #include "dsrrl/operators/material_response/generated_ptde_flver_texture_semantics_v1.hpp"
+#include "dsrrl/operators/material_response/generated_flver_pairwise_semantics_v1.hpp"
 #include "dsrrl/operators/env_spec/env_spec_island.hpp"
 #include "dsrrl/operators/resource_bridges/spec_rgb_bridge.hpp"
 
@@ -129,7 +130,7 @@ int main()
     // for positive USE; resource tuple checks remain downstream in runtime.
     const auto pmetal_tex=classify_ptde_flver_texture_semantics(pmetal);
     CHECK(pmetal_tex.exact_host_identity_match);
-    CHECK(!pmetal_tex.source_complete);
+    CHECK(pmetal_tex.source_complete);
     CHECK(ptde_flver_texture_semantic_present(
         pmetal_tex,ptde_texture_semantic::diffuse));
     CHECK(ptde_flver_texture_semantic_present(
@@ -173,13 +174,13 @@ int main()
     d=classify_mtd_semantic(owned_q,mtd_semantic_operator::diffuse);
     CHECK(d.state==mtd_semantic_state::use);
     CHECK(d.source==
-          mtd_semantic_source::ptde_flver_texture_semantics_exact);
+          mtd_semantic_source::flver_pairwise_stable_exact);
     CHECK(d.exact_identity_match);
 
     d=classify_mtd_semantic(owned_q,mtd_semantic_operator::normal_bump);
     CHECK(d.state==mtd_semantic_state::use);
     CHECK(d.source==
-          mtd_semantic_source::ptde_flver_texture_semantics_exact);
+          mtd_semantic_source::flver_pairwise_stable_exact);
     CHECK(d.exact_identity_match);
 
     auto wrong_tex=pmetal;
@@ -394,12 +395,24 @@ int main()
     CHECK(slot_counts[3]==44u);
 
 
-    // Imported owner FLVER census is positive-use evidence only because the
-    // source scan had 75 BND3 parse failures. The generated table must retain
-    // this provenance and never promote missing bits to NO_USE.
+    // FIXED owner FLVER census closed the variable-header BND3 parser gap:
+    // zero scan errors / zero unresolved rows. Absence is still not promoted
+    // blindly; Diffuse/Normal additionally require the DSR<->PTDE pairwise
+    // shared-stable resource gate.
     CHECK(generated::k_ptde_flver_texture_semantics_v1.size()==261u);
-    CHECK(generated::k_ptde_flver_texture_semantics_scan_error_count==75u);
-    CHECK(!generated::k_ptde_flver_texture_semantics_source_complete);
+    CHECK(generated::k_ptde_flver_texture_semantics_scan_error_count==0u);
+    CHECK(generated::k_ptde_flver_texture_semantics_source_complete);
+    CHECK(generated::k_flver_pairwise_overlap_mtd_count==256u);
+    CHECK(generated::k_flver_pairwise_diffuse_reject.size()==6u);
+    CHECK(generated::k_flver_pairwise_bump_reject.size()==6u);
+    CHECK(generated::flver_pairwise_diffuse_stable_after_ptde_positive(
+        mtd_semantic_hash("P_Metal[DSB].mtd")));
+    CHECK(generated::flver_pairwise_bump_stable_after_ptde_positive(
+        mtd_semantic_hash("P_Metal[DSB].mtd")));
+    CHECK(!generated::flver_pairwise_diffuse_stable_after_ptde_positive(
+        mtd_semantic_hash("P[D].mtd")));
+    CHECK(!generated::flver_pairwise_bump_stable_after_ptde_positive(
+        mtd_semantic_hash("Ps_Wander_Ghost.mtd")));
 
     std::size_t ptde_diffuse_count=0u;
     std::size_t ptde_bump_count=0u;
