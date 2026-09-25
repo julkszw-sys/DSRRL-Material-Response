@@ -1,83 +1,219 @@
 #!/usr/bin/env python3
-"""DSR source-complete FLVER/material ownership exporter.
+"""Export source-complete DSR FLVER/material ownership from an extracted root.
 
-Read-only scanner for a Dark Souls Remastered extracted asset root. It deliberately
-emits ownership facts only; it does not infer PTDE equivalence. The output schema
-matches flver_material_ownership_census.py so PTDE and DSR corpora can be joined
-only after both sides are source-complete.
-
-Input root is expected to contain extracted FLVER/FLVER2 and MTD files (for
-example from a read-only binder extraction). Unknown/unsupported files are
-ignored; unresolved material references are emitted separately and therefore
-cannot be mistaken for operator absence.
+This is construction evidence only. It reuses the canonical FLVER2/DCX parser
+from dsr_flver_zip_ownership_census.py so extracted-root and ZIP scans cannot
+drift on binary layout. Exact PTDE homology, runtime activation, and pixel
+equivalence remain separate evidence layers.
 """
 from __future__ import annotations
-import argparse,csv,hashlib,json,struct
-from collections import defaultdict
+
+import argparse
+import csv
+import hashlib
+import json
+from collections import Counter, defaultdict
 from pathlib import Path
 
-SCHEMA=("game","flver_identity","material_slot","mtd_name","mtd_sha256","spx_sha256","receiver_index","consumer_family","material_family","texture_semantic","resource_hash","srv_slot","sampler_slot")
+from dsr_flver_zip_ownership_census import (
+    DCX_MAGIC,
+    FLVER_MAGIC,
+    basename_any,
+    norm_slashes,
+    parse_flver2_materials,
+    sha256_bytes,
+    unwrap_dcx,
+)
 
-def sha(b:bytes)->str:return hashlib.sha256(b).hexdigest()
-def cstr(b:bytes,o:int)->str:
-    if o<0 or o>=len(b):return ""
-    e=b.find(b"\0",o)
-    if e<0:e=len(b)
-    for enc in ("utf-8","shift_jis","cp932","latin1"):
-        try:return b[o:e].decode(enc)
-        except UnicodeDecodeError:pass
-    return b[o:e].decode("latin1",errors="replace")
+SCHEMA=(
+    "game","flver_identity","material_slot","mtd_name","mtd_sha256",
+    "spx_sha256","receiver_index","consumer_family","material_family",
+    "texture_semantic","resource_hash","srv_slot","sampler_slot",
+)
 
-def material_records(data:bytes):
-    # FLVER2 material table: DS1-family layout. Fail closed on implausible data.
-    if not data.startswith(b"FLVER\0") or len(data)<0x80:return []
-    endian=">" if data[6:8]==b"B\0" else "<"
-    def i32(o):return struct.unpack_from(endian+"i",data,o)[0]
-    # Known FLVER2 header fields; candidate validation prevents silent garbage.
-    candidates=[]
-    for count_off,table_off in ((0x20,0x24),(0x24,0x28),(0x28,0x2c)):
-        try:n=i32(count_off);off=i32(table_off)
-        except struct.error:continue
-        if 0<n<10000 and 0x40<=off<len(data):candidates.append((n,off))
-    for n,off in candidates:
-        for stride in (0x20,0x1c,0x18):
-            if off+n*stride>len(data):continue
-            rows=[];ok=True
-            for k in range(n):
-                p=off+k*stride
-                try:name_off=i32(p);mtd_off=i32(p+4)
-                except struct.error:ok=False;break
-                name=cstr(data,name_off);mtd=cstr(data,mtd_off)
-                if not mtd.lower().endswith(".mtd"):ok=False;break
-                rows.append((k,name,mtd))
-            if ok:return rows
-    return []
 
-def main():
-    ap=argparse.ArgumentParser();ap.add_argument("root",type=Path);ap.add_argument("--out",type=Path,default=Path("dsr_flver_ownership.tsv"));ap.add_argument("--unresolved",type=Path,default=Path("dsr_flver_ownership_unresolved.tsv"));a=ap.parse_args()
-    mtd=defaultdict(list)
-    for p in a.root.rglob("*"):
-        if p.is_file() and p.suffix.lower()==".mtd":mtd[p.name.lower()].append((p,sha(p.read_bytes())))
-    rows=[];bad=[];flvers=0
-    for p in a.root.rglob("*"):
-        if not p.is_file():continue
-        try:b=p.read_bytes()
-        except OSError:continue
-        if not b.startswith(b"FLVER\0"):continue
-        flvers+=1;ident=f"{p.relative_to(a.root).as_posix()}#{sha(b)}"
-        recs=material_records(b)
-        if not recs:bad.append((ident,"FLVER material table unresolved"));continue
-        for slot,_,name in recs:
-            hits=mtd.get(Path(name.replace('\\','/')).name.lower(),[])
-            if len(hits)!=1:
-                bad.append((ident,f"slot={slot};mtd={name};matches={len(hits)}"));continue
-            _,mh=hits[0]
-            rows.append(("DSR",ident,slot,name,mh,"","","","","","","",""))
+def sha256_file(path:Path,chunk:int=8<<20)->str:
+    h=hashlib.sha256()
+    with path.open("rb") as f:
+        while True:
+            block=f.read(chunk)
+            if not block:
+                return h.hexdigest()
+            h.update(block)
+
+
+def resolve_mtd(
+    mtd_index:dict[str,list[tuple[Path,str]]],
+    mtd_path:str,
+)->tuple[str|None,list[tuple[Path,str]]]:
+    """Resolve a basename only when every matching file has one content hash."""
+    name=basename_any(mtd_path)
+    hits=mtd_index.get(name.casefold(),[])
+    by_hash=defaultdict(list)
+    for path,digest in hits:
+        by_hash[digest].append(path)
+    if len(by_hash)!=1:
+        return None,hits
+    return next(iter(by_hash)),hits
+
+
+def main()->int:
+    ap=argparse.ArgumentParser()
+    ap.add_argument("root",type=Path)
+    ap.add_argument("--out",type=Path,default=Path("dsr_flver_ownership.tsv"))
+    ap.add_argument(
+        "--unresolved",
+        type=Path,
+        default=Path("dsr_flver_ownership_unresolved.tsv"),
+    )
+    ap.add_argument(
+        "--summary",
+        type=Path,
+        default=Path("dsr_flver_ownership_summary.json"),
+    )
+    a=ap.parse_args()
+
+    root=a.root.resolve()
+    if not root.is_dir():
+        ap.error(f"root is not a directory: {root}")
+
+    mtd_index=defaultdict(list)
+    scan_errors=[]
+    for p in root.rglob("*"):
+        if not p.is_file() or p.suffix.casefold()!=".mtd":
+            continue
+        try:
+            digest=sha256_file(p)
+        except OSError as exc:
+            scan_errors.append((
+                p.relative_to(root).as_posix(),
+                f"MTD_READ: {exc}",
+            ))
+            continue
+        mtd_index[p.name.casefold()].append((p,digest))
+
+    rows=[]
+    unresolved=[]
+    counts=Counter()
+    versions=Counter()
+
+    for p in root.rglob("*"):
+        if not p.is_file() or p.suffix.casefold()==".mtd":
+            continue
+        rel=p.relative_to(root).as_posix()
+        try:
+            raw=p.read_bytes()
+        except OSError as exc:
+            if p.suffix.casefold() in {".flver",".flver2",".dcx"}:
+                unresolved.append((rel,f"FILE_READ: {exc}"))
+            continue
+
+        try:
+            data,layers=unwrap_dcx(raw)
+        except Exception as exc:
+            if raw.startswith(DCX_MAGIC) or p.suffix.casefold()==".dcx":
+                unresolved.append((rel,f"DCX: {exc}"))
+            continue
+        if not data.startswith(FLVER_MAGIC):
+            continue
+
+        counts["flver_files"]+=1
+        counts["dcx_layers"]+=layers
+        digest=sha256_bytes(data)
+        ident=f"DSR|{norm_slashes(rel)}#{digest}"
+
+        try:
+            version,materials=parse_flver2_materials(data)
+        except Exception as exc:
+            unresolved.append((ident,f"FLVER_PARSE: {exc}"))
+            continue
+
+        counts["flver_parse_ok"]+=1
+        counts["material_instances"]+=len(materials)
+        versions[f"0x{version:X}"]+=1
+
+        for material in materials:
+            mtd_hash,hits=resolve_mtd(mtd_index,material.mtd_path)
+            if mtd_hash is None:
+                unresolved.append((
+                    ident,
+                    (
+                        f"slot={material.slot};mtd={material.mtd_path};"
+                        f"distinct_hashes={len({h for _,h in hits})};"
+                        f"matches={len(hits)}"
+                    ),
+                ))
+                continue
+
+            bindings=material.textures or (None,)
+            for binding in bindings:
+                semantic="" if binding is None else binding.semantic
+                rows.append((
+                    "DSR",
+                    ident,
+                    material.slot,
+                    basename_any(material.mtd_path),
+                    mtd_hash,
+                    "","","","",
+                    semantic,
+                    "","","",
+                ))
+                counts["ownership_rows"]+=1
+                if binding is not None:
+                    counts["texture_bindings"]+=1
+
+    unresolved.extend(scan_errors)
+    rows.sort(key=lambda r:(
+        r[1],
+        int(r[2]),
+        str(r[3]).casefold(),
+        str(r[9]).casefold(),
+    ))
+    unresolved.sort(key=lambda r:(r[0],r[1]))
+
+    a.out.parent.mkdir(parents=True,exist_ok=True)
+    a.unresolved.parent.mkdir(parents=True,exist_ok=True)
+    a.summary.parent.mkdir(parents=True,exist_ok=True)
+
     with a.out.open("w",newline="",encoding="utf-8") as f:
-        w=csv.writer(f,delimiter="\t",lineterminator="\n");w.writerow(SCHEMA);w.writerows(rows)
+        w=csv.writer(f,delimiter="\t",lineterminator="\n")
+        w.writerow(SCHEMA)
+        w.writerows(rows)
+
     with a.unresolved.open("w",newline="",encoding="utf-8") as f:
-        w=csv.writer(f,delimiter="\t",lineterminator="\n");w.writerow(("flver_identity","reason"));w.writerows(bad)
-    summary={"game":"DSR","flver_files":flvers,"resolved_material_rows":len(rows),"unresolved_rows":len(bad),"source_complete":len(bad)==0 and flvers>0,"policy":"absence is not operator absence unless source_complete=true"}
+        w=csv.writer(f,delimiter="\t",lineterminator="\n")
+        w.writerow(("flver_identity","reason"))
+        w.writerows(unresolved)
+
+    summary={
+        "schema":2,
+        "game":"DSR",
+        "claim_scope":
+            "FLVER_MATERIAL_SLOT_MTD_TEXTURE_SEMANTIC_CONSTRUCTION_EVIDENCE",
+        "counts":{
+            **{k:int(v) for k,v in sorted(counts.items())},
+            "mtd_basenames":len(mtd_index),
+            "unresolved_rows":len(unresolved),
+        },
+        "flver_versions":dict(sorted(versions.items())),
+        "source_complete":
+            counts["flver_files"]>0 and len(unresolved)==0,
+        "policy":{
+            "duplicate_mtd_basename":
+                "RESOLVE_ONLY_IF_ALL_MATCHES_HAVE_ONE_CONTENT_SHA256",
+            "missing_or_ambiguous_mtd":"UNKNOWN_FAIL_OPEN",
+            "cross_version_homology":"OPEN",
+            "runtime_activation":"OPEN",
+            "pixel_equivalence":"OPEN",
+        },
+    }
+    a.summary.write_text(
+        json.dumps(summary,indent=2,sort_keys=True)+"\n",
+        encoding="utf-8",
+    )
     print(json.dumps(summary,indent=2,sort_keys=True))
     return 0 if summary["source_complete"] else 2
-if __name__=="__main__":raise SystemExit(main())
+
+
+if __name__=="__main__":
+    raise SystemExit(main())
