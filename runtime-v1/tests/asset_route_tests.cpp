@@ -3,12 +3,23 @@
 #include "dsrrl/runtime/generated_spec_routes_v12.hpp"
 #include "dsrrl/runtime/generated_spec_material_routes.hpp"
 #include "dsrrl/runtime/generated_ul_stable_hashes.hpp"
+#include "dsrrl/runtime/material_owner_authorization.hpp"
 
 #include <cstdint>
 
 int main()
 {
     using namespace dsrrl::runtime::generated;
+    using dsrrl::runtime::assets::material_owner_authorization;
+    using dsrrl::runtime::assets::material_owner_authorized;
+
+    static_assert(!material_owner_authorized(material_owner_authorization{}));
+    static_assert(material_owner_authorized(
+        material_owner_authorization{true,false}));
+    static_assert(material_owner_authorized(
+        material_owner_authorization{false,true}));
+    static_assert(material_owner_authorized(
+        material_owner_authorization{true,true}));
 
     static_assert(k_normal_tuple_count_v12 == 557u);
     static_assert(k_normal_tuple_member_count_v12 == 1664u);
