@@ -3,6 +3,7 @@
 #include "dsrrl/runtime/flver_identity_transport.hpp"
 #include "dsrrl/runtime/flver_identity_registry.hpp"
 #include "dsrrl/runtime/material_owner_selection.hpp"
+#include "dsrrl/runtime/material_response_draw_transaction.hpp"
 #include "dsrrl/runtime/stable_receiver_pipeline_registry.hpp"
 #include "dsrrl/operators/material_response/material_response_island.hpp"
 #include "dsrrl/operators/material_response/material_response_seed.hpp"
@@ -32,6 +33,8 @@ dsrrl::runtime::a1_create_pipeline_bridge
     g_a1_bridge(g_core.features());
 dsrrl::operators::material_response::material_response_island
     g_material_response;
+dsrrl::runtime::material_response_draw_runtime
+    g_mr_draw_runtime(g_core);
 
 std::atomic<std::uint64_t> g_present_count{0};
 std::atomic<std::uint64_t> g_mr_draw_eval{0};
@@ -74,12 +77,14 @@ const reshade::api::shader_desc *find_pixel_shader(
     return nullptr;
 }
 
-void observe_draw_identity(
-    reshade::api::command_list *cmd_list) noexcept
+bool observe_draw_identity(
+    reshade::api::command_list *cmd_list,
+    std::uint32_t &receiver_id,
+    dsrrl::operators::material_response::decision &out_decision) noexcept
 {
     ++g_draw_events;
 
-    std::uint32_t receiver_id = 0u;
+    receiver_id = 0u;
     const bool receiver_ok =
         dsrrl::runtime::stable_receiver_bound(
             cmd_list,
@@ -101,26 +106,29 @@ void observe_draw_identity(
         if (receiver_ok && !owner_ok)
             ++g_draw_receiver_only;
         ++g_mr_fail_open;
-        return;
+        return false;
     }
 
     ++g_draw_joins;
 
     if (!g_mr_ready.load()) {
         ++g_mr_fail_open;
-        return;
+        return false;
     }
 
     ++g_mr_draw_eval;
-    const auto decision =
+    out_decision =
         g_material_response.evaluate(
             receiver_id,
             material);
 
-    if (decision.active)
+    if (out_decision.active) {
         ++g_mr_would_activate;
-    else
-        ++g_mr_fail_open;
+        return true;
+    }
+
+    ++g_mr_fail_open;
+    return false;
 }
 
 bool enable_integrated_islands() noexcept
@@ -144,8 +152,9 @@ void log_state(const char *tag) noexcept
     const auto f = dsrrl::runtime::flver_identity_stats();
     const auto h = dsrrl::runtime::flver_identity_transport::status();
     const auto m = dsrrl::runtime::material_owner_selection_stats();
+    const auto mr_tx = g_mr_draw_runtime.telemetry();
 
-    char line[768]{};
+    char line[960]{};
     std::snprintf(
         line,
         sizeof(line),
@@ -157,6 +166,8 @@ void log_state(const char *tag) noexcept
         "inserts=%llu lookups=%llu hits=%llu misses=%llu erases=%llu invalid=%llu "
         "owner_sel=%llu owner_enriched=%llu owner_auth=%llu owner_fo=%llu "
         "mr_ready=%u mr_eval=%llu mr_would_activate=%llu mr_fo=%llu "
+        "mr_payload_ok=%llu mr_payload_fail=%llu mr_tx_eligible=%llu mr_tx_miss=%llu "
+        "mr_replay=%llu mr_restore_fail=%llu mr_quarantine=%u "
         "draw=%llu draw_rx=%llu draw_owner=%llu draw_join=%llu owner_only=%llu rx_only=%llu",
         tag,
         static_cast<unsigned long long>(t.create_events),
@@ -190,6 +201,13 @@ void log_state(const char *tag) noexcept
         static_cast<unsigned long long>(g_mr_draw_eval.load()),
         static_cast<unsigned long long>(g_mr_would_activate.load()),
         static_cast<unsigned long long>(g_mr_fail_open.load()),
+        static_cast<unsigned long long>(mr_tx.replacement_register_ok),
+        static_cast<unsigned long long>(mr_tx.replacement_register_fail),
+        static_cast<unsigned long long>(mr_tx.eligible_draws),
+        static_cast<unsigned long long>(mr_tx.replacement_miss),
+        static_cast<unsigned long long>(mr_tx.replay_ok),
+        static_cast<unsigned long long>(mr_tx.restore_fail),
+        mr_tx.quarantined ? 1u : 0u,
         static_cast<unsigned long long>(g_draw_events.load()),
         static_cast<unsigned long long>(g_draw_receiver_hits.load()),
         static_cast<unsigned long long>(g_draw_owner_hits.load()),
@@ -203,10 +221,12 @@ void log_state(const char *tag) noexcept
 void on_init_device(reshade::api::device *device)
 {
     g_a1_bridge.on_init_device(device);
+    g_mr_draw_runtime.on_init_device(device);
 }
 
 void on_destroy_device(reshade::api::device *device)
 {
+    g_mr_draw_runtime.on_destroy_device(device);
     g_a1_bridge.on_destroy_device(device);
 }
 
@@ -301,25 +321,46 @@ void on_bind_pipeline(
 
 bool on_draw(
     reshade::api::command_list *cmd_list,
-    std::uint32_t,
-    std::uint32_t,
-    std::uint32_t,
-    std::uint32_t)
+    std::uint32_t vertex_count,
+    std::uint32_t instance_count,
+    std::uint32_t first_vertex,
+    std::uint32_t first_instance)
 {
-    observe_draw_identity(cmd_list);
-    return false;
+    std::uint32_t receiver_id = 0u;
+    dsrrl::operators::material_response::decision decision{};
+    if (!observe_draw_identity(cmd_list, receiver_id, decision))
+        return false;
+
+    return g_mr_draw_runtime.replay_draw(
+        cmd_list,
+        receiver_id,
+        vertex_count,
+        instance_count,
+        first_vertex,
+        first_instance);
 }
 
 bool on_draw_indexed(
     reshade::api::command_list *cmd_list,
-    std::uint32_t,
-    std::uint32_t,
-    std::uint32_t,
-    std::int32_t,
-    std::uint32_t)
+    std::uint32_t index_count,
+    std::uint32_t instance_count,
+    std::uint32_t first_index,
+    std::int32_t vertex_offset,
+    std::uint32_t first_instance)
 {
-    observe_draw_identity(cmd_list);
-    return false;
+    std::uint32_t receiver_id = 0u;
+    dsrrl::operators::material_response::decision decision{};
+    if (!observe_draw_identity(cmd_list, receiver_id, decision))
+        return false;
+
+    return g_mr_draw_runtime.replay_draw_indexed(
+        cmd_list,
+        receiver_id,
+        index_count,
+        instance_count,
+        first_index,
+        vertex_offset,
+        first_instance);
 }
 
 void on_present(
@@ -385,6 +426,7 @@ bool AddonInit(
         return false;
 
     g_a1_bridge.reset();
+    g_mr_draw_runtime.reset();
     g_present_count.store(0);
     g_mr_draw_eval.store(0);
     g_mr_would_activate.store(0);
@@ -434,9 +476,9 @@ bool AddonInit(
     reshade::log::message(
         reshade::log::level::info,
         "[DSRRL CORE+ISLANDS " DSRRL_CORE_ISLANDS_VERSION
-        "] READY: native Renderer Core A1 islands plus pixel-inert exact "
-        "receiver/owner Material Response eligibility probe (NO visible MR state mutation); frozen legacy "
-        "monolith is not linked.");
+        "] READY: native Renderer Core A1 islands plus exact receiver/owner "
+        "Material Response draw-transaction layer; MR remains fail-open per receiver until "
+        "an exact replacement payload is registered; frozen legacy monolith is not linked.");
 
     return true;
 }
@@ -454,6 +496,7 @@ void AddonUninit(
         log_state("UNLOAD_RESTORE_FAIL");
 
     dsrrl::runtime::stable_receiver_pipeline_reset();
+    g_mr_draw_runtime.reset();
     g_a1_bridge.reset();
     disable_integrated_islands();
 
