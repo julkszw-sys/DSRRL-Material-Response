@@ -7,6 +7,7 @@ on:
       - 'renderer-core/data/ptde_full_flver_ownership_census_v1.json'
       - 'renderer-core/include/dsrrl/operators/material_response/generated_dsr_mtd_identity_v1.hpp'
       - 'renderer-core/tools/verify_mtd_semantic_census.py'
+      - 'renderer-core/tools/verify_mtd_semantic_census_policy.py'
       - 'renderer-core/tools/verify_ptde_flver_census_import.py'
       - 'renderer-core/tools/verify_ptde_flver_source_completeness.py'
       - 'renderer-core/tools/verify_mtd_texture_semantic_surface.py'
@@ -22,6 +23,7 @@ on:
       - 'renderer-core/data/ptde_full_flver_ownership_census_v1.json'
       - 'renderer-core/include/dsrrl/operators/material_response/generated_dsr_mtd_identity_v1.hpp'
       - 'renderer-core/tools/verify_mtd_semantic_census.py'
+      - 'renderer-core/tools/verify_mtd_semantic_census_policy.py'
       - 'renderer-core/tools/verify_ptde_flver_census_import.py'
       - 'renderer-core/tools/verify_ptde_flver_source_completeness.py'
       - 'renderer-core/tools/verify_mtd_texture_semantic_surface.py'
@@ -42,6 +44,8 @@ jobs:
           python-version: '3.12'
       - name: Verify exact MTD semantic census invariants
         run: python renderer-core/tools/verify_mtd_semantic_census.py
+      - name: Verify exact-evidence and fail-open census policy
+        run: python renderer-core/tools/verify_mtd_semantic_census_policy.py
       - name: Verify PTDE FLVER census import provenance
         run: python renderer-core/tools/verify_ptde_flver_census_import.py
       - name: Verify PTDE FLVER semantic completeness authority
