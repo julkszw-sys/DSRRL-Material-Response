@@ -772,6 +772,8 @@ bool on_draw(
     draw_semantic_selection_guard semantic_guard{};
     std::uint32_t receiver_id = 0u;
     bool subsurface_bound = false;
+    bool hemdir3_bound = false;
+    dsrrl::runtime::hemdir3_receiver_identity hemdir3_identity{};
     dsrrl::operators::material_response::material_identity material{};
     dsrrl::operators::material_response::decision decision{};
 
@@ -779,6 +781,8 @@ bool on_draw(
             cmd_list,
             receiver_id,
             subsurface_bound,
+            hemdir3_bound,
+            hemdir3_identity,
             material,
             decision))
         return false;
@@ -788,6 +792,8 @@ bool on_draw(
             cmd_list,
             receiver_id,
             subsurface_bound,
+            hemdir3_bound,
+            hemdir3_identity,
             material,
             decision,
             prepared))
@@ -828,6 +834,8 @@ bool on_draw_indexed(
     draw_semantic_selection_guard semantic_guard{};
     std::uint32_t receiver_id = 0u;
     bool subsurface_bound = false;
+    bool hemdir3_bound = false;
+    dsrrl::runtime::hemdir3_receiver_identity hemdir3_identity{};
     dsrrl::operators::material_response::material_identity material{};
     dsrrl::operators::material_response::decision decision{};
 
@@ -835,6 +843,8 @@ bool on_draw_indexed(
             cmd_list,
             receiver_id,
             subsurface_bound,
+            hemdir3_bound,
+            hemdir3_identity,
             material,
             decision))
         return false;
@@ -844,6 +854,8 @@ bool on_draw_indexed(
             cmd_list,
             receiver_id,
             subsurface_bound,
+            hemdir3_bound,
+            hemdir3_identity,
             material,
             decision,
             prepared))
@@ -941,6 +953,7 @@ bool AddonInit(
     g_mr_draw_runtime.reset();
     g_material_resources.reset();
     g_upper_lower.reset();
+    g_hemdir3.reset();
     dsrrl::runtime::hemdir3_mode_transport::reset_stats();
     g_present_count.store(0);
     g_mr_draw_eval.store(0);
@@ -956,6 +969,7 @@ bool AddonInit(
     g_draw_receiver_only.store(0);
     dsrrl::runtime::stable_receiver_pipeline_reset();
     dsrrl::runtime::subsurface_receiver_pipeline_reset();
+    dsrrl::runtime::hemdir3_receiver_pipeline_reset();
     g_subsurface.reset();
     dsrrl::runtime::material_owner_selection_reset_stats();
 
@@ -1035,10 +1049,10 @@ bool AddonInit(
         reshade::log::level::info,
         "[DSRRL CORE+ISLANDS " DSRRL_CORE_ISLANDS_VERSION
         "] READY: shared Core draw-state transaction layer (PS/CB/SRV/sampler) "
-        "is active; Material Response, SpecRGB, Diffuse, Normal, Subsurface and Upper/Lower "
-        "compose into one conflict-checked replay where their exact routes are verified. "
-        "Other draw-specific islands fail open until their verified adapter payload is armed; "
-        "frozen legacy monolith is not linked.");
+        "is active; Material Response, SpecRGB, Diffuse, Normal and Subsurface compose "
+        "normally; native HemDir3 no-Spc uses the exact mode2+D123+U/L b13 carrier in the "
+        "same single replay. HemDir3 Spc remains fail-open pending exact b12 c101/c102 donor. "
+        "Frozen legacy monolith is not linked.");
 
     return true;
 }
@@ -1067,10 +1081,12 @@ void AddonUninit(
 
     dsrrl::runtime::stable_receiver_pipeline_reset();
     dsrrl::runtime::subsurface_receiver_pipeline_reset();
+    dsrrl::runtime::hemdir3_receiver_pipeline_reset();
     dsrrl::runtime::texture_identity_transport::uninstall();
     g_material_resources.unregister_events();
     g_material_resources.reset();
     g_upper_lower.reset();
+    g_hemdir3.reset();
     g_mr_draw_runtime.reset();
     g_draw_transactions.reset();
     g_a1_bridge.reset();
