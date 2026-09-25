@@ -19,6 +19,10 @@ on:
       - "renderer-core/data/provenance/spec_routes_v12.tsv"
       - "renderer-core/data/provenance/diffuse_routes_v12.tsv"
       - "renderer-core/data/provenance/normal_routes_v12.tsv"
+      - "renderer-core/tools/generate_hemdir3_receiver_registry_v1.py"
+      - "renderer-core/data/provenance/hemdir3_receivers_v1.tsv"
+      - "renderer-core/data/provenance/hemdir3_b13_patch_sites_v1.tsv"
+      - "renderer-core/data/provenance/hemdir3_b13_replacements_v1.tsv"
       - "runtime-v1/provenance/mr_v211/V29_SHADER_MANIFEST.json"
       - "runtime-v1/provenance/mr_v211/V210_C101_MATERIAL_RESPONSE_AUDIT.json"
       - "runtime-v1/provenance/mr_v211/V211_C101_UNBOUNDED_AUDIT.json"
@@ -125,6 +129,9 @@ jobs:
           $upperLower = Get-Content renderer-core/src/runtime/upper_lower_draw_runtime.cpp -Raw
           $mode2 = Get-Content renderer-core/src/runtime/hemdir3_mode_transport.cpp -Raw
           $mode2Asm = Get-Content renderer-core/integrated/hemdir3_mode_detour.asm -Raw
+          $h3Materializer = Get-Content renderer-core/src/operators/lightbank/hemdir3_b13_materializer.cpp -Raw
+          $h3Registry = Get-Content renderer-core/src/runtime/hemdir3_pipeline_registry.cpp -Raw
+          $h3Runtime = Get-Content renderer-core/src/runtime/hemdir3_draw_runtime.cpp -Raw
           $selectorAsm = Get-Content renderer-core/integrated/flver_identity_detour.asm -Raw
           $cmake = Get-Content renderer-core/integrated/CMakeLists.txt -Raw
 
@@ -293,12 +300,59 @@ jobs:
             if ($selectorAsm -notmatch [regex]::Escape($required)) { throw "Selector full-ABI semantic transport invariant missing: $required" }
           }
 
-          if ($entry -match 'operator_id::hemdir3[,)]') {
-            throw "HemDir3 must remain disabled until exact D123 producer attachment and full readiness close"
+          foreach ($required in @(
+            'materialize_hemdir3_b13_receiver',
+            'k_cb13_decl',
+            'source_register - 92u',
+            'replacement_sha256',
+            'compose_enabled_a1_islands'
+          )) {
+            if ($h3Materializer -notmatch [regex]::Escape($required)) { throw "HemDir3 exact b13 materializer invariant missing: $required" }
+          }
+
+          foreach ($required in @(
+            'hemdir3_receiver_attest_created_code',
+            'hemdir3_receiver_observe_pipeline',
+            'hemdir3_receiver_observe_bind',
+            'hemdir3_receiver_bound'
+          )) {
+            if ($h3Registry -notmatch [regex]::Escape($required)) { throw "HemDir3 exact pipeline registry invariant missing: $required" }
+          }
+
+          foreach ($required in @(
+            'operator_id::hemdir3',
+            'exact_effective_mode2',
+            'prepare_hemdir3_carrier',
+            'operator_id::upper_lower',
+            'spc_b12_hold_'
+          )) {
+            if ($h3Runtime -notmatch [regex]::Escape($required)) { throw "HemDir3 shared-batch runtime invariant missing: $required" }
+          }
+
+          if ($h3Runtime -match 'spc_b12_material_donor_ready\s*=\s*true' -or
+              $h3Runtime -match 'receiver_stratum::spc') {
+            throw "HemDir3 Spc must remain fail-open until exact c101/c102 b12 donor routing is implemented"
+          }
+
+          if ($entry -notmatch 'operator_id::hemdir3' -or
+              $entry -notmatch 'hemdir3_receiver_observe_pipeline' -or
+              $entry -notmatch 'prepared_hemdir3_draw') {
+            throw "HemDir3 no-Spc shared-batch activation is not armed"
           }
 
           if ($entry -match 'P_Metal|P_METAL|pmetal' -or $bridge -match 'P_Metal|P_METAL|pmetal') { throw "Integrated entry/A1 bridge must not special-case P_Metal" }
           Write-Host "CORE_ISLANDS_SHARED_DRAW_TRANSACTION_BOUNDARY_PASS"
+      - name: Verify HemDir3 generated authority
+        shell: pwsh
+        run: |
+          python renderer-core/tools/generate_hemdir3_receiver_registry_v1.py --receivers renderer-core/data/provenance/hemdir3_receivers_v1.tsv --patch-sites renderer-core/data/provenance/hemdir3_b13_patch_sites_v1.tsv --replacements renderer-core/data/provenance/hemdir3_b13_replacements_v1.tsv --out "$env:RUNNER_TEMP/generated_hemdir3_receivers_v1.hpp"
+          $built = "build-integrated/generated/dsrrl/operators/lightbank/generated_hemdir3_receivers_v1.hpp"
+          if (!(Test-Path $built)) { throw "Generated HemDir3 authority header missing from build" }
+          if ((Get-FileHash $built -Algorithm SHA256).Hash -ne (Get-FileHash "$env:RUNNER_TEMP/generated_hemdir3_receivers_v1.hpp" -Algorithm SHA256).Hash) {
+            throw "Generated HemDir3 receiver authority is not reproducible"
+          }
+          Write-Host "CORE_ISLANDS_HEMDIR3_GENERATED_AUTHORITY_PASS"
+
       - name: Verify material resource generated authority
         shell: pwsh
         run: |
@@ -364,6 +418,12 @@ jobs:
           $upperLowerHash = (Get-FileHash "renderer-core/src/runtime/upper_lower_draw_runtime.cpp" -Algorithm SHA256).Hash.ToLowerInvariant()
           $mode2Hash = (Get-FileHash "renderer-core/src/runtime/hemdir3_mode_transport.cpp" -Algorithm SHA256).Hash.ToLowerInvariant()
           $mode2AsmHash = (Get-FileHash "renderer-core/integrated/hemdir3_mode_detour.asm" -Algorithm SHA256).Hash.ToLowerInvariant()
+          $h3MaterializerHash = (Get-FileHash "renderer-core/src/operators/lightbank/hemdir3_b13_materializer.cpp" -Algorithm SHA256).Hash.ToLowerInvariant()
+          $h3RegistryHash = (Get-FileHash "renderer-core/src/runtime/hemdir3_pipeline_registry.cpp" -Algorithm SHA256).Hash.ToLowerInvariant()
+          $h3RuntimeHash = (Get-FileHash "renderer-core/src/runtime/hemdir3_draw_runtime.cpp" -Algorithm SHA256).Hash.ToLowerInvariant()
+          $h3ReceiverAuthorityHash = (Get-FileHash "renderer-core/data/provenance/hemdir3_receivers_v1.tsv" -Algorithm SHA256).Hash.ToLowerInvariant()
+          $h3PatchAuthorityHash = (Get-FileHash "renderer-core/data/provenance/hemdir3_b13_patch_sites_v1.tsv" -Algorithm SHA256).Hash.ToLowerInvariant()
+          $h3ReplacementAuthorityHash = (Get-FileHash "renderer-core/data/provenance/hemdir3_b13_replacements_v1.tsv" -Algorithm SHA256).Hash.ToLowerInvariant()
           $specRoutesHash = (Get-FileHash "renderer-core/data/provenance/spec_routes_v12.tsv" -Algorithm SHA256).Hash.ToLowerInvariant()
           $diffuseRoutesHash = (Get-FileHash "renderer-core/data/provenance/diffuse_routes_v12.tsv" -Algorithm SHA256).Hash.ToLowerInvariant()
           $normalRoutesHash = (Get-FileHash "renderer-core/data/provenance/normal_routes_v12.tsv" -Algorithm SHA256).Hash.ToLowerInvariant()
@@ -418,7 +478,16 @@ jobs:
             upper_lower_carrier = "B13_LANES_6_7_SHARED_BATCH"
             hemdir3_mode_transport_sha256 = $mode2Hash
             hemdir3_mode_detour_sha256 = $mode2AsmHash
-            hemdir3_activation = "DISABLED_PENDING_D123_AND_FULL_READINESS"
+            hemdir3_activation = "NOSPC_ACTIVE_SPC_B12_HOLD"
+            hemdir3_b13_materializer_sha256 = $h3MaterializerHash
+            hemdir3_pipeline_registry_sha256 = $h3RegistryHash
+            hemdir3_draw_runtime_sha256 = $h3RuntimeHash
+            hemdir3_receiver_authority_sha256 = $h3ReceiverAuthorityHash
+            hemdir3_patch_authority_sha256 = $h3PatchAuthorityHash
+            hemdir3_replacement_authority_sha256 = $h3ReplacementAuthorityHash
+            hemdir3_native_receiver_count = 48
+            hemdir3_nospc_active_count = 24
+            hemdir3_spc_hold_count = 24
             subsurface_route = "EXACT_DSBT_TO_DSB_TARGET_33_34_35"
             spec_routes_v12_tsv_sha256 = $specRoutesHash
             diffuse_routes_v12_tsv_sha256 = $diffuseRoutesHash
@@ -431,7 +500,7 @@ jobs:
             material_response_draw_probe = "VISIBLE_EXACT_OWNER_RECEIVER_PS_B12_BATCH_TRANSACTION"
             material_response_feature_armed = $true
             material_response_runtime_activation = "NOT_TESTED"
-            boot_armed_operator_count = 11
+            boot_armed_operator_count = 12
             single_addon_entrypoint = $true
             draw_replay = $true
             runtime_status = "NOT_TESTED"
