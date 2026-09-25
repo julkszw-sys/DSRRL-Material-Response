@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.20)
 
-project(DSRRLRendererCoreIntegrated LANGUAGES CXX)
+project(DSRRLRendererCoreIntegrated LANGUAGES CXX ASM_MASM)
 
 if(NOT WIN32)
     message(FATAL_ERROR "DSRRL integrated addon is Windows-only.")
@@ -39,7 +39,9 @@ add_library(
     dsrrl_renderer_core_integrated
     SHARED
     integrated_addon.cpp
-    "${DSRRL_RENDERER_CORE_ROOT}/src/runtime/a1_create_pipeline_bridge.cpp")
+    material_selector_hook.asm
+    "${DSRRL_RENDERER_CORE_ROOT}/src/runtime/a1_create_pipeline_bridge.cpp"
+    "${DSRRL_RENDERER_CORE_ROOT}/src/runtime/material_response_runtime_bridge.cpp")
 
 target_include_directories(
     dsrrl_renderer_core_integrated
@@ -67,9 +69,7 @@ if(MSVC)
     target_compile_options(
         dsrrl_renderer_core_integrated
         PRIVATE
-        /W4
-        /WX
-        /EHsc)
+        "$<$<COMPILE_LANGUAGE:CXX>:/W4;/WX;/EHsc>")
 endif()
 
 set_target_properties(
