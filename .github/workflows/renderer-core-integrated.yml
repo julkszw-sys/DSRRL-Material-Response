@@ -127,6 +127,10 @@ jobs:
           $subsurface = Get-Content renderer-core/src/runtime/subsurface_draw_runtime.cpp -Raw
           $subsurfaceRegistry = Get-Content renderer-core/src/runtime/subsurface_pipeline_registry.cpp -Raw
           $upperLower = Get-Content renderer-core/src/runtime/upper_lower_draw_runtime.cpp -Raw
+          $ulMaterializer = Get-Content renderer-core/src/operators/lightbank/upper_lower_hemenv_materializer.cpp -Raw
+          $ulRegistry = Get-Content renderer-core/src/runtime/upper_lower_pipeline_registry.cpp -Raw
+          $ulRuntime = Get-Content renderer-core/src/runtime/upper_lower_hemenv_draw_runtime.cpp -Raw
+          $rdefPatch = Get-Content renderer-core/include/dsrrl/operators/legacy_plan/dxbc_rdef_patch.hpp -Raw
           $mode2 = Get-Content renderer-core/src/runtime/hemdir3_mode_transport.cpp -Raw
           $mode2Asm = Get-Content renderer-core/integrated/hemdir3_mode_detour.asm -Raw
           $h3Materializer = Get-Content renderer-core/src/operators/lightbank/hemdir3_b13_materializer.cpp -Raw
@@ -234,7 +238,9 @@ jobs:
             'v29_sha256',
             'v210_sha256',
             'v211_sha256',
-            'compose_enabled_a1_islands'
+            'compose_enabled_a1_islands',
+            'augment_final_rdef_b12',
+            'DSRRL_MaterialCarrier'
           )) {
             if ($mr -notmatch [regex]::Escape($required)) { throw "MR exact materializer invariant missing: $required" }
           }
@@ -283,6 +289,54 @@ jobs:
             'PSSetConstantBuffers'
           )) {
             if ($upperLower -match [regex]::Escape($forbidden)) { throw "Upper/Lower runtime must prepare a request, not own draw/bind/restore: $forbidden" }
+          }
+
+          foreach ($required in @(
+            'k_cb13_decl',
+            'plan->u_slot_word',
+            'plan->d_slot_word_0',
+            'plan->d_slot_word_1',
+            'DSRRL_LightBankCarrier',
+            'augment_upper_lower_hemenv_verified_base',
+            'words_inserted_at_11 != 4u',
+            'has_constant_buffer_binding'
+          )) {
+            if ($ulMaterializer -notmatch [regex]::Escape($required)) { throw "Upper/Lower exact HemEnv consumer materializer invariant missing: $required" }
+          }
+
+          foreach ($required in @(
+            'upper_lower_receiver_attest_created_code',
+            'upper_lower_receiver_observe_pipeline',
+            'upper_lower_receiver_observe_bind',
+            'upper_lower_receiver_bound'
+          )) {
+            if ($ulRegistry -notmatch [regex]::Escape($required)) { throw "Upper/Lower exact pipeline registry invariant missing: $required" }
+          }
+
+          foreach ($required in @(
+            'operator_id::upper_lower',
+            'replace_pixel_shader = true',
+            'prepare_upper_lower_carrier',
+            'spc_mr_hold_'
+          )) {
+            if ($ulRuntime -notmatch [regex]::Escape($required)) { throw "Upper/Lower HemEnv draw runtime invariant missing: $required" }
+          }
+
+          foreach ($required in @(
+            'append_constant_buffer_binding',
+            'has_constant_buffer_binding'
+          )) {
+            if ($rdefPatch -notmatch [regex]::Escape($required)) { throw "Shared RDEF augmentation helper invariant missing: $required" }
+          }
+
+          foreach ($required in @(
+            'materialize_upper_lower_hemenv_receiver',
+            'upper_lower_receiver_observe_pipeline',
+            'prepare_draw_request_with_upper_lower',
+            'register_receiver_upper_lower_replacement',
+            'upper_lower_combined'
+          )) {
+            if (($entry + $tx) -notmatch [regex]::Escape($required)) { throw "Integrated MR+UpperLower single-PS route missing: $required" }
           }
 
           foreach ($required in @(
@@ -357,6 +411,17 @@ jobs:
 
           if ($entry -match 'P_Metal|P_METAL|pmetal' -or $bridge -match 'P_Metal|P_METAL|pmetal') { throw "Integrated entry/A1 bridge must not special-case P_Metal" }
           Write-Host "CORE_ISLANDS_SHARED_DRAW_TRANSACTION_BOUNDARY_PASS"
+      - name: Verify UpperLower generated authority
+        shell: pwsh
+        run: |
+          python renderer-core/tools/generate_upper_lower_hemenv_v1.py --input renderer-core/data/provenance/upper_lower_hemenv_consumers_v1.tsv --output "$env:RUNNER_TEMP/generated_upper_lower_hemenv_v1.hpp"
+          $built = "build-integrated/generated/dsrrl/operators/lightbank/generated_upper_lower_hemenv_v1.hpp"
+          if (!(Test-Path $built)) { throw "Generated UpperLower authority header missing from build" }
+          if ((Get-FileHash $built -Algorithm SHA256).Hash -ne (Get-FileHash "$env:RUNNER_TEMP/generated_upper_lower_hemenv_v1.hpp" -Algorithm SHA256).Hash) {
+            throw "Generated UpperLower HemEnv authority is not reproducible"
+          }
+          Write-Host "CORE_ISLANDS_UPPER_LOWER_GENERATED_AUTHORITY_PASS"
+
       - name: Verify HemDir3 generated authority
         shell: pwsh
         run: |
@@ -431,6 +496,11 @@ jobs:
           $subsurfaceRuntimeHash = (Get-FileHash "renderer-core/src/runtime/subsurface_draw_runtime.cpp" -Algorithm SHA256).Hash.ToLowerInvariant()
           $subsurfaceRegistryHash = (Get-FileHash "renderer-core/src/runtime/subsurface_pipeline_registry.cpp" -Algorithm SHA256).Hash.ToLowerInvariant()
           $upperLowerHash = (Get-FileHash "renderer-core/src/runtime/upper_lower_draw_runtime.cpp" -Algorithm SHA256).Hash.ToLowerInvariant()
+          $upperLowerMaterializerHash = (Get-FileHash "renderer-core/src/operators/lightbank/upper_lower_hemenv_materializer.cpp" -Algorithm SHA256).Hash.ToLowerInvariant()
+          $upperLowerRegistryHash = (Get-FileHash "renderer-core/src/runtime/upper_lower_pipeline_registry.cpp" -Algorithm SHA256).Hash.ToLowerInvariant()
+          $upperLowerDrawHash = (Get-FileHash "renderer-core/src/runtime/upper_lower_hemenv_draw_runtime.cpp" -Algorithm SHA256).Hash.ToLowerInvariant()
+          $upperLowerAuthorityHash = (Get-FileHash "renderer-core/data/provenance/upper_lower_hemenv_consumers_v1.tsv" -Algorithm SHA256).Hash.ToLowerInvariant()
+          $rdefPatchHash = (Get-FileHash "renderer-core/include/dsrrl/operators/legacy_plan/dxbc_rdef_patch.hpp" -Algorithm SHA256).Hash.ToLowerInvariant()
           $mode2Hash = (Get-FileHash "renderer-core/src/runtime/hemdir3_mode_transport.cpp" -Algorithm SHA256).Hash.ToLowerInvariant()
           $mode2AsmHash = (Get-FileHash "renderer-core/integrated/hemdir3_mode_detour.asm" -Algorithm SHA256).Hash.ToLowerInvariant()
           $h3MaterializerHash = (Get-FileHash "renderer-core/src/operators/lightbank/hemdir3_b13_materializer.cpp" -Algorithm SHA256).Hash.ToLowerInvariant()
@@ -490,7 +560,17 @@ jobs:
             subsurface_draw_runtime_sha256 = $subsurfaceRuntimeHash
             subsurface_pipeline_registry_sha256 = $subsurfaceRegistryHash
             upper_lower_draw_runtime_sha256 = $upperLowerHash
-            upper_lower_carrier = "B13_LANES_6_7_SHARED_BATCH"
+            upper_lower_hemenv_materializer_sha256 = $upperLowerMaterializerHash
+            upper_lower_pipeline_registry_sha256 = $upperLowerRegistryHash
+            upper_lower_hemenv_draw_runtime_sha256 = $upperLowerDrawHash
+            upper_lower_consumer_authority_sha256 = $upperLowerAuthorityHash
+            dxbc_rdef_patch_sha256 = $rdefPatchHash
+            upper_lower_consumer_count = 36
+            upper_lower_spc_consumer_count = 24
+            upper_lower_nospc_consumer_count = 12
+            upper_lower_inert_hemenv_excluded_count = 12
+            upper_lower_carrier = "EXACT_HEMENV_PS_PLUS_B13_LANES_6_7"
+            mr_upper_lower_composition = "SINGLE_PS_B12_B13_EXACT_SPC_RECEIVER"
             hemdir3_mode_transport_sha256 = $mode2Hash
             hemdir3_mode_detour_sha256 = $mode2AsmHash
             hemdir3_activation = "NOSPC_ACTIVE_SPC_B12_HOLD"
