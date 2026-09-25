@@ -14,6 +14,9 @@ enum class mtd_gate_policy : std::uint8_t { none=0,exact_material,direct_exact,p
 // First-class ownership identity. Zero/invalid fields mean ownership is not
 // proven and any ownership-sensitive semantic must fail open to UNKNOWN.
 struct flver_material_ownership {
+    // Authoritative owner identity is the complete raw FLVER content digest.
+    // The legacy 64-bit token is auxiliary only and must never authorize USE.
+    core::sha256_digest flver_sha256{};
     std::uint64_t flver_identity_hash = 0;
     std::uint32_t material_slot = 0;
     bool material_slot_valid = false;
