@@ -8,6 +8,7 @@
 #include "dsrrl/runtime/flver_identity_registry.hpp"
 #include "dsrrl/runtime/material_owner_selection.hpp"
 #include "dsrrl/runtime/material_owner_producer.hpp"
+#include "dsrrl/runtime/upper_lower_draw_runtime.hpp"
 #include <Windows.h>
 #include <bcrypt.h>
 #include <array>
@@ -96,11 +97,24 @@ void __fastcall parse_entry(void*m,const void*r) noexcept {
 }
 void __fastcall destroy_entry(void*m) noexcept {flver_identity_observe_destroy(m);if(g_do)g_do(m);}
 }
-extern "C" void dsrrl_flver_selector_observer(void *c, std::int32_t i, void *ret) noexcept {
+extern "C" void dsrrl_flver_selector_observer(
+    void *container,
+    void *owner,
+    void *ret,
+    void *r14,
+    void *r15,
+    std::int32_t material_index) noexcept
+{
  ++g_selector_events;
  material_owner_selection_clear();
 
- if(g_base==0u || ret==nullptr || i<0){++g_owner_fail_open;return;}
+ upper_lower_selector_event_bridge(
+     owner,
+     ret,
+     r14,
+     r15);
+
+ if(g_base==0u || ret==nullptr || material_index<0){++g_owner_fail_open;return;}
  const auto ret_addr=reinterpret_cast<std::uintptr_t>(ret);
  if(ret_addr<g_base){++g_owner_fail_open;return;}
  const auto rva=ret_addr-g_base;
@@ -111,7 +125,7 @@ extern "C" void dsrrl_flver_selector_observer(void *c, std::int32_t i, void *ret
 
  actual_material_owner_observation observation{};
  if(!flver_identity_enrich_owner(
-        c,static_cast<std::uint32_t>(i),observation)){
+        container,static_cast<std::uint32_t>(material_index),observation)){
   ++g_owner_fail_open;
   return;
  }
