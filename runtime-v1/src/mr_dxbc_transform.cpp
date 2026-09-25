@@ -1,5 +1,6 @@
 #include "dsrrl/runtime/mr_dxbc_transform.hpp"
 #include "dsrrl/runtime/v13_pmetal_consumer_authority.hpp"
+#include "dsrrl/runtime/pmetal_envspec_rgba_authority.hpp"
 #include "dsrrl/sha256.hpp"
 
 #include <algorithm>
@@ -937,6 +938,211 @@ transform_result transform_spec_rgb(std::span<const std::uint8_t> base)
     r.ok=true; r.code=std::move(out); return r;
 }
 
+
+
+transform_result transform_pmetal_envspec_rgba(
+    std::span<const std::uint8_t> base)
+{
+    transform_result r;
+    const auto base_sha=sha_hex(base);
+    const auto *authority=
+        pmetal_envspec_rgba_authority::find(base_sha);
+    if(!authority){
+        r.error="PMetal RGBA exact V2.11 identity";
+        return r;
+    }
+
+    std::vector<chunk> chunks;
+    std::vector<std::uint32_t> words;
+    std::size_t shex=0;
+    if(!get_shex_words(base,chunks,shex,words,r.error))
+        return r;
+
+    std::vector<instruction_view> instructions;
+    if(!decode_instructions(words,instructions,r.error))
+        return r;
+
+    std::optional<instruction_view> sampler9;
+    std::optional<instruction_view> texture9;
+    std::optional<instruction_view> t12_sample;
+    std::size_t t9_sample_count=0u;
+    std::size_t t14_decl_count=0u;
+
+    for(const auto &ins:instructions){
+        if(ins.opcode==0x5au && ins.length==3u){
+            const auto slot=words[ins.offset+2u];
+            if(slot==9u){
+                if(sampler9){r.error="PMetal RGBA duplicate s9";return r;}
+                sampler9=ins;
+            }
+            if(slot==14u) ++t14_decl_count;
+        }
+        if(ins.opcode==0x58u && ins.length==4u){
+            const auto slot=words[ins.offset+2u];
+            if(slot==9u){
+                if(texture9){r.error="PMetal RGBA duplicate t9";return r;}
+                texture9=ins;
+            }
+            if(slot==14u) ++t14_decl_count;
+        }
+        if(ins.opcode>=0x45u && ins.opcode<=0x4au && ins.length==13u){
+            const auto resource=words[ins.offset+8u];
+            const auto sampler=words[ins.offset+10u];
+            if(resource==12u && sampler==12u){
+                if(t12_sample){r.error="PMetal RGBA duplicate t12 sample";return r;}
+                t12_sample=ins;
+            }
+            if(resource==9u || sampler==9u)
+                ++t9_sample_count;
+        }
+    }
+
+    if(!sampler9 || !texture9 || !t12_sample || t14_decl_count!=0u){
+        r.error="PMetal RGBA exact t9/s9/t12 declarations";
+        return r;
+    }
+
+    constexpr std::array<std::uint32_t,13> k_current_t12_sample = {{
+        0x8d000048u,0x80000182u,0x00155543u,0x001000e2u,
+        0x00000001u,0x00100796u,0x00000001u,0x00107936u,
+        0x0000000cu,0x00106000u,0x0000000cu,0x0010003au,
+        0x00000002u
+    }};
+    if(t12_sample->offset!=authority->t12_word ||
+       !std::equal(
+           k_current_t12_sample.begin(),k_current_t12_sample.end(),
+           words.begin()+static_cast<std::ptrdiff_t>(t12_sample->offset))){
+        r.error="PMetal RGBA exact current t12 sample";
+        return r;
+    }
+
+    const auto merge=authority->merge_word;
+    if(merge<=authority->t12_word ||
+       merge-authority->t12_word!=115u ||
+       merge>=words.size()){
+        r.error="PMetal RGBA canonical receiver window";
+        return r;
+    }
+    if(t9_sample_count!=1u){
+        r.error="PMetal RGBA expected one DSR t9/s9 sample";
+        return r;
+    }
+
+    const auto merge_it=std::find_if(
+        instructions.begin(),instructions.end(),
+        [merge](const instruction_view &ins){return ins.offset==merge;});
+    if(merge_it==instructions.end() ||
+       merge_it->opcode!=0x32u || merge_it->length!=9u){
+        r.error="PMetal RGBA EnvSpec+EnvDiffuse merge";
+        return r;
+    }
+
+    // The DSR BRDF LUT sample must be fully contained inside the first
+    // 100 words of the exact EnvSpec island that Build131 replaces.
+    for(const auto &ins:instructions){
+        if(ins.opcode<0x45u || ins.opcode>0x4au || ins.length!=13u)
+            continue;
+        const auto resource=words[ins.offset+8u];
+        const auto sampler=words[ins.offset+10u];
+        if(resource==9u || sampler==9u){
+            if(ins.offset<authority->t12_word ||
+               ins.offset>=authority->t12_word+100u){
+                r.error="PMetal RGBA t9/s9 outside recovered Build131 window";
+                return r;
+            }
+        }
+    }
+
+    if(words[sampler9->offset]!=0x0300005au ||
+       words[sampler9->offset+1u]!=0x00106000u ||
+       words[sampler9->offset+2u]!=9u){
+        r.error="PMetal RGBA exact s9 declaration";
+        return r;
+    }
+    if(words[texture9->offset]!=0x04001858u ||
+       words[texture9->offset+1u]!=0x00107000u ||
+       words[texture9->offset+2u]!=9u ||
+       words[texture9->offset+3u]!=0x00005555u){
+        r.error="PMetal RGBA exact t9 2D declaration";
+        return r;
+    }
+
+    // Build131 source-complete 100-word operator window. The only receiver-
+    // specific values are the two reflection-coordinate register indices.
+    constexpr std::array<std::uint32_t,100> k_build131_window = {{
+        0x8d000048u, 0x80000182u, 0x00155543u, 0x001000f2u, 0x00000001u, 0x00100796u, 0x00000000u, 0x00107936u,
+        0x0000000cu, 0x00106000u, 0x0000000cu, 0x00004001u, 0x00000000u, 0x0700000eu, 0x001000e2u, 0x00000001u,
+        0x00100e56u, 0x00000001u, 0x00100006u, 0x00000001u, 0x08000038u, 0x001000e2u, 0x00000001u, 0x00100e56u,
+        0x00000001u, 0x00208246u, 0x0000000cu, 0x00000002u, 0x0404001fu, 0x0020803au, 0x0000000cu, 0x00000003u,
+        0x8d000048u, 0x80000182u, 0x00155543u, 0x001000f2u, 0x0000000cu, 0x00100796u, 0x00000000u, 0x00107936u,
+        0x0000000eu, 0x00106000u, 0x0000000eu, 0x00004001u, 0x00000000u, 0x0700000eu, 0x001000e2u, 0x0000000cu,
+        0x00100e56u, 0x0000000cu, 0x00100006u, 0x0000000cu, 0x0b000032u, 0x001000e2u, 0x0000000cu, 0x00100e56u,
+        0x0000000cu, 0x00208246u, 0x0000000cu, 0x00000003u, 0x80100e56u, 0x00000041u, 0x00000001u, 0x0a000032u,
+        0x001000e2u, 0x00000001u, 0x00100e56u, 0x0000000cu, 0x0020803au, 0x0000000cu, 0x00000003u, 0x00100e56u,
+        0x00000001u, 0x01000015u, 0x0100003au, 0x0100003au, 0x0100003au, 0x0100003au, 0x0100003au, 0x0100003au,
+        0x0100003au, 0x0100003au, 0x0100003au, 0x0100003au, 0x0100003au, 0x0100003au, 0x0100003au, 0x0100003au,
+        0x0100003au, 0x0100003au, 0x0100003au, 0x0100003au, 0x0100003au, 0x0100003au, 0x0100003au, 0x0100003au,
+        0x0100003au, 0x0100003au, 0x0100003au, 0x0100003au
+    }};
+
+    auto window=k_build131_window;
+    window[6]=authority->reflection_coord_register;
+    window[38]=authority->reflection_coord_register;
+
+    // Reuse the dead DSR BRDF-LUT declaration as the PTDE B endpoint.
+    words[sampler9->offset+2u]=14u;
+    words[texture9->offset]=0x04003058u;
+    words[texture9->offset+2u]=14u;
+
+    std::copy(
+        window.begin(),window.end(),
+        words.begin()+static_cast<std::ptrdiff_t>(authority->t12_word));
+
+    chunks[shex].payload.resize(words.size()*4u);
+    for(std::size_t i=0;i<words.size();++i)
+        write_u32(chunks[shex].payload.data()+i*4u,words[i]);
+
+    if(!patch_rdef_pmetal_v13(chunks,r.error))
+        return r;
+
+    auto out=rebuild(base,chunks,r.error);
+    if(out.empty() || out.size()!=base.size()){
+        r.error="PMetal RGBA rebuild";
+        return r;
+    }
+
+    if(!get_shex_words(out,chunks,shex,words,r.error) ||
+       !decode_instructions(words,instructions,r.error))
+        return r;
+
+    if(authority->t12_word+window.size()>words.size() ||
+       !std::equal(
+           window.begin(),window.end(),
+           words.begin()+static_cast<std::ptrdiff_t>(authority->t12_word))){
+        r.error="PMetal RGBA Build131 window postcondition";
+        return r;
+    }
+
+    std::size_t s14=0u,t14=0u,t9_sample=0u;
+    for(const auto &ins:instructions){
+        if(ins.opcode==0x5au && ins.length==3u &&
+           words[ins.offset+2u]==14u) ++s14;
+        if(ins.opcode==0x58u && ins.length==4u &&
+           words[ins.offset]==0x04003058u &&
+           words[ins.offset+2u]==14u) ++t14;
+        if(ins.opcode>=0x45u && ins.opcode<=0x4au && ins.length==13u &&
+           (words[ins.offset+8u]==9u || words[ins.offset+10u]==9u))
+            ++t9_sample;
+    }
+    if(s14!=1u || t14!=1u || t9_sample!=0u){
+        r.error="PMetal RGBA structural postcondition";
+        return r;
+    }
+
+    r.ok=true;
+    r.code=std::move(out);
+    return r;
+}
 
 transform_result transform_pmetal_v13(std::span<const std::uint8_t> base)
 {
