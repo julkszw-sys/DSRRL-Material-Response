@@ -1,45 +1,73 @@
 # Renderer Core integrated single-addon construction target
 
-This directory is the integration root for the eventual single DSRRL
+This directory is the canonical integration root for the eventual single DSRRL
 `.addon64`. It is deliberately a **construction/development target**, not an
 RC or release.
 
-The first integrated runtime component is the exact A1 create-time shader
-bridge. The standalone A1 diagnostic remains useful provenance, but the
-shipping architecture must not accumulate one addon per operator.
+## Current integrated A2 scope
 
-## Current integrated islands
+The integrated entrypoint now combines the exact A1 create-time bridge with the
+source-complete material/resource runtime glue recovered in `runtime-v1`.
+The glue is compiled once as `dsrrl_runtime_v1_operator_glue`; the predecessor
+standalone addon and this integrated target consume the same implementation
+rather than maintaining divergent copies.
 
-The shared Renderer Core `feature_registry` enables exactly these five
-source-complete create-time islands:
+Exactly ten operators are boot-armed by
+`dsrrl::runtime::k_integrated_feature_policy`:
 
+- Material Response;
+- SpecRGB resource bridge;
+- Diffuse resource bridge;
+- Normal resource bridge;
+- Subsurface body bypass;
 - terminal RGB SAT;
 - diffuse material-domain;
 - PntS attenuation;
 - certified no-Spc EnvSpec deletion;
 - fixed post-Fog identity.
 
-The event entrypoint lives only in `integrated_addon.cpp`. The reusable state,
-replacement cache and create/init/bind attestation logic live in
-`dsrrl::runtime::a1_create_pipeline_bridge`.
+The first five are draw/material/resource glue. The latter five are the
+previously integrated exact create-time A1 islands.
 
-Future resource/material bridges should join this addon entrypoint rather than
-introducing another independently loaded addon.
+## Material/resource transaction
 
-## Safety boundary
+The runtime uses one EngineBridge selector/MTD/texture-name owner. It requires
+the exact supported EXE and shader-binder provenance before installing hooks.
 
-The integrated A1 corpus contains zero `FRPG_Phn_*Spc*` plans. Therefore this
-create-time path does not enter the protected shared Phn DifSpc/DifSpcBmp
-HemEnv P_Metal host class.
+For supported material draws the existing runtime transaction can select the
+verified PTDE material-response shader and independently bind:
 
-Unknown SHA-256, invalid DXBC, token mismatch, unsupported device or
-attestation mismatch fail open. An init mismatch quarantines further A1
-materialization for that process.
+- PTDE SpecRGB at `t10`, while retaining stock DSR `t1` alpha/roughness;
+- PTDE Diffuse at `t0` only together with its exact c100/material-domain route;
+- PTDE Normal at `t2` only for an authorized homologous material route or
+  certified exact `t0+t1+t2` tuple;
+- the exact `Ps_Body[DSBT]` -> PTDE plain `Ps_Body[DSB]` Subsurface bypass
+  only when the ordinary receiver and all dependent surface bridges are ready.
 
-No draw callback or draw replay is registered.
+State restoration is part of the transaction. Unknown material, receiver,
+logical texture, sidecar, tuple, donor, shader identity, device or restore
+state fails open to the untouched stock DSR draw. A failed restore quarantines
+the resource path rather than allowing a hybrid.
 
-## Status
+## Deliberately not armed
 
-Construction and ABI compatibility may be proven by CI. Runtime liveness,
-actual receiver hits, bridge activation and PTDE-visible pixel behavior remain
-separate statuses and are not inferred from a successful build.
+The presence of predecessor code is not authorization to activate an operator.
+The integrated policy therefore keeps these paths OFF:
+
+- Upper/Lower;
+- HemDir3;
+- EnvDiffuse;
+- legacy EnvSpec / P_Metal EnvSpec source;
+- full PointLight and local legacy specular;
+- FaceEye legacy shadow;
+- P_Metal black-safe source and V10;
+- Bloom/HDR;
+- rejected RGBA SAT.
+
+Native DSR SFX paths remain host-preserved.
+
+## Status semantics
+
+CI may establish source completeness, construction and ABI compatibility.
+Runtime liveness, exact receiver hits, bridge activation and PTDE-visible pixel
+behavior are separate statuses. A green build does not promote any of those.

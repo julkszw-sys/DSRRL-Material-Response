@@ -1186,7 +1186,13 @@ bool on_draw_indexed(command_list *cmd,std::uint32_t index_count,std::uint32_t i
     // not sufficient: it may precede a non-target draw on the same thread.
     // Unknown/unowned draws therefore remain completely stock and do not
     // contribute EnvSpec identity/carrier telemetry.
+    const bool envspec_feature_enabled=
+        g_core &&
+        (g_core->features().enabled(core::operator_id::env_spec) ||
+         g_core->features().enabled(core::operator_id::pmetal_black_safe_source) ||
+         g_core->features().enabled(core::operator_id::pmetal_black_safe_v10));
     const bool envspec_receiver_owned=
+        envspec_feature_enabled &&
         cmd && cmd==g_bound_command &&
         !g_bound_subsurface &&
         g_bound_host>=0 && g_bound_host<24;

@@ -3,26 +3,37 @@ name: Renderer Core Integrated Single Addon
 on:
   push:
     branches:
+      - main
       - dev/renderer-core-v1-islands
       - agent/integrated-single-addon-a1-20260924
     paths:
       - "renderer-core/integrated/**"
       - "renderer-core/include/dsrrl/runtime/**"
       - "renderer-core/src/runtime/**"
+      - "renderer-core/tests/integrated_feature_policy_tests.cpp"
       - "renderer-core/tools/audit_a1_protected_host_scope.py"
       - "renderer-core/data/a1_island_plan_index_v1.json"
-      - "renderer-core/include/dsrrl/operators/legacy_plan/**"
+      - "renderer-core/include/dsrrl/operators/**"
+      - "renderer-core/src/operators/**"
       - "renderer-core/src/feature_registry.cpp"
+      - "runtime-v1/CMakeLists.txt"
+      - "runtime-v1/include/dsrrl/runtime/**"
+      - "runtime-v1/src/**"
+      - "runtime-v1/cmake/**"
+      - "runtime-v1/tools/**"
+      - "runtime-v1/provenance/**"
       - ".github/workflows/renderer-core-integrated.yml"
   pull_request:
     paths:
       - "renderer-core/integrated/**"
       - "renderer-core/include/dsrrl/runtime/**"
       - "renderer-core/src/runtime/**"
-      - "renderer-core/tools/audit_a1_protected_host_scope.py"
-      - "renderer-core/data/a1_island_plan_index_v1.json"
-      - "renderer-core/include/dsrrl/operators/legacy_plan/**"
-      - "renderer-core/src/feature_registry.cpp"
+      - "renderer-core/tests/integrated_feature_policy_tests.cpp"
+      - "renderer-core/include/dsrrl/operators/**"
+      - "renderer-core/src/operators/**"
+      - "runtime-v1/CMakeLists.txt"
+      - "runtime-v1/include/dsrrl/runtime/**"
+      - "runtime-v1/src/**"
       - ".github/workflows/renderer-core-integrated.yml"
 
 permissions:
@@ -60,25 +71,45 @@ jobs:
       - name: Build integrated addon
         run: cmake --build build-integrated --config Release
 
-      - name: Audit integrated entrypoint
+      - name: Build and run integrated feature policy test
+        shell: pwsh
+        run: |
+          cmake --build build-integrated --config Release --target dsrrl_renderer_integrated_policy_tests
+          & "build-integrated/renderer-core-lib/Release/dsrrl_renderer_integrated_policy_tests.exe"
+          if ($LASTEXITCODE -ne 0) { throw "Integrated feature policy test failed" }
+
+      - name: Audit integrated operator boundary
         shell: pwsh
         run: |
           $entry = Get-Content renderer-core/integrated/integrated_addon.cpp -Raw
-          $bridge = Get-Content renderer-core/src/runtime/a1_create_pipeline_bridge.cpp -Raw
+          $policy = Get-Content renderer-core/include/dsrrl/runtime/integrated_feature_policy.hpp -Raw
 
-          if ($entry -match 'addon_event::draw(?:_indexed)?' -or $bridge -match 'addon_event::draw(?:_indexed)?') {
-            throw "Integrated A1 path must not register draw callbacks"
+          foreach ($required in @(
+            'engine::verify_provenance',
+            'engine::install',
+            'assets::register_runtime',
+            'mr::register_runtime',
+            'integrated_feature_policy'
+          )) {
+            if ($entry -notmatch [regex]::Escape($required)) {
+              throw "Integrated entrypoint missing required glue: $required"
+            }
           }
 
-          if ($entry -match '\bDraw(?:Indexed|Instanced|IndexedInstanced)?\s*\(' -or $bridge -match '\bDraw(?:Indexed|Instanced|IndexedInstanced)?\s*\(') {
-            throw "Integrated A1 path must not issue native draw replay"
+          foreach ($forbidden in @(
+            'upper_lower::register_runtime',
+            'envspec::register_runtime'
+          )) {
+            if ($entry -match [regex]::Escape($forbidden)) {
+              throw "Deferred operator accidentally activated by integrated entrypoint: $forbidden"
+            }
           }
 
-          if ($entry -match 'P_Metal|P_METAL|pmetal' -or $bridge -match 'P_Metal|P_METAL|pmetal') {
-            throw "Integrated A1 create-time path must not special-case P_Metal"
+          if ($policy -notmatch 'integrated_boot_enabled_count\(\) == 10u') {
+            throw "Integrated policy boot-count invariant missing"
           }
 
-          Write-Host "INTEGRATED_A1_OPERATOR_ISOLATION_PASS"
+          Write-Host "INTEGRATED_A2_OPERATOR_BOUNDARY_PASS"
 
       - name: Build audit and package
         shell: pwsh
@@ -90,11 +121,14 @@ jobs:
 
           $addonHash = (Get-FileHash $addon -Algorithm SHA256).Hash.ToLowerInvariant()
           $entryHash = (Get-FileHash "renderer-core/integrated/integrated_addon.cpp" -Algorithm SHA256).Hash.ToLowerInvariant()
-          $bridgeHash = (Get-FileHash "renderer-core/src/runtime/a1_create_pipeline_bridge.cpp" -Algorithm SHA256).Hash.ToLowerInvariant()
-          $bridgeHeaderHash = (Get-FileHash "renderer-core/include/dsrrl/runtime/a1_create_pipeline_bridge.hpp" -Algorithm SHA256).Hash.ToLowerInvariant()
+          $policyHash = (Get-FileHash "renderer-core/include/dsrrl/runtime/integrated_feature_policy.hpp" -Algorithm SHA256).Hash.ToLowerInvariant()
+          $a1Hash = (Get-FileHash "renderer-core/src/runtime/a1_create_pipeline_bridge.cpp" -Algorithm SHA256).Hash.ToLowerInvariant()
+          $mrHash = (Get-FileHash "runtime-v1/src/mr_island.cpp" -Algorithm SHA256).Hash.ToLowerInvariant()
+          $assetHash = (Get-FileHash "runtime-v1/src/asset_bridges.cpp" -Algorithm SHA256).Hash.ToLowerInvariant()
+          $engineHash = (Get-FileHash "runtime-v1/src/engine_hooks.cpp" -Algorithm SHA256).Hash.ToLowerInvariant()
 
           $audit = [ordered]@{
-            schema = "DSRRL_RENDERER_CORE_INTEGRATED_BUILD_AUDIT_V1"
+            schema = "DSRRL_RENDERER_CORE_INTEGRATED_BUILD_AUDIT_V2"
             build_kind = "DEVELOPMENT"
             source_commit = $env:GITHUB_SHA
             reshade_commit = "3645e3025d1d98a90e318278858931f034d5d1f6"
@@ -102,14 +136,18 @@ jobs:
             target = "DSRRL_Renderer_Core_Integrated_Construction.addon64"
             addon_sha256 = $addonHash
             entrypoint_sha256 = $entryHash
-            a1_bridge_source_sha256 = $bridgeHash
-            a1_bridge_header_sha256 = $bridgeHeaderHash
-            source_plan_sha256 = "5cc15f8084fb75cb33c27be3f0e94be7fd186f07c16274b33ee09735b747a1ec"
-            exact_recipe_corpus_sha256 = "c38d5560e7dfc99f149da0908d754400e8bf654fe7e0a0469e5f08f47d7575b0"
-            a1_plans = 144
-            a1_ops = 312
-            protected_phn_spc_hits = 0
-            single_addon_entrypoint = true
+            integrated_policy_sha256 = $policyHash
+            a1_bridge_source_sha256 = $a1Hash
+            material_response_glue_sha256 = $mrHash
+            asset_bridge_glue_sha256 = $assetHash
+            engine_bridge_sha256 = $engineHash
+            boot_armed_operator_count = 10
+            single_addon_entrypoint = $true
+            engine_hook_owner_count = 1
+            deferred_upper_lower = $true
+            deferred_legacy_envspec = $true
+            deferred_full_pointlight = $true
+            deferred_pmetal_source = $true
             runtime_status = "NOT_TESTED"
             bridge_activation = "NOT_TESTED"
             pixel_status = "OPEN"
