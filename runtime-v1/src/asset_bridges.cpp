@@ -849,6 +849,47 @@ bool spec_ready(
     return ready;
 }
 
+bool diffuse_exact_resource_tuple_authorized(
+    ID3D11DeviceContext *context) noexcept
+{
+    if(context==nullptr || g_quarantined.load())
+        return false;
+
+    ID3D11ShaderResourceView *views[2]{};
+    context->PSGetShaderResources(0u,1u,&views[0]);
+    context->PSGetShaderResources(1u,1u,&views[1]);
+
+    const auto h0=logical_hash_for(views[0]);
+    const auto h1=logical_hash_for(views[1]);
+    const bool authorized=
+        h0!=0u && h1!=0u &&
+        generated::diffuse_pair_allowed_v12(h1,h0);
+
+    release_view(views[0]);
+    release_view(views[1]);
+    return authorized;
+}
+
+bool normal_exact_resource_tuple_authorized(
+    ID3D11DeviceContext *context) noexcept
+{
+    if(context==nullptr || g_quarantined.load())
+        return false;
+
+    ID3D11ShaderResourceView *views[3]{};
+    context->PSGetShaderResources(0u,3u,views);
+
+    const auto h0=logical_hash_for(views[0]);
+    const auto h1=logical_hash_for(views[1]);
+    const auto h2=logical_hash_for(views[2]);
+    const bool authorized=
+        h0!=0u && h1!=0u && h2!=0u &&
+        generated::normal_tuple_allowed_v12(h0,h1,h2);
+
+    for(auto *&view:views) release_view(view);
+    return authorized;
+}
+
 bool diffuse_ready(
     ID3D11DeviceContext *context,
     const material_route_scope &route,
@@ -856,7 +897,7 @@ bool diffuse_ready(
 {
     if(context==nullptr || g_core==nullptr || g_quarantined.load() ||
        !receiver_allowed(route,receiver_id) ||
-       !material_owner_authorized(route.owner_authorization) ||
+       !diffuse_route_authorized(route.owner_authorization) ||
        !route.diffuse_eligible ||
        receiver_id<24u || receiver_id>35u ||
        !g_core->features().enabled(core::operator_id::diffuse))
@@ -889,7 +930,7 @@ bool normal_ready(
 {
     if(context==nullptr || g_core==nullptr || g_quarantined.load() ||
        !receiver_allowed(route,receiver_id) ||
-       !material_owner_authorized(route.owner_authorization) ||
+       !normal_route_authorized(route.owner_authorization) ||
        !route.normal_eligible ||
        receiver_id<24u || receiver_id>35u ||
        !g_core->features().enabled(core::operator_id::normal))
@@ -961,18 +1002,20 @@ bool apply_draw(
         g_core->features().enabled(core::operator_id::spec_rgb);
 
     const bool bmp_receiver = receiver_id >= 24u && receiver_id <= 35u;
-    const bool owner_authorized =
-        material_owner_authorized(route.owner_authorization);
+    const bool diffuse_authorized =
+        diffuse_route_authorized(route.owner_authorization);
+    const bool normal_authorized =
+        normal_route_authorized(route.owner_authorization);
 
     const bool want_diff =
-        owner_authorized &&
+        diffuse_authorized &&
         route.diffuse_eligible &&
         route.diffuse_c100_carrier_active &&
         bmp_receiver &&
         g_core->features().enabled(core::operator_id::diffuse);
 
     const bool want_norm =
-        owner_authorized &&
+        normal_authorized &&
         route.normal_eligible &&
         bmp_receiver &&
         g_core->features().enabled(core::operator_id::normal);
