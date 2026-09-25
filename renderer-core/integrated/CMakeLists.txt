@@ -1,12 +1,38 @@
 cmake_minimum_required(VERSION 3.20)
 
-project(DSRRLRendererCoreIntegrated LANGUAGES CXX)
+project(DSRRLCoreIslands LANGUAGES CXX)
 
 if(NOT WIN32)
-    message(FATAL_ERROR "DSRRL integrated addon is Windows-only.")
+    message(FATAL_ERROR "DSRRL Core+Islands addon is Windows-only.")
 endif()
 
 find_package(Python3 REQUIRED COMPONENTS Interpreter)
+
+file(
+    READ
+    "${CMAKE_CURRENT_LIST_DIR}/VERSION.json"
+    DSRRL_CORE_ISLANDS_VERSION_JSON)
+
+string(
+    JSON
+    DSRRL_CORE_ISLANDS_VERSION
+    GET
+    "${DSRRL_CORE_ISLANDS_VERSION_JSON}"
+    version)
+
+string(
+    JSON
+    DSRRL_CORE_ISLANDS_PRODUCT_LINE
+    GET
+    "${DSRRL_CORE_ISLANDS_VERSION_JSON}"
+    product_line)
+
+string(
+    JSON
+    DSRRL_CORE_ISLANDS_ARTIFACT_STEM
+    GET
+    "${DSRRL_CORE_ISLANDS_VERSION_JSON}"
+    artifact_stem)
 
 set(
     RESHADE_INCLUDE_DIR
@@ -43,7 +69,7 @@ add_subdirectory(
     EXCLUDE_FROM_ALL)
 
 # Consume the source-complete predecessor implementation as a reusable glue
-# library, but never build/load its standalone addon in the integrated target.
+# library, but never build/load its standalone addon in the Core+Islands target.
 set(
     DSRRL_RUNTIME_V1_BUILD_STANDALONE_ADDON
     OFF
@@ -85,7 +111,9 @@ target_compile_definitions(
     dsrrl_renderer_core_integrated
     PRIVATE
     WIN32_LEAN_AND_MEAN
-    NOMINMAX)
+    NOMINMAX
+    DSRRL_CORE_ISLANDS_VERSION="${DSRRL_CORE_ISLANDS_VERSION}"
+    DSRRL_CORE_ISLANDS_PRODUCT_LINE="${DSRRL_CORE_ISLANDS_PRODUCT_LINE}")
 
 if(MSVC)
     target_compile_options(
@@ -107,7 +135,7 @@ set_target_properties(
     dsrrl_renderer_core_integrated
     PROPERTIES
     PREFIX ""
-    OUTPUT_NAME "DSRRL_Renderer_Core_Integrated_Construction"
+    OUTPUT_NAME "${DSRRL_CORE_ISLANDS_ARTIFACT_STEM}"
     SUFFIX ".addon64")
 
 add_custom_command(
@@ -116,5 +144,5 @@ add_custom_command(
     COMMAND "${Python3_EXECUTABLE}"
             "${DSRRL_REPO_ROOT}/runtime-v1/tools/canonicalize_pe.py"
             "$<TARGET_FILE:dsrrl_renderer_core_integrated>"
-    COMMENT "Canonicalizing integrated PE metadata for reproducible addon bytes"
+    COMMENT "Canonicalizing Core+Islands PE metadata for reproducible addon bytes"
     VERBATIM)
