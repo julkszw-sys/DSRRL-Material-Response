@@ -1,8 +1,14 @@
 #pragma once
 
+#include "dsrrl/core/draw_transaction_policy.hpp"
+
 #include <cstdint>
 
 namespace dsrrl::operators::lightbank {
+
+static_assert(
+    core::requires_draw_transaction(core::operator_id::upper_lower),
+    "Upper/Lower draw carrier must use the shared transaction layer.");
 
 struct ul_rgb3 {
     float r = 0.0f;
