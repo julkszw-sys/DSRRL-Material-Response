@@ -1,6 +1,7 @@
 #include "dsrrl/operators/material_response/material_response_seed.hpp"
 #include "dsrrl/operators/material_response/generated_routes_v1.hpp"
 #include "dsrrl/operators/material_response/mtd_semantic_census.hpp"
+#include "dsrrl/runtime/generated_stable_hemenv_receivers_v1.hpp"
 
 #include <cstdint>
 
@@ -32,6 +33,26 @@ bool parse_sha256(const char *hex, core::sha256_digest &out) noexcept
 }
 
 } // namespace
+
+std::size_t register_confirmed_material_receivers_v1(
+    material_response_island &island)
+{
+    std::size_t registered = 0;
+
+    for (const auto &receiver :
+         runtime::generated::k_stable_hemenv_receivers_v1) {
+        receiver_recipe recipe;
+        recipe.receiver_id = receiver.receiver_id;
+        recipe.scope = material_scope_policy::exact_material_required;
+        recipe.certified_operations = specular_factor_c101;
+        recipe.envspec = ptde_envspec_presence::unknown;
+
+        if (island.register_receiver_recipe(recipe))
+            ++registered;
+    }
+
+    return registered;
+}
 
 std::size_t register_confirmed_material_routes_v1(material_response_island &island)
 {
