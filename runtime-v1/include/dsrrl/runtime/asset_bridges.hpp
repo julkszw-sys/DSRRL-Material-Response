@@ -10,6 +10,8 @@
 #include <Windows.h>
 #include <d3d11.h>
 
+#include "dsrrl/runtime/material_owner_authorization.hpp"
+
 #include <array>
 #include <cstdint>
 
@@ -19,6 +21,7 @@ namespace dsrrl::runtime::assets {
 
 struct material_route_scope {
     bool exact = false;
+    material_owner_authorization owner_authorization{};
     bool diffuse_eligible = false;
     bool normal_eligible = false;
     bool diffuse_c100_carrier_active = false;
