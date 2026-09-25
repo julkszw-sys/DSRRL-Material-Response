@@ -1,6 +1,6 @@
 #include "dsrrl/core/renderer_core.hpp"
 #include "dsrrl/runtime/a1_create_pipeline_bridge.hpp"
-#include "dsrrl/runtime/flver_engine_hooks.hpp"
+#include "dsrrl/runtime/flver_identity_transport.hpp"
 #include "dsrrl/runtime/flver_identity_registry.hpp"
 
 #include <reshade.hpp>
@@ -56,7 +56,7 @@ void log_state(const char *tag) noexcept
 {
     const auto t = g_a1_bridge.telemetry();
     const auto f = dsrrl::runtime::flver_identity_stats();
-    const auto h = dsrrl::runtime::flver_engine_hooks::status();
+    const auto h = dsrrl::runtime::flver_identity_transport::status();
 
     char line[560]{};
     std::snprintf(
@@ -230,7 +230,7 @@ bool AddonInit(
 
     register_events();
 
-    const bool flver_hooks = dsrrl::runtime::flver_engine_hooks::install();
+    const bool flver_hooks = dsrrl::runtime::flver_identity_transport::install();
     if (!flver_hooks) {
         reshade::log::message(reshade::log::level::warning,
             "[DSRRL CORE+ISLANDS " DSRRL_CORE_ISLANDS_VERSION
@@ -253,7 +253,7 @@ void AddonUninit(
 {
     unregister_events();
     log_state("UNLOAD");
-    dsrrl::runtime::flver_engine_hooks::uninstall();
+    dsrrl::runtime::flver_identity_transport::uninstall();
     g_a1_bridge.reset();
     disable_integrated_islands();
 
