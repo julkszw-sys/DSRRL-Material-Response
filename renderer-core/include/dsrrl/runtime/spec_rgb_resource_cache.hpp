@@ -72,11 +72,12 @@ private:
     std::unordered_map<std::u16string, entry> by_name_;
     std::unordered_map<spec_rgb_resource_handle, std::u16string> name_by_stock_;
     std::unordered_map<spec_rgb_resource_handle, std::u16string> name_by_companion_;
-    // Once one live stock handle has been observed under multiple logical
-    // identities, the handle itself is ambiguous. Keep that quarantine until
-    // erase_stock observes resource destruction; otherwise a third name could
-    // silently reclaim the handle after the reverse owner was removed.
+    // Once one live handle has been observed under multiple logical identities,
+    // the handle itself is ambiguous. Keep quarantine until the corresponding
+    // resource-destruction callback; otherwise a later identity can silently
+    // reclaim a still-live handle after the first conflict.
     std::unordered_set<spec_rgb_resource_handle> ambiguous_stock_;
+    std::unordered_set<spec_rgb_resource_handle> ambiguous_companion_;
 };
 
 } // namespace dsrrl::runtime
