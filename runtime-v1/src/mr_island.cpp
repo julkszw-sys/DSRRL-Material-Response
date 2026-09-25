@@ -1039,6 +1039,9 @@ bool on_draw_indexed(command_list *cmd,std::uint32_t index_count,std::uint32_t i
         route.normal_eligible &&
         g_core->features().enabled(core::operator_id::normal) &&
         assets::normal_ready(ctx,route,receiver_id);
+    // Freeze the exact preflight decision for the mutation phase so the
+    // transaction plan and actual resource writes cannot diverge.
+    route.normal_eligible=normal_candidate;
 
     const bool pmetal_exact_route =
         !body_route &&
