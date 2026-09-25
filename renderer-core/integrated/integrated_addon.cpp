@@ -7,6 +7,7 @@
 #include "dsrrl/runtime/stable_receiver_pipeline_registry.hpp"
 #include "dsrrl/operators/material_response/material_response_island.hpp"
 #include "dsrrl/operators/material_response/material_response_seed.hpp"
+#include "dsrrl/operators/material_response/material_response_v211_materializer.hpp"
 
 #include <reshade.hpp>
 
@@ -25,6 +26,7 @@
 #include <atomic>
 #include <cstdint>
 #include <cstdio>
+#include <vector>
 
 namespace {
 
@@ -41,6 +43,8 @@ std::atomic<std::uint64_t> g_mr_draw_eval{0};
 std::atomic<std::uint64_t> g_mr_would_activate{0};
 std::atomic<std::uint64_t> g_mr_fail_open{0};
 std::atomic_bool g_mr_ready{false};
+std::atomic<std::uint64_t> g_mr_payload_materialize_ok{0};
+std::atomic<std::uint64_t> g_mr_payload_materialize_fail{0};
 std::atomic<std::uint64_t> g_draw_events{0};
 std::atomic<std::uint64_t> g_draw_receiver_hits{0};
 std::atomic<std::uint64_t> g_draw_owner_hits{0};
@@ -49,6 +53,7 @@ std::atomic<std::uint64_t> g_draw_owner_only{0};
 std::atomic<std::uint64_t> g_draw_receiver_only{0};
 
 constexpr dsrrl::core::operator_id k_integrated_islands[] = {
+    dsrrl::core::operator_id::material_response,
     dsrrl::core::operator_id::terminal_sat_rgb,
     dsrrl::core::operator_id::diffuse_material_domain,
     dsrrl::core::operator_id::pointlight_pnts_attenuation,
@@ -166,7 +171,7 @@ void log_state(const char *tag) noexcept
         "inserts=%llu lookups=%llu hits=%llu misses=%llu erases=%llu invalid=%llu "
         "owner_sel=%llu owner_enriched=%llu owner_auth=%llu owner_fo=%llu "
         "mr_ready=%u mr_eval=%llu mr_would_activate=%llu mr_fo=%llu "
-        "mr_payload_ok=%llu mr_payload_fail=%llu mr_tx_eligible=%llu mr_tx_miss=%llu "
+        "mr_mat_ok=%llu mr_mat_fail=%llu mr_payload_ok=%llu mr_payload_fail=%llu mr_tx_eligible=%llu mr_tx_miss=%llu "
         "mr_replay=%llu mr_restore_fail=%llu mr_quarantine=%u "
         "draw=%llu draw_rx=%llu draw_owner=%llu draw_join=%llu owner_only=%llu rx_only=%llu",
         tag,
@@ -201,6 +206,8 @@ void log_state(const char *tag) noexcept
         static_cast<unsigned long long>(g_mr_draw_eval.load()),
         static_cast<unsigned long long>(g_mr_would_activate.load()),
         static_cast<unsigned long long>(g_mr_fail_open.load()),
+        static_cast<unsigned long long>(g_mr_payload_materialize_ok.load()),
+        static_cast<unsigned long long>(g_mr_payload_materialize_fail.load()),
         static_cast<unsigned long long>(mr_tx.replacement_register_ok),
         static_cast<unsigned long long>(mr_tx.replacement_register_fail),
         static_cast<unsigned long long>(mr_tx.eligible_draws),
@@ -236,6 +243,49 @@ bool on_create_pipeline(
     std::uint32_t subobject_count,
     const reshade::api::pipeline_subobject *subobjects)
 {
+    const auto *pixel_shader =
+        find_pixel_shader(
+            subobject_count,
+            subobjects);
+
+    if (pixel_shader != nullptr &&
+        pixel_shader->code != nullptr &&
+        pixel_shader->code_size != 0u) {
+        const auto *source =
+            static_cast<const std::uint8_t *>(
+                pixel_shader->code);
+
+        std::vector<std::uint8_t> mr_payload;
+        const auto mr =
+            dsrrl::operators::material_response::
+                materialize_v211_stable_receiver(
+                    g_core.features(),
+                    source,
+                    pixel_shader->code_size,
+                    mr_payload);
+
+        using mr_result =
+            dsrrl::operators::material_response::
+                v211_materialize_result;
+
+        if (mr.result == mr_result::applied) {
+            if (!g_mr_draw_runtime.has_receiver_replacement(
+                    mr.receiver_id)) {
+                if (g_mr_draw_runtime.register_receiver_replacement(
+                        mr.receiver_id,
+                        mr_payload.data(),
+                        mr_payload.size()))
+                    ++g_mr_payload_materialize_ok;
+                else
+                    ++g_mr_payload_materialize_fail;
+            }
+        } else if (
+            mr.result != mr_result::pass_not_candidate &&
+            mr.result != mr_result::pass_unknown_exact_sha) {
+            ++g_mr_payload_materialize_fail;
+        }
+    }
+
     return g_a1_bridge.on_create_pipeline(
         device, layout, subobject_count, subobjects);
 }
@@ -431,6 +481,8 @@ bool AddonInit(
     g_mr_draw_eval.store(0);
     g_mr_would_activate.store(0);
     g_mr_fail_open.store(0);
+    g_mr_payload_materialize_ok.store(0);
+    g_mr_payload_materialize_fail.store(0);
     g_draw_events.store(0);
     g_draw_receiver_hits.store(0);
     g_draw_owner_hits.store(0);
@@ -477,8 +529,9 @@ bool AddonInit(
         reshade::log::level::info,
         "[DSRRL CORE+ISLANDS " DSRRL_CORE_ISLANDS_VERSION
         "] READY: native Renderer Core A1 islands plus exact receiver/owner "
-        "Material Response draw-transaction layer; MR remains fail-open per receiver until "
-        "an exact replacement payload is registered; frozen legacy monolith is not linked.");
+        "Material Response V2.11 draw-transaction layer; exact stock DXBC is materialized "
+        "into a composed receiver payload before A1 create-time mutation; frozen legacy "
+        "monolith is not linked.");
 
     return true;
 }
