@@ -237,7 +237,7 @@ void log_state(const char *tag) noexcept
         "ul_hook=%u ul_q=%u ul_restore_fail=%u ul_pub=%llu ul_sel=%llu/%llu/%llu ul_tuple_miss=%llu "
         "ul_steady=%llu/%llu ul_blend=%llu/%llu/%llu ul_b13=%llu/%llu ul_req=%llu "
         "sub_candidate=%llu sub_prepared=%llu sub_pipe_reject=%llu sub_mat_reject=%llu sub_surface_reject=%llu "
-        "mode_hook=%u/%u mode_q=%u mode_restore_fail=%u mode_begin=%llu mode_obs=%llu mode2=%llu mode_snap=%llu/%llu "
+        "mode_hook=%u/%u mode_q=%u mode_restore_fail=%u mode_begin=%llu mode_in2=%llu mode_obs=%llu mode2=%llu mode_snap=%llu/%llu "
         "draw=%llu draw_rx=%llu draw_owner=%llu draw_join=%llu owner_only=%llu rx_only=%llu",
         tag,
         static_cast<unsigned long long>(t.create_events),
@@ -323,10 +323,11 @@ void log_state(const char *tag) noexcept
         static_cast<unsigned long long>(subs.material_rejects),
         static_cast<unsigned long long>(subs.surface_rejects),
         mode.lt5_hook_armed ? 1u : 0u,
-        mode.ge5_hook_armed ? 1u : 0u,
+        mode.selector_end_hook_armed ? 1u : 0u,
         mode.quarantined ? 1u : 0u,
         mode.restore_failed ? 1u : 0u,
         static_cast<unsigned long long>(mode.selector_begin),
+        static_cast<unsigned long long>(mode.incoming_mode2),
         static_cast<unsigned long long>(mode.effective_observed),
         static_cast<unsigned long long>(mode.mode2_observed),
         static_cast<unsigned long long>(mode.snapshot_hits),
