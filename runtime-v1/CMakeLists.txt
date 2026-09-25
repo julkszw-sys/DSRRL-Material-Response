@@ -1,9 +1,6 @@
 cmake_minimum_required(VERSION 3.20)
 project(DSRRLRendererRuntimeV1 LANGUAGES CXX)
 
-option(DSRRL_RUNTIME_V1_BUILD_STANDALONE_ADDON
-  "Build the legacy standalone Runtime v1 addon entrypoint" ON)
-
 find_package(Python3 REQUIRED COMPONENTS Interpreter)
 
 set(PROV "${CMAKE_CURRENT_SOURCE_DIR}/provenance/mr_v211")
@@ -123,101 +120,63 @@ set(RESHade_INCLUDE_DIR "" CACHE PATH "Path to pinned ReShade include directory"
 
 if(WIN32 AND RESHade_INCLUDE_DIR)
   enable_language(ASM_MASM)
+  add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/../renderer-core"
+                   "${CMAKE_CURRENT_BINARY_DIR}/renderer-core")
 
-  if(NOT TARGET dsrrl_renderer_core)
-    add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/../renderer-core"
-                     "${CMAKE_CURRENT_BINARY_DIR}/renderer-core")
-  endif()
-
-  # Reusable operator glue shared by the predecessor addon and the canonical
-  # renderer-core/integrated entrypoint. Keeping one implementation prevents
-  # drift in selector/MTD/resource routing and draw-state restore semantics.
-  add_library(dsrrl_runtime_v1_operator_glue STATIC
+  add_library(dsrrl_renderer_runtime_v1_addon SHARED
+    src/addon.cpp
     src/engine_hooks.cpp
     src/mr_island.cpp
     src/envspec_runtime.cpp
     src/asset_bridges.cpp
     src/upper_lower_runtime.cpp
+    "${CMAKE_CURRENT_SOURCE_DIR}/../renderer-core/src/runtime/a1_create_pipeline_bridge.cpp"
     src/selector_hook.asm
     src/texture_name_hook.asm
   )
-  add_dependencies(dsrrl_runtime_v1_operator_glue
-    dsrrl_mr_manifest
-    dsrrl_semantic_spec_donor_header
-    dsrrl_a3_route_headers)
-  target_include_directories(dsrrl_runtime_v1_operator_glue PUBLIC
+  add_dependencies(dsrrl_renderer_runtime_v1_addon dsrrl_mr_manifest dsrrl_semantic_spec_donor_header dsrrl_a3_route_headers)
+  target_include_directories(dsrrl_renderer_runtime_v1_addon PRIVATE
     include
     "${GEN_DIR}"
     "${CMAKE_CURRENT_SOURCE_DIR}/generated"
     "${CMAKE_CURRENT_SOURCE_DIR}/provenance/mr_v211"
     "${RESHade_INCLUDE_DIR}"
   )
-  target_link_libraries(dsrrl_runtime_v1_operator_glue PUBLIC
+  target_link_libraries(dsrrl_renderer_runtime_v1_addon PRIVATE
     dsrrl_runtime_v1
     dsrrl_renderer_core
   )
-  target_compile_features(dsrrl_runtime_v1_operator_glue PUBLIC cxx_std_20)
+  target_compile_features(dsrrl_renderer_runtime_v1_addon PRIVATE cxx_std_20)
 
+  # C++ warning/conformance switches must never leak into ml64/MASM.
+  # MASM receives its own defaults; /WX remains C++-only here so the
+  # mixed-language addon can build deterministically on Windows runners.
   if(MSVC)
-    target_compile_options(dsrrl_runtime_v1_operator_glue PRIVATE
+    target_compile_options(dsrrl_renderer_runtime_v1_addon PRIVATE
       $<$<COMPILE_LANGUAGE:CXX>:/W4>
       $<$<COMPILE_LANGUAGE:CXX>:/WX>
       $<$<COMPILE_LANGUAGE:CXX>:/permissive->
       $<$<COMPILE_LANGUAGE:CXX>:/Brepro>
     )
-  endif()
-
-  if(DSRRL_RUNTIME_V1_BUILD_STANDALONE_ADDON)
-    add_library(dsrrl_renderer_runtime_v1_addon SHARED
-      src/addon.cpp
-      "${CMAKE_CURRENT_SOURCE_DIR}/../renderer-core/src/runtime/a1_create_pipeline_bridge.cpp"
-    )
-    add_dependencies(dsrrl_renderer_runtime_v1_addon
-      dsrrl_mr_manifest
-      dsrrl_semantic_spec_donor_header
-      dsrrl_a3_route_headers)
-    target_include_directories(dsrrl_renderer_runtime_v1_addon PRIVATE
-      include
-      "${GEN_DIR}"
-      "${CMAKE_CURRENT_SOURCE_DIR}/generated"
-      "${CMAKE_CURRENT_SOURCE_DIR}/provenance/mr_v211"
-      "${RESHade_INCLUDE_DIR}"
-    )
-    target_link_libraries(dsrrl_renderer_runtime_v1_addon PRIVATE
-      dsrrl_runtime_v1_operator_glue
-      dsrrl_runtime_v1
-      dsrrl_renderer_core
-    )
-    target_compile_features(dsrrl_renderer_runtime_v1_addon PRIVATE cxx_std_20)
-
-    # C++ warning/conformance switches must never leak into ml64/MASM.
-    if(MSVC)
-      target_compile_options(dsrrl_renderer_runtime_v1_addon PRIVATE
-        $<$<COMPILE_LANGUAGE:CXX>:/W4>
-        $<$<COMPILE_LANGUAGE:CXX>:/WX>
-        $<$<COMPILE_LANGUAGE:CXX>:/permissive->
-        $<$<COMPILE_LANGUAGE:CXX>:/Brepro>
-      )
-      target_link_options(dsrrl_renderer_runtime_v1_addon PRIVATE
-        /Brepro
-        /INCREMENTAL:NO
-      )
-    endif()
-
-    set_target_properties(dsrrl_renderer_runtime_v1_addon PROPERTIES
-      PREFIX ""
-      OUTPUT_NAME "DSRRL_Renderer_Core_Runtime_v1"
-      SUFFIX ".addon64"
-    )
-
-    add_custom_command(TARGET dsrrl_renderer_runtime_v1_addon POST_BUILD
-      COMMAND "${Python3_EXECUTABLE}"
-              "${CMAKE_CURRENT_SOURCE_DIR}/tools/canonicalize_pe.py"
-              "$<TARGET_FILE:dsrrl_renderer_runtime_v1_addon>"
-      COMMENT "Canonicalizing PE metadata for reproducible addon bytes"
-      VERBATIM
+    target_link_options(dsrrl_renderer_runtime_v1_addon PRIVATE
+      /Brepro
+      /INCREMENTAL:NO
     )
   endif()
+
+  set_target_properties(dsrrl_renderer_runtime_v1_addon PROPERTIES
+    PREFIX ""
+    OUTPUT_NAME "DSRRL_Renderer_Core_Runtime_v1"
+    SUFFIX ".addon64"
+  )
+
+  add_custom_command(TARGET dsrrl_renderer_runtime_v1_addon POST_BUILD
+    COMMAND "${Python3_EXECUTABLE}"
+            "${CMAKE_CURRENT_SOURCE_DIR}/tools/canonicalize_pe.py"
+            "$<TARGET_FILE:dsrrl_renderer_runtime_v1_addon>"
+    COMMENT "Canonicalizing PE metadata for reproducible addon bytes"
+    VERBATIM
+  )
 endif()
 
 add_executable(dsrrl_runtime_subsurface_tests tests/subsurface_dispatch_tests.cpp)

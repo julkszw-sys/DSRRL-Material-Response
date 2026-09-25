@@ -6,8 +6,6 @@ if(NOT WIN32)
     message(FATAL_ERROR "DSRRL Core+Islands addon is Windows-only.")
 endif()
 
-find_package(Python3 REQUIRED COMPONENTS Interpreter)
-
 file(
     READ
     "${CMAKE_CURRENT_LIST_DIR}/VERSION.json"
@@ -51,11 +49,6 @@ get_filename_component(
     "${CMAKE_CURRENT_LIST_DIR}/.."
     ABSOLUTE)
 
-get_filename_component(
-    DSRRL_REPO_ROOT
-    "${DSRRL_RENDERER_CORE_ROOT}/.."
-    ABSOLUTE)
-
 set(
     RESHade_INCLUDE_DIR
     "${RESHADE_INCLUDE_DIR}"
@@ -68,20 +61,6 @@ add_subdirectory(
     "${CMAKE_BINARY_DIR}/renderer-core-lib"
     EXCLUDE_FROM_ALL)
 
-# Consume the source-complete predecessor implementation as a reusable glue
-# library, but never build/load its standalone addon in the Core+Islands target.
-set(
-    DSRRL_RUNTIME_V1_BUILD_STANDALONE_ADDON
-    OFF
-    CACHE BOOL
-    "Build the legacy standalone Runtime v1 addon entrypoint"
-    FORCE)
-
-add_subdirectory(
-    "${DSRRL_REPO_ROOT}/runtime-v1"
-    "${CMAKE_BINARY_DIR}/runtime-v1-glue"
-    EXCLUDE_FROM_ALL)
-
 add_library(
     dsrrl_renderer_core_integrated
     SHARED
@@ -92,20 +71,17 @@ target_include_directories(
     dsrrl_renderer_core_integrated
     PRIVATE
     "${DSRRL_RENDERER_CORE_ROOT}/include"
-    "${DSRRL_REPO_ROOT}/runtime-v1/include"
     "${RESHADE_INCLUDE_DIR}")
 
 target_link_libraries(
     dsrrl_renderer_core_integrated
     PRIVATE
-    dsrrl_runtime_v1_operator_glue
-    dsrrl_runtime_v1
     dsrrl_renderer_core)
 
 target_compile_features(
     dsrrl_renderer_core_integrated
     PRIVATE
-    cxx_std_20)
+    cxx_std_17)
 
 target_compile_definitions(
     dsrrl_renderer_core_integrated
@@ -137,12 +113,3 @@ set_target_properties(
     PREFIX ""
     OUTPUT_NAME "${DSRRL_CORE_ISLANDS_ARTIFACT_STEM}"
     SUFFIX ".addon64")
-
-add_custom_command(
-    TARGET dsrrl_renderer_core_integrated
-    POST_BUILD
-    COMMAND "${Python3_EXECUTABLE}"
-            "${DSRRL_REPO_ROOT}/runtime-v1/tools/canonicalize_pe.py"
-            "$<TARGET_FILE:dsrrl_renderer_core_integrated>"
-    COMMENT "Canonicalizing Core+Islands PE metadata for reproducible addon bytes"
-    VERBATIM)

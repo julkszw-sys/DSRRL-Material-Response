@@ -563,7 +563,7 @@ bool install_v13_env_hook() noexcept
     return true;
 }
 
-bool install_hooks(bool capture_pmetal_env_source) noexcept
+bool install_hooks() noexcept
 {
     if(!g_base) return false;
     if(!prepare_hook(g_hooks[0],k_rva_wrapper_type5,k_wrapper_bytes,
@@ -591,15 +591,11 @@ bool install_hooks(bool capture_pmetal_env_source) noexcept
     }
 
     // V13 P_Metal source capture is an independent optional producer.
-    // Integrated producer-only preflight deliberately leaves it unhooked
-    // while the P_Metal V13/source island remains OFF.
-    g_pmetal_env_enabled.store(false);
-    if(capture_pmetal_env_source){
-        if(install_v13_env_hook())
-            g_pmetal_env_enabled.store(true);
-        else
-            g_pmetal_env_enabled.store(false);
-    }
+    // Its preflight failure must never disable the already-certified U/L path.
+    if(install_v13_env_hook())
+        g_pmetal_env_enabled.store(true);
+    else
+        g_pmetal_env_enabled.store(false);
 
     return true;
 }
@@ -656,19 +652,12 @@ void release_state(draw_state &s) noexcept
 
 bool register_runtime(core::renderer_core &core) noexcept
 {
-    return register_runtime(core, producer_registration_options{});
-}
-
-bool register_runtime(
-    core::renderer_core &core,
-    producer_registration_options options) noexcept
-{
     g_core=&core;
     g_base=engine::image_base();
     g_quarantined.store(false);
     g_enabled.store(false);
 
-    if(!g_base || !install_hooks(options.capture_pmetal_env_source)){
+    if(!g_base || !install_hooks()){
         log_warn("DSRRL Runtime U/L: exact producer hook preflight failed; U/L fail-open.");
         restore_hooks();
         g_core=nullptr;
@@ -678,15 +667,10 @@ bool register_runtime(
     reshade::register_event<reshade::addon_event::destroy_device>(
         on_destroy_device);
     g_enabled.store(true);
-    if(!options.capture_pmetal_env_source){
-        log_info(
-            "DSRRL Runtime U/L: producer-only preflight armed; U/L snapshot capture active, visible bind remains feature-gated, V13 P_Metal producer deliberately OFF.");
-    }else{
-        log_info(
-            g_pmetal_env_enabled.load() ?
-            "DSRRL Runtime U/L: steady 0x563B80 + blend 0x5642F0 producer capture armed; V13 P_Metal A/B producer 0x563C30 preflight PASS; shared selector only." :
-            "DSRRL Runtime U/L: steady 0x563B80 + blend 0x5642F0 producer capture armed; V13 P_Metal A/B producer preflight FAIL-OPEN-OFF; shared selector only.");
-    }
+    log_info(
+        g_pmetal_env_enabled.load() ?
+        "DSRRL Runtime U/L: steady 0x563B80 + blend 0x5642F0 producer capture armed; V13 P_Metal A/B producer 0x563C30 preflight PASS; shared selector only." :
+        "DSRRL Runtime U/L: steady 0x563B80 + blend 0x5642F0 producer capture armed; V13 P_Metal A/B producer preflight FAIL-OPEN-OFF; shared selector only.");
     return true;
 }
 

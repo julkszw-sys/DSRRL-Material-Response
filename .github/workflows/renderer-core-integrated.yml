@@ -10,30 +10,19 @@ on:
       - "renderer-core/integrated/**"
       - "renderer-core/include/dsrrl/runtime/**"
       - "renderer-core/src/runtime/**"
-      - "renderer-core/tests/integrated_feature_policy_tests.cpp"
       - "renderer-core/tools/audit_a1_protected_host_scope.py"
       - "renderer-core/data/a1_island_plan_index_v1.json"
       - "renderer-core/include/dsrrl/operators/**"
       - "renderer-core/src/operators/**"
       - "renderer-core/src/feature_registry.cpp"
-      - "runtime-v1/CMakeLists.txt"
-      - "runtime-v1/include/dsrrl/runtime/**"
-      - "runtime-v1/src/**"
-      - "runtime-v1/cmake/**"
-      - "runtime-v1/tools/**"
-      - "runtime-v1/provenance/**"
       - ".github/workflows/renderer-core-integrated.yml"
   pull_request:
     paths:
       - "renderer-core/integrated/**"
       - "renderer-core/include/dsrrl/runtime/**"
       - "renderer-core/src/runtime/**"
-      - "renderer-core/tests/integrated_feature_policy_tests.cpp"
       - "renderer-core/include/dsrrl/operators/**"
       - "renderer-core/src/operators/**"
-      - "runtime-v1/CMakeLists.txt"
-      - "runtime-v1/include/dsrrl/runtime/**"
-      - "runtime-v1/src/**"
       - ".github/workflows/renderer-core-integrated.yml"
 
 permissions:
@@ -56,10 +45,31 @@ jobs:
           if ($v.legacy_monolith.version -ne "1.45" -or $v.legacy_monolith.status -ne "FROZEN_LEGACY" -or $v.legacy_monolith.development -ne $false) {
             throw "Legacy monolith separation invariant failed"
           }
-          $root = Get-Content README.md -Raw
-          $integrated = Get-Content renderer-core/integrated/README.md -Raw
-          if ($root -notmatch [regex]::Escape("Core+Islands 2.0.0-dev")) { throw "Root README missing active Core+Islands version" }
-          if ($integrated -notmatch [regex]::Escape("Core+Islands 2.0.0-dev")) { throw "Integrated README missing active Core+Islands version" }
+
+      - name: Audit frozen legacy boundary
+        shell: pwsh
+        run: |
+          $cmake = Get-Content renderer-core/integrated/CMakeLists.txt -Raw
+          $entry = Get-Content renderer-core/integrated/integrated_addon.cpp -Raw
+          $combined = $cmake + "`n" + $entry
+
+          foreach ($forbidden in @(
+            'runtime-v1',
+            'dsrrl_runtime_v1',
+            'asset_bridges.hpp',
+            'engine_hooks.hpp',
+            'mr_island.hpp',
+            'envspec_runtime.hpp',
+            'upper_lower_runtime.hpp',
+            'selector_hook.asm',
+            'texture_name_hook.asm'
+          )) {
+            if ($combined -match [regex]::Escape($forbidden)) {
+              throw "Frozen legacy dependency leaked into active Core+Islands target: $forbidden"
+            }
+          }
+
+          Write-Host "CORE_ISLANDS_FROZEN_LEGACY_BOUNDARY_PASS"
 
       - name: Checkout pinned ReShade API
         uses: actions/checkout@v4
@@ -74,7 +84,7 @@ jobs:
           python3 renderer-core/tools/audit_a1_protected_host_scope.py \
             --index renderer-core/data/a1_island_plan_index_v1.json
 
-      - name: Configure integrated addon
+      - name: Configure Core+Islands addon
         shell: pwsh
         run: >
           cmake
@@ -83,53 +93,28 @@ jobs:
           -A x64
           -DRESHADE_INCLUDE_DIR="${{ github.workspace }}/_reshade/include"
 
-      - name: Build integrated addon
+      - name: Build Core+Islands addon
         run: cmake --build build-integrated --config Release
 
-      - name: Verify integrated feature policy is compiled into addon
-        shell: pwsh
-        run: |
-          $policy = Get-Content renderer-core/include/dsrrl/runtime/integrated_feature_policy.hpp -Raw
-          if ($policy -notmatch 'integrated_boot_enabled_count\(\) == 11u') {
-            throw "Integrated feature policy invariant missing"
-          }
-          Write-Host "Integrated policy static_asserts compiled with addon; full policy test runs in Renderer Core Islands CI."
-
-      - name: Audit integrated operator boundary
+      - name: Audit active operator boundary
         shell: pwsh
         run: |
           $entry = Get-Content renderer-core/integrated/integrated_addon.cpp -Raw
-          $policy = Get-Content renderer-core/include/dsrrl/runtime/integrated_feature_policy.hpp -Raw
+          $bridge = Get-Content renderer-core/src/runtime/a1_create_pipeline_bridge.cpp -Raw
 
-          foreach ($required in @(
-            'engine::verify_provenance',
-            'engine::install',
-            'assets::register_runtime',
-            'mr::register_runtime',
-            'upper_lower::register_runtime',
-            'envspec::register_runtime',
-            'capture_pmetal_env_source = false',
-            'integrated_feature_policy'
-          )) {
-            if ($entry -notmatch [regex]::Escape($required)) {
-              throw "Integrated entrypoint missing required glue: $required"
-            }
+          if ($entry -match 'addon_event::draw(?:_indexed)?' -or $bridge -match 'addon_event::draw(?:_indexed)?') {
+            throw "Current native integrated path must not register draw callbacks"
           }
 
-          foreach ($forbidden in @(
-            'upper_lower::bind_draw',
-            'bind_pmetal_envspec'
-          )) {
-            if ($entry -match [regex]::Escape($forbidden)) {
-              throw "Deferred visible consumer accidentally activated by integrated entrypoint: $forbidden"
-            }
+          if ($entry -match '\bDraw(?:Indexed|Instanced|IndexedInstanced)?\s*\(' -or $bridge -match '\bDraw(?:Indexed|Instanced|IndexedInstanced)?\s*\(') {
+            throw "Current native integrated path must not issue draw replay"
           }
 
-          if ($policy -notmatch 'integrated_boot_enabled_count\(\) == 11u') {
-            throw "Integrated policy boot-count invariant missing"
+          if ($entry -match 'P_Metal|P_METAL|pmetal' -or $bridge -match 'P_Metal|P_METAL|pmetal') {
+            throw "Current A1 create-time path must not special-case P_Metal"
           }
 
-          Write-Host "CORE_ISLANDS_2_0_0_DEV_OPERATOR_BOUNDARY_PASS"
+          Write-Host "CORE_ISLANDS_NATIVE_A1_BOUNDARY_PASS"
 
       - name: Build audit and package
         shell: pwsh
@@ -144,24 +129,21 @@ jobs:
           $addonHash = (Get-FileHash $addon -Algorithm SHA256).Hash.ToLowerInvariant()
           $entryHash = (Get-FileHash "renderer-core/integrated/integrated_addon.cpp" -Algorithm SHA256).Hash.ToLowerInvariant()
           $cmakeHash = (Get-FileHash "renderer-core/integrated/CMakeLists.txt" -Algorithm SHA256).Hash.ToLowerInvariant()
-          $policyHash = (Get-FileHash "renderer-core/include/dsrrl/runtime/integrated_feature_policy.hpp" -Algorithm SHA256).Hash.ToLowerInvariant()
           $versionHash = (Get-FileHash "renderer-core/integrated/VERSION.json" -Algorithm SHA256).Hash.ToLowerInvariant()
-          $a1Hash = (Get-FileHash "renderer-core/src/runtime/a1_create_pipeline_bridge.cpp" -Algorithm SHA256).Hash.ToLowerInvariant()
-          $mrHash = (Get-FileHash "runtime-v1/src/mr_island.cpp" -Algorithm SHA256).Hash.ToLowerInvariant()
-          $assetHash = (Get-FileHash "runtime-v1/src/asset_bridges.cpp" -Algorithm SHA256).Hash.ToLowerInvariant()
-          $engineHash = (Get-FileHash "runtime-v1/src/engine_hooks.cpp" -Algorithm SHA256).Hash.ToLowerInvariant()
+          $bridgeHash = (Get-FileHash "renderer-core/src/runtime/a1_create_pipeline_bridge.cpp" -Algorithm SHA256).Hash.ToLowerInvariant()
           $sourceRef = if ($env:GITHUB_HEAD_REF) { $env:GITHUB_HEAD_REF } else { $env:GITHUB_REF_NAME }
           $sourceRefKind = if ($env:GITHUB_HEAD_REF) { "pull_request_head" } else { "git_ref" }
           if ([string]::IsNullOrWhiteSpace($sourceRef)) { throw "Unable to resolve exact source ref" }
 
           $audit = [ordered]@{
-            schema = "DSRRL_CORE_ISLANDS_BUILD_AUDIT_V1"
+            schema = "DSRRL_CORE_ISLANDS_BUILD_AUDIT_V2"
             product_line = $v.product_line
             version = $v.version
             version_namespace = $v.version_policy.namespace
             development_status = $v.status
             legacy_monolith_version = $v.legacy_monolith.version
             legacy_monolith_status = $v.legacy_monolith.status
+            legacy_runtime_linked = $false
             build_kind = "DEVELOPMENT"
             source_commit = $env:GITHUB_SHA
             source_ref = $sourceRef
@@ -173,21 +155,10 @@ jobs:
             version_manifest_sha256 = $versionHash
             integrated_cmake_sha256 = $cmakeHash
             entrypoint_sha256 = $entryHash
-            integrated_policy_sha256 = $policyHash
-            a1_bridge_source_sha256 = $a1Hash
-            material_response_glue_sha256 = $mrHash
-            asset_bridge_glue_sha256 = $assetHash
-            engine_bridge_sha256 = $engineHash
-            boot_armed_operator_count = 11
+            a1_bridge_source_sha256 = $bridgeHash
+            boot_armed_operator_count = 5
             single_addon_entrypoint = $true
-            engine_hook_owner_count = 1
-            deferred_upper_lower = $true
-            deferred_legacy_envspec = $true
-            deferred_full_pointlight = $true
-            deferred_pmetal_source = $true
-            ul_producer_preflight_glue = $true
-            envspec_resource_preflight_glue = $true
-            pmetal_v13_producer_capture = $false
+            draw_replay = $false
             runtime_status = "NOT_TESTED"
             bridge_activation = "NOT_TESTED"
             pixel_status = "OPEN"

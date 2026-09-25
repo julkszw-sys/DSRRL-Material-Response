@@ -28,13 +28,6 @@ struct pmetal_env_source {
     std::uint32_t row_id_b = 0;
 };
 
-struct producer_registration_options {
-    // The U/L producer snapshot is observational until a consumer explicitly
-    // asks bind_draw(). P_Metal V13/A-B capture is a separate producer and
-    // must be opted into independently.
-    bool capture_pmetal_env_source = true;
-};
-
 struct draw_state {
     ID3D11Buffer *old_base = nullptr;
     ID3D11Buffer *old_window = nullptr;
@@ -47,9 +40,6 @@ struct draw_state {
 };
 
 bool register_runtime(core::renderer_core &core) noexcept;
-bool register_runtime(
-    core::renderer_core &core,
-    producer_registration_options options) noexcept;
 void unregister_runtime() noexcept;
 
 void selector_event(
