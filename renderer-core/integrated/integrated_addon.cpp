@@ -113,6 +113,8 @@ bool observe_draw_identity(
     reshade::api::command_list *cmd_list,
     std::uint32_t &receiver_id,
     bool &subsurface_bound,
+    bool &hemdir3_bound,
+    dsrrl::runtime::hemdir3_receiver_identity &hemdir3_identity,
     dsrrl::operators::material_response::material_identity &out_material,
     dsrrl::operators::material_response::decision &out_decision) noexcept
 {
@@ -120,6 +122,8 @@ bool observe_draw_identity(
 
     receiver_id = 0u;
     subsurface_bound = false;
+    hemdir3_bound = false;
+    hemdir3_identity = {};
 
     const bool stable_receiver =
         dsrrl::runtime::stable_receiver_bound(
@@ -132,12 +136,26 @@ bool observe_draw_identity(
             cmd_list,
             subsurface_target);
 
+    const bool hemdir3_receiver =
+        dsrrl::runtime::hemdir3_receiver_bound(
+            cmd_list,
+            hemdir3_identity);
+
+    const unsigned receiver_classes =
+        (stable_receiver ? 1u : 0u) +
+        (subsurface_receiver ? 1u : 0u) +
+        (hemdir3_receiver ? 1u : 0u);
+
     const bool receiver_ok =
-        stable_receiver != subsurface_receiver;
+        receiver_classes == 1u;
 
     if (subsurface_receiver) {
         receiver_id = subsurface_target;
         subsurface_bound = true;
+    } else if (hemdir3_receiver) {
+        receiver_id =
+            hemdir3_identity.paired_stable_receiver_id;
+        hemdir3_bound = true;
     }
 
     out_material = {};
@@ -167,7 +185,8 @@ bool observe_draw_identity(
 
     ++g_draw_joins;
 
-    if (subsurface_bound) {
+    if (subsurface_bound ||
+        hemdir3_bound) {
         ++g_mr_fail_open;
         return true;
     }
