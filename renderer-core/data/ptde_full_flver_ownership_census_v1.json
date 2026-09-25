@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "game": "PTDE",
-  "status": "SOURCE_COMPLETE_OWNER_CORPUS",
+  "status": "SOURCE_COMPLETE_OWNER_CORPUS_CORRECTED_RERUN",
   "runtime_status": "OPEN",
   "pixel_status": "OPEN",
   "resource_byte_identity": "OPEN",
@@ -9,8 +9,8 @@
   "counts": {
     "archive_entries_scanned": 6114,
     "archive_pairs": 2,
-    "bnd3_binders": 3479,
-    "bnd3_entries": 27814,
+    "bnd3_binders": 3554,
+    "bnd3_entries": 30674,
     "dcx_layers": 4983,
     "flver_instances": 4998,
     "unique_flver_payloads": 4688,
@@ -19,7 +19,7 @@
     "mtd_entries": 436,
     "unique_mtd_payloads": 418,
     "unresolved_rows": 0,
-    "scan_errors": 75
+    "scan_errors": 0
   },
   "mtd_resolution": {
     "EXACT_BASENAME_SHA": 87151
@@ -29,7 +29,7 @@
     "flver_material_ownership_input_v1.tsv": "f6fab999e103cb11a0c3ce50b33bde82c531f8297df81674344c1e3e9082a6f6",
     "flver_material_ownership_raw_v1.jsonl": "c762b9a4705ed422e13d439b1a6ccf01a1778decaa5c8526dd85b3d27027eb37",
     "flver_material_ownership_unresolved_v1.tsv": "c0450f6fc1ee78ee60f42ab0ffcff280e5d011af9a44e1118909a284251cff9d",
-    "flver_scan_errors_v1.jsonl": "1285616dfd1c4e6e1ffe9b1e24a536200ce423db346a2f9ebd4f90e0e1057c8e",
+    "flver_scan_errors_v1.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
     "ptde_mtd_index_v1.jsonl": "4166d5231b96f6b72164d9a62425092cc237ee06536d0cd0549a0e5de4f4bdd9"
   },
   "confirmed_route_examples": {
@@ -56,8 +56,16 @@
       "policy": "SEPARATE_SUBSURF_CONSUMER"
     }
   },
-  "activation_policy": "Census completeness removes the missing-source-corpus blocker only. Unknown cross-version resource identity or consumer homology must still fail open.",
-  "evidence_id": "937705df-dbf4-4799-9d2a-0bf3961e889d",
-  "finding_key": "project.census.ptde_full_flver_ownership_complete_v1",
-  "knowledge_revision": 9112
+  "activation_policy": "Corrected zero-error rerun closes the PTDE owner-source completeness blocker. Runtime USE still requires exact DSR owner/material/receiver/resource routing; source completeness alone does not prove cross-version FLVER homology or pixel equivalence. Missing runtime identity remains fail-open.",
+  "corrected_rerun": {
+    "owner_zip_sha256": "6651acb4fe995a69f1c84e5761b3d6bdcadeb39e1fc4d1087c3b82794f4d7281",
+    "scan_summary_sha256": "af7331fd0eeb9959559e655253c1439731684291953f2d00fe1bf0d4ed9860c5",
+    "scan_errors_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "scan_error_count": 0,
+    "corrected_variable_bnd3_headers": true,
+    "source_complete_candidate": true,
+    "flver_identities": 4757,
+    "producer_exporter_commit": "064948c060695df52b4a3af35390615ee49edb76",
+    "corrected_exporter_commit": "12c6d69d6c66fc0be44d8af76aaf17219a696d2b"
+  }
 }
