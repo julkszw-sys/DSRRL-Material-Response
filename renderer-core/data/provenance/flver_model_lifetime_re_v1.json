@@ -1,0 +1,21 @@
+{
+  "schema": "dsrrl.flver_model_lifetime_re.v1",
+  "status": "CONFIRMED",
+  "exe_sha256": "a45aaa36dd2f6cc151670a639ea5547043cf38ea79ff4178b963c6ed71f98d7b",
+  "model_destructor_rva": "0x20D7A0",
+  "binary_observations": [
+    "0x20D7BE preserves destructor RCX model pointer in RDI.",
+    "The destructor tears down model subobjects in reverse layout order.",
+    "0x20D839 computes RCX = RDI + 0x88.",
+    "0x20D84A calls 0x22AA90 to destroy the same material-container member constructed by parser path at model+0x88.",
+    "The destructor continues tearing down +0x58, +0x40, +0x28 and +0x08 members and returns at 0x20D8B0."
+  ],
+  "lifetime_contract": {
+    "registry_key": "model pointer",
+    "insert_cut": "parser entry 0x20D910 before raw FLVER mutation",
+    "lookup_cut": "selector container - 0x88",
+    "erase_cut": "model destructor 0x20D7A0 before/while +0x88 member is destroyed"
+  },
+  "safety": "Erase the model->raw-FLVER-SHA registry entry at destructor entry. Missing insert/lookup/erase state fails open. This prevents stale pointer reuse from authenticating a later unrelated model.",
+  "activation": "STATIC_ROUTING_COMPLETE_RUNTIME_LIVENESS_REQUIRED"
+}
