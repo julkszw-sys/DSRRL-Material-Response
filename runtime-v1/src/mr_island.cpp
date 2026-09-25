@@ -82,6 +82,10 @@ std::atomic<std::uint64_t> g_envspec_draw_none_safe{0}, g_envspec_draw_none_unsa
 std::atomic<std::uint64_t> g_envspec_draw_nospc{0};
 std::atomic<std::uint64_t> g_semantic_spec_override_hit{0};
 std::atomic<std::uint64_t> g_semantic_spec_ambiguous_hold{0};
+std::atomic<std::uint64_t> g_ptde_tex_mtd_exact{0};
+std::atomic<std::uint64_t> g_ptde_tex_selector_exact{0};
+std::atomic<std::uint64_t> g_diffuse_semantic_hold{0};
+std::atomic<std::uint64_t> g_normal_semantic_hold{0};
 
 namespace mtd_sem=dsrrl::operators::material_response;
 
@@ -99,6 +103,7 @@ std::mutex g_material_mutex;
 std::unordered_map<void*,std::uint16_t> g_material_donor;
 std::unordered_map<void*,std::uint8_t> g_material_spec_override;
 std::unordered_map<void*,mtd_sem::mtd_envspec_semantics> g_material_envspec;
+std::unordered_map<void*,mtd_sem::ptde_flver_texture_semantics> g_material_ptde_texture;
 
 std::uint64_t legacy_semantic_key_hash(const wchar_t *semantic_key) noexcept
 {
@@ -178,6 +183,16 @@ mtd_sem::mtd_envspec_semantics envspec_for(void *material)
         : it->second;
 }
 
+mtd_sem::ptde_flver_texture_semantics ptde_texture_for(void *material)
+{
+    if(!material) return {};
+    std::lock_guard lock(g_material_mutex);
+    const auto it=g_material_ptde_texture.find(material);
+    return it==g_material_ptde_texture.end()
+        ? mtd_sem::ptde_flver_texture_semantics{}
+        : it->second;
+}
+
 void *resolve_material(void *container,std::int32_t index) noexcept
 {
     if(!container || index<0 || index>0x100000) return nullptr;
@@ -195,6 +210,7 @@ thread_local int g_draw_donor=-1;
 thread_local int g_draw_spec_override=-1;
 thread_local mtd_sem::mtd_envspec_semantics g_draw_envspec{};
 thread_local bool g_draw_envspec_exact=false;
+thread_local mtd_sem::ptde_flver_texture_semantics g_draw_ptde_texture{};
 thread_local int g_bound_host=-1;
 thread_local bool g_bound_lerp=false;
 thread_local bool g_bound_subsurface=false;
@@ -972,6 +988,7 @@ void on_bind_pipeline(command_list *cmd,pipeline_stage stages,pipeline p)
         g_draw_spec_override=-1;
         g_draw_envspec={};
         g_draw_envspec_exact=false;
+        g_draw_ptde_texture={};
         upper_lower::consume_draw_selection();
     }
 }
@@ -981,10 +998,12 @@ bool on_draw_indexed(command_list *cmd,std::uint32_t index_count,std::uint32_t i
 {
     const auto draw_envspec=g_draw_envspec;
     const bool draw_envspec_exact=g_draw_envspec_exact;
+    const auto draw_ptde_texture=g_draw_ptde_texture;
     const int draw_spec_override=g_draw_spec_override;
     g_draw_spec_override=-1;
     g_draw_envspec={};
     g_draw_envspec_exact=false;
+    g_draw_ptde_texture={};
 
     // Pixel-inert live preflight must obey the same receiver/command ownership
     // boundary as any future visible EnvSpec carrier. A selector token alone is
@@ -1086,12 +1105,25 @@ bool on_draw_indexed(command_list *cmd,std::uint32_t index_count,std::uint32_t i
     const std::uint32_t receiver_id=24u+static_cast<std::uint32_t>(g_bound_host);
     assets::material_route_scope route{};
     route.exact=true;
-    route.diffuse_eligible=g_bound_host<12;
+    const bool ptde_diffuse_use=
+        mtd_sem::ptde_flver_texture_semantic_present(
+            draw_ptde_texture,
+            mtd_sem::ptde_texture_semantic::diffuse);
+    const bool ptde_bump_use=
+        mtd_sem::ptde_flver_texture_semantic_present(
+            draw_ptde_texture,
+            mtd_sem::ptde_texture_semantic::bump);
+    route.diffuse_eligible=g_bound_host<12 && ptde_diffuse_use;
     const std::string_view donor_sha=don.sha256;
     const bool normal_material_homologous=
         donor_sha!=k_nonhomologous_normal_pd_sha256 &&
         donor_sha!=k_nonhomologous_normal_pleather_ds_sha256;
-    route.normal_eligible=g_bound_host<12 && normal_material_homologous;
+    route.normal_eligible=
+        g_bound_host<12 && ptde_bump_use && normal_material_homologous;
+    if(g_bound_host<12 && !ptde_diffuse_use)
+        ++g_diffuse_semantic_hold;
+    if(g_bound_host<12 && !ptde_bump_use)
+        ++g_normal_semantic_hold;
     route.diffuse_c100_carrier_active=false;
     route.specular_material_verified=
         don.has_c101 &&
@@ -1513,6 +1545,10 @@ void on_present(command_queue *,swapchain *,const rect *,const rect *,std::uint3
                <<" env_nospc="<<g_envspec_draw_nospc.load()
                <<" spec_semantic_hit="<<g_semantic_spec_override_hit.load()
                <<" spec_ambiguous_hold="<<g_semantic_spec_ambiguous_hold.load()
+               <<" ptde_tex_mtd_exact="<<g_ptde_tex_mtd_exact.load()
+               <<" ptde_tex_sel_exact="<<g_ptde_tex_selector_exact.load()
+               <<" diff_sem_hold="<<g_diffuse_semantic_hold.load()
+               <<" norm_sem_hold="<<g_normal_semantic_hold.load()
                <<" failopen="<<g_fail_open.load()
               <<" restore_fail="<<g_restore_fail.load()<<" quarantined="<<(g_quarantined.load()?1:0);
             log_info(os.str());
@@ -1549,6 +1585,12 @@ void mtd_event(
             mtd_sem::classify_mtd_envspec_semantics_legacy(
                 legacy_key,
                 digest);
+        const auto ptde_texture=
+            mtd_sem::classify_ptde_flver_texture_semantics_legacy(
+                legacy_key,
+                digest);
+        if(ptde_texture.exact_host_identity_match)
+            ++g_ptde_tex_mtd_exact;
 
         int semantic_spec_override=-1;
         std::wstring semantic_name;
@@ -1567,6 +1609,7 @@ void mtd_event(
         g_material_donor.erase(material);
         g_material_spec_override.erase(material);
         g_material_envspec.erase(material);
+        g_material_ptde_texture.erase(material);
 
         if(idx>=0){
             g_material_donor[material]=static_cast<std::uint16_t>(idx);
@@ -1583,6 +1626,8 @@ void mtd_event(
             g_material_envspec[material]=envspec;
             ++g_envspec_mtd_exact;
         }
+        if(ptde_texture.exact_host_identity_match)
+            g_material_ptde_texture[material]=ptde_texture;
     }catch(...){++g_fail_open;}
 }
 
@@ -1595,6 +1640,7 @@ void selector_event(void *container,void *,void *ret,void *,void *,std::int32_t 
         g_draw_spec_override=-1;
         g_draw_envspec={};
         g_draw_envspec_exact=false;
+        g_draw_ptde_texture={};
         return;
     }
     const auto rva=reinterpret_cast<std::uintptr_t>(ret)-base;
@@ -1603,6 +1649,7 @@ void selector_event(void *container,void *,void *ret,void *,void *,std::int32_t 
         g_draw_spec_override=-1;
         g_draw_envspec={};
         g_draw_envspec_exact=false;
+        g_draw_ptde_texture={};
         return;
     }
     void *actual=resolve_material(container,material_index);
@@ -1610,8 +1657,11 @@ void selector_event(void *container,void *,void *ret,void *,void *,std::int32_t 
     g_draw_spec_override=spec_override_for(actual);
     g_draw_envspec=envspec_for(actual);
     g_draw_envspec_exact=g_draw_envspec.exact_identity_match;
+    g_draw_ptde_texture=ptde_texture_for(actual);
     if(g_draw_donor>=0) ++g_selector_mapped;
     if(g_draw_envspec_exact) ++g_envspec_selector_exact;
+    if(g_draw_ptde_texture.exact_host_identity_match)
+        ++g_ptde_tex_selector_exact;
 }
 
 bool register_runtime(core::renderer_core &core) noexcept
@@ -1620,7 +1670,7 @@ bool register_runtime(core::renderer_core &core) noexcept
     g_quarantined.store(false);
     g_v13_first_draw_logged.store(false);
     g_v10_first_draw_logged.store(false);
-    g_draw_donor=-1; g_draw_spec_override=-1; g_draw_envspec={}; g_draw_envspec_exact=false;
+    g_draw_donor=-1; g_draw_spec_override=-1; g_draw_envspec={}; g_draw_envspec_exact=false; g_draw_ptde_texture={};
     g_bound_host=-1; g_bound_lerp=false; g_bound_subsurface=false; g_bound_command=nullptr;
     g_enabled.store(true);
     reshade::register_event<reshade::addon_event::init_device>(on_init_device);
@@ -1653,6 +1703,7 @@ void unregister_runtime() noexcept
         g_material_donor.clear();
         g_material_spec_override.clear();
         g_material_envspec.clear();
+        g_material_ptde_texture.clear();
     }
     g_draw_donor=-1; g_draw_spec_override=-1; g_draw_envspec={}; g_draw_envspec_exact=false;
     g_bound_host=-1; g_bound_lerp=false; g_bound_subsurface=false; g_bound_command=nullptr;
