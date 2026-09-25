@@ -1403,26 +1403,11 @@ bool upper_lower_draw_runtime::prepare_upper_lower_carrier(
     if (b13 == nullptr)
         return false;
 
+    // Producer-only contract: realize and retain the exact fresh b13
+    // payload. Receiver/shader ownership is established by the consumer
+    // adapter (ordinary HemEnv, MR+U/L, or another explicitly certified
+    // consumer), never here.
     prepared.b13 = b13;
-    prepared.request.primary =
-        core::operator_id::upper_lower;
-    prepared.request.receiver_verified = true;
-    prepared.request.material_verified = false;
-    prepared.request.constant_buffers[0] = {
-        13u,
-        b13
-    };
-    prepared.request.constant_buffer_count = 1u;
-
-    draw_tx_mutation verify{};
-    if (build_island_draw_mutation(
-            prepared.request,
-            verify) !=
-        island_draw_adapter_result::ready) {
-        release_prepared_draw(prepared);
-        return false;
-    }
-
     prepared.ready = true;
     ++g_requests;
     return true;
@@ -1437,9 +1422,15 @@ bool upper_lower_draw_runtime::prepare_draw_request(
         receiver_id > 47u)
         return false;
 
-    return prepare_upper_lower_carrier(
-        context,
-        prepared);
+    if (!prepare_upper_lower_carrier(
+            context,
+            prepared))
+        return false;
+
+    // Legacy compatibility surface only. U/L now requires an exact consumer
+    // PS plus b13, so a carrier-only request must not be dispatched.
+    prepared.request = {};
+    return true;
 }
 
 bool upper_lower_draw_runtime::prepare_hemdir3_carrier(
