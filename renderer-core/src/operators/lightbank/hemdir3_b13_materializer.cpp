@@ -190,6 +190,258 @@ bool extract_words(
     return true;
 }
 
+bool patch_rdef_for_b13(
+    std::vector<chunk> &chunks) noexcept
+{
+    constexpr std::size_t k_cb_desc_size = 24u;
+    constexpr std::size_t k_resource_desc_size = 32u;
+    constexpr char k_name[] =
+        "DSRRL_LightBankCarrier";
+
+    chunk *rdef = nullptr;
+
+    for (auto &current : chunks) {
+        if (std::memcmp(
+                current.tag.data(),
+                "RDEF",
+                4u) != 0)
+            continue;
+
+        if (rdef != nullptr)
+            return false;
+
+        rdef = &current;
+    }
+
+    if (rdef == nullptr ||
+        rdef->payload.size() < 32u)
+        return false;
+
+    auto &payload =
+        rdef->payload;
+
+    const std::uint32_t cb_count =
+        read_u32(payload.data());
+    const std::uint32_t cb_offset =
+        read_u32(payload.data() + 4u);
+    const std::uint32_t resource_count =
+        read_u32(payload.data() + 8u);
+    const std::uint32_t resource_offset =
+        read_u32(payload.data() + 12u);
+
+    if (cb_count == 0u ||
+        cb_count > 64u ||
+        resource_count == 0u ||
+        resource_count > 256u)
+        return false;
+
+    const std::size_t cb_bytes =
+        static_cast<std::size_t>(
+            cb_count) *
+        k_cb_desc_size;
+
+    const std::size_t resource_bytes =
+        static_cast<std::size_t>(
+            resource_count) *
+        k_resource_desc_size;
+
+    if (cb_offset > payload.size() ||
+        cb_bytes >
+            payload.size() - cb_offset ||
+        resource_offset > payload.size() ||
+        resource_bytes >
+            payload.size() - resource_offset)
+        return false;
+
+    for (std::uint32_t i = 0u;
+         i < resource_count;
+         ++i) {
+        const std::size_t base =
+            static_cast<std::size_t>(
+                resource_offset) +
+            static_cast<std::size_t>(i) *
+                k_resource_desc_size;
+
+        const std::uint32_t type =
+            read_u32(
+                payload.data() +
+                base + 4u);
+
+        const std::uint32_t bind_point =
+            read_u32(
+                payload.data() +
+                base + 20u);
+
+        const std::uint32_t bind_count =
+            read_u32(
+                payload.data() +
+                base + 24u);
+
+        if (type == 0u &&
+            bind_count != 0u &&
+            bind_point <= 13u &&
+            13u < bind_point + bind_count)
+            return false;
+    }
+
+    try {
+        while ((payload.size() & 3u) != 0u)
+            payload.push_back(0u);
+
+        const std::uint32_t name_offset =
+            static_cast<std::uint32_t>(
+                payload.size());
+
+        payload.insert(
+            payload.end(),
+            reinterpret_cast<
+                const std::uint8_t *>(
+                    k_name),
+            reinterpret_cast<
+                const std::uint8_t *>(
+                    k_name) +
+                sizeof(k_name));
+
+        while ((payload.size() & 3u) != 0u)
+            payload.push_back(0u);
+
+        if (payload.size() >
+            std::numeric_limits<
+                std::uint32_t>::max())
+            return false;
+
+        const std::uint32_t new_cb_offset =
+            static_cast<std::uint32_t>(
+                payload.size());
+
+        const auto *old_cb =
+            payload.data() + cb_offset;
+
+        std::vector<std::uint8_t> cb_copy(
+            old_cb,
+            old_cb + cb_bytes);
+
+        payload.insert(
+            payload.end(),
+            cb_copy.begin(),
+            cb_copy.end());
+
+        const std::size_t cb_new =
+            payload.size();
+
+        payload.resize(
+            cb_new +
+            k_cb_desc_size);
+
+        write_u32(
+            payload.data() +
+            cb_new + 0u,
+            name_offset);
+        write_u32(
+            payload.data() +
+            cb_new + 4u,
+            0u);
+        write_u32(
+            payload.data() +
+            cb_new + 8u,
+            0u);
+        write_u32(
+            payload.data() +
+            cb_new + 12u,
+            128u);
+        write_u32(
+            payload.data() +
+            cb_new + 16u,
+            0u);
+        write_u32(
+            payload.data() +
+            cb_new + 20u,
+            0u);
+
+        if (payload.size() >
+            std::numeric_limits<
+                std::uint32_t>::max())
+            return false;
+
+        const std::uint32_t
+            new_resource_offset =
+                static_cast<std::uint32_t>(
+                    payload.size());
+
+        const auto *old_resources =
+            rdef->payload.data() +
+            resource_offset;
+
+        std::vector<std::uint8_t>
+            resource_copy(
+                old_resources,
+                old_resources +
+                    resource_bytes);
+
+        payload.insert(
+            payload.end(),
+            resource_copy.begin(),
+            resource_copy.end());
+
+        const std::size_t resource_new =
+            payload.size();
+
+        payload.resize(
+            resource_new +
+            k_resource_desc_size);
+
+        write_u32(
+            payload.data() +
+            resource_new + 0u,
+            name_offset);
+        write_u32(
+            payload.data() +
+            resource_new + 4u,
+            0u);
+        write_u32(
+            payload.data() +
+            resource_new + 8u,
+            0u);
+        write_u32(
+            payload.data() +
+            resource_new + 12u,
+            0u);
+        write_u32(
+            payload.data() +
+            resource_new + 16u,
+            0u);
+        write_u32(
+            payload.data() +
+            resource_new + 20u,
+            13u);
+        write_u32(
+            payload.data() +
+            resource_new + 24u,
+            1u);
+        write_u32(
+            payload.data() +
+            resource_new + 28u,
+            0u);
+
+        write_u32(
+            payload.data() + 0u,
+            cb_count + 1u);
+        write_u32(
+            payload.data() + 4u,
+            new_cb_offset);
+        write_u32(
+            payload.data() + 8u,
+            resource_count + 1u);
+        write_u32(
+            payload.data() + 12u,
+            new_resource_offset);
+    } catch (...) {
+        return false;
+    }
+
+    return true;
+}
+
 bool rebuild(
     const std::uint8_t *source,
     std::size_t source_size,
@@ -649,6 +901,14 @@ materialize_hemdir3_b13_receiver(
     words[1] +=
         static_cast<std::uint32_t>(
             k_cb13_decl.size());
+
+    if (!patch_rdef_for_b13(
+            chunks)) {
+        outcome.result =
+            hemdir3_b13_materialize_result::
+                fail_rebuild;
+        return outcome;
+    }
 
     if (!rebuild(
             source,
