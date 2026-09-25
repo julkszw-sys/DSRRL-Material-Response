@@ -45,6 +45,12 @@ jobs:
           python3 renderer-core/tools/generate_spec_material_routes.py --input renderer-core/data/provenance/spec_material_routes_v1.tsv --output /tmp/generated_spec_material_routes.hpp
           python3 renderer-core/tools/generate_ul_stable_hashes.py --input renderer-core/data/provenance/ul_stable_v29_hashes_v1.tsv --output /tmp/generated_ul_stable_hashes.hpp
           sha256sum /tmp/generated_spec_routes_v12.hpp /tmp/generated_spec_material_routes.hpp /tmp/generated_ul_stable_hashes.hpp
+      - name: Verify A1 and MR exact-shader authority disjointness
+        run: |
+          python3 runtime-v1/tools/verify_runtime_source_disjoint.py \
+            --a1 renderer-core/include/dsrrl/operators/legacy_plan/generated_a1_exact_patch_recipes_v1.hpp \
+            --mr runtime-v1/include/dsrrl/runtime/build151_mr_authority.hpp \
+            --lerp runtime-v1/provenance/build151/hemenvlerp_mr_v211_full_authority.tsv
       - name: Configure runtime tests
         run: cmake -S runtime-v1 -B build/runtime-v1 -DCMAKE_BUILD_TYPE=Release
       - name: Build runtime tests
