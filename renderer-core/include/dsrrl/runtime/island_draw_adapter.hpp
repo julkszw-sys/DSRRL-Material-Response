@@ -42,4 +42,30 @@ island_draw_adapter_result build_island_draw_mutation(
     const island_draw_adapter_request &request,
     draw_tx_mutation &mutation) noexcept;
 
+struct island_draw_dispatch_result {
+    island_draw_adapter_result adapter =
+        island_draw_adapter_result::wrong_transaction_mode;
+    draw_tx_result transaction =
+        draw_tx_result::not_issued;
+};
+
+island_draw_dispatch_result dispatch_island_draw(
+    draw_state_transaction_runtime &transactions,
+    reshade::api::command_list *cmd_list,
+    const island_draw_adapter_request &request,
+    std::uint32_t vertex_count,
+    std::uint32_t instance_count,
+    std::uint32_t first_vertex,
+    std::uint32_t first_instance) noexcept;
+
+island_draw_dispatch_result dispatch_island_draw_indexed(
+    draw_state_transaction_runtime &transactions,
+    reshade::api::command_list *cmd_list,
+    const island_draw_adapter_request &request,
+    std::uint32_t index_count,
+    std::uint32_t instance_count,
+    std::uint32_t first_index,
+    std::int32_t vertex_offset,
+    std::uint32_t first_instance) noexcept;
+
 } // namespace dsrrl::runtime
