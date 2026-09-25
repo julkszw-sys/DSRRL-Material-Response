@@ -57,6 +57,8 @@ jobs:
           cmp /tmp/generated_a1_plan_index_v1.hpp renderer-core/include/dsrrl/operators/legacy_plan/generated_a1_plan_index_v1.hpp
       - name: Verify DSR FLVER ZIP ownership census
         run: python3 renderer-core/tests/test_dsr_flver_zip_ownership_census.py
+      - name: Verify extracted-root DSR FLVER ownership exporter
+        run: python3 renderer-core/tests/test_dsr_full_flver_ownership_export.py
       - name: Configure
         run: cmake -S renderer-core -B build/renderer-core -DCMAKE_BUILD_TYPE=Release
       - name: Build
