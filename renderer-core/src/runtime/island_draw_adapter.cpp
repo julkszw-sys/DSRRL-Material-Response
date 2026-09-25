@@ -94,4 +94,72 @@ island_draw_adapter_result build_island_draw_mutation(
     return island_draw_adapter_result::ready;
 }
 
+island_draw_dispatch_result dispatch_island_draw(
+    draw_state_transaction_runtime &transactions,
+    reshade::api::command_list *cmd_list,
+    const island_draw_adapter_request &request,
+    std::uint32_t vertex_count,
+    std::uint32_t instance_count,
+    std::uint32_t first_vertex,
+    std::uint32_t first_instance) noexcept
+{
+    island_draw_dispatch_result out{};
+    draw_tx_mutation mutation{};
+
+    out.adapter =
+        build_island_draw_mutation(
+            request,
+            mutation);
+
+    if (out.adapter !=
+        island_draw_adapter_result::ready)
+        return out;
+
+    out.transaction =
+        transactions.replay_draw(
+            cmd_list,
+            mutation,
+            vertex_count,
+            instance_count,
+            first_vertex,
+            first_instance);
+
+    return out;
+}
+
+island_draw_dispatch_result dispatch_island_draw_indexed(
+    draw_state_transaction_runtime &transactions,
+    reshade::api::command_list *cmd_list,
+    const island_draw_adapter_request &request,
+    std::uint32_t index_count,
+    std::uint32_t instance_count,
+    std::uint32_t first_index,
+    std::int32_t vertex_offset,
+    std::uint32_t first_instance) noexcept
+{
+    island_draw_dispatch_result out{};
+    draw_tx_mutation mutation{};
+
+    out.adapter =
+        build_island_draw_mutation(
+            request,
+            mutation);
+
+    if (out.adapter !=
+        island_draw_adapter_result::ready)
+        return out;
+
+    out.transaction =
+        transactions.replay_draw_indexed(
+            cmd_list,
+            mutation,
+            index_count,
+            instance_count,
+            first_index,
+            vertex_offset,
+            first_instance);
+
+    return out;
+}
+
 } // namespace dsrrl::runtime
