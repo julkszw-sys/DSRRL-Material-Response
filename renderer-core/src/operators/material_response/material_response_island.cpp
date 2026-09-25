@@ -68,6 +68,8 @@ bool material_response_island::register_material_profile(const material_profile 
         return existing.raw_mtd_sha256 == profile.raw_mtd_sha256 &&
                existing.material_family_hash == profile.material_family_hash &&
                existing.c101 == profile.c101 &&
+               existing.c100 == profile.c100 &&
+               existing.c101_f0q == profile.c101_f0q &&
                existing.lod_min == profile.lod_min &&
                existing.lod_max == profile.lod_max &&
                existing.receiver_ids == profile.receiver_ids &&
@@ -213,7 +215,9 @@ decision material_response_island::evaluate(
         profile->c101,
         profile->lod_min,
         profile->lod_max,
-        envspec
+        envspec,
+        profile->c100,
+        profile->c101_f0q
     };
 }
 
