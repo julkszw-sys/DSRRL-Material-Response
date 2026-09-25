@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import csv
+import hashlib
 import importlib.util
 import tempfile
 from pathlib import Path
@@ -36,11 +37,24 @@ def write_rows(path: Path, semantics: list[str]) -> None:
             })
 
 
+def digest(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def expect_system_exit(fn, needle: str) -> None:
+    try:
+        fn()
+    except SystemExit as exc:
+        assert needle in str(exc), str(exc)
+    else:
+        raise AssertionError(f"expected SystemExit containing {needle!r}")
+
+
 def main() -> int:
     tool = load_tool()
     with tempfile.TemporaryDirectory() as td:
         root = Path(td)
-        tsv = root / "ownership.tsv"
+        tsv = root / "flver_material_ownership_input_v1.tsv"
 
         write_rows(tsv, ["g_Diffuse", "g_Specular"])
         records, slots = tool.load_records(tsv)
@@ -62,14 +76,48 @@ def main() -> int:
         # A non-empty semantic outside the serialized ABI must never be
         # silently discarded from positive_mask.
         write_rows(tsv, ["g_Diffuse", "g_FutureSemantic"])
-        try:
-            tool.load_records(tsv)
-        except SystemExit as exc:
-            message = str(exc)
-            assert "unknown PTDE texture_semantic" in message
-            assert "g_FutureSemantic" in message
-        else:
-            raise AssertionError("unknown semantic did not fail open")
+        expect_system_exit(
+            lambda: tool.load_records(tsv),
+            "unknown PTDE texture_semantic",
+        )
+
+        # Provenance is fail-open: a generator invocation may only consume the
+        # exact canonical TSV/error files named and hashed by one scan summary.
+        write_rows(tsv, ["g_Diffuse"])
+        errors = root / "flver_scan_errors_v1.jsonl"
+        errors.write_text("", encoding="utf-8")
+        summary = {
+            "outputs": {
+                "canonical_tsv": tsv.name,
+                "errors_jsonl": errors.name,
+            },
+            "sha256": {
+                tsv.name: digest(tsv),
+                errors.name: digest(errors),
+            },
+        }
+        tool.require_scan_member(summary, tsv, digest(tsv), "canonical_tsv")
+        tool.require_scan_member(summary, errors, digest(errors), "errors_jsonl")
+
+        bad_sha = dict(summary)
+        bad_sha["sha256"] = dict(summary["sha256"])
+        bad_sha["sha256"][tsv.name] = "0" * 64
+        expect_system_exit(
+            lambda: tool.require_scan_member(bad_sha, tsv, digest(tsv), "canonical_tsv"),
+            "scan provenance SHA mismatch",
+        )
+
+        renamed = root / "other.tsv"
+        renamed.write_bytes(tsv.read_bytes())
+        expect_system_exit(
+            lambda: tool.require_scan_member(summary, renamed, digest(renamed), "canonical_tsv"),
+            "scan provenance filename mismatch",
+        )
+
+        expect_system_exit(
+            lambda: tool.require_scan_member({}, tsv, digest(tsv), "canonical_tsv"),
+            "scan summary lacks output provenance",
+        )
 
     print("generate_ptde_flver_texture_semantics: PASS")
     return 0
