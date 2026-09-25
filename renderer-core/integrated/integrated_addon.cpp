@@ -66,7 +66,7 @@ void log_state(const char *tag) noexcept
         "create=%llu candidate=%llu exact=%llu materialized=%llu "
         "unknown=%llu no_owner=%llu failopen=%llu init_ok=%llu "
         "init_bad=%llu binds=%llu quarantine=%u "
-        "flver_hook=%u/%u/%u prov=%u inserts=%llu lookups=%llu hits=%llu misses=%llu erases=%llu invalid=%llu",
+        "flver_hook=%u/%u/%u prov=%u restore_fail=%u inserts=%llu lookups=%llu hits=%llu misses=%llu erases=%llu invalid=%llu",
         tag,
         static_cast<unsigned long long>(t.create_events),
         static_cast<unsigned long long>(t.candidate_size_hits),
@@ -83,6 +83,7 @@ void log_state(const char *tag) noexcept
         h.selector_armed ? 1u : 0u,
         h.destructor_armed ? 1u : 0u,
         h.provenance_ok ? 1u : 0u,
+        h.restore_failed ? 1u : 0u,
         static_cast<unsigned long long>(f.inserts),
         static_cast<unsigned long long>(f.lookups),
         static_cast<unsigned long long>(f.hits),
@@ -252,8 +253,8 @@ void AddonUninit(
     HMODULE reshade_module)
 {
     unregister_events();
-    log_state("UNLOAD");
     dsrrl::runtime::flver_identity_transport::uninstall();
+    log_state("UNLOAD");
     g_a1_bridge.reset();
     disable_integrated_islands();
 
