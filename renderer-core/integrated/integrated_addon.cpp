@@ -35,8 +35,10 @@ dsrrl::runtime::a1_create_pipeline_bridge
     g_a1_bridge(g_core.features());
 dsrrl::operators::material_response::material_response_island
     g_material_response;
+dsrrl::runtime::draw_state_transaction_runtime
+    g_draw_transactions(g_core);
 dsrrl::runtime::material_response_draw_runtime
-    g_mr_draw_runtime(g_core);
+    g_mr_draw_runtime(g_draw_transactions);
 
 std::atomic<std::uint64_t> g_present_count{0};
 std::atomic<std::uint64_t> g_mr_draw_eval{0};
@@ -158,8 +160,9 @@ void log_state(const char *tag) noexcept
     const auto h = dsrrl::runtime::flver_identity_transport::status();
     const auto m = dsrrl::runtime::material_owner_selection_stats();
     const auto mr_tx = g_mr_draw_runtime.telemetry();
+    const auto tx = g_draw_transactions.telemetry();
 
-    char line[960]{};
+    char line[1152]{};
     std::snprintf(
         line,
         sizeof(line),
@@ -174,6 +177,8 @@ void log_state(const char *tag) noexcept
         "mr_mat_ok=%llu mr_mat_fail=%llu mr_payload_ok=%llu mr_payload_fail=%llu "
         "mr_b12_create=%llu mr_b12_hit=%llu mr_b12_bind_fail=%llu "
         "mr_tx_eligible=%llu mr_tx_miss=%llu mr_replay=%llu mr_restore_fail=%llu mr_quarantine=%u "
+        "tx_begin_ok=%llu tx_begin_fail=%llu tx_bind_fail=%llu tx_issued=%llu "
+        "tx_restore_ok=%llu tx_restore_fail=%llu tx_quarantine=%u "
         "draw=%llu draw_rx=%llu draw_owner=%llu draw_join=%llu owner_only=%llu rx_only=%llu",
         tag,
         static_cast<unsigned long long>(t.create_events),
@@ -217,8 +222,15 @@ void log_state(const char *tag) noexcept
         static_cast<unsigned long long>(mr_tx.eligible_draws),
         static_cast<unsigned long long>(mr_tx.replacement_miss),
         static_cast<unsigned long long>(mr_tx.replay_ok),
-        static_cast<unsigned long long>(mr_tx.restore_fail),
+        static_cast<unsigned long long>(mr_tx.replay_restore_fail),
         mr_tx.quarantined ? 1u : 0u,
+        static_cast<unsigned long long>(tx.begin_ok),
+        static_cast<unsigned long long>(tx.begin_fail),
+        static_cast<unsigned long long>(tx.bind_fail),
+        static_cast<unsigned long long>(tx.draws_issued),
+        static_cast<unsigned long long>(tx.restore_ok),
+        static_cast<unsigned long long>(tx.restore_fail),
+        tx.quarantined ? 1u : 0u,
         static_cast<unsigned long long>(g_draw_events.load()),
         static_cast<unsigned long long>(g_draw_receiver_hits.load()),
         static_cast<unsigned long long>(g_draw_owner_hits.load()),
@@ -481,6 +493,7 @@ bool AddonInit(
         return false;
 
     g_a1_bridge.reset();
+    g_draw_transactions.reset();
     g_mr_draw_runtime.reset();
     g_present_count.store(0);
     g_mr_draw_eval.store(0);
@@ -533,10 +546,10 @@ bool AddonInit(
     reshade::log::message(
         reshade::log::level::info,
         "[DSRRL CORE+ISLANDS " DSRRL_CORE_ISLANDS_VERSION
-        "] READY: native Renderer Core A1 islands plus exact receiver/owner "
-        "Material Response V2.11 draw-transaction layer; exact stock DXBC is materialized "
-        "into a composed receiver payload before A1 create-time mutation; frozen legacy "
-        "monolith is not linked.");
+        "] READY: shared Core draw-state transaction layer (PS/CB/SRV/sampler) "
+        "is active; Material Response V2.11 is the first migrated adapter on exact "
+        "receiver/owner routing. Other draw-specific islands fail open until their own "
+        "verified adapter payload is armed; frozen legacy monolith is not linked.");
 
     return true;
 }
@@ -555,6 +568,7 @@ void AddonUninit(
 
     dsrrl::runtime::stable_receiver_pipeline_reset();
     g_mr_draw_runtime.reset();
+    g_draw_transactions.reset();
     g_a1_bridge.reset();
     disable_integrated_islands();
 
