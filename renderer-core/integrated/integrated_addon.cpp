@@ -671,16 +671,11 @@ bool on_create_pipeline(
             dsrrl::operators::lightbank::
                 hemdir3_b13_materialize_result::applied) {
             h3_identity_ready = true;
-
-            if (h3.stratum ==
-                dsrrl::operators::lightbank::
-                    hemdir3_native_stratum::nospc) {
-                h3_replacement_ready =
-                    g_hemdir3.register_replacement(
-                        h3,
-                        h3_payload.data(),
-                        h3_payload.size());
-            }
+            h3_replacement_ready =
+                g_hemdir3.register_replacement(
+                    h3,
+                    h3_payload.data(),
+                    h3_payload.size());
         }
     }
 
@@ -925,6 +920,7 @@ bool prepare_island_batch(
         if (!g_hemdir3.prepare_draw_request(
                 cmd_list,
                 hemdir3_identity,
+                material,
                 prepared.hemdir3))
             return false;
 
