@@ -68,6 +68,13 @@ jobs:
           python3 renderer-core/tools/generate_dsr_flver_owner_tuple_header.py \
             --input renderer-core/data/census/dsr_flver_owner_tuple_corpus_v1.bin.z \
             --verify-only
+      - name: Verify stable HemEnv receiver census
+        run: |
+          python3 renderer-core/tools/generate_stable_hemenv_receiver_census.py \
+            renderer-core/data/census/stable_hemenv_receiver_census_v1.json \
+            /tmp/generated_stable_hemenv_receivers_v1.hpp
+          cmp /tmp/generated_stable_hemenv_receivers_v1.hpp \
+            renderer-core/include/dsrrl/runtime/generated_stable_hemenv_receivers_v1.hpp
       - name: Configure
         run: cmake -S renderer-core -B build/renderer-core -DCMAKE_BUILD_TYPE=Release
       - name: Build
