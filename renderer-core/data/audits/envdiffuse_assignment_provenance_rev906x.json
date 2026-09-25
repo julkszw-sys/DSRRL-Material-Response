@@ -1,0 +1,45 @@
+{
+  "schema": "dsrrl.renderer_core.envdiffuse_assignment_provenance.v1",
+  "operator": "surface.envdiffuse",
+  "evidence_id": "b1ce1012-070e-4157-beb8-50cb6fcbdc41",
+  "activation": "FAIL_OPEN",
+  "pixel_equivalence": "OPEN",
+  "runtime_equivalence": "OPEN",
+  "ptde": {
+    "enemyins_chrmodel": {
+      "status": "CONFIRMED_CLASS_SCOPED",
+      "producer": "0xE95BE0 -> 0xE920C0",
+      "selector_field": "FrpgModel+0x7A",
+      "dirty_bit": "0x100",
+      "packed_id_equation": "10000*subarea+localProbe"
+    },
+    "remo": {
+      "status": "SEPARATE_CONFIRMED_ROUTE",
+      "ordinary_gameplay_equivalent": false
+    },
+    "mapmodel": {
+      "status": "OPEN",
+      "normal_producer_update_law": "OPEN"
+    },
+    "forbidden_assignment_evidence": [
+      "FrpgModel+0x6C/+0x70 on audited ChrModel path",
+      "tag0x803A former GI producer attribution",
+      "DSR-bound t11/t13 resource identity alone"
+    ]
+  },
+  "dsr": {
+    "ordinary_assignment_source": "Collision ToneCorrect transition"
+  },
+  "narrow_carrier": [
+    "pre-draw-multiplier EnvDiffuse endpoint XYZ",
+    "exact independently assigned PTDE t11/t13 probe resources",
+    "producer-class/selector provenance"
+  ],
+  "required_fail_open": [
+    "unknown producer class",
+    "ordinary MapModel without recovered producer",
+    "REMO/gameplay class conflation",
+    "same-world PTDE-DSR assignment relation unverified",
+    "resource ownership incomplete"
+  ]
+}
