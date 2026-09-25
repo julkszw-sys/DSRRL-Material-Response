@@ -2,6 +2,9 @@
 #include "dsrrl/runtime/a1_create_pipeline_bridge.hpp"
 #include "dsrrl/runtime/flver_identity_transport.hpp"
 #include "dsrrl/runtime/flver_identity_registry.hpp"
+#include "dsrrl/runtime/stable_receiver_pipeline_registry.hpp"
+#include "dsrrl/operators/material_response/material_response_island.hpp"
+#include "dsrrl/operators/material_response/material_response_seed.hpp"
 
 #include <reshade.hpp>
 
@@ -29,6 +32,17 @@ dsrrl::runtime::a1_create_pipeline_bridge
 
 std::atomic<std::uint64_t> g_present_count{0};
 
+dsrrl::operators::material_response::material_response_island g_mr_probe;
+std::atomic_bool g_mr_probe_ready{false};
+std::atomic<std::uint64_t> g_draw_probe_events{0};
+std::atomic<std::uint64_t> g_draw_probe_receiver_hits{0};
+std::atomic<std::uint64_t> g_draw_probe_owner_hits{0};
+std::atomic<std::uint64_t> g_draw_probe_joins{0};
+std::atomic<std::uint64_t> g_draw_probe_active{0};
+std::atomic<std::uint64_t> g_draw_probe_inactive{0};
+std::atomic<std::uint64_t> g_draw_probe_owner_only{0};
+std::atomic<std::uint64_t> g_draw_probe_receiver_only{0};
+
 constexpr dsrrl::core::operator_id k_integrated_islands[] = {
     dsrrl::core::operator_id::terminal_sat_rgb,
     dsrrl::core::operator_id::diffuse_material_domain,
@@ -36,6 +50,87 @@ constexpr dsrrl::core::operator_id k_integrated_islands[] = {
     dsrrl::core::operator_id::envspec_nospc_delete,
     dsrrl::core::operator_id::fixed_postfog_identity
 };
+
+const reshade::api::shader_desc *find_pixel_shader(
+    std::uint32_t subobject_count,
+    const reshade::api::pipeline_subobject *subobjects) noexcept
+{
+    if (subobjects == nullptr)
+        return nullptr;
+
+    for (std::uint32_t i = 0; i < subobject_count; ++i) {
+        if (subobjects[i].type !=
+                reshade::api::pipeline_subobject_type::pixel_shader ||
+            subobjects[i].count != 1u ||
+            subobjects[i].data == nullptr)
+            continue;
+
+        return static_cast<const reshade::api::shader_desc *>(
+            subobjects[i].data);
+    }
+
+    return nullptr;
+}
+
+void reset_draw_probe() noexcept
+{
+    dsrrl::runtime::stable_receiver_pipeline_reset();
+    g_draw_probe_events.store(0);
+    g_draw_probe_receiver_hits.store(0);
+    g_draw_probe_owner_hits.store(0);
+    g_draw_probe_joins.store(0);
+    g_draw_probe_active.store(0);
+    g_draw_probe_inactive.store(0);
+    g_draw_probe_owner_only.store(0);
+    g_draw_probe_receiver_only.store(0);
+}
+
+void observe_draw_identity(
+    reshade::api::command_list *cmd_list) noexcept
+{
+    ++g_draw_probe_events;
+
+    std::uint32_t receiver_id = 0u;
+    const bool receiver_ok =
+        dsrrl::runtime::stable_receiver_bound(
+            cmd_list,
+            receiver_id);
+
+    dsrrl::operators::material_response::material_identity material{};
+    const bool owner_ok =
+        dsrrl::runtime::flver_identity_transport::
+            consume_selector_owner_candidate(material);
+
+    if (receiver_ok)
+        ++g_draw_probe_receiver_hits;
+    if (owner_ok)
+        ++g_draw_probe_owner_hits;
+
+    if (!receiver_ok || !owner_ok) {
+        if (owner_ok && !receiver_ok)
+            ++g_draw_probe_owner_only;
+        if (receiver_ok && !owner_ok)
+            ++g_draw_probe_receiver_only;
+        return;
+    }
+
+    ++g_draw_probe_joins;
+
+    if (!g_mr_probe_ready.load()) {
+        ++g_draw_probe_inactive;
+        return;
+    }
+
+    const auto decision =
+        g_mr_probe.evaluate(
+            receiver_id,
+            material);
+
+    if (decision.active)
+        ++g_draw_probe_active;
+    else
+        ++g_draw_probe_inactive;
+}
 
 bool enable_integrated_islands() noexcept
 {
