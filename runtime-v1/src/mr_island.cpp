@@ -2002,14 +2002,22 @@ void flver_parse_event(void *model,const void *raw) noexcept
         std::memcpy(&data_length,header.data()+0x10,sizeof(data_length));
         const std::uint64_t total64=
             static_cast<std::uint64_t>(data_offset)+data_length;
+        constexpr std::uint64_t k_live_flver_cap=
+            16ull*1024ull*1024ull;
         if(data_offset<0x40u || total64<data_offset ||
-           total64>0x40000000ull){
+           total64>k_live_flver_cap){
+            ++g_flver_identity_fail;
+            return;
+        }
+
+        const auto total=static_cast<std::size_t>(total64);
+        if(!engine::safe_readable_range(raw,total)){
             ++g_flver_identity_fail;
             return;
         }
 
         if(dsrrl::runtime::flver_identity_observe_parse(
-               model,raw,static_cast<std::size_t>(total64)))
+               model,raw,total))
             ++g_flver_identity_ok;
         else
             ++g_flver_identity_fail;
