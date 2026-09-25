@@ -1,11 +1,8 @@
 #!/usr/bin/env python3
-"""Guard PTDE FLVER texture-semantic surface; absence stays UNKNOWN unless authority allows otherwise."""
 from __future__ import annotations
 import ast,json
 from pathlib import Path
-ROOT=Path(__file__).resolve().parents[1]
-GEN=ROOT/"tools"/"generate_ptde_flver_texture_semantics.py"
-SRC=ROOT/"data"/"census"/"ptde_flver_texture_semantics_v1_source.json"
+ROOT=Path(__file__).resolve().parents[1]; GEN=ROOT/"tools"/"generate_ptde_flver_texture_semantics.py"; SRC=ROOT/"data"/"census"/"ptde_flver_texture_semantics_v1_source.json"
 REQUIRED={"g_Diffuse","g_Bumpmap","g_DetailBumpmap","g_Specular","g_Lightmap","g_Diffuse_2","g_Bumpmap_2","g_Specular_2"}
 def generator_bits():
  tree=ast.parse(GEN.read_text(encoding="utf-8"),filename=str(GEN))
@@ -14,9 +11,12 @@ def generator_bits():
   if isinstance(node,ast.Assign) and any(isinstance(t,ast.Name) and t.id=="BITS" for t in node.targets): value=node.value
   elif isinstance(node,ast.AnnAssign) and isinstance(node.target,ast.Name) and node.target.id=="BITS": value=node.value
   if value is not None:
-   parsed=ast.literal_eval(value)
-   if not isinstance(parsed,dict): raise SystemExit("BITS is not a dict")
-   return set(parsed)
+   if not isinstance(value,ast.Dict): raise SystemExit("BITS is not a dict literal")
+   keys=set()
+   for key in value.keys:
+    if not isinstance(key,ast.Constant) or not isinstance(key.value,str): raise SystemExit("BITS contains a non-string key")
+    keys.add(key.value)
+   return keys
  raise SystemExit("BITS assignment not found")
 def main():
  bits=generator_bits(); missing=REQUIRED-bits
