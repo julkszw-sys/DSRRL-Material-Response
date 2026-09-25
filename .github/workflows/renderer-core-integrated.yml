@@ -13,6 +13,12 @@ on:
       - "renderer-core/tools/audit_a1_protected_host_scope.py"
       - "renderer-core/tools/generate_material_response_v211_plans.py"
       - "renderer-core/tools/generate_material_response_constants_v1.py"
+      - "renderer-core/tools/generate_spec_routes_v12.py"
+      - "renderer-core/tools/generate_diffuse_routes_v12.py"
+      - "renderer-core/tools/generate_normal_routes_v12.py"
+      - "renderer-core/data/provenance/spec_routes_v12.tsv"
+      - "renderer-core/data/provenance/diffuse_routes_v12.tsv"
+      - "renderer-core/data/provenance/normal_routes_v12.tsv"
       - "runtime-v1/provenance/mr_v211/V29_SHADER_MANIFEST.json"
       - "runtime-v1/provenance/mr_v211/V210_C101_MATERIAL_RESPONSE_AUDIT.json"
       - "runtime-v1/provenance/mr_v211/V211_C101_UNBOUNDED_AUDIT.json"
@@ -112,6 +118,9 @@ jobs:
           $adapter = Get-Content renderer-core/src/runtime/island_draw_adapter.cpp -Raw
           $policy = Get-Content renderer-core/include/dsrrl/core/draw_transaction_policy.hpp -Raw
           $mr = Get-Content renderer-core/src/operators/material_response/material_response_v211_materializer.cpp -Raw
+          $resourceRuntime = Get-Content renderer-core/src/runtime/material_resource_draw_runtime.cpp -Raw
+          $textureTransport = Get-Content renderer-core/src/runtime/texture_identity_transport.cpp -Raw
+          $cmake = Get-Content renderer-core/integrated/CMakeLists.txt -Raw
 
           if ($entry -notmatch 'operator_id::material_response') { throw "Material Response feature is not armed in Core+Islands" }
           if ($bridge -match 'addon_event::draw(?:_indexed)?') { throw "A1 create-time bridge must not own draw callbacks" }
@@ -122,10 +131,12 @@ jobs:
             'material_owner_selection_consume',
             'stable_receiver_bound',
             'materialize_v211_stable_receiver',
-            'replay_draw',
-            'replay_draw_indexed'
+            'prepare_island_batch',
+            'append_island_draw_request',
+            'dispatch_island_draw_batch',
+            'dispatch_island_draw_indexed_batch'
           )) {
-            if ($entry -notmatch [regex]::Escape($required)) { throw "Visible MR draw transaction invariant missing: $required" }
+            if ($entry -notmatch [regex]::Escape($required)) { throw "Integrated single-replay island batch invariant missing: $required" }
           }
 
           foreach ($required in @(
@@ -160,9 +171,40 @@ jobs:
 
           foreach ($required in @(
             'build_island_draw_mutation',
+            'prepare_draw_request',
             'draw_tx_issued'
           )) {
             if ($tx -notmatch [regex]::Escape($required)) { throw "MR is not migrated onto the shared transaction layer: $required" }
+          }
+
+          foreach ($required in @(
+            'operator_id::spec_rgb',
+            'operator_id::diffuse',
+            'operator_id::normal',
+            'generated::spec_name_hash_allowed_v12',
+            'generated::diffuse_pair_allowed_v12',
+            'generated::normal_tuple_allowed_v12',
+            'build_island_draw_mutation'
+          )) {
+            if ($resourceRuntime -notmatch [regex]::Escape($required)) { throw "Material resource island adapter invariant missing: $required" }
+          }
+
+          foreach ($required in @(
+            '0x583AA6u',
+            '0x583E81u',
+            'a45aaa36dd2f6cc151670a639ea5547043cf38ea79ff4178b963c6ed71f98d7b',
+            'snapshot'
+          )) {
+            if ($textureTransport -notmatch [regex]::Escape($required)) { throw "Exact texture identity transport invariant missing: $required" }
+          }
+
+          foreach ($required in @(
+            'generate_spec_routes_v12.py',
+            'generate_diffuse_routes_v12.py',
+            'generate_normal_routes_v12.py',
+            'dsrrl_core_material_resource_routes'
+          )) {
+            if ($cmake -notmatch [regex]::Escape($required)) { throw "Reproducible material resource route generation missing: $required" }
           }
 
           foreach ($required in @(
@@ -176,6 +218,24 @@ jobs:
 
           if ($entry -match 'P_Metal|P_METAL|pmetal' -or $bridge -match 'P_Metal|P_METAL|pmetal') { throw "Integrated entry/A1 bridge must not special-case P_Metal" }
           Write-Host "CORE_ISLANDS_SHARED_DRAW_TRANSACTION_BOUNDARY_PASS"
+      - name: Verify material resource generated authority
+        shell: pwsh
+        run: |
+          python renderer-core/tools/generate_spec_routes_v12.py --input renderer-core/data/provenance/spec_routes_v12.tsv --output "$env:RUNNER_TEMP/generated_spec_routes_v12.hpp"
+          python renderer-core/tools/generate_diffuse_routes_v12.py --input renderer-core/data/provenance/diffuse_routes_v12.tsv --output "$env:RUNNER_TEMP/generated_diffuse_routes_v12.hpp"
+          python renderer-core/tools/generate_normal_routes_v12.py --input renderer-core/data/provenance/normal_routes_v12.tsv --output "$env:RUNNER_TEMP/generated_normal_routes_v12.hpp"
+
+          foreach ($name in @('spec','diffuse','normal')) {
+            $built = "build-integrated/generated/dsrrl/runtime/generated_$($name)_routes_v12.hpp"
+            $regen = "$env:RUNNER_TEMP/generated_$($name)_routes_v12.hpp"
+            if (!(Test-Path $built)) { throw "Generated V12 route header missing from build: $built" }
+            if ((Get-FileHash $built -Algorithm SHA256).Hash -ne (Get-FileHash $regen -Algorithm SHA256).Hash) {
+              throw "Generated V12 $name route authority is not reproducible"
+            }
+          }
+
+          Write-Host "CORE_ISLANDS_MATERIAL_RESOURCE_GENERATED_AUTHORITY_PASS"
+
       - name: Verify Material Response generated authority
         shell: pwsh
         run: |
@@ -215,6 +275,12 @@ jobs:
           $sharedTxHash = (Get-FileHash "renderer-core/src/runtime/draw_state_transaction.cpp" -Algorithm SHA256).Hash.ToLowerInvariant()
           $islandAdapterHash = (Get-FileHash "renderer-core/src/runtime/island_draw_adapter.cpp" -Algorithm SHA256).Hash.ToLowerInvariant()
           $drawPolicyHash = (Get-FileHash "renderer-core/include/dsrrl/core/draw_transaction_policy.hpp" -Algorithm SHA256).Hash.ToLowerInvariant()
+          $textureTransportHash = (Get-FileHash "renderer-core/src/runtime/texture_identity_transport.cpp" -Algorithm SHA256).Hash.ToLowerInvariant()
+          $textureDetourHash = (Get-FileHash "renderer-core/integrated/texture_identity_detour.asm" -Algorithm SHA256).Hash.ToLowerInvariant()
+          $resourceRuntimeHash = (Get-FileHash "renderer-core/src/runtime/material_resource_draw_runtime.cpp" -Algorithm SHA256).Hash.ToLowerInvariant()
+          $specRoutesHash = (Get-FileHash "renderer-core/data/provenance/spec_routes_v12.tsv" -Algorithm SHA256).Hash.ToLowerInvariant()
+          $diffuseRoutesHash = (Get-FileHash "renderer-core/data/provenance/diffuse_routes_v12.tsv" -Algorithm SHA256).Hash.ToLowerInvariant()
+          $normalRoutesHash = (Get-FileHash "renderer-core/data/provenance/normal_routes_v12.tsv" -Algorithm SHA256).Hash.ToLowerInvariant()
           $materialV211Hash = (Get-FileHash "renderer-core/src/operators/material_response/material_response_v211_materializer.cpp" -Algorithm SHA256).Hash.ToLowerInvariant()
           $materialV211PlanHash = (Get-FileHash "renderer-core/include/dsrrl/operators/material_response/generated_v211_plans.hpp" -Algorithm SHA256).Hash.ToLowerInvariant()
           $materialConstantsHash = (Get-FileHash "renderer-core/include/dsrrl/operators/material_response/generated_material_constants_v1.hpp" -Algorithm SHA256).Hash.ToLowerInvariant()
@@ -257,13 +323,21 @@ jobs:
             draw_transaction_policy_sha256 = $drawPolicyHash
             draw_transaction_policy_coverage = "25_OF_25"
             shared_draw_executor_surface = "PS_CB_SRV_SAMPLER"
+            texture_identity_transport_sha256 = $textureTransportHash
+            texture_identity_detour_sha256 = $textureDetourHash
+            material_resource_draw_runtime_sha256 = $resourceRuntimeHash
+            spec_routes_v12_tsv_sha256 = $specRoutesHash
+            diffuse_routes_v12_tsv_sha256 = $diffuseRoutesHash
+            normal_routes_v12_tsv_sha256 = $normalRoutesHash
+            material_resource_batch_islands = @("spec_rgb","diffuse","normal")
+            draw_composition = "SINGLE_REPLAY_CONFLICT_CHECKED_BATCH"
             material_response_v211_materializer_sha256 = $materialV211Hash
             material_response_v211_plan_sha256 = $materialV211PlanHash
             material_response_constants_sha256 = $materialConstantsHash
-            material_response_draw_probe = "VISIBLE_EXACT_OWNER_RECEIVER_PS_B12_TRANSACTION"
+            material_response_draw_probe = "VISIBLE_EXACT_OWNER_RECEIVER_PS_B12_BATCH_TRANSACTION"
             material_response_feature_armed = $true
             material_response_runtime_activation = "NOT_TESTED"
-            boot_armed_operator_count = 6
+            boot_armed_operator_count = 9
             single_addon_entrypoint = $true
             draw_replay = $true
             runtime_status = "NOT_TESTED"
