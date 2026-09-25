@@ -938,6 +938,7 @@ bool on_draw_indexed(command_list *cmd,std::uint32_t index_count,std::uint32_t i
     // contribute EnvSpec identity/carrier telemetry.
     const bool envspec_receiver_owned=
         cmd && cmd==g_bound_command &&
+        !g_bound_subsurface &&
         g_bound_host>=0 && g_bound_host<24;
     if(envspec_receiver_owned){
         const auto envspec_identity=
@@ -949,7 +950,7 @@ bool on_draw_indexed(command_list *cmd,std::uint32_t index_count,std::uint32_t i
         (void)envspec_identity;
     }
 
-    if(draw_envspec_exact){
+    if(envspec_receiver_owned && draw_envspec_exact){
         ++g_envspec_draw_exact;
         switch(draw_envspec.router_state){
         case mtd_sem::mtd_envspec_router_state::present:
