@@ -18,18 +18,18 @@
 #include <cstring>
 
 extern "C" void dsrrl_hemdir3_mode_lt5_hook_entry();
-extern "C" void dsrrl_hemdir3_mode_ge5_hook_entry();
+extern "C" void dsrrl_hemdir3_selector_end_hook_entry();
 
 extern "C" {
 void *g_dsrrl_hemdir3_mode_lt5_trampoline = nullptr;
-void *g_dsrrl_hemdir3_mode_ge5_trampoline = nullptr;
+void *g_dsrrl_hemdir3_selector_end_trampoline = nullptr;
 }
 
 namespace dsrrl::runtime::hemdir3_mode_transport {
 namespace {
 
 constexpr std::uintptr_t k_lt5_rva = 0x295F9Fu;
-constexpr std::uintptr_t k_ge5_rva = 0x295FC2u;
+constexpr std::uintptr_t k_selector_end_rva = 0x22BA79u;
 
 constexpr std::array<std::uint8_t,17> k_lt5_bytes = {
     0x48,0x63,0xCA,
@@ -39,13 +39,11 @@ constexpr std::array<std::uint8_t,17> k_lt5_bytes = {
     0x48,0x8D,0x14,0x49
 };
 
-constexpr std::array<std::uint8_t,15> k_ge5_bytes = {
-    0x83,0xEA,0x06,
-    0x74,0x2F,
-    0x83,0xEA,0x01,
-    0x74,0x1D,
-    0x83,0xFA,0x01,
-    0x75,0x15
+constexpr std::array<std::uint8_t,18> k_selector_end_bytes = {
+    0x44,0x0F,0xB6,0x84,0x24,0x88,0x00,0x00,0x00,
+    0x8B,0xD0,
+    0x48,0x8B,0xCB,
+    0x48,0x83,0xC4,0x30
 };
 
 struct hook {
@@ -67,11 +65,12 @@ struct tls_snapshot {
 
 std::uintptr_t g_base = 0u;
 hook g_lt5{};
-hook g_ge5{};
+hook g_selector_end{};
 telemetry g_state{};
 thread_local tls_snapshot g_tls{};
 
 std::atomic<std::uint64_t> g_selector_begin{0};
+std::atomic<std::uint64_t> g_incoming_mode2{0};
 std::atomic<std::uint64_t> g_effective_observed{0};
 std::atomic<std::uint64_t> g_mode2_observed{0};
 std::atomic<std::uint64_t> g_snapshot_hits{0};
@@ -209,6 +208,7 @@ bool prepare_hook(
     auto *tail =
         static_cast<std::uint8_t *>(
             trampoline) + N;
+
     tail[0] = 0xFFu;
     tail[1] = 0x25u;
 
@@ -221,6 +221,7 @@ bool prepare_hook(
     const auto back =
         reinterpret_cast<std::uint64_t>(
             target + N);
+
     std::memcpy(
         tail + 6u,
         &back,
@@ -339,8 +340,17 @@ void observe_effective_mode(
     g_tls.capture_active = false;
 
     ++g_effective_observed;
+
     if (effective_mode == 2u)
         ++g_mode2_observed;
+}
+
+void selector_end() noexcept
+{
+    // A mode2 incoming selector that did not pass the <5 dispatch branch was
+    // overridden into the >=5 family. Do not let that unfinished capture leak
+    // into any later selector call on this thread.
+    g_tls.capture_active = false;
 }
 
 } // namespace
@@ -353,10 +363,16 @@ dsrrl_hemdir3_effective_mode_observer(
         effective_mode);
 }
 
+extern "C" void
+dsrrl_hemdir3_selector_end_observer() noexcept
+{
+    selector_end();
+}
+
 bool install() noexcept
 {
     if (g_lt5.patched ||
-        g_ge5.patched)
+        g_selector_end.patched)
         return false;
 
     g_state = {};
@@ -384,24 +400,24 @@ bool install() noexcept
             reinterpret_cast<void *>(
                 &dsrrl_hemdir3_mode_lt5_hook_entry)) ||
         !prepare_hook(
-            g_ge5,
-            k_ge5_rva,
-            k_ge5_bytes,
+            g_selector_end,
+            k_selector_end_rva,
+            k_selector_end_bytes,
             reinterpret_cast<void *>(
-                &dsrrl_hemdir3_mode_ge5_hook_entry)))
+                &dsrrl_hemdir3_selector_end_hook_entry)))
         goto fail;
 
     g_dsrrl_hemdir3_mode_lt5_trampoline =
         g_lt5.trampoline;
-    g_dsrrl_hemdir3_mode_ge5_trampoline =
-        g_ge5.trampoline;
+    g_dsrrl_hemdir3_selector_end_trampoline =
+        g_selector_end.trampoline;
 
-    if (!arm_hook(g_lt5) ||
-        !arm_hook(g_ge5))
+    if (!arm_hook(g_selector_end) ||
+        !arm_hook(g_lt5))
         goto fail;
 
     g_state.lt5_hook_armed = true;
-    g_state.ge5_hook_armed = true;
+    g_state.selector_end_hook_armed = true;
     return true;
 
 fail:
@@ -411,24 +427,24 @@ fail:
 
 void uninstall() noexcept
 {
-    const bool ge5_ok =
-        restore_hook(g_ge5);
     const bool lt5_ok =
         restore_hook(g_lt5);
+    const bool end_ok =
+        restore_hook(g_selector_end);
 
-    if (!ge5_ok || !lt5_ok) {
+    if (!lt5_ok || !end_ok) {
         g_state.restore_failed = true;
         g_state.quarantined = true;
         g_state.lt5_hook_armed =
             g_lt5.patched;
-        g_state.ge5_hook_armed =
-            g_ge5.patched;
+        g_state.selector_end_hook_armed =
+            g_selector_end.patched;
         return;
     }
 
     g_dsrrl_hemdir3_mode_lt5_trampoline =
         nullptr;
-    g_dsrrl_hemdir3_mode_ge5_trampoline =
+    g_dsrrl_hemdir3_selector_end_trampoline =
         nullptr;
 
     g_base = 0u;
@@ -447,9 +463,16 @@ void selector_begin(
     g_tls.effective_mode = 0u;
     g_tls.ready = false;
 
+    const bool candidate =
+        incoming_mode == 2u;
+
+    if (candidate)
+        ++g_incoming_mode2;
+
     g_tls.capture_active =
+        candidate &&
         g_state.lt5_hook_armed &&
-        g_state.ge5_hook_armed &&
+        g_state.selector_end_hook_armed &&
         !g_state.quarantined;
 }
 
@@ -481,8 +504,11 @@ void consume_draw_selection() noexcept
 telemetry status() noexcept
 {
     auto out = g_state;
+
     out.selector_begin =
         g_selector_begin.load();
+    out.incoming_mode2 =
+        g_incoming_mode2.load();
     out.effective_observed =
         g_effective_observed.load();
     out.mode2_observed =
@@ -491,12 +517,14 @@ telemetry status() noexcept
         g_snapshot_hits.load();
     out.snapshot_misses =
         g_snapshot_misses.load();
+
     return out;
 }
 
 void reset_stats() noexcept
 {
     g_selector_begin.store(0u);
+    g_incoming_mode2.store(0u);
     g_effective_observed.store(0u);
     g_mode2_observed.store(0u);
     g_snapshot_hits.store(0u);
