@@ -1015,6 +1015,9 @@ bool apply_draw(
         }
     }
 
+    if (want_norm && !state.changed_t2)
+        return false;
+
     return true;
 }
 bool restore_draw(
