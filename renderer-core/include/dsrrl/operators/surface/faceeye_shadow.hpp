@@ -44,6 +44,35 @@ inline constexpr std::array<float,4> k_faceeye_pcf_offsets={{
 }};
 inline constexpr float k_faceeye_shadow_texel_scale=1.0f/2048.0f;
 
+// Exact PTDE ShaderConstant_DirLightEntity producer offsets for the auxiliary
+// FaceEye shadow carrier. These are producer-layout coordinates, not guessed
+// authored field names. Runtime activation requires an immutable draw-local
+// snapshot of every lane plus independent PTDE<->DSR value homology.
+inline constexpr std::array<std::uint16_t,26> k_faceeye_aux_ps_registers={{
+    121,122,123,
+    140,141,142,143,144,145,146,147,
+    148,149,150,151,152,153,154,155,
+    157,158,159,160,
+    174,175,182
+}};
+inline constexpr std::array<std::uint16_t,26> k_faceeye_aux_dirlight_offsets={{
+    0x300,0x310,0x320,
+    0x200,0x210,0x220,0x230,0x240,0x250,0x260,0x270,
+    0x280,0x290,0x2A0,0x2B0,0x2C0,0x2D0,0x2E0,0x2F0,
+    0x340,0x350,0x360,0x370,
+    0x390,0x330,0x3A0
+}};
+
+struct faceeye_auxiliary_snapshot_descriptor {
+    std::array<bool,26> register_present{};
+    std::array<std::uint16_t,26> producer_offsets{};
+    bool immutable_draw_local=false;
+    bool ptde_dsr_value_homology_verified=false;
+};
+
+bool validate_faceeye_auxiliary_snapshot(
+    const faceeye_auxiliary_snapshot_descriptor &snapshot) noexcept;
+
 float decode_faceeye_packed_depth(const faceeye_vec3 &sample_rgb) noexcept;
 
 faceeye_shadow_sample evaluate_faceeye_shadow_response(
@@ -69,6 +98,7 @@ enum class faceeye_runtime_reason : std::uint8_t {
     ptde_kernel_shader_not_ready,
     runtime_t7_identity_not_verified,
     auxiliary_dirlight_snapshot_not_ready,
+    auxiliary_dirlight_snapshot_incomplete,
     csd_matrix_region_not_ready,
     stock_regular_s7_not_verified,
     regular_s7_sampler_not_ready,
@@ -84,11 +114,10 @@ struct faceeye_runtime_context {
     faceeye_receiver_variant variant=faceeye_receiver_variant::unsupported;
     bool ptde_kernel_shader_ready=false;
     bool runtime_t7_identity_verified=false;
-    // PTDE FaceEye consumes auxiliary ShaderConstant_DirLightEntity lanes
-    // (c121-c123, c140-c155, c157-c160, c174/c175/c182). Their authored
-    // field names remain open; readiness requires an immutable draw-local
-    // snapshot rather than a generic DrawParam-role assertion.
+    // Compatibility pre-gate: producer capture must exist before descriptor
+    // validation. It is deliberately insufficient by itself.
     bool auxiliary_dirlight_snapshot_ready=false;
+    faceeye_auxiliary_snapshot_descriptor auxiliary_dirlight_snapshot{};
     bool csd_matrix_region_ready=false;
 
     bool stock_regular_s7_verified=false;
