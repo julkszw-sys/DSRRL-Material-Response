@@ -1,4 +1,5 @@
 #include "dsrrl/runtime/a1_create_pipeline_bridge.hpp"
+#include "dsrrl/runtime/generated_stable_hemenv_receivers_v1.hpp"
 
 #include <cstring>
 #include <utility>
@@ -135,6 +136,7 @@ a1_create_pipeline_bridge::cache_replacement_record(
     core::operator_mask selected_owners,
     std::uint16_t selected_ops,
     bool full_plan_materialized,
+    std::uint32_t receiver_id,
     const operators::legacy_plan::hashing::
         sha256_digest &output_sha256,
     std::vector<std::uint8_t> replacement)
@@ -190,6 +192,7 @@ a1_create_pipeline_bridge::cache_replacement_record(
         selected_owners;
     mutable_record->full_plan_materialized =
         full_plan_materialized;
+    mutable_record->receiver_id = receiver_id;
 
     const std::shared_ptr<
         const replacement_record> record =
@@ -219,6 +222,7 @@ a1_create_pipeline_bridge::cache_replacement(
         outcome.selected_owners,
         outcome.selected_ops,
         outcome.full_plan_materialized,
+        generated::stable_hemenv_receiver_id(outcome.source_sha256, outcome.plan != nullptr ? outcome.plan->code_size : 0u),
         outcome.output_sha256,
         std::move(replacement));
 }
@@ -368,6 +372,7 @@ bool a1_create_pipeline_bridge::on_create_pipeline(
                         envspec_nospc_delete),
                 1u,
                 true,
+                0u,
                 ext.output_sha256,
                 std::move(replacement));
 
@@ -490,7 +495,9 @@ bool a1_create_pipeline_bridge::on_bind_pipeline(
     core::operator_mask *
         selected_owners,
     std::uint16_t *
-        selected_ops) noexcept
+        selected_ops,
+    std::uint32_t *
+        receiver_id) noexcept
 {
     if ((static_cast<std::uint32_t>(stages) &
          static_cast<std::uint32_t>(
@@ -527,6 +534,9 @@ bool a1_create_pipeline_bridge::on_bind_pipeline(
 
     if (selected_ops != nullptr)
         *selected_ops = record->selected_ops;
+
+    if (receiver_id != nullptr)
+        *receiver_id = record->receiver_id;
 
     if (record->plan_index >=
         operators::legacy_plan::build151::
