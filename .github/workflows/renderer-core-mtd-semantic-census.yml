@@ -9,6 +9,8 @@ on:
       - 'renderer-core/tools/verify_ptde_flver_census_import.py'
       - 'renderer-core/tools/verify_ptde_flver_source_completeness.py'
       - 'renderer-core/tools/verify_mtd_texture_semantic_surface.py'
+      - 'renderer-core/tools/verify_exact_owner_raw_mtd_join_gap.py'
+      - 'renderer-core/src/runtime/material_owner_producer.cpp'
       - 'renderer-core/tools/generate_ptde_flver_texture_semantics.py'
       - 'renderer-core/tests/test_generate_ptde_flver_texture_semantics.py'
       - '.github/workflows/renderer-core-mtd-semantic-census.yml'
@@ -20,6 +22,8 @@ on:
       - 'renderer-core/tools/verify_ptde_flver_census_import.py'
       - 'renderer-core/tools/verify_ptde_flver_source_completeness.py'
       - 'renderer-core/tools/verify_mtd_texture_semantic_surface.py'
+      - 'renderer-core/tools/verify_exact_owner_raw_mtd_join_gap.py'
+      - 'renderer-core/src/runtime/material_owner_producer.cpp'
       - 'renderer-core/tools/generate_ptde_flver_texture_semantics.py'
       - 'renderer-core/tests/test_generate_ptde_flver_texture_semantics.py'
       - '.github/workflows/renderer-core-mtd-semantic-census.yml'
@@ -40,5 +44,7 @@ jobs:
         run: python renderer-core/tools/verify_ptde_flver_source_completeness.py
       - name: Verify full FLVER texture semantic surface
         run: python renderer-core/tools/verify_mtd_texture_semantic_surface.py
+      - name: Verify exact-owner raw-MTD coverage boundary
+        run: python renderer-core/tools/verify_exact_owner_raw_mtd_join_gap.py
       - name: Verify PTDE texture semantic generator fail-open
         run: python renderer-core/tests/test_generate_ptde_flver_texture_semantics.py
