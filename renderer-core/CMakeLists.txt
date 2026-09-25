@@ -49,6 +49,7 @@ add_library(dsrrl_renderer_core STATIC
     src/shader_registry.cpp
     src/draw_transaction.cpp
     src/runtime/material_owner_producer.cpp
+    src/runtime/material_owner_selection.cpp
     src/runtime/flver_identity_registry.cpp
     src/runtime/stable_receiver_pipeline_registry.cpp
     src/renderer_core.cpp
