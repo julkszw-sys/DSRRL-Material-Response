@@ -143,12 +143,16 @@ jobs:
 
           $addonHash = (Get-FileHash $addon -Algorithm SHA256).Hash.ToLowerInvariant()
           $entryHash = (Get-FileHash "renderer-core/integrated/integrated_addon.cpp" -Algorithm SHA256).Hash.ToLowerInvariant()
+          $cmakeHash = (Get-FileHash "renderer-core/integrated/CMakeLists.txt" -Algorithm SHA256).Hash.ToLowerInvariant()
           $policyHash = (Get-FileHash "renderer-core/include/dsrrl/runtime/integrated_feature_policy.hpp" -Algorithm SHA256).Hash.ToLowerInvariant()
           $versionHash = (Get-FileHash "renderer-core/integrated/VERSION.json" -Algorithm SHA256).Hash.ToLowerInvariant()
           $a1Hash = (Get-FileHash "renderer-core/src/runtime/a1_create_pipeline_bridge.cpp" -Algorithm SHA256).Hash.ToLowerInvariant()
           $mrHash = (Get-FileHash "runtime-v1/src/mr_island.cpp" -Algorithm SHA256).Hash.ToLowerInvariant()
           $assetHash = (Get-FileHash "runtime-v1/src/asset_bridges.cpp" -Algorithm SHA256).Hash.ToLowerInvariant()
           $engineHash = (Get-FileHash "runtime-v1/src/engine_hooks.cpp" -Algorithm SHA256).Hash.ToLowerInvariant()
+          $sourceRef = if ($env:GITHUB_HEAD_REF) { $env:GITHUB_HEAD_REF } else { $env:GITHUB_REF_NAME }
+          $sourceRefKind = if ($env:GITHUB_HEAD_REF) { "pull_request_head" } else { "git_ref" }
+          if ([string]::IsNullOrWhiteSpace($sourceRef)) { throw "Unable to resolve exact source ref" }
 
           $audit = [ordered]@{
             schema = "DSRRL_CORE_ISLANDS_BUILD_AUDIT_V1"
@@ -160,12 +164,14 @@ jobs:
             legacy_monolith_status = $v.legacy_monolith.status
             build_kind = "DEVELOPMENT"
             source_commit = $env:GITHUB_SHA
-            source_branch = "main"
+            source_ref = $sourceRef
+            source_ref_kind = $sourceRefKind
             reshade_commit = "3645e3025d1d98a90e318278858931f034d5d1f6"
             reshade_api = 20
             target = "$stem.addon64"
             addon_sha256 = $addonHash
             version_manifest_sha256 = $versionHash
+            integrated_cmake_sha256 = $cmakeHash
             entrypoint_sha256 = $entryHash
             integrated_policy_sha256 = $policyHash
             a1_bridge_source_sha256 = $a1Hash
