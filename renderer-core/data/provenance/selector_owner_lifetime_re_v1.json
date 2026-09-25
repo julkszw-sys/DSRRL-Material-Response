@@ -1,0 +1,32 @@
+{
+  "schema": "dsrrl.selector_owner_lifetime_re.v1",
+  "status": "HIGH_CONFIDENCE",
+  "exe_sha256": "a45aaa36dd2f6cc151670a639ea5547043cf38ea79ff4178b963c6ed71f98d7b",
+  "selector_rva": "0x22BA20",
+  "selector_callers": [
+    {"return_rva":"0x20E019","container":"draw_context+0x88","owner":"r14","material_index":"ebx"},
+    {"return_rva":"0x20EB7F","container":"render_context+0x88","owner":"rbp","material_index":"ebx"},
+    {"return_rva":"0x20FB9E","container":"render_context+0x88","owner":"rbp","material_index":"r14d"}
+  ],
+  "selector_material_resolution": {
+    "array_pointer_offset": "0x10",
+    "entry_stride": 24,
+    "expression": "entry = [container+0x10] + 24*material_index; actual_material = [entry]"
+  },
+  "upstream_owner_lifetime_observation": {
+    "rva_20E9D0": {
+      "owner_from_input": "rbp = [rdx]",
+      "material_count_from_context": "[rcx+0x60]",
+      "material_container": "rcx+0x88",
+      "selector_owner_argument": "rbp"
+    },
+    "rva_20F9F0": {
+      "owner_from_input": "rbp = [rdx]",
+      "material_count_from_context": "[rcx+0x60]",
+      "material_container": "rcx+0x88",
+      "selector_owner_argument": "rbp"
+    }
+  },
+  "conclusion": "All three selector call paths preserve an owner object across the material loop. This owner object is the narrowest verified lifetime to which an upstream raw-FLVER identity may be attached. The current evidence does not prove that any field inside the owner already equals canonical raw FLVER SHA-256.",
+  "guardrail": "Do not authorize owner tuples from owner/container pointer identity. Positive authorization still requires an independently derived raw FLVER SHA-256 bound to this owner lifetime."
+}
