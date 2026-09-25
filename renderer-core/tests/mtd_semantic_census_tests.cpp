@@ -107,6 +107,14 @@ int main()
     CHECK(wrong_legacy.envspc_slot_valid);
     CHECK(wrong_legacy.envspc_slot==2u);
 
+    const auto missing_key_legacy=classify_mtd_envspec_semantics_legacy(
+        0u,
+        pmetal.raw_mtd_sha256);
+    CHECK(missing_key_legacy.exact_identity_match);
+    CHECK(missing_key_legacy.router_state==mtd_envspec_router_state::present);
+    CHECK(missing_key_legacy.envspc_slot_valid);
+    CHECK(missing_key_legacy.envspc_slot==2u);
+
     auto unknown_sha=pmetal.raw_mtd_sha256;
     unknown_sha[0]^=0xffu;
     const auto unknown_legacy=classify_mtd_envspec_semantics_legacy(
