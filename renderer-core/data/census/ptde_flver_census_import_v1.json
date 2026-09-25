@@ -1,0 +1,63 @@
+{
+  "schema": 1,
+  "game": "PTDE",
+  "source_zip": "DSRRL_PTDE_FLVER_CENSUS(1).zip",
+  "claim_scope": "EXACT_FLVER_MATERIAL_SLOT_TEXTURE_BINDING_CONSTRUCTION_EVIDENCE",
+  "runtime_activation": "OPEN",
+  "pixel_equivalence": "OPEN",
+  "counts": {
+    "canonical_rows": 87151,
+    "archive_entries_scanned": 6114,
+    "archive_pairs": 2,
+    "bhd_entries": 6114,
+    "bnd3_binders": 3479,
+    "bnd3_entries": 27814,
+    "dcx_layers": 4983,
+    "flver_instances": 4998,
+    "flver_identities": 4757,
+    "unique_flver_payloads": 4688,
+    "duplicate_flver_payloads": 310,
+    "material_instances": 22063,
+    "mtd_entries": 436,
+    "unique_mtd_payloads": 418,
+    "unresolved_rows": 0,
+    "scan_errors": 75
+  },
+  "mtd_resolution": {"EXACT_BASENAME_SHA": 87151},
+  "texture_semantics": {
+    "g_Diffuse": 21975,
+    "g_DetailBumpmap": 21600,
+    "g_Bumpmap": 17310,
+    "g_Specular": 12307,
+    "g_Lightmap": 9382,
+    "g_Diffuse_2": 2007,
+    "g_Bumpmap_2": 1878,
+    "g_Specular_2": 692
+  },
+  "exact_mtd_identity_projection": {
+    "identities_observed_in_flver_rows": 261,
+    "diffuse_use_identities": 239,
+    "normal_bump_use_identities": 240,
+    "specular_resource_use_identities": 153,
+    "lightmap_resource_use_identities": 60,
+    "classification_rule": "USE requires at least one exact FLVER+material_slot row for the exact MTD name+raw SHA carrying the corresponding texture semantic. Absence remains UNKNOWN and never becomes NO_USE."
+  },
+  "sha256": {
+    "flver_material_ownership_input_v1.tsv": "f6fab999e103cb11a0c3ce50b33bde82c531f8297df81674344c1e3e9082a6f6",
+    "flver_material_ownership_raw_v1.jsonl": "c762b9a4705ed422e13d439b1a6ccf01a1778decaa5c8526dd85b3d27027eb37",
+    "flver_material_ownership_unresolved_v1.tsv": "c0450f6fc1ee78ee60f42ab0ffcff280e5d011af9a44e1118909a284251cff9d",
+    "flver_scan_errors_v1.jsonl": "1285616dfd1c4e6e1ffe9b1e24a536200ce423db346a2f9ebd4f90e0e1057c8e",
+    "ptde_mtd_index_v1.jsonl": "4166d5231b96f6b72164d9a62425092cc237ee06536d0cd0549a0e5de4f4bdd9"
+  },
+  "policies": {
+    "missing_or_ambiguous_mtd": "UNRESOLVED_NOT_NO_USE",
+    "texture_resource_hash": "UNKNOWN_UNLESS_SEPARATELY_PROVEN",
+    "missing_texture_semantic": "UNKNOWN_FAIL_OPEN",
+    "operator_vs_resource": "A g_Specular/g_Lightmap binding proves resource consumption only; it does not by itself prove the complete SpecRGB or emissive operator equation."
+  },
+  "notes": [
+    "All 87151 canonical ownership rows resolve their MTD by exact basename plus raw SHA; unresolved_rows=0.",
+    "The 75 scan errors are retained as provenance and do not authorize negative classification.",
+    "Diffuse and Normal/Bump USE are resource-consumer semantics at exact FLVER material-slot ownership scope. Whole-MTD promotion is only the projection of observed exact rows and does not imply universal runtime activation."
+  ]
+}
