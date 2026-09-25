@@ -59,11 +59,30 @@ bool draw_state_transaction_runtime::validate_mutation(
     const draw_tx_mutation &mutation) const noexcept
 {
     if (mutation.owners == 0u ||
-        (mutation.owners & ~core::all_operator_bits) != 0u)
+        (mutation.owners & ~core::all_operator_bits) != 0u ||
+        (mutation.shader_owners & ~mutation.owners) != 0u ||
+        (mutation.resource_owners & ~mutation.owners) != 0u ||
+        (mutation.carrier_owners & ~mutation.owners) != 0u)
         return false;
 
-    if (mutation.replace_pixel_shader &&
-        mutation.pixel_shader == nullptr)
+    if (mutation.replace_pixel_shader) {
+        if (mutation.pixel_shader == nullptr ||
+            mutation.shader_owners == 0u)
+            return false;
+    } else if (mutation.shader_owners != 0u) {
+        return false;
+    }
+
+    const bool has_resources =
+        mutation.srv_count != 0u ||
+        mutation.sampler_count != 0u;
+
+    if (has_resources !=
+        (mutation.resource_owners != 0u))
+        return false;
+
+    if (mutation.carrier_owners != 0u &&
+        mutation.constant_buffer_count == 0u)
         return false;
 
     if (mutation.constant_buffer_count > draw_tx_max_cb ||
@@ -281,15 +300,28 @@ bool draw_state_transaction_runtime::begin(
             return false;
         }
 
+        const auto bit =
+            core::operator_bit(op);
+
         const auto carrier_mask =
-            core::draw_policy_carrier_write_mask(op);
+            (mutation.carrier_owners & bit) != 0u
+                ? core::draw_policy_carrier_write_mask(op)
+                : 0u;
+
+        if ((mutation.carrier_owners & bit) != 0u &&
+            carrier_mask == 0u) {
+            if (ctx1 != nullptr)
+                ctx1->Release();
+            release_state(state);
+            ++begin_fail_;
+            return false;
+        }
 
         plan.patches[plan.patch_count++] = {
             op,
             carrier_mask,
-            mutation.replace_pixel_shader,
-            mutation.srv_count != 0u ||
-                mutation.sampler_count != 0u
+            (mutation.shader_owners & bit) != 0u,
+            (mutation.resource_owners & bit) != 0u
         };
         plan.carrier_write_mask |= carrier_mask;
     }
