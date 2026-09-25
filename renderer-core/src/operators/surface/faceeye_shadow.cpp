@@ -1,180 +1,20 @@
 #include "dsrrl/operators/surface/faceeye_shadow.hpp"
-
 #include <algorithm>
 #include <cmath>
-
 namespace dsrrl::operators::surface {
 namespace {
-
-bool finite(const faceeye_vec3 &v) noexcept
-{
-    return std::isfinite(v.x)&&std::isfinite(v.y)&&std::isfinite(v.z);
+bool finite(const faceeye_vec3 &v) noexcept{return std::isfinite(v.x)&&std::isfinite(v.y)&&std::isfinite(v.z);}
+float dot(const faceeye_vec3&a,const faceeye_vec3&b) noexcept{return a.x*b.x+a.y*b.y+a.z*b.z;}
+float sat(float x) noexcept{return std::max(0.0f,std::min(1.0f,x));}
+bool is_csd(faceeye_receiver_variant v) noexcept{return v==faceeye_receiver_variant::csd_no_point||v==faceeye_receiver_variant::csd_pnts||v==faceeye_receiver_variant::csd_pntss||v==faceeye_receiver_variant::csd_pntssss;}
+bool stock_regular_sampler_family(faceeye_receiver_variant v) noexcept{return v==faceeye_receiver_variant::sdw_pntss||v==faceeye_receiver_variant::csd_pntss||v==faceeye_receiver_variant::sdw_pntssss||v==faceeye_receiver_variant::csd_pntssss;}
 }
-
-float dot(const faceeye_vec3 &a,const faceeye_vec3 &b) noexcept
-{
-    return a.x*b.x+a.y*b.y+a.z*b.z;
-}
-
-float sat(float x) noexcept
-{
-    return std::max(0.0f,std::min(1.0f,x));
-}
-
-bool is_csd(faceeye_receiver_variant v) noexcept
-{
-    return v==faceeye_receiver_variant::csd_no_point ||
-           v==faceeye_receiver_variant::csd_pnts ||
-           v==faceeye_receiver_variant::csd_pntss ||
-           v==faceeye_receiver_variant::csd_pntssss;
-}
-
-bool stock_regular_sampler_family(faceeye_receiver_variant v) noexcept
-{
-    return v==faceeye_receiver_variant::sdw_pntss ||
-           v==faceeye_receiver_variant::csd_pntss ||
-           v==faceeye_receiver_variant::sdw_pntssss ||
-           v==faceeye_receiver_variant::csd_pntssss;
-}
-
-} // namespace
-
-bool validate_faceeye_auxiliary_snapshot(
-    const faceeye_auxiliary_snapshot_descriptor &snapshot) noexcept
-{
-    if(!snapshot.immutable_draw_local ||
-       !snapshot.ptde_dsr_value_homology_verified)
-        return false;
-    for(std::size_t i=0;i<k_faceeye_aux_ps_registers.size();++i){
-        if(!snapshot.register_present[i] ||
-           snapshot.producer_offsets[i]!=k_faceeye_aux_dirlight_offsets[i])
-            return false;
-    }
-    return true;
-}
-
-float decode_faceeye_packed_depth(const faceeye_vec3 &sample_rgb) noexcept
-{
-    if(!finite(sample_rgb))
-        return 0.0f;
-    return sample_rgb.x*(255.0f/256.0f)+
-           sample_rgb.y*(255.0f/65536.0f)+
-           sample_rgb.z*(255.0f/16777216.0f);
-}
-
-faceeye_shadow_sample evaluate_faceeye_shadow_response(
-    const faceeye_shadow_input &input) noexcept
-{
-    faceeye_shadow_sample out;
-    if(!std::isfinite(input.pcf16) ||
-       !finite(input.normal) ||
-       !finite(input.c175_direction) ||
-       !std::isfinite(input.c121_bias) ||
-       !std::isfinite(input.c121_normal_scale) ||
-       !std::isfinite(input.c121_fade_start) ||
-       !std::isfinite(input.c121_fade_scale) ||
-       !std::isfinite(input.view_length) ||
-       !finite(input.c122_shadow_rgb))
-        return out;
-
-    out.normal_term=sat(
-        (dot(input.c175_direction,input.normal)+input.c121_bias)*
-        input.c121_normal_scale);
-    out.shadow_s=sat(input.pcf16+out.normal_term);
-    out.fade=sat(
-        (input.c121_fade_start-input.view_length)*
-        input.c121_fade_scale);
-    const float k=out.shadow_s*out.fade;
-    out.shadow_rgb={
-        1.0f-k*input.c122_shadow_rgb.x,
-        1.0f-k*input.c122_shadow_rgb.y,
-        1.0f-k*input.c122_shadow_rgb.z
-    };
-    out.result=faceeye_shadow_math_result::exact;
-    return out;
-}
-
-faceeye_runtime_plan evaluate_faceeye_runtime_readiness(
-    const core::feature_registry &features,
-    const core::activation_context &activation,
-    const faceeye_runtime_context &context) noexcept
-{
-    faceeye_runtime_plan out;
-    const auto gate=core::evaluate_operator_activation(
-        features,core::operator_id::faceeye_shadow_legacy,activation);
-    if(gate.state!=core::island_state::active){
-        out.reason=faceeye_runtime_reason::core_gate_not_active;
-        return out;
-    }
-    if(!context.receiver_verified){
-        out.reason=faceeye_runtime_reason::receiver_not_verified;
-        return out;
-    }
-    if(context.variant==faceeye_receiver_variant::unsupported){
-        out.reason=faceeye_runtime_reason::unsupported_receiver;
-        return out;
-    }
-    if(!context.ptde_kernel_shader_ready){
-        out.reason=faceeye_runtime_reason::ptde_kernel_shader_not_ready;
-        return out;
-    }
-    if(!context.runtime_t7_identity_verified){
-        out.reason=faceeye_runtime_reason::runtime_t7_identity_not_verified;
-        return out;
-    }
-    if(!context.auxiliary_dirlight_snapshot_ready){
-        out.reason=faceeye_runtime_reason::auxiliary_dirlight_snapshot_not_ready;
-        return out;
-    }
-    if(!validate_faceeye_auxiliary_snapshot(context.auxiliary_dirlight_snapshot)){
-        out.reason=faceeye_runtime_reason::auxiliary_dirlight_snapshot_incomplete;
-        return out;
-    }
-    if(is_csd(context.variant) && !context.csd_matrix_region_ready){
-        out.reason=faceeye_runtime_reason::csd_matrix_region_not_ready;
-        return out;
-    }
-
-    const bool native_regular=stock_regular_sampler_family(context.variant);
-    if(native_regular){
-        if(!context.stock_regular_s7_verified){
-            out.reason=faceeye_runtime_reason::stock_regular_s7_not_verified;
-            return out;
-        }
-    }else{
-        out.override_s7_with_regular_sampler=true;
-        if(!context.regular_s7_sampler_ready){
-            out.reason=faceeye_runtime_reason::regular_s7_sampler_not_ready;
-            return out;
-        }
-        if(!context.regular_s7_descriptor_verified){
-            out.reason=faceeye_runtime_reason::regular_s7_descriptor_not_verified;
-            return out;
-        }
-        if(!context.sampler_override_transaction_ready){
-            out.reason=
-                faceeye_runtime_reason::sampler_override_transaction_not_ready;
-            return out;
-        }
-    }
-
-    if(!context.legacy_env_probe_routes_ready){
-        out.reason=faceeye_runtime_reason::legacy_env_probe_routes_not_ready;
-        return out;
-    }
-    if(!context.independent_lighting_exclusion_verified){
-        out.reason=
-            faceeye_runtime_reason::independent_lighting_exclusion_not_verified;
-        return out;
-    }
-    if(!context.draw_transaction_ready){
-        out.reason=faceeye_runtime_reason::draw_transaction_not_ready;
-        return out;
-    }
-
-    out.ready=true;
-    out.reason=faceeye_runtime_reason::ready;
-    return out;
-}
-
+bool validate_faceeye_auxiliary_snapshot(const faceeye_auxiliary_snapshot_descriptor&s) noexcept{if(!s.immutable_draw_local||!s.ptde_dsr_value_homology_verified)return false;for(std::size_t i=0;i<k_faceeye_aux_ps_registers.size();++i)if(!s.register_present[i]||s.producer_offsets[i]!=k_faceeye_aux_dirlight_offsets[i])return false;return true;}
+float decode_faceeye_packed_depth(const faceeye_vec3&s) noexcept{if(!finite(s))return 0.0f;return s.x*(255.0f/256.0f)+s.y*(255.0f/65536.0f)+s.z*(255.0f/16777216.0f);}
+faceeye_shadow_sample evaluate_faceeye_shadow_response(const faceeye_shadow_input&i) noexcept{faceeye_shadow_sample o;if(!std::isfinite(i.pcf16)||!finite(i.normal)||!finite(i.c175_direction)||!std::isfinite(i.c121_bias)||!std::isfinite(i.c121_normal_scale)||!std::isfinite(i.c121_fade_start)||!std::isfinite(i.c121_fade_scale)||!std::isfinite(i.view_length)||!finite(i.c122_shadow_rgb))return o;o.normal_term=sat((dot(i.c175_direction,i.normal)+i.c121_bias)*i.c121_normal_scale);o.shadow_s=sat(i.pcf16+o.normal_term);o.fade=sat((i.c121_fade_start-i.view_length)*i.c121_fade_scale);const float k=o.shadow_s*o.fade;o.shadow_rgb={1.0f-k*i.c122_shadow_rgb.x,1.0f-k*i.c122_shadow_rgb.y,1.0f-k*i.c122_shadow_rgb.z};o.result=faceeye_shadow_math_result::exact;return o;}
+faceeye_runtime_plan evaluate_faceeye_runtime_readiness(const core::feature_registry&f,const core::activation_context&a,const faceeye_runtime_context&c) noexcept{
+ faceeye_runtime_plan o;const auto g=core::evaluate_operator_activation(f,core::operator_id::faceeye_shadow_legacy,a);if(g.state!=core::island_state::active)return o;
+ if(!c.receiver_verified){o.reason=faceeye_runtime_reason::receiver_not_verified;return o;}if(c.variant==faceeye_receiver_variant::unsupported){o.reason=faceeye_runtime_reason::unsupported_receiver;return o;}if(!c.runtime_t7_identity_verified){o.reason=faceeye_runtime_reason::runtime_t7_identity_not_verified;return o;}if(!c.auxiliary_dirlight_snapshot_ready){o.reason=faceeye_runtime_reason::auxiliary_dirlight_snapshot_not_ready;return o;}if(!validate_faceeye_auxiliary_snapshot(c.auxiliary_dirlight_snapshot)){o.reason=faceeye_runtime_reason::auxiliary_dirlight_snapshot_incomplete;return o;}if(is_csd(c.variant)&&!c.csd_matrix_region_ready){o.reason=faceeye_runtime_reason::csd_matrix_region_not_ready;return o;}
+ const bool native=stock_regular_sampler_family(c.variant);if(native){o.use_stock_ptde_style_kernel=true;if(!c.stock_ptde_kernel_identity_verified){o.reason=faceeye_runtime_reason::stock_ptde_kernel_identity_not_verified;return o;}if(!c.stock_regular_s7_verified){o.reason=faceeye_runtime_reason::stock_regular_s7_not_verified;return o;}}else{o.replace_comparison_kernel=true;if(!c.replacement_ptde_kernel_shader_ready){o.reason=faceeye_runtime_reason::replacement_ptde_kernel_shader_not_ready;return o;}o.override_s7_with_regular_sampler=true;if(!c.regular_s7_sampler_ready){o.reason=faceeye_runtime_reason::regular_s7_sampler_not_ready;return o;}if(!c.regular_s7_descriptor_verified){o.reason=faceeye_runtime_reason::regular_s7_descriptor_not_verified;return o;}if(!c.sampler_override_transaction_ready){o.reason=faceeye_runtime_reason::sampler_override_transaction_not_ready;return o;}}
+ if(!c.legacy_env_probe_routes_ready){o.reason=faceeye_runtime_reason::legacy_env_probe_routes_not_ready;return o;}if(!c.independent_lighting_exclusion_verified){o.reason=faceeye_runtime_reason::independent_lighting_exclusion_not_verified;return o;}if(!c.draw_transaction_ready){o.reason=faceeye_runtime_reason::draw_transaction_not_ready;return o;}o.ready=true;o.reason=faceeye_runtime_reason::ready;return o;}
 } // namespace dsrrl::operators::surface
