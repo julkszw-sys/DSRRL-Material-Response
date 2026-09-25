@@ -85,6 +85,38 @@ bool draw_state_transaction_runtime::validate_mutation(
         mutation.constant_buffer_count == 0u)
         return false;
 
+    for (std::size_t i = 0;
+         i < core::operator_count;
+         ++i) {
+        const auto op =
+            static_cast<core::operator_id>(i);
+        const auto bit =
+            core::operator_bit(op);
+
+        if ((mutation.owners & bit) == 0u)
+            continue;
+
+        const auto &policy =
+            core::draw_policy(op);
+
+        if ((mutation.shader_owners & bit) != 0u &&
+            (policy.allowed_mutation_mask &
+             core::draw_mutation_shader) == 0u)
+            return false;
+
+        if ((mutation.resource_owners & bit) != 0u &&
+            (policy.allowed_mutation_mask &
+             (core::draw_mutation_srv |
+              core::draw_mutation_sampler)) == 0u)
+            return false;
+
+        if ((mutation.carrier_owners & bit) != 0u &&
+            ((policy.allowed_mutation_mask &
+              core::draw_mutation_constant_buffer) == 0u ||
+             core::draw_policy_carrier_write_mask(op) == 0u))
+            return false;
+    }
+
     if (mutation.constant_buffer_count > draw_tx_max_cb ||
         mutation.srv_count > draw_tx_max_srv ||
         mutation.sampler_count > draw_tx_max_sampler)
