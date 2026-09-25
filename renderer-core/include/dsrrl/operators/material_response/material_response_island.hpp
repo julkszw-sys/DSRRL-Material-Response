@@ -42,6 +42,10 @@ struct material_identity {
     bool valid = false;
     // Actual draw-owner provenance. These fields must come from the observed
     // DSR FLVER/material binding, never from an MTD-only inference.
+    // Full content digest is authoritative; the legacy 64-bit token is kept
+    // only for compatibility with older census APIs and is never sufficient
+    // for positive Material Response activation.
+    core::sha256_digest flver_sha256{};
     std::uint64_t flver_identity_hash = 0;
     std::uint32_t material_slot = 0;
     bool material_slot_valid = false;
