@@ -283,8 +283,10 @@ bool compose_enabled_a1_islands(
     const core::feature_registry &features,
     const std::uint8_t *stock,
     std::size_t stock_size,
-    std::vector<std::uint8_t> &v211) noexcept
+    std::vector<std::uint8_t> &v211,
+    core::operator_mask &composed_owners) noexcept
 {
+    composed_owners = 0u;
     const auto digest = hashing::sha256(stock, stock_size);
     const auto *plan =
         legacy_plan::find_a1_plan_by_exact_digest(
@@ -342,6 +344,7 @@ bool compose_enabled_a1_islands(
         write_u32(
             v211.data() + target,
             op.replacement_word);
+        composed_owners |= core::operator_bit(op.owner);
     }
 
     return legacy_plan::dxbc::fix_checksum(
@@ -552,7 +555,8 @@ v211_materialize_outcome materialize_v211_stable_receiver(
             features,
             source,
             size,
-            output)) {
+            output,
+            outcome.composed_owners)) {
         output.clear();
         outcome.result =
             v211_materialize_result::fail_patch_precondition;
