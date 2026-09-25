@@ -39,6 +39,12 @@ enum class decision_reason : std::uint8_t {
 
 struct material_identity {
     bool valid = false;
+    // Actual draw-owner provenance. These fields must come from the observed
+    // DSR FLVER/material binding, never from an MTD-only inference.
+    std::uint64_t flver_identity_hash = 0;
+    std::uint32_t material_slot = 0;
+    bool material_slot_valid = false;
+    bool owner_tuple_exact = false;
     std::uint32_t route_index = 0;
     std::uint64_t semantic_name_hash = 0;
     core::sha256_digest raw_mtd_sha256{};
