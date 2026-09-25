@@ -152,8 +152,42 @@ int main()
     CHECK(env.selected == operators::env_spec::action::preserve_host);
 
     material_response_island seeded;
+    CHECK(register_confirmed_material_receivers_v1(seeded) == 24);
+    CHECK(seeded.receiver_recipe_count() == 24);
     CHECK(register_confirmed_material_routes_v1(seeded) == 35);
     CHECK(seeded.material_profile_count() == 35);
+    material_identity exact_pmetal{};
+    exact_pmetal.valid=true;
+    exact_pmetal.flver_sha256={
+        0x00u,0x88u,0x88u,0x37u,0x02u,0x25u,0xb8u,0x51u,
+        0xbfu,0xe3u,0xaau,0xa3u,0x79u,0x9au,0x46u,0x7au,
+        0x20u,0x84u,0x42u,0xe7u,0xedu,0x29u,0x87u,0x62u,
+        0xa0u,0xf9u,0x25u,0xf0u,0xb2u,0x05u,0xfbu,0x39u};
+    exact_pmetal.material_slot=1u;
+    exact_pmetal.material_slot_valid=true;
+    exact_pmetal.owner_tuple_exact=true;
+    exact_pmetal.route_index=345u;
+    exact_pmetal.semantic_name_hash=mtd_semantic_hash("P_Metal[DSB].mtd");
+    exact_pmetal.raw_mtd_sha256={
+        0xecu,0xe7u,0x0fu,0x36u,0xbdu,0x25u,0x17u,0xd2u,
+        0x8cu,0x84u,0x95u,0xe2u,0x76u,0xceu,0xa5u,0x37u,
+        0xf8u,0xb5u,0x19u,0xd6u,0xbeu,0xd9u,0x81u,0x78u,
+        0x8eu,0x79u,0xa4u,0x09u,0xffu,0xbfu,0x76u,0x3bu};
+    exact_pmetal.material_family_hash=mtd_semantic_hash("DifSpcBmp");
+
+    auto exact_mr=seeded.evaluate(33u,exact_pmetal);
+    CHECK(exact_mr.active);
+    CHECK(exact_mr.reason==decision_reason::active);
+    CHECK(exact_mr.route_index==345u);
+    CHECK(exact_mr.certified_operations==specular_factor_c101);
+    CHECK(exact_mr.c101==2.5f);
+
+    auto spoofed_pmetal=exact_pmetal;
+    spoofed_pmetal.flver_sha256.fill(0xffu);
+    exact_mr=seeded.evaluate(33u,spoofed_pmetal);
+    CHECK(!exact_mr.active);
+    CHECK(exact_mr.reason==decision_reason::owner_tuple_not_authenticated);
+
 
     const auto &catalog = core::known_operator_catalog();
     CHECK(catalog.size() == core::operator_count);
