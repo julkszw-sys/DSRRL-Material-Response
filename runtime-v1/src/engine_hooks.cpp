@@ -35,12 +35,16 @@ constexpr std::string_view k_exe_sha256 =
 constexpr std::string_view k_binder_sha256 =
     "ad180732ac79d5d98783aa504c789c2bab15e515c3b0f66b237d8b8c69113394";
 
-constexpr std::uintptr_t k_rva_selector = 0x22BA20;\nconstexpr std::uintptr_t k_rva_flver_parse = 0x20D910;
+constexpr std::uintptr_t k_rva_selector = 0x22BA20;
+constexpr std::uintptr_t k_rva_flver_parse = 0x20D910;
 constexpr std::uintptr_t k_rva_mtd_parse = 0x295ED0;
 constexpr std::uintptr_t k_rva_texture_name = 0x583AA6;
 constexpr std::uintptr_t k_rva_texture_name_clear = 0x583E81;
 
-constexpr std::array<std::uint8_t,16> k_flver_parse_bytes = {\n    0x48,0x89,0x5C,0x24,0x18,0x55,0x56,0x57,0x41,0x54,0x41,0x55,0x41,0x56,0x41,0x57\n};\nconstexpr std::array<std::uint8_t,15> k_selector_bytes = {
+constexpr std::array<std::uint8_t,16> k_flver_parse_bytes = {
+    0x48,0x89,0x5C,0x24,0x18,0x55,0x56,0x57,0x41,0x54,0x41,0x55,0x41,0x56,0x41,0x57
+};
+constexpr std::array<std::uint8_t,15> k_selector_bytes = {
     0x40,0x53,0x48,0x83,0xEC,0x30,0x49,0x63,0xC0,0x45,0x8B,0xD1,0x48,0x8B,0xDA
 };
 constexpr std::array<std::uint8_t,15> k_mtd_bytes = {
@@ -69,11 +73,15 @@ struct hook {
 std::uintptr_t g_base = 0;
 hook g_selector_hook{}, g_flver_parse_hook{}, g_mtd_hook{}, g_texture_name_hook{}, g_texture_name_clear_hook{};
 selector_callback g_selector_cb = nullptr;
-mtd_callback g_mtd_cb = nullptr;\nflver_parse_callback g_flver_parse_cb = nullptr;
+mtd_callback g_mtd_cb = nullptr;
+flver_parse_callback g_flver_parse_cb = nullptr;
 texture_name_callback g_texture_name_cb = nullptr;
 texture_clear_callback g_texture_clear_cb = nullptr;
 
-using flver_parse_fn = void(__fastcall *)(void *, const void *);\nflver_parse_fn g_flver_parse_original = nullptr;\n\nusing mtd_parse_fn = void(__fastcall *)(void *, const void *, std::uint32_t, const wchar_t *);
+using flver_parse_fn = void(__fastcall *)(void *, const void *);
+flver_parse_fn g_flver_parse_original = nullptr;
+
+using mtd_parse_fn = void(__fastcall *)(void *, const void *, std::uint32_t, const wchar_t *);
 mtd_parse_fn g_mtd_original = nullptr;
 
 std::filesystem::path process_path()
@@ -164,11 +172,21 @@ void clear_callbacks() noexcept
 {
     g_selector_cb = nullptr;
     g_mtd_cb = nullptr;
+    g_flver_parse_cb = nullptr;
     g_texture_name_cb = nullptr;
     g_texture_clear_cb = nullptr;
 }
 
-void __fastcall flver_parse_hook_entry(void *model, const void *raw) noexcept\n{\n    // Retail 0x14020D910 receives the parsed-model destination in RCX and the\n    // still-raw FLVER2 image in RDX. Observe before the original mutates the\n    // image by rebasing its internal offsets.\n    if (g_flver_parse_cb) g_flver_parse_cb(model, raw);\n    if (g_flver_parse_original) g_flver_parse_original(model, raw);\n}\n\nvoid __fastcall mtd_hook_entry(
+void __fastcall flver_parse_hook_entry(void *model, const void *raw) noexcept
+{
+    // Retail 0x14020D910 receives the parsed-model destination in RCX and the
+    // still-raw FLVER2 image in RDX. Observe before the original mutates the
+    // image by rebasing its internal offsets.
+    if (g_flver_parse_cb) g_flver_parse_cb(model, raw);
+    if (g_flver_parse_original) g_flver_parse_original(model, raw);
+}
+
+void __fastcall mtd_hook_entry(
     void *material,
     const void *raw,
     std::uint32_t len,
@@ -217,6 +235,7 @@ bool verify_provenance() noexcept
 bool install(
     selector_callback selector,
     mtd_callback mtd,
+    flver_parse_callback flver_parse,
     texture_name_callback texture_name,
     texture_clear_callback texture_clear) noexcept
 {
@@ -225,11 +244,17 @@ bool install(
         return false;
 
     g_selector_cb = selector;
-    g_mtd_cb = mtd;\n    g_flver_parse_cb = flver_parse;
+    g_mtd_cb = mtd;
+    g_flver_parse_cb = flver_parse;
     g_texture_name_cb = texture_name;
     g_texture_clear_cb = texture_clear;
 
-    if (!prepare_hook(g_flver_parse_hook, k_rva_flver_parse, k_flver_parse_bytes,\n                      reinterpret_cast<void *>(&flver_parse_hook_entry)))\n        goto fail;\n    g_flver_parse_original = reinterpret_cast<flver_parse_fn>(g_flver_parse_hook.trampoline);\n\n    if (!prepare_hook(g_selector_hook, k_rva_selector, k_selector_bytes,
+    if (!prepare_hook(g_flver_parse_hook, k_rva_flver_parse, k_flver_parse_bytes,
+                      reinterpret_cast<void *>(&flver_parse_hook_entry)))
+        goto fail;
+    g_flver_parse_original = reinterpret_cast<flver_parse_fn>(g_flver_parse_hook.trampoline);
+
+    if (!prepare_hook(g_selector_hook, k_rva_selector, k_selector_bytes,
                       reinterpret_cast<void *>(&selector_hook_entry)))
         goto fail;
     g_selector_trampoline = g_selector_hook.trampoline;
@@ -252,7 +277,8 @@ bool install(
 
     // Patch the passive/resource hooks first, then the material hooks. Any fault
     // restores all already-patched sites below, so partial activation is impossible.
-    if (!patch_hook(g_texture_name_hook) ||\n        !patch_hook(g_flver_parse_hook) ||
+    if (!patch_hook(g_texture_name_hook) ||
+        !patch_hook(g_flver_parse_hook) ||
         !patch_hook(g_texture_name_clear_hook) ||
         !patch_hook(g_mtd_hook) ||
         !patch_hook(g_selector_hook))
@@ -267,7 +293,8 @@ fail:
 
 void uninstall() noexcept
 {
-    restore_hook(g_selector_hook);\n    restore_hook(g_flver_parse_hook);
+    restore_hook(g_selector_hook);
+    restore_hook(g_flver_parse_hook);
     restore_hook(g_mtd_hook);
     restore_hook(g_texture_name_hook);
     restore_hook(g_texture_name_clear_hook);
@@ -275,7 +302,8 @@ void uninstall() noexcept
     g_selector_trampoline = nullptr;
     g_texture_name_resume = nullptr;
     g_texture_name_clear_resume = nullptr;
-    g_mtd_original = nullptr;\n    g_flver_parse_original = nullptr;
+    g_mtd_original = nullptr;
+    g_flver_parse_original = nullptr;
     clear_callbacks();
 }
 
