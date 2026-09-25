@@ -4,7 +4,7 @@
 No SoulsFormats/Witchy/Yabber dependencies. The two external census ZIPs are
 content-addressed inputs. The output is intentionally a small negative
 refinement table for Diffuse/Normal: runtime still requires the existing exact
-positive PTDE capability, exact DSR raw-MTD identity and exact owner slot.
+positive PTDE capability and exact DSR raw-MTD identity. Positive runtime activation remains fail-open until an exact DSR (FLVER identity, material slot, MTD) tuple corpus is materialized.
 """
 from __future__ import annotations
 import argparse, collections, hashlib, json, struct, zipfile
@@ -112,6 +112,8 @@ inline constexpr std::size_t k_flver_pairwise_ptde_material_count=21315u;
 inline constexpr std::size_t k_flver_pairwise_dsr_mtd_count=367u;
 inline constexpr std::size_t k_flver_pairwise_ptde_mtd_count=261u;
 inline constexpr std::size_t k_flver_pairwise_overlap_mtd_count=256u;
+inline constexpr bool k_flver_pairwise_owner_tuple_authentication_available=false;
+constexpr bool flver_pairwise_owner_tuple_authenticated(std::uint64_t,std::uint32_t,std::uint64_t) noexcept{{return false;}}
 {arr("k_flver_pairwise_diffuse_reject",diff)}
 {arr("k_flver_pairwise_bump_reject",bump)}
 template<std::size_t N> constexpr bool pairwise_rejected(std::uint64_t h,const std::array<std::uint64_t,N>&a) noexcept{{if(!h)return true;for(auto x:a)if(x==h)return true;return false;}}
