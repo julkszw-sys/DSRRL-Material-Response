@@ -54,8 +54,19 @@ int main()
     conflict.logical_name = u"a"; conflict.currently_bound_t1 = 0x301u;
     plan = cache.plan_bind(conflict); CHECK(!plan.activate); CHECK(plan.ptde_t10_srv == 0u);
 
-    cache.erase_stock(0x301u); // reverse owner was already quarantined
-    CHECK(cache.size() == 1u); // ambiguous tombstone intentionally survives
+    // Removing the reverse owner is not enough to make the still-live stock
+    // handle exact again. A third logical identity must also fail open until
+    // erase_stock establishes the destruction/reuse boundary.
+    CHECK(cache.register_exact(u"c", 0x301u, 0x403u) == runtime::spec_rgb_resource_result::fail_open_conflicting_stock_binding);
+    conflict.logical_name = u"c";
+    plan = cache.plan_bind(conflict); CHECK(!plan.activate); CHECK(plan.ptde_t10_srv == 0u);
+
+    cache.erase_stock(0x301u);
+    CHECK(cache.size() == 1u); // ambiguous logical tombstone intentionally survives
+    CHECK(cache.register_exact(u"c", 0x301u, 0x403u) == runtime::spec_rgb_resource_result::registered);
+    conflict.logical_name = u"c";
+    plan = cache.plan_bind(conflict); CHECK(plan.activate); CHECK(plan.ptde_t10_srv == 0x403u);
+
     cache.clear(); CHECK(cache.size() == 0u);
 
     std::cout << "dsrrl_spec_rgb_resource_cache_tests: PASS\n";
