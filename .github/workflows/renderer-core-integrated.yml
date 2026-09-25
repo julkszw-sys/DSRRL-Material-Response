@@ -120,6 +120,8 @@ jobs:
           $mr = Get-Content renderer-core/src/operators/material_response/material_response_v211_materializer.cpp -Raw
           $resourceRuntime = Get-Content renderer-core/src/runtime/material_resource_draw_runtime.cpp -Raw
           $textureTransport = Get-Content renderer-core/src/runtime/texture_identity_transport.cpp -Raw
+          $subsurface = Get-Content renderer-core/src/runtime/subsurface_draw_runtime.cpp -Raw
+          $subsurfaceRegistry = Get-Content renderer-core/src/runtime/subsurface_pipeline_registry.cpp -Raw
           $cmake = Get-Content renderer-core/integrated/CMakeLists.txt -Raw
 
           if ($entry -notmatch 'operator_id::material_response') { throw "Material Response feature is not armed in Core+Islands" }
@@ -216,6 +218,30 @@ jobs:
             if ($mr -notmatch [regex]::Escape($required)) { throw "MR exact materializer invariant missing: $required" }
           }
 
+          foreach ($required in @(
+            'prepare_prevalidated_route_request',
+            'k_ptde_body_route_index',
+            'exact_dsbt_material',
+            'evaluate_subsurface_route',
+            'operator_id::subsurface'
+          )) {
+            if ($subsurface -notmatch [regex]::Escape($required)) { throw "Subsurface exact-route adapter invariant missing: $required" }
+          }
+
+          foreach ($required in @(
+            'k_subsurface_receiver_routes',
+            'subsurface_receiver_observe_pipeline',
+            'subsurface_receiver_observe_bind',
+            'subsurface_receiver_bound'
+          )) {
+            if ($subsurfaceRegistry -notmatch [regex]::Escape($required)) { throw "Subsurface pipeline identity invariant missing: $required" }
+          }
+
+          if ($entry -notmatch 'subsurface_receiver_observe_pipeline' -or
+              $entry -notmatch 'prepared_subsurface_draw') {
+            throw "Integrated Subsurface batch routing is not armed"
+          }
+
           if ($entry -match 'P_Metal|P_METAL|pmetal' -or $bridge -match 'P_Metal|P_METAL|pmetal') { throw "Integrated entry/A1 bridge must not special-case P_Metal" }
           Write-Host "CORE_ISLANDS_SHARED_DRAW_TRANSACTION_BOUNDARY_PASS"
       - name: Verify material resource generated authority
@@ -278,6 +304,8 @@ jobs:
           $textureTransportHash = (Get-FileHash "renderer-core/src/runtime/texture_identity_transport.cpp" -Algorithm SHA256).Hash.ToLowerInvariant()
           $textureDetourHash = (Get-FileHash "renderer-core/integrated/texture_identity_detour.asm" -Algorithm SHA256).Hash.ToLowerInvariant()
           $resourceRuntimeHash = (Get-FileHash "renderer-core/src/runtime/material_resource_draw_runtime.cpp" -Algorithm SHA256).Hash.ToLowerInvariant()
+          $subsurfaceRuntimeHash = (Get-FileHash "renderer-core/src/runtime/subsurface_draw_runtime.cpp" -Algorithm SHA256).Hash.ToLowerInvariant()
+          $subsurfaceRegistryHash = (Get-FileHash "renderer-core/src/runtime/subsurface_pipeline_registry.cpp" -Algorithm SHA256).Hash.ToLowerInvariant()
           $specRoutesHash = (Get-FileHash "renderer-core/data/provenance/spec_routes_v12.tsv" -Algorithm SHA256).Hash.ToLowerInvariant()
           $diffuseRoutesHash = (Get-FileHash "renderer-core/data/provenance/diffuse_routes_v12.tsv" -Algorithm SHA256).Hash.ToLowerInvariant()
           $normalRoutesHash = (Get-FileHash "renderer-core/data/provenance/normal_routes_v12.tsv" -Algorithm SHA256).Hash.ToLowerInvariant()
@@ -326,6 +354,9 @@ jobs:
             texture_identity_transport_sha256 = $textureTransportHash
             texture_identity_detour_sha256 = $textureDetourHash
             material_resource_draw_runtime_sha256 = $resourceRuntimeHash
+            subsurface_draw_runtime_sha256 = $subsurfaceRuntimeHash
+            subsurface_pipeline_registry_sha256 = $subsurfaceRegistryHash
+            subsurface_route = "EXACT_DSBT_TO_DSB_TARGET_33_34_35"
             spec_routes_v12_tsv_sha256 = $specRoutesHash
             diffuse_routes_v12_tsv_sha256 = $diffuseRoutesHash
             normal_routes_v12_tsv_sha256 = $normalRoutesHash
@@ -337,7 +368,7 @@ jobs:
             material_response_draw_probe = "VISIBLE_EXACT_OWNER_RECEIVER_PS_B12_BATCH_TRANSACTION"
             material_response_feature_armed = $true
             material_response_runtime_activation = "NOT_TESTED"
-            boot_armed_operator_count = 9
+            boot_armed_operator_count = 10
             single_addon_entrypoint = $true
             draw_replay = $true
             runtime_status = "NOT_TESTED"
