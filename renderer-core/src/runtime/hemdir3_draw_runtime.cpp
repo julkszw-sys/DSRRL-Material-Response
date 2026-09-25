@@ -440,6 +440,10 @@ bool hemdir3_draw_runtime::prepare_draw_request(
         (plan.require_b12_material_donor != spc) ||
         (plan.require_directional_legacy_specular != spc)) {
         replacement.shader->Release();
+        if (prepared.b12 != nullptr) {
+            prepared.b12->Release();
+            prepared.b12 = nullptr;
+        }
         lightbank_.release_hemdir3_carrier(
             prepared.carrier);
         ++readiness_rejects_;
