@@ -1684,6 +1684,30 @@ bool register_runtime(core::renderer_core &core) noexcept
     return true;
 }
 
-r
+void unregister_runtime() noexcept
+{
+    g_enabled.store(false);
+    reshade::unregister_event<reshade::addon_event::present>(on_present);
+    reshade::unregister_event<reshade::addon_event::draw_indexed>(on_draw_indexed);
+    reshade::unregister_event<reshade::addon_event::bind_pipeline>(on_bind_pipeline);
+    reshade::unregister_event<reshade::addon_event::destroy_pipeline>(on_destroy_pipeline);
+    reshade::unregister_event<reshade::addon_event::init_pipeline>(on_init_pipeline);
+    reshade::unregister_event<reshade::addon_event::create_pipeline>(on_create_pipeline);
+    reshade::unregister_event<reshade::addon_event::destroy_device>(on_destroy_device);
+    reshade::unregister_event<reshade::addon_event::init_device>(on_init_device);
+    release_device_state();
+    {std::lock_guard lock(g_pending_mutex);g_pending.clear();}
+    {std::lock_guard lock(g_pipeline_mutex);g_pipelines.clear();}
+    {
+        std::lock_guard lock(g_material_mutex);
+        g_material_donor.clear();
+        g_material_spec_override.clear();
+        g_material_envspec.clear();
+        g_material_ptde_texture.clear();
+    }
+    g_draw_donor=-1; g_draw_spec_override=-1; g_draw_envspec={}; g_draw_envspec_exact=false; g_draw_ptde_texture={};
+    g_bound_host=-1; g_bound_lerp=false; g_bound_subsurface=false; g_bound_command=nullptr;
+    g_core=nullptr;
+}
 
 } // namespace dsrrl::runtime::mr
