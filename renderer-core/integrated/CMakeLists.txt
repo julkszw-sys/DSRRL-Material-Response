@@ -119,10 +119,34 @@ add_custom_command(
         "${DSRRL_RENDERER_CORE_ROOT}/data/provenance/hemdir3_b13_replacements_v1.tsv"
     VERBATIM)
 
+add_custom_command(
+    OUTPUT "${DSRRL_CORE_GENERATED_LIGHTBANK}/generated_hemdir3_spc_b12_authority_v1.hpp"
+    COMMAND "${Python3_EXECUTABLE}"
+            "${DSRRL_RENDERER_CORE_ROOT}/tools/generate_hemdir3_spc_b12_authority_v1.py"
+            --input "${DSRRL_RENDERER_CORE_ROOT}/data/provenance/hemdir3_spc_b12_patch_sites_v1.tsv"
+            --output "${DSRRL_CORE_GENERATED_LIGHTBANK}/generated_hemdir3_spc_b12_authority_v1.hpp"
+    DEPENDS
+        "${DSRRL_RENDERER_CORE_ROOT}/tools/generate_hemdir3_spc_b12_authority_v1.py"
+        "${DSRRL_RENDERER_CORE_ROOT}/data/provenance/hemdir3_spc_b12_patch_sites_v1.tsv"
+    VERBATIM)
+
+add_custom_command(
+    OUTPUT "${DSRRL_CORE_GENERATED_LIGHTBANK}/generated_hemdir3_spc_material_donors_v1.hpp"
+    COMMAND "${Python3_EXECUTABLE}"
+            "${DSRRL_RENDERER_CORE_ROOT}/tools/generate_hemdir3_spc_material_donors_v1.py"
+            --input "${DSRRL_RENDERER_CORE_ROOT}/data/provenance/hemdir3_spc_material_donors_v1.tsv"
+            --output "${DSRRL_CORE_GENERATED_LIGHTBANK}/generated_hemdir3_spc_material_donors_v1.hpp"
+    DEPENDS
+        "${DSRRL_RENDERER_CORE_ROOT}/tools/generate_hemdir3_spc_material_donors_v1.py"
+        "${DSRRL_RENDERER_CORE_ROOT}/data/provenance/hemdir3_spc_material_donors_v1.tsv"
+    VERBATIM)
+
 add_custom_target(
     dsrrl_core_hemdir3_authority
     DEPENDS
-        "${DSRRL_CORE_GENERATED_LIGHTBANK}/generated_hemdir3_receivers_v1.hpp")
+        "${DSRRL_CORE_GENERATED_LIGHTBANK}/generated_hemdir3_receivers_v1.hpp"
+        "${DSRRL_CORE_GENERATED_LIGHTBANK}/generated_hemdir3_spc_b12_authority_v1.hpp"
+        "${DSRRL_CORE_GENERATED_LIGHTBANK}/generated_hemdir3_spc_material_donors_v1.hpp")
 
 add_custom_command(
     OUTPUT "${DSRRL_CORE_GENERATED_LIGHTBANK}/generated_upper_lower_hemenv_v1.hpp"
