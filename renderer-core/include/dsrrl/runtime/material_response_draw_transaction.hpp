@@ -87,12 +87,6 @@ private:
     ID3D11Buffer *realize_b12(
         const operators::material_response::decision &decision) noexcept;
 
-    bool build_mutation(
-        const operators::material_response::decision &decision,
-        const replacement_record &replacement,
-        ID3D11Buffer *b12,
-        draw_tx_mutation &mutation) const noexcept;
-
     void release_resources() noexcept;
 
     draw_state_transaction_runtime &transactions_;
