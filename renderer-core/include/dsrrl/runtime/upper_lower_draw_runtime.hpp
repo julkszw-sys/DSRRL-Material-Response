@@ -21,6 +21,10 @@ struct upper_lower_telemetry {
     std::uint64_t blend_seen = 0;
     std::uint64_t blend_upper = 0;
     std::uint64_t blend_lower = 0;
+    std::uint64_t d123_steady = 0;
+    std::uint64_t d123_blend_direction = 0;
+    std::uint64_t d123_blend_color = 0;
+    std::uint64_t d123_snapshot_publish = 0;
     std::uint64_t snapshot_publish = 0;
     std::uint64_t selector_seen = 0;
     std::uint64_t selector_match = 0;
@@ -28,7 +32,10 @@ struct upper_lower_telemetry {
     std::uint64_t tuple_mismatch = 0;
     std::uint64_t b13_create = 0;
     std::uint64_t b13_hit = 0;
+    std::uint64_t hemdir3_b13_create = 0;
+    std::uint64_t hemdir3_b13_hit = 0;
     std::uint64_t requests = 0;
+    std::uint64_t hemdir3_carrier_requests = 0;
     bool producer_hooks_armed = false;
     bool quarantined = false;
     bool restore_failed = false;
@@ -37,6 +44,14 @@ struct upper_lower_telemetry {
 struct prepared_upper_lower_draw {
     island_draw_adapter_request request{};
     ID3D11Buffer *b13 = nullptr;
+    bool ready = false;
+};
+
+struct prepared_hemdir3_carrier {
+    ID3D11Buffer *b13 = nullptr;
+    operators::lightbank::lightbank_snapshot_fingerprint fingerprint{};
+    bool d123_ready = false;
+    bool upper_lower_ready = false;
     bool ready = false;
 };
 
@@ -70,6 +85,14 @@ public:
 
     void release_prepared_draw(
         prepared_upper_lower_draw &prepared) noexcept;
+
+    bool prepare_hemdir3_carrier(
+        ID3D11DeviceContext *context,
+        std::uint32_t receiver_id,
+        prepared_hemdir3_carrier &prepared) noexcept;
+
+    void release_hemdir3_carrier(
+        prepared_hemdir3_carrier &prepared) noexcept;
 
     // Selection is one draw-scoped semantic event. Never carry it forward.
     void consume_draw_selection() noexcept;
