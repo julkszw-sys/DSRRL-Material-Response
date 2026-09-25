@@ -42,6 +42,12 @@ int main()
     raw[0]='X';
     assert(!dsrrl::runtime::flver_identity_observe_parse(model_key,raw.data(),raw.size()));
 
+    std::memcpy(raw.data(),magic,6);
+    const std::uint32_t oversized_length=16u*1024u*1024u;
+    std::memcpy(raw.data()+0x10,&oversized_length,4);
+    assert(!dsrrl::runtime::flver_identity_observe_parse(
+        model_key,raw.data(),static_cast<std::size_t>(0x40u)+oversized_length));
+
     const auto t=dsrrl::runtime::flver_identity_stats();
     assert(t.inserts>=1u);
     assert(t.hits>=2u);
