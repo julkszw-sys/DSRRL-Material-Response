@@ -32,12 +32,26 @@ def main() -> int:
 
     lines=[
       '#pragma once\n#include <array>\n#include <cstdint>\n#include <string_view>\n\n',
-      'namespace dsrrl::operators::material_response::generated {\n',
-      'struct word_patch { std::uint32_t word; std::uint32_t old_value; std::uint32_t new_value; };\n',
-      'struct v211_plan { std::uint32_t receiver_id; std::uint8_t stable_index; std::uint32_t stock_size; ',
-      'std::string_view original_sha256; std::array<std::uint32_t,2> cb_sites; std::uint32_t pow_site; ',
-      'std::string_view v29_sha256; std::array<word_patch,2> v210; std::string_view v210_sha256; ',
-      'word_patch v211; std::string_view v211_sha256; std::uint32_t replacement_size; };\n',
+      'namespace dsrrl::operators::material_response::generated {\n\n',
+      'struct word_patch {\n',
+      '    std::uint32_t word;\n',
+      '    std::uint32_t old_value;\n',
+      '    std::uint32_t new_value;\n',
+      '};\n\n',
+      'struct v211_plan {\n',
+      '    std::uint32_t receiver_id;\n',
+      '    std::uint8_t stable_index;\n',
+      '    std::uint32_t stock_size;\n',
+      '    std::string_view original_sha256;\n',
+      '    std::array<std::uint32_t,2> cb_sites;\n',
+      '    std::uint32_t pow_site;\n',
+      '    std::string_view v29_sha256;\n',
+      '    std::array<word_patch,2> v210;\n',
+      '    std::string_view v210_sha256;\n',
+      '    word_patch v211;\n',
+      '    std::string_view v211_sha256;\n',
+      '    std::uint32_t replacement_size;\n',
+      '};\n\n',
       'inline constexpr std::array<v211_plan,24> k_v211_plans = {{\n'
     ]
 
