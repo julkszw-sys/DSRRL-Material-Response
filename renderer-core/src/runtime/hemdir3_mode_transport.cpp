@@ -463,14 +463,14 @@ void selector_begin(
     g_tls.effective_mode = 0u;
     g_tls.ready = false;
 
-    const bool candidate =
-        incoming_mode == 2u;
-
-    if (candidate)
+    if (incoming_mode == 2u)
         ++g_incoming_mode2;
 
+    // 0x140295F50 may replace EDX with the global lighting override before
+    // dispatch. Therefore incoming mode is diagnostic only: every selector
+    // call must be observed, and HemDir3 authorization is based solely on the
+    // post-override effective EDX captured at the <5 dispatch cut.
     g_tls.capture_active =
-        candidate &&
         g_state.lt5_hook_armed &&
         g_state.selector_end_hook_armed &&
         !g_state.quarantined;
