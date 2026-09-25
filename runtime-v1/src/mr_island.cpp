@@ -294,27 +294,36 @@ bool ensure_shader_pair(device *d,const plan &p,std::span<const std::uint8_t> st
     std::lock_guard lock(g_device_mutex);
     if(g_device.device!=native) return false;
     const auto i=static_cast<std::size_t>(p.index);
-    if(g_device.diffuse[i] && g_device.full[i]) return true;
+    if(g_device.diffuse[i] && g_device.full[i] &&
+       g_device.stock_diffuse_full[i]) return true;
 
     const auto diffuse=transform(stock,p,variant::diffuse_v29);
     const auto full=transform(stock,p,variant::full_v211);
-    if(!diffuse.ok || !full.ok){
+    const auto stock_diffuse_full=
+        full.ok ? transform_stock_diffuse_material(full.code,p) : transform_result{};
+    if(!diffuse.ok || !full.ok || !stock_diffuse_full.ok){
         ++g_shader_pair_fail;
         return false;
     }
 
-    ID3D11PixelShader *ps_diffuse=nullptr,*ps_full=nullptr;
+    ID3D11PixelShader *ps_diffuse=nullptr,*ps_full=nullptr,*ps_stock_diffuse_full=nullptr;
     if(!create_shader(native,diffuse,ps_diffuse)){
         ++g_shader_pair_fail; return false;
     }
-    if(!create_shader(native,full,ps_full)){
-        ps_diffuse->Release(); ++g_shader_pair_fail; return false;
+    if(!create_shader(native,full,ps_full) ||
+       !create_shader(native,stock_diffuse_full,ps_stock_diffuse_full)){
+        if(ps_diffuse) ps_diffuse->Release();
+        if(ps_full) ps_full->Release();
+        if(ps_stock_diffuse_full) ps_stock_diffuse_full->Release();
+        ++g_shader_pair_fail; return false;
     }
 
     if(g_device.diffuse[i]) g_device.diffuse[i]->Release();
     if(g_device.full[i]) g_device.full[i]->Release();
+    if(g_device.stock_diffuse_full[i]) g_device.stock_diffuse_full[i]->Release();
     g_device.diffuse[i]=ps_diffuse;
     g_device.full[i]=ps_full;
+    g_device.stock_diffuse_full[i]=ps_stock_diffuse_full;
     ++g_shader_pair_pass;
 
     // U/L is compositional over the exact V29/V2.11 variants. The historical
@@ -326,31 +335,44 @@ bool ensure_shader_pair(device *d,const plan &p,std::span<const std::uint8_t> st
     if(diffuse_sha==ul_expected.v29){
         const auto diffuse_ul=transform_upper_lower(diffuse.code,ul_expected.v29_ul);
         const auto full_ul=transform_upper_lower(full.code);
+        const auto stock_diffuse_full_ul=
+            transform_upper_lower(stock_diffuse_full.code);
         ID3D11PixelShader *ps_diffuse_ul=nullptr,*ps_full_ul=nullptr;
+        ID3D11PixelShader *ps_stock_diffuse_full_ul=nullptr;
         if(create_shader(native,diffuse_ul,ps_diffuse_ul) &&
-           create_shader(native,full_ul,ps_full_ul)){
+           create_shader(native,full_ul,ps_full_ul) &&
+           create_shader(native,stock_diffuse_full_ul,ps_stock_diffuse_full_ul)){
             if(g_device.diffuse_ul[i]) g_device.diffuse_ul[i]->Release();
             if(g_device.full_ul[i]) g_device.full_ul[i]->Release();
+            if(g_device.stock_diffuse_full_ul[i]) g_device.stock_diffuse_full_ul[i]->Release();
             g_device.diffuse_ul[i]=ps_diffuse_ul;
             g_device.full_ul[i]=ps_full_ul;
+            g_device.stock_diffuse_full_ul[i]=ps_stock_diffuse_full_ul;
             ++g_shader_ul_pass;
         }else{
             if(ps_diffuse_ul) ps_diffuse_ul->Release();
             if(ps_full_ul) ps_full_ul->Release();
+            if(ps_stock_diffuse_full_ul) ps_stock_diffuse_full_ul->Release();
             ++g_shader_ul_fail;
         }
 
-        // The combined U/L + SpecRGB variant is built from the already exact
-        // U/L V2.11 payload so both operator islands share one pixel shader.
-        if(full_ul.ok){
+        // The combined U/L + SpecRGB variants are built from their already
+        // isolated U/L payloads so SpecRGB never decides the diffuse domain.
+        if(full_ul.ok && stock_diffuse_full_ul.ok){
             const auto ul_spec=transform_spec_rgb(full_ul.code);
-            ID3D11PixelShader *ps_ul_spec=nullptr;
-            if(create_shader(native,ul_spec,ps_ul_spec)){
+            const auto stock_ul_spec=transform_spec_rgb(stock_diffuse_full_ul.code);
+            ID3D11PixelShader *ps_ul_spec=nullptr,*ps_stock_ul_spec=nullptr;
+            if(create_shader(native,ul_spec,ps_ul_spec) &&
+               create_shader(native,stock_ul_spec,ps_stock_ul_spec)){
                 if(g_device.full_ul_spec[i]) g_device.full_ul_spec[i]->Release();
+                if(g_device.stock_diffuse_full_ul_spec[i])
+                    g_device.stock_diffuse_full_ul_spec[i]->Release();
                 g_device.full_ul_spec[i]=ps_ul_spec;
+                g_device.stock_diffuse_full_ul_spec[i]=ps_stock_ul_spec;
                 ++g_shader_ul_spec_pass;
             }else{
                 if(ps_ul_spec) ps_ul_spec->Release();
+                if(ps_stock_ul_spec) ps_stock_ul_spec->Release();
                 ++g_shader_ul_spec_fail;
             }
         }else{
@@ -362,13 +384,19 @@ bool ensure_shader_pair(device *d,const plan &p,std::span<const std::uint8_t> st
     }
 
     const auto spec=transform_spec_rgb(full.code);
-    ID3D11PixelShader *ps_spec=nullptr;
-    if(create_shader(native,spec,ps_spec)){
+    const auto stock_diffuse_spec=transform_spec_rgb(stock_diffuse_full.code);
+    ID3D11PixelShader *ps_spec=nullptr,*ps_stock_diffuse_spec=nullptr;
+    if(create_shader(native,spec,ps_spec) &&
+       create_shader(native,stock_diffuse_spec,ps_stock_diffuse_spec)){
         if(g_device.full_spec[i]) g_device.full_spec[i]->Release();
+        if(g_device.stock_diffuse_full_spec[i])
+            g_device.stock_diffuse_full_spec[i]->Release();
         g_device.full_spec[i]=ps_spec;
+        g_device.stock_diffuse_full_spec[i]=ps_stock_diffuse_spec;
         ++g_shader_spec_pass;
     }else{
         if(ps_spec) ps_spec->Release();
+        if(ps_stock_diffuse_spec) ps_stock_diffuse_spec->Release();
         ++g_shader_spec_fail;
     }
 
