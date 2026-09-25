@@ -7,6 +7,8 @@ source-complete, observed semantic presence may still be emitted as USE evidence
 but every absent bit remains UNKNOWN and --require-source-complete refuses output.
 Unknown non-empty texture semantics are also rejected: silently dropping one from
 positive_mask would turn observed evidence into an unrepresented runtime carrier.
+The TSV and error log must match the hashes recorded by the scan summary so files
+from different owner runs can never be combined into false provenance/completeness.
 """
 from __future__ import annotations
 
@@ -62,6 +64,29 @@ def load_summary(path: Path) -> dict:
     if obj.get("game") != "PTDE":
         raise SystemExit("summary is not PTDE")
     return obj
+
+
+def require_scan_member(summary: dict, path: Path, actual_sha: str, output_key: str) -> None:
+    outputs = summary.get("outputs")
+    hashes = summary.get("sha256")
+    if not isinstance(outputs, dict) or not isinstance(hashes, dict):
+        raise SystemExit("scan summary lacks output provenance")
+    recorded_name = outputs.get(output_key)
+    if not isinstance(recorded_name, str) or not recorded_name:
+        raise SystemExit(f"scan summary lacks output name for {output_key}")
+    expected_sha = hashes.get(recorded_name)
+    if not isinstance(expected_sha, str) or len(expected_sha) != 64:
+        raise SystemExit(f"scan summary lacks SHA-256 for {recorded_name}")
+    if path.name != recorded_name:
+        raise SystemExit(
+            f"scan provenance filename mismatch for {output_key}: "
+            f"{path.name!r} != {recorded_name!r}"
+        )
+    if actual_sha.lower() != expected_sha.lower():
+        raise SystemExit(
+            f"scan provenance SHA mismatch for {recorded_name}: "
+            f"{actual_sha.lower()} != {expected_sha.lower()}"
+        )
 
 
 def load_error_count(path: Path) -> int:
@@ -218,6 +243,9 @@ def main() -> int:
         raise SystemExit(f"input SHA mismatch: {tsv_sha}")
 
     summary = load_summary(args.scan_summary)
+    errors_sha = sha256_file(args.scan_errors)
+    require_scan_member(summary, args.input_tsv, tsv_sha, "canonical_tsv")
+    require_scan_member(summary, args.scan_errors, errors_sha, "errors_jsonl")
     error_count = load_error_count(args.scan_errors)
     unresolved = int(summary.get("unresolved_rows", 0))
     source_complete = error_count == 0 and unresolved == 0
@@ -228,7 +256,6 @@ def main() -> int:
 
     records, slot_count = load_records(args.input_tsv)
     summary_sha = sha256_file(args.scan_summary)
-    errors_sha = sha256_file(args.scan_errors)
     header = render_header(
         records, tsv_sha, summary_sha, errors_sha, error_count,
         source_complete, args.owner_zip_sha256.lower(),
