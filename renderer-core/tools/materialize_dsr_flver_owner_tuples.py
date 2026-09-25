@@ -186,28 +186,70 @@ def _digest_initializer(hex_digest: str) -> str:
 def render_header(rows: Iterable[dict], summary: dict) -> str:
     rows = list(rows)
     complete = bool(summary.get("source_complete"))
+
+    # Material slots are contiguous 0..N-1 inside every FLVER. Store one full
+    # SHA-256 per owner FLVER plus one MTD hash per slot instead of repeating
+    # the 32-byte digest in all 19,985 records.
+    grouped: list[tuple[str, list[dict]]] = []
+    current_sha = None
+    current_rows: list[dict] = []
+    for row in rows:
+        sha = row["flver_sha256"]
+        if sha != current_sha:
+            if current_rows:
+                grouped.append((current_sha, current_rows))
+            current_sha = sha
+            current_rows = []
+        current_rows.append(row)
+    if current_rows:
+        grouped.append((current_sha, current_rows))
+
+    flattened_hashes: list[str] = []
+    groups: list[tuple[str, int, int]] = []
+    for sha, owner_rows in grouped:
+        slots = [int(r["material_slot"]) for r in owner_rows]
+        if slots != list(range(len(slots))):
+            raise ValueError(
+                f"non-contiguous material slots for FLVER {sha}: "
+                f"{slots[:16]}"
+            )
+        first = len(flattened_hashes)
+        flattened_hashes.extend(r["semantic_name_hash"] for r in owner_rows)
+        groups.append((sha, first, len(owner_rows)))
+
+    if len(flattened_hashes) != len(rows):
+        raise ValueError("owner group flattening changed tuple count")
+
     out = [
         "#pragma once\n",
         "#include <array>\n#include <cstddef>\n#include <cstdint>\n\n",
         "namespace dsrrl::operators::material_response::generated {\n",
-        "struct flver_owner_tuple_record {\n",
+        "struct flver_owner_group_record {\n",
         "    std::array<std::uint8_t,32> flver_sha256;\n",
-        "    std::uint32_t material_slot;\n",
-        "    std::uint64_t semantic_name_hash;\n",
+        "    std::uint32_t first_material;\n",
+        "    std::uint32_t material_count;\n",
         "};\n",
         f'inline constexpr char k_dsr_flver_owner_tuple_source_sha256[]="{summary["source_zip_sha256"]}";\n',
         f"inline constexpr bool k_dsr_flver_owner_tuple_source_complete={'true' if complete else 'false'};\n",
+        f"inline constexpr std::size_t k_dsr_flver_owner_group_count={len(groups)}u;\n",
         f"inline constexpr std::size_t k_dsr_flver_owner_tuple_count={len(rows)}u;\n",
-        "inline constexpr std::array<flver_owner_tuple_record,k_dsr_flver_owner_tuple_count> "
-        "k_dsr_flver_owner_tuples = {{\n",
+        "inline constexpr std::array<flver_owner_group_record,k_dsr_flver_owner_group_count> "
+        "k_dsr_flver_owner_groups = {{\n",
     ]
-    for row in rows:
+    for sha, first, count in groups:
         out.append(
             "    {"
-            + _digest_initializer(row["flver_sha256"])
-            + f',{row["material_slot"]}u,{row["semantic_name_hash"]}ull'
+            + _digest_initializer(sha)
+            + f",{first}u,{count}u"
             + "},\n"
         )
+    out.extend([
+        "}};\n",
+        "inline constexpr std::array<std::uint64_t,k_dsr_flver_owner_tuple_count> "
+        "k_dsr_flver_owner_mtd_hashes = {{\n",
+    ])
+    for value in flattened_hashes:
+        out.append(f"    {value}ull,\n")
     out.extend([
         "}};\n",
         "constexpr int compare_digest(const std::array<std::uint8_t,32>&a,"
@@ -216,18 +258,17 @@ def render_header(rows: Iterable[dict], summary: dict) -> str:
         "constexpr bool dsr_flver_owner_tuple_authenticated("
         "const std::array<std::uint8_t,32>&sha,std::uint32_t slot,std::uint64_t mtd) noexcept{"
         "if(!k_dsr_flver_owner_tuple_source_complete||mtd==0u)return false;"
-        "std::size_t lo=0,hi=k_dsr_flver_owner_tuples.size();"
-        "while(lo<hi){const auto mid=lo+(hi-lo)/2u;const auto&r=k_dsr_flver_owner_tuples[mid];"
+        "std::size_t lo=0,hi=k_dsr_flver_owner_groups.size();"
+        "while(lo<hi){const auto mid=lo+(hi-lo)/2u;const auto&r=k_dsr_flver_owner_groups[mid];"
         "const int dc=compare_digest(r.flver_sha256,sha);"
-        "if(dc<0||(dc==0&&(r.material_slot<slot||(r.material_slot==slot&&r.semantic_name_hash<mtd))))lo=mid+1u;"
-        "else hi=mid;}"
-        "if(lo>=k_dsr_flver_owner_tuples.size())return false;"
-        "const auto&r=k_dsr_flver_owner_tuples[lo];"
-        "return compare_digest(r.flver_sha256,sha)==0&&r.material_slot==slot&&r.semantic_name_hash==mtd;}\n",
+        "if(dc<0)lo=mid+1u;else hi=mid;}"
+        "if(lo>=k_dsr_flver_owner_groups.size())return false;"
+        "const auto&r=k_dsr_flver_owner_groups[lo];"
+        "if(compare_digest(r.flver_sha256,sha)!=0||slot>=r.material_count)return false;"
+        "return k_dsr_flver_owner_mtd_hashes[r.first_material+slot]==mtd;}\n",
         "} // namespace dsrrl::operators::material_response::generated\n",
     ])
     return "".join(out)
-
 
 def main() -> int:
     ap = argparse.ArgumentParser()
