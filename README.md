@@ -1,19 +1,22 @@
-# DSRRL Material Response
+# DSRRL Core+Islands
 
 Renderer/material bridge source and reproducibility material for **Dark Souls Remastered – Restored Lighting**.
 
 DSR remains the host renderer. Bridges are scoped to verified renderer/material/resource routes and unsupported or unidentified routes fail open to stock DSR.
 
-## Integrated core and islands
+## Active development line
 
-`runtime-v1/` builds the source-complete single-addon Renderer Core runtime.
-See [runtime build and island status](runtime-v1/README.md).
-This runtime candidate is distinct from the historical public release below;
-construction success does not establish in-game liveness or pixel equivalence.
+**DSRRL Core+Islands 2.0.0-dev**
 
-## Current public release
+`main` is the canonical active development/integration line for Renderer Core + operator islands and the eventual single `.addon64`. The machine-readable version authority is `renderer-core/integrated/VERSION.json`.
 
-**Material Response 1.45**
+Core+Islands has its own version namespace. It must not be called Material Response 1.45, and new development must not extend the 1.45 monolith version number.
+
+Construction, compatibility, runtime liveness, bridge activation and PTDE-visible pixel behavior are separate statuses.
+
+## Frozen legacy monolith
+
+**Material Response Monolith 1.45 — FROZEN LEGACY**
 
 `DSRRL_Material_Response_1.45.addon64`
 
@@ -27,14 +30,14 @@ Exact Nexus archive:
 - SHA-256: `2439d24644a0dc5bef6e29b1d980bab5b421a08c6bc71fca93d4c88859ad0893`
 - size: `244,154 bytes`
 
-The release intentionally ships with **PTDE EnvSpec/PackedGI replacement disabled**. The final release delta adds terminal RGB saturation to embedded DXBC 33/34/35; alpha is unchanged.
+1.45 is retained for historical reproduction, compatibility comparison and provenance only. It is **not the active development line** and must not be reported as the current Core+Islands version. The historical release intentionally ships with **PTDE EnvSpec/PackedGI replacement disabled**.
 
 See `RELEASE_HASHES.md` and `BUILD.md`.
 
 ## Repository lanes
 
-- `main` — canonical release-facing metadata, reproducibility docs and stable review material.
-- `develop` — integration lane for work that is not yet a release.
+- `main` — canonical **Core+Islands 2.0.0-dev** active development/integration line.
+- `develop` — optional staging lane; it is not authoritative over a newer accepted `main`.
 - `nexus-review/material-response-1.45-source` — exact Nexus 1.45 binary-review/reproduction lane.
 - `recovery/material-response-1.45-source-chain-2026-09-23` — canonical historical source-recovery lane for 1.45.
 - `dev/material-response-expanded-a3-monolith` — source-completeness experimental lane; not the shipping 1.45 source.
