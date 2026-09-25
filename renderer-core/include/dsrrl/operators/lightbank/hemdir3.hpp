@@ -11,18 +11,36 @@ struct hemdir3_lobe { hemdir3_vec3 direction{}; hemdir3_vec3 color{}; };
 enum class hemdir3_math_result : std::uint8_t { exact=0, fail_open_nonfinite_input };
 struct hemdir3_sample { hemdir3_math_result result=hemdir3_math_result::fail_open_nonfinite_input; hemdir3_vec3 hemisphere{}; std::array<float,3> weights{}; hemdir3_vec3 joined_source{}; };
 
-// Exact PTDE local diffuse source join. Spc receivers additionally own a
-// directional legacy-specular lobe, gated separately by b12 c101/c102.
 hemdir3_sample evaluate_hemdir3_source_join(const hemdir3_vec3 &hemisphere,const hemdir3_vec3 &n_final,const std::array<hemdir3_lobe,3> &lobes) noexcept;
 
 enum class hemdir3_receiver_class : std::uint8_t { no_spc=0, spc };
+
+// Mode value alone is not authority. Direct DSR RE closes the ordinary carrier
+// as source+0x104 -> drawDesc+0x18 -> selector wrapper, while the existing
+// selector-entry census does not prove a retail effective mode2 producer.
+// Activation therefore requires a draw-local snapshot tied to the exact owner
+// and current LightBank A/B/beta tuple. A synthetic/debug override is forbidden.
+enum class hemdir3_semantic_provenance : std::uint8_t {
+ unknown=0,
+ ordinary_draw_descriptor,
+ independently_verified_special_route,
+ synthetic_debug_override
+};
+struct hemdir3_semantic_snapshot {
+ std::uint32_t mode=0;
+ hemdir3_semantic_provenance provenance=hemdir3_semantic_provenance::unknown;
+ bool immutable_draw_local=false;
+ bool exact_owner_context=false;
+ bool lightbank_tuple_fresh=false;
+ bool effective_mode_observation_verified=false;
+};
+
 enum class hemdir3_runtime_reason : std::uint8_t {
- ready=0,core_gate_not_active,semantic_mode_not_hemdir3,upper_lower_source_not_ready,d123_source_not_ready,b13_carrier_not_ready,receiver_not_verified,material_specular_b12_not_ready,directional_specular_continuation_not_ready,host_envdiffuse_not_suppressed,material_continuation_not_ready,downstream_material_domain_not_ready,downstream_postfog_not_ready,atmosphere_route_not_verified,draw_transaction_not_ready
+ ready=0,core_gate_not_active,semantic_snapshot_not_proven,semantic_mode_not_hemdir3,upper_lower_source_not_ready,d123_source_not_ready,b13_carrier_not_ready,receiver_not_verified,material_specular_b12_not_ready,directional_specular_continuation_not_ready,host_envdiffuse_not_suppressed,material_continuation_not_ready,downstream_material_domain_not_ready,downstream_postfog_not_ready,atmosphere_route_not_verified,draw_transaction_not_ready
 };
 struct hemdir3_runtime_context {
- std::uint32_t semantic_mode=0; bool upper_lower_source_ready=false; bool d123_source_ready=false; bool b13_carrier_ready=false; bool receiver_verified=false;
- // Existing certified readiness call sites are no-Spc unless explicitly
- // classified Spc. Exact receiver verification remains mandatory before this.
+ hemdir3_semantic_snapshot semantic{};
+ bool upper_lower_source_ready=false; bool d123_source_ready=false; bool b13_carrier_ready=false; bool receiver_verified=false;
  hemdir3_receiver_class receiver_class=hemdir3_receiver_class::no_spc;
  bool material_specular_b12_ready=false; bool directional_specular_continuation_ready=false;
  bool host_envdiffuse_source_suppressed=false; bool material_continuation_ready=false; bool downstream_material_domain_ready=false; bool downstream_postfog_ready=false; bool atmosphere_route_verified=false; bool draw_transaction_ready=false;
