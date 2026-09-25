@@ -35,7 +35,7 @@ dsrrl::operators::material_response::material_response_island
 
 std::atomic<std::uint64_t> g_present_count{0};
 std::atomic<std::uint64_t> g_mr_draw_eval{0};
-std::atomic<std::uint64_t> g_mr_active{0};
+std::atomic<std::uint64_t> g_mr_would_activate{0};
 std::atomic<std::uint64_t> g_mr_fail_open{0};
 std::atomic_bool g_mr_ready{false};
 std::atomic<std::uint64_t> g_draw_events{0};
@@ -118,7 +118,7 @@ void observe_draw_identity(
             material);
 
     if (decision.active)
-        ++g_mr_active;
+        ++g_mr_would_activate;
     else
         ++g_mr_fail_open;
 }
@@ -156,7 +156,7 @@ void log_state(const char *tag) noexcept
         "flver_hook=%u/%u/%u prov=%u owner_enrich=%u restore_fail=%u "
         "inserts=%llu lookups=%llu hits=%llu misses=%llu erases=%llu invalid=%llu "
         "owner_sel=%llu owner_enriched=%llu owner_auth=%llu owner_fo=%llu "
-        "mr_ready=%u mr_eval=%llu mr_active=%llu mr_fo=%llu "
+        "mr_ready=%u mr_eval=%llu mr_would_activate=%llu mr_fo=%llu "
         "draw=%llu draw_rx=%llu draw_owner=%llu draw_join=%llu owner_only=%llu rx_only=%llu",
         tag,
         static_cast<unsigned long long>(t.create_events),
@@ -188,7 +188,7 @@ void log_state(const char *tag) noexcept
         static_cast<unsigned long long>(m.fail_open),
         g_mr_ready.load() ? 1u : 0u,
         static_cast<unsigned long long>(g_mr_draw_eval.load()),
-        static_cast<unsigned long long>(g_mr_active.load()),
+        static_cast<unsigned long long>(g_mr_would_activate.load()),
         static_cast<unsigned long long>(g_mr_fail_open.load()),
         static_cast<unsigned long long>(g_draw_events.load()),
         static_cast<unsigned long long>(g_draw_receiver_hits.load()),
@@ -387,7 +387,7 @@ bool AddonInit(
     g_a1_bridge.reset();
     g_present_count.store(0);
     g_mr_draw_eval.store(0);
-    g_mr_active.store(0);
+    g_mr_would_activate.store(0);
     g_mr_fail_open.store(0);
     g_draw_events.store(0);
     g_draw_receiver_hits.store(0);
@@ -435,7 +435,7 @@ bool AddonInit(
         reshade::log::level::info,
         "[DSRRL CORE+ISLANDS " DSRRL_CORE_ISLANDS_VERSION
         "] READY: native Renderer Core A1 islands plus pixel-inert exact "
-        "receiver/owner Material Response identity probe; frozen legacy "
+        "receiver/owner Material Response eligibility probe (NO visible MR state mutation); frozen legacy "
         "monolith is not linked.");
 
     return true;
