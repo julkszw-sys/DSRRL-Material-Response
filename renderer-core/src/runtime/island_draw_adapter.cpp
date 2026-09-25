@@ -48,10 +48,19 @@ island_draw_adapter_result build_island_draw_mutation(
         !request.material_verified)
         return island_draw_adapter_result::material_gate_missing;
 
+    const auto primary_bit =
+        core::operator_bit(request.primary);
+
     if ((request.additional_owners &
          ~core::all_operator_bits) != 0u ||
         (request.additional_owners &
-         core::operator_bit(request.primary)) != 0u)
+         primary_bit) != 0u ||
+        (request.additional_shader_owners &
+         ~request.additional_owners) != 0u ||
+        (request.additional_resource_owners &
+         ~request.additional_owners) != 0u ||
+        (request.additional_carrier_owners &
+         ~request.additional_owners) != 0u)
         return island_draw_adapter_result::invalid_additional_owner;
 
     if (request.constant_buffer_count > draw_tx_max_cb ||
@@ -73,8 +82,32 @@ island_draw_adapter_result build_island_draw_mutation(
         return island_draw_adapter_result::required_mutation_missing;
 
     mutation.owners =
-        core::operator_bit(request.primary) |
+        primary_bit |
         request.additional_owners;
+
+    mutation.shader_owners =
+        (request.replace_pixel_shader
+             ? primary_bit
+             : 0u) |
+        request.additional_shader_owners;
+
+    mutation.resource_owners =
+        ((request.srv_count != 0u ||
+          request.sampler_count != 0u)
+             ? primary_bit
+             : 0u) |
+        request.additional_resource_owners;
+
+    const auto primary_carrier =
+        core::draw_policy_carrier_write_mask(
+            request.primary);
+
+    mutation.carrier_owners =
+        ((primary_carrier != 0u &&
+          request.constant_buffer_count != 0u)
+             ? primary_bit
+             : 0u) |
+        request.additional_carrier_owners;
 
     mutation.pixel_shader =
         request.pixel_shader;
@@ -193,6 +226,12 @@ island_draw_batch_result append_island_draw_request(
         return merged;
 
     batch.mutation.owners |= one.owners;
+    batch.mutation.shader_owners |=
+        one.shader_owners;
+    batch.mutation.resource_owners |=
+        one.resource_owners;
+    batch.mutation.carrier_owners |=
+        one.carrier_owners;
     ++batch.island_count;
     return island_draw_batch_result::ready;
 }
