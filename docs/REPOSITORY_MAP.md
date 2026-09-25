@@ -5,13 +5,13 @@ This file defines which branches are authoritative for which job. It is intentio
 ## Canonical lanes
 
 **`main`**  
-Release-facing source of truth for the current public identity, stable documentation and repository policy. Do not use it as a scratch branch.
+Canonical active development/integration line for **DSRRL Core+Islands 2.0.0-dev**. Renderer Core + operator-island work belongs here once evidence and source completeness support it. Material Response 1.45 is not the version identity of `main`.
 
 **`develop`**  
-Integration lane. Features may be combined here only after their source and provenance are committed.
+Optional staging lane. It may hold preparatory integration work, but it is not authoritative over a newer accepted `main`.
 
 **`nexus-review/material-response-1.45-source`**  
-Exact Nexus 1.45 binary reproduction/review lane. It reproduces the shipping file from the integrated historical basis and contains the public terminal-SAT patch/verifier.
+Exact frozen Nexus 1.45 monolith reproduction/review lane. It is historical/compatibility provenance and is not an active development lane.
 
 **`recovery/material-response-1.45-source-chain-2026-09-23`**  
 Canonical historical source-recovery lane. Recovered originals are immutable provenance objects. This is the only 1.45 recovery branch that should receive new recovery work.
