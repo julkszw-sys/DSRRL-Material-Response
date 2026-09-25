@@ -46,7 +46,22 @@ template<std::size_t N> bool prep(hook &h,std::uintptr_t r,const std::array<std:
  if(FlushInstructionCache(GetCurrentProcess(),tr,N+14)==FALSE){VirtualFree(tr,0,MEM_RELEASE);return false;}
  h.target=t;h.trampoline=tr;h.detour=d;h.stolen=N;std::copy(e.begin(),e.end(),h.original.begin());return true;}
 bool arm(hook&h) noexcept {std::array<std::uint8_t,32>b{};b.fill(0x90);b[0]=0xff;b[1]=0x25;std::uint32_t z=0;std::memcpy(b.data()+2,&z,4);const auto d=reinterpret_cast<std::uint64_t>(h.detour);std::memcpy(b.data()+6,&d,8);h.patched=true;return write(h.target,b.data(),h.stolen);}
-void restore(hook&h) noexcept {if(h.patched){write(h.target,h.original.data(),h.stolen);h.patched=false;}if(h.trampoline)VirtualFree(h.trampoline,0,MEM_RELEASE);h={};}
+bool restore(hook&h) noexcept {
+ if(h.patched){
+  if(!h.target||h.stolen==0u||!write(h.target,h.original.data(),h.stolen))
+   return false;
+  // Verify the actual instruction bytes before releasing the trampoline/state.
+  if(std::memcmp(h.target,h.original.data(),h.stolen)!=0)
+   return false;
+  h.patched=false;
+ }
+ if(h.trampoline){
+  if(VirtualFree(h.trampoline,0,MEM_RELEASE)==FALSE)
+   return false;
+ }
+ h={};
+ return true;
+}
 std::wstring path(){std::wstring p(32768,L'\0');const DWORD n=GetModuleFileNameW(nullptr,p.data(),static_cast<DWORD>(p.size()));if(n==0||n>=p.size())return{};p.resize(n);return p;}
 bool exe_ok(){
  const auto p=path();if(p.empty())return false;BCRYPT_ALG_HANDLE a=nullptr;BCRYPT_HASH_HANDLE h=nullptr;DWORD ol=0,hl=0,cb=0;std::array<std::uint8_t,32>d{};bool ok=false;
@@ -76,7 +91,29 @@ bool install() noexcept {if(g_p.patched||g_s.patched||g_d.patched)return false;g
  if(!prep(g_d,k_destroy,k_destroy_b,reinterpret_cast<void*>(&destroy_entry)))goto fail;g_do=reinterpret_cast<destructor_fn>(g_d.trampoline);
  if(!prep(g_s,k_selector,k_selector_b,reinterpret_cast<void*>(&dsrrl_flver_selector_hook_entry)))goto fail;g_dsrrl_flver_selector_trampoline=g_s.trampoline;
  if(!arm(g_p)||!arm(g_d)||!arm(g_s))goto fail;g_state.parser_armed=true;g_state.destructor_armed=true;g_state.selector_armed=true;return true;
-fail:uninstall();return false;}
-void uninstall() noexcept {restore(g_s);restore(g_d);restore(g_p);g_dsrrl_flver_selector_trampoline=nullptr;g_po=nullptr;g_do=nullptr;flver_identity_reset();g_state={};}
+fail:
+ uninstall();
+ return false;
+}
+void uninstall() noexcept {
+ const bool selector_ok=restore(g_s);
+ const bool destructor_ok=restore(g_d);
+ const bool parser_ok=restore(g_p);
+ if(!(selector_ok&&destructor_ok&&parser_ok)){
+  // Preserve failed hook state/trampolines for diagnostics and do not claim a
+  // clean teardown. A failed restore is construction/runtime safety evidence,
+  // never a reason to free state and pretend stock code was restored.
+  g_state.restore_failed=true;
+  g_state.selector_armed=g_s.patched;
+  g_state.destructor_armed=g_d.patched;
+  g_state.parser_armed=g_p.patched;
+  return;
+ }
+ g_dsrrl_flver_selector_trampoline=nullptr;
+ g_po=nullptr;
+ g_do=nullptr;
+ flver_identity_reset();
+ g_state={};
+}
 hook_status status() noexcept{return g_state;}
 }
