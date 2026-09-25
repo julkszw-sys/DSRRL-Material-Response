@@ -73,6 +73,9 @@ public:
     void release_prepared_draw(
         prepared_material_response_draw &prepared) noexcept;
 
+    void account_dispatch_result(
+        draw_tx_result result) noexcept;
+
     bool replay_draw(
         reshade::api::command_list *cmd_list,
         const operators::material_response::decision &decision,
