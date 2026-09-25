@@ -8,24 +8,35 @@ float dot(const faceeye_vec3&a,const faceeye_vec3&b) noexcept{return a.x*b.x+a.y
 float sat(float x) noexcept{return std::max(0.0f,std::min(1.0f,x));}
 bool is_csd(faceeye_receiver_variant v) noexcept{return v==faceeye_receiver_variant::csd_no_point||v==faceeye_receiver_variant::csd_pnts||v==faceeye_receiver_variant::csd_pntss||v==faceeye_receiver_variant::csd_pntssss;}
 bool stock_regular_sampler_family(faceeye_receiver_variant v) noexcept{return v==faceeye_receiver_variant::sdw_pntss||v==faceeye_receiver_variant::csd_pntss||v==faceeye_receiver_variant::sdw_pntssss||v==faceeye_receiver_variant::csd_pntssss;}
-bool homology_complete(const faceeye_auxiliary_snapshot_descriptor&s,bool require_csd) noexcept{
- // The operator consumes c121/c122/c175 in both Sdw and Csd. Csd additionally
- // consumes selector c123, c140..c155 and c157..c160. c174/c182 are carried by
- // the producer descriptor but are not part of the closed FaceEye pixel chain,
- // so they are deliberately not activation requirements here.
- constexpr std::array<std::size_t,3> common={{0,1,24}};
- for(const auto i:common)if(!s.value_homology_verified[i])return false;
- if(require_csd){for(std::size_t i=2;i<=22;++i)if(!s.value_homology_verified[i])return false;}
+bool lane_ready(const faceeye_auxiliary_snapshot_descriptor&s,std::size_t i) noexcept{return s.register_present[i]&&s.producer_offsets[i]==k_faceeye_aux_dirlight_offsets[i]&&s.value_homology_verified[i];}
+bool consumed_carrier_complete(const faceeye_auxiliary_snapshot_descriptor&s,bool require_csd) noexcept{
+ // Direct PTDE consumer RE gives the narrow carrier. Both Sdw and Csd consume
+ // c121/c122/c175. Sdw additionally consumes the single atlas rectangle c157.
+ // Csd consumes selector c123, matrices c140..c155 and all four atlas regions
+ // c157..c160. c174/c182 are producer-transport lanes but are outside the
+ // closed FaceEye pixel chain and therefore must not widen activation.
+ if(!s.immutable_draw_local)return false;
+ constexpr std::array<std::size_t,4> common_sdw={{0,1,19,24}};
+ for(const auto i:common_sdw)if(!lane_ready(s,i))return false;
+ if(require_csd){for(std::size_t i=2;i<=22;++i)if(!lane_ready(s,i))return false;}
  return true;
 }
 }
-bool validate_faceeye_auxiliary_snapshot(const faceeye_auxiliary_snapshot_descriptor&s,bool require_csd) noexcept{if(!s.immutable_draw_local)return false;for(std::size_t i=0;i<k_faceeye_aux_ps_registers.size();++i)if(!s.register_present[i]||s.producer_offsets[i]!=k_faceeye_aux_dirlight_offsets[i])return false;return homology_complete(s,require_csd);}
+bool validate_faceeye_auxiliary_snapshot(const faceeye_auxiliary_snapshot_descriptor&s,bool require_csd) noexcept{return consumed_carrier_complete(s,require_csd);}
 float decode_faceeye_packed_depth(const faceeye_vec3&s) noexcept{if(!finite(s))return 0.0f;return s.x*(255.0f/256.0f)+s.y*(255.0f/65536.0f)+s.z*(255.0f/16777216.0f);}
 faceeye_shadow_sample evaluate_faceeye_shadow_response(const faceeye_shadow_input&i) noexcept{faceeye_shadow_sample o;if(!std::isfinite(i.pcf16)||!finite(i.normal)||!finite(i.c175_direction)||!std::isfinite(i.c121_bias)||!std::isfinite(i.c121_normal_scale)||!std::isfinite(i.c121_fade_start)||!std::isfinite(i.c121_fade_scale)||!std::isfinite(i.view_length)||!finite(i.c122_shadow_rgb))return o;o.normal_term=sat((dot(i.c175_direction,i.normal)+i.c121_bias)*i.c121_normal_scale);o.shadow_s=sat(i.pcf16+o.normal_term);o.fade=sat((i.c121_fade_start-i.view_length)*i.c121_fade_scale);const float k=o.shadow_s*o.fade;o.shadow_rgb={1.0f-k*i.c122_shadow_rgb.x,1.0f-k*i.c122_shadow_rgb.y,1.0f-k*i.c122_shadow_rgb.z};o.result=faceeye_shadow_math_result::exact;return o;}
 faceeye_runtime_plan evaluate_faceeye_runtime_readiness(const core::feature_registry&f,const core::activation_context&a,const faceeye_runtime_context&c) noexcept{
  faceeye_runtime_plan o;const auto g=core::evaluate_operator_activation(f,core::operator_id::faceeye_shadow_legacy,a);if(g.state!=core::island_state::active)return o;
  if(!c.receiver_verified){o.reason=faceeye_runtime_reason::receiver_not_verified;return o;}if(c.variant==faceeye_receiver_variant::unsupported){o.reason=faceeye_runtime_reason::unsupported_receiver;return o;}if(!c.runtime_t7_identity_verified){o.reason=faceeye_runtime_reason::runtime_t7_identity_not_verified;return o;}if(!c.auxiliary_dirlight_snapshot_ready){o.reason=faceeye_runtime_reason::auxiliary_dirlight_snapshot_not_ready;return o;}
- const bool csd=is_csd(c.variant);if(!c.auxiliary_dirlight_snapshot.immutable_draw_local){o.reason=faceeye_runtime_reason::auxiliary_dirlight_snapshot_incomplete;return o;}for(std::size_t i=0;i<k_faceeye_aux_ps_registers.size();++i)if(!c.auxiliary_dirlight_snapshot.register_present[i]||c.auxiliary_dirlight_snapshot.producer_offsets[i]!=k_faceeye_aux_dirlight_offsets[i]){o.reason=faceeye_runtime_reason::auxiliary_dirlight_snapshot_incomplete;return o;}if(!homology_complete(c.auxiliary_dirlight_snapshot,csd)){o.reason=faceeye_runtime_reason::auxiliary_value_homology_incomplete;return o;}if(csd&&!c.csd_matrix_region_ready){o.reason=faceeye_runtime_reason::csd_matrix_region_not_ready;return o;}
+ const bool csd=is_csd(c.variant);if(!c.auxiliary_dirlight_snapshot.immutable_draw_local){o.reason=faceeye_runtime_reason::auxiliary_dirlight_snapshot_incomplete;return o;}
+ // Separate structural presence/offset failure from value-homology failure so
+ // diagnostics never promote a present producer lane into semantic equality.
+ constexpr std::array<std::size_t,4> common_sdw={{0,1,19,24}};
+ for(const auto i:common_sdw)if(!c.auxiliary_dirlight_snapshot.register_present[i]||c.auxiliary_dirlight_snapshot.producer_offsets[i]!=k_faceeye_aux_dirlight_offsets[i]){o.reason=faceeye_runtime_reason::auxiliary_dirlight_snapshot_incomplete;return o;}
+ if(csd)for(std::size_t i=2;i<=22;++i)if(!c.auxiliary_dirlight_snapshot.register_present[i]||c.auxiliary_dirlight_snapshot.producer_offsets[i]!=k_faceeye_aux_dirlight_offsets[i]){o.reason=faceeye_runtime_reason::auxiliary_dirlight_snapshot_incomplete;return o;}
+ for(const auto i:common_sdw)if(!c.auxiliary_dirlight_snapshot.value_homology_verified[i]){o.reason=faceeye_runtime_reason::auxiliary_value_homology_incomplete;return o;}
+ if(csd)for(std::size_t i=2;i<=22;++i)if(!c.auxiliary_dirlight_snapshot.value_homology_verified[i]){o.reason=faceeye_runtime_reason::auxiliary_value_homology_incomplete;return o;}
+ if(csd&&!c.csd_matrix_region_ready){o.reason=faceeye_runtime_reason::csd_matrix_region_not_ready;return o;}
  const bool native=stock_regular_sampler_family(c.variant);if(native){o.use_stock_ptde_style_kernel=true;if(!c.stock_ptde_kernel_identity_verified){o.reason=faceeye_runtime_reason::stock_ptde_kernel_identity_not_verified;return o;}if(!c.stock_regular_s7_verified){o.reason=faceeye_runtime_reason::stock_regular_s7_not_verified;return o;}}else{o.replace_comparison_kernel=true;if(!c.replacement_ptde_kernel_shader_ready){o.reason=faceeye_runtime_reason::replacement_ptde_kernel_shader_not_ready;return o;}o.override_s7_with_regular_sampler=true;if(!c.regular_s7_sampler_ready){o.reason=faceeye_runtime_reason::regular_s7_sampler_not_ready;return o;}if(!c.regular_s7_descriptor_verified){o.reason=faceeye_runtime_reason::regular_s7_descriptor_not_verified;return o;}if(!c.sampler_override_transaction_ready){o.reason=faceeye_runtime_reason::sampler_override_transaction_not_ready;return o;}}
  if(!c.legacy_env_probe_routes_ready){o.reason=faceeye_runtime_reason::legacy_env_probe_routes_not_ready;return o;}if(!c.independent_lighting_exclusion_verified){o.reason=faceeye_runtime_reason::independent_lighting_exclusion_not_verified;return o;}if(!c.draw_transaction_ready){o.reason=faceeye_runtime_reason::draw_transaction_not_ready;return o;}o.ready=true;o.reason=faceeye_runtime_reason::ready;return o;}
 } // namespace dsrrl::operators::surface
