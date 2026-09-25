@@ -45,7 +45,7 @@ void update(sha256_context &c,const std::uint8_t *p,std::size_t n) noexcept {
     c.total+=n;while(n){const auto take=std::min(n,64u-c.used);std::memcpy(c.buffer.data()+c.used,p,take);c.used+=take;p+=take;n-=take;if(c.used==64){block(c,c.buffer.data());c.used=0;}}
 }
 std::array<std::uint8_t,32> finish(sha256_context &c) noexcept {
-    const auto bits=c.total*8u;c.buffer[c.used++]=0x80u;if(c.used>56){std::fill(c.buffer.begin()+c.used,c.buffer.end(),0u);block(c,c.buffer.data());c.used=0;}std::fill(c.buffer.begin()+c.used,c.buffer.begin()+56,0u);for(int i=0;i<8;++i)c.buffer[63-i]=static_cast<std::uint8_t>(bits>>(8*i));block(c,c.buffer.data());
+    const auto bits=c.total*8u;c.buffer[c.used++]=0x80u;if(c.used>56){std::fill(c.buffer.begin()+c.used,c.buffer.end(),static_cast<std::uint8_t>(0));block(c,c.buffer.data());c.used=0;}std::fill(c.buffer.begin()+c.used,c.buffer.begin()+56,static_cast<std::uint8_t>(0));for(int i=0;i<8;++i)c.buffer[63-i]=static_cast<std::uint8_t>(bits>>(8*i));block(c,c.buffer.data());
     std::array<std::uint8_t,32> out{};for(int i=0;i<8;++i){out[4*i]=static_cast<std::uint8_t>(c.h[i]>>24);out[4*i+1]=static_cast<std::uint8_t>(c.h[i]>>16);out[4*i+2]=static_cast<std::uint8_t>(c.h[i]>>8);out[4*i+3]=static_cast<std::uint8_t>(c.h[i]);}return out;
 }
 std::array<std::uint8_t,32> digest(const void *p,std::size_t n) noexcept {sha256_context c;update(c,static_cast<const std::uint8_t*>(p),n);return finish(c);}
