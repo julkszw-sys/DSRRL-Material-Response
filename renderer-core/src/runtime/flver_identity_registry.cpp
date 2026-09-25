@@ -80,6 +80,18 @@ bool flver_identity_lookup(const void *selector_container,std::array<std::uint8_
     ++g_lookups;if(!selector_container){++g_misses;return false;}const auto address=reinterpret_cast<std::uintptr_t>(selector_container);if(address<k_container_offset){++g_misses;return false;}const auto *model=reinterpret_cast<const void*>(address-k_container_offset);
     std::lock_guard<std::mutex> lock(g_mutex);const auto it=g_by_model.find(model);if(it==g_by_model.end()){++g_misses;return false;}sha256=it->second;++g_hits;return true;
 }
+bool flver_identity_enrich_owner(const void *selector_container,std::uint32_t material_slot,actual_material_owner_observation &observation) noexcept {
+    std::array<std::uint8_t,32> sha{};
+    if (!flver_identity_lookup(selector_container, sha)) {
+        observation.flver_sha256 = {};
+        observation.material_slot_valid = false;
+        return false;
+    }
+    observation.flver_sha256 = sha;
+    observation.material_slot = material_slot;
+    observation.material_slot_valid = true;
+    return true;
+}
 void flver_identity_reset() noexcept {std::lock_guard<std::mutex> lock(g_mutex);g_by_model.clear();}
 flver_identity_telemetry flver_identity_stats() noexcept {return {g_inserts.load(),g_lookups.load(),g_hits.load(),g_misses.load(),g_erases.load(),g_invalid.load()};}
 
