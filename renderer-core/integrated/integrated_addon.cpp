@@ -4,6 +4,9 @@
 #include "dsrrl/runtime/flver_identity_registry.hpp"
 #include "dsrrl/runtime/material_owner_selection.hpp"
 #include "dsrrl/runtime/material_response_draw_transaction.hpp"
+#include "dsrrl/runtime/material_resource_draw_runtime.hpp"
+#include "dsrrl/runtime/texture_identity_transport.hpp"
+#include "dsrrl/operators/material_response/mtd_semantic_census.hpp"
 #include "dsrrl/runtime/stable_receiver_pipeline_registry.hpp"
 #include "dsrrl/operators/material_response/material_response_island.hpp"
 #include "dsrrl/operators/material_response/material_response_seed.hpp"
@@ -39,6 +42,8 @@ dsrrl::runtime::draw_state_transaction_runtime
     g_draw_transactions(g_core);
 dsrrl::runtime::material_response_draw_runtime
     g_mr_draw_runtime(g_draw_transactions);
+dsrrl::runtime::material_resource_draw_runtime
+    g_material_resources(g_core);
 
 std::atomic<std::uint64_t> g_present_count{0};
 std::atomic<std::uint64_t> g_mr_draw_eval{0};
@@ -56,6 +61,9 @@ std::atomic<std::uint64_t> g_draw_receiver_only{0};
 
 constexpr dsrrl::core::operator_id k_integrated_islands[] = {
     dsrrl::core::operator_id::material_response,
+    dsrrl::core::operator_id::spec_rgb,
+    dsrrl::core::operator_id::diffuse,
+    dsrrl::core::operator_id::normal,
     dsrrl::core::operator_id::terminal_sat_rgb,
     dsrrl::core::operator_id::diffuse_material_domain,
     dsrrl::core::operator_id::pointlight_pnts_attenuation,
@@ -87,6 +95,7 @@ const reshade::api::shader_desc *find_pixel_shader(
 bool observe_draw_identity(
     reshade::api::command_list *cmd_list,
     std::uint32_t &receiver_id,
+    dsrrl::operators::material_response::material_identity &out_material,
     dsrrl::operators::material_response::decision &out_decision) noexcept
 {
     ++g_draw_events;
@@ -97,10 +106,10 @@ bool observe_draw_identity(
             cmd_list,
             receiver_id);
 
-    dsrrl::operators::material_response::material_identity material{};
+    out_material = {};
     const bool owner_ok =
         dsrrl::runtime::material_owner_selection_consume(
-            material);
+            out_material);
 
     if (receiver_ok)
         ++g_draw_receiver_hits;
@@ -127,7 +136,7 @@ bool observe_draw_identity(
     out_decision =
         g_material_response.evaluate(
             receiver_id,
-            material);
+            out_material);
 
     if (out_decision.active) {
         ++g_mr_would_activate;
@@ -394,17 +403,81 @@ bool on_draw(
     std::uint32_t first_instance)
 {
     std::uint32_t receiver_id = 0u;
+    dsrrl::operators::material_response::material_identity material{};
     dsrrl::operators::material_response::decision decision{};
-    if (!observe_draw_identity(cmd_list, receiver_id, decision))
+
+    if (!observe_draw_identity(
+            cmd_list,
+            receiver_id,
+            material,
+            decision))
         return false;
 
-    return g_mr_draw_runtime.replay_draw(
-        cmd_list,
-        decision,
-        vertex_count,
-        instance_count,
-        first_vertex,
-        first_instance);
+    dsrrl::runtime::prepared_material_response_draw mr{};
+    if (!g_mr_draw_runtime.prepare_draw_request(
+            decision,
+            mr))
+        return false;
+
+    dsrrl::runtime::island_draw_batch batch{};
+    if (dsrrl::runtime::append_island_draw_request(
+            batch,
+            mr.request) !=
+        dsrrl::runtime::island_draw_batch_result::ready) {
+        g_mr_draw_runtime.release_prepared_draw(mr);
+        return false;
+    }
+
+    dsrrl::operators::material_response::mtd_semantic_query query{};
+    query.material = material;
+    query.receiver_id = receiver_id;
+    query.ownership.flver_sha256 = material.flver_sha256;
+    query.ownership.flver_identity_hash = material.flver_identity_hash;
+    query.ownership.material_slot = material.material_slot;
+    query.ownership.material_slot_valid = material.material_slot_valid;
+    query.ownership.exact = material.owner_tuple_exact;
+
+    dsrrl::runtime::prepared_material_resource_draw resources{};
+    auto *context = reinterpret_cast<ID3D11DeviceContext *>(
+        cmd_list->get_native());
+
+    if (g_material_resources.prepare_draw_requests(
+            context,
+            receiver_id,
+            query,
+            true,
+            resources)) {
+        for (std::uint32_t i = 0u;
+             i < resources.request_count;
+             ++i) {
+            if (dsrrl::runtime::append_island_draw_request(
+                    batch,
+                    resources.requests[i]) !=
+                dsrrl::runtime::island_draw_batch_result::ready) {
+                g_material_resources.release_prepared_draw(resources);
+                g_mr_draw_runtime.release_prepared_draw(mr);
+                return false;
+            }
+        }
+    }
+
+    const auto dispatch =
+        dsrrl::runtime::dispatch_island_draw_batch(
+            g_draw_transactions,
+            cmd_list,
+            batch,
+            vertex_count,
+            instance_count,
+            first_vertex,
+            first_instance);
+
+    g_material_resources.release_prepared_draw(resources);
+    g_mr_draw_runtime.release_prepared_draw(mr);
+    g_mr_draw_runtime.account_dispatch_result(
+        dispatch.transaction);
+
+    return dsrrl::runtime::draw_tx_issued(
+        dispatch.transaction);
 }
 
 bool on_draw_indexed(
@@ -416,18 +489,82 @@ bool on_draw_indexed(
     std::uint32_t first_instance)
 {
     std::uint32_t receiver_id = 0u;
+    dsrrl::operators::material_response::material_identity material{};
     dsrrl::operators::material_response::decision decision{};
-    if (!observe_draw_identity(cmd_list, receiver_id, decision))
+
+    if (!observe_draw_identity(
+            cmd_list,
+            receiver_id,
+            material,
+            decision))
         return false;
 
-    return g_mr_draw_runtime.replay_draw_indexed(
-        cmd_list,
-        decision,
-        index_count,
-        instance_count,
-        first_index,
-        vertex_offset,
-        first_instance);
+    dsrrl::runtime::prepared_material_response_draw mr{};
+    if (!g_mr_draw_runtime.prepare_draw_request(
+            decision,
+            mr))
+        return false;
+
+    dsrrl::runtime::island_draw_batch batch{};
+    if (dsrrl::runtime::append_island_draw_request(
+            batch,
+            mr.request) !=
+        dsrrl::runtime::island_draw_batch_result::ready) {
+        g_mr_draw_runtime.release_prepared_draw(mr);
+        return false;
+    }
+
+    dsrrl::operators::material_response::mtd_semantic_query query{};
+    query.material = material;
+    query.receiver_id = receiver_id;
+    query.ownership.flver_sha256 = material.flver_sha256;
+    query.ownership.flver_identity_hash = material.flver_identity_hash;
+    query.ownership.material_slot = material.material_slot;
+    query.ownership.material_slot_valid = material.material_slot_valid;
+    query.ownership.exact = material.owner_tuple_exact;
+
+    dsrrl::runtime::prepared_material_resource_draw resources{};
+    auto *context = reinterpret_cast<ID3D11DeviceContext *>(
+        cmd_list->get_native());
+
+    if (g_material_resources.prepare_draw_requests(
+            context,
+            receiver_id,
+            query,
+            true,
+            resources)) {
+        for (std::uint32_t i = 0u;
+             i < resources.request_count;
+             ++i) {
+            if (dsrrl::runtime::append_island_draw_request(
+                    batch,
+                    resources.requests[i]) !=
+                dsrrl::runtime::island_draw_batch_result::ready) {
+                g_material_resources.release_prepared_draw(resources);
+                g_mr_draw_runtime.release_prepared_draw(mr);
+                return false;
+            }
+        }
+    }
+
+    const auto dispatch =
+        dsrrl::runtime::dispatch_island_draw_indexed_batch(
+            g_draw_transactions,
+            cmd_list,
+            batch,
+            index_count,
+            instance_count,
+            first_index,
+            vertex_offset,
+            first_instance);
+
+    g_material_resources.release_prepared_draw(resources);
+    g_mr_draw_runtime.release_prepared_draw(mr);
+    g_mr_draw_runtime.account_dispatch_result(
+        dispatch.transaction);
+
+    return dsrrl::runtime::draw_tx_issued(
+        dispatch.transaction);
 }
 
 void on_present(
