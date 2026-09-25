@@ -55,6 +55,13 @@ void material_response_draw_runtime::release_resources() noexcept
     }
     replacements_.clear();
 
+    for (auto &entry : upper_lower_replacements_) {
+        auto *shader = entry.second.shader;
+        if (shader != nullptr)
+            shader->Release();
+    }
+    upper_lower_replacements_.clear();
+
     for (auto &entry : b12_by_route_) {
         auto *buffer = entry.second;
         if (buffer != nullptr)
@@ -111,6 +118,13 @@ void material_response_draw_runtime::on_destroy_device(
             shader->Release();
     }
     replacements_.clear();
+
+    for (auto &entry : upper_lower_replacements_) {
+        auto *shader = entry.second.shader;
+        if (shader != nullptr)
+            shader->Release();
+    }
+    upper_lower_replacements_.clear();
 
     for (auto &entry : b12_by_route_) {
         auto *buffer = entry.second;
@@ -193,6 +207,86 @@ bool material_response_draw_runtime::has_receiver_replacement(
         found->second.shader != nullptr;
 }
 
+bool material_response_draw_runtime::
+register_receiver_upper_lower_replacement(
+    std::uint32_t receiver_id,
+    const void *dxbc,
+    std::size_t dxbc_size,
+    core::operator_mask composed_owners) noexcept
+{
+    const core::operator_mask forbidden_owners =
+        core::operator_bit(core::operator_id::material_response) |
+        core::operator_bit(core::operator_id::diffuse_material_domain) |
+        core::operator_bit(core::operator_id::upper_lower);
+
+    if (receiver_id < 24u ||
+        receiver_id > 47u ||
+        dxbc == nullptr ||
+        dxbc_size == 0u ||
+        (composed_owners & ~core::all_operator_bits) != 0u ||
+        (composed_owners & forbidden_owners) != 0u ||
+        local_quarantine_.load() ||
+        transactions_.quarantined()) {
+        ++combined_ul_register_fail_;
+        return false;
+    }
+
+    std::lock_guard<std::mutex> lock(mutex_);
+    if (device_ == nullptr) {
+        ++combined_ul_register_fail_;
+        return false;
+    }
+
+    ID3D11PixelShader *shader = nullptr;
+    if (FAILED(device_->CreatePixelShader(
+            dxbc,
+            dxbc_size,
+            nullptr,
+            &shader)) ||
+        shader == nullptr) {
+        ++combined_ul_register_fail_;
+        return false;
+    }
+
+    const replacement_record record{
+        shader,
+        composed_owners
+    };
+
+    const auto found =
+        upper_lower_replacements_.find(
+            receiver_id);
+
+    if (found !=
+        upper_lower_replacements_.end()) {
+        if (found->second.shader != nullptr)
+            found->second.shader->Release();
+        found->second = record;
+    } else {
+        upper_lower_replacements_.emplace(
+            receiver_id,
+            record);
+    }
+
+    ++combined_ul_register_ok_;
+    return true;
+}
+
+bool material_response_draw_runtime::
+has_receiver_upper_lower_replacement(
+    std::uint32_t receiver_id) const noexcept
+{
+    std::lock_guard<std::mutex> lock(mutex_);
+    const auto found =
+        upper_lower_replacements_.find(
+            receiver_id);
+
+    return
+        found !=
+            upper_lower_replacements_.end() &&
+        found->second.shader != nullptr;
+}
+
 bool material_response_draw_runtime::prepare_draw_request(
     const operators::material_response::decision &decision,
     prepared_material_response_draw &prepared) noexcept
@@ -250,6 +344,97 @@ bool material_response_draw_runtime::prepare_draw_request(
         b12
     };
     prepared.request.constant_buffer_count = 1u;
+
+    draw_tx_mutation verify{};
+    if (build_island_draw_mutation(
+            prepared.request,
+            verify) !=
+        island_draw_adapter_result::ready) {
+        ++b12_bind_fail_;
+        release_prepared_draw(prepared);
+        return false;
+    }
+
+    prepared.ready = true;
+    return true;
+}
+
+bool material_response_draw_runtime::
+prepare_draw_request_with_upper_lower(
+    const operators::material_response::decision &decision,
+    ID3D11Buffer *b13,
+    prepared_material_response_draw &prepared) noexcept
+{
+    prepared = {};
+    ++eligible_draws_;
+    ++combined_ul_prepare_;
+
+    if (!full_material_response_decision(decision) ||
+        decision.receiver_id < 24u ||
+        decision.receiver_id > 47u ||
+        b13 == nullptr ||
+        local_quarantine_.load() ||
+        transactions_.quarantined())
+        return false;
+
+    replacement_record replacement{};
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        const auto found =
+            upper_lower_replacements_.find(
+                decision.receiver_id);
+
+        if (found !=
+                upper_lower_replacements_.end() &&
+            found->second.shader != nullptr) {
+            replacement = found->second;
+            replacement.shader->AddRef();
+        }
+    }
+
+    if (replacement.shader == nullptr) {
+        ++combined_ul_miss_;
+        return false;
+    }
+
+    auto *b12 = realize_b12(decision);
+    if (b12 == nullptr) {
+        ++b12_bind_fail_;
+        replacement.shader->Release();
+        return false;
+    }
+
+    const auto ul_owner =
+        core::operator_bit(
+            core::operator_id::upper_lower);
+
+    prepared.shader = replacement.shader;
+    prepared.b12 = b12;
+    prepared.request.primary =
+        core::operator_id::material_response;
+    prepared.request.additional_owners =
+        core::operator_bit(
+            core::operator_id::diffuse_material_domain) |
+        ul_owner |
+        replacement.composed_owners;
+    prepared.request.additional_shader_owners =
+        prepared.request.additional_owners;
+    prepared.request.additional_carrier_owners =
+        ul_owner;
+    prepared.request.receiver_verified = true;
+    prepared.request.material_verified = true;
+    prepared.request.pixel_shader =
+        replacement.shader;
+    prepared.request.replace_pixel_shader = true;
+    prepared.request.constant_buffers[0] = {
+        12u,
+        b12
+    };
+    prepared.request.constant_buffers[1] = {
+        13u,
+        b13
+    };
+    prepared.request.constant_buffer_count = 2u;
 
     draw_tx_mutation verify{};
     if (build_island_draw_mutation(
@@ -498,6 +683,10 @@ material_response_draw_runtime::telemetry() const noexcept
     return {
         replacement_register_ok_.load(),
         replacement_register_fail_.load(),
+        combined_ul_register_ok_.load(),
+        combined_ul_register_fail_.load(),
+        combined_ul_prepare_.load(),
+        combined_ul_miss_.load(),
         b12_create_.load(),
         b12_hit_.load(),
         b12_bind_fail_.load(),
@@ -516,6 +705,10 @@ void material_response_draw_runtime::reset() noexcept
 
     replacement_register_ok_.store(0);
     replacement_register_fail_.store(0);
+    combined_ul_register_ok_.store(0);
+    combined_ul_register_fail_.store(0);
+    combined_ul_prepare_.store(0);
+    combined_ul_miss_.store(0);
     b12_create_.store(0);
     b12_hit_.store(0);
     b12_bind_fail_.store(0);
