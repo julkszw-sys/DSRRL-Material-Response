@@ -17,7 +17,8 @@
 #include "dsrrl/runtime/generated_spec_material_routes.hpp"
 #include "semantic_spec_donor_overrides_generated.hpp"
 #include "dsrrl/core/renderer_core.hpp"
-#include "dsrrl/operators/material_response/mtd_semantic_census.hpp"\n#include "dsrrl/operators/material_response/generated_dsr_flver_owner_tuples_v1.hpp"
+#include "dsrrl/operators/material_response/mtd_semantic_census.hpp"
+#include "dsrrl/operators/material_response/generated_dsr_flver_owner_tuples_v1.hpp"
 #include "dsrrl/sha256.hpp"
 #include "dsrrl/runtime/subsurface_dispatch.hpp"
 #include "ptde_material_donor_registry.hpp"
@@ -90,7 +91,9 @@ std::atomic<std::uint64_t> g_ptde_tex_mtd_exact{0};
 std::atomic<std::uint64_t> g_ptde_tex_selector_exact{0};
 std::atomic<std::uint64_t> g_diffuse_semantic_hold{0};
 std::atomic<std::uint64_t> g_normal_semantic_hold{0};
-std::atomic<std::uint64_t> g_owner_auth_hold{0};\nstd::atomic<std::uint64_t> g_flver_parse_seen{0}, g_flver_identity_ok{0}, g_flver_identity_fail{0};\nstd::atomic<std::uint64_t> g_owner_tuple_auth_ok{0};
+std::atomic<std::uint64_t> g_owner_auth_hold{0};
+std::atomic<std::uint64_t> g_flver_parse_seen{0}, g_flver_identity_ok{0}, g_flver_identity_fail{0};
+std::atomic<std::uint64_t> g_owner_tuple_auth_ok{0};
 
 namespace mtd_sem=dsrrl::operators::material_response;
 
@@ -108,7 +111,11 @@ std::mutex g_material_mutex;
 std::unordered_map<void*,std::uint16_t> g_material_donor;
 std::unordered_map<void*,std::uint8_t> g_material_spec_override;
 std::unordered_map<void*,mtd_sem::mtd_envspec_semantics> g_material_envspec;
-std::unordered_map<void*,mtd_sem::ptde_flver_texture_semantics> g_material_ptde_texture;\nstd::unordered_map<void*,std::uint64_t> g_material_semantic_hash;\nstd::mutex g_flver_mutex;\nstd::unordered_map<void*,core::sha256_digest> g_flver_sha_by_model;\nthread_local bool g_draw_owner_tuple_authenticated=false;
+std::unordered_map<void*,mtd_sem::ptde_flver_texture_semantics> g_material_ptde_texture;
+std::unordered_map<void*,std::uint64_t> g_material_semantic_hash;
+std::mutex g_flver_mutex;
+std::unordered_map<void*,core::sha256_digest> g_flver_sha_by_model;
+thread_local bool g_draw_owner_tuple_authenticated=false;
 
 std::uint64_t legacy_semantic_key_hash(const wchar_t *semantic_key) noexcept
 {
@@ -1855,7 +1862,8 @@ void on_present(command_queue *,swapchain *,const rect *,const rect *,std::uint3
                <<" ptde_tex_sel_exact="<<g_ptde_tex_selector_exact.load()
                <<" diff_sem_hold="<<g_diffuse_semantic_hold.load()
                <<" norm_sem_hold="<<g_normal_semantic_hold.load()
-               <<" flver_parse="<<g_flver_parse_seen.load()<<" flver_id_ok="<<g_flver_identity_ok.load()<<" flver_id_fail="<<g_flver_identity_fail.load()\n               <<" owner_auth_ok="<<g_owner_tuple_auth_ok.load()<<" owner_auth_hold="<<g_owner_auth_hold.load()
+               <<" flver_parse="<<g_flver_parse_seen.load()<<" flver_id_ok="<<g_flver_identity_ok.load()<<" flver_id_fail="<<g_flver_identity_fail.load()
+               <<" owner_auth_ok="<<g_owner_tuple_auth_ok.load()<<" owner_auth_hold="<<g_owner_auth_hold.load()
                <<" failopen="<<g_fail_open.load()
               <<" restore_fail="<<g_restore_fail.load()<<" quarantined="<<(g_quarantined.load()?1:0);
             log_info(os.str());
@@ -1863,6 +1871,34 @@ void on_present(command_queue *,swapchain *,const rect *,const rect *,std::uint3
     } catch (...) {
         // Telemetry is non-authoritative and must never escape the callback ABI.
     }
+}
+
+
+std::uint64_t owner_semantic_name_hash(const wchar_t *semantic_key) noexcept
+{
+    if(!semantic_key) return 0u;
+    constexpr std::uint64_t offset=14695981039346656037ull;
+    constexpr std::uint64_t prime=1099511628211ull;
+    std::uint64_t hash=offset;
+
+    for(std::size_t i=0;i<512u;++i){
+        std::uint16_t u=0u;
+        if(!engine::safe_read_bytes(
+               reinterpret_cast<const std::uint8_t*>(semantic_key)+i*2u,
+               &u,sizeof(u)))
+            return 0u;
+        if(u==0u)
+            return i==0u ? 0u : hash;
+
+        // The canonical DSR owner corpus hashes the exact MTD basename as
+        // UTF-8. All audited retail MTD entry names are ASCII; fail open for
+        // unexpected non-ASCII rather than inventing a normalization rule.
+        if(u>0x7fu)
+            return 0u;
+        hash^=static_cast<std::uint8_t>(u);
+        hash*=prime;
+    }
+    return 0u;
 }
 
 } // namespace
@@ -1912,11 +1948,17 @@ void mtd_event(
         else if(semantic_spec_raw_hash_is_ambiguous(hash))
             ++g_semantic_spec_ambiguous_hold;
 
+        const std::uint64_t owner_mtd_hash=
+            owner_semantic_name_hash(semantic_key);
+
         std::lock_guard lock(g_material_mutex);
         g_material_donor.erase(material);
         g_material_spec_override.erase(material);
         g_material_envspec.erase(material);
-        g_material_ptde_texture.erase(material);\n        g_material_semantic_hash.erase(material);
+        g_material_ptde_texture.erase(material);
+        g_material_semantic_hash.erase(material);
+        if(owner_mtd_hash!=0u)
+            g_material_semantic_hash[material]=owner_mtd_hash;
 
         if(idx>=0){
             g_material_donor[material]=static_cast<std::uint16_t>(idx);
@@ -1938,9 +1980,31 @@ void mtd_event(
     }catch(...){++g_fail_open;}
 }
 
-void flver_parse_event(void *model,const void *raw) noexcept\n{\n    ++g_flver_parse_seen;\n    if(model){std::lock_guard lock(g_flver_mutex);g_flver_sha_by_model.erase(model);}\n    if(!model || !raw){++g_flver_identity_fail;return;}\n    try{\n        std::array<std::uint8_t,0x18> header{};\n        if(!engine::safe_read_bytes(raw,header.data(),header.size())){++g_flver_identity_fail;return;}\n        constexpr std::array<std::uint8_t,6> magic={'F','L','V','E','R',0};\n        if(!std::equal(magic.begin(),magic.end(),header.begin())){++g_flver_identity_fail;return;}\n        std::uint32_t data_offset=0,data_length=0;\n        std::memcpy(&data_offset,header.data()+0x0c,sizeof(data_offset));\n        std::memcpy(&data_length,header.data()+0x10,sizeof(data_length));\n        const std::uint64_t total64=static_cast<std::uint64_t>(data_offset)+data_length;\n        if(data_offset<0x40u || total64<data_offset || total64>0x40000000ull){++g_flver_identity_fail;return;}\n        const auto digest=dsrrl::sha256({reinterpret_cast<const std::byte*>(raw),static_cast<std::size_t>(total64)});\n        {std::lock_guard lock(g_flver_mutex);g_flver_sha_by_model[model]=digest;}\n        ++g_flver_identity_ok;\n    }catch(...){++g_flver_identity_fail;++g_fail_open;}\n}\n\nvoid selector_event(void *container,void *,void *ret,void *,void *,std::int32_t material_index) noexcept
+void flver_parse_event(void *model,const void *raw) noexcept
+{
+    ++g_flver_parse_seen;
+    if(model){std::lock_guard lock(g_flver_mutex);g_flver_sha_by_model.erase(model);}
+    if(!model || !raw){++g_flver_identity_fail;return;}
+    try{
+        std::array<std::uint8_t,0x18> header{};
+        if(!engine::safe_read_bytes(raw,header.data(),header.size())){++g_flver_identity_fail;return;}
+        constexpr std::array<std::uint8_t,6> magic={'F','L','V','E','R',0};
+        if(!std::equal(magic.begin(),magic.end(),header.begin())){++g_flver_identity_fail;return;}
+        std::uint32_t data_offset=0,data_length=0;
+        std::memcpy(&data_offset,header.data()+0x0c,sizeof(data_offset));
+        std::memcpy(&data_length,header.data()+0x10,sizeof(data_length));
+        const std::uint64_t total64=static_cast<std::uint64_t>(data_offset)+data_length;
+        if(data_offset<0x40u || total64<data_offset || total64>0x40000000ull){++g_flver_identity_fail;return;}
+        const auto digest=dsrrl::sha256({reinterpret_cast<const std::byte*>(raw),static_cast<std::size_t>(total64)});
+        {std::lock_guard lock(g_flver_mutex);g_flver_sha_by_model[model]=digest;}
+        ++g_flver_identity_ok;
+    }catch(...){++g_flver_identity_fail;++g_fail_open;}
+}
+
+void selector_event(void *container,void *,void *ret,void *,void *,std::int32_t material_index) noexcept
 {
     ++g_selector_seen;
+    g_draw_owner_tuple_authenticated=false;
     const auto base=engine::image_base();
     if(!base){
         g_draw_donor=-1;
@@ -1959,7 +2023,20 @@ void flver_parse_event(void *model,const void *raw) noexcept\n{\n    ++g_flver_p
         g_draw_ptde_texture={};
         return;
     }
-    void *actual=resolve_material(container,material_index);\n    g_draw_owner_tuple_authenticated=false;\n    if(container && actual && material_index>=0){\n        core::sha256_digest flver_sha{};\n        bool have_flver=false;\n        const auto model=reinterpret_cast<void*>(reinterpret_cast<std::uintptr_t>(container)-0x88u);\n        {std::lock_guard lock(g_flver_mutex);const auto it=g_flver_sha_by_model.find(model);if(it!=g_flver_sha_by_model.end()){flver_sha=it->second;have_flver=true;}}\n        std::uint64_t semantic_hash=0u;\n        {std::lock_guard lock(g_material_mutex);const auto it=g_material_semantic_hash.find(actual);if(it!=g_material_semantic_hash.end())semantic_hash=it->second;}\n        if(have_flver && semantic_hash!=0u)\n            g_draw_owner_tuple_authenticated=\n                mtd_sem::generated::dsr_flver_owner_tuple_authenticated(\n                    flver_sha,static_cast<std::uint32_t>(material_index),semantic_hash);\n        if(g_draw_owner_tuple_authenticated) ++g_owner_tuple_auth_ok;\n    }
+    void *actual=resolve_material(container,material_index);
+    if(container && actual && material_index>=0){
+        core::sha256_digest flver_sha{};
+        bool have_flver=false;
+        const auto model=reinterpret_cast<void*>(reinterpret_cast<std::uintptr_t>(container)-0x88u);
+        {std::lock_guard lock(g_flver_mutex);const auto it=g_flver_sha_by_model.find(model);if(it!=g_flver_sha_by_model.end()){flver_sha=it->second;have_flver=true;}}
+        std::uint64_t semantic_hash=0u;
+        {std::lock_guard lock(g_material_mutex);const auto it=g_material_semantic_hash.find(actual);if(it!=g_material_semantic_hash.end())semantic_hash=it->second;}
+        if(have_flver && semantic_hash!=0u)
+            g_draw_owner_tuple_authenticated=
+                mtd_sem::generated::dsr_flver_owner_tuple_authenticated(
+                    flver_sha,static_cast<std::uint32_t>(material_index),semantic_hash);
+        if(g_draw_owner_tuple_authenticated) ++g_owner_tuple_auth_ok;
+    }
     g_draw_donor=donor_for(actual);
     g_draw_spec_override=spec_override_for(actual);
     g_draw_envspec=envspec_for(actual);
@@ -2011,11 +2088,14 @@ void unregister_runtime() noexcept
         g_material_donor.clear();
         g_material_spec_override.clear();
         g_material_envspec.clear();
-        g_material_ptde_texture.clear();\n        g_material_semantic_hash.clear();
+        g_material_ptde_texture.clear();
+        g_material_semantic_hash.clear();
     }
     g_draw_donor=-1; g_draw_spec_override=-1; g_draw_envspec={}; g_draw_envspec_exact=false; g_draw_ptde_texture={};
     g_bound_host=-1; g_bound_lerp=false; g_bound_subsurface=false; g_bound_command=nullptr;
-    {std::lock_guard lock(g_flver_mutex);g_flver_sha_by_model.clear();}\n    g_draw_owner_tuple_authenticated=false;\n    g_core=nullptr;
+    {std::lock_guard lock(g_flver_mutex);g_flver_sha_by_model.clear();}
+    g_draw_owner_tuple_authenticated=false;
+    g_core=nullptr;
 }
 
-} // namespace dsrrl::runtime::mstd::uint64_t owner_semantic_name_hash(const wchar_t *semantic_key) noexcept\n{\n    if(!semantic_key) return 0u;\n    constexpr std::uint64_t offset=14695981039346656037ull;\n    constexpr std::uint64_t prime=1099511628211ull;\n    std::uint64_t hash=offset;\n    for(std::size_t i=0;i<512u;++i){\n        std::uint16_t u=0u;\n        if(!engine::safe_read_bytes(reinterpret_cast<const std::uint8_t*>(semantic_key)+i*2u,&u,sizeof(u))) return 0u;\n        if(u==0u) return i==0u?0u:hash;\n        // Canonical owner corpus hashes the exact MTD basename as UTF-8.\n        // Retail MTD names are ASCII in the audited corpus; fail open rather\n        // than silently inventing Unicode normalization for an unexpected key.\n        if(u>0x7fu) return 0u;\n        hash^=static_cast<std::uint8_t>(u);\n        hash*=prime;\n    }\n    return 0u;\n}\n\nr
+} // namespace dsrrl::runtime::mr
