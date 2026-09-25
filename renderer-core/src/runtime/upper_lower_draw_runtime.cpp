@@ -111,6 +111,7 @@ struct raw_rgbm {
 #pragma pack(pop)
 
 core::renderer_core *g_core = nullptr;
+upper_lower_draw_runtime *g_runtime = nullptr;
 std::uintptr_t g_base = 0u;
 std::array<inline_hook,4> g_hooks{};
 
@@ -900,10 +901,28 @@ upper_lower_draw_runtime::upper_lower_draw_runtime(
 {
 }
 
+void upper_lower_selector_event_bridge(
+    void *owner,
+    void *return_address,
+    void *r14,
+    void *r15) noexcept
+{
+    if (g_runtime != nullptr)
+        g_runtime->selector_event(
+            owner,
+            return_address,
+            r14,
+            r15);
+}
+
 bool upper_lower_draw_runtime::install() noexcept
 {
     if (g_enabled.load())
-        return true;
+        return g_runtime == this;
+
+    if (g_runtime != nullptr &&
+        g_runtime != this)
+        return false;
 
     const auto selector_status =
         flver_identity_transport::status();
@@ -913,6 +932,7 @@ bool upper_lower_draw_runtime::install() noexcept
         return false;
 
     g_core = &core_;
+    g_runtime = this;
     g_base =
         reinterpret_cast<std::uintptr_t>(
             GetModuleHandleW(nullptr));
@@ -921,6 +941,7 @@ bool upper_lower_draw_runtime::install() noexcept
         !install_producer_hooks()) {
         (void)restore_producer_hooks();
         g_core = nullptr;
+        g_runtime = nullptr;
         g_base = 0u;
         return false;
     }
@@ -944,6 +965,7 @@ void upper_lower_draw_runtime::uninstall() noexcept
     }
 
     g_core = nullptr;
+    g_runtime = nullptr;
     g_base = 0u;
 }
 
