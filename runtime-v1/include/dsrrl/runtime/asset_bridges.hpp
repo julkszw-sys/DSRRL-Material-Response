@@ -60,6 +60,12 @@ bool diffuse_ready(
     const material_route_scope &route,
     std::uint32_t receiver_id) noexcept;
 
+// Exact non-mutating preflight for the independent Normal resource island.
+bool normal_ready(
+    ID3D11DeviceContext *context,
+    const material_route_scope &route,
+    std::uint32_t receiver_id) noexcept;
+
 // Exact body identities and complete three-sidecar tuple, without mutation.
 bool body_surface_ready(ID3D11DeviceContext *context) noexcept;
 
