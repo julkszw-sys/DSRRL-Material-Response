@@ -46,6 +46,7 @@ enum class load_status : std::uint8_t {
 };
 
 struct companion_set {
+    device *owner_device = nullptr;
     std::uint64_t logical_hash = 0;
     ID3D11ShaderResourceView *specular = nullptr;
     ID3D11ShaderResourceView *diffuse = nullptr;
@@ -174,6 +175,31 @@ void release_set(companion_set &set) noexcept
     release_view(set.specular);
     release_view(set.diffuse);
     release_view(set.normal);
+}
+
+void release_cache_for_device(device *owner) noexcept
+{
+    if(owner==nullptr)
+        return;
+    try {
+        std::vector<companion_set> dead;
+        {
+            std::lock_guard lock(g_cache_mutex);
+            for(auto it=g_cache.begin();it!=g_cache.end();){
+                if(it->second.owner_device==owner){
+                    dead.push_back(it->second);
+                    it=g_cache.erase(it);
+                }else{
+                    ++it;
+                }
+            }
+        }
+        for(auto &set:dead)
+            release_set(set);
+    } catch (...) {
+        // Device teardown is fail-open. Remaining references are released
+        // during addon unregister rather than risking an exception at ABI edge.
+    }
 }
 
 void release_cache() noexcept
@@ -606,6 +632,7 @@ void on_init_resource_view(
             return;
 
         ++g_named_srv;
+        set.owner_device = device;
         set.logical_hash = logical_hash;
 
         if (spec_member) {
@@ -680,9 +707,9 @@ void on_destroy_resource_view(
         release_set(dead);
 }
 
-void on_destroy_device(device *)
+void on_destroy_device(device *device_ptr)
 {
-    release_cache();
+    release_cache_for_device(device_ptr);
 }
 
 void on_present(
