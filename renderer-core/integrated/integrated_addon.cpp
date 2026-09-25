@@ -451,8 +451,16 @@ void AddonUninit(
     HMODULE reshade_module)
 {
     unregister_events();
+
+    // Preserve the full live identity telemetry before successful teardown
+    // clears the hook/registry state. A restore failure is logged separately
+    // after uninstall so it cannot masquerade as a clean shutdown.
+    log_state("PRE_UNLOAD");
     dsrrl::runtime::flver_identity_transport::uninstall();
-    log_state("UNLOAD");
+    if (dsrrl::runtime::flver_identity_transport::status().restore_failed)
+        log_state("UNLOAD_RESTORE_FAIL");
+
+    dsrrl::runtime::stable_receiver_pipeline_reset();
     g_a1_bridge.reset();
     disable_integrated_islands();
 
