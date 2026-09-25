@@ -1,0 +1,19 @@
+{
+  "schema": "dsrrl.dsr_flver_owner_tuple_corpus.v1",
+  "status": "CONSTRUCTION_PASS_RUNTIME_OPEN_PIXEL_OPEN",
+  "rows": 19985,
+  "unique_tuples": 19985,
+  "duplicate_tuples": 0,
+  "ptde_mtd_present_rows": 18098,
+  "ptde_mtd_absent_rows": 1887,
+  "corpus_sha256": "0be97e628b52b74896697bd641c23347d532dd4a0d42d9158b783f22f9d191a5",
+  "dsr_zip_sha256": "a9a2e0eb48625fc735dfe18f7f375105cc5f56be005022969300c778489d0891",
+  "ptde_zip_sha256": "6651acb4fe995a69f1c84e5761b3d6bdcadeb39e1fc4d1087c3b82794f4d7281",
+  "activation_policy": "Exact DSR FLVER SHA-256 + material slot + exact MTD identity is an authentication prerequisite only. PTDE MTD capability annotations do not prove cross-version FLVER homology or pixel equivalence. Unknown identity or consumer must fail open.",
+  "source_storage": {
+    "persistent_library_folder": "/DSRRL/source-corpora",
+    "dsr": "DSR_FLVER_CENSUS_COMPACT.zip",
+    "ptde": "DSRRL_PTDE_FLVER_CENSUS_FIXED.zip"
+  },
+  "generator": "renderer-core/tools/generate_flver_owner_tuple_corpus.py"
+}
