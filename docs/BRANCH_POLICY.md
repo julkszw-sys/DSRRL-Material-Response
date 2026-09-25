@@ -6,11 +6,12 @@ Git history is evidence. Do not delete, squash away or silently rewrite supersed
 
 ## Roles
 
-`main` is release-facing and stable.  
-`develop` is integration.  
+`main` is the canonical active **Core+Islands 2.0.0-dev** development/integration line.  
+`develop` is optional staging and is not authoritative over a newer accepted `main`.  
 `recovery/*` preserves or reconstructs historical source/provenance.  
 `dev/*` is implementation/experiment work.  
-`release/*` is reserved for source-complete RC/release material.
+`release/*` is reserved for source-complete RC/release material.  
+The Material Response 1.45 monolith is frozen legacy provenance and uses a separate historical version namespace; new Core+Islands work must not inherit the 1.45 version number.
 
 ## Source-complete release gate
 
