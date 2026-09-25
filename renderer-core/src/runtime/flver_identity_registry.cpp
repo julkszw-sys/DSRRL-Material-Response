@@ -68,7 +68,13 @@ bool flver_identity_observe_parse(const void *model,const void *raw,std::size_t 
     {std::lock_guard<std::mutex> lock(g_mutex);g_by_model[model]=sha;}++g_inserts;return true;
 }
 void flver_identity_observe_destroy(const void *model) noexcept {
-    if(!model)return;std::lock_guard<std::mutex> lock(g_mutex);if(g_by_model.erase(model)!=0u)++g_erases;
+    if (!model) {
+        return;
+    }
+    std::lock_guard<std::mutex> lock(g_mutex);
+    if (g_by_model.erase(model) != 0u) {
+        ++g_erases;
+    }
 }
 bool flver_identity_lookup(const void *selector_container,std::array<std::uint8_t,32> &sha256) noexcept {
     ++g_lookups;if(!selector_container){++g_misses;return false;}const auto address=reinterpret_cast<std::uintptr_t>(selector_container);if(address<k_container_offset){++g_misses;return false;}const auto *model=reinterpret_cast<const void*>(address-k_container_offset);
