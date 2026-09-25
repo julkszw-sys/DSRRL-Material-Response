@@ -22,10 +22,14 @@ from __future__ import annotations
 
 import argparse
 import hashlib
-import importlib.util
 import json
+import sys
+import zipfile
 from pathlib import Path
 from typing import Iterable
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import generate_flver_pairwise_material_census as pairwise  # noqa: E402
 
 CANONICAL_DSR_ZIP_SHA256 = (
     "a9a2e0eb48625fc735dfe18f7f375105cc5f56be005022969300c778489d0891"
@@ -33,16 +37,6 @@ CANONICAL_DSR_ZIP_SHA256 = (
 EXPECTED_UNIQUE_FLVER = 4161
 EXPECTED_MATERIAL_SLOTS = 19985
 EXPECTED_MTD_BASENAMES = 367
-
-
-def _load_pairwise_module():
-    path = Path(__file__).with_name("generate_flver_pairwise_material_census.py")
-    spec = importlib.util.spec_from_file_location("dsrrl_flver_pairwise", path)
-    if spec is None or spec.loader is None:
-        raise RuntimeError("cannot load pairwise census module")
-    mod = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(mod)
-    return mod
 
 
 def sha256_file(path: Path) -> str:
@@ -55,13 +49,50 @@ def sha256_file(path: Path) -> str:
             h.update(chunk)
 
 
+def _verify_manifest_hashes(zip_path: Path) -> None:
+    """Verify every materialized FLVER member against manifest sha256_full."""
+    with zipfile.ZipFile(zip_path) as z:
+        try:
+            manifest = json.loads(z.read("manifest.json"))
+        except KeyError as exc:
+            raise ValueError("DSR compact census is missing manifest.json") from exc
+        names = set(z.namelist())
+        seen: set[str] = set()
+        for index, row in enumerate(manifest):
+            member = str(row.get("output", ""))
+            expected = str(row.get("sha256_full", "")).lower()
+            if not member or member in seen:
+                continue
+            seen.add(member)
+            if member not in names:
+                raise ValueError(
+                    f"manifest row {index} references missing member {member!r}"
+                )
+            if len(expected) != 64:
+                raise ValueError(
+                    f"manifest row {index} has invalid sha256_full {expected!r}"
+                )
+            try:
+                int(expected, 16)
+            except ValueError as exc:
+                raise ValueError(
+                    f"manifest row {index} has non-hex sha256_full {expected!r}"
+                ) from exc
+            actual = hashlib.sha256(z.read(member)).hexdigest()
+            if actual != expected:
+                raise ValueError(
+                    f"manifest/member SHA mismatch for {member}: "
+                    f"expected {expected}, got {actual}"
+                )
+
+
 def materialize_rows(
     zip_path: Path,
     *,
     require_canonical: bool = True,
 ) -> tuple[list[dict], dict]:
-    pairwise = _load_pairwise_module()
     source_sha = sha256_file(zip_path)
+    _verify_manifest_hashes(zip_path)
     if require_canonical and source_sha != CANONICAL_DSR_ZIP_SHA256:
         raise ValueError(
             "DSR compact census SHA-256 mismatch: "
