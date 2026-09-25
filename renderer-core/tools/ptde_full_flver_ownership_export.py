@@ -409,8 +409,8 @@ class FLVERMaterial:
 def parse_flver2_materials(data: bytes) -> tuple[int, list[FLVERMaterial]]:
     """Parse DS1 FLVER2 material and global texture records; geometry is ignored.
 
-    DS1 uses FLVER2 versions 0x2000B/0x2000C/0x2000D. The table sizes below
-    match the retail DS1 FLVER2 structs used by SoulsFormats: header 0x80,
+    DS1/PTDE owner corpora used by DSRRL include FLVER2 through 0x2000E.
+    The table sizes below match the DS1-family FLVER2 structs used here: header 0x80,
     dummy 0x40, material 0x20, bone 0x80, mesh 0x30, face-set 0x20,
     vertex-buffer 0x20, buffer-layout header 0x10 and texture 0x20.
     """
@@ -429,8 +429,8 @@ def parse_flver2_materials(data: bytes) -> tuple[int, list[FLVERMaterial]]:
     version = _i32(data, 8, endian)
     if version < 0x20000:
         raise ValueError(f"FLVER0/non-DS1 version 0x{version:X}")
-    if version > 0x2000D:
-        raise ValueError(f"post-DS1 FLVER2 version 0x{version:X}")
+    if version > 0x2000E:
+        raise ValueError(f"post-PTDE FLVER2 version 0x{version:X}")
 
     dummy_count = _i32(data, 0x14, endian)
     material_count = _i32(data, 0x18, endian)
