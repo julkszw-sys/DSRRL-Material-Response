@@ -208,7 +208,7 @@ bool AddonInit(
     reshade::log::message(
         reshade::log::level::info,
         "[DSRRL CORE+ISLANDS " DSRRL_CORE_ISLANDS_VERSION
-        "] READY: native Renderer Core A1 islands only; frozen 1.45/runtime-v1 "
+        "] READY: native Renderer Core A1 islands only; frozen legacy monolith "
         "is not linked or executed.");
 
     return true;
