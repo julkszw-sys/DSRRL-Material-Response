@@ -242,8 +242,6 @@ bool hemdir3_draw_runtime::prepare_draw_request(
 
     if (!lightbank_.prepare_hemdir3_carrier(
             context,
-            static_cast<std::uint32_t>(
-                identity.plan_index) + 1u,
             prepared.carrier)) {
         replacement.shader->Release();
         ++carrier_rejects_;
