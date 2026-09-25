@@ -10,6 +10,19 @@ inline constexpr std::size_t k_flver_pairwise_ptde_material_count=21315u;
 inline constexpr std::size_t k_flver_pairwise_dsr_mtd_count=367u;
 inline constexpr std::size_t k_flver_pairwise_ptde_mtd_count=261u;
 inline constexpr std::size_t k_flver_pairwise_overlap_mtd_count=256u;
+
+// Current pairwise evidence aggregates resource stability by MTD identity.
+// It does not materialize a DSR (FLVER identity, material slot, MTD) owner
+// table. A caller-provided "exact" bit is therefore insufficient evidence.
+inline constexpr bool k_flver_pairwise_owner_tuple_authentication_available=false;
+
+constexpr bool flver_pairwise_owner_tuple_authenticated(
+    std::uint64_t,
+    std::uint32_t,
+    std::uint64_t) noexcept
+{
+    return false;
+}
 inline constexpr std::array<std::uint64_t,6> k_flver_pairwise_diffuse_reject = {{
     0x11e72450c49be97aull, // A10_Wet[DSB]_Alp.mtd
     0xe792ac9ec044628bull, // C_5290_Body[DSB][M].mtd
