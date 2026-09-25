@@ -74,7 +74,7 @@ const reshade::api::shader_desc *find_pixel_shader(
     return nullptr;
 }
 
-void observe_material_response_identity(
+void observe_draw_identity(
     reshade::api::command_list *cmd_list) noexcept
 {
     ++g_draw_events;
@@ -299,7 +299,7 @@ bool on_draw(
     std::uint32_t,
     std::uint32_t)
 {
-    observe_material_response_identity(cmd_list);
+    observe_draw_identity(cmd_list);
     return false;
 }
 
@@ -311,7 +311,7 @@ bool on_draw_indexed(
     std::int32_t,
     std::uint32_t)
 {
-    observe_material_response_identity(cmd_list);
+    observe_draw_identity(cmd_list);
     return false;
 }
 
