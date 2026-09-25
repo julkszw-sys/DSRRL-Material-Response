@@ -32,6 +32,7 @@ enum class decision_reason : std::uint8_t {
     active = 0,
     unknown_receiver,
     material_required,
+    owner_tuple_not_authenticated,
     unknown_material,
     receiver_material_mismatch,
     no_certified_operator
