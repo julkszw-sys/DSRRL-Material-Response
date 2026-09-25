@@ -474,7 +474,8 @@ void log_state(const char *tag) noexcept
         "pipe_attest=%llu pipe_conflict=%llu pipe_init=%llu exact_nospc=%llu exact_spc=%llu "
         "init_bad=%llu binds=%llu/%llu/%llu unknown=%llu lookup=%llu/%llu/%llu q=%u "
         "repl=%llu/%llu candidate=%llu mode2=%llu mode_reject=%llu carrier=%llu/%llu "
-        "nospc_ready=%llu spc_b12_hold=%llu readiness_reject=%llu req=%llu h3_q=%u "
+        "nospc_ready=%llu spc_ready=%llu donor=%llu/%llu b12=%llu/%llu spc_hold=%llu "
+        "readiness_reject=%llu req=%llu h3_q=%u "
         "d123_steady=%llu d123_blend_dir=%llu d123_blend_col=%llu d123_publish=%llu "
         "h3_b13=%llu/%llu h3_carrier_req=%llu",
         tag,
@@ -500,6 +501,11 @@ void log_state(const char *tag) noexcept
         static_cast<unsigned long long>(h3_draw.carrier_ready),
         static_cast<unsigned long long>(h3_draw.carrier_rejects),
         static_cast<unsigned long long>(h3_draw.nospc_ready),
+        static_cast<unsigned long long>(h3_draw.spc_ready),
+        static_cast<unsigned long long>(h3_draw.spc_donor_hit),
+        static_cast<unsigned long long>(h3_draw.spc_donor_miss),
+        static_cast<unsigned long long>(h3_draw.spc_b12_create),
+        static_cast<unsigned long long>(h3_draw.spc_b12_hit),
         static_cast<unsigned long long>(h3_draw.spc_b12_hold),
         static_cast<unsigned long long>(h3_draw.readiness_rejects),
         static_cast<unsigned long long>(h3_draw.requests),
