@@ -9,7 +9,7 @@ using namespace dsrrl::runtime;
 
 int main()
 {
-    static_CHECK(k_semantic_spec_donor_overrides.size()==8u);
+    static_assert(k_semantic_spec_donor_overrides.size()==8u);
 
     const auto a=find_semantic_spec_donor_override(
         L"A03_7Metal[DSB][L].mtd",
