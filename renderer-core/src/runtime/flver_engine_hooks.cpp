@@ -8,7 +8,6 @@
 #include "dsrrl/runtime/flver_identity_registry.hpp"
 #include "dsrrl/runtime/material_owner_selection.hpp"
 #include "dsrrl/runtime/material_owner_producer.hpp"
-#include "dsrrl/runtime/material_owner_producer.hpp"
 #include <Windows.h>
 #include <bcrypt.h>
 #include <array>
@@ -36,8 +35,6 @@ std::uintptr_t g_base=0; hook g_p{},g_s{},g_d{}; hook_status g_state{};
 using parser_fn=void(__fastcall *)(void *,const void *); using destructor_fn=void(__fastcall *)(void *);
 parser_fn g_po=nullptr; destructor_fn g_do=nullptr;
 
-thread_local operators::material_response::material_identity g_selector_owner_candidate{};
-thread_local bool g_selector_owner_valid=false;
 std::atomic<std::uint64_t> g_selector_events{0};
 std::atomic<std::uint64_t> g_owner_sha_hits{0};
 std::atomic<std::uint64_t> g_owner_mtd_hits{0};
@@ -99,15 +96,33 @@ void __fastcall parse_entry(void*m,const void*r) noexcept {
 void __fastcall destroy_entry(void*m) noexcept {flver_identity_observe_destroy(m);if(g_do)g_do(m);}
 }
 extern "C" void dsrrl_flver_selector_observer(void *c, std::int32_t i) noexcept {
+ ++g_selector_events;
  material_owner_selection_clear();
- if(i<0)return;
+
+ if(i<0){++g_owner_fail_open;return;}
+
  actual_material_owner_observation observation{};
- if(!flver_identity_enrich_owner(c,static_cast<std::uint32_t>(i),observation))
+ if(!flver_identity_enrich_owner(
+        c,static_cast<std::uint32_t>(i),observation)){
+  ++g_owner_fail_open;
   return;
- if(!enrich_exact_owner_mtd_identity(observation))
+ }
+ ++g_owner_sha_hits;
+
+ if(!enrich_exact_owner_mtd_identity(observation)){
+  ++g_owner_fail_open;
   return;
+ }
+ ++g_owner_mtd_hits;
+
  const auto identity=make_actual_material_identity(observation);
- material_owner_selection_publish(identity);
+ if(!identity.owner_tuple_exact ||
+    !material_owner_selection_publish(identity)){
+  ++g_owner_fail_open;
+  return;
+ }
+
+ ++g_exact_owner_ready;
 }
 bool install() noexcept {if(g_p.patched||g_s.patched||g_d.patched)return false;g_state={};if(!exe_ok())return false;g_base=reinterpret_cast<std::uintptr_t>(GetModuleHandleW(nullptr));if(!g_base)return false;g_state.provenance_ok=true;
  if(!prep(g_p,k_parse,k_parse_b,reinterpret_cast<void*>(&parse_entry)))goto fail;g_po=reinterpret_cast<parser_fn>(g_p.trampoline);
@@ -135,6 +150,7 @@ void uninstall() noexcept {
  g_dsrrl_flver_selector_trampoline=nullptr;
  g_po=nullptr;
  g_do=nullptr;
+ material_owner_selection_clear();
  flver_identity_reset();
  g_state={};
 }
@@ -143,15 +159,11 @@ hook_status status() noexcept{return g_state;}
 bool consume_selector_owner_candidate(
     operators::material_response::material_identity &material) noexcept
 {
-    material={};
-    if(!g_selector_owner_valid){
+    if(!material_owner_selection_consume(material)){
         ++g_owner_consume_misses;
         return false;
     }
 
-    material=g_selector_owner_candidate;
-    g_selector_owner_candidate={};
-    g_selector_owner_valid=false;
     ++g_owner_consumed;
     return true;
 }
