@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.20)
 
-project(DSRRLCoreIslands LANGUAGES CXX)
+project(DSRRLCoreIslands LANGUAGES CXX ASM_MASM)
 
 if(NOT WIN32)
     message(FATAL_ERROR "DSRRL Core+Islands addon is Windows-only.")
@@ -65,7 +65,9 @@ add_library(
     dsrrl_renderer_core_integrated
     SHARED
     integrated_addon.cpp
-    "${DSRRL_RENDERER_CORE_ROOT}/src/runtime/a1_create_pipeline_bridge.cpp")
+    flver_selector_hook.asm
+    "${DSRRL_RENDERER_CORE_ROOT}/src/runtime/a1_create_pipeline_bridge.cpp"
+    "${DSRRL_RENDERER_CORE_ROOT}/src/runtime/flver_engine_hooks.cpp")
 
 target_include_directories(
     dsrrl_renderer_core_integrated
