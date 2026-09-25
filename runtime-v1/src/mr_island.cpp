@@ -1025,6 +1025,7 @@ bool on_draw_indexed(command_list *cmd,std::uint32_t index_count,std::uint32_t i
     const bool diffuse_candidate =
         route.diffuse_eligible &&
         g_core->features().enabled(core::operator_id::diffuse) &&
+        g_core->features().enabled(core::operator_id::diffuse_material_domain) &&
         assets::diffuse_ready(ctx,route,receiver_id);
     route.diffuse_c100_carrier_active=diffuse_candidate;
 
@@ -1218,8 +1219,18 @@ bool on_draw_indexed(command_list *cmd,std::uint32_t index_count,std::uint32_t i
             body_material,g_core->features().enabled(core::operator_id::subsurface),true,spec_active))){
             core::render_patch_plan plan{};
             plan.patches[plan.patch_count++]={core::operator_id::material_response,0u,true,false};
-            if(diffuse_candidate)
-                plan.patches[plan.patch_count++]={core::operator_id::diffuse,0u,false,true};
+            if(diffuse_candidate){
+                plan.patches[plan.patch_count++]={
+                    core::operator_id::diffuse_material_domain,
+                    0u,
+                    true,
+                    false};
+                plan.patches[plan.patch_count++]={
+                    core::operator_id::diffuse,
+                    0u,
+                    false,
+                    true};
+            }
             if(normal_candidate)
                 plan.patches[plan.patch_count++]={core::operator_id::normal,0u,false,true};
             if(body_route)
