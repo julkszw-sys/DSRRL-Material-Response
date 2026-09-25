@@ -746,6 +746,7 @@ void texture_name_event(
 
     try {
         constexpr std::size_t k_max = 512u;
+        bool terminated = false;
 
         for (std::size_t i = 0;
              i < k_max;
@@ -760,10 +761,19 @@ void texture_name_event(
                 return;
             }
 
-            if (ch == L'\0')
+            if (ch == L'\0') {
+                terminated = true;
                 break;
+            }
 
             g_logical_name.push_back(ch);
+        }
+
+        // Logical texture identity is exact-only. Never admit a truncated
+        // parser string as a valid resource key.
+        if (!terminated) {
+            g_logical_name.clear();
+            return;
         }
 
         if (!g_logical_name.empty())
