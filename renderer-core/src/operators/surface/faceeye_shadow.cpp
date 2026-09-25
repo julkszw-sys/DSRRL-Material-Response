@@ -8,17 +8,14 @@ float dot(const faceeye_vec3&a,const faceeye_vec3&b) noexcept{return a.x*b.x+a.y
 float sat(float x) noexcept{return std::max(0.0f,std::min(1.0f,x));}
 bool is_csd(faceeye_receiver_variant v) noexcept{return v==faceeye_receiver_variant::csd_no_point||v==faceeye_receiver_variant::csd_pnts||v==faceeye_receiver_variant::csd_pntss||v==faceeye_receiver_variant::csd_pntssss;}
 bool stock_regular_sampler_family(faceeye_receiver_variant v) noexcept{return v==faceeye_receiver_variant::sdw_pntss||v==faceeye_receiver_variant::csd_pntss||v==faceeye_receiver_variant::sdw_pntssss||v==faceeye_receiver_variant::csd_pntssss;}
-bool lane_ready(const faceeye_auxiliary_snapshot_descriptor&s,std::size_t i) noexcept{return s.register_present[i]&&s.producer_offsets[i]==k_faceeye_aux_dirlight_offsets[i]&&s.value_homology_verified[i];}
+bool lane_structurally_ready(const faceeye_auxiliary_snapshot_descriptor&s,std::size_t i) noexcept{return s.register_present[i]&&s.producer_offsets[i]==k_faceeye_aux_dirlight_offsets[i];}
+bool lane_ready(const faceeye_auxiliary_snapshot_descriptor&s,std::size_t i) noexcept{return lane_structurally_ready(s,i)&&s.value_homology_verified[i];}
+template<std::size_t N> bool lanes_structurally_ready(const faceeye_auxiliary_snapshot_descriptor&s,const std::array<std::size_t,N>&lanes) noexcept{for(const auto i:lanes)if(!lane_structurally_ready(s,i))return false;return true;}
+template<std::size_t N> bool lanes_ready(const faceeye_auxiliary_snapshot_descriptor&s,const std::array<std::size_t,N>&lanes) noexcept{for(const auto i:lanes)if(!lane_ready(s,i))return false;return true;}
 bool consumed_carrier_complete(const faceeye_auxiliary_snapshot_descriptor&s,bool require_csd) noexcept{
- // Direct PTDE consumer RE gives the narrow carrier. Both Sdw and Csd consume
- // c121/c122/c175. Sdw additionally consumes the single atlas rectangle c157.
- // Csd consumes selector c123, matrices c140..c155 and all four atlas regions
- // c157..c160. c174/c182 are producer-transport lanes but are outside the
- // closed FaceEye pixel chain and therefore must not widen activation.
  if(!s.immutable_draw_local)return false;
- constexpr std::array<std::size_t,4> common_sdw={{0,1,19,24}};
- for(const auto i:common_sdw)if(!lane_ready(s,i))return false;
- if(require_csd){for(std::size_t i=2;i<=22;++i)if(!lane_ready(s,i))return false;}
+ if(!lanes_ready(s,k_faceeye_sdw_consumed_lane_indices))return false;
+ if(require_csd&&!lanes_ready(s,k_faceeye_csd_only_consumed_lane_indices))return false;
  return true;
 }
 }
@@ -29,13 +26,10 @@ faceeye_runtime_plan evaluate_faceeye_runtime_readiness(const core::feature_regi
  faceeye_runtime_plan o;const auto g=core::evaluate_operator_activation(f,core::operator_id::faceeye_shadow_legacy,a);if(g.state!=core::island_state::active)return o;
  if(!c.receiver_verified){o.reason=faceeye_runtime_reason::receiver_not_verified;return o;}if(c.variant==faceeye_receiver_variant::unsupported){o.reason=faceeye_runtime_reason::unsupported_receiver;return o;}if(!c.runtime_t7_identity_verified){o.reason=faceeye_runtime_reason::runtime_t7_identity_not_verified;return o;}if(!c.auxiliary_dirlight_snapshot_ready){o.reason=faceeye_runtime_reason::auxiliary_dirlight_snapshot_not_ready;return o;}
  const bool csd=is_csd(c.variant);if(!c.auxiliary_dirlight_snapshot.immutable_draw_local){o.reason=faceeye_runtime_reason::auxiliary_dirlight_snapshot_incomplete;return o;}
- // Separate structural presence/offset failure from value-homology failure so
- // diagnostics never promote a present producer lane into semantic equality.
- constexpr std::array<std::size_t,4> common_sdw={{0,1,19,24}};
- for(const auto i:common_sdw)if(!c.auxiliary_dirlight_snapshot.register_present[i]||c.auxiliary_dirlight_snapshot.producer_offsets[i]!=k_faceeye_aux_dirlight_offsets[i]){o.reason=faceeye_runtime_reason::auxiliary_dirlight_snapshot_incomplete;return o;}
- if(csd)for(std::size_t i=2;i<=22;++i)if(!c.auxiliary_dirlight_snapshot.register_present[i]||c.auxiliary_dirlight_snapshot.producer_offsets[i]!=k_faceeye_aux_dirlight_offsets[i]){o.reason=faceeye_runtime_reason::auxiliary_dirlight_snapshot_incomplete;return o;}
- for(const auto i:common_sdw)if(!c.auxiliary_dirlight_snapshot.value_homology_verified[i]){o.reason=faceeye_runtime_reason::auxiliary_value_homology_incomplete;return o;}
- if(csd)for(std::size_t i=2;i<=22;++i)if(!c.auxiliary_dirlight_snapshot.value_homology_verified[i]){o.reason=faceeye_runtime_reason::auxiliary_value_homology_incomplete;return o;}
+ // Structural transport and semantic/value homology are deliberately separate
+ // gates: a present producer lane is never promoted into cross-render equality.
+ if(!lanes_structurally_ready(c.auxiliary_dirlight_snapshot,k_faceeye_sdw_consumed_lane_indices)||(csd&&!lanes_structurally_ready(c.auxiliary_dirlight_snapshot,k_faceeye_csd_only_consumed_lane_indices))){o.reason=faceeye_runtime_reason::auxiliary_dirlight_snapshot_incomplete;return o;}
+ if(!lanes_ready(c.auxiliary_dirlight_snapshot,k_faceeye_sdw_consumed_lane_indices)||(csd&&!lanes_ready(c.auxiliary_dirlight_snapshot,k_faceeye_csd_only_consumed_lane_indices))){o.reason=faceeye_runtime_reason::auxiliary_value_homology_incomplete;return o;}
  if(csd&&!c.csd_matrix_region_ready){o.reason=faceeye_runtime_reason::csd_matrix_region_not_ready;return o;}
  const bool native=stock_regular_sampler_family(c.variant);if(native){o.use_stock_ptde_style_kernel=true;if(!c.stock_ptde_kernel_identity_verified){o.reason=faceeye_runtime_reason::stock_ptde_kernel_identity_not_verified;return o;}if(!c.stock_regular_s7_verified){o.reason=faceeye_runtime_reason::stock_regular_s7_not_verified;return o;}}else{o.replace_comparison_kernel=true;if(!c.replacement_ptde_kernel_shader_ready){o.reason=faceeye_runtime_reason::replacement_ptde_kernel_shader_not_ready;return o;}o.override_s7_with_regular_sampler=true;if(!c.regular_s7_sampler_ready){o.reason=faceeye_runtime_reason::regular_s7_sampler_not_ready;return o;}if(!c.regular_s7_descriptor_verified){o.reason=faceeye_runtime_reason::regular_s7_descriptor_not_verified;return o;}if(!c.sampler_override_transaction_ready){o.reason=faceeye_runtime_reason::sampler_override_transaction_not_ready;return o;}}
  if(!c.legacy_env_probe_routes_ready){o.reason=faceeye_runtime_reason::legacy_env_probe_routes_not_ready;return o;}if(!c.independent_lighting_exclusion_verified){o.reason=faceeye_runtime_reason::independent_lighting_exclusion_not_verified;return o;}if(!c.draw_transaction_ready){o.reason=faceeye_runtime_reason::draw_transaction_not_ready;return o;}o.ready=true;o.reason=faceeye_runtime_reason::ready;return o;}
