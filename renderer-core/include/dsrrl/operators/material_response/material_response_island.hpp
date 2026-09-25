@@ -61,8 +61,6 @@ struct receiver_recipe {
     material_scope_policy scope = material_scope_policy::exact_material_required;
     std::uint32_t certified_operations = response_none;
     ptde_envspec_presence envspec = ptde_envspec_presence::unknown;
-    std::array<float, 3> c100{{1.0f, 1.0f, 1.0f}};
-    std::array<float, 3> c101_f0q{{1.0f, 1.0f, 1.0f}};
 };
 
 struct material_profile {
@@ -92,6 +90,8 @@ struct decision {
     std::uint8_t lod_min = 0;
     std::uint8_t lod_max = 7;
     ptde_envspec_presence envspec = ptde_envspec_presence::unknown;
+    std::array<float, 3> c100{{1.0f, 1.0f, 1.0f}};
+    std::array<float, 3> c101_f0q{{1.0f, 1.0f, 1.0f}};
 };
 
 class material_response_island {
