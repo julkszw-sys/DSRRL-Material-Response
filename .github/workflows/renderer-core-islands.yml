@@ -55,6 +55,8 @@ jobs:
             --input renderer-core/data/a1_island_plan_index_v1.json \
             --output /tmp/generated_a1_plan_index_v1.hpp
           cmp /tmp/generated_a1_plan_index_v1.hpp renderer-core/include/dsrrl/operators/legacy_plan/generated_a1_plan_index_v1.hpp
+      - name: Verify DSR FLVER ZIP ownership census
+        run: python3 renderer-core/tests/test_dsr_flver_zip_ownership_census.py
       - name: Configure
         run: cmake -S renderer-core -B build/renderer-core -DCMAKE_BUILD_TYPE=Release
       - name: Build
