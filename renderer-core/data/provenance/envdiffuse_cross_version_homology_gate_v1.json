@@ -1,0 +1,31 @@
+{
+  "schema": 1,
+  "island": "surface.envdiffuse",
+  "producer_class": "ordinary_mapmodel",
+  "ptde_ownership": {
+    "state": "SOURCE_COMPLETE_POSITIVE_OWNERSHIP",
+    "canonical_rows": 87151,
+    "mtd_resolved": 87151,
+    "unresolved_rows": 0,
+    "source_sha256": "f6fab999e103cb11a0c3ce50b33bde82c531f8297df81674344c1e3e9082a6f6"
+  },
+  "cross_version_homology": {
+    "state": "OPEN",
+    "reason": "No source-complete DSR FLVER/material ownership corpus is present in the current Renderer Core evidence set, and PTDE texture-resource byte identity is explicitly UNKNOWN.",
+    "required_before_activation": [
+      "same-world Classic PTDE-to-DSR assignment relation",
+      "exact DSR owner/material/resource identity",
+      "exact PTDE probe resource identity",
+      "receiver-scoped ownership and restore"
+    ]
+  },
+  "carrier": "EnvDiffuse endpoint XYZ + exact PTDE t11/t13 probe resources + producer-class/assignment provenance",
+  "policy": {
+    "classic_assignment_homology_verified": false,
+    "missing_dsr_owner_corpus": "FAIL_OPEN",
+    "ptde_positive_use_does_not_imply_dsr_homology": true,
+    "runtime_activation": "OPEN",
+    "pixel_equivalence": "OPEN"
+  },
+  "evidence_id": "83461f70-b56a-4639-bc1a-dff6b2772b04"
+}
