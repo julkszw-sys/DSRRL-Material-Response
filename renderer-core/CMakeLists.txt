@@ -50,6 +50,7 @@ add_library(dsrrl_renderer_core STATIC
     src/draw_transaction.cpp
     src/runtime/material_owner_producer.cpp
     src/runtime/flver_identity_registry.cpp
+    src/runtime/stable_receiver_pipeline_registry.cpp
     src/renderer_core.cpp
     src/operator_catalog.cpp
     src/island_policy.cpp
@@ -86,6 +87,11 @@ add_executable(dsrrl_renderer_material_owner_tests tests/material_owner_producer
 add_executable(dsrrl_renderer_flver_identity_tests tests/flver_identity_registry_tests.cpp)
 target_link_libraries(dsrrl_renderer_flver_identity_tests PRIVATE dsrrl_renderer_core)
 target_compile_features(dsrrl_renderer_flver_identity_tests PRIVATE cxx_std_17)
+
+add_executable(dsrrl_renderer_stable_receiver_pipeline_tests
+    tests/stable_receiver_pipeline_registry_tests.cpp)
+target_link_libraries(dsrrl_renderer_stable_receiver_pipeline_tests PRIVATE dsrrl_renderer_core)
+target_compile_features(dsrrl_renderer_stable_receiver_pipeline_tests PRIVATE cxx_std_17)
 target_link_libraries(dsrrl_renderer_material_owner_tests PRIVATE dsrrl_renderer_core)
 target_compile_features(dsrrl_renderer_material_owner_tests PRIVATE cxx_std_17)
 
@@ -136,6 +142,7 @@ if(MSVC)
     target_compile_options(dsrrl_renderer_postprocess_unblock_tests PRIVATE /W4 /WX)
     target_compile_options(dsrrl_renderer_build151_nospc_tests PRIVATE /W4 /WX)
     target_compile_options(dsrrl_renderer_mtd_semantic_census_tests PRIVATE /W4 /WX)
+    target_compile_options(dsrrl_renderer_stable_receiver_pipeline_tests PRIVATE /W4 /WX)
 else()
     target_compile_options(dsrrl_renderer_core_tests PRIVATE -Wall -Wextra -Wpedantic -Werror)
     target_compile_options(dsrrl_renderer_island_tests PRIVATE -Wall -Wextra -Wpedantic -Werror)
@@ -144,6 +151,7 @@ else()
     target_compile_options(dsrrl_renderer_postprocess_unblock_tests PRIVATE -Wall -Wextra -Wpedantic -Werror)
     target_compile_options(dsrrl_renderer_build151_nospc_tests PRIVATE -Wall -Wextra -Wpedantic -Werror)
     target_compile_options(dsrrl_renderer_mtd_semantic_census_tests PRIVATE -Wall -Wextra -Wpedantic -Werror)
+    target_compile_options(dsrrl_renderer_stable_receiver_pipeline_tests PRIVATE -Wall -Wextra -Wpedantic -Werror)
 endif()
 
 if(DSRRL_BUILD_PHASE0_PROBE)
@@ -174,6 +182,7 @@ endif()
 enable_testing()
 add_test(NAME dsrrl_renderer_material_owner_tests COMMAND dsrrl_renderer_material_owner_tests)
 add_test(NAME dsrrl_renderer_flver_identity_tests COMMAND dsrrl_renderer_flver_identity_tests)
+add_test(NAME dsrrl_renderer_stable_receiver_pipeline_tests COMMAND dsrrl_renderer_stable_receiver_pipeline_tests)
 add_test(NAME dsrrl_renderer_core_tests COMMAND dsrrl_renderer_core_tests)
 add_test(NAME dsrrl_renderer_island_tests COMMAND dsrrl_renderer_island_tests)
 add_test(NAME dsrrl_renderer_future_runtime_tests COMMAND dsrrl_renderer_future_runtime_tests)
