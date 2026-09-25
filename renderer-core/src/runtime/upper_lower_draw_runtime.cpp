@@ -1372,9 +1372,8 @@ void upper_lower_draw_runtime::selector_event(
     ++g_selector_match;
 }
 
-bool upper_lower_draw_runtime::prepare_draw_request(
+bool upper_lower_draw_runtime::prepare_upper_lower_carrier(
     ID3D11DeviceContext *context,
-    std::uint32_t receiver_id,
     prepared_upper_lower_draw &prepared) noexcept
 {
     prepared = {};
@@ -1384,8 +1383,6 @@ bool upper_lower_draw_runtime::prepare_draw_request(
         !core_.features().enabled(
             core::operator_id::upper_lower) ||
         context == nullptr ||
-        receiver_id < 24u ||
-        receiver_id > 47u ||
         !g_draw_snapshot)
         return false;
 
@@ -1429,6 +1426,20 @@ bool upper_lower_draw_runtime::prepare_draw_request(
     prepared.ready = true;
     ++g_requests;
     return true;
+}
+
+bool upper_lower_draw_runtime::prepare_draw_request(
+    ID3D11DeviceContext *context,
+    std::uint32_t receiver_id,
+    prepared_upper_lower_draw &prepared) noexcept
+{
+    if (receiver_id < 24u ||
+        receiver_id > 47u)
+        return false;
+
+    return prepare_upper_lower_carrier(
+        context,
+        prepared);
 }
 
 bool upper_lower_draw_runtime::prepare_hemdir3_carrier(
