@@ -93,6 +93,15 @@ k_semantic_spec_donor_overrides = {{
     }
 }};
 
+inline bool semantic_spec_raw_hash_is_ambiguous(
+    std::string_view raw_sha256) noexcept
+{
+    for(const auto &entry:k_semantic_spec_donor_overrides)
+        if(entry.raw_sha256==raw_sha256)
+            return true;
+    return false;
+}
+
 inline int find_semantic_spec_donor_override(
     std::wstring_view semantic_name,
     std::string_view raw_sha256) noexcept
