@@ -68,6 +68,7 @@ add_library(
     flver_identity_detour.asm
     "${DSRRL_RENDERER_CORE_ROOT}/src/runtime/a1_create_pipeline_bridge.cpp"
     "${DSRRL_RENDERER_CORE_ROOT}/src/runtime/flver_engine_hooks.cpp"
+    "${DSRRL_RENDERER_CORE_ROOT}/src/runtime/draw_state_transaction.cpp"
     "${DSRRL_RENDERER_CORE_ROOT}/src/runtime/material_response_draw_transaction.cpp"
     "${DSRRL_RENDERER_CORE_ROOT}/src/operators/material_response/material_response_v211_materializer.cpp")
 
