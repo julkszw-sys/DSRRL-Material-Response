@@ -144,6 +144,16 @@ int main()
     CHECK(pmetal_tex_legacy.exact_host_identity_match);
     CHECK(pmetal_tex_legacy.positive_mask==pmetal_tex.positive_mask);
 
+    // Legacy parser keys are not always the canonical basename hash. Raw DSR
+    // SHA fallback is allowed only when every exact host alias for that SHA has
+    // a PTDE capability row and all aliases agree on the positive mask.
+    const auto pmetal_tex_fallback=
+        classify_ptde_flver_texture_semantics_legacy(
+            0x1755dba68cb5e9a2ull,
+            pmetal.raw_mtd_sha256);
+    CHECK(pmetal_tex_fallback.exact_host_identity_match);
+    CHECK(pmetal_tex_fallback.positive_mask==pmetal_tex.positive_mask);
+
     d=classify_mtd_semantic(q,mtd_semantic_operator::diffuse);
     CHECK(d.state==mtd_semantic_state::use);
     CHECK(d.source==
@@ -205,6 +215,16 @@ int main()
     CHECK(classify_mtd_semantic(
         edge_q,mtd_semantic_operator::material_response).state==
         mtd_semantic_state::use);
+    const auto edge_tex_exact=
+        classify_ptde_flver_texture_semantics(edge);
+    CHECK(edge_tex_exact.exact_host_identity_match);
+    CHECK(ptde_flver_texture_semantic_present(
+        edge_tex_exact,ptde_texture_semantic::diffuse));
+    const auto edge_tex_ambiguous_fallback=
+        classify_ptde_flver_texture_semantics_legacy(
+            0x075f111448f91c2eull,
+            edge.raw_mtd_sha256);
+    CHECK(!edge_tex_ambiguous_fallback.exact_host_identity_match);
     edge.semantic_name_hash=0u;
     edge_q.material=edge;
     CHECK(classify_mtd_semantic(
