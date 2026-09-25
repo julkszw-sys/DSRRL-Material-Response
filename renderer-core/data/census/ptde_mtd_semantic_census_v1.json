@@ -13,7 +13,8 @@
     {"artifact_id":944,"sha256":"e34e395b110d247b745cd54dc7a2ce9f088866017767b2bb570fb14af8ed45e8","role":"SpecRGB residual exact-MTD audit"},
     {"artifact_id":1322,"sha256":"0701154f5fa683aae95094a65bad32320baa74a3f8855183b750fd7383d28b8a","role":"325-record EnvSpec tristate router; row-level import pending"},
     {"path":"renderer-core/data/material_response_routes_v1.json","role":"35 exact names / 34 raw SHA keys; c101, family and receiver triplets"},
-    {"path":"renderer-core/data/census/ptde_subsurface_usage_census_v1.json","role":"verified Subsurface classification seed"}
+    {"path":"renderer-core/data/census/ptde_subsurface_usage_census_v1.json","role":"verified Subsurface classification seed"},
+    {"path":"renderer-core/data/ptde_full_flver_ownership_census_v1.json","role":"exact-resolved PTDE FLVER material texture bindings; positive resource-consumer evidence only while scan errors remain"}
   ],
   "operator_columns": ["material_response","spec_rgb","env_spec","subsurface","diffuse","normal_bump","upper_lower","hemenv","hemenv_lerp","pointlight","alpha_blend","parallax","emissive_lightmap","texture_resource_consumers"],
   "cohorts": [
@@ -46,7 +47,12 @@
       "ptde_mtd_name":"Ps_Body[DSB].mtd",
       "ptde_mtd_sha256":"af2f108831b783a43b0e02f047919719d14f38e68d6c5a97b80678d593ba1c95",
       "receiver_scope":[33,34,35],
-      "operators":{"subsurface":{"state":"NO_USE","confidence":"HIGH_CONFIDENCE","basis":"verified PTDE plain ColDifSpcBmp homolog versus DSR Ps_Body[DSBT] Subsurf route"}}
+      "operators":{
+        "subsurface":{"state":"NO_USE","confidence":"HIGH_CONFIDENCE","basis":"verified PTDE plain ColDifSpcBmp homolog versus DSR Ps_Body[DSBT] Subsurf route"},
+        "diffuse":{"state":"USE","confidence":"CONFIRMED","basis":"canonical PTDE FLVER ownership census resolves all bindings by exact basename+raw-SHA and records 701 g_Diffuse bindings for Ps_Body[DSB].mtd"},
+        "normal_bump":{"state":"USE","confidence":"CONFIRMED","basis":"canonical PTDE FLVER ownership census resolves all bindings by exact basename+raw-SHA and records 701 g_Bumpmap bindings for Ps_Body[DSB].mtd"},
+        "texture_resource_consumers":{"state":"USE","confidence":"CONFIRMED","basis":"positive exact FLVER ownership evidence: g_Diffuse=701, g_Bumpmap=701, g_DetailBumpmap=701, g_Specular=701; this does not promote SpecRGB operator semantics"}
+      }
     },
     {
       "ptde_mtd_name":"P_Metal[DSB].mtd",
@@ -63,6 +69,7 @@
   "guardrails": [
     "Never infer NO_USE from an MTD name or missing suffix alone.",
     "A cohort classification may not override a contradictory exact record.",
+    "Positive FLVER resource ownership may promote only the observed resource consumer; it does not by itself prove SpecRGB, EnvSpec, emissive/lightmap, runtime activation, or pixel equivalence.",
     "UNKNOWN preserves stock DSR behavior.",
     "Construction/static routing evidence does not establish runtime activation or PTDE-visible pixel equivalence."
   ]
