@@ -66,6 +66,8 @@ std::size_t register_confirmed_material_routes_v1(material_response_island &isla
 
         material_identity identity;
         identity.valid = true;
+        // Seed validation is MTD/profile construction only. It intentionally
+        // carries no FLVER owner provenance; runtime ownership is draw-specific.
         identity.route_index = seed.route_index;
         identity.semantic_name_hash = profile.semantic_name_hash;
         identity.raw_mtd_sha256 = profile.raw_mtd_sha256;
