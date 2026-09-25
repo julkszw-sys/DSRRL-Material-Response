@@ -1352,21 +1352,19 @@ bool on_draw_indexed(command_list *cmd,std::uint32_t index_count,std::uint32_t i
         spec_candidate &&
         g_core->features().enabled(core::operator_id::env_spec);
 
+    // Lower-priority islands remain independently eligible. Dispatch below
+    // suppresses them only after a higher-priority replacement shader is
+    // actually available; a requested-but-unready EnvSpec must not disable
+    // the owner-accepted V10 path.
     const bool pmetal_v10_feature =
         pmetal_exact_route &&
         diffuse_candidate &&
-        !pmetal_envspec_feature &&
         g_core->features().enabled(core::operator_id::pmetal_black_safe_v10);
 
-    // V13 remains preserved as a separately preflighted research/runtime path,
-    // but it must not supersede either the full EnvSpec island or the
-    // owner-accepted V10 result.
     const bool pmetal_v13_feature =
         pmetal_exact_route &&
         diffuse_candidate &&
         !g_bound_lerp &&
-        !pmetal_envspec_feature &&
-        !pmetal_v10_feature &&
         g_core->features().enabled(core::operator_id::pmetal_black_safe_source);
 
     upper_lower::pmetal_env_source pmetal_source{};
@@ -1496,7 +1494,9 @@ bool on_draw_indexed(command_list *cmd,std::uint32_t index_count,std::uint32_t i
                         replacement->AddRef();
                         pmetal_envspec_active=true;
                     }
-                }else if(pmetal_v10_feature && don.has_c101){
+                }
+
+                if(!replacement && pmetal_v10_feature && don.has_c101){
                     ID3D11PixelShader *v10 =
                         intended_ul && spec_active ? g_device.v9a_full_ul_spec[i] :
                         intended_ul ? g_device.v9a_full_ul[i] :
@@ -1507,7 +1507,9 @@ bool on_draw_indexed(command_list *cmd,std::uint32_t index_count,std::uint32_t i
                         replacement->AddRef();
                         pmetal_v10_active=true;
                     }
-                }else if(pmetal_candidate && don.has_c101){
+                }
+
+                if(!replacement && pmetal_candidate && don.has_c101){
                     ID3D11PixelShader *v13 =
                         intended_ul && spec_active ? g_device.full_v13_ul_spec[i] :
                         intended_ul ? g_device.full_v13_ul[i] :
