@@ -153,8 +153,9 @@ bool observe_draw_identity(
         receiver_id = subsurface_target;
         subsurface_bound = true;
     } else if (hemdir3_receiver) {
-        receiver_id =
-            hemdir3_identity.paired_stable_receiver_id;
+        // HemDir3 has its own exact receiver namespace. no-Spc deliberately
+        // has no paired stable HemEnv receiver, and Spc pairing is metadata
+        // only; never leak either into generic HemEnv routing.
         hemdir3_bound = true;
     }
 
@@ -450,6 +451,7 @@ bool on_create_pipeline(
 
     dsrrl::operators::lightbank::
         hemdir3_b13_materialize_outcome h3{};
+    bool h3_identity_ready = false;
     bool h3_replacement_ready = false;
 
     if (pixel_shader != nullptr &&
@@ -502,11 +504,17 @@ bool on_create_pipeline(
         if (h3.result ==
             dsrrl::operators::lightbank::
                 hemdir3_b13_materialize_result::applied) {
-            h3_replacement_ready =
-                g_hemdir3.register_replacement(
-                    h3,
-                    h3_payload.data(),
-                    h3_payload.size());
+            h3_identity_ready = true;
+
+            if (h3.stratum ==
+                dsrrl::operators::lightbank::
+                    hemdir3_native_stratum::nospc) {
+                h3_replacement_ready =
+                    g_hemdir3.register_replacement(
+                        h3,
+                        h3_payload.data(),
+                        h3_payload.size());
+            }
         }
     }
 
@@ -517,7 +525,7 @@ bool on_create_pipeline(
             subobject_count,
             subobjects);
 
-    if (h3_replacement_ready) {
+    if (h3_identity_ready) {
         const auto *created_shader =
             find_pixel_shader(
                 subobject_count,
@@ -526,7 +534,7 @@ bool on_create_pipeline(
         if (created_shader == nullptr ||
             created_shader->code == nullptr ||
             created_shader->code_size == 0u) {
-            h3_replacement_ready = false;
+            h3_identity_ready = false;
         } else {
             dsrrl::runtime::hemdir3_receiver_identity identity{};
             identity.plan_index = h3.plan_index;
@@ -535,7 +543,7 @@ bool on_create_pipeline(
             identity.paired_stable_receiver_id =
                 h3.paired_stable_receiver_id;
 
-            h3_replacement_ready =
+            h3_identity_ready =
                 dsrrl::runtime::
                     hemdir3_receiver_attest_created_code(
                         created_shader->code,
@@ -544,6 +552,7 @@ bool on_create_pipeline(
         }
     }
 
+    (void)h3_identity_ready;
     (void)h3_replacement_ready;
     return a1_changed;
 }
