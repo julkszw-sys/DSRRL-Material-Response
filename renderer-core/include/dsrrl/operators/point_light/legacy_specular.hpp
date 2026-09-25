@@ -1,10 +1,15 @@
 #pragma once
 
 #include "dsrrl/core/island_policy.hpp"
+#include "dsrrl/core/draw_transaction_policy.hpp"
 
 #include <cstdint>
 
 namespace dsrrl::operators::point_light {
+
+static_assert(
+    core::requires_draw_transaction(core::operator_id::local_specular_legacy),
+    "Legacy local specular must use the shared draw transaction layer.");
 
 struct pointlight_vec3 {
     float x=0.0f;
