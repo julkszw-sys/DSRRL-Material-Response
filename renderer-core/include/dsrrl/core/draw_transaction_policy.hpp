@@ -93,7 +93,7 @@ inline constexpr std::array<
      draw_mutation_srv,
      draw_mutation_srv, true, true, true},
     {operator_id::normal, draw_transaction_mode::draw_required,
-     draw_mutation_srv, draw_mutation_srv, true, true, true},
+     draw_mutation_srv, draw_mutation_srv, true, false, true},
     {operator_id::diffuse_material_domain,
      draw_transaction_mode::create_time_safe,
      draw_mutation_none, draw_mutation_shader, true, false, false},
