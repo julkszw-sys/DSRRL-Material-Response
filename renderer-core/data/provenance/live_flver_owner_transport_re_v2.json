@@ -1,0 +1,37 @@
+{
+  "schema": "dsrrl.live_flver_owner_transport_re.v2",
+  "status": "HIGH_CONFIDENCE_CONSTRUCTION_PASS_RUNTIME_OPEN",
+  "exe_sha256": "a45aaa36dd2f6cc151670a639ea5547043cf38ea79ff4178b963c6ed71f98d7b",
+  "flver_parse": {
+    "rva": "0x20D910",
+    "entry_rcx": "parsed model destination",
+    "entry_rdx": "raw FLVER2 image before in-place offset fixups",
+    "header": {
+      "version_offset": "0x08",
+      "data_offset_field": "0x0C",
+      "data_length_field": "0x10",
+      "material_count_field": "0x18"
+    },
+    "raw_length": "dataOffset + dataLength"
+  },
+  "selector_transport": {
+    "render_model_root": "rdi",
+    "selector_container": "rdi + 0x88",
+    "material_index": "r8d / ebx",
+    "material_resolution": "*([container+0x10] + 24*material_index)",
+    "owner_identity_recovery": "model_root = selector_container - 0x88"
+  },
+  "implementation": {
+    "producer": "hash raw FLVER at 0x20D910 before original parser mutates offsets",
+    "transport": "map parsed model root -> full SHA-256",
+    "consumer": "selector recovers model root from container-0x88 and combines SHA-256 + material slot + exact MTD-name hash",
+    "authorization": "generated dsr_flver_owner_tuple_authenticated",
+    "fail_open": true
+  },
+  "remaining_blocker": {
+    "static_owner_header_source_complete": false,
+    "canonical_corpus_artifact_id": 1366,
+    "canonical_corpus_sha256": "0be97e628b52b74896697bd641c23347d532dd4a0d42d9158b783f22f9d191a5",
+    "note": "Runtime transport is implemented, but the repository generated owner header is still the deliberate zero-row placeholder. Positive authorization remains false until the canonical corpus bytes are materialized reproducibly into the generated header."
+  }
+}
