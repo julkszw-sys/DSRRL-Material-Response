@@ -90,7 +90,7 @@ bool install() noexcept {if(g_p.patched||g_s.patched||g_d.patched)return false;g
  if(!prep(g_p,k_parse,k_parse_b,reinterpret_cast<void*>(&parse_entry)))goto fail;g_po=reinterpret_cast<parser_fn>(g_p.trampoline);
  if(!prep(g_d,k_destroy,k_destroy_b,reinterpret_cast<void*>(&destroy_entry)))goto fail;g_do=reinterpret_cast<destructor_fn>(g_d.trampoline);
  if(!prep(g_s,k_selector,k_selector_b,reinterpret_cast<void*>(&dsrrl_flver_selector_hook_entry)))goto fail;g_dsrrl_flver_selector_trampoline=g_s.trampoline;
- if(!arm(g_p)||!arm(g_d)||!arm(g_s))goto fail;g_state.parser_armed=true;g_state.destructor_armed=true;g_state.selector_armed=true;return true;
+ if(!arm(g_p)||!arm(g_d)||!arm(g_s))goto fail;g_state.parser_armed=true;g_state.destructor_armed=true;g_state.selector_armed=true;g_state.selector_owner_enrichment=true;return true;
 fail:
  uninstall();
  return false;
