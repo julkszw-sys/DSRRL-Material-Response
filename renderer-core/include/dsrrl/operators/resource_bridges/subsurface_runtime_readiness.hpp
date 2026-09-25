@@ -1,11 +1,16 @@
 #pragma once
 
 #include "dsrrl/core/island_policy.hpp"
+#include "dsrrl/core/draw_transaction_policy.hpp"
 #include "dsrrl/operators/resource_bridges/subsurface_route.hpp"
 
 #include <cstdint>
 
 namespace dsrrl::operators::resource_bridges {
+
+static_assert(
+    core::requires_draw_transaction(core::operator_id::subsurface),
+    "Subsurface runtime readiness requires the shared draw transaction layer.");
 
 enum class subsurface_runtime_reason : std::uint8_t {
     ready = 0,
