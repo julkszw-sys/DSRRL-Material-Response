@@ -1,5 +1,6 @@
 #include "dsrrl/runtime/draw_state_transaction.hpp"
 #include "dsrrl/runtime/d3d11_cb_window.hpp"
+#include "dsrrl/core/draw_transaction_policy.hpp"
 
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
@@ -224,7 +225,9 @@ bool draw_state_transaction_runtime::begin(
                 capture.base == capture.window;
             capture.explicit_window =
                 capture.window != nullptr &&
-                count != 0u;
+                count >= 16u &&
+                (first % 16u) == 0u &&
+                (count % 16u) == 0u;
         }
 
         if (!capture.coherent) {
@@ -278,13 +281,17 @@ bool draw_state_transaction_runtime::begin(
             return false;
         }
 
+        const auto carrier_mask =
+            core::draw_policy_carrier_write_mask(op);
+
         plan.patches[plan.patch_count++] = {
             op,
-            0u,
+            carrier_mask,
             mutation.replace_pixel_shader,
             mutation.srv_count != 0u ||
                 mutation.sampler_count != 0u
         };
+        plan.carrier_write_mask |= carrier_mask;
     }
 
     state.command = command_key(cmd_list);
@@ -344,16 +351,21 @@ bool draw_state_transaction_runtime::begin(
 
     if (mutation.replace_pixel_shader) {
         ID3D11PixelShader *shader = nullptr;
-        UINT linked_count = 0u;
+        std::array<ID3D11ClassInstance *, 1> linked{};
+        UINT linked_count =
+            static_cast<UINT>(linked.size());
         ctx->PSGetShader(
             &shader,
-            nullptr,
+            linked.data(),
             &linked_count);
         bound =
             shader == mutation.pixel_shader &&
             linked_count == 0u;
         if (shader != nullptr)
             shader->Release();
+        for (auto *instance : linked)
+            if (instance != nullptr)
+                instance->Release();
     }
 
     for (std::uint32_t i = 0;
