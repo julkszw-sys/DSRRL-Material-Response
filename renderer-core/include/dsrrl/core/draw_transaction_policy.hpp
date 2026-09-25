@@ -158,7 +158,7 @@ constexpr std::uint32_t draw_policy_carrier_write_mask(
     case operator_id::upper_lower:
         return carrier_ul_mask;
     case operator_id::hemdir3:
-        return carrier_hemdir3_mask | carrier_ul_mask;
+        return carrier_hemdir3_mask;
     default:
         return 0u;
     }
