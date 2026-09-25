@@ -136,6 +136,8 @@ jobs:
           $h3Materializer = Get-Content renderer-core/src/operators/lightbank/hemdir3_b13_materializer.cpp -Raw
           $h3Registry = Get-Content renderer-core/src/runtime/hemdir3_pipeline_registry.cpp -Raw
           $h3Runtime = Get-Content renderer-core/src/runtime/hemdir3_draw_runtime.cpp -Raw
+          $h3SpcAuthority = Get-Content renderer-core/data/provenance/hemdir3_spc_b12_patch_sites_v1.tsv -Raw
+          $h3SpcDonors = Get-Content renderer-core/data/provenance/hemdir3_spc_material_donors_v1.tsv -Raw
           $selectorAsm = Get-Content renderer-core/integrated/flver_identity_detour.asm -Raw
           $cmake = Get-Content renderer-core/integrated/CMakeLists.txt -Raw
 
@@ -368,7 +370,12 @@ jobs:
 
           foreach ($required in @(
             'materialize_hemdir3_b13_receiver',
+            'k_cb12_decl',
             'k_cb13_decl',
+            'find_hemdir3_spc_b12_plan',
+            'k_hemdir3_spc_c101_operand_token',
+            'k_hemdir3_spc_c102_operand_token',
+            'DSRRL_HemDir3MaterialCarrier',
             'source_register - 92u',
             'replacement_sha256',
             'compose_enabled_a1_islands'
@@ -389,18 +396,27 @@ jobs:
             'operator_id::hemdir3',
             'exact_effective_mode2',
             'prepare_hemdir3_carrier',
+            'realize_spc_b12',
+            'find_hemdir3_spc_material_donor',
+            'spc_b12_material_donor_ready',
+            'directional_specular_continuation_ready',
             'additional_shader_owners',
             'additional_carrier_owners',
             'operator_id::upper_lower',
-            'spc_b12_hold_',
-            'hemdir3_native_stratum::nospc'
+            'hemdir3_native_stratum::nospc',
+            'hemdir3_native_stratum::spc'
           )) {
             if ($h3Runtime -notmatch [regex]::Escape($required)) { throw "HemDir3 shared-batch runtime invariant missing: $required" }
           }
 
-          if ($h3Runtime -match 'spc_b12_material_donor_ready\s*=\s*true' -or
-              $h3Runtime -match 'receiver_stratum::spc') {
-            throw "HemDir3 Spc must remain fail-open until exact c101/c102 b12 donor routing is implemented"
+          if (($h3SpcAuthority -split "`n" | Where-Object { $_ -and -not $_.StartsWith('#') }).Count -ne 25) {
+            throw "HemDir3 Spc shader authority must contain header + 24 exact rows"
+          }
+          if (($h3SpcDonors -split "`n" | Where-Object { $_ -and -not $_.StartsWith('#') }).Count -ne 307) {
+            throw "HemDir3 Spc donor authority must contain header + 306 exact rows"
+          }
+          if ($h3Runtime -match 'c11' -or $h3Runtime -match 'semantic_name_hash.*find_hemdir3_spc_material_donor') {
+            throw "HemDir3 Spc donor routing must not borrow DSR c11 or semantic-name-only identity"
           }
 
           if ($entry -notmatch 'operator_id::hemdir3' -or
@@ -426,10 +442,20 @@ jobs:
         shell: pwsh
         run: |
           python renderer-core/tools/generate_hemdir3_receiver_registry_v1.py --receivers renderer-core/data/provenance/hemdir3_receivers_v1.tsv --patch-sites renderer-core/data/provenance/hemdir3_b13_patch_sites_v1.tsv --replacements renderer-core/data/provenance/hemdir3_b13_replacements_v1.tsv --out "$env:RUNNER_TEMP/generated_hemdir3_receivers_v1.hpp"
-          $built = "build-integrated/generated/dsrrl/operators/lightbank/generated_hemdir3_receivers_v1.hpp"
-          if (!(Test-Path $built)) { throw "Generated HemDir3 authority header missing from build" }
-          if ((Get-FileHash $built -Algorithm SHA256).Hash -ne (Get-FileHash "$env:RUNNER_TEMP/generated_hemdir3_receivers_v1.hpp" -Algorithm SHA256).Hash) {
-            throw "Generated HemDir3 receiver authority is not reproducible"
+          python renderer-core/tools/generate_hemdir3_spc_b12_authority_v1.py --input renderer-core/data/provenance/hemdir3_spc_b12_patch_sites_v1.tsv --output "$env:RUNNER_TEMP/generated_hemdir3_spc_b12_authority_v1.hpp"
+          python renderer-core/tools/generate_hemdir3_spc_material_donors_v1.py --input renderer-core/data/provenance/hemdir3_spc_material_donors_v1.tsv --output "$env:RUNNER_TEMP/generated_hemdir3_spc_material_donors_v1.hpp"
+
+          foreach ($name in @(
+            'generated_hemdir3_receivers_v1.hpp',
+            'generated_hemdir3_spc_b12_authority_v1.hpp',
+            'generated_hemdir3_spc_material_donors_v1.hpp'
+          )) {
+            $built = "build-integrated/generated/dsrrl/operators/lightbank/$name"
+            $regen = "$env:RUNNER_TEMP/$name"
+            if (!(Test-Path $built)) { throw "Generated HemDir3 authority header missing from build: $name" }
+            if ((Get-FileHash $built -Algorithm SHA256).Hash -ne (Get-FileHash $regen -Algorithm SHA256).Hash) {
+              throw "Generated HemDir3 authority is not reproducible: $name"
+            }
           }
           Write-Host "CORE_ISLANDS_HEMDIR3_GENERATED_AUTHORITY_PASS"
 
@@ -509,6 +535,10 @@ jobs:
           $h3ReceiverAuthorityHash = (Get-FileHash "renderer-core/data/provenance/hemdir3_receivers_v1.tsv" -Algorithm SHA256).Hash.ToLowerInvariant()
           $h3PatchAuthorityHash = (Get-FileHash "renderer-core/data/provenance/hemdir3_b13_patch_sites_v1.tsv" -Algorithm SHA256).Hash.ToLowerInvariant()
           $h3ReplacementAuthorityHash = (Get-FileHash "renderer-core/data/provenance/hemdir3_b13_replacements_v1.tsv" -Algorithm SHA256).Hash.ToLowerInvariant()
+          $h3SpcAuthorityHash = (Get-FileHash "renderer-core/data/provenance/hemdir3_spc_b12_patch_sites_v1.tsv" -Algorithm SHA256).Hash.ToLowerInvariant()
+          $h3SpcDonorAuthorityHash = (Get-FileHash "renderer-core/data/provenance/hemdir3_spc_material_donors_v1.tsv" -Algorithm SHA256).Hash.ToLowerInvariant()
+          $h3SpcAuthorityGeneratorHash = (Get-FileHash "renderer-core/tools/generate_hemdir3_spc_b12_authority_v1.py" -Algorithm SHA256).Hash.ToLowerInvariant()
+          $h3SpcDonorGeneratorHash = (Get-FileHash "renderer-core/tools/generate_hemdir3_spc_material_donors_v1.py" -Algorithm SHA256).Hash.ToLowerInvariant()
           $specRoutesHash = (Get-FileHash "renderer-core/data/provenance/spec_routes_v12.tsv" -Algorithm SHA256).Hash.ToLowerInvariant()
           $diffuseRoutesHash = (Get-FileHash "renderer-core/data/provenance/diffuse_routes_v12.tsv" -Algorithm SHA256).Hash.ToLowerInvariant()
           $normalRoutesHash = (Get-FileHash "renderer-core/data/provenance/normal_routes_v12.tsv" -Algorithm SHA256).Hash.ToLowerInvariant()
@@ -573,16 +603,22 @@ jobs:
             mr_upper_lower_composition = "SINGLE_PS_B12_B13_EXACT_SPC_RECEIVER"
             hemdir3_mode_transport_sha256 = $mode2Hash
             hemdir3_mode_detour_sha256 = $mode2AsmHash
-            hemdir3_activation = "NOSPC_ACTIVE_SPC_B12_HOLD"
+            hemdir3_activation = "NOSPC_AND_SPC_CONSTRUCTION_ARMED_RUNTIME_NOT_TESTED"
             hemdir3_b13_materializer_sha256 = $h3MaterializerHash
             hemdir3_pipeline_registry_sha256 = $h3RegistryHash
             hemdir3_draw_runtime_sha256 = $h3RuntimeHash
             hemdir3_receiver_authority_sha256 = $h3ReceiverAuthorityHash
             hemdir3_patch_authority_sha256 = $h3PatchAuthorityHash
             hemdir3_replacement_authority_sha256 = $h3ReplacementAuthorityHash
+            hemdir3_spc_b12_authority_sha256 = $h3SpcAuthorityHash
+            hemdir3_spc_material_donor_authority_sha256 = $h3SpcDonorAuthorityHash
+            hemdir3_spc_b12_generator_sha256 = $h3SpcAuthorityGeneratorHash
+            hemdir3_spc_donor_generator_sha256 = $h3SpcDonorGeneratorHash
+            hemdir3_spc_b12_layout = "b12_0_xyz_RAW_PTDE_C101__b12_1_x_PTDE_C102"
             hemdir3_native_receiver_count = 48
-            hemdir3_nospc_active_count = 24
-            hemdir3_spc_hold_count = 24
+            hemdir3_nospc_construction_count = 24
+            hemdir3_spc_construction_count = 24
+            hemdir3_spc_runtime_activation = "NOT_TESTED"
             subsurface_route = "EXACT_DSBT_TO_DSB_TARGET_33_34_35"
             spec_routes_v12_tsv_sha256 = $specRoutesHash
             diffuse_routes_v12_tsv_sha256 = $diffuseRoutesHash
