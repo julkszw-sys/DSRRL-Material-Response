@@ -677,4 +677,209 @@ materialize_upper_lower_hemenv_receiver(
     return outcome;
 }
 
+
+upper_lower_hemenv_materialize_outcome
+augment_upper_lower_hemenv_verified_base(
+    const std::uint8_t *stock_source,
+    std::size_t stock_size,
+    const std::uint8_t *verified_base,
+    std::size_t verified_base_size,
+    std::uint32_t words_inserted_at_11,
+    std::vector<std::uint8_t> &output) noexcept
+{
+    upper_lower_hemenv_materialize_outcome outcome{};
+    output.clear();
+
+    if (stock_source == nullptr ||
+        stock_size == 0u ||
+        verified_base == nullptr ||
+        verified_base_size == 0u ||
+        words_inserted_at_11 == 0u) {
+        outcome.result =
+            upper_lower_hemenv_materialize_result::
+                fail_invalid_dxbc;
+        return outcome;
+    }
+
+    if (!legacy_plan::dxbc::
+            checksum_container_valid(
+                stock_source,
+                stock_size) ||
+        !legacy_plan::dxbc::
+            checksum_container_valid(
+                verified_base,
+                verified_base_size)) {
+        outcome.result =
+            upper_lower_hemenv_materialize_result::
+                fail_invalid_dxbc;
+        return outcome;
+    }
+
+    const auto *plan =
+        find_plan(
+            stock_source,
+            stock_size);
+
+    if (plan == nullptr) {
+        outcome.result =
+            upper_lower_hemenv_materialize_result::
+                pass_unknown_exact_sha;
+        return outcome;
+    }
+
+    outcome.plan_index =
+        plan->plan_index;
+    outcome.shader_index =
+        plan->shader_index;
+    outcome.stable_receiver_id =
+        plan->stable_receiver_id;
+    outcome.stratum =
+        plan->stratum ==
+            generated_ul::
+                upper_lower_hemenv_stratum::spc
+            ? upper_lower_hemenv_stratum::spc
+            : upper_lower_hemenv_stratum::nospc;
+
+    std::vector<chunk> chunks;
+    std::vector<std::uint32_t> words;
+    std::size_t code_index = 0u;
+
+    if (!parse_dxbc(
+            verified_base,
+            verified_base_size,
+            chunks,
+            code_index) ||
+        !extract_words(
+            chunks,
+            code_index,
+            words) ||
+        words.size() <
+            11u + words_inserted_at_11 ||
+        words[1] != words.size()) {
+        outcome.result =
+            upper_lower_hemenv_materialize_result::
+                fail_invalid_dxbc;
+        return outcome;
+    }
+
+    const std::array<
+        std::pair<std::uint32_t,std::uint32_t>,
+        3> patches{{
+            {plan->u_slot_word, 7u},
+            {plan->d_slot_word_0, 8u},
+            {plan->d_slot_word_1, 8u}
+        }};
+
+    for (const auto &[stock_slot_word, source_register] :
+         patches) {
+        const std::size_t slot_word =
+            static_cast<std::size_t>(
+                stock_slot_word) +
+            words_inserted_at_11;
+
+        if (slot_word + 1u >= words.size() ||
+            words[slot_word] != 0u ||
+            words[slot_word + 1u] !=
+                source_register) {
+            outcome.result =
+                upper_lower_hemenv_materialize_result::
+                    fail_operand_precondition;
+            return outcome;
+        }
+
+        words[slot_word] = 13u;
+        words[slot_word + 1u] =
+            source_register == 7u
+                ? 6u
+                : 7u;
+    }
+
+    const std::size_t declaration_word =
+        11u +
+        static_cast<std::size_t>(
+            words_inserted_at_11);
+
+    if (declaration_word > words.size()) {
+        outcome.result =
+            upper_lower_hemenv_materialize_result::
+                fail_operand_precondition;
+        return outcome;
+    }
+
+    try {
+        words.insert(
+            words.begin() +
+                static_cast<std::ptrdiff_t>(
+                    declaration_word),
+            k_cb13_decl.begin(),
+            k_cb13_decl.end());
+    } catch (...) {
+        outcome.result =
+            upper_lower_hemenv_materialize_result::
+                fail_rebuild;
+        return outcome;
+    }
+
+    words[1] +=
+        static_cast<std::uint32_t>(
+            k_cb13_decl.size());
+
+    chunk *rdef = nullptr;
+    for (auto &current : chunks) {
+        if (std::memcmp(
+                current.tag.data(),
+                "RDEF",
+                4u) != 0)
+            continue;
+
+        if (rdef != nullptr) {
+            outcome.result =
+                upper_lower_hemenv_materialize_result::
+                    fail_rebuild;
+            return outcome;
+        }
+
+        rdef = &current;
+    }
+
+    if (rdef == nullptr ||
+        legacy_plan::dxbc::rdef::
+            has_constant_buffer_binding(
+                rdef->payload,
+                13u) ||
+        !legacy_plan::dxbc::rdef::
+            append_constant_buffer_binding(
+                rdef->payload,
+                "DSRRL_LightBankCarrier",
+                13u,
+                128u) ||
+        !legacy_plan::dxbc::rdef::
+            has_constant_buffer_binding(
+                rdef->payload,
+                13u)) {
+        outcome.result =
+            upper_lower_hemenv_materialize_result::
+                fail_rebuild;
+        return outcome;
+    }
+
+    if (!rebuild(
+            verified_base,
+            verified_base_size,
+            std::move(chunks),
+            code_index,
+            words,
+            output)) {
+        outcome.result =
+            upper_lower_hemenv_materialize_result::
+                fail_rebuild;
+        return outcome;
+    }
+
+    outcome.result =
+        upper_lower_hemenv_materialize_result::
+            applied;
+    return outcome;
+}
+
 } // namespace dsrrl::operators::lightbank
