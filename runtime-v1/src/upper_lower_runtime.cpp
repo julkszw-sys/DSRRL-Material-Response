@@ -7,6 +7,7 @@
 
 #include "dsrrl/runtime/upper_lower_runtime.hpp"
 #include "dsrrl/runtime/engine_hooks.hpp"
+#include "dsrrl/runtime/d3d11_cb_window.hpp"
 #include "dsrrl/operators/lightbank/snapshot_freshness.hpp"
 #include "dsrrl/core/renderer_core.hpp"
 #include "v13_pmetal_donors.hpp"
@@ -809,14 +810,14 @@ bool restore_draw(ID3D11DeviceContext *context,draw_state &state) noexcept
         ID3D11DeviceContext1 *context1=nullptr;
         if(SUCCEEDED(context->QueryInterface(__uuidof(ID3D11DeviceContext1),
                                              reinterpret_cast<void **>(&context1))) && context1){
-            if(state.explicit_window){
-                ID3D11Buffer *b=state.old_window;
-                UINT first=state.first,count=state.count;
-                context1->PSSetConstantBuffers1(13,1,&b,&first,&count);
-            }else{
-                ID3D11Buffer *b=state.old_base;
-                context->PSSetConstantBuffers(13,1,&b);
-            }
+            restore_ps_constant_buffer_window(
+                context,
+                context1,
+                13u,
+                state.explicit_window ? state.old_window : state.old_base,
+                state.explicit_window,
+                state.first,
+                state.count);
 
             ID3D11Buffer *base=nullptr,*window=nullptr;
             UINT first=0,count=0;
