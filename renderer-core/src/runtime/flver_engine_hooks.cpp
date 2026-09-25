@@ -6,6 +6,7 @@
 #endif
 #include "dsrrl/runtime/flver_identity_transport.hpp"
 #include "dsrrl/runtime/flver_identity_registry.hpp"
+#include "dsrrl/runtime/material_owner_producer.hpp"
 #include <Windows.h>
 #include <bcrypt.h>
 #include <array>
@@ -32,6 +33,16 @@ struct hook{void *target=nullptr,*trampoline=nullptr,*detour=nullptr;std::size_t
 std::uintptr_t g_base=0; hook g_p{},g_s{},g_d{}; hook_status g_state{};
 using parser_fn=void(__fastcall *)(void *,const void *); using destructor_fn=void(__fastcall *)(void *);
 parser_fn g_po=nullptr; destructor_fn g_do=nullptr;
+
+thread_local operators::material_response::material_identity g_selector_owner_candidate{};
+thread_local bool g_selector_owner_valid=false;
+std::atomic<std::uint64_t> g_selector_events{0};
+std::atomic<std::uint64_t> g_owner_sha_hits{0};
+std::atomic<std::uint64_t> g_owner_mtd_hits{0};
+std::atomic<std::uint64_t> g_exact_owner_ready{0};
+std::atomic<std::uint64_t> g_owner_fail_open{0};
+std::atomic<std::uint64_t> g_owner_consumed{0};
+std::atomic<std::uint64_t> g_owner_consume_misses{0};
 
 bool range_ok(const void *p,std::size_t n) noexcept {
  if(!p)return false;if(n==0)return true;auto cur=reinterpret_cast<std::uintptr_t>(p);const auto end=cur+n;if(end<cur)return false;
@@ -86,9 +97,35 @@ void __fastcall parse_entry(void*m,const void*r) noexcept {
 void __fastcall destroy_entry(void*m) noexcept {flver_identity_observe_destroy(m);if(g_do)g_do(m);}
 }
 extern "C" void dsrrl_flver_selector_observer(void *c, std::int32_t i) noexcept {
- if(i<0)return;
+ ++g_selector_events;
+ g_selector_owner_candidate={};
+ g_selector_owner_valid=false;
+
+ if(i<0){++g_owner_fail_open;return;}
+
  actual_material_owner_observation observation{};
- (void)flver_identity_enrich_owner(c,static_cast<std::uint32_t>(i),observation);
+ if(!flver_identity_enrich_owner(
+        c,static_cast<std::uint32_t>(i),observation)){
+  ++g_owner_fail_open;
+  return;
+ }
+ ++g_owner_sha_hits;
+
+ if(!enrich_exact_owner_mtd_identity(observation)){
+  ++g_owner_fail_open;
+  return;
+ }
+ ++g_owner_mtd_hits;
+
+ auto material=make_actual_material_identity(observation);
+ if(!material.owner_tuple_exact){
+  ++g_owner_fail_open;
+  return;
+ }
+
+ g_selector_owner_candidate=material;
+ g_selector_owner_valid=true;
+ ++g_exact_owner_ready;
 }
 bool install() noexcept {if(g_p.patched||g_s.patched||g_d.patched)return false;g_state={};if(!exe_ok())return false;g_base=reinterpret_cast<std::uintptr_t>(GetModuleHandleW(nullptr));if(!g_base)return false;g_state.provenance_ok=true;
  if(!prep(g_p,k_parse,k_parse_b,reinterpret_cast<void*>(&parse_entry)))goto fail;g_po=reinterpret_cast<parser_fn>(g_p.trampoline);
@@ -120,4 +157,33 @@ void uninstall() noexcept {
  g_state={};
 }
 hook_status status() noexcept{return g_state;}
+
+bool consume_selector_owner_candidate(
+    operators::material_response::material_identity &material) noexcept
+{
+    material={};
+    if(!g_selector_owner_valid){
+        ++g_owner_consume_misses;
+        return false;
+    }
+
+    material=g_selector_owner_candidate;
+    g_selector_owner_candidate={};
+    g_selector_owner_valid=false;
+    ++g_owner_consumed;
+    return true;
+}
+
+selector_owner_telemetry selector_owner_stats() noexcept
+{
+    return {
+        g_selector_events.load(),
+        g_owner_sha_hits.load(),
+        g_owner_mtd_hits.load(),
+        g_exact_owner_ready.load(),
+        g_owner_fail_open.load(),
+        g_owner_consumed.load(),
+        g_owner_consume_misses.load()
+    };
+}
 }
