@@ -20,6 +20,24 @@ add_custom_command(
 add_custom_target(dsrrl_native_envspec_probe_header
     DEPENDS "${DSRRL_NATIVE_PROBE_HEADER}")
 
+set(DSRRL_OWNER_CORPUS_PAYLOAD
+    "${CMAKE_CURRENT_SOURCE_DIR}/data/census/dsr_flver_owner_tuple_corpus_v1.bin.z")
+set(DSRRL_OWNER_CORPUS_HEADER
+    "${DSRRL_GENERATED_DIR}/dsrrl/operators/material_response/generated_dsr_flver_owner_tuples_v1.hpp")
+add_custom_command(
+    OUTPUT "${DSRRL_OWNER_CORPUS_HEADER}"
+    COMMAND "${Python3_EXECUTABLE}"
+            "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_dsr_flver_owner_tuple_header.py"
+            --input "${DSRRL_OWNER_CORPUS_PAYLOAD}"
+            --output "${DSRRL_OWNER_CORPUS_HEADER}"
+    DEPENDS
+        "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_dsr_flver_owner_tuple_header.py"
+        "${DSRRL_OWNER_CORPUS_PAYLOAD}"
+    VERBATIM
+)
+add_custom_target(dsrrl_dsr_flver_owner_tuple_header
+    DEPENDS "${DSRRL_OWNER_CORPUS_HEADER}")
+
 option(DSRRL_BUILD_PHASE0_PROBE "Build the pixel-inert ReShade API20 Phase 0 probe addon" OFF)
 set(RESHade_INCLUDE_DIR "" CACHE PATH "Path to pinned ReShade include directory")
 
@@ -52,11 +70,15 @@ add_library(dsrrl_renderer_core STATIC
     src/operators/resource_bridges/normal_bridge.cpp
     src/operators/resource_bridges/diffuse_bridge.cpp
     "${DSRRL_NATIVE_PROBE_HEADER}"
+    "${DSRRL_OWNER_CORPUS_HEADER}"
 )
-add_dependencies(dsrrl_renderer_core dsrrl_native_envspec_probe_header)
+add_dependencies(
+    dsrrl_renderer_core
+    dsrrl_native_envspec_probe_header
+    dsrrl_dsr_flver_owner_tuple_header)
 target_include_directories(dsrrl_renderer_core PUBLIC
-    ${CMAKE_CURRENT_SOURCE_DIR}/include
-    ${DSRRL_GENERATED_DIR})
+    ${DSRRL_GENERATED_DIR}
+    ${CMAKE_CURRENT_SOURCE_DIR}/include)
 target_compile_features(dsrrl_renderer_core PUBLIC cxx_std_17)
 
 add_executable(dsrrl_renderer_material_owner_tests tests/material_owner_producer_tests.cpp)
