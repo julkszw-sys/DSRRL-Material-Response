@@ -5,11 +5,13 @@ on:
     paths:
       - 'renderer-core/data/census/**'
       - 'renderer-core/data/ptde_full_flver_ownership_census_v1.json'
+      - 'renderer-core/include/dsrrl/operators/material_response/generated_dsr_mtd_identity_v1.hpp'
       - 'renderer-core/tools/verify_mtd_semantic_census.py'
       - 'renderer-core/tools/verify_ptde_flver_census_import.py'
       - 'renderer-core/tools/verify_ptde_flver_source_completeness.py'
       - 'renderer-core/tools/verify_mtd_texture_semantic_surface.py'
       - 'renderer-core/tools/verify_exact_owner_raw_mtd_join_gap.py'
+      - 'renderer-core/tools/verify_dsr_mtd_identity_registry.py'
       - 'renderer-core/src/runtime/material_owner_producer.cpp'
       - 'renderer-core/tools/generate_ptde_flver_texture_semantics.py'
       - 'renderer-core/tests/test_generate_ptde_flver_texture_semantics.py'
@@ -18,11 +20,13 @@ on:
     paths:
       - 'renderer-core/data/census/**'
       - 'renderer-core/data/ptde_full_flver_ownership_census_v1.json'
+      - 'renderer-core/include/dsrrl/operators/material_response/generated_dsr_mtd_identity_v1.hpp'
       - 'renderer-core/tools/verify_mtd_semantic_census.py'
       - 'renderer-core/tools/verify_ptde_flver_census_import.py'
       - 'renderer-core/tools/verify_ptde_flver_source_completeness.py'
       - 'renderer-core/tools/verify_mtd_texture_semantic_surface.py'
       - 'renderer-core/tools/verify_exact_owner_raw_mtd_join_gap.py'
+      - 'renderer-core/tools/verify_dsr_mtd_identity_registry.py'
       - 'renderer-core/src/runtime/material_owner_producer.cpp'
       - 'renderer-core/tools/generate_ptde_flver_texture_semantics.py'
       - 'renderer-core/tests/test_generate_ptde_flver_texture_semantics.py'
@@ -46,5 +50,7 @@ jobs:
         run: python renderer-core/tools/verify_mtd_texture_semantic_surface.py
       - name: Verify exact-owner raw-MTD coverage boundary
         run: python renderer-core/tools/verify_exact_owner_raw_mtd_join_gap.py
+      - name: Verify partial exact DSR MTD identity registry
+        run: python renderer-core/tools/verify_dsr_mtd_identity_registry.py
       - name: Verify PTDE texture semantic generator fail-open
         run: python renderer-core/tests/test_generate_ptde_flver_texture_semantics.py
