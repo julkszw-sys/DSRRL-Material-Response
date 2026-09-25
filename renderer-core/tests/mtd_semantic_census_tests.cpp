@@ -122,7 +122,18 @@ int main()
         unknown_sha);
     CHECK(!unknown_legacy.exact_identity_match);
 
+    // Diffuse/Normal are FLVER ownership-sensitive. Exact MTD identity
+    // alone must not be promoted through the operator gate.
     d=classify_mtd_semantic(q,mtd_semantic_operator::diffuse);
+    CHECK(d.state==mtd_semantic_state::unknown);
+    CHECK(!d.exact_identity_match);
+
+    auto owned_q=q;
+    owned_q.ownership.flver_identity_hash=0x1234u;
+    owned_q.ownership.material_slot=7u;
+    owned_q.ownership.material_slot_valid=true;
+    owned_q.ownership.exact=true;
+    d=classify_mtd_semantic(owned_q,mtd_semantic_operator::diffuse);
     CHECK(d.state==mtd_semantic_state::unknown);
     CHECK(d.exact_identity_match);
 
