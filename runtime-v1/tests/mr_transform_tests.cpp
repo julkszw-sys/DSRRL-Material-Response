@@ -1,4 +1,5 @@
 #include "dsrrl/runtime/mr_dxbc_transform.hpp"
+#include "dsrrl/runtime/pmetal_envspec_rgba_authority.hpp"
 
 #include <array>
 #include <cstdint>
@@ -168,6 +169,15 @@ int main()
         CHECK(find_plan(k_plans[i].stock_size,k_plans[i].original_sha256)==&k_plans[i]);
     }
     CHECK(find_plan(0,"nope")==nullptr);
+
+    CHECK(pmetal_envspec_rgba_authority::k_entries.size()==3u);
+    CHECK(pmetal_envspec_rgba_authority::find(
+        "70b85d49cea116ff1f72a3fd5bb7726ee72aee5a0655cc81718a83a659ee03f5")!=nullptr);
+    CHECK(pmetal_envspec_rgba_authority::k_entries[0].reflection_coord_register==7u);
+    CHECK(pmetal_envspec_rgba_authority::k_entries[1].reflection_coord_register==6u);
+    CHECK(pmetal_envspec_rgba_authority::k_entries[2].reflection_coord_register==5u);
+    CHECK(pmetal_envspec_rgba_authority::k_entries[0].merge_word-
+          pmetal_envspec_rgba_authority::k_entries[0].t12_word==115u);
 
     const std::uint8_t junk[32]={};
     const auto r=transform(junk,k_plans[0],variant::full_v211);
