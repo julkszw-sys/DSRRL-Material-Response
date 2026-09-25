@@ -10,6 +10,7 @@
 #include "dsrrl/runtime/stable_receiver_pipeline_registry.hpp"
 #include "dsrrl/runtime/subsurface_pipeline_registry.hpp"
 #include "dsrrl/runtime/subsurface_draw_runtime.hpp"
+#include "dsrrl/runtime/upper_lower_draw_runtime.hpp"
 #include "dsrrl/operators/material_response/material_response_island.hpp"
 #include "dsrrl/operators/material_response/material_response_seed.hpp"
 #include "dsrrl/operators/material_response/material_response_v211_materializer.hpp"
@@ -49,6 +50,8 @@ dsrrl::runtime::material_resource_draw_runtime
     g_material_resources(g_core);
 dsrrl::runtime::subsurface_draw_runtime
     g_subsurface(g_core, g_mr_draw_runtime, g_material_resources);
+dsrrl::runtime::upper_lower_draw_runtime
+    g_upper_lower(g_core);
 
 std::atomic<std::uint64_t> g_present_count{0};
 std::atomic<std::uint64_t> g_mr_draw_eval{0};
@@ -70,6 +73,7 @@ constexpr dsrrl::core::operator_id k_integrated_islands[] = {
     dsrrl::core::operator_id::diffuse,
     dsrrl::core::operator_id::normal,
     dsrrl::core::operator_id::subsurface,
+    dsrrl::core::operator_id::upper_lower,
     dsrrl::core::operator_id::terminal_sat_rgb,
     dsrrl::core::operator_id::diffuse_material_domain,
     dsrrl::core::operator_id::pointlight_pnts_attenuation,
@@ -306,6 +310,7 @@ void on_init_device(reshade::api::device *device)
 
 void on_destroy_device(reshade::api::device *device)
 {
+    g_upper_lower.on_destroy_device(device);
     g_mr_draw_runtime.on_destroy_device(device);
     g_a1_bridge.on_destroy_device(device);
 }
@@ -459,6 +464,7 @@ struct prepared_island_batch {
     dsrrl::runtime::prepared_material_response_draw mr{};
     dsrrl::runtime::prepared_material_resource_draw resources{};
     dsrrl::runtime::prepared_subsurface_draw subsurface{};
+    dsrrl::runtime::prepared_upper_lower_draw upper_lower{};
     bool mr_in_batch = false;
     bool subsurface_in_batch = false;
 };
@@ -466,6 +472,9 @@ struct prepared_island_batch {
 void release_prepared_island_batch(
     prepared_island_batch &prepared) noexcept
 {
+    g_upper_lower.release_prepared_draw(
+        prepared.upper_lower);
+
     if (prepared.subsurface_in_batch)
         g_subsurface.release(
             prepared.subsurface);
@@ -477,6 +486,46 @@ void release_prepared_island_batch(
     }
     prepared = {};
 }
+
+bool append_upper_lower_request(
+    reshade::api::command_list *cmd_list,
+    std::uint32_t receiver_id,
+    prepared_island_batch &prepared) noexcept
+{
+    if (cmd_list == nullptr)
+        return true;
+
+    auto *context =
+        reinterpret_cast<ID3D11DeviceContext *>(
+            cmd_list->get_native());
+
+    if (context == nullptr)
+        return true;
+
+    if (!g_upper_lower.prepare_draw_request(
+            context,
+            receiver_id,
+            prepared.upper_lower))
+        return true;
+
+    if (dsrrl::runtime::append_island_draw_request(
+            prepared.batch,
+            prepared.upper_lower.request) !=
+        dsrrl::runtime::island_draw_batch_result::ready) {
+        g_upper_lower.release_prepared_draw(
+            prepared.upper_lower);
+        return false;
+    }
+
+    return true;
+}
+
+struct upper_lower_selection_guard {
+    ~upper_lower_selection_guard()
+    {
+        g_upper_lower.consume_draw_selection();
+    }
+};
 
 bool prepare_island_batch(
     reshade::api::command_list *cmd_list,
@@ -524,6 +573,14 @@ bool prepare_island_batch(
                 release_prepared_island_batch(prepared);
                 return false;
             }
+        }
+
+        if (!append_upper_lower_request(
+                cmd_list,
+                receiver_id,
+                prepared)) {
+            release_prepared_island_batch(prepared);
+            return false;
         }
 
         return true;
@@ -582,6 +639,14 @@ bool prepare_island_batch(
         }
     }
 
+    if (!append_upper_lower_request(
+            cmd_list,
+            receiver_id,
+            prepared)) {
+        release_prepared_island_batch(prepared);
+        return false;
+    }
+
     return prepared.batch.island_count != 0u;
 }
 
@@ -592,6 +657,7 @@ bool on_draw(
     std::uint32_t first_vertex,
     std::uint32_t first_instance)
 {
+    upper_lower_selection_guard ul_guard{};
     std::uint32_t receiver_id = 0u;
     bool subsurface_bound = false;
     dsrrl::operators::material_response::material_identity material{};
@@ -647,6 +713,7 @@ bool on_draw_indexed(
     std::int32_t vertex_offset,
     std::uint32_t first_instance)
 {
+    upper_lower_selection_guard ul_guard{};
     std::uint32_t receiver_id = 0u;
     bool subsurface_bound = false;
     dsrrl::operators::material_response::material_identity material{};
