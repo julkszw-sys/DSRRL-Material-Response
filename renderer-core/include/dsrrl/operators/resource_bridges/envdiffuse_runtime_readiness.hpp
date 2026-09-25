@@ -12,6 +12,19 @@ enum class envdiffuse_receiver_family : std::uint8_t {
     heme_env_lerp
 };
 
+enum class envdiffuse_producer_class : std::uint8_t {
+    unknown = 0,
+    ordinary_mapmodel,
+    enemyins_chrmodel,
+    remo_parts
+};
+
+enum class envdiffuse_assignment_route : std::uint8_t {
+    unknown = 0,
+    classic_legacy_environment,
+    packed_gi_selector
+};
+
 enum class envdiffuse_filter_mode : std::uint8_t {
     unknown = 0,
     point,
@@ -39,9 +52,6 @@ struct envdiffuse_sampler_descriptor {
     bool mip0_only = false;
 };
 
-// Exact ordinary PTDE environment-cube sampler used by EnvDiffuse s11/s13.
-// This is a semantic descriptor, not a D3D9/D3D11 ABI struct, so runtime
-// capture can normalize API-specific state before authorizing the bridge.
 inline constexpr envdiffuse_sampler_descriptor ptde_envdiffuse_sampler() noexcept
 {
     return {
@@ -71,7 +81,6 @@ inline constexpr bool matches_ptde_envdiffuse_sampler(
            sampler.mip0_only;
 }
 
-
 enum class envdiffuse_runtime_reason : std::uint8_t {
     ready = 0,
     core_gate_not_active,
@@ -82,6 +91,10 @@ enum class envdiffuse_runtime_reason : std::uint8_t {
     envspec_lanes_not_preserved,
     receiver_not_verified,
     unsupported_receiver_family,
+    producer_class_not_verified,
+    assignment_route_mismatch,
+    classic_assignment_homology_not_verified,
+    packed_selector_not_verified,
     probe_assignment_not_verified,
     probe_a_not_ready,
     probe_b_not_ready,
@@ -101,6 +114,18 @@ struct envdiffuse_runtime_context {
     bool receiver_verified = false;
     envdiffuse_receiver_family receiver_family =
         envdiffuse_receiver_family::unsupported;
+
+    // Assignment provenance is class-scoped. Ordinary MapModel is a confirmed
+    // Classic/legacy route and must never consume the ChrModel +0x7A packed
+    // selector. EnemyIns/ChrModel owns that packed-selector contract. REMO is
+    // intentionally separate until its own assignment relation is certified.
+    bool producer_class_verified = false;
+    envdiffuse_producer_class producer_class =
+        envdiffuse_producer_class::unknown;
+    envdiffuse_assignment_route assignment_route =
+        envdiffuse_assignment_route::unknown;
+    bool classic_assignment_homology_verified = false;
+    bool packed_selector_verified = false;
 
     bool exact_probe_assignment_verified = false;
     bool probe_a_srv_ready = false;
@@ -127,6 +152,7 @@ struct envdiffuse_runtime_plan {
     bool preserve_alpha_beta = true;
     bool preserve_draw_multiplier = true;
     bool preserve_envspec_lanes = true;
+    bool consume_packed_selector = false;
 };
 
 inline envdiffuse_runtime_plan evaluate_envdiffuse_runtime_readiness(
@@ -135,11 +161,8 @@ inline envdiffuse_runtime_plan evaluate_envdiffuse_runtime_readiness(
     const envdiffuse_runtime_context &context) noexcept
 {
     envdiffuse_runtime_plan out;
-    const auto core_gate =
-        core::evaluate_operator_activation(
-            features,
-            core::operator_id::env_diffuse,
-            activation);
+    const auto core_gate = core::evaluate_operator_activation(
+        features, core::operator_id::env_diffuse, activation);
 
     if (core_gate.state != core::island_state::active) {
         out.reason = envdiffuse_runtime_reason::core_gate_not_active;
@@ -174,6 +197,47 @@ inline envdiffuse_runtime_plan evaluate_envdiffuse_runtime_readiness(
         out.reason = envdiffuse_runtime_reason::unsupported_receiver_family;
         return out;
     }
+    if (!context.producer_class_verified ||
+        context.producer_class == envdiffuse_producer_class::unknown) {
+        out.reason = envdiffuse_runtime_reason::producer_class_not_verified;
+        return out;
+    }
+
+    switch (context.producer_class) {
+    case envdiffuse_producer_class::ordinary_mapmodel:
+        if (context.assignment_route !=
+            envdiffuse_assignment_route::classic_legacy_environment) {
+            out.reason = envdiffuse_runtime_reason::assignment_route_mismatch;
+            return out;
+        }
+        if (!context.classic_assignment_homology_verified) {
+            out.reason =
+                envdiffuse_runtime_reason::classic_assignment_homology_not_verified;
+            return out;
+        }
+        out.consume_packed_selector = false;
+        break;
+    case envdiffuse_producer_class::enemyins_chrmodel:
+        if (context.assignment_route !=
+            envdiffuse_assignment_route::packed_gi_selector) {
+            out.reason = envdiffuse_runtime_reason::assignment_route_mismatch;
+            return out;
+        }
+        if (!context.packed_selector_verified) {
+            out.reason = envdiffuse_runtime_reason::packed_selector_not_verified;
+            return out;
+        }
+        out.consume_packed_selector = true;
+        break;
+    case envdiffuse_producer_class::remo_parts:
+        // REMO must not borrow gameplay/ChrModel provenance.
+        out.reason = envdiffuse_runtime_reason::assignment_route_mismatch;
+        return out;
+    default:
+        out.reason = envdiffuse_runtime_reason::producer_class_not_verified;
+        return out;
+    }
+
     if (!context.exact_probe_assignment_verified) {
         out.reason = envdiffuse_runtime_reason::probe_assignment_not_verified;
         return out;
