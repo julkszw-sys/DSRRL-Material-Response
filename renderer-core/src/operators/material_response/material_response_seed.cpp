@@ -1,5 +1,6 @@
 #include "dsrrl/operators/material_response/material_response_seed.hpp"
 #include "dsrrl/operators/material_response/generated_routes_v1.hpp"
+#include "dsrrl/operators/material_response/generated_material_constants_v1.hpp"
 #include "dsrrl/operators/material_response/mtd_semantic_census.hpp"
 #include "dsrrl/runtime/generated_stable_hemenv_receivers_v1.hpp"
 
@@ -64,6 +65,15 @@ std::size_t register_confirmed_material_routes_v1(material_response_island &isla
         profile.semantic_name_hash = mtd_semantic_hash(seed.mtd_name);
         profile.material_family_hash = mtd_semantic_hash(seed.material_family);
         profile.c101 = seed.c101;
+
+        const auto *constants =
+            generated::find_material_response_constants(
+                seed.route_index);
+        if (constants == nullptr)
+            continue;
+
+        profile.c100 = constants->c100;
+        profile.c101_f0q = constants->c101_f0q;
         profile.lod_min = seed.lod_min;
         profile.lod_max = seed.lod_max;
         profile.receiver_ids = {
