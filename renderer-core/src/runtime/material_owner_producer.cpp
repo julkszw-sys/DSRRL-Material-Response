@@ -1,6 +1,7 @@
 #include "dsrrl/runtime/material_owner_producer.hpp"
 #include "dsrrl/operators/material_response/generated_dsr_flver_owner_tuples_v1.hpp"
 #include "dsrrl/operators/material_response/generated_envspec_router_v1.hpp"
+#include "dsrrl/operators/material_response/generated_mtd_spx_negative_v1.hpp"
 #include "dsrrl/operators/material_response/generated_routes_v1.hpp"
 #include "dsrrl/operators/material_response/mtd_semantic_census.hpp"
 #include "dsrrl/operators/legacy_plan/sha256_bytes.hpp"
@@ -13,6 +14,51 @@ bool zero_digest(const core::sha256_digest &digest) noexcept
 {
     return std::all_of(digest.begin(), digest.end(),
         [](std::uint8_t value) { return value == 0; });
+}
+
+// Resolve raw DSR MTD identity only from exact canonical payload evidence.
+// Multiple evidence surfaces are deliberately joined here because the EnvSpec
+// router is not a generic MTD registry. Any disagreement for one semantic hash
+// is ambiguity and fails open. This is an incremental construction bridge until
+// the complete DSR MTD corpus is materialized as a dedicated generated registry.
+bool resolve_exact_raw_mtd_sha(std::uint64_t semantic_hash,
+    core::sha256_digest &raw_sha) noexcept
+{
+    namespace mr = operators::material_response;
+    bool found = false;
+    auto accept = [&](const core::sha256_digest &candidate) noexcept {
+        if (!found) {
+            raw_sha = candidate;
+            found = true;
+            return true;
+        }
+        return raw_sha == candidate;
+    };
+
+    for (const auto &candidate : mr::generated::k_envspec_router_v1) {
+        if (candidate.semantic_name_hash == semantic_hash &&
+            !accept(candidate.raw_mtd_sha256))
+            return false;
+    }
+
+    for (const auto &candidate : mr::generated::k_mtd_spx_negative_v1) {
+        if (candidate.semantic_name_hash == semantic_hash &&
+            !accept(candidate.raw_dsr_mtd_sha256))
+            return false;
+    }
+
+    for (const auto &route : mr::generated::k_material_routes_v1) {
+        if (mr::mtd_semantic_hash(route.mtd_name) != semantic_hash)
+            continue;
+        core::sha256_digest candidate{};
+        // route.sha256 is canonical exact raw DSR MTD payload identity.
+        if (!operators::legacy_plan::hashing::parse_hex(route.sha256, candidate))
+            return false;
+        if (!accept(candidate))
+            return false;
+    }
+
+    return found;
 }
 }
 
@@ -33,28 +79,13 @@ bool enrich_exact_owner_mtd_identity(
             semantic_hash))
         return false;
 
-    const mr::generated::envspec_router_record *match = nullptr;
-    for (const auto &candidate : mr::generated::k_envspec_router_v1) {
-        if (candidate.semantic_name_hash != semantic_hash)
-            continue;
-
-        if (match == nullptr) {
-            match = &candidate;
-            continue;
-        }
-
-        // A name hash that resolves to more than one raw DSR MTD payload is
-        // not an exact host identity and must remain fail-open.
-        if (match->raw_mtd_sha256 != candidate.raw_mtd_sha256)
-            return false;
-    }
-
-    if (match == nullptr)
+    core::sha256_digest raw_mtd_sha{};
+    if (!resolve_exact_raw_mtd_sha(semantic_hash, raw_mtd_sha))
         return false;
 
     observation.material.valid = true;
     observation.material.semantic_name_hash = semantic_hash;
-    observation.material.raw_mtd_sha256 = match->raw_mtd_sha256;
+    observation.material.raw_mtd_sha256 = raw_mtd_sha;
 
     const mr::generated::route_seed *route_match = nullptr;
     for (const auto &route : mr::generated::k_material_routes_v1) {
@@ -91,9 +122,6 @@ make_actual_material_identity(
 {
     auto result = observation.material;
 
-    // The producer requires the complete FLVER digest, material slot and
-    // semantic material identity. The legacy 64-bit FLVER token is auxiliary
-    // compatibility/telemetry only and is never an authorization requirement.
     if (!result.valid ||
         zero_digest(observation.flver_sha256) ||
         !observation.material_slot_valid ||
@@ -110,9 +138,6 @@ make_actual_material_identity(
     result.flver_identity_hash = observation.flver_identity_hash;
     result.material_slot = observation.material_slot;
     result.material_slot_valid = true;
-
-    // This flag means the producer observed all identity components. Corpus
-    // membership is still checked independently by the Material Response gate.
     result.owner_tuple_exact = true;
     return result;
 }
