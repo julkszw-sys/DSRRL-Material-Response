@@ -69,6 +69,10 @@ std::atomic<std::uint64_t> g_v13_resource_ready{0}, g_v13_resource_miss{0};
 std::atomic<std::uint64_t> g_v13_b12_update{0}, g_v13_b12_fail{0}, g_v13_replay{0};
 std::atomic<bool> g_v13_first_draw_logged{false};
 std::atomic<std::uint64_t> g_target_binds{0}, g_replays{0}, g_fail_open{0};
+std::atomic<std::uint64_t> g_diffuse_candidates{0}, g_normal_candidates{0};
+std::atomic<std::uint64_t> g_spec_candidates{0}, g_ul_candidates{0};
+std::atomic<std::uint64_t> g_full_diffuse_replays{0}, g_stock_diffuse_replays{0};
+std::atomic<std::uint64_t> g_normal_replays{0}, g_spec_replays{0}, g_ul_replays{0};
 std::atomic<std::uint64_t> g_b12_create{0}, g_b12_hit{0}, g_restore_fail{0}, g_present{0};
 std::atomic<std::uint64_t> g_envspec_key_valid{0}, g_envspec_key_fail{0};
 std::atomic<std::uint64_t> g_envspec_mtd_exact{0}, g_envspec_selector_exact{0};
@@ -1044,6 +1048,11 @@ bool on_draw_indexed(command_list *cmd,std::uint32_t index_count,std::uint32_t i
     // transaction plan and actual resource writes cannot diverge.
     route.normal_eligible=normal_candidate;
 
+    if(diffuse_candidate) ++g_diffuse_candidates;
+    if(normal_candidate) ++g_normal_candidates;
+    if(spec_candidate) ++g_spec_candidates;
+    if(ul_candidate) ++g_ul_candidates;
+
     const bool pmetal_exact_route =
         !body_route &&
         donor==k_pmetal_route &&
@@ -1339,6 +1348,11 @@ bool on_draw_indexed(command_list *cmd,std::uint32_t index_count,std::uint32_t i
         ++g_replays;
         if(g_bound_lerp) ++g_lerp_replays;
         if(body_route) ++g_subsurface_replays;
+        if(diffuse_candidate) ++g_full_diffuse_replays;
+        else ++g_stock_diffuse_replays;
+        if(normal_candidate) ++g_normal_replays;
+        if(spec_active) ++g_spec_replays;
+        if(intended_ul) ++g_ul_replays;
 
         if(pmetal_v10_active){
             ++g_v10_replays;
@@ -1404,6 +1418,15 @@ void on_present(command_queue *,swapchain *,const rect *,const rect *,std::uint3
               <<" v13_replay="<<g_v13_replay.load()
               <<" binds="<<g_target_binds.load()<<" lerp_binds="<<g_lerp_binds.load()
               <<" replay="<<g_replays.load()<<" lerp_replay="<<g_lerp_replays.load()
+              <<" diff_candidate="<<g_diffuse_candidates.load()
+              <<" diff_full_replay="<<g_full_diffuse_replays.load()
+              <<" diff_stock_replay="<<g_stock_diffuse_replays.load()
+              <<" norm_candidate="<<g_normal_candidates.load()
+              <<" norm_replay="<<g_normal_replays.load()
+              <<" spec_candidate="<<g_spec_candidates.load()
+              <<" spec_replay="<<g_spec_replays.load()
+              <<" ul_candidate="<<g_ul_candidates.load()
+              <<" ul_replay="<<g_ul_replays.load()
               <<" v10_replay="<<g_v10_replays.load()
               <<" subsurface_replay="<<g_subsurface_replays.load()<<" b12_create="<<g_b12_create.load()
               <<" b12_hit="<<g_b12_hit.load()
