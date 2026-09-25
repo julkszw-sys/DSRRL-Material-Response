@@ -297,6 +297,7 @@ void log_state(const char *tag) noexcept
         "owner_sel=%llu owner_enriched=%llu owner_auth=%llu owner_fo=%llu "
         "mr_ready=%u mr_eval=%llu mr_would_activate=%llu mr_fo=%llu "
         "mr_mat_ok=%llu mr_mat_fail=%llu mr_payload_ok=%llu mr_payload_fail=%llu "
+        "mr_ul_payload=%llu/%llu mr_ul_reg=%llu/%llu mr_ul_prepare=%llu mr_ul_miss=%llu "
         "mr_b12_create=%llu mr_b12_hit=%llu mr_b12_bind_fail=%llu "
         "mr_tx_eligible=%llu mr_tx_miss=%llu mr_replay=%llu mr_restore_fail=%llu mr_quarantine=%u "
         "tx_begin_ok=%llu tx_begin_fail=%llu tx_bind_fail=%llu tx_issued=%llu "
@@ -342,6 +343,12 @@ void log_state(const char *tag) noexcept
         static_cast<unsigned long long>(g_mr_fail_open.load()),
         static_cast<unsigned long long>(g_mr_payload_materialize_ok.load()),
         static_cast<unsigned long long>(g_mr_payload_materialize_fail.load()),
+        static_cast<unsigned long long>(g_mr_ul_payload_materialize_ok.load()),
+        static_cast<unsigned long long>(g_mr_ul_payload_materialize_fail.load()),
+        static_cast<unsigned long long>(mr_tx.combined_ul_register_ok),
+        static_cast<unsigned long long>(mr_tx.combined_ul_register_fail),
+        static_cast<unsigned long long>(mr_tx.combined_ul_prepare),
+        static_cast<unsigned long long>(mr_tx.combined_ul_miss),
         static_cast<unsigned long long>(mr_tx.replacement_register_ok),
         static_cast<unsigned long long>(mr_tx.replacement_register_fail),
         static_cast<unsigned long long>(mr_tx.b12_create),
@@ -409,6 +416,50 @@ void log_state(const char *tag) noexcept
         static_cast<unsigned long long>(g_draw_receiver_only.load()));
 
     reshade::log::message(reshade::log::level::info, line);
+
+    const auto ul_pipe =
+        dsrrl::runtime::upper_lower_receiver_pipeline_stats();
+    const auto ul_draw =
+        g_upper_lower_hemenv.telemetry();
+
+    char ul_line[768]{};
+    std::snprintf(
+        ul_line,
+        sizeof(ul_line),
+        "[DSRRL CORE+ISLANDS " DSRRL_CORE_ISLANDS_VERSION "] %s_UL "
+        "pipe_attest=%llu pipe_conflict=%llu pipe_init=%llu exact_nospc=%llu exact_spc=%llu "
+        "init_bad=%llu binds=%llu/%llu/%llu unknown=%llu lookup=%llu/%llu/%llu q=%u "
+        "repl=%llu/%llu candidate=%llu carrier=%llu/%llu nospc_ready=%llu spc_ready=%llu "
+        "spc_mr_hold=%llu req=%llu ul_q=%u",
+        tag,
+        static_cast<unsigned long long>(ul_pipe.created_code_attested),
+        static_cast<unsigned long long>(ul_pipe.created_code_conflict),
+        static_cast<unsigned long long>(ul_pipe.pipeline_inits),
+        static_cast<unsigned long long>(ul_pipe.exact_nospc_hits),
+        static_cast<unsigned long long>(ul_pipe.exact_spc_hits),
+        static_cast<unsigned long long>(ul_pipe.init_mismatch),
+        static_cast<unsigned long long>(ul_pipe.pixel_binds),
+        static_cast<unsigned long long>(ul_pipe.nospc_binds),
+        static_cast<unsigned long long>(ul_pipe.spc_binds),
+        static_cast<unsigned long long>(ul_pipe.unknown_binds),
+        static_cast<unsigned long long>(ul_pipe.lookups),
+        static_cast<unsigned long long>(ul_pipe.lookup_hits),
+        static_cast<unsigned long long>(ul_pipe.lookup_misses),
+        ul_pipe.quarantined ? 1u : 0u,
+        static_cast<unsigned long long>(ul_draw.replacement_register_ok),
+        static_cast<unsigned long long>(ul_draw.replacement_register_fail),
+        static_cast<unsigned long long>(ul_draw.candidates),
+        static_cast<unsigned long long>(ul_draw.carrier_ready),
+        static_cast<unsigned long long>(ul_draw.carrier_rejects),
+        static_cast<unsigned long long>(ul_draw.nospc_ready),
+        static_cast<unsigned long long>(ul_draw.spc_ready),
+        static_cast<unsigned long long>(ul_draw.spc_mr_hold),
+        static_cast<unsigned long long>(ul_draw.requests),
+        ul_draw.quarantined ? 1u : 0u);
+
+    reshade::log::message(
+        reshade::log::level::info,
+        ul_line);
 
     const auto h3_pipe =
         dsrrl::runtime::hemdir3_receiver_pipeline_stats();
@@ -1242,6 +1293,7 @@ bool AddonInit(
     g_mr_draw_runtime.reset();
     g_material_resources.reset();
     g_upper_lower.reset();
+    g_upper_lower_hemenv.reset();
     g_hemdir3.reset();
     dsrrl::runtime::hemdir3_mode_transport::reset_stats();
     g_present_count.store(0);
@@ -1250,6 +1302,8 @@ bool AddonInit(
     g_mr_fail_open.store(0);
     g_mr_payload_materialize_ok.store(0);
     g_mr_payload_materialize_fail.store(0);
+    g_mr_ul_payload_materialize_ok.store(0);
+    g_mr_ul_payload_materialize_fail.store(0);
     g_draw_events.store(0);
     g_draw_receiver_hits.store(0);
     g_draw_owner_hits.store(0);
@@ -1259,6 +1313,7 @@ bool AddonInit(
     dsrrl::runtime::stable_receiver_pipeline_reset();
     dsrrl::runtime::subsurface_receiver_pipeline_reset();
     dsrrl::runtime::hemdir3_receiver_pipeline_reset();
+    dsrrl::runtime::upper_lower_receiver_pipeline_reset();
     g_subsurface.reset();
     dsrrl::runtime::material_owner_selection_reset_stats();
 
@@ -1338,10 +1393,11 @@ bool AddonInit(
         reshade::log::level::info,
         "[DSRRL CORE+ISLANDS " DSRRL_CORE_ISLANDS_VERSION
         "] READY: shared Core draw-state transaction layer (PS/CB/SRV/sampler) "
-        "is active; Material Response, SpecRGB, Diffuse, Normal and Subsurface compose "
-        "normally; native HemDir3 no-Spc uses the exact mode2+D123+U/L b13 carrier in the "
-        "same single replay. HemDir3 Spc remains fail-open pending exact b12 c101/c102 donor. "
-        "Frozen legacy monolith is not linked.");
+        "is active; Material Response and Upper/Lower use a single combined PS+b12+b13 "
+        "on exact Spc receivers, while exact no-Spc U/L uses its own PS+b13 route. "
+        "SpecRGB/Diffuse/Normal/Subsurface compose through the same replay; native HemDir3 "
+        "no-Spc uses exact mode2+D123+U/L b13. HemDir3 Spc remains fail-open pending exact "
+        "b12 c101/c102 donor. Frozen legacy monolith is not linked.");
 
     return true;
 }
@@ -1371,10 +1427,12 @@ void AddonUninit(
     dsrrl::runtime::stable_receiver_pipeline_reset();
     dsrrl::runtime::subsurface_receiver_pipeline_reset();
     dsrrl::runtime::hemdir3_receiver_pipeline_reset();
+    dsrrl::runtime::upper_lower_receiver_pipeline_reset();
     dsrrl::runtime::texture_identity_transport::uninstall();
     g_material_resources.unregister_events();
     g_material_resources.reset();
     g_upper_lower.reset();
+    g_upper_lower_hemenv.reset();
     g_hemdir3.reset();
     g_mr_draw_runtime.reset();
     g_draw_transactions.reset();
