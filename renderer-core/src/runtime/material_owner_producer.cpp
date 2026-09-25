@@ -1,6 +1,9 @@
 #include "dsrrl/runtime/material_owner_producer.hpp"
 #include "dsrrl/operators/material_response/generated_dsr_flver_owner_tuples_v1.hpp"
 #include "dsrrl/operators/material_response/generated_envspec_router_v1.hpp"
+#include "dsrrl/operators/material_response/generated_routes_v1.hpp"
+#include "dsrrl/operators/material_response/mtd_semantic_census.hpp"
+#include "dsrrl/operators/legacy_plan/sha256_bytes.hpp"
 
 #include <algorithm>
 
@@ -52,6 +55,33 @@ bool enrich_exact_owner_mtd_identity(
     observation.material.valid = true;
     observation.material.semantic_name_hash = semantic_hash;
     observation.material.raw_mtd_sha256 = match->raw_mtd_sha256;
+
+    const mr::generated::route_seed *route_match = nullptr;
+    for (const auto &route : mr::generated::k_material_routes_v1) {
+        if (mr::mtd_semantic_hash(route.mtd_name) != semantic_hash ||
+            !operators::legacy_plan::hashing::matches_hex(
+                observation.material.raw_mtd_sha256,
+                route.sha256))
+            continue;
+
+        if (route_match != nullptr &&
+            (route_match->route_index != route.route_index ||
+             mr::mtd_semantic_hash(route_match->material_family) !=
+                 mr::mtd_semantic_hash(route.material_family))) {
+            observation.material.route_index = 0u;
+            observation.material.material_family_hash = 0u;
+            return true;
+        }
+
+        route_match = &route;
+    }
+
+    if (route_match != nullptr) {
+        observation.material.route_index = route_match->route_index;
+        observation.material.material_family_hash =
+            mr::mtd_semantic_hash(route_match->material_family);
+    }
+
     return true;
 }
 
