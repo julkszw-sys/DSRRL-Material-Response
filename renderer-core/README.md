@@ -1,6 +1,6 @@
-# DSRRL Renderer Core v1 — Phase 0
+# DSRRL Core+Islands 2.0.0-dev
 
-This directory is the future stable runtime foundation for DSRRL Renderer Edition.
+This directory contains the active Renderer Core foundation for the **Core+Islands 2.0.0-dev** line on `main`. Phase 0 material below is retained as architectural history/invariants; the active integrated target now lives under `renderer-core/integrated/`.
 
 ## Phase 0 goal
 
@@ -20,8 +20,7 @@ Default invariants:
 - the optional ReShade probe only registers the addon and logs READY;
 - with all islands disabled, Renderer Core is pass-through by construction.
 
-The accepted behavior baseline for integration is Material Response 1.45
-SHA-256 e44183ef10fc7921f7741eb16d54ec30e814f580421ac6c83be18b5308b73342.
+Material Response 1.45 (SHA-256 `e44183ef10fc7921f7741eb16d54ec30e814f580421ac6c83be18b5308b73342`) is a **frozen legacy monolith / compatibility baseline**, not the version identity of the active Core+Islands line. Active version authority: `renderer-core/integrated/VERSION.json`.
 
 ## Architecture
 
