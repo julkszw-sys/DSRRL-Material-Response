@@ -83,6 +83,9 @@ target_include_directories(dsrrl_renderer_core PUBLIC
 target_compile_features(dsrrl_renderer_core PUBLIC cxx_std_17)
 
 add_executable(dsrrl_renderer_material_owner_tests tests/material_owner_producer_tests.cpp)
+add_executable(dsrrl_renderer_flver_identity_tests tests/flver_identity_registry_tests.cpp)
+target_link_libraries(dsrrl_renderer_flver_identity_tests PRIVATE dsrrl_renderer_core)
+target_compile_features(dsrrl_renderer_flver_identity_tests PRIVATE cxx_std_17)
 target_link_libraries(dsrrl_renderer_material_owner_tests PRIVATE dsrrl_renderer_core)
 target_compile_features(dsrrl_renderer_material_owner_tests PRIVATE cxx_std_17)
 
@@ -170,6 +173,7 @@ endif()
 
 enable_testing()
 add_test(NAME dsrrl_renderer_material_owner_tests COMMAND dsrrl_renderer_material_owner_tests)
+add_test(NAME dsrrl_renderer_flver_identity_tests COMMAND dsrrl_renderer_flver_identity_tests)
 add_test(NAME dsrrl_renderer_core_tests COMMAND dsrrl_renderer_core_tests)
 add_test(NAME dsrrl_renderer_island_tests COMMAND dsrrl_renderer_island_tests)
 add_test(NAME dsrrl_renderer_future_runtime_tests COMMAND dsrrl_renderer_future_runtime_tests)
