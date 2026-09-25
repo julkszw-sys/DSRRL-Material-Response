@@ -15,6 +15,7 @@
 #include "dsrrl/runtime/upper_lower_runtime.hpp"
 #include "dsrrl/runtime/generated_ul_stable_hashes.hpp"
 #include "dsrrl/runtime/generated_spec_material_routes.hpp"
+#include "dsrrl/runtime/semantic_spec_donor_overrides.hpp"
 #include "dsrrl/core/renderer_core.hpp"
 #include "dsrrl/operators/material_response/mtd_semantic_census.hpp"
 #include "dsrrl/sha256.hpp"
@@ -79,6 +80,8 @@ std::atomic<std::uint64_t> g_envspec_mtd_exact{0}, g_envspec_selector_exact{0};
 std::atomic<std::uint64_t> g_envspec_draw_exact{0}, g_envspec_draw_present{0};
 std::atomic<std::uint64_t> g_envspec_draw_none_safe{0}, g_envspec_draw_none_unsafe{0};
 std::atomic<std::uint64_t> g_envspec_draw_nospc{0};
+std::atomic<std::uint64_t> g_semantic_spec_override_hit{0};
+std::atomic<std::uint64_t> g_semantic_spec_ambiguous_hold{0};
 
 namespace mtd_sem=dsrrl::operators::material_response;
 
@@ -94,6 +97,7 @@ void log_error(const std::string &s){ reshade::log::message(reshade::log::level:
 
 std::mutex g_material_mutex;
 std::unordered_map<void*,std::uint16_t> g_material_donor;
+std::unordered_map<void*,std::uint8_t> g_material_spec_override;
 std::unordered_map<void*,mtd_sem::mtd_envspec_semantics> g_material_envspec;
 
 std::uint64_t legacy_semantic_key_hash(const wchar_t *semantic_key) noexcept
@@ -121,12 +125,47 @@ std::uint64_t legacy_semantic_key_hash(const wchar_t *semantic_key) noexcept
     return 0u;
 }
 
+bool read_semantic_name(
+    const wchar_t *semantic_key,
+    std::wstring &out) noexcept
+{
+    out.clear();
+    if(!semantic_key) return false;
+
+    for(std::size_t i=0;i<512u;++i){
+        std::uint16_t u=0u;
+        if(!engine::safe_read_bytes(
+                reinterpret_cast<const std::uint8_t*>(semantic_key)+i*2u,
+                &u,
+                sizeof(u))){
+            out.clear();
+            return false;
+        }
+        if(u==0u)
+            return !out.empty();
+        out.push_back(static_cast<wchar_t>(u));
+    }
+
+    out.clear();
+    return false;
+}
+
 int donor_for(void *material)
 {
     if(!material) return -1;
     std::lock_guard lock(g_material_mutex);
     const auto it=g_material_donor.find(material);
     return it==g_material_donor.end() ? -1 : static_cast<int>(it->second);
+}
+
+int spec_override_for(void *material)
+{
+    if(!material) return -1;
+    std::lock_guard lock(g_material_mutex);
+    const auto it=g_material_spec_override.find(material);
+    return it==g_material_spec_override.end() ?
+        -1 :
+        static_cast<int>(it->second);
 }
 
 mtd_sem::mtd_envspec_semantics envspec_for(void *material)
@@ -153,6 +192,7 @@ void *resolve_material(void *container,std::int32_t index) noexcept
 }
 
 thread_local int g_draw_donor=-1;
+thread_local int g_draw_spec_override=-1;
 thread_local mtd_sem::mtd_envspec_semantics g_draw_envspec{};
 thread_local bool g_draw_envspec_exact=false;
 thread_local int g_bound_host=-1;
@@ -673,7 +713,11 @@ ID3D11Buffer *realize_pmetal_b12(
     }
 }
 
-ID3D11Buffer *realize_b12(ID3D11Device *device,int donor_index) noexcept
+ID3D11Buffer *realize_b12(
+    ID3D11Device *device,
+    int donor_index,
+    const dsrrl::materialdonor::donor &resolved_donor,
+    int semantic_override) noexcept
 {
     if(!device || donor_index<0 ||
        static_cast<std::size_t>(donor_index)>=dsrrl::materialdonor::k_donors.size())
@@ -684,12 +728,15 @@ ID3D11Buffer *realize_b12(ID3D11Device *device,int donor_index) noexcept
         std::lock_guard lock(g_device_mutex);
         if(g_device.device!=device) return nullptr;
 
-        const auto key=static_cast<std::uint16_t>(donor_index);
+        const auto key=
+            semantic_override>=0 ?
+            static_cast<std::uint16_t>(0x8000u+static_cast<unsigned>(semantic_override)) :
+            static_cast<std::uint16_t>(donor_index);
         if(const auto it=g_device.b12.find(key);it!=g_device.b12.end() && it->second){
             it->second->AddRef(); ++g_b12_hit; return it->second;
         }
 
-        const auto &d=dsrrl::materialdonor::k_donors[static_cast<std::size_t>(donor_index)];
+        const auto &d=resolved_donor;
         struct f4{float x,y,z,w;};
         const std::array<f4,4> payload={{
             {d.c101_f0q[0],d.c101_f0q[1],d.c101_f0q[2],d.has_c101?1.0f:0.0f},
@@ -922,6 +969,7 @@ void on_bind_pipeline(command_list *cmd,pipeline_stage stages,pipeline p)
         g_bound_subsurface=false;
         g_bound_command=nullptr;
         g_draw_donor=-1;
+        g_draw_spec_override=-1;
         g_draw_envspec={};
         g_draw_envspec_exact=false;
         upper_lower::consume_draw_selection();
@@ -933,6 +981,8 @@ bool on_draw_indexed(command_list *cmd,std::uint32_t index_count,std::uint32_t i
 {
     const auto draw_envspec=g_draw_envspec;
     const bool draw_envspec_exact=g_draw_envspec_exact;
+    const int draw_spec_override=g_draw_spec_override;
+    g_draw_spec_override=-1;
     g_draw_envspec={};
     g_draw_envspec_exact=false;
 
@@ -1009,7 +1059,30 @@ bool on_draw_indexed(command_list *cmd,std::uint32_t index_count,std::uint32_t i
         return false;
     }
 
-    const auto &don=dsrrl::materialdonor::k_donors[static_cast<std::size_t>(donor)];
+    auto don=dsrrl::materialdonor::k_donors[static_cast<std::size_t>(donor)];
+    int semantic_override=body_route ? -1 : draw_spec_override;
+    if(semantic_override>=0 &&
+       static_cast<std::size_t>(semantic_override) <
+           k_semantic_spec_donor_overrides.size()){
+        const auto &ov=
+            k_semantic_spec_donor_overrides[
+                static_cast<std::size_t>(semantic_override)];
+        if(ov.raw_sha256==don.sha256){
+            for(std::size_t i=0;i<3u;++i){
+                don.c101_ptde[i]=ov.c101[i];
+                don.c101_f0q[i]=ov.c101_f0q[i];
+            }
+            don.c101_tier=1u;
+            don.c102=ov.c102;
+            don.slot=ov.slot;
+            don.has_c101=true;
+        }else{
+            semantic_override=-1;
+        }
+    }else{
+        semantic_override=-1;
+    }
+
     const std::uint32_t receiver_id=24u+static_cast<std::uint32_t>(g_bound_host);
     assets::material_route_scope route{};
     route.exact=true;
@@ -1215,7 +1288,7 @@ bool on_draw_indexed(command_list *cmd,std::uint32_t index_count,std::uint32_t i
                     replacement=fallback_replacement;
                     fallback_replacement=nullptr;
                 }
-                b12=realize_b12(dev,donor);
+                b12=realize_b12(dev,donor,don,semantic_override);
             }
         }else{
             b12=realize_b12(dev,donor);
@@ -1438,6 +1511,8 @@ void on_present(command_queue *,swapchain *,const rect *,const rect *,std::uint3
                <<" env_none_safe="<<g_envspec_draw_none_safe.load()
                <<" env_none_hold="<<g_envspec_draw_none_unsafe.load()
                <<" env_nospc="<<g_envspec_draw_nospc.load()
+               <<" spec_semantic_hit="<<g_semantic_spec_override_hit.load()
+               <<" spec_ambiguous_hold="<<g_semantic_spec_ambiguous_hold.load()
                <<" failopen="<<g_fail_open.load()
               <<" restore_fail="<<g_restore_fail.load()<<" quarantined="<<(g_quarantined.load()?1:0);
             log_info(os.str());
@@ -1475,8 +1550,22 @@ void mtd_event(
                 legacy_key,
                 digest);
 
+        int semantic_spec_override=-1;
+        std::wstring semantic_name;
+        if(read_semantic_name(semantic_key,semantic_name))
+            semantic_spec_override=
+                find_semantic_spec_donor_override(
+                    semantic_name,
+                    hash);
+
+        if(semantic_spec_override>=0)
+            ++g_semantic_spec_override_hit;
+        else if(semantic_spec_raw_hash_is_ambiguous(hash))
+            ++g_semantic_spec_ambiguous_hold;
+
         std::lock_guard lock(g_material_mutex);
         g_material_donor.erase(material);
+        g_material_spec_override.erase(material);
         g_material_envspec.erase(material);
 
         if(idx>=0){
@@ -1485,6 +1574,10 @@ void mtd_event(
         }else{
             ++g_unmapped;
         }
+
+        if(semantic_spec_override>=0)
+            g_material_spec_override[material]=
+                static_cast<std::uint8_t>(semantic_spec_override);
 
         if(envspec.exact_identity_match){
             g_material_envspec[material]=envspec;
@@ -1499,6 +1592,7 @@ void selector_event(void *container,void *,void *ret,void *,void *,std::int32_t 
     const auto base=engine::image_base();
     if(!base){
         g_draw_donor=-1;
+        g_draw_spec_override=-1;
         g_draw_envspec={};
         g_draw_envspec_exact=false;
         return;
@@ -1512,6 +1606,7 @@ void selector_event(void *container,void *,void *ret,void *,void *,std::int32_t 
     }
     void *actual=resolve_material(container,material_index);
     g_draw_donor=donor_for(actual);
+    g_draw_spec_override=spec_override_for(actual);
     g_draw_envspec=envspec_for(actual);
     g_draw_envspec_exact=g_draw_envspec.exact_identity_match;
     if(g_draw_donor>=0) ++g_selector_mapped;
@@ -1524,7 +1619,7 @@ bool register_runtime(core::renderer_core &core) noexcept
     g_quarantined.store(false);
     g_v13_first_draw_logged.store(false);
     g_v10_first_draw_logged.store(false);
-    g_draw_donor=-1; g_draw_envspec={}; g_draw_envspec_exact=false;
+    g_draw_donor=-1; g_draw_spec_override=-1; g_draw_envspec={}; g_draw_envspec_exact=false;
     g_bound_host=-1; g_bound_lerp=false; g_bound_subsurface=false; g_bound_command=nullptr;
     g_enabled.store(true);
     reshade::register_event<reshade::addon_event::init_device>(on_init_device);
@@ -1555,6 +1650,7 @@ void unregister_runtime() noexcept
     {
         std::lock_guard lock(g_material_mutex);
         g_material_donor.clear();
+        g_material_spec_override.clear();
         g_material_envspec.clear();
     }
     g_draw_donor=-1; g_draw_envspec={}; g_draw_envspec_exact=false;
