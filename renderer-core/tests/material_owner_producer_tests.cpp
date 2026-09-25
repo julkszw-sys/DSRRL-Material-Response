@@ -21,8 +21,15 @@ int main()
     CHECK(id.owner_tuple_exact);
     CHECK(id.material_slot_valid);
     CHECK(id.material_slot == 7u);
-    CHECK(id.flver_identity_hash == 0x55u);
+    CHECK(id.flver_identity_hash == 0u);
     CHECK(id.flver_sha256[0] == 0x42u);
+
+    // Legacy token is preserved when present, but it is not required for
+    // exact producer provenance and cannot substitute for the full digest.
+    o.flver_identity_hash = 0x55u;
+    id = runtime::make_actual_material_identity(o);
+    CHECK(id.owner_tuple_exact);
+    CHECK(id.flver_identity_hash == 0x55u);
 
     o.material.semantic_name_hash = 0u;
     id = runtime::make_actual_material_identity(o);
