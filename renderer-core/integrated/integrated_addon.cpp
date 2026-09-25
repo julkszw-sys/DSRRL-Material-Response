@@ -120,6 +120,8 @@ bool observe_draw_identity(
     bool &subsurface_bound,
     bool &hemdir3_bound,
     dsrrl::runtime::hemdir3_receiver_identity &hemdir3_identity,
+    bool &upper_lower_bound,
+    dsrrl::runtime::upper_lower_receiver_identity &upper_lower_identity,
     dsrrl::operators::material_response::material_identity &out_material,
     dsrrl::operators::material_response::decision &out_decision) noexcept
 {
@@ -129,6 +131,8 @@ bool observe_draw_identity(
     subsurface_bound = false;
     hemdir3_bound = false;
     hemdir3_identity = {};
+    upper_lower_bound = false;
+    upper_lower_identity = {};
 
     const bool stable_receiver =
         dsrrl::runtime::stable_receiver_bound(
@@ -146,13 +150,38 @@ bool observe_draw_identity(
             cmd_list,
             hemdir3_identity);
 
+    const bool upper_lower_receiver =
+        dsrrl::runtime::upper_lower_receiver_bound(
+            cmd_list,
+            upper_lower_identity);
+
+    const bool upper_lower_spc =
+        upper_lower_receiver &&
+        upper_lower_identity.stratum ==
+            dsrrl::operators::lightbank::
+                upper_lower_hemenv_stratum::spc;
+
+    const bool upper_lower_nospc =
+        upper_lower_receiver &&
+        upper_lower_identity.stratum ==
+            dsrrl::operators::lightbank::
+                upper_lower_hemenv_stratum::nospc;
+
+    const bool upper_lower_spc_matches_stable =
+        !upper_lower_spc ||
+        (stable_receiver &&
+         receiver_id ==
+             upper_lower_identity.stable_receiver_id);
+
     const unsigned receiver_classes =
         (stable_receiver ? 1u : 0u) +
         (subsurface_receiver ? 1u : 0u) +
-        (hemdir3_receiver ? 1u : 0u);
+        (hemdir3_receiver ? 1u : 0u) +
+        (upper_lower_nospc ? 1u : 0u);
 
     const bool receiver_ok =
-        receiver_classes == 1u;
+        receiver_classes == 1u &&
+        upper_lower_spc_matches_stable;
 
     if (subsurface_receiver) {
         receiver_id = subsurface_target;
@@ -162,6 +191,13 @@ bool observe_draw_identity(
         // has no paired stable HemEnv receiver, and Spc pairing is metadata
         // only; never leak either into generic HemEnv routing.
         hemdir3_bound = true;
+    } else if (upper_lower_nospc) {
+        // U/L no-Spc has an exact HemEnv consumer identity but no stable
+        // Material Response receiver. Keep generic receiver_id unset.
+        receiver_id = 0u;
+        upper_lower_bound = true;
+    } else if (upper_lower_spc) {
+        upper_lower_bound = true;
     }
 
     out_material = {};
@@ -735,6 +771,7 @@ struct prepared_island_batch {
     dsrrl::runtime::prepared_material_resource_draw resources{};
     dsrrl::runtime::prepared_subsurface_draw subsurface{};
     dsrrl::runtime::prepared_hemdir3_draw hemdir3{};
+    dsrrl::runtime::prepared_upper_lower_hemenv_draw upper_lower{};
     bool mr_in_batch = false;
     bool subsurface_in_batch = false;
     bool hemdir3_in_batch = false;
@@ -750,6 +787,8 @@ void release_prepared_island_batch(
         g_subsurface.release(
             prepared.subsurface);
     } else {
+        g_upper_lower_hemenv.release_prepared_draw(
+            prepared.upper_lower);
         g_material_resources.release_prepared_draw(
             prepared.resources);
         g_mr_draw_runtime.release_prepared_draw(
@@ -774,6 +813,8 @@ bool prepare_island_batch(
     bool subsurface_bound,
     bool hemdir3_bound,
     const dsrrl::runtime::hemdir3_receiver_identity &hemdir3_identity,
+    bool upper_lower_bound,
+    const dsrrl::runtime::upper_lower_receiver_identity &upper_lower_identity,
     const dsrrl::operators::material_response::material_identity &material,
     const dsrrl::operators::material_response::decision &decision,
     prepared_island_batch &prepared) noexcept
@@ -855,6 +896,21 @@ bool prepare_island_batch(
         prepared.mr_in_batch = true;
     }
 
+    if (upper_lower_bound &&
+        g_upper_lower_hemenv.prepare_draw_request(
+            cmd_list,
+            upper_lower_identity,
+            prepared.mr_in_batch,
+            prepared.upper_lower)) {
+        if (dsrrl::runtime::append_island_draw_request(
+                prepared.batch,
+                prepared.upper_lower.request) !=
+            dsrrl::runtime::island_draw_batch_result::ready) {
+            release_prepared_island_batch(prepared);
+            return false;
+        }
+    }
+
     dsrrl::operators::material_response::mtd_semantic_query query{};
     query.material = material;
     query.receiver_id = receiver_id;
@@ -909,6 +965,8 @@ bool on_draw(
     bool subsurface_bound = false;
     bool hemdir3_bound = false;
     dsrrl::runtime::hemdir3_receiver_identity hemdir3_identity{};
+    bool upper_lower_bound = false;
+    dsrrl::runtime::upper_lower_receiver_identity upper_lower_identity{};
     dsrrl::operators::material_response::material_identity material{};
     dsrrl::operators::material_response::decision decision{};
 
@@ -918,6 +976,8 @@ bool on_draw(
             subsurface_bound,
             hemdir3_bound,
             hemdir3_identity,
+            upper_lower_bound,
+            upper_lower_identity,
             material,
             decision))
         return false;
@@ -929,6 +989,8 @@ bool on_draw(
             subsurface_bound,
             hemdir3_bound,
             hemdir3_identity,
+            upper_lower_bound,
+            upper_lower_identity,
             material,
             decision,
             prepared))
@@ -971,6 +1033,8 @@ bool on_draw_indexed(
     bool subsurface_bound = false;
     bool hemdir3_bound = false;
     dsrrl::runtime::hemdir3_receiver_identity hemdir3_identity{};
+    bool upper_lower_bound = false;
+    dsrrl::runtime::upper_lower_receiver_identity upper_lower_identity{};
     dsrrl::operators::material_response::material_identity material{};
     dsrrl::operators::material_response::decision decision{};
 
@@ -980,6 +1044,8 @@ bool on_draw_indexed(
             subsurface_bound,
             hemdir3_bound,
             hemdir3_identity,
+            upper_lower_bound,
+            upper_lower_identity,
             material,
             decision))
         return false;
@@ -991,6 +1057,8 @@ bool on_draw_indexed(
             subsurface_bound,
             hemdir3_bound,
             hemdir3_identity,
+            upper_lower_bound,
+            upper_lower_identity,
             material,
             decision,
             prepared))
