@@ -1,4 +1,5 @@
 #include "dsrrl/operators/material_response/material_response_island.hpp"
+#include "dsrrl/operators/material_response/generated_flver_pairwise_semantics_v1.hpp"
 
 #include <algorithm>
 
@@ -166,6 +167,22 @@ decision material_response_island::evaluate(
 
     if (!material.has_value() || !material->valid)
         return {false, decision_reason::material_required, receiver_id};
+
+    // Positive per-material activation is draw-specific. MTD/profile identity
+    // alone is insufficient: authenticate the actual FLVER owner + slot + MTD.
+    if (!material->owner_tuple_exact ||
+        material->flver_identity_hash == 0u ||
+        !material->material_slot_valid ||
+        material->semantic_name_hash == 0u ||
+        !generated::flver_pairwise_owner_tuple_authenticated(
+            material->flver_identity_hash,
+            material->material_slot,
+            material->semantic_name_hash))
+        return {
+            false,
+            decision_reason::owner_tuple_not_authenticated,
+            receiver_id
+        };
 
     const auto profile = resolve_material(*material, receiver_id);
     if (!profile.has_value())
