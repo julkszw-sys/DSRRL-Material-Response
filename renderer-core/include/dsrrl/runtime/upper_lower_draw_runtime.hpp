@@ -40,6 +40,14 @@ struct prepared_upper_lower_draw {
     bool ready = false;
 };
 
+// Selector bridge called by the already-owned exact FLVER/material selector
+// detour. It is inert unless an upper_lower_draw_runtime instance is installed.
+void upper_lower_selector_event_bridge(
+    void *owner,
+    void *return_address,
+    void *r14,
+    void *r15) noexcept;
+
 class upper_lower_draw_runtime {
 public:
     explicit upper_lower_draw_runtime(
