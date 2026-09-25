@@ -9,6 +9,7 @@
 #include "dsrrl/runtime/material_owner_selection.hpp"
 #include "dsrrl/runtime/material_owner_producer.hpp"
 #include "dsrrl/runtime/upper_lower_draw_runtime.hpp"
+#include "dsrrl/runtime/hemdir3_mode_transport.hpp"
 #include <Windows.h>
 #include <bcrypt.h>
 #include <array>
@@ -103,10 +104,14 @@ extern "C" void dsrrl_flver_selector_observer(
     void *ret,
     void *r14,
     void *r15,
-    std::int32_t material_index) noexcept
+    std::int32_t material_index,
+    std::uint32_t incoming_mode) noexcept
 {
  ++g_selector_events;
  material_owner_selection_clear();
+
+ hemdir3_mode_transport::selector_begin(
+     incoming_mode);
 
  upper_lower_selector_event_bridge(
      owner,
