@@ -818,27 +818,16 @@ void on_destroy_device(
         native);
 }
 
-bool retain(
+bool append_retained_request(
     prepared_material_resource_draw &prepared,
+    const island_draw_adapter_request &request,
     ID3D11ShaderResourceView *view) noexcept
 {
     if (view == nullptr ||
+        prepared.request_count >=
+            prepared.requests.size() ||
         prepared.retained_count >=
             prepared.retained_views.size())
-        return false;
-
-    prepared.retained_views[
-        prepared.retained_count++] =
-        view;
-    return true;
-}
-
-bool append_request(
-    prepared_material_resource_draw &prepared,
-    const island_draw_adapter_request &request) noexcept
-{
-    if (prepared.request_count >=
-        prepared.requests.size())
         return false;
 
     draw_tx_mutation verify{};
@@ -851,6 +840,9 @@ bool append_request(
     prepared.requests[
         prepared.request_count++] =
         request;
+    prepared.retained_views[
+        prepared.retained_count++] =
+        view;
     return true;
 }
 
@@ -1011,12 +1003,10 @@ prepare_draw_requests(
             };
             request.srv_count = 1u;
 
-            if (retain(
+            if (append_retained_request(
                     prepared,
-                    replacement) &&
-                append_request(
-                    prepared,
-                    request)) {
+                    request,
+                    replacement)) {
                 prepared.spec_rgb = true;
                 ++g_spec_requests;
                 replacement = nullptr;
@@ -1102,12 +1092,10 @@ prepare_draw_requests(
             };
             request.srv_count = 1u;
 
-            if (retain(
+            if (append_retained_request(
                     prepared,
-                    replacement) &&
-                append_request(
-                    prepared,
-                    request)) {
+                    request,
+                    replacement)) {
                 prepared.diffuse = true;
                 ++g_diffuse_requests;
                 replacement = nullptr;
@@ -1201,12 +1189,10 @@ prepare_draw_requests(
             };
             request.srv_count = 1u;
 
-            if (retain(
+            if (append_retained_request(
                     prepared,
-                    replacement) &&
-                append_request(
-                    prepared,
-                    request)) {
+                    request,
+                    replacement)) {
                 prepared.normal = true;
                 ++g_normal_requests;
                 replacement = nullptr;
