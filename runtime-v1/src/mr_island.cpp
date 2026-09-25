@@ -1654,7 +1654,7 @@ void unregister_runtime() noexcept
         g_material_spec_override.clear();
         g_material_envspec.clear();
     }
-    g_draw_donor=-1; g_draw_envspec={}; g_draw_envspec_exact=false;
+    g_draw_donor=-1; g_draw_spec_override=-1; g_draw_envspec={}; g_draw_envspec_exact=false;
     g_bound_host=-1; g_bound_lerp=false; g_bound_subsurface=false; g_bound_command=nullptr;
     g_core=nullptr;
 }
