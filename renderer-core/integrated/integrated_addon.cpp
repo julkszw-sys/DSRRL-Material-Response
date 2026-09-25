@@ -11,6 +11,8 @@
 #include "dsrrl/runtime/subsurface_pipeline_registry.hpp"
 #include "dsrrl/runtime/subsurface_draw_runtime.hpp"
 #include "dsrrl/runtime/upper_lower_draw_runtime.hpp"
+#include "dsrrl/runtime/upper_lower_pipeline_registry.hpp"
+#include "dsrrl/runtime/upper_lower_hemenv_draw_runtime.hpp"
 #include "dsrrl/runtime/hemdir3_mode_transport.hpp"
 #include "dsrrl/runtime/hemdir3_pipeline_registry.hpp"
 #include "dsrrl/runtime/hemdir3_draw_runtime.hpp"
@@ -18,6 +20,7 @@
 #include "dsrrl/operators/material_response/material_response_seed.hpp"
 #include "dsrrl/operators/material_response/material_response_v211_materializer.hpp"
 #include "dsrrl/operators/lightbank/hemdir3_b13_materializer.hpp"
+#include "dsrrl/operators/lightbank/upper_lower_hemenv_materializer.hpp"
 
 #include <reshade.hpp>
 #include <d3d11.h>
@@ -56,6 +59,8 @@ dsrrl::runtime::subsurface_draw_runtime
     g_subsurface(g_core, g_mr_draw_runtime, g_material_resources);
 dsrrl::runtime::upper_lower_draw_runtime
     g_upper_lower(g_core);
+dsrrl::runtime::upper_lower_hemenv_draw_runtime
+    g_upper_lower_hemenv(g_core, g_upper_lower);
 dsrrl::runtime::hemdir3_draw_runtime
     g_hemdir3(g_core, g_upper_lower);
 
@@ -427,12 +432,14 @@ void on_init_device(reshade::api::device *device)
 {
     g_a1_bridge.on_init_device(device);
     g_mr_draw_runtime.on_init_device(device);
+    g_upper_lower_hemenv.on_init_device(device);
     g_hemdir3.on_init_device(device);
 }
 
 void on_destroy_device(reshade::api::device *device)
 {
     g_upper_lower.on_destroy_device(device);
+    g_upper_lower_hemenv.on_destroy_device(device);
     g_hemdir3.on_destroy_device(device);
     g_mr_draw_runtime.on_destroy_device(device);
     g_a1_bridge.on_destroy_device(device);
@@ -451,8 +458,12 @@ bool on_create_pipeline(
 
     dsrrl::operators::lightbank::
         hemdir3_b13_materialize_outcome h3{};
+    dsrrl::operators::lightbank::
+        upper_lower_hemenv_materialize_outcome ul{};
     bool h3_identity_ready = false;
     bool h3_replacement_ready = false;
+    bool ul_identity_ready = false;
+    bool ul_replacement_ready = false;
 
     if (pixel_shader != nullptr &&
         pixel_shader->code != nullptr &&
@@ -492,6 +503,26 @@ bool on_create_pipeline(
             ++g_mr_payload_materialize_fail;
         }
 
+        std::vector<std::uint8_t> ul_payload;
+        ul =
+            dsrrl::operators::lightbank::
+                materialize_upper_lower_hemenv_receiver(
+                    g_core.features(),
+                    source,
+                    pixel_shader->code_size,
+                    ul_payload);
+
+        if (ul.result ==
+            dsrrl::operators::lightbank::
+                upper_lower_hemenv_materialize_result::applied) {
+            ul_identity_ready = true;
+            ul_replacement_ready =
+                g_upper_lower_hemenv.register_replacement(
+                    ul,
+                    ul_payload.data(),
+                    ul_payload.size());
+        }
+
         std::vector<std::uint8_t> h3_payload;
         h3 =
             dsrrl::operators::lightbank::
@@ -525,6 +556,33 @@ bool on_create_pipeline(
             subobject_count,
             subobjects);
 
+    if (ul_identity_ready) {
+        const auto *created_shader =
+            find_pixel_shader(
+                subobject_count,
+                subobjects);
+
+        if (created_shader == nullptr ||
+            created_shader->code == nullptr ||
+            created_shader->code_size == 0u) {
+            ul_identity_ready = false;
+        } else {
+            dsrrl::runtime::upper_lower_receiver_identity identity{};
+            identity.plan_index = ul.plan_index;
+            identity.shader_index = ul.shader_index;
+            identity.stable_receiver_id =
+                ul.stable_receiver_id;
+            identity.stratum = ul.stratum;
+
+            ul_identity_ready =
+                dsrrl::runtime::
+                    upper_lower_receiver_attest_created_code(
+                        created_shader->code,
+                        created_shader->code_size,
+                        identity);
+        }
+    }
+
     if (h3_identity_ready) {
         const auto *created_shader =
             find_pixel_shader(
@@ -552,6 +610,8 @@ bool on_create_pipeline(
         }
     }
 
+    (void)ul_identity_ready;
+    (void)ul_replacement_ready;
     (void)h3_identity_ready;
     (void)h3_replacement_ready;
     return a1_changed;
@@ -590,6 +650,11 @@ void on_init_pipeline(
                 pipeline.handle,
                 pixel_shader->code,
                 pixel_shader->code_size);
+        (void)dsrrl::runtime::
+            upper_lower_receiver_observe_pipeline(
+                pipeline.handle,
+                pixel_shader->code,
+                pixel_shader->code_size);
     }
 }
 
@@ -602,6 +667,8 @@ void on_destroy_pipeline(
     dsrrl::runtime::subsurface_receiver_forget_pipeline(
         pipeline.handle);
     dsrrl::runtime::hemdir3_receiver_forget_pipeline(
+        pipeline.handle);
+    dsrrl::runtime::upper_lower_receiver_forget_pipeline(
         pipeline.handle);
     g_a1_bridge.on_destroy_pipeline(device, pipeline);
 }
@@ -625,6 +692,10 @@ void on_bind_pipeline(
         pixel_stage_bound,
         pipeline.handle);
     dsrrl::runtime::hemdir3_receiver_observe_bind(
+        cmd_list,
+        pixel_stage_bound,
+        pipeline.handle);
+    dsrrl::runtime::upper_lower_receiver_observe_bind(
         cmd_list,
         pixel_stage_bound,
         pipeline.handle);
