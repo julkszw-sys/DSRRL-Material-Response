@@ -61,6 +61,7 @@ std::atomic<std::uint64_t> g_shader_ul_pass{0}, g_shader_ul_fail{0};
 std::atomic<std::uint64_t> g_shader_spec_pass{0}, g_shader_spec_fail{0};
 std::atomic<std::uint64_t> g_shader_ul_spec_pass{0}, g_shader_ul_spec_fail{0};
 std::atomic<std::uint64_t> g_shader_v13_pass{0}, g_shader_v13_fail{0};
+std::atomic<std::uint64_t> g_envspec_rgba_shader_pass{0}, g_envspec_rgba_shader_fail{0};
 std::atomic<std::uint64_t> g_lerp_shader_pass{0}, g_lerp_shader_fail{0};
 std::atomic<std::uint64_t> g_v9a_shader_pass{0}, g_v9a_shader_fail{0};
 std::atomic<std::uint64_t> g_lerp_binds{0}, g_lerp_replays{0}, g_v10_replays{0};
@@ -69,6 +70,9 @@ std::atomic<std::uint64_t> g_v13_source_ready{0}, g_v13_source_miss{0};
 std::atomic<std::uint64_t> g_v13_resource_ready{0}, g_v13_resource_miss{0};
 std::atomic<std::uint64_t> g_v13_b12_update{0}, g_v13_b12_fail{0}, g_v13_replay{0};
 std::atomic<bool> g_v13_first_draw_logged{false};
+std::atomic<std::uint64_t> g_envspec_rgba_candidate{0}, g_envspec_rgba_replay{0};
+std::atomic<std::uint64_t> g_envspec_rgba_bind_fail{0}, g_envspec_rgba_restore_fail{0};
+std::atomic<bool> g_envspec_rgba_first_draw_logged{false};
 std::atomic<std::uint64_t> g_target_binds{0}, g_replays{0}, g_fail_open{0};
 std::atomic<std::uint64_t> g_diffuse_candidates{0}, g_normal_candidates{0};
 std::atomic<std::uint64_t> g_spec_candidates{0}, g_ul_candidates{0};
@@ -281,6 +285,12 @@ struct device_state {
     std::array<ID3D11PixelShader*,24> full_v13_spec{};
     std::array<ID3D11PixelShader*,24> full_v13_ul_spec{};
 
+    // Full Build131 PTDE EnvSpec consumer. These variants always include the
+    // independently verified SpecRGB t10 bridge; EnvSpec is not allowed to
+    // activate without its material texture input.
+    std::array<ID3D11PixelShader*,24> pmetal_envspec_rgba_spec{};
+    std::array<ID3D11PixelShader*,24> pmetal_envspec_rgba_ul_spec{};
+
     std::unordered_map<std::uint16_t,ID3D11Buffer*> b12;
     std::unordered_map<std::uintptr_t,ID3D11Buffer*> pmetal_b12;
 };
@@ -321,6 +331,8 @@ void release_device_state()
     for(auto *&p:g_device.full_v13_ul){ if(p){p->Release();p=nullptr;} }
     for(auto *&p:g_device.full_v13_spec){ if(p){p->Release();p=nullptr;} }
     for(auto *&p:g_device.full_v13_ul_spec){ if(p){p->Release();p=nullptr;} }
+    for(auto *&p:g_device.pmetal_envspec_rgba_spec){ if(p){p->Release();p=nullptr;} }
+    for(auto *&p:g_device.pmetal_envspec_rgba_ul_spec){ if(p){p->Release();p=nullptr;} }
     for(auto &[_,b]:g_device.b12) if(b) b->Release();
     g_device.b12.clear();
     for(auto &[_,b]:g_device.pmetal_b12) if(b) b->Release();
@@ -459,6 +471,43 @@ bool ensure_shader_pair(device *d,const plan &p,std::span<const std::uint8_t> st
         if(ps_spec) ps_spec->Release();
         if(ps_stock_diffuse_spec) ps_stock_diffuse_spec->Release();
         ++g_shader_spec_fail;
+    }
+
+    // Source-complete Build131 PTDE EnvSpec consumer, retargeted to the
+    // exact current V2.11 bodies. It is materialized now but remains dormant
+    // while env_spec is hold-off in the runtime manifest.
+    if(i>=9u && i<=11u){
+        const auto rgba=transform_pmetal_envspec_rgba(full.code);
+        const auto rgba_ul=
+            rgba.ok ? transform_upper_lower(rgba.code) : transform_result{};
+        const auto rgba_spec=
+            rgba.ok ? transform_spec_rgb(rgba.code) : transform_result{};
+        const auto rgba_ul_spec=
+            rgba_ul.ok ? transform_spec_rgb(rgba_ul.code) : transform_result{};
+
+        bool any=false;
+        ID3D11PixelShader *ps_rgba_spec=nullptr;
+        if(create_shader(native,rgba_spec,ps_rgba_spec)){
+            if(g_device.pmetal_envspec_rgba_spec[i])
+                g_device.pmetal_envspec_rgba_spec[i]->Release();
+            g_device.pmetal_envspec_rgba_spec[i]=ps_rgba_spec;
+            any=true;
+        }else if(ps_rgba_spec){
+            ps_rgba_spec->Release();
+        }
+
+        ID3D11PixelShader *ps_rgba_ul_spec=nullptr;
+        if(create_shader(native,rgba_ul_spec,ps_rgba_ul_spec)){
+            if(g_device.pmetal_envspec_rgba_ul_spec[i])
+                g_device.pmetal_envspec_rgba_ul_spec[i]->Release();
+            g_device.pmetal_envspec_rgba_ul_spec[i]=ps_rgba_ul_spec;
+            any=true;
+        }else if(ps_rgba_ul_spec){
+            ps_rgba_ul_spec->Release();
+        }
+
+        if(any) ++g_envspec_rgba_shader_pass;
+        else ++g_envspec_rgba_shader_fail;
     }
 
     // Exact V13 P_Metal consumer exists only for the three stable P_Metal
