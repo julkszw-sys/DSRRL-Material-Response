@@ -6,6 +6,8 @@
 #endif
 #include "dsrrl/runtime/flver_identity_transport.hpp"
 #include "dsrrl/runtime/flver_identity_registry.hpp"
+#include "dsrrl/runtime/material_owner_selection.hpp"
+#include "dsrrl/runtime/material_owner_producer.hpp"
 #include "dsrrl/runtime/material_owner_producer.hpp"
 #include <Windows.h>
 #include <bcrypt.h>
@@ -97,35 +99,15 @@ void __fastcall parse_entry(void*m,const void*r) noexcept {
 void __fastcall destroy_entry(void*m) noexcept {flver_identity_observe_destroy(m);if(g_do)g_do(m);}
 }
 extern "C" void dsrrl_flver_selector_observer(void *c, std::int32_t i) noexcept {
- ++g_selector_events;
- g_selector_owner_candidate={};
- g_selector_owner_valid=false;
-
- if(i<0){++g_owner_fail_open;return;}
-
+ material_owner_selection_clear();
+ if(i<0)return;
  actual_material_owner_observation observation{};
- if(!flver_identity_enrich_owner(
-        c,static_cast<std::uint32_t>(i),observation)){
-  ++g_owner_fail_open;
+ if(!flver_identity_enrich_owner(c,static_cast<std::uint32_t>(i),observation))
   return;
- }
- ++g_owner_sha_hits;
-
- if(!enrich_exact_owner_mtd_identity(observation)){
-  ++g_owner_fail_open;
+ if(!enrich_exact_owner_mtd_identity(observation))
   return;
- }
- ++g_owner_mtd_hits;
-
- auto material=make_actual_material_identity(observation);
- if(!material.owner_tuple_exact){
-  ++g_owner_fail_open;
-  return;
- }
-
- g_selector_owner_candidate=material;
- g_selector_owner_valid=true;
- ++g_exact_owner_ready;
+ const auto identity=make_actual_material_identity(observation);
+ material_owner_selection_publish(identity);
 }
 bool install() noexcept {if(g_p.patched||g_s.patched||g_d.patched)return false;g_state={};if(!exe_ok())return false;g_base=reinterpret_cast<std::uintptr_t>(GetModuleHandleW(nullptr));if(!g_base)return false;g_state.provenance_ok=true;
  if(!prep(g_p,k_parse,k_parse_b,reinterpret_cast<void*>(&parse_entry)))goto fail;g_po=reinterpret_cast<parser_fn>(g_p.trampoline);
