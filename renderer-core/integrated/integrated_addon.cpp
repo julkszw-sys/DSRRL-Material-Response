@@ -209,8 +209,10 @@ void log_state(const char *tag) noexcept
     const auto tx = g_draw_transactions.telemetry();
     const auto resources = g_material_resources.telemetry();
     const auto tex = dsrrl::runtime::texture_identity_transport::status();
+    const auto ul = g_upper_lower.telemetry();
+    const auto subs = g_subsurface.telemetry();
 
-    char line[1408]{};
+    char line[1792]{};
     std::snprintf(
         line,
         sizeof(line),
@@ -229,6 +231,9 @@ void log_state(const char *tag) noexcept
         "tx_restore_ok=%llu tx_restore_fail=%llu tx_quarantine=%u "
         "tex_hook=%u/%u tex_restore_fail=%u res_named=%llu res_ready=%llu res_missing=%llu "
         "res_unsupported=%llu spec_req=%llu diff_req=%llu norm_req=%llu res_fo=%llu "
+        "ul_hook=%u ul_q=%u ul_restore_fail=%u ul_pub=%llu ul_sel=%llu/%llu/%llu ul_tuple_miss=%llu "
+        "ul_steady=%llu/%llu ul_blend=%llu/%llu/%llu ul_b13=%llu/%llu ul_req=%llu "
+        "sub_candidate=%llu sub_prepared=%llu sub_pipe_reject=%llu sub_mat_reject=%llu sub_surface_reject=%llu "
         "draw=%llu draw_rx=%llu draw_owner=%llu draw_join=%llu owner_only=%llu rx_only=%llu",
         tag,
         static_cast<unsigned long long>(t.create_events),
@@ -292,6 +297,27 @@ void log_state(const char *tag) noexcept
         static_cast<unsigned long long>(resources.diffuse_requests),
         static_cast<unsigned long long>(resources.normal_requests),
         static_cast<unsigned long long>(resources.fail_open),
+        ul.producer_hooks_armed ? 1u : 0u,
+        ul.quarantined ? 1u : 0u,
+        ul.restore_failed ? 1u : 0u,
+        static_cast<unsigned long long>(ul.snapshot_publish),
+        static_cast<unsigned long long>(ul.selector_seen),
+        static_cast<unsigned long long>(ul.selector_match),
+        static_cast<unsigned long long>(ul.selector_miss),
+        static_cast<unsigned long long>(ul.tuple_mismatch),
+        static_cast<unsigned long long>(ul.steady_seen),
+        static_cast<unsigned long long>(ul.steady_pass),
+        static_cast<unsigned long long>(ul.blend_seen),
+        static_cast<unsigned long long>(ul.blend_upper),
+        static_cast<unsigned long long>(ul.blend_lower),
+        static_cast<unsigned long long>(ul.b13_create),
+        static_cast<unsigned long long>(ul.b13_hit),
+        static_cast<unsigned long long>(ul.requests),
+        static_cast<unsigned long long>(subs.candidates),
+        static_cast<unsigned long long>(subs.prepared),
+        static_cast<unsigned long long>(subs.pipeline_rejects),
+        static_cast<unsigned long long>(subs.material_rejects),
+        static_cast<unsigned long long>(subs.surface_rejects),
         static_cast<unsigned long long>(g_draw_events.load()),
         static_cast<unsigned long long>(g_draw_receiver_hits.load()),
         static_cast<unsigned long long>(g_draw_owner_hits.load()),
@@ -828,6 +854,7 @@ bool AddonInit(
     g_draw_transactions.reset();
     g_mr_draw_runtime.reset();
     g_material_resources.reset();
+    g_upper_lower.reset();
     g_present_count.store(0);
     g_mr_draw_eval.store(0);
     g_mr_would_activate.store(0);
@@ -895,13 +922,25 @@ bool AddonInit(
             "] FLVER identity hooks FAIL-OPEN: stock DSR preserved for exact owner routing.");
     }
 
+    const bool upper_lower_hooks =
+        flver_hooks &&
+        g_upper_lower.install();
+
+    if (!upper_lower_hooks) {
+        reshade::log::message(
+            reshade::log::level::warning,
+            "[DSRRL CORE+ISLANDS " DSRRL_CORE_ISLANDS_VERSION
+            "] Upper/Lower producer hooks FAIL-OPEN: stock DSR b13 preserved.");
+    }
+
     reshade::log::message(
         reshade::log::level::info,
         "[DSRRL CORE+ISLANDS " DSRRL_CORE_ISLANDS_VERSION
         "] READY: shared Core draw-state transaction layer (PS/CB/SRV/sampler) "
-        "is active; Material Response, SpecRGB, Diffuse and Normal compose into one "
-        "exact receiver/owner/resource-gated replay. Other draw-specific islands fail "
-        "open until their verified adapter payload is armed; frozen legacy monolith is not linked.");
+        "is active; Material Response, SpecRGB, Diffuse, Normal, Subsurface and Upper/Lower "
+        "compose into one conflict-checked replay where their exact routes are verified. "
+        "Other draw-specific islands fail open until their verified adapter payload is armed; "
+        "frozen legacy monolith is not linked.");
 
     return true;
 }
@@ -913,6 +952,11 @@ void AddonUninit(
 {
     unregister_events();
     log_state("PRE_UNLOAD");
+    g_upper_lower.uninstall();
+
+    if (g_upper_lower.telemetry().restore_failed)
+        log_state("UL_UNLOAD_RESTORE_FAIL");
+
     dsrrl::runtime::flver_identity_transport::uninstall();
 
     if (dsrrl::runtime::flver_identity_transport::status().restore_failed)
@@ -923,6 +967,7 @@ void AddonUninit(
     dsrrl::runtime::texture_identity_transport::uninstall();
     g_material_resources.unregister_events();
     g_material_resources.reset();
+    g_upper_lower.reset();
     g_mr_draw_runtime.reset();
     g_draw_transactions.reset();
     g_a1_bridge.reset();
