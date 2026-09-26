@@ -632,11 +632,15 @@ bool pmetal_envspec_draw_runtime::prepare(
 
     prepared.request.additional_shader_owners =
         prepared.request.additional_owners;
+    prepared.request.additional_constant_buffer_owners =
+        mr_owner;
 
     if (use_upper_lower) {
         prepared.request.additional_owners |=
             ul_owner;
         prepared.request.additional_shader_owners |=
+            ul_owner;
+        prepared.request.additional_constant_buffer_owners |=
             ul_owner;
         prepared.request.additional_carrier_owners |=
             ul_owner;
