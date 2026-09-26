@@ -1,0 +1,53 @@
+{
+  "schema": "dsrrl.upper_lower_renderer_wide_census.v1",
+  "source": {
+    "dcx_sha256": "ad180732ac79d5d98783aa504c789c2bab15e515c3b0f66b237d8b8c69113394",
+    "bnd3_sha256": "9ad94df9e282e6fd559605506aa16d74eeb1ef3ebb1ed3002c5affee80018464",
+    "binder": "FRPG_FlverPBL_fpo_DX11.shaderbnd.dcx"
+  },
+  "exact_consumer_rule": {
+    "rdef_names": ["gFC_HemAmbCol_u", "gFC_HemAmbCol_d"],
+    "shex_operand_pairs": {
+      "b0_c7": 1,
+      "b0_c8": 2
+    },
+    "policy": "RDEF presence alone is not USE; exact executable consumption requires the unique b0[7]/b0[8]/b0[8] operand triad."
+  },
+  "coverage": {
+    "binder_names": 603,
+    "unique_executable_sha256": 344,
+    "authority_plans": 344,
+    "uncovered_unique_executables": 0
+  },
+  "families": [
+    {"family":"Phn","binder_names":294,"unique_executable_sha256":180},
+    {"family":"Gst","binder_names":150,"unique_executable_sha256":78},
+    {"family":"Sfx","binder_names":144,"unique_executable_sha256":72},
+    {"family":"Snow","binder_names":12,"unique_executable_sha256":11},
+    {"family":"NtoA","binder_names":3,"unique_executable_sha256":3}
+  ],
+  "other_dx11_binders": [
+    {"binder":"DbgFont_DX11.shaderbnd.dcx","exact_unique_consumers":0},
+    {"binder":"FRPG_Deferred_DX11.shaderbnd.dcx","rdef_u_l_names":1,"exact_unique_consumers":0},
+    {"binder":"FRPG_Filter_DX11.shaderbnd.dcx","exact_unique_consumers":0},
+    {"binder":"FRPG_FlverPBL_vpo_DX11.shaderbnd.dcx","rdef_u_l_names":674,"exact_unique_consumers":0},
+    {"binder":"FRPG_Menu_DX11.shaderbnd.dcx","exact_unique_consumers":0},
+    {"binder":"FRPG_SfxPBL_DX11.shaderbnd.dcx","exact_unique_consumers":0}
+  ],
+  "abi": {
+    "ordinary_declaration_word": 11,
+    "ordinary_nonphn_verified": {
+      "Gst": 72,
+      "Sfx": 72,
+      "Snow": 11,
+      "NtoA": 3
+    },
+    "faceeye_declaration_word": 7,
+    "Gst_FaceEye_verified": 6
+  },
+  "status": {
+    "construction_coverage": "COMPLETE",
+    "runtime_activation": "NOT_PROVEN",
+    "pixel_equivalence": "OPEN"
+  }
+}
