@@ -693,6 +693,46 @@ bool on_create_pipeline(
             ++g_mr_payload_materialize_fail;
         }
 
+        if (g_core.features().enabled(
+                dsrrl::core::operator_id::env_spec)) {
+            for (const bool with_upper_lower :
+                 {false, true}) {
+                std::vector<std::uint8_t>
+                    envspec_payload;
+
+                const auto envspec =
+                    dsrrl::operators::env_spec::
+                        materialize_pmetal_rgba_receiver(
+                            g_core.features(),
+                            source,
+                            pixel_shader->code_size,
+                            with_upper_lower,
+                            envspec_payload);
+
+                using envspec_result =
+                    dsrrl::operators::env_spec::
+                        pmetal_rgba_materialize_result;
+
+                if (envspec.result ==
+                    envspec_result::applied) {
+                    if (g_pmetal_envspec.
+                            register_replacement(
+                                envspec,
+                                envspec_payload.data(),
+                                envspec_payload.size()))
+                        ++g_envspec_payload_materialize_ok;
+                    else
+                        ++g_envspec_payload_materialize_fail;
+                } else if (
+                    envspec.result !=
+                        envspec_result::pass_not_candidate &&
+                    envspec.result !=
+                        envspec_result::pass_unknown_exact_sha) {
+                    ++g_envspec_payload_materialize_fail;
+                }
+            }
+        }
+
         std::vector<std::uint8_t> ul_payload;
         ul =
             dsrrl::operators::lightbank::
