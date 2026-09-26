@@ -344,6 +344,16 @@ void fixed_pointlight_pipeline_runtime::on_destroy_device(
     device_ = nullptr;
 }
 
+bool fixed_pointlight_pipeline_runtime::pipeline_attested(
+    std::uint64_t pipeline_handle) const noexcept
+{
+    if (pipeline_handle == 0u || quarantined_.load())
+        return false;
+
+    std::lock_guard<std::mutex> lock(mutex_);
+    return pipelines_.find(pipeline_handle) != pipelines_.end();
+}
+
 bool fixed_pointlight_pipeline_runtime::prepare_bound_shader(
     reshade::api::command_list *cmd_list,
     prepared_fixed_pointlight_shader &prepared) noexcept
