@@ -325,9 +325,15 @@ upper_lower_hemenv_draw_runtime::telemetry() const noexcept
         candidates_.load(),
         carrier_ready_.load(),
         carrier_rejects_.load(),
+        identity_rejects_.load(),
         nospc_ready_.load(),
         spc_ready_.load(),
         spc_mr_hold_.load(),
+        phn_ready_.load(),
+        gst_ready_.load(),
+        sfx_ready_.load(),
+        snow_ready_.load(),
+        ntoa_ready_.load(),
         requests_.load(),
         quarantined_.load()
     };
@@ -342,9 +348,15 @@ void upper_lower_hemenv_draw_runtime::reset() noexcept
     candidates_.store(0);
     carrier_ready_.store(0);
     carrier_rejects_.store(0);
+    identity_rejects_.store(0);
     nospc_ready_.store(0);
     spc_ready_.store(0);
     spc_mr_hold_.store(0);
+    phn_ready_.store(0);
+    gst_ready_.store(0);
+    sfx_ready_.store(0);
+    snow_ready_.store(0);
+    ntoa_ready_.store(0);
     requests_.store(0);
     quarantined_.store(false);
 }
