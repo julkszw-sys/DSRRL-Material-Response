@@ -120,6 +120,13 @@ release_resources() noexcept
     }
     replacements_.clear();
 
+    for (auto &[_,shader] :
+         lerp_replacements_) {
+        if (shader != nullptr)
+            shader->Release();
+    }
+    lerp_replacements_.clear();
+
     for (auto &[_,buffer] :
          b12_by_context_) {
         if (buffer != nullptr)
@@ -189,6 +196,13 @@ on_destroy_device(
             pair.upper_lower->Release();
     }
     replacements_.clear();
+
+    for (auto &[_,shader] :
+         lerp_replacements_) {
+        if (shader != nullptr)
+            shader->Release();
+    }
+    lerp_replacements_.clear();
 
     for (auto &[_,buffer] :
          b12_by_context_) {
@@ -271,10 +285,86 @@ register_replacement(
     return true;
 }
 
+bool pmetal_envspec_draw_runtime::
+register_lerp_replacement(
+    const operators::env_spec::
+        pmetal_rgba_lerp_materialize_outcome &outcome,
+    const void *dxbc,
+    std::size_t dxbc_size) noexcept
+{
+    using result =
+        operators::env_spec::
+            pmetal_rgba_lerp_materialize_result;
+
+    if (outcome.result != result::applied ||
+        outcome.semantic_receiver_id < 33u ||
+        outcome.semantic_receiver_id > 35u ||
+        outcome.pair_index + 24u !=
+            outcome.semantic_receiver_id ||
+        !outcome.envdiffuse_preserved ||
+        !outcome.spec_rgb_consumer ||
+        dxbc == nullptr ||
+        dxbc_size == 0u ||
+        quarantined_.load()) {
+        ++lerp_replacement_register_fail_;
+        return false;
+    }
+
+    std::lock_guard<std::mutex> lock(
+        mutex_);
+
+    if (device_ == nullptr) {
+        ++lerp_replacement_register_fail_;
+        return false;
+    }
+
+    ID3D11PixelShader *shader = nullptr;
+    if (FAILED(
+            device_->CreatePixelShader(
+                dxbc,
+                dxbc_size,
+                nullptr,
+                &shader)) ||
+        shader == nullptr) {
+        ++lerp_replacement_register_fail_;
+        return false;
+    }
+
+    auto &target =
+        lerp_replacements_[
+            outcome.semantic_receiver_id];
+
+    if (target != nullptr)
+        target->Release();
+
+    target = shader;
+
+    ++lerp_replacement_register_ok_;
+    return true;
+}
+
 bool pmetal_envspec_draw_runtime::prepare(
     reshade::api::command_list *cmd_list,
     const mr::material_identity &material,
     const mr::decision &decision,
+    bool upper_lower_receiver_verified,
+    prepared_pmetal_envspec_draw &prepared) noexcept
+{
+    return prepare(
+        cmd_list,
+        material,
+        decision,
+        pmetal_envspec_receiver_family::
+            stable_hemenv,
+        upper_lower_receiver_verified,
+        prepared);
+}
+
+bool pmetal_envspec_draw_runtime::prepare(
+    reshade::api::command_list *cmd_list,
+    const mr::material_identity &material,
+    const mr::decision &decision,
+    pmetal_envspec_receiver_family family,
     bool upper_lower_receiver_verified,
     prepared_pmetal_envspec_draw &prepared) noexcept
 {
@@ -287,6 +377,10 @@ bool pmetal_envspec_draw_runtime::prepare(
         return false;
 
     ++candidates_;
+    if (family ==
+        pmetal_envspec_receiver_family::
+            hemenvlerp)
+        ++lerp_candidates_;
 
     if (!exact_pmetal_material(
             material) ||
@@ -335,13 +429,22 @@ bool pmetal_envspec_draw_runtime::prepare(
         return false;
     }
 
-    // Current Build131 authority is certified only for the stable HemEnv
-    // 33/34/35 one-endpoint consumer family. Preserve full A/B+beta producer
-    // state, but never execute a blended source through that consumer.
-    // beta != 0 remains fail-open until an exact HemEnvLerp receiver/consumer
-    // path is independently materialized and attested.
-    if (source.beta != 0.0f) {
+    // Stable HemEnv remains a one-endpoint consumer. HemEnvLerp is an
+    // independently attested A/B+beta consumer and is the only family allowed
+    // to carry finite blended source state through this island.
+    if (family ==
+            pmetal_envspec_receiver_family::
+                stable_hemenv &&
+        source.beta != 0.0f) {
         ++blended_receiver_hold_;
+        return false;
+    }
+
+    if (family ==
+            pmetal_envspec_receiver_family::
+                hemenvlerp &&
+        upper_lower_receiver_verified) {
+        ++semantic_rejects_;
         return false;
     }
 
@@ -355,30 +458,54 @@ bool pmetal_envspec_draw_runtime::prepare(
     }
 
     replacement_pair pair{};
+    ID3D11PixelShader *lerp_shader = nullptr;
+
     {
         std::lock_guard<std::mutex> lock(
             mutex_);
 
-        const auto found =
-            replacements_.find(
-                decision.receiver_id);
+        if (family ==
+            pmetal_envspec_receiver_family::
+                hemenvlerp) {
+            const auto found =
+                lerp_replacements_.find(
+                    decision.receiver_id);
 
-        if (found ==
-            replacements_.end()) {
-            ++replacement_register_fail_;
-            return false;
+            if (found ==
+                    lerp_replacements_.end() ||
+                found->second == nullptr) {
+                ++lerp_replacement_register_fail_;
+                return false;
+            }
+
+            lerp_shader =
+                found->second;
+            lerp_shader->AddRef();
+        } else {
+            const auto found =
+                replacements_.find(
+                    decision.receiver_id);
+
+            if (found ==
+                replacements_.end()) {
+                ++replacement_register_fail_;
+                return false;
+            }
+
+            pair =
+                found->second;
+
+            if (pair.base != nullptr)
+                pair.base->AddRef();
+            if (pair.upper_lower != nullptr)
+                pair.upper_lower->AddRef();
         }
-
-        pair =
-            found->second;
-
-        if (pair.base != nullptr)
-            pair.base->AddRef();
-        if (pair.upper_lower != nullptr)
-            pair.upper_lower->AddRef();
     }
 
-    if (pair.base == nullptr) {
+    if (family ==
+            pmetal_envspec_receiver_family::
+                stable_hemenv &&
+        pair.base == nullptr) {
         if (pair.upper_lower != nullptr)
             pair.upper_lower->Release();
         ++replacement_register_fail_;
@@ -387,7 +514,10 @@ bool pmetal_envspec_draw_runtime::prepare(
 
     bool use_upper_lower = false;
 
-    if (upper_lower_receiver_verified &&
+    if (family ==
+            pmetal_envspec_receiver_family::
+                stable_hemenv &&
+        upper_lower_receiver_verified &&
         pair.upper_lower != nullptr &&
         lightbank_.
             prepare_upper_lower_carrier(
@@ -395,31 +525,47 @@ bool pmetal_envspec_draw_runtime::prepare(
                 prepared.upper_lower)) {
         use_upper_lower = true;
         ++upper_lower_ready_;
-    } else {
+    } else if (
+        family ==
+            pmetal_envspec_receiver_family::
+                stable_hemenv) {
         ++upper_lower_fallback_;
     }
 
     ID3D11PixelShader *shader =
-        use_upper_lower
-            ? pair.upper_lower
-            : pair.base;
+        family ==
+            pmetal_envspec_receiver_family::
+                hemenvlerp
+            ? lerp_shader
+            : (use_upper_lower
+                ? pair.upper_lower
+                : pair.base);
 
     core::operator_mask composed_owners =
-        use_upper_lower
-            ? pair.upper_lower_owners
-            : pair.base_owners;
+        family ==
+            pmetal_envspec_receiver_family::
+                hemenvlerp
+            ? 0u
+            : (use_upper_lower
+                ? pair.upper_lower_owners
+                : pair.base_owners);
 
-    if (use_upper_lower) {
-        pair.base->Release();
-        pair.base = nullptr;
-    } else {
-        if (pair.upper_lower != nullptr) {
+    if (family ==
+        pmetal_envspec_receiver_family::
+            stable_hemenv) {
+        if (use_upper_lower) {
+            pair.base->Release();
+            pair.base = nullptr;
+        } else if (pair.upper_lower != nullptr) {
             pair.upper_lower->Release();
             pair.upper_lower = nullptr;
         }
     }
 
     const bool probe_b_required =
+        family ==
+            pmetal_envspec_receiver_family::
+                hemenvlerp ||
         source.beta != 0.0f;
 
     if (!env_resources_.prepare(
@@ -715,6 +861,10 @@ bool pmetal_envspec_draw_runtime::prepare(
 
     prepared.ready = true;
     ++requests_;
+    if (family ==
+        pmetal_envspec_receiver_family::
+            hemenvlerp)
+        ++lerp_requests_;
     return true;
 }
 
@@ -746,7 +896,10 @@ pmetal_envspec_draw_runtime::telemetry() const noexcept
     return {
         replacement_register_ok_.load(),
         replacement_register_fail_.load(),
+        lerp_replacement_register_ok_.load(),
+        lerp_replacement_register_fail_.load(),
         candidates_.load(),
+        lerp_candidates_.load(),
         material_rejects_.load(),
         semantic_rejects_.load(),
         source_rejects_.load(),
@@ -756,6 +909,7 @@ pmetal_envspec_draw_runtime::telemetry() const noexcept
         upper_lower_ready_.load(),
         upper_lower_fallback_.load(),
         requests_.load(),
+        lerp_requests_.load(),
         quarantined_.load()
     };
 }
@@ -766,7 +920,10 @@ void pmetal_envspec_draw_runtime::reset() noexcept
 
     replacement_register_ok_.store(0u);
     replacement_register_fail_.store(0u);
+    lerp_replacement_register_ok_.store(0u);
+    lerp_replacement_register_fail_.store(0u);
     candidates_.store(0u);
+    lerp_candidates_.store(0u);
     material_rejects_.store(0u);
     semantic_rejects_.store(0u);
     source_rejects_.store(0u);
@@ -776,6 +933,7 @@ void pmetal_envspec_draw_runtime::reset() noexcept
     upper_lower_ready_.store(0u);
     upper_lower_fallback_.store(0u);
     requests_.store(0u);
+    lerp_requests_.store(0u);
     quarantined_.store(false);
 }
 
