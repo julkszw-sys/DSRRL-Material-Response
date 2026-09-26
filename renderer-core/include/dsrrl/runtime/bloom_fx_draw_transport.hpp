@@ -50,8 +50,29 @@ struct fx_draw_snapshot {
     bool waterwave_same_model_instance = false;
     bool appearance_backend_key_observed = false;
     bool backend_key_matches_waterwave_runtime_index = false;
+    // Diagnostic conjunction only. This does not publish authored identity
+    // and cannot authorize Q8 writes by itself.
+    bool waterwave_semantic_model_candidate = false;
     bool ready = false;
 };
+
+inline bool is_waterwave_semantic_model_diagnostic_candidate(
+    const fx_draw_snapshot &snapshot) noexcept
+{
+    return
+        snapshot.kind == fx_draw_entity_kind::particle &&
+        snapshot.exact_entity_vtable &&
+        snapshot.exact_appearance_vtable &&
+        snapshot.appearance_state_ready &&
+        snapshot.particle_model_instance_join &&
+        snapshot.particle_model_instance != nullptr &&
+        snapshot.particle_model_generation != 0u &&
+        snapshot.appearance_backend_key_observed &&
+        snapshot.backend_key_matches_waterwave_runtime_index &&
+        operators::postprocess::
+            waterwave_dsr_authored_semantic_is_source_complete_unique();
+}
+
 
 enum class waterwave_draw_authority_result : std::uint8_t {
     authorized = 0,
@@ -138,6 +159,7 @@ struct telemetry {
     std::uint64_t backend_key_read_failures = 0;
     std::uint64_t waterwave_runtime_index_reads = 0;
     std::uint64_t backend_key_waterwave_matches = 0;
+    std::uint64_t waterwave_semantic_model_candidate_hits = 0;
     std::uint64_t backend_semantic_snapshot_hits = 0;
     std::uint64_t backend_semantic_snapshot_misses = 0;
     std::uint64_t waterwave_publish_ok = 0;
