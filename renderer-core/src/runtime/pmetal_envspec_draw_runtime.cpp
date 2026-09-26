@@ -769,8 +769,7 @@ bool pmetal_envspec_draw_runtime::prepare(
                 diffuse_material_domain);
     const auto spec_owner =
         core::operator_bit(
-            core::operator_id::
-                spec_rgb);
+            core::operator_id::spec_rgb);
     const auto ul_owner =
         core::operator_bit(
             core::operator_id::
