@@ -132,6 +132,22 @@ bool subsurface_draw_runtime::prepare(
         return false;
     }
 
+    // The plain-surface target consumes PTDE SpecRGB at t10. Do not
+    // activate that consumer until the exact body-sidecar request above has
+    // succeeded for this draw.
+    if (!prepared.resources.spec_rgb ||
+        !mr_.promote_prepared_draw_to_spec_rgb(
+            prepared.mr)) {
+        resources_.release_prepared_draw(
+            prepared.resources);
+        mr_.release_prepared_draw(
+            prepared.mr);
+        upper_lower_.release_prepared_draw(
+            prepared.upper_lower);
+        ++surface_rejects_;
+        return false;
+    }
+
     operators::resource_bridges::
         subsurface_route_context route_context{};
 
