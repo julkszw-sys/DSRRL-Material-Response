@@ -609,6 +609,10 @@ bool pmetal_envspec_draw_runtime::prepare(
         b12,
         0u);
 
+    const auto env_owner =
+        core::operator_bit(
+            core::operator_id::
+                env_spec);
     const auto mr_owner =
         core::operator_bit(
             core::operator_id::
@@ -665,7 +669,8 @@ bool pmetal_envspec_draw_runtime::prepare(
 
     prepared.request.constant_buffers[0] = {
         12u,
-        b12
+        b12,
+        env_owner | mr_owner
     };
     prepared.request.constant_buffer_count =
         1u;
@@ -674,7 +679,8 @@ bool pmetal_envspec_draw_runtime::prepare(
         prepared.request.constant_buffers[
             prepared.request.constant_buffer_count++] = {
                 13u,
-                prepared.upper_lower.b13
+                prepared.upper_lower.b13,
+                ul_owner
             };
     }
 
