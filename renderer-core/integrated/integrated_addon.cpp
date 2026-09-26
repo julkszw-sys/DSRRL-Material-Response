@@ -67,10 +67,14 @@ dsrrl::runtime::envspec_resource_runtime
     g_envspec_resources;
 dsrrl::runtime::bloom_scene_sidecar_runtime
     g_bloom_scene_sidecar;
-dsrrl::runtime::subsurface_draw_runtime
-    g_subsurface(g_core, g_mr_draw_runtime, g_material_resources);
 dsrrl::runtime::upper_lower_draw_runtime
     g_upper_lower(g_core);
+dsrrl::runtime::subsurface_draw_runtime
+    g_subsurface(
+        g_core,
+        g_mr_draw_runtime,
+        g_material_resources,
+        g_upper_lower);
 dsrrl::runtime::upper_lower_hemenv_draw_runtime
     g_upper_lower_hemenv(g_core, g_upper_lower);
 dsrrl::runtime::hemdir3_draw_runtime
