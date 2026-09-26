@@ -22,6 +22,7 @@
 #include "dsrrl/runtime/hemdir3_pipeline_registry.hpp"
 #include "dsrrl/runtime/hemdir3_draw_runtime.hpp"
 #include "dsrrl/runtime/fixed_pointlight_draw_runtime.hpp"
+#include "dsrrl/runtime/fixed_pointlight_pipeline_runtime.hpp"
 #include "dsrrl/operators/material_response/material_response_island.hpp"
 #include "dsrrl/operators/material_response/material_response_seed.hpp"
 #include "dsrrl/operators/material_response/material_response_v211_materializer.hpp"
@@ -102,6 +103,8 @@ dsrrl::runtime::hemdir3_draw_runtime
     g_hemdir3(g_core, g_upper_lower);
 dsrrl::runtime::fixed_pointlight_draw_runtime
     g_fixed_pointlight;
+dsrrl::runtime::fixed_pointlight_pipeline_runtime
+    g_fixed_pointlight_pipeline;
 dsrrl::runtime::pmetal_envspec_draw_runtime
     g_pmetal_envspec(
         g_core,
@@ -1196,6 +1199,7 @@ void on_destroy_device(reshade::api::device *device)
     g_hemdir3.on_destroy_device(device);
     g_pmetal_envspec.on_destroy_device(device);
     g_fixed_pointlight.on_destroy_device(device);
+    g_fixed_pointlight_pipeline.on_destroy_device(device);
     g_mr_draw_runtime.on_destroy_device(device);
     g_a1_bridge.on_destroy_device(device);
 }
@@ -1323,8 +1327,17 @@ bool on_create_pipeline(
                                     dsrrl::operators::point_light::
                                         fixed_local_single_materialize_result;
                                 if (fixed_materialized.result ==
-                                        fixed_result::applied)
-                                    ++g_local_specular_single_materialize_ok;
+                                        fixed_result::applied) {
+                                    if (g_fixed_pointlight_pipeline.
+                                            register_candidate(
+                                                device,
+                                                fixed_materialized,
+                                                fixed_payload.data(),
+                                                fixed_payload.size()))
+                                        ++g_local_specular_single_materialize_ok;
+                                    else
+                                        ++g_local_specular_materialize_fail;
+                                }
                                 else if (fixed_materialized.result ==
                                         fixed_result::
                                             pass_blended_requires_endpoint_b)
@@ -1782,6 +1795,8 @@ void on_init_pipeline(
 {
     g_a1_bridge.on_init_pipeline(
         device, layout, subobject_count, subobjects, pipeline);
+    g_fixed_pointlight_pipeline.on_init_pipeline(
+        device, subobject_count, subobjects, pipeline);
 
     const auto *pixel_shader =
         find_pixel_shader(
@@ -1854,6 +1869,7 @@ void on_destroy_pipeline(
         pipeline.handle);
     dsrrl::runtime::upper_lower_receiver_forget_pipeline(
         pipeline.handle);
+    g_fixed_pointlight_pipeline.on_destroy_pipeline(pipeline);
     g_a1_bridge.on_destroy_pipeline(device, pipeline);
 }
 
@@ -1895,6 +1911,11 @@ void on_bind_pipeline(
     dsrrl::core::operator_mask selected_owners = 0u;
     std::uint16_t selected_ops = 0u;
     std::uint32_t receiver_id = 0u;
+
+    g_fixed_pointlight_pipeline.on_bind_pipeline(
+        cmd_list,
+        stages,
+        pipeline);
 
     const bool target =
         pixel_stage_bound &&
