@@ -1060,7 +1060,9 @@ augment_upper_lower_hemenv_verified_base(
     }
 
     if (plan->family !=
-        upper_lower_hemenv_family::hemenv) {
+            upper_lower_hemenv_family::hemenv &&
+        plan->family !=
+            upper_lower_hemenv_family::hemenvlerp) {
         outcome.result =
             upper_lower_hemenv_materialize_result::
                 pass_not_candidate;
