@@ -41,7 +41,7 @@ def main() -> int:
     rows.sort(key=lambda r: r['plan_index'])
 
     if len(rows) != 36:
-        raise SystemExit(f'expected 36 Upper/Lower HemEnv consumers, got {len(rows)}')
+        raise SystemExit(f'expected 36 Upper/Lower HemEnvLerp consumers, got {len(rows)}')
     if [r['plan_index'] for r in rows] != list(range(36, 72)):
         raise SystemExit('plan_index must be contiguous 36..71')
 
