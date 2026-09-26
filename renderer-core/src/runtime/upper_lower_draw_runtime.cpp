@@ -1409,10 +1409,11 @@ bool install_producer_hooks() noexcept
         if (!arm_hook(hook))
             return false;
 
-    // P_Metal EnvSpec A/B source is independent from U/L and D123. A
-    // fingerprint failure must only disable EnvSpec source capture.
-    if (!install_optional_pmetal_env_hook())
-        g_pmetal_env_hook_armed.store(false);
+    // PERF DIAG M: P_Metal EnvSpec source capture is a separate operator
+    // and is intentionally disabled here. This keeps the U/L producer path
+    // intact while removing pmetal_bank_signature() scans and the optional
+    // P_Metal blend hook from the hot producer path.
+    g_pmetal_env_hook_armed.store(false);
 
     return true;
 }
