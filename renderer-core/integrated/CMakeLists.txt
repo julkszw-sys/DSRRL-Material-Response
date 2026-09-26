@@ -164,6 +164,22 @@ add_custom_target(
     DEPENDS
         "${DSRRL_CORE_GENERATED_LIGHTBANK}/generated_upper_lower_hemenv_v1.hpp")
 
+add_custom_command(
+    OUTPUT "${DSRRL_CORE_GENERATED_RUNTIME}/generated_pmetal_env_source_authority.hpp"
+    COMMAND "${Python3_EXECUTABLE}"
+            "${DSRRL_RENDERER_CORE_ROOT}/tools/generate_pmetal_env_source_authority.py"
+            --input "${DSRRL_RENDERER_CORE_ROOT}/provenance/mr145/SOURCE_V13_PTDE_DONOR.cpp"
+            --output "${DSRRL_CORE_GENERATED_RUNTIME}/generated_pmetal_env_source_authority.hpp"
+    DEPENDS
+        "${DSRRL_RENDERER_CORE_ROOT}/tools/generate_pmetal_env_source_authority.py"
+        "${DSRRL_RENDERER_CORE_ROOT}/provenance/mr145/SOURCE_V13_PTDE_DONOR.cpp"
+    VERBATIM)
+
+add_custom_target(
+    dsrrl_core_pmetal_env_source_authority
+    DEPENDS
+        "${DSRRL_CORE_GENERATED_RUNTIME}/generated_pmetal_env_source_authority.hpp")
+
 set(
     RESHade_INCLUDE_DIR
     "${RESHADE_INCLUDE_DIR}"
@@ -206,7 +222,8 @@ add_dependencies(
     dsrrl_renderer_core_integrated
     dsrrl_core_material_resource_routes
     dsrrl_core_hemdir3_authority
-    dsrrl_core_upper_lower_authority)
+    dsrrl_core_upper_lower_authority
+    dsrrl_core_pmetal_env_source_authority)
 
 target_include_directories(
     dsrrl_renderer_core_integrated
