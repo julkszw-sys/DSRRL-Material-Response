@@ -216,7 +216,10 @@ bool observe_draw_identity(
                  upper_lower_hemenv_family::hemenvlerp_parallax ||
          upper_lower_identity.family ==
              dsrrl::operators::lightbank::
-                 upper_lower_hemenv_family::phn_pnts);
+                 upper_lower_hemenv_family::phn_pnts ||
+         upper_lower_identity.family ==
+             dsrrl::operators::lightbank::
+                 upper_lower_hemenv_family::phn_faceeye);
 
     const bool upper_lower_spc_matches_stable =
         !upper_lower_spc ||
@@ -248,7 +251,7 @@ bool observe_draw_identity(
         upper_lower_spc_matches_stable;
 
     if (upper_lower_isolated) {
-        // Exact Parallax and PntS executable identities are U/L-only here.
+        // Exact Parallax, PntS and FaceEye executable identities are U/L-only here.
         // Do not borrow stable HemEnv/HemEnvLerp receiver IDs into MR,
         // resources or EnvSpec. PntS may already carry exact A1 PointLight
         // suboperators composed by stock SHA; this route owns only U/L+b13.
