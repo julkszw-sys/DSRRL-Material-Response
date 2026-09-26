@@ -714,7 +714,8 @@ void log_state(const char *tag) noexcept
         "prov=%u hooks=%u/%u model=%u/%u q=%u restore_fail=%u "
         "events=%llu/%llu exact=%llu reject=%llu state=%llu/%llu "
         "state_exact=%llu/%llu links=%llu/%llu model_evt=%llu/%llu "
-        "model_join=%llu/%llu ww_publish=%llu/%llu ww_same=%llu registry=%llu "
+        "model_join=%llu/%llu join_ch=%llu/%llu/%llu "
+        "ww_publish=%llu/%llu ww_same=%llu registry=%llu "
         "snap=%llu/%llu api_snap=%llu ww_auth=%llu/%llu",
         tag,
         bloom_fx.provenance_ok ? 1u : 0u,
@@ -738,6 +739,9 @@ void log_state(const char *tag) noexcept
         static_cast<unsigned long long>(bloom_fx.particle_model_dtor_events),
         static_cast<unsigned long long>(bloom_fx.particle_model_join_hits),
         static_cast<unsigned long long>(bloom_fx.particle_model_join_misses),
+        static_cast<unsigned long long>(bloom_fx.particle_model_owner_join_hits),
+        static_cast<unsigned long long>(bloom_fx.particle_model_source_primary_join_hits),
+        static_cast<unsigned long long>(bloom_fx.particle_model_source_secondary_join_hits),
         static_cast<unsigned long long>(bloom_fx.waterwave_publish_ok),
         static_cast<unsigned long long>(bloom_fx.waterwave_publish_fail),
         static_cast<unsigned long long>(bloom_fx.waterwave_same_instance_hits),
