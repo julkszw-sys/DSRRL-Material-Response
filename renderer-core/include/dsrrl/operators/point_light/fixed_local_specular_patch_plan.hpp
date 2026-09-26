@@ -36,13 +36,16 @@ struct fixed_local_specular_patch_plan {
     std::uint8_t material_cb_slot = 12u;
     std::uint8_t raw_q_srv_slot = 19u;
 
-    // PTDE g_SpecularPower is already transported by stock DSR as
-    // gFC_SpcParam.x == cb0[11].x for the ordinary Phn fixed-light families.
-    // The replacement shader must consume this value directly as the legacy
-    // angular POW exponent; it is not a gain and must not be folded into c101.
-    std::uint8_t specular_power_cb_slot = 0u;
-    std::uint16_t specular_power_cb_index = 11u;
-    std::uint8_t specular_power_component = 0u; // x
+    // Stock DSR exposes its authored value as gFC_SpcParam.x == cb0[11].x.
+    // That is retained as a routing witness only. The PTDE-authored donor is
+    // transported draw-selectively by Material Response in b12[0].w so the
+    // local-specular island never depends on rewriting DSR MTD authoring.
+    std::uint8_t stock_specular_power_cb_slot = 0u;
+    std::uint16_t stock_specular_power_cb_index = 11u;
+    std::uint8_t stock_specular_power_component = 0u; // x
+    std::uint8_t ptde_specular_power_cb_slot = 12u;
+    std::uint16_t ptde_specular_power_cb_index = 0u;
+    std::uint8_t ptde_specular_power_component = 3u; // w
 
     // Explicit anti-hybrid contract.
     bool replace_complete_microfacet_window = false;
