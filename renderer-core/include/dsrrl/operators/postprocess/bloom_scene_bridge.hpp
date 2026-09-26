@@ -6,8 +6,9 @@ namespace dsrrl::operators::postprocess {
 
 // Capture-free semantic boundary for the shared pre-Bloom/pre-HDR scene source.
 // PTDE's +0x5C/+0x60 A8R8G8B8 target is an accumulated render history. Exact
-// construction therefore requires not only terminal Q8 semantics but coverage
-// of every writer class that can participate in the target history.
+// construction requires terminal storage semantics, exhaustive writer-class
+// coverage, and ordering/blend recurrence. Class membership alone is not an
+// ordering proof.
 enum class bloom_scene_source_domain : std::uint8_t {
     unknown = 0,
     dsr_late_r11g11b10,
@@ -37,12 +38,20 @@ enum bloom_scene_writer_class : std::uint32_t {
 constexpr std::uint32_t bloom_known_writer_classes =
     bloom_writer_main_flver_material | bloom_writer_fx_sfx_target_scene;
 
+enum class bloom_writer_order_proof : std::uint8_t {
+    unknown = 0,
+    same_target_plan_membership_closed,
+    inter_class_serialization_closed,
+    execution_order_closed
+};
+
 enum class bloom_scene_bridge_result : std::uint8_t {
     exact_construction = 0,
     source_domain_mismatch,
     terminal_storage_not_closed,
     writer_set_not_closed,
     writer_class_coverage_incomplete,
+    writer_order_not_closed,
     blend_history_not_closed,
     late_fullscreen_reconstruction_rejected,
     construction_strategy_not_closed,
@@ -57,6 +66,7 @@ struct bloom_scene_bridge_carrier {
     bloom_scene_construction_strategy strategy = bloom_scene_construction_strategy::unknown;
     std::uint32_t proven_writer_classes = bloom_writer_none;
     bool writer_set_exhaustiveness_proven = false;
+    bloom_writer_order_proof writer_order = bloom_writer_order_proof::unknown;
     bool q8_a8r8g8b8_storage_verified = false;
     bool source_freshness_verified = false;
     bool draw_local_handoff_verified = false;
@@ -74,6 +84,8 @@ inline bloom_scene_bridge_result validate_bloom_scene_bridge_carrier(
     if (!c.writer_set_exhaustiveness_proven ||
         (c.proven_writer_classes & bloom_known_writer_classes) != bloom_known_writer_classes)
         return bloom_scene_bridge_result::writer_class_coverage_incomplete;
+    if (c.writer_order != bloom_writer_order_proof::execution_order_closed)
+        return bloom_scene_bridge_result::writer_order_not_closed;
     if (c.history_proof == bloom_scene_history_proof::writer_set_closed)
         return bloom_scene_bridge_result::blend_history_not_closed;
     if (c.strategy == bloom_scene_construction_strategy::late_fullscreen_reconstruction)
