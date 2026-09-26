@@ -698,7 +698,8 @@ void log_state(const char *tag) noexcept
         sizeof(bloom_fx_line),
         "[DSRRL CORE+ISLANDS " DSRRL_CORE_ISLANDS_VERSION "] %s_BLOOM_FX "
         "prov=%u hooks=%u/%u q=%u restore_fail=%u "
-        "events=%llu/%llu exact=%llu reject=%llu state=%llu/%llu snap=%llu/%llu",
+        "events=%llu/%llu exact=%llu reject=%llu state=%llu/%llu "
+        "state_exact=%llu/%llu links=%llu/%llu snap=%llu/%llu",
         tag,
         bloom_fx.provenance_ok ? 1u : 0u,
         bloom_fx.particle_hook_armed ? 1u : 0u,
@@ -711,6 +712,10 @@ void log_state(const char *tag) noexcept
         static_cast<unsigned long long>(bloom_fx.entity_rejects),
         static_cast<unsigned long long>(bloom_fx.state_ready_hits),
         static_cast<unsigned long long>(bloom_fx.state_missing),
+        static_cast<unsigned long long>(bloom_fx.exact_state_hits),
+        static_cast<unsigned long long>(bloom_fx.state_vtable_rejects),
+        static_cast<unsigned long long>(bloom_fx.source_links_ready),
+        static_cast<unsigned long long>(bloom_fx.source_links_missing),
         static_cast<unsigned long long>(bloom_fx.snapshot_hits),
         static_cast<unsigned long long>(bloom_fx.snapshot_misses));
 
