@@ -26,13 +26,9 @@ constexpr std::uint16_t k_op_div = 14u;
 constexpr std::uint16_t k_op_endif = 21u;
 constexpr std::uint16_t k_op_endswitch = 23u;
 constexpr std::uint16_t k_op_customdata = 53u;
-constexpr std::uint16_t k_op_mov = 54u;
 constexpr std::uint16_t k_op_mul = 56u;
 constexpr std::uint16_t k_op_dcl_resource = 88u;
-constexpr std::uint16_t k_op_dcl_cb = 89u;
 constexpr std::uint16_t k_op_dcl_temps = 104u;
-constexpr std::uint16_t k_op_dcl_structured = 162u;
-constexpr std::uint16_t k_op_ld_structured = 167u;
 
 constexpr std::uint32_t k_temp_dst_x = 0x00100012u;
 constexpr std::uint32_t k_temp_dst_y = 0x00100022u;
@@ -763,7 +759,7 @@ materialize_fixed_local_specular_single(
     spec_capture.payload.assign(
         words.begin()+t1_sample->start,
         words.begin()+t1_sample->end);
-    if(spec_capture.payload[3]<0x10u ||
+    if(spec_capture.payload[3]!=0x001000f2u ||
        spec_capture.payload[8]!=1u) {
         out.result=fixed_local_single_materialize_result::fail_material_capture;
         return out;
