@@ -23,14 +23,14 @@ struct fixed_local_specular_output_cut {
 
     fixed_local_specular_operand_contract operands{};
 
-    // Final stock local-light join immediately before the bridge MOV/Fog path.
-    // Audited fixed Spc surface: ADD for 24 bodies, MAD for 24 bodies.
+    // Exact fixed-Spc census: 48/48 unique bodies place the local-light join
+    // as the first instruction immediately after the final PointLight ENDIF,
+    // and that join is always a 7-DWORD ADD. Some bodies have an unrelated
+    // continuation MAD after this ADD; it is not part of the PointLight cut.
     std::uint32_t join_word = 0u;
     std::uint16_t join_opcode = 0u;
 
-    // Last source operand of the join is the owned additive PointLight term:
-    //   ADD -> src1
-    //   MAD -> src2 (addend)
+    // The last ADD source operand is the owned additive PointLight term.
     // The materializer may redirect only this temp index to the PTDE island
     // result, leaving the stock block executable but dead at the owned cut.
     std::uint32_t local_operand_token_word = 0u;
@@ -43,8 +43,9 @@ struct fixed_local_specular_output_cut {
 
 // Exact fixed PntSS/PntSSSS Spc output-cut locator. Positive activation first
 // requires the complete receiver/window/operand contract. The cut is accepted
-// only when, after the final fixed-light ENDIF, there is exactly one ADD/MAD
-// join before a MOV bridge and the next instruction begins the c103 Fog path.
+// only when the first instruction after the final fixed-light ENDIF is the
+// exact 7-DWORD ADD join. The downstream bridge/Fog path is independently
+// attested but may contain family-specific continuation instructions.
 // Any structural drift fails open.
 fixed_local_specular_output_cut
 locate_fixed_local_specular_output_cut(
