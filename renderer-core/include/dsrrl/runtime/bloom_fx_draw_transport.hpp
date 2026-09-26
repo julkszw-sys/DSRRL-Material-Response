@@ -12,12 +12,22 @@ enum class fx_draw_entity_kind : std::uint8_t {
     cluster
 };
 
+enum class fx_particle_model_join_channel : std::uint8_t {
+    none = 0,
+    appearance_owner,
+    appearance_source_primary,
+    appearance_source_secondary
+};
+
 struct fx_draw_snapshot {
     std::uint64_t generation = 0;
     std::uint64_t particle_model_generation = 0;
     fx_draw_entity_kind kind = fx_draw_entity_kind::unknown;
+    fx_particle_model_join_channel particle_model_join_channel =
+        fx_particle_model_join_channel::none;
     void *entity = nullptr;
     void *appearance_state = nullptr;
+    void *appearance_owner = nullptr;
     void *appearance_source_primary = nullptr;
     void *appearance_source_secondary = nullptr;
     void *particle_model_instance = nullptr;
@@ -43,6 +53,7 @@ enum class waterwave_draw_authority_result : std::uint8_t {
     draw_snapshot_not_ready,
     wrong_entity_kind,
     model_instance_not_joined,
+    model_join_channel_missing,
     model_generation_missing,
     authored_identity_not_exact,
     same_instance_join_not_closed
@@ -68,6 +79,11 @@ validate_waterwave_draw_authority(
         snapshot.particle_model_instance == nullptr)
         return waterwave_draw_authority_result::
             model_instance_not_joined;
+
+    if (snapshot.particle_model_join_channel ==
+        fx_particle_model_join_channel::none)
+        return waterwave_draw_authority_result::
+            model_join_channel_missing;
 
     if (snapshot.particle_model_generation == 0u)
         return waterwave_draw_authority_result::
@@ -107,6 +123,9 @@ struct telemetry {
     std::uint64_t particle_model_dtor_events = 0;
     std::uint64_t particle_model_join_hits = 0;
     std::uint64_t particle_model_join_misses = 0;
+    std::uint64_t particle_model_owner_join_hits = 0;
+    std::uint64_t particle_model_source_primary_join_hits = 0;
+    std::uint64_t particle_model_source_secondary_join_hits = 0;
     std::uint64_t waterwave_publish_ok = 0;
     std::uint64_t waterwave_publish_fail = 0;
     std::uint64_t waterwave_same_instance_hits = 0;
@@ -121,13 +140,15 @@ struct telemetry {
 // Cluster 0x5576D0 and both delegate through entity+0x30 appearance state.
 // Retail DSR preserves the same index-10 contract at RVA 0xFFCF30 / 0xFFDCE0
 // and the same entity+0x30 appearance-state carrier. DSR Particle appearance
-// state retains source links at +0x30/+0x38; Cluster retains them at
-// +0x50/+0x58 and an additional semantic word at +0x60. A third diagnostic
-// hook observes the unique FrpgFxParticleAppearance_Model constructor and
-// joins its live object identity to draw-state back-references by pointer
-// equality. The exact model destructor is also observed so pointer reuse cannot
-// turn a stale registry entry into false identity; this remains below
-// WaterWave authored-MTD authority.
+// state has a distinct per-instance owner channel at +0x10 plus seed/source
+// links at +0x30/+0x38; Cluster retains source links at +0x50/+0x58 and an
+// additional semantic word at +0x60. Static RE does NOT prove that any one of
+// these pointers is the FrpgFxParticleAppearance_Model object. The diagnostic
+// model hook therefore tests owner/source pointer equality as separately
+// attributed runtime hypotheses and records which channel, if any, joins the
+// exact live model instance. The exact model destructor is also observed so
+// pointer reuse cannot turn a stale registry entry into false identity. No
+// channel is promoted to WaterWave authored-MTD authority without a live join.
 //
 // This transport authenticates the exact retail executable indirectly through
 // the already source-complete FLVER provenance gate, then byte-attests both
