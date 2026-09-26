@@ -7,7 +7,8 @@ namespace dsrrl::operators::postprocess {
 // Capture-free semantic boundary for the shared pre-Bloom/pre-HDR scene source.
 // PTDE's +0x5C/+0x60 A8R8G8B8 target is an accumulated render history. Exact
 // construction requires terminal storage semantics, exhaustive writer-class
-// coverage, and ordering/blend recurrence. Parser/build order is not draw order.
+// coverage, per-class producer recurrence, and inter-class ordering/blend
+// recurrence. Collector membership alone is not a material/blend proof.
 enum class bloom_scene_source_domain : std::uint8_t {
     unknown = 0,
     dsr_late_r11g11b10,
@@ -51,6 +52,17 @@ enum class bloom_draw_recurrence_proof : std::uint8_t {
     target_write_recurrence_closed
 };
 
+// The FX/SFX class has a distinct collector route. A TargetScene collector
+// proves target membership, but not which FX entity/material reaches it, which
+// blend state is installed, or the resulting target mutation recurrence.
+enum class bloom_fx_sfx_recurrence_proof : std::uint8_t {
+    unknown = 0,
+    target_scene_collector_closed,
+    entity_callback_route_closed,
+    material_blend_route_closed,
+    target_write_recurrence_closed
+};
+
 enum class bloom_scene_bridge_result : std::uint8_t {
     exact_construction = 0,
     source_domain_mismatch,
@@ -59,6 +71,7 @@ enum class bloom_scene_bridge_result : std::uint8_t {
     writer_class_coverage_incomplete,
     writer_order_not_closed,
     draw_recurrence_not_closed,
+    fx_sfx_recurrence_not_closed,
     blend_history_not_closed,
     late_fullscreen_reconstruction_rejected,
     construction_strategy_not_closed,
@@ -75,6 +88,7 @@ struct bloom_scene_bridge_carrier {
     bool writer_set_exhaustiveness_proven = false;
     bloom_writer_order_proof writer_order = bloom_writer_order_proof::unknown;
     bloom_draw_recurrence_proof draw_recurrence = bloom_draw_recurrence_proof::unknown;
+    bloom_fx_sfx_recurrence_proof fx_sfx_recurrence = bloom_fx_sfx_recurrence_proof::unknown;
     bool q8_a8r8g8b8_storage_verified = false;
     bool source_freshness_verified = false;
     bool draw_local_handoff_verified = false;
@@ -94,11 +108,10 @@ inline bloom_scene_bridge_result validate_bloom_scene_bridge_carrier(
         return bloom_scene_bridge_result::writer_class_coverage_incomplete;
     if (c.writer_order != bloom_writer_order_proof::execution_order_closed)
         return bloom_scene_bridge_result::writer_order_not_closed;
-    // Even an execution-order proof for command/collector classes is not yet a
-    // proof of the per-draw recurrence that mutates the Q8 target. The latter
-    // must close the parser iteration -> callback sequence -> target-write edge.
     if (c.draw_recurrence != bloom_draw_recurrence_proof::target_write_recurrence_closed)
         return bloom_scene_bridge_result::draw_recurrence_not_closed;
+    if (c.fx_sfx_recurrence != bloom_fx_sfx_recurrence_proof::target_write_recurrence_closed)
+        return bloom_scene_bridge_result::fx_sfx_recurrence_not_closed;
     if (c.history_proof == bloom_scene_history_proof::writer_set_closed)
         return bloom_scene_bridge_result::blend_history_not_closed;
     if (c.strategy == bloom_scene_construction_strategy::late_fullscreen_reconstruction)
