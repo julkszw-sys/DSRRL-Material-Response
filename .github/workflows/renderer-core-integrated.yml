@@ -484,13 +484,21 @@ jobs:
           foreach ($required in @(
             '0x1C0BE0u',
             '0x1C0C10u',
-            '0x5642F0u',
+            '0x5637E0u',
             '0x563B80u',
+            'k_raw_upper_rgbm_offset = 0x24u',
+            'k_raw_lower_rgbm_offset = 0x2Cu',
+            'evaluate_raw_upper_lower',
             'lightbank_snapshot_matches_draw',
             'operator_id::upper_lower',
             '13u'
           )) {
             if ($upperLower -notmatch [regex]::Escape($required)) { throw "Upper/Lower shared-batch producer invariant missing: $required" }
+          }
+
+          if ($upperLower -match '0x5642F0u' -or
+              $upperLower -match 'k_rva_blend_helper') {
+            throw "Upper/Lower runtime must not reinstall the global DSR blend-helper hook"
           }
 
           foreach ($forbidden in @(
