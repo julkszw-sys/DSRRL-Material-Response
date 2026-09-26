@@ -2048,11 +2048,17 @@ bool prepare_island_batch(
             lerp_query.ownership.exact =
                 material.owner_tuple_exact;
 
+            const bool lerp_spec_consumer_ready =
+                g_mr_draw_runtime.
+                    has_paired_spec_rgb_replacement(
+                        prepared.mr);
+
             (void)g_material_resources.prepare_draw_requests(
                 context,
                 receiver_id,
                 lerp_query,
                 true,
+                lerp_spec_consumer_ready,
                 prepared.resources);
 
             // SpecRGB carrier and consumer are one atomic bridge. If the
@@ -2173,11 +2179,18 @@ bool prepare_island_batch(
         material.owner_tuple_exact;
 
     if (context != nullptr) {
+        const bool spec_consumer_ready =
+            prepared.mr_in_batch &&
+            g_mr_draw_runtime.
+                has_paired_spec_rgb_replacement(
+                    prepared.mr);
+
         (void)g_material_resources.prepare_draw_requests(
             context,
             receiver_id,
             query,
             prepared.mr_in_batch,
+            spec_consumer_ready,
             prepared.resources);
 
         if (prepared.mr_in_batch &&
