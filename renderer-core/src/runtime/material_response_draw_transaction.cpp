@@ -898,6 +898,47 @@ prepare_lerp_draw_request_with_upper_lower(
     return true;
 }
 
+bool material_response_draw_runtime::has_paired_spec_rgb_replacement(
+    const prepared_material_response_draw &prepared) const noexcept
+{
+    if (!prepared.ready ||
+        prepared.receiver_id == 0u ||
+        local_quarantine_.load() ||
+        transactions_.quarantined())
+        return false;
+
+    const auto spec_owner =
+        core::operator_bit(core::operator_id::spec_rgb);
+
+    std::lock_guard<std::mutex> lock(mutex_);
+
+    const std::unordered_map<std::uint32_t, replacement_record> *bank =
+        nullptr;
+
+    switch (prepared.family) {
+    case material_response_replacement_family::stable:
+        bank = &spec_rgb_replacements_;
+        break;
+    case material_response_replacement_family::stable_upper_lower:
+        bank = &upper_lower_spec_rgb_replacements_;
+        break;
+    case material_response_replacement_family::hemenvlerp_upper_lower:
+        bank = &lerp_spec_rgb_replacements_;
+        break;
+    }
+
+    if (bank == nullptr)
+        return false;
+
+    const auto found = bank->find(prepared.receiver_id);
+    return
+        found != bank->end() &&
+        found->second.shader != nullptr &&
+        (found->second.composed_owners & spec_owner) != 0u &&
+        (found->second.composed_owners & ~spec_owner) ==
+            prepared.replacement_composed_owners;
+}
+
 bool material_response_draw_runtime::promote_prepared_draw_to_spec_rgb(
     prepared_material_response_draw &prepared) noexcept
 {
