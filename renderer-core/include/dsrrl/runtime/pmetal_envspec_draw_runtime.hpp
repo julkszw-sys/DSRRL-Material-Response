@@ -2,6 +2,7 @@
 
 #include "dsrrl/core/renderer_core.hpp"
 #include "dsrrl/operators/env_spec/pmetal_rgba_materializer.hpp"
+#include "dsrrl/operators/env_spec/pmetal_rgba_lerp_materializer.hpp"
 #include "dsrrl/operators/material_response/material_response_island.hpp"
 #include "dsrrl/operators/material_response/mtd_semantic_census.hpp"
 #include "dsrrl/runtime/envspec_resource_runtime.hpp"
@@ -23,6 +24,11 @@ struct ID3D11PixelShader;
 
 namespace dsrrl::runtime {
 
+enum class pmetal_envspec_receiver_family : std::uint8_t {
+    stable_hemenv = 0,
+    hemenvlerp
+};
+
 struct prepared_pmetal_envspec_draw {
     island_draw_adapter_request request{};
     prepared_envspec_resources env_resources{};
@@ -39,7 +45,10 @@ struct prepared_pmetal_envspec_draw {
 struct pmetal_envspec_telemetry {
     std::uint64_t replacement_register_ok = 0;
     std::uint64_t replacement_register_fail = 0;
+    std::uint64_t lerp_replacement_register_ok = 0;
+    std::uint64_t lerp_replacement_register_fail = 0;
     std::uint64_t candidates = 0;
+    std::uint64_t lerp_candidates = 0;
     std::uint64_t material_rejects = 0;
     std::uint64_t semantic_rejects = 0;
     std::uint64_t source_rejects = 0;
@@ -49,6 +58,7 @@ struct pmetal_envspec_telemetry {
     std::uint64_t upper_lower_ready = 0;
     std::uint64_t upper_lower_fallback = 0;
     std::uint64_t requests = 0;
+    std::uint64_t lerp_requests = 0;
     bool quarantined = false;
 };
 
@@ -73,10 +83,24 @@ public:
         const void *dxbc,
         std::size_t dxbc_size) noexcept;
 
+    bool register_lerp_replacement(
+        const operators::env_spec::
+            pmetal_rgba_lerp_materialize_outcome &outcome,
+        const void *dxbc,
+        std::size_t dxbc_size) noexcept;
+
     bool prepare(
         reshade::api::command_list *cmd_list,
         const operators::material_response::material_identity &material,
         const operators::material_response::decision &decision,
+        bool upper_lower_receiver_verified,
+        prepared_pmetal_envspec_draw &prepared) noexcept;
+
+    bool prepare(
+        reshade::api::command_list *cmd_list,
+        const operators::material_response::material_identity &material,
+        const operators::material_response::decision &decision,
+        pmetal_envspec_receiver_family family,
         bool upper_lower_receiver_verified,
         prepared_pmetal_envspec_draw &prepared) noexcept;
 
@@ -105,12 +129,17 @@ private:
     ID3D11Device *device_ = nullptr;
     std::unordered_map<std::uint32_t,replacement_pair>
         replacements_;
+    std::unordered_map<std::uint32_t,ID3D11PixelShader *>
+        lerp_replacements_;
     std::unordered_map<std::uintptr_t,ID3D11Buffer *>
         b12_by_context_;
 
     std::atomic<std::uint64_t> replacement_register_ok_{0};
     std::atomic<std::uint64_t> replacement_register_fail_{0};
+    std::atomic<std::uint64_t> lerp_replacement_register_ok_{0};
+    std::atomic<std::uint64_t> lerp_replacement_register_fail_{0};
     std::atomic<std::uint64_t> candidates_{0};
+    std::atomic<std::uint64_t> lerp_candidates_{0};
     std::atomic<std::uint64_t> material_rejects_{0};
     std::atomic<std::uint64_t> semantic_rejects_{0};
     std::atomic<std::uint64_t> source_rejects_{0};
@@ -120,6 +149,7 @@ private:
     std::atomic<std::uint64_t> upper_lower_ready_{0};
     std::atomic<std::uint64_t> upper_lower_fallback_{0};
     std::atomic<std::uint64_t> requests_{0};
+    std::atomic<std::uint64_t> lerp_requests_{0};
     std::atomic_bool quarantined_{false};
 };
 
