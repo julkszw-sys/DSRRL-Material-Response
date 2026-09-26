@@ -119,6 +119,9 @@ locate_fixed_local_specular_material_samples(
         out.island.output_cut.operands.plan.lights[0].
             microfacet_window.start_word;
 
+    std::array<std::uint8_t,5> counts{};
+    std::array<fixed_local_specular_sample_site,5> sites{};
+
     std::size_t at=2u;
     while(at<word_count && at<first_light) {
         const auto token=words[at];
@@ -135,7 +138,6 @@ locate_fixed_local_specular_material_samples(
         } else {
             length=(token>>24u)&0x7fu;
         }
-
         if (length==0u || length>word_count-at) {
             out.result=
                 fixed_local_specular_material_sample_result::
@@ -146,7 +148,9 @@ locate_fixed_local_specular_material_samples(
         if (opcode>=0x45u && opcode<=0x4au &&
             length==11u && at+8u<word_count) {
             const auto resource=words[at+8u];
-            if (resource==0u || resource==1u) {
+            if (resource<=4u &&
+                (resource==0u || resource==1u ||
+                 resource==3u || resource==4u)) {
                 if (at+4u>=word_count ||
                     !temp_destination(
                         words[at+3u],
@@ -156,58 +160,57 @@ locate_fixed_local_specular_material_samples(
                             fail_sample_shape;
                     return out;
                 }
-
-                auto site=fixed_local_specular_sample_site{
+                if (++counts[resource] != 1u) {
+                    out.result=
+                        fixed_local_specular_material_sample_result::
+                            fail_sample_count;
+                    return out;
+                }
+                sites[resource]={
                     static_cast<std::uint32_t>(at),
                     words[at+3u],
                     words[at+4u]
                 };
-
-                if (resource==0u) {
-                    if (out.diffuse_count>=out.diffuse_t0.size()) {
-                        out.result=
-                            fixed_local_specular_material_sample_result::
-                                fail_sample_count;
-                        return out;
-                    }
-                    out.diffuse_t0[out.diffuse_count++]=site;
-                } else {
-                    if (out.specular_count>=out.specular_t1.size()) {
-                        out.result=
-                            fixed_local_specular_material_sample_result::
-                                fail_sample_count;
-                        return out;
-                    }
-                    out.specular_t1[out.specular_count++]=site;
-                }
             }
         }
-
         at+=length;
     }
 
-    if (out.diffuse_count==1u && out.specular_count==1u) {
-        out.topology=
-            fixed_local_specular_material_topology::
-                single_diffuse_spec;
-    } else if (
-        out.diffuse_count==2u && out.specular_count==2u) {
-        out.topology=
-            fixed_local_specular_material_topology::
-                blended_diffuse_spec;
-    } else {
+    if (counts[0u]!=1u || counts[1u]!=1u ||
+        counts[3u]!=counts[4u] || counts[3u]>1u) {
         out.result=
             fixed_local_specular_material_sample_result::
                 fail_sample_count;
         return out;
     }
 
-    const auto last_spec=
-        out.specular_t1[out.specular_count-1u].instruction_word;
-    const auto first_diff=
-        out.diffuse_t0[0u].instruction_word;
-    if (last_spec>=first_diff ||
-        first_diff>=first_light) {
+    out.diffuse_a_t0=sites[0u];
+    out.specular_a_t1=sites[1u];
+    out.has_blend_b=counts[3u]==1u;
+    if (out.has_blend_b) {
+        out.diffuse_b_t3=sites[3u];
+        out.specular_b_t4=sites[4u];
+        out.topology=
+            fixed_local_specular_material_topology::
+                blended_diffuse_spec;
+    } else {
+        out.topology=
+            fixed_local_specular_material_topology::
+                single_diffuse_spec;
+    }
+
+    const auto last_material =
+        out.has_blend_b
+            ? std::max(
+                std::max(out.diffuse_a_t0.instruction_word,
+                         out.specular_a_t1.instruction_word),
+                std::max(out.diffuse_b_t3.instruction_word,
+                         out.specular_b_t4.instruction_word))
+            : std::max(
+                out.diffuse_a_t0.instruction_word,
+                out.specular_a_t1.instruction_word);
+
+    if (last_material>=first_light) {
         out.result=
             fixed_local_specular_material_sample_result::
                 fail_sample_order;
