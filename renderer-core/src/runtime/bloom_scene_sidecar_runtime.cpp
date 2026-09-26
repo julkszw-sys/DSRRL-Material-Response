@@ -11,19 +11,8 @@
 #include <d3d11.h>
 
 namespace dsrrl::runtime {
-namespace {
 
 using namespace operators::postprocess;
-
-void release_interface(IUnknown *&p) noexcept
-{
-    if (p != nullptr) {
-        p->Release();
-        p = nullptr;
-    }
-}
-
-} // namespace
 
 bloom_scene_sidecar_runtime::~bloom_scene_sidecar_runtime()
 {
