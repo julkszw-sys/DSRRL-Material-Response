@@ -15,23 +15,10 @@ DONOR_RE = re.compile(
     r'(?P<c102>[^,]+), (?P<slot>-?\d+), (?P<has>true|false)\}'
 )
 
-# Exact family authority confirmed by retained PTDE<->DSR material pairs.
-# These are legacy local-specular exponent coordinates, not generic c102
-# aliases from the donor registry. Unknown/non-family rows remain fail-open.
-def ptde_specular_power_for_mtd(mtd: str) -> tuple[str, bool]:
-    key = mtd.lower()
-    if "dullleather" in key:
-        return "2.0f", True
-    if "roughcloth" in key:
-        return "2.0f", True
-    if "leather" in key:
-        return "4.0f", True
-    if "metal" in key:
-        return "8.5f", True
-    if "wet" in key:
-        return "60.0f", True
-    return "0.0f", False
-
+# Exact donor authority. The direct PTDE local-specular island consumes the
+# authored c102 value associated with the exact MTD SHA. Do not infer c102 from
+# a broad material-family name: e.g. P_Wet and C_Wet variants legitimately
+# carry different authored exponents.
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--routes", required=True)
@@ -47,6 +34,7 @@ def main() -> int:
         donors[m.group("sha")] = {
             "c100": m.group("c100"),
             "c101_f0q": m.group("c101_f0q"),
+            "c102": m.group("c102"),
             "has": m.group("has") == "true",
         }
 
@@ -57,9 +45,8 @@ def main() -> int:
         if sha not in donors or not donors[sha]["has"]:
             raise SystemExit(f"missing active donor constants for route={route} sha={sha}")
 
-        specular_power, specular_power_verified = (
-            ptde_specular_power_for_mtd(m.group("mtd"))
-        )
+        specular_power = donors[sha]["c102"]
+        specular_power_verified = donors[sha]["has"]
         value = (
             donors[sha]["c100"],
             donors[sha]["c101_f0q"],
