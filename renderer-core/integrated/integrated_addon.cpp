@@ -2207,60 +2207,24 @@ bool AddonInit(
 
     const bool texture_hooks =
         dsrrl::runtime::texture_identity_transport::install();
+    const bool flver_hooks = false;
+    const bool bloom_fx_hooks = false;
+    const bool hemdir3_mode_hooks = false;
+    const bool upper_lower_hooks = false;
+    (void)flver_hooks;
+    (void)bloom_fx_hooks;
+    (void)hemdir3_mode_hooks;
+    (void)upper_lower_hooks;
 
     if (!texture_hooks) {
         reshade::log::message(
             reshade::log::level::warning,
-            "[DSRRL CORE+ISLANDS " DSRRL_CORE_ISLANDS_VERSION
-            "] texture identity hooks FAIL-OPEN: SpecRGB/Diffuse/Normal sidecars remain stock.");
-    }
-
-    const bool flver_hooks =
-        dsrrl::runtime::flver_identity_transport::install();
-
-    if (!flver_hooks) {
-        reshade::log::message(
-            reshade::log::level::warning,
-            "[DSRRL CORE+ISLANDS " DSRRL_CORE_ISLANDS_VERSION
-            "] FLVER identity hooks FAIL-OPEN: stock DSR preserved for exact owner routing.");
-    }
-
-    const bool bloom_fx_hooks =
-        flver_hooks &&
-        dsrrl::runtime::bloom_fx_draw_transport::install();
-
-    if (!bloom_fx_hooks) {
-        reshade::log::message(
-            reshade::log::level::warning,
-            "[DSRRL CORE+ISLANDS " DSRRL_CORE_ISLANDS_VERSION
-            "] Bloom FX draw transport FAIL-OPEN: Q8 sidecar remains unauthorised; stock SFX preserved.");
-    }
-
-    const bool hemdir3_mode_hooks =
-        flver_hooks &&
-        dsrrl::runtime::hemdir3_mode_transport::install();
-
-    if (!hemdir3_mode_hooks) {
-        reshade::log::message(
-            reshade::log::level::warning,
-            "[DSRRL CORE+ISLANDS " DSRRL_CORE_ISLANDS_VERSION
-            "] HemDir3 effective-mode hooks FAIL-OPEN: HemDir3 remains stock.");
-    }
-
-    const bool upper_lower_hooks =
-        flver_hooks &&
-        g_upper_lower.install();
-
-    if (!upper_lower_hooks) {
-        reshade::log::message(
-            reshade::log::level::warning,
-            "[DSRRL CORE+ISLANDS " DSRRL_CORE_ISLANDS_VERSION
-            "] Upper/Lower producer hooks FAIL-OPEN: stock DSR b13 preserved.");
+            "[DSRRL PERF DIAG F_TEXTURE_ONLY] Texture identity hook install failed.");
     }
 
     reshade::log::message(
         reshade::log::level::warning,
-        "[DSRRL PERF DIAG D_NATIVE_HOOKS_ONLY] Native DSR hooks active; ReShade draw/bind/create/present and resource events disabled.");
+        "[DSRRL PERF DIAG F_TEXTURE_ONLY] Only native texture identity hooks are active; FLVER/Bloom/HemDir3/UpperLower and ReShade event/resource layers are disabled.");
 
     reshade::log::message(
         reshade::log::level::info,
@@ -2280,7 +2244,7 @@ void AddonUninit(
     HMODULE addon_module,
     HMODULE reshade_module)
 {
-    // PERF DIAG D: no ReShade callbacks were registered.
+    // PERF DIAG TEXTURE_ONLY: no ReShade callbacks were registered.
     log_state("PRE_UNLOAD");
     g_upper_lower.uninstall();
 
