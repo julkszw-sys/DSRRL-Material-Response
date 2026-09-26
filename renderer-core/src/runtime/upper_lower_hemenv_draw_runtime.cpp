@@ -185,8 +185,10 @@ bool upper_lower_hemenv_draw_runtime::prepare_draw_request(
             upper_lower_hemenv_stratum::spc;
 
     if (!upper_lower_identity_runtime_shape_valid(
-            identity))
+            identity)) {
+        ++identity_rejects_;
         return false;
+    }
 
     // Until the combined MR+U/L replacement is materialized, never allow
     // two replacement pixel shaders to compete in one draw batch.
@@ -272,6 +274,31 @@ bool upper_lower_hemenv_draw_runtime::prepare_draw_request(
         ++spc_ready_;
     else
         ++nospc_ready_;
+
+    switch (identity.family) {
+    case operators::lightbank::upper_lower_hemenv_family::hemenv:
+    case operators::lightbank::upper_lower_hemenv_family::hemenvlerp:
+    case operators::lightbank::upper_lower_hemenv_family::hemenv_parallax:
+    case operators::lightbank::upper_lower_hemenv_family::hemenvlerp_parallax:
+    case operators::lightbank::upper_lower_hemenv_family::phn_pnts:
+    case operators::lightbank::upper_lower_hemenv_family::phn_faceeye:
+    case operators::lightbank::upper_lower_hemenv_family::phn_subsurf:
+        ++phn_ready_;
+        break;
+    case operators::lightbank::upper_lower_hemenv_family::gst:
+    case operators::lightbank::upper_lower_hemenv_family::gst_faceeye:
+        ++gst_ready_;
+        break;
+    case operators::lightbank::upper_lower_hemenv_family::sfx:
+        ++sfx_ready_;
+        break;
+    case operators::lightbank::upper_lower_hemenv_family::snow:
+        ++snow_ready_;
+        break;
+    case operators::lightbank::upper_lower_hemenv_family::ntoa:
+        ++ntoa_ready_;
+        break;
+    }
 
     return true;
 }
