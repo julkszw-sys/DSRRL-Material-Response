@@ -11,6 +11,7 @@
 #include "dsrrl/runtime/texture_identity_transport.hpp"
 #include "dsrrl/operators/material_response/mtd_semantic_census.hpp"
 #include "dsrrl/runtime/stable_receiver_pipeline_registry.hpp"
+#include "dsrrl/runtime/hemenvlerp_pipeline_registry.hpp"
 #include "dsrrl/runtime/subsurface_pipeline_registry.hpp"
 #include "dsrrl/runtime/subsurface_draw_runtime.hpp"
 #include "dsrrl/runtime/upper_lower_draw_runtime.hpp"
@@ -26,6 +27,7 @@
 #include "dsrrl/operators/lightbank/upper_lower_hemenv_materializer.hpp"
 #include "dsrrl/operators/resource_bridges/spec_rgb_consumer_materializer.hpp"
 #include "dsrrl/operators/env_spec/pmetal_rgba_materializer.hpp"
+#include "dsrrl/operators/env_spec/pmetal_rgba_lerp_materializer.hpp"
 
 #include <reshade.hpp>
 #include <d3d11.h>
@@ -137,6 +139,8 @@ const reshade::api::shader_desc *find_pixel_shader(
 bool observe_draw_identity(
     reshade::api::command_list *cmd_list,
     std::uint32_t &receiver_id,
+    bool &hemenvlerp_bound,
+    dsrrl::runtime::hemenvlerp_receiver_identity &hemenvlerp_identity,
     bool &subsurface_bound,
     bool &hemdir3_bound,
     dsrrl::runtime::hemdir3_receiver_identity &hemdir3_identity,
@@ -148,6 +152,8 @@ bool observe_draw_identity(
     ++g_draw_events;
 
     receiver_id = 0u;
+    hemenvlerp_bound = false;
+    hemenvlerp_identity = {};
     subsurface_bound = false;
     hemdir3_bound = false;
     hemdir3_identity = {};
@@ -158,6 +164,11 @@ bool observe_draw_identity(
         dsrrl::runtime::stable_receiver_bound(
             cmd_list,
             receiver_id);
+
+    const bool hemenvlerp_receiver =
+        dsrrl::runtime::hemenvlerp_receiver_bound(
+            cmd_list,
+            hemenvlerp_identity);
 
     std::uint32_t subsurface_target = 0u;
     const bool subsurface_receiver =
@@ -195,6 +206,7 @@ bool observe_draw_identity(
 
     const unsigned receiver_classes =
         (stable_receiver ? 1u : 0u) +
+        (hemenvlerp_receiver ? 1u : 0u) +
         (subsurface_receiver ? 1u : 0u) +
         (hemdir3_receiver ? 1u : 0u) +
         (upper_lower_nospc ? 1u : 0u);
@@ -203,7 +215,11 @@ bool observe_draw_identity(
         receiver_classes == 1u &&
         upper_lower_spc_matches_stable;
 
-    if (subsurface_receiver) {
+    if (hemenvlerp_receiver) {
+        receiver_id =
+            hemenvlerp_identity.semantic_receiver_id;
+        hemenvlerp_bound = true;
+    } else if (subsurface_receiver) {
         receiver_id = subsurface_target;
         subsurface_bound = true;
     } else if (hemdir3_receiver) {
@@ -844,6 +860,38 @@ bool on_create_pipeline(
             }
         }
 
+        if (g_core.features().enabled(
+                dsrrl::core::operator_id::env_spec)) {
+            std::vector<std::uint8_t> envspec_lerp_payload;
+            const auto envspec_lerp =
+                dsrrl::operators::env_spec::
+                    materialize_pmetal_rgba_lerp_receiver(
+                        source,
+                        pixel_shader->code_size,
+                        envspec_lerp_payload);
+
+            using envspec_lerp_result =
+                dsrrl::operators::env_spec::
+                    pmetal_rgba_lerp_materialize_result;
+
+            if (envspec_lerp.result ==
+                    envspec_lerp_result::applied) {
+                if (g_pmetal_envspec.register_lerp_replacement(
+                        envspec_lerp,
+                        envspec_lerp_payload.data(),
+                        envspec_lerp_payload.size()))
+                    ++g_envspec_payload_materialize_ok;
+                else
+                    ++g_envspec_payload_materialize_fail;
+            } else if (
+                envspec_lerp.result !=
+                    envspec_lerp_result::pass_not_candidate &&
+                envspec_lerp.result !=
+                    envspec_lerp_result::pass_unknown_exact_sha) {
+                ++g_envspec_payload_materialize_fail;
+            }
+        }
+
         std::vector<std::uint8_t> ul_payload;
         ul =
             dsrrl::operators::lightbank::
@@ -977,6 +1025,11 @@ void on_init_pipeline(
                 pixel_shader->code,
                 pixel_shader->code_size);
         (void)dsrrl::runtime::
+            hemenvlerp_receiver_observe_pipeline(
+                pipeline.handle,
+                pixel_shader->code,
+                pixel_shader->code_size);
+        (void)dsrrl::runtime::
             subsurface_receiver_observe_pipeline(
                 pipeline.handle,
                 pixel_shader->code,
@@ -1000,6 +1053,8 @@ void on_destroy_pipeline(
 {
     dsrrl::runtime::stable_receiver_forget_pipeline(
         pipeline.handle);
+    dsrrl::runtime::hemenvlerp_receiver_forget_pipeline(
+        pipeline.handle);
     dsrrl::runtime::subsurface_receiver_forget_pipeline(
         pipeline.handle);
     dsrrl::runtime::hemdir3_receiver_forget_pipeline(
@@ -1020,6 +1075,10 @@ void on_bind_pipeline(
              reshade::api::pipeline_stage::pixel_shader)) != 0u;
 
     dsrrl::runtime::stable_receiver_observe_bind(
+        cmd_list,
+        pixel_stage_bound,
+        pipeline.handle);
+    dsrrl::runtime::hemenvlerp_receiver_observe_bind(
         cmd_list,
         pixel_stage_bound,
         pipeline.handle);
@@ -1116,6 +1175,7 @@ struct draw_semantic_selection_guard {
 bool prepare_island_batch(
     reshade::api::command_list *cmd_list,
     std::uint32_t receiver_id,
+    bool hemenvlerp_bound,
     bool subsurface_bound,
     bool hemdir3_bound,
     const dsrrl::runtime::hemdir3_receiver_identity &hemdir3_identity,
@@ -1204,12 +1264,19 @@ bool prepare_island_batch(
     // P_Metal EnvSpec owns the complete PS+b12+t12/t14+s12/s14 semantic
     // island. If any exact source/material/probe/resource precondition fails,
     // fall through to ordinary MR/U-L/resource routing for this draw.
+    const auto envspec_family =
+        hemenvlerp_bound
+            ? dsrrl::runtime::pmetal_envspec_receiver_family::hemenvlerp
+            : dsrrl::runtime::pmetal_envspec_receiver_family::stable_hemenv;
+
     if (decision.active &&
         g_pmetal_envspec.prepare(
             cmd_list,
             material,
             decision,
-            envspec_ul_verified,
+            envspec_family,
+            envspec_ul_verified &&
+                !hemenvlerp_bound,
             prepared.envspec)) {
         prepared.envspec_in_batch = true;
 
@@ -1235,6 +1302,13 @@ bool prepare_island_batch(
 
         return true;
     }
+
+    // HemEnvLerp shares semantic receiver IDs 33..35 with stable HemEnv, but
+    // is a different executable consumer. If its exact combined island cannot
+    // activate, fail open to the original Lerp draw rather than a stable
+    // HemEnv/MR hybrid.
+    if (hemenvlerp_bound)
+        return false;
 
     const bool ul_spc =
         upper_lower_bound &&
@@ -1566,6 +1640,7 @@ bool AddonInit(
     g_draw_owner_only.store(0);
     g_draw_receiver_only.store(0);
     dsrrl::runtime::stable_receiver_pipeline_reset();
+    dsrrl::runtime::hemenvlerp_receiver_pipeline_reset();
     dsrrl::runtime::subsurface_receiver_pipeline_reset();
     dsrrl::runtime::hemdir3_receiver_pipeline_reset();
     dsrrl::runtime::upper_lower_receiver_pipeline_reset();
@@ -1693,6 +1768,7 @@ void AddonUninit(
         log_state("UNLOAD_RESTORE_FAIL");
 
     dsrrl::runtime::stable_receiver_pipeline_reset();
+    dsrrl::runtime::hemenvlerp_receiver_pipeline_reset();
     dsrrl::runtime::subsurface_receiver_pipeline_reset();
     dsrrl::runtime::hemdir3_receiver_pipeline_reset();
     dsrrl::runtime::upper_lower_receiver_pipeline_reset();
