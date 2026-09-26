@@ -31,6 +31,11 @@ int main()
         fixed_local_specular_island_plan_result::
             pass_not_fixed_local_specular);
     CHECK(!plan.stock_microfacet_dead_at_output_cut);
+    CHECK(plan.material_cb_slot==12u);
+    CHECK(plan.ptde_c100_cb_index==1u);
+    CHECK(plan.ptde_c101_cb_index==2u);
+    CHECK(plan.ptde_specular_power_cb_index==0u);
+    CHECK(plan.ptde_specular_power_component==3u);
 
     std::cout<<"fixed_local_specular_island_plan_tests: PASS\n";
     return 0;
