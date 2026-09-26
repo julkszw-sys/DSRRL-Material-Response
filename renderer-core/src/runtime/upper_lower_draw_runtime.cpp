@@ -1319,10 +1319,7 @@ void __fastcall hook_pmetal_env_blend(
         g_producer.pmetal_env_a = a;
         g_producer.pmetal_env_b = b;
         g_producer.pmetal_env_beta =
-            std::clamp(
-                beta,
-                0.0f,
-                1.0f);
+            beta;
         g_producer.pmetal_bank_a = bank_a;
         g_producer.pmetal_bank_b = bank_b;
         g_producer.pmetal_row_a = row_a;
