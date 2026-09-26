@@ -1308,6 +1308,20 @@ bool on_create_pipeline(
                 dsrrl::core::operator_bit(
                     dsrrl::core::operator_id::spec_rgb);
 
+            // Base MR always preserves stock t1. SpecRGB is a paired shader
+            // variant selected only after the draw-local t10 carrier succeeds.
+            if (!g_mr_draw_runtime.has_receiver_replacement(
+                    mr.receiver_id)) {
+                if (g_mr_draw_runtime.register_receiver_replacement(
+                        mr.receiver_id,
+                        mr_payload.data(),
+                        mr_payload.size(),
+                        mr.composed_owners))
+                    ++g_mr_payload_materialize_ok;
+                else
+                    ++g_mr_payload_materialize_fail;
+            }
+
             std::vector<std::uint8_t> mr_spec_payload;
             const auto spec_result =
                 dsrrl::operators::resource_bridges::
@@ -1319,18 +1333,17 @@ bool on_create_pipeline(
             if (spec_result ==
                 dsrrl::operators::resource_bridges::
                     spec_rgb_consumer_result::applied) {
-                if (!g_mr_draw_runtime.has_receiver_replacement(
-                        mr.receiver_id)) {
-                    if (g_mr_draw_runtime.register_receiver_replacement(
+                if (!g_mr_draw_runtime.
+                        has_receiver_spec_rgb_replacement(
+                            mr.receiver_id) &&
+                    !g_mr_draw_runtime.
+                        register_receiver_spec_rgb_replacement(
                             mr.receiver_id,
                             mr_spec_payload.data(),
                             mr_spec_payload.size(),
                             mr.composed_owners |
                                 spec_owner))
-                        ++g_mr_payload_materialize_ok;
-                    else
-                        ++g_mr_payload_materialize_fail;
-                }
+                    ++g_mr_payload_materialize_fail;
             } else {
                 ++g_mr_payload_materialize_fail;
             }
@@ -1362,23 +1375,34 @@ bool on_create_pipeline(
                             mr_ul_payload.size(),
                             mr_ul_spec_payload);
 
+                if (!g_mr_draw_runtime.
+                        has_receiver_upper_lower_replacement(
+                            mr.receiver_id)) {
+                    if (g_mr_draw_runtime.
+                            register_receiver_upper_lower_replacement(
+                                mr.receiver_id,
+                                mr_ul_payload.data(),
+                                mr_ul_payload.size(),
+                                mr.composed_owners))
+                        ++g_mr_ul_payload_materialize_ok;
+                    else
+                        ++g_mr_ul_payload_materialize_fail;
+                }
+
                 if (ul_spec_result ==
                     dsrrl::operators::resource_bridges::
                         spec_rgb_consumer_result::applied) {
                     if (!g_mr_draw_runtime.
-                            has_receiver_upper_lower_replacement(
-                                mr.receiver_id)) {
-                        if (g_mr_draw_runtime.
-                                register_receiver_upper_lower_replacement(
-                                    mr.receiver_id,
-                                    mr_ul_spec_payload.data(),
-                                    mr_ul_spec_payload.size(),
-                                    mr.composed_owners |
-                                        spec_owner))
-                            ++g_mr_ul_payload_materialize_ok;
-                        else
-                            ++g_mr_ul_payload_materialize_fail;
-                    }
+                            has_receiver_upper_lower_spec_rgb_replacement(
+                                mr.receiver_id) &&
+                        !g_mr_draw_runtime.
+                            register_receiver_upper_lower_spec_rgb_replacement(
+                                mr.receiver_id,
+                                mr_ul_spec_payload.data(),
+                                mr_ul_spec_payload.size(),
+                                mr.composed_owners |
+                                    spec_owner))
+                        ++g_mr_ul_payload_materialize_fail;
                 } else {
                     ++g_mr_ul_payload_materialize_fail;
                 }
@@ -1457,22 +1481,33 @@ bool on_create_pipeline(
                             lerp_mr_ul_payload.size(),
                             lerp_full_payload);
 
+                if (!g_mr_draw_runtime.
+                        has_lerp_receiver_replacement(
+                            lerp_receiver_id)) {
+                    if (g_mr_draw_runtime.
+                            register_lerp_receiver_replacement(
+                                lerp_receiver_id,
+                                lerp_mr_ul_payload.data(),
+                                lerp_mr_ul_payload.size(),
+                                0u))
+                        ++g_mr_ul_payload_materialize_ok;
+                    else
+                        ++g_mr_ul_payload_materialize_fail;
+                }
+
                 if (lerp_spec ==
                         dsrrl::operators::resource_bridges::
                             spec_rgb_consumer_result::applied) {
                     if (!g_mr_draw_runtime.
-                            has_lerp_receiver_replacement(
-                                lerp_receiver_id)) {
-                        if (g_mr_draw_runtime.
-                                register_lerp_receiver_replacement(
-                                    lerp_receiver_id,
-                                    lerp_full_payload.data(),
-                                    lerp_full_payload.size(),
-                                    lerp_spec_owner))
-                            ++g_mr_ul_payload_materialize_ok;
-                        else
-                            ++g_mr_ul_payload_materialize_fail;
-                    }
+                            has_lerp_receiver_spec_rgb_replacement(
+                                lerp_receiver_id) &&
+                        !g_mr_draw_runtime.
+                            register_lerp_receiver_spec_rgb_replacement(
+                                lerp_receiver_id,
+                                lerp_full_payload.data(),
+                                lerp_full_payload.size(),
+                                lerp_spec_owner))
+                        ++g_mr_ul_payload_materialize_fail;
                 } else {
                     ++g_mr_ul_payload_materialize_fail;
                 }
@@ -2004,13 +2039,9 @@ bool prepare_island_batch(
     }
 
     // HemEnvLerp is a distinct executable consumer and must use its own
-    // replacement shader namespace. The exact paired semantic receiver ID is
-    // reused only for material/resource policy; the PS itself is the Lerp
-    // V2.11+b12 + U/L+b13 + SpecRGB-t10 composition registered above.
-    //
-    // This closes the runtime hole where Lerp previously returned early with
-    // U/L only, causing PTDE Diffuse/Normal/SpecRGB carriers to fall back to
-    // stock DSR during profile interpolation.
+    // replacement shader namespace. Build the draw from the base t1 consumer
+    // first. Only after the exact draw-local SpecRGB resource request exists
+    // may the paired t10-consuming shader replace it.
     if (hemenvlerp_bound) {
         const bool lerp_ul_exact =
             upper_lower_bound &&
@@ -2034,14 +2065,6 @@ bool prepare_island_batch(
                     decision,
                     prepared.upper_lower.carrier.b13,
                     prepared.mr)) {
-            if (dsrrl::runtime::append_island_draw_request(
-                    prepared.batch,
-                    prepared.mr.request) !=
-                dsrrl::runtime::island_draw_batch_result::ready) {
-                release_prepared_island_batch(prepared);
-                return false;
-            }
-
             prepared.mr_in_batch = true;
             prepared.upper_lower_combined = true;
 
@@ -2060,12 +2083,39 @@ bool prepare_island_batch(
             lerp_query.ownership.exact =
                 material.owner_tuple_exact;
 
+            const bool lerp_spec_consumer_ready =
+                g_mr_draw_runtime.
+                    has_paired_spec_rgb_replacement(
+                        prepared.mr);
+
             (void)g_material_resources.prepare_draw_requests(
                 context,
                 receiver_id,
                 lerp_query,
                 true,
+                lerp_spec_consumer_ready,
                 prepared.resources);
+
+            // SpecRGB carrier and consumer are one atomic bridge. If the
+            // resource is ready but the exact paired shader is not, discard
+            // draw-local resource substitutions and keep the base t1 MR path.
+            bool lerp_resource_fallback = false;
+            if (prepared.resources.spec_rgb &&
+                !g_mr_draw_runtime.
+                    promote_prepared_draw_to_spec_rgb(
+                        prepared.mr)) {
+                g_material_resources.release_prepared_draw(
+                    prepared.resources);
+                lerp_resource_fallback = true;
+            }
+
+            if (dsrrl::runtime::append_island_draw_request(
+                    prepared.batch,
+                    prepared.mr.request) !=
+                dsrrl::runtime::island_draw_batch_result::ready) {
+                release_prepared_island_batch(prepared);
+                return false;
+            }
 
             for (std::uint32_t i = 0u;
                  i < prepared.resources.request_count;
@@ -2079,7 +2129,10 @@ bool prepare_island_batch(
                 }
             }
 
-            ++g_lerp_full_draw_ready;
+            if (lerp_resource_fallback)
+                ++g_lerp_full_draw_fallback;
+            else
+                ++g_lerp_full_draw_ready;
             return true;
         }
 
@@ -2120,6 +2173,8 @@ bool prepare_island_batch(
             dsrrl::operators::lightbank::
                 upper_lower_hemenv_stratum::spc;
 
+    // Prepare the base MR shader first. It is deliberately the stock-t1
+    // consumer; the paired t10 variant is selected only after resource proof.
     if (decision.active &&
         ul_spc &&
         context != nullptr &&
@@ -2131,14 +2186,6 @@ bool prepare_island_batch(
                     decision,
                     prepared.upper_lower.carrier.b13,
                     prepared.mr)) {
-            if (dsrrl::runtime::append_island_draw_request(
-                    prepared.batch,
-                    prepared.mr.request) !=
-                dsrrl::runtime::island_draw_batch_result::ready) {
-                release_prepared_island_batch(prepared);
-                return false;
-            }
-
             prepared.mr_in_batch = true;
             prepared.upper_lower_combined = true;
         } else {
@@ -2154,30 +2201,7 @@ bool prepare_island_batch(
         g_mr_draw_runtime.prepare_draw_request(
             decision,
             prepared.mr)) {
-        if (dsrrl::runtime::append_island_draw_request(
-                prepared.batch,
-                prepared.mr.request) !=
-            dsrrl::runtime::island_draw_batch_result::ready) {
-            release_prepared_island_batch(prepared);
-            return false;
-        }
         prepared.mr_in_batch = true;
-    }
-
-    if (upper_lower_bound &&
-        !prepared.upper_lower_combined &&
-        g_upper_lower_hemenv.prepare_draw_request(
-            cmd_list,
-            upper_lower_identity,
-            prepared.mr_in_batch,
-            prepared.upper_lower)) {
-        if (dsrrl::runtime::append_island_draw_request(
-                prepared.batch,
-                prepared.upper_lower.request) !=
-            dsrrl::runtime::island_draw_batch_result::ready) {
-            release_prepared_island_batch(prepared);
-            return false;
-        }
     }
 
     dsrrl::operators::material_response::mtd_semantic_query query{};
@@ -2195,23 +2219,73 @@ bool prepare_island_batch(
         material.owner_tuple_exact;
 
     if (context != nullptr) {
+        const bool spec_consumer_ready =
+            prepared.mr_in_batch &&
+            g_mr_draw_runtime.
+                has_paired_spec_rgb_replacement(
+                    prepared.mr);
+
         (void)g_material_resources.prepare_draw_requests(
             context,
             receiver_id,
             query,
             prepared.mr_in_batch,
+            spec_consumer_ready,
             prepared.resources);
 
-        for (std::uint32_t i = 0u;
-             i < prepared.resources.request_count;
-             ++i) {
-            if (dsrrl::runtime::append_island_draw_request(
-                    prepared.batch,
-                    prepared.resources.requests[i]) !=
-                dsrrl::runtime::island_draw_batch_result::ready) {
-                release_prepared_island_batch(prepared);
-                return false;
-            }
+        if (prepared.mr_in_batch &&
+            prepared.resources.spec_rgb &&
+            !g_mr_draw_runtime.
+                promote_prepared_draw_to_spec_rgb(
+                    prepared.mr)) {
+            // Never dispatch t10 without its paired consumer. If the exact
+            // shader pair is missing, preserve base MR and all stock textures.
+            g_material_resources.release_prepared_draw(
+                prepared.resources);
+        }
+    }
+
+    if (upper_lower_bound &&
+        !prepared.upper_lower_combined &&
+        g_upper_lower_hemenv.prepare_draw_request(
+            cmd_list,
+            upper_lower_identity,
+            prepared.mr_in_batch,
+            prepared.upper_lower)) {
+        // Request is appended below, after the final MR shader variant is
+        // known, preserving the historical MR->U/L batch ordering.
+    }
+
+    if (prepared.mr_in_batch) {
+        if (dsrrl::runtime::append_island_draw_request(
+                prepared.batch,
+                prepared.mr.request) !=
+            dsrrl::runtime::island_draw_batch_result::ready) {
+            release_prepared_island_batch(prepared);
+            return false;
+        }
+    }
+
+    if (!prepared.upper_lower_combined &&
+        prepared.upper_lower.ready) {
+        if (dsrrl::runtime::append_island_draw_request(
+                prepared.batch,
+                prepared.upper_lower.request) !=
+            dsrrl::runtime::island_draw_batch_result::ready) {
+            release_prepared_island_batch(prepared);
+            return false;
+        }
+    }
+
+    for (std::uint32_t i = 0u;
+         i < prepared.resources.request_count;
+         ++i) {
+        if (dsrrl::runtime::append_island_draw_request(
+                prepared.batch,
+                prepared.resources.requests[i]) !=
+            dsrrl::runtime::island_draw_batch_result::ready) {
+            release_prepared_island_batch(prepared);
+            return false;
         }
     }
 

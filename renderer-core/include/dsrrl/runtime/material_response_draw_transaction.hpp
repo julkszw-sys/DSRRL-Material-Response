@@ -23,10 +23,43 @@ struct ID3D11PixelShader;
 
 namespace dsrrl::runtime {
 
+enum class material_response_replacement_family : std::uint8_t {
+    stable = 0,
+    stable_upper_lower,
+    hemenvlerp_upper_lower
+};
+
+constexpr bool material_response_spec_rgb_pair_owners_match(
+    core::operator_mask base_owners,
+    core::operator_mask spec_owners) noexcept
+{
+    const auto spec =
+        core::operator_bit(core::operator_id::spec_rgb);
+    return
+        (base_owners & spec) == 0u &&
+        (spec_owners & spec) != 0u &&
+        (spec_owners & ~spec) == base_owners;
+}
+
+static_assert(
+    material_response_spec_rgb_pair_owners_match(
+        0u,
+        core::operator_bit(core::operator_id::spec_rgb)));
+
+static_assert(
+    !material_response_spec_rgb_pair_owners_match(
+        core::operator_bit(core::operator_id::material_response),
+        core::operator_bit(core::operator_id::spec_rgb)));
+
 struct prepared_material_response_draw {
     island_draw_adapter_request request{};
     ID3D11PixelShader *shader = nullptr;
     ID3D11Buffer *b12 = nullptr;
+    std::uint32_t receiver_id = 0u;
+    core::operator_mask replacement_composed_owners = 0u;
+    material_response_replacement_family family =
+        material_response_replacement_family::stable;
+    bool spec_rgb_consumer = false;
     bool ready = false;
 };
 
@@ -70,6 +103,15 @@ public:
     bool has_receiver_replacement(
         std::uint32_t receiver_id) const noexcept;
 
+    bool register_receiver_spec_rgb_replacement(
+        std::uint32_t receiver_id,
+        const void *dxbc,
+        std::size_t dxbc_size,
+        core::operator_mask composed_owners) noexcept;
+
+    bool has_receiver_spec_rgb_replacement(
+        std::uint32_t receiver_id) const noexcept;
+
     bool register_lerp_receiver_replacement(
         std::uint32_t receiver_id,
         const void *dxbc,
@@ -79,6 +121,15 @@ public:
     bool has_lerp_receiver_replacement(
         std::uint32_t receiver_id) const noexcept;
 
+    bool register_lerp_receiver_spec_rgb_replacement(
+        std::uint32_t receiver_id,
+        const void *dxbc,
+        std::size_t dxbc_size,
+        core::operator_mask composed_owners) noexcept;
+
+    bool has_lerp_receiver_spec_rgb_replacement(
+        std::uint32_t receiver_id) const noexcept;
+
     bool register_receiver_upper_lower_replacement(
         std::uint32_t receiver_id,
         const void *dxbc,
@@ -86,6 +137,15 @@ public:
         core::operator_mask composed_owners) noexcept;
 
     bool has_receiver_upper_lower_replacement(
+        std::uint32_t receiver_id) const noexcept;
+
+    bool register_receiver_upper_lower_spec_rgb_replacement(
+        std::uint32_t receiver_id,
+        const void *dxbc,
+        std::size_t dxbc_size,
+        core::operator_mask composed_owners) noexcept;
+
+    bool has_receiver_upper_lower_spec_rgb_replacement(
         std::uint32_t receiver_id) const noexcept;
 
     bool prepare_draw_request(
@@ -101,6 +161,15 @@ public:
         const operators::material_response::decision &decision,
         ID3D11Buffer *b13,
         prepared_material_response_draw &prepared) noexcept;
+
+    // Promote an already-prepared base MR draw to the paired t10-consuming
+    // shader only after the draw-local SpecRGB resource gate has succeeded.
+    // Missing/mismatched pair leaves the base t1 consumer untouched.
+    bool promote_prepared_draw_to_spec_rgb(
+        prepared_material_response_draw &prepared) noexcept;
+
+    bool has_paired_spec_rgb_replacement(
+        const prepared_material_response_draw &prepared) const noexcept;
 
     // Carrier preparation only. Authorization must already have been
     // established by an operator-specific exact route (for example the
@@ -162,9 +231,15 @@ private:
     ID3D11Device *device_ = nullptr;
     std::unordered_map<std::uint32_t, replacement_record> replacements_;
     std::unordered_map<std::uint32_t, replacement_record>
+        spec_rgb_replacements_;
+    std::unordered_map<std::uint32_t, replacement_record>
         lerp_replacements_;
     std::unordered_map<std::uint32_t, replacement_record>
+        lerp_spec_rgb_replacements_;
+    std::unordered_map<std::uint32_t, replacement_record>
         upper_lower_replacements_;
+    std::unordered_map<std::uint32_t, replacement_record>
+        upper_lower_spec_rgb_replacements_;
     std::unordered_map<std::uint32_t, ID3D11Buffer *> b12_by_route_;
 
     std::atomic<std::uint64_t> replacement_register_ok_{0};
