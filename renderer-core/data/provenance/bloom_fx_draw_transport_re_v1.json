@@ -46,7 +46,20 @@
       "name": "DS_WaterWaveSfx",
       "registration_rva": "0x0027664D",
       "semantic_id": "0xE35"
-    }
+    },
+    "particle_state_vtable_rva": "0x015F8B18",
+    "cluster_state_vtable_rva": "0x015F8B98",
+    "particle_state_source_links": {
+      "primary": "0x30",
+      "secondary": "0x38"
+    },
+    "cluster_state_source_links": {
+      "primary": "0x50",
+      "secondary": "0x58",
+      "semantic_word": "0x60"
+    },
+    "particle_entity_ctor_state_factory_callsite_rva": "0x00FFCBB2",
+    "cluster_entity_ctor_state_factory_callsite_rva": "0x00FFD9DB"
   },
   "waterwave_authored_identity": {
     "mtd": "S[DB]_Alp_water.mtd",
@@ -61,6 +74,7 @@
     "generic_dsr_sfx_shader_body_is_sufficient_identity": false,
     "live_waterwave_mtd_to_entity_transport_closed": false,
     "q8_writer_authorized": false,
-    "pixel_equivalence": "OPEN"
+    "pixel_equivalence": "OPEN",
+    "live_appearance_source_links_observable": true
   }
 }
