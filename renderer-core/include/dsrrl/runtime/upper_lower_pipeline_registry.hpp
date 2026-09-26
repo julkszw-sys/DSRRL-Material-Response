@@ -13,6 +13,8 @@ struct upper_lower_receiver_identity {
     std::uint8_t stable_receiver_id = 0u;
     operators::lightbank::upper_lower_hemenv_stratum stratum =
         operators::lightbank::upper_lower_hemenv_stratum::nospc;
+    operators::lightbank::upper_lower_hemenv_family family =
+        operators::lightbank::upper_lower_hemenv_family::hemenv;
 
     constexpr bool valid() const noexcept
     {
