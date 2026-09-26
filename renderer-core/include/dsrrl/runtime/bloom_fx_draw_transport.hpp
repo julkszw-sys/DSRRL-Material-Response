@@ -38,6 +38,7 @@ struct telemetry {
     bool particle_hook_armed = false;
     bool cluster_hook_armed = false;
     bool particle_model_ctor_hook_armed = false;
+    bool particle_model_dtor_hook_armed = false;
     bool restore_failed = false;
     bool quarantined = false;
 
@@ -52,6 +53,7 @@ struct telemetry {
     std::uint64_t source_links_ready = 0;
     std::uint64_t source_links_missing = 0;
     std::uint64_t particle_model_ctor_events = 0;
+    std::uint64_t particle_model_dtor_events = 0;
     std::uint64_t particle_model_join_hits = 0;
     std::uint64_t particle_model_join_misses = 0;
     std::uint64_t particle_model_registry_size = 0;
@@ -69,7 +71,9 @@ struct telemetry {
 // +0x50/+0x58 and an additional semantic word at +0x60. A third diagnostic
 // hook observes the unique FrpgFxParticleAppearance_Model constructor and
 // joins its live object identity to draw-state back-references by pointer
-// equality; this is still below WaterWave authored-MTD authority.
+// equality. The exact model destructor is also observed so pointer reuse cannot
+// turn a stale registry entry into false identity; this remains below
+// WaterWave authored-MTD authority.
 //
 // This transport authenticates the exact retail executable indirectly through
 // the already source-complete FLVER provenance gate, then byte-attests both
