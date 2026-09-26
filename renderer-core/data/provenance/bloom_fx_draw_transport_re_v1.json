@@ -1,0 +1,66 @@
+{
+  "schema": "dsrrl.bloom_fx_draw_transport_re.v1",
+  "operator": "post.bloom",
+  "status": "CONSTRUCTION_EVIDENCE",
+  "ptde": {
+    "exe_sha256": "88d1eec18eba2542c9c7e5e6903e89f9c075b20be5cd045ce6e568e7b22bea9d",
+    "collector_insert_va": "0x0054C870",
+    "collector_draw_va": "0x0054CA10",
+    "particle_vtable_va": "0x01249400",
+    "particle_semantic_vfunc_index": 10,
+    "particle_semantic_vfunc_va": "0x00556CF0",
+    "cluster_vtable_va": "0x01249530",
+    "cluster_semantic_vfunc_index": 10,
+    "cluster_semantic_vfunc_va": "0x005576D0",
+    "appearance_state_offset": "0x30",
+    "particle_state_factory_va": "0x00BCC3E0",
+    "particle_state_draw_va": "0x00BCCFA0",
+    "cluster_state_draw_va": "0x00BCEA90"
+  },
+  "dsr": {
+    "exe_sha256": "a45aaa36dd2f6cc151670a639ea5547043cf38ea79ff4178b963c6ed71f98d7b",
+    "image_base": "0x140000000",
+    "particle_vtable_rva": "0x0151C930",
+    "particle_semantic_vfunc_index": 10,
+    "particle_semantic_vfunc_rva": "0x00FFCF30",
+    "cluster_vtable_rva": "0x0151CBF8",
+    "cluster_semantic_vfunc_index": 10,
+    "cluster_semantic_vfunc_rva": "0x00FFDCE0",
+    "appearance_state_offset": "0x30",
+    "particle_state_factory_rva": "0x0118CAD0",
+    "particle_state_draw_rva": "0x0118CE40",
+    "cluster_state_factory_rva": "0x0118D430",
+    "cluster_state_draw_rva": "0x0118D8B0",
+    "shared_hook_prefix_hex": "4883ec5848c7442420feffffff488b4130",
+    "waterwave_semantic_parameter": {
+      "name": "g_IsWaterWaveSfx",
+      "registration_rva": "0x00294D2C",
+      "dsr_parameter_index": "0x53"
+    },
+    "waterwave_spx_registration": {
+      "name": "FRPG_WaterWaveSfx",
+      "registration_rva": "0x00276A27",
+      "semantic_id": "0xE35"
+    },
+    "waterwave_ds_registration": {
+      "name": "DS_WaterWaveSfx",
+      "registration_rva": "0x0027664D",
+      "semantic_id": "0xE35"
+    }
+  },
+  "waterwave_authored_identity": {
+    "mtd": "S[DB]_Alp_water.mtd",
+    "raw_sha256": "f54b8cd620c6dca4319d8368f5d30f9d3fe1ddf60849dddc0e6308c59ef7a837",
+    "raw_payload_equal_ptde_dsr": true,
+    "spx": "FRPG_WaterWaveSfx.spx",
+    "blend_mode": 9,
+    "is_waterwave_sfx": true
+  },
+  "claims": {
+    "cross_renderer_fx_entity_appearance_draw_cut_homologous": true,
+    "generic_dsr_sfx_shader_body_is_sufficient_identity": false,
+    "live_waterwave_mtd_to_entity_transport_closed": false,
+    "q8_writer_authorized": false,
+    "pixel_equivalence": "OPEN"
+  }
+}
