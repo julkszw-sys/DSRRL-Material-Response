@@ -135,6 +135,8 @@ jobs:
           -B build-integrated
           -A x64
           -DRESHADE_INCLUDE_DIR="${{ github.workspace }}/_reshade/include"
+          -DDSRRL_SOURCE_COMMIT="${{ github.sha }}"
+          -DDSRRL_BUILD_FLAVOR="${{ github.ref_name }}"
 
       - name: Build Core+Islands addon
         run: cmake --build build-integrated --config Release
@@ -179,6 +181,14 @@ jobs:
           $h3SpcDonors = Get-Content renderer-core/data/provenance/hemdir3_spc_material_donors_v1.tsv -Raw
           $selectorAsm = Get-Content renderer-core/integrated/flver_identity_detour.asm -Raw
           $cmake = Get-Content renderer-core/integrated/CMakeLists.txt -Raw
+
+          foreach ($required in @(
+            'DSRRL_SOURCE_COMMIT',
+            'DSRRL_BUILD_FLAVOR',
+            '[DSRRL BUILD_ID]'
+          )) {
+            if (($entry + $cmake) -notmatch [regex]::Escape($required)) { throw "Runtime build identity invariant missing: $required" }
+          }
 
           if ($entry -notmatch 'operator_id::material_response') { throw "Material Response feature is not armed in Core+Islands" }
           if ($bridge -match 'addon_event::draw(?:_indexed)?') { throw "A1 create-time bridge must not own draw callbacks" }
