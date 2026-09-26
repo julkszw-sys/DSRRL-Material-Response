@@ -104,6 +104,8 @@ private:
     ID3D11Device *device_ = nullptr;
     std::unordered_map<std::uint32_t,replacement_pair>
         replacements_;
+    std::unordered_map<std::uintptr_t,ID3D11Buffer *>
+        b12_by_context_;
 
     std::atomic<std::uint64_t> replacement_register_ok_{0};
     std::atomic<std::uint64_t> replacement_register_fail_{0};
