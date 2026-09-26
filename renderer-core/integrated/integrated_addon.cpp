@@ -29,6 +29,7 @@
 #include "dsrrl/operators/resource_bridges/spec_rgb_consumer_materializer.hpp"
 #include "dsrrl/operators/env_spec/pmetal_rgba_materializer.hpp"
 #include "dsrrl/operators/env_spec/pmetal_rgba_lerp_materializer.hpp"
+#include "dsrrl/operators/point_light/local_specular_receiver_registry.hpp"
 
 #include <reshade.hpp>
 #include <d3d11.h>
@@ -116,6 +117,10 @@ std::atomic<std::uint64_t> g_draw_joins{0};
 std::atomic<std::uint64_t> g_draw_owner_only{0};
 std::atomic<std::uint64_t> g_draw_receiver_only{0};
 std::atomic<std::uint64_t> g_draw_fast_skip{0};
+std::atomic<std::uint64_t> g_local_specular_receiver_hits{0};
+std::atomic<std::uint64_t> g_local_specular_clustered_hits{0};
+std::atomic<std::uint64_t> g_local_specular_fixed2_hits{0};
+std::atomic<std::uint64_t> g_local_specular_fixed4_hits{0};
 
 enum integrated_draw_route_bit : std::uint8_t {
     k_route_stable = 1u << 0,
@@ -716,6 +721,23 @@ void log_state(const char *tag) noexcept
 
     reshade::log::message(reshade::log::level::info, line);
 
+    // Observe-only exact-hash census for the still-unarmed PTDE local
+    // PointLight specular island. These counters are not bridge activation.
+    char local_spec_line[320]{};
+    std::snprintf(
+        local_spec_line,
+        sizeof(local_spec_line),
+        "[DSRRL CORE+ISLANDS " DSRRL_CORE_ISLANDS_VERSION "] %s "
+        "LOCAL_SPEC_RX exact=%llu clustered=%llu fixed2=%llu fixed4=%llu armed=0",
+        tag,
+        static_cast<unsigned long long>(g_local_specular_receiver_hits.load()),
+        static_cast<unsigned long long>(g_local_specular_clustered_hits.load()),
+        static_cast<unsigned long long>(g_local_specular_fixed2_hits.load()),
+        static_cast<unsigned long long>(g_local_specular_fixed4_hits.load()));
+    reshade::log::message(
+        reshade::log::level::info,
+        local_spec_line);
+
     // Compact machine-parseable receiver census. Emit one line rather than
     // 24 lines per checkpoint so long runtime captures remain practical.
     char rx_line[2048]{};
@@ -1127,6 +1149,36 @@ bool on_create_pipeline(
         const auto *source =
             static_cast<const std::uint8_t *>(
                 pixel_shader->code);
+
+        // Observe the exact original DSR local-specular host before any
+        // create-time island is allowed to replace the shader bytes. This is
+        // census-only: local_specular_legacy remains unarmed until the full
+        // per-light microfacet window has an exact rewrite recipe.
+        dsrrl::operators::point_light::
+            local_specular_receiver_identity local_specular_identity{};
+        if (dsrrl::operators::point_light::
+                local_specular_receiver_for_shader(
+                    source,
+                    pixel_shader->code_size,
+                    local_specular_identity)) {
+            ++g_local_specular_receiver_hits;
+            using local_class =
+                dsrrl::operators::point_light::
+                    local_specular_receiver_class;
+            switch (local_specular_identity.receiver_class) {
+            case local_class::clustered_spc_pnts:
+                ++g_local_specular_clustered_hits;
+                break;
+            case local_class::fixed_spc_pntss:
+                ++g_local_specular_fixed2_hits;
+                break;
+            case local_class::fixed_spc_pntssss:
+                ++g_local_specular_fixed4_hits;
+                break;
+            default:
+                break;
+            }
+        }
 
         std::vector<std::uint8_t> mr_payload;
         const auto mr =
@@ -2171,6 +2223,10 @@ bool AddonInit(
     g_draw_owner_only.store(0);
     g_draw_receiver_only.store(0);
     g_draw_fast_skip.store(0);
+    g_local_specular_receiver_hits.store(0);
+    g_local_specular_clustered_hits.store(0);
+    g_local_specular_fixed2_hits.store(0);
+    g_local_specular_fixed4_hits.store(0);
     reset_integrated_draw_routes();
     for (auto &rx : g_material_receiver_runtime) {
         rx.seen.store(0);
