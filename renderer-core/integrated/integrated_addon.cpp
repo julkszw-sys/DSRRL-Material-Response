@@ -99,6 +99,9 @@ std::atomic<std::uint64_t> g_draw_owner_hits{0};
 std::atomic<std::uint64_t> g_draw_joins{0};
 std::atomic<std::uint64_t> g_draw_owner_only{0};
 std::atomic<std::uint64_t> g_draw_receiver_only{0};
+std::atomic<std::uint64_t> g_bloom_fx_draw_snapshots{0};
+std::atomic<std::uint64_t> g_bloom_fx_draw_authorized{0};
+std::atomic<std::uint64_t> g_bloom_fx_draw_rejected{0};
 
 constexpr dsrrl::core::operator_id k_integrated_islands[] = {
     dsrrl::core::operator_id::material_response,
@@ -711,7 +714,8 @@ void log_state(const char *tag) noexcept
         "prov=%u hooks=%u/%u model=%u/%u q=%u restore_fail=%u "
         "events=%llu/%llu exact=%llu reject=%llu state=%llu/%llu "
         "state_exact=%llu/%llu links=%llu/%llu model_evt=%llu/%llu "
-        "model_join=%llu/%llu registry=%llu snap=%llu/%llu",
+        "model_join=%llu/%llu ww_publish=%llu/%llu ww_same=%llu registry=%llu "
+        "snap=%llu/%llu api_snap=%llu ww_auth=%llu/%llu",
         tag,
         bloom_fx.provenance_ok ? 1u : 0u,
         bloom_fx.particle_hook_armed ? 1u : 0u,
@@ -734,9 +738,15 @@ void log_state(const char *tag) noexcept
         static_cast<unsigned long long>(bloom_fx.particle_model_dtor_events),
         static_cast<unsigned long long>(bloom_fx.particle_model_join_hits),
         static_cast<unsigned long long>(bloom_fx.particle_model_join_misses),
+        static_cast<unsigned long long>(bloom_fx.waterwave_publish_ok),
+        static_cast<unsigned long long>(bloom_fx.waterwave_publish_fail),
+        static_cast<unsigned long long>(bloom_fx.waterwave_same_instance_hits),
         static_cast<unsigned long long>(bloom_fx.particle_model_registry_size),
         static_cast<unsigned long long>(bloom_fx.snapshot_hits),
-        static_cast<unsigned long long>(bloom_fx.snapshot_misses));
+        static_cast<unsigned long long>(bloom_fx.snapshot_misses),
+        static_cast<unsigned long long>(g_bloom_fx_draw_snapshots.load()),
+        static_cast<unsigned long long>(g_bloom_fx_draw_authorized.load()),
+        static_cast<unsigned long long>(g_bloom_fx_draw_rejected.load()));
 
     reshade::log::message(
         reshade::log::level::info,
@@ -1517,6 +1527,26 @@ bool prepare_island_batch(
     return prepared.batch.island_count != 0u;
 }
 
+void observe_bloom_fx_draw_authority() noexcept
+{
+    dsrrl::runtime::bloom_fx_draw_transport::fx_draw_snapshot snapshot{};
+    if (!dsrrl::runtime::bloom_fx_draw_transport::snapshot(snapshot))
+        return;
+
+    ++g_bloom_fx_draw_snapshots;
+
+    const auto authority =
+        dsrrl::runtime::bloom_fx_draw_transport::
+            validate_waterwave_draw_authority(snapshot);
+
+    if (authority ==
+        dsrrl::runtime::bloom_fx_draw_transport::
+            waterwave_draw_authority_result::authorized)
+        ++g_bloom_fx_draw_authorized;
+    else
+        ++g_bloom_fx_draw_rejected;
+}
+
 bool on_draw(
     reshade::api::command_list *cmd_list,
     std::uint32_t vertex_count,
@@ -1524,6 +1554,8 @@ bool on_draw(
     std::uint32_t first_vertex,
     std::uint32_t first_instance)
 {
+    observe_bloom_fx_draw_authority();
+
     draw_semantic_selection_guard semantic_guard{};
     std::uint32_t receiver_id = 0u;
     bool hemenvlerp_bound = false;
@@ -1597,6 +1629,8 @@ bool on_draw_indexed(
     std::int32_t vertex_offset,
     std::uint32_t first_instance)
 {
+    observe_bloom_fx_draw_authority();
+
     draw_semantic_selection_guard semantic_guard{};
     std::uint32_t receiver_id = 0u;
     bool hemenvlerp_bound = false;
@@ -1753,6 +1787,9 @@ bool AddonInit(
     g_draw_joins.store(0);
     g_draw_owner_only.store(0);
     g_draw_receiver_only.store(0);
+    g_bloom_fx_draw_snapshots.store(0);
+    g_bloom_fx_draw_authorized.store(0);
+    g_bloom_fx_draw_rejected.store(0);
     dsrrl::runtime::stable_receiver_pipeline_reset();
     dsrrl::runtime::hemenvlerp_receiver_pipeline_reset();
     dsrrl::runtime::subsurface_receiver_pipeline_reset();
