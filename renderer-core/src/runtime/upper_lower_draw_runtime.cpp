@@ -755,8 +755,39 @@ const std::uint8_t *resolve_raw_lightbank_record(
             sizeof(live_header));
 
         if (live_header != nullptr &&
-            live_header == cached.header)
-            return cached.record;
+            live_header == cached.header) {
+            std::uint16_t live_type = 0u;
+            std::uint16_t live_count = 0u;
+            std::memcpy(
+                &live_type,
+                live_header + 0x08u,
+                sizeof(live_type));
+            std::memcpy(
+                &live_count,
+                live_header + 0x0Au,
+                sizeof(live_count));
+
+            if (live_type == 4u &&
+                static_cast<std::uint32_t>(
+                    selector) < live_count) {
+                const auto index =
+                    static_cast<std::size_t>(
+                        static_cast<std::uint32_t>(
+                            selector));
+                std::uint32_t live_offset = 0u;
+                std::memcpy(
+                    &live_offset,
+                    live_header +
+                        0x34u +
+                        index * 12u,
+                    sizeof(live_offset));
+
+                if (live_header +
+                        live_offset ==
+                    cached.record)
+                    return cached.record;
+            }
+        }
 
         cached = {};
     }
@@ -1040,10 +1071,23 @@ bool read_selected_ptde(
             sizeof(live_records));
 
         if (live_header == cached.header &&
-            live_records == cached.records)
-            record = cached.record;
-        else
+            live_records == cached.records &&
+            live_header != nullptr &&
+            live_records != nullptr) {
+            std::uint16_t live_count = 0u;
+            std::memcpy(
+                &live_count,
+                live_header + 0x0Au,
+                sizeof(live_count));
+
+            if (static_cast<std::uint32_t>(
+                    selector) < live_count)
+                record = cached.record;
+            else
+                cached = {};
+        } else {
             cached = {};
+        }
     }
 
     if (record == nullptr) {
