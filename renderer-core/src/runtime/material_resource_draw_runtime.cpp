@@ -941,7 +941,8 @@ prepare_draw_requests(
         query.material.valid &&
         query.material.owner_tuple_exact;
 
-    if (core_.features().enabled(
+    if (full_material_response_ready &&
+        core_.features().enabled(
             core::operator_id::spec_rgb) &&
         receiver_id >= 24u &&
         receiver_id <= 47u) {
