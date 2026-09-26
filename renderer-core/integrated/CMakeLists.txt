@@ -69,6 +69,11 @@ set(
     "${DSRRL_CORE_GENERATED_ROOT}/dsrrl/operators/material_response")
 file(MAKE_DIRECTORY "${DSRRL_CORE_GENERATED_MATERIAL_RESPONSE}")
 
+set(
+    DSRRL_CORE_GENERATED_ENVSPEC
+    "${DSRRL_CORE_GENERATED_ROOT}/dsrrl/operators/env_spec")
+file(MAKE_DIRECTORY "${DSRRL_CORE_GENERATED_ENVSPEC}")
+
 add_custom_command(
     OUTPUT "${DSRRL_CORE_GENERATED_RUNTIME}/generated_spec_routes_v12.hpp"
     COMMAND "${Python3_EXECUTABLE}"
@@ -201,6 +206,22 @@ add_custom_target(
     DEPENDS
         "${DSRRL_CORE_GENERATED_MATERIAL_RESPONSE}/generated_hemenvlerp_v211_v1.hpp")
 
+add_custom_command(
+    OUTPUT "${DSRRL_CORE_GENERATED_ENVSPEC}/generated_pmetal_envspec_hemenvlerp_v1.hpp"
+    COMMAND "${Python3_EXECUTABLE}"
+            "${DSRRL_RENDERER_CORE_ROOT}/tools/generate_pmetal_envspec_hemenvlerp_v1.py"
+            --input "${DSRRL_RENDERER_CORE_ROOT}/data/provenance/pmetal_envspec_hemenvlerp_v1.tsv"
+            --output "${DSRRL_CORE_GENERATED_ENVSPEC}/generated_pmetal_envspec_hemenvlerp_v1.hpp"
+    DEPENDS
+        "${DSRRL_RENDERER_CORE_ROOT}/tools/generate_pmetal_envspec_hemenvlerp_v1.py"
+        "${DSRRL_RENDERER_CORE_ROOT}/data/provenance/pmetal_envspec_hemenvlerp_v1.tsv"
+    VERBATIM)
+
+add_custom_target(
+    dsrrl_core_pmetal_envspec_hemenvlerp_authority
+    DEPENDS
+        "${DSRRL_CORE_GENERATED_ENVSPEC}/generated_pmetal_envspec_hemenvlerp_v1.hpp")
+
 set(
     RESHade_INCLUDE_DIR
     "${RESHADE_INCLUDE_DIR}"
@@ -242,6 +263,7 @@ add_library(
     "${DSRRL_RENDERER_CORE_ROOT}/src/operators/material_response/hemenvlerp_v211_materializer.cpp"
     "${DSRRL_RENDERER_CORE_ROOT}/src/operators/resource_bridges/spec_rgb_consumer_materializer.cpp"
     "${DSRRL_RENDERER_CORE_ROOT}/src/operators/env_spec/pmetal_rgba_materializer.cpp"
+    "${DSRRL_RENDERER_CORE_ROOT}/src/operators/env_spec/pmetal_rgba_lerp_materializer.cpp"
     "${DSRRL_RENDERER_CORE_ROOT}/src/operators/lightbank/hemdir3_b13_materializer.cpp"
     "${DSRRL_RENDERER_CORE_ROOT}/src/operators/lightbank/upper_lower_hemenv_materializer.cpp")
 
@@ -251,7 +273,8 @@ add_dependencies(
     dsrrl_core_hemdir3_authority
     dsrrl_core_upper_lower_authority
     dsrrl_core_pmetal_env_source_authority
-    dsrrl_core_hemenvlerp_authority)
+    dsrrl_core_hemenvlerp_authority
+    dsrrl_core_pmetal_envspec_hemenvlerp_authority)
 
 target_include_directories(
     dsrrl_renderer_core_integrated
