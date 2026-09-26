@@ -1187,77 +1187,19 @@ void *__fastcall hook_blend_packer(
     std::int32_t selector_b,
     float beta) noexcept
 {
-    void *result =
-        g_blend_packer_orig != nullptr
-            ? g_blend_packer_orig(
-                dst,
-                source_a,
-                selector_a,
-                source_b,
-                selector_b,
-                beta)
-            : nullptr;
-
-    if (!g_producer.active)
-        return result;
-
-    const auto *raw_a =
-        resolve_raw_lightbank_record(
-            source_a,
-            selector_a);
-    const auto *raw_b =
-        resolve_raw_lightbank_record(
-            source_b,
-            selector_b);
-
-    const std::uint8_t *eval_a = raw_a;
-    const std::uint8_t *eval_b = raw_b;
-    float eval_beta = beta;
-
-    if (raw_a != nullptr &&
-        (selector_a == selector_b ||
-         raw_b == nullptr ||
-         beta <= 0.0f)) {
-        eval_b = raw_a;
-        eval_beta = 0.0f;
-    } else if (
-        raw_b != nullptr &&
-        (raw_a == nullptr ||
-         beta >= 1.0f)) {
-        eval_a = raw_b;
-        eval_b = raw_b;
-        eval_beta = 0.0f;
-    }
-
+    // PERF DIAG Q: blend packer detour/trampoline only. Steady capture remains
+    // fully active under producer TLS; snapshot publish and selector join are
+    // disabled by the O baseline.
     ++g_blend_seen;
-
-    f4 upper{};
-    f4 lower{};
-    if (evaluate_raw_upper_lower(
-            eval_a,
-            eval_b,
-            eval_beta,
-            upper,
-            lower)) {
-        g_producer.upper = upper;
-        g_producer.lower = lower;
-        g_producer.have_upper = true;
-        g_producer.have_lower = true;
-        ++g_blend_upper;
-        ++g_blend_lower;
-    }
-
-    if (evaluate_raw_d123(
-            eval_a,
-            eval_b,
-            eval_beta,
-            g_producer.d123)) {
-        g_producer.have_d123 = true;
-        g_d123_blend_direction += 3u;
-        g_d123_blend_color += 3u;
-    }
-
-    return result;
+    return g_blend_packer_orig != nullptr
+        ? g_blend_packer_orig(
+            dst,
+            source_a,
+            selector_a,
+            source_b,
+            selector_b,
+            beta)
+        : nullptr;
 }
 
 void __fastcall hook_pmetal_env_blend(
