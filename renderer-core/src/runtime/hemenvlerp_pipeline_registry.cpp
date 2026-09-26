@@ -49,21 +49,15 @@ bool candidate_size(std::size_t size) noexcept
     return false;
 }
 
-bool exact_identity(
-    const void *code,
+bool exact_identity_digest(
+    const std::array<std::uint8_t,32> &digest,
     std::size_t size,
     hemenvlerp_receiver_identity &out) noexcept
 {
     out = {};
-    if (code == nullptr ||
-        size == 0u ||
+    if (size == 0u ||
         !candidate_size(size))
         return false;
-
-    const auto digest =
-        hashing::sha256(
-            static_cast<const std::uint8_t *>(code),
-            size);
 
     const gen::hemenvlerp_v211_plan *hit = nullptr;
     for (const auto &plan :
@@ -110,9 +104,31 @@ bool hemenvlerp_receiver_observe_pipeline(
 
     ++g_candidate_size_hits;
 
+    const auto digest =
+        hashing::sha256(
+            static_cast<const std::uint8_t *>(
+                pixel_shader_code),
+            pixel_shader_size);
+
+    return hemenvlerp_receiver_observe_pipeline_digest(
+        pipeline_handle,
+        digest,
+        pixel_shader_size);
+}
+
+bool hemenvlerp_receiver_observe_pipeline_digest(
+    std::uint64_t pipeline_handle,
+    const std::array<std::uint8_t,32> &pixel_shader_sha256,
+    std::size_t pixel_shader_size) noexcept
+{
+    if (pipeline_handle == 0u ||
+        pixel_shader_size == 0u ||
+        !candidate_size(pixel_shader_size))
+        return false;
+
     hemenvlerp_receiver_identity identity{};
-    if (!exact_identity(
-            pixel_shader_code,
+    if (!exact_identity_digest(
+            pixel_shader_sha256,
             pixel_shader_size,
             identity)) {
         ++g_hash_misses;
