@@ -4,6 +4,7 @@
 #include "dsrrl/operators/lightbank/generated_upper_lower_phn_parallax_v1.hpp"
 #include "dsrrl/operators/lightbank/generated_upper_lower_phn_pnts_v1.hpp"
 #include "dsrrl/operators/lightbank/generated_upper_lower_phn_faceeye_v1.hpp"
+#include "dsrrl/operators/lightbank/generated_upper_lower_phn_subsurf_v1.hpp"
 #include "dsrrl/operators/legacy_plan/sha256_bytes.hpp"
 
 #include <atomic>
@@ -24,6 +25,8 @@ namespace generated_ul_pnts =
     operators::lightbank::generated_pnts;
 namespace generated_ul_faceeye =
     operators::lightbank::generated_faceeye;
+namespace generated_ul_subsurf =
+    operators::lightbank::generated_subsurf;
 namespace hashing =
     operators::legacy_plan::hashing;
 
@@ -166,6 +169,21 @@ upper_lower_receiver_identity identity_from_plan(
     };
 }
 
+upper_lower_receiver_identity identity_from_plan(
+    const generated_ul_subsurf::
+        upper_lower_phn_subsurf_plan &plan) noexcept
+{
+    return {
+        plan.plan_index,
+        plan.shader_index,
+        plan.stable_receiver_id,
+        operators::lightbank::
+            upper_lower_hemenv_stratum::spc,
+        operators::lightbank::
+            upper_lower_hemenv_family::phn_subsurf
+    };
+}
+
 bool identity_equal(
     const upper_lower_receiver_identity &a,
     const upper_lower_receiver_identity &b) noexcept
@@ -267,6 +285,23 @@ bool identify_exact_stock(
     for (const auto &plan :
          generated_ul_faceeye::
              k_upper_lower_phn_faceeye_plans) {
+        if (plan.stock_size != size ||
+            !hashing::matches_hex(
+                digest,
+                plan.stock_sha256))
+            continue;
+
+        if (found)
+            return false;
+
+        identity =
+            identity_from_plan(plan);
+        found = true;
+    }
+
+    for (const auto &plan :
+         generated_ul_subsurf::
+             k_upper_lower_phn_subsurf_plans) {
         if (plan.stock_size != size ||
             !hashing::matches_hex(
                 digest,
