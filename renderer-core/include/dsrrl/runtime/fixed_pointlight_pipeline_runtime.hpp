@@ -72,6 +72,9 @@ public:
     void on_destroy_device(
         reshade::api::device *device) noexcept;
 
+    bool pipeline_attested(
+        std::uint64_t pipeline_handle) const noexcept;
+
     bool prepare_bound_shader(
         reshade::api::command_list *cmd_list,
         prepared_fixed_pointlight_shader &prepared) noexcept;
