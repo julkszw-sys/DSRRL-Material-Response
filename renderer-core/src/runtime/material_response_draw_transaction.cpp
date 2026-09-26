@@ -898,6 +898,89 @@ prepare_lerp_draw_request_with_upper_lower(
     return true;
 }
 
+bool material_response_draw_runtime::promote_prepared_draw_to_spec_rgb(
+    prepared_material_response_draw &prepared) noexcept
+{
+    if (!prepared.ready ||
+        prepared.shader == nullptr ||
+        prepared.receiver_id == 0u ||
+        local_quarantine_.load() ||
+        transactions_.quarantined())
+        return false;
+
+    if (prepared.spec_rgb_consumer)
+        return true;
+
+    const auto spec_owner =
+        core::operator_bit(core::operator_id::spec_rgb);
+
+    replacement_record replacement{};
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+
+        const std::unordered_map<std::uint32_t, replacement_record> *bank =
+            nullptr;
+
+        switch (prepared.family) {
+        case material_response_replacement_family::stable:
+            bank = &spec_rgb_replacements_;
+            break;
+        case material_response_replacement_family::stable_upper_lower:
+            bank = &upper_lower_spec_rgb_replacements_;
+            break;
+        case material_response_replacement_family::hemenvlerp_upper_lower:
+            bank = &lerp_spec_rgb_replacements_;
+            break;
+        }
+
+        if (bank == nullptr)
+            return false;
+
+        const auto found = bank->find(prepared.receiver_id);
+        if (found != bank->end() &&
+            found->second.shader != nullptr) {
+            replacement = found->second;
+            replacement.shader->AddRef();
+        }
+    }
+
+    if (replacement.shader == nullptr)
+        return false;
+
+    const bool pair_matches =
+        (replacement.composed_owners & spec_owner) != 0u &&
+        (replacement.composed_owners & ~spec_owner) ==
+            prepared.replacement_composed_owners;
+
+    if (!pair_matches) {
+        replacement.shader->Release();
+        return false;
+    }
+
+    auto upgraded = prepared.request;
+    upgraded.pixel_shader = replacement.shader;
+    upgraded.additional_owners |= spec_owner;
+    upgraded.additional_shader_owners |= spec_owner;
+
+    draw_tx_mutation verify{};
+    if (build_island_draw_mutation(
+            upgraded,
+            verify) != island_draw_adapter_result::ready) {
+        replacement.shader->Release();
+        return false;
+    }
+
+    auto *old_shader = prepared.shader;
+    prepared.shader = replacement.shader;
+    prepared.request = upgraded;
+    prepared.spec_rgb_consumer = true;
+
+    if (old_shader != nullptr)
+        old_shader->Release();
+
+    return true;
+}
+
 bool material_response_draw_runtime::prepare_prevalidated_route_request(
     std::uint32_t receiver_id,
     std::uint32_t route_index,
