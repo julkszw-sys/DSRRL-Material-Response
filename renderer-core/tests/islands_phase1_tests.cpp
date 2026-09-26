@@ -190,6 +190,8 @@ int main()
     CHECK(exact_mr.c101_f0q[0]==1.51663761f);
     CHECK(exact_mr.c101_f0q[1]==1.51663761f);
     CHECK(exact_mr.c101_f0q[2]==1.51663761f);
+    CHECK(exact_mr.ptde_specular_power_verified);
+    CHECK(exact_mr.ptde_specular_power==8.5f);
 
     auto spoofed_pmetal=exact_pmetal;
     spoofed_pmetal.flver_sha256.fill(0xffu);
