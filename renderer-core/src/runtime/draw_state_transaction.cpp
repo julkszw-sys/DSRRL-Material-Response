@@ -47,6 +47,21 @@ bool unique_slots(
     return true;
 }
 
+bool verify_native_readback_for(
+    const draw_tx_mutation &mutation) noexcept
+{
+    // Upper/Lower is the only currently confirmed high-frequency replay
+    // island. Its native state is still captured before mutation and restored
+    // after the replay, but repeating PSGet* after our own PSSet* calls on
+    // every draw is diagnostic-only work. Keep that expensive verification on
+    // every other operator until separately justified.
+    const auto upper_lower =
+        core::operator_bit(
+            core::operator_id::upper_lower);
+
+    return (mutation.owners & upper_lower) == 0u;
+}
+
 } // namespace
 
 draw_state_transaction_runtime::draw_state_transaction_runtime(
