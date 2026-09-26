@@ -2,6 +2,7 @@
 #include "dsrrl/operators/lightbank/generated_upper_lower_hemenv_v1.hpp"
 #include "dsrrl/operators/lightbank/generated_upper_lower_hemenvlerp_v1.hpp"
 #include "dsrrl/operators/lightbank/generated_upper_lower_phn_parallax_v1.hpp"
+#include "dsrrl/operators/lightbank/generated_upper_lower_phn_pnts_v1.hpp"
 #include "dsrrl/operators/legacy_plan/sha256_bytes.hpp"
 
 #include <atomic>
@@ -18,6 +19,8 @@ namespace generated_ul_lerp =
     operators::lightbank::generated_lerp;
 namespace generated_ul_parallax =
     operators::lightbank::generated_parallax;
+namespace generated_ul_pnts =
+    operators::lightbank::generated_pnts;
 namespace hashing =
     operators::legacy_plan::hashing;
 
@@ -120,6 +123,26 @@ upper_lower_receiver_identity identity_from_plan(
     };
 }
 
+upper_lower_receiver_identity identity_from_plan(
+    const generated_ul_pnts::
+        upper_lower_phn_pnts_plan &plan) noexcept
+{
+    return {
+        plan.plan_index,
+        plan.shader_index,
+        plan.stable_receiver_id,
+        plan.stratum ==
+                generated_ul_pnts::
+                    upper_lower_phn_pnts_stratum::spc
+            ? operators::lightbank::
+                  upper_lower_hemenv_stratum::spc
+            : operators::lightbank::
+                  upper_lower_hemenv_stratum::nospc,
+        operators::lightbank::
+            upper_lower_hemenv_family::phn_pnts
+    };
+}
+
 bool identity_equal(
     const upper_lower_receiver_identity &a,
     const upper_lower_receiver_identity &b) noexcept
@@ -187,6 +210,23 @@ bool identify_exact_stock(
     for (const auto &plan :
          generated_ul_parallax::
              k_upper_lower_phn_parallax_plans) {
+        if (plan.stock_size != size ||
+            !hashing::matches_hex(
+                digest,
+                plan.stock_sha256))
+            continue;
+
+        if (found)
+            return false;
+
+        identity =
+            identity_from_plan(plan);
+        found = true;
+    }
+
+    for (const auto &plan :
+         generated_ul_pnts::
+             k_upper_lower_phn_pnts_plans) {
         if (plan.stock_size != size ||
             !hashing::matches_hex(
                 digest,
