@@ -117,8 +117,7 @@ bool identify_exact_stock(
             static_cast<const std::uint8_t *>(code),
             size);
 
-    const generated::upper_lower_hemenv_plan *hit =
-        nullptr;
+    bool found = false;
 
     for (const auto &plan :
          generated::k_upper_lower_hemenv_plans) {
@@ -128,18 +127,32 @@ bool identify_exact_stock(
                 plan.stock_sha256))
             continue;
 
-        if (hit != nullptr)
+        if (found)
             return false;
 
-        hit = &plan;
+        identity =
+            identity_from_plan(plan);
+        found = true;
     }
 
-    if (hit == nullptr)
-        return false;
+    for (const auto &plan :
+         generated_ul_lerp::
+             k_upper_lower_hemenvlerp_plans) {
+        if (plan.stock_size != size ||
+            !hashing::matches_hex(
+                digest,
+                plan.stock_sha256))
+            continue;
 
-    identity =
-        identity_from_plan(*hit);
-    return true;
+        if (found)
+            return false;
+
+        identity =
+            identity_from_plan(plan);
+        found = true;
+    }
+
+    return found;
 }
 
 void account_exact(
