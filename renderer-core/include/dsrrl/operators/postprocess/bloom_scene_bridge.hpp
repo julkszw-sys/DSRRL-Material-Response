@@ -25,6 +25,18 @@ enum class bloom_scene_history_proof : std::uint8_t {
     blend_history_closed
 };
 
+// Fresh retail RE closes the former placement ambiguity: PTDE main-scene
+// AddDrawStageMask(0x01000000) reaches parser+0x84, runtime executor 0xBD1840
+// writes the active one-hot stage into DrawContext+0x8C, and BlendMode4 then
+// performs decision-relevant SRCALPHA/ONE accumulation into the Q8 scene.
+// Once that iterative blend/storage history has been collapsed into the stock
+// DSR floating-point scene, there is no universal pointwise exact inverse.
+enum class bloom_scene_capture_placement : std::uint8_t {
+    unknown = 0,
+    history_preserving_pre_loss,
+    late_fullscreen_after_dsr_accumulation
+};
+
 enum class bloom_scene_bridge_result : std::uint8_t {
     exact_construction = 0,
     source_domain_mismatch,
@@ -33,6 +45,8 @@ enum class bloom_scene_bridge_result : std::uint8_t {
     blend_history_not_closed,
     q8_storage_not_verified,
     source_freshness_not_verified,
+    history_preserving_placement_not_verified,
+    late_fullscreen_history_loss,
     graph_handoff_not_verified
 };
 
@@ -41,6 +55,8 @@ struct bloom_scene_bridge_carrier {
         bloom_scene_source_domain::unknown;
     bloom_scene_history_proof history_proof =
         bloom_scene_history_proof::unknown;
+    bloom_scene_capture_placement capture_placement =
+        bloom_scene_capture_placement::unknown;
 
     bool q8_a8r8g8b8_storage_verified = false;
     bool source_freshness_verified = false;
@@ -69,6 +85,15 @@ inline bloom_scene_bridge_result validate_bloom_scene_bridge_carrier(
 
     if (!c.source_freshness_verified)
         return bloom_scene_bridge_result::source_freshness_not_verified;
+
+    if (c.capture_placement ==
+        bloom_scene_capture_placement::late_fullscreen_after_dsr_accumulation)
+        return bloom_scene_bridge_result::late_fullscreen_history_loss;
+
+    if (c.capture_placement !=
+        bloom_scene_capture_placement::history_preserving_pre_loss)
+        return bloom_scene_bridge_result::
+            history_preserving_placement_not_verified;
 
     if (!c.graph_handoff_verified)
         return bloom_scene_bridge_result::graph_handoff_not_verified;
