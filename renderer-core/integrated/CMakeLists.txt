@@ -264,6 +264,7 @@ add_library(
     "${DSRRL_RENDERER_CORE_ROOT}/src/operators/material_response/hemenvlerp_v211_materializer.cpp"
     "${DSRRL_RENDERER_CORE_ROOT}/src/operators/resource_bridges/spec_rgb_consumer_materializer.cpp"
     "${DSRRL_RENDERER_CORE_ROOT}/src/operators/env_spec/pmetal_rgba_materializer.cpp"
+    "${DSRRL_RENDERER_CORE_ROOT}/src/operators/env_spec/pmetal_rgba_lerp_materializer.cpp"
     "${DSRRL_RENDERER_CORE_ROOT}/src/operators/lightbank/hemdir3_b13_materializer.cpp"
     "${DSRRL_RENDERER_CORE_ROOT}/src/operators/lightbank/upper_lower_hemenv_materializer.cpp")
 
