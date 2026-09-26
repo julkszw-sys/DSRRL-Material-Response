@@ -14,7 +14,8 @@
     {"artifact_id":1322,"sha256":"0701154f5fa683aae95094a65bad32320baa74a3f8855183b750fd7383d28b8a","role":"325-record exact EnvSpec tristate authority; reproducible row export is CI-verified by renderer-core/tools/export_mtd_envspec_semantic_census.py"},
     {"path":"renderer-core/data/material_response_routes_v1.json","role":"35 exact names / 34 raw SHA keys; c101, family and receiver triplets"},
     {"path":"renderer-core/data/census/ptde_subsurface_usage_census_v1.json","role":"verified Subsurface classification seed"},
-    {"path":"renderer-core/data/ptde_full_flver_ownership_census_v1.json","role":"exact-resolved PTDE FLVER material texture bindings; positive resource-consumer evidence only while scan errors remain"}
+    {"path":"renderer-core/data/ptde_full_flver_ownership_census_v1.json","role":"exact-resolved PTDE FLVER material texture bindings; positive resource-consumer evidence only while scan errors remain"},
+    {"path":"renderer-core/data/census/ptde_mtd_semantic_exact_bindings_v1.json","role":"8 exact bridge_resource_bindings 40..47 identities with raw MTD SHA and evidence-bounded semantic classifications"}
   ],
   "operator_columns": ["material_response","spec_rgb","env_spec","subsurface","diffuse","normal_bump","upper_lower","hemenv","hemenv_lerp","pointlight","alpha_blend","parallax","emissive_lightmap","texture_resource_consumers"],
   "cohorts": [
@@ -62,10 +63,10 @@
     }
   ],
   "materialized_exports": [
-    {"source_artifact_id":1322,"records":325,"tool":"renderer-core/tools/export_mtd_envspec_semantic_census.py","ci_contract":"exact row count 325; present=>USE, explicit_none=>NO_USE, unresolved/nospc-host=>UNKNOWN under exporter evidence policy","claim_scope":"CONSTRUCTION_AND_STATIC_ROUTING_ONLY"}
+    {"source_artifact_id":1322,"records":325,"tool":"renderer-core/tools/export_mtd_envspec_semantic_census.py","ci_contract":"exact row count 325; present=>USE, explicit_none=>NO_USE, unresolved/nospc-host=>UNKNOWN under exporter evidence policy","claim_scope":"CONSTRUCTION_AND_STATIC_ROUTING_ONLY"},
+    {"source":"bridge_resource_bindings 40..47","records":8,"path":"renderer-core/data/census/ptde_mtd_semantic_exact_bindings_v1.json","verifier":"renderer-core/tools/verify_mtd_semantic_exact_bindings.py","ci_contract":"8 exact raw-SHA identities; Material Response/HemEnv positive routing and route-local PointLight NO_USE only; unresolved SpecRGB/EnvSpec/Subsurface remain UNKNOWN","claim_scope":"CONSTRUCTION_AND_STATIC_ROUTING_ONLY"}
   ],
   "pending_imports": [
-    {"source":"bridge_resource_bindings 40..47","records":8,"purpose":"DSR-only/equivalent-plain material identities and gate policy"},
     {"source":"full PTDE/DSR MTD homology registry artifact 571","purpose":"expand beyond current FULL24 cohort to all exact common and one-sided MTD identities"}
   ],
   "guardrails": [
