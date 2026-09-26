@@ -338,6 +338,7 @@ bool add_b12_rdef(
 
 bool final_postcondition(
     const std::vector<std::uint8_t> &bytes,
+    const generated_lerp::pmetal_hemenvlerp_site &site,
     const std::vector<std::uint32_t> &preserved_envdiffuse) noexcept
 {
     std::vector<chunk> chunks;
@@ -359,7 +360,43 @@ bool final_postcondition(
             12u))
         return false;
 
-    if (!contains_exact_subsequence(words, preserved_envdiffuse))
+    if (site.t11_word <= site.t12_word ||
+        site.postblend_word < site.t12_word ||
+        site.postblend_word >=
+            site.t12_word + k_ptde_rgba_envspec_chain.size() ||
+        site.t9_word <
+            site.t12_word + k_ptde_rgba_envspec_chain.size() ||
+        site.t9_word >= site.t11_word)
+        return false;
+
+    auto expected_envspec_cut =
+        std::vector<std::uint32_t>(
+            k_ptde_rgba_envspec_chain.begin(),
+            k_ptde_rgba_envspec_chain.end());
+
+    expected_envspec_cut[6] =
+        site.reflection_coord_register;
+    expected_envspec_cut[38] =
+        site.reflection_coord_register;
+
+    try {
+        expected_envspec_cut.resize(
+            site.t11_word - site.t12_word,
+            0x0100003au);
+    } catch (...) {
+        return false;
+    }
+
+    // The exact PTDE EnvSpec chain plus the NOP-filled remainder up to the
+    // independent EnvDiffuse operator must survive every later composition
+    // unchanged. This explicitly prevents DSR-only dynamic-LOD/angular/t9
+    // logic from being reintroduced inside the EnvSpec semantic cut.
+    if (!contains_exact_subsequence(
+            words,
+            expected_envspec_cut) ||
+        !contains_exact_subsequence(
+            words,
+            preserved_envdiffuse))
         return false;
 
     return
@@ -487,6 +524,12 @@ materialize_pmetal_rgba_lerp_receiver(
         site->reflection_coord_register > 7u ||
         site->t11_word != site->t12_word + 129u ||
         site->merge_word != site->t12_word + 192u ||
+        site->postblend_word < site->t12_word ||
+        site->postblend_word >=
+            site->t12_word + k_ptde_rgba_envspec_chain.size() ||
+        site->t9_word <
+            site->t12_word + k_ptde_rgba_envspec_chain.size() ||
+        site->t9_word >= site->t11_word ||
         site->t12_word + k_ptde_rgba_envspec_chain.size() >
             site->t11_word ||
         site->merge_word + 9u > words.size() ||
@@ -571,6 +614,7 @@ materialize_pmetal_rgba_lerp_receiver(
 
     if (!final_postcondition(
             spec_rgb_base,
+            *site,
             preserved_envdiffuse)) {
         outcome.result =
             pmetal_rgba_lerp_materialize_result::fail_postcondition;
