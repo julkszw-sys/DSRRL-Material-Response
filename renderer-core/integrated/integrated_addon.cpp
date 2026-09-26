@@ -613,7 +613,7 @@ void log_state(const char *tag) noexcept
         "inserts=%llu lookups=%llu hits=%llu misses=%llu erases=%llu invalid=%llu "
         "owner_sel=%llu owner_enriched=%llu owner_auth=%llu owner_fo=%llu "
         "mr_ready=%u mr_eval=%llu mr_would_activate=%llu mr_fo=%llu "
-        "mr_mat_ok=%llu mr_mat_fail=%llu mr_payload_ok=%llu mr_payload_fail=%llu "
+        "mr_payload_ok=%llu mr_payload_fail=%llu "
         "mr_ul_payload=%llu/%llu mr_ul_reg=%llu/%llu mr_ul_prepare=%llu mr_ul_miss=%llu "
         "mr_reg=%llu/%llu lerp_full=%llu/%llu "
         "mr_b12_create=%llu mr_b12_hit=%llu mr_b12_bind_fail=%llu "
