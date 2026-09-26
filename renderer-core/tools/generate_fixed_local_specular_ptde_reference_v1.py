@@ -26,6 +26,10 @@ def main()->int:
             if not SHA.fullmatch(r[k]): raise SystemExit(f"bad sha {k}")
         if r["dsr_sha256"] in seen: raise SystemExit("duplicate DSR SHA")
         seen.add(r["dsr_sha256"]); counts[cls]+=1
+        rid=int(r["semantic_receiver_id"])
+        if rid<24 or rid>47:
+            raise SystemExit(f"bad semantic_receiver_id {rid}")
+        r["_semantic_receiver_id"]=rid
         entries.append(r)
     if counts!={"fixed_spc_pntss":24,"fixed_spc_pntssss":24}:
         raise SystemExit(f"bad counts {counts}")
@@ -36,6 +40,7 @@ def main()->int:
        "    std::array<std::uint8_t,32> dsr_sha256;\n",
        "    std::uint32_t dsr_size;\n",
        "    std::uint8_t light_count;\n",
+       "    std::uint32_t semantic_receiver_id;\n",
        "    std::array<std::uint8_t,32> ptde_hemenv_sha256;\n",
        "    std::uint32_t ptde_hemenv_size;\n",
        "    std::array<std::uint8_t,32> ptde_hemenvlerp_sha256;\n",
@@ -43,8 +48,9 @@ def main()->int:
        "};\n\n",
        "inline constexpr std::array<fixed_ptde_reference_record,48> k_fixed_ptde_references = {{\n"]
     for r in entries:
-        o.append("    {{{{{}}},{},{}u,{{{}}},{}u,{{{}}},{}u}},\n".format(
+        o.append("    {{{{{}}},{},{}u,{}u,{{{}}},{}u,{{{}}},{}u}},\n".format(
             digest(r["dsr_sha256"]),r["dsr_size"],CLASSES[r["receiver_class"]],
+            r["_semantic_receiver_id"],
             digest(r["ptde_hemenv_sha256"]),r["ptde_hemenv_size"],
             digest(r["ptde_hemenvlerp_sha256"]),r["ptde_hemenvlerp_size"]))
     o+=["}};\n\n","} // namespace dsrrl::operators::point_light::generated\n"]
