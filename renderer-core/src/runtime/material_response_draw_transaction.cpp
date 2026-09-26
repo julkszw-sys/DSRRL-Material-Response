@@ -341,7 +341,9 @@ bool material_response_draw_runtime::prepare_draw_request(
     prepared.request.replace_pixel_shader = true;
     prepared.request.constant_buffers[0] = {
         12u,
-        b12
+        b12,
+        core::operator_bit(
+            core::operator_id::material_response)
     };
     prepared.request.constant_buffer_count = 1u;
 
@@ -430,11 +432,14 @@ prepare_draw_request_with_upper_lower(
     prepared.request.replace_pixel_shader = true;
     prepared.request.constant_buffers[0] = {
         12u,
-        b12
+        b12,
+        core::operator_bit(
+            core::operator_id::material_response)
     };
     prepared.request.constant_buffers[1] = {
         13u,
-        b13
+        b13,
+        ul_owner
     };
     prepared.request.constant_buffer_count = 2u;
 
