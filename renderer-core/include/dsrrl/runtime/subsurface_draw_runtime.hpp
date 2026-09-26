@@ -5,6 +5,7 @@
 #include "dsrrl/runtime/island_draw_adapter.hpp"
 #include "dsrrl/runtime/material_response_draw_transaction.hpp"
 #include "dsrrl/runtime/material_resource_draw_runtime.hpp"
+#include "dsrrl/runtime/upper_lower_draw_runtime.hpp"
 
 #include <reshade.hpp>
 #include <atomic>
@@ -15,6 +16,7 @@ namespace dsrrl::runtime {
 struct prepared_subsurface_draw {
     prepared_material_response_draw mr{};
     prepared_material_resource_draw resources{};
+    prepared_upper_lower_draw upper_lower{};
     island_draw_adapter_request subsurface{};
     std::uint32_t target_receiver_id = 0;
     bool ready = false;
@@ -33,7 +35,8 @@ public:
     subsurface_draw_runtime(
         core::renderer_core &core,
         material_response_draw_runtime &mr,
-        material_resource_draw_runtime &resources) noexcept;
+        material_resource_draw_runtime &resources,
+        upper_lower_draw_runtime &upper_lower) noexcept;
 
     bool prepare(
         reshade::api::command_list *cmd_list,
@@ -50,6 +53,7 @@ private:
     core::renderer_core &core_;
     material_response_draw_runtime &mr_;
     material_resource_draw_runtime &resources_;
+    upper_lower_draw_runtime &upper_lower_;
 
     std::atomic<std::uint64_t> candidates_{0};
     std::atomic<std::uint64_t> material_rejects_{0};
