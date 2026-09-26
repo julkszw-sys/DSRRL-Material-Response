@@ -167,49 +167,54 @@ void __fastcall capture_callback(
     const float *raw,
     void *) noexcept
 {
-    if(!g_enabled.load() || g_quarantined.load() ||
-       owner==nullptr || raw==nullptr || slot>=4u){
+    try {
+        if(!g_enabled.load() || g_quarantined.load() ||
+           owner==nullptr || raw==nullptr || slot>=4u){
+            ++g_rejects;
+            return;
+        }
+
+        f4 value{};
+        std::memcpy(&value,raw,sizeof(value));
+        if(!std::isfinite(value.x) || !std::isfinite(value.y) ||
+           !std::isfinite(value.z) || !std::isfinite(value.w)){
+            ++g_rejects;
+            return;
+        }
+
+        const auto owner_key=reinterpret_cast<std::uintptr_t>(owner);
+
+        if(slot==0u){
+            auto next=std::make_shared<snapshot>();
+            next->owner=owner_key;
+            next->serial=g_serial.fetch_add(1u)+1u;
+            g_producer_snapshot=std::move(next);
+            ++g_restarts;
+        }
+
+        auto current=g_producer_snapshot;
+        if(!current || current->owner!=owner_key ||
+           current->captured_count!=slot){
+            ++g_rejects;
+            g_producer_snapshot.reset();
+            return;
+        }
+
+        current->raw_q[slot]=value;
+        current->valid_mask=static_cast<std::uint8_t>(
+            current->valid_mask | (1u<<slot));
+        current->captured_count=static_cast<std::uint8_t>(slot+1u);
+
+        {
+            std::lock_guard<std::mutex> lock(g_mutex);
+            g_snapshots[owner_key]=current;
+        }
+
+        ++g_captures;
+    } catch (...) {
         ++g_rejects;
-        return;
+        g_quarantined.store(true);
     }
-
-    f4 value{};
-    std::memcpy(&value,raw,sizeof(value));
-    if(!std::isfinite(value.x) || !std::isfinite(value.y) ||
-       !std::isfinite(value.z) || !std::isfinite(value.w)){
-        ++g_rejects;
-        return;
-    }
-
-    const auto owner_key=reinterpret_cast<std::uintptr_t>(owner);
-
-    if(slot==0u){
-        auto next=std::make_shared<snapshot>();
-        next->owner=owner_key;
-        next->serial=g_serial.fetch_add(1u)+1u;
-        g_producer_snapshot=std::move(next);
-        ++g_restarts;
-    }
-
-    auto current=g_producer_snapshot;
-    if(!current || current->owner!=owner_key ||
-       current->captured_count!=slot){
-        ++g_rejects;
-        g_producer_snapshot.reset();
-        return;
-    }
-
-    current->raw_q[slot]=value;
-    current->valid_mask=static_cast<std::uint8_t>(
-        current->valid_mask | (1u<<slot));
-    current->captured_count=static_cast<std::uint8_t>(slot+1u);
-
-    {
-        std::lock_guard<std::mutex> lock(g_mutex);
-        g_snapshots[owner_key]=current;
-    }
-
-    ++g_captures;
 }
 
 bool build_capture_stub(void *target,void *&stub_out) noexcept
