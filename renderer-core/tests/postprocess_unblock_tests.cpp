@@ -154,14 +154,41 @@ int main()
           bloom_scene_bridge_result::writer_set_not_closed);
     scene.history_proof=bloom_scene_history_proof::writer_set_closed;
     CHECK(validate_bloom_scene_bridge_carrier(scene)==
+          bloom_scene_bridge_result::writer_class_coverage_incomplete);
+
+    scene.proven_writer_classes=bloom_known_writer_classes;
+    scene.writer_set_exhaustiveness_proven=true;
+    scene.writer_order=bloom_writer_order_proof::execution_order_closed;
+    scene.draw_recurrence=
+        bloom_draw_recurrence_proof::target_write_recurrence_closed;
+    scene.fx_sfx_recurrence=
+        bloom_fx_sfx_recurrence_proof::target_write_recurrence_closed;
+    scene.fx_material_route=
+        bloom_fx_material_route_proof::collector_material_binding_closed;
+    scene.fx_blend_semantics=
+        bloom_fx_blend_semantics_proof::render_state_tuple_closed;
+    CHECK(validate_bloom_scene_bridge_carrier(scene)==
+          bloom_scene_bridge_result::fx_identity_transport_not_closed);
+
+    scene.fx_identity_transport=
+        bloom_fx_identity_transport_proof::collector_draw_token_closed;
+    scene.fx_identity_join=
+        bloom_fx_identity_join_proof::same_collector_draw_closed;
+    CHECK(validate_bloom_scene_bridge_carrier(scene)==
           bloom_scene_bridge_result::blend_history_not_closed);
+
     scene.history_proof=bloom_scene_history_proof::blend_history_closed;
     scene.capture_placement=
         bloom_scene_capture_placement::late_fullscreen_after_dsr_accumulation;
+    scene.strategy=
+        bloom_scene_construction_strategy::late_fullscreen_reconstruction;
     CHECK(validate_bloom_scene_bridge_carrier(scene)==
           bloom_scene_bridge_result::late_fullscreen_history_loss);
+
     scene.capture_placement=
         bloom_scene_capture_placement::history_preserving_pre_loss;
+    scene.strategy=
+        bloom_scene_construction_strategy::history_preserving_sidecar;
     CHECK(validate_bloom_scene_bridge_carrier(scene)==
           bloom_scene_bridge_result::exact_construction);
 
