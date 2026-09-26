@@ -915,6 +915,7 @@ prepare_draw_requests(
     const operators::material_response::
         mtd_semantic_query &query,
     bool full_material_response_ready,
+    bool spec_rgb_consumer_ready,
     prepared_material_resource_draw &prepared) noexcept
 {
     prepared = {};
@@ -942,6 +943,7 @@ prepare_draw_requests(
         query.material.owner_tuple_exact;
 
     if (full_material_response_ready &&
+        spec_rgb_consumer_ready &&
         core_.features().enabled(
             core::operator_id::spec_rgb) &&
         receiver_id >= 24u &&
@@ -978,7 +980,7 @@ prepare_draw_requests(
         context_spec.ptde_sidecar_ready =
             replacement != nullptr;
         context_spec.native_t10_transport_ready =
-            true;
+            spec_rgb_consumer_ready;
         context_spec.stock_t1_preserved =
             true;
 
