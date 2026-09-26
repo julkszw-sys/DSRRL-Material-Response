@@ -100,6 +100,7 @@ add_library(dsrrl_renderer_core STATIC
     src/operators/point_light/legacy_specular.cpp
     src/operators/point_light/local_specular_receiver_registry.cpp
     src/operators/point_light/local_specular_microfacet_windows.cpp
+    src/operators/point_light/fixed_local_specular_patch_plan.cpp
     src/operators/surface/diffuse_material_domain.cpp
     src/operators/surface/fixed_postfog_identity.cpp
     src/operators/lightbank/upper_lower.cpp
@@ -178,6 +179,11 @@ add_executable(dsrrl_renderer_local_specular_window_tests
 target_link_libraries(dsrrl_renderer_local_specular_window_tests PRIVATE dsrrl_renderer_core)
 target_compile_features(dsrrl_renderer_local_specular_window_tests PRIVATE cxx_std_17)
 
+add_executable(dsrrl_renderer_fixed_local_specular_plan_tests
+    tests/fixed_local_specular_patch_plan_tests.cpp)
+target_link_libraries(dsrrl_renderer_fixed_local_specular_plan_tests PRIVATE dsrrl_renderer_core)
+target_compile_features(dsrrl_renderer_fixed_local_specular_plan_tests PRIVATE cxx_std_17)
+
 add_executable(dsrrl_renderer_postprocess_unblock_tests
     tests/postprocess_unblock_tests.cpp)
 target_link_libraries(dsrrl_renderer_postprocess_unblock_tests PRIVATE dsrrl_renderer_core)
@@ -201,6 +207,7 @@ if(MSVC)
     target_compile_options(dsrrl_renderer_faceeye_pointlight_tests PRIVATE /W4 /WX)
     target_compile_options(dsrrl_renderer_local_specular_receiver_tests PRIVATE /W4 /WX)
     target_compile_options(dsrrl_renderer_local_specular_window_tests PRIVATE /W4 /WX)
+    target_compile_options(dsrrl_renderer_fixed_local_specular_plan_tests PRIVATE /W4 /WX)
     target_compile_options(dsrrl_renderer_postprocess_unblock_tests PRIVATE /W4 /WX)
     target_compile_options(dsrrl_renderer_build151_nospc_tests PRIVATE /W4 /WX)
     target_compile_options(dsrrl_renderer_mtd_semantic_census_tests PRIVATE /W4 /WX)
@@ -214,6 +221,7 @@ else()
     target_compile_options(dsrrl_renderer_faceeye_pointlight_tests PRIVATE -Wall -Wextra -Wpedantic -Werror)
     target_compile_options(dsrrl_renderer_local_specular_receiver_tests PRIVATE -Wall -Wextra -Wpedantic -Werror)
     target_compile_options(dsrrl_renderer_local_specular_window_tests PRIVATE -Wall -Wextra -Wpedantic -Werror)
+    target_compile_options(dsrrl_renderer_fixed_local_specular_plan_tests PRIVATE -Wall -Wextra -Wpedantic -Werror)
     target_compile_options(dsrrl_renderer_postprocess_unblock_tests PRIVATE -Wall -Wextra -Wpedantic -Werror)
     target_compile_options(dsrrl_renderer_build151_nospc_tests PRIVATE -Wall -Wextra -Wpedantic -Werror)
     target_compile_options(dsrrl_renderer_mtd_semantic_census_tests PRIVATE -Wall -Wextra -Wpedantic -Werror)
@@ -258,6 +266,7 @@ add_test(NAME dsrrl_renderer_future_runtime_tests COMMAND dsrrl_renderer_future_
 add_test(NAME dsrrl_renderer_faceeye_pointlight_tests COMMAND dsrrl_renderer_faceeye_pointlight_tests)
 add_test(NAME dsrrl_renderer_local_specular_receiver_tests COMMAND dsrrl_renderer_local_specular_receiver_tests)
 add_test(NAME dsrrl_renderer_local_specular_window_tests COMMAND dsrrl_renderer_local_specular_window_tests)
+add_test(NAME dsrrl_renderer_fixed_local_specular_plan_tests COMMAND dsrrl_renderer_fixed_local_specular_plan_tests)
 add_test(NAME dsrrl_renderer_postprocess_unblock_tests COMMAND dsrrl_renderer_postprocess_unblock_tests)
 add_test(NAME dsrrl_renderer_build151_nospc_tests COMMAND dsrrl_renderer_build151_nospc_tests)
 add_test(NAME dsrrl_renderer_mtd_semantic_census_tests COMMAND dsrrl_renderer_mtd_semantic_census_tests)
