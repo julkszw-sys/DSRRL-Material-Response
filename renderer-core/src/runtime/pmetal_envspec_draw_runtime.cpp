@@ -302,6 +302,7 @@ register_lerp_replacement(
         outcome.pair_index + 24u !=
             outcome.semantic_receiver_id ||
         !outcome.envdiffuse_preserved ||
+        !outcome.upper_lower_composed ||
         !outcome.terminal_sat_rgb_composed ||
         !outcome.spec_rgb_consumer ||
         dxbc == nullptr ||
@@ -386,6 +387,8 @@ bool pmetal_envspec_draw_runtime::prepare(
              core::operator_id::diffuse_material_domain) ||
          !core_.features().enabled(
              core::operator_id::spec_rgb) ||
+         !core_.features().enabled(
+             core::operator_id::upper_lower) ||
          !core_.features().enabled(
              core::operator_id::terminal_sat_rgb))) {
         ++semantic_rejects_;
@@ -532,7 +535,22 @@ bool pmetal_envspec_draw_runtime::prepare(
 
     if (family ==
             pmetal_envspec_receiver_family::
-                stable_hemenv &&
+                hemenvlerp) {
+        // Exact Lerp materialization already owns the verified b0[7]/b0[8]
+        // -> b13[6]/b13[7] consumer remap. The matching PTDE carrier is
+        // therefore mandatory; missing producer state fails open to stock.
+        if (!lightbank_.
+                prepare_upper_lower_carrier(
+                    context,
+                    prepared.upper_lower)) {
+            if (lerp_shader != nullptr)
+                lerp_shader->Release();
+            ++upper_lower_fallback_;
+            return false;
+        }
+        use_upper_lower = true;
+        ++upper_lower_ready_;
+    } else if (
         upper_lower_receiver_verified &&
         pair.upper_lower != nullptr &&
         lightbank_.
@@ -541,10 +559,7 @@ bool pmetal_envspec_draw_runtime::prepare(
                 prepared.upper_lower)) {
         use_upper_lower = true;
         ++upper_lower_ready_;
-    } else if (
-        family ==
-            pmetal_envspec_receiver_family::
-                stable_hemenv) {
+    } else {
         ++upper_lower_fallback_;
     }
 
