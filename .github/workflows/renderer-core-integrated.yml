@@ -19,6 +19,8 @@ on:
       - "renderer-core/data/provenance/spec_routes_v12.tsv"
       - "renderer-core/data/provenance/diffuse_routes_v12.tsv"
       - "renderer-core/data/provenance/normal_routes_v12.tsv"
+      - "renderer-core/data/provenance/bloom_fx_draw_transport_re_v1.json"
+      - "renderer-core/data/provenance/bloom_waterwave_dsr_mtd_uniqueness_v1.json"
       - "renderer-core/tools/generate_hemdir3_receiver_registry_v1.py"
       - "renderer-core/data/provenance/hemdir3_receivers_v1.tsv"
       - "renderer-core/data/provenance/hemdir3_b13_patch_sites_v1.tsv"
@@ -39,6 +41,8 @@ on:
       - "renderer-core/src/runtime/**"
       - "renderer-core/include/dsrrl/operators/**"
       - "renderer-core/src/operators/**"
+      - "renderer-core/data/provenance/bloom_fx_draw_transport_re_v1.json"
+      - "renderer-core/data/provenance/bloom_waterwave_dsr_mtd_uniqueness_v1.json"
       - ".github/workflows/renderer-core-integrated.yml"
 
 permissions:
@@ -131,6 +135,11 @@ jobs:
           $envspecRuntime = Get-Content renderer-core/src/runtime/pmetal_envspec_draw_runtime.cpp -Raw
           $pmetalGenerator = Get-Content renderer-core/tools/generate_pmetal_env_source_authority.py -Raw
           $textureTransport = Get-Content renderer-core/src/runtime/texture_identity_transport.cpp -Raw
+          $bloomFx = Get-Content renderer-core/src/runtime/bloom_fx_draw_transport.cpp -Raw
+          $bloomFxHeader = Get-Content renderer-core/include/dsrrl/runtime/bloom_fx_draw_transport.hpp -Raw
+          $bloomSidecar = Get-Content renderer-core/src/runtime/bloom_scene_sidecar_runtime.cpp -Raw
+          $bloomSidecarHeader = Get-Content renderer-core/include/dsrrl/runtime/bloom_scene_sidecar_runtime.hpp -Raw
+          $waterwaveIdentity = Get-Content renderer-core/include/dsrrl/operators/postprocess/waterwave_authored_identity.hpp -Raw
           $subsurface = Get-Content renderer-core/src/runtime/subsurface_draw_runtime.cpp -Raw
           $subsurfaceRegistry = Get-Content renderer-core/src/runtime/subsurface_pipeline_registry.cpp -Raw
           $upperLower = Get-Content renderer-core/src/runtime/upper_lower_draw_runtime.cpp -Raw
@@ -357,6 +366,52 @@ jobs:
             'snapshot'
           )) {
             if ($textureTransport -notmatch [regex]::Escape($required)) { throw "Exact texture identity transport invariant missing: $required" }
+          }
+
+          foreach ($required in @(
+            'k_particle_draw_rva',
+            'k_cluster_draw_rva',
+            'join_particle_model',
+            'attach_backend_semantic',
+            'waterwave_semantic_model_candidate',
+            'publish_waterwave_model_identity'
+          )) {
+            if (($bloomFx + $bloomFxHeader) -notmatch [regex]::Escape($required)) { throw "Bloom FX diagnostic transport invariant missing: $required" }
+          }
+
+          foreach ($required in @(
+            'validate_waterwave_draw_authority',
+            'authored_identity_not_exact',
+            'is_waterwave_semantic_model_diagnostic_candidate'
+          )) {
+            if ($bloomFxHeader -notmatch [regex]::Escape($required)) { throw "Bloom WaterWave fail-open authority boundary missing: $required" }
+          }
+
+          foreach ($required in @(
+            'validate_bloom_scene_bridge_carrier',
+            'history_preserving_sidecar',
+            'proof_authorized',
+            'contents_valid'
+          )) {
+            if (($bloomSidecar + $bloomSidecarHeader) -notmatch [regex]::Escape($required)) { throw "Bloom Q8 sidecar fail-open lifecycle invariant missing: $required" }
+          }
+
+          foreach ($required in @(
+            'waterwave_dsr_authored_semantic_is_source_complete_unique',
+            'k_waterwave_dsr_source_complete_mtd_count',
+            'k_waterwave_dsr_spx_occurrences'
+          )) {
+            if ($waterwaveIdentity -notmatch [regex]::Escape($required)) { throw "WaterWave source-complete semantic authority invariant missing: $required" }
+          }
+
+          if ($entry -notmatch 'BLOOM_FX' -or
+              $entry -notmatch 'ww_diag_join' -or
+              $entry -notmatch 'Bloom FX draw transport FAIL-OPEN') {
+            throw "Integrated Bloom FX diagnostic telemetry is not armed"
+          }
+
+          if ($bloomFx -match 'waterwave_semantic_model_candidate.*waterwave_identity_exact\s*=\s*true') {
+            throw "Bloom diagnostic candidate must never self-publish exact authored identity"
           }
 
           foreach ($required in @(
@@ -682,6 +737,13 @@ jobs:
           $drawPolicyHash = (Get-FileHash "renderer-core/include/dsrrl/core/draw_transaction_policy.hpp" -Algorithm SHA256).Hash.ToLowerInvariant()
           $textureTransportHash = (Get-FileHash "renderer-core/src/runtime/texture_identity_transport.cpp" -Algorithm SHA256).Hash.ToLowerInvariant()
           $textureDetourHash = (Get-FileHash "renderer-core/integrated/texture_identity_detour.asm" -Algorithm SHA256).Hash.ToLowerInvariant()
+          $bloomFxHash = (Get-FileHash "renderer-core/src/runtime/bloom_fx_draw_transport.cpp" -Algorithm SHA256).Hash.ToLowerInvariant()
+          $bloomFxHeaderHash = (Get-FileHash "renderer-core/include/dsrrl/runtime/bloom_fx_draw_transport.hpp" -Algorithm SHA256).Hash.ToLowerInvariant()
+          $bloomSidecarHash = (Get-FileHash "renderer-core/src/runtime/bloom_scene_sidecar_runtime.cpp" -Algorithm SHA256).Hash.ToLowerInvariant()
+          $bloomSidecarHeaderHash = (Get-FileHash "renderer-core/include/dsrrl/runtime/bloom_scene_sidecar_runtime.hpp" -Algorithm SHA256).Hash.ToLowerInvariant()
+          $bloomFxProvenanceHash = (Get-FileHash "renderer-core/data/provenance/bloom_fx_draw_transport_re_v1.json" -Algorithm SHA256).Hash.ToLowerInvariant()
+          $bloomWaterwaveUniquenessHash = (Get-FileHash "renderer-core/data/provenance/bloom_waterwave_dsr_mtd_uniqueness_v1.json" -Algorithm SHA256).Hash.ToLowerInvariant()
+          $bloomWaterwaveIdentityHash = (Get-FileHash "renderer-core/include/dsrrl/operators/postprocess/waterwave_authored_identity.hpp" -Algorithm SHA256).Hash.ToLowerInvariant()
           $resourceRuntimeHash = (Get-FileHash "renderer-core/src/runtime/material_resource_draw_runtime.cpp" -Algorithm SHA256).Hash.ToLowerInvariant()
           $specConsumerHash = (Get-FileHash "renderer-core/src/operators/resource_bridges/spec_rgb_consumer_materializer.cpp" -Algorithm SHA256).Hash.ToLowerInvariant()
           $envspecMaterializerHash = (Get-FileHash "renderer-core/src/operators/env_spec/pmetal_rgba_materializer.cpp" -Algorithm SHA256).Hash.ToLowerInvariant()
@@ -767,6 +829,17 @@ jobs:
             shared_draw_executor_surface = "PS_CB_SRV_SAMPLER"
             texture_identity_transport_sha256 = $textureTransportHash
             texture_identity_detour_sha256 = $textureDetourHash
+            bloom_fx_draw_transport_sha256 = $bloomFxHash
+            bloom_fx_draw_transport_header_sha256 = $bloomFxHeaderHash
+            bloom_scene_sidecar_runtime_sha256 = $bloomSidecarHash
+            bloom_scene_sidecar_runtime_header_sha256 = $bloomSidecarHeaderHash
+            bloom_fx_re_provenance_sha256 = $bloomFxProvenanceHash
+            bloom_waterwave_dsr_uniqueness_provenance_sha256 = $bloomWaterwaveUniquenessHash
+            bloom_waterwave_authored_identity_sha256 = $bloomWaterwaveIdentityHash
+            bloom_fx_diagnostic = "SAME_INSTANCE_MODEL_PLUS_BACKEND_SEMANTIC_CANDIDATE_TELEMETRY"
+            bloom_fx_q8_writer_authority = "FAIL_OPEN_NOT_AUTHORIZED"
+            bloom_q8_sidecar = "RESOURCE_LIFECYCLE_CONSTRUCTION_INTEGRATED_WRITES_NOT_AUTHORIZED"
+            bloom_hdr_pixel_behavior = "OPEN"
             material_resource_draw_runtime_sha256 = $resourceRuntimeHash
             spec_rgb_consumer_materializer_sha256 = $specConsumerHash
             pmetal_envspec_materializer_sha256 = $envspecMaterializerHash
