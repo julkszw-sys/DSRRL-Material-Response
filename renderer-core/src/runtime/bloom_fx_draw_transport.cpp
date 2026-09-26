@@ -34,6 +34,8 @@ constexpr std::uintptr_t k_particle_state_vtable_rva = 0x015F8B18u;
 constexpr std::uintptr_t k_cluster_state_vtable_rva = 0x015F8B98u;
 constexpr std::uintptr_t k_particle_model_ctor_rva = 0x004FE7B0u;
 constexpr std::uintptr_t k_particle_model_dtor_rva = 0x004FED90u;
+constexpr std::uintptr_t k_particle_state_update_rva = 0x0118CCF0u;
+constexpr std::uintptr_t k_semantic_index_getter_rva = 0x001BBC00u;
 
 // Relocation-free prefix shared by both index-10 draw callbacks:
 //   sub rsp,58h
@@ -62,6 +64,21 @@ constexpr std::array<std::uint8_t,15> k_particle_model_dtor_prefix = {
     0x48,0x8B,0xF9
 };
 
+constexpr std::array<std::uint8_t,16> k_particle_state_update_prefix = {
+    0x48,0x8B,0xC4,
+    0x55,
+    0x57,
+    0x48,0x81,0xEC,0xD8,0x00,0x00,0x00,
+    0x48,0x89,0x70,0x18
+};
+
+constexpr std::array<std::uint8_t,18> k_semantic_index_getter_bytes = {
+    0x48,0x8B,0x05,0x69,0xF3,0xAA,0x01,
+    0x48,0x63,0xD1,
+    0x8B,0x84,0x90,0x98,0x38,0x00,0x00,
+    0xC3
+};
+
 struct hook {
     void *target = nullptr;
     void *trampoline = nullptr;
@@ -77,6 +94,10 @@ using particle_model_ctor_fn =
     void *(__fastcall *)(void *, void *, void *, void *, void *);
 using particle_model_dtor_fn =
     void *(__fastcall *)(void *, std::uint32_t);
+using particle_state_update_fn =
+    bool (__fastcall *)(void *, void *, void *);
+using semantic_index_getter_fn =
+    std::uint32_t (__fastcall *)(std::uint32_t);
 
 struct particle_model_record {
     void *arg2 = nullptr;
@@ -88,6 +109,14 @@ struct particle_model_record {
     bool waterwave_identity_exact = false;
 };
 
+struct backend_semantic_record {
+    std::uint32_t backend_key = 0u;
+    std::uint32_t waterwave_runtime_index = 0u;
+    std::uint64_t generation = 0u;
+    bool key_observed = false;
+    bool matches_waterwave = false;
+};
+
 struct tls_state {
     fx_draw_snapshot snapshot{};
 };
@@ -97,15 +126,21 @@ hook g_particle{};
 hook g_cluster{};
 hook g_particle_model_ctor{};
 hook g_particle_model_dtor{};
+hook g_particle_state_update{};
 draw_fn g_particle_original = nullptr;
 draw_fn g_cluster_original = nullptr;
 particle_model_ctor_fn g_particle_model_ctor_original = nullptr;
 particle_model_dtor_fn g_particle_model_dtor_original = nullptr;
+particle_state_update_fn g_particle_state_update_original = nullptr;
+semantic_index_getter_fn g_semantic_index_getter = nullptr;
 telemetry g_state{};
 thread_local tls_state g_tls{};
 std::mutex g_model_mutex;
 std::unordered_map<std::uintptr_t,particle_model_record> g_particle_models;
+std::unordered_map<std::uintptr_t,backend_semantic_record>
+    g_backend_semantics;
 constexpr std::size_t k_particle_model_registry_cap = 4096u;
+constexpr std::size_t k_backend_semantic_registry_cap = 4096u;
 
 std::atomic<std::uint64_t> g_particle_events{0};
 std::atomic<std::uint64_t> g_cluster_events{0};
@@ -124,6 +159,13 @@ std::atomic<std::uint64_t> g_particle_model_join_misses{0};
 std::atomic<std::uint64_t> g_particle_model_owner_join_hits{0};
 std::atomic<std::uint64_t> g_particle_model_source_primary_join_hits{0};
 std::atomic<std::uint64_t> g_particle_model_source_secondary_join_hits{0};
+std::atomic<std::uint64_t> g_particle_state_update_events{0};
+std::atomic<std::uint64_t> g_backend_key_reads{0};
+std::atomic<std::uint64_t> g_backend_key_read_failures{0};
+std::atomic<std::uint64_t> g_waterwave_runtime_index_reads{0};
+std::atomic<std::uint64_t> g_backend_key_waterwave_matches{0};
+std::atomic<std::uint64_t> g_backend_semantic_snapshot_hits{0};
+std::atomic<std::uint64_t> g_backend_semantic_snapshot_misses{0};
 std::atomic<std::uint64_t> g_waterwave_publish_ok{0};
 std::atomic<std::uint64_t> g_waterwave_publish_fail{0};
 std::atomic<std::uint64_t> g_waterwave_same_instance_hits{0};
@@ -556,6 +598,125 @@ void * __fastcall particle_model_dtor_entry(
     return self;
 }
 
+bool read_semantic_index_getter() noexcept
+{
+    if (g_base == 0u)
+        return false;
+
+    const auto *bytes =
+        reinterpret_cast<const std::uint8_t *>(
+            g_base + k_semantic_index_getter_rva);
+
+    if (!readable_range(
+            bytes,
+            k_semantic_index_getter_bytes.size()) ||
+        std::memcmp(
+            bytes,
+            k_semantic_index_getter_bytes.data(),
+            k_semantic_index_getter_bytes.size()) != 0)
+        return false;
+
+    g_semantic_index_getter =
+        reinterpret_cast<semantic_index_getter_fn>(
+            const_cast<std::uint8_t *>(bytes));
+    return true;
+}
+
+bool __fastcall particle_state_update_entry(
+    void *appearance,
+    void *key_object,
+    void *context) noexcept
+{
+    ++g_particle_state_update_events;
+
+    backend_semantic_record record{};
+    record.generation =
+        g_generation.fetch_add(1u) + 1u;
+
+    if (appearance != nullptr &&
+        readable_range(key_object,sizeof(std::uint32_t))) {
+        std::memcpy(
+            &record.backend_key,
+            key_object,
+            sizeof(record.backend_key));
+        record.key_observed = true;
+        ++g_backend_key_reads;
+
+        if (g_semantic_index_getter != nullptr) {
+            record.waterwave_runtime_index =
+                g_semantic_index_getter(
+                    pp::k_waterwave_spx_semantic_id);
+            ++g_waterwave_runtime_index_reads;
+
+            record.matches_waterwave =
+                record.waterwave_runtime_index != 0u &&
+                record.backend_key ==
+                    record.waterwave_runtime_index;
+
+            if (record.matches_waterwave)
+                ++g_backend_key_waterwave_matches;
+        }
+
+        std::lock_guard<std::mutex> lock(g_model_mutex);
+
+        if (g_backend_semantics.size() >=
+                k_backend_semantic_registry_cap &&
+            g_backend_semantics.find(
+                reinterpret_cast<std::uintptr_t>(
+                    appearance)) ==
+                g_backend_semantics.end()) {
+            g_backend_semantics.clear();
+        }
+
+        g_backend_semantics[
+            reinterpret_cast<std::uintptr_t>(
+                appearance)] = record;
+    } else {
+        ++g_backend_key_read_failures;
+    }
+
+    if (g_particle_state_update_original != nullptr) {
+        return g_particle_state_update_original(
+            appearance,
+            key_object,
+            context);
+    }
+
+    return false;
+}
+
+void attach_backend_semantic(
+    fx_draw_snapshot &snap) noexcept
+{
+    if (snap.kind != fx_draw_entity_kind::particle ||
+        snap.appearance_state == nullptr)
+        return;
+
+    std::lock_guard<std::mutex> lock(g_model_mutex);
+
+    const auto found =
+        g_backend_semantics.find(
+            reinterpret_cast<std::uintptr_t>(
+                snap.appearance_state));
+
+    if (found == g_backend_semantics.end()) {
+        ++g_backend_semantic_snapshot_misses;
+        return;
+    }
+
+    snap.backend_semantic_generation =
+        found->second.generation;
+    snap.appearance_backend_key =
+        found->second.backend_key;
+    snap.waterwave_runtime_semantic_index =
+        found->second.waterwave_runtime_index;
+    snap.appearance_backend_key_observed =
+        found->second.key_observed;
+    snap.backend_key_matches_waterwave_runtime_index =
+        found->second.matches_waterwave;
+    ++g_backend_semantic_snapshot_hits;
+}
+
 void observe(
     fx_draw_entity_kind kind,
     void *entity,
@@ -708,6 +869,7 @@ void observe(
         ++g_source_links_missing;
 
     (void)join_particle_model(snap);
+    attach_backend_semantic(snap);
 
     snap.ready =
         snap.exact_entity_vtable &&
@@ -769,7 +931,8 @@ bool install() noexcept
     if (g_particle.patched ||
         g_cluster.patched ||
         g_particle_model_ctor.patched ||
-        g_particle_model_dtor.patched)
+        g_particle_model_dtor.patched ||
+        g_particle_state_update.patched)
         return false;
 
     g_state = {};
@@ -792,6 +955,11 @@ bool install() noexcept
 
     g_state.provenance_ok = true;
 
+    if (!read_semantic_index_getter())
+        goto fail;
+
+    g_state.semantic_index_getter_attested = true;
+
     if (!prepare_hook(
             g_particle_model_ctor,
             k_particle_model_ctor_rva,
@@ -804,6 +972,12 @@ bool install() noexcept
             k_particle_model_dtor_prefix,
             reinterpret_cast<void *>(
                 &particle_model_dtor_entry)) ||
+        !prepare_hook(
+            g_particle_state_update,
+            k_particle_state_update_rva,
+            k_particle_state_update_prefix,
+            reinterpret_cast<void *>(
+                &particle_state_update_entry)) ||
         !prepare_hook(
             g_particle,
             k_particle_draw_rva,
@@ -824,6 +998,9 @@ bool install() noexcept
     g_particle_model_dtor_original =
         reinterpret_cast<particle_model_dtor_fn>(
             g_particle_model_dtor.trampoline);
+    g_particle_state_update_original =
+        reinterpret_cast<particle_state_update_fn>(
+            g_particle_state_update.trampoline);
     g_particle_original =
         reinterpret_cast<draw_fn>(
             g_particle.trampoline);
@@ -833,6 +1010,7 @@ bool install() noexcept
 
     if (!arm_hook(g_particle_model_dtor) ||
         !arm_hook(g_particle_model_ctor) ||
+        !arm_hook(g_particle_state_update) ||
         !arm_hook(g_cluster) ||
         !arm_hook(g_particle))
         goto fail;
@@ -841,6 +1019,7 @@ bool install() noexcept
     g_state.cluster_hook_armed = true;
     g_state.particle_model_ctor_hook_armed = true;
     g_state.particle_model_dtor_hook_armed = true;
+    g_state.particle_state_update_hook_armed = true;
     return true;
 
 fail:
@@ -858,11 +1037,14 @@ void uninstall() noexcept
         restore_hook(g_particle_model_ctor);
     const bool model_dtor_ok =
         restore_hook(g_particle_model_dtor);
+    const bool state_update_ok =
+        restore_hook(g_particle_state_update);
 
     if (!particle_ok ||
         !cluster_ok ||
         !model_ctor_ok ||
-        !model_dtor_ok) {
+        !model_dtor_ok ||
+        !state_update_ok) {
         g_state.restore_failed = true;
         g_state.quarantined = true;
         g_state.particle_hook_armed =
@@ -873,6 +1055,8 @@ void uninstall() noexcept
             g_particle_model_ctor.patched;
         g_state.particle_model_dtor_hook_armed =
             g_particle_model_dtor.patched;
+        g_state.particle_state_update_hook_armed =
+            g_particle_state_update.patched;
         return;
     }
 
@@ -880,9 +1064,12 @@ void uninstall() noexcept
     g_cluster_original = nullptr;
     g_particle_model_ctor_original = nullptr;
     g_particle_model_dtor_original = nullptr;
+    g_particle_state_update_original = nullptr;
+    g_semantic_index_getter = nullptr;
     {
         std::lock_guard<std::mutex> lock(g_model_mutex);
         g_particle_models.clear();
+        g_backend_semantics.clear();
     }
     g_base = 0u;
     g_tls = {};
@@ -979,6 +1166,20 @@ telemetry status() noexcept
         g_particle_model_source_primary_join_hits.load();
     out.particle_model_source_secondary_join_hits =
         g_particle_model_source_secondary_join_hits.load();
+    out.particle_state_update_events =
+        g_particle_state_update_events.load();
+    out.backend_key_reads =
+        g_backend_key_reads.load();
+    out.backend_key_read_failures =
+        g_backend_key_read_failures.load();
+    out.waterwave_runtime_index_reads =
+        g_waterwave_runtime_index_reads.load();
+    out.backend_key_waterwave_matches =
+        g_backend_key_waterwave_matches.load();
+    out.backend_semantic_snapshot_hits =
+        g_backend_semantic_snapshot_hits.load();
+    out.backend_semantic_snapshot_misses =
+        g_backend_semantic_snapshot_misses.load();
     out.waterwave_publish_ok =
         g_waterwave_publish_ok.load();
     out.waterwave_publish_fail =
@@ -1017,12 +1218,23 @@ void reset_stats() noexcept
     g_particle_model_owner_join_hits.store(0u);
     g_particle_model_source_primary_join_hits.store(0u);
     g_particle_model_source_secondary_join_hits.store(0u);
+    g_particle_state_update_events.store(0u);
+    g_backend_key_reads.store(0u);
+    g_backend_key_read_failures.store(0u);
+    g_waterwave_runtime_index_reads.store(0u);
+    g_backend_key_waterwave_matches.store(0u);
+    g_backend_semantic_snapshot_hits.store(0u);
+    g_backend_semantic_snapshot_misses.store(0u);
     g_waterwave_publish_ok.store(0u);
     g_waterwave_publish_fail.store(0u);
     g_waterwave_same_instance_hits.store(0u);
     g_snapshot_hits.store(0u);
     g_snapshot_misses.store(0u);
     g_generation.store(0u);
+    {
+        std::lock_guard<std::mutex> lock(g_model_mutex);
+        g_backend_semantics.clear();
+    }
     g_tls = {};
 }
 
