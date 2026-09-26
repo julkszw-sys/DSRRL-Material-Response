@@ -560,8 +560,11 @@ void log_state(const char *tag) noexcept
         g_envspec_resources.telemetry();
     const auto env_draw =
         g_pmetal_envspec.telemetry();
+    const auto env_lerp =
+        dsrrl::runtime::
+            hemenvlerp_receiver_pipeline_stats();
 
-    char env_line[960]{};
+    char env_line[1280]{};
     std::snprintf(
         env_line,
         sizeof(env_line),
@@ -569,7 +572,8 @@ void log_state(const char *tag) noexcept
         "ps_mat=%llu/%llu src_steady=%llu src_blend=%llu src_miss=%llu src_hook=%u "
         "native=%llu/%llu hash_miss=%llu views=%llu pack=%llu/%llu pack_ready=%u sampler=%u "
         "cube=%llu/%llu prepare=%llu/%llu candidate=%llu material_reject=%llu semantic_reject=%llu "
-        "source_reject=%llu probe_reject=%llu spec_reject=%llu ul=%llu/%llu req=%llu q=%u",
+        "source_reject=%llu blend_hold=%llu probe_reject=%llu spec_reject=%llu ul=%llu/%llu req=%llu q=%u "
+        "lerp_reg=%llu/%llu lerp_candidate=%llu lerp_req=%llu lerp_pipe=%llu/%llu bind=%llu/%llu miss=%llu conflict=%llu",
         tag,
         static_cast<unsigned long long>(
             g_envspec_payload_materialize_ok.load()),
@@ -613,6 +617,8 @@ void log_state(const char *tag) noexcept
         static_cast<unsigned long long>(
             env_draw.source_rejects),
         static_cast<unsigned long long>(
+            env_draw.blended_receiver_hold),
+        static_cast<unsigned long long>(
             env_draw.probe_rejects),
         static_cast<unsigned long long>(
             env_draw.spec_rgb_rejects),
@@ -622,7 +628,27 @@ void log_state(const char *tag) noexcept
             env_draw.upper_lower_fallback),
         static_cast<unsigned long long>(
             env_draw.requests),
-        env_draw.quarantined ? 1u : 0u);
+        env_draw.quarantined ? 1u : 0u,
+        static_cast<unsigned long long>(
+            env_draw.lerp_replacement_register_ok),
+        static_cast<unsigned long long>(
+            env_draw.lerp_replacement_register_fail),
+        static_cast<unsigned long long>(
+            env_draw.lerp_candidates),
+        static_cast<unsigned long long>(
+            env_draw.lerp_requests),
+        static_cast<unsigned long long>(
+            env_lerp.exact_hits),
+        static_cast<unsigned long long>(
+            env_lerp.hash_misses),
+        static_cast<unsigned long long>(
+            env_lerp.exact_binds),
+        static_cast<unsigned long long>(
+            env_lerp.unknown_binds),
+        static_cast<unsigned long long>(
+            env_lerp.lookup_misses),
+        static_cast<unsigned long long>(
+            env_lerp.handle_conflicts));
 
     reshade::log::message(
         reshade::log::level::info,
