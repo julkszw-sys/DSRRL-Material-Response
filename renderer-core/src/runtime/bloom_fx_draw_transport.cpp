@@ -17,6 +17,8 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <mutex>
+#include <unordered_map>
 
 namespace dsrrl::runtime::bloom_fx_draw_transport {
 namespace {
@@ -28,6 +30,7 @@ constexpr std::uintptr_t k_particle_vtable_rva = 0x0151C930u;
 constexpr std::uintptr_t k_cluster_vtable_rva = 0x0151CBF8u;
 constexpr std::uintptr_t k_particle_state_vtable_rva = 0x015F8B18u;
 constexpr std::uintptr_t k_cluster_state_vtable_rva = 0x015F8B98u;
+constexpr std::uintptr_t k_particle_model_ctor_rva = 0x004FE7B0u;
 
 // Relocation-free prefix shared by both index-10 draw callbacks:
 //   sub rsp,58h
@@ -37,6 +40,15 @@ constexpr std::array<std::uint8_t,17> k_draw_prefix = {
     0x48,0x83,0xEC,0x58,
     0x48,0xC7,0x44,0x24,0x20,0xFE,0xFF,0xFF,0xFF,
     0x48,0x8B,0x41,0x30
+};
+
+constexpr std::array<std::uint8_t,22> k_particle_model_ctor_prefix = {
+    0x48,0x89,0x4C,0x24,0x08,
+    0x56,
+    0x57,
+    0x41,0x56,
+    0x48,0x83,0xEC,0x30,
+    0x48,0xC7,0x44,0x24,0x20,0xFE,0xFF,0xFF,0xFF
 };
 
 struct hook {
@@ -50,6 +62,16 @@ struct hook {
 
 using draw_fn =
     void (__fastcall *)(void *, void *, std::uint64_t);
+using particle_model_ctor_fn =
+    void *(__fastcall *)(void *, void *, void *, void *, void *);
+
+struct particle_model_record {
+    void *arg2 = nullptr;
+    void *arg3 = nullptr;
+    void *arg4 = nullptr;
+    void *arg5 = nullptr;
+    std::uint64_t generation = 0;
+};
 
 struct tls_state {
     fx_draw_snapshot snapshot{};
@@ -58,10 +80,15 @@ struct tls_state {
 std::uintptr_t g_base = 0u;
 hook g_particle{};
 hook g_cluster{};
+hook g_particle_model_ctor{};
 draw_fn g_particle_original = nullptr;
 draw_fn g_cluster_original = nullptr;
+particle_model_ctor_fn g_particle_model_ctor_original = nullptr;
 telemetry g_state{};
 thread_local tls_state g_tls{};
+std::mutex g_model_mutex;
+std::unordered_map<std::uintptr_t,particle_model_record> g_particle_models;
+constexpr std::size_t k_particle_model_registry_cap = 4096u;
 
 std::atomic<std::uint64_t> g_particle_events{0};
 std::atomic<std::uint64_t> g_cluster_events{0};
@@ -73,6 +100,9 @@ std::atomic<std::uint64_t> g_exact_state_hits{0};
 std::atomic<std::uint64_t> g_state_vtable_rejects{0};
 std::atomic<std::uint64_t> g_source_links_ready{0};
 std::atomic<std::uint64_t> g_source_links_missing{0};
+std::atomic<std::uint64_t> g_particle_model_ctor_events{0};
+std::atomic<std::uint64_t> g_particle_model_join_hits{0};
+std::atomic<std::uint64_t> g_particle_model_join_misses{0};
 std::atomic<std::uint64_t> g_snapshot_hits{0};
 std::atomic<std::uint64_t> g_snapshot_misses{0};
 std::atomic<std::uint64_t> g_generation{0};
@@ -324,6 +354,118 @@ bool restore_hook(hook &h) noexcept
     return ok;
 }
 
+void register_particle_model(
+    void *instance,
+    void *arg2,
+    void *arg3,
+    void *arg4,
+    void *arg5) noexcept
+{
+    if (instance == nullptr)
+        return;
+
+    ++g_particle_model_ctor_events;
+
+    particle_model_record record{};
+    record.arg2 = arg2;
+    record.arg3 = arg3;
+    record.arg4 = arg4;
+    record.arg5 = arg5;
+    record.generation =
+        g_generation.fetch_add(1u) + 1u;
+
+    std::lock_guard<std::mutex> lock(g_model_mutex);
+
+    if (g_particle_models.size() >=
+            k_particle_model_registry_cap &&
+        g_particle_models.find(
+            reinterpret_cast<std::uintptr_t>(
+                instance)) ==
+            g_particle_models.end()) {
+        g_particle_models.clear();
+    }
+
+    g_particle_models[
+        reinterpret_cast<std::uintptr_t>(
+            instance)] = record;
+}
+
+bool join_particle_model(
+    fx_draw_snapshot &snap) noexcept
+{
+    if (snap.kind !=
+            fx_draw_entity_kind::particle ||
+        !snap.source_links_ready)
+        return false;
+
+    const std::uintptr_t candidates[] = {
+        reinterpret_cast<std::uintptr_t>(
+            snap.appearance_source_primary),
+        reinterpret_cast<std::uintptr_t>(
+            snap.appearance_source_secondary)
+    };
+
+    std::lock_guard<std::mutex> lock(g_model_mutex);
+
+    for (const auto candidate : candidates) {
+        if (candidate == 0u)
+            continue;
+
+        const auto found =
+            g_particle_models.find(candidate);
+        if (found ==
+            g_particle_models.end())
+            continue;
+
+        snap.particle_model_instance =
+            reinterpret_cast<void *>(candidate);
+        snap.particle_model_arg2 =
+            found->second.arg2;
+        snap.particle_model_arg3 =
+            found->second.arg3;
+        snap.particle_model_arg4 =
+            found->second.arg4;
+        snap.particle_model_arg5 =
+            found->second.arg5;
+        snap.particle_model_instance_join = true;
+        ++g_particle_model_join_hits;
+        return true;
+    }
+
+    ++g_particle_model_join_misses;
+    return false;
+}
+
+void * __fastcall particle_model_ctor_entry(
+    void *self,
+    void *arg2,
+    void *arg3,
+    void *arg4,
+    void *arg5) noexcept
+{
+    void *result = nullptr;
+
+    if (g_particle_model_ctor_original != nullptr) {
+        result =
+            g_particle_model_ctor_original(
+                self,
+                arg2,
+                arg3,
+                arg4,
+                arg5);
+    }
+
+    if (result != nullptr)
+        register_particle_model(
+            result,
+            arg2,
+            arg3,
+            arg4,
+            arg5);
+
+    return result;
+}
+
 void observe(
     fx_draw_entity_kind kind,
     void *entity,
@@ -468,6 +610,8 @@ void observe(
     else
         ++g_source_links_missing;
 
+    (void)join_particle_model(snap);
+
     snap.ready =
         snap.exact_entity_vtable &&
         snap.exact_appearance_vtable &&
@@ -519,7 +663,8 @@ void __fastcall cluster_entry(
 bool install() noexcept
 {
     if (g_particle.patched ||
-        g_cluster.patched)
+        g_cluster.patched ||
+        g_particle_model_ctor.patched)
         return false;
 
     g_state = {};
@@ -543,6 +688,12 @@ bool install() noexcept
     g_state.provenance_ok = true;
 
     if (!prepare_hook(
+            g_particle_model_ctor,
+            k_particle_model_ctor_rva,
+            k_particle_model_ctor_prefix,
+            reinterpret_cast<void *>(
+                &particle_model_ctor_entry)) ||
+        !prepare_hook(
             g_particle,
             k_particle_draw_rva,
             k_draw_prefix,
@@ -556,6 +707,9 @@ bool install() noexcept
                 &cluster_entry)))
         goto fail;
 
+    g_particle_model_ctor_original =
+        reinterpret_cast<particle_model_ctor_fn>(
+            g_particle_model_ctor.trampoline);
     g_particle_original =
         reinterpret_cast<draw_fn>(
             g_particle.trampoline);
@@ -563,12 +717,14 @@ bool install() noexcept
         reinterpret_cast<draw_fn>(
             g_cluster.trampoline);
 
-    if (!arm_hook(g_cluster) ||
+    if (!arm_hook(g_particle_model_ctor) ||
+        !arm_hook(g_cluster) ||
         !arm_hook(g_particle))
         goto fail;
 
     g_state.particle_hook_armed = true;
     g_state.cluster_hook_armed = true;
+    g_state.particle_model_ctor_hook_armed = true;
     return true;
 
 fail:
@@ -582,20 +738,30 @@ void uninstall() noexcept
         restore_hook(g_particle);
     const bool cluster_ok =
         restore_hook(g_cluster);
+    const bool model_ctor_ok =
+        restore_hook(g_particle_model_ctor);
 
     if (!particle_ok ||
-        !cluster_ok) {
+        !cluster_ok ||
+        !model_ctor_ok) {
         g_state.restore_failed = true;
         g_state.quarantined = true;
         g_state.particle_hook_armed =
             g_particle.patched;
         g_state.cluster_hook_armed =
             g_cluster.patched;
+        g_state.particle_model_ctor_hook_armed =
+            g_particle_model_ctor.patched;
         return;
     }
 
     g_particle_original = nullptr;
     g_cluster_original = nullptr;
+    g_particle_model_ctor_original = nullptr;
+    {
+        std::lock_guard<std::mutex> lock(g_model_mutex);
+        g_particle_models.clear();
+    }
     g_base = 0u;
     g_tls = {};
     g_state = {};
@@ -645,6 +811,18 @@ telemetry status() noexcept
         g_source_links_ready.load();
     out.source_links_missing =
         g_source_links_missing.load();
+    out.particle_model_ctor_events =
+        g_particle_model_ctor_events.load();
+    out.particle_model_join_hits =
+        g_particle_model_join_hits.load();
+    out.particle_model_join_misses =
+        g_particle_model_join_misses.load();
+    {
+        std::lock_guard<std::mutex> lock(g_model_mutex);
+        out.particle_model_registry_size =
+            static_cast<std::uint64_t>(
+                g_particle_models.size());
+    }
     out.snapshot_hits =
         g_snapshot_hits.load();
     out.snapshot_misses =
@@ -664,6 +842,9 @@ void reset_stats() noexcept
     g_state_vtable_rejects.store(0u);
     g_source_links_ready.store(0u);
     g_source_links_missing.store(0u);
+    g_particle_model_ctor_events.store(0u);
+    g_particle_model_join_hits.store(0u);
+    g_particle_model_join_misses.store(0u);
     g_snapshot_hits.store(0u);
     g_snapshot_misses.store(0u);
     g_generation.store(0u);
