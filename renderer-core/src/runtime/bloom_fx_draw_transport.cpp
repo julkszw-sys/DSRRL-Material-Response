@@ -26,6 +26,8 @@ constexpr std::uintptr_t k_cluster_draw_rva = 0x00FFDCE0u;
 
 constexpr std::uintptr_t k_particle_vtable_rva = 0x0151C930u;
 constexpr std::uintptr_t k_cluster_vtable_rva = 0x0151CBF8u;
+constexpr std::uintptr_t k_particle_state_vtable_rva = 0x015F8B18u;
+constexpr std::uintptr_t k_cluster_state_vtable_rva = 0x015F8B98u;
 
 // Relocation-free prefix shared by both index-10 draw callbacks:
 //   sub rsp,58h
@@ -67,6 +69,10 @@ std::atomic<std::uint64_t> g_exact_entity_hits{0};
 std::atomic<std::uint64_t> g_entity_rejects{0};
 std::atomic<std::uint64_t> g_state_ready_hits{0};
 std::atomic<std::uint64_t> g_state_missing{0};
+std::atomic<std::uint64_t> g_exact_state_hits{0};
+std::atomic<std::uint64_t> g_state_vtable_rejects{0};
+std::atomic<std::uint64_t> g_source_links_ready{0};
+std::atomic<std::uint64_t> g_source_links_missing{0};
 std::atomic<std::uint64_t> g_snapshot_hits{0};
 std::atomic<std::uint64_t> g_snapshot_misses{0};
 std::atomic<std::uint64_t> g_generation{0};
@@ -381,20 +387,92 @@ void observe(
 
     snap.appearance_state =
         appearance_state;
+
+    const std::size_t state_probe_size =
+        kind == fx_draw_entity_kind::particle
+            ? 0x40u
+            : 0x68u;
+
     snap.appearance_state_ready =
         appearance_state != nullptr &&
         readable_range(
             appearance_state,
-            sizeof(void *));
+            state_probe_size);
 
-    if (snap.appearance_state_ready)
-        ++g_state_ready_hits;
-    else
+    if (!snap.appearance_state_ready) {
         ++g_state_missing;
+        g_tls.snapshot = snap;
+        return;
+    }
+
+    ++g_state_ready_hits;
+
+    std::uintptr_t state_vtable = 0u;
+    std::memcpy(
+        &state_vtable,
+        appearance_state,
+        sizeof(state_vtable));
+
+    const std::uintptr_t expected_state_vtable =
+        g_base +
+        (kind == fx_draw_entity_kind::particle
+            ? k_particle_state_vtable_rva
+            : k_cluster_state_vtable_rva);
+
+    snap.exact_appearance_vtable =
+        state_vtable == expected_state_vtable;
+
+    if (!snap.exact_appearance_vtable) {
+        ++g_state_vtable_rejects;
+        g_tls.snapshot = snap;
+        return;
+    }
+
+    ++g_exact_state_hits;
+
+    const auto *state_bytes =
+        static_cast<const std::uint8_t *>(
+            appearance_state);
+
+    const std::size_t primary_offset =
+        kind == fx_draw_entity_kind::particle
+            ? 0x30u
+            : 0x50u;
+    const std::size_t secondary_offset =
+        kind == fx_draw_entity_kind::particle
+            ? 0x38u
+            : 0x58u;
+
+    std::memcpy(
+        &snap.appearance_source_primary,
+        state_bytes + primary_offset,
+        sizeof(snap.appearance_source_primary));
+    std::memcpy(
+        &snap.appearance_source_secondary,
+        state_bytes + secondary_offset,
+        sizeof(snap.appearance_source_secondary));
+
+    if (kind == fx_draw_entity_kind::cluster) {
+        std::memcpy(
+            &snap.appearance_semantic_word,
+            state_bytes + 0x60u,
+            sizeof(snap.appearance_semantic_word));
+    }
+
+    snap.source_links_ready =
+        snap.appearance_source_primary != nullptr &&
+        snap.appearance_source_secondary != nullptr;
+
+    if (snap.source_links_ready)
+        ++g_source_links_ready;
+    else
+        ++g_source_links_missing;
 
     snap.ready =
         snap.exact_entity_vtable &&
+        snap.exact_appearance_vtable &&
         snap.appearance_state_ready &&
+        snap.source_links_ready &&
         draw_context != nullptr;
 
     g_tls.snapshot = snap;
@@ -559,6 +637,14 @@ telemetry status() noexcept
         g_state_ready_hits.load();
     out.state_missing =
         g_state_missing.load();
+    out.exact_state_hits =
+        g_exact_state_hits.load();
+    out.state_vtable_rejects =
+        g_state_vtable_rejects.load();
+    out.source_links_ready =
+        g_source_links_ready.load();
+    out.source_links_missing =
+        g_source_links_missing.load();
     out.snapshot_hits =
         g_snapshot_hits.load();
     out.snapshot_misses =
@@ -574,6 +660,10 @@ void reset_stats() noexcept
     g_entity_rejects.store(0u);
     g_state_ready_hits.store(0u);
     g_state_missing.store(0u);
+    g_exact_state_hits.store(0u);
+    g_state_vtable_rejects.store(0u);
+    g_source_links_ready.store(0u);
+    g_source_links_missing.store(0u);
     g_snapshot_hits.store(0u);
     g_snapshot_misses.store(0u);
     g_generation.store(0u);
