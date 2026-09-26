@@ -1,7 +1,5 @@
 #pragma once
 
-#include "dsrrl/runtime/island_draw_adapter.hpp"
-
 #include <reshade.hpp>
 
 #if RESHADE_API_VERSION != 20
@@ -32,7 +30,6 @@ struct fixed_pointlight_telemetry {
 };
 
 struct prepared_fixed_pointlight_draw {
-    island_draw_adapter_request request{};
     ID3D11ShaderResourceView *t19 = nullptr;
     std::uint64_t producer_serial = 0;
     std::uint8_t captured_light_count = 0;
@@ -55,7 +52,7 @@ public:
     void selector_event(void *owner) noexcept;
 
     // expected_count is receiver-derived: PntSS=2, PntSSSS=4.
-    bool prepare_t19_request(
+    bool prepare_t19(
         ID3D11DeviceContext *context,
         std::uint8_t expected_count,
         prepared_fixed_pointlight_draw &prepared) noexcept;
