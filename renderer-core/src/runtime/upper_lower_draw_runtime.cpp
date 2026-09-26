@@ -1068,21 +1068,10 @@ void *run_wrapper(
                 x)
             : nullptr;
 
-    const auto completed =
-        g_producer;
+    // PERF DIAG O: keep producer TLS and all steady/blend semantic capture,
+    // but suppress wrapper-side snapshot publication/erase entirely.
     g_producer =
         previous;
-
-    if (!completed.have_upper ||
-        !completed.have_lower) {
-        std::lock_guard<std::mutex> lock(
-            g_snapshot_mutex);
-        g_snapshots.erase(
-            completed.owner);
-    } else {
-        publish_snapshot(
-            completed);
-    }
 
     return result;
 }
@@ -1543,12 +1532,12 @@ void upper_lower_selector_event_bridge(
     void *r14,
     void *r15) noexcept
 {
-    if (g_runtime != nullptr)
-        g_runtime->selector_event(
-            owner,
-            return_address,
-            r14,
-            r15);
+    // PERF DIAG O: downstream selector join disabled so this build measures
+    // producer capture computation only.
+    (void)owner;
+    (void)return_address;
+    (void)r14;
+    (void)r15;
 }
 
 bool upper_lower_draw_runtime::install() noexcept
