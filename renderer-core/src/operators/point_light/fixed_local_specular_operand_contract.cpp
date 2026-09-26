@@ -14,11 +14,8 @@ constexpr std::uint32_t k_shex_tag = 0x58454853u;
 constexpr std::uint32_t k_shdr_tag = 0x52444853u;
 constexpr std::uint16_t k_op_dp3 = 16u;
 constexpr std::uint16_t k_op_endswitch = 23u;
-constexpr std::uint16_t k_op_mad = 50u;
 constexpr std::uint16_t k_op_customdata = 53u;
 constexpr std::uint16_t k_op_mul = 56u;
-constexpr std::uint32_t k_schlick_a_bits = 0xc0b1c059u;
-constexpr std::uint32_t k_schlick_b_bits = 0xc0df760cu;
 constexpr std::size_t k_max_words = 8192u;
 constexpr std::size_t k_max_instructions = 4096u;
 
