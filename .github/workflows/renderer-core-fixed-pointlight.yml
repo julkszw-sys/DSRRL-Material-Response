@@ -1,0 +1,41 @@
+name: Renderer Core Fixed PointLight
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "renderer-core/include/dsrrl/operators/point_light/fixed_local_*"
+      - "renderer-core/src/operators/point_light/fixed_local_*"
+      - "renderer-core/tests/fixed_local_*"
+      - "renderer-core/CMakeLists.txt"
+      - ".github/workflows/renderer-core-fixed-pointlight.yml"
+  pull_request:
+    paths:
+      - "renderer-core/include/dsrrl/operators/point_light/fixed_local_*"
+      - "renderer-core/src/operators/point_light/fixed_local_*"
+      - "renderer-core/tests/fixed_local_*"
+      - "renderer-core/CMakeLists.txt"
+      - ".github/workflows/renderer-core-fixed-pointlight.yml"
+
+jobs:
+  linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure
+        run: cmake -S renderer-core -B build -DCMAKE_BUILD_TYPE=Release
+      - name: Build
+        run: cmake --build build --parallel 2
+      - name: Test
+        run: ctest --test-dir build --output-on-failure
+
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure
+        run: cmake -S renderer-core -B build -A x64
+      - name: Build
+        run: cmake --build build --config Release --parallel 2
+      - name: Test
+        run: ctest --test-dir build -C Release --output-on-failure
