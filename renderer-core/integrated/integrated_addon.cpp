@@ -202,18 +202,21 @@ bool observe_draw_identity(
             dsrrl::operators::lightbank::
                 upper_lower_hemenv_stratum::nospc;
 
-    const bool upper_lower_parallax =
+    const bool upper_lower_isolated =
         upper_lower_receiver &&
         (upper_lower_identity.family ==
              dsrrl::operators::lightbank::
                  upper_lower_hemenv_family::hemenv_parallax ||
          upper_lower_identity.family ==
              dsrrl::operators::lightbank::
-                 upper_lower_hemenv_family::hemenvlerp_parallax);
+                 upper_lower_hemenv_family::hemenvlerp_parallax ||
+         upper_lower_identity.family ==
+             dsrrl::operators::lightbank::
+                 upper_lower_hemenv_family::phn_pnts);
 
     const bool upper_lower_spc_matches_stable =
         !upper_lower_spc ||
-        upper_lower_parallax ||
+        upper_lower_isolated ||
         (upper_lower_identity.family ==
                  dsrrl::operators::lightbank::
                      upper_lower_hemenv_family::hemenv
@@ -226,7 +229,7 @@ bool observe_draw_identity(
 
     const bool upper_lower_unpaired_nospc =
         upper_lower_nospc &&
-        !upper_lower_parallax;
+        !upper_lower_isolated;
 
     const unsigned receiver_classes =
         (stable_receiver ? 1u : 0u) +
@@ -234,16 +237,17 @@ bool observe_draw_identity(
         (subsurface_receiver ? 1u : 0u) +
         (hemdir3_receiver ? 1u : 0u) +
         (upper_lower_unpaired_nospc ? 1u : 0u) +
-        (upper_lower_parallax ? 1u : 0u);
+        (upper_lower_isolated ? 1u : 0u);
 
     const bool receiver_ok =
         receiver_classes == 1u &&
         upper_lower_spc_matches_stable;
 
-    if (upper_lower_parallax) {
-        // Exact Parallax executable identities are U/L-only here. Do not
-        // borrow stable HemEnv/HemEnvLerp receiver IDs into MR, resources or
-        // EnvSpec: the U/L consumer cut is independently certified by SHA.
+    if (upper_lower_isolated) {
+        // Exact Parallax and PntS executable identities are U/L-only here.
+        // Do not borrow stable HemEnv/HemEnvLerp receiver IDs into MR,
+        // resources or EnvSpec. PntS may already carry exact A1 PointLight
+        // suboperators composed by stock SHA; this route owns only U/L+b13.
         receiver_id = 0u;
         upper_lower_bound = true;
     } else if (hemenvlerp_receiver) {
