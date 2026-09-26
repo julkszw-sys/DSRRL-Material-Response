@@ -13,7 +13,6 @@ namespace {
 constexpr std::uint32_t k_shex_tag = 0x58454853u;
 constexpr std::uint32_t k_shdr_tag = 0x52444853u;
 constexpr std::uint16_t k_op_add = 0u;
-constexpr std::uint16_t k_op_mad = 50u;
 constexpr std::uint16_t k_op_customdata = 53u;
 constexpr std::uint16_t k_op_mov = 54u;
 constexpr std::size_t k_max_words = 8192u;
@@ -213,37 +212,27 @@ locate_fixed_local_specular_output_cut(
     }
 
     const auto bridge_mov=fog-1u;
-    std::size_t join=instruction_count;
-    std::size_t join_count=0u;
-    for (std::size_t i=first_after_window;i<bridge_mov;++i) {
-        if (instructions[i].opcode==k_op_add ||
-            instructions[i].opcode==k_op_mad) {
-            join=i;
-            ++join_count;
-        }
-    }
 
-    if (join_count!=1u || join==instruction_count) {
+    // Fixed Spc exact corpus invariant: the owned local-light join is the
+    // first instruction immediately after the final per-light ENDIF. Do not
+    // scan forward for arbitrary ADD/MAD instructions: 24/48 bodies contain
+    // a later continuation MAD before Fog which belongs to another expression.
+    const auto join=first_after_window;
+    if (join>=bridge_mov) {
         out.result =
             fixed_local_specular_output_cut_result::fail_join_shape;
         return out;
     }
 
     const auto &j=instructions[join];
-    std::uint32_t token_word=0u;
-    std::uint32_t index_word=0u;
-
-    if (j.opcode==k_op_add && j.end-j.start==7u) {
-        token_word=j.start+5u;
-        index_word=j.start+6u;
-    } else if (j.opcode==k_op_mad && j.end-j.start==9u) {
-        token_word=j.start+7u;
-        index_word=j.start+8u;
-    } else {
+    if (j.opcode!=k_op_add || j.end-j.start!=7u) {
         out.result =
             fixed_local_specular_output_cut_result::fail_join_shape;
         return out;
     }
+
+    const std::uint32_t token_word=j.start+5u;
+    const std::uint32_t index_word=j.start+6u;
 
     if (index_word>=word_count ||
         !temp_scalar_operand(words[token_word])) {
