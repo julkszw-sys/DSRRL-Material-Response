@@ -5,6 +5,7 @@
 #include "dsrrl/operators/lightbank/generated_upper_lower_phn_pnts_v1.hpp"
 #include "dsrrl/operators/lightbank/generated_upper_lower_phn_faceeye_v1.hpp"
 #include "dsrrl/operators/lightbank/generated_upper_lower_phn_subsurf_v1.hpp"
+#include "dsrrl/operators/lightbank/generated_upper_lower_nonphn_v1.hpp"
 #include "dsrrl/operators/legacy_plan/a1_create_time_materializer.hpp"
 #include "dsrrl/operators/legacy_plan/dxbc_checksum.hpp"
 #include "dsrrl/operators/legacy_plan/dxbc_rdef_patch.hpp"
@@ -29,6 +30,7 @@ namespace generated_ul_parallax = generated_parallax;
 namespace generated_ul_pnts = generated_pnts;
 namespace generated_ul_faceeye = generated_faceeye;
 namespace generated_ul_subsurf = generated_subsurf;
+namespace generated_ul_nonphn = generated_nonphn;
 
 constexpr std::array<std::uint32_t,4> k_cb13_decl = {
     0x04000059u,
@@ -89,6 +91,11 @@ bool candidate_size(std::size_t size) noexcept
 
     for (const auto &plan :
          generated_ul_subsurf::k_upper_lower_phn_subsurf_plans)
+        if (plan.stock_size == size)
+            return true;
+
+    for (const auto &plan :
+         generated_ul_nonphn::k_upper_lower_nonphn_plans)
         if (plan.stock_size == size)
             return true;
 
@@ -299,6 +306,67 @@ find_plan(
                 upper_lower_hemenv_stratum::spc,
             upper_lower_hemenv_family::phn_subsurf,
             11u,
+            plan.stock_size,
+            plan.stock_sha256,
+            plan.u_slot_word,
+            plan.d_slot_word_0,
+            plan.d_slot_word_1,
+            plan.replacement_size,
+            plan.replacement_sha256
+        };
+        found = true;
+    }
+
+    for (const auto &plan :
+         generated_ul_nonphn::k_upper_lower_nonphn_plans) {
+        if (plan.stock_size != size ||
+            !hashing::matches_hex(
+                digest,
+                plan.stock_sha256))
+            continue;
+
+        if (found)
+            return nullptr;
+
+        upper_lower_hemenv_family family =
+            upper_lower_hemenv_family::gst;
+
+        switch (plan.family) {
+        case generated_ul_nonphn::
+            upper_lower_nonphn_family::gst:
+            family = upper_lower_hemenv_family::gst;
+            break;
+        case generated_ul_nonphn::
+            upper_lower_nonphn_family::gst_faceeye:
+            family = upper_lower_hemenv_family::gst_faceeye;
+            break;
+        case generated_ul_nonphn::
+            upper_lower_nonphn_family::sfx:
+            family = upper_lower_hemenv_family::sfx;
+            break;
+        case generated_ul_nonphn::
+            upper_lower_nonphn_family::snow:
+            family = upper_lower_hemenv_family::snow;
+            break;
+        case generated_ul_nonphn::
+            upper_lower_nonphn_family::ntoa:
+            family = upper_lower_hemenv_family::ntoa;
+            break;
+        }
+
+        hit = {
+            plan.plan_index,
+            plan.shader_index,
+            plan.stable_receiver_id,
+            plan.stratum ==
+                    generated_ul_nonphn::
+                        upper_lower_nonphn_stratum::spc
+                ? generated_ul::
+                    upper_lower_hemenv_stratum::spc
+                : generated_ul::
+                    upper_lower_hemenv_stratum::nospc,
+            family,
+            plan.declaration_word,
             plan.stock_size,
             plan.stock_sha256,
             plan.u_slot_word,
@@ -788,8 +856,7 @@ materialize_upper_lower_hemenv_receiver(
     }
 
     const bool faceeye =
-        plan->family ==
-            upper_lower_hemenv_family::phn_faceeye;
+        plan->declaration_word == 7u;
 
     const bool common_b0 =
         words[2] == 0x0100086au &&
