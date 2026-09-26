@@ -216,7 +216,62 @@ std::atomic<std::uint64_t> g_hemdir3_carrier_requests{0};
 std::atomic<std::uint64_t> g_pmetal_env_steady{0};
 std::atomic<std::uint64_t> g_pmetal_env_blend{0};
 std::atomic<std::uint64_t> g_pmetal_env_miss{0};
+std::atomic<std::uint64_t> g_perf_steady_ticks{0};
+std::atomic<std::uint64_t> g_perf_steady_pmetal_ticks{0};
+std::atomic<std::uint64_t> g_perf_steady_ul_ticks{0};
+std::atomic<std::uint64_t> g_perf_steady_d123_ticks{0};
+std::atomic<std::uint64_t> g_perf_blend_capture_ticks{0};
+std::atomic<std::uint64_t> g_perf_pmetal_blend_ticks{0};
+std::atomic<std::uint64_t> g_perf_publish_ticks{0};
+std::atomic<std::uint64_t> g_perf_selector_ticks{0};
 std::atomic_bool g_pmetal_env_hook_armed{false};
+
+std::uint64_t qpc_now() noexcept
+{
+    LARGE_INTEGER value{};
+    return QueryPerformanceCounter(&value) != FALSE
+        ? static_cast<std::uint64_t>(value.QuadPart)
+        : 0u;
+}
+
+std::uint64_t qpc_frequency() noexcept
+{
+    static const std::uint64_t frequency = []() noexcept {
+        LARGE_INTEGER value{};
+        return QueryPerformanceFrequency(&value) != FALSE
+            ? static_cast<std::uint64_t>(value.QuadPart)
+            : 0u;
+    }();
+    return frequency;
+}
+
+struct qpc_scope {
+    std::atomic<std::uint64_t> *counter = nullptr;
+    std::uint64_t begin = 0u;
+
+    explicit qpc_scope(
+        std::atomic<std::uint64_t> &target) noexcept
+        : counter(&target),
+          begin(qpc_now())
+    {
+    }
+
+    ~qpc_scope()
+    {
+        if (counter == nullptr ||
+            begin == 0u)
+            return;
+
+        const auto end = qpc_now();
+        if (end >= begin)
+            counter->fetch_add(
+                end - begin,
+                std::memory_order_relaxed);
+    }
+
+    qpc_scope(const qpc_scope &) = delete;
+    qpc_scope &operator=(const qpc_scope &) = delete;
+};
 
 bool readable_range(
     const void *ptr,
@@ -901,6 +956,9 @@ void publish_snapshot(
         !producer.have_lower)
         return;
 
+    qpc_scope perf_scope(
+        g_perf_publish_ticks);
+
     std::uint16_t selector_a = 0u;
     std::uint16_t selector_b = 0u;
     std::uint32_t beta_bits = 0u;
@@ -1089,7 +1147,13 @@ void __fastcall hook_steady_packer(
     if (!g_producer.active)
         return;
 
+    qpc_scope steady_scope(
+        g_perf_steady_ticks);
+
     if (g_pmetal_env_hook_armed.load()) {
+        qpc_scope pmetal_scope(
+            g_perf_steady_pmetal_ticks);
+
         f4 env{};
         std::uint64_t bank = 0u;
         std::uint32_t row = 0u;
@@ -1116,12 +1180,20 @@ void __fastcall hook_steady_packer(
 
     f4 upper{};
     f4 lower{};
+    bool ul_ready = false;
 
-    if (!read_selected_ptde(
-            source,
-            selector,
-            upper,
-            lower))
+    {
+        qpc_scope ul_scope(
+            g_perf_steady_ul_ticks);
+        ul_ready =
+            read_selected_ptde(
+                source,
+                selector,
+                upper,
+                lower);
+    }
+
+    if (!ul_ready)
         return;
 
     g_producer.upper = upper;
@@ -1129,18 +1201,23 @@ void __fastcall hook_steady_packer(
     g_producer.have_upper = true;
     g_producer.have_lower = true;
 
-    const auto *raw =
-        resolve_raw_lightbank_record(
-            source,
-            selector);
+    {
+        qpc_scope d123_scope(
+            g_perf_steady_d123_ticks);
 
-    if (evaluate_raw_d123(
-            raw,
-            raw,
-            0.0f,
-            g_producer.d123)) {
-        g_producer.have_d123 = true;
-        ++g_d123_steady;
+        const auto *raw =
+            resolve_raw_lightbank_record(
+                source,
+                selector);
+
+        if (evaluate_raw_d123(
+                raw,
+                raw,
+                0.0f,
+                g_producer.d123)) {
+            g_producer.have_d123 = true;
+            ++g_d123_steady;
+        }
     }
 
     ++g_steady_pass;
@@ -1174,6 +1251,9 @@ void *__fastcall hook_blend(
         b != nullptr &&
         (rva == k_ret_blend_upper ||
          rva == k_ret_blend_lower)) {
+        qpc_scope capture_scope(
+            g_perf_blend_capture_ticks);
+
         raw_rgbm raw_a{};
         raw_rgbm raw_b{};
 
@@ -1294,6 +1374,9 @@ void __fastcall hook_pmetal_env_blend(
     if (!g_producer.active ||
         !g_pmetal_env_hook_armed.load())
         return;
+
+    qpc_scope pmetal_scope(
+        g_perf_pmetal_blend_ticks);
 
     f4 a{};
     f4 b{};
@@ -1624,6 +1707,8 @@ void upper_lower_draw_runtime::selector_event(
     void *r15) noexcept
 {
     ++g_selector_seen;
+    qpc_scope selector_scope(
+        g_perf_selector_ticks);
     g_draw_snapshot.reset();
 
     if (!g_enabled.load() ||
@@ -1929,6 +2014,15 @@ upper_lower_draw_runtime::telemetry() const noexcept
         g_pmetal_env_steady.load(),
         g_pmetal_env_blend.load(),
         g_pmetal_env_miss.load(),
+        qpc_frequency(),
+        g_perf_steady_ticks.load(),
+        g_perf_steady_pmetal_ticks.load(),
+        g_perf_steady_ul_ticks.load(),
+        g_perf_steady_d123_ticks.load(),
+        g_perf_blend_capture_ticks.load(),
+        g_perf_pmetal_blend_ticks.load(),
+        g_perf_publish_ticks.load(),
+        g_perf_selector_ticks.load(),
         g_enabled.load(),
         g_pmetal_env_hook_armed.load(),
         g_quarantined.load(),
@@ -1965,6 +2059,14 @@ void upper_lower_draw_runtime::reset() noexcept
     g_pmetal_env_steady.store(0);
     g_pmetal_env_blend.store(0);
     g_pmetal_env_miss.store(0);
+    g_perf_steady_ticks.store(0);
+    g_perf_steady_pmetal_ticks.store(0);
+    g_perf_steady_ul_ticks.store(0);
+    g_perf_steady_d123_ticks.store(0);
+    g_perf_blend_capture_ticks.store(0);
+    g_perf_pmetal_blend_ticks.store(0);
+    g_perf_publish_ticks.store(0);
+    g_perf_selector_ticks.store(0);
 }
 
 } // namespace dsrrl::runtime
