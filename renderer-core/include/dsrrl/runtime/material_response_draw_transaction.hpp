@@ -189,6 +189,15 @@ public:
         ID3D11Buffer *b13,
         prepared_material_response_draw &prepared) noexcept;
 
+    // Carrier-only seam for an independently authorized operator that shares
+    // the exact Material Response b12 ABI (e.g. fixed direct PTDE PointLight).
+    // This performs no receiver/material authorization and no shader bind:
+    // caller must already hold an exact draw decision and compose b12 into its
+    // own atomic draw transaction. Returned buffer is AddRef-owned by caller.
+    bool prepare_b12_carrier(
+        const operators::material_response::decision &decision,
+        ID3D11Buffer *&b12) noexcept;
+
     void release_prepared_draw(
         prepared_material_response_draw &prepared) noexcept;
 
