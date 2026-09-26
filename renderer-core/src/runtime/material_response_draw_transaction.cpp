@@ -656,6 +656,11 @@ bool material_response_draw_runtime::prepare_draw_request(
 
     prepared.shader = replacement.shader;
     prepared.b12 = b12;
+    prepared.receiver_id = decision.receiver_id;
+    prepared.replacement_composed_owners =
+        replacement.composed_owners;
+    prepared.family =
+        material_response_replacement_family::stable;
     prepared.request.primary =
         core::operator_id::material_response;
     prepared.request.additional_owners =
@@ -742,6 +747,11 @@ prepare_draw_request_with_upper_lower(
 
     prepared.shader = replacement.shader;
     prepared.b12 = b12;
+    prepared.receiver_id = decision.receiver_id;
+    prepared.replacement_composed_owners =
+        replacement.composed_owners;
+    prepared.family =
+        material_response_replacement_family::stable_upper_lower;
     prepared.request.primary =
         core::operator_id::material_response;
     prepared.request.additional_owners =
@@ -838,6 +848,11 @@ prepare_lerp_draw_request_with_upper_lower(
 
     prepared.shader = replacement.shader;
     prepared.b12 = b12;
+    prepared.receiver_id = decision.receiver_id;
+    prepared.replacement_composed_owners =
+        replacement.composed_owners;
+    prepared.family =
+        material_response_replacement_family::hemenvlerp_upper_lower;
     prepared.request.primary =
         core::operator_id::material_response;
     prepared.request.additional_owners =
