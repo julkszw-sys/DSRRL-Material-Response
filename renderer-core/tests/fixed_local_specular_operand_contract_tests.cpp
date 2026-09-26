@@ -141,6 +141,10 @@ int main()
                 plan,words.data(),words.size());
         CHECK(out.result==fixed_local_specular_operand_result::ready);
         CHECK(out.light_count==2u);
+        CHECK(out.specular_power_cb_slot==0u);
+        CHECK(out.specular_power_cb_index==11u);
+        CHECK(out.specular_power_component==0u);
+        CHECK(out.exponent_carrier_attested);
         CHECK(out.lights[0].view.token[1]==6u);
         CHECK(out.lights[0].normal.token[1]==5u);
         CHECK(out.lights[0].light.token[1]==14u);
