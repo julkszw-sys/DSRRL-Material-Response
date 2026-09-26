@@ -29,6 +29,15 @@ struct fixed_local_specular_light_operands {
     fixed_local_specular_operand_pair view{};
     fixed_local_specular_operand_pair light{};
 
+    // Scalar destinations already owned by the DSR microfacet window:
+    //   stock VdotH -> replacement NdotV / final RdotL
+    //   stock NdotH -> replacement VdotL auxiliary
+    //   stock NdotL -> retained NdotL for the separately preserved diffuse path.
+    // Reusing these destinations avoids introducing a new temporary-register ABI.
+    fixed_local_specular_operand_pair primary_scalar_dst{};
+    fixed_local_specular_operand_pair auxiliary_scalar_dst{};
+    fixed_local_specular_operand_pair ndotl_scalar_dst{};
+
     // Stock tail anchors retained only as structural witnesses. A later
     // materializer must not reuse their DSR common-NdotL specular semantics.
     std::uint32_t ndotl_dp3_word = 0u;
