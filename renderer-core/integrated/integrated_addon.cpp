@@ -2239,7 +2239,7 @@ bool AddonInit(
 
     reshade::log::message(
         reshade::log::level::warning,
-        "[DSRRL PERF DIAG C_EVENTS_NO_NATIVE_HOOKS] ReShade callbacks/resource events active; A1 and all native DSR inline hooks disabled.");
+        "[DSRRL PERF DIAG C_EVENTS_NO_NATIVE_HOOKS] ReShade callbacks/resource events active; A1 and all native DSR inline hooks disabled. Bloom FX draw transport FAIL-OPEN; BLOOM_FX ww_diag_join disabled by design.");
 
     reshade::log::message(
         reshade::log::level::info,
