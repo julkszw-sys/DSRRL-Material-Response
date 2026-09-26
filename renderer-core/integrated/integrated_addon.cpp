@@ -2210,11 +2210,12 @@ bool AddonInit(
         dsrrl::runtime::flver_identity_transport::install();
     const bool bloom_fx_hooks = false;
     const bool hemdir3_mode_hooks = false;
-    const bool upper_lower_hooks = false;
+    const bool upper_lower_hooks =
+        flver_hooks &&
+        g_upper_lower.install();
     (void)texture_hooks;
     (void)bloom_fx_hooks;
     (void)hemdir3_mode_hooks;
-    (void)upper_lower_hooks;
 
     if (!flver_hooks) {
         reshade::log::message(
@@ -2224,7 +2225,7 @@ bool AddonInit(
 
     reshade::log::message(
         reshade::log::level::warning,
-        "[DSRRL PERF DIAG E_FLVER_ONLY] Only native FLVER parse/destroy/selector hooks are active; texture/Bloom/HemDir3/UpperLower and ReShade event/resource layers are disabled. Audit marker: BLOOM_FX ww_diag_join; Bloom FX draw transport FAIL-OPEN where disabled by this diagnostic.");
+        "[DSRRL PERF DIAG H_FLVER_UL] FLVER + Upper/Lower producer hooks active; texture/Bloom/HemDir3 and ReShade event/resource layers disabled. Audit marker: BLOOM_FX ww_diag_join; Bloom FX draw transport FAIL-OPEN where disabled by this diagnostic.");
 
     reshade::log::message(
         reshade::log::level::info,
