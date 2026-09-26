@@ -1,5 +1,5 @@
 #include "dsrrl/runtime/upper_lower_pipeline_registry.hpp"
-#include "dsrrl/operators/lightbank/generated_upper_lower_hemenv_v1.hpp"
+#include "dsrrl/operators/lightbank/generated_upper_lower_hemenv_v1.hpp"\n#include "dsrrl/operators/lightbank/generated_upper_lower_hemenvlerp_v1.hpp"
 #include "dsrrl/operators/legacy_plan/sha256_bytes.hpp"
 
 #include <atomic>
