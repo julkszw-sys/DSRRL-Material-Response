@@ -1099,6 +1099,9 @@ bool on_create_pipeline(
     std::uint32_t subobject_count,
     const reshade::api::pipeline_subobject *subobjects)
 {
+    (void)device;
+    (void)layout;
+
     const auto *pixel_shader =
         find_pixel_shader(
             subobject_count,
@@ -1342,12 +1345,10 @@ bool on_create_pipeline(
         }
     }
 
-    const bool a1_changed =
-        g_a1_bridge.on_create_pipeline(
-            device,
-            layout,
-            subobject_count,
-            subobjects);
+    // PERFORMANCE ISOLATION DIAGNOSTIC B:
+    // Keep the full runtime hook/event layer, but do not mutate any shader
+    // through the A1 create-time bridge.
+    const bool a1_changed = false;
 
     if (ul_identity_ready) {
         const auto *created_shader =
@@ -2277,6 +2278,10 @@ bool AddonInit(
             "[DSRRL CORE+ISLANDS " DSRRL_CORE_ISLANDS_VERSION
             "] Upper/Lower producer hooks FAIL-OPEN: stock DSR b13 preserved.");
     }
+
+    reshade::log::message(
+        reshade::log::level::warning,
+        "[DSRRL PERF DIAG RUNTIME_NO_A1] Full runtime hook/event layer is active; A1 create-time shader replacement is disabled.");
 
     reshade::log::message(
         reshade::log::level::info,
