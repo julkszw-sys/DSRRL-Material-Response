@@ -76,6 +76,9 @@ std::size_t register_confirmed_material_routes_v1(material_response_island &isla
 
         profile.c100 = constants->c100;
         profile.c101_f0q = constants->c101_f0q;
+        profile.ptde_specular_power = constants->ptde_specular_power;
+        profile.ptde_specular_power_verified =
+            constants->ptde_specular_power_verified;
         profile.lod_min = seed.lod_min;
         profile.lod_max = seed.lod_max;
         profile.receiver_ids = {
