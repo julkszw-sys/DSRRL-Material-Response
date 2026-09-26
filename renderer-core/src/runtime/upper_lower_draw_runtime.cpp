@@ -118,6 +118,15 @@ struct d123_identity_cache_entry {
     std::array<operators::lightbank::hemdir3_lobe,3> lobes{};
 };
 
+struct pmetal_bank_cache_entry {
+    const std::uint8_t *base = nullptr;
+    std::uint16_t count = 0u;
+    std::uint64_t signature = 0u;
+    const pmetal_env_source_authority::bank_donor *bank = nullptr;
+    bool valid = false;
+};
+
+
 constexpr std::size_t k_steady_cache_slots = 32u;
 thread_local std::array<steady_q_cache_entry,k_steady_cache_slots>
     g_steady_q_cache{};
@@ -125,6 +134,8 @@ thread_local std::array<raw_record_cache_entry,k_steady_cache_slots>
     g_raw_record_cache{};
 thread_local std::array<d123_identity_cache_entry,k_steady_cache_slots>
     g_d123_identity_cache{};
+thread_local std::array<pmetal_bank_cache_entry,k_steady_cache_slots>
+    g_pmetal_bank_cache{};
 
 struct inline_hook {
     void *target = nullptr;
@@ -360,6 +371,18 @@ std::size_t d123_cache_slot(
             (k_steady_cache_slots - 1u));
 }
 
+std::size_t pmetal_bank_cache_slot(
+    const void *ptr) noexcept
+{
+    const auto value =
+        reinterpret_cast<std::uintptr_t>(ptr);
+
+    return
+        static_cast<std::size_t>(
+            (value >> 4u) &
+            (k_steady_cache_slots - 1u));
+}
+
 std::uint64_t pmetal_fnv_byte(
     std::uint64_t hash,
     std::uint8_t value) noexcept
@@ -553,6 +576,57 @@ bool pmetal_bank_signature(
     return true;
 }
 
+const pmetal_env_source_authority::bank_donor *
+resolve_pmetal_bank(
+    const std::uint8_t *base,
+    std::uint16_t count,
+    std::uint64_t &signature) noexcept
+{
+    signature = 0u;
+    if (base == nullptr ||
+        count == 0u)
+        return nullptr;
+
+    auto &cached =
+        g_pmetal_bank_cache[
+            pmetal_bank_cache_slot(base)];
+
+    // Legacy V13 already cached bank_index(base), including negative results.
+    // The integrated runtime had accidentally dropped that layer, causing a
+    // full exact FNV scan of the same non-P_Metal LightBank on every steady
+    // packer invocation. Restore that source contract, but make it TLS and
+    // include live row-count identity in the key. Only a successfully decoded
+    // exact signature is cached; unreadable/transient memory never becomes a
+    // durable negative result.
+    if (cached.valid &&
+        cached.base == base &&
+        cached.count == count) {
+        signature = cached.signature;
+        return cached.bank;
+    }
+
+    std::uint64_t decoded_signature = 0u;
+    if (!pmetal_bank_signature(
+            base,
+            decoded_signature)) {
+        cached = {};
+        return nullptr;
+    }
+
+    const auto *bank =
+        pmetal_env_source_authority::find_bank(
+            decoded_signature);
+
+    cached.base = base;
+    cached.count = count;
+    cached.signature = decoded_signature;
+    cached.bank = bank;
+    cached.valid = true;
+
+    signature = decoded_signature;
+    return bank;
+}
+
 bool read_exact_pmetal_env_source(
     void *source,
     std::int32_t selector,
@@ -596,14 +670,13 @@ bool read_exact_pmetal_env_source(
         base + 0x30u +
         static_cast<std::size_t>(index) * 12u;
 
-    if (!safe_read(entry, row_id) ||
-        !pmetal_bank_signature(
-            base,
-            bank_signature))
+    if (!safe_read(entry, row_id))
         return false;
 
     const auto *bank =
-        pmetal_env_source_authority::find_bank(
+        resolve_pmetal_bank(
+            base,
+            count,
             bank_signature);
     if (bank == nullptr)
         return false;
