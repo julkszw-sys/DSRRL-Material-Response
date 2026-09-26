@@ -34,6 +34,7 @@ struct prepared_material_response_draw {
     ID3D11PixelShader *shader = nullptr;
     ID3D11Buffer *b12 = nullptr;
     std::uint32_t receiver_id = 0u;
+    core::operator_mask replacement_composed_owners = 0u;
     material_response_replacement_family family =
         material_response_replacement_family::stable;
     bool spec_rgb_consumer = false;
