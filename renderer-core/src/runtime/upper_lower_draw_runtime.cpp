@@ -1045,16 +1045,37 @@ void *run_wrapper(
     void *assignment,
     float x) noexcept
 {
-    // PERF DIAG N: preserve the exact wrapper detour/trampoline cost while
-    // disabling producer TLS, snapshot publication and all semantic capture.
+    // PERF DIAG P: isolate wrapper-side snapshot publication cost. Packer
+    // hooks remain semantic pass-through, while every wrapper publishes a
+    // minimal synthetic U/L snapshot using the real owner/assignment tuple.
     ++counter;
-    return original != nullptr
-        ? original(
-            rcx,
-            owner,
-            assignment,
-            x)
-        : nullptr;
+
+    void *result =
+        original != nullptr
+            ? original(
+                rcx,
+                owner,
+                assignment,
+                x)
+            : nullptr;
+
+    producer_tls synthetic{};
+    synthetic.active = true;
+    synthetic.owner =
+        reinterpret_cast<std::uintptr_t>(
+            owner);
+    synthetic.assignment =
+        static_cast<const std::uint8_t *>(
+            assignment);
+    synthetic.have_upper = true;
+    synthetic.have_lower = true;
+    synthetic.upper = {};
+    synthetic.lower = {};
+
+    publish_snapshot(
+        synthetic);
+
+    return result;
 }
 
 void *__fastcall hook_wrapper5(
