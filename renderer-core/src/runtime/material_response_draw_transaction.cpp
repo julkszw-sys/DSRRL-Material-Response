@@ -907,9 +907,6 @@ bool material_response_draw_runtime::has_paired_spec_rgb_replacement(
         transactions_.quarantined())
         return false;
 
-    const auto spec_owner =
-        core::operator_bit(core::operator_id::spec_rgb);
-
     std::lock_guard<std::mutex> lock(mutex_);
 
     const std::unordered_map<std::uint32_t, replacement_record> *bank =
@@ -934,9 +931,9 @@ bool material_response_draw_runtime::has_paired_spec_rgb_replacement(
     return
         found != bank->end() &&
         found->second.shader != nullptr &&
-        (found->second.composed_owners & spec_owner) != 0u &&
-        (found->second.composed_owners & ~spec_owner) ==
-            prepared.replacement_composed_owners;
+        material_response_spec_rgb_pair_owners_match(
+            prepared.replacement_composed_owners,
+            found->second.composed_owners);
 }
 
 bool material_response_draw_runtime::promote_prepared_draw_to_spec_rgb(
@@ -989,9 +986,9 @@ bool material_response_draw_runtime::promote_prepared_draw_to_spec_rgb(
         return false;
 
     const bool pair_matches =
-        (replacement.composed_owners & spec_owner) != 0u &&
-        (replacement.composed_owners & ~spec_owner) ==
-            prepared.replacement_composed_owners;
+        material_response_spec_rgb_pair_owners_match(
+            prepared.replacement_composed_owners,
+            replacement.composed_owners);
 
     if (!pair_matches) {
         replacement.shader->Release();
