@@ -26,6 +26,7 @@ struct island_draw_adapter_request {
     // ownership is explicit: never infer shader/resource/carrier ownership
     // from the primary island's state changes.
     core::operator_mask additional_shader_owners = 0;
+    core::operator_mask additional_constant_buffer_owners = 0;
     core::operator_mask additional_resource_owners = 0;
     core::operator_mask additional_carrier_owners = 0;
 
