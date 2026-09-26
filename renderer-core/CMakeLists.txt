@@ -101,6 +101,7 @@ add_library(dsrrl_renderer_core STATIC
     src/runtime/flver_identity_registry.cpp
     src/runtime/stable_receiver_pipeline_registry.cpp
     src/runtime/hemenvlerp_pipeline_registry.cpp
+    src/runtime/fixed_pointlight_draw_runtime.cpp
     src/renderer_core.cpp
     src/operator_catalog.cpp
     src/island_policy.cpp
