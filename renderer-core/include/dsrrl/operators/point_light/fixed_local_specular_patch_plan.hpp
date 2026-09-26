@@ -36,8 +36,18 @@ struct fixed_local_specular_patch_plan {
     std::uint8_t material_cb_slot = 12u;
     std::uint8_t raw_q_srv_slot = 19u;
 
+    // PTDE g_SpecularPower is already transported by stock DSR as
+    // gFC_SpcParam.x == cb0[11].x for the ordinary Phn fixed-light families.
+    // The replacement shader must consume this value directly as the legacy
+    // angular POW exponent; it is not a gain and must not be folded into c101.
+    std::uint8_t specular_power_cb_slot = 0u;
+    std::uint16_t specular_power_cb_index = 11u;
+    std::uint8_t specular_power_component = 0u; // x
+
     // Explicit anti-hybrid contract.
     bool replace_complete_microfacet_window = false;
+    bool use_ptde_legacy_reflect_pow = false;
+    bool consume_g_specular_power_as_exponent = false;
     bool bypass_stock_roughness_tail = false;
     bool bypass_stock_common_ndotl_specular = false;
     bool preserve_stock_diffuse = true;
