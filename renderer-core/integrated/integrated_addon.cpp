@@ -536,6 +536,78 @@ void log_state(const char *tag) noexcept
     reshade::log::message(
         reshade::log::level::info,
         h3_line);
+
+    const auto env_res =
+        g_envspec_resources.telemetry();
+    const auto env_draw =
+        g_pmetal_envspec.telemetry();
+
+    char env_line[960]{};
+    std::snprintf(
+        env_line,
+        sizeof(env_line),
+        "[DSRRL CORE+ISLANDS " DSRRL_CORE_ISLANDS_VERSION "] %s_ENVSPEC "
+        "ps_mat=%llu/%llu src_steady=%llu src_blend=%llu src_miss=%llu src_hook=%u "
+        "native=%llu/%llu hash_miss=%llu views=%llu pack=%llu/%llu pack_ready=%u sampler=%u "
+        "cube=%llu/%llu prepare=%llu/%llu candidate=%llu material_reject=%llu semantic_reject=%llu "
+        "source_reject=%llu probe_reject=%llu spec_reject=%llu ul=%llu/%llu req=%llu q=%u",
+        tag,
+        static_cast<unsigned long long>(
+            g_envspec_payload_materialize_ok.load()),
+        static_cast<unsigned long long>(
+            g_envspec_payload_materialize_fail.load()),
+        static_cast<unsigned long long>(
+            ul.pmetal_env_steady),
+        static_cast<unsigned long long>(
+            ul.pmetal_env_blend),
+        static_cast<unsigned long long>(
+            ul.pmetal_env_miss),
+        ul.pmetal_env_hook_armed ? 1u : 0u,
+        static_cast<unsigned long long>(
+            env_res.native_candidates),
+        static_cast<unsigned long long>(
+            env_res.native_matches),
+        static_cast<unsigned long long>(
+            env_res.native_hash_miss),
+        static_cast<unsigned long long>(
+            env_res.view_matches),
+        static_cast<unsigned long long>(
+            env_res.pack_admit_ok),
+        static_cast<unsigned long long>(
+            env_res.pack_admit_fail),
+        env_res.pack_ready ? 1u : 0u,
+        env_res.sampler_ready ? 1u : 0u,
+        static_cast<unsigned long long>(
+            env_res.cube_created),
+        static_cast<unsigned long long>(
+            env_res.cube_fail),
+        static_cast<unsigned long long>(
+            env_res.prepare_ok),
+        static_cast<unsigned long long>(
+            env_res.prepare_fail),
+        static_cast<unsigned long long>(
+            env_draw.candidates),
+        static_cast<unsigned long long>(
+            env_draw.material_rejects),
+        static_cast<unsigned long long>(
+            env_draw.semantic_rejects),
+        static_cast<unsigned long long>(
+            env_draw.source_rejects),
+        static_cast<unsigned long long>(
+            env_draw.probe_rejects),
+        static_cast<unsigned long long>(
+            env_draw.spec_rgb_rejects),
+        static_cast<unsigned long long>(
+            env_draw.upper_lower_ready),
+        static_cast<unsigned long long>(
+            env_draw.upper_lower_fallback),
+        static_cast<unsigned long long>(
+            env_draw.requests),
+        env_draw.quarantined ? 1u : 0u);
+
+    reshade::log::message(
+        reshade::log::level::info,
+        env_line);
 }
 
 void on_init_device(reshade::api::device *device)
