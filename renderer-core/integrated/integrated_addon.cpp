@@ -30,6 +30,7 @@
 #include "dsrrl/operators/env_spec/pmetal_rgba_materializer.hpp"
 #include "dsrrl/operators/env_spec/pmetal_rgba_lerp_materializer.hpp"
 #include "dsrrl/operators/point_light/local_specular_receiver_registry.hpp"\n#include "dsrrl/operators/point_light/local_specular_microfacet_windows.hpp"
+#include "dsrrl/operators/point_light/fixed_local_specular_patch_plan.hpp"
 
 #include <reshade.hpp>
 #include <d3d11.h>
@@ -124,6 +125,9 @@ std::atomic<std::uint64_t> g_local_specular_fixed4_hits{0};
 std::atomic<std::uint64_t> g_local_specular_window_pass{0};
 std::atomic<std::uint64_t> g_local_specular_window_fail{0};
 std::atomic<std::uint64_t> g_local_specular_windows_total{0};
+std::atomic<std::uint64_t> g_local_specular_fixed_plan_ready{0};
+std::atomic<std::uint64_t> g_local_specular_clustered_deferred{0};
+std::atomic<std::uint64_t> g_local_specular_fixed_plan_fail{0};
 
 enum integrated_draw_route_bit : std::uint8_t {
     k_route_stable = 1u << 0,
@@ -732,7 +736,8 @@ void log_state(const char *tag) noexcept
         sizeof(local_spec_line),
         "[DSRRL CORE+ISLANDS " DSRRL_CORE_ISLANDS_VERSION "] %s "
         "LOCAL_SPEC_RX exact=%llu clustered=%llu fixed2=%llu fixed4=%llu "
-        "window_pass=%llu window_fail=%llu windows=%llu armed=0",
+        "window_pass=%llu window_fail=%llu windows=%llu "
+        "fixed_ready=%llu clustered_defer=%llu plan_fail=%llu armed=0",
         tag,
         static_cast<unsigned long long>(g_local_specular_receiver_hits.load()),
         static_cast<unsigned long long>(g_local_specular_clustered_hits.load()),
@@ -740,7 +745,10 @@ void log_state(const char *tag) noexcept
         static_cast<unsigned long long>(g_local_specular_fixed4_hits.load()),
         static_cast<unsigned long long>(g_local_specular_window_pass.load()),
         static_cast<unsigned long long>(g_local_specular_window_fail.load()),
-        static_cast<unsigned long long>(g_local_specular_windows_total.load()));
+        static_cast<unsigned long long>(g_local_specular_windows_total.load()),
+        static_cast<unsigned long long>(g_local_specular_fixed_plan_ready.load()),
+        static_cast<unsigned long long>(g_local_specular_clustered_deferred.load()),
+        static_cast<unsigned long long>(g_local_specular_fixed_plan_fail.load()));
     reshade::log::message(
         reshade::log::level::info,
         local_spec_line);
@@ -1198,8 +1206,26 @@ bool on_create_pipeline(
                 ++g_local_specular_window_pass;
                 g_local_specular_windows_total.fetch_add(
                     window_scan.window_count);
+
+                const auto fixed_plan =
+                    dsrrl::operators::point_light::
+                        build_fixed_local_specular_patch_plan_from_attested(
+                            local_specular_identity,
+                            window_scan);
+                using plan_result =
+                    dsrrl::operators::point_light::
+                        fixed_local_specular_plan_result;
+                if (fixed_plan.result == plan_result::ready)
+                    ++g_local_specular_fixed_plan_ready;
+                else if (fixed_plan.result ==
+                         plan_result::
+                            pass_clustered_membership_not_owned)
+                    ++g_local_specular_clustered_deferred;
+                else
+                    ++g_local_specular_fixed_plan_fail;
             } else {
                 ++g_local_specular_window_fail;
+                ++g_local_specular_fixed_plan_fail;
             }
         }
 
@@ -2253,6 +2279,9 @@ bool AddonInit(
     g_local_specular_window_pass.store(0);
     g_local_specular_window_fail.store(0);
     g_local_specular_windows_total.store(0);
+    g_local_specular_fixed_plan_ready.store(0);
+    g_local_specular_clustered_deferred.store(0);
+    g_local_specular_fixed_plan_fail.store(0);
     reset_integrated_draw_routes();
     for (auto &rx : g_material_receiver_runtime) {
         rx.seen.store(0);
