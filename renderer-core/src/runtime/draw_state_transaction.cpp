@@ -721,9 +721,6 @@ bool draw_state_transaction_runtime::restore(
                 sampler->Release();
         }
     
-        if (ctx1 != nullptr)
-            ctx1->Release();
-    
     
     }
 
@@ -830,6 +827,7 @@ draw_state_transaction_runtime::telemetry() const noexcept
         draws_issued_.load(),
         restore_ok_.load(),
         restore_fail_.load(),
+        native_readback_skipped_.load(),
         quarantined_.load()
     };
 }
@@ -848,6 +846,7 @@ void draw_state_transaction_runtime::reset() noexcept
     draws_issued_.store(0);
     restore_ok_.store(0);
     restore_fail_.store(0);
+    native_readback_skipped_.store(0);
     quarantined_.store(false);
 }
 
