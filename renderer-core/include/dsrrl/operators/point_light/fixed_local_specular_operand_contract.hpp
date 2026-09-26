@@ -42,6 +42,15 @@ struct fixed_local_specular_operand_contract {
     fixed_local_specular_patch_plan plan{};
     std::array<fixed_local_specular_light_operands,4> lights{};
     std::uint8_t light_count = 0u;
+
+    // Direct stock DSR transport for the PTDE legacy angular exponent.
+    // Kept in the operand contract so the eventual DXBC materializer has one
+    // attested source for N/V/L and g_SpecularPower, rather than reconstructing
+    // either semantic independently.
+    std::uint8_t specular_power_cb_slot = 0u;
+    std::uint16_t specular_power_cb_index = 11u;
+    std::uint8_t specular_power_component = 0u;
+    bool exponent_carrier_attested = false;
 };
 
 // Exact-token semantic extraction after receiver/window attestation.
