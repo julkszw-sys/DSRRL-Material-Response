@@ -231,14 +231,6 @@ std::uint8_t scalar_component(std::uint32_t dst_token) noexcept
     return 0xffu;
 }
 
-std::uint32_t temp_dst_scalar(std::uint8_t c) noexcept
-{
-    return c==0u?0x00100012u:
-           c==1u?0x00100022u:
-           c==2u?0x00100042u:
-                 0x00100082u;
-}
-
 std::uint32_t temp_src_scalar(std::uint8_t c) noexcept
 {
     return 0x0010000au+
