@@ -1561,6 +1561,49 @@ prepare_subsurface_body_requests(
     return true;
 }
 
+bool material_resource_draw_runtime::
+drop_spec_rgb_request(
+    prepared_material_resource_draw &prepared) noexcept
+{
+    if (!prepared.spec_rgb ||
+        prepared.request_count == 0u ||
+        prepared.request_count != prepared.retained_count)
+        return false;
+
+    std::uint32_t index = prepared.request_count;
+    for (std::uint32_t i = 0u;
+         i < prepared.request_count;
+         ++i) {
+        if (prepared.requests[i].primary ==
+            core::operator_id::spec_rgb) {
+            index = i;
+            break;
+        }
+    }
+
+    if (index >= prepared.request_count)
+        return false;
+
+    if (prepared.retained_views[index] != nullptr)
+        prepared.retained_views[index]->Release();
+
+    for (std::uint32_t i = index + 1u;
+         i < prepared.request_count;
+         ++i) {
+        prepared.requests[i - 1u] =
+            prepared.requests[i];
+        prepared.retained_views[i - 1u] =
+            prepared.retained_views[i];
+    }
+
+    --prepared.request_count;
+    --prepared.retained_count;
+    prepared.requests[prepared.request_count] = {};
+    prepared.retained_views[prepared.retained_count] = nullptr;
+    prepared.spec_rgb = false;
+    return true;
+}
+
 void material_resource_draw_runtime::
 release_prepared_draw(
     prepared_material_resource_draw &prepared) noexcept
