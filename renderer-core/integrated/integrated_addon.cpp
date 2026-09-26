@@ -1963,12 +1963,91 @@ bool prepare_island_batch(
         return true;
     }
 
-    // HemEnvLerp is a distinct executable consumer. P_Metal EnvSpec above
-    // owns its exact composed MR+EnvSpec+SpecRGB+U/L route. For every other
-    // exact U/L-live HemEnvLerp receiver, use only the stock-derived U/L
-    // replacement plus fresh b13. This restores the U/L operator without
-    // silently importing stable-HemEnv MR/resource semantics into Lerp.
+    // HemEnvLerp is a distinct executable consumer and must use its own
+    // replacement shader namespace. The exact paired semantic receiver ID is
+    // reused only for material/resource policy; the PS itself is the Lerp
+    // V2.11+b12 + U/L+b13 + SpecRGB-t10 composition registered above.
+    //
+    // This closes the runtime hole where Lerp previously returned early with
+    // U/L only, causing PTDE Diffuse/Normal/SpecRGB carriers to fall back to
+    // stock DSR during profile interpolation.
     if (hemenvlerp_bound) {
+        const bool lerp_ul_exact =
+            upper_lower_bound &&
+            upper_lower_identity.family ==
+                dsrrl::operators::lightbank::
+                    upper_lower_hemenv_family::hemenvlerp &&
+            upper_lower_identity.stratum ==
+                dsrrl::operators::lightbank::
+                    upper_lower_hemenv_stratum::spc &&
+            upper_lower_identity.stable_receiver_id ==
+                decision.receiver_id;
+
+        if (decision.active &&
+            lerp_ul_exact &&
+            context != nullptr &&
+            g_upper_lower.prepare_upper_lower_carrier(
+                context,
+                prepared.upper_lower.carrier) &&
+            g_mr_draw_runtime.
+                prepare_lerp_draw_request_with_upper_lower(
+                    decision,
+                    prepared.upper_lower.carrier.b13,
+                    prepared.mr)) {
+            if (dsrrl::runtime::append_island_draw_request(
+                    prepared.batch,
+                    prepared.mr.request) !=
+                dsrrl::runtime::island_draw_batch_result::ready) {
+                release_prepared_island_batch(prepared);
+                return false;
+            }
+
+            prepared.mr_in_batch = true;
+            prepared.upper_lower_combined = true;
+
+            dsrrl::operators::material_response::
+                mtd_semantic_query lerp_query{};
+            lerp_query.material = material;
+            lerp_query.receiver_id = receiver_id;
+            lerp_query.ownership.flver_sha256 =
+                material.flver_sha256;
+            lerp_query.ownership.flver_identity_hash =
+                material.flver_identity_hash;
+            lerp_query.ownership.material_slot =
+                material.material_slot;
+            lerp_query.ownership.material_slot_valid =
+                material.material_slot_valid;
+            lerp_query.ownership.exact =
+                material.owner_tuple_exact;
+
+            (void)g_material_resources.prepare_draw_requests(
+                context,
+                receiver_id,
+                lerp_query,
+                true,
+                prepared.resources);
+
+            for (std::uint32_t i = 0u;
+                 i < prepared.resources.request_count;
+                 ++i) {
+                if (dsrrl::runtime::append_island_draw_request(
+                        prepared.batch,
+                        prepared.resources.requests[i]) !=
+                    dsrrl::runtime::island_draw_batch_result::ready) {
+                    release_prepared_island_batch(prepared);
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        // Conservative fallback for exact Lerp receivers that cannot prove
+        // the full material/resource composition. Keep the already-certified
+        // U/L-only route rather than borrowing a stable-HemEnv shader.
+        g_upper_lower_hemenv.release_prepared_draw(
+            prepared.upper_lower);
+
         if (upper_lower_bound &&
             upper_lower_identity.family ==
                 dsrrl::operators::lightbank::
