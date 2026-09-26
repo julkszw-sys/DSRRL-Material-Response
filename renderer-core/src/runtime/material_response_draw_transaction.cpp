@@ -689,6 +689,10 @@ bool material_response_draw_runtime::prepare_prevalidated_route_request(
     decision.lod_max = seed->lod_max;
     decision.c100 = constants->c100;
     decision.c101_f0q = constants->c101_f0q;
+    decision.ptde_specular_power =
+        constants->ptde_specular_power;
+    decision.ptde_specular_power_verified =
+        constants->ptde_specular_power_verified;
 
     return prepare_draw_request(
         decision,
@@ -749,6 +753,10 @@ prepare_prevalidated_route_request_with_upper_lower(
     decision.lod_max = seed->lod_max;
     decision.c100 = constants->c100;
     decision.c101_f0q = constants->c101_f0q;
+    decision.ptde_specular_power =
+        constants->ptde_specular_power;
+    decision.ptde_specular_power_verified =
+        constants->ptde_specular_power_verified;
 
     return prepare_draw_request_with_upper_lower(
         decision,
@@ -813,7 +821,9 @@ ID3D11Buffer *material_response_draw_runtime::realize_b12(
             decision.c101_f0q[0],
             decision.c101_f0q[1],
             decision.c101_f0q[2],
-            1.0f
+            decision.ptde_specular_power_verified
+                ? decision.ptde_specular_power
+                : 1.0f
         },
         {
             decision.c100[0],
