@@ -2,6 +2,7 @@
 
 #include "dsrrl/operators/legacy_plan/a1_create_time_materializer.hpp"
 #include "dsrrl/operators/legacy_plan/dxbc_checksum.hpp"
+#include "dsrrl/operators/legacy_plan/sha256_bytes.hpp"
 #include "dsrrl/operators/point_light/fixed_local_geometry_contract.hpp"
 #include "dsrrl/operators/point_light/fixed_local_specular_material_samples.hpp"
 #include "dsrrl/operators/point_light/fixed_local_specular_t19_lowering.hpp"
@@ -656,6 +657,11 @@ materialize_fixed_local_specular_single(
         return out;
     }
     out.a1_full_plan=true;
+    out.a1_host_sha256 =
+        legacy_plan::hashing::sha256(
+            p22.data(),
+            p22.size());
+    out.a1_host_size = p22.size();
 
     std::vector<chunk> chunks;
     std::vector<std::uint32_t> words;
@@ -928,6 +934,10 @@ materialize_fixed_local_specular_single(
     }
 
     out.light_count=samples.island.light_count;
+    out.replacement_sha256 =
+        legacy_plan::hashing::sha256(
+            output.data(),
+            output.size());
     out.result=fixed_local_single_materialize_result::applied;
     return out;
 }
