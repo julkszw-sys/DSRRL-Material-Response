@@ -101,7 +101,6 @@ add_library(dsrrl_renderer_core STATIC
     src/runtime/flver_identity_registry.cpp
     src/runtime/stable_receiver_pipeline_registry.cpp
     src/runtime/hemenvlerp_pipeline_registry.cpp
-    src/runtime/fixed_pointlight_draw_runtime.cpp
     src/renderer_core.cpp
     src/operator_catalog.cpp
     src/island_policy.cpp
@@ -164,6 +163,12 @@ target_include_directories(dsrrl_renderer_core PUBLIC
     ${DSRRL_GENERATED_DIR}
     ${CMAKE_CURRENT_SOURCE_DIR}/include)
 target_compile_features(dsrrl_renderer_core PUBLIC cxx_std_17)
+
+if(WIN32)
+    target_sources(dsrrl_renderer_core PRIVATE
+        src/runtime/fixed_pointlight_draw_runtime.cpp
+    )
+endif()
 
 add_executable(dsrrl_renderer_material_owner_tests tests/material_owner_producer_tests.cpp)
 add_executable(dsrrl_renderer_material_owner_selection_tests
