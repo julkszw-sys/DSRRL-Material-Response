@@ -112,6 +112,8 @@ std::atomic<std::uint64_t> g_mr_payload_materialize_ok{0};
 std::atomic<std::uint64_t> g_mr_payload_materialize_fail{0};
 std::atomic<std::uint64_t> g_mr_ul_payload_materialize_ok{0};
 std::atomic<std::uint64_t> g_mr_ul_payload_materialize_fail{0};
+std::atomic<std::uint64_t> g_lerp_full_draw_ready{0};
+std::atomic<std::uint64_t> g_lerp_full_draw_fallback{0};
 std::atomic<std::uint64_t> g_envspec_payload_materialize_ok{0};
 std::atomic<std::uint64_t> g_envspec_payload_materialize_fail{0};
 std::atomic<std::uint64_t> g_draw_events{0};
@@ -613,6 +615,7 @@ void log_state(const char *tag) noexcept
         "mr_ready=%u mr_eval=%llu mr_would_activate=%llu mr_fo=%llu "
         "mr_mat_ok=%llu mr_mat_fail=%llu mr_payload_ok=%llu mr_payload_fail=%llu "
         "mr_ul_payload=%llu/%llu mr_ul_reg=%llu/%llu mr_ul_prepare=%llu mr_ul_miss=%llu "
+        "mr_reg=%llu/%llu lerp_full=%llu/%llu "
         "mr_b12_create=%llu mr_b12_hit=%llu mr_b12_bind_fail=%llu "
         "mr_tx_eligible=%llu mr_tx_miss=%llu mr_replay=%llu mr_restore_fail=%llu mr_quarantine=%u "
         "tx_begin_ok=%llu tx_begin_fail=%llu tx_bind_fail=%llu tx_issued=%llu "
@@ -666,6 +669,8 @@ void log_state(const char *tag) noexcept
         static_cast<unsigned long long>(mr_tx.combined_ul_miss),
         static_cast<unsigned long long>(mr_tx.replacement_register_ok),
         static_cast<unsigned long long>(mr_tx.replacement_register_fail),
+        static_cast<unsigned long long>(g_lerp_full_draw_ready.load()),
+        static_cast<unsigned long long>(g_lerp_full_draw_fallback.load()),
         static_cast<unsigned long long>(mr_tx.b12_create),
         static_cast<unsigned long long>(mr_tx.b12_hit),
         static_cast<unsigned long long>(mr_tx.b12_bind_fail),
@@ -2039,8 +2044,11 @@ bool prepare_island_batch(
                 }
             }
 
+            ++g_lerp_full_draw_ready;
             return true;
         }
+
+        ++g_lerp_full_draw_fallback;
 
         // Conservative fallback for exact Lerp receivers that cannot prove
         // the full material/resource composition. Keep the already-certified
@@ -2457,6 +2465,8 @@ bool AddonInit(
     g_mr_payload_materialize_fail.store(0);
     g_mr_ul_payload_materialize_ok.store(0);
     g_mr_ul_payload_materialize_fail.store(0);
+    g_lerp_full_draw_ready.store(0);
+    g_lerp_full_draw_fallback.store(0);
     g_envspec_payload_materialize_ok.store(0);
     g_envspec_payload_materialize_fail.store(0);
     g_draw_events.store(0);
