@@ -55,6 +55,13 @@ void material_response_draw_runtime::release_resources() noexcept
     }
     replacements_.clear();
 
+    for (auto &entry : spec_rgb_replacements_) {
+        auto *shader = entry.second.shader;
+        if (shader != nullptr)
+            shader->Release();
+    }
+    spec_rgb_replacements_.clear();
+
     for (auto &entry : lerp_replacements_) {
         auto *shader = entry.second.shader;
         if (shader != nullptr)
@@ -62,12 +69,26 @@ void material_response_draw_runtime::release_resources() noexcept
     }
     lerp_replacements_.clear();
 
+    for (auto &entry : lerp_spec_rgb_replacements_) {
+        auto *shader = entry.second.shader;
+        if (shader != nullptr)
+            shader->Release();
+    }
+    lerp_spec_rgb_replacements_.clear();
+
     for (auto &entry : upper_lower_replacements_) {
         auto *shader = entry.second.shader;
         if (shader != nullptr)
             shader->Release();
     }
     upper_lower_replacements_.clear();
+
+    for (auto &entry : upper_lower_spec_rgb_replacements_) {
+        auto *shader = entry.second.shader;
+        if (shader != nullptr)
+            shader->Release();
+    }
+    upper_lower_spec_rgb_replacements_.clear();
 
     for (auto &entry : b12_by_route_) {
         auto *buffer = entry.second;
@@ -126,6 +147,13 @@ void material_response_draw_runtime::on_destroy_device(
     }
     replacements_.clear();
 
+    for (auto &entry : spec_rgb_replacements_) {
+        auto *shader = entry.second.shader;
+        if (shader != nullptr)
+            shader->Release();
+    }
+    spec_rgb_replacements_.clear();
+
     for (auto &entry : lerp_replacements_) {
         auto *shader = entry.second.shader;
         if (shader != nullptr)
@@ -133,12 +161,26 @@ void material_response_draw_runtime::on_destroy_device(
     }
     lerp_replacements_.clear();
 
+    for (auto &entry : lerp_spec_rgb_replacements_) {
+        auto *shader = entry.second.shader;
+        if (shader != nullptr)
+            shader->Release();
+    }
+    lerp_spec_rgb_replacements_.clear();
+
     for (auto &entry : upper_lower_replacements_) {
         auto *shader = entry.second.shader;
         if (shader != nullptr)
             shader->Release();
     }
     upper_lower_replacements_.clear();
+
+    for (auto &entry : upper_lower_spec_rgb_replacements_) {
+        auto *shader = entry.second.shader;
+        if (shader != nullptr)
+            shader->Release();
+    }
+    upper_lower_spec_rgb_replacements_.clear();
 
     for (auto &entry : b12_by_route_) {
         auto *buffer = entry.second;
