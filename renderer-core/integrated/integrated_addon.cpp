@@ -2064,12 +2064,14 @@ bool prepare_island_batch(
             // SpecRGB carrier and consumer are one atomic bridge. If the
             // resource is ready but the exact paired shader is not, discard
             // draw-local resource substitutions and keep the base t1 MR path.
+            bool lerp_resource_fallback = false;
             if (prepared.resources.spec_rgb &&
                 !g_mr_draw_runtime.
                     promote_prepared_draw_to_spec_rgb(
                         prepared.mr)) {
                 g_material_resources.release_prepared_draw(
                     prepared.resources);
+                lerp_resource_fallback = true;
             }
 
             if (dsrrl::runtime::append_island_draw_request(
@@ -2092,7 +2094,10 @@ bool prepare_island_batch(
                 }
             }
 
-            ++g_lerp_full_draw_ready;
+            if (lerp_resource_fallback)
+                ++g_lerp_full_draw_fallback;
+            else
+                ++g_lerp_full_draw_ready;
             return true;
         }
 
