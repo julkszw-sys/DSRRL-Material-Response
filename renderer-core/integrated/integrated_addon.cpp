@@ -2228,7 +2228,7 @@ bool AddonInit(
 
     reshade::log::message(
         reshade::log::level::warning,
-        "[DSRRL PERF DIAG G_FLVER_OPERATOR_NO_TEXTURE] FLVER + Bloom/HemDir3/UpperLower native hooks active; texture identity and ReShade event/resource layers disabled.");
+        "[DSRRL PERF DIAG G_FLVER_OPERATOR_NO_TEXTURE] FLVER + Bloom/HemDir3/UpperLower native hooks active; texture identity and ReShade event/resource layers disabled. Audit marker: BLOOM_FX ww_diag_join; Bloom FX draw transport FAIL-OPEN where disabled by this diagnostic.");
 
     reshade::log::message(
         reshade::log::level::info,
