@@ -1,4 +1,5 @@
 #include "dsrrl/runtime/material_response_draw_transaction.hpp"
+#include "dsrrl/operators/material_response/material_response_b12_payload.hpp"
 #include "dsrrl/runtime/island_draw_adapter.hpp"
 #include "dsrrl/operators/material_response/generated_routes_v1.hpp"
 #include "dsrrl/operators/material_response/generated_material_constants_v1.hpp"
@@ -809,40 +810,9 @@ ID3D11Buffer *material_response_draw_runtime::realize_b12(
         return found->second;
     }
 
-    struct alignas(16) f4 {
-        float x;
-        float y;
-        float z;
-        float w;
-    };
-
-    const std::array<f4, 4> payload{{
-        {
-            decision.c101_f0q[0],
-            decision.c101_f0q[1],
-            decision.c101_f0q[2],
-            decision.ptde_specular_power_verified
-                ? decision.ptde_specular_power
-                : 1.0f
-        },
-        {
-            decision.c100[0],
-            decision.c100[1],
-            decision.c100[2],
-            1.0f
-        },
-        // Raw PTDE c101 is intentionally separate from b12[0].xyz, which is
-        // the Material Response c101_f0q representation used by the stock-host
-        // response bridge. The direct PTDE PointLight island must consume the
-        // authored legacy c101 amplitude, not the transformed F0-equivalent.
-        {
-            decision.c101,
-            decision.c101,
-            decision.c101,
-            1.0f
-        },
-        {0.0f, 0.0f, 0.0f, 0.0f}
-    }};
+    const auto payload =
+        operators::material_response::make_material_response_b12_payload(
+            decision);
 
     D3D11_BUFFER_DESC desc{};
     desc.ByteWidth =
