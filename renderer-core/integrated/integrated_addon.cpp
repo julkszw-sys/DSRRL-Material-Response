@@ -1037,6 +1037,7 @@ bool on_create_pipeline(
             identity.stable_receiver_id =
                 ul.stable_receiver_id;
             identity.stratum = ul.stratum;
+            identity.family = ul.family;
 
             ul_identity_ready =
                 dsrrl::runtime::
