@@ -256,8 +256,12 @@ jobs:
             'materialize_spec_rgb_consumer',
             'final_postcondition',
             'fail_a1_overlap',
+            'site->postblend_word',
+            'site->t9_word',
             'site->t11_word',
-            'site->merge_word'
+            'site->merge_word',
+            'expected_envspec_cut',
+            '0x0100003au'
           )) {
             if ($envspecLerpMaterializer -notmatch [regex]::Escape($required)) { throw "P_Metal HemEnvLerp exact EnvSpec materializer invariant missing: $required" }
           }
