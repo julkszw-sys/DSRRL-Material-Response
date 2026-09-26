@@ -107,6 +107,14 @@ public:
         std::uint32_t receiver_id,
         const std::optional<material_identity> &material) const;
 
+    // Direct PTDE PointLight owns a material-local operator and must not borrow
+    // the stable no-PointLight receiver namespace merely to recover authored
+    // c100/c101/c102. This resolver authenticates the exact FLVER+slot+MTD
+    // tuple and resolves one unique registered material profile independent of
+    // receiver, requiring a verified PTDE specular-power donor.
+    decision evaluate_direct_pointlight_material(
+        const material_identity &material) const;
+
     std::size_t receiver_recipe_count() const noexcept;
     std::size_t material_profile_count() const noexcept;
 
@@ -115,6 +123,8 @@ private:
     std::optional<material_profile> resolve_material(
         const material_identity &identity,
         std::uint32_t receiver_id) const;
+    std::optional<material_profile> resolve_material_unscoped(
+        const material_identity &identity) const;
 
     mutable std::mutex mutex_;
     std::vector<receiver_recipe> receiver_recipes_;
