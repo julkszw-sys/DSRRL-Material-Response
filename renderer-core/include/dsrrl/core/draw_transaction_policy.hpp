@@ -175,17 +175,38 @@ upper_lower_native_readback_skip_allowed(
     const auto ul =
         operator_bit(operator_id::upper_lower);
 
-    return
-        (shape.owners & ul) != 0u &&
-        (shape.shader_owners & ul) != 0u &&
-        shape.constant_buffer_owners == ul &&
-        shape.carrier_owners == ul &&
-        shape.resource_owners == 0u &&
-        shape.constant_buffer_count == 1u &&
-        shape.constant_buffer_slot == 13u &&
-        shape.constant_buffer_binding_owners == ul &&
-        shape.srv_count == 0u &&
-        shape.sampler_count == 0u;
+    if ((shape.owners & ul) == 0u ||
+        (shape.shader_owners & ul) == 0u ||
+        shape.constant_buffer_owners != ul ||
+        shape.carrier_owners != ul ||
+        shape.resource_owners != 0u ||
+        shape.constant_buffer_count != 1u ||
+        shape.constant_buffer_slot != 13u ||
+        shape.constant_buffer_binding_owners != ul ||
+        shape.srv_count != 0u ||
+        shape.sampler_count != 0u)
+        return false;
+
+    // Additional shader owners are permitted only when they are already
+    // create-time-safe operators embedded in the replacement PS. No other
+    // draw-required island may inherit U/L's runtime readback waiver.
+    for (std::size_t i = 0u;
+         i < operator_count;
+         ++i) {
+        const auto op =
+            static_cast<operator_id>(i);
+        const auto bit = operator_bit(op);
+
+        if (bit == ul ||
+            (shape.owners & bit) == 0u)
+            continue;
+
+        if (!create_time_safe_operator(op) ||
+            (shape.shader_owners & bit) == 0u)
+            return false;
+    }
+
+    return true;
 }
 
 constexpr std::uint32_t draw_policy_carrier_write_mask(
