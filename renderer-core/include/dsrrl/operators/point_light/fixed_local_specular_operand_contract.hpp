@@ -43,13 +43,14 @@ struct fixed_local_specular_operand_contract {
     std::array<fixed_local_specular_light_operands,4> lights{};
     std::uint8_t light_count = 0u;
 
-    // Direct stock DSR transport for the PTDE legacy angular exponent.
-    // Kept in the operand contract so the eventual DXBC materializer has one
-    // attested source for N/V/L and g_SpecularPower, rather than reconstructing
-    // either semantic independently.
-    std::uint8_t specular_power_cb_slot = 0u;
-    std::uint16_t specular_power_cb_index = 11u;
-    std::uint8_t specular_power_component = 0u;
+    // Stock cb0[11].x remains an attested routing witness. The actual PTDE
+    // exponent donor is carried by Material Response in b12[0].w.
+    std::uint8_t stock_specular_power_cb_slot = 0u;
+    std::uint16_t stock_specular_power_cb_index = 11u;
+    std::uint8_t stock_specular_power_component = 0u;
+    std::uint8_t ptde_specular_power_cb_slot = 12u;
+    std::uint16_t ptde_specular_power_cb_index = 0u;
+    std::uint8_t ptde_specular_power_component = 3u;
     bool exponent_carrier_attested = false;
 };
 
