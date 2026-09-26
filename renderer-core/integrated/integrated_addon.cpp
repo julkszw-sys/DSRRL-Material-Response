@@ -648,7 +648,8 @@ void log_state(const char *tag) noexcept
         "init_bad=%llu binds=%llu/%llu/%llu unknown=%llu lookup=%llu/%llu/%llu q=%u "
         "repl=%llu/%llu candidate=%llu carrier=%llu/%llu identity_reject=%llu "
         "nospc_ready=%llu spc_ready=%llu spc_mr_hold=%llu "
-        "family_ready=%llu/%llu/%llu/%llu/%llu req=%llu ul_q=%u",
+        "family_seen=%llu/%llu/%llu/%llu/%llu family_ready=%llu/%llu/%llu/%llu/%llu "
+        "req=%llu ul_q=%u",
         tag,
         static_cast<unsigned long long>(ul_pipe.created_code_attested),
         static_cast<unsigned long long>(ul_pipe.created_code_conflict),
@@ -673,6 +674,11 @@ void log_state(const char *tag) noexcept
         static_cast<unsigned long long>(ul_draw.nospc_ready),
         static_cast<unsigned long long>(ul_draw.spc_ready),
         static_cast<unsigned long long>(ul_draw.spc_mr_hold),
+        static_cast<unsigned long long>(ul_draw.phn_candidates),
+        static_cast<unsigned long long>(ul_draw.gst_candidates),
+        static_cast<unsigned long long>(ul_draw.sfx_candidates),
+        static_cast<unsigned long long>(ul_draw.snow_candidates),
+        static_cast<unsigned long long>(ul_draw.ntoa_candidates),
         static_cast<unsigned long long>(ul_draw.phn_ready),
         static_cast<unsigned long long>(ul_draw.gst_ready),
         static_cast<unsigned long long>(ul_draw.sfx_ready),
