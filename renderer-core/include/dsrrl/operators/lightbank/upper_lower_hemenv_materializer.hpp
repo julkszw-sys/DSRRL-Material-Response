@@ -30,7 +30,8 @@ enum class upper_lower_hemenv_family : std::uint8_t {
     hemenv = 0,
     hemenvlerp,
     hemenv_parallax,
-    hemenvlerp_parallax
+    hemenvlerp_parallax,
+    phn_pnts
 };
 
 struct upper_lower_hemenv_materialize_outcome {
