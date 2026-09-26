@@ -708,13 +708,16 @@ void log_state(const char *tag) noexcept
         bloom_fx_line,
         sizeof(bloom_fx_line),
         "[DSRRL CORE+ISLANDS " DSRRL_CORE_ISLANDS_VERSION "] %s_BLOOM_FX "
-        "prov=%u hooks=%u/%u q=%u restore_fail=%u "
+        "prov=%u hooks=%u/%u model=%u/%u q=%u restore_fail=%u "
         "events=%llu/%llu exact=%llu reject=%llu state=%llu/%llu "
-        "state_exact=%llu/%llu links=%llu/%llu snap=%llu/%llu",
+        "state_exact=%llu/%llu links=%llu/%llu model_evt=%llu/%llu "
+        "model_join=%llu/%llu registry=%llu snap=%llu/%llu",
         tag,
         bloom_fx.provenance_ok ? 1u : 0u,
         bloom_fx.particle_hook_armed ? 1u : 0u,
         bloom_fx.cluster_hook_armed ? 1u : 0u,
+        bloom_fx.particle_model_ctor_hook_armed ? 1u : 0u,
+        bloom_fx.particle_model_dtor_hook_armed ? 1u : 0u,
         bloom_fx.quarantined ? 1u : 0u,
         bloom_fx.restore_failed ? 1u : 0u,
         static_cast<unsigned long long>(bloom_fx.particle_events),
@@ -727,6 +730,11 @@ void log_state(const char *tag) noexcept
         static_cast<unsigned long long>(bloom_fx.state_vtable_rejects),
         static_cast<unsigned long long>(bloom_fx.source_links_ready),
         static_cast<unsigned long long>(bloom_fx.source_links_missing),
+        static_cast<unsigned long long>(bloom_fx.particle_model_ctor_events),
+        static_cast<unsigned long long>(bloom_fx.particle_model_dtor_events),
+        static_cast<unsigned long long>(bloom_fx.particle_model_join_hits),
+        static_cast<unsigned long long>(bloom_fx.particle_model_join_misses),
+        static_cast<unsigned long long>(bloom_fx.particle_model_registry_size),
         static_cast<unsigned long long>(bloom_fx.snapshot_hits),
         static_cast<unsigned long long>(bloom_fx.snapshot_misses));
 
