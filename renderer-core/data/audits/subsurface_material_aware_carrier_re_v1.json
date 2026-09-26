@@ -1,0 +1,43 @@
+{
+  "schema": "dsrrl.renderer_core.subsurface_material_aware_carrier_re.v1",
+  "island": "bridge.subsurface",
+  "status": "CAPTURE_FREE_STRUCTURAL_PASS_RUNTIME_OPEN",
+  "source_revision": "1b41bbbb8639265ad07ccda0e532a8ab3051bc6a",
+  "finding": "The existing runtime-v1 selector path already transports parsed material identity to the draw boundary, so Subsurface is not intrinsically constrained to global create-time shader substitution. A narrower material-aware draw-time PS carrier is structurally available and avoids requiring global shader-owner exclusivity.",
+  "chain": {
+    "source": "retail DSR parsed material selected from material container",
+    "producer": "DarkSoulsRemastered.exe RVA 0x22BA20 selector; parsed material = *([container+0x10] + 24*material_index)",
+    "transport": "selector_hook_entry preserves container/material_index and calls selector_event; selector_event resolves the exact parsed material and stores draw-local material identity as g_draw_donor",
+    "consumer": "on_draw_indexed consumes g_draw_donor exactly once and combines it with the currently bound exact receiver/pipeline host",
+    "composition": "existing unified draw transaction can bind a replacement pixel shader plus resource bridges and restore stock PS/CB/SRV state",
+    "downstream": "native DrawIndexed/DrawIndexedInstanced; failed qualification restores stock state and lets ReShade issue the original draw"
+  },
+  "narrowest_carrier": "selector-authenticated material token + exact bound receiver -> draw-local PS substitution -> unified restore",
+  "evidence": [
+    "runtime-v1/src/selector_hook.asm: material container and material_index are forwarded to selector_observer; retail selector layout is documented in-code",
+    "runtime-v1/src/mr_island.cpp: resolve_material reads [container+0x10] and 24-byte indexed material records; selector_event gates three certified selector return sites and stores g_draw_donor",
+    "runtime-v1/src/mr_island.cpp: on_draw_indexed consumes g_draw_donor, derives exact receiver_id from bound host, performs PSSetShader inside the unified transaction, then restores shader/CB/resource state",
+    "experimental/expanded-a3/audit/SELECTOR_CHAIN_HOTFIX2.json: shipping selector resolver executes before the observer at EXE RVA 0x22BA20"
+  ],
+  "boundary": {
+    "closed": [
+      "material identity is available at selector time",
+      "material identity survives to the draw boundary in existing runtime architecture",
+      "exact receiver identity is available at draw time",
+      "draw-local pixel-shader substitution and fail-open restoration machinery already exist"
+    ],
+    "open": [
+      "Subsurface-specific DSR MTD identity authentication on this carrier",
+      "exact HemEnvSubsurf -> plain DifSpcBmp replacement selection on this carrier",
+      "proof that all three Ps_Body[DSBT] routes reach the certified selector return sites",
+      "runtime activation",
+      "pixel equivalence"
+    ]
+  },
+  "governance": {
+    "does_not_prove_pixel_equivalence": true,
+    "does_not_promote_runtime": true,
+    "global_create_time_owner_exclusivity_still_required_only_for_global_create_time_carrier": true,
+    "preferred_next_step": "Implement a typed material-aware Subsurface readiness/carrier alternative that requires exact Ps_Body route authentication + exact receiver + certified replacement identity; retain the current create-time path as fail-open unless owner exclusivity is independently closed."
+  }
+}
