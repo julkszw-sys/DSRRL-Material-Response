@@ -42,9 +42,12 @@ int main()
         CHECK(plan.light_count==2u);
         CHECK(plan.material_cb_slot==12u);
         CHECK(plan.raw_q_srv_slot==19u);
-        CHECK(plan.specular_power_cb_slot==0u);
-        CHECK(plan.specular_power_cb_index==11u);
-        CHECK(plan.specular_power_component==0u);
+        CHECK(plan.stock_specular_power_cb_slot==0u);
+        CHECK(plan.stock_specular_power_cb_index==11u);
+        CHECK(plan.stock_specular_power_component==0u);
+        CHECK(plan.ptde_specular_power_cb_slot==12u);
+        CHECK(plan.ptde_specular_power_cb_index==0u);
+        CHECK(plan.ptde_specular_power_component==3u);
         CHECK(plan.lights[0].raw_q_t19_index==0u);
         CHECK(plan.lights[1].raw_q_t19_index==1u);
         CHECK(plan.lights[0].position_begin_cb==112u);
