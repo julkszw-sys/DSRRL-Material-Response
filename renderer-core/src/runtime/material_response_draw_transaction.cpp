@@ -203,7 +203,8 @@ bool material_response_draw_runtime::register_receiver_replacement(
 {
     const core::operator_mask forbidden_owners =
         core::operator_bit(core::operator_id::material_response) |
-        core::operator_bit(core::operator_id::diffuse_material_domain);
+        core::operator_bit(core::operator_id::diffuse_material_domain) |
+        core::operator_bit(core::operator_id::spec_rgb);
 
     if (receiver_id == 0u ||
         dxbc == nullptr ||
@@ -272,7 +273,8 @@ bool material_response_draw_runtime::register_lerp_receiver_replacement(
     const core::operator_mask forbidden_owners =
         core::operator_bit(core::operator_id::material_response) |
         core::operator_bit(core::operator_id::diffuse_material_domain) |
-        core::operator_bit(core::operator_id::upper_lower);
+        core::operator_bit(core::operator_id::upper_lower) |
+        core::operator_bit(core::operator_id::spec_rgb);
 
     if (receiver_id < 24u ||
         receiver_id > 47u ||
