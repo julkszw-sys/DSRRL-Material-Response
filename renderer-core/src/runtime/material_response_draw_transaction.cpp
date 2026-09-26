@@ -831,7 +831,16 @@ ID3D11Buffer *material_response_draw_runtime::realize_b12(
             decision.c100[2],
             1.0f
         },
-        {0.0f, 0.0f, 0.0f, 0.0f},
+        // Raw PTDE c101 is intentionally separate from b12[0].xyz, which is
+        // the Material Response c101_f0q representation used by the stock-host
+        // response bridge. The direct PTDE PointLight island must consume the
+        // authored legacy c101 amplitude, not the transformed F0-equivalent.
+        {
+            decision.c101,
+            decision.c101,
+            decision.c101,
+            1.0f
+        },
         {0.0f, 0.0f, 0.0f, 0.0f}
     }};
 
