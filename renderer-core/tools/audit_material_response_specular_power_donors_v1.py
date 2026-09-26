@@ -7,7 +7,7 @@ import re
 from pathlib import Path
 
 ROUTE_RE = re.compile(
-    r'\{"[^"]+","[^"]+",(?P<route>\d+)u,[-0-9.]+f,\d+u,\d+,'
+    r'\{"[^"]+","[^"]+",(?P<route>\d+)u,[-0-9.]+f,\d+u,\d+u,'
     r'"[^"]+",\d+u,\d+u,\d+u,"(?P<sha>[0-9a-f]{64})",(?:true|false)\}'
 )
 DONOR_RE = re.compile(
