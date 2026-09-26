@@ -138,8 +138,20 @@ add_library(dsrrl_renderer_core STATIC
     "${DSRRL_LOCAL_SPECULAR_RECEIVER_HEADER}"
     "${DSRRL_FIXED_LOCAL_SPECULAR_PTDE_REFERENCE_HEADER}"
 )
+add_custom_target(dsrrl_pointlight_core_source_audit
+    COMMAND "${Python3_EXECUTABLE}"
+            "${CMAKE_CURRENT_SOURCE_DIR}/tools/audit_pointlight_core_sources.py"
+            --source-dir "${CMAKE_CURRENT_SOURCE_DIR}"
+            --cmake "${CMAKE_CURRENT_LIST_FILE}"
+    DEPENDS
+        "${CMAKE_CURRENT_SOURCE_DIR}/tools/audit_pointlight_core_sources.py"
+        "${CMAKE_CURRENT_LIST_FILE}"
+    VERBATIM
+)
+
 add_dependencies(
     dsrrl_renderer_core
+    dsrrl_pointlight_core_source_audit
     dsrrl_native_envspec_probe_header
     dsrrl_dsr_flver_owner_tuple_header
     dsrrl_hemenvlerp_v211_header
