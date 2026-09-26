@@ -100,8 +100,6 @@ struct inline_hook {
 
 using wrapper_fn =
     void *(__fastcall *)(void *,void *,void *,float);
-using blend_fn =
-    void *(__fastcall *)(void *,const void *,const void *,float);
 using steady_packer_fn =
     void (__fastcall *)(void *,void *,std::int32_t);
 using lightbank_blend_packer_fn =
@@ -123,22 +121,16 @@ using pmetal_env_blend_fn =
 
 constexpr std::uintptr_t k_rva_wrapper_type5 = 0x1C0BE0u;
 constexpr std::uintptr_t k_rva_wrapper_type6 = 0x1C0C10u;
-constexpr std::uintptr_t k_rva_blend_helper = 0x5642F0u;
 constexpr std::uintptr_t k_rva_steady_packer = 0x563B80u;
 constexpr std::uintptr_t k_rva_blend_packer = 0x5637E0u;
 constexpr std::uintptr_t k_rva_pmetal_env_blend = 0x563C30u;
 
-constexpr std::uintptr_t k_ret_blend_upper = 0x5639BAu;
-constexpr std::uintptr_t k_ret_blend_lower = 0x5639D5u;
 constexpr std::uintptr_t k_ret_sel_1 = 0x20E019u;
 constexpr std::uintptr_t k_ret_sel_2 = 0x20EB7Fu;
 constexpr std::uintptr_t k_ret_sel_3 = 0x20FB9Eu;
 
 constexpr std::array<std::uint8_t,17> k_wrapper_bytes = {
     0x48,0x83,0xEC,0x38,0x4D,0x8B,0xC8,0xF3,0x0F,0x11,0x5C,0x24,0x20,0x4C,0x8B,0x41,0x40
-};
-constexpr std::array<std::uint8_t,19> k_blend_bytes = {
-    0x48,0x8B,0xC4,0x48,0x89,0x58,0x08,0x48,0x89,0x70,0x10,0x57,0x48,0x81,0xEC,0xC0,0x00,0x00,0x00
 };
 constexpr std::array<std::uint8_t,14> k_steady_packer_bytes = {
     0x48,0x89,0x5C,0x24,0x08,0x57,0x48,0x83,0xEC,0x40,0x48,0x8B,0x41,0x18
@@ -155,6 +147,8 @@ constexpr std::array<std::uint8_t,14> k_pmetal_env_blend_bytes = {
 constexpr std::size_t k_record_stride = 0x110u;
 constexpr std::size_t k_q_upper_offset = 0x60u;
 constexpr std::size_t k_q_lower_offset = 0x70u;
+constexpr std::size_t k_raw_upper_rgbm_offset = 0x24u;
+constexpr std::size_t k_raw_lower_rgbm_offset = 0x2Cu;
 constexpr float k_inv_pow = 1.0f / 2.2f;
 
 #pragma pack(push,1)
@@ -169,12 +163,11 @@ struct raw_rgbm {
 core::renderer_core *g_core = nullptr;
 upper_lower_draw_runtime *g_runtime = nullptr;
 std::uintptr_t g_base = 0u;
-std::array<inline_hook,5> g_hooks{};
+std::array<inline_hook,4> g_hooks{};
 inline_hook g_pmetal_env_hook{};
 
 wrapper_fn g_wrapper5_orig = nullptr;
 wrapper_fn g_wrapper6_orig = nullptr;
-blend_fn g_blend_orig = nullptr;
 steady_packer_fn g_steady_packer_orig = nullptr;
 lightbank_blend_packer_fn g_blend_packer_orig = nullptr;
 pmetal_env_blend_fn g_pmetal_env_blend_orig = nullptr;
@@ -891,6 +884,57 @@ f4 lerp4(
     };
 }
 
+bool evaluate_raw_upper_lower(
+    const std::uint8_t *a,
+    const std::uint8_t *b,
+    float beta,
+    f4 &upper,
+    f4 &lower) noexcept
+{
+    if (a == nullptr ||
+        b == nullptr ||
+        !std::isfinite(beta))
+        return false;
+
+    raw_rgbm upper_a{};
+    raw_rgbm upper_b{};
+    raw_rgbm lower_a{};
+    raw_rgbm lower_b{};
+
+    if (!safe_read(
+            a + k_raw_upper_rgbm_offset,
+            upper_a) ||
+        !safe_read(
+            b + k_raw_upper_rgbm_offset,
+            upper_b) ||
+        !safe_read(
+            a + k_raw_lower_rgbm_offset,
+            lower_a) ||
+        !safe_read(
+            b + k_raw_lower_rgbm_offset,
+            lower_b))
+        return false;
+
+    upper =
+        lerp4(
+            decode_rgbm(upper_a),
+            decode_rgbm(upper_b),
+            beta);
+    lower =
+        lerp4(
+            decode_rgbm(lower_a),
+            decode_rgbm(lower_b),
+            beta);
+
+    return
+        std::isfinite(upper.x) &&
+        std::isfinite(upper.y) &&
+        std::isfinite(upper.z) &&
+        std::isfinite(lower.x) &&
+        std::isfinite(lower.y) &&
+        std::isfinite(lower.z);
+}
+
 void publish_snapshot(
     const producer_tls &producer) noexcept
 {
@@ -1001,19 +1045,10 @@ void *run_wrapper(
     void *assignment,
     float x) noexcept
 {
+    // PERF DIAG P: isolate wrapper-side snapshot publication cost. Packer
+    // hooks remain semantic pass-through, while every wrapper publishes a
+    // minimal synthetic U/L snapshot using the real owner/assignment tuple.
     ++counter;
-
-    const auto previous =
-        g_producer;
-
-    g_producer = {};
-    g_producer.active = true;
-    g_producer.owner =
-        reinterpret_cast<std::uintptr_t>(
-            owner);
-    g_producer.assignment =
-        static_cast<const std::uint8_t *>(
-            assignment);
 
     void *result =
         original != nullptr
@@ -1024,21 +1059,21 @@ void *run_wrapper(
                 x)
             : nullptr;
 
-    const auto completed =
-        g_producer;
-    g_producer =
-        previous;
+    producer_tls synthetic{};
+    synthetic.active = true;
+    synthetic.owner =
+        reinterpret_cast<std::uintptr_t>(
+            owner);
+    synthetic.assignment =
+        static_cast<const std::uint8_t *>(
+            assignment);
+    synthetic.have_upper = true;
+    synthetic.have_lower = true;
+    synthetic.upper = {};
+    synthetic.lower = {};
 
-    if (!completed.have_upper ||
-        !completed.have_lower) {
-        std::lock_guard<std::mutex> lock(
-            g_snapshot_mutex);
-        g_snapshots.erase(
-            completed.owner);
-    } else {
-        publish_snapshot(
-            completed);
-    }
+    publish_snapshot(
+        synthetic);
 
     return result;
 }
@@ -1078,137 +1113,13 @@ void __fastcall hook_steady_packer(
     void *dst,
     std::int32_t selector) noexcept
 {
+    // PERF DIAG N: detour/trampoline only.
     ++g_steady_seen;
-
     if (g_steady_packer_orig != nullptr)
         g_steady_packer_orig(
             source,
             dst,
             selector);
-
-    if (!g_producer.active)
-        return;
-
-    if (g_pmetal_env_hook_armed.load()) {
-        f4 env{};
-        std::uint64_t bank = 0u;
-        std::uint32_t row = 0u;
-
-        if (read_exact_pmetal_env_source(
-                source,
-                selector,
-                env,
-                bank,
-                row)) {
-            g_producer.have_pmetal_env = true;
-            g_producer.pmetal_env_a = env;
-            g_producer.pmetal_env_b = env;
-            g_producer.pmetal_env_beta = 0.0f;
-            g_producer.pmetal_bank_a = bank;
-            g_producer.pmetal_bank_b = bank;
-            g_producer.pmetal_row_a = row;
-            g_producer.pmetal_row_b = row;
-            ++g_pmetal_env_steady;
-        } else {
-            ++g_pmetal_env_miss;
-        }
-    }
-
-    f4 upper{};
-    f4 lower{};
-
-    if (!read_selected_ptde(
-            source,
-            selector,
-            upper,
-            lower))
-        return;
-
-    g_producer.upper = upper;
-    g_producer.lower = lower;
-    g_producer.have_upper = true;
-    g_producer.have_lower = true;
-
-    const auto *raw =
-        resolve_raw_lightbank_record(
-            source,
-            selector);
-
-    if (evaluate_raw_d123(
-            raw,
-            raw,
-            0.0f,
-            g_producer.d123)) {
-        g_producer.have_d123 = true;
-        ++g_d123_steady;
-    }
-
-    ++g_steady_pass;
-}
-
-void *__fastcall hook_blend(
-    void *dst,
-    const void *a,
-    const void *b,
-    float beta) noexcept
-{
-    ++g_blend_seen;
-
-#if defined(_MSC_VER)
-    const auto return_address =
-        reinterpret_cast<std::uintptr_t>(
-            _ReturnAddress());
-#else
-    const auto return_address =
-        reinterpret_cast<std::uintptr_t>(
-            __builtin_return_address(0));
-#endif
-
-    const auto rva =
-        return_address >= g_base
-            ? return_address - g_base
-            : 0u;
-
-    if (g_producer.active &&
-        a != nullptr &&
-        b != nullptr &&
-        (rva == k_ret_blend_upper ||
-         rva == k_ret_blend_lower)) {
-        raw_rgbm raw_a{};
-        raw_rgbm raw_b{};
-
-        if (safe_read(a, raw_a) &&
-            safe_read(b, raw_b)) {
-            const auto value =
-                lerp4(
-                    decode_rgbm(raw_a),
-                    decode_rgbm(raw_b),
-                    beta);
-
-            if (std::isfinite(value.x) &&
-                std::isfinite(value.y) &&
-                std::isfinite(value.z)) {
-                if (rva ==
-                    k_ret_blend_upper) {
-                    g_producer.upper = value;
-                    g_producer.have_upper = true;
-                    ++g_blend_upper;
-                } else {
-                    g_producer.lower = value;
-                    g_producer.have_lower = true;
-                    ++g_blend_lower;
-                }
-            }
-        }
-    }
-
-    return g_blend_orig != nullptr
-        ? g_blend_orig(
-            dst,
-            a,
-            b,
-            beta)
-        : nullptr;
 }
 
 void *__fastcall hook_blend_packer(
@@ -1219,59 +1130,17 @@ void *__fastcall hook_blend_packer(
     std::int32_t selector_b,
     float beta) noexcept
 {
-    void *result =
-        g_blend_packer_orig != nullptr
-            ? g_blend_packer_orig(
-                dst,
-                source_a,
-                selector_a,
-                source_b,
-                selector_b,
-                beta)
-            : nullptr;
-
-    if (!g_producer.active)
-        return result;
-
-    const auto *raw_a =
-        resolve_raw_lightbank_record(
+    // PERF DIAG N: detour/trampoline only.
+    ++g_blend_seen;
+    return g_blend_packer_orig != nullptr
+        ? g_blend_packer_orig(
+            dst,
             source_a,
-            selector_a);
-    const auto *raw_b =
-        resolve_raw_lightbank_record(
+            selector_a,
             source_b,
-            selector_b);
-
-    const std::uint8_t *eval_a = raw_a;
-    const std::uint8_t *eval_b = raw_b;
-    float eval_beta = beta;
-
-    if (raw_a != nullptr &&
-        (selector_a == selector_b ||
-         raw_b == nullptr ||
-         beta <= 0.0f)) {
-        eval_b = raw_a;
-        eval_beta = 0.0f;
-    } else if (
-        raw_b != nullptr &&
-        (raw_a == nullptr ||
-         beta >= 1.0f)) {
-        eval_a = raw_b;
-        eval_b = raw_b;
-        eval_beta = 0.0f;
-    }
-
-    if (evaluate_raw_d123(
-            eval_a,
-            eval_b,
-            eval_beta,
-            g_producer.d123)) {
-        g_producer.have_d123 = true;
-        g_d123_blend_direction += 3u;
-        g_d123_blend_color += 3u;
-    }
-
-    return result;
+            selector_b,
+            beta)
+        : nullptr;
 }
 
 void __fastcall hook_pmetal_env_blend(
@@ -1382,18 +1251,12 @@ bool install_producer_hooks() noexcept
                 &hook_wrapper6)) ||
         !prepare_hook(
             g_hooks[2],
-            k_rva_blend_helper,
-            k_blend_bytes,
-            reinterpret_cast<void *>(
-                &hook_blend)) ||
-        !prepare_hook(
-            g_hooks[3],
             k_rva_steady_packer,
             k_steady_packer_bytes,
             reinterpret_cast<void *>(
                 &hook_steady_packer)) ||
         !prepare_hook(
-            g_hooks[4],
+            g_hooks[3],
             k_rva_blend_packer,
             k_blend_packer_bytes,
             reinterpret_cast<void *>(
@@ -1407,24 +1270,22 @@ bool install_producer_hooks() noexcept
     g_wrapper6_orig =
         reinterpret_cast<wrapper_fn>(
             g_hooks[1].trampoline);
-    g_blend_orig =
-        reinterpret_cast<blend_fn>(
-            g_hooks[2].trampoline);
     g_steady_packer_orig =
         reinterpret_cast<steady_packer_fn>(
-            g_hooks[3].trampoline);
+            g_hooks[2].trampoline);
     g_blend_packer_orig =
         reinterpret_cast<lightbank_blend_packer_fn>(
-            g_hooks[4].trampoline);
+            g_hooks[3].trampoline);
 
     for (auto &hook : g_hooks)
         if (!arm_hook(hook))
             return false;
 
-    // P_Metal EnvSpec A/B source is independent from U/L and D123. A
-    // fingerprint failure must only disable EnvSpec source capture.
-    if (!install_optional_pmetal_env_hook())
-        g_pmetal_env_hook_armed.store(false);
+    // PERF DIAG M: P_Metal EnvSpec source capture is a separate operator
+    // and is intentionally disabled here. This keeps the U/L producer path
+    // intact while removing pmetal_bank_signature() scans and the optional
+    // P_Metal blend hook from the hot producer path.
+    g_pmetal_env_hook_armed.store(false);
 
     return true;
 }
@@ -1448,7 +1309,6 @@ bool restore_producer_hooks() noexcept
     if (ok) {
         g_wrapper5_orig = nullptr;
         g_wrapper6_orig = nullptr;
-        g_blend_orig = nullptr;
         g_steady_packer_orig = nullptr;
         g_blend_packer_orig = nullptr;
     }
@@ -1555,12 +1415,12 @@ void upper_lower_selector_event_bridge(
     void *r14,
     void *r15) noexcept
 {
-    if (g_runtime != nullptr)
-        g_runtime->selector_event(
-            owner,
-            return_address,
-            r14,
-            r15);
+    // PERF DIAG N: selector join is already runtime-exonerated by K and is
+    // disabled here so this build measures only raw native detour overhead.
+    (void)owner;
+    (void)return_address;
+    (void)r14;
+    (void)r15;
 }
 
 bool upper_lower_draw_runtime::install() noexcept
