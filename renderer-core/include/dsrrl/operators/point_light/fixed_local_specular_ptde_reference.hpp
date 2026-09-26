@@ -13,6 +13,7 @@ enum class fixed_local_specular_ptde_profile : std::uint8_t {
 
 struct fixed_local_specular_ptde_reference {
     std::uint8_t light_count = 0u;
+    std::uint32_t semantic_receiver_id = 0u;
     std::array<std::uint8_t,32> ptde_sha256{};
     std::uint32_t ptde_size = 0u;
 };
