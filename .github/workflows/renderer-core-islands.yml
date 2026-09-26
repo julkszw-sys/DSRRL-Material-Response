@@ -91,6 +91,20 @@ jobs:
           test "$(grep -c 'FRPG_Phn_' /tmp/generated_upper_lower_phn_subsurf_v1.hpp)" = "24"
           test "$(grep -c '33u' /tmp/generated_upper_lower_phn_subsurf_v1.hpp)" -ge "1"
           test "$(grep -c '35u' /tmp/generated_upper_lower_phn_subsurf_v1.hpp)" -ge "1"
+      - name: Verify complete non-Phn UpperLower authority
+        run: |
+          python3 renderer-core/tools/generate_upper_lower_nonphn_v1.py \
+            --input renderer-core/data/provenance/upper_lower_gst_v1.tsv \
+            --input renderer-core/data/provenance/upper_lower_gst_faceeye_v1.tsv \
+            --input renderer-core/data/provenance/upper_lower_sfx_v1.tsv \
+            --input renderer-core/data/provenance/upper_lower_snow_v1.tsv \
+            --input renderer-core/data/provenance/upper_lower_ntoa_v1.tsv \
+            --output /tmp/generated_upper_lower_nonphn_v1.hpp
+          test "$(grep -c 'upper_lower_nonphn_family::gst,' /tmp/generated_upper_lower_nonphn_v1.hpp)" = "72"
+          test "$(grep -c 'upper_lower_nonphn_family::gst_faceeye' /tmp/generated_upper_lower_nonphn_v1.hpp)" = "6"
+          test "$(grep -c 'upper_lower_nonphn_family::sfx' /tmp/generated_upper_lower_nonphn_v1.hpp)" = "72"
+          test "$(grep -c 'upper_lower_nonphn_family::snow' /tmp/generated_upper_lower_nonphn_v1.hpp)" = "11"
+          test "$(grep -c 'upper_lower_nonphn_family::ntoa' /tmp/generated_upper_lower_nonphn_v1.hpp)" = "3"
       - name: Verify UpperLower executable SHA ownership
         run: |
           python3 renderer-core/tools/verify_upper_lower_executable_authority_v1.py \
@@ -100,7 +114,12 @@ jobs:
             --authority renderer-core/data/provenance/upper_lower_phn_pnts_unique_v1.tsv \
             --authority renderer-core/data/provenance/upper_lower_phn_faceeye_v1.tsv \
             --authority renderer-core/data/provenance/upper_lower_phn_subsurf_unique_v1.tsv \
-            --expected-plans 180
+            --authority renderer-core/data/provenance/upper_lower_gst_v1.tsv \
+            --authority renderer-core/data/provenance/upper_lower_gst_faceeye_v1.tsv \
+            --authority renderer-core/data/provenance/upper_lower_sfx_v1.tsv \
+            --authority renderer-core/data/provenance/upper_lower_snow_v1.tsv \
+            --authority renderer-core/data/provenance/upper_lower_ntoa_v1.tsv \
+            --expected-plans 344
       - name: Verify A1 island plan index
         run: |
           python3 renderer-core/tools/generate_a1_island_plan_index.py \
