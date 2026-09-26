@@ -169,6 +169,7 @@ jobs:
             'PSSetShaderResources',
             'PSSetSamplers',
             'shader_owners',
+            'constant_buffer_owners',
             'resource_owners',
             'carrier_owners',
             'draw_policy_carrier_write_mask',
@@ -186,9 +187,11 @@ jobs:
           foreach ($required in @(
             'build_island_draw_mutation',
             'additional_shader_owners',
+            'additional_constant_buffer_owners',
             'additional_resource_owners',
             'additional_carrier_owners',
             'shader_owners',
+            'constant_buffer_owners',
             'resource_owners',
             'carrier_owners',
             'required_mutation_mask',
@@ -262,6 +265,7 @@ jobs:
             'prepare_draw_requests',
             'operator_id::env_spec',
             'operator_id::spec_rgb',
+            'additional_constant_buffer_owners',
             '12u',
             '14u'
           )) {
