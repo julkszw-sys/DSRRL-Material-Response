@@ -11,7 +11,7 @@
     {"artifact_id":920,"sha256":"de3d49a67ddc7b1e8ff89f18817a77ca5d21b845c007e10fb1f2eba692a7413a","role":"exact MTD to SPX to receiver census"},
     {"artifact_id":943,"sha256":"2006aff1a18d436f08d71ff491cd618f558ec263499ad038ac31556304af091e","role":"equipment material-slot MTD receiver census"},
     {"artifact_id":944,"sha256":"e34e395b110d247b745cd54dc7a2ce9f088866017767b2bb570fb14af8ed45e8","role":"SpecRGB residual exact-MTD audit"},
-    {"artifact_id":1322,"sha256":"0701154f5fa683aae95094a65bad32320baa74a3f8855183b750fd7383d28b8a","role":"325-record EnvSpec tristate router; row-level import pending"},
+    {"artifact_id":1322,"sha256":"0701154f5fa683aae95094a65bad32320baa74a3f8855183b750fd7383d28b8a","role":"325-record exact EnvSpec tristate authority; reproducible row export is CI-verified by renderer-core/tools/export_mtd_envspec_semantic_census.py"},
     {"path":"renderer-core/data/material_response_routes_v1.json","role":"35 exact names / 34 raw SHA keys; c101, family and receiver triplets"},
     {"path":"renderer-core/data/census/ptde_subsurface_usage_census_v1.json","role":"verified Subsurface classification seed"},
     {"path":"renderer-core/data/ptde_full_flver_ownership_census_v1.json","role":"exact-resolved PTDE FLVER material texture bindings; positive resource-consumer evidence only while scan errors remain"}
@@ -29,7 +29,7 @@
         "spec_rgb":{"state":"USE","confidence":"CONFIRMED","basis":"exact actual-material SpecRGB t10 route gate on stable FULL24 consumers"},
         "hemenv":{"state":"USE","confidence":"CONFIRMED","basis":"stable no-PointLight receiver-family routing"},
         "pointlight":{"state":"NO_USE","confidence":"CONFIRMED","basis":"this cohort is specifically stable no-PointLight HemEnv receiver routing; does not classify sibling PntS/PntSS routes"},
-        "env_spec":{"state":"UNKNOWN","confidence":"OPEN","basis":"must join row-by-row against artifact 1322; do not infer from material name"},
+        "env_spec":{"state":"UNKNOWN","confidence":"OPEN","basis":"cohort default remains UNKNOWN; exact EnvSpec state is resolved row-by-row by the 325-record authority/export, never from material name"},
         "subsurface":{"state":"UNKNOWN","confidence":"OPEN"},
         "diffuse":{"state":"UNKNOWN","confidence":"OPEN"},
         "normal_bump":{"state":"UNKNOWN","confidence":"OPEN"},
@@ -61,8 +61,10 @@
       "operators":{"env_spec":{"state":"USE","confidence":"CONFIRMED","basis":"P_Metal exact-material EnvSpec route is independently certified; selector/value and pixel equivalence remain separate"}}
     }
   ],
+  "materialized_exports": [
+    {"source_artifact_id":1322,"records":325,"tool":"renderer-core/tools/export_mtd_envspec_semantic_census.py","ci_contract":"exact row count 325; present=>USE, explicit_none=>NO_USE, unresolved/nospc-host=>UNKNOWN under exporter evidence policy","claim_scope":"CONSTRUCTION_AND_STATIC_ROUTING_ONLY"}
+  ],
   "pending_imports": [
-    {"source_artifact_id":1322,"records":325,"purpose":"row-level EnvSpec USE/NO_USE/UNKNOWN classification by semantic-name hash plus raw MTD SHA"},
     {"source":"bridge_resource_bindings 40..47","records":8,"purpose":"DSR-only/equivalent-plain material identities and gate policy"},
     {"source":"full PTDE/DSR MTD homology registry artifact 571","purpose":"expand beyond current FULL24 cohort to all exact common and one-sided MTD identities"}
   ],
