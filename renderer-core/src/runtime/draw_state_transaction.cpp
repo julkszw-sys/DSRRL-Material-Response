@@ -455,71 +455,77 @@ bool draw_state_transaction_runtime::begin(
 
     bool bound = true;
 
-    if (mutation.replace_pixel_shader) {
-        ID3D11PixelShader *shader = nullptr;
-        std::array<ID3D11ClassInstance *, 1> linked{};
-        UINT linked_count =
-            static_cast<UINT>(linked.size());
-        ctx->PSGetShader(
-            &shader,
-            linked.data(),
-            &linked_count);
-        bound =
-            shader == mutation.pixel_shader &&
-            linked_count == 0u;
-        if (shader != nullptr)
-            shader->Release();
-        for (auto *instance : linked)
-            if (instance != nullptr)
-                instance->Release();
+    if (state.verify_native_readback) {
+        if (mutation.replace_pixel_shader) {
+            ID3D11PixelShader *shader = nullptr;
+            std::array<ID3D11ClassInstance *, 1> linked{};
+            UINT linked_count =
+                static_cast<UINT>(linked.size());
+            ctx->PSGetShader(
+                &shader,
+                linked.data(),
+                &linked_count);
+            bound =
+                shader == mutation.pixel_shader &&
+                linked_count == 0u;
+            if (shader != nullptr)
+                shader->Release();
+            for (auto *instance : linked)
+                if (instance != nullptr)
+                    instance->Release();
+        }
+    
+        for (std::uint32_t i = 0;
+             bound &&
+             i < mutation.constant_buffer_count;
+             ++i) {
+            ID3D11Buffer *buffer = nullptr;
+            ctx->PSGetConstantBuffers(
+                mutation.constant_buffers[i].slot,
+                1u,
+                &buffer);
+            bound =
+                buffer ==
+                mutation.constant_buffers[i].buffer;
+            if (buffer != nullptr)
+                buffer->Release();
+        }
+    
+        for (std::uint32_t i = 0;
+             bound && i < mutation.srv_count;
+             ++i) {
+            ID3D11ShaderResourceView *srv = nullptr;
+            ctx->PSGetShaderResources(
+                mutation.srvs[i].slot,
+                1u,
+                &srv);
+            bound = srv == mutation.srvs[i].srv;
+            if (srv != nullptr)
+                srv->Release();
+        }
+    
+        for (std::uint32_t i = 0;
+             bound && i < mutation.sampler_count;
+             ++i) {
+            ID3D11SamplerState *sampler = nullptr;
+            ctx->PSGetSamplers(
+                mutation.samplers[i].slot,
+                1u,
+                &sampler);
+            bound =
+                sampler ==
+                mutation.samplers[i].sampler;
+            if (sampler != nullptr)
+                sampler->Release();
+        }
+    
+        if (ctx1 != nullptr)
+            ctx1->Release();
+    
+    
+    } else {
+        ++native_readback_skipped_;
     }
-
-    for (std::uint32_t i = 0;
-         bound &&
-         i < mutation.constant_buffer_count;
-         ++i) {
-        ID3D11Buffer *buffer = nullptr;
-        ctx->PSGetConstantBuffers(
-            mutation.constant_buffers[i].slot,
-            1u,
-            &buffer);
-        bound =
-            buffer ==
-            mutation.constant_buffers[i].buffer;
-        if (buffer != nullptr)
-            buffer->Release();
-    }
-
-    for (std::uint32_t i = 0;
-         bound && i < mutation.srv_count;
-         ++i) {
-        ID3D11ShaderResourceView *srv = nullptr;
-        ctx->PSGetShaderResources(
-            mutation.srvs[i].slot,
-            1u,
-            &srv);
-        bound = srv == mutation.srvs[i].srv;
-        if (srv != nullptr)
-            srv->Release();
-    }
-
-    for (std::uint32_t i = 0;
-         bound && i < mutation.sampler_count;
-         ++i) {
-        ID3D11SamplerState *sampler = nullptr;
-        ctx->PSGetSamplers(
-            mutation.samplers[i].slot,
-            1u,
-            &sampler);
-        bound =
-            sampler ==
-            mutation.samplers[i].sampler;
-        if (sampler != nullptr)
-            sampler->Release();
-    }
-
-    if (ctx1 != nullptr)
-        ctx1->Release();
 
     if (!bound) {
         ++bind_fail_;
