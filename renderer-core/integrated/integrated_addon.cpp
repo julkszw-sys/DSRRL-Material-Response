@@ -5,6 +5,8 @@
 #include "dsrrl/runtime/material_owner_selection.hpp"
 #include "dsrrl/runtime/material_response_draw_transaction.hpp"
 #include "dsrrl/runtime/material_resource_draw_runtime.hpp"
+#include "dsrrl/runtime/envspec_resource_runtime.hpp"
+#include "dsrrl/runtime/pmetal_envspec_draw_runtime.hpp"
 #include "dsrrl/runtime/texture_identity_transport.hpp"
 #include "dsrrl/operators/material_response/mtd_semantic_census.hpp"
 #include "dsrrl/runtime/stable_receiver_pipeline_registry.hpp"
@@ -22,6 +24,7 @@
 #include "dsrrl/operators/lightbank/hemdir3_b13_materializer.hpp"
 #include "dsrrl/operators/lightbank/upper_lower_hemenv_materializer.hpp"
 #include "dsrrl/operators/resource_bridges/spec_rgb_consumer_materializer.hpp"
+#include "dsrrl/operators/env_spec/pmetal_rgba_materializer.hpp"
 
 #include <reshade.hpp>
 #include <d3d11.h>
@@ -56,6 +59,8 @@ dsrrl::runtime::material_response_draw_runtime
     g_mr_draw_runtime(g_draw_transactions);
 dsrrl::runtime::material_resource_draw_runtime
     g_material_resources(g_core);
+dsrrl::runtime::envspec_resource_runtime
+    g_envspec_resources;
 dsrrl::runtime::subsurface_draw_runtime
     g_subsurface(g_core, g_mr_draw_runtime, g_material_resources);
 dsrrl::runtime::upper_lower_draw_runtime
@@ -64,6 +69,12 @@ dsrrl::runtime::upper_lower_hemenv_draw_runtime
     g_upper_lower_hemenv(g_core, g_upper_lower);
 dsrrl::runtime::hemdir3_draw_runtime
     g_hemdir3(g_core, g_upper_lower);
+dsrrl::runtime::pmetal_envspec_draw_runtime
+    g_pmetal_envspec(
+        g_core,
+        g_upper_lower,
+        g_envspec_resources,
+        g_material_resources);
 
 std::atomic<std::uint64_t> g_present_count{0};
 std::atomic<std::uint64_t> g_mr_draw_eval{0};
@@ -74,6 +85,8 @@ std::atomic<std::uint64_t> g_mr_payload_materialize_ok{0};
 std::atomic<std::uint64_t> g_mr_payload_materialize_fail{0};
 std::atomic<std::uint64_t> g_mr_ul_payload_materialize_ok{0};
 std::atomic<std::uint64_t> g_mr_ul_payload_materialize_fail{0};
+std::atomic<std::uint64_t> g_envspec_payload_materialize_ok{0};
+std::atomic<std::uint64_t> g_envspec_payload_materialize_fail{0};
 std::atomic<std::uint64_t> g_draw_events{0};
 std::atomic<std::uint64_t> g_draw_receiver_hits{0};
 std::atomic<std::uint64_t> g_draw_owner_hits{0};
@@ -89,6 +102,7 @@ constexpr dsrrl::core::operator_id k_integrated_islands[] = {
     dsrrl::core::operator_id::subsurface,
     dsrrl::core::operator_id::upper_lower,
     dsrrl::core::operator_id::hemdir3,
+    dsrrl::core::operator_id::env_spec,
     dsrrl::core::operator_id::terminal_sat_rgb,
     dsrrl::core::operator_id::diffuse_material_domain,
     dsrrl::core::operator_id::pointlight_pnts_attenuation,
