@@ -67,7 +67,8 @@ render_patch_plan renderer_core::build_plan(
             request.op,
             request.carrier_write_mask,
             request.shader_replacement,
-            request.resource_replacement
+            request.resource_replacement,
+            request.constant_buffer_replacement
         };
         plan.carrier_write_mask |= request.carrier_write_mask;
     }
