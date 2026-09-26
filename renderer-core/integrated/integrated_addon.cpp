@@ -727,15 +727,16 @@ void log_state(const char *tag) noexcept
     const auto bloom_fx =
         dsrrl::runtime::bloom_fx_draw_transport::status();
 
-    char bloom_fx_line[640]{};
+    char bloom_fx_line[896]{};
     std::snprintf(
         bloom_fx_line,
         sizeof(bloom_fx_line),
         "[DSRRL CORE+ISLANDS " DSRRL_CORE_ISLANDS_VERSION "] %s_BLOOM_FX "
-        "prov=%u hooks=%u/%u model=%u/%u q=%u restore_fail=%u "
+        "prov=%u hooks=%u/%u model=%u/%u state_upd=%u sem_get=%u q=%u restore_fail=%u "
         "events=%llu/%llu exact=%llu reject=%llu state=%llu/%llu "
         "state_exact=%llu/%llu links=%llu/%llu model_evt=%llu/%llu "
         "model_join=%llu/%llu join_ch=%llu/%llu/%llu "
+        "backend=%llu key=%llu/%llu ww_idx=%llu key_eq=%llu sem_snap=%llu/%llu "
         "ww_publish=%llu/%llu ww_same=%llu registry=%llu "
         "snap=%llu/%llu api_snap=%llu ww_auth=%llu/%llu",
         tag,
@@ -744,6 +745,8 @@ void log_state(const char *tag) noexcept
         bloom_fx.cluster_hook_armed ? 1u : 0u,
         bloom_fx.particle_model_ctor_hook_armed ? 1u : 0u,
         bloom_fx.particle_model_dtor_hook_armed ? 1u : 0u,
+        bloom_fx.particle_state_update_hook_armed ? 1u : 0u,
+        bloom_fx.semantic_index_getter_attested ? 1u : 0u,
         bloom_fx.quarantined ? 1u : 0u,
         bloom_fx.restore_failed ? 1u : 0u,
         static_cast<unsigned long long>(bloom_fx.particle_events),
@@ -763,6 +766,13 @@ void log_state(const char *tag) noexcept
         static_cast<unsigned long long>(bloom_fx.particle_model_owner_join_hits),
         static_cast<unsigned long long>(bloom_fx.particle_model_source_primary_join_hits),
         static_cast<unsigned long long>(bloom_fx.particle_model_source_secondary_join_hits),
+        static_cast<unsigned long long>(bloom_fx.particle_state_update_events),
+        static_cast<unsigned long long>(bloom_fx.backend_key_reads),
+        static_cast<unsigned long long>(bloom_fx.backend_key_read_failures),
+        static_cast<unsigned long long>(bloom_fx.waterwave_runtime_index_reads),
+        static_cast<unsigned long long>(bloom_fx.backend_key_waterwave_matches),
+        static_cast<unsigned long long>(bloom_fx.backend_semantic_snapshot_hits),
+        static_cast<unsigned long long>(bloom_fx.backend_semantic_snapshot_misses),
         static_cast<unsigned long long>(bloom_fx.waterwave_publish_ok),
         static_cast<unsigned long long>(bloom_fx.waterwave_publish_fail),
         static_cast<unsigned long long>(bloom_fx.waterwave_same_instance_hits),
