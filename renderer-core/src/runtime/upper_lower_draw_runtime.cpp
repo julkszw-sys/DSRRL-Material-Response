@@ -9,6 +9,7 @@
 #include "dsrrl/runtime/flver_identity_transport.hpp"
 #include "dsrrl/operators/lightbank/snapshot_freshness.hpp"
 #include "dsrrl/operators/lightbank/hemdir3.hpp"
+#include "dsrrl/runtime/generated_pmetal_env_source_authority.hpp"
 
 #include <Windows.h>
 #include <d3d11.h>
@@ -43,6 +44,15 @@ struct snapshot {
     alignas(16) std::array<f4,8> hemdir3_payload{};
     bool d123_ready = false;
 
+    bool pmetal_env_ready = false;
+    f4 pmetal_env_a{};
+    f4 pmetal_env_b{};
+    float pmetal_env_beta = 0.0f;
+    std::uint64_t pmetal_bank_a = 0;
+    std::uint64_t pmetal_bank_b = 0;
+    std::uint32_t pmetal_row_a = 0;
+    std::uint32_t pmetal_row_b = 0;
+
     mutable std::mutex gpu_mutex;
     mutable ID3D11Device *device = nullptr;
     mutable ID3D11Buffer *ul_buffer = nullptr;
@@ -66,9 +76,17 @@ struct producer_tls {
     bool have_upper = false;
     bool have_lower = false;
     bool have_d123 = false;
+    bool have_pmetal_env = false;
     f4 upper{};
     f4 lower{};
     std::array<operators::lightbank::hemdir3_lobe,3> d123{};
+    f4 pmetal_env_a{};
+    f4 pmetal_env_b{};
+    float pmetal_env_beta = 0.0f;
+    std::uint64_t pmetal_bank_a = 0;
+    std::uint64_t pmetal_bank_b = 0;
+    std::uint32_t pmetal_row_a = 0;
+    std::uint32_t pmetal_row_b = 0;
 };
 
 struct inline_hook {
@@ -94,12 +112,21 @@ using lightbank_blend_packer_fn =
         void *,
         std::int32_t,
         float);
+using pmetal_env_blend_fn =
+    void (__fastcall *)(
+        float *,
+        void *,
+        std::int32_t,
+        void *,
+        std::int32_t,
+        float);
 
 constexpr std::uintptr_t k_rva_wrapper_type5 = 0x1C0BE0u;
 constexpr std::uintptr_t k_rva_wrapper_type6 = 0x1C0C10u;
 constexpr std::uintptr_t k_rva_blend_helper = 0x5642F0u;
 constexpr std::uintptr_t k_rva_steady_packer = 0x563B80u;
 constexpr std::uintptr_t k_rva_blend_packer = 0x5637E0u;
+constexpr std::uintptr_t k_rva_pmetal_env_blend = 0x563C30u;
 
 constexpr std::uintptr_t k_ret_blend_upper = 0x5639BAu;
 constexpr std::uintptr_t k_ret_blend_lower = 0x5639D5u;
@@ -120,6 +147,10 @@ constexpr std::array<std::uint8_t,15> k_blend_packer_bytes = {
     0x40,0x55,0x56,0x48,0x8D,0x6C,0x24,0xC1,
     0x48,0x81,0xEC,0x88,0x00,0x00,0x00
 };
+constexpr std::array<std::uint8_t,14> k_pmetal_env_blend_bytes = {
+    0x40,0x53,0x48,0x83,0xEC,0x50,0x44,0x8B,
+    0x94,0x24,0x80,0x00,0x00,0x00
+};
 
 constexpr std::size_t k_record_stride = 0x110u;
 constexpr std::size_t k_q_upper_offset = 0x60u;
@@ -139,12 +170,14 @@ core::renderer_core *g_core = nullptr;
 upper_lower_draw_runtime *g_runtime = nullptr;
 std::uintptr_t g_base = 0u;
 std::array<inline_hook,5> g_hooks{};
+inline_hook g_pmetal_env_hook{};
 
 wrapper_fn g_wrapper5_orig = nullptr;
 wrapper_fn g_wrapper6_orig = nullptr;
 blend_fn g_blend_orig = nullptr;
 steady_packer_fn g_steady_packer_orig = nullptr;
 lightbank_blend_packer_fn g_blend_packer_orig = nullptr;
+pmetal_env_blend_fn g_pmetal_env_blend_orig = nullptr;
 
 std::mutex g_snapshot_mutex;
 std::unordered_map<
@@ -180,6 +213,10 @@ std::atomic<std::uint64_t> g_hemdir3_b13_create{0};
 std::atomic<std::uint64_t> g_hemdir3_b13_hit{0};
 std::atomic<std::uint64_t> g_requests{0};
 std::atomic<std::uint64_t> g_hemdir3_carrier_requests{0};
+std::atomic<std::uint64_t> g_pmetal_env_steady{0};
+std::atomic<std::uint64_t> g_pmetal_env_blend{0};
+std::atomic<std::uint64_t> g_pmetal_env_miss{0};
+std::atomic_bool g_pmetal_env_hook_armed{false};
 
 bool readable_range(
     const void *ptr,
@@ -254,6 +291,176 @@ bool safe_read(
         ptr,
         sizeof(T));
     return true;
+}
+
+std::uint64_t pmetal_fnv_byte(
+    std::uint64_t hash,
+    std::uint8_t value) noexcept
+{
+    hash ^= value;
+    return hash * 0x100000001b3ULL;
+}
+
+bool pmetal_bank_signature(
+    const std::uint8_t *base,
+    std::uint64_t &signature) noexcept
+{
+    signature = 0u;
+    if (base == nullptr)
+        return false;
+
+    std::uint16_t version = 0u;
+    std::uint16_t count = 0u;
+    if (!safe_read(base + 8u, version) ||
+        !safe_read(base + 10u, count) ||
+        version != 4u ||
+        count == 0u ||
+        count > 256u)
+        return false;
+
+    std::uint64_t hash = 0xcbf29ce484222325ULL;
+    hash = pmetal_fnv_byte(
+        hash,
+        static_cast<std::uint8_t>(count));
+    hash = pmetal_fnv_byte(
+        hash,
+        static_cast<std::uint8_t>(count >> 8u));
+
+    const std::uint32_t minimum_name =
+        0x30u +
+        static_cast<std::uint32_t>(count) * 12u;
+
+    for (std::uint32_t i = 0u;
+         i < count;
+         ++i) {
+        const auto *entry =
+            base + 0x30u +
+            static_cast<std::size_t>(i) * 12u;
+
+        std::uint32_t row_id = 0u;
+        std::uint32_t name_offset = 0u;
+        if (!safe_read(entry, row_id) ||
+            !safe_read(entry + 8u, name_offset) ||
+            name_offset < minimum_name ||
+            name_offset > 0x100000u)
+            return false;
+
+        for (std::uint32_t shift = 0u;
+             shift < 32u;
+             shift += 8u)
+            hash = pmetal_fnv_byte(
+                hash,
+                static_cast<std::uint8_t>(
+                    row_id >> shift));
+
+        bool terminated = false;
+        for (std::uint32_t j = 0u;
+             j < 256u;
+             ++j) {
+            std::uint8_t ch = 0u;
+            if (!safe_read(
+                    base + name_offset + j,
+                    ch))
+                return false;
+
+            hash = pmetal_fnv_byte(
+                hash,
+                ch);
+
+            if (ch == 0u) {
+                terminated = true;
+                break;
+            }
+        }
+
+        if (!terminated)
+            return false;
+    }
+
+    signature = hash;
+    return true;
+}
+
+bool read_exact_pmetal_env_source(
+    void *source,
+    std::int32_t selector,
+    f4 &out,
+    std::uint64_t &bank_signature,
+    std::uint32_t &row_id) noexcept
+{
+    out = {};
+    bank_signature = 0u;
+    row_id = 0u;
+
+    if (source == nullptr ||
+        selector < 0)
+        return false;
+
+    const std::uint8_t *base = nullptr;
+    if (!safe_read(
+            static_cast<const std::uint8_t *>(
+                source) + 0x18u,
+            base) ||
+        base == nullptr)
+        return false;
+
+    std::uint16_t version = 0u;
+    std::uint16_t count = 0u;
+    if (!safe_read(base + 8u, version) ||
+        !safe_read(base + 10u, count) ||
+        version != 4u ||
+        count == 0u ||
+        count > 256u)
+        return false;
+
+    const auto index =
+        static_cast<std::uint8_t>(
+            selector);
+    if (static_cast<std::uint32_t>(index) >=
+        count)
+        return false;
+
+    const auto *entry =
+        base + 0x30u +
+        static_cast<std::size_t>(index) * 12u;
+
+    if (!safe_read(entry, row_id) ||
+        !pmetal_bank_signature(
+            base,
+            bank_signature))
+        return false;
+
+    const auto *bank =
+        pmetal_env_source_authority::find_bank(
+            bank_signature);
+    if (bank == nullptr)
+        return false;
+
+    const auto *row =
+        pmetal_env_source_authority::find_row(
+            *bank,
+            row_id);
+    if (row == nullptr)
+        return false;
+
+    const float scale =
+        static_cast<float>(row->m) *
+        0.01f;
+
+    out = {
+        static_cast<float>(row->r) /
+            255.0f * scale,
+        static_cast<float>(row->g) /
+            255.0f * scale,
+        static_cast<float>(row->b) /
+            255.0f * scale,
+        0.0f
+    };
+
+    return
+        std::isfinite(out.x) &&
+        std::isfinite(out.y) &&
+        std::isfinite(out.z);
 }
 
 bool write_bytes(
@@ -732,6 +939,23 @@ void publish_snapshot(
         fresh->d123_ready =
             producer.have_d123;
 
+        fresh->pmetal_env_ready =
+            producer.have_pmetal_env;
+        fresh->pmetal_env_a =
+            producer.pmetal_env_a;
+        fresh->pmetal_env_b =
+            producer.pmetal_env_b;
+        fresh->pmetal_env_beta =
+            producer.pmetal_env_beta;
+        fresh->pmetal_bank_a =
+            producer.pmetal_bank_a;
+        fresh->pmetal_bank_b =
+            producer.pmetal_bank_b;
+        fresh->pmetal_row_a =
+            producer.pmetal_row_a;
+        fresh->pmetal_row_b =
+            producer.pmetal_row_b;
+
         if (producer.have_d123) {
             for (std::size_t i = 0u;
                  i < producer.d123.size();
@@ -864,6 +1088,31 @@ void __fastcall hook_steady_packer(
 
     if (!g_producer.active)
         return;
+
+    if (g_pmetal_env_hook_armed.load()) {
+        f4 env{};
+        std::uint64_t bank = 0u;
+        std::uint32_t row = 0u;
+
+        if (read_exact_pmetal_env_source(
+                source,
+                selector,
+                env,
+                bank,
+                row)) {
+            g_producer.have_pmetal_env = true;
+            g_producer.pmetal_env_a = env;
+            g_producer.pmetal_env_b = env;
+            g_producer.pmetal_env_beta = 0.0f;
+            g_producer.pmetal_bank_a = bank;
+            g_producer.pmetal_bank_b = bank;
+            g_producer.pmetal_row_a = row;
+            g_producer.pmetal_row_b = row;
+            ++g_pmetal_env_steady;
+        } else {
+            ++g_pmetal_env_miss;
+        }
+    }
 
     f4 upper{};
     f4 lower{};
@@ -1025,6 +1274,92 @@ void *__fastcall hook_blend_packer(
     return result;
 }
 
+void __fastcall hook_pmetal_env_blend(
+    float *out,
+    void *source_a,
+    std::int32_t selector_a,
+    void *source_b,
+    std::int32_t selector_b,
+    float beta) noexcept
+{
+    if (g_pmetal_env_blend_orig != nullptr)
+        g_pmetal_env_blend_orig(
+            out,
+            source_a,
+            selector_a,
+            source_b,
+            selector_b,
+            beta);
+
+    if (!g_producer.active ||
+        !g_pmetal_env_hook_armed.load())
+        return;
+
+    f4 a{};
+    f4 b{};
+    std::uint64_t bank_a = 0u;
+    std::uint64_t bank_b = 0u;
+    std::uint32_t row_a = 0u;
+    std::uint32_t row_b = 0u;
+
+    if (read_exact_pmetal_env_source(
+            source_a,
+            selector_a,
+            a,
+            bank_a,
+            row_a) &&
+        read_exact_pmetal_env_source(
+            source_b,
+            selector_b,
+            b,
+            bank_b,
+            row_b) &&
+        std::isfinite(beta)) {
+        g_producer.have_pmetal_env = true;
+        g_producer.pmetal_env_a = a;
+        g_producer.pmetal_env_b = b;
+        g_producer.pmetal_env_beta =
+            std::clamp(
+                beta,
+                0.0f,
+                1.0f);
+        g_producer.pmetal_bank_a = bank_a;
+        g_producer.pmetal_bank_b = bank_b;
+        g_producer.pmetal_row_a = row_a;
+        g_producer.pmetal_row_b = row_b;
+        ++g_pmetal_env_blend;
+    } else {
+        g_producer.have_pmetal_env = false;
+        ++g_pmetal_env_miss;
+    }
+}
+
+bool install_optional_pmetal_env_hook() noexcept
+{
+    if (!prepare_hook(
+            g_pmetal_env_hook,
+            k_rva_pmetal_env_blend,
+            k_pmetal_env_blend_bytes,
+            reinterpret_cast<void *>(
+                &hook_pmetal_env_blend)))
+        return false;
+
+    g_pmetal_env_blend_orig =
+        reinterpret_cast<pmetal_env_blend_fn>(
+            g_pmetal_env_hook.trampoline);
+
+    if (!arm_hook(
+            g_pmetal_env_hook)) {
+        (void)restore_hook(
+            g_pmetal_env_hook);
+        g_pmetal_env_blend_orig = nullptr;
+        return false;
+    }
+
+    g_pmetal_env_hook_armed.store(true);
+    return true;
+}
+
 bool install_producer_hooks() noexcept
 {
     if (g_base == 0u)
@@ -1083,12 +1418,24 @@ bool install_producer_hooks() noexcept
         if (!arm_hook(hook))
             return false;
 
+    // P_Metal EnvSpec A/B source is independent from U/L and D123. A
+    // fingerprint failure must only disable EnvSpec source capture.
+    if (!install_optional_pmetal_env_hook())
+        g_pmetal_env_hook_armed.store(false);
+
     return true;
 }
 
 bool restore_producer_hooks() noexcept
 {
-    bool ok = true;
+    bool ok =
+        restore_hook(
+            g_pmetal_env_hook);
+
+    g_pmetal_env_hook_armed.store(false);
+
+    if (ok)
+        g_pmetal_env_blend_orig = nullptr;
 
     for (auto it = g_hooks.rbegin();
          it != g_hooks.rend();
@@ -1481,6 +1828,49 @@ void upper_lower_draw_runtime::release_hemdir3_carrier(
     prepared = {};
 }
 
+bool upper_lower_draw_runtime::selected_pmetal_env_source(
+    pmetal_env_source &out) const noexcept
+{
+    out = {};
+
+    if (!g_enabled.load() ||
+        g_quarantined.load() ||
+        !g_pmetal_env_hook_armed.load() ||
+        !g_draw_snapshot ||
+        !g_draw_snapshot->pmetal_env_ready)
+        return false;
+
+    out.a = {
+        g_draw_snapshot->pmetal_env_a.x,
+        g_draw_snapshot->pmetal_env_a.y,
+        g_draw_snapshot->pmetal_env_a.z
+    };
+    out.b = {
+        g_draw_snapshot->pmetal_env_b.x,
+        g_draw_snapshot->pmetal_env_b.y,
+        g_draw_snapshot->pmetal_env_b.z
+    };
+    out.beta =
+        g_draw_snapshot->pmetal_env_beta;
+    out.bank_signature_a =
+        g_draw_snapshot->pmetal_bank_a;
+    out.bank_signature_b =
+        g_draw_snapshot->pmetal_bank_b;
+    out.row_id_a =
+        g_draw_snapshot->pmetal_row_a;
+    out.row_id_b =
+        g_draw_snapshot->pmetal_row_b;
+
+    return
+        std::isfinite(out.a[0]) &&
+        std::isfinite(out.a[1]) &&
+        std::isfinite(out.a[2]) &&
+        std::isfinite(out.b[0]) &&
+        std::isfinite(out.b[1]) &&
+        std::isfinite(out.b[2]) &&
+        std::isfinite(out.beta);
+}
+
 void upper_lower_draw_runtime::release_prepared_draw(
     prepared_upper_lower_draw &prepared) noexcept
 {
@@ -1532,7 +1922,11 @@ upper_lower_draw_runtime::telemetry() const noexcept
         g_hemdir3_b13_hit.load(),
         g_requests.load(),
         g_hemdir3_carrier_requests.load(),
+        g_pmetal_env_steady.load(),
+        g_pmetal_env_blend.load(),
+        g_pmetal_env_miss.load(),
         g_enabled.load(),
+        g_pmetal_env_hook_armed.load(),
         g_quarantined.load(),
         g_restore_failed.load()
     };
@@ -1564,6 +1958,9 @@ void upper_lower_draw_runtime::reset() noexcept
     g_hemdir3_b13_hit.store(0);
     g_requests.store(0);
     g_hemdir3_carrier_requests.store(0);
+    g_pmetal_env_steady.store(0);
+    g_pmetal_env_blend.store(0);
+    g_pmetal_env_miss.store(0);
 }
 
 } // namespace dsrrl::runtime
