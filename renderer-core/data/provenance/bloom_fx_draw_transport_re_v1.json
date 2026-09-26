@@ -59,7 +59,16 @@
       "semantic_word": "0x60"
     },
     "particle_entity_ctor_state_factory_callsite_rva": "0x00FFCBB2",
-    "cluster_entity_ctor_state_factory_callsite_rva": "0x00FFD9DB"
+    "cluster_entity_ctor_state_factory_callsite_rva": "0x00FFD9DB",
+    "particle_model": {
+      "class": "FrpgFxParticleAppearance_Model",
+      "ctor_rva": "0x004FE7B0",
+      "ctor_only_callsite_rva": "0x004FDB0B",
+      "vtable_rva": "0x0136C208",
+      "scalar_deleting_dtor_rva": "0x004FED90",
+      "ctor_prefix_hex": "48894c2408565741564883ec3048c7442420feffffff",
+      "dtor_prefix_hex": "48895c2408574883ec208bda488bf9"
+    }
   },
   "waterwave_authored_identity": {
     "mtd": "S[DB]_Alp_water.mtd",
@@ -75,6 +84,9 @@
     "live_waterwave_mtd_to_entity_transport_closed": false,
     "q8_writer_authorized": false,
     "pixel_equivalence": "OPEN",
-    "live_appearance_source_links_observable": true
+    "live_appearance_source_links_observable": true,
+    "live_particle_model_instance_registry": true,
+    "live_particle_model_destructor_retirement": true,
+    "live_particle_model_to_draw_backref_pointer_join": "CONSTRUCTION_IMPLEMENTED_RUNTIME_REQUIRED"
   }
 }
