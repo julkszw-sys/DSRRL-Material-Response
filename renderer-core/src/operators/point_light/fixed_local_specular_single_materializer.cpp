@@ -851,7 +851,7 @@ materialize_fixed_local_specular_single(
         // falloff switch and before the DSR-only microfacet/light tail. N/V/L
         // are still the attested geometry operands here. The stock tail is
         // allowed to run afterwards but is dead at the redirected output cut.
-        island.word=island_insert_word
+        island.word=island_insert_word;
         append(island.payload,linear_words.data(),linear_words.size());
 
         fixed_local_specular_t19_load q_load{};
