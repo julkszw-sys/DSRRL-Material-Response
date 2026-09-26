@@ -764,7 +764,7 @@ void log_state(const char *tag) noexcept
         "events=%llu/%llu exact=%llu reject=%llu state=%llu/%llu "
         "state_exact=%llu/%llu links=%llu/%llu model_evt=%llu/%llu "
         "model_join=%llu/%llu join_ch=%llu/%llu/%llu "
-        "backend=%llu key=%llu/%llu ww_idx=%llu key_eq=%llu sem_snap=%llu/%llu "
+        "backend=%llu key=%llu/%llu ww_idx=%llu key_eq=%llu ww_diag_join=%llu sem_snap=%llu/%llu "
         "ww_publish=%llu/%llu ww_same=%llu registry=%llu "
         "snap=%llu/%llu api_snap=%llu ww_auth=%llu/%llu",
         tag,
@@ -799,6 +799,7 @@ void log_state(const char *tag) noexcept
         static_cast<unsigned long long>(bloom_fx.backend_key_read_failures),
         static_cast<unsigned long long>(bloom_fx.waterwave_runtime_index_reads),
         static_cast<unsigned long long>(bloom_fx.backend_key_waterwave_matches),
+        static_cast<unsigned long long>(bloom_fx.waterwave_semantic_model_candidate_hits),
         static_cast<unsigned long long>(bloom_fx.backend_semantic_snapshot_hits),
         static_cast<unsigned long long>(bloom_fx.backend_semantic_snapshot_misses),
         static_cast<unsigned long long>(bloom_fx.waterwave_publish_ok),
