@@ -25,6 +25,14 @@ struct v211_materialize_outcome {
     core::operator_mask composed_owners = 0;
 };
 
+// Exact historical V2.11 stage before generic A1 composition and final
+// reflection augmentation. This is the certified semantic cut used by
+// downstream operator-island materializers such as P_Metal EnvSpec.
+v211_materialize_outcome materialize_v211_certified_stage(
+    const std::uint8_t *source,
+    std::size_t size,
+    std::vector<std::uint8_t> &output) noexcept;
+
 v211_materialize_outcome materialize_v211_stable_receiver(
     const core::feature_registry &features,
     const std::uint8_t *source,
