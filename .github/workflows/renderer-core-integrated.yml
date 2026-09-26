@@ -123,6 +123,11 @@ jobs:
           $policy = Get-Content renderer-core/include/dsrrl/core/draw_transaction_policy.hpp -Raw
           $mr = Get-Content renderer-core/src/operators/material_response/material_response_v211_materializer.cpp -Raw
           $resourceRuntime = Get-Content renderer-core/src/runtime/material_resource_draw_runtime.cpp -Raw
+          $specConsumer = Get-Content renderer-core/src/operators/resource_bridges/spec_rgb_consumer_materializer.cpp -Raw
+          $envspecMaterializer = Get-Content renderer-core/src/operators/env_spec/pmetal_rgba_materializer.cpp -Raw
+          $envspecResource = Get-Content renderer-core/src/runtime/envspec_resource_runtime.cpp -Raw
+          $envspecRuntime = Get-Content renderer-core/src/runtime/pmetal_envspec_draw_runtime.cpp -Raw
+          $pmetalGenerator = Get-Content renderer-core/tools/generate_pmetal_env_source_authority.py -Raw
           $textureTransport = Get-Content renderer-core/src/runtime/texture_identity_transport.cpp -Raw
           $subsurface = Get-Content renderer-core/src/runtime/subsurface_draw_runtime.cpp -Raw
           $subsurfaceRegistry = Get-Content renderer-core/src/runtime/subsurface_pipeline_registry.cpp -Raw
@@ -216,6 +221,67 @@ jobs:
             'build_island_draw_mutation'
           )) {
             if ($resourceRuntime -notmatch [regex]::Escape($required)) { throw "Material resource island adapter invariant missing: $required" }
+          }
+
+          foreach ($required in @(
+            'materialize_spec_rgb_consumer',
+            'DSRRL_PTDE_SpecRGB',
+            '10u'
+          )) {
+            if ($specConsumer -notmatch [regex]::Escape($required)) { throw "SpecRGB exact t10 consumer invariant missing: $required" }
+          }
+
+          foreach ($required in @(
+            'materialize_v211_certified_stage',
+            'pmetal_rgba_authority',
+            'k_build131_window',
+            'materialize_spec_rgb_consumer',
+            'augment_upper_lower_hemenv_verified_base',
+            'final_postcondition'
+          )) {
+            if ($envspecMaterializer -notmatch [regex]::Escape($required)) { throw "P_Metal EnvSpec Build131 materializer invariant missing: $required" }
+          }
+
+          foreach ($required in @(
+            'legacy_native_probe_for_sha',
+            'k_legacy_packed_gi_sha256',
+            'PSGetShaderResources',
+            '12u',
+            '14u',
+            'create_resource_view'
+          )) {
+            if ($envspecResource -notmatch [regex]::Escape($required)) { throw "P_Metal EnvSpec exact probe resource invariant missing: $required" }
+          }
+
+          foreach ($required in @(
+            'k_pmetal_route_index = 345u',
+            'ece70f36bd2517d28c8495e276cea537f8b519d6bed981788e79a409ffbf763b',
+            'envspc_slot != 2u',
+            'selected_pmetal_env_source',
+            'prepare_upper_lower_carrier',
+            'prepare_draw_requests',
+            'operator_id::env_spec',
+            'operator_id::spec_rgb',
+            '12u',
+            '14u'
+          )) {
+            if ($envspecRuntime -notmatch [regex]::Escape($required)) { throw "P_Metal EnvSpec shared-batch runtime invariant missing: $required" }
+          }
+
+          foreach ($required in @(
+            'len(rows) != 1246',
+            'len(banks) != 20'
+          )) {
+            if ($pmetalGenerator -notmatch [regex]::Escape($required)) { throw "P_Metal donor generator count invariant missing: $required" }
+          }
+
+          foreach ($required in @(
+            'operator_id::env_spec',
+            'prepared_pmetal_envspec_draw',
+            'g_pmetal_envspec.prepare',
+            'envspec_in_batch'
+          )) {
+            if ($entry -notmatch [regex]::Escape($required)) { throw "Integrated P_Metal EnvSpec batch activation missing: $required" }
           }
 
           foreach ($required in @(
@@ -425,7 +491,7 @@ jobs:
             throw "HemDir3 no-Spc shared-batch activation is not armed"
           }
 
-          if ($entry -match 'P_Metal|P_METAL|pmetal' -or $bridge -match 'P_Metal|P_METAL|pmetal') { throw "Integrated entry/A1 bridge must not special-case P_Metal" }
+          if ($bridge -match 'P_Metal|P_METAL|pmetal') { throw "Generic A1 bridge must not special-case P_Metal; P_Metal belongs to the exact EnvSpec island" }
           Write-Host "CORE_ISLANDS_SHARED_DRAW_TRANSACTION_BOUNDARY_PASS"
       - name: Verify UpperLower generated authority
         shell: pwsh
@@ -631,7 +697,7 @@ jobs:
             material_response_draw_probe = "VISIBLE_EXACT_OWNER_RECEIVER_PS_B12_BATCH_TRANSACTION"
             material_response_feature_armed = $true
             material_response_runtime_activation = "NOT_TESTED"
-            boot_armed_operator_count = 12
+            boot_armed_operator_count = 13
             single_addon_entrypoint = $true
             draw_replay = $true
             runtime_status = "NOT_TESTED"
