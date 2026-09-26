@@ -42,6 +42,9 @@ int main()
         CHECK(plan.light_count==2u);
         CHECK(plan.material_cb_slot==12u);
         CHECK(plan.raw_q_srv_slot==19u);
+        CHECK(plan.specular_power_cb_slot==0u);
+        CHECK(plan.specular_power_cb_index==11u);
+        CHECK(plan.specular_power_component==0u);
         CHECK(plan.lights[0].raw_q_t19_index==0u);
         CHECK(plan.lights[1].raw_q_t19_index==1u);
         CHECK(plan.lights[0].position_begin_cb==112u);
@@ -49,6 +52,8 @@ int main()
         CHECK(plan.lights[0].color_end_cb==116u);
         CHECK(plan.lights[1].color_end_cb==117u);
         CHECK(plan.replace_complete_microfacet_window);
+        CHECK(plan.use_ptde_legacy_reflect_pow);
+        CHECK(plan.consume_g_specular_power_as_exponent);
         CHECK(plan.bypass_stock_roughness_tail);
         CHECK(plan.bypass_stock_common_ndotl_specular);
         CHECK(plan.preserve_stock_diffuse);
@@ -76,6 +81,8 @@ int main()
                 pass_clustered_membership_not_owned);
         CHECK(plan.light_count==0u);
         CHECK(!plan.replace_complete_microfacet_window);
+        CHECK(!plan.use_ptde_legacy_reflect_pow);
+        CHECK(!plan.consume_g_specular_power_as_exponent);
     }
 
     {
