@@ -201,9 +201,15 @@ bool observe_draw_identity(
 
     const bool upper_lower_spc_matches_stable =
         !upper_lower_spc ||
-        (stable_receiver &&
-         receiver_id ==
-             upper_lower_identity.stable_receiver_id);
+        (upper_lower_identity.family ==
+                 dsrrl::operators::lightbank::
+                     upper_lower_hemenv_family::hemenv
+             ? (stable_receiver &&
+                receiver_id ==
+                    upper_lower_identity.stable_receiver_id)
+             : (hemenvlerp_receiver &&
+                hemenvlerp_identity.semantic_receiver_id ==
+                    upper_lower_identity.stable_receiver_id));
 
     const unsigned receiver_classes =
         (stable_receiver ? 1u : 0u) +
@@ -220,6 +226,11 @@ bool observe_draw_identity(
         receiver_id =
             hemenvlerp_identity.semantic_receiver_id;
         hemenvlerp_bound = true;
+        if (upper_lower_spc &&
+            upper_lower_identity.family ==
+                dsrrl::operators::lightbank::
+                    upper_lower_hemenv_family::hemenvlerp)
+            upper_lower_bound = true;
     } else if (subsurface_receiver) {
         receiver_id = subsurface_target;
         subsurface_bound = true;
