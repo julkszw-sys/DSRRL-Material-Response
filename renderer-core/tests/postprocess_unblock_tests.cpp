@@ -175,6 +175,13 @@ int main()
     fxdraw.particle_model_generation=1u;
     CHECK(runtime::bloom_fx_draw_transport::validate_waterwave_draw_authority(fxdraw)==
           runtime::bloom_fx_draw_transport::waterwave_draw_authority_result::
+              model_join_channel_missing);
+
+    fxdraw.particle_model_join_channel=
+        runtime::bloom_fx_draw_transport::
+            fx_particle_model_join_channel::appearance_owner;
+    CHECK(runtime::bloom_fx_draw_transport::validate_waterwave_draw_authority(fxdraw)==
+          runtime::bloom_fx_draw_transport::waterwave_draw_authority_result::
               authored_identity_not_exact);
 
     fxdraw.waterwave_authored_identity_exact=true;
