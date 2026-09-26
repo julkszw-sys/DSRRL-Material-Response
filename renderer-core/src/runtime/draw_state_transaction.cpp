@@ -50,16 +50,23 @@ bool unique_slots(
 bool verify_native_readback_for(
     const draw_tx_mutation &mutation) noexcept
 {
-    // Upper/Lower is the only currently confirmed high-frequency replay
-    // island. Its native state is still captured before mutation and restored
-    // after the replay, but repeating PSGet* after our own PSSet* calls on
-    // every draw is diagnostic-only work. Keep that expensive verification on
-    // every other operator until separately justified.
-    const auto upper_lower =
-        core::operator_bit(
-            core::operator_id::upper_lower);
+    core::upper_lower_readback_skip_shape shape{};
+    shape.owners = mutation.owners;
+    shape.shader_owners = mutation.shader_owners;
+    shape.constant_buffer_owners = mutation.constant_buffer_owners;
+    shape.carrier_owners = mutation.carrier_owners;
+    shape.resource_owners = mutation.resource_owners;
+    shape.constant_buffer_count = mutation.constant_buffer_count;
+    shape.srv_count = mutation.srv_count;
+    shape.sampler_count = mutation.sampler_count;
 
-    return (mutation.owners & upper_lower) == 0u;
+    if (mutation.constant_buffer_count == 1u) {
+        shape.constant_buffer_slot = mutation.constant_buffers[0].slot;
+        shape.constant_buffer_binding_owners =
+            mutation.constant_buffers[0].owners;
+    }
+
+    return !core::upper_lower_native_readback_skip_allowed(shape);
 }
 
 } // namespace
