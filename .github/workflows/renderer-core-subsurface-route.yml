@@ -9,12 +9,16 @@ on:
       - "renderer-core/include/dsrrl/operators/resource_bridges/subsurface_route.hpp"
       - "renderer-core/tests/subsurface_route_tests.cpp"
       - "renderer-core/docs/SUBSURFACE_PTDE_PLAIN_ROUTE.md"
+      - "renderer-core/data/census/subsurface_shader_owner_exclusivity_census_v1.json"
+      - "renderer-core/tools/verify_subsurface_shader_owner_exclusivity_census.py"
       - ".github/workflows/renderer-core-subsurface-route.yml"
   pull_request:
     paths:
       - "renderer-core/include/dsrrl/operators/resource_bridges/subsurface_route.hpp"
       - "renderer-core/tests/subsurface_route_tests.cpp"
       - "renderer-core/docs/SUBSURFACE_PTDE_PLAIN_ROUTE.md"
+      - "renderer-core/data/census/subsurface_shader_owner_exclusivity_census_v1.json"
+      - "renderer-core/tools/verify_subsurface_shader_owner_exclusivity_census.py"
       - ".github/workflows/renderer-core-subsurface-route.yml"
 
 jobs:
@@ -22,6 +26,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Verify shader-owner exclusivity census boundary
+        run: python3 renderer-core/tools/verify_subsurface_shader_owner_exclusivity_census.py
       - name: Compile Subsurface route contract tests
         run: |
           c++ -std=c++17 -Wall -Wextra -Wpedantic -Werror \
