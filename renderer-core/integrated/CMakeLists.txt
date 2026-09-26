@@ -35,6 +35,18 @@ string(
     artifact_stem)
 
 set(
+    DSRRL_SOURCE_COMMIT
+    "unknown"
+    CACHE STRING
+    "Source commit embedded into runtime telemetry")
+
+set(
+    DSRRL_BUILD_FLAVOR
+    "default"
+    CACHE STRING
+    "Build flavor/ref embedded into runtime telemetry")
+
+set(
     RESHADE_INCLUDE_DIR
     ""
     CACHE PATH
@@ -381,7 +393,9 @@ target_compile_definitions(
     $<$<COMPILE_LANGUAGE:CXX>:WIN32_LEAN_AND_MEAN>
     $<$<COMPILE_LANGUAGE:CXX>:NOMINMAX>
     $<$<COMPILE_LANGUAGE:CXX>:DSRRL_CORE_ISLANDS_VERSION="${DSRRL_CORE_ISLANDS_VERSION}">
-    $<$<COMPILE_LANGUAGE:CXX>:DSRRL_CORE_ISLANDS_PRODUCT_LINE="DSRRL_Core_Islands">)
+    $<$<COMPILE_LANGUAGE:CXX>:DSRRL_CORE_ISLANDS_PRODUCT_LINE="DSRRL_Core_Islands">
+    $<$<COMPILE_LANGUAGE:CXX>:DSRRL_SOURCE_COMMIT="${DSRRL_SOURCE_COMMIT}">
+    $<$<COMPILE_LANGUAGE:CXX>:DSRRL_BUILD_FLAVOR="${DSRRL_BUILD_FLAVOR}">)
 
 if(MSVC)
     target_compile_options(
