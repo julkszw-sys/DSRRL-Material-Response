@@ -22,6 +22,7 @@ enum class fx_particle_model_join_channel : std::uint8_t {
 struct fx_draw_snapshot {
     std::uint64_t generation = 0;
     std::uint64_t particle_model_generation = 0;
+    std::uint64_t backend_semantic_generation = 0;
     fx_draw_entity_kind kind = fx_draw_entity_kind::unknown;
     fx_particle_model_join_channel particle_model_join_channel =
         fx_particle_model_join_channel::none;
@@ -38,6 +39,8 @@ struct fx_draw_snapshot {
     void *draw_context = nullptr;
     std::uint32_t mode_token = 0;
     std::uint32_t appearance_semantic_word = 0;
+    std::uint32_t appearance_backend_key = 0;
+    std::uint32_t waterwave_runtime_semantic_index = 0;
     bool exact_entity_vtable = false;
     bool exact_appearance_vtable = false;
     bool appearance_state_ready = false;
@@ -45,6 +48,8 @@ struct fx_draw_snapshot {
     bool particle_model_instance_join = false;
     bool waterwave_authored_identity_exact = false;
     bool waterwave_same_model_instance = false;
+    bool appearance_backend_key_observed = false;
+    bool backend_key_matches_waterwave_runtime_index = false;
     bool ready = false;
 };
 
@@ -106,6 +111,8 @@ struct telemetry {
     bool cluster_hook_armed = false;
     bool particle_model_ctor_hook_armed = false;
     bool particle_model_dtor_hook_armed = false;
+    bool particle_state_update_hook_armed = false;
+    bool semantic_index_getter_attested = false;
     bool restore_failed = false;
     bool quarantined = false;
 
@@ -126,6 +133,13 @@ struct telemetry {
     std::uint64_t particle_model_owner_join_hits = 0;
     std::uint64_t particle_model_source_primary_join_hits = 0;
     std::uint64_t particle_model_source_secondary_join_hits = 0;
+    std::uint64_t particle_state_update_events = 0;
+    std::uint64_t backend_key_reads = 0;
+    std::uint64_t backend_key_read_failures = 0;
+    std::uint64_t waterwave_runtime_index_reads = 0;
+    std::uint64_t backend_key_waterwave_matches = 0;
+    std::uint64_t backend_semantic_snapshot_hits = 0;
+    std::uint64_t backend_semantic_snapshot_misses = 0;
     std::uint64_t waterwave_publish_ok = 0;
     std::uint64_t waterwave_publish_fail = 0;
     std::uint64_t waterwave_same_instance_hits = 0;
@@ -149,6 +163,13 @@ struct telemetry {
 // exact live model instance. The exact model destructor is also observed so
 // pointer reuse cannot turn a stale registry entry into false identity. No
 // channel is promoted to WaterWave authored-MTD authority without a live join.
+//
+// Particle appearance update RVA 0x118CCF0 provides a second, same-appearance
+// diagnostic axis: its key object is dispatched by DWORD key, while DSR's exact
+// semantic-index getter RVA 0x1BBC00 maps authored semantic ID 0xE35 to the
+// runtime registry index. Their equality is observed and attributed to the same
+// appearance pointer, but remains diagnostic evidence only until runtime data
+// proves that this dispatcher key is the WaterWave semantic carrier.
 //
 // This transport authenticates the exact retail executable indirectly through
 // the already source-complete FLVER provenance gate, then byte-attests both
