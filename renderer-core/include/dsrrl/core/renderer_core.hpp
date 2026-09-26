@@ -19,6 +19,7 @@ struct island_request {
     std::uint32_t carrier_write_mask = 0;
     bool shader_replacement = false;
     bool resource_replacement = false;
+    bool constant_buffer_replacement = false;
 
     // PARTIAL / ACTIVE_CANDIDATE / DIAGNOSTIC islands have operator-local
     // readiness contracts beyond the generic Core activation_context. They
