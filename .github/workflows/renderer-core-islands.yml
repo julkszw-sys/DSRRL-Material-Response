@@ -51,6 +51,14 @@ jobs:
             --stamp /tmp/a1_exact_recipe_stamp.json
           test "$(python3 -c 'import json; print(json.load(open("/tmp/a1_exact_recipe_stamp.json"))["selected_plans"])')" = "144"
           test "$(python3 -c 'import json; print(json.load(open("/tmp/a1_exact_recipe_stamp.json"))["selected_ops"])')" = "312"
+      - name: Verify UpperLower HemEnvLerp exact authority
+        run: |
+          python3 renderer-core/tools/generate_upper_lower_hemenvlerp_v1.py \
+            --input renderer-core/data/provenance/upper_lower_hemenvlerp_consumers_v1.tsv \
+            --output /tmp/generated_upper_lower_hemenvlerp_v1.hpp
+          test "$(grep -c 'FRPG_Phn_' /tmp/generated_upper_lower_hemenvlerp_v1.hpp)" = "36"
+          test "$(grep -c 'upper_lower_hemenvlerp_stratum::spc' /tmp/generated_upper_lower_hemenvlerp_v1.hpp)" = "24"
+          test "$(grep -c 'upper_lower_hemenvlerp_stratum::nospc' /tmp/generated_upper_lower_hemenvlerp_v1.hpp)" = "12"
       - name: Verify A1 island plan index
         run: |
           python3 renderer-core/tools/generate_a1_island_plan_index.py \
