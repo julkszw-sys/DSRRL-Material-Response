@@ -14,6 +14,11 @@ if len(rows)!=3:
 
 expected=[9,10,11]
 expected_terminal_rgb_word={9:2904,10:2823,11:2476}
+expected_ul_sites={
+    9:(1831,1835,1845),
+    10:(1740,1744,1754),
+    11:(1393,1397,1407),
+}
 required_offsets={
     "mul_a_word":13,
     "t14_word":21,
@@ -45,13 +50,21 @@ for i,r in enumerate(rows):
             raise SystemExit(f"{key} is not t12+{delta} for pair {pair}")
     if int(r["terminal_rgb_word"]) != expected_terminal_rgb_word[pair]:
         raise SystemExit(f"unexpected terminal RGB word for pair {pair}")
+    ul_sites=(
+        int(r["ul_u_slot_word"]),
+        int(r["ul_d_slot_word_0"]),
+        int(r["ul_d_slot_word_1"]),
+    )
+    if ul_sites != expected_ul_sites[pair]:
+        raise SystemExit(f"unexpected UpperLower operand sites for pair {pair}")
 
 fields=[
     "pair_index","semantic_receiver_id","label","v211_sha256",
     "reflection_coord_register","t12_word","mul_a_word","t14_word",
     "mad_b_minus_a_word","mad_lerp_word","postblend_word","t9_word",
     "t11_word","t13_word","envdiff_b_minus_a_word","envdiff_lerp_word",
-    "envdiff_gain_word","merge_word","terminal_rgb_word"
+    "envdiff_gain_word","merge_word","terminal_rgb_word",
+    "ul_u_slot_word","ul_d_slot_word_0","ul_d_slot_word_1"
 ]
 
 lines=[
@@ -81,6 +94,9 @@ lines=[
 "    std::uint32_t envdiff_gain_word;",
 "    std::uint32_t merge_word;",
 "    std::uint32_t terminal_rgb_word;",
+"    std::uint32_t ul_u_slot_word;",
+"    std::uint32_t ul_d_slot_word_0;",
+"    std::uint32_t ul_d_slot_word_1;",
 "};",
 "inline constexpr std::array<pmetal_hemenvlerp_site,3> k_pmetal_hemenvlerp_sites = {{"
 ]
