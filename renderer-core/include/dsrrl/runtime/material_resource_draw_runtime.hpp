@@ -84,6 +84,12 @@ public:
         prepared_material_resource_draw &prepared,
         operators::resource_bridges::subsurface_body_texture &body_texture) noexcept;
 
+    // Selective fail-open for a missing/mismatched SpecRGB consumer.
+    // Removes only the t10 request and retained view; independent Diffuse t0
+    // and Normal t2 requests remain live.
+    bool drop_spec_rgb_request(
+        prepared_material_resource_draw &prepared) noexcept;
+
     void release_prepared_draw(
         prepared_material_resource_draw &prepared) noexcept;
 
