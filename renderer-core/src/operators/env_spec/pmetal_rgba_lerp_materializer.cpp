@@ -7,6 +7,7 @@
 #include "dsrrl/operators/legacy_plan/sha256_bytes.hpp"
 #include "dsrrl/operators/material_response/hemenvlerp_v211_materializer.hpp"
 #include "dsrrl/operators/resource_bridges/spec_rgb_consumer_materializer.hpp"
+#include "dsrrl/operators/surface/terminal_sat_rgb_patch.hpp"
 
 #include <algorithm>
 #include <array>
@@ -293,6 +294,60 @@ bool contains_exact_subsequence(
     return second == haystack.end();
 }
 
+bool terminal_rgb_output_instruction(
+    const std::vector<std::uint32_t> &words,
+    std::size_t &word) noexcept
+{
+    word = static_cast<std::size_t>(-1);
+
+    std::vector<instruction_view> instructions;
+    if (!decode(words, instructions))
+        return false;
+
+    for (const auto &ins : instructions) {
+        if (ins.opcode != 0x36u ||
+            ins.length != 5u ||
+            ins.offset + 4u >= words.size() ||
+            words[ins.offset + 1u] != 0x00102072u ||
+            words[ins.offset + 2u] != 0u)
+            continue;
+
+        if (word != static_cast<std::size_t>(-1))
+            return false;
+
+        word = ins.offset;
+    }
+
+    return word != static_cast<std::size_t>(-1);
+}
+
+bool apply_exact_terminal_rgb_sat(
+    std::vector<std::uint32_t> &words) noexcept
+{
+    std::size_t word = 0u;
+    if (!terminal_rgb_output_instruction(
+            words,
+            word) ||
+        words[word] != 0x05000036u)
+        return false;
+
+    words[word] |=
+        surface::dxbc_saturate_modifier_bit;
+
+    return words[word] == 0x05002036u;
+}
+
+bool terminal_rgb_sat_exact(
+    const std::vector<std::uint32_t> &words) noexcept
+{
+    std::size_t word = 0u;
+    return
+        terminal_rgb_output_instruction(
+            words,
+            word) &&
+        words[word] == 0x05002036u;
+}
+
 constexpr std::array<std::uint32_t,74> k_ptde_rgba_envspec_chain = {{
     0x8d000048u,0x80000182u,0x00155543u,0x001000f2u,0x00000001u,0x00100796u,0x00000000u,0x00107936u,
     0x0000000cu,0x00106000u,0x0000000cu,0x00004001u,0x00000000u,0x0700000eu,0x001000e2u,0x00000001u,
@@ -400,6 +455,7 @@ bool final_postcondition(
         return false;
 
     return
+        terminal_rgb_sat_exact(words) &&
         sample_count(words, 9u) == 0u &&
         sample_count(words, 10u) == 1u &&
         sample_count(words, 11u) == 1u &&
@@ -584,6 +640,16 @@ materialize_pmetal_rgba_lerp_receiver(
         return outcome;
     }
 
+    // PTDE Phn HemEnv/HemEnvLerp terminates with RGB-only SAT. This is a
+    // separate surface operator composed into the exact P_Metal replacement;
+    // alpha is untouched and any non-unique/future output shape fails open.
+    if (!apply_exact_terminal_rgb_sat(words)) {
+        outcome.result =
+            pmetal_rgba_lerp_materialize_result::
+                fail_terminal_sat;
+        return outcome;
+    }
+
     std::vector<std::uint8_t> envspec_base;
     if (!add_b12_rdef(
             v211.data(),
@@ -619,6 +685,7 @@ materialize_pmetal_rgba_lerp_receiver(
     }
 
     outcome.envdiffuse_preserved = true;
+    outcome.terminal_sat_rgb_composed = true;
     outcome.spec_rgb_consumer = true;
     output = std::move(spec_rgb_base);
     outcome.result =
