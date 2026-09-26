@@ -145,6 +145,46 @@ std::optional<material_profile> material_response_island::resolve_material(
     return result;
 }
 
+std::optional<material_profile>
+material_response_island::resolve_material_unscoped(
+    const material_identity &identity) const
+{
+    if (!identity.valid)
+        return std::nullopt;
+
+    std::optional<material_profile> result;
+
+    for (const auto &profile : material_profiles_) {
+        if (profile.route_index != identity.route_index)
+            continue;
+
+        if (profile.semantic_name_required &&
+            (identity.semantic_name_hash == 0u ||
+             identity.semantic_name_hash != profile.semantic_name_hash))
+            continue;
+
+        if (profile.semantic_name_hash != 0u &&
+            identity.semantic_name_hash != 0u &&
+            identity.semantic_name_hash != profile.semantic_name_hash)
+            continue;
+
+        if (!digest_is_zero(profile.raw_mtd_sha256) &&
+            identity.raw_mtd_sha256 != profile.raw_mtd_sha256)
+            continue;
+
+        if (profile.material_family_hash != 0u &&
+            identity.material_family_hash != profile.material_family_hash)
+            continue;
+
+        if (result.has_value())
+            return std::nullopt;
+
+        result = profile;
+    }
+
+    return result;
+}
+
 decision material_response_island::evaluate(
     std::uint32_t receiver_id,
     const std::optional<material_identity> &material) const
@@ -222,6 +262,68 @@ decision material_response_island::evaluate(
         profile->c101_f0q,
         profile->ptde_specular_power,
         profile->ptde_specular_power_verified
+    };
+}
+
+decision
+material_response_island::evaluate_direct_pointlight_material(
+    const material_identity &material) const
+{
+    std::lock_guard lock(mutex_);
+
+    if (!material.valid)
+        return {false, decision_reason::material_required, 0u};
+
+    if (!material.owner_tuple_exact ||
+        !material.material_slot_valid ||
+        material.semantic_name_hash == 0u ||
+        !generated::dsr_flver_owner_tuple_authenticated(
+            material.flver_sha256,
+            material.material_slot,
+            material.semantic_name_hash))
+        return {
+            false,
+            decision_reason::owner_tuple_not_authenticated,
+            0u
+        };
+
+    const auto profile =
+        resolve_material_unscoped(material);
+    if (!profile.has_value())
+        return {
+            false,
+            decision_reason::unknown_material,
+            0u
+        };
+
+    const auto required =
+        diffuse_material_domain_linear |
+        specular_factor_c101;
+
+    if ((profile->certified_operations & required) != required ||
+        !profile->ptde_specular_power_verified ||
+        !(profile->ptde_specular_power > 0.0f))
+        return {
+            false,
+            decision_reason::no_certified_operator,
+            0u,
+            profile->route_index
+        };
+
+    return {
+        true,
+        decision_reason::active,
+        0u,
+        profile->route_index,
+        required,
+        profile->c101,
+        profile->lod_min,
+        profile->lod_max,
+        profile->envspec,
+        profile->c100,
+        profile->c101_f0q,
+        profile->ptde_specular_power,
+        true
     };
 }
 
