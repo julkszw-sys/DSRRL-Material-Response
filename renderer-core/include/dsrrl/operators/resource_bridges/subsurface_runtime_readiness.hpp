@@ -12,6 +12,7 @@ enum class subsurface_runtime_reason : std::uint8_t {
     ready = 0,
     core_gate_not_active,
     route_not_active,
+    create_time_owner_exclusivity_not_verified,
     replacement_shader_not_materialized,
     replacement_shader_identity_mismatch,
     replacement_shader_lifecycle_not_verified
@@ -19,6 +20,15 @@ enum class subsurface_runtime_reason : std::uint8_t {
 
 struct subsurface_runtime_context {
     subsurface_route_context route{};
+
+    // A create-time PS substitution acts on the shader object before any
+    // draw-local MTD identity exists. The route contract is material-specific,
+    // so the carrier is legal only when source-complete evidence proves that
+    // this exact Subsurf source shader identity is exclusive to the authorized
+    // Ps_Body route (or an equivalent create-time owner token is available).
+    // ABI compatibility alone does not prove this ownership property.
+    bool create_time_owner_exclusivity_verified = false;
+
     bool replacement_shader_materialized = false;
     bool replacement_shader_identity_verified = false;
 
@@ -57,6 +67,12 @@ inline subsurface_runtime_plan evaluate_subsurface_runtime_readiness(
     if (out.route.action !=
         subsurface_route_action::route_to_ptde_plain_difspcbmp_surface) {
         out.reason = subsurface_runtime_reason::route_not_active;
+        return out;
+    }
+
+    if (!context.create_time_owner_exclusivity_verified) {
+        out.reason =
+            subsurface_runtime_reason::create_time_owner_exclusivity_not_verified;
         return out;
     }
 
