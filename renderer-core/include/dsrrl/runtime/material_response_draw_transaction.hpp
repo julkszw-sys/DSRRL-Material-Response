@@ -23,10 +23,20 @@ struct ID3D11PixelShader;
 
 namespace dsrrl::runtime {
 
+enum class material_response_replacement_family : std::uint8_t {
+    stable = 0,
+    stable_upper_lower,
+    lerp_upper_lower
+};
+
 struct prepared_material_response_draw {
     island_draw_adapter_request request{};
     ID3D11PixelShader *shader = nullptr;
     ID3D11Buffer *b12 = nullptr;
+    material_response_replacement_family family =
+        material_response_replacement_family::stable;
+    std::uint32_t receiver_id = 0u;
+    bool spec_rgb_variant = false;
     bool ready = false;
 };
 
@@ -70,6 +80,15 @@ public:
     bool has_receiver_replacement(
         std::uint32_t receiver_id) const noexcept;
 
+    bool register_receiver_spec_rgb_replacement(
+        std::uint32_t receiver_id,
+        const void *dxbc,
+        std::size_t dxbc_size,
+        core::operator_mask composed_owners) noexcept;
+
+    bool has_receiver_spec_rgb_replacement(
+        std::uint32_t receiver_id) const noexcept;
+
     bool register_lerp_receiver_replacement(
         std::uint32_t receiver_id,
         const void *dxbc,
@@ -77,6 +96,15 @@ public:
         core::operator_mask composed_owners) noexcept;
 
     bool has_lerp_receiver_replacement(
+        std::uint32_t receiver_id) const noexcept;
+
+    bool register_lerp_receiver_spec_rgb_replacement(
+        std::uint32_t receiver_id,
+        const void *dxbc,
+        std::size_t dxbc_size,
+        core::operator_mask composed_owners) noexcept;
+
+    bool has_lerp_receiver_spec_rgb_replacement(
         std::uint32_t receiver_id) const noexcept;
 
     bool register_receiver_upper_lower_replacement(
@@ -87,6 +115,18 @@ public:
 
     bool has_receiver_upper_lower_replacement(
         std::uint32_t receiver_id) const noexcept;
+
+    bool register_receiver_upper_lower_spec_rgb_replacement(
+        std::uint32_t receiver_id,
+        const void *dxbc,
+        std::size_t dxbc_size,
+        core::operator_mask composed_owners) noexcept;
+
+    bool has_receiver_upper_lower_spec_rgb_replacement(
+        std::uint32_t receiver_id) const noexcept;
+
+    bool activate_spec_rgb_variant(
+        prepared_material_response_draw &prepared) noexcept;
 
     bool prepare_draw_request(
         const operators::material_response::decision &decision,
@@ -162,9 +202,15 @@ private:
     ID3D11Device *device_ = nullptr;
     std::unordered_map<std::uint32_t, replacement_record> replacements_;
     std::unordered_map<std::uint32_t, replacement_record>
+        spec_rgb_replacements_;
+    std::unordered_map<std::uint32_t, replacement_record>
         lerp_replacements_;
     std::unordered_map<std::uint32_t, replacement_record>
+        lerp_spec_rgb_replacements_;
+    std::unordered_map<std::uint32_t, replacement_record>
         upper_lower_replacements_;
+    std::unordered_map<std::uint32_t, replacement_record>
+        upper_lower_spec_rgb_replacements_;
     std::unordered_map<std::uint32_t, ID3D11Buffer *> b12_by_route_;
 
     std::atomic<std::uint64_t> replacement_register_ok_{0};
