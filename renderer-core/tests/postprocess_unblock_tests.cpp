@@ -180,6 +180,18 @@ int main()
     fxdraw.particle_model_join_channel=
         runtime::bloom_fx_draw_transport::
             fx_particle_model_join_channel::appearance_owner;
+
+    // Source-complete DSR authoring makes the WaterWave semantic unique, and
+    // runtime may observe the translated 0xE35 key on the same appearance/model
+    // instance. That conjunction is deliberately diagnostic only: without a
+    // separately published exact authored identity it still cannot authorize
+    // the Q8 writer.
+    CHECK(waterwave_dsr_authored_semantic_is_source_complete_unique());
+    fxdraw.appearance_state_ready=true;
+    fxdraw.appearance_backend_key_observed=true;
+    fxdraw.backend_key_matches_waterwave_runtime_index=true;
+    CHECK(runtime::bloom_fx_draw_transport::
+          is_waterwave_semantic_model_diagnostic_candidate(fxdraw));
     CHECK(runtime::bloom_fx_draw_transport::validate_waterwave_draw_authority(fxdraw)==
           runtime::bloom_fx_draw_transport::waterwave_draw_authority_result::
               authored_identity_not_exact);
