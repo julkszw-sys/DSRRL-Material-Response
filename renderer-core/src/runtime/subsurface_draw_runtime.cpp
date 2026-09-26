@@ -48,10 +48,12 @@ bool exact_dsbt_material(
 subsurface_draw_runtime::subsurface_draw_runtime(
     core::renderer_core &core,
     material_response_draw_runtime &mr,
-    material_resource_draw_runtime &resources) noexcept
+    material_resource_draw_runtime &resources,
+    upper_lower_draw_runtime &upper_lower) noexcept
     : core_(core),
       mr_(mr),
-      resources_(resources)
+      resources_(resources),
+      upper_lower_(upper_lower)
 {
 }
 
@@ -89,17 +91,28 @@ bool subsurface_draw_runtime::prepare(
         return false;
     }
 
-    if (!mr_.prepare_prevalidated_route_request(
-            target_receiver,
-            k_ptde_body_route_index,
-            prepared.mr)) {
+    auto *context =
+        reinterpret_cast<ID3D11DeviceContext *>(
+            cmd_list->get_native());
+
+    if (context == nullptr ||
+        !upper_lower_.prepare_upper_lower_carrier(
+            context,
+            prepared.upper_lower)) {
         ++surface_rejects_;
         return false;
     }
 
-    auto *context =
-        reinterpret_cast<ID3D11DeviceContext *>(
-            cmd_list->get_native());
+    if (!mr_.prepare_prevalidated_route_request_with_upper_lower(
+            target_receiver,
+            k_ptde_body_route_index,
+            prepared.upper_lower.b13,
+            prepared.mr)) {
+        upper_lower_.release_prepared_draw(
+            prepared.upper_lower);
+        ++surface_rejects_;
+        return false;
+    }
 
     operators::resource_bridges::
         subsurface_body_texture body_texture =
@@ -113,6 +126,8 @@ bool subsurface_draw_runtime::prepare(
             body_texture)) {
         mr_.release_prepared_draw(
             prepared.mr);
+        upper_lower_.release_prepared_draw(
+            prepared.upper_lower);
         ++surface_rejects_;
         return false;
     }
@@ -224,6 +239,8 @@ void subsurface_draw_runtime::release(
         prepared.resources);
     mr_.release_prepared_draw(
         prepared.mr);
+    upper_lower_.release_prepared_draw(
+        prepared.upper_lower);
     prepared = {};
 }
 
