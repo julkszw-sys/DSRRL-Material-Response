@@ -43,6 +43,7 @@ struct pmetal_envspec_telemetry {
     std::uint64_t material_rejects = 0;
     std::uint64_t semantic_rejects = 0;
     std::uint64_t source_rejects = 0;
+    std::uint64_t blended_receiver_hold = 0;
     std::uint64_t probe_rejects = 0;
     std::uint64_t spec_rgb_rejects = 0;
     std::uint64_t upper_lower_ready = 0;
@@ -113,6 +114,7 @@ private:
     std::atomic<std::uint64_t> material_rejects_{0};
     std::atomic<std::uint64_t> semantic_rejects_{0};
     std::atomic<std::uint64_t> source_rejects_{0};
+    std::atomic<std::uint64_t> blended_receiver_hold_{0};
     std::atomic<std::uint64_t> probe_rejects_{0};
     std::atomic<std::uint64_t> spec_rgb_rejects_{0};
     std::atomic<std::uint64_t> upper_lower_ready_{0};
