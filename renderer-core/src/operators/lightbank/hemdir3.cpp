@@ -7,30 +7,9 @@ float dot(const hemdir3_vec3&a,const hemdir3_vec3&b) noexcept { return a.x*b.x+a
 hemdir3_vec3 madd(const hemdir3_vec3&a,const hemdir3_vec3&b,float s) noexcept { return {a.x+b.x*s,a.y+b.y*s,a.z+b.z*s}; }
 bool proven_semantic_snapshot(const hemdir3_semantic_snapshot &s) noexcept {
  if(!s.immutable_draw_local || !s.exact_owner_context || !s.lightbank_tuple_fresh || !s.effective_mode_observation_verified) return false;
- return s.provenance==hemdir3_semantic_provenance::ordinary_draw_descriptor ||
-        s.provenance==hemdir3_semantic_provenance::independently_verified_special_route;
+ return s.provenance==hemdir3_semantic_provenance::ordinary_draw_descriptor || s.provenance==hemdir3_semantic_provenance::independently_verified_special_route;
 }
 }
-hemdir3_sample evaluate_hemdir3_source_join(const hemdir3_vec3 &h,const hemdir3_vec3 &n,const std::array<hemdir3_lobe,3>&lobes) noexcept {
- hemdir3_sample out; if(!finite(h)||!finite(n)) return out; for(const auto&l:lobes) if(!finite(l.direction)||!finite(l.color)) return out; out.hemisphere=h; out.joined_source=h;
- for(std::size_t i=0;i<lobes.size();++i){const float w=std::max(-dot(n,lobes[i].direction),0.0f); if(!std::isfinite(w)) return hemdir3_sample{}; out.weights[i]=w; out.joined_source=madd(out.joined_source,lobes[i].color,w);} out.result=hemdir3_math_result::exact; return out;
-}
-hemdir3_runtime_plan evaluate_hemdir3_runtime_readiness(const core::feature_registry&f,const core::activation_context&a,const hemdir3_runtime_context&c) noexcept {
- hemdir3_runtime_plan out; const auto g=core::evaluate_operator_activation(f,core::operator_id::hemdir3,a);
- if(g.state!=core::island_state::active){out.reason=hemdir3_runtime_reason::core_gate_not_active;return out;}
- if(!proven_semantic_snapshot(c.semantic)){out.reason=hemdir3_runtime_reason::semantic_snapshot_not_proven;return out;}
- if(c.semantic.mode!=2u){out.reason=hemdir3_runtime_reason::semantic_mode_not_hemdir3;return out;}
- if(!c.upper_lower_source_ready){out.reason=hemdir3_runtime_reason::upper_lower_source_not_ready;return out;}
- if(!c.d123_source_ready){out.reason=hemdir3_runtime_reason::d123_source_not_ready;return out;}
- if(!c.b13_carrier_ready){out.reason=hemdir3_runtime_reason::b13_carrier_not_ready;return out;}
- if(!c.receiver_verified){out.reason=hemdir3_runtime_reason::receiver_not_verified;return out;}
- if(c.receiver_class==hemdir3_receiver_class::spc){out.require_directional_legacy_specular=true;out.require_material_specular_b12=true;if(!c.material_specular_b12_ready){out.reason=hemdir3_runtime_reason::material_specular_b12_not_ready;return out;}if(!c.directional_specular_continuation_ready){out.reason=hemdir3_runtime_reason::directional_specular_continuation_not_ready;return out;}}
- if(!c.host_envdiffuse_source_suppressed){out.reason=hemdir3_runtime_reason::host_envdiffuse_not_suppressed;return out;}
- if(!c.material_continuation_ready){out.reason=hemdir3_runtime_reason::material_continuation_not_ready;return out;}
- if(!c.downstream_material_domain_ready){out.reason=hemdir3_runtime_reason::downstream_material_domain_not_ready;return out;}
- if(!c.downstream_postfog_ready){out.reason=hemdir3_runtime_reason::downstream_postfog_not_ready;return out;}
- if(!c.atmosphere_route_verified){out.reason=hemdir3_runtime_reason::atmosphere_route_not_verified;return out;}
- if(!c.draw_transaction_ready){out.reason=hemdir3_runtime_reason::draw_transaction_not_ready;return out;}
- out.ready=true;out.reason=hemdir3_runtime_reason::ready;return out;
-}
+hemdir3_sample evaluate_hemdir3_source_join(const hemdir3_vec3 &h,const hemdir3_vec3 &n,const std::array<hemdir3_lobe,3>&lobes) noexcept { hemdir3_sample out; if(!finite(h)||!finite(n)) return out; for(const auto&l:lobes) if(!finite(l.direction)||!finite(l.color)) return out; out.hemisphere=h; out.joined_source=h; for(std::size_t i=0;i<lobes.size();++i){const float w=std::max(-dot(n,lobes[i].direction),0.0f); if(!std::isfinite(w)) return hemdir3_sample{}; out.weights[i]=w; out.joined_source=madd(out.joined_source,lobes[i].color,w);} out.result=hemdir3_math_result::exact; return out; }
+hemdir3_runtime_plan evaluate_hemdir3_runtime_readiness(const core::feature_registry&f,const core::activation_context&a,const hemdir3_runtime_context&c) noexcept { hemdir3_runtime_plan out; const auto g=core::evaluate_operator_activation(f,core::operator_id::hemdir3,a); if(g.state!=core::island_state::active){out.reason=hemdir3_runtime_reason::core_gate_not_active;return out;} if(!proven_semantic_snapshot(c.semantic)){out.reason=hemdir3_runtime_reason::semantic_snapshot_not_proven;return out;} if(c.semantic.domain!=hemdir3_semantic_domain::lighting_family_selector){out.reason=hemdir3_runtime_reason::semantic_domain_not_lighting_selector;return out;} if(c.semantic.mode!=2u){out.reason=hemdir3_runtime_reason::semantic_mode_not_hemdir3;return out;} if(!c.upper_lower_source_ready){out.reason=hemdir3_runtime_reason::upper_lower_source_not_ready;return out;} if(!c.d123_source_ready){out.reason=hemdir3_runtime_reason::d123_source_not_ready;return out;} if(!c.b13_carrier_ready){out.reason=hemdir3_runtime_reason::b13_carrier_not_ready;return out;} if(!c.receiver_verified){out.reason=hemdir3_runtime_reason::receiver_not_verified;return out;} if(c.receiver_class==hemdir3_receiver_class::spc){out.require_directional_legacy_specular=true;out.require_material_specular_b12=true;if(!c.material_specular_b12_ready){out.reason=hemdir3_runtime_reason::material_specular_b12_not_ready;return out;}if(!c.directional_specular_continuation_ready){out.reason=hemdir3_runtime_reason::directional_specular_continuation_not_ready;return out;}} if(!c.host_envdiffuse_source_suppressed){out.reason=hemdir3_runtime_reason::host_envdiffuse_not_suppressed;return out;} if(!c.material_continuation_ready){out.reason=hemdir3_runtime_reason::material_continuation_not_ready;return out;} if(!c.downstream_material_domain_ready){out.reason=hemdir3_runtime_reason::downstream_material_domain_not_ready;return out;} if(!c.downstream_postfog_ready){out.reason=hemdir3_runtime_reason::downstream_postfog_not_ready;return out;} if(!c.atmosphere_route_verified){out.reason=hemdir3_runtime_reason::atmosphere_route_not_verified;return out;} if(!c.draw_transaction_ready){out.reason=hemdir3_runtime_reason::draw_transaction_not_ready;return out;} out.ready=true;out.reason=hemdir3_runtime_reason::ready;return out; }
 } // namespace dsrrl::operators::lightbank
