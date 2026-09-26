@@ -519,9 +519,6 @@ bool draw_state_transaction_runtime::begin(
                 sampler->Release();
         }
     
-        if (ctx1 != nullptr)
-            ctx1->Release();
-    
     
     } else {
         ++native_readback_skipped_;
@@ -572,10 +569,7 @@ bool draw_state_transaction_runtime::restore(
         return false;
     }
 
-    ID3D11DeviceContext1 *ctx1 = nullptr;
-    (void)ctx->QueryInterface(
-        __uuidof(ID3D11DeviceContext1),
-        reinterpret_cast<void **>(&ctx1));
+    auto *ctx1 = state.context1;
 
     std::array<ID3D11ClassInstance *,
                draw_tx_max_class_instances> classes{};
