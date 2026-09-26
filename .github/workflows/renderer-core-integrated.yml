@@ -125,6 +125,8 @@ jobs:
           $resourceRuntime = Get-Content renderer-core/src/runtime/material_resource_draw_runtime.cpp -Raw
           $specConsumer = Get-Content renderer-core/src/operators/resource_bridges/spec_rgb_consumer_materializer.cpp -Raw
           $envspecMaterializer = Get-Content renderer-core/src/operators/env_spec/pmetal_rgba_materializer.cpp -Raw
+          $envspecLerpMaterializer = Get-Content renderer-core/src/operators/env_spec/pmetal_rgba_lerp_materializer.cpp -Raw
+          $envspecLerpRegistry = Get-Content renderer-core/src/runtime/hemenvlerp_pipeline_registry.cpp -Raw
           $envspecResource = Get-Content renderer-core/src/runtime/envspec_resource_runtime.cpp -Raw
           $envspecRuntime = Get-Content renderer-core/src/runtime/pmetal_envspec_draw_runtime.cpp -Raw
           $pmetalGenerator = Get-Content renderer-core/tools/generate_pmetal_env_source_authority.py -Raw
@@ -245,6 +247,36 @@ jobs:
             'final_postcondition'
           )) {
             if ($envspecMaterializer -notmatch [regex]::Escape($required)) { throw "P_Metal EnvSpec Build131 materializer invariant missing: $required" }
+          }
+
+          foreach ($required in @(
+            'materialize_hemenvlerp_v211_certified_stage',
+            'k_ptde_rgba_envspec_chain',
+            'preserved_envdiffuse',
+            'materialize_spec_rgb_consumer',
+            'final_postcondition',
+            'fail_a1_overlap'
+          )) {
+            if ($envspecLerpMaterializer -notmatch [regex]::Escape($required)) { throw "P_Metal HemEnvLerp EnvSpec materializer invariant missing: $required" }
+          }
+
+          foreach ($required in @(
+            'k_hemenvlerp_v211_plans',
+            'semantic_receiver_id',
+            '24u',
+            'g_ambiguous_pipeline',
+            'hemenvlerp_receiver_bound'
+          )) {
+            if ($envspecLerpRegistry -notmatch [regex]::Escape($required)) { throw "HemEnvLerp exact pipeline identity invariant missing: $required" }
+          }
+
+          foreach ($required in @(
+            'hemenvlerp_receiver_observe_pipeline',
+            'hemenvlerp_receiver_observe_bind',
+            'hemenvlerp_receiver_bound',
+            'register_lerp_replacement'
+          )) {
+            if ($entry -notmatch [regex]::Escape($required)) { throw "Integrated HemEnvLerp routing invariant missing: $required" }
           }
 
           foreach ($required in @(
@@ -567,12 +599,24 @@ jobs:
         run: |
           python renderer-core/tools/generate_material_response_v211_plans.py --v29 runtime-v1/provenance/mr_v211/V29_SHADER_MANIFEST.json --v210 runtime-v1/provenance/mr_v211/V210_C101_MATERIAL_RESPONSE_AUDIT.json --v211 runtime-v1/provenance/mr_v211/V211_C101_UNBOUNDED_AUDIT.json --out "$env:RUNNER_TEMP/generated_v211_plans.hpp"
           python renderer-core/tools/generate_material_response_constants_v1.py --routes renderer-core/include/dsrrl/operators/material_response/generated_routes_v1.hpp --donors runtime-v1/provenance/mr_v211/ptde_material_donor_registry.hpp --out "$env:RUNNER_TEMP/generated_material_constants_v1.hpp"
+          python renderer-core/tools/generate_hemenvlerp_v211_v1.py --input renderer-core/data/provenance/hemenvlerp_mr_v211_v1.tsv --output "$env:RUNNER_TEMP/generated_hemenvlerp_v211_v1.hpp"
+          python renderer-core/tools/generate_pmetal_envspec_hemenvlerp_v1.py --input renderer-core/data/provenance/pmetal_envspec_hemenvlerp_v1.tsv --output "$env:RUNNER_TEMP/generated_pmetal_envspec_hemenvlerp_v1.hpp"
           $v211Expected = (Get-FileHash renderer-core/include/dsrrl/operators/material_response/generated_v211_plans.hpp -Algorithm SHA256).Hash
           $v211Actual = (Get-FileHash "$env:RUNNER_TEMP/generated_v211_plans.hpp" -Algorithm SHA256).Hash
           if ($v211Expected -ne $v211Actual) { throw "V2.11 plan header is not reproducible" }
           $constExpected = (Get-FileHash renderer-core/include/dsrrl/operators/material_response/generated_material_constants_v1.hpp -Algorithm SHA256).Hash
           $constActual = (Get-FileHash "$env:RUNNER_TEMP/generated_material_constants_v1.hpp" -Algorithm SHA256).Hash
           if ($constExpected -ne $constActual) { throw "MR b12 sidecar header is not reproducible" }
+          $lerpMrBuilt = "build-integrated/generated/dsrrl/operators/material_response/generated_hemenvlerp_v211_v1.hpp"
+          if (!(Test-Path $lerpMrBuilt)) { throw "Generated HemEnvLerp V2.11 authority missing from build" }
+          if ((Get-FileHash $lerpMrBuilt -Algorithm SHA256).Hash -ne (Get-FileHash "$env:RUNNER_TEMP/generated_hemenvlerp_v211_v1.hpp" -Algorithm SHA256).Hash) {
+            throw "HemEnvLerp V2.11 authority is not reproducible"
+          }
+          $lerpEnvBuilt = "build-integrated/generated/dsrrl/operators/env_spec/generated_pmetal_envspec_hemenvlerp_v1.hpp"
+          if (!(Test-Path $lerpEnvBuilt)) { throw "Generated P_Metal HemEnvLerp EnvSpec authority missing from build" }
+          if ((Get-FileHash $lerpEnvBuilt -Algorithm SHA256).Hash -ne (Get-FileHash "$env:RUNNER_TEMP/generated_pmetal_envspec_hemenvlerp_v1.hpp" -Algorithm SHA256).Hash) {
+            throw "P_Metal HemEnvLerp EnvSpec authority is not reproducible"
+          }
           Write-Host "CORE_ISLANDS_MR_GENERATED_AUTHORITY_PASS"
 
       - name: Build audit and package
@@ -607,6 +651,16 @@ jobs:
           $specConsumerHash = (Get-FileHash "renderer-core/src/operators/resource_bridges/spec_rgb_consumer_materializer.cpp" -Algorithm SHA256).Hash.ToLowerInvariant()
           $envspecMaterializerHash = (Get-FileHash "renderer-core/src/operators/env_spec/pmetal_rgba_materializer.cpp" -Algorithm SHA256).Hash.ToLowerInvariant()
           $envspecAuthorityHash = (Get-FileHash "renderer-core/include/dsrrl/operators/env_spec/pmetal_rgba_authority.hpp" -Algorithm SHA256).Hash.ToLowerInvariant()
+          $envspecLerpMaterializerHash = (Get-FileHash "renderer-core/src/operators/env_spec/pmetal_rgba_lerp_materializer.cpp" -Algorithm SHA256).Hash.ToLowerInvariant()
+          $envspecLerpMaterializerHeaderHash = (Get-FileHash "renderer-core/include/dsrrl/operators/env_spec/pmetal_rgba_lerp_materializer.hpp" -Algorithm SHA256).Hash.ToLowerInvariant()
+          $envspecLerpRegistryHash = (Get-FileHash "renderer-core/src/runtime/hemenvlerp_pipeline_registry.cpp" -Algorithm SHA256).Hash.ToLowerInvariant()
+          $envspecLerpRegistryHeaderHash = (Get-FileHash "renderer-core/include/dsrrl/runtime/hemenvlerp_pipeline_registry.hpp" -Algorithm SHA256).Hash.ToLowerInvariant()
+          $hemenvLerpMrAuthorityHash = (Get-FileHash "renderer-core/data/provenance/hemenvlerp_mr_v211_v1.tsv" -Algorithm SHA256).Hash.ToLowerInvariant()
+          $hemenvLerpMrGeneratorHash = (Get-FileHash "renderer-core/tools/generate_hemenvlerp_v211_v1.py" -Algorithm SHA256).Hash.ToLowerInvariant()
+          $envspecLerpAuthorityHash = (Get-FileHash "renderer-core/data/provenance/pmetal_envspec_hemenvlerp_v1.tsv" -Algorithm SHA256).Hash.ToLowerInvariant()
+          $envspecLerpGeneratorHash = (Get-FileHash "renderer-core/tools/generate_pmetal_envspec_hemenvlerp_v1.py" -Algorithm SHA256).Hash.ToLowerInvariant()
+          $generatedHemEnvLerpMrHash = (Get-FileHash "build-integrated/generated/dsrrl/operators/material_response/generated_hemenvlerp_v211_v1.hpp" -Algorithm SHA256).Hash.ToLowerInvariant()
+          $generatedEnvSpecLerpHash = (Get-FileHash "build-integrated/generated/dsrrl/operators/env_spec/generated_pmetal_envspec_hemenvlerp_v1.hpp" -Algorithm SHA256).Hash.ToLowerInvariant()
           $envspecResourceRuntimeHash = (Get-FileHash "renderer-core/src/runtime/envspec_resource_runtime.cpp" -Algorithm SHA256).Hash.ToLowerInvariant()
           $envspecDrawRuntimeHash = (Get-FileHash "renderer-core/src/runtime/pmetal_envspec_draw_runtime.cpp" -Algorithm SHA256).Hash.ToLowerInvariant()
           $pmetalSourceAuthorityHash = (Get-FileHash "renderer-core/provenance/mr145/SOURCE_V13_PTDE_DONOR.cpp" -Algorithm SHA256).Hash.ToLowerInvariant()
@@ -682,6 +736,18 @@ jobs:
             spec_rgb_consumer_materializer_sha256 = $specConsumerHash
             pmetal_envspec_materializer_sha256 = $envspecMaterializerHash
             pmetal_envspec_shader_authority_sha256 = $envspecAuthorityHash
+            pmetal_envspec_hemenvlerp_materializer_sha256 = $envspecLerpMaterializerHash
+            pmetal_envspec_hemenvlerp_materializer_header_sha256 = $envspecLerpMaterializerHeaderHash
+            hemenvlerp_pipeline_registry_sha256 = $envspecLerpRegistryHash
+            hemenvlerp_pipeline_registry_header_sha256 = $envspecLerpRegistryHeaderHash
+            hemenvlerp_mr_authority_tsv_sha256 = $hemenvLerpMrAuthorityHash
+            hemenvlerp_mr_generator_sha256 = $hemenvLerpMrGeneratorHash
+            pmetal_envspec_hemenvlerp_authority_tsv_sha256 = $envspecLerpAuthorityHash
+            pmetal_envspec_hemenvlerp_generator_sha256 = $envspecLerpGeneratorHash
+            generated_hemenvlerp_mr_authority_sha256 = $generatedHemEnvLerpMrHash
+            generated_pmetal_envspec_hemenvlerp_authority_sha256 = $generatedEnvSpecLerpHash
+            pmetal_envspec_hemenvlerp_route = "P_METAL_DSB_EXACT_PAIR9_10_11_TO_RECEIVERS33_34_35"
+            pmetal_envspec_hemenvlerp_runtime_activation = "NOT_TESTED"
             pmetal_envspec_resource_runtime_sha256 = $envspecResourceRuntimeHash
             pmetal_envspec_draw_runtime_sha256 = $envspecDrawRuntimeHash
             pmetal_envspec_source_authority_sha256 = $pmetalSourceAuthorityHash
