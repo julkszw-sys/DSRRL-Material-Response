@@ -335,6 +335,16 @@ bool pmetal_envspec_draw_runtime::prepare(
         return false;
     }
 
+    // Current Build131 authority is certified only for the stable HemEnv
+    // 33/34/35 one-endpoint consumer family. Preserve full A/B+beta producer
+    // state, but never execute a blended source through that consumer.
+    // beta != 0 remains fail-open until an exact HemEnvLerp receiver/consumer
+    // path is independently materialized and attested.
+    if (source.beta != 0.0f) {
+        ++blended_receiver_hold_;
+        return false;
+    }
+
     auto *context =
         reinterpret_cast<ID3D11DeviceContext *>(
             cmd_list->get_native());
@@ -734,6 +744,7 @@ pmetal_envspec_draw_runtime::telemetry() const noexcept
         material_rejects_.load(),
         semantic_rejects_.load(),
         source_rejects_.load(),
+        blended_receiver_hold_.load(),
         probe_rejects_.load(),
         spec_rgb_rejects_.load(),
         upper_lower_ready_.load(),
@@ -753,6 +764,7 @@ void pmetal_envspec_draw_runtime::reset() noexcept
     material_rejects_.store(0u);
     semantic_rejects_.store(0u);
     source_rejects_.store(0u);
+    blended_receiver_hold_.store(0u);
     probe_rejects_.store(0u);
     spec_rgb_rejects_.store(0u);
     upper_lower_ready_.store(0u);
