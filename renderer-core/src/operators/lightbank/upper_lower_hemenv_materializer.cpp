@@ -20,7 +20,7 @@ using legacy_plan::dxbc::read_u32;
 using legacy_plan::dxbc::write_u32;
 namespace hashing = legacy_plan::hashing;
 namespace generated_ul = generated;
-namespace generated_lerp = generated_lerp;
+namespace generated_ul_lerp = generated_lerp;
 
 constexpr std::array<std::uint32_t,4> k_cb13_decl = {
     0x04000059u,
@@ -59,7 +59,7 @@ bool candidate_size(std::size_t size) noexcept
             return true;
 
     for (const auto &plan :
-         generated_lerp::k_upper_lower_hemenvlerp_plans)
+         generated_ul_lerp::k_upper_lower_hemenvlerp_plans)
         if (plan.stock_size == size)
             return true;
 
@@ -106,7 +106,7 @@ find_plan(
     }
 
     for (const auto &plan :
-         generated_lerp::k_upper_lower_hemenvlerp_plans) {
+         generated_ul_lerp::k_upper_lower_hemenvlerp_plans) {
         if (plan.stock_size != size ||
             !hashing::matches_hex(
                 digest,
