@@ -2206,12 +2206,51 @@ bool prepare_island_batch(
         material.owner_tuple_exact;
 
     if (context != nullptr) {
-        (void)g_material_resources.prepare_draw_requests(
-            context,
-            receiver_id,
-            query,
-            prepared.mr_in_batch,
-            prepared.resources);
+        const bool resources_ready =
+            g_material_resources.prepare_draw_requests(
+                context,
+                receiver_id,
+                query,
+                prepared.mr_in_batch,
+                prepared.resources);
+
+        if (!resources_ready) {
+            release_prepared_island_batch(prepared);
+            return false;
+        }
+
+        if (prepared.mr_in_batch &&
+            prepared.resources.spec_rgb &&
+            !g_mr_draw_runtime.activate_spec_rgb_variant(
+                prepared.mr)) {
+            // Never execute a t10 resource carrier against a base t1
+            // consumer, or a t10 consumer without the exact paired carrier.
+            release_prepared_island_batch(prepared);
+            return false;
+        }
+
+        // Rebuild the merged mutation after the draw-local resource gate has
+        // selected the base-t1 or SpecRGB-t10 MR shader variant.
+        prepared.batch = {};
+
+        if (prepared.mr_in_batch &&
+            dsrrl::runtime::append_island_draw_request(
+                prepared.batch,
+                prepared.mr.request) !=
+            dsrrl::runtime::island_draw_batch_result::ready) {
+            release_prepared_island_batch(prepared);
+            return false;
+        }
+
+        if (!prepared.upper_lower_combined &&
+            prepared.upper_lower.ready &&
+            dsrrl::runtime::append_island_draw_request(
+                prepared.batch,
+                prepared.upper_lower.request) !=
+            dsrrl::runtime::island_draw_batch_result::ready) {
+            release_prepared_island_batch(prepared);
+            return false;
+        }
 
         for (std::uint32_t i = 0u;
              i < prepared.resources.request_count;
