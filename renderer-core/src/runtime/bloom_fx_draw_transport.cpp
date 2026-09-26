@@ -121,6 +121,9 @@ std::atomic<std::uint64_t> g_particle_model_ctor_events{0};
 std::atomic<std::uint64_t> g_particle_model_dtor_events{0};
 std::atomic<std::uint64_t> g_particle_model_join_hits{0};
 std::atomic<std::uint64_t> g_particle_model_join_misses{0};
+std::atomic<std::uint64_t> g_particle_model_owner_join_hits{0};
+std::atomic<std::uint64_t> g_particle_model_source_primary_join_hits{0};
+std::atomic<std::uint64_t> g_particle_model_source_secondary_join_hits{0};
 std::atomic<std::uint64_t> g_waterwave_publish_ok{0};
 std::atomic<std::uint64_t> g_waterwave_publish_fail{0};
 std::atomic<std::uint64_t> g_waterwave_same_instance_hits{0};
@@ -416,30 +419,49 @@ bool join_particle_model(
 {
     if (snap.kind !=
             fx_draw_entity_kind::particle ||
-        !snap.source_links_ready)
+        !snap.appearance_state_ready)
         return false;
 
-    const std::uintptr_t candidates[] = {
-        reinterpret_cast<std::uintptr_t>(
-            snap.appearance_source_primary),
-        reinterpret_cast<std::uintptr_t>(
-            snap.appearance_source_secondary)
+    struct candidate {
+        void *ptr = nullptr;
+        fx_particle_model_join_channel channel =
+            fx_particle_model_join_channel::none;
+    };
+
+    const candidate candidates[] = {
+        {
+            snap.appearance_owner,
+            fx_particle_model_join_channel::appearance_owner
+        },
+        {
+            snap.appearance_source_primary,
+            fx_particle_model_join_channel::appearance_source_primary
+        },
+        {
+            snap.appearance_source_secondary,
+            fx_particle_model_join_channel::appearance_source_secondary
+        }
     };
 
     std::lock_guard<std::mutex> lock(g_model_mutex);
 
-    for (const auto candidate : candidates) {
-        if (candidate == 0u)
+    for (const auto &candidate_value : candidates) {
+        const auto candidate_key =
+            reinterpret_cast<std::uintptr_t>(
+                candidate_value.ptr);
+        if (candidate_key == 0u)
             continue;
 
         const auto found =
-            g_particle_models.find(candidate);
+            g_particle_models.find(candidate_key);
         if (found ==
             g_particle_models.end())
             continue;
 
         snap.particle_model_instance =
-            reinterpret_cast<void *>(candidate);
+            candidate_value.ptr;
+        snap.particle_model_join_channel =
+            candidate_value.channel;
         snap.particle_model_arg2 =
             found->second.arg2;
         snap.particle_model_arg3 =
@@ -456,6 +478,21 @@ bool join_particle_model(
         snap.waterwave_same_model_instance =
             found->second.waterwave_identity_exact &&
             found->second.generation != 0u;
+
+        switch (candidate_value.channel) {
+        case fx_particle_model_join_channel::appearance_owner:
+            ++g_particle_model_owner_join_hits;
+            break;
+        case fx_particle_model_join_channel::appearance_source_primary:
+            ++g_particle_model_source_primary_join_hits;
+            break;
+        case fx_particle_model_join_channel::appearance_source_secondary:
+            ++g_particle_model_source_secondary_join_hits;
+            break;
+        default:
+            break;
+        }
+
         if (snap.waterwave_same_model_instance)
             ++g_waterwave_same_instance_hits;
         ++g_particle_model_join_hits;
@@ -628,6 +665,13 @@ void observe(
     const auto *state_bytes =
         static_cast<const std::uint8_t *>(
             appearance_state);
+
+    if (kind == fx_draw_entity_kind::particle) {
+        std::memcpy(
+            &snap.appearance_owner,
+            state_bytes + 0x10u,
+            sizeof(snap.appearance_owner));
+    }
 
     const std::size_t primary_offset =
         kind == fx_draw_entity_kind::particle
@@ -929,6 +973,12 @@ telemetry status() noexcept
         g_particle_model_join_hits.load();
     out.particle_model_join_misses =
         g_particle_model_join_misses.load();
+    out.particle_model_owner_join_hits =
+        g_particle_model_owner_join_hits.load();
+    out.particle_model_source_primary_join_hits =
+        g_particle_model_source_primary_join_hits.load();
+    out.particle_model_source_secondary_join_hits =
+        g_particle_model_source_secondary_join_hits.load();
     out.waterwave_publish_ok =
         g_waterwave_publish_ok.load();
     out.waterwave_publish_fail =
@@ -964,6 +1014,9 @@ void reset_stats() noexcept
     g_particle_model_dtor_events.store(0u);
     g_particle_model_join_hits.store(0u);
     g_particle_model_join_misses.store(0u);
+    g_particle_model_owner_join_hits.store(0u);
+    g_particle_model_source_primary_join_hits.store(0u);
+    g_particle_model_source_secondary_join_hits.store(0u);
     g_waterwave_publish_ok.store(0u);
     g_waterwave_publish_fail.store(0u);
     g_waterwave_same_instance_hits.store(0u);
