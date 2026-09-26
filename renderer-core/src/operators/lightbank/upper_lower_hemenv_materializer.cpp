@@ -3,6 +3,7 @@
 #include "dsrrl/operators/lightbank/generated_upper_lower_hemenvlerp_v1.hpp"
 #include "dsrrl/operators/lightbank/generated_upper_lower_phn_parallax_v1.hpp"
 #include "dsrrl/operators/lightbank/generated_upper_lower_phn_pnts_v1.hpp"
+#include "dsrrl/operators/lightbank/generated_upper_lower_phn_faceeye_v1.hpp"
 #include "dsrrl/operators/legacy_plan/a1_create_time_materializer.hpp"
 #include "dsrrl/operators/legacy_plan/dxbc_checksum.hpp"
 #include "dsrrl/operators/legacy_plan/dxbc_rdef_patch.hpp"
@@ -25,6 +26,7 @@ namespace generated_ul = generated;
 namespace generated_ul_lerp = generated_lerp;
 namespace generated_ul_parallax = generated_parallax;
 namespace generated_ul_pnts = generated_pnts;
+namespace generated_ul_faceeye = generated_faceeye;
 
 constexpr std::array<std::uint32_t,4> k_cb13_decl = {
     0x04000059u,
@@ -46,6 +48,7 @@ struct upper_lower_plan_view {
         generated_ul::upper_lower_hemenv_stratum::nospc;
     upper_lower_hemenv_family family =
         upper_lower_hemenv_family::hemenv;
+    std::uint32_t declaration_word = 11u;
     std::uint32_t stock_size = 0u;
     std::string_view stock_sha256{};
     std::uint32_t u_slot_word = 0u;
@@ -74,6 +77,11 @@ bool candidate_size(std::size_t size) noexcept
 
     for (const auto &plan :
          generated_ul_pnts::k_upper_lower_phn_pnts_plans)
+        if (plan.stock_size == size)
+            return true;
+
+    for (const auto &plan :
+         generated_ul_faceeye::k_upper_lower_phn_faceeye_plans)
         if (plan.stock_size == size)
             return true;
 
@@ -108,6 +116,7 @@ find_plan(
             plan.stable_receiver_id,
             plan.stratum,
             upper_lower_hemenv_family::hemenv,
+            11u,
             plan.stock_size,
             plan.stock_sha256,
             plan.u_slot_word,
@@ -142,6 +151,7 @@ find_plan(
                 : generated_ul::
                     upper_lower_hemenv_stratum::nospc,
             upper_lower_hemenv_family::hemenvlerp,
+            11u,
             plan.stock_size,
             plan.stock_sha256,
             plan.u_slot_word,
@@ -181,6 +191,7 @@ find_plan(
                             hemenv_parallax
                 ? upper_lower_hemenv_family::hemenv_parallax
                 : upper_lower_hemenv_family::hemenvlerp_parallax,
+            11u,
             plan.stock_size,
             plan.stock_sha256,
             plan.u_slot_word,
@@ -215,6 +226,42 @@ find_plan(
                 : generated_ul::
                     upper_lower_hemenv_stratum::nospc,
             upper_lower_hemenv_family::phn_pnts,
+            11u,
+            plan.stock_size,
+            plan.stock_sha256,
+            plan.u_slot_word,
+            plan.d_slot_word_0,
+            plan.d_slot_word_1,
+            plan.replacement_size,
+            plan.replacement_sha256
+        };
+        found = true;
+    }
+
+    for (const auto &plan :
+         generated_ul_faceeye::k_upper_lower_phn_faceeye_plans) {
+        if (plan.stock_size != size ||
+            !hashing::matches_hex(
+                digest,
+                plan.stock_sha256))
+            continue;
+
+        if (found)
+            return nullptr;
+
+        hit = {
+            plan.plan_index,
+            plan.shader_index,
+            plan.stable_receiver_id,
+            plan.stratum ==
+                    generated_ul_faceeye::
+                        upper_lower_phn_faceeye_stratum::spc
+                ? generated_ul::
+                    upper_lower_hemenv_stratum::spc
+                : generated_ul::
+                    upper_lower_hemenv_stratum::nospc,
+            upper_lower_hemenv_family::phn_faceeye,
+            7u,
             plan.stock_size,
             plan.stock_sha256,
             plan.u_slot_word,
@@ -526,6 +573,7 @@ bool compose_enabled_a1_islands(
     const core::feature_registry &features,
     const std::uint8_t *stock,
     std::size_t stock_size,
+    std::size_t declaration_word,
     std::vector<std::uint8_t> &replacement,
     core::operator_mask &composed_owners) noexcept
 {
@@ -580,8 +628,10 @@ bool compose_enabled_a1_islands(
             (op.byte_offset -
              stock_code) / 4u;
 
-        // U/L inserts one b13 declaration at SHEX word 11.
-        if (word >= 11u)
+        // U/L inserts one b13 declaration at the exact family-local
+        // declaration boundary. A1 stock offsets at/after that boundary move
+        // by four words in the rebuilt U/L consumer.
+        if (word >= declaration_word)
             word += 4u;
 
         const std::size_t target =
@@ -700,18 +750,32 @@ materialize_upper_lower_hemenv_receiver(
         return outcome;
     }
 
-    // Exact retail ordinary HemEnv ABI. The Spc and no-Spc strata differ
-    // only in the b0 declaration indexing mode token.
-    if (words[2] != 0x0100086au ||
-        (words[3] != 0x04000059u &&
-         words[3] != 0x04000859u) ||
-        words[4] != 0x00208e46u ||
-        words[5] != 0u ||
-        words[6] != 0x67u ||
-        words[7] != 0x04000059u ||
-        words[8] != 0x00208e46u ||
-        words[9] != 1u ||
-        words[10] != 1u) {
+    const bool faceeye =
+        plan->family ==
+            upper_lower_hemenv_family::phn_faceeye;
+
+    const bool common_b0 =
+        words[2] == 0x0100086au &&
+        (words[3] == 0x04000059u ||
+         words[3] == 0x04000859u) &&
+        words[4] == 0x00208e46u &&
+        words[5] == 0u &&
+        words[6] == 0x67u;
+
+    const bool ordinary_tail =
+        plan->declaration_word == 11u &&
+        words[7] == 0x04000059u &&
+        words[8] == 0x00208e46u &&
+        words[9] == 1u &&
+        words[10] == 1u;
+
+    const bool faceeye_tail =
+        plan->declaration_word == 7u &&
+        (words[7] & 0x7ffu) == 0x5au &&
+        ((words[7] >> 24u) & 0x7fu) == 3u;
+
+    if (!common_b0 ||
+        (faceeye ? !faceeye_tail : !ordinary_tail)) {
         outcome.result =
             upper_lower_hemenv_materialize_result::
                 fail_operand_precondition;
@@ -747,7 +811,9 @@ materialize_upper_lower_hemenv_receiver(
 
     try {
         words.insert(
-            words.begin() + 11,
+            words.begin() +
+                static_cast<std::ptrdiff_t>(
+                    plan->declaration_word),
             k_cb13_decl.begin(),
             k_cb13_decl.end());
     } catch (...) {
@@ -823,6 +889,7 @@ materialize_upper_lower_hemenv_receiver(
             features,
             source,
             size,
+            plan->declaration_word,
             output,
             outcome.composed_owners)) {
         output.clear();
