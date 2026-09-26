@@ -302,6 +302,7 @@ register_lerp_replacement(
         outcome.pair_index + 24u !=
             outcome.semantic_receiver_id ||
         !outcome.envdiffuse_preserved ||
+        !outcome.terminal_sat_rgb_composed ||
         !outcome.spec_rgb_consumer ||
         dxbc == nullptr ||
         dxbc_size == 0u ||
@@ -375,6 +376,21 @@ bool pmetal_envspec_draw_runtime::prepare(
         !core_.features().enabled(
             core::operator_id::env_spec))
         return false;
+
+    if (family ==
+            pmetal_envspec_receiver_family::
+                hemenvlerp &&
+        (!core_.features().enabled(
+             core::operator_id::material_response) ||
+         !core_.features().enabled(
+             core::operator_id::diffuse_material_domain) ||
+         !core_.features().enabled(
+             core::operator_id::spec_rgb) ||
+         !core_.features().enabled(
+             core::operator_id::terminal_sat_rgb))) {
+        ++semantic_rejects_;
+        return false;
+    }
 
     ++candidates_;
     if (family ==
@@ -770,6 +786,10 @@ bool pmetal_envspec_draw_runtime::prepare(
     const auto spec_owner =
         core::operator_bit(
             core::operator_id::spec_rgb);
+    const auto sat_owner =
+        core::operator_bit(
+            core::operator_id::
+                terminal_sat_rgb);
     const auto ul_owner =
         core::operator_bit(
             core::operator_id::
@@ -788,6 +808,12 @@ bool pmetal_envspec_draw_runtime::prepare(
         domain_owner |
         spec_owner |
         composed_owners;
+
+    if (family ==
+        pmetal_envspec_receiver_family::
+            hemenvlerp)
+        prepared.request.additional_owners |=
+            sat_owner;
 
     prepared.request.additional_shader_owners =
         prepared.request.additional_owners;
