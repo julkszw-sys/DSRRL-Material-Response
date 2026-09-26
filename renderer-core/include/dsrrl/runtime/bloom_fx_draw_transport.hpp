@@ -1,5 +1,7 @@
 #pragma once
 
+#include "dsrrl/operators/postprocess/waterwave_authored_identity.hpp"
+
 #include <cstdint>
 
 namespace dsrrl::runtime::bloom_fx_draw_transport {
@@ -12,6 +14,7 @@ enum class fx_draw_entity_kind : std::uint8_t {
 
 struct fx_draw_snapshot {
     std::uint64_t generation = 0;
+    std::uint64_t particle_model_generation = 0;
     fx_draw_entity_kind kind = fx_draw_entity_kind::unknown;
     void *entity = nullptr;
     void *appearance_state = nullptr;
@@ -30,6 +33,8 @@ struct fx_draw_snapshot {
     bool appearance_state_ready = false;
     bool source_links_ready = false;
     bool particle_model_instance_join = false;
+    bool waterwave_authored_identity_exact = false;
+    bool waterwave_same_model_instance = false;
     bool ready = false;
 };
 
@@ -56,6 +61,9 @@ struct telemetry {
     std::uint64_t particle_model_dtor_events = 0;
     std::uint64_t particle_model_join_hits = 0;
     std::uint64_t particle_model_join_misses = 0;
+    std::uint64_t waterwave_publish_ok = 0;
+    std::uint64_t waterwave_publish_fail = 0;
+    std::uint64_t waterwave_same_instance_hits = 0;
     std::uint64_t particle_model_registry_size = 0;
     std::uint64_t snapshot_hits = 0;
     std::uint64_t snapshot_misses = 0;
@@ -81,6 +89,14 @@ struct telemetry {
 // only: it does not authorize WaterWaveSfx, Q8 writes, Bloom, or pixels.
 bool install() noexcept;
 void uninstall() noexcept;
+
+// Publish an already-authenticated authored WaterWave identity onto the exact
+// live FrpgFxParticleAppearance_Model instance. This is intentionally a
+// separate handoff: the FX draw transport never infers authored material
+// identity from parameter index, shader name, blend mode, or collector token.
+bool publish_waterwave_model_identity(
+    void *particle_model_instance,
+    const operators::postprocess::waterwave_authored_identity &identity) noexcept;
 
 bool snapshot(fx_draw_snapshot &out) noexcept;
 void consume() noexcept;
