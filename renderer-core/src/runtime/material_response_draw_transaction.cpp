@@ -1154,6 +1154,18 @@ void material_response_draw_runtime::release_prepared_draw(
     prepared = {};
 }
 
+bool material_response_draw_runtime::prepare_b12_carrier(
+    const operators::material_response::decision &decision,
+    ID3D11Buffer *&b12) noexcept
+{
+    b12 = realize_b12(decision);
+    if (b12 == nullptr) {
+        ++b12_bind_fail_;
+        return false;
+    }
+    return true;
+}
+
 void material_response_draw_runtime::account_dispatch_result(
     draw_tx_result result) noexcept
 {
