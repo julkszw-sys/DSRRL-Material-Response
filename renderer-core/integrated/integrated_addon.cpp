@@ -167,14 +167,16 @@ void forget_integrated_draw_route(
         pipeline_handle);
 }
 
-void observe_integrated_draw_route_bind(
+std::uint8_t observe_integrated_draw_route_bind(
     const void *command_list_key,
     bool pixel_stage_bound,
     std::uint64_t pipeline_handle) noexcept
 {
     if (!pixel_stage_bound ||
         command_list_key == nullptr)
-        return;
+        return g_integrated_draw_route_tls.command_list_key == command_list_key
+            ? g_integrated_draw_route_tls.mask
+            : 0u;
 
     std::uint8_t mask = 0u;
     try {
@@ -194,6 +196,7 @@ void observe_integrated_draw_route_bind(
         command_list_key,
         mask
     };
+    return mask;
 }
 
 std::uint8_t integrated_draw_route_bound(
@@ -1497,31 +1500,29 @@ void on_bind_pipeline(
          static_cast<std::uint32_t>(
              reshade::api::pipeline_stage::pixel_shader)) != 0u;
 
-    dsrrl::runtime::stable_receiver_observe_bind(
-        cmd_list,
-        pixel_stage_bound,
-        pipeline.handle);
-    dsrrl::runtime::hemenvlerp_receiver_observe_bind(
-        cmd_list,
-        pixel_stage_bound,
-        pipeline.handle);
-    dsrrl::runtime::subsurface_receiver_observe_bind(
-        cmd_list,
-        pixel_stage_bound,
-        pipeline.handle);
-    dsrrl::runtime::hemdir3_receiver_observe_bind(
-        cmd_list,
-        pixel_stage_bound,
-        pipeline.handle);
-    dsrrl::runtime::upper_lower_receiver_observe_bind(
-        cmd_list,
-        pixel_stage_bound,
-        pipeline.handle);
+    const auto route_mask =
+        observe_integrated_draw_route_bind(
+            cmd_list,
+            pixel_stage_bound,
+            pipeline.handle);
 
-    observe_integrated_draw_route_bind(
-        cmd_list,
-        pixel_stage_bound,
-        pipeline.handle);
+    if (pixel_stage_bound && route_mask != 0u) {
+        if ((route_mask & k_route_stable) != 0u)
+            dsrrl::runtime::stable_receiver_observe_bind(
+                cmd_list, true, pipeline.handle);
+        if ((route_mask & k_route_hemenvlerp) != 0u)
+            dsrrl::runtime::hemenvlerp_receiver_observe_bind(
+                cmd_list, true, pipeline.handle);
+        if ((route_mask & k_route_subsurface) != 0u)
+            dsrrl::runtime::subsurface_receiver_observe_bind(
+                cmd_list, true, pipeline.handle);
+        if ((route_mask & k_route_hemdir3) != 0u)
+            dsrrl::runtime::hemdir3_receiver_observe_bind(
+                cmd_list, true, pipeline.handle);
+        if ((route_mask & k_route_upper_lower) != 0u)
+            dsrrl::runtime::upper_lower_receiver_observe_bind(
+                cmd_list, true, pipeline.handle);
+    }
 
     std::uint16_t first_plan = 0xFFFFu;
     dsrrl::core::operator_mask selected_owners = 0u;
