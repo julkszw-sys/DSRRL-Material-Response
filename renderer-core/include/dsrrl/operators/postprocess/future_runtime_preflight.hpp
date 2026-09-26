@@ -11,6 +11,11 @@ enum class post_unblock_state : std::uint8_t {
     ready_for_partial
 };
 
+enum class postprocess_sfx_scope : std::uint8_t {
+    preserve_stock_dsr = 0,
+    full_frame_diagnostic
+};
+
 enum class bloom_unblock_reason : std::uint8_t {
     ready_for_partial = 0,
     scene_domain_bridge_not_ready,
@@ -29,13 +34,17 @@ enum class bloom_unblock_reason : std::uint8_t {
     resource_lifetime_not_ready,
     hdr_t1_handoff_not_verified,
     lightshaft_separation_not_preserved,
-    stock_sfx_graph_not_preserved
+    stock_sfx_graph_not_preserved,
+    sfx_diagnostic_opt_in_not_ready,
+    sfx_diagnostic_attribution_not_ready,
+    sfx_diagnostic_release_guard_not_ready
 };
 
 struct bloom_unblock_context {
-    // Required semantic input bridge:
-    // DSR decoded-positive-linear R11G11B10_FLOAT scene ->
-    // PTDE-compatible 1024x720 A8R8G8B8/Q8 stored scene-code domain.
+    // Required semantic input bridge. A late DSR R11G11B10_FLOAT surface is
+    // not a proven inverse source for PTDE scene code. Exact construction
+    // requires preserved/replayed PTDE normalized scene history ending in
+    // SAT -> A8R8G8B8/Q8 before the legacy Bloom graph.
     bool scene_domain_bridge_ready = false;
     bool q8_scene_source_ready = false;
 
@@ -60,7 +69,16 @@ struct bloom_unblock_context {
 
     // Independent operators must remain independent.
     bool lightshaft_separation_preserved = false;
+
+    // Production keeps the DSR-native SFX island unless separately proven.
+    // A full-frame diagnostic may intentionally allow Bloom/postprocess to
+    // affect SFX, but it must remain explicitly non-release and attributable.
+    postprocess_sfx_scope sfx_scope =
+        postprocess_sfx_scope::preserve_stock_dsr;
     bool stock_sfx_graph_preserved = false;
+    bool sfx_diagnostic_opt_in = false;
+    bool sfx_diagnostic_attribution_ready = false;
+    bool sfx_diagnostic_non_release = false;
 };
 
 struct bloom_unblock_plan {
@@ -72,6 +90,8 @@ struct bloom_unblock_plan {
     bool requires_q8_scene_bridge = true;
     bool requires_fixed_rgba_sidecars = true;
     bool preserve_stock_hdr_until_separately_ready = true;
+    bool includes_sfx_in_postprocess = false;
+    bool diagnostic_only = false;
 };
 
 inline bloom_unblock_plan evaluate_bloom_unblock_preflight(
@@ -142,9 +162,28 @@ inline bloom_unblock_plan evaluate_bloom_unblock_preflight(
         out.reason = bloom_unblock_reason::lightshaft_separation_not_preserved;
         return out;
     }
-    if (!c.stock_sfx_graph_preserved) {
-        out.reason = bloom_unblock_reason::stock_sfx_graph_not_preserved;
-        return out;
+    if (c.sfx_scope == postprocess_sfx_scope::preserve_stock_dsr) {
+        if (!c.stock_sfx_graph_preserved) {
+            out.reason = bloom_unblock_reason::stock_sfx_graph_not_preserved;
+            return out;
+        }
+    } else {
+        out.includes_sfx_in_postprocess = true;
+        out.diagnostic_only = true;
+        if (!c.sfx_diagnostic_opt_in) {
+            out.reason = bloom_unblock_reason::sfx_diagnostic_opt_in_not_ready;
+            return out;
+        }
+        if (!c.sfx_diagnostic_attribution_ready) {
+            out.reason =
+                bloom_unblock_reason::sfx_diagnostic_attribution_not_ready;
+            return out;
+        }
+        if (!c.sfx_diagnostic_non_release) {
+            out.reason =
+                bloom_unblock_reason::sfx_diagnostic_release_guard_not_ready;
+            return out;
+        }
     }
 
     out.state = post_unblock_state::ready_for_partial;
@@ -170,7 +209,10 @@ enum class hdr_unblock_reason : std::uint8_t {
     output_handoff_not_verified,
     sfx_composite_order_not_verified,
     stock_dsr_sfx_not_preserved,
-    sfx_inverse_tonemap_contract_not_preserved
+    sfx_inverse_tonemap_contract_not_preserved,
+    sfx_diagnostic_opt_in_not_ready,
+    sfx_diagnostic_attribution_not_ready,
+    sfx_diagnostic_release_guard_not_ready
 };
 
 struct hdr_unblock_context {
@@ -198,8 +240,14 @@ struct hdr_unblock_context {
     // Stock DSR spells/VFX remain a host-owned island. Any HDR replacement
     // must preserve their composition domain unless that island is redesigned.
     bool sfx_composite_order_verified = false;
+
+    postprocess_sfx_scope sfx_scope =
+        postprocess_sfx_scope::preserve_stock_dsr;
     bool stock_dsr_sfx_preserved = false;
     bool sfx_inverse_tonemap_contract_preserved = false;
+    bool sfx_diagnostic_opt_in = false;
+    bool sfx_diagnostic_attribution_ready = false;
+    bool sfx_diagnostic_non_release = false;
 };
 
 struct hdr_unblock_plan {
@@ -211,6 +259,8 @@ struct hdr_unblock_plan {
     bool whole_c56_copy_allowed = false;
     bool requires_q8_scene_bridge = true;
     bool preserve_native_sfx_island = true;
+    bool includes_sfx_in_postprocess = false;
+    bool diagnostic_only = false;
 };
 
 inline hdr_unblock_plan evaluate_hdr_unblock_preflight(
@@ -277,14 +327,34 @@ inline hdr_unblock_plan evaluate_hdr_unblock_preflight(
         out.reason = hdr_unblock_reason::sfx_composite_order_not_verified;
         return out;
     }
-    if (!c.stock_dsr_sfx_preserved) {
-        out.reason = hdr_unblock_reason::stock_dsr_sfx_not_preserved;
-        return out;
-    }
-    if (!c.sfx_inverse_tonemap_contract_preserved) {
-        out.reason =
-            hdr_unblock_reason::sfx_inverse_tonemap_contract_not_preserved;
-        return out;
+    if (c.sfx_scope == postprocess_sfx_scope::preserve_stock_dsr) {
+        if (!c.stock_dsr_sfx_preserved) {
+            out.reason = hdr_unblock_reason::stock_dsr_sfx_not_preserved;
+            return out;
+        }
+        if (!c.sfx_inverse_tonemap_contract_preserved) {
+            out.reason =
+                hdr_unblock_reason::sfx_inverse_tonemap_contract_not_preserved;
+            return out;
+        }
+    } else {
+        out.preserve_native_sfx_island = false;
+        out.includes_sfx_in_postprocess = true;
+        out.diagnostic_only = true;
+        if (!c.sfx_diagnostic_opt_in) {
+            out.reason = hdr_unblock_reason::sfx_diagnostic_opt_in_not_ready;
+            return out;
+        }
+        if (!c.sfx_diagnostic_attribution_ready) {
+            out.reason =
+                hdr_unblock_reason::sfx_diagnostic_attribution_not_ready;
+            return out;
+        }
+        if (!c.sfx_diagnostic_non_release) {
+            out.reason =
+                hdr_unblock_reason::sfx_diagnostic_release_guard_not_ready;
+            return out;
+        }
     }
 
     out.state = post_unblock_state::ready_for_partial;
