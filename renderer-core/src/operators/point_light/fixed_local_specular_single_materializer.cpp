@@ -418,7 +418,8 @@ bool locate_linear_template(
     std::uint32_t window_end,
     std::uint32_t begin_cb,
     std::uint32_t end_cb,
-    std::array<instruction,4> &out) noexcept
+    std::array<instruction,4> &out,
+    std::uint32_t &island_insert_word) noexcept
 {
     std::size_t start_index=instructions.size();
     std::size_t end_index=instructions.size();
@@ -437,6 +438,7 @@ bool locate_linear_template(
             endswitch=i;
     if(endswitch==instructions.size())
         return false;
+    island_insert_word=instructions[endswitch].end;
 
     for(std::size_t i=start_index;i+3u<endswitch;++i) {
         const auto &a=instructions[i];
@@ -817,13 +819,15 @@ materialize_fixed_local_specular_single(
             samples.island.output_cut.operands.plan.lights[light].
                 microfacet_window;
         std::array<instruction,4> linear{};
+        std::uint32_t island_insert_word=0u;
         if(!locate_linear_template(
                 words,instructions,
                 window.start_word,
                 window.end_word_exclusive,
                 112u+light,
                 116u+light,
-                linear)) {
+                linear,
+                island_insert_word)) {
             out.result=
                 fixed_local_single_materialize_result::fail_geometry_capture;
             return out;
@@ -838,11 +842,16 @@ materialize_fixed_local_specular_single(
         }
 
         insertion island{};
-        if(window.end_word_exclusive==0u) {
+        if(island_insert_word==0u ||
+           island_insert_word>=window.end_word_exclusive) {
             out.result=fixed_local_single_materialize_result::fail_contract;
             return out;
         }
-        island.word=window.end_word_exclusive-1u; // immediately before ENDIF
+        // Execute inside the light-in-range IF, immediately after the stock
+        // falloff switch and before the DSR-only microfacet/light tail. N/V/L
+        // are still the attested geometry operands here. The stock tail is
+        // allowed to run afterwards but is dead at the redirected output cut.
+        island.word=island_insert_word
         append(island.payload,linear_words.data(),linear_words.size());
 
         fixed_local_specular_t19_load q_load{};
