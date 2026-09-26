@@ -52,6 +52,27 @@ A separately published exact authored identity is still required before a
 WaterWave draw can pass the Q8 writer authority gate. Bloom/HDR pixel behavior
 therefore remains OPEN.
 
+### Bloom FX diagnostic readout
+
+The diagnostic line is tagged `_BLOOM_FX`. The decision-relevant counters are:
+
+- `model_join=hit/miss`: live Particle appearance pointer joined to the exact
+  tracked `FrpgFxParticleAppearance_Model` instance;
+- `key_eq`: same-appearance backend key equalled the runtime index translated
+  from WaterWave semantic ID `0xE35`;
+- `ww_diag_join`: both facts above occurred on the same authenticated
+  Particle appearance/model snapshot while the DSR WaterWave authored semantic
+  is source-complete unique;
+- `ww_publish=ok/fail`: separately published exact authored identity. This is
+  expected to remain zero in the current diagnostic build;
+- `ww_auth=authorized/rejected`: final WaterWave draw-authority result. A
+  positive `ww_diag_join` alone must not increment `authorized`.
+
+Thus `ww_diag_join > 0` is evidence for the remaining runtime identity join,
+not permission to replay into Q8. `key_eq == 0` with semantic snapshots
+present falsifies the current backend-key candidate; `model_join == 0`
+instead points to the appearance-to-model join channel.
+
 ## Legacy boundary
 
 `runtime-v1/` and Material Response 1.45 may be consulted as frozen
