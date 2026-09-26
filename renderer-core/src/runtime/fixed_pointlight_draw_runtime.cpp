@@ -245,6 +245,7 @@ bool build_capture_stub(void *target,void *&stub_out) noexcept
         emit(code,{0x48,0x8B,0xCD});             // mov rcx,rbp
         emit(code,{0x8B,0xD7});                  // mov edx,edi
         emit(code,{0x83,0xEA,0x60});             // sub edx,60h
+        emit(code,{0xC1,0xEA,0x04});             // shr edx,4 => fixed slot 0..3
         emit(code,{0x4C,0x8D,0x84,0x24,0x30,0x01,0x00,0x00}); // lea r8,[rsp+130h]
         emit(code,{0x4C,0x8B,0xCB});             // mov r9,rbx
         emit(code,{0x48,0xB8});
