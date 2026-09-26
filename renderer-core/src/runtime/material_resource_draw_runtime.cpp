@@ -1,6 +1,7 @@
 #include "dsrrl/runtime/material_resource_draw_runtime.hpp"
 #include "dsrrl/runtime/texture_identity_transport.hpp"
 #include "dsrrl/operators/resource_bridges/spec_rgb_bridge.hpp"
+#include "dsrrl/operators/resource_bridges/fixed_pointlight_spec_rgb_bridge.hpp"
 #include "dsrrl/operators/resource_bridges/diffuse_bridge.hpp"
 #include "dsrrl/operators/resource_bridges/normal_bridge.hpp"
 #include "dsrrl/runtime/generated_spec_routes_v12.hpp"
@@ -120,6 +121,7 @@ std::atomic<std::uint64_t> g_sidecar_ready{0};
 std::atomic<std::uint64_t> g_sidecar_missing{0};
 std::atomic<std::uint64_t> g_sidecar_unsupported{0};
 std::atomic<std::uint64_t> g_spec_requests{0};
+std::atomic<std::uint64_t> g_fixed_pointlight_spec_requests{0};
 std::atomic<std::uint64_t> g_diffuse_requests{0};
 std::atomic<std::uint64_t> g_normal_requests{0};
 std::atomic<std::uint64_t> g_fail_open{0};
@@ -1214,6 +1216,179 @@ prepare_draw_requests(
 }
 
 bool material_resource_draw_runtime::
+prepare_fixed_pointlight_spec_requests(
+    ID3D11DeviceContext *context,
+    const operators::material_response::
+        mtd_semantic_query &query,
+    bool exact_fixed_receiver_verified,
+    bool blended_material,
+    prepared_material_resource_draw &prepared) noexcept
+{
+    prepared = {};
+
+    if (context == nullptr ||
+        g_quarantined.load() ||
+        !core_.features().enabled(
+            core::operator_id::spec_rgb))
+        return false;
+
+    ID3D11ShaderResourceView *views[5]{};
+    context->PSGetShaderResources(
+        0u,
+        5u,
+        views);
+
+    auto release_all = [&]() noexcept {
+        for (auto *&view : views)
+            release_view(view);
+    };
+
+    auto *spec_a =
+        lookup(
+            views[1],
+            asset_class::specular);
+    auto *spec_b =
+        blended_material
+            ? lookup(
+                views[4],
+                asset_class::specular)
+            : nullptr;
+
+    const auto h1 =
+        logical_hash_for(views[1]);
+    const auto h4 =
+        blended_material
+            ? logical_hash_for(views[4])
+            : 0u;
+
+    const bool exact_material =
+        query.material.valid &&
+        query.material.owner_tuple_exact;
+
+    const bool endpoint_a_exact =
+        h1 != 0u &&
+        generated::spec_name_hash_allowed_v12(h1) &&
+        spec_a != nullptr;
+
+    const bool endpoint_b_exact =
+        !blended_material ||
+        (h4 != 0u &&
+         generated::spec_name_hash_allowed_v12(h4) &&
+         spec_b != nullptr);
+
+    operators::resource_bridges::
+        fixed_pointlight_spec_rgb_context bridge{};
+    bridge.exact_fixed_receiver_verified =
+        exact_fixed_receiver_verified;
+    bridge.blended_material =
+        blended_material;
+    bridge.actual_material_verified =
+        exact_material;
+    bridge.material_specular_consumer_verified =
+        operators::material_response::
+            classify_mtd_semantic(
+                query,
+                operators::material_response::
+                    mtd_semantic_operator::spec_rgb)
+            .state ==
+        operators::material_response::
+            mtd_semantic_state::use;
+    bridge.endpoint_a_identity_verified =
+        endpoint_a_exact;
+    bridge.endpoint_a_sidecar_ready =
+        spec_a != nullptr;
+    bridge.endpoint_b_identity_verified =
+        endpoint_b_exact;
+    bridge.endpoint_b_sidecar_ready =
+        !blended_material || spec_b != nullptr;
+    bridge.t10_t16_transport_ready = true;
+    bridge.stock_t1_t4_preserved = true;
+
+    const auto decision =
+        operators::resource_bridges::
+            evaluate_fixed_pointlight_spec_rgb_route(
+                bridge,
+                query);
+
+    using action =
+        operators::resource_bridges::
+            fixed_pointlight_spec_rgb_action;
+
+    if (decision.action ==
+            action::preserve_host ||
+        spec_a == nullptr ||
+        (decision.action ==
+            action::bind_blended_t10_t16 &&
+         spec_b == nullptr)) {
+        release_view(spec_a);
+        release_view(spec_b);
+        release_all();
+        ++g_fail_open;
+        return true;
+    }
+
+    island_draw_adapter_request request{};
+    request.primary = core::operator_id::spec_rgb;
+    request.receiver_verified = true;
+    request.material_verified = true;
+    request.srvs[0] = {
+        decision.endpoint_a_srv_slot,
+        spec_a
+    };
+    request.srv_count = 1u;
+
+    if (decision.action ==
+        action::bind_blended_t10_t16) {
+        request.srvs[1] = {
+            decision.endpoint_b_srv_slot,
+            spec_b
+        };
+        request.srv_count = 2u;
+    }
+
+    draw_tx_mutation verify{};
+    if (build_island_draw_mutation(
+            request,
+            verify) !=
+        island_draw_adapter_result::ready ||
+        prepared.request_count >=
+            prepared.requests.size() ||
+        prepared.retained_count +
+            request.srv_count >
+            prepared.retained_views.size()) {
+        release_view(spec_a);
+        release_view(spec_b);
+        release_all();
+        ++g_fail_open;
+        return true;
+    }
+
+    prepared.requests[
+        prepared.request_count++] =
+        request;
+    prepared.retained_views[
+        prepared.retained_count++] =
+        spec_a;
+    spec_a = nullptr;
+
+    if (request.srv_count == 2u) {
+        prepared.retained_views[
+            prepared.retained_count++] =
+            spec_b;
+        spec_b = nullptr;
+    }
+
+    prepared.spec_rgb = true;
+    ++g_fixed_pointlight_spec_requests;
+    ++g_spec_requests;
+
+    release_view(spec_a);
+    release_view(spec_b);
+    release_all();
+    return true;
+}
+
+bool material_resource_draw_runtime::
 prepare_subsurface_body_requests(
     ID3D11DeviceContext *context,
     std::uint32_t target_plain_receiver_id,
@@ -1408,6 +1583,7 @@ telemetry() const noexcept
         g_sidecar_missing.load(),
         g_sidecar_unsupported.load(),
         g_spec_requests.load(),
+        g_fixed_pointlight_spec_requests.load(),
         g_diffuse_requests.load(),
         g_normal_requests.load(),
         g_fail_open.load(),
