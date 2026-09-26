@@ -1431,6 +1431,8 @@ bool AddonInit(
     g_draw_transactions.reset();
     g_mr_draw_runtime.reset();
     g_material_resources.reset();
+    g_envspec_resources.reset_stats();
+    g_pmetal_envspec.reset();
     g_upper_lower.reset();
     g_upper_lower_hemenv.reset();
     g_hemdir3.reset();
@@ -1443,6 +1445,8 @@ bool AddonInit(
     g_mr_payload_materialize_fail.store(0);
     g_mr_ul_payload_materialize_ok.store(0);
     g_mr_ul_payload_materialize_fail.store(0);
+    g_envspec_payload_materialize_ok.store(0);
+    g_envspec_payload_materialize_fail.store(0);
     g_draw_events.store(0);
     g_draw_receiver_hits.store(0);
     g_draw_owner_hits.store(0);
@@ -1484,6 +1488,19 @@ bool AddonInit(
         disable_integrated_islands();
         reshade::unregister_addon(addon_module, reshade_module);
         return false;
+    }
+
+    const bool envspec_resource_events =
+        g_envspec_resources.register_events();
+
+    if (!envspec_resource_events) {
+        (void)g_core.features().set(
+            dsrrl::core::operator_id::env_spec,
+            false);
+        reshade::log::message(
+            reshade::log::level::warning,
+            "[DSRRL CORE+ISLANDS " DSRRL_CORE_ISLANDS_VERSION
+            "] EnvSpec resource events FAIL-OPEN: P_Metal EnvSpec stays stock; other islands remain active.");
     }
 
     const bool texture_hooks =
@@ -1532,11 +1549,11 @@ bool AddonInit(
         reshade::log::level::info,
         "[DSRRL CORE+ISLANDS " DSRRL_CORE_ISLANDS_VERSION
         "] READY: shared Core draw-state transaction layer (PS/CB/SRV/sampler) "
-        "is active; Material Response and Upper/Lower use a single combined PS+b12+b13 "
-        "on exact Spc receivers, while exact no-Spc U/L uses its own PS+b13 route. "
-        "SpecRGB/Diffuse/Normal/Subsurface compose through the same replay; native HemDir3 "
-        "no-Spc uses exact mode2+D123+U/L b13. HemDir3 Spc remains fail-open pending exact "
-        "b12 c101/c102 donor. Frozen legacy monolith is not linked.");
+        "is active; exact Material Response, SpecRGB, Upper/Lower, Subsurface and native "
+        "HemDir3 no-Spc/Spc routes are construction-armed. Exact P_Metal EnvSpec uses its "
+        "own material/source/probe-gated PS+b12(+b13)+t10+t12/t14+s12/s14 single replay. "
+        "Runtime activation and PTDE pixel behavior remain separate validation stages; "
+        "frozen legacy monolith is not linked.");
 
     return true;
 }
@@ -1568,7 +1585,10 @@ void AddonUninit(
     dsrrl::runtime::hemdir3_receiver_pipeline_reset();
     dsrrl::runtime::upper_lower_receiver_pipeline_reset();
     dsrrl::runtime::texture_identity_transport::uninstall();
+    g_envspec_resources.unregister_events();
     g_material_resources.unregister_events();
+    g_pmetal_envspec.reset();
+    g_envspec_resources.reset_stats();
     g_material_resources.reset();
     g_upper_lower.reset();
     g_upper_lower_hemenv.reset();
