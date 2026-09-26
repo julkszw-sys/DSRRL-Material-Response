@@ -79,6 +79,8 @@ private:
         ID3D11PixelShader *shader = nullptr;
         operators::lightbank::upper_lower_hemenv_stratum stratum =
             operators::lightbank::upper_lower_hemenv_stratum::nospc;
+        operators::lightbank::upper_lower_hemenv_family family =
+            operators::lightbank::upper_lower_hemenv_family::hemenv;
         std::uint8_t stable_receiver_id = 0u;
         core::operator_mask composed_owners = 0u;
     };
