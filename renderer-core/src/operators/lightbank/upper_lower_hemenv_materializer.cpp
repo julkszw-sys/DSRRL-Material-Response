@@ -1,6 +1,7 @@
 #include "dsrrl/operators/lightbank/upper_lower_hemenv_materializer.hpp"
 #include "dsrrl/operators/lightbank/generated_upper_lower_hemenv_v1.hpp"
 #include "dsrrl/operators/lightbank/generated_upper_lower_hemenvlerp_v1.hpp"
+#include "dsrrl/operators/lightbank/generated_upper_lower_phn_parallax_v1.hpp"
 #include "dsrrl/operators/legacy_plan/a1_create_time_materializer.hpp"
 #include "dsrrl/operators/legacy_plan/dxbc_checksum.hpp"
 #include "dsrrl/operators/legacy_plan/dxbc_rdef_patch.hpp"
@@ -21,6 +22,7 @@ using legacy_plan::dxbc::write_u32;
 namespace hashing = legacy_plan::hashing;
 namespace generated_ul = generated;
 namespace generated_ul_lerp = generated_lerp;
+namespace generated_ul_parallax = generated_parallax;
 
 constexpr std::array<std::uint32_t,4> k_cb13_decl = {
     0x04000059u,
@@ -60,6 +62,11 @@ bool candidate_size(std::size_t size) noexcept
 
     for (const auto &plan :
          generated_ul_lerp::k_upper_lower_hemenvlerp_plans)
+        if (plan.stock_size == size)
+            return true;
+
+    for (const auto &plan :
+         generated_ul_parallax::k_upper_lower_phn_parallax_plans)
         if (plan.stock_size == size)
             return true;
 
@@ -128,6 +135,45 @@ find_plan(
                 : generated_ul::
                     upper_lower_hemenv_stratum::nospc,
             upper_lower_hemenv_family::hemenvlerp,
+            plan.stock_size,
+            plan.stock_sha256,
+            plan.u_slot_word,
+            plan.d_slot_word_0,
+            plan.d_slot_word_1,
+            plan.replacement_size,
+            plan.replacement_sha256
+        };
+        found = true;
+    }
+
+    for (const auto &plan :
+         generated_ul_parallax::k_upper_lower_phn_parallax_plans) {
+        if (plan.stock_size != size ||
+            !hashing::matches_hex(
+                digest,
+                plan.stock_sha256))
+            continue;
+
+        if (found)
+            return nullptr;
+
+        hit = {
+            plan.plan_index,
+            plan.shader_index,
+            plan.stable_receiver_id,
+            plan.stratum ==
+                    generated_ul_parallax::
+                        upper_lower_phn_parallax_stratum::spc
+                ? generated_ul::
+                    upper_lower_hemenv_stratum::spc
+                : generated_ul::
+                    upper_lower_hemenv_stratum::nospc,
+            plan.family ==
+                    generated_ul_parallax::
+                        upper_lower_phn_parallax_family::
+                            hemenv_parallax
+                ? upper_lower_hemenv_family::hemenv_parallax
+                : upper_lower_hemenv_family::hemenvlerp_parallax,
             plan.stock_size,
             plan.stock_sha256,
             plan.u_slot_word,
