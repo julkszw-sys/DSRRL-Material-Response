@@ -2004,13 +2004,9 @@ bool prepare_island_batch(
     }
 
     // HemEnvLerp is a distinct executable consumer and must use its own
-    // replacement shader namespace. The exact paired semantic receiver ID is
-    // reused only for material/resource policy; the PS itself is the Lerp
-    // V2.11+b12 + U/L+b13 + SpecRGB-t10 composition registered above.
-    //
-    // This closes the runtime hole where Lerp previously returned early with
-    // U/L only, causing PTDE Diffuse/Normal/SpecRGB carriers to fall back to
-    // stock DSR during profile interpolation.
+    // replacement shader namespace. Build the draw from the base t1 consumer
+    // first. Only after the exact draw-local SpecRGB resource request exists
+    // may the paired t10-consuming shader replace it.
     if (hemenvlerp_bound) {
         const bool lerp_ul_exact =
             upper_lower_bound &&
@@ -2034,14 +2030,6 @@ bool prepare_island_batch(
                     decision,
                     prepared.upper_lower.carrier.b13,
                     prepared.mr)) {
-            if (dsrrl::runtime::append_island_draw_request(
-                    prepared.batch,
-                    prepared.mr.request) !=
-                dsrrl::runtime::island_draw_batch_result::ready) {
-                release_prepared_island_batch(prepared);
-                return false;
-            }
-
             prepared.mr_in_batch = true;
             prepared.upper_lower_combined = true;
 
@@ -2066,6 +2054,25 @@ bool prepare_island_batch(
                 lerp_query,
                 true,
                 prepared.resources);
+
+            // SpecRGB carrier and consumer are one atomic bridge. If the
+            // resource is ready but the exact paired shader is not, discard
+            // draw-local resource substitutions and keep the base t1 MR path.
+            if (prepared.resources.spec_rgb &&
+                !g_mr_draw_runtime.
+                    promote_prepared_draw_to_spec_rgb(
+                        prepared.mr)) {
+                g_material_resources.release_prepared_draw(
+                    prepared.resources);
+            }
+
+            if (dsrrl::runtime::append_island_draw_request(
+                    prepared.batch,
+                    prepared.mr.request) !=
+                dsrrl::runtime::island_draw_batch_result::ready) {
+                release_prepared_island_batch(prepared);
+                return false;
+            }
 
             for (std::uint32_t i = 0u;
                  i < prepared.resources.request_count;
