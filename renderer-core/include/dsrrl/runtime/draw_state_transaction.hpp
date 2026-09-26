@@ -13,6 +13,7 @@
 #include <cstdint>
 
 struct ID3D11Buffer;
+struct ID3D11DeviceContext1;
 struct ID3D11PixelShader;
 struct ID3D11SamplerState;
 struct ID3D11ShaderResourceView;
