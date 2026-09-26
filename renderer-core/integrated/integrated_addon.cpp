@@ -21,6 +21,7 @@
 #include "dsrrl/runtime/hemdir3_mode_transport.hpp"
 #include "dsrrl/runtime/hemdir3_pipeline_registry.hpp"
 #include "dsrrl/runtime/hemdir3_draw_runtime.hpp"
+#include "dsrrl/runtime/fixed_pointlight_draw_runtime.hpp"
 #include "dsrrl/operators/material_response/material_response_island.hpp"
 #include "dsrrl/operators/material_response/material_response_seed.hpp"
 #include "dsrrl/operators/material_response/material_response_v211_materializer.hpp"
@@ -99,6 +100,8 @@ dsrrl::runtime::upper_lower_hemenv_draw_runtime
     g_upper_lower_hemenv(g_core, g_upper_lower);
 dsrrl::runtime::hemdir3_draw_runtime
     g_hemdir3(g_core, g_upper_lower);
+dsrrl::runtime::fixed_pointlight_draw_runtime
+    g_fixed_pointlight;
 dsrrl::runtime::pmetal_envspec_draw_runtime
     g_pmetal_envspec(
         g_core,
@@ -1166,6 +1169,7 @@ void on_destroy_device(reshade::api::device *device)
     g_upper_lower_hemenv.on_destroy_device(device);
     g_hemdir3.on_destroy_device(device);
     g_pmetal_envspec.on_destroy_device(device);
+    g_fixed_pointlight.on_destroy_device(device);
     g_mr_draw_runtime.on_destroy_device(device);
     g_a1_bridge.on_destroy_device(device);
 }
@@ -2598,6 +2602,7 @@ bool AddonInit(
     g_upper_lower.reset();
     g_upper_lower_hemenv.reset();
     g_hemdir3.reset();
+    g_fixed_pointlight.reset();
     dsrrl::runtime::hemdir3_mode_transport::reset_stats();
     g_present_count.store(0);
     g_mr_draw_eval.store(0);
@@ -2719,6 +2724,17 @@ bool AddonInit(
             "] FLVER identity hooks FAIL-OPEN: stock DSR preserved for exact owner routing.");
     }
 
+    const bool fixed_pointlight_hooks =
+        flver_hooks &&
+        g_fixed_pointlight.install();
+
+    if (!fixed_pointlight_hooks) {
+        reshade::log::message(
+            reshade::log::level::warning,
+            "[DSRRL CORE+ISLANDS " DSRRL_CORE_ISLANDS_VERSION
+            "] Fixed PointLight transport FAIL-OPEN: raw-q t19 remains unavailable; stock DSR fixed PointLight preserved.");
+    }
+
     const bool bloom_fx_hooks =
         flver_hooks &&
         dsrrl::runtime::bloom_fx_draw_transport::install();
@@ -2801,6 +2817,11 @@ void AddonUninit(
     if (dsrrl::runtime::bloom_fx_draw_transport::status().restore_failed)
         log_state("BLOOM_FX_UNLOAD_RESTORE_FAIL");
 
+    g_fixed_pointlight.uninstall();
+
+    if (g_fixed_pointlight.telemetry().restore_failed)
+        log_state("FIXED_PL_UNLOAD_RESTORE_FAIL");
+
     dsrrl::runtime::flver_identity_transport::uninstall();
 
     if (dsrrl::runtime::flver_identity_transport::status().restore_failed)
@@ -2823,6 +2844,7 @@ void AddonUninit(
     g_upper_lower.reset();
     g_upper_lower_hemenv.reset();
     g_hemdir3.reset();
+    g_fixed_pointlight.reset();
     g_mr_draw_runtime.reset();
     g_draw_transactions.reset();
     g_a1_bridge.reset();
