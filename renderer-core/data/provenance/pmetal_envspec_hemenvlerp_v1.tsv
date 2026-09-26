@@ -1,4 +1,4 @@
-pair_index	semantic_receiver_id	label	v211_sha256	reflection_coord_register	t12_word	mul_a_word	t14_word	mad_b_minus_a_word	mad_lerp_word	postblend_word	t9_word	t11_word	t13_word	envdiff_b_minus_a_word	envdiff_lerp_word	envdiff_gain_word	merge_word	terminal_rgb_word
-9	33	FRPG_Phn_DifSpcBmp______Csd_HemEnvLerp.fpo	a876ecc8b93abf6ae1f992e39278b597a875ab3f9d9a23dbe5abc053e7788706	7	1610	1623	1631	1644	1655	1665	1703	1739	1760	1773	1784	1794	1802	2904
-10	34	FRPG_Phn_DifSpcBmp______Sdw_HemEnvLerp.fpo	df68fad62b45a6e606342736f51973dc4593cf864d6efe7010cca80b1e458034	6	1519	1532	1540	1553	1564	1574	1612	1648	1669	1682	1693	1703	1711	2823
-11	35	FRPG_Phn_DifSpcBmp__________HemEnvLerp.fpo	009435e1d2bd9c809254cf9270df2aee8cce6091f5017fcfe75fee313bfddead	5	1179	1192	1200	1213	1224	1234	1272	1308	1329	1342	1353	1363	1371	2476
+pair_index	semantic_receiver_id	label	v211_sha256	reflection_coord_register	t12_word	mul_a_word	t14_word	mad_b_minus_a_word	mad_lerp_word	postblend_word	t9_word	t11_word	t13_word	envdiff_b_minus_a_word	envdiff_lerp_word	envdiff_gain_word	merge_word	terminal_rgb_word	ul_u_slot_word	ul_d_slot_word_0	ul_d_slot_word_1
+9	33	FRPG_Phn_DifSpcBmp______Csd_HemEnvLerp.fpo	a876ecc8b93abf6ae1f992e39278b597a875ab3f9d9a23dbe5abc053e7788706	7	1610	1623	1631	1644	1655	1665	1703	1739	1760	1773	1784	1794	1802	2904	1831	1835	1845
+10	34	FRPG_Phn_DifSpcBmp______Sdw_HemEnvLerp.fpo	df68fad62b45a6e606342736f51973dc4593cf864d6efe7010cca80b1e458034	6	1519	1532	1540	1553	1564	1574	1612	1648	1669	1682	1693	1703	1711	2823	1740	1744	1754
+11	35	FRPG_Phn_DifSpcBmp__________HemEnvLerp.fpo	009435e1d2bd9c809254cf9270df2aee8cce6091f5017fcfe75fee313bfddead	5	1179	1192	1200	1213	1224	1234	1272	1308	1329	1342	1353	1363	1371	2476	1393	1397	1407
