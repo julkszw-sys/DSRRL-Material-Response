@@ -226,6 +226,7 @@ add_library(
     "${DSRRL_RENDERER_CORE_ROOT}/src/runtime/material_resource_draw_runtime.cpp"
     "${DSRRL_RENDERER_CORE_ROOT}/src/runtime/envspec_resource_runtime.cpp"
     "${DSRRL_RENDERER_CORE_ROOT}/src/runtime/pmetal_envspec_draw_runtime.cpp"
+    "${DSRRL_RENDERER_CORE_ROOT}/src/runtime/hemenvlerp_pipeline_registry.cpp"
     "${DSRRL_RENDERER_CORE_ROOT}/src/runtime/subsurface_pipeline_registry.cpp"
     "${DSRRL_RENDERER_CORE_ROOT}/src/runtime/subsurface_draw_runtime.cpp"
     "${DSRRL_RENDERER_CORE_ROOT}/src/runtime/upper_lower_draw_runtime.cpp"
