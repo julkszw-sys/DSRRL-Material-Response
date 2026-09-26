@@ -1113,10 +1113,6 @@ bool on_create_pipeline(
     bool ul_identity_ready = false;
     bool ul_replacement_ready = false;
 
-    if (g_a1_bridge.pipeline_attested(
-            pipeline.handle))
-        draw_route_mask |= k_route_a1;
-
     if (pixel_shader != nullptr &&
         pixel_shader->code != nullptr &&
         pixel_shader->code_size != 0u) {
@@ -1431,6 +1427,10 @@ void on_init_pipeline(
             subobjects);
 
     std::uint8_t draw_route_mask = 0u;
+
+    if (g_a1_bridge.pipeline_attested(
+            pipeline.handle))
+        draw_route_mask |= k_route_a1;
 
     if (pixel_shader != nullptr &&
         pixel_shader->code != nullptr &&
