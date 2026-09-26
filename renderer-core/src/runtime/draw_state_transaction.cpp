@@ -77,8 +77,25 @@ bool draw_state_transaction_runtime::validate_mutation(
     const bool has_constant_buffers =
         mutation.constant_buffer_count != 0u;
 
+    core::operator_mask binding_cb_owners = 0u;
+
+    for (std::uint32_t i = 0u;
+         i < mutation.constant_buffer_count;
+         ++i) {
+        const auto owners =
+            mutation.constant_buffers[i].owners;
+
+        if (owners == 0u ||
+            (owners & ~mutation.owners) != 0u)
+            return false;
+
+        binding_cb_owners |= owners;
+    }
+
     if (has_constant_buffers !=
-        (mutation.constant_buffer_owners != 0u))
+            (mutation.constant_buffer_owners != 0u) ||
+        binding_cb_owners !=
+            mutation.constant_buffer_owners)
         return false;
 
     const bool has_resources =
