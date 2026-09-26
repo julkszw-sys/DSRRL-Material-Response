@@ -70,6 +70,22 @@ add_custom_command(
 add_custom_target(dsrrl_local_specular_receiver_header
     DEPENDS "${DSRRL_LOCAL_SPECULAR_RECEIVER_HEADER}")
 
+set(DSRRL_FIXED_LOCAL_SPECULAR_PTDE_REFERENCE_HEADER
+    "${DSRRL_GENERATED_DIR}/dsrrl/operators/point_light/generated_fixed_local_specular_ptde_reference_v1.hpp")
+add_custom_command(
+    OUTPUT "${DSRRL_FIXED_LOCAL_SPECULAR_PTDE_REFERENCE_HEADER}"
+    COMMAND "${Python3_EXECUTABLE}"
+            "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_fixed_local_specular_ptde_reference_v1.py"
+            --input "${CMAKE_CURRENT_SOURCE_DIR}/data/provenance/fixed_local_specular_ptde_pairs_v1.tsv"
+            --output "${DSRRL_FIXED_LOCAL_SPECULAR_PTDE_REFERENCE_HEADER}"
+    DEPENDS
+        "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_fixed_local_specular_ptde_reference_v1.py"
+        "${CMAKE_CURRENT_SOURCE_DIR}/data/provenance/fixed_local_specular_ptde_pairs_v1.tsv"
+    VERBATIM
+)
+add_custom_target(dsrrl_fixed_local_specular_ptde_reference_header
+    DEPENDS "${DSRRL_FIXED_LOCAL_SPECULAR_PTDE_REFERENCE_HEADER}")
+
 option(DSRRL_BUILD_PHASE0_PROBE "Build the pixel-inert ReShade API20 Phase 0 probe addon" OFF)
 set(RESHade_INCLUDE_DIR "" CACHE PATH "Path to pinned ReShade include directory")
 
@@ -102,6 +118,7 @@ add_library(dsrrl_renderer_core STATIC
     src/operators/point_light/local_specular_microfacet_windows.cpp
     src/operators/point_light/fixed_local_specular_patch_plan.cpp
     src/operators/point_light/fixed_local_specular_operand_contract.cpp
+    src/operators/point_light/fixed_local_specular_ptde_reference.cpp
     src/operators/surface/diffuse_material_domain.cpp
     src/operators/surface/fixed_postfog_identity.cpp
     src/operators/lightbank/upper_lower.cpp
@@ -112,13 +129,15 @@ add_library(dsrrl_renderer_core STATIC
     "${DSRRL_NATIVE_PROBE_HEADER}"
     "${DSRRL_OWNER_CORPUS_HEADER}"
     "${DSRRL_LOCAL_SPECULAR_RECEIVER_HEADER}"
+    "${DSRRL_FIXED_LOCAL_SPECULAR_PTDE_REFERENCE_HEADER}"
 )
 add_dependencies(
     dsrrl_renderer_core
     dsrrl_native_envspec_probe_header
     dsrrl_dsr_flver_owner_tuple_header
     dsrrl_hemenvlerp_v211_header
-    dsrrl_local_specular_receiver_header)
+    dsrrl_local_specular_receiver_header
+    dsrrl_fixed_local_specular_ptde_reference_header)
 target_include_directories(dsrrl_renderer_core PUBLIC
     ${DSRRL_GENERATED_DIR}
     ${CMAKE_CURRENT_SOURCE_DIR}/include)
