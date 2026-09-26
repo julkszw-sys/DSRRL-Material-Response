@@ -38,6 +38,22 @@ add_custom_command(
 add_custom_target(dsrrl_dsr_flver_owner_tuple_header
     DEPENDS "${DSRRL_OWNER_CORPUS_HEADER}")
 
+set(DSRRL_HEMENVLERP_V211_HEADER
+    "${DSRRL_GENERATED_DIR}/dsrrl/operators/material_response/generated_hemenvlerp_v211_v1.hpp")
+add_custom_command(
+    OUTPUT "${DSRRL_HEMENVLERP_V211_HEADER}"
+    COMMAND "${Python3_EXECUTABLE}"
+            "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_hemenvlerp_v211_v1.py"
+            --input "${CMAKE_CURRENT_SOURCE_DIR}/data/provenance/hemenvlerp_mr_v211_v1.tsv"
+            --output "${DSRRL_HEMENVLERP_V211_HEADER}"
+    DEPENDS
+        "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_hemenvlerp_v211_v1.py"
+        "${CMAKE_CURRENT_SOURCE_DIR}/data/provenance/hemenvlerp_mr_v211_v1.tsv"
+    VERBATIM
+)
+add_custom_target(dsrrl_hemenvlerp_v211_header
+    DEPENDS "${DSRRL_HEMENVLERP_V211_HEADER}")
+
 option(DSRRL_BUILD_PHASE0_PROBE "Build the pixel-inert ReShade API20 Phase 0 probe addon" OFF)
 set(RESHade_INCLUDE_DIR "" CACHE PATH "Path to pinned ReShade include directory")
 
@@ -52,6 +68,7 @@ add_library(dsrrl_renderer_core STATIC
     src/runtime/material_owner_selection.cpp
     src/runtime/flver_identity_registry.cpp
     src/runtime/stable_receiver_pipeline_registry.cpp
+    src/runtime/hemenvlerp_pipeline_registry.cpp
     src/renderer_core.cpp
     src/operator_catalog.cpp
     src/island_policy.cpp
@@ -78,7 +95,8 @@ add_library(dsrrl_renderer_core STATIC
 add_dependencies(
     dsrrl_renderer_core
     dsrrl_native_envspec_probe_header
-    dsrrl_dsr_flver_owner_tuple_header)
+    dsrrl_dsr_flver_owner_tuple_header
+    dsrrl_hemenvlerp_v211_header)
 target_include_directories(dsrrl_renderer_core PUBLIC
     ${DSRRL_GENERATED_DIR}
     ${CMAKE_CURRENT_SOURCE_DIR}/include)
@@ -97,6 +115,12 @@ add_executable(dsrrl_renderer_stable_receiver_pipeline_tests
     tests/stable_receiver_pipeline_registry_tests.cpp)
 target_link_libraries(dsrrl_renderer_stable_receiver_pipeline_tests PRIVATE dsrrl_renderer_core)
 target_compile_features(dsrrl_renderer_stable_receiver_pipeline_tests PRIVATE cxx_std_17)
+
+add_executable(dsrrl_renderer_hemenvlerp_pipeline_tests
+    tests/hemenvlerp_pipeline_registry_tests.cpp)
+target_link_libraries(dsrrl_renderer_hemenvlerp_pipeline_tests PRIVATE dsrrl_renderer_core)
+target_compile_features(dsrrl_renderer_hemenvlerp_pipeline_tests PRIVATE cxx_std_17)
+
 target_link_libraries(dsrrl_renderer_material_owner_tests PRIVATE dsrrl_renderer_core)
 target_compile_features(dsrrl_renderer_material_owner_tests PRIVATE cxx_std_17)
 
@@ -149,6 +173,7 @@ if(MSVC)
     target_compile_options(dsrrl_renderer_build151_nospc_tests PRIVATE /W4 /WX)
     target_compile_options(dsrrl_renderer_mtd_semantic_census_tests PRIVATE /W4 /WX)
     target_compile_options(dsrrl_renderer_stable_receiver_pipeline_tests PRIVATE /W4 /WX)
+    target_compile_options(dsrrl_renderer_hemenvlerp_pipeline_tests PRIVATE /W4 /WX)
 else()
     target_compile_options(dsrrl_renderer_core_tests PRIVATE -Wall -Wextra -Wpedantic -Werror)
     target_compile_options(dsrrl_renderer_material_owner_selection_tests PRIVATE -Wall -Wextra -Wpedantic -Werror)
@@ -159,6 +184,7 @@ else()
     target_compile_options(dsrrl_renderer_build151_nospc_tests PRIVATE -Wall -Wextra -Wpedantic -Werror)
     target_compile_options(dsrrl_renderer_mtd_semantic_census_tests PRIVATE -Wall -Wextra -Wpedantic -Werror)
     target_compile_options(dsrrl_renderer_stable_receiver_pipeline_tests PRIVATE -Wall -Wextra -Wpedantic -Werror)
+    target_compile_options(dsrrl_renderer_hemenvlerp_pipeline_tests PRIVATE -Wall -Wextra -Wpedantic -Werror)
 endif()
 
 if(DSRRL_BUILD_PHASE0_PROBE)
@@ -191,6 +217,7 @@ add_test(NAME dsrrl_renderer_material_owner_tests COMMAND dsrrl_renderer_materia
 add_test(NAME dsrrl_renderer_material_owner_selection_tests COMMAND dsrrl_renderer_material_owner_selection_tests)
 add_test(NAME dsrrl_renderer_flver_identity_tests COMMAND dsrrl_renderer_flver_identity_tests)
 add_test(NAME dsrrl_renderer_stable_receiver_pipeline_tests COMMAND dsrrl_renderer_stable_receiver_pipeline_tests)
+add_test(NAME dsrrl_renderer_hemenvlerp_pipeline_tests COMMAND dsrrl_renderer_hemenvlerp_pipeline_tests)
 add_test(NAME dsrrl_renderer_core_tests COMMAND dsrrl_renderer_core_tests)
 add_test(NAME dsrrl_renderer_island_tests COMMAND dsrrl_renderer_island_tests)
 add_test(NAME dsrrl_renderer_future_runtime_tests COMMAND dsrrl_renderer_future_runtime_tests)
