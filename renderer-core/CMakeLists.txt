@@ -381,3 +381,11 @@ add_test(NAME dsrrl_renderer_fixed_local_specular_kernel_tests COMMAND dsrrl_ren
 add_test(NAME dsrrl_renderer_postprocess_unblock_tests COMMAND dsrrl_renderer_postprocess_unblock_tests)
 add_test(NAME dsrrl_renderer_build151_nospc_tests COMMAND dsrrl_renderer_build151_nospc_tests)
 add_test(NAME dsrrl_renderer_mtd_semantic_census_tests COMMAND dsrrl_renderer_mtd_semantic_census_tests)
+add_test(
+    NAME dsrrl_material_response_specular_power_donor_audit
+    COMMAND "${Python3_EXECUTABLE}"
+            "${CMAKE_CURRENT_SOURCE_DIR}/tools/audit_material_response_specular_power_donors_v1.py"
+            --routes "${CMAKE_CURRENT_SOURCE_DIR}/include/dsrrl/operators/material_response/generated_routes_v1.hpp"
+            --donors "${CMAKE_CURRENT_SOURCE_DIR}/../runtime-v1/provenance/mr_v211/ptde_material_donor_registry.hpp"
+            --generated "${CMAKE_CURRENT_SOURCE_DIR}/include/dsrrl/operators/material_response/generated_material_constants_v1.hpp"
+)
