@@ -2085,6 +2085,19 @@ void on_present(
         log_state("LIVE");
 }
 
+bool on_create_pipeline_a1_only(
+    reshade::api::device *device,
+    reshade::api::pipeline_layout layout,
+    std::uint32_t subobject_count,
+    const reshade::api::pipeline_subobject *subobjects)
+{
+    return g_a1_bridge.on_create_pipeline(
+        device,
+        layout,
+        subobject_count,
+        subobjects);
+}
+
 void register_events()
 {
     reshade::register_event<reshade::addon_event::init_device>(on_init_device);
@@ -2133,6 +2146,24 @@ bool AddonInit(
 {
     if (!reshade::register_addon(addon_module, reshade_module))
         return false;
+
+    // PERFORMANCE ISOLATION DIAGNOSTIC A:
+    // Keep only exact A1 create-time shader replacement. No draw/bind/present
+    // callbacks, no resource events and no DSR inline hooks are installed.
+    g_a1_bridge.reset();
+    if (!enable_integrated_islands()) {
+        disable_integrated_islands();
+        reshade::unregister_addon(addon_module, reshade_module);
+        return false;
+    }
+
+    reshade::register_event<reshade::addon_event::create_pipeline>(
+        on_create_pipeline_a1_only);
+
+    reshade::log::message(
+        reshade::log::level::warning,
+        "[DSRRL PERF DIAG A1_CREATE_ONLY] Only exact A1 create-time shader replacement is active; runtime hooks/events are disabled.");
+    return true;
 
     g_a1_bridge.reset();
     g_draw_transactions.reset();
@@ -2296,6 +2327,14 @@ void AddonUninit(
     HMODULE addon_module,
     HMODULE reshade_module)
 {
+    // PERFORMANCE ISOLATION DIAGNOSTIC A counterpart to AddonInit.
+    reshade::unregister_event<reshade::addon_event::create_pipeline>(
+        on_create_pipeline_a1_only);
+    g_a1_bridge.reset();
+    disable_integrated_islands();
+    reshade::unregister_addon(addon_module, reshade_module);
+    return;
+
     unregister_events();
     log_state("PRE_UNLOAD");
     g_upper_lower.uninstall();
