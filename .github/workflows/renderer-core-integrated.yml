@@ -364,7 +364,7 @@ jobs:
             'DrawIndexedInstanced(',
             'PSSetConstantBuffers'
           )) {
-            if ($upperLower -match [regex]::Escape($forbidden)) { throw "Upper/Lower runtime must prepare a request, not own draw/bind/restore: $forbidden" }
+            if ($upperLower -cmatch [regex]::Escape($forbidden)) { throw "Upper/Lower runtime must prepare a request, not own draw/bind/restore: $forbidden" }
           }
 
           foreach ($required in @(
