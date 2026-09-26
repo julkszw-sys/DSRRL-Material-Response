@@ -5,7 +5,10 @@
 #include "dsrrl/operators/postprocess/bloom_scene_bridge.hpp"
 #include <iostream>
 using namespace dsrrl;
-namespace { bool check(bool c,const char*e,int l){if(c)return true;std::cerr<<"CHECK FAILED line "<<l<<": "<<e<<'\n';return false;} #define CHECK(e) do{if(!check(static_cast<bool>(e),#e,__LINE__))return 1;}while(false) }
+namespace {
+bool check(bool c,const char*e,int l){if(c)return true;std::cerr<<"CHECK FAILED line "<<l<<": "<<e<<'\n';return false;}
+#define CHECK(e) do{if(!check(static_cast<bool>(e),#e,__LINE__))return 1;}while(false)
+}
 int main(){using namespace operators::postprocess;
  const auto bc=core::find_operator_contract(core::operator_id::post_bloom);CHECK(bc.has_value());CHECK(bc->status==core::canonical_status::confirmed);CHECK(bc->default_state==core::port_state::blocked);
  const auto hc=core::find_operator_contract(core::operator_id::post_hdr);CHECK(hc.has_value());CHECK(hc->status==core::canonical_status::confirmed);CHECK(hc->default_state==core::port_state::blocked);
