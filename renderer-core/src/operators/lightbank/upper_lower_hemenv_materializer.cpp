@@ -135,7 +135,7 @@ find_plan(
             plan.shader_index,
             plan.stable_receiver_id,
             plan.stratum ==
-                    generated_lerp::
+                    generated_ul_lerp::
                         upper_lower_hemenvlerp_stratum::spc
                 ? generated_ul::
                     upper_lower_hemenv_stratum::spc
