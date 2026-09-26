@@ -156,6 +156,12 @@ int main()
     CHECK(validate_bloom_scene_bridge_carrier(scene)==
           bloom_scene_bridge_result::blend_history_not_closed);
     scene.history_proof=bloom_scene_history_proof::blend_history_closed;
+    scene.capture_placement=
+        bloom_scene_capture_placement::late_fullscreen_after_dsr_accumulation;
+    CHECK(validate_bloom_scene_bridge_carrier(scene)==
+          bloom_scene_bridge_result::late_fullscreen_history_loss);
+    scene.capture_placement=
+        bloom_scene_capture_placement::history_preserving_pre_loss;
     CHECK(validate_bloom_scene_bridge_carrier(scene)==
           bloom_scene_bridge_result::exact_construction);
 
