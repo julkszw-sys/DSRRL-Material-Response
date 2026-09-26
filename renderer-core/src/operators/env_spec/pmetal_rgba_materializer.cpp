@@ -3,6 +3,7 @@
 #include "dsrrl/operators/env_spec/pmetal_rgba_authority.hpp"
 #include "dsrrl/operators/lightbank/upper_lower_hemenv_materializer.hpp"
 #include "dsrrl/operators/material_response/material_response_v211_materializer.hpp"
+#include "dsrrl/operators/resource_bridges/spec_rgb_consumer_materializer.hpp"
 #include "dsrrl/operators/legacy_plan/a1_create_time_materializer.hpp"
 #include "dsrrl/operators/legacy_plan/dxbc_checksum.hpp"
 #include "dsrrl/operators/legacy_plan/dxbc_rdef_patch.hpp"
@@ -1478,14 +1479,24 @@ materialize_pmetal_rgba_receiver(
             true;
     }
 
-    if (!apply_spec_rgb_consumer(
-            base)) {
+    std::vector<std::uint8_t>
+        spec_rgb_base;
+
+    if (resource_bridges::
+            materialize_spec_rgb_consumer(
+                base.data(),
+                base.size(),
+                spec_rgb_base) !=
+        resource_bridges::
+            spec_rgb_consumer_result::applied) {
         outcome.result =
             pmetal_rgba_materialize_result::
                 fail_spec_rgb_consumer;
         return outcome;
     }
 
+    base =
+        std::move(spec_rgb_base);
     outcome.spec_rgb_consumer =
         true;
 
