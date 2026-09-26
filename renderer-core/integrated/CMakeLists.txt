@@ -213,6 +213,17 @@ add_custom_command(
         "${DSRRL_RENDERER_CORE_ROOT}/data/provenance/upper_lower_phn_faceeye_v1.tsv"
     VERBATIM)
 
+add_custom_command(
+    OUTPUT "${DSRRL_CORE_GENERATED_LIGHTBANK}/generated_upper_lower_phn_subsurf_v1.hpp"
+    COMMAND "${Python3_EXECUTABLE}"
+            "${DSRRL_RENDERER_CORE_ROOT}/tools/generate_upper_lower_phn_subsurf_v1.py"
+            --input "${DSRRL_RENDERER_CORE_ROOT}/data/provenance/upper_lower_phn_subsurf_unique_v1.tsv"
+            --output "${DSRRL_CORE_GENERATED_LIGHTBANK}/generated_upper_lower_phn_subsurf_v1.hpp"
+    DEPENDS
+        "${DSRRL_RENDERER_CORE_ROOT}/tools/generate_upper_lower_phn_subsurf_v1.py"
+        "${DSRRL_RENDERER_CORE_ROOT}/data/provenance/upper_lower_phn_subsurf_unique_v1.tsv"
+    VERBATIM)
+
 add_custom_target(
     dsrrl_core_upper_lower_authority
     DEPENDS
@@ -220,7 +231,8 @@ add_custom_target(
         "${DSRRL_CORE_GENERATED_LIGHTBANK}/generated_upper_lower_hemenvlerp_v1.hpp"
         "${DSRRL_CORE_GENERATED_LIGHTBANK}/generated_upper_lower_phn_parallax_v1.hpp"
         "${DSRRL_CORE_GENERATED_LIGHTBANK}/generated_upper_lower_phn_pnts_v1.hpp"
-        "${DSRRL_CORE_GENERATED_LIGHTBANK}/generated_upper_lower_phn_faceeye_v1.hpp")
+        "${DSRRL_CORE_GENERATED_LIGHTBANK}/generated_upper_lower_phn_faceeye_v1.hpp"
+        "${DSRRL_CORE_GENERATED_LIGHTBANK}/generated_upper_lower_phn_subsurf_v1.hpp")
 
 add_custom_command(
     OUTPUT "${DSRRL_CORE_GENERATED_RUNTIME}/generated_pmetal_env_source_authority.hpp"
