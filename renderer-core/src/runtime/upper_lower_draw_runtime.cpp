@@ -1754,7 +1754,8 @@ bool upper_lower_draw_runtime::prepare_upper_lower_carrier(
         return false;
 
     // Producer-only contract: realize and retain the exact fresh b13
-    // payload. Receiver/shader ownership is established by the consumer
+    // payload for consumer constant-buffer slot 13u. Receiver/shader ownership
+    // is established by the consumer
     // adapter (ordinary HemEnv, MR+U/L, or another explicitly certified
     // consumer), never here.
     prepared.b13 = b13;
