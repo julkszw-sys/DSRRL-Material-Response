@@ -289,6 +289,50 @@ int main()
     CHECK(core::create_time_safe_operator(
         core::operator_id::fixed_postfog_identity));
 
+    const auto ul_bit =
+        core::operator_bit(core::operator_id::upper_lower);
+    const auto sat_bit =
+        core::operator_bit(core::operator_id::terminal_sat_rgb);
+    const auto mr_bit =
+        core::operator_bit(core::operator_id::material_response);
+    const auto spec_bit =
+        core::operator_bit(core::operator_id::spec_rgb);
+
+    core::upper_lower_readback_skip_shape ul_fast{};
+    ul_fast.owners = ul_bit;
+    ul_fast.shader_owners = ul_bit;
+    ul_fast.constant_buffer_owners = ul_bit;
+    ul_fast.carrier_owners = ul_bit;
+    ul_fast.constant_buffer_count = 1u;
+    ul_fast.constant_buffer_slot = 13u;
+    ul_fast.constant_buffer_binding_owners = ul_bit;
+    CHECK(core::upper_lower_native_readback_skip_allowed(ul_fast));
+
+    auto ul_create_time = ul_fast;
+    ul_create_time.owners |= sat_bit;
+    ul_create_time.shader_owners |= sat_bit;
+    CHECK(core::upper_lower_native_readback_skip_allowed(ul_create_time));
+
+    auto ul_mr = ul_fast;
+    ul_mr.owners |= mr_bit;
+    ul_mr.shader_owners |= mr_bit;
+    CHECK(!core::upper_lower_native_readback_skip_allowed(ul_mr));
+
+    auto ul_b12_b13 = ul_fast;
+    ul_b12_b13.constant_buffer_count = 2u;
+    ul_b12_b13.constant_buffer_owners |= mr_bit;
+    CHECK(!core::upper_lower_native_readback_skip_allowed(ul_b12_b13));
+
+    auto ul_spec = ul_fast;
+    ul_spec.owners |= spec_bit;
+    ul_spec.resource_owners = spec_bit;
+    ul_spec.srv_count = 1u;
+    CHECK(!core::upper_lower_native_readback_skip_allowed(ul_spec));
+
+    auto wrong_slot = ul_fast;
+    wrong_slot.constant_buffer_slot = 12u;
+    CHECK(!core::upper_lower_native_readback_skip_allowed(wrong_slot));
+
     for (std::size_t i = 0; i < catalog.size(); ++i) {
         CHECK(static_cast<std::size_t>(catalog[i].id) == i);
         CHECK(catalog[i].operator_key != nullptr);
