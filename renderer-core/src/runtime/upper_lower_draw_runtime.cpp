@@ -1399,14 +1399,25 @@ f4 lerp4(
     };
 }
 
-bool f4_bits_equal(
-    const f4 &a,
-    const f4 &b) noexcept
+bool float_bits_equal(
+    float a,
+    float b) noexcept
 {
     return std::memcmp(
         &a,
         &b,
-        sizeof(f4)) == 0;
+        sizeof(float)) == 0;
+}
+
+bool f4_bits_equal(
+    const f4 &a,
+    const f4 &b) noexcept
+{
+    return
+        float_bits_equal(a.x, b.x) &&
+        float_bits_equal(a.y, b.y) &&
+        float_bits_equal(a.z, b.z) &&
+        float_bits_equal(a.w, b.w);
 }
 
 bool payload_bits_equal(
@@ -1455,10 +1466,9 @@ bool snapshot_matches_candidate(
         f4_bits_equal(
             current.pmetal_env_b,
             producer.pmetal_env_b) &&
-        std::memcmp(
-            &current.pmetal_env_beta,
-            &producer.pmetal_env_beta,
-            sizeof(float)) == 0 &&
+        float_bits_equal(
+            current.pmetal_env_beta,
+            producer.pmetal_env_beta) &&
         current.pmetal_bank_a ==
             producer.pmetal_bank_a &&
         current.pmetal_bank_b ==
