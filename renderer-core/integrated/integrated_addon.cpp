@@ -1269,35 +1269,44 @@ bool on_create_pipeline(
                 v211_materialize_result;
 
         if (mr.result == mr_result::applied) {
-            const auto spec_owner =
-                dsrrl::core::operator_bit(
-                    dsrrl::core::operator_id::spec_rgb);
+            const bool mr_base_ready =
+                g_mr_draw_runtime.has_receiver_replacement(
+                    mr.receiver_id) ||
+                g_mr_draw_runtime.register_receiver_replacement(
+                    mr.receiver_id,
+                    mr_payload.data(),
+                    mr_payload.size(),
+                    mr.composed_owners);
 
-            std::vector<std::uint8_t> mr_spec_payload;
-            const auto spec_result =
-                dsrrl::operators::resource_bridges::
-                    materialize_spec_rgb_consumer(
-                        mr_payload.data(),
-                        mr_payload.size(),
-                        mr_spec_payload);
-
-            if (spec_result ==
-                dsrrl::operators::resource_bridges::
-                    spec_rgb_consumer_result::applied) {
-                if (!g_mr_draw_runtime.has_receiver_replacement(
-                        mr.receiver_id)) {
-                    if (g_mr_draw_runtime.register_receiver_replacement(
-                            mr.receiver_id,
-                            mr_spec_payload.data(),
-                            mr_spec_payload.size(),
-                            mr.composed_owners |
-                                spec_owner))
-                        ++g_mr_payload_materialize_ok;
-                    else
-                        ++g_mr_payload_materialize_fail;
-                }
-            } else {
+            if (!mr_base_ready) {
                 ++g_mr_payload_materialize_fail;
+            } else {
+                std::vector<std::uint8_t> mr_spec_payload;
+                const auto spec_result =
+                    dsrrl::operators::resource_bridges::
+                        materialize_spec_rgb_consumer(
+                            mr_payload.data(),
+                            mr_payload.size(),
+                            mr_spec_payload);
+
+                const bool spec_ready =
+                    spec_result ==
+                        dsrrl::operators::resource_bridges::
+                            spec_rgb_consumer_result::applied &&
+                    (g_mr_draw_runtime.
+                         has_receiver_spec_rgb_replacement(
+                             mr.receiver_id) ||
+                     g_mr_draw_runtime.
+                         register_receiver_spec_rgb_replacement(
+                             mr.receiver_id,
+                             mr_spec_payload.data(),
+                             mr_spec_payload.size(),
+                             mr.composed_owners));
+
+                if (spec_ready)
+                    ++g_mr_payload_materialize_ok;
+                else
+                    ++g_mr_payload_materialize_fail;
             }
 
             std::vector<std::uint8_t> mr_ul_payload;
@@ -1319,33 +1328,46 @@ bool on_create_pipeline(
                         upper_lower_hemenv_stratum::spc &&
                 mr_ul.stable_receiver_id ==
                     mr.receiver_id) {
-                std::vector<std::uint8_t> mr_ul_spec_payload;
-                const auto ul_spec_result =
-                    dsrrl::operators::resource_bridges::
-                        materialize_spec_rgb_consumer(
+                const bool ul_base_ready =
+                    g_mr_draw_runtime.
+                        has_receiver_upper_lower_replacement(
+                            mr.receiver_id) ||
+                    g_mr_draw_runtime.
+                        register_receiver_upper_lower_replacement(
+                            mr.receiver_id,
                             mr_ul_payload.data(),
                             mr_ul_payload.size(),
-                            mr_ul_spec_payload);
+                            mr.composed_owners);
 
-                if (ul_spec_result ==
-                    dsrrl::operators::resource_bridges::
-                        spec_rgb_consumer_result::applied) {
-                    if (!g_mr_draw_runtime.
-                            has_receiver_upper_lower_replacement(
-                                mr.receiver_id)) {
-                        if (g_mr_draw_runtime.
-                                register_receiver_upper_lower_replacement(
-                                    mr.receiver_id,
-                                    mr_ul_spec_payload.data(),
-                                    mr_ul_spec_payload.size(),
-                                    mr.composed_owners |
-                                        spec_owner))
-                            ++g_mr_ul_payload_materialize_ok;
-                        else
-                            ++g_mr_ul_payload_materialize_fail;
-                    }
-                } else {
+                if (!ul_base_ready) {
                     ++g_mr_ul_payload_materialize_fail;
+                } else {
+                    std::vector<std::uint8_t> mr_ul_spec_payload;
+                    const auto ul_spec_result =
+                        dsrrl::operators::resource_bridges::
+                            materialize_spec_rgb_consumer(
+                                mr_ul_payload.data(),
+                                mr_ul_payload.size(),
+                                mr_ul_spec_payload);
+
+                    const bool ul_spec_ready =
+                        ul_spec_result ==
+                            dsrrl::operators::resource_bridges::
+                                spec_rgb_consumer_result::applied &&
+                        (g_mr_draw_runtime.
+                             has_receiver_upper_lower_spec_rgb_replacement(
+                                 mr.receiver_id) ||
+                         g_mr_draw_runtime.
+                             register_receiver_upper_lower_spec_rgb_replacement(
+                                 mr.receiver_id,
+                                 mr_ul_spec_payload.data(),
+                                 mr_ul_spec_payload.size(),
+                                 mr.composed_owners));
+
+                    if (ul_spec_ready)
+                        ++g_mr_ul_payload_materialize_ok;
+                    else
+                        ++g_mr_ul_payload_materialize_fail;
                 }
             } else if (
                 mr_ul.result !=
@@ -1399,10 +1421,6 @@ bool on_create_pipeline(
                         4u,
                         lerp_mr_ul_payload);
 
-            const auto lerp_spec_owner =
-                dsrrl::core::operator_bit(
-                    dsrrl::core::operator_id::spec_rgb);
-
             if (lerp_mr_ul.result ==
                     dsrrl::operators::lightbank::
                         upper_lower_hemenv_materialize_result::applied &&
@@ -1414,32 +1432,46 @@ bool on_create_pipeline(
                         upper_lower_hemenv_stratum::spc &&
                 lerp_mr_ul.stable_receiver_id ==
                     lerp_receiver_id) {
-                std::vector<std::uint8_t> lerp_full_payload;
-                const auto lerp_spec =
-                    dsrrl::operators::resource_bridges::
-                        materialize_spec_rgb_consumer(
+                const bool lerp_base_ready =
+                    g_mr_draw_runtime.
+                        has_lerp_receiver_replacement(
+                            lerp_receiver_id) ||
+                    g_mr_draw_runtime.
+                        register_lerp_receiver_replacement(
+                            lerp_receiver_id,
                             lerp_mr_ul_payload.data(),
                             lerp_mr_ul_payload.size(),
-                            lerp_full_payload);
+                            0u);
 
-                if (lerp_spec ==
-                        dsrrl::operators::resource_bridges::
-                            spec_rgb_consumer_result::applied) {
-                    if (!g_mr_draw_runtime.
-                            has_lerp_receiver_replacement(
-                                lerp_receiver_id)) {
-                        if (g_mr_draw_runtime.
-                                register_lerp_receiver_replacement(
-                                    lerp_receiver_id,
-                                    lerp_full_payload.data(),
-                                    lerp_full_payload.size(),
-                                    lerp_spec_owner))
-                            ++g_mr_ul_payload_materialize_ok;
-                        else
-                            ++g_mr_ul_payload_materialize_fail;
-                    }
-                } else {
+                if (!lerp_base_ready) {
                     ++g_mr_ul_payload_materialize_fail;
+                } else {
+                    std::vector<std::uint8_t> lerp_full_payload;
+                    const auto lerp_spec =
+                        dsrrl::operators::resource_bridges::
+                            materialize_spec_rgb_consumer(
+                                lerp_mr_ul_payload.data(),
+                                lerp_mr_ul_payload.size(),
+                                lerp_full_payload);
+
+                    const bool lerp_spec_ready =
+                        lerp_spec ==
+                            dsrrl::operators::resource_bridges::
+                                spec_rgb_consumer_result::applied &&
+                        (g_mr_draw_runtime.
+                             has_lerp_receiver_spec_rgb_replacement(
+                                 lerp_receiver_id) ||
+                         g_mr_draw_runtime.
+                             register_lerp_receiver_spec_rgb_replacement(
+                                 lerp_receiver_id,
+                                 lerp_full_payload.data(),
+                                 lerp_full_payload.size(),
+                                 0u));
+
+                    if (lerp_spec_ready)
+                        ++g_mr_ul_payload_materialize_ok;
+                    else
+                        ++g_mr_ul_payload_materialize_fail;
                 }
             } else if (
                 lerp_mr_ul.result !=
