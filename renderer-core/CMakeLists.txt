@@ -125,6 +125,7 @@ add_library(dsrrl_renderer_core STATIC
     src/operators/point_light/fixed_local_specular_output_cut.cpp
     src/operators/point_light/fixed_local_specular_island_plan.cpp
     src/operators/point_light/fixed_local_specular_t19_lowering.cpp
+    src/operators/point_light/fixed_local_specular_material_samples.cpp
     src/operators/surface/diffuse_material_domain.cpp
     src/operators/surface/fixed_postfog_identity.cpp
     src/operators/lightbank/upper_lower.cpp
