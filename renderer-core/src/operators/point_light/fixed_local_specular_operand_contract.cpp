@@ -395,6 +395,15 @@ extract_fixed_local_specular_operand_contract_from_attested_shex_words(
             nh_src0[0],nh_src0[1]};
         dst.light.token = {
             nl_src1[0],nl_src1[1]};
+        dst.primary_scalar_dst.token = {
+            shex_words[dp_vh.start+1u],
+            shex_words[dp_vh.start+2u]};
+        dst.auxiliary_scalar_dst.token = {
+            shex_words[dp_nh.start+1u],
+            shex_words[dp_nh.start+2u]};
+        dst.ndotl_scalar_dst.token = {
+            shex_words[dp_nl.start+1u],
+            shex_words[dp_nl.start+2u]};
         dst.ndotl_dp3_word =
             dp_nl.start;
         dst.stock_light_color_cb =
