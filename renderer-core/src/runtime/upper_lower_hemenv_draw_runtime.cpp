@@ -139,6 +139,7 @@ bool upper_lower_hemenv_draw_runtime::register_replacement(
     replacement_record record{};
     record.shader = shader;
     record.stratum = outcome.stratum;
+    record.family = outcome.family;
     record.stable_receiver_id =
         outcome.stable_receiver_id;
     record.composed_owners =
@@ -211,6 +212,8 @@ bool upper_lower_hemenv_draw_runtime::prepare_draw_request(
             found->second.shader != nullptr &&
             found->second.stratum ==
                 identity.stratum &&
+            found->second.family ==
+                identity.family &&
             found->second.stable_receiver_id ==
                 identity.stable_receiver_id) {
             replacement = found->second;
