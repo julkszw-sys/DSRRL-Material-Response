@@ -457,7 +457,7 @@ bool locate_linear_template(
         const auto &d=instructions[i+3u];
         if(a.opcode!=k_op_add || b.opcode!=k_op_add ||
            c.opcode!=k_op_div || d.opcode!=k_op_add ||
-           a.end-a.start!=10u || b.end-b.start!=10u ||
+           a.end-a.start!=9u || b.end-b.start!=10u ||
            c.end-c.start!=7u || d.end-d.start!=8u ||
            (words[d.start]&0x2000u)==0u ||
            !has_cb_index(words,a,begin_cb) ||
@@ -533,7 +533,7 @@ bool rebuild(
     const std::vector<std::uint32_t> &words,
     std::vector<std::uint8_t> &out) noexcept
 {
-    if(old_code_index>=chunks.size()) return false;
+    (void)old_code_index;
 
     // After RDEF removal, locate the sole code chunk again.
     std::size_t code_index=static_cast<std::size_t>(-1);
