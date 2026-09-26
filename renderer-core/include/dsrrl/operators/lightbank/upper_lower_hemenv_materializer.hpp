@@ -26,6 +26,11 @@ enum class upper_lower_hemenv_stratum : std::uint8_t {
     spc
 };
 
+enum class upper_lower_hemenv_family : std::uint8_t {
+    hemenv = 0,
+    hemenvlerp
+};
+
 struct upper_lower_hemenv_materialize_outcome {
     upper_lower_hemenv_materialize_result result =
         upper_lower_hemenv_materialize_result::pass_not_candidate;
@@ -34,6 +39,8 @@ struct upper_lower_hemenv_materialize_outcome {
     std::uint8_t stable_receiver_id = 0u;
     upper_lower_hemenv_stratum stratum =
         upper_lower_hemenv_stratum::nospc;
+    upper_lower_hemenv_family family =
+        upper_lower_hemenv_family::hemenv;
     core::operator_mask composed_owners = 0u;
 };
 
