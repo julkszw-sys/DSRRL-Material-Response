@@ -57,6 +57,8 @@ island_draw_adapter_result build_island_draw_mutation(
          primary_bit) != 0u ||
         (request.additional_shader_owners &
          ~request.additional_owners) != 0u ||
+        (request.additional_constant_buffer_owners &
+         ~request.additional_owners) != 0u ||
         (request.additional_resource_owners &
          ~request.additional_owners) != 0u ||
         (request.additional_carrier_owners &
@@ -90,6 +92,12 @@ island_draw_adapter_result build_island_draw_mutation(
              ? primary_bit
              : 0u) |
         request.additional_shader_owners;
+
+    mutation.constant_buffer_owners =
+        (request.constant_buffer_count != 0u
+             ? primary_bit
+             : 0u) |
+        request.additional_constant_buffer_owners;
 
     mutation.resource_owners =
         ((request.srv_count != 0u ||
@@ -228,6 +236,8 @@ island_draw_batch_result append_island_draw_request(
     batch.mutation.owners |= one.owners;
     batch.mutation.shader_owners |=
         one.shader_owners;
+    batch.mutation.constant_buffer_owners |=
+        one.constant_buffer_owners;
     batch.mutation.resource_owners |=
         one.resource_owners;
     batch.mutation.carrier_owners |=
