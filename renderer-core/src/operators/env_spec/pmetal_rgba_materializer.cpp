@@ -426,11 +426,6 @@ bool compose_a1(
                 k_a1_exact_patch_ops_v1[
                     plan->first_op + i];
 
-        if (op.owner ==
-            core::operator_id::
-                diffuse_material_domain)
-            continue;
-
         if (!features.enabled(
                 op.owner))
             continue;
