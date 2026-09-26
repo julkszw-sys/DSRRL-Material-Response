@@ -45,7 +45,11 @@ struct draw_tx_mutation {
     // mutation merely because both are composed into one replay.
     core::operator_mask owners = 0;
     core::operator_mask shader_owners = 0;
+    core::operator_mask constant_buffer_owners = 0;
     core::operator_mask resource_owners = 0;
+
+    // b13 lane-level ownership only. Ordinary CB ownership (e.g. shared b12)
+    // is tracked independently in constant_buffer_owners.
     core::operator_mask carrier_owners = 0;
 
     ID3D11PixelShader *pixel_shader = nullptr;
