@@ -164,12 +164,6 @@ target_include_directories(dsrrl_renderer_core PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/include)
 target_compile_features(dsrrl_renderer_core PUBLIC cxx_std_17)
 
-if(WIN32)
-    target_sources(dsrrl_renderer_core PRIVATE
-        src/runtime/fixed_pointlight_draw_runtime.cpp
-    )
-endif()
-
 add_executable(dsrrl_renderer_material_owner_tests tests/material_owner_producer_tests.cpp)
 add_executable(dsrrl_renderer_material_owner_selection_tests
     tests/material_owner_selection_tests.cpp)

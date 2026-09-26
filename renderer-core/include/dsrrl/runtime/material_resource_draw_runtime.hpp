@@ -84,6 +84,9 @@ public:
         prepared_material_resource_draw &prepared,
         operators::resource_bridges::subsurface_body_texture &body_texture) noexcept;
 
+    bool drop_spec_rgb_request(
+        prepared_material_resource_draw &prepared) noexcept;
+
     void release_prepared_draw(
         prepared_material_resource_draw &prepared) noexcept;
 
