@@ -420,8 +420,7 @@ bool compose_enabled_a1_islands(
 
 } // namespace
 
-v211_materialize_outcome materialize_v211_stable_receiver(
-    const core::feature_registry &features,
+v211_materialize_outcome materialize_v211_certified_stage(
     const std::uint8_t *source,
     std::size_t size,
     std::vector<std::uint8_t> &output) noexcept
@@ -616,6 +615,27 @@ v211_materialize_outcome materialize_v211_stable_receiver(
             v211_materialize_result::fail_stage_sha;
         return outcome;
     }
+
+    outcome.result =
+        v211_materialize_result::applied;
+    return outcome;
+}
+
+v211_materialize_outcome materialize_v211_stable_receiver(
+    const core::feature_registry &features,
+    const std::uint8_t *source,
+    std::size_t size,
+    std::vector<std::uint8_t> &output) noexcept
+{
+    auto outcome =
+        materialize_v211_certified_stage(
+            source,
+            size,
+            output);
+
+    if (outcome.result !=
+        v211_materialize_result::applied)
+        return outcome;
 
     if (!compose_enabled_a1_islands(
             features,
