@@ -1099,6 +1099,9 @@ bool on_create_pipeline(
     std::uint32_t subobject_count,
     const reshade::api::pipeline_subobject *subobjects)
 {
+    (void)device;
+    (void)layout;
+
     const auto *pixel_shader =
         find_pixel_shader(
             subobject_count,
