@@ -205,8 +205,11 @@ extract_fixed_local_specular_operand_contract_from_attested_shex_words(
     out.plan = plan;
 
     if (out.plan.result ==
-        fixed_local_specular_plan_result::
-            pass_clustered_membership_not_owned) {
+            fixed_local_specular_plan_result::
+                pass_not_local_specular_receiver ||
+        out.plan.result ==
+            fixed_local_specular_plan_result::
+                pass_clustered_membership_not_owned) {
         out.result =
             fixed_local_specular_operand_result::
                 pass_not_fixed_local_specular;
