@@ -15,6 +15,7 @@ struct island_patch {
     std::uint32_t carrier_write_mask = 0;
     bool shader_replacement = false;
     bool resource_replacement = false;
+    bool constant_buffer_replacement = false;
 };
 
 struct render_patch_plan {
