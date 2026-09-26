@@ -7,6 +7,7 @@
 #include "dsrrl/operators/legacy_plan/a1_mask_decomposition.hpp"
 #include "dsrrl/operators/legacy_plan/generated_a1_plan_index_v1.hpp"
 #include "dsrrl/operators/lightbank/lightbank_islands.hpp"
+#include "dsrrl/runtime/upper_lower_pipeline_registry.hpp"
 #include "dsrrl/operators/point_light/point_light_islands.hpp"
 #include "dsrrl/operators/postprocess/postprocess_islands.hpp"
 #include "dsrrl/operators/resource_bridges/resource_bridge_islands.hpp"
@@ -494,6 +495,43 @@ int main()
     no_spc = operators::env_spec::evaluate_no_spc_envspec_delete(0.75f, ptde_present_or_unknown);
     CHECK(no_spc.action == operators::env_spec::no_spc_delete_action::preserve_host);
     CHECK(no_spc.reason == operators::env_spec::no_spc_delete_reason::ptde_lane_not_proven_absent);
+
+    // Runtime identity shape is family-aware. Stable Phn material
+    // receivers retain semantic IDs 24..47; isolated FaceEye/Gst/Sfx
+    // executable families intentionally have no Material Response receiver ID.
+    runtime::upper_lower_receiver_identity ul_identity{};
+    ul_identity.plan_index = 0u;
+    ul_identity.shader_index = 723u;
+    ul_identity.stratum =
+        operators::lightbank::upper_lower_hemenv_stratum::spc;
+    ul_identity.family =
+        operators::lightbank::upper_lower_hemenv_family::hemenv;
+    ul_identity.stable_receiver_id = 24u;
+    CHECK(runtime::upper_lower_identity_runtime_shape_valid(ul_identity));
+
+    ul_identity.stable_receiver_id = 0u;
+    CHECK(!runtime::upper_lower_identity_runtime_shape_valid(ul_identity));
+
+    ul_identity.plan_index = 150u;
+    ul_identity.shader_index = 1637u;
+    ul_identity.family =
+        operators::lightbank::upper_lower_hemenv_family::phn_faceeye;
+    CHECK(runtime::upper_lower_identity_runtime_shape_valid(ul_identity));
+
+    ul_identity.plan_index = 180u;
+    ul_identity.shader_index = 35u;
+    ul_identity.family =
+        operators::lightbank::upper_lower_hemenv_family::gst;
+    CHECK(runtime::upper_lower_identity_runtime_shape_valid(ul_identity));
+
+    ul_identity.plan_index = 261u;
+    ul_identity.shader_index = 1649u;
+    ul_identity.family =
+        operators::lightbank::upper_lower_hemenv_family::sfx;
+    CHECK(runtime::upper_lower_identity_runtime_shape_valid(ul_identity));
+
+    ul_identity.stable_receiver_id = 24u;
+    CHECK(!runtime::upper_lower_identity_runtime_shape_valid(ul_identity));
 
     // Upper/Lower exact operator math is independent of the still-open
     // runtime producer/sidecar path.
