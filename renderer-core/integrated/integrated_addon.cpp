@@ -2189,8 +2189,11 @@ bool prepare_island_batch(
                 !g_mr_draw_runtime.
                     promote_prepared_draw_to_spec_rgb(
                         prepared.mr)) {
-                g_material_resources.release_prepared_draw(
-                    prepared.resources);
+                if (!g_material_resources.drop_spec_rgb_request(
+                        prepared.resources)) {
+                    g_material_resources.release_prepared_draw(
+                        prepared.resources);
+                }
                 lerp_resource_fallback = true;
             }
 
@@ -2323,10 +2326,11 @@ bool prepare_island_batch(
             !g_mr_draw_runtime.
                 promote_prepared_draw_to_spec_rgb(
                     prepared.mr)) {
-            // Never dispatch t10 without its paired consumer. If the exact
-            // shader pair is missing, preserve base MR and all stock textures.
-            g_material_resources.release_prepared_draw(
-                prepared.resources);
+            if (!g_material_resources.drop_spec_rgb_request(
+                    prepared.resources)) {
+                g_material_resources.release_prepared_draw(
+                    prepared.resources);
+            }
         }
     }
 
