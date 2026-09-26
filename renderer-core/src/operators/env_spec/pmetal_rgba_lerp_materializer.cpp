@@ -522,19 +522,16 @@ materialize_pmetal_rgba_lerp_receiver(
 
     if (site->reflection_coord_register < 5u ||
         site->reflection_coord_register > 7u ||
+        site->postblend_word != site->t12_word + 55u ||
+        site->t9_word != site->t12_word + 93u ||
         site->t11_word != site->t12_word + 129u ||
         site->merge_word != site->t12_word + 192u ||
-        site->postblend_word < site->t12_word ||
-        site->postblend_word >=
-            site->t12_word + k_ptde_rgba_envspec_chain.size() ||
-        site->t9_word <
-            site->t12_word + k_ptde_rgba_envspec_chain.size() ||
-        site->t9_word >= site->t11_word ||
         site->t12_word + k_ptde_rgba_envspec_chain.size() >
             site->t11_word ||
         site->merge_word + 9u > words.size() ||
         !sample_at(words, site->t12_word, 12u) ||
         !sample_at(words, site->t14_word, 14u) ||
+        !sample_at(words, site->t9_word, 9u) ||
         !sample_at(words, site->t11_word, 11u) ||
         !sample_at(words, site->t13_word, 13u) ||
         !opcode_at(words, site->mul_a_word, 0x38u, 8u) ||
