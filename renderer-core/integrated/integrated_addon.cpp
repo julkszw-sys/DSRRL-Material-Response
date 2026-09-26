@@ -2127,6 +2127,8 @@ bool prepare_island_batch(
             dsrrl::operators::lightbank::
                 upper_lower_hemenv_stratum::spc;
 
+    // Prepare the base MR shader first. It is deliberately the stock-t1
+    // consumer; the paired t10 variant is selected only after resource proof.
     if (decision.active &&
         ul_spc &&
         context != nullptr &&
@@ -2138,14 +2140,6 @@ bool prepare_island_batch(
                     decision,
                     prepared.upper_lower.carrier.b13,
                     prepared.mr)) {
-            if (dsrrl::runtime::append_island_draw_request(
-                    prepared.batch,
-                    prepared.mr.request) !=
-                dsrrl::runtime::island_draw_batch_result::ready) {
-                release_prepared_island_batch(prepared);
-                return false;
-            }
-
             prepared.mr_in_batch = true;
             prepared.upper_lower_combined = true;
         } else {
@@ -2161,30 +2155,7 @@ bool prepare_island_batch(
         g_mr_draw_runtime.prepare_draw_request(
             decision,
             prepared.mr)) {
-        if (dsrrl::runtime::append_island_draw_request(
-                prepared.batch,
-                prepared.mr.request) !=
-            dsrrl::runtime::island_draw_batch_result::ready) {
-            release_prepared_island_batch(prepared);
-            return false;
-        }
         prepared.mr_in_batch = true;
-    }
-
-    if (upper_lower_bound &&
-        !prepared.upper_lower_combined &&
-        g_upper_lower_hemenv.prepare_draw_request(
-            cmd_list,
-            upper_lower_identity,
-            prepared.mr_in_batch,
-            prepared.upper_lower)) {
-        if (dsrrl::runtime::append_island_draw_request(
-                prepared.batch,
-                prepared.upper_lower.request) !=
-            dsrrl::runtime::island_draw_batch_result::ready) {
-            release_prepared_island_batch(prepared);
-            return false;
-        }
     }
 
     dsrrl::operators::material_response::mtd_semantic_query query{};
@@ -2209,16 +2180,59 @@ bool prepare_island_batch(
             prepared.mr_in_batch,
             prepared.resources);
 
-        for (std::uint32_t i = 0u;
-             i < prepared.resources.request_count;
-             ++i) {
-            if (dsrrl::runtime::append_island_draw_request(
-                    prepared.batch,
-                    prepared.resources.requests[i]) !=
-                dsrrl::runtime::island_draw_batch_result::ready) {
-                release_prepared_island_batch(prepared);
-                return false;
-            }
+        if (prepared.mr_in_batch &&
+            prepared.resources.spec_rgb &&
+            !g_mr_draw_runtime.
+                promote_prepared_draw_to_spec_rgb(
+                    prepared.mr)) {
+            // Never dispatch t10 without its paired consumer. If the exact
+            // shader pair is missing, preserve base MR and all stock textures.
+            g_material_resources.release_prepared_draw(
+                prepared.resources);
+        }
+    }
+
+    if (upper_lower_bound &&
+        !prepared.upper_lower_combined &&
+        g_upper_lower_hemenv.prepare_draw_request(
+            cmd_list,
+            upper_lower_identity,
+            prepared.mr_in_batch,
+            prepared.upper_lower)) {
+        // Request is appended below, after the final MR shader variant is
+        // known, preserving the historical MR->U/L batch ordering.
+    }
+
+    if (prepared.mr_in_batch) {
+        if (dsrrl::runtime::append_island_draw_request(
+                prepared.batch,
+                prepared.mr.request) !=
+            dsrrl::runtime::island_draw_batch_result::ready) {
+            release_prepared_island_batch(prepared);
+            return false;
+        }
+    }
+
+    if (!prepared.upper_lower_combined &&
+        prepared.upper_lower.ready) {
+        if (dsrrl::runtime::append_island_draw_request(
+                prepared.batch,
+                prepared.upper_lower.request) !=
+            dsrrl::runtime::island_draw_batch_result::ready) {
+            release_prepared_island_batch(prepared);
+            return false;
+        }
+    }
+
+    for (std::uint32_t i = 0u;
+         i < prepared.resources.request_count;
+         ++i) {
+        if (dsrrl::runtime::append_island_draw_request(
+                prepared.batch,
+                prepared.resources.requests[i]) !=
+            dsrrl::runtime::island_draw_batch_result::ready) {
+            release_prepared_island_batch(prepared);
+            return false;
         }
     }
 
