@@ -270,6 +270,9 @@ bool draw_state_transaction_runtime::begin(
     (void)ctx->QueryInterface(
         __uuidof(ID3D11DeviceContext1),
         reinterpret_cast<void **>(&ctx1));
+    state.context1 = ctx1;
+    state.verify_native_readback =
+        verify_native_readback_for(mutation);
 
     std::array<ID3D11ClassInstance *,
                draw_tx_max_class_instances> classes{};
@@ -283,8 +286,6 @@ bool draw_state_transaction_runtime::begin(
 
     if (state.old_shader == nullptr ||
         class_count > classes.size()) {
-        if (ctx1 != nullptr)
-            ctx1->Release();
         release_state(state);
         ++begin_fail_;
         return false;
@@ -330,8 +331,6 @@ bool draw_state_transaction_runtime::begin(
         }
 
         if (!capture.coherent) {
-            if (ctx1 != nullptr)
-                ctx1->Release();
             release_state(state);
             ++begin_fail_;
             return false;
@@ -373,8 +372,6 @@ bool draw_state_transaction_runtime::begin(
             continue;
 
         if (plan.patch_count >= plan.patches.size()) {
-            if (ctx1 != nullptr)
-                ctx1->Release();
             release_state(state);
             ++begin_fail_;
             return false;
@@ -390,8 +387,6 @@ bool draw_state_transaction_runtime::begin(
 
         if ((mutation.carrier_owners & bit) != 0u &&
             carrier_mask == 0u) {
-            if (ctx1 != nullptr)
-                ctx1->Release();
             release_state(state);
             ++begin_fail_;
             return false;
@@ -413,8 +408,6 @@ bool draw_state_transaction_runtime::begin(
             ++draw_serial_,
             context_kind_of(ctx),
             plan)) {
-        if (ctx1 != nullptr)
-            ctx1->Release();
         release_state(state);
         ++begin_fail_;
         return false;
