@@ -1601,6 +1601,7 @@ reset() noexcept
     g_sidecar_missing.store(0u);
     g_sidecar_unsupported.store(0u);
     g_spec_requests.store(0u);
+    g_fixed_pointlight_spec_requests.store(0u);
     g_diffuse_requests.store(0u);
     g_normal_requests.store(0u);
     g_fail_open.store(0u);
