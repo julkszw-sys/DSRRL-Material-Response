@@ -458,6 +458,9 @@ bool hemdir3_draw_runtime::prepare_draw_request(
     prepared.request.primary =
         core::operator_id::hemdir3;
 
+    const auto hemdir3_owner =
+        core::operator_bit(
+            core::operator_id::hemdir3);
     const auto upper_lower_owner =
         core::operator_bit(
             core::operator_id::upper_lower);
@@ -486,17 +489,22 @@ bool hemdir3_draw_runtime::prepare_draw_request(
     if (spc) {
         prepared.request.constant_buffers[0] = {
             12u,
-            prepared.b12
+            prepared.b12,
+            hemdir3_owner
         };
         prepared.request.constant_buffers[1] = {
             13u,
-            prepared.carrier.b13
+            prepared.carrier.b13,
+            hemdir3_owner |
+                upper_lower_owner
         };
         prepared.request.constant_buffer_count = 2u;
     } else {
         prepared.request.constant_buffers[0] = {
             13u,
-            prepared.carrier.b13
+            prepared.carrier.b13,
+            hemdir3_owner |
+                upper_lower_owner
         };
         prepared.request.constant_buffer_count = 1u;
     }
