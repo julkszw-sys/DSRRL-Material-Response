@@ -623,105 +623,109 @@ bool draw_state_transaction_runtime::restore(
 
     bool native_restored = true;
 
-    ID3D11PixelShader *shader = nullptr;
-    std::array<ID3D11ClassInstance *,
-               draw_tx_max_class_instances> check_classes{};
-    UINT check_class_count =
-        static_cast<UINT>(check_classes.size());
-    ctx->PSGetShader(
-        &shader,
-        check_classes.data(),
-        &check_class_count);
-
-    native_restored =
-        shader == state.old_shader &&
-        check_class_count == state.old_class_count;
-
-    if (native_restored) {
-        for (std::uint32_t i = 0;
-             i < state.old_class_count;
-             ++i) {
-            if (check_classes[i] != classes[i]) {
-                native_restored = false;
-                break;
+    if (state.verify_native_readback) {
+        ID3D11PixelShader *shader = nullptr;
+        std::array<ID3D11ClassInstance *,
+                   draw_tx_max_class_instances> check_classes{};
+        UINT check_class_count =
+            static_cast<UINT>(check_classes.size());
+        ctx->PSGetShader(
+            &shader,
+            check_classes.data(),
+            &check_class_count);
+    
+        native_restored =
+            shader == state.old_shader &&
+            check_class_count == state.old_class_count;
+    
+        if (native_restored) {
+            for (std::uint32_t i = 0;
+                 i < state.old_class_count;
+                 ++i) {
+                if (check_classes[i] != classes[i]) {
+                    native_restored = false;
+                    break;
+                }
             }
         }
-    }
-
-    if (shader != nullptr)
-        shader->Release();
-    for (std::uint32_t i = 0;
-         i < check_class_count &&
-         i < check_classes.size();
-         ++i)
-        if (check_classes[i] != nullptr)
-            check_classes[i]->Release();
-
-    for (std::uint32_t i = 0;
-         native_restored && i < state.cb_count;
-         ++i) {
-        ID3D11Buffer *buffer = nullptr;
-        ctx->PSGetConstantBuffers(
-            state.cbs[i].slot,
-            1u,
-            &buffer);
-        native_restored =
-            buffer == state.cbs[i].base;
-        if (buffer != nullptr)
-            buffer->Release();
-
-        if (native_restored &&
-            ctx1 != nullptr &&
-            state.cbs[i].explicit_window) {
-            ID3D11Buffer *window = nullptr;
-            UINT first = 0u;
-            UINT count = 0u;
-            ctx1->PSGetConstantBuffers1(
+    
+        if (shader != nullptr)
+            shader->Release();
+        for (std::uint32_t i = 0;
+             i < check_class_count &&
+             i < check_classes.size();
+             ++i)
+            if (check_classes[i] != nullptr)
+                check_classes[i]->Release();
+    
+        for (std::uint32_t i = 0;
+             native_restored && i < state.cb_count;
+             ++i) {
+            ID3D11Buffer *buffer = nullptr;
+            ctx->PSGetConstantBuffers(
                 state.cbs[i].slot,
                 1u,
-                &window,
-                &first,
-                &count);
+                &buffer);
             native_restored =
-                window == state.cbs[i].window &&
-                first == state.cbs[i].first &&
-                count == state.cbs[i].count;
-            if (window != nullptr)
-                window->Release();
+                buffer == state.cbs[i].base;
+            if (buffer != nullptr)
+                buffer->Release();
+    
+            if (native_restored &&
+                ctx1 != nullptr &&
+                state.cbs[i].explicit_window) {
+                ID3D11Buffer *window = nullptr;
+                UINT first = 0u;
+                UINT count = 0u;
+                ctx1->PSGetConstantBuffers1(
+                    state.cbs[i].slot,
+                    1u,
+                    &window,
+                    &first,
+                    &count);
+                native_restored =
+                    window == state.cbs[i].window &&
+                    first == state.cbs[i].first &&
+                    count == state.cbs[i].count;
+                if (window != nullptr)
+                    window->Release();
+            }
         }
+    
+        for (std::uint32_t i = 0;
+             native_restored && i < state.srv_count;
+             ++i) {
+            ID3D11ShaderResourceView *srv = nullptr;
+            ctx->PSGetShaderResources(
+                state.srvs[i].slot,
+                1u,
+                &srv);
+            native_restored =
+                srv == state.srvs[i].srv;
+            if (srv != nullptr)
+                srv->Release();
+        }
+    
+        for (std::uint32_t i = 0;
+             native_restored &&
+             i < state.sampler_count;
+             ++i) {
+            ID3D11SamplerState *sampler = nullptr;
+            ctx->PSGetSamplers(
+                state.samplers[i].slot,
+                1u,
+                &sampler);
+            native_restored =
+                sampler == state.samplers[i].sampler;
+            if (sampler != nullptr)
+                sampler->Release();
+        }
+    
+        if (ctx1 != nullptr)
+            ctx1->Release();
+    
+    
     }
-
-    for (std::uint32_t i = 0;
-         native_restored && i < state.srv_count;
-         ++i) {
-        ID3D11ShaderResourceView *srv = nullptr;
-        ctx->PSGetShaderResources(
-            state.srvs[i].slot,
-            1u,
-            &srv);
-        native_restored =
-            srv == state.srvs[i].srv;
-        if (srv != nullptr)
-            srv->Release();
-    }
-
-    for (std::uint32_t i = 0;
-         native_restored &&
-         i < state.sampler_count;
-         ++i) {
-        ID3D11SamplerState *sampler = nullptr;
-        ctx->PSGetSamplers(
-            state.samplers[i].slot,
-            1u,
-            &sampler);
-        native_restored =
-            sampler == state.samplers[i].sampler;
-        if (sampler != nullptr)
-            sampler->Release();
-    }
-
-    if (ctx1 != nullptr)
-        ctx1->Release();
 
     if (state.core_started && state.command != 0u)
         core_restored =
