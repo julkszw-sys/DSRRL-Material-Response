@@ -961,10 +961,12 @@ struct prepared_island_batch {
     dsrrl::runtime::prepared_subsurface_draw subsurface{};
     dsrrl::runtime::prepared_hemdir3_draw hemdir3{};
     dsrrl::runtime::prepared_upper_lower_hemenv_draw upper_lower{};
+    dsrrl::runtime::prepared_pmetal_envspec_draw envspec{};
     bool mr_in_batch = false;
     bool upper_lower_combined = false;
     bool subsurface_in_batch = false;
     bool hemdir3_in_batch = false;
+    bool envspec_in_batch = false;
 };
 
 void release_prepared_island_batch(
@@ -976,6 +978,9 @@ void release_prepared_island_batch(
     } else if (prepared.subsurface_in_batch) {
         g_subsurface.release(
             prepared.subsurface);
+    } else if (prepared.envspec_in_batch) {
+        g_pmetal_envspec.release(
+            prepared.envspec);
     } else {
         g_upper_lower_hemenv.release_prepared_draw(
             prepared.upper_lower);
@@ -1076,6 +1081,49 @@ bool prepare_island_batch(
     auto *context =
         reinterpret_cast<ID3D11DeviceContext *>(
             cmd_list->get_native());
+
+    const bool envspec_ul_verified =
+        upper_lower_bound &&
+        upper_lower_identity.stratum ==
+            dsrrl::operators::lightbank::
+                upper_lower_hemenv_stratum::spc &&
+        upper_lower_identity.stable_receiver_id ==
+            decision.receiver_id;
+
+    // P_Metal EnvSpec owns the complete PS+b12+t12/t14+s12/s14 semantic
+    // island. If any exact source/material/probe/resource precondition fails,
+    // fall through to ordinary MR/U-L/resource routing for this draw.
+    if (decision.active &&
+        g_pmetal_envspec.prepare(
+            cmd_list,
+            material,
+            decision,
+            envspec_ul_verified,
+            prepared.envspec)) {
+        prepared.envspec_in_batch = true;
+
+        if (dsrrl::runtime::append_island_draw_request(
+                prepared.batch,
+                prepared.envspec.request) !=
+            dsrrl::runtime::island_draw_batch_result::ready) {
+            release_prepared_island_batch(prepared);
+            return false;
+        }
+
+        for (std::uint32_t i = 0u;
+             i < prepared.envspec.material_resources.request_count;
+             ++i) {
+            if (dsrrl::runtime::append_island_draw_request(
+                    prepared.batch,
+                    prepared.envspec.material_resources.requests[i]) !=
+                dsrrl::runtime::island_draw_batch_result::ready) {
+                release_prepared_island_batch(prepared);
+                return false;
+            }
+        }
+
+        return true;
+    }
 
     const bool ul_spc =
         upper_lower_bound &&
