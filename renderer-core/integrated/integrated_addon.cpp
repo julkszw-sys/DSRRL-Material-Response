@@ -788,6 +788,32 @@ void log_state(const char *tag) noexcept
         reshade::log::level::info,
         local_spec_line);
 
+    const auto fixed_pl = g_fixed_pointlight.telemetry();
+    char fixed_pl_line[512]{};
+    std::snprintf(
+        fixed_pl_line,
+        sizeof(fixed_pl_line),
+        "[DSRRL CORE+ISLANDS " DSRRL_CORE_ISLANDS_VERSION "] %s "
+        "FIXED_PL_TX captures=%llu restarts=%llu rejects=%llu "
+        "selector=%llu/%llu stale=%llu t19=%llu/%llu requests=%llu "
+        "hook=%u quarantine=%u restore_fail=%u bridge_armed=0",
+        tag,
+        static_cast<unsigned long long>(fixed_pl.producer_captures),
+        static_cast<unsigned long long>(fixed_pl.producer_restarts),
+        static_cast<unsigned long long>(fixed_pl.producer_rejects),
+        static_cast<unsigned long long>(fixed_pl.selector_seen),
+        static_cast<unsigned long long>(fixed_pl.selector_match),
+        static_cast<unsigned long long>(fixed_pl.selector_stale),
+        static_cast<unsigned long long>(fixed_pl.t19_create),
+        static_cast<unsigned long long>(fixed_pl.t19_hit),
+        static_cast<unsigned long long>(fixed_pl.requests),
+        fixed_pl.capture_hook_armed ? 1u : 0u,
+        fixed_pl.quarantined ? 1u : 0u,
+        fixed_pl.restore_failed ? 1u : 0u);
+    reshade::log::message(
+        reshade::log::level::info,
+        fixed_pl_line);
+
     // Compact machine-parseable receiver census. Emit one line rather than
     // 24 lines per checkpoint so long runtime captures remain practical.
     char rx_line[2048]{};
