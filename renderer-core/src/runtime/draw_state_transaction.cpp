@@ -238,6 +238,9 @@ void draw_state_transaction_runtime::release_state(
         if (state.samplers[i].sampler != nullptr)
             state.samplers[i].sampler->Release();
 
+    if (state.context1 != nullptr)
+        state.context1->Release();
+
     state = {};
 }
 
