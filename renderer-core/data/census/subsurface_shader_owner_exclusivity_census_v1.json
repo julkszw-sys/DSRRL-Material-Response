@@ -1,0 +1,15 @@
+{
+  "schema": 1,
+  "island": "bridge.subsurface",
+  "claim_scope": "CAPTURE_FREE_CONSTRUCTION_AND_STATIC_OWNERSHIP_ONLY",
+  "runtime_activation": "OPEN",
+  "pixel_equivalence": "OPEN",
+  "source_shader_sha256": ["0b8288d686c8f349ad87352946be51ffd007462f25357326bf47e736e690e511","885337e50f3d29f086fd18e1f7524f28712031d0264964aef5f37037df7d7bcb","3002cfb9aee6835412399c3be267ab94c5706d7d5030fc4cafc82bc54c55a860"],
+  "source_receivers": ["FRPG_Phn_DifSpcBmp______Csd_HemEnvSubsurf.fpo","FRPG_Phn_DifSpcBmp______Sdw_HemEnvSubsurf.fpo","FRPG_Phn_DifSpcBmp__________HemEnvSubsurf.fpo"],
+  "authorized_material": {"name":"Ps_Body[DSBT].mtd","sha256":"2706080f2b306245b90bf9d3fdfa38624b2ed0452a9b1aff830cf59de69b37d4","owner_tuple_corpus_rows":10,"observed_material_slots":[0]},
+  "ownership_result": "NOT_SOURCE_COMPLETE",
+  "reason": "The FLVER owner tuple corpus closes exact Ps_Body[DSBT] material-slot ownership, while the shader corpus closes the three HemEnvSubsurf shader identities. No available source-complete reverse join proves that each source shader SHA is exclusive to those ten Ps_Body[DSBT] owners across all DSR MTD/FLVER owners. Separate material and receiver corpora must not be promoted into shader-owner exclusivity.",
+  "carrier_policy": {"global_create_time_substitution":"FAIL_OPEN_UNLESS_SHADER_OWNER_EXCLUSIVITY_IS_PROVEN","narrowest_current_legal_carrier":"material-aware route or create-time owner token with equivalent source-complete identity","abi_compatibility_alone":"INSUFFICIENT"},
+  "sources": ["dsr_flver_owner_tuple_corpus_v1.jsonl","renderer-core/data/census/ptde_subsurface_usage_census_v1.json","build_specrgb_subsurf_spec_only.py"],
+  "supabase_evidence_id": "fe2245cd-a4b3-43ca-ab59-ac5d9c4700f8"
+}
