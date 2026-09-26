@@ -1099,6 +1099,9 @@ bool on_create_pipeline(
     std::uint32_t subobject_count,
     const reshade::api::pipeline_subobject *subobjects)
 {
+    (void)device;
+    (void)layout;
+
     const auto *pixel_shader =
         find_pixel_shader(
             subobject_count,
@@ -1342,12 +1345,8 @@ bool on_create_pipeline(
         }
     }
 
-    const bool a1_changed =
-        g_a1_bridge.on_create_pipeline(
-            device,
-            layout,
-            subobject_count,
-            subobjects);
+    // PERF DIAG C: event/resource layer only. A1 shader mutation is disabled.
+    const bool a1_changed = false;
 
     if (ul_identity_ready) {
         const auto *created_shader =
@@ -2225,58 +2224,22 @@ bool AddonInit(
             "] EnvSpec resource events FAIL-OPEN: P_Metal EnvSpec stays stock; other islands remain active.");
     }
 
-    const bool texture_hooks =
-        dsrrl::runtime::texture_identity_transport::install();
+    // PERF DIAG C: no native DSR inline hooks. Keep the ReShade
+    // callback/resource layer intact to isolate its performance cost.
+    const bool texture_hooks = false;
+    const bool flver_hooks = false;
+    const bool bloom_fx_hooks = false;
+    const bool hemdir3_mode_hooks = false;
+    const bool upper_lower_hooks = false;
+    (void)texture_hooks;
+    (void)flver_hooks;
+    (void)bloom_fx_hooks;
+    (void)hemdir3_mode_hooks;
+    (void)upper_lower_hooks;
 
-    if (!texture_hooks) {
-        reshade::log::message(
-            reshade::log::level::warning,
-            "[DSRRL CORE+ISLANDS " DSRRL_CORE_ISLANDS_VERSION
-            "] texture identity hooks FAIL-OPEN: SpecRGB/Diffuse/Normal sidecars remain stock.");
-    }
-
-    const bool flver_hooks =
-        dsrrl::runtime::flver_identity_transport::install();
-
-    if (!flver_hooks) {
-        reshade::log::message(
-            reshade::log::level::warning,
-            "[DSRRL CORE+ISLANDS " DSRRL_CORE_ISLANDS_VERSION
-            "] FLVER identity hooks FAIL-OPEN: stock DSR preserved for exact owner routing.");
-    }
-
-    const bool bloom_fx_hooks =
-        flver_hooks &&
-        dsrrl::runtime::bloom_fx_draw_transport::install();
-
-    if (!bloom_fx_hooks) {
-        reshade::log::message(
-            reshade::log::level::warning,
-            "[DSRRL CORE+ISLANDS " DSRRL_CORE_ISLANDS_VERSION
-            "] Bloom FX draw transport FAIL-OPEN: Q8 sidecar remains unauthorised; stock SFX preserved.");
-    }
-
-    const bool hemdir3_mode_hooks =
-        flver_hooks &&
-        dsrrl::runtime::hemdir3_mode_transport::install();
-
-    if (!hemdir3_mode_hooks) {
-        reshade::log::message(
-            reshade::log::level::warning,
-            "[DSRRL CORE+ISLANDS " DSRRL_CORE_ISLANDS_VERSION
-            "] HemDir3 effective-mode hooks FAIL-OPEN: HemDir3 remains stock.");
-    }
-
-    const bool upper_lower_hooks =
-        flver_hooks &&
-        g_upper_lower.install();
-
-    if (!upper_lower_hooks) {
-        reshade::log::message(
-            reshade::log::level::warning,
-            "[DSRRL CORE+ISLANDS " DSRRL_CORE_ISLANDS_VERSION
-            "] Upper/Lower producer hooks FAIL-OPEN: stock DSR b13 preserved.");
-    }
+    reshade::log::message(
+        reshade::log::level::warning,
+        "[DSRRL PERF DIAG C_EVENTS_NO_NATIVE_HOOKS] ReShade callbacks/resource events active; A1 and all native DSR inline hooks disabled. Bloom FX draw transport FAIL-OPEN; BLOOM_FX ww_diag_join disabled by design.");
 
     reshade::log::message(
         reshade::log::level::info,
