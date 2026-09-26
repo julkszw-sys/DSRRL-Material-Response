@@ -2214,6 +2214,7 @@ bool AddonInit(
     const bool hemdir3_mode_hooks = false;
     const bool upper_lower_hooks = false;
     (void)texture_hooks;
+    (void)bloom_fx_hooks;
     (void)hemdir3_mode_hooks;
     (void)upper_lower_hooks;
 
