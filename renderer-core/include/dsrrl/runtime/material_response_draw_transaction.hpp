@@ -29,6 +29,18 @@ enum class material_response_replacement_family : std::uint8_t {
     hemenvlerp_upper_lower
 };
 
+constexpr bool material_response_spec_rgb_pair_owners_match(
+    core::operator_mask base_owners,
+    core::operator_mask spec_owners) noexcept
+{
+    const auto spec =
+        core::operator_bit(core::operator_id::spec_rgb);
+    return
+        (base_owners & spec) == 0u &&
+        (spec_owners & spec) != 0u &&
+        (spec_owners & ~spec) == base_owners;
+}
+
 struct prepared_material_response_draw {
     island_draw_adapter_request request{};
     ID3D11PixelShader *shader = nullptr;
