@@ -49,6 +49,9 @@
 #include <atomic>
 #include <cstdint>
 #include <cstdio>
+#include <mutex>
+#include <shared_mutex>
+#include <unordered_map>
 #include <vector>
 
 namespace {
@@ -104,6 +107,115 @@ std::atomic<std::uint64_t> g_draw_owner_hits{0};
 std::atomic<std::uint64_t> g_draw_joins{0};
 std::atomic<std::uint64_t> g_draw_owner_only{0};
 std::atomic<std::uint64_t> g_draw_receiver_only{0};
+std::atomic<std::uint64_t> g_draw_fast_skip{0};
+
+enum integrated_draw_route_bit : std::uint8_t {
+    k_route_stable = 1u << 0,
+    k_route_hemenvlerp = 1u << 1,
+    k_route_subsurface = 1u << 2,
+    k_route_hemdir3 = 1u << 3,
+    k_route_upper_lower = 1u << 4
+};
+
+struct integrated_draw_route_tls {
+    const void *command_list_key = nullptr;
+    std::uint8_t mask = 0u;
+};
+
+std::shared_mutex g_integrated_draw_route_mutex;
+std::unordered_map<std::uint64_t,std::uint8_t>
+    g_integrated_draw_routes;
+thread_local integrated_draw_route_tls
+    g_integrated_draw_route_tls{};
+
+void remember_integrated_draw_route(
+    std::uint64_t pipeline_handle,
+    std::uint8_t mask) noexcept
+{
+    if (pipeline_handle == 0u)
+        return;
+
+    try {
+        std::unique_lock<std::shared_mutex> lock(
+            g_integrated_draw_route_mutex);
+        if (mask == 0u)
+            g_integrated_draw_routes.erase(
+                pipeline_handle);
+        else
+            g_integrated_draw_routes[
+                pipeline_handle] = mask;
+    } catch (...) {
+        try {
+            std::unique_lock<std::shared_mutex> lock(
+                g_integrated_draw_route_mutex);
+            g_integrated_draw_routes.erase(
+                pipeline_handle);
+        } catch (...) {
+        }
+    }
+}
+
+void forget_integrated_draw_route(
+    std::uint64_t pipeline_handle) noexcept
+{
+    if (pipeline_handle == 0u)
+        return;
+
+    std::unique_lock<std::shared_mutex> lock(
+        g_integrated_draw_route_mutex);
+    g_integrated_draw_routes.erase(
+        pipeline_handle);
+}
+
+void observe_integrated_draw_route_bind(
+    const void *command_list_key,
+    bool pixel_stage_bound,
+    std::uint64_t pipeline_handle) noexcept
+{
+    if (!pixel_stage_bound ||
+        command_list_key == nullptr)
+        return;
+
+    std::uint8_t mask = 0u;
+    try {
+        std::shared_lock<std::shared_mutex> lock(
+            g_integrated_draw_route_mutex);
+        const auto found =
+            g_integrated_draw_routes.find(
+                pipeline_handle);
+        if (found !=
+            g_integrated_draw_routes.end())
+            mask = found->second;
+    } catch (...) {
+        mask = 0u;
+    }
+
+    g_integrated_draw_route_tls = {
+        command_list_key,
+        mask
+    };
+}
+
+std::uint8_t integrated_draw_route_bound(
+    const void *command_list_key) noexcept
+{
+    if (command_list_key == nullptr ||
+        g_integrated_draw_route_tls.command_list_key !=
+            command_list_key)
+        return 0u;
+
+    return g_integrated_draw_route_tls.mask;
+}
+
+void reset_integrated_draw_routes() noexcept
+{
+    {
+        std::unique_lock<std::shared_mutex> lock(
+            g_integrated_draw_route_mutex);
+        g_integrated_draw_routes.clear();
+    }
+    g_integrated_draw_route_tls = {};
+}
 
 constexpr std::uint32_t k_material_receiver_first = 24u;
 constexpr std::uint32_t k_material_receiver_last = 47u;
@@ -177,6 +289,7 @@ const reshade::api::shader_desc *find_pixel_shader(
 
 bool observe_draw_identity(
     reshade::api::command_list *cmd_list,
+    std::uint8_t route_mask,
     std::uint32_t &receiver_id,
     bool &hemenvlerp_bound,
     dsrrl::runtime::hemenvlerp_receiver_identity &hemenvlerp_identity,
@@ -188,8 +301,6 @@ bool observe_draw_identity(
     dsrrl::operators::material_response::material_identity &out_material,
     dsrrl::operators::material_response::decision &out_decision) noexcept
 {
-    ++g_draw_events;
-
     receiver_id = 0u;
     hemenvlerp_bound = false;
     hemenvlerp_identity = {};
@@ -200,27 +311,32 @@ bool observe_draw_identity(
     upper_lower_identity = {};
 
     const bool stable_receiver =
+        (route_mask & k_route_stable) != 0u &&
         dsrrl::runtime::stable_receiver_bound(
             cmd_list,
             receiver_id);
 
     const bool hemenvlerp_receiver =
+        (route_mask & k_route_hemenvlerp) != 0u &&
         dsrrl::runtime::hemenvlerp_receiver_bound(
             cmd_list,
             hemenvlerp_identity);
 
     std::uint32_t subsurface_target = 0u;
     const bool subsurface_receiver =
+        (route_mask & k_route_subsurface) != 0u &&
         dsrrl::runtime::subsurface_receiver_bound(
             cmd_list,
             subsurface_target);
 
     const bool hemdir3_receiver =
+        (route_mask & k_route_hemdir3) != 0u &&
         dsrrl::runtime::hemdir3_receiver_bound(
             cmd_list,
             hemdir3_identity);
 
     const bool upper_lower_receiver =
+        (route_mask & k_route_upper_lower) != 0u &&
         dsrrl::runtime::upper_lower_receiver_bound(
             cmd_list,
             upper_lower_identity);
@@ -478,7 +594,7 @@ void log_state(const char *tag) noexcept
         "ul_steady=%llu/%llu ul_blend=%llu/%llu/%llu ul_b13=%llu/%llu ul_req=%llu "
         "sub_candidate=%llu sub_prepared=%llu sub_pipe_reject=%llu sub_mat_reject=%llu sub_surface_reject=%llu "
         "mode_hook=%u/%u mode_q=%u mode_restore_fail=%u mode_begin=%llu mode_in2=%llu mode_obs=%llu mode2=%llu mode_snap=%llu/%llu "
-        "draw=%llu draw_rx=%llu draw_owner=%llu draw_join=%llu owner_only=%llu rx_only=%llu",
+        "draw=%llu draw_skip=%llu draw_rx=%llu draw_owner=%llu draw_join=%llu owner_only=%llu rx_only=%llu",
         tag,
         static_cast<unsigned long long>(t.create_events),
         static_cast<unsigned long long>(t.candidate_size_hits),
@@ -579,6 +695,7 @@ void log_state(const char *tag) noexcept
         static_cast<unsigned long long>(mode.snapshot_hits),
         static_cast<unsigned long long>(mode.snapshot_misses),
         static_cast<unsigned long long>(g_draw_events.load()),
+        static_cast<unsigned long long>(g_draw_fast_skip.load()),
         static_cast<unsigned long long>(g_draw_receiver_hits.load()),
         static_cast<unsigned long long>(g_draw_owner_hits.load()),
         static_cast<unsigned long long>(g_draw_joins.load()),
@@ -1305,41 +1422,58 @@ void on_init_pipeline(
             subobject_count,
             subobjects);
 
+    std::uint8_t draw_route_mask = 0u;
+
     if (pixel_shader != nullptr &&
         pixel_shader->code != nullptr &&
         pixel_shader->code_size != 0u) {
-        (void)dsrrl::runtime::
-            stable_receiver_observe_pipeline(
-                pipeline.handle,
-                pixel_shader->code,
-                pixel_shader->code_size);
-        (void)dsrrl::runtime::
-            hemenvlerp_receiver_observe_pipeline(
-                pipeline.handle,
-                pixel_shader->code,
-                pixel_shader->code_size);
-        (void)dsrrl::runtime::
-            subsurface_receiver_observe_pipeline(
-                pipeline.handle,
-                pixel_shader->code,
-                pixel_shader->code_size);
-        (void)dsrrl::runtime::
-            hemdir3_receiver_observe_pipeline(
-                pipeline.handle,
-                pixel_shader->code,
-                pixel_shader->code_size);
-        (void)dsrrl::runtime::
-            upper_lower_receiver_observe_pipeline(
-                pipeline.handle,
-                pixel_shader->code,
-                pixel_shader->code_size);
+        if (dsrrl::runtime::
+                stable_receiver_observe_pipeline(
+                    pipeline.handle,
+                    pixel_shader->code,
+                    pixel_shader->code_size))
+            draw_route_mask |= k_route_stable;
+
+        if (dsrrl::runtime::
+                hemenvlerp_receiver_observe_pipeline(
+                    pipeline.handle,
+                    pixel_shader->code,
+                    pixel_shader->code_size))
+            draw_route_mask |= k_route_hemenvlerp;
+
+        if (dsrrl::runtime::
+                subsurface_receiver_observe_pipeline(
+                    pipeline.handle,
+                    pixel_shader->code,
+                    pixel_shader->code_size))
+            draw_route_mask |= k_route_subsurface;
+
+        if (dsrrl::runtime::
+                hemdir3_receiver_observe_pipeline(
+                    pipeline.handle,
+                    pixel_shader->code,
+                    pixel_shader->code_size))
+            draw_route_mask |= k_route_hemdir3;
+
+        if (dsrrl::runtime::
+                upper_lower_receiver_observe_pipeline(
+                    pipeline.handle,
+                    pixel_shader->code,
+                    pixel_shader->code_size))
+            draw_route_mask |= k_route_upper_lower;
     }
+
+    remember_integrated_draw_route(
+        pipeline.handle,
+        draw_route_mask);
 }
 
 void on_destroy_pipeline(
     reshade::api::device *device,
     reshade::api::pipeline pipeline)
 {
+    forget_integrated_draw_route(
+        pipeline.handle);
     dsrrl::runtime::stable_receiver_forget_pipeline(
         pipeline.handle);
     dsrrl::runtime::hemenvlerp_receiver_forget_pipeline(
@@ -1380,6 +1514,11 @@ void on_bind_pipeline(
         pixel_stage_bound,
         pipeline.handle);
     dsrrl::runtime::upper_lower_receiver_observe_bind(
+        cmd_list,
+        pixel_stage_bound,
+        pipeline.handle);
+
+    observe_integrated_draw_route_bind(
         cmd_list,
         pixel_stage_bound,
         pipeline.handle);
@@ -1752,9 +1891,23 @@ bool on_draw(
     std::uint32_t first_vertex,
     std::uint32_t first_instance)
 {
-    observe_bloom_fx_draw_authority();
+    if (dsrrl::runtime::bloom_fx_draw_transport::
+            active_draw_scope())
+        observe_bloom_fx_draw_authority();
 
+    ++g_draw_events;
     draw_semantic_selection_guard semantic_guard{};
+
+    const auto route_mask =
+        integrated_draw_route_bound(
+            cmd_list);
+    if (route_mask == 0u) {
+        ++g_draw_fast_skip;
+        dsrrl::runtime::
+            material_owner_selection_clear();
+        return false;
+    }
+
     std::uint32_t receiver_id = 0u;
     bool hemenvlerp_bound = false;
     dsrrl::runtime::hemenvlerp_receiver_identity hemenvlerp_identity{};
@@ -1768,6 +1921,7 @@ bool on_draw(
 
     if (!observe_draw_identity(
             cmd_list,
+            route_mask,
             receiver_id,
             hemenvlerp_bound,
             hemenvlerp_identity,
@@ -1827,9 +1981,23 @@ bool on_draw_indexed(
     std::int32_t vertex_offset,
     std::uint32_t first_instance)
 {
-    observe_bloom_fx_draw_authority();
+    if (dsrrl::runtime::bloom_fx_draw_transport::
+            active_draw_scope())
+        observe_bloom_fx_draw_authority();
 
+    ++g_draw_events;
     draw_semantic_selection_guard semantic_guard{};
+
+    const auto route_mask =
+        integrated_draw_route_bound(
+            cmd_list);
+    if (route_mask == 0u) {
+        ++g_draw_fast_skip;
+        dsrrl::runtime::
+            material_owner_selection_clear();
+        return false;
+    }
+
     std::uint32_t receiver_id = 0u;
     bool hemenvlerp_bound = false;
     dsrrl::runtime::hemenvlerp_receiver_identity hemenvlerp_identity{};
@@ -1843,6 +2011,7 @@ bool on_draw_indexed(
 
     if (!observe_draw_identity(
             cmd_list,
+            route_mask,
             receiver_id,
             hemenvlerp_bound,
             hemenvlerp_identity,
@@ -1985,6 +2154,8 @@ bool AddonInit(
     g_draw_joins.store(0);
     g_draw_owner_only.store(0);
     g_draw_receiver_only.store(0);
+    g_draw_fast_skip.store(0);
+    reset_integrated_draw_routes();
     for (auto &rx : g_material_receiver_runtime) {
         rx.seen.store(0);
         rx.accepted.store(0);
@@ -2144,6 +2315,7 @@ void AddonUninit(
     dsrrl::runtime::subsurface_receiver_pipeline_reset();
     dsrrl::runtime::hemdir3_receiver_pipeline_reset();
     dsrrl::runtime::upper_lower_receiver_pipeline_reset();
+    reset_integrated_draw_routes();
     dsrrl::runtime::texture_identity_transport::uninstall();
     g_envspec_resources.unregister_events();
     g_material_resources.unregister_events();

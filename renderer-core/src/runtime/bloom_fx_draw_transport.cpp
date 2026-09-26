@@ -1141,6 +1141,13 @@ bool publish_waterwave_model_identity(
     return true;
 }
 
+bool active_draw_scope() noexcept
+{
+    return
+        g_tls.snapshot.ready &&
+        !g_state.quarantined;
+}
+
 bool snapshot(
     fx_draw_snapshot &out) noexcept
 {

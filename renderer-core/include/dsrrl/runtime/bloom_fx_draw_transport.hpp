@@ -226,6 +226,7 @@ bool publish_waterwave_model_identity(
     void *particle_model_instance,
     const operators::postprocess::waterwave_authored_identity &identity) noexcept;
 
+bool active_draw_scope() noexcept;
 bool snapshot(fx_draw_snapshot &out) noexcept;
 void consume() noexcept;
 
