@@ -38,18 +38,20 @@ struct fixed_local_specular_material_samples {
     fixed_local_specular_material_topology topology =
         fixed_local_specular_material_topology::unsupported;
 
-    std::array<fixed_local_specular_sample_site,2> diffuse_t0{};
-    std::array<fixed_local_specular_sample_site,2> specular_t1{};
-    std::uint8_t diffuse_count = 0u;
-    std::uint8_t specular_count = 0u;
+    fixed_local_specular_sample_site diffuse_a_t0{};
+    fixed_local_specular_sample_site specular_a_t1{};
+    fixed_local_specular_sample_site diffuse_b_t3{};
+    fixed_local_specular_sample_site specular_b_t4{};
+    bool has_blend_b = false;
 };
 
-// Locates the stock texture sample sites that must be split for the fixed
-// direct-PTDE island. Exact corpus invariant:
-//   24 bodies: one t0 + one t1 sample,
-//   24 bodies: two t0 + two t1 samples.
-// All sample sites must precede the first fixed-light microfacet window.
-// This scanner does not mutate resources or shader bytes.
+// Locates the stock material endpoint samples needed by the fixed direct-PTDE
+// island. Exact corpus invariant on the 48 unique Spc bodies:
+//   every body: exactly one base diffuse t0 and one base specular t1 sample;
+//   Mul/blended bodies: exactly one additional diffuse t3 + specular t4 pair.
+// t2/t5 normal, t6 lightmap and t7 shadow resources are intentionally outside
+// this material-endpoint contract. All four material endpoints, when present,
+// precede the first fixed-light window. This scanner does not mutate bytes.
 fixed_local_specular_material_samples
 locate_fixed_local_specular_material_samples(
     const void *pixel_shader_code,
