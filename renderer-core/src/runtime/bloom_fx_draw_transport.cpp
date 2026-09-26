@@ -100,12 +100,14 @@ using semantic_index_getter_fn =
     std::uint32_t (__fastcall *)(std::uint32_t);
 
 struct particle_model_record {
+    void *persisted_source = nullptr;
     void *arg2 = nullptr;
     void *arg3 = nullptr;
     void *arg4 = nullptr;
     void *arg5 = nullptr;
     std::uint64_t generation = 0;
     pp::waterwave_authored_identity waterwave_identity{};
+    bool source_attested = false;
     bool waterwave_identity_exact = false;
 };
 
@@ -153,6 +155,8 @@ std::atomic<std::uint64_t> g_state_vtable_rejects{0};
 std::atomic<std::uint64_t> g_source_links_ready{0};
 std::atomic<std::uint64_t> g_source_links_missing{0};
 std::atomic<std::uint64_t> g_particle_model_ctor_events{0};
+std::atomic<std::uint64_t> g_particle_model_source_attest_hits{0};
+std::atomic<std::uint64_t> g_particle_model_source_attest_misses{0};
 std::atomic<std::uint64_t> g_particle_model_dtor_events{0};
 std::atomic<std::uint64_t> g_particle_model_join_hits{0};
 std::atomic<std::uint64_t> g_particle_model_join_misses{0};
@@ -438,6 +442,25 @@ void register_particle_model(
     record.arg3 = arg3;
     record.arg4 = arg4;
     record.arg5 = arg5;
+
+    // Exact retail DSR FrpgFxParticleAppearance_Model constructor stores
+    // ctor arg2 at model+0x08. Re-attest the live instance after the original
+    // ctor returns instead of trusting the detour ABI alone.
+    if (readable_range(instance,0x10u)) {
+        std::memcpy(
+            &record.persisted_source,
+            static_cast<const std::uint8_t *>(instance) + 0x08u,
+            sizeof(record.persisted_source));
+    }
+    record.source_attested =
+        record.persisted_source != nullptr &&
+        record.persisted_source == arg2;
+
+    if (record.source_attested)
+        ++g_particle_model_source_attest_hits;
+    else
+        ++g_particle_model_source_attest_misses;
+
     record.generation =
         g_generation.fetch_add(1u) + 1u;
 
@@ -503,6 +526,10 @@ bool join_particle_model(
 
         snap.particle_model_instance =
             candidate_value.ptr;
+        snap.particle_model_source =
+            found->second.persisted_source;
+        snap.particle_model_source_attested =
+            found->second.source_attested;
         snap.particle_model_join_channel =
             candidate_value.channel;
         snap.particle_model_arg2 =
@@ -1160,6 +1187,10 @@ telemetry status() noexcept
         g_source_links_missing.load();
     out.particle_model_ctor_events =
         g_particle_model_ctor_events.load();
+    out.particle_model_source_attest_hits =
+        g_particle_model_source_attest_hits.load();
+    out.particle_model_source_attest_misses =
+        g_particle_model_source_attest_misses.load();
     out.particle_model_dtor_events =
         g_particle_model_dtor_events.load();
     out.particle_model_join_hits =
@@ -1220,6 +1251,8 @@ void reset_stats() noexcept
     g_source_links_ready.store(0u);
     g_source_links_missing.store(0u);
     g_particle_model_ctor_events.store(0u);
+    g_particle_model_source_attest_hits.store(0u);
+    g_particle_model_source_attest_misses.store(0u);
     g_particle_model_dtor_events.store(0u);
     g_particle_model_join_hits.store(0u);
     g_particle_model_join_misses.store(0u);

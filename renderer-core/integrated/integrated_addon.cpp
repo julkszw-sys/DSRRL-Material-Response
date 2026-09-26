@@ -778,7 +778,7 @@ void log_state(const char *tag) noexcept
         "prov=%u hooks=%u/%u model=%u/%u state_upd=%u sem_get=%u q=%u restore_fail=%u "
         "events=%llu/%llu exact=%llu reject=%llu state=%llu/%llu "
         "state_exact=%llu/%llu links=%llu/%llu model_evt=%llu/%llu "
-        "model_join=%llu/%llu join_ch=%llu/%llu/%llu "
+        "model_src=%llu/%llu model_join=%llu/%llu join_ch=%llu/%llu/%llu "
         "backend=%llu key=%llu/%llu ww_idx=%llu key_eq=%llu ww_diag_join=%llu sem_snap=%llu/%llu "
         "ww_publish=%llu/%llu ww_same=%llu registry=%llu "
         "snap=%llu/%llu api_snap=%llu ww_auth=%llu/%llu",
@@ -804,6 +804,8 @@ void log_state(const char *tag) noexcept
         static_cast<unsigned long long>(bloom_fx.source_links_missing),
         static_cast<unsigned long long>(bloom_fx.particle_model_ctor_events),
         static_cast<unsigned long long>(bloom_fx.particle_model_dtor_events),
+        static_cast<unsigned long long>(bloom_fx.particle_model_source_attest_hits),
+        static_cast<unsigned long long>(bloom_fx.particle_model_source_attest_misses),
         static_cast<unsigned long long>(bloom_fx.particle_model_join_hits),
         static_cast<unsigned long long>(bloom_fx.particle_model_join_misses),
         static_cast<unsigned long long>(bloom_fx.particle_model_owner_join_hits),

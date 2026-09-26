@@ -68,7 +68,15 @@
       "vtable_rva": "0x0136C208",
       "scalar_deleting_dtor_rva": "0x004FED90",
       "ctor_prefix_hex": "48894c2408565741564883ec3048c7442420feffffff",
-      "dtor_prefix_hex": "48895c2408574883ec208bda488bf9"
+      "dtor_prefix_hex": "48895c2408574883ec208bda488bf9",
+      "persisted_source_carrier": {
+        "model_offset": "0x08",
+        "source": "constructor arg2",
+        "store_rva": "0x00F3EDF0",
+        "later_draw_read_rva": "0x004FDCA0",
+        "status": "CONFIRMED_STATIC_RE",
+        "runtime_policy": "re-attest model+0x08 == ctor arg2 after original ctor; mismatch fails open"
+      }
     },
     "particle_state_owner_link": "0x10",
     "particle_state_backend_build": {
@@ -138,6 +146,8 @@
       "same_appearance_join": true,
       "q8_authority": false,
       "purpose": "test whether Particle appearance backend dispatcher key is the translated WaterWave semantic carrier"
-    }
+    },
+    "particle_model_persisted_source_carrier_closed": true,
+    "particle_model_persisted_source_runtime_attestation": "CONSTRUCTION_INSTRUMENTED_RUNTIME_REQUIRED"
   }
 }

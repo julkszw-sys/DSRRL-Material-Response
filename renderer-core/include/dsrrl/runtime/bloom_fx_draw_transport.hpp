@@ -32,6 +32,9 @@ struct fx_draw_snapshot {
     void *appearance_source_primary = nullptr;
     void *appearance_source_secondary = nullptr;
     void *particle_model_instance = nullptr;
+    // Exact retail DSR ctor RE: FrpgFxParticleAppearance_Model persists
+    // constructor arg2 at model+0x08 and its draw path reads that carrier.
+    void *particle_model_source = nullptr;
     void *particle_model_arg2 = nullptr;
     void *particle_model_arg3 = nullptr;
     void *particle_model_arg4 = nullptr;
@@ -46,6 +49,7 @@ struct fx_draw_snapshot {
     bool appearance_state_ready = false;
     bool source_links_ready = false;
     bool particle_model_instance_join = false;
+    bool particle_model_source_attested = false;
     bool waterwave_authored_identity_exact = false;
     bool waterwave_same_model_instance = false;
     bool appearance_backend_key_observed = false;
@@ -67,6 +71,8 @@ inline bool is_waterwave_semantic_model_diagnostic_candidate(
         snapshot.particle_model_instance_join &&
         snapshot.particle_model_instance != nullptr &&
         snapshot.particle_model_generation != 0u &&
+        snapshot.particle_model_source_attested &&
+        snapshot.particle_model_source != nullptr &&
         snapshot.appearance_backend_key_observed &&
         snapshot.backend_key_matches_waterwave_runtime_index &&
         operators::postprocess::
@@ -81,6 +87,7 @@ enum class waterwave_draw_authority_result : std::uint8_t {
     model_instance_not_joined,
     model_join_channel_missing,
     model_generation_missing,
+    model_source_not_attested,
     authored_identity_not_exact,
     same_instance_join_not_closed
 };
@@ -115,6 +122,11 @@ validate_waterwave_draw_authority(
         return waterwave_draw_authority_result::
             model_generation_missing;
 
+    if (!snapshot.particle_model_source_attested ||
+        snapshot.particle_model_source == nullptr)
+        return waterwave_draw_authority_result::
+            model_source_not_attested;
+
     if (!snapshot.waterwave_authored_identity_exact)
         return waterwave_draw_authority_result::
             authored_identity_not_exact;
@@ -148,6 +160,8 @@ struct telemetry {
     std::uint64_t source_links_ready = 0;
     std::uint64_t source_links_missing = 0;
     std::uint64_t particle_model_ctor_events = 0;
+    std::uint64_t particle_model_source_attest_hits = 0;
+    std::uint64_t particle_model_source_attest_misses = 0;
     std::uint64_t particle_model_dtor_events = 0;
     std::uint64_t particle_model_join_hits = 0;
     std::uint64_t particle_model_join_misses = 0;
@@ -182,8 +196,12 @@ struct telemetry {
 // these pointers is the FrpgFxParticleAppearance_Model object. The diagnostic
 // model hook therefore tests owner/source pointer equality as separately
 // attributed runtime hypotheses and records which channel, if any, joins the
-// exact live model instance. The exact model destructor is also observed so
-// pointer reuse cannot turn a stale registry entry into false identity. No
+// exact live model instance. Exact constructor/body RE also proves that ctor
+// arg2 is persisted at FrpgFxParticleAppearance_Model+0x08 and is read by the
+// later model draw path. Runtime re-attests that persisted pointer after ctor
+// return; a mismatch fails open and cannot contribute WaterWave authority.
+// The exact model destructor is also observed so pointer reuse cannot turn a
+// stale registry entry into false identity. No
 // channel is promoted to WaterWave authored-MTD authority without a live join.
 //
 // Particle appearance update RVA 0x118CCF0 provides a second, same-appearance
