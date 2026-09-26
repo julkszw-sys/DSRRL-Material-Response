@@ -2,6 +2,7 @@
 #include "dsrrl/core/island_policy.hpp"
 #include "dsrrl/operators/postprocess/future_runtime_preflight.hpp"
 #include "dsrrl/operators/postprocess/bloom_scene_bridge.hpp"
+#include "dsrrl/operators/postprocess/bloom_scene_static_authority.hpp"
 #include "dsrrl/operators/postprocess/bloom_legacy_graph.hpp"
 
 #include <iostream>
@@ -133,6 +134,17 @@ int main()
         features,core::operator_id::post_hdr,activation);
     CHECK(gate.state==core::island_state::fail_open);
     CHECK(gate.reason==core::activation_reason::blocked);
+
+    // Canonical static authority is deliberately incomplete. Rev9384 closes
+    // FXHG collector insertion -> entity callback, not writer exhaustiveness
+    // or material identity transport. It must therefore fail open.
+    const auto static_scene =
+        current_bloom_scene_static_authority();
+    CHECK(static_scene.fx_sfx_recurrence ==
+          bloom_fx_sfx_recurrence_proof::entity_callback_route_closed);
+    CHECK(!static_scene.writer_set_exhaustiveness_proven);
+    CHECK(validate_bloom_scene_bridge_carrier(static_scene) ==
+          bloom_scene_bridge_result::writer_set_not_closed);
 
     // The late DSR HDR surface is not an authenticated PTDE Q8 source.
     bloom_scene_bridge_carrier scene{};
