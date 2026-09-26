@@ -85,6 +85,24 @@
       "runtime_index_store": "registry + 4*semantic_id + 0x3898",
       "downstream_literal_required": false,
       "note": "WaterWave semantic is translated into registry state before downstream draw; absence of literal 0xE35 at TargetScene draw is expected."
+    },
+    "particle_state_update": {
+      "rva": "0x0118CCF0",
+      "exact_prefix_hex": "488bc455574881ecd800000048897018",
+      "key_object_argument": "RDX",
+      "key_expression": "*(u32*)key_object",
+      "appearance_instance_argument": "RCX",
+      "backend_dispatch_call_rva": "0x00F3DEF0",
+      "backend_registry_dispatch_rva": "0x00F3DF50",
+      "note": "same appearance instance is used to associate backend key diagnostics with later TargetScene draw"
+    },
+    "waterwave_runtime_semantic_index_getter": {
+      "rva": "0x001BBC00",
+      "exact_bytes_hex": "488b0569f3aa014863d18b849098380000c3",
+      "input": "semantic_id",
+      "output": "registry[semantic_id].runtime_index",
+      "storage_expression": "global_registry + 4*semantic_id + 0x3898",
+      "waterwave_authored_semantic_id": "0xE35"
     }
   },
   "waterwave_authored_identity": {
@@ -114,6 +132,12 @@
         "appearance+0x38 source-secondary"
       ],
       "authority": "none without exact runtime pointer join and separately published authored identity"
+    },
+    "backend_key_vs_waterwave_runtime_index": {
+      "status": "CONSTRUCTION_INSTRUMENTED_RUNTIME_REQUIRED",
+      "same_appearance_join": true,
+      "q8_authority": false,
+      "purpose": "test whether Particle appearance backend dispatcher key is the translated WaterWave semantic carrier"
     }
   }
 }
