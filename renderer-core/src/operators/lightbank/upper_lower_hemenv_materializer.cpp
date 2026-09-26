@@ -1,5 +1,6 @@
 #include "dsrrl/operators/lightbank/upper_lower_hemenv_materializer.hpp"
 #include "dsrrl/operators/lightbank/generated_upper_lower_hemenv_v1.hpp"
+#include "dsrrl/operators/lightbank/generated_upper_lower_hemenvlerp_v1.hpp"
 #include "dsrrl/operators/legacy_plan/a1_create_time_materializer.hpp"
 #include "dsrrl/operators/legacy_plan/dxbc_checksum.hpp"
 #include "dsrrl/operators/legacy_plan/dxbc_rdef_patch.hpp"
@@ -19,6 +20,7 @@ using legacy_plan::dxbc::read_u32;
 using legacy_plan::dxbc::write_u32;
 namespace hashing = legacy_plan::hashing;
 namespace generated_ul = generated;
+namespace generated_lerp = generated_lerp;
 
 constexpr std::array<std::uint32_t,4> k_cb13_decl = {
     0x04000059u,
@@ -32,6 +34,23 @@ struct chunk {
     std::vector<std::uint8_t> payload;
 };
 
+struct upper_lower_plan_view {
+    std::uint16_t plan_index = 0xFFFFu;
+    std::uint16_t shader_index = 0xFFFFu;
+    std::uint8_t stable_receiver_id = 0u;
+    generated_ul::upper_lower_hemenv_stratum stratum =
+        generated_ul::upper_lower_hemenv_stratum::nospc;
+    upper_lower_hemenv_family family =
+        upper_lower_hemenv_family::hemenv;
+    std::uint32_t stock_size = 0u;
+    std::string_view stock_sha256{};
+    std::uint32_t u_slot_word = 0u;
+    std::uint32_t d_slot_word_0 = 0u;
+    std::uint32_t d_slot_word_1 = 0u;
+    std::uint32_t replacement_size = 0u;
+    std::string_view replacement_sha256{};
+};
+
 bool candidate_size(std::size_t size) noexcept
 {
     for (const auto &plan :
@@ -39,10 +58,15 @@ bool candidate_size(std::size_t size) noexcept
         if (plan.stock_size == size)
             return true;
 
+    for (const auto &plan :
+         generated_lerp::k_upper_lower_hemenvlerp_plans)
+        if (plan.stock_size == size)
+            return true;
+
     return false;
 }
 
-const generated_ul::upper_lower_hemenv_plan *
+const upper_lower_plan_view *
 find_plan(
     const std::uint8_t *source,
     std::size_t size) noexcept
@@ -50,8 +74,8 @@ find_plan(
     const auto digest =
         hashing::sha256(source, size);
 
-    const generated_ul::upper_lower_hemenv_plan *hit =
-        nullptr;
+    thread_local upper_lower_plan_view hit{};
+    bool found = false;
 
     for (const auto &plan :
          generated_ul::k_upper_lower_hemenv_plans) {
@@ -61,13 +85,61 @@ find_plan(
                 plan.stock_sha256))
             continue;
 
-        if (hit != nullptr)
+        if (found)
             return nullptr;
 
-        hit = &plan;
+        hit = {
+            plan.plan_index,
+            plan.shader_index,
+            plan.stable_receiver_id,
+            plan.stratum,
+            upper_lower_hemenv_family::hemenv,
+            plan.stock_size,
+            plan.stock_sha256,
+            plan.u_slot_word,
+            plan.d_slot_word_0,
+            plan.d_slot_word_1,
+            plan.replacement_size,
+            plan.replacement_sha256
+        };
+        found = true;
     }
 
-    return hit;
+    for (const auto &plan :
+         generated_lerp::k_upper_lower_hemenvlerp_plans) {
+        if (plan.stock_size != size ||
+            !hashing::matches_hex(
+                digest,
+                plan.stock_sha256))
+            continue;
+
+        if (found)
+            return nullptr;
+
+        hit = {
+            plan.plan_index,
+            plan.shader_index,
+            plan.stable_receiver_id,
+            plan.stratum ==
+                    generated_lerp::
+                        upper_lower_hemenvlerp_stratum::spc
+                ? generated_ul::
+                    upper_lower_hemenv_stratum::spc
+                : generated_ul::
+                    upper_lower_hemenv_stratum::nospc,
+            upper_lower_hemenv_family::hemenvlerp,
+            plan.stock_size,
+            plan.stock_sha256,
+            plan.u_slot_word,
+            plan.d_slot_word_0,
+            plan.d_slot_word_1,
+            plan.replacement_size,
+            plan.replacement_sha256
+        };
+        found = true;
+    }
+
+    return found ? &hit : nullptr;
 }
 
 bool parse_dxbc(
@@ -511,6 +583,8 @@ materialize_upper_lower_hemenv_receiver(
         plan->shader_index;
     outcome.stable_receiver_id =
         plan->stable_receiver_id;
+    outcome.family =
+        plan->family;
     outcome.stratum =
         plan->stratum ==
             generated_ul::
@@ -727,12 +801,22 @@ augment_upper_lower_hemenv_verified_base(
         return outcome;
     }
 
+    if (plan->family !=
+        upper_lower_hemenv_family::hemenv) {
+        outcome.result =
+            upper_lower_hemenv_materialize_result::
+                pass_not_candidate;
+        return outcome;
+    }
+
     outcome.plan_index =
         plan->plan_index;
     outcome.shader_index =
         plan->shader_index;
     outcome.stable_receiver_id =
         plan->stable_receiver_id;
+    outcome.family =
+        plan->family;
     outcome.stratum =
         plan->stratum ==
             generated_ul::
