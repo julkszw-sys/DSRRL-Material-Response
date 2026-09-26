@@ -15,11 +15,16 @@ hemdir3_sample evaluate_hemdir3_source_join(const hemdir3_vec3 &hemisphere,const
 
 enum class hemdir3_receiver_class : std::uint8_t { no_spc=0, spc };
 
-// Mode value alone is not authority. Direct DSR RE closes the ordinary carrier
-// as source+0x104 -> drawDesc+0x18 -> selector wrapper, while the existing
-// selector-entry census does not prove a retail effective mode2 producer.
-// Activation therefore requires a draw-local snapshot tied to the exact owner
-// and current LightBank A/B/beta tuple. A synthetic/debug override is forbidden.
+// A numeric value 2 is not a semantic identity. DSR has at least two unrelated
+// mode domains that contain the value 2: the lighting-family selector transported
+// source+0x104 -> drawDesc+0x18 -> 0x14022BA20, and model-construction helper
+// 0x14021F810 mode2 which produces packed-enable bit 0x20. The latter is NOT a
+// HemDir3 producer and must never arm this island.
+enum class hemdir3_semantic_domain : std::uint8_t {
+ unknown=0,
+ lighting_family_selector,
+ model_packed_enable_helper
+};
 enum class hemdir3_semantic_provenance : std::uint8_t {
  unknown=0,
  ordinary_draw_descriptor,
@@ -28,6 +33,7 @@ enum class hemdir3_semantic_provenance : std::uint8_t {
 };
 struct hemdir3_semantic_snapshot {
  std::uint32_t mode=0;
+ hemdir3_semantic_domain domain=hemdir3_semantic_domain::unknown;
  hemdir3_semantic_provenance provenance=hemdir3_semantic_provenance::unknown;
  bool immutable_draw_local=false;
  bool exact_owner_context=false;
@@ -36,7 +42,7 @@ struct hemdir3_semantic_snapshot {
 };
 
 enum class hemdir3_runtime_reason : std::uint8_t {
- ready=0,core_gate_not_active,semantic_snapshot_not_proven,semantic_mode_not_hemdir3,upper_lower_source_not_ready,d123_source_not_ready,b13_carrier_not_ready,receiver_not_verified,material_specular_b12_not_ready,directional_specular_continuation_not_ready,host_envdiffuse_not_suppressed,material_continuation_not_ready,downstream_material_domain_not_ready,downstream_postfog_not_ready,atmosphere_route_not_verified,draw_transaction_not_ready
+ ready=0,core_gate_not_active,semantic_snapshot_not_proven,semantic_domain_not_lighting_selector,semantic_mode_not_hemdir3,upper_lower_source_not_ready,d123_source_not_ready,b13_carrier_not_ready,receiver_not_verified,material_specular_b12_not_ready,directional_specular_continuation_not_ready,host_envdiffuse_not_suppressed,material_continuation_not_ready,downstream_material_domain_not_ready,downstream_postfog_not_ready,atmosphere_route_not_verified,draw_transaction_not_ready
 };
 struct hemdir3_runtime_context {
  hemdir3_semantic_snapshot semantic{};
