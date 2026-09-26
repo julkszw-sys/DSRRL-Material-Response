@@ -1318,8 +1318,14 @@ void __fastcall hook_pmetal_env_blend(
         g_producer.have_pmetal_env = true;
         g_producer.pmetal_env_a = a;
         g_producer.pmetal_env_b = b;
+        // V13 producer contract publishes clamp01(beta) into b12[3].w.
+        // Preserve that operator behavior rather than exporting an unchecked
+        // transport value.
         g_producer.pmetal_env_beta =
-            beta;
+            std::clamp(
+                beta,
+                0.0f,
+                1.0f);
         g_producer.pmetal_bank_a = bank_a;
         g_producer.pmetal_bank_b = bank_b;
         g_producer.pmetal_row_a = row_a;
