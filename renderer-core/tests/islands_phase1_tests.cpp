@@ -2,6 +2,7 @@
 #include "dsrrl/operators/material_response/material_response_island.hpp"
 #include "dsrrl/operators/material_response/material_response_seed.hpp"
 #include "dsrrl/operators/material_response/generated_material_constants_v1.hpp"
+#include "dsrrl/operators/material_response/material_response_b12_payload.hpp"
 #include "dsrrl/core/island_policy.hpp"
 #include "dsrrl/core/draw_transaction_policy.hpp"
 #include "dsrrl/core/operator_catalog.hpp"
@@ -194,17 +195,32 @@ int main()
     CHECK(exact_mr.ptde_specular_power_verified);
     CHECK(exact_mr.ptde_specular_power==8.5f);
 
+    const auto pmetal_b12 =
+        make_material_response_b12_payload(exact_mr);
+    CHECK(pmetal_b12[0][0]==1.51663761f);
+    CHECK(pmetal_b12[0][3]==8.5f);
+    CHECK(pmetal_b12[1][0]==0.5f);
+    CHECK(pmetal_b12[2][0]==2.5f);
+    CHECK(pmetal_b12[2][1]==2.5f);
+    CHECK(pmetal_b12[2][2]==2.5f);
+
     const auto *wet_constants =
         generated::find_material_response_constants(8u);
     CHECK(wet_constants != nullptr);
     CHECK(wet_constants->ptde_specular_power_verified);
     CHECK(wet_constants->ptde_specular_power==60.0f);
 
-    const auto *unknown_body_constants =
+    const auto *character_wet_constants =
+        generated::find_material_response_constants(16u);
+    CHECK(character_wet_constants != nullptr);
+    CHECK(character_wet_constants->ptde_specular_power_verified);
+    CHECK(character_wet_constants->ptde_specular_power==15.0f);
+
+    const auto *body_constants =
         generated::find_material_response_constants(3u);
-    CHECK(unknown_body_constants != nullptr);
-    CHECK(!unknown_body_constants->ptde_specular_power_verified);
-    CHECK(unknown_body_constants->ptde_specular_power==0.0f);
+    CHECK(body_constants != nullptr);
+    CHECK(body_constants->ptde_specular_power_verified);
+    CHECK(body_constants->ptde_specular_power==8.0f);
 
     auto spoofed_pmetal=exact_pmetal;
     spoofed_pmetal.flver_sha256.fill(0xffu);
