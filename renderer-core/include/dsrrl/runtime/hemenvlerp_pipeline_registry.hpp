@@ -1,5 +1,6 @@
 #pragma once
 
+#include <array>
 #include <cstddef>
 #include <cstdint>
 
@@ -28,6 +29,11 @@ struct hemenvlerp_pipeline_telemetry {
 bool hemenvlerp_receiver_observe_pipeline(
     std::uint64_t pipeline_handle,
     const void *pixel_shader_code,
+    std::size_t pixel_shader_size) noexcept;
+
+bool hemenvlerp_receiver_observe_pipeline_digest(
+    std::uint64_t pipeline_handle,
+    const std::array<std::uint8_t,32> &pixel_shader_sha256,
     std::size_t pixel_shader_size) noexcept;
 
 void hemenvlerp_receiver_forget_pipeline(
