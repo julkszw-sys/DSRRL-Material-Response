@@ -184,14 +184,38 @@ bool upper_lower_hemenv_draw_runtime::prepare_draw_request(
         operators::lightbank::
             upper_lower_hemenv_stratum::spc;
 
-    if (spc &&
-        (identity.stable_receiver_id < 24u ||
-         identity.stable_receiver_id > 47u))
-        return false;
+    const bool spc_without_stable_receiver_id =
+        identity.family ==
+            operators::lightbank::
+                upper_lower_hemenv_family::phn_faceeye ||
+        identity.family ==
+            operators::lightbank::
+                upper_lower_hemenv_family::gst ||
+        identity.family ==
+            operators::lightbank::
+                upper_lower_hemenv_family::gst_faceeye ||
+        identity.family ==
+            operators::lightbank::
+                upper_lower_hemenv_family::sfx ||
+        identity.family ==
+            operators::lightbank::
+                upper_lower_hemenv_family::snow ||
+        identity.family ==
+            operators::lightbank::
+                upper_lower_hemenv_family::ntoa;
 
-    if (!spc &&
-        identity.stable_receiver_id != 0u)
+    if (spc) {
+        if (spc_without_stable_receiver_id) {
+            if (identity.stable_receiver_id != 0u)
+                return false;
+        } else if (
+            identity.stable_receiver_id < 24u ||
+            identity.stable_receiver_id > 47u) {
+            return false;
+        }
+    } else if (identity.stable_receiver_id != 0u) {
         return false;
+    }
 
     // Until the combined MR+U/L replacement is materialized, never allow
     // two replacement pixel shaders to compete in one draw batch.
