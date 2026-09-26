@@ -189,7 +189,7 @@ jobs:
             'build_island_draw_mutation',
             'additional_shader_owners',
             'additional_constant_buffer_owners',
-            'constant_buffers[i].owners',
+            'binding.owners',
             'additional_resource_owners',
             'additional_carrier_owners',
             'shader_owners',
