@@ -36,6 +36,7 @@
 #include "dsrrl/operators/point_light/fixed_local_specular_operand_contract.hpp"
 #include "dsrrl/operators/point_light/fixed_local_specular_output_cut.hpp"
 #include "dsrrl/operators/point_light/fixed_local_specular_island_plan.hpp"
+#include "dsrrl/operators/point_light/fixed_local_specular_single_materializer.hpp"
 
 #include <reshade.hpp>
 #include <d3d11.h>
@@ -141,6 +142,9 @@ std::atomic<std::uint64_t> g_local_specular_output_cut_ready{0};
 std::atomic<std::uint64_t> g_local_specular_output_cut_fail{0};
 std::atomic<std::uint64_t> g_local_specular_island_plan_ready{0};
 std::atomic<std::uint64_t> g_local_specular_island_plan_fail{0};
+std::atomic<std::uint64_t> g_local_specular_single_materialize_ok{0};
+std::atomic<std::uint64_t> g_local_specular_blended_defer{0};
+std::atomic<std::uint64_t> g_local_specular_materialize_fail{0};
 
 enum integrated_draw_route_bit : std::uint8_t {
     k_route_stable = 1u << 0,
@@ -756,7 +760,7 @@ void log_state(const char *tag) noexcept
         "window_pass=%llu window_fail=%llu windows=%llu "
         "fixed_ready=%llu clustered_defer=%llu plan_fail=%llu "
         "operand_ready=%llu operand_fail=%llu output_cut=%llu/%llu "
-        "island_plan=%llu/%llu armed=0",
+        "island_plan=%llu/%llu materialize=%llu blend_defer=%llu mat_fail=%llu armed=0",
         tag,
         static_cast<unsigned long long>(g_local_specular_receiver_hits.load()),
         static_cast<unsigned long long>(g_local_specular_clustered_hits.load()),
@@ -773,7 +777,10 @@ void log_state(const char *tag) noexcept
         static_cast<unsigned long long>(g_local_specular_output_cut_ready.load()),
         static_cast<unsigned long long>(g_local_specular_output_cut_fail.load()),
         static_cast<unsigned long long>(g_local_specular_island_plan_ready.load()),
-        static_cast<unsigned long long>(g_local_specular_island_plan_fail.load()));
+        static_cast<unsigned long long>(g_local_specular_island_plan_fail.load()),
+        static_cast<unsigned long long>(g_local_specular_single_materialize_ok.load()),
+        static_cast<unsigned long long>(g_local_specular_blended_defer.load()),
+        static_cast<unsigned long long>(g_local_specular_materialize_fail.load()));
     reshade::log::message(
         reshade::log::level::info,
         local_spec_line);
@@ -1267,10 +1274,36 @@ bool on_create_pipeline(
                                         pixel_shader->code_size);
                             if (island_plan.result ==
                                     dsrrl::operators::point_light::
-                                        fixed_local_specular_island_plan_result::ready)
+                                        fixed_local_specular_island_plan_result::ready) {
                                 ++g_local_specular_island_plan_ready;
-                            else
+
+                                // Construction probe only. Build the exact
+                                // replacement from the live original DXBC but
+                                // do not expose it to ReShade until draw-local
+                                // t19+b12+SpecRGB readiness is proven.
+                                std::vector<std::uint8_t> fixed_payload;
+                                const auto fixed_materialized =
+                                    dsrrl::operators::point_light::
+                                        materialize_fixed_local_specular_single(
+                                            g_core.features(),
+                                            source,
+                                            pixel_shader->code_size,
+                                            fixed_payload);
+                                using fixed_result =
+                                    dsrrl::operators::point_light::
+                                        fixed_local_single_materialize_result;
+                                if (fixed_materialized.result ==
+                                        fixed_result::applied)
+                                    ++g_local_specular_single_materialize_ok;
+                                else if (fixed_materialized.result ==
+                                        fixed_result::
+                                            pass_blended_requires_endpoint_b)
+                                    ++g_local_specular_blended_defer;
+                                else
+                                    ++g_local_specular_materialize_fail;
+                            } else {
                                 ++g_local_specular_island_plan_fail;
+                            }
                         } else {
                             ++g_local_specular_output_cut_fail;
                         }
@@ -2527,6 +2560,9 @@ bool AddonInit(
     g_local_specular_output_cut_fail.store(0);
     g_local_specular_island_plan_ready.store(0);
     g_local_specular_island_plan_fail.store(0);
+    g_local_specular_single_materialize_ok.store(0);
+    g_local_specular_blended_defer.store(0);
+    g_local_specular_materialize_fail.store(0);
     reset_integrated_draw_routes();
     for (auto &rx : g_material_receiver_runtime) {
         rx.seen.store(0);
