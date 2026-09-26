@@ -5,6 +5,7 @@
 #include "dsrrl/operators/lightbank/generated_upper_lower_phn_pnts_v1.hpp"
 #include "dsrrl/operators/lightbank/generated_upper_lower_phn_faceeye_v1.hpp"
 #include "dsrrl/operators/lightbank/generated_upper_lower_phn_subsurf_v1.hpp"
+#include "dsrrl/operators/lightbank/generated_upper_lower_nonphn_v1.hpp"
 #include "dsrrl/operators/legacy_plan/sha256_bytes.hpp"
 
 #include <atomic>
@@ -27,6 +28,8 @@ namespace generated_ul_faceeye =
     operators::lightbank::generated_faceeye;
 namespace generated_ul_subsurf =
     operators::lightbank::generated_subsurf;
+namespace generated_ul_nonphn =
+    operators::lightbank::generated_nonphn;
 namespace hashing =
     operators::legacy_plan::hashing;
 
@@ -184,6 +187,57 @@ upper_lower_receiver_identity identity_from_plan(
     };
 }
 
+upper_lower_receiver_identity identity_from_plan(
+    const generated_ul_nonphn::
+        upper_lower_nonphn_plan &plan) noexcept
+{
+    auto family =
+        operators::lightbank::
+            upper_lower_hemenv_family::gst;
+
+    switch (plan.family) {
+    case generated_ul_nonphn::
+        upper_lower_nonphn_family::gst:
+        family = operators::lightbank::
+            upper_lower_hemenv_family::gst;
+        break;
+    case generated_ul_nonphn::
+        upper_lower_nonphn_family::gst_faceeye:
+        family = operators::lightbank::
+            upper_lower_hemenv_family::gst_faceeye;
+        break;
+    case generated_ul_nonphn::
+        upper_lower_nonphn_family::sfx:
+        family = operators::lightbank::
+            upper_lower_hemenv_family::sfx;
+        break;
+    case generated_ul_nonphn::
+        upper_lower_nonphn_family::snow:
+        family = operators::lightbank::
+            upper_lower_hemenv_family::snow;
+        break;
+    case generated_ul_nonphn::
+        upper_lower_nonphn_family::ntoa:
+        family = operators::lightbank::
+            upper_lower_hemenv_family::ntoa;
+        break;
+    }
+
+    return {
+        plan.plan_index,
+        plan.shader_index,
+        plan.stable_receiver_id,
+        plan.stratum ==
+                generated_ul_nonphn::
+                    upper_lower_nonphn_stratum::spc
+            ? operators::lightbank::
+                  upper_lower_hemenv_stratum::spc
+            : operators::lightbank::
+                  upper_lower_hemenv_stratum::nospc,
+        family
+    };
+}
+
 bool identity_equal(
     const upper_lower_receiver_identity &a,
     const upper_lower_receiver_identity &b) noexcept
@@ -302,6 +356,23 @@ bool identify_exact_stock(
     for (const auto &plan :
          generated_ul_subsurf::
              k_upper_lower_phn_subsurf_plans) {
+        if (plan.stock_size != size ||
+            !hashing::matches_hex(
+                digest,
+                plan.stock_sha256))
+            continue;
+
+        if (found)
+            return false;
+
+        identity =
+            identity_from_plan(plan);
+        found = true;
+    }
+
+    for (const auto &plan :
+         generated_ul_nonphn::
+             k_upper_lower_nonphn_plans) {
         if (plan.stock_size != size ||
             !hashing::matches_hex(
                 digest,
