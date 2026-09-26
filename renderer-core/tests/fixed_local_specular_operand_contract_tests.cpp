@@ -111,6 +111,14 @@ fixed_local_specular_patch_plan make_plan(
     plan.result=fixed_local_specular_plan_result::ready;
     plan.light_count=count;
     plan.replace_complete_microfacet_window=true;
+    plan.use_ptde_legacy_reflect_pow=true;
+    plan.consume_g_specular_power_as_exponent=true;
+    plan.stock_specular_power_cb_slot=0u;
+    plan.stock_specular_power_cb_index=11u;
+    plan.stock_specular_power_component=0u;
+    plan.ptde_specular_power_cb_slot=12u;
+    plan.ptde_specular_power_cb_index=0u;
+    plan.ptde_specular_power_component=3u;
     plan.bypass_stock_roughness_tail=true;
     plan.bypass_stock_common_ndotl_specular=true;
     plan.preserve_stock_diffuse=true;
