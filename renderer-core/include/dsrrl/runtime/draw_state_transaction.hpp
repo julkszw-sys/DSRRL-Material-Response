@@ -27,6 +27,11 @@ inline constexpr std::size_t draw_tx_max_class_instances = 256u;
 struct draw_tx_cb_binding {
     std::uint32_t slot = 0;
     ID3D11Buffer *buffer = nullptr;
+
+    // Exact semantic owners of this CB slot. Zero is accepted at request
+    // construction time as shorthand for the primary island only; composed
+    // requests must assign explicit owners for shared slots.
+    core::operator_mask owners = 0;
 };
 
 struct draw_tx_srv_binding {
