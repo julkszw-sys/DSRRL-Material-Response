@@ -45,6 +45,7 @@
 #error DSRRL_CORE_ISLANDS_PRODUCT_LINE must be supplied by integrated CMake
 #endif
 
+#include <array>
 #include <atomic>
 #include <cstdint>
 #include <cstdio>
@@ -103,6 +104,36 @@ std::atomic<std::uint64_t> g_draw_owner_hits{0};
 std::atomic<std::uint64_t> g_draw_joins{0};
 std::atomic<std::uint64_t> g_draw_owner_only{0};
 std::atomic<std::uint64_t> g_draw_receiver_only{0};
+
+constexpr std::uint32_t k_material_receiver_first = 24u;
+constexpr std::uint32_t k_material_receiver_last = 47u;
+constexpr std::size_t k_material_receiver_count =
+    k_material_receiver_last - k_material_receiver_first + 1u;
+
+struct material_receiver_runtime_counters {
+    std::atomic<std::uint64_t> seen{0};
+    std::atomic<std::uint64_t> accepted{0};
+    std::atomic<std::uint64_t> joined{0};
+    std::atomic<std::uint64_t> mr_active{0};
+    std::atomic<std::uint64_t> fail_open{0};
+};
+
+std::array<
+    material_receiver_runtime_counters,
+    k_material_receiver_count>
+    g_material_receiver_runtime{};
+
+material_receiver_runtime_counters *material_receiver_runtime_slot(
+    std::uint32_t receiver_id) noexcept
+{
+    if (receiver_id < k_material_receiver_first ||
+        receiver_id > k_material_receiver_last)
+        return nullptr;
+
+    return &g_material_receiver_runtime[
+        receiver_id - k_material_receiver_first];
+}
+
 std::atomic<std::uint64_t> g_bloom_fx_draw_snapshots{0};
 std::atomic<std::uint64_t> g_bloom_fx_draw_authorized{0};
 std::atomic<std::uint64_t> g_bloom_fx_draw_rejected{0};
@@ -322,8 +353,21 @@ bool observe_draw_identity(
         dsrrl::runtime::material_owner_selection_consume(
             out_material);
 
-    if (receiver_ok)
+    // Receiver telemetry is intentionally limited to the confirmed Material
+    // Response HemEnv/HemEnvLerp namespace (24..47). Other islands may reuse
+    // numeric IDs internally and must not contaminate this census.
+    auto *const rx =
+        (stable_receiver || hemenvlerp_receiver)
+            ? material_receiver_runtime_slot(receiver_id)
+            : nullptr;
+    if (rx != nullptr)
+        ++rx->seen;
+
+    if (receiver_ok) {
         ++g_draw_receiver_hits;
+        if (rx != nullptr)
+            ++rx->accepted;
+    }
     if (owner_ok)
         ++g_draw_owner_hits;
 
@@ -331,16 +375,22 @@ bool observe_draw_identity(
         if (owner_ok)
             ++g_draw_owner_only;
         ++g_mr_fail_open;
+        if (rx != nullptr)
+            ++rx->fail_open;
         return false;
     }
 
     if (!owner_ok) {
         ++g_draw_receiver_only;
         ++g_mr_fail_open;
+        if (rx != nullptr)
+            ++rx->fail_open;
         return true;
     }
 
     ++g_draw_joins;
+    if (rx != nullptr)
+        ++rx->joined;
 
     if (subsurface_bound ||
         hemdir3_bound) {
@@ -350,6 +400,8 @@ bool observe_draw_identity(
 
     if (!g_mr_ready.load()) {
         ++g_mr_fail_open;
+        if (rx != nullptr)
+            ++rx->fail_open;
         return true;
     }
 
@@ -359,10 +411,15 @@ bool observe_draw_identity(
             receiver_id,
             out_material);
 
-    if (out_decision.active)
+    if (out_decision.active) {
         ++g_mr_would_activate;
-    else
+        if (rx != nullptr)
+            ++rx->mr_active;
+    } else {
         ++g_mr_fail_open;
+        if (rx != nullptr)
+            ++rx->fail_open;
+    }
 
     return true;
 }
@@ -529,6 +586,53 @@ void log_state(const char *tag) noexcept
         static_cast<unsigned long long>(g_draw_receiver_only.load()));
 
     reshade::log::message(reshade::log::level::info, line);
+
+    // Compact machine-parseable receiver census. Emit one line rather than
+    // 24 lines per checkpoint so long runtime captures remain practical.
+    char rx_line[2048]{};
+    int rx_used = std::snprintf(
+        rx_line,
+        sizeof(rx_line),
+        "[DSRRL CORE+ISLANDS " DSRRL_CORE_ISLANDS_VERSION "] %s_RX",
+        tag);
+    bool rx_any = false;
+    for (std::uint32_t receiver_id = k_material_receiver_first;
+         receiver_id <= k_material_receiver_last &&
+         rx_used > 0 &&
+         static_cast<std::size_t>(rx_used) < sizeof(rx_line);
+         ++receiver_id) {
+        const auto &rx = g_material_receiver_runtime[
+            receiver_id - k_material_receiver_first];
+        const auto seen = rx.seen.load();
+        if (seen == 0u)
+            continue;
+
+        rx_any = true;
+        const int added = std::snprintf(
+            rx_line + rx_used,
+            sizeof(rx_line) - static_cast<std::size_t>(rx_used),
+            " rx%u=%llu,%llu,%llu,%llu,%llu",
+            receiver_id,
+            static_cast<unsigned long long>(seen),
+            static_cast<unsigned long long>(rx.accepted.load()),
+            static_cast<unsigned long long>(rx.joined.load()),
+            static_cast<unsigned long long>(rx.mr_active.load()),
+            static_cast<unsigned long long>(rx.fail_open.load()));
+        if (added <= 0)
+            break;
+        rx_used += added;
+    }
+    if (!rx_any &&
+        rx_used > 0 &&
+        static_cast<std::size_t>(rx_used) < sizeof(rx_line))
+        std::snprintf(
+            rx_line + rx_used,
+            sizeof(rx_line) - static_cast<std::size_t>(rx_used),
+            " none=1");
+
+    reshade::log::message(
+        reshade::log::level::info,
+        rx_line);
 
     const auto ul_pipe =
         dsrrl::runtime::upper_lower_receiver_pipeline_stats();
@@ -1875,6 +1979,13 @@ bool AddonInit(
     g_draw_joins.store(0);
     g_draw_owner_only.store(0);
     g_draw_receiver_only.store(0);
+    for (auto &rx : g_material_receiver_runtime) {
+        rx.seen.store(0);
+        rx.accepted.store(0);
+        rx.joined.store(0);
+        rx.mr_active.store(0);
+        rx.fail_open.store(0);
+    }
     g_bloom_fx_draw_snapshots.store(0);
     g_bloom_fx_draw_authorized.store(0);
     g_bloom_fx_draw_rejected.store(0);
