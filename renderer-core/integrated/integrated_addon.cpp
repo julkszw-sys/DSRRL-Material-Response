@@ -7,6 +7,7 @@
 #include "dsrrl/runtime/material_resource_draw_runtime.hpp"
 #include "dsrrl/runtime/envspec_resource_runtime.hpp"
 #include "dsrrl/runtime/bloom_scene_sidecar_runtime.hpp"
+#include "dsrrl/runtime/bloom_fx_draw_transport.hpp"
 #include "dsrrl/runtime/pmetal_envspec_draw_runtime.hpp"
 #include "dsrrl/runtime/texture_identity_transport.hpp"
 #include "dsrrl/operators/material_response/mtd_semantic_census.hpp"
@@ -687,6 +688,35 @@ void log_state(const char *tag) noexcept
     reshade::log::message(
         reshade::log::level::info,
         bloom_line);
+
+    const auto bloom_fx =
+        dsrrl::runtime::bloom_fx_draw_transport::status();
+
+    char bloom_fx_line[640]{};
+    std::snprintf(
+        bloom_fx_line,
+        sizeof(bloom_fx_line),
+        "[DSRRL CORE+ISLANDS " DSRRL_CORE_ISLANDS_VERSION "] %s_BLOOM_FX "
+        "prov=%u hooks=%u/%u q=%u restore_fail=%u "
+        "events=%llu/%llu exact=%llu reject=%llu state=%llu/%llu snap=%llu/%llu",
+        tag,
+        bloom_fx.provenance_ok ? 1u : 0u,
+        bloom_fx.particle_hook_armed ? 1u : 0u,
+        bloom_fx.cluster_hook_armed ? 1u : 0u,
+        bloom_fx.quarantined ? 1u : 0u,
+        bloom_fx.restore_failed ? 1u : 0u,
+        static_cast<unsigned long long>(bloom_fx.particle_events),
+        static_cast<unsigned long long>(bloom_fx.cluster_events),
+        static_cast<unsigned long long>(bloom_fx.exact_entity_hits),
+        static_cast<unsigned long long>(bloom_fx.entity_rejects),
+        static_cast<unsigned long long>(bloom_fx.state_ready_hits),
+        static_cast<unsigned long long>(bloom_fx.state_missing),
+        static_cast<unsigned long long>(bloom_fx.snapshot_hits),
+        static_cast<unsigned long long>(bloom_fx.snapshot_misses));
+
+    reshade::log::message(
+        reshade::log::level::info,
+        bloom_fx_line);
 }
 
 void on_init_device(reshade::api::device *device)
@@ -1654,6 +1684,7 @@ bool AddonInit(
     g_material_resources.reset();
     g_envspec_resources.reset_stats();
     g_bloom_scene_sidecar.reset();
+    dsrrl::runtime::bloom_fx_draw_transport::reset_stats();
     g_pmetal_envspec.reset();
     g_upper_lower.reset();
     g_upper_lower_hemenv.reset();
@@ -1746,6 +1777,17 @@ bool AddonInit(
             "] FLVER identity hooks FAIL-OPEN: stock DSR preserved for exact owner routing.");
     }
 
+    const bool bloom_fx_hooks =
+        flver_hooks &&
+        dsrrl::runtime::bloom_fx_draw_transport::install();
+
+    if (!bloom_fx_hooks) {
+        reshade::log::message(
+            reshade::log::level::warning,
+            "[DSRRL CORE+ISLANDS " DSRRL_CORE_ISLANDS_VERSION
+            "] Bloom FX draw transport FAIL-OPEN: Q8 sidecar remains unauthorised; stock SFX preserved.");
+    }
+
     const bool hemdir3_mode_hooks =
         flver_hooks &&
         dsrrl::runtime::hemdir3_mode_transport::install();
@@ -1798,6 +1840,11 @@ void AddonUninit(
     if (dsrrl::runtime::hemdir3_mode_transport::status().restore_failed)
         log_state("MODE2_UNLOAD_RESTORE_FAIL");
 
+    dsrrl::runtime::bloom_fx_draw_transport::uninstall();
+
+    if (dsrrl::runtime::bloom_fx_draw_transport::status().restore_failed)
+        log_state("BLOOM_FX_UNLOAD_RESTORE_FAIL");
+
     dsrrl::runtime::flver_identity_transport::uninstall();
 
     if (dsrrl::runtime::flver_identity_transport::status().restore_failed)
@@ -1814,6 +1861,7 @@ void AddonUninit(
     g_pmetal_envspec.reset();
     g_envspec_resources.reset_stats();
     g_bloom_scene_sidecar.reset();
+    dsrrl::runtime::bloom_fx_draw_transport::reset_stats();
     g_material_resources.reset();
     g_upper_lower.reset();
     g_upper_lower_hemenv.reset();
