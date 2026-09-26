@@ -45,6 +45,14 @@
 #error DSRRL_CORE_ISLANDS_PRODUCT_LINE must be supplied by integrated CMake
 #endif
 
+#ifndef DSRRL_SOURCE_COMMIT
+#define DSRRL_SOURCE_COMMIT "unknown"
+#endif
+
+#ifndef DSRRL_BUILD_FLAVOR
+#define DSRRL_BUILD_FLAVOR "default"
+#endif
+
 #include <array>
 #include <atomic>
 #include <cstdint>
@@ -2276,6 +2284,20 @@ bool AddonInit(
             reshade::log::level::warning,
             "[DSRRL CORE+ISLANDS " DSRRL_CORE_ISLANDS_VERSION
             "] Upper/Lower producer hooks FAIL-OPEN: stock DSR b13 preserved.");
+    }
+
+    {
+        char build_identity[768]{};
+        std::snprintf(
+            build_identity,
+            sizeof(build_identity),
+            "[DSRRL BUILD_ID] version=%s source_commit=%s flavor=%s",
+            DSRRL_CORE_ISLANDS_VERSION,
+            DSRRL_SOURCE_COMMIT,
+            DSRRL_BUILD_FLAVOR);
+        reshade::log::message(
+            reshade::log::level::info,
+            build_identity);
     }
 
     reshade::log::message(
