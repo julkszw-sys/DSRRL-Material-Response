@@ -55,6 +55,14 @@ struct fixed_local_specular_patch_plan {
 // pass_clustered_membership_not_owned until the independent PTDE-selected
 // four-light membership sidecar is integrated. This function performs no
 // visible shader mutation.
+// Secondary deterministic seam for unit tests and offline tooling after
+// exact receiver identity + window attestation have already been established.
+// Production code should call build_fixed_local_specular_patch_plan().
+fixed_local_specular_patch_plan
+build_fixed_local_specular_patch_plan_from_attested(
+    const local_specular_receiver_identity &identity,
+    const local_specular_microfacet_window_scan &scan) noexcept;
+
 fixed_local_specular_patch_plan
 build_fixed_local_specular_patch_plan(
     const void *pixel_shader_code,
