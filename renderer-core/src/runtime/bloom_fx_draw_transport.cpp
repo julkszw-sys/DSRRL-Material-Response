@@ -164,6 +164,7 @@ std::atomic<std::uint64_t> g_backend_key_reads{0};
 std::atomic<std::uint64_t> g_backend_key_read_failures{0};
 std::atomic<std::uint64_t> g_waterwave_runtime_index_reads{0};
 std::atomic<std::uint64_t> g_backend_key_waterwave_matches{0};
+std::atomic<std::uint64_t> g_waterwave_semantic_model_candidate_hits{0};
 std::atomic<std::uint64_t> g_backend_semantic_snapshot_hits{0};
 std::atomic<std::uint64_t> g_backend_semantic_snapshot_misses{0};
 std::atomic<std::uint64_t> g_waterwave_publish_ok{0};
@@ -871,6 +872,11 @@ void observe(
     (void)join_particle_model(snap);
     attach_backend_semantic(snap);
 
+    snap.waterwave_semantic_model_candidate =
+        is_waterwave_semantic_model_diagnostic_candidate(snap);
+    if (snap.waterwave_semantic_model_candidate)
+        ++g_waterwave_semantic_model_candidate_hits;
+
     snap.ready =
         snap.exact_entity_vtable &&
         snap.exact_appearance_vtable &&
@@ -1176,6 +1182,8 @@ telemetry status() noexcept
         g_waterwave_runtime_index_reads.load();
     out.backend_key_waterwave_matches =
         g_backend_key_waterwave_matches.load();
+    out.waterwave_semantic_model_candidate_hits =
+        g_waterwave_semantic_model_candidate_hits.load();
     out.backend_semantic_snapshot_hits =
         g_backend_semantic_snapshot_hits.load();
     out.backend_semantic_snapshot_misses =
@@ -1223,6 +1231,7 @@ void reset_stats() noexcept
     g_backend_key_read_failures.store(0u);
     g_waterwave_runtime_index_reads.store(0u);
     g_backend_key_waterwave_matches.store(0u);
+    g_waterwave_semantic_model_candidate_hits.store(0u);
     g_backend_semantic_snapshot_hits.store(0u);
     g_backend_semantic_snapshot_misses.store(0u);
     g_waterwave_publish_ok.store(0u);
