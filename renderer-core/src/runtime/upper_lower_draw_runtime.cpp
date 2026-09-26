@@ -368,6 +368,63 @@ std::uint64_t pmetal_fnv_byte(
     return hash * 0x100000001b3ULL;
 }
 
+struct readable_window {
+    std::uintptr_t begin = 0u;
+    std::uintptr_t end = 0u;
+};
+
+bool ensure_readable_window(
+    const void *ptr,
+    readable_window &window) noexcept
+{
+    if (ptr == nullptr)
+        return false;
+
+    const auto address =
+        reinterpret_cast<std::uintptr_t>(ptr);
+
+    if (window.begin <= address &&
+        address < window.end)
+        return true;
+
+    MEMORY_BASIC_INFORMATION mbi{};
+    if (VirtualQuery(
+            ptr,
+            &mbi,
+            sizeof(mbi)) != sizeof(mbi))
+        return false;
+
+    if (mbi.State != MEM_COMMIT ||
+        (mbi.Protect & PAGE_GUARD) != 0u)
+        return false;
+
+    const DWORD access = mbi.Protect & 0xffu;
+    const bool readable =
+        access == PAGE_READONLY ||
+        access == PAGE_READWRITE ||
+        access == PAGE_WRITECOPY ||
+        access == PAGE_EXECUTE_READ ||
+        access == PAGE_EXECUTE_READWRITE ||
+        access == PAGE_EXECUTE_WRITECOPY;
+
+    if (!readable)
+        return false;
+
+    const auto region_begin =
+        reinterpret_cast<std::uintptr_t>(
+            mbi.BaseAddress);
+    const auto region_end =
+        region_begin + mbi.RegionSize;
+
+    if (region_end <= address ||
+        region_end < region_begin)
+        return false;
+
+    window.begin = region_begin;
+    window.end = region_end;
+    return true;
+}
+
 bool pmetal_bank_signature(
     const std::uint8_t *base,
     std::uint64_t &signature) noexcept
@@ -376,13 +433,41 @@ bool pmetal_bank_signature(
     if (base == nullptr)
         return false;
 
+    // Bank identity is immutable resource metadata, but this function may sit
+    // on the steady LightBank hot path. The previous implementation performed
+    // safe_read -> VirtualQuery for every row field and every name byte.
+    // Preserve the exact FNV identity equation while validating the fixed
+    // header/table once and reusing a validated VM window while scanning
+    // strings. This removes per-byte VirtualQuery without introducing a stale
+    // identity cache or weakening fail-open semantics.
+    if (!readable_range(
+            base + 8u,
+            sizeof(std::uint16_t) * 2u))
+        return false;
+
     std::uint16_t version = 0u;
     std::uint16_t count = 0u;
-    if (!safe_read(base + 8u, version) ||
-        !safe_read(base + 10u, count) ||
-        version != 4u ||
+    std::memcpy(
+        &version,
+        base + 8u,
+        sizeof(version));
+    std::memcpy(
+        &count,
+        base + 10u,
+        sizeof(count));
+
+    if (version != 4u ||
         count == 0u ||
         count > 256u)
+        return false;
+
+    const std::size_t table_bytes =
+        0x30u +
+        static_cast<std::size_t>(count) * 12u;
+
+    if (!readable_range(
+            base,
+            table_bytes))
         return false;
 
     std::uint64_t hash = 0xcbf29ce484222325ULL;
@@ -397,6 +482,8 @@ bool pmetal_bank_signature(
         0x30u +
         static_cast<std::uint32_t>(count) * 12u;
 
+    readable_window name_window{};
+
     for (std::uint32_t i = 0u;
          i < count;
          ++i) {
@@ -406,9 +493,16 @@ bool pmetal_bank_signature(
 
         std::uint32_t row_id = 0u;
         std::uint32_t name_offset = 0u;
-        if (!safe_read(entry, row_id) ||
-            !safe_read(entry + 8u, name_offset) ||
-            name_offset < minimum_name ||
+        std::memcpy(
+            &row_id,
+            entry,
+            sizeof(row_id));
+        std::memcpy(
+            &name_offset,
+            entry + 8u,
+            sizeof(name_offset));
+
+        if (name_offset < minimum_name ||
             name_offset > 0x100000u)
             return false;
 
@@ -424,11 +518,22 @@ bool pmetal_bank_signature(
         for (std::uint32_t j = 0u;
              j < 256u;
              ++j) {
-            std::uint8_t ch = 0u;
-            if (!safe_read(
-                    base + name_offset + j,
-                    ch))
+            const auto *name_byte =
+                base +
+                static_cast<std::size_t>(
+                    name_offset) +
+                j;
+
+            if (!ensure_readable_window(
+                    name_byte,
+                    name_window))
                 return false;
+
+            std::uint8_t ch = 0u;
+            std::memcpy(
+                &ch,
+                name_byte,
+                sizeof(ch));
 
             hash = pmetal_fnv_byte(
                 hash,
