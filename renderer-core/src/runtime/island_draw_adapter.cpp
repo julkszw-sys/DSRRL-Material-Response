@@ -93,11 +93,39 @@ island_draw_adapter_result build_island_draw_mutation(
              : 0u) |
         request.additional_shader_owners;
 
-    mutation.constant_buffer_owners =
-        (request.constant_buffer_count != 0u
-             ? primary_bit
-             : 0u) |
-        request.additional_constant_buffer_owners;
+    mutation.constant_buffer_owners = 0u;
+
+    for (std::uint32_t i = 0u;
+         i < request.constant_buffer_count;
+         ++i) {
+        auto binding =
+            request.constant_buffers[i];
+
+        if (binding.owners == 0u)
+            binding.owners =
+                primary_bit;
+
+        if ((binding.owners &
+             ~mutation.owners) != 0u ||
+            (binding.owners &
+             request.additional_owners &
+             ~request.additional_constant_buffer_owners) != 0u)
+            return
+                island_draw_adapter_result::
+                    invalid_additional_owner;
+
+        mutation.constant_buffers[i] =
+            binding;
+        mutation.constant_buffer_owners |=
+            binding.owners;
+    }
+
+    if ((mutation.constant_buffer_owners &
+         request.additional_owners) !=
+        request.additional_constant_buffer_owners)
+        return
+            island_draw_adapter_result::
+                invalid_additional_owner;
 
     mutation.resource_owners =
         ((request.srv_count != 0u ||
@@ -122,8 +150,6 @@ island_draw_adapter_result build_island_draw_mutation(
     mutation.replace_pixel_shader =
         request.replace_pixel_shader;
 
-    mutation.constant_buffers =
-        request.constant_buffers;
     mutation.constant_buffer_count =
         request.constant_buffer_count;
 
@@ -157,6 +183,8 @@ island_draw_batch_result merge_slot_bindings(
             if constexpr (std::is_same_v<Binding, draw_tx_cb_binding>) {
                 if (dst[j].buffer != src[i].buffer)
                     return conflict;
+                dst[j].owners |=
+                    src[i].owners;
             } else if constexpr (std::is_same_v<Binding, draw_tx_srv_binding>) {
                 if (dst[j].srv != src[i].srv)
                     return conflict;
