@@ -6,6 +6,7 @@
 
 #include <reshade.hpp>
 
+#include <array>
 #include <atomic>
 #include <cstdint>
 
@@ -37,7 +38,11 @@ struct upper_lower_telemetry {
     std::uint64_t hemdir3_b13_hit = 0;
     std::uint64_t requests = 0;
     std::uint64_t hemdir3_carrier_requests = 0;
+    std::uint64_t pmetal_env_steady = 0;
+    std::uint64_t pmetal_env_blend = 0;
+    std::uint64_t pmetal_env_miss = 0;
     bool producer_hooks_armed = false;
+    bool pmetal_env_hook_armed = false;
     bool quarantined = false;
     bool restore_failed = false;
 };
@@ -46,6 +51,16 @@ struct prepared_upper_lower_draw {
     island_draw_adapter_request request{};
     ID3D11Buffer *b13 = nullptr;
     bool ready = false;
+};
+
+struct pmetal_env_source {
+    std::array<float,3> a{};
+    std::array<float,3> b{};
+    float beta = 0.0f;
+    std::uint64_t bank_signature_a = 0;
+    std::uint64_t bank_signature_b = 0;
+    std::uint32_t row_id_a = 0;
+    std::uint32_t row_id_b = 0;
 };
 
 struct prepared_hemdir3_carrier {
@@ -97,6 +112,9 @@ public:
 
     void release_hemdir3_carrier(
         prepared_hemdir3_carrier &prepared) noexcept;
+
+    bool selected_pmetal_env_source(
+        pmetal_env_source &out) const noexcept;
 
     // Selection is one draw-scoped semantic event. Never carry it forward.
     void consume_draw_selection() noexcept;
