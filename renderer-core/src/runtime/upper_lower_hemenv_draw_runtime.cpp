@@ -184,6 +184,31 @@ bool upper_lower_hemenv_draw_runtime::prepare_draw_request(
         operators::lightbank::
             upper_lower_hemenv_stratum::spc;
 
+    switch (identity.family) {
+    case operators::lightbank::upper_lower_hemenv_family::hemenv:
+    case operators::lightbank::upper_lower_hemenv_family::hemenvlerp:
+    case operators::lightbank::upper_lower_hemenv_family::hemenv_parallax:
+    case operators::lightbank::upper_lower_hemenv_family::hemenvlerp_parallax:
+    case operators::lightbank::upper_lower_hemenv_family::phn_pnts:
+    case operators::lightbank::upper_lower_hemenv_family::phn_faceeye:
+    case operators::lightbank::upper_lower_hemenv_family::phn_subsurf:
+        ++phn_candidates_;
+        break;
+    case operators::lightbank::upper_lower_hemenv_family::gst:
+    case operators::lightbank::upper_lower_hemenv_family::gst_faceeye:
+        ++gst_candidates_;
+        break;
+    case operators::lightbank::upper_lower_hemenv_family::sfx:
+        ++sfx_candidates_;
+        break;
+    case operators::lightbank::upper_lower_hemenv_family::snow:
+        ++snow_candidates_;
+        break;
+    case operators::lightbank::upper_lower_hemenv_family::ntoa:
+        ++ntoa_candidates_;
+        break;
+    }
+
     if (!upper_lower_identity_runtime_shape_valid(
             identity)) {
         ++identity_rejects_;
@@ -329,6 +354,11 @@ upper_lower_hemenv_draw_runtime::telemetry() const noexcept
         nospc_ready_.load(),
         spc_ready_.load(),
         spc_mr_hold_.load(),
+        phn_candidates_.load(),
+        gst_candidates_.load(),
+        sfx_candidates_.load(),
+        snow_candidates_.load(),
+        ntoa_candidates_.load(),
         phn_ready_.load(),
         gst_ready_.load(),
         sfx_ready_.load(),
@@ -352,6 +382,11 @@ void upper_lower_hemenv_draw_runtime::reset() noexcept
     nospc_ready_.store(0);
     spc_ready_.store(0);
     spc_mr_hold_.store(0);
+    phn_candidates_.store(0);
+    gst_candidates_.store(0);
+    sfx_candidates_.store(0);
+    snow_candidates_.store(0);
+    ntoa_candidates_.store(0);
     phn_ready_.store(0);
     gst_ready_.store(0);
     sfx_ready_.store(0);
