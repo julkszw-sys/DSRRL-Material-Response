@@ -2147,10 +2147,8 @@ bool AddonInit(
     if (!reshade::register_addon(addon_module, reshade_module))
         return false;
 
-    // PERFORMANCE ISOLATION DIAGNOSTIC A:
-    // Keep only exact A1 create-time shader replacement. No draw/bind/present
-    // callbacks, no resource events and no DSR inline hooks are installed.
     g_a1_bridge.reset();
+
     if (!enable_integrated_islands()) {
         disable_integrated_islands();
         reshade::unregister_addon(addon_module, reshade_module);
@@ -2163,161 +2161,6 @@ bool AddonInit(
     reshade::log::message(
         reshade::log::level::warning,
         "[DSRRL PERF DIAG A1_CREATE_ONLY] Only exact A1 create-time shader replacement is active; runtime hooks/events are disabled.");
-    return true;
-
-    g_a1_bridge.reset();
-    g_draw_transactions.reset();
-    g_mr_draw_runtime.reset();
-    g_material_resources.reset();
-    g_envspec_resources.reset_stats();
-    g_bloom_scene_sidecar.reset();
-    dsrrl::runtime::bloom_fx_draw_transport::reset_stats();
-    g_pmetal_envspec.reset();
-    g_upper_lower.reset();
-    g_upper_lower_hemenv.reset();
-    g_hemdir3.reset();
-    dsrrl::runtime::hemdir3_mode_transport::reset_stats();
-    g_present_count.store(0);
-    g_mr_draw_eval.store(0);
-    g_mr_would_activate.store(0);
-    g_mr_fail_open.store(0);
-    g_mr_payload_materialize_ok.store(0);
-    g_mr_payload_materialize_fail.store(0);
-    g_mr_ul_payload_materialize_ok.store(0);
-    g_mr_ul_payload_materialize_fail.store(0);
-    g_envspec_payload_materialize_ok.store(0);
-    g_envspec_payload_materialize_fail.store(0);
-    g_draw_events.store(0);
-    g_draw_receiver_hits.store(0);
-    g_draw_owner_hits.store(0);
-    g_draw_joins.store(0);
-    g_draw_owner_only.store(0);
-    g_draw_receiver_only.store(0);
-    g_draw_fast_skip.store(0);
-    reset_integrated_draw_routes();
-    for (auto &rx : g_material_receiver_runtime) {
-        rx.seen.store(0);
-        rx.accepted.store(0);
-        rx.joined.store(0);
-        rx.mr_active.store(0);
-        rx.fail_open.store(0);
-    }
-    g_bloom_fx_draw_snapshots.store(0);
-    g_bloom_fx_draw_authorized.store(0);
-    g_bloom_fx_draw_rejected.store(0);
-    dsrrl::runtime::stable_receiver_pipeline_reset();
-    dsrrl::runtime::hemenvlerp_receiver_pipeline_reset();
-    dsrrl::runtime::subsurface_receiver_pipeline_reset();
-    dsrrl::runtime::hemdir3_receiver_pipeline_reset();
-    dsrrl::runtime::upper_lower_receiver_pipeline_reset();
-    g_subsurface.reset();
-    dsrrl::runtime::material_owner_selection_reset_stats();
-
-    const auto receivers =
-        dsrrl::operators::material_response::
-            register_confirmed_material_receivers_v1(
-                g_material_response);
-    const auto routes =
-        dsrrl::operators::material_response::
-            register_confirmed_material_routes_v1(
-                g_material_response);
-
-    g_mr_ready.store(
-        receivers == 24u &&
-        routes == 35u &&
-        g_material_response.receiver_recipe_count() == 24u &&
-        g_material_response.material_profile_count() == 35u);
-
-    if (!enable_integrated_islands()) {
-        disable_integrated_islands();
-        reshade::unregister_addon(addon_module, reshade_module);
-        return false;
-    }
-
-    register_events();
-
-    if (!g_material_resources.register_events()) {
-        unregister_events();
-        disable_integrated_islands();
-        reshade::unregister_addon(addon_module, reshade_module);
-        return false;
-    }
-
-    const bool envspec_resource_events =
-        g_envspec_resources.register_events();
-
-    if (!envspec_resource_events) {
-        (void)g_core.features().set(
-            dsrrl::core::operator_id::env_spec,
-            false);
-        reshade::log::message(
-            reshade::log::level::warning,
-            "[DSRRL CORE+ISLANDS " DSRRL_CORE_ISLANDS_VERSION
-            "] EnvSpec resource events FAIL-OPEN: P_Metal EnvSpec stays stock; other islands remain active.");
-    }
-
-    const bool texture_hooks =
-        dsrrl::runtime::texture_identity_transport::install();
-
-    if (!texture_hooks) {
-        reshade::log::message(
-            reshade::log::level::warning,
-            "[DSRRL CORE+ISLANDS " DSRRL_CORE_ISLANDS_VERSION
-            "] texture identity hooks FAIL-OPEN: SpecRGB/Diffuse/Normal sidecars remain stock.");
-    }
-
-    const bool flver_hooks =
-        dsrrl::runtime::flver_identity_transport::install();
-
-    if (!flver_hooks) {
-        reshade::log::message(
-            reshade::log::level::warning,
-            "[DSRRL CORE+ISLANDS " DSRRL_CORE_ISLANDS_VERSION
-            "] FLVER identity hooks FAIL-OPEN: stock DSR preserved for exact owner routing.");
-    }
-
-    const bool bloom_fx_hooks =
-        flver_hooks &&
-        dsrrl::runtime::bloom_fx_draw_transport::install();
-
-    if (!bloom_fx_hooks) {
-        reshade::log::message(
-            reshade::log::level::warning,
-            "[DSRRL CORE+ISLANDS " DSRRL_CORE_ISLANDS_VERSION
-            "] Bloom FX draw transport FAIL-OPEN: Q8 sidecar remains unauthorised; stock SFX preserved.");
-    }
-
-    const bool hemdir3_mode_hooks =
-        flver_hooks &&
-        dsrrl::runtime::hemdir3_mode_transport::install();
-
-    if (!hemdir3_mode_hooks) {
-        reshade::log::message(
-            reshade::log::level::warning,
-            "[DSRRL CORE+ISLANDS " DSRRL_CORE_ISLANDS_VERSION
-            "] HemDir3 effective-mode hooks FAIL-OPEN: HemDir3 remains stock.");
-    }
-
-    const bool upper_lower_hooks =
-        flver_hooks &&
-        g_upper_lower.install();
-
-    if (!upper_lower_hooks) {
-        reshade::log::message(
-            reshade::log::level::warning,
-            "[DSRRL CORE+ISLANDS " DSRRL_CORE_ISLANDS_VERSION
-            "] Upper/Lower producer hooks FAIL-OPEN: stock DSR b13 preserved.");
-    }
-
-    reshade::log::message(
-        reshade::log::level::info,
-        "[DSRRL CORE+ISLANDS " DSRRL_CORE_ISLANDS_VERSION
-        "] READY: shared Core draw-state transaction layer (PS/CB/SRV/sampler) "
-        "is active; exact Material Response, SpecRGB, Upper/Lower, Subsurface and native "
-        "HemDir3 no-Spc/Spc routes are construction-armed. Exact P_Metal EnvSpec uses its "
-        "own material/source/probe-gated PS+b12(+b13)+t10+t12/t14+s12/s14 single replay. "
-        "Runtime activation and PTDE pixel behavior remain separate validation stages; "
-        "frozen legacy monolith is not linked.");
 
     return true;
 }
@@ -2327,57 +2170,10 @@ void AddonUninit(
     HMODULE addon_module,
     HMODULE reshade_module)
 {
-    // PERFORMANCE ISOLATION DIAGNOSTIC A counterpart to AddonInit.
     reshade::unregister_event<reshade::addon_event::create_pipeline>(
         on_create_pipeline_a1_only);
+
     g_a1_bridge.reset();
     disable_integrated_islands();
-    reshade::unregister_addon(addon_module, reshade_module);
-    return;
-
-    unregister_events();
-    log_state("PRE_UNLOAD");
-    g_upper_lower.uninstall();
-
-    if (g_upper_lower.telemetry().restore_failed)
-        log_state("UL_UNLOAD_RESTORE_FAIL");
-
-    dsrrl::runtime::hemdir3_mode_transport::uninstall();
-
-    if (dsrrl::runtime::hemdir3_mode_transport::status().restore_failed)
-        log_state("MODE2_UNLOAD_RESTORE_FAIL");
-
-    dsrrl::runtime::bloom_fx_draw_transport::uninstall();
-
-    if (dsrrl::runtime::bloom_fx_draw_transport::status().restore_failed)
-        log_state("BLOOM_FX_UNLOAD_RESTORE_FAIL");
-
-    dsrrl::runtime::flver_identity_transport::uninstall();
-
-    if (dsrrl::runtime::flver_identity_transport::status().restore_failed)
-        log_state("UNLOAD_RESTORE_FAIL");
-
-    dsrrl::runtime::stable_receiver_pipeline_reset();
-    dsrrl::runtime::hemenvlerp_receiver_pipeline_reset();
-    dsrrl::runtime::subsurface_receiver_pipeline_reset();
-    dsrrl::runtime::hemdir3_receiver_pipeline_reset();
-    dsrrl::runtime::upper_lower_receiver_pipeline_reset();
-    reset_integrated_draw_routes();
-    dsrrl::runtime::texture_identity_transport::uninstall();
-    g_envspec_resources.unregister_events();
-    g_material_resources.unregister_events();
-    g_pmetal_envspec.reset();
-    g_envspec_resources.reset_stats();
-    g_bloom_scene_sidecar.reset();
-    dsrrl::runtime::bloom_fx_draw_transport::reset_stats();
-    g_material_resources.reset();
-    g_upper_lower.reset();
-    g_upper_lower_hemenv.reset();
-    g_hemdir3.reset();
-    g_mr_draw_runtime.reset();
-    g_draw_transactions.reset();
-    g_a1_bridge.reset();
-    disable_integrated_islands();
-
     reshade::unregister_addon(addon_module, reshade_module);
 }
