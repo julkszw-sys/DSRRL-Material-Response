@@ -97,6 +97,15 @@ public:
         std::uint32_t route_index,
         prepared_material_response_draw &prepared) noexcept;
 
+    // Same exact prevalidated route, but require the already-certified
+    // MR+UpperLower combined receiver replacement and bind the fresh b13
+    // LightBank carrier in the same draw transaction.
+    bool prepare_prevalidated_route_request_with_upper_lower(
+        std::uint32_t receiver_id,
+        std::uint32_t route_index,
+        ID3D11Buffer *b13,
+        prepared_material_response_draw &prepared) noexcept;
+
     void release_prepared_draw(
         prepared_material_response_draw &prepared) noexcept;
 
