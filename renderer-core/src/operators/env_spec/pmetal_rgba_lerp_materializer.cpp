@@ -12,6 +12,7 @@
 #include <array>
 #include <cstring>
 #include <limits>
+#include <utility>
 #include <vector>
 
 namespace dsrrl::operators::env_spec {
