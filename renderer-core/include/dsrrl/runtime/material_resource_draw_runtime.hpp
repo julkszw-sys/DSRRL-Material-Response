@@ -67,6 +67,7 @@ public:
         std::uint32_t receiver_id,
         const operators::material_response::mtd_semantic_query &query,
         bool full_material_response_ready,
+        bool spec_rgb_consumer_ready,
         prepared_material_resource_draw &prepared) noexcept;
 
     bool prepare_subsurface_body_requests(
