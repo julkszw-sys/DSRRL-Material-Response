@@ -41,6 +41,15 @@ struct upper_lower_telemetry {
     std::uint64_t pmetal_env_steady = 0;
     std::uint64_t pmetal_env_blend = 0;
     std::uint64_t pmetal_env_miss = 0;
+    std::uint64_t perf_qpc_frequency = 0;
+    std::uint64_t perf_steady_ticks = 0;
+    std::uint64_t perf_steady_pmetal_ticks = 0;
+    std::uint64_t perf_steady_ul_ticks = 0;
+    std::uint64_t perf_steady_d123_ticks = 0;
+    std::uint64_t perf_blend_capture_ticks = 0;
+    std::uint64_t perf_pmetal_blend_ticks = 0;
+    std::uint64_t perf_publish_ticks = 0;
+    std::uint64_t perf_selector_ticks = 0;
     bool producer_hooks_armed = false;
     bool pmetal_env_hook_armed = false;
     bool quarantined = false;

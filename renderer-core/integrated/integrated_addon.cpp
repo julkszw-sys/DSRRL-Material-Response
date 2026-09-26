@@ -716,6 +716,30 @@ void log_state(const char *tag) noexcept
 
     reshade::log::message(reshade::log::level::info, line);
 
+    char ul_perf_line[1024]{};
+    std::snprintf(
+        ul_perf_line,
+        sizeof(ul_perf_line),
+        "[DSRRL CORE+ISLANDS " DSRRL_CORE_ISLANDS_VERSION "] %s_ULPERF "
+        "qpc_freq=%llu steady_ticks=%llu steady_pmetal_ticks=%llu "
+        "steady_ul_ticks=%llu steady_d123_ticks=%llu "
+        "blend_capture_ticks=%llu pmetal_blend_ticks=%llu "
+        "publish_ticks=%llu selector_ticks=%llu",
+        tag,
+        static_cast<unsigned long long>(ul.perf_qpc_frequency),
+        static_cast<unsigned long long>(ul.perf_steady_ticks),
+        static_cast<unsigned long long>(ul.perf_steady_pmetal_ticks),
+        static_cast<unsigned long long>(ul.perf_steady_ul_ticks),
+        static_cast<unsigned long long>(ul.perf_steady_d123_ticks),
+        static_cast<unsigned long long>(ul.perf_blend_capture_ticks),
+        static_cast<unsigned long long>(ul.perf_pmetal_blend_ticks),
+        static_cast<unsigned long long>(ul.perf_publish_ticks),
+        static_cast<unsigned long long>(ul.perf_selector_ticks));
+
+    reshade::log::message(
+        reshade::log::level::info,
+        ul_perf_line);
+
     // Compact machine-parseable receiver census. Emit one line rather than
     // 24 lines per checkpoint so long runtime captures remain practical.
     char rx_line[2048]{};
