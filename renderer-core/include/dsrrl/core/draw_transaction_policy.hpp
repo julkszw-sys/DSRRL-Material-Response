@@ -155,6 +155,57 @@ constexpr bool create_time_safe_operator(
         draw_transaction_mode::create_time_safe;
 }
 
+struct upper_lower_readback_skip_shape {
+    operator_mask owners = 0u;
+    operator_mask shader_owners = 0u;
+    operator_mask constant_buffer_owners = 0u;
+    operator_mask carrier_owners = 0u;
+    operator_mask resource_owners = 0u;
+    std::uint32_t constant_buffer_count = 0u;
+    std::uint32_t constant_buffer_slot = 0u;
+    operator_mask constant_buffer_binding_owners = 0u;
+    std::uint32_t srv_count = 0u;
+    std::uint32_t sampler_count = 0u;
+};
+
+constexpr bool
+upper_lower_native_readback_skip_allowed(
+    const upper_lower_readback_skip_shape &shape) noexcept
+{
+    const auto ul =
+        operator_bit(operator_id::upper_lower);
+
+    if ((shape.owners & ul) == 0u ||
+        (shape.shader_owners & ul) == 0u ||
+        shape.constant_buffer_owners != ul ||
+        shape.carrier_owners != ul ||
+        shape.resource_owners != 0u ||
+        shape.constant_buffer_count != 1u ||
+        shape.constant_buffer_slot != 13u ||
+        shape.constant_buffer_binding_owners != ul ||
+        shape.srv_count != 0u ||
+        shape.sampler_count != 0u)
+        return false;
+
+    for (std::size_t i = 0u;
+         i < operator_count;
+         ++i) {
+        const auto op =
+            static_cast<operator_id>(i);
+        const auto bit = operator_bit(op);
+
+        if (bit == ul ||
+            (shape.owners & bit) == 0u)
+            continue;
+
+        if (!create_time_safe_operator(op) ||
+            (shape.shader_owners & bit) == 0u)
+            return false;
+    }
+
+    return true;
+}
+
 constexpr std::uint32_t draw_policy_carrier_write_mask(
     operator_id op) noexcept
 {
