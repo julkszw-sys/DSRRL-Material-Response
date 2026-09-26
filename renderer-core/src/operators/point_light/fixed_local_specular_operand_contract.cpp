@@ -201,7 +201,7 @@ bool find_instruction_by_word(
 fixed_local_specular_operand_contract
 extract_fixed_local_specular_operand_contract_from_attested_shex_words(
     const fixed_local_specular_patch_plan &plan,
-    const std::uint32_t *shex_shex_words,
+    const std::uint32_t *shex_words,
     std::size_t word_count) noexcept
 {
     fixed_local_specular_operand_contract out;
@@ -238,7 +238,7 @@ extract_fixed_local_specular_operand_contract_from_attested_shex_words(
         instructions{};
     std::size_t instruction_count=0u;
     if (!decode_instructions(
-            shex_shex_words,
+            shex_words,
             word_count,
             instructions,
             instruction_count)) {
@@ -356,12 +356,12 @@ extract_fixed_local_specular_operand_contract_from_attested_shex_words(
 
             has_position = has_position ||
                 has_cb0_index(
-                    shex_shex_words,
+                    shex_words,
                     instruction,
                     expected_position);
             has_color = has_color ||
                 has_cb0_index(
-                    shex_shex_words,
+                    shex_words,
                     instruction,
                     expected_color);
 
@@ -372,7 +372,7 @@ extract_fixed_local_specular_operand_contract_from_attested_shex_words(
                      instruction.opcode ==
                         k_op_mul &&
                      has_cb0_index(
-                        shex_shex_words,
+                        shex_words,
                         instruction,
                         expected_color))
                 tail_color=true;
