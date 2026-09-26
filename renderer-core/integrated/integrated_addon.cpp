@@ -542,6 +542,7 @@ void on_init_device(reshade::api::device *device)
 {
     g_a1_bridge.on_init_device(device);
     g_mr_draw_runtime.on_init_device(device);
+    g_pmetal_envspec.on_init_device(device);
     g_upper_lower_hemenv.on_init_device(device);
     g_hemdir3.on_init_device(device);
 }
@@ -551,6 +552,7 @@ void on_destroy_device(reshade::api::device *device)
     g_upper_lower.on_destroy_device(device);
     g_upper_lower_hemenv.on_destroy_device(device);
     g_hemdir3.on_destroy_device(device);
+    g_pmetal_envspec.on_destroy_device(device);
     g_mr_draw_runtime.on_destroy_device(device);
     g_a1_bridge.on_destroy_device(device);
 }
