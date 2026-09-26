@@ -1555,12 +1555,14 @@ void upper_lower_selector_event_bridge(
     void *r14,
     void *r15) noexcept
 {
-    if (g_runtime != nullptr)
-        g_runtime->selector_event(
-            owner,
-            return_address,
-            r14,
-            r15);
+    // PERF DIAG K: producer hooks remain fully armed, but the FLVER selector
+    // must not enter the U/L snapshot join path. This isolates producer cost
+    // from selector-side snapshot lookup/join cost without altering producer
+    // hook coverage.
+    (void)owner;
+    (void)return_address;
+    (void)r14;
+    (void)r15;
 }
 
 bool upper_lower_draw_runtime::install() noexcept
