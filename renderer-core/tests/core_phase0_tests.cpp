@@ -178,6 +178,7 @@ int main()
         carrier_hemdir3_mask,
         true,
         false,
+        true,
         false
     };
     plan = core.build_plan(draw, &hemdir_unverified, 1);
@@ -188,6 +189,7 @@ int main()
         carrier_hemdir3_mask,
         true,
         false,
+        true,
         true
     };
     plan = core.build_plan(draw, &hemdir_verified, 1);
