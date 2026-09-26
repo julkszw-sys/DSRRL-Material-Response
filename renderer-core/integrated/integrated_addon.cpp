@@ -114,7 +114,8 @@ enum integrated_draw_route_bit : std::uint8_t {
     k_route_hemenvlerp = 1u << 1,
     k_route_subsurface = 1u << 2,
     k_route_hemdir3 = 1u << 3,
-    k_route_upper_lower = 1u << 4
+    k_route_upper_lower = 1u << 4,
+    k_route_a1 = 1u << 5
 };
 
 struct integrated_draw_route_tls {
@@ -1427,6 +1428,10 @@ void on_init_pipeline(
 
     std::uint8_t draw_route_mask = 0u;
 
+    if (g_a1_bridge.pipeline_attested(
+            pipeline.handle))
+        draw_route_mask |= k_route_a1;
+
     if (pixel_shader != nullptr &&
         pixel_shader->code != nullptr &&
         pixel_shader->code_size != 0u) {
@@ -1530,6 +1535,8 @@ void on_bind_pipeline(
     std::uint32_t receiver_id = 0u;
 
     const bool target =
+        pixel_stage_bound &&
+        (route_mask & k_route_a1) != 0u &&
         g_a1_bridge.on_bind_pipeline(
             stages,
             pipeline,

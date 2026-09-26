@@ -487,6 +487,18 @@ void a1_create_pipeline_bridge::on_destroy_pipeline(
     pipeline_records_.erase(pipeline.handle);
 }
 
+bool a1_create_pipeline_bridge::pipeline_attested(
+    std::uint64_t pipeline_handle) const noexcept
+{
+    if (pipeline_handle == 0u ||
+        quarantined_.load())
+        return false;
+
+    std::lock_guard<std::mutex> lock(mutex_);
+    return pipeline_records_.find(pipeline_handle) !=
+        pipeline_records_.end();
+}
+
 bool a1_create_pipeline_bridge::on_bind_pipeline(
     reshade::api::pipeline_stage stages,
     reshade::api::pipeline pipeline,

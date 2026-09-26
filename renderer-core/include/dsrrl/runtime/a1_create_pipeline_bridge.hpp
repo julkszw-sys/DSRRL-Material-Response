@@ -71,6 +71,9 @@ public:
         reshade::api::device *device,
         reshade::api::pipeline pipeline) noexcept;
 
+    bool pipeline_attested(
+        std::uint64_t pipeline_handle) const noexcept;
+
     bool on_bind_pipeline(
         reshade::api::pipeline_stage stages,
         reshade::api::pipeline pipeline,
