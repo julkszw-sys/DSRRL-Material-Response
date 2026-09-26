@@ -61,6 +61,7 @@ bool draw_state_transaction_runtime::validate_mutation(
     if (mutation.owners == 0u ||
         (mutation.owners & ~core::all_operator_bits) != 0u ||
         (mutation.shader_owners & ~mutation.owners) != 0u ||
+        (mutation.constant_buffer_owners & ~mutation.owners) != 0u ||
         (mutation.resource_owners & ~mutation.owners) != 0u ||
         (mutation.carrier_owners & ~mutation.owners) != 0u)
         return false;
@@ -73,6 +74,13 @@ bool draw_state_transaction_runtime::validate_mutation(
         return false;
     }
 
+    const bool has_constant_buffers =
+        mutation.constant_buffer_count != 0u;
+
+    if (has_constant_buffers !=
+        (mutation.constant_buffer_owners != 0u))
+        return false;
+
     const bool has_resources =
         mutation.srv_count != 0u ||
         mutation.sampler_count != 0u;
@@ -82,7 +90,7 @@ bool draw_state_transaction_runtime::validate_mutation(
         return false;
 
     if (mutation.carrier_owners != 0u &&
-        mutation.constant_buffer_count == 0u)
+        !has_constant_buffers)
         return false;
 
     for (std::size_t i = 0;
@@ -102,6 +110,11 @@ bool draw_state_transaction_runtime::validate_mutation(
         if ((mutation.shader_owners & bit) != 0u &&
             (policy.allowed_mutation_mask &
              core::draw_mutation_shader) == 0u)
+            return false;
+
+        if ((mutation.constant_buffer_owners & bit) != 0u &&
+            (policy.allowed_mutation_mask &
+             core::draw_mutation_constant_buffer) == 0u)
             return false;
 
         if ((mutation.resource_owners & bit) != 0u &&
