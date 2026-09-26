@@ -111,6 +111,11 @@ fixed_local_specular_patch_plan make_plan(
     plan.result=fixed_local_specular_plan_result::ready;
     plan.light_count=count;
     plan.replace_complete_microfacet_window=true;
+    plan.use_ptde_legacy_reflect_pow=true;
+    plan.consume_g_specular_power_as_exponent=true;
+    plan.specular_power_cb_slot=0u;
+    plan.specular_power_cb_index=11u;
+    plan.specular_power_component=0u;
     plan.bypass_stock_roughness_tail=true;
     plan.bypass_stock_common_ndotl_specular=true;
     plan.preserve_stock_diffuse=true;
@@ -141,6 +146,10 @@ int main()
                 plan,words.data(),words.size());
         CHECK(out.result==fixed_local_specular_operand_result::ready);
         CHECK(out.light_count==2u);
+        CHECK(out.specular_power_cb_slot==0u);
+        CHECK(out.specular_power_cb_index==11u);
+        CHECK(out.specular_power_component==0u);
+        CHECK(out.exponent_carrier_attested);
         CHECK(out.lights[0].view.token[1]==6u);
         CHECK(out.lights[0].normal.token[1]==5u);
         CHECK(out.lights[0].light.token[1]==14u);
