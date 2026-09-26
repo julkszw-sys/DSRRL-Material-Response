@@ -2214,6 +2214,7 @@ bool AddonInit(
         dsrrl::runtime::hemdir3_mode_transport::install();
     const bool upper_lower_hooks = false;
     (void)texture_hooks;
+    (void)hemdir3_mode_hooks;
     (void)bloom_fx_hooks;
     (void)upper_lower_hooks;
 
