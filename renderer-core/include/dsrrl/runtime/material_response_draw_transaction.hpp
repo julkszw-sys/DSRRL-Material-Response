@@ -146,6 +146,9 @@ public:
     bool promote_prepared_draw_to_spec_rgb(
         prepared_material_response_draw &prepared) noexcept;
 
+    bool has_paired_spec_rgb_replacement(
+        const prepared_material_response_draw &prepared) const noexcept;
+
     // Carrier preparation only. Authorization must already have been
     // established by an operator-specific exact route (for example the
     // certified DSBT->DSB Subsurface route). This function never infers
