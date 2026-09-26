@@ -1,0 +1,32 @@
+{
+  "schema": "dsrrl.upper_lower_blend_packer_local_capture_re.v1",
+  "operator": "lighting.upper_lower",
+  "status": "CONSTRUCTION_EVIDENCE",
+  "dsr": {
+    "exe_sha256": "a45aaa36dd2f6cc151670a639ea5547043cf38ea79ff4178b963c6ed71f98d7b",
+    "image_base": "0x140000000",
+    "blend_packer_rva": "0x005637E0",
+    "global_blend_helper_rva": "0x005642F0",
+    "upper_helper_call_rva": "0x005639B5",
+    "upper_helper_return_rva": "0x005639BA",
+    "upper_raw_rgbm_record_offset": "0x24",
+    "lower_helper_call_rva": "0x005639D0",
+    "lower_helper_return_rva": "0x005639D5",
+    "lower_raw_rgbm_record_offset": "0x2C",
+    "record_resolution": "header+entry_offset resolved by resolve_raw_lightbank_record(source, selector)",
+    "observation": "blend_packer passes record+0x24 and record+0x2C to the same global blend helper for Upper and Lower respectively"
+  },
+  "bridge": {
+    "previous_design": "global detour at 0x5642F0 captured every helper invocation and filtered by return address after entering the detour",
+    "replacement_design": "do not hook 0x5642F0; inside the already-scoped blend_packer detour, read raw RGBM at +0x24/+0x2C from the two resolved records and apply the bridge's existing PTDE-side decode_rgbm + lerp4(beta)",
+    "semantic_change": false,
+    "routing_change": "narrows capture from global helper to the verified blend_packer producer call",
+    "fail_open": "if raw records or fields cannot be read or produce non-finite values, do not publish Upper/Lower for that producer snapshot"
+  },
+  "claims": {
+    "blend_helper_global_detour_required": false,
+    "blend_packer_local_capture_sufficient_for_existing_bridge_semantics": true,
+    "pixel_equivalence": "OPEN",
+    "runtime_fps_recovery": "OPEN"
+  }
+}
