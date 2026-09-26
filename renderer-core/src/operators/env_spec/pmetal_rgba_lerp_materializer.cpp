@@ -322,13 +322,17 @@ bool terminal_rgb_output_instruction(
 }
 
 bool apply_exact_terminal_rgb_sat(
-    std::vector<std::uint32_t> &words) noexcept
+    std::vector<std::uint32_t> &words,
+    const generated_lerp::pmetal_hemenvlerp_site &site) noexcept
 {
-    std::size_t word = 0u;
-    if (!terminal_rgb_output_instruction(
-            words,
-            word) ||
-        words[word] != 0x05000036u)
+    const auto word =
+        static_cast<std::size_t>(
+            site.terminal_rgb_word);
+
+    if (word + 4u >= words.size() ||
+        words[word] != 0x05000036u ||
+        words[word + 1u] != 0x00102072u ||
+        words[word + 2u] != 0u)
         return false;
 
     words[word] |=
@@ -643,7 +647,9 @@ materialize_pmetal_rgba_lerp_receiver(
     // PTDE Phn HemEnv/HemEnvLerp terminates with RGB-only SAT. This is a
     // separate surface operator composed into the exact P_Metal replacement;
     // alpha is untouched and any non-unique/future output shape fails open.
-    if (!apply_exact_terminal_rgb_sat(words)) {
+    if (!apply_exact_terminal_rgb_sat(
+            words,
+            *site)) {
         outcome.result =
             pmetal_rgba_lerp_materialize_result::
                 fail_terminal_sat;
