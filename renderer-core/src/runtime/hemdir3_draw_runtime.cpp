@@ -467,6 +467,8 @@ bool hemdir3_draw_runtime::prepare_draw_request(
         replacement.composed_owners;
     prepared.request.additional_shader_owners =
         replacement.composed_owners;
+    prepared.request.additional_constant_buffer_owners =
+        upper_lower_owner;
     prepared.request.additional_carrier_owners =
         upper_lower_owner;
 
