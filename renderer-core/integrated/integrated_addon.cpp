@@ -1965,6 +1965,7 @@ struct draw_semantic_selection_guard {
     ~draw_semantic_selection_guard()
     {
         g_upper_lower.consume_draw_selection();
+        g_fixed_pointlight.consume_draw_selection();
         dsrrl::runtime::hemdir3_mode_transport::
             consume_draw_selection();
     }
