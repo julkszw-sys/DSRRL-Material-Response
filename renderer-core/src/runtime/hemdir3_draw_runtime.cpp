@@ -386,14 +386,15 @@ bool hemdir3_draw_runtime::prepare_draw_request(
         prepared.carrier.ready;
 
     runtime.receiver_verified = true;
+    // Exact native receiver strata are hemdir3_native_stratum::nospc and
+    // hemdir3_native_stratum::spc; both remain distinct through readiness.
     runtime.receiver_stratum =
         identity.stratum ==
                 operators::lightbank::
                     hemdir3_native_stratum::spc
             ? operators::lightbank::
                 hemdir3_receiver_stratum::spc
-            : operators::lightbank::
-                hemdir3_receiver_stratum::nospc;
+            : operators::lightbank::hemdir3_receiver_stratum::nospc;
 
     runtime.spc_b12_material_donor_ready =
         identity.stratum !=
