@@ -404,6 +404,26 @@ extract_fixed_local_specular_operand_contract_from_attested_shex_words(
     }
 
     out.light_count=out.plan.light_count;
+    out.specular_power_cb_slot=
+        out.plan.specular_power_cb_slot;
+    out.specular_power_cb_index=
+        out.plan.specular_power_cb_index;
+    out.specular_power_component=
+        out.plan.specular_power_component;
+    out.exponent_carrier_attested=
+        out.plan.use_ptde_legacy_reflect_pow &&
+        out.plan.consume_g_specular_power_as_exponent &&
+        out.specular_power_cb_slot==0u &&
+        out.specular_power_cb_index==11u &&
+        out.specular_power_component==0u;
+
+    if (!out.exponent_carrier_attested) {
+        out.result =
+            fixed_local_specular_operand_result::
+                fail_fixed_cb_identity;
+        return out;
+    }
+
     out.result =
         fixed_local_specular_operand_result::ready;
     return out;
