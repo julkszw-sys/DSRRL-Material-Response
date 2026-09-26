@@ -10,6 +10,8 @@ on:
       - 'renderer-core/include/dsrrl/operators/material_response/generated_dsr_mtd_identity_v1.hpp'
       - 'renderer-core/tools/export_mtd_envspec_semantic_census.py'
       - 'renderer-core/tools/export_upper_lower_hemenv_semantic_census.py'
+      - 'renderer-core/tools/export_hemdir3_spc_material_semantic_census.py'
+      - 'renderer-core/tools/verify_hemdir3_spc_material_semantic_census.py'
       - 'renderer-core/tools/verify_mtd_semantic_census.py'
       - 'renderer-core/tools/verify_mtd_semantic_census_policy.py'
       - 'renderer-core/tools/verify_ptde_flver_census_import.py'
@@ -30,6 +32,8 @@ on:
       - 'renderer-core/include/dsrrl/operators/material_response/generated_dsr_mtd_identity_v1.hpp'
       - 'renderer-core/tools/export_mtd_envspec_semantic_census.py'
       - 'renderer-core/tools/export_upper_lower_hemenv_semantic_census.py'
+      - 'renderer-core/tools/export_hemdir3_spc_material_semantic_census.py'
+      - 'renderer-core/tools/verify_hemdir3_spc_material_semantic_census.py'
       - 'renderer-core/tools/verify_mtd_semantic_census.py'
       - 'renderer-core/tools/verify_mtd_semantic_census_policy.py'
       - 'renderer-core/tools/verify_ptde_flver_census_import.py'
@@ -62,6 +66,10 @@ jobs:
         run: |
           python renderer-core/tools/export_upper_lower_hemenv_semantic_census.py --input renderer-core/data/provenance/upper_lower_hemenv_consumers_v1.tsv --output /tmp/upper_lower_hemenv_semantic_census_v1.jsonl
           test $(wc -l < /tmp/upper_lower_hemenv_semantic_census_v1.jsonl) -eq 37
+      - name: Verify HemDir3 exact material census preserves evidence boundary
+        run: |
+          python renderer-core/tools/export_hemdir3_spc_material_semantic_census.py --input renderer-core/data/provenance/hemdir3_spc_mtd_donor_authority_v1.tsv --output /tmp/hemdir3_spc_material_semantic_census_v1.jsonl
+          python renderer-core/tools/verify_hemdir3_spc_material_semantic_census.py --input /tmp/hemdir3_spc_material_semantic_census_v1.jsonl
       - name: Verify PTDE FLVER census import provenance
         run: python renderer-core/tools/verify_ptde_flver_census_import.py
       - name: Verify PTDE FLVER semantic completeness authority
