@@ -29,6 +29,28 @@ inline constexpr std::uint32_t
 inline constexpr std::uint32_t
     k_waterwave_dsr_param_index = 0x53u;
 
+inline constexpr std::uint32_t
+    k_waterwave_dsr_source_complete_mtd_count = 581u;
+
+inline constexpr std::uint32_t
+    k_waterwave_dsr_material_name_occurrences = 1u;
+
+inline constexpr std::uint32_t
+    k_waterwave_dsr_spx_occurrences = 1u;
+
+inline constexpr std::uint32_t
+    k_waterwave_dsr_flag_name_occurrences = 1u;
+
+inline constexpr bool
+waterwave_dsr_authored_semantic_is_source_complete_unique() noexcept
+{
+    return
+        k_waterwave_dsr_source_complete_mtd_count == 581u &&
+        k_waterwave_dsr_material_name_occurrences == 1u &&
+        k_waterwave_dsr_spx_occurrences == 1u &&
+        k_waterwave_dsr_flag_name_occurrences == 1u;
+}
+
 enum class waterwave_authored_identity_result : std::uint8_t {
     exact_authored_identity = 0,
     raw_mtd_not_exact,
