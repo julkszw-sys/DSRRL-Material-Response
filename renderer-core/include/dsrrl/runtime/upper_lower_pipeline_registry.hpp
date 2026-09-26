@@ -29,39 +29,51 @@ constexpr bool upper_lower_identity_runtime_shape_valid(
     if (!identity.valid())
         return false;
 
+    using family =
+        operators::lightbank::upper_lower_hemenv_family;
+    using stratum =
+        operators::lightbank::upper_lower_hemenv_stratum;
+
     const bool spc =
-        identity.stratum ==
-            operators::lightbank::
-                upper_lower_hemenv_stratum::spc;
+        identity.stratum == stratum::spc;
+    const bool no_spc =
+        identity.stratum == stratum::nospc;
 
-    const bool spc_without_stable_receiver_id =
-        identity.family ==
-            operators::lightbank::
-                upper_lower_hemenv_family::phn_faceeye ||
-        identity.family ==
-            operators::lightbank::
-                upper_lower_hemenv_family::gst ||
-        identity.family ==
-            operators::lightbank::
-                upper_lower_hemenv_family::gst_faceeye ||
-        identity.family ==
-            operators::lightbank::
-                upper_lower_hemenv_family::sfx ||
-        identity.family ==
-            operators::lightbank::
-                upper_lower_hemenv_family::snow ||
-        identity.family ==
-            operators::lightbank::
-                upper_lower_hemenv_family::ntoa;
-
-    if (!spc)
+    switch (identity.family) {
+    case family::phn_faceeye:
+    case family::gst:
+    case family::sfx:
+        // Exact authorities contain both strata and no stable MR receiver ID.
         return identity.stable_receiver_id == 0u;
 
-    if (spc_without_stable_receiver_id)
-        return identity.stable_receiver_id == 0u;
+    case family::gst_faceeye:
+    case family::snow:
+    case family::ntoa:
+        // These exact families are no-Spc only.
+        return no_spc &&
+               identity.stable_receiver_id == 0u;
 
-    return identity.stable_receiver_id >= 24u &&
-           identity.stable_receiver_id <= 47u;
+    case family::hemenvlerp_parallax:
+    case family::phn_subsurf:
+        // These exact families are Spc only and retain semantic receiver 24..47.
+        return spc &&
+               identity.stable_receiver_id >= 24u &&
+               identity.stable_receiver_id <= 47u;
+
+    case family::hemenv:
+    case family::hemenvlerp:
+    case family::hemenv_parallax:
+    case family::phn_pnts:
+        // Exact authorities contain both strata. Spc is paired to 24..47;
+        // no-Spc is intentionally unpaired.
+        return spc
+            ? identity.stable_receiver_id >= 24u &&
+              identity.stable_receiver_id <= 47u
+            : no_spc &&
+              identity.stable_receiver_id == 0u;
+    }
+
+    return false;
 }
 
 struct upper_lower_pipeline_telemetry {
