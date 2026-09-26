@@ -24,6 +24,7 @@
 #include "dsrrl/operators/material_response/material_response_island.hpp"
 #include "dsrrl/operators/material_response/material_response_seed.hpp"
 #include "dsrrl/operators/material_response/material_response_v211_materializer.hpp"
+#include "dsrrl/operators/material_response/hemenvlerp_v211_materializer.hpp"
 #include "dsrrl/operators/lightbank/hemdir3_b13_materializer.hpp"
 #include "dsrrl/operators/lightbank/upper_lower_hemenv_materializer.hpp"
 #include "dsrrl/operators/resource_bridges/spec_rgb_consumer_materializer.hpp"
@@ -1355,6 +1356,100 @@ bool on_create_pipeline(
         } else if (
             mr.result != mr_result::pass_not_candidate &&
             mr.result != mr_result::pass_unknown_exact_sha) {
+            ++g_mr_payload_materialize_fail;
+        }
+
+        // Exact HemEnvLerp is a distinct executable family that shares the
+        // semantic receiver namespace 24..47. Build and store a separate
+        // replacement object so stable HemEnv and Lerp never overwrite each
+        // other by receiver_id. The verified base supplies b12/MR; the
+        // exact stock Lerp plan supplies the b13 U/L consumer sites; SpecRGB
+        // is then split to t10 on the composed shader. Diffuse t0 and Normal
+        // t2 remain draw-local resource carriers and are attached later.
+        std::vector<std::uint8_t> lerp_mr_payload;
+        const auto lerp_mr =
+            dsrrl::operators::material_response::
+                materialize_hemenvlerp_v211_certified_stage(
+                    source,
+                    pixel_shader->code_size,
+                    lerp_mr_payload);
+
+        using lerp_mr_result =
+            dsrrl::operators::material_response::
+                hemenvlerp_v211_result;
+
+        if (lerp_mr.result == lerp_mr_result::applied) {
+            const std::uint32_t lerp_receiver_id =
+                24u + static_cast<std::uint32_t>(
+                    lerp_mr.pair_index);
+
+            std::vector<std::uint8_t> lerp_mr_ul_payload;
+            const auto lerp_mr_ul =
+                dsrrl::operators::lightbank::
+                    augment_upper_lower_hemenv_verified_base(
+                        source,
+                        pixel_shader->code_size,
+                        lerp_mr_payload.data(),
+                        lerp_mr_payload.size(),
+                        4u,
+                        lerp_mr_ul_payload);
+
+            const auto lerp_spec_owner =
+                dsrrl::core::operator_bit(
+                    dsrrl::core::operator_id::spec_rgb);
+
+            if (lerp_mr_ul.result ==
+                    dsrrl::operators::lightbank::
+                        upper_lower_hemenv_materialize_result::applied &&
+                lerp_mr_ul.family ==
+                    dsrrl::operators::lightbank::
+                        upper_lower_hemenv_family::hemenvlerp &&
+                lerp_mr_ul.stratum ==
+                    dsrrl::operators::lightbank::
+                        upper_lower_hemenv_stratum::spc &&
+                lerp_mr_ul.stable_receiver_id ==
+                    lerp_receiver_id) {
+                std::vector<std::uint8_t> lerp_full_payload;
+                const auto lerp_spec =
+                    dsrrl::operators::resource_bridges::
+                        materialize_spec_rgb_consumer(
+                            lerp_mr_ul_payload.data(),
+                            lerp_mr_ul_payload.size(),
+                            lerp_full_payload);
+
+                if (lerp_spec ==
+                        dsrrl::operators::resource_bridges::
+                            spec_rgb_consumer_result::applied) {
+                    if (!g_mr_draw_runtime.
+                            has_lerp_receiver_replacement(
+                                lerp_receiver_id)) {
+                        if (g_mr_draw_runtime.
+                                register_lerp_receiver_replacement(
+                                    lerp_receiver_id,
+                                    lerp_full_payload.data(),
+                                    lerp_full_payload.size(),
+                                    lerp_spec_owner))
+                            ++g_mr_ul_payload_materialize_ok;
+                        else
+                            ++g_mr_ul_payload_materialize_fail;
+                    }
+                } else {
+                    ++g_mr_ul_payload_materialize_fail;
+                }
+            } else if (
+                lerp_mr_ul.result !=
+                    dsrrl::operators::lightbank::
+                        upper_lower_hemenv_materialize_result::
+                            pass_not_candidate &&
+                lerp_mr_ul.result !=
+                    dsrrl::operators::lightbank::
+                        upper_lower_hemenv_materialize_result::
+                            pass_unknown_exact_sha) {
+                ++g_mr_ul_payload_materialize_fail;
+            }
+        } else if (
+            lerp_mr.result != lerp_mr_result::pass_not_candidate &&
+            lerp_mr.result != lerp_mr_result::pass_unknown_exact_sha) {
             ++g_mr_payload_materialize_fail;
         }
 
