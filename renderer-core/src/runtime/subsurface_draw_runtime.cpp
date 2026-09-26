@@ -132,6 +132,14 @@ bool subsurface_draw_runtime::prepare(
         return false;
     }
 
+    if (!prepared.resources.spec_rgb ||
+        !mr_.activate_spec_rgb_variant(
+            prepared.mr)) {
+        release(prepared);
+        ++surface_rejects_;
+        return false;
+    }
+
     operators::resource_bridges::
         subsurface_route_context route_context{};
 
