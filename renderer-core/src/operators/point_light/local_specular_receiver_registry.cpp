@@ -60,7 +60,7 @@ bool local_specular_receiver_for_shader(
         return false;
 
     const auto digest =
-        operators::legacy_plan::hashing::sha256(
+        dsrrl::operators::legacy_plan::hashing::sha256(
             static_cast<const std::uint8_t *>(pixel_shader_code),
             code_size);
 
