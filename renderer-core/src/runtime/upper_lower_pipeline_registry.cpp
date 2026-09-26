@@ -63,7 +63,28 @@ upper_lower_receiver_identity identity_from_plan(
             ? operators::lightbank::
                   upper_lower_hemenv_stratum::spc
             : operators::lightbank::
-                  upper_lower_hemenv_stratum::nospc
+                  upper_lower_hemenv_stratum::nospc,
+        operators::lightbank::
+            upper_lower_hemenv_family::hemenv
+    };
+}
+
+upper_lower_receiver_identity identity_from_plan(
+    const generated_ul_lerp::upper_lower_hemenvlerp_plan &plan) noexcept
+{
+    return {
+        plan.plan_index,
+        plan.shader_index,
+        plan.stable_receiver_id,
+        plan.stratum ==
+                generated_ul_lerp::
+                    upper_lower_hemenvlerp_stratum::spc
+            ? operators::lightbank::
+                  upper_lower_hemenv_stratum::spc
+            : operators::lightbank::
+                  upper_lower_hemenv_stratum::nospc,
+        operators::lightbank::
+            upper_lower_hemenv_family::hemenvlerp
     };
 }
 
@@ -76,7 +97,8 @@ bool identity_equal(
         a.shader_index == b.shader_index &&
         a.stable_receiver_id ==
             b.stable_receiver_id &&
-        a.stratum == b.stratum;
+        a.stratum == b.stratum &&
+        a.family == b.family;
 }
 
 bool identify_exact_stock(
