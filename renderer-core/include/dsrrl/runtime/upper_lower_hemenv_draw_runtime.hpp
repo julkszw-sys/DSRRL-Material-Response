@@ -36,6 +36,11 @@ struct upper_lower_hemenv_draw_telemetry {
     std::uint64_t nospc_ready = 0;
     std::uint64_t spc_ready = 0;
     std::uint64_t spc_mr_hold = 0;
+    std::uint64_t phn_candidates = 0;
+    std::uint64_t gst_candidates = 0;
+    std::uint64_t sfx_candidates = 0;
+    std::uint64_t snow_candidates = 0;
+    std::uint64_t ntoa_candidates = 0;
     std::uint64_t phn_ready = 0;
     std::uint64_t gst_ready = 0;
     std::uint64_t sfx_ready = 0;
@@ -110,6 +115,11 @@ private:
     std::atomic<std::uint64_t> nospc_ready_{0};
     std::atomic<std::uint64_t> spc_ready_{0};
     std::atomic<std::uint64_t> spc_mr_hold_{0};
+    std::atomic<std::uint64_t> phn_candidates_{0};
+    std::atomic<std::uint64_t> gst_candidates_{0};
+    std::atomic<std::uint64_t> sfx_candidates_{0};
+    std::atomic<std::uint64_t> snow_candidates_{0};
+    std::atomic<std::uint64_t> ntoa_candidates_{0};
     std::atomic<std::uint64_t> phn_ready_{0};
     std::atomic<std::uint64_t> gst_ready_{0};
     std::atomic<std::uint64_t> sfx_ready_{0};
