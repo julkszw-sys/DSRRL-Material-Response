@@ -383,7 +383,8 @@ bool draw_state_transaction_runtime::begin(
             op,
             carrier_mask,
             (mutation.shader_owners & bit) != 0u,
-            (mutation.resource_owners & bit) != 0u
+            (mutation.resource_owners & bit) != 0u,
+            (mutation.constant_buffer_owners & bit) != 0u
         };
         plan.carrier_write_mask |= carrier_mask;
     }
