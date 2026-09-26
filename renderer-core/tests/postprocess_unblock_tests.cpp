@@ -5,6 +5,7 @@
 #include "dsrrl/operators/postprocess/bloom_scene_static_authority.hpp"
 #include "dsrrl/operators/postprocess/bloom_legacy_graph.hpp"
 #include "dsrrl/operators/postprocess/waterwave_authored_identity.hpp"
+#include "dsrrl/runtime/bloom_fx_draw_transport.hpp"
 
 #include <iostream>
 
@@ -151,6 +152,36 @@ int main()
     waterwave.blend_mode=1u;
     CHECK(validate_waterwave_authored_identity(waterwave)==
           waterwave_authored_identity_result::blend_mode_not_exact);
+
+    // Live authority is a stricter stage than authored identity. Exact
+    // WaterWave identity must be attached to the very same live Particle model
+    // instance that the authenticated collector draw resolves through.
+    runtime::bloom_fx_draw_transport::fx_draw_snapshot fxdraw{};
+    CHECK(runtime::bloom_fx_draw_transport::validate_waterwave_draw_authority(fxdraw)==
+          runtime::bloom_fx_draw_transport::waterwave_draw_authority_result::
+              draw_snapshot_not_ready);
+
+    fxdraw.ready=true;
+    fxdraw.exact_entity_vtable=true;
+    fxdraw.exact_appearance_vtable=true;
+    fxdraw.draw_context=reinterpret_cast<void *>(0x1);
+    fxdraw.kind=runtime::bloom_fx_draw_transport::fx_draw_entity_kind::particle;
+    CHECK(runtime::bloom_fx_draw_transport::validate_waterwave_draw_authority(fxdraw)==
+          runtime::bloom_fx_draw_transport::waterwave_draw_authority_result::
+              model_instance_not_joined);
+
+    fxdraw.particle_model_instance_join=true;
+    fxdraw.particle_model_instance=reinterpret_cast<void *>(0x2);
+    fxdraw.particle_model_generation=1u;
+    CHECK(runtime::bloom_fx_draw_transport::validate_waterwave_draw_authority(fxdraw)==
+          runtime::bloom_fx_draw_transport::waterwave_draw_authority_result::
+              authored_identity_not_exact);
+
+    fxdraw.waterwave_authored_identity_exact=true;
+    fxdraw.waterwave_same_model_instance=true;
+    CHECK(runtime::bloom_fx_draw_transport::validate_waterwave_draw_authority(fxdraw)==
+          runtime::bloom_fx_draw_transport::waterwave_draw_authority_result::
+              authorized);
 
     // Canonical static authority is deliberately incomplete. Rev9384 closes
     // FXHG collector insertion -> entity callback, not writer exhaustiveness
