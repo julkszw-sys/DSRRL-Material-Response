@@ -1,6 +1,8 @@
 #include "dsrrl/core/operator_catalog.hpp"
 #include "dsrrl/core/island_policy.hpp"
 #include "dsrrl/operators/postprocess/future_runtime_preflight.hpp"
+#include "dsrrl/operators/postprocess/bloom_scene_bridge.hpp"
+#include "dsrrl/operators/postprocess/bloom_legacy_graph.hpp"
 
 #include <iostream>
 
@@ -36,6 +38,25 @@ operators::postprocess::bloom_unblock_context ready_bloom()
     c.hdr_t1_handoff_verified=true;
     c.lightshaft_separation_preserved=true;
     c.stock_sfx_graph_preserved=true;
+    return c;
+}
+
+operators::postprocess::bloom_legacy_graph_carrier ready_bloom_graph()
+{
+    using namespace operators::postprocess;
+    bloom_legacy_graph_carrier c;
+    c.q8_scene_1024x720_ready=true;
+    c.packed_depth_256x180_ready=true;
+    c.fixed_rgba_256x180_ready=true;
+    c.fixed_rgba_128x90_ready=true;
+    c.first_pass04=bloom_pass04_role::packed_depth_first;
+    c.second_pass04=bloom_pass04_role::pre_brightpass_color_copy_second;
+    c.second_pass04_source_is_q8_scene=true;
+    c.second_pass04_destination_is_rgba_256x180=true;
+    c.pass18_brightpass_ready=true;
+    c.pass19_blur_h_ready=true;
+    c.pass1a_blur_v_ready=true;
+    c.hdr_t1_consumes_rgba_128x90=true;
     return c;
 }
 
@@ -113,8 +134,41 @@ int main()
     CHECK(gate.state==core::island_state::fail_open);
     CHECK(gate.reason==core::activation_reason::blocked);
 
-    // Bloom: current canonical blocker is the missing decoded-linear -> Q8
-    // stored-scene semantic bridge. The preflight must expose that first.
+    // The late DSR HDR surface is not an authenticated PTDE Q8 source.
+    bloom_scene_bridge_carrier scene{};
+    scene.source_domain=bloom_scene_source_domain::dsr_late_r11g11b10;
+    scene.history_proof=bloom_scene_history_proof::blend_history_closed;
+    scene.q8_a8r8g8b8_storage_verified=true;
+    scene.source_freshness_verified=true;
+    scene.graph_handoff_verified=true;
+    CHECK(validate_bloom_scene_bridge_carrier(scene)==
+          bloom_scene_bridge_result::source_domain_mismatch);
+
+    // Terminal SAT/Q8 by itself is not enough: complete writer-set and blend
+    // history closure are explicit prerequisites.
+    scene.source_domain=
+        bloom_scene_source_domain::ptde_normalized_scene_history_q8;
+    scene.history_proof=
+        bloom_scene_history_proof::terminal_sat_and_q8_storage_closed;
+    CHECK(validate_bloom_scene_bridge_carrier(scene)==
+          bloom_scene_bridge_result::writer_set_not_closed);
+    scene.history_proof=bloom_scene_history_proof::writer_set_closed;
+    CHECK(validate_bloom_scene_bridge_carrier(scene)==
+          bloom_scene_bridge_result::blend_history_not_closed);
+    scene.history_proof=bloom_scene_history_proof::blend_history_closed;
+    CHECK(validate_bloom_scene_bridge_carrier(scene)==
+          bloom_scene_bridge_result::exact_construction);
+
+    // PTDE pass 0x04 has two semantic roles. Stock DSR depth-only 0x04 cannot
+    // masquerade as the second PTDE Q8->RGBA color-copy edge.
+    auto graph=ready_bloom_graph();
+    CHECK(validate_bloom_legacy_graph_carrier(graph)==
+          bloom_legacy_graph_result::exact_construction);
+    graph.second_pass04=bloom_pass04_role::dsr_depth_only_host;
+    CHECK(validate_bloom_legacy_graph_carrier(graph)==
+          bloom_legacy_graph_result::second_pass04_role_mismatch);
+
+    // Bloom scene bridge remains the first real blocker.
     bloom_unblock_context bloom{};
     bloom.packed_depth_logical_bridge_ready=true;
     bloom.type06_host_verified=true;
@@ -153,6 +207,27 @@ int main()
     CHECK(bp.state==post_unblock_state::ready_for_partial);
     CHECK(bp.reason==bloom_unblock_reason::ready_for_partial);
     CHECK(!bp.direct_shader_body_swap_allowed);
+    CHECK(!bp.includes_sfx_in_postprocess);
+    CHECK(!bp.diagnostic_only);
+
+    // Owner-approved diagnostic scope: Bloom may intentionally affect SFX.
+    // This relaxes only SFX preservation, not scene/graph proof.
+    bloom=ready_bloom();
+    bloom.stock_sfx_graph_preserved=false;
+    bloom.sfx_scope=postprocess_sfx_scope::full_frame_diagnostic;
+    bloom.sfx_diagnostic_opt_in=true;
+    bloom.sfx_diagnostic_attribution_ready=true;
+    bloom.sfx_diagnostic_non_release=true;
+    bp=evaluate_bloom_unblock_preflight(bloom);
+    CHECK(bp.state==post_unblock_state::ready_for_partial);
+    CHECK(bp.includes_sfx_in_postprocess);
+    CHECK(bp.diagnostic_only);
+
+    bloom.sfx_diagnostic_non_release=false;
+    bp=evaluate_bloom_unblock_preflight(bloom);
+    CHECK(bp.state==post_unblock_state::blocked);
+    CHECK(bp.reason==
+          bloom_unblock_reason::sfx_diagnostic_release_guard_not_ready);
 
     // HDR: the historical R24 decoded-input body substitution must remain
     // forbidden until an explicit Q8 scene-domain bridge exists.
@@ -191,6 +266,32 @@ int main()
     CHECK(hp.reason==hdr_unblock_reason::ready_for_partial);
     CHECK(!hp.direct_legacy_body_swap_allowed);
     CHECK(!hp.whole_c56_copy_allowed);
+    CHECK(hp.preserve_native_sfx_island);
+    CHECK(!hp.includes_sfx_in_postprocess);
+    CHECK(!hp.diagnostic_only);
+
+    // Owner-approved full-frame diagnostic: legacy/PTDE HDR can be tested on
+    // the complete frame, including spells/VFX. Known DSR SFX inverse-tone
+    // semantics are not claimed equivalent; telemetry and non-release guards
+    // are mandatory so the test can be falsified by runtime/pixel evidence.
+    hdr=ready_hdr();
+    hdr.stock_dsr_sfx_preserved=false;
+    hdr.sfx_inverse_tonemap_contract_preserved=false;
+    hdr.sfx_scope=postprocess_sfx_scope::full_frame_diagnostic;
+    hdr.sfx_diagnostic_opt_in=true;
+    hdr.sfx_diagnostic_attribution_ready=true;
+    hdr.sfx_diagnostic_non_release=true;
+    hp=evaluate_hdr_unblock_preflight(hdr);
+    CHECK(hp.state==post_unblock_state::ready_for_partial);
+    CHECK(!hp.preserve_native_sfx_island);
+    CHECK(hp.includes_sfx_in_postprocess);
+    CHECK(hp.diagnostic_only);
+
+    hdr.sfx_diagnostic_attribution_ready=false;
+    hp=evaluate_hdr_unblock_preflight(hdr);
+    CHECK(hp.state==post_unblock_state::blocked);
+    CHECK(hp.reason==
+          hdr_unblock_reason::sfx_diagnostic_attribution_not_ready);
 
     std::cout<<"postprocess_unblock_tests: PASS\n";
     return 0;
