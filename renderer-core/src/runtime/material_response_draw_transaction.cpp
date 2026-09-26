@@ -635,6 +635,86 @@ has_receiver_upper_lower_spec_rgb_replacement(
         found->second.shader != nullptr;
 }
 
+bool material_response_draw_runtime::
+activate_spec_rgb_variant(
+    prepared_material_response_draw &prepared) noexcept
+{
+    if (!prepared.ready ||
+        prepared.shader == nullptr ||
+        prepared.receiver_id == 0u ||
+        prepared.spec_rgb_variant ||
+        local_quarantine_.load() ||
+        transactions_.quarantined())
+        return false;
+
+    replacement_record replacement{};
+
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+
+        const std::unordered_map<
+            std::uint32_t,
+            replacement_record> *bank =
+                nullptr;
+
+        switch (prepared.family) {
+        case material_response_replacement_family::stable:
+            bank = &spec_rgb_replacements_;
+            break;
+        case material_response_replacement_family::stable_upper_lower:
+            bank = &upper_lower_spec_rgb_replacements_;
+            break;
+        case material_response_replacement_family::lerp_upper_lower:
+            bank = &lerp_spec_rgb_replacements_;
+            break;
+        }
+
+        if (bank == nullptr)
+            return false;
+
+        const auto found =
+            bank->find(prepared.receiver_id);
+
+        if (found == bank->end() ||
+            found->second.shader == nullptr)
+            return false;
+
+        replacement = found->second;
+        replacement.shader->AddRef();
+    }
+
+    const auto spec_owner =
+        core::operator_bit(
+            core::operator_id::spec_rgb);
+
+    auto request = prepared.request;
+    request.pixel_shader =
+        replacement.shader;
+    request.additional_owners |=
+        spec_owner;
+    request.additional_shader_owners |=
+        spec_owner;
+
+    draw_tx_mutation verify{};
+    if (build_island_draw_mutation(
+            request,
+            verify) !=
+        island_draw_adapter_result::ready) {
+        replacement.shader->Release();
+        return false;
+    }
+
+    auto *old_shader = prepared.shader;
+    prepared.shader = replacement.shader;
+    prepared.request = request;
+    prepared.spec_rgb_variant = true;
+
+    if (old_shader != nullptr)
+        old_shader->Release();
+
+    return true;
+}
+
 bool material_response_draw_runtime::prepare_draw_request(
     const operators::material_response::decision &decision,
     prepared_material_response_draw &prepared) noexcept
@@ -674,6 +754,10 @@ bool material_response_draw_runtime::prepare_draw_request(
 
     prepared.shader = replacement.shader;
     prepared.b12 = b12;
+    prepared.family =
+        material_response_replacement_family::stable;
+    prepared.receiver_id =
+        decision.receiver_id;
     prepared.request.primary =
         core::operator_id::material_response;
     prepared.request.additional_owners =
@@ -760,6 +844,11 @@ prepare_draw_request_with_upper_lower(
 
     prepared.shader = replacement.shader;
     prepared.b12 = b12;
+    prepared.family =
+        material_response_replacement_family::
+            stable_upper_lower;
+    prepared.receiver_id =
+        decision.receiver_id;
     prepared.request.primary =
         core::operator_id::material_response;
     prepared.request.additional_owners =
@@ -856,6 +945,11 @@ prepare_lerp_draw_request_with_upper_lower(
 
     prepared.shader = replacement.shader;
     prepared.b12 = b12;
+    prepared.family =
+        material_response_replacement_family::
+            lerp_upper_lower;
+    prepared.receiver_id =
+        decision.receiver_id;
     prepared.request.primary =
         core::operator_id::material_response;
     prepared.request.additional_owners =
