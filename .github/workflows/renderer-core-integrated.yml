@@ -264,6 +264,11 @@ jobs:
             '0x0100003au',
             'terminal_rgb_output_instruction',
             'terminal_rgb_word',
+            'ul_u_slot_word',
+            'ul_d_slot_word_0',
+            'ul_d_slot_word_1',
+            'DSRRL_LightBankCarrier',
+            'upper_lower_composed',
             'terminal_sat_rgb_composed',
             '0x05002036u'
           )) {
@@ -318,7 +323,10 @@ jobs:
             'operator_id::env_spec',
             'operator_id::spec_rgb',
             'operator_id::terminal_sat_rgb',
+            'outcome.upper_lower_composed',
             'outcome.terminal_sat_rgb_composed',
+            'core::operator_id::upper_lower',
+            'prepare_upper_lower_carrier',
             'additional_constant_buffer_owners',
             '12u',
             '14u'
