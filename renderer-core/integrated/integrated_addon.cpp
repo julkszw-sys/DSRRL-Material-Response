@@ -2214,6 +2214,7 @@ bool AddonInit(
         flver_hooks &&
         g_upper_lower.install();
     (void)texture_hooks;
+    (void)upper_lower_hooks;
     (void)bloom_fx_hooks;
     (void)hemdir3_mode_hooks;
 
