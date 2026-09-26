@@ -28,7 +28,9 @@ enum class upper_lower_hemenv_stratum : std::uint8_t {
 
 enum class upper_lower_hemenv_family : std::uint8_t {
     hemenv = 0,
-    hemenvlerp
+    hemenvlerp,
+    hemenv_parallax,
+    hemenvlerp_parallax
 };
 
 struct upper_lower_hemenv_materialize_outcome {
