@@ -199,15 +199,13 @@ bool find_instruction_by_word(
 } // namespace
 
 fixed_local_specular_operand_contract
-extract_fixed_local_specular_operand_contract(
-    const void *pixel_shader_code,
-    std::size_t code_size) noexcept
+extract_fixed_local_specular_operand_contract_from_attested_shex_words(
+    const fixed_local_specular_patch_plan &plan,
+    const std::uint32_t *shex_shex_words,
+    std::size_t word_count) noexcept
 {
     fixed_local_specular_operand_contract out;
-    out.plan =
-        build_fixed_local_specular_patch_plan(
-            pixel_shader_code,
-            code_size);
+    out.plan = plan;
 
     if (out.plan.result ==
         fixed_local_specular_plan_result::
@@ -226,13 +224,10 @@ extract_fixed_local_specular_operand_contract(
         return out;
     }
 
-    std::array<std::uint32_t,k_max_words> words{};
-    std::size_t word_count=0u;
-    if (!code_words(
-            pixel_shader_code,
-            code_size,
-            words,
-            word_count)) {
+    if (shex_words == nullptr ||
+        word_count < 3u ||
+        word_count > k_max_words ||
+        shex_words[1] != word_count) {
         out.result =
             fixed_local_specular_operand_result::
                 fail_invalid_dxbc;
@@ -243,7 +238,7 @@ extract_fixed_local_specular_operand_contract(
         instructions{};
     std::size_t instruction_count=0u;
     if (!decode_instructions(
-            words.data(),
+            shex_shex_words,
             word_count,
             instructions,
             instruction_count)) {
@@ -291,17 +286,17 @@ extract_fixed_local_specular_operand_contract(
         // Every audited fixed DP3 here has:
         //   opcode | dst(2) | src0(2) | src1(2)
         const auto *vh_src0 =
-            words.data()+dp_vh.start+3u;
+            shex_words+dp_vh.start+3u;
         const auto *vh_src1 =
-            words.data()+dp_vh.start+5u;
+            shex_words+dp_vh.start+5u;
         const auto *nh_src0 =
-            words.data()+dp_nh.start+3u;
+            shex_words+dp_nh.start+3u;
         const auto *nh_src1 =
-            words.data()+dp_nh.start+5u;
+            shex_words+dp_nh.start+5u;
         const auto *nl_src0 =
-            words.data()+dp_nl.start+3u;
+            shex_words+dp_nl.start+3u;
         const auto *nl_src1 =
-            words.data()+dp_nl.start+5u;
+            shex_words+dp_nl.start+5u;
 
         // Semantic identities:
         //   DP3(V,H), DP3(N,H), DP3(N,L)
@@ -361,12 +356,12 @@ extract_fixed_local_specular_operand_contract(
 
             has_position = has_position ||
                 has_cb0_index(
-                    words.data(),
+                    shex_shex_words,
                     instruction,
                     expected_position);
             has_color = has_color ||
                 has_cb0_index(
-                    words.data(),
+                    shex_shex_words,
                     instruction,
                     expected_color);
 
@@ -377,7 +372,7 @@ extract_fixed_local_specular_operand_contract(
                      instruction.opcode ==
                         k_op_mul &&
                      has_cb0_index(
-                        words.data(),
+                        shex_shex_words,
                         instruction,
                         expected_color))
                 tail_color=true;
@@ -415,6 +410,47 @@ extract_fixed_local_specular_operand_contract(
     out.result =
         fixed_local_specular_operand_result::ready;
     return out;
+}
+
+
+fixed_local_specular_operand_contract
+extract_fixed_local_specular_operand_contract(
+    const void *pixel_shader_code,
+    std::size_t code_size) noexcept
+{
+    const auto plan =
+        build_fixed_local_specular_patch_plan(
+            pixel_shader_code,
+            code_size);
+
+    if (plan.result !=
+        fixed_local_specular_plan_result::ready)
+        return
+            extract_fixed_local_specular_operand_contract_from_attested_shex_words(
+                plan,
+                nullptr,
+                0u);
+
+    std::array<std::uint32_t,k_max_words> words{};
+    std::size_t word_count=0u;
+    if (!code_words(
+            pixel_shader_code,
+            code_size,
+            words,
+            word_count)) {
+        fixed_local_specular_operand_contract out;
+        out.plan=plan;
+        out.result=
+            fixed_local_specular_operand_result::
+                fail_invalid_dxbc;
+        return out;
+    }
+
+    return
+        extract_fixed_local_specular_operand_contract_from_attested_shex_words(
+            plan,
+            words.data(),
+            word_count);
 }
 
 } // namespace dsrrl::operators::point_light
