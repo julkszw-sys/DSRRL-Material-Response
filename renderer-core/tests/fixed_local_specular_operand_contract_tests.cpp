@@ -211,6 +211,19 @@ int main()
                 pass_not_fixed_local_specular);
     }
 
+    {
+        fixed_local_specular_patch_plan plan{};
+        plan.result=
+            fixed_local_specular_plan_result::
+                pass_not_local_specular_receiver;
+        const auto out=
+            extract_fixed_local_specular_operand_contract_from_attested_shex_words(
+                plan,nullptr,0u);
+        CHECK(out.result==
+            fixed_local_specular_operand_result::
+                pass_not_fixed_local_specular);
+    }
+
     std::cout<<"fixed_local_specular_operand_contract_tests: PASS\n";
     return 0;
 }
