@@ -1045,46 +1045,16 @@ void *run_wrapper(
     void *assignment,
     float x) noexcept
 {
+    // PERF DIAG N: preserve the exact wrapper detour/trampoline cost while
+    // disabling producer TLS, snapshot publication and all semantic capture.
     ++counter;
-
-    const auto previous =
-        g_producer;
-
-    g_producer = {};
-    g_producer.active = true;
-    g_producer.owner =
-        reinterpret_cast<std::uintptr_t>(
-            owner);
-    g_producer.assignment =
-        static_cast<const std::uint8_t *>(
-            assignment);
-
-    void *result =
-        original != nullptr
-            ? original(
-                rcx,
-                owner,
-                assignment,
-                x)
-            : nullptr;
-
-    const auto completed =
-        g_producer;
-    g_producer =
-        previous;
-
-    if (!completed.have_upper ||
-        !completed.have_lower) {
-        std::lock_guard<std::mutex> lock(
-            g_snapshot_mutex);
-        g_snapshots.erase(
-            completed.owner);
-    } else {
-        publish_snapshot(
-            completed);
-    }
-
-    return result;
+    return original != nullptr
+        ? original(
+            rcx,
+            owner,
+            assignment,
+            x)
+        : nullptr;
 }
 
 void *__fastcall hook_wrapper5(
@@ -1122,72 +1092,13 @@ void __fastcall hook_steady_packer(
     void *dst,
     std::int32_t selector) noexcept
 {
+    // PERF DIAG N: detour/trampoline only.
     ++g_steady_seen;
-
     if (g_steady_packer_orig != nullptr)
         g_steady_packer_orig(
             source,
             dst,
             selector);
-
-    if (!g_producer.active)
-        return;
-
-    if (g_pmetal_env_hook_armed.load()) {
-        f4 env{};
-        std::uint64_t bank = 0u;
-        std::uint32_t row = 0u;
-
-        if (read_exact_pmetal_env_source(
-                source,
-                selector,
-                env,
-                bank,
-                row)) {
-            g_producer.have_pmetal_env = true;
-            g_producer.pmetal_env_a = env;
-            g_producer.pmetal_env_b = env;
-            g_producer.pmetal_env_beta = 0.0f;
-            g_producer.pmetal_bank_a = bank;
-            g_producer.pmetal_bank_b = bank;
-            g_producer.pmetal_row_a = row;
-            g_producer.pmetal_row_b = row;
-            ++g_pmetal_env_steady;
-        } else {
-            ++g_pmetal_env_miss;
-        }
-    }
-
-    f4 upper{};
-    f4 lower{};
-
-    if (!read_selected_ptde(
-            source,
-            selector,
-            upper,
-            lower))
-        return;
-
-    g_producer.upper = upper;
-    g_producer.lower = lower;
-    g_producer.have_upper = true;
-    g_producer.have_lower = true;
-
-    const auto *raw =
-        resolve_raw_lightbank_record(
-            source,
-            selector);
-
-    if (evaluate_raw_d123(
-            raw,
-            raw,
-            0.0f,
-            g_producer.d123)) {
-        g_producer.have_d123 = true;
-        ++g_d123_steady;
-    }
-
-    ++g_steady_pass;
 }
 
 void *__fastcall hook_blend_packer(
@@ -1198,77 +1109,17 @@ void *__fastcall hook_blend_packer(
     std::int32_t selector_b,
     float beta) noexcept
 {
-    void *result =
-        g_blend_packer_orig != nullptr
-            ? g_blend_packer_orig(
-                dst,
-                source_a,
-                selector_a,
-                source_b,
-                selector_b,
-                beta)
-            : nullptr;
-
-    if (!g_producer.active)
-        return result;
-
-    const auto *raw_a =
-        resolve_raw_lightbank_record(
-            source_a,
-            selector_a);
-    const auto *raw_b =
-        resolve_raw_lightbank_record(
-            source_b,
-            selector_b);
-
-    const std::uint8_t *eval_a = raw_a;
-    const std::uint8_t *eval_b = raw_b;
-    float eval_beta = beta;
-
-    if (raw_a != nullptr &&
-        (selector_a == selector_b ||
-         raw_b == nullptr ||
-         beta <= 0.0f)) {
-        eval_b = raw_a;
-        eval_beta = 0.0f;
-    } else if (
-        raw_b != nullptr &&
-        (raw_a == nullptr ||
-         beta >= 1.0f)) {
-        eval_a = raw_b;
-        eval_b = raw_b;
-        eval_beta = 0.0f;
-    }
-
+    // PERF DIAG N: detour/trampoline only.
     ++g_blend_seen;
-
-    f4 upper{};
-    f4 lower{};
-    if (evaluate_raw_upper_lower(
-            eval_a,
-            eval_b,
-            eval_beta,
-            upper,
-            lower)) {
-        g_producer.upper = upper;
-        g_producer.lower = lower;
-        g_producer.have_upper = true;
-        g_producer.have_lower = true;
-        ++g_blend_upper;
-        ++g_blend_lower;
-    }
-
-    if (evaluate_raw_d123(
-            eval_a,
-            eval_b,
-            eval_beta,
-            g_producer.d123)) {
-        g_producer.have_d123 = true;
-        g_d123_blend_direction += 3u;
-        g_d123_blend_color += 3u;
-    }
-
-    return result;
+    return g_blend_packer_orig != nullptr
+        ? g_blend_packer_orig(
+            dst,
+            source_a,
+            selector_a,
+            source_b,
+            selector_b,
+            beta)
+        : nullptr;
 }
 
 void __fastcall hook_pmetal_env_blend(
@@ -1543,12 +1394,12 @@ void upper_lower_selector_event_bridge(
     void *r14,
     void *r15) noexcept
 {
-    if (g_runtime != nullptr)
-        g_runtime->selector_event(
-            owner,
-            return_address,
-            r14,
-            r15);
+    // PERF DIAG N: selector join is already runtime-exonerated by K and is
+    // disabled here so this build measures only raw native detour overhead.
+    (void)owner;
+    (void)return_address;
+    (void)r14;
+    (void)r15;
 }
 
 bool upper_lower_draw_runtime::install() noexcept
