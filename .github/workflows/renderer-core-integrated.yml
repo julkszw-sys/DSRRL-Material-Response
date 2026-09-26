@@ -267,6 +267,7 @@ jobs:
             'semantic_receiver_id',
             'g_ambiguous_pipeline',
             'hemenvlerp_receiver_observe_pipeline',
+            'hemenvlerp_receiver_observe_pipeline_digest',
             'hemenvlerp_receiver_observe_bind',
             'hemenvlerp_receiver_bound',
             'exact_identity',
