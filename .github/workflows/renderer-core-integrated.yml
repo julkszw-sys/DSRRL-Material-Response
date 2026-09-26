@@ -21,6 +21,9 @@ on:
       - "renderer-core/data/provenance/normal_routes_v12.tsv"
       - "renderer-core/data/provenance/bloom_fx_draw_transport_re_v1.json"
       - "renderer-core/data/provenance/bloom_waterwave_dsr_mtd_uniqueness_v1.json"
+      - "renderer-core/tools/generate_upper_lower_*.py"
+      - "renderer-core/tools/verify_upper_lower_executable_authority_v1.py"
+      - "renderer-core/data/provenance/upper_lower_*.tsv"
       - "renderer-core/tools/generate_hemdir3_receiver_registry_v1.py"
       - "renderer-core/data/provenance/hemdir3_receivers_v1.tsv"
       - "renderer-core/data/provenance/hemdir3_b13_patch_sites_v1.tsv"
@@ -43,6 +46,9 @@ on:
       - "renderer-core/src/operators/**"
       - "renderer-core/data/provenance/bloom_fx_draw_transport_re_v1.json"
       - "renderer-core/data/provenance/bloom_waterwave_dsr_mtd_uniqueness_v1.json"
+      - "renderer-core/tools/generate_upper_lower_*.py"
+      - "renderer-core/tools/verify_upper_lower_executable_authority_v1.py"
+      - "renderer-core/data/provenance/upper_lower_*.tsv"
       - ".github/workflows/renderer-core-integrated.yml"
 
 permissions:
@@ -90,6 +96,23 @@ jobs:
           }
 
           Write-Host "CORE_ISLANDS_FROZEN_LEGACY_BOUNDARY_PASS"
+
+      - name: Verify UpperLower executable SHA ownership
+        shell: bash
+        run: |
+          python3 renderer-core/tools/verify_upper_lower_executable_authority_v1.py \
+            --authority renderer-core/data/provenance/upper_lower_hemenv_consumers_v1.tsv \
+            --authority renderer-core/data/provenance/upper_lower_hemenvlerp_consumers_v1.tsv \
+            --authority renderer-core/data/provenance/upper_lower_phn_parallax_unique_v1.tsv \
+            --authority renderer-core/data/provenance/upper_lower_phn_pnts_unique_v1.tsv \
+            --authority renderer-core/data/provenance/upper_lower_phn_faceeye_v1.tsv \
+            --authority renderer-core/data/provenance/upper_lower_phn_subsurf_unique_v1.tsv \
+            --authority renderer-core/data/provenance/upper_lower_gst_v1.tsv \
+            --authority renderer-core/data/provenance/upper_lower_gst_faceeye_v1.tsv \
+            --authority renderer-core/data/provenance/upper_lower_sfx_v1.tsv \
+            --authority renderer-core/data/provenance/upper_lower_snow_v1.tsv \
+            --authority renderer-core/data/provenance/upper_lower_ntoa_v1.tsv \
+            --expected-plans 344
 
       - name: Checkout pinned ReShade API
         uses: actions/checkout@v4
