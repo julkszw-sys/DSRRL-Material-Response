@@ -607,7 +607,7 @@ void log_state(const char *tag) noexcept
     const auto mode =
         dsrrl::runtime::hemdir3_mode_transport::status();
 
-    char line[1984]{};
+    char line[4096]{};
     std::snprintf(
         line,
         sizeof(line),
@@ -747,7 +747,7 @@ void log_state(const char *tag) noexcept
 
     // Observe-only exact-hash census for the still-unarmed PTDE local
     // PointLight specular island. These counters are not bridge activation.
-    char local_spec_line[320]{};
+    char local_spec_line[768]{};
     std::snprintf(
         local_spec_line,
         sizeof(local_spec_line),
@@ -830,7 +830,7 @@ void log_state(const char *tag) noexcept
     const auto ul_draw =
         g_upper_lower_hemenv.telemetry();
 
-    char ul_line[768]{};
+    char ul_line[1280]{};
     std::snprintf(
         ul_line,
         sizeof(ul_line),
@@ -887,7 +887,7 @@ void log_state(const char *tag) noexcept
     const auto h3_draw =
         g_hemdir3.telemetry();
 
-    char h3_line[1024]{};
+    char h3_line[1536]{};
     std::snprintf(
         h3_line,
         sizeof(h3_line),
@@ -951,7 +951,7 @@ void log_state(const char *tag) noexcept
         dsrrl::runtime::
             hemenvlerp_receiver_pipeline_stats();
 
-    char env_line[1280]{};
+    char env_line[1536]{};
     std::snprintf(
         env_line,
         sizeof(env_line),
@@ -1044,7 +1044,7 @@ void log_state(const char *tag) noexcept
     const auto bloom_q8 =
         g_bloom_scene_sidecar.telemetry();
 
-    char bloom_line[640]{};
+    char bloom_line[768]{};
     std::snprintf(
         bloom_line,
         sizeof(bloom_line),
@@ -1078,7 +1078,7 @@ void log_state(const char *tag) noexcept
     const auto bloom_fx =
         dsrrl::runtime::bloom_fx_draw_transport::status();
 
-    char bloom_fx_line[896]{};
+    char bloom_fx_line[1536]{};
     std::snprintf(
         bloom_fx_line,
         sizeof(bloom_fx_line),
