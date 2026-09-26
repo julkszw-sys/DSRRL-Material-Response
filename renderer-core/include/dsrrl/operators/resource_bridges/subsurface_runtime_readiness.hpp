@@ -13,14 +13,21 @@ enum class subsurface_runtime_reason : std::uint8_t {
     route_not_active,
     replacement_shader_not_materialized,
     replacement_shader_identity_mismatch,
-    draw_transaction_not_ready
+    replacement_shader_lifecycle_not_verified
 };
 
 struct subsurface_runtime_context {
     subsurface_route_context route{};
     bool replacement_shader_materialized = false;
     bool replacement_shader_identity_verified = false;
-    bool draw_transaction_ready = false;
+
+    // The confirmed narrow carrier is create-time PS substitution/reuse. It
+    // does not need a separate draw-time Subsurface transaction: the ordinary
+    // target PS removes only the DSR-only t10/s10 Subsurf declarations, while
+    // all ordinary PTDE surface dependencies are independently gated by route.
+    // Runtime must instead prove that the exact replacement object survives
+    // create->init/use and is retired safely with its pipeline lifetime.
+    bool replacement_shader_lifecycle_verified = false;
 };
 
 struct subsurface_runtime_plan {
@@ -66,9 +73,9 @@ inline subsurface_runtime_plan evaluate_subsurface_runtime_readiness(
         return out;
     }
 
-    if (!context.draw_transaction_ready) {
+    if (!context.replacement_shader_lifecycle_verified) {
         out.reason =
-            subsurface_runtime_reason::draw_transaction_not_ready;
+            subsurface_runtime_reason::replacement_shader_lifecycle_not_verified;
         return out;
     }
 
