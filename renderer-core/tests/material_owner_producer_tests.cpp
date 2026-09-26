@@ -53,19 +53,19 @@ int main()
     id = runtime::make_actual_material_identity(o);
     CHECK(!id.owner_tuple_exact);
 
+    // This source-complete owner tuple is intentionally outside the current
+    // partial generic raw-MTD identity registry. Exact FLVER+slot ownership
+    // alone must not manufacture raw-MTD identity from an operator-specific
+    // table; unresolved generic identity therefore fails open.
     runtime::actual_material_owner_observation exact{};
     exact.flver_sha256=digest(
         "002271e70f2b00efd4d273b3a53b711ece681e6920d22e763af5355498368e20");
     exact.material_slot=0u;
     exact.material_slot_valid=true;
-    CHECK(runtime::enrich_exact_owner_mtd_identity(exact));
-    CHECK(exact.material.valid);
-    CHECK(exact.material.semantic_name_hash==0xce91d872734184bcull);
-    CHECK(exact.material.raw_mtd_sha256==digest(
-        "14a82945df959cab55bf9475ecba2822248b6a90911c6b017a86e57e2d60a52c"));
+    CHECK(!runtime::enrich_exact_owner_mtd_identity(exact));
+    CHECK(!exact.material.valid);
     const auto exact_id=runtime::make_actual_material_identity(exact);
-    CHECK(exact_id.owner_tuple_exact);
-    CHECK(exact_id.material_slot==0u);
+    CHECK(!exact_id.owner_tuple_exact);
 
     runtime::actual_material_owner_observation pmetal{};
     pmetal.flver_sha256=digest(
