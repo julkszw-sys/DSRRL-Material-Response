@@ -2,6 +2,7 @@
 
 #include "dsrrl/operators/legacy_plan/dxbc_checksum.hpp"
 
+#include <algorithm>
 #include <array>
 #include <cstddef>
 #include <cstdint>
