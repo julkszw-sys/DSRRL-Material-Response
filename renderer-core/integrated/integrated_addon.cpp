@@ -219,11 +219,26 @@ bool observe_draw_identity(
                  upper_lower_hemenv_family::phn_pnts ||
          upper_lower_identity.family ==
              dsrrl::operators::lightbank::
-                 upper_lower_hemenv_family::phn_faceeye);
+                 upper_lower_hemenv_family::phn_faceeye ||
+         upper_lower_identity.family ==
+             dsrrl::operators::lightbank::
+                 upper_lower_hemenv_family::phn_subsurf);
+
+    const bool upper_lower_standalone =
+        upper_lower_isolated &&
+        !subsurface_receiver;
+
+    const bool upper_lower_subsurf_combined =
+        upper_lower_receiver &&
+        upper_lower_identity.family ==
+            dsrrl::operators::lightbank::
+                upper_lower_hemenv_family::phn_subsurf &&
+        subsurface_receiver;
 
     const bool upper_lower_spc_matches_stable =
         !upper_lower_spc ||
-        upper_lower_isolated ||
+        upper_lower_standalone ||
+        upper_lower_subsurf_combined ||
         (upper_lower_identity.family ==
                  dsrrl::operators::lightbank::
                      upper_lower_hemenv_family::hemenv
@@ -236,7 +251,7 @@ bool observe_draw_identity(
 
     const bool upper_lower_unpaired_nospc =
         upper_lower_nospc &&
-        !upper_lower_isolated;
+        !upper_lower_standalone;
 
     const unsigned receiver_classes =
         (stable_receiver ? 1u : 0u) +
@@ -244,17 +259,22 @@ bool observe_draw_identity(
         (subsurface_receiver ? 1u : 0u) +
         (hemdir3_receiver ? 1u : 0u) +
         (upper_lower_unpaired_nospc ? 1u : 0u) +
-        (upper_lower_isolated ? 1u : 0u);
+        (upper_lower_standalone ? 1u : 0u);
 
     const bool receiver_ok =
         receiver_classes == 1u &&
         upper_lower_spc_matches_stable;
 
-    if (upper_lower_isolated) {
-        // Exact Parallax, PntS and FaceEye executable identities are U/L-only here.
-        // Do not borrow stable HemEnv/HemEnvLerp receiver IDs into MR,
-        // resources or EnvSpec. PntS may already carry exact A1 PointLight
-        // suboperators composed by stock SHA; this route owns only U/L+b13.
+    if (subsurface_receiver) {
+        // DSBT body Subsurf exact receivers 33..35 own the route. Their
+        // target plain-HemEnv replacement now includes fresh U/L+b13.
+        receiver_id = subsurface_target;
+        subsurface_bound = true;
+    } else if (upper_lower_standalone) {
+        // Exact Parallax, PntS, FaceEye and non-body Subsurf executable
+        // identities are U/L-only here. Do not borrow stable HemEnv/HemEnvLerp
+        // receiver IDs into MR/resources/EnvSpec. PntS may already carry
+        // exact A1 PointLight suboperators composed by stock SHA.
         receiver_id = 0u;
         upper_lower_bound = true;
     } else if (hemenvlerp_receiver) {
@@ -266,9 +286,6 @@ bool observe_draw_identity(
                 dsrrl::operators::lightbank::
                     upper_lower_hemenv_family::hemenvlerp)
             upper_lower_bound = true;
-    } else if (subsurface_receiver) {
-        receiver_id = subsurface_target;
-        subsurface_bound = true;
     } else if (hemdir3_receiver) {
         // HemDir3 has its own exact receiver namespace. no-Spc deliberately
         // has no paired stable HemEnv receiver, and Spc pairing is metadata
