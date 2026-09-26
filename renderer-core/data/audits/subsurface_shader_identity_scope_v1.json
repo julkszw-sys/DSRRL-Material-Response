@@ -1,0 +1,38 @@
+{
+  "schema": "dsrrl.renderer_core.subsurface_shader_identity_scope.v1",
+  "island": "bridge.subsurface",
+  "status": "CAPTURE_FREE_BOUNDARY_CLOSED",
+  "source_scope": {
+    "shader_registry": "DarkSoulsRemastered.exe stock PHN/Gst/Sfx template registry",
+    "shader_binder": "FRPG_FlverPBL_fpo_DX11.shaderbnd.dcx",
+    "mtd_binder": "DSR Mtd.mtdbnd.dcx (581 members; reverse selector join still required)"
+  },
+  "closed": {
+    "registry_template": "FRPG_Phn_%s_HemEnvSubsurf",
+    "template_semantics": "generic PHN feature-composed receiver template, not a material-name template",
+    "subsurf_binder_population": 96,
+    "exact_candidate_aliases": [
+      {"index":907,"name":"FRPG_Phn_DifSpcBmp______Csd_HemEnvSubsurf.fpo","sha256":"0b8288d686c8f349ad87352946be51ffd007462f25357326bf47e736e690e511"},
+      {"index":926,"name":"FRPG_Phn_DifSpcBmp______Sdw_HemEnvSubsurf.fpo","sha256":"885337e50f3d29f086fd18e1f7524f28712031d0264964aef5f37037df7d7bcb"},
+      {"index":945,"name":"FRPG_Phn_DifSpcBmp__________HemEnvSubsurf.fpo","sha256":"3002cfb9aee6835412399c3be267ab94c5706d7d5030fc4cafc82bc54c55a860"}
+    ],
+    "identity_scope": "exact shader feature body only"
+  },
+  "not_closed": {
+    "material_owner_identity": true,
+    "reverse_selector_join": "all DSR MTD -> SPX -> feature-key/receiver selection -> exact HemEnvSubsurf SHA -> all FLVER/material-slot owners",
+    "create_time_owner_exclusivity": false,
+    "runtime_activation": false,
+    "pixel_equivalence": false
+  },
+  "carrier_rule": "Do not treat exact HemEnvSubsurf DXBC SHA as Ps_Body material identity. Global create-time substitution remains fail-open until source-complete owner exclusivity is proven or an equivalent owner token is available at create time.",
+  "provenance": {
+    "basis_evidence": [
+      "ce6d17de-b47e-44b0-a5c9-a3094eebf396",
+      "8d596828-45b8-4a2f-9ab8-fb9dc3488d8e",
+      "1f88ec37-1f3b-43b5-93d2-4c4fa7da92aa",
+      "fe2245cd-a4b3-43ca-ab59-ac5d9c4700f8"
+    ],
+    "method": "capture-free cross-join of stock template-registry semantics, binder population, exact SHA aliases and existing material-owner boundary"
+  }
+}
