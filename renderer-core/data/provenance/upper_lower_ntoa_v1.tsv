@@ -1,0 +1,8 @@
+# DSRRL Upper/Lower ntoa exact executable authority v1
+# source_dcx_sha256=ad180732ac79d5d98783aa504c789c2bab15e515c3b0f66b237d8b8c69113394
+# source_bnd3_sha256=9ad94df9e282e6fd559605506aa16d74eeb1ef3ebb1ed3002c5affee80018464
+# one row per unique executable SHA; exact U/L triad only; runtime remains fresh-selector gated and fail-open.
+plan_index	shader_index	stable_receiver_id	stratum	family	declaration_word	name	stock_size	stock_sha256	u_slot_word	d_slot_word_0	d_slot_word_1	replacement_size	replacement_sha256
+258	715	0	nospc	ntoa	11	FRPG_NtoA_Csd.fpo	11464	892cbf03a59545d78c71697b6a8dbe065f8c49d9d6ab136bc732cf88b3ef166d	106	110	120	11864	7cf61d4658aac43a04968f478d54b592c8b333a0271e5f45a1fb1d2600fa8628
+259	717	0	nospc	ntoa	11	FRPG_NtoA_Non.fpo	9616	e5f1035f73ed69a7e77e9bbb1ae74637869dd08f0488c4f4f5c2d12d04588fdc	96	100	110	9952	36030f3571bbb472f7f883872dc2c0be482806f78cf2ce1c54bf50b7676aade4
+260	718	0	nospc	ntoa	11	FRPG_NtoA_Sdw.fpo	11112	3aa99071079ffcd547414d0ef8b88f196dd29c3f379f63a79f90ce6c43c722bb	106	110	120	11512	d27948c38f0801d6810da8b940ce164232073040c041067c276da13bb2c94e09
