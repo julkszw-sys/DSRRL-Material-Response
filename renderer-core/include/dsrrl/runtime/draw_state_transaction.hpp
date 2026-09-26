@@ -84,6 +84,7 @@ struct draw_tx_telemetry {
     std::uint64_t draws_issued = 0;
     std::uint64_t restore_ok = 0;
     std::uint64_t restore_fail = 0;
+    std::uint64_t native_readback_skipped = 0;
     bool quarantined = false;
 };
 
