@@ -41,6 +41,16 @@ constexpr bool material_response_spec_rgb_pair_owners_match(
         (spec_owners & ~spec) == base_owners;
 }
 
+static_assert(
+    material_response_spec_rgb_pair_owners_match(
+        0u,
+        core::operator_bit(core::operator_id::spec_rgb)));
+
+static_assert(
+    !material_response_spec_rgb_pair_owners_match(
+        core::operator_bit(core::operator_id::material_response),
+        core::operator_bit(core::operator_id::spec_rgb)));
+
 struct prepared_material_response_draw {
     island_draw_adapter_request request{};
     ID3D11PixelShader *shader = nullptr;
