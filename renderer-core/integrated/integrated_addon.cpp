@@ -29,7 +29,7 @@
 #include "dsrrl/operators/resource_bridges/spec_rgb_consumer_materializer.hpp"
 #include "dsrrl/operators/env_spec/pmetal_rgba_materializer.hpp"
 #include "dsrrl/operators/env_spec/pmetal_rgba_lerp_materializer.hpp"
-#include "dsrrl/operators/point_light/local_specular_receiver_registry.hpp"
+#include "dsrrl/operators/point_light/local_specular_receiver_registry.hpp"\n#include "dsrrl/operators/point_light/local_specular_microfacet_windows.hpp"
 
 #include <reshade.hpp>
 #include <d3d11.h>
@@ -121,6 +121,9 @@ std::atomic<std::uint64_t> g_local_specular_receiver_hits{0};
 std::atomic<std::uint64_t> g_local_specular_clustered_hits{0};
 std::atomic<std::uint64_t> g_local_specular_fixed2_hits{0};
 std::atomic<std::uint64_t> g_local_specular_fixed4_hits{0};
+std::atomic<std::uint64_t> g_local_specular_window_pass{0};
+std::atomic<std::uint64_t> g_local_specular_window_fail{0};
+std::atomic<std::uint64_t> g_local_specular_windows_total{0};
 
 enum integrated_draw_route_bit : std::uint8_t {
     k_route_stable = 1u << 0,
@@ -728,12 +731,16 @@ void log_state(const char *tag) noexcept
         local_spec_line,
         sizeof(local_spec_line),
         "[DSRRL CORE+ISLANDS " DSRRL_CORE_ISLANDS_VERSION "] %s "
-        "LOCAL_SPEC_RX exact=%llu clustered=%llu fixed2=%llu fixed4=%llu armed=0",
+        "LOCAL_SPEC_RX exact=%llu clustered=%llu fixed2=%llu fixed4=%llu "
+        "window_pass=%llu window_fail=%llu windows=%llu armed=0",
         tag,
         static_cast<unsigned long long>(g_local_specular_receiver_hits.load()),
         static_cast<unsigned long long>(g_local_specular_clustered_hits.load()),
         static_cast<unsigned long long>(g_local_specular_fixed2_hits.load()),
-        static_cast<unsigned long long>(g_local_specular_fixed4_hits.load()));
+        static_cast<unsigned long long>(g_local_specular_fixed4_hits.load()),
+        static_cast<unsigned long long>(g_local_specular_window_pass.load()),
+        static_cast<unsigned long long>(g_local_specular_window_fail.load()),
+        static_cast<unsigned long long>(g_local_specular_windows_total.load()));
     reshade::log::message(
         reshade::log::level::info,
         local_spec_line);
@@ -1177,6 +1184,22 @@ bool on_create_pipeline(
                 break;
             default:
                 break;
+            }
+
+            const auto window_scan =
+                dsrrl::operators::point_light::
+                    scan_local_specular_microfacet_windows(
+                        source,
+                        pixel_shader->code_size,
+                        local_specular_identity.receiver_class);
+            if (window_scan.result ==
+                    dsrrl::operators::point_light::
+                        local_specular_window_result::exact) {
+                ++g_local_specular_window_pass;
+                g_local_specular_windows_total.fetch_add(
+                    window_scan.window_count);
+            } else {
+                ++g_local_specular_window_fail;
             }
         }
 
@@ -2227,6 +2250,9 @@ bool AddonInit(
     g_local_specular_clustered_hits.store(0);
     g_local_specular_fixed2_hits.store(0);
     g_local_specular_fixed4_hits.store(0);
+    g_local_specular_window_pass.store(0);
+    g_local_specular_window_fail.store(0);
+    g_local_specular_windows_total.store(0);
     reset_integrated_draw_routes();
     for (auto &rx : g_material_receiver_runtime) {
         rx.seen.store(0);
