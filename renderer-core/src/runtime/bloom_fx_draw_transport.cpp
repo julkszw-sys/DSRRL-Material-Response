@@ -23,6 +23,8 @@
 namespace dsrrl::runtime::bloom_fx_draw_transport {
 namespace {
 
+namespace pp = dsrrl::operators::postprocess;
+
 constexpr std::uintptr_t k_particle_draw_rva = 0x00FFCF30u;
 constexpr std::uintptr_t k_cluster_draw_rva = 0x00FFDCE0u;
 
@@ -82,6 +84,8 @@ struct particle_model_record {
     void *arg4 = nullptr;
     void *arg5 = nullptr;
     std::uint64_t generation = 0;
+    pp::waterwave_authored_identity waterwave_identity{};
+    bool waterwave_identity_exact = false;
 };
 
 struct tls_state {
@@ -117,6 +121,9 @@ std::atomic<std::uint64_t> g_particle_model_ctor_events{0};
 std::atomic<std::uint64_t> g_particle_model_dtor_events{0};
 std::atomic<std::uint64_t> g_particle_model_join_hits{0};
 std::atomic<std::uint64_t> g_particle_model_join_misses{0};
+std::atomic<std::uint64_t> g_waterwave_publish_ok{0};
+std::atomic<std::uint64_t> g_waterwave_publish_fail{0};
+std::atomic<std::uint64_t> g_waterwave_same_instance_hits{0};
 std::atomic<std::uint64_t> g_snapshot_hits{0};
 std::atomic<std::uint64_t> g_snapshot_misses{0};
 std::atomic<std::uint64_t> g_generation{0};
@@ -441,7 +448,16 @@ bool join_particle_model(
             found->second.arg4;
         snap.particle_model_arg5 =
             found->second.arg5;
+        snap.particle_model_generation =
+            found->second.generation;
         snap.particle_model_instance_join = true;
+        snap.waterwave_authored_identity_exact =
+            found->second.waterwave_identity_exact;
+        snap.waterwave_same_model_instance =
+            found->second.waterwave_identity_exact &&
+            found->second.generation != 0u;
+        if (snap.waterwave_same_model_instance)
+            ++g_waterwave_same_instance_hits;
         ++g_particle_model_join_hits;
         return true;
     }
@@ -822,6 +838,38 @@ void uninstall() noexcept
     g_state = {};
 }
 
+bool publish_waterwave_model_identity(
+    void *particle_model_instance,
+    const pp::waterwave_authored_identity &identity) noexcept
+{
+    if (particle_model_instance == nullptr ||
+        pp::validate_waterwave_authored_identity(identity) !=
+            pp::waterwave_authored_identity_result::
+                exact_authored_identity) {
+        ++g_waterwave_publish_fail;
+        return false;
+    }
+
+    std::lock_guard<std::mutex> lock(g_model_mutex);
+
+    const auto found =
+        g_particle_models.find(
+            reinterpret_cast<std::uintptr_t>(
+                particle_model_instance));
+
+    if (found == g_particle_models.end() ||
+        found->second.generation == 0u) {
+        ++g_waterwave_publish_fail;
+        return false;
+    }
+
+    found->second.waterwave_identity =
+        identity;
+    found->second.waterwave_identity_exact = true;
+    ++g_waterwave_publish_ok;
+    return true;
+}
+
 bool snapshot(
     fx_draw_snapshot &out) noexcept
 {
@@ -874,6 +922,12 @@ telemetry status() noexcept
         g_particle_model_join_hits.load();
     out.particle_model_join_misses =
         g_particle_model_join_misses.load();
+    out.waterwave_publish_ok =
+        g_waterwave_publish_ok.load();
+    out.waterwave_publish_fail =
+        g_waterwave_publish_fail.load();
+    out.waterwave_same_instance_hits =
+        g_waterwave_same_instance_hits.load();
     {
         std::lock_guard<std::mutex> lock(g_model_mutex);
         out.particle_model_registry_size =
@@ -903,6 +957,9 @@ void reset_stats() noexcept
     g_particle_model_dtor_events.store(0u);
     g_particle_model_join_hits.store(0u);
     g_particle_model_join_misses.store(0u);
+    g_waterwave_publish_ok.store(0u);
+    g_waterwave_publish_fail.store(0u);
+    g_waterwave_same_instance_hits.store(0u);
     g_snapshot_hits.store(0u);
     g_snapshot_misses.store(0u);
     g_generation.store(0u);
