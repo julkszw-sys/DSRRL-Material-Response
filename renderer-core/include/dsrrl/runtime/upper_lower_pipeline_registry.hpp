@@ -23,6 +23,47 @@ struct upper_lower_receiver_identity {
     }
 };
 
+constexpr bool upper_lower_identity_runtime_shape_valid(
+    const upper_lower_receiver_identity &identity) noexcept
+{
+    if (!identity.valid())
+        return false;
+
+    const bool spc =
+        identity.stratum ==
+            operators::lightbank::
+                upper_lower_hemenv_stratum::spc;
+
+    const bool spc_without_stable_receiver_id =
+        identity.family ==
+            operators::lightbank::
+                upper_lower_hemenv_family::phn_faceeye ||
+        identity.family ==
+            operators::lightbank::
+                upper_lower_hemenv_family::gst ||
+        identity.family ==
+            operators::lightbank::
+                upper_lower_hemenv_family::gst_faceeye ||
+        identity.family ==
+            operators::lightbank::
+                upper_lower_hemenv_family::sfx ||
+        identity.family ==
+            operators::lightbank::
+                upper_lower_hemenv_family::snow ||
+        identity.family ==
+            operators::lightbank::
+                upper_lower_hemenv_family::ntoa;
+
+    if (!spc)
+        return identity.stable_receiver_id == 0u;
+
+    if (spc_without_stable_receiver_id)
+        return identity.stable_receiver_id == 0u;
+
+    return identity.stable_receiver_id >= 24u &&
+           identity.stable_receiver_id <= 47u;
+}
+
 struct upper_lower_pipeline_telemetry {
     std::uint64_t created_code_attested = 0;
     std::uint64_t created_code_conflict = 0;
