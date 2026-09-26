@@ -36,7 +36,7 @@ bool exact_dsbt_material(
         material.material_slot_valid &&
         material.semantic_name_hash ==
             mr::mtd_semantic_hash(
-                subs::k_dsr_body_subsurf_material) &&
+                subs::k_dsr_body_subsurf_material.data()) &&
         operators::legacy_plan::hashing::
             matches_hex(
                 material.raw_mtd_sha256,
