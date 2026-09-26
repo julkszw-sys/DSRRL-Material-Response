@@ -493,6 +493,17 @@ jobs:
 
           if ($bridge -match 'P_Metal|P_METAL|pmetal') { throw "Generic A1 bridge must not special-case P_Metal; P_Metal belongs to the exact EnvSpec island" }
           Write-Host "CORE_ISLANDS_SHARED_DRAW_TRANSACTION_BOUNDARY_PASS"
+      - name: Verify P_Metal EnvSpec source authority
+        shell: pwsh
+        run: |
+          python renderer-core/tools/generate_pmetal_env_source_authority.py --input renderer-core/provenance/mr145/SOURCE_V13_PTDE_DONOR.cpp --output "$env:RUNNER_TEMP/generated_pmetal_env_source_authority.hpp"
+          $built = "build-integrated/generated/dsrrl/runtime/generated_pmetal_env_source_authority.hpp"
+          if (!(Test-Path $built)) { throw "Generated P_Metal EnvSpec source authority missing from build" }
+          if ((Get-FileHash $built -Algorithm SHA256).Hash -ne (Get-FileHash "$env:RUNNER_TEMP/generated_pmetal_env_source_authority.hpp" -Algorithm SHA256).Hash) {
+            throw "Generated P_Metal EnvSpec source authority is not reproducible"
+          }
+          Write-Host "CORE_ISLANDS_PMETAL_ENVSPEC_SOURCE_AUTHORITY_PASS"
+
       - name: Verify UpperLower generated authority
         shell: pwsh
         run: |
@@ -585,6 +596,13 @@ jobs:
           $textureTransportHash = (Get-FileHash "renderer-core/src/runtime/texture_identity_transport.cpp" -Algorithm SHA256).Hash.ToLowerInvariant()
           $textureDetourHash = (Get-FileHash "renderer-core/integrated/texture_identity_detour.asm" -Algorithm SHA256).Hash.ToLowerInvariant()
           $resourceRuntimeHash = (Get-FileHash "renderer-core/src/runtime/material_resource_draw_runtime.cpp" -Algorithm SHA256).Hash.ToLowerInvariant()
+          $specConsumerHash = (Get-FileHash "renderer-core/src/operators/resource_bridges/spec_rgb_consumer_materializer.cpp" -Algorithm SHA256).Hash.ToLowerInvariant()
+          $envspecMaterializerHash = (Get-FileHash "renderer-core/src/operators/env_spec/pmetal_rgba_materializer.cpp" -Algorithm SHA256).Hash.ToLowerInvariant()
+          $envspecAuthorityHash = (Get-FileHash "renderer-core/include/dsrrl/operators/env_spec/pmetal_rgba_authority.hpp" -Algorithm SHA256).Hash.ToLowerInvariant()
+          $envspecResourceRuntimeHash = (Get-FileHash "renderer-core/src/runtime/envspec_resource_runtime.cpp" -Algorithm SHA256).Hash.ToLowerInvariant()
+          $envspecDrawRuntimeHash = (Get-FileHash "renderer-core/src/runtime/pmetal_envspec_draw_runtime.cpp" -Algorithm SHA256).Hash.ToLowerInvariant()
+          $pmetalSourceAuthorityHash = (Get-FileHash "renderer-core/provenance/mr145/SOURCE_V13_PTDE_DONOR.cpp" -Algorithm SHA256).Hash.ToLowerInvariant()
+          $pmetalSourceGeneratorHash = (Get-FileHash "renderer-core/tools/generate_pmetal_env_source_authority.py" -Algorithm SHA256).Hash.ToLowerInvariant()
           $subsurfaceRuntimeHash = (Get-FileHash "renderer-core/src/runtime/subsurface_draw_runtime.cpp" -Algorithm SHA256).Hash.ToLowerInvariant()
           $subsurfaceRegistryHash = (Get-FileHash "renderer-core/src/runtime/subsurface_pipeline_registry.cpp" -Algorithm SHA256).Hash.ToLowerInvariant()
           $upperLowerHash = (Get-FileHash "renderer-core/src/runtime/upper_lower_draw_runtime.cpp" -Algorithm SHA256).Hash.ToLowerInvariant()
@@ -653,6 +671,16 @@ jobs:
             texture_identity_transport_sha256 = $textureTransportHash
             texture_identity_detour_sha256 = $textureDetourHash
             material_resource_draw_runtime_sha256 = $resourceRuntimeHash
+            spec_rgb_consumer_materializer_sha256 = $specConsumerHash
+            pmetal_envspec_materializer_sha256 = $envspecMaterializerHash
+            pmetal_envspec_shader_authority_sha256 = $envspecAuthorityHash
+            pmetal_envspec_resource_runtime_sha256 = $envspecResourceRuntimeHash
+            pmetal_envspec_draw_runtime_sha256 = $envspecDrawRuntimeHash
+            pmetal_envspec_source_authority_sha256 = $pmetalSourceAuthorityHash
+            pmetal_envspec_source_generator_sha256 = $pmetalSourceGeneratorHash
+            pmetal_envspec_source_authority = "20_BANKS_1246_ROWS_EXACT"
+            pmetal_envspec_route = "P_METAL_DSB_ROUTE345_RECEIVERS33_34_35_SLOT2"
+            pmetal_envspec_runtime_activation = "NOT_TESTED"
             subsurface_draw_runtime_sha256 = $subsurfaceRuntimeHash
             subsurface_pipeline_registry_sha256 = $subsurfaceRegistryHash
             upper_lower_draw_runtime_sha256 = $upperLowerHash
