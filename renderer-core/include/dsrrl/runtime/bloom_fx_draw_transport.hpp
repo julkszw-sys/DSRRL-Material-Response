@@ -38,6 +38,52 @@ struct fx_draw_snapshot {
     bool ready = false;
 };
 
+enum class waterwave_draw_authority_result : std::uint8_t {
+    authorized = 0,
+    draw_snapshot_not_ready,
+    wrong_entity_kind,
+    model_instance_not_joined,
+    model_generation_missing,
+    authored_identity_not_exact,
+    same_instance_join_not_closed
+};
+
+inline waterwave_draw_authority_result
+validate_waterwave_draw_authority(
+    const fx_draw_snapshot &snapshot) noexcept
+{
+    if (!snapshot.ready ||
+        !snapshot.exact_entity_vtable ||
+        !snapshot.exact_appearance_vtable ||
+        snapshot.draw_context == nullptr)
+        return waterwave_draw_authority_result::
+            draw_snapshot_not_ready;
+
+    if (snapshot.kind !=
+        fx_draw_entity_kind::particle)
+        return waterwave_draw_authority_result::
+            wrong_entity_kind;
+
+    if (!snapshot.particle_model_instance_join ||
+        snapshot.particle_model_instance == nullptr)
+        return waterwave_draw_authority_result::
+            model_instance_not_joined;
+
+    if (snapshot.particle_model_generation == 0u)
+        return waterwave_draw_authority_result::
+            model_generation_missing;
+
+    if (!snapshot.waterwave_authored_identity_exact)
+        return waterwave_draw_authority_result::
+            authored_identity_not_exact;
+
+    if (!snapshot.waterwave_same_model_instance)
+        return waterwave_draw_authority_result::
+            same_instance_join_not_closed;
+
+    return waterwave_draw_authority_result::authorized;
+}
+
 struct telemetry {
     bool provenance_ok = false;
     bool particle_hook_armed = false;
