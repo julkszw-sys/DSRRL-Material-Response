@@ -23,7 +23,7 @@ int main()
         0u,0u,stock)==
         fixed_local_specular_pow_emit_result::exact);
 
-    constexpr std::array<std::uint32_t,26> expected_stock{{
+    constexpr std::array<std::uint32_t,25> expected_stock{{
         0x08000034u,
         0x00100012u,0x00000000u,
         0x0010000au,0x00000000u,
