@@ -1423,6 +1423,8 @@ bool on_draw(
 {
     draw_semantic_selection_guard semantic_guard{};
     std::uint32_t receiver_id = 0u;
+    bool hemenvlerp_bound = false;
+    dsrrl::runtime::hemenvlerp_receiver_identity hemenvlerp_identity{};
     bool subsurface_bound = false;
     bool hemdir3_bound = false;
     dsrrl::runtime::hemdir3_receiver_identity hemdir3_identity{};
@@ -1434,6 +1436,8 @@ bool on_draw(
     if (!observe_draw_identity(
             cmd_list,
             receiver_id,
+            hemenvlerp_bound,
+            hemenvlerp_identity,
             subsurface_bound,
             hemdir3_bound,
             hemdir3_identity,
@@ -1447,6 +1451,7 @@ bool on_draw(
     if (!prepare_island_batch(
             cmd_list,
             receiver_id,
+            hemenvlerp_bound,
             subsurface_bound,
             hemdir3_bound,
             hemdir3_identity,
@@ -1491,6 +1496,8 @@ bool on_draw_indexed(
 {
     draw_semantic_selection_guard semantic_guard{};
     std::uint32_t receiver_id = 0u;
+    bool hemenvlerp_bound = false;
+    dsrrl::runtime::hemenvlerp_receiver_identity hemenvlerp_identity{};
     bool subsurface_bound = false;
     bool hemdir3_bound = false;
     dsrrl::runtime::hemdir3_receiver_identity hemdir3_identity{};
@@ -1502,6 +1509,8 @@ bool on_draw_indexed(
     if (!observe_draw_identity(
             cmd_list,
             receiver_id,
+            hemenvlerp_bound,
+            hemenvlerp_identity,
             subsurface_bound,
             hemdir3_bound,
             hemdir3_identity,
@@ -1515,6 +1524,7 @@ bool on_draw_indexed(
     if (!prepare_island_batch(
             cmd_list,
             receiver_id,
+            hemenvlerp_bound,
             subsurface_bound,
             hemdir3_bound,
             hemdir3_identity,
