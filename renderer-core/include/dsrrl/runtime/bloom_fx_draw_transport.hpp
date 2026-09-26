@@ -15,10 +15,15 @@ struct fx_draw_snapshot {
     fx_draw_entity_kind kind = fx_draw_entity_kind::unknown;
     void *entity = nullptr;
     void *appearance_state = nullptr;
+    void *appearance_source_primary = nullptr;
+    void *appearance_source_secondary = nullptr;
     void *draw_context = nullptr;
     std::uint32_t mode_token = 0;
+    std::uint32_t appearance_semantic_word = 0;
     bool exact_entity_vtable = false;
+    bool exact_appearance_vtable = false;
     bool appearance_state_ready = false;
+    bool source_links_ready = false;
     bool ready = false;
 };
 
@@ -35,6 +40,10 @@ struct telemetry {
     std::uint64_t entity_rejects = 0;
     std::uint64_t state_ready_hits = 0;
     std::uint64_t state_missing = 0;
+    std::uint64_t exact_state_hits = 0;
+    std::uint64_t state_vtable_rejects = 0;
+    std::uint64_t source_links_ready = 0;
+    std::uint64_t source_links_missing = 0;
     std::uint64_t snapshot_hits = 0;
     std::uint64_t snapshot_misses = 0;
 };
@@ -44,7 +53,9 @@ struct telemetry {
 // PTDE collector vfunc index 10 dispatches through Particle 0x556CF0 /
 // Cluster 0x5576D0 and both delegate through entity+0x30 appearance state.
 // Retail DSR preserves the same index-10 contract at RVA 0xFFCF30 / 0xFFDCE0
-// and the same entity+0x30 appearance-state carrier.
+// and the same entity+0x30 appearance-state carrier. DSR Particle appearance
+// state retains source links at +0x30/+0x38; Cluster retains them at
+// +0x50/+0x58 and an additional semantic word at +0x60.
 //
 // This transport authenticates the exact retail executable indirectly through
 // the already source-complete FLVER provenance gate, then byte-attests both
