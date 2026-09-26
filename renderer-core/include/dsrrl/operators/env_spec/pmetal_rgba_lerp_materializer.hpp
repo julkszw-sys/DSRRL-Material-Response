@@ -26,6 +26,7 @@ struct pmetal_rgba_lerp_materialize_outcome {
 
     std::uint8_t pair_index = 0xffu;
     std::uint32_t semantic_receiver_id = 0u;
+    bool envdiffuse_preserved = false;
     bool spec_rgb_consumer = false;
 };
 
