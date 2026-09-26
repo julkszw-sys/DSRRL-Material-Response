@@ -14,7 +14,7 @@ namespace dsrrl::operators::point_light {
 // gFC_SpcParam.x / cb0[11].x.  The PointLight bridge reuses the same lowering
 // but sources the PTDE-authored exponent from Material Response b12[0].w.
 struct fixed_local_specular_pow_lowering {
-    static constexpr std::size_t word_count = 26u;
+    static constexpr std::size_t word_count = 25u;
     std::array<std::uint32_t,word_count> words{};
 };
 
