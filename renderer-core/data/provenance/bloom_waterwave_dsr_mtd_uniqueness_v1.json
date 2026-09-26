@@ -1,0 +1,33 @@
+{
+  "schema": "dsrrl.bloom_waterwave_dsr_mtd_uniqueness.v1",
+  "operator": "post.bloom",
+  "status": "CONFIRMED_STATIC_ASSET_IDENTITY",
+  "source": {
+    "container": "DSRRL_FINAL_EVIDENCE_PART02(2).zip::DSR/mtd/Mtd.mtdbnd.dcx",
+    "dcx_sha256": "7c5a0952c1016a3efa3c6a7180bc60af81ccf7b2a4685c3c89028eda78c2d8b5",
+    "decoded_bnd3_sha256": "621f787733e8fc9cd08eaac39ef433394a57d9328342c41fec77766e793344c9",
+    "decoded_size": 1419160,
+    "binder_member_count": 581
+  },
+  "waterwave": {
+    "material_name": "S[DB]_Alp_water.mtd",
+    "material_name_occurrences_in_decoded_binder": 1,
+    "spx": "FRPG_WaterWaveSfx.spx",
+    "spx_occurrences_in_decoded_binder": 1,
+    "flag_name": "g_IsWaterWaveSfx",
+    "flag_name_occurrences_in_decoded_binder": 1,
+    "raw_mtd_size": 1232,
+    "raw_mtd_sha256": "f54b8cd620c6dca4319d8368f5d30f9d3fe1ddf60849dddc0e6308c59ef7a837",
+    "semantic_id": "0xE35",
+    "blend_mode": 9
+  },
+  "claims": {
+    "dsr_source_complete_waterwave_spx_unique": true,
+    "dsr_source_complete_waterwave_material_name_unique": true,
+    "cross_render_raw_mtd_homology": true,
+    "backend_dispatch_key_domain_closed": false,
+    "live_same_instance_join_closed": false,
+    "q8_writer_authorized": false,
+    "pixel_equivalence": "OPEN"
+  }
+}
