@@ -51,7 +51,8 @@
     "cluster_state_vtable_rva": "0x015F8B98",
     "particle_state_source_links": {
       "primary": "0x30",
-      "secondary": "0x38"
+      "secondary": "0x38",
+      "static_role_note": "seed/source channels; not statically proven FrpgFxParticleAppearance_Model identity"
     },
     "cluster_state_source_links": {
       "primary": "0x50",
@@ -68,6 +69,22 @@
       "scalar_deleting_dtor_rva": "0x004FED90",
       "ctor_prefix_hex": "48894c2408565741564883ec3048c7442420feffffff",
       "dtor_prefix_hex": "48895c2408574883ec208bda488bf9"
+    },
+    "particle_state_owner_link": "0x10",
+    "particle_state_backend_build": {
+      "wrapper_rva": "0x00F3DEF0",
+      "registry_dispatch_rva": "0x00F3DF50",
+      "owner_input": "appearance+0x10",
+      "source_state_input": "&appearance+0x30",
+      "note": "owner and source state are distinct channels at backend creation"
+    },
+    "semantic_registry_runtime_index": {
+      "semantic_id": "0xE35",
+      "registration_rva": "0x00271ACE",
+      "registry_materializer_rva": "0x001BAC70",
+      "runtime_index_store": "registry + 4*semantic_id + 0x3898",
+      "downstream_literal_required": false,
+      "note": "WaterWave semantic is translated into registry state before downstream draw; absence of literal 0xE35 at TargetScene draw is expected."
     }
   },
   "waterwave_authored_identity": {
@@ -87,6 +104,16 @@
     "live_appearance_source_links_observable": true,
     "live_particle_model_instance_registry": true,
     "live_particle_model_destructor_retirement": true,
-    "live_particle_model_to_draw_backref_pointer_join": "CONSTRUCTION_IMPLEMENTED_RUNTIME_REQUIRED"
+    "live_appearance_owner_link_observable": true,
+    "static_particle_model_backref_channel_closed": false,
+    "live_particle_model_to_draw_pointer_join": {
+      "status": "CONSTRUCTION_INSTRUMENTED_RUNTIME_REQUIRED",
+      "candidates": [
+        "appearance+0x10 owner",
+        "appearance+0x30 source-primary",
+        "appearance+0x38 source-secondary"
+      ],
+      "authority": "none without exact runtime pointer join and separately published authored identity"
+    }
   }
 }
