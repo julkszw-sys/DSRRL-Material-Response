@@ -261,7 +261,10 @@ jobs:
             'site->t11_word',
             'site->merge_word',
             'expected_envspec_cut',
-            '0x0100003au'
+            '0x0100003au',
+            'terminal_rgb_output_instruction',
+            'terminal_sat_rgb_composed',
+            '0x05002036u'
           )) {
             if ($envspecLerpMaterializer -notmatch [regex]::Escape($required)) { throw "P_Metal HemEnvLerp exact EnvSpec materializer invariant missing: $required" }
           }
@@ -313,6 +316,8 @@ jobs:
             'prepare_draw_requests',
             'operator_id::env_spec',
             'operator_id::spec_rgb',
+            'operator_id::terminal_sat_rgb',
+            'outcome.terminal_sat_rgb_composed',
             'additional_constant_buffer_owners',
             '12u',
             '14u'
