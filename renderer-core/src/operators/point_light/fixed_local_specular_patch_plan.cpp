@@ -85,6 +85,8 @@ build_fixed_local_specular_patch_plan_from_attested(
     // microfacet branch while preserving diffuse as an independently retained
     // path.
     out.replace_complete_microfacet_window = true;
+    out.use_ptde_legacy_reflect_pow = true;
+    out.consume_g_specular_power_as_exponent = true;
     out.bypass_stock_roughness_tail = true;
     out.bypass_stock_common_ndotl_specular = true;
     out.preserve_stock_diffuse = true;
