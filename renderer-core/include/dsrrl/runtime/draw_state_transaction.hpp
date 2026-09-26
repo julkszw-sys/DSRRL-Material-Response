@@ -13,6 +13,7 @@
 #include <cstdint>
 
 struct ID3D11Buffer;
+struct ID3D11DeviceContext1;
 struct ID3D11PixelShader;
 struct ID3D11SamplerState;
 struct ID3D11ShaderResourceView;
@@ -83,6 +84,7 @@ struct draw_tx_telemetry {
     std::uint64_t draws_issued = 0;
     std::uint64_t restore_ok = 0;
     std::uint64_t restore_fail = 0;
+    std::uint64_t native_readback_skipped = 0;
     bool quarantined = false;
 };
 
@@ -151,8 +153,10 @@ private:
         std::array<sampler_capture, draw_tx_max_sampler> samplers{};
         std::uint32_t sampler_count = 0;
 
+        ID3D11DeviceContext1 *context1 = nullptr;
         std::uint64_t command = 0;
         bool core_started = false;
+        bool verify_native_readback = true;
     };
 
     bool validate_mutation(
@@ -177,6 +181,7 @@ private:
     std::atomic<std::uint64_t> draws_issued_{0};
     std::atomic<std::uint64_t> restore_ok_{0};
     std::atomic<std::uint64_t> restore_fail_{0};
+    std::atomic<std::uint64_t> native_readback_skipped_{0};
     std::atomic_bool quarantined_{false};
 };
 
