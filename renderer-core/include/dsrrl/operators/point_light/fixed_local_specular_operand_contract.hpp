@@ -47,6 +47,14 @@ struct fixed_local_specular_operand_contract {
 // Exact-token semantic extraction after receiver/window attestation.
 // It recovers host-register operands for N/V/L from the canonical
 // DP3(V,H), DP3(N,H), DP3(N,L) triplet. This avoids any hardcoded r# ABI.
+// Deterministic test/offline seam after exact receiver identity and
+// token-window attestation. Production runtime must use the DXBC wrapper below.
+fixed_local_specular_operand_contract
+extract_fixed_local_specular_operand_contract_from_attested_shex_words(
+    const fixed_local_specular_patch_plan &plan,
+    const std::uint32_t *shex_words,
+    std::size_t word_count) noexcept;
+
 fixed_local_specular_operand_contract
 extract_fixed_local_specular_operand_contract(
     const void *pixel_shader_code,
