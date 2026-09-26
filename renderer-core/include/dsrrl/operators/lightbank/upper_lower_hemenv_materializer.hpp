@@ -33,7 +33,12 @@ enum class upper_lower_hemenv_family : std::uint8_t {
     hemenvlerp_parallax,
     phn_pnts,
     phn_faceeye,
-    phn_subsurf
+    phn_subsurf,
+    gst,
+    gst_faceeye,
+    sfx,
+    snow,
+    ntoa
 };
 
 struct upper_lower_hemenv_materialize_outcome {
