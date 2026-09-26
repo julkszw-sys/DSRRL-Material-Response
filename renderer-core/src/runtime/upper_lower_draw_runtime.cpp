@@ -89,6 +89,43 @@ struct producer_tls {
     std::uint32_t pmetal_row_b = 0;
 };
 
+struct steady_q_cache_entry {
+    void *source = nullptr;
+    std::int32_t selector = -1;
+    const std::uint8_t *header = nullptr;
+    const std::uint8_t *records = nullptr;
+    const std::uint8_t *record = nullptr;
+    bool view_valid = false;
+    bool sample_valid = false;
+    f4 q_upper{};
+    f4 q_lower{};
+    f4 upper{};
+    f4 lower{};
+};
+
+struct raw_record_cache_entry {
+    void *source = nullptr;
+    std::int32_t selector = -1;
+    const std::uint8_t *header = nullptr;
+    const std::uint8_t *record = nullptr;
+    bool valid = false;
+};
+
+struct d123_identity_cache_entry {
+    const std::uint8_t *record = nullptr;
+    std::array<std::uint8_t,0x24> raw{};
+    bool sample_valid = false;
+    std::array<operators::lightbank::hemdir3_lobe,3> lobes{};
+};
+
+constexpr std::size_t k_steady_cache_slots = 32u;
+thread_local std::array<steady_q_cache_entry,k_steady_cache_slots>
+    g_steady_q_cache{};
+thread_local std::array<raw_record_cache_entry,k_steady_cache_slots>
+    g_raw_record_cache{};
+thread_local std::array<d123_identity_cache_entry,k_steady_cache_slots>
+    g_d123_identity_cache{};
+
 struct inline_hook {
     void *target = nullptr;
     void *trampoline = nullptr;
@@ -291,6 +328,36 @@ bool safe_read(
         ptr,
         sizeof(T));
     return true;
+}
+
+std::size_t steady_cache_slot(
+    const void *ptr,
+    std::int32_t selector) noexcept
+{
+    const auto value =
+        reinterpret_cast<std::uintptr_t>(ptr);
+    const auto mixed =
+        (value >> 4u) ^
+        (static_cast<std::uintptr_t>(
+            static_cast<std::uint32_t>(selector)) *
+         static_cast<std::uintptr_t>(0x9E3779B1u));
+
+    return
+        static_cast<std::size_t>(
+            mixed &
+            (k_steady_cache_slots - 1u));
+}
+
+std::size_t d123_cache_slot(
+    const void *ptr) noexcept
+{
+    const auto value =
+        reinterpret_cast<std::uintptr_t>(ptr);
+
+    return
+        static_cast<std::size_t>(
+            (value >> 4u) &
+            (k_steady_cache_slots - 1u));
 }
 
 std::uint64_t pmetal_fnv_byte(
@@ -667,6 +734,64 @@ const std::uint8_t *resolve_raw_lightbank_record(
         selector < 0)
         return nullptr;
 
+    auto &cached =
+        g_raw_record_cache[
+            steady_cache_slot(
+                source,
+                selector)];
+
+    // The packer original has already completed successfully before this
+    // resolver is called. Re-reading the engine-owned source->header pointer
+    // is therefore the narrow live-object attestation used by the hot path.
+    // VirtualQuery is retained only when the tuple changes.
+    if (cached.valid &&
+        cached.source == source &&
+        cached.selector == selector) {
+        const std::uint8_t *live_header = nullptr;
+        std::memcpy(
+            &live_header,
+            static_cast<const std::uint8_t *>(
+                source) + 0x18u,
+            sizeof(live_header));
+
+        if (live_header != nullptr &&
+            live_header == cached.header) {
+            std::uint16_t live_type = 0u;
+            std::uint16_t live_count = 0u;
+            std::memcpy(
+                &live_type,
+                live_header + 0x08u,
+                sizeof(live_type));
+            std::memcpy(
+                &live_count,
+                live_header + 0x0Au,
+                sizeof(live_count));
+
+            if (live_type == 4u &&
+                static_cast<std::uint32_t>(
+                    selector) < live_count) {
+                const auto index =
+                    static_cast<std::size_t>(
+                        static_cast<std::uint32_t>(
+                            selector));
+                std::uint32_t live_offset = 0u;
+                std::memcpy(
+                    &live_offset,
+                    live_header +
+                        0x34u +
+                        index * 12u,
+                    sizeof(live_offset));
+
+                if (live_header +
+                        live_offset ==
+                    cached.record)
+                    return cached.record;
+            }
+        }
+
+        cached = {};
+    }
+
     const std::uint8_t *header = nullptr;
     if (!safe_read(
             static_cast<const std::uint8_t *>(
@@ -696,9 +821,18 @@ const std::uint8_t *resolve_raw_lightbank_record(
     const auto *record =
         header + offset;
 
-    return readable_range(record, 0x50u)
-        ? record
-        : nullptr;
+    if (!readable_range(
+            record,
+            0x50u))
+        return nullptr;
+
+    cached.source = source;
+    cached.selector = selector;
+    cached.header = header;
+    cached.record = record;
+    cached.valid = true;
+
+    return record;
 }
 
 bool raw_d123_endpoint(
@@ -741,6 +875,69 @@ bool raw_d123_endpoint(
     return true;
 }
 
+bool decode_d123_identity_raw(
+    const std::array<std::uint8_t,0x24> &raw,
+    std::array<
+        operators::lightbank::hemdir3_lobe,
+        3> &out) noexcept
+{
+    std::array<
+        operators::lightbank::hemdir3_raw_lobe_endpoint,
+        3> endpoint{};
+
+    for (std::size_t i = 0u;
+         i < endpoint.size();
+         ++i) {
+        const auto *base =
+            raw.data() +
+            i * 0x0Cu;
+
+        std::int16_t x = 0;
+        std::int16_t y = 0;
+        raw_rgbm color{};
+
+        std::memcpy(
+            &x,
+            base + 0x00u,
+            sizeof(x));
+        std::memcpy(
+            &y,
+            base + 0x02u,
+            sizeof(y));
+        std::memcpy(
+            &color,
+            base + 0x04u,
+            sizeof(color));
+
+        endpoint[i].direction.x_degrees =
+            static_cast<float>(x);
+        endpoint[i].direction.y_degrees =
+            static_cast<float>(y);
+        endpoint[i].color.rgb_255 = {
+            static_cast<float>(color.r),
+            static_cast<float>(color.g),
+            static_cast<float>(color.b)
+        };
+        endpoint[i].color.multiplier_percent =
+            static_cast<float>(color.m);
+    }
+
+    const auto sample =
+        operators::lightbank::
+            evaluate_hemdir3_profile(
+                endpoint,
+                endpoint,
+                0.0f);
+
+    if (sample.result !=
+        operators::lightbank::
+            hemdir3_profile_result::exact)
+        return false;
+
+    out = sample.lobes;
+    return true;
+}
+
 bool evaluate_raw_d123(
     const std::uint8_t *a,
     const std::uint8_t *b,
@@ -749,6 +946,48 @@ bool evaluate_raw_d123(
         operators::lightbank::hemdir3_lobe,
         3> &out) noexcept
 {
+    if (a != nullptr &&
+        a == b &&
+        beta == 0.0f) {
+        auto &cached =
+            g_d123_identity_cache[
+                d123_cache_slot(a)];
+
+        std::array<std::uint8_t,0x24> raw{};
+        std::memcpy(
+            raw.data(),
+            a,
+            raw.size());
+
+        if (cached.sample_valid &&
+            cached.record == a &&
+            std::memcmp(
+                cached.raw.data(),
+                raw.data(),
+                raw.size()) == 0) {
+            out = cached.lobes;
+            return true;
+        }
+
+        std::array<
+            operators::lightbank::hemdir3_lobe,
+            3> decoded{};
+
+        if (!decode_d123_identity_raw(
+                raw,
+                decoded)) {
+            cached = {};
+            return false;
+        }
+
+        cached.record = a;
+        cached.raw = raw;
+        cached.sample_valid = true;
+        cached.lobes = decoded;
+        out = decoded;
+        return true;
+    }
+
     std::array<
         operators::lightbank::hemdir3_raw_lobe_endpoint,
         3> endpoint_a{};
@@ -802,46 +1041,129 @@ bool read_selected_ptde(
         selector < 0)
         return false;
 
-    const std::uint8_t *header = nullptr;
-    if (!safe_read(
+    auto &cached =
+        g_steady_q_cache[
+            steady_cache_slot(
+                source,
+                selector)];
+
+    const std::uint8_t *record = nullptr;
+
+    if (cached.view_valid &&
+        cached.source == source &&
+        cached.selector == selector) {
+        // This function is called only after the exact steady packer original
+        // returned. The live source object is therefore engine-attested for
+        // this call. Refresh its two carrier pointers without VirtualQuery;
+        // fall back to the fully validated slow path if either changed.
+        const std::uint8_t *live_header = nullptr;
+        const std::uint8_t *live_records = nullptr;
+
+        std::memcpy(
+            &live_header,
             static_cast<const std::uint8_t *>(
                 source) + 0x18u,
-            header) ||
-        header == nullptr)
-        return false;
-
-    std::uint16_t count = 0u;
-    if (!safe_read(
-            header + 0x0Au,
-            count) ||
-        static_cast<std::uint32_t>(
-            selector) >= count)
-        return false;
-
-    const std::uint8_t *records = nullptr;
-    if (!safe_read(
+            sizeof(live_header));
+        std::memcpy(
+            &live_records,
             static_cast<const std::uint8_t *>(
                 source) + 0x20u,
-            records) ||
-        records == nullptr)
-        return false;
+            sizeof(live_records));
 
-    const auto *record =
-        records +
-        static_cast<std::size_t>(
-            selector) *
-        k_record_stride;
+        if (live_header == cached.header &&
+            live_records == cached.records &&
+            live_header != nullptr &&
+            live_records != nullptr) {
+            std::uint16_t live_count = 0u;
+            std::memcpy(
+                &live_count,
+                live_header + 0x0Au,
+                sizeof(live_count));
+
+            if (static_cast<std::uint32_t>(
+                    selector) < live_count)
+                record = cached.record;
+            else
+                cached = {};
+        } else {
+            cached = {};
+        }
+    }
+
+    if (record == nullptr) {
+        const std::uint8_t *header = nullptr;
+        if (!safe_read(
+                static_cast<const std::uint8_t *>(
+                    source) + 0x18u,
+                header) ||
+            header == nullptr)
+            return false;
+
+        std::uint16_t count = 0u;
+        if (!safe_read(
+                header + 0x0Au,
+                count) ||
+            static_cast<std::uint32_t>(
+                selector) >= count)
+            return false;
+
+        const std::uint8_t *records = nullptr;
+        if (!safe_read(
+                static_cast<const std::uint8_t *>(
+                    source) + 0x20u,
+                records) ||
+            records == nullptr)
+            return false;
+
+        record =
+            records +
+            static_cast<std::size_t>(
+                selector) *
+            k_record_stride;
+
+        // Validate both q vectors once for this exact live
+        // (source,header,records,selector) tuple.
+        if (!readable_range(
+                record + k_q_upper_offset,
+                (k_q_lower_offset -
+                 k_q_upper_offset) +
+                    sizeof(f4)))
+            return false;
+
+        cached = {};
+        cached.source = source;
+        cached.selector = selector;
+        cached.header = header;
+        cached.records = records;
+        cached.record = record;
+        cached.view_valid = true;
+    }
 
     f4 q_upper{};
     f4 q_lower{};
 
-    if (!safe_read(
-            record + k_q_upper_offset,
-            q_upper) ||
-        !safe_read(
-            record + k_q_lower_offset,
-            q_lower))
-        return false;
+    std::memcpy(
+        &q_upper,
+        record + k_q_upper_offset,
+        sizeof(q_upper));
+    std::memcpy(
+        &q_lower,
+        record + k_q_lower_offset,
+        sizeof(q_lower));
+
+    if (cached.sample_valid &&
+        std::memcmp(
+            &cached.q_upper,
+            &q_upper,
+            sizeof(q_upper)) == 0 &&
+        std::memcmp(
+            &cached.q_lower,
+            &q_lower,
+            sizeof(q_lower)) == 0) {
+        upper = cached.upper;
+        lower = cached.lower;
+        return true;
+    }
 
     f4 u{};
     f4 l{};
@@ -851,11 +1173,19 @@ bool read_selected_ptde(
         !inverse_q(q_upper.z, u.z) ||
         !inverse_q(q_lower.x, l.x) ||
         !inverse_q(q_lower.y, l.y) ||
-        !inverse_q(q_lower.z, l.z))
+        !inverse_q(q_lower.z, l.z)) {
+        cached.sample_valid = false;
         return false;
+    }
 
     upper = {u.x,u.y,u.z,0.0f};
     lower = {l.x,l.y,l.z,0.0f};
+
+    cached.q_upper = q_upper;
+    cached.q_lower = q_lower;
+    cached.upper = upper;
+    cached.lower = lower;
+    cached.sample_valid = true;
     return true;
 }
 
