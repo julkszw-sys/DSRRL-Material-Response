@@ -1384,12 +1384,34 @@ bool prepare_island_batch(
         return true;
     }
 
-    // HemEnvLerp shares semantic receiver IDs 33..35 with stable HemEnv, but
-    // is a different executable consumer. If its exact combined island cannot
-    // activate, fail open to the original Lerp draw rather than a stable
-    // HemEnv/MR hybrid.
-    if (hemenvlerp_bound)
+    // HemEnvLerp is a distinct executable consumer. P_Metal EnvSpec above
+    // owns its exact composed MR+EnvSpec+SpecRGB+U/L route. For every other
+    // exact U/L-live HemEnvLerp receiver, use only the stock-derived U/L
+    // replacement plus fresh b13. This restores the U/L operator without
+    // silently importing stable-HemEnv MR/resource semantics into Lerp.
+    if (hemenvlerp_bound) {
+        if (upper_lower_bound &&
+            upper_lower_identity.family ==
+                dsrrl::operators::lightbank::
+                    upper_lower_hemenv_family::hemenvlerp &&
+            g_upper_lower_hemenv.prepare_draw_request(
+                cmd_list,
+                upper_lower_identity,
+                false,
+                prepared.upper_lower)) {
+            if (dsrrl::runtime::append_island_draw_request(
+                    prepared.batch,
+                    prepared.upper_lower.request) !=
+                dsrrl::runtime::island_draw_batch_result::ready) {
+                release_prepared_island_batch(prepared);
+                return false;
+            }
+
+            return true;
+        }
+
         return false;
+    }
 
     const bool ul_spc =
         upper_lower_bound &&
