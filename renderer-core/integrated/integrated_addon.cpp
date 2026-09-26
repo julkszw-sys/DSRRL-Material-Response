@@ -202,8 +202,18 @@ bool observe_draw_identity(
             dsrrl::operators::lightbank::
                 upper_lower_hemenv_stratum::nospc;
 
+    const bool upper_lower_parallax =
+        upper_lower_receiver &&
+        (upper_lower_identity.family ==
+             dsrrl::operators::lightbank::
+                 upper_lower_hemenv_family::hemenv_parallax ||
+         upper_lower_identity.family ==
+             dsrrl::operators::lightbank::
+                 upper_lower_hemenv_family::hemenvlerp_parallax);
+
     const bool upper_lower_spc_matches_stable =
         !upper_lower_spc ||
+        upper_lower_parallax ||
         (upper_lower_identity.family ==
                  dsrrl::operators::lightbank::
                      upper_lower_hemenv_family::hemenv
@@ -214,18 +224,29 @@ bool observe_draw_identity(
                 hemenvlerp_identity.semantic_receiver_id ==
                     upper_lower_identity.stable_receiver_id));
 
+    const bool upper_lower_unpaired_nospc =
+        upper_lower_nospc &&
+        !upper_lower_parallax;
+
     const unsigned receiver_classes =
         (stable_receiver ? 1u : 0u) +
         (hemenvlerp_receiver ? 1u : 0u) +
         (subsurface_receiver ? 1u : 0u) +
         (hemdir3_receiver ? 1u : 0u) +
-        (upper_lower_nospc ? 1u : 0u);
+        (upper_lower_unpaired_nospc ? 1u : 0u) +
+        (upper_lower_parallax ? 1u : 0u);
 
     const bool receiver_ok =
         receiver_classes == 1u &&
         upper_lower_spc_matches_stable;
 
-    if (hemenvlerp_receiver) {
+    if (upper_lower_parallax) {
+        // Exact Parallax executable identities are U/L-only here. Do not
+        // borrow stable HemEnv/HemEnvLerp receiver IDs into MR, resources or
+        // EnvSpec: the U/L consumer cut is independently certified by SHA.
+        receiver_id = 0u;
+        upper_lower_bound = true;
+    } else if (hemenvlerp_receiver) {
         receiver_id =
             hemenvlerp_identity.semantic_receiver_id;
         hemenvlerp_bound = true;
