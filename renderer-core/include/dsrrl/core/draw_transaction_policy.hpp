@@ -57,7 +57,9 @@ inline constexpr std::array<
      draw_mutation_constant_buffer,
      draw_mutation_shader | draw_mutation_constant_buffer, true, false, true},
     {operator_id::spec_rgb, draw_transaction_mode::draw_required,
-     draw_mutation_srv, draw_mutation_srv, true, true, true},
+     draw_mutation_srv,
+     draw_mutation_shader | draw_mutation_srv,
+     true, true, true},
     {operator_id::env_spec, draw_transaction_mode::draw_required,
      draw_mutation_shader | draw_mutation_constant_buffer |
          draw_mutation_srv | draw_mutation_sampler,
