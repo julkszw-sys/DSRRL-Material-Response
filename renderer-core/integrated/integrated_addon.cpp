@@ -222,7 +222,22 @@ bool observe_draw_identity(
                  upper_lower_hemenv_family::phn_faceeye ||
          upper_lower_identity.family ==
              dsrrl::operators::lightbank::
-                 upper_lower_hemenv_family::phn_subsurf);
+                 upper_lower_hemenv_family::phn_subsurf ||
+         upper_lower_identity.family ==
+             dsrrl::operators::lightbank::
+                 upper_lower_hemenv_family::gst ||
+         upper_lower_identity.family ==
+             dsrrl::operators::lightbank::
+                 upper_lower_hemenv_family::gst_faceeye ||
+         upper_lower_identity.family ==
+             dsrrl::operators::lightbank::
+                 upper_lower_hemenv_family::sfx ||
+         upper_lower_identity.family ==
+             dsrrl::operators::lightbank::
+                 upper_lower_hemenv_family::snow ||
+         upper_lower_identity.family ==
+             dsrrl::operators::lightbank::
+                 upper_lower_hemenv_family::ntoa);
 
     const bool upper_lower_standalone =
         upper_lower_isolated &&
