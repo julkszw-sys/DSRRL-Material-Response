@@ -129,8 +129,6 @@ jobs:
           $envspecLerpRegistry = Get-Content renderer-core/src/runtime/hemenvlerp_pipeline_registry.cpp -Raw
           $envspecResource = Get-Content renderer-core/src/runtime/envspec_resource_runtime.cpp -Raw
           $envspecRuntime = Get-Content renderer-core/src/runtime/pmetal_envspec_draw_runtime.cpp -Raw
-          $envspecLerpMaterializer = Get-Content renderer-core/src/operators/env_spec/pmetal_rgba_lerp_materializer.cpp -Raw
-          $hemenvlerpRegistry = Get-Content renderer-core/src/runtime/hemenvlerp_pipeline_registry.cpp -Raw
           $pmetalGenerator = Get-Content renderer-core/tools/generate_pmetal_env_source_authority.py -Raw
           $textureTransport = Get-Content renderer-core/src/runtime/texture_identity_transport.cpp -Raw
           $subsurface = Get-Content renderer-core/src/runtime/subsurface_draw_runtime.cpp -Raw
@@ -300,7 +298,7 @@ jobs:
             'exact_identity',
             '24u +'
           )) {
-            if ($hemenvlerpRegistry -notmatch [regex]::Escape($required)) { throw "HemEnvLerp exact pipeline identity invariant missing: $required" }
+            if ($envspecLerpRegistry -notmatch [regex]::Escape($required)) { throw "HemEnvLerp exact pipeline identity invariant missing: $required" }
           }
 
           foreach ($required in @(
