@@ -70,6 +70,15 @@ public:
     bool has_receiver_replacement(
         std::uint32_t receiver_id) const noexcept;
 
+    bool register_lerp_receiver_replacement(
+        std::uint32_t receiver_id,
+        const void *dxbc,
+        std::size_t dxbc_size,
+        core::operator_mask composed_owners) noexcept;
+
+    bool has_lerp_receiver_replacement(
+        std::uint32_t receiver_id) const noexcept;
+
     bool register_receiver_upper_lower_replacement(
         std::uint32_t receiver_id,
         const void *dxbc,
@@ -84,6 +93,11 @@ public:
         prepared_material_response_draw &prepared) noexcept;
 
     bool prepare_draw_request_with_upper_lower(
+        const operators::material_response::decision &decision,
+        ID3D11Buffer *b13,
+        prepared_material_response_draw &prepared) noexcept;
+
+    bool prepare_lerp_draw_request_with_upper_lower(
         const operators::material_response::decision &decision,
         ID3D11Buffer *b13,
         prepared_material_response_draw &prepared) noexcept;
@@ -147,6 +161,8 @@ private:
     mutable std::mutex mutex_;
     ID3D11Device *device_ = nullptr;
     std::unordered_map<std::uint32_t, replacement_record> replacements_;
+    std::unordered_map<std::uint32_t, replacement_record>
+        lerp_replacements_;
     std::unordered_map<std::uint32_t, replacement_record>
         upper_lower_replacements_;
     std::unordered_map<std::uint32_t, ID3D11Buffer *> b12_by_route_;
