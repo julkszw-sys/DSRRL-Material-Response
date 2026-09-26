@@ -1111,72 +1111,15 @@ void __fastcall hook_steady_packer(
     void *dst,
     std::int32_t selector) noexcept
 {
+    // PERF DIAG R: steady packer detour/trampoline only. Blend capture remains
+    // fully active under producer TLS; snapshot publish and selector join are
+    // disabled by the O baseline.
     ++g_steady_seen;
-
     if (g_steady_packer_orig != nullptr)
         g_steady_packer_orig(
             source,
             dst,
             selector);
-
-    if (!g_producer.active)
-        return;
-
-    if (g_pmetal_env_hook_armed.load()) {
-        f4 env{};
-        std::uint64_t bank = 0u;
-        std::uint32_t row = 0u;
-
-        if (read_exact_pmetal_env_source(
-                source,
-                selector,
-                env,
-                bank,
-                row)) {
-            g_producer.have_pmetal_env = true;
-            g_producer.pmetal_env_a = env;
-            g_producer.pmetal_env_b = env;
-            g_producer.pmetal_env_beta = 0.0f;
-            g_producer.pmetal_bank_a = bank;
-            g_producer.pmetal_bank_b = bank;
-            g_producer.pmetal_row_a = row;
-            g_producer.pmetal_row_b = row;
-            ++g_pmetal_env_steady;
-        } else {
-            ++g_pmetal_env_miss;
-        }
-    }
-
-    f4 upper{};
-    f4 lower{};
-
-    if (!read_selected_ptde(
-            source,
-            selector,
-            upper,
-            lower))
-        return;
-
-    g_producer.upper = upper;
-    g_producer.lower = lower;
-    g_producer.have_upper = true;
-    g_producer.have_lower = true;
-
-    const auto *raw =
-        resolve_raw_lightbank_record(
-            source,
-            selector);
-
-    if (evaluate_raw_d123(
-            raw,
-            raw,
-            0.0f,
-            g_producer.d123)) {
-        g_producer.have_d123 = true;
-        ++g_d123_steady;
-    }
-
-    ++g_steady_pass;
 }
 
 void *__fastcall hook_blend_packer(
