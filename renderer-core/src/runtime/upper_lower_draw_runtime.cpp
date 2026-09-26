@@ -10,6 +10,7 @@
 #include "dsrrl/operators/lightbank/snapshot_freshness.hpp"
 #include "dsrrl/operators/lightbank/hemdir3.hpp"
 #include "dsrrl/runtime/generated_pmetal_env_source_authority.hpp"
+#include "dsrrl/runtime/fixed_pointlight_draw_runtime.hpp"
 
 #include <Windows.h>
 #include <d3d11.h>
@@ -2182,6 +2183,11 @@ void upper_lower_selector_event_bridge(
             return_address,
             r14,
             r15);
+
+    // Fixed PointLight uses the exact same owner_context association as the
+    // already-owned selector hook. Keep this bridge independent of U/L
+    // activation; the PointLight runtime is inert when not installed.
+    fixed_pointlight_selector_event_bridge(owner);
 }
 
 bool upper_lower_draw_runtime::install() noexcept
