@@ -4,6 +4,7 @@
 #include "dsrrl/operators/postprocess/bloom_scene_bridge.hpp"
 #include "dsrrl/operators/postprocess/bloom_scene_static_authority.hpp"
 #include "dsrrl/operators/postprocess/bloom_legacy_graph.hpp"
+#include "dsrrl/operators/postprocess/waterwave_authored_identity.hpp"
 
 #include <iostream>
 
@@ -134,6 +135,22 @@ int main()
         features,core::operator_id::post_hdr,activation);
     CHECK(gate.state==core::island_state::fail_open);
     CHECK(gate.reason==core::activation_reason::blocked);
+
+    // WaterWaveSfx authored identity is exact across PTDE/DSR, but authored
+    // identity is not a live draw authority. The same runtime material/entity
+    // instance must still reach the authenticated FX collector draw.
+    waterwave_authored_identity waterwave{};
+    waterwave.raw_mtd_exact=true;
+    waterwave.spx_semantic_id=k_waterwave_spx_semantic_id;
+    waterwave.blend_mode=k_waterwave_blend_mode;
+    waterwave.is_waterwave_sfx=true;
+    CHECK(validate_waterwave_authored_identity(waterwave)==
+          waterwave_authored_identity_result::exact_authored_identity);
+    CHECK(!waterwave_authored_identity_is_draw_authority());
+
+    waterwave.blend_mode=1u;
+    CHECK(validate_waterwave_authored_identity(waterwave)==
+          waterwave_authored_identity_result::blend_mode_not_exact);
 
     // Canonical static authority is deliberately incomplete. Rev9384 closes
     // FXHG collector insertion -> entity callback, not writer exhaustiveness
