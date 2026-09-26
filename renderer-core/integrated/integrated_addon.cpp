@@ -6,6 +6,7 @@
 #include "dsrrl/runtime/material_response_draw_transaction.hpp"
 #include "dsrrl/runtime/material_resource_draw_runtime.hpp"
 #include "dsrrl/runtime/envspec_resource_runtime.hpp"
+#include "dsrrl/runtime/bloom_scene_sidecar_runtime.hpp"
 #include "dsrrl/runtime/pmetal_envspec_draw_runtime.hpp"
 #include "dsrrl/runtime/texture_identity_transport.hpp"
 #include "dsrrl/operators/material_response/mtd_semantic_census.hpp"
@@ -61,6 +62,8 @@ dsrrl::runtime::material_resource_draw_runtime
     g_material_resources(g_core);
 dsrrl::runtime::envspec_resource_runtime
     g_envspec_resources;
+dsrrl::runtime::bloom_scene_sidecar_runtime
+    g_bloom_scene_sidecar;
 dsrrl::runtime::subsurface_draw_runtime
     g_subsurface(g_core, g_mr_draw_runtime, g_material_resources);
 dsrrl::runtime::upper_lower_draw_runtime
@@ -608,10 +611,45 @@ void log_state(const char *tag) noexcept
     reshade::log::message(
         reshade::log::level::info,
         env_line);
+
+    const auto bloom_q8 =
+        g_bloom_scene_sidecar.telemetry();
+
+    char bloom_line[640]{};
+    std::snprintf(
+        bloom_line,
+        sizeof(bloom_line),
+        "[DSRRL CORE+ISLANDS " DSRRL_CORE_ISLANDS_VERSION "] %s_BLOOM_Q8 "
+        "init=%llu create=%llu/%llu ready=%u auth=%llu/%llu armed=%u "
+        "begin=%llu/%llu commit=%llu/%llu rtv=%llu srv=%llu acquire_fail=%llu "
+        "valid=%u frame=%llu destroy=%llu",
+        tag,
+        static_cast<unsigned long long>(bloom_q8.init_calls),
+        static_cast<unsigned long long>(bloom_q8.create_ok),
+        static_cast<unsigned long long>(bloom_q8.create_fail),
+        bloom_q8.resource_ready ? 1u : 0u,
+        static_cast<unsigned long long>(bloom_q8.authorize_ok),
+        static_cast<unsigned long long>(bloom_q8.authorize_fail),
+        bloom_q8.proof_authorized ? 1u : 0u,
+        static_cast<unsigned long long>(bloom_q8.begin_ok),
+        static_cast<unsigned long long>(bloom_q8.begin_fail),
+        static_cast<unsigned long long>(bloom_q8.commit_ok),
+        static_cast<unsigned long long>(bloom_q8.commit_fail),
+        static_cast<unsigned long long>(bloom_q8.rtv_acquire_ok),
+        static_cast<unsigned long long>(bloom_q8.srv_acquire_ok),
+        static_cast<unsigned long long>(bloom_q8.acquire_fail),
+        bloom_q8.contents_valid ? 1u : 0u,
+        static_cast<unsigned long long>(bloom_q8.frame_serial),
+        static_cast<unsigned long long>(bloom_q8.destroy_calls));
+
+    reshade::log::message(
+        reshade::log::level::info,
+        bloom_line);
 }
 
 void on_init_device(reshade::api::device *device)
 {
+    g_bloom_scene_sidecar.on_init_device(device);
     g_a1_bridge.on_init_device(device);
     g_mr_draw_runtime.on_init_device(device);
     g_pmetal_envspec.on_init_device(device);
@@ -621,6 +659,7 @@ void on_init_device(reshade::api::device *device)
 
 void on_destroy_device(reshade::api::device *device)
 {
+    g_bloom_scene_sidecar.on_destroy_device(device);
     g_upper_lower.on_destroy_device(device);
     g_upper_lower_hemenv.on_destroy_device(device);
     g_hemdir3.on_destroy_device(device);
@@ -1504,6 +1543,7 @@ bool AddonInit(
     g_mr_draw_runtime.reset();
     g_material_resources.reset();
     g_envspec_resources.reset_stats();
+    g_bloom_scene_sidecar.reset();
     g_pmetal_envspec.reset();
     g_upper_lower.reset();
     g_upper_lower_hemenv.reset();
@@ -1661,6 +1701,7 @@ void AddonUninit(
     g_material_resources.unregister_events();
     g_pmetal_envspec.reset();
     g_envspec_resources.reset_stats();
+    g_bloom_scene_sidecar.reset();
     g_material_resources.reset();
     g_upper_lower.reset();
     g_upper_lower_hemenv.reset();
