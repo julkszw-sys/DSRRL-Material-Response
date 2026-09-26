@@ -75,6 +75,10 @@ public:
     bool pipeline_attested(
         std::uint64_t pipeline_handle) const noexcept;
 
+    bool bound_light_count(
+        reshade::api::command_list *cmd_list,
+        std::uint8_t &light_count) const noexcept;
+
     bool prepare_bound_shader(
         reshade::api::command_list *cmd_list,
         prepared_fixed_pointlight_shader &prepared) noexcept;
