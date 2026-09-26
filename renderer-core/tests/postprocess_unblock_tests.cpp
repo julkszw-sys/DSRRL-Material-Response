@@ -180,6 +180,15 @@ int main()
     fxdraw.particle_model_join_channel=
         runtime::bloom_fx_draw_transport::
             fx_particle_model_join_channel::appearance_owner;
+    CHECK(runtime::bloom_fx_draw_transport::validate_waterwave_draw_authority(fxdraw)==
+          runtime::bloom_fx_draw_transport::waterwave_draw_authority_result::
+              model_source_not_attested);
+
+    // Exact constructor/body RE proves ctor arg2 persists at model+0x08.
+    // Runtime must re-attest that carrier on the same live model before the
+    // semantic diagnostic or any future Q8 authority can advance.
+    fxdraw.particle_model_source=reinterpret_cast<void *>(0x3);
+    fxdraw.particle_model_source_attested=true;
 
     // Source-complete DSR authoring makes the WaterWave semantic unique, and
     // runtime may observe the translated 0xE35 key on the same appearance/model
