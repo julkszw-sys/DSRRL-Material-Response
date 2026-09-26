@@ -691,6 +691,11 @@ void __fastcall particle_entry(
             entity,
             draw_context,
             mode_token);
+
+    // ReShade D3D draw callbacks execute synchronously inside the original
+    // entity draw. Retire the TLS identity immediately afterwards so an
+    // unrelated later API draw cannot inherit stale FX authority.
+    g_tls.snapshot = {};
 }
 
 void __fastcall cluster_entry(
@@ -709,6 +714,8 @@ void __fastcall cluster_entry(
             entity,
             draw_context,
             mode_token);
+
+    g_tls.snapshot = {};
 }
 
 } // namespace
