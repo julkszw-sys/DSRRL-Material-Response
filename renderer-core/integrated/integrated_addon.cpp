@@ -2031,14 +2031,6 @@ bool prepare_island_batch(
                     decision,
                     prepared.upper_lower.carrier.b13,
                     prepared.mr)) {
-            if (dsrrl::runtime::append_island_draw_request(
-                    prepared.batch,
-                    prepared.mr.request) !=
-                dsrrl::runtime::island_draw_batch_result::ready) {
-                release_prepared_island_batch(prepared);
-                return false;
-            }
-
             prepared.mr_in_batch = true;
             prepared.upper_lower_combined = true;
 
@@ -2057,27 +2049,52 @@ bool prepare_island_batch(
             lerp_query.ownership.exact =
                 material.owner_tuple_exact;
 
-            (void)g_material_resources.prepare_draw_requests(
-                context,
-                receiver_id,
-                lerp_query,
-                true,
-                prepared.resources);
+            const bool resources_ready =
+                g_material_resources.prepare_draw_requests(
+                    context,
+                    receiver_id,
+                    lerp_query,
+                    true,
+                    prepared.resources);
 
-            for (std::uint32_t i = 0u;
-                 i < prepared.resources.request_count;
-                 ++i) {
+            const bool spec_consumer_ready =
+                !prepared.resources.spec_rgb ||
+                g_mr_draw_runtime.activate_spec_rgb_variant(
+                    prepared.mr);
+
+            if (resources_ready &&
+                spec_consumer_ready) {
+                prepared.batch = {};
+
                 if (dsrrl::runtime::append_island_draw_request(
                         prepared.batch,
-                        prepared.resources.requests[i]) !=
+                        prepared.mr.request) !=
                     dsrrl::runtime::island_draw_batch_result::ready) {
                     release_prepared_island_batch(prepared);
                     return false;
                 }
+
+                for (std::uint32_t i = 0u;
+                     i < prepared.resources.request_count;
+                     ++i) {
+                    if (dsrrl::runtime::append_island_draw_request(
+                            prepared.batch,
+                            prepared.resources.requests[i]) !=
+                        dsrrl::runtime::island_draw_batch_result::ready) {
+                        release_prepared_island_batch(prepared);
+                        return false;
+                    }
+                }
+
+                ++g_lerp_full_draw_ready;
+                return true;
             }
 
-            ++g_lerp_full_draw_ready;
-            return true;
+            // The full Lerp material bridge is atomic. If a draw proves a
+            // SpecRGB t10 carrier but the paired t10 consumer is unavailable,
+            // discard the partial MR/resource state before taking the
+            // independently certified U/L-only fallback below.
+            release_prepared_island_batch(prepared);
         }
 
         ++g_lerp_full_draw_fallback;
@@ -2085,9 +2102,6 @@ bool prepare_island_batch(
         // Conservative fallback for exact Lerp receivers that cannot prove
         // the full material/resource composition. Keep the already-certified
         // U/L-only route rather than borrowing a stable-HemEnv shader.
-        g_upper_lower_hemenv.release_prepared_draw(
-            prepared.upper_lower);
-
         if (upper_lower_bound &&
             upper_lower_identity.family ==
                 dsrrl::operators::lightbank::
