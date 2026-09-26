@@ -666,19 +666,19 @@ bool read_exact_pmetal_env_source(
         count)
         return false;
 
-    const auto *entry =
-        base + 0x30u +
-        static_cast<std::size_t>(index) * 12u;
-
-    if (!safe_read(entry, row_id))
-        return false;
-
     const auto *bank =
         resolve_pmetal_bank(
             base,
             count,
             bank_signature);
     if (bank == nullptr)
+        return false;
+
+    const auto *entry =
+        base + 0x30u +
+        static_cast<std::size_t>(index) * 12u;
+
+    if (!safe_read(entry, row_id))
         return false;
 
     const auto *row =
@@ -1399,6 +1399,76 @@ f4 lerp4(
     };
 }
 
+bool f4_bits_equal(
+    const f4 &a,
+    const f4 &b) noexcept
+{
+    return std::memcmp(
+        &a,
+        &b,
+        sizeof(f4)) == 0;
+}
+
+bool payload_bits_equal(
+    const std::array<f4,8> &a,
+    const std::array<f4,8> &b) noexcept
+{
+    for (std::size_t i = 0u;
+         i < a.size();
+         ++i)
+        if (!f4_bits_equal(
+                a[i],
+                b[i]))
+            return false;
+
+    return true;
+}
+
+bool snapshot_matches_candidate(
+    const snapshot &current,
+    const operators::lightbank::
+        lightbank_snapshot_fingerprint &fingerprint,
+    const std::array<f4,8> &ul_payload,
+    const std::array<f4,8> &hemdir3_payload,
+    const producer_tls &producer) noexcept
+{
+    if (!operators::lightbank::
+            lightbank_snapshot_matches_draw(
+                current.fingerprint,
+                fingerprint) ||
+        current.d123_ready !=
+            producer.have_d123 ||
+        current.pmetal_env_ready !=
+            producer.have_pmetal_env ||
+        !payload_bits_equal(
+            current.ul_payload,
+            ul_payload) ||
+        !payload_bits_equal(
+            current.hemdir3_payload,
+            hemdir3_payload))
+        return false;
+
+    return
+        f4_bits_equal(
+            current.pmetal_env_a,
+            producer.pmetal_env_a) &&
+        f4_bits_equal(
+            current.pmetal_env_b,
+            producer.pmetal_env_b) &&
+        std::memcmp(
+            &current.pmetal_env_beta,
+            &producer.pmetal_env_beta,
+            sizeof(float)) == 0 &&
+        current.pmetal_bank_a ==
+            producer.pmetal_bank_a &&
+        current.pmetal_bank_b ==
+            producer.pmetal_bank_b &&
+        current.pmetal_row_a ==
+            producer.pmetal_row_a &&
+        current.pmetal_row_b ==
+            producer.pmetal_row_b;
+}
+
 void publish_snapshot(
     const producer_tls &producer) noexcept
 {
@@ -1424,26 +1494,88 @@ void publish_snapshot(
             beta_bits))
         return;
 
-    try {
-        auto fresh =
-            std::make_shared<snapshot>();
-
-        fresh->fingerprint = {
+    const operators::lightbank::
+        lightbank_snapshot_fingerprint fingerprint{
             producer.owner,
             selector_a,
             selector_b,
             beta_bits
         };
 
-        fresh->ul_payload[6] =
-            producer.upper;
-        fresh->ul_payload[7] =
-            producer.lower;
+    std::array<f4,8> ul_payload{};
+    std::array<f4,8> hemdir3_payload{};
 
-        fresh->hemdir3_payload[6] =
-            producer.upper;
-        fresh->hemdir3_payload[7] =
-            producer.lower;
+    ul_payload[6] =
+        producer.upper;
+    ul_payload[7] =
+        producer.lower;
+
+    hemdir3_payload[6] =
+        producer.upper;
+    hemdir3_payload[7] =
+        producer.lower;
+
+    if (producer.have_d123) {
+        for (std::size_t i = 0u;
+             i < producer.d123.size();
+             ++i) {
+            const auto &lobe =
+                producer.d123[i];
+
+            hemdir3_payload[i] = {
+                lobe.direction.x,
+                lobe.direction.y,
+                lobe.direction.z,
+                0.0f
+            };
+
+            hemdir3_payload[3u + i] = {
+                lobe.color.x,
+                lobe.color.y,
+                lobe.color.z,
+                0.0f
+            };
+        }
+
+        ++g_d123_snapshot_publish;
+    }
+
+    try {
+        std::lock_guard<std::mutex> lock(
+            g_snapshot_mutex);
+
+        const auto found =
+            g_snapshots.find(
+                producer.owner);
+
+        // Repeated wrapper calls commonly republish the same immutable
+        // LightBank tuple. Replacing the shared snapshot discarded its
+        // already-realized b13 and forced another ID3D11Buffer::CreateBuffer
+        // on the next draw. Preserve the exact existing snapshot (and its GPU
+        // buffers) only when fingerprint and every transported payload bit are
+        // identical. Any selector/beta/U/L/D123/P_Metal change still creates a
+        // fresh snapshot and follows the original freshness path.
+        if (found != g_snapshots.end() &&
+            found->second &&
+            snapshot_matches_candidate(
+                *found->second,
+                fingerprint,
+                ul_payload,
+                hemdir3_payload,
+                producer)) {
+            ++g_snapshot_publish;
+            return;
+        }
+
+        auto fresh =
+            std::make_shared<snapshot>();
+
+        fresh->fingerprint =
+            fingerprint;
+        fresh->ul_payload =
+            ul_payload;
+        fresh->hemdir3_payload =
+            hemdir3_payload;
         fresh->d123_ready =
             producer.have_d123;
 
@@ -1464,37 +1596,8 @@ void publish_snapshot(
         fresh->pmetal_row_b =
             producer.pmetal_row_b;
 
-        if (producer.have_d123) {
-            for (std::size_t i = 0u;
-                 i < producer.d123.size();
-                 ++i) {
-                const auto &lobe =
-                    producer.d123[i];
-
-                fresh->hemdir3_payload[i] = {
-                    lobe.direction.x,
-                    lobe.direction.y,
-                    lobe.direction.z,
-                    0.0f
-                };
-
-                fresh->hemdir3_payload[3u + i] = {
-                    lobe.color.x,
-                    lobe.color.y,
-                    lobe.color.z,
-                    0.0f
-                };
-            }
-
-            ++g_d123_snapshot_publish;
-        }
-
-        {
-            std::lock_guard<std::mutex> lock(
-                g_snapshot_mutex);
-            g_snapshots[producer.owner] =
-                std::move(fresh);
-        }
+        g_snapshots[producer.owner] =
+            std::move(fresh);
 
         ++g_snapshot_publish;
     } catch (...) {
