@@ -1342,12 +1342,8 @@ bool on_create_pipeline(
         }
     }
 
-    const bool a1_changed =
-        g_a1_bridge.on_create_pipeline(
-            device,
-            layout,
-            subobject_count,
-            subobjects);
+    // PERF DIAG D: native hooks only. A1 shader mutation is disabled.
+    const bool a1_changed = false;
 
     if (ul_identity_ready) {
         const auto *created_shader =
@@ -2203,27 +2199,8 @@ bool AddonInit(
         return false;
     }
 
-    register_events();
-
-    if (!g_material_resources.register_events()) {
-        unregister_events();
-        disable_integrated_islands();
-        reshade::unregister_addon(addon_module, reshade_module);
-        return false;
-    }
-
-    const bool envspec_resource_events =
-        g_envspec_resources.register_events();
-
-    if (!envspec_resource_events) {
-        (void)g_core.features().set(
-            dsrrl::core::operator_id::env_spec,
-            false);
-        reshade::log::message(
-            reshade::log::level::warning,
-            "[DSRRL CORE+ISLANDS " DSRRL_CORE_ISLANDS_VERSION
-            "] EnvSpec resource events FAIL-OPEN: P_Metal EnvSpec stays stock; other islands remain active.");
-    }
+    // PERF DIAG D: no ReShade event callbacks or resource event registries.
+    // Keep only the native DSR hook transports installed below.
 
     const bool texture_hooks =
         dsrrl::runtime::texture_identity_transport::install();
@@ -2279,6 +2256,10 @@ bool AddonInit(
     }
 
     reshade::log::message(
+        reshade::log::level::warning,
+        "[DSRRL PERF DIAG D_NATIVE_HOOKS_ONLY] Native DSR hooks active; ReShade draw/bind/create/present and resource events disabled.");
+
+    reshade::log::message(
         reshade::log::level::info,
         "[DSRRL CORE+ISLANDS " DSRRL_CORE_ISLANDS_VERSION
         "] READY: shared Core draw-state transaction layer (PS/CB/SRV/sampler) "
@@ -2296,7 +2277,7 @@ void AddonUninit(
     HMODULE addon_module,
     HMODULE reshade_module)
 {
-    unregister_events();
+    // PERF DIAG D: no ReShade callbacks were registered.
     log_state("PRE_UNLOAD");
     g_upper_lower.uninstall();
 
@@ -2325,8 +2306,7 @@ void AddonUninit(
     dsrrl::runtime::upper_lower_receiver_pipeline_reset();
     reset_integrated_draw_routes();
     dsrrl::runtime::texture_identity_transport::uninstall();
-    g_envspec_resources.unregister_events();
-    g_material_resources.unregister_events();
+    // PERF DIAG D: resource events were not registered.
     g_pmetal_envspec.reset();
     g_envspec_resources.reset_stats();
     g_bloom_scene_sidecar.reset();
