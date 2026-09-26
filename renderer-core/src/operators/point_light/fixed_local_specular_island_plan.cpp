@@ -41,7 +41,10 @@ build_fixed_local_specular_island_plan(
     if (!operands.exponent_carrier_attested ||
         operands.ptde_specular_power_cb_slot != 12u ||
         operands.ptde_specular_power_cb_index != 0u ||
-        operands.ptde_specular_power_component != 3u) {
+        operands.ptde_specular_power_component != 3u ||
+        out.material_cb_slot != 12u ||
+        out.ptde_c100_cb_index != 1u ||
+        out.ptde_c101_cb_index != 2u) {
         out.result =
             fixed_local_specular_island_plan_result::
                 fail_exponent_carrier;
