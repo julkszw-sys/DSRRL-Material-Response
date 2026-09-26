@@ -29,6 +29,12 @@ struct fixed_local_specular_island_plan {
 
     std::uint8_t raw_q_srv_slot = 19u;
     std::uint8_t material_cb_slot = 12u;
+
+    // Direct PTDE material ABI. b12[0].xyz is deliberately NOT listed here:
+    // that lane is c101_f0q for the stock-host Material Response bridge.
+    // The direct PointLight island owns authored PTDE material terms only.
+    std::uint16_t ptde_c100_cb_index = 1u;
+    std::uint16_t ptde_c101_cb_index = 2u;
     std::uint16_t ptde_specular_power_cb_index = 0u;
     std::uint8_t ptde_specular_power_component = 3u;
 
