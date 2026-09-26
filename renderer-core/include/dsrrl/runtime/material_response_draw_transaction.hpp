@@ -54,6 +54,10 @@ struct material_response_draw_telemetry {
     std::uint64_t replacement_miss = 0;
     std::uint64_t replay_ok = 0;
     std::uint64_t replay_restore_fail = 0;
+    std::uint64_t spec_variant_register_ok = 0;
+    std::uint64_t spec_variant_register_fail = 0;
+    std::uint64_t spec_variant_activate_ok = 0;
+    std::uint64_t spec_variant_activate_miss = 0;
     bool quarantined = false;
 };
 
@@ -226,6 +230,10 @@ private:
     std::atomic<std::uint64_t> replacement_miss_{0};
     std::atomic<std::uint64_t> replay_ok_{0};
     std::atomic<std::uint64_t> replay_restore_fail_{0};
+    std::atomic<std::uint64_t> spec_variant_register_ok_{0};
+    std::atomic<std::uint64_t> spec_variant_register_fail_{0};
+    std::atomic<std::uint64_t> spec_variant_activate_ok_{0};
+    std::atomic<std::uint64_t> spec_variant_activate_miss_{0};
     std::atomic_bool local_quarantine_{false};
 };
 
