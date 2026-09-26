@@ -574,11 +574,20 @@ jobs:
         shell: pwsh
         run: |
           python renderer-core/tools/generate_upper_lower_hemenv_v1.py --input renderer-core/data/provenance/upper_lower_hemenv_consumers_v1.tsv --output "$env:RUNNER_TEMP/generated_upper_lower_hemenv_v1.hpp"
-          $built = "build-integrated/generated/dsrrl/operators/lightbank/generated_upper_lower_hemenv_v1.hpp"
-          if (!(Test-Path $built)) { throw "Generated UpperLower authority header missing from build" }
-          if ((Get-FileHash $built -Algorithm SHA256).Hash -ne (Get-FileHash "$env:RUNNER_TEMP/generated_upper_lower_hemenv_v1.hpp" -Algorithm SHA256).Hash) {
-            throw "Generated UpperLower HemEnv authority is not reproducible"
+          python renderer-core/tools/generate_upper_lower_hemenvlerp_v1.py --input renderer-core/data/provenance/upper_lower_hemenvlerp_consumers_v1.tsv --output "$env:RUNNER_TEMP/generated_upper_lower_hemenvlerp_v1.hpp"
+
+          foreach ($name in @(
+            'generated_upper_lower_hemenv_v1.hpp',
+            'generated_upper_lower_hemenvlerp_v1.hpp'
+          )) {
+            $built = "build-integrated/generated/dsrrl/operators/lightbank/$name"
+            $regen = "$env:RUNNER_TEMP/$name"
+            if (!(Test-Path $built)) { throw "Generated UpperLower authority header missing from build: $name" }
+            if ((Get-FileHash $built -Algorithm SHA256).Hash -ne (Get-FileHash $regen -Algorithm SHA256).Hash) {
+              throw "Generated UpperLower authority is not reproducible: $name"
+            }
           }
+
           Write-Host "CORE_ISLANDS_UPPER_LOWER_GENERATED_AUTHORITY_PASS"
 
       - name: Verify HemDir3 generated authority
