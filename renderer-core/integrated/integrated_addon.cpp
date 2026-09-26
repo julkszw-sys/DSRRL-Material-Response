@@ -29,7 +29,8 @@
 #include "dsrrl/operators/resource_bridges/spec_rgb_consumer_materializer.hpp"
 #include "dsrrl/operators/env_spec/pmetal_rgba_materializer.hpp"
 #include "dsrrl/operators/env_spec/pmetal_rgba_lerp_materializer.hpp"
-#include "dsrrl/operators/point_light/local_specular_receiver_registry.hpp"\n#include "dsrrl/operators/point_light/local_specular_microfacet_windows.hpp"
+#include "dsrrl/operators/point_light/local_specular_receiver_registry.hpp"
+#include "dsrrl/operators/point_light/local_specular_microfacet_windows.hpp"
 #include "dsrrl/operators/point_light/fixed_local_specular_patch_plan.hpp"
 #include "dsrrl/operators/point_light/fixed_local_specular_operand_contract.hpp"
 
