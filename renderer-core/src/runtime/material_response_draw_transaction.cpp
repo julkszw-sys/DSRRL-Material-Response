@@ -419,6 +419,8 @@ prepare_draw_request_with_upper_lower(
         replacement.composed_owners;
     prepared.request.additional_shader_owners =
         prepared.request.additional_owners;
+    prepared.request.additional_constant_buffer_owners =
+        ul_owner;
     prepared.request.additional_carrier_owners =
         ul_owner;
     prepared.request.receiver_verified = true;
