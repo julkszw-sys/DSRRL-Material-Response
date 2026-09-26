@@ -163,7 +163,7 @@ struct raw_rgbm {
 core::renderer_core *g_core = nullptr;
 upper_lower_draw_runtime *g_runtime = nullptr;
 std::uintptr_t g_base = 0u;
-std::array<inline_hook,4> g_hooks{};
+std::array<inline_hook,2> g_hooks{};
 inline_hook g_pmetal_env_hook{};
 
 wrapper_fn g_wrapper5_orig = nullptr;
@@ -1227,19 +1227,7 @@ bool install_producer_hooks() noexcept
             k_rva_wrapper_type6,
             k_wrapper_bytes,
             reinterpret_cast<void *>(
-                &hook_wrapper6)) ||
-        !prepare_hook(
-            g_hooks[2],
-            k_rva_steady_packer,
-            k_steady_packer_bytes,
-            reinterpret_cast<void *>(
-                &hook_steady_packer)) ||
-        !prepare_hook(
-            g_hooks[3],
-            k_rva_blend_packer,
-            k_blend_packer_bytes,
-            reinterpret_cast<void *>(
-                &hook_blend_packer))) {
+                &hook_wrapper6))) {
         return false;
     }
 
@@ -1249,23 +1237,14 @@ bool install_producer_hooks() noexcept
     g_wrapper6_orig =
         reinterpret_cast<wrapper_fn>(
             g_hooks[1].trampoline);
-    g_steady_packer_orig =
-        reinterpret_cast<steady_packer_fn>(
-            g_hooks[2].trampoline);
-    g_blend_packer_orig =
-        reinterpret_cast<lightbank_blend_packer_fn>(
-            g_hooks[3].trampoline);
+    g_steady_packer_orig = nullptr;
+    g_blend_packer_orig = nullptr;
 
     for (auto &hook : g_hooks)
         if (!arm_hook(hook))
             return false;
 
-    // PERF DIAG M: P_Metal EnvSpec source capture is a separate operator
-    // and is intentionally disabled here. This keeps the U/L producer path
-    // intact while removing pmetal_bank_signature() scans and the optional
-    // P_Metal blend hook from the hot producer path.
     g_pmetal_env_hook_armed.store(false);
-
     return true;
 }
 
