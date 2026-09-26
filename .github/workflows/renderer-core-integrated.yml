@@ -263,6 +263,7 @@ jobs:
             'expected_envspec_cut',
             '0x0100003au',
             'terminal_rgb_output_instruction',
+            'terminal_rgb_word',
             'terminal_sat_rgb_composed',
             '0x05002036u'
           )) {
