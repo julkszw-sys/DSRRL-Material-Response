@@ -2,6 +2,7 @@
 
 #include "dsrrl/core/feature_registry.hpp"
 
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <vector>
@@ -38,6 +39,14 @@ struct fixed_local_single_materialize_outcome {
     bool t19_declared = false;
     bool b12_declared = false;
     bool output_cut_redirected = false;
+
+    // Exact created-code attestation seam. The fixed replacement is generated
+    // from this full A1/P2.2 host, so runtime may associate the replacement
+    // with a pipeline only when init_pipeline exposes byte-identical host
+    // code (SHA256 + size). Never infer identity from creation order.
+    std::array<std::uint8_t,32> a1_host_sha256{};
+    std::size_t a1_host_size = 0u;
+    std::array<std::uint8_t,32> replacement_sha256{};
 };
 
 // Construction-only exact materializer for the 24 unique single-endpoint
