@@ -618,6 +618,7 @@ bool pmetal_envspec_draw_runtime::prepare(
                 decision.receiver_id,
                 query,
                 true,
+                true,
                 prepared.material_resources) ||
         !prepared.material_resources.spec_rgb) {
         if (shader != nullptr)
