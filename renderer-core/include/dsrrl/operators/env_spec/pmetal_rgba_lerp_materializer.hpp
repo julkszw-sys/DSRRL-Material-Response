@@ -15,6 +15,7 @@ enum class pmetal_rgba_lerp_materialize_result : std::uint8_t {
     fail_invalid_dxbc,
     fail_operator_precondition,
     fail_b12_rdef,
+    fail_upper_lower_consumer,
     fail_terminal_sat,
     fail_spec_rgb_consumer,
     fail_postcondition,
@@ -28,6 +29,7 @@ struct pmetal_rgba_lerp_materialize_outcome {
     std::uint8_t pair_index = 0xffu;
     std::uint32_t semantic_receiver_id = 0u;
     bool envdiffuse_preserved = false;
+    bool upper_lower_composed = false;
     bool terminal_sat_rgb_composed = false;
     bool spec_rgb_consumer = false;
 };
