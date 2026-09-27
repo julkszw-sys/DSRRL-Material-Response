@@ -52,6 +52,9 @@ std::atomic<std::uint64_t> g_exact_owner_ready{0};
 std::atomic<std::uint64_t> g_owner_fail_open{0};
 std::atomic<std::uint64_t> g_runtime_material_hits{0};
 std::atomic<std::uint64_t> g_runtime_material_ready{0};
+std::atomic_bool g_runtime_mtd_classified{false};
+std::atomic_bool g_runtime_mtd_cache_hit{false};
+std::atomic_bool g_runtime_mtd_selection_published{false};
 std::atomic<std::uint64_t> g_owner_consumed{0};
 std::atomic<std::uint64_t> g_owner_consume_misses{0};
 
@@ -224,6 +227,10 @@ void observe_exact_runtime_mtd(
       route_ordinal))
   return;
 
+ g_runtime_mtd_classified.store(
+     true,
+     std::memory_order_relaxed);
+
  exact_material_cache_publish(
      material,
      route_ordinal);
@@ -240,6 +247,10 @@ bool lookup_exact_runtime_material(
       material,
       route_ordinal))
   return false;
+
+ g_runtime_mtd_cache_hit.store(
+     true,
+     std::memory_order_relaxed);
 
  const auto &route=
      operators::material_response::generated::
@@ -429,6 +440,9 @@ extern "C" void dsrrl_flver_selector_observer(
 
   if(material_owner_selection_publish(
         runtime_material)){
+   g_runtime_mtd_selection_published.store(
+       true,
+       std::memory_order_relaxed);
    telemetry::hot_count(
        g_runtime_material_ready);
    return;
@@ -437,7 +451,7 @@ extern "C" void dsrrl_flver_selector_observer(
 
  telemetry::hot_count(g_owner_fail_open);
 }
-bool install() noexcept {if(g_p.patched||g_s.patched||g_d.patched||g_m.patched)return false;g_state={};if(!exe_ok())return false;g_base=reinterpret_cast<std::uintptr_t>(GetModuleHandleW(nullptr));if(!g_base)return false;g_state.provenance_ok=true;
+bool install() noexcept {if(g_p.patched||g_s.patched||g_d.patched||g_m.patched)return false;g_state={};g_runtime_mtd_classified.store(false);g_runtime_mtd_cache_hit.store(false);g_runtime_mtd_selection_published.store(false);if(!exe_ok())return false;g_base=reinterpret_cast<std::uintptr_t>(GetModuleHandleW(nullptr));if(!g_base)return false;g_state.provenance_ok=true;
  if(!prep(g_p,k_parse,k_parse_b,reinterpret_cast<void*>(&parse_entry)))goto fail;g_po=reinterpret_cast<parser_fn>(g_p.trampoline);
  if(!prep(g_d,k_destroy,k_destroy_b,reinterpret_cast<void*>(&destroy_entry)))goto fail;g_do=reinterpret_cast<destructor_fn>(g_d.trampoline);
  if(!prep(g_m,k_mtd,k_mtd_b,reinterpret_cast<void*>(&mtd_entry)))goto fail;g_mo=reinterpret_cast<mtd_fn>(g_m.trampoline);
@@ -473,7 +487,20 @@ void uninstall() noexcept {
  flver_identity_reset();
  g_state={};
 }
-hook_status status() noexcept{return g_state;}
+hook_status status() noexcept
+{
+ hook_status out=g_state;
+ out.runtime_mtd_classified=
+     g_runtime_mtd_classified.load(
+         std::memory_order_relaxed);
+ out.runtime_mtd_cache_hit=
+     g_runtime_mtd_cache_hit.load(
+         std::memory_order_relaxed);
+ out.runtime_mtd_selection_published=
+     g_runtime_mtd_selection_published.load(
+         std::memory_order_relaxed);
+ return out;
+}
 
 bool consume_selector_owner_candidate(
     operators::material_response::material_identity &material) noexcept
