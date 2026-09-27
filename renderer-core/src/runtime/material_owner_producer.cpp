@@ -2,7 +2,6 @@
 #include "dsrrl/operators/material_response/generated_dsr_flver_owner_tuples_v1.hpp"
 #include "dsrrl/operators/material_response/generated_dsr_mtd_identity_v1.hpp"
 #include "dsrrl/operators/material_response/generated_dsr_mtd_identity_supplement_v1.hpp"
-#include "dsrrl/operators/material_response/generated_envspec_router_v1.hpp"
 #include "dsrrl/operators/material_response/generated_routes_v1.hpp"
 #include "dsrrl/operators/material_response/mtd_semantic_census.hpp"
 #include "dsrrl/operators/legacy_plan/sha256_bytes.hpp"
@@ -55,41 +54,6 @@ std::size_t owner_material_cache_index(
         h % k_owner_material_cache_slots);
 }
 
-bool resolve_exact_direct_nospc_raw_mtd(
-    std::uint64_t semantic_name_hash,
-    core::sha256_digest &raw_mtd_sha) noexcept
-{
-    namespace generated =
-        operators::material_response::generated;
-
-    raw_mtd_sha = {};
-    if (semantic_name_hash == 0u)
-        return false;
-
-    const generated::envspec_router_record *match = nullptr;
-    for (const auto &record :
-         generated::k_envspec_router_v1) {
-        if (record.state !=
-                generated::envspec_router_state::nospc_host ||
-            record.semantic_name_hash != semantic_name_hash)
-            continue;
-
-        // The exact PTDE/DSR name pair must remain single-valued. If a future
-        // corpus introduces a semantic collision, preserve stock behavior.
-        if (match != nullptr)
-            return false;
-
-        match = &record;
-    }
-
-    if (match == nullptr)
-        return false;
-
-    raw_mtd_sha = match->raw_mtd_sha256;
-    return !zero_digest(raw_mtd_sha);
-}
-
-}
 
 bool enrich_exact_owner_mtd_identity(
     actual_material_owner_observation &observation) noexcept
@@ -135,19 +99,13 @@ bool enrich_exact_owner_mtd_identity(
 
     core::sha256_digest raw_mtd_sha{};
     // Exact raw-MTD identity comes from the dedicated generic registry or
-    // the evidence-certified special-route supplement. The supplement does
-    // not make generic coverage source-complete; unknown/ambiguous semantic
-    // hashes still fail open. EnvSpec/SPX consumer membership is never used
-    // as an identity fallback.
-    if (!mr::generated::dsr_mtd_identity_resolve(
-            semantic_hash,
-            raw_mtd_sha) &&
-        !mr::generated::dsr_mtd_identity_supplement_resolve(
-            semantic_hash,
-            raw_mtd_sha) &&
-        !resolve_exact_direct_nospc_raw_mtd(
-            semantic_hash,
-            raw_mtd_sha)) {
+    // the evidence-certified special-route supplement. The supplement also
+    // carries the exact HOMOLOGOUS_NOSPC identities required by direct
+    // PointLight, but does not make generic coverage source-complete.
+    // Unknown/ambiguous semantic hashes still fail open. EnvSpec/SPX
+    // consumer membership is never used as an identity fallback.
+    if (!mr::generated::dsr_mtd_identity_resolve(semantic_hash, raw_mtd_sha) &&
+        !mr::generated::dsr_mtd_identity_supplement_resolve(semantic_hash, raw_mtd_sha)) {
         cached = {
             observation.flver_sha256,
             observation.material_slot,
