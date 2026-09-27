@@ -1241,7 +1241,7 @@ prepare_lerp_draw_request(
 
     replacement_record replacement{};
     if (!acquire_replacement(
-            replacement_bank::lerp_upper_lower,
+            replacement_bank::lerp,
             decision.receiver_id,
             replacement)) {
         telemetry::hot_count(replacement_miss_);
@@ -1317,7 +1317,7 @@ prepare_lerp_draw_request_with_upper_lower(
 
     replacement_record replacement{};
     if (!acquire_replacement(
-            replacement_bank::lerp,
+            replacement_bank::lerp_upper_lower,
             decision.receiver_id,
             replacement)) {
         telemetry::hot_count(combined_ul_miss_);
