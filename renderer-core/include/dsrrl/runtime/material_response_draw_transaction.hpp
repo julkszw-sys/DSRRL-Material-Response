@@ -26,6 +26,7 @@ namespace dsrrl::runtime {
 enum class material_response_replacement_family : std::uint8_t {
     stable = 0,
     stable_upper_lower,
+    hemenvlerp,
     hemenvlerp_upper_lower
 };
 
@@ -130,6 +131,24 @@ public:
     bool has_lerp_receiver_spec_rgb_replacement(
         std::uint32_t receiver_id) const noexcept;
 
+    bool register_lerp_receiver_upper_lower_replacement(
+        std::uint32_t receiver_id,
+        const void *dxbc,
+        std::size_t dxbc_size,
+        core::operator_mask composed_owners) noexcept;
+
+    bool has_lerp_receiver_upper_lower_replacement(
+        std::uint32_t receiver_id) const noexcept;
+
+    bool register_lerp_receiver_upper_lower_spec_rgb_replacement(
+        std::uint32_t receiver_id,
+        const void *dxbc,
+        std::size_t dxbc_size,
+        core::operator_mask composed_owners) noexcept;
+
+    bool has_lerp_receiver_upper_lower_spec_rgb_replacement(
+        std::uint32_t receiver_id) const noexcept;
+
     bool register_receiver_upper_lower_replacement(
         std::uint32_t receiver_id,
         const void *dxbc,
@@ -155,6 +174,10 @@ public:
     bool prepare_draw_request_with_upper_lower(
         const operators::material_response::decision &decision,
         ID3D11Buffer *b13,
+        prepared_material_response_draw &prepared) noexcept;
+
+    bool prepare_lerp_draw_request(
+        const operators::material_response::decision &decision,
         prepared_material_response_draw &prepared) noexcept;
 
     bool prepare_lerp_draw_request_with_upper_lower(
@@ -235,6 +258,8 @@ private:
         stable_spec,
         lerp,
         lerp_spec,
+        lerp_upper_lower,
+        lerp_upper_lower_spec,
         upper_lower,
         upper_lower_spec
     };
@@ -259,6 +284,10 @@ private:
         lerp_replacements_;
     std::unordered_map<std::uint32_t, replacement_record>
         lerp_spec_rgb_replacements_;
+    std::unordered_map<std::uint32_t, replacement_record>
+        lerp_upper_lower_replacements_;
+    std::unordered_map<std::uint32_t, replacement_record>
+        lerp_upper_lower_spec_rgb_replacements_;
     std::unordered_map<std::uint32_t, replacement_record>
         upper_lower_replacements_;
     std::unordered_map<std::uint32_t, replacement_record>
