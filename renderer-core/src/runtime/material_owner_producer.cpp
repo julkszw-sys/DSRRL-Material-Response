@@ -2,6 +2,7 @@
 #include "dsrrl/operators/material_response/generated_dsr_flver_owner_tuples_v1.hpp"
 #include "dsrrl/operators/material_response/generated_dsr_mtd_identity_v1.hpp"
 #include "dsrrl/operators/material_response/generated_dsr_mtd_identity_supplement_v1.hpp"
+#include "dsrrl/operators/material_response/generated_envspec_router_v1.hpp"
 #include "dsrrl/operators/material_response/generated_routes_v1.hpp"
 #include "dsrrl/operators/material_response/mtd_semantic_census.hpp"
 #include "dsrrl/operators/legacy_plan/sha256_bytes.hpp"
@@ -52,6 +53,40 @@ std::size_t owner_material_cache_index(
     h *= 0x100000001b3ULL;
     return static_cast<std::size_t>(
         h % k_owner_material_cache_slots);
+}
+
+bool resolve_exact_direct_nospc_raw_mtd(
+    std::uint64_t semantic_name_hash,
+    core::sha256_digest &raw_mtd_sha) noexcept
+{
+    namespace generated =
+        operators::material_response::generated;
+
+    raw_mtd_sha = {};
+    if (semantic_name_hash == 0u)
+        return false;
+
+    const generated::envspec_router_record *match = nullptr;
+    for (const auto &record :
+         generated::k_envspec_router_v1) {
+        if (record.state !=
+                generated::envspec_router_state::nospc_host ||
+            record.semantic_name_hash != semantic_name_hash)
+            continue;
+
+        // The exact PTDE/DSR name pair must remain single-valued. If a future
+        // corpus introduces a semantic collision, preserve stock behavior.
+        if (match != nullptr)
+            return false;
+
+        match = &record;
+    }
+
+    if (match == nullptr)
+        return false;
+
+    raw_mtd_sha = match->raw_mtd_sha256;
+    return !zero_digest(raw_mtd_sha);
 }
 
 }
@@ -108,6 +143,9 @@ bool enrich_exact_owner_mtd_identity(
             semantic_hash,
             raw_mtd_sha) &&
         !mr::generated::dsr_mtd_identity_supplement_resolve(
+            semantic_hash,
+            raw_mtd_sha) &&
+        !resolve_exact_direct_nospc_raw_mtd(
             semantic_hash,
             raw_mtd_sha)) {
         cached = {
