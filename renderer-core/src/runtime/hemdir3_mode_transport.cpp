@@ -340,10 +340,10 @@ void observe_effective_mode(
     g_tls.ready = true;
     g_tls.capture_active = false;
 
-    telemetry::hot_count(g_effective_observed);
+    dsrrl::runtime::telemetry::hot_count(g_effective_observed);
 
     if (effective_mode == 2u)
-        telemetry::hot_count(g_mode2_observed);
+        dsrrl::runtime::telemetry::hot_count(g_mode2_observed);
 }
 
 void selector_end() noexcept
@@ -456,7 +456,7 @@ void uninstall() noexcept
 void selector_begin(
     std::uint32_t incoming_mode) noexcept
 {
-    telemetry::hot_count(g_selector_begin);
+    dsrrl::runtime::telemetry::hot_count(g_selector_begin);
 
     ++g_tls.generation;
     g_tls.incoming_mode =
@@ -465,7 +465,7 @@ void selector_begin(
     g_tls.ready = false;
 
     if (incoming_mode == 2u)
-        telemetry::hot_count(g_incoming_mode2);
+        dsrrl::runtime::telemetry::hot_count(g_incoming_mode2);
 
     // 0x140295F50 may replace EDX with the global lighting override before
     // dispatch. Therefore incoming mode is diagnostic only: every selector
@@ -484,13 +484,13 @@ bool snapshot(
 
     if (!g_tls.ready ||
         g_state.quarantined) {
-        telemetry::hot_count(g_snapshot_misses);
+        dsrrl::runtime::telemetry::hot_count(g_snapshot_misses);
         return false;
     }
 
     effective_mode =
         g_tls.effective_mode;
-    telemetry::hot_count(g_snapshot_hits);
+    dsrrl::runtime::telemetry::hot_count(g_snapshot_hits);
     return true;
 }
 
