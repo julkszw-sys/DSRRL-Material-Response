@@ -19,6 +19,65 @@
 namespace dsrrl::runtime {
 namespace {
 
+struct b12_tls_cache_entry {
+    const material_response_draw_runtime *runtime = nullptr;
+    std::uint32_t route_index = 0u;
+    std::uint64_t epoch = 0u;
+    ID3D11Buffer *buffer = nullptr;
+
+    ~b12_tls_cache_entry()
+    {
+        if (buffer != nullptr)
+            buffer->Release();
+    }
+
+    void clear() noexcept
+    {
+        if (buffer != nullptr)
+            buffer->Release();
+        runtime = nullptr;
+        route_index = 0u;
+        epoch = 0u;
+        buffer = nullptr;
+    }
+
+    void assign(
+        const material_response_draw_runtime *owner,
+        std::uint32_t route,
+        std::uint64_t resource_epoch,
+        ID3D11Buffer *value) noexcept
+    {
+        if (buffer == value &&
+            runtime == owner &&
+            route_index == route &&
+            epoch == resource_epoch)
+            return;
+
+        clear();
+
+        runtime = owner;
+        route_index = route;
+        epoch = resource_epoch;
+        buffer = value;
+
+        if (buffer != nullptr)
+            buffer->AddRef();
+    }
+};
+
+constexpr std::size_t k_b12_tls_cache_slots = 16u;
+thread_local std::array<
+    b12_tls_cache_entry,
+    k_b12_tls_cache_slots>
+    g_b12_tls_cache{};
+
+std::size_t b12_tls_cache_index(
+    std::uint32_t route_index) noexcept
+{
+    return static_cast<std::size_t>(
+        route_index % k_b12_tls_cache_slots);
+}
+
 bool full_material_response_decision(
     const operators::material_response::decision &decision) noexcept
 {
@@ -103,6 +162,10 @@ void material_response_draw_runtime::release_resources() noexcept
         device_->Release();
         device_ = nullptr;
     }
+
+    resource_epoch_.fetch_add(
+        1u,
+        std::memory_order_release);
 }
 
 void material_response_draw_runtime::on_init_device(
@@ -195,6 +258,10 @@ void material_response_draw_runtime::on_destroy_device(
         device_->Release();
         device_ = nullptr;
     }
+
+    resource_epoch_.fetch_add(
+        1u,
+        std::memory_order_release);
 }
 
 bool material_response_draw_runtime::register_receiver_replacement(
@@ -1188,33 +1255,69 @@ ID3D11Buffer *material_response_draw_runtime::realize_b12(
         transactions_.quarantined())
         return nullptr;
 
+    const auto epoch =
+        resource_epoch_.load(
+            std::memory_order_acquire);
+    auto &cached =
+        g_b12_tls_cache[
+            b12_tls_cache_index(
+                decision.route_index)];
+
+    if (cached.runtime == this &&
+        cached.route_index ==
+            decision.route_index &&
+        cached.epoch == epoch &&
+        cached.buffer != nullptr) {
+        cached.buffer->AddRef();
+        telemetry::hot_count(b12_hit_);
+        return cached.buffer;
+    }
+
     std::lock_guard<std::mutex> lock(mutex_);
-    if (device_ == nullptr)
+    if (device_ == nullptr) {
+        if (cached.runtime == this)
+            cached.clear();
         return nullptr;
+    }
 
     const auto found =
-        b12_by_route_.find(decision.route_index);
+        b12_by_route_.find(
+            decision.route_index);
 
     if (found != b12_by_route_.end() &&
         found->second != nullptr) {
-        found->second->AddRef();
+        auto *buffer =
+            found->second;
+        buffer->AddRef();
+
+        cached.assign(
+            this,
+            decision.route_index,
+            resource_epoch_.load(
+                std::memory_order_relaxed),
+            buffer);
+
         telemetry::hot_count(b12_hit_);
-        return found->second;
+        return buffer;
     }
 
     const auto payload =
-        operators::material_response::make_material_response_b12_payload(
-            decision);
+        operators::material_response::
+            make_material_response_b12_payload(
+                decision);
 
     D3D11_BUFFER_DESC desc{};
     desc.ByteWidth =
-        static_cast<UINT>(sizeof(payload));
-    desc.Usage = D3D11_USAGE_IMMUTABLE;
+        static_cast<UINT>(
+            sizeof(payload));
+    desc.Usage =
+        D3D11_USAGE_IMMUTABLE;
     desc.BindFlags =
         D3D11_BIND_CONSTANT_BUFFER;
 
     D3D11_SUBRESOURCE_DATA init{};
-    init.pSysMem = payload.data();
+    init.pSysMem =
+        payload.data();
 
     ID3D11Buffer *buffer = nullptr;
     if (FAILED(device_->CreateBuffer(
@@ -1228,7 +1331,17 @@ ID3D11Buffer *material_response_draw_runtime::realize_b12(
         decision.route_index,
         buffer);
 
+    // One reference is owned by b12_by_route_, one by the prepared caller,
+    // and the TLS cache retains its own reference so a concurrent device
+    // teardown cannot turn a stale cache entry into a dangling COM pointer.
     buffer->AddRef();
+    cached.assign(
+        this,
+        decision.route_index,
+        resource_epoch_.load(
+            std::memory_order_relaxed),
+        buffer);
+
     ++b12_create_;
     return buffer;
 }
