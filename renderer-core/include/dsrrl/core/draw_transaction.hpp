@@ -6,7 +6,7 @@
 #include <cstdint>
 #include <mutex>
 #include <optional>
-#include <unordered_map>
+#include <vector>
 
 namespace dsrrl::core {
 
@@ -46,7 +46,10 @@ public:
 
 private:
     mutable std::mutex mutex_;
-    std::unordered_map<std::uint64_t, transaction_state> active_;
+    // Draw replay is normally single-command-list and strictly begin/restore.
+    // Retaining vector capacity avoids unordered_map node allocation/hash on
+    // every draw while preserving arbitrary concurrent command ownership.
+    std::vector<transaction_state> active_;
 };
 
 } // namespace dsrrl::core
