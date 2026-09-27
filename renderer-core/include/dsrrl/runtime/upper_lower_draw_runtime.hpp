@@ -96,6 +96,18 @@ struct pmetal_env_source_diagnostic {
     pmetal_env_source_diag_endpoint b{};
     float beta = 0.0f;
     bool observed = false;
+
+    // Reference-carrier transport frontier. Thread IDs are captured once per
+    // session so cross-thread producer/selector routing can be falsified
+    // without enabling heavyweight hot telemetry.
+    std::uint32_t producer_publish_tid = 0u;
+    std::uint32_t selector_tid = 0u;
+    bool producer_publish_seen = false;
+    bool selector_relevant_seen = false;
+    bool selector_candidate_found = false;
+    bool selector_tuple_read = false;
+    bool selector_tuple_match = false;
+    bool draw_token_selected = false;
 };
 
 struct prepared_hemdir3_carrier {
