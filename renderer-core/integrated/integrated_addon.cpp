@@ -697,6 +697,8 @@ constexpr dsrrl::core::operator_id k_integrated_islands[] = {
     dsrrl::core::operator_id::env_spec,
     dsrrl::core::operator_id::terminal_sat_rgb,
     dsrrl::core::operator_id::diffuse_material_domain,
+    dsrrl::core::operator_id::point_light,
+    dsrrl::core::operator_id::local_specular_legacy,
     dsrrl::core::operator_id::pointlight_pnts_attenuation,
     dsrrl::core::operator_id::envspec_nospc_delete,
     dsrrl::core::operator_id::fixed_postfog_identity
