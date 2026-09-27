@@ -592,69 +592,6 @@ void account_load(
     }
 }
 
-ID3D11ShaderResourceView *lookup(
-    ID3D11ShaderResourceView *stock,
-    asset_class cls) noexcept
-{
-    if (stock == nullptr)
-        return nullptr;
-
-    const auto key =
-        static_cast<std::uint64_t>(
-            reinterpret_cast<std::uintptr_t>(
-                stock));
-
-    std::lock_guard<std::mutex> lock(
-        g_mutex);
-
-    const auto found =
-        g_cache.find(key);
-    if (found == g_cache.end())
-        return nullptr;
-
-    ID3D11ShaderResourceView *view =
-        nullptr;
-
-    switch (cls) {
-    case asset_class::specular:
-        view = found->second.specular;
-        break;
-    case asset_class::diffuse:
-        view = found->second.diffuse;
-        break;
-    case asset_class::normal:
-        view = found->second.normal;
-        break;
-    }
-
-    if (view != nullptr)
-        view->AddRef();
-
-    return view;
-}
-
-std::uint64_t logical_hash_for(
-    ID3D11ShaderResourceView *stock) noexcept
-{
-    if (stock == nullptr)
-        return 0u;
-
-    const auto key =
-        static_cast<std::uint64_t>(
-            reinterpret_cast<std::uintptr_t>(
-                stock));
-
-    std::lock_guard<std::mutex> lock(
-        g_mutex);
-
-    const auto found =
-        g_cache.find(key);
-
-    return found == g_cache.end()
-        ? 0u
-        : found->second.logical_hash;
-}
-
 void logical_hashes_for(
     ID3D11ShaderResourceView *const *stocks,
     std::size_t count,
