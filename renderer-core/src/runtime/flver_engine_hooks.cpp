@@ -6,6 +6,7 @@
 #endif
 #include "dsrrl/runtime/flver_identity_transport.hpp"
 #include "dsrrl/runtime/flver_identity_registry.hpp"
+#include "dsrrl/runtime/runtime_hot_telemetry.hpp"
 #include "dsrrl/runtime/material_owner_selection.hpp"
 #include "dsrrl/runtime/material_owner_producer.hpp"
 #include "dsrrl/runtime/upper_lower_draw_runtime.hpp"
@@ -107,7 +108,7 @@ extern "C" void dsrrl_flver_selector_observer(
     std::int32_t material_index,
     std::uint32_t incoming_mode) noexcept
 {
- ++g_selector_events;
+ telemetry::hot_count(g_selector_events);
  material_owner_selection_clear();
 
  hemdir3_mode_transport::selector_begin(
@@ -119,37 +120,37 @@ extern "C" void dsrrl_flver_selector_observer(
      r14,
      r15);
 
- if(g_base==0u || ret==nullptr || material_index<0){++g_owner_fail_open;return;}
+ if(g_base==0u || ret==nullptr || material_index<0){telemetry::hot_count(g_owner_fail_open);return;}
  const auto ret_addr=reinterpret_cast<std::uintptr_t>(ret);
- if(ret_addr<g_base){++g_owner_fail_open;return;}
+ if(ret_addr<g_base){telemetry::hot_count(g_owner_fail_open);return;}
  const auto rva=ret_addr-g_base;
  if(rva!=k_ret_sel_1 && rva!=k_ret_sel_2 && rva!=k_ret_sel_3){
-  ++g_owner_fail_open;
+  telemetry::hot_count(g_owner_fail_open);
   return;
  }
 
  actual_material_owner_observation observation{};
  if(!flver_identity_enrich_owner(
         container,static_cast<std::uint32_t>(material_index),observation)){
-  ++g_owner_fail_open;
+  telemetry::hot_count(g_owner_fail_open);
   return;
  }
- ++g_owner_sha_hits;
+ telemetry::hot_count(g_owner_sha_hits);
 
  if(!enrich_exact_owner_mtd_identity(observation)){
-  ++g_owner_fail_open;
+  telemetry::hot_count(g_owner_fail_open);
   return;
  }
- ++g_owner_mtd_hits;
+ telemetry::hot_count(g_owner_mtd_hits);
 
  const auto identity=make_actual_material_identity(observation);
  if(!identity.owner_tuple_exact ||
     !material_owner_selection_publish(identity)){
-  ++g_owner_fail_open;
+  telemetry::hot_count(g_owner_fail_open);
   return;
  }
 
- ++g_exact_owner_ready;
+ telemetry::hot_count(g_exact_owner_ready);
 }
 bool install() noexcept {if(g_p.patched||g_s.patched||g_d.patched)return false;g_state={};if(!exe_ok())return false;g_base=reinterpret_cast<std::uintptr_t>(GetModuleHandleW(nullptr));if(!g_base)return false;g_state.provenance_ok=true;
  if(!prep(g_p,k_parse,k_parse_b,reinterpret_cast<void*>(&parse_entry)))goto fail;g_po=reinterpret_cast<parser_fn>(g_p.trampoline);
@@ -187,11 +188,11 @@ bool consume_selector_owner_candidate(
     operators::material_response::material_identity &material) noexcept
 {
     if(!material_owner_selection_consume(material)){
-        ++g_owner_consume_misses;
+        telemetry::hot_count(g_owner_consume_misses);
         return false;
     }
 
-    ++g_owner_consumed;
+    telemetry::hot_count(g_owner_consumed);
     return true;
 }
 
