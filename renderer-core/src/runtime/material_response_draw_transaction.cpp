@@ -1408,9 +1408,13 @@ bool material_response_draw_runtime::has_paired_spec_rgb_replacement(
         bank =
             replacement_bank::upper_lower_spec;
         break;
-    case material_response_replacement_family::hemenvlerp_upper_lower:
+    case material_response_replacement_family::hemenvlerp:
         bank =
             replacement_bank::lerp_spec;
+        break;
+    case material_response_replacement_family::hemenvlerp_upper_lower:
+        bank =
+            replacement_bank::lerp_upper_lower_spec;
         break;
     }
 
@@ -1458,9 +1462,13 @@ bool material_response_draw_runtime::promote_prepared_draw_to_spec_rgb(
         bank =
             replacement_bank::upper_lower_spec;
         break;
-    case material_response_replacement_family::hemenvlerp_upper_lower:
+    case material_response_replacement_family::hemenvlerp:
         bank =
             replacement_bank::lerp_spec;
+        break;
+    case material_response_replacement_family::hemenvlerp_upper_lower:
+        bank =
+            replacement_bank::lerp_upper_lower_spec;
         break;
     }
 
