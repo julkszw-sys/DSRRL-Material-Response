@@ -1,6 +1,7 @@
 #include "dsrrl/runtime/material_response_draw_transaction.hpp"
 #include "dsrrl/operators/material_response/material_response_b12_payload.hpp"
 #include "dsrrl/runtime/island_draw_adapter.hpp"
+#include "dsrrl/runtime/runtime_hot_telemetry.hpp"
 #include "dsrrl/operators/material_response/generated_routes_v1.hpp"
 #include "dsrrl/operators/material_response/generated_material_constants_v1.hpp"
 
@@ -623,7 +624,7 @@ bool material_response_draw_runtime::prepare_draw_request(
     prepared_material_response_draw &prepared) noexcept
 {
     prepared = {};
-    ++eligible_draws_;
+    telemetry::hot_count(eligible_draws_);
 
     if (!full_material_response_decision(decision) ||
         local_quarantine_.load() ||
@@ -644,13 +645,13 @@ bool material_response_draw_runtime::prepare_draw_request(
     }
 
     if (replacement.shader == nullptr) {
-        ++replacement_miss_;
+        telemetry::hot_count(replacement_miss_);
         return false;
     }
 
     auto *b12 = realize_b12(decision);
     if (b12 == nullptr) {
-        ++b12_bind_fail_;
+        telemetry::hot_count(b12_bind_fail_);
         replacement.shader->Release();
         return false;
     }
@@ -688,7 +689,7 @@ bool material_response_draw_runtime::prepare_draw_request(
             prepared.request,
             verify) !=
         island_draw_adapter_result::ready) {
-        ++b12_bind_fail_;
+        telemetry::hot_count(b12_bind_fail_);
         release_prepared_draw(prepared);
         return false;
     }
@@ -704,8 +705,8 @@ prepare_draw_request_with_upper_lower(
     prepared_material_response_draw &prepared) noexcept
 {
     prepared = {};
-    ++eligible_draws_;
-    ++combined_ul_prepare_;
+    telemetry::hot_count(eligible_draws_);
+    telemetry::hot_count(combined_ul_prepare_);
 
     if (!full_material_response_decision(decision) ||
         decision.receiver_id < 24u ||
@@ -731,13 +732,13 @@ prepare_draw_request_with_upper_lower(
     }
 
     if (replacement.shader == nullptr) {
-        ++combined_ul_miss_;
+        telemetry::hot_count(combined_ul_miss_);
         return false;
     }
 
     auto *b12 = realize_b12(decision);
     if (b12 == nullptr) {
-        ++b12_bind_fail_;
+        telemetry::hot_count(b12_bind_fail_);
         replacement.shader->Release();
         return false;
     }
@@ -789,7 +790,7 @@ prepare_draw_request_with_upper_lower(
             prepared.request,
             verify) !=
         island_draw_adapter_result::ready) {
-        ++b12_bind_fail_;
+        telemetry::hot_count(b12_bind_fail_);
         release_prepared_draw(prepared);
         return false;
     }
@@ -806,8 +807,8 @@ prepare_lerp_draw_request_with_upper_lower(
     prepared_material_response_draw &prepared) noexcept
 {
     prepared = {};
-    ++eligible_draws_;
-    ++combined_ul_prepare_;
+    telemetry::hot_count(eligible_draws_);
+    telemetry::hot_count(combined_ul_prepare_);
 
     if (!full_material_response_decision(decision) ||
         decision.receiver_id < 24u ||
@@ -832,13 +833,13 @@ prepare_lerp_draw_request_with_upper_lower(
     }
 
     if (replacement.shader == nullptr) {
-        ++combined_ul_miss_;
+        telemetry::hot_count(combined_ul_miss_);
         return false;
     }
 
     auto *b12 = realize_b12(decision);
     if (b12 == nullptr) {
-        ++b12_bind_fail_;
+        telemetry::hot_count(b12_bind_fail_);
         replacement.shader->Release();
         return false;
     }
@@ -890,7 +891,7 @@ prepare_lerp_draw_request_with_upper_lower(
             prepared.request,
             verify) !=
         island_draw_adapter_result::ready) {
-        ++b12_bind_fail_;
+        telemetry::hot_count(b12_bind_fail_);
         release_prepared_draw(prepared);
         return false;
     }
@@ -1160,7 +1161,7 @@ bool material_response_draw_runtime::prepare_b12_carrier(
 {
     b12 = realize_b12(decision);
     if (b12 == nullptr) {
-        ++b12_bind_fail_;
+        telemetry::hot_count(b12_bind_fail_);
         return false;
     }
     return true;
@@ -1171,11 +1172,11 @@ void material_response_draw_runtime::account_dispatch_result(
 {
     if (result ==
         draw_tx_result::issued_restored) {
-        ++replay_ok_;
+        telemetry::hot_count(replay_ok_);
     } else if (
         result ==
         draw_tx_result::issued_restore_failed) {
-        ++replay_restore_fail_;
+        telemetry::hot_count(replay_restore_fail_);
     }
 }
 
@@ -1197,7 +1198,7 @@ ID3D11Buffer *material_response_draw_runtime::realize_b12(
     if (found != b12_by_route_.end() &&
         found->second != nullptr) {
         found->second->AddRef();
-        ++b12_hit_;
+        telemetry::hot_count(b12_hit_);
         return found->second;
     }
 
