@@ -407,8 +407,9 @@ jobs:
 
           if ($entry -notmatch 'BLOOM_FX' -or
               $entry -notmatch 'ww_diag_join' -or
-              $entry -notmatch 'Bloom FX draw transport FAIL-OPEN') {
-            throw "Integrated Bloom FX diagnostic telemetry is not armed"
+              $entry -notmatch 'bloom_fx_diagnostics' -or
+              $entry -notmatch 'Bloom FX diagnostic hooks disabled for production runtime') {
+            throw "Integrated Bloom FX diagnostic opt-in boundary is missing"
           }
 
           if ($bloomFx -match 'waterwave_semantic_model_candidate.*waterwave_identity_exact\s*=\s*true') {
