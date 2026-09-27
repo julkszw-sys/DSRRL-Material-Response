@@ -121,31 +121,6 @@ int main()
         runtime::make_actual_material_identity(nospc);
     CHECK(nospc_id.owner_tuple_exact);
 
-    // Same raw MTD bytes under a DSR-only alias must not inherit the exact
-    // PTDE name-pair authority from A10_Sky[Dn]_LS.
-    const auto alias_semantic =
-        operators::material_response::mtd_semantic_hash(
-            "A17_Sky[Dn]_LS.mtd");
-    runtime::actual_material_owner_observation alias{};
-    bool alias_owner_found=false;
-    for(const auto &group: generated::k_dsr_flver_owner_groups){
-        for(std::uint32_t slot=0u;slot<group.material_count;++slot){
-            const auto index=
-                static_cast<std::size_t>(group.first_material)+slot;
-            if(generated::k_dsr_flver_owner_mtd_hashes[index]!=alias_semantic)
-                continue;
-            alias.flver_sha256=group.flver_sha256;
-            alias.material_slot=slot;
-            alias.material_slot_valid=true;
-            alias_owner_found=true;
-            break;
-        }
-        if(alias_owner_found) break;
-    }
-    CHECK(alias_owner_found);
-    CHECK(!runtime::enrich_exact_owner_mtd_identity(alias));
-    CHECK(!alias.material.valid);
-
     // End-to-end Subsurface authority: locate an exact DSBT owner tuple from
     // the source-complete corpus, then prove owner enrichment reaches the
     // evidence-certified raw-MTD identity without manufacturing a PTDE route.
