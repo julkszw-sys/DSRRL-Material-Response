@@ -220,6 +220,10 @@ target_compile_features(dsrrl_renderer_hemenvlerp_pipeline_tests PRIVATE cxx_std
 
 target_link_libraries(dsrrl_renderer_material_owner_tests PRIVATE dsrrl_renderer_core)
 target_compile_features(dsrrl_renderer_material_owner_tests PRIVATE cxx_std_17)
+add_dependencies(
+    dsrrl_renderer_material_owner_tests
+    dsrrl_dsr_flver_owner_tuple_header
+    dsrrl_dsr_mtd_identity_supplement_header)
 
 if(MSVC)
     target_compile_options(dsrrl_renderer_core PRIVATE /W4 /WX)
