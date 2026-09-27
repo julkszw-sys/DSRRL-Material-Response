@@ -124,6 +124,7 @@ std::atomic<std::uint64_t> g_mr_payload_materialize_fail{0};
 std::atomic_bool g_mr_once_receiver_hit{false};
 std::atomic_bool g_mr_once_owner_join{false};
 std::atomic_bool g_mr_once_decision_active{false};
+std::atomic_bool g_mr_once_identity{false};
 std::atomic_bool g_mr_once_batch_ready{false};
 std::atomic_bool g_mr_once_draw_issued{false};
 std::atomic<std::uint64_t> g_mr_ul_payload_materialize_ok{0};
@@ -705,6 +706,34 @@ bool observe_draw_identity(
             reshade::log::message(
                 reshade::log::level::info,
                 "[DSRRL MR ACT] stage=decision_active");
+        }
+
+        if (!fixed_pointlight_receiver &&
+            !g_mr_once_identity.exchange(true)) {
+            char mr_identity_line[512]{};
+            std::snprintf(
+                mr_identity_line,
+                sizeof(mr_identity_line),
+                "[DSRRL MR ACTIVE] rx=%u route=%u carrier=%s "
+                "c100=%.6f,%.6f,%.6f "
+                "c101q=%.6f,%.6f,%.6f raw_c101=%.6f",
+                receiver_id,
+                out_decision.route_index,
+                out_material.actual_material_exact
+                    ? "runtime_mtd"
+                    : (out_material.owner_tuple_exact
+                        ? "flver_owner"
+                        : "unknown"),
+                out_decision.c100[0],
+                out_decision.c100[1],
+                out_decision.c100[2],
+                out_decision.c101_f0q[0],
+                out_decision.c101_f0q[1],
+                out_decision.c101_f0q[2],
+                out_decision.c101);
+            reshade::log::message(
+                reshade::log::level::info,
+                mr_identity_line);
         }
     } else {
         hot_count(g_mr_fail_open);
@@ -3161,6 +3190,7 @@ bool AddonInit(
     g_mr_once_receiver_hit.store(false);
     g_mr_once_owner_join.store(false);
     g_mr_once_decision_active.store(false);
+    g_mr_once_identity.store(false);
     g_mr_once_batch_ready.store(false);
     g_mr_once_draw_issued.store(false);
     g_mr_ul_payload_materialize_ok.store(0);
