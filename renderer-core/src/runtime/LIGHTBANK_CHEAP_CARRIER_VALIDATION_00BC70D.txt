@@ -1,0 +1,1 @@
+CI trigger only. Runtime sources match main 00bc70d5ccce4b04c73e061ae3da94040f9d4af3. Validates bounded TLS LightBank reference carrier: minimal steady/blend source references, exact owner+tuple selector freshness, deferred D123 color materialization at HemDir3 gate, deferred exact P_Metal donor lookup after material gate, no heap snapshot publication on cache-builder path.
