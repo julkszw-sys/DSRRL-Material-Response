@@ -332,7 +332,8 @@ decision material_response_island::evaluate(
 
 decision
 material_response_island::evaluate_direct_pointlight_material(
-    const material_identity &material) const
+    const material_identity &material,
+    bool require_legacy_specular) const
 {
     std::lock_guard lock(mutex_);
 
@@ -363,11 +364,14 @@ material_response_island::evaluate_direct_pointlight_material(
 
     const auto required =
         diffuse_material_domain_linear |
-        specular_factor_c101;
+        (require_legacy_specular
+             ? specular_factor_c101
+             : response_none);
 
     if ((profile->certified_operations & required) != required ||
-        !profile->ptde_specular_power_verified ||
-        !(profile->ptde_specular_power > 0.0f))
+        (require_legacy_specular &&
+         (!profile->ptde_specular_power_verified ||
+          !(profile->ptde_specular_power > 0.0f))))
         return {
             false,
             decision_reason::no_certified_operator,
