@@ -678,6 +678,63 @@ void lookup_many(
     }
 }
 
+void inspect_many(
+    const companion_lookup_request *requests,
+    std::size_t count,
+    std::uint64_t *hashes,
+    ID3D11ShaderResourceView **views) noexcept
+{
+    if (hashes == nullptr || views == nullptr)
+        return;
+
+    std::fill_n(hashes, count, 0u);
+    std::fill_n(views, count, nullptr);
+
+    if (requests == nullptr || count == 0u)
+        return;
+
+    // Render-hot generic material routing needs both the logical identity and
+    // its PTDE companion for the same bound SRV. Snapshot both under one
+    // cache lock so the draw does not repeat the mutex acquisition and
+    // unordered_map probe for identical keys.
+    std::lock_guard<std::mutex> lock(
+        g_mutex);
+
+    for (std::size_t i = 0u; i < count; ++i) {
+        if (requests[i].stock == nullptr)
+            continue;
+
+        const auto key =
+            static_cast<std::uint64_t>(
+                reinterpret_cast<std::uintptr_t>(
+                    requests[i].stock));
+        const auto found =
+            g_cache.find(key);
+        if (found == g_cache.end())
+            continue;
+
+        hashes[i] = found->second.logical_hash;
+
+        ID3D11ShaderResourceView *view = nullptr;
+        switch (requests[i].cls) {
+        case asset_class::specular:
+            view = found->second.specular;
+            break;
+        case asset_class::diffuse:
+            view = found->second.diffuse;
+            break;
+        case asset_class::normal:
+            view = found->second.normal;
+            break;
+        }
+
+        if (view != nullptr) {
+            view->AddRef();
+            views[i] = view;
+        }
+    }
+}
+
 void on_init_resource_view(
     reshade::api::device *device,
     reshade::api::resource,
@@ -956,11 +1013,19 @@ prepare_draw_requests(
         3u,
         views);
 
+    const companion_lookup_request
+        companion_requests[3]{
+            {views[0], asset_class::diffuse},
+            {views[1], asset_class::specular},
+            {views[2], asset_class::normal}
+        };
     std::uint64_t hashes[3]{};
-    logical_hashes_for(
-        views,
+    ID3D11ShaderResourceView *companions[3]{};
+    inspect_many(
+        companion_requests,
         3u,
-        hashes);
+        hashes,
+        companions);
 
     const auto h0 = hashes[0];
     const auto h1 = hashes[1];
@@ -970,18 +1035,6 @@ prepare_draw_requests(
         query.material.valid &&
         query.material.owner_tuple_exact;
 
-    const companion_lookup_request
-        companion_requests[3]{
-            {views[1], asset_class::specular},
-            {views[0], asset_class::diffuse},
-            {views[2], asset_class::normal}
-        };
-    ID3D11ShaderResourceView *companions[3]{};
-    lookup_many(
-        companion_requests,
-        3u,
-        companions);
-
     if (full_material_response_ready &&
         spec_rgb_consumer_ready &&
         core_.features().enabled(
@@ -989,8 +1042,8 @@ prepare_draw_requests(
         receiver_id >= 24u &&
         receiver_id <= 47u) {
         auto *replacement =
-            companions[0];
-        companions[0] = nullptr;
+            companions[1];
+        companions[1] = nullptr;
 
         const bool exact_companion =
             h1 != 0u &&
@@ -1076,10 +1129,10 @@ prepare_draw_requests(
             core::operator_id::diffuse)) {
         auto *replacement =
             diffuse_pair
-                ? companions[1]
+                ? companions[0]
                 : nullptr;
         if (diffuse_pair)
-            companions[1] = nullptr;
+            companions[0] = nullptr;
 
         const auto semantic =
             operators::material_response::
