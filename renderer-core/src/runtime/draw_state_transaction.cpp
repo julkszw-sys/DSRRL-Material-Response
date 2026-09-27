@@ -19,6 +19,54 @@
 namespace dsrrl::runtime {
 namespace {
 
+struct context1_tls_cache {
+    ID3D11DeviceContext *base = nullptr;
+    ID3D11DeviceContext1 *extended = nullptr;
+
+    ~context1_tls_cache()
+    {
+        if (extended != nullptr)
+            extended->Release();
+    }
+
+    ID3D11DeviceContext1 *acquire(
+        ID3D11DeviceContext *context) noexcept
+    {
+        if (context == nullptr)
+            return nullptr;
+
+        if (base == context &&
+            extended != nullptr) {
+            extended->AddRef();
+            return extended;
+        }
+
+        ID3D11DeviceContext1 *resolved =
+            nullptr;
+        (void)context->QueryInterface(
+            __uuidof(ID3D11DeviceContext1),
+            reinterpret_cast<void **>(
+                &resolved));
+
+        if (resolved == nullptr)
+            return nullptr;
+
+        if (extended != nullptr)
+            extended->Release();
+
+        base = context;
+        extended = resolved;
+
+        // QueryInterface gives the cache its retained reference. State gets
+        // a second reference so release_state() remains unchanged.
+        extended->AddRef();
+        return extended;
+    }
+};
+
+thread_local context1_tls_cache
+    g_context1_cache{};
+
 core::context_kind context_kind_of(ID3D11DeviceContext *ctx) noexcept
 {
     if (ctx == nullptr)
@@ -280,13 +328,9 @@ bool draw_state_transaction_runtime::begin(
         return false;
     }
 
-    if (mutation.constant_buffer_count != 0u) {
-        ID3D11DeviceContext1 *ctx1 = nullptr;
-        (void)ctx->QueryInterface(
-            __uuidof(ID3D11DeviceContext1),
-            reinterpret_cast<void **>(&ctx1));
-        state.context1 = ctx1;
-    }
+    if (mutation.constant_buffer_count != 0u)
+        state.context1 =
+            g_context1_cache.acquire(ctx);
 
     state.verify_native_readback =
         telemetry::native_state_verification_enabled() &&
