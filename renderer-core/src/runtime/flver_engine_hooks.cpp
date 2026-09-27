@@ -12,6 +12,7 @@
 #include "dsrrl/runtime/upper_lower_draw_runtime.hpp"
 #include "dsrrl/runtime/hemdir3_mode_transport.hpp"
 #include "dsrrl/operators/material_response/mtd_semantic_census.hpp"
+#include "dsrrl/operators/material_response/generated_routes_v1.hpp"
 #include "dsrrl/operators/legacy_plan/sha256_bytes.hpp"
 #include <Windows.h>
 #include <bcrypt.h>
@@ -59,13 +60,7 @@ std::mutex g_exact_material_mutex;
 std::unordered_map<
     const void *,
     operators::material_response::material_identity>
-    g_exact_pmetal_materials;
-
-constexpr std::uint32_t k_pmetal_route=345u;
-constexpr const char *k_pmetal_name="P_Metal[DSB].mtd";
-constexpr const char *k_pmetal_sha256=
-    "ece70f36bd2517d28c8495e276cea537f8b519d6bed981788e79a409ffbf763b";
-constexpr const char *k_pmetal_family="DifSpcBmp";
+    g_exact_runtime_materials;
 
 bool range_ok(const void *p,std::size_t n) noexcept {
  if(!p)return false;if(n==0)return true;auto cur=reinterpret_cast<std::uintptr_t>(p);const auto end=cur+n;if(end<cur)return false;
@@ -103,7 +98,7 @@ void observe_exact_runtime_mtd(
 
  {
   std::lock_guard<std::mutex> lock(g_exact_material_mutex);
-  g_exact_pmetal_materials.erase(material);
+  g_exact_runtime_materials.erase(material);
  }
 
  constexpr std::uint32_t k_max_mtd_bytes=8u*1024u*1024u;
@@ -112,51 +107,74 @@ void observe_exact_runtime_mtd(
   return;
 
  const auto semantic=exact_semantic_hash(semantic_key);
- if(semantic!=operators::material_response::mtd_semantic_hash(k_pmetal_name))
+ if(semantic==0u)
   return;
 
  const auto digest=
   operators::legacy_plan::hashing::sha256(
    static_cast<const std::uint8_t*>(raw),
    static_cast<std::size_t>(len));
- if(!operators::legacy_plan::hashing::matches_hex(
-      digest,k_pmetal_sha256))
+
+ const operators::material_response::generated::route_seed
+     *match=nullptr;
+
+ for(const auto &route:
+     operators::material_response::generated::
+         k_material_routes_v1){
+  if(operators::material_response::mtd_semantic_hash(
+        route.mtd_name)!=semantic ||
+     !operators::legacy_plan::hashing::matches_hex(
+        digest,route.sha256))
+   continue;
+
+  if(match!=nullptr &&
+     (match->route_index!=route.route_index ||
+      operators::material_response::mtd_semantic_hash(
+        match->material_family)!=
+      operators::material_response::mtd_semantic_hash(
+        route.material_family)))
+   return;
+
+  match=&route;
+ }
+
+ if(match==nullptr)
   return;
 
  operators::material_response::material_identity identity{};
  identity.valid=true;
  identity.actual_material_exact=true;
- identity.route_index=k_pmetal_route;
+ identity.route_index=match->route_index;
  identity.semantic_name_hash=semantic;
  identity.raw_mtd_sha256=digest;
  identity.material_family_hash=
   operators::material_response::mtd_semantic_hash(
-   k_pmetal_family);
+   match->material_family);
 
  if(!operators::material_response::
-       exact_runtime_pmetal_material_identity(identity))
+       exact_runtime_material_response_identity(identity))
   return;
 
  try{
   std::lock_guard<std::mutex> lock(g_exact_material_mutex);
-  g_exact_pmetal_materials[material]=identity;
+  g_exact_runtime_materials[material]=identity;
  }catch(...){
   return;
  }
 }
 
-bool lookup_exact_runtime_pmetal(
+bool lookup_exact_runtime_material(
     const void *material,
     operators::material_response::material_identity &identity) noexcept
 {
  identity={};
  if(material==nullptr)return false;
  std::lock_guard<std::mutex> lock(g_exact_material_mutex);
- const auto found=g_exact_pmetal_materials.find(material);
- if(found==g_exact_pmetal_materials.end())return false;
+ const auto found=g_exact_runtime_materials.find(material);
+ if(found==g_exact_runtime_materials.end())return false;
  identity=found->second;
  return operators::material_response::
-  exact_runtime_pmetal_material_identity(identity);
+  exact_runtime_material_response_identity(identity);
 }
 
 void *resolve_actual_material(
@@ -274,16 +292,6 @@ extern "C" void dsrrl_flver_selector_observer(
          container,
          material_index);
 
- operators::material_response::material_identity
-     runtime_material{};
- const bool runtime_pmetal=
-     lookup_exact_runtime_pmetal(
-         actual_material,
-         runtime_material);
- if(runtime_pmetal)
-     telemetry::hot_count(
-         g_runtime_material_hits);
-
  actual_material_owner_observation observation{};
  if(flver_identity_enrich_owner(
         container,static_cast<std::uint32_t>(material_index),observation)){
@@ -303,16 +311,24 @@ extern "C" void dsrrl_flver_selector_observer(
   }
  }
 
- // Legacy 1.45 proved P_Metal c101 can be safely routed from the exact
- // runtime material object itself. Restore only that narrow authority:
- // route345 + exact raw MTD + exact semantic identity. Full EnvSpec and
- // other owner-sensitive operators still require FLVER ownership.
- if(runtime_pmetal &&
-    material_owner_selection_publish(
+ // Material Response c100/c101 is MTD-local. If FLVER owner enrichment
+ // is unavailable, fall back to the exact runtime material object observed
+ // by the retail MTD parser. This carrier is accepted only for certified MR
+ // profiles; resource/asset operators still require their own owner gates.
+ operators::material_response::material_identity
+     runtime_material{};
+ if(lookup_exact_runtime_material(
+        actual_material,
         runtime_material)){
   telemetry::hot_count(
-      g_runtime_material_ready);
-  return;
+      g_runtime_material_hits);
+
+  if(material_owner_selection_publish(
+        runtime_material)){
+   telemetry::hot_count(
+       g_runtime_material_ready);
+   return;
+  }
  }
 
  telemetry::hot_count(g_owner_fail_open);
@@ -351,7 +367,7 @@ void uninstall() noexcept {
  {
   std::lock_guard<std::mutex> lock(
       g_exact_material_mutex);
-  g_exact_pmetal_materials.clear();
+  g_exact_runtime_materials.clear();
  }
  material_owner_selection_clear();
  flver_identity_reset();
