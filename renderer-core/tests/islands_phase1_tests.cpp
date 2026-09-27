@@ -252,6 +252,17 @@ int main()
     CHECK(direct_nospc_wrong_spec_mode.reason==
           decision_reason::no_certified_operator);
 
+    auto direct_nospc_same_sha_alias=exact_nospc;
+    direct_nospc_same_sha_alias.semantic_name_hash=
+        mtd_semantic_hash("A17_Sky[Dn]_LS.mtd");
+    const auto direct_nospc_alias_result=
+        seeded.evaluate_direct_pointlight_material(
+            direct_nospc_same_sha_alias,
+            false);
+    CHECK(!direct_nospc_alias_result.active);
+    CHECK(direct_nospc_alias_result.reason==
+          decision_reason::owner_tuple_unverified);
+
     auto direct_nospc_wrong_sha=exact_nospc;
     direct_nospc_wrong_sha.raw_mtd_sha256.fill(0xffu);
     const auto direct_nospc_bad_identity=
