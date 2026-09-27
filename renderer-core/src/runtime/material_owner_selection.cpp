@@ -1,4 +1,5 @@
 #include "dsrrl/runtime/material_owner_selection.hpp"
+#include "dsrrl/runtime/runtime_hot_telemetry.hpp"
 #include "dsrrl/operators/material_response/generated_dsr_flver_owner_tuples_v1.hpp"
 #include <atomic>
 #include <optional>
@@ -21,30 +22,30 @@ void material_owner_selection_clear() noexcept
 bool material_owner_selection_publish(
     const operators::material_response::material_identity &identity) noexcept
 {
-    ++g_selector_events;
+    telemetry::hot_count(g_selector_events);
     if (!identity.valid ||
         !identity.owner_tuple_exact ||
         !identity.material_slot_valid ||
         identity.semantic_name_hash == 0u) {
-        ++g_fail_open;
+        telemetry::hot_count(g_fail_open);
         g_current.reset();
         return false;
     }
 
-    ++g_owner_enriched;
+    telemetry::hot_count(g_owner_enriched);
 
     if (!operators::material_response::generated::
             dsr_flver_owner_tuple_authenticated(
                 identity.flver_sha256,
                 identity.material_slot,
                 identity.semantic_name_hash)) {
-        ++g_fail_open;
+        telemetry::hot_count(g_fail_open);
         g_current.reset();
         return false;
     }
 
-    ++g_owner_authenticated;
-    ++g_accepted_callers;
+    telemetry::hot_count(g_owner_authenticated);
+    telemetry::hot_count(g_accepted_callers);
     g_current = identity;
     return true;
 }
