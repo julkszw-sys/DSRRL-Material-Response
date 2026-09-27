@@ -151,6 +151,13 @@ std::atomic<std::uint64_t> g_local_specular_island_plan_fail{0};
 std::atomic<std::uint64_t> g_local_specular_single_materialize_ok{0};
 std::atomic<std::uint64_t> g_local_specular_blended_defer{0};
 std::atomic<std::uint64_t> g_local_specular_materialize_fail{0};
+std::atomic<std::uint64_t> g_fixed_draw_candidates{0};
+std::atomic<std::uint64_t> g_fixed_draw_material_ready{0};
+std::atomic<std::uint64_t> g_fixed_draw_spec_ready{0};
+std::atomic<std::uint64_t> g_fixed_draw_b12_ready{0};
+std::atomic<std::uint64_t> g_fixed_draw_t19_ready{0};
+std::atomic<std::uint64_t> g_fixed_draw_batch_ready{0};
+std::atomic<std::uint64_t> g_fixed_draw_fail_open{0};
 
 enum integrated_draw_route_bit : std::uint8_t {
     k_route_stable = 1u << 0,
@@ -2061,6 +2068,7 @@ bool prepare_island_batch(
     if (g_fixed_pointlight_pipeline.prepare_bound_shader(
             cmd_list,
             prepared.fixed_shader)) {
+        ++g_fixed_draw_candidates;
         auto *context =
             reinterpret_cast<ID3D11DeviceContext *>(
                 cmd_list->get_native());
@@ -2068,6 +2076,8 @@ bool prepare_island_batch(
         const bool direct_material_ready =
             decision.active &&
             decision.ptde_specular_power_verified;
+        if (direct_material_ready)
+            ++g_fixed_draw_material_ready;
 
         dsrrl::operators::material_response::
             mtd_semantic_query fixed_query{};
@@ -2097,11 +2107,17 @@ bool prepare_island_batch(
                     prepared.resources) &&
             prepared.resources.spec_rgb;
 
+        if (resources_ready)
+            ++g_fixed_draw_spec_ready;
+
         const bool b12_ready =
             resources_ready &&
             g_mr_draw_runtime.prepare_b12_carrier(
                 decision,
                 prepared.fixed_b12);
+
+        if (b12_ready)
+            ++g_fixed_draw_b12_ready;
 
         const bool t19_ready =
             b12_ready &&
@@ -2111,6 +2127,7 @@ bool prepare_island_batch(
                 prepared.fixed_carrier);
 
         if (t19_ready) {
+            ++g_fixed_draw_t19_ready;
             dsrrl::runtime::island_draw_adapter_request fixed{};
             const auto local =
                 dsrrl::core::operator_bit(
@@ -2171,6 +2188,7 @@ bool prepare_island_batch(
 
                 if (resources_appended) {
                     prepared.fixed_in_batch = true;
+                    ++g_fixed_draw_batch_ready;
                     return true;
                 }
             }
@@ -2187,6 +2205,7 @@ bool prepare_island_batch(
             prepared.fixed_b12 = nullptr;
         }
         prepared.batch = {};
+        ++g_fixed_draw_fail_open;
     }
 
     if (hemdir3_bound) {
@@ -2899,6 +2918,13 @@ bool AddonInit(
     g_local_specular_single_materialize_ok.store(0);
     g_local_specular_blended_defer.store(0);
     g_local_specular_materialize_fail.store(0);
+    g_fixed_draw_candidates.store(0);
+    g_fixed_draw_material_ready.store(0);
+    g_fixed_draw_spec_ready.store(0);
+    g_fixed_draw_b12_ready.store(0);
+    g_fixed_draw_t19_ready.store(0);
+    g_fixed_draw_batch_ready.store(0);
+    g_fixed_draw_fail_open.store(0);
     reset_integrated_draw_routes();
     for (auto &rx : g_material_receiver_runtime) {
         rx.seen.store(0);
