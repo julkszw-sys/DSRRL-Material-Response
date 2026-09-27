@@ -289,6 +289,11 @@ target_compile_features(dsrrl_renderer_clustered_pnts_materializer_tests PRIVATE
 add_dependencies(
     dsrrl_renderer_clustered_pnts_materializer_tests
     dsrrl_clustered_pnts_direct_header)
+
+add_executable(dsrrl_renderer_clustered_pnts_draw_adapter_tests
+    tests/clustered_pnts_draw_adapter_tests.cpp)
+target_link_libraries(dsrrl_renderer_clustered_pnts_draw_adapter_tests PRIVATE dsrrl_renderer_core)
+target_compile_features(dsrrl_renderer_clustered_pnts_draw_adapter_tests PRIVATE cxx_std_17)
 target_link_libraries(dsrrl_renderer_faceeye_pointlight_tests PRIVATE dsrrl_renderer_core)
 target_compile_features(dsrrl_renderer_faceeye_pointlight_tests PRIVATE cxx_std_17)
 
@@ -387,6 +392,7 @@ if(MSVC)
     target_compile_options(dsrrl_renderer_faceeye_pointlight_tests PRIVATE /W4 /WX)
     target_compile_options(dsrrl_renderer_clustered_sidecar_tests PRIVATE /W4 /WX)
     target_compile_options(dsrrl_renderer_clustered_pnts_materializer_tests PRIVATE /W4 /WX)
+    target_compile_options(dsrrl_renderer_clustered_pnts_draw_adapter_tests PRIVATE /W4 /WX)
     target_compile_options(dsrrl_renderer_local_specular_receiver_tests PRIVATE /W4 /WX)
     target_compile_options(dsrrl_renderer_local_specular_window_tests PRIVATE /W4 /WX)
     target_compile_options(dsrrl_renderer_fixed_local_specular_plan_tests PRIVATE /W4 /WX)
@@ -416,6 +422,7 @@ else()
     target_compile_options(dsrrl_renderer_faceeye_pointlight_tests PRIVATE -Wall -Wextra -Wpedantic -Werror)
     target_compile_options(dsrrl_renderer_clustered_sidecar_tests PRIVATE -Wall -Wextra -Wpedantic -Werror)
     target_compile_options(dsrrl_renderer_clustered_pnts_materializer_tests PRIVATE -Wall -Wextra -Wpedantic -Werror)
+    target_compile_options(dsrrl_renderer_clustered_pnts_draw_adapter_tests PRIVATE -Wall -Wextra -Wpedantic -Werror)
     target_compile_options(dsrrl_renderer_local_specular_receiver_tests PRIVATE -Wall -Wextra -Wpedantic -Werror)
     target_compile_options(dsrrl_renderer_local_specular_window_tests PRIVATE -Wall -Wextra -Wpedantic -Werror)
     target_compile_options(dsrrl_renderer_fixed_local_specular_plan_tests PRIVATE -Wall -Wextra -Wpedantic -Werror)
@@ -481,6 +488,7 @@ add_test(NAME dsrrl_renderer_future_runtime_tests COMMAND dsrrl_renderer_future_
 add_test(NAME dsrrl_renderer_faceeye_pointlight_tests COMMAND dsrrl_renderer_faceeye_pointlight_tests)
 add_test(NAME dsrrl_renderer_clustered_sidecar_tests COMMAND dsrrl_renderer_clustered_sidecar_tests)
 add_test(NAME dsrrl_renderer_clustered_pnts_materializer_tests COMMAND dsrrl_renderer_clustered_pnts_materializer_tests)
+add_test(NAME dsrrl_renderer_clustered_pnts_draw_adapter_tests COMMAND dsrrl_renderer_clustered_pnts_draw_adapter_tests)
 add_test(NAME dsrrl_renderer_local_specular_receiver_tests COMMAND dsrrl_renderer_local_specular_receiver_tests)
 add_test(NAME dsrrl_renderer_local_specular_window_tests COMMAND dsrrl_renderer_local_specular_window_tests)
 add_test(NAME dsrrl_renderer_fixed_local_specular_plan_tests COMMAND dsrrl_renderer_fixed_local_specular_plan_tests)
