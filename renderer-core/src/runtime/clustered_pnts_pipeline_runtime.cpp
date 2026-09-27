@@ -371,6 +371,49 @@ bool clustered_pnts_pipeline_runtime::pipeline_attested(
         pipeline_handle) != pipelines_.end();
 }
 
+bool clustered_pnts_pipeline_runtime::bound_metadata(
+    reshade::api::command_list *cmd_list,
+    bool &spc,
+    bool &blended_material) const noexcept
+{
+    spc = false;
+    blended_material = false;
+    if (cmd_list == nullptr ||
+        quarantined_.load())
+        return false;
+
+    const auto command =
+        static_cast<std::uint64_t>(
+            reinterpret_cast<std::uintptr_t>(
+                cmd_list));
+    const auto epoch =
+        bound_epoch_.load(
+            std::memory_order_acquire);
+
+    std::shared_ptr<const record> selected{};
+    if (bound_tls_.runtime == this &&
+        bound_tls_.command == command &&
+        bound_tls_.epoch == epoch) {
+        if (!bound_tls_.present)
+            return false;
+        selected = bound_tls_.selected;
+    } else {
+        std::lock_guard<std::mutex> lock(mutex_);
+        const auto found = bound_.find(command);
+        if (found == bound_.end())
+            return false;
+        selected = found->second;
+    }
+
+    if (selected == nullptr)
+        return false;
+
+    spc = selected->spc;
+    blended_material =
+        selected->blended_material;
+    return true;
+}
+
 bool clustered_pnts_pipeline_runtime::prepare_bound_shader(
     reshade::api::command_list *cmd_list,
     prepared_clustered_pnts_shader &prepared) noexcept
