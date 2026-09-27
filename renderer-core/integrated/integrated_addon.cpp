@@ -2460,6 +2460,227 @@ struct prepared_island_batch {
     bool envspec_in_batch = false;
 };
 
+effect_probe_mask resource_effect_mask(
+    const dsrrl::runtime::prepared_material_resource_draw &resources) noexcept
+{
+    effect_probe_mask mask = 0u;
+    if (resources.spec_rgb)
+        mask |= effect_probe_bit(
+            effect_probe_id::spec_rgb);
+    if (resources.diffuse)
+        mask |= effect_probe_bit(
+            effect_probe_id::diffuse);
+    if (resources.normal)
+        mask |= effect_probe_bit(
+            effect_probe_id::normal);
+    return mask;
+}
+
+effect_probe_mask prepared_effect_mask(
+    const prepared_island_batch &prepared) noexcept
+{
+    effect_probe_mask mask = 0u;
+
+    if (prepared.mr_in_batch)
+        mask |= effect_probe_bit(
+            effect_probe_id::material_response);
+
+    if (prepared.lerp_mr_in_batch)
+        mask |= effect_probe_bit(
+            effect_probe_id::material_response_lerp);
+
+    mask |= resource_effect_mask(
+        prepared.resources);
+
+    if (prepared.upper_lower_combined ||
+        prepared.upper_lower.ready)
+        mask |= effect_probe_bit(
+            effect_probe_id::upper_lower);
+
+    if (prepared.subsurface_in_batch) {
+        mask |= effect_probe_bit(
+            effect_probe_id::subsurface);
+        mask |= effect_probe_bit(
+            effect_probe_id::material_response);
+        mask |= resource_effect_mask(
+            prepared.subsurface.resources);
+        if (prepared.subsurface.upper_lower.ready)
+            mask |= effect_probe_bit(
+                effect_probe_id::upper_lower);
+    }
+
+    if (prepared.hemdir3_in_batch) {
+        mask |= effect_probe_bit(
+            effect_probe_id::hemdir3);
+        if (prepared.hemdir3.carrier.upper_lower_ready)
+            mask |= effect_probe_bit(
+                effect_probe_id::upper_lower);
+    }
+
+    if (prepared.envspec_in_batch) {
+        mask |= effect_probe_bit(
+            effect_probe_id::pmetal_envspec);
+        mask |= effect_probe_bit(
+            effect_probe_id::material_response);
+        mask |= resource_effect_mask(
+            prepared.envspec.material_resources);
+        if (prepared.envspec.upper_lower_composed)
+            mask |= effect_probe_bit(
+                effect_probe_id::upper_lower);
+    }
+
+    if (prepared.fixed_in_batch) {
+        mask |= effect_probe_bit(
+            effect_probe_id::pointlight);
+        mask |= effect_probe_bit(
+            effect_probe_id::local_specular);
+        mask |= effect_probe_bit(
+            effect_probe_id::material_response);
+        mask |= resource_effect_mask(
+            prepared.resources);
+    }
+
+    return mask;
+}
+
+effect_probe_mask candidate_effect_mask(
+    std::uint8_t route_mask,
+    bool fixed_pointlight_bound,
+    bool hemenvlerp_bound,
+    bool subsurface_bound,
+    bool hemdir3_bound,
+    bool upper_lower_bound,
+    const dsrrl::operators::material_response::
+        material_identity &material,
+    const dsrrl::operators::material_response::
+        decision &decision) noexcept
+{
+    effect_probe_mask mask = 0u;
+
+    if ((route_mask &
+         (k_route_stable |
+          k_route_hemenvlerp |
+          k_route_subsurface |
+          k_route_fixed_pointlight)) != 0u)
+        mask |= effect_probe_bit(
+            effect_probe_id::material_response);
+
+    if (hemenvlerp_bound)
+        mask |= effect_probe_bit(
+            effect_probe_id::material_response_lerp);
+
+    if (upper_lower_bound ||
+        g_upper_lower.direct_producer_active())
+        mask |= effect_probe_bit(
+            effect_probe_id::upper_lower);
+
+    if (subsurface_bound)
+        mask |= effect_probe_bit(
+            effect_probe_id::subsurface);
+
+    if (hemdir3_bound)
+        mask |= effect_probe_bit(
+            effect_probe_id::hemdir3);
+
+    if (fixed_pointlight_bound) {
+        mask |= effect_probe_bit(
+            effect_probe_id::pointlight);
+        mask |= effect_probe_bit(
+            effect_probe_id::local_specular);
+    }
+
+    if (material.owner_tuple_exact) {
+        mask |= effect_probe_bit(
+            effect_probe_id::spec_rgb);
+        mask |= effect_probe_bit(
+            effect_probe_id::diffuse);
+        mask |= effect_probe_bit(
+            effect_probe_id::normal);
+    }
+
+    if (decision.active &&
+        dsrrl::operators::material_response::
+            exact_runtime_pmetal_material_identity(
+                material))
+        mask |= effect_probe_bit(
+            effect_probe_id::pmetal_envspec);
+
+    return mask;
+}
+
+effect_probe_mask authority_effect_mask(
+    bool fixed_pointlight_bound,
+    bool hemenvlerp_bound,
+    bool upper_lower_bound,
+    const dsrrl::operators::material_response::
+        material_identity &material,
+    const dsrrl::operators::material_response::
+        decision &decision) noexcept
+{
+    effect_probe_mask mask = 0u;
+
+    if (decision.active)
+        mask |= effect_probe_bit(
+            effect_probe_id::material_response);
+
+    if (hemenvlerp_bound &&
+        decision.active)
+        mask |= effect_probe_bit(
+            effect_probe_id::material_response_lerp);
+
+    if (upper_lower_bound ||
+        g_upper_lower.direct_producer_active())
+        mask |= effect_probe_bit(
+            effect_probe_id::upper_lower);
+
+    if (fixed_pointlight_bound &&
+        decision.active &&
+        decision.ptde_specular_power_verified) {
+        mask |= effect_probe_bit(
+            effect_probe_id::pointlight);
+        mask |= effect_probe_bit(
+            effect_probe_id::local_specular);
+    }
+
+    if (decision.active &&
+        dsrrl::operators::material_response::
+            exact_runtime_pmetal_material_identity(
+                material))
+        mask |= effect_probe_bit(
+            effect_probe_id::pmetal_envspec);
+
+    return mask;
+}
+
+void account_effect_dispatch(
+    effect_probe_mask mask,
+    dsrrl::runtime::draw_tx_result result) noexcept
+{
+    if (!g_effect_telemetry_enabled ||
+        mask == 0u)
+        return;
+
+    if (dsrrl::runtime::draw_tx_issued(
+            result))
+        mark_effect_probe_mask(
+            mask,
+            effect_probe_stage::applied);
+
+    if (result ==
+        dsrrl::runtime::draw_tx_result::
+            issued_restore_failed)
+        mark_effect_probe_mask(
+            mask,
+            effect_probe_stage::restore_failed);
+
+    if (result ==
+        dsrrl::runtime::draw_tx_result::
+            not_issued)
+        mark_effect_probe_mask(
+            mask,
+            effect_probe_stage::fail_open);
+}
+
 void release_prepared_island_batch(
     prepared_island_batch &prepared) noexcept
 {
