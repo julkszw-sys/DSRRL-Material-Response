@@ -130,6 +130,11 @@ std::atomic<std::uint64_t> g_mr_ul_payload_materialize_ok{0};
 std::atomic<std::uint64_t> g_mr_ul_payload_materialize_fail{0};
 std::atomic<std::uint64_t> g_lerp_full_draw_ready{0};
 std::atomic<std::uint64_t> g_lerp_full_draw_fallback{0};
+std::atomic_bool g_lerp_once_receiver_hit{false};
+std::atomic_bool g_lerp_once_mr_ul_ready{false};
+std::atomic_bool g_lerp_once_mr_only_ready{false};
+std::atomic_bool g_lerp_once_batch_ready{false};
+std::atomic_bool g_lerp_once_draw_issued{false};
 std::atomic<std::uint64_t> g_envspec_payload_materialize_ok{0};
 std::atomic<std::uint64_t> g_envspec_payload_materialize_fail{0};
 std::atomic<std::uint64_t> g_draw_events{0};
@@ -2167,6 +2172,7 @@ struct prepared_island_batch {
     ID3D11Buffer *fixed_b12 = nullptr;
     bool fixed_in_batch = false;
     bool mr_in_batch = false;
+    bool lerp_mr_in_batch = false;
     bool upper_lower_combined = false;
     bool subsurface_in_batch = false;
     bool hemdir3_in_batch = false;
@@ -2507,6 +2513,12 @@ bool prepare_island_batch(
     // first. Only after the exact draw-local SpecRGB resource request exists
     // may the paired t10-consuming shader replace it.
     if (hemenvlerp_bound) {
+        if (!g_lerp_once_receiver_hit.exchange(true)) {
+            reshade::log::message(
+                reshade::log::level::info,
+                "[DSRRL LERP MR ACT] stage=receiver_hit");
+        }
+
         const bool lerp_ul_exact =
             upper_lower_bound &&
             upper_lower_identity.family ==
@@ -2533,6 +2545,11 @@ bool prepare_island_batch(
                     prepared.mr)) {
             prepared.upper_lower_combined = true;
             lerp_mr_prepared = true;
+            if (!g_lerp_once_mr_ul_ready.exchange(true)) {
+                reshade::log::message(
+                    reshade::log::level::info,
+                    "[DSRRL LERP MR ACT] stage=mr_ul_ready");
+            }
         } else if (
             decision.active &&
             g_mr_draw_runtime.prepare_lerp_draw_request(
@@ -2542,10 +2559,16 @@ bool prepare_island_batch(
             // the U/L composed operator must not demote MR to stock DSR.
             prepared.upper_lower_combined = false;
             lerp_mr_prepared = true;
+            if (!g_lerp_once_mr_only_ready.exchange(true)) {
+                reshade::log::message(
+                    reshade::log::level::info,
+                    "[DSRRL LERP MR ACT] stage=mr_only_ready");
+            }
         }
 
         if (lerp_mr_prepared) {
             prepared.mr_in_batch = true;
+            prepared.lerp_mr_in_batch = true;
 
             dsrrl::operators::material_response::
                 mtd_semantic_query lerp_query{};
@@ -2615,6 +2638,12 @@ bool prepare_island_batch(
                 hot_count(g_lerp_full_draw_fallback);
             else
                 hot_count(g_lerp_full_draw_ready);
+
+            if (!g_lerp_once_batch_ready.exchange(true)) {
+                reshade::log::message(
+                    reshade::log::level::info,
+                    "[DSRRL LERP MR ACT] stage=batch_ready");
+            }
             return true;
         }
 
@@ -2892,6 +2921,8 @@ bool on_draw(
 
     const bool mr_in_batch =
         prepared.mr_in_batch;
+    const bool lerp_mr_in_batch =
+        prepared.lerp_mr_in_batch;
 
     release_prepared_island_batch(
         prepared);
@@ -2905,6 +2936,14 @@ bool on_draw(
             reshade::log::message(
                 reshade::log::level::info,
                 "[DSRRL MR ACT] stage=draw_issued");
+        }
+        if (lerp_mr_in_batch &&
+            dsrrl::runtime::draw_tx_issued(
+                dispatch.transaction) &&
+            !g_lerp_once_draw_issued.exchange(true)) {
+            reshade::log::message(
+                reshade::log::level::info,
+                "[DSRRL LERP MR ACT] stage=draw_issued");
         }
     }
 
@@ -2998,6 +3037,8 @@ bool on_draw_indexed(
 
     const bool mr_in_batch =
         prepared.mr_in_batch;
+    const bool lerp_mr_in_batch =
+        prepared.lerp_mr_in_batch;
 
     release_prepared_island_batch(
         prepared);
@@ -3011,6 +3052,14 @@ bool on_draw_indexed(
             reshade::log::message(
                 reshade::log::level::info,
                 "[DSRRL MR ACT] stage=draw_issued");
+        }
+        if (lerp_mr_in_batch &&
+            dsrrl::runtime::draw_tx_issued(
+                dispatch.transaction) &&
+            !g_lerp_once_draw_issued.exchange(true)) {
+            reshade::log::message(
+                reshade::log::level::info,
+                "[DSRRL LERP MR ACT] stage=draw_issued");
         }
     }
 
@@ -3120,6 +3169,11 @@ bool AddonInit(
     g_mr_ul_payload_materialize_fail.store(0);
     g_lerp_full_draw_ready.store(0);
     g_lerp_full_draw_fallback.store(0);
+    g_lerp_once_receiver_hit.store(false);
+    g_lerp_once_mr_ul_ready.store(false);
+    g_lerp_once_mr_only_ready.store(false);
+    g_lerp_once_batch_ready.store(false);
+    g_lerp_once_draw_issued.store(false);
     g_envspec_payload_materialize_ok.store(0);
     g_envspec_payload_materialize_fail.store(0);
     g_draw_events.store(0);
