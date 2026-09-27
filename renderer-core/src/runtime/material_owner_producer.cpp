@@ -99,9 +99,11 @@ bool enrich_exact_owner_mtd_identity(
     }
 
     core::sha256_digest raw_mtd_sha{};
-    // Generic exact-MTD identity must come from the source-complete DSR MTD
-    // registry. EnvSpec/SPX/operator surfaces are consumers, never identity
-    // authorities. Ambiguous or absent semantic hashes fail open here.
+    // Exact raw-MTD identity comes from the dedicated generic registry or
+    // the evidence-certified special-route supplement. The supplement does
+    // not make generic coverage source-complete; unknown/ambiguous semantic
+    // hashes still fail open. EnvSpec/SPX consumer membership is never used
+    // as an identity fallback.
     if (!mr::generated::dsr_mtd_identity_resolve(
             semantic_hash,
             raw_mtd_sha) &&
