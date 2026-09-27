@@ -13,6 +13,9 @@ struct hook_status {
     bool restore_failed = false;
     bool selector_owner_enrichment = false;
     bool exact_runtime_material_carrier = false;
+    bool runtime_mtd_classified = false;
+    bool runtime_mtd_cache_hit = false;
+    bool runtime_mtd_selection_published = false;
 };
 
 bool install() noexcept;
