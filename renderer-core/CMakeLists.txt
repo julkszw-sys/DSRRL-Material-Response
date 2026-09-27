@@ -190,9 +190,19 @@ add_custom_target(dsrrl_pointlight_core_source_audit
     VERBATIM
 )
 
+add_custom_target(dsrrl_clustered_pnts_activation_source_audit
+    COMMAND "${Python3_EXECUTABLE}"
+            "${CMAKE_CURRENT_SOURCE_DIR}/tools/audit_clustered_pnts_activation_sources.py"
+            --source-dir "${CMAKE_CURRENT_SOURCE_DIR}"
+    DEPENDS
+        "${CMAKE_CURRENT_SOURCE_DIR}/tools/audit_clustered_pnts_activation_sources.py"
+    VERBATIM
+)
+
 add_dependencies(
     dsrrl_renderer_core
     dsrrl_pointlight_core_source_audit
+    dsrrl_clustered_pnts_activation_source_audit
     dsrrl_native_envspec_probe_header
     dsrrl_dsr_flver_owner_tuple_header
     dsrrl_dsr_mtd_identity_supplement_header
