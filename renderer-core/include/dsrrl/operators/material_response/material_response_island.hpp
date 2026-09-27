@@ -50,11 +50,22 @@ struct material_identity {
     std::uint32_t material_slot = 0;
     bool material_slot_valid = false;
     bool owner_tuple_exact = false;
+    // Exact runtime material-object provenance recovered at the retail MTD
+    // parser and joined back to the selector's actual material pointer.
+    // This is a distinct authority from FLVER ownership and is intentionally
+    // accepted only by explicitly scoped operator routes.
+    bool actual_material_exact = false;
     std::uint32_t route_index = 0;
     std::uint64_t semantic_name_hash = 0;
     core::sha256_digest raw_mtd_sha256{};
     std::uint64_t material_family_hash = 0;
 };
+
+// Narrow legacy-compatible carrier used only for the independently certified
+// P_Metal Material Response route. It deliberately does not authorize other
+// operators (notably EnvSpec or direct PointLight).
+bool exact_runtime_pmetal_material_identity(
+    const material_identity &identity) noexcept;
 
 struct receiver_recipe {
     std::uint32_t receiver_id = 0;
