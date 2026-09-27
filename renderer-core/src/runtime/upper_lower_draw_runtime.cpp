@@ -239,8 +239,16 @@ std::unordered_map<
     std::uintptr_t,
     std::shared_ptr<const snapshot>> g_snapshots;
 
+struct selector_snapshot_tls {
+    std::uintptr_t owner = 0u;
+    std::uint64_t epoch = 0u;
+    std::shared_ptr<const snapshot> selected{};
+};
+
+std::atomic<std::uint64_t> g_snapshot_epoch{1u};
 thread_local producer_tls g_producer{};
 thread_local std::shared_ptr<const snapshot> g_draw_snapshot{};
+thread_local selector_snapshot_tls g_selector_snapshot{};
 
 std::atomic_bool g_enabled{false};
 std::atomic_bool g_quarantined{false};
@@ -403,6 +411,8 @@ struct readable_window {
     std::uintptr_t end = 0u;
 };
 
+thread_local readable_window g_selector_window{};
+
 bool ensure_readable_window(
     const void *ptr,
     readable_window &window) noexcept
@@ -452,6 +462,57 @@ bool ensure_readable_window(
 
     window.begin = region_begin;
     window.end = region_end;
+    return true;
+}
+
+bool read_selector_tuple(
+    const std::uint8_t *descriptor,
+    std::uint16_t &selector_a,
+    std::uint16_t &selector_b,
+    std::uint32_t &beta_bits) noexcept
+{
+    selector_a = 0u;
+    selector_b = 0u;
+    beta_bits = 0u;
+
+    if (descriptor == nullptr)
+        return false;
+
+    const auto *tuple =
+        descriptor + 0x4Cu;
+    const auto begin =
+        reinterpret_cast<std::uintptr_t>(
+            tuple);
+    const auto end =
+        begin + 8u;
+
+    if (end < begin ||
+        !ensure_readable_window(
+            tuple,
+            g_selector_window) ||
+        end > g_selector_window.end)
+        return false;
+
+    // This descriptor is observed at three exact, attested engine return
+    // sites. Once its VM region is validated, read the contiguous tuple in
+    // one copy instead of issuing three VirtualQuery-backed safe_read calls.
+    std::array<std::uint8_t,8> raw{};
+    std::memcpy(
+        raw.data(),
+        tuple,
+        raw.size());
+    std::memcpy(
+        &selector_a,
+        raw.data(),
+        sizeof(selector_a));
+    std::memcpy(
+        &selector_b,
+        raw.data() + 2u,
+        sizeof(selector_b));
+    std::memcpy(
+        &beta_bits,
+        raw.data() + 4u,
+        sizeof(beta_bits));
     return true;
 }
 
@@ -1615,6 +1676,9 @@ void publish_snapshot(
 
         g_snapshots[producer.owner] =
             std::move(fresh);
+        g_snapshot_epoch.fetch_add(
+            1u,
+            std::memory_order_release);
 
         ++g_snapshot_publish;
     } catch (...) {
@@ -1661,8 +1725,11 @@ void *run_wrapper(
         !completed.have_lower) {
         std::lock_guard<std::mutex> lock(
             g_snapshot_mutex);
-        g_snapshots.erase(
-            completed.owner);
+        if (g_snapshots.erase(
+                completed.owner) != 0u)
+            g_snapshot_epoch.fetch_add(
+                1u,
+                std::memory_order_release);
     } else {
         publish_snapshot(
             completed);
@@ -2201,10 +2268,15 @@ ID3D11Buffer *realize_b13(
 void clear_snapshots() noexcept
 {
     g_draw_snapshot.reset();
+    g_selector_snapshot = {};
+    g_selector_window = {};
 
     std::lock_guard<std::mutex> lock(
         g_snapshot_mutex);
     g_snapshots.clear();
+    g_snapshot_epoch.fetch_add(
+        1u,
+        std::memory_order_release);
 }
 
 } // namespace
@@ -2338,32 +2410,48 @@ void upper_lower_draw_runtime::selector_event(
     std::uint16_t selector_b = 0u;
     std::uint32_t beta_bits = 0u;
 
-    if (!safe_read(
-            descriptor + 0x4Cu,
-            selector_a) ||
-        !safe_read(
-            descriptor + 0x4Eu,
-            selector_b) ||
-        !safe_read(
-            descriptor + 0x50u,
+    if (!read_selector_tuple(
+            descriptor,
+            selector_a,
+            selector_b,
             beta_bits)) {
         ++g_selector_miss;
         return;
     }
 
+    const auto owner_key =
+        reinterpret_cast<std::uintptr_t>(
+            owner);
+    const auto epoch =
+        g_snapshot_epoch.load(
+            std::memory_order_acquire);
+
     std::shared_ptr<const snapshot> selected{};
 
-    {
+    if (g_selector_snapshot.owner ==
+            owner_key &&
+        g_selector_snapshot.epoch ==
+            epoch) {
+        selected =
+            g_selector_snapshot.selected;
+    } else {
         std::lock_guard<std::mutex> lock(
             g_snapshot_mutex);
 
         const auto found =
             g_snapshots.find(
-                reinterpret_cast<std::uintptr_t>(
-                    owner));
+                owner_key);
 
         if (found != g_snapshots.end())
             selected = found->second;
+
+        g_selector_snapshot.owner =
+            owner_key;
+        g_selector_snapshot.epoch =
+            g_snapshot_epoch.load(
+                std::memory_order_relaxed);
+        g_selector_snapshot.selected =
+            selected;
     }
 
     if (!selected) {
