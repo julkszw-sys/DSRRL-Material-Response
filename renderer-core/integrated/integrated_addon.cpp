@@ -2809,6 +2809,18 @@ effect_probe_mask prepared_effect_mask(
                 effect_probe_id::upper_lower);
     }
 
+    if (prepared.clustered_in_batch) {
+        mask |= effect_probe_bit(
+            effect_probe_id::pointlight);
+        if (prepared.clustered_shader.spc)
+            mask |= effect_probe_bit(
+                effect_probe_id::local_specular);
+        mask |= effect_probe_bit(
+            effect_probe_id::material_response);
+        mask |= resource_effect_mask(
+            prepared.resources);
+    }
+
     if (prepared.fixed_in_batch) {
         mask |= effect_probe_bit(
             effect_probe_id::pointlight);
@@ -2864,12 +2876,19 @@ effect_probe_mask route_candidate_effect_mask(
             effect_probe_id::local_specular);
     }
 
+    if ((route_mask &
+         k_route_clustered_pointlight) != 0u)
+        mask |= effect_probe_bit(
+            effect_probe_id::pointlight);
+
     return mask;
 }
 
 effect_probe_mask candidate_effect_mask(
     std::uint8_t route_mask,
     bool fixed_pointlight_bound,
+    bool clustered_pointlight_bound,
+    bool clustered_pointlight_spc,
     bool hemenvlerp_bound,
     bool subsurface_bound,
     bool hemdir3_bound,
@@ -2913,6 +2932,14 @@ effect_probe_mask candidate_effect_mask(
             effect_probe_id::local_specular);
     }
 
+    if (clustered_pointlight_bound) {
+        mask |= effect_probe_bit(
+            effect_probe_id::pointlight);
+        if (clustered_pointlight_spc)
+            mask |= effect_probe_bit(
+                effect_probe_id::local_specular);
+    }
+
     if (material.owner_tuple_exact) {
         mask |= effect_probe_bit(
             effect_probe_id::spec_rgb);
@@ -2934,6 +2961,8 @@ effect_probe_mask candidate_effect_mask(
 
 effect_probe_mask authority_effect_mask(
     bool fixed_pointlight_bound,
+    bool clustered_pointlight_bound,
+    bool clustered_pointlight_spc,
     bool hemenvlerp_bound,
     bool upper_lower_bound,
     const dsrrl::operators::material_response::
@@ -2965,6 +2994,16 @@ effect_probe_mask authority_effect_mask(
             effect_probe_id::pointlight);
         mask |= effect_probe_bit(
             effect_probe_id::local_specular);
+    }
+
+    if (clustered_pointlight_bound &&
+        decision.active) {
+        mask |= effect_probe_bit(
+            effect_probe_id::pointlight);
+        if (clustered_pointlight_spc &&
+            decision.ptde_specular_power_verified)
+            mask |= effect_probe_bit(
+                effect_probe_id::local_specular);
     }
 
     return mask;
