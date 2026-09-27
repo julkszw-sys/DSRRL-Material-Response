@@ -1,4 +1,5 @@
 #include "dsrrl/runtime/flver_identity_registry.hpp"
+#include "dsrrl/runtime/runtime_hot_telemetry.hpp"
 
 #include <algorithm>
 #include <array>
@@ -55,6 +56,16 @@ std::array<std::uint8_t,32> digest(const void *p,std::size_t n) noexcept {sha256
 
 std::mutex g_mutex;
 std::unordered_map<const void*,std::array<std::uint8_t,32>> g_by_model;
+std::atomic<std::uint64_t> g_epoch{1u};
+
+struct lookup_tls_cache {
+    const void *model = nullptr;
+    std::uint64_t epoch = 0u;
+    std::array<std::uint8_t,32> sha{};
+    bool present = false;
+};
+
+thread_local lookup_tls_cache g_lookup_cache{};
 std::atomic<std::uint64_t> g_inserts{0},g_lookups{0},g_hits{0},g_misses{0},g_erases{0},g_invalid{0};
 
 } // namespace
@@ -71,6 +82,9 @@ bool flver_identity_observe_parse(const void *model,const void *raw,std::size_t 
     try {
         std::lock_guard<std::mutex> lock(g_mutex);
         g_by_model[model]=sha;
+        g_epoch.fetch_add(
+            1u,
+            std::memory_order_release);
     } catch (...) {
         ++g_invalid;
         return false;
@@ -84,12 +98,70 @@ void flver_identity_observe_destroy(const void *model) noexcept {
     }
     std::lock_guard<std::mutex> lock(g_mutex);
     if (g_by_model.erase(model) != 0u) {
+        g_epoch.fetch_add(
+            1u,
+            std::memory_order_release);
         ++g_erases;
     }
 }
 bool flver_identity_lookup(const void *selector_container,std::array<std::uint8_t,32> &sha256) noexcept {
-    ++g_lookups;if(!selector_container){++g_misses;return false;}const auto address=reinterpret_cast<std::uintptr_t>(selector_container);if(address<k_container_offset){++g_misses;return false;}const auto *model=reinterpret_cast<const void*>(address-k_container_offset);
-    std::lock_guard<std::mutex> lock(g_mutex);const auto it=g_by_model.find(model);if(it==g_by_model.end()){++g_misses;return false;}sha256=it->second;++g_hits;return true;
+    telemetry::hot_count(g_lookups);
+    if(!selector_container){
+        telemetry::hot_count(g_misses);
+        return false;
+    }
+
+    const auto address=
+        reinterpret_cast<std::uintptr_t>(
+            selector_container);
+    if(address<k_container_offset){
+        telemetry::hot_count(g_misses);
+        return false;
+    }
+
+    const auto *model=
+        reinterpret_cast<const void*>(
+            address-k_container_offset);
+    const auto epoch=
+        g_epoch.load(
+            std::memory_order_acquire);
+
+    if(g_lookup_cache.model==model &&
+       g_lookup_cache.epoch==epoch){
+        if(!g_lookup_cache.present){
+            telemetry::hot_count(g_misses);
+            return false;
+        }
+
+        sha256=g_lookup_cache.sha;
+        telemetry::hot_count(g_hits);
+        return true;
+    }
+
+    std::lock_guard<std::mutex> lock(g_mutex);
+    const auto it=g_by_model.find(model);
+    if(it==g_by_model.end()){
+        g_lookup_cache={
+            model,
+            g_epoch.load(
+                std::memory_order_relaxed),
+            {},
+            false
+        };
+        telemetry::hot_count(g_misses);
+        return false;
+    }
+
+    sha256=it->second;
+    g_lookup_cache={
+        model,
+        g_epoch.load(
+            std::memory_order_relaxed),
+        sha256,
+        true
+    };
+    telemetry::hot_count(g_hits);
+    return true;
 }
 bool flver_identity_enrich_owner(const void *selector_container,std::uint32_t material_slot,actual_material_owner_observation &observation) noexcept {
     std::array<std::uint8_t,32> sha{};
@@ -103,7 +175,14 @@ bool flver_identity_enrich_owner(const void *selector_container,std::uint32_t ma
     observation.material_slot_valid = true;
     return true;
 }
-void flver_identity_reset() noexcept {std::lock_guard<std::mutex> lock(g_mutex);g_by_model.clear();}
+void flver_identity_reset() noexcept {
+    std::lock_guard<std::mutex> lock(g_mutex);
+    g_by_model.clear();
+    g_epoch.fetch_add(
+        1u,
+        std::memory_order_release);
+    g_lookup_cache={};
+}
 flver_identity_telemetry flver_identity_stats() noexcept {return {g_inserts.load(),g_lookups.load(),g_hits.load(),g_misses.load(),g_erases.load(),g_invalid.load()};}
 
 } // namespace dsrrl::runtime
