@@ -53,7 +53,7 @@ std::mutex g_registry_mutex;
 
 struct draw_selection_tls {
     producer_snapshot snapshot{};
-    std::uint8_t material_max = 0u;
+    std::uint32_t material_max = 0u;
     bool owner_verified = false;
     bool material_limit_ready = false;
     bool ready = false;
@@ -828,8 +828,7 @@ void clustered_pnts_draw_runtime::selector_event(
             actual_material) + 0x384u,
         sizeof(material_max));
 
-    if (material_max == 0u ||
-        material_max > 4u) {
+    if (material_max == 0u) {
         telemetry::hot_count(
             g_material_limit_fail);
         return;
@@ -837,9 +836,7 @@ void clustered_pnts_draw_runtime::selector_event(
     telemetry::hot_count(g_material_limit_ok);
 
     g_draw_selection.snapshot = snapshot;
-    g_draw_selection.material_max =
-        static_cast<std::uint8_t>(
-            material_max);
+    g_draw_selection.material_max = material_max;
     g_draw_selection.owner_verified = true;
     g_draw_selection.material_limit_ready =
         true;
