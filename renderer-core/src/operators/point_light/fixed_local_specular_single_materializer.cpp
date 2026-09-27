@@ -329,11 +329,11 @@ void append_difference_vec(
     std::uint32_t b)
 {
     const std::uint32_t v[]={
-        0x09000000u,k_temp_dst_xyz,difference,
+        0x08000000u,k_temp_dst_xyz,difference,
         0x80100246u,0x00000041u,a,
         k_temp_src_xyz,b
     };
-    append(dst,v,9u);
+    append(dst,v,8u);
 }
 
 void append_blend_vec(
