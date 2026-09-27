@@ -19,6 +19,16 @@ std::mutex g_mutex;
 std::unordered_map<std::uint64_t,std::uint32_t> g_pipeline_target;
 std::unordered_map<const void*,bound_subsurface> g_bound;
 
+struct bound_subsurface_tls {
+    const void *command_list_key = nullptr;
+    bound_subsurface value{};
+    std::uint64_t epoch = 0u;
+    bool present = false;
+};
+
+std::atomic<std::uint64_t> g_bound_epoch{1u};
+thread_local bound_subsurface_tls g_bound_tls{};
+
 std::atomic<std::uint64_t> g_pipeline_inits{0};
 std::atomic<std::uint64_t> g_exact_hits{0};
 std::atomic<std::uint64_t> g_pixel_binds{0};
@@ -109,6 +119,8 @@ void subsurface_receiver_forget_pipeline(
         else
             ++it;
     }
+
+    ++g_bound_epoch;
 }
 
 void subsurface_receiver_observe_bind(
@@ -130,19 +142,39 @@ void subsurface_receiver_observe_bind(
 
         if (found == g_pipeline_target.end()) {
             g_bound.erase(command_list_key);
+            g_bound_tls = {
+                command_list_key,
+                {},
+                g_bound_epoch.load(),
+                false
+            };
             return;
         }
 
-        g_bound[command_list_key] = {
+        const bound_subsurface bound{
             pipeline_handle,
             found->second
+        };
+        g_bound[command_list_key] = bound;
+        g_bound_tls = {
+            command_list_key,
+            bound,
+            g_bound_epoch.load(),
+            true
         };
         ++g_exact_binds;
     } catch (...) {
         try {
             std::lock_guard<std::mutex> lock(g_mutex);
             g_bound.erase(command_list_key);
+            g_bound_tls = {
+                command_list_key,
+                {},
+                g_bound_epoch.load(),
+                false
+            };
         } catch (...) {
+            g_bound_tls = {};
         }
     }
 }
@@ -158,15 +190,44 @@ bool subsurface_receiver_bound(
         return false;
     }
 
+    const auto epoch =
+        g_bound_epoch.load();
+
+    if (g_bound_tls.command_list_key ==
+            command_list_key &&
+        g_bound_tls.epoch == epoch) {
+        if (!g_bound_tls.present) {
+            ++g_lookup_misses;
+            return false;
+        }
+
+        target_plain_receiver_id =
+            g_bound_tls.value.target_receiver;
+        ++g_lookup_hits;
+        return true;
+    }
+
     std::lock_guard<std::mutex> lock(g_mutex);
     const auto found =
         g_bound.find(command_list_key);
 
     if (found == g_bound.end()) {
+        g_bound_tls = {
+            command_list_key,
+            {},
+            g_bound_epoch.load(),
+            false
+        };
         ++g_lookup_misses;
         return false;
     }
 
+    g_bound_tls = {
+        command_list_key,
+        found->second,
+        g_bound_epoch.load(),
+        true
+    };
     target_plain_receiver_id =
         found->second.target_receiver;
     ++g_lookup_hits;
@@ -179,7 +240,10 @@ void subsurface_receiver_pipeline_reset() noexcept
         std::lock_guard<std::mutex> lock(g_mutex);
         g_pipeline_target.clear();
         g_bound.clear();
+        ++g_bound_epoch;
     }
+
+    g_bound_tls = {};
 
     g_pipeline_inits.store(0);
     g_exact_hits.store(0);
