@@ -1671,57 +1671,76 @@ bool inverse_q(
 }
 
 bool rewrite_steady_cache_ptde_ul(
-    void *dst) noexcept
+    void *dst,
+    const void *raw_row) noexcept
 {
-    if (dst == nullptr)
+    if (dst == nullptr ||
+        raw_row == nullptr)
         return false;
 
     auto *bytes =
         static_cast<std::uint8_t *>(dst);
+    const auto *raw =
+        static_cast<const std::uint8_t *>(
+            raw_row);
 
-    f4 q_upper{};
-    f4 q_lower{};
+    raw_rgbm authored_upper{};
+    raw_rgbm authored_lower{};
     std::memcpy(
-        &q_upper,
+        &authored_upper,
+        raw + 0x24u,
+        sizeof(authored_upper));
+    std::memcpy(
+        &authored_lower,
+        raw + 0x2Cu,
+        sizeof(authored_lower));
+
+    // PTDE steady U/L consumes the authored RGBM carrier linearly:
+    // P=(RGB/255)*(M/100). DSR steady evaluator 0x140563460 applies its
+    // stock x1.5 terminal gain to cache +0x60/+0x70, so the exact cache
+    // representation is P/1.5. This avoids the DSR pow(2.2) domain entirely
+    // and requires only integer->float conversion/multiply once per row.
+    const auto to_cache =
+        [](const raw_rgbm &value) noexcept -> f4 {
+            const float scale =
+                (static_cast<float>(value.m) /
+                 100.0f) /
+                k_stock_steady_ul_gain;
+            return {
+                static_cast<float>(value.r) /
+                    255.0f * scale,
+                static_cast<float>(value.g) /
+                    255.0f * scale,
+                static_cast<float>(value.b) /
+                    255.0f * scale,
+                0.0f
+            };
+        };
+
+    const auto linear_upper =
+        to_cache(authored_upper);
+    const auto linear_lower =
+        to_cache(authored_lower);
+
+    f4 cache_upper{};
+    f4 cache_lower{};
+    std::memcpy(
+        &cache_upper,
         bytes + k_q_upper_offset,
-        sizeof(q_upper));
+        sizeof(cache_upper));
     std::memcpy(
-        &q_lower,
+        &cache_lower,
         bytes + k_q_lower_offset,
-        sizeof(q_lower));
+        sizeof(cache_lower));
 
-    f4 cache_upper = q_upper;
-    f4 cache_lower = q_lower;
-    float value = 0.0f;
+    // Preserve DSR W lanes exactly; replace only semantic RGB.
+    cache_upper.x = linear_upper.x;
+    cache_upper.y = linear_upper.y;
+    cache_upper.z = linear_upper.z;
+    cache_lower.x = linear_lower.x;
+    cache_lower.y = linear_lower.y;
+    cache_lower.z = linear_lower.z;
 
-    if (!inverse_q(q_upper.x, value))
-        return false;
-    cache_upper.x =
-        value / k_stock_steady_ul_gain;
-    if (!inverse_q(q_upper.y, value))
-        return false;
-    cache_upper.y =
-        value / k_stock_steady_ul_gain;
-    if (!inverse_q(q_upper.z, value))
-        return false;
-    cache_upper.z =
-        value / k_stock_steady_ul_gain;
-
-    if (!inverse_q(q_lower.x, value))
-        return false;
-    cache_lower.x =
-        value / k_stock_steady_ul_gain;
-    if (!inverse_q(q_lower.y, value))
-        return false;
-    cache_lower.y =
-        value / k_stock_steady_ul_gain;
-    if (!inverse_q(q_lower.z, value))
-        return false;
-    cache_lower.z =
-        value / k_stock_steady_ul_gain;
-
-    // Preserve W exactly in cache. Stock 0x140563460 will apply its original
-    // x1.5 to all lanes; only RGB is the PTDE semantic bridge.
     std::memcpy(
         bytes + k_q_upper_offset,
         &cache_upper,
@@ -1748,7 +1767,9 @@ void __fastcall hook_steady_cache_builder(
         raw_row == nullptr)
         return;
 
-    if (rewrite_steady_cache_ptde_ul(dst))
+    if (rewrite_steady_cache_ptde_ul(
+            dst,
+            raw_row))
         telemetry::hot_count(
             g_direct_ul_steady_inject);
     else
