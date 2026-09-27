@@ -3137,15 +3137,29 @@ bool AddonInit(
             "] Fixed PointLight transport FAIL-OPEN: raw-q t19 remains unavailable; stock DSR fixed PointLight preserved.");
     }
 
+    // Bloom FX transport is diagnostic-only: it does not authorize Q8,
+    // Bloom, WaterWaveSfx, or pixels. Do not keep five inline FX hooks and
+    // their registry/census work armed in production. The same explicit
+    // telemetry switch used for render-hot counters enables the diagnostic
+    // transport for census sessions.
+    const bool bloom_fx_diagnostics =
+        g_hot_telemetry_enabled;
     const bool bloom_fx_hooks =
+        bloom_fx_diagnostics &&
         flver_hooks &&
         dsrrl::runtime::bloom_fx_draw_transport::install();
 
-    if (!bloom_fx_hooks) {
+    if (bloom_fx_diagnostics &&
+        !bloom_fx_hooks) {
         reshade::log::message(
             reshade::log::level::warning,
             "[DSRRL CORE+ISLANDS " DSRRL_CORE_ISLANDS_VERSION
-            "] Bloom FX draw transport FAIL-OPEN: Q8 sidecar remains unauthorised; stock SFX preserved.");
+            "] Bloom FX diagnostic transport FAIL-OPEN: Q8 sidecar remains unauthorised; stock SFX preserved.");
+    } else if (!bloom_fx_diagnostics) {
+        reshade::log::message(
+            reshade::log::level::info,
+            "[DSRRL CORE+ISLANDS " DSRRL_CORE_ISLANDS_VERSION
+            "] Bloom FX diagnostic hooks disabled for production runtime.");
     }
 
     const bool hemdir3_mode_hooks =
