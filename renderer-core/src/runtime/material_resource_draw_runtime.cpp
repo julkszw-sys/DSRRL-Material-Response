@@ -1854,13 +1854,23 @@ prepare_subsurface_body_requests(
                 subsurface_body_texture::bd_m_body_s;
     }
 
+    // Ps_Body[DSBT] is a dedicated Subsurface bridge. Its two exact
+    // stock body-spec resources are intentionally outside the generic
+    // equipment SpecRGB name allowlist, but are already authenticated above
+    // by exact logical hashes. Requiring the generic allowlist here makes the
+    // dedicated route unreachable. Keep diffuse/normal tuple certification
+    // intact and allow only these two exact body-spec identities.
+    const bool exact_body_spec =
+        h1 == k_body_f_spec ||
+        h1 == k_body_m_spec;
+
     const bool tuple_ready =
         body_texture !=
             operators::resource_bridges::
                 subsurface_body_texture::unknown &&
         h0 != 0u &&
         h2 != 0u &&
-        generated::spec_name_hash_allowed_v12(h1) &&
+        exact_body_spec &&
         generated::diffuse_pair_allowed_v12(
             h1,
             h0) &&
