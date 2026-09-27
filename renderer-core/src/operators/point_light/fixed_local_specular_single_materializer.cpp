@@ -824,6 +824,16 @@ materialize_fixed_local_specular_single(
     t10_decl_words[2]=10u;
     append(declarations.payload,t10_decl_words);
 
+    if(blended) {
+        std::array<std::uint32_t,4> t16_decl_words{};
+        std::copy_n(
+            words.begin()+static_cast<std::ptrdiff_t>(t4_decl),
+            4u,t16_decl_words.begin());
+        t16_decl_words[2]=16u;
+        append(declarations.payload,t16_decl_words);
+        out.t16_declared=true;
+    }
+
     fixed_local_specular_t19_decl t19_decl{};
     if(emit_fixed_local_specular_t19_decl(t19_decl)!=
         fixed_local_specular_t19_emit_result::exact) {
@@ -836,8 +846,9 @@ materialize_fixed_local_specular_single(
     out.t10_declared=true;
     out.t19_declared=true;
 
-    // Clone stock t1 sampling to exact PTDE sidecar t10 and immediately
-    // materialize Mspec0 = SpecRGB * raw_c101 * COLOR0.
+    // Clone stock t1 sampling to exact PTDE sidecar t10. A1 has already
+    // split the stock roughness/alpha lane, so sidecar RGB is carried in yzw
+    // while x remains the host alpha witness.
     insertion spec_capture{};
     spec_capture.word=t1_sample->end;
     spec_capture.payload.assign(
@@ -848,27 +859,99 @@ materialize_fixed_local_specular_single(
         out.result=fixed_local_single_materialize_result::fail_material_capture;
         return out;
     }
-    spec_capture.payload[3]-=0x10u; // preserve stock alpha, write RGB to .yzw
+    spec_capture.payload[3]-=0x10u;
     spec_capture.payload[8]=10u;
-    append_mul_vec_temp_cb(
-        spec_capture.payload,
-        spec_mat,
-        k_temp_src_yzw,
-        samples.specular_a_t1.destination_register,
-        2u);
-    append_mul_vec_temp_input(
-        spec_capture.payload,spec_mat,spec_mat,color0);
-    insertions.push_back(std::move(spec_capture));
 
-    // t0 + c156 is the audited pre-material diffuse seam.
+    if(!blended) {
+        // Single endpoint:
+        // Mspec = PTDE_SpecRGB_A * raw_c101 * COLOR0.
+        append_mul_vec_temp_cb(
+            spec_capture.payload,
+            spec_mat,
+            k_temp_src_yzw,
+            samples.specular_a_t1.destination_register,
+            2u);
+        append_mul_vec_temp_input(
+            spec_capture.payload,spec_mat,spec_mat,color0);
+        insertions.push_back(std::move(spec_capture));
+    } else {
+        // Blended endpoint A is sampled first. Keep the clone isolated here;
+        // materialization is completed after the adjacent t4/t16 endpoint is
+        // available so the exact stock input weight can be reused.
+        insertions.push_back(std::move(spec_capture));
+
+        insertion spec_b_capture{};
+        spec_b_capture.word=t4_sample->end;
+        spec_b_capture.payload.assign(
+            words.begin()+t4_sample->start,
+            words.begin()+t4_sample->end);
+        if(spec_b_capture.payload[3]!=0x001000f2u ||
+           spec_b_capture.payload[8]!=4u ||
+           samples.blend_weight_token==0u) {
+            out.result=
+                fixed_local_single_materialize_result::
+                    fail_material_capture;
+            return out;
+        }
+        spec_b_capture.payload[3]-=0x10u;
+        spec_b_capture.payload[8]=16u;
+
+        // c101 is common material amplitude, so applying it to A and B before
+        // interpolation is algebraically identical to multiplying afterwards.
+        append_mul_vec_temp_cb(
+            spec_b_capture.payload,
+            spec_mat,
+            k_temp_src_yzw,
+            samples.specular_a_t1.destination_register,
+            2u);
+        append_mul_vec_temp_cb(
+            spec_b_capture.payload,
+            work,
+            k_temp_src_yzw,
+            samples.specular_b_t4.destination_register,
+            2u);
+        append_difference_vec(
+            spec_b_capture.payload,
+            work,
+            spec_mat,
+            work);
+        append_blend_vec(
+            spec_b_capture.payload,
+            spec_mat,
+            samples.blend_weight_token,
+            samples.blend_weight_register,
+            work,
+            spec_mat);
+        append_mul_vec_temp_input(
+            spec_b_capture.payload,
+            spec_mat,
+            spec_mat,
+            color0);
+        insertions.push_back(std::move(spec_b_capture));
+    }
+
     insertion diffuse_capture{};
-    diffuse_capture.word=c156_add->end;
-    append_mul_vec_temp_cb(
-        diffuse_capture.payload,
-        diff_mat,
-        k_temp_src_xyz,
-        words[c156_add->start+2u],
-        1u);
+    if(!blended) {
+        // Single endpoint t0 + c156 is the audited pre-material diffuse seam.
+        diffuse_capture.word=c156_add->end;
+        append_mul_vec_temp_cb(
+            diffuse_capture.payload,
+            diff_mat,
+            k_temp_src_xyz,
+            words[c156_add->start+2u],
+            1u);
+    } else {
+        // Mul diffuse has a DSR cb0[156] operator on endpoint B before the
+        // shared A/B MAD. Preserve that upstream operator and take the exact
+        // post-blend result as the pre-material diffuse seam.
+        diffuse_capture.word=diffuse_blend_mad->end;
+        append_mul_vec_temp_cb(
+            diffuse_capture.payload,
+            diff_mat,
+            k_temp_src_xyz,
+            words[diffuse_blend_mad->start+2u],
+            1u);
+    }
     append_mul_vec_temp_input(
         diffuse_capture.payload,diff_mat,diff_mat,color0);
     append_mov_zero_xyz(diffuse_capture.payload,accum);
