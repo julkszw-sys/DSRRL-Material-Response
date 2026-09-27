@@ -411,12 +411,18 @@ bool pmetal_envspec_draw_runtime::prepare(
     prepared_pmetal_envspec_draw &prepared) noexcept
 {
     prepared = {};
+    effect_latch(effect_entry_seen_);
 
     if (cmd_list == nullptr ||
         quarantined_.load() ||
         !core_.features().enabled(
-            core::operator_id::env_spec))
+            core::operator_id::env_spec)) {
+        effect_fail(
+            effect_fail_mask_,
+            k_effect_fail_feature);
         return false;
+    }
+    effect_latch(effect_feature_ready_);
 
     if (family ==
             pmetal_envspec_receiver_family::
@@ -432,6 +438,9 @@ bool pmetal_envspec_draw_runtime::prepare(
          !core_.features().enabled(
              core::operator_id::terminal_sat_rgb))) {
         telemetry::hot_count(semantic_rejects_);
+        effect_fail(
+            effect_fail_mask_,
+            k_effect_fail_lerp_feature);
         return false;
     }
 
@@ -446,8 +455,12 @@ bool pmetal_envspec_draw_runtime::prepare(
         !exact_pmetal_decision(
             decision)) {
         telemetry::hot_count(material_rejects_);
+        effect_fail(
+            effect_fail_mask_,
+            k_effect_fail_material);
         return false;
     }
+    effect_latch(effect_material_ready_);
 
     const auto query =
         make_query(
@@ -476,8 +489,12 @@ bool pmetal_envspec_draw_runtime::prepare(
         env_decision.state !=
             mr::mtd_semantic_state::use) {
         telemetry::hot_count(semantic_rejects_);
+        effect_fail(
+            effect_fail_mask_,
+            k_effect_fail_semantic);
         return false;
     }
+    effect_latch(effect_semantic_ready_);
 
     pmetal_env_source source{};
     if (!lightbank_.
@@ -485,8 +502,12 @@ bool pmetal_envspec_draw_runtime::prepare(
                 source) ||
         !std::isfinite(source.beta)) {
         telemetry::hot_count(source_rejects_);
+        effect_fail(
+            effect_fail_mask_,
+            k_effect_fail_source);
         return false;
     }
+    effect_latch(effect_source_ready_);
 
     // Stable HemEnv remains a one-endpoint consumer. HemEnvLerp is an
     // independently attested A/B+beta consumer and is the only family allowed
@@ -496,6 +517,9 @@ bool pmetal_envspec_draw_runtime::prepare(
                 stable_hemenv &&
         source.beta != 0.0f) {
         telemetry::hot_count(blended_receiver_hold_);
+        effect_fail(
+            effect_fail_mask_,
+            k_effect_fail_blend);
         return false;
     }
 
@@ -504,8 +528,12 @@ bool pmetal_envspec_draw_runtime::prepare(
                 hemenvlerp &&
         upper_lower_receiver_verified) {
         telemetry::hot_count(semantic_rejects_);
+        effect_fail(
+            effect_fail_mask_,
+            k_effect_fail_lerp_ul_conflict);
         return false;
     }
+    effect_latch(effect_receiver_source_ready_);
 
     auto *context =
         reinterpret_cast<ID3D11DeviceContext *>(
@@ -513,6 +541,9 @@ bool pmetal_envspec_draw_runtime::prepare(
 
     if (context == nullptr) {
         telemetry::hot_count(source_rejects_);
+        effect_fail(
+            effect_fail_mask_,
+            k_effect_fail_context);
         return false;
     }
 
