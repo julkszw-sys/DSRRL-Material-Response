@@ -1,4 +1,5 @@
 #include "dsrrl/runtime/hemenvlerp_pipeline_registry.hpp"
+#include "dsrrl/runtime/runtime_hot_telemetry.hpp"
 
 #include "dsrrl/operators/material_response/generated_hemenvlerp_v211_v1.hpp"
 #include "dsrrl/operators/legacy_plan/sha256_bytes.hpp"
@@ -214,7 +215,7 @@ void hemenvlerp_receiver_observe_bind(
         command_list_key == nullptr)
         return;
 
-    ++g_pixel_binds;
+    telemetry::hot_count(g_pixel_binds);
 
     try {
         std::lock_guard<std::mutex> lock(g_mutex);
@@ -236,7 +237,7 @@ void hemenvlerp_receiver_observe_bind(
                 g_bound_epoch.load(),
                 false
             };
-            ++g_unknown_binds;
+            telemetry::hot_count(g_unknown_binds);
             return;
         }
 
@@ -252,7 +253,7 @@ void hemenvlerp_receiver_observe_bind(
             g_bound_epoch.load(),
             true
         };
-        ++g_exact_binds;
+        telemetry::hot_count(g_exact_binds);
     } catch (...) {
         try {
             std::lock_guard<std::mutex> lock(g_mutex);
@@ -267,7 +268,7 @@ void hemenvlerp_receiver_observe_bind(
         } catch (...) {
             g_bound_tls = {};
         }
-        ++g_unknown_binds;
+        telemetry::hot_count(g_unknown_binds);
     }
 }
 
@@ -275,11 +276,11 @@ bool hemenvlerp_receiver_bound(
     const void *command_list_key,
     hemenvlerp_receiver_identity &identity) noexcept
 {
-    ++g_lookups;
+    telemetry::hot_count(g_lookups);
     identity = {};
 
     if (command_list_key == nullptr) {
-        ++g_lookup_misses;
+        telemetry::hot_count(g_lookup_misses);
         return false;
     }
 
@@ -290,13 +291,13 @@ bool hemenvlerp_receiver_bound(
             command_list_key &&
         g_bound_tls.epoch == epoch) {
         if (!g_bound_tls.present) {
-            ++g_lookup_misses;
+            telemetry::hot_count(g_lookup_misses);
             return false;
         }
 
         identity =
             g_bound_tls.value.identity;
-        ++g_lookup_hits;
+        telemetry::hot_count(g_lookup_hits);
         return identity.exact;
     }
 
@@ -314,7 +315,7 @@ bool hemenvlerp_receiver_bound(
             g_bound_epoch.load(),
             false
         };
-        ++g_lookup_misses;
+        telemetry::hot_count(g_lookup_misses);
         return false;
     }
 
@@ -326,7 +327,7 @@ bool hemenvlerp_receiver_bound(
     };
     identity =
         found->second.identity;
-    ++g_lookup_hits;
+    telemetry::hot_count(g_lookup_hits);
     return identity.exact;
 }
 
