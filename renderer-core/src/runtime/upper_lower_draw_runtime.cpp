@@ -115,14 +115,32 @@ struct pmetal_bank_cache_entry {
 };
 
 
-constexpr std::size_t k_steady_cache_slots = 32u;
-thread_local std::array<steady_q_cache_entry,k_steady_cache_slots>
+// Clean-Q proved that steady semantic capture is sufficient to collapse
+// performance. A 32-entry direct-mapped cache is too small for scenes with a
+// large active LightBank working set: unrelated source/selector pairs can
+// continually evict one another and force the fully validated slow path on
+// every call. Keep the cache allocation fixed and TLS, but make the three
+// clean-Q hot caches 4-way set associative with 128 sets (512 entries).
+constexpr std::size_t k_steady_cache_sets = 128u;
+constexpr std::size_t k_steady_cache_ways = 4u;
+constexpr std::size_t k_steady_cache_entries =
+    k_steady_cache_sets * k_steady_cache_ways;
+constexpr std::size_t k_pmetal_cache_slots = 32u;
+
+thread_local std::array<steady_q_cache_entry,k_steady_cache_entries>
     g_steady_q_cache{};
-thread_local std::array<raw_record_cache_entry,k_steady_cache_slots>
+thread_local std::array<raw_record_cache_entry,k_steady_cache_entries>
     g_raw_record_cache{};
-thread_local std::array<d123_identity_cache_entry,k_steady_cache_slots>
+thread_local std::array<d123_identity_cache_entry,k_steady_cache_entries>
     g_d123_identity_cache{};
-thread_local std::array<pmetal_bank_cache_entry,k_steady_cache_slots>
+thread_local std::array<std::uint8_t,k_steady_cache_sets>
+    g_steady_q_victim{};
+thread_local std::array<std::uint8_t,k_steady_cache_sets>
+    g_raw_record_victim{};
+thread_local std::array<std::uint8_t,k_steady_cache_sets>
+    g_d123_victim{};
+
+thread_local std::array<pmetal_bank_cache_entry,k_pmetal_cache_slots>
     g_pmetal_bank_cache{};
 
 // b13 is draw-local data, but the D3D11 buffer object itself does not need to
@@ -474,7 +492,7 @@ bool safe_read(
     return true;
 }
 
-std::size_t steady_cache_slot(
+std::size_t steady_cache_set(
     const void *ptr,
     std::int32_t selector) noexcept
 {
@@ -489,10 +507,10 @@ std::size_t steady_cache_slot(
     return
         static_cast<std::size_t>(
             mixed &
-            (k_steady_cache_slots - 1u));
+            (k_steady_cache_sets - 1u));
 }
 
-std::size_t d123_cache_slot(
+std::size_t d123_cache_set(
     const void *ptr) noexcept
 {
     const auto value =
@@ -501,7 +519,135 @@ std::size_t d123_cache_slot(
     return
         static_cast<std::size_t>(
             (value >> 4u) &
-            (k_steady_cache_slots - 1u));
+            (k_steady_cache_sets - 1u));
+}
+
+steady_q_cache_entry &steady_q_cache_for(
+    void *source,
+    std::int32_t selector) noexcept
+{
+    const auto set =
+        steady_cache_set(
+            source,
+            selector);
+    const auto base =
+        set * k_steady_cache_ways;
+
+    for (std::size_t way = 0u;
+         way < k_steady_cache_ways;
+         ++way) {
+        auto &entry =
+            g_steady_q_cache[base + way];
+        if (entry.view_valid &&
+            entry.source == source &&
+            entry.selector == selector)
+            return entry;
+    }
+
+    for (std::size_t way = 0u;
+         way < k_steady_cache_ways;
+         ++way) {
+        auto &entry =
+            g_steady_q_cache[base + way];
+        if (!entry.view_valid) {
+            entry = {};
+            return entry;
+        }
+    }
+
+    const auto victim =
+        static_cast<std::size_t>(
+            g_steady_q_victim[set]++ &
+            static_cast<std::uint8_t>(
+                k_steady_cache_ways - 1u));
+    auto &entry =
+        g_steady_q_cache[base + victim];
+    entry = {};
+    return entry;
+}
+
+raw_record_cache_entry &raw_record_cache_for(
+    void *source,
+    std::int32_t selector) noexcept
+{
+    const auto set =
+        steady_cache_set(
+            source,
+            selector);
+    const auto base =
+        set * k_steady_cache_ways;
+
+    for (std::size_t way = 0u;
+         way < k_steady_cache_ways;
+         ++way) {
+        auto &entry =
+            g_raw_record_cache[base + way];
+        if (entry.valid &&
+            entry.source == source &&
+            entry.selector == selector)
+            return entry;
+    }
+
+    for (std::size_t way = 0u;
+         way < k_steady_cache_ways;
+         ++way) {
+        auto &entry =
+            g_raw_record_cache[base + way];
+        if (!entry.valid) {
+            entry = {};
+            return entry;
+        }
+    }
+
+    const auto victim =
+        static_cast<std::size_t>(
+            g_raw_record_victim[set]++ &
+            static_cast<std::uint8_t>(
+                k_steady_cache_ways - 1u));
+    auto &entry =
+        g_raw_record_cache[base + victim];
+    entry = {};
+    return entry;
+}
+
+d123_identity_cache_entry &d123_cache_for(
+    const std::uint8_t *record) noexcept
+{
+    const auto set =
+        d123_cache_set(record);
+    const auto base =
+        set * k_steady_cache_ways;
+
+    for (std::size_t way = 0u;
+         way < k_steady_cache_ways;
+         ++way) {
+        auto &entry =
+            g_d123_identity_cache[base + way];
+        if (entry.sample_valid &&
+            entry.record == record)
+            return entry;
+    }
+
+    for (std::size_t way = 0u;
+         way < k_steady_cache_ways;
+         ++way) {
+        auto &entry =
+            g_d123_identity_cache[base + way];
+        if (!entry.sample_valid) {
+            entry = {};
+            return entry;
+        }
+    }
+
+    const auto victim =
+        static_cast<std::size_t>(
+            g_d123_victim[set]++ &
+            static_cast<std::uint8_t>(
+                k_steady_cache_ways - 1u));
+    auto &entry =
+        g_d123_identity_cache[base + victim];
+    entry = {};
+    return entry;
 }
 
 std::size_t pmetal_bank_cache_slot(
@@ -513,7 +659,7 @@ std::size_t pmetal_bank_cache_slot(
     return
         static_cast<std::size_t>(
             (value >> 4u) &
-            (k_steady_cache_slots - 1u));
+            (k_pmetal_cache_slots - 1u));
 }
 
 std::uint64_t pmetal_fnv_byte(
@@ -1214,10 +1360,9 @@ const std::uint8_t *resolve_raw_lightbank_record(
         return nullptr;
 
     auto &cached =
-        g_raw_record_cache[
-            steady_cache_slot(
-                source,
-                selector)];
+        raw_record_cache_for(
+            source,
+            selector);
 
     // The packer original has already completed successfully before this
     // resolver is called. Re-reading the engine-owned source->header pointer
@@ -1429,8 +1574,7 @@ bool evaluate_raw_d123(
         a == b &&
         beta == 0.0f) {
         auto &cached =
-            g_d123_identity_cache[
-                d123_cache_slot(a)];
+            d123_cache_for(a);
 
         std::array<std::uint8_t,0x24> raw{};
         std::memcpy(
@@ -1521,10 +1665,9 @@ bool read_selected_ptde(
         return false;
 
     auto &cached =
-        g_steady_q_cache[
-            steady_cache_slot(
-                source,
-                selector)];
+        steady_q_cache_for(
+            source,
+            selector);
 
     const std::uint8_t *record = nullptr;
 
