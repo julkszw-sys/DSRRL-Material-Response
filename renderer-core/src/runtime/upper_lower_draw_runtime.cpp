@@ -530,6 +530,7 @@ struct readable_window {
 };
 
 thread_local readable_window g_selector_window{};
+thread_local readable_window g_assignment_window{};
 
 bool ensure_readable_window(
     const void *ptr,
@@ -614,6 +615,58 @@ bool read_selector_tuple(
     // This descriptor is observed at three exact, attested engine return
     // sites. Once its VM region is validated, read the contiguous tuple in
     // one copy instead of issuing three VirtualQuery-backed safe_read calls.
+    std::array<std::uint8_t,8> raw{};
+    std::memcpy(
+        raw.data(),
+        tuple,
+        raw.size());
+    std::memcpy(
+        &selector_a,
+        raw.data(),
+        sizeof(selector_a));
+    std::memcpy(
+        &selector_b,
+        raw.data() + 2u,
+        sizeof(selector_b));
+    std::memcpy(
+        &beta_bits,
+        raw.data() + 4u,
+        sizeof(beta_bits));
+    return true;
+}
+
+bool read_assignment_tuple(
+    const std::uint8_t *assignment,
+    std::uint16_t &selector_a,
+    std::uint16_t &selector_b,
+    std::uint32_t &beta_bits) noexcept
+{
+    selector_a = 0u;
+    selector_b = 0u;
+    beta_bits = 0u;
+
+    if (assignment == nullptr)
+        return false;
+
+    const auto *tuple =
+        assignment + 8u;
+    const auto begin =
+        reinterpret_cast<std::uintptr_t>(
+            tuple);
+    const auto end =
+        begin + 8u;
+
+    if (end < begin ||
+        !ensure_readable_window(
+            tuple,
+            g_assignment_window) ||
+        end > g_assignment_window.end)
+        return false;
+
+    // Wrapper assignment is engine-owned and has just been consumed by the
+    // original call. Validate its VM region once, then read the contiguous
+    // selectorA/selectorB/beta tuple in one copy instead of three
+    // VirtualQuery-backed safe_read operations per publication.
     std::array<std::uint8_t,8> raw{};
     std::memcpy(
         raw.data(),
@@ -1718,14 +1771,10 @@ void publish_snapshot(
     std::uint16_t selector_b = 0u;
     std::uint32_t beta_bits = 0u;
 
-    if (!safe_read(
-            producer.assignment + 8u,
-            selector_a) ||
-        !safe_read(
-            producer.assignment + 10u,
-            selector_b) ||
-        !safe_read(
-            producer.assignment + 12u,
+    if (!read_assignment_tuple(
+            producer.assignment,
+            selector_a,
+            selector_b,
             beta_bits))
         return;
 
@@ -2554,6 +2603,7 @@ void clear_snapshots() noexcept
     clear_b13_upload_slots();
     g_selector_snapshot = {};
     g_selector_window = {};
+    g_assignment_window = {};
 
     std::lock_guard<std::mutex> lock(
         g_snapshot_mutex);
