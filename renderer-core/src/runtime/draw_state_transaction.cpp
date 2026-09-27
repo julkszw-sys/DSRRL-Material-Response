@@ -279,36 +279,43 @@ bool draw_state_transaction_runtime::begin(
         return false;
     }
 
-    ID3D11DeviceContext1 *ctx1 = nullptr;
-    (void)ctx->QueryInterface(
-        __uuidof(ID3D11DeviceContext1),
-        reinterpret_cast<void **>(&ctx1));
-    state.context1 = ctx1;
+    if (mutation.constant_buffer_count != 0u) {
+        ID3D11DeviceContext1 *ctx1 = nullptr;
+        (void)ctx->QueryInterface(
+            __uuidof(ID3D11DeviceContext1),
+            reinterpret_cast<void **>(&ctx1));
+        state.context1 = ctx1;
+    }
+
     state.verify_native_readback =
         verify_native_readback_for(mutation);
 
-    std::array<ID3D11ClassInstance *,
-               draw_tx_max_class_instances> classes{};
-    UINT class_count =
-        static_cast<UINT>(classes.size());
+    if (mutation.replace_pixel_shader) {
+        std::array<ID3D11ClassInstance *,
+                   draw_tx_max_class_instances> classes{};
+        UINT class_count =
+            static_cast<UINT>(classes.size());
 
-    ctx->PSGetShader(
-        &state.old_shader,
-        classes.data(),
-        &class_count);
+        ctx->PSGetShader(
+            &state.old_shader,
+            classes.data(),
+            &class_count);
 
-    if (state.old_shader == nullptr ||
-        class_count > classes.size()) {
-        release_state(state);
-        ++begin_fail_;
-        return false;
+        if (state.old_shader == nullptr ||
+            class_count > classes.size()) {
+            release_state(state);
+            ++begin_fail_;
+            return false;
+        }
+
+        state.old_class_count = class_count;
+        for (std::uint32_t i = 0;
+             i < state.old_class_count;
+             ++i)
+            state.old_classes[i] = classes[i];
+
+        state.shader_captured = true;
     }
-
-    state.old_class_count = class_count;
-    for (std::uint32_t i = 0;
-         i < state.old_class_count;
-         ++i)
-        state.old_classes[i] = classes[i];
 
     state.cb_count = mutation.constant_buffer_count;
     for (std::uint32_t i = 0;
@@ -556,7 +563,8 @@ bool draw_state_transaction_runtime::restore(
     bool core_restored = true;
 
     if (cmd_list == nullptr ||
-        state.old_shader == nullptr) {
+        (state.shader_captured &&
+         state.old_shader == nullptr)) {
         if (state.core_started && state.command != 0u)
             core_restored =
                 core_.transactions().restore(
@@ -586,17 +594,19 @@ bool draw_state_transaction_runtime::restore(
 
     std::array<ID3D11ClassInstance *,
                draw_tx_max_class_instances> classes{};
-    for (std::uint32_t i = 0;
-         i < state.old_class_count;
-         ++i)
-        classes[i] =
-            reinterpret_cast<ID3D11ClassInstance *>(
-                state.old_classes[i]);
+    if (state.shader_captured) {
+        for (std::uint32_t i = 0;
+             i < state.old_class_count;
+             ++i)
+            classes[i] =
+                reinterpret_cast<ID3D11ClassInstance *>(
+                    state.old_classes[i]);
 
-    ctx->PSSetShader(
-        state.old_shader,
-        classes.data(),
-        state.old_class_count);
+        ctx->PSSetShader(
+            state.old_shader,
+            classes.data(),
+            state.old_class_count);
+    }
 
     for (std::uint32_t i = 0;
          i < state.cb_count;
@@ -637,40 +647,42 @@ bool draw_state_transaction_runtime::restore(
     bool native_restored = true;
 
     if (state.verify_native_readback) {
-        ID3D11PixelShader *shader = nullptr;
-        std::array<ID3D11ClassInstance *,
-                   draw_tx_max_class_instances> check_classes{};
-        UINT check_class_count =
-            static_cast<UINT>(check_classes.size());
-        ctx->PSGetShader(
-            &shader,
-            check_classes.data(),
-            &check_class_count);
-    
-        native_restored =
-            shader == state.old_shader &&
-            check_class_count == state.old_class_count;
-    
-        if (native_restored) {
-            for (std::uint32_t i = 0;
-                 i < state.old_class_count;
-                 ++i) {
-                if (check_classes[i] != classes[i]) {
-                    native_restored = false;
-                    break;
+        if (state.shader_captured) {
+            ID3D11PixelShader *shader = nullptr;
+            std::array<ID3D11ClassInstance *,
+                       draw_tx_max_class_instances> check_classes{};
+            UINT check_class_count =
+                static_cast<UINT>(check_classes.size());
+            ctx->PSGetShader(
+                &shader,
+                check_classes.data(),
+                &check_class_count);
+
+            native_restored =
+                shader == state.old_shader &&
+                check_class_count == state.old_class_count;
+
+            if (native_restored) {
+                for (std::uint32_t i = 0;
+                     i < state.old_class_count;
+                     ++i) {
+                    if (check_classes[i] != classes[i]) {
+                        native_restored = false;
+                        break;
+                    }
                 }
             }
+
+            if (shader != nullptr)
+                shader->Release();
+            for (std::uint32_t i = 0;
+                 i < check_class_count &&
+                 i < check_classes.size();
+                 ++i)
+                if (check_classes[i] != nullptr)
+                    check_classes[i]->Release();
         }
-    
-        if (shader != nullptr)
-            shader->Release();
-        for (std::uint32_t i = 0;
-             i < check_class_count &&
-             i < check_classes.size();
-             ++i)
-            if (check_classes[i] != nullptr)
-                check_classes[i]->Release();
-    
+
         for (std::uint32_t i = 0;
              native_restored && i < state.cb_count;
              ++i) {
