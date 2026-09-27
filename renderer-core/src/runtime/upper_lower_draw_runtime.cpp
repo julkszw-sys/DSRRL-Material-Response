@@ -255,6 +255,12 @@ using blend_fn =
     void *(__fastcall *)(void *,const void *,const void *,float);
 using steady_packer_fn =
     void (__fastcall *)(void *,void *,std::int32_t);
+using steady_eval_tail_fn =
+    void (__fastcall *)(
+        const void *,
+        void *,
+        std::int32_t,
+        void *);
 using lightbank_blend_packer_fn =
     void *(__fastcall *)(
         void *,
@@ -276,6 +282,7 @@ constexpr std::uintptr_t k_rva_wrapper_type5 = 0x1C0BE0u;
 constexpr std::uintptr_t k_rva_wrapper_type6 = 0x1C0C10u;
 constexpr std::uintptr_t k_rva_blend_helper = 0x5642F0u;
 constexpr std::uintptr_t k_rva_steady_packer = 0x563B80u;
+constexpr std::uintptr_t k_rva_steady_eval_tail = 0x5634E7u;
 constexpr std::uintptr_t k_rva_blend_packer = 0x5637E0u;
 constexpr std::uintptr_t k_rva_pmetal_env_blend = 0x563C30u;
 
@@ -293,6 +300,14 @@ constexpr std::array<std::uint8_t,19> k_blend_bytes = {
 };
 constexpr std::array<std::uint8_t,14> k_steady_packer_bytes = {
     0x48,0x89,0x5C,0x24,0x08,0x57,0x48,0x83,0xEC,0x40,0x48,0x8B,0x41,0x18
+};
+// 0x1405634E7 is reached only on the valid selected-record path, after DSR
+// has written qUpper*1.5 and qLower*1.5 to dst+0x60/+0x70. These 15 stolen
+// bytes are branch-free and RIP-independent, so the existing raw trampoline
+// remains relocation-safe.
+constexpr std::array<std::uint8_t,15> k_steady_eval_tail_bytes = {
+    0x0F,0x28,0x81,0x80,0x00,0x00,0x00,
+    0x66,0x0F,0x7F,0x82,0x80,0x00,0x00,0x00
 };
 constexpr std::array<std::uint8_t,15> k_blend_packer_bytes = {
     0x40,0x55,0x56,0x48,0x8D,0x6C,0x24,0xC1,
@@ -322,11 +337,13 @@ upper_lower_draw_runtime *g_runtime = nullptr;
 std::uintptr_t g_base = 0u;
 std::array<inline_hook,5> g_hooks{};
 inline_hook g_pmetal_env_hook{};
+inline_hook g_steady_eval_tail_hook{};
 
 wrapper_fn g_wrapper5_orig = nullptr;
 wrapper_fn g_wrapper6_orig = nullptr;
 blend_fn g_blend_orig = nullptr;
 steady_packer_fn g_steady_packer_orig = nullptr;
+steady_eval_tail_fn g_steady_eval_tail_orig = nullptr;
 lightbank_blend_packer_fn g_blend_packer_orig = nullptr;
 pmetal_env_blend_fn g_pmetal_env_blend_orig = nullptr;
 
@@ -376,6 +393,10 @@ std::atomic<std::uint64_t> g_pmetal_env_steady{0};
 std::atomic<std::uint64_t> g_pmetal_env_blend{0};
 std::atomic<std::uint64_t> g_pmetal_env_miss{0};
 std::atomic_bool g_pmetal_env_hook_armed{false};
+std::atomic_bool g_direct_ul_producer_active{false};
+std::atomic<std::uint64_t> g_direct_ul_steady_inject{0};
+std::atomic<std::uint64_t> g_direct_ul_blend_inject{0};
+std::atomic<std::uint64_t> g_direct_ul_inject_fail{0};
 
 bool readable_range(
     const void *ptr,
@@ -1864,6 +1885,90 @@ void *__fastcall hook_wrapper6(
         x);
 }
 
+void write_direct_ul_rgb(
+    void *dst,
+    const f4 &upper,
+    const f4 &lower) noexcept
+{
+    // The exact producer functions have just written both float4 lanes, so
+    // dst is engine-attested here. Preserve DSR's W lanes and replace only
+    // RGB, matching the PTDE U/L operator's authored color semantics.
+    auto *bytes =
+        static_cast<std::uint8_t *>(dst);
+
+    f4 out_upper{};
+    f4 out_lower{};
+    std::memcpy(
+        &out_upper,
+        bytes + k_q_upper_offset,
+        sizeof(out_upper));
+    std::memcpy(
+        &out_lower,
+        bytes + k_q_lower_offset,
+        sizeof(out_lower));
+
+    out_upper.x = upper.x;
+    out_upper.y = upper.y;
+    out_upper.z = upper.z;
+    out_lower.x = lower.x;
+    out_lower.y = lower.y;
+    out_lower.z = lower.z;
+
+    std::memcpy(
+        bytes + k_q_upper_offset,
+        &out_upper,
+        sizeof(out_upper));
+    std::memcpy(
+        bytes + k_q_lower_offset,
+        &out_lower,
+        sizeof(out_lower));
+}
+
+void __fastcall hook_steady_eval_tail(
+    const void *record,
+    void *dst,
+    std::int32_t selector,
+    void *source) noexcept
+{
+    // Complete the original evaluator first. The tail trampoline continues
+    // through the original RET and returns here before the caller copies
+    // dst+0x60/+0x70 into renderer state +0x12A0/+0x12B0.
+    if (g_steady_eval_tail_orig != nullptr)
+        g_steady_eval_tail_orig(
+            record,
+            dst,
+            selector,
+            source);
+
+    if (!g_direct_ul_producer_active.load(
+            std::memory_order_acquire) ||
+        !g_producer.active ||
+        g_core == nullptr ||
+        !g_core->features().enabled(
+            core::operator_id::upper_lower) ||
+        dst == nullptr ||
+        source == nullptr) {
+        return;
+    }
+
+    f4 upper{};
+    f4 lower{};
+    if (!read_selected_ptde(
+            source,
+            selector,
+            upper,
+            lower)) {
+        ++g_direct_ul_inject_fail;
+        return;
+    }
+
+    write_direct_ul_rgb(
+        dst,
+        upper,
+        lower);
+    ++g_direct_ul_steady_inject;
+}
+
 void __fastcall hook_steady_packer(
     void *source,
     void *dst,
@@ -2023,6 +2128,21 @@ void *__fastcall hook_blend_packer(
 
     if (!g_producer.active)
         return result;
+
+    if (g_direct_ul_producer_active.load(
+            std::memory_order_acquire) &&
+        g_core != nullptr &&
+        g_core->features().enabled(
+            core::operator_id::upper_lower) &&
+        dst != nullptr &&
+        g_producer.have_upper &&
+        g_producer.have_lower) {
+        write_direct_ul_rgb(
+            dst,
+            g_producer.upper,
+            g_producer.lower);
+        ++g_direct_ul_blend_inject;
+    }
 
     const auto *raw_a =
         resolve_raw_lightbank_record(
@@ -2188,7 +2308,13 @@ bool install_producer_hooks() noexcept
             k_rva_blend_packer,
             k_blend_packer_bytes,
             reinterpret_cast<void *>(
-                &hook_blend_packer))) {
+                &hook_blend_packer)) ||
+        !prepare_hook(
+            g_steady_eval_tail_hook,
+            k_rva_steady_eval_tail,
+            k_steady_eval_tail_bytes,
+            reinterpret_cast<void *>(
+                &hook_steady_eval_tail))) {
         return false;
     }
 
@@ -2204,6 +2330,9 @@ bool install_producer_hooks() noexcept
     g_steady_packer_orig =
         reinterpret_cast<steady_packer_fn>(
             g_hooks[3].trampoline);
+    g_steady_eval_tail_orig =
+        reinterpret_cast<steady_eval_tail_fn>(
+            g_steady_eval_tail_hook.trampoline);
     g_blend_packer_orig =
         reinterpret_cast<lightbank_blend_packer_fn>(
             g_hooks[4].trampoline);
@@ -2211,6 +2340,16 @@ bool install_producer_hooks() noexcept
     for (auto &hook : g_hooks)
         if (!arm_hook(hook))
             return false;
+
+    if (!arm_hook(
+            g_steady_eval_tail_hook))
+        return false;
+
+    // Only after both the steady evaluator tail and the already-owned blend
+    // packer hook are armed may integrated routing bypass draw-time U/L.
+    g_direct_ul_producer_active.store(
+        true,
+        std::memory_order_release);
 
     // P_Metal EnvSpec A/B source is independent from U/L and D123. A
     // fingerprint failure must only disable EnvSpec source capture.
@@ -2222,6 +2361,10 @@ bool install_producer_hooks() noexcept
 
 bool restore_producer_hooks() noexcept
 {
+    g_direct_ul_producer_active.store(
+        false,
+        std::memory_order_release);
+
     bool ok =
         restore_hook(
             g_pmetal_env_hook);
@@ -2230,6 +2373,11 @@ bool restore_producer_hooks() noexcept
 
     if (ok)
         g_pmetal_env_blend_orig = nullptr;
+
+    ok =
+        restore_hook(
+            g_steady_eval_tail_hook) &&
+        ok;
 
     for (auto it = g_hooks.rbegin();
          it != g_hooks.rend();
@@ -2241,6 +2389,7 @@ bool restore_producer_hooks() noexcept
         g_wrapper6_orig = nullptr;
         g_blend_orig = nullptr;
         g_steady_packer_orig = nullptr;
+        g_steady_eval_tail_orig = nullptr;
         g_blend_packer_orig = nullptr;
     }
 
@@ -2559,6 +2708,15 @@ void upper_lower_draw_runtime::selector_event(
     ++g_selector_match;
 }
 
+bool upper_lower_draw_runtime::direct_producer_active() const noexcept
+{
+    return
+        g_enabled.load(std::memory_order_acquire) &&
+        !g_quarantined.load(std::memory_order_acquire) &&
+        g_direct_ul_producer_active.load(
+            std::memory_order_acquire);
+}
+
 bool upper_lower_draw_runtime::prepare_upper_lower_carrier(
     ID3D11DeviceContext *context,
     prepared_upper_lower_draw &prepared) noexcept
@@ -2745,8 +2903,12 @@ upper_lower_draw_runtime::telemetry() const noexcept
         g_pmetal_env_steady.load(),
         g_pmetal_env_blend.load(),
         g_pmetal_env_miss.load(),
+        g_direct_ul_steady_inject.load(),
+        g_direct_ul_blend_inject.load(),
+        g_direct_ul_inject_fail.load(),
         g_enabled.load(),
         g_pmetal_env_hook_armed.load(),
+        g_direct_ul_producer_active.load(),
         g_quarantined.load(),
         g_restore_failed.load()
     };
@@ -2781,6 +2943,9 @@ void upper_lower_draw_runtime::reset() noexcept
     g_pmetal_env_steady.store(0);
     g_pmetal_env_blend.store(0);
     g_pmetal_env_miss.store(0);
+    g_direct_ul_steady_inject.store(0);
+    g_direct_ul_blend_inject.store(0);
+    g_direct_ul_inject_fail.store(0);
 }
 
 } // namespace dsrrl::runtime

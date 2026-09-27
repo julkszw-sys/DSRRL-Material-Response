@@ -755,6 +755,24 @@ void log_state(const char *tag) noexcept
 
     reshade::log::message(reshade::log::level::info, line);
 
+    char ul_direct_line[320]{};
+    std::snprintf(
+        ul_direct_line,
+        sizeof(ul_direct_line),
+        "[DSRRL CORE+ISLANDS " DSRRL_CORE_ISLANDS_VERSION "] %s "
+        "UL_DIRECT active=%u steady=%llu blend=%llu fail=%llu",
+        tag,
+        ul.direct_ul_producer_active ? 1u : 0u,
+        static_cast<unsigned long long>(
+            ul.direct_ul_steady_inject),
+        static_cast<unsigned long long>(
+            ul.direct_ul_blend_inject),
+        static_cast<unsigned long long>(
+            ul.direct_ul_inject_fail));
+    reshade::log::message(
+        reshade::log::level::info,
+        ul_direct_line);
+
     // Observe-only exact-hash census for the still-unarmed PTDE local
     // PointLight specular island. These counters are not bridge activation.
     char local_spec_line[320]{};
@@ -2073,6 +2091,9 @@ bool prepare_island_batch(
         reinterpret_cast<ID3D11DeviceContext *>(
             cmd_list->get_native());
 
+    const bool direct_ul_producer =
+        g_upper_lower.direct_producer_active();
+
     const bool envspec_ul_verified =
         upper_lower_bound &&
         upper_lower_identity.stratum ==
@@ -2095,7 +2116,8 @@ bool prepare_island_batch(
             material,
             decision,
             envspec_family,
-            envspec_ul_verified &&
+            !direct_ul_producer &&
+                envspec_ul_verified &&
                 !hemenvlerp_bound,
             prepared.envspec)) {
         prepared.envspec_in_batch = true;
@@ -2263,7 +2285,8 @@ bool prepare_island_batch(
 
     // Prepare the base MR shader first. It is deliberately the stock-t1
     // consumer; the paired t10 variant is selected only after resource proof.
-    if (decision.active &&
+    if (!direct_ul_producer &&
+        decision.active &&
         ul_spc &&
         context != nullptr &&
         g_upper_lower.prepare_upper_lower_carrier(
@@ -2334,7 +2357,8 @@ bool prepare_island_batch(
         }
     }
 
-    if (upper_lower_bound &&
+    if (!direct_ul_producer &&
+        upper_lower_bound &&
         !prepared.upper_lower_combined &&
         g_upper_lower_hemenv.prepare_draw_request(
             cmd_list,

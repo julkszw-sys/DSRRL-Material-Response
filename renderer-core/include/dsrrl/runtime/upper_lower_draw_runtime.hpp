@@ -41,8 +41,12 @@ struct upper_lower_telemetry {
     std::uint64_t pmetal_env_steady = 0;
     std::uint64_t pmetal_env_blend = 0;
     std::uint64_t pmetal_env_miss = 0;
+    std::uint64_t direct_ul_steady_inject = 0;
+    std::uint64_t direct_ul_blend_inject = 0;
+    std::uint64_t direct_ul_inject_fail = 0;
     bool producer_hooks_armed = false;
     bool pmetal_env_hook_armed = false;
+    bool direct_ul_producer_active = false;
     bool quarantined = false;
     bool restore_failed = false;
 };
@@ -93,6 +97,11 @@ public:
         void *return_address,
         void *r14,
         void *r15) noexcept;
+
+    // True only when both steady and blended PTDE-linear U/L producer
+    // injection are construction-armed. Integrated routing may bypass the
+    // draw-time U/L shader+b13 replay only while this remains true.
+    bool direct_producer_active() const noexcept;
 
     bool prepare_upper_lower_carrier(
         ID3D11DeviceContext *context,
