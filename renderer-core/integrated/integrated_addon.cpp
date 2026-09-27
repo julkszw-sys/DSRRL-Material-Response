@@ -2114,14 +2114,15 @@ bool prepare_island_batch(
             context != nullptr &&
             direct_material_ready &&
             g_material_resources.
-                prepare_fixed_pointlight_spec_requests(
+                prepare_fixed_pointlight_material_requests(
                     context,
                     fixed_query,
                     true,
                     true,
                     prepared.fixed_shader.blended_material,
                     prepared.resources) &&
-            prepared.resources.spec_rgb;
+            prepared.resources.spec_rgb &&
+            prepared.resources.diffuse;
 
         if (resources_ready)
             ++g_fixed_draw_spec_ready;
