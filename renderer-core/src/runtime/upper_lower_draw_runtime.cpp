@@ -1022,11 +1022,19 @@ void publish_reference_token(
         selector_b,
         beta_bits
     };
+    float assignment_beta = 0.0f;
+    std::memcpy(
+        &assignment_beta,
+        &beta_bits,
+        sizeof(assignment_beta));
+    if (!std::isfinite(assignment_beta))
+        return;
+
     token.source_a = producer.source_a;
     token.source_b = producer.source_b;
     token.selector_a = producer.selector_a;
     token.selector_b = producer.selector_b;
-    token.beta = producer.source_beta;
+    token.beta = assignment_beta;
     token.directions =
         producer.evaluated_directions;
     token.upper = producer.upper;
