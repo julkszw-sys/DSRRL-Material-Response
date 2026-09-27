@@ -1,6 +1,7 @@
 #include "dsrrl/runtime/material_owner_producer.hpp"
 #include "dsrrl/operators/material_response/generated_dsr_flver_owner_tuples_v1.hpp"
 #include "dsrrl/operators/material_response/generated_dsr_mtd_identity_v1.hpp"
+#include "dsrrl/operators/material_response/generated_dsr_mtd_identity_supplement_v1.hpp"
 #include "dsrrl/operators/material_response/generated_routes_v1.hpp"
 #include "dsrrl/operators/material_response/mtd_semantic_census.hpp"
 #include "dsrrl/operators/legacy_plan/sha256_bytes.hpp"
@@ -102,6 +103,9 @@ bool enrich_exact_owner_mtd_identity(
     // registry. EnvSpec/SPX/operator surfaces are consumers, never identity
     // authorities. Ambiguous or absent semantic hashes fail open here.
     if (!mr::generated::dsr_mtd_identity_resolve(
+            semantic_hash,
+            raw_mtd_sha) &&
+        !mr::generated::dsr_mtd_identity_supplement_resolve(
             semantic_hash,
             raw_mtd_sha)) {
         cached = {
