@@ -676,18 +676,17 @@ materialize_fixed_local_specular_single(
         out.result=fixed_local_single_materialize_result::fail_contract;
         return out;
     }
-    if(samples.topology==
-        fixed_local_specular_material_topology::blended_diffuse_spec) {
-        out.result=
-            fixed_local_single_materialize_result::
-                pass_blended_requires_endpoint_b;
-        return out;
-    }
+    const bool blended =
+        samples.topology==
+            fixed_local_specular_material_topology::
+                blended_diffuse_spec;
     if(samples.topology!=
-        fixed_local_specular_material_topology::single_diffuse_spec) {
+           fixed_local_specular_material_topology::single_diffuse_spec &&
+       !blended) {
         out.result=fixed_local_single_materialize_result::fail_contract;
         return out;
     }
+    out.blended_material=blended;
 
     const auto geometry=attest_fixed_local_geometry_contract(source,size);
     if(geometry.result!=fixed_local_geometry_result::exact) {
