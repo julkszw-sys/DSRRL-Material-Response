@@ -236,6 +236,12 @@ bool material_response_draw_runtime::acquire_replacement(
     case replacement_bank::lerp_spec:
         source = &lerp_spec_rgb_replacements_;
         break;
+    case replacement_bank::lerp_upper_lower:
+        source = &lerp_upper_lower_replacements_;
+        break;
+    case replacement_bank::lerp_upper_lower_spec:
+        source = &lerp_upper_lower_spec_rgb_replacements_;
+        break;
     case replacement_bank::upper_lower:
         source = &upper_lower_replacements_;
         break;
@@ -325,6 +331,20 @@ void material_response_draw_runtime::release_resources() noexcept
             shader->Release();
     }
     lerp_spec_rgb_replacements_.clear();
+
+    for (auto &entry : lerp_upper_lower_replacements_) {
+        auto *shader = entry.second.shader;
+        if (shader != nullptr)
+            shader->Release();
+    }
+    lerp_upper_lower_replacements_.clear();
+
+    for (auto &entry : lerp_upper_lower_spec_rgb_replacements_) {
+        auto *shader = entry.second.shader;
+        if (shader != nullptr)
+            shader->Release();
+    }
+    lerp_upper_lower_spec_rgb_replacements_.clear();
 
     for (auto &entry : upper_lower_replacements_) {
         auto *shader = entry.second.shader;
@@ -421,6 +441,20 @@ void material_response_draw_runtime::on_destroy_device(
             shader->Release();
     }
     lerp_spec_rgb_replacements_.clear();
+
+    for (auto &entry : lerp_upper_lower_replacements_) {
+        auto *shader = entry.second.shader;
+        if (shader != nullptr)
+            shader->Release();
+    }
+    lerp_upper_lower_replacements_.clear();
+
+    for (auto &entry : lerp_upper_lower_spec_rgb_replacements_) {
+        auto *shader = entry.second.shader;
+        if (shader != nullptr)
+            shader->Release();
+    }
+    lerp_upper_lower_spec_rgb_replacements_.clear();
 
     for (auto &entry : upper_lower_replacements_) {
         auto *shader = entry.second.shader;
