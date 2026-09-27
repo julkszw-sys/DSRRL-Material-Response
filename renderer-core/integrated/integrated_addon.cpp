@@ -293,6 +293,40 @@ const char *effect_probe_stage_name(
     }
 }
 
+const char *pmetal_source_diag_name(
+    dsrrl::runtime::pmetal_env_source_diag_status status) noexcept
+{
+    using status_t =
+        dsrrl::runtime::pmetal_env_source_diag_status;
+
+    switch (status) {
+    case status_t::none:
+        return "NONE";
+    case status_t::success:
+        return "SUCCESS";
+    case status_t::token_invalid:
+        return "TOKEN_INVALID";
+    case status_t::base_null:
+        return "BASE_NULL";
+    case status_t::header_invalid:
+        return "HEADER_INVALID";
+    case status_t::selector_oob:
+        return "SELECTOR_OOB";
+    case status_t::signature_invalid:
+        return "SIGNATURE_INVALID";
+    case status_t::bank_unknown:
+        return "BANK_UNKNOWN";
+    case status_t::row_read_failed:
+        return "ROW_READ_FAILED";
+    case status_t::row_unknown:
+        return "ROW_UNKNOWN";
+    case status_t::nonfinite:
+        return "NONFINITE";
+    default:
+        return "UNKNOWN";
+    }
+}
+
 std::atomic_bool &effect_probe_flag(
     effect_probe_state &state,
     effect_probe_stage stage) noexcept
@@ -1077,8 +1111,10 @@ void log_effect_matrix(
             flver_identity_transport::status();
     const auto pmetal =
         g_pmetal_envspec.telemetry();
+    const auto pmetal_source =
+        g_upper_lower.pmetal_source_diagnostic();
 
-    char detail[1280]{};
+    char detail[1792]{};
     std::snprintf(
         detail,
         sizeof(detail),
@@ -1086,6 +1122,8 @@ void log_effect_matrix(
         "MR mtd_classified=%u cache_hit=%u selection_published=%u "
         "PMetal entry=%u feature=%u material=%u semantic=%u source=%u "
         "receiver_source=%u repl=%u probe=%u spec=%u b12=%u request=%u fail=0x%08X "
+        "PMSRC obs=%u A=%s sel=%d count=%u sig=%016llX row=%u "
+        "B=%s sel=%d count=%u sig=%016llX row=%u beta=%.6f "
         "UL producer=%u changed=%u quarantine=%u restore_fail=%u "
         "Bloom diag_hooks=%u/%u model_hook=%u proof=%u contents=%u "
         "fx_authorized=%llu fx_rejected=%llu",
@@ -1104,6 +1142,29 @@ void log_effect_matrix(
         pmetal.effect_b12_ready ? 1u : 0u,
         pmetal.effect_request_ready ? 1u : 0u,
         static_cast<unsigned>(pmetal.effect_fail_mask),
+        pmetal_source.observed ? 1u : 0u,
+        pmetal_source_diag_name(
+            pmetal_source.a.status),
+        static_cast<int>(
+            pmetal_source.a.selector),
+        static_cast<unsigned>(
+            pmetal_source.a.bank_count),
+        static_cast<unsigned long long>(
+            pmetal_source.a.bank_signature),
+        static_cast<unsigned>(
+            pmetal_source.a.row_id),
+        pmetal_source_diag_name(
+            pmetal_source.b.status),
+        static_cast<int>(
+            pmetal_source.b.selector),
+        static_cast<unsigned>(
+            pmetal_source.b.bank_count),
+        static_cast<unsigned long long>(
+            pmetal_source.b.bank_signature),
+        static_cast<unsigned>(
+            pmetal_source.b.row_id),
+        static_cast<double>(
+            pmetal_source.beta),
         ul.direct_ul_producer_active ? 1u : 0u,
         ul.direct_ul_operator_changed ? 1u : 0u,
         ul.quarantined ? 1u : 0u,
