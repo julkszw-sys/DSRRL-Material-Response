@@ -1480,8 +1480,10 @@ prepare_fixed_pointlight_material_requests(
             prepared.retained_views.size()) {
         release_view(spec_a);
         release_view(diff_a);
+        release_view(normal_a);
         release_view(spec_b);
         release_view(diff_b);
+        release_view(normal_b);
         release_all();
         ++g_fail_open;
         return true;
