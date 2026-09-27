@@ -59,6 +59,8 @@ def main():
     require(integrated,"18u,\n                prepared.clustered_carrier.t18","clustered t18 slot")
     require(integrated,"19u,\n                prepared.clustered_carrier.t19","clustered t19 slot")
     require(integrated,"k_route_clustered_pointlight","clustered route bit")
+    require(integrated,"dsrrl::core::operator_id::point_light,","full PointLight feature enable")
+    require(integrated,"dsrrl::core::operator_id::local_specular_legacy,","legacy spec feature enable")
     require(integrated,"g_clustered_pnts.install()","clustered producer install")
     require(integrated,"g_clustered_pnts_pipeline.on_init_pipeline","clustered pipeline attestation")
     require(integrated,"g_clustered_pnts_pipeline.on_bind_pipeline","clustered pipeline bind")
