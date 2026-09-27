@@ -565,6 +565,9 @@ bool pmetal_envspec_draw_runtime::prepare(
                     lerp_replacements_.end() ||
                 found->second == nullptr) {
                 ++lerp_replacement_register_fail_;
+                effect_fail(
+                    effect_fail_mask_,
+                    k_effect_fail_replacement);
                 return false;
             }
 
@@ -579,6 +582,9 @@ bool pmetal_envspec_draw_runtime::prepare(
             if (found ==
                 replacements_.end()) {
                 ++replacement_register_fail_;
+                effect_fail(
+                    effect_fail_mask_,
+                    k_effect_fail_replacement);
                 return false;
             }
 
@@ -599,8 +605,12 @@ bool pmetal_envspec_draw_runtime::prepare(
         if (pair.upper_lower != nullptr)
             pair.upper_lower->Release();
         ++replacement_register_fail_;
+        effect_fail(
+            effect_fail_mask_,
+            k_effect_fail_replacement);
         return false;
     }
+    effect_latch(effect_replacement_ready_);
 
     bool use_upper_lower = false;
 
@@ -617,6 +627,9 @@ bool pmetal_envspec_draw_runtime::prepare(
             if (lerp_shader != nullptr)
                 lerp_shader->Release();
             telemetry::hot_count(upper_lower_fallback_);
+            effect_fail(
+                effect_fail_mask_,
+                k_effect_fail_ul);
             return false;
         }
         use_upper_lower = true;
@@ -680,8 +693,12 @@ bool pmetal_envspec_draw_runtime::prepare(
         lightbank_.release_prepared_draw(
             prepared.upper_lower);
         telemetry::hot_count(probe_rejects_);
+        effect_fail(
+            effect_fail_mask_,
+            k_effect_fail_probe);
         return false;
     }
+    effect_latch(effect_probe_ready_);
 
     if (!material_resources_.
             prepare_draw_requests(
@@ -702,8 +719,12 @@ bool pmetal_envspec_draw_runtime::prepare(
             release_prepared_draw(
                 prepared.material_resources);
         telemetry::hot_count(spec_rgb_rejects_);
+        effect_fail(
+            effect_fail_mask_,
+            k_effect_fail_spec_rgb);
         return false;
     }
+    effect_latch(effect_spec_rgb_ready_);
 
     ID3D11Device *device = nullptr;
     context->GetDevice(&device);
@@ -719,6 +740,9 @@ bool pmetal_envspec_draw_runtime::prepare(
             release_prepared_draw(
                 prepared.material_resources);
         telemetry::hot_count(source_rejects_);
+        effect_fail(
+            effect_fail_mask_,
+            k_effect_fail_device);
         return false;
     }
 
@@ -742,6 +766,9 @@ bool pmetal_envspec_draw_runtime::prepare(
                     prepared.material_resources);
 
             quarantined_.store(true);
+            effect_fail(
+                effect_fail_mask_,
+                k_effect_fail_device);
             return false;
         }
 
@@ -786,6 +813,9 @@ bool pmetal_envspec_draw_runtime::prepare(
                     release_prepared_draw(
                         prepared.material_resources);
                 telemetry::hot_count(source_rejects_);
+                effect_fail(
+                    effect_fail_mask_,
+                    k_effect_fail_b12);
                 return false;
             }
 
@@ -819,6 +849,9 @@ bool pmetal_envspec_draw_runtime::prepare(
             release_prepared_draw(
                 prepared.material_resources);
         telemetry::hot_count(source_rejects_);
+        effect_fail(
+            effect_fail_mask_,
+            k_effect_fail_b12);
         return false;
     }
 
@@ -857,6 +890,7 @@ bool pmetal_envspec_draw_runtime::prepare(
     context->Unmap(
         b12,
         0u);
+    effect_latch(effect_b12_ready_);
 
     const auto env_owner =
         core::operator_bit(
@@ -968,10 +1002,14 @@ bool pmetal_envspec_draw_runtime::prepare(
             verify) !=
         island_draw_adapter_result::ready) {
         release(prepared);
+        effect_fail(
+            effect_fail_mask_,
+            k_effect_fail_mutation);
         return false;
     }
 
     prepared.ready = true;
+    effect_latch(effect_request_ready_);
     telemetry::hot_count(requests_);
     if (family ==
         pmetal_envspec_receiver_family::
