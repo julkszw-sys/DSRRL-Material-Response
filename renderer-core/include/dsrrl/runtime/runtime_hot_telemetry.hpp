@@ -42,6 +42,18 @@ inline bool hot_enabled() noexcept
     return enabled;
 }
 
+inline bool effect_enabled() noexcept
+{
+#if defined(DSRRL_EFFECT_TELEMETRY_DEFAULT_ON)
+    return true;
+#else
+    static const bool enabled =
+        environment_flag(
+            "DSRRL_EFFECT_TELEMETRY");
+    return enabled;
+#endif
+}
+
 inline void hot_count(
     std::atomic<std::uint64_t> &counter) noexcept
 {
