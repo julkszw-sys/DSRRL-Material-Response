@@ -296,12 +296,15 @@ using pmetal_env_blend_fn =
         void *,
         std::int32_t,
         float);
+using steady_cache_builder_fn =
+    void (__fastcall *)(void *,const void *);
 
 constexpr std::uintptr_t k_rva_wrapper_type5 = 0x1C0BE0u;
 constexpr std::uintptr_t k_rva_wrapper_type6 = 0x1C0C10u;
 constexpr std::uintptr_t k_rva_blend_helper = 0x5642F0u;
 constexpr std::uintptr_t k_rva_steady_packer = 0x563B80u;
 constexpr std::uintptr_t k_rva_steady_eval_tail = 0x5634E7u;
+constexpr std::uintptr_t k_rva_steady_cache_builder = 0x563590u;
 constexpr std::uintptr_t k_rva_blend_packer = 0x5637E0u;
 constexpr std::uintptr_t k_rva_pmetal_env_blend = 0x563C30u;
 
@@ -328,6 +331,15 @@ constexpr std::array<std::uint8_t,15> k_steady_eval_tail_bytes = {
     0x0F,0x28,0x81,0x80,0x00,0x00,0x00,
     0x66,0x0F,0x7F,0x82,0x80,0x00,0x00,0x00
 };
+// 0x140563590 is the LightBank record cache builder. The first 14 bytes are
+// a branch-free/RIP-independent prologue, so the existing trampoline is safe.
+// Rewriting qUpper/qLower here moves the PTDE steady representation once per
+// cache record instead of recomputing it for every visible object evaluation.
+constexpr std::array<std::uint8_t,14> k_steady_cache_builder_bytes = {
+    0x48,0x89,0x74,0x24,0x10,
+    0x48,0x89,0x7C,0x24,0x18,
+    0x55,0x48,0x8B,0xEC
+};
 constexpr std::array<std::uint8_t,15> k_blend_packer_bytes = {
     0x40,0x55,0x56,0x48,0x8D,0x6C,0x24,0xC1,
     0x48,0x81,0xEC,0x88,0x00,0x00,0x00
@@ -341,6 +353,7 @@ constexpr std::size_t k_record_stride = 0x110u;
 constexpr std::size_t k_q_upper_offset = 0x60u;
 constexpr std::size_t k_q_lower_offset = 0x70u;
 constexpr float k_inv_pow = 1.0f / 2.2f;
+constexpr float k_stock_steady_ul_gain = 1.5f;
 
 #pragma pack(push,1)
 struct raw_rgbm {
@@ -357,6 +370,7 @@ std::uintptr_t g_base = 0u;
 std::array<inline_hook,5> g_hooks{};
 inline_hook g_pmetal_env_hook{};
 inline_hook g_steady_eval_tail_hook{};
+inline_hook g_steady_cache_builder_hook{};
 
 wrapper_fn g_wrapper5_orig = nullptr;
 wrapper_fn g_wrapper6_orig = nullptr;
@@ -365,6 +379,7 @@ steady_packer_fn g_steady_packer_orig = nullptr;
 steady_eval_tail_fn g_steady_eval_tail_orig = nullptr;
 lightbank_blend_packer_fn g_blend_packer_orig = nullptr;
 pmetal_env_blend_fn g_pmetal_env_blend_orig = nullptr;
+steady_cache_builder_fn g_steady_cache_builder_orig = nullptr;
 
 std::mutex g_snapshot_mutex;
 std::unordered_map<
@@ -413,6 +428,7 @@ std::atomic<std::uint64_t> g_pmetal_env_blend{0};
 std::atomic<std::uint64_t> g_pmetal_env_miss{0};
 std::atomic_bool g_pmetal_env_hook_armed{false};
 std::atomic_bool g_direct_ul_producer_active{false};
+std::atomic_bool g_steady_cache_builder_active{false};
 std::atomic<std::uint64_t> g_direct_ul_steady_inject{0};
 std::atomic<std::uint64_t> g_direct_ul_blend_inject{0};
 std::atomic<std::uint64_t> g_direct_ul_inject_fail{0};
@@ -1654,6 +1670,92 @@ bool inverse_q(
     return std::isfinite(out);
 }
 
+bool rewrite_steady_cache_ptde_ul(
+    void *dst) noexcept
+{
+    if (dst == nullptr)
+        return false;
+
+    auto *bytes =
+        static_cast<std::uint8_t *>(dst);
+
+    f4 q_upper{};
+    f4 q_lower{};
+    std::memcpy(
+        &q_upper,
+        bytes + k_q_upper_offset,
+        sizeof(q_upper));
+    std::memcpy(
+        &q_lower,
+        bytes + k_q_lower_offset,
+        sizeof(q_lower));
+
+    f4 cache_upper = q_upper;
+    f4 cache_lower = q_lower;
+    float value = 0.0f;
+
+    if (!inverse_q(q_upper.x, value))
+        return false;
+    cache_upper.x =
+        value / k_stock_steady_ul_gain;
+    if (!inverse_q(q_upper.y, value))
+        return false;
+    cache_upper.y =
+        value / k_stock_steady_ul_gain;
+    if (!inverse_q(q_upper.z, value))
+        return false;
+    cache_upper.z =
+        value / k_stock_steady_ul_gain;
+
+    if (!inverse_q(q_lower.x, value))
+        return false;
+    cache_lower.x =
+        value / k_stock_steady_ul_gain;
+    if (!inverse_q(q_lower.y, value))
+        return false;
+    cache_lower.y =
+        value / k_stock_steady_ul_gain;
+    if (!inverse_q(q_lower.z, value))
+        return false;
+    cache_lower.z =
+        value / k_stock_steady_ul_gain;
+
+    // Preserve W exactly in cache. Stock 0x140563460 will apply its original
+    // x1.5 to all lanes; only RGB is the PTDE semantic bridge.
+    std::memcpy(
+        bytes + k_q_upper_offset,
+        &cache_upper,
+        sizeof(cache_upper));
+    std::memcpy(
+        bytes + k_q_lower_offset,
+        &cache_lower,
+        sizeof(cache_lower));
+    return true;
+}
+
+void __fastcall hook_steady_cache_builder(
+    void *dst,
+    const void *raw_row) noexcept
+{
+    if (g_steady_cache_builder_orig != nullptr)
+        g_steady_cache_builder_orig(
+            dst,
+            raw_row);
+
+    if (!g_steady_cache_builder_active.load(
+            std::memory_order_acquire) ||
+        dst == nullptr ||
+        raw_row == nullptr)
+        return;
+
+    if (rewrite_steady_cache_ptde_ul(dst))
+        telemetry::hot_count(
+            g_direct_ul_steady_inject);
+    else
+        telemetry::hot_count(
+            g_direct_ul_inject_fail);
+}
+
 bool read_selected_ptde(
     void *source,
     std::int32_t selector,
@@ -2093,6 +2195,15 @@ void *run_wrapper(
     g_producer =
         previous;
 
+    // Steady U/L is now materialized in the LightBank cache builder and
+    // true interior blend is written directly by hook_blend_packer. Do not
+    // republish the old D123/P_Metal/U-L snapshot stack on every wrapper:
+    // owner runtime proved that this extended stack is the geometry-scaled
+    // performance failure while direct U/L alone is not.
+    if (g_steady_cache_builder_active.load(
+            std::memory_order_acquire))
+        return result;
+
     if (!completed.have_upper ||
         !completed.have_lower) {
         std::lock_guard<std::mutex> lock(
@@ -2195,6 +2306,10 @@ void __fastcall hook_steady_eval_tail(
             selector,
             source);
 
+    if (g_steady_cache_builder_active.load(
+            std::memory_order_acquire))
+        return;
+
     if (!g_direct_ul_producer_active.load(
             std::memory_order_acquire) ||
         !g_producer.active ||
@@ -2249,6 +2364,10 @@ void __fastcall hook_steady_packer(
             source,
             dst,
             selector);
+
+    if (g_steady_cache_builder_active.load(
+            std::memory_order_acquire))
+        return;
 
     if (!g_producer.active)
         return;
@@ -2588,7 +2707,13 @@ bool install_producer_hooks() noexcept
             k_rva_steady_eval_tail,
             k_steady_eval_tail_bytes,
             reinterpret_cast<void *>(
-                &hook_steady_eval_tail))) {
+                &hook_steady_eval_tail)) ||
+        !prepare_hook(
+            g_steady_cache_builder_hook,
+            k_rva_steady_cache_builder,
+            k_steady_cache_builder_bytes,
+            reinterpret_cast<void *>(
+                &hook_steady_cache_builder))) {
         return false;
     }
 
@@ -2610,25 +2735,35 @@ bool install_producer_hooks() noexcept
     g_blend_packer_orig =
         reinterpret_cast<lightbank_blend_packer_fn>(
             g_hooks[4].trampoline);
+    g_steady_cache_builder_orig =
+        reinterpret_cast<steady_cache_builder_fn>(
+            g_steady_cache_builder_hook.trampoline);
 
     for (auto &hook : g_hooks)
         if (!arm_hook(hook))
             return false;
 
     if (!arm_hook(
-            g_steady_eval_tail_hook))
+            g_steady_eval_tail_hook) ||
+        !arm_hook(
+            g_steady_cache_builder_hook))
         return false;
 
-    // Only after both the steady evaluator tail and the already-owned blend
+    g_steady_cache_builder_active.store(
+        true,
+        std::memory_order_release);
+
+    // Only after both the steady cache builder and the already-owned blend
     // packer hook are armed may integrated routing bypass draw-time U/L.
     g_direct_ul_producer_active.store(
         true,
         std::memory_order_release);
 
-    // P_Metal EnvSpec A/B source is independent from U/L and D123. A
-    // fingerprint failure must only disable EnvSpec source capture.
-    if (!install_optional_pmetal_env_hook())
-        g_pmetal_env_hook_armed.store(false);
+    // P_Metal/HemDir3 capture must not piggyback on steady U/L evaluation.
+    // Owner runtime isolated that shared semantic-capture stack as the
+    // geometry-scaled bottleneck. Those operators fail open to stock DSR
+    // until they get their own producer-local carriers.
+    g_pmetal_env_hook_armed.store(false);
 
     return true;
 }
@@ -2636,6 +2771,9 @@ bool install_producer_hooks() noexcept
 bool restore_producer_hooks() noexcept
 {
     g_direct_ul_producer_active.store(
+        false,
+        std::memory_order_release);
+    g_steady_cache_builder_active.store(
         false,
         std::memory_order_release);
 
@@ -2648,6 +2786,10 @@ bool restore_producer_hooks() noexcept
     if (ok)
         g_pmetal_env_blend_orig = nullptr;
 
+    ok =
+        restore_hook(
+            g_steady_cache_builder_hook) &&
+        ok;
     ok =
         restore_hook(
             g_steady_eval_tail_hook) &&
@@ -2664,6 +2806,7 @@ bool restore_producer_hooks() noexcept
         g_blend_orig = nullptr;
         g_steady_packer_orig = nullptr;
         g_steady_eval_tail_orig = nullptr;
+        g_steady_cache_builder_orig = nullptr;
         g_blend_packer_orig = nullptr;
     }
 
@@ -2870,6 +3013,10 @@ void upper_lower_draw_runtime::selector_event(
 {
     telemetry::hot_count(g_selector_seen);
     g_draw_snapshot.reset();
+
+    if (g_steady_cache_builder_active.load(
+            std::memory_order_acquire))
+        return;
 
     if (!g_enabled.load() ||
         g_quarantined.load() ||
