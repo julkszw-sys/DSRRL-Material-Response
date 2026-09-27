@@ -42,7 +42,7 @@ struct prepared_material_resource_draw {
 
     std::array<
         ID3D11ShaderResourceView *,
-        4> retained_views{};
+        6> retained_views{};
     std::uint32_t retained_count = 0;
 
     bool spec_rgb = false;
