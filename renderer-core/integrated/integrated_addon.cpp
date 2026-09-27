@@ -1972,10 +1972,13 @@ void on_bind_pipeline(
     std::uint16_t selected_ops = 0u;
     std::uint32_t receiver_id = 0u;
 
-    g_fixed_pointlight_pipeline.on_bind_pipeline(
-        cmd_list,
-        stages,
-        pipeline);
+    if (pixel_stage_bound &&
+        (route_mask &
+         k_route_fixed_pointlight) != 0u)
+        g_fixed_pointlight_pipeline.on_bind_pipeline(
+            cmd_list,
+            stages,
+            pipeline);
 
     const bool target =
         pixel_stage_bound &&
@@ -2067,6 +2070,7 @@ struct draw_semantic_selection_guard {
 
 bool prepare_island_batch(
     reshade::api::command_list *cmd_list,
+    bool fixed_pointlight_bound,
     std::uint32_t receiver_id,
     bool hemenvlerp_bound,
     bool subsurface_bound,
@@ -2084,7 +2088,8 @@ bool prepare_island_batch(
     // the entire visible island atomically: replacement PS, authored b12
     // material state, fresh raw-q t19 and PTDE SpecRGB t10 (plus t16 for
     // audited Mul/blended bodies).
-    if (g_fixed_pointlight_pipeline.prepare_bound_shader(
+    if (fixed_pointlight_bound &&
+        g_fixed_pointlight_pipeline.prepare_bound_shader(
             cmd_list,
             prepared.fixed_shader)) {
         ++g_fixed_draw_candidates;
@@ -2688,6 +2693,7 @@ bool on_draw(
     prepared_island_batch prepared{};
     if (!prepare_island_batch(
             cmd_list,
+            fixed_pointlight_bound,
             receiver_id,
             hemenvlerp_bound,
             subsurface_bound,
@@ -2784,6 +2790,7 @@ bool on_draw_indexed(
     prepared_island_batch prepared{};
     if (!prepare_island_batch(
             cmd_list,
+            fixed_pointlight_bound,
             receiver_id,
             hemenvlerp_bound,
             subsurface_bound,
