@@ -2618,6 +2618,11 @@ void on_present(
         log_state("LIVE");
 }
 
+// Performance diagnostic only. Keep all native producer/selector hooks and
+// pipeline construction intact, but remove ReShade's per-draw dispatch layer.
+// This cleanly separates native hook overhead from bind/draw callback overhead.
+constexpr bool k_perf_disable_per_draw_events = true;
+
 void register_events()
 {
     reshade::register_event<reshade::addon_event::init_device>(on_init_device);
@@ -2625,18 +2630,26 @@ void register_events()
     reshade::register_event<reshade::addon_event::create_pipeline>(on_create_pipeline);
     reshade::register_event<reshade::addon_event::init_pipeline>(on_init_pipeline);
     reshade::register_event<reshade::addon_event::destroy_pipeline>(on_destroy_pipeline);
-    reshade::register_event<reshade::addon_event::bind_pipeline>(on_bind_pipeline);
-    reshade::register_event<reshade::addon_event::draw>(on_draw);
-    reshade::register_event<reshade::addon_event::draw_indexed>(on_draw_indexed);
+
+    if (!k_perf_disable_per_draw_events) {
+        reshade::register_event<reshade::addon_event::bind_pipeline>(on_bind_pipeline);
+        reshade::register_event<reshade::addon_event::draw>(on_draw);
+        reshade::register_event<reshade::addon_event::draw_indexed>(on_draw_indexed);
+    }
+
     reshade::register_event<reshade::addon_event::present>(on_present);
 }
 
 void unregister_events()
 {
     reshade::unregister_event<reshade::addon_event::present>(on_present);
-    reshade::unregister_event<reshade::addon_event::draw_indexed>(on_draw_indexed);
-    reshade::unregister_event<reshade::addon_event::draw>(on_draw);
-    reshade::unregister_event<reshade::addon_event::bind_pipeline>(on_bind_pipeline);
+
+    if (!k_perf_disable_per_draw_events) {
+        reshade::unregister_event<reshade::addon_event::draw_indexed>(on_draw_indexed);
+        reshade::unregister_event<reshade::addon_event::draw>(on_draw);
+        reshade::unregister_event<reshade::addon_event::bind_pipeline>(on_bind_pipeline);
+    }
+
     reshade::unregister_event<reshade::addon_event::destroy_pipeline>(on_destroy_pipeline);
     reshade::unregister_event<reshade::addon_event::init_pipeline>(on_init_pipeline);
     reshade::unregister_event<reshade::addon_event::create_pipeline>(on_create_pipeline);
@@ -2856,6 +2869,13 @@ bool AddonInit(
         reshade::log::message(
             reshade::log::level::info,
             build_identity);
+    }
+
+    if (k_perf_disable_per_draw_events) {
+        reshade::log::message(
+            reshade::log::level::warning,
+            "[DSRRL CORE+ISLANDS " DSRRL_CORE_ISLANDS_VERSION
+            "] PERF_DIAG: bind_pipeline/draw/draw_indexed callbacks are disabled; native producer/selector hooks remain active.");
     }
 
     reshade::log::message(
