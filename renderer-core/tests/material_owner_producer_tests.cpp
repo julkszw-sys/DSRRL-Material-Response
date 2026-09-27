@@ -4,6 +4,8 @@
 #include <cstddef>
 #include <iostream>
 using namespace dsrrl;
+namespace generated =
+    dsrrl::operators::material_response::generated;
 
 #define CHECK(x) do { if(!(x)){ std::cerr << "CHECK failed: " #x "\n"; return 1; } } while(false)
 
@@ -88,8 +90,6 @@ int main()
     // End-to-end Subsurface authority: locate an exact DSBT owner tuple from
     // the source-complete corpus, then prove owner enrichment reaches the
     // evidence-certified raw-MTD identity without manufacturing a PTDE route.
-    namespace generated =
-        operators::material_response::generated;
     const auto dsbt_semantic =
         operators::material_response::mtd_semantic_hash(
             "Ps_Body[DSBT].mtd");
