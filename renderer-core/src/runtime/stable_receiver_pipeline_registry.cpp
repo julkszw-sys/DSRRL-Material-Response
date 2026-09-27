@@ -20,6 +20,16 @@ std::unordered_map<std::uint64_t,std::uint32_t> g_pipeline_receiver;
 std::unordered_set<std::uint64_t> g_ambiguous_pipeline;
 std::unordered_map<const void*,bound_receiver> g_bound_receiver;
 
+struct bound_receiver_tls {
+    const void *command_list_key = nullptr;
+    bound_receiver value{};
+    std::uint64_t epoch = 0u;
+    bool present = false;
+};
+
+std::atomic<std::uint64_t> g_bound_epoch{1u};
+thread_local bound_receiver_tls g_bound_tls{};
+
 std::atomic<std::uint64_t> g_pipeline_inits{0};
 std::atomic<std::uint64_t> g_candidate_size_hits{0};
 std::atomic<std::uint64_t> g_exact_receiver_hits{0};
@@ -132,6 +142,8 @@ void stable_receiver_forget_pipeline(
         else
             ++it;
     }
+
+    ++g_bound_epoch;
 }
 
 void stable_receiver_observe_bind(
@@ -154,12 +166,27 @@ void stable_receiver_observe_bind(
             g_ambiguous_pipeline.find(pipeline_handle) !=
                 g_ambiguous_pipeline.end()) {
             g_bound_receiver.erase(command_list_key);
+            g_bound_tls = {
+                command_list_key,
+                {},
+                g_bound_epoch.load(),
+                false
+            };
             ++g_unknown_binds;
             return;
         }
 
-        g_bound_receiver[command_list_key] =
-            bound_receiver{pipeline_handle, found->second};
+        const bound_receiver bound{
+            pipeline_handle,
+            found->second
+        };
+        g_bound_receiver[command_list_key] = bound;
+        g_bound_tls = {
+            command_list_key,
+            bound,
+            g_bound_epoch.load(),
+            true
+        };
         ++g_exact_binds;
     } catch (...) {
         // A telemetry/identity cache allocation failure cannot be allowed to
@@ -168,7 +195,14 @@ void stable_receiver_observe_bind(
         try {
             std::lock_guard<std::mutex> lock(g_mutex);
             g_bound_receiver.erase(command_list_key);
+            g_bound_tls = {
+                command_list_key,
+                {},
+                g_bound_epoch.load(),
+                false
+            };
         } catch (...) {
+            g_bound_tls = {};
         }
         ++g_unknown_binds;
     }
@@ -186,13 +220,39 @@ bool stable_receiver_bound(
         return false;
     }
 
+    const auto epoch = g_bound_epoch.load();
+    if (g_bound_tls.command_list_key == command_list_key &&
+        g_bound_tls.epoch == epoch) {
+        if (!g_bound_tls.present) {
+            ++g_lookup_misses;
+            return false;
+        }
+
+        receiver_id =
+            g_bound_tls.value.receiver_id;
+        ++g_lookup_hits;
+        return true;
+    }
+
     std::lock_guard<std::mutex> lock(g_mutex);
     const auto found = g_bound_receiver.find(command_list_key);
     if (found == g_bound_receiver.end()) {
+        g_bound_tls = {
+            command_list_key,
+            {},
+            g_bound_epoch.load(),
+            false
+        };
         ++g_lookup_misses;
         return false;
     }
 
+    g_bound_tls = {
+        command_list_key,
+        found->second,
+        g_bound_epoch.load(),
+        true
+    };
     receiver_id = found->second.receiver_id;
     ++g_lookup_hits;
     return true;
@@ -205,7 +265,10 @@ void stable_receiver_pipeline_reset() noexcept
         g_pipeline_receiver.clear();
         g_ambiguous_pipeline.clear();
         g_bound_receiver.clear();
+        ++g_bound_epoch;
     }
+
+    g_bound_tls = {};
 
     g_pipeline_inits.store(0);
     g_candidate_size_hits.store(0);

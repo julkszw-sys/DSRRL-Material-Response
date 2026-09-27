@@ -28,6 +28,16 @@ std::unordered_map<
 std::unordered_set<std::uint64_t> g_ambiguous_pipeline;
 std::unordered_map<const void *,bound_identity> g_bound_identity;
 
+struct bound_identity_tls {
+    const void *command_list_key = nullptr;
+    bound_identity value{};
+    std::uint64_t epoch = 0u;
+    bool present = false;
+};
+
+std::atomic<std::uint64_t> g_bound_epoch{1u};
+thread_local bound_identity_tls g_bound_tls{};
+
 std::atomic<std::uint64_t> g_pipeline_inits{0};
 std::atomic<std::uint64_t> g_candidate_size_hits{0};
 std::atomic<std::uint64_t> g_exact_hits{0};
@@ -191,6 +201,8 @@ void hemenvlerp_receiver_forget_pipeline(
         else
             ++it;
     }
+
+    ++g_bound_epoch;
 }
 
 void hemenvlerp_receiver_observe_bind(
@@ -218,22 +230,42 @@ void hemenvlerp_receiver_observe_bind(
                 g_ambiguous_pipeline.end()) {
             g_bound_identity.erase(
                 command_list_key);
+            g_bound_tls = {
+                command_list_key,
+                {},
+                g_bound_epoch.load(),
+                false
+            };
             ++g_unknown_binds;
             return;
         }
 
+        const bound_identity bound{
+            pipeline_handle,
+            found->second
+        };
         g_bound_identity[
-            command_list_key] = {
-                pipeline_handle,
-                found->second
-            };
+            command_list_key] = bound;
+        g_bound_tls = {
+            command_list_key,
+            bound,
+            g_bound_epoch.load(),
+            true
+        };
         ++g_exact_binds;
     } catch (...) {
         try {
             std::lock_guard<std::mutex> lock(g_mutex);
             g_bound_identity.erase(
                 command_list_key);
+            g_bound_tls = {
+                command_list_key,
+                {},
+                g_bound_epoch.load(),
+                false
+            };
         } catch (...) {
+            g_bound_tls = {};
         }
         ++g_unknown_binds;
     }
@@ -251,6 +283,23 @@ bool hemenvlerp_receiver_bound(
         return false;
     }
 
+    const auto epoch =
+        g_bound_epoch.load();
+
+    if (g_bound_tls.command_list_key ==
+            command_list_key &&
+        g_bound_tls.epoch == epoch) {
+        if (!g_bound_tls.present) {
+            ++g_lookup_misses;
+            return false;
+        }
+
+        identity =
+            g_bound_tls.value.identity;
+        ++g_lookup_hits;
+        return identity.exact;
+    }
+
     std::lock_guard<std::mutex> lock(g_mutex);
 
     const auto found =
@@ -259,15 +308,26 @@ bool hemenvlerp_receiver_bound(
 
     if (found ==
         g_bound_identity.end()) {
+        g_bound_tls = {
+            command_list_key,
+            {},
+            g_bound_epoch.load(),
+            false
+        };
         ++g_lookup_misses;
         return false;
     }
 
+    g_bound_tls = {
+        command_list_key,
+        found->second,
+        g_bound_epoch.load(),
+        true
+    };
     identity =
         found->second.identity;
     ++g_lookup_hits;
-    return
-        identity.exact;
+    return identity.exact;
 }
 
 void hemenvlerp_receiver_pipeline_reset() noexcept
@@ -277,7 +337,10 @@ void hemenvlerp_receiver_pipeline_reset() noexcept
         g_pipeline_identity.clear();
         g_ambiguous_pipeline.clear();
         g_bound_identity.clear();
+        ++g_bound_epoch;
     }
+
+    g_bound_tls = {};
 
     g_pipeline_inits.store(0u);
     g_candidate_size_hits.store(0u);
