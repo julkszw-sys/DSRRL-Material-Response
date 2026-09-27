@@ -3184,14 +3184,24 @@ bool prepare_island_batch(
                     ? dsrrl::core::operator_id::
                         local_specular_legacy
                     : dsrrl::core::operator_id::point_light;
+
+            // Never duplicate the primary island in additional_owners:
+            // build_island_draw_mutation rejects that shape by contract.
+            // Spc is owned primarily by local_specular_legacy and composes
+            // PointLight + MR; NoSpc is owned primarily by PointLight and
+            // composes only MR.
             clustered.additional_owners =
-                point | mr | local_if_spc;
+                prepared.clustered_shader.spc
+                    ? (point | mr)
+                    : mr;
             clustered.additional_shader_owners =
-                point | mr | local_if_spc;
+                clustered.additional_owners;
             clustered.additional_constant_buffer_owners =
-                point | mr | local_if_spc;
+                clustered.additional_owners;
             clustered.additional_resource_owners =
-                point | local_if_spc;
+                prepared.clustered_shader.spc
+                    ? point
+                    : dsrrl::core::operator_mask{0u};
             clustered.receiver_verified = true;
             clustered.material_verified = true;
             clustered.pixel_shader =
