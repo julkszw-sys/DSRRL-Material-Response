@@ -68,6 +68,36 @@ struct pmetal_env_source {
     std::uint32_t row_id_b = 0;
 };
 
+enum class pmetal_env_source_diag_status : std::uint32_t {
+    none = 0u,
+    success,
+    token_invalid,
+    base_null,
+    header_invalid,
+    selector_oob,
+    signature_invalid,
+    bank_unknown,
+    row_read_failed,
+    row_unknown,
+    nonfinite
+};
+
+struct pmetal_env_source_diag_endpoint {
+    pmetal_env_source_diag_status status =
+        pmetal_env_source_diag_status::none;
+    std::int32_t selector = -1;
+    std::uint16_t bank_count = 0u;
+    std::uint64_t bank_signature = 0u;
+    std::uint32_t row_id = 0u;
+};
+
+struct pmetal_env_source_diagnostic {
+    pmetal_env_source_diag_endpoint a{};
+    pmetal_env_source_diag_endpoint b{};
+    float beta = 0.0f;
+    bool observed = false;
+};
+
 struct prepared_hemdir3_carrier {
     ID3D11Buffer *b13 = nullptr;
     operators::lightbank::lightbank_snapshot_fingerprint fingerprint{};
@@ -125,6 +155,9 @@ public:
 
     bool selected_pmetal_env_source(
         pmetal_env_source &out) const noexcept;
+
+    pmetal_env_source_diagnostic
+    pmetal_source_diagnostic() const noexcept;
 
     // Selection is one draw-scoped semantic event. Never carry it forward.
     void consume_draw_selection() noexcept;
