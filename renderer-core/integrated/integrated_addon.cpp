@@ -1683,6 +1683,53 @@ bool on_create_pipeline(
                 24u + static_cast<std::uint32_t>(
                     lerp_mr.pair_index);
 
+            const auto lerp_spec_owner =
+                dsrrl::core::operator_bit(
+                    dsrrl::core::operator_id::spec_rgb);
+
+            // Material Response is operator-independent from U/L readiness.
+            // Always register the certified Lerp MR-only replacement first.
+            if (!g_mr_draw_runtime.
+                    has_lerp_receiver_replacement(
+                        lerp_receiver_id)) {
+                if (g_mr_draw_runtime.
+                        register_lerp_receiver_replacement(
+                            lerp_receiver_id,
+                            lerp_mr_payload.data(),
+                            lerp_mr_payload.size(),
+                            0u))
+                    ++g_mr_payload_materialize_ok;
+                else
+                    ++g_mr_payload_materialize_fail;
+            }
+
+            std::vector<std::uint8_t> lerp_mr_spec_payload;
+            const auto lerp_mr_spec =
+                dsrrl::operators::resource_bridges::
+                    materialize_spec_rgb_consumer(
+                        lerp_mr_payload.data(),
+                        lerp_mr_payload.size(),
+                        lerp_mr_spec_payload);
+
+            if (lerp_mr_spec ==
+                    dsrrl::operators::resource_bridges::
+                        spec_rgb_consumer_result::applied) {
+                if (!g_mr_draw_runtime.
+                        has_lerp_receiver_spec_rgb_replacement(
+                            lerp_receiver_id) &&
+                    !g_mr_draw_runtime.
+                        register_lerp_receiver_spec_rgb_replacement(
+                            lerp_receiver_id,
+                            lerp_mr_spec_payload.data(),
+                            lerp_mr_spec_payload.size(),
+                            lerp_spec_owner))
+                    ++g_mr_payload_materialize_fail;
+            } else {
+                ++g_mr_payload_materialize_fail;
+            }
+
+            // U/L is an optional composed operator. Its failure must never
+            // remove the independently certified Lerp Material Response path.
             std::vector<std::uint8_t> lerp_mr_ul_payload;
             const auto lerp_mr_ul =
                 dsrrl::operators::lightbank::
@@ -1693,10 +1740,6 @@ bool on_create_pipeline(
                         lerp_mr_payload.size(),
                         4u,
                         lerp_mr_ul_payload);
-
-            const auto lerp_spec_owner =
-                dsrrl::core::operator_bit(
-                    dsrrl::core::operator_id::spec_rgb);
 
             if (lerp_mr_ul.result ==
                     dsrrl::operators::lightbank::
@@ -1718,10 +1761,10 @@ bool on_create_pipeline(
                             lerp_full_payload);
 
                 if (!g_mr_draw_runtime.
-                        has_lerp_receiver_replacement(
+                        has_lerp_receiver_upper_lower_replacement(
                             lerp_receiver_id)) {
                     if (g_mr_draw_runtime.
-                            register_lerp_receiver_replacement(
+                            register_lerp_receiver_upper_lower_replacement(
                                 lerp_receiver_id,
                                 lerp_mr_ul_payload.data(),
                                 lerp_mr_ul_payload.size(),
@@ -1735,10 +1778,10 @@ bool on_create_pipeline(
                         dsrrl::operators::resource_bridges::
                             spec_rgb_consumer_result::applied) {
                     if (!g_mr_draw_runtime.
-                            has_lerp_receiver_spec_rgb_replacement(
+                            has_lerp_receiver_upper_lower_spec_rgb_replacement(
                                 lerp_receiver_id) &&
                         !g_mr_draw_runtime.
-                            register_lerp_receiver_spec_rgb_replacement(
+                            register_lerp_receiver_upper_lower_spec_rgb_replacement(
                                 lerp_receiver_id,
                                 lerp_full_payload.data(),
                                 lerp_full_payload.size(),
