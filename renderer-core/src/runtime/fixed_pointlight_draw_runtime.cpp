@@ -228,9 +228,12 @@ bool build_capture_stub(void *target,void *&stub_out) noexcept
         std::vector<std::uint8_t> code;
         code.reserve(320u);
 
-        // RSP at this exact site is 16-byte aligned. Reserve Win64 shadow
-        // space plus volatile GPR/XMM preservation without touching host data.
-        emit(code,{0x48,0x81,0xEC,0x00,0x01,0x00,0x00}); // sub rsp,100h
+        // Preserve flags too: the callback is arbitrary C++ and may clobber
+        // condition codes consumed by the host after the stolen MOVSS block.
+        // Site RSP is 16-byte aligned; pushfq + sub 108h restores 16-byte
+        // call alignment while leaving 100h scratch + shadow space.
+        emit(code,{0x9C}); // pushfq
+        emit(code,{0x48,0x81,0xEC,0x08,0x01,0x00,0x00}); // sub rsp,108h
 
         // volatile GPR saves at +20..+50. Preserve RFLAGS separately at
         // +58 without changing call-site alignment.
@@ -254,7 +257,7 @@ bool build_capture_stub(void *target,void *&stub_out) noexcept
         emit(code,{0x8B,0xD7});                  // mov edx,edi
         emit(code,{0x83,0xEA,0x60});             // sub edx,60h
         emit(code,{0xC1,0xEA,0x04});             // shr edx,4 => fixed slot 0..3
-        emit(code,{0x4C,0x8D,0x84,0x24,0x30,0x01,0x00,0x00}); // lea r8,[rsp+130h]
+        emit(code,{0x4C,0x8D,0x84,0x24,0x40,0x01,0x00,0x00}); // lea r8,[rsp+140h]
         emit(code,{0x4C,0x8B,0xCB});             // mov r9,rbx
         emit(code,{0x48,0xB8});
         emit_u64(code,reinterpret_cast<std::uint64_t>(&capture_callback));
@@ -273,7 +276,8 @@ bool build_capture_stub(void *target,void *&stub_out) noexcept
         emit(code,{0x50});                     // push rax
         emit(code,{0x9D});                     // popfq
         emit(code,{0x48,0x8B,0x44,0x24,0x20}); // rax
-        emit(code,{0x48,0x81,0xC4,0x00,0x01,0x00,0x00}); // add rsp,100h
+        emit(code,{0x48,0x81,0xC4,0x08,0x01,0x00,0x00}); // add rsp,108h
+        emit(code,{0x9D}); // popfq
 
         // Stolen instructions, byte exact.
         code.insert(code.end(),k_capture_bytes.begin(),k_capture_bytes.end());
