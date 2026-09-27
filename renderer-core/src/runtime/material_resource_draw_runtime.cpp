@@ -1,5 +1,6 @@
 #include "dsrrl/runtime/material_resource_draw_runtime.hpp"
 #include "dsrrl/runtime/texture_identity_transport.hpp"
+#include "dsrrl/runtime/runtime_hot_telemetry.hpp"
 #include "dsrrl/operators/resource_bridges/spec_rgb_bridge.hpp"
 #include "dsrrl/operators/resource_bridges/fixed_pointlight_spec_rgb_bridge.hpp"
 #include "dsrrl/operators/resource_bridges/diffuse_bridge.hpp"
@@ -199,11 +200,8 @@ bool g_hot_telemetry_enabled = false;
 
 bool runtime_hot_telemetry_requested() noexcept
 {
-    const char *value =
-        std::getenv("DSRRL_RUNTIME_TELEMETRY");
-    return value != nullptr &&
-        value[0] == '1' &&
-        value[1] == '\0';
+    return dsrrl::runtime::telemetry::
+        hot_enabled();
 }
 
 void hot_count(
