@@ -1879,6 +1879,10 @@ bool on_create_pipeline(
     bool h3_replacement_ready = false;
     bool ul_identity_ready = false;
     bool ul_replacement_ready = false;
+    dsrrl::operators::point_light::
+        clustered_pnts_direct_materialize_outcome clustered_pnts{};
+    std::vector<std::uint8_t> clustered_pnts_payload;
+    bool clustered_pnts_candidate = false;
 
     if (pixel_shader != nullptr &&
         pixel_shader->code != nullptr &&
@@ -1886,6 +1890,17 @@ bool on_create_pipeline(
         const auto *source =
             static_cast<const std::uint8_t *>(
                 pixel_shader->code);
+
+        clustered_pnts =
+            dsrrl::operators::point_light::
+                materialize_clustered_pnts_direct_ptde(
+                    source,
+                    pixel_shader->code_size,
+                    clustered_pnts_payload);
+        clustered_pnts_candidate =
+            clustered_pnts.result ==
+                dsrrl::operators::point_light::
+                    clustered_pnts_direct_materialize_result::applied;
 
         // Observe the exact original DSR local-specular host before any
         // create-time island is allowed to replace the shader bytes. This is
@@ -2422,6 +2437,25 @@ bool on_create_pipeline(
             layout,
             subobject_count,
             subobjects);
+
+    if (clustered_pnts_candidate) {
+        const auto *attested_host =
+            find_pixel_shader(
+                subobject_count,
+                subobjects);
+        if (attested_host == nullptr ||
+            attested_host->code == nullptr ||
+            attested_host->code_size == 0u ||
+            !g_clustered_pnts_pipeline.register_candidate(
+                device,
+                clustered_pnts,
+                static_cast<const std::uint8_t *>(
+                    attested_host->code),
+                attested_host->code_size,
+                clustered_pnts_payload.data(),
+                clustered_pnts_payload.size()))
+            clustered_pnts_candidate = false;
+    }
 
     if (ul_identity_ready) {
         const auto *created_shader =
