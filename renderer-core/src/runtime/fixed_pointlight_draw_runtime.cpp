@@ -40,6 +40,7 @@ struct snapshot {
     std::array<f4,4> raw_q{};
     std::uint8_t valid_mask=0u;
     std::uint8_t captured_count=0u;
+    mutable std::atomic_bool consumed{false};
 
     mutable std::mutex gpu_mutex;
     mutable ID3D11Device *device=nullptr;
@@ -74,7 +75,6 @@ capture_hook g_hook{};
 
 std::mutex g_mutex;
 std::unordered_map<std::uintptr_t,std::shared_ptr<snapshot>> g_snapshots;
-std::unordered_map<std::uintptr_t,std::uint64_t> g_consumed_serial;
 std::atomic_bool g_have_snapshots{false};
 thread_local std::shared_ptr<snapshot> g_producer_snapshot{};
 thread_local std::shared_ptr<const snapshot> g_draw_snapshot{};
@@ -189,7 +189,7 @@ void __fastcall capture_callback(
         if(slot==0u){
             auto next=std::make_shared<snapshot>();
             next->owner=owner_key;
-            next->serial=g_serial.fetch_add(1u)+1u;
+            next->serial=g_serial.fetch_add(1u,std::memory_order_relaxed)+1u;
             g_producer_snapshot=std::move(next);
             telemetry::hot_count(g_restarts);
         }
@@ -411,7 +411,6 @@ void clear_state() noexcept
     g_draw_snapshot.reset();
     std::lock_guard<std::mutex> lock(g_mutex);
     g_snapshots.clear();
-    g_consumed_serial.clear();
     g_have_snapshots.store(
         false,
         std::memory_order_release);
@@ -523,34 +522,32 @@ bool fixed_pointlight_draw_runtime::prepare_t19(
        selected->valid_mask!=expected_mask)
         return false;
 
-    {
-        std::lock_guard<std::mutex> lock(g_mutex);
-        const auto it=g_consumed_serial.find(selected->owner);
-        if(it!=g_consumed_serial.end() && it->second>=selected->serial){
-            telemetry::hot_count(g_selector_stale);
-            return false;
-        }
+    bool expected_consumed=false;
+    if(!selected->consumed.compare_exchange_strong(
+            expected_consumed,
+            true,
+            std::memory_order_acq_rel,
+            std::memory_order_acquire)){
+        telemetry::hot_count(g_selector_stale);
+        return false;
     }
 
     ID3D11Device *device=nullptr;
     context->GetDevice(&device);
-    if(device==nullptr)
+    if(device==nullptr){
+        selected->consumed.store(
+            false,
+            std::memory_order_release);
         return false;
+    }
 
     auto *srv=realize_t19(selected,device);
     device->Release();
-    if(srv==nullptr)
+    if(srv==nullptr){
+        selected->consumed.store(
+            false,
+            std::memory_order_release);
         return false;
-
-    {
-        std::lock_guard<std::mutex> lock(g_mutex);
-        auto &consumed=g_consumed_serial[selected->owner];
-        if(consumed>=selected->serial){
-            srv->Release();
-            telemetry::hot_count(g_selector_stale);
-            return false;
-        }
-        consumed=selected->serial;
     }
 
     prepared.t19=srv;
