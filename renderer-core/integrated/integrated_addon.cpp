@@ -431,6 +431,9 @@ const char *effect_probe_status(
     if (state.authority.load(
             std::memory_order_relaxed))
         return "AUTHORIZED_NOT_PREPARED";
+    if (state.fail_open.load(
+            std::memory_order_relaxed))
+        return "FAIL_OPEN";
     if (state.candidate.load(
             std::memory_order_relaxed))
         return "CANDIDATE_ONLY";
