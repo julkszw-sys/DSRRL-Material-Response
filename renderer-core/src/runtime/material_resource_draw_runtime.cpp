@@ -1218,7 +1218,7 @@ prepare_draw_requests(
 }
 
 bool material_resource_draw_runtime::
-prepare_fixed_pointlight_spec_requests(
+prepare_fixed_pointlight_material_requests(
     ID3D11DeviceContext *context,
     const operators::material_response::
         mtd_semantic_query &query,
@@ -1231,8 +1231,12 @@ prepare_fixed_pointlight_spec_requests(
 
     if (context == nullptr ||
         g_quarantined.load() ||
+        !exact_fixed_receiver_verified ||
+        !direct_pointlight_material_authorized ||
         !core_.features().enabled(
-            core::operator_id::spec_rgb))
+            core::operator_id::spec_rgb) ||
+        !core_.features().enabled(
+            core::operator_id::diffuse))
         return false;
 
     ID3D11ShaderResourceView *views[5]{};
@@ -1246,19 +1250,12 @@ prepare_fixed_pointlight_spec_requests(
             release_view(view);
     };
 
-    auto *spec_a =
-        lookup(
-            views[1],
-            asset_class::specular);
-    auto *spec_b =
+    const auto h0 = logical_hash_for(views[0]);
+    const auto h1 = logical_hash_for(views[1]);
+    const auto h3 =
         blended_material
-            ? lookup(
-                views[4],
-                asset_class::specular)
-            : nullptr;
-
-    const auto h1 =
-        logical_hash_for(views[1]);
+            ? logical_hash_for(views[3])
+            : 0u;
     const auto h4 =
         blended_material
             ? logical_hash_for(views[4])
@@ -1268,37 +1265,64 @@ prepare_fixed_pointlight_spec_requests(
         query.material.valid &&
         query.material.owner_tuple_exact;
 
-    const bool endpoint_a_exact =
+    const bool endpoint_a_pair =
+        h0 != 0u &&
         h1 != 0u &&
         generated::spec_name_hash_allowed_v12(h1) &&
-        spec_a != nullptr;
+        generated::diffuse_pair_allowed_v12(h1,h0);
 
+    const bool endpoint_b_pair =
+        !blended_material ||
+        (h3 != 0u &&
+         h4 != 0u &&
+         generated::spec_name_hash_allowed_v12(h4) &&
+         generated::diffuse_pair_allowed_v12(h4,h3));
+
+    if (!exact_material ||
+        !endpoint_a_pair ||
+        !endpoint_b_pair) {
+        release_all();
+        ++g_fail_open;
+        return true;
+    }
+
+    auto *spec_a =
+        lookup(
+            views[1],
+            asset_class::specular);
+    auto *diff_a =
+        lookup(
+            views[0],
+            asset_class::diffuse);
+    auto *spec_b =
+        blended_material
+            ? lookup(
+                views[4],
+                asset_class::specular)
+            : nullptr;
+    auto *diff_b =
+        blended_material
+            ? lookup(
+                views[3],
+                asset_class::diffuse)
+            : nullptr;
+
+    const bool endpoint_a_exact =
+        spec_a != nullptr &&
+        diff_a != nullptr;
     const bool endpoint_b_exact =
         !blended_material ||
-        (h4 != 0u &&
-         generated::spec_name_hash_allowed_v12(h4) &&
-         spec_b != nullptr);
+        (spec_b != nullptr &&
+         diff_b != nullptr);
 
     operators::resource_bridges::
         fixed_pointlight_spec_rgb_context bridge{};
-    bridge.exact_fixed_receiver_verified =
-        exact_fixed_receiver_verified;
+    bridge.exact_fixed_receiver_verified = true;
     bridge.blended_material =
         blended_material;
-    bridge.actual_material_verified =
-        exact_material;
-    bridge.material_specular_consumer_verified =
-        direct_pointlight_material_authorized ||
-        operators::material_response::
-            classify_mtd_semantic(
-                query,
-                operators::material_response::
-                    mtd_semantic_operator::spec_rgb)
-            .state ==
-        operators::material_response::
-            mtd_semantic_state::use;
-    bridge.direct_pointlight_material_authorized =
-        direct_pointlight_material_authorized;
+    bridge.actual_material_verified = true;
+    bridge.material_specular_consumer_verified = true;
+    bridge.direct_pointlight_material_authorized = true;
     bridge.endpoint_a_identity_verified =
         endpoint_a_exact;
     bridge.endpoint_a_sidecar_ready =
@@ -1323,47 +1347,81 @@ prepare_fixed_pointlight_spec_requests(
     if (decision.action ==
             action::preserve_host ||
         spec_a == nullptr ||
-        (decision.action ==
-            action::bind_blended_t10_t16 &&
-         spec_b == nullptr)) {
+        diff_a == nullptr ||
+        (blended_material &&
+         (spec_b == nullptr ||
+          diff_b == nullptr))) {
         release_view(spec_a);
+        release_view(diff_a);
         release_view(spec_b);
+        release_view(diff_b);
         release_all();
         ++g_fail_open;
         return true;
     }
 
-    island_draw_adapter_request request{};
-    request.primary = core::operator_id::spec_rgb;
-    request.receiver_verified = true;
-    request.material_verified = true;
-    request.srvs[0] = {
+    island_draw_adapter_request spec_request{};
+    spec_request.primary =
+        core::operator_id::spec_rgb;
+    spec_request.receiver_verified = true;
+    spec_request.material_verified = true;
+    spec_request.srvs[0] = {
         decision.endpoint_a_srv_slot,
         spec_a
     };
-    request.srv_count = 1u;
+    spec_request.srv_count = 1u;
 
     if (decision.action ==
         action::bind_blended_t10_t16) {
-        request.srvs[1] = {
+        spec_request.srvs[1] = {
             decision.endpoint_b_srv_slot,
             spec_b
         };
-        request.srv_count = 2u;
+        spec_request.srv_count = 2u;
     }
 
-    draw_tx_mutation verify{};
+    island_draw_adapter_request diffuse_request{};
+    diffuse_request.primary =
+        core::operator_id::diffuse;
+    diffuse_request.receiver_verified = true;
+    diffuse_request.material_verified = true;
+    diffuse_request.srvs[0] = {
+        0u,
+        diff_a
+    };
+    diffuse_request.srv_count = 1u;
+
+    if (blended_material) {
+        diffuse_request.srvs[1] = {
+            3u,
+            diff_b
+        };
+        diffuse_request.srv_count = 2u;
+    }
+
+    draw_tx_mutation verify_spec{};
+    draw_tx_mutation verify_diff{};
+    const auto total_retained =
+        spec_request.srv_count +
+        diffuse_request.srv_count;
+
     if (build_island_draw_mutation(
-            request,
-            verify) !=
-        island_draw_adapter_result::ready ||
-        prepared.request_count >=
+            spec_request,
+            verify_spec) !=
+            island_draw_adapter_result::ready ||
+        build_island_draw_mutation(
+            diffuse_request,
+            verify_diff) !=
+            island_draw_adapter_result::ready ||
+        prepared.request_count + 2u >
             prepared.requests.size() ||
         prepared.retained_count +
-            request.srv_count >
+            total_retained >
             prepared.retained_views.size()) {
         release_view(spec_a);
+        release_view(diff_a);
         release_view(spec_b);
+        release_view(diff_b);
         release_all();
         ++g_fail_open;
         return true;
@@ -1371,25 +1429,43 @@ prepare_fixed_pointlight_spec_requests(
 
     prepared.requests[
         prepared.request_count++] =
-        request;
+        spec_request;
+    prepared.requests[
+        prepared.request_count++] =
+        diffuse_request;
+
     prepared.retained_views[
         prepared.retained_count++] =
         spec_a;
     spec_a = nullptr;
-
-    if (request.srv_count == 2u) {
+    if (spec_request.srv_count == 2u) {
         prepared.retained_views[
             prepared.retained_count++] =
             spec_b;
         spec_b = nullptr;
     }
 
+    prepared.retained_views[
+        prepared.retained_count++] =
+        diff_a;
+    diff_a = nullptr;
+    if (diffuse_request.srv_count == 2u) {
+        prepared.retained_views[
+            prepared.retained_count++] =
+            diff_b;
+        diff_b = nullptr;
+    }
+
     prepared.spec_rgb = true;
+    prepared.diffuse = true;
     ++g_fixed_pointlight_spec_requests;
     ++g_spec_requests;
+    ++g_diffuse_requests;
 
     release_view(spec_a);
+    release_view(diff_a);
     release_view(spec_b);
+    release_view(diff_b);
     release_all();
     return true;
 }
