@@ -6,6 +6,7 @@
 #endif
 
 #include "dsrrl/runtime/hemdir3_mode_transport.hpp"
+#include "dsrrl/runtime/runtime_hot_telemetry.hpp"
 #include "dsrrl/runtime/flver_identity_transport.hpp"
 
 #include <Windows.h>
@@ -339,10 +340,10 @@ void observe_effective_mode(
     g_tls.ready = true;
     g_tls.capture_active = false;
 
-    ++g_effective_observed;
+    telemetry::hot_count(g_effective_observed);
 
     if (effective_mode == 2u)
-        ++g_mode2_observed;
+        telemetry::hot_count(g_mode2_observed);
 }
 
 void selector_end() noexcept
@@ -455,7 +456,7 @@ void uninstall() noexcept
 void selector_begin(
     std::uint32_t incoming_mode) noexcept
 {
-    ++g_selector_begin;
+    telemetry::hot_count(g_selector_begin);
 
     ++g_tls.generation;
     g_tls.incoming_mode =
@@ -464,7 +465,7 @@ void selector_begin(
     g_tls.ready = false;
 
     if (incoming_mode == 2u)
-        ++g_incoming_mode2;
+        telemetry::hot_count(g_incoming_mode2);
 
     // 0x140295F50 may replace EDX with the global lighting override before
     // dispatch. Therefore incoming mode is diagnostic only: every selector
@@ -483,13 +484,13 @@ bool snapshot(
 
     if (!g_tls.ready ||
         g_state.quarantined) {
-        ++g_snapshot_misses;
+        telemetry::hot_count(g_snapshot_misses);
         return false;
     }
 
     effective_mode =
         g_tls.effective_mode;
-    ++g_snapshot_hits;
+    telemetry::hot_count(g_snapshot_hits);
     return true;
 }
 
