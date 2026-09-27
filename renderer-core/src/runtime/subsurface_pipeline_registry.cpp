@@ -1,4 +1,5 @@
 #include "dsrrl/runtime/subsurface_pipeline_registry.hpp"
+#include "dsrrl/runtime/runtime_hot_telemetry.hpp"
 #include "dsrrl/operators/resource_bridges/subsurface_route.hpp"
 #include "dsrrl/operators/legacy_plan/sha256_bytes.hpp"
 
@@ -132,7 +133,7 @@ void subsurface_receiver_observe_bind(
         command_list_key == nullptr)
         return;
 
-    ++g_pixel_binds;
+    telemetry::hot_count(g_pixel_binds);
 
     try {
         std::lock_guard<std::mutex> lock(g_mutex);
@@ -162,7 +163,7 @@ void subsurface_receiver_observe_bind(
             g_bound_epoch.load(),
             true
         };
-        ++g_exact_binds;
+        telemetry::hot_count(g_exact_binds);
     } catch (...) {
         try {
             std::lock_guard<std::mutex> lock(g_mutex);
@@ -186,7 +187,7 @@ bool subsurface_receiver_bound(
     target_plain_receiver_id = 0u;
 
     if (command_list_key == nullptr) {
-        ++g_lookup_misses;
+        telemetry::hot_count(g_lookup_misses);
         return false;
     }
 
@@ -197,13 +198,13 @@ bool subsurface_receiver_bound(
             command_list_key &&
         g_bound_tls.epoch == epoch) {
         if (!g_bound_tls.present) {
-            ++g_lookup_misses;
+            telemetry::hot_count(g_lookup_misses);
             return false;
         }
 
         target_plain_receiver_id =
             g_bound_tls.value.target_receiver;
-        ++g_lookup_hits;
+        telemetry::hot_count(g_lookup_hits);
         return true;
     }
 
@@ -218,7 +219,7 @@ bool subsurface_receiver_bound(
             g_bound_epoch.load(),
             false
         };
-        ++g_lookup_misses;
+        telemetry::hot_count(g_lookup_misses);
         return false;
     }
 
@@ -230,7 +231,7 @@ bool subsurface_receiver_bound(
     };
     target_plain_receiver_id =
         found->second.target_receiver;
-    ++g_lookup_hits;
+    telemetry::hot_count(g_lookup_hits);
     return true;
 }
 
