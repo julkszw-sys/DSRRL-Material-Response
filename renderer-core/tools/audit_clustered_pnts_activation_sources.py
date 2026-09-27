@@ -70,6 +70,24 @@ def main():
     if len(set(semantic_hashes))!=25 or len(set(exact_pairs))!=25:
         fail("NoSpc exact-name/raw-MTD authority is ambiguous")
 
+    supplement=json.loads((root/"data/census/dsr_mtd_identity_certified_supplement_v1.json").read_text(encoding="utf-8"))
+    nospc_identity=[
+        r for r in supplement.get("records",[])
+        if r.get("authority_class")=="DIRECT_POINTLIGHT_NOSPC"
+    ]
+    if len(nospc_identity)!=25:
+        fail(f"expected 25 certified direct-PointLight NoSpc identities, got {len(nospc_identity)}")
+    router_identity={
+        (r.get("mtd_name"),r.get("dsr_mtd_sha256"))
+        for r in nospc_materials
+    }
+    supplement_identity={
+        (r.get("semantic_name"),r.get("raw_mtd_sha256"))
+        for r in nospc_identity
+    }
+    if supplement_identity!=router_identity:
+        fail("certified NoSpc identity supplement does not exactly match the HOMOLOGOUS_NOSPC authority set")
+
     require(sidecar_h,"std::uint32_t material_max_pnt_lit_num","material-limit ABI")
     if "material_max_pnt_lit_num > 4u" in sidecar_cpp or "material_max > 4u" in draw_cpp:
         fail("clustered material limit still has an artificial >4 fail-open")
@@ -85,9 +103,9 @@ def main():
     # Exact PTDE NoSpc material authority is intentionally direct-PointLight
     # only: authenticated FLVER+slot owner -> exact semantic name/raw-MTD pair
     # -> bit-exact PTDE c100. It must not expand the generic MR route cohort.
-    require(owner_cpp,"resolve_exact_direct_nospc_raw_mtd","NoSpc owner raw-MTD authority")
-    require(owner_cpp,"envspec_router_state::nospc_host","NoSpc owner class gate")
-    require(owner_cpp,"record.semantic_name_hash","NoSpc owner semantic gate")
+    require(owner_cpp,"dsr_mtd_identity_supplement_resolve(semantic_hash, raw_mtd_sha)","certified NoSpc owner raw-MTD authority")
+    if "generated_envspec_router_v1.hpp" in owner_cpp or "k_envspec_router_v1" in owner_cpp:
+        fail("material owner producer must not use EnvSpec/SPX router as raw-MTD identity fallback")
     require(mr_cpp,"resolve_direct_nospc_authority","direct NoSpc material resolver")
     require(mr_cpp,"record.raw_mtd_sha256","direct NoSpc raw-MTD gate")
     require(mr_cpp,"f32_from_bits","bit-exact PTDE c100 decode")
@@ -138,7 +156,7 @@ def main():
     print("  receivers=36 spc=24 nospc=12 stock_membership=t16/t17_bypassed")
     print("  producer=builder+retained_selector+independent_mirror+raw_source")
     print("  carrier=b12[3].x+t18+t19 material_max=uint32 min_after_first4")
-    print("  material=25 exact HOMOLOGOUS_NOSPC name+raw-MTD pairs with bit-exact PTDE c100")
+    print("  material=25 exact HOMOLOGOUS_NOSPC pairs; identity=certified supplement; c100=bit-exact router authority")
     print("  chain=candidate>receiver>selector>sources>material>sidecar>shader>draw-mutation>restore")
     print("  draw=adapter-valid ownership + exact pipeline route + shared transaction")
     return 0
