@@ -19,7 +19,7 @@ bool finite4(const std::array<float,4> &v) noexcept
 clustered_sidecar_build_v1 build_clustered_sidecar_v1(
     const std::array<clustered_source_raw_v1,4> &sources,
     std::uint8_t raw_selected_count,
-    std::uint8_t material_max_pnt_lit_num,
+    std::uint32_t material_max_pnt_lit_num,
     const operators::material_response::decision &material) noexcept
 {
     clustered_sidecar_build_v1 out{};
@@ -30,8 +30,7 @@ clustered_sidecar_build_v1 build_clustered_sidecar_v1(
         return out;
     }
 
-    if (material_max_pnt_lit_num == 0u ||
-        material_max_pnt_lit_num > 4u) {
+    if (material_max_pnt_lit_num == 0u) {
         out.result =
             clustered_sidecar_result_v1::fail_invalid_material_limit;
         return out;
@@ -41,7 +40,7 @@ clustered_sidecar_build_v1 build_clustered_sidecar_v1(
         static_cast<std::uint8_t>(
             std::min(
                 static_cast<unsigned>(raw_selected_count),
-                static_cast<unsigned>(material_max_pnt_lit_num)));
+                material_max_pnt_lit_num));
 
     if (effective_count == 0u) {
         out.result = clustered_sidecar_result_v1::fail_invalid_count;
@@ -90,7 +89,10 @@ clustered_sidecar_build_v1 build_clustered_sidecar_v1(
         out.payload.ordered_source_ids[i] =
             source.source_id;
 
-        // Keep the full raw first-four entity-level selection even when the\n        // material clamps N_effective below N_raw. The shader loop count lives\n        // only in b12[3].x; membership/source provenance stays independent.\n        // t18 is deliberately geometry-only. Preserve the homologous
+        // Keep the full raw first-four entity-level selection even when the
+        // material clamps N_effective below N_raw. The shader loop count lives
+        // only in b12[3].x; membership/source provenance stays independent.
+        // t18 is deliberately geometry-only. Preserve the homologous
         // position/invRange lane and raw End, while zeroing DSR-only
         // transformed source RGB/category/falloff metadata. The PTDE local
         // light contribution must therefore obtain source RGB only from t19.
