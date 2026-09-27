@@ -57,6 +57,7 @@ def main() -> int:
     out = [
         "#pragma once\n",
         "#include <array>\n",
+        "#include <cstddef>\n",
         "#include <cstdint>\n\n",
         "namespace dsrrl::operators::material_response::generated {\n",
         "struct dsr_mtd_identity_supplement_record { "
