@@ -272,6 +272,62 @@ jobs:
             if ($resourceRuntime -notmatch [regex]::Escape($required)) { throw "Material resource island adapter invariant missing: $required" }
           }
 
+          $fixedDrawRuntime = Get-Content renderer-core/src/runtime/fixed_pointlight_draw_runtime.cpp -Raw
+          $fixedPipelineRuntime = Get-Content renderer-core/src/runtime/fixed_pointlight_pipeline_runtime.cpp -Raw
+          $fixedMaterializer = Get-Content renderer-core/src/operators/point_light/fixed_local_specular_single_materializer.cpp -Raw
+          $fixedSpecBridge = Get-Content renderer-core/src/operators/resource_bridges/fixed_pointlight_spec_rgb_bridge.cpp -Raw
+
+          foreach ($required in @(
+            'prepare_t19',
+            'k_capture_rva',
+            'pushfq',
+            'owner_verified',
+            'producer_serial_fresh'
+          )) {
+            if ($fixedDrawRuntime -notmatch [regex]::Escape($required)) { throw "Fixed PointLight raw-q runtime invariant missing: $required" }
+          }
+
+          foreach ($required in @(
+            'register_candidate',
+            'host_sha256',
+            'replacement_sha256',
+            'prepare_bound_shader',
+            'blended_material'
+          )) {
+            if ($fixedPipelineRuntime -notmatch [regex]::Escape($required)) { throw "Fixed PointLight pipeline registry invariant missing: $required" }
+          }
+
+          foreach ($required in @(
+            'raw_host_basis',
+            't10_declared',
+            't19_declared',
+            'b12_declared',
+            'output_cut_redirected',
+            'replacement_sha256'
+          )) {
+            if ($fixedMaterializer -notmatch [regex]::Escape($required)) { throw "Fixed PointLight materializer invariant missing: $required" }
+          }
+
+          foreach ($required in @(
+            'bind_single_t10',
+            'bind_blended_t10_t16',
+            'direct_pointlight_material_authorized',
+            'stock_t1_t4_preserved'
+          )) {
+            if ($fixedSpecBridge -notmatch [regex]::Escape($required)) { throw "Fixed PointLight SpecRGB bridge invariant missing: $required" }
+          }
+
+          foreach ($required in @(
+            'g_fixed_pointlight_pipeline.prepare_bound_shader',
+            'evaluate_direct_pointlight_material',
+            'prepare_fixed_pointlight_spec_requests',
+            'prepare_b12_carrier',
+            'g_fixed_pointlight.prepare_t19',
+            'g_fixed_draw_batch_ready'
+          )) {
+            if ($entry -notmatch [regex]::Escape($required)) { throw "Integrated fixed PointLight atomic draw path missing: $required" }
+          }
+
           foreach ($required in @(
             'materialize_spec_rgb_consumer',
             'DSRRL_PTDE_SpecRGB',
@@ -821,6 +877,18 @@ jobs:
           $materialV211Hash = (Get-FileHash "renderer-core/src/operators/material_response/material_response_v211_materializer.cpp" -Algorithm SHA256).Hash.ToLowerInvariant()
           $materialV211PlanHash = (Get-FileHash "renderer-core/include/dsrrl/operators/material_response/generated_v211_plans.hpp" -Algorithm SHA256).Hash.ToLowerInvariant()
           $materialConstantsHash = (Get-FileHash "renderer-core/include/dsrrl/operators/material_response/generated_material_constants_v1.hpp" -Algorithm SHA256).Hash.ToLowerInvariant()
+          $materialResponseIslandHash = (Get-FileHash "renderer-core/src/operators/material_response/material_response_island.cpp" -Algorithm SHA256).Hash.ToLowerInvariant()
+          $fixedPointlightDrawRuntimeHash = (Get-FileHash "renderer-core/src/runtime/fixed_pointlight_draw_runtime.cpp" -Algorithm SHA256).Hash.ToLowerInvariant()
+          $fixedPointlightPipelineRuntimeHash = (Get-FileHash "renderer-core/src/runtime/fixed_pointlight_pipeline_runtime.cpp" -Algorithm SHA256).Hash.ToLowerInvariant()
+          $fixedPointlightMaterializerHash = (Get-FileHash "renderer-core/src/operators/point_light/fixed_local_specular_single_materializer.cpp" -Algorithm SHA256).Hash.ToLowerInvariant()
+          $fixedPointlightSamplesHash = (Get-FileHash "renderer-core/src/operators/point_light/fixed_local_specular_material_samples.cpp" -Algorithm SHA256).Hash.ToLowerInvariant()
+          $fixedPointlightOutputCutHash = (Get-FileHash "renderer-core/src/operators/point_light/fixed_local_specular_output_cut.cpp" -Algorithm SHA256).Hash.ToLowerInvariant()
+          $fixedPointlightOperandHash = (Get-FileHash "renderer-core/src/operators/point_light/fixed_local_specular_operand_contract.cpp" -Algorithm SHA256).Hash.ToLowerInvariant()
+          $fixedPointlightLegacyKernelHash = (Get-FileHash "renderer-core/src/operators/point_light/fixed_local_specular_legacy_kernel.cpp" -Algorithm SHA256).Hash.ToLowerInvariant()
+          $fixedPointlightT19LoweringHash = (Get-FileHash "renderer-core/src/operators/point_light/fixed_local_specular_t19_lowering.cpp" -Algorithm SHA256).Hash.ToLowerInvariant()
+          $fixedPointlightSpecBridgeHash = (Get-FileHash "renderer-core/src/operators/resource_bridges/fixed_pointlight_spec_rgb_bridge.cpp" -Algorithm SHA256).Hash.ToLowerInvariant()
+          $fixedPointlightPairsHash = (Get-FileHash "renderer-core/data/provenance/fixed_local_specular_ptde_pairs_v1.tsv" -Algorithm SHA256).Hash.ToLowerInvariant()
+          $fixedPointlightEndpointAuditHash = (Get-FileHash "renderer-core/tools/audit_fixed_spc_material_endpoints_v2.py" -Algorithm SHA256).Hash.ToLowerInvariant()
           $sourceRef = if ($env:GITHUB_HEAD_REF) { $env:GITHUB_HEAD_REF } else { $env:GITHUB_REF_NAME }
           $sourceRefKind = if ($env:GITHUB_HEAD_REF) { "pull_request_head" } else { "git_ref" }
           if ([string]::IsNullOrWhiteSpace($sourceRef)) { throw "Unable to resolve exact source ref" }
@@ -937,6 +1005,21 @@ jobs:
             material_response_v211_materializer_sha256 = $materialV211Hash
             material_response_v211_plan_sha256 = $materialV211PlanHash
             material_response_constants_sha256 = $materialConstantsHash
+            material_response_island_sha256 = $materialResponseIslandHash
+            fixed_pointlight_draw_runtime_sha256 = $fixedPointlightDrawRuntimeHash
+            fixed_pointlight_pipeline_runtime_sha256 = $fixedPointlightPipelineRuntimeHash
+            fixed_pointlight_materializer_sha256 = $fixedPointlightMaterializerHash
+            fixed_pointlight_material_samples_sha256 = $fixedPointlightSamplesHash
+            fixed_pointlight_output_cut_sha256 = $fixedPointlightOutputCutHash
+            fixed_pointlight_operand_contract_sha256 = $fixedPointlightOperandHash
+            fixed_pointlight_legacy_kernel_sha256 = $fixedPointlightLegacyKernelHash
+            fixed_pointlight_t19_lowering_sha256 = $fixedPointlightT19LoweringHash
+            fixed_pointlight_spec_rgb_bridge_sha256 = $fixedPointlightSpecBridgeHash
+            fixed_pointlight_ptde_pairs_sha256 = $fixedPointlightPairsHash
+            fixed_pointlight_endpoint_audit_sha256 = $fixedPointlightEndpointAuditHash
+            fixed_pointlight_draw_composition = "EXACT_RAW_HOST_PS_PLUS_B12_PLUS_T19_PLUS_T10_T16_ATOMIC_DRAW_TRANSACTION"
+            fixed_pointlight_runtime_activation = "NOT_TESTED"
+            fixed_pointlight_pixel_behavior = "OPEN"
             material_response_draw_probe = "VISIBLE_EXACT_OWNER_RECEIVER_PS_B12_BATCH_TRANSACTION"
             material_response_feature_armed = $true
             material_response_runtime_activation = "NOT_TESTED"
