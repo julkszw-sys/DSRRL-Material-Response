@@ -39,6 +39,24 @@ add_custom_command(
 add_custom_target(dsrrl_dsr_flver_owner_tuple_header
     DEPENDS "${DSRRL_OWNER_CORPUS_HEADER}")
 
+set(DSRRL_MTD_IDENTITY_SUPPLEMENT_SOURCE
+    "${CMAKE_CURRENT_SOURCE_DIR}/data/census/dsr_mtd_identity_certified_supplement_v1.json")
+set(DSRRL_MTD_IDENTITY_SUPPLEMENT_HEADER
+    "${DSRRL_GENERATED_DIR}/dsrrl/operators/material_response/generated_dsr_mtd_identity_supplement_v1.hpp")
+add_custom_command(
+    OUTPUT "${DSRRL_MTD_IDENTITY_SUPPLEMENT_HEADER}"
+    COMMAND "${Python3_EXECUTABLE}"
+            "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_dsr_mtd_identity_supplement.py"
+            --input "${DSRRL_MTD_IDENTITY_SUPPLEMENT_SOURCE}"
+            --output "${DSRRL_MTD_IDENTITY_SUPPLEMENT_HEADER}"
+    DEPENDS
+        "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_dsr_mtd_identity_supplement.py"
+        "${DSRRL_MTD_IDENTITY_SUPPLEMENT_SOURCE}"
+    VERBATIM
+)
+add_custom_target(dsrrl_dsr_mtd_identity_supplement_header
+    DEPENDS "${DSRRL_MTD_IDENTITY_SUPPLEMENT_HEADER}")
+
 set(DSRRL_HEMENVLERP_V211_HEADER
     "${DSRRL_GENERATED_DIR}/dsrrl/operators/material_response/generated_hemenvlerp_v211_v1.hpp")
 add_custom_command(
@@ -138,6 +156,7 @@ add_library(dsrrl_renderer_core STATIC
     src/operators/resource_bridges/diffuse_bridge.cpp
     "${DSRRL_NATIVE_PROBE_HEADER}"
     "${DSRRL_OWNER_CORPUS_HEADER}"
+    "${DSRRL_MTD_IDENTITY_SUPPLEMENT_HEADER}"
     "${DSRRL_LOCAL_SPECULAR_RECEIVER_HEADER}"
     "${DSRRL_FIXED_LOCAL_SPECULAR_PTDE_REFERENCE_HEADER}"
 )
@@ -157,6 +176,7 @@ add_dependencies(
     dsrrl_pointlight_core_source_audit
     dsrrl_native_envspec_probe_header
     dsrrl_dsr_flver_owner_tuple_header
+    dsrrl_dsr_mtd_identity_supplement_header
     dsrrl_hemenvlerp_v211_header
     dsrrl_local_specular_receiver_header
     dsrrl_fixed_local_specular_ptde_reference_header)
@@ -179,6 +199,14 @@ target_compile_features(dsrrl_renderer_exact_material_cache_tests PRIVATE cxx_st
 add_executable(dsrrl_renderer_flver_identity_tests tests/flver_identity_registry_tests.cpp)
 target_link_libraries(dsrrl_renderer_flver_identity_tests PRIVATE dsrrl_renderer_core)
 target_compile_features(dsrrl_renderer_flver_identity_tests PRIVATE cxx_std_17)
+
+add_executable(dsrrl_renderer_dsr_mtd_identity_supplement_tests
+    tests/dsr_mtd_identity_supplement_tests.cpp)
+target_link_libraries(dsrrl_renderer_dsr_mtd_identity_supplement_tests PRIVATE dsrrl_renderer_core)
+target_compile_features(dsrrl_renderer_dsr_mtd_identity_supplement_tests PRIVATE cxx_std_17)
+add_dependencies(
+    dsrrl_renderer_dsr_mtd_identity_supplement_tests
+    dsrrl_dsr_mtd_identity_supplement_header)
 
 add_executable(dsrrl_renderer_stable_receiver_pipeline_tests
     tests/stable_receiver_pipeline_registry_tests.cpp)
@@ -306,6 +334,7 @@ if(MSVC)
     target_compile_options(dsrrl_renderer_core_tests PRIVATE /W4 /WX)
     target_compile_options(dsrrl_renderer_material_owner_selection_tests PRIVATE /W4 /WX)
     target_compile_options(dsrrl_renderer_exact_material_cache_tests PRIVATE /W4 /WX)
+    target_compile_options(dsrrl_renderer_dsr_mtd_identity_supplement_tests PRIVATE /W4 /WX)
     target_compile_options(dsrrl_renderer_island_tests PRIVATE /W4 /WX)
     target_compile_options(dsrrl_renderer_future_runtime_tests PRIVATE /W4 /WX)
     target_compile_options(dsrrl_renderer_faceeye_pointlight_tests PRIVATE /W4 /WX)
@@ -332,6 +361,7 @@ else()
     target_compile_options(dsrrl_renderer_core_tests PRIVATE -Wall -Wextra -Wpedantic -Werror)
     target_compile_options(dsrrl_renderer_material_owner_selection_tests PRIVATE -Wall -Wextra -Wpedantic -Werror)
     target_compile_options(dsrrl_renderer_exact_material_cache_tests PRIVATE -Wall -Wextra -Wpedantic -Werror)
+    target_compile_options(dsrrl_renderer_dsr_mtd_identity_supplement_tests PRIVATE -Wall -Wextra -Wpedantic -Werror)
     target_compile_options(dsrrl_renderer_island_tests PRIVATE -Wall -Wextra -Wpedantic -Werror)
     target_compile_options(dsrrl_renderer_future_runtime_tests PRIVATE -Wall -Wextra -Wpedantic -Werror)
     target_compile_options(dsrrl_renderer_faceeye_pointlight_tests PRIVATE -Wall -Wextra -Wpedantic -Werror)
@@ -386,6 +416,7 @@ add_test(NAME dsrrl_renderer_material_owner_tests COMMAND dsrrl_renderer_materia
 add_test(NAME dsrrl_renderer_material_owner_selection_tests COMMAND dsrrl_renderer_material_owner_selection_tests)
 add_test(NAME dsrrl_renderer_exact_material_cache_tests COMMAND dsrrl_renderer_exact_material_cache_tests)
 add_test(NAME dsrrl_renderer_flver_identity_tests COMMAND dsrrl_renderer_flver_identity_tests)
+add_test(NAME dsrrl_renderer_dsr_mtd_identity_supplement_tests COMMAND dsrrl_renderer_dsr_mtd_identity_supplement_tests)
 add_test(NAME dsrrl_renderer_stable_receiver_pipeline_tests COMMAND dsrrl_renderer_stable_receiver_pipeline_tests)
 add_test(NAME dsrrl_renderer_hemenvlerp_pipeline_tests COMMAND dsrrl_renderer_hemenvlerp_pipeline_tests)
 set_tests_properties(
