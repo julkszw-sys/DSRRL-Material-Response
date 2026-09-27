@@ -2077,11 +2077,10 @@ bool prepare_island_batch(
 {
     prepared = {};
 
-    // Fixed PntSS/PntSSSS is a separate exact receiver namespace. The
-    // registry contains only single-endpoint materializations; Mul/blended
-    // bodies are deliberately absent and therefore fail open before this
-    // branch. Compose the entire visible island atomically: replacement PS,
-    // authored b12 material state, fresh raw-q t19 and PTDE SpecRGB t10.
+    // Fixed PntSS/PntSSSS is a separate exact receiver namespace. Compose
+    // the entire visible island atomically: replacement PS, authored b12
+    // material state, fresh raw-q t19 and PTDE SpecRGB t10 (plus t16 for
+    // audited Mul/blended bodies).
     if (g_fixed_pointlight_pipeline.prepare_bound_shader(
             cmd_list,
             prepared.fixed_shader)) {
@@ -2120,7 +2119,7 @@ bool prepare_island_batch(
                     fixed_query,
                     true,
                     true,
-                    false,
+                    prepared.fixed_shader.blended_material,
                     prepared.resources) &&
             prepared.resources.spec_rgb;
 
