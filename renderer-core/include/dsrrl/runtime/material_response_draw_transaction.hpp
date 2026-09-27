@@ -250,6 +250,7 @@ private:
     std::unordered_map<std::uint32_t, replacement_record>
         upper_lower_spec_rgb_replacements_;
     std::unordered_map<std::uint32_t, ID3D11Buffer *> b12_by_route_;
+    std::atomic<std::uint64_t> resource_epoch_{1u};
 
     std::atomic<std::uint64_t> replacement_register_ok_{0};
     std::atomic<std::uint64_t> replacement_register_fail_{0};
