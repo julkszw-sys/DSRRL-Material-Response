@@ -59,6 +59,22 @@ struct pmetal_envspec_telemetry {
     std::uint64_t upper_lower_fallback = 0;
     std::uint64_t requests = 0;
     std::uint64_t lerp_requests = 0;
+
+    // Low-overhead effect ladder. These are one-way session latches used by
+    // DSRRL_EFFECT_TELEMETRY and do not imply pixel equivalence.
+    bool effect_entry_seen = false;
+    bool effect_feature_ready = false;
+    bool effect_material_ready = false;
+    bool effect_semantic_ready = false;
+    bool effect_source_ready = false;
+    bool effect_receiver_source_ready = false;
+    bool effect_replacement_ready = false;
+    bool effect_probe_ready = false;
+    bool effect_spec_rgb_ready = false;
+    bool effect_b12_ready = false;
+    bool effect_request_ready = false;
+    std::uint32_t effect_fail_mask = 0u;
+
     bool quarantined = false;
 };
 
@@ -150,6 +166,20 @@ private:
     std::atomic<std::uint64_t> upper_lower_fallback_{0};
     std::atomic<std::uint64_t> requests_{0};
     std::atomic<std::uint64_t> lerp_requests_{0};
+
+    std::atomic_bool effect_entry_seen_{false};
+    std::atomic_bool effect_feature_ready_{false};
+    std::atomic_bool effect_material_ready_{false};
+    std::atomic_bool effect_semantic_ready_{false};
+    std::atomic_bool effect_source_ready_{false};
+    std::atomic_bool effect_receiver_source_ready_{false};
+    std::atomic_bool effect_replacement_ready_{false};
+    std::atomic_bool effect_probe_ready_{false};
+    std::atomic_bool effect_spec_rgb_ready_{false};
+    std::atomic_bool effect_b12_ready_{false};
+    std::atomic_bool effect_request_ready_{false};
+    std::atomic<std::uint32_t> effect_fail_mask_{0u};
+
     std::atomic_bool quarantined_{false};
 };
 
