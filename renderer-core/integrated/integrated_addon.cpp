@@ -173,11 +173,23 @@ std::atomic<std::uint64_t> g_fixed_draw_batch_ready{0};
 std::atomic<std::uint64_t> g_fixed_draw_fail_open{0};
 
 bool g_hot_telemetry_enabled = false;
+bool g_effect_telemetry_enabled = false;
 
 bool runtime_hot_telemetry_requested() noexcept
 {
     return dsrrl::runtime::telemetry::
         hot_enabled();
+}
+
+bool runtime_effect_telemetry_requested() noexcept
+{
+#if defined(DSRRL_EFFECT_TELEMETRY_DEFAULT_ON)
+    return true;
+#else
+    return dsrrl::runtime::telemetry::
+        environment_flag(
+            "DSRRL_EFFECT_TELEMETRY");
+#endif
 }
 
 void hot_count(
@@ -187,6 +199,224 @@ void hot_count(
         counter.fetch_add(
             1u,
             std::memory_order_relaxed);
+}
+
+enum class effect_probe_id : std::uint8_t {
+    material_response = 0,
+    material_response_lerp,
+    spec_rgb,
+    diffuse,
+    normal,
+    upper_lower,
+    subsurface,
+    hemdir3,
+    pmetal_envspec,
+    pointlight,
+    local_specular,
+    bloom_q8,
+    count
+};
+
+enum class effect_probe_stage : std::uint8_t {
+    candidate = 0,
+    authority,
+    prepared,
+    applied,
+    fail_open,
+    restore_failed
+};
+
+struct effect_probe_state {
+    std::atomic_bool candidate{false};
+    std::atomic_bool authority{false};
+    std::atomic_bool prepared{false};
+    std::atomic_bool applied{false};
+    std::atomic_bool fail_open{false};
+    std::atomic_bool restore_failed{false};
+};
+
+constexpr std::size_t k_effect_probe_count =
+    static_cast<std::size_t>(
+        effect_probe_id::count);
+
+std::array<
+    effect_probe_state,
+    k_effect_probe_count>
+    g_effect_probe{};
+
+const char *effect_probe_name(
+    effect_probe_id id) noexcept
+{
+    switch (id) {
+    case effect_probe_id::material_response:
+        return "MaterialResponse";
+    case effect_probe_id::material_response_lerp:
+        return "MaterialResponseLerp";
+    case effect_probe_id::spec_rgb:
+        return "SpecRGB";
+    case effect_probe_id::diffuse:
+        return "Diffuse";
+    case effect_probe_id::normal:
+        return "Normal";
+    case effect_probe_id::upper_lower:
+        return "UpperLower";
+    case effect_probe_id::subsurface:
+        return "Subsurface";
+    case effect_probe_id::hemdir3:
+        return "HemDir3";
+    case effect_probe_id::pmetal_envspec:
+        return "PMetalEnvSpec";
+    case effect_probe_id::pointlight:
+        return "PointLight";
+    case effect_probe_id::local_specular:
+        return "LocalSpecular";
+    case effect_probe_id::bloom_q8:
+        return "BloomQ8";
+    default:
+        return "Unknown";
+    }
+}
+
+const char *effect_probe_stage_name(
+    effect_probe_stage stage) noexcept
+{
+    switch (stage) {
+    case effect_probe_stage::candidate:
+        return "candidate";
+    case effect_probe_stage::authority:
+        return "authority";
+    case effect_probe_stage::prepared:
+        return "prepared";
+    case effect_probe_stage::applied:
+        return "applied";
+    case effect_probe_stage::fail_open:
+        return "fail_open";
+    case effect_probe_stage::restore_failed:
+        return "restore_failed";
+    default:
+        return "unknown";
+    }
+}
+
+std::atomic_bool &effect_probe_flag(
+    effect_probe_state &state,
+    effect_probe_stage stage) noexcept
+{
+    switch (stage) {
+    case effect_probe_stage::candidate:
+        return state.candidate;
+    case effect_probe_stage::authority:
+        return state.authority;
+    case effect_probe_stage::prepared:
+        return state.prepared;
+    case effect_probe_stage::applied:
+        return state.applied;
+    case effect_probe_stage::fail_open:
+        return state.fail_open;
+    case effect_probe_stage::restore_failed:
+        return state.restore_failed;
+    default:
+        return state.fail_open;
+    }
+}
+
+void mark_effect_probe(
+    effect_probe_id id,
+    effect_probe_stage stage) noexcept
+{
+    if (!g_effect_telemetry_enabled)
+        return;
+
+    auto &state =
+        g_effect_probe[
+            static_cast<std::size_t>(id)];
+    auto &flag =
+        effect_probe_flag(
+            state,
+            stage);
+
+    if (flag.load(
+            std::memory_order_relaxed))
+        return;
+
+    if (flag.exchange(
+            true,
+            std::memory_order_relaxed))
+        return;
+
+    char line[256]{};
+    std::snprintf(
+        line,
+        sizeof(line),
+        "[DSRRL EFFECT ACT] effect=%s stage=%s",
+        effect_probe_name(id),
+        effect_probe_stage_name(stage));
+    reshade::log::message(
+        reshade::log::level::info,
+        line);
+}
+
+using effect_probe_mask = std::uint32_t;
+
+constexpr effect_probe_mask effect_probe_bit(
+    effect_probe_id id) noexcept
+{
+    return
+        static_cast<effect_probe_mask>(1u) <<
+        static_cast<std::uint8_t>(id);
+}
+
+void mark_effect_probe_mask(
+    effect_probe_mask mask,
+    effect_probe_stage stage) noexcept
+{
+    if (!g_effect_telemetry_enabled ||
+        mask == 0u)
+        return;
+
+    for (std::size_t i = 0u;
+         i < k_effect_probe_count;
+         ++i) {
+        const auto id =
+            static_cast<effect_probe_id>(i);
+        if ((mask & effect_probe_bit(id)) != 0u)
+            mark_effect_probe(
+                id,
+                stage);
+    }
+}
+
+void reset_effect_probe() noexcept
+{
+    for (auto &state : g_effect_probe) {
+        state.candidate.store(false);
+        state.authority.store(false);
+        state.prepared.store(false);
+        state.applied.store(false);
+        state.fail_open.store(false);
+        state.restore_failed.store(false);
+    }
+}
+
+const char *effect_probe_status(
+    const effect_probe_state &state) noexcept
+{
+    if (state.restore_failed.load(
+            std::memory_order_relaxed))
+        return "RESTORE_FAILED";
+    if (state.applied.load(
+            std::memory_order_relaxed))
+        return "APPLIED";
+    if (state.prepared.load(
+            std::memory_order_relaxed))
+        return "PREPARED_NOT_APPLIED";
+    if (state.authority.load(
+            std::memory_order_relaxed))
+        return "AUTHORIZED_NOT_PREPARED";
+    if (state.candidate.load(
+            std::memory_order_relaxed))
+        return "CANDIDATE_ONLY";
+    return "NOT_SEEN";
 }
 
 enum integrated_draw_route_bit : std::uint8_t {
