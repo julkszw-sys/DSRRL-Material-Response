@@ -1046,7 +1046,7 @@ void publish_reference_token(
         auto &entry =
             g_reference_tokens[base + way];
         if (entry.valid &&
-            entry.fingerprint.owner_context ==
+            entry.fingerprint.owner ==
                 producer.owner) {
             entry = token;
             return;
@@ -1092,7 +1092,7 @@ lightbank_reference_token *find_reference_token(
             g_reference_tokens[base + way];
         if (entry.valid &&
             entry.available &&
-            entry.fingerprint.owner_context ==
+            entry.fingerprint.owner ==
                 owner)
             return &entry;
     }
