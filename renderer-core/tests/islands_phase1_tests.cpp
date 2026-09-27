@@ -213,7 +213,7 @@ int main()
     runtime_mr=seeded.evaluate(36u,runtime_pmetal);
     CHECK(!runtime_mr.active);
     CHECK(runtime_mr.reason==
-          decision_reason::owner_tuple_not_authenticated);
+          decision_reason::unknown_material);
 
     auto wrong_runtime_pmetal=runtime_pmetal;
     wrong_runtime_pmetal.route_index=359u;
