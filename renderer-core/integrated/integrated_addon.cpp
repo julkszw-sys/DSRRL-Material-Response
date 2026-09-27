@@ -727,6 +727,8 @@ bool observe_draw_identity(
     reshade::api::command_list *cmd_list,
     std::uint8_t route_mask,
     bool fixed_pointlight_receiver,
+    bool clustered_pointlight_receiver,
+    bool clustered_pointlight_spc,
     std::uint32_t &receiver_id,
     bool &hemenvlerp_bound,
     dsrrl::runtime::hemenvlerp_receiver_identity &hemenvlerp_identity,
@@ -859,15 +861,17 @@ bool observe_draw_identity(
         (hemdir3_receiver ? 1u : 0u) +
         (upper_lower_unpaired_nospc ? 1u : 0u) +
         (upper_lower_standalone ? 1u : 0u) +
-        (fixed_pointlight_receiver ? 1u : 0u);
+        (fixed_pointlight_receiver ? 1u : 0u) +
+        (clustered_pointlight_receiver ? 1u : 0u);
 
     const bool receiver_ok =
         receiver_classes == 1u &&
         upper_lower_spc_matches_stable;
 
-    if (fixed_pointlight_receiver) {
-        // Fixed PntSS/PntSSSS is an independent receiver namespace. Never
-        // borrow Material Response receiver IDs 24..47 for this path.
+    if (fixed_pointlight_receiver ||
+        clustered_pointlight_receiver) {
+        // Direct PointLight families are independent receiver namespaces.
+        // Never borrow Material Response receiver IDs 24..47 for these paths.
         receiver_id = 0u;
     } else if (subsurface_receiver) {
         // DSBT body Subsurf exact receivers 33..35 own the route. Their
@@ -926,6 +930,7 @@ bool observe_draw_identity(
         if (rx != nullptr)
             hot_count(rx->accepted);
         if (!fixed_pointlight_receiver &&
+            !clustered_pointlight_receiver &&
             !g_mr_once_receiver_hit.exchange(true)) {
             reshade::log::message(
                 reshade::log::level::info,
@@ -956,6 +961,7 @@ bool observe_draw_identity(
     if (rx != nullptr)
         hot_count(rx->joined);
     if (!fixed_pointlight_receiver &&
+        !clustered_pointlight_receiver &&
         !g_mr_once_owner_join.exchange(true)) {
         reshade::log::message(
             reshade::log::level::info,
@@ -976,11 +982,20 @@ bool observe_draw_identity(
     }
 
     hot_count(g_mr_draw_eval);
+    const bool direct_pointlight_receiver =
+        fixed_pointlight_receiver ||
+        clustered_pointlight_receiver;
+    const bool direct_pointlight_requires_specular =
+        fixed_pointlight_receiver ||
+        (clustered_pointlight_receiver &&
+         clustered_pointlight_spc);
+
     out_decision =
-        fixed_pointlight_receiver
+        direct_pointlight_receiver
             ? g_material_response.
                 evaluate_direct_pointlight_material(
-                    out_material)
+                    out_material,
+                    direct_pointlight_requires_specular)
             : g_material_response.evaluate(
                 receiver_id,
                 out_material);
@@ -990,6 +1005,7 @@ bool observe_draw_identity(
         if (rx != nullptr)
             hot_count(rx->mr_active);
         if (!fixed_pointlight_receiver &&
+            !clustered_pointlight_receiver &&
             !g_mr_once_decision_active.exchange(true)) {
             reshade::log::message(
                 reshade::log::level::info,
@@ -997,6 +1013,7 @@ bool observe_draw_identity(
         }
 
         if (!fixed_pointlight_receiver &&
+            !clustered_pointlight_receiver &&
             !g_mr_once_identity.exchange(true)) {
             char mr_identity_line[512]{};
             std::snprintf(
