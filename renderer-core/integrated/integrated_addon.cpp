@@ -165,7 +165,8 @@ enum integrated_draw_route_bit : std::uint8_t {
     k_route_subsurface = 1u << 2,
     k_route_hemdir3 = 1u << 3,
     k_route_upper_lower = 1u << 4,
-    k_route_a1 = 1u << 5
+    k_route_a1 = 1u << 5,
+    k_route_fixed_pointlight = 1u << 6
 };
 
 struct integrated_draw_route_tls {
@@ -1863,6 +1864,11 @@ void on_init_pipeline(
             pipeline.handle))
         draw_route_mask |= k_route_a1;
 
+    if (g_fixed_pointlight_pipeline.pipeline_attested(
+            pipeline.handle))
+        draw_route_mask |=
+            k_route_fixed_pointlight;
+
     if (pixel_shader != nullptr &&
         pixel_shader->code != nullptr &&
         pixel_shader->code_size != 0u) {
@@ -2641,15 +2647,24 @@ bool on_draw(
         integrated_draw_route_bound(
             cmd_list);
 
+    if (route_mask == 0u) {
+        ++g_draw_fast_skip;
+        dsrrl::runtime::
+            material_owner_selection_clear();
+        return false;
+    }
+
     std::uint8_t fixed_pointlight_bound_count = 0u;
     const bool fixed_pointlight_bound =
+        (route_mask &
+         k_route_fixed_pointlight) != 0u &&
         g_fixed_pointlight_pipeline.bound_light_count(
             cmd_list,
             fixed_pointlight_bound_count);
 
-    if (route_mask == 0u &&
+    if ((route_mask &
+         k_route_fixed_pointlight) != 0u &&
         !fixed_pointlight_bound) {
-        ++g_draw_fast_skip;
         dsrrl::runtime::
             material_owner_selection_clear();
         return false;
@@ -2740,15 +2755,24 @@ bool on_draw_indexed(
         integrated_draw_route_bound(
             cmd_list);
 
+    if (route_mask == 0u) {
+        ++g_draw_fast_skip;
+        dsrrl::runtime::
+            material_owner_selection_clear();
+        return false;
+    }
+
     std::uint8_t fixed_pointlight_bound_count = 0u;
     const bool fixed_pointlight_bound =
+        (route_mask &
+         k_route_fixed_pointlight) != 0u &&
         g_fixed_pointlight_pipeline.bound_light_count(
             cmd_list,
             fixed_pointlight_bound_count);
 
-    if (route_mask == 0u &&
+    if ((route_mask &
+         k_route_fixed_pointlight) != 0u &&
         !fixed_pointlight_bound) {
-        ++g_draw_fast_skip;
         dsrrl::runtime::
             material_owner_selection_clear();
         return false;
