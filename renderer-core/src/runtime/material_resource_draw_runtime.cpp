@@ -1033,6 +1033,18 @@ prepare_draw_requests(
         query.material.valid &&
         query.material.owner_tuple_exact;
 
+    const companion_lookup_request
+        companion_requests[3]{
+            {views[1], asset_class::specular},
+            {views[0], asset_class::diffuse},
+            {views[2], asset_class::normal}
+        };
+    ID3D11ShaderResourceView *companions[3]{};
+    lookup_many(
+        companion_requests,
+        3u,
+        companions);
+
     if (full_material_response_ready &&
         spec_rgb_consumer_ready &&
         core_.features().enabled(
@@ -1040,9 +1052,8 @@ prepare_draw_requests(
         receiver_id >= 24u &&
         receiver_id <= 47u) {
         auto *replacement =
-            lookup(
-                views[1],
-                asset_class::specular);
+            companions[0];
+        companions[0] = nullptr;
 
         const bool exact_companion =
             h1 != 0u &&
@@ -1128,10 +1139,10 @@ prepare_draw_requests(
             core::operator_id::diffuse)) {
         auto *replacement =
             diffuse_pair
-                ? lookup(
-                    views[0],
-                    asset_class::diffuse)
+                ? companions[1]
                 : nullptr;
+        if (diffuse_pair)
+            companions[1] = nullptr;
 
         const auto semantic =
             operators::material_response::
@@ -1214,10 +1225,10 @@ prepare_draw_requests(
             core::operator_id::normal)) {
         auto *replacement =
             normal_tuple
-                ? lookup(
-                    views[2],
-                    asset_class::normal)
+                ? companions[2]
                 : nullptr;
+        if (normal_tuple)
+            companions[2] = nullptr;
 
         const auto semantic =
             operators::material_response::
@@ -1296,6 +1307,9 @@ prepare_draw_requests(
         if (replacement != nullptr)
             replacement->Release();
     }
+
+    for (auto *&companion : companions)
+        release_view(companion);
 
     for (auto *&view : views)
         release_view(view);
@@ -1479,7 +1493,8 @@ prepare_fixed_pointlight_material_requests(
     }
 
     island_draw_adapter_request spec_request{};
-    spec_request.primary =        core::operator_id::spec_rgb;
+    spec_request.primary =
+        core::operator_id::spec_rgb;
     spec_request.receiver_verified = true;
     spec_request.material_verified = true;
     spec_request.srvs[0] = {
