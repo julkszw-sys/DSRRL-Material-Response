@@ -344,6 +344,7 @@ const reshade::api::shader_desc *find_pixel_shader(
 bool observe_draw_identity(
     reshade::api::command_list *cmd_list,
     std::uint8_t route_mask,
+    bool fixed_pointlight_receiver,
     std::uint32_t &receiver_id,
     bool &hemenvlerp_bound,
     dsrrl::runtime::hemenvlerp_receiver_identity &hemenvlerp_identity,
@@ -394,12 +395,6 @@ bool observe_draw_identity(
         dsrrl::runtime::upper_lower_receiver_bound(
             cmd_list,
             upper_lower_identity);
-
-    std::uint8_t fixed_pointlight_light_count = 0u;
-    const bool fixed_pointlight_receiver =
-        g_fixed_pointlight_pipeline.bound_light_count(
-            cmd_list,
-            fixed_pointlight_light_count);
 
     const bool upper_lower_spc =
         upper_lower_receiver &&
@@ -2674,6 +2669,7 @@ bool on_draw(
     if (!observe_draw_identity(
             cmd_list,
             route_mask,
+            fixed_pointlight_bound,
             receiver_id,
             hemenvlerp_bound,
             hemenvlerp_identity,
@@ -2772,6 +2768,7 @@ bool on_draw_indexed(
     if (!observe_draw_identity(
             cmd_list,
             route_mask,
+            fixed_pointlight_bound,
             receiver_id,
             hemenvlerp_bound,
             hemenvlerp_identity,
