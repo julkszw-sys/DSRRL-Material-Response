@@ -3389,6 +3389,32 @@ bool on_draw(
             decision))
         return false;
 
+    const auto effect_candidates =
+        candidate_effect_mask(
+            route_mask,
+            fixed_pointlight_bound,
+            hemenvlerp_bound,
+            subsurface_bound,
+            hemdir3_bound,
+            upper_lower_bound,
+            material,
+            decision);
+    mark_effect_probe_mask(
+        effect_candidates,
+        effect_probe_stage::candidate,
+        receiver_id,
+        decision.route_index);
+    mark_effect_probe_mask(
+        authority_effect_mask(
+            fixed_pointlight_bound,
+            hemenvlerp_bound,
+            upper_lower_bound,
+            material,
+            decision),
+        effect_probe_stage::authority,
+        receiver_id,
+        decision.route_index);
+
     prepared_island_batch prepared{};
     if (!prepare_island_batch(
             cmd_list,
@@ -3402,8 +3428,27 @@ bool on_draw(
             upper_lower_identity,
             material,
             decision,
-            prepared))
+            prepared)) {
+        mark_effect_probe_mask(
+            effect_candidates,
+            effect_probe_stage::fail_open,
+            receiver_id,
+            decision.route_index);
         return false;
+    }
+
+    const auto effect_prepared =
+        prepared_effect_mask(prepared);
+    mark_effect_probe_mask(
+        effect_prepared,
+        effect_probe_stage::authority,
+        receiver_id,
+        decision.route_index);
+    mark_effect_probe_mask(
+        effect_prepared,
+        effect_probe_stage::prepared,
+        receiver_id,
+        decision.route_index);
 
     const auto dispatch =
         dsrrl::runtime::dispatch_island_draw_batch(
@@ -3422,6 +3467,10 @@ bool on_draw(
 
     release_prepared_island_batch(
         prepared);
+
+    account_effect_dispatch(
+        effect_prepared,
+        dispatch.transaction);
 
     if (mr_in_batch) {
         g_mr_draw_runtime.account_dispatch_result(
@@ -3504,6 +3553,32 @@ bool on_draw_indexed(
             decision))
         return false;
 
+    const auto effect_candidates =
+        candidate_effect_mask(
+            route_mask,
+            fixed_pointlight_bound,
+            hemenvlerp_bound,
+            subsurface_bound,
+            hemdir3_bound,
+            upper_lower_bound,
+            material,
+            decision);
+    mark_effect_probe_mask(
+        effect_candidates,
+        effect_probe_stage::candidate,
+        receiver_id,
+        decision.route_index);
+    mark_effect_probe_mask(
+        authority_effect_mask(
+            fixed_pointlight_bound,
+            hemenvlerp_bound,
+            upper_lower_bound,
+            material,
+            decision),
+        effect_probe_stage::authority,
+        receiver_id,
+        decision.route_index);
+
     prepared_island_batch prepared{};
     if (!prepare_island_batch(
             cmd_list,
@@ -3517,8 +3592,27 @@ bool on_draw_indexed(
             upper_lower_identity,
             material,
             decision,
-            prepared))
+            prepared)) {
+        mark_effect_probe_mask(
+            effect_candidates,
+            effect_probe_stage::fail_open,
+            receiver_id,
+            decision.route_index);
         return false;
+    }
+
+    const auto effect_prepared =
+        prepared_effect_mask(prepared);
+    mark_effect_probe_mask(
+        effect_prepared,
+        effect_probe_stage::authority,
+        receiver_id,
+        decision.route_index);
+    mark_effect_probe_mask(
+        effect_prepared,
+        effect_probe_stage::prepared,
+        receiver_id,
+        decision.route_index);
 
     const auto dispatch =
         dsrrl::runtime::dispatch_island_draw_indexed_batch(
@@ -3538,6 +3632,10 @@ bool on_draw_indexed(
 
     release_prepared_island_batch(
         prepared);
+
+    account_effect_dispatch(
+        effect_prepared,
+        dispatch.transaction);
 
     if (mr_in_batch) {
         g_mr_draw_runtime.account_dispatch_result(
