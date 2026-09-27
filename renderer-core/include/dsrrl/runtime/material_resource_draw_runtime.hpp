@@ -36,12 +36,12 @@ struct material_resource_telemetry {
 struct prepared_material_resource_draw {
     std::array<
         island_draw_adapter_request,
-        3> requests{};
+        4> requests{};
     std::uint32_t request_count = 0;
 
     std::array<
         ID3D11ShaderResourceView *,
-        3> retained_views{};
+        4> retained_views{};
     std::uint32_t retained_count = 0;
 
     bool spec_rgb = false;
@@ -71,7 +71,7 @@ public:
         bool spec_rgb_consumer_ready,
         prepared_material_resource_draw &prepared) noexcept;
 
-    bool prepare_fixed_pointlight_spec_requests(
+    bool prepare_fixed_pointlight_material_requests(
         ID3D11DeviceContext *context,
         const operators::material_response::mtd_semantic_query &query,
         bool exact_fixed_receiver_verified,
