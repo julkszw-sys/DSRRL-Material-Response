@@ -18,7 +18,7 @@ int main()
             plan.replacement_sha256 == nullptr ||
             plan.stock_size == 0u ||
             plan.replacement_size == 0u ||
-            plan.op_count != 15u)
+            plan.op_count != 24u)
             return 2;
 
         if (plan.first_op >

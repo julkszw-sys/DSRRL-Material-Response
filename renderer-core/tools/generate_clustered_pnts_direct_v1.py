@@ -12,7 +12,7 @@ def main():
     ap.add_argument("--output",required=True)
     ns=ap.parse_args()
     data=json.loads(Path(ns.input).read_text(encoding="utf-8"))
-    if data.get("schema")!="DSRRL_CLUSTERED_PNTS_DIRECT_PTDE_STOCK_JOURNAL_V1":
+    if data.get("schema")!="DSRRL_CLUSTERED_PNTS_DIRECT_PTDE_FOUR_SLOT_STOCK_JOURNAL_V1":
         raise SystemExit("unexpected clustered PntS journal schema")
     entries=data.get("entries",[])
     if len(entries)!=36:

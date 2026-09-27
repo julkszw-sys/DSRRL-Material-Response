@@ -59,7 +59,7 @@ clustered_sidecar_build_v1 build_clustered_sidecar_v1(
         static_cast<float>(effective_count);
 
     for (std::uint8_t i = 0u;
-         i < effective_count;
+         i < raw_selected_count;
          ++i) {
         const auto &source = sources[i];
 
@@ -90,7 +90,7 @@ clustered_sidecar_build_v1 build_clustered_sidecar_v1(
         out.payload.ordered_source_ids[i] =
             source.source_id;
 
-        // t18 is deliberately geometry-only. Preserve the homologous
+        // Keep the full raw first-four entity-level selection even when the\n        // material clamps N_effective below N_raw. The shader loop count lives\n        // only in b12[3].x; membership/source provenance stays independent.\n        // t18 is deliberately geometry-only. Preserve the homologous
         // position/invRange lane and raw End, while zeroing DSR-only
         // transformed source RGB/category/falloff metadata. The PTDE local
         // light contribution must therefore obtain source RGB only from t19.

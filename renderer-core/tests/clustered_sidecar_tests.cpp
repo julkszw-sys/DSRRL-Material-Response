@@ -61,7 +61,7 @@ int main()
     CHECK(built.payload.b12[1][2] == 4.0f);
     CHECK(built.payload.b12[2][0] == 2.5f);
 
-    for (std::uint32_t i=0u;i<3u;++i) {
+    for (std::uint32_t i=0u;i<4u;++i) {
         CHECK(built.payload.ordered_source_ids[i] == 100u+i);
         CHECK(built.payload.t18[i].position_inv_range ==
               sources[i].position_inv_range);
@@ -77,7 +77,7 @@ int main()
         CHECK(built.payload.t19[i] == sources[i].raw_q_end);
     }
 
-    const auto bad_count =
+    // Raw first-four membership is entity-level and must survive a material\n    // clamp to three; only b12[3].x/effective_count controls consumption.\n    CHECK(built.payload.ordered_source_ids[3] == 103u);\n    CHECK(built.payload.t19[3] == sources[3].raw_q_end);\n\n    const auto bad_count =
         point_light::build_clustered_sidecar_v1(
             sources,0u,4u,material);
     CHECK(bad_count.result ==
