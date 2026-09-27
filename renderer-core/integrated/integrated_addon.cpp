@@ -2654,21 +2654,9 @@ bool on_draw(
         return false;
     }
 
-    std::uint8_t fixed_pointlight_bound_count = 0u;
     const bool fixed_pointlight_bound =
         (route_mask &
-         k_route_fixed_pointlight) != 0u &&
-        g_fixed_pointlight_pipeline.bound_light_count(
-            cmd_list,
-            fixed_pointlight_bound_count);
-
-    if ((route_mask &
-         k_route_fixed_pointlight) != 0u &&
-        !fixed_pointlight_bound) {
-        dsrrl::runtime::
-            material_owner_selection_clear();
-        return false;
-    }
+         k_route_fixed_pointlight) != 0u;
 
     std::uint32_t receiver_id = 0u;
     bool hemenvlerp_bound = false;
@@ -2762,21 +2750,9 @@ bool on_draw_indexed(
         return false;
     }
 
-    std::uint8_t fixed_pointlight_bound_count = 0u;
     const bool fixed_pointlight_bound =
         (route_mask &
-         k_route_fixed_pointlight) != 0u &&
-        g_fixed_pointlight_pipeline.bound_light_count(
-            cmd_list,
-            fixed_pointlight_bound_count);
-
-    if ((route_mask &
-         k_route_fixed_pointlight) != 0u &&
-        !fixed_pointlight_bound) {
-        dsrrl::runtime::
-            material_owner_selection_clear();
-        return false;
-    }
+         k_route_fixed_pointlight) != 0u;
 
     std::uint32_t receiver_id = 0u;
     bool hemenvlerp_bound = false;
