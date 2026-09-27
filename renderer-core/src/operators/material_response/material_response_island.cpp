@@ -38,7 +38,7 @@ bool exact_runtime_pmetal_material_identity(
     const material_identity &identity) noexcept
 {
     namespace hashing =
-        operators::legacy_plan::hashing;
+        ::dsrrl::operators::legacy_plan::hashing;
 
     constexpr std::uint32_t k_route = 345u;
     constexpr const char *k_name =
