@@ -1,0 +1,1 @@
+CI trigger only. Runtime sources match main de03020d3b9bf6b81ab4679887983d0a798f9bd8. Validates generic exact runtime-MTD authority for all certified Material Response profiles while resource/asset operators retain owner_tuple_exact gates. Adds first-active MR route/receiver/constants log.
