@@ -54,6 +54,7 @@ std::size_t owner_material_cache_index(
         h % k_owner_material_cache_slots);
 }
 
+} // namespace
 
 bool enrich_exact_owner_mtd_identity(
     actual_material_owner_observation &observation) noexcept
