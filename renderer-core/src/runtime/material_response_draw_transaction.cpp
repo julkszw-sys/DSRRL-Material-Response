@@ -78,6 +78,81 @@ std::size_t b12_tls_cache_index(
         route_index % k_b12_tls_cache_slots);
 }
 
+struct replacement_tls_cache_entry {
+    const material_response_draw_runtime *runtime = nullptr;
+    std::uint32_t receiver_id = 0u;
+    std::uint8_t bank = 0u;
+    std::uint64_t epoch = 0u;
+    ID3D11PixelShader *shader = nullptr;
+    core::operator_mask composed_owners = 0u;
+    bool present = false;
+
+    ~replacement_tls_cache_entry()
+    {
+        if (shader != nullptr)
+            shader->Release();
+    }
+
+    void clear() noexcept
+    {
+        if (shader != nullptr)
+            shader->Release();
+        runtime = nullptr;
+        receiver_id = 0u;
+        bank = 0u;
+        epoch = 0u;
+        shader = nullptr;
+        composed_owners = 0u;
+        present = false;
+    }
+
+    void assign(
+        const material_response_draw_runtime *owner,
+        std::uint32_t receiver,
+        std::uint8_t replacement_bank,
+        std::uint64_t resource_epoch,
+        ID3D11PixelShader *value,
+        core::operator_mask owners,
+        bool exists) noexcept
+    {
+        if (runtime == owner &&
+            receiver_id == receiver &&
+            bank == replacement_bank &&
+            epoch == resource_epoch &&
+            shader == value &&
+            composed_owners == owners &&
+            present == exists)
+            return;
+
+        clear();
+        runtime = owner;
+        receiver_id = receiver;
+        bank = replacement_bank;
+        epoch = resource_epoch;
+        shader = value;
+        composed_owners = owners;
+        present = exists;
+
+        if (shader != nullptr)
+            shader->AddRef();
+    }
+};
+
+constexpr std::size_t k_replacement_tls_cache_slots = 32u;
+thread_local std::array<
+    replacement_tls_cache_entry,
+    k_replacement_tls_cache_slots>
+    g_replacement_tls_cache{};
+
+std::size_t replacement_tls_cache_index(
+    std::uint32_t receiver_id,
+    std::uint8_t bank) noexcept
+{
+    return static_cast<std::size_t>(
+        (receiver_id * 7u + bank) %
+        k_replacement_tls_cache_slots);
+}
+
 bool full_material_response_decision(
     const operators::material_response::decision &decision) noexcept
 {
@@ -103,6 +178,116 @@ material_response_draw_runtime::material_response_draw_runtime(
 material_response_draw_runtime::~material_response_draw_runtime()
 {
     release_resources();
+}
+
+bool material_response_draw_runtime::acquire_replacement(
+    replacement_bank bank,
+    std::uint32_t receiver_id,
+    replacement_record &replacement) const noexcept
+{
+    replacement = {};
+
+    const auto bank_id =
+        static_cast<std::uint8_t>(
+            bank);
+    const auto epoch =
+        resource_epoch_.load(
+            std::memory_order_acquire);
+    auto &cached =
+        g_replacement_tls_cache[
+            replacement_tls_cache_index(
+                receiver_id,
+                bank_id)];
+
+    if (cached.runtime == this &&
+        cached.receiver_id == receiver_id &&
+        cached.bank == bank_id &&
+        cached.epoch == epoch) {
+        if (!cached.present ||
+            cached.shader == nullptr)
+            return false;
+
+        cached.shader->AddRef();
+        replacement.shader =
+            cached.shader;
+        replacement.composed_owners =
+            cached.composed_owners;
+        return true;
+    }
+
+    std::lock_guard<std::mutex> lock(
+        mutex_);
+
+    const std::unordered_map<
+        std::uint32_t,
+        replacement_record> *source =
+            nullptr;
+
+    switch (bank) {
+    case replacement_bank::stable:
+        source = &replacements_;
+        break;
+    case replacement_bank::stable_spec:
+        source = &spec_rgb_replacements_;
+        break;
+    case replacement_bank::lerp:
+        source = &lerp_replacements_;
+        break;
+    case replacement_bank::lerp_spec:
+        source = &lerp_spec_rgb_replacements_;
+        break;
+    case replacement_bank::upper_lower:
+        source = &upper_lower_replacements_;
+        break;
+    case replacement_bank::upper_lower_spec:
+        source = &upper_lower_spec_rgb_replacements_;
+        break;
+    }
+
+    if (source == nullptr) {
+        cached.assign(
+            this,
+            receiver_id,
+            bank_id,
+            resource_epoch_.load(
+                std::memory_order_relaxed),
+            nullptr,
+            0u,
+            false);
+        return false;
+    }
+
+    const auto found =
+        source->find(receiver_id);
+    if (found == source->end() ||
+        found->second.shader == nullptr) {
+        cached.assign(
+            this,
+            receiver_id,
+            bank_id,
+            resource_epoch_.load(
+                std::memory_order_relaxed),
+            nullptr,
+            0u,
+            false);
+        return false;
+    }
+
+    replacement =
+        found->second;
+    replacement.shader->AddRef();
+
+    cached.assign(
+        this,
+        receiver_id,
+        bank_id,
+        resource_epoch_.load(
+            std::memory_order_relaxed),
+        replacement.shader,
+        replacement.composed_owners,
+        true);
+
+    return true;
 }
 
 void material_response_draw_runtime::release_resources() noexcept
@@ -319,6 +504,9 @@ bool material_response_draw_runtime::register_receiver_replacement(
             record);
     }
 
+    resource_epoch_.fetch_add(
+        1u,
+        std::memory_order_release);
     ++replacement_register_ok_;
     return true;
 }
@@ -381,6 +569,9 @@ bool material_response_draw_runtime::register_receiver_spec_rgb_replacement(
         spec_rgb_replacements_.emplace(receiver_id, record);
     }
 
+    resource_epoch_.fetch_add(
+        1u,
+        std::memory_order_release);
     ++replacement_register_ok_;
     return true;
 }
@@ -454,6 +645,9 @@ bool material_response_draw_runtime::register_lerp_receiver_replacement(
             record);
     }
 
+    resource_epoch_.fetch_add(
+        1u,
+        std::memory_order_release);
     ++replacement_register_ok_;
     return true;
 }
@@ -521,6 +715,9 @@ register_lerp_receiver_spec_rgb_replacement(
         lerp_spec_rgb_replacements_.emplace(receiver_id, record);
     }
 
+    resource_epoch_.fetch_add(
+        1u,
+        std::memory_order_release);
     ++replacement_register_ok_;
     return true;
 }
@@ -599,6 +796,9 @@ register_receiver_upper_lower_replacement(
             record);
     }
 
+    resource_epoch_.fetch_add(
+        1u,
+        std::memory_order_release);
     ++combined_ul_register_ok_;
     return true;
 }
@@ -670,6 +870,9 @@ register_receiver_upper_lower_spec_rgb_replacement(
         upper_lower_spec_rgb_replacements_.emplace(receiver_id, record);
     }
 
+    resource_epoch_.fetch_add(
+        1u,
+        std::memory_order_release);
     ++combined_ul_register_ok_;
     return true;
 }
@@ -699,19 +902,10 @@ bool material_response_draw_runtime::prepare_draw_request(
         return false;
 
     replacement_record replacement{};
-    {
-        std::lock_guard<std::mutex> lock(mutex_);
-        const auto found =
-            replacements_.find(decision.receiver_id);
-
-        if (found != replacements_.end() &&
-            found->second.shader != nullptr) {
-            replacement = found->second;
-            replacement.shader->AddRef();
-        }
-    }
-
-    if (replacement.shader == nullptr) {
+    if (!acquire_replacement(
+            replacement_bank::stable,
+            decision.receiver_id,
+            replacement)) {
         telemetry::hot_count(replacement_miss_);
         return false;
     }
@@ -784,21 +978,10 @@ prepare_draw_request_with_upper_lower(
         return false;
 
     replacement_record replacement{};
-    {
-        std::lock_guard<std::mutex> lock(mutex_);
-        const auto found =
-            upper_lower_replacements_.find(
-                decision.receiver_id);
-
-        if (found !=
-                upper_lower_replacements_.end() &&
-            found->second.shader != nullptr) {
-            replacement = found->second;
-            replacement.shader->AddRef();
-        }
-    }
-
-    if (replacement.shader == nullptr) {
+    if (!acquire_replacement(
+            replacement_bank::upper_lower,
+            decision.receiver_id,
+            replacement)) {
         telemetry::hot_count(combined_ul_miss_);
         return false;
     }
@@ -886,20 +1069,10 @@ prepare_lerp_draw_request_with_upper_lower(
         return false;
 
     replacement_record replacement{};
-    {
-        std::lock_guard<std::mutex> lock(mutex_);
-        const auto found =
-            lerp_replacements_.find(
-                decision.receiver_id);
-
-        if (found != lerp_replacements_.end() &&
-            found->second.shader != nullptr) {
-            replacement = found->second;
-            replacement.shader->AddRef();
-        }
-    }
-
-    if (replacement.shader == nullptr) {
+    if (!acquire_replacement(
+            replacement_bank::lerp,
+            decision.receiver_id,
+            replacement)) {
         telemetry::hot_count(combined_ul_miss_);
         return false;
     }
@@ -976,33 +1149,38 @@ bool material_response_draw_runtime::has_paired_spec_rgb_replacement(
         transactions_.quarantined())
         return false;
 
-    std::lock_guard<std::mutex> lock(mutex_);
-
-    const std::unordered_map<std::uint32_t, replacement_record> *bank =
-        nullptr;
+    replacement_bank bank =
+        replacement_bank::stable_spec;
 
     switch (prepared.family) {
     case material_response_replacement_family::stable:
-        bank = &spec_rgb_replacements_;
+        bank =
+            replacement_bank::stable_spec;
         break;
     case material_response_replacement_family::stable_upper_lower:
-        bank = &upper_lower_spec_rgb_replacements_;
+        bank =
+            replacement_bank::upper_lower_spec;
         break;
     case material_response_replacement_family::hemenvlerp_upper_lower:
-        bank = &lerp_spec_rgb_replacements_;
+        bank =
+            replacement_bank::lerp_spec;
         break;
     }
 
-    if (bank == nullptr)
+    replacement_record replacement{};
+    if (!acquire_replacement(
+            bank,
+            prepared.receiver_id,
+            replacement))
         return false;
 
-    const auto found = bank->find(prepared.receiver_id);
-    return
-        found != bank->end() &&
-        found->second.shader != nullptr &&
+    const bool match =
         material_response_spec_rgb_pair_owners_match(
             prepared.replacement_composed_owners,
-            found->second.composed_owners);
+            replacement.composed_owners);
+
+    replacement.shader->Release();
+    return match;
 }
 
 bool material_response_draw_runtime::promote_prepared_draw_to_spec_rgb(
@@ -1021,37 +1199,29 @@ bool material_response_draw_runtime::promote_prepared_draw_to_spec_rgb(
     const auto spec_owner =
         core::operator_bit(core::operator_id::spec_rgb);
 
-    replacement_record replacement{};
-    {
-        std::lock_guard<std::mutex> lock(mutex_);
+    replacement_bank bank =
+        replacement_bank::stable_spec;
 
-        const std::unordered_map<std::uint32_t, replacement_record> *bank =
-            nullptr;
-
-        switch (prepared.family) {
-        case material_response_replacement_family::stable:
-            bank = &spec_rgb_replacements_;
-            break;
-        case material_response_replacement_family::stable_upper_lower:
-            bank = &upper_lower_spec_rgb_replacements_;
-            break;
-        case material_response_replacement_family::hemenvlerp_upper_lower:
-            bank = &lerp_spec_rgb_replacements_;
-            break;
-        }
-
-        if (bank == nullptr)
-            return false;
-
-        const auto found = bank->find(prepared.receiver_id);
-        if (found != bank->end() &&
-            found->second.shader != nullptr) {
-            replacement = found->second;
-            replacement.shader->AddRef();
-        }
+    switch (prepared.family) {
+    case material_response_replacement_family::stable:
+        bank =
+            replacement_bank::stable_spec;
+        break;
+    case material_response_replacement_family::stable_upper_lower:
+        bank =
+            replacement_bank::upper_lower_spec;
+        break;
+    case material_response_replacement_family::hemenvlerp_upper_lower:
+        bank =
+            replacement_bank::lerp_spec;
+        break;
     }
 
-    if (replacement.shader == nullptr)
+    replacement_record replacement{};
+    if (!acquire_replacement(
+            bank,
+            prepared.receiver_id,
+            replacement))
         return false;
 
     const bool pair_matches =
