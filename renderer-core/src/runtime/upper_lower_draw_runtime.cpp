@@ -75,6 +75,33 @@ struct producer_tls {
     std::uint64_t pmetal_bank_b = 0;
     std::uint32_t pmetal_row_a = 0;
     std::uint32_t pmetal_row_b = 0;
+
+    // Cheap reference carrier. These fields are populated by the already
+    // attested steady/blend packers and contain no decoded D123/P_Metal
+    // payload. Expensive operator work is deferred until its exact consumer
+    // gate is known.
+    void *source_a = nullptr;
+    void *source_b = nullptr;
+    std::int32_t selector_a = -1;
+    std::int32_t selector_b = -1;
+    float source_beta = 0.0f;
+    bool reference_ready = false;
+    bool evaluated_vectors_ready = false;
+    std::array<f4,3> evaluated_directions{};
+};
+
+struct lightbank_reference_token {
+    operators::lightbank::lightbank_snapshot_fingerprint fingerprint{};
+    void *source_a = nullptr;
+    void *source_b = nullptr;
+    std::int32_t selector_a = -1;
+    std::int32_t selector_b = -1;
+    float beta = 0.0f;
+    std::array<f4,3> directions{};
+    f4 upper{};
+    f4 lower{};
+    bool valid = false;
+    bool available = false;
 };
 
 struct steady_q_cache_entry {
@@ -396,6 +423,24 @@ std::atomic<std::uint64_t> g_snapshot_epoch{1u};
 thread_local producer_tls g_producer{};
 thread_local std::shared_ptr<const snapshot> g_draw_snapshot{};
 thread_local selector_snapshot_tls g_selector_snapshot{};
+
+// The old owner->shared_ptr snapshot registry was correct but far too
+// expensive under geometry-heavy scenes. The cache-builder architecture uses
+// a bounded 2-way TLS registry carrying only references plus the exact
+// freshness fingerprint. No heap allocation, mutex, shared_ptr or global
+// epoch participates in this path.
+constexpr std::size_t k_reference_token_sets = 32u;
+constexpr std::size_t k_reference_token_ways = 2u;
+constexpr std::size_t k_reference_token_entries =
+    k_reference_token_sets * k_reference_token_ways;
+thread_local std::array<
+    lightbank_reference_token,
+    k_reference_token_entries>
+    g_reference_tokens{};
+thread_local std::array<std::uint8_t,k_reference_token_sets>
+    g_reference_token_victim{};
+thread_local lightbank_reference_token
+    g_draw_reference_token{};
 
 std::atomic_bool g_enabled{false};
 std::atomic_bool g_quarantined{false};
@@ -846,6 +891,369 @@ bool read_assignment_tuple(
         &beta_bits,
         raw.data() + 4u,
         sizeof(beta_bits));
+    return true;
+}
+
+
+std::size_t reference_token_set(
+    std::uintptr_t owner) noexcept
+{
+    const auto mixed =
+        (owner >> 4u) ^
+        (owner >> 17u) ^
+        (owner >> 31u);
+
+    return static_cast<std::size_t>(
+        mixed &
+        (k_reference_token_sets - 1u));
+}
+
+bool read_assignment_tuple_attested(
+    const std::uint8_t *assignment,
+    std::uint16_t &selector_a,
+    std::uint16_t &selector_b,
+    std::uint32_t &beta_bits) noexcept
+{
+    selector_a = 0u;
+    selector_b = 0u;
+    beta_bits = 0u;
+
+    if (assignment == nullptr)
+        return false;
+
+    // run_wrapper calls this only after the original engine wrapper consumed
+    // the same assignment object. The memory is therefore live for this
+    // transaction; avoid VirtualQuery on every producer event.
+    std::array<std::uint8_t,8> raw{};
+    std::memcpy(
+        raw.data(),
+        assignment + 8u,
+        raw.size());
+    std::memcpy(
+        &selector_a,
+        raw.data(),
+        sizeof(selector_a));
+    std::memcpy(
+        &selector_b,
+        raw.data() + 2u,
+        sizeof(selector_b));
+    std::memcpy(
+        &beta_bits,
+        raw.data() + 4u,
+        sizeof(beta_bits));
+    return true;
+}
+
+bool read_selector_tuple_attested(
+    const std::uint8_t *descriptor,
+    std::uint16_t &selector_a,
+    std::uint16_t &selector_b,
+    std::uint32_t &beta_bits) noexcept
+{
+    selector_a = 0u;
+    selector_b = 0u;
+    beta_bits = 0u;
+
+    if (descriptor == nullptr)
+        return false;
+
+    // descriptor is supplied only from the three exact 0x22BA20 return-site
+    // register mappings. It has just been consumed by the engine selector.
+    std::array<std::uint8_t,8> raw{};
+    std::memcpy(
+        raw.data(),
+        descriptor + 0x4Cu,
+        raw.size());
+    std::memcpy(
+        &selector_a,
+        raw.data(),
+        sizeof(selector_a));
+    std::memcpy(
+        &selector_b,
+        raw.data() + 2u,
+        sizeof(selector_b));
+    std::memcpy(
+        &beta_bits,
+        raw.data() + 4u,
+        sizeof(beta_bits));
+    return true;
+}
+
+void publish_reference_token(
+    const producer_tls &producer) noexcept
+{
+    if (!producer.reference_ready ||
+        !producer.evaluated_vectors_ready ||
+        !producer.have_upper ||
+        !producer.have_lower ||
+        producer.owner == 0u ||
+        producer.assignment == nullptr ||
+        producer.source_a == nullptr ||
+        producer.source_b == nullptr ||
+        producer.selector_a < 0 ||
+        producer.selector_b < 0 ||
+        !std::isfinite(producer.source_beta))
+        return;
+
+    std::uint16_t selector_a = 0u;
+    std::uint16_t selector_b = 0u;
+    std::uint32_t beta_bits = 0u;
+    if (!read_assignment_tuple_attested(
+            producer.assignment,
+            selector_a,
+            selector_b,
+            beta_bits))
+        return;
+
+    lightbank_reference_token token{};
+    token.fingerprint = {
+        producer.owner,
+        selector_a,
+        selector_b,
+        beta_bits
+    };
+    token.source_a = producer.source_a;
+    token.source_b = producer.source_b;
+    token.selector_a = producer.selector_a;
+    token.selector_b = producer.selector_b;
+    token.beta = producer.source_beta;
+    token.directions =
+        producer.evaluated_directions;
+    token.upper = producer.upper;
+    token.lower = producer.lower;
+    token.valid = true;
+    token.available = true;
+
+    const auto set =
+        reference_token_set(
+            producer.owner);
+    const auto base =
+        set * k_reference_token_ways;
+
+    for (std::size_t way = 0u;
+         way < k_reference_token_ways;
+         ++way) {
+        auto &entry =
+            g_reference_tokens[base + way];
+        if (entry.valid &&
+            entry.fingerprint.owner_context ==
+                producer.owner) {
+            entry = token;
+            return;
+        }
+    }
+
+    for (std::size_t way = 0u;
+         way < k_reference_token_ways;
+         ++way) {
+        auto &entry =
+            g_reference_tokens[base + way];
+        if (!entry.valid ||
+            !entry.available) {
+            entry = token;
+            return;
+        }
+    }
+
+    const auto victim =
+        static_cast<std::size_t>(
+            g_reference_token_victim[set]++ &
+            static_cast<std::uint8_t>(
+                k_reference_token_ways - 1u));
+    g_reference_tokens[base + victim] =
+        token;
+}
+
+lightbank_reference_token *find_reference_token(
+    std::uintptr_t owner) noexcept
+{
+    if (owner == 0u)
+        return nullptr;
+
+    const auto set =
+        reference_token_set(owner);
+    const auto base =
+        set * k_reference_token_ways;
+
+    for (std::size_t way = 0u;
+         way < k_reference_token_ways;
+         ++way) {
+        auto &entry =
+            g_reference_tokens[base + way];
+        if (entry.valid &&
+            entry.available &&
+            entry.fingerprint.owner_context ==
+                owner)
+            return &entry;
+    }
+
+    return nullptr;
+}
+
+bool capture_evaluated_vectors(
+    void *dst,
+    producer_tls &producer) noexcept
+{
+    if (dst == nullptr)
+        return false;
+
+    const auto *bytes =
+        static_cast<const std::uint8_t *>(dst);
+
+    for (std::size_t i = 0u;
+         i < producer.evaluated_directions.size();
+         ++i)
+        std::memcpy(
+            &producer.evaluated_directions[i],
+            bytes + i * sizeof(f4),
+            sizeof(f4));
+
+    std::memcpy(
+        &producer.upper,
+        bytes + k_q_upper_offset,
+        sizeof(producer.upper));
+    std::memcpy(
+        &producer.lower,
+        bytes + k_q_lower_offset,
+        sizeof(producer.lower));
+
+    producer.have_upper = true;
+    producer.have_lower = true;
+    producer.evaluated_vectors_ready = true;
+    return true;
+}
+
+bool capture_source_reference(
+    void *source_a,
+    std::int32_t selector_a,
+    void *source_b,
+    std::int32_t selector_b,
+    float beta,
+    producer_tls &producer) noexcept
+{
+    if (source_a == nullptr ||
+        source_b == nullptr ||
+        selector_a < 0 ||
+        selector_b < 0 ||
+        !std::isfinite(beta))
+        return false;
+
+    producer.source_a = source_a;
+    producer.source_b = source_b;
+    producer.selector_a = selector_a;
+    producer.selector_b = selector_b;
+    producer.source_beta = beta;
+    producer.reference_ready = true;
+    return true;
+}
+
+bool decode_d123_colors_only(
+    const lightbank_reference_token &token,
+    std::array<f4,3> &colors) noexcept
+{
+    colors = {};
+
+    if (!token.valid ||
+        token.source_a == nullptr ||
+        token.source_b == nullptr ||
+        token.selector_a < 0 ||
+        token.selector_b < 0 ||
+        !std::isfinite(token.beta))
+        return false;
+
+    const auto *raw_a =
+        resolve_raw_lightbank_record(
+            token.source_a,
+            token.selector_a);
+    const auto *raw_b =
+        resolve_raw_lightbank_record(
+            token.source_b,
+            token.selector_b);
+
+    if (raw_a == nullptr &&
+        raw_b == nullptr)
+        return false;
+
+    const std::uint8_t *eval_a = raw_a;
+    const std::uint8_t *eval_b = raw_b;
+    float beta = token.beta;
+
+    if (raw_a != nullptr &&
+        (token.selector_a ==
+             token.selector_b ||
+         raw_b == nullptr ||
+         beta <= 0.0f)) {
+        eval_b = raw_a;
+        beta = 0.0f;
+    } else if (
+        raw_b != nullptr &&
+        (raw_a == nullptr ||
+         beta >= 1.0f)) {
+        eval_a = raw_b;
+        eval_b = raw_b;
+        beta = 0.0f;
+    }
+
+    if (eval_a == nullptr ||
+        eval_b == nullptr)
+        return false;
+
+    for (std::size_t i = 0u;
+         i < colors.size();
+         ++i) {
+        raw_rgbm a{};
+        raw_rgbm b{};
+        std::memcpy(
+            &a,
+            eval_a + i * 0x0Cu + 0x04u,
+            sizeof(a));
+        std::memcpy(
+            &b,
+            eval_b + i * 0x0Cu + 0x04u,
+            sizeof(b));
+
+        colors[i] =
+            beta == 0.0f
+                ? decode_rgbm(a)
+                : lerp4(
+                    decode_rgbm(a),
+                    decode_rgbm(b),
+                    beta);
+
+        if (!std::isfinite(colors[i].x) ||
+            !std::isfinite(colors[i].y) ||
+            !std::isfinite(colors[i].z))
+            return false;
+    }
+
+    return true;
+}
+
+bool build_hemdir3_reference_payload(
+    const lightbank_reference_token &token,
+    std::array<f4,8> &payload) noexcept
+{
+    payload = {};
+    if (!token.valid)
+        return false;
+
+    std::array<f4,3> colors{};
+    if (!decode_d123_colors_only(
+            token,
+            colors))
+        return false;
+
+    for (std::size_t i = 0u;
+         i < 3u;
+         ++i) {
+        payload[i] =
+            token.directions[i];
+        payload[3u + i] =
+            colors[i];
+    }
+
+    payload[6] = token.upper;
+    payload[7] = token.lower;
     return true;
 }
 
@@ -2222,8 +2630,11 @@ void *run_wrapper(
     // owner runtime proved that this extended stack is the geometry-scaled
     // performance failure while direct U/L alone is not.
     if (g_steady_cache_builder_active.load(
-            std::memory_order_acquire))
+            std::memory_order_acquire)) {
+        publish_reference_token(
+            completed);
         return result;
+    }
 
     if (!completed.have_upper ||
         !completed.have_lower) {
@@ -2387,8 +2798,22 @@ void __fastcall hook_steady_packer(
             selector);
 
     if (g_steady_cache_builder_active.load(
-            std::memory_order_acquire))
+            std::memory_order_acquire)) {
+        if (g_producer.active &&
+            capture_source_reference(
+                source,
+                selector,
+                source,
+                selector,
+                0.0f,
+                g_producer) &&
+            capture_evaluated_vectors(
+                dst,
+                g_producer))
+            telemetry::hot_count(
+                g_steady_pass);
         return;
+    }
 
     if (!g_producer.active)
         return;
@@ -2558,12 +2983,23 @@ void *__fastcall hook_blend_packer(
         telemetry::hot_count(g_direct_ul_blend_inject);
     }
 
-    // In cache-builder mode the old wrapper snapshot stack is intentionally
-    // disabled, so D123 computed here would be discarded by run_wrapper().
-    // Keep true U/L blend direct and cheap; HemDir3 gets a separate carrier.
+    // In cache-builder mode carry only source references plus the already
+    // evaluated direction/U-L vectors. D123 colors and P_Metal donor lookup
+    // are deferred until their exact consumer gates.
     if (g_steady_cache_builder_active.load(
-            std::memory_order_acquire))
+            std::memory_order_acquire)) {
+        if (capture_source_reference(
+                source_a,
+                selector_a,
+                source_b,
+                selector_b,
+                beta,
+                g_producer))
+            (void)capture_evaluated_vectors(
+                dst,
+                g_producer);
         return result;
+    }
 
     const auto *raw_a =
         resolve_raw_lightbank_record(
@@ -2768,13 +3204,15 @@ bool install_producer_hooks() noexcept
             g_steady_cache_builder_hook.trampoline);
 
     // Cache-builder architecture: wrapper5/6 + blend helper + blend
-    // packer are required only for true interior blend. The legacy steady
-    // packer (g_hooks[3], RVA 0x563B80) and evaluator-tail detour
-    // (0x5634E7) stay prepared for rollback/provenance but are deliberately
-    // NOT armed. Steady U/L is carried exclusively by 0x563590.
+    // packer are required for true interior blend. The steady packer
+    // (g_hooks[3], RVA 0x563B80) is armed only as a reference-token tap:
+    // it copies engine-attested source/selector and already-evaluated vectors
+    // without D123/P_Metal decoding. Evaluator-tail 0x5634E7 stays unarmed.
+    // Steady U/L correction itself is carried exclusively by 0x563590.
     if (!arm_hook(g_hooks[0]) ||
         !arm_hook(g_hooks[1]) ||
         !arm_hook(g_hooks[2]) ||
+        !arm_hook(g_hooks[3]) ||
         !arm_hook(g_hooks[4]) ||
         !arm_hook(
             g_steady_cache_builder_hook))
@@ -2844,15 +3282,12 @@ bool restore_producer_hooks() noexcept
     return ok;
 }
 
-ID3D11Buffer *realize_b13(
-    const std::shared_ptr<const snapshot> &selected,
+ID3D11Buffer *realize_b13_payload(
+    const std::array<f4,8> &payload,
     ID3D11DeviceContext *context,
     bool hemdir3_combined) noexcept
 {
-    if (!selected ||
-        context == nullptr ||
-        (hemdir3_combined &&
-         !selected->d123_ready))
+    if (context == nullptr)
         return nullptr;
 
     auto *slot =
@@ -2875,11 +3310,6 @@ ID3D11Buffer *realize_b13(
         hemdir3_combined
             ? slot->hemdir3_last_valid
             : slot->ul_last_valid;
-
-    const auto &payload =
-        hemdir3_combined
-            ? selected->hemdir3_payload
-            : selected->ul_payload;
 
     bool created = false;
 
@@ -2926,22 +3356,47 @@ ID3D11Buffer *realize_b13(
 
     if (hemdir3_combined) {
         if (created)
-            telemetry::hot_count(g_hemdir3_b13_create);
+            telemetry::hot_count(
+                g_hemdir3_b13_create);
         else
-            telemetry::hot_count(g_hemdir3_b13_hit);
+            telemetry::hot_count(
+                g_hemdir3_b13_hit);
     } else {
         if (created)
-            telemetry::hot_count(g_b13_create);
+            telemetry::hot_count(
+                g_b13_create);
         else
-            telemetry::hot_count(g_b13_hit);
+            telemetry::hot_count(
+                g_b13_hit);
     }
 
     return buffer;
 }
 
+ID3D11Buffer *realize_b13(
+    const std::shared_ptr<const snapshot> &selected,
+    ID3D11DeviceContext *context,
+    bool hemdir3_combined) noexcept
+{
+    if (!selected ||
+        (hemdir3_combined &&
+         !selected->d123_ready))
+        return nullptr;
+
+    return realize_b13_payload(
+        hemdir3_combined
+            ? selected->hemdir3_payload
+            : selected->ul_payload,
+        context,
+        hemdir3_combined);
+}
+
 void clear_snapshots() noexcept
 {
     g_draw_snapshot.reset();
+    g_draw_reference_token = {};
+    g_reference_tokens = {};
+    g_reference_token_victim = {};
     clear_b13_upload_slots();
     g_selector_snapshot = {};
     g_selector_window = {};
@@ -3044,10 +3499,7 @@ void upper_lower_draw_runtime::selector_event(
 {
     telemetry::hot_count(g_selector_seen);
     g_draw_snapshot.reset();
-
-    if (g_steady_cache_builder_active.load(
-            std::memory_order_acquire))
-        return;
+    g_draw_reference_token = {};
 
     if (!g_enabled.load() ||
         g_quarantined.load() ||
@@ -3083,6 +3535,63 @@ void upper_lower_draw_runtime::selector_event(
 
     if (descriptor == nullptr) {
         telemetry::hot_count(g_selector_miss);
+        return;
+    }
+
+    if (g_steady_cache_builder_active.load(
+            std::memory_order_acquire)) {
+        const auto owner_key =
+            reinterpret_cast<std::uintptr_t>(
+                owner);
+
+        auto *candidate =
+            find_reference_token(
+                owner_key);
+        if (candidate == nullptr) {
+            telemetry::hot_count(
+                g_selector_miss);
+            return;
+        }
+
+        std::uint16_t selector_a = 0u;
+        std::uint16_t selector_b = 0u;
+        std::uint32_t beta_bits = 0u;
+        if (!read_selector_tuple_attested(
+                descriptor,
+                selector_a,
+                selector_b,
+                beta_bits)) {
+            candidate->available = false;
+            telemetry::hot_count(
+                g_selector_miss);
+            return;
+        }
+
+        const operators::lightbank::
+            lightbank_snapshot_fingerprint draw{
+                owner_key,
+                selector_a,
+                selector_b,
+                beta_bits
+            };
+
+        if (!operators::lightbank::
+                lightbank_snapshot_matches_draw(
+                    candidate->fingerprint,
+                    draw)) {
+            candidate->available = false;
+            telemetry::hot_count(
+                g_tuple_mismatch);
+            return;
+        }
+
+        g_draw_reference_token =
+            *candidate;
+        g_draw_reference_token.available =
+            false;
+        candidate->available = false;
+        telemetry::hot_count(
+            g_selector_match);
         return;
     }
 
@@ -3178,8 +3687,35 @@ bool upper_lower_draw_runtime::prepare_upper_lower_carrier(
 
     if (!g_enabled.load() ||
         g_quarantined.load() ||
-        context == nullptr ||
-        !g_draw_snapshot)
+        context == nullptr)
+        return false;
+
+    if (g_steady_cache_builder_active.load(
+            std::memory_order_acquire)) {
+        if (!g_draw_reference_token.valid)
+            return false;
+
+        std::array<f4,8> payload{};
+        payload[6] =
+            g_draw_reference_token.upper;
+        payload[7] =
+            g_draw_reference_token.lower;
+
+        auto *b13 =
+            realize_b13_payload(
+                payload,
+                context,
+                false);
+        if (b13 == nullptr)
+            return false;
+
+        prepared.b13 = b13;
+        prepared.ready = true;
+        telemetry::hot_count(g_requests);
+        return true;
+    }
+
+    if (!g_draw_snapshot)
         return false;
 
     // install() is only reached after the integrated feature registry has
@@ -3235,8 +3771,40 @@ bool upper_lower_draw_runtime::prepare_hemdir3_carrier(
 
     if (!g_enabled.load() ||
         g_quarantined.load() ||
-        context == nullptr ||
-        !g_draw_snapshot ||
+        context == nullptr)
+        return false;
+
+    if (g_steady_cache_builder_active.load(
+            std::memory_order_acquire)) {
+        if (!g_draw_reference_token.valid)
+            return false;
+
+        std::array<f4,8> payload{};
+        if (!build_hemdir3_reference_payload(
+                g_draw_reference_token,
+                payload))
+            return false;
+
+        auto *b13 =
+            realize_b13_payload(
+                payload,
+                context,
+                true);
+        if (b13 == nullptr)
+            return false;
+
+        prepared.b13 = b13;
+        prepared.fingerprint =
+            g_draw_reference_token.fingerprint;
+        prepared.d123_ready = true;
+        prepared.upper_lower_ready = true;
+        prepared.ready = true;
+        telemetry::hot_count(
+            g_hemdir3_carrier_requests);
+        return true;
+    }
+
+    if (!g_draw_snapshot ||
         !g_draw_snapshot->d123_ready)
         return false;
 
@@ -3271,8 +3839,77 @@ bool upper_lower_draw_runtime::selected_pmetal_env_source(
     out = {};
 
     if (!g_enabled.load() ||
-        g_quarantined.load() ||
-        !g_pmetal_env_hook_armed.load() ||
+        g_quarantined.load())
+        return false;
+
+    if (g_steady_cache_builder_active.load(
+            std::memory_order_acquire)) {
+        const auto &token =
+            g_draw_reference_token;
+        if (!token.valid ||
+            token.source_a == nullptr ||
+            token.source_b == nullptr ||
+            token.selector_a < 0 ||
+            token.selector_b < 0 ||
+            !std::isfinite(token.beta))
+            return false;
+
+        f4 a{};
+        f4 b{};
+        std::uint64_t bank_a = 0u;
+        std::uint64_t bank_b = 0u;
+        std::uint32_t row_a = 0u;
+        std::uint32_t row_b = 0u;
+
+        if (!read_exact_pmetal_env_source(
+                token.source_a,
+                token.selector_a,
+                a,
+                bank_a,
+                row_a))
+            return false;
+
+        if (token.beta <= 0.0f) {
+            b = a;
+            bank_b = bank_a;
+            row_b = row_a;
+        } else if (!read_exact_pmetal_env_source(
+                       token.source_b,
+                       token.selector_b,
+                       b,
+                       bank_b,
+                       row_b)) {
+            return false;
+        }
+
+        if (token.beta >= 1.0f) {
+            a = b;
+            bank_a = bank_b;
+            row_a = row_b;
+        }
+
+        out.a = {a.x,a.y,a.z};
+        out.b = {b.x,b.y,b.z};
+        out.beta =
+            std::clamp(
+                token.beta,
+                0.0f,
+                1.0f);
+        out.bank_signature_a = bank_a;
+        out.bank_signature_b = bank_b;
+        out.row_id_a = row_a;
+        out.row_id_b = row_b;
+
+        return
+            std::isfinite(out.a[0]) &&
+            std::isfinite(out.a[1]) &&
+            std::isfinite(out.a[2]) &&
+            std::isfinite(out.b[0]) &&
+            std::isfinite(out.b[1]) &&
+            std::isfinite(out.b[2]);
+    }
+
+    if (!g_pmetal_env_hook_armed.load() ||
         !g_draw_snapshot ||
         !g_draw_snapshot->pmetal_env_ready)
         return false;
@@ -3317,6 +3954,7 @@ void upper_lower_draw_runtime::release_prepared_draw(
 void upper_lower_draw_runtime::consume_draw_selection() noexcept
 {
     g_draw_snapshot.reset();
+    g_draw_reference_token = {};
 }
 
 void upper_lower_draw_runtime::on_destroy_device(
