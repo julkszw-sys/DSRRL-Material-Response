@@ -45,6 +45,7 @@ def main():
     require(draw_cpp,"g_retained_selector","retained selector")
     require(draw_cpp,"mirror_first_four","independent first-four mirror")
     require(draw_cpp,"capture_source","raw source capture")
+    require(draw_cpp,"executable_address(target)","source vfunc executable gate")
     require(draw_cpp,"0x55FC70u","retained selector RVA")
     require(flver_cpp,"k_builder=0x22084Fu","ordinary builder hook")
     require(flver_cpp,"builder_armed=true","builder hook attestation")
