@@ -6,6 +6,7 @@
 #endif
 
 #include "dsrrl/runtime/upper_lower_draw_runtime.hpp"
+#include "dsrrl/runtime/runtime_hot_telemetry.hpp"
 #include "dsrrl/runtime/flver_identity_transport.hpp"
 #include "dsrrl/operators/lightbank/snapshot_freshness.hpp"
 #include "dsrrl/operators/lightbank/hemdir3.hpp"
@@ -1732,7 +1733,7 @@ void publish_snapshot(
             };
         }
 
-        ++g_d123_snapshot_publish;
+        telemetry::hot_count(g_d123_snapshot_publish);
     }
 
     try {
@@ -1758,7 +1759,7 @@ void publish_snapshot(
                 ul_payload,
                 hemdir3_payload,
                 producer)) {
-            ++g_snapshot_publish;
+            telemetry::hot_count(g_snapshot_publish);
             return;
         }
 
@@ -1797,7 +1798,7 @@ void publish_snapshot(
             1u,
             std::memory_order_release);
 
-        ++g_snapshot_publish;
+        telemetry::hot_count(g_snapshot_publish);
     } catch (...) {
     }
 }
@@ -1810,7 +1811,7 @@ void *run_wrapper(
     void *assignment,
     float x) noexcept
 {
-    ++counter;
+    telemetry::hot_count(counter);
 
     const auto previous =
         g_producer;
@@ -1958,7 +1959,7 @@ void __fastcall hook_steady_eval_tail(
             selector,
             upper,
             lower)) {
-        ++g_direct_ul_inject_fail;
+        telemetry::hot_count(g_direct_ul_inject_fail);
         return;
     }
 
@@ -1966,7 +1967,7 @@ void __fastcall hook_steady_eval_tail(
         dst,
         upper,
         lower);
-    ++g_direct_ul_steady_inject;
+    telemetry::hot_count(g_direct_ul_steady_inject);
 }
 
 void __fastcall hook_steady_packer(
@@ -1974,7 +1975,7 @@ void __fastcall hook_steady_packer(
     void *dst,
     std::int32_t selector) noexcept
 {
-    ++g_steady_seen;
+    telemetry::hot_count(g_steady_seen);
 
     if (g_steady_packer_orig != nullptr)
         g_steady_packer_orig(
@@ -2004,9 +2005,9 @@ void __fastcall hook_steady_packer(
             g_producer.pmetal_bank_b = bank;
             g_producer.pmetal_row_a = row;
             g_producer.pmetal_row_b = row;
-            ++g_pmetal_env_steady;
+            telemetry::hot_count(g_pmetal_env_steady);
         } else {
-            ++g_pmetal_env_miss;
+            telemetry::hot_count(g_pmetal_env_miss);
         }
     }
 
@@ -2036,10 +2037,10 @@ void __fastcall hook_steady_packer(
             0.0f,
             g_producer.d123)) {
         g_producer.have_d123 = true;
-        ++g_d123_steady;
+        telemetry::hot_count(g_d123_steady);
     }
 
-    ++g_steady_pass;
+    telemetry::hot_count(g_steady_pass);
 }
 
 void *__fastcall hook_blend(
@@ -2048,7 +2049,7 @@ void *__fastcall hook_blend(
     const void *b,
     float beta) noexcept
 {
-    ++g_blend_seen;
+    telemetry::hot_count(g_blend_seen);
 
 #if defined(_MSC_VER)
     const auto return_address =
@@ -2088,11 +2089,11 @@ void *__fastcall hook_blend(
                     k_ret_blend_upper) {
                     g_producer.upper = value;
                     g_producer.have_upper = true;
-                    ++g_blend_upper;
+                    telemetry::hot_count(g_blend_upper);
                 } else {
                     g_producer.lower = value;
                     g_producer.have_lower = true;
-                    ++g_blend_lower;
+                    telemetry::hot_count(g_blend_lower);
                 }
             }
         }
@@ -2141,7 +2142,7 @@ void *__fastcall hook_blend_packer(
             dst,
             g_producer.upper,
             g_producer.lower);
-        ++g_direct_ul_blend_inject;
+        telemetry::hot_count(g_direct_ul_blend_inject);
     }
 
     const auto *raw_a =
@@ -2241,10 +2242,10 @@ void __fastcall hook_pmetal_env_blend(
         g_producer.pmetal_bank_b = bank_b;
         g_producer.pmetal_row_a = row_a;
         g_producer.pmetal_row_b = row_b;
-        ++g_pmetal_env_blend;
+        telemetry::hot_count(g_pmetal_env_blend);
     } else {
         g_producer.have_pmetal_env = false;
-        ++g_pmetal_env_miss;
+        telemetry::hot_count(g_pmetal_env_miss);
     }
 }
 
@@ -2478,14 +2479,14 @@ ID3D11Buffer *realize_b13(
 
     if (hemdir3_combined) {
         if (created)
-            ++g_hemdir3_b13_create;
+            telemetry::hot_count(g_hemdir3_b13_create);
         else
-            ++g_hemdir3_b13_hit;
+            telemetry::hot_count(g_hemdir3_b13_hit);
     } else {
         if (created)
-            ++g_b13_create;
+            telemetry::hot_count(g_b13_create);
         else
-            ++g_b13_hit;
+            telemetry::hot_count(g_b13_hit);
     }
 
     return buffer;
@@ -2593,7 +2594,7 @@ void upper_lower_draw_runtime::selector_event(
     void *r14,
     void *r15) noexcept
 {
-    ++g_selector_seen;
+    telemetry::hot_count(g_selector_seen);
     g_draw_snapshot.reset();
 
     if (!g_enabled.load() ||
@@ -2629,7 +2630,7 @@ void upper_lower_draw_runtime::selector_event(
         return;
 
     if (descriptor == nullptr) {
-        ++g_selector_miss;
+        telemetry::hot_count(g_selector_miss);
         return;
     }
 
@@ -2642,7 +2643,7 @@ void upper_lower_draw_runtime::selector_event(
             selector_a,
             selector_b,
             beta_bits)) {
-        ++g_selector_miss;
+        telemetry::hot_count(g_selector_miss);
         return;
     }
 
@@ -2682,7 +2683,7 @@ void upper_lower_draw_runtime::selector_event(
     }
 
     if (!selected) {
-        ++g_selector_miss;
+        telemetry::hot_count(g_selector_miss);
         return;
     }
 
@@ -2699,13 +2700,13 @@ void upper_lower_draw_runtime::selector_event(
             lightbank_snapshot_matches_draw(
                 selected->fingerprint,
                 draw)) {
-        ++g_tuple_mismatch;
+        telemetry::hot_count(g_tuple_mismatch);
         return;
     }
 
     g_draw_snapshot =
         std::move(selected);
-    ++g_selector_match;
+    telemetry::hot_count(g_selector_match);
 }
 
 bool upper_lower_draw_runtime::direct_producer_active() const noexcept
@@ -2747,7 +2748,7 @@ bool upper_lower_draw_runtime::prepare_upper_lower_carrier(
     // consumer), never here.
     prepared.b13 = b13;
     prepared.ready = true;
-    ++g_requests;
+    telemetry::hot_count(g_requests);
     return true;
 }
 
@@ -2799,7 +2800,7 @@ bool upper_lower_draw_runtime::prepare_hemdir3_carrier(
     prepared.d123_ready = true;
     prepared.upper_lower_ready = true;
     prepared.ready = true;
-    ++g_hemdir3_carrier_requests;
+    telemetry::hot_count(g_hemdir3_carrier_requests);
     return true;
 }
 
