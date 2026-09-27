@@ -1124,6 +1124,7 @@ void log_effect_matrix(
         "receiver_source=%u repl=%u probe=%u spec=%u b12=%u request=%u fail=0x%08X "
         "PMSRC obs=%u A=%s sel=%d count=%u sig=%016llX row=%u "
         "B=%s sel=%d count=%u sig=%016llX row=%u beta=%.6f "
+        "REF pub=%u ptid=%u sel_evt=%u stid=%u cand=%u tuple=%u match=%u drawtok=%u "
         "UL producer=%u changed=%u quarantine=%u restore_fail=%u "
         "Bloom diag_hooks=%u/%u model_hook=%u proof=%u contents=%u "
         "fx_authorized=%llu fx_rejected=%llu",
@@ -1165,6 +1166,14 @@ void log_effect_matrix(
             pmetal_source.b.row_id),
         static_cast<double>(
             pmetal_source.beta),
+        pmetal_source.producer_publish_seen ? 1u : 0u,
+        static_cast<unsigned>(pmetal_source.producer_publish_tid),
+        pmetal_source.selector_relevant_seen ? 1u : 0u,
+        static_cast<unsigned>(pmetal_source.selector_tid),
+        pmetal_source.selector_candidate_found ? 1u : 0u,
+        pmetal_source.selector_tuple_read ? 1u : 0u,
+        pmetal_source.selector_tuple_match ? 1u : 0u,
+        pmetal_source.draw_token_selected ? 1u : 0u,
         ul.direct_ul_producer_active ? 1u : 0u,
         ul.direct_ul_operator_changed ? 1u : 0u,
         ul.quarantined ? 1u : 0u,
