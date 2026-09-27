@@ -109,6 +109,10 @@ void material_response_draw_runtime::release_resources() noexcept
 {
     std::lock_guard<std::mutex> lock(mutex_);
 
+    resource_epoch_.fetch_add(
+        1u,
+        std::memory_order_release);
+
     for (auto &entry : replacements_) {
         auto *shader = entry.second.shader;
         if (shader != nullptr)
@@ -162,10 +166,6 @@ void material_response_draw_runtime::release_resources() noexcept
         device_->Release();
         device_ = nullptr;
     }
-
-    resource_epoch_.fetch_add(
-        1u,
-        std::memory_order_release);
 }
 
 void material_response_draw_runtime::on_init_device(
@@ -205,6 +205,10 @@ void material_response_draw_runtime::on_destroy_device(
     if (native != device_)
         return;
 
+    resource_epoch_.fetch_add(
+        1u,
+        std::memory_order_release);
+
     for (auto &entry : replacements_) {
         auto *shader = entry.second.shader;
         if (shader != nullptr)
@@ -258,10 +262,6 @@ void material_response_draw_runtime::on_destroy_device(
         device_->Release();
         device_ = nullptr;
     }
-
-    resource_epoch_.fetch_add(
-        1u,
-        std::memory_order_release);
 }
 
 bool material_response_draw_runtime::register_receiver_replacement(
