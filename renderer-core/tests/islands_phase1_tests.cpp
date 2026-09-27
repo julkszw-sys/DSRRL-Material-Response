@@ -2,6 +2,8 @@
 #include "dsrrl/operators/material_response/material_response_island.hpp"
 #include "dsrrl/operators/material_response/material_response_seed.hpp"
 #include "dsrrl/operators/material_response/generated_material_constants_v1.hpp"
+#include "dsrrl/operators/material_response/generated_envspec_router_v1.hpp"
+#include "dsrrl/operators/material_response/generated_dsr_flver_owner_tuples_v1.hpp"
 #include "dsrrl/operators/material_response/material_response_b12_payload.hpp"
 #include "dsrrl/core/island_policy.hpp"
 #include "dsrrl/core/draw_transaction_policy.hpp"
@@ -183,6 +185,94 @@ int main()
     CHECK(seeded.receiver_recipe_count() == 24);
     CHECK(register_confirmed_material_routes_v1(seeded) == 35);
     CHECK(seeded.material_profile_count() == 35);
+
+    // The direct PointLight NoSpc path is intentionally not registered as a
+    // generic Material Response profile. Recover exact c100 only after an
+    // authenticated FLVER+slot owner tuple and exact name+raw-MTD pair.
+    material_identity exact_nospc{};
+    exact_nospc.valid=true;
+    exact_nospc.semantic_name_hash=
+        mtd_semantic_hash("A10_Sky[Dn]_LS.mtd");
+    bool nospc_record_found=false;
+    for(const auto &record:
+        generated::k_envspec_router_v1){
+        if(record.state!=generated::envspec_router_state::nospc_host ||
+           record.semantic_name_hash!=exact_nospc.semantic_name_hash)
+            continue;
+        CHECK(!nospc_record_found);
+        exact_nospc.raw_mtd_sha256=record.raw_mtd_sha256;
+        nospc_record_found=true;
+    }
+    CHECK(nospc_record_found);
+
+    bool nospc_owner_found=false;
+    for(const auto &group:
+        generated::k_dsr_flver_owner_groups){
+        for(std::uint32_t slot=0u;
+            slot<group.material_count;
+            ++slot){
+            const auto index=
+                static_cast<std::size_t>(
+                    group.first_material)+slot;
+            if(generated::k_dsr_flver_owner_mtd_hashes[index]!=
+               exact_nospc.semantic_name_hash)
+                continue;
+            exact_nospc.flver_sha256=group.flver_sha256;
+            exact_nospc.material_slot=slot;
+            exact_nospc.material_slot_valid=true;
+            exact_nospc.owner_tuple_exact=true;
+            nospc_owner_found=true;
+            break;
+        }
+        if(nospc_owner_found) break;
+    }
+    CHECK(nospc_owner_found);
+
+    const auto direct_nospc=
+        seeded.evaluate_direct_pointlight_material(
+            exact_nospc,
+            false);
+    CHECK(direct_nospc.active);
+    CHECK(direct_nospc.reason==decision_reason::active);
+    CHECK(direct_nospc.certified_operations==
+          diffuse_material_domain_linear);
+    CHECK(direct_nospc.c100[0]==7.0f);
+    CHECK(direct_nospc.c100[1]==7.0f);
+    CHECK(direct_nospc.c100[2]==7.0f);
+    CHECK(direct_nospc.c101==0.0f);
+    CHECK(direct_nospc.c101_f0q[0]==0.0f);
+    CHECK(!direct_nospc.ptde_specular_power_verified);
+    CHECK(direct_nospc.ptde_specular_power==0.0f);
+
+    const auto direct_nospc_wrong_spec_mode=
+        seeded.evaluate_direct_pointlight_material(
+            exact_nospc,
+            true);
+    CHECK(!direct_nospc_wrong_spec_mode.active);
+    CHECK(direct_nospc_wrong_spec_mode.reason==
+          decision_reason::no_certified_operator);
+
+    auto direct_nospc_same_sha_alias=exact_nospc;
+    direct_nospc_same_sha_alias.semantic_name_hash=
+        mtd_semantic_hash("A17_Sky[Dn]_LS.mtd");
+    const auto direct_nospc_alias_result=
+        seeded.evaluate_direct_pointlight_material(
+            direct_nospc_same_sha_alias,
+            false);
+    CHECK(!direct_nospc_alias_result.active);
+    CHECK(direct_nospc_alias_result.reason==
+          decision_reason::owner_tuple_not_authenticated);
+
+    auto direct_nospc_wrong_sha=exact_nospc;
+    direct_nospc_wrong_sha.raw_mtd_sha256.fill(0xffu);
+    const auto direct_nospc_bad_identity=
+        seeded.evaluate_direct_pointlight_material(
+            direct_nospc_wrong_sha,
+            false);
+    CHECK(!direct_nospc_bad_identity.active);
+    CHECK(direct_nospc_bad_identity.reason==
+          decision_reason::unknown_material);
+
     material_identity exact_pmetal{};
     exact_pmetal.valid=true;
     exact_pmetal.flver_sha256={

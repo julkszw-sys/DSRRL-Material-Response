@@ -13,8 +13,618 @@
         "path": "renderer-core/data/census/ptde_subsurface_usage_census_v1.json",
         "mapped_ptde_material": "Ps_Body[DSB].mtd",
         "mapped_ptde_sha256": "af2f108831b783a43b0e02f047919719d14f38e68d6c5a97b80678d593ba1c95",
-        "receiver_scope": [33, 34, 35],
-        "source_evidence_artifact_ids": [99, 571, 920, 943, 944]
+        "receiver_scope": [
+          33,
+          34,
+          35
+        ],
+        "source_evidence_artifact_ids": [
+          99,
+          571,
+          920,
+          943,
+          944
+        ]
+      }
+    },
+    {
+      "semantic_name": "A10_BG_cloud[Dn]_Add.mtd",
+      "raw_mtd_sha256": "b3ec0ccf59bfdac94db7eb6292484c43755c09252a711b4aa2f2131b32c33543",
+      "status": "CONFIRMED",
+      "scope": "DSR exact HOMOLOGOUS_NOSPC direct PointLight material identity",
+      "authority_class": "DIRECT_POINTLIGHT_NOSPC",
+      "basis": {
+        "path": "renderer-core/data/census/ptde_mtd_envspec_router_v1.json",
+        "router_index": 46,
+        "homology_class": "HOMOLOGOUS_NOSPC",
+        "delta_kind": "EXACT_SPX",
+        "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDif.spx",
+        "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDif.spx",
+        "c100_f32_bits": [
+          "0x00000000",
+          "0x00000000",
+          "0x00000000"
+        ],
+        "source_evidence_artifact_ids": [
+          571,
+          1322
+        ]
+      }
+    },
+    {
+      "semantic_name": "A10_Sky[Dn].mtd",
+      "raw_mtd_sha256": "cfceaf053d7b8a674e758bbfc5da0185d7080a2bf2787a4c478a5c95b0ea1025",
+      "status": "CONFIRMED",
+      "scope": "DSR exact HOMOLOGOUS_NOSPC direct PointLight material identity",
+      "authority_class": "DIRECT_POINTLIGHT_NOSPC",
+      "basis": {
+        "path": "renderer-core/data/census/ptde_mtd_envspec_router_v1.json",
+        "router_index": 49,
+        "homology_class": "HOMOLOGOUS_NOSPC",
+        "delta_kind": "EXACT_SPX",
+        "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDif.spx",
+        "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDif.spx",
+        "c100_f32_bits": [
+          "0x40e00000",
+          "0x40e00000",
+          "0x40e00000"
+        ],
+        "source_evidence_artifact_ids": [
+          571,
+          1322
+        ]
+      }
+    },
+    {
+      "semantic_name": "A10_Sky[Dn]_LS.mtd",
+      "raw_mtd_sha256": "9e15f7569b6e68245e4bcae56cf6204d5c2784cbee132ca7f9da9aa93751690f",
+      "status": "CONFIRMED",
+      "scope": "DSR exact HOMOLOGOUS_NOSPC direct PointLight material identity",
+      "authority_class": "DIRECT_POINTLIGHT_NOSPC",
+      "basis": {
+        "path": "renderer-core/data/census/ptde_mtd_envspec_router_v1.json",
+        "router_index": 50,
+        "homology_class": "HOMOLOGOUS_NOSPC",
+        "delta_kind": "EXACT_SPX",
+        "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDif.spx",
+        "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDif.spx",
+        "c100_f32_bits": [
+          "0x40e00000",
+          "0x40e00000",
+          "0x40e00000"
+        ],
+        "source_evidence_artifact_ids": [
+          571,
+          1322
+        ]
+      }
+    },
+    {
+      "semantic_name": "A10_cloud[DB]_Alp.mtd",
+      "raw_mtd_sha256": "796621ebbd08d877658d93beac4bb201589338f69a1b73b8776bd497973d1293",
+      "status": "CONFIRMED",
+      "scope": "DSR exact HOMOLOGOUS_NOSPC direct PointLight material identity",
+      "authority_class": "DIRECT_POINTLIGHT_NOSPC",
+      "basis": {
+        "path": "renderer-core/data/census/ptde_mtd_envspec_router_v1.json",
+        "router_index": 56,
+        "homology_class": "HOMOLOGOUS_NOSPC",
+        "delta_kind": "EXACT_SPX",
+        "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifBmp.spx",
+        "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifBmp.spx",
+        "c100_f32_bits": [
+          "0x3f19999a",
+          "0x3f19999a",
+          "0x3f19999a"
+        ],
+        "source_evidence_artifact_ids": [
+          571,
+          1322
+        ]
+      }
+    },
+    {
+      "semantic_name": "A10_cloud[Dn]_Add.mtd",
+      "raw_mtd_sha256": "4ee0a7798328c17b66da020c7dbef086e4a4dd313887ccca54bf67a7a1b08aeb",
+      "status": "CONFIRMED",
+      "scope": "DSR exact HOMOLOGOUS_NOSPC direct PointLight material identity",
+      "authority_class": "DIRECT_POINTLIGHT_NOSPC",
+      "basis": {
+        "path": "renderer-core/data/census/ptde_mtd_envspec_router_v1.json",
+        "router_index": 57,
+        "homology_class": "HOMOLOGOUS_NOSPC",
+        "delta_kind": "EXACT_SPX",
+        "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDif.spx",
+        "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDif.spx",
+        "c100_f32_bits": [
+          "0x3eddaa78",
+          "0x3ed8d8da",
+          "0x3ef5c28f"
+        ],
+        "source_evidence_artifact_ids": [
+          571,
+          1322
+        ]
+      }
+    },
+    {
+      "semantic_name": "A11_Cloud[Dn]_Add.mtd",
+      "raw_mtd_sha256": "ba7b802867cba5bbfb003e6587fed8e46ce160c9a42340c478e17770d0679764",
+      "status": "CONFIRMED",
+      "scope": "DSR exact HOMOLOGOUS_NOSPC direct PointLight material identity",
+      "authority_class": "DIRECT_POINTLIGHT_NOSPC",
+      "basis": {
+        "path": "renderer-core/data/census/ptde_mtd_envspec_router_v1.json",
+        "router_index": 65,
+        "homology_class": "HOMOLOGOUS_NOSPC",
+        "delta_kind": "EXACT_SPX",
+        "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDif.spx",
+        "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDif.spx",
+        "c100_f32_bits": [
+          "0x3d20a0a2",
+          "0x3d48c8ca",
+          "0x3d30b0b2"
+        ],
+        "source_evidence_artifact_ids": [
+          571,
+          1322
+        ]
+      }
+    },
+    {
+      "semantic_name": "A11_Sky[Dn].mtd",
+      "raw_mtd_sha256": "87adc329de440b39aad78f3525b90c9857d3a97d3242970ccf2c8de78a72d728",
+      "status": "CONFIRMED",
+      "scope": "DSR exact HOMOLOGOUS_NOSPC direct PointLight material identity",
+      "authority_class": "DIRECT_POINTLIGHT_NOSPC",
+      "basis": {
+        "path": "renderer-core/data/census/ptde_mtd_envspec_router_v1.json",
+        "router_index": 66,
+        "homology_class": "HOMOLOGOUS_NOSPC",
+        "delta_kind": "EXACT_SPX",
+        "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDif.spx",
+        "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDif.spx",
+        "c100_f32_bits": [
+          "0x3ff0f0f2",
+          "0x40169697",
+          "0x40078788"
+        ],
+        "source_evidence_artifact_ids": [
+          571,
+          1322
+        ]
+      }
+    },
+    {
+      "semantic_name": "A15_BG_cloud[Dn]_Alp.mtd",
+      "raw_mtd_sha256": "b5064fcea230debc23c06c3633f7949e870116b544b6a9ddc2e114975a59b15f",
+      "status": "CONFIRMED",
+      "scope": "DSR exact HOMOLOGOUS_NOSPC direct PointLight material identity",
+      "authority_class": "DIRECT_POINTLIGHT_NOSPC",
+      "basis": {
+        "path": "renderer-core/data/census/ptde_mtd_envspec_router_v1.json",
+        "router_index": 98,
+        "homology_class": "HOMOLOGOUS_NOSPC",
+        "delta_kind": "EXACT_SPX",
+        "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDif.spx",
+        "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDif.spx",
+        "c100_f32_bits": [
+          "0x3f800000",
+          "0x3f800000",
+          "0x3f800000"
+        ],
+        "source_evidence_artifact_ids": [
+          571,
+          1322
+        ]
+      }
+    },
+    {
+      "semantic_name": "A18_Sky[Dn].mtd",
+      "raw_mtd_sha256": "905abfffb3d4ecf33b287ed0c16321cc4460a5afaee23033b1dbecceaefa6312",
+      "status": "CONFIRMED",
+      "scope": "DSR exact HOMOLOGOUS_NOSPC direct PointLight material identity",
+      "authority_class": "DIRECT_POINTLIGHT_NOSPC",
+      "basis": {
+        "path": "renderer-core/data/census/ptde_mtd_envspec_router_v1.json",
+        "router_index": 118,
+        "homology_class": "HOMOLOGOUS_NOSPC",
+        "delta_kind": "EXACT_SPX",
+        "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDif.spx",
+        "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDif.spx",
+        "c100_f32_bits": [
+          "0x40e00000",
+          "0x40e00000",
+          "0x40e00000"
+        ],
+        "source_evidence_artifact_ids": [
+          571,
+          1322
+        ]
+      }
+    },
+    {
+      "semantic_name": "A18_WhitePassage[Dn].mtd",
+      "raw_mtd_sha256": "1245c1a4520333a54b767ac6a723f92ac20e68f32ddd824c2089663b9983f5d6",
+      "status": "CONFIRMED",
+      "scope": "DSR exact HOMOLOGOUS_NOSPC direct PointLight material identity",
+      "authority_class": "DIRECT_POINTLIGHT_NOSPC",
+      "basis": {
+        "path": "renderer-core/data/census/ptde_mtd_envspec_router_v1.json",
+        "router_index": 119,
+        "homology_class": "HOMOLOGOUS_NOSPC",
+        "delta_kind": "EXACT_SPX",
+        "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDif.spx",
+        "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDif.spx",
+        "c100_f32_bits": [
+          "0x40e00000",
+          "0x40e00000",
+          "0x40e00000"
+        ],
+        "source_evidence_artifact_ids": [
+          571,
+          1322
+        ]
+      }
+    },
+    {
+      "semantic_name": "A18_cloud[Dn]_Alp.mtd",
+      "raw_mtd_sha256": "a1f29a9b80a295e5c9a1dbb5fd70dca1820b8eea53cd013fae40edebcf60f675",
+      "status": "CONFIRMED",
+      "scope": "DSR exact HOMOLOGOUS_NOSPC direct PointLight material identity",
+      "authority_class": "DIRECT_POINTLIGHT_NOSPC",
+      "basis": {
+        "path": "renderer-core/data/census/ptde_mtd_envspec_router_v1.json",
+        "router_index": 121,
+        "homology_class": "HOMOLOGOUS_NOSPC",
+        "delta_kind": "EXACT_SPX",
+        "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDif.spx",
+        "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDif.spx",
+        "c100_f32_bits": [
+          "0x3f19999a",
+          "0x3f19999a",
+          "0x3f19999a"
+        ],
+        "source_evidence_artifact_ids": [
+          571,
+          1322
+        ]
+      }
+    },
+    {
+      "semantic_name": "A19_Sky[Dn].mtd",
+      "raw_mtd_sha256": "ab697d8587146f9da383849916cb7f00d742aa1fd162a601799f95df2896fb4c",
+      "status": "CONFIRMED",
+      "scope": "DSR exact HOMOLOGOUS_NOSPC direct PointLight material identity",
+      "authority_class": "DIRECT_POINTLIGHT_NOSPC",
+      "basis": {
+        "path": "renderer-core/data/census/ptde_mtd_envspec_router_v1.json",
+        "router_index": 124,
+        "homology_class": "HOMOLOGOUS_NOSPC",
+        "delta_kind": "EXACT_SPX",
+        "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDif.spx",
+        "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDif.spx",
+        "c100_f32_bits": [
+          "0x40000000",
+          "0x40000000",
+          "0x40000000"
+        ],
+        "source_evidence_artifact_ids": [
+          571,
+          1322
+        ]
+      }
+    },
+    {
+      "semantic_name": "A19_cloud[Dn]_Alp.mtd",
+      "raw_mtd_sha256": "aa0da11a5d5b4f7757925ed8144d8d96ab95a807f568f125e139d6106f8391c9",
+      "status": "CONFIRMED",
+      "scope": "DSR exact HOMOLOGOUS_NOSPC direct PointLight material identity",
+      "authority_class": "DIRECT_POINTLIGHT_NOSPC",
+      "basis": {
+        "path": "renderer-core/data/census/ptde_mtd_envspec_router_v1.json",
+        "router_index": 125,
+        "homology_class": "HOMOLOGOUS_NOSPC",
+        "delta_kind": "EXACT_SPX",
+        "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDif.spx",
+        "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDif.spx",
+        "c100_f32_bits": [
+          "0x3fe66666",
+          "0x3fe66666",
+          "0x3fe66666"
+        ],
+        "source_evidence_artifact_ids": [
+          571,
+          1322
+        ]
+      }
+    },
+    {
+      "semantic_name": "A19_mountains[Dn]_Edge.mtd",
+      "raw_mtd_sha256": "1a45ec2e74f791f326d4b09fc91c6f4cc6d8fe004c194f1734e9473ac4c9b6ea",
+      "status": "CONFIRMED",
+      "scope": "DSR exact HOMOLOGOUS_NOSPC direct PointLight material identity",
+      "authority_class": "DIRECT_POINTLIGHT_NOSPC",
+      "basis": {
+        "path": "renderer-core/data/census/ptde_mtd_envspec_router_v1.json",
+        "router_index": 128,
+        "homology_class": "HOMOLOGOUS_NOSPC",
+        "delta_kind": "EXACT_SPX",
+        "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDif.spx",
+        "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDif.spx",
+        "c100_f32_bits": [
+          "0x3f800000",
+          "0x3f800000",
+          "0x3f800000"
+        ],
+        "source_evidence_artifact_ids": [
+          571,
+          1322
+        ]
+      }
+    },
+    {
+      "semantic_name": "M_MagicBarrier.mtd",
+      "raw_mtd_sha256": "a6ee04fdbb6c5b7af95841d2b722899467e7e4ee08c83e9d667114458e770683",
+      "status": "CONFIRMED",
+      "scope": "DSR exact HOMOLOGOUS_NOSPC direct PointLight material identity",
+      "authority_class": "DIRECT_POINTLIGHT_NOSPC",
+      "basis": {
+        "path": "renderer-core/data/census/ptde_mtd_envspec_router_v1.json",
+        "router_index": 269,
+        "homology_class": "HOMOLOGOUS_NOSPC",
+        "delta_kind": "EXACT_SPX",
+        "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifMul.spx",
+        "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifMul.spx",
+        "c100_f32_bits": [
+          "0x3f933333",
+          "0x3f933333",
+          "0x3f933333"
+        ],
+        "source_evidence_artifact_ids": [
+          571,
+          1322
+        ]
+      }
+    },
+    {
+      "semantic_name": "M_Sky[Dn].mtd",
+      "raw_mtd_sha256": "9fbe6db7035256823acecee9ad376c8c3106ef730ba2294efa4955b1a68bd8d1",
+      "status": "CONFIRMED",
+      "scope": "DSR exact HOMOLOGOUS_NOSPC direct PointLight material identity",
+      "authority_class": "DIRECT_POINTLIGHT_NOSPC",
+      "basis": {
+        "path": "renderer-core/data/census/ptde_mtd_envspec_router_v1.json",
+        "router_index": 270,
+        "homology_class": "HOMOLOGOUS_NOSPC",
+        "delta_kind": "EXACT_SPX",
+        "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDif.spx",
+        "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDif.spx",
+        "c100_f32_bits": [
+          "0x3f800000",
+          "0x3f800000",
+          "0x3f800000"
+        ],
+        "source_evidence_artifact_ids": [
+          571,
+          1322
+        ]
+      }
+    },
+    {
+      "semantic_name": "M_Sky[Dn]_Edge.mtd",
+      "raw_mtd_sha256": "f0f8a1eff2407c9f27825e9f45b052a96f4c08bc980919cffa56deedca3fc0ee",
+      "status": "CONFIRMED",
+      "scope": "DSR exact HOMOLOGOUS_NOSPC direct PointLight material identity",
+      "authority_class": "DIRECT_POINTLIGHT_NOSPC",
+      "basis": {
+        "path": "renderer-core/data/census/ptde_mtd_envspec_router_v1.json",
+        "router_index": 271,
+        "homology_class": "HOMOLOGOUS_NOSPC",
+        "delta_kind": "EXACT_SPX",
+        "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDif.spx",
+        "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDif.spx",
+        "c100_f32_bits": [
+          "0x3f800000",
+          "0x3f800000",
+          "0x3f800000"
+        ],
+        "source_evidence_artifact_ids": [
+          571,
+          1322
+        ]
+      }
+    },
+    {
+      "semantic_name": "M_Sky_dark[Dn].mtd",
+      "raw_mtd_sha256": "2749baa5e03f9bbc80feafd72ed0bb30e57fb8e47eec422006fd0f0c7d03fc97",
+      "status": "CONFIRMED",
+      "scope": "DSR exact HOMOLOGOUS_NOSPC direct PointLight material identity",
+      "authority_class": "DIRECT_POINTLIGHT_NOSPC",
+      "basis": {
+        "path": "renderer-core/data/census/ptde_mtd_envspec_router_v1.json",
+        "router_index": 272,
+        "homology_class": "HOMOLOGOUS_NOSPC",
+        "delta_kind": "EXACT_SPX",
+        "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDif.spx",
+        "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDif.spx",
+        "c100_f32_bits": [
+          "0x3f19999a",
+          "0x3f19999a",
+          "0x3f19999a"
+        ],
+        "source_evidence_artifact_ids": [
+          571,
+          1322
+        ]
+      }
+    },
+    {
+      "semantic_name": "M_Sky_light[Dn].mtd",
+      "raw_mtd_sha256": "9fe3316e3ca74a7392374f55eefd6d055626c461688ef215eaf8e98297efcacd",
+      "status": "CONFIRMED",
+      "scope": "DSR exact HOMOLOGOUS_NOSPC direct PointLight material identity",
+      "authority_class": "DIRECT_POINTLIGHT_NOSPC",
+      "basis": {
+        "path": "renderer-core/data/census/ptde_mtd_envspec_router_v1.json",
+        "router_index": 273,
+        "homology_class": "HOMOLOGOUS_NOSPC",
+        "delta_kind": "EXACT_SPX",
+        "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDif.spx",
+        "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDif.spx",
+        "c100_f32_bits": [
+          "0x3fc00000",
+          "0x3fc00000",
+          "0x3fc00000"
+        ],
+        "source_evidence_artifact_ids": [
+          571,
+          1322
+        ]
+      }
+    },
+    {
+      "semantic_name": "Ps_Eye[DS].mtd",
+      "raw_mtd_sha256": "e806f10306b9e7fbeaffd3e9160a5db2f446dc3d7a9ec148abede5e609b1e5c3",
+      "status": "CONFIRMED",
+      "scope": "DSR exact HOMOLOGOUS_NOSPC direct PointLight material identity",
+      "authority_class": "DIRECT_POINTLIGHT_NOSPC",
+      "basis": {
+        "path": "renderer-core/data/census/ptde_mtd_envspec_router_v1.json",
+        "router_index": 301,
+        "homology_class": "HOMOLOGOUS_NOSPC",
+        "delta_kind": "EXACT_SPX",
+        "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_FaceEye.spx",
+        "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_FaceEye.spx",
+        "c100_f32_bits": [
+          "0x3f000000",
+          "0x3f000000",
+          "0x3f000000"
+        ],
+        "source_evidence_artifact_ids": [
+          571,
+          1322
+        ]
+      }
+    },
+    {
+      "semantic_name": "S[DB].mtd",
+      "raw_mtd_sha256": "3bafd8d9548ac37aa2f5d0ab61e6259b962e2f3e31a6af9314115abe269968e4",
+      "status": "CONFIRMED",
+      "scope": "DSR exact HOMOLOGOUS_NOSPC direct PointLight material identity",
+      "authority_class": "DIRECT_POINTLIGHT_NOSPC",
+      "basis": {
+        "path": "renderer-core/data/census/ptde_mtd_envspec_router_v1.json",
+        "router_index": 313,
+        "homology_class": "HOMOLOGOUS_NOSPC",
+        "delta_kind": "EXACT_SPX",
+        "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifBmp.spx",
+        "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifBmp.spx",
+        "c100_f32_bits": [
+          "0x3f19999a",
+          "0x3f19999a",
+          "0x3f19999a"
+        ],
+        "source_evidence_artifact_ids": [
+          571,
+          1322
+        ]
+      }
+    },
+    {
+      "semantic_name": "S[D].mtd",
+      "raw_mtd_sha256": "6c6129c206c1d93d260d4c128a1e71c03da2b9b12591a6ddde423fcf69418c22",
+      "status": "CONFIRMED",
+      "scope": "DSR exact HOMOLOGOUS_NOSPC direct PointLight material identity",
+      "authority_class": "DIRECT_POINTLIGHT_NOSPC",
+      "basis": {
+        "path": "renderer-core/data/census/ptde_mtd_envspec_router_v1.json",
+        "router_index": 315,
+        "homology_class": "HOMOLOGOUS_NOSPC",
+        "delta_kind": "EXACT_SPX",
+        "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDif.spx",
+        "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDif.spx",
+        "c100_f32_bits": [
+          "0x3f800000",
+          "0x3f800000",
+          "0x3f800000"
+        ],
+        "source_evidence_artifact_ids": [
+          571,
+          1322
+        ]
+      }
+    },
+    {
+      "semantic_name": "S[D]_Sub.mtd",
+      "raw_mtd_sha256": "97c831c047b0f7e2b15358bbc5d1402b5fbf600c8a2f2ba7e8b8165a8a80f78d",
+      "status": "CONFIRMED",
+      "scope": "DSR exact HOMOLOGOUS_NOSPC direct PointLight material identity",
+      "authority_class": "DIRECT_POINTLIGHT_NOSPC",
+      "basis": {
+        "path": "renderer-core/data/census/ptde_mtd_envspec_router_v1.json",
+        "router_index": 317,
+        "homology_class": "HOMOLOGOUS_NOSPC",
+        "delta_kind": "EXACT_SPX",
+        "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDif.spx",
+        "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDif.spx",
+        "c100_f32_bits": [
+          "0x3f800000",
+          "0x3f800000",
+          "0x3f800000"
+        ],
+        "source_evidence_artifact_ids": [
+          571,
+          1322
+        ]
+      }
+    },
+    {
+      "semantic_name": "S[magic circle].mtd",
+      "raw_mtd_sha256": "79234092c8ff5193dc504a210d44eaeaa2a8c212d94e1a178af9ab31315d4a80",
+      "status": "CONFIRMED",
+      "scope": "DSR exact HOMOLOGOUS_NOSPC direct PointLight material identity",
+      "authority_class": "DIRECT_POINTLIGHT_NOSPC",
+      "basis": {
+        "path": "renderer-core/data/census/ptde_mtd_envspec_router_v1.json",
+        "router_index": 318,
+        "homology_class": "HOMOLOGOUS_NOSPC",
+        "delta_kind": "EXACT_SPX",
+        "dsr_spx": "N:\\DS2\\data\\Material\\spx\\FRPG_Phn_ColDif.spx",
+        "ptde_spx": "N:\\DS2\\data\\Material\\spx\\FRPG_Phn_ColDif.spx",
+        "c100_f32_bits": [
+          "0x3f800000",
+          "0x3f800000",
+          "0x3f800000"
+        ],
+        "source_evidence_artifact_ids": [
+          571,
+          1322
+        ]
+      }
+    },
+    {
+      "semantic_name": "S_A03_Thunder00[Dn].mtd",
+      "raw_mtd_sha256": "b2ddceaf17692b839a0f26e01828401b2c0662b8d55ab848b7e5906d8366d617",
+      "status": "CONFIRMED",
+      "scope": "DSR exact HOMOLOGOUS_NOSPC direct PointLight material identity",
+      "authority_class": "DIRECT_POINTLIGHT_NOSPC",
+      "basis": {
+        "path": "renderer-core/data/census/ptde_mtd_envspec_router_v1.json",
+        "router_index": 319,
+        "homology_class": "HOMOLOGOUS_NOSPC",
+        "delta_kind": "EXACT_SPX",
+        "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDif.spx",
+        "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDif.spx",
+        "c100_f32_bits": [
+          "0x3f119192",
+          "0x3f078788",
+          "0x3f800000"
+        ],
+        "source_evidence_artifact_ids": [
+          571,
+          1322
+        ]
       }
     }
   ]

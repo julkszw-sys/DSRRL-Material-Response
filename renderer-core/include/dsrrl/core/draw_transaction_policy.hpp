@@ -157,6 +157,29 @@ constexpr bool create_time_safe_operator(
         draw_transaction_mode::create_time_safe;
 }
 
+constexpr bool draw_additional_owner_masks_valid(
+    operator_id primary,
+    operator_mask additional_owners,
+    operator_mask additional_shader_owners,
+    operator_mask additional_constant_buffer_owners,
+    operator_mask additional_resource_owners,
+    operator_mask additional_carrier_owners) noexcept
+{
+    if (!valid_operator_id(primary))
+        return false;
+
+    const auto primary_bit =
+        operator_bit(primary);
+
+    return
+        (additional_owners & ~all_operator_bits) == 0u &&
+        (additional_owners & primary_bit) == 0u &&
+        (additional_shader_owners & ~additional_owners) == 0u &&
+        (additional_constant_buffer_owners & ~additional_owners) == 0u &&
+        (additional_resource_owners & ~additional_owners) == 0u &&
+        (additional_carrier_owners & ~additional_owners) == 0u;
+}
+
 struct upper_lower_readback_skip_shape {
     operator_mask owners = 0u;
     operator_mask shader_owners = 0u;

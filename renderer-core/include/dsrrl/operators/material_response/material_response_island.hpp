@@ -130,7 +130,8 @@ public:
     // tuple and resolves one unique registered material profile independent of
     // receiver, requiring a verified PTDE specular-power donor.
     decision evaluate_direct_pointlight_material(
-        const material_identity &material) const;
+        const material_identity &material,
+        bool require_legacy_specular = true) const;
 
     std::size_t receiver_recipe_count() const noexcept;
     std::size_t material_profile_count() const noexcept;

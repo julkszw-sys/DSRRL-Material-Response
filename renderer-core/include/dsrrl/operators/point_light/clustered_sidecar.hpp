@@ -29,7 +29,7 @@ struct clustered_sidecar_payload_v1 {
     operators::material_response::material_response_b12_payload b12{};
     std::array<std::uint32_t,4> ordered_source_ids{};
     std::uint8_t raw_selected_count = 0u;
-    std::uint8_t material_max_pnt_lit_num = 0u;
+    std::uint32_t material_max_pnt_lit_num = 0u;
     std::uint8_t effective_count = 0u;
     bool ready = false;
 };
@@ -52,7 +52,7 @@ struct clustered_sidecar_build_v1 {
 clustered_sidecar_build_v1 build_clustered_sidecar_v1(
     const std::array<clustered_source_raw_v1,4> &sources,
     std::uint8_t raw_selected_count,
-    std::uint8_t material_max_pnt_lit_num,
+    std::uint32_t material_max_pnt_lit_num,
     const operators::material_response::decision &material) noexcept;
 
 } // namespace dsrrl::operators::point_light

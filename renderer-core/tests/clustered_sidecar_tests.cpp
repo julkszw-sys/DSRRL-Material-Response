@@ -61,7 +61,7 @@ int main()
     CHECK(built.payload.b12[1][2] == 4.0f);
     CHECK(built.payload.b12[2][0] == 2.5f);
 
-    for (std::uint32_t i=0u;i<3u;++i) {
+    for (std::uint32_t i=0u;i<4u;++i) {
         CHECK(built.payload.ordered_source_ids[i] == 100u+i);
         CHECK(built.payload.t18[i].position_inv_range ==
               sources[i].position_inv_range);
@@ -76,6 +76,23 @@ int main()
         CHECK(built.payload.t18[i].metadata[3] == 0u);
         CHECK(built.payload.t19[i] == sources[i].raw_q_end);
     }
+
+    // Raw first-four membership is entity-level and must survive a material
+    // clamp to three; only b12[3].x/effective_count controls consumption.
+    CHECK(built.payload.ordered_source_ids[3] == 103u);
+    CHECK(built.payload.t19[3] == sources[3].raw_q_end);
+
+    // g_MaxPntLitNum is a 32-bit material value. Selection is already bounded
+    // to first-four, so values above four must clamp N_effective rather than
+    // fail-open.
+    const auto high_limit =
+        point_light::build_clustered_sidecar_v1(
+            sources,4u,8u,material);
+    CHECK(high_limit.result ==
+          point_light::clustered_sidecar_result_v1::ready);
+    CHECK(high_limit.payload.material_max_pnt_lit_num == 8u);
+    CHECK(high_limit.payload.effective_count == 4u);
+    CHECK(high_limit.payload.b12[3][0] == 4.0f);
 
     const auto bad_count =
         point_light::build_clustered_sidecar_v1(

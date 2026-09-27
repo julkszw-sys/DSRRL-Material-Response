@@ -1,10 +1,12 @@
 #include "dsrrl/operators/material_response/material_response_island.hpp"
 #include "dsrrl/operators/material_response/generated_dsr_flver_owner_tuples_v1.hpp"
+#include "dsrrl/operators/material_response/generated_envspec_router_v1.hpp"
 #include "dsrrl/operators/material_response/generated_routes_v1.hpp"
 #include "dsrrl/operators/material_response/mtd_semantic_census.hpp"
 #include "dsrrl/operators/legacy_plan/sha256_bytes.hpp"
 
 #include <algorithm>
+#include <cstring>
 
 namespace dsrrl::operators::material_response {
 namespace {
@@ -31,6 +33,57 @@ bool receiver_allowed(const material_profile &profile, std::uint32_t receiver_id
             return true;
 
     return false;
+}
+
+struct direct_nospc_authority_match {
+    const generated::envspec_router_record *record = nullptr;
+    std::uint32_t ordinal = 0u;
+};
+
+std::optional<direct_nospc_authority_match>
+resolve_direct_nospc_authority(
+    const material_identity &identity) noexcept
+{
+    if (!identity.valid ||
+        identity.semantic_name_hash == 0u ||
+        digest_is_zero(identity.raw_mtd_sha256))
+        return std::nullopt;
+
+    std::optional<direct_nospc_authority_match> result;
+    for (std::size_t i = 0u;
+         i < generated::k_envspec_router_v1.size();
+         ++i) {
+        const auto &record =
+            generated::k_envspec_router_v1[i];
+        if (record.state !=
+                generated::envspec_router_state::nospc_host ||
+            record.semantic_name_hash !=
+                identity.semantic_name_hash ||
+            record.raw_mtd_sha256 !=
+                identity.raw_mtd_sha256)
+            continue;
+
+        // Exact-name + exact raw-MTD identity must remain single-valued.
+        // Any future duplicate/ambiguity fails open instead of selecting one.
+        if (result.has_value())
+            return std::nullopt;
+
+        result = direct_nospc_authority_match{
+            &record,
+            static_cast<std::uint32_t>(i)
+        };
+    }
+
+    return result;
+}
+
+float f32_from_bits(std::uint32_t bits) noexcept
+{
+    float value = 0.0f;
+    static_assert(sizeof(value) == sizeof(bits),
+                  "PTDE c100 bit carrier must be f32");
+    std::memcpy(&value, &bits, sizeof(value));
+    return value;
 }
 
 } // namespace
@@ -332,7 +385,8 @@ decision material_response_island::evaluate(
 
 decision
 material_response_island::evaluate_direct_pointlight_material(
-    const material_identity &material) const
+    const material_identity &material,
+    bool require_legacy_specular) const
 {
     std::lock_guard lock(mutex_);
 
@@ -354,20 +408,67 @@ material_response_island::evaluate_direct_pointlight_material(
 
     const auto profile =
         resolve_material_unscoped(material);
-    if (!profile.has_value())
+
+    // The ordinary MR registry intentionally remains the 35-route Spc
+    // surface cohort. Direct PointLight may additionally consume the exact
+    // PTDE NoSpc c100 authority carried by the 325-row pairwise MTD router,
+    // but only after the FLVER+slot owner tuple above has authenticated the
+    // draw and only on an exact semantic-name + raw-MTD match.
+    if (!profile.has_value()) {
+        const auto nospc =
+            resolve_direct_nospc_authority(material);
+        if (!nospc.has_value())
+            return {
+                false,
+                decision_reason::unknown_material,
+                0u
+            };
+
+        if (require_legacy_specular)
+            return {
+                false,
+                decision_reason::no_certified_operator,
+                0u
+            };
+
+        std::array<float, 3> c100{};
+        for (std::size_t i = 0u; i < c100.size(); ++i)
+            c100[i] =
+                f32_from_bits(
+                    nospc->record->c100_bits[i]);
+
+        // High-bit route tags are telemetry-only and cannot alias the normal
+        // Material Response route namespace.
+        const std::uint32_t route_tag =
+            0x80000000u | nospc->ordinal;
+
         return {
-            false,
-            decision_reason::unknown_material,
-            0u
+            true,
+            decision_reason::active,
+            0u,
+            route_tag,
+            diffuse_material_domain_linear,
+            0.0f,
+            0u,
+            7u,
+            ptde_envspec_presence::absent,
+            c100,
+            {{0.0f, 0.0f, 0.0f}},
+            0.0f,
+            false
         };
+    }
 
     const auto required =
         diffuse_material_domain_linear |
-        specular_factor_c101;
+        (require_legacy_specular
+             ? specular_factor_c101
+             : response_none);
 
     if ((profile->certified_operations & required) != required ||
-        !profile->ptde_specular_power_verified ||
-        !(profile->ptde_specular_power > 0.0f))
+        (require_legacy_specular &&
+         (!profile->ptde_specular_power_verified ||
+          !(profile->ptde_specular_power > 0.0f))))
         return {
             false,
             decision_reason::no_certified_operator,
@@ -388,7 +489,7 @@ material_response_island::evaluate_direct_pointlight_material(
         profile->c100,
         profile->c101_f0q,
         profile->ptde_specular_power,
-        true
+        profile->ptde_specular_power_verified
     };
 }
 

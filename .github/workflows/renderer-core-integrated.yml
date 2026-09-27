@@ -65,6 +65,36 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Resolve exact source lineage
+        shell: pwsh
+        run: |
+          $checkout = (git rev-parse HEAD).Trim()
+          if ([string]::IsNullOrWhiteSpace($checkout)) { throw "Unable to resolve checkout commit" }
+
+          if ($env:GITHUB_EVENT_NAME -eq "pull_request") {
+            $head = "${{ github.event.pull_request.head.sha }}"
+            $base = "${{ github.event.pull_request.base.sha }}"
+            $ref = "${{ github.head_ref }}"
+            $kind = "pull_request_merge_commit"
+          } else {
+            $head = $checkout
+            $base = $checkout
+            $ref = $env:GITHUB_REF_NAME
+            $kind = "git_ref_commit"
+          }
+
+          if ([string]::IsNullOrWhiteSpace($head) -or
+              [string]::IsNullOrWhiteSpace($base) -or
+              [string]::IsNullOrWhiteSpace($ref)) {
+            throw "Incomplete source lineage"
+          }
+
+          "DSRRL_CHECKOUT_COMMIT=$checkout" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "DSRRL_HEAD_COMMIT=$head" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "DSRRL_BASE_COMMIT=$base" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "DSRRL_SOURCE_REF=$ref" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "DSRRL_SOURCE_REF_KIND=$kind" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
       - name: Verify Core+Islands version authority
         shell: pwsh
         run: |
@@ -122,9 +152,20 @@ jobs:
           -B build-integrated
           -A x64
           -DRESHADE_INCLUDE_DIR="${{ github.workspace }}/_reshade/include"
+          -DDSRRL_SOURCE_COMMIT="$env:DSRRL_CHECKOUT_COMMIT"
+          -DDSRRL_BUILD_FLAVOR="$env:DSRRL_SOURCE_REF_KIND"
 
       - name: Build Core+Islands addon
         run: cmake --build build-integrated --config Release
+
+      - name: Run clustered PntS pre-runtime unit tests
+        shell: pwsh
+        run: >
+          ctest
+          --test-dir build-integrated
+          -C Release
+          --output-on-failure
+          -R "dsrrl_renderer_clustered_(sidecar|pnts_materializer|pnts_draw_adapter)_tests"
 
       - name: Audit active operator boundary
         shell: pwsh
@@ -867,6 +908,13 @@ jobs:
           $bloomWaterwaveIdentityHash = (Get-FileHash "renderer-core/include/dsrrl/operators/postprocess/waterwave_authored_identity.hpp" -Algorithm SHA256).Hash.ToLowerInvariant()
           $resourceRuntimeHash = (Get-FileHash "renderer-core/src/runtime/material_resource_draw_runtime.cpp" -Algorithm SHA256).Hash.ToLowerInvariant()
           $specConsumerHash = (Get-FileHash "renderer-core/src/operators/resource_bridges/spec_rgb_consumer_materializer.cpp" -Algorithm SHA256).Hash.ToLowerInvariant()
+          $clusteredJournalHash = (Get-FileHash "renderer-core/data/provenance/clustered_pnts_direct_stock_journal_v1.json" -Algorithm SHA256).Hash.ToLowerInvariant()
+          $clusteredMaterializerHash = (Get-FileHash "renderer-core/src/operators/point_light/clustered_pnts_direct_materializer.cpp" -Algorithm SHA256).Hash.ToLowerInvariant()
+          $clusteredSidecarHash = (Get-FileHash "renderer-core/src/operators/point_light/clustered_sidecar.cpp" -Algorithm SHA256).Hash.ToLowerInvariant()
+          $clusteredDrawRuntimeHash = (Get-FileHash "renderer-core/src/runtime/clustered_pnts_draw_runtime.cpp" -Algorithm SHA256).Hash.ToLowerInvariant()
+          $clusteredPipelineRuntimeHash = (Get-FileHash "renderer-core/src/runtime/clustered_pnts_pipeline_runtime.cpp" -Algorithm SHA256).Hash.ToLowerInvariant()
+          $clusteredSourceAuditHash = (Get-FileHash "renderer-core/tools/audit_clustered_pnts_activation_sources.py" -Algorithm SHA256).Hash.ToLowerInvariant()
+          $clusteredAdapterTestHash = (Get-FileHash "renderer-core/tests/clustered_pnts_draw_adapter_tests.cpp" -Algorithm SHA256).Hash.ToLowerInvariant()
           $envspecMaterializerHash = (Get-FileHash "renderer-core/src/operators/env_spec/pmetal_rgba_materializer.cpp" -Algorithm SHA256).Hash.ToLowerInvariant()
           $envspecAuthorityHash = (Get-FileHash "renderer-core/include/dsrrl/operators/env_spec/pmetal_rgba_authority.hpp" -Algorithm SHA256).Hash.ToLowerInvariant()
           $envspecLerpMaterializerHash = (Get-FileHash "renderer-core/src/operators/env_spec/pmetal_rgba_lerp_materializer.cpp" -Algorithm SHA256).Hash.ToLowerInvariant()
@@ -909,9 +957,18 @@ jobs:
           $materialV211Hash = (Get-FileHash "renderer-core/src/operators/material_response/material_response_v211_materializer.cpp" -Algorithm SHA256).Hash.ToLowerInvariant()
           $materialV211PlanHash = (Get-FileHash "renderer-core/include/dsrrl/operators/material_response/generated_v211_plans.hpp" -Algorithm SHA256).Hash.ToLowerInvariant()
           $materialConstantsHash = (Get-FileHash "renderer-core/include/dsrrl/operators/material_response/generated_material_constants_v1.hpp" -Algorithm SHA256).Hash.ToLowerInvariant()
-          $sourceRef = if ($env:GITHUB_HEAD_REF) { $env:GITHUB_HEAD_REF } else { $env:GITHUB_REF_NAME }
-          $sourceRefKind = if ($env:GITHUB_HEAD_REF) { "pull_request_head" } else { "git_ref" }
-          if ([string]::IsNullOrWhiteSpace($sourceRef)) { throw "Unable to resolve exact source ref" }
+          $sourceRef = $env:DSRRL_SOURCE_REF
+          $sourceRefKind = $env:DSRRL_SOURCE_REF_KIND
+          $checkoutCommit = $env:DSRRL_CHECKOUT_COMMIT
+          $headCommit = $env:DSRRL_HEAD_COMMIT
+          $baseCommit = $env:DSRRL_BASE_COMMIT
+          if ([string]::IsNullOrWhiteSpace($sourceRef) -or
+              [string]::IsNullOrWhiteSpace($sourceRefKind) -or
+              [string]::IsNullOrWhiteSpace($checkoutCommit) -or
+              [string]::IsNullOrWhiteSpace($headCommit) -or
+              [string]::IsNullOrWhiteSpace($baseCommit)) {
+            throw "Unable to resolve exact source lineage"
+          }
 
           $audit = [ordered]@{
             schema = "DSRRL_CORE_ISLANDS_BUILD_AUDIT_V2"
@@ -923,7 +980,9 @@ jobs:
             legacy_monolith_status = $v.legacy_monolith.status
             legacy_runtime_linked = $false
             build_kind = "DEVELOPMENT"
-            source_commit = $env:GITHUB_SHA
+            source_commit = $checkoutCommit
+            source_head_commit = $headCommit
+            source_base_commit = $baseCommit
             source_ref = $sourceRef
             source_ref_kind = $sourceRefKind
             reshade_commit = "3645e3025d1d98a90e318278858931f034d5d1f6"
@@ -963,6 +1022,22 @@ jobs:
             bloom_hdr_pixel_behavior = "OPEN"
             material_resource_draw_runtime_sha256 = $resourceRuntimeHash
             spec_rgb_consumer_materializer_sha256 = $specConsumerHash
+            clustered_pnts_journal_sha256 = $clusteredJournalHash
+            clustered_pnts_materializer_sha256 = $clusteredMaterializerHash
+            clustered_pnts_sidecar_sha256 = $clusteredSidecarHash
+            clustered_pnts_draw_runtime_sha256 = $clusteredDrawRuntimeHash
+            clustered_pnts_pipeline_runtime_sha256 = $clusteredPipelineRuntimeHash
+            clustered_pnts_activation_source_audit_sha256 = $clusteredSourceAuditHash
+            clustered_pnts_draw_adapter_test_sha256 = $clusteredAdapterTestHash
+            clustered_pnts_receiver_count = 36
+            clustered_pnts_spc_receiver_count = 24
+            clustered_pnts_nospc_receiver_count = 12
+            clustered_pnts_stock_membership = "T16_T17_BYPASSED_PRIVATE_FIRST4"
+            clustered_pnts_carriers = "B12_SLOT12_T18_SLOT18_T19_SLOT19"
+            clustered_pnts_pre_runtime_activation = "STATIC_PATH_AND_WINDOWS_CI_PASS_RUNTIME_NOT_TESTED"
+            clustered_pnts_external_asset_prerequisite = @("DSRRL\\Specular","DSRRL\\Diffuse","DSRRL\\Normals")
+            clustered_pnts_runtime_activation = "NOT_TESTED"
+            clustered_pnts_pixel_behavior = "OPEN"
             pmetal_envspec_materializer_sha256 = $envspecMaterializerHash
             pmetal_envspec_shader_authority_sha256 = $envspecAuthorityHash
             pmetal_envspec_hemenvlerp_materializer_sha256 = $envspecLerpMaterializerHash
@@ -1028,7 +1103,7 @@ jobs:
             material_response_draw_probe = "VISIBLE_EXACT_OWNER_RECEIVER_PS_B12_BATCH_TRANSACTION"
             material_response_feature_armed = $true
             material_response_runtime_activation = "NOT_TESTED"
-            boot_armed_operator_count = 13
+            boot_armed_operator_count = 15
             single_addon_entrypoint = $true
             draw_replay = $true
             runtime_status = "NOT_TESTED"

@@ -1,6 +1,6 @@
 #include "dsrrl/runtime/material_owner_producer.hpp"
 #include "dsrrl/operators/material_response/mtd_semantic_census.hpp"
-#include "dsrrl/operators/material_response/generated_dsr_flver_owner_tuple_v1.hpp"
+#include "dsrrl/operators/material_response/generated_dsr_flver_owner_tuples_v1.hpp"
 #include <cstddef>
 #include <iostream>
 using namespace dsrrl;
@@ -86,6 +86,40 @@ int main()
     const auto pmetal_id=runtime::make_actual_material_identity(pmetal);
     CHECK(pmetal_id.owner_tuple_exact);
     CHECK(pmetal_id.route_index==345u);
+
+    // Direct PointLight NoSpc authority: exact PTDE/DSR homology supplies
+    // raw-MTD identity for the owner producer without promoting the material
+    // into the ordinary 35-route Material Response cohort.
+    const auto nospc_semantic =
+        operators::material_response::mtd_semantic_hash(
+            "A10_Sky[Dn]_LS.mtd");
+    runtime::actual_material_owner_observation nospc{};
+    bool nospc_owner_found=false;
+    for(const auto &group: generated::k_dsr_flver_owner_groups){
+        for(std::uint32_t slot=0u;slot<group.material_count;++slot){
+            const auto index=
+                static_cast<std::size_t>(group.first_material)+slot;
+            if(generated::k_dsr_flver_owner_mtd_hashes[index]!=nospc_semantic)
+                continue;
+            nospc.flver_sha256=group.flver_sha256;
+            nospc.material_slot=slot;
+            nospc.material_slot_valid=true;
+            nospc_owner_found=true;
+            break;
+        }
+        if(nospc_owner_found) break;
+    }
+    CHECK(nospc_owner_found);
+    CHECK(runtime::enrich_exact_owner_mtd_identity(nospc));
+    CHECK(nospc.material.valid);
+    CHECK(nospc.material.semantic_name_hash==nospc_semantic);
+    CHECK(nospc.material.raw_mtd_sha256==digest(
+        "9e15f7569b6e68245e4bcae56cf6204d5c2784cbee132ca7f9da9aa93751690f"));
+    CHECK(nospc.material.route_index==0u);
+    CHECK(nospc.material.material_family_hash==0u);
+    const auto nospc_id=
+        runtime::make_actual_material_identity(nospc);
+    CHECK(nospc_id.owner_tuple_exact);
 
     // End-to-end Subsurface authority: locate an exact DSBT owner tuple from
     // the source-complete corpus, then prove owner enrichment reaches the

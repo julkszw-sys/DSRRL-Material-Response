@@ -54,7 +54,7 @@ std::size_t owner_material_cache_index(
         h % k_owner_material_cache_slots);
 }
 
-}
+} // namespace
 
 bool enrich_exact_owner_mtd_identity(
     actual_material_owner_observation &observation) noexcept
@@ -100,16 +100,13 @@ bool enrich_exact_owner_mtd_identity(
 
     core::sha256_digest raw_mtd_sha{};
     // Exact raw-MTD identity comes from the dedicated generic registry or
-    // the evidence-certified special-route supplement. The supplement does
-    // not make generic coverage source-complete; unknown/ambiguous semantic
-    // hashes still fail open. EnvSpec/SPX consumer membership is never used
-    // as an identity fallback.
-    if (!mr::generated::dsr_mtd_identity_resolve(
-            semantic_hash,
-            raw_mtd_sha) &&
-        !mr::generated::dsr_mtd_identity_supplement_resolve(
-            semantic_hash,
-            raw_mtd_sha)) {
+    // the evidence-certified special-route supplement. The supplement also
+    // carries the exact HOMOLOGOUS_NOSPC identities required by direct
+    // PointLight, but does not make generic coverage source-complete.
+    // Unknown/ambiguous semantic hashes still fail open. EnvSpec/SPX
+    // consumer membership is never used as an identity fallback.
+    if (!mr::generated::dsr_mtd_identity_resolve(semantic_hash, raw_mtd_sha) &&
+        !mr::generated::dsr_mtd_identity_supplement_resolve(semantic_hash, raw_mtd_sha)) {
         cached = {
             observation.flver_sha256,
             observation.material_slot,
