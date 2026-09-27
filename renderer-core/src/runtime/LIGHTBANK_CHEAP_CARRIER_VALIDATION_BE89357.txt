@@ -1,0 +1,1 @@
+CI trigger only. Runtime sources match main be8935768200a1c8f85dfff8cb876a468fb82ce9. Validates bounded TLS LightBank reference carrier with exact assignment beta preservation; D123 colors and exact P_Metal donors are deferred to their exact consumer gates.
