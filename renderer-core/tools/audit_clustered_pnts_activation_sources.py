@@ -37,6 +37,7 @@ def main():
     flver_cpp=(root/"src/runtime/flver_engine_hooks.cpp").read_text(encoding="utf-8")
     integrated=(root/"integrated/integrated_addon.cpp").read_text(encoding="utf-8")
     policy=(root/"include/dsrrl/core/draw_transaction_policy.hpp").read_text(encoding="utf-8")
+    adapter=(root/"src/runtime/island_draw_adapter.cpp").read_text(encoding="utf-8")
 
     require(sidecar_h,"std::uint32_t material_max_pnt_lit_num","material-limit ABI")
     if "material_max_pnt_lit_num > 4u" in sidecar_cpp or "material_max > 4u" in draw_cpp:
@@ -73,6 +74,8 @@ def main():
 
     require(pipe_cpp,"replacement_sha256","replacement shader attestation")
     require(pipe_cpp,"pipeline_attested","pipeline attestation registry")
+    require(policy,"draw_additional_owner_masks_valid","pure ownership validation contract")
+    require(adapter,"draw_additional_owner_masks_valid","production adapter ownership contract")
     require(policy,"{operator_id::point_light, draw_transaction_mode::draw_required","PointLight draw transaction")
     require(policy,"{operator_id::local_specular_legacy, draw_transaction_mode::draw_required","legacy spec draw transaction")
 
