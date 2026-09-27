@@ -12,8 +12,8 @@ int main()
     namespace mr = dsrrl::operators::material_response;
     namespace gen = dsrrl::operators::material_response::generated;
 
-    static_CHECK(!gen::k_dsr_mtd_identity_supplement_source_complete);
-    static_CHECK(gen::k_dsr_mtd_identity_supplement.size() == 1u);
+    static_assert(!gen::k_dsr_mtd_identity_supplement_source_complete);
+    static_assert(gen::k_dsr_mtd_identity_supplement.size() == 1u);
 
     std::array<std::uint8_t,32> resolved{};
     const auto semantic =
