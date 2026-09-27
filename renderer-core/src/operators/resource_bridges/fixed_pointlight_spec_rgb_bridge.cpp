@@ -28,16 +28,18 @@ evaluate_fixed_pointlight_spec_rgb_route(
             fixed_pointlight_spec_rgb_reason::
                 material_not_verified);
 
-    const auto semantic =
-        material_response::classify_mtd_semantic(
-            query,
-            material_response::mtd_semantic_operator::spec_rgb);
+    if (!context.direct_pointlight_material_authorized) {
+        const auto semantic =
+            material_response::classify_mtd_semantic(
+                query,
+                material_response::mtd_semantic_operator::spec_rgb);
 
-    if (semantic.state !=
-        material_response::mtd_semantic_state::use)
-        return fail(
-            fixed_pointlight_spec_rgb_reason::
-                mtd_census_not_authorized);
+        if (semantic.state !=
+            material_response::mtd_semantic_state::use)
+            return fail(
+                fixed_pointlight_spec_rgb_reason::
+                    mtd_census_not_authorized);
+    }
 
     if (!context.material_specular_consumer_verified)
         return fail(
