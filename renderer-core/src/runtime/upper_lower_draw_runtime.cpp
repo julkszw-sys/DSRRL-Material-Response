@@ -1152,8 +1152,10 @@ void publish_reference_token(
         auto &entry =
             g_reference_tokens[base + way];
         if (entry.valid &&
-            entry.fingerprint.owner ==
-                producer.owner) {
+            operators::lightbank::
+                lightbank_snapshot_matches_draw(
+                    entry.fingerprint,
+                    token.fingerprint)) {
             entry = token;
             return;
         }
@@ -1199,6 +1201,8 @@ bool consume_reference_token(
     const auto base =
         set * k_reference_token_ways;
 
+    bool owner_candidate = false;
+
     for (std::size_t way = 0u;
          way < k_reference_token_ways;
          ++way) {
@@ -1209,24 +1213,24 @@ bool consume_reference_token(
             entry.fingerprint.owner != owner)
             continue;
 
-        // Selection is one-shot even on a stale tuple. This preserves the
-        // previous fail-open lifetime rule while making producer->selector
-        // transport visible across engine threads.
-        entry.available = false;
+        owner_candidate = true;
 
         if (!operators::lightbank::
                 lightbank_snapshot_matches_draw(
                     entry.fingerprint,
-                    draw)) {
-            tuple_mismatch = true;
-            return false;
-        }
+                    draw))
+            continue;
 
+        entry.available = false;
         out = entry;
         out.available = false;
         return true;
     }
 
+    // A same-owner token for another selector/beta tuple is not consumed.
+    // The second way can therefore carry a parallel draw for the same bank.
+    // The current draw still fails open if its exact tuple is absent.
+    tuple_mismatch = owner_candidate;
     return false;
 }
 
