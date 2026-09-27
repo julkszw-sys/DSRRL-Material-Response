@@ -895,6 +895,16 @@ bool read_assignment_tuple(
 }
 
 
+const std::uint8_t *resolve_raw_lightbank_record(
+    void *source,
+    std::int32_t selector) noexcept;
+f4 decode_rgbm(
+    const raw_rgbm &value) noexcept;
+f4 lerp4(
+    const f4 &a,
+    const f4 &b,
+    float t) noexcept;
+
 std::size_t reference_token_set(
     std::uintptr_t owner) noexcept
 {
