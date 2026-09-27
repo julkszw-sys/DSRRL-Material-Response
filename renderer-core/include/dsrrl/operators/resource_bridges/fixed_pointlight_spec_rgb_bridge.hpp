@@ -36,6 +36,11 @@ struct fixed_pointlight_spec_rgb_context {
     bool blended_material = false;
     bool actual_material_verified = false;
     bool material_specular_consumer_verified = false;
+    // Direct fixed PointLight has its own exact receiver namespace. When the
+    // draw-local material has already passed the authenticated direct
+    // PointLight material resolver, do not borrow a stable HemEnv receiver ID
+    // solely to re-run the generic MTD census.
+    bool direct_pointlight_material_authorized = false;
 
     bool endpoint_a_identity_verified = false;
     bool endpoint_a_sidecar_ready = false;
