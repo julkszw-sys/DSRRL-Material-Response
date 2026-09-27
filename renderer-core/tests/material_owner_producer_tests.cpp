@@ -1,6 +1,6 @@
 #include "dsrrl/runtime/material_owner_producer.hpp"
 #include "dsrrl/operators/material_response/mtd_semantic_census.hpp"
-#include "dsrrl/operators/material_response/generated_dsr_flver_owner_tuple_v1.hpp"
+#include "dsrrl/operators/material_response/generated_dsr_flver_owner_tuples_v1.hpp"
 #include <cstddef>
 #include <iostream>
 using namespace dsrrl;

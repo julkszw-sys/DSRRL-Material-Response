@@ -12,6 +12,7 @@
 #include "dsrrl/runtime/material_owner_producer.hpp"
 #include "dsrrl/runtime/upper_lower_draw_runtime.hpp"
 #include "dsrrl/runtime/hemdir3_mode_transport.hpp"
+#include "dsrrl/runtime/clustered_pnts_draw_runtime.hpp"
 #include "dsrrl/operators/material_response/mtd_semantic_census.hpp"
 #include "dsrrl/operators/material_response/generated_routes_v1.hpp"
 #include "dsrrl/operators/legacy_plan/sha256_bytes.hpp"
@@ -28,19 +29,28 @@
 #pragma comment(lib,"bcrypt.lib")
 
 extern "C" void dsrrl_flver_selector_hook_entry();
-extern "C" { void *g_dsrrl_flver_selector_trampoline=nullptr; }
+extern "C" void dsrrl_clustered_pnts_builder_hook_entry();
+extern "C" {
+void *g_dsrrl_flver_selector_trampoline=nullptr;
+void *g_dsrrl_flver_builder_trampoline=nullptr;
+}
 
 namespace dsrrl::runtime::flver_identity_transport {
 namespace {
 constexpr char k_sha[]="a45aaa36dd2f6cc151670a639ea5547043cf38ea79ff4178b963c6ed71f98d7b";
-constexpr std::uintptr_t k_parse=0x20D910u,k_selector=0x22BA20u,k_destroy=0x20D7A0u,k_mtd=0x295ED0u;
+constexpr std::uintptr_t k_parse=0x20D910u,k_selector=0x22BA20u,k_destroy=0x20D7A0u,k_mtd=0x295ED0u,k_builder=0x22084Fu;
 constexpr std::uintptr_t k_ret_sel_1=0x20E019u,k_ret_sel_2=0x20EB7Fu,k_ret_sel_3=0x20FB9Eu;
 constexpr std::array<std::uint8_t,16> k_parse_b={0x48,0x89,0x5C,0x24,0x18,0x55,0x56,0x57,0x41,0x54,0x41,0x55,0x41,0x56,0x41,0x57};
 constexpr std::array<std::uint8_t,15> k_selector_b={0x40,0x53,0x48,0x83,0xEC,0x30,0x49,0x63,0xC0,0x45,0x8B,0xD1,0x48,0x8B,0xDA};
 constexpr std::array<std::uint8_t,20> k_destroy_b={0x40,0x57,0x48,0x83,0xEC,0x30,0x48,0xC7,0x44,0x24,0x20,0xFE,0xFF,0xFF,0xFF,0x48,0x89,0x5C,0x24,0x40};
 constexpr std::array<std::uint8_t,15> k_mtd_b={0x40,0x57,0x48,0x83,0xEC,0x40,0x48,0xC7,0x44,0x24,0x20,0xFE,0xFF,0xFF,0xFF};
+constexpr std::array<std::uint8_t,17> k_builder_b={
+    0x48,0x8D,0x8F,0xD0,0x00,0x00,0x00,
+    0x33,0xDB,
+    0x0F,0x28,0x41,0x10,
+    0x0F,0xC2,0x01,0x01};
 struct hook{void *target=nullptr,*trampoline=nullptr,*detour=nullptr;std::size_t stolen=0;std::array<std::uint8_t,32> original{};bool patched=false;};
-std::uintptr_t g_base=0; hook g_p{},g_s{},g_d{},g_m{}; hook_status g_state{};
+std::uintptr_t g_base=0; hook g_p{},g_s{},g_d{},g_m{},g_b{}; hook_status g_state{};
 using parser_fn=void(__fastcall *)(void *,const void *); using destructor_fn=void(__fastcall *)(void *);
 using mtd_fn=void(__fastcall *)(void *,const void *,std::uint32_t,const wchar_t *);
 parser_fn g_po=nullptr; destructor_fn g_do=nullptr; mtd_fn g_mo=nullptr;
@@ -380,6 +390,15 @@ void __fastcall mtd_entry(
  if(g_mo)g_mo(material,raw,len,semantic_key);
 }
 }
+extern "C" void dsrrl_clustered_pnts_builder_observer(
+    void *draw,
+    void *renderer_context) noexcept
+{
+ clustered_pnts_builder_event_bridge(
+     draw,
+     renderer_context);
+}
+
 extern "C" void dsrrl_flver_selector_observer(
     void *container,
     void *owner,
@@ -414,6 +433,10 @@ extern "C" void dsrrl_flver_selector_observer(
      resolve_actual_material(
          container,
          material_index);
+
+ clustered_pnts_selector_event_bridge(
+     owner,
+     actual_material);
 
  actual_material_owner_observation observation{};
  if(flver_identity_enrich_owner(
@@ -458,33 +481,37 @@ extern "C" void dsrrl_flver_selector_observer(
 
  telemetry::hot_count(g_owner_fail_open);
 }
-bool install() noexcept {if(g_p.patched||g_s.patched||g_d.patched||g_m.patched)return false;g_state={};g_runtime_mtd_classified.store(false);g_runtime_mtd_cache_hit.store(false);g_runtime_mtd_selection_published.store(false);if(!exe_ok())return false;g_base=reinterpret_cast<std::uintptr_t>(GetModuleHandleW(nullptr));if(!g_base)return false;g_state.provenance_ok=true;
+bool install() noexcept {if(g_p.patched||g_s.patched||g_d.patched||g_m.patched||g_b.patched)return false;g_state={};g_runtime_mtd_classified.store(false);g_runtime_mtd_cache_hit.store(false);g_runtime_mtd_selection_published.store(false);if(!exe_ok())return false;g_base=reinterpret_cast<std::uintptr_t>(GetModuleHandleW(nullptr));if(!g_base)return false;g_state.provenance_ok=true;
  if(!prep(g_p,k_parse,k_parse_b,reinterpret_cast<void*>(&parse_entry)))goto fail;g_po=reinterpret_cast<parser_fn>(g_p.trampoline);
  if(!prep(g_d,k_destroy,k_destroy_b,reinterpret_cast<void*>(&destroy_entry)))goto fail;g_do=reinterpret_cast<destructor_fn>(g_d.trampoline);
  if(!prep(g_m,k_mtd,k_mtd_b,reinterpret_cast<void*>(&mtd_entry)))goto fail;g_mo=reinterpret_cast<mtd_fn>(g_m.trampoline);
  if(!prep(g_s,k_selector,k_selector_b,reinterpret_cast<void*>(&dsrrl_flver_selector_hook_entry)))goto fail;g_dsrrl_flver_selector_trampoline=g_s.trampoline;
- if(!arm(g_p)||!arm(g_d)||!arm(g_m)||!arm(g_s))goto fail;
- g_state.parser_armed=true;g_state.destructor_armed=true;g_state.mtd_armed=true;g_state.selector_armed=true;g_state.selector_owner_enrichment=true;g_state.exact_runtime_material_carrier=true;return true;
+ if(!prep(g_b,k_builder,k_builder_b,reinterpret_cast<void*>(&dsrrl_clustered_pnts_builder_hook_entry)))goto fail;g_dsrrl_flver_builder_trampoline=g_b.trampoline;
+ if(!arm(g_p)||!arm(g_d)||!arm(g_m)||!arm(g_s)||!arm(g_b))goto fail;
+ g_state.parser_armed=true;g_state.destructor_armed=true;g_state.mtd_armed=true;g_state.selector_armed=true;g_state.builder_armed=true;g_state.selector_owner_enrichment=true;g_state.exact_runtime_material_carrier=true;return true;
 fail:
  uninstall();
  return false;
 }
 void uninstall() noexcept {
+ const bool builder_ok=restore(g_b);
  const bool selector_ok=restore(g_s);
  const bool mtd_ok=restore(g_m);
  const bool destructor_ok=restore(g_d);
  const bool parser_ok=restore(g_p);
- if(!(selector_ok&&mtd_ok&&destructor_ok&&parser_ok)){
+ if(!(builder_ok&&selector_ok&&mtd_ok&&destructor_ok&&parser_ok)){
   // Preserve failed hook state/trampolines for diagnostics and do not claim a
   // clean teardown. A failed restore is construction/runtime safety evidence,
   // never a reason to free state and pretend stock code was restored.
   g_state.restore_failed=true;
+  g_state.builder_armed=g_b.patched;
   g_state.selector_armed=g_s.patched;
   g_state.mtd_armed=g_m.patched;
   g_state.destructor_armed=g_d.patched;
   g_state.parser_armed=g_p.patched;
   return;
  }
+ g_dsrrl_flver_builder_trampoline=nullptr;
  g_dsrrl_flver_selector_trampoline=nullptr;
  g_po=nullptr;
  g_do=nullptr;

@@ -24,6 +24,8 @@
 #include "dsrrl/runtime/hemdir3_draw_runtime.hpp"
 #include "dsrrl/runtime/fixed_pointlight_draw_runtime.hpp"
 #include "dsrrl/runtime/fixed_pointlight_pipeline_runtime.hpp"
+#include "dsrrl/runtime/clustered_pnts_draw_runtime.hpp"
+#include "dsrrl/runtime/clustered_pnts_pipeline_runtime.hpp"
 #include "dsrrl/operators/material_response/material_response_island.hpp"
 #include "dsrrl/operators/material_response/material_response_seed.hpp"
 #include "dsrrl/operators/material_response/material_response_v211_materializer.hpp"
@@ -40,6 +42,7 @@
 #include "dsrrl/operators/point_light/fixed_local_specular_output_cut.hpp"
 #include "dsrrl/operators/point_light/fixed_local_specular_island_plan.hpp"
 #include "dsrrl/operators/point_light/fixed_local_specular_single_materializer.hpp"
+#include "dsrrl/operators/point_light/clustered_pnts_direct_materializer.hpp"
 
 #include <reshade.hpp>
 #include <d3d11.h>
@@ -107,6 +110,10 @@ dsrrl::runtime::fixed_pointlight_draw_runtime
     g_fixed_pointlight;
 dsrrl::runtime::fixed_pointlight_pipeline_runtime
     g_fixed_pointlight_pipeline;
+dsrrl::runtime::clustered_pnts_draw_runtime
+    g_clustered_pnts;
+dsrrl::runtime::clustered_pnts_pipeline_runtime
+    g_clustered_pnts_pipeline;
 dsrrl::runtime::pmetal_envspec_draw_runtime
     g_pmetal_envspec(
         g_core,
@@ -171,6 +178,15 @@ std::atomic<std::uint64_t> g_fixed_draw_b12_ready{0};
 std::atomic<std::uint64_t> g_fixed_draw_t19_ready{0};
 std::atomic<std::uint64_t> g_fixed_draw_batch_ready{0};
 std::atomic<std::uint64_t> g_fixed_draw_fail_open{0};
+std::atomic<std::uint64_t> g_clustered_draw_candidates{0};
+std::atomic<std::uint64_t> g_clustered_draw_pipeline_ready{0};
+std::atomic<std::uint64_t> g_clustered_draw_material_ready{0};
+std::atomic<std::uint64_t> g_clustered_draw_resources_ready{0};
+std::atomic<std::uint64_t> g_clustered_draw_sidecar_ready{0};
+std::atomic<std::uint64_t> g_clustered_draw_batch_ready{0};
+std::atomic<std::uint64_t> g_clustered_draw_applied{0};
+std::atomic<std::uint64_t> g_clustered_draw_fail_open{0};
+std::atomic<std::uint64_t> g_clustered_draw_restore_fail{0};
 
 bool g_hot_telemetry_enabled = false;
 bool g_effect_telemetry_enabled = false;
@@ -476,7 +492,8 @@ enum integrated_draw_route_bit : std::uint8_t {
     k_route_hemdir3 = 1u << 3,
     k_route_upper_lower = 1u << 4,
     k_route_a1 = 1u << 5,
-    k_route_fixed_pointlight = 1u << 6
+    k_route_fixed_pointlight = 1u << 6,
+    k_route_clustered_pointlight = 1u << 7
 };
 
 struct integrated_draw_route_tls {
@@ -689,6 +706,8 @@ constexpr dsrrl::core::operator_id k_integrated_islands[] = {
     dsrrl::core::operator_id::env_spec,
     dsrrl::core::operator_id::terminal_sat_rgb,
     dsrrl::core::operator_id::diffuse_material_domain,
+    dsrrl::core::operator_id::point_light,
+    dsrrl::core::operator_id::local_specular_legacy,
     dsrrl::core::operator_id::pointlight_pnts_attenuation,
     dsrrl::core::operator_id::envspec_nospc_delete,
     dsrrl::core::operator_id::fixed_postfog_identity
@@ -719,6 +738,8 @@ bool observe_draw_identity(
     reshade::api::command_list *cmd_list,
     std::uint8_t route_mask,
     bool fixed_pointlight_receiver,
+    bool clustered_pointlight_receiver,
+    bool clustered_pointlight_spc,
     std::uint32_t &receiver_id,
     bool &hemenvlerp_bound,
     dsrrl::runtime::hemenvlerp_receiver_identity &hemenvlerp_identity,
@@ -851,15 +872,17 @@ bool observe_draw_identity(
         (hemdir3_receiver ? 1u : 0u) +
         (upper_lower_unpaired_nospc ? 1u : 0u) +
         (upper_lower_standalone ? 1u : 0u) +
-        (fixed_pointlight_receiver ? 1u : 0u);
+        (fixed_pointlight_receiver ? 1u : 0u) +
+        (clustered_pointlight_receiver ? 1u : 0u);
 
     const bool receiver_ok =
         receiver_classes == 1u &&
         upper_lower_spc_matches_stable;
 
-    if (fixed_pointlight_receiver) {
-        // Fixed PntSS/PntSSSS is an independent receiver namespace. Never
-        // borrow Material Response receiver IDs 24..47 for this path.
+    if (fixed_pointlight_receiver ||
+        clustered_pointlight_receiver) {
+        // Direct PointLight families are independent receiver namespaces.
+        // Never borrow Material Response receiver IDs 24..47 for these paths.
         receiver_id = 0u;
     } else if (subsurface_receiver) {
         // DSBT body Subsurf exact receivers 33..35 own the route. Their
@@ -918,6 +941,7 @@ bool observe_draw_identity(
         if (rx != nullptr)
             hot_count(rx->accepted);
         if (!fixed_pointlight_receiver &&
+            !clustered_pointlight_receiver &&
             !g_mr_once_receiver_hit.exchange(true)) {
             reshade::log::message(
                 reshade::log::level::info,
@@ -948,6 +972,7 @@ bool observe_draw_identity(
     if (rx != nullptr)
         hot_count(rx->joined);
     if (!fixed_pointlight_receiver &&
+        !clustered_pointlight_receiver &&
         !g_mr_once_owner_join.exchange(true)) {
         reshade::log::message(
             reshade::log::level::info,
@@ -968,11 +993,20 @@ bool observe_draw_identity(
     }
 
     hot_count(g_mr_draw_eval);
+    const bool direct_pointlight_receiver =
+        fixed_pointlight_receiver ||
+        clustered_pointlight_receiver;
+    const bool direct_pointlight_requires_specular =
+        fixed_pointlight_receiver ||
+        (clustered_pointlight_receiver &&
+         clustered_pointlight_spc);
+
     out_decision =
-        fixed_pointlight_receiver
+        direct_pointlight_receiver
             ? g_material_response.
                 evaluate_direct_pointlight_material(
-                    out_material)
+                    out_material,
+                    direct_pointlight_requires_specular)
             : g_material_response.evaluate(
                 receiver_id,
                 out_material);
@@ -982,6 +1016,7 @@ bool observe_draw_identity(
         if (rx != nullptr)
             hot_count(rx->mr_active);
         if (!fixed_pointlight_receiver &&
+            !clustered_pointlight_receiver &&
             !g_mr_once_decision_active.exchange(true)) {
             reshade::log::message(
                 reshade::log::level::info,
@@ -989,6 +1024,7 @@ bool observe_draw_identity(
         }
 
         if (!fixed_pointlight_receiver &&
+            !clustered_pointlight_receiver &&
             !g_mr_once_identity.exchange(true)) {
             char mr_identity_line[512]{};
             std::snprintf(
@@ -1463,6 +1499,67 @@ void log_state(const char *tag) noexcept
         reshade::log::level::info,
         fixed_pl_line);
 
+    const auto clustered_pl =
+        g_clustered_pnts.telemetry();
+    const auto clustered_pipe =
+        g_clustered_pnts_pipeline.telemetry();
+    char clustered_pl_line[1536]{};
+    std::snprintf(
+        clustered_pl_line,
+        sizeof(clustered_pl_line),
+        "[DSRRL CLPNTS ACT] tag=%s "
+        "builder=%llu collection=%llu/%llu selector=%llu mirror=%llu/%llu "
+        "source=%llu/%llu publish=%llu owner=%llu/%llu max=%llu/%llu "
+        "sidecar=%llu/%llu gpu18=%llu/%llu gpu19=%llu/%llu b12=%llu/%llu prepare=%llu/%llu "
+        "pipe_reg=%llu/%llu pipe_init=%llu pipe_bind=%llu/%llu "
+        "draw_candidate=%llu pipeline_ready=%llu material_ready=%llu resources_ready=%llu "
+        "sidecar_ready=%llu batch_ready=%llu applied=%llu target_failopen=%llu restore_fail=%llu "
+        "enabled=%u quarantine=%u/%u",
+        tag,
+        static_cast<unsigned long long>(clustered_pl.builder_seen),
+        static_cast<unsigned long long>(clustered_pl.collection_ok),
+        static_cast<unsigned long long>(clustered_pl.collection_fail),
+        static_cast<unsigned long long>(clustered_pl.selector_calls),
+        static_cast<unsigned long long>(clustered_pl.mirror_equal),
+        static_cast<unsigned long long>(clustered_pl.mirror_diff),
+        static_cast<unsigned long long>(clustered_pl.source_capture_ok),
+        static_cast<unsigned long long>(clustered_pl.source_capture_fail),
+        static_cast<unsigned long long>(clustered_pl.snapshot_publish),
+        static_cast<unsigned long long>(clustered_pl.owner_join_hit),
+        static_cast<unsigned long long>(clustered_pl.owner_join_miss),
+        static_cast<unsigned long long>(clustered_pl.material_limit_ok),
+        static_cast<unsigned long long>(clustered_pl.material_limit_fail),
+        static_cast<unsigned long long>(clustered_pl.sidecar_ready),
+        static_cast<unsigned long long>(clustered_pl.sidecar_fail),
+        static_cast<unsigned long long>(clustered_pl.t18_create),
+        static_cast<unsigned long long>(clustered_pl.t18_hit),
+        static_cast<unsigned long long>(clustered_pl.t19_create),
+        static_cast<unsigned long long>(clustered_pl.t19_hit),
+        static_cast<unsigned long long>(clustered_pl.b12_create),
+        static_cast<unsigned long long>(clustered_pl.b12_hit),
+        static_cast<unsigned long long>(clustered_pl.prepare_ok),
+        static_cast<unsigned long long>(clustered_pl.prepare_fail),
+        static_cast<unsigned long long>(clustered_pipe.candidate_create_ok),
+        static_cast<unsigned long long>(clustered_pipe.candidate_create_fail),
+        static_cast<unsigned long long>(clustered_pipe.init_attested),
+        static_cast<unsigned long long>(clustered_pipe.bind_hits),
+        static_cast<unsigned long long>(clustered_pipe.bind_misses),
+        static_cast<unsigned long long>(g_clustered_draw_candidates.load()),
+        static_cast<unsigned long long>(g_clustered_draw_pipeline_ready.load()),
+        static_cast<unsigned long long>(g_clustered_draw_material_ready.load()),
+        static_cast<unsigned long long>(g_clustered_draw_resources_ready.load()),
+        static_cast<unsigned long long>(g_clustered_draw_sidecar_ready.load()),
+        static_cast<unsigned long long>(g_clustered_draw_batch_ready.load()),
+        static_cast<unsigned long long>(g_clustered_draw_applied.load()),
+        static_cast<unsigned long long>(g_clustered_draw_fail_open.load()),
+        static_cast<unsigned long long>(g_clustered_draw_restore_fail.load()),
+        clustered_pl.enabled ? 1u : 0u,
+        clustered_pl.quarantined ? 1u : 0u,
+        clustered_pipe.quarantined ? 1u : 0u);
+    reshade::log::message(
+        reshade::log::level::info,
+        clustered_pl_line);
+
     // Compact machine-parseable receiver census. Emit one line rather than
     // 24 lines per checkpoint so long runtime captures remain practical.
     char rx_line[4096]{};
@@ -1846,6 +1943,8 @@ void on_destroy_device(reshade::api::device *device)
     g_pmetal_envspec.on_destroy_device(device);
     g_fixed_pointlight.on_destroy_device(device);
     g_fixed_pointlight_pipeline.on_destroy_device(device);
+    g_clustered_pnts.on_destroy_device(device);
+    g_clustered_pnts_pipeline.on_destroy_device(device);
     g_mr_draw_runtime.on_destroy_device(device);
     g_a1_bridge.on_destroy_device(device);
 }
@@ -1869,6 +1968,10 @@ bool on_create_pipeline(
     bool h3_replacement_ready = false;
     bool ul_identity_ready = false;
     bool ul_replacement_ready = false;
+    dsrrl::operators::point_light::
+        clustered_pnts_direct_materialize_outcome clustered_pnts{};
+    std::vector<std::uint8_t> clustered_pnts_payload;
+    bool clustered_pnts_candidate = false;
 
     if (pixel_shader != nullptr &&
         pixel_shader->code != nullptr &&
@@ -1876,6 +1979,17 @@ bool on_create_pipeline(
         const auto *source =
             static_cast<const std::uint8_t *>(
                 pixel_shader->code);
+
+        clustered_pnts =
+            dsrrl::operators::point_light::
+                materialize_clustered_pnts_direct_ptde(
+                    source,
+                    pixel_shader->code_size,
+                    clustered_pnts_payload);
+        clustered_pnts_candidate =
+            clustered_pnts.result ==
+                dsrrl::operators::point_light::
+                    clustered_pnts_direct_materialize_result::applied;
 
         // Observe the exact original DSR local-specular host before any
         // create-time island is allowed to replace the shader bytes. This is
@@ -2413,6 +2527,25 @@ bool on_create_pipeline(
             subobject_count,
             subobjects);
 
+    if (clustered_pnts_candidate) {
+        const auto *attested_host =
+            find_pixel_shader(
+                subobject_count,
+                subobjects);
+        if (attested_host == nullptr ||
+            attested_host->code == nullptr ||
+            attested_host->code_size == 0u ||
+            !g_clustered_pnts_pipeline.register_candidate(
+                device,
+                clustered_pnts,
+                static_cast<const std::uint8_t *>(
+                    attested_host->code),
+                attested_host->code_size,
+                clustered_pnts_payload.data(),
+                clustered_pnts_payload.size()))
+            clustered_pnts_candidate = false;
+    }
+
     if (ul_identity_ready) {
         const auto *created_shader =
             find_pixel_shader(
@@ -2486,6 +2619,8 @@ void on_init_pipeline(
         device, layout, subobject_count, subobjects, pipeline);
     g_fixed_pointlight_pipeline.on_init_pipeline(
         device, subobject_count, subobjects, pipeline);
+    g_clustered_pnts_pipeline.on_init_pipeline(
+        device, subobject_count, subobjects, pipeline);
 
     const auto *pixel_shader =
         find_pixel_shader(
@@ -2502,6 +2637,11 @@ void on_init_pipeline(
             pipeline.handle))
         draw_route_mask |=
             k_route_fixed_pointlight;
+
+    if (g_clustered_pnts_pipeline.pipeline_attested(
+            pipeline.handle))
+        draw_route_mask |=
+            k_route_clustered_pointlight;
 
     if (pixel_shader != nullptr &&
         pixel_shader->code != nullptr &&
@@ -2564,6 +2704,7 @@ void on_destroy_pipeline(
     dsrrl::runtime::upper_lower_receiver_forget_pipeline(
         pipeline.handle);
     g_fixed_pointlight_pipeline.on_destroy_pipeline(pipeline);
+    g_clustered_pnts_pipeline.on_destroy_pipeline(pipeline);
     g_a1_bridge.on_destroy_pipeline(device, pipeline);
 }
 
@@ -2614,6 +2755,14 @@ void on_bind_pipeline(
             stages,
             pipeline);
 
+    if (pixel_stage_bound &&
+        (route_mask &
+         k_route_clustered_pointlight) != 0u)
+        g_clustered_pnts_pipeline.on_bind_pipeline(
+            cmd_list,
+            stages,
+            pipeline);
+
     const bool target =
         pixel_stage_bound &&
         (route_mask & k_route_a1) != 0u &&
@@ -2651,6 +2800,9 @@ struct prepared_island_batch {
     dsrrl::runtime::prepared_fixed_pointlight_shader fixed_shader{};
     dsrrl::runtime::prepared_fixed_pointlight_draw fixed_carrier{};
     ID3D11Buffer *fixed_b12 = nullptr;
+    dsrrl::runtime::prepared_clustered_pnts_shader clustered_shader{};
+    dsrrl::runtime::prepared_clustered_pnts_draw clustered_carrier{};
+    bool clustered_in_batch = false;
     bool fixed_in_batch = false;
     bool mr_in_batch = false;
     bool lerp_mr_in_batch = false;
@@ -2729,6 +2881,18 @@ effect_probe_mask prepared_effect_mask(
                 effect_probe_id::upper_lower);
     }
 
+    if (prepared.clustered_in_batch) {
+        mask |= effect_probe_bit(
+            effect_probe_id::pointlight);
+        if (prepared.clustered_shader.spc)
+            mask |= effect_probe_bit(
+                effect_probe_id::local_specular);
+        mask |= effect_probe_bit(
+            effect_probe_id::material_response);
+        mask |= resource_effect_mask(
+            prepared.resources);
+    }
+
     if (prepared.fixed_in_batch) {
         mask |= effect_probe_bit(
             effect_probe_id::pointlight);
@@ -2784,12 +2948,19 @@ effect_probe_mask route_candidate_effect_mask(
             effect_probe_id::local_specular);
     }
 
+    if ((route_mask &
+         k_route_clustered_pointlight) != 0u)
+        mask |= effect_probe_bit(
+            effect_probe_id::pointlight);
+
     return mask;
 }
 
 effect_probe_mask candidate_effect_mask(
     std::uint8_t route_mask,
     bool fixed_pointlight_bound,
+    bool clustered_pointlight_bound,
+    bool clustered_pointlight_spc,
     bool hemenvlerp_bound,
     bool subsurface_bound,
     bool hemdir3_bound,
@@ -2833,6 +3004,14 @@ effect_probe_mask candidate_effect_mask(
             effect_probe_id::local_specular);
     }
 
+    if (clustered_pointlight_bound) {
+        mask |= effect_probe_bit(
+            effect_probe_id::pointlight);
+        if (clustered_pointlight_spc)
+            mask |= effect_probe_bit(
+                effect_probe_id::local_specular);
+    }
+
     if (material.owner_tuple_exact) {
         mask |= effect_probe_bit(
             effect_probe_id::spec_rgb);
@@ -2854,6 +3033,8 @@ effect_probe_mask candidate_effect_mask(
 
 effect_probe_mask authority_effect_mask(
     bool fixed_pointlight_bound,
+    bool clustered_pointlight_bound,
+    bool clustered_pointlight_spc,
     bool hemenvlerp_bound,
     bool upper_lower_bound,
     const dsrrl::operators::material_response::
@@ -2885,6 +3066,16 @@ effect_probe_mask authority_effect_mask(
             effect_probe_id::pointlight);
         mask |= effect_probe_bit(
             effect_probe_id::local_specular);
+    }
+
+    if (clustered_pointlight_bound &&
+        decision.active) {
+        mask |= effect_probe_bit(
+            effect_probe_id::pointlight);
+        if (clustered_pointlight_spc &&
+            decision.ptde_specular_power_verified)
+            mask |= effect_probe_bit(
+                effect_probe_id::local_specular);
     }
 
     return mask;
@@ -2922,7 +3113,14 @@ void account_effect_dispatch(
 void release_prepared_island_batch(
     prepared_island_batch &prepared) noexcept
 {
-    if (prepared.fixed_in_batch) {
+    if (prepared.clustered_in_batch) {
+        g_material_resources.release_prepared_draw(
+            prepared.resources);
+        g_clustered_pnts.release_prepared_draw(
+            prepared.clustered_carrier);
+        g_clustered_pnts_pipeline.release_prepared_shader(
+            prepared.clustered_shader);
+    } else if (prepared.fixed_in_batch) {
         g_material_resources.release_prepared_draw(
             prepared.resources);
         g_fixed_pointlight.release_prepared_draw(
@@ -2957,6 +3155,7 @@ struct draw_semantic_selection_guard {
     {
         g_upper_lower.consume_draw_selection();
         g_fixed_pointlight.consume_draw_selection();
+        g_clustered_pnts.consume_draw_selection();
         dsrrl::runtime::hemdir3_mode_transport::
             consume_draw_selection();
     }
@@ -2965,6 +3164,7 @@ struct draw_semantic_selection_guard {
 bool prepare_island_batch(
     reshade::api::command_list *cmd_list,
     bool fixed_pointlight_bound,
+    bool clustered_pointlight_bound,
     std::uint32_t receiver_id,
     bool hemenvlerp_bound,
     bool subsurface_bound,
@@ -2977,6 +3177,170 @@ bool prepare_island_batch(
     prepared_island_batch &prepared) noexcept
 {
     prepared = {};
+
+    // Clustered PntS owns PTDE first-four membership, source geometry/raw-q,
+    // diffuse and (for Spc) legacy local specular. The replacement PS is
+    // attested independently from the post-A1 host, while all draw-local
+    // carriers are bound atomically and restored by the shared transaction.
+    if (clustered_pointlight_bound)
+        hot_count(g_clustered_draw_candidates);
+
+    if (clustered_pointlight_bound &&
+        g_clustered_pnts_pipeline.prepare_bound_shader(
+            cmd_list,
+            prepared.clustered_shader)) {
+        hot_count(g_clustered_draw_pipeline_ready);
+        auto *context =
+            reinterpret_cast<ID3D11DeviceContext *>(
+                cmd_list->get_native());
+
+        const bool direct_material_ready =
+            decision.active &&
+            (!prepared.clustered_shader.spc ||
+             (decision.ptde_specular_power_verified &&
+              decision.ptde_specular_power > 0.0f));
+        if (direct_material_ready)
+            hot_count(g_clustered_draw_material_ready);
+
+        dsrrl::operators::material_response::
+            mtd_semantic_query clustered_query{};
+        clustered_query.material = material;
+        clustered_query.receiver_id = 0u;
+        clustered_query.ownership.flver_sha256 =
+            material.flver_sha256;
+        clustered_query.ownership.flver_identity_hash =
+            material.flver_identity_hash;
+        clustered_query.ownership.material_slot =
+            material.material_slot;
+        clustered_query.ownership.material_slot_valid =
+            material.material_slot_valid;
+        clustered_query.ownership.exact =
+            material.owner_tuple_exact;
+
+        const bool resources_ready =
+            context != nullptr &&
+            direct_material_ready &&
+            g_material_resources.
+                prepare_clustered_pointlight_material_requests(
+                    context,
+                    clustered_query,
+                    true,
+                    prepared.clustered_shader.spc,
+                    prepared.clustered_shader.blended_material,
+                    prepared.resources) &&
+            prepared.resources.diffuse &&
+            prepared.resources.normal &&
+            (!prepared.clustered_shader.spc ||
+             prepared.resources.spec_rgb);
+
+        if (resources_ready)
+            hot_count(g_clustered_draw_resources_ready);
+
+        const bool sidecar_ready =
+            resources_ready &&
+            g_clustered_pnts.prepare_sidecar(
+                context,
+                decision,
+                prepared.clustered_carrier);
+
+        if (sidecar_ready) {
+            hot_count(g_clustered_draw_sidecar_ready);
+            const auto point =
+                dsrrl::core::operator_bit(
+                    dsrrl::core::operator_id::point_light);
+            const auto mr =
+                dsrrl::core::operator_bit(
+                    dsrrl::core::operator_id::material_response);
+            const auto local =
+                dsrrl::core::operator_bit(
+                    dsrrl::core::operator_id::
+                        local_specular_legacy);
+            const auto local_if_spc =
+                prepared.clustered_shader.spc
+                    ? local
+                    : dsrrl::core::operator_mask{0u};
+
+            dsrrl::runtime::island_draw_adapter_request clustered{};
+            clustered.primary =
+                prepared.clustered_shader.spc
+                    ? dsrrl::core::operator_id::
+                        local_specular_legacy
+                    : dsrrl::core::operator_id::point_light;
+
+            // Never duplicate the primary island in additional_owners:
+            // build_island_draw_mutation rejects that shape by contract.
+            // Spc is owned primarily by local_specular_legacy and composes
+            // PointLight + MR; NoSpc is owned primarily by PointLight and
+            // composes only MR.
+            clustered.additional_owners =
+                prepared.clustered_shader.spc
+                    ? (point | mr)
+                    : mr;
+            clustered.additional_shader_owners =
+                clustered.additional_owners;
+            clustered.additional_constant_buffer_owners =
+                clustered.additional_owners;
+            clustered.additional_resource_owners =
+                prepared.clustered_shader.spc
+                    ? point
+                    : dsrrl::core::operator_mask{0u};
+            clustered.receiver_verified = true;
+            clustered.material_verified = true;
+            clustered.pixel_shader =
+                prepared.clustered_shader.shader;
+            clustered.replace_pixel_shader = true;
+            clustered.constant_buffers[0] = {
+                12u,
+                prepared.clustered_carrier.b12,
+                point | mr | local_if_spc
+            };
+            clustered.constant_buffer_count = 1u;
+            clustered.srvs[0] = {
+                18u,
+                prepared.clustered_carrier.t18
+            };
+            clustered.srvs[1] = {
+                19u,
+                prepared.clustered_carrier.t19
+            };
+            clustered.srv_count = 2u;
+
+            if (dsrrl::runtime::append_island_draw_request(
+                    prepared.batch,
+                    clustered) ==
+                dsrrl::runtime::island_draw_batch_result::ready) {
+                bool resources_appended = true;
+                for (std::uint32_t i = 0u;
+                     i < prepared.resources.request_count;
+                     ++i) {
+                    if (dsrrl::runtime::append_island_draw_request(
+                            prepared.batch,
+                            prepared.resources.requests[i]) !=
+                        dsrrl::runtime::island_draw_batch_result::ready) {
+                        resources_appended = false;
+                        break;
+                    }
+                }
+
+                if (resources_appended) {
+                    prepared.clustered_in_batch = true;
+                    hot_count(g_clustered_draw_batch_ready);
+                    return true;
+                }
+            }
+        }
+
+        g_material_resources.release_prepared_draw(
+            prepared.resources);
+        g_clustered_pnts.release_prepared_draw(
+            prepared.clustered_carrier);
+        g_clustered_pnts_pipeline.release_prepared_shader(
+            prepared.clustered_shader);
+        prepared.batch = {};
+    }
+
+    if (clustered_pointlight_bound)
+        hot_count(g_clustered_draw_fail_open);
 
     // Fixed PntSS/PntSSSS is a separate exact receiver namespace. Compose
     // the entire visible island atomically: replacement PS, authored b12
@@ -3617,6 +3981,17 @@ bool on_draw(
         (route_mask &
          k_route_fixed_pointlight) != 0u;
 
+    bool clustered_pointlight_spc = false;
+    bool clustered_pointlight_blended = false;
+    const bool clustered_pointlight_bound =
+        (route_mask &
+         k_route_clustered_pointlight) != 0u &&
+        g_clustered_pnts_pipeline.bound_metadata(
+            cmd_list,
+            clustered_pointlight_spc,
+            clustered_pointlight_blended);
+    (void)clustered_pointlight_blended;
+
     std::uint32_t receiver_id = 0u;
     bool hemenvlerp_bound = false;
     dsrrl::runtime::hemenvlerp_receiver_identity hemenvlerp_identity{};
@@ -3632,6 +4007,8 @@ bool on_draw(
             cmd_list,
             route_mask,
             fixed_pointlight_bound,
+            clustered_pointlight_bound,
+            clustered_pointlight_spc,
             receiver_id,
             hemenvlerp_bound,
             hemenvlerp_identity,
@@ -3652,6 +4029,8 @@ bool on_draw(
         candidate_effect_mask(
             route_mask,
             fixed_pointlight_bound,
+            clustered_pointlight_bound,
+            clustered_pointlight_spc,
             hemenvlerp_bound,
             subsurface_bound,
             hemdir3_bound,
@@ -3666,6 +4045,8 @@ bool on_draw(
     mark_effect_probe_mask(
         authority_effect_mask(
             fixed_pointlight_bound,
+            clustered_pointlight_bound,
+            clustered_pointlight_spc,
             hemenvlerp_bound,
             upper_lower_bound,
             material,
@@ -3678,6 +4059,7 @@ bool on_draw(
     if (!prepare_island_batch(
             cmd_list,
             fixed_pointlight_bound,
+            clustered_pointlight_bound,
             receiver_id,
             hemenvlerp_bound,
             subsurface_bound,
@@ -3723,6 +4105,8 @@ bool on_draw(
         prepared.mr_in_batch;
     const bool lerp_mr_in_batch =
         prepared.lerp_mr_in_batch;
+    const bool clustered_in_batch =
+        prepared.clustered_in_batch;
 
     release_prepared_island_batch(
         prepared);
@@ -3730,6 +4114,19 @@ bool on_draw(
     account_effect_dispatch(
         effect_prepared,
         dispatch.transaction);
+
+    if (clustered_in_batch) {
+        if (dsrrl::runtime::draw_tx_issued(
+                dispatch.transaction))
+            hot_count(g_clustered_draw_applied);
+        else
+            hot_count(g_clustered_draw_fail_open);
+
+        if (dispatch.transaction ==
+            dsrrl::runtime::draw_tx_result::
+                issued_restore_failed)
+            hot_count(g_clustered_draw_restore_fail);
+    }
 
     if (mr_in_batch) {
         g_mr_draw_runtime.account_dispatch_result(
@@ -3792,6 +4189,17 @@ bool on_draw_indexed(
         (route_mask &
          k_route_fixed_pointlight) != 0u;
 
+    bool clustered_pointlight_spc = false;
+    bool clustered_pointlight_blended = false;
+    const bool clustered_pointlight_bound =
+        (route_mask &
+         k_route_clustered_pointlight) != 0u &&
+        g_clustered_pnts_pipeline.bound_metadata(
+            cmd_list,
+            clustered_pointlight_spc,
+            clustered_pointlight_blended);
+    (void)clustered_pointlight_blended;
+
     std::uint32_t receiver_id = 0u;
     bool hemenvlerp_bound = false;
     dsrrl::runtime::hemenvlerp_receiver_identity hemenvlerp_identity{};
@@ -3807,6 +4215,8 @@ bool on_draw_indexed(
             cmd_list,
             route_mask,
             fixed_pointlight_bound,
+            clustered_pointlight_bound,
+            clustered_pointlight_spc,
             receiver_id,
             hemenvlerp_bound,
             hemenvlerp_identity,
@@ -3827,6 +4237,8 @@ bool on_draw_indexed(
         candidate_effect_mask(
             route_mask,
             fixed_pointlight_bound,
+            clustered_pointlight_bound,
+            clustered_pointlight_spc,
             hemenvlerp_bound,
             subsurface_bound,
             hemdir3_bound,
@@ -3841,6 +4253,8 @@ bool on_draw_indexed(
     mark_effect_probe_mask(
         authority_effect_mask(
             fixed_pointlight_bound,
+            clustered_pointlight_bound,
+            clustered_pointlight_spc,
             hemenvlerp_bound,
             upper_lower_bound,
             material,
@@ -3853,6 +4267,7 @@ bool on_draw_indexed(
     if (!prepare_island_batch(
             cmd_list,
             fixed_pointlight_bound,
+            clustered_pointlight_bound,
             receiver_id,
             hemenvlerp_bound,
             subsurface_bound,
@@ -3899,6 +4314,8 @@ bool on_draw_indexed(
         prepared.mr_in_batch;
     const bool lerp_mr_in_batch =
         prepared.lerp_mr_in_batch;
+    const bool clustered_in_batch =
+        prepared.clustered_in_batch;
 
     release_prepared_island_batch(
         prepared);
@@ -3906,6 +4323,19 @@ bool on_draw_indexed(
     account_effect_dispatch(
         effect_prepared,
         dispatch.transaction);
+
+    if (clustered_in_batch) {
+        if (dsrrl::runtime::draw_tx_issued(
+                dispatch.transaction))
+            hot_count(g_clustered_draw_applied);
+        else
+            hot_count(g_clustered_draw_fail_open);
+
+        if (dispatch.transaction ==
+            dsrrl::runtime::draw_tx_result::
+                issued_restore_failed)
+            hot_count(g_clustered_draw_restore_fail);
+    }
 
     if (mr_in_batch) {
         g_mr_draw_runtime.account_dispatch_result(
@@ -4025,6 +4455,8 @@ bool AddonInit(
     g_hemdir3.reset();
     g_fixed_pointlight.reset();
     g_fixed_pointlight_pipeline.reset();
+    g_clustered_pnts.reset();
+    g_clustered_pnts_pipeline.reset();
     dsrrl::runtime::hemdir3_mode_transport::reset_stats();
     g_present_count.store(0);
     g_mr_draw_eval.store(0);
@@ -4082,6 +4514,15 @@ bool AddonInit(
     g_fixed_draw_t19_ready.store(0);
     g_fixed_draw_batch_ready.store(0);
     g_fixed_draw_fail_open.store(0);
+    g_clustered_draw_candidates.store(0);
+    g_clustered_draw_pipeline_ready.store(0);
+    g_clustered_draw_material_ready.store(0);
+    g_clustered_draw_resources_ready.store(0);
+    g_clustered_draw_sidecar_ready.store(0);
+    g_clustered_draw_batch_ready.store(0);
+    g_clustered_draw_applied.store(0);
+    g_clustered_draw_fail_open.store(0);
+    g_clustered_draw_restore_fail.store(0);
     reset_integrated_draw_routes();
     for (auto &rx : g_material_receiver_runtime) {
         rx.seen.store(0);
@@ -4173,6 +4614,17 @@ bool AddonInit(
             reshade::log::level::warning,
             "[DSRRL CORE+ISLANDS " DSRRL_CORE_ISLANDS_VERSION
             "] Fixed PointLight transport FAIL-OPEN: raw-q t19 remains unavailable; stock DSR fixed PointLight preserved.");
+    }
+
+    const bool clustered_pointlight_hooks =
+        flver_hooks &&
+        g_clustered_pnts.install();
+
+    if (!clustered_pointlight_hooks) {
+        reshade::log::message(
+            reshade::log::level::warning,
+            "[DSRRL CORE+ISLANDS " DSRRL_CORE_ISLANDS_VERSION
+            "] Clustered PntS transport FAIL-OPEN: first-four sidecar remains unavailable; stock DSR clustered PointLight preserved.");
     }
 
     // Bloom FX transport is diagnostic-only: it does not authorize Q8,
@@ -4272,6 +4724,8 @@ void AddonUninit(
     if (dsrrl::runtime::bloom_fx_draw_transport::status().restore_failed)
         log_state("BLOOM_FX_UNLOAD_RESTORE_FAIL");
 
+    g_clustered_pnts.uninstall();
+
     g_fixed_pointlight.uninstall();
 
     if (g_fixed_pointlight.telemetry().restore_failed)
@@ -4300,6 +4754,9 @@ void AddonUninit(
     g_upper_lower_hemenv.reset();
     g_hemdir3.reset();
     g_fixed_pointlight.reset();
+    g_fixed_pointlight_pipeline.reset();
+    g_clustered_pnts.reset();
+    g_clustered_pnts_pipeline.reset();
     g_mr_draw_runtime.reset();
     g_draw_transactions.reset();
     g_a1_bridge.reset();
