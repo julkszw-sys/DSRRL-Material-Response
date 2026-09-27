@@ -1,0 +1,1 @@
+Diagnostic CI trigger only. Runtime sources are identical to main parent cb090dd53535c97917032aedacfde63e9f815a21. Validates 4-way set-associative 512-entry clean-Q U/L steady_q/raw_record/D123 caches after owner observed 5 FPS on initial load and ~30 FPS after teleport in the same process.
