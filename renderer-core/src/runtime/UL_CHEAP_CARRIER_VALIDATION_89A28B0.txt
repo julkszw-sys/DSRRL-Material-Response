@@ -1,0 +1,1 @@
+CI trigger only. Main parent 89a28b08cd31f513041dfd110e539f034503b7c9. Steady U/L sole carrier is the 0x110 LightBank cache record produced by 0x563590. Legacy steady packer/evaluator-tail hooks are not armed. True interior blend remains direct runtime. D123/P_Metal shared capture remains fail-open pending separate carriers.
