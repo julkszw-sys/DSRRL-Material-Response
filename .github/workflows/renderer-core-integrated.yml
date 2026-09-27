@@ -155,7 +155,36 @@ jobs:
           $h3SpcAuthority = Get-Content renderer-core/data/provenance/hemdir3_spc_b12_patch_sites_v1.tsv -Raw
           $h3SpcDonors = Get-Content renderer-core/data/provenance/hemdir3_spc_material_donors_v1.tsv -Raw
           $selectorAsm = Get-Content renderer-core/integrated/flver_identity_detour.asm -Raw
+          $flverHooks = Get-Content renderer-core/src/runtime/flver_engine_hooks.cpp -Raw
           $cmake = Get-Content renderer-core/integrated/CMakeLists.txt -Raw
+
+          # Retail MTD fallback is a draw-hot selector carrier. Preserve the
+          # performance-pass contract: raw-MTD SHA classification at producer
+          # time, bounded lock-free pointer transport, no runtime-name gate,
+          # and no VirtualQuery/mutex in selector lookup/actual-material reads.
+          foreach ($required in @(
+            'classify_exact_runtime_route',
+            'exact_material_cache_publish',
+            'exact_material_cache_lookup',
+            'std::array<',
+            'std::atomic<std::uintptr_t>',
+            'working 1.45 carrier selected the MR donor from the exact',
+            'no VirtualQuery and no mutex'
+          )) {
+            if ($flverHooks -notmatch [regex]::Escape($required)) { throw "MR retail carrier invariant missing: $required" }
+          }
+          if ($flverHooks -match 'exact_semantic_hash\s*\(') {
+            throw "MR retail carrier regressed to a runtime semantic-name prerequisite"
+          }
+          $lookupStart = $flverHooks.IndexOf('bool lookup_exact_runtime_material')
+          $lookupEnd = $flverHooks.IndexOf('bool write(', $lookupStart)
+          if ($lookupStart -lt 0 -or $lookupEnd -le $lookupStart) {
+            throw "Cannot isolate MR selector hot-path audit region"
+          }
+          $hot = $flverHooks.Substring($lookupStart, $lookupEnd - $lookupStart)
+          foreach ($forbidden in @('VirtualQuery(', 'range_ok(', 'std::lock_guard', 'std::mutex', 'unordered_map')) {
+            if ($hot -match [regex]::Escape($forbidden)) { throw "MR retail carrier hot-path performance regression: $forbidden" }
+          }
 
           if ($entry -notmatch 'operator_id::material_response') { throw "Material Response feature is not armed in Core+Islands" }
           if ($bridge -match 'addon_event::draw(?:_indexed)?') { throw "A1 create-time bridge must not own draw callbacks" }
