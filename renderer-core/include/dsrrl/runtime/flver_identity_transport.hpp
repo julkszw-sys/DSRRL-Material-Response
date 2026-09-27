@@ -30,6 +30,10 @@ struct selector_owner_telemetry {
 bool consume_selector_owner_candidate(
     operators::material_response::material_identity &material) noexcept;
 
+// Discard an unconsumed selector candidate at draw-scope end. Required for
+// fail-open/non-target draws so no owner identity can leak into a later draw.
+void discard_selector_owner_candidate() noexcept;
+
 selector_owner_telemetry selector_owner_stats() noexcept;
 
 } // namespace dsrrl::runtime::flver_identity_transport

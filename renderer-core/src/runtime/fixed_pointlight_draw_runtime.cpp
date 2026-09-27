@@ -409,7 +409,8 @@ void clear_state() noexcept
 
 void fixed_pointlight_selector_event_bridge(void *owner) noexcept
 {
-    if(g_runtime!=nullptr)
+    if(g_runtime!=nullptr &&
+       g_have_snapshots.load(std::memory_order_acquire))
         g_runtime->selector_event(owner);
 }
 

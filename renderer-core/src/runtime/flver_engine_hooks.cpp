@@ -46,6 +46,13 @@ std::atomic<std::uint64_t> g_owner_fail_open{0};
 std::atomic<std::uint64_t> g_owner_consumed{0};
 std::atomic<std::uint64_t> g_owner_consume_misses{0};
 
+struct pending_owner_candidate {
+ void *container=nullptr;
+ std::uint32_t material_index=0u;
+ bool valid=false;
+};
+thread_local pending_owner_candidate g_pending_owner{};
+
 bool range_ok(const void *p,std::size_t n) noexcept {
  if(!p)return false;if(n==0)return true;auto cur=reinterpret_cast<std::uintptr_t>(p);const auto end=cur+n;if(end<cur)return false;
  while(cur<end){MEMORY_BASIC_INFORMATION m{};if(VirtualQuery(reinterpret_cast<const void*>(cur),&m,sizeof(m))!=sizeof(m))return false;
@@ -109,6 +116,7 @@ extern "C" void dsrrl_flver_selector_observer(
 {
  ++g_selector_events;
  material_owner_selection_clear();
+ g_pending_owner={};
 
  hemdir3_mode_transport::selector_begin(
      incoming_mode);
@@ -128,28 +136,12 @@ extern "C" void dsrrl_flver_selector_observer(
   return;
  }
 
- actual_material_owner_observation observation{};
- if(!flver_identity_enrich_owner(
-        container,static_cast<std::uint32_t>(material_index),observation)){
-  ++g_owner_fail_open;
-  return;
- }
- ++g_owner_sha_hits;
-
- if(!enrich_exact_owner_mtd_identity(observation)){
-  ++g_owner_fail_open;
-  return;
- }
- ++g_owner_mtd_hits;
-
- const auto identity=make_actual_material_identity(observation);
- if(!identity.owner_tuple_exact ||
-    !material_owner_selection_publish(identity)){
-  ++g_owner_fail_open;
-  return;
- }
-
- ++g_exact_owner_ready;
+ // Owner materialization is intentionally deferred until a routed draw
+ // actually asks for it. This selector runs hundreds of thousands of times;
+ // most events never feed a material-sensitive bridge.
+ g_pending_owner.container=container;
+ g_pending_owner.material_index=static_cast<std::uint32_t>(material_index);
+ g_pending_owner.valid=true;
 }
 bool install() noexcept {if(g_p.patched||g_s.patched||g_d.patched)return false;g_state={};if(!exe_ok())return false;g_base=reinterpret_cast<std::uintptr_t>(GetModuleHandleW(nullptr));if(!g_base)return false;g_state.provenance_ok=true;
  if(!prep(g_p,k_parse,k_parse_b,reinterpret_cast<void*>(&parse_entry)))goto fail;g_po=reinterpret_cast<parser_fn>(g_p.trampoline);
@@ -177,6 +169,7 @@ void uninstall() noexcept {
  g_dsrrl_flver_selector_trampoline=nullptr;
  g_po=nullptr;
  g_do=nullptr;
+ g_pending_owner={};
  material_owner_selection_clear();
  flver_identity_reset();
  g_state={};
@@ -186,13 +179,52 @@ hook_status status() noexcept{return g_state;}
 bool consume_selector_owner_candidate(
     operators::material_response::material_identity &material) noexcept
 {
-    if(!material_owner_selection_consume(material)){
+    material={};
+
+    if(!g_pending_owner.valid){
         ++g_owner_consume_misses;
         return false;
     }
 
+    const auto pending=g_pending_owner;
+    g_pending_owner={};
+
+    actual_material_owner_observation observation{};
+    if(!flver_identity_enrich_owner(
+            pending.container,
+            pending.material_index,
+            observation)){
+        ++g_owner_fail_open;
+        ++g_owner_consume_misses;
+        return false;
+    }
+    ++g_owner_sha_hits;
+
+    if(!enrich_exact_owner_mtd_identity(observation)){
+        ++g_owner_fail_open;
+        ++g_owner_consume_misses;
+        return false;
+    }
+    ++g_owner_mtd_hits;
+
+    const auto identity=make_actual_material_identity(observation);
+    if(!identity.owner_tuple_exact ||
+       !material_owner_selection_publish(identity) ||
+       !material_owner_selection_consume(material)){
+        ++g_owner_fail_open;
+        ++g_owner_consume_misses;
+        return false;
+    }
+
+    ++g_exact_owner_ready;
     ++g_owner_consumed;
     return true;
+}
+
+void discard_selector_owner_candidate() noexcept
+{
+    g_pending_owner={};
+    material_owner_selection_clear();
 }
 
 selector_owner_telemetry selector_owner_stats() noexcept

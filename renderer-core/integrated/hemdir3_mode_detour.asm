@@ -7,86 +7,44 @@ EXTERN g_dsrrl_hemdir3_selector_end_trampoline:QWORD
 
 .code
 
-; Inside 0x140295F50 the stack is still the callee-entry stack (8 mod 16).
+; Exact site 0x140295F9F. At this point EDX is the post-override effective
+; semantic mode. The remaining stock <5 path needs only RDX/R9/R10/R11 from
+; volatile state; RAX/RCX are overwritten by the stolen instructions and R8
+; is dead. No XMM register is live across this integer-only lookup.
 PUBLIC dsrrl_hemdir3_mode_lt5_hook_entry
 dsrrl_hemdir3_mode_lt5_hook_entry PROC
-    pushfq
-    push rax
-    push rcx
-    push rdx
-    push r8
-    push r9
-    push r10
-    push r11
-    sub rsp,0A8h
-
-    movdqu xmmword ptr [rsp+30h],xmm0
-    movdqu xmmword ptr [rsp+40h],xmm1
-    movdqu xmmword ptr [rsp+50h],xmm2
-    movdqu xmmword ptr [rsp+60h],xmm3
-    movdqu xmmword ptr [rsp+70h],xmm4
-    movdqu xmmword ptr [rsp+80h],xmm5
+    ; Current RSP is 8 mod 16. 48h makes it 16-byte aligned at CALL and
+    ; provides shadow space plus four saved live registers.
+    sub rsp,048h
+    mov qword ptr [rsp+20h],rdx
+    mov qword ptr [rsp+28h],r9
+    mov qword ptr [rsp+30h],r10
+    mov qword ptr [rsp+38h],r11
 
     mov ecx,edx
     call dsrrl_hemdir3_effective_mode_observer
 
-    movdqu xmm0,xmmword ptr [rsp+30h]
-    movdqu xmm1,xmmword ptr [rsp+40h]
-    movdqu xmm2,xmmword ptr [rsp+50h]
-    movdqu xmm3,xmmword ptr [rsp+60h]
-    movdqu xmm4,xmmword ptr [rsp+70h]
-    movdqu xmm5,xmmword ptr [rsp+80h]
+    mov rdx,qword ptr [rsp+20h]
+    mov r9,qword ptr [rsp+28h]
+    mov r10,qword ptr [rsp+30h]
+    mov r11,qword ptr [rsp+38h]
+    add rsp,048h
 
-    add rsp,0A8h
-    pop r11
-    pop r10
-    pop r9
-    pop r8
-    pop rdx
-    pop rcx
-    pop rax
-    popfq
     jmp qword ptr [g_dsrrl_hemdir3_mode_lt5_trampoline]
 dsrrl_hemdir3_mode_lt5_hook_entry ENDP
 
-; At 0x14022BA79 the parent selector has a 16-byte aligned local stack.
+; Exact site 0x14022BA79 after CALL 0x140295F50. The continuation immediately
+; overwrites R8/RDX/RCX and only needs EAX (lookup result) plus nonvolatile RBX.
+; Preserve just RAX across the observer call.
 PUBLIC dsrrl_hemdir3_selector_end_hook_entry
 dsrrl_hemdir3_selector_end_hook_entry PROC
-    pushfq
-    push rax
-    push rcx
-    push rdx
-    push r8
-    push r9
-    push r10
-    push r11
-    sub rsp,0A0h
-
-    movdqu xmmword ptr [rsp+20h],xmm0
-    movdqu xmmword ptr [rsp+30h],xmm1
-    movdqu xmmword ptr [rsp+40h],xmm2
-    movdqu xmmword ptr [rsp+50h],xmm3
-    movdqu xmmword ptr [rsp+60h],xmm4
-    movdqu xmmword ptr [rsp+70h],xmm5
-
+    ; Parent selector local RSP is 16-byte aligned here.
+    sub rsp,030h
+    mov qword ptr [rsp+20h],rax
     call dsrrl_hemdir3_selector_end_observer
+    mov rax,qword ptr [rsp+20h]
+    add rsp,030h
 
-    movdqu xmm0,xmmword ptr [rsp+20h]
-    movdqu xmm1,xmmword ptr [rsp+30h]
-    movdqu xmm2,xmmword ptr [rsp+40h]
-    movdqu xmm3,xmmword ptr [rsp+50h]
-    movdqu xmm4,xmmword ptr [rsp+60h]
-    movdqu xmm5,xmmword ptr [rsp+70h]
-
-    add rsp,0A0h
-    pop r11
-    pop r10
-    pop r9
-    pop r8
-    pop rdx
-    pop rcx
-    pop rax
-    popfq
     jmp qword ptr [g_dsrrl_hemdir3_selector_end_trampoline]
 dsrrl_hemdir3_selector_end_hook_entry ENDP
 

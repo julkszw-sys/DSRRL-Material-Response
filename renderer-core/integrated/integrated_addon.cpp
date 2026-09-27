@@ -2003,6 +2003,8 @@ void release_prepared_island_batch(
 struct draw_semantic_selection_guard {
     ~draw_semantic_selection_guard()
     {
+        dsrrl::runtime::flver_identity_transport::
+            discard_selector_owner_candidate();
         g_upper_lower.consume_draw_selection();
         g_fixed_pointlight.consume_draw_selection();
         dsrrl::runtime::hemdir3_mode_transport::

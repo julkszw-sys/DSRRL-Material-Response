@@ -363,6 +363,15 @@ thread_local producer_tls g_producer{};
 thread_local std::shared_ptr<const snapshot> g_draw_snapshot{};
 thread_local selector_snapshot_tls g_selector_snapshot{};
 
+struct pending_selector_tls {
+    std::uintptr_t owner = 0u;
+    std::uint16_t selector_a = 0u;
+    std::uint16_t selector_b = 0u;
+    std::uint32_t beta_bits = 0u;
+    bool ready = false;
+};
+thread_local pending_selector_tls g_pending_selector{};
+
 std::atomic_bool g_enabled{false};
 std::atomic_bool g_quarantined{false};
 std::atomic_bool g_restore_failed{false};
@@ -2494,6 +2503,7 @@ ID3D11Buffer *realize_b13(
 void clear_snapshots() noexcept
 {
     g_draw_snapshot.reset();
+    g_pending_selector = {};
     clear_b13_upload_slots();
     g_selector_snapshot = {};
     g_selector_window = {};
@@ -2646,53 +2656,60 @@ void upper_lower_draw_runtime::selector_event(
         return;
     }
 
+    g_pending_selector.owner =
+        reinterpret_cast<std::uintptr_t>(owner);
+    g_pending_selector.selector_a = selector_a;
+    g_pending_selector.selector_b = selector_b;
+    g_pending_selector.beta_bits = beta_bits;
+    g_pending_selector.ready = true;
+}
+
+bool resolve_pending_draw_snapshot() noexcept
+{
+    if (g_draw_snapshot)
+        return true;
+
+    if (!g_pending_selector.ready)
+        return false;
+
     const auto owner_key =
-        reinterpret_cast<std::uintptr_t>(
-            owner);
+        g_pending_selector.owner;
     const auto epoch =
         g_snapshot_epoch.load(
             std::memory_order_acquire);
 
     std::shared_ptr<const snapshot> selected{};
 
-    if (g_selector_snapshot.owner ==
-            owner_key &&
-        g_selector_snapshot.epoch ==
-            epoch) {
-        selected =
-            g_selector_snapshot.selected;
+    if (g_selector_snapshot.owner == owner_key &&
+        g_selector_snapshot.epoch == epoch) {
+        selected = g_selector_snapshot.selected;
     } else {
         std::lock_guard<std::mutex> lock(
             g_snapshot_mutex);
 
         const auto found =
-            g_snapshots.find(
-                owner_key);
-
+            g_snapshots.find(owner_key);
         if (found != g_snapshots.end())
             selected = found->second;
 
-        g_selector_snapshot.owner =
-            owner_key;
+        g_selector_snapshot.owner = owner_key;
         g_selector_snapshot.epoch =
             g_snapshot_epoch.load(
                 std::memory_order_relaxed);
-        g_selector_snapshot.selected =
-            selected;
+        g_selector_snapshot.selected = selected;
     }
 
     if (!selected) {
         ++g_selector_miss;
-        return;
+        return false;
     }
 
     const operators::lightbank::
         lightbank_snapshot_fingerprint draw{
-            reinterpret_cast<std::uintptr_t>(
-                owner),
-            selector_a,
-            selector_b,
-            beta_bits
+            owner_key,
+            g_pending_selector.selector_a,
+            g_pending_selector.selector_b,
+            g_pending_selector.beta_bits
         };
 
     if (!operators::lightbank::
@@ -2700,12 +2717,12 @@ void upper_lower_draw_runtime::selector_event(
                 selected->fingerprint,
                 draw)) {
         ++g_tuple_mismatch;
-        return;
+        return false;
     }
 
-    g_draw_snapshot =
-        std::move(selected);
+    g_draw_snapshot = std::move(selected);
     ++g_selector_match;
+    return true;
 }
 
 bool upper_lower_draw_runtime::direct_producer_active() const noexcept
@@ -2728,7 +2745,7 @@ bool upper_lower_draw_runtime::prepare_upper_lower_carrier(
         !core_.features().enabled(
             core::operator_id::upper_lower) ||
         context == nullptr ||
-        !g_draw_snapshot)
+        !resolve_pending_draw_snapshot())
         return false;
 
     auto *b13 =
@@ -2780,7 +2797,7 @@ bool upper_lower_draw_runtime::prepare_hemdir3_carrier(
     if (!g_enabled.load() ||
         g_quarantined.load() ||
         context == nullptr ||
-        !g_draw_snapshot ||
+        !resolve_pending_draw_snapshot() ||
         !g_draw_snapshot->d123_ready)
         return false;
 
@@ -2817,7 +2834,7 @@ bool upper_lower_draw_runtime::selected_pmetal_env_source(
     if (!g_enabled.load() ||
         g_quarantined.load() ||
         !g_pmetal_env_hook_armed.load() ||
-        !g_draw_snapshot ||
+        !resolve_pending_draw_snapshot() ||
         !g_draw_snapshot->pmetal_env_ready)
         return false;
 
@@ -2861,6 +2878,7 @@ void upper_lower_draw_runtime::release_prepared_draw(
 void upper_lower_draw_runtime::consume_draw_selection() noexcept
 {
     g_draw_snapshot.reset();
+    g_pending_selector = {};
 }
 
 void upper_lower_draw_runtime::on_destroy_device(
