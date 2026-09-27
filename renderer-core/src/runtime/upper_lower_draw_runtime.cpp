@@ -2537,6 +2537,13 @@ void *__fastcall hook_blend_packer(
         telemetry::hot_count(g_direct_ul_blend_inject);
     }
 
+    // In cache-builder mode the old wrapper snapshot stack is intentionally
+    // disabled, so D123 computed here would be discarded by run_wrapper().
+    // Keep true U/L blend direct and cheap; HemDir3 gets a separate carrier.
+    if (g_steady_cache_builder_active.load(
+            std::memory_order_acquire))
+        return result;
+
     const auto *raw_a =
         resolve_raw_lightbank_record(
             source_a,
@@ -2739,12 +2746,15 @@ bool install_producer_hooks() noexcept
         reinterpret_cast<steady_cache_builder_fn>(
             g_steady_cache_builder_hook.trampoline);
 
-    for (auto &hook : g_hooks)
-        if (!arm_hook(hook))
-            return false;
-
-    if (!arm_hook(
-            g_steady_eval_tail_hook) ||
+    // Cache-builder architecture: wrapper5/6 + blend helper + blend
+    // packer are required only for true interior blend. The legacy steady
+    // packer (g_hooks[3], RVA 0x563B80) and evaluator-tail detour
+    // (0x5634E7) stay prepared for rollback/provenance but are deliberately
+    // NOT armed. Steady U/L is carried exclusively by 0x563590.
+    if (!arm_hook(g_hooks[0]) ||
+        !arm_hook(g_hooks[1]) ||
+        !arm_hook(g_hooks[2]) ||
+        !arm_hook(g_hooks[4]) ||
         !arm_hook(
             g_steady_cache_builder_hook))
         return false;
