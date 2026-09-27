@@ -1,4 +1,5 @@
 #include "dsrrl/runtime/stable_receiver_pipeline_registry.hpp"
+#include "dsrrl/runtime/runtime_hot_telemetry.hpp"
 #include "dsrrl/runtime/generated_stable_hemenv_receivers_v1.hpp"
 #include "dsrrl/operators/legacy_plan/sha256_bytes.hpp"
 
@@ -154,7 +155,7 @@ void stable_receiver_observe_bind(
     if (!pixel_stage_bound || command_list_key == nullptr)
         return;
 
-    ++g_pixel_binds;
+    telemetry::hot_count(g_pixel_binds);
 
     try {
         std::lock_guard<std::mutex> lock(g_mutex);
@@ -172,7 +173,7 @@ void stable_receiver_observe_bind(
                 g_bound_epoch.load(),
                 false
             };
-            ++g_unknown_binds;
+            telemetry::hot_count(g_unknown_binds);
             return;
         }
 
@@ -187,7 +188,7 @@ void stable_receiver_observe_bind(
             g_bound_epoch.load(),
             true
         };
-        ++g_exact_binds;
+        telemetry::hot_count(g_exact_binds);
     } catch (...) {
         // A telemetry/identity cache allocation failure cannot be allowed to
         // terminate the host. Drop any stale command-list receiver and fail
@@ -204,7 +205,7 @@ void stable_receiver_observe_bind(
         } catch (...) {
             g_bound_tls = {};
         }
-        ++g_unknown_binds;
+        telemetry::hot_count(g_unknown_binds);
     }
 }
 
@@ -212,11 +213,11 @@ bool stable_receiver_bound(
     const void *command_list_key,
     std::uint32_t &receiver_id) noexcept
 {
-    ++g_lookups;
+    telemetry::hot_count(g_lookups);
     receiver_id = 0u;
 
     if (command_list_key == nullptr) {
-        ++g_lookup_misses;
+        telemetry::hot_count(g_lookup_misses);
         return false;
     }
 
@@ -224,13 +225,13 @@ bool stable_receiver_bound(
     if (g_bound_tls.command_list_key == command_list_key &&
         g_bound_tls.epoch == epoch) {
         if (!g_bound_tls.present) {
-            ++g_lookup_misses;
+            telemetry::hot_count(g_lookup_misses);
             return false;
         }
 
         receiver_id =
             g_bound_tls.value.receiver_id;
-        ++g_lookup_hits;
+        telemetry::hot_count(g_lookup_hits);
         return true;
     }
 
@@ -243,7 +244,7 @@ bool stable_receiver_bound(
             g_bound_epoch.load(),
             false
         };
-        ++g_lookup_misses;
+        telemetry::hot_count(g_lookup_misses);
         return false;
     }
 
@@ -254,7 +255,7 @@ bool stable_receiver_bound(
         true
     };
     receiver_id = found->second.receiver_id;
-    ++g_lookup_hits;
+    telemetry::hot_count(g_lookup_hits);
     return true;
 }
 
