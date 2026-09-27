@@ -4237,6 +4237,17 @@ bool AddonInit(
             "] Fixed PointLight transport FAIL-OPEN: raw-q t19 remains unavailable; stock DSR fixed PointLight preserved.");
     }
 
+    const bool clustered_pointlight_hooks =
+        flver_hooks &&
+        g_clustered_pnts.install();
+
+    if (!clustered_pointlight_hooks) {
+        reshade::log::message(
+            reshade::log::level::warning,
+            "[DSRRL CORE+ISLANDS " DSRRL_CORE_ISLANDS_VERSION
+            "] Clustered PntS transport FAIL-OPEN: first-four sidecar remains unavailable; stock DSR clustered PointLight preserved.");
+    }
+
     // Bloom FX transport is diagnostic-only: it does not authorize Q8,
     // Bloom, WaterWaveSfx, or pixels. Do not keep five inline FX hooks and
     // their registry/census work armed in production. The same explicit
@@ -4334,6 +4345,8 @@ void AddonUninit(
     if (dsrrl::runtime::bloom_fx_draw_transport::status().restore_failed)
         log_state("BLOOM_FX_UNLOAD_RESTORE_FAIL");
 
+    g_clustered_pnts.uninstall();
+
     g_fixed_pointlight.uninstall();
 
     if (g_fixed_pointlight.telemetry().restore_failed)
@@ -4362,6 +4375,9 @@ void AddonUninit(
     g_upper_lower_hemenv.reset();
     g_hemdir3.reset();
     g_fixed_pointlight.reset();
+    g_fixed_pointlight_pipeline.reset();
+    g_clustered_pnts.reset();
+    g_clustered_pnts_pipeline.reset();
     g_mr_draw_runtime.reset();
     g_draw_transactions.reset();
     g_a1_bridge.reset();
