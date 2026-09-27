@@ -933,10 +933,6 @@ bool envspec_resource_runtime::prepare(
             sampler_native,
             needs_cube);
 
-    for (auto *view : stock_views)
-        if (view != nullptr)
-            view->Release();
-
     if (!ready && needs_cube) {
         resource_view ignored{};
 
@@ -975,6 +971,10 @@ bool envspec_resource_runtime::prepare(
                 sampler_native,
                 needs_cube);
     }
+
+    for (auto *view : stock_views)
+        if (view != nullptr)
+            view->Release();
 
     if (!ready ||
         a_native == nullptr ||
