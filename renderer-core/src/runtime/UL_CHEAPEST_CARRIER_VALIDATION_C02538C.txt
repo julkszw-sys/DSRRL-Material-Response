@@ -1,0 +1,1 @@
+CI trigger only. Main parent c02538c6ae285d001e6953c8abbe796108dfc4f9. Steady U/L carrier is the LightBank cache row at 0x563590 fed directly from authored RGBM row+0x24/+0x2C as P/1.5. No pow and no armed steady packer/evaluator-tail hooks. True interior blend remains direct runtime.
