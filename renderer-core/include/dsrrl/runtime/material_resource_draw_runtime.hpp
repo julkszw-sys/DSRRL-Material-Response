@@ -75,6 +75,7 @@ public:
         ID3D11DeviceContext *context,
         const operators::material_response::mtd_semantic_query &query,
         bool exact_fixed_receiver_verified,
+        bool direct_pointlight_material_authorized,
         bool blended_material,
         prepared_material_resource_draw &prepared) noexcept;
 
