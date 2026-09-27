@@ -1,6 +1,5 @@
 #include "dsrrl/operators/point_light/fixed_local_specular_single_materializer.hpp"
 
-#include "dsrrl/operators/legacy_plan/a1_create_time_materializer.hpp"
 #include "dsrrl/operators/legacy_plan/dxbc_checksum.hpp"
 #include "dsrrl/operators/legacy_plan/sha256_bytes.hpp"
 #include "dsrrl/operators/point_light/fixed_local_geometry_contract.hpp"
@@ -694,27 +693,23 @@ materialize_fixed_local_specular_single(
         return out;
     }
 
-    std::vector<std::uint8_t> p22;
-    const auto a1=legacy_plan::materialize_a1_create_time(
-        features,source,size,p22);
-    if(a1.result!=legacy_plan::a1_create_time_result::applied ||
-       !a1.full_plan_materialized) {
-        out.result=
-            fixed_local_single_materialize_result::
-                pass_a1_not_fully_materialized;
-        return out;
-    }
-    out.a1_full_plan=true;
-    out.a1_host_sha256 =
+    // The exact fixed PntSS/PntSSSS corpus is disjoint from the A1 recipe
+    // corpus (48/48 have no A1 exact recipe). Build directly from the already
+    // attested stock DSR host rather than forcing a nonexistent A1 stage.
+    // Independent A1 operators remain untouched because this host family is
+    // outside their create-time identity set.
+    (void)features;
+    out.raw_host_basis=true;
+    out.host_sha256 =
         legacy_plan::hashing::sha256(
-            p22.data(),
-            p22.size());
-    out.a1_host_size = p22.size();
+            source,
+            size);
+    out.host_size = size;
 
     std::vector<chunk> chunks;
     std::vector<std::uint32_t> words;
     std::size_t code_index=0u;
-    if(!parse(p22.data(),p22.size(),chunks,code_index,words)) {
+    if(!parse(source,size,chunks,code_index,words)) {
         out.result=fixed_local_single_materialize_result::fail_invalid_dxbc;
         return out;
     }
@@ -1085,7 +1080,7 @@ materialize_fixed_local_specular_single(
 
     if(!strip_rdef(chunks,out.rdef_stripped) ||
        !rebuild(
-            p22.data(),p22.size(),
+            source,size,
             std::move(chunks),code_index,
             words,output)) {
         output.clear();
