@@ -63,8 +63,9 @@ int main()
     CHECK(!runtime::material_owner_selection_publish(spoofed));
     CHECK(!runtime::material_owner_selection_consume(observed));
 
-    // Legacy-compatible P_Metal authority is intentionally independent from
-    // FLVER ownership, but only for the exact runtime material identity.
+    // Material Response is MTD-local: exact runtime MTD identity may authorize
+    // any certified MR profile without FLVER ownership. Resource/asset
+    // bridges retain their own owner_tuple_exact gates.
     mr::material_identity runtime_pmetal{};
     runtime_pmetal.valid=true;
     runtime_pmetal.actual_material_exact=true;
@@ -82,17 +83,34 @@ int main()
     CHECK(!observed.owner_tuple_exact);
     CHECK(observed.route_index==345u);
 
+    mr::material_identity runtime_cmetal{};
+    runtime_cmetal.valid=true;
+    runtime_cmetal.actual_material_exact=true;
+    runtime_cmetal.route_index=229u;
+    runtime_cmetal.semantic_name_hash=
+        mr::mtd_semantic_hash("C_Metal[DSB].mtd");
+    runtime_cmetal.raw_mtd_sha256=digest(
+        "ae2e8df867fe2859eef37104c13c939e7e7fe4f703b7fe49c408d0230fc71d85");
+    runtime_cmetal.material_family_hash=
+        mr::mtd_semantic_hash("DifSpcBmp");
+
+    CHECK(runtime::material_owner_selection_publish(runtime_cmetal));
+    CHECK(runtime::material_owner_selection_consume(observed));
+    CHECK(observed.actual_material_exact);
+    CHECK(!observed.owner_tuple_exact);
+    CHECK(observed.route_index==229u);
+
     auto wrong_runtime=runtime_pmetal;
     wrong_runtime.route_index=359u;
     CHECK(!runtime::material_owner_selection_publish(wrong_runtime));
     CHECK(!runtime::material_owner_selection_consume(observed));
 
     const auto stats=runtime::material_owner_selection_stats();
-    CHECK(stats.selector_events==5u);
-    CHECK(stats.accepted_callers==3u);
-    CHECK(stats.owner_enriched==4u);
+    CHECK(stats.selector_events==6u);
+    CHECK(stats.accepted_callers==4u);
+    CHECK(stats.owner_enriched==5u);
     CHECK(stats.owner_authenticated==2u);
-    CHECK(stats.actual_material_authenticated==1u);
+    CHECK(stats.actual_material_authenticated==2u);
     CHECK(stats.fail_open==2u);
 
     runtime::material_owner_selection_reset_stats();
