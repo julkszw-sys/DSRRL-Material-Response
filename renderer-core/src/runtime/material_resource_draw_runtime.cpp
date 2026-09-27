@@ -115,7 +115,74 @@ constexpr std::uint32_t k_caps2_cubemap = 0x200u;
 core::renderer_core *g_core = nullptr;
 std::mutex g_mutex;
 std::unordered_map<std::uint64_t, companion_set> g_cache;
+std::atomic<std::uint64_t> g_cache_epoch{1u};
 thread_local bool g_internal_create = false;
+
+struct companion_tls_entry {
+    std::uint64_t key = 0u;
+    std::uint64_t epoch = 0u;
+    std::uint64_t logical_hash = 0u;
+    ID3D11ShaderResourceView *specular = nullptr;
+    ID3D11ShaderResourceView *diffuse = nullptr;
+    ID3D11ShaderResourceView *normal = nullptr;
+    bool present = false;
+
+    ~companion_tls_entry()
+    {
+        clear();
+    }
+
+    void clear() noexcept
+    {
+        if (specular != nullptr)
+            specular->Release();
+        if (diffuse != nullptr)
+            diffuse->Release();
+        if (normal != nullptr)
+            normal->Release();
+
+        key = 0u;
+        epoch = 0u;
+        logical_hash = 0u;
+        specular = nullptr;
+        diffuse = nullptr;
+        normal = nullptr;
+        present = false;
+    }
+
+    void assign_owned(
+        std::uint64_t stock_key,
+        std::uint64_t cache_epoch,
+        std::uint64_t hash,
+        ID3D11ShaderResourceView *spec,
+        ID3D11ShaderResourceView *diff,
+        ID3D11ShaderResourceView *norm,
+        bool exists) noexcept
+    {
+        clear();
+        key = stock_key;
+        epoch = cache_epoch;
+        logical_hash = hash;
+        specular = spec;
+        diffuse = diff;
+        normal = norm;
+        present = exists;
+    }
+};
+
+constexpr std::size_t k_companion_tls_slots = 64u;
+thread_local std::array<
+    companion_tls_entry,
+    k_companion_tls_slots>
+    g_companion_tls{};
+
+std::size_t companion_tls_index(
+    std::uint64_t key) noexcept
+{
+    return static_cast<std::size_t>(
+        ((key >> 4u) ^ (key >> 13u)) %
+        k_companion_tls_slots);
+}
 
 std::atomic<std::uint64_t> g_named_views{0};
 std::atomic<std::uint64_t> g_sidecar_ready{0};
@@ -198,6 +265,9 @@ void release_cache() noexcept
 
     {
         std::lock_guard<std::mutex> lock(g_mutex);
+        g_cache_epoch.fetch_add(
+            1u,
+            std::memory_order_release);
         dead.swap(g_cache);
     }
 
@@ -216,15 +286,22 @@ void release_cache_for_device(
     {
         std::lock_guard<std::mutex> lock(g_mutex);
 
+        bool changed = false;
         for (auto it = g_cache.begin();
              it != g_cache.end();) {
             if (it->second.device == device) {
                 dead.push_back(it->second);
                 it = g_cache.erase(it);
+                changed = true;
             } else {
                 ++it;
             }
         }
+
+        if (changed)
+            g_cache_epoch.fetch_add(
+                1u,
+                std::memory_order_release);
     }
 
     for (auto &set : dead)
@@ -612,6 +689,118 @@ void account_load(
     }
 }
 
+bool snapshot_companion_cached(
+    ID3D11ShaderResourceView *stock,
+    asset_class cls,
+    std::uint64_t &hash,
+    ID3D11ShaderResourceView *&view,
+    bool retain_view) noexcept
+{
+    hash = 0u;
+    view = nullptr;
+
+    if (stock == nullptr)
+        return false;
+
+    const auto key =
+        static_cast<std::uint64_t>(
+            reinterpret_cast<std::uintptr_t>(
+                stock));
+    const auto epoch =
+        g_cache_epoch.load(
+            std::memory_order_acquire);
+    auto &cached =
+        g_companion_tls[
+            companion_tls_index(key)];
+
+    auto publish_from_cache =
+        [&]() noexcept {
+            if (!cached.present)
+                return false;
+
+            hash = cached.logical_hash;
+
+            ID3D11ShaderResourceView *selected =
+                nullptr;
+            switch (cls) {
+            case asset_class::specular:
+                selected = cached.specular;
+                break;
+            case asset_class::diffuse:
+                selected = cached.diffuse;
+                break;
+            case asset_class::normal:
+                selected = cached.normal;
+                break;
+            }
+
+            if (retain_view &&
+                selected != nullptr) {
+                selected->AddRef();
+                view = selected;
+            }
+            return true;
+        };
+
+    if (cached.key == key &&
+        cached.epoch == epoch)
+        return publish_from_cache();
+
+    std::uint64_t logical_hash = 0u;
+    ID3D11ShaderResourceView *spec = nullptr;
+    ID3D11ShaderResourceView *diff = nullptr;
+    ID3D11ShaderResourceView *norm = nullptr;
+    bool present = false;
+    std::uint64_t snapshot_epoch = epoch;
+
+    {
+        std::lock_guard<std::mutex> lock(
+            g_mutex);
+
+        snapshot_epoch =
+            g_cache_epoch.load(
+                std::memory_order_relaxed);
+
+        const auto found =
+            g_cache.find(key);
+        if (found != g_cache.end()) {
+            present = true;
+            logical_hash =
+                found->second.logical_hash;
+            spec =
+                found->second.specular;
+            diff =
+                found->second.diffuse;
+            norm =
+                found->second.normal;
+
+            // These references become TLS cache ownership after the mutex is
+            // released. Holding them before unlock prevents a concurrent
+            // resource-view destruction from invalidating the snapshot.
+            if (spec != nullptr)
+                spec->AddRef();
+            if (diff != nullptr)
+                diff->AddRef();
+            if (norm != nullptr)
+                norm->AddRef();
+        }
+    }
+
+    // Release any previous TLS-owned sidecars outside g_mutex; a COM Release
+    // can trigger a resource-view destruction callback and must not re-enter
+    // the same mutex.
+    cached.assign_owned(
+        key,
+        snapshot_epoch,
+        logical_hash,
+        spec,
+        diff,
+        norm,
+        present);
+
+    return publish_from_cache();
+}
+
 void logical_hashes_for(
     ID3D11ShaderResourceView *const *stocks,
     std::size_t count,
@@ -622,25 +811,21 @@ void logical_hashes_for(
 
     std::fill_n(hashes, count, 0u);
 
-    if (stocks == nullptr || count == 0u)
+    if (stocks == nullptr ||
+        count == 0u)
         return;
 
-    std::lock_guard<std::mutex> lock(
-        g_mutex);
-
-    for (std::size_t i = 0u; i < count; ++i) {
-        if (stocks[i] == nullptr)
-            continue;
-
-        const auto key =
-            static_cast<std::uint64_t>(
-                reinterpret_cast<std::uintptr_t>(
-                    stocks[i]));
-        const auto found =
-            g_cache.find(key);
-        if (found != g_cache.end())
-            hashes[i] =
-                found->second.logical_hash;
+    for (std::size_t i = 0u;
+         i < count;
+         ++i) {
+        ID3D11ShaderResourceView *ignored =
+            nullptr;
+        (void)snapshot_companion_cached(
+            stocks[i],
+            asset_class::specular,
+            hashes[i],
+            ignored,
+            false);
     }
 }
 
@@ -659,42 +844,20 @@ void lookup_many(
 
     std::fill_n(views, count, nullptr);
 
-    if (requests == nullptr || count == 0u)
+    if (requests == nullptr ||
+        count == 0u)
         return;
 
-    std::lock_guard<std::mutex> lock(
-        g_mutex);
-
-    for (std::size_t i = 0u; i < count; ++i) {
-        if (requests[i].stock == nullptr)
-            continue;
-
-        const auto key =
-            static_cast<std::uint64_t>(
-                reinterpret_cast<std::uintptr_t>(
-                    requests[i].stock));
-        const auto found =
-            g_cache.find(key);
-        if (found == g_cache.end())
-            continue;
-
-        ID3D11ShaderResourceView *view = nullptr;
-        switch (requests[i].cls) {
-        case asset_class::specular:
-            view = found->second.specular;
-            break;
-        case asset_class::diffuse:
-            view = found->second.diffuse;
-            break;
-        case asset_class::normal:
-            view = found->second.normal;
-            break;
-        }
-
-        if (view != nullptr) {
-            view->AddRef();
-            views[i] = view;
-        }
+    for (std::size_t i = 0u;
+         i < count;
+         ++i) {
+        std::uint64_t ignored_hash = 0u;
+        (void)snapshot_companion_cached(
+            requests[i].stock,
+            requests[i].cls,
+            ignored_hash,
+            views[i],
+            true);
     }
 }
 
@@ -704,54 +867,26 @@ void inspect_many(
     std::uint64_t *hashes,
     ID3D11ShaderResourceView **views) noexcept
 {
-    if (hashes == nullptr || views == nullptr)
+    if (hashes == nullptr ||
+        views == nullptr)
         return;
 
     std::fill_n(hashes, count, 0u);
     std::fill_n(views, count, nullptr);
 
-    if (requests == nullptr || count == 0u)
+    if (requests == nullptr ||
+        count == 0u)
         return;
 
-    // Render-hot generic material routing needs both the logical identity and
-    // its PTDE companion for the same bound SRV. Snapshot both under one
-    // cache lock so the draw does not repeat the mutex acquisition and
-    // unordered_map probe for identical keys.
-    std::lock_guard<std::mutex> lock(
-        g_mutex);
-
-    for (std::size_t i = 0u; i < count; ++i) {
-        if (requests[i].stock == nullptr)
-            continue;
-
-        const auto key =
-            static_cast<std::uint64_t>(
-                reinterpret_cast<std::uintptr_t>(
-                    requests[i].stock));
-        const auto found =
-            g_cache.find(key);
-        if (found == g_cache.end())
-            continue;
-
-        hashes[i] = found->second.logical_hash;
-
-        ID3D11ShaderResourceView *view = nullptr;
-        switch (requests[i].cls) {
-        case asset_class::specular:
-            view = found->second.specular;
-            break;
-        case asset_class::diffuse:
-            view = found->second.diffuse;
-            break;
-        case asset_class::normal:
-            view = found->second.normal;
-            break;
-        }
-
-        if (view != nullptr) {
-            view->AddRef();
-            views[i] = view;
-        }
+    for (std::size_t i = 0u;
+         i < count;
+         ++i) {
+        (void)snapshot_companion_cached(
+            requests[i].stock,
+            requests[i].cls,
+            hashes[i],
+            views[i],
+            true);
     }
 }
 
@@ -867,6 +1002,10 @@ void on_init_resource_view(
                 key,
                 set);
         }
+
+        g_cache_epoch.fetch_add(
+            1u,
+            std::memory_order_release);
     }
 
     set = {};
@@ -896,6 +1035,9 @@ void on_destroy_resource_view(
         if (it != g_cache.end()) {
             dead = it->second;
             g_cache.erase(it);
+            g_cache_epoch.fetch_add(
+                1u,
+                std::memory_order_release);
             found = true;
         }
     }
