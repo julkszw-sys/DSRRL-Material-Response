@@ -195,6 +195,37 @@ int main()
     CHECK(exact_mr.ptde_specular_power_verified);
     CHECK(exact_mr.ptde_specular_power==8.5f);
 
+    // The 1.45-compatible carrier is deliberately narrower than FLVER-owner
+    // authorization: only exact runtime P_Metal may activate stable MR.
+    auto runtime_pmetal=exact_pmetal;
+    runtime_pmetal.flver_sha256={};
+    runtime_pmetal.material_slot=0u;
+    runtime_pmetal.material_slot_valid=false;
+    runtime_pmetal.owner_tuple_exact=false;
+    runtime_pmetal.actual_material_exact=true;
+
+    auto runtime_mr=seeded.evaluate(33u,runtime_pmetal);
+    CHECK(runtime_mr.active);
+    CHECK(runtime_mr.reason==decision_reason::active);
+    CHECK(runtime_mr.route_index==345u);
+    CHECK(runtime_mr.c101==2.5f);
+
+    runtime_mr=seeded.evaluate(36u,runtime_pmetal);
+    CHECK(!runtime_mr.active);
+    CHECK(runtime_mr.reason==decision_reason::unknown_material);
+
+    auto wrong_runtime_pmetal=runtime_pmetal;
+    wrong_runtime_pmetal.route_index=359u;
+    runtime_mr=seeded.evaluate(33u,wrong_runtime_pmetal);
+    CHECK(!runtime_mr.active);
+
+    const auto runtime_direct_pointlight =
+        seeded.evaluate_direct_pointlight_material(
+            runtime_pmetal);
+    CHECK(!runtime_direct_pointlight.active);
+    CHECK(runtime_direct_pointlight.reason==
+          decision_reason::owner_tuple_not_authenticated);
+
     const auto direct_pointlight =
         seeded.evaluate_direct_pointlight_material(
             exact_pmetal);
