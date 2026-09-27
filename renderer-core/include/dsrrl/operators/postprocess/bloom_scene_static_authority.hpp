@@ -49,6 +49,13 @@ current_bloom_scene_static_authority() noexcept
 
     c.writer_order =
         bloom_writer_order_proof::unknown;
+    // Rev9346/9350 close the ordinary main-scene path through active
+    // stage 0x01000000 into the +0x5C/+0x60 target, including an authored
+    // BlendMode4 ADD/SRCALPHA/ONE write. This does not close the FX path or
+    // prove writer-set exhaustiveness.
+    c.main_scene_recurrence =
+        bloom_main_scene_recurrence_proof::blended_target_write_closed;
+
     c.draw_recurrence =
         bloom_draw_recurrence_proof::unknown;
 
