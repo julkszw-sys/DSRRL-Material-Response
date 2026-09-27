@@ -2859,6 +2859,7 @@ bool AddonInit(
     g_upper_lower_hemenv.reset();
     g_hemdir3.reset();
     g_fixed_pointlight.reset();
+    g_fixed_pointlight_pipeline.reset();
     dsrrl::runtime::hemdir3_mode_transport::reset_stats();
     g_present_count.store(0);
     g_mr_draw_eval.store(0);
