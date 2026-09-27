@@ -17,13 +17,12 @@
 #include <bcrypt.h>
 #include <array>
 #include <algorithm>
+#include <atomic>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
 #include <fstream>
-#include <mutex>
 #include <string>
-#include <unordered_map>
 #include <vector>
 #pragma comment(lib,"bcrypt.lib")
 
@@ -55,17 +54,120 @@ std::atomic<std::uint64_t> g_runtime_material_ready{0};
 std::atomic<std::uint64_t> g_owner_consumed{0};
 std::atomic<std::uint64_t> g_owner_consume_misses{0};
 
-std::mutex g_exact_material_mutex;
-std::unordered_map<
-    const void *,
-    operators::material_response::material_identity>
-    g_exact_pmetal_materials;
-
 constexpr std::uint32_t k_pmetal_route=345u;
 constexpr const char *k_pmetal_name="P_Metal[DSB].mtd";
 constexpr const char *k_pmetal_sha256=
     "ece70f36bd2517d28c8495e276cea537f8b519d6bed981788e79a409ffbf763b";
 constexpr const char *k_pmetal_family="DifSpcBmp";
+
+// Draw-hot exact-material carrier. MTD parsing is the producer and selector
+// routing is the consumer. Keep the consumer lock-free and VirtualQuery-free:
+// collisions/evictions may only create false negatives (stock fail-open), not
+// false positives. Every MTD parse for a reused material pointer clears or
+// republishes that pointer before the selector may consume it.
+constexpr std::size_t k_pmetal_cache_sets=256u;
+constexpr std::size_t k_pmetal_cache_ways=4u;
+static_assert(
+    (k_pmetal_cache_sets & (k_pmetal_cache_sets-1u))==0u);
+struct pmetal_cache_set {
+ std::array<std::atomic<std::uintptr_t>,k_pmetal_cache_ways> slots{};
+};
+std::array<pmetal_cache_set,k_pmetal_cache_sets> g_exact_pmetal_materials{};
+
+constexpr core::sha256_digest k_pmetal_digest{
+ 0xec,0xe7,0x0f,0x36,0xbd,0x25,0x17,0xd2,
+ 0x8c,0x84,0x95,0xe2,0x76,0xce,0xa5,0x37,
+ 0xf8,0xb5,0x19,0xd6,0xbe,0xd9,0x81,0x78,
+ 0x8e,0x79,0xa4,0x09,0xff,0xbf,0x76,0x3b
+};
+
+std::size_t pmetal_cache_set_index(
+    const void *material) noexcept
+{
+ const auto p=
+     reinterpret_cast<std::uintptr_t>(
+         material);
+ return static_cast<std::size_t>(
+     ((p>>4u)^(p>>13u)^(p>>23u))&
+     (k_pmetal_cache_sets-1u));
+}
+
+void pmetal_cache_erase(
+    const void *material) noexcept
+{
+ if(material==nullptr)return;
+ const auto key=
+     reinterpret_cast<std::uintptr_t>(
+         material);
+ auto &set=
+     g_exact_pmetal_materials[
+         pmetal_cache_set_index(material)];
+ for(auto &slot:set.slots){
+  auto expected=key;
+  (void)slot.compare_exchange_strong(
+      expected,
+      0u,
+      std::memory_order_release,
+      std::memory_order_relaxed);
+ }
+}
+
+void pmetal_cache_publish(
+    const void *material) noexcept
+{
+ if(material==nullptr)return;
+ const auto key=
+     reinterpret_cast<std::uintptr_t>(
+         material);
+ auto &set=
+     g_exact_pmetal_materials[
+         pmetal_cache_set_index(material)];
+
+ for(auto &slot:set.slots)
+  if(slot.load(std::memory_order_acquire)==key)
+   return;
+
+ for(auto &slot:set.slots){
+  std::uintptr_t empty=0u;
+  if(slot.compare_exchange_strong(
+       empty,
+       key,
+       std::memory_order_release,
+       std::memory_order_relaxed))
+   return;
+ }
+
+ // Bounded deterministic replacement. A collision can evict only another
+ // exact P_Metal pointer and therefore degrades to stock on that draw.
+ set.slots[0].store(
+     key,
+     std::memory_order_release);
+}
+
+bool pmetal_cache_contains(
+    const void *material) noexcept
+{
+ if(material==nullptr)return false;
+ const auto key=
+     reinterpret_cast<std::uintptr_t>(
+         material);
+ const auto &set=
+     g_exact_pmetal_materials[
+         pmetal_cache_set_index(material)];
+ for(const auto &slot:set.slots)
+  if(slot.load(std::memory_order_acquire)==key)
+   return true;
+ return false;
+}
+
+void clear_pmetal_cache() noexcept
+{
+ for(auto &set:g_exact_pmetal_materials)
+  for(auto &slot:set.slots)
+   slot.store(
+       0u,
+       std::memory_order_release);
+}
 
 bool range_ok(const void *p,std::size_t n) noexcept {
  if(!p)return false;if(n==0)return true;auto cur=reinterpret_cast<std::uintptr_t>(p);const auto end=cur+n;if(end<cur)return false;
@@ -74,75 +176,37 @@ bool range_ok(const void *p,std::size_t n) noexcept {
   const auto re=reinterpret_cast<std::uintptr_t>(m.BaseAddress)+m.RegionSize;if(re<=cur)return false;cur=std::min(re,end);}return true;
 }
 
-std::uint64_t exact_semantic_hash(const wchar_t *semantic_key) noexcept
-{
- if(!semantic_key)return 0u;
- constexpr std::uint64_t offset=14695981039346656037ull;
- constexpr std::uint64_t prime=1099511628211ull;
- std::uint64_t hash=offset;
- for(std::size_t i=0u;i<512u;++i){
-  std::uint16_t ch=0u;
-  const auto *at=reinterpret_cast<const std::uint8_t*>(semantic_key)+i*2u;
-  if(!range_ok(at,sizeof(ch)))return 0u;
-  std::memcpy(&ch,at,sizeof(ch));
-  if(ch==0u)return i==0u?0u:hash;
-  if(ch>0x7fu)return 0u;
-  hash^=static_cast<std::uint8_t>(ch);
-  hash*=prime;
- }
- return 0u;
-}
-
 void observe_exact_runtime_mtd(
     void *material,
     const void *raw,
     std::uint32_t len,
     const wchar_t *semantic_key) noexcept
 {
+ (void)semantic_key;
  if(material==nullptr)return;
 
- {
-  std::lock_guard<std::mutex> lock(g_exact_material_mutex);
-  g_exact_pmetal_materials.erase(material);
- }
+ // Pointer reuse is invalidated on every MTD parse before classification.
+ pmetal_cache_erase(material);
 
  constexpr std::uint32_t k_max_mtd_bytes=8u*1024u*1024u;
  if(raw==nullptr||len==0u||len>k_max_mtd_bytes||
     !range_ok(raw,len))
   return;
 
- const auto semantic=exact_semantic_hash(semantic_key);
- if(semantic!=operators::material_response::mtd_semantic_hash(k_pmetal_name))
-  return;
-
  const auto digest=
   operators::legacy_plan::hashing::sha256(
    static_cast<const std::uint8_t*>(raw),
    static_cast<std::size_t>(len));
- if(!operators::legacy_plan::hashing::matches_hex(
-      digest,k_pmetal_sha256))
+
+ // Legacy 1.45 selected donor route345 from exact raw MTD SHA. Route345 is
+ // collision-free in the generated corpus, so do not add a stronger runtime
+ // semantic-name prerequisite that the working carrier never required.
+ if(digest!=k_pmetal_digest ||
+    !operators::legacy_plan::hashing::matches_hex(
+       digest,k_pmetal_sha256))
   return;
 
- operators::material_response::material_identity identity{};
- identity.valid=true;
- identity.actual_material_exact=true;
- identity.route_index=k_pmetal_route;
- identity.semantic_name_hash=semantic;
- identity.raw_mtd_sha256=digest;
- identity.material_family_hash=
-  operators::material_response::mtd_semantic_hash(
-   k_pmetal_family);
-
- if(!operators::material_response::
-       exact_runtime_pmetal_material_identity(identity))
-  return;
-
- try{
-  std::lock_guard<std::mutex> lock(g_exact_material_mutex);
-  g_exact_pmetal_materials[material]=identity;
- }catch(...){
-  return;
- }
+ pmetal_cache_publish(material);
 }
 
 bool lookup_exact_runtime_pmetal(
@@ -150,11 +214,20 @@ bool lookup_exact_runtime_pmetal(
     operators::material_response::material_identity &identity) noexcept
 {
  identity={};
- if(material==nullptr)return false;
- std::lock_guard<std::mutex> lock(g_exact_material_mutex);
- const auto found=g_exact_pmetal_materials.find(material);
- if(found==g_exact_pmetal_materials.end())return false;
- identity=found->second;
+ if(!pmetal_cache_contains(material))
+  return false;
+
+ identity.valid=true;
+ identity.actual_material_exact=true;
+ identity.route_index=k_pmetal_route;
+ identity.semantic_name_hash=
+     operators::material_response::
+         mtd_semantic_hash(k_pmetal_name);
+ identity.raw_mtd_sha256=k_pmetal_digest;
+ identity.material_family_hash=
+     operators::material_response::
+         mtd_semantic_hash(k_pmetal_family);
+
  return operators::material_response::
   exact_runtime_pmetal_material_identity(identity);
 }
@@ -165,22 +238,29 @@ void *resolve_actual_material(
 {
  if(container==nullptr||material_index<0||material_index>0x100000)
   return nullptr;
+
+ // This callback is entered only from the exact retail selector and only after
+ // caller-RVA validation. The container and its material table are therefore
+ // engine-attested for this call. Match the performance policy used by the
+ // LightBank hot path: direct fixed-layout reads, no VirtualQuery.
  void *array=nullptr;
- const auto *array_at=
-  static_cast<const std::uint8_t*>(container)+0x10u;
- if(!range_ok(array_at,sizeof(array)))
-  return nullptr;
- std::memcpy(&array,array_at,sizeof(array));
+ std::memcpy(
+     &array,
+     static_cast<const std::uint8_t*>(container)+0x10u,
+     sizeof(array));
  if(array==nullptr)return nullptr;
 
- const auto index=static_cast<std::size_t>(material_index);
- if(index>(SIZE_MAX/24u))return nullptr;
- const auto *material_at=
-  static_cast<const std::uint8_t*>(array)+index*24u;
- void *material=nullptr;
- if(!range_ok(material_at,sizeof(material)))
+ const auto index=
+     static_cast<std::size_t>(
+         material_index);
+ if(index>(SIZE_MAX/24u))
   return nullptr;
- std::memcpy(&material,material_at,sizeof(material));
+
+ void *material=nullptr;
+ std::memcpy(
+     &material,
+     static_cast<const std::uint8_t*>(array)+index*24u,
+     sizeof(material));
  return material;
 }
 
@@ -348,11 +428,7 @@ void uninstall() noexcept {
  g_po=nullptr;
  g_do=nullptr;
  g_mo=nullptr;
- {
-  std::lock_guard<std::mutex> lock(
-      g_exact_material_mutex);
-  g_exact_pmetal_materials.clear();
- }
+ clear_pmetal_cache();
  material_owner_selection_clear();
  flver_identity_reset();
  g_state={};
