@@ -23,6 +23,7 @@
 #include <atomic>
 #include <cstddef>
 #include <cstdint>
+#include <cstdlib>
 #include <cstring>
 #include <filesystem>
 #include <fstream>
@@ -127,6 +128,25 @@ std::atomic<std::uint64_t> g_diffuse_requests{0};
 std::atomic<std::uint64_t> g_normal_requests{0};
 std::atomic<std::uint64_t> g_fail_open{0};
 std::atomic_bool g_quarantined{false};
+bool g_hot_telemetry_enabled = false;
+
+bool runtime_hot_telemetry_requested() noexcept
+{
+    const char *value =
+        std::getenv("DSRRL_RUNTIME_TELEMETRY");
+    return value != nullptr &&
+        value[0] == '1' &&
+        value[1] == '\0';
+}
+
+void hot_count(
+    std::atomic<std::uint64_t> &counter) noexcept
+{
+    if (g_hot_telemetry_enabled)
+        counter.fetch_add(
+            1u,
+            std::memory_order_relaxed);
+}
 
 std::uint64_t fnv_name(const std::wstring &name) noexcept
 {
@@ -952,6 +972,8 @@ register_events() noexcept
 
     g_core = &core_;
     g_quarantined.store(false);
+    g_hot_telemetry_enabled =
+        runtime_hot_telemetry_requested();
 
     reshade::register_event<
         reshade::addon_event::init_resource_view>(
@@ -1103,7 +1125,7 @@ prepare_draw_requests(
                     request,
                     replacement)) {
                 prepared.spec_rgb = true;
-                ++g_spec_requests;
+                hot_count(g_spec_requests);
                 replacement = nullptr;
             }
         }
@@ -1192,7 +1214,7 @@ prepare_draw_requests(
                     request,
                     replacement)) {
                 prepared.diffuse = true;
-                ++g_diffuse_requests;
+                hot_count(g_diffuse_requests);
                 replacement = nullptr;
             }
         }
@@ -1289,7 +1311,7 @@ prepare_draw_requests(
                     request,
                     replacement)) {
                 prepared.normal = true;
-                ++g_normal_requests;
+                hot_count(g_normal_requests);
                 replacement = nullptr;
             }
         }
@@ -1305,7 +1327,7 @@ prepare_draw_requests(
         release_view(view);
 
     if (prepared.request_count == 0u)
-        ++g_fail_open;
+        hot_count(g_fail_open);
 
     return true;
 }
@@ -1394,7 +1416,7 @@ prepare_fixed_pointlight_material_requests(
         !endpoint_a_normal ||
         !endpoint_b_normal) {
         release_all();
-        ++g_fail_open;
+        hot_count(g_fail_open);
         return true;
     }
 
@@ -1478,7 +1500,7 @@ prepare_fixed_pointlight_material_requests(
         release_view(diff_b);
         release_view(normal_b);
         release_all();
-        ++g_fail_open;
+        hot_count(g_fail_open);
         return true;
     }
 
@@ -1571,7 +1593,7 @@ prepare_fixed_pointlight_material_requests(
         release_view(diff_b);
         release_view(normal_b);
         release_all();
-        ++g_fail_open;
+        hot_count(g_fail_open);
         return true;
     }
 
@@ -1621,11 +1643,11 @@ prepare_fixed_pointlight_material_requests(
     prepared.spec_rgb = true;
     prepared.diffuse = true;
     prepared.normal = true;
-    ++g_fixed_pointlight_spec_requests;
-    ++g_fixed_pointlight_diffuse_requests;
-    ++g_spec_requests;
-    ++g_diffuse_requests;
-    ++g_normal_requests;
+    hot_count(g_fixed_pointlight_spec_requests);
+    hot_count(g_fixed_pointlight_diffuse_requests);
+    hot_count(g_spec_requests);
+    hot_count(g_diffuse_requests);
+    hot_count(g_normal_requests);
 
     release_view(spec_a);
     release_view(diff_a);
@@ -1810,9 +1832,9 @@ prepare_subsurface_body_requests(
     prepared.spec_rgb = true;
     prepared.diffuse = true;
     prepared.normal = true;
-    ++g_spec_requests;
-    ++g_diffuse_requests;
-    ++g_normal_requests;
+    hot_count(g_spec_requests);
+    hot_count(g_diffuse_requests);
+    hot_count(g_normal_requests);
     return true;
 }
 
