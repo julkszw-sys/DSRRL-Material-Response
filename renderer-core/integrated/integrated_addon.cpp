@@ -178,6 +178,15 @@ std::atomic<std::uint64_t> g_fixed_draw_b12_ready{0};
 std::atomic<std::uint64_t> g_fixed_draw_t19_ready{0};
 std::atomic<std::uint64_t> g_fixed_draw_batch_ready{0};
 std::atomic<std::uint64_t> g_fixed_draw_fail_open{0};
+std::atomic<std::uint64_t> g_clustered_draw_candidates{0};
+std::atomic<std::uint64_t> g_clustered_draw_pipeline_ready{0};
+std::atomic<std::uint64_t> g_clustered_draw_material_ready{0};
+std::atomic<std::uint64_t> g_clustered_draw_resources_ready{0};
+std::atomic<std::uint64_t> g_clustered_draw_sidecar_ready{0};
+std::atomic<std::uint64_t> g_clustered_draw_batch_ready{0};
+std::atomic<std::uint64_t> g_clustered_draw_applied{0};
+std::atomic<std::uint64_t> g_clustered_draw_fail_open{0};
+std::atomic<std::uint64_t> g_clustered_draw_restore_fail{0};
 
 bool g_hot_telemetry_enabled = false;
 bool g_effect_telemetry_enabled = false;
@@ -1489,6 +1498,67 @@ void log_state(const char *tag) noexcept
     reshade::log::message(
         reshade::log::level::info,
         fixed_pl_line);
+
+    const auto clustered_pl =
+        g_clustered_pnts.telemetry();
+    const auto clustered_pipe =
+        g_clustered_pnts_pipeline.telemetry();
+    char clustered_pl_line[1536]{};
+    std::snprintf(
+        clustered_pl_line,
+        sizeof(clustered_pl_line),
+        "[DSRRL CLPNTS ACT] tag=%s "
+        "builder=%llu collection=%llu/%llu selector=%llu mirror=%llu/%llu "
+        "source=%llu/%llu publish=%llu owner=%llu/%llu max=%llu/%llu "
+        "sidecar=%llu/%llu gpu18=%llu/%llu gpu19=%llu/%llu b12=%llu/%llu prepare=%llu/%llu "
+        "pipe_reg=%llu/%llu pipe_init=%llu pipe_bind=%llu/%llu "
+        "draw_candidate=%llu pipeline_ready=%llu material_ready=%llu resources_ready=%llu "
+        "sidecar_ready=%llu batch_ready=%llu applied=%llu target_failopen=%llu restore_fail=%llu "
+        "enabled=%u quarantine=%u/%u",
+        tag,
+        static_cast<unsigned long long>(clustered_pl.builder_seen),
+        static_cast<unsigned long long>(clustered_pl.collection_ok),
+        static_cast<unsigned long long>(clustered_pl.collection_fail),
+        static_cast<unsigned long long>(clustered_pl.selector_calls),
+        static_cast<unsigned long long>(clustered_pl.mirror_equal),
+        static_cast<unsigned long long>(clustered_pl.mirror_diff),
+        static_cast<unsigned long long>(clustered_pl.source_capture_ok),
+        static_cast<unsigned long long>(clustered_pl.source_capture_fail),
+        static_cast<unsigned long long>(clustered_pl.snapshot_publish),
+        static_cast<unsigned long long>(clustered_pl.owner_join_hit),
+        static_cast<unsigned long long>(clustered_pl.owner_join_miss),
+        static_cast<unsigned long long>(clustered_pl.material_limit_ok),
+        static_cast<unsigned long long>(clustered_pl.material_limit_fail),
+        static_cast<unsigned long long>(clustered_pl.sidecar_ready),
+        static_cast<unsigned long long>(clustered_pl.sidecar_fail),
+        static_cast<unsigned long long>(clustered_pl.t18_create),
+        static_cast<unsigned long long>(clustered_pl.t18_hit),
+        static_cast<unsigned long long>(clustered_pl.t19_create),
+        static_cast<unsigned long long>(clustered_pl.t19_hit),
+        static_cast<unsigned long long>(clustered_pl.b12_create),
+        static_cast<unsigned long long>(clustered_pl.b12_hit),
+        static_cast<unsigned long long>(clustered_pl.prepare_ok),
+        static_cast<unsigned long long>(clustered_pl.prepare_fail),
+        static_cast<unsigned long long>(clustered_pipe.candidate_register_ok),
+        static_cast<unsigned long long>(clustered_pipe.candidate_register_fail),
+        static_cast<unsigned long long>(clustered_pipe.init_attested),
+        static_cast<unsigned long long>(clustered_pipe.bind_hits),
+        static_cast<unsigned long long>(clustered_pipe.bind_misses),
+        static_cast<unsigned long long>(g_clustered_draw_candidates.load()),
+        static_cast<unsigned long long>(g_clustered_draw_pipeline_ready.load()),
+        static_cast<unsigned long long>(g_clustered_draw_material_ready.load()),
+        static_cast<unsigned long long>(g_clustered_draw_resources_ready.load()),
+        static_cast<unsigned long long>(g_clustered_draw_sidecar_ready.load()),
+        static_cast<unsigned long long>(g_clustered_draw_batch_ready.load()),
+        static_cast<unsigned long long>(g_clustered_draw_applied.load()),
+        static_cast<unsigned long long>(g_clustered_draw_fail_open.load()),
+        static_cast<unsigned long long>(g_clustered_draw_restore_fail.load()),
+        clustered_pl.enabled ? 1u : 0u,
+        clustered_pl.quarantined ? 1u : 0u,
+        clustered_pipe.quarantined ? 1u : 0u);
+    reshade::log::message(
+        reshade::log::level::info,
+        clustered_pl_line);
 
     // Compact machine-parseable receiver census. Emit one line rather than
     // 24 lines per checkpoint so long runtime captures remain practical.
@@ -3112,10 +3182,14 @@ bool prepare_island_batch(
     // diffuse and (for Spc) legacy local specular. The replacement PS is
     // attested independently from the post-A1 host, while all draw-local
     // carriers are bound atomically and restored by the shared transaction.
+    if (clustered_pointlight_bound)
+        hot_count(g_clustered_draw_candidates);
+
     if (clustered_pointlight_bound &&
         g_clustered_pnts_pipeline.prepare_bound_shader(
             cmd_list,
             prepared.clustered_shader)) {
+        hot_count(g_clustered_draw_pipeline_ready);
         auto *context =
             reinterpret_cast<ID3D11DeviceContext *>(
                 cmd_list->get_native());
@@ -3125,6 +3199,8 @@ bool prepare_island_batch(
             (!prepared.clustered_shader.spc ||
              (decision.ptde_specular_power_verified &&
               decision.ptde_specular_power > 0.0f));
+        if (direct_material_ready)
+            hot_count(g_clustered_draw_material_ready);
 
         dsrrl::operators::material_response::
             mtd_semantic_query clustered_query{};
@@ -3157,6 +3233,9 @@ bool prepare_island_batch(
             (!prepared.clustered_shader.spc ||
              prepared.resources.spec_rgb);
 
+        if (resources_ready)
+            hot_count(g_clustered_draw_resources_ready);
+
         const bool sidecar_ready =
             resources_ready &&
             g_clustered_pnts.prepare_sidecar(
@@ -3165,6 +3244,7 @@ bool prepare_island_batch(
                 prepared.clustered_carrier);
 
         if (sidecar_ready) {
+            hot_count(g_clustered_draw_sidecar_ready);
             const auto point =
                 dsrrl::core::operator_bit(
                     dsrrl::core::operator_id::point_light);
@@ -3244,6 +3324,7 @@ bool prepare_island_batch(
 
                 if (resources_appended) {
                     prepared.clustered_in_batch = true;
+                    hot_count(g_clustered_draw_batch_ready);
                     return true;
                 }
             }
@@ -3257,6 +3338,9 @@ bool prepare_island_batch(
             prepared.clustered_shader);
         prepared.batch = {};
     }
+
+    if (clustered_pointlight_bound)
+        hot_count(g_clustered_draw_fail_open);
 
     // Fixed PntSS/PntSSSS is a separate exact receiver namespace. Compose
     // the entire visible island atomically: replacement PS, authored b12
@@ -4021,6 +4105,8 @@ bool on_draw(
         prepared.mr_in_batch;
     const bool lerp_mr_in_batch =
         prepared.lerp_mr_in_batch;
+    const bool clustered_in_batch =
+        prepared.clustered_in_batch;
 
     release_prepared_island_batch(
         prepared);
@@ -4028,6 +4114,19 @@ bool on_draw(
     account_effect_dispatch(
         effect_prepared,
         dispatch.transaction);
+
+    if (clustered_in_batch) {
+        if (dsrrl::runtime::draw_tx_issued(
+                dispatch.transaction))
+            hot_count(g_clustered_draw_applied);
+        else
+            hot_count(g_clustered_draw_fail_open);
+
+        if (dispatch.transaction ==
+            dsrrl::runtime::draw_tx_result::
+                issued_restore_failed)
+            hot_count(g_clustered_draw_restore_fail);
+    }
 
     if (mr_in_batch) {
         g_mr_draw_runtime.account_dispatch_result(
@@ -4215,6 +4314,8 @@ bool on_draw_indexed(
         prepared.mr_in_batch;
     const bool lerp_mr_in_batch =
         prepared.lerp_mr_in_batch;
+    const bool clustered_in_batch =
+        prepared.clustered_in_batch;
 
     release_prepared_island_batch(
         prepared);
@@ -4222,6 +4323,19 @@ bool on_draw_indexed(
     account_effect_dispatch(
         effect_prepared,
         dispatch.transaction);
+
+    if (clustered_in_batch) {
+        if (dsrrl::runtime::draw_tx_issued(
+                dispatch.transaction))
+            hot_count(g_clustered_draw_applied);
+        else
+            hot_count(g_clustered_draw_fail_open);
+
+        if (dispatch.transaction ==
+            dsrrl::runtime::draw_tx_result::
+                issued_restore_failed)
+            hot_count(g_clustered_draw_restore_fail);
+    }
 
     if (mr_in_batch) {
         g_mr_draw_runtime.account_dispatch_result(
@@ -4400,6 +4514,15 @@ bool AddonInit(
     g_fixed_draw_t19_ready.store(0);
     g_fixed_draw_batch_ready.store(0);
     g_fixed_draw_fail_open.store(0);
+    g_clustered_draw_candidates.store(0);
+    g_clustered_draw_pipeline_ready.store(0);
+    g_clustered_draw_material_ready.store(0);
+    g_clustered_draw_resources_ready.store(0);
+    g_clustered_draw_sidecar_ready.store(0);
+    g_clustered_draw_batch_ready.store(0);
+    g_clustered_draw_applied.store(0);
+    g_clustered_draw_fail_open.store(0);
+    g_clustered_draw_restore_fail.store(0);
     reset_integrated_draw_routes();
     for (auto &rx : g_material_receiver_runtime) {
         rx.seen.store(0);
