@@ -639,7 +639,7 @@ void log_state(const char *tag) noexcept
     const auto mode =
         dsrrl::runtime::hemdir3_mode_transport::status();
 
-    char line[1984]{};
+    char line[4096]{};
     std::snprintf(
         line,
         sizeof(line),
@@ -878,7 +878,7 @@ void log_state(const char *tag) noexcept
 
     // Compact machine-parseable receiver census. Emit one line rather than
     // 24 lines per checkpoint so long runtime captures remain practical.
-    char rx_line[2048]{};
+    char rx_line[4096]{};
     int rx_used = std::snprintf(
         rx_line,
         sizeof(rx_line),
