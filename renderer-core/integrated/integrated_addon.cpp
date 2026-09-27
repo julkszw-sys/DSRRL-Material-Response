@@ -388,6 +388,12 @@ bool observe_draw_identity(
             cmd_list,
             upper_lower_identity);
 
+    std::uint8_t fixed_pointlight_light_count = 0u;
+    const bool fixed_pointlight_receiver =
+        g_fixed_pointlight_pipeline.bound_light_count(
+            cmd_list,
+            fixed_pointlight_light_count);
+
     const bool upper_lower_spc =
         upper_lower_receiver &&
         upper_lower_identity.stratum ==
@@ -468,13 +474,18 @@ bool observe_draw_identity(
         (subsurface_receiver ? 1u : 0u) +
         (hemdir3_receiver ? 1u : 0u) +
         (upper_lower_unpaired_nospc ? 1u : 0u) +
-        (upper_lower_standalone ? 1u : 0u);
+        (upper_lower_standalone ? 1u : 0u) +
+        (fixed_pointlight_receiver ? 1u : 0u);
 
     const bool receiver_ok =
         receiver_classes == 1u &&
         upper_lower_spc_matches_stable;
 
-    if (subsurface_receiver) {
+    if (fixed_pointlight_receiver) {
+        // Fixed PntSS/PntSSSS is an independent receiver namespace. Never
+        // borrow Material Response receiver IDs 24..47 for this path.
+        receiver_id = 0u;
+    } else if (subsurface_receiver) {
         // DSBT body Subsurf exact receivers 33..35 own the route. Their
         // target plain-HemEnv replacement now includes fresh U/L+b13.
         receiver_id = subsurface_target;
@@ -570,9 +581,13 @@ bool observe_draw_identity(
 
     ++g_mr_draw_eval;
     out_decision =
-        g_material_response.evaluate(
-            receiver_id,
-            out_material);
+        fixed_pointlight_receiver
+            ? g_material_response.
+                evaluate_direct_pointlight_material(
+                    out_material)
+            : g_material_response.evaluate(
+                receiver_id,
+                out_material);
 
     if (out_decision.active) {
         ++g_mr_would_activate;
