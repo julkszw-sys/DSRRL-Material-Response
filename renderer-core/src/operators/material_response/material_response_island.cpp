@@ -1,5 +1,7 @@
 #include "dsrrl/operators/material_response/material_response_island.hpp"
 #include "dsrrl/operators/material_response/generated_dsr_flver_owner_tuples_v1.hpp"
+#include "dsrrl/operators/material_response/mtd_semantic_census.hpp"
+#include "dsrrl/operators/legacy_plan/sha256_bytes.hpp"
 
 #include <algorithm>
 
@@ -31,6 +33,33 @@ bool receiver_allowed(const material_profile &profile, std::uint32_t receiver_id
 }
 
 } // namespace
+
+bool exact_runtime_pmetal_material_identity(
+    const material_identity &identity) noexcept
+{
+    namespace hashing =
+        operators::legacy_plan::hashing;
+
+    constexpr std::uint32_t k_route = 345u;
+    constexpr const char *k_name =
+        "P_Metal[DSB].mtd";
+    constexpr const char *k_sha256 =
+        "ece70f36bd2517d28c8495e276cea537f8b519d6bed981788e79a409ffbf763b";
+    constexpr const char *k_family =
+        "DifSpcBmp";
+
+    return
+        identity.valid &&
+        identity.actual_material_exact &&
+        identity.route_index == k_route &&
+        identity.semantic_name_hash ==
+            mtd_semantic_hash(k_name) &&
+        hashing::matches_hex(
+            identity.raw_mtd_sha256,
+            k_sha256) &&
+        identity.material_family_hash ==
+            mtd_semantic_hash(k_family);
+}
 
 bool material_response_island::register_receiver_recipe(const receiver_recipe &recipe)
 {
@@ -212,24 +241,39 @@ decision material_response_island::evaluate(
     if (!material.has_value() || !material->valid)
         return {false, decision_reason::material_required, receiver_id};
 
-    // Positive per-material activation is draw-specific. MTD/profile identity
-    // alone is insufficient: authenticate the actual FLVER owner + slot + MTD.
-    if (!material->owner_tuple_exact ||
-        !material->material_slot_valid ||
-        material->semantic_name_hash == 0u ||
-        !generated::dsr_flver_owner_tuple_authenticated(
+    const auto profile = resolve_material(*material, receiver_id);
+    if (!profile.has_value())
+        return {false, decision_reason::unknown_material, receiver_id};
+
+    // Shared HemEnv hosts still require a positive draw-local material
+    // authority. The normal authority is the source-complete FLVER+slot+MTD
+    // tuple. P_Metal additionally restores the independently certified legacy
+    // carrier: the exact runtime material object observed by the retail MTD
+    // parser. This exception is deliberately route345-only and does not
+    // authorize EnvSpec, resources, PointLight, or any other material.
+    const bool flver_owner_authenticated =
+        material->owner_tuple_exact &&
+        material->material_slot_valid &&
+        material->semantic_name_hash != 0u &&
+        generated::dsr_flver_owner_tuple_authenticated(
             material->flver_sha256,
             material->material_slot,
-            material->semantic_name_hash))
+            material->semantic_name_hash);
+
+    const bool exact_runtime_pmetal =
+        exact_runtime_pmetal_material_identity(
+            *material) &&
+        profile->route_index == 345u &&
+        receiver_id >= 33u &&
+        receiver_id <= 35u;
+
+    if (!flver_owner_authenticated &&
+        !exact_runtime_pmetal)
         return {
             false,
             decision_reason::owner_tuple_not_authenticated,
             receiver_id
         };
-
-    const auto profile = resolve_material(*material, receiver_id);
-    if (!profile.has_value())
-        return {false, decision_reason::unknown_material, receiver_id};
 
     const std::uint32_t operations =
         recipe->certified_operations & profile->certified_operations;
