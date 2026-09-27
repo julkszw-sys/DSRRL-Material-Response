@@ -322,7 +322,9 @@ std::atomic_bool &effect_probe_flag(
 
 void mark_effect_probe(
     effect_probe_id id,
-    effect_probe_stage stage) noexcept
+    effect_probe_stage stage,
+    std::uint32_t receiver_id = 0xffffffffu,
+    std::uint32_t route_index = 0xffffffffu) noexcept
 {
     if (!g_effect_telemetry_enabled)
         return;
@@ -344,13 +346,25 @@ void mark_effect_probe(
             std::memory_order_relaxed))
         return;
 
-    char line[256]{};
-    std::snprintf(
-        line,
-        sizeof(line),
-        "[DSRRL EFFECT ACT] effect=%s stage=%s",
-        effect_probe_name(id),
-        effect_probe_stage_name(stage));
+    char line[320]{};
+    if (receiver_id != 0xffffffffu ||
+        route_index != 0xffffffffu) {
+        std::snprintf(
+            line,
+            sizeof(line),
+            "[DSRRL EFFECT ACT] effect=%s stage=%s rx=%u route=%u",
+            effect_probe_name(id),
+            effect_probe_stage_name(stage),
+            receiver_id == 0xffffffffu ? 0u : receiver_id,
+            route_index == 0xffffffffu ? 0u : route_index);
+    } else {
+        std::snprintf(
+            line,
+            sizeof(line),
+            "[DSRRL EFFECT ACT] effect=%s stage=%s",
+            effect_probe_name(id),
+            effect_probe_stage_name(stage));
+    }
     reshade::log::message(
         reshade::log::level::info,
         line);
@@ -368,7 +382,9 @@ constexpr effect_probe_mask effect_probe_bit(
 
 void mark_effect_probe_mask(
     effect_probe_mask mask,
-    effect_probe_stage stage) noexcept
+    effect_probe_stage stage,
+    std::uint32_t receiver_id = 0xffffffffu,
+    std::uint32_t route_index = 0xffffffffu) noexcept
 {
     if (!g_effect_telemetry_enabled ||
         mask == 0u)
@@ -382,7 +398,9 @@ void mark_effect_probe_mask(
         if ((mask & effect_probe_bit(id)) != 0u)
             mark_effect_probe(
                 id,
-                stage);
+                stage,
+                receiver_id,
+                route_index);
     }
 }
 
