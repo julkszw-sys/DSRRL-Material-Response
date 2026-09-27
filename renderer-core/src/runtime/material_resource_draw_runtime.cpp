@@ -655,6 +655,92 @@ std::uint64_t logical_hash_for(
         : found->second.logical_hash;
 }
 
+void logical_hashes_for(
+    ID3D11ShaderResourceView *const *stocks,
+    std::size_t count,
+    std::uint64_t *hashes) noexcept
+{
+    if (hashes == nullptr)
+        return;
+
+    std::fill_n(hashes, count, 0u);
+
+    if (stocks == nullptr || count == 0u)
+        return;
+
+    std::lock_guard<std::mutex> lock(
+        g_mutex);
+
+    for (std::size_t i = 0u; i < count; ++i) {
+        if (stocks[i] == nullptr)
+            continue;
+
+        const auto key =
+            static_cast<std::uint64_t>(
+                reinterpret_cast<std::uintptr_t>(
+                    stocks[i]));
+        const auto found =
+            g_cache.find(key);
+        if (found != g_cache.end())
+            hashes[i] =
+                found->second.logical_hash;
+    }
+}
+
+struct companion_lookup_request {
+    ID3D11ShaderResourceView *stock = nullptr;
+    asset_class cls = asset_class::specular;
+};
+
+void lookup_many(
+    const companion_lookup_request *requests,
+    std::size_t count,
+    ID3D11ShaderResourceView **views) noexcept
+{
+    if (views == nullptr)
+        return;
+
+    std::fill_n(views, count, nullptr);
+
+    if (requests == nullptr || count == 0u)
+        return;
+
+    std::lock_guard<std::mutex> lock(
+        g_mutex);
+
+    for (std::size_t i = 0u; i < count; ++i) {
+        if (requests[i].stock == nullptr)
+            continue;
+
+        const auto key =
+            static_cast<std::uint64_t>(
+                reinterpret_cast<std::uintptr_t>(
+                    requests[i].stock));
+        const auto found =
+            g_cache.find(key);
+        if (found == g_cache.end())
+            continue;
+
+        ID3D11ShaderResourceView *view = nullptr;
+        switch (requests[i].cls) {
+        case asset_class::specular:
+            view = found->second.specular;
+            break;
+        case asset_class::diffuse:
+            view = found->second.diffuse;
+            break;
+        case asset_class::normal:
+            view = found->second.normal;
+            break;
+        }
+
+        if (view != nullptr) {
+            view->AddRef();
+            views[i] = view;
+        }
+    }
+}
+
 void on_init_resource_view(
     reshade::api::device *device,
     reshade::api::resource,
@@ -698,7 +784,6 @@ void on_init_resource_view(
     auto *native_device =
         reinterpret_cast<ID3D11Device *>(
             device->get_native());
-
     if (native_device == nullptr)
         return;
 
@@ -934,12 +1019,15 @@ prepare_draw_requests(
         3u,
         views);
 
-    const auto h0 =
-        logical_hash_for(views[0]);
-    const auto h1 =
-        logical_hash_for(views[1]);
-    const auto h2 =
-        logical_hash_for(views[2]);
+    std::uint64_t hashes[3]{};
+    logical_hashes_for(
+        views,
+        3u,
+        hashes);
+
+    const auto h0 = hashes[0];
+    const auto h1 = hashes[1];
+    const auto h2 = hashes[2];
 
     const bool exact_material =
         query.material.valid &&
@@ -1253,21 +1341,21 @@ prepare_fixed_pointlight_material_requests(
             release_view(view);
     };
 
-    const auto h0 = logical_hash_for(views[0]);
-    const auto h1 = logical_hash_for(views[1]);
-    const auto h2 = logical_hash_for(views[2]);
+    std::uint64_t hashes[6]{};
+    logical_hashes_for(
+        views,
+        blended_material ? 6u : 3u,
+        hashes);
+
+    const auto h0 = hashes[0];
+    const auto h1 = hashes[1];
+    const auto h2 = hashes[2];
     const auto h3 =
-        blended_material
-            ? logical_hash_for(views[3])
-            : 0u;
+        blended_material ? hashes[3] : 0u;
     const auto h4 =
-        blended_material
-            ? logical_hash_for(views[4])
-            : 0u;
+        blended_material ? hashes[4] : 0u;
     const auto h5 =
-        blended_material
-            ? logical_hash_for(views[5])
-            : 0u;
+        blended_material ? hashes[5] : 0u;
 
     const bool exact_material =
         query.material.valid &&
@@ -1306,36 +1394,30 @@ prepare_fixed_pointlight_material_requests(
         return true;
     }
 
-    auto *spec_a =
-        lookup(
-            views[1],
-            asset_class::specular);
-    auto *diff_a =
-        lookup(
-            views[0],
-            asset_class::diffuse);
-    auto *normal_a =
-        lookup(
-            views[2],
-            asset_class::normal);
-    auto *spec_b =
-        blended_material
-            ? lookup(
-                views[4],
-                asset_class::specular)
-            : nullptr;
-    auto *diff_b =
-        blended_material
-            ? lookup(
-                views[3],
-                asset_class::diffuse)
-            : nullptr;
-    auto *normal_b =
-        blended_material
-            ? lookup(
-                views[5],
-                asset_class::normal)
-            : nullptr;
+    const companion_lookup_request
+        companion_requests[6]{
+            {views[1], asset_class::specular},
+            {views[0], asset_class::diffuse},
+            {views[2], asset_class::normal},
+            {blended_material ? views[4] : nullptr,
+             asset_class::specular},
+            {blended_material ? views[3] : nullptr,
+             asset_class::diffuse},
+            {blended_material ? views[5] : nullptr,
+             asset_class::normal}
+        };
+    ID3D11ShaderResourceView *companions[6]{};
+    lookup_many(
+        companion_requests,
+        6u,
+        companions);
+
+    auto *spec_a = companions[0];
+    auto *diff_a = companions[1];
+    auto *normal_a = companions[2];
+    auto *spec_b = companions[3];
+    auto *diff_b = companions[4];
+    auto *normal_b = companions[5];
 
     const bool endpoint_a_exact =
         spec_a != nullptr &&
@@ -1397,8 +1479,7 @@ prepare_fixed_pointlight_material_requests(
     }
 
     island_draw_adapter_request spec_request{};
-    spec_request.primary =
-        core::operator_id::spec_rgb;
+    spec_request.primary =        core::operator_id::spec_rgb;
     spec_request.receiver_verified = true;
     spec_request.material_verified = true;
     spec_request.srvs[0] = {
@@ -1581,12 +1662,15 @@ prepare_subsurface_body_requests(
         3u,
         views);
 
-    const auto h0 =
-        logical_hash_for(views[0]);
-    const auto h1 =
-        logical_hash_for(views[1]);
-    const auto h2 =
-        logical_hash_for(views[2]);
+    std::uint64_t hashes[3]{};
+    logical_hashes_for(
+        views,
+        3u,
+        hashes);
+
+    const auto h0 = hashes[0];
+    const auto h1 = hashes[1];
+    const auto h2 = hashes[2];
 
     constexpr std::uint64_t k_body_f_spec =
         0x724f5fe11b342205ull;
@@ -1623,15 +1707,20 @@ prepare_subsurface_body_requests(
     ID3D11ShaderResourceView *norm = nullptr;
 
     if (tuple_ready) {
-        spec = lookup(
-            views[1],
-            asset_class::specular);
-        diff = lookup(
-            views[0],
-            asset_class::diffuse);
-        norm = lookup(
-            views[2],
-            asset_class::normal);
+        const companion_lookup_request
+            companion_requests[3]{
+                {views[1], asset_class::specular},
+                {views[0], asset_class::diffuse},
+                {views[2], asset_class::normal}
+            };
+        ID3D11ShaderResourceView *companions[3]{};
+        lookup_many(
+            companion_requests,
+            3u,
+            companions);
+        spec = companions[0];
+        diff = companions[1];
+        norm = companions[2];
     }
 
     for (auto *&view : views)
