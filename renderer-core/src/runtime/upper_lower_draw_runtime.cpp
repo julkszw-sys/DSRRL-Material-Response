@@ -104,6 +104,15 @@ struct lightbank_reference_token {
     bool available = false;
 };
 
+struct pmetal_source_probe {
+    pmetal_env_source_diag_status status =
+        pmetal_env_source_diag_status::none;
+    std::int32_t selector = -1;
+    std::uint16_t bank_count = 0u;
+    std::uint64_t bank_signature = 0u;
+    std::uint32_t row_id = 0u;
+};
+
 struct steady_q_cache_entry {
     void *source = nullptr;
     std::int32_t selector = -1;
@@ -472,6 +481,19 @@ std::atomic<std::uint64_t> g_pmetal_env_steady{0};
 std::atomic<std::uint64_t> g_pmetal_env_blend{0};
 std::atomic<std::uint64_t> g_pmetal_env_miss{0};
 std::atomic_bool g_pmetal_env_hook_armed{false};
+
+std::atomic<std::uint32_t> g_pmetal_diag_status_a{0u};
+std::atomic<std::uint32_t> g_pmetal_diag_status_b{0u};
+std::atomic<std::int32_t> g_pmetal_diag_selector_a{-1};
+std::atomic<std::int32_t> g_pmetal_diag_selector_b{-1};
+std::atomic<std::uint32_t> g_pmetal_diag_count_a{0u};
+std::atomic<std::uint32_t> g_pmetal_diag_count_b{0u};
+std::atomic<std::uint64_t> g_pmetal_diag_signature_a{0u};
+std::atomic<std::uint64_t> g_pmetal_diag_signature_b{0u};
+std::atomic<std::uint32_t> g_pmetal_diag_row_a{0u};
+std::atomic<std::uint32_t> g_pmetal_diag_row_b{0u};
+std::atomic<std::uint32_t> g_pmetal_diag_beta_bits{0u};
+std::atomic_bool g_pmetal_diag_observed{false};
 std::atomic_bool g_direct_ul_producer_active{false};
 std::atomic_bool g_steady_cache_builder_active{false};
 std::atomic_bool g_direct_ul_operator_changed{false};
@@ -1453,6 +1475,62 @@ resolve_pmetal_bank(
 
     signature = decoded_signature;
     return bank;
+}
+
+void publish_pmetal_source_probe(
+    bool endpoint_b,
+    const pmetal_source_probe &probe,
+    float beta) noexcept
+{
+    if (!telemetry::effect_enabled())
+        return;
+
+    auto &status = endpoint_b
+        ? g_pmetal_diag_status_b
+        : g_pmetal_diag_status_a;
+    auto &selector = endpoint_b
+        ? g_pmetal_diag_selector_b
+        : g_pmetal_diag_selector_a;
+    auto &count = endpoint_b
+        ? g_pmetal_diag_count_b
+        : g_pmetal_diag_count_a;
+    auto &signature = endpoint_b
+        ? g_pmetal_diag_signature_b
+        : g_pmetal_diag_signature_a;
+    auto &row = endpoint_b
+        ? g_pmetal_diag_row_b
+        : g_pmetal_diag_row_a;
+
+    selector.store(
+        probe.selector,
+        std::memory_order_relaxed);
+    count.store(
+        probe.bank_count,
+        std::memory_order_relaxed);
+    signature.store(
+        probe.bank_signature,
+        std::memory_order_relaxed);
+    row.store(
+        probe.row_id,
+        std::memory_order_relaxed);
+
+    std::uint32_t beta_bits = 0u;
+    static_assert(sizeof(beta_bits) == sizeof(beta));
+    std::memcpy(
+        &beta_bits,
+        &beta,
+        sizeof(beta_bits));
+    g_pmetal_diag_beta_bits.store(
+        beta_bits,
+        std::memory_order_relaxed);
+
+    status.store(
+        static_cast<std::uint32_t>(
+            probe.status),
+        std::memory_order_release);
+    g_pmetal_diag_observed.store(
+        true,
+        std::memory_order_release);
 }
 
 bool read_exact_pmetal_env_source(
