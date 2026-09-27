@@ -1237,13 +1237,15 @@ prepare_fixed_pointlight_material_requests(
         !core_.features().enabled(
             core::operator_id::spec_rgb) ||
         !core_.features().enabled(
-            core::operator_id::diffuse))
+            core::operator_id::diffuse) ||
+        !core_.features().enabled(
+            core::operator_id::normal))
         return false;
 
-    ID3D11ShaderResourceView *views[5]{};
+    ID3D11ShaderResourceView *views[6]{};
     context->PSGetShaderResources(
         0u,
-        5u,
+        6u,
         views);
 
     auto release_all = [&]() noexcept {
@@ -1253,6 +1255,7 @@ prepare_fixed_pointlight_material_requests(
 
     const auto h0 = logical_hash_for(views[0]);
     const auto h1 = logical_hash_for(views[1]);
+    const auto h2 = logical_hash_for(views[2]);
     const auto h3 =
         blended_material
             ? logical_hash_for(views[3])
@@ -1260,6 +1263,10 @@ prepare_fixed_pointlight_material_requests(
     const auto h4 =
         blended_material
             ? logical_hash_for(views[4])
+            : 0u;
+    const auto h5 =
+        blended_material
+            ? logical_hash_for(views[5])
             : 0u;
 
     const bool exact_material =
@@ -1279,9 +1286,21 @@ prepare_fixed_pointlight_material_requests(
          generated::spec_name_hash_allowed_v12(h4) &&
          generated::diffuse_pair_allowed_v12(h4,h3));
 
+    const bool endpoint_a_normal =
+        h2 != 0u &&
+        generated::normal_tuple_allowed_v12(
+            h0,h1,h2);
+    const bool endpoint_b_normal =
+        !blended_material ||
+        (h5 != 0u &&
+         generated::normal_tuple_allowed_v12(
+            h3,h4,h5));
+
     if (!exact_material ||
         !endpoint_a_pair ||
-        !endpoint_b_pair) {
+        !endpoint_b_pair ||
+        !endpoint_a_normal ||
+        !endpoint_b_normal) {
         release_all();
         ++g_fail_open;
         return true;
@@ -1295,6 +1314,10 @@ prepare_fixed_pointlight_material_requests(
         lookup(
             views[0],
             asset_class::diffuse);
+    auto *normal_a =
+        lookup(
+            views[2],
+            asset_class::normal);
     auto *spec_b =
         blended_material
             ? lookup(
@@ -1307,14 +1330,22 @@ prepare_fixed_pointlight_material_requests(
                 views[3],
                 asset_class::diffuse)
             : nullptr;
+    auto *normal_b =
+        blended_material
+            ? lookup(
+                views[5],
+                asset_class::normal)
+            : nullptr;
 
     const bool endpoint_a_exact =
         spec_a != nullptr &&
-        diff_a != nullptr;
+        diff_a != nullptr &&
+        normal_a != nullptr;
     const bool endpoint_b_exact =
         !blended_material ||
         (spec_b != nullptr &&
-         diff_b != nullptr);
+         diff_b != nullptr &&
+         normal_b != nullptr);
 
     operators::resource_bridges::
         fixed_pointlight_spec_rgb_context bridge{};
@@ -1349,13 +1380,17 @@ prepare_fixed_pointlight_material_requests(
             action::preserve_host ||
         spec_a == nullptr ||
         diff_a == nullptr ||
+        normal_a == nullptr ||
         (blended_material &&
          (spec_b == nullptr ||
-          diff_b == nullptr))) {
+          diff_b == nullptr ||
+          normal_b == nullptr))) {
         release_view(spec_a);
         release_view(diff_a);
+        release_view(normal_a);
         release_view(spec_b);
         release_view(diff_b);
+        release_view(normal_b);
         release_all();
         ++g_fail_open;
         return true;
@@ -1400,11 +1435,31 @@ prepare_fixed_pointlight_material_requests(
         diffuse_request.srv_count = 2u;
     }
 
+    island_draw_adapter_request normal_request{};
+    normal_request.primary =
+        core::operator_id::normal;
+    normal_request.receiver_verified = true;
+    normal_request.material_verified = true;
+    normal_request.srvs[0] = {
+        2u,
+        normal_a
+    };
+    normal_request.srv_count = 1u;
+    if (blended_material) {
+        normal_request.srvs[1] = {
+            5u,
+            normal_b
+        };
+        normal_request.srv_count = 2u;
+    }
+
     draw_tx_mutation verify_spec{};
     draw_tx_mutation verify_diff{};
+    draw_tx_mutation verify_norm{};
     const auto total_retained =
         spec_request.srv_count +
-        diffuse_request.srv_count;
+        diffuse_request.srv_count +
+        normal_request.srv_count;
 
     if (build_island_draw_mutation(
             spec_request,
@@ -1414,7 +1469,11 @@ prepare_fixed_pointlight_material_requests(
             diffuse_request,
             verify_diff) !=
             island_draw_adapter_result::ready ||
-        prepared.request_count + 2u >
+        build_island_draw_mutation(
+            normal_request,
+            verify_norm) !=
+            island_draw_adapter_result::ready ||
+        prepared.request_count + 3u >
             prepared.requests.size() ||
         prepared.retained_count +
             total_retained >
@@ -1434,6 +1493,9 @@ prepare_fixed_pointlight_material_requests(
     prepared.requests[
         prepared.request_count++] =
         diffuse_request;
+    prepared.requests[
+        prepared.request_count++] =
+        normal_request;
 
     prepared.retained_views[
         prepared.retained_count++] =
@@ -1457,17 +1519,32 @@ prepare_fixed_pointlight_material_requests(
         diff_b = nullptr;
     }
 
+    prepared.retained_views[
+        prepared.retained_count++] =
+        normal_a;
+    normal_a = nullptr;
+    if (normal_request.srv_count == 2u) {
+        prepared.retained_views[
+            prepared.retained_count++] =
+            normal_b;
+        normal_b = nullptr;
+    }
+
     prepared.spec_rgb = true;
     prepared.diffuse = true;
+    prepared.normal = true;
     ++g_fixed_pointlight_spec_requests;
     ++g_fixed_pointlight_diffuse_requests;
     ++g_spec_requests;
     ++g_diffuse_requests;
+    ++g_normal_requests;
 
     release_view(spec_a);
     release_view(diff_a);
+    release_view(normal_a);
     release_view(spec_b);
     release_view(diff_b);
+    release_view(normal_b);
     release_all();
     return true;
 }
