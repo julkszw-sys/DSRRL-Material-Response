@@ -1113,8 +1113,10 @@ void log_effect_matrix(
         g_pmetal_envspec.telemetry();
     const auto pmetal_source =
         g_upper_lower.pmetal_source_diagnostic();
+    const auto subsurface =
+        g_subsurface.telemetry();
 
-    char detail[1792]{};
+    char detail[2048]{};
     std::snprintf(
         detail,
         sizeof(detail),
@@ -1125,6 +1127,7 @@ void log_effect_matrix(
         "PMSRC obs=%u A=%s sel=%d count=%u sig=%016llX row=%u "
         "B=%s sel=%d count=%u sig=%016llX row=%u beta=%.6f "
         "REF pub=%u ptid=%u sel_evt=%u stid=%u cand=%u tuple=%u match=%u drawtok=%u "
+        "SUB cand=%llu matrej=%llu piperej=%llu surfrej=%llu prep=%llu "
         "UL producer=%u changed=%u quarantine=%u restore_fail=%u "
         "Bloom diag_hooks=%u/%u model_hook=%u proof=%u contents=%u "
         "fx_authorized=%llu fx_rejected=%llu",
@@ -1174,6 +1177,16 @@ void log_effect_matrix(
         pmetal_source.selector_tuple_read ? 1u : 0u,
         pmetal_source.selector_tuple_match ? 1u : 0u,
         pmetal_source.draw_token_selected ? 1u : 0u,
+        static_cast<unsigned long long>(
+            subsurface.candidates),
+        static_cast<unsigned long long>(
+            subsurface.material_rejects),
+        static_cast<unsigned long long>(
+            subsurface.pipeline_rejects),
+        static_cast<unsigned long long>(
+            subsurface.surface_rejects),
+        static_cast<unsigned long long>(
+            subsurface.prepared),
         ul.direct_ul_producer_active ? 1u : 0u,
         ul.direct_ul_operator_changed ? 1u : 0u,
         ul.quarantined ? 1u : 0u,
