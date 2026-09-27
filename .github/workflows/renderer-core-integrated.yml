@@ -466,10 +466,18 @@ jobs:
             '0x5642F0u',
             '0x563B80u',
             'lightbank_snapshot_matches_draw',
-            'operator_id::upper_lower',
+            'g_direct_ul_producer_active',
+            'direct_producer_active',
             '13u'
           )) {
             if ($upperLower -notmatch [regex]::Escape($required)) { throw "Upper/Lower shared-batch producer invariant missing: $required" }
+          }
+
+          if ($upperLower -match 'features\(\)\.enabled\(\s*core::operator_id::upper_lower') {
+            throw "Upper/Lower producer hot path must not query the mutex-backed feature registry"
+          }
+          if ($entry -notmatch 'operator_id::upper_lower') {
+            throw "Upper/Lower feature ownership must remain armed by the integrated addon"
           }
 
           foreach ($forbidden in @(
