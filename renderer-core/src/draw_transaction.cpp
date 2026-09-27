@@ -1,6 +1,7 @@
 #include "dsrrl/core/draw_transaction.hpp"
 #include "dsrrl/core/carrier_abi.hpp"
 
+#include <algorithm>
 #include <cstddef>
 
 namespace dsrrl::core {
@@ -47,12 +48,23 @@ bool draw_transaction_manager::begin(
 
     try {
         std::lock_guard lock(mutex_);
-        if (active_.find(command) != active_.end())
+
+        const auto existing =
+            std::find_if(
+                active_.begin(),
+                active_.end(),
+                [command](const transaction_state &state) noexcept {
+                    return state.command == command;
+                });
+        if (existing != active_.end())
             return false;
 
-        active_.emplace(
-            command,
-            transaction_state{command, draw_serial, context, plan});
+        active_.push_back(
+            transaction_state{
+                command,
+                draw_serial,
+                context,
+                plan});
         return true;
     } catch (...) {
         // A transaction that cannot be recorded must never mutate native
@@ -64,20 +76,37 @@ bool draw_transaction_manager::begin(
 bool draw_transaction_manager::restore(std::uint64_t command)
 {
     std::lock_guard lock(mutex_);
-    const auto it = active_.find(command);
+
+    const auto it =
+        std::find_if(
+            active_.begin(),
+            active_.end(),
+            [command](const transaction_state &state) noexcept {
+                return state.command == command;
+            });
     if (it == active_.end())
         return false;
-    active_.erase(it);
+
+    if (it != active_.end() - 1)
+        *it = std::move(active_.back());
+    active_.pop_back();
     return true;
 }
 
 std::optional<transaction_state> draw_transaction_manager::active(std::uint64_t command) const
 {
     std::lock_guard lock(mutex_);
-    const auto it = active_.find(command);
+
+    const auto it =
+        std::find_if(
+            active_.begin(),
+            active_.end(),
+            [command](const transaction_state &state) noexcept {
+                return state.command == command;
+            });
     if (it == active_.end())
         return std::nullopt;
-    return it->second;
+    return *it;
 }
 
 bool draw_transaction_manager::empty() const noexcept
