@@ -1060,6 +1060,18 @@ pmetal_envspec_draw_runtime::telemetry() const noexcept
         upper_lower_fallback_.load(),
         requests_.load(),
         lerp_requests_.load(),
+        effect_entry_seen_.load(),
+        effect_feature_ready_.load(),
+        effect_material_ready_.load(),
+        effect_semantic_ready_.load(),
+        effect_source_ready_.load(),
+        effect_receiver_source_ready_.load(),
+        effect_replacement_ready_.load(),
+        effect_probe_ready_.load(),
+        effect_spec_rgb_ready_.load(),
+        effect_b12_ready_.load(),
+        effect_request_ready_.load(),
+        effect_fail_mask_.load(),
         quarantined_.load()
     };
 }
@@ -1084,6 +1096,18 @@ void pmetal_envspec_draw_runtime::reset() noexcept
     upper_lower_fallback_.store(0u);
     requests_.store(0u);
     lerp_requests_.store(0u);
+    effect_entry_seen_.store(false);
+    effect_feature_ready_.store(false);
+    effect_material_ready_.store(false);
+    effect_semantic_ready_.store(false);
+    effect_source_ready_.store(false);
+    effect_receiver_source_ready_.store(false);
+    effect_replacement_ready_.store(false);
+    effect_probe_ready_.store(false);
+    effect_spec_rgb_ready_.store(false);
+    effect_b12_ready_.store(false);
+    effect_request_ready_.store(false);
+    effect_fail_mask_.store(0u);
     quarantined_.store(false);
 }
 
