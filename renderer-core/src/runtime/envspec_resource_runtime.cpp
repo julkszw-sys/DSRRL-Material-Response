@@ -6,6 +6,7 @@
 #endif
 
 #include "dsrrl/runtime/envspec_resource_runtime.hpp"
+#include "dsrrl/runtime/runtime_hot_telemetry.hpp"
 
 #include "dsrrl/operators/legacy_plan/sha256_bytes.hpp"
 
@@ -763,7 +764,7 @@ bool envspec_resource_runtime::prepare(
 
     if (context == nullptr ||
         slot >= k_ptde_slots) {
-        ++g_prepare_fail;
+        telemetry::hot_count(g_prepare_fail);
         return false;
     }
 
@@ -801,7 +802,7 @@ bool envspec_resource_runtime::prepare(
 
     if (!a_ok ||
         (probe_b_required && !b_ok)) {
-        ++g_prepare_fail;
+        telemetry::hot_count(g_prepare_fail);
         return false;
     }
 
@@ -819,7 +820,7 @@ bool envspec_resource_runtime::prepare(
             probe_b,
             slot,
             b_view)) {
-        ++g_prepare_fail;
+        telemetry::hot_count(g_prepare_fail);
         return false;
     }
 
@@ -830,7 +831,7 @@ bool envspec_resource_runtime::prepare(
 
         if (!g_sampler_ready ||
             g_sampler.handle == 0u) {
-            ++g_prepare_fail;
+            telemetry::hot_count(g_prepare_fail);
             return false;
         }
 
@@ -859,7 +860,7 @@ bool envspec_resource_runtime::prepare(
     if (a_native == nullptr ||
         b_native == nullptr ||
         sampler_native == nullptr) {
-        ++g_prepare_fail;
+        telemetry::hot_count(g_prepare_fail);
         return false;
     }
 
@@ -883,7 +884,7 @@ bool envspec_resource_runtime::prepare(
         probe_b_required;
     prepared.ready = true;
 
-    ++g_prepare_ok;
+    telemetry::hot_count(g_prepare_ok);
     return true;
 }
 
