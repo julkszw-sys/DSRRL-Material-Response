@@ -72,7 +72,7 @@ def main() -> int:
             f"{{0x{h:016x}ull,{digest_array(sha)}}},\n"
         )
     out += [
-        "};\n",
+        "}};\n",
         "constexpr bool dsr_mtd_identity_supplement_resolve("
         "std::uint64_t h,std::array<std::uint8_t,32>&out) noexcept{"
         "out={};"
