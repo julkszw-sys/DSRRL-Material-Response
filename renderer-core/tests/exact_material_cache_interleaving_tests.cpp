@@ -170,6 +170,77 @@ int main()
         k_route_count,
         route));
 
+    // Pointer reuse regression: old and new MTD generations may occupy the
+    // exact same engine material address. A delayed erase of the old
+    // generation must not clear the route published for the new generation.
+    cache.clear();
+
+    const auto *reused_material =
+        reinterpret_cast<const void *>(
+            static_cast<std::uintptr_t>(
+                0x3000u));
+
+    CHECK(cache.publish(
+        reused_material,
+        k_old_route,
+        k_route_count));
+
+    writer_gate reuse_gate{};
+    reuse_gate.old_key =
+        reinterpret_cast<std::uintptr_t>(
+            reused_material);
+    reuse_gate.new_key =
+        reuse_gate.old_key;
+
+    std::thread reuse_eraser([&] {
+        (void)cache.erase(
+            reused_material,
+            writer_hook,
+            &reuse_gate);
+    });
+
+    CHECK(wait_until(
+        reuse_gate.erase_claimed));
+
+    std::thread reuse_publisher([&] {
+        (void)cache.publish(
+            reused_material,
+            k_new_route,
+            k_route_count,
+            writer_hook,
+            &reuse_gate);
+    });
+
+    // New publication cannot claim the same address while erase owns BUSY.
+    CHECK(!reuse_gate.publish_claimed.load(
+        std::memory_order_acquire));
+
+    reuse_gate.allow_erase_commit.store(
+        true,
+        std::memory_order_release);
+    reuse_eraser.join();
+
+    CHECK(wait_until(
+        reuse_gate.publish_claimed));
+
+    route = 0xffffu;
+    CHECK(!cache.lookup(
+        reused_material,
+        k_route_count,
+        route));
+
+    reuse_gate.allow_publish_commit.store(
+        true,
+        std::memory_order_release);
+    reuse_publisher.join();
+
+    route = 0u;
+    CHECK(cache.lookup(
+        reused_material,
+        k_route_count,
+        route));
+    CHECK(route == k_new_route);
+
     std::cout
         << "exact material cache BUSY interleaving test passed\n";
     return 0;
