@@ -2,6 +2,7 @@ cmake_minimum_required(VERSION 3.20)
 project(DSRRLRendererCoreV1 LANGUAGES CXX)
 
 find_package(Python3 REQUIRED COMPONENTS Interpreter)
+find_package(Threads REQUIRED)
 
 set(DSRRL_GENERATED_DIR "${CMAKE_CURRENT_BINARY_DIR}/generated")
 set(DSRRL_NATIVE_PROBE_HEADER
@@ -173,6 +174,7 @@ add_executable(dsrrl_renderer_exact_material_cache_tests
     tests/exact_material_cache_interleaving_tests.cpp)
 target_include_directories(dsrrl_renderer_exact_material_cache_tests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/include)
+target_link_libraries(dsrrl_renderer_exact_material_cache_tests PRIVATE Threads::Threads)
 target_compile_features(dsrrl_renderer_exact_material_cache_tests PRIVATE cxx_std_17)
 add_executable(dsrrl_renderer_flver_identity_tests tests/flver_identity_registry_tests.cpp)
 target_link_libraries(dsrrl_renderer_flver_identity_tests PRIVATE dsrrl_renderer_core)
