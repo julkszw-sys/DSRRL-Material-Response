@@ -1,4 +1,5 @@
 #include "dsrrl/runtime/fixed_pointlight_pipeline_runtime.hpp"
+#include "dsrrl/runtime/runtime_hot_telemetry.hpp"
 
 #include "dsrrl/operators/legacy_plan/sha256_bytes.hpp"
 
@@ -304,12 +305,12 @@ void fixed_pointlight_pipeline_runtime::on_bind_pipeline(
         pipelines_.find(pipeline.handle);
     if (found == pipelines_.end()) {
         bound_.erase(command);
-        ++bind_misses_;
+        telemetry::hot_count(bind_misses_);
         return;
     }
 
     bound_[command] = found->second;
-    ++bind_hits_;
+    telemetry::hot_count(bind_hits_);
 }
 
 void fixed_pointlight_pipeline_runtime::on_destroy_pipeline(
