@@ -1,4 +1,5 @@
 #include "dsrrl/runtime/upper_lower_pipeline_registry.hpp"
+#include "dsrrl/runtime/runtime_hot_telemetry.hpp"
 #include "dsrrl/operators/lightbank/generated_upper_lower_hemenv_v1.hpp"
 #include "dsrrl/operators/lightbank/generated_upper_lower_hemenvlerp_v1.hpp"
 #include "dsrrl/operators/lightbank/generated_upper_lower_phn_parallax_v1.hpp"
@@ -591,7 +592,7 @@ void upper_lower_receiver_observe_bind(
         command_list_key == nullptr)
         return;
 
-    ++g_pixel_binds;
+    telemetry::hot_count(g_pixel_binds);
 
     try {
         std::lock_guard<std::mutex> lock(g_mutex);
@@ -613,7 +614,7 @@ void upper_lower_receiver_observe_bind(
                 g_bound_epoch.load(),
                 false
             };
-            ++g_unknown_binds;
+            telemetry::hot_count(g_unknown_binds);
             return;
         }
 
@@ -633,9 +634,9 @@ void upper_lower_receiver_observe_bind(
         if (found->second.stratum ==
             operators::lightbank::
                 upper_lower_hemenv_stratum::spc)
-            ++g_spc_binds;
+            telemetry::hot_count(g_spc_binds);
         else
-            ++g_nospc_binds;
+            telemetry::hot_count(g_nospc_binds);
     } catch (...) {
         try {
             std::lock_guard<std::mutex> lock(
@@ -652,7 +653,7 @@ void upper_lower_receiver_observe_bind(
             g_bound_tls = {};
         }
 
-        ++g_unknown_binds;
+        telemetry::hot_count(g_unknown_binds);
     }
 }
 
@@ -660,12 +661,12 @@ bool upper_lower_receiver_bound(
     const void *command_list_key,
     upper_lower_receiver_identity &identity) noexcept
 {
-    ++g_lookups;
+    telemetry::hot_count(g_lookups);
     identity = {};
 
     if (command_list_key == nullptr ||
         g_quarantined.load()) {
-        ++g_lookup_misses;
+        telemetry::hot_count(g_lookup_misses);
         return false;
     }
 
@@ -676,13 +677,13 @@ bool upper_lower_receiver_bound(
             command_list_key &&
         g_bound_tls.epoch == epoch) {
         if (!g_bound_tls.present) {
-            ++g_lookup_misses;
+            telemetry::hot_count(g_lookup_misses);
             return false;
         }
 
         identity =
             g_bound_tls.value.identity;
-        ++g_lookup_hits;
+        telemetry::hot_count(g_lookup_hits);
         return true;
     }
 
@@ -700,7 +701,7 @@ bool upper_lower_receiver_bound(
             g_bound_epoch.load(),
             false
         };
-        ++g_lookup_misses;
+        telemetry::hot_count(g_lookup_misses);
         return false;
     }
 
@@ -712,7 +713,7 @@ bool upper_lower_receiver_bound(
     };
     identity =
         found->second.identity;
-    ++g_lookup_hits;
+    telemetry::hot_count(g_lookup_hits);
     return true;
 }
 
