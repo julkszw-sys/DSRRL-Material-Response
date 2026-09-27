@@ -320,7 +320,7 @@ jobs:
           foreach ($required in @(
             'g_fixed_pointlight_pipeline.prepare_bound_shader',
             'evaluate_direct_pointlight_material',
-            'prepare_fixed_pointlight_spec_requests',
+            'prepare_fixed_pointlight_material_requests',
             'prepare_b12_carrier',
             'g_fixed_pointlight.prepare_t19',
             'g_fixed_draw_batch_ready'
