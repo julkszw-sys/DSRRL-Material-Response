@@ -1,0 +1,21 @@
+{
+  "schema": 1,
+  "registry": "DSR certified raw-MTD identity supplement",
+  "source_complete": false,
+  "policy": "Exact semantic basename hash resolves only to an evidence-certified raw DSR MTD SHA. This supplement extends the partial generic identity registry for explicitly certified special routes; unknown identities still fail open.",
+  "records": [
+    {
+      "semantic_name": "Ps_Body[DSBT].mtd",
+      "raw_mtd_sha256": "2706080f2b306245b90bf9d3fdfa38624b2ed0452a9b1aff830cf59de69b37d4",
+      "status": "CONFIRMED",
+      "scope": "DSR Ps_Body[DSBT] stable HemEnv Subsurface route",
+      "basis": {
+        "path": "renderer-core/data/census/ptde_subsurface_usage_census_v1.json",
+        "mapped_ptde_material": "Ps_Body[DSB].mtd",
+        "mapped_ptde_sha256": "af2f108831b783a43b0e02f047919719d14f38e68d6c5a97b80678d593ba1c95",
+        "receiver_scope": [33, 34, 35],
+        "source_evidence_artifact_ids": [99, 571, 920, 943, 944]
+      }
+    }
+  ]
+}
