@@ -832,14 +832,18 @@ void log_state(const char *tag) noexcept
         local_spec_line);
 
     const auto fixed_pl = g_fixed_pointlight.telemetry();
-    char fixed_pl_line[512]{};
+    const auto fixed_pipe =
+        g_fixed_pointlight_pipeline.telemetry();
+    char fixed_pl_line[768]{};
     std::snprintf(
         fixed_pl_line,
         sizeof(fixed_pl_line),
         "[DSRRL CORE+ISLANDS " DSRRL_CORE_ISLANDS_VERSION "] %s "
         "FIXED_PL_TX captures=%llu restarts=%llu rejects=%llu "
         "selector=%llu/%llu stale=%llu t19=%llu/%llu requests=%llu "
-        "hook=%u quarantine=%u restore_fail=%u bridge_armed=0",
+        "pipe=%llu/%llu init=%llu bind=%llu/%llu "
+        "draw=%llu mat=%llu spec=%llu b12=%llu q=%llu ready=%llu failopen=%llu "
+        "hook=%u quarantine=%u/%u restore_fail=%u",
         tag,
         static_cast<unsigned long long>(fixed_pl.producer_captures),
         static_cast<unsigned long long>(fixed_pl.producer_restarts),
@@ -850,8 +854,21 @@ void log_state(const char *tag) noexcept
         static_cast<unsigned long long>(fixed_pl.t19_create),
         static_cast<unsigned long long>(fixed_pl.t19_hit),
         static_cast<unsigned long long>(fixed_pl.requests),
+        static_cast<unsigned long long>(fixed_pipe.candidate_create_ok),
+        static_cast<unsigned long long>(fixed_pipe.candidate_create_fail),
+        static_cast<unsigned long long>(fixed_pipe.init_attested),
+        static_cast<unsigned long long>(fixed_pipe.bind_hits),
+        static_cast<unsigned long long>(fixed_pipe.bind_misses),
+        static_cast<unsigned long long>(g_fixed_draw_candidates.load()),
+        static_cast<unsigned long long>(g_fixed_draw_material_ready.load()),
+        static_cast<unsigned long long>(g_fixed_draw_spec_ready.load()),
+        static_cast<unsigned long long>(g_fixed_draw_b12_ready.load()),
+        static_cast<unsigned long long>(g_fixed_draw_t19_ready.load()),
+        static_cast<unsigned long long>(g_fixed_draw_batch_ready.load()),
+        static_cast<unsigned long long>(g_fixed_draw_fail_open.load()),
         fixed_pl.capture_hook_armed ? 1u : 0u,
         fixed_pl.quarantined ? 1u : 0u,
+        fixed_pipe.quarantined ? 1u : 0u,
         fixed_pl.restore_failed ? 1u : 0u);
     reshade::log::message(
         reshade::log::level::info,
