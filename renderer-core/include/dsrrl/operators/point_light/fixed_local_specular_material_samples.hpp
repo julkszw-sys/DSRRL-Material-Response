@@ -43,6 +43,15 @@ struct fixed_local_specular_material_samples {
     fixed_local_specular_sample_site diffuse_b_t3{};
     fixed_local_specular_sample_site specular_b_t4{};
     bool has_blend_b = false;
+
+    // Exact Mul endpoint interpolation operand. Raw-DXBC census shows the
+    // specular t1/t4 and diffuse t0/t3 lerps use the same input operand, but
+    // the input register differs across shader families. Preserve the token
+    // and register exactly; never hard-code a semantic register number.
+    std::uint32_t blend_weight_token = 0u;
+    std::uint32_t blend_weight_register = 0u;
+    std::uint32_t specular_blend_mad_word = 0u;
+    std::uint32_t diffuse_blend_mad_word = 0u;
 };
 
 // Locates the stock material endpoint samples needed by the fixed direct-PTDE
