@@ -24,6 +24,8 @@
 #include "dsrrl/runtime/hemdir3_draw_runtime.hpp"
 #include "dsrrl/runtime/fixed_pointlight_draw_runtime.hpp"
 #include "dsrrl/runtime/fixed_pointlight_pipeline_runtime.hpp"
+#include "dsrrl/runtime/clustered_pnts_draw_runtime.hpp"
+#include "dsrrl/runtime/clustered_pnts_pipeline_runtime.hpp"
 #include "dsrrl/operators/material_response/material_response_island.hpp"
 #include "dsrrl/operators/material_response/material_response_seed.hpp"
 #include "dsrrl/operators/material_response/material_response_v211_materializer.hpp"
@@ -40,6 +42,7 @@
 #include "dsrrl/operators/point_light/fixed_local_specular_output_cut.hpp"
 #include "dsrrl/operators/point_light/fixed_local_specular_island_plan.hpp"
 #include "dsrrl/operators/point_light/fixed_local_specular_single_materializer.hpp"
+#include "dsrrl/operators/point_light/clustered_pnts_direct_materializer.hpp"
 
 #include <reshade.hpp>
 #include <d3d11.h>
@@ -107,6 +110,10 @@ dsrrl::runtime::fixed_pointlight_draw_runtime
     g_fixed_pointlight;
 dsrrl::runtime::fixed_pointlight_pipeline_runtime
     g_fixed_pointlight_pipeline;
+dsrrl::runtime::clustered_pnts_draw_runtime
+    g_clustered_pnts;
+dsrrl::runtime::clustered_pnts_pipeline_runtime
+    g_clustered_pnts_pipeline;
 dsrrl::runtime::pmetal_envspec_draw_runtime
     g_pmetal_envspec(
         g_core,
@@ -476,7 +483,8 @@ enum integrated_draw_route_bit : std::uint8_t {
     k_route_hemdir3 = 1u << 3,
     k_route_upper_lower = 1u << 4,
     k_route_a1 = 1u << 5,
-    k_route_fixed_pointlight = 1u << 6
+    k_route_fixed_pointlight = 1u << 6,
+    k_route_clustered_pointlight = 1u << 7
 };
 
 struct integrated_draw_route_tls {
@@ -1846,6 +1854,8 @@ void on_destroy_device(reshade::api::device *device)
     g_pmetal_envspec.on_destroy_device(device);
     g_fixed_pointlight.on_destroy_device(device);
     g_fixed_pointlight_pipeline.on_destroy_device(device);
+    g_clustered_pnts.on_destroy_device(device);
+    g_clustered_pnts_pipeline.on_destroy_device(device);
     g_mr_draw_runtime.on_destroy_device(device);
     g_a1_bridge.on_destroy_device(device);
 }
