@@ -841,38 +841,45 @@ materialize_fixed_local_specular_single(
     out.t10_declared=true;
     out.t19_declared=true;
 
-    // Clone stock t1 sampling to exact PTDE sidecar t10. A1 has already
-    // split the stock roughness/alpha lane, so sidecar RGB is carried in yzw
-    // while x remains the host alpha witness.
+    // Clone the stock t1 coordinate/sampler instruction but direct the PTDE
+    // sidecar sample into isolated scratch RGB. Never overwrite the stock t1
+    // destination: its alpha/roughness lane remains available to independent
+    // DSR operators and the fixed PTDE island reads only this scratch SpecRGB.
     insertion spec_capture{};
     spec_capture.word=t1_sample->end;
     spec_capture.payload.assign(
         words.begin()+t1_sample->start,
         words.begin()+t1_sample->end);
-    if(spec_capture.payload[3]!=0x001000f2u ||
-       spec_capture.payload[8]!=1u) {
+    if(spec_capture.payload[8]!=1u ||
+       spec_capture.payload[4]!=
+           samples.specular_a_t1.destination_register) {
         out.result=fixed_local_single_materialize_result::fail_material_capture;
         return out;
     }
-    spec_capture.payload[3]-=0x10u;
+    spec_capture.payload[3]=k_temp_dst_xyz;
+    spec_capture.payload[4]=spec_mat;
     spec_capture.payload[8]=10u;
+
+    // Endpoint A authored material amplitude.
+    append_mul_vec_temp_cb(
+        spec_capture.payload,
+        spec_mat,
+        k_temp_src_xyz,
+        spec_mat,
+        2u);
 
     if(!blended) {
         // Single endpoint:
         // Mspec = PTDE_SpecRGB_A * raw_c101 * COLOR0.
-        append_mul_vec_temp_cb(
+        append_mul_vec_temp_input(
             spec_capture.payload,
             spec_mat,
-            k_temp_src_yzw,
-            samples.specular_a_t1.destination_register,
-            2u);
-        append_mul_vec_temp_input(
-            spec_capture.payload,spec_mat,spec_mat,color0);
+            spec_mat,
+            color0);
         insertions.push_back(std::move(spec_capture));
     } else {
-        // Blended endpoint A is sampled first. Keep the clone isolated here;
-        // materialization is completed after the adjacent t4/t16 endpoint is
-        // available so the exact stock input weight can be reused.
+        // Keep endpoint A live in spec_mat until the adjacent endpoint-B
+        // sidecar sample has been materialized.
         insertions.push_back(std::move(spec_capture));
 
         insertion spec_b_capture{};
@@ -880,30 +887,27 @@ materialize_fixed_local_specular_single(
         spec_b_capture.payload.assign(
             words.begin()+t4_sample->start,
             words.begin()+t4_sample->end);
-        if(spec_b_capture.payload[3]!=0x001000f2u ||
-           spec_b_capture.payload[8]!=4u ||
+        if(spec_b_capture.payload[8]!=4u ||
+           spec_b_capture.payload[4]!=
+               samples.specular_b_t4.destination_register ||
            samples.blend_weight_token==0u) {
             out.result=
                 fixed_local_single_materialize_result::
                     fail_material_capture;
             return out;
         }
-        spec_b_capture.payload[3]-=0x10u;
+
+        spec_b_capture.payload[3]=k_temp_dst_xyz;
+        spec_b_capture.payload[4]=work;
         spec_b_capture.payload[8]=16u;
 
         // c101 is common material amplitude, so applying it to A and B before
         // interpolation is algebraically identical to multiplying afterwards.
         append_mul_vec_temp_cb(
             spec_b_capture.payload,
-            spec_mat,
-            k_temp_src_yzw,
-            samples.specular_a_t1.destination_register,
-            2u);
-        append_mul_vec_temp_cb(
-            spec_b_capture.payload,
             work,
-            k_temp_src_yzw,
-            samples.specular_b_t4.destination_register,
+            k_temp_src_xyz,
+            work,
             2u);
         append_difference_vec(
             spec_b_capture.payload,
