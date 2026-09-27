@@ -232,6 +232,24 @@ jobs:
           if ($upperLower -match 'thread_local\s+std::array<\s*lightbank_reference_token') {
             throw "PMetal reference registry regressed to thread-local producer/selector isolation"
           }
+          foreach ($required in @(
+            'token.fingerprint',
+            'bool owner_candidate = false',
+            'lightbank_snapshot_matches_draw('
+          )) {
+            if ($upperLower -notmatch [regex]::Escape($required)) { throw "PMetal same-owner tuple preservation invariant missing: $required" }
+          }
+
+          foreach ($required in @(
+            'k_subsurface_body_f_spec_hash',
+            'k_subsurface_body_m_spec_hash',
+            'exact_subsurface_body_spec_hash',
+            'subsurface_body_spec',
+            'generated::diffuse_pair_allowed_v12',
+            'generated::normal_tuple_allowed_v12'
+          )) {
+            if ($resourceRuntime -notmatch [regex]::Escape($required)) { throw "Subsurface body companion routing invariant missing: $required" }
+          }
 
           # The generic DSR raw-MTD registry is intentionally partial. DSBT is
           # authorized only by its certified exact special-route supplement.
