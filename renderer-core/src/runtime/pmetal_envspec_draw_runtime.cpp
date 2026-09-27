@@ -29,6 +29,45 @@ constexpr const char *k_pmetal_name =
 constexpr const char *k_pmetal_sha256 =
     "ece70f36bd2517d28c8495e276cea537f8b519d6bed981788e79a409ffbf763b";
 
+constexpr std::uint32_t k_effect_fail_feature = 1u << 0u;
+constexpr std::uint32_t k_effect_fail_lerp_feature = 1u << 1u;
+constexpr std::uint32_t k_effect_fail_material = 1u << 2u;
+constexpr std::uint32_t k_effect_fail_semantic = 1u << 3u;
+constexpr std::uint32_t k_effect_fail_source = 1u << 4u;
+constexpr std::uint32_t k_effect_fail_blend = 1u << 5u;
+constexpr std::uint32_t k_effect_fail_lerp_ul_conflict = 1u << 6u;
+constexpr std::uint32_t k_effect_fail_context = 1u << 7u;
+constexpr std::uint32_t k_effect_fail_replacement = 1u << 8u;
+constexpr std::uint32_t k_effect_fail_ul = 1u << 9u;
+constexpr std::uint32_t k_effect_fail_probe = 1u << 10u;
+constexpr std::uint32_t k_effect_fail_spec_rgb = 1u << 11u;
+constexpr std::uint32_t k_effect_fail_device = 1u << 12u;
+constexpr std::uint32_t k_effect_fail_b12 = 1u << 13u;
+constexpr std::uint32_t k_effect_fail_mutation = 1u << 14u;
+
+void effect_latch(std::atomic_bool &flag) noexcept
+{
+    if (!telemetry::effect_enabled() ||
+        flag.load(std::memory_order_relaxed))
+        return;
+    flag.store(true, std::memory_order_relaxed);
+}
+
+void effect_fail(
+    std::atomic<std::uint32_t> &mask,
+    std::uint32_t bit) noexcept
+{
+    if (!telemetry::effect_enabled())
+        return;
+
+    const auto current =
+        mask.load(std::memory_order_relaxed);
+    if ((current & bit) != 0u)
+        return;
+
+    mask.fetch_or(bit, std::memory_order_relaxed);
+}
+
 bool exact_pmetal_material(
     const mr::material_identity &material) noexcept
 {
