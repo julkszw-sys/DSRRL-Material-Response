@@ -241,16 +241,12 @@ decision material_response_island::evaluate(
     if (!material.has_value() || !material->valid)
         return {false, decision_reason::material_required, receiver_id};
 
-    const auto profile = resolve_material(*material, receiver_id);
-    if (!profile.has_value())
-        return {false, decision_reason::unknown_material, receiver_id};
-
     // Shared HemEnv hosts still require a positive draw-local material
     // authority. The normal authority is the source-complete FLVER+slot+MTD
     // tuple. P_Metal additionally restores the independently certified legacy
     // carrier: the exact runtime material object observed by the retail MTD
-    // parser. This exception is deliberately route345-only and does not
-    // authorize EnvSpec, resources, PointLight, or any other material.
+    // parser. Keep this authorization check before profile resolution so the
+    // existing fail-open reason contract remains stable.
     const bool flver_owner_authenticated =
         material->owner_tuple_exact &&
         material->material_slot_valid &&
@@ -263,7 +259,6 @@ decision material_response_island::evaluate(
     const bool exact_runtime_pmetal =
         exact_runtime_pmetal_material_identity(
             *material) &&
-        profile->route_index == 345u &&
         receiver_id >= 33u &&
         receiver_id <= 35u;
 
@@ -274,6 +269,10 @@ decision material_response_island::evaluate(
             decision_reason::owner_tuple_not_authenticated,
             receiver_id
         };
+
+    const auto profile = resolve_material(*material, receiver_id);
+    if (!profile.has_value())
+        return {false, decision_reason::unknown_material, receiver_id};
 
     const std::uint32_t operations =
         recipe->certified_operations & profile->certified_operations;
