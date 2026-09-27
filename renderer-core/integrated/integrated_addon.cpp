@@ -3885,6 +3885,17 @@ bool on_draw(
         (route_mask &
          k_route_fixed_pointlight) != 0u;
 
+    bool clustered_pointlight_spc = false;
+    bool clustered_pointlight_blended = false;
+    const bool clustered_pointlight_bound =
+        (route_mask &
+         k_route_clustered_pointlight) != 0u &&
+        g_clustered_pnts_pipeline.bound_metadata(
+            cmd_list,
+            clustered_pointlight_spc,
+            clustered_pointlight_blended);
+    (void)clustered_pointlight_blended;
+
     std::uint32_t receiver_id = 0u;
     bool hemenvlerp_bound = false;
     dsrrl::runtime::hemenvlerp_receiver_identity hemenvlerp_identity{};
@@ -3900,6 +3911,8 @@ bool on_draw(
             cmd_list,
             route_mask,
             fixed_pointlight_bound,
+            clustered_pointlight_bound,
+            clustered_pointlight_spc,
             receiver_id,
             hemenvlerp_bound,
             hemenvlerp_identity,
@@ -3920,6 +3933,8 @@ bool on_draw(
         candidate_effect_mask(
             route_mask,
             fixed_pointlight_bound,
+            clustered_pointlight_bound,
+            clustered_pointlight_spc,
             hemenvlerp_bound,
             subsurface_bound,
             hemdir3_bound,
@@ -3934,6 +3949,8 @@ bool on_draw(
     mark_effect_probe_mask(
         authority_effect_mask(
             fixed_pointlight_bound,
+            clustered_pointlight_bound,
+            clustered_pointlight_spc,
             hemenvlerp_bound,
             upper_lower_bound,
             material,
@@ -3946,6 +3963,7 @@ bool on_draw(
     if (!prepare_island_batch(
             cmd_list,
             fixed_pointlight_bound,
+            clustered_pointlight_bound,
             receiver_id,
             hemenvlerp_bound,
             subsurface_bound,
@@ -4060,6 +4078,17 @@ bool on_draw_indexed(
         (route_mask &
          k_route_fixed_pointlight) != 0u;
 
+    bool clustered_pointlight_spc = false;
+    bool clustered_pointlight_blended = false;
+    const bool clustered_pointlight_bound =
+        (route_mask &
+         k_route_clustered_pointlight) != 0u &&
+        g_clustered_pnts_pipeline.bound_metadata(
+            cmd_list,
+            clustered_pointlight_spc,
+            clustered_pointlight_blended);
+    (void)clustered_pointlight_blended;
+
     std::uint32_t receiver_id = 0u;
     bool hemenvlerp_bound = false;
     dsrrl::runtime::hemenvlerp_receiver_identity hemenvlerp_identity{};
@@ -4075,6 +4104,8 @@ bool on_draw_indexed(
             cmd_list,
             route_mask,
             fixed_pointlight_bound,
+            clustered_pointlight_bound,
+            clustered_pointlight_spc,
             receiver_id,
             hemenvlerp_bound,
             hemenvlerp_identity,
@@ -4095,6 +4126,8 @@ bool on_draw_indexed(
         candidate_effect_mask(
             route_mask,
             fixed_pointlight_bound,
+            clustered_pointlight_bound,
+            clustered_pointlight_spc,
             hemenvlerp_bound,
             subsurface_bound,
             hemdir3_bound,
@@ -4109,6 +4142,8 @@ bool on_draw_indexed(
     mark_effect_probe_mask(
         authority_effect_mask(
             fixed_pointlight_bound,
+            clustered_pointlight_bound,
+            clustered_pointlight_spc,
             hemenvlerp_bound,
             upper_lower_bound,
             material,
@@ -4121,6 +4156,7 @@ bool on_draw_indexed(
     if (!prepare_island_batch(
             cmd_list,
             fixed_pointlight_bound,
+            clustered_pointlight_bound,
             receiver_id,
             hemenvlerp_bound,
             subsurface_bound,
