@@ -474,6 +474,7 @@ std::atomic<std::uint64_t> g_pmetal_env_miss{0};
 std::atomic_bool g_pmetal_env_hook_armed{false};
 std::atomic_bool g_direct_ul_producer_active{false};
 std::atomic_bool g_steady_cache_builder_active{false};
+std::atomic_bool g_direct_ul_operator_changed{false};
 std::atomic<std::uint64_t> g_direct_ul_steady_inject{0};
 std::atomic<std::uint64_t> g_direct_ul_blend_inject{0};
 std::atomic<std::uint64_t> g_direct_ul_inject_fail{0};
@@ -2195,10 +2196,15 @@ void __fastcall hook_steady_cache_builder(
 
     if (rewrite_steady_cache_ptde_ul(
             dst,
-            raw_row))
+            raw_row)) {
+        if (!g_direct_ul_operator_changed.load(
+                std::memory_order_relaxed))
+            g_direct_ul_operator_changed.store(
+                true,
+                std::memory_order_relaxed);
         telemetry::hot_count(
             g_direct_ul_steady_inject);
-    else
+    } else
         telemetry::hot_count(
             g_direct_ul_inject_fail);
 }
@@ -2998,6 +3004,11 @@ void *__fastcall hook_blend_packer(
             dst,
             g_producer.upper,
             g_producer.lower);
+        if (!g_direct_ul_operator_changed.load(
+                std::memory_order_relaxed))
+            g_direct_ul_operator_changed.store(
+                true,
+                std::memory_order_relaxed);
         telemetry::hot_count(g_direct_ul_blend_inject);
     }
 
@@ -4021,6 +4032,7 @@ upper_lower_draw_runtime::telemetry() const noexcept
         g_enabled.load(),
         g_pmetal_env_hook_armed.load(),
         g_direct_ul_producer_active.load(),
+        g_direct_ul_operator_changed.load(),
         g_quarantined.load(),
         g_restore_failed.load()
     };
@@ -4058,6 +4070,7 @@ void upper_lower_draw_runtime::reset() noexcept
     g_direct_ul_steady_inject.store(0);
     g_direct_ul_blend_inject.store(0);
     g_direct_ul_inject_fail.store(0);
+    g_direct_ul_operator_changed.store(false);
 }
 
 } // namespace dsrrl::runtime
