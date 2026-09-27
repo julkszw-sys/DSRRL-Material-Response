@@ -51,7 +51,7 @@ struct prepared_clustered_pnts_draw {
     ID3D11Buffer *b12 = nullptr;
     std::uint64_t producer_serial = 0;
     std::uint8_t raw_selected_count = 0;
-    std::uint8_t material_max_pnt_lit_num = 0;
+    std::uint32_t material_max_pnt_lit_num = 0;
     std::uint8_t effective_count = 0;
     bool owner_verified = false;
     bool selector_mirror_verified = false;
