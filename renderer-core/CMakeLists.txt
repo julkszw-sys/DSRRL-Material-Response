@@ -378,6 +378,11 @@ add_test(NAME dsrrl_renderer_material_owner_selection_tests COMMAND dsrrl_render
 add_test(NAME dsrrl_renderer_flver_identity_tests COMMAND dsrrl_renderer_flver_identity_tests)
 add_test(NAME dsrrl_renderer_stable_receiver_pipeline_tests COMMAND dsrrl_renderer_stable_receiver_pipeline_tests)
 add_test(NAME dsrrl_renderer_hemenvlerp_pipeline_tests COMMAND dsrrl_renderer_hemenvlerp_pipeline_tests)
+set_tests_properties(
+    dsrrl_renderer_material_owner_selection_tests
+    dsrrl_renderer_stable_receiver_pipeline_tests
+    dsrrl_renderer_hemenvlerp_pipeline_tests
+    PROPERTIES ENVIRONMENT "DSRRL_RUNTIME_TELEMETRY=1")
 add_test(NAME dsrrl_renderer_core_tests COMMAND dsrrl_renderer_core_tests)
 add_test(NAME dsrrl_renderer_island_tests COMMAND dsrrl_renderer_island_tests)
 add_test(NAME dsrrl_renderer_future_runtime_tests COMMAND dsrrl_renderer_future_runtime_tests)
