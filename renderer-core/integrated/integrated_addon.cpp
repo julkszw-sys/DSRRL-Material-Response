@@ -2124,7 +2124,8 @@ bool prepare_island_batch(
                     prepared.fixed_shader.blended_material,
                     prepared.resources) &&
             prepared.resources.spec_rgb &&
-            prepared.resources.diffuse;
+            prepared.resources.diffuse &&
+            prepared.resources.normal;
 
         if (resources_ready)
             ++g_fixed_draw_spec_ready;
