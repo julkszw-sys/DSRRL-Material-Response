@@ -2648,12 +2648,6 @@ bool prepare_island_batch(
         }
 
         hot_count(g_lerp_full_draw_fallback);
-            else
-                hot_count(g_lerp_full_draw_ready);
-            return true;
-        }
-
-        hot_count(g_lerp_full_draw_fallback);
 
         // Conservative fallback for exact Lerp receivers that cannot prove
         // the full material/resource composition. Keep the already-certified
