@@ -47,6 +47,29 @@ core::sha256_digest digest(std::uint8_t seed)
     return out;
 }
 
+core::sha256_digest digest_hex(const char *hex)
+{
+    core::sha256_digest out{};
+    if (hex == nullptr)
+        return out;
+
+    const auto nibble=[](char ch)->int{
+        if(ch>='0'&&ch<='9') return ch-'0';
+        if(ch>='a'&&ch<='f') return 10+ch-'a';
+        if(ch>='A'&&ch<='F') return 10+ch-'A';
+        return -1;
+    };
+
+    for(std::size_t i=0;i<out.size();++i){
+        const int hi=nibble(hex[i*2]);
+        const int lo=nibble(hex[i*2+1]);
+        if(hi<0||lo<0)
+            return {};
+        out[i]=static_cast<std::uint8_t>((hi<<4)|lo);
+    }
+    return out;
+}
+
 void write_u32(std::array<std::uint8_t, 16> &bytes, std::size_t offset, std::uint32_t value)
 {
     std::memcpy(bytes.data() + offset, &value, sizeof(value));
@@ -195,8 +218,9 @@ int main()
     CHECK(exact_mr.ptde_specular_power_verified);
     CHECK(exact_mr.ptde_specular_power==8.5f);
 
-    // The 1.45-compatible carrier is deliberately narrower than FLVER-owner
-    // authorization: only exact runtime P_Metal may activate stable MR.
+    // Exact runtime MTD identity may authorize any certified Material
+    // Response profile without an FLVER owner. This authority remains scoped
+    // to MR: direct PointLight and resource bridges keep stricter owner gates.
     auto runtime_pmetal=exact_pmetal;
     runtime_pmetal.flver_sha256={};
     runtime_pmetal.material_slot=0u;
@@ -213,18 +237,44 @@ int main()
     runtime_mr=seeded.evaluate(36u,runtime_pmetal);
     CHECK(!runtime_mr.active);
     CHECK(runtime_mr.reason==
-          decision_reason::owner_tuple_not_authenticated);
+          decision_reason::unknown_material);
+
+    material_identity runtime_cmetal{};
+    runtime_cmetal.valid=true;
+    runtime_cmetal.actual_material_exact=true;
+    runtime_cmetal.route_index=229u;
+    runtime_cmetal.semantic_name_hash=
+        mtd_semantic_hash("C_Metal[DSB].mtd");
+    runtime_cmetal.raw_mtd_sha256=digest_hex(
+        "ae2e8df867fe2859eef37104c13c939e7e7fe4f703b7fe49c408d0230fc71d85");
+    runtime_cmetal.material_family_hash=
+        mtd_semantic_hash("DifSpcBmp");
+
+    runtime_mr=seeded.evaluate(33u,runtime_cmetal);
+    CHECK(runtime_mr.active);
+    CHECK(runtime_mr.reason==decision_reason::active);
+    CHECK(runtime_mr.route_index==229u);
+    CHECK(runtime_mr.c101==2.5f);
 
     auto wrong_runtime_pmetal=runtime_pmetal;
     wrong_runtime_pmetal.route_index=359u;
     runtime_mr=seeded.evaluate(33u,wrong_runtime_pmetal);
     CHECK(!runtime_mr.active);
+    CHECK(runtime_mr.reason==
+          decision_reason::owner_tuple_not_authenticated);
 
     const auto runtime_direct_pointlight =
         seeded.evaluate_direct_pointlight_material(
             runtime_pmetal);
     CHECK(!runtime_direct_pointlight.active);
     CHECK(runtime_direct_pointlight.reason==
+          decision_reason::owner_tuple_not_authenticated);
+
+    const auto runtime_cmetal_direct =
+        seeded.evaluate_direct_pointlight_material(
+            runtime_cmetal);
+    CHECK(!runtime_cmetal_direct.active);
+    CHECK(runtime_cmetal_direct.reason==
           decision_reason::owner_tuple_not_authenticated);
 
     const auto direct_pointlight =
