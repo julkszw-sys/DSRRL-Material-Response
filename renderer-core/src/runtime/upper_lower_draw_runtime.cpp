@@ -494,12 +494,48 @@ std::atomic<std::uint32_t> g_pmetal_diag_row_a{0u};
 std::atomic<std::uint32_t> g_pmetal_diag_row_b{0u};
 std::atomic<std::uint32_t> g_pmetal_diag_beta_bits{0u};
 std::atomic_bool g_pmetal_diag_observed{false};
+
+std::atomic<std::uint32_t> g_reference_publish_tid{0u};
+std::atomic<std::uint32_t> g_reference_selector_tid{0u};
+std::atomic_bool g_reference_publish_seen{false};
+std::atomic_bool g_reference_selector_relevant_seen{false};
+std::atomic_bool g_reference_selector_candidate_found{false};
+std::atomic_bool g_reference_selector_tuple_read{false};
+std::atomic_bool g_reference_selector_tuple_match{false};
+std::atomic_bool g_reference_draw_token_selected{false};
 std::atomic_bool g_direct_ul_producer_active{false};
 std::atomic_bool g_steady_cache_builder_active{false};
 std::atomic_bool g_direct_ul_operator_changed{false};
 std::atomic<std::uint64_t> g_direct_ul_steady_inject{0};
 std::atomic<std::uint64_t> g_direct_ul_blend_inject{0};
 std::atomic<std::uint64_t> g_direct_ul_inject_fail{0};
+
+void latch_thread_id_once(
+    std::atomic<std::uint32_t> &slot) noexcept
+{
+    if (!telemetry::effect_enabled())
+        return;
+
+    std::uint32_t expected = 0u;
+    (void)slot.compare_exchange_strong(
+        expected,
+        static_cast<std::uint32_t>(
+            GetCurrentThreadId()),
+        std::memory_order_relaxed,
+        std::memory_order_relaxed);
+}
+
+void latch_bool_once(
+    std::atomic_bool &slot) noexcept
+{
+    if (!telemetry::effect_enabled() ||
+        slot.load(std::memory_order_relaxed))
+        return;
+
+    slot.store(
+        true,
+        std::memory_order_relaxed);
+}
 
 bool readable_range(
     const void *ptr,
@@ -1052,6 +1088,11 @@ void publish_reference_token(
         sizeof(assignment_beta));
     if (!std::isfinite(assignment_beta))
         return;
+
+    latch_thread_id_once(
+        g_reference_publish_tid);
+    latch_bool_once(
+        g_reference_publish_seen);
 
     token.source_a = producer.source_a;
     token.source_b = producer.source_b;
@@ -3708,6 +3749,11 @@ void upper_lower_draw_runtime::selector_event(
     else
         return;
 
+    latch_thread_id_once(
+        g_reference_selector_tid);
+    latch_bool_once(
+        g_reference_selector_relevant_seen);
+
     if (descriptor == nullptr) {
         telemetry::hot_count(g_selector_miss);
         return;
@@ -3728,6 +3774,9 @@ void upper_lower_draw_runtime::selector_event(
             return;
         }
 
+        latch_bool_once(
+            g_reference_selector_candidate_found);
+
         std::uint16_t selector_a = 0u;
         std::uint16_t selector_b = 0u;
         std::uint32_t beta_bits = 0u;
@@ -3741,6 +3790,9 @@ void upper_lower_draw_runtime::selector_event(
                 g_selector_miss);
             return;
         }
+
+        latch_bool_once(
+            g_reference_selector_tuple_read);
 
         const operators::lightbank::
             lightbank_snapshot_fingerprint draw{
@@ -3760,11 +3812,16 @@ void upper_lower_draw_runtime::selector_event(
             return;
         }
 
+        latch_bool_once(
+            g_reference_selector_tuple_match);
+
         g_draw_reference_token =
             *candidate;
         g_draw_reference_token.available =
             false;
         candidate->available = false;
+        latch_bool_once(
+            g_reference_draw_token_selected);
         telemetry::hot_count(
             g_selector_match);
         return;
@@ -4224,6 +4281,31 @@ upper_lower_draw_runtime::pmetal_source_diagnostic() const noexcept
     out.observed =
         g_pmetal_diag_observed.load(
             std::memory_order_acquire);
+
+    out.producer_publish_tid =
+        g_reference_publish_tid.load(
+            std::memory_order_relaxed);
+    out.selector_tid =
+        g_reference_selector_tid.load(
+            std::memory_order_relaxed);
+    out.producer_publish_seen =
+        g_reference_publish_seen.load(
+            std::memory_order_relaxed);
+    out.selector_relevant_seen =
+        g_reference_selector_relevant_seen.load(
+            std::memory_order_relaxed);
+    out.selector_candidate_found =
+        g_reference_selector_candidate_found.load(
+            std::memory_order_relaxed);
+    out.selector_tuple_read =
+        g_reference_selector_tuple_read.load(
+            std::memory_order_relaxed);
+    out.selector_tuple_match =
+        g_reference_selector_tuple_match.load(
+            std::memory_order_relaxed);
+    out.draw_token_selected =
+        g_reference_draw_token_selected.load(
+            std::memory_order_relaxed);
     return out;
 }
 
@@ -4332,6 +4414,14 @@ void upper_lower_draw_runtime::reset() noexcept
     g_pmetal_diag_row_b.store(0u);
     g_pmetal_diag_beta_bits.store(0u);
     g_pmetal_diag_observed.store(false);
+    g_reference_publish_tid.store(0u);
+    g_reference_selector_tid.store(0u);
+    g_reference_publish_seen.store(false);
+    g_reference_selector_relevant_seen.store(false);
+    g_reference_selector_candidate_found.store(false);
+    g_reference_selector_tuple_read.store(false);
+    g_reference_selector_tuple_match.store(false);
+    g_reference_draw_token_selected.store(false);
     g_direct_ul_steady_inject.store(0);
     g_direct_ul_blend_inject.store(0);
     g_direct_ul_inject_fail.store(0);
