@@ -79,7 +79,7 @@ operators::postprocess::hdr_unblock_context ready_hdr()
     c.lightshaft_input_semantics_ready=true;
     c.legacy_hdr_transfer_ready=true;
     c.dsr_output_transfer_contract_ready=true;
-    c.coloradjust_overlay_tail_ready=true;
+    c.preserved_coloradjust_overlay_tail_ready=true;
     c.graph_insertion_ready=true;
     c.synchronization_ready=true;
     c.resource_ownership_ready=true;
