@@ -3525,13 +3525,6 @@ bool on_draw(
         route_candidates,
         effect_probe_stage::candidate);
 
-    const auto route_candidates =
-        route_candidate_effect_mask(
-            route_mask);
-    mark_effect_probe_mask(
-        route_candidates,
-        effect_probe_stage::candidate);
-
     const bool fixed_pointlight_bound =
         (route_mask &
          k_route_fixed_pointlight) != 0u;
@@ -3699,6 +3692,13 @@ bool on_draw_indexed(
             material_owner_selection_clear();
         return false;
     }
+
+    const auto route_candidates =
+        route_candidate_effect_mask(
+            route_mask);
+    mark_effect_probe_mask(
+        route_candidates,
+        effect_probe_stage::candidate);
 
     const bool fixed_pointlight_bound =
         (route_mask &
