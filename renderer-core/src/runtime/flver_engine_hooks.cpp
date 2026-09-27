@@ -22,9 +22,7 @@
 #include <cstdint>
 #include <cstring>
 #include <fstream>
-#include <mutex>
 #include <string>
-#include <unordered_map>
 #include <vector>
 #pragma comment(lib,"bcrypt.lib")
 
@@ -56,11 +54,266 @@ std::atomic<std::uint64_t> g_runtime_material_ready{0};
 std::atomic<std::uint64_t> g_owner_consumed{0};
 std::atomic<std::uint64_t> g_owner_consume_misses{0};
 
-std::mutex g_exact_material_mutex;
-std::unordered_map<
-    const void *,
-    operators::material_response::material_identity>
-    g_exact_runtime_materials;
+constexpr std::size_t k_exact_material_cache_sets=1024u;
+constexpr std::size_t k_exact_material_cache_ways=4u;
+static_assert(
+    (k_exact_material_cache_sets &
+     (k_exact_material_cache_sets-1u))==0u);
+
+struct exact_material_cache_slot {
+ std::atomic<std::uintptr_t> material{0u};
+ std::atomic<std::uint16_t> route_ordinal_plus_one{0u};
+};
+
+struct exact_material_cache_set {
+ std::array<
+     exact_material_cache_slot,
+     k_exact_material_cache_ways> slots{};
+};
+
+std::array<
+    exact_material_cache_set,
+    k_exact_material_cache_sets>
+    g_exact_runtime_materials{};
+
+std::size_t exact_material_cache_set_index(
+    const void *material) noexcept
+{
+ const auto p=
+     reinterpret_cast<std::uintptr_t>(
+         material);
+ return static_cast<std::size_t>(
+     ((p>>4u)^(p>>13u)^(p>>23u))&
+     (k_exact_material_cache_sets-1u));
+}
+
+void exact_material_cache_erase(
+    const void *material) noexcept
+{
+ if(material==nullptr)return;
+ const auto key=
+     reinterpret_cast<std::uintptr_t>(
+         material);
+ auto &set=
+     g_exact_runtime_materials[
+         exact_material_cache_set_index(
+             material)];
+
+ for(auto &slot:set.slots){
+  auto expected=key;
+  if(slot.material.compare_exchange_strong(
+       expected,
+       0u,
+       std::memory_order_acq_rel,
+       std::memory_order_relaxed))
+   slot.route_ordinal_plus_one.store(
+       0u,
+       std::memory_order_release);
+ }
+}
+
+bool same_mr_behavior(
+    const operators::material_response::generated::route_seed &a,
+    const operators::material_response::generated::route_seed &b) noexcept
+{
+ return
+     a.route_index==b.route_index &&
+     a.c101==b.c101 &&
+     a.lod_min==b.lod_min &&
+     a.lod_max==b.lod_max &&
+     a.receiver0==b.receiver0 &&
+     a.receiver1==b.receiver1 &&
+     a.receiver2==b.receiver2 &&
+     operators::material_response::mtd_semantic_hash(
+         a.material_family)==
+     operators::material_response::mtd_semantic_hash(
+         b.material_family);
+}
+
+bool classify_exact_runtime_route(
+    const core::sha256_digest &digest,
+    std::uint16_t &route_ordinal) noexcept
+{
+ route_ordinal=0u;
+ const operators::material_response::generated::route_seed
+     *match=nullptr;
+ std::size_t match_index=0u;
+
+ for(std::size_t i=0u;
+     i<operators::material_response::generated::
+         k_material_route_count_v1;
+     ++i){
+  const auto &route=
+      operators::material_response::generated::
+          k_material_routes_v1[i];
+
+  if(!operators::legacy_plan::hashing::matches_hex(
+        digest,
+        route.sha256))
+   continue;
+
+  if(match!=nullptr &&
+     !same_mr_behavior(*match,route))
+   return false;
+
+  if(match==nullptr){
+   match=&route;
+   match_index=i;
+  }
+ }
+
+ if(match==nullptr ||
+    match_index>=0xffffu)
+  return false;
+
+ route_ordinal=
+     static_cast<std::uint16_t>(
+         match_index);
+ return true;
+}
+
+void exact_material_cache_publish(
+    const void *material,
+    std::uint16_t route_ordinal) noexcept
+{
+ if(material==nullptr ||
+    route_ordinal>=
+        operators::material_response::generated::
+            k_material_route_count_v1)
+  return;
+
+ const auto key=
+     reinterpret_cast<std::uintptr_t>(
+         material);
+ const auto encoded=
+     static_cast<std::uint16_t>(
+         route_ordinal+1u);
+ auto &set=
+     g_exact_runtime_materials[
+         exact_material_cache_set_index(
+             material)];
+
+ for(auto &slot:set.slots){
+  if(slot.material.load(
+       std::memory_order_acquire)==key){
+   slot.route_ordinal_plus_one.store(
+       encoded,
+       std::memory_order_release);
+   return;
+  }
+ }
+
+ for(auto &slot:set.slots){
+  std::uintptr_t empty=0u;
+  if(slot.material.compare_exchange_strong(
+       empty,
+       key,
+       std::memory_order_acq_rel,
+       std::memory_order_relaxed)){
+   slot.route_ordinal_plus_one.store(
+       encoded,
+       std::memory_order_release);
+   return;
+  }
+ }
+
+ // Deterministic bounded replacement. Eviction can only turn an otherwise
+ // valid MR draw into stock DSR (false negative); it cannot authorize a
+ // different material because the pointer+route pair is revalidated below.
+ auto &slot=set.slots[0];
+ slot.material.store(
+     0u,
+     std::memory_order_release);
+ slot.route_ordinal_plus_one.store(
+     encoded,
+     std::memory_order_relaxed);
+ slot.material.store(
+     key,
+     std::memory_order_release);
+}
+
+bool exact_material_cache_lookup(
+    const void *material,
+    std::uint16_t &route_ordinal) noexcept
+{
+ route_ordinal=0u;
+ if(material==nullptr)return false;
+
+ const auto key=
+     reinterpret_cast<std::uintptr_t>(
+         material);
+ const auto &set=
+     g_exact_runtime_materials[
+         exact_material_cache_set_index(
+             material)];
+
+ for(const auto &slot:set.slots){
+  if(slot.material.load(
+       std::memory_order_acquire)!=key)
+   continue;
+
+  const auto encoded=
+      slot.route_ordinal_plus_one.load(
+          std::memory_order_acquire);
+  if(encoded==0u)
+   return false;
+
+  const auto ordinal=
+      static_cast<std::size_t>(
+          encoded-1u);
+  if(ordinal>=
+      operators::material_response::generated::
+          k_material_route_count_v1)
+   return false;
+
+  route_ordinal=
+      static_cast<std::uint16_t>(
+          ordinal);
+  return true;
+ }
+
+ return false;
+}
+
+void clear_exact_material_cache() noexcept
+{
+ for(auto &set:g_exact_runtime_materials)
+  for(auto &slot:set.slots){
+   slot.material.store(
+       0u,
+       std::memory_order_release);
+   slot.route_ordinal_plus_one.store(
+       0u,
+       std::memory_order_release);
+  }
+}
+
+int hex_nibble(char c) noexcept
+{
+ if(c>='0'&&c<='9')return c-'0';
+ if(c>='a'&&c<='f')return c-'a'+10;
+ if(c>='A'&&c<='F')return c-'A'+10;
+ return -1;
+}
+
+bool route_digest(
+    const operators::material_response::generated::route_seed &route,
+    core::sha256_digest &digest) noexcept
+{
+ digest={};
+ for(std::size_t i=0u;i<digest.size();++i){
+  const int hi=hex_nibble(route.sha256[2u*i]);
+  const int lo=hex_nibble(route.sha256[2u*i+1u]);
+  if(hi<0||lo<0){
+   digest={};
+   return false;
+  }
+  digest[i]=
+      static_cast<std::uint8_t>(
+          (hi<<4)|lo);
+ }
+ return true;
+}
 
 bool range_ok(const void *p,std::size_t n) noexcept {
  if(!p)return false;if(n==0)return true;auto cur=reinterpret_cast<std::uintptr_t>(p);const auto end=cur+n;if(end<cur)return false;
@@ -69,45 +322,24 @@ bool range_ok(const void *p,std::size_t n) noexcept {
   const auto re=reinterpret_cast<std::uintptr_t>(m.BaseAddress)+m.RegionSize;if(re<=cur)return false;cur=std::min(re,end);}return true;
 }
 
-std::uint64_t exact_semantic_hash(const wchar_t *semantic_key) noexcept
-{
- if(!semantic_key)return 0u;
- constexpr std::uint64_t offset=14695981039346656037ull;
- constexpr std::uint64_t prime=1099511628211ull;
- std::uint64_t hash=offset;
- for(std::size_t i=0u;i<512u;++i){
-  std::uint16_t ch=0u;
-  const auto *at=reinterpret_cast<const std::uint8_t*>(semantic_key)+i*2u;
-  if(!range_ok(at,sizeof(ch)))return 0u;
-  std::memcpy(&ch,at,sizeof(ch));
-  if(ch==0u)return i==0u?0u:hash;
-  if(ch>0x7fu)return 0u;
-  hash^=static_cast<std::uint8_t>(ch);
-  hash*=prime;
- }
- return 0u;
-}
-
 void observe_exact_runtime_mtd(
     void *material,
     const void *raw,
     std::uint32_t len,
     const wchar_t *semantic_key) noexcept
 {
+ (void)semantic_key;
  if(material==nullptr)return;
 
- {
-  std::lock_guard<std::mutex> lock(g_exact_material_mutex);
-  g_exact_runtime_materials.erase(material);
- }
+ // Reused engine material objects are invalidated before classifying the new
+ // MTD image. The working 1.45 carrier selected the MR donor from the exact
+ // raw-MTD digest; do not add a runtime-name prerequisite that the donor did
+ // not require.
+ exact_material_cache_erase(material);
 
  constexpr std::uint32_t k_max_mtd_bytes=8u*1024u*1024u;
  if(raw==nullptr||len==0u||len>k_max_mtd_bytes||
     !range_ok(raw,len))
-  return;
-
- const auto semantic=exact_semantic_hash(semantic_key);
- if(semantic==0u)
   return;
 
  const auto digest=
@@ -115,52 +347,15 @@ void observe_exact_runtime_mtd(
    static_cast<const std::uint8_t*>(raw),
    static_cast<std::size_t>(len));
 
- const operators::material_response::generated::route_seed
-     *match=nullptr;
-
- for(const auto &route:
-     operators::material_response::generated::
-         k_material_routes_v1){
-  if(operators::material_response::mtd_semantic_hash(
-        route.mtd_name)!=semantic ||
-     !operators::legacy_plan::hashing::matches_hex(
-        digest,route.sha256))
-   continue;
-
-  if(match!=nullptr &&
-     (match->route_index!=route.route_index ||
-      operators::material_response::mtd_semantic_hash(
-        match->material_family)!=
-      operators::material_response::mtd_semantic_hash(
-        route.material_family)))
-   return;
-
-  match=&route;
- }
-
- if(match==nullptr)
+ std::uint16_t route_ordinal=0u;
+ if(!classify_exact_runtime_route(
+      digest,
+      route_ordinal))
   return;
 
- operators::material_response::material_identity identity{};
- identity.valid=true;
- identity.actual_material_exact=true;
- identity.route_index=match->route_index;
- identity.semantic_name_hash=semantic;
- identity.raw_mtd_sha256=digest;
- identity.material_family_hash=
-  operators::material_response::mtd_semantic_hash(
-   match->material_family);
-
- if(!operators::material_response::
-       exact_runtime_material_response_identity(identity))
-  return;
-
- try{
-  std::lock_guard<std::mutex> lock(g_exact_material_mutex);
-  g_exact_runtime_materials[material]=identity;
- }catch(...){
-  return;
- }
+ exact_material_cache_publish(
+     material,
+     route_ordinal);
 }
 
 bool lookup_exact_runtime_material(
@@ -168,37 +363,75 @@ bool lookup_exact_runtime_material(
     operators::material_response::material_identity &identity) noexcept
 {
  identity={};
- if(material==nullptr)return false;
- std::lock_guard<std::mutex> lock(g_exact_material_mutex);
- const auto found=g_exact_runtime_materials.find(material);
- if(found==g_exact_runtime_materials.end())return false;
- identity=found->second;
+
+ std::uint16_t route_ordinal=0u;
+ if(!exact_material_cache_lookup(
+      material,
+      route_ordinal))
+  return false;
+
+ const auto &route=
+     operators::material_response::generated::
+         k_material_routes_v1[
+             route_ordinal];
+
+ core::sha256_digest digest{};
+ if(!route_digest(route,digest))
+  return false;
+
+ identity.valid=true;
+ identity.actual_material_exact=true;
+ identity.route_index=route.route_index;
+ // SHA collisions in the certified MR table are accepted only when every
+ // colliding entry has identical MR behavior. Use the first certified route
+ // as the canonical semantic identity for that behaviorally equivalent class.
+ identity.semantic_name_hash=
+     operators::material_response::
+         mtd_semantic_hash(
+             route.mtd_name);
+ identity.raw_mtd_sha256=digest;
+ identity.material_family_hash=
+     operators::material_response::
+         mtd_semantic_hash(
+             route.material_family);
+
  return operators::material_response::
-  exact_runtime_material_response_identity(identity);
+  exact_runtime_material_response_identity(
+      identity);
 }
 
 void *resolve_actual_material(
     void *container,
     std::int32_t material_index) noexcept
 {
- if(container==nullptr||material_index<0||material_index>0x100000)
+ if(container==nullptr||
+    material_index<0||
+    material_index>0x100000)
   return nullptr;
+
+ // Exact retail selector return-RVA validation has already authenticated this
+ // call shape. Match the post-performance LightBank/P_Metal policy: direct
+ // fixed-layout reads on the draw-hot path, no VirtualQuery and no mutex.
  void *array=nullptr;
- const auto *array_at=
-  static_cast<const std::uint8_t*>(container)+0x10u;
- if(!range_ok(array_at,sizeof(array)))
-  return nullptr;
- std::memcpy(&array,array_at,sizeof(array));
+ std::memcpy(
+     &array,
+     static_cast<const std::uint8_t*>(
+         container)+0x10u,
+     sizeof(array));
  if(array==nullptr)return nullptr;
 
- const auto index=static_cast<std::size_t>(material_index);
- if(index>(SIZE_MAX/24u))return nullptr;
- const auto *material_at=
-  static_cast<const std::uint8_t*>(array)+index*24u;
- void *material=nullptr;
- if(!range_ok(material_at,sizeof(material)))
+ const auto index=
+     static_cast<std::size_t>(
+         material_index);
+ if(index>(SIZE_MAX/24u))
   return nullptr;
- std::memcpy(&material,material_at,sizeof(material));
+
+ void *material=nullptr;
+ std::memcpy(
+     &material,
+     static_cast<const std::uint8_t*>(
+         array)+index*24u,
+     sizeof(material));
  return material;
 }
 
@@ -364,11 +597,7 @@ void uninstall() noexcept {
  g_po=nullptr;
  g_do=nullptr;
  g_mo=nullptr;
- {
-  std::lock_guard<std::mutex> lock(
-      g_exact_material_mutex);
-  g_exact_runtime_materials.clear();
- }
+ clear_exact_material_cache();
  material_owner_selection_clear();
  flver_identity_reset();
  g_state={};
