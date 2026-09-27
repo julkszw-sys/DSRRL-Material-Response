@@ -1,0 +1,1 @@
+Diagnostic CI trigger only. Runtime sources are identical to main parent 0915e35efd3f48b114998df28685a9d48ce6b933. Validates post-clean-Q U/L steady hot-path optimizations: shared steady sample, cached negative P_Metal fast path, batched snapshot selector tuple read.
