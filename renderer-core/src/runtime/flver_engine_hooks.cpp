@@ -56,6 +56,16 @@ std::atomic_bool g_runtime_mtd_classified{false};
 std::atomic_bool g_runtime_mtd_cache_hit{false};
 std::atomic_bool g_runtime_mtd_selection_published{false};
 std::atomic<std::uint64_t> g_owner_consumed{0};
+
+void latch_once(
+    std::atomic_bool &flag) noexcept
+{
+    if (!flag.load(
+            std::memory_order_relaxed))
+        flag.store(
+            true,
+            std::memory_order_relaxed);
+}
 std::atomic<std::uint64_t> g_owner_consume_misses{0};
 
 constexpr std::size_t k_exact_material_cache_sets=1024u;
@@ -227,9 +237,8 @@ void observe_exact_runtime_mtd(
       route_ordinal))
   return;
 
- g_runtime_mtd_classified.store(
-     true,
-     std::memory_order_relaxed);
+ latch_once(
+     g_runtime_mtd_classified);
 
  exact_material_cache_publish(
      material,
@@ -248,9 +257,8 @@ bool lookup_exact_runtime_material(
       route_ordinal))
   return false;
 
- g_runtime_mtd_cache_hit.store(
-     true,
-     std::memory_order_relaxed);
+ latch_once(
+     g_runtime_mtd_cache_hit);
 
  const auto &route=
      operators::material_response::generated::
@@ -440,9 +448,8 @@ extern "C" void dsrrl_flver_selector_observer(
 
   if(material_owner_selection_publish(
         runtime_material)){
-   g_runtime_mtd_selection_published.store(
-       true,
-       std::memory_order_relaxed);
+   latch_once(
+       g_runtime_mtd_selection_published);
    telemetry::hot_count(
        g_runtime_material_ready);
    return;
