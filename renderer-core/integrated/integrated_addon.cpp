@@ -2728,6 +2728,9 @@ struct prepared_island_batch {
     dsrrl::runtime::prepared_fixed_pointlight_shader fixed_shader{};
     dsrrl::runtime::prepared_fixed_pointlight_draw fixed_carrier{};
     ID3D11Buffer *fixed_b12 = nullptr;
+    dsrrl::runtime::prepared_clustered_pnts_shader clustered_shader{};
+    dsrrl::runtime::prepared_clustered_pnts_draw clustered_carrier{};
+    bool clustered_in_batch = false;
     bool fixed_in_batch = false;
     bool mr_in_batch = false;
     bool lerp_mr_in_batch = false;
@@ -2999,7 +3002,14 @@ void account_effect_dispatch(
 void release_prepared_island_batch(
     prepared_island_batch &prepared) noexcept
 {
-    if (prepared.fixed_in_batch) {
+    if (prepared.clustered_in_batch) {
+        g_material_resources.release_prepared_draw(
+            prepared.resources);
+        g_clustered_pnts.release_prepared_draw(
+            prepared.clustered_carrier);
+        g_clustered_pnts_pipeline.release_prepared_shader(
+            prepared.clustered_shader);
+    } else if (prepared.fixed_in_batch) {
         g_material_resources.release_prepared_draw(
             prepared.resources);
         g_fixed_pointlight.release_prepared_draw(
@@ -3034,6 +3044,7 @@ struct draw_semantic_selection_guard {
     {
         g_upper_lower.consume_draw_selection();
         g_fixed_pointlight.consume_draw_selection();
+        g_clustered_pnts.consume_draw_selection();
         dsrrl::runtime::hemdir3_mode_transport::
             consume_draw_selection();
     }
@@ -3042,6 +3053,7 @@ struct draw_semantic_selection_guard {
 bool prepare_island_batch(
     reshade::api::command_list *cmd_list,
     bool fixed_pointlight_bound,
+    bool clustered_pointlight_bound,
     std::uint32_t receiver_id,
     bool hemenvlerp_bound,
     bool subsurface_bound,
@@ -3054,6 +3066,146 @@ bool prepare_island_batch(
     prepared_island_batch &prepared) noexcept
 {
     prepared = {};
+
+    // Clustered PntS owns PTDE first-four membership, source geometry/raw-q,
+    // diffuse and (for Spc) legacy local specular. The replacement PS is
+    // attested independently from the post-A1 host, while all draw-local
+    // carriers are bound atomically and restored by the shared transaction.
+    if (clustered_pointlight_bound &&
+        g_clustered_pnts_pipeline.prepare_bound_shader(
+            cmd_list,
+            prepared.clustered_shader)) {
+        auto *context =
+            reinterpret_cast<ID3D11DeviceContext *>(
+                cmd_list->get_native());
+
+        const bool direct_material_ready =
+            decision.active &&
+            (!prepared.clustered_shader.spc ||
+             (decision.ptde_specular_power_verified &&
+              decision.ptde_specular_power > 0.0f));
+
+        dsrrl::operators::material_response::
+            mtd_semantic_query clustered_query{};
+        clustered_query.material = material;
+        clustered_query.receiver_id = 0u;
+        clustered_query.ownership.flver_sha256 =
+            material.flver_sha256;
+        clustered_query.ownership.flver_identity_hash =
+            material.flver_identity_hash;
+        clustered_query.ownership.material_slot =
+            material.material_slot;
+        clustered_query.ownership.material_slot_valid =
+            material.material_slot_valid;
+        clustered_query.ownership.exact =
+            material.owner_tuple_exact;
+
+        const bool resources_ready =
+            context != nullptr &&
+            direct_material_ready &&
+            g_material_resources.
+                prepare_clustered_pointlight_material_requests(
+                    context,
+                    clustered_query,
+                    true,
+                    prepared.clustered_shader.spc,
+                    prepared.clustered_shader.blended_material,
+                    prepared.resources) &&
+            prepared.resources.diffuse &&
+            prepared.resources.normal &&
+            (!prepared.clustered_shader.spc ||
+             prepared.resources.spec_rgb);
+
+        const bool sidecar_ready =
+            resources_ready &&
+            g_clustered_pnts.prepare_sidecar(
+                context,
+                decision,
+                prepared.clustered_carrier);
+
+        if (sidecar_ready) {
+            const auto point =
+                dsrrl::core::operator_bit(
+                    dsrrl::core::operator_id::point_light);
+            const auto mr =
+                dsrrl::core::operator_bit(
+                    dsrrl::core::operator_id::material_response);
+            const auto local =
+                dsrrl::core::operator_bit(
+                    dsrrl::core::operator_id::
+                        local_specular_legacy);
+            const auto local_if_spc =
+                prepared.clustered_shader.spc
+                    ? local
+                    : dsrrl::core::operator_mask{0u};
+
+            dsrrl::runtime::island_draw_adapter_request clustered{};
+            clustered.primary =
+                prepared.clustered_shader.spc
+                    ? dsrrl::core::operator_id::
+                        local_specular_legacy
+                    : dsrrl::core::operator_id::point_light;
+            clustered.additional_owners =
+                point | mr | local_if_spc;
+            clustered.additional_shader_owners =
+                point | mr | local_if_spc;
+            clustered.additional_constant_buffer_owners =
+                point | mr | local_if_spc;
+            clustered.additional_resource_owners =
+                point | local_if_spc;
+            clustered.receiver_verified = true;
+            clustered.material_verified = true;
+            clustered.pixel_shader =
+                prepared.clustered_shader.shader;
+            clustered.replace_pixel_shader = true;
+            clustered.constant_buffers[0] = {
+                12u,
+                prepared.clustered_carrier.b12,
+                point | mr | local_if_spc
+            };
+            clustered.constant_buffer_count = 1u;
+            clustered.srvs[0] = {
+                18u,
+                prepared.clustered_carrier.t18
+            };
+            clustered.srvs[1] = {
+                19u,
+                prepared.clustered_carrier.t19
+            };
+            clustered.srv_count = 2u;
+
+            if (dsrrl::runtime::append_island_draw_request(
+                    prepared.batch,
+                    clustered) ==
+                dsrrl::runtime::island_draw_batch_result::ready) {
+                bool resources_appended = true;
+                for (std::uint32_t i = 0u;
+                     i < prepared.resources.request_count;
+                     ++i) {
+                    if (dsrrl::runtime::append_island_draw_request(
+                            prepared.batch,
+                            prepared.resources.requests[i]) !=
+                        dsrrl::runtime::island_draw_batch_result::ready) {
+                        resources_appended = false;
+                        break;
+                    }
+                }
+
+                if (resources_appended) {
+                    prepared.clustered_in_batch = true;
+                    return true;
+                }
+            }
+        }
+
+        g_material_resources.release_prepared_draw(
+            prepared.resources);
+        g_clustered_pnts.release_prepared_draw(
+            prepared.clustered_carrier);
+        g_clustered_pnts_pipeline.release_prepared_shader(
+            prepared.clustered_shader);
+        prepared.batch = {};
+    }
 
     // Fixed PntSS/PntSSSS is a separate exact receiver namespace. Compose
     // the entire visible island atomically: replacement PS, authored b12
