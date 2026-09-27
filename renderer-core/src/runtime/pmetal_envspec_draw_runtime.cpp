@@ -6,6 +6,7 @@
 #endif
 
 #include "dsrrl/runtime/pmetal_envspec_draw_runtime.hpp"
+#include "dsrrl/runtime/runtime_hot_telemetry.hpp"
 
 #include "dsrrl/operators/legacy_plan/sha256_bytes.hpp"
 
@@ -391,21 +392,21 @@ bool pmetal_envspec_draw_runtime::prepare(
              core::operator_id::upper_lower) ||
          !core_.features().enabled(
              core::operator_id::terminal_sat_rgb))) {
-        ++semantic_rejects_;
+        telemetry::hot_count(semantic_rejects_);
         return false;
     }
 
-    ++candidates_;
+    telemetry::hot_count(candidates_);
     if (family ==
         pmetal_envspec_receiver_family::
             hemenvlerp)
-        ++lerp_candidates_;
+        telemetry::hot_count(lerp_candidates_);
 
     if (!exact_pmetal_material(
             material) ||
         !exact_pmetal_decision(
             decision)) {
-        ++material_rejects_;
+        telemetry::hot_count(material_rejects_);
         return false;
     }
 
@@ -435,7 +436,7 @@ bool pmetal_envspec_draw_runtime::prepare(
         env_semantics.envspc_slot != 2u ||
         env_decision.state !=
             mr::mtd_semantic_state::use) {
-        ++semantic_rejects_;
+        telemetry::hot_count(semantic_rejects_);
         return false;
     }
 
@@ -444,7 +445,7 @@ bool pmetal_envspec_draw_runtime::prepare(
             selected_pmetal_env_source(
                 source) ||
         !std::isfinite(source.beta)) {
-        ++source_rejects_;
+        telemetry::hot_count(source_rejects_);
         return false;
     }
 
@@ -455,7 +456,7 @@ bool pmetal_envspec_draw_runtime::prepare(
             pmetal_envspec_receiver_family::
                 stable_hemenv &&
         source.beta != 0.0f) {
-        ++blended_receiver_hold_;
+        telemetry::hot_count(blended_receiver_hold_);
         return false;
     }
 
@@ -463,7 +464,7 @@ bool pmetal_envspec_draw_runtime::prepare(
             pmetal_envspec_receiver_family::
                 hemenvlerp &&
         upper_lower_receiver_verified) {
-        ++semantic_rejects_;
+        telemetry::hot_count(semantic_rejects_);
         return false;
     }
 
@@ -472,7 +473,7 @@ bool pmetal_envspec_draw_runtime::prepare(
             cmd_list->get_native());
 
     if (context == nullptr) {
-        ++source_rejects_;
+        telemetry::hot_count(source_rejects_);
         return false;
     }
 
@@ -545,11 +546,11 @@ bool pmetal_envspec_draw_runtime::prepare(
                     prepared.upper_lower)) {
             if (lerp_shader != nullptr)
                 lerp_shader->Release();
-            ++upper_lower_fallback_;
+            telemetry::hot_count(upper_lower_fallback_);
             return false;
         }
         use_upper_lower = true;
-        ++upper_lower_ready_;
+        telemetry::hot_count(upper_lower_ready_);
     } else if (
         upper_lower_receiver_verified &&
         pair.upper_lower != nullptr &&
@@ -558,9 +559,9 @@ bool pmetal_envspec_draw_runtime::prepare(
                 context,
                 prepared.upper_lower)) {
         use_upper_lower = true;
-        ++upper_lower_ready_;
+        telemetry::hot_count(upper_lower_ready_);
     } else {
-        ++upper_lower_fallback_;
+        telemetry::hot_count(upper_lower_fallback_);
     }
 
     ID3D11PixelShader *shader =
@@ -608,7 +609,7 @@ bool pmetal_envspec_draw_runtime::prepare(
             shader->Release();
         lightbank_.release_prepared_draw(
             prepared.upper_lower);
-        ++probe_rejects_;
+        telemetry::hot_count(probe_rejects_);
         return false;
     }
 
@@ -630,7 +631,7 @@ bool pmetal_envspec_draw_runtime::prepare(
         material_resources_.
             release_prepared_draw(
                 prepared.material_resources);
-        ++spec_rgb_rejects_;
+        telemetry::hot_count(spec_rgb_rejects_);
         return false;
     }
 
@@ -647,7 +648,7 @@ bool pmetal_envspec_draw_runtime::prepare(
         material_resources_.
             release_prepared_draw(
                 prepared.material_resources);
-        ++source_rejects_;
+        telemetry::hot_count(source_rejects_);
         return false;
     }
 
@@ -714,7 +715,7 @@ bool pmetal_envspec_draw_runtime::prepare(
                 material_resources_.
                     release_prepared_draw(
                         prepared.material_resources);
-                ++source_rejects_;
+                telemetry::hot_count(source_rejects_);
                 return false;
             }
 
@@ -747,7 +748,7 @@ bool pmetal_envspec_draw_runtime::prepare(
         material_resources_.
             release_prepared_draw(
                 prepared.material_resources);
-        ++source_rejects_;
+        telemetry::hot_count(source_rejects_);
         return false;
     }
 
@@ -901,11 +902,11 @@ bool pmetal_envspec_draw_runtime::prepare(
     }
 
     prepared.ready = true;
-    ++requests_;
+    telemetry::hot_count(requests_);
     if (family ==
         pmetal_envspec_receiver_family::
             hemenvlerp)
-        ++lerp_requests_;
+        telemetry::hot_count(lerp_requests_);
     return true;
 }
 
