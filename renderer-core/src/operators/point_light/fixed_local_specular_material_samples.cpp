@@ -79,6 +79,114 @@ bool temp_destination(
            reg<=4095u;
 }
 
+struct decoded_instruction {
+    std::uint32_t word = 0u;
+    std::uint16_t opcode = 0u;
+    std::uint32_t length = 0u;
+};
+
+bool decode_instructions(
+    const std::array<std::uint32_t,k_max_words> &words,
+    std::size_t word_count,
+    std::array<decoded_instruction,k_max_words> &out,
+    std::size_t &count) noexcept
+{
+    count=0u;
+    std::size_t at=2u;
+    while(at<word_count) {
+        const auto token=words[at];
+        const auto opcode=
+            static_cast<std::uint16_t>(token&0x7ffu);
+        std::uint32_t length=0u;
+        if(opcode==k_op_customdata) {
+            if(at+1u>=word_count)
+                return false;
+            length=words[at+1u];
+        } else {
+            length=(token>>24u)&0x7fu;
+        }
+
+        if(length==0u ||
+           length>word_count-at ||
+           count>=out.size())
+            return false;
+
+        out[count++]={
+            static_cast<std::uint32_t>(at),
+            opcode,
+            length
+        };
+        at+=length;
+    }
+    return at==word_count;
+}
+
+std::size_t instruction_index(
+    const std::array<decoded_instruction,k_max_words> &instructions,
+    std::size_t count,
+    std::uint32_t word) noexcept
+{
+    for(std::size_t i=0u;i<count;++i)
+        if(instructions[i].word==word)
+            return i;
+    return count;
+}
+
+bool difference_add(
+    const std::array<std::uint32_t,k_max_words> &words,
+    const decoded_instruction &ins,
+    std::uint32_t a,
+    std::uint32_t b) noexcept
+{
+    if(ins.opcode!=0u || ins.length!=8u)
+        return false;
+
+    const auto at=ins.word;
+    return
+        words[at+1u]==0x00100072u &&
+        words[at+2u]==b &&
+        words[at+3u]==0x80100246u &&
+        words[at+4u]==0x00000041u &&
+        words[at+5u]==a &&
+        words[at+6u]==0x00100246u &&
+        words[at+7u]==b;
+}
+
+bool blend_mad(
+    const std::array<std::uint32_t,k_max_words> &words,
+    const decoded_instruction &ins,
+    std::uint32_t a,
+    std::uint32_t b,
+    std::uint32_t &weight_token,
+    std::uint32_t &weight_register) noexcept
+{
+    if(ins.opcode!=50u || ins.length!=9u)
+        return false;
+
+    const auto at=ins.word;
+    if(words[at+1u]!=0x00100072u ||
+       words[at+2u]!=a ||
+       words[at+5u]!=0x00100246u ||
+       words[at+6u]!=b ||
+       words[at+7u]!=0x00100246u ||
+       words[at+8u]!=a)
+        return false;
+
+    const auto token=words[at+3u];
+    const auto reg=words[at+4u];
+
+    // Exact census shows a vector input operand; preserve its swizzle token
+    // and register rather than assuming a fixed TEXCOORD/COLOR register.
+    if(((token>>12u)&0xffu)!=1u ||
+       ((token>>20u)&0x3u)!=1u ||
+       reg>4095u)
+        return false;
+
+    weight_token=token;
+    weight_register=reg;
+    return true;
+}
+
 } // namespace
 
 fixed_local_specular_material_samples
@@ -194,6 +302,123 @@ locate_fixed_local_specular_material_samples(
         out.topology=
             fixed_local_specular_material_topology::
                 blended_diffuse_spec;
+
+        std::array<decoded_instruction,k_max_words> instructions{};
+        std::size_t instruction_count=0u;
+        if(!decode_instructions(
+                words,
+                word_count,
+                instructions,
+                instruction_count)) {
+            out.result=
+                fixed_local_specular_material_sample_result::
+                    fail_invalid_dxbc;
+            return out;
+        }
+
+        const auto spec_a_index=
+            instruction_index(
+                instructions,
+                instruction_count,
+                out.specular_a_t1.instruction_word);
+        const auto spec_b_index=
+            instruction_index(
+                instructions,
+                instruction_count,
+                out.specular_b_t4.instruction_word);
+        const auto diff_a_index=
+            instruction_index(
+                instructions,
+                instruction_count,
+                out.diffuse_a_t0.instruction_word);
+        const auto diff_b_index=
+            instruction_index(
+                instructions,
+                instruction_count,
+                out.diffuse_b_t3.instruction_word);
+
+        if(spec_a_index>=instruction_count ||
+           spec_b_index>=instruction_count ||
+           diff_a_index>=instruction_count ||
+           diff_b_index>=instruction_count ||
+           spec_b_index!=spec_a_index+1u ||
+           diff_b_index!=diff_a_index+1u ||
+           spec_b_index+2u>=instruction_count) {
+            out.result=
+                fixed_local_specular_material_sample_result::
+                    fail_sample_order;
+            return out;
+        }
+
+        const auto spec_add_index=spec_b_index+1u;
+        const auto spec_mad_index=spec_b_index+2u;
+        std::uint32_t spec_weight_token=0u;
+        std::uint32_t spec_weight_register=0u;
+
+        if(!difference_add(
+                words,
+                instructions[spec_add_index],
+                out.specular_a_t1.destination_register,
+                out.specular_b_t4.destination_register) ||
+           !blend_mad(
+                words,
+                instructions[spec_mad_index],
+                out.specular_a_t1.destination_register,
+                out.specular_b_t4.destination_register,
+                spec_weight_token,
+                spec_weight_register)) {
+            out.result=
+                fixed_local_specular_material_sample_result::
+                    fail_sample_shape;
+            return out;
+        }
+
+        bool diffuse_lerp_found=false;
+        std::uint32_t diffuse_weight_token=0u;
+        std::uint32_t diffuse_weight_register=0u;
+        std::uint32_t diffuse_mad_word=0u;
+
+        for(std::size_t i=diff_b_index+1u;
+            i+1u<instruction_count &&
+            i<=diff_b_index+4u;
+            ++i) {
+            if(!difference_add(
+                    words,
+                    instructions[i],
+                    out.diffuse_a_t0.destination_register,
+                    out.diffuse_b_t3.destination_register))
+                continue;
+
+            if(!blend_mad(
+                    words,
+                    instructions[i+1u],
+                    out.diffuse_a_t0.destination_register,
+                    out.diffuse_b_t3.destination_register,
+                    diffuse_weight_token,
+                    diffuse_weight_register))
+                continue;
+
+            diffuse_lerp_found=true;
+            diffuse_mad_word=
+                instructions[i+1u].word;
+            break;
+        }
+
+        if(!diffuse_lerp_found ||
+           diffuse_weight_token!=spec_weight_token ||
+           diffuse_weight_register!=spec_weight_register) {
+            out.result=
+                fixed_local_specular_material_sample_result::
+                    fail_sample_shape;
+            return out;
+        }
+
+        out.blend_weight_token=spec_weight_token;
+        out.blend_weight_register=spec_weight_register;
+        out.specular_blend_mad_word=
+            instructions[spec_mad_index].word;
+        out.diffuse_blend_mad_word=
+            diffuse_mad_word;
     } else {
         out.topology=
             fixed_local_specular_material_topology::
