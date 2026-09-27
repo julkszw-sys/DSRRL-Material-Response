@@ -2778,6 +2778,7 @@ effect_probe_mask authority_effect_mask(
     const dsrrl::operators::material_response::
         decision &decision) noexcept
 {
+    (void)material;
     effect_probe_mask mask = 0u;
 
     if (decision.active)
