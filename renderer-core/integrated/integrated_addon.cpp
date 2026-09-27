@@ -183,13 +183,8 @@ bool runtime_hot_telemetry_requested() noexcept
 
 bool runtime_effect_telemetry_requested() noexcept
 {
-#if defined(DSRRL_EFFECT_TELEMETRY_DEFAULT_ON)
-    return true;
-#else
     return dsrrl::runtime::telemetry::
-        environment_flag(
-            "DSRRL_EFFECT_TELEMETRY");
-#endif
+        effect_enabled();
 }
 
 void hot_count(
@@ -2749,9 +2744,9 @@ effect_probe_mask candidate_effect_mask(
     }
 
     if (decision.active &&
-        dsrrl::operators::material_response::
-            exact_runtime_pmetal_material_identity(
-                material))
+        decision.route_index == 345u &&
+        decision.receiver_id >= 33u &&
+        decision.receiver_id <= 35u)
         mask |= effect_probe_bit(
             effect_probe_id::pmetal_envspec);
 
@@ -2791,13 +2786,6 @@ effect_probe_mask authority_effect_mask(
         mask |= effect_probe_bit(
             effect_probe_id::local_specular);
     }
-
-    if (decision.active &&
-        dsrrl::operators::material_response::
-            exact_runtime_pmetal_material_identity(
-                material))
-        mask |= effect_probe_bit(
-            effect_probe_id::pmetal_envspec);
 
     return mask;
 }
