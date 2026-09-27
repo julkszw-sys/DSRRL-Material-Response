@@ -37,7 +37,9 @@ struct fixed_local_single_materialize_outcome {
     bool rdef_stripped = false;
     bool t10_declared = false;
     bool t19_declared = false;
+    bool t16_declared = false;
     bool b12_declared = false;
+    bool blended_material = false;
     bool output_cut_redirected = false;
 
     // Exact created-code attestation seam. The fixed replacement is generated
@@ -49,21 +51,24 @@ struct fixed_local_single_materialize_outcome {
     std::array<std::uint8_t,32> replacement_sha256{};
 };
 
-// Construction-only exact materializer for the 24 unique single-endpoint
-// fixed Spc PntSS/PntSSSS bodies.
+// Exact fixed Spc PntSS/PntSSSS materializer. Historical function name is
+// retained for ABI/source compatibility; it now supports both the 24
+// single-endpoint bodies and the 24 Mul/blended bodies once endpoint-B routing
+// is proven by the exact material-sample contract.
 //
 // Pipeline:
 //   exact original DSR identity
 //   -> full enabled A1/P2.2 materialization
 //   -> t10 split from t1 with stock alpha preserved
+//   -> for Mul: t16 split from t4 + exact per-body A/B blend operand
 //   -> raw PTDE material carriers from b12[1]/b12[2]
 //   -> raw-q t19 + PTDE legacy fixed PointLight island
 //   -> common cb0[139] multiplier
 //   -> redirect immediate post-ENDIF ADD src1
 //   -> strip RDEF + rebuild checksum.
 //
-// Mul/blended t3/t4 endpoint-B bodies deliberately fail open until the second
-// exact PTDE diffuse/spec resource route is available.
+// Diffuse Mul uses the audited post-cb156 stock blend seam; SpecRGB Mul uses
+// PTDE sidecars t10/t16 and the exact shared blend operand.
 fixed_local_single_materialize_outcome
 materialize_fixed_local_specular_single(
     const core::feature_registry &features,
