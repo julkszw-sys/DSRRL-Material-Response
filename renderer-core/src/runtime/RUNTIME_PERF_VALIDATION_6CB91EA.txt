@@ -1,0 +1,2 @@
+Diagnostic CI trigger only. Runtime/C++ sources are identical to main parent 6cb91ea20e9476e953663af19e9452c325842cb5.
+Purpose: native Windows build/package of optimized Core+Islands addon for owner-side CPU/frametime validation.
