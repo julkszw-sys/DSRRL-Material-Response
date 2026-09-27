@@ -1007,6 +1007,101 @@ void disable_integrated_islands() noexcept
         (void)g_core.features().set(op, false);
 }
 
+void log_effect_matrix(
+    const char *tag) noexcept
+{
+    if (!g_effect_telemetry_enabled)
+        return;
+
+    const auto ul =
+        g_upper_lower.telemetry();
+
+    if (ul.direct_ul_producer_active) {
+        mark_effect_probe(
+            effect_probe_id::upper_lower,
+            effect_probe_stage::candidate);
+        mark_effect_probe(
+            effect_probe_id::upper_lower,
+            effect_probe_stage::authority);
+    }
+
+    if (ul.direct_ul_operator_changed) {
+        mark_effect_probe(
+            effect_probe_id::upper_lower,
+            effect_probe_stage::prepared);
+        mark_effect_probe(
+            effect_probe_id::upper_lower,
+            effect_probe_stage::applied);
+    }
+
+    for (std::size_t i = 0u;
+         i < k_effect_probe_count;
+         ++i) {
+        const auto id =
+            static_cast<effect_probe_id>(i);
+        const auto &state =
+            g_effect_probe[i];
+
+        char line[512]{};
+        std::snprintf(
+            line,
+            sizeof(line),
+            "[DSRRL EFFECT MATRIX] tag=%s effect=%s status=%s "
+            "candidate=%u authority=%u prepared=%u applied=%u "
+            "fail_open=%u restore_fail=%u pixel=UNVERIFIED",
+            tag != nullptr ? tag : "UNKNOWN",
+            effect_probe_name(id),
+            effect_probe_status(state),
+            state.candidate.load(
+                std::memory_order_relaxed) ? 1u : 0u,
+            state.authority.load(
+                std::memory_order_relaxed) ? 1u : 0u,
+            state.prepared.load(
+                std::memory_order_relaxed) ? 1u : 0u,
+            state.applied.load(
+                std::memory_order_relaxed) ? 1u : 0u,
+            state.fail_open.load(
+                std::memory_order_relaxed) ? 1u : 0u,
+            state.restore_failed.load(
+                std::memory_order_relaxed) ? 1u : 0u);
+        reshade::log::message(
+            reshade::log::level::info,
+            line);
+    }
+
+    const auto fx =
+        dsrrl::runtime::
+            bloom_fx_draw_transport::status();
+    const auto bloom =
+        g_bloom_scene_sidecar.telemetry();
+
+    char detail[768]{};
+    std::snprintf(
+        detail,
+        sizeof(detail),
+        "[DSRRL EFFECT DETAIL] UL producer=%u changed=%u quarantine=%u restore_fail=%u "
+        "Bloom diag_hooks=%u/%u model_hook=%u proof=%u contents=%u "
+        "fx_authorized=%llu fx_rejected=%llu",
+        ul.direct_ul_producer_active ? 1u : 0u,
+        ul.direct_ul_operator_changed ? 1u : 0u,
+        ul.quarantined ? 1u : 0u,
+        ul.restore_failed ? 1u : 0u,
+        fx.particle_hook_armed ? 1u : 0u,
+        fx.cluster_hook_armed ? 1u : 0u,
+        fx.particle_model_ctor_hook_armed ? 1u : 0u,
+        bloom.proof_authorized ? 1u : 0u,
+        bloom.contents_valid ? 1u : 0u,
+        static_cast<unsigned long long>(
+            g_bloom_fx_draw_authorized.load(
+                std::memory_order_relaxed)),
+        static_cast<unsigned long long>(
+            g_bloom_fx_draw_rejected.load(
+                std::memory_order_relaxed)));
+    reshade::log::message(
+        reshade::log::level::info,
+        detail);
+}
+
 void log_state(const char *tag) noexcept
 {
     const auto t = g_a1_bridge.telemetry();
@@ -3677,6 +3772,11 @@ void on_present(
         (g_hot_telemetry_enabled &&
          (present % 300u) == 0u))
         log_state("LIVE");
+
+    if (g_effect_telemetry_enabled &&
+        (present == 1u ||
+         (present % 300u) == 0u))
+        log_effect_matrix("LIVE");
 }
 
 void register_events()
@@ -3733,6 +3833,9 @@ bool AddonInit(
     // for receiver/island census sessions.
     g_hot_telemetry_enabled =
         runtime_hot_telemetry_requested();
+    g_effect_telemetry_enabled =
+        runtime_effect_telemetry_requested();
+    reset_effect_probe();
 
     g_a1_bridge.reset();
     g_draw_transactions.reset();
@@ -3978,6 +4081,7 @@ void AddonUninit(
 {
     unregister_events();
     log_state("PRE_UNLOAD");
+    log_effect_matrix("PRE_UNLOAD");
     g_upper_lower.uninstall();
 
     if (g_upper_lower.telemetry().restore_failed)
