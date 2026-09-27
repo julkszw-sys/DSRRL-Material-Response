@@ -54,26 +54,6 @@ struct snapshot {
     std::uint32_t pmetal_row_a = 0;
     std::uint32_t pmetal_row_b = 0;
 
-    mutable std::mutex gpu_mutex;
-    mutable std::atomic<ID3D11Device *> device{nullptr};
-    mutable std::atomic<ID3D11Buffer *> ul_buffer{nullptr};
-    mutable std::atomic<ID3D11Buffer *> hemdir3_buffer{nullptr};
-
-    ~snapshot()
-    {
-        if (auto *buffer =
-                ul_buffer.load(std::memory_order_relaxed);
-            buffer != nullptr)
-            buffer->Release();
-        if (auto *buffer =
-                hemdir3_buffer.load(std::memory_order_relaxed);
-            buffer != nullptr)
-            buffer->Release();
-        if (auto *cached_device =
-                device.load(std::memory_order_relaxed);
-            cached_device != nullptr)
-            cached_device->Release();
-    }
 };
 
 struct producer_tls {
@@ -143,6 +123,122 @@ thread_local std::array<d123_identity_cache_entry,k_steady_cache_slots>
     g_d123_identity_cache{};
 thread_local std::array<pmetal_bank_cache_entry,k_steady_cache_slots>
     g_pmetal_bank_cache{};
+
+// b13 is draw-local data, but the D3D11 buffer object itself does not need to
+// be draw-local. Creating an immutable buffer per LightBank snapshot caused
+// thousands of ID3D11Device::CreateBuffer calls while turning the camera.
+// Keep one DEFAULT constant buffer per native D3D11 context and update its
+// 128-byte payload in command-stream order before the replay draw. Separate
+// U/L and HemDir3 buffers preserve independent carrier contents.
+//
+// D3D11 contexts are the natural serialization domain for UpdateSubresource.
+// A TLS entry keeps the steady hot path lock-free; the global map is touched
+// only when a context is first observed or after device teardown.
+struct b13_upload_slot {
+    ID3D11Device *device = nullptr;
+    ID3D11Buffer *ul_buffer = nullptr;
+    ID3D11Buffer *hemdir3_buffer = nullptr;
+    std::array<f4,8> ul_last{};
+    std::array<f4,8> hemdir3_last{};
+    bool ul_last_valid = false;
+    bool hemdir3_last_valid = false;
+
+    ~b13_upload_slot()
+    {
+        if (ul_buffer != nullptr)
+            ul_buffer->Release();
+        if (hemdir3_buffer != nullptr)
+            hemdir3_buffer->Release();
+        if (device != nullptr)
+            device->Release();
+    }
+};
+
+std::mutex g_b13_upload_mutex;
+std::unordered_map<
+    ID3D11DeviceContext *,
+    std::unique_ptr<b13_upload_slot>>
+    g_b13_upload_slots;
+std::atomic<std::uint64_t> g_b13_upload_epoch{1u};
+
+struct b13_upload_tls_cache {
+    ID3D11DeviceContext *context = nullptr;
+    b13_upload_slot *slot = nullptr;
+    std::uint64_t epoch = 0u;
+};
+
+thread_local b13_upload_tls_cache
+    g_b13_upload_tls{};
+
+b13_upload_slot *resolve_b13_upload_slot(
+    ID3D11DeviceContext *context) noexcept
+{
+    if (context == nullptr)
+        return nullptr;
+
+    const auto epoch =
+        g_b13_upload_epoch.load(
+            std::memory_order_acquire);
+
+    if (g_b13_upload_tls.context == context &&
+        g_b13_upload_tls.slot != nullptr &&
+        g_b13_upload_tls.epoch == epoch)
+        return g_b13_upload_tls.slot;
+
+    try {
+        std::lock_guard<std::mutex> lock(
+            g_b13_upload_mutex);
+
+        const auto found =
+            g_b13_upload_slots.find(context);
+        if (found != g_b13_upload_slots.end()) {
+            g_b13_upload_tls = {
+                context,
+                found->second.get(),
+                epoch
+            };
+            return found->second.get();
+        }
+
+        ID3D11Device *device = nullptr;
+        context->GetDevice(&device);
+        if (device == nullptr)
+            return nullptr;
+
+        auto owned =
+            std::make_unique<b13_upload_slot>();
+        owned->device = device;
+
+        auto *const raw = owned.get();
+        g_b13_upload_slots.emplace(
+            context,
+            std::move(owned));
+
+        g_b13_upload_tls = {
+            context,
+            raw,
+            epoch
+        };
+        return raw;
+    } catch (...) {
+        return nullptr;
+    }
+}
+
+void clear_b13_upload_slots() noexcept
+{
+    g_b13_upload_epoch.fetch_add(
+        1u,
+        std::memory_order_acq_rel);
+
+    {
+        std::lock_guard<std::mutex> lock(
+            g_b13_upload_mutex);
+        g_b13_upload_slots.clear();
+    }
+
+    g_b13_upload_tls = {};
+}
 
 struct inline_hook {
     void *target = nullptr;
@@ -2153,114 +2249,95 @@ bool restore_producer_hooks() noexcept
 
 ID3D11Buffer *realize_b13(
     const std::shared_ptr<const snapshot> &selected,
-    ID3D11Device *device,
+    ID3D11DeviceContext *context,
     bool hemdir3_combined) noexcept
 {
     if (!selected ||
-        device == nullptr ||
+        context == nullptr ||
         (hemdir3_combined &&
          !selected->d123_ready))
         return nullptr;
 
-    auto &cache =
-        hemdir3_combined
-            ? selected->hemdir3_buffer
-            : selected->ul_buffer;
-
-    // Immutable b13 buffers are published once per immutable snapshot. The
-    // selected shared_ptr keeps both snapshot and its owned COM reference
-    // alive while this hit path performs AddRef(), so steady draws need no
-    // mutex after first realization.
-    if (auto *cached =
-            cache.load(std::memory_order_acquire);
-        cached != nullptr) {
-        if (selected->device.load(
-                std::memory_order_acquire) != device)
-            return nullptr;
-
-        cached->AddRef();
-
-        if (hemdir3_combined)
-            ++g_hemdir3_b13_hit;
-        else
-            ++g_b13_hit;
-
-        return cached;
-    }
-
-    std::lock_guard<std::mutex> lock(
-        selected->gpu_mutex);
-
-    // Another caller may have completed realization while this caller waited.
-    if (auto *cached =
-            cache.load(std::memory_order_acquire);
-        cached != nullptr) {
-        if (selected->device.load(
-                std::memory_order_acquire) != device)
-            return nullptr;
-
-        cached->AddRef();
-
-        if (hemdir3_combined)
-            ++g_hemdir3_b13_hit;
-        else
-            ++g_b13_hit;
-
-        return cached;
-    }
-
-    auto *cached_device =
-        selected->device.load(
-            std::memory_order_acquire);
-    if (cached_device != nullptr &&
-        cached_device != device)
+    auto *slot =
+        resolve_b13_upload_slot(context);
+    if (slot == nullptr ||
+        slot->device == nullptr)
         return nullptr;
+
+    auto *&buffer =
+        hemdir3_combined
+            ? slot->hemdir3_buffer
+            : slot->ul_buffer;
+
+    auto &last =
+        hemdir3_combined
+            ? slot->hemdir3_last
+            : slot->ul_last;
+
+    bool &last_valid =
+        hemdir3_combined
+            ? slot->hemdir3_last_valid
+            : slot->ul_last_valid;
 
     const auto &payload =
         hemdir3_combined
             ? selected->hemdir3_payload
             : selected->ul_payload;
 
-    D3D11_BUFFER_DESC desc{};
-    desc.ByteWidth =
-        static_cast<UINT>(
-            sizeof(payload));
-    desc.Usage =
-        D3D11_USAGE_IMMUTABLE;
-    desc.BindFlags =
-        D3D11_BIND_CONSTANT_BUFFER;
+    bool created = false;
 
-    D3D11_SUBRESOURCE_DATA init{};
-    init.pSysMem =
-        payload.data();
+    if (buffer == nullptr) {
+        D3D11_BUFFER_DESC desc{};
+        desc.ByteWidth =
+            static_cast<UINT>(
+                sizeof(payload));
+        desc.Usage =
+            D3D11_USAGE_DEFAULT;
+        desc.BindFlags =
+            D3D11_BIND_CONSTANT_BUFFER;
 
-    ID3D11Buffer *buffer = nullptr;
-    if (FAILED(device->CreateBuffer(
-            &desc,
-            &init,
-            &buffer)) ||
-        buffer == nullptr)
-        return nullptr;
+        if (FAILED(slot->device->CreateBuffer(
+                &desc,
+                nullptr,
+                &buffer)) ||
+            buffer == nullptr)
+            return nullptr;
 
-    if (cached_device == nullptr) {
-        device->AddRef();
-        selected->device.store(
-            device,
-            std::memory_order_release);
+        created = true;
+        last_valid = false;
     }
 
-    // The snapshot owns CreateBuffer's initial reference. Publish only after
-    // the device identity is visible, then retain one additional reference
-    // for the prepared draw.
-    cache.store(
-        buffer,
-        std::memory_order_release);
-    buffer->AddRef();
+    const bool payload_unchanged =
+        last_valid &&
+        std::memcmp(
+            last.data(),
+            payload.data(),
+            sizeof(payload)) == 0;
 
-    if (hemdir3_combined)
-        ++g_hemdir3_b13_create;
-    else
-        ++g_b13_create;
+    if (!payload_unchanged) {
+        context->UpdateSubresource(
+            buffer,
+            0u,
+            nullptr,
+            payload.data(),
+            0u,
+            0u);
+
+        last = payload;
+        last_valid = true;
+    }
+
+    if (hemdir3_combined) {
+        if (created)
+            ++g_hemdir3_b13_create;
+        else
+            ++g_hemdir3_b13_hit;
+    } else {
+        if (created)
+            ++g_b13_create;
+        else
+            ++g_b13_hit;
+    }
 
     return buffer;
 }
@@ -2268,6 +2345,7 @@ ID3D11Buffer *realize_b13(
 void clear_snapshots() noexcept
 {
     g_draw_snapshot.reset();
+    clear_b13_upload_slots();
     g_selector_snapshot = {};
     g_selector_window = {};
 
@@ -2495,19 +2573,11 @@ bool upper_lower_draw_runtime::prepare_upper_lower_carrier(
         !g_draw_snapshot)
         return false;
 
-    ID3D11Device *device = nullptr;
-    context->GetDevice(&device);
-
-    if (device == nullptr)
-        return false;
-
     auto *b13 =
         realize_b13(
             g_draw_snapshot,
-            device,
+            context,
             false);
-
-    device->Release();
 
     if (b13 == nullptr)
         return false;
@@ -2556,18 +2626,11 @@ bool upper_lower_draw_runtime::prepare_hemdir3_carrier(
         !g_draw_snapshot->d123_ready)
         return false;
 
-    ID3D11Device *device = nullptr;
-    context->GetDevice(&device);
-    if (device == nullptr)
-        return false;
-
     auto *b13 =
         realize_b13(
             g_draw_snapshot,
-            device,
+            context,
             true);
-
-    device->Release();
 
     if (b13 == nullptr)
         return false;
@@ -2585,9 +2648,6 @@ bool upper_lower_draw_runtime::prepare_hemdir3_carrier(
 void upper_lower_draw_runtime::release_hemdir3_carrier(
     prepared_hemdir3_carrier &prepared) noexcept
 {
-    if (prepared.b13 != nullptr)
-        prepared.b13->Release();
-
     prepared = {};
 }
 
@@ -2637,9 +2697,6 @@ bool upper_lower_draw_runtime::selected_pmetal_env_source(
 void upper_lower_draw_runtime::release_prepared_draw(
     prepared_upper_lower_draw &prepared) noexcept
 {
-    if (prepared.b13 != nullptr)
-        prepared.b13->Release();
-
     prepared = {};
 }
 
