@@ -1,0 +1,1 @@
+Diagnostic CI trigger only. Runtime sources are identical to main parent 113d31e8baa684f29a1d09a3fe02d22b9bb463ac. Final post-clean-Q U/L performance candidate: shared steady decode, cached negative P_Metal path with live header revalidation and no VirtualQuery on hits, batched snapshot tuple read, lock-free U/L lifecycle token, updated CI boundary audit.
