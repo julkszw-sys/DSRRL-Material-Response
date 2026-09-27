@@ -195,6 +195,16 @@ int main()
     CHECK(exact_mr.ptde_specular_power_verified);
     CHECK(exact_mr.ptde_specular_power==8.5f);
 
+    const auto direct_pointlight =
+        seeded.evaluate_direct_pointlight_material(
+            exact_pmetal);
+    CHECK(direct_pointlight.active);
+    CHECK(direct_pointlight.reason==decision_reason::active);
+    CHECK(direct_pointlight.receiver_id==0u);
+    CHECK(direct_pointlight.route_index==345u);
+    CHECK(direct_pointlight.ptde_specular_power_verified);
+    CHECK(direct_pointlight.ptde_specular_power==8.5f);
+
     const auto pmetal_b12 =
         make_material_response_b12_payload(exact_mr);
     CHECK(pmetal_b12[0][0]==1.51663761f);
@@ -228,6 +238,12 @@ int main()
     CHECK(!exact_mr.active);
     CHECK(exact_mr.reason==decision_reason::owner_tuple_not_authenticated);
 
+    const auto spoofed_direct =
+        seeded.evaluate_direct_pointlight_material(
+            spoofed_pmetal);
+    CHECK(!spoofed_direct.active);
+    CHECK(spoofed_direct.reason==
+          decision_reason::owner_tuple_not_authenticated);
 
     const auto &catalog = core::known_operator_catalog();
     CHECK(catalog.size() == core::operator_count);
