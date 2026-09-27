@@ -225,6 +225,7 @@ enum class hdr_unblock_reason : std::uint8_t {
     bloom_input_semantics_not_ready,
     lightshaft_input_semantics_not_ready,
     legacy_hdr_transfer_not_ready,
+    dsr_output_transfer_contract_not_ready,
     coloradjust_overlay_tail_not_ready,
     graph_insertion_not_ready,
     synchronization_not_ready,
@@ -253,6 +254,11 @@ struct hdr_unblock_context {
     bool bloom_input_semantics_ready = false;
     bool lightshaft_input_semantics_ready = false;
     bool legacy_hdr_transfer_ready = false;
+    // R24 proved that dropping DSR's explicit ~pow(1/2.2) output transfer on a
+    // non-sRGB swapchain violates the host output contract. A legacy HDR port
+    // must therefore provide an explicit PTDE-result -> DSR backbuffer transfer
+    // contract rather than assuming the retained legacy body is final-output ready.
+    bool dsr_output_transfer_contract_ready = false;
     bool coloradjust_overlay_tail_ready = false;
 
     bool graph_insertion_ready = false;
@@ -321,6 +327,10 @@ inline hdr_unblock_plan evaluate_hdr_unblock_preflight(
     }
     if (!c.legacy_hdr_transfer_ready) {
         out.reason = hdr_unblock_reason::legacy_hdr_transfer_not_ready;
+        return out;
+    }
+    if (!c.dsr_output_transfer_contract_ready) {
+        out.reason = hdr_unblock_reason::dsr_output_transfer_contract_not_ready;
         return out;
     }
     if (!c.coloradjust_overlay_tail_ready) {
