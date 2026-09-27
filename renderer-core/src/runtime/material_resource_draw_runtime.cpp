@@ -198,6 +198,22 @@ std::atomic<std::uint64_t> g_fail_open{0};
 std::atomic_bool g_quarantined{false};
 bool g_hot_telemetry_enabled = false;
 
+// Exact DSR body SpecMap identities used only by the Ps_Body[DSBT]
+// Subsurface -> PTDE plain-surface bridge. They are certified tuple members
+// but intentionally absent from the generic equipment SpecRGB allowlist.
+constexpr std::uint64_t k_subsurface_body_f_spec_hash =
+    0x724f5fe11b342205ull;
+constexpr std::uint64_t k_subsurface_body_m_spec_hash =
+    0x777ede2aecc3d102ull;
+
+bool exact_subsurface_body_spec_hash(
+    std::uint64_t hash) noexcept
+{
+    return
+        hash == k_subsurface_body_f_spec_hash ||
+        hash == k_subsurface_body_m_spec_hash;
+}
+
 bool runtime_hot_telemetry_requested() noexcept
 {
     return dsrrl::runtime::telemetry::
@@ -913,9 +929,13 @@ void on_init_resource_view(
     const auto logical_hash =
         fnv_name(logical_name);
 
+    const bool subsurface_body_spec =
+        exact_subsurface_body_spec_hash(
+            logical_hash);
     const bool spec_member =
         generated::spec_name_hash_allowed_v12(
-            logical_hash);
+            logical_hash) ||
+        subsurface_body_spec;
     const bool diffuse_member =
         generated::diffuse_name_hash_allowed_v12(
             logical_hash);
@@ -1839,16 +1859,12 @@ prepare_subsurface_body_requests(
     const auto h1 = hashes[1];
     const auto h2 = hashes[2];
 
-    constexpr std::uint64_t k_body_f_spec =
-        0x724f5fe11b342205ull;
-    constexpr std::uint64_t k_body_m_spec =
-        0x777ede2aecc3d102ull;
-
-    if (h1 == k_body_f_spec) {
+    if (h1 == k_subsurface_body_f_spec_hash) {
         body_texture =
             operators::resource_bridges::
                 subsurface_body_texture::bd_f_body_s;
-    } else if (h1 == k_body_m_spec) {
+    } else if (
+        h1 == k_subsurface_body_m_spec_hash) {
         body_texture =
             operators::resource_bridges::
                 subsurface_body_texture::bd_m_body_s;
@@ -1861,8 +1877,7 @@ prepare_subsurface_body_requests(
     // dedicated route unreachable. Keep diffuse/normal tuple certification
     // intact and allow only these two exact body-spec identities.
     const bool exact_body_spec =
-        h1 == k_body_f_spec ||
-        h1 == k_body_m_spec;
+        exact_subsurface_body_spec_hash(h1);
 
     const bool tuple_ready =
         body_texture !=
