@@ -2530,6 +2530,8 @@ void on_init_pipeline(
         device, layout, subobject_count, subobjects, pipeline);
     g_fixed_pointlight_pipeline.on_init_pipeline(
         device, subobject_count, subobjects, pipeline);
+    g_clustered_pnts_pipeline.on_init_pipeline(
+        device, subobject_count, subobjects, pipeline);
 
     const auto *pixel_shader =
         find_pixel_shader(
@@ -2546,6 +2548,11 @@ void on_init_pipeline(
             pipeline.handle))
         draw_route_mask |=
             k_route_fixed_pointlight;
+
+    if (g_clustered_pnts_pipeline.pipeline_attested(
+            pipeline.handle))
+        draw_route_mask |=
+            k_route_clustered_pointlight;
 
     if (pixel_shader != nullptr &&
         pixel_shader->code != nullptr &&
@@ -2608,6 +2615,7 @@ void on_destroy_pipeline(
     dsrrl::runtime::upper_lower_receiver_forget_pipeline(
         pipeline.handle);
     g_fixed_pointlight_pipeline.on_destroy_pipeline(pipeline);
+    g_clustered_pnts_pipeline.on_destroy_pipeline(pipeline);
     g_a1_bridge.on_destroy_pipeline(device, pipeline);
 }
 
@@ -2654,6 +2662,14 @@ void on_bind_pipeline(
         (route_mask &
          k_route_fixed_pointlight) != 0u)
         g_fixed_pointlight_pipeline.on_bind_pipeline(
+            cmd_list,
+            stages,
+            pipeline);
+
+    if (pixel_stage_bound &&
+        (route_mask &
+         k_route_clustered_pointlight) != 0u)
+        g_clustered_pnts_pipeline.on_bind_pipeline(
             cmd_list,
             stages,
             pipeline);
@@ -4069,6 +4085,8 @@ bool AddonInit(
     g_hemdir3.reset();
     g_fixed_pointlight.reset();
     g_fixed_pointlight_pipeline.reset();
+    g_clustered_pnts.reset();
+    g_clustered_pnts_pipeline.reset();
     dsrrl::runtime::hemdir3_mode_transport::reset_stats();
     g_present_count.store(0);
     g_mr_draw_eval.store(0);
