@@ -51,18 +51,13 @@ island_draw_adapter_result build_island_draw_mutation(
     const auto primary_bit =
         core::operator_bit(request.primary);
 
-    if ((request.additional_owners &
-         ~core::all_operator_bits) != 0u ||
-        (request.additional_owners &
-         primary_bit) != 0u ||
-        (request.additional_shader_owners &
-         ~request.additional_owners) != 0u ||
-        (request.additional_constant_buffer_owners &
-         ~request.additional_owners) != 0u ||
-        (request.additional_resource_owners &
-         ~request.additional_owners) != 0u ||
-        (request.additional_carrier_owners &
-         ~request.additional_owners) != 0u)
+    if (!core::draw_additional_owner_masks_valid(
+            request.primary,
+            request.additional_owners,
+            request.additional_shader_owners,
+            request.additional_constant_buffer_owners,
+            request.additional_resource_owners,
+            request.additional_carrier_owners))
         return island_draw_adapter_result::invalid_additional_owner;
 
     if (request.constant_buffer_count > draw_tx_max_cb ||

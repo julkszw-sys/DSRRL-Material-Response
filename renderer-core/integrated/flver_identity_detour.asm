@@ -2,6 +2,8 @@ option casemap:none
 
 EXTERN dsrrl_flver_selector_observer:PROC
 EXTERN g_dsrrl_flver_selector_trampoline:QWORD
+EXTERN dsrrl_clustered_pnts_builder_observer:PROC
+EXTERN g_dsrrl_flver_builder_trampoline:QWORD
 
 .code
 
@@ -60,5 +62,51 @@ dsrrl_flver_selector_hook_entry PROC
     popfq
     jmp qword ptr [g_dsrrl_flver_selector_trampoline]
 dsrrl_flver_selector_hook_entry ENDP
+
+
+; Ordinary FrpgModelDrawEntity after optional AABB refresh, retail
+; 0x14022084F. At this site RDI=draw, RSI=renderer_ctx and RSP is
+; 16-byte aligned by the host prologue.
+PUBLIC dsrrl_clustered_pnts_builder_hook_entry
+dsrrl_clustered_pnts_builder_hook_entry PROC
+    pushfq
+    push rax
+    push rcx
+    push rdx
+    push r8
+    push r9
+    push r10
+    push r11
+    sub rsp,0A0h
+
+    movdqu xmmword ptr [rsp+20h],xmm0
+    movdqu xmmword ptr [rsp+30h],xmm1
+    movdqu xmmword ptr [rsp+40h],xmm2
+    movdqu xmmword ptr [rsp+50h],xmm3
+    movdqu xmmword ptr [rsp+60h],xmm4
+    movdqu xmmword ptr [rsp+70h],xmm5
+
+    mov rcx,rdi
+    mov rdx,rsi
+    call dsrrl_clustered_pnts_builder_observer
+
+    movdqu xmm0,xmmword ptr [rsp+20h]
+    movdqu xmm1,xmmword ptr [rsp+30h]
+    movdqu xmm2,xmmword ptr [rsp+40h]
+    movdqu xmm3,xmmword ptr [rsp+50h]
+    movdqu xmm4,xmmword ptr [rsp+60h]
+    movdqu xmm5,xmmword ptr [rsp+70h]
+
+    add rsp,0A0h
+    pop r11
+    pop r10
+    pop r9
+    pop r8
+    pop rdx
+    pop rcx
+    pop rax
+    popfq
+    jmp qword ptr [g_dsrrl_flver_builder_trampoline]
+dsrrl_clustered_pnts_builder_hook_entry ENDP
 
 END
