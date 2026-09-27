@@ -95,7 +95,7 @@ bool fixed_pointlight_pipeline_runtime::register_candidate(
         device->get_api() !=
             reshade::api::device_api::d3d11 ||
         outcome.result != result::applied ||
-        outcome.a1_host_size == 0u ||
+        outcome.host_size == 0u ||
         outcome.light_count == 0u ||
         (outcome.light_count != 2u &&
          outcome.light_count != 4u) ||
@@ -110,8 +110,8 @@ bool fixed_pointlight_pipeline_runtime::register_candidate(
     }
 
     const digest_key key{
-        outcome.a1_host_sha256,
-        outcome.a1_host_size
+        outcome.host_sha256,
+        outcome.host_size
     };
 
     {
