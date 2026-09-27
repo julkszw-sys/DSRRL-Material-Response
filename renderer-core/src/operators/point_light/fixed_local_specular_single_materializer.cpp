@@ -322,6 +322,37 @@ void append_mul_vec_scalar(
     append(dst,v,7u);
 }
 
+void append_difference_vec(
+    std::vector<std::uint32_t> &dst,
+    std::uint32_t difference,
+    std::uint32_t a,
+    std::uint32_t b)
+{
+    const std::uint32_t v[]={
+        0x09000000u,k_temp_dst_xyz,difference,
+        0x80100246u,0x00000041u,a,
+        k_temp_src_xyz,b
+    };
+    append(dst,v,9u);
+}
+
+void append_blend_vec(
+    std::vector<std::uint32_t> &dst,
+    std::uint32_t out,
+    std::uint32_t weight_token,
+    std::uint32_t weight_register,
+    std::uint32_t difference,
+    std::uint32_t a)
+{
+    const std::uint32_t v[]={
+        0x09000032u,k_temp_dst_xyz,out,
+        weight_token,weight_register,
+        k_temp_src_xyz,difference,
+        k_temp_src_xyz,a
+    };
+    append(dst,v,9u);
+}
+
 void append_mad_accum(
     std::vector<std::uint32_t> &dst,
     std::uint32_t accum,
@@ -388,6 +419,24 @@ bool locate_t1_decl_and_temps(
     }
     return t1_count==1u && temps_count==1u &&
            temp_count>0u && temp_count<4090u;
+}
+
+bool locate_resource_decl(
+    const std::vector<std::uint32_t> &words,
+    const std::vector<instruction> &instructions,
+    std::uint32_t slot,
+    std::uint32_t &decl_word) noexcept
+{
+    std::size_t count=0u;
+    for(const auto &ins:instructions) {
+        if(ins.opcode!=k_op_dcl_resource ||
+           ins.end-ins.start!=4u ||
+           words[ins.start+2u]!=slot)
+            continue;
+        decl_word=ins.start;
+        ++count;
+    }
+    return count==1u;
 }
 
 bool locate_c156_add(
