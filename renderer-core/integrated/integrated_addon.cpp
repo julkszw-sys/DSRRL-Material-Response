@@ -2124,20 +2124,15 @@ bool prepare_island_batch(
                 dsrrl::core::operator_bit(
                     dsrrl::core::operator_id::
                         material_response);
-            const auto diffuse_domain =
-                dsrrl::core::operator_bit(
-                    dsrrl::core::operator_id::
-                        diffuse_material_domain);
-
             fixed.primary =
                 dsrrl::core::operator_id::
                     local_specular_legacy;
             fixed.additional_owners =
-                point | mr | diffuse_domain;
+                point | mr;
             fixed.additional_shader_owners =
-                point | mr | diffuse_domain;
+                point | mr;
             fixed.additional_constant_buffer_owners =
-                point | mr | diffuse_domain;
+                point | mr;
             fixed.additional_resource_owners =
                 point;
             fixed.receiver_verified = true;
@@ -2148,7 +2143,7 @@ bool prepare_island_batch(
             fixed.constant_buffers[0] = {
                 12u,
                 prepared.fixed_b12,
-                local | point | mr | diffuse_domain
+                local | point | mr
             };
             fixed.constant_buffer_count = 1u;
             fixed.srvs[0] = {
