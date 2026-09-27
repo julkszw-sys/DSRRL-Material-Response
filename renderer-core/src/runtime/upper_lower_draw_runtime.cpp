@@ -449,7 +449,13 @@ std::array<
     g_reference_tokens{};
 std::array<std::uint8_t,k_reference_token_sets>
     g_reference_token_victim{};
-std::array<std::atomic_flag,k_reference_token_sets>
+struct reference_token_guard_state {
+    std::atomic_flag flag = ATOMIC_FLAG_INIT;
+};
+
+std::array<
+    reference_token_guard_state,
+    k_reference_token_sets>
     g_reference_token_locks{};
 thread_local lightbank_reference_token
     g_draw_reference_token{};
@@ -457,7 +463,7 @@ thread_local lightbank_reference_token
 class reference_token_set_guard {
 public:
     explicit reference_token_set_guard(std::size_t set) noexcept
-        : flag_(g_reference_token_locks[set])
+        : flag_(g_reference_token_locks[set].flag)
     {
         while (flag_.test_and_set(
             std::memory_order_acquire)) {
