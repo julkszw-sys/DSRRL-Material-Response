@@ -2518,6 +2518,8 @@ bool prepare_island_batch(
             upper_lower_identity.stable_receiver_id ==
                 decision.receiver_id;
 
+        bool lerp_mr_prepared = false;
+
         if (decision.active &&
             lerp_ul_exact &&
             context != nullptr &&
@@ -2529,8 +2531,21 @@ bool prepare_island_batch(
                     decision,
                     prepared.upper_lower.carrier.b13,
                     prepared.mr)) {
-            prepared.mr_in_batch = true;
             prepared.upper_lower_combined = true;
+            lerp_mr_prepared = true;
+        } else if (
+            decision.active &&
+            g_mr_draw_runtime.prepare_lerp_draw_request(
+                decision,
+                prepared.mr)) {
+            // Material Response is independently valid for Lerp. Failure of
+            // the U/L composed operator must not demote MR to stock DSR.
+            prepared.upper_lower_combined = false;
+            lerp_mr_prepared = true;
+        }
+
+        if (lerp_mr_prepared) {
+            prepared.mr_in_batch = true;
 
             dsrrl::operators::material_response::
                 mtd_semantic_query lerp_query{};
@@ -2598,6 +2613,12 @@ bool prepare_island_batch(
 
             if (lerp_resource_fallback)
                 hot_count(g_lerp_full_draw_fallback);
+            else
+                hot_count(g_lerp_full_draw_ready);
+            return true;
+        }
+
+        hot_count(g_lerp_full_draw_fallback);
             else
                 hot_count(g_lerp_full_draw_ready);
             return true;
