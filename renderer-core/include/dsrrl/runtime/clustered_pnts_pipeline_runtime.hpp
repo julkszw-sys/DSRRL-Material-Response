@@ -81,6 +81,11 @@ public:
     bool pipeline_attested(
         std::uint64_t pipeline_handle) const noexcept;
 
+    bool bound_metadata(
+        reshade::api::command_list *cmd_list,
+        bool &spc,
+        bool &blended_material) const noexcept;
+
     bool prepare_bound_shader(
         reshade::api::command_list *cmd_list,
         prepared_clustered_pnts_shader &prepared) noexcept;
