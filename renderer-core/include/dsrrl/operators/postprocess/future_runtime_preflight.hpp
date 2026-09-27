@@ -226,7 +226,7 @@ enum class hdr_unblock_reason : std::uint8_t {
     lightshaft_input_semantics_not_ready,
     legacy_hdr_transfer_not_ready,
     dsr_output_transfer_contract_not_ready,
-    coloradjust_overlay_tail_not_ready,
+    preserved_coloradjust_overlay_tail_not_ready,
     graph_insertion_not_ready,
     synchronization_not_ready,
     resource_ownership_not_ready,
@@ -259,7 +259,11 @@ struct hdr_unblock_context {
     // must therefore provide an explicit PTDE-result -> DSR backbuffer transfer
     // contract rather than assuming the retained legacy body is final-output ready.
     bool dsr_output_transfer_contract_ready = false;
-    bool coloradjust_overlay_tail_ready = false;
+    // PTDE and DSR ordinary ToneCorrect/ColorAdjust tails are operator-
+    // equivalent for the shared fields. Do not rebuild or retune this tail as
+    // part of HDR; preserve the routed DSR tail and bridge only the upstream
+    // legacy HDR composition plus the host output contract.
+    bool preserved_coloradjust_overlay_tail_ready = false;
 
     bool graph_insertion_ready = false;
     bool synchronization_ready = false;
@@ -333,8 +337,8 @@ inline hdr_unblock_plan evaluate_hdr_unblock_preflight(
         out.reason = hdr_unblock_reason::dsr_output_transfer_contract_not_ready;
         return out;
     }
-    if (!c.coloradjust_overlay_tail_ready) {
-        out.reason = hdr_unblock_reason::coloradjust_overlay_tail_not_ready;
+    if (!c.preserved_coloradjust_overlay_tail_ready) {
+        out.reason = hdr_unblock_reason::preserved_coloradjust_overlay_tail_not_ready;
         return out;
     }
     if (!c.graph_insertion_ready) {
