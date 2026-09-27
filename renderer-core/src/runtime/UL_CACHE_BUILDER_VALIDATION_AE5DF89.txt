@@ -1,0 +1,1 @@
+CI trigger only. Runtime sources match main ae5df89e43fcef333096a21e07a2c64c9b36c371. Steady PTDE UpperLower is materialized at LightBank cache builder 0x563590; stock evaluator 0x563460 consumes the rewritten q cache. Extended D123/P_Metal/snapshot capture is intentionally fail-open pending separate carriers.
