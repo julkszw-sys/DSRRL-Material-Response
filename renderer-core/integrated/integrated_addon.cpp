@@ -3415,6 +3415,9 @@ void observe_bloom_fx_draw_authority() noexcept
         return;
 
     hot_count(g_bloom_fx_draw_snapshots);
+    mark_effect_probe(
+        effect_probe_id::bloom_q8,
+        effect_probe_stage::candidate);
 
     const auto authority =
         dsrrl::runtime::bloom_fx_draw_transport::
@@ -3422,10 +3425,17 @@ void observe_bloom_fx_draw_authority() noexcept
 
     if (authority ==
         dsrrl::runtime::bloom_fx_draw_transport::
-            waterwave_draw_authority_result::authorized)
+            waterwave_draw_authority_result::authorized) {
         hot_count(g_bloom_fx_draw_authorized);
-    else
+        mark_effect_probe(
+            effect_probe_id::bloom_q8,
+            effect_probe_stage::authority);
+    } else {
         hot_count(g_bloom_fx_draw_rejected);
+        mark_effect_probe(
+            effect_probe_id::bloom_q8,
+            effect_probe_stage::fail_open);
+    }
 }
 
 bool on_draw(
