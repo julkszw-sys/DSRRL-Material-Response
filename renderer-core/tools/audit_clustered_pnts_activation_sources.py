@@ -36,8 +36,39 @@ def main():
     pipe_cpp=(root/"src/runtime/clustered_pnts_pipeline_runtime.cpp").read_text(encoding="utf-8")
     flver_cpp=(root/"src/runtime/flver_engine_hooks.cpp").read_text(encoding="utf-8")
     integrated=(root/"integrated/integrated_addon.cpp").read_text(encoding="utf-8")
+    mr_cpp=(root/"src/operators/material_response/material_response_island.cpp").read_text(encoding="utf-8")
+    owner_cpp=(root/"src/runtime/material_owner_producer.cpp").read_text(encoding="utf-8")
     policy=(root/"include/dsrrl/core/draw_transaction_policy.hpp").read_text(encoding="utf-8")
     adapter=(root/"src/runtime/island_draw_adapter.cpp").read_text(encoding="utf-8")
+    transaction=(root/"src/runtime/draw_state_transaction.cpp").read_text(encoding="utf-8")
+
+    material_router=json.loads((root/"data/census/ptde_mtd_envspec_router_v1.json").read_text(encoding="utf-8"))
+    material_records=material_router.get("records",[])
+    nospc_materials=[
+        r for r in material_records
+        if r.get("state")=="NOSPC_HOST"
+    ]
+    if len(material_records)!=325:
+        fail(f"expected 325 exact PTDE/DSR material pairs, got {len(material_records)}")
+    if len(nospc_materials)!=25:
+        fail(f"expected 25 exact NoSpc material authorities, got {len(nospc_materials)}")
+    if any(r.get("homology_class")!="HOMOLOGOUS_NOSPC" for r in nospc_materials):
+        fail("NoSpc material authority contains a non-homologous pair")
+    if any(r.get("dsr_spx")!=r.get("ptde_spx") for r in nospc_materials):
+        fail("NoSpc material authority contains a non-exact SPX pair")
+    if any(r.get("c102_f32_bits")!="0x00000000" for r in nospc_materials):
+        fail("NoSpc material authority unexpectedly carries PTDE c102")
+    if any(any(v!="0x00000000" for v in r.get("c101_f32_bits",[])) for r in nospc_materials):
+        fail("NoSpc material authority unexpectedly carries PTDE c101")
+    if any(len(r.get("c100_f32_bits",[]))!=3 for r in nospc_materials):
+        fail("NoSpc material authority is missing exact PTDE c100 bits")
+    semantic_hashes=[r.get("semantic_name_hash_fnv1a_utf8") for r in nospc_materials]
+    exact_pairs=[
+        (r.get("semantic_name_hash_fnv1a_utf8"),r.get("dsr_mtd_sha256"))
+        for r in nospc_materials
+    ]
+    if len(set(semantic_hashes))!=25 or len(set(exact_pairs))!=25:
+        fail("NoSpc exact-name/raw-MTD authority is ambiguous")
 
     require(sidecar_h,"std::uint32_t material_max_pnt_lit_num","material-limit ABI")
     if "material_max_pnt_lit_num > 4u" in sidecar_cpp or "material_max > 4u" in draw_cpp:
@@ -50,6 +81,19 @@ def main():
     require(draw_cpp,"0x55FC70u","retained selector RVA")
     require(flver_cpp,"k_builder=0x22084Fu","ordinary builder hook")
     require(flver_cpp,"builder_armed=true","builder hook attestation")
+
+    # Exact PTDE NoSpc material authority is intentionally direct-PointLight
+    # only: authenticated FLVER+slot owner -> exact semantic name/raw-MTD pair
+    # -> bit-exact PTDE c100. It must not expand the generic MR route cohort.
+    require(owner_cpp,"resolve_exact_direct_nospc_raw_mtd","NoSpc owner raw-MTD authority")
+    require(owner_cpp,"envspec_router_state::nospc_host","NoSpc owner class gate")
+    require(owner_cpp,"record.semantic_name_hash","NoSpc owner semantic gate")
+    require(mr_cpp,"resolve_direct_nospc_authority","direct NoSpc material resolver")
+    require(mr_cpp,"record.raw_mtd_sha256","direct NoSpc raw-MTD gate")
+    require(mr_cpp,"f32_from_bits","bit-exact PTDE c100 decode")
+    require(mr_cpp,"if (require_legacy_specular)","NoSpc specular exclusion")
+    require(integrated,"evaluate_direct_pointlight_material","direct PointLight material resolver call")
+    require(integrated,"direct_pointlight_requires_specular","receiver-derived specular requirement")
 
     if "clustered.additional_owners =\n                point | mr | local_if_spc;" in integrated:
         fail("clustered request duplicates primary in additional_owners")
@@ -79,10 +123,23 @@ def main():
     require(policy,"{operator_id::point_light, draw_transaction_mode::draw_required","PointLight draw transaction")
     require(policy,"{operator_id::local_specular_legacy, draw_transaction_mode::draw_required","legacy spec draw transaction")
 
+    # Final transaction closure: shader+b12+t18+t19 mutation is replayed only
+    # through the shared draw transaction and all captured D3D11 state is
+    # restored (and optionally read back) before the host draw path resumes.
+    require(adapter,"transactions.replay_draw(","non-indexed shared draw transaction")
+    require(adapter,"transactions.replay_draw_indexed(","indexed shared draw transaction")
+    require(transaction,"PSSetShader(","pixel-shader mutation/restore")
+    require(transaction,"restore_ps_constant_buffer_window","constant-buffer restore")
+    require(transaction,"PSSetShaderResources(","SRV mutation/restore")
+    require(transaction,"return restore(cmd_list, state)","post-draw restore gate")
+    require(transaction,"issued_restore_failed","restore failure quarantine path")
+
     print("Clustered PntS pre-runtime activation source audit: PASS")
     print("  receivers=36 spc=24 nospc=12 stock_membership=t16/t17_bypassed")
     print("  producer=builder+retained_selector+independent_mirror+raw_source")
     print("  carrier=b12[3].x+t18+t19 material_max=uint32 min_after_first4")
+    print("  material=25 exact HOMOLOGOUS_NOSPC name+raw-MTD pairs with bit-exact PTDE c100")
+    print("  chain=candidate>receiver>selector>sources>material>sidecar>shader>draw-mutation>restore")
     print("  draw=adapter-valid ownership + exact pipeline route + shared transaction")
     return 0
 
