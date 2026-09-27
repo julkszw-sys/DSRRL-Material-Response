@@ -1074,14 +1074,22 @@ void log_effect_matrix(
             bloom_fx_draw_transport::status();
     const auto bloom =
         g_bloom_scene_sidecar.telemetry();
+    const auto flver =
+        dsrrl::runtime::
+            flver_identity_transport::status();
 
-    char detail[768]{};
+    char detail[896]{};
     std::snprintf(
         detail,
         sizeof(detail),
-        "[DSRRL EFFECT DETAIL] UL producer=%u changed=%u quarantine=%u restore_fail=%u "
+        "[DSRRL EFFECT DETAIL] "
+        "MR mtd_classified=%u cache_hit=%u selection_published=%u "
+        "UL producer=%u changed=%u quarantine=%u restore_fail=%u "
         "Bloom diag_hooks=%u/%u model_hook=%u proof=%u contents=%u "
         "fx_authorized=%llu fx_rejected=%llu",
+        flver.runtime_mtd_classified ? 1u : 0u,
+        flver.runtime_mtd_cache_hit ? 1u : 0u,
+        flver.runtime_mtd_selection_published ? 1u : 0u,
         ul.direct_ul_producer_active ? 1u : 0u,
         ul.direct_ul_operator_changed ? 1u : 0u,
         ul.quarantined ? 1u : 0u,
