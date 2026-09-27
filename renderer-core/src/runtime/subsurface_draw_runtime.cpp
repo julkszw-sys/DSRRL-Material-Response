@@ -1,4 +1,5 @@
 #include "dsrrl/runtime/subsurface_draw_runtime.hpp"
+#include "dsrrl/runtime/runtime_hot_telemetry.hpp"
 #include "dsrrl/runtime/subsurface_pipeline_registry.hpp"
 #include "dsrrl/operators/resource_bridges/subsurface_route.hpp"
 #include "dsrrl/operators/material_response/mtd_semantic_census.hpp"
@@ -69,25 +70,25 @@ bool subsurface_draw_runtime::prepare(
             core::operator_id::subsurface))
         return false;
 
-    ++candidates_;
+    telemetry::hot_count(candidates_);
 
     std::uint32_t target_receiver = 0u;
     if (!subsurface_receiver_bound(
             cmd_list,
             target_receiver)) {
-        ++pipeline_rejects_;
+        telemetry::hot_count(pipeline_rejects_);
         return false;
     }
 
     const auto *route =
         route_for_target(target_receiver);
     if (route == nullptr) {
-        ++pipeline_rejects_;
+        telemetry::hot_count(pipeline_rejects_);
         return false;
     }
 
     if (!exact_dsbt_material(material)) {
-        ++material_rejects_;
+        telemetry::hot_count(material_rejects_);
         return false;
     }
 
@@ -99,7 +100,7 @@ bool subsurface_draw_runtime::prepare(
         !upper_lower_.prepare_upper_lower_carrier(
             context,
             prepared.upper_lower)) {
-        ++surface_rejects_;
+        telemetry::hot_count(surface_rejects_);
         return false;
     }
 
@@ -110,7 +111,7 @@ bool subsurface_draw_runtime::prepare(
             prepared.mr)) {
         upper_lower_.release_prepared_draw(
             prepared.upper_lower);
-        ++surface_rejects_;
+        telemetry::hot_count(surface_rejects_);
         return false;
     }
 
@@ -128,7 +129,7 @@ bool subsurface_draw_runtime::prepare(
             prepared.mr);
         upper_lower_.release_prepared_draw(
             prepared.upper_lower);
-        ++surface_rejects_;
+        telemetry::hot_count(surface_rejects_);
         return false;
     }
 
@@ -144,7 +145,7 @@ bool subsurface_draw_runtime::prepare(
             prepared.mr);
         upper_lower_.release_prepared_draw(
             prepared.upper_lower);
-        ++surface_rejects_;
+        telemetry::hot_count(surface_rejects_);
         return false;
     }
 
@@ -218,7 +219,7 @@ bool subsurface_draw_runtime::prepare(
                 subsurface_bypass_carrier::
                     create_time_pixel_shader_substitution) {
         release(prepared);
-        ++surface_rejects_;
+        telemetry::hot_count(surface_rejects_);
         return false;
     }
 
@@ -237,14 +238,14 @@ bool subsurface_draw_runtime::prepare(
             verify) !=
         island_draw_adapter_result::ready) {
         release(prepared);
-        ++surface_rejects_;
+        telemetry::hot_count(surface_rejects_);
         return false;
     }
 
     prepared.target_receiver_id =
         target_receiver;
     prepared.ready = true;
-    ++prepared_;
+    telemetry::hot_count(prepared_);
     return true;
 }
 
