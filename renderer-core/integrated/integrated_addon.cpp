@@ -2457,7 +2457,15 @@ bool on_draw(
     const auto route_mask =
         integrated_draw_route_bound(
             cmd_list);
-    if (route_mask == 0u) {
+
+    std::uint8_t fixed_pointlight_bound_count = 0u;
+    const bool fixed_pointlight_bound =
+        g_fixed_pointlight_pipeline.bound_light_count(
+            cmd_list,
+            fixed_pointlight_bound_count);
+
+    if (route_mask == 0u &&
+        !fixed_pointlight_bound) {
         ++g_draw_fast_skip;
         dsrrl::runtime::
             material_owner_selection_clear();
@@ -2547,7 +2555,15 @@ bool on_draw_indexed(
     const auto route_mask =
         integrated_draw_route_bound(
             cmd_list);
-    if (route_mask == 0u) {
+
+    std::uint8_t fixed_pointlight_bound_count = 0u;
+    const bool fixed_pointlight_bound =
+        g_fixed_pointlight_pipeline.bound_light_count(
+            cmd_list,
+            fixed_pointlight_bound_count);
+
+    if (route_mask == 0u &&
+        !fixed_pointlight_bound) {
         ++g_draw_fast_skip;
         dsrrl::runtime::
             material_owner_selection_clear();
