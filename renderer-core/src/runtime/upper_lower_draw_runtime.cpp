@@ -417,6 +417,12 @@ std::atomic<std::uint64_t> g_direct_ul_steady_inject{0};
 std::atomic<std::uint64_t> g_direct_ul_blend_inject{0};
 std::atomic<std::uint64_t> g_direct_ul_inject_fail{0};
 
+// Diagnostic only: retain the exact direct PTDE U/L producer injection while
+// suppressing the legacy draw-side carrier population (D123/P_Metal/snapshot).
+// This isolates whether geometry-scaled CPU cost is in the extra semantic
+// capture layered around the direct producer.
+constexpr bool k_direct_producer_only_geometry_diag = true;
+
 bool readable_range(
     const void *ptr,
     std::size_t size) noexcept
@@ -2093,6 +2099,9 @@ void *run_wrapper(
     g_producer =
         previous;
 
+    if (k_direct_producer_only_geometry_diag)
+        return result;
+
     if (!completed.have_upper ||
         !completed.have_lower) {
         std::lock_guard<std::mutex> lock(
@@ -2251,6 +2260,12 @@ void __fastcall hook_steady_packer(
             selector);
 
     if (!g_producer.active)
+        return;
+
+    // Direct producer-only diagnostic: hook_steady_eval_tail already wrote
+    // exact PTDE U/L RGB during g_steady_packer_orig. Do not perform D123,
+    // P_Metal or snapshot-side capture for this test.
+    if (k_direct_producer_only_geometry_diag)
         return;
 
     if (g_pmetal_env_hook_armed.load()) {
@@ -2417,6 +2432,9 @@ void *__fastcall hook_blend_packer(
             g_producer.lower);
         telemetry::hot_count(g_direct_ul_blend_inject);
     }
+
+    if (k_direct_producer_only_geometry_diag)
+        return result;
 
     const auto *raw_a =
         resolve_raw_lightbank_record(
@@ -2625,10 +2643,14 @@ bool install_producer_hooks() noexcept
         true,
         std::memory_order_release);
 
-    // P_Metal EnvSpec A/B source is independent from U/L and D123. A
-    // fingerprint failure must only disable EnvSpec source capture.
-    if (!install_optional_pmetal_env_hook())
+    // Diagnostic intentionally suppresses P_Metal EnvSpec source capture so
+    // the runtime cost contains only direct U/L producer injection.
+    if (!k_direct_producer_only_geometry_diag) {
+        if (!install_optional_pmetal_env_hook())
+            g_pmetal_env_hook_armed.store(false);
+    } else {
         g_pmetal_env_hook_armed.store(false);
+    }
 
     return true;
 }
@@ -2870,6 +2892,9 @@ void upper_lower_draw_runtime::selector_event(
 {
     telemetry::hot_count(g_selector_seen);
     g_draw_snapshot.reset();
+
+    if (k_direct_producer_only_geometry_diag)
+        return;
 
     if (!g_enabled.load() ||
         g_quarantined.load() ||
