@@ -156,6 +156,8 @@ jobs:
           $h3SpcDonors = Get-Content renderer-core/data/provenance/hemdir3_spc_material_donors_v1.tsv -Raw
           $selectorAsm = Get-Content renderer-core/integrated/flver_identity_detour.asm -Raw
           $flverHooks = Get-Content renderer-core/src/runtime/flver_engine_hooks.cpp -Raw
+          $exactMaterialCache = Get-Content renderer-core/include/dsrrl/runtime/exact_material_cache.hpp -Raw
+          $exactMaterialCacheTest = Get-Content renderer-core/tests/exact_material_cache_interleaving_tests.cpp -Raw
           $cmake = Get-Content renderer-core/integrated/CMakeLists.txt -Raw
 
           # Retail MTD fallback is a draw-hot selector carrier. Preserve the
@@ -166,12 +168,33 @@ jobs:
             'classify_exact_runtime_route',
             'exact_material_cache_publish',
             'exact_material_cache_lookup',
-            'std::array<',
-            'std::atomic<std::uintptr_t>',
             'working 1.45 carrier selected the MR donor from the exact',
             'no VirtualQuery and no mutex'
           )) {
             if ($flverHooks -notmatch [regex]::Escape($required)) { throw "MR retail carrier invariant missing: $required" }
+          }
+          foreach ($required in @(
+            'k_busy = 1u',
+            'std::atomic<std::uintptr_t>',
+            'compare_exchange',
+            'erase_claimed',
+            'publish_claimed',
+            'const auto before',
+            'const auto after',
+            'if (after != key)'
+          )) {
+            if ($exactMaterialCache -notmatch [regex]::Escape($required)) { throw "MR exact-material BUSY protocol invariant missing: $required" }
+          }
+          foreach ($required in @(
+            'exact_material_cache<1u,1u>',
+            'erase_claimed',
+            'publish_claimed',
+            'allow_erase_commit',
+            'allow_publish_commit',
+            'lookup(',
+            'k_new_route'
+          )) {
+            if ($exactMaterialCacheTest -notmatch [regex]::Escape($required)) { throw "MR exact-material deterministic interleaving test missing: $required" }
           }
           if ($flverHooks -match 'exact_semantic_hash\s*\(') {
             throw "MR retail carrier regressed to a runtime semantic-name prerequisite"
