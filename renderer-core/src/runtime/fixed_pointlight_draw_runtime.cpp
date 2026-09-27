@@ -74,6 +74,7 @@ capture_hook g_hook{};
 std::mutex g_mutex;
 std::unordered_map<std::uintptr_t,std::shared_ptr<snapshot>> g_snapshots;
 std::unordered_map<std::uintptr_t,std::uint64_t> g_consumed_serial;
+std::atomic_bool g_have_snapshots{false};
 thread_local std::shared_ptr<snapshot> g_producer_snapshot{};
 thread_local std::shared_ptr<const snapshot> g_draw_snapshot{};
 
@@ -208,6 +209,9 @@ void __fastcall capture_callback(
         {
             std::lock_guard<std::mutex> lock(g_mutex);
             g_snapshots[owner_key]=current;
+            g_have_snapshots.store(
+                true,
+                std::memory_order_release);
         }
 
         ++g_captures;
@@ -396,6 +400,9 @@ void clear_state() noexcept
     std::lock_guard<std::mutex> lock(g_mutex);
     g_snapshots.clear();
     g_consumed_serial.clear();
+    g_have_snapshots.store(
+        false,
+        std::memory_order_release);
 }
 
 } // namespace
@@ -457,6 +464,17 @@ void fixed_pointlight_draw_runtime::selector_event(void *owner) noexcept
 
     if(!g_enabled.load() || g_quarantined.load() || owner==nullptr)
         return;
+
+    // The selector bridge is shared with Upper/Lower, so this callback can be
+    // invoked at very high frequency even when the fixed PointLight producer
+    // has never published a snapshot. Avoid a guaranteed mutex/map miss in
+    // that state. Publication sets this flag under the same map lock before
+    // unlock; clearing resets it under the lock after erasing the map.
+    if(!g_have_snapshots.load(
+            std::memory_order_acquire)){
+        ++g_selector_stale;
+        return;
+    }
 
     const auto key=reinterpret_cast<std::uintptr_t>(owner);
     std::shared_ptr<const snapshot> selected{};
