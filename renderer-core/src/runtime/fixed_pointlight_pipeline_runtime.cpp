@@ -27,6 +27,9 @@ struct fixed_pointlight_pipeline_runtime::record {
     }
 };
 
+thread_local fixed_pointlight_pipeline_runtime::bound_tls_state
+    fixed_pointlight_pipeline_runtime::bound_tls_{};
+
 fixed_pointlight_pipeline_runtime::~fixed_pointlight_pipeline_runtime()
 {
     reset();
@@ -296,8 +299,19 @@ void fixed_pointlight_pipeline_runtime::on_bind_pipeline(
 
     std::lock_guard<std::mutex> lock(mutex_);
 
+    const auto epoch =
+        bound_epoch_.load(
+            std::memory_order_relaxed);
+
     if (quarantined_.load()) {
         bound_.erase(command);
+        bound_tls_ = {
+            this,
+            command,
+            {},
+            epoch,
+            false
+        };
         return;
     }
 
@@ -305,11 +319,25 @@ void fixed_pointlight_pipeline_runtime::on_bind_pipeline(
         pipelines_.find(pipeline.handle);
     if (found == pipelines_.end()) {
         bound_.erase(command);
+        bound_tls_ = {
+            this,
+            command,
+            {},
+            epoch,
+            false
+        };
         telemetry::hot_count(bind_misses_);
         return;
     }
 
     bound_[command] = found->second;
+    bound_tls_ = {
+        this,
+        command,
+        found->second,
+        epoch,
+        true
+    };
     telemetry::hot_count(bind_hits_);
 }
 
@@ -336,6 +364,10 @@ void fixed_pointlight_pipeline_runtime::on_destroy_pipeline(
         else
             ++it;
     }
+    bound_epoch_.fetch_add(
+        1u,
+        std::memory_order_release);
+    bound_tls_ = {};
 }
 
 void fixed_pointlight_pipeline_runtime::on_destroy_device(
@@ -350,6 +382,10 @@ void fixed_pointlight_pipeline_runtime::on_destroy_device(
     pipelines_.clear();
     candidates_.clear();
     device_ = nullptr;
+    bound_epoch_.fetch_add(
+        1u,
+        std::memory_order_release);
+    bound_tls_ = {};
 }
 
 bool fixed_pointlight_pipeline_runtime::pipeline_attested(
@@ -376,15 +412,49 @@ bool fixed_pointlight_pipeline_runtime::bound_light_count(
             reinterpret_cast<std::uintptr_t>(
                 cmd_list));
 
-    std::lock_guard<std::mutex> lock(mutex_);
-    const auto found = bound_.find(command);
-    if (found == bound_.end() ||
-        found->second == nullptr ||
-        (found->second->light_count != 2u &&
-         found->second->light_count != 4u))
+    const auto epoch =
+        bound_epoch_.load(
+            std::memory_order_acquire);
+
+    std::shared_ptr<const record> selected{};
+    if (bound_tls_.runtime == this &&
+        bound_tls_.command == command &&
+        bound_tls_.epoch == epoch) {
+        if (!bound_tls_.present)
+            return false;
+        selected = bound_tls_.selected;
+    } else {
+        std::lock_guard<std::mutex> lock(mutex_);
+        const auto found = bound_.find(command);
+        if (found == bound_.end()) {
+            bound_tls_ = {
+                this,
+                command,
+                {},
+                bound_epoch_.load(
+                    std::memory_order_relaxed),
+                false
+            };
+            return false;
+        }
+
+        selected = found->second;
+        bound_tls_ = {
+            this,
+            command,
+            selected,
+            bound_epoch_.load(
+                std::memory_order_relaxed),
+            selected != nullptr
+        };
+    }
+
+    if (selected == nullptr ||
+        (selected->light_count != 2u &&
+         selected->light_count != 4u))
         return false;
 
-    light_count = found->second->light_count;
+    light_count = selected->light_count;
     return true;
 }
 
@@ -403,14 +473,40 @@ bool fixed_pointlight_pipeline_runtime::prepare_bound_shader(
             reinterpret_cast<std::uintptr_t>(
                 cmd_list));
 
+    const auto epoch =
+        bound_epoch_.load(
+            std::memory_order_acquire);
+
     std::shared_ptr<const record> selected{};
-    {
-        std::lock_guard<std::mutex> lock(mutex_);
-        const auto found =
-            bound_.find(command);
-        if (found == bound_.end())
+    if (bound_tls_.runtime == this &&
+        bound_tls_.command == command &&
+        bound_tls_.epoch == epoch) {
+        if (!bound_tls_.present)
             return false;
+        selected = bound_tls_.selected;
+    } else {
+        std::lock_guard<std::mutex> lock(mutex_);
+        const auto found = bound_.find(command);
+        if (found == bound_.end()) {
+            bound_tls_ = {
+                this,
+                command,
+                {},
+                bound_epoch_.load(
+                    std::memory_order_relaxed),
+                false
+            };
+            return false;
+        }
         selected = found->second;
+        bound_tls_ = {
+            this,
+            command,
+            selected,
+            bound_epoch_.load(
+                std::memory_order_relaxed),
+            selected != nullptr
+        };
     }
 
     if (selected == nullptr ||
@@ -459,6 +555,10 @@ void fixed_pointlight_pipeline_runtime::reset() noexcept
     pipelines_.clear();
     candidates_.clear();
     device_ = nullptr;
+    bound_epoch_.fetch_add(
+        1u,
+        std::memory_order_release);
+    bound_tls_ = {};
 
     candidates_seen_.store(0u);
     candidate_create_ok_.store(0u);
