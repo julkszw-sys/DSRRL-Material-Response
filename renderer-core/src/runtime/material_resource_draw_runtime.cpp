@@ -1223,6 +1223,7 @@ prepare_fixed_pointlight_spec_requests(
     const operators::material_response::
         mtd_semantic_query &query,
     bool exact_fixed_receiver_verified,
+    bool direct_pointlight_material_authorized,
     bool blended_material,
     prepared_material_resource_draw &prepared) noexcept
 {
@@ -1287,6 +1288,7 @@ prepare_fixed_pointlight_spec_requests(
     bridge.actual_material_verified =
         exact_material;
     bridge.material_specular_consumer_verified =
+        direct_pointlight_material_authorized ||
         operators::material_response::
             classify_mtd_semantic(
                 query,
@@ -1295,6 +1297,8 @@ prepare_fixed_pointlight_spec_requests(
             .state ==
         operators::material_response::
             mtd_semantic_state::use;
+    bridge.direct_pointlight_material_authorized =
+        direct_pointlight_material_authorized;
     bridge.endpoint_a_identity_verified =
         endpoint_a_exact;
     bridge.endpoint_a_sidecar_ready =
