@@ -105,6 +105,22 @@ add_custom_command(
 add_custom_target(dsrrl_fixed_local_specular_ptde_reference_header
     DEPENDS "${DSRRL_FIXED_LOCAL_SPECULAR_PTDE_REFERENCE_HEADER}")
 
+set(DSRRL_CLUSTERED_PNTS_DIRECT_HEADER
+    "${DSRRL_GENERATED_DIR}/dsrrl/operators/point_light/generated_clustered_pnts_direct_v1.hpp")
+add_custom_command(
+    OUTPUT "${DSRRL_CLUSTERED_PNTS_DIRECT_HEADER}"
+    COMMAND "${Python3_EXECUTABLE}"
+            "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_clustered_pnts_direct_v1.py"
+            --input "${CMAKE_CURRENT_SOURCE_DIR}/data/provenance/clustered_pnts_direct_stock_journal_v1.json"
+            --output "${DSRRL_CLUSTERED_PNTS_DIRECT_HEADER}"
+    DEPENDS
+        "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_clustered_pnts_direct_v1.py"
+        "${CMAKE_CURRENT_SOURCE_DIR}/data/provenance/clustered_pnts_direct_stock_journal_v1.json"
+    VERBATIM
+)
+add_custom_target(dsrrl_clustered_pnts_direct_header
+    DEPENDS "${DSRRL_CLUSTERED_PNTS_DIRECT_HEADER}")
+
 option(DSRRL_BUILD_PHASE0_PROBE "Build the pixel-inert ReShade API20 Phase 0 probe addon" OFF)
 set(RESHade_INCLUDE_DIR "" CACHE PATH "Path to pinned ReShade include directory")
 
@@ -133,6 +149,7 @@ add_library(dsrrl_renderer_core STATIC
     src/operators/surface/faceeye_shadow.cpp
     src/operators/point_light/pnts_attenuation.cpp
     src/operators/point_light/clustered_sidecar.cpp
+    src/operators/point_light/clustered_pnts_direct_materializer.cpp
     src/operators/point_light/legacy_specular.cpp
     src/operators/point_light/local_specular_receiver_registry.cpp
     src/operators/point_light/local_specular_microfacet_windows.cpp
@@ -160,6 +177,7 @@ add_library(dsrrl_renderer_core STATIC
     "${DSRRL_MTD_IDENTITY_SUPPLEMENT_HEADER}"
     "${DSRRL_LOCAL_SPECULAR_RECEIVER_HEADER}"
     "${DSRRL_FIXED_LOCAL_SPECULAR_PTDE_REFERENCE_HEADER}"
+    "${DSRRL_CLUSTERED_PNTS_DIRECT_HEADER}"
 )
 add_custom_target(dsrrl_pointlight_core_source_audit
     COMMAND "${Python3_EXECUTABLE}"
@@ -172,15 +190,26 @@ add_custom_target(dsrrl_pointlight_core_source_audit
     VERBATIM
 )
 
+add_custom_target(dsrrl_clustered_pnts_activation_source_audit
+    COMMAND "${Python3_EXECUTABLE}"
+            "${CMAKE_CURRENT_SOURCE_DIR}/tools/audit_clustered_pnts_activation_sources.py"
+            --source-dir "${CMAKE_CURRENT_SOURCE_DIR}"
+    DEPENDS
+        "${CMAKE_CURRENT_SOURCE_DIR}/tools/audit_clustered_pnts_activation_sources.py"
+    VERBATIM
+)
+
 add_dependencies(
     dsrrl_renderer_core
     dsrrl_pointlight_core_source_audit
+    dsrrl_clustered_pnts_activation_source_audit
     dsrrl_native_envspec_probe_header
     dsrrl_dsr_flver_owner_tuple_header
     dsrrl_dsr_mtd_identity_supplement_header
     dsrrl_hemenvlerp_v211_header
     dsrrl_local_specular_receiver_header
-    dsrrl_fixed_local_specular_ptde_reference_header)
+    dsrrl_fixed_local_specular_ptde_reference_header
+    dsrrl_clustered_pnts_direct_header)
 target_include_directories(dsrrl_renderer_core PUBLIC
     ${DSRRL_GENERATED_DIR}
     ${CMAKE_CURRENT_SOURCE_DIR}/include)
@@ -252,6 +281,19 @@ add_executable(dsrrl_renderer_clustered_sidecar_tests
     tests/clustered_sidecar_tests.cpp)
 target_link_libraries(dsrrl_renderer_clustered_sidecar_tests PRIVATE dsrrl_renderer_core)
 target_compile_features(dsrrl_renderer_clustered_sidecar_tests PRIVATE cxx_std_17)
+
+add_executable(dsrrl_renderer_clustered_pnts_materializer_tests
+    tests/clustered_pnts_direct_materializer_tests.cpp)
+target_link_libraries(dsrrl_renderer_clustered_pnts_materializer_tests PRIVATE dsrrl_renderer_core)
+target_compile_features(dsrrl_renderer_clustered_pnts_materializer_tests PRIVATE cxx_std_17)
+add_dependencies(
+    dsrrl_renderer_clustered_pnts_materializer_tests
+    dsrrl_clustered_pnts_direct_header)
+
+add_executable(dsrrl_renderer_clustered_pnts_draw_adapter_tests
+    tests/clustered_pnts_draw_adapter_tests.cpp)
+target_link_libraries(dsrrl_renderer_clustered_pnts_draw_adapter_tests PRIVATE dsrrl_renderer_core)
+target_compile_features(dsrrl_renderer_clustered_pnts_draw_adapter_tests PRIVATE cxx_std_17)
 target_link_libraries(dsrrl_renderer_faceeye_pointlight_tests PRIVATE dsrrl_renderer_core)
 target_compile_features(dsrrl_renderer_faceeye_pointlight_tests PRIVATE cxx_std_17)
 
@@ -349,6 +391,8 @@ if(MSVC)
     target_compile_options(dsrrl_renderer_future_runtime_tests PRIVATE /W4 /WX)
     target_compile_options(dsrrl_renderer_faceeye_pointlight_tests PRIVATE /W4 /WX)
     target_compile_options(dsrrl_renderer_clustered_sidecar_tests PRIVATE /W4 /WX)
+    target_compile_options(dsrrl_renderer_clustered_pnts_materializer_tests PRIVATE /W4 /WX)
+    target_compile_options(dsrrl_renderer_clustered_pnts_draw_adapter_tests PRIVATE /W4 /WX)
     target_compile_options(dsrrl_renderer_local_specular_receiver_tests PRIVATE /W4 /WX)
     target_compile_options(dsrrl_renderer_local_specular_window_tests PRIVATE /W4 /WX)
     target_compile_options(dsrrl_renderer_fixed_local_specular_plan_tests PRIVATE /W4 /WX)
@@ -377,6 +421,8 @@ else()
     target_compile_options(dsrrl_renderer_future_runtime_tests PRIVATE -Wall -Wextra -Wpedantic -Werror)
     target_compile_options(dsrrl_renderer_faceeye_pointlight_tests PRIVATE -Wall -Wextra -Wpedantic -Werror)
     target_compile_options(dsrrl_renderer_clustered_sidecar_tests PRIVATE -Wall -Wextra -Wpedantic -Werror)
+    target_compile_options(dsrrl_renderer_clustered_pnts_materializer_tests PRIVATE -Wall -Wextra -Wpedantic -Werror)
+    target_compile_options(dsrrl_renderer_clustered_pnts_draw_adapter_tests PRIVATE -Wall -Wextra -Wpedantic -Werror)
     target_compile_options(dsrrl_renderer_local_specular_receiver_tests PRIVATE -Wall -Wextra -Wpedantic -Werror)
     target_compile_options(dsrrl_renderer_local_specular_window_tests PRIVATE -Wall -Wextra -Wpedantic -Werror)
     target_compile_options(dsrrl_renderer_fixed_local_specular_plan_tests PRIVATE -Wall -Wextra -Wpedantic -Werror)
@@ -440,6 +486,9 @@ add_test(NAME dsrrl_renderer_core_tests COMMAND dsrrl_renderer_core_tests)
 add_test(NAME dsrrl_renderer_island_tests COMMAND dsrrl_renderer_island_tests)
 add_test(NAME dsrrl_renderer_future_runtime_tests COMMAND dsrrl_renderer_future_runtime_tests)
 add_test(NAME dsrrl_renderer_faceeye_pointlight_tests COMMAND dsrrl_renderer_faceeye_pointlight_tests)
+add_test(NAME dsrrl_renderer_clustered_sidecar_tests COMMAND dsrrl_renderer_clustered_sidecar_tests)
+add_test(NAME dsrrl_renderer_clustered_pnts_materializer_tests COMMAND dsrrl_renderer_clustered_pnts_materializer_tests)
+add_test(NAME dsrrl_renderer_clustered_pnts_draw_adapter_tests COMMAND dsrrl_renderer_clustered_pnts_draw_adapter_tests)
 add_test(NAME dsrrl_renderer_local_specular_receiver_tests COMMAND dsrrl_renderer_local_specular_receiver_tests)
 add_test(NAME dsrrl_renderer_local_specular_window_tests COMMAND dsrrl_renderer_local_specular_window_tests)
 add_test(NAME dsrrl_renderer_fixed_local_specular_plan_tests COMMAND dsrrl_renderer_fixed_local_specular_plan_tests)
