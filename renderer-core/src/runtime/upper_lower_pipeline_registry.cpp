@@ -54,6 +54,16 @@ std::unordered_set<std::uint64_t>
 std::unordered_map<const void *, bound_receiver>
     g_bound_receivers;
 
+struct bound_receiver_tls {
+    const void *command_list_key = nullptr;
+    bound_receiver value{};
+    std::uint64_t epoch = 0u;
+    bool present = false;
+};
+
+std::atomic<std::uint64_t> g_bound_epoch{1u};
+thread_local bound_receiver_tls g_bound_tls{};
+
 std::atomic<std::uint64_t> g_created_code_attested{0};
 std::atomic<std::uint64_t> g_created_code_conflict{0};
 std::atomic<std::uint64_t> g_pipeline_inits{0};
@@ -568,6 +578,8 @@ void upper_lower_receiver_forget_pipeline(
         else
             ++it;
     }
+
+    ++g_bound_epoch;
 }
 
 void upper_lower_receiver_observe_bind(
@@ -595,15 +607,28 @@ void upper_lower_receiver_observe_bind(
                 g_ambiguous_pipelines.end()) {
             g_bound_receivers.erase(
                 command_list_key);
+            g_bound_tls = {
+                command_list_key,
+                {},
+                g_bound_epoch.load(),
+                false
+            };
             ++g_unknown_binds;
             return;
         }
 
+        const bound_receiver bound{
+            pipeline_handle,
+            found->second
+        };
         g_bound_receivers[
-            command_list_key] = {
-                pipeline_handle,
-                found->second
-            };
+            command_list_key] = bound;
+        g_bound_tls = {
+            command_list_key,
+            bound,
+            g_bound_epoch.load(),
+            true
+        };
 
         if (found->second.stratum ==
             operators::lightbank::
@@ -617,7 +642,14 @@ void upper_lower_receiver_observe_bind(
                 g_mutex);
             g_bound_receivers.erase(
                 command_list_key);
+            g_bound_tls = {
+                command_list_key,
+                {},
+                g_bound_epoch.load(),
+                false
+            };
         } catch (...) {
+            g_bound_tls = {};
         }
 
         ++g_unknown_binds;
@@ -637,6 +669,23 @@ bool upper_lower_receiver_bound(
         return false;
     }
 
+    const auto epoch =
+        g_bound_epoch.load();
+
+    if (g_bound_tls.command_list_key ==
+            command_list_key &&
+        g_bound_tls.epoch == epoch) {
+        if (!g_bound_tls.present) {
+            ++g_lookup_misses;
+            return false;
+        }
+
+        identity =
+            g_bound_tls.value.identity;
+        ++g_lookup_hits;
+        return true;
+    }
+
     std::lock_guard<std::mutex> lock(g_mutex);
 
     const auto found =
@@ -645,10 +694,22 @@ bool upper_lower_receiver_bound(
 
     if (found ==
         g_bound_receivers.end()) {
+        g_bound_tls = {
+            command_list_key,
+            {},
+            g_bound_epoch.load(),
+            false
+        };
         ++g_lookup_misses;
         return false;
     }
 
+    g_bound_tls = {
+        command_list_key,
+        found->second,
+        g_bound_epoch.load(),
+        true
+    };
     identity =
         found->second.identity;
     ++g_lookup_hits;
@@ -663,7 +724,10 @@ void upper_lower_receiver_pipeline_reset() noexcept
         g_pipeline_receivers.clear();
         g_ambiguous_pipelines.clear();
         g_bound_receivers.clear();
+        ++g_bound_epoch;
     }
+
+    g_bound_tls = {};
 
     g_created_code_attested.store(0);
     g_created_code_conflict.store(0);
