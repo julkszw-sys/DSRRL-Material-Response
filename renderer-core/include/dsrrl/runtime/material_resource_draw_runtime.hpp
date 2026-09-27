@@ -27,6 +27,7 @@ struct material_resource_telemetry {
     std::uint64_t sidecar_unsupported = 0;
     std::uint64_t spec_requests = 0;
     std::uint64_t fixed_pointlight_spec_requests = 0;
+    std::uint64_t fixed_pointlight_diffuse_requests = 0;
     std::uint64_t diffuse_requests = 0;
     std::uint64_t normal_requests = 0;
     std::uint64_t fail_open = 0;
