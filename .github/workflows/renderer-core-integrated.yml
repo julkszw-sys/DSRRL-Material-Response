@@ -148,6 +148,7 @@ jobs:
           $bridge = Get-Content renderer-core/src/runtime/a1_create_pipeline_bridge.cpp -Raw
           $tx = Get-Content renderer-core/src/runtime/material_response_draw_transaction.cpp -Raw
           $sharedTx = Get-Content renderer-core/src/runtime/draw_state_transaction.cpp -Raw
+          $hotTelemetry = Get-Content renderer-core/include/dsrrl/runtime/runtime_hot_telemetry.hpp -Raw
           $adapter = Get-Content renderer-core/src/runtime/island_draw_adapter.cpp -Raw
           $policy = Get-Content renderer-core/include/dsrrl/core/draw_transaction_policy.hpp -Raw
           $mr = Get-Content renderer-core/src/operators/material_response/material_response_v211_materializer.cpp -Raw
@@ -223,12 +224,22 @@ jobs:
             'restore_ps_constant_buffer_window',
             'shader_captured',
             'mutation.constant_buffer_count != 0u',
+            'native_state_verification_enabled',
+            'memory_order_relaxed',
             'transactions().begin',
             'transactions().restore',
             'issued_restore_failed',
             'quarantined_.store(true)'
           )) {
             if ($sharedTx -notmatch [regex]::Escape($required)) { throw "Shared draw transaction invariant missing: $required" }
+          }
+
+          foreach ($required in @(
+            'DSRRL_RUNTIME_TELEMETRY',
+            'DSRRL_RUNTIME_VERIFY_STATE',
+            'memory_order_relaxed'
+          )) {
+            if ($hotTelemetry -notmatch [regex]::Escape($required)) { throw "Runtime hot-telemetry policy invariant missing: $required" }
           }
 
           foreach ($required in @(
@@ -271,6 +282,7 @@ jobs:
             'generated::normal_tuple_allowed_v12',
             'logical_hashes_for',
             'lookup_many',
+            'inspect_many',
             'build_island_draw_mutation'
           )) {
             if ($resourceRuntime -notmatch [regex]::Escape($required)) { throw "Material resource island adapter invariant missing: $required" }
@@ -285,6 +297,8 @@ jobs:
             'prepare_t19',
             'k_capture_rva',
             'pushfq',
+            'g_selector_cache',
+            'consumed.compare_exchange_strong',
             'owner_verified',
             'producer_serial_fresh'
           )) {
@@ -296,6 +310,8 @@ jobs:
             'host_sha256',
             'replacement_sha256',
             'prepare_bound_shader',
+            'bound_tls_',
+            'bound_epoch_',
             'blended_material'
           )) {
             if ($fixedPipelineRuntime -notmatch [regex]::Escape($required)) { throw "Fixed PointLight pipeline registry invariant missing: $required" }
@@ -344,6 +360,14 @@ jobs:
             '10u'
           )) {
             if ($specConsumer -notmatch [regex]::Escape($required)) { throw "SpecRGB exact t10 consumer invariant missing: $required" }
+          }
+
+          foreach ($required in @(
+            'snapshot_ready_envspec',
+            'PSGetShaderResources',
+            'needs_cube'
+          )) {
+            if ($envspecResource -notmatch [regex]::Escape($required)) { throw "EnvSpec single-snapshot hot path invariant missing: $required" }
           }
 
           foreach ($required in @(
