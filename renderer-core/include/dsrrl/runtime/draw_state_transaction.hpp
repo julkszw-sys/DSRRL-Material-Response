@@ -156,6 +156,7 @@ private:
         ID3D11DeviceContext1 *context1 = nullptr;
         std::uint64_t command = 0;
         bool core_started = false;
+        bool shader_captured = false;
         bool verify_native_readback = true;
     };
 
