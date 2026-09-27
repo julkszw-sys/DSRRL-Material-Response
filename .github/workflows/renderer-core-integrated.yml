@@ -155,7 +155,35 @@ jobs:
           $h3SpcAuthority = Get-Content renderer-core/data/provenance/hemdir3_spc_b12_patch_sites_v1.tsv -Raw
           $h3SpcDonors = Get-Content renderer-core/data/provenance/hemdir3_spc_material_donors_v1.tsv -Raw
           $selectorAsm = Get-Content renderer-core/integrated/flver_identity_detour.asm -Raw
+          $flverHooks = Get-Content renderer-core/src/runtime/flver_engine_hooks.cpp -Raw
           $cmake = Get-Content renderer-core/integrated/CMakeLists.txt -Raw
+
+          # P_Metal actual-material routing lives on the retail selector hot path.
+          # Lock the post-perf architecture: exact raw MTD SHA producer, bounded
+          # lock-free pointer carrier, and no VirtualQuery/mutex in the selector
+          # lookup or actual-material resolve path.
+          foreach ($required in @(
+            'k_pmetal_digest',
+            'pmetal_cache_publish',
+            'pmetal_cache_contains',
+            'std::array<std::atomic<std::uintptr_t>',
+            'Legacy 1.45 selected donor route345 from exact raw MTD SHA',
+            'direct fixed-layout reads, no VirtualQuery'
+          )) {
+            if ($flverHooks -notmatch [regex]::Escape($required)) { throw "P_Metal MR hot-path carrier invariant missing: $required" }
+          }
+          if ($flverHooks -match 'exact_semantic_hash\s*\(') {
+            throw "P_Metal MR regressed to a runtime semantic-name prerequisite"
+          }
+          $lookupStart = $flverHooks.IndexOf('bool lookup_exact_runtime_pmetal')
+          $lookupEnd = $flverHooks.IndexOf('bool write(', $lookupStart)
+          if ($lookupStart -lt 0 -or $lookupEnd -le $lookupStart) {
+            throw "Cannot isolate P_Metal selector hot-path audit region"
+          }
+          $hot = $flverHooks.Substring($lookupStart, $lookupEnd - $lookupStart)
+          foreach ($forbidden in @('VirtualQuery(', 'range_ok(', 'std::lock_guard', 'std::mutex', 'unordered_map')) {
+            if ($hot -match [regex]::Escape($forbidden)) { throw "P_Metal MR hot-path performance regression: $forbidden" }
+          }
 
           if ($entry -notmatch 'operator_id::material_response') { throw "Material Response feature is not armed in Core+Islands" }
           if ($bridge -match 'addon_event::draw(?:_indexed)?') { throw "A1 create-time bridge must not own draw callbacks" }
