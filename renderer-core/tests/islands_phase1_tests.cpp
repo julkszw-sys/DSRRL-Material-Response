@@ -261,7 +261,7 @@ int main()
             false);
     CHECK(!direct_nospc_alias_result.active);
     CHECK(direct_nospc_alias_result.reason==
-          decision_reason::owner_tuple_unverified);
+          decision_reason::owner_tuple_not_authenticated);
 
     auto direct_nospc_wrong_sha=exact_nospc;
     direct_nospc_wrong_sha.raw_mtd_sha256.fill(0xffu);
