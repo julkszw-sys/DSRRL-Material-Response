@@ -177,8 +177,34 @@ struct integrated_draw_route_tls {
 std::shared_mutex g_integrated_draw_route_mutex;
 std::unordered_map<std::uint64_t,std::uint8_t>
     g_integrated_draw_routes;
+std::atomic<std::uint64_t>
+    g_integrated_draw_route_epoch{1u};
+
+struct integrated_pipeline_route_cache_entry {
+    std::uint64_t pipeline_handle = 0u;
+    std::uint64_t epoch = 0u;
+    std::uint8_t mask = 0u;
+};
+
+constexpr std::size_t k_integrated_route_cache_size = 16u;
+thread_local std::array<
+    integrated_pipeline_route_cache_entry,
+    k_integrated_route_cache_size>
+    g_integrated_pipeline_route_cache{};
 thread_local integrated_draw_route_tls
     g_integrated_draw_route_tls{};
+
+std::size_t integrated_route_cache_index(
+    std::uint64_t pipeline_handle) noexcept
+{
+    const auto mixed =
+        (pipeline_handle >> 4u) ^
+        (pipeline_handle >> 17u) ^
+        (pipeline_handle >> 31u);
+    return static_cast<std::size_t>(
+        mixed &
+        (k_integrated_route_cache_size - 1u));
+}
 
 void remember_integrated_draw_route(
     std::uint64_t pipeline_handle,
@@ -190,6 +216,9 @@ void remember_integrated_draw_route(
     try {
         std::unique_lock<std::shared_mutex> lock(
             g_integrated_draw_route_mutex);
+        g_integrated_draw_route_epoch.fetch_add(
+            1u,
+            std::memory_order_acq_rel);
         if (mask == 0u)
             g_integrated_draw_routes.erase(
                 pipeline_handle);
@@ -200,6 +229,9 @@ void remember_integrated_draw_route(
         try {
             std::unique_lock<std::shared_mutex> lock(
                 g_integrated_draw_route_mutex);
+            g_integrated_draw_route_epoch.fetch_add(
+                1u,
+                std::memory_order_acq_rel);
             g_integrated_draw_routes.erase(
                 pipeline_handle);
         } catch (...) {
@@ -215,6 +247,9 @@ void forget_integrated_draw_route(
 
     std::unique_lock<std::shared_mutex> lock(
         g_integrated_draw_route_mutex);
+    g_integrated_draw_route_epoch.fetch_add(
+        1u,
+        std::memory_order_acq_rel);
     g_integrated_draw_routes.erase(
         pipeline_handle);
 }
@@ -231,17 +266,41 @@ std::uint8_t observe_integrated_draw_route_bind(
             : 0u;
 
     std::uint8_t mask = 0u;
-    try {
-        std::shared_lock<std::shared_mutex> lock(
-            g_integrated_draw_route_mutex);
-        const auto found =
-            g_integrated_draw_routes.find(
-                pipeline_handle);
-        if (found !=
-            g_integrated_draw_routes.end())
-            mask = found->second;
-    } catch (...) {
-        mask = 0u;
+    const auto epoch =
+        g_integrated_draw_route_epoch.load(
+            std::memory_order_acquire);
+    auto &cached =
+        g_integrated_pipeline_route_cache[
+            integrated_route_cache_index(
+                pipeline_handle)];
+
+    if (cached.pipeline_handle ==
+            pipeline_handle &&
+        cached.epoch == epoch &&
+        g_integrated_draw_route_epoch.load(
+            std::memory_order_acquire) == epoch) {
+        mask = cached.mask;
+    } else {
+        try {
+            std::shared_lock<std::shared_mutex> lock(
+                g_integrated_draw_route_mutex);
+            const auto found =
+                g_integrated_draw_routes.find(
+                    pipeline_handle);
+            if (found !=
+                g_integrated_draw_routes.end())
+                mask = found->second;
+
+            cached = {
+                pipeline_handle,
+                g_integrated_draw_route_epoch.load(
+                    std::memory_order_relaxed),
+                mask
+            };
+        } catch (...) {
+            cached = {};
+            mask = 0u;
+        }
     }
 
     g_integrated_draw_route_tls = {
@@ -267,8 +326,12 @@ void reset_integrated_draw_routes() noexcept
     {
         std::unique_lock<std::shared_mutex> lock(
             g_integrated_draw_route_mutex);
+        g_integrated_draw_route_epoch.fetch_add(
+            1u,
+            std::memory_order_acq_rel);
         g_integrated_draw_routes.clear();
     }
+    g_integrated_pipeline_route_cache = {};
     g_integrated_draw_route_tls = {};
 }
 
