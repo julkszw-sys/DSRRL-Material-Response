@@ -935,41 +935,40 @@ bool envspec_resource_runtime::prepare(
 
     if (!ready && needs_cube) {
         resource_view ignored{};
-
-        if (!get_ptde_cube(
+        bool materialized =
+            get_ptde_cube(
                 probe_a,
                 slot,
-                ignored)) {
-            telemetry::hot_count(g_prepare_fail);
-            return false;
+                ignored);
+
+        if (materialized &&
+            probe_b_required &&
+            probe_b != probe_a) {
+            materialized =
+                get_ptde_cube(
+                    probe_b,
+                    slot,
+                    ignored);
         }
 
-        if (probe_b_required &&
-            probe_b != probe_a &&
-            !get_ptde_cube(
-                probe_b,
-                slot,
-                ignored)) {
-            telemetry::hot_count(g_prepare_fail);
-            return false;
+        if (materialized) {
+            // Materialization is a cold miss. Re-enter the single-lock
+            // snapshot path so normal draws keep resource identity + cube +
+            // sampler lookup atomic and do not repeat independent map locks.
+            needs_cube = false;
+            ready =
+                snapshot_ready_envspec(
+                    stock_a,
+                    stock_b,
+                    slot,
+                    probe_b_required,
+                    probe_a,
+                    probe_b,
+                    a_native,
+                    b_native,
+                    sampler_native,
+                    needs_cube);
         }
-
-        // Materialization is a cold miss. Re-enter the single-lock snapshot
-        // path so normal draws keep resource identity + cube + sampler lookup
-        // atomic and do not repeat independent map locks.
-        needs_cube = false;
-        ready =
-            snapshot_ready_envspec(
-                stock_a,
-                stock_b,
-                slot,
-                probe_b_required,
-                probe_a,
-                probe_b,
-                a_native,
-                b_native,
-                sampler_native,
-                needs_cube);
     }
 
     for (auto *view : stock_views)
