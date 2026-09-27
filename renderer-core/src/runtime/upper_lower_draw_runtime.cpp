@@ -4026,8 +4026,27 @@ bool upper_lower_draw_runtime::selected_pmetal_env_source(
             token.source_b == nullptr ||
             token.selector_a < 0 ||
             token.selector_b < 0 ||
-            !std::isfinite(token.beta))
+            !std::isfinite(token.beta)) {
+            pmetal_source_probe invalid_a{};
+            invalid_a.status =
+                pmetal_env_source_diag_status::
+                    token_invalid;
+            invalid_a.selector =
+                token.selector_a;
+            pmetal_source_probe invalid_b =
+                invalid_a;
+            invalid_b.selector =
+                token.selector_b;
+            publish_pmetal_source_probe(
+                false,
+                invalid_a,
+                token.beta);
+            publish_pmetal_source_probe(
+                true,
+                invalid_b,
+                token.beta);
             return false;
+        }
 
         f4 a{};
         f4 b{};
@@ -4036,25 +4055,55 @@ bool upper_lower_draw_runtime::selected_pmetal_env_source(
         std::uint32_t row_a = 0u;
         std::uint32_t row_b = 0u;
 
+        pmetal_source_probe probe_a{};
         if (!read_exact_pmetal_env_source(
                 token.source_a,
                 token.selector_a,
                 a,
                 bank_a,
-                row_a))
+                row_a,
+                &probe_a)) {
+            publish_pmetal_source_probe(
+                false,
+                probe_a,
+                token.beta);
             return false;
+        }
+        publish_pmetal_source_probe(
+            false,
+            probe_a,
+            token.beta);
 
         if (token.beta <= 0.0f) {
             b = a;
             bank_b = bank_a;
             row_b = row_a;
-        } else if (!read_exact_pmetal_env_source(
-                       token.source_b,
-                       token.selector_b,
-                       b,
-                       bank_b,
-                       row_b)) {
-            return false;
+            auto probe_b = probe_a;
+            probe_b.selector =
+                token.selector_b;
+            publish_pmetal_source_probe(
+                true,
+                probe_b,
+                token.beta);
+        } else {
+            pmetal_source_probe probe_b{};
+            if (!read_exact_pmetal_env_source(
+                    token.source_b,
+                    token.selector_b,
+                    b,
+                    bank_b,
+                    row_b,
+                    &probe_b)) {
+                publish_pmetal_source_probe(
+                    true,
+                    probe_b,
+                    token.beta);
+                return false;
+            }
+            publish_pmetal_source_probe(
+                true,
+                probe_b,
+                token.beta);
         }
 
         if (token.beta >= 1.0f) {
@@ -4118,6 +4167,64 @@ bool upper_lower_draw_runtime::selected_pmetal_env_source(
         std::isfinite(out.b[1]) &&
         std::isfinite(out.b[2]) &&
         std::isfinite(out.beta);
+}
+
+pmetal_env_source_diagnostic
+upper_lower_draw_runtime::pmetal_source_diagnostic() const noexcept
+{
+    pmetal_env_source_diagnostic out{};
+
+    out.a.status =
+        static_cast<pmetal_env_source_diag_status>(
+            g_pmetal_diag_status_a.load(
+                std::memory_order_acquire));
+    out.a.selector =
+        g_pmetal_diag_selector_a.load(
+            std::memory_order_relaxed);
+    out.a.bank_count =
+        static_cast<std::uint16_t>(
+            g_pmetal_diag_count_a.load(
+                std::memory_order_relaxed));
+    out.a.bank_signature =
+        g_pmetal_diag_signature_a.load(
+            std::memory_order_relaxed);
+    out.a.row_id =
+        g_pmetal_diag_row_a.load(
+            std::memory_order_relaxed);
+
+    out.b.status =
+        static_cast<pmetal_env_source_diag_status>(
+            g_pmetal_diag_status_b.load(
+                std::memory_order_acquire));
+    out.b.selector =
+        g_pmetal_diag_selector_b.load(
+            std::memory_order_relaxed);
+    out.b.bank_count =
+        static_cast<std::uint16_t>(
+            g_pmetal_diag_count_b.load(
+                std::memory_order_relaxed));
+    out.b.bank_signature =
+        g_pmetal_diag_signature_b.load(
+            std::memory_order_relaxed);
+    out.b.row_id =
+        g_pmetal_diag_row_b.load(
+            std::memory_order_relaxed);
+
+    const auto beta_bits =
+        g_pmetal_diag_beta_bits.load(
+            std::memory_order_relaxed);
+    static_assert(
+        sizeof(beta_bits) ==
+        sizeof(out.beta));
+    std::memcpy(
+        &out.beta,
+        &beta_bits,
+        sizeof(out.beta));
+
+    out.observed =
+        g_pmetal_diag_observed.load(
+            std::memory_order_acquire);
+    return out;
 }
 
 void upper_lower_draw_runtime::release_prepared_draw(
@@ -4213,6 +4320,18 @@ void upper_lower_draw_runtime::reset() noexcept
     g_pmetal_env_steady.store(0);
     g_pmetal_env_blend.store(0);
     g_pmetal_env_miss.store(0);
+    g_pmetal_diag_status_a.store(0u);
+    g_pmetal_diag_status_b.store(0u);
+    g_pmetal_diag_selector_a.store(-1);
+    g_pmetal_diag_selector_b.store(-1);
+    g_pmetal_diag_count_a.store(0u);
+    g_pmetal_diag_count_b.store(0u);
+    g_pmetal_diag_signature_a.store(0u);
+    g_pmetal_diag_signature_b.store(0u);
+    g_pmetal_diag_row_a.store(0u);
+    g_pmetal_diag_row_b.store(0u);
+    g_pmetal_diag_beta_bits.store(0u);
+    g_pmetal_diag_observed.store(false);
     g_direct_ul_steady_inject.store(0);
     g_direct_ul_blend_inject.store(0);
     g_direct_ul_inject_fail.store(0);
