@@ -17,6 +17,7 @@ struct fixed_pointlight_pipeline_runtime::record {
     std::array<std::uint8_t,32> replacement_sha{};
     ID3D11PixelShader *shader = nullptr;
     std::uint8_t light_count = 0u;
+    bool blended_material = false;
 
     ~record()
     {
@@ -137,7 +138,9 @@ bool fixed_pointlight_pipeline_runtime::register_candidate(
                 existing->replacement_sha !=
                     outcome.replacement_sha256 ||
                 existing->light_count !=
-                    outcome.light_count) {
+                    outcome.light_count ||
+                existing->blended_material !=
+                    outcome.blended_material) {
                 quarantined_.store(true);
                 ++candidate_create_fail_;
                 return false;
@@ -175,6 +178,8 @@ bool fixed_pointlight_pipeline_runtime::register_candidate(
         mutable_record->shader = shader;
         mutable_record->light_count =
             outcome.light_count;
+        mutable_record->blended_material =
+            outcome.blended_material;
 
         std::shared_ptr<const record> value =
             mutable_record;
@@ -203,7 +208,9 @@ bool fixed_pointlight_pipeline_runtime::register_candidate(
                 existing->replacement_sha !=
                     outcome.replacement_sha256 ||
                 existing->light_count !=
-                    outcome.light_count) {
+                    outcome.light_count ||
+                existing->blended_material !=
+                    outcome.blended_material) {
                 quarantined_.store(true);
                 ++candidate_create_fail_;
                 return false;
@@ -415,6 +422,8 @@ bool fixed_pointlight_pipeline_runtime::prepare_bound_shader(
     prepared.shader = selected->shader;
     prepared.light_count =
         selected->light_count;
+    prepared.blended_material =
+        selected->blended_material;
     prepared.ready = true;
     return true;
 }
