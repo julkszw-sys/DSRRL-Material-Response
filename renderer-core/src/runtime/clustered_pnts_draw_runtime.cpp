@@ -166,6 +166,29 @@ bool readable_range(
     return true;
 }
 
+bool executable_address(
+    const void *ptr) noexcept
+{
+    if (ptr == nullptr)
+        return false;
+
+    MEMORY_BASIC_INFORMATION mbi{};
+    if (VirtualQuery(
+            ptr,
+            &mbi,
+            sizeof(mbi)) != sizeof(mbi) ||
+        mbi.State != MEM_COMMIT ||
+        (mbi.Protect & PAGE_GUARD) != 0u)
+        return false;
+
+    const DWORD access = mbi.Protect & 0xffu;
+    return
+        access == PAGE_EXECUTE ||
+        access == PAGE_EXECUTE_READ ||
+        access == PAGE_EXECUTE_READWRITE ||
+        access == PAGE_EXECUTE_WRITECOPY;
+}
+
 std::size_t registry_set(
     std::uintptr_t owner) noexcept
 {
@@ -349,7 +372,7 @@ bool capture_source(
         &target,
         vtable + 12u,
         sizeof(target));
-    if (!readable_range(target, 1u))
+    if (!executable_address(target))
         return false;
 
     using source_fn =
