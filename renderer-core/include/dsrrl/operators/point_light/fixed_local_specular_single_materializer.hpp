@@ -33,7 +33,7 @@ struct fixed_local_single_materialize_outcome {
     std::uint32_t color0_input_register = 0u;
     std::uint32_t original_temp_count = 0u;
     std::uint32_t final_temp_count = 0u;
-    bool a1_full_plan = false;
+    bool raw_host_basis = false;
     bool rdef_stripped = false;
     bool t10_declared = false;
     bool t19_declared = false;
@@ -42,12 +42,12 @@ struct fixed_local_single_materialize_outcome {
     bool blended_material = false;
     bool output_cut_redirected = false;
 
-    // Exact created-code attestation seam. The fixed replacement is generated
-    // from this full A1/P2.2 host, so runtime may associate the replacement
-    // with a pipeline only when init_pipeline exposes byte-identical host
-    // code (SHA256 + size). Never infer identity from creation order.
-    std::array<std::uint8_t,32> a1_host_sha256{};
-    std::size_t a1_host_size = 0u;
+    // Exact created-code attestation seam. The fixed 48-body corpus is not
+    // part of the A1 recipe set, so the replacement is generated directly
+    // from the byte-identical stock DSR fixed host. Runtime may associate the
+    // replacement only when init_pipeline exposes that exact SHA256 + size.
+    std::array<std::uint8_t,32> host_sha256{};
+    std::size_t host_size = 0u;
     std::array<std::uint8_t,32> replacement_sha256{};
 };
 
@@ -57,9 +57,9 @@ struct fixed_local_single_materialize_outcome {
 // is proven by the exact material-sample contract.
 //
 // Pipeline:
-//   exact original DSR identity
-//   -> full enabled A1/P2.2 materialization
-//   -> t10 split from t1 with stock alpha preserved
+//   exact original DSR identity (raw fixed host; A1 corpus is disjoint)
+ //   -> t10 PTDE SpecRGB sample into isolated scratch RGB
+ //      (stock t1/t4, including any alpha lane, remain untouched)
 //   -> for Mul: t16 split from t4 + exact per-body A/B blend operand
 //   -> raw PTDE material carriers from b12[1]/b12[2]
 //   -> raw-q t19 + PTDE legacy fixed PointLight island
