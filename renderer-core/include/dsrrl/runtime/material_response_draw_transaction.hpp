@@ -230,6 +230,20 @@ private:
         core::operator_mask composed_owners = 0;
     };
 
+    enum class replacement_bank : std::uint8_t {
+        stable = 0,
+        stable_spec,
+        lerp,
+        lerp_spec,
+        upper_lower,
+        upper_lower_spec
+    };
+
+    bool acquire_replacement(
+        replacement_bank bank,
+        std::uint32_t receiver_id,
+        replacement_record &replacement) const noexcept;
+
     ID3D11Buffer *realize_b12(
         const operators::material_response::decision &decision) noexcept;
 
