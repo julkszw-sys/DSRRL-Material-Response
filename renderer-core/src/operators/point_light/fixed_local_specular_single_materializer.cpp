@@ -738,6 +738,18 @@ materialize_fixed_local_specular_single(
         out.result=fixed_local_single_materialize_result::fail_declaration_shape;
         return out;
     }
+
+    std::uint32_t t4_decl=0u;
+    if(blended &&
+       !locate_resource_decl(
+            words,
+            instructions,
+            4u,
+            t4_decl)) {
+        out.result=fixed_local_single_materialize_result::fail_declaration_shape;
+        return out;
+    }
+
     out.original_temp_count=temp_count;
 
     constexpr std::uint32_t k_scratch_count=6u;
@@ -755,10 +767,34 @@ materialize_fixed_local_specular_single(
 
     const auto *t1_sample=
         find_instruction(instructions,samples.specular_a_t1.instruction_word);
+    const auto *t4_sample=
+        blended
+            ? find_instruction(
+                instructions,
+                samples.specular_b_t4.instruction_word)
+            : nullptr;
+    const auto *diffuse_blend_mad=
+        blended
+            ? find_instruction(
+                instructions,
+                samples.diffuse_blend_mad_word)
+            : nullptr;
     const instruction *c156_add=nullptr;
-    if(t1_sample==nullptr || t1_sample->end-t1_sample->start!=11u ||
-       !locate_c156_add(
-            words,instructions,samples.diffuse_a_t0,c156_add)) {
+
+    if(t1_sample==nullptr ||
+       t1_sample->end-t1_sample->start!=11u ||
+       (blended &&
+        (t4_sample==nullptr ||
+         t4_sample->end-t4_sample->start!=11u ||
+         diffuse_blend_mad==nullptr ||
+         diffuse_blend_mad->opcode!=50u ||
+         diffuse_blend_mad->end-diffuse_blend_mad->start!=9u)) ||
+       (!blended &&
+        !locate_c156_add(
+            words,
+            instructions,
+            samples.diffuse_a_t0,
+            c156_add))) {
         out.result=fixed_local_single_materialize_result::fail_material_capture;
         return out;
     }
