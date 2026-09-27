@@ -151,6 +151,8 @@ jobs:
           $subsurface = Get-Content renderer-core/src/runtime/subsurface_draw_runtime.cpp -Raw
           $subsurfaceRegistry = Get-Content renderer-core/src/runtime/subsurface_pipeline_registry.cpp -Raw
           $upperLower = Get-Content renderer-core/src/runtime/upper_lower_draw_runtime.cpp -Raw
+          $mtdOwnerProducer = Get-Content renderer-core/src/runtime/material_owner_producer.cpp -Raw
+          $mtdSupplement = Get-Content renderer-core/data/census/dsr_mtd_identity_certified_supplement_v1.json -Raw | ConvertFrom-Json
           $ulMaterializer = Get-Content renderer-core/src/operators/lightbank/upper_lower_hemenv_materializer.cpp -Raw
           $ulRegistry = Get-Content renderer-core/src/runtime/upper_lower_pipeline_registry.cpp -Raw
           $ulRuntime = Get-Content renderer-core/src/runtime/upper_lower_hemenv_draw_runtime.cpp -Raw
@@ -215,6 +217,35 @@ jobs:
           $hot = $flverHooks.Substring($lookupStart, $lookupEnd - $lookupStart)
           foreach ($forbidden in @('VirtualQuery(', 'range_ok(', 'std::lock_guard', 'std::mutex', 'unordered_map')) {
             if ($hot -match [regex]::Escape($forbidden)) { throw "MR retail carrier hot-path performance regression: $forbidden" }
+          }
+
+          # P_Metal source reference must survive producer/selector thread changes
+          # without restoring the old heap/shared_ptr global snapshot path.
+          foreach ($required in @(
+            'bounded 2-way cross-thread registry',
+            'g_reference_token_locks',
+            'reference_token_set_guard',
+            'consume_reference_token'
+          )) {
+            if ($upperLower -notmatch [regex]::Escape($required)) { throw "PMetal cross-thread reference carrier invariant missing: $required" }
+          }
+          if ($upperLower -match 'thread_local\s+std::array<\s*lightbank_reference_token') {
+            throw "PMetal reference registry regressed to thread-local producer/selector isolation"
+          }
+
+          # The generic DSR raw-MTD registry is intentionally partial. DSBT is
+          # authorized only by its certified exact special-route supplement.
+          foreach ($required in @(
+            'generated_dsr_mtd_identity_supplement_v1.hpp',
+            'dsr_mtd_identity_supplement_resolve'
+          )) {
+            if ($mtdOwnerProducer -notmatch [regex]::Escape($required)) { throw "Certified MTD supplement carrier missing: $required" }
+          }
+          $dsbt = @($mtdSupplement.records | Where-Object { $_.semantic_name -eq 'Ps_Body[DSBT].mtd' })
+          if ($dsbt.Count -ne 1) { throw "Expected exactly one certified Ps_Body[DSBT].mtd identity" }
+          if ($dsbt[0].status -ne 'CONFIRMED') { throw "DSBT supplement is not CONFIRMED" }
+          if ($dsbt[0].raw_mtd_sha256 -ne '2706080f2b306245b90bf9d3fdfa38624b2ed0452a9b1aff830cf59de69b37d4') {
+            throw "DSBT supplement raw-MTD SHA mismatch"
           }
 
           if ($entry -notmatch 'operator_id::material_response') { throw "Material Response feature is not armed in Core+Islands" }
