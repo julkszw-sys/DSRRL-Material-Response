@@ -1984,6 +1984,10 @@ struct prepared_island_batch {
     dsrrl::runtime::prepared_hemdir3_draw hemdir3{};
     dsrrl::runtime::prepared_upper_lower_hemenv_draw upper_lower{};
     dsrrl::runtime::prepared_pmetal_envspec_draw envspec{};
+    dsrrl::runtime::prepared_fixed_pointlight_shader fixed_shader{};
+    dsrrl::runtime::prepared_fixed_pointlight_draw fixed_carrier{};
+    ID3D11Buffer *fixed_b12 = nullptr;
+    bool fixed_in_batch = false;
     bool mr_in_batch = false;
     bool upper_lower_combined = false;
     bool subsurface_in_batch = false;
@@ -1994,7 +1998,16 @@ struct prepared_island_batch {
 void release_prepared_island_batch(
     prepared_island_batch &prepared) noexcept
 {
-    if (prepared.hemdir3_in_batch) {
+    if (prepared.fixed_in_batch) {
+        g_material_resources.release_prepared_draw(
+            prepared.resources);
+        g_fixed_pointlight.release_prepared_draw(
+            prepared.fixed_carrier);
+        g_fixed_pointlight_pipeline.release_prepared_shader(
+            prepared.fixed_shader);
+        if (prepared.fixed_b12 != nullptr)
+            prepared.fixed_b12->Release();
+    } else if (prepared.hemdir3_in_batch) {
         g_hemdir3.release_prepared_draw(
             prepared.hemdir3);
     } else if (prepared.subsurface_in_batch) {
@@ -2039,6 +2052,147 @@ bool prepare_island_batch(
     prepared_island_batch &prepared) noexcept
 {
     prepared = {};
+
+    // Fixed PntSS/PntSSSS is a separate exact receiver namespace. The
+    // registry contains only single-endpoint materializations; Mul/blended
+    // bodies are deliberately absent and therefore fail open before this
+    // branch. Compose the entire visible island atomically: replacement PS,
+    // authored b12 material state, fresh raw-q t19 and PTDE SpecRGB t10.
+    if (g_fixed_pointlight_pipeline.prepare_bound_shader(
+            cmd_list,
+            prepared.fixed_shader)) {
+        auto *context =
+            reinterpret_cast<ID3D11DeviceContext *>(
+                cmd_list->get_native());
+
+        const bool direct_material_ready =
+            decision.active &&
+            decision.ptde_specular_power_verified;
+
+        dsrrl::operators::material_response::
+            mtd_semantic_query fixed_query{};
+        fixed_query.material = material;
+        fixed_query.receiver_id = 0u;
+        fixed_query.ownership.flver_sha256 =
+            material.flver_sha256;
+        fixed_query.ownership.flver_identity_hash =
+            material.flver_identity_hash;
+        fixed_query.ownership.material_slot =
+            material.material_slot;
+        fixed_query.ownership.material_slot_valid =
+            material.material_slot_valid;
+        fixed_query.ownership.exact =
+            material.owner_tuple_exact;
+
+        const bool resources_ready =
+            context != nullptr &&
+            direct_material_ready &&
+            g_material_resources.
+                prepare_fixed_pointlight_spec_requests(
+                    context,
+                    fixed_query,
+                    true,
+                    true,
+                    false,
+                    prepared.resources) &&
+            prepared.resources.spec_rgb;
+
+        const bool b12_ready =
+            resources_ready &&
+            g_mr_draw_runtime.prepare_b12_carrier(
+                decision,
+                prepared.fixed_b12);
+
+        const bool t19_ready =
+            b12_ready &&
+            g_fixed_pointlight.prepare_t19(
+                context,
+                prepared.fixed_shader.light_count,
+                prepared.fixed_carrier);
+
+        if (t19_ready) {
+            dsrrl::runtime::island_draw_adapter_request fixed{};
+            const auto local =
+                dsrrl::core::operator_bit(
+                    dsrrl::core::operator_id::
+                        local_specular_legacy);
+            const auto point =
+                dsrrl::core::operator_bit(
+                    dsrrl::core::operator_id::
+                        point_light);
+            const auto mr =
+                dsrrl::core::operator_bit(
+                    dsrrl::core::operator_id::
+                        material_response);
+            const auto diffuse_domain =
+                dsrrl::core::operator_bit(
+                    dsrrl::core::operator_id::
+                        diffuse_material_domain);
+
+            fixed.primary =
+                dsrrl::core::operator_id::
+                    local_specular_legacy;
+            fixed.additional_owners =
+                point | mr | diffuse_domain;
+            fixed.additional_shader_owners =
+                point | mr | diffuse_domain;
+            fixed.additional_constant_buffer_owners =
+                point | mr | diffuse_domain;
+            fixed.additional_resource_owners =
+                point;
+            fixed.receiver_verified = true;
+            fixed.material_verified = true;
+            fixed.pixel_shader =
+                prepared.fixed_shader.shader;
+            fixed.replace_pixel_shader = true;
+            fixed.constant_buffers[0] = {
+                12u,
+                prepared.fixed_b12,
+                local | point | mr | diffuse_domain
+            };
+            fixed.constant_buffer_count = 1u;
+            fixed.srvs[0] = {
+                19u,
+                prepared.fixed_carrier.t19
+            };
+            fixed.srv_count = 1u;
+
+            if (dsrrl::runtime::append_island_draw_request(
+                    prepared.batch,
+                    fixed) ==
+                dsrrl::runtime::island_draw_batch_result::ready) {
+                bool resources_appended = true;
+                for (std::uint32_t i = 0u;
+                     i < prepared.resources.request_count;
+                     ++i) {
+                    if (dsrrl::runtime::append_island_draw_request(
+                            prepared.batch,
+                            prepared.resources.requests[i]) !=
+                        dsrrl::runtime::island_draw_batch_result::ready) {
+                        resources_appended = false;
+                        break;
+                    }
+                }
+
+                if (resources_appended) {
+                    prepared.fixed_in_batch = true;
+                    return true;
+                }
+            }
+        }
+
+        g_material_resources.release_prepared_draw(
+            prepared.resources);
+        g_fixed_pointlight.release_prepared_draw(
+            prepared.fixed_carrier);
+        g_fixed_pointlight_pipeline.release_prepared_shader(
+            prepared.fixed_shader);
+        if (prepared.fixed_b12 != nullptr) {
+            prepared.fixed_b12->Release();
+            prepared.fixed_b12 = nullptr;
+        }
+        prepared.batch = {};
+    }
 
     if (hemdir3_bound) {
         if (!g_hemdir3.prepare_draw_request(
