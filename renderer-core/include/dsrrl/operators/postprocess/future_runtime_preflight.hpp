@@ -18,6 +18,10 @@ enum class postprocess_sfx_scope : std::uint8_t {
 
 enum class bloom_unblock_reason : std::uint8_t {
     ready_for_partial = 0,
+    history_writer_set_not_closed,
+    history_writer_order_not_closed,
+    history_draw_recurrence_not_closed,
+    history_sfx_recurrence_not_closed,
     scene_domain_bridge_not_ready,
     q8_scene_source_not_ready,
     packed_depth_bridge_not_ready,
@@ -41,10 +45,14 @@ enum class bloom_unblock_reason : std::uint8_t {
 };
 
 struct bloom_unblock_context {
-    // Required semantic input bridge. A late DSR R11G11B10_FLOAT surface is
-    // not a proven inverse source for PTDE scene code. Exact construction
-    // requires preserved/replayed PTDE normalized scene history ending in
-    // SAT -> A8R8G8B8/Q8 before the legacy Bloom graph.
+    // Exact PTDE Q8 cannot be reconstructed by a universal late transform.
+    // Authorize the scene source only after the known writer set, execution
+    // order and per-draw target recurrence are closed. FX/SFX recurrence is
+    // independent because additive/blended writes participate in Q8 history.
+    bool history_writer_set_closed = false;
+    bool history_writer_order_closed = false;
+    bool history_draw_recurrence_closed = false;
+    bool history_sfx_recurrence_closed = false;
     bool scene_domain_bridge_ready = false;
     bool q8_scene_source_ready = false;
 
@@ -98,6 +106,22 @@ inline bloom_unblock_plan evaluate_bloom_unblock_preflight(
     const bloom_unblock_context &c) noexcept
 {
     bloom_unblock_plan out;
+    if (!c.history_writer_set_closed) {
+        out.reason = bloom_unblock_reason::history_writer_set_not_closed;
+        return out;
+    }
+    if (!c.history_writer_order_closed) {
+        out.reason = bloom_unblock_reason::history_writer_order_not_closed;
+        return out;
+    }
+    if (!c.history_draw_recurrence_closed) {
+        out.reason = bloom_unblock_reason::history_draw_recurrence_not_closed;
+        return out;
+    }
+    if (!c.history_sfx_recurrence_closed) {
+        out.reason = bloom_unblock_reason::history_sfx_recurrence_not_closed;
+        return out;
+    }
     if (!c.scene_domain_bridge_ready) {
         out.reason = bloom_unblock_reason::scene_domain_bridge_not_ready;
         return out;
