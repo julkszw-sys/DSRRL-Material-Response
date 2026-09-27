@@ -6,6 +6,7 @@
 #endif
 
 #include "dsrrl/runtime/fixed_pointlight_draw_runtime.hpp"
+#include "dsrrl/runtime/runtime_hot_telemetry.hpp"
 #include "dsrrl/runtime/flver_identity_transport.hpp"
 
 #include <Windows.h>
@@ -171,7 +172,7 @@ void __fastcall capture_callback(
     try {
         if(!g_enabled.load() || g_quarantined.load() ||
            owner==nullptr || raw==nullptr || slot>=4u){
-            ++g_rejects;
+            telemetry::hot_count(g_rejects);
             return;
         }
 
@@ -179,7 +180,7 @@ void __fastcall capture_callback(
         std::memcpy(&value,raw,sizeof(value));
         if(!std::isfinite(value.x) || !std::isfinite(value.y) ||
            !std::isfinite(value.z) || !std::isfinite(value.w)){
-            ++g_rejects;
+            telemetry::hot_count(g_rejects);
             return;
         }
 
@@ -190,13 +191,13 @@ void __fastcall capture_callback(
             next->owner=owner_key;
             next->serial=g_serial.fetch_add(1u)+1u;
             g_producer_snapshot=std::move(next);
-            ++g_restarts;
+            telemetry::hot_count(g_restarts);
         }
 
         auto current=g_producer_snapshot;
         if(!current || current->owner!=owner_key ||
            current->captured_count!=slot){
-            ++g_rejects;
+            telemetry::hot_count(g_rejects);
             g_producer_snapshot.reset();
             return;
         }
@@ -214,9 +215,9 @@ void __fastcall capture_callback(
                 std::memory_order_release);
         }
 
-        ++g_captures;
+        telemetry::hot_count(g_captures);
     } catch (...) {
-        ++g_rejects;
+        telemetry::hot_count(g_rejects);
         g_quarantined.store(true);
     }
 }
@@ -363,7 +364,7 @@ ID3D11ShaderResourceView *realize_t19(
 
     if(selected->srv!=nullptr){
         selected->srv->AddRef();
-        ++g_t19_hit;
+        telemetry::hot_count(g_t19_hit);
         return selected->srv;
     }
 
@@ -400,7 +401,7 @@ ID3D11ShaderResourceView *realize_t19(
     selected->buffer=buffer;
     selected->srv=srv;
     srv->AddRef();
-    ++g_t19_create;
+    telemetry::hot_count(g_t19_create);
     return srv;
 }
 
@@ -470,7 +471,7 @@ void fixed_pointlight_draw_runtime::uninstall() noexcept
 
 void fixed_pointlight_draw_runtime::selector_event(void *owner) noexcept
 {
-    ++g_selector_seen;
+    telemetry::hot_count(g_selector_seen);
     g_draw_snapshot.reset();
 
     if(!g_enabled.load() || g_quarantined.load() || owner==nullptr)
@@ -483,7 +484,7 @@ void fixed_pointlight_draw_runtime::selector_event(void *owner) noexcept
     // unlock; clearing resets it under the lock after erasing the map.
     if(!g_have_snapshots.load(
             std::memory_order_acquire)){
-        ++g_selector_stale;
+        telemetry::hot_count(g_selector_stale);
         return;
     }
 
@@ -497,12 +498,12 @@ void fixed_pointlight_draw_runtime::selector_event(void *owner) noexcept
     }
 
     if(!selected){
-        ++g_selector_stale;
+        telemetry::hot_count(g_selector_stale);
         return;
     }
 
     g_draw_snapshot=std::move(selected);
-    ++g_selector_match;
+    telemetry::hot_count(g_selector_match);
 }
 
 bool fixed_pointlight_draw_runtime::prepare_t19(
@@ -526,7 +527,7 @@ bool fixed_pointlight_draw_runtime::prepare_t19(
         std::lock_guard<std::mutex> lock(g_mutex);
         const auto it=g_consumed_serial.find(selected->owner);
         if(it!=g_consumed_serial.end() && it->second>=selected->serial){
-            ++g_selector_stale;
+            telemetry::hot_count(g_selector_stale);
             return false;
         }
     }
@@ -546,7 +547,7 @@ bool fixed_pointlight_draw_runtime::prepare_t19(
         auto &consumed=g_consumed_serial[selected->owner];
         if(consumed>=selected->serial){
             srv->Release();
-            ++g_selector_stale;
+            telemetry::hot_count(g_selector_stale);
             return false;
         }
         consumed=selected->serial;
@@ -558,7 +559,7 @@ bool fixed_pointlight_draw_runtime::prepare_t19(
     prepared.owner_verified=true;
     prepared.producer_serial_fresh=true;
     prepared.ready=true;
-    ++g_requests;
+    telemetry::hot_count(g_requests);
     return true;
 }
 
