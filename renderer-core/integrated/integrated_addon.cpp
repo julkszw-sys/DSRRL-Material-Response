@@ -2938,9 +2938,17 @@ bool on_draw_indexed(
     release_prepared_island_batch(
         prepared);
 
-    if (mr_in_batch)
+    if (mr_in_batch) {
         g_mr_draw_runtime.account_dispatch_result(
             dispatch.transaction);
+        if (dsrrl::runtime::draw_tx_issued(
+                dispatch.transaction) &&
+            !g_mr_once_draw_issued.exchange(true)) {
+            reshade::log::message(
+                reshade::log::level::info,
+                "[DSRRL MR ACT] stage=draw_issued");
+        }
+    }
 
     return dsrrl::runtime::draw_tx_issued(
         dispatch.transaction);
