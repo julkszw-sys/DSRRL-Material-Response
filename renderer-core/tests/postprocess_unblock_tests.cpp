@@ -224,6 +224,8 @@ int main()
     CHECK(static_scene.fx_sfx_recurrence ==
           bloom_fx_sfx_recurrence_proof::entity_callback_route_closed);
     CHECK(!static_scene.writer_set_exhaustiveness_proven);
+    CHECK(static_scene.main_scene_recurrence ==
+          bloom_main_scene_recurrence_proof::blended_target_write_closed);
     CHECK(validate_bloom_scene_bridge_carrier(static_scene) ==
           bloom_scene_bridge_result::writer_set_not_closed);
 
@@ -254,6 +256,8 @@ int main()
     scene.writer_order=bloom_writer_order_proof::execution_order_closed;
     scene.draw_recurrence=
         bloom_draw_recurrence_proof::target_write_recurrence_closed;
+    scene.main_scene_recurrence=
+        bloom_main_scene_recurrence_proof::blended_target_write_closed;
     scene.fx_sfx_recurrence=
         bloom_fx_sfx_recurrence_proof::target_write_recurrence_closed;
     scene.fx_material_route=
