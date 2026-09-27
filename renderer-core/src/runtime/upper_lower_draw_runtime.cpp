@@ -2033,12 +2033,16 @@ void __fastcall hook_steady_eval_tail(
             std::memory_order_acquire) ||
         !g_producer.active ||
         g_core == nullptr ||
-        !g_core->features().enabled(
-            core::operator_id::upper_lower) ||
         dst == nullptr ||
         source == nullptr) {
         return;
     }
+
+    // The integrated addon enables upper_lower before install() and uninstalls
+    // this producer before disabling the feature registry. Therefore
+    // g_direct_ul_producer_active is the hot-path activation token. Do not
+    // call feature_registry::enabled() here: it takes a std::mutex and this
+    // hook runs once per steady producer evaluation.
 
     f4 upper{};
     f4 lower{};
@@ -2238,8 +2242,6 @@ void *__fastcall hook_blend_packer(
     if (g_direct_ul_producer_active.load(
             std::memory_order_acquire) &&
         g_core != nullptr &&
-        g_core->features().enabled(
-            core::operator_id::upper_lower) &&
         dst != nullptr &&
         g_producer.have_upper &&
         g_producer.have_lower) {
@@ -2832,11 +2834,14 @@ bool upper_lower_draw_runtime::prepare_upper_lower_carrier(
 
     if (!g_enabled.load() ||
         g_quarantined.load() ||
-        !core_.features().enabled(
-            core::operator_id::upper_lower) ||
         context == nullptr ||
         !g_draw_snapshot)
         return false;
+
+    // install() is only reached after the integrated feature registry has
+    // enabled upper_lower, and uninstall() runs before that registry is
+    // disabled. g_enabled is therefore the lifecycle-equivalent hot token;
+    // avoid the registry mutex on every carrier request.
 
     auto *b13 =
         realize_b13(
