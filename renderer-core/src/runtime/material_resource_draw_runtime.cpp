@@ -122,6 +122,7 @@ std::atomic<std::uint64_t> g_sidecar_missing{0};
 std::atomic<std::uint64_t> g_sidecar_unsupported{0};
 std::atomic<std::uint64_t> g_spec_requests{0};
 std::atomic<std::uint64_t> g_fixed_pointlight_spec_requests{0};
+std::atomic<std::uint64_t> g_fixed_pointlight_diffuse_requests{0};
 std::atomic<std::uint64_t> g_diffuse_requests{0};
 std::atomic<std::uint64_t> g_normal_requests{0};
 std::atomic<std::uint64_t> g_fail_open{0};
@@ -1459,6 +1460,7 @@ prepare_fixed_pointlight_material_requests(
     prepared.spec_rgb = true;
     prepared.diffuse = true;
     ++g_fixed_pointlight_spec_requests;
+    ++g_fixed_pointlight_diffuse_requests;
     ++g_spec_requests;
     ++g_diffuse_requests;
 
@@ -1707,6 +1709,7 @@ telemetry() const noexcept
         g_sidecar_unsupported.load(),
         g_spec_requests.load(),
         g_fixed_pointlight_spec_requests.load(),
+        g_fixed_pointlight_diffuse_requests.load(),
         g_diffuse_requests.load(),
         g_normal_requests.load(),
         g_fail_open.load(),
@@ -1725,6 +1728,7 @@ reset() noexcept
     g_sidecar_unsupported.store(0u);
     g_spec_requests.store(0u);
     g_fixed_pointlight_spec_requests.store(0u);
+    g_fixed_pointlight_diffuse_requests.store(0u);
     g_diffuse_requests.store(0u);
     g_normal_requests.store(0u);
     g_fail_open.store(0u);
