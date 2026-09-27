@@ -221,6 +221,8 @@ jobs:
             'DrawIndexed',
             'DrawIndexedInstanced',
             'restore_ps_constant_buffer_window',
+            'shader_captured',
+            'mutation.constant_buffer_count != 0u',
             'transactions().begin',
             'transactions().restore',
             'issued_restore_failed',
@@ -267,6 +269,8 @@ jobs:
             'generated::spec_name_hash_allowed_v12',
             'generated::diffuse_pair_allowed_v12',
             'generated::normal_tuple_allowed_v12',
+            'logical_hashes_for',
+            'lookup_many',
             'build_island_draw_mutation'
           )) {
             if ($resourceRuntime -notmatch [regex]::Escape($required)) { throw "Material resource island adapter invariant missing: $required" }
@@ -318,6 +322,8 @@ jobs:
           }
 
           foreach ($required in @(
+            'k_route_fixed_pointlight',
+            'g_integrated_pipeline_route_cache',
             'g_fixed_pointlight_pipeline.prepare_bound_shader',
             'evaluate_direct_pointlight_material',
             'prepare_fixed_pointlight_material_requests',
@@ -326,6 +332,10 @@ jobs:
             'g_fixed_draw_batch_ready'
           )) {
             if ($entry -notmatch [regex]::Escape($required)) { throw "Integrated fixed PointLight atomic draw path missing: $required" }
+          }
+
+          if ($entry -match 'bound_light_count\s*\(') {
+            throw "Fixed PointLight draw-map precheck regressed into integrated hot path"
           }
 
           foreach ($required in @(
@@ -898,154 +908,3 @@ jobs:
             product_line = $v.product_line
             version = $v.version
             version_namespace = $v.version_policy.namespace
-            development_status = $v.status
-            legacy_monolith_version = $v.legacy_monolith.version
-            legacy_monolith_status = $v.legacy_monolith.status
-            legacy_runtime_linked = $false
-            build_kind = "DEVELOPMENT"
-            source_commit = $env:GITHUB_SHA
-            source_ref = $sourceRef
-            source_ref_kind = $sourceRefKind
-            reshade_commit = "3645e3025d1d98a90e318278858931f034d5d1f6"
-            reshade_api = 20
-            target = "$stem.addon64"
-            addon_sha256 = $addonHash
-            version_manifest_sha256 = $versionHash
-            integrated_cmake_sha256 = $cmakeHash
-            entrypoint_sha256 = $entryHash
-            a1_bridge_source_sha256 = $bridgeHash
-            flver_engine_hooks_sha256 = $flverHookHash
-            flver_identity_detour_sha256 = $flverDetourHash
-            flver_identity_registry_sha256 = $flverRegistryHash
-            flver_identity_transport = "CONSTRUCTION_IMPLEMENTED"
-            stable_receiver_pipeline_registry_sha256 = $receiverRegistryHash
-            stable_receiver_census_sha256 = $receiverCensusHash
-            material_owner_producer_sha256 = $materialOwnerHash
-            material_response_seed_sha256 = $materialSeedHash
-            material_response_draw_transaction_sha256 = $materialTxHash
-            shared_draw_transaction_sha256 = $sharedTxHash
-            island_draw_adapter_sha256 = $islandAdapterHash
-            draw_transaction_policy_sha256 = $drawPolicyHash
-            draw_transaction_policy_coverage = "25_OF_25"
-            shared_draw_executor_surface = "PS_CB_SRV_SAMPLER"
-            texture_identity_transport_sha256 = $textureTransportHash
-            texture_identity_detour_sha256 = $textureDetourHash
-            bloom_fx_draw_transport_sha256 = $bloomFxHash
-            bloom_fx_draw_transport_header_sha256 = $bloomFxHeaderHash
-            bloom_scene_sidecar_runtime_sha256 = $bloomSidecarHash
-            bloom_scene_sidecar_runtime_header_sha256 = $bloomSidecarHeaderHash
-            bloom_fx_re_provenance_sha256 = $bloomFxProvenanceHash
-            bloom_waterwave_dsr_uniqueness_provenance_sha256 = $bloomWaterwaveUniquenessHash
-            bloom_waterwave_authored_identity_sha256 = $bloomWaterwaveIdentityHash
-            bloom_fx_diagnostic = "SAME_INSTANCE_MODEL_PLUS_BACKEND_SEMANTIC_CANDIDATE_TELEMETRY"
-            bloom_fx_q8_writer_authority = "FAIL_OPEN_NOT_AUTHORIZED"
-            bloom_q8_sidecar = "RESOURCE_LIFECYCLE_CONSTRUCTION_INTEGRATED_WRITES_NOT_AUTHORIZED"
-            bloom_hdr_pixel_behavior = "OPEN"
-            material_resource_draw_runtime_sha256 = $resourceRuntimeHash
-            spec_rgb_consumer_materializer_sha256 = $specConsumerHash
-            pmetal_envspec_materializer_sha256 = $envspecMaterializerHash
-            pmetal_envspec_shader_authority_sha256 = $envspecAuthorityHash
-            pmetal_envspec_hemenvlerp_materializer_sha256 = $envspecLerpMaterializerHash
-            pmetal_envspec_hemenvlerp_materializer_header_sha256 = $envspecLerpMaterializerHeaderHash
-            hemenvlerp_pipeline_registry_sha256 = $envspecLerpRegistryHash
-            hemenvlerp_pipeline_registry_header_sha256 = $envspecLerpRegistryHeaderHash
-            hemenvlerp_mr_authority_tsv_sha256 = $hemenvLerpMrAuthorityHash
-            hemenvlerp_mr_generator_sha256 = $hemenvLerpMrGeneratorHash
-            pmetal_envspec_hemenvlerp_authority_tsv_sha256 = $envspecLerpAuthorityHash
-            pmetal_envspec_hemenvlerp_generator_sha256 = $envspecLerpGeneratorHash
-            generated_hemenvlerp_mr_authority_sha256 = $generatedHemEnvLerpMrHash
-            generated_pmetal_envspec_hemenvlerp_authority_sha256 = $generatedEnvSpecLerpHash
-            pmetal_envspec_hemenvlerp_route = "P_METAL_DSB_EXACT_PAIR9_10_11_TO_RECEIVERS33_34_35"
-            pmetal_envspec_hemenvlerp_runtime_activation = "NOT_TESTED"
-            pmetal_envspec_resource_runtime_sha256 = $envspecResourceRuntimeHash
-            pmetal_envspec_draw_runtime_sha256 = $envspecDrawRuntimeHash
-            pmetal_envspec_source_authority_sha256 = $pmetalSourceAuthorityHash
-            pmetal_envspec_source_generator_sha256 = $pmetalSourceGeneratorHash
-            pmetal_envspec_source_authority = "20_BANKS_1246_ROWS_EXACT"
-            pmetal_envspec_route = "P_METAL_DSB_ROUTE345_RECEIVERS33_34_35_SLOT2"
-            pmetal_envspec_runtime_activation = "NOT_TESTED"
-            subsurface_draw_runtime_sha256 = $subsurfaceRuntimeHash
-            subsurface_pipeline_registry_sha256 = $subsurfaceRegistryHash
-            upper_lower_draw_runtime_sha256 = $upperLowerHash
-            upper_lower_hemenv_materializer_sha256 = $upperLowerMaterializerHash
-            upper_lower_pipeline_registry_sha256 = $upperLowerRegistryHash
-            upper_lower_hemenv_draw_runtime_sha256 = $upperLowerDrawHash
-            upper_lower_consumer_authority_sha256 = $upperLowerAuthorityHash
-            dxbc_rdef_patch_sha256 = $rdefPatchHash
-            upper_lower_consumer_count = 36
-            upper_lower_spc_consumer_count = 24
-            upper_lower_nospc_consumer_count = 12
-            upper_lower_inert_hemenv_excluded_count = 12
-            upper_lower_carrier = "EXACT_HEMENV_PS_PLUS_B13_LANES_6_7"
-            mr_upper_lower_composition = "SINGLE_PS_B12_B13_EXACT_SPC_RECEIVER"
-            hemdir3_mode_transport_sha256 = $mode2Hash
-            hemdir3_mode_detour_sha256 = $mode2AsmHash
-            hemdir3_activation = "NOSPC_AND_SPC_CONSTRUCTION_ARMED_RUNTIME_NOT_TESTED"
-            hemdir3_b13_materializer_sha256 = $h3MaterializerHash
-            hemdir3_pipeline_registry_sha256 = $h3RegistryHash
-            hemdir3_draw_runtime_sha256 = $h3RuntimeHash
-            hemdir3_receiver_authority_sha256 = $h3ReceiverAuthorityHash
-            hemdir3_patch_authority_sha256 = $h3PatchAuthorityHash
-            hemdir3_replacement_authority_sha256 = $h3ReplacementAuthorityHash
-            hemdir3_spc_b12_authority_sha256 = $h3SpcAuthorityHash
-            hemdir3_spc_material_donor_authority_sha256 = $h3SpcDonorAuthorityHash
-            hemdir3_spc_b12_generator_sha256 = $h3SpcAuthorityGeneratorHash
-            hemdir3_spc_donor_generator_sha256 = $h3SpcDonorGeneratorHash
-            hemdir3_spc_b12_layout = "b12_0_xyz_RAW_PTDE_C101__b12_1_x_PTDE_C102"
-            hemdir3_native_receiver_count = 48
-            hemdir3_nospc_construction_count = 24
-            hemdir3_spc_construction_count = 24
-            hemdir3_spc_runtime_activation = "NOT_TESTED"
-            subsurface_route = "EXACT_DSBT_TO_DSB_TARGET_33_34_35"
-            spec_routes_v12_tsv_sha256 = $specRoutesHash
-            diffuse_routes_v12_tsv_sha256 = $diffuseRoutesHash
-            normal_routes_v12_tsv_sha256 = $normalRoutesHash
-            material_resource_batch_islands = @("spec_rgb","diffuse","normal")
-            draw_composition = "SINGLE_REPLAY_CONFLICT_CHECKED_BATCH"
-            material_response_v211_materializer_sha256 = $materialV211Hash
-            material_response_v211_plan_sha256 = $materialV211PlanHash
-            material_response_constants_sha256 = $materialConstantsHash
-            material_response_island_sha256 = $materialResponseIslandHash
-            fixed_pointlight_draw_runtime_sha256 = $fixedPointlightDrawRuntimeHash
-            fixed_pointlight_pipeline_runtime_sha256 = $fixedPointlightPipelineRuntimeHash
-            fixed_pointlight_materializer_sha256 = $fixedPointlightMaterializerHash
-            fixed_pointlight_material_samples_sha256 = $fixedPointlightSamplesHash
-            fixed_pointlight_output_cut_sha256 = $fixedPointlightOutputCutHash
-            fixed_pointlight_operand_contract_sha256 = $fixedPointlightOperandHash
-            fixed_pointlight_legacy_kernel_sha256 = $fixedPointlightLegacyKernelHash
-            fixed_pointlight_t19_lowering_sha256 = $fixedPointlightT19LoweringHash
-            fixed_pointlight_spec_rgb_bridge_sha256 = $fixedPointlightSpecBridgeHash
-            fixed_pointlight_ptde_pairs_sha256 = $fixedPointlightPairsHash
-            fixed_pointlight_endpoint_audit_sha256 = $fixedPointlightEndpointAuditHash
-            fixed_pointlight_draw_composition = "EXACT_RAW_HOST_PS_PLUS_B12_PLUS_T19_PLUS_T10_T16_ATOMIC_DRAW_TRANSACTION"
-            fixed_pointlight_runtime_activation = "NOT_TESTED"
-            fixed_pointlight_pixel_behavior = "OPEN"
-            material_response_draw_probe = "VISIBLE_EXACT_OWNER_RECEIVER_PS_B12_BATCH_TRANSACTION"
-            material_response_feature_armed = $true
-            material_response_runtime_activation = "NOT_TESTED"
-            boot_armed_operator_count = 13
-            single_addon_entrypoint = $true
-            draw_replay = $true
-            runtime_status = "NOT_TESTED"
-            bridge_activation = "NOT_TESTED"
-            pixel_status = "OPEN"
-          }
-
-          New-Item -ItemType Directory -Force -Path package-integrated | Out-Null
-          Copy-Item $addon package-integrated/
-          Copy-Item renderer-core/integrated/README.md package-integrated/
-          Copy-Item renderer-core/integrated/VERSION.json package-integrated/
-          $audit | ConvertTo-Json -Depth 6 | Set-Content package-integrated/BUILD_AUDIT.json -Encoding UTF8
-
-          $zip = "$stem.zip"
-          Compress-Archive -Path package-integrated/* -DestinationPath $zip -Force
-          Get-FileHash $zip -Algorithm SHA256
-          "DSRRL_CORE_ISLANDS_ARTIFACT=$stem" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-          "DSRRL_CORE_ISLANDS_ZIP=$zip" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-
-      - name: Upload Core+Islands development package
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ env.DSRRL_CORE_ISLANDS_ARTIFACT }}
-          path: ${{ env.DSRRL_CORE_ISLANDS_ZIP }}
-          if-no-files-found: error
