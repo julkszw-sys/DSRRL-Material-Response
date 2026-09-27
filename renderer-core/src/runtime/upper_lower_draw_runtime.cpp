@@ -910,7 +910,30 @@ bool read_exact_pmetal_env_source(
 
     if (cached_bank.valid &&
         cached_bank.base == base) {
-        count = cached_bank.count;
+        // The source object is engine-attested at this hook. Recheck the tiny
+        // immutable header identity directly so address reuse or a changed
+        // bank count cannot inherit an old negative/positive verdict. This
+        // retains fail-open identity without reintroducing VirtualQuery.
+        std::uint16_t live_version = 0u;
+        std::uint16_t live_count = 0u;
+        std::memcpy(
+            &live_version,
+            base + 8u,
+            sizeof(live_version));
+        std::memcpy(
+            &live_count,
+            base + 10u,
+            sizeof(live_count));
+
+        if (live_version != 4u ||
+            live_count != cached_bank.count ||
+            live_count == 0u ||
+            live_count > 256u) {
+            cached_bank = {};
+            return false;
+        }
+
+        count = live_count;
         bank_signature =
             cached_bank.signature;
         bank = cached_bank.bank;
