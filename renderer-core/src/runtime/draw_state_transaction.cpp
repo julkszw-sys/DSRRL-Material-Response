@@ -1,5 +1,6 @@
 #include "dsrrl/runtime/draw_state_transaction.hpp"
 #include "dsrrl/runtime/d3d11_cb_window.hpp"
+#include "dsrrl/runtime/runtime_hot_telemetry.hpp"
 #include "dsrrl/core/draw_transaction_policy.hpp"
 
 #ifndef WIN32_LEAN_AND_MEAN
@@ -267,7 +268,7 @@ bool draw_state_transaction_runtime::begin(
     if (cmd_list == nullptr ||
         quarantined_.load() ||
         !validate_mutation(mutation)) {
-        ++begin_fail_;
+        telemetry::hot_count(begin_fail_);
         return false;
     }
 
@@ -275,7 +276,7 @@ bool draw_state_transaction_runtime::begin(
         reinterpret_cast<ID3D11DeviceContext *>(
             cmd_list->get_native());
     if (ctx == nullptr) {
-        ++begin_fail_;
+        telemetry::hot_count(begin_fail_);
         return false;
     }
 
@@ -288,6 +289,7 @@ bool draw_state_transaction_runtime::begin(
     }
 
     state.verify_native_readback =
+        telemetry::native_state_verification_enabled() &&
         verify_native_readback_for(mutation);
 
     if (mutation.replace_pixel_shader) {
@@ -304,7 +306,7 @@ bool draw_state_transaction_runtime::begin(
         if (state.old_shader == nullptr ||
             class_count > classes.size()) {
             release_state(state);
-            ++begin_fail_;
+            telemetry::hot_count(begin_fail_);
             return false;
         }
 
@@ -352,7 +354,7 @@ bool draw_state_transaction_runtime::begin(
 
         if (!capture.coherent) {
             release_state(state);
-            ++begin_fail_;
+            telemetry::hot_count(begin_fail_);
             return false;
         }
     }
@@ -393,7 +395,7 @@ bool draw_state_transaction_runtime::begin(
 
         if (plan.patch_count >= plan.patches.size()) {
             release_state(state);
-            ++begin_fail_;
+            telemetry::hot_count(begin_fail_);
             return false;
         }
 
@@ -408,7 +410,7 @@ bool draw_state_transaction_runtime::begin(
         if ((mutation.carrier_owners & bit) != 0u &&
             carrier_mask == 0u) {
             release_state(state);
-            ++begin_fail_;
+            telemetry::hot_count(begin_fail_);
             return false;
         }
 
@@ -425,11 +427,13 @@ bool draw_state_transaction_runtime::begin(
     state.command = command_key(cmd_list);
     if (!core_.transactions().begin(
             state.command,
-            ++draw_serial_,
+            draw_serial_.fetch_add(
+                1u,
+                std::memory_order_relaxed) + 1u,
             context_kind_of(ctx),
             plan)) {
         release_state(state);
-        ++begin_fail_;
+        telemetry::hot_count(begin_fail_);
         return false;
     }
     state.core_started = true;
@@ -541,18 +545,18 @@ bool draw_state_transaction_runtime::begin(
     
     
     } else {
-        ++native_readback_skipped_;
+        telemetry::hot_count(native_readback_skipped_);
     }
 
     if (!bound) {
-        ++bind_fail_;
+        telemetry::hot_count(bind_fail_);
         if (!restore(cmd_list, state))
             quarantined_.store(true);
-        ++begin_fail_;
+        telemetry::hot_count(begin_fail_);
         return false;
     }
 
-    ++begin_ok_;
+    telemetry::hot_count(begin_ok_);
     return true;
 }
 
@@ -570,7 +574,7 @@ bool draw_state_transaction_runtime::restore(
                 core_.transactions().restore(
                     state.command);
         release_state(state);
-        ++restore_fail_;
+        telemetry::hot_count(restore_fail_);
         quarantined_.store(true);
         return false;
     }
@@ -585,7 +589,7 @@ bool draw_state_transaction_runtime::restore(
                     state.command);
         (void)core_restored;
         release_state(state);
-        ++restore_fail_;
+        telemetry::hot_count(restore_fail_);
         quarantined_.store(true);
         return false;
     }
@@ -757,12 +761,12 @@ bool draw_state_transaction_runtime::restore(
     release_state(state);
 
     if (!native_restored || !core_restored) {
-        ++restore_fail_;
+        telemetry::hot_count(restore_fail_);
         quarantined_.store(true);
         return false;
     }
 
-    ++restore_ok_;
+    telemetry::hot_count(restore_ok_);
     return true;
 }
 
@@ -795,7 +799,7 @@ draw_tx_result draw_state_transaction_runtime::replay_draw(
             first_instance);
     }
 
-    ++draws_issued_;
+    telemetry::hot_count(draws_issued_);
 
     return restore(cmd_list, state)
         ? draw_tx_result::issued_restored
@@ -835,7 +839,7 @@ draw_state_transaction_runtime::replay_draw_indexed(
             first_instance);
     }
 
-    ++draws_issued_;
+    telemetry::hot_count(draws_issued_);
 
     return restore(cmd_list, state)
         ? draw_tx_result::issued_restored
