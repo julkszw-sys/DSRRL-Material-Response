@@ -753,9 +753,9 @@ void log_state(const char *tag) noexcept
         "create=%llu candidate=%llu exact=%llu materialized=%llu "
         "unknown=%llu no_owner=%llu failopen=%llu init_ok=%llu "
         "init_bad=%llu binds=%llu quarantine=%u "
-        "flver_hook=%u/%u/%u prov=%u owner_enrich=%u restore_fail=%u "
+        "flver_hook=%u/%u/%u mtd_hook=%u prov=%u owner_enrich=%u actual_carrier=%u restore_fail=%u "
         "inserts=%llu lookups=%llu hits=%llu misses=%llu erases=%llu invalid=%llu "
-        "owner_sel=%llu owner_enriched=%llu owner_auth=%llu owner_fo=%llu "
+        "owner_sel=%llu owner_enriched=%llu owner_auth=%llu owner_actual=%llu owner_fo=%llu "
         "mr_ready=%u mr_eval=%llu mr_would_activate=%llu mr_fo=%llu "
         "mr_payload_ok=%llu mr_payload_fail=%llu "
         "mr_ul_payload=%llu/%llu mr_ul_reg=%llu/%llu mr_ul_prepare=%llu mr_ul_miss=%llu "
@@ -786,8 +786,10 @@ void log_state(const char *tag) noexcept
         h.parser_armed ? 1u : 0u,
         h.selector_armed ? 1u : 0u,
         h.destructor_armed ? 1u : 0u,
+        h.mtd_armed ? 1u : 0u,
         h.provenance_ok ? 1u : 0u,
         h.selector_owner_enrichment ? 1u : 0u,
+        h.exact_runtime_material_carrier ? 1u : 0u,
         h.restore_failed ? 1u : 0u,
         static_cast<unsigned long long>(f.inserts),
         static_cast<unsigned long long>(f.lookups),
@@ -798,6 +800,8 @@ void log_state(const char *tag) noexcept
         static_cast<unsigned long long>(m.selector_events),
         static_cast<unsigned long long>(m.owner_enriched),
         static_cast<unsigned long long>(m.owner_authenticated),
+        static_cast<unsigned long long>(
+            m.actual_material_authenticated),
         static_cast<unsigned long long>(m.fail_open),
         g_mr_ready.load() ? 1u : 0u,
         static_cast<unsigned long long>(g_mr_draw_eval.load()),

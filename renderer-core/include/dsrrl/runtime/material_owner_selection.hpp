@@ -9,6 +9,7 @@ struct material_owner_selection_telemetry {
     std::uint64_t accepted_callers = 0;
     std::uint64_t owner_enriched = 0;
     std::uint64_t owner_authenticated = 0;
+    std::uint64_t actual_material_authenticated = 0;
     std::uint64_t fail_open = 0;
 };
 

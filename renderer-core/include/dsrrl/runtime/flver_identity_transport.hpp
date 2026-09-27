@@ -9,8 +9,10 @@ struct hook_status {
     bool parser_armed = false;
     bool selector_armed = false;
     bool destructor_armed = false;
+    bool mtd_armed = false;
     bool restore_failed = false;
     bool selector_owner_enrichment = false;
+    bool exact_runtime_material_carrier = false;
 };
 
 bool install() noexcept;
@@ -23,6 +25,8 @@ struct selector_owner_telemetry {
     std::uint64_t owner_mtd_hits = 0;
     std::uint64_t exact_owner_ready = 0;
     std::uint64_t owner_fail_open = 0;
+    std::uint64_t runtime_material_hits = 0;
+    std::uint64_t runtime_material_ready = 0;
     std::uint64_t consumed = 0;
     std::uint64_t consume_misses = 0;
 };

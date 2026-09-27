@@ -13,6 +13,7 @@ std::atomic<std::uint64_t> g_selector_events{0};
 std::atomic<std::uint64_t> g_accepted_callers{0};
 std::atomic<std::uint64_t> g_owner_enriched{0};
 std::atomic<std::uint64_t> g_owner_authenticated{0};
+std::atomic<std::uint64_t> g_actual_material_authenticated{0};
 std::atomic<std::uint64_t> g_fail_open{0};
 
 struct owner_auth_cache_entry {
@@ -97,10 +98,20 @@ bool material_owner_selection_publish(
     const operators::material_response::material_identity &identity) noexcept
 {
     telemetry::hot_count(g_selector_events);
-    if (!identity.valid ||
-        !identity.owner_tuple_exact ||
-        !identity.material_slot_valid ||
-        identity.semantic_name_hash == 0u) {
+
+    const bool exact_runtime_pmetal =
+        operators::material_response::
+            exact_runtime_pmetal_material_identity(
+                identity);
+
+    const bool flver_shape_valid =
+        identity.valid &&
+        identity.owner_tuple_exact &&
+        identity.material_slot_valid &&
+        identity.semantic_name_hash != 0u;
+
+    if (!exact_runtime_pmetal &&
+        !flver_shape_valid) {
         telemetry::hot_count(g_fail_open);
         g_current.reset();
         return false;
@@ -108,14 +119,21 @@ bool material_owner_selection_publish(
 
     telemetry::hot_count(g_owner_enriched);
 
-    if (!owner_tuple_authenticated_cached(
+    if (!exact_runtime_pmetal &&
+        !owner_tuple_authenticated_cached(
             identity)) {
         telemetry::hot_count(g_fail_open);
         g_current.reset();
         return false;
     }
 
-    telemetry::hot_count(g_owner_authenticated);
+    if (exact_runtime_pmetal)
+        telemetry::hot_count(
+            g_actual_material_authenticated);
+    else
+        telemetry::hot_count(
+            g_owner_authenticated);
+
     telemetry::hot_count(g_accepted_callers);
     g_current = identity;
     return true;
@@ -140,6 +158,7 @@ material_owner_selection_telemetry material_owner_selection_stats() noexcept
         g_accepted_callers.load(),
         g_owner_enriched.load(),
         g_owner_authenticated.load(),
+        g_actual_material_authenticated.load(),
         g_fail_open.load()
     };
 }
@@ -151,6 +170,7 @@ void material_owner_selection_reset_stats() noexcept
     g_accepted_callers.store(0);
     g_owner_enriched.store(0);
     g_owner_authenticated.store(0);
+    g_actual_material_authenticated.store(0);
     g_fail_open.store(0);
     g_owner_auth_cache = {};
 }
