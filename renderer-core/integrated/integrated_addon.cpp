@@ -121,6 +121,11 @@ std::atomic<std::uint64_t> g_mr_fail_open{0};
 std::atomic_bool g_mr_ready{false};
 std::atomic<std::uint64_t> g_mr_payload_materialize_ok{0};
 std::atomic<std::uint64_t> g_mr_payload_materialize_fail{0};
+std::atomic_bool g_mr_once_receiver_hit{false};
+std::atomic_bool g_mr_once_owner_join{false};
+std::atomic_bool g_mr_once_decision_active{false};
+std::atomic_bool g_mr_once_batch_ready{false};
+std::atomic_bool g_mr_once_draw_issued{false};
 std::atomic<std::uint64_t> g_mr_ul_payload_materialize_ok{0};
 std::atomic<std::uint64_t> g_mr_ul_payload_materialize_fail{0};
 std::atomic<std::uint64_t> g_lerp_full_draw_ready{0};
@@ -626,6 +631,12 @@ bool observe_draw_identity(
         hot_count(g_draw_receiver_hits);
         if (rx != nullptr)
             hot_count(rx->accepted);
+        if (!fixed_pointlight_receiver &&
+            !g_mr_once_receiver_hit.exchange(true)) {
+            reshade::log::message(
+                reshade::log::level::info,
+                "[DSRRL MR ACT] stage=receiver_hit");
+        }
     }
     if (owner_ok)
         hot_count(g_draw_owner_hits);
@@ -650,6 +661,12 @@ bool observe_draw_identity(
     hot_count(g_draw_joins);
     if (rx != nullptr)
         hot_count(rx->joined);
+    if (!fixed_pointlight_receiver &&
+        !g_mr_once_owner_join.exchange(true)) {
+        reshade::log::message(
+            reshade::log::level::info,
+            "[DSRRL MR ACT] stage=owner_join");
+    }
 
     if (subsurface_bound ||
         hemdir3_bound) {
@@ -678,6 +695,12 @@ bool observe_draw_identity(
         hot_count(g_mr_would_activate);
         if (rx != nullptr)
             hot_count(rx->mr_active);
+        if (!fixed_pointlight_receiver &&
+            !g_mr_once_decision_active.exchange(true)) {
+            reshade::log::message(
+                reshade::log::level::info,
+                "[DSRRL MR ACT] stage=decision_active");
+        }
     } else {
         hot_count(g_mr_fail_open);
         if (rx != nullptr)
@@ -2661,6 +2684,11 @@ bool prepare_island_batch(
     }
 
     if (prepared.mr_in_batch) {
+        if (!g_mr_once_batch_ready.exchange(true)) {
+            reshade::log::message(
+                reshade::log::level::info,
+                "[DSRRL MR ACT] stage=batch_ready");
+        }
         if (dsrrl::runtime::append_island_draw_request(
                 prepared.batch,
                 prepared.mr.request) !=
@@ -2804,9 +2832,17 @@ bool on_draw(
     release_prepared_island_batch(
         prepared);
 
-    if (mr_in_batch)
+    if (mr_in_batch) {
         g_mr_draw_runtime.account_dispatch_result(
             dispatch.transaction);
+        if (dsrrl::runtime::draw_tx_issued(
+                dispatch.transaction) &&
+            !g_mr_once_draw_issued.exchange(true)) {
+            reshade::log::message(
+                reshade::log::level::info,
+                "[DSRRL MR ACT] stage=draw_issued");
+        }
+    }
 
     return dsrrl::runtime::draw_tx_issued(
         dispatch.transaction);
@@ -3003,6 +3039,11 @@ bool AddonInit(
     g_mr_fail_open.store(0);
     g_mr_payload_materialize_ok.store(0);
     g_mr_payload_materialize_fail.store(0);
+    g_mr_once_receiver_hit.store(false);
+    g_mr_once_owner_join.store(false);
+    g_mr_once_decision_active.store(false);
+    g_mr_once_batch_ready.store(false);
+    g_mr_once_draw_issued.store(false);
     g_mr_ul_payload_materialize_ok.store(0);
     g_mr_ul_payload_materialize_fail.store(0);
     g_lerp_full_draw_ready.store(0);
