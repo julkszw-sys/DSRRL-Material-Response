@@ -1075,19 +1075,35 @@ void log_effect_matrix(
     const auto flver =
         dsrrl::runtime::
             flver_identity_transport::status();
+    const auto pmetal =
+        g_pmetal_envspec.telemetry();
 
-    char detail[896]{};
+    char detail[1280]{};
     std::snprintf(
         detail,
         sizeof(detail),
         "[DSRRL EFFECT DETAIL] "
         "MR mtd_classified=%u cache_hit=%u selection_published=%u "
+        "PMetal entry=%u feature=%u material=%u semantic=%u source=%u "
+        "receiver_source=%u repl=%u probe=%u spec=%u b12=%u request=%u fail=0x%08X "
         "UL producer=%u changed=%u quarantine=%u restore_fail=%u "
         "Bloom diag_hooks=%u/%u model_hook=%u proof=%u contents=%u "
         "fx_authorized=%llu fx_rejected=%llu",
         flver.runtime_mtd_classified ? 1u : 0u,
         flver.runtime_mtd_cache_hit ? 1u : 0u,
         flver.runtime_mtd_selection_published ? 1u : 0u,
+        pmetal.effect_entry_seen ? 1u : 0u,
+        pmetal.effect_feature_ready ? 1u : 0u,
+        pmetal.effect_material_ready ? 1u : 0u,
+        pmetal.effect_semantic_ready ? 1u : 0u,
+        pmetal.effect_source_ready ? 1u : 0u,
+        pmetal.effect_receiver_source_ready ? 1u : 0u,
+        pmetal.effect_replacement_ready ? 1u : 0u,
+        pmetal.effect_probe_ready ? 1u : 0u,
+        pmetal.effect_spec_rgb_ready ? 1u : 0u,
+        pmetal.effect_b12_ready ? 1u : 0u,
+        pmetal.effect_request_ready ? 1u : 0u,
+        static_cast<unsigned>(pmetal.effect_fail_mask),
         ul.direct_ul_producer_active ? 1u : 0u,
         ul.direct_ul_operator_changed ? 1u : 0u,
         ul.quarantined ? 1u : 0u,
