@@ -659,7 +659,7 @@ void log_state(const char *tag) noexcept
         "tx_begin_ok=%llu tx_begin_fail=%llu tx_bind_fail=%llu tx_issued=%llu "
         "tx_restore_ok=%llu tx_restore_fail=%llu tx_readback_skip=%llu tx_quarantine=%u "
         "tex_hook=%u/%u tex_restore_fail=%u res_named=%llu res_ready=%llu res_missing=%llu "
-        "res_unsupported=%llu spec_req=%llu diff_req=%llu norm_req=%llu res_fo=%llu "
+        "res_unsupported=%llu spec_req=%llu fixed_spec=%llu fixed_diff=%llu diff_req=%llu norm_req=%llu res_fo=%llu "
         "ul_hook=%u ul_q=%u ul_restore_fail=%u ul_pub=%llu ul_sel=%llu/%llu/%llu ul_tuple_miss=%llu "
         "ul_steady=%llu/%llu ul_blend=%llu/%llu/%llu ul_b13=%llu/%llu ul_req=%llu "
         "sub_candidate=%llu sub_prepared=%llu sub_pipe_reject=%llu sub_mat_reject=%llu sub_surface_reject=%llu "
@@ -733,6 +733,8 @@ void log_state(const char *tag) noexcept
         static_cast<unsigned long long>(resources.sidecar_missing),
         static_cast<unsigned long long>(resources.sidecar_unsupported),
         static_cast<unsigned long long>(resources.spec_requests),
+        static_cast<unsigned long long>(resources.fixed_pointlight_spec_requests),
+        static_cast<unsigned long long>(resources.fixed_pointlight_diffuse_requests),
         static_cast<unsigned long long>(resources.diffuse_requests),
         static_cast<unsigned long long>(resources.normal_requests),
         static_cast<unsigned long long>(resources.fail_open),
