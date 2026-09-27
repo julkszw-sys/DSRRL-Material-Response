@@ -210,6 +210,23 @@ int main()
     CHECK(core.transactions().restore(draw.command));
     CHECK(!core.transactions().active(draw.command).has_value());
 
+    // Multiple command IDs remain independently observable/restorable.
+    const auto second_command = draw.command + 1u;
+    CHECK(core.transactions().begin(
+        draw.command, draw.draw_serial + 2u, draw.context, plan));
+    CHECK(core.transactions().begin(
+        second_command, draw.draw_serial + 3u, draw.context, plan));
+    CHECK(core.transactions().active(draw.command).has_value());
+    CHECK(core.transactions().active(second_command).has_value());
+    CHECK(!core.transactions().begin(
+        second_command, draw.draw_serial + 4u, draw.context, plan));
+    CHECK(core.transactions().restore(draw.command));
+    CHECK(!core.transactions().active(draw.command).has_value());
+    CHECK(core.transactions().active(second_command).has_value());
+    CHECK(core.transactions().restore(second_command));
+    CHECK(!core.transactions().active(second_command).has_value());
+    CHECK(core.transactions().empty());
+
     // Carrier slot collisions fail before native draw.
     render_patch_plan invalid;
     invalid.patch_count = 2;
