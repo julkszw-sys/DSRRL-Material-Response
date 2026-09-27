@@ -6,6 +6,7 @@
 #endif
 #include "dsrrl/runtime/flver_identity_transport.hpp"
 #include "dsrrl/runtime/flver_identity_registry.hpp"
+#include "dsrrl/runtime/exact_material_cache.hpp"
 #include "dsrrl/runtime/runtime_hot_telemetry.hpp"
 #include "dsrrl/runtime/material_owner_selection.hpp"
 #include "dsrrl/runtime/material_owner_producer.hpp"
@@ -56,60 +57,17 @@ std::atomic<std::uint64_t> g_owner_consume_misses{0};
 
 constexpr std::size_t k_exact_material_cache_sets=1024u;
 constexpr std::size_t k_exact_material_cache_ways=4u;
-static_assert(
-    (k_exact_material_cache_sets &
-     (k_exact_material_cache_sets-1u))==0u);
 
-struct exact_material_cache_slot {
- std::atomic<std::uintptr_t> material{0u};
- std::atomic<std::uint16_t> route_ordinal_plus_one{0u};
-};
-
-struct exact_material_cache_set {
- std::array<
-     exact_material_cache_slot,
-     k_exact_material_cache_ways> slots{};
-};
-
-std::array<
-    exact_material_cache_set,
-    k_exact_material_cache_sets>
+exact_material_cache<
+    k_exact_material_cache_sets,
+    k_exact_material_cache_ways>
     g_exact_runtime_materials{};
-
-std::size_t exact_material_cache_set_index(
-    const void *material) noexcept
-{
- const auto p=
-     reinterpret_cast<std::uintptr_t>(
-         material);
- return static_cast<std::size_t>(
-     ((p>>4u)^(p>>13u)^(p>>23u))&
-     (k_exact_material_cache_sets-1u));
-}
 
 void exact_material_cache_erase(
     const void *material) noexcept
 {
- if(material==nullptr)return;
- const auto key=
-     reinterpret_cast<std::uintptr_t>(
-         material);
- auto &set=
-     g_exact_runtime_materials[
-         exact_material_cache_set_index(
-             material)];
-
- for(auto &slot:set.slots){
-  auto expected=key;
-  if(slot.material.compare_exchange_strong(
-       expected,
-       0u,
-       std::memory_order_acq_rel,
-       std::memory_order_relaxed))
-   slot.route_ordinal_plus_one.store(
-       0u,
-       std::memory_order_release);
- }
+    (void)g_exact_runtime_materials.erase(
+        material);
 }
 
 bool same_mr_behavior(
@@ -176,116 +134,29 @@ void exact_material_cache_publish(
     const void *material,
     std::uint16_t route_ordinal) noexcept
 {
- if(material==nullptr ||
-    route_ordinal>=
-        operators::material_response::generated::
-            k_material_route_count_v1)
-  return;
-
- const auto key=
-     reinterpret_cast<std::uintptr_t>(
-         material);
- const auto encoded=
-     static_cast<std::uint16_t>(
-         route_ordinal+1u);
- auto &set=
-     g_exact_runtime_materials[
-         exact_material_cache_set_index(
-             material)];
-
- for(auto &slot:set.slots){
-  if(slot.material.load(
-       std::memory_order_acquire)==key){
-   slot.route_ordinal_plus_one.store(
-       encoded,
-       std::memory_order_release);
-   return;
-  }
- }
-
- for(auto &slot:set.slots){
-  std::uintptr_t empty=0u;
-  if(slot.material.compare_exchange_strong(
-       empty,
-       key,
-       std::memory_order_acq_rel,
-       std::memory_order_relaxed)){
-   slot.route_ordinal_plus_one.store(
-       encoded,
-       std::memory_order_release);
-   return;
-  }
- }
-
- // Deterministic bounded replacement. Eviction can only turn an otherwise
- // valid MR draw into stock DSR (false negative); it cannot authorize a
- // different material because the pointer+route pair is revalidated below.
- auto &slot=set.slots[0];
- slot.material.store(
-     0u,
-     std::memory_order_release);
- slot.route_ordinal_plus_one.store(
-     encoded,
-     std::memory_order_relaxed);
- slot.material.store(
-     key,
-     std::memory_order_release);
+    (void)g_exact_runtime_materials.publish(
+        material,
+        route_ordinal,
+        static_cast<std::uint16_t>(
+            operators::material_response::generated::
+                k_material_route_count_v1));
 }
 
 bool exact_material_cache_lookup(
     const void *material,
     std::uint16_t &route_ordinal) noexcept
 {
- route_ordinal=0u;
- if(material==nullptr)return false;
-
- const auto key=
-     reinterpret_cast<std::uintptr_t>(
-         material);
- const auto &set=
-     g_exact_runtime_materials[
-         exact_material_cache_set_index(
-             material)];
-
- for(const auto &slot:set.slots){
-  if(slot.material.load(
-       std::memory_order_acquire)!=key)
-   continue;
-
-  const auto encoded=
-      slot.route_ordinal_plus_one.load(
-          std::memory_order_acquire);
-  if(encoded==0u)
-   return false;
-
-  const auto ordinal=
-      static_cast<std::size_t>(
-          encoded-1u);
-  if(ordinal>=
-      operators::material_response::generated::
-          k_material_route_count_v1)
-   return false;
-
-  route_ordinal=
-      static_cast<std::uint16_t>(
-          ordinal);
-  return true;
- }
-
- return false;
+    return g_exact_runtime_materials.lookup(
+        material,
+        static_cast<std::uint16_t>(
+            operators::material_response::generated::
+                k_material_route_count_v1),
+        route_ordinal);
 }
 
 void clear_exact_material_cache() noexcept
 {
- for(auto &set:g_exact_runtime_materials)
-  for(auto &slot:set.slots){
-   slot.material.store(
-       0u,
-       std::memory_order_release);
-   slot.route_ordinal_plus_one.store(
-       0u,
-       std::memory_order_release);
-  }
+    g_exact_runtime_materials.clear();
 }
 
 int hex_nibble(char c) noexcept
