@@ -527,6 +527,142 @@ bool probe_for_native_view(
     return true;
 }
 
+bool snapshot_ready_envspec(
+    ID3D11ShaderResourceView *stock_a,
+    ID3D11ShaderResourceView *stock_b,
+    std::uint8_t slot,
+    bool probe_b_required,
+    std::uint16_t &probe_a,
+    std::uint16_t &probe_b,
+    ID3D11ShaderResourceView *&ptde_a,
+    ID3D11ShaderResourceView *&ptde_b,
+    ID3D11SamplerState *&sampler_native,
+    bool &needs_cube) noexcept
+{
+    probe_a = 0u;
+    probe_b = 0u;
+    ptde_a = nullptr;
+    ptde_b = nullptr;
+    sampler_native = nullptr;
+    needs_cube = false;
+
+    if (stock_a == nullptr ||
+        slot >= k_ptde_slots)
+        return false;
+
+    const auto resolve_probe_locked =
+        [](ID3D11ShaderResourceView *view,
+           std::uint16_t &probe) noexcept {
+            if (view == nullptr)
+                return false;
+
+            const auto view_key =
+                static_cast<std::uint64_t>(
+                    reinterpret_cast<std::uintptr_t>(
+                        view));
+            const auto by_view =
+                g_resource_by_view.find(view_key);
+            if (by_view ==
+                g_resource_by_view.end())
+                return false;
+
+            const auto by_resource =
+                g_native_resources.find(
+                    by_view->second);
+            if (by_resource ==
+                g_native_resources.end())
+                return false;
+
+            probe =
+                by_resource->second.probe_ordinal;
+            return true;
+        };
+
+    std::lock_guard<std::mutex> lock(g_mutex);
+
+    if (g_device == nullptr ||
+        !g_pack_ready ||
+        !g_sampler_ready ||
+        g_sampler.handle == 0u)
+        return false;
+
+    if (!resolve_probe_locked(
+            stock_a,
+            probe_a))
+        return false;
+
+    if (probe_b_required) {
+        if (!resolve_probe_locked(
+                stock_b,
+                probe_b))
+            return false;
+    } else {
+        probe_b = probe_a;
+    }
+
+    if (probe_a >=
+            env::k_legacy_envspec_probe_count ||
+        probe_b >=
+            env::k_legacy_envspec_probe_count)
+        return false;
+
+    const auto key_a =
+        static_cast<std::uint32_t>(
+            probe_a) *
+        k_ptde_slots +
+        slot;
+    const auto key_b =
+        static_cast<std::uint32_t>(
+            probe_b) *
+        k_ptde_slots +
+        slot;
+
+    const auto found_a =
+        g_ptde_cubes.find(key_a);
+    const auto found_b =
+        g_ptde_cubes.find(key_b);
+
+    if (found_a == g_ptde_cubes.end() ||
+        found_b == g_ptde_cubes.end() ||
+        found_a->second.view.handle == 0u ||
+        found_b->second.view.handle == 0u) {
+        needs_cube = true;
+        return false;
+    }
+
+    ptde_a =
+        reinterpret_cast<
+            ID3D11ShaderResourceView *>(
+                static_cast<std::uintptr_t>(
+                    found_a->second.view.handle));
+    ptde_b =
+        reinterpret_cast<
+            ID3D11ShaderResourceView *>(
+                static_cast<std::uintptr_t>(
+                    found_b->second.view.handle));
+    sampler_native =
+        reinterpret_cast<
+            ID3D11SamplerState *>(
+                static_cast<std::uintptr_t>(
+                    g_sampler.handle));
+
+    if (ptde_a == nullptr ||
+        ptde_b == nullptr ||
+        sampler_native == nullptr) {
+        ptde_a = nullptr;
+        ptde_b = nullptr;
+        sampler_native = nullptr;
+        return false;
+    }
+
+    // Retain the exact draw resources while the registry lock guarantees that
+    // a device teardown cannot remove their handles underneath this snapshot.
+    ptde_a->AddRef();
+    ptde_b->AddRef();
+    sampler_native->AddRef();
+    return true;
+}
+
 bool get_ptde_cube(
     std::uint16_t probe,
     std::uint8_t slot,
@@ -768,105 +904,91 @@ bool envspec_resource_runtime::prepare(
         return false;
     }
 
-    ID3D11ShaderResourceView *stock_a =
-        nullptr;
-    ID3D11ShaderResourceView *stock_b =
-        nullptr;
-
+    ID3D11ShaderResourceView *stock_views[3]{};
     context->PSGetShaderResources(
         12u,
-        1u,
-        &stock_a);
-    context->PSGetShaderResources(
-        14u,
-        1u,
-        &stock_b);
+        3u,
+        stock_views);
+
+    auto *stock_a = stock_views[0];
+    auto *stock_b = stock_views[2];
 
     std::uint16_t probe_a = 0u;
     std::uint16_t probe_b = 0u;
+    ID3D11ShaderResourceView *a_native = nullptr;
+    ID3D11ShaderResourceView *b_native = nullptr;
+    ID3D11SamplerState *sampler_native = nullptr;
+    bool needs_cube = false;
 
-    const bool a_ok =
-        probe_for_native_view(
+    bool ready =
+        snapshot_ready_envspec(
             stock_a,
-            probe_a);
-
-    const bool b_ok =
-        probe_for_native_view(
             stock_b,
-            probe_b);
-
-    if (stock_a != nullptr)
-        stock_a->Release();
-    if (stock_b != nullptr)
-        stock_b->Release();
-
-    if (!a_ok ||
-        (probe_b_required && !b_ok)) {
-        telemetry::hot_count(g_prepare_fail);
-        return false;
-    }
-
-    if (!probe_b_required)
-        probe_b = probe_a;
-
-    resource_view a_view{};
-    resource_view b_view{};
-
-    if (!get_ptde_cube(
+            slot,
+            probe_b_required,
             probe_a,
-            slot,
-            a_view) ||
-        !get_ptde_cube(
             probe_b,
-            slot,
-            b_view)) {
-        telemetry::hot_count(g_prepare_fail);
-        return false;
-    }
+            a_native,
+            b_native,
+            sampler_native,
+            needs_cube);
 
-    sampler sampler_handle{};
-    {
-        std::lock_guard<std::mutex> lock(
-            g_mutex);
+    for (auto *view : stock_views)
+        if (view != nullptr)
+            view->Release();
 
-        if (!g_sampler_ready ||
-            g_sampler.handle == 0u) {
+    if (!ready && needs_cube) {
+        resource_view ignored{};
+
+        if (!get_ptde_cube(
+                probe_a,
+                slot,
+                ignored)) {
             telemetry::hot_count(g_prepare_fail);
             return false;
         }
 
-        sampler_handle =
-            g_sampler;
+        if (probe_b_required &&
+            probe_b != probe_a &&
+            !get_ptde_cube(
+                probe_b,
+                slot,
+                ignored)) {
+            telemetry::hot_count(g_prepare_fail);
+            return false;
+        }
+
+        // Materialization is a cold miss. Re-enter the single-lock snapshot
+        // path so normal draws keep resource identity + cube + sampler lookup
+        // atomic and do not repeat independent map locks.
+        needs_cube = false;
+        ready =
+            snapshot_ready_envspec(
+                stock_a,
+                stock_b,
+                slot,
+                probe_b_required,
+                probe_a,
+                probe_b,
+                a_native,
+                b_native,
+                sampler_native,
+                needs_cube);
     }
 
-    auto *a_native =
-        reinterpret_cast<
-            ID3D11ShaderResourceView *>(
-                static_cast<std::uintptr_t>(
-                    a_view.handle));
-
-    auto *b_native =
-        reinterpret_cast<
-            ID3D11ShaderResourceView *>(
-                static_cast<std::uintptr_t>(
-                    b_view.handle));
-
-    auto *sampler_native =
-        reinterpret_cast<
-            ID3D11SamplerState *>(
-                static_cast<std::uintptr_t>(
-                    sampler_handle.handle));
-
-    if (a_native == nullptr ||
+    if (!ready ||
+        a_native == nullptr ||
         b_native == nullptr ||
         sampler_native == nullptr) {
+        if (a_native != nullptr)
+            a_native->Release();
+        if (b_native != nullptr)
+            b_native->Release();
+        if (sampler_native != nullptr)
+            sampler_native->Release();
         telemetry::hot_count(g_prepare_fail);
         return false;
     }
-
-    a_native->AddRef();
-    b_native->AddRef();
-    sampler_native->AddRef();
 
     prepared.ptde_a =
         a_native;
