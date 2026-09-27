@@ -106,6 +106,16 @@ private:
 
     struct record;
 
+    struct bound_tls_state {
+        const fixed_pointlight_pipeline_runtime *runtime = nullptr;
+        std::uint64_t command = 0u;
+        std::shared_ptr<const record> selected{};
+        std::uint64_t epoch = 0u;
+        bool present = false;
+    };
+
+    static thread_local bound_tls_state bound_tls_;
+
     static const reshade::api::shader_desc *find_pixel_shader(
         std::uint32_t subobject_count,
         const reshade::api::pipeline_subobject *subobjects) noexcept;
@@ -122,6 +132,7 @@ private:
         std::uint64_t,
         std::shared_ptr<const record>> bound_;
     reshade::api::device *device_ = nullptr;
+    std::atomic<std::uint64_t> bound_epoch_{1u};
 
     std::atomic<std::uint64_t> candidates_seen_{0};
     std::atomic<std::uint64_t> candidate_create_ok_{0};
