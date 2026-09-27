@@ -67,6 +67,7 @@
 #include <atomic>
 #include <cstdint>
 #include <cstdio>
+#include <cstdlib>
 #include <mutex>
 #include <shared_mutex>
 #include <unordered_map>
@@ -158,6 +159,26 @@ std::atomic<std::uint64_t> g_fixed_draw_b12_ready{0};
 std::atomic<std::uint64_t> g_fixed_draw_t19_ready{0};
 std::atomic<std::uint64_t> g_fixed_draw_batch_ready{0};
 std::atomic<std::uint64_t> g_fixed_draw_fail_open{0};
+
+bool g_hot_telemetry_enabled = false;
+
+bool runtime_hot_telemetry_requested() noexcept
+{
+    const char *value =
+        std::getenv("DSRRL_RUNTIME_TELEMETRY");
+    return value != nullptr &&
+        value[0] == '1' &&
+        value[1] == '\0';
+}
+
+void hot_count(
+    std::atomic<std::uint64_t> &counter) noexcept
+{
+    if (g_hot_telemetry_enabled)
+        counter.fetch_add(
+            1u,
+            std::memory_order_relaxed);
+}
 
 enum integrated_draw_route_bit : std::uint8_t {
     k_route_stable = 1u << 0,
@@ -601,51 +622,51 @@ bool observe_draw_identity(
             ? material_receiver_runtime_slot(receiver_id)
             : nullptr;
     if (rx != nullptr)
-        ++rx->seen;
+        hot_count(rx->seen);
 
     if (receiver_ok) {
-        ++g_draw_receiver_hits;
+        hot_count(g_draw_receiver_hits);
         if (rx != nullptr)
-            ++rx->accepted;
+            hot_count(rx->accepted);
     }
     if (owner_ok)
-        ++g_draw_owner_hits;
+        hot_count(g_draw_owner_hits);
 
     if (!receiver_ok) {
         if (owner_ok)
-            ++g_draw_owner_only;
-        ++g_mr_fail_open;
+            hot_count(g_draw_owner_only);
+        hot_count(g_mr_fail_open);
         if (rx != nullptr)
-            ++rx->fail_open;
+            hot_count(rx->fail_open);
         return false;
     }
 
     if (!owner_ok) {
-        ++g_draw_receiver_only;
-        ++g_mr_fail_open;
+        hot_count(g_draw_receiver_only);
+        hot_count(g_mr_fail_open);
         if (rx != nullptr)
-            ++rx->fail_open;
+            hot_count(rx->fail_open);
         return true;
     }
 
-    ++g_draw_joins;
+    hot_count(g_draw_joins);
     if (rx != nullptr)
-        ++rx->joined;
+        hot_count(rx->joined);
 
     if (subsurface_bound ||
         hemdir3_bound) {
-        ++g_mr_fail_open;
+        hot_count(g_mr_fail_open);
         return true;
     }
 
     if (!g_mr_ready.load()) {
-        ++g_mr_fail_open;
+        hot_count(g_mr_fail_open);
         if (rx != nullptr)
-            ++rx->fail_open;
+            hot_count(rx->fail_open);
         return true;
     }
 
-    ++g_mr_draw_eval;
+    hot_count(g_mr_draw_eval);
     out_decision =
         fixed_pointlight_receiver
             ? g_material_response.
@@ -656,13 +677,13 @@ bool observe_draw_identity(
                 out_material);
 
     if (out_decision.active) {
-        ++g_mr_would_activate;
+        hot_count(g_mr_would_activate);
         if (rx != nullptr)
-            ++rx->mr_active;
+            hot_count(rx->mr_active);
     } else {
-        ++g_mr_fail_open;
+        hot_count(g_mr_fail_open);
         if (rx != nullptr)
-            ++rx->fail_open;
+            hot_count(rx->fail_open);
     }
 
     return true;
@@ -2155,7 +2176,7 @@ bool prepare_island_batch(
         g_fixed_pointlight_pipeline.prepare_bound_shader(
             cmd_list,
             prepared.fixed_shader)) {
-        ++g_fixed_draw_candidates;
+        hot_count(g_fixed_draw_candidates);
         auto *context =
             reinterpret_cast<ID3D11DeviceContext *>(
                 cmd_list->get_native());
@@ -2164,7 +2185,7 @@ bool prepare_island_batch(
             decision.active &&
             decision.ptde_specular_power_verified;
         if (direct_material_ready)
-            ++g_fixed_draw_material_ready;
+            hot_count(g_fixed_draw_material_ready);
 
         dsrrl::operators::material_response::
             mtd_semantic_query fixed_query{};
@@ -2197,7 +2218,7 @@ bool prepare_island_batch(
             prepared.resources.normal;
 
         if (resources_ready)
-            ++g_fixed_draw_spec_ready;
+            hot_count(g_fixed_draw_spec_ready);
 
         const bool b12_ready =
             resources_ready &&
@@ -2206,7 +2227,7 @@ bool prepare_island_batch(
                 prepared.fixed_b12);
 
         if (b12_ready)
-            ++g_fixed_draw_b12_ready;
+            hot_count(g_fixed_draw_b12_ready);
 
         const bool t19_ready =
             b12_ready &&
@@ -2216,7 +2237,7 @@ bool prepare_island_batch(
                 prepared.fixed_carrier);
 
         if (t19_ready) {
-            ++g_fixed_draw_t19_ready;
+            hot_count(g_fixed_draw_t19_ready);
             dsrrl::runtime::island_draw_adapter_request fixed{};
             const auto local =
                 dsrrl::core::operator_bit(
@@ -2277,7 +2298,7 @@ bool prepare_island_batch(
 
                 if (resources_appended) {
                     prepared.fixed_in_batch = true;
-                    ++g_fixed_draw_batch_ready;
+                    hot_count(g_fixed_draw_batch_ready);
                     return true;
                 }
             }
@@ -2294,7 +2315,7 @@ bool prepare_island_batch(
             prepared.fixed_b12 = nullptr;
         }
         prepared.batch = {};
-        ++g_fixed_draw_fail_open;
+        hot_count(g_fixed_draw_fail_open);
     }
 
     if (hemdir3_bound) {
@@ -2512,13 +2533,13 @@ bool prepare_island_batch(
             }
 
             if (lerp_resource_fallback)
-                ++g_lerp_full_draw_fallback;
+                hot_count(g_lerp_full_draw_fallback);
             else
-                ++g_lerp_full_draw_ready;
+                hot_count(g_lerp_full_draw_ready);
             return true;
         }
 
-        ++g_lerp_full_draw_fallback;
+        hot_count(g_lerp_full_draw_fallback);
 
         // Conservative fallback for exact Lerp receivers that cannot prove
         // the full material/resource composition. Keep the already-certified
@@ -2683,7 +2704,7 @@ void observe_bloom_fx_draw_authority() noexcept
     if (!dsrrl::runtime::bloom_fx_draw_transport::snapshot(snapshot))
         return;
 
-    ++g_bloom_fx_draw_snapshots;
+    hot_count(g_bloom_fx_draw_snapshots);
 
     const auto authority =
         dsrrl::runtime::bloom_fx_draw_transport::
@@ -2692,9 +2713,9 @@ void observe_bloom_fx_draw_authority() noexcept
     if (authority ==
         dsrrl::runtime::bloom_fx_draw_transport::
             waterwave_draw_authority_result::authorized)
-        ++g_bloom_fx_draw_authorized;
+        hot_count(g_bloom_fx_draw_authorized);
     else
-        ++g_bloom_fx_draw_rejected;
+        hot_count(g_bloom_fx_draw_rejected);
 }
 
 bool on_draw(
@@ -2708,7 +2729,7 @@ bool on_draw(
             active_draw_scope())
         observe_bloom_fx_draw_authority();
 
-    ++g_draw_events;
+    hot_count(g_draw_events);
     draw_semantic_selection_guard semantic_guard{};
 
     const auto route_mask =
@@ -2716,7 +2737,7 @@ bool on_draw(
             cmd_list);
 
     if (route_mask == 0u) {
-        ++g_draw_fast_skip;
+        hot_count(g_draw_fast_skip);
         dsrrl::runtime::
             material_owner_selection_clear();
         return false;
@@ -2805,7 +2826,7 @@ bool on_draw_indexed(
             active_draw_scope())
         observe_bloom_fx_draw_authority();
 
-    ++g_draw_events;
+    hot_count(g_draw_events);
     draw_semantic_selection_guard semantic_guard{};
 
     const auto route_mask =
@@ -2813,7 +2834,7 @@ bool on_draw_indexed(
             cmd_list);
 
     if (route_mask == 0u) {
-        ++g_draw_fast_skip;
+        hot_count(g_draw_fast_skip);
         dsrrl::runtime::
             material_owner_selection_clear();
         return false;
@@ -2899,8 +2920,13 @@ void on_present(
     std::uint32_t,
     const reshade::api::rect *)
 {
-    const auto present = ++g_present_count;
-    if (present == 1u || (present % 300u) == 0u)
+    const auto present =
+        g_present_count.fetch_add(
+            1u,
+            std::memory_order_relaxed) + 1u;
+    if (present == 1u ||
+        (g_hot_telemetry_enabled &&
+         (present % 300u) == 0u))
         log_state("LIVE");
 }
 
@@ -2952,6 +2978,12 @@ bool AddonInit(
 {
     if (!reshade::register_addon(addon_module, reshade_module))
         return false;
+
+    // Render-hot telemetry is opt-in. Production/default execution avoids
+    // synchronized counter RMWs on every draw; set DSRRL_RUNTIME_TELEMETRY=1
+    // for receiver/island census sessions.
+    g_hot_telemetry_enabled =
+        runtime_hot_telemetry_requested();
 
     g_a1_bridge.reset();
     g_draw_transactions.reset();
