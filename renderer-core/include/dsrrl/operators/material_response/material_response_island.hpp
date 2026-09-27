@@ -61,9 +61,15 @@ struct material_identity {
     std::uint64_t material_family_hash = 0;
 };
 
-// Narrow legacy-compatible carrier used only for the independently certified
-// P_Metal Material Response route. It deliberately does not authorize other
-// operators (notably EnvSpec or direct PointLight).
+// Exact runtime MTD carrier for Material Response only. The retail MTD
+// parser supplies semantic name + full raw-MTD bytes, so this authority can
+// prove one of the certified MR profiles without requiring an FLVER owner.
+// Resource/asset islands keep their own stricter owner/resource gates.
+bool exact_runtime_material_response_identity(
+    const material_identity &identity) noexcept;
+
+// Narrow P_Metal specialization retained for EnvSpec and other explicitly
+// scoped P_Metal consumers. Generic MR authority must not broaden those.
 bool exact_runtime_pmetal_material_identity(
     const material_identity &identity) noexcept;
 
