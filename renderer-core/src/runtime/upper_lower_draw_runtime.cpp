@@ -435,21 +435,48 @@ thread_local selector_snapshot_tls g_selector_snapshot{};
 
 // The old owner->shared_ptr snapshot registry was correct but far too
 // expensive under geometry-heavy scenes. The cache-builder architecture uses
-// a bounded 2-way TLS registry carrying only references plus the exact
-// freshness fingerprint. No heap allocation, mutex, shared_ptr or global
-// epoch participates in this path.
+// a bounded 2-way cross-thread registry carrying only references plus the
+// exact freshness fingerprint. Each set has a tiny spin guard: no heap,
+// shared_ptr, global unordered_map or global epoch participates in this path.
+// The selected draw token remains TLS because it is consumed in draw order.
 constexpr std::size_t k_reference_token_sets = 32u;
 constexpr std::size_t k_reference_token_ways = 2u;
 constexpr std::size_t k_reference_token_entries =
     k_reference_token_sets * k_reference_token_ways;
-thread_local std::array<
+std::array<
     lightbank_reference_token,
     k_reference_token_entries>
     g_reference_tokens{};
-thread_local std::array<std::uint8_t,k_reference_token_sets>
+std::array<std::uint8_t,k_reference_token_sets>
     g_reference_token_victim{};
+std::array<std::atomic_flag,k_reference_token_sets>
+    g_reference_token_locks{};
 thread_local lightbank_reference_token
     g_draw_reference_token{};
+
+class reference_token_set_guard {
+public:
+    explicit reference_token_set_guard(std::size_t set) noexcept
+        : flag_(g_reference_token_locks[set])
+    {
+        while (flag_.test_and_set(
+            std::memory_order_acquire)) {
+        }
+    }
+
+    ~reference_token_set_guard()
+    {
+        flag_.clear(std::memory_order_release);
+    }
+
+    reference_token_set_guard(
+        const reference_token_set_guard &) = delete;
+    reference_token_set_guard &operator=(
+        const reference_token_set_guard &) = delete;
+
+private:
+    std::atomic_flag &flag_;
+};
 
 std::atomic_bool g_enabled{false};
 std::atomic_bool g_quarantined{false};
@@ -1109,6 +1136,7 @@ void publish_reference_token(
     const auto set =
         reference_token_set(
             producer.owner);
+    reference_token_set_guard guard(set);
     const auto base =
         set * k_reference_token_ways;
 
@@ -1146,14 +1174,22 @@ void publish_reference_token(
         token;
 }
 
-lightbank_reference_token *find_reference_token(
-    std::uintptr_t owner) noexcept
+bool consume_reference_token(
+    std::uintptr_t owner,
+    const operators::lightbank::
+        lightbank_snapshot_fingerprint &draw,
+    lightbank_reference_token &out,
+    bool &tuple_mismatch) noexcept
 {
+    out = {};
+    tuple_mismatch = false;
+
     if (owner == 0u)
-        return nullptr;
+        return false;
 
     const auto set =
         reference_token_set(owner);
+    reference_token_set_guard guard(set);
     const auto base =
         set * k_reference_token_ways;
 
@@ -1162,14 +1198,30 @@ lightbank_reference_token *find_reference_token(
          ++way) {
         auto &entry =
             g_reference_tokens[base + way];
-        if (entry.valid &&
-            entry.available &&
-            entry.fingerprint.owner ==
-                owner)
-            return &entry;
+        if (!entry.valid ||
+            !entry.available ||
+            entry.fingerprint.owner != owner)
+            continue;
+
+        // Selection is one-shot even on a stale tuple. This preserves the
+        // previous fail-open lifetime rule while making producer->selector
+        // transport visible across engine threads.
+        entry.available = false;
+
+        if (!operators::lightbank::
+                lightbank_snapshot_matches_draw(
+                    entry.fingerprint,
+                    draw)) {
+            tuple_mismatch = true;
+            return false;
+        }
+
+        out = entry;
+        out.available = false;
+        return true;
     }
 
-    return nullptr;
+    return false;
 }
 
 bool capture_evaluated_vectors(
@@ -3611,8 +3663,18 @@ void clear_snapshots() noexcept
 {
     g_draw_snapshot.reset();
     g_draw_reference_token = {};
-    g_reference_tokens = {};
-    g_reference_token_victim = {};
+    for (std::size_t set = 0u;
+         set < k_reference_token_sets;
+         ++set) {
+        reference_token_set_guard guard(set);
+        const auto base =
+            set * k_reference_token_ways;
+        for (std::size_t way = 0u;
+             way < k_reference_token_ways;
+             ++way)
+            g_reference_tokens[base + way] = {};
+        g_reference_token_victim[set] = 0u;
+    }
     clear_b13_upload_slots();
     g_selector_snapshot = {};
     g_selector_window = {};
@@ -3765,18 +3827,6 @@ void upper_lower_draw_runtime::selector_event(
             reinterpret_cast<std::uintptr_t>(
                 owner);
 
-        auto *candidate =
-            find_reference_token(
-                owner_key);
-        if (candidate == nullptr) {
-            telemetry::hot_count(
-                g_selector_miss);
-            return;
-        }
-
-        latch_bool_once(
-            g_reference_selector_candidate_found);
-
         std::uint16_t selector_a = 0u;
         std::uint16_t selector_b = 0u;
         std::uint32_t beta_bits = 0u;
@@ -3785,7 +3835,6 @@ void upper_lower_draw_runtime::selector_event(
                 selector_a,
                 selector_b,
                 beta_bits)) {
-            candidate->available = false;
             telemetry::hot_count(
                 g_selector_miss);
             return;
@@ -3802,24 +3851,29 @@ void upper_lower_draw_runtime::selector_event(
                 beta_bits
             };
 
-        if (!operators::lightbank::
-                lightbank_snapshot_matches_draw(
-                    candidate->fingerprint,
-                    draw)) {
-            candidate->available = false;
-            telemetry::hot_count(
-                g_tuple_mismatch);
+        lightbank_reference_token selected{};
+        bool tuple_mismatch = false;
+        if (!consume_reference_token(
+                owner_key,
+                draw,
+                selected,
+                tuple_mismatch)) {
+            if (tuple_mismatch)
+                telemetry::hot_count(
+                    g_tuple_mismatch);
+            else
+                telemetry::hot_count(
+                    g_selector_miss);
             return;
         }
 
         latch_bool_once(
+            g_reference_selector_candidate_found);
+        latch_bool_once(
             g_reference_selector_tuple_match);
 
         g_draw_reference_token =
-            *candidate;
-        g_draw_reference_token.available =
-            false;
-        candidate->available = false;
+            selected;
         latch_bool_once(
             g_reference_draw_token_selected);
         telemetry::hot_count(
