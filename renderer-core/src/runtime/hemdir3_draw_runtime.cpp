@@ -1,4 +1,5 @@
 #include "dsrrl/runtime/hemdir3_draw_runtime.hpp"
+#include "dsrrl/runtime/runtime_hot_telemetry.hpp"
 #include "dsrrl/operators/lightbank/hemdir3.hpp"
 #include "dsrrl/operators/lightbank/generated_hemdir3_spc_material_donors_v1.hpp"
 #include "dsrrl/runtime/hemdir3_mode_transport.hpp"
@@ -119,7 +120,7 @@ ID3D11Buffer *hemdir3_draw_runtime::realize_spc_b12(
     if (!material.valid ||
         !material.owner_tuple_exact ||
         quarantined_.load()) {
-        ++spc_donor_miss_;
+        telemetry::hot_count(spc_donor_miss_);
         return nullptr;
     }
 
@@ -129,11 +130,11 @@ ID3D11Buffer *hemdir3_draw_runtime::realize_spc_b12(
                 material.raw_mtd_sha256);
 
     if (donor == nullptr) {
-        ++spc_donor_miss_;
+        telemetry::hot_count(spc_donor_miss_);
         return nullptr;
     }
 
-    ++spc_donor_hit_;
+    telemetry::hot_count(spc_donor_hit_);
 
     std::lock_guard<std::mutex> lock(mutex_);
     if (device_ == nullptr)
@@ -146,7 +147,7 @@ ID3D11Buffer *hemdir3_draw_runtime::realize_spc_b12(
     if (found != spc_b12_by_mtd_.end() &&
         found->second != nullptr) {
         found->second->AddRef();
-        ++spc_b12_hit_;
+        telemetry::hot_count(spc_b12_hit_);
         return found->second;
     }
 
@@ -288,18 +289,18 @@ bool hemdir3_draw_runtime::prepare_draw_request(
             core::operator_id::hemdir3))
         return false;
 
-    ++candidates_;
+    telemetry::hot_count(candidates_);
 
     std::uint32_t effective_mode = 0u;
 
     if (!hemdir3_mode_transport::snapshot(
             effective_mode) ||
         effective_mode != 2u) {
-        ++mode_rejects_;
+        telemetry::hot_count(mode_rejects_);
         return false;
     }
 
-    ++mode2_hits_;
+    telemetry::hot_count(mode2_hits_);
 
     replacement_record replacement{};
 
@@ -316,7 +317,7 @@ bool hemdir3_draw_runtime::prepare_draw_request(
                 identity.stratum ||
             found->second.paired_stable_receiver_id !=
                 identity.paired_stable_receiver_id) {
-            ++readiness_rejects_;
+            telemetry::hot_count(readiness_rejects_);
             return false;
         }
 
@@ -330,7 +331,7 @@ bool hemdir3_draw_runtime::prepare_draw_request(
 
     if (context == nullptr) {
         replacement.shader->Release();
-        ++carrier_rejects_;
+        telemetry::hot_count(carrier_rejects_);
         return false;
     }
 
@@ -338,11 +339,11 @@ bool hemdir3_draw_runtime::prepare_draw_request(
             context,
             prepared.carrier)) {
         replacement.shader->Release();
-        ++carrier_rejects_;
+        telemetry::hot_count(carrier_rejects_);
         return false;
     }
 
-    ++carrier_ready_;
+    telemetry::hot_count(carrier_ready_);
 
     if (identity.stratum ==
         operators::lightbank::
@@ -354,7 +355,7 @@ bool hemdir3_draw_runtime::prepare_draw_request(
             replacement.shader->Release();
             lightbank_.release_hemdir3_carrier(
                 prepared.carrier);
-            ++spc_b12_hold_;
+            telemetry::hot_count(spc_b12_hold_);
             return false;
         }
     }
@@ -447,7 +448,7 @@ bool hemdir3_draw_runtime::prepare_draw_request(
         }
         lightbank_.release_hemdir3_carrier(
             prepared.carrier);
-        ++readiness_rejects_;
+        telemetry::hot_count(readiness_rejects_);
         return false;
     }
 
@@ -517,16 +518,16 @@ bool hemdir3_draw_runtime::prepare_draw_request(
             verify) !=
         island_draw_adapter_result::ready) {
         release_prepared_draw(prepared);
-        ++readiness_rejects_;
+        telemetry::hot_count(readiness_rejects_);
         return false;
     }
 
     prepared.ready = true;
     if (spc)
-        ++spc_ready_;
+        telemetry::hot_count(spc_ready_);
     else
-        ++nospc_ready_;
-    ++requests_;
+        telemetry::hot_count(nospc_ready_);
+    telemetry::hot_count(requests_);
     return true;
 }
 
