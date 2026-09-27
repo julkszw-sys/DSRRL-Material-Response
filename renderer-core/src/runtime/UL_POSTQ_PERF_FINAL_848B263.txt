@@ -1,0 +1,1 @@
+Diagnostic CI trigger only. Runtime sources are identical to main parent 848b263d78e1bd98ba3104df9ef80b38ab6807bf. Final post-clean-Q U/L performance candidate with lock-free producer lifecycle audit.
