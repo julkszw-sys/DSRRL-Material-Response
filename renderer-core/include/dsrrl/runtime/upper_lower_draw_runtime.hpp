@@ -47,6 +47,7 @@ struct upper_lower_telemetry {
     bool producer_hooks_armed = false;
     bool pmetal_env_hook_armed = false;
     bool direct_ul_producer_active = false;
+    bool direct_ul_operator_changed = false;
     bool quarantined = false;
     bool restore_failed = false;
 };
