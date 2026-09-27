@@ -1538,31 +1538,47 @@ bool read_exact_pmetal_env_source(
     std::int32_t selector,
     f4 &out,
     std::uint64_t &bank_signature,
-    std::uint32_t &row_id) noexcept
+    std::uint32_t &row_id,
+    pmetal_source_probe *probe = nullptr) noexcept
 {
     out = {};
     bank_signature = 0u;
     row_id = 0u;
 
+    pmetal_source_probe local{};
+    local.selector = selector;
+    auto finish = [&](pmetal_env_source_diag_status status) noexcept {
+        local.status = status;
+        local.bank_signature = bank_signature;
+        local.row_id = row_id;
+        if (probe != nullptr)
+            *probe = local;
+    };
+
     if (source == nullptr ||
-        selector < 0)
+        selector < 0) {
+        finish(
+            pmetal_env_source_diag_status::
+                token_invalid);
         return false;
+    }
 
     // Both callers are exact engine producer hooks and invoke this only
     // after the original producer returned successfully, so 'source' is
     // engine-attested for this call. On the steady hot path, first reuse the
-    // immutable bank verdict by exact base pointer. This is especially
-    // important for the overwhelmingly common non-P_Metal case: a known
-    // negative bank now exits after one pointer load instead of repeating
-    // safe_read -> VirtualQuery for source/header/count on every capture.
+    // immutable bank verdict by exact base pointer.
     const std::uint8_t *base = nullptr;
     std::memcpy(
         &base,
         static_cast<const std::uint8_t *>(
             source) + 0x18u,
         sizeof(base));
-    if (base == nullptr)
+    if (base == nullptr) {
+        finish(
+            pmetal_env_source_diag_status::
+                base_null);
         return false;
+    }
 
     const auto index =
         static_cast<std::uint8_t>(
@@ -1577,10 +1593,6 @@ bool read_exact_pmetal_env_source(
 
     if (cached_bank.valid &&
         cached_bank.base == base) {
-        // The source object is engine-attested at this hook. Recheck the tiny
-        // immutable header identity directly so address reuse or a changed
-        // bank count cannot inherit an old negative/positive verdict. This
-        // retains fail-open identity without reintroducing VirtualQuery.
         std::uint16_t live_version = 0u;
         std::uint16_t live_count = 0u;
         std::memcpy(
@@ -1592,11 +1604,16 @@ bool read_exact_pmetal_env_source(
             base + 10u,
             sizeof(live_count));
 
+        local.bank_count = live_count;
+
         if (live_version != 4u ||
             live_count != cached_bank.count ||
             live_count == 0u ||
             live_count > 256u) {
             cached_bank = {};
+            finish(
+                pmetal_env_source_diag_status::
+                    header_invalid);
             return false;
         }
 
@@ -1605,38 +1622,73 @@ bool read_exact_pmetal_env_source(
             cached_bank.signature;
         bank = cached_bank.bank;
 
-        if (static_cast<std::uint32_t>(index) >=
-                count ||
-            bank == nullptr)
+        if (static_cast<std::uint32_t>(
+                index) >= count) {
+            finish(
+                pmetal_env_source_diag_status::
+                    selector_oob);
             return false;
+        }
+
+        if (bank == nullptr) {
+            finish(
+                bank_signature == 0u
+                    ? pmetal_env_source_diag_status::
+                        signature_invalid
+                    : pmetal_env_source_diag_status::
+                        bank_unknown);
+            return false;
+        }
     } else {
         std::uint16_t version = 0u;
-        if (!safe_read(base + 8u, version) ||
-            !safe_read(base + 10u, count) ||
+        if (!safe_read(
+                base + 8u,
+                version) ||
+            !safe_read(
+                base + 10u,
+                count) ||
             version != 4u ||
             count == 0u ||
-            count > 256u ||
-            static_cast<std::uint32_t>(index) >=
-                count)
+            count > 256u) {
+            local.bank_count = count;
+            finish(
+                pmetal_env_source_diag_status::
+                    header_invalid);
             return false;
+        }
+
+        local.bank_count = count;
+
+        if (static_cast<std::uint32_t>(
+                index) >= count) {
+            finish(
+                pmetal_env_source_diag_status::
+                    selector_oob);
+            return false;
+        }
 
         bank =
             resolve_pmetal_bank(
                 base,
                 count,
                 bank_signature);
-        if (bank == nullptr)
+        if (bank == nullptr) {
+            finish(
+                bank_signature == 0u
+                    ? pmetal_env_source_diag_status::
+                        signature_invalid
+                    : pmetal_env_source_diag_status::
+                        bank_unknown);
             return false;
+        }
     }
+
+    local.bank_count = count;
 
     const auto *entry =
         base + 0x30u +
         static_cast<std::size_t>(index) * 12u;
 
-    // pmetal_bank_signature validated the complete fixed row table before a
-    // cache entry could become valid. With immutable bank metadata and exact
-    // base identity, a cached positive bank may read the selected row id
-    // directly. The slow path above remains fail-open for unseen carriers.
     if (cached_bank.valid &&
         cached_bank.base == base) {
         std::memcpy(
@@ -1646,6 +1698,9 @@ bool read_exact_pmetal_env_source(
     } else if (!safe_read(
                    entry,
                    row_id)) {
+        finish(
+            pmetal_env_source_diag_status::
+                row_read_failed);
         return false;
     }
 
@@ -1653,8 +1708,12 @@ bool read_exact_pmetal_env_source(
         pmetal_env_source_authority::find_row(
             *bank,
             row_id);
-    if (row == nullptr)
+    if (row == nullptr) {
+        finish(
+            pmetal_env_source_diag_status::
+                row_unknown);
         return false;
+    }
 
     const float scale =
         static_cast<float>(row->m) *
@@ -1670,10 +1729,19 @@ bool read_exact_pmetal_env_source(
         0.0f
     };
 
-    return
-        std::isfinite(out.x) &&
-        std::isfinite(out.y) &&
-        std::isfinite(out.z);
+    if (!std::isfinite(out.x) ||
+        !std::isfinite(out.y) ||
+        !std::isfinite(out.z)) {
+        finish(
+            pmetal_env_source_diag_status::
+                nonfinite);
+        return false;
+    }
+
+    finish(
+        pmetal_env_source_diag_status::
+            success);
+    return true;
 }
 
 bool write_bytes(
