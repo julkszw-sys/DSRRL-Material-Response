@@ -55,18 +55,24 @@ struct snapshot {
     std::uint32_t pmetal_row_b = 0;
 
     mutable std::mutex gpu_mutex;
-    mutable ID3D11Device *device = nullptr;
-    mutable ID3D11Buffer *ul_buffer = nullptr;
-    mutable ID3D11Buffer *hemdir3_buffer = nullptr;
+    mutable std::atomic<ID3D11Device *> device{nullptr};
+    mutable std::atomic<ID3D11Buffer *> ul_buffer{nullptr};
+    mutable std::atomic<ID3D11Buffer *> hemdir3_buffer{nullptr};
 
     ~snapshot()
     {
-        if (ul_buffer != nullptr)
-            ul_buffer->Release();
-        if (hemdir3_buffer != nullptr)
-            hemdir3_buffer->Release();
-        if (device != nullptr)
-            device->Release();
+        if (auto *buffer =
+                ul_buffer.load(std::memory_order_relaxed);
+            buffer != nullptr)
+            buffer->Release();
+        if (auto *buffer =
+                hemdir3_buffer.load(std::memory_order_relaxed);
+            buffer != nullptr)
+            buffer->Release();
+        if (auto *cached_device =
+                device.load(std::memory_order_relaxed);
+            cached_device != nullptr)
+            cached_device->Release();
     }
 };
 
@@ -2089,19 +2095,22 @@ ID3D11Buffer *realize_b13(
          !selected->d123_ready))
         return nullptr;
 
-    std::lock_guard<std::mutex> lock(
-        selected->gpu_mutex);
-
-    if (selected->device != nullptr &&
-        selected->device != device)
-        return nullptr;
-
-    auto *&cached =
+    auto &cache =
         hemdir3_combined
             ? selected->hemdir3_buffer
             : selected->ul_buffer;
 
-    if (cached != nullptr) {
+    // Immutable b13 buffers are published once per immutable snapshot. The
+    // selected shared_ptr keeps both snapshot and its owned COM reference
+    // alive while this hit path performs AddRef(), so steady draws need no
+    // mutex after first realization.
+    if (auto *cached =
+            cache.load(std::memory_order_acquire);
+        cached != nullptr) {
+        if (selected->device.load(
+                std::memory_order_acquire) != device)
+            return nullptr;
+
         cached->AddRef();
 
         if (hemdir3_combined)
@@ -2111,6 +2120,34 @@ ID3D11Buffer *realize_b13(
 
         return cached;
     }
+
+    std::lock_guard<std::mutex> lock(
+        selected->gpu_mutex);
+
+    // Another caller may have completed realization while this caller waited.
+    if (auto *cached =
+            cache.load(std::memory_order_acquire);
+        cached != nullptr) {
+        if (selected->device.load(
+                std::memory_order_acquire) != device)
+            return nullptr;
+
+        cached->AddRef();
+
+        if (hemdir3_combined)
+            ++g_hemdir3_b13_hit;
+        else
+            ++g_b13_hit;
+
+        return cached;
+    }
+
+    auto *cached_device =
+        selected->device.load(
+            std::memory_order_acquire);
+    if (cached_device != nullptr &&
+        cached_device != device)
+        return nullptr;
 
     const auto &payload =
         hemdir3_combined
@@ -2138,12 +2175,19 @@ ID3D11Buffer *realize_b13(
         buffer == nullptr)
         return nullptr;
 
-    if (selected->device == nullptr) {
-        selected->device = device;
+    if (cached_device == nullptr) {
         device->AddRef();
+        selected->device.store(
+            device,
+            std::memory_order_release);
     }
 
-    cached = buffer;
+    // The snapshot owns CreateBuffer's initial reference. Publish only after
+    // the device identity is visible, then retain one additional reference
+    // for the prepared draw.
+    cache.store(
+        buffer,
+        std::memory_order_release);
     buffer->AddRef();
 
     if (hemdir3_combined)
