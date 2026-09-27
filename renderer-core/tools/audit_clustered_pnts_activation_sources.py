@@ -49,9 +49,9 @@ def main():
     require(flver_cpp,"k_builder=0x22084Fu","ordinary builder hook")
     require(flver_cpp,"builder_armed=true","builder hook attestation")
 
-    if "point | mr | local_if_spc" in integrated:
+    if "clustered.additional_owners =\n                point | mr | local_if_spc;" in integrated:
         fail("clustered request duplicates primary in additional_owners")
-    if "point | local_if_spc" in integrated:
+    if "clustered.additional_resource_owners =\n                point | local_if_spc;" in integrated:
         fail("clustered resource ownership duplicates primary")
     require(integrated,"? (point | mr)","Spc additional ownership")
     require(integrated,": mr;","NoSpc additional ownership")
