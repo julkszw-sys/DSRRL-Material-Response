@@ -24,6 +24,10 @@ bool check(bool condition,const char *expr,int line)
 operators::postprocess::bloom_unblock_context ready_bloom()
 {
     operators::postprocess::bloom_unblock_context c;
+    c.history_writer_set_closed=true;
+    c.history_writer_order_closed=true;
+    c.history_draw_recurrence_closed=true;
+    c.history_sfx_recurrence_closed=true;
     c.scene_domain_bridge_ready=true;
     c.q8_scene_source_ready=true;
     c.packed_depth_logical_bridge_ready=true;
@@ -299,7 +303,7 @@ int main()
 
     auto bp=evaluate_bloom_unblock_preflight(bloom);
     CHECK(bp.state==post_unblock_state::blocked);
-    CHECK(bp.reason==bloom_unblock_reason::scene_domain_bridge_not_ready);
+    CHECK(bp.reason==bloom_unblock_reason::history_writer_set_not_closed);
     CHECK(!bp.direct_shader_body_swap_allowed);
     CHECK(bp.requires_q8_scene_bridge);
     CHECK(bp.requires_fixed_rgba_sidecars);
