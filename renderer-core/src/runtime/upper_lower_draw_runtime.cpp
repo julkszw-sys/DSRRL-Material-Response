@@ -828,44 +828,83 @@ bool read_exact_pmetal_env_source(
         selector < 0)
         return false;
 
+    // Both callers are exact engine producer hooks and invoke this only
+    // after the original producer returned successfully, so 'source' is
+    // engine-attested for this call. On the steady hot path, first reuse the
+    // immutable bank verdict by exact base pointer. This is especially
+    // important for the overwhelmingly common non-P_Metal case: a known
+    // negative bank now exits after one pointer load instead of repeating
+    // safe_read -> VirtualQuery for source/header/count on every capture.
     const std::uint8_t *base = nullptr;
-    if (!safe_read(
-            static_cast<const std::uint8_t *>(
-                source) + 0x18u,
-            base) ||
-        base == nullptr)
-        return false;
-
-    std::uint16_t version = 0u;
-    std::uint16_t count = 0u;
-    if (!safe_read(base + 8u, version) ||
-        !safe_read(base + 10u, count) ||
-        version != 4u ||
-        count == 0u ||
-        count > 256u)
+    std::memcpy(
+        &base,
+        static_cast<const std::uint8_t *>(
+            source) + 0x18u,
+        sizeof(base));
+    if (base == nullptr)
         return false;
 
     const auto index =
         static_cast<std::uint8_t>(
             selector);
-    if (static_cast<std::uint32_t>(index) >=
-        count)
-        return false;
 
-    const auto *bank =
-        resolve_pmetal_bank(
-            base,
-            count,
-            bank_signature);
-    if (bank == nullptr)
-        return false;
+    auto &cached_bank =
+        g_pmetal_bank_cache[
+            pmetal_bank_cache_slot(base)];
+
+    const pmetal_env_source_authority::bank_donor *bank = nullptr;
+    std::uint16_t count = 0u;
+
+    if (cached_bank.valid &&
+        cached_bank.base == base) {
+        count = cached_bank.count;
+        bank_signature =
+            cached_bank.signature;
+        bank = cached_bank.bank;
+
+        if (static_cast<std::uint32_t>(index) >=
+                count ||
+            bank == nullptr)
+            return false;
+    } else {
+        std::uint16_t version = 0u;
+        if (!safe_read(base + 8u, version) ||
+            !safe_read(base + 10u, count) ||
+            version != 4u ||
+            count == 0u ||
+            count > 256u ||
+            static_cast<std::uint32_t>(index) >=
+                count)
+            return false;
+
+        bank =
+            resolve_pmetal_bank(
+                base,
+                count,
+                bank_signature);
+        if (bank == nullptr)
+            return false;
+    }
 
     const auto *entry =
         base + 0x30u +
         static_cast<std::size_t>(index) * 12u;
 
-    if (!safe_read(entry, row_id))
+    // pmetal_bank_signature validated the complete fixed row table before a
+    // cache entry could become valid. With immutable bank metadata and exact
+    // base identity, a cached positive bank may read the selected row id
+    // directly. The slow path above remains fail-open for unseen carriers.
+    if (cached_bank.valid &&
+        cached_bank.base == base) {
+        std::memcpy(
+            &row_id,
+            entry,
+            sizeof(row_id));
+    } else if (!safe_read(
+                   entry,
+                   row_id)) {
         return false;
+    }
 
     const auto *row =
         pmetal_env_source_authority::find_row(
@@ -1963,6 +2002,15 @@ void __fastcall hook_steady_eval_tail(
         return;
     }
 
+    // Reuse this exact decoded sample in hook_steady_packer. Before the
+    // direct-producer path existed, the packer performed one PTDE decode per
+    // steady event. The tail hook had accidentally added a second identical
+    // read_selected_ptde() on the same event.
+    g_producer.upper = upper;
+    g_producer.lower = lower;
+    g_producer.have_upper = true;
+    g_producer.have_lower = true;
+
     write_direct_ul_rgb(
         dst,
         upper,
@@ -2011,20 +2059,28 @@ void __fastcall hook_steady_packer(
         }
     }
 
-    f4 upper{};
-    f4 lower{};
+    // The direct steady-evaluator tail runs inside g_steady_packer_orig and
+    // already decoded the exact same selected record. Reuse that event-local
+    // sample instead of traversing and validating the carrier a second time.
+    // If direct injection is unavailable or its decode failed, preserve the
+    // original fail-open capture path.
+    if (!g_producer.have_upper ||
+        !g_producer.have_lower) {
+        f4 upper{};
+        f4 lower{};
 
-    if (!read_selected_ptde(
-            source,
-            selector,
-            upper,
-            lower))
-        return;
+        if (!read_selected_ptde(
+                source,
+                selector,
+                upper,
+                lower))
+            return;
 
-    g_producer.upper = upper;
-    g_producer.lower = lower;
-    g_producer.have_upper = true;
-    g_producer.have_lower = true;
+        g_producer.upper = upper;
+        g_producer.lower = lower;
+        g_producer.have_upper = true;
+        g_producer.have_lower = true;
+    }
 
     const auto *raw =
         resolve_raw_lightbank_record(
