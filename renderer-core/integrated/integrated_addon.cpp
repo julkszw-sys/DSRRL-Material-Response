@@ -2646,6 +2646,50 @@ effect_probe_mask prepared_effect_mask(
     return mask;
 }
 
+effect_probe_mask route_candidate_effect_mask(
+    std::uint8_t route_mask) noexcept
+{
+    effect_probe_mask mask = 0u;
+
+    if ((route_mask &
+         (k_route_stable |
+          k_route_hemenvlerp |
+          k_route_subsurface |
+          k_route_fixed_pointlight)) != 0u)
+        mask |= effect_probe_bit(
+            effect_probe_id::material_response);
+
+    if ((route_mask &
+         k_route_hemenvlerp) != 0u)
+        mask |= effect_probe_bit(
+            effect_probe_id::material_response_lerp);
+
+    if ((route_mask &
+         k_route_upper_lower) != 0u)
+        mask |= effect_probe_bit(
+            effect_probe_id::upper_lower);
+
+    if ((route_mask &
+         k_route_subsurface) != 0u)
+        mask |= effect_probe_bit(
+            effect_probe_id::subsurface);
+
+    if ((route_mask &
+         k_route_hemdir3) != 0u)
+        mask |= effect_probe_bit(
+            effect_probe_id::hemdir3);
+
+    if ((route_mask &
+         k_route_fixed_pointlight) != 0u) {
+        mask |= effect_probe_bit(
+            effect_probe_id::pointlight);
+        mask |= effect_probe_bit(
+            effect_probe_id::local_specular);
+    }
+
+    return mask;
+}
+
 effect_probe_mask candidate_effect_mask(
     std::uint8_t route_mask,
     bool fixed_pointlight_bound,
@@ -3471,6 +3515,20 @@ bool on_draw(
         return false;
     }
 
+    const auto route_candidates =
+        route_candidate_effect_mask(
+            route_mask);
+    mark_effect_probe_mask(
+        route_candidates,
+        effect_probe_stage::candidate);
+
+    const auto route_candidates =
+        route_candidate_effect_mask(
+            route_mask);
+    mark_effect_probe_mask(
+        route_candidates,
+        effect_probe_stage::candidate);
+
     const bool fixed_pointlight_bound =
         (route_mask &
          k_route_fixed_pointlight) != 0u;
@@ -3499,8 +3557,12 @@ bool on_draw(
             upper_lower_bound,
             upper_lower_identity,
             material,
-            decision))
+            decision)) {
+        mark_effect_probe_mask(
+            route_candidates,
+            effect_probe_stage::fail_open);
         return false;
+    }
 
     const auto effect_candidates =
         candidate_effect_mask(
@@ -3663,8 +3725,12 @@ bool on_draw_indexed(
             upper_lower_bound,
             upper_lower_identity,
             material,
-            decision))
+            decision)) {
+        mark_effect_probe_mask(
+            route_candidates,
+            effect_probe_stage::fail_open);
         return false;
+    }
 
     const auto effect_candidates =
         candidate_effect_mask(
