@@ -314,7 +314,8 @@ jobs:
             'k_legacy_packed_gi_sha256',
             'PSGetShaderResources',
             '12u',
-            '14u',
+            'stock_views[2]',
+            'snapshot_ready_envspec',
             'create_resource_view'
           )) {
             if ($envspecResource -notmatch [regex]::Escape($required)) { throw "P_Metal EnvSpec exact probe resource invariant missing: $required" }
