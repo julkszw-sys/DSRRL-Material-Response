@@ -13,7 +13,7 @@ int main()
     namespace gen = dsrrl::operators::material_response::generated;
 
     static_assert(!gen::k_dsr_mtd_identity_supplement_source_complete);
-    static_assert(gen::k_dsr_mtd_identity_supplement.size() == 1u);
+    static_assert(gen::k_dsr_mtd_identity_supplement.size() == 26u);
 
     std::array<std::uint8_t,32> resolved{};
     const auto semantic =
@@ -30,6 +30,19 @@ int main()
         0x83,0x0c,0xf5,0x9d,0xe6,0x9b,0x37,0xd4
     };
     CHECK(resolved == expected);
+
+    std::array<std::uint8_t,32> nospc{};
+    CHECK(gen::dsr_mtd_identity_supplement_resolve(
+        mr::mtd_semantic_hash("A10_Sky[Dn]_LS.mtd"),
+        nospc));
+
+    constexpr std::array<std::uint8_t,32> expected_nospc = {
+        0x9e,0x15,0xf7,0x56,0x9b,0x6e,0x68,0x24,
+        0x5e,0x4b,0xca,0xe5,0x6c,0xf6,0x20,0x4d,
+        0x5c,0x27,0x84,0xcb,0xee,0x13,0x2c,0xa7,
+        0xf9,0xda,0x9a,0xa9,0x37,0x51,0x69,0x0f
+    };
+    CHECK(nospc == expected_nospc);
 
     std::array<std::uint8_t,32> unknown{};
     CHECK(!gen::dsr_mtd_identity_supplement_resolve(
