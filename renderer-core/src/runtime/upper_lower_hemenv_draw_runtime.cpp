@@ -1,4 +1,5 @@
 #include "dsrrl/runtime/upper_lower_hemenv_draw_runtime.hpp"
+#include "dsrrl/runtime/runtime_hot_telemetry.hpp"
 
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
@@ -170,7 +171,7 @@ bool upper_lower_hemenv_draw_runtime::prepare_draw_request(
     prepared_upper_lower_hemenv_draw &prepared) noexcept
 {
     prepared = {};
-    ++candidates_;
+    telemetry::hot_count(candidates_);
 
     if (cmd_list == nullptr ||
         !identity.valid() ||
@@ -192,33 +193,33 @@ bool upper_lower_hemenv_draw_runtime::prepare_draw_request(
     case operators::lightbank::upper_lower_hemenv_family::phn_pnts:
     case operators::lightbank::upper_lower_hemenv_family::phn_faceeye:
     case operators::lightbank::upper_lower_hemenv_family::phn_subsurf:
-        ++phn_candidates_;
+        telemetry::hot_count(phn_candidates_);
         break;
     case operators::lightbank::upper_lower_hemenv_family::gst:
     case operators::lightbank::upper_lower_hemenv_family::gst_faceeye:
-        ++gst_candidates_;
+        telemetry::hot_count(gst_candidates_);
         break;
     case operators::lightbank::upper_lower_hemenv_family::sfx:
-        ++sfx_candidates_;
+        telemetry::hot_count(sfx_candidates_);
         break;
     case operators::lightbank::upper_lower_hemenv_family::snow:
-        ++snow_candidates_;
+        telemetry::hot_count(snow_candidates_);
         break;
     case operators::lightbank::upper_lower_hemenv_family::ntoa:
-        ++ntoa_candidates_;
+        telemetry::hot_count(ntoa_candidates_);
         break;
     }
 
     if (!upper_lower_identity_runtime_shape_valid(
             identity)) {
-        ++identity_rejects_;
+        telemetry::hot_count(identity_rejects_);
         return false;
     }
 
     // Until the combined MR+U/L replacement is materialized, never allow
     // two replacement pixel shaders to compete in one draw batch.
     if (spc && material_response_active) {
-        ++spc_mr_hold_;
+        telemetry::hot_count(spc_mr_hold_);
         return false;
     }
 
@@ -255,11 +256,11 @@ bool upper_lower_hemenv_draw_runtime::prepare_draw_request(
             context,
             prepared.carrier)) {
         replacement.shader->Release();
-        ++carrier_rejects_;
+        telemetry::hot_count(carrier_rejects_);
         return false;
     }
 
-    ++carrier_ready_;
+    telemetry::hot_count(carrier_ready_);
 
     prepared.shader =
         replacement.shader;
@@ -293,12 +294,12 @@ bool upper_lower_hemenv_draw_runtime::prepare_draw_request(
     }
 
     prepared.ready = true;
-    ++requests_;
+    telemetry::hot_count(requests_);
 
     if (spc)
-        ++spc_ready_;
+        telemetry::hot_count(spc_ready_);
     else
-        ++nospc_ready_;
+        telemetry::hot_count(nospc_ready_);
 
     switch (identity.family) {
     case operators::lightbank::upper_lower_hemenv_family::hemenv:
@@ -308,20 +309,20 @@ bool upper_lower_hemenv_draw_runtime::prepare_draw_request(
     case operators::lightbank::upper_lower_hemenv_family::phn_pnts:
     case operators::lightbank::upper_lower_hemenv_family::phn_faceeye:
     case operators::lightbank::upper_lower_hemenv_family::phn_subsurf:
-        ++phn_ready_;
+        telemetry::hot_count(phn_ready_);
         break;
     case operators::lightbank::upper_lower_hemenv_family::gst:
     case operators::lightbank::upper_lower_hemenv_family::gst_faceeye:
-        ++gst_ready_;
+        telemetry::hot_count(gst_ready_);
         break;
     case operators::lightbank::upper_lower_hemenv_family::sfx:
-        ++sfx_ready_;
+        telemetry::hot_count(sfx_ready_);
         break;
     case operators::lightbank::upper_lower_hemenv_family::snow:
-        ++snow_ready_;
+        telemetry::hot_count(snow_ready_);
         break;
     case operators::lightbank::upper_lower_hemenv_family::ntoa:
-        ++ntoa_ready_;
+        telemetry::hot_count(ntoa_ready_);
         break;
     }
 
