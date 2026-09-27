@@ -35,6 +35,7 @@ struct fixed_pointlight_pipeline_telemetry {
 struct prepared_fixed_pointlight_shader {
     ID3D11PixelShader *shader = nullptr;
     std::uint8_t light_count = 0u;
+    bool blended_material = false;
     bool ready = false;
 };
 
