@@ -1,0 +1,1 @@
+Diagnostic CI trigger only. Runtime sources are identical to main parent ce5e1ced2c85982da2f71ce4a37e428eaf005c60. Includes post-clean-Q U/L hot-path fixes: shared steady decode, negative P_Metal fast path, batched snapshot tuple read, and removal of feature-registry mutex from U/L producer/carrier hot paths.
