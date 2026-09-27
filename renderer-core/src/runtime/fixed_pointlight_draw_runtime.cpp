@@ -41,6 +41,7 @@ struct snapshot {
     std::uint8_t valid_mask=0u;
     std::uint8_t captured_count=0u;
     mutable std::atomic_bool consumed{false};
+    std::shared_ptr<std::atomic<std::uint64_t>> owner_consumed_serial{};
 
     mutable std::mutex gpu_mutex;
     mutable ID3D11Device *device=nullptr;
@@ -75,6 +76,10 @@ capture_hook g_hook{};
 
 std::mutex g_mutex;
 std::unordered_map<std::uintptr_t,std::shared_ptr<snapshot>> g_snapshots;
+std::unordered_map<
+    std::uintptr_t,
+    std::shared_ptr<std::atomic<std::uint64_t>>>
+    g_owner_consumed_serial;
 std::atomic_bool g_have_snapshots{false};
 std::atomic<std::uint64_t> g_snapshot_epoch{1u};
 
@@ -219,6 +224,18 @@ void __fastcall capture_callback(
 
         {
             std::lock_guard<std::mutex> lock(g_mutex);
+
+            if(!current->owner_consumed_serial){
+                auto &owner_serial=
+                    g_owner_consumed_serial[owner_key];
+                if(!owner_serial)
+                    owner_serial=
+                        std::make_shared<
+                            std::atomic<std::uint64_t>>(0u);
+                current->owner_consumed_serial=
+                    owner_serial;
+            }
+
             g_snapshots[owner_key]=current;
             g_snapshot_epoch.fetch_add(
                 1u,
@@ -424,6 +441,7 @@ void clear_state() noexcept
     g_draw_snapshot.reset();
     std::lock_guard<std::mutex> lock(g_mutex);
     g_snapshots.clear();
+    g_owner_consumed_serial.clear();
     g_snapshot_epoch.fetch_add(
         1u,
         std::memory_order_release);
@@ -555,8 +573,17 @@ bool fixed_pointlight_draw_runtime::prepare_t19(
     const auto selected=g_draw_snapshot;
     const auto expected_mask=static_cast<std::uint8_t>((1u<<expected_count)-1u);
     if(selected->captured_count!=expected_count ||
-       selected->valid_mask!=expected_mask)
+       selected->valid_mask!=expected_mask ||
+       !selected->owner_consumed_serial)
         return false;
+
+    const auto last_consumed=
+        selected->owner_consumed_serial->load(
+            std::memory_order_acquire);
+    if(last_consumed>=selected->serial){
+        telemetry::hot_count(g_selector_stale);
+        return false;
+    }
 
     bool expected_consumed=false;
     if(!selected->consumed.compare_exchange_strong(
@@ -584,6 +611,25 @@ bool fixed_pointlight_draw_runtime::prepare_t19(
             false,
             std::memory_order_release);
         return false;
+    }
+
+    auto observed=
+        selected->owner_consumed_serial->load(
+            std::memory_order_acquire);
+    for(;;){
+        if(observed>=selected->serial){
+            srv->Release();
+            telemetry::hot_count(g_selector_stale);
+            return false;
+        }
+
+        if(selected->owner_consumed_serial->
+                compare_exchange_weak(
+                    observed,
+                    selected->serial,
+                    std::memory_order_acq_rel,
+                    std::memory_order_acquire))
+            break;
     }
 
     prepared.t19=srv;
@@ -654,9 +700,6 @@ fixed_pointlight_telemetry fixed_pointlight_draw_runtime::telemetry() const noex
 void fixed_pointlight_draw_runtime::reset() noexcept
 {
     clear_state();
-    g_snapshot_epoch.store(
-        1u,
-        std::memory_order_release);
     g_selector_cache={};
     g_serial.store(0u);
     g_captures.store(0u);
