@@ -5,6 +5,7 @@
 #include "dsrrl/runtime/material_owner_selection.hpp"
 #include "dsrrl/runtime/material_response_draw_transaction.hpp"
 #include "dsrrl/runtime/material_resource_draw_runtime.hpp"
+#include "dsrrl/runtime/runtime_hot_telemetry.hpp"
 #include "dsrrl/runtime/envspec_resource_runtime.hpp"
 #include "dsrrl/runtime/bloom_scene_sidecar_runtime.hpp"
 #include "dsrrl/runtime/bloom_fx_draw_transport.hpp"
@@ -164,11 +165,8 @@ bool g_hot_telemetry_enabled = false;
 
 bool runtime_hot_telemetry_requested() noexcept
 {
-    const char *value =
-        std::getenv("DSRRL_RUNTIME_TELEMETRY");
-    return value != nullptr &&
-        value[0] == '1' &&
-        value[1] == '\0';
+    return dsrrl::runtime::telemetry::
+        hot_enabled();
 }
 
 void hot_count(
