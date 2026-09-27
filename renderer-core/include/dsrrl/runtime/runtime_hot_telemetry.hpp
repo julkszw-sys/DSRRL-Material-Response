@@ -28,4 +28,17 @@ inline void hot_count(
             std::memory_order_relaxed);
 }
 
+inline bool native_state_verification_enabled() noexcept
+{
+    static const bool enabled = []() noexcept {
+        const char *value =
+            std::getenv("DSRRL_RUNTIME_VERIFY_STATE");
+        return value != nullptr &&
+            value[0] == '1' &&
+            value[1] == '\0';
+    }();
+
+    return enabled;
+}
+
 } // namespace dsrrl::runtime::telemetry
