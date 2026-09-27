@@ -132,6 +132,7 @@ add_library(dsrrl_renderer_core STATIC
     src/operators/surface/terminal_sat_rgb_patch.cpp
     src/operators/surface/faceeye_shadow.cpp
     src/operators/point_light/pnts_attenuation.cpp
+    src/operators/point_light/clustered_sidecar.cpp
     src/operators/point_light/legacy_specular.cpp
     src/operators/point_light/local_specular_receiver_registry.cpp
     src/operators/point_light/local_specular_microfacet_windows.cpp
@@ -246,6 +247,11 @@ target_compile_features(dsrrl_renderer_future_runtime_tests PRIVATE cxx_std_17)
 
 add_executable(dsrrl_renderer_faceeye_pointlight_tests
     tests/faceeye_pointlight_readiness_tests.cpp)
+
+add_executable(dsrrl_renderer_clustered_sidecar_tests
+    tests/clustered_sidecar_tests.cpp)
+target_link_libraries(dsrrl_renderer_clustered_sidecar_tests PRIVATE dsrrl_renderer_core)
+target_compile_features(dsrrl_renderer_clustered_sidecar_tests PRIVATE cxx_std_17)
 target_link_libraries(dsrrl_renderer_faceeye_pointlight_tests PRIVATE dsrrl_renderer_core)
 target_compile_features(dsrrl_renderer_faceeye_pointlight_tests PRIVATE cxx_std_17)
 
@@ -342,6 +348,7 @@ if(MSVC)
     target_compile_options(dsrrl_renderer_island_tests PRIVATE /W4 /WX)
     target_compile_options(dsrrl_renderer_future_runtime_tests PRIVATE /W4 /WX)
     target_compile_options(dsrrl_renderer_faceeye_pointlight_tests PRIVATE /W4 /WX)
+    target_compile_options(dsrrl_renderer_clustered_sidecar_tests PRIVATE /W4 /WX)
     target_compile_options(dsrrl_renderer_local_specular_receiver_tests PRIVATE /W4 /WX)
     target_compile_options(dsrrl_renderer_local_specular_window_tests PRIVATE /W4 /WX)
     target_compile_options(dsrrl_renderer_fixed_local_specular_plan_tests PRIVATE /W4 /WX)
@@ -369,6 +376,7 @@ else()
     target_compile_options(dsrrl_renderer_island_tests PRIVATE -Wall -Wextra -Wpedantic -Werror)
     target_compile_options(dsrrl_renderer_future_runtime_tests PRIVATE -Wall -Wextra -Wpedantic -Werror)
     target_compile_options(dsrrl_renderer_faceeye_pointlight_tests PRIVATE -Wall -Wextra -Wpedantic -Werror)
+    target_compile_options(dsrrl_renderer_clustered_sidecar_tests PRIVATE -Wall -Wextra -Wpedantic -Werror)
     target_compile_options(dsrrl_renderer_local_specular_receiver_tests PRIVATE -Wall -Wextra -Wpedantic -Werror)
     target_compile_options(dsrrl_renderer_local_specular_window_tests PRIVATE -Wall -Wextra -Wpedantic -Werror)
     target_compile_options(dsrrl_renderer_fixed_local_specular_plan_tests PRIVATE -Wall -Wextra -Wpedantic -Werror)
