@@ -280,8 +280,8 @@ bool draw_state_transaction_runtime::begin(
         return false;
     }
 
+    ID3D11DeviceContext1 *ctx1 = nullptr;
     if (mutation.constant_buffer_count != 0u) {
-        ID3D11DeviceContext1 *ctx1 = nullptr;
         (void)ctx->QueryInterface(
             __uuidof(ID3D11DeviceContext1),
             reinterpret_cast<void **>(&ctx1));
