@@ -1,0 +1,1 @@
+Diagnostic build trigger. Parent main 622ac39917a6f76238de412f72a1b97074fff936. No renderer math changes. Reports producer token publication and selector/draw reference-carrier frontier with one-time thread IDs and candidate/tuple/draw-token latches. Heavy runtime telemetry and Bloom FX diagnostics remain off.
