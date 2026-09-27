@@ -1225,6 +1225,79 @@ prepare_draw_request_with_upper_lower(
 
 
 bool material_response_draw_runtime::
+prepare_lerp_draw_request(
+    const operators::material_response::decision &decision,
+    prepared_material_response_draw &prepared) noexcept
+{
+    prepared = {};
+    telemetry::hot_count(eligible_draws_);
+
+    if (!full_material_response_decision(decision) ||
+        decision.receiver_id < 24u ||
+        decision.receiver_id > 47u ||
+        local_quarantine_.load() ||
+        transactions_.quarantined())
+        return false;
+
+    replacement_record replacement{};
+    if (!acquire_replacement(
+            replacement_bank::lerp_upper_lower,
+            decision.receiver_id,
+            replacement)) {
+        telemetry::hot_count(replacement_miss_);
+        return false;
+    }
+
+    auto *b12 = realize_b12(decision);
+    if (b12 == nullptr) {
+        telemetry::hot_count(b12_bind_fail_);
+        replacement.shader->Release();
+        return false;
+    }
+
+    prepared.shader = replacement.shader;
+    prepared.b12 = b12;
+    prepared.receiver_id = decision.receiver_id;
+    prepared.replacement_composed_owners =
+        replacement.composed_owners;
+    prepared.family =
+        material_response_replacement_family::hemenvlerp;
+    prepared.request.primary =
+        core::operator_id::material_response;
+    prepared.request.additional_owners =
+        core::operator_bit(
+            core::operator_id::diffuse_material_domain) |
+        replacement.composed_owners;
+    prepared.request.additional_shader_owners =
+        prepared.request.additional_owners;
+    prepared.request.receiver_verified = true;
+    prepared.request.material_verified = true;
+    prepared.request.pixel_shader =
+        replacement.shader;
+    prepared.request.replace_pixel_shader = true;
+    prepared.request.constant_buffers[0] = {
+        12u,
+        b12,
+        core::operator_bit(
+            core::operator_id::material_response)
+    };
+    prepared.request.constant_buffer_count = 1u;
+
+    draw_tx_mutation verify{};
+    if (build_island_draw_mutation(
+            prepared.request,
+            verify) !=
+        island_draw_adapter_result::ready) {
+        telemetry::hot_count(b12_bind_fail_);
+        release_prepared_draw(prepared);
+        return false;
+    }
+
+    prepared.ready = true;
+    return true;
+}
+
+bool material_response_draw_runtime::
 prepare_lerp_draw_request_with_upper_lower(
     const operators::material_response::decision &decision,
     ID3D11Buffer *b13,
