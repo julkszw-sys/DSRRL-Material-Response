@@ -54,6 +54,18 @@ enum class bloom_draw_recurrence_proof : std::uint8_t {
     target_write_recurrence_closed
 };
 
+// Main FLVER/material recurrence and FX/SFX recurrence are independent.
+// PTDE stage 0x01000000 already closes the main parser -> DrawContext ->
+// material route and proves a decision-relevant blended write. Keep that proof
+// separate from the still-open FX material/identity chain.
+enum class bloom_main_scene_recurrence_proof : std::uint8_t {
+    unknown = 0,
+    stage_target_pair_closed,
+    parser_drawcontext_route_closed,
+    material_route_closed,
+    blended_target_write_closed
+};
+
 enum class bloom_fx_sfx_recurrence_proof : std::uint8_t {
     unknown = 0,
     target_scene_collector_closed,
@@ -97,6 +109,7 @@ enum class bloom_scene_bridge_result : std::uint8_t {
     writer_class_coverage_incomplete,
     writer_order_not_closed,
     draw_recurrence_not_closed,
+    main_scene_recurrence_not_closed,
     fx_sfx_recurrence_not_closed,
     fx_material_route_not_closed,
     fx_blend_semantics_not_closed,
@@ -128,6 +141,8 @@ struct bloom_scene_bridge_carrier {
         bloom_writer_order_proof::unknown;
     bloom_draw_recurrence_proof draw_recurrence =
         bloom_draw_recurrence_proof::unknown;
+    bloom_main_scene_recurrence_proof main_scene_recurrence =
+        bloom_main_scene_recurrence_proof::unknown;
     bloom_fx_sfx_recurrence_proof fx_sfx_recurrence =
         bloom_fx_sfx_recurrence_proof::unknown;
     bloom_fx_material_route_proof fx_material_route =
@@ -170,6 +185,10 @@ inline bloom_scene_bridge_result validate_bloom_scene_bridge_carrier(
     if (c.draw_recurrence !=
         bloom_draw_recurrence_proof::target_write_recurrence_closed)
         return bloom_scene_bridge_result::draw_recurrence_not_closed;
+
+    if (c.main_scene_recurrence !=
+        bloom_main_scene_recurrence_proof::blended_target_write_closed)
+        return bloom_scene_bridge_result::main_scene_recurrence_not_closed;
 
     if (c.fx_sfx_recurrence !=
         bloom_fx_sfx_recurrence_proof::target_write_recurrence_closed)
