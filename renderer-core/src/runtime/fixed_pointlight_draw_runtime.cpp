@@ -76,8 +76,18 @@ capture_hook g_hook{};
 std::mutex g_mutex;
 std::unordered_map<std::uintptr_t,std::shared_ptr<snapshot>> g_snapshots;
 std::atomic_bool g_have_snapshots{false};
+std::atomic<std::uint64_t> g_snapshot_epoch{1u};
+
+struct selector_snapshot_tls {
+    std::uintptr_t owner=0u;
+    std::uint64_t epoch=0u;
+    std::shared_ptr<const snapshot> selected{};
+    bool present=false;
+};
+
 thread_local std::shared_ptr<snapshot> g_producer_snapshot{};
 thread_local std::shared_ptr<const snapshot> g_draw_snapshot{};
+thread_local selector_snapshot_tls g_selector_cache{};
 
 std::atomic_bool g_enabled{false};
 std::atomic_bool g_quarantined{false};
@@ -210,6 +220,9 @@ void __fastcall capture_callback(
         {
             std::lock_guard<std::mutex> lock(g_mutex);
             g_snapshots[owner_key]=current;
+            g_snapshot_epoch.fetch_add(
+                1u,
+                std::memory_order_release);
             g_have_snapshots.store(
                 true,
                 std::memory_order_release);
@@ -411,6 +424,10 @@ void clear_state() noexcept
     g_draw_snapshot.reset();
     std::lock_guard<std::mutex> lock(g_mutex);
     g_snapshots.clear();
+    g_snapshot_epoch.fetch_add(
+        1u,
+        std::memory_order_release);
+    g_selector_cache={};
     g_have_snapshots.store(
         false,
         std::memory_order_release);
@@ -488,12 +505,31 @@ void fixed_pointlight_draw_runtime::selector_event(void *owner) noexcept
     }
 
     const auto key=reinterpret_cast<std::uintptr_t>(owner);
+    const auto epoch=
+        g_snapshot_epoch.load(
+            std::memory_order_acquire);
     std::shared_ptr<const snapshot> selected{};
-    {
+
+    if(g_selector_cache.owner==key &&
+       g_selector_cache.epoch==epoch){
+        if(!g_selector_cache.present){
+            telemetry::hot_count(g_selector_stale);
+            return;
+        }
+        selected=g_selector_cache.selected;
+    }else{
         std::lock_guard<std::mutex> lock(g_mutex);
         const auto it=g_snapshots.find(key);
         if(it!=g_snapshots.end())
             selected=it->second;
+
+        g_selector_cache={
+            key,
+            g_snapshot_epoch.load(
+                std::memory_order_relaxed),
+            selected,
+            selected!=nullptr
+        };
     }
 
     if(!selected){
@@ -618,6 +654,10 @@ fixed_pointlight_telemetry fixed_pointlight_draw_runtime::telemetry() const noex
 void fixed_pointlight_draw_runtime::reset() noexcept
 {
     clear_state();
+    g_snapshot_epoch.store(
+        1u,
+        std::memory_order_release);
+    g_selector_cache={};
     g_serial.store(0u);
     g_captures.store(0u);
     g_restarts.store(0u);
