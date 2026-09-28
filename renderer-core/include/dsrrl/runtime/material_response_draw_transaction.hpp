@@ -108,6 +108,14 @@ public:
     bool has_receiver_upper_lower_replacement(
         std::uint32_t receiver_id) const noexcept;
 
+    // Dedicated exact-Subsurface paired consumer. This bank is intentionally
+    // unreachable from generic MR draw preparation.
+    bool register_subsurface_upper_lower_spec_replacement(
+        std::uint32_t receiver_id,
+        const void *dxbc,
+        std::size_t dxbc_size,
+        core::operator_mask composed_owners) noexcept;
+
     bool prepare_draw_request(
         const operators::material_response::decision &decision,
         prepared_material_response_draw &prepared) noexcept;
@@ -142,6 +150,11 @@ public:
         std::uint32_t receiver_id,
         std::uint32_t route_index,
         ID3D11Buffer *b13,
+        prepared_material_response_draw &prepared) noexcept;
+
+    // Only the exact DSBT->DSB Subsurface route may call this. Generic MR has
+    // no paired-SpecRGB promotion entry point after the reset.
+    bool promote_prevalidated_subsurface_to_spec_rgb(
         prepared_material_response_draw &prepared) noexcept;
 
     // Carrier-only seam for an independently authorized operator that shares
@@ -191,7 +204,8 @@ private:
         stable = 0,
         lerp,
         lerp_upper_lower,
-        upper_lower
+        upper_lower,
+        subsurface_upper_lower_spec
     };
 
     bool acquire_replacement(
@@ -223,6 +237,8 @@ private:
         lerp_upper_lower_replacements_;
     std::unordered_map<std::uint32_t, replacement_record>
         upper_lower_replacements_;
+    std::unordered_map<std::uint32_t, replacement_record>
+        subsurface_upper_lower_spec_replacements_;
     std::unordered_map<std::uint32_t, ID3D11Buffer *> b12_by_route_;
     std::atomic<std::uint64_t> resource_epoch_{1u};
 
