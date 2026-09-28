@@ -693,5 +693,3 @@ std::size_t material_response_island::material_profile_count() const noexcept
 }
 
 } // namespace dsrrl::operators::material_response
-
-} // namespace dsrrl::operators::material_response
