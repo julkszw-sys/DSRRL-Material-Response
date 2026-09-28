@@ -32,7 +32,6 @@ int main()
     material_response::decision material{};
     material.active = true;
     material.c100 = {{2.0f,3.0f,4.0f}};
-    material.c101_f0q = {{0.25f,0.5f,0.75f}};
     material.c101 = 2.5f;
     material.ptde_specular_power = 8.5f;
     material.ptde_specular_power_verified = true;
