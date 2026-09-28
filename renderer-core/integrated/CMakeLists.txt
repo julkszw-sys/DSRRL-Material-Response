@@ -283,20 +283,20 @@ add_custom_target(
         "${DSRRL_CORE_GENERATED_RUNTIME}/generated_pmetal_env_source_authority.hpp")
 
 add_custom_command(
-    OUTPUT "${DSRRL_CORE_GENERATED_MATERIAL_RESPONSE}/generated_hemenvlerp_v211_v1.hpp"
+    OUTPUT "${DSRRL_CORE_GENERATED_MATERIAL_RESPONSE}/generated_diffuse_response_v1.hpp"
     COMMAND "${Python3_EXECUTABLE}"
-            "${DSRRL_RENDERER_CORE_ROOT}/tools/generate_hemenvlerp_v211_v1.py"
-            --input "${DSRRL_RENDERER_CORE_ROOT}/data/provenance/hemenvlerp_mr_v211_v1.tsv"
-            --output "${DSRRL_CORE_GENERATED_MATERIAL_RESPONSE}/generated_hemenvlerp_v211_v1.hpp"
+            "${DSRRL_RENDERER_CORE_ROOT}/tools/generate_material_response_diffuse_v1.py"
+            --input "${DSRRL_RENDERER_CORE_ROOT}/data/provenance/material_response_diffuse_v1.tsv"
+            --output "${DSRRL_CORE_GENERATED_MATERIAL_RESPONSE}/generated_diffuse_response_v1.hpp"
     DEPENDS
-        "${DSRRL_RENDERER_CORE_ROOT}/tools/generate_hemenvlerp_v211_v1.py"
-        "${DSRRL_RENDERER_CORE_ROOT}/data/provenance/hemenvlerp_mr_v211_v1.tsv"
+        "${DSRRL_RENDERER_CORE_ROOT}/tools/generate_material_response_diffuse_v1.py"
+        "${DSRRL_RENDERER_CORE_ROOT}/data/provenance/material_response_diffuse_v1.tsv"
     VERBATIM)
 
 add_custom_target(
-    dsrrl_core_hemenvlerp_authority
+    dsrrl_core_material_response_diffuse_v1_authority
     DEPENDS
-        "${DSRRL_CORE_GENERATED_MATERIAL_RESPONSE}/generated_hemenvlerp_v211_v1.hpp")
+        "${DSRRL_CORE_GENERATED_MATERIAL_RESPONSE}/generated_diffuse_response_v1.hpp")
 
 add_custom_command(
     OUTPUT "${DSRRL_CORE_GENERATED_ENVSPEC}/generated_pmetal_envspec_hemenvlerp_v1.hpp"
@@ -357,8 +357,7 @@ add_library(
     "${DSRRL_RENDERER_CORE_ROOT}/src/runtime/draw_state_transaction.cpp"
     "${DSRRL_RENDERER_CORE_ROOT}/src/runtime/island_draw_adapter.cpp"
     "${DSRRL_RENDERER_CORE_ROOT}/src/runtime/material_response_draw_transaction.cpp"
-    "${DSRRL_RENDERER_CORE_ROOT}/src/operators/material_response/material_response_v211_materializer.cpp"
-    "${DSRRL_RENDERER_CORE_ROOT}/src/operators/material_response/hemenvlerp_v211_materializer.cpp"
+    "${DSRRL_RENDERER_CORE_ROOT}/src/operators/material_response/material_response_diffuse_v1.cpp"
     "${DSRRL_RENDERER_CORE_ROOT}/src/operators/resource_bridges/spec_rgb_consumer_materializer.cpp"
     "${DSRRL_RENDERER_CORE_ROOT}/src/operators/resource_bridges/fixed_pointlight_spec_rgb_bridge.cpp"
     "${DSRRL_RENDERER_CORE_ROOT}/src/operators/lightbank/hemdir3_b13_materializer.cpp"
@@ -371,7 +370,7 @@ add_dependencies(
     dsrrl_core_hemdir3_authority
     dsrrl_core_upper_lower_authority
     dsrrl_core_pmetal_env_source_authority
-    dsrrl_core_hemenvlerp_authority
+    dsrrl_core_material_response_diffuse_v1_authority
     dsrrl_core_pmetal_envspec_hemenvlerp_authority)
 
 target_include_directories(
