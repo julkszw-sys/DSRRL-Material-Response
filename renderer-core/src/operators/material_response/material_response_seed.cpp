@@ -79,7 +79,6 @@ std::size_t register_confirmed_material_routes_v1(material_response_island &isla
             continue;
 
         profile.c100 = constants->c100;
-        profile.c101_f0q = constants->c101_f0q;
         profile.ptde_specular_power = constants->ptde_specular_power;
         profile.ptde_specular_power_verified =
             constants->ptde_specular_power_verified;
@@ -137,7 +136,6 @@ std::size_t register_confirmed_material_routes_v1(material_response_island &isla
             mtd_semantic_hash(seed.material_family);
         profile.c101 = seed.c101;
         profile.c100 = seed.c100;
-        profile.c101_f0q = seed.c101_f0q;
         profile.ptde_specular_power =
             seed.ptde_specular_power;
         profile.ptde_specular_power_verified = true;
