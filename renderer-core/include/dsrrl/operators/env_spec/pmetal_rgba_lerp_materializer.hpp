@@ -1,5 +1,7 @@
 #pragma once
 
+#include "dsrrl/core/feature_registry.hpp"
+
 #include <cstddef>
 #include <cstdint>
 #include <vector>
@@ -10,7 +12,7 @@ enum class pmetal_rgba_lerp_materialize_result : std::uint8_t {
     applied = 0,
     pass_not_candidate,
     pass_unknown_exact_sha,
-    fail_v211_stage,
+    fail_diffuse_base,
     fail_a1_overlap,
     fail_invalid_dxbc,
     fail_operator_precondition,
@@ -36,6 +38,7 @@ struct pmetal_rgba_lerp_materialize_outcome {
 
 pmetal_rgba_lerp_materialize_outcome
 materialize_pmetal_rgba_lerp_receiver(
+    const core::feature_registry &features,
     const std::uint8_t *stock_source,
     std::size_t stock_size,
     std::vector<std::uint8_t> &output) noexcept;
