@@ -167,10 +167,10 @@ release_resources() noexcept
     }
     lerp_replacements_.clear();
 
-    for (auto &[_,buffer] :
+    for (auto &[_,entry] :
          b12_by_context_) {
-        if (buffer != nullptr)
-            buffer->Release();
+        if (entry.buffer != nullptr)
+            entry.buffer->Release();
     }
     b12_by_context_.clear();
 
@@ -244,10 +244,10 @@ on_destroy_device(
     }
     lerp_replacements_.clear();
 
-    for (auto &[_,buffer] :
+    for (auto &[_,entry] :
          b12_by_context_) {
-        if (buffer != nullptr)
-            buffer->Release();
+        if (entry.buffer != nullptr)
+            entry.buffer->Release();
     }
     b12_by_context_.clear();
 
@@ -726,6 +726,34 @@ bool pmetal_envspec_draw_runtime::prepare(
     }
     effect_latch(effect_spec_rgb_ready_);
 
+    const std::array<f4,4> payload{{
+        {
+            decision.c101_f0q[0],
+            decision.c101_f0q[1],
+            decision.c101_f0q[2],
+            1.0f
+        },
+        {
+            decision.c100[0],
+            decision.c100[1],
+            decision.c100[2],
+            1.0f
+        },
+        {
+            source.a[0],
+            source.a[1],
+            source.a[2],
+            0.0f
+        },
+        {
+            source.b[0],
+            source.b[1],
+            source.b[2],
+            source.beta
+        }
+    }};
+    static_assert(sizeof(payload) == 64u);
+
     ID3D11Device *device = nullptr;
     context->GetDevice(&device);
 
@@ -747,6 +775,10 @@ bool pmetal_envspec_draw_runtime::prepare(
     }
 
     ID3D11Buffer *b12 = nullptr;
+    bool upload_required = true;
+    const auto b12_key =
+        reinterpret_cast<std::uintptr_t>(
+            context);
 
     {
         std::lock_guard<std::mutex> lock(
@@ -772,19 +804,22 @@ bool pmetal_envspec_draw_runtime::prepare(
             return false;
         }
 
-        const auto key =
-            reinterpret_cast<std::uintptr_t>(
-                context);
-
         const auto found =
-            b12_by_context_.find(key);
+            b12_by_context_.find(
+                b12_key);
 
         if (found !=
                 b12_by_context_.end() &&
-            found->second != nullptr) {
+            found->second.buffer != nullptr) {
             b12 =
-                found->second;
+                found->second.buffer;
             b12->AddRef();
+            upload_required =
+                !found->second.payload_valid ||
+                std::memcmp(
+                    found->second.payload.data(),
+                    payload.data(),
+                    sizeof(payload)) != 0;
         } else {
             D3D11_BUFFER_DESC desc{};
             desc.ByteWidth = 64u;
@@ -819,77 +854,78 @@ bool pmetal_envspec_draw_runtime::prepare(
                 return false;
             }
 
+            b12_context_cache entry{};
+            entry.buffer = b12;
             b12_by_context_.emplace(
-                key,
-                b12);
+                b12_key,
+                entry);
             b12->AddRef();
         }
     }
 
     device->Release();
 
-    D3D11_MAPPED_SUBRESOURCE mapped{};
-    if (FAILED(
-            context->Map(
-                b12,
-                0u,
-                D3D11_MAP_WRITE_DISCARD,
-                0u,
-                &mapped)) ||
-        mapped.pData == nullptr) {
-        b12->Release();
+    if (upload_required) {
+        D3D11_MAPPED_SUBRESOURCE mapped{};
+        if (FAILED(
+                context->Map(
+                    b12,
+                    0u,
+                    D3D11_MAP_WRITE_DISCARD,
+                    0u,
+                    &mapped)) ||
+            mapped.pData == nullptr) {
+            b12->Release();
 
-        if (shader != nullptr)
-            shader->Release();
-        env_resources_.release(
-            prepared.env_resources);
-        lightbank_.release_prepared_draw(
-            prepared.upper_lower);
-        material_resources_.
-            release_prepared_draw(
-                prepared.material_resources);
-        telemetry::hot_count(source_rejects_);
-        effect_fail(
-            effect_fail_mask_,
-            k_effect_fail_b12);
-        return false;
+            if (shader != nullptr)
+                shader->Release();
+            env_resources_.release(
+                prepared.env_resources);
+            lightbank_.release_prepared_draw(
+                prepared.upper_lower);
+            material_resources_.
+                release_prepared_draw(
+                    prepared.material_resources);
+            telemetry::hot_count(source_rejects_);
+            effect_fail(
+                effect_fail_mask_,
+                k_effect_fail_b12);
+            return false;
+        }
+
+        std::memcpy(
+            mapped.pData,
+            payload.data(),
+            sizeof(payload));
+
+        context->Unmap(
+            b12,
+            0u);
+
+        {
+            std::lock_guard<std::mutex> lock(
+                mutex_);
+            const auto found =
+                b12_by_context_.find(
+                    b12_key);
+            if (found !=
+                    b12_by_context_.end() &&
+                found->second.buffer == b12) {
+                std::memcpy(
+                    found->second.payload.data(),
+                    payload.data(),
+                    sizeof(payload));
+                found->second.payload_valid = true;
+            }
+        }
+
+        telemetry::hot_count(
+            b12_uploads_);
+    } else {
+        telemetry::hot_count(
+            b12_reuses_);
     }
 
-    const std::array<f4,4> payload{{
-        {
-            decision.c101_f0q[0],
-            decision.c101_f0q[1],
-            decision.c101_f0q[2],
-            1.0f
-        },
-        {
-            decision.c100[0],
-            decision.c100[1],
-            decision.c100[2],
-            1.0f
-        },
-        {
-            source.a[0],
-            source.a[1],
-            source.a[2],
-            0.0f
-        },
-        {
-            source.b[0],
-            source.b[1],
-            source.b[2],
-            source.beta
-        }
-    }};
-
-    std::memcpy(
-        mapped.pData,
-        payload.data(),
-        sizeof(payload));
-
-    context->Unmap(
-        b12,
-        0u);
     effect_latch(effect_b12_ready_);
 
     const auto env_owner =
@@ -1060,6 +1096,8 @@ pmetal_envspec_draw_runtime::telemetry() const noexcept
         upper_lower_fallback_.load(),
         requests_.load(),
         lerp_requests_.load(),
+        b12_uploads_.load(),
+        b12_reuses_.load(),
         effect_entry_seen_.load(),
         effect_feature_ready_.load(),
         effect_material_ready_.load(),
@@ -1096,6 +1134,8 @@ void pmetal_envspec_draw_runtime::reset() noexcept
     upper_lower_fallback_.store(0u);
     requests_.store(0u);
     lerp_requests_.store(0u);
+    b12_uploads_.store(0u);
+    b12_reuses_.store(0u);
     effect_entry_seen_.store(false);
     effect_feature_ready_.store(false);
     effect_material_ready_.store(false);

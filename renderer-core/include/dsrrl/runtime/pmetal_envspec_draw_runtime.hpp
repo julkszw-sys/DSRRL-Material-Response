@@ -12,6 +12,7 @@
 
 #include <reshade.hpp>
 
+#include <array>
 #include <atomic>
 #include <cstddef>
 #include <cstdint>
@@ -59,6 +60,8 @@ struct pmetal_envspec_telemetry {
     std::uint64_t upper_lower_fallback = 0;
     std::uint64_t requests = 0;
     std::uint64_t lerp_requests = 0;
+    std::uint64_t b12_uploads = 0;
+    std::uint64_t b12_reuses = 0;
 
     // Low-overhead effect ladder. These are one-way session latches used by
     // DSRRL_EFFECT_TELEMETRY and do not imply pixel equivalence.
@@ -134,6 +137,12 @@ private:
         core::operator_mask upper_lower_owners = 0;
     };
 
+    struct b12_context_cache {
+        ID3D11Buffer *buffer = nullptr;
+        std::array<std::uint8_t,64> payload{};
+        bool payload_valid = false;
+    };
+
     void release_resources() noexcept;
 
     core::renderer_core &core_;
@@ -147,7 +156,7 @@ private:
         replacements_;
     std::unordered_map<std::uint32_t,ID3D11PixelShader *>
         lerp_replacements_;
-    std::unordered_map<std::uintptr_t,ID3D11Buffer *>
+    std::unordered_map<std::uintptr_t,b12_context_cache>
         b12_by_context_;
 
     std::atomic<std::uint64_t> replacement_register_ok_{0};
@@ -166,6 +175,8 @@ private:
     std::atomic<std::uint64_t> upper_lower_fallback_{0};
     std::atomic<std::uint64_t> requests_{0};
     std::atomic<std::uint64_t> lerp_requests_{0};
+    std::atomic<std::uint64_t> b12_uploads_{0};
+    std::atomic<std::uint64_t> b12_reuses_{0};
 
     std::atomic_bool effect_entry_seen_{false};
     std::atomic_bool effect_feature_ready_{false};
