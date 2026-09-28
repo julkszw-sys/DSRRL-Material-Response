@@ -4560,9 +4560,9 @@ bool AddonInit(
 
     g_mr_ready.store(
         receivers == 24u &&
-        routes == 35u &&
+        routes == 43u &&
         g_material_response.receiver_recipe_count() == 24u &&
-        g_material_response.material_profile_count() == 35u);
+        g_material_response.material_profile_count() == 43u);
 
     if (!enable_integrated_islands()) {
         disable_integrated_islands();
