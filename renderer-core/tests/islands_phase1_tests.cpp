@@ -183,8 +183,8 @@ int main()
     material_response_island seeded;
     CHECK(register_confirmed_material_receivers_v1(seeded) == 24);
     CHECK(seeded.receiver_recipe_count() == 24);
-    CHECK(register_confirmed_material_routes_v1(seeded) == 35);
-    CHECK(seeded.material_profile_count() == 35);
+    CHECK(register_confirmed_material_routes_v1(seeded) == 43);
+    CHECK(seeded.material_profile_count() == 43);
 
     // The direct PointLight NoSpc path is intentionally not registered as a
     // generic Material Response profile. Recover exact c100 only after an
