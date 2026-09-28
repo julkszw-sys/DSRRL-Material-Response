@@ -665,6 +665,14 @@ jobs:
           }
 
           foreach ($required in @(
+            'register_subsurface_upper_lower_spec_replacement',
+            'subsurface_upper_lower_spec_replacements_',
+            'promote_prevalidated_subsurface_to_spec_rgb'
+          )) {
+            if (($entry + $tx + $subsurface) -notmatch [regex]::Escape($required)) { throw "Exact Subsurface paired SpecRGB materialization missing: $required" }
+          }
+
+          foreach ($required in @(
             'prepare_prevalidated_route_request',
             'k_ptde_body_route_index',
             'exact_dsbt_material',
