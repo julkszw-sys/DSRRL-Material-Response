@@ -46,9 +46,12 @@ std::size_t register_confirmed_material_receivers_v1(
         receiver_recipe recipe;
         recipe.receiver_id = receiver.receiver_id;
         recipe.scope = material_scope_policy::exact_material_required;
+        // Generic HemEnv/HemEnvLerp Material Response owns only the
+        // confirmed PTDE diffuse material-domain operator. Raw c101 remains
+        // material data for explicit EnvSpec/local-specular consumers and is
+        // never authorization for a generic DSR F0/PBL mutation.
         recipe.certified_operations =
-            diffuse_material_domain_linear |
-            specular_factor_c101;
+            diffuse_material_domain_linear;
         recipe.envspec = ptde_envspec_presence::unknown;
 
         if (island.register_receiver_recipe(recipe))
