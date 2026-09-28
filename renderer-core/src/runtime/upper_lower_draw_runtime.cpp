@@ -1731,7 +1731,7 @@ bool read_exact_pmetal_env_source(
     }
 
     const auto index =
-        static_cast<std::uint8_t>(
+        static_cast<std::uint32_t>(
             selector);
 
     auto &cached_bank =
