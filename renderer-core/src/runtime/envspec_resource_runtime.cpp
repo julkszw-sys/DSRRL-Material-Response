@@ -18,6 +18,7 @@
 #include <atomic>
 #include <cstddef>
 #include <cstdint>
+#include <cstring>
 #include <filesystem>
 #include <fstream>
 #include <mutex>
@@ -97,8 +98,11 @@ std::filesystem::path process_dir()
         buffer).parent_path();
 }
 
-bool admit_pack()
+bool load_pack(
+    std::vector<std::uint8_t> &out)
 {
+    out.clear();
+
     try {
         const auto root =
             process_dir();
@@ -145,10 +149,11 @@ bool admit_pack()
             env::k_legacy_packed_gi_sha256)
             return false;
 
-        g_pack =
+        out =
             std::move(bytes);
         return true;
     } catch (...) {
+        out.clear();
         return false;
     }
 }
@@ -323,13 +328,9 @@ void on_init_device(
         g_device = device_ptr;
     }
 
-    g_pack_ready =
-        admit_pack();
-
-    if (g_pack_ready)
-        ++g_pack_admit_ok;
-    else
-        ++g_pack_admit_fail;
+    std::vector<std::uint8_t> pack;
+    const bool pack_ready =
+        load_pack(pack);
 
     sampler_desc desc{};
     desc.filter =
@@ -344,10 +345,49 @@ void on_init_device(
     desc.min_lod = 0.0f;
     desc.max_lod = 0.0f;
 
-    g_sampler_ready =
+    sampler created_sampler{};
+    const bool sampler_ready =
         device_ptr->create_sampler(
             desc,
-            &g_sampler);
+            &created_sampler);
+
+    sampler replaced_sampler{};
+    bool adopted = false;
+    {
+        std::lock_guard<std::mutex> lock(
+            g_mutex);
+
+        // Pack bytes and the sampler become visible atomically with their
+        // readiness flags. A concurrent teardown may clear g_device while the
+        // sidecar is being admitted; in that case discard the cold result
+        // instead of resurrecting an already-released carrier.
+        if (g_device == device_ptr) {
+            replaced_sampler = g_sampler;
+            g_pack = std::move(pack);
+            g_pack_ready = pack_ready;
+            g_sampler = created_sampler;
+            g_sampler_ready = sampler_ready;
+            adopted = true;
+        }
+    }
+
+    if (!adopted) {
+        if (created_sampler.handle != 0u)
+            device_ptr->destroy_sampler(
+                created_sampler);
+        return;
+    }
+
+    if (replaced_sampler.handle != 0u &&
+        replaced_sampler.handle !=
+            created_sampler.handle)
+        device_ptr->destroy_sampler(
+            replaced_sampler);
+
+    if (pack_ready)
+        ++g_pack_admit_ok;
+    else
+        ++g_pack_admit_fail;
 }
 
 void on_destroy_device(
@@ -675,7 +715,16 @@ bool get_ptde_cube(
         slot >= k_ptde_slots)
         return false;
 
+    const std::uint32_t key =
+        static_cast<std::uint32_t>(
+            probe) *
+        k_ptde_slots +
+        slot;
+
     device *device_ptr = nullptr;
+    std::array<std::uint8_t,k_ptde_cube_bytes>
+        cube_bytes{};
+
     {
         std::lock_guard<std::mutex> lock(
             g_mutex);
@@ -687,12 +736,6 @@ bool get_ptde_cube(
         device_ptr =
             g_device;
 
-        const std::uint32_t key =
-            static_cast<std::uint32_t>(
-                probe) *
-            k_ptde_slots +
-            slot;
-
         const auto found =
             g_ptde_cubes.find(key);
 
@@ -703,23 +746,26 @@ bool get_ptde_cube(
             return
                 view.handle != 0u;
         }
-    }
 
-    const std::uint32_t key =
-        static_cast<std::uint32_t>(
-            probe) *
-        k_ptde_slots +
-        slot;
+        const std::size_t offset =
+            static_cast<std::size_t>(key) *
+            k_ptde_cube_bytes;
 
-    const std::size_t offset =
-        static_cast<std::size_t>(key) *
-        k_ptde_cube_bytes;
+        if (offset > g_pack.size() ||
+            k_ptde_cube_bytes >
+                g_pack.size() - offset) {
+            ++g_cube_fail;
+            return false;
+        }
 
-    if (offset > g_pack.size() ||
-        k_ptde_cube_bytes >
-            g_pack.size() - offset) {
-        ++g_cube_fail;
-        return false;
+        // Cold materialization must never retain a pointer into g_pack after
+        // dropping the registry lock: release_carrier() is allowed to clear
+        // that vector during teardown. Copy one 32x32x6 RGBA cube (24 KiB)
+        // while protected, then create the GPU resource from the local bytes.
+        std::memcpy(
+            cube_bytes.data(),
+            g_pack.data() + offset,
+            cube_bytes.size());
     }
 
     std::array<subresource_data,k_faces>
@@ -729,8 +775,7 @@ bool get_ptde_cube(
          face < k_faces;
          ++face) {
         subresources[face].data =
-            g_pack.data() +
-            offset +
+            cube_bytes.data() +
             static_cast<std::size_t>(face) *
                 k_ptde_face_bytes;
         subresources[face].row_pitch =
@@ -783,22 +828,29 @@ bool get_ptde_cube(
     }
 
     bool inserted = false;
+    bool carrier_alive = false;
     {
         std::lock_guard<std::mutex> lock(
             g_mutex);
 
-        const auto result =
-            g_ptde_cubes.emplace(
-                key,
-                cube);
+        carrier_alive =
+            g_device == device_ptr &&
+            g_pack_ready;
 
-        inserted =
-            result.second;
-        view =
-            result.first->second.view;
+        if (carrier_alive) {
+            const auto result =
+                g_ptde_cubes.emplace(
+                    key,
+                    cube);
+
+            inserted =
+                result.second;
+            view =
+                result.first->second.view;
+        }
     }
 
-    if (!inserted) {
+    if (!carrier_alive || !inserted) {
         device_ptr->destroy_resource_view(
             cube.view);
         device_ptr->destroy_resource(
@@ -905,10 +957,22 @@ bool envspec_resource_runtime::prepare(
     }
 
     ID3D11ShaderResourceView *stock_views[3]{};
-    context->PSGetShaderResources(
-        12u,
-        3u,
-        stock_views);
+    if (probe_b_required) {
+        // HemEnvLerp needs both stock endpoints. One contiguous fetch is
+        // cheaper than two calls even though t13 is intentionally ignored.
+        context->PSGetShaderResources(
+            12u,
+            3u,
+            stock_views);
+    } else {
+        // Stable HemEnv resolves its logical probe from t12 only. The PTDE
+        // replacement still binds its required t14/s14 carrier, but reading
+        // stock t13/t14 here would only add two COM retains/releases per draw.
+        context->PSGetShaderResources(
+            12u,
+            1u,
+            stock_views);
+    }
 
     auto *stock_a = stock_views[0];
     auto *stock_b = stock_views[2];
@@ -1025,6 +1089,15 @@ void envspec_resource_runtime::release(
 envspec_resource_telemetry
 envspec_resource_runtime::telemetry() const noexcept
 {
+    bool pack_ready = false;
+    bool sampler_ready = false;
+    {
+        std::lock_guard<std::mutex> lock(
+            g_mutex);
+        pack_ready = g_pack_ready;
+        sampler_ready = g_sampler_ready;
+    }
+
     return {
         g_native_candidates.load(),
         g_native_matches.load(),
@@ -1036,8 +1109,8 @@ envspec_resource_runtime::telemetry() const noexcept
         g_cube_fail.load(),
         g_prepare_ok.load(),
         g_prepare_fail.load(),
-        g_pack_ready,
-        g_sampler_ready
+        pack_ready,
+        sampler_ready
     };
 }
 
