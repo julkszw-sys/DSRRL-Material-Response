@@ -388,6 +388,16 @@ void on_init_device(
         ++g_pack_admit_ok;
     else
         ++g_pack_admit_fail;
+
+    if (!pack_ready) {
+        reshade::log::message(
+            reshade::log::level::warning,
+            "DSRRL EnvSpec: exact PTDE PackedGI sidecar unavailable or invalid; EnvSpec fails open to stock DSR. Run VERIFY_ENVSPEC_SIDECAR.ps1 from the game root.");
+    } else if (!sampler_ready) {
+        reshade::log::message(
+            reshade::log::level::warning,
+            "DSRRL EnvSpec: PTDE sampler creation failed; EnvSpec fails open to stock DSR.");
+    }
 }
 
 void on_destroy_device(
