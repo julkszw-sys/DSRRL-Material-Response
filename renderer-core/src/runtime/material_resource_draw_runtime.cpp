@@ -936,7 +936,7 @@ void on_init_resource_view(
         exact_subsurface_body_spec_hash(
             logical_hash);
     const bool spec_member =
-        generated::spec_name_hash_allowed_v12(
+        generated::spec_equipment_name_hash_allowed_v12(
             logical_hash) ||
         subsurface_body_spec;
     const bool diffuse_member =
@@ -1206,7 +1206,7 @@ exact_specular_companion_ready(
     const bool ready =
         snapshot &&
         logical_hash != 0u &&
-        generated::spec_name_hash_allowed_v12(
+        generated::spec_equipment_name_hash_allowed_v12(
             logical_hash) &&
         companion != nullptr;
 
@@ -1272,7 +1272,7 @@ prepare_draw_requests(
         const bool exact_companion =
             h1 != 0u &&
             generated::
-                spec_name_hash_allowed_v12(
+                spec_equipment_name_hash_allowed_v12(
                     h1) &&
             replacement != nullptr;
 
