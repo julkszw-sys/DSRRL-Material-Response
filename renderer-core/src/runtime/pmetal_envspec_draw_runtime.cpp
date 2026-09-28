@@ -290,6 +290,24 @@ register_replacement(
         return false;
     }
 
+    const auto existing =
+        replacements_.find(
+            outcome.receiver_id);
+    if (existing !=
+        replacements_.end()) {
+        auto *already =
+            outcome.upper_lower_composed
+                ? existing->second.upper_lower
+                : existing->second.base;
+
+        // receiver_id is bound to one exact stock SHA in the materializer
+        // authority. Within one device lifetime the resulting replacement is
+        // deterministic, so recreating the same D3D11 PS for every matching
+        // pipeline only adds driver work and pointer churn.
+        if (already != nullptr)
+            return true;
+    }
+
     ID3D11PixelShader *shader = nullptr;
     if (FAILED(
             device_->CreatePixelShader(
@@ -362,6 +380,14 @@ register_lerp_replacement(
         ++lerp_replacement_register_fail_;
         return false;
     }
+
+    const auto existing =
+        lerp_replacements_.find(
+            outcome.semantic_receiver_id);
+    if (existing !=
+            lerp_replacements_.end() &&
+        existing->second != nullptr)
+        return true;
 
     ID3D11PixelShader *shader = nullptr;
     if (FAILED(
