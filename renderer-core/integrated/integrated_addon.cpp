@@ -4667,10 +4667,14 @@ bool AddonInit(
         dsrrl::operators::material_response::
             register_confirmed_material_routes_v1(
                 g_material_response);
+    const bool mr_finalized =
+        g_material_response.finalize_registration();
 
     g_mr_ready.store(
         receivers == 24u &&
         routes == 43u &&
+        mr_finalized &&
+        g_material_response.registration_finalized() &&
         g_material_response.receiver_recipe_count() == 24u &&
         g_material_response.material_profile_count() == 43u);
 
