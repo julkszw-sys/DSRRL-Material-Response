@@ -33,6 +33,7 @@ enum class decision_reason : std::uint8_t {
     unknown_receiver,
     material_required,
     owner_tuple_not_authenticated,
+    ptde_companion_required,
     unknown_material,
     receiver_material_mismatch,
     no_certified_operator
@@ -97,6 +98,7 @@ struct material_profile {
     std::uint32_t certified_operations = response_none;
     ptde_envspec_presence envspec = ptde_envspec_presence::unknown;
     bool semantic_name_required = false;
+    bool ptde_companion_required = false;
 };
 
 struct decision {
@@ -122,7 +124,8 @@ public:
 
     decision evaluate(
         std::uint32_t receiver_id,
-        const std::optional<material_identity> &material) const;
+        const std::optional<material_identity> &material,
+        bool ptde_companion_verified = false) const;
 
     // Direct PTDE PointLight owns a material-local operator and must not borrow
     // the stable no-PointLight receiver namespace merely to recover authored
