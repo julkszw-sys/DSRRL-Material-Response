@@ -14,6 +14,13 @@ int main()
         core::operator_bit(core::operator_id::local_specular_legacy);
     const auto mr =
         core::operator_bit(core::operator_id::material_response);
+    const auto static_common =
+        core::operator_bit(core::operator_id::diffuse_material_domain) |
+        core::operator_bit(core::operator_id::pointlight_pnts_attenuation) |
+        core::operator_bit(core::operator_id::terminal_sat_rgb);
+    const auto static_nospc =
+        static_common |
+        core::operator_bit(core::operator_id::envspec_nospc_delete);
 
     CHECK(core::draw_additional_owner_masks_valid(
         core::operator_id::local_specular_legacy,
@@ -27,6 +34,25 @@ int main()
         core::operator_id::point_light,
         mr,
         mr,
+        mr,
+        0u,
+        0u));
+
+    // Direct clustered replacements are composed shader payloads. Static
+    // create-time owners participate in shader ownership only; b12/t18/t19
+    // remain owned by the dynamic PointLight/MR/local-specular islands.
+    CHECK(core::draw_additional_owner_masks_valid(
+        core::operator_id::local_specular_legacy,
+        point | mr | static_common,
+        point | mr | static_common,
+        point | mr,
+        point,
+        0u));
+
+    CHECK(core::draw_additional_owner_masks_valid(
+        core::operator_id::point_light,
+        mr | static_nospc,
+        mr | static_nospc,
         mr,
         0u,
         0u));
