@@ -2282,17 +2282,14 @@ bool on_create_pipeline(
                     diffuse_v1_family::stable_hemenv) {
             // Base MR always preserves stock t1. SpecRGB is a paired shader
             // variant selected only after the draw-local t10 carrier succeeds.
-            if (!g_mr_draw_runtime.has_receiver_replacement(
-                    mr.receiver_id)) {
-                if (g_mr_draw_runtime.register_receiver_replacement(
-                        mr.receiver_id,
-                        mr_payload.data(),
-                        mr_payload.size(),
-                        mr.composed_owners))
-                    ++g_mr_payload_materialize_ok;
-                else
-                    ++g_mr_payload_materialize_fail;
-            }
+            if (g_mr_draw_runtime.register_receiver_replacement(
+                    mr.receiver_id,
+                    mr_payload.data(),
+                    mr_payload.size(),
+                    mr.composed_owners))
+                ++g_mr_payload_materialize_ok;
+            else
+                ++g_mr_payload_materialize_fail;
 
             // MR reset: generic diffuse response must never feed PTDE SpecRGB
             // into the surviving DSR F0/PBL receiver. SpecRGB is owned only by
@@ -2316,19 +2313,15 @@ bool on_create_pipeline(
                         upper_lower_hemenv_stratum::spc &&
                 mr_ul.stable_receiver_id ==
                     mr.receiver_id) {
-                if (!g_mr_draw_runtime.
-                        has_receiver_upper_lower_replacement(
-                            mr.receiver_id)) {
-                    if (g_mr_draw_runtime.
-                            register_receiver_upper_lower_replacement(
-                                mr.receiver_id,
-                                mr_ul_payload.data(),
-                                mr_ul_payload.size(),
-                                mr.composed_owners))
-                        ++g_mr_ul_payload_materialize_ok;
-                    else
-                        ++g_mr_ul_payload_materialize_fail;
-                }
+                if (g_mr_draw_runtime.
+                        register_receiver_upper_lower_replacement(
+                            mr.receiver_id,
+                            mr_ul_payload.data(),
+                            mr_ul_payload.size(),
+                            mr.composed_owners))
+                    ++g_mr_ul_payload_materialize_ok;
+                else
+                    ++g_mr_ul_payload_materialize_fail;
 
                 // No generic MR+SpecRGB variant: see anti-hybrid rule above.
             } else if (
@@ -2378,19 +2371,15 @@ bool on_create_pipeline(
 
             // Material Response is operator-independent from U/L readiness.
             // Always register the certified Lerp MR-only replacement first.
-            if (!g_mr_draw_runtime.
-                    has_lerp_receiver_replacement(
-                        lerp_receiver_id)) {
-                if (g_mr_draw_runtime.
-                        register_lerp_receiver_replacement(
-                            lerp_receiver_id,
-                            lerp_mr_payload.data(),
-                            lerp_mr_payload.size(),
-                            lerp_mr.composed_owners))
-                    ++g_mr_payload_materialize_ok;
-                else
-                    ++g_mr_payload_materialize_fail;
-            }
+            if (g_mr_draw_runtime.
+                    register_lerp_receiver_replacement(
+                        lerp_receiver_id,
+                        lerp_mr_payload.data(),
+                        lerp_mr_payload.size(),
+                        lerp_mr.composed_owners))
+                ++g_mr_payload_materialize_ok;
+            else
+                ++g_mr_payload_materialize_fail;
 
             // MR reset: do not pair PTDE SpecRGB with the stock DSR
             // HemEnvLerp PBL tail. SpecRGB is operator-local elsewhere.
@@ -2419,19 +2408,15 @@ bool on_create_pipeline(
                         upper_lower_hemenv_stratum::spc &&
                 lerp_mr_ul.stable_receiver_id ==
                     lerp_receiver_id) {
-                if (!g_mr_draw_runtime.
-                        has_lerp_receiver_upper_lower_replacement(
-                            lerp_receiver_id)) {
-                    if (g_mr_draw_runtime.
-                            register_lerp_receiver_upper_lower_replacement(
-                                lerp_receiver_id,
-                                lerp_mr_ul_payload.data(),
-                                lerp_mr_ul_payload.size(),
-                                lerp_mr.composed_owners))
-                        ++g_mr_ul_payload_materialize_ok;
-                    else
-                        ++g_mr_ul_payload_materialize_fail;
-                }
+                if (g_mr_draw_runtime.
+                        register_lerp_receiver_upper_lower_replacement(
+                            lerp_receiver_id,
+                            lerp_mr_ul_payload.data(),
+                            lerp_mr_ul_payload.size(),
+                            lerp_mr.composed_owners))
+                    ++g_mr_ul_payload_materialize_ok;
+                else
+                    ++g_mr_ul_payload_materialize_fail;
 
                 // No generic Lerp MR+SpecRGB variant.
             } else if (
