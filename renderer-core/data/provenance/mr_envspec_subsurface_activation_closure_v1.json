@@ -79,7 +79,16 @@
   "envspec": {
     "path": "P_METAL_EXACT_ROUTE_RESOURCE_AND_CB_TRANSACTION_PRESENT",
     "runtime_activation": "OPEN",
-    "pixel_behavior": "OPEN"
+    "pixel_behavior": "OPEN",
+    "reference_carrier_tuple_integrity": {
+      "status": "HARDENED_FAIL_OPEN",
+      "fingerprint_source": "assignment owner+selectorA+selectorB+beta_bits",
+      "payload_source": "producer sourceA/sourceB+selectorA+selectorB+source_beta",
+      "new_gate": "producer selectorA/selectorB/source_beta bits must exactly equal assignment tuple before publication",
+      "telemetry": "upper_lower.reference_publish_tuple_mismatch",
+      "runtime_activation": "OPEN",
+      "pixel_behavior": "OPEN"
+    }
   },
   "exclusions": {
     "envspec_packedgi_sidecar": "EXTERNAL_USER_OWNED_NOT_SEARCHED_NOT_AUDITED",

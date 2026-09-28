@@ -1412,7 +1412,7 @@ void log_state(const char *tag) noexcept
         "tex_hook=%u/%u tex_restore_fail=%u res_named=%llu res_ready=%llu res_missing=%llu "
         "res_unsupported=%llu spec_req=%llu fixed_spec=%llu fixed_diff=%llu diff_req=%llu norm_req=%llu res_fo=%llu "
         "ul_hook=%u ul_q=%u ul_restore_fail=%u ul_pub=%llu ul_sel=%llu/%llu/%llu ul_tuple_miss=%llu "
-        "ul_steady=%llu/%llu ul_blend=%llu/%llu/%llu ul_b13=%llu/%llu ul_req=%llu "
+        "ul_pub_tuple_miss=%llu ul_steady=%llu/%llu ul_blend=%llu/%llu/%llu ul_b13=%llu/%llu ul_req=%llu "
         "sub_candidate=%llu sub_prepared=%llu sub_pipe_reject=%llu sub_mat_reject=%llu sub_surface_reject=%llu "
         "sub_ul_reject=%llu sub_mr_reject=%llu sub_res_reject=%llu sub_spec_reject=%llu sub_route_reject=%llu sub_adapter_reject=%llu "
         "mode_hook=%u/%u mode_q=%u mode_restore_fail=%u mode_begin=%llu mode_in2=%llu mode_obs=%llu mode2=%llu mode_snap=%llu/%llu "
@@ -1504,6 +1504,8 @@ void log_state(const char *tag) noexcept
         static_cast<unsigned long long>(ul.selector_match),
         static_cast<unsigned long long>(ul.selector_miss),
         static_cast<unsigned long long>(ul.tuple_mismatch),
+        static_cast<unsigned long long>(
+            ul.reference_publish_tuple_mismatch),
         static_cast<unsigned long long>(ul.steady_seen),
         static_cast<unsigned long long>(ul.steady_pass),
         static_cast<unsigned long long>(ul.blend_seen),

@@ -32,6 +32,7 @@ struct upper_lower_telemetry {
     std::uint64_t selector_match = 0;
     std::uint64_t selector_miss = 0;
     std::uint64_t tuple_mismatch = 0;
+    std::uint64_t reference_publish_tuple_mismatch = 0;
     std::uint64_t b13_create = 0;
     std::uint64_t b13_hit = 0;
     std::uint64_t hemdir3_b13_create = 0;

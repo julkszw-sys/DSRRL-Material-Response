@@ -723,6 +723,7 @@ std::atomic<std::uint64_t> g_selector_seen{0};
 std::atomic<std::uint64_t> g_selector_match{0};
 std::atomic<std::uint64_t> g_selector_miss{0};
 std::atomic<std::uint64_t> g_tuple_mismatch{0};
+std::atomic<std::uint64_t> g_reference_publish_tuple_mismatch{0};
 std::atomic<std::uint64_t> g_b13_create{0};
 std::atomic<std::uint64_t> g_b13_hit{0};
 std::atomic<std::uint64_t> g_hemdir3_b13_create{0};
@@ -1370,6 +1371,29 @@ void publish_reference_token(
         sizeof(assignment_beta));
     if (!std::isfinite(assignment_beta))
         return;
+
+    // The fingerprint and the source payload must describe the same producer
+    // event. The assignment tuple is what the selector later authenticates;
+    // never attach packer source pointers/selectors from a different tuple to
+    // that fingerprint. A mismatch is fail-open, not a best-effort remap.
+    std::uint32_t producer_beta_bits = 0u;
+    static_assert(
+        sizeof(producer_beta_bits) ==
+        sizeof(producer.source_beta));
+    std::memcpy(
+        &producer_beta_bits,
+        &producer.source_beta,
+        sizeof(producer_beta_bits));
+
+    if (producer.selector_a !=
+            static_cast<std::int32_t>(selector_a) ||
+        producer.selector_b !=
+            static_cast<std::int32_t>(selector_b) ||
+        producer_beta_bits != beta_bits) {
+        telemetry::hot_count(
+            g_reference_publish_tuple_mismatch);
+        return;
+    }
 
     latch_thread_id_once(
         g_reference_publish_tid);
@@ -4879,6 +4903,7 @@ upper_lower_draw_runtime::telemetry() const noexcept
         g_selector_match.load(),
         g_selector_miss.load(),
         g_tuple_mismatch.load(),
+        g_reference_publish_tuple_mismatch.load(),
         g_b13_create.load(),
         g_b13_hit.load(),
         g_hemdir3_b13_create.load(),
@@ -4922,6 +4947,7 @@ void upper_lower_draw_runtime::reset() noexcept
     g_selector_match.store(0);
     g_selector_miss.store(0);
     g_tuple_mismatch.store(0);
+    g_reference_publish_tuple_mismatch.store(0);
     g_b13_create.store(0);
     g_b13_hit.store(0);
     g_hemdir3_b13_create.store(0);
