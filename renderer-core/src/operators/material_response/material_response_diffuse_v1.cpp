@@ -151,8 +151,7 @@ bool rebuild_dxbc(
     std::vector<chunk> chunks,
     std::size_t code_index,
     const std::vector<std::uint32_t> &words,
-    std::vector<std::uint8_t> &output,
-    bool defer_surface_operators) noexcept
+    std::vector<std::uint8_t> &output) noexcept
 {
     output.clear();
 
@@ -604,7 +603,8 @@ materialize_ptde_diffuse_response_v1(
     const core::feature_registry &features,
     const std::uint8_t *source,
     std::size_t size,
-    std::vector<std::uint8_t> &output) noexcept
+    std::vector<std::uint8_t> &output,
+    bool defer_surface_operators) noexcept
 {
     diffuse_v1_outcome outcome{};
     output.clear();
