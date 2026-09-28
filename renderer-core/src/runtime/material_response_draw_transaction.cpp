@@ -143,10 +143,10 @@ struct replacement_tls_cache_entry {
     }
 };
 
-// Replacement identity is (bank, receiver). Eight banks share the same
-// 24-receiver semantic namespace, so the old 32-slot direct cache could
-// repeatedly fall back to the mutex under mixed HemEnv/HemEnvLerp/U-L draws.
-// Keep the cache bounded but large enough for the active working set.
+// Replacement identity is (bank, receiver). Four active banks share the
+// 24-receiver semantic namespace after the MR reset (stable, Lerp and their
+// U/L compositions). Keep the cache bounded but large enough for the complete
+// active working set without generic SpecRGB bank collisions.
 constexpr std::size_t k_replacement_tls_cache_slots = 128u;
 thread_local std::array<
     replacement_tls_cache_entry,
@@ -238,26 +238,14 @@ bool material_response_draw_runtime::acquire_replacement(
     case replacement_bank::stable:
         source = &replacements_;
         break;
-    case replacement_bank::stable_spec:
-        source = &spec_rgb_replacements_;
-        break;
     case replacement_bank::lerp:
         source = &lerp_replacements_;
-        break;
-    case replacement_bank::lerp_spec:
-        source = &lerp_spec_rgb_replacements_;
         break;
     case replacement_bank::lerp_upper_lower:
         source = &lerp_upper_lower_replacements_;
         break;
-    case replacement_bank::lerp_upper_lower_spec:
-        source = &lerp_upper_lower_spec_rgb_replacements_;
-        break;
     case replacement_bank::upper_lower:
         source = &upper_lower_replacements_;
-        break;
-    case replacement_bank::upper_lower_spec:
-        source = &upper_lower_spec_rgb_replacements_;
         break;
     }
 
@@ -411,26 +399,12 @@ void material_response_draw_runtime::release_resources() noexcept
     }
     replacements_.clear();
 
-    for (auto &entry : spec_rgb_replacements_) {
-        auto *shader = entry.second.shader;
-        if (shader != nullptr)
-            shader->Release();
-    }
-    spec_rgb_replacements_.clear();
-
     for (auto &entry : lerp_replacements_) {
         auto *shader = entry.second.shader;
         if (shader != nullptr)
             shader->Release();
     }
     lerp_replacements_.clear();
-
-    for (auto &entry : lerp_spec_rgb_replacements_) {
-        auto *shader = entry.second.shader;
-        if (shader != nullptr)
-            shader->Release();
-    }
-    lerp_spec_rgb_replacements_.clear();
 
     for (auto &entry : lerp_upper_lower_replacements_) {
         auto *shader = entry.second.shader;
@@ -439,26 +413,12 @@ void material_response_draw_runtime::release_resources() noexcept
     }
     lerp_upper_lower_replacements_.clear();
 
-    for (auto &entry : lerp_upper_lower_spec_rgb_replacements_) {
-        auto *shader = entry.second.shader;
-        if (shader != nullptr)
-            shader->Release();
-    }
-    lerp_upper_lower_spec_rgb_replacements_.clear();
-
     for (auto &entry : upper_lower_replacements_) {
         auto *shader = entry.second.shader;
         if (shader != nullptr)
             shader->Release();
     }
     upper_lower_replacements_.clear();
-
-    for (auto &entry : upper_lower_spec_rgb_replacements_) {
-        auto *shader = entry.second.shader;
-        if (shader != nullptr)
-            shader->Release();
-    }
-    upper_lower_spec_rgb_replacements_.clear();
 
     for (auto &entry : b12_by_route_) {
         auto *buffer = entry.second;
@@ -521,26 +481,12 @@ void material_response_draw_runtime::on_destroy_device(
     }
     replacements_.clear();
 
-    for (auto &entry : spec_rgb_replacements_) {
-        auto *shader = entry.second.shader;
-        if (shader != nullptr)
-            shader->Release();
-    }
-    spec_rgb_replacements_.clear();
-
     for (auto &entry : lerp_replacements_) {
         auto *shader = entry.second.shader;
         if (shader != nullptr)
             shader->Release();
     }
     lerp_replacements_.clear();
-
-    for (auto &entry : lerp_spec_rgb_replacements_) {
-        auto *shader = entry.second.shader;
-        if (shader != nullptr)
-            shader->Release();
-    }
-    lerp_spec_rgb_replacements_.clear();
 
     for (auto &entry : lerp_upper_lower_replacements_) {
         auto *shader = entry.second.shader;
@@ -549,26 +495,12 @@ void material_response_draw_runtime::on_destroy_device(
     }
     lerp_upper_lower_replacements_.clear();
 
-    for (auto &entry : lerp_upper_lower_spec_rgb_replacements_) {
-        auto *shader = entry.second.shader;
-        if (shader != nullptr)
-            shader->Release();
-    }
-    lerp_upper_lower_spec_rgb_replacements_.clear();
-
     for (auto &entry : upper_lower_replacements_) {
         auto *shader = entry.second.shader;
         if (shader != nullptr)
             shader->Release();
     }
     upper_lower_replacements_.clear();
-
-    for (auto &entry : upper_lower_spec_rgb_replacements_) {
-        auto *shader = entry.second.shader;
-        if (shader != nullptr)
-            shader->Release();
-    }
-    upper_lower_spec_rgb_replacements_.clear();
 
     for (auto &entry : b12_by_route_) {
         auto *buffer = entry.second;
@@ -625,50 +557,6 @@ bool material_response_draw_runtime::has_receiver_replacement(
         found->second.shader != nullptr;
 }
 
-bool material_response_draw_runtime::register_receiver_spec_rgb_replacement(
-    std::uint32_t receiver_id,
-    const void *dxbc,
-    std::size_t dxbc_size,
-    core::operator_mask composed_owners) noexcept
-{
-    const auto spec_owner =
-        core::operator_bit(core::operator_id::spec_rgb);
-    const core::operator_mask forbidden_owners =
-        core::operator_bit(core::operator_id::material_response) |
-        core::operator_bit(core::operator_id::diffuse_material_domain);
-
-    if (receiver_id == 0u ||
-        dxbc == nullptr ||
-        dxbc_size == 0u ||
-        (composed_owners & spec_owner) == 0u ||
-        (composed_owners & ~core::all_operator_bits) != 0u ||
-        (composed_owners & forbidden_owners) != 0u ||
-        local_quarantine_.load() ||
-        transactions_.quarantined()) {
-        ++replacement_register_fail_;
-        return false;
-    }
-
-    return register_replacement_record(
-        spec_rgb_replacements_,
-        receiver_id,
-        dxbc,
-        dxbc_size,
-        composed_owners,
-        replacement_register_ok_,
-        replacement_register_fail_);
-}
-
-bool material_response_draw_runtime::has_receiver_spec_rgb_replacement(
-    std::uint32_t receiver_id) const noexcept
-{
-    std::lock_guard<std::mutex> lock(mutex_);
-    const auto found = spec_rgb_replacements_.find(receiver_id);
-    return
-        found != spec_rgb_replacements_.end() &&
-        found->second.shader != nullptr;
-}
-
 bool material_response_draw_runtime::register_lerp_receiver_replacement(
     std::uint32_t receiver_id,
     const void *dxbc,
@@ -711,55 +599,6 @@ bool material_response_draw_runtime::has_lerp_receiver_replacement(
         lerp_replacements_.find(receiver_id);
     return
         found != lerp_replacements_.end() &&
-        found->second.shader != nullptr;
-}
-
-bool material_response_draw_runtime::
-register_lerp_receiver_spec_rgb_replacement(
-    std::uint32_t receiver_id,
-    const void *dxbc,
-    std::size_t dxbc_size,
-    core::operator_mask composed_owners) noexcept
-{
-    const auto spec_owner =
-        core::operator_bit(core::operator_id::spec_rgb);
-    const core::operator_mask forbidden_owners =
-        core::operator_bit(core::operator_id::material_response) |
-        core::operator_bit(core::operator_id::diffuse_material_domain) |
-        core::operator_bit(core::operator_id::upper_lower);
-
-    if (receiver_id < 24u ||
-        receiver_id > 47u ||
-        dxbc == nullptr ||
-        dxbc_size == 0u ||
-        (composed_owners & spec_owner) == 0u ||
-        (composed_owners & ~core::all_operator_bits) != 0u ||
-        (composed_owners & forbidden_owners) != 0u ||
-        local_quarantine_.load() ||
-        transactions_.quarantined()) {
-        ++replacement_register_fail_;
-        return false;
-    }
-
-    return register_replacement_record(
-        lerp_spec_rgb_replacements_,
-        receiver_id,
-        dxbc,
-        dxbc_size,
-        composed_owners,
-        replacement_register_ok_,
-        replacement_register_fail_);
-}
-
-bool material_response_draw_runtime::
-has_lerp_receiver_spec_rgb_replacement(
-    std::uint32_t receiver_id) const noexcept
-{
-    std::lock_guard<std::mutex> lock(mutex_);
-    const auto found =
-        lerp_spec_rgb_replacements_.find(receiver_id);
-    return
-        found != lerp_spec_rgb_replacements_.end() &&
         found->second.shader != nullptr;
 }
 
@@ -810,54 +649,6 @@ has_lerp_receiver_upper_lower_replacement(
 }
 
 bool material_response_draw_runtime::
-register_lerp_receiver_upper_lower_spec_rgb_replacement(
-    std::uint32_t receiver_id,
-    const void *dxbc,
-    std::size_t dxbc_size,
-    core::operator_mask composed_owners) noexcept
-{
-    const auto spec_owner =
-        core::operator_bit(core::operator_id::spec_rgb);
-    const core::operator_mask forbidden_owners =
-        core::operator_bit(core::operator_id::material_response) |
-        core::operator_bit(core::operator_id::diffuse_material_domain) |
-        core::operator_bit(core::operator_id::upper_lower);
-
-    if (receiver_id < 24u ||
-        receiver_id > 47u ||
-        dxbc == nullptr ||
-        dxbc_size == 0u ||
-        (composed_owners & spec_owner) == 0u ||
-        (composed_owners & ~core::all_operator_bits) != 0u ||
-        (composed_owners & forbidden_owners) != 0u ||
-        local_quarantine_.load() ||
-        transactions_.quarantined()) {
-        ++combined_ul_register_fail_;
-        return false;
-    }
-
-    return register_replacement_record(
-        lerp_upper_lower_spec_rgb_replacements_,
-        receiver_id,
-        dxbc,
-        dxbc_size,
-        composed_owners,
-        combined_ul_register_ok_,
-        combined_ul_register_fail_);
-}
-
-bool material_response_draw_runtime::
-has_lerp_receiver_upper_lower_spec_rgb_replacement(
-    std::uint32_t receiver_id) const noexcept
-{
-    std::lock_guard<std::mutex> lock(mutex_);
-    const auto found =
-        lerp_upper_lower_spec_rgb_replacements_.find(receiver_id);
-    return found != lerp_upper_lower_spec_rgb_replacements_.end() &&
-        found->second.shader != nullptr;
-}
-
-bool material_response_draw_runtime::
 register_receiver_upper_lower_replacement(
     std::uint32_t receiver_id,
     const void *dxbc,
@@ -904,55 +695,6 @@ has_receiver_upper_lower_replacement(
     return
         found !=
             upper_lower_replacements_.end() &&
-        found->second.shader != nullptr;
-}
-
-bool material_response_draw_runtime::
-register_receiver_upper_lower_spec_rgb_replacement(
-    std::uint32_t receiver_id,
-    const void *dxbc,
-    std::size_t dxbc_size,
-    core::operator_mask composed_owners) noexcept
-{
-    const auto spec_owner =
-        core::operator_bit(core::operator_id::spec_rgb);
-    const core::operator_mask forbidden_owners =
-        core::operator_bit(core::operator_id::material_response) |
-        core::operator_bit(core::operator_id::diffuse_material_domain) |
-        core::operator_bit(core::operator_id::upper_lower);
-
-    if (receiver_id < 24u ||
-        receiver_id > 47u ||
-        dxbc == nullptr ||
-        dxbc_size == 0u ||
-        (composed_owners & spec_owner) == 0u ||
-        (composed_owners & ~core::all_operator_bits) != 0u ||
-        (composed_owners & forbidden_owners) != 0u ||
-        local_quarantine_.load() ||
-        transactions_.quarantined()) {
-        ++combined_ul_register_fail_;
-        return false;
-    }
-
-    return register_replacement_record(
-        upper_lower_spec_rgb_replacements_,
-        receiver_id,
-        dxbc,
-        dxbc_size,
-        composed_owners,
-        combined_ul_register_ok_,
-        combined_ul_register_fail_);
-}
-
-bool material_response_draw_runtime::
-has_receiver_upper_lower_spec_rgb_replacement(
-    std::uint32_t receiver_id) const noexcept
-{
-    std::lock_guard<std::mutex> lock(mutex_);
-    const auto found =
-        upper_lower_spec_rgb_replacements_.find(receiver_id);
-    return
-        found != upper_lower_spec_rgb_replacements_.end() &&
         found->second.shader != nullptr;
 }
 
@@ -1277,132 +1019,6 @@ prepare_lerp_draw_request_with_upper_lower(
     }
 
     prepared.ready = true;
-    return true;
-}
-
-bool material_response_draw_runtime::has_paired_spec_rgb_replacement(
-    const prepared_material_response_draw &prepared) const noexcept
-{
-    if (!prepared.ready ||
-        prepared.receiver_id == 0u ||
-        local_quarantine_.load() ||
-        transactions_.quarantined())
-        return false;
-
-    replacement_bank bank =
-        replacement_bank::stable_spec;
-
-    switch (prepared.family) {
-    case material_response_replacement_family::stable:
-        bank =
-            replacement_bank::stable_spec;
-        break;
-    case material_response_replacement_family::stable_upper_lower:
-        bank =
-            replacement_bank::upper_lower_spec;
-        break;
-    case material_response_replacement_family::hemenvlerp:
-        bank =
-            replacement_bank::lerp_spec;
-        break;
-    case material_response_replacement_family::hemenvlerp_upper_lower:
-        bank =
-            replacement_bank::lerp_upper_lower_spec;
-        break;
-    }
-
-    replacement_record replacement{};
-    if (!acquire_replacement(
-            bank,
-            prepared.receiver_id,
-            replacement))
-        return false;
-
-    const bool match =
-        material_response_spec_rgb_pair_owners_match(
-            prepared.replacement_composed_owners,
-            replacement.composed_owners);
-
-    replacement.shader->Release();
-    return match;
-}
-
-bool material_response_draw_runtime::promote_prepared_draw_to_spec_rgb(
-    prepared_material_response_draw &prepared) noexcept
-{
-    if (!prepared.ready ||
-        prepared.shader == nullptr ||
-        prepared.receiver_id == 0u ||
-        local_quarantine_.load() ||
-        transactions_.quarantined())
-        return false;
-
-    if (prepared.spec_rgb_consumer)
-        return true;
-
-    const auto spec_owner =
-        core::operator_bit(core::operator_id::spec_rgb);
-
-    replacement_bank bank =
-        replacement_bank::stable_spec;
-
-    switch (prepared.family) {
-    case material_response_replacement_family::stable:
-        bank =
-            replacement_bank::stable_spec;
-        break;
-    case material_response_replacement_family::stable_upper_lower:
-        bank =
-            replacement_bank::upper_lower_spec;
-        break;
-    case material_response_replacement_family::hemenvlerp:
-        bank =
-            replacement_bank::lerp_spec;
-        break;
-    case material_response_replacement_family::hemenvlerp_upper_lower:
-        bank =
-            replacement_bank::lerp_upper_lower_spec;
-        break;
-    }
-
-    replacement_record replacement{};
-    if (!acquire_replacement(
-            bank,
-            prepared.receiver_id,
-            replacement))
-        return false;
-
-    const bool pair_matches =
-        material_response_spec_rgb_pair_owners_match(
-            prepared.replacement_composed_owners,
-            replacement.composed_owners);
-
-    if (!pair_matches) {
-        replacement.shader->Release();
-        return false;
-    }
-
-    auto upgraded = prepared.request;
-    upgraded.pixel_shader = replacement.shader;
-    upgraded.additional_owners |= spec_owner;
-    upgraded.additional_shader_owners |= spec_owner;
-
-    draw_tx_mutation verify{};
-    if (build_island_draw_mutation(
-            upgraded,
-            verify) != island_draw_adapter_result::ready) {
-        replacement.shader->Release();
-        return false;
-    }
-
-    auto *old_shader = prepared.shader;
-    prepared.shader = replacement.shader;
-    prepared.request = upgraded;
-    prepared.spec_rgb_consumer = true;
-
-    if (old_shader != nullptr)
-        old_shader->Release();
-
     return true;
 }
 
