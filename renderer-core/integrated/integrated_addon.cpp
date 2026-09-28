@@ -2097,6 +2097,18 @@ bool on_create_pipeline(
             subobject_count,
             subobjects);
 
+    // Create-pipeline carries the authoritative ReShade device for this PS.
+    // Re-arm the two draw runtimes idempotently here so replacement
+    // materialization cannot be lost solely because init_device ordering was
+    // different on a host/runtime variant. A different native device still
+    // quarantines through the runtimes' existing fail-open contract.
+    if (pixel_shader != nullptr &&
+        pixel_shader->code != nullptr &&
+        pixel_shader->code_size != 0u) {
+        g_mr_draw_runtime.on_init_device(device);
+        g_pmetal_envspec.on_init_device(device);
+    }
+
     dsrrl::operators::lightbank::
         hemdir3_b13_materialize_outcome h3{};
     dsrrl::operators::lightbank::
