@@ -4144,14 +4144,32 @@ bool on_draw(
 
     bool clustered_pointlight_spc = false;
     bool clustered_pointlight_blended = false;
-    const bool clustered_pointlight_bound =
+    const bool clustered_route_present =
         (route_mask &
-         k_route_clustered_pointlight) != 0u &&
+         k_route_clustered_pointlight) != 0u;
+    const bool clustered_pointlight_bound =
+        clustered_route_present &&
         g_clustered_pnts_pipeline.bound_metadata(
             cmd_list,
             clustered_pointlight_spc,
             clustered_pointlight_blended);
     (void)clustered_pointlight_blended;
+
+    if (clustered_route_present &&
+        !clustered_pointlight_bound) {
+        constexpr std::uint32_t bit = 1u << 5;
+        const auto observed =
+            g_pointlight_gate_log_mask.load(
+                std::memory_order_relaxed);
+        if ((observed & bit) == 0u &&
+            (g_pointlight_gate_log_mask.fetch_or(
+                 bit,
+                 std::memory_order_relaxed) & bit) == 0u) {
+            reshade::log::message(
+                reshade::log::level::info,
+                "[DSRRL POINTLIGHT GATE] stage=clustered_metadata_unbound");
+        }
+    }
 
     std::uint32_t receiver_id = 0u;
     bool hemenvlerp_bound = false;
