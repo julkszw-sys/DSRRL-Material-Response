@@ -143,6 +143,22 @@ add_custom_command(
 add_custom_target(dsrrl_clustered_pnts_direct_header
     DEPENDS "${DSRRL_CLUSTERED_PNTS_DIRECT_HEADER}")
 
+set(DSRRL_UPPER_LOWER_PHN_PNTS_HEADER
+    "${DSRRL_GENERATED_DIR}/dsrrl/operators/lightbank/generated_upper_lower_phn_pnts_v1.hpp")
+add_custom_command(
+    OUTPUT "${DSRRL_UPPER_LOWER_PHN_PNTS_HEADER}"
+    COMMAND "${Python3_EXECUTABLE}"
+            "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_upper_lower_phn_pnts_v1.py"
+            --input "${CMAKE_CURRENT_SOURCE_DIR}/data/provenance/upper_lower_phn_pnts_unique_v1.tsv"
+            --output "${DSRRL_UPPER_LOWER_PHN_PNTS_HEADER}"
+    DEPENDS
+        "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_upper_lower_phn_pnts_v1.py"
+        "${CMAKE_CURRENT_SOURCE_DIR}/data/provenance/upper_lower_phn_pnts_unique_v1.tsv"
+    VERBATIM
+)
+add_custom_target(dsrrl_upper_lower_phn_pnts_header
+    DEPENDS "${DSRRL_UPPER_LOWER_PHN_PNTS_HEADER}")
+
 option(DSRRL_BUILD_PHASE0_PROBE "Build the pixel-inert ReShade API20 Phase 0 probe addon" OFF)
 set(RESHade_INCLUDE_DIR "" CACHE PATH "Path to pinned ReShade include directory")
 
@@ -233,7 +249,8 @@ add_dependencies(
     dsrrl_hemenvlerp_v211_header
     dsrrl_local_specular_receiver_header
     dsrrl_fixed_local_specular_ptde_reference_header
-    dsrrl_clustered_pnts_direct_header)
+    dsrrl_clustered_pnts_direct_header
+    dsrrl_upper_lower_phn_pnts_header)
 target_include_directories(dsrrl_renderer_core PUBLIC
     ${DSRRL_GENERATED_DIR}
     ${CMAKE_CURRENT_SOURCE_DIR}/include)
@@ -312,7 +329,8 @@ target_link_libraries(dsrrl_renderer_clustered_pnts_materializer_tests PRIVATE d
 target_compile_features(dsrrl_renderer_clustered_pnts_materializer_tests PRIVATE cxx_std_17)
 add_dependencies(
     dsrrl_renderer_clustered_pnts_materializer_tests
-    dsrrl_clustered_pnts_direct_header)
+    dsrrl_clustered_pnts_direct_header
+    dsrrl_upper_lower_phn_pnts_header)
 
 add_executable(dsrrl_renderer_clustered_pnts_draw_adapter_tests
     tests/clustered_pnts_draw_adapter_tests.cpp)
