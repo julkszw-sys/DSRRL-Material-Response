@@ -15,6 +15,7 @@
 #include "dsrrl/runtime/clustered_pnts_draw_runtime.hpp"
 #include "dsrrl/operators/material_response/mtd_semantic_census.hpp"
 #include "dsrrl/operators/material_response/generated_routes_v1.hpp"
+#include "dsrrl/operators/material_response/generated_exact_binding_mr_v1.hpp"
 #include "dsrrl/operators/legacy_plan/sha256_bytes.hpp"
 #include <Windows.h>
 #include <bcrypt.h>
@@ -86,6 +87,16 @@ exact_material_cache<
     k_exact_material_cache_ways>
     g_exact_runtime_materials{};
 
+constexpr std::size_t k_exact_runtime_route_count =
+    operators::material_response::generated::
+        k_material_route_count_v1 +
+    operators::material_response::generated::
+        k_exact_binding_mr_v1.size();
+
+static_assert(
+    k_exact_runtime_route_count < 0xffffu,
+    "exact runtime MR route ordinal must fit the cache carrier");
+
 void exact_material_cache_erase(
     const void *material) noexcept
 {
@@ -143,13 +154,53 @@ bool classify_exact_runtime_route(
   }
  }
 
- if(match==nullptr ||
-    match_index>=0xffffu)
+ if(match!=nullptr){
+  if(match_index>=0xffffu)
+   return false;
+  route_ordinal=
+      static_cast<std::uint16_t>(
+          match_index);
+  return true;
+ }
+
+ const operators::material_response::generated::
+     exact_binding_mr_record *extension_match=nullptr;
+ std::size_t extension_index=0u;
+
+ for(std::size_t i=0u;
+     i<operators::material_response::generated::
+         k_exact_binding_mr_v1.size();
+     ++i){
+  const auto &route=
+      operators::material_response::generated::
+          k_exact_binding_mr_v1[i];
+
+  // Shared base MTDs are intentionally owner/companion gated. The retail
+  // parser SHA alone may authorize only DIRECT_EXACT extension records.
+  if(!route.runtime_mtd_allowed ||
+     route.raw_mtd_sha256!=digest)
+   continue;
+
+  if(extension_match!=nullptr)
+   return false;
+
+  extension_match=&route;
+  extension_index=i;
+ }
+
+ if(extension_match==nullptr)
+  return false;
+
+ const auto combined_ordinal=
+     operators::material_response::generated::
+         k_material_route_count_v1+
+     extension_index;
+ if(combined_ordinal>=0xffffu)
   return false;
 
  route_ordinal=
      static_cast<std::uint16_t>(
-         match_index);
+         combined_ordinal);
  return true;
 }
 
@@ -161,8 +212,7 @@ void exact_material_cache_publish(
         material,
         route_ordinal,
         static_cast<std::uint16_t>(
-            operators::material_response::generated::
-                k_material_route_count_v1));
+            k_exact_runtime_route_count));
 }
 
 bool exact_material_cache_lookup(
@@ -172,8 +222,7 @@ bool exact_material_cache_lookup(
     return g_exact_runtime_materials.lookup(
         material,
         static_cast<std::uint16_t>(
-            operators::material_response::generated::
-                k_material_route_count_v1),
+            k_exact_runtime_route_count),
         route_ordinal);
 }
 
@@ -270,30 +319,64 @@ bool lookup_exact_runtime_material(
  latch_once(
      g_runtime_mtd_cache_hit);
 
- const auto &route=
+ const auto standard_count=
      operators::material_response::generated::
-         k_material_routes_v1[
-             route_ordinal];
-
- core::sha256_digest digest{};
- if(!route_digest(route,digest))
-  return false;
+         k_material_route_count_v1;
 
  identity.valid=true;
  identity.actual_material_exact=true;
- identity.route_index=route.route_index;
- // SHA collisions in the certified MR table are accepted only when every
- // colliding entry has identical MR behavior. Use the first certified route
- // as the canonical semantic identity for that behaviorally equivalent class.
- identity.semantic_name_hash=
-     operators::material_response::
-         mtd_semantic_hash(
-             route.mtd_name);
- identity.raw_mtd_sha256=digest;
- identity.material_family_hash=
-     operators::material_response::
-         mtd_semantic_hash(
-             route.material_family);
+
+ if(route_ordinal<standard_count){
+  const auto &route=
+      operators::material_response::generated::
+          k_material_routes_v1[
+              route_ordinal];
+
+  core::sha256_digest digest{};
+  if(!route_digest(route,digest))
+   return false;
+
+  identity.route_index=route.route_index;
+  // SHA collisions in the certified MR table are accepted only when every
+  // colliding entry has identical MR behavior. Use the first certified route
+  // as the canonical semantic identity for that behaviorally equivalent class.
+  identity.semantic_name_hash=
+      operators::material_response::
+          mtd_semantic_hash(
+              route.mtd_name);
+  identity.raw_mtd_sha256=digest;
+  identity.material_family_hash=
+      operators::material_response::
+          mtd_semantic_hash(
+              route.material_family);
+ } else {
+  const auto extension_index=
+      static_cast<std::size_t>(
+          route_ordinal-standard_count);
+  if(extension_index>=
+         operators::material_response::generated::
+             k_exact_binding_mr_v1.size())
+   return false;
+
+  const auto &route=
+      operators::material_response::generated::
+          k_exact_binding_mr_v1[
+              extension_index];
+  if(!route.runtime_mtd_allowed)
+   return false;
+
+  identity.route_index=route.route_tag;
+  identity.semantic_name_hash=
+      operators::material_response::
+          mtd_semantic_hash(
+              route.mtd_name);
+  identity.raw_mtd_sha256=
+      route.raw_mtd_sha256;
+  identity.material_family_hash=
+      operators::material_response::
+          mtd_semantic_hash(
+              route.material_family);
+ }
 
  return operators::material_response::
   exact_runtime_material_response_identity(
