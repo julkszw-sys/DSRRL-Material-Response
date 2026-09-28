@@ -426,7 +426,9 @@ jobs:
             foreach ($required in @(
               'materialize_ptde_diffuse_response_v1',
               'stock_source',
-              'stock_size'
+              'stock_size',
+              'spec_rgb_base',
+              'true'
             )) {
               if ($materializer -notmatch [regex]::Escape($required)) { throw "Stock-rooted EnvSpec invariant missing: $required" }
             }
@@ -439,6 +441,26 @@ jobs:
             )) {
               if ($materializer -match [regex]::Escape($forbidden)) { throw "EnvSpec regressed to historical proxy semantics: $forbidden" }
             }
+          }
+          foreach ($required in @(
+            'multiply_raw_ptde_c101',
+            '0x08000038u',
+            '0x00208246u',
+            '12u',
+            '0u'
+          )) {
+            if ($specConsumer -notmatch [regex]::Escape($required)) { throw "PTDE SpecRGB*c101 linear material tail missing: $required" }
+          }
+          foreach ($required in @(
+            'decision.c101',
+            'source.a[0]',
+            'source.b[0]',
+            'source.beta'
+          )) {
+            if ($envspecRuntime -notmatch [regex]::Escape($required)) { throw "P_Metal EnvSpec b12 raw carrier invariant missing: $required" }
+          }
+          if ($envspecRuntime -match 'c101_f0q') {
+            throw "P_Metal EnvSpec runtime regressed to F0 proxy carrier"
           }
           if ($envspecMaterializer -notmatch 'candidate\.stock_sha256') {
             throw "Stable P_Metal EnvSpec is not authorized from exact stock SHA"
@@ -1151,9 +1173,15 @@ jobs:
             normal_routes_v12_tsv_sha256 = $normalRoutesHash
             material_resource_batch_islands = @("spec_rgb","diffuse","normal")
             draw_composition = "SINGLE_REPLAY_CONFLICT_CHECKED_BATCH"
-            material_response_v211_materializer_sha256 = $materialV211Hash
-            material_response_v211_plan_sha256 = $materialV211PlanHash
+            material_response_operator = "PTDE_DIFFUSE_DOMAIN_V1"
+            material_response_legacy_v211_active = $false
+            material_response_diffuse_source_sha256 = $mrDiffuseSourceHash
+            material_response_diffuse_header_sha256 = $mrDiffuseHeaderHash
+            material_response_diffuse_authority_sha256 = $mrDiffuseAuthorityHash
+            material_response_diffuse_generator_sha256 = $mrDiffuseGeneratorHash
+            material_response_ptde_donor_authority_sha256 = $mrDonorAuthorityHash
             material_response_constants_sha256 = $materialConstantsHash
+            pmetal_envspec_material_tail = "PTDE_SPECRGB_X_RAW_C101_X_COLOR0_NO_DSR_F0_PROXY"
             material_response_draw_probe = "VISIBLE_EXACT_OWNER_RECEIVER_PS_B12_BATCH_TRANSACTION"
             material_response_feature_armed = $true
             material_response_runtime_activation = "NOT_TESTED"
