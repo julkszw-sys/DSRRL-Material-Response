@@ -768,6 +768,19 @@ std::atomic<std::uint64_t> g_direct_ul_inject_fail{0};
 std::atomic<std::uint64_t> g_direct_ul_draw_ready{0};
 std::atomic<std::uint64_t> g_direct_ul_draw_fallback{0};
 
+// Owner pixel falsifier 2026-09-28: direct producer-level U/L cache
+// mutation was live in the session that produced broad black world surfaces
+// and a repeatable dark FaceEye wedge. Keep the reference/token transport
+// active, but preserve stock DSR LightBank cache/output by default. This
+// mutation can be re-enabled only for an explicit focused diagnostic.
+bool direct_ul_mutation_enabled() noexcept
+{
+    static const bool enabled =
+        telemetry::environment_flag(
+            "DSRRL_EXPERIMENTAL_DIRECT_UPPER_LOWER");
+    return enabled;
+}
+
 void latch_thread_id_once(
     std::atomic<std::uint32_t> &slot) noexcept
 {
@@ -2725,6 +2738,7 @@ void __fastcall hook_steady_cache_builder(
 
     if (!g_steady_cache_builder_active.load(
             std::memory_order_acquire) ||
+        !direct_ul_mutation_enabled() ||
         dst == nullptr ||
         raw_row == nullptr)
         return;
@@ -3943,10 +3957,12 @@ bool install_producer_hooks() noexcept
         true,
         std::memory_order_release);
 
-    // Only after both the steady cache builder and the already-owned blend
-    // packer hook are armed may integrated routing bypass draw-time U/L.
+    // Keep the narrow reference/token carrier live for exact downstream
+    // consumers, but do not mutate the shared DSR LightBank producer unless
+    // an explicit diagnostic opts in. This prevents unproven renderer-wide
+    // propagation into unrelated receiver families.
     g_direct_ul_producer_active.store(
-        true,
+        direct_ul_mutation_enabled(),
         std::memory_order_release);
 
     // P_Metal/HemDir3 capture must not piggyback on steady U/L evaluation.
