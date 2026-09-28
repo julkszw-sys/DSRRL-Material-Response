@@ -48,8 +48,6 @@ struct draw_selection_tls {
 
 thread_local draw_selection_tls g_draw_selection{};
 thread_local producer_input_snapshot g_producer_input_tls{};
-thread_local const void *g_material_validation_ptr = nullptr;
-thread_local bool g_material_validation_ok = false;
 
 struct gpu_resources {
     ID3D11Device *device = nullptr;
@@ -177,21 +175,6 @@ bool executable_address(
         access == PAGE_EXECUTE_READ ||
         access == PAGE_EXECUTE_READWRITE ||
         access == PAGE_EXECUTE_WRITECOPY;
-}
-
-bool actual_material_readable_cached(
-    const void *ptr) noexcept
-{
-    if (ptr == nullptr)
-        return false;
-
-    if (ptr != g_material_validation_ptr) {
-        g_material_validation_ptr = ptr;
-        g_material_validation_ok =
-            readable_range(ptr, 0x388u);
-    }
-
-    return g_material_validation_ok;
 }
 
 bool spatial_overlap_xyz_unchecked(
@@ -609,8 +592,6 @@ void clustered_pnts_draw_runtime::uninstall() noexcept
     g_enabled.store(false);
     consume_draw_selection();
     g_producer_input_tls = {};
-    g_material_validation_ptr = nullptr;
-    g_material_validation_ok = false;
 
     {
         std::lock_guard<std::mutex> lock(
@@ -711,16 +692,10 @@ void clustered_pnts_draw_runtime::selector_event(
     }
     telemetry::hot_count(g_owner_join_hit);
 
-    // The selector hook can execute millions of times. Cache the OS page
-    // validation per actual material object rather than VirtualQuery every
-    // event.
-    if (!actual_material_readable_cached(
-            actual_material)) {
-        telemetry::hot_count(
-            g_material_limit_fail);
-        return;
-    }
-
+    // Exact retail return-RVA validation and resolve_actual_material() have
+    // already authenticated this fixed-layout material object. Match the
+    // existing FLVER draw-hot policy: direct fixed-layout read, no
+    // VirtualQuery/syscall on this multi-million-call path.
     std::uint32_t material_max = 0u;
     std::memcpy(
         &material_max,
@@ -1002,8 +977,6 @@ void clustered_pnts_draw_runtime::reset() noexcept
 {
     consume_draw_selection();
     g_producer_input_tls = {};
-    g_material_validation_ptr = nullptr;
-    g_material_validation_ok = false;
 
     {
         std::lock_guard<std::mutex> lock(
