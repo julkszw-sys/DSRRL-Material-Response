@@ -1154,8 +1154,7 @@ bool observe_draw_identity(
                 mr_identity_line,
                 sizeof(mr_identity_line),
                 "[DSRRL MR ACTIVE] rx=%u route=%u carrier=%s "
-                "c100=%.6f,%.6f,%.6f "
-                "c101q=%.6f,%.6f,%.6f raw_c101=%.6f",
+                "c100=%.6f,%.6f,%.6f raw_c101=%.6f",
                 receiver_id,
                 out_decision.route_index,
                 out_material.actual_material_exact
@@ -1166,9 +1165,6 @@ bool observe_draw_identity(
                 out_decision.c100[0],
                 out_decision.c100[1],
                 out_decision.c100[2],
-                out_decision.c101_f0q[0],
-                out_decision.c101_f0q[1],
-                out_decision.c101_f0q[2],
                 out_decision.c101);
             reshade::log::message(
                 reshade::log::level::info,
