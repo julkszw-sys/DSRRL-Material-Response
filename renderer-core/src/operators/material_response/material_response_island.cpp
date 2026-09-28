@@ -8,6 +8,7 @@
 
 #include <algorithm>
 #include <cstring>
+#include <iterator>
 
 namespace dsrrl::operators::material_response {
 namespace {
@@ -100,13 +101,31 @@ bool exact_runtime_material_response_identity(
         identity.semantic_name_hash == 0u)
         return false;
 
+    // Ordinary generated routes are ordered by route_index. Restrict runtime
+    // authentication to the exact route cohort instead of rescanning the
+    // entire MR corpus on every eligible draw. Duplicate route tags (route 5)
+    // remain explicitly ambiguity-checked through semantic/raw identity.
     const generated::route_seed *match = nullptr;
+    const auto ordinary_begin =
+        std::lower_bound(
+            std::begin(generated::k_material_routes_v1),
+            std::end(generated::k_material_routes_v1),
+            identity.route_index,
+            [](const generated::route_seed &route,
+               std::uint32_t route_index) {
+                return route.route_index <
+                    route_index;
+            });
 
-    for (const auto &route :
-         generated::k_material_routes_v1) {
-        if (route.route_index !=
-                identity.route_index ||
-            mtd_semantic_hash(route.mtd_name) !=
+    for (auto it = ordinary_begin;
+         it != std::end(
+             generated::k_material_routes_v1) &&
+         it->route_index ==
+             identity.route_index;
+         ++it) {
+        const auto &route = *it;
+
+        if (mtd_semantic_hash(route.mtd_name) !=
                 identity.semantic_name_hash ||
             !hashing::matches_hex(
                 identity.raw_mtd_sha256,
@@ -127,12 +146,25 @@ bool exact_runtime_material_response_identity(
 
     const generated::exact_binding_mr_record
         *extension_match = nullptr;
+    const auto extension_begin =
+        std::lower_bound(
+            generated::k_exact_binding_mr_v1.begin(),
+            generated::k_exact_binding_mr_v1.end(),
+            identity.route_index,
+            [](const generated::exact_binding_mr_record &route,
+               std::uint32_t route_index) {
+                return route.route_tag <
+                    route_index;
+            });
 
-    for (const auto &route :
-         generated::k_exact_binding_mr_v1) {
+    for (auto it = extension_begin;
+         it != generated::k_exact_binding_mr_v1.end() &&
+         it->route_tag ==
+             identity.route_index;
+         ++it) {
+        const auto &route = *it;
+
         if (!route.runtime_mtd_allowed ||
-            route.route_tag !=
-                identity.route_index ||
             mtd_semantic_hash(route.mtd_name) !=
                 identity.semantic_name_hash ||
             route.raw_mtd_sha256 !=
