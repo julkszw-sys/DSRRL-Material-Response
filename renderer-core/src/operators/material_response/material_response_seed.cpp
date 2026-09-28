@@ -1,6 +1,7 @@
 #include "dsrrl/operators/material_response/material_response_seed.hpp"
 #include "dsrrl/operators/material_response/generated_routes_v1.hpp"
 #include "dsrrl/operators/material_response/generated_material_constants_v1.hpp"
+#include "dsrrl/operators/material_response/generated_exact_binding_mr_v1.hpp"
 #include "dsrrl/operators/material_response/mtd_semantic_census.hpp"
 #include "dsrrl/runtime/generated_stable_hemenv_receivers_v1.hpp"
 
@@ -119,6 +120,68 @@ std::size_t register_confirmed_material_routes_v1(material_response_island &isla
             continue;
 
         profile.envspec = mtd_envspec_presence(query);
+
+        if (island.register_material_profile(profile))
+            ++registered;
+    }
+
+    for (const auto &seed : generated::k_exact_binding_mr_v1) {
+        material_profile profile;
+        profile.route_index = seed.route_tag;
+        profile.semantic_name_hash = mtd_semantic_hash(seed.mtd_name);
+        profile.raw_mtd_sha256 = seed.raw_mtd_sha256;
+        profile.material_family_hash =
+            mtd_semantic_hash(seed.material_family);
+        profile.c101 = seed.c101;
+        profile.c100 = seed.c100;
+        profile.c101_f0q = seed.c101_f0q;
+        profile.ptde_specular_power =
+            seed.ptde_specular_power;
+        profile.ptde_specular_power_verified = true;
+        profile.lod_min = seed.lod_min;
+        profile.lod_max = seed.lod_max;
+        profile.receiver_ids = {
+            seed.receiver0,
+            seed.receiver1,
+            seed.receiver2,
+            0u
+        };
+        profile.receiver_count = 3;
+        profile.certified_operations =
+            diffuse_material_domain_linear |
+            specular_factor_c101;
+        profile.envspec =
+            ptde_envspec_presence::unknown;
+        profile.semantic_name_required = true;
+
+        material_identity identity;
+        identity.valid = true;
+        identity.route_index = seed.route_tag;
+        identity.semantic_name_hash =
+            profile.semantic_name_hash;
+        identity.raw_mtd_sha256 =
+            profile.raw_mtd_sha256;
+        identity.material_family_hash =
+            profile.material_family_hash;
+        const mtd_semantic_query query{
+            identity,
+            seed.receiver0
+        };
+
+        const auto semantic =
+            classify_mtd_semantic(
+                query,
+                mtd_semantic_operator::
+                    material_response);
+        if (semantic.state !=
+                mtd_semantic_state::use ||
+            semantic.source !=
+                mtd_semantic_source::
+                    exact_binding_extension)
+            continue;
+
+        profile.envspec =
+            mtd_envspec_presence(query);
 
         if (island.register_material_profile(profile))
             ++registered;
