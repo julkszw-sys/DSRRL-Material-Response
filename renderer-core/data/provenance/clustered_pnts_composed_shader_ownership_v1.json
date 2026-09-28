@@ -1,0 +1,36 @@
+{
+  "schema": "dsrrl.clustered_pnts_composed_shader_ownership.v1",
+  "status": "CONFIRMED_STATIC_COMPOSITION_RUNTIME_GATE_ADDED",
+  "source_journal": "renderer-core/data/provenance/clustered_pnts_direct_stock_journal_v1.json",
+  "scope": {
+    "plans": 36,
+    "spc": 24,
+    "nospc": 12
+  },
+  "exact_static_shader_owners": {
+    "all_36": [
+      "diffuse_material_domain",
+      "pointlight_pnts_attenuation",
+      "terminal_sat_rgb"
+    ],
+    "nospc_12_additional": [
+      "envspec_nospc_delete"
+    ]
+  },
+  "runtime_ownership": {
+    "dynamic_primary": "Spc=local_specular_legacy; NoSpc=point_light",
+    "dynamic_existing": [
+      "point_light",
+      "material_response",
+      "local_specular_legacy for Spc"
+    ],
+    "static_composed_mask_transport": "materializer -> candidate record -> prepared bound shader -> island_draw_adapter_request.additional_shader_owners",
+    "static_owners_are_shader_only": true,
+    "dynamic_cb_resource_ownership_unchanged": true,
+    "mismatch_behavior": "FAIL_OPEN"
+  },
+  "conclusion": "The direct clustered PntS replacement is a composed shader payload, not a PointLight-only shader. Exact journal transforms prove three create-time operators in all 36 plans and NoSpc EnvSpec deletion in 12/12 NoSpc plans. Runtime ownership must declare these shader owners whenever the replacement PS is replayed.",
+  "runtime_liveness": "OPEN_CURRENT_SOURCE",
+  "bridge_activation": "OPEN_CURRENT_SOURCE",
+  "pixel_behavior": "OPEN"
+}

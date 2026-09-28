@@ -19,6 +19,7 @@ struct clustered_pnts_pipeline_runtime::record {
     bool spc = false;
     bool blended_material = false;
     std::uint32_t representative_shader_index = 0u;
+    core::operator_mask composed_shader_owners = 0u;
 
     ~record()
     {
@@ -136,7 +137,9 @@ bool clustered_pnts_pipeline_runtime::register_candidate(
                 existing->blended_material !=
                     outcome.blended_material ||
                 existing->representative_shader_index !=
-                    outcome.representative_shader_index) {
+                    outcome.representative_shader_index ||
+                existing->composed_shader_owners !=
+                    outcome.composed_shader_owners) {
                 quarantined_.store(true);
                 telemetry::hot_count(candidate_create_fail_);
                 return false;
@@ -176,6 +179,8 @@ bool clustered_pnts_pipeline_runtime::register_candidate(
             outcome.blended_material;
         mutable_record->representative_shader_index =
             outcome.representative_shader_index;
+        mutable_record->composed_shader_owners =
+            outcome.composed_shader_owners;
 
         std::shared_ptr<const record> value =
             mutable_record;
@@ -474,6 +479,8 @@ bool clustered_pnts_pipeline_runtime::prepare_bound_shader(
         selected->blended_material;
     prepared.representative_shader_index =
         selected->representative_shader_index;
+    prepared.composed_shader_owners =
+        selected->composed_shader_owners;
     prepared.ready = true;
     return true;
 }

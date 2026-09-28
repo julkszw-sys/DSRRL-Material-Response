@@ -3379,6 +3379,27 @@ bool prepare_island_batch(
                 prepared.clustered_shader.spc
                     ? local
                     : dsrrl::core::operator_mask{0u};
+            const auto static_shader_owners =
+                prepared.clustered_shader.
+                    composed_shader_owners;
+            const auto expected_static_shader_owners =
+                dsrrl::operators::point_light::
+                    clustered_pnts_required_composed_shader_owners(
+                        prepared.clustered_shader.spc);
+
+            if (static_shader_owners !=
+                    expected_static_shader_owners ||
+                static_shader_owners == 0u) {
+                g_material_resources.release_prepared_draw(
+                    prepared.resources);
+                g_clustered_pnts.release_prepared_draw(
+                    prepared.clustered_carrier);
+                g_clustered_pnts_pipeline.release_prepared_shader(
+                    prepared.clustered_shader);
+                prepared.batch = {};
+                hot_count(g_clustered_draw_fail_open);
+                return false;
+            }
 
             dsrrl::runtime::island_draw_adapter_request clustered{};
             clustered.primary =
@@ -3390,12 +3411,18 @@ bool prepare_island_batch(
             // Never duplicate the primary island in additional_owners:
             // build_island_draw_mutation rejects that shape by contract.
             // Spc is owned primarily by local_specular_legacy and composes
-            // PointLight + MR; NoSpc is owned primarily by PointLight and
-            // composes only MR.
+            // PointLight + MR. NoSpc is owned primarily by PointLight and
+            // composes MR. In both classes the replacement shader also
+            // contains exact create-time operator islands recovered from the
+            // journal (diffuse domain, clustered attenuation, terminal SAT,
+            // plus NoSpc EnvSpec deletion). They are shader-only owners here:
+            // draw-local b12/t18/t19/resource mutations retain their narrower
+            // PointLight/MR/local-specular ownership.
             clustered.additional_owners =
-                prepared.clustered_shader.spc
+                (prepared.clustered_shader.spc
                     ? (point | mr)
-                    : mr;
+                    : mr) |
+                static_shader_owners;
             clustered.additional_shader_owners =
                 clustered.additional_owners;
             clustered.additional_constant_buffer_owners =

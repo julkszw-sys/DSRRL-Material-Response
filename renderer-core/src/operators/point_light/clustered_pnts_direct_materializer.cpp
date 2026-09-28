@@ -162,6 +162,101 @@ bool validate_plan(
     return true;
 }
 
+bool attest_composed_shader_owners(
+    const generated::clustered_pnts_plan_v1 &plan,
+    core::operator_mask &owners) noexcept
+{
+    owners = 0u;
+    std::uint32_t diffuse_domain = 0u;
+    std::uint32_t attenuation_a = 0u;
+    std::uint32_t attenuation_b = 0u;
+    std::uint32_t envspec_delete = 0u;
+    std::uint32_t terminal_sat = 0u;
+
+    if (plan.first_op >
+            generated::k_clustered_pnts_journal_ops_v1.size() ||
+        plan.op_count >
+            generated::k_clustered_pnts_journal_ops_v1.size() -
+                plan.first_op)
+        return false;
+
+    const auto token_at =
+        [](std::uint32_t offset) noexcept -> std::uint32_t {
+            return generated::
+                k_clustered_pnts_journal_tokens_v1[offset];
+        };
+
+    for (std::uint32_t i=0u;i<plan.op_count;++i) {
+        const auto &op =
+            generated::k_clustered_pnts_journal_ops_v1[
+                plan.first_op+i];
+
+        if (op.old_offset >
+                generated::k_clustered_pnts_journal_tokens_v1.size() ||
+            op.old_count >
+                generated::k_clustered_pnts_journal_tokens_v1.size() -
+                    op.old_offset ||
+            op.new_offset >
+                generated::k_clustered_pnts_journal_tokens_v1.size() ||
+            op.new_count >
+                generated::k_clustered_pnts_journal_tokens_v1.size() -
+                    op.new_offset)
+            return false;
+
+        if (op.old_count==3u && op.new_count==3u &&
+            token_at(op.old_offset+0u)==0x400ccccdu &&
+            token_at(op.old_offset+1u)==0x400ccccdu &&
+            token_at(op.old_offset+2u)==0x400ccccdu &&
+            token_at(op.new_offset+0u)==0x3f800000u &&
+            token_at(op.new_offset+1u)==0x3f800000u &&
+            token_at(op.new_offset+2u)==0x3f800000u) {
+            ++diffuse_domain;
+            continue;
+        }
+
+        if (op.old_count!=1u || op.new_count!=1u)
+            continue;
+
+        const auto old_token=token_at(op.old_offset);
+        const auto new_token=token_at(op.new_offset);
+
+        if (old_token==0x07000038u &&
+            new_token==0x07000031u) {
+            ++envspec_delete;
+            continue;
+        }
+        if (old_token==0x07000038u &&
+            new_token==0x07000033u) {
+            ++attenuation_a;
+            continue;
+        }
+        if (old_token==0x07002038u &&
+            new_token==0x07002034u) {
+            ++attenuation_b;
+            continue;
+        }
+        if (old_token==0x05000036u &&
+            new_token==0x05002036u) {
+            ++terminal_sat;
+            continue;
+        }
+    }
+
+    const bool exact =
+        diffuse_domain==1u &&
+        attenuation_a==1u &&
+        attenuation_b==1u &&
+        terminal_sat==1u &&
+        envspec_delete==(plan.spc ? 0u : 1u);
+    if (!exact)
+        return false;
+
+    owners =
+        clustered_pnts_required_composed_shader_owners(
+            plan.spc);
+    return owners!=0u;
+}
+
 bool apply_plan(
     std::vector<std::uint32_t> &words,
     const generated::clustered_pnts_plan_v1 &plan) noexcept
@@ -375,6 +470,18 @@ materialize_clustered_pnts_direct_ptde(
     outcome.spc = plan->spc;
     outcome.blended_material =
         plan->blended_material;
+
+    if (!attest_composed_shader_owners(
+            *plan,
+            outcome.composed_shader_owners) ||
+        outcome.composed_shader_owners !=
+            clustered_pnts_required_composed_shader_owners(
+                plan->spc)) {
+        outcome.result =
+            clustered_pnts_direct_materialize_result::
+                fail_patch_precondition;
+        return outcome;
+    }
 
     std::vector<chunk> chunks;
     std::vector<std::uint32_t> words;

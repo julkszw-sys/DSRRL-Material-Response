@@ -28,7 +28,31 @@ struct clustered_pnts_direct_materialize_outcome {
     std::uint32_t representative_shader_index = 0u;
     bool spc = false;
     bool blended_material = false;
+
+    // Exact create-time operators already baked into the direct replacement
+    // bytecode. These are shader ownership only: their stock inputs remain
+    // host-owned unless another draw-local bridge explicitly replaces them.
+    core::operator_mask composed_shader_owners = 0u;
 };
+
+constexpr core::operator_mask
+clustered_pnts_required_composed_shader_owners(
+    bool spc) noexcept
+{
+    auto owners =
+        core::operator_bit(
+            core::operator_id::diffuse_material_domain) |
+        core::operator_bit(
+            core::operator_id::pointlight_pnts_attenuation) |
+        core::operator_bit(
+            core::operator_id::terminal_sat_rgb);
+
+    if (!spc)
+        owners |= core::operator_bit(
+            core::operator_id::envspec_nospc_delete);
+
+    return owners;
+}
 
 clustered_pnts_direct_materialize_outcome
 materialize_clustered_pnts_direct_ptde(
