@@ -1285,3 +1285,38 @@ jobs:
           name: ${{ env.DSRRL_CORE_ISLANDS_ARTIFACT }}
           path: ${{ env.DSRRL_CORE_ISLANDS_ZIP }}
           if-no-files-found: error
+
+
+      - name: Configure full-runtime diagnostic addon
+        shell: pwsh
+        run: >
+          cmake
+          -S renderer-core/integrated
+          -B build-integrated-full-runtime
+          -A x64
+          -DRESHADE_INCLUDE_DIR="${{ github.workspace }}/_reshade/include"
+          -DDSRRL_SOURCE_COMMIT="$env:DSRRL_CHECKOUT_COMMIT"
+          -DDSRRL_BUILD_FLAVOR="full_runtime_diagnostic"
+          -DDSRRL_DIAGNOSTIC_TELEMETRY_DEFAULT_ON=ON
+
+      - name: Build full-runtime diagnostic addon
+        shell: pwsh
+        run: |
+          cmake --build build-integrated-full-runtime --config Release --target dsrrl_renderer_core_integrated
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $addons = @(Get-ChildItem build-integrated-full-runtime -Recurse -Filter *.addon64)
+          if ($addons.Count -ne 1) {
+            throw "Expected exactly one full-runtime diagnostic addon, found $($addons.Count)"
+          }
+          $diag = "DSRRL_Core_Islands_FULL_RUNTIME_DIAG.addon64"
+          Copy-Item $addons[0].FullName $diag -Force
+          $hash = (Get-FileHash $diag -Algorithm SHA256).Hash.ToLowerInvariant()
+          Write-Host "FULL_RUNTIME_DIAG=$diag"
+          Write-Host "FULL_RUNTIME_DIAG_SHA256=$hash"
+
+      - name: Upload full-runtime diagnostic addon
+        uses: actions/upload-artifact@v4
+        with:
+          name: DSRRL_Core_Islands_FULL_RUNTIME_DIAG
+          path: DSRRL_Core_Islands_FULL_RUNTIME_DIAG.addon64
+          if-no-files-found: error

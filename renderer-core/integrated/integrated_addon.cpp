@@ -228,6 +228,11 @@ enum class effect_probe_id : std::uint8_t {
     pmetal_envspec,
     pointlight,
     local_specular,
+    pointlight_pnts_attenuation,
+    diffuse_material_domain,
+    terminal_sat_rgb,
+    envspec_nospc_delete,
+    fixed_postfog_identity,
     bloom_q8,
     count
 };
@@ -285,6 +290,16 @@ const char *effect_probe_name(
         return "PointLight";
     case effect_probe_id::local_specular:
         return "LocalSpecular";
+    case effect_probe_id::pointlight_pnts_attenuation:
+        return "PointLightPntSAttenuation";
+    case effect_probe_id::diffuse_material_domain:
+        return "DiffuseMaterialDomain";
+    case effect_probe_id::terminal_sat_rgb:
+        return "TerminalSatRGB";
+    case effect_probe_id::envspec_nospc_delete:
+        return "EnvSpecNoSpcDelete";
+    case effect_probe_id::fixed_postfog_identity:
+        return "FixedPostFogIdentity";
     case effect_probe_id::bloom_q8:
         return "BloomQ8";
     default:
@@ -429,6 +444,47 @@ constexpr effect_probe_mask effect_probe_bit(
         static_cast<std::uint8_t>(id);
 }
 
+effect_probe_mask static_shader_owner_effect_mask(
+    dsrrl::core::operator_mask owners) noexcept
+{
+    effect_probe_mask mask = 0u;
+    const auto add =
+        [&mask,owners](
+            dsrrl::core::operator_id owner,
+            effect_probe_id effect) noexcept {
+            if ((owners &
+                 dsrrl::core::operator_bit(owner)) != 0u)
+                mask |= effect_probe_bit(effect);
+        };
+
+    add(
+        dsrrl::core::operator_id::
+            pointlight_pnts_attenuation,
+        effect_probe_id::
+            pointlight_pnts_attenuation);
+    add(
+        dsrrl::core::operator_id::
+            diffuse_material_domain,
+        effect_probe_id::
+            diffuse_material_domain);
+    add(
+        dsrrl::core::operator_id::
+            terminal_sat_rgb,
+        effect_probe_id::
+            terminal_sat_rgb);
+    add(
+        dsrrl::core::operator_id::
+            envspec_nospc_delete,
+        effect_probe_id::
+            envspec_nospc_delete);
+    add(
+        dsrrl::core::operator_id::
+            fixed_postfog_identity,
+        effect_probe_id::
+            fixed_postfog_identity);
+    return mask;
+}
+
 void mark_effect_probe_mask(
     effect_probe_mask mask,
     effect_probe_stage stage,
@@ -503,6 +559,7 @@ enum integrated_draw_route_bit : std::uint8_t {
 struct integrated_draw_route_tls {
     const void *command_list_key = nullptr;
     std::uint8_t mask = 0u;
+    dsrrl::core::operator_mask a1_owners = 0u;
 };
 
 std::shared_mutex g_integrated_draw_route_mutex;
@@ -636,9 +693,35 @@ std::uint8_t observe_integrated_draw_route_bind(
 
     g_integrated_draw_route_tls = {
         command_list_key,
-        mask
+        mask,
+        0u
     };
     return mask;
+}
+
+void observe_integrated_a1_owner_bind(
+    const void *command_list_key,
+    dsrrl::core::operator_mask owners) noexcept
+{
+    if (command_list_key == nullptr ||
+        g_integrated_draw_route_tls.command_list_key !=
+            command_list_key)
+        return;
+
+    g_integrated_draw_route_tls.a1_owners =
+        owners;
+}
+
+dsrrl::core::operator_mask
+integrated_a1_owners_bound(
+    const void *command_list_key) noexcept
+{
+    if (command_list_key == nullptr ||
+        g_integrated_draw_route_tls.command_list_key !=
+            command_list_key)
+        return 0u;
+
+    return g_integrated_draw_route_tls.a1_owners;
 }
 
 std::uint8_t integrated_draw_route_bound(
@@ -2886,6 +2969,29 @@ void on_bind_pipeline(
             &selected_ops,
             &receiver_id);
 
+    if (pixel_stage_bound)
+        observe_integrated_a1_owner_bind(
+            cmd_list,
+            target ? selected_owners : 0u);
+
+    if (target) {
+        const auto a1_effects =
+            static_shader_owner_effect_mask(
+                selected_owners);
+        mark_effect_probe_mask(
+            a1_effects,
+            effect_probe_stage::candidate,
+            receiver_id);
+        mark_effect_probe_mask(
+            a1_effects,
+            effect_probe_stage::authority,
+            receiver_id);
+        mark_effect_probe_mask(
+            a1_effects,
+            effect_probe_stage::prepared,
+            receiver_id);
+    }
+
     if (target && first_plan != 0xFFFFu) {
         char line[240]{};
         std::snprintf(
@@ -2994,6 +3100,9 @@ effect_probe_mask prepared_effect_mask(
     }
 
     if (prepared.clustered_in_batch) {
+        mask |= static_shader_owner_effect_mask(
+            prepared.clustered_shader.
+                composed_shader_owners);
         mask |= effect_probe_bit(
             effect_probe_id::pointlight);
         if (prepared.clustered_shader.spc)
@@ -4121,6 +4230,16 @@ bool on_draw(
         return false;
     }
 
+    const auto a1_effects =
+        static_shader_owner_effect_mask(
+            integrated_a1_owners_bound(
+                cmd_list));
+    if ((route_mask & k_route_a1) != 0u &&
+        a1_effects != 0u)
+        mark_effect_probe_mask(
+            a1_effects,
+            effect_probe_stage::applied);
+
     const auto route_candidates =
         route_candidate_effect_mask(
             route_mask);
@@ -4358,6 +4477,16 @@ bool on_draw_indexed(
             material_owner_selection_clear();
         return false;
     }
+
+    const auto a1_effects =
+        static_shader_owner_effect_mask(
+            integrated_a1_owners_bound(
+                cmd_list));
+    if ((route_mask & k_route_a1) != 0u &&
+        a1_effects != 0u)
+        mark_effect_probe_mask(
+            a1_effects,
+            effect_probe_stage::applied);
 
     const auto route_candidates =
         route_candidate_effect_mask(

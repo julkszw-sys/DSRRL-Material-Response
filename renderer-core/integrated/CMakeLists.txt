@@ -46,6 +46,11 @@ set(
     CACHE STRING
     "Build flavor/ref embedded into runtime telemetry")
 
+option(
+    DSRRL_DIAGNOSTIC_TELEMETRY_DEFAULT_ON
+    "Compile Core+Islands with runtime/effect/native-state telemetry always enabled"
+    OFF)
+
 set(
     RESHADE_INCLUDE_DIR
     ""
@@ -401,6 +406,15 @@ target_compile_definitions(
     $<$<COMPILE_LANGUAGE:CXX>:DSRRL_CORE_ISLANDS_PRODUCT_LINE="DSRRL_Core_Islands">
     $<$<COMPILE_LANGUAGE:CXX>:DSRRL_SOURCE_COMMIT="${DSRRL_SOURCE_COMMIT}">
     $<$<COMPILE_LANGUAGE:CXX>:DSRRL_BUILD_FLAVOR="${DSRRL_BUILD_FLAVOR}">)
+
+if(DSRRL_DIAGNOSTIC_TELEMETRY_DEFAULT_ON)
+    target_compile_definitions(
+        dsrrl_renderer_core_integrated
+        PRIVATE
+        $<$<COMPILE_LANGUAGE:CXX>:DSRRL_RUNTIME_TELEMETRY_DEFAULT_ON>
+        $<$<COMPILE_LANGUAGE:CXX>:DSRRL_EFFECT_TELEMETRY_DEFAULT_ON>
+        $<$<COMPILE_LANGUAGE:CXX>:DSRRL_RUNTIME_VERIFY_STATE_DEFAULT_ON>)
+endif()
 
 if(MSVC)
     target_compile_options(
