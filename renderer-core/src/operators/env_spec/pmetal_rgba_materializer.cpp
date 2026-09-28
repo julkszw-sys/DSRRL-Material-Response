@@ -4,6 +4,7 @@
 #include "dsrrl/operators/lightbank/upper_lower_hemenv_materializer.hpp"
 #include "dsrrl/operators/material_response/material_response_v211_materializer.hpp"
 #include "dsrrl/operators/resource_bridges/spec_rgb_consumer_materializer.hpp"
+#include "dsrrl/operators/surface/terminal_sat_rgb_patch.hpp"
 #include "dsrrl/operators/legacy_plan/a1_create_time_materializer.hpp"
 #include "dsrrl/operators/legacy_plan/dxbc_checksum.hpp"
 #include "dsrrl/operators/legacy_plan/dxbc_rdef_patch.hpp"
@@ -480,6 +481,90 @@ bool compose_a1(
             fix_checksum(
                 v211.data(),
                 v211.size());
+}
+
+bool terminal_rgb_output_word(
+    const std::vector<std::uint32_t> &words,
+    std::size_t &word) noexcept
+{
+    word = static_cast<std::size_t>(-1);
+
+    std::vector<instruction_view> instructions;
+    if (!decode(words, instructions))
+        return false;
+
+    for (const auto &ins : instructions) {
+        if (ins.opcode != 0x36u ||
+            ins.length != 5u ||
+            ins.offset + 4u >= words.size() ||
+            words[ins.offset + 1u] != 0x00102072u ||
+            words[ins.offset + 2u] != 0u)
+            continue;
+
+        if (word != static_cast<std::size_t>(-1))
+            return false;
+
+        word = ins.offset;
+    }
+
+    return word != static_cast<std::size_t>(-1);
+}
+
+bool terminal_rgb_sat_exact(
+    const std::vector<std::uint32_t> &words) noexcept
+{
+    std::size_t word = 0u;
+    return
+        terminal_rgb_output_word(words, word) &&
+        words[word] == 0x05002036u;
+}
+
+bool compose_exact_terminal_rgb_sat(
+    std::vector<std::uint8_t> &bytes) noexcept
+{
+    std::vector<chunk> chunks;
+    std::vector<std::uint32_t> words;
+    std::size_t code_index = 0u;
+
+    if (!parse_dxbc(
+            bytes.data(),
+            bytes.size(),
+            chunks,
+            code_index) ||
+        !extract_words(
+            chunks,
+            code_index,
+            words))
+        return false;
+
+    std::size_t word = 0u;
+    if (!terminal_rgb_output_word(words, word))
+        return false;
+
+    if (words[word] == 0x05002036u)
+        return true;
+
+    if (words[word] != 0x05000036u)
+        return false;
+
+    words[word] |=
+        surface::dxbc_saturate_modifier_bit;
+
+    if (words[word] != 0x05002036u)
+        return false;
+
+    std::vector<std::uint8_t> rebuilt;
+    if (!rebuild(
+            bytes.data(),
+            bytes.size(),
+            std::move(chunks),
+            code_index,
+            words,
+            rebuilt))
+        return false;
+
+    bytes = std::move(rebuilt);
+    return true;
 }
 
 chunk *unique_rdef(
@@ -1052,7 +1137,8 @@ bool final_postcondition(
         t14_decl == 1u &&
         s14_decl == 1u &&
         t14_sample == 1u &&
-        t9_sample == 0u;
+        t9_sample == 0u &&
+        terminal_rgb_sat_exact(words);
 }
 
 } // namespace
@@ -1225,6 +1311,24 @@ materialize_pmetal_rgba_receiver(
         std::move(spec_rgb_base);
     outcome.spec_rgb_consumer =
         true;
+
+    // PTDE Phn HemEnv terminates its surface contribution with an RGB-only
+    // saturate. These exact P_Metal receivers are not members of the generic
+    // A1 terminal-SAT plan index, so relying on A1 composition here leaves a
+    // DSR-only unclamped HDR tail in an otherwise PTDE EnvSpec island. Compose
+    // the independent surface operator explicitly and record its ownership.
+    if (!features.enabled(
+            core::operator_id::terminal_sat_rgb) ||
+        !compose_exact_terminal_rgb_sat(base)) {
+        outcome.result =
+            pmetal_rgba_materialize_result::
+                fail_postcondition;
+        return outcome;
+    }
+
+    outcome.composed_owners |=
+        core::operator_bit(
+            core::operator_id::terminal_sat_rgb);
 
     if (!final_postcondition(
             base,
