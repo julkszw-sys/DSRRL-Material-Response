@@ -368,6 +368,7 @@ add_library(
 
 add_dependencies(
     dsrrl_renderer_core_integrated
+    dsrrl_mr_exact_binding_header
     dsrrl_core_material_resource_routes
     dsrrl_core_hemdir3_authority
     dsrrl_core_upper_lower_authority
