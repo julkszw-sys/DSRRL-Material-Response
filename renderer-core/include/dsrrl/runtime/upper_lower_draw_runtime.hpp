@@ -44,6 +44,8 @@ struct upper_lower_telemetry {
     std::uint64_t direct_ul_steady_inject = 0;
     std::uint64_t direct_ul_blend_inject = 0;
     std::uint64_t direct_ul_inject_fail = 0;
+    std::uint64_t direct_ul_draw_ready = 0;
+    std::uint64_t direct_ul_draw_fallback = 0;
     bool producer_hooks_armed = false;
     bool pmetal_env_hook_armed = false;
     bool direct_ul_producer_active = false;
@@ -148,6 +150,11 @@ public:
     // injection are construction-armed. Integrated routing may bypass the
     // draw-time U/L shader+b13 replay only while this remains true.
     bool direct_producer_active() const noexcept;
+
+    // Draw-local activation proof. Hook liveness alone is not sufficient:
+    // true means the selected LightBank tuple actually received the direct
+    // PTDE U/L producer write for this draw.
+    bool direct_producer_ready_for_draw() const noexcept;
 
     bool prepare_upper_lower_carrier(
         ID3D11DeviceContext *context,
