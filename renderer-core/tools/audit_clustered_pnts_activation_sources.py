@@ -93,6 +93,8 @@ def main():
         fail("clustered material limit still has an artificial >4 fail-open")
     require(sidecar_cpp,"b12[3][0]","effective-count carrier")
     require(draw_cpp,"g_retained_selector","retained selector")
+    require(draw_cpp,"k_selector_validation_samples","bounded retained-selector certification")
+    require(draw_cpp,"g_selector_validation_remaining","steady-state selector bypass")
     require(draw_cpp,"mirror_first_four","independent first-four mirror")
     require(draw_cpp,"capture_source","raw source capture")
     require(draw_cpp,"executable_address(target)","source vfunc executable gate")
@@ -154,7 +156,7 @@ def main():
 
     print("Clustered PntS pre-runtime activation source audit: PASS")
     print("  receivers=36 spc=24 nospc=12 stock_membership=t16/t17_bypassed")
-    print("  producer=builder+retained_selector+independent_mirror+raw_source")
+    print("  producer=builder+single_mirror+bounded_retained_selector_validation+raw_source")
     print("  carrier=b12[3].x+t18+t19 material_max=uint32 min_after_first4")
     print("  material=25 exact HOMOLOGOUS_NOSPC pairs; identity=certified supplement; c100=bit-exact router authority")
     print("  chain=candidate>receiver>selector>sources>material>sidecar>shader>draw-mutation>restore")
