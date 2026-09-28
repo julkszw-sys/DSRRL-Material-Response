@@ -251,6 +251,8 @@ private:
     struct replacement_record {
         ID3D11PixelShader *shader = nullptr;
         core::operator_mask composed_owners = 0;
+        core::sha256_digest payload_sha256{};
+        std::size_t payload_size = 0u;
     };
 
     enum class replacement_bank : std::uint8_t {
@@ -268,6 +270,15 @@ private:
         replacement_bank bank,
         std::uint32_t receiver_id,
         replacement_record &replacement) const noexcept;
+
+    bool register_replacement_record(
+        std::unordered_map<std::uint32_t, replacement_record> &bank,
+        std::uint32_t receiver_id,
+        const void *dxbc,
+        std::size_t dxbc_size,
+        core::operator_mask composed_owners,
+        std::atomic<std::uint64_t> &ok_counter,
+        std::atomic<std::uint64_t> &fail_counter) noexcept;
 
     ID3D11Buffer *realize_b12(
         const operators::material_response::decision &decision) noexcept;
