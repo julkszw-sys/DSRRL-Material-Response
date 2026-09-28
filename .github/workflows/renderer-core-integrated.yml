@@ -178,6 +178,7 @@ jobs:
           $adapter = Get-Content renderer-core/src/runtime/island_draw_adapter.cpp -Raw
           $policy = Get-Content renderer-core/include/dsrrl/core/draw_transaction_policy.hpp -Raw
           $mr = Get-Content renderer-core/src/operators/material_response/material_response_diffuse_v1.cpp -Raw
+          $mrIsland = Get-Content renderer-core/src/operators/material_response/material_response_island.cpp -Raw
           $resourceRuntime = Get-Content renderer-core/src/runtime/material_resource_draw_runtime.cpp -Raw
           $specConsumer = Get-Content renderer-core/src/operators/resource_bridges/spec_rgb_consumer_materializer.cpp -Raw
           $envspecMaterializer = Get-Content renderer-core/src/operators/env_spec/pmetal_rgba_materializer.cpp -Raw
@@ -267,7 +268,8 @@ jobs:
           # P_Metal source reference must survive producer/selector thread changes
           # without restoring the old heap/shared_ptr global snapshot path.
           foreach ($required in @(
-            'bounded 2-way cross-thread registry',
+            'k_reference_token_sets = 128u',
+            'k_reference_token_ways = 4u',
             'g_reference_token_locks',
             'reference_token_set_guard',
             'consume_reference_token'
@@ -640,6 +642,30 @@ jobs:
             'DSRRL_MaterialCarrier'
           )) {
             if ($mr -notmatch [regex]::Escape($required)) { throw "MR diffuse-v1 exact materializer invariant missing: $required" }
+          }
+
+          foreach ($required in @(
+            'finalize_registration',
+            'registration_finalized_.load',
+            'std::lower_bound',
+            'k_direct_nospc_cache_slots = 16u'
+          )) {
+            if ($mrIsland -notmatch [regex]::Escape($required)) { throw "MR finalized hot-path authority invariant missing: $required" }
+          }
+          foreach ($required in @(
+            'k_b12_tls_cache_slots = 128u',
+            'k_replacement_tls_cache_slots = 128u',
+            'register_replacement_record'
+          )) {
+            if ($tx -notmatch [regex]::Escape($required)) { throw "MR draw hot-cache/materialization invariant missing: $required" }
+          }
+          foreach ($required in @(
+            'g_snapshot_epoch',
+            'k_envspec_snapshot_tls_slots = 16u',
+            'g_envspec_snapshot_tls',
+            'native_view_record'
+          )) {
+            if ($envspecResource -notmatch [regex]::Escape($required)) { throw "EnvSpec snapshot hot-cache invariant missing: $required" }
           }
           foreach ($forbidden in @(
             'materialize_v211',
