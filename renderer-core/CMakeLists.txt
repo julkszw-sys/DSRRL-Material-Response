@@ -79,22 +79,6 @@ add_custom_command(
 add_custom_target(dsrrl_mr_exact_binding_header
     DEPENDS "${DSRRL_MR_EXACT_BINDING_HEADER}")
 
-set(DSRRL_HEMENVLERP_V211_HEADER
-    "${DSRRL_GENERATED_DIR}/dsrrl/operators/material_response/generated_hemenvlerp_v211_v1.hpp")
-add_custom_command(
-    OUTPUT "${DSRRL_HEMENVLERP_V211_HEADER}"
-    COMMAND "${Python3_EXECUTABLE}"
-            "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_hemenvlerp_v211_v1.py"
-            --input "${CMAKE_CURRENT_SOURCE_DIR}/data/provenance/hemenvlerp_mr_v211_v1.tsv"
-            --output "${DSRRL_HEMENVLERP_V211_HEADER}"
-    DEPENDS
-        "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_hemenvlerp_v211_v1.py"
-        "${CMAKE_CURRENT_SOURCE_DIR}/data/provenance/hemenvlerp_mr_v211_v1.tsv"
-    VERBATIM
-)
-add_custom_target(dsrrl_hemenvlerp_v211_header
-    DEPENDS "${DSRRL_HEMENVLERP_V211_HEADER}")
-
 set(DSRRL_LOCAL_SPECULAR_RECEIVER_HEADER
     "${DSRRL_GENERATED_DIR}/dsrrl/operators/point_light/generated_local_specular_receivers_v1.hpp")
 add_custom_command(
@@ -230,7 +214,6 @@ add_dependencies(
     dsrrl_dsr_flver_owner_tuple_header
     dsrrl_dsr_mtd_identity_supplement_header
     dsrrl_mr_exact_binding_header
-    dsrrl_hemenvlerp_v211_header
     dsrrl_local_specular_receiver_header
     dsrrl_fixed_local_specular_ptde_reference_header
     dsrrl_clustered_pnts_direct_header)
