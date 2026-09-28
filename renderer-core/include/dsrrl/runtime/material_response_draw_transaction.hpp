@@ -38,7 +38,6 @@ struct prepared_material_response_draw {
     core::operator_mask replacement_composed_owners = 0u;
     material_response_replacement_family family =
         material_response_replacement_family::stable;
-    bool spec_rgb_consumer = false;
     bool ready = false;
 };
 
