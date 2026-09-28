@@ -11,7 +11,7 @@ ROUTE_RE = re.compile(
 )
 DONOR_RE = re.compile(
     r'\{"(?P<sha>[0-9a-f]{64})", \{(?P<c100>[^}]+)\}, \d+, '
-    r'\{(?P<c101_ptde>[^}]+)\}, \{(?P<c101_f0q>[^}]+)\}, \d+, '
+    r'\{(?P<c101_ptde>[^}]+)\}, \d+, '
     r'(?P<c102>[^,]+), (?P<slot>-?\d+), (?P<has>true|false)\}'
 )
 
@@ -33,7 +33,6 @@ def main() -> int:
     for m in DONOR_RE.finditer(donor_text):
         donors[m.group("sha")] = {
             "c100": m.group("c100"),
-            "c101_f0q": m.group("c101_f0q"),
             "c102": m.group("c102"),
             "has": m.group("has") == "true",
         }
@@ -49,7 +48,6 @@ def main() -> int:
         specular_power_verified = donors[sha]["has"]
         value = (
             donors[sha]["c100"],
-            donors[sha]["c101_f0q"],
             specular_power,
             specular_power_verified,
         )
@@ -68,7 +66,6 @@ def main() -> int:
         "struct material_response_constants {\n",
         "    std::uint32_t route_index;\n",
         "    std::array<float,3> c100;\n",
-        "    std::array<float,3> c101_f0q;\n",
         "    float ptde_specular_power;\n",
         "    bool ptde_specular_power_verified;\n",
         "};\n\n",
@@ -77,10 +74,10 @@ def main() -> int:
     ]
 
     for route in sorted(by_route):
-        c100, c101, specular_power, verified = by_route[route]
+        c100, specular_power, verified = by_route[route]
         verified_text = "true" if verified else "false"
         lines.append(
-            f"    {{{route}u,{{{{{c100}}}}},{{{{{c101}}}}},"
+            f"    {{{route}u,{{{{{c100}}}}},"
             f"{specular_power},{verified_text}}},\n"
         )
 
