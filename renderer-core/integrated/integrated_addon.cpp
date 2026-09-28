@@ -2459,84 +2459,9 @@ bool on_create_pipeline(
             ++g_mr_payload_materialize_fail;
         }
 
-        // MR reset: the current P_Metal EnvSpec materializer is rooted in the
-        // historical V2.11 proxy. Do not register it into the live runtime.
-        // P_Metal remains stock DSR EnvSpec (fail-open) until the direct
-        // stock->PTDE legacy EnvSpec operator island is rebuilt independently.
-#if 0
-        if (g_core.features().enabled(
-                dsrrl::core::operator_id::env_spec)) {
-            for (const bool with_upper_lower :
-                 {false, true}) {
-                std::vector<std::uint8_t>
-                    envspec_payload;
-
-                const auto envspec =
-                    dsrrl::operators::env_spec::
-                        materialize_pmetal_rgba_receiver(
-                            g_core.features(),
-                            source,
-                            pixel_shader->code_size,
-                            with_upper_lower,
-                            envspec_payload);
-
-                using envspec_result =
-                    dsrrl::operators::env_spec::
-                        pmetal_rgba_materialize_result;
-
-                if (envspec.result ==
-                    envspec_result::applied) {
-                    if (g_pmetal_envspec.
-                            register_replacement(
-                                envspec,
-                                envspec_payload.data(),
-                                envspec_payload.size()))
-                        ++g_envspec_payload_materialize_ok;
-                    else
-                        ++g_envspec_payload_materialize_fail;
-                } else if (
-                    envspec.result !=
-                        envspec_result::pass_not_candidate &&
-                    envspec.result !=
-                        envspec_result::pass_unknown_exact_sha) {
-                    ++g_envspec_payload_materialize_fail;
-                }
-            }
-        }
-
-        if (g_core.features().enabled(
-                dsrrl::core::operator_id::env_spec)) {
-            std::vector<std::uint8_t> envspec_lerp_payload;
-            const auto envspec_lerp =
-                dsrrl::operators::env_spec::
-                    materialize_pmetal_rgba_lerp_receiver(
-                        source,
-                        pixel_shader->code_size,
-                        envspec_lerp_payload);
-
-            using envspec_lerp_result =
-                dsrrl::operators::env_spec::
-                    pmetal_rgba_lerp_materialize_result;
-
-            if (envspec_lerp.result ==
-                    envspec_lerp_result::applied) {
-                if (g_pmetal_envspec.register_lerp_replacement(
-                        envspec_lerp,
-                        envspec_lerp_payload.data(),
-                        envspec_lerp_payload.size()))
-                    ++g_envspec_payload_materialize_ok;
-                else
-                    ++g_envspec_payload_materialize_fail;
-            } else if (
-                envspec_lerp.result !=
-                    envspec_lerp_result::pass_not_candidate &&
-                envspec_lerp.result !=
-                    envspec_lerp_result::pass_unknown_exact_sha) {
-                ++g_envspec_payload_materialize_fail;
-            }
-        }
-
-#endif
+        // P_Metal EnvSpec is intentionally fail-open while its stock-rooted
+        // PTDE operator materializer is rebuilt. No legacy/proxy builder is
+        // present in the active entrypoint.
         std::vector<std::uint8_t> ul_payload;
         ul =
             dsrrl::operators::lightbank::
