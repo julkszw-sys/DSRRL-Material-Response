@@ -3759,32 +3759,25 @@ bool prepare_island_batch(
             lerp_query.ownership.exact =
                 material.owner_tuple_exact;
 
-            const bool lerp_spec_consumer_ready =
-                g_mr_draw_runtime.
-                    has_paired_spec_rgb_replacement(
-                        prepared.mr);
-
+            // MR reset invariant: generic diffuse MR must never advertise
+            // a SpecRGB consumer. PTDE SpecRGB is owned by explicit EnvSpec/
+            // local-specular islands, not by the surviving DSR PBL tail.
             (void)g_material_resources.prepare_draw_requests(
                 context,
                 receiver_id,
                 lerp_query,
                 true,
-                lerp_spec_consumer_ready,
+                false,
                 prepared.resources);
 
-            // SpecRGB carrier and consumer are one atomic bridge. If the
-            // resource is ready but the exact paired shader is not, discard
-            // draw-local resource substitutions and keep the base t1 MR path.
             bool lerp_resource_fallback = false;
-            if (prepared.resources.spec_rgb &&
-                !g_mr_draw_runtime.
-                    promote_prepared_draw_to_spec_rgb(
-                        prepared.mr)) {
+            if (prepared.resources.spec_rgb) {
+                // Defensive anti-hybrid fail-open: a future resource-router
+                // regression must not silently resurrect generic MR+SpecRGB.
                 if (!g_material_resources.drop_spec_rgb_request(
-                        prepared.resources)) {
+                        prepared.resources))
                     g_material_resources.release_prepared_draw(
                         prepared.resources);
-                }
                 lerp_resource_fallback = true;
             }
 
@@ -3905,30 +3898,24 @@ bool prepare_island_batch(
         material.owner_tuple_exact;
 
     if (context != nullptr) {
-        const bool spec_consumer_ready =
-            prepared.mr_in_batch &&
-            g_mr_draw_runtime.
-                has_paired_spec_rgb_replacement(
-                    prepared.mr);
-
+        // MR reset invariant: generic stable MR is diffuse-v1 only.
+        // It must never request/promote a t10 SpecRGB consumer.
         (void)g_material_resources.prepare_draw_requests(
             context,
             receiver_id,
             query,
             prepared.mr_in_batch,
-            spec_consumer_ready,
+            false,
             prepared.resources);
 
-        if (prepared.mr_in_batch &&
-            prepared.resources.spec_rgb &&
-            !g_mr_draw_runtime.
-                promote_prepared_draw_to_spec_rgb(
-                    prepared.mr)) {
+        if (prepared.resources.spec_rgb) {
+            // Defensive anti-hybrid fail-open. Keep independently valid
+            // diffuse/normal resource requests when the SpecRGB request can
+            // be removed cleanly; otherwise discard the whole resource batch.
             if (!g_material_resources.drop_spec_rgb_request(
-                    prepared.resources)) {
+                    prepared.resources))
                 g_material_resources.release_prepared_draw(
                     prepared.resources);
-            }
         }
     }
 
