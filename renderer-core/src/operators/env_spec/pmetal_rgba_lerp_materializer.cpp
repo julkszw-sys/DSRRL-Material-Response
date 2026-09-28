@@ -784,7 +784,8 @@ materialize_pmetal_rgba_lerp_receiver(
     if (resource_bridges::materialize_spec_rgb_consumer(
             envspec_base.data(),
             envspec_base.size(),
-            spec_rgb_base) !=
+            spec_rgb_base,
+            true) !=
         resource_bridges::spec_rgb_consumer_result::applied) {
         outcome.result =
             pmetal_rgba_lerp_materialize_result::
