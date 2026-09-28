@@ -4,6 +4,7 @@
 #include "dsrrl/operators/material_response/generated_ptde_flver_texture_semantics_v1.hpp"
 #include "dsrrl/operators/material_response/generated_flver_pairwise_semantics_v1.hpp"
 #include "dsrrl/operators/material_response/generated_dsr_flver_owner_tuples_v1.hpp"
+#include "dsrrl/operators/material_response/generated_exact_binding_mr_v1.hpp"
 #include "dsrrl/operators/material_response/generated_mtd_spx_negative_v1.hpp"
 #include "dsrrl/operators/env_spec/env_spec_island.hpp"
 #include "dsrrl/operators/resource_bridges/spec_rgb_bridge.hpp"
@@ -533,7 +534,7 @@ int main()
     }
 
     material_response_island seeded;
-    CHECK(register_confirmed_material_routes_v1(seeded)==35u);
+    CHECK(register_confirmed_material_routes_v1(seeded)==43u);
     CHECK(seeded.register_receiver_recipe(receiver_recipe{
         33u,
         material_scope_policy::exact_material_required,
@@ -543,6 +544,82 @@ int main()
     const auto mr=seeded.evaluate(33u,pmetal);
     CHECK(!mr.active);
     CHECK(mr.reason==decision_reason::owner_tuple_not_authenticated);
+
+    const auto *pmetal_spec_extension=
+        [&]() -> const generated::exact_binding_mr_record * {
+            for(const auto &record:generated::k_exact_binding_mr_v1)
+                if(record.bridge_binding_id==40u)
+                    return &record;
+            return nullptr;
+        }();
+    CHECK(pmetal_spec_extension!=nullptr);
+    CHECK(pmetal_spec_extension->runtime_mtd_allowed);
+
+    material_identity pmetal_spec_runtime{};
+    pmetal_spec_runtime.valid=true;
+    pmetal_spec_runtime.actual_material_exact=true;
+    pmetal_spec_runtime.route_index=
+        pmetal_spec_extension->route_tag;
+    pmetal_spec_runtime.semantic_name_hash=
+        mtd_semantic_hash(
+            pmetal_spec_extension->mtd_name);
+    pmetal_spec_runtime.raw_mtd_sha256=
+        pmetal_spec_extension->raw_mtd_sha256;
+    pmetal_spec_runtime.material_family_hash=
+        mtd_semantic_hash(
+            pmetal_spec_extension->material_family);
+    CHECK(exact_runtime_material_response_identity(
+        pmetal_spec_runtime));
+
+    const auto pmetal_spec_mr=
+        seeded.evaluate(
+            33u,
+            pmetal_spec_runtime);
+    CHECK(pmetal_spec_mr.active);
+    CHECK(pmetal_spec_mr.reason==
+          decision_reason::active);
+    CHECK(pmetal_spec_mr.route_index==
+          pmetal_spec_extension->route_tag);
+    CHECK(pmetal_spec_mr.c100==
+          pmetal_spec_extension->c100);
+    CHECK(pmetal_spec_mr.c101_f0q==
+          pmetal_spec_extension->c101_f0q);
+    CHECK(pmetal_spec_mr.ptde_specular_power==
+          pmetal_spec_extension->ptde_specular_power);
+
+    const auto *shared_extension=
+        [&]() -> const generated::exact_binding_mr_record * {
+            for(const auto &record:generated::k_exact_binding_mr_v1)
+                if(record.bridge_binding_id==45u)
+                    return &record;
+            return nullptr;
+        }();
+    CHECK(shared_extension!=nullptr);
+    CHECK(!shared_extension->runtime_mtd_allowed);
+
+    material_identity shared_runtime{};
+    shared_runtime.valid=true;
+    shared_runtime.actual_material_exact=true;
+    shared_runtime.route_index=
+        shared_extension->route_tag;
+    shared_runtime.semantic_name_hash=
+        mtd_semantic_hash(
+            shared_extension->mtd_name);
+    shared_runtime.raw_mtd_sha256=
+        shared_extension->raw_mtd_sha256;
+    shared_runtime.material_family_hash=
+        mtd_semantic_hash(
+            shared_extension->material_family);
+    CHECK(!exact_runtime_material_response_identity(
+        shared_runtime));
+
+    const auto shared_mr=
+        seeded.evaluate(
+            33u,
+            shared_runtime);
+    CHECK(!shared_mr.active);
+    CHECK(shared_mr.reason==
+          decision_reason::owner_tuple_not_authenticated);
 
     // EnvSpec remains independently classifiable by its exact MTD router;
     // the generic exact-material Material Response island must not manufacture
