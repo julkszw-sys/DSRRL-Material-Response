@@ -53,7 +53,7 @@ def emit_array(out, typename, name, values, formatter):
         out.append("    " + formatter(value) + ",\n")
     out.append("}};\n\n")
 
-def render(tuples, members, targets):
+def render(tuples, members, targets, diffuse_normal_pairs):
     out=["#pragma once\n","#include <array>\n#include <cstddef>\n#include <cstdint>\n\n",
          "namespace dsrrl::runtime::generated {\n\n",
          "struct normal_tuple_v12 { std::uint64_t diffuse_hash; std::uint64_t spec_hash; std::uint64_t normal_hash; };\n",
