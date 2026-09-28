@@ -66,7 +66,11 @@ struct b12_tls_cache_entry {
     }
 };
 
-constexpr std::size_t k_b12_tls_cache_slots = 16u;
+// The finalized MR registry has 43 route profiles. A 16-entry direct
+// cache creates avoidable lock/map fallback when several materials with
+// colliding route tags alternate in one frame. 128 entries remain small TLS
+// state while covering the complete current route surface with low collision.
+constexpr std::size_t k_b12_tls_cache_slots = 128u;
 thread_local std::array<
     b12_tls_cache_entry,
     k_b12_tls_cache_slots>
@@ -139,7 +143,11 @@ struct replacement_tls_cache_entry {
     }
 };
 
-constexpr std::size_t k_replacement_tls_cache_slots = 32u;
+// Replacement identity is (bank, receiver). Eight banks share the same
+// 24-receiver semantic namespace, so the old 32-slot direct cache could
+// repeatedly fall back to the mutex under mixed HemEnv/HemEnvLerp/U-L draws.
+// Keep the cache bounded but large enough for the active working set.
+constexpr std::size_t k_replacement_tls_cache_slots = 128u;
 thread_local std::array<
     replacement_tls_cache_entry,
     k_replacement_tls_cache_slots>
