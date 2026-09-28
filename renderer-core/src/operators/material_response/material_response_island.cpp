@@ -321,7 +321,8 @@ material_response_island::resolve_material_unscoped(
 
 decision material_response_island::evaluate(
     std::uint32_t receiver_id,
-    const std::optional<material_identity> &material) const
+    const std::optional<material_identity> &material,
+    bool ptde_companion_verified) const
 {
     std::lock_guard lock(mutex_);
 
@@ -375,6 +376,15 @@ decision material_response_island::evaluate(
     const auto profile = resolve_material(*material, receiver_id);
     if (!profile.has_value())
         return {false, decision_reason::unknown_material, receiver_id};
+
+    if (profile->ptde_companion_required &&
+        !ptde_companion_verified)
+        return {
+            false,
+            decision_reason::ptde_companion_required,
+            receiver_id,
+            profile->route_index
+        };
 
     const std::uint32_t operations =
         recipe->certified_operations & profile->certified_operations;
@@ -436,8 +446,8 @@ material_response_island::evaluate_direct_pointlight_material(
     const auto profile =
         resolve_material_unscoped(material);
 
-    // The ordinary MR registry intentionally remains the 35-route Spc
-    // surface cohort. Direct PointLight may additionally consume the exact
+    // The ordinary MR profile surface plus exact-binding extensions remain
+    // separate from PointLight. Direct PointLight may additionally consume the exact
     // PTDE NoSpc c100 authority carried by the 325-row pairwise MTD router,
     // but only after the FLVER+slot owner tuple above has authenticated the
     // draw and only on an exact semantic-name + raw-MTD match.
