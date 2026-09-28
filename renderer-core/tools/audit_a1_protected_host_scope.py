@@ -8,11 +8,17 @@ EXPECTED_PLANS = 144
 EXPECTED_ALIASES = 252
 EXPECTED_ENVSPEC_NOSPC_PLANS = 12
 EXPECTED_ENVSPEC_NOSPC_ALIASES = 24
+EXPECTED_BUILD151_NOSPC = 24
+EXPECTED_TOTAL_NOSPC_IDENTITIES = 48
 PROTECTED = re.compile(r"^FRPG_Phn_.*Spc")
 
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--index", required=True)
+    ap.add_argument(
+        "--build151",
+        default="renderer-core/include/dsrrl/operators/legacy_plan/build151_nospc_extension.hpp",
+    )
     args = ap.parse_args()
 
     doc = json.loads(
@@ -67,6 +73,38 @@ def main() -> int:
     if any(not p.get("replacement_sha256") for p in envspec_nospc):
         raise SystemExit("EnvSpec no-Spc A1 plan missing replacement SHA-256")
 
+    a1_nospc_names = sorted({
+        name
+        for p in envspec_nospc
+        for name in p.get("aliases", [])
+    })
+    if len(a1_nospc_names) != EXPECTED_ENVSPEC_NOSPC_ALIASES:
+        raise SystemExit(
+            "EnvSpec no-Spc A1 alias identities are not unique: "
+            f"expected {EXPECTED_ENVSPEC_NOSPC_ALIASES}, got {len(a1_nospc_names)}"
+        )
+
+    build151_text = Path(args.build151).read_text(encoding="utf-8")
+    build151_names = re.findall(
+        r'\\{\\{"(FRPG_Phn_[^"]+)","[0-9a-f]{64}",\\d+u,\\d+u,"[0-9a-f]{64}"\\}\\}',
+        build151_text,
+    )
+    if len(build151_names) != EXPECTED_BUILD151_NOSPC:
+        raise SystemExit(
+            "Build151 EnvSpec no-Spc exact identity coverage drifted: "
+            f"expected {EXPECTED_BUILD151_NOSPC}, got {len(build151_names)}"
+        )
+    if len(set(build151_names)) != EXPECTED_BUILD151_NOSPC:
+        raise SystemExit("Build151 EnvSpec no-Spc identity names are not unique")
+    if sum("HemEnvLerp.fpo" in n for n in build151_names) != 12:
+        raise SystemExit("Build151 EnvSpec no-Spc HemEnvLerp coverage must be 12")
+    if sum(n.endswith("HemEnv.fpo") for n in build151_names) != 12:
+        raise SystemExit("Build151 EnvSpec no-Spc HemEnv coverage must be 12")
+    if set(a1_nospc_names) & set(build151_names):
+        raise SystemExit("A1 and Build151 EnvSpec no-Spc identity strata overlap")
+    if len(a1_nospc_names) + len(build151_names) != EXPECTED_TOTAL_NOSPC_IDENTITIES:
+        raise SystemExit("Combined EnvSpec no-Spc DSR identity coverage must be 48")
+
     gst_spc = sorted({
         name
         for plan in plans
@@ -81,6 +119,8 @@ def main() -> int:
         "protected_phn_spc_hits": 0,
         "envspec_nospc_plans": len(envspec_nospc),
         "envspec_nospc_aliases": envspec_nospc_aliases,
+        "envspec_nospc_build151_identities": len(build151_names),
+        "envspec_nospc_total_dsr_identities": len(a1_nospc_names) + len(build151_names),
         "gst_spc_names": len(gst_spc),
     }, indent=2))
 

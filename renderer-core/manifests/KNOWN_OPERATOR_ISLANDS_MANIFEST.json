@@ -92,8 +92,8 @@
       ],
       "fail_open": "PRESERVE_STOCK_DSR_ENVSPEC_TERM",
       "owns": "DSR-only local EnvSpec contribution only",
-      "identity_recipe_import": "WIRED_A1_CREATE_TIME_EXACT_DIGEST_PLAN_INDEX",
-      "construction_coverage": "12 exact DSR SHA plans / 24 DSR HemEnv-HemEnvLerp aliases; cross-renderer scope remains the canonical 48 substantive homolog count",
+      "identity_recipe_import": "WIRED_A1_PLUS_BUILD151_EXACT_DIGEST_CREATE_TIME",
+      "construction_coverage": "48 DSR executable identities total: 12 shared A1 exact-SHA plans exposing 24 PntS HemEnv/HemEnvLerp aliases + 24 separate Build151 exact-SHA plain HemEnv/HemEnvLerp identities",
       "runtime_activation": "NOT_TESTED",
       "pixel": "OPEN"
     },
