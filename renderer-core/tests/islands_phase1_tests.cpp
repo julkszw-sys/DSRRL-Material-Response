@@ -301,7 +301,7 @@ int main()
     CHECK(exact_mr.reason==decision_reason::active);
     CHECK(exact_mr.route_index==345u);
     CHECK(exact_mr.certified_operations==
-          (diffuse_material_domain_linear | specular_factor_c101));
+          diffuse_material_domain_linear);
     CHECK(exact_mr.c101==2.5f);
     CHECK(exact_mr.c100[0]==0.5f);
     CHECK(exact_mr.c100[1]==0.5f);
