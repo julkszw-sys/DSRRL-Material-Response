@@ -1,5 +1,7 @@
 #pragma once
 
+#include "dsrrl/core/feature_registry.hpp"
+
 #include <cstddef>
 #include <cstdint>
 #include <vector>
@@ -20,10 +22,21 @@ struct hemenvlerp_v211_outcome {
     hemenvlerp_v211_result result =
         hemenvlerp_v211_result::pass_not_candidate;
     std::uint8_t pair_index = 0xffu;
+    core::operator_mask composed_owners = 0u;
 };
 
 hemenvlerp_v211_outcome
 materialize_hemenvlerp_v211_certified_stage(
+    const std::uint8_t *source,
+    std::size_t size,
+    std::vector<std::uint8_t> &output) noexcept;
+
+// Compose only independently certified post-MR surface islands after the
+// exact V2.11 HemEnvLerp stage. The certified-stage hashes above remain the
+// provenance boundary; unknown terminal write shapes fail open.
+hemenvlerp_v211_outcome
+materialize_hemenvlerp_v211_receiver(
+    const core::feature_registry &features,
     const std::uint8_t *source,
     std::size_t size,
     std::vector<std::uint8_t> &output) noexcept;
