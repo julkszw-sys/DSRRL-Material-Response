@@ -67,13 +67,13 @@ add_custom_command(
             "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_material_response_exact_binding_extension_v1.py"
             --bindings "${DSRRL_MR_EXACT_BINDING_SOURCE}"
             --routes "${CMAKE_CURRENT_SOURCE_DIR}/data/material_response_routes_v1.json"
-            --donors "${CMAKE_CURRENT_SOURCE_DIR}/../runtime-v1/provenance/mr_v211/ptde_material_donor_registry.hpp"
+            --donors "${CMAKE_CURRENT_SOURCE_DIR}/data/provenance/ptde_material_donor_registry.hpp"
             --output "${DSRRL_MR_EXACT_BINDING_HEADER}"
     DEPENDS
         "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_material_response_exact_binding_extension_v1.py"
         "${DSRRL_MR_EXACT_BINDING_SOURCE}"
         "${CMAKE_CURRENT_SOURCE_DIR}/data/material_response_routes_v1.json"
-        "${CMAKE_CURRENT_SOURCE_DIR}/../runtime-v1/provenance/mr_v211/ptde_material_donor_registry.hpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/data/provenance/ptde_material_donor_registry.hpp"
     VERBATIM
 )
 add_custom_target(dsrrl_mr_exact_binding_header
@@ -518,6 +518,6 @@ add_test(
     COMMAND "${Python3_EXECUTABLE}"
             "${CMAKE_CURRENT_SOURCE_DIR}/tools/audit_material_response_specular_power_donors_v1.py"
             --routes "${CMAKE_CURRENT_SOURCE_DIR}/include/dsrrl/operators/material_response/generated_routes_v1.hpp"
-            --donors "${CMAKE_CURRENT_SOURCE_DIR}/../runtime-v1/provenance/mr_v211/ptde_material_donor_registry.hpp"
+            --donors "${CMAKE_CURRENT_SOURCE_DIR}/data/provenance/ptde_material_donor_registry.hpp"
             --generated "${CMAKE_CURRENT_SOURCE_DIR}/include/dsrrl/operators/material_response/generated_material_constants_v1.hpp"
 )
