@@ -582,8 +582,8 @@ int main()
           pmetal_spec_extension->route_tag);
     CHECK(pmetal_spec_mr.c100==
           pmetal_spec_extension->c100);
-    CHECK(pmetal_spec_mr.c101_f0q==
-          pmetal_spec_extension->c101_f0q);
+    CHECK(pmetal_spec_mr.c101==
+          pmetal_spec_extension->c101);
     CHECK(pmetal_spec_mr.ptde_specular_power==
           pmetal_spec_extension->ptde_specular_power);
 
