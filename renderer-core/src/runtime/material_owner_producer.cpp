@@ -134,12 +134,8 @@ bool enrich_exact_owner_mtd_identity(
     // PointLight, but does not make generic coverage source-complete.
     // Unknown/ambiguous semantic hashes still fail open. EnvSpec/SPX
     // consumer membership is never used as an identity fallback.
-    if (!mr::generated::dsr_mtd_identity_resolve(
-            semantic_hash,
-            raw_mtd_sha) &&
-        !mr::generated::dsr_mtd_identity_supplement_resolve(
-            semantic_hash,
-            raw_mtd_sha)) {
+    if (!mr::generated::dsr_mtd_identity_resolve(semantic_hash, raw_mtd_sha) &&
+        !mr::generated::dsr_mtd_identity_supplement_resolve(semantic_hash, raw_mtd_sha)) {
         const auto *extension =
             find_exact_binding_extension(
                 semantic_hash);
