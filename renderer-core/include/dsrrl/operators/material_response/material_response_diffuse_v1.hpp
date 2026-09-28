@@ -45,6 +45,7 @@ diffuse_v1_outcome materialize_ptde_diffuse_response_v1(
     const core::feature_registry &features,
     const std::uint8_t *source,
     std::size_t size,
-    std::vector<std::uint8_t> &output) noexcept;
+    std::vector<std::uint8_t> &output,
+    bool defer_surface_operators = false) noexcept;
 
 } // namespace dsrrl::operators::material_response
