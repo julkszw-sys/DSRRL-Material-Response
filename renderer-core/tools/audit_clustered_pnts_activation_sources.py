@@ -92,11 +92,16 @@ def main():
     if "material_max_pnt_lit_num > 4u" in sidecar_cpp or "material_max > 4u" in draw_cpp:
         fail("clustered material limit still has an artificial >4 fail-open")
     require(sidecar_cpp,"b12[3][0]","effective-count carrier")
-    require(draw_cpp,"g_retained_selector","retained selector")
-    require(draw_cpp,"mirror_first_four","independent first-four mirror")
+    require(draw_cpp,"select_first_four_exact","single-pass exact first-four selector")
+    require(draw_cpp,"DSRRL_CLUSTERED_SELECTOR_RUNTIME_CROSSCHECK","optional retained-selector cross-check gate")
+    require(draw_cpp,"g_retained_selector","retained selector available only for optional cross-check")
+    require(draw_cpp,"g_producer_snapshot_tls","same-thread producer snapshot fast path")
+    require(draw_cpp,"spatial_overlap_xyz_unchecked","single node-range validation overlap path")
     require(draw_cpp,"capture_source","raw source capture")
     require(draw_cpp,"executable_address(target)","source vfunc executable gate")
-    require(draw_cpp,"0x55FC70u","retained selector RVA")
+    require(draw_cpp,"0x55FC70u","retained selector RVA for optional audit cross-check")
+    if "mirror_first_four(" in draw_cpp:
+        fail("production clustered selector still contains the legacy double-traversal mirror path")
     require(flver_cpp,"k_builder=0x22084Fu","ordinary builder hook")
     require(flver_cpp,"builder_armed=true","builder hook attestation")
 
