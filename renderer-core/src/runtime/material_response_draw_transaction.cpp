@@ -597,44 +597,14 @@ bool material_response_draw_runtime::register_receiver_replacement(
         return false;
     }
 
-    std::lock_guard<std::mutex> lock(mutex_);
-    if (device_ == nullptr) {
-        ++replacement_register_fail_;
-        return false;
-    }
-
-    ID3D11PixelShader *shader = nullptr;
-    if (FAILED(device_->CreatePixelShader(
-            dxbc,
-            dxbc_size,
-            nullptr,
-            &shader)) ||
-        shader == nullptr) {
-        ++replacement_register_fail_;
-        return false;
-    }
-
-    const replacement_record record{
-        shader,
-        composed_owners
-    };
-
-    const auto found = replacements_.find(receiver_id);
-    if (found != replacements_.end()) {
-        if (found->second.shader != nullptr)
-            found->second.shader->Release();
-        found->second = record;
-    } else {
-        replacements_.emplace(
-            receiver_id,
-            record);
-    }
-
-    resource_epoch_.fetch_add(
-        1u,
-        std::memory_order_release);
-    ++replacement_register_ok_;
-    return true;
+    return register_replacement_record(
+        replacements_,
+        receiver_id,
+        dxbc,
+        dxbc_size,
+        composed_owners,
+        replacement_register_ok_,
+        replacement_register_fail_);
 }
 
 bool material_response_draw_runtime::has_receiver_replacement(
@@ -671,35 +641,14 @@ bool material_response_draw_runtime::register_receiver_spec_rgb_replacement(
         return false;
     }
 
-    std::lock_guard<std::mutex> lock(mutex_);
-    if (device_ == nullptr) {
-        ++replacement_register_fail_;
-        return false;
-    }
-
-    ID3D11PixelShader *shader = nullptr;
-    if (FAILED(device_->CreatePixelShader(
-            dxbc, dxbc_size, nullptr, &shader)) ||
-        shader == nullptr) {
-        ++replacement_register_fail_;
-        return false;
-    }
-
-    const replacement_record record{shader, composed_owners};
-    const auto found = spec_rgb_replacements_.find(receiver_id);
-    if (found != spec_rgb_replacements_.end()) {
-        if (found->second.shader != nullptr)
-            found->second.shader->Release();
-        found->second = record;
-    } else {
-        spec_rgb_replacements_.emplace(receiver_id, record);
-    }
-
-    resource_epoch_.fetch_add(
-        1u,
-        std::memory_order_release);
-    ++replacement_register_ok_;
-    return true;
+    return register_replacement_record(
+        spec_rgb_replacements_,
+        receiver_id,
+        dxbc,
+        dxbc_size,
+        composed_owners,
+        replacement_register_ok_,
+        replacement_register_fail_);
 }
 
 bool material_response_draw_runtime::has_receiver_spec_rgb_replacement(
@@ -736,46 +685,14 @@ bool material_response_draw_runtime::register_lerp_receiver_replacement(
         return false;
     }
 
-    std::lock_guard<std::mutex> lock(mutex_);
-    if (device_ == nullptr) {
-        ++replacement_register_fail_;
-        return false;
-    }
-
-    ID3D11PixelShader *shader = nullptr;
-    if (FAILED(device_->CreatePixelShader(
-            dxbc,
-            dxbc_size,
-            nullptr,
-            &shader)) ||
-        shader == nullptr) {
-        ++replacement_register_fail_;
-        return false;
-    }
-
-    const replacement_record record{
-        shader,
-        composed_owners
-    };
-
-    const auto found =
-        lerp_replacements_.find(receiver_id);
-
-    if (found != lerp_replacements_.end()) {
-        if (found->second.shader != nullptr)
-            found->second.shader->Release();
-        found->second = record;
-    } else {
-        lerp_replacements_.emplace(
-            receiver_id,
-            record);
-    }
-
-    resource_epoch_.fetch_add(
-        1u,
-        std::memory_order_release);
-    ++replacement_register_ok_;
-    return true;
+    return register_replacement_record(
+        lerp_replacements_,
+        receiver_id,
+        dxbc,
+        dxbc_size,
+        composed_owners,
+        replacement_register_ok_,
+        replacement_register_fail_);
 }
 
 bool material_response_draw_runtime::has_lerp_receiver_replacement(
@@ -816,36 +733,14 @@ register_lerp_receiver_spec_rgb_replacement(
         return false;
     }
 
-    std::lock_guard<std::mutex> lock(mutex_);
-    if (device_ == nullptr) {
-        ++replacement_register_fail_;
-        return false;
-    }
-
-    ID3D11PixelShader *shader = nullptr;
-    if (FAILED(device_->CreatePixelShader(
-            dxbc, dxbc_size, nullptr, &shader)) ||
-        shader == nullptr) {
-        ++replacement_register_fail_;
-        return false;
-    }
-
-    const replacement_record record{shader, composed_owners};
-    const auto found =
-        lerp_spec_rgb_replacements_.find(receiver_id);
-    if (found != lerp_spec_rgb_replacements_.end()) {
-        if (found->second.shader != nullptr)
-            found->second.shader->Release();
-        found->second = record;
-    } else {
-        lerp_spec_rgb_replacements_.emplace(receiver_id, record);
-    }
-
-    resource_epoch_.fetch_add(
-        1u,
-        std::memory_order_release);
-    ++replacement_register_ok_;
-    return true;
+    return register_replacement_record(
+        lerp_spec_rgb_replacements_,
+        receiver_id,
+        dxbc,
+        dxbc_size,
+        composed_owners,
+        replacement_register_ok_,
+        replacement_register_fail_);
 }
 
 bool material_response_draw_runtime::
@@ -885,37 +780,14 @@ register_lerp_receiver_upper_lower_replacement(
         return false;
     }
 
-    std::lock_guard<std::mutex> lock(mutex_);
-    if (device_ == nullptr) {
-        ++combined_ul_register_fail_;
-        return false;
-    }
-
-    ID3D11PixelShader *shader = nullptr;
-    if (FAILED(device_->CreatePixelShader(
-            dxbc, dxbc_size, nullptr, &shader)) ||
-        shader == nullptr) {
-        ++combined_ul_register_fail_;
-        return false;
-    }
-
-    const replacement_record record{shader, composed_owners};
-    const auto found =
-        lerp_upper_lower_replacements_.find(receiver_id);
-    if (found != lerp_upper_lower_replacements_.end()) {
-        if (found->second.shader != nullptr)
-            found->second.shader->Release();
-        found->second = record;
-    } else {
-        lerp_upper_lower_replacements_.emplace(
-            receiver_id, record);
-    }
-
-    resource_epoch_.fetch_add(
-        1u,
-        std::memory_order_release);
-    ++combined_ul_register_ok_;
-    return true;
+    return register_replacement_record(
+        lerp_upper_lower_replacements_,
+        receiver_id,
+        dxbc,
+        dxbc_size,
+        composed_owners,
+        combined_ul_register_ok_,
+        combined_ul_register_fail_);
 }
 
 bool material_response_draw_runtime::
@@ -956,37 +828,14 @@ register_lerp_receiver_upper_lower_spec_rgb_replacement(
         return false;
     }
 
-    std::lock_guard<std::mutex> lock(mutex_);
-    if (device_ == nullptr) {
-        ++combined_ul_register_fail_;
-        return false;
-    }
-
-    ID3D11PixelShader *shader = nullptr;
-    if (FAILED(device_->CreatePixelShader(
-            dxbc, dxbc_size, nullptr, &shader)) ||
-        shader == nullptr) {
-        ++combined_ul_register_fail_;
-        return false;
-    }
-
-    const replacement_record record{shader, composed_owners};
-    const auto found =
-        lerp_upper_lower_spec_rgb_replacements_.find(receiver_id);
-    if (found != lerp_upper_lower_spec_rgb_replacements_.end()) {
-        if (found->second.shader != nullptr)
-            found->second.shader->Release();
-        found->second = record;
-    } else {
-        lerp_upper_lower_spec_rgb_replacements_.emplace(
-            receiver_id, record);
-    }
-
-    resource_epoch_.fetch_add(
-        1u,
-        std::memory_order_release);
-    ++combined_ul_register_ok_;
-    return true;
+    return register_replacement_record(
+        lerp_upper_lower_spec_rgb_replacements_,
+        receiver_id,
+        dxbc,
+        dxbc_size,
+        composed_owners,
+        combined_ul_register_ok_,
+        combined_ul_register_fail_);
 }
 
 bool material_response_draw_runtime::
@@ -1025,48 +874,14 @@ register_receiver_upper_lower_replacement(
         return false;
     }
 
-    std::lock_guard<std::mutex> lock(mutex_);
-    if (device_ == nullptr) {
-        ++combined_ul_register_fail_;
-        return false;
-    }
-
-    ID3D11PixelShader *shader = nullptr;
-    if (FAILED(device_->CreatePixelShader(
-            dxbc,
-            dxbc_size,
-            nullptr,
-            &shader)) ||
-        shader == nullptr) {
-        ++combined_ul_register_fail_;
-        return false;
-    }
-
-    const replacement_record record{
-        shader,
-        composed_owners
-    };
-
-    const auto found =
-        upper_lower_replacements_.find(
-            receiver_id);
-
-    if (found !=
-        upper_lower_replacements_.end()) {
-        if (found->second.shader != nullptr)
-            found->second.shader->Release();
-        found->second = record;
-    } else {
-        upper_lower_replacements_.emplace(
-            receiver_id,
-            record);
-    }
-
-    resource_epoch_.fetch_add(
-        1u,
-        std::memory_order_release);
-    ++combined_ul_register_ok_;
-    return true;
+    return register_replacement_record(
+        upper_lower_replacements_,
+        receiver_id,
+        dxbc,
+        dxbc_size,
+        composed_owners,
+        combined_ul_register_ok_,
+        combined_ul_register_fail_);
 }
 
 bool material_response_draw_runtime::
@@ -1111,36 +926,14 @@ register_receiver_upper_lower_spec_rgb_replacement(
         return false;
     }
 
-    std::lock_guard<std::mutex> lock(mutex_);
-    if (device_ == nullptr) {
-        ++combined_ul_register_fail_;
-        return false;
-    }
-
-    ID3D11PixelShader *shader = nullptr;
-    if (FAILED(device_->CreatePixelShader(
-            dxbc, dxbc_size, nullptr, &shader)) ||
-        shader == nullptr) {
-        ++combined_ul_register_fail_;
-        return false;
-    }
-
-    const replacement_record record{shader, composed_owners};
-    const auto found =
-        upper_lower_spec_rgb_replacements_.find(receiver_id);
-    if (found != upper_lower_spec_rgb_replacements_.end()) {
-        if (found->second.shader != nullptr)
-            found->second.shader->Release();
-        found->second = record;
-    } else {
-        upper_lower_spec_rgb_replacements_.emplace(receiver_id, record);
-    }
-
-    resource_epoch_.fetch_add(
-        1u,
-        std::memory_order_release);
-    ++combined_ul_register_ok_;
-    return true;
+    return register_replacement_record(
+        upper_lower_spec_rgb_replacements_,
+        receiver_id,
+        dxbc,
+        dxbc_size,
+        composed_owners,
+        combined_ul_register_ok_,
+        combined_ul_register_fail_);
 }
 
 bool material_response_draw_runtime::
