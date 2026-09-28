@@ -57,6 +57,28 @@ add_custom_command(
 add_custom_target(dsrrl_dsr_mtd_identity_supplement_header
     DEPENDS "${DSRRL_MTD_IDENTITY_SUPPLEMENT_HEADER}")
 
+set(DSRRL_MR_EXACT_BINDING_SOURCE
+    "${CMAKE_CURRENT_SOURCE_DIR}/data/census/ptde_mtd_semantic_exact_bindings_v1.json")
+set(DSRRL_MR_EXACT_BINDING_HEADER
+    "${DSRRL_GENERATED_DIR}/dsrrl/operators/material_response/generated_exact_binding_mr_v1.hpp")
+add_custom_command(
+    OUTPUT "${DSRRL_MR_EXACT_BINDING_HEADER}"
+    COMMAND "${Python3_EXECUTABLE}"
+            "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_material_response_exact_binding_extension_v1.py"
+            --bindings "${DSRRL_MR_EXACT_BINDING_SOURCE}"
+            --routes "${CMAKE_CURRENT_SOURCE_DIR}/data/material_response_routes_v1.json"
+            --donors "${CMAKE_CURRENT_SOURCE_DIR}/../runtime-v1/provenance/mr_v211/ptde_material_donor_registry.hpp"
+            --output "${DSRRL_MR_EXACT_BINDING_HEADER}"
+    DEPENDS
+        "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_material_response_exact_binding_extension_v1.py"
+        "${DSRRL_MR_EXACT_BINDING_SOURCE}"
+        "${CMAKE_CURRENT_SOURCE_DIR}/data/material_response_routes_v1.json"
+        "${CMAKE_CURRENT_SOURCE_DIR}/../runtime-v1/provenance/mr_v211/ptde_material_donor_registry.hpp"
+    VERBATIM
+)
+add_custom_target(dsrrl_mr_exact_binding_header
+    DEPENDS "${DSRRL_MR_EXACT_BINDING_HEADER}")
+
 set(DSRRL_HEMENVLERP_V211_HEADER
     "${DSRRL_GENERATED_DIR}/dsrrl/operators/material_response/generated_hemenvlerp_v211_v1.hpp")
 add_custom_command(
@@ -175,6 +197,7 @@ add_library(dsrrl_renderer_core STATIC
     "${DSRRL_NATIVE_PROBE_HEADER}"
     "${DSRRL_OWNER_CORPUS_HEADER}"
     "${DSRRL_MTD_IDENTITY_SUPPLEMENT_HEADER}"
+    "${DSRRL_MR_EXACT_BINDING_HEADER}"
     "${DSRRL_LOCAL_SPECULAR_RECEIVER_HEADER}"
     "${DSRRL_FIXED_LOCAL_SPECULAR_PTDE_REFERENCE_HEADER}"
     "${DSRRL_CLUSTERED_PNTS_DIRECT_HEADER}"
@@ -206,6 +229,7 @@ add_dependencies(
     dsrrl_native_envspec_probe_header
     dsrrl_dsr_flver_owner_tuple_header
     dsrrl_dsr_mtd_identity_supplement_header
+    dsrrl_mr_exact_binding_header
     dsrrl_hemenvlerp_v211_header
     dsrrl_local_specular_receiver_header
     dsrrl_fixed_local_specular_ptde_reference_header
