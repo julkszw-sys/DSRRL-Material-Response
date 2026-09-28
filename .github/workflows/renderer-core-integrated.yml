@@ -176,7 +176,7 @@ jobs:
           $sharedTx = Get-Content renderer-core/src/runtime/draw_state_transaction.cpp -Raw
           $adapter = Get-Content renderer-core/src/runtime/island_draw_adapter.cpp -Raw
           $policy = Get-Content renderer-core/include/dsrrl/core/draw_transaction_policy.hpp -Raw
-          $mr = Get-Content renderer-core/src/operators/material_response/material_response_v211_materializer.cpp -Raw
+          $mr = Get-Content renderer-core/src/operators/material_response/material_response_diffuse_v1.cpp -Raw
           $resourceRuntime = Get-Content renderer-core/src/runtime/material_resource_draw_runtime.cpp -Raw
           $specConsumer = Get-Content renderer-core/src/operators/resource_bridges/spec_rgb_consumer_materializer.cpp -Raw
           $envspecMaterializer = Get-Content renderer-core/src/operators/env_spec/pmetal_rgba_materializer.cpp -Raw
@@ -318,7 +318,7 @@ jobs:
             'addon_event::draw_indexed',
             'material_owner_selection_consume',
             'stable_receiver_bound',
-            'materialize_v211_stable_receiver',
+            'materialize_ptde_diffuse_response_v1',
             'prepare_island_batch',
             'append_island_draw_request',
             'dispatch_island_draw_batch',
@@ -599,14 +599,23 @@ jobs:
           }
 
           foreach ($required in @(
-            'v29_sha256',
-            'v210_sha256',
-            'v211_sha256',
-            'compose_enabled_a1_islands',
-            'augment_final_rdef_b12',
+            'generated_diffuse_response_v1',
+            'diffuse_pow_site',
+            'c100_sites',
+            'cb0[9]',
+            'b12[1]',
+            'does NOT consume c101',
             'DSRRL_MaterialCarrier'
           )) {
-            if ($mr -notmatch [regex]::Escape($required)) { throw "MR exact materializer invariant missing: $required" }
+            if ($mr -notmatch [regex]::Escape($required)) { throw "MR diffuse-v1 exact materializer invariant missing: $required" }
+          }
+          foreach ($forbidden in @(
+            'materialize_v211',
+            'v210_sha256',
+            'v211_sha256',
+            'c101_f0q'
+          )) {
+            if ($mr -match [regex]::Escape($forbidden)) { throw "MR diffuse-v1 regressed to historical proxy semantics: $forbidden" }
           }
 
           foreach ($required in @(
