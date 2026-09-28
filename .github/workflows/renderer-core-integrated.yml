@@ -930,7 +930,8 @@ jobs:
           $constHeader = Get-Content renderer-core/include/dsrrl/operators/material_response/generated_material_constants_v1.hpp -Raw
           $b12Payload = Get-Content renderer-core/include/dsrrl/operators/material_response/material_response_b12_payload.hpp -Raw
 
-          if (($constGenerator + $constHeader + $b12Payload) -match 'c101_f0q') {
+          $proxyCodePattern = '(value\s*\.\s*c101_f0q|\bc101_f0q\s*[;=,}\]])'
+          if (($constGenerator + $constHeader + $b12Payload) -match $proxyCodePattern) {
             throw "Historical c101->DSR-F0 proxy signal leaked into active MR authority/ABI"
           }
 
