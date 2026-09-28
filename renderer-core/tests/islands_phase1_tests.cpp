@@ -1252,7 +1252,7 @@ int main()
           "35880c0b2f2330208dfc21af6dd3d944218fcc4540cd8e59404a0aefc13c0b24");
     CHECK(subsurf_route.carrier ==
           operators::resource_bridges::subsurface_bypass_carrier::
-              create_time_pixel_shader_substitution);
+              draw_time_material_aware_pixel_shader_substitution);
     CHECK(subsurf_route.bypass_dsr_subsurf);
     CHECK(!subsurf_route.preserve_dsr_sss);
 
