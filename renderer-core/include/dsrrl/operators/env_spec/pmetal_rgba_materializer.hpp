@@ -14,7 +14,7 @@ enum class pmetal_rgba_materialize_result : std::uint8_t {
     pass_not_candidate,
     pass_unknown_exact_sha,
     fail_invalid_dxbc,
-    fail_v211_stage,
+    fail_diffuse_base,
     fail_a1_composition,
     fail_build131_precondition,
     fail_build131_rdef,
