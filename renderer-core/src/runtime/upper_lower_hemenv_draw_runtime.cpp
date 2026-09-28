@@ -185,6 +185,25 @@ bool upper_lower_hemenv_draw_runtime::prepare_draw_request(
         operators::lightbank::
             upper_lower_hemenv_stratum::spc;
 
+    // Runtime pixel falsifier 2026-09-28: enabling the renderer-wide U/L
+    // bridge on FaceEye produced a repeatable dark facial wedge on every
+    // character. Static consumer coverage is not pixel-equivalence authority.
+    // Preserve stock DSR FaceEye until the dedicated FaceEye shadow/material
+    // operator has closed PTDE<->DSR value homology. Opt-in is diagnostic only.
+    const bool faceeye_family =
+        identity.family ==
+            operators::lightbank::
+                upper_lower_hemenv_family::phn_faceeye ||
+        identity.family ==
+            operators::lightbank::
+                upper_lower_hemenv_family::gst_faceeye;
+    static const bool experimental_faceeye_upper_lower =
+        telemetry::environment_flag(
+            "DSRRL_EXPERIMENTAL_FACEEYE_UPPER_LOWER");
+    if (faceeye_family &&
+        !experimental_faceeye_upper_lower)
+        return false;
+
     switch (identity.family) {
     case operators::lightbank::upper_lower_hemenv_family::hemenv:
     case operators::lightbank::upper_lower_hemenv_family::hemenvlerp:
