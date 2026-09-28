@@ -105,7 +105,10 @@ int main()
     CHECK(d.envspec == ptde_envspec_presence::absent);
 
     auto env = operators::env_spec::env_spec_island::gate(d.envspec, false);
-    CHECK(env.selected == operators::env_spec::action::suppress_dsr_only);
+    // Presence-only absence is semantic metadata, not deletion authority.
+    // Exact material/receiver routing is required before suppressing a
+    // DSR-only EnvSpec contribution.
+    CHECK(env.selected == operators::env_spec::action::preserve_host);
     CHECK(!env.ptde_bridge_required);
 
     CHECK(mr.register_receiver_recipe(receiver_recipe{
