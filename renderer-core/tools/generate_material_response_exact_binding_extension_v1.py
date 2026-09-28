@@ -244,7 +244,9 @@ def main() -> int:
         "} // namespace dsrrl::operators::material_response::generated\n",
     ]
 
-    Path(args.output).write_text("".join(lines), encoding="utf-8")
+    output = Path(args.output)
+    output.parent.mkdir(parents=True, exist_ok=True)
+    output.write_text("".join(lines), encoding="utf-8")
     print(
         "MR_EXACT_BINDING_EXTENSION_GENERATION_PASS "
         f"records={len(records)} direct_exact="
