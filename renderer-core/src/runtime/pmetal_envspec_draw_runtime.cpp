@@ -471,12 +471,10 @@ bool pmetal_envspec_draw_runtime::prepare(
         mr::classify_mtd_envspec_semantics(
             query);
 
-    const auto env_decision =
-        mr::classify_mtd_semantic(
-            query,
-            mr::mtd_semantic_operator::
-                env_spec);
-
+    // classify_mtd_semantic(...env_spec) begins by running the same exact
+    // EnvSpec router lookup again. At this point P_Metal material + route are
+    // already exact, so the exact router result is the authoritative semantic
+    // gate. Avoid scanning the 325-record router twice per candidate draw.
     if (!env_semantics.exact_identity_match ||
         env_semantics.presence !=
             mr::ptde_envspec_presence::
@@ -485,9 +483,7 @@ bool pmetal_envspec_draw_runtime::prepare(
             mr::mtd_envspec_router_state::
                 present ||
         !env_semantics.envspc_slot_valid ||
-        env_semantics.envspc_slot != 2u ||
-        env_decision.state !=
-            mr::mtd_semantic_state::use) {
+        env_semantics.envspc_slot != 2u) {
         telemetry::hot_count(semantic_rejects_);
         effect_fail(
             effect_fail_mask_,

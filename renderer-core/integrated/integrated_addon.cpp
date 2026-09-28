@@ -1162,7 +1162,7 @@ void log_effect_matrix(
         "receiver_source=%u repl=%u probe=%u spec=%u b12=%u request=%u fail=0x%08X "
         "PMSRC obs=%u A=%s sel=%d count=%u sig=%016llX row=%u "
         "B=%s sel=%d count=%u sig=%016llX row=%u beta=%.6f "
-        "REF pub=%u ptid=%u sel_evt=%u stid=%u cand=%u tuple=%u match=%u drawtok=%u "
+        "REF pub=%u ptid=%u sel_evt=%u stid=%u cand=%u tuple=%u match=%u drawtok=%u src=%u vec=%u ul=%u "
         "SUB cand=%llu matrej=%llu piperej=%llu surfrej=%llu prep=%llu "
         "UL producer=%u changed=%u quarantine=%u restore_fail=%u "
         "Bloom diag_hooks=%u/%u model_hook=%u proof=%u contents=%u "
@@ -1213,6 +1213,9 @@ void log_effect_matrix(
         pmetal_source.selector_tuple_read ? 1u : 0u,
         pmetal_source.selector_tuple_match ? 1u : 0u,
         pmetal_source.draw_token_selected ? 1u : 0u,
+        pmetal_source.draw_token_source_ready ? 1u : 0u,
+        pmetal_source.draw_token_vectors_ready ? 1u : 0u,
+        pmetal_source.draw_token_upper_lower_ready ? 1u : 0u,
         static_cast<unsigned long long>(
             subsurface.candidates),
         static_cast<unsigned long long>(

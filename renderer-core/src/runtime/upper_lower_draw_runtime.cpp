@@ -100,6 +100,13 @@ struct lightbank_reference_token {
     std::array<f4,3> directions{};
     f4 upper{};
     f4 lower{};
+    // A token is exact/fresh by fingerprint independently of which operator
+    // payloads the producer happened to materialize. Keep source, evaluated
+    // vectors and U/L readiness separate so an unrelated carrier failure
+    // cannot suppress P_Metal EnvSpec source routing.
+    bool source_ready = false;
+    bool vectors_ready = false;
+    bool upper_lower_ready = false;
     bool valid = false;
     bool available = false;
 };
@@ -536,6 +543,9 @@ std::atomic_bool g_reference_selector_candidate_found{false};
 std::atomic_bool g_reference_selector_tuple_read{false};
 std::atomic_bool g_reference_selector_tuple_match{false};
 std::atomic_bool g_reference_draw_token_selected{false};
+std::atomic_bool g_reference_draw_token_source_ready{false};
+std::atomic_bool g_reference_draw_token_vectors_ready{false};
+std::atomic_bool g_reference_draw_token_upper_lower_ready{false};
 std::atomic_bool g_direct_ul_producer_active{false};
 std::atomic_bool g_steady_cache_builder_active{false};
 std::atomic_bool g_direct_ul_operator_changed{false};
@@ -1085,9 +1095,6 @@ void publish_reference_token(
     const producer_tls &producer) noexcept
 {
     if (!producer.reference_ready ||
-        !producer.evaluated_vectors_ready ||
-        !producer.have_upper ||
-        !producer.have_lower ||
         producer.owner == 0u ||
         producer.assignment == nullptr ||
         producer.source_a == nullptr ||
@@ -1132,10 +1139,19 @@ void publish_reference_token(
     token.selector_a = producer.selector_a;
     token.selector_b = producer.selector_b;
     token.beta = assignment_beta;
-    token.directions =
-        producer.evaluated_directions;
-    token.upper = producer.upper;
-    token.lower = producer.lower;
+    token.source_ready = true;
+    token.vectors_ready =
+        producer.evaluated_vectors_ready;
+    token.upper_lower_ready =
+        producer.have_upper &&
+        producer.have_lower;
+    if (token.vectors_ready)
+        token.directions =
+            producer.evaluated_directions;
+    if (token.upper_lower_ready) {
+        token.upper = producer.upper;
+        token.lower = producer.lower;
+    }
     token.valid = true;
     token.available = true;
 
@@ -1298,6 +1314,7 @@ bool decode_d123_colors_only(
     colors = {};
 
     if (!token.valid ||
+        !token.source_ready ||
         token.source_a == nullptr ||
         token.source_b == nullptr ||
         token.selector_a < 0 ||
@@ -1378,7 +1395,10 @@ bool build_hemdir3_reference_payload(
     std::array<f4,8> &payload) noexcept
 {
     payload = {};
-    if (!token.valid)
+    if (!token.valid ||
+        !token.source_ready ||
+        !token.vectors_ready ||
+        !token.upper_lower_ready)
         return false;
 
     std::array<f4,3> colors{};
@@ -3886,6 +3906,15 @@ void upper_lower_draw_runtime::selector_event(
             selected;
         latch_bool_once(
             g_reference_draw_token_selected);
+        if (selected.source_ready)
+            latch_bool_once(
+                g_reference_draw_token_source_ready);
+        if (selected.vectors_ready)
+            latch_bool_once(
+                g_reference_draw_token_vectors_ready);
+        if (selected.upper_lower_ready)
+            latch_bool_once(
+                g_reference_draw_token_upper_lower_ready);
         telemetry::hot_count(
             g_selector_match);
         return;
@@ -3988,7 +4017,8 @@ bool upper_lower_draw_runtime::prepare_upper_lower_carrier(
 
     if (g_steady_cache_builder_active.load(
             std::memory_order_acquire)) {
-        if (!g_draw_reference_token.valid)
+        if (!g_draw_reference_token.valid ||
+            !g_draw_reference_token.upper_lower_ready)
             return false;
 
         std::array<f4,8> payload{};
@@ -4143,6 +4173,7 @@ bool upper_lower_draw_runtime::selected_pmetal_env_source(
         const auto &token =
             g_draw_reference_token;
         if (!token.valid ||
+            !token.source_ready ||
             token.source_a == nullptr ||
             token.source_b == nullptr ||
             token.selector_a < 0 ||
@@ -4370,6 +4401,15 @@ upper_lower_draw_runtime::pmetal_source_diagnostic() const noexcept
     out.draw_token_selected =
         g_reference_draw_token_selected.load(
             std::memory_order_relaxed);
+    out.draw_token_source_ready =
+        g_reference_draw_token_source_ready.load(
+            std::memory_order_relaxed);
+    out.draw_token_vectors_ready =
+        g_reference_draw_token_vectors_ready.load(
+            std::memory_order_relaxed);
+    out.draw_token_upper_lower_ready =
+        g_reference_draw_token_upper_lower_ready.load(
+            std::memory_order_relaxed);
     return out;
 }
 
@@ -4486,6 +4526,9 @@ void upper_lower_draw_runtime::reset() noexcept
     g_reference_selector_tuple_read.store(false);
     g_reference_selector_tuple_match.store(false);
     g_reference_draw_token_selected.store(false);
+    g_reference_draw_token_source_ready.store(false);
+    g_reference_draw_token_vectors_ready.store(false);
+    g_reference_draw_token_upper_lower_ready.store(false);
     g_direct_ul_steady_inject.store(0);
     g_direct_ul_blend_inject.store(0);
     g_direct_ul_inject_fail.store(0);

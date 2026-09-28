@@ -108,6 +108,9 @@ struct pmetal_env_source_diagnostic {
     bool selector_tuple_read = false;
     bool selector_tuple_match = false;
     bool draw_token_selected = false;
+    bool draw_token_source_ready = false;
+    bool draw_token_vectors_ready = false;
+    bool draw_token_upper_lower_ready = false;
 };
 
 struct prepared_hemdir3_carrier {
