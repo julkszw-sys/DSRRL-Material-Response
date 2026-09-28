@@ -13,6 +13,26 @@
 namespace dsrrl::operators::material_response {
 namespace {
 
+static_assert([]() constexpr {
+    for (std::size_t i = 1u;
+         i < generated::k_material_routes_v1.size();
+         ++i)
+        if (generated::k_material_routes_v1[i - 1u].route_index >
+            generated::k_material_routes_v1[i].route_index)
+            return false;
+    return true;
+}(), "MR route authority must remain sorted by route_index");
+
+static_assert([]() constexpr {
+    for (std::size_t i = 1u;
+         i < generated::k_exact_binding_mr_v1.size();
+         ++i)
+        if (generated::k_exact_binding_mr_v1[i - 1u].route_tag >
+            generated::k_exact_binding_mr_v1[i].route_tag)
+            return false;
+    return true;
+}(), "MR exact-binding authority must remain sorted by route_tag");
+
 bool digest_is_zero(const core::sha256_digest &digest) noexcept
 {
     return std::all_of(
