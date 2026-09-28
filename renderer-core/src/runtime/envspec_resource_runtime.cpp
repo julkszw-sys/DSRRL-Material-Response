@@ -49,6 +49,11 @@ struct native_probe_record {
     std::uint16_t probe_ordinal = 0;
 };
 
+struct native_view_record {
+    std::uint64_t resource_handle = 0;
+    std::uint16_t probe_ordinal = 0;
+};
+
 struct rgba_cube {
     resource texture{};
     resource_view view{};
@@ -57,7 +62,7 @@ struct rgba_cube {
 std::mutex g_mutex;
 std::unordered_map<std::uint64_t,native_probe_record>
     g_native_resources;
-std::unordered_map<std::uint64_t,std::uint64_t>
+std::unordered_map<std::uint64_t,native_view_record>
     g_resource_by_view;
 std::unordered_map<std::uint32_t,rgba_cube>
     g_ptde_cubes;
@@ -326,6 +331,17 @@ void on_init_device(
             return;
 
         g_device = device_ptr;
+
+        // All three registries have strict finite authority domains. Reserving
+        // them once at device init avoids allocator/rehash work while resource
+        // creation and first-use cube materialization are running.
+        g_native_resources.reserve(
+            env::k_legacy_envspec_probe_count);
+        g_resource_by_view.reserve(
+            env::k_legacy_envspec_probe_count * 2u);
+        g_ptde_cubes.reserve(
+            env::k_legacy_envspec_probe_count *
+            k_ptde_slots);
     }
 
     std::vector<std::uint8_t> pack;
@@ -483,7 +499,7 @@ void on_destroy_resource(
     for (auto it =
              g_resource_by_view.begin();
          it != g_resource_by_view.end();) {
-        if (it->second ==
+        if (it->second.resource_handle ==
             resource_handle.handle)
             it =
                 g_resource_by_view.erase(
@@ -511,15 +527,21 @@ void on_init_resource_view(
     std::lock_guard<std::mutex> lock(
         g_mutex);
 
-    if (device_ptr != g_device ||
+    if (device_ptr != g_device)
+        return;
+
+    const auto native =
         g_native_resources.find(
-            resource_handle.handle) ==
-            g_native_resources.end())
+            resource_handle.handle);
+    if (native ==
+        g_native_resources.end())
         return;
 
     g_resource_by_view[
-        view.handle] =
-        resource_handle.handle;
+        view.handle] = {
+            resource_handle.handle,
+            native->second.probe_ordinal
+        };
 
     ++g_view_matches;
 }
@@ -564,16 +586,8 @@ bool probe_for_native_view(
         g_resource_by_view.end())
         return false;
 
-    const auto by_resource =
-        g_native_resources.find(
-            by_view->second);
-
-    if (by_resource ==
-        g_native_resources.end())
-        return false;
-
     probe =
-        by_resource->second.probe_ordinal;
+        by_view->second.probe_ordinal;
     return true;
 }
 
@@ -616,15 +630,8 @@ bool snapshot_ready_envspec(
                 g_resource_by_view.end())
                 return false;
 
-            const auto by_resource =
-                g_native_resources.find(
-                    by_view->second);
-            if (by_resource ==
-                g_native_resources.end())
-                return false;
-
             probe =
-                by_resource->second.probe_ordinal;
+                by_view->second.probe_ordinal;
             return true;
         };
 
