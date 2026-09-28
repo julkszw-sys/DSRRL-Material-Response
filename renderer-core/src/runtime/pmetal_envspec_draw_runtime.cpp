@@ -724,9 +724,9 @@ bool pmetal_envspec_draw_runtime::prepare(
 
     const std::array<f4,4> payload{{
         {
-            decision.c101_f0q[0],
-            decision.c101_f0q[1],
-            decision.c101_f0q[2],
+            decision.c101,
+            decision.c101,
+            decision.c101,
             1.0f
         },
         {
