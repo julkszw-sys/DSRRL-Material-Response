@@ -3123,7 +3123,9 @@ effect_probe_mask authority_effect_mask(
 
 void account_effect_dispatch(
     effect_probe_mask mask,
-    dsrrl::runtime::draw_tx_result result) noexcept
+    dsrrl::runtime::draw_tx_result result,
+    std::uint32_t receiver_id,
+    std::uint32_t route_index) noexcept
 {
     if (!g_effect_telemetry_enabled ||
         mask == 0u)
@@ -3133,21 +3135,27 @@ void account_effect_dispatch(
             result))
         mark_effect_probe_mask(
             mask,
-            effect_probe_stage::applied);
+            effect_probe_stage::applied,
+            receiver_id,
+            route_index);
 
     if (result ==
         dsrrl::runtime::draw_tx_result::
             issued_restore_failed)
         mark_effect_probe_mask(
             mask,
-            effect_probe_stage::restore_failed);
+            effect_probe_stage::restore_failed,
+            receiver_id,
+            route_index);
 
     if (result ==
         dsrrl::runtime::draw_tx_result::
             not_issued)
         mark_effect_probe_mask(
             mask,
-            effect_probe_stage::fail_open);
+            effect_probe_stage::fail_open,
+            receiver_id,
+            route_index);
 }
 
 void release_prepared_island_batch(
@@ -4161,7 +4169,9 @@ bool on_draw(
 
     account_effect_dispatch(
         effect_prepared,
-        dispatch.transaction);
+        dispatch.transaction,
+        receiver_id,
+        decision.route_index);
 
     if (clustered_in_batch) {
         if (dsrrl::runtime::draw_tx_issued(
@@ -4182,9 +4192,23 @@ bool on_draw(
         if (dsrrl::runtime::draw_tx_issued(
                 dispatch.transaction) &&
             !g_mr_once_draw_issued.exchange(true)) {
+            char line[320]{};
+            std::snprintf(
+                line,
+                sizeof(line),
+                "[DSRRL MR ACT] stage=draw_issued rx=%u route=%u c100=%.6f,%.6f,%.6f c101q=%.6f,%.6f,%.6f raw_c101=%.6f",
+                static_cast<unsigned>(receiver_id),
+                static_cast<unsigned>(decision.route_index),
+                decision.c100[0],
+                decision.c100[1],
+                decision.c100[2],
+                decision.c101_f0q[0],
+                decision.c101_f0q[1],
+                decision.c101_f0q[2],
+                decision.c101);
             reshade::log::message(
                 reshade::log::level::info,
-                "[DSRRL MR ACT] stage=draw_issued");
+                line);
         }
         if (lerp_mr_in_batch &&
             dsrrl::runtime::draw_tx_issued(
@@ -4370,7 +4394,9 @@ bool on_draw_indexed(
 
     account_effect_dispatch(
         effect_prepared,
-        dispatch.transaction);
+        dispatch.transaction,
+        receiver_id,
+        decision.route_index);
 
     if (clustered_in_batch) {
         if (dsrrl::runtime::draw_tx_issued(
@@ -4391,9 +4417,23 @@ bool on_draw_indexed(
         if (dsrrl::runtime::draw_tx_issued(
                 dispatch.transaction) &&
             !g_mr_once_draw_issued.exchange(true)) {
+            char line[320]{};
+            std::snprintf(
+                line,
+                sizeof(line),
+                "[DSRRL MR ACT] stage=draw_issued rx=%u route=%u c100=%.6f,%.6f,%.6f c101q=%.6f,%.6f,%.6f raw_c101=%.6f",
+                static_cast<unsigned>(receiver_id),
+                static_cast<unsigned>(decision.route_index),
+                decision.c100[0],
+                decision.c100[1],
+                decision.c100[2],
+                decision.c101_f0q[0],
+                decision.c101_f0q[1],
+                decision.c101_f0q[2],
+                decision.c101);
             reshade::log::message(
                 reshade::log::level::info,
-                "[DSRRL MR ACT] stage=draw_issued");
+                line);
         }
         if (lerp_mr_in_batch &&
             dsrrl::runtime::draw_tx_issued(
