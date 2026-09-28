@@ -51,6 +51,18 @@ find_mask39_plan()
     return nullptr;
 }
 
+const operators::legacy_plan::generated::a1_exact_patch_plan *
+find_mask256_plan()
+{
+    using namespace operators::legacy_plan::generated;
+
+    for (const auto &plan : k_a1_exact_patch_plans_v1)
+        if (plan.legacy_mask == 256u)
+            return &plan;
+
+    return nullptr;
+}
+
 std::vector<std::uint8_t> make_synthetic_original(
     const operators::legacy_plan::generated::a1_exact_patch_plan &plan)
 {
@@ -94,6 +106,31 @@ int main()
     CHECK(k_a1_exact_patch_plan_count_v1 == 144u);
     CHECK(k_a1_exact_patch_op_count_v1 == 312u);
 
+    std::size_t certified_terminal_sat_ops = 0u;
+    std::size_t rejected_terminal_sat_ops = 0u;
+    for (const auto &candidate : k_a1_exact_patch_plans_v1) {
+        for (std::size_t i = 0u; i < candidate.op_count; ++i) {
+            const auto &op =
+                k_a1_exact_patch_ops_v1[candidate.first_op + i];
+            if (op.owner !=
+                core::operator_id::terminal_sat_rgb)
+                continue;
+
+            if (a1_op_semantically_authorized(
+                    candidate,
+                    op))
+                ++certified_terminal_sat_ops;
+            else
+                ++rejected_terminal_sat_ops;
+        }
+    }
+
+    // Only the exact Phn HemEnv/Lerp PntS/PntSS/PntSSSS terminal RGB writes
+    // inherit PTDE SAT authority. Historical Gst and Non/FaceEye SAT edits
+    // remain provenance-only and fail open.
+    CHECK(certified_terminal_sat_ops == 36u);
+    CHECK(rejected_terminal_sat_ops == 108u);
+
     const auto *plan = find_mask39_plan();
     CHECK(plan != nullptr);
     CHECK(plan->op_count == 7u);
@@ -118,6 +155,40 @@ int main()
     CHECK(
         out.result ==
         a1_create_time_result::pass_through_no_enabled_owner);
+    CHECK(replacement.empty());
+
+    // A historical Non/FaceEye SAT-only plan must not gain current
+    // TerminalSatRGB authority merely because the recovered DWORD toggles the
+    // SAT modifier. It remains exact-byte provenance and passes through.
+    const auto *unverified_sat_plan =
+        find_mask256_plan();
+    CHECK(unverified_sat_plan != nullptr);
+    CHECK(unverified_sat_plan->op_count == 1u);
+
+    auto unverified_original =
+        make_synthetic_original(
+            *unverified_sat_plan);
+    CHECK(dxbc::checksum_container_valid(
+        unverified_original.data(),
+        unverified_original.size()));
+
+    core::feature_registry sat_only_features;
+    CHECK(sat_only_features.set(
+        core::operator_id::terminal_sat_rgb,
+        true));
+
+    out = materialize_verified_a1_plan(
+        sat_only_features,
+        *unverified_sat_plan,
+        unverified_original.data(),
+        unverified_original.size(),
+        replacement);
+
+    CHECK(
+        out.result ==
+        a1_create_time_result::pass_through_no_enabled_owner);
+    CHECK(out.selected_ops == 0u);
+    CHECK(out.selected_owners == 0u);
     CHECK(replacement.empty());
 
     // PntS-only activation patches exactly its two DWORDs and leaves every
