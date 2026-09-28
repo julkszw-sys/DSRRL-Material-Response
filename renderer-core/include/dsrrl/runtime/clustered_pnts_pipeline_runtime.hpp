@@ -35,6 +35,7 @@ struct prepared_clustered_pnts_shader {
     ID3D11PixelShader *shader = nullptr;
     bool spc = false;
     bool blended_material = false;
+    bool upper_lower_composed = false;
     std::uint32_t representative_shader_index = 0u;
     bool ready = false;
 };
