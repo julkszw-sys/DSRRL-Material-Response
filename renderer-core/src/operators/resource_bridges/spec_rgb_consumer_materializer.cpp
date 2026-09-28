@@ -1,6 +1,7 @@
 #include "dsrrl/operators/resource_bridges/spec_rgb_consumer_materializer.hpp"
 
 #include "dsrrl/operators/legacy_plan/dxbc_checksum.hpp"
+#include "dsrrl/operators/legacy_plan/dxbc_rdef_patch.hpp"
 
 #include <algorithm>
 #include <array>
@@ -449,7 +450,8 @@ bool rebuild(
 
 bool postcondition(
     const std::uint8_t *source,
-    std::size_t size) noexcept
+    std::size_t size,
+    bool raw_c101) noexcept
 {
     std::vector<chunk> chunks;
     std::vector<std::uint32_t> words;
@@ -487,9 +489,58 @@ bool postcondition(
             ++sample;
     }
 
-    return
-        dcl == 1u &&
-        sample == 1u;
+    if (dcl != 1u ||
+        sample != 1u)
+        return false;
+
+    if (!raw_c101)
+        return true;
+
+    // Exact EnvSpec material tail: the duplicated PTDE SpecRGB sample at t10
+    // must be followed immediately by a linear raw-c101 multiply. This is the
+    // PTDE material gain, not a DSR F0 translation.
+    for (const auto &ins :
+         instructions) {
+        if (ins.opcode < 0x45u ||
+            ins.opcode > 0x4au ||
+            ins.length != 11u ||
+            words[ins.offset + 8u] != 10u)
+            continue;
+
+        const auto next =
+            ins.offset + ins.length;
+        if (next + 7u >= words.size() ||
+            words[next] != 0x08000038u ||
+            words[next + 1u] != 0x00100072u ||
+            words[next + 2u] != words[ins.offset + 4u] ||
+            words[next + 3u] != 0x00100246u ||
+            words[next + 4u] != words[ins.offset + 4u] ||
+            words[next + 5u] != 0x00208246u ||
+            words[next + 6u] != 12u ||
+            words[next + 7u] != 0u)
+            return false;
+
+        chunk *rdef = nullptr;
+        for (auto &current : chunks) {
+            if (std::memcmp(
+                    current.tag.data(),
+                    "RDEF",
+                    4u) != 0)
+                continue;
+            if (rdef != nullptr)
+                return false;
+            rdef = &current;
+        }
+
+        return
+            rdef != nullptr &&
+            legacy_plan::dxbc::rdef::
+                has_constant_buffer_binding(
+                    rdef->payload,
+                    12u);
+    }
+
+    return false;
 }
 
 } // namespace
@@ -498,7 +549,8 @@ spec_rgb_consumer_result
 materialize_spec_rgb_consumer(
     const std::uint8_t *source,
     std::size_t size,
-    std::vector<std::uint8_t> &output) noexcept
+    std::vector<std::uint8_t> &output,
+    bool multiply_raw_ptde_c101) noexcept
 {
     output.clear();
 
@@ -601,6 +653,32 @@ materialize_spec_rgb_consumer(
         sample.begin(),
         sample.end());
 
+    if (multiply_raw_ptde_c101) {
+        const std::uint32_t dst =
+            sample[4u];
+
+        const std::array<std::uint32_t,8>
+            c101_mul{{
+                0x08000038u,
+                0x00100072u,
+                dst,
+                0x00100246u,
+                dst,
+                0x00208246u,
+                12u,
+                0u
+            }};
+
+        words.insert(
+            words.begin() +
+                static_cast<std::ptrdiff_t>(
+                    shifted_sample +
+                    11u +
+                    sample.size()),
+            c101_mul.begin(),
+            c101_mul.end());
+    }
+
     words[1] =
         static_cast<std::uint32_t>(
             words.size());
@@ -623,7 +701,8 @@ materialize_spec_rgb_consumer(
 
     if (!postcondition(
             output.data(),
-            output.size())) {
+            output.size(),
+            multiply_raw_ptde_c101)) {
         output.clear();
         return
             spec_rgb_consumer_result::
