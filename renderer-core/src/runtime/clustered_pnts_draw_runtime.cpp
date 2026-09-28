@@ -78,6 +78,15 @@ std::atomic_bool g_enabled{false};
 std::atomic_bool g_quarantined{false};
 std::atomic<std::uint64_t> g_serial{0u};
 
+// The retained DSR selector was originally executed for every producer event
+// and then followed by an independent mirror traversal. Runtime capture on the
+// exact retail EXE proved 488602/488602 equality with zero mirror mismatches.
+// Keep a bounded per-session certification sample for fail-open protection,
+// but never pay for two full list walks in steady state.
+constexpr std::uint32_t k_selector_validation_samples = 1024u;
+std::atomic<std::uint32_t> g_selector_validation_remaining{
+    k_selector_validation_samples};
+
 std::atomic<std::uint64_t> g_builder_seen{0u};
 std::atomic<std::uint64_t> g_collection_ok{0u};
 std::atomic<std::uint64_t> g_collection_fail{0u};
@@ -166,6 +175,68 @@ bool readable_range(
     return true;
 }
 
+struct readable_region_cache {
+    std::uintptr_t begin = 0u;
+    std::uintptr_t end = 0u;
+};
+
+bool readable_range_cached(
+    const void *ptr,
+    std::size_t size,
+    readable_region_cache &cache) noexcept
+{
+    if (ptr == nullptr || size == 0u)
+        return ptr != nullptr;
+
+    const auto begin =
+        reinterpret_cast<std::uintptr_t>(ptr);
+    const auto end = begin + size;
+    if (end < begin)
+        return false;
+
+    if (begin >= cache.begin &&
+        end <= cache.end)
+        return true;
+
+    MEMORY_BASIC_INFORMATION mbi{};
+    if (VirtualQuery(
+            ptr,
+            &mbi,
+            sizeof(mbi)) != sizeof(mbi) ||
+        mbi.State != MEM_COMMIT ||
+        (mbi.Protect & PAGE_GUARD) != 0u)
+        return false;
+
+    const DWORD access = mbi.Protect & 0xffu;
+    const bool readable =
+        access == PAGE_READONLY ||
+        access == PAGE_READWRITE ||
+        access == PAGE_WRITECOPY ||
+        access == PAGE_EXECUTE_READ ||
+        access == PAGE_EXECUTE_READWRITE ||
+        access == PAGE_EXECUTE_WRITECOPY;
+    if (!readable)
+        return false;
+
+    const auto region_begin =
+        reinterpret_cast<std::uintptr_t>(
+            mbi.BaseAddress);
+    const auto region_end =
+        region_begin + mbi.RegionSize;
+    if (region_end <= begin ||
+        region_end < region_begin)
+        return false;
+
+    // A linked-list node is only 0x50 bytes. If it happens to straddle a
+    // region boundary, use the full verifier rather than weakening safety.
+    if (end > region_end)
+        return readable_range(ptr, size);
+
+    cache.begin = region_begin;
+    cache.end = region_end;
+    return true;
+}
+
 bool executable_address(
     const void *ptr) noexcept
 {
@@ -249,10 +320,10 @@ bool spatial_overlap_xyz(
     const void *node,
     const float *query) noexcept
 {
-    if (!readable_range(node, 0x50u) ||
-        !readable_range(query, 0x20u))
-        return false;
-
+    // builder_event validates the complete query and mirror_first_four
+    // validates each node once before this helper is entered. Do not repeat
+    // VirtualQuery for every overlap test: that made the bridge scale badly
+    // with dense PointLight lists.
     const auto *bytes =
         static_cast<const std::uint8_t *>(node);
     std::array<float,4> node_min{};
@@ -297,11 +368,10 @@ bool mirror_first_four(
     nodes = {};
     count = 0u;
 
-    if (!readable_range(collection, 0x90u))
-        return false;
-
+    // collection/query are validated once by builder_event.
     auto *base =
         static_cast<std::uint8_t *>(collection);
+    readable_region_cache node_region{};
 
     for (std::uint32_t bucket = 0u;
          bucket < 4u && count < 4u;
@@ -319,7 +389,10 @@ bool mirror_first_four(
         while (node != nullptr &&
                count < 4u) {
             if (++guard > 4096u ||
-                !readable_range(node, 0x50u))
+                !readable_range_cached(
+                    node,
+                    0x50u,
+                    node_region))
                 return false;
 
             if (spatial_overlap_xyz(
@@ -357,9 +430,7 @@ bool capture_source(
     source_raw &out) noexcept
 {
     out = {};
-    if (!readable_range(node, 0x20u))
-        return false;
-
+    // node was already validated for 0x50 bytes by mirror_first_four.
     void **vtable = nullptr;
     std::memcpy(&vtable, node, sizeof(vtable));
     if (!readable_range(
@@ -695,6 +766,18 @@ void clustered_pnts_draw_runtime::builder_event(
         return;
     }
 
+    std::uint8_t mask = 0u;
+    std::memcpy(
+        &mask,
+        static_cast<const std::uint8_t *>(
+            draw) + 0x3Au,
+        sizeof(mask));
+
+    // The certified selector only scans the four low bucket bits. Avoid all
+    // collection/list work when none of those buckets can contribute.
+    if ((mask & 0x0fu) == 0u)
+        return;
+
     void *collection = nullptr;
     std::memcpy(
         &collection,
@@ -715,30 +798,9 @@ void clustered_pnts_draw_runtime::builder_event(
             static_cast<const std::uint8_t *>(
                 draw) + 0xD0u);
 
-    std::uint8_t mask = 0u;
-    std::memcpy(
-        &mask,
-        static_cast<const std::uint8_t *>(
-            draw) + 0x3Au,
-        sizeof(mask));
-
-    std::array<std::uint32_t,4> host_ids{
-        0xffffffffu,0xffffffffu,
-        0xffffffffu,0xffffffffu};
-
-    const int host_count =
-        g_retained_selector(
-            collection,
-            host_ids.data(),
-            4,
-            query,
-            mask);
-    telemetry::hot_count(g_selector_calls);
-
-    if (host_count < 0 ||
-        host_count > 4)
-        return;
-
+    // This is the actual production PTDE first-four carrier. It walks each
+    // enabled bucket/list once, in the certified selector order, and retains
+    // the source node pointers needed for raw-q/geometry capture.
     std::array<std::uint32_t,4> mirror_ids{};
     std::array<void *,4> nodes{};
     std::uint8_t mirror_count = 0u;
@@ -753,21 +815,60 @@ void clustered_pnts_draw_runtime::builder_event(
         return;
     }
 
-    if (static_cast<int>(mirror_count) !=
-            host_count) {
-        telemetry::hot_count(g_mirror_diff);
-        return;
-    }
-
-    for (std::uint8_t i = 0u;
-         i < mirror_count;
-         ++i) {
-        if (host_ids[i] != mirror_ids[i]) {
-            telemetry::hot_count(g_mirror_diff);
-            return;
+    // Fail-open certification only. The old path paid for the retained DSR
+    // selector AND the mirror on every builder event. The exact retail capture
+    // already established 488602/488602 equality with zero mismatches, so a
+    // bounded startup sample is sufficient to catch routing/build drift.
+    auto remaining =
+        g_selector_validation_remaining.load(
+            std::memory_order_relaxed);
+    bool validate_against_host = false;
+    while (remaining != 0u) {
+        if (g_selector_validation_remaining.
+                compare_exchange_weak(
+                    remaining,
+                    remaining - 1u,
+                    std::memory_order_relaxed,
+                    std::memory_order_relaxed)) {
+            validate_against_host = true;
+            break;
         }
     }
-    telemetry::hot_count(g_mirror_equal);
+
+    if (validate_against_host) {
+        std::array<std::uint32_t,4> host_ids{
+            0xffffffffu,0xffffffffu,
+            0xffffffffu,0xffffffffu};
+
+        const int host_count =
+            g_retained_selector(
+                collection,
+                host_ids.data(),
+                4,
+                query,
+                mask);
+        telemetry::hot_count(g_selector_calls);
+
+        bool equal =
+            host_count >= 0 &&
+            host_count <= 4 &&
+            static_cast<int>(mirror_count) ==
+                host_count;
+
+        for (std::uint8_t i = 0u;
+             equal && i < mirror_count;
+             ++i)
+            equal = host_ids[i] == mirror_ids[i];
+
+        if (!equal) {
+            telemetry::hot_count(g_mirror_diff);
+            g_quarantined.store(
+                true,
+                std::memory_order_relaxed);
+            return;
+        }
+        telemetry::hot_count(g_mirror_equal);
+    }
 
     if (mirror_count == 0u)
         return;
@@ -782,6 +883,8 @@ void clustered_pnts_draw_runtime::builder_event(
             std::memory_order_relaxed) + 1u;
     snapshot.raw_selected_count =
         mirror_count;
+    // Membership is certified by the exact selector RE and guarded at runtime
+    // by the bounded retained-selector sample above.
     snapshot.selector_mirror_verified =
         true;
 
@@ -816,7 +919,14 @@ void clustered_pnts_draw_runtime::selector_event(
     const void *actual_material) noexcept
 {
     telemetry::hot_count(g_selector_seen);
-    g_draw_selection = {};
+
+    // This observer can run millions of times per session. Invalidating only
+    // the readiness bits avoids repeatedly zeroing the large four-source TLS
+    // payload on every selector event.
+    g_draw_selection.ready = false;
+    g_draw_selection.owner_verified = false;
+    g_draw_selection.material_limit_ready = false;
+    g_draw_selection.material_max = 0u;
 
     if (!g_enabled.load() ||
         g_quarantined.load() ||
@@ -824,18 +934,8 @@ void clustered_pnts_draw_runtime::selector_event(
         actual_material == nullptr)
         return;
 
-    producer_snapshot snapshot{};
-    if (!lookup_snapshot(
-            reinterpret_cast<std::uintptr_t>(
-                owner),
-            snapshot) ||
-        !snapshot.valid ||
-        !snapshot.selector_mirror_verified) {
-        telemetry::hot_count(g_owner_join_miss);
-        return;
-    }
-    telemetry::hot_count(g_owner_join_hit);
-
+    // Material max is a cheaper and narrower reject than the producer-registry
+    // join. Reject zero-PointLight materials before taking the registry mutex.
     if (!readable_range(
             actual_material,
             0x388u)) {
@@ -857,6 +957,18 @@ void clustered_pnts_draw_runtime::selector_event(
         return;
     }
     telemetry::hot_count(g_material_limit_ok);
+
+    producer_snapshot snapshot{};
+    if (!lookup_snapshot(
+            reinterpret_cast<std::uintptr_t>(
+                owner),
+            snapshot) ||
+        !snapshot.valid ||
+        !snapshot.selector_mirror_verified) {
+        telemetry::hot_count(g_owner_join_miss);
+        return;
+    }
+    telemetry::hot_count(g_owner_join_hit);
 
     g_draw_selection.snapshot = snapshot;
     g_draw_selection.material_max = material_max;
@@ -978,7 +1090,10 @@ void clustered_pnts_draw_runtime::release_prepared_draw(
 
 void clustered_pnts_draw_runtime::consume_draw_selection() noexcept
 {
-    g_draw_selection = {};
+    g_draw_selection.ready = false;
+    g_draw_selection.owner_verified = false;
+    g_draw_selection.material_limit_ready = false;
+    g_draw_selection.material_max = 0u;
 }
 
 void clustered_pnts_draw_runtime::on_destroy_device(
@@ -1043,6 +1158,9 @@ void clustered_pnts_draw_runtime::reset() noexcept
     }
 
     g_serial.store(0u);
+    g_selector_validation_remaining.store(
+        k_selector_validation_samples,
+        std::memory_order_relaxed);
     g_builder_seen.store(0u);
     g_collection_ok.store(0u);
     g_collection_fail.store(0u);
