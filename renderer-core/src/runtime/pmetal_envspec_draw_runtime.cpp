@@ -86,15 +86,18 @@ bool exact_pmetal_material(
 bool exact_pmetal_decision(
     const mr::decision &decision) noexcept
 {
+    // EnvSpec owns its own PTDE material consumer. Do not borrow the generic
+    // Material Response specular-operation bit: generic MR is diffuse-only.
+    // Exact P_Metal identity + route/receiver select the verified profile, and
+    // raw c101 is consumed explicitly by the EnvSpec SpecRGB material tail.
     return
         decision.active &&
         decision.route_index ==
             k_pmetal_route_index &&
         decision.receiver_id >= 33u &&
         decision.receiver_id <= 35u &&
-        (decision.certified_operations &
-         mr::material_response_operation::
-             specular_factor_c101) != 0u;
+        std::isfinite(decision.c101) &&
+        decision.c101 >= 0.0f;
 }
 
 mr::mtd_semantic_query make_query(
