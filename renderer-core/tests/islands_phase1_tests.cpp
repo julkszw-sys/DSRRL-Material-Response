@@ -776,6 +776,23 @@ int main()
         operators::lightbank::upper_lower_hemenv_family::hemenv;
     ul_identity.stable_receiver_id = 24u;
     CHECK(runtime::upper_lower_identity_runtime_shape_valid(ul_identity));
+    CHECK(!runtime::upper_lower_direct_producer_bypass_allowed(
+        false,
+        ul_identity));
+    CHECK(runtime::upper_lower_direct_producer_bypass_allowed(
+        true,
+        ul_identity));
+
+    // Hook liveness / draw activation does not widen the certified direct
+    // producer cut beyond ordinary stable HemEnv.
+    auto ul_lerp_identity = ul_identity;
+    ul_lerp_identity.family =
+        operators::lightbank::upper_lower_hemenv_family::hemenvlerp;
+    CHECK(runtime::upper_lower_identity_runtime_shape_valid(
+        ul_lerp_identity));
+    CHECK(!runtime::upper_lower_direct_producer_bypass_allowed(
+        true,
+        ul_lerp_identity));
 
     ul_identity.stable_receiver_id = 0u;
     CHECK(!runtime::upper_lower_identity_runtime_shape_valid(ul_identity));
@@ -785,18 +802,27 @@ int main()
     ul_identity.family =
         operators::lightbank::upper_lower_hemenv_family::phn_faceeye;
     CHECK(runtime::upper_lower_identity_runtime_shape_valid(ul_identity));
+    CHECK(!runtime::upper_lower_direct_producer_bypass_allowed(
+        true,
+        ul_identity));
 
     ul_identity.plan_index = 180u;
     ul_identity.shader_index = 35u;
     ul_identity.family =
         operators::lightbank::upper_lower_hemenv_family::gst;
     CHECK(runtime::upper_lower_identity_runtime_shape_valid(ul_identity));
+    CHECK(!runtime::upper_lower_direct_producer_bypass_allowed(
+        true,
+        ul_identity));
 
     ul_identity.plan_index = 261u;
     ul_identity.shader_index = 1649u;
     ul_identity.family =
         operators::lightbank::upper_lower_hemenv_family::sfx;
     CHECK(runtime::upper_lower_identity_runtime_shape_valid(ul_identity));
+    CHECK(!runtime::upper_lower_direct_producer_bypass_allowed(
+        true,
+        ul_identity));
 
     ul_identity.stable_receiver_id = 24u;
     CHECK(!runtime::upper_lower_identity_runtime_shape_valid(ul_identity));
