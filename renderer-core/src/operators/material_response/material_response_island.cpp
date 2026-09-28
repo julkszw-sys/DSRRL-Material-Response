@@ -203,7 +203,6 @@ bool material_response_island::register_material_profile(const material_profile 
                existing.material_family_hash == profile.material_family_hash &&
                existing.c101 == profile.c101 &&
                existing.c100 == profile.c100 &&
-               existing.c101_f0q == profile.c101_f0q &&
                existing.ptde_specular_power == profile.ptde_specular_power &&
                existing.ptde_specular_power_verified == profile.ptde_specular_power_verified &&
                existing.lod_min == profile.lod_min &&
@@ -414,7 +413,6 @@ decision material_response_island::evaluate(
         profile->lod_max,
         envspec,
         profile->c100,
-        profile->c101_f0q,
         profile->ptde_specular_power,
         profile->ptde_specular_power_verified
     };
@@ -536,7 +534,6 @@ material_response_island::evaluate_direct_pointlight_material(
         profile->lod_max,
         profile->envspec,
         profile->c100,
-        profile->c101_f0q,
         profile->ptde_specular_power,
         profile->ptde_specular_power_verified
     };
