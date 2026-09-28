@@ -27,6 +27,12 @@ struct subsurface_draw_telemetry {
     std::uint64_t material_rejects = 0;
     std::uint64_t pipeline_rejects = 0;
     std::uint64_t surface_rejects = 0;
+    std::uint64_t upper_lower_rejects = 0;
+    std::uint64_t mr_route_rejects = 0;
+    std::uint64_t resource_rejects = 0;
+    std::uint64_t spec_rgb_rejects = 0;
+    std::uint64_t route_rejects = 0;
+    std::uint64_t adapter_rejects = 0;
     std::uint64_t prepared = 0;
 };
 
@@ -59,6 +65,12 @@ private:
     std::atomic<std::uint64_t> material_rejects_{0};
     std::atomic<std::uint64_t> pipeline_rejects_{0};
     std::atomic<std::uint64_t> surface_rejects_{0};
+    std::atomic<std::uint64_t> upper_lower_rejects_{0};
+    std::atomic<std::uint64_t> mr_route_rejects_{0};
+    std::atomic<std::uint64_t> resource_rejects_{0};
+    std::atomic<std::uint64_t> spec_rgb_rejects_{0};
+    std::atomic<std::uint64_t> route_rejects_{0};
+    std::atomic<std::uint64_t> adapter_rejects_{0};
     std::atomic<std::uint64_t> prepared_{0};
 };
 

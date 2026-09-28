@@ -1414,6 +1414,7 @@ void log_state(const char *tag) noexcept
         "ul_hook=%u ul_q=%u ul_restore_fail=%u ul_pub=%llu ul_sel=%llu/%llu/%llu ul_tuple_miss=%llu "
         "ul_steady=%llu/%llu ul_blend=%llu/%llu/%llu ul_b13=%llu/%llu ul_req=%llu "
         "sub_candidate=%llu sub_prepared=%llu sub_pipe_reject=%llu sub_mat_reject=%llu sub_surface_reject=%llu "
+        "sub_ul_reject=%llu sub_mr_reject=%llu sub_res_reject=%llu sub_spec_reject=%llu sub_route_reject=%llu sub_adapter_reject=%llu "
         "mode_hook=%u/%u mode_q=%u mode_restore_fail=%u mode_begin=%llu mode_in2=%llu mode_obs=%llu mode2=%llu mode_snap=%llu/%llu "
         "draw=%llu draw_skip=%llu draw_rx=%llu draw_owner=%llu draw_join=%llu owner_only=%llu rx_only=%llu",
         tag,
@@ -1516,6 +1517,12 @@ void log_state(const char *tag) noexcept
         static_cast<unsigned long long>(subs.pipeline_rejects),
         static_cast<unsigned long long>(subs.material_rejects),
         static_cast<unsigned long long>(subs.surface_rejects),
+        static_cast<unsigned long long>(subs.upper_lower_rejects),
+        static_cast<unsigned long long>(subs.mr_route_rejects),
+        static_cast<unsigned long long>(subs.resource_rejects),
+        static_cast<unsigned long long>(subs.spec_rgb_rejects),
+        static_cast<unsigned long long>(subs.route_rejects),
+        static_cast<unsigned long long>(subs.adapter_rejects),
         mode.lt5_hook_armed ? 1u : 0u,
         mode.selector_end_hook_armed ? 1u : 0u,
         mode.quarantined ? 1u : 0u,

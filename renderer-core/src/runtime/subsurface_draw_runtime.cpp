@@ -101,6 +101,7 @@ bool subsurface_draw_runtime::prepare(
             context,
             prepared.upper_lower)) {
         telemetry::hot_count(surface_rejects_);
+        telemetry::hot_count(upper_lower_rejects_);
         return false;
     }
 
@@ -112,6 +113,7 @@ bool subsurface_draw_runtime::prepare(
         upper_lower_.release_prepared_draw(
             prepared.upper_lower);
         telemetry::hot_count(surface_rejects_);
+        telemetry::hot_count(mr_route_rejects_);
         return false;
     }
 
@@ -130,6 +132,7 @@ bool subsurface_draw_runtime::prepare(
         upper_lower_.release_prepared_draw(
             prepared.upper_lower);
         telemetry::hot_count(surface_rejects_);
+        telemetry::hot_count(resource_rejects_);
         return false;
     }
 
@@ -146,6 +149,7 @@ bool subsurface_draw_runtime::prepare(
         upper_lower_.release_prepared_draw(
             prepared.upper_lower);
         telemetry::hot_count(surface_rejects_);
+        telemetry::hot_count(spec_rgb_rejects_);
         return false;
     }
 
@@ -220,6 +224,7 @@ bool subsurface_draw_runtime::prepare(
                     draw_time_material_aware_pixel_shader_substitution) {
         release(prepared);
         telemetry::hot_count(surface_rejects_);
+        telemetry::hot_count(route_rejects_);
         return false;
     }
 
@@ -239,6 +244,7 @@ bool subsurface_draw_runtime::prepare(
         island_draw_adapter_result::ready) {
         release(prepared);
         telemetry::hot_count(surface_rejects_);
+        telemetry::hot_count(adapter_rejects_);
         return false;
     }
 
@@ -269,6 +275,12 @@ subsurface_draw_runtime::telemetry() const noexcept
         material_rejects_.load(),
         pipeline_rejects_.load(),
         surface_rejects_.load(),
+        upper_lower_rejects_.load(),
+        mr_route_rejects_.load(),
+        resource_rejects_.load(),
+        spec_rgb_rejects_.load(),
+        route_rejects_.load(),
+        adapter_rejects_.load(),
         prepared_.load()
     };
 }
@@ -279,6 +291,12 @@ void subsurface_draw_runtime::reset() noexcept
     material_rejects_.store(0);
     pipeline_rejects_.store(0);
     surface_rejects_.store(0);
+    upper_lower_rejects_.store(0);
+    mr_route_rejects_.store(0);
+    resource_rejects_.store(0);
+    spec_rgb_rejects_.store(0);
+    route_rejects_.store(0);
+    adapter_rejects_.store(0);
     prepared_.store(0);
 }
 

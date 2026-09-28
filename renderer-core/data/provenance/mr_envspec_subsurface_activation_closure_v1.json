@@ -62,7 +62,19 @@
     ],
     "old_create_time_carrier_label": "SUPERSEDED_SOURCE_NOMENCLATURE",
     "runtime_activation": "OPEN",
-    "pixel_behavior": "OPEN"
+    "pixel_behavior": "OPEN",
+    "activation_reject_telemetry": {
+      "aggregate": "surface_rejects",
+      "stages": [
+        "upper_lower",
+        "mr_prevalidated_route",
+        "body_resources",
+        "spec_rgb_promotion",
+        "final_route_gate",
+        "draw_adapter"
+      ],
+      "purpose": "Differentiate exact activation frontier without changing renderer behavior."
+    }
   },
   "envspec": {
     "path": "P_METAL_EXACT_ROUTE_RESOURCE_AND_CB_TRANSACTION_PRESENT",
