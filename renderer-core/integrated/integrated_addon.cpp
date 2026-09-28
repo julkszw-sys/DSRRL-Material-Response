@@ -3418,15 +3418,18 @@ bool prepare_island_batch(
             // plus NoSpc EnvSpec deletion). They are shader-only owners here:
             // draw-local b12/t18/t19/resource mutations retain their narrower
             // PointLight/MR/local-specular ownership.
-            clustered.additional_owners =
-                (prepared.clustered_shader.spc
+            const auto dynamic_additional_owners =
+                prepared.clustered_shader.spc
                     ? (point | mr)
-                    : mr) |
+                    : mr;
+
+            clustered.additional_owners =
+                dynamic_additional_owners |
                 static_shader_owners;
             clustered.additional_shader_owners =
                 clustered.additional_owners;
             clustered.additional_constant_buffer_owners =
-                clustered.additional_owners;
+                dynamic_additional_owners;
             clustered.additional_resource_owners =
                 prepared.clustered_shader.spc
                     ? point
