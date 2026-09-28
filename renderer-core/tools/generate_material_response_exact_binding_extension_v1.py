@@ -24,7 +24,10 @@ def parse_vec(text: str) -> tuple[float, float, float]:
 
 
 def f32_text(value: float) -> str:
-    return f"{value:.9g}f"
+    text = f"{value:.9g}"
+    if "." not in text and "e" not in text.lower():
+        text += ".0"
+    return text + "f"
 
 
 def bytes_cpp(sha: str) -> str:
