@@ -198,6 +198,217 @@ bool hash_matches(
 } // namespace
 
 hemenvlerp_v211_outcome
+materialize_ptde_diffuse_hemenvlerp_receiver(
+    const core::feature_registry &features,
+    const std::uint8_t *source,
+    std::size_t size,
+    std::vector<std::uint8_t> &output) noexcept
+{
+    hemenvlerp_v211_outcome outcome{};
+    output.clear();
+
+    if (source == nullptr || size == 0u) {
+        outcome.result =
+            hemenvlerp_v211_result::fail_invalid_dxbc;
+        return outcome;
+    }
+
+    bool candidate_size = false;
+    for (const auto &plan :
+         generated_lerp::k_hemenvlerp_v211_plans)
+        if (plan.stock_size == size) {
+            candidate_size = true;
+            break;
+        }
+
+    if (!candidate_size) {
+        outcome.result =
+            hemenvlerp_v211_result::pass_not_candidate;
+        return outcome;
+    }
+
+    const auto *plan = find_plan(source, size);
+    if (plan == nullptr) {
+        outcome.result =
+            hemenvlerp_v211_result::pass_unknown_exact_sha;
+        return outcome;
+    }
+
+    outcome.pair_index = plan->pair_index;
+
+    std::vector<chunk> chunks;
+    std::vector<std::uint32_t> words;
+    std::size_t code_index = 0u;
+
+    if (!parse(
+            source,
+            size,
+            chunks,
+            code_index,
+            words)) {
+        outcome.result =
+            hemenvlerp_v211_result::fail_invalid_dxbc;
+        return outcome;
+    }
+
+    // Direct stock -> PTDE diffuse material-domain bridge.
+    // Exact historical site records are host-identity guards only.
+    for (const auto site : plan->cb_sites) {
+        if (site + 1u >= words.size() ||
+            words[site] != 0u ||
+            words[site + 1u] != 9u) {
+            outcome.result =
+                hemenvlerp_v211_result::
+                    fail_patch_precondition;
+            return outcome;
+        }
+    }
+
+    if (plan->pow_site + 2u >= words.size() ||
+        words[plan->pow_site] != 0x400ccccdu ||
+        words[plan->pow_site + 1u] != 0x400ccccdu ||
+        words[plan->pow_site + 2u] != 0x400ccccdu) {
+        outcome.result =
+            hemenvlerp_v211_result::
+                fail_patch_precondition;
+        return outcome;
+    }
+
+    for (const auto site : plan->cb_sites) {
+        words[site] = 12u;
+        words[site + 1u] = 1u;
+    }
+
+    words[plan->pow_site] = 0x3f800000u;
+    words[plan->pow_site + 1u] = 0x3f800000u;
+    words[plan->pow_site + 2u] = 0x3f800000u;
+
+    try {
+        words.insert(
+            words.begin() + 11,
+            k_cb12_decl.begin(),
+            k_cb12_decl.end());
+    } catch (...) {
+        outcome.result =
+            hemenvlerp_v211_result::fail_rebuild;
+        return outcome;
+    }
+    words[1] += 4u;
+
+    if (!rebuild(
+            source,
+            size,
+            chunks,
+            code_index,
+            words,
+            output) ||
+        output.empty()) {
+        output.clear();
+        outcome.result =
+            hemenvlerp_v211_result::fail_rebuild;
+        return outcome;
+    }
+
+    // Finalize b12 ABI directly on the clean diffuse operator.
+    if (!parse(
+            output.data(),
+            output.size(),
+            chunks,
+            code_index,
+            words)) {
+        output.clear();
+        outcome.result =
+            hemenvlerp_v211_result::
+                fail_patch_precondition;
+        return outcome;
+    }
+
+    chunk *rdef = nullptr;
+    for (auto &current : chunks) {
+        if (std::memcmp(
+                current.tag.data(),
+                "RDEF",
+                4u) != 0)
+            continue;
+
+        if (rdef != nullptr) {
+            output.clear();
+            outcome.result =
+                hemenvlerp_v211_result::
+                    fail_patch_precondition;
+            return outcome;
+        }
+        rdef = &current;
+    }
+
+    if (rdef == nullptr ||
+        (!legacy_plan::dxbc::rdef::
+             has_constant_buffer_binding(
+                 rdef->payload,
+                 12u) &&
+         !legacy_plan::dxbc::rdef::
+             append_constant_buffer_binding(
+                 rdef->payload,
+                 "DSRRL_MaterialCarrier",
+                 12u,
+                 64u)) ||
+        !legacy_plan::dxbc::rdef::
+             has_constant_buffer_binding(
+                 rdef->payload,
+                 12u)) {
+        output.clear();
+        outcome.result =
+            hemenvlerp_v211_result::
+                fail_patch_precondition;
+        return outcome;
+    }
+
+    if (features.enabled(
+            core::operator_id::terminal_sat_rgb)) {
+        const auto sat =
+            operators::surface::
+                apply_unique_terminal_rgb_sat_words(
+                    words);
+
+        using sat_result =
+            operators::surface::
+                terminal_sat_patch_result;
+
+        if (sat != sat_result::applied &&
+            sat != sat_result::already_saturated) {
+            output.clear();
+            outcome.result =
+                hemenvlerp_v211_result::
+                    fail_patch_precondition;
+            return outcome;
+        }
+
+        outcome.composed_owners |=
+            core::operator_bit(
+                core::operator_id::terminal_sat_rgb);
+    }
+
+    std::vector<std::uint8_t> composed;
+    if (!rebuild(
+            output.data(),
+            output.size(),
+            std::move(chunks),
+            code_index,
+            words,
+            composed)) {
+        output.clear();
+        outcome.result =
+            hemenvlerp_v211_result::fail_rebuild;
+        return outcome;
+    }
+
+    output = std::move(composed);
+    outcome.result =
+        hemenvlerp_v211_result::applied;
+    return outcome;
+}
+
+hemenvlerp_v211_outcome
 materialize_hemenvlerp_v211_certified_stage(
     const std::uint8_t *source,
     std::size_t size,
