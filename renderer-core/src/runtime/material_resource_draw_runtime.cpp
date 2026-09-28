@@ -220,6 +220,19 @@ bool runtime_hot_telemetry_requested() noexcept
         hot_enabled();
 }
 
+// Runtime pixel falsifier 2026-09-28: generic PTDE Diffuse/Normal sidecars
+// produced black surfaces in a live full-runtime session even though MR and
+// EnvSpec improved. Until the exact offending resource class is isolated,
+// preserve stock DSR t0/t2 by default. The bridge remains opt-in for focused
+// resource diagnostics only.
+bool generic_texture_bridge_enabled() noexcept
+{
+    static const bool enabled =
+        dsrrl::runtime::telemetry::environment_flag(
+            "DSRRL_EXPERIMENTAL_GENERIC_TEXTURE_BRIDGE");
+    return enabled;
+}
+
 void hot_count(
     std::atomic<std::uint64_t> &counter) noexcept
 {
@@ -1256,6 +1269,9 @@ prepare_draw_requests(
         query.material.valid &&
         query.material.owner_tuple_exact;
 
+    const bool generic_resources_enabled =
+        generic_texture_bridge_enabled();
+
     if (full_material_response_ready &&
         spec_rgb_consumer_ready &&
         core_.features().enabled(
@@ -1344,7 +1360,8 @@ prepare_draw_requests(
             h1,
             h0);
 
-    if (bmp_receiver &&
+    if (generic_resources_enabled &&
+        bmp_receiver &&
         full_material_response_ready &&
         core_.features().enabled(
             core::operator_id::diffuse)) {
@@ -1431,7 +1448,8 @@ prepare_draw_requests(
             h1,
             h2);
 
-    if (bmp_receiver &&
+    if (generic_resources_enabled &&
+        bmp_receiver &&
         core_.features().enabled(
             core::operator_id::normal)) {
         auto *replacement =
