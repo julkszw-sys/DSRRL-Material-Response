@@ -384,7 +384,9 @@ int main()
 
     const auto pmetal_b12 =
         make_material_response_b12_payload(exact_mr);
-    CHECK(pmetal_b12[0][0]==1.51663761f);
+    CHECK(pmetal_b12[0][0]==0.0f);
+    CHECK(pmetal_b12[0][1]==0.0f);
+    CHECK(pmetal_b12[0][2]==0.0f);
     CHECK(pmetal_b12[0][3]==8.5f);
     CHECK(pmetal_b12[1][0]==0.5f);
     CHECK(pmetal_b12[2][0]==2.5f);
