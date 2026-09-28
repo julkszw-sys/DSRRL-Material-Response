@@ -6,6 +6,8 @@ from pathlib import Path
 
 EXPECTED_PLANS = 144
 EXPECTED_ALIASES = 252
+EXPECTED_ENVSPEC_NOSPC_PLANS = 12
+EXPECTED_ENVSPEC_NOSPC_ALIASES = 24
 PROTECTED = re.compile(r"^FRPG_Phn_.*Spc")
 
 def main() -> int:
@@ -43,6 +45,28 @@ def main() -> int:
             + ", ".join(sorted(set(protected)))
         )
 
+    envspec_nospc = [
+        p for p in plans
+        if "envspec_nospc_delete" in p.get("owners", [])
+    ]
+    envspec_nospc_aliases = sum(
+        len(p.get("aliases", [])) for p in envspec_nospc
+    )
+    if len(envspec_nospc) != EXPECTED_ENVSPEC_NOSPC_PLANS:
+        raise SystemExit(
+            "EnvSpec no-Spc exact A1 coverage drifted: "
+            f"expected {EXPECTED_ENVSPEC_NOSPC_PLANS} plans, "
+            f"got {len(envspec_nospc)}"
+        )
+    if envspec_nospc_aliases != EXPECTED_ENVSPEC_NOSPC_ALIASES:
+        raise SystemExit(
+            "EnvSpec no-Spc exact A1 alias coverage drifted: "
+            f"expected {EXPECTED_ENVSPEC_NOSPC_ALIASES}, "
+            f"got {envspec_nospc_aliases}"
+        )
+    if any(not p.get("replacement_sha256") for p in envspec_nospc):
+        raise SystemExit("EnvSpec no-Spc A1 plan missing replacement SHA-256")
+
     gst_spc = sorted({
         name
         for plan in plans
@@ -55,6 +79,8 @@ def main() -> int:
         "plans": len(plans),
         "aliases": aliases,
         "protected_phn_spc_hits": 0,
+        "envspec_nospc_plans": len(envspec_nospc),
+        "envspec_nospc_aliases": envspec_nospc_aliases,
         "gst_spc_names": len(gst_spc),
     }, indent=2))
 
