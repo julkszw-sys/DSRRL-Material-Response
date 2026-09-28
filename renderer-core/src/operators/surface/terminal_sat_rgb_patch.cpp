@@ -47,4 +47,69 @@ terminal_sat_patch_result apply_terminal_rgb_sat(
     return terminal_sat_patch_result::applied;
 }
 
+terminal_sat_patch_result apply_unique_terminal_rgb_sat_words(
+    std::vector<std::uint32_t> &words) noexcept
+{
+    if (words.size() < 2u ||
+        words[1] != words.size())
+        return terminal_sat_patch_result::
+            fail_open_unverified_write_shape;
+
+    std::size_t hit =
+        static_cast<std::size_t>(-1);
+
+    std::size_t i = 2u;
+    while (i < words.size()) {
+        const auto length =
+            static_cast<std::size_t>(
+                (words[i] >> 24u) & 0x7fu);
+
+        if (length == 0u ||
+            i + length > words.size())
+            return terminal_sat_patch_result::
+                fail_open_unverified_write_shape;
+
+        const auto opcode =
+            words[i] & 0x7ffu;
+
+        // Exact separate RGB COLOROUT0 shape used by the substantive DSR
+        // Phn HemEnv/HemEnvLerp homologs. A combined RGBA destination has a
+        // different destination token and is deliberately rejected.
+        if (opcode == 0x36u &&
+            length == 5u &&
+            i + 4u < words.size() &&
+            words[i + 1u] == 0x00102072u &&
+            words[i + 2u] == 0u) {
+            if (hit !=
+                static_cast<std::size_t>(-1))
+                return terminal_sat_patch_result::
+                    fail_open_unverified_write_shape;
+            hit = i;
+        }
+
+        i += length;
+    }
+
+    if (i != words.size() ||
+        hit == static_cast<std::size_t>(-1))
+        return terminal_sat_patch_result::
+            fail_open_unverified_write_shape;
+
+    const auto saturated =
+        words[hit] |
+        dxbc_saturate_modifier_bit;
+
+    if (words[hit] == saturated)
+        return terminal_sat_patch_result::
+            already_saturated;
+
+    if (words[hit] != 0x05000036u ||
+        saturated != 0x05002036u)
+        return terminal_sat_patch_result::
+            fail_open_token_mismatch;
+
+    words[hit] = saturated;
+    return terminal_sat_patch_result::applied;
+}
+
 } // namespace dsrrl::operators::surface
