@@ -87,10 +87,10 @@ def main() -> int:
     build151_text = Path(args.build151).read_text(encoding="utf-8")
     build151_names = []
     build151_entry = re.compile(
-        r'\\{"(FRPG_Phn_[^"]+)","[0-9a-f]{64}",\\d+u,\\d+u,"[0-9a-f]{64}"\\},?'
+        r'"(FRPG_Phn_[^"]+)","[0-9a-f]{64}",\d+u,\d+u,"[0-9a-f]{64}"'
     )
     for line in build151_text.splitlines():
-        match = build151_entry.fullmatch(line.strip())
+        match = build151_entry.search(line)
         if match:
             build151_names.append(match.group(1))
 
