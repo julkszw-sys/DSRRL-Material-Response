@@ -3,6 +3,7 @@
 #include "dsrrl/operators/material_response/generated_hemenvlerp_v211_v1.hpp"
 #include "dsrrl/operators/surface/terminal_sat_rgb_patch.hpp"
 #include "dsrrl/operators/legacy_plan/dxbc_checksum.hpp"
+#include "dsrrl/operators/legacy_plan/dxbc_rdef_patch.hpp"
 #include "dsrrl/operators/legacy_plan/sha256_bytes.hpp"
 
 #include <algorithm>
@@ -352,9 +353,7 @@ materialize_hemenvlerp_v211_receiver(
             output);
 
     if (outcome.result !=
-            hemenvlerp_v211_result::applied ||
-        !features.enabled(
-            core::operator_id::terminal_sat_rgb))
+            hemenvlerp_v211_result::applied)
         return outcome;
 
     std::vector<chunk> chunks;
@@ -374,17 +373,29 @@ materialize_hemenvlerp_v211_receiver(
         return outcome;
     }
 
-    const auto sat =
-        operators::surface::
-            apply_unique_terminal_rgb_sat_words(
-                words);
+    // The certified V2.11 byte hashes stop before composition. The runtime
+    // receiver must nevertheless expose the b12 ABI in RDEF exactly like the
+    // stable HemEnv path; a SHEX declaration without matching reflection
+    // metadata is not an acceptable final DXBC bridge.
+    chunk *rdef = nullptr;
+    for (auto &current : chunks) {
+        if (std::memcmp(
+                current.tag.data(),
+                "RDEF",
+                4u) != 0)
+            continue;
 
-    using sat_result =
-        operators::surface::
-            terminal_sat_patch_result;
+        if (rdef != nullptr) {
+            output.clear();
+            outcome.result =
+                hemenvlerp_v211_result::
+                    fail_patch_precondition;
+            return outcome;
+        }
+        rdef = &current;
+    }
 
-    if (sat != sat_result::applied &&
-        sat != sat_result::already_saturated) {
+    if (rdef == nullptr) {
         output.clear();
         outcome.result =
             hemenvlerp_v211_result::
@@ -392,27 +403,75 @@ materialize_hemenvlerp_v211_receiver(
         return outcome;
     }
 
-    if (sat == sat_result::applied) {
-        std::vector<std::uint8_t> composed;
-        if (!rebuild(
-                output.data(),
-                output.size(),
-                std::move(chunks),
-                code_index,
-                words,
-                composed)) {
+    if (!legacy_plan::dxbc::rdef::
+            has_constant_buffer_binding(
+                rdef->payload,
+                12u) &&
+        !legacy_plan::dxbc::rdef::
+            append_constant_buffer_binding(
+                rdef->payload,
+                "DSRRL_MaterialCarrier",
+                12u,
+                64u)) {
+        output.clear();
+        outcome.result =
+            hemenvlerp_v211_result::
+                fail_patch_precondition;
+        return outcome;
+    }
+
+    if (!legacy_plan::dxbc::rdef::
+            has_constant_buffer_binding(
+                rdef->payload,
+                12u)) {
+        output.clear();
+        outcome.result =
+            hemenvlerp_v211_result::
+                fail_patch_precondition;
+        return outcome;
+    }
+
+    if (features.enabled(
+            core::operator_id::terminal_sat_rgb)) {
+        const auto sat =
+            operators::surface::
+                apply_unique_terminal_rgb_sat_words(
+                    words);
+
+        using sat_result =
+            operators::surface::
+                terminal_sat_patch_result;
+
+        if (sat != sat_result::applied &&
+            sat != sat_result::already_saturated) {
             output.clear();
             outcome.result =
                 hemenvlerp_v211_result::
-                    fail_rebuild;
+                    fail_patch_precondition;
             return outcome;
         }
-        output = std::move(composed);
+
+        outcome.composed_owners |=
+            core::operator_bit(
+                core::operator_id::terminal_sat_rgb);
     }
 
-    outcome.composed_owners |=
-        core::operator_bit(
-            core::operator_id::terminal_sat_rgb);
+    std::vector<std::uint8_t> composed;
+    if (!rebuild(
+            output.data(),
+            output.size(),
+            std::move(chunks),
+            code_index,
+            words,
+            composed)) {
+        output.clear();
+        outcome.result =
+            hemenvlerp_v211_result::
+                fail_rebuild;
+        return outcome;
+    }
+
+    output = std::move(composed);
     return outcome;
 }
 
