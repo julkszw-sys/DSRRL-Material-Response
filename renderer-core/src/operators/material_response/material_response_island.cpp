@@ -15,7 +15,7 @@ namespace {
 
 static_assert([]() constexpr {
     for (std::size_t i = 1u;
-         i < generated::k_material_routes_v1.size();
+         i < std::size(generated::k_material_routes_v1);
          ++i)
         if (generated::k_material_routes_v1[i - 1u].route_index >
             generated::k_material_routes_v1[i].route_index)
@@ -25,7 +25,7 @@ static_assert([]() constexpr {
 
 static_assert([]() constexpr {
     for (std::size_t i = 1u;
-         i < generated::k_exact_binding_mr_v1.size();
+         i < std::size(generated::k_exact_binding_mr_v1);
          ++i)
         if (generated::k_exact_binding_mr_v1[i - 1u].route_tag >
             generated::k_exact_binding_mr_v1[i].route_tag)
