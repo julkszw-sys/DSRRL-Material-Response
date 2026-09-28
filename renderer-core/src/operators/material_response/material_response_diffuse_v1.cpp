@@ -151,7 +151,8 @@ bool rebuild_dxbc(
     std::vector<chunk> chunks,
     std::size_t code_index,
     const std::vector<std::uint32_t> &words,
-    std::vector<std::uint8_t> &output) noexcept
+    std::vector<std::uint8_t> &output,
+    bool defer_surface_operators) noexcept
 {
     output.clear();
 
@@ -759,7 +760,8 @@ materialize_ptde_diffuse_response_v1(
         return outcome;
     }
 
-    if (!lerp &&
+    if (!defer_surface_operators &&
+        !lerp &&
         !compose_stable_surface_islands(
             features,
             source,
@@ -775,7 +777,7 @@ materialize_ptde_diffuse_response_v1(
 
     if (!finalize_b12_rdef_and_lerp_surface(
             features,
-            lerp,
+            lerp && !defer_surface_operators,
             output,
             outcome.composed_owners)) {
         output.clear();
