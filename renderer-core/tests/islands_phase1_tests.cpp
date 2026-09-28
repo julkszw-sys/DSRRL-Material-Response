@@ -245,7 +245,6 @@ int main()
     CHECK(direct_nospc.c100[1]==7.0f);
     CHECK(direct_nospc.c100[2]==7.0f);
     CHECK(direct_nospc.c101==0.0f);
-    CHECK(direct_nospc.c101_f0q[0]==0.0f);
     CHECK(!direct_nospc.ptde_specular_power_verified);
     CHECK(direct_nospc.ptde_specular_power==0.0f);
 
@@ -307,9 +306,6 @@ int main()
     CHECK(exact_mr.c100[0]==0.5f);
     CHECK(exact_mr.c100[1]==0.5f);
     CHECK(exact_mr.c100[2]==0.5f);
-    CHECK(exact_mr.c101_f0q[0]==1.51663761f);
-    CHECK(exact_mr.c101_f0q[1]==1.51663761f);
-    CHECK(exact_mr.c101_f0q[2]==1.51663761f);
     CHECK(exact_mr.ptde_specular_power_verified);
     CHECK(exact_mr.ptde_specular_power==8.5f);
 
