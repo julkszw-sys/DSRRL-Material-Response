@@ -1,7 +1,7 @@
 #include "dsrrl/runtime/hemenvlerp_pipeline_registry.hpp"
 #include "dsrrl/runtime/runtime_hot_telemetry.hpp"
 
-#include "dsrrl/operators/material_response/generated_hemenvlerp_v211_v1.hpp"
+#include "dsrrl/operators/material_response/generated_diffuse_response_v1.hpp"
 #include "dsrrl/operators/legacy_plan/sha256_bytes.hpp"
 
 #include <atomic>
@@ -13,7 +13,7 @@ namespace dsrrl::runtime {
 namespace {
 
 namespace gen =
-    operators::material_response::generated;
+    operators::material_response::generated_diffuse_v1;
 namespace hashing =
     operators::legacy_plan::hashing;
 
@@ -54,8 +54,10 @@ std::atomic<std::uint64_t> g_handle_conflicts{0};
 bool candidate_size(std::size_t size) noexcept
 {
     for (const auto &plan :
-         gen::k_hemenvlerp_v211_plans)
-        if (plan.stock_size == size)
+         gen::k_plans)
+        if (plan.family ==
+                gen::receiver_family::hemenvlerp &&
+            plan.stock_size == size)
             return true;
     return false;
 }
@@ -70,10 +72,12 @@ bool exact_identity_digest(
         !candidate_size(size))
         return false;
 
-    const gen::hemenvlerp_v211_plan *hit = nullptr;
+    const gen::plan *hit = nullptr;
     for (const auto &plan :
-         gen::k_hemenvlerp_v211_plans) {
-        if (plan.stock_size != size ||
+         gen::k_plans) {
+        if (plan.family !=
+                gen::receiver_family::hemenvlerp ||
+            plan.stock_size != size ||
             !hashing::matches_hex(
                 digest,
                 plan.stock_sha256))
@@ -89,11 +93,9 @@ bool exact_identity_digest(
         return false;
 
     out.pair_index =
-        hit->pair_index;
+        hit->family_index;
     out.semantic_receiver_id =
-        24u +
-        static_cast<std::uint32_t>(
-            hit->pair_index);
+        hit->receiver_id;
     out.exact = true;
     return true;
 }
