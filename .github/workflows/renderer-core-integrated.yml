@@ -650,6 +650,20 @@ jobs:
             if ($mr -match [regex]::Escape($forbidden)) { throw "MR diffuse-v1 regressed to historical proxy semantics: $forbidden" }
           }
 
+          # MR reset anti-hybrid invariant: generic MR owns diffuse-v1 only.
+          # SpecRGB pairing/promotion belongs to explicit downstream operator
+          # islands and must not re-enter the generic MR replacement runtime.
+          foreach ($forbidden in @(
+            'register_receiver_spec_rgb_replacement',
+            'register_lerp_receiver_spec_rgb_replacement',
+            'register_receiver_upper_lower_spec_rgb_replacement',
+            'register_lerp_receiver_upper_lower_spec_rgb_replacement',
+            'has_paired_spec_rgb_replacement',
+            'promote_prepared_draw_to_spec_rgb'
+          )) {
+            if (($entry + $tx) -match [regex]::Escape($forbidden)) { throw "Generic MR SpecRGB/PBL path regressed after reset: $forbidden" }
+          }
+
           foreach ($required in @(
             'prepare_prevalidated_route_request',
             'k_ptde_body_route_index',
