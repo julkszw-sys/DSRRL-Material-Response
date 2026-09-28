@@ -9,7 +9,10 @@ on:
     paths:
       - "renderer-core/integrated/**"
       - "renderer-core/include/dsrrl/runtime/**"
+      - "renderer-core/include/dsrrl/operators/legacy_plan/**"
       - "renderer-core/src/runtime/**"
+      - "renderer-core/tests/a1_create_time_materializer_tests.cpp"
+      - "renderer-core/tools/verify_a1_terminal_sat_semantic_scope.py"
       - "renderer-core/CMakeLists.txt"
       - "renderer-core/tests/dsr_mtd_identity_supplement_tests.cpp"
       - "renderer-core/tests/material_owner_producer_tests.cpp"
