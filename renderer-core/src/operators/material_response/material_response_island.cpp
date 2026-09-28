@@ -488,7 +488,6 @@ material_response_island::evaluate_direct_pointlight_material(
             7u,
             ptde_envspec_presence::absent,
             c100,
-            {{0.0f, 0.0f, 0.0f}},
             0.0f,
             false
         };
