@@ -926,6 +926,14 @@ jobs:
 
           $cmake = Get-Content renderer-core/integrated/CMakeLists.txt -Raw
           $entry = Get-Content renderer-core/integrated/integrated_addon.cpp -Raw
+          $constGenerator = Get-Content renderer-core/tools/generate_material_response_constants_v1.py -Raw
+          $constHeader = Get-Content renderer-core/include/dsrrl/operators/material_response/generated_material_constants_v1.hpp -Raw
+          $b12Payload = Get-Content renderer-core/include/dsrrl/operators/material_response/material_response_b12_payload.hpp -Raw
+
+          if (($constGenerator + $constHeader + $b12Payload) -match 'c101_f0q') {
+            throw "Historical c101->DSR-F0 proxy signal leaked into active MR authority/ABI"
+          }
+
           foreach ($forbidden in @(
             'generate_material_response_v211_plans.py',
             'generate_hemenvlerp_v211_v1.py',
