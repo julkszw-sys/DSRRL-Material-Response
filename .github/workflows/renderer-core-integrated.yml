@@ -400,58 +400,40 @@ jobs:
             if ($specConsumer -notmatch [regex]::Escape($required)) { throw "SpecRGB exact t10 consumer invariant missing: $required" }
           }
 
-          foreach ($required in @(
+          # MR reset boundary: V2.10/V2.11-rooted EnvSpec materializers are
+          # forbidden from the active addon until rebuilt from neutral stock/PTDE
+          # operator authority.
+          foreach ($forbidden in @(
+            'material_response_v211_materializer.cpp',
+            'hemenvlerp_v211_materializer.cpp',
+            'pmetal_rgba_materializer.cpp',
+            'pmetal_rgba_lerp_materializer.cpp'
+          )) {
+            if ($cmake -match [regex]::Escape($forbidden)) { throw "Legacy/proxy MR dependency leaked into active addon target: $forbidden" }
+          }
+          foreach ($forbidden in @(
             'materialize_v211_certified_stage',
-            'pmetal_rgba_authority',
-            'k_build131_window',
-            'materialize_spec_rgb_consumer',
-            'augment_upper_lower_hemenv_verified_base',
-            'compose_exact_terminal_rgb_sat',
-            'terminal_rgb_sat_exact',
-            'operator_id::terminal_sat_rgb',
-            'final_postcondition'
-          )) {
-            if ($envspecMaterializer -notmatch [regex]::Escape($required)) { throw "P_Metal EnvSpec Build131 materializer invariant missing: $required" }
-          }
-
-          foreach ($required in @(
             'materialize_hemenvlerp_v211_certified_stage',
-            'k_ptde_rgba_envspec_chain',
-            'preserved_envdiffuse',
-            'materialize_spec_rgb_consumer',
-            'final_postcondition',
-            'fail_a1_overlap',
-            'site->postblend_word',
-            'site->t9_word',
-            'site->t11_word',
-            'site->merge_word',
-            'expected_envspec_cut',
-            '0x0100003au',
-            'terminal_rgb_output_instruction',
-            'terminal_rgb_word',
-            'ul_u_slot_word',
-            'ul_d_slot_word_0',
-            'ul_d_slot_word_1',
-            'DSRRL_LightBankCarrier',
-            'upper_lower_composed',
-            'terminal_sat_rgb_composed',
-            '0x05002036u'
+            'materialize_pmetal_rgba_receiver',
+            'materialize_pmetal_rgba_lerp_receiver'
           )) {
-            if ($envspecLerpMaterializer -notmatch [regex]::Escape($required)) { throw "P_Metal HemEnvLerp exact EnvSpec materializer invariant missing: $required" }
+            if ($entry -match [regex]::Escape($forbidden)) { throw "Legacy/proxy MR call leaked into active addon entrypoint: $forbidden" }
           }
 
           foreach ($required in @(
-            'k_hemenvlerp_v211_plans',
-            'semantic_receiver_id',
+            'generated_diffuse_response_v1.hpp',
+            'generated_diffuse_v1',
+            'receiver_family::hemenvlerp',
+            'family_index',
+            'receiver_id',
             'g_ambiguous_pipeline',
             'hemenvlerp_receiver_observe_pipeline',
             'hemenvlerp_receiver_observe_pipeline_digest',
             'hemenvlerp_receiver_observe_bind',
             'hemenvlerp_receiver_bound',
-            'exact_identity',
-            '24u +'
+            'exact_identity'
           )) {
-            if ($envspecLerpRegistry -notmatch [regex]::Escape($required)) { throw "HemEnvLerp exact pipeline identity invariant missing: $required" }
+            if ($envspecLerpRegistry -notmatch [regex]::Escape($required)) { throw "HemEnvLerp neutral exact pipeline identity invariant missing: $required" }
           }
 
           foreach ($required in @(
