@@ -87,7 +87,32 @@
       "new_gate": "producer selectorA/selectorB/source_beta bits must exactly equal assignment tuple before publication",
       "telemetry": "upper_lower.reference_publish_tuple_mismatch",
       "runtime_activation": "OPEN",
-      "pixel_behavior": "OPEN"
+      "pixel_behavior": "OPEN",
+      "static_re": {
+        "exe_sha256": "a45aaa36dd2f6cc151670a639ea5547043cf38ea79ff4178b963c6ed71f98d7b",
+        "type5_wrapper_rva": "0x1C0BE0",
+        "type6_wrapper_rva": "0x1C0C10",
+        "type5_body_rva": "0x1C6900",
+        "type6_body_rva": "0x1C6C40",
+        "selector_a_helper_rva": "0x0C04A0",
+        "selector_b_helper_rva": "0x0C0550",
+        "blend_packer_rva": "0x5637E0",
+        "pmetal_blend_rva": "0x563C30",
+        "observations": [
+          "0x0C04A0 returns WORD [assignment+0x08] unchanged.",
+          "0x0C0550 returns WORD [assignment+0x0A] unchanged.",
+          "Type5/Type6 bodies load beta from [assignment+0x0C] and pass those selector A/B values plus the same beta bits directly to the blend packer.",
+          "The same A/B selector and beta arguments are forwarded to the P_Metal blend producer."
+        ],
+        "conclusion": "Producer selectorA/selectorB/source_beta are the same semantic tuple encoded in assignment+0x08/+0x0A/+0x0C; bit-exact publication equality is therefore an exact fail-open identity gate."
+      },
+      "ci": {
+        "git_commit": "480d3c982cd669b1a259508b0551de3a23d1e9db",
+        "renderer_core_islands_run": 1818,
+        "integrated_single_addon_run": 1204,
+        "runtime_v1_a2_run": 1803,
+        "construction": "PASS"
+      }
     }
   },
   "exclusions": {
