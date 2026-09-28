@@ -676,15 +676,28 @@ bool snapshot_ready_envspec(
 
     const auto found_a =
         g_ptde_cubes.find(key_a);
-    const auto found_b =
-        g_ptde_cubes.find(key_b);
 
     if (found_a == g_ptde_cubes.end() ||
-        found_b == g_ptde_cubes.end() ||
-        found_a->second.view.handle == 0u ||
-        found_b->second.view.handle == 0u) {
+        found_a->second.view.handle == 0u) {
         needs_cube = true;
         return false;
+    }
+
+    const rgba_cube *cube_b =
+        &found_a->second;
+
+    if (probe_b_required) {
+        const auto found_b =
+            g_ptde_cubes.find(key_b);
+
+        if (found_b == g_ptde_cubes.end() ||
+            found_b->second.view.handle == 0u) {
+            needs_cube = true;
+            return false;
+        }
+
+        cube_b =
+            &found_b->second;
     }
 
     ptde_a =
@@ -696,7 +709,7 @@ bool snapshot_ready_envspec(
         reinterpret_cast<
             ID3D11ShaderResourceView *>(
                 static_cast<std::uintptr_t>(
-                    found_b->second.view.handle));
+                    cube_b->view.handle));
     sampler_native =
         reinterpret_cast<
             ID3D11SamplerState *>(
