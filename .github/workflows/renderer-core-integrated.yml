@@ -940,11 +940,14 @@ jobs:
           $envspecLerpMaterializerHeaderHash = (Get-FileHash "renderer-core/include/dsrrl/operators/env_spec/pmetal_rgba_lerp_materializer.hpp" -Algorithm SHA256).Hash.ToLowerInvariant()
           $envspecLerpRegistryHash = (Get-FileHash "renderer-core/src/runtime/hemenvlerp_pipeline_registry.cpp" -Algorithm SHA256).Hash.ToLowerInvariant()
           $envspecLerpRegistryHeaderHash = (Get-FileHash "renderer-core/include/dsrrl/runtime/hemenvlerp_pipeline_registry.hpp" -Algorithm SHA256).Hash.ToLowerInvariant()
-          $hemenvLerpMrAuthorityHash = (Get-FileHash "renderer-core/data/provenance/hemenvlerp_mr_v211_v1.tsv" -Algorithm SHA256).Hash.ToLowerInvariant()
-          $hemenvLerpMrGeneratorHash = (Get-FileHash "renderer-core/tools/generate_hemenvlerp_v211_v1.py" -Algorithm SHA256).Hash.ToLowerInvariant()
+          $mrDiffuseAuthorityHash = (Get-FileHash "renderer-core/data/provenance/material_response_diffuse_v1.tsv" -Algorithm SHA256).Hash.ToLowerInvariant()
+          $mrDiffuseGeneratorHash = (Get-FileHash "renderer-core/tools/generate_material_response_diffuse_v1.py" -Algorithm SHA256).Hash.ToLowerInvariant()
+          $mrDiffuseSourceHash = (Get-FileHash "renderer-core/src/operators/material_response/material_response_diffuse_v1.cpp" -Algorithm SHA256).Hash.ToLowerInvariant()
+          $mrDiffuseHeaderHash = (Get-FileHash "renderer-core/include/dsrrl/operators/material_response/material_response_diffuse_v1.hpp" -Algorithm SHA256).Hash.ToLowerInvariant()
+          $mrDonorAuthorityHash = (Get-FileHash "renderer-core/data/provenance/ptde_material_donor_registry.hpp" -Algorithm SHA256).Hash.ToLowerInvariant()
           $envspecLerpAuthorityHash = (Get-FileHash "renderer-core/data/provenance/pmetal_envspec_hemenvlerp_v1.tsv" -Algorithm SHA256).Hash.ToLowerInvariant()
           $envspecLerpGeneratorHash = (Get-FileHash "renderer-core/tools/generate_pmetal_envspec_hemenvlerp_v1.py" -Algorithm SHA256).Hash.ToLowerInvariant()
-          $generatedHemEnvLerpMrHash = (Get-FileHash "build-integrated/generated/dsrrl/operators/material_response/generated_hemenvlerp_v211_v1.hpp" -Algorithm SHA256).Hash.ToLowerInvariant()
+          $generatedMrDiffuseHash = (Get-FileHash "build-integrated/generated/dsrrl/operators/material_response/generated_diffuse_response_v1.hpp" -Algorithm SHA256).Hash.ToLowerInvariant()
           $generatedEnvSpecLerpHash = (Get-FileHash "build-integrated/generated/dsrrl/operators/env_spec/generated_pmetal_envspec_hemenvlerp_v1.hpp" -Algorithm SHA256).Hash.ToLowerInvariant()
           $envspecResourceRuntimeHash = (Get-FileHash "renderer-core/src/runtime/envspec_resource_runtime.cpp" -Algorithm SHA256).Hash.ToLowerInvariant()
           $envspecDrawRuntimeHash = (Get-FileHash "renderer-core/src/runtime/pmetal_envspec_draw_runtime.cpp" -Algorithm SHA256).Hash.ToLowerInvariant()
@@ -974,8 +977,7 @@ jobs:
           $specRoutesHash = (Get-FileHash "renderer-core/data/provenance/spec_routes_v12.tsv" -Algorithm SHA256).Hash.ToLowerInvariant()
           $diffuseRoutesHash = (Get-FileHash "renderer-core/data/provenance/diffuse_routes_v12.tsv" -Algorithm SHA256).Hash.ToLowerInvariant()
           $normalRoutesHash = (Get-FileHash "renderer-core/data/provenance/normal_routes_v12.tsv" -Algorithm SHA256).Hash.ToLowerInvariant()
-          $materialV211Hash = (Get-FileHash "renderer-core/src/operators/material_response/material_response_v211_materializer.cpp" -Algorithm SHA256).Hash.ToLowerInvariant()
-          $materialV211PlanHash = (Get-FileHash "renderer-core/include/dsrrl/operators/material_response/generated_v211_plans.hpp" -Algorithm SHA256).Hash.ToLowerInvariant()
+          # Historical V2.10/V2.11 source is deliberately excluded from active build provenance.
           $materialConstantsHash = (Get-FileHash "renderer-core/include/dsrrl/operators/material_response/generated_material_constants_v1.hpp" -Algorithm SHA256).Hash.ToLowerInvariant()
           $sourceRef = $env:DSRRL_SOURCE_REF
           $sourceRefKind = $env:DSRRL_SOURCE_REF_KIND
