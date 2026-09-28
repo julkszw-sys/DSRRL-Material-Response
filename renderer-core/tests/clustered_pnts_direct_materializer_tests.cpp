@@ -26,20 +26,20 @@ int main()
             clustered_pnts_required_composed_shader_owners(
                 plan.spc);
         const auto common =
-            core::operator_bit(
-                core::operator_id::diffuse_material_domain) |
-            core::operator_bit(
-                core::operator_id::pointlight_pnts_attenuation) |
-            core::operator_bit(
-                core::operator_id::terminal_sat_rgb);
+            dsrrl::core::operator_bit(
+                dsrrl::core::operator_id::diffuse_material_domain) |
+            dsrrl::core::operator_bit(
+                dsrrl::core::operator_id::pointlight_pnts_attenuation) |
+            dsrrl::core::operator_bit(
+                dsrrl::core::operator_id::terminal_sat_rgb);
 
         if ((expected & common) != common ||
             (plan.spc &&
-             (expected & core::operator_bit(
-                 core::operator_id::envspec_nospc_delete)) != 0u) ||
+             (expected & dsrrl::core::operator_bit(
+                 dsrrl::core::operator_id::envspec_nospc_delete)) != 0u) ||
             (!plan.spc &&
-             (expected & core::operator_bit(
-                 core::operator_id::envspec_nospc_delete)) == 0u))
+             (expected & dsrrl::core::operator_bit(
+                 dsrrl::core::operator_id::envspec_nospc_delete)) == 0u))
             return 2;
 
         if (plan.original_sha256 == nullptr ||
