@@ -2301,7 +2301,8 @@ bool on_create_pipeline(
         std::vector<std::uint8_t> lerp_mr_payload;
         const auto lerp_mr =
             dsrrl::operators::material_response::
-                materialize_hemenvlerp_v211_certified_stage(
+                materialize_hemenvlerp_v211_receiver(
+                    g_core.features(),
                     source,
                     pixel_shader->code_size,
                     lerp_mr_payload);
@@ -2329,7 +2330,7 @@ bool on_create_pipeline(
                             lerp_receiver_id,
                             lerp_mr_payload.data(),
                             lerp_mr_payload.size(),
-                            0u))
+                            lerp_mr.composed_owners))
                     ++g_mr_payload_materialize_ok;
                 else
                     ++g_mr_payload_materialize_fail;
@@ -2354,7 +2355,8 @@ bool on_create_pipeline(
                             lerp_receiver_id,
                             lerp_mr_spec_payload.data(),
                             lerp_mr_spec_payload.size(),
-                            lerp_spec_owner))
+                            lerp_mr.composed_owners |
+                                lerp_spec_owner))
                     ++g_mr_payload_materialize_fail;
             } else {
                 ++g_mr_payload_materialize_fail;
@@ -2400,7 +2402,7 @@ bool on_create_pipeline(
                                 lerp_receiver_id,
                                 lerp_mr_ul_payload.data(),
                                 lerp_mr_ul_payload.size(),
-                                0u))
+                                lerp_mr.composed_owners))
                         ++g_mr_ul_payload_materialize_ok;
                     else
                         ++g_mr_ul_payload_materialize_fail;
@@ -2417,7 +2419,8 @@ bool on_create_pipeline(
                                 lerp_receiver_id,
                                 lerp_full_payload.data(),
                                 lerp_full_payload.size(),
-                                lerp_spec_owner))
+                                lerp_mr.composed_owners |
+                                    lerp_spec_owner))
                         ++g_mr_ul_payload_materialize_fail;
                 } else {
                     ++g_mr_ul_payload_materialize_fail;
