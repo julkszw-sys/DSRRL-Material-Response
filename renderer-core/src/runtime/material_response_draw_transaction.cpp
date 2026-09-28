@@ -143,10 +143,10 @@ struct replacement_tls_cache_entry {
     }
 };
 
-// Replacement identity is (bank, receiver). Four active banks share the
-// 24-receiver semantic namespace after the MR reset (stable, Lerp and their
-// U/L compositions). Keep the cache bounded but large enough for the complete
-// active working set without generic SpecRGB bank collisions.
+// Replacement identity is (bank, receiver). Five active banks share the
+// receiver namespace after the MR reset: stable, Lerp, their U/L compositions,
+// plus the narrow 33-35 Subsurface U/L+SpecRGB bank. 128 slots cover the
+// complete current key surface without resurrecting generic SpecRGB banks.
 constexpr std::size_t k_replacement_tls_cache_slots = 128u;
 thread_local std::array<
     replacement_tls_cache_entry,
