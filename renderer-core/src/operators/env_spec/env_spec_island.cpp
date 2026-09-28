@@ -10,7 +10,11 @@ decision env_spec_island::gate(
 
     switch (presence) {
     case ptde_envspec_presence::absent:
-        return {action::suppress_dsr_only, false};
+        // Presence-only absence has no receiver/material identity proof and
+        // therefore cannot authorize deletion of a DSR EnvSpec contribution.
+        // Certified suppression is issued exclusively by the exact MTD gate
+        // below (explicit_none + suppress_dsr_only_safe).
+        return {action::preserve_host, false};
 
     case ptde_envspec_presence::present:
         if (ptde_bridge_ready)
