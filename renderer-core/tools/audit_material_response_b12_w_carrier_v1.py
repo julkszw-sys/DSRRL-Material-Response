@@ -77,10 +77,11 @@ def cb0_material_refs(words: list[int]) -> list[tuple[int, int, int, int]]:
 def main() -> int:
     ap = argparse.ArgumentParser(
         description=(
-            "Prove that the 48 exact Material Response HemEnv/HemEnvLerp "
-            "stock hosts never consume .w from the cb0[9]/cb0[10] operands "
-            "rewired by V2.11 to b12[1]/b12[0]. This certifies b12[0].w as "
-            "an orthogonal PTDE g_SpecularPower carrier."
+            "Prove that the 48 exact HemEnv/HemEnvLerp stock hosts never "
+            "consume .w from the audited cb0[9]/cb0[10] material operands. "
+            "The active MR reset uses b12[1].xyz for PTDE c100, reserves "
+            "b12[0].xyz, and uses b12[0].w only as the orthogonal PTDE "
+            "g_SpecularPower/c102 carrier for explicit local-specular paths."
         )
     )
     ap.add_argument("--shader-dir", required=True)
