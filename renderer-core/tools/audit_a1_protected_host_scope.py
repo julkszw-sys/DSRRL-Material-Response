@@ -85,8 +85,15 @@ def main() -> int:
         )
 
     build151_text = Path(args.build151).read_text(encoding="utf-8")
-    build151_names = re.findall(
-        r'^\\s*\\{"(FRPG_Phn_[^"]+)","[0-9a-f]{64}",\\d+u,\\d+u,"[0-9a-f]{64}"\\},?
+    build151_names = []
+    build151_entry = re.compile(
+        r'\\{"(FRPG_Phn_[^"]+)","[0-9a-f]{64}",\\d+u,\\d+u,"[0-9a-f]{64}"\\},?'
+    )
+    for line in build151_text.splitlines():
+        match = build151_entry.fullmatch(line.strip())
+        if match:
+            build151_names.append(match.group(1))
+
     if len(build151_names) != EXPECTED_BUILD151_NOSPC:
         raise SystemExit(
             "Build151 EnvSpec no-Spc exact identity coverage drifted: "
