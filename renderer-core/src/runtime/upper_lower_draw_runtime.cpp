@@ -650,9 +650,16 @@ thread_local selector_snapshot_tls g_selector_snapshot{};
 // a bounded 2-way cross-thread registry carrying only references plus the
 // exact freshness fingerprint. Each set has a tiny spin guard: no heap,
 // shared_ptr, global unordered_map or global epoch participates in this path.
+//
+// Keep this carrier sized like the proven steady hot caches. The old 32x2
+// registry was vulnerable to collision eviction in geometry-heavy scenes:
+// a valid producer token could disappear before the exact selector event and
+// surface later as TOKEN_INVALID at the P_Metal EnvSpec source gate. 128x4
+// remains bounded (~512 tokens), preserves exact owner/selector/beta matching,
+// and changes capacity only -- never identity or fail-open semantics.
 // The selected draw token remains TLS because it is consumed in draw order.
-constexpr std::size_t k_reference_token_sets = 32u;
-constexpr std::size_t k_reference_token_ways = 2u;
+constexpr std::size_t k_reference_token_sets = 128u;
+constexpr std::size_t k_reference_token_ways = 4u;
 constexpr std::size_t k_reference_token_entries =
     k_reference_token_sets * k_reference_token_ways;
 std::array<
