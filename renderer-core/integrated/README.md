@@ -117,3 +117,13 @@ CI can establish source completeness, deterministic construction and ABI/build
 compatibility. Runtime liveness, exact receiver or FX identity hits, bridge
 activation, operator change and PTDE-visible pixel improvement are separate
 statuses. Success at one level does not promote the next.
+
+
+## Runtime receiver arbitration note (2026-09-28)
+
+The 36 exact clustered `PntS` stock pixel-shader identities are the same
+36 exact identities covered by the `phn_pnts` Upper/Lower census. This is
+an intentional semantic overlap, not two independent receiver namespaces.
+Integrated routing therefore lets the clustered PointLight island own the
+single replacement-PS slot for those draws and keeps independent Upper/Lower
+fail-open until a combined PointLight+U/L replacement is separately certified.
