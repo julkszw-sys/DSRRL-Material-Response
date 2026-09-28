@@ -153,6 +153,8 @@ std::size_t register_confirmed_material_routes_v1(material_response_island &isla
         profile.envspec =
             ptde_envspec_presence::unknown;
         profile.semantic_name_required = true;
+        profile.ptde_companion_required =
+            !seed.runtime_mtd_allowed;
 
         material_identity identity;
         identity.valid = true;
