@@ -1,5 +1,6 @@
 #include "dsrrl/runtime/material_owner_producer.hpp"
 #include "dsrrl/operators/material_response/mtd_semantic_census.hpp"
+#include "dsrrl/operators/material_response/material_response_seed.hpp"
 #include "dsrrl/operators/material_response/generated_dsr_flver_owner_tuples_v1.hpp"
 #include "dsrrl/operators/material_response/generated_exact_binding_mr_v1.hpp"
 #include <cstddef>
@@ -132,6 +133,29 @@ int main()
         runtime::make_actual_material_identity(leather);
     CHECK(leather_id.owner_tuple_exact);
     CHECK(leather_id.route_index==
+          leather_extension->route_tag);
+
+    operators::material_response::material_response_island mr{};
+    CHECK(operators::material_response::
+          register_confirmed_receivers_v1(mr)==24u);
+    CHECK(operators::material_response::
+          register_confirmed_material_routes_v1(mr)==43u);
+
+    const auto shared_without_companion=
+        mr.evaluate(33u,leather_id);
+    CHECK(!shared_without_companion.active);
+    CHECK(shared_without_companion.reason==
+          operators::material_response::
+              decision_reason::ptde_companion_required);
+    CHECK(shared_without_companion.route_index==
+          leather_extension->route_tag);
+
+    const auto shared_with_companion=
+        mr.evaluate(33u,leather_id,true);
+    CHECK(shared_with_companion.active);
+    CHECK(shared_with_companion.reason==
+          operators::material_response::decision_reason::active);
+    CHECK(shared_with_companion.route_index==
           leather_extension->route_tag);
 
     // Direct PointLight NoSpc authority: exact PTDE/DSR homology supplies
