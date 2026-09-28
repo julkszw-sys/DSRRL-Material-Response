@@ -1320,3 +1320,37 @@ jobs:
           name: DSRRL_Core_Islands_FULL_RUNTIME_DIAG
           path: DSRRL_Core_Islands_FULL_RUNTIME_DIAG.addon64
           if-no-files-found: error
+
+      - name: Configure live effect-telemetry addon
+        shell: pwsh
+        run: >
+          cmake
+          -S renderer-core/integrated
+          -B build-integrated-live-telemetry
+          -A x64
+          -DRESHADE_INCLUDE_DIR="${{ github.workspace }}/_reshade/include"
+          -DDSRRL_SOURCE_COMMIT="$env:DSRRL_CHECKOUT_COMMIT"
+          -DDSRRL_BUILD_FLAVOR="live_effect_telemetry_safe"
+          -DDSRRL_EFFECT_TELEMETRY_DEFAULT_ON_ONLY=ON
+
+      - name: Build live effect-telemetry addon
+        shell: pwsh
+        run: |
+          cmake --build build-integrated-live-telemetry --config Release --target dsrrl_renderer_core_integrated
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $addons = @(Get-ChildItem build-integrated-live-telemetry -Recurse -Filter *.addon64)
+          if ($addons.Count -ne 1) {
+            throw "Expected exactly one live effect-telemetry addon, found $($addons.Count)"
+          }
+          $live = "DSRRL_Core_Islands_LIVE_TELEMETRY.addon64"
+          Copy-Item $addons[0].FullName $live -Force
+          $hash = (Get-FileHash $live -Algorithm SHA256).Hash.ToLowerInvariant()
+          Write-Host "LIVE_TELEMETRY=$live"
+          Write-Host "LIVE_TELEMETRY_SHA256=$hash"
+
+      - name: Upload live effect-telemetry addon
+        uses: actions/upload-artifact@v4
+        with:
+          name: DSRRL_Core_Islands_LIVE_TELEMETRY
+          path: DSRRL_Core_Islands_LIVE_TELEMETRY.addon64
+          if-no-files-found: error
