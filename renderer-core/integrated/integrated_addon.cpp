@@ -32,6 +32,7 @@
 #include "dsrrl/operators/lightbank/hemdir3_b13_materializer.hpp"
 #include "dsrrl/operators/lightbank/upper_lower_hemenv_materializer.hpp"
 #include "dsrrl/operators/resource_bridges/spec_rgb_consumer_materializer.hpp"
+#include "dsrrl/operators/resource_bridges/subsurface_route.hpp"
 #include "dsrrl/operators/env_spec/pmetal_rgba_materializer.hpp"
 #include "dsrrl/operators/env_spec/pmetal_rgba_lerp_materializer.hpp"
 #include "dsrrl/operators/point_light/local_specular_receiver_registry.hpp"
@@ -137,6 +138,8 @@ std::atomic<std::uint32_t> g_pointlight_gate_log_mask{0u};
 std::atomic_bool g_pointlight_active_logged{false};
 std::atomic<std::uint64_t> g_mr_ul_payload_materialize_ok{0};
 std::atomic<std::uint64_t> g_mr_ul_payload_materialize_fail{0};
+std::atomic<std::uint64_t> g_subsurface_spec_payload_materialize_ok{0};
+std::atomic<std::uint64_t> g_subsurface_spec_payload_materialize_fail{0};
 std::atomic<std::uint64_t> g_lerp_full_draw_ready{0};
 std::atomic<std::uint64_t> g_lerp_full_draw_fallback{0};
 std::atomic_bool g_lerp_once_receiver_hit{false};
@@ -1399,7 +1402,8 @@ void log_state(const char *tag) noexcept
         "owner_sel=%llu owner_enriched=%llu owner_auth=%llu owner_actual=%llu owner_fo=%llu "
         "mr_ready=%u mr_eval=%llu mr_would_activate=%llu mr_fo=%llu "
         "mr_payload_ok=%llu mr_payload_fail=%llu "
-        "mr_ul_payload=%llu/%llu mr_ul_reg=%llu/%llu mr_ul_prepare=%llu mr_ul_miss=%llu "
+        "mr_ul_payload=%llu/%llu sub_spec_payload=%llu/%llu "
+        "mr_ul_reg=%llu/%llu mr_ul_prepare=%llu mr_ul_miss=%llu "
         "mr_reg=%llu/%llu lerp_full=%llu/%llu "
         "mr_b12_create=%llu mr_b12_hit=%llu mr_b12_bind_fail=%llu "
         "mr_tx_eligible=%llu mr_tx_miss=%llu mr_replay=%llu mr_restore_fail=%llu mr_quarantine=%u "
@@ -1452,6 +1456,8 @@ void log_state(const char *tag) noexcept
         static_cast<unsigned long long>(g_mr_payload_materialize_fail.load()),
         static_cast<unsigned long long>(g_mr_ul_payload_materialize_ok.load()),
         static_cast<unsigned long long>(g_mr_ul_payload_materialize_fail.load()),
+        static_cast<unsigned long long>(g_subsurface_spec_payload_materialize_ok.load()),
+        static_cast<unsigned long long>(g_subsurface_spec_payload_materialize_fail.load()),
         static_cast<unsigned long long>(mr_tx.combined_ul_register_ok),
         static_cast<unsigned long long>(mr_tx.combined_ul_register_fail),
         static_cast<unsigned long long>(mr_tx.combined_ul_prepare),
@@ -2334,6 +2340,55 @@ bool on_create_pipeline(
                     ++g_mr_ul_payload_materialize_ok;
                 else
                     ++g_mr_ul_payload_materialize_fail;
+
+                // Subsurface is the only post-reset path allowed to pair this
+                // generic diffuse-v1 base with a t10 SpecRGB consumer. Build
+                // the pair only for the three exact PTDE plain-body targets;
+                // draw-time use remains gated by exact DSBT material +
+                // Subsurf receiver + body sidecar in subsurface_draw_runtime.
+                bool subsurface_target = false;
+                for (const auto &route :
+                     dsrrl::operators::resource_bridges::
+                         k_subsurface_receiver_routes) {
+                    if (route.target_plain_receiver_id ==
+                        mr.receiver_id) {
+                        subsurface_target = true;
+                        break;
+                    }
+                }
+
+                if (subsurface_target) {
+                    std::vector<std::uint8_t>
+                        subsurface_spec_payload;
+                    const auto spec_result =
+                        dsrrl::operators::resource_bridges::
+                            materialize_spec_rgb_consumer(
+                                mr_ul_payload.data(),
+                                mr_ul_payload.size(),
+                                subsurface_spec_payload,
+                                false);
+
+                    if (spec_result ==
+                        dsrrl::operators::resource_bridges::
+                            spec_rgb_consumer_result::applied) {
+                        const auto spec_owner =
+                            dsrrl::core::operator_bit(
+                                dsrrl::core::operator_id::
+                                    spec_rgb);
+                        if (g_mr_draw_runtime.
+                                register_subsurface_upper_lower_spec_replacement(
+                                    mr.receiver_id,
+                                    subsurface_spec_payload.data(),
+                                    subsurface_spec_payload.size(),
+                                    mr.composed_owners |
+                                        spec_owner))
+                            ++g_subsurface_spec_payload_materialize_ok;
+                        else
+                            ++g_subsurface_spec_payload_materialize_fail;
+                    } else {
+                        ++g_subsurface_spec_payload_materialize_fail;
+                    }
+                }
 
                 // No generic MR+SpecRGB variant: see anti-hybrid rule above.
             } else if (
@@ -4573,6 +4628,8 @@ bool AddonInit(
     g_pointlight_active_logged.store(false);
     g_mr_ul_payload_materialize_ok.store(0);
     g_mr_ul_payload_materialize_fail.store(0);
+    g_subsurface_spec_payload_materialize_ok.store(0);
+    g_subsurface_spec_payload_materialize_fail.store(0);
     g_lerp_full_draw_ready.store(0);
     g_lerp_full_draw_fallback.store(0);
     g_lerp_once_receiver_hit.store(false);
