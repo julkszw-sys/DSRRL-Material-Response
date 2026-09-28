@@ -247,6 +247,10 @@ bool material_response_draw_runtime::acquire_replacement(
     case replacement_bank::upper_lower:
         source = &upper_lower_replacements_;
         break;
+    case replacement_bank::subsurface_upper_lower_spec:
+        source =
+            &subsurface_upper_lower_spec_replacements_;
+        break;
     }
 
     if (source == nullptr) {
@@ -420,6 +424,14 @@ void material_response_draw_runtime::release_resources() noexcept
     }
     upper_lower_replacements_.clear();
 
+    for (auto &entry :
+         subsurface_upper_lower_spec_replacements_) {
+        auto *shader = entry.second.shader;
+        if (shader != nullptr)
+            shader->Release();
+    }
+    subsurface_upper_lower_spec_replacements_.clear();
+
     for (auto &entry : b12_by_route_) {
         auto *buffer = entry.second;
         if (buffer != nullptr)
@@ -501,6 +513,14 @@ void material_response_draw_runtime::on_destroy_device(
             shader->Release();
     }
     upper_lower_replacements_.clear();
+
+    for (auto &entry :
+         subsurface_upper_lower_spec_replacements_) {
+        auto *shader = entry.second.shader;
+        if (shader != nullptr)
+            shader->Release();
+    }
+    subsurface_upper_lower_spec_replacements_.clear();
 
     for (auto &entry : b12_by_route_) {
         auto *buffer = entry.second;
@@ -696,6 +716,49 @@ has_receiver_upper_lower_replacement(
         found !=
             upper_lower_replacements_.end() &&
         found->second.shader != nullptr;
+}
+
+bool material_response_draw_runtime::
+register_subsurface_upper_lower_spec_replacement(
+    std::uint32_t receiver_id,
+    const void *dxbc,
+    std::size_t dxbc_size,
+    core::operator_mask composed_owners) noexcept
+{
+    const auto spec_owner =
+        core::operator_bit(
+            core::operator_id::spec_rgb);
+    const core::operator_mask forbidden_owners =
+        core::operator_bit(
+            core::operator_id::material_response) |
+        core::operator_bit(
+            core::operator_id::diffuse_material_domain) |
+        core::operator_bit(
+            core::operator_id::upper_lower);
+
+    // This bank exists only for the three exact PTDE plain-body targets used
+    // by the DSBT->DSB Subsurface bypass. It is not a generic MR bank.
+    if (receiver_id < 33u ||
+        receiver_id > 35u ||
+        dxbc == nullptr ||
+        dxbc_size == 0u ||
+        (composed_owners & spec_owner) == 0u ||
+        (composed_owners & forbidden_owners) != 0u ||
+        (composed_owners & ~core::all_operator_bits) != 0u ||
+        local_quarantine_.load() ||
+        transactions_.quarantined()) {
+        ++combined_ul_register_fail_;
+        return false;
+    }
+
+    return register_replacement_record(
+        subsurface_upper_lower_spec_replacements_,
+        receiver_id,
+        dxbc,
+        dxbc_size,
+        composed_owners,
+        combined_ul_register_ok_,
+        combined_ul_register_fail_);
 }
 
 bool material_response_draw_runtime::prepare_draw_request(
@@ -1140,6 +1203,78 @@ prepare_prevalidated_route_request_with_upper_lower(
         decision,
         b13,
         prepared);
+}
+
+bool material_response_draw_runtime::
+promote_prevalidated_subsurface_to_spec_rgb(
+    prepared_material_response_draw &prepared) noexcept
+{
+    if (!prepared.ready ||
+        prepared.shader == nullptr ||
+        prepared.receiver_id < 33u ||
+        prepared.receiver_id > 35u ||
+        prepared.family !=
+            material_response_replacement_family::
+                stable_upper_lower ||
+        local_quarantine_.load() ||
+        transactions_.quarantined())
+        return false;
+
+    replacement_record replacement{};
+    if (!acquire_replacement(
+            replacement_bank::
+                subsurface_upper_lower_spec,
+            prepared.receiver_id,
+            replacement))
+        return false;
+
+    const auto spec_owner =
+        core::operator_bit(
+            core::operator_id::spec_rgb);
+
+    const bool pair_matches =
+        (replacement.composed_owners &
+             spec_owner) != 0u &&
+        (replacement.composed_owners &
+             ~spec_owner) ==
+            prepared.replacement_composed_owners;
+
+    if (!pair_matches) {
+        replacement.shader->Release();
+        return false;
+    }
+
+    auto upgraded =
+        prepared.request;
+    upgraded.pixel_shader =
+        replacement.shader;
+    upgraded.additional_owners |=
+        spec_owner;
+    upgraded.additional_shader_owners |=
+        spec_owner;
+
+    draw_tx_mutation verify{};
+    if (build_island_draw_mutation(
+            upgraded,
+            verify) !=
+        island_draw_adapter_result::ready) {
+        replacement.shader->Release();
+        return false;
+    }
+
+    auto *old_shader =
+        prepared.shader;
+    prepared.shader =
+        replacement.shader;
+    prepared.request =
+        upgraded;
+    prepared.replacement_composed_owners =
+        replacement.composed_owners;
+
+    if (old_shader != nullptr)
+        old_shader->Release();
+
+    return true;
 }
 
 void material_response_draw_runtime::release_prepared_draw(
