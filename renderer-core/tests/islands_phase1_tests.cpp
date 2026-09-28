@@ -190,6 +190,19 @@ int main()
     CHECK(seeded.receiver_recipe_count() == 24);
     CHECK(register_confirmed_material_routes_v1(seeded) == 43);
     CHECK(seeded.material_profile_count() == 43);
+    CHECK(seeded.finalize_registration());
+    CHECK(seeded.registration_finalized());
+    CHECK(seeded.receiver_recipe_count() == 24);
+    CHECK(seeded.material_profile_count() == 43);
+
+    // A finalized runtime authority table is immutable. Late registration
+    // fails open instead of invalidating lock-free draw readers.
+    CHECK(!seeded.register_receiver_recipe(receiver_recipe{
+        500u,
+        material_scope_policy::global_receiver_safe,
+        diffuse_material_domain_linear,
+        ptde_envspec_presence::absent
+    }));
 
     // The direct PointLight NoSpc path is intentionally not registered as a
     // generic Material Response profile. Recover exact c100 only after an
