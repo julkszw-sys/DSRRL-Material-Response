@@ -153,14 +153,16 @@ std::size_t replacement_tls_cache_index(
         k_replacement_tls_cache_slots);
 }
 
-bool full_material_response_decision(
+bool generic_diffuse_response_decision(
     const operators::material_response::decision &decision) noexcept
 {
     using namespace operators::material_response;
 
+    // Generic Material Response owns only the verified PTDE diffuse material
+    // domain. Raw c101/c102 are data for explicit EnvSpec/local-specular
+    // operators and must never be required to authorize this replay.
     constexpr std::uint32_t required =
-        diffuse_material_domain_linear |
-        specular_factor_c101;
+        diffuse_material_domain_linear;
 
     return
         decision.active &&
@@ -1070,7 +1072,7 @@ bool material_response_draw_runtime::prepare_draw_request(
     prepared = {};
     telemetry::hot_count(eligible_draws_);
 
-    if (!full_material_response_decision(decision) ||
+    if (!generic_diffuse_response_decision(decision) ||
         local_quarantine_.load() ||
         transactions_.quarantined())
         return false;
@@ -1143,7 +1145,7 @@ prepare_draw_request_with_upper_lower(
     telemetry::hot_count(eligible_draws_);
     telemetry::hot_count(combined_ul_prepare_);
 
-    if (!full_material_response_decision(decision) ||
+    if (!generic_diffuse_response_decision(decision) ||
         decision.receiver_id < 24u ||
         decision.receiver_id > 47u ||
         b13 == nullptr ||
@@ -1232,7 +1234,7 @@ prepare_lerp_draw_request(
     prepared = {};
     telemetry::hot_count(eligible_draws_);
 
-    if (!full_material_response_decision(decision) ||
+    if (!generic_diffuse_response_decision(decision) ||
         decision.receiver_id < 24u ||
         decision.receiver_id > 47u ||
         local_quarantine_.load() ||
@@ -1307,7 +1309,7 @@ prepare_lerp_draw_request_with_upper_lower(
     telemetry::hot_count(eligible_draws_);
     telemetry::hot_count(combined_ul_prepare_);
 
-    if (!full_material_response_decision(decision) ||
+    if (!generic_diffuse_response_decision(decision) ||
         decision.receiver_id < 24u ||
         decision.receiver_id > 47u ||
         b13 == nullptr ||
@@ -1671,7 +1673,7 @@ void material_response_draw_runtime::account_dispatch_result(
 ID3D11Buffer *material_response_draw_runtime::realize_b12(
     const operators::material_response::decision &decision) noexcept
 {
-    if (!full_material_response_decision(decision) ||
+    if (!generic_diffuse_response_decision(decision) ||
         local_quarantine_.load() ||
         transactions_.quarantined())
         return nullptr;
