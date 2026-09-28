@@ -15,7 +15,9 @@
 
 #include <d3d11.h>
 
+#include <algorithm>
 #include <array>
+#include <iterator>
 
 namespace dsrrl::runtime {
 namespace {
@@ -176,6 +178,49 @@ bool generic_diffuse_response_decision(
     return
         decision.active &&
         (decision.certified_operations & required) == required;
+}
+
+const operators::material_response::generated::route_seed *
+find_prevalidated_route_seed(
+    std::uint32_t route_index,
+    std::uint32_t receiver_id) noexcept
+{
+    namespace generated =
+        operators::material_response::generated;
+
+    const auto begin =
+        std::begin(generated::k_material_routes_v1);
+    const auto end =
+        std::end(generated::k_material_routes_v1);
+    auto it =
+        std::lower_bound(
+            begin,
+            end,
+            route_index,
+            [](const generated::route_seed &seed,
+               std::uint32_t route) {
+                return seed.route_index < route;
+            });
+
+    const generated::route_seed *match = nullptr;
+
+    for (; it != end &&
+           it->route_index == route_index;
+         ++it) {
+        const bool receiver_match =
+            receiver_id == it->receiver0 ||
+            receiver_id == it->receiver1 ||
+            receiver_id == it->receiver2;
+        if (!receiver_match)
+            continue;
+
+        if (match != nullptr)
+            return nullptr;
+
+        match = &*it;
+    }
+
+    return match;
 }
 
 } // namespace
@@ -1092,25 +1137,10 @@ bool material_response_draw_runtime::prepare_prevalidated_route_request(
 {
     namespace mr = operators::material_response;
 
-    const mr::generated::route_seed *seed = nullptr;
-    for (const auto &candidate :
-         mr::generated::k_material_routes_v1) {
-        if (candidate.route_index != route_index)
-            continue;
-
-        const bool receiver_match =
-            receiver_id == candidate.receiver0 ||
-            receiver_id == candidate.receiver1 ||
-            receiver_id == candidate.receiver2;
-
-        if (!receiver_match)
-            return false;
-
-        if (seed != nullptr)
-            return false;
-
-        seed = &candidate;
-    }
+    const auto *seed =
+        find_prevalidated_route_seed(
+            route_index,
+            receiver_id);
 
     if (seed == nullptr)
         return false;
@@ -1154,25 +1184,10 @@ prepare_prevalidated_route_request_with_upper_lower(
     if (b13 == nullptr)
         return false;
 
-    const mr::generated::route_seed *seed = nullptr;
-    for (const auto &candidate :
-         mr::generated::k_material_routes_v1) {
-        if (candidate.route_index != route_index)
-            continue;
-
-        const bool receiver_match =
-            receiver_id == candidate.receiver0 ||
-            receiver_id == candidate.receiver1 ||
-            receiver_id == candidate.receiver2;
-
-        if (!receiver_match)
-            return false;
-
-        if (seed != nullptr)
-            return false;
-
-        seed = &candidate;
-    }
+    const auto *seed =
+        find_prevalidated_route_seed(
+            route_index,
+            receiver_id);
 
     if (seed == nullptr)
         return false;
