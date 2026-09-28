@@ -120,7 +120,9 @@ def main():
             fail(f"builder hot path still performs {label}")
 
     require(selector_body,"g_producer_input_tls","same-thread producer join")
-    require(selector_body,"actual_material_readable_cached","cached actual-material validation")
+    require(selector_body,"actual_material) + 0x384u","direct attested material-limit read")
+    if "readable_range(" in selector_body or "VirtualQuery(" in selector_body:
+        fail("selector hot path still performs OS page validation")
     if "lookup_snapshot(" in selector_body or "g_registry_mutex" in selector_body:
         fail("selector hot path still uses legacy synchronized producer registry")
 
@@ -152,6 +154,7 @@ def main():
     require(integrated,"evaluate_direct_pointlight_material","direct PointLight material resolver call")
     require(integrated,"direct_pointlight_requires_specular","receiver-derived specular requirement")
     require(integrated,"[DSRRL POINTLIGHT GATE]","one-shot direct PointLight rejection trace")
+    require(integrated,"clustered_metadata_unbound","pipeline-route versus bound-metadata rejection trace")
     resources_gate=integrated.find("const bool resources_ready =")
     prepare_call=integrated.find("g_clustered_pnts.prepare_sidecar(")
     if resources_gate<0 or prepare_call<0 or not resources_gate<prepare_call:
