@@ -3,6 +3,7 @@
 #include "dsrrl/operators/legacy_plan/dxbc_checksum.hpp"
 #include "dsrrl/operators/legacy_plan/sha256_bytes.hpp"
 #include "dsrrl/operators/point_light/generated_clustered_pnts_direct_v1.hpp"
+#include "dsrrl/operators/lightbank/generated_upper_lower_phn_pnts_v1.hpp"
 
 #include <algorithm>
 #include <array>
@@ -19,6 +20,15 @@ namespace {
 using legacy_plan::dxbc::read_u32;
 using legacy_plan::dxbc::write_u32;
 namespace hashing = legacy_plan::hashing;
+namespace generated_ul_pnts =
+    dsrrl::operators::lightbank::generated_pnts;
+
+constexpr std::array<std::uint32_t,4> k_cb13_decl = {
+    0x04000059u,
+    0x00208e46u,
+    13u,
+    8u
+};
 
 struct chunk {
     std::array<char,4> tag{};
@@ -49,6 +59,149 @@ const generated::clustered_pnts_plan_v1 *find_plan(
         hit = &plan;
     }
     return hit;
+}
+
+const generated_ul_pnts::upper_lower_phn_pnts_plan *
+find_upper_lower_pnts_plan(
+    std::size_t size,
+    const core::sha256_digest &digest) noexcept
+{
+    const generated_ul_pnts::upper_lower_phn_pnts_plan *hit = nullptr;
+    for (const auto &plan :
+         generated_ul_pnts::k_upper_lower_phn_pnts_plans) {
+        if (plan.stock_size != size ||
+            !hashing::matches_hex(
+                digest,
+                plan.stock_sha256))
+            continue;
+        if (hit != nullptr)
+            return nullptr;
+        hit = &plan;
+    }
+    return hit;
+}
+
+bool remap_stock_word_after_clustered_journal(
+    const generated::clustered_pnts_plan_v1 &plan,
+    std::uint32_t stock_word,
+    std::size_t &mapped) noexcept
+{
+    std::int64_t shift = 0;
+
+    for (std::uint32_t i = 0u;
+         i < plan.op_count;
+         ++i) {
+        const auto &op =
+            generated::k_clustered_pnts_journal_ops_v1[
+                plan.first_op + i];
+
+        // Any replacement/deletion range touching the U/L operand means the
+        // two operator patches are not independently composable.
+        if (op.old_count != 0u &&
+            stock_word >= op.start &&
+            stock_word < op.end)
+            return false;
+
+        // Insertions at exactly stock_word occur before that original word.
+        const bool before =
+            op.old_count == 0u
+                ? op.start <= stock_word
+                : op.end <= stock_word;
+        if (!before)
+            continue;
+
+        shift +=
+            static_cast<std::int64_t>(
+                op.new_count) -
+            static_cast<std::int64_t>(
+                op.old_count);
+    }
+
+    const auto result =
+        static_cast<std::int64_t>(
+            stock_word) + shift;
+    if (result < 0)
+        return false;
+
+    mapped = static_cast<std::size_t>(result);
+    return true;
+}
+
+bool compose_upper_lower_pnts(
+    std::vector<std::uint32_t> &words,
+    const generated::clustered_pnts_plan_v1 &clustered,
+    const generated_ul_pnts::upper_lower_phn_pnts_plan &ul) noexcept
+{
+    const bool ul_spc =
+        ul.stratum ==
+        generated_ul_pnts::
+            upper_lower_phn_pnts_stratum::spc;
+
+    if (ul_spc != clustered.spc ||
+        ul.shader_index !=
+            clustered.representative_shader_index ||
+        words.size() < 15u ||
+        words[11] != k_cb13_decl[0] ||
+        words[12] != k_cb13_decl[1] ||
+        words[13] != 12u ||
+        words[14] != 4u)
+        return false;
+
+    const std::array<
+        std::pair<std::uint32_t,std::uint32_t>,
+        3> patches{{
+            {ul.u_slot_word, 7u},
+            {ul.d_slot_word_0, 8u},
+            {ul.d_slot_word_1, 8u}
+        }};
+
+    for (const auto &[stock_slot, source_register] :
+         patches) {
+        std::size_t slot = 0u;
+        std::size_t register_word = 0u;
+        if (!remap_stock_word_after_clustered_journal(
+                clustered,
+                stock_slot,
+                slot) ||
+            !remap_stock_word_after_clustered_journal(
+                clustered,
+                stock_slot + 1u,
+                register_word) ||
+            register_word != slot + 1u ||
+            register_word >= words.size() ||
+            words[slot] != 0u ||
+            words[register_word] != source_register)
+            return false;
+
+        // Exact PTDE U/L consumer cut:
+        // b0[7] -> b13[6], b0[8] -> b13[7] twice.
+        words[slot] = 13u;
+        words[register_word] =
+            source_register == 7u
+                ? 6u
+                : 7u;
+    }
+
+    // The clustered journal already inserted dcl_constantbuffer b12[4] at
+    // words 11..14. Compose the independent U/L carrier declaration directly
+    // after it. RDEF is stripped by the clustered island by design, so the
+    // executable declaration is the complete runtime binding contract.
+    try {
+        words.insert(
+            words.begin() + 15,
+            k_cb13_decl.begin(),
+            k_cb13_decl.end());
+    } catch (...) {
+        return false;
+    }
+
+    if (words.size() >
+        std::numeric_limits<std::uint32_t>::max())
+        return false;
+    words[1] =
+        static_cast<std::uint32_t>(
+            words.size());
+    return true;
 }
 
 bool parse_dxbc(
@@ -398,6 +551,56 @@ materialize_clustered_pnts_direct_ptde(
         return outcome;
     }
 
+    // First certify the existing direct-PointLight replacement byte-for-byte.
+    // U/L composition is allowed only on top of this already verified base.
+    std::vector<std::uint8_t> pointlight_only;
+    auto pointlight_chunks = chunks;
+    if (!strip_rdef(pointlight_chunks) ||
+        !rebuild(
+            source,
+            size,
+            std::move(pointlight_chunks),
+            words,
+            pointlight_only)) {
+        outcome.result =
+            clustered_pnts_direct_materialize_result::
+                fail_rebuild;
+        return outcome;
+    }
+
+    const auto pointlight_digest =
+        hashing::sha256(
+            pointlight_only.data(),
+            pointlight_only.size());
+    if (pointlight_only.size() !=
+            plan->replacement_size ||
+        !hashing::matches_hex(
+            pointlight_digest,
+            plan->replacement_sha256)) {
+        outcome.result =
+            clustered_pnts_direct_materialize_result::
+                fail_final_sha;
+        return outcome;
+    }
+
+    // Every exact clustered PntS stock SHA has one exact U/L PntS consumer
+    // authority. The two patch sets are required to be disjoint; stock-word
+    // operands are deterministically remapped through the clustered journal.
+    const auto *ul =
+        find_upper_lower_pnts_plan(
+            size,
+            host_digest);
+    if (ul == nullptr ||
+        !compose_upper_lower_pnts(
+            words,
+            *plan,
+            *ul)) {
+        outcome.result =
+            clustered_pnts_direct_materialize_result::
+                fail_upper_lower_composition;
+        return outcome;
+    }
+
     if (!strip_rdef(chunks) ||
         !rebuild(
             source,
@@ -412,27 +615,27 @@ materialize_clustered_pnts_direct_ptde(
         return outcome;
     }
 
-    const auto replacement_digest =
-        hashing::sha256(
-            output.data(),
-            output.size());
-
     if (output.size() !=
-            plan->replacement_size ||
-        !hashing::matches_hex(
-            replacement_digest,
-            plan->replacement_sha256)) {
+            plan->replacement_size +
+                sizeof(k_cb13_decl) ||
+        !legacy_plan::dxbc::
+            checksum_container_valid(
+                output.data(),
+                output.size())) {
         output.clear();
         outcome.result =
             clustered_pnts_direct_materialize_result::
-                fail_final_sha;
+                fail_upper_lower_composition;
         return outcome;
     }
 
     outcome.replacement_sha256 =
-        replacement_digest;
+        hashing::sha256(
+            output.data(),
+            output.size());
     outcome.replacement_size =
         output.size();
+    outcome.upper_lower_composed = true;
     outcome.result =
         clustered_pnts_direct_materialize_result::
             applied;
