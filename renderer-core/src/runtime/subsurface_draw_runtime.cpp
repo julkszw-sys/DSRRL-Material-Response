@@ -137,7 +137,7 @@ bool subsurface_draw_runtime::prepare(
     // activate that consumer until the exact body-sidecar request above has
     // succeeded for this draw.
     if (!prepared.resources.spec_rgb ||
-        !mr_.promote_prepared_draw_to_spec_rgb(
+        !mr_.promote_prevalidated_subsurface_to_spec_rgb(
             prepared.mr)) {
         resources_.release_prepared_draw(
             prepared.resources);
