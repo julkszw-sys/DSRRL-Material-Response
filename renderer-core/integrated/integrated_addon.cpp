@@ -994,6 +994,13 @@ bool observe_draw_identity(
         upper_lower_isolated &&
         !subsurface_receiver;
 
+    const bool clustered_pnts_upper_lower_overlap =
+        clustered_pointlight_receiver &&
+        upper_lower_standalone &&
+        upper_lower_identity.family ==
+            dsrrl::operators::lightbank::
+                upper_lower_hemenv_family::phn_pnts;
+
     const bool upper_lower_subsurf_combined =
         upper_lower_receiver &&
         upper_lower_identity.family ==
@@ -1025,7 +1032,7 @@ bool observe_draw_identity(
         (subsurface_receiver ? 1u : 0u) +
         (hemdir3_receiver ? 1u : 0u) +
         (upper_lower_unpaired_nospc ? 1u : 0u) +
-        (upper_lower_standalone ? 1u : 0u) +
+        ((upper_lower_standalone && !clustered_pnts_upper_lower_overlap) ? 1u : 0u) +
         (fixed_pointlight_receiver ? 1u : 0u) +
         (clustered_pointlight_receiver ? 1u : 0u);
 
@@ -1049,7 +1056,7 @@ bool observe_draw_identity(
         // receiver IDs into MR/resources/EnvSpec. PntS may already carry
         // exact A1 PointLight suboperators composed by stock SHA.
         receiver_id = 0u;
-        upper_lower_bound = true;
+        upper_lower_bound = !clustered_pnts_upper_lower_overlap;
     } else if (hemenvlerp_receiver) {
         receiver_id =
             hemenvlerp_identity.semantic_receiver_id;
