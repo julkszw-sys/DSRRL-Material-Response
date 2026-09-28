@@ -41,8 +41,8 @@ for i,r in enumerate(rows):
         raise SystemExit("unexpected pair order")
     if receiver!=24+pair:
         raise SystemExit("semantic receiver mismatch")
-    if len(r["v211_sha256"])!=64:
-        raise SystemExit("bad v211 sha")
+    if len(r["stock_sha256"])!=64:
+        raise SystemExit("bad stock sha")
     if int(r["reflection_coord_register"]) not in (5,6,7):
         raise SystemExit("unexpected reflection coordinate register")
     for key,delta in required_offsets.items():
@@ -59,7 +59,7 @@ for i,r in enumerate(rows):
         raise SystemExit(f"unexpected UpperLower operand sites for pair {pair}")
 
 fields=[
-    "pair_index","semantic_receiver_id","label","v211_sha256",
+    "pair_index","semantic_receiver_id","label","stock_sha256",
     "reflection_coord_register","t12_word","mul_a_word","t14_word",
     "mad_b_minus_a_word","mad_lerp_word","postblend_word","t9_word",
     "t11_word","t13_word","envdiff_b_minus_a_word","envdiff_lerp_word",
@@ -78,7 +78,7 @@ lines=[
 "    std::uint8_t pair_index;",
 "    std::uint32_t semantic_receiver_id;",
 "    std::string_view label;",
-"    std::string_view v211_sha256;",
+"    std::string_view stock_sha256;",
 "    std::uint32_t reflection_coord_register;",
 "    std::uint32_t t12_word;",
 "    std::uint32_t mul_a_word;",
@@ -106,7 +106,7 @@ for r in rows:
         f'{int(r["pair_index"])}u',
         f'{int(r["semantic_receiver_id"])}u',
         f'"{label}"',
-        f'"{r["v211_sha256"]}"'
+        f'"{r["stock_sha256"]}"'
     ]
     vals += [f'{int(r[k])}u' for k in fields[4:]]
     lines.append("    {"+",".join(vals)+"},")
