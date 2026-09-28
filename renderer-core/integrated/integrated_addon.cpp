@@ -2271,7 +2271,7 @@ bool on_create_pipeline(
         std::vector<std::uint8_t> mr_payload;
         const auto mr =
             dsrrl::operators::material_response::
-                materialize_v211_stable_receiver(
+                materialize_ptde_diffuse_stable_receiver(
                     g_core.features(),
                     source,
                     pixel_shader->code_size,
@@ -2300,32 +2300,9 @@ bool on_create_pipeline(
                     ++g_mr_payload_materialize_fail;
             }
 
-            std::vector<std::uint8_t> mr_spec_payload;
-            const auto spec_result =
-                dsrrl::operators::resource_bridges::
-                    materialize_spec_rgb_consumer(
-                        mr_payload.data(),
-                        mr_payload.size(),
-                        mr_spec_payload);
-
-            if (spec_result ==
-                dsrrl::operators::resource_bridges::
-                    spec_rgb_consumer_result::applied) {
-                if (!g_mr_draw_runtime.
-                        has_receiver_spec_rgb_replacement(
-                            mr.receiver_id) &&
-                    !g_mr_draw_runtime.
-                        register_receiver_spec_rgb_replacement(
-                            mr.receiver_id,
-                            mr_spec_payload.data(),
-                            mr_spec_payload.size(),
-                            mr.composed_owners |
-                                spec_owner))
-                    ++g_mr_payload_materialize_fail;
-            } else {
-                ++g_mr_payload_materialize_fail;
-            }
-
+            // MR reset: generic diffuse response must never feed PTDE SpecRGB
+            // into the surviving DSR F0/PBL receiver. SpecRGB is owned only by
+            // verified PTDE EnvSpec/local-specular operator islands.
             std::vector<std::uint8_t> mr_ul_payload;
             const auto mr_ul =
                 dsrrl::operators::lightbank::
@@ -2345,14 +2322,6 @@ bool on_create_pipeline(
                         upper_lower_hemenv_stratum::spc &&
                 mr_ul.stable_receiver_id ==
                     mr.receiver_id) {
-                std::vector<std::uint8_t> mr_ul_spec_payload;
-                const auto ul_spec_result =
-                    dsrrl::operators::resource_bridges::
-                        materialize_spec_rgb_consumer(
-                            mr_ul_payload.data(),
-                            mr_ul_payload.size(),
-                            mr_ul_spec_payload);
-
                 if (!g_mr_draw_runtime.
                         has_receiver_upper_lower_replacement(
                             mr.receiver_id)) {
@@ -2367,23 +2336,7 @@ bool on_create_pipeline(
                         ++g_mr_ul_payload_materialize_fail;
                 }
 
-                if (ul_spec_result ==
-                    dsrrl::operators::resource_bridges::
-                        spec_rgb_consumer_result::applied) {
-                    if (!g_mr_draw_runtime.
-                            has_receiver_upper_lower_spec_rgb_replacement(
-                                mr.receiver_id) &&
-                        !g_mr_draw_runtime.
-                            register_receiver_upper_lower_spec_rgb_replacement(
-                                mr.receiver_id,
-                                mr_ul_spec_payload.data(),
-                                mr_ul_spec_payload.size(),
-                                mr.composed_owners |
-                                    spec_owner))
-                        ++g_mr_ul_payload_materialize_fail;
-                } else {
-                    ++g_mr_ul_payload_materialize_fail;
-                }
+                // No generic MR+SpecRGB variant: see anti-hybrid rule above.
             } else if (
                 mr_ul.result !=
                     dsrrl::operators::lightbank::
@@ -2411,7 +2364,7 @@ bool on_create_pipeline(
         std::vector<std::uint8_t> lerp_mr_payload;
         const auto lerp_mr =
             dsrrl::operators::material_response::
-                materialize_hemenvlerp_v211_receiver(
+                materialize_ptde_diffuse_hemenvlerp_receiver(
                     g_core.features(),
                     source,
                     pixel_shader->code_size,
@@ -2446,31 +2399,8 @@ bool on_create_pipeline(
                     ++g_mr_payload_materialize_fail;
             }
 
-            std::vector<std::uint8_t> lerp_mr_spec_payload;
-            const auto lerp_mr_spec =
-                dsrrl::operators::resource_bridges::
-                    materialize_spec_rgb_consumer(
-                        lerp_mr_payload.data(),
-                        lerp_mr_payload.size(),
-                        lerp_mr_spec_payload);
-
-            if (lerp_mr_spec ==
-                    dsrrl::operators::resource_bridges::
-                        spec_rgb_consumer_result::applied) {
-                if (!g_mr_draw_runtime.
-                        has_lerp_receiver_spec_rgb_replacement(
-                            lerp_receiver_id) &&
-                    !g_mr_draw_runtime.
-                        register_lerp_receiver_spec_rgb_replacement(
-                            lerp_receiver_id,
-                            lerp_mr_spec_payload.data(),
-                            lerp_mr_spec_payload.size(),
-                            lerp_mr.composed_owners |
-                                lerp_spec_owner))
-                    ++g_mr_payload_materialize_fail;
-            } else {
-                ++g_mr_payload_materialize_fail;
-            }
+            // MR reset: do not pair PTDE SpecRGB with the stock DSR
+            // HemEnvLerp PBL tail. SpecRGB is operator-local elsewhere.
 
             // U/L is an optional composed operator. Its failure must never
             // remove the independently certified Lerp Material Response path.
@@ -2496,14 +2426,6 @@ bool on_create_pipeline(
                         upper_lower_hemenv_stratum::spc &&
                 lerp_mr_ul.stable_receiver_id ==
                     lerp_receiver_id) {
-                std::vector<std::uint8_t> lerp_full_payload;
-                const auto lerp_spec =
-                    dsrrl::operators::resource_bridges::
-                        materialize_spec_rgb_consumer(
-                            lerp_mr_ul_payload.data(),
-                            lerp_mr_ul_payload.size(),
-                            lerp_full_payload);
-
                 if (!g_mr_draw_runtime.
                         has_lerp_receiver_upper_lower_replacement(
                             lerp_receiver_id)) {
@@ -2518,23 +2440,7 @@ bool on_create_pipeline(
                         ++g_mr_ul_payload_materialize_fail;
                 }
 
-                if (lerp_spec ==
-                        dsrrl::operators::resource_bridges::
-                            spec_rgb_consumer_result::applied) {
-                    if (!g_mr_draw_runtime.
-                            has_lerp_receiver_upper_lower_spec_rgb_replacement(
-                                lerp_receiver_id) &&
-                        !g_mr_draw_runtime.
-                            register_lerp_receiver_upper_lower_spec_rgb_replacement(
-                                lerp_receiver_id,
-                                lerp_full_payload.data(),
-                                lerp_full_payload.size(),
-                                lerp_mr.composed_owners |
-                                    lerp_spec_owner))
-                        ++g_mr_ul_payload_materialize_fail;
-                } else {
-                    ++g_mr_ul_payload_materialize_fail;
-                }
+                // No generic Lerp MR+SpecRGB variant.
             } else if (
                 lerp_mr_ul.result !=
                     dsrrl::operators::lightbank::
@@ -2552,6 +2458,11 @@ bool on_create_pipeline(
             ++g_mr_payload_materialize_fail;
         }
 
+        // MR reset: the current P_Metal EnvSpec materializer is rooted in the
+        // historical V2.11 proxy. Do not register it into the live runtime.
+        // P_Metal remains stock DSR EnvSpec (fail-open) until the direct
+        // stock->PTDE legacy EnvSpec operator island is rebuilt independently.
+#if 0
         if (g_core.features().enabled(
                 dsrrl::core::operator_id::env_spec)) {
             for (const bool with_upper_lower :
@@ -2624,6 +2535,7 @@ bool on_create_pipeline(
             }
         }
 
+#endif
         std::vector<std::uint8_t> ul_payload;
         ul =
             dsrrl::operators::lightbank::
@@ -3781,7 +3693,7 @@ bool prepare_island_batch(
         if (!g_lerp_once_receiver_hit.exchange(true)) {
             reshade::log::message(
                 reshade::log::level::info,
-                "[DSRRL LERP MR ACT] stage=receiver_hit");
+                "[DSRRL LERP MR DIFFUSE ACT] stage=receiver_hit");
         }
 
         const bool lerp_ul_exact =
@@ -3813,7 +3725,7 @@ bool prepare_island_batch(
             if (!g_lerp_once_mr_ul_ready.exchange(true)) {
                 reshade::log::message(
                     reshade::log::level::info,
-                    "[DSRRL LERP MR ACT] stage=mr_ul_ready");
+                    "[DSRRL LERP MR DIFFUSE ACT] stage=mr_ul_ready");
             }
         } else if (
             decision.active &&
@@ -3827,7 +3739,7 @@ bool prepare_island_batch(
             if (!g_lerp_once_mr_only_ready.exchange(true)) {
                 reshade::log::message(
                     reshade::log::level::info,
-                    "[DSRRL LERP MR ACT] stage=mr_only_ready");
+                    "[DSRRL LERP MR DIFFUSE ACT] stage=mr_only_ready");
             }
         }
 
@@ -3907,7 +3819,7 @@ bool prepare_island_batch(
             if (!g_lerp_once_batch_ready.exchange(true)) {
                 reshade::log::message(
                     reshade::log::level::info,
-                    "[DSRRL LERP MR ACT] stage=batch_ready");
+                    "[DSRRL LERP MR DIFFUSE ACT] stage=batch_ready");
             }
             return true;
         }
@@ -4039,7 +3951,7 @@ bool prepare_island_batch(
         if (!g_mr_once_batch_ready.exchange(true)) {
             reshade::log::message(
                 reshade::log::level::info,
-                "[DSRRL MR ACT] stage=batch_ready");
+                "[DSRRL MR DIFFUSE ACT] stage=batch_ready");
         }
         if (dsrrl::runtime::append_island_draw_request(
                 prepared.batch,
@@ -4319,16 +4231,12 @@ bool on_draw(
             std::snprintf(
                 line,
                 sizeof(line),
-                "[DSRRL MR ACT] stage=draw_issued rx=%u route=%u c100=%.6f,%.6f,%.6f c101q=%.6f,%.6f,%.6f raw_c101=%.6f",
+                "[DSRRL MR DIFFUSE ACT] stage=draw_issued rx=%u route=%u c100=%.6f,%.6f,%.6f",
                 static_cast<unsigned>(receiver_id),
                 static_cast<unsigned>(decision.route_index),
                 decision.c100[0],
                 decision.c100[1],
-                decision.c100[2],
-                decision.c101_f0q[0],
-                decision.c101_f0q[1],
-                decision.c101_f0q[2],
-                decision.c101);
+                decision.c100[2]);
             reshade::log::message(
                 reshade::log::level::info,
                 line);
@@ -4339,7 +4247,7 @@ bool on_draw(
             !g_lerp_once_draw_issued.exchange(true)) {
             reshade::log::message(
                 reshade::log::level::info,
-                "[DSRRL LERP MR ACT] stage=draw_issued");
+                "[DSRRL LERP MR DIFFUSE ACT] stage=draw_issued");
         }
     }
 
@@ -4544,16 +4452,12 @@ bool on_draw_indexed(
             std::snprintf(
                 line,
                 sizeof(line),
-                "[DSRRL MR ACT] stage=draw_issued rx=%u route=%u c100=%.6f,%.6f,%.6f c101q=%.6f,%.6f,%.6f raw_c101=%.6f",
+                "[DSRRL MR DIFFUSE ACT] stage=draw_issued rx=%u route=%u c100=%.6f,%.6f,%.6f",
                 static_cast<unsigned>(receiver_id),
                 static_cast<unsigned>(decision.route_index),
                 decision.c100[0],
                 decision.c100[1],
-                decision.c100[2],
-                decision.c101_f0q[0],
-                decision.c101_f0q[1],
-                decision.c101_f0q[2],
-                decision.c101);
+                decision.c100[2]);
             reshade::log::message(
                 reshade::log::level::info,
                 line);
@@ -4564,7 +4468,7 @@ bool on_draw_indexed(
             !g_lerp_once_draw_issued.exchange(true)) {
             reshade::log::message(
                 reshade::log::level::info,
-                "[DSRRL LERP MR ACT] stage=draw_issued");
+                "[DSRRL LERP MR DIFFUSE ACT] stage=draw_issued");
         }
     }
 
@@ -4905,9 +4809,10 @@ bool AddonInit(
         reshade::log::level::info,
         "[DSRRL CORE+ISLANDS " DSRRL_CORE_ISLANDS_VERSION
         "] READY: shared Core draw-state transaction layer (PS/CB/SRV/sampler) "
-        "is active; exact Material Response, SpecRGB, Upper/Lower, Subsurface and native "
-        "HemDir3 no-Spc/Spc routes are construction-armed. Exact P_Metal EnvSpec uses its "
-        "own material/source/probe-gated PS+b12(+b13)+t10+t12/t14+s12/s14 single replay. "
+        "is active; Material Response reset uses only the direct stock->PTDE diffuse "
+        "material-domain operator in generic HemEnv/HemEnvLerp. PTDE c101/c102 remain "
+        "operator-local carriers for verified local-specular islands; generic SpecRGB->DSR "
+        "PBL pairing and the V2.11-rooted P_Metal EnvSpec replay are disabled/fail-open. "
         "Runtime activation and PTDE pixel behavior remain separate validation stages; "
         "frozen legacy monolith is not linked.");
 
