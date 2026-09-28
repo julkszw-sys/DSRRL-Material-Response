@@ -29,6 +29,24 @@ Every operator keeps its own receiver/material/resource/ABI gates. Failure of
 one route fails open to stock DSR for that route instead of broadening the
 bridge to a similar shader or material.
 
+## EnvSpec external resource contract
+
+The P_Metal EnvSpec island is one addon path, but its exact PTDE cubemap payload
+is an external asset sidecar rather than source-controlled game data. Runtime
+activation therefore requires this file under the Dark Souls Remastered game
+root:
+
+`DSRRL\\EnvSpec\\PackedGI\\PTDE_GI_ENVSPEC_PACK_RGBA.bin`
+
+The admitted carrier is exact only when the file is **33,619,968 bytes** and
+SHA-256 is
+`c16c3fd75bcf34f3cc075da6da1ad10c9440ee4a3ca580fe7f74d07a2ce4eac3`.
+Missing, wrong-size or wrong-hash data deliberately fails open to stock DSR;
+it is not a runtime or pixel PASS. The development ZIP does not redistribute
+that PTDE-derived binary. It includes `VERIFY_ENVSPEC_SIDECAR.ps1`; run it
+from the game root, or pass `-GameDir <path>`, before treating EnvSpec as
+eligible for bridge activation.
+
 ## Bloom / HDR diagnostic boundary
 
 Bloom/HDR remain a separate postprocess workstream.

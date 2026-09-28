@@ -184,6 +184,7 @@ jobs:
           $envspecLerpRegistry = Get-Content renderer-core/src/runtime/hemenvlerp_pipeline_registry.cpp -Raw
           $envspecResource = Get-Content renderer-core/src/runtime/envspec_resource_runtime.cpp -Raw
           $envspecRuntime = Get-Content renderer-core/src/runtime/pmetal_envspec_draw_runtime.cpp -Raw
+          $envspecSidecarVerifier = Get-Content renderer-core/integrated/VERIFY_ENVSPEC_SIDECAR.ps1 -Raw
           $pmetalGenerator = Get-Content renderer-core/tools/generate_pmetal_env_source_authority.py -Raw
           $textureTransport = Get-Content renderer-core/src/runtime/texture_identity_transport.cpp -Raw
           $bloomFx = Get-Content renderer-core/src/runtime/bloom_fx_draw_transport.cpp -Raw
@@ -405,6 +406,9 @@ jobs:
             'k_build131_window',
             'materialize_spec_rgb_consumer',
             'augment_upper_lower_hemenv_verified_base',
+            'compose_exact_terminal_rgb_sat',
+            'terminal_rgb_sat_exact',
+            'operator_id::terminal_sat_rgb',
             'final_postcondition'
           )) {
             if ($envspecMaterializer -notmatch [regex]::Escape($required)) { throw "P_Metal EnvSpec Build131 materializer invariant missing: $required" }
@@ -468,7 +472,11 @@ jobs:
             '12u',
             'stock_views[2]',
             'snapshot_ready_envspec',
-            'create_resource_view'
+            'create_resource_view',
+            'load_pack',
+            'cube_bytes',
+            'std::memcpy',
+            'carrier_alive'
           )) {
             if ($envspecResource -notmatch [regex]::Escape($required)) { throw "P_Metal EnvSpec exact probe resource invariant missing: $required" }
           }
@@ -490,10 +498,23 @@ jobs:
             'core::operator_id::upper_lower',
             'prepare_upper_lower_carrier',
             'additional_constant_buffer_owners',
+            'b12_uploads_',
+            'b12_reuses_',
+            'payload_valid',
+            'std::memcmp',
             '12u',
             '14u'
           )) {
             if ($envspecRuntime -notmatch [regex]::Escape($required)) { throw "P_Metal EnvSpec shared-batch runtime invariant missing: $required" }
+          }
+
+          foreach ($required in @(
+            'DSRRL\\EnvSpec\\PackedGI\\PTDE_GI_ENVSPEC_PACK_RGBA.bin',
+            '33619968',
+            'c16c3fd75bcf34f3cc075da6da1ad10c9440ee4a3ca580fe7f74d07a2ce4eac3',
+            'ENVSPEC_SIDECAR_PASS'
+          )) {
+            if ($envspecSidecarVerifier -notmatch [regex]::Escape($required)) { throw "EnvSpec external sidecar contract verifier missing invariant: $required" }
           }
 
           foreach ($required in @(
@@ -929,6 +950,7 @@ jobs:
           $generatedEnvSpecLerpHash = (Get-FileHash "build-integrated/generated/dsrrl/operators/env_spec/generated_pmetal_envspec_hemenvlerp_v1.hpp" -Algorithm SHA256).Hash.ToLowerInvariant()
           $envspecResourceRuntimeHash = (Get-FileHash "renderer-core/src/runtime/envspec_resource_runtime.cpp" -Algorithm SHA256).Hash.ToLowerInvariant()
           $envspecDrawRuntimeHash = (Get-FileHash "renderer-core/src/runtime/pmetal_envspec_draw_runtime.cpp" -Algorithm SHA256).Hash.ToLowerInvariant()
+          $envspecSidecarVerifierHash = (Get-FileHash "renderer-core/integrated/VERIFY_ENVSPEC_SIDECAR.ps1" -Algorithm SHA256).Hash.ToLowerInvariant()
           $pmetalSourceAuthorityHash = (Get-FileHash "renderer-core/provenance/mr145/SOURCE_V13_PTDE_DONOR.cpp" -Algorithm SHA256).Hash.ToLowerInvariant()
           $pmetalSourceGeneratorHash = (Get-FileHash "renderer-core/tools/generate_pmetal_env_source_authority.py" -Algorithm SHA256).Hash.ToLowerInvariant()
           $subsurfaceRuntimeHash = (Get-FileHash "renderer-core/src/runtime/subsurface_draw_runtime.cpp" -Algorithm SHA256).Hash.ToLowerInvariant()
@@ -1054,6 +1076,11 @@ jobs:
             pmetal_envspec_hemenvlerp_runtime_activation = "NOT_TESTED"
             pmetal_envspec_resource_runtime_sha256 = $envspecResourceRuntimeHash
             pmetal_envspec_draw_runtime_sha256 = $envspecDrawRuntimeHash
+            pmetal_envspec_sidecar_verifier_sha256 = $envspecSidecarVerifierHash
+            pmetal_envspec_external_asset_prerequisite = "DSRRL\\EnvSpec\\PackedGI\\PTDE_GI_ENVSPEC_PACK_RGBA.bin"
+            pmetal_envspec_external_asset_size = 33619968
+            pmetal_envspec_external_asset_sha256 = "c16c3fd75bcf34f3cc075da6da1ad10c9440ee4a3ca580fe7f74d07a2ce4eac3"
+            pmetal_envspec_external_asset_in_package = $false
             pmetal_envspec_source_authority_sha256 = $pmetalSourceAuthorityHash
             pmetal_envspec_source_generator_sha256 = $pmetalSourceGeneratorHash
             pmetal_envspec_source_authority = "20_BANKS_1246_ROWS_EXACT"
@@ -1115,6 +1142,7 @@ jobs:
           Copy-Item $addon package-integrated/
           Copy-Item renderer-core/integrated/README.md package-integrated/
           Copy-Item renderer-core/integrated/VERSION.json package-integrated/
+          Copy-Item renderer-core/integrated/VERIFY_ENVSPEC_SIDECAR.ps1 package-integrated/
           $audit | ConvertTo-Json -Depth 6 | Set-Content package-integrated/BUILD_AUDIT.json -Encoding UTF8
 
           $zip = "$stem.zip"
