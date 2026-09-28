@@ -2,6 +2,7 @@
 #include "dsrrl/operators/material_response/generated_dsr_flver_owner_tuples_v1.hpp"
 #include "dsrrl/operators/material_response/generated_envspec_router_v1.hpp"
 #include "dsrrl/operators/material_response/generated_routes_v1.hpp"
+#include "dsrrl/operators/material_response/generated_exact_binding_mr_v1.hpp"
 #include "dsrrl/operators/material_response/mtd_semantic_census.hpp"
 #include "dsrrl/operators/legacy_plan/sha256_bytes.hpp"
 
@@ -121,7 +122,33 @@ bool exact_runtime_material_response_identity(
         match = &route;
     }
 
-    return match != nullptr;
+    if (match != nullptr)
+        return true;
+
+    const generated::exact_binding_mr_record
+        *extension_match = nullptr;
+
+    for (const auto &route :
+         generated::k_exact_binding_mr_v1) {
+        if (!route.runtime_mtd_allowed ||
+            route.route_tag !=
+                identity.route_index ||
+            mtd_semantic_hash(route.mtd_name) !=
+                identity.semantic_name_hash ||
+            route.raw_mtd_sha256 !=
+                identity.raw_mtd_sha256 ||
+            mtd_semantic_hash(
+                route.material_family) !=
+                identity.material_family_hash)
+            continue;
+
+        if (extension_match != nullptr)
+            return false;
+
+        extension_match = &route;
+    }
+
+    return extension_match != nullptr;
 }
 
 bool exact_runtime_pmetal_material_identity(
@@ -458,6 +485,18 @@ material_response_island::evaluate_direct_pointlight_material(
             false
         };
     }
+
+    // Exact-binding MR extensions are explicitly NO_USE for PointLight in
+    // the semantic census. Registering their ordinary MR profile must not
+    // broaden that authority into the direct PointLight island.
+    if (generated::is_exact_binding_mr_route_tag(
+            profile->route_index))
+        return {
+            false,
+            decision_reason::no_certified_operator,
+            0u,
+            profile->route_index
+        };
 
     const auto required =
         diffuse_material_domain_linear |
