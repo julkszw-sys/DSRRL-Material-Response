@@ -1304,7 +1304,8 @@ materialize_pmetal_rgba_receiver(
             materialize_spec_rgb_consumer(
                 base.data(),
                 base.size(),
-                spec_rgb_base) !=
+                spec_rgb_base,
+                true) !=
         resource_bridges::
             spec_rgb_consumer_result::applied) {
         outcome.result =
