@@ -1173,6 +1173,45 @@ unregister_events() noexcept
 }
 
 bool material_resource_draw_runtime::
+exact_specular_companion_ready(
+    ID3D11DeviceContext *context) noexcept
+{
+    if (context == nullptr ||
+        g_quarantined.load())
+        return false;
+
+    ID3D11ShaderResourceView *stock = nullptr;
+    context->PSGetShaderResources(
+        1u,
+        1u,
+        &stock);
+    if (stock == nullptr)
+        return false;
+
+    std::uint64_t logical_hash = 0u;
+    ID3D11ShaderResourceView *companion = nullptr;
+    const bool snapshot =
+        snapshot_companion_cached(
+            stock,
+            asset_class::specular,
+            logical_hash,
+            companion,
+            true);
+
+    release_view(stock);
+
+    const bool ready =
+        snapshot &&
+        logical_hash != 0u &&
+        generated::spec_name_hash_allowed_v12(
+            logical_hash) &&
+        companion != nullptr;
+
+    release_view(companion);
+    return ready;
+}
+
+bool material_resource_draw_runtime::
 prepare_draw_requests(
     ID3D11DeviceContext *context,
     std::uint32_t receiver_id,
