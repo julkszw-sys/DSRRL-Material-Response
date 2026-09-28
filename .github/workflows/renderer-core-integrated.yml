@@ -400,24 +400,50 @@ jobs:
             if ($specConsumer -notmatch [regex]::Escape($required)) { throw "SpecRGB exact t10 consumer invariant missing: $required" }
           }
 
-          # MR reset boundary: V2.10/V2.11-rooted EnvSpec materializers are
-          # forbidden from the active addon until rebuilt from neutral stock/PTDE
-          # operator authority.
+          # MR reset boundary: active EnvSpec must be stock-rooted and consume
+          # the clean diffuse-v1 base. Historical V2.10/V2.11 proxy semantics
+          # are forbidden in source, entrypoint and active CMake.
           foreach ($forbidden in @(
             'material_response_v211_materializer.cpp',
-            'hemenvlerp_v211_materializer.cpp',
-            'pmetal_rgba_materializer.cpp',
-            'pmetal_rgba_lerp_materializer.cpp'
+            'hemenvlerp_v211_materializer.cpp'
           )) {
             if ($cmake -match [regex]::Escape($forbidden)) { throw "Legacy/proxy MR dependency leaked into active addon target: $forbidden" }
           }
-          foreach ($forbidden in @(
-            'materialize_v211_certified_stage',
-            'materialize_hemenvlerp_v211_certified_stage',
+          foreach ($required in @(
+            'pmetal_rgba_materializer.cpp',
+            'pmetal_rgba_lerp_materializer.cpp'
+          )) {
+            if ($cmake -notmatch [regex]::Escape($required)) { throw "Clean stock-rooted EnvSpec builder is not linked: $required" }
+          }
+          foreach ($required in @(
             'materialize_pmetal_rgba_receiver',
             'materialize_pmetal_rgba_lerp_receiver'
           )) {
-            if ($entry -match [regex]::Escape($forbidden)) { throw "Legacy/proxy MR call leaked into active addon entrypoint: $forbidden" }
+            if ($entry -notmatch [regex]::Escape($required)) { throw "Clean P_Metal EnvSpec call missing from active entrypoint: $required" }
+          }
+          foreach ($materializer in @($envspecMaterializer,$envspecLerpMaterializer)) {
+            foreach ($required in @(
+              'materialize_ptde_diffuse_response_v1',
+              'stock_source',
+              'stock_size'
+            )) {
+              if ($materializer -notmatch [regex]::Escape($required)) { throw "Stock-rooted EnvSpec invariant missing: $required" }
+            }
+            foreach ($forbidden in @(
+              'materialize_v211',
+              'hemenvlerp_v211',
+              'v211_sha256',
+              'input_v211_sha256',
+              'c101_f0q'
+            )) {
+              if ($materializer -match [regex]::Escape($forbidden)) { throw "EnvSpec regressed to historical proxy semantics: $forbidden" }
+            }
+          }
+          if ($envspecMaterializer -notmatch 'candidate\.stock_sha256') {
+            throw "Stable P_Metal EnvSpec is not authorized from exact stock SHA"
+          }
+          if ($envspecLerpMaterializer -notmatch 'candidate\.stock_sha256') {
+            throw "Lerp P_Metal EnvSpec is not authorized from exact stock SHA"
           }
 
           foreach ($required in @(
