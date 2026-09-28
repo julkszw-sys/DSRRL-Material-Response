@@ -1435,7 +1435,8 @@ void log_state(const char *tag) noexcept
         ul_direct_line,
         sizeof(ul_direct_line),
         "[DSRRL CORE+ISLANDS " DSRRL_CORE_ISLANDS_VERSION "] %s "
-        "UL_DIRECT active=%u steady=%llu blend=%llu fail=%llu",
+        "UL_DIRECT active=%u steady=%llu blend=%llu fail=%llu "
+        "draw_ready=%llu draw_fallback=%llu",
         tag,
         ul.direct_ul_producer_active ? 1u : 0u,
         static_cast<unsigned long long>(
@@ -1443,7 +1444,11 @@ void log_state(const char *tag) noexcept
         static_cast<unsigned long long>(
             ul.direct_ul_blend_inject),
         static_cast<unsigned long long>(
-            ul.direct_ul_inject_fail));
+            ul.direct_ul_inject_fail),
+        static_cast<unsigned long long>(
+            ul.direct_ul_draw_ready),
+        static_cast<unsigned long long>(
+            ul.direct_ul_draw_fallback));
     reshade::log::message(
         reshade::log::level::info,
         ul_direct_line);
@@ -3593,8 +3598,16 @@ bool prepare_island_batch(
         reinterpret_cast<ID3D11DeviceContext *>(
             cmd_list->get_native());
 
+    const bool direct_ul_draw_applied =
+        upper_lower_bound &&
+        g_upper_lower.
+            direct_producer_ready_for_draw();
     const bool direct_ul_producer =
-        g_upper_lower.direct_producer_active();
+        upper_lower_bound &&
+        dsrrl::runtime::
+            upper_lower_direct_producer_bypass_allowed(
+                direct_ul_draw_applied,
+                upper_lower_identity);
 
     const bool envspec_ul_verified =
         upper_lower_bound &&
