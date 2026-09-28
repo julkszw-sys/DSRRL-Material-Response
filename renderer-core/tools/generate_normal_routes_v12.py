@@ -15,6 +15,7 @@ EXPECTED_TUPLES = 557
 EXPECTED_SAFE_ROWS = 3872
 EXPECTED_UNIQUE_HASHES = 1664
 EXPECTED_NORMAL_TARGETS = 555
+EXPECTED_DIFFUSE_NORMAL_PAIRS = 557
 
 def load(path: Path):
     raw = path.read_text(encoding="utf-8").splitlines()
@@ -37,11 +38,14 @@ def load(path: Path):
         raise SystemExit("safe row count mismatch")
     members = sorted({v for triple in tuples for v in triple})
     targets = sorted({triple[2] for triple in tuples})
+    diffuse_normal_pairs = sorted({(triple[0], triple[2]) for triple in tuples})
     if len(members) != EXPECTED_UNIQUE_HASHES:
         raise SystemExit("normal logical-name hash count mismatch")
     if len(targets) != EXPECTED_NORMAL_TARGETS:
         raise SystemExit("normal target hash count mismatch")
-    return tuples, members, targets
+    if len(diffuse_normal_pairs) != EXPECTED_DIFFUSE_NORMAL_PAIRS:
+        raise SystemExit("diffuse+normal pair count mismatch")
+    return tuples, members, targets, diffuse_normal_pairs
 
 def emit_array(out, typename, name, values, formatter):
     out.append(f"inline constexpr std::array<{typename}, {len(values)}> {name} = {{{{\n")
@@ -52,13 +56,16 @@ def emit_array(out, typename, name, values, formatter):
 def render(tuples, members, targets):
     out=["#pragma once\n","#include <array>\n#include <cstddef>\n#include <cstdint>\n\n",
          "namespace dsrrl::runtime::generated {\n\n",
-         "struct normal_tuple_v12 { std::uint64_t diffuse_hash; std::uint64_t spec_hash; std::uint64_t normal_hash; };\n\n"]
+         "struct normal_tuple_v12 { std::uint64_t diffuse_hash; std::uint64_t spec_hash; std::uint64_t normal_hash; };\n",
+         "struct normal_diffuse_pair_v12 { std::uint64_t diffuse_hash; std::uint64_t normal_hash; };\n\n"]
     emit_array(out,"normal_tuple_v12","k_normal_tuples_v12",tuples,
                lambda x:f"{{0x{x[0]:016x}ull, 0x{x[1]:016x}ull, 0x{x[2]:016x}ull}}")
     emit_array(out,"std::uint64_t","k_normal_tuple_member_hashes_v12",members,
                lambda x:f"0x{x:016x}ull")
     emit_array(out,"std::uint64_t","k_normal_target_hashes_v12",targets,
                lambda x:f"0x{x:016x}ull")
+    emit_array(out,"normal_diffuse_pair_v12","k_normal_diffuse_pairs_v12",diffuse_normal_pairs,
+               lambda x:f"{{0x{x[0]:016x}ull, 0x{x[1]:016x}ull}}")
     out.append("""template <std::size_t N>
 inline bool sorted_hash_contains(const std::array<std::uint64_t,N> &values, std::uint64_t value) noexcept
 {
@@ -81,10 +88,20 @@ inline bool normal_tuple_allowed_v12(std::uint64_t diffuse,std::uint64_t spec,st
         return true;}
     return false;
 }
+inline bool normal_diffuse_pair_allowed_v12(std::uint64_t diffuse,std::uint64_t normal) noexcept
+{
+    std::size_t lo=0,hi=k_normal_diffuse_pairs_v12.size();
+    while(lo<hi){const auto mid=lo+((hi-lo)>>1u);const auto &at=k_normal_diffuse_pairs_v12[mid];
+        if(diffuse!=at.diffuse_hash){if(diffuse<at.diffuse_hash)hi=mid;else lo=mid+1u;continue;}
+        if(normal!=at.normal_hash){if(normal<at.normal_hash)hi=mid;else lo=mid+1u;continue;}
+        return true;}
+    return false;
+}
 inline constexpr std::size_t k_normal_tuple_count_v12=k_normal_tuples_v12.size();
 inline constexpr std::size_t k_normal_tuple_member_count_v12=k_normal_tuple_member_hashes_v12.size();
 inline constexpr std::size_t k_normal_target_count_v12=k_normal_target_hashes_v12.size();
 inline constexpr std::size_t k_normal_safe_row_count_v12=3872u;
+inline constexpr std::size_t k_normal_diffuse_pair_count_v12=k_normal_diffuse_pairs_v12.size();
 
 } // namespace dsrrl::runtime::generated
 """)
@@ -95,7 +112,7 @@ def main():
     ap.add_argument("--input",required=True,type=Path)
     ap.add_argument("--output",required=True,type=Path)
     ns=ap.parse_args()
-    tuples,members,targets=load(ns.input)
-    ns.output.write_text(render(tuples,members,targets),encoding="utf-8")
+    tuples,members,targets,diffuse_normal_pairs=load(ns.input)
+    ns.output.write_text(render(tuples,members,targets,diffuse_normal_pairs),encoding="utf-8")
 
 if __name__=="__main__": main()

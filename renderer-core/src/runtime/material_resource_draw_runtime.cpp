@@ -220,19 +220,9 @@ bool runtime_hot_telemetry_requested() noexcept
         hot_enabled();
 }
 
-// Runtime pixel falsifier 2026-09-28: generic PTDE Diffuse/Normal sidecars
-// produced black surfaces in a live full-runtime session even though MR and
-// EnvSpec improved. Until the exact offending resource class is isolated,
-// preserve stock DSR t0/t2 by default. The bridge remains opt-in for focused
-// resource diagnostics only.
-bool generic_texture_bridge_enabled() noexcept
-{
-    static const bool enabled =
-        dsrrl::runtime::telemetry::environment_flag(
-            "DSRRL_EXPERIMENTAL_GENERIC_TEXTURE_BRIDGE");
-    return enabled;
-}
-
+// PTDE texture sidecars are authorized only on authenticated equipment draws.
+// Folder membership or basename identity is never sufficient authority. World,
+// map and static-environment draws fail open even if they collide by filename.
 void hot_count(
     std::atomic<std::uint64_t> &counter) noexcept
 {
@@ -1269,9 +1259,6 @@ prepare_draw_requests(
         query.material.valid &&
         query.material.owner_tuple_exact;
 
-    const bool generic_resources_enabled =
-        generic_texture_bridge_enabled();
-
     if (full_material_response_ready &&
         spec_rgb_consumer_ready &&
         core_.features().enabled(
@@ -1360,8 +1347,9 @@ prepare_draw_requests(
             h1,
             h0);
 
-    if (generic_resources_enabled &&
-        bmp_receiver &&
+    if (bmp_receiver &&
+        exact_material &&
+        diffuse_pair &&
         full_material_response_ready &&
         core_.features().enabled(
             core::operator_id::diffuse)) {
@@ -1448,8 +1436,9 @@ prepare_draw_requests(
             h1,
             h2);
 
-    if (generic_resources_enabled &&
-        bmp_receiver &&
+    if (bmp_receiver &&
+        exact_material &&
+        normal_tuple &&
         core_.features().enabled(
             core::operator_id::normal)) {
         auto *replacement =
@@ -1479,13 +1468,6 @@ prepare_draw_requests(
                     normal_route_authority::
                         homologous_material_route;
             context_norm.homologous_bmp_material_route =
-                exact_material;
-        } else if (normal_tuple) {
-            context_norm.authority =
-                operators::resource_bridges::
-                    normal_route_authority::
-                        safe_exact_resource_tuple;
-            context_norm.safe_exact_t0_t1_t2_tuple =
                 true;
         }
 
@@ -1515,8 +1497,7 @@ prepare_draw_requests(
                 core::operator_id::normal;
             request.receiver_verified = true;
             request.material_verified =
-                exact_material ||
-                normal_tuple;
+                exact_material;
             request.srvs[0] = {
                 decision.srv_slot,
                 replacement
@@ -1607,14 +1588,14 @@ prepare_fixed_pointlight_material_requests(
     const bool endpoint_a_pair =
         h0 != 0u &&
         h1 != 0u &&
-        generated::spec_name_hash_allowed_v12(h1) &&
+        generated::spec_equipment_name_hash_allowed_v12(h1) &&
         generated::diffuse_pair_allowed_v12(h1,h0);
 
     const bool endpoint_b_pair =
         !blended_material ||
         (h3 != 0u &&
          h4 != 0u &&
-         generated::spec_name_hash_allowed_v12(h4) &&
+         generated::spec_equipment_name_hash_allowed_v12(h4) &&
          generated::diffuse_pair_allowed_v12(h4,h3));
 
     const bool endpoint_a_normal =
@@ -1928,10 +1909,16 @@ prepare_clustered_pointlight_material_requests(
         3u,
         hashes);
 
+    const bool exact_diffuse_normal_pair =
+        hashes[0] != 0u &&
+        hashes[2] != 0u &&
+        generated::normal_diffuse_pair_allowed_v12(
+            hashes[0],
+            hashes[2]);
+
     if (views[0] == nullptr ||
         views[2] == nullptr ||
-        hashes[0] == 0u ||
-        hashes[2] == 0u) {
+        !exact_diffuse_normal_pair) {
         release_all();
         hot_count(g_fail_open);
         return true;

@@ -5,6 +5,8 @@ from pathlib import Path
 
 EXPECTED_CANONICAL_DATA_SHA256="ca9825ea04f82ae5449aad58a42e4d84cf6b34eded15eef3a6afdfe715e15c95"
 EXPECTED_COUNT=769
+EXPECTED_EQUIPMENT_COUNT=748
+EQUIPMENT_PREFIXES=("bd_","lg_","am_","hd_","wp_")
 
 def load(path:Path):
     lines=[x for x in path.read_text(encoding="utf-8").splitlines() if x and not x.startswith("#")]
@@ -18,13 +20,32 @@ def load(path:Path):
         raise SystemExit("SpecRGB hash count/uniqueness mismatch")
     if values!=sorted(values):
         raise SystemExit("SpecRGB corpus is not sorted")
-    return values
 
-def render(values):
+    equipment=[]
+    excluded=[]
+    for r in rows:
+        name=r["logical_name"].lower()
+        value=int(r["spec_hash"],16)
+        if name.startswith(EQUIPMENT_PREFIXES):
+            equipment.append(value)
+        else:
+            excluded.append(name)
+    if len(equipment)!=EXPECTED_EQUIPMENT_COUNT or len(set(equipment))!=EXPECTED_EQUIPMENT_COUNT:
+        raise SystemExit("SpecRGB equipment-only hash count/uniqueness mismatch")
+    if equipment!=sorted(equipment):
+        raise SystemExit("SpecRGB equipment-only corpus is not sorted")
+    if any(not name.startswith("hr_") for name in excluded):
+        raise SystemExit(f"unexpected non-equipment SpecRGB prefix: {excluded[:8]}")
+    return values,equipment
+
+def render(values,equipment):
     out=["#pragma once\n","#include <array>\n#include <cstddef>\n#include <cstdint>\n\n",
          "namespace dsrrl::runtime::generated {\n\n",
          f"inline constexpr std::array<std::uint64_t, {len(values)}> k_spec_name_hashes_v12 = {{{{\n"]
     out.extend(f"    0x{x:016x}ull,\n" for x in values)
+    out.append("}};\n\n")
+    out.append(f"inline constexpr std::array<std::uint64_t, {len(equipment)}> k_spec_equipment_name_hashes_v12 = {{{{\n")
+    out.extend(f"    0x{x:016x}ull,\n" for x in equipment)
     out.append("}};\n\n")
     out.append("""inline bool spec_name_hash_allowed_v12(std::uint64_t value) noexcept
 {
@@ -36,7 +57,18 @@ def render(values):
     }
     return false;
 }
+inline bool spec_equipment_name_hash_allowed_v12(std::uint64_t value) noexcept
+{
+    std::size_t lo=0,hi=k_spec_equipment_name_hashes_v12.size();
+    while(lo<hi){
+        const auto mid=lo+((hi-lo)>>1u);
+        const auto at=k_spec_equipment_name_hashes_v12[mid];
+        if(value<at)hi=mid;else if(value>at)lo=mid+1u;else return true;
+    }
+    return false;
+}
 inline constexpr std::size_t k_spec_name_count_v12=k_spec_name_hashes_v12.size();
+inline constexpr std::size_t k_spec_equipment_name_count_v12=k_spec_equipment_name_hashes_v12.size();
 
 } // namespace dsrrl::runtime::generated
 """)
@@ -47,5 +79,6 @@ def main():
     ap.add_argument("--input",required=True,type=Path)
     ap.add_argument("--output",required=True,type=Path)
     ns=ap.parse_args()
-    ns.output.write_text(render(load(ns.input)),encoding="utf-8")
+    values,equipment=load(ns.input)
+    ns.output.write_text(render(values,equipment),encoding="utf-8")
 if __name__=="__main__":main()
