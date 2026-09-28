@@ -3623,6 +3623,12 @@ bool prepare_island_batch(
         reinterpret_cast<ID3D11DeviceContext *>(
             cmd_list->get_native());
 
+    const bool diffuse_mr_active =
+        decision.active &&
+        (decision.certified_operations &
+         dsrrl::operators::material_response::
+             diffuse_material_domain_linear) != 0u;
+
     const bool direct_ul_draw_applied =
         upper_lower_bound &&
         g_upper_lower.
@@ -3709,7 +3715,7 @@ bool prepare_island_batch(
 
         bool lerp_mr_prepared = false;
 
-        if (decision.active &&
+        if (diffuse_mr_active &&
             lerp_ul_exact &&
             context != nullptr &&
             g_upper_lower.prepare_upper_lower_carrier(
@@ -3728,7 +3734,7 @@ bool prepare_island_batch(
                     "[DSRRL LERP MR DIFFUSE ACT] stage=mr_ul_ready");
             }
         } else if (
-            decision.active &&
+            diffuse_mr_active &&
             g_mr_draw_runtime.prepare_lerp_draw_request(
                 decision,
                 prepared.mr)) {
@@ -3864,7 +3870,7 @@ bool prepare_island_batch(
     // Prepare the base MR shader first. It is deliberately the stock-t1
     // consumer; the paired t10 variant is selected only after resource proof.
     if (!direct_ul_producer &&
-        decision.active &&
+        diffuse_mr_active &&
         ul_spc &&
         context != nullptr &&
         g_upper_lower.prepare_upper_lower_carrier(
@@ -3886,7 +3892,7 @@ bool prepare_island_batch(
     // Independent fallback: if combined MR+U/L is unavailable, keep MR
     // active by itself and leave U/L at stock DSR for this draw.
     if (!prepared.mr_in_batch &&
-        decision.active &&
+        diffuse_mr_active &&
         g_mr_draw_runtime.prepare_draw_request(
             decision,
             prepared.mr)) {
