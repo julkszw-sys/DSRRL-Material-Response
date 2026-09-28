@@ -1022,10 +1022,10 @@ bool observe_draw_identity(
             dsrrl::operators::material_response::
                 decision_reason::ptde_companion_required) {
         auto *context =
-            reinterpret_cast<ID3D11DeviceContext *>(
-                cmd_list != nullptr
-                    ? cmd_list->get_native()
-                    : 0u);
+            cmd_list != nullptr
+                ? reinterpret_cast<ID3D11DeviceContext *>(
+                      cmd_list->get_native())
+                : nullptr;
         if (g_material_resources.
                 exact_specular_companion_ready(
                     context))
