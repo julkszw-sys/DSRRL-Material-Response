@@ -905,10 +905,6 @@ bool observe_draw_identity(
              dsrrl::operators::lightbank::
                  upper_lower_hemenv_family::ntoa);
 
-    const bool upper_lower_standalone =
-        upper_lower_isolated &&
-        !subsurface_receiver;
-
     const bool upper_lower_subsurf_combined =
         upper_lower_receiver &&
         upper_lower_identity.family ==
@@ -916,10 +912,23 @@ bool observe_draw_identity(
                 upper_lower_hemenv_family::phn_subsurf &&
         subsurface_receiver;
 
+    const bool upper_lower_clustered_pointlight_combined =
+        upper_lower_receiver &&
+        upper_lower_identity.family ==
+            dsrrl::operators::lightbank::
+                upper_lower_hemenv_family::phn_pnts &&
+        clustered_pointlight_receiver;
+
+    const bool upper_lower_standalone =
+        upper_lower_isolated &&
+        !subsurface_receiver &&
+        !upper_lower_clustered_pointlight_combined;
+
     const bool upper_lower_spc_matches_stable =
         !upper_lower_spc ||
         upper_lower_standalone ||
         upper_lower_subsurf_combined ||
+        upper_lower_clustered_pointlight_combined ||
         (upper_lower_identity.family ==
                  dsrrl::operators::lightbank::
                      upper_lower_hemenv_family::hemenv
@@ -932,7 +941,8 @@ bool observe_draw_identity(
 
     const bool upper_lower_unpaired_nospc =
         upper_lower_nospc &&
-        !upper_lower_standalone;
+        !upper_lower_standalone &&
+        !upper_lower_clustered_pointlight_combined;
 
     const unsigned receiver_classes =
         (stable_receiver ? 1u : 0u) +
@@ -952,7 +962,11 @@ bool observe_draw_identity(
         clustered_pointlight_receiver) {
         // Direct PointLight families are independent receiver namespaces.
         // Never borrow Material Response receiver IDs 24..47 for these paths.
+        // Exact PntS is one composed consumer island: the clustered direct
+        // PointLight PS also owns the U/L consumer cut and consumes fresh b13.
         receiver_id = 0u;
+        if (upper_lower_clustered_pointlight_combined)
+            upper_lower_bound = true;
     } else if (subsurface_receiver) {
         // DSBT body Subsurf exact receivers 33..35 own the route. Their
         // target plain-HemEnv replacement now includes fresh U/L+b13.
@@ -2851,6 +2865,7 @@ struct prepared_island_batch {
     ID3D11Buffer *fixed_b12 = nullptr;
     dsrrl::runtime::prepared_clustered_pnts_shader clustered_shader{};
     dsrrl::runtime::prepared_clustered_pnts_draw clustered_carrier{};
+    dsrrl::runtime::prepared_upper_lower_draw clustered_upper_lower{};
     bool clustered_in_batch = false;
     bool fixed_in_batch = false;
     bool mr_in_batch = false;
@@ -3177,6 +3192,8 @@ void release_prepared_island_batch(
             prepared.clustered_carrier);
         g_clustered_pnts_pipeline.release_prepared_shader(
             prepared.clustered_shader);
+        g_upper_lower.release_prepared_draw(
+            prepared.clustered_upper_lower);
     } else if (prepared.fixed_in_batch) {
         g_material_resources.release_prepared_draw(
             prepared.resources);
@@ -3293,8 +3310,23 @@ bool prepare_island_batch(
         if (resources_ready)
             hot_count(g_clustered_draw_resources_ready);
 
-        const bool sidecar_ready =
+        const bool clustered_ul_identity =
+            upper_lower_bound &&
+            upper_lower_identity.valid() &&
+            upper_lower_identity.family ==
+                dsrrl::operators::lightbank::
+                    upper_lower_hemenv_family::phn_pnts;
+
+        const bool upper_lower_ready =
             resources_ready &&
+            prepared.clustered_shader.upper_lower_composed &&
+            clustered_ul_identity &&
+            g_upper_lower.prepare_upper_lower_carrier(
+                context,
+                prepared.clustered_upper_lower);
+
+        const bool sidecar_ready =
+            upper_lower_ready &&
             g_clustered_pnts.prepare_sidecar(
                 context,
                 decision,
@@ -3312,6 +3344,10 @@ bool prepare_island_batch(
                 dsrrl::core::operator_bit(
                     dsrrl::core::operator_id::
                         local_specular_legacy);
+            const auto upper_lower =
+                dsrrl::core::operator_bit(
+                    dsrrl::core::operator_id::
+                        upper_lower);
             const auto local_if_spc =
                 prepared.clustered_shader.spc
                     ? local
@@ -3331,8 +3367,8 @@ bool prepare_island_batch(
             // composes only MR.
             clustered.additional_owners =
                 prepared.clustered_shader.spc
-                    ? (point | mr)
-                    : mr;
+                    ? (point | mr | upper_lower)
+                    : (mr | upper_lower);
             clustered.additional_shader_owners =
                 clustered.additional_owners;
             clustered.additional_constant_buffer_owners =
@@ -3351,7 +3387,12 @@ bool prepare_island_batch(
                 prepared.clustered_carrier.b12,
                 point | mr | local_if_spc
             };
-            clustered.constant_buffer_count = 1u;
+            clustered.constant_buffers[1] = {
+                13u,
+                prepared.clustered_upper_lower.b13,
+                upper_lower
+            };
+            clustered.constant_buffer_count = 2u;
             clustered.srvs[0] = {
                 18u,
                 prepared.clustered_carrier.t18
@@ -3381,6 +3422,7 @@ bool prepare_island_batch(
 
                 if (resources_appended) {
                     prepared.clustered_in_batch = true;
+                    prepared.upper_lower_combined = true;
                     hot_count(g_clustered_draw_batch_ready);
                     return true;
                 }
@@ -3393,6 +3435,8 @@ bool prepare_island_batch(
             prepared.clustered_carrier);
         g_clustered_pnts_pipeline.release_prepared_shader(
             prepared.clustered_shader);
+        g_upper_lower.release_prepared_draw(
+            prepared.clustered_upper_lower);
         prepared.batch = {};
     }
 
