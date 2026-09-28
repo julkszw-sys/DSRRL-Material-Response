@@ -1,6 +1,7 @@
 #include "dsrrl/runtime/material_owner_producer.hpp"
 #include "dsrrl/operators/material_response/mtd_semantic_census.hpp"
 #include "dsrrl/operators/material_response/generated_dsr_flver_owner_tuples_v1.hpp"
+#include "dsrrl/operators/material_response/generated_exact_binding_mr_v1.hpp"
 #include <cstddef>
 #include <iostream>
 using namespace dsrrl;
@@ -86,6 +87,52 @@ int main()
     const auto pmetal_id=runtime::make_actual_material_identity(pmetal);
     CHECK(pmetal_id.owner_tuple_exact);
     CHECK(pmetal_id.route_index==345u);
+
+    // Shared-base exact-binding extension: unlike the retail MTD fallback,
+    // the authenticated FLVER+slot owner path may carry the
+    // PTDE_COMPANION_REQUIRED profile.
+    const auto leather_semantic =
+        operators::material_response::mtd_semantic_hash(
+            "P_Leather[DSB].mtd");
+    const generated::exact_binding_mr_record *leather_extension=nullptr;
+    for(const auto &record:generated::k_exact_binding_mr_v1)
+        if(record.bridge_binding_id==45u)
+            leather_extension=&record;
+    CHECK(leather_extension!=nullptr);
+    CHECK(!leather_extension->runtime_mtd_allowed);
+
+    runtime::actual_material_owner_observation leather{};
+    bool leather_owner_found=false;
+    for(const auto &group: generated::k_dsr_flver_owner_groups){
+        for(std::uint32_t slot=0u;slot<group.material_count;++slot){
+            const auto index=
+                static_cast<std::size_t>(group.first_material)+slot;
+            if(generated::k_dsr_flver_owner_mtd_hashes[index]!=leather_semantic)
+                continue;
+            leather.flver_sha256=group.flver_sha256;
+            leather.material_slot=slot;
+            leather.material_slot_valid=true;
+            leather_owner_found=true;
+            break;
+        }
+        if(leather_owner_found) break;
+    }
+    CHECK(leather_owner_found);
+    CHECK(runtime::enrich_exact_owner_mtd_identity(leather));
+    CHECK(leather.material.valid);
+    CHECK(leather.material.semantic_name_hash==leather_semantic);
+    CHECK(leather.material.raw_mtd_sha256==
+          leather_extension->raw_mtd_sha256);
+    CHECK(leather.material.route_index==
+          leather_extension->route_tag);
+    CHECK(leather.material.material_family_hash==
+          operators::material_response::mtd_semantic_hash(
+              leather_extension->material_family));
+    const auto leather_id=
+        runtime::make_actual_material_identity(leather);
+    CHECK(leather_id.owner_tuple_exact);
+    CHECK(leather_id.route_index==
+          leather_extension->route_tag);
 
     // Direct PointLight NoSpc authority: exact PTDE/DSR homology supplies
     // raw-MTD identity for the owner producer without promoting the material
