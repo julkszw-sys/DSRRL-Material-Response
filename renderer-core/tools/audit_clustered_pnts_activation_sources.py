@@ -92,16 +92,50 @@ def main():
     if "material_max_pnt_lit_num > 4u" in sidecar_cpp or "material_max > 4u" in draw_cpp:
         fail("clustered material limit still has an artificial >4 fail-open")
     require(sidecar_cpp,"b12[3][0]","effective-count carrier")
-    require(draw_cpp,"select_first_four_exact","single-pass exact first-four selector")
+
+    builder_start=draw_cpp.find("void clustered_pnts_draw_runtime::builder_event(")
+    selector_start=draw_cpp.find("void clustered_pnts_draw_runtime::selector_event(")
+    prepare_start=draw_cpp.find("bool clustered_pnts_draw_runtime::prepare_sidecar(")
+    release_start=draw_cpp.find("void clustered_pnts_draw_runtime::release_prepared_draw(")
+    if min(builder_start,selector_start,prepare_start,release_start)<0:
+        fail("clustered runtime stage boundaries are missing")
+    if not (builder_start < selector_start < prepare_start < release_start):
+        fail("clustered runtime stage ordering is invalid")
+
+    builder_body=draw_cpp[builder_start:selector_start]
+    selector_body=draw_cpp[selector_start:prepare_start]
+    prepare_body=draw_cpp[prepare_start:release_start]
+
+    require(builder_body,"g_producer_input_tls","capture-only producer TLS")
+    require(builder_body,"renderer_bytes + 0x2328u","collection input capture")
+    require(builder_body,"draw_bytes + 0xD0u","query input capture")
+    require(builder_body,"draw_bytes + 0x3Au","mask input capture")
+    for forbidden,label in [
+        ("select_first_four_exact(","selector traversal"),
+        ("capture_source(","source capture"),
+        ("readable_range(","VirtualQuery-backed range validation"),
+        ("std::lock_guard","global/resource lock")
+    ]:
+        if forbidden in builder_body:
+            fail(f"builder hot path still performs {label}")
+
+    require(selector_body,"g_producer_input_tls","same-thread producer join")
+    require(selector_body,"actual_material_readable_cached","cached actual-material validation")
+    if "lookup_snapshot(" in selector_body or "g_registry_mutex" in selector_body:
+        fail("selector hot path still uses legacy synchronized producer registry")
+
+    require(prepare_body,"material.active","authorized material gate before heavy work")
+    require(prepare_body,"select_first_four_exact(","authorized-draw exact first-four selector")
+    require(prepare_body,"capture_source(","authorized-draw raw source capture")
     require(draw_cpp,"DSRRL_CLUSTERED_SELECTOR_RUNTIME_CROSSCHECK","optional retained-selector cross-check gate")
     require(draw_cpp,"g_retained_selector","retained selector available only for optional cross-check")
-    require(draw_cpp,"g_producer_snapshot_tls","same-thread producer snapshot fast path")
     require(draw_cpp,"spatial_overlap_xyz_unchecked","single node-range validation overlap path")
-    require(draw_cpp,"capture_source","raw source capture")
     require(draw_cpp,"executable_address(target)","source vfunc executable gate")
     require(draw_cpp,"0x55FC70u","retained selector RVA for optional audit cross-check")
     if "mirror_first_four(" in draw_cpp:
         fail("production clustered selector still contains the legacy double-traversal mirror path")
+    if "g_registry_mutex" in draw_cpp or "lookup_snapshot(" in draw_cpp or "publish_snapshot(" in draw_cpp:
+        fail("legacy globally locked clustered producer registry is still present")
     require(flver_cpp,"k_builder=0x22084Fu","ordinary builder hook")
     require(flver_cpp,"builder_armed=true","builder hook attestation")
 
@@ -117,6 +151,11 @@ def main():
     require(mr_cpp,"if (require_legacy_specular)","NoSpc specular exclusion")
     require(integrated,"evaluate_direct_pointlight_material","direct PointLight material resolver call")
     require(integrated,"direct_pointlight_requires_specular","receiver-derived specular requirement")
+    require(integrated,"[DSRRL POINTLIGHT GATE]","one-shot direct PointLight rejection trace")
+    resources_gate=integrated.find("const bool resources_ready =")
+    prepare_call=integrated.find("g_clustered_pnts.prepare_sidecar(")
+    if resources_gate<0 or prepare_call<0 or not resources_gate<prepare_call:
+        fail("clustered heavy source selection is not downstream of the material-resource gate")
 
     if "clustered.additional_owners =\n                point | mr | local_if_spc;" in integrated:
         fail("clustered request duplicates primary in additional_owners")
@@ -159,10 +198,10 @@ def main():
 
     print("Clustered PntS pre-runtime activation source audit: PASS")
     print("  receivers=36 spc=24 nospc=12 stock_membership=t16/t17_bypassed")
-    print("  producer=builder+retained_selector+independent_mirror+raw_source")
+    print("  producer=builder-input-snapshot>same-thread-material-join>authorized-draw-first4+raw-source")
     print("  carrier=b12[3].x+t18+t19 material_max=uint32 min_after_first4")
     print("  material=25 exact HOMOLOGOUS_NOSPC pairs; identity=certified supplement; c100=bit-exact router authority")
-    print("  chain=candidate>receiver>selector>sources>material>sidecar>shader>draw-mutation>restore")
+    print("  chain=candidate>receiver>material>resources>selector>sources>sidecar>shader>draw-mutation>restore")
     print("  draw=adapter-valid ownership + exact pipeline route + shared transaction")
     return 0
 

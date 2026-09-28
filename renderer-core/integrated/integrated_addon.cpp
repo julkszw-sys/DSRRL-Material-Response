@@ -134,6 +134,8 @@ std::atomic_bool g_mr_once_decision_active{false};
 std::atomic_bool g_mr_once_identity{false};
 std::atomic_bool g_mr_once_batch_ready{false};
 std::atomic_bool g_mr_once_draw_issued{false};
+std::atomic<std::uint32_t> g_pointlight_gate_log_mask{0u};
+std::atomic_bool g_pointlight_active_logged{false};
 std::atomic<std::uint64_t> g_mr_ul_payload_materialize_ok{0};
 std::atomic<std::uint64_t> g_mr_ul_payload_materialize_fail{0};
 std::atomic<std::uint64_t> g_lerp_full_draw_ready{0};
@@ -734,6 +736,73 @@ const reshade::api::shader_desc *find_pixel_shader(
     return nullptr;
 }
 
+const char *pointlight_decision_reason_name(
+    dsrrl::operators::material_response::decision_reason reason) noexcept
+{
+    using reason_t =
+        dsrrl::operators::material_response::decision_reason;
+    switch (reason) {
+    case reason_t::active: return "active";
+    case reason_t::unknown_receiver: return "unknown_receiver";
+    case reason_t::material_required: return "material_required";
+    case reason_t::owner_tuple_not_authenticated: return "owner_tuple_not_authenticated";
+    case reason_t::ptde_companion_required: return "ptde_companion_required";
+    case reason_t::unknown_material: return "unknown_material";
+    case reason_t::receiver_material_mismatch: return "receiver_material_mismatch";
+    case reason_t::no_certified_operator: return "no_certified_operator";
+    default: return "unknown_reason";
+    }
+}
+
+void log_pointlight_gate_once(
+    std::uint32_t bit,
+    const char *stage,
+    bool fixed_pointlight_receiver,
+    bool clustered_pointlight_receiver,
+    bool clustered_pointlight_spc,
+    bool owner_ok,
+    const dsrrl::operators::material_response::material_identity &material,
+    const dsrrl::operators::material_response::decision &decision) noexcept
+{
+    if ((!fixed_pointlight_receiver &&
+         !clustered_pointlight_receiver) ||
+        stage == nullptr)
+        return;
+
+    const auto previous =
+        g_pointlight_gate_log_mask.fetch_or(
+            bit,
+            std::memory_order_relaxed);
+    if ((previous & bit) != 0u)
+        return;
+
+    char line[768]{};
+    std::snprintf(
+        line,
+        sizeof(line),
+        "[DSRRL POINTLIGHT GATE] stage=%s fixed=%u clustered=%u spc=%u "
+        "owner_ok=%u mat_valid=%u owner_exact=%u slot=%u slot_valid=%u "
+        "actual_mtd=%u sem=%016llx family=%016llx decision=%s(%u) route=%u",
+        stage,
+        fixed_pointlight_receiver ? 1u : 0u,
+        clustered_pointlight_receiver ? 1u : 0u,
+        clustered_pointlight_spc ? 1u : 0u,
+        owner_ok ? 1u : 0u,
+        material.valid ? 1u : 0u,
+        material.owner_tuple_exact ? 1u : 0u,
+        material.material_slot,
+        material.material_slot_valid ? 1u : 0u,
+        material.actual_material_exact ? 1u : 0u,
+        static_cast<unsigned long long>(material.semantic_name_hash),
+        static_cast<unsigned long long>(material.material_family_hash),
+        pointlight_decision_reason_name(decision.reason),
+        static_cast<unsigned>(decision.reason),
+        decision.route_index);
+    reshade::log::message(
+        reshade::log::level::info,
+        line);
+}
+
 bool observe_draw_identity(
     reshade::api::command_list *cmd_list,
     std::uint8_t route_mask,
@@ -957,6 +1026,12 @@ bool observe_draw_identity(
         hot_count(g_mr_fail_open);
         if (rx != nullptr)
             hot_count(rx->fail_open);
+        log_pointlight_gate_once(
+            1u << 0, "receiver_reject",
+            fixed_pointlight_receiver,
+            clustered_pointlight_receiver,
+            clustered_pointlight_spc,
+            owner_ok, out_material, out_decision);
         return false;
     }
 
@@ -965,6 +1040,12 @@ bool observe_draw_identity(
         hot_count(g_mr_fail_open);
         if (rx != nullptr)
             hot_count(rx->fail_open);
+        log_pointlight_gate_once(
+            1u << 1, "owner_reject",
+            fixed_pointlight_receiver,
+            clustered_pointlight_receiver,
+            clustered_pointlight_spc,
+            false, out_material, out_decision);
         return true;
     }
 
@@ -989,6 +1070,12 @@ bool observe_draw_identity(
         hot_count(g_mr_fail_open);
         if (rx != nullptr)
             hot_count(rx->fail_open);
+        log_pointlight_gate_once(
+            1u << 2, "material_registry_not_ready",
+            fixed_pointlight_receiver,
+            clustered_pointlight_receiver,
+            clustered_pointlight_spc,
+            true, out_material, out_decision);
         return true;
     }
 
@@ -1040,6 +1127,18 @@ bool observe_draw_identity(
         hot_count(g_mr_would_activate);
         if (rx != nullptr)
             hot_count(rx->mr_active);
+        if ((fixed_pointlight_receiver ||
+             clustered_pointlight_receiver) &&
+            !g_pointlight_active_logged.exchange(
+                true,
+                std::memory_order_relaxed)) {
+            log_pointlight_gate_once(
+                1u << 4, "decision_active",
+                fixed_pointlight_receiver,
+                clustered_pointlight_receiver,
+                clustered_pointlight_spc,
+                true, out_material, out_decision);
+        }
         if (!fixed_pointlight_receiver &&
             !clustered_pointlight_receiver &&
             !g_mr_once_decision_active.exchange(true)) {
@@ -1080,6 +1179,12 @@ bool observe_draw_identity(
         hot_count(g_mr_fail_open);
         if (rx != nullptr)
             hot_count(rx->fail_open);
+        log_pointlight_gate_once(
+            1u << 3, "decision_reject",
+            fixed_pointlight_receiver,
+            clustered_pointlight_receiver,
+            clustered_pointlight_spc,
+            true, out_material, out_decision);
     }
 
     return true;
@@ -4558,6 +4663,8 @@ bool AddonInit(
     g_mr_once_identity.store(false);
     g_mr_once_batch_ready.store(false);
     g_mr_once_draw_issued.store(false);
+    g_pointlight_gate_log_mask.store(0u);
+    g_pointlight_active_logged.store(false);
     g_mr_ul_payload_materialize_ok.store(0);
     g_mr_ul_payload_materialize_fail.store(0);
     g_lerp_full_draw_ready.store(0);

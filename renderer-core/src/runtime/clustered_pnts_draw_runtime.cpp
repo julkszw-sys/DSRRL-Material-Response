@@ -29,30 +29,17 @@ namespace {
 using source_raw =
     operators::point_light::clustered_source_raw_v1;
 
-struct producer_snapshot {
+struct producer_input_snapshot {
     std::uintptr_t owner = 0u;
     std::uint64_t serial = 0u;
-    std::array<source_raw,4> sources{};
-    std::uint8_t raw_selected_count = 0u;
-    bool selector_mirror_verified = false;
+    void *collection = nullptr;
+    std::array<float,8> query{};
+    std::uint8_t mask = 0u;
     bool valid = false;
 };
 
-struct registry_entry {
-    producer_snapshot snapshot{};
-};
-
-constexpr std::size_t k_registry_sets = 64u;
-constexpr std::size_t k_registry_ways = 2u;
-static_assert((k_registry_sets & (k_registry_sets - 1u)) == 0u);
-
-std::array<
-    std::array<registry_entry,k_registry_ways>,
-    k_registry_sets> g_registry{};
-std::mutex g_registry_mutex;
-
 struct draw_selection_tls {
-    producer_snapshot snapshot{};
+    producer_input_snapshot input{};
     std::uint32_t material_max = 0u;
     bool owner_verified = false;
     bool material_limit_ready = false;
@@ -60,7 +47,9 @@ struct draw_selection_tls {
 };
 
 thread_local draw_selection_tls g_draw_selection{};
-thread_local producer_snapshot g_producer_snapshot_tls{};
+thread_local producer_input_snapshot g_producer_input_tls{};
+thread_local const void *g_material_validation_ptr = nullptr;
+thread_local bool g_material_validation_ok = false;
 
 struct gpu_resources {
     ID3D11Device *device = nullptr;
@@ -190,61 +179,19 @@ bool executable_address(
         access == PAGE_EXECUTE_WRITECOPY;
 }
 
-std::size_t registry_set(
-    std::uintptr_t owner) noexcept
+bool actual_material_readable_cached(
+    const void *ptr) noexcept
 {
-    const auto mixed =
-        owner ^ (owner >> 17u) ^
-        (owner >> 31u);
-    return static_cast<std::size_t>(
-        mixed & (k_registry_sets - 1u));
-}
-
-void publish_snapshot(
-    const producer_snapshot &snapshot) noexcept
-{
-    const auto set = registry_set(snapshot.owner);
-    std::lock_guard<std::mutex> lock(g_registry_mutex);
-
-    auto *target = &g_registry[set][0];
-    for (auto &way : g_registry[set]) {
-        if (!way.snapshot.valid ||
-            way.snapshot.owner == snapshot.owner) {
-            target = &way;
-            break;
-        }
-        if (way.snapshot.serial <
-            target->snapshot.serial)
-            target = &way;
-    }
-
-    target->snapshot = snapshot;
-    g_producer_snapshot_tls = snapshot;
-}
-
-bool lookup_snapshot(
-    std::uintptr_t owner,
-    producer_snapshot &out) noexcept
-{
-    out = {};
-    const auto set = registry_set(owner);
-    std::lock_guard<std::mutex> lock(g_registry_mutex);
-
-    const producer_snapshot *best = nullptr;
-    for (const auto &way : g_registry[set]) {
-        if (!way.snapshot.valid ||
-            way.snapshot.owner != owner)
-            continue;
-        if (best == nullptr ||
-            way.snapshot.serial > best->serial)
-            best = &way.snapshot;
-    }
-
-    if (best == nullptr)
+    if (ptr == nullptr)
         return false;
 
-    out = *best;
-    return true;
+    if (ptr != g_material_validation_ptr) {
+        g_material_validation_ptr = ptr;
+        g_material_validation_ok =
+            readable_range(ptr, 0x388u);
+    }
+
+    return g_material_validation_ok;
 }
 
 bool spatial_overlap_xyz_unchecked(
@@ -290,7 +237,7 @@ bool select_first_four_exact(
     count = 0u;
 
     if (!readable_range(collection, 0x90u) ||
-        !readable_range(query, 0x20u))
+        query == nullptr)
         return false;
 
     std::array<float,4> query_min{};
@@ -603,12 +550,6 @@ bool update_buffer(
     return true;
 }
 
-void clear_registry() noexcept
-{
-    std::lock_guard<std::mutex> lock(
-        g_registry_mutex);
-    g_registry = {};
-}
 
 } // namespace
 
@@ -667,8 +608,9 @@ void clustered_pnts_draw_runtime::uninstall() noexcept
 {
     g_enabled.store(false);
     consume_draw_selection();
-    g_producer_snapshot_tls = {};
-    clear_registry();
+    g_producer_input_tls = {};
+    g_material_validation_ptr = nullptr;
+    g_material_validation_ok = false;
 
     {
         std::lock_guard<std::mutex> lock(
@@ -687,152 +629,61 @@ void clustered_pnts_draw_runtime::builder_event(
 {
     telemetry::hot_count(g_builder_seen);
 
+    // The 0x14022084F ordinary builder hook is extremely hot. Never traverse
+    // PointLight lists, call source vfuncs, VirtualQuery draw memory or take a
+    // global lock here. Capture only the exact selector inputs that the later
+    // authorized draw may need.
+    g_producer_input_tls = {};
+
     if (!g_enabled.load() ||
         g_quarantined.load() ||
         draw == nullptr ||
         renderer_context == nullptr)
         return;
 
-    if (!readable_range(
-            renderer_context,
-            0x2330u) ||
-        !readable_range(
-            draw,
-            0xF0u)) {
-        telemetry::hot_count(g_collection_fail);
-        return;
-    }
-
-    void *collection = nullptr;
-    std::memcpy(
-        &collection,
-        static_cast<const std::uint8_t *>(
-            renderer_context) + 0x2328u,
-        sizeof(collection));
-
-    if (!readable_range(
-            collection,
-            0x90u)) {
-        telemetry::hot_count(g_collection_fail);
-        return;
-    }
-    telemetry::hot_count(g_collection_ok);
-
-    auto *query =
-        reinterpret_cast<const float *>(
-            static_cast<const std::uint8_t *>(
-                draw) + 0xD0u);
-
-    std::uint8_t mask = 0u;
-    std::memcpy(
-        &mask,
-        static_cast<const std::uint8_t *>(
-            draw) + 0x3Au,
-        sizeof(mask));
-
-    std::array<std::uint32_t,4> selected_ids{};
-    std::array<void *,4> nodes{};
-    std::uint8_t selected_count = 0u;
-
-    // Runtime evidence from the normal-launch diagnostic certified this exact
-    // traversal against the retained retail selector for 488,602 executions
-    // with zero mismatches. Production therefore executes the PTDE-equivalent
-    // first-four traversal once instead of calling the retail selector and
-    // repeating the same list walk a second time merely to recover node
-    // pointers. Optional cross-check builds may re-enable the retained call.
-    if (!select_first_four_exact(
-            collection,
-            query,
-            mask,
-            selected_ids,
-            nodes,
-            selected_count)) {
-        telemetry::hot_count(g_mirror_diff);
-        return;
-    }
-    telemetry::hot_count(g_selector_calls);
-
-#if defined(DSRRL_CLUSTERED_SELECTOR_RUNTIME_CROSSCHECK)
-    if (g_retained_selector == nullptr) {
-        telemetry::hot_count(g_mirror_diff);
-        return;
-    }
-
-    std::array<std::uint32_t,4> host_ids{
-        0xffffffffu,0xffffffffu,
-        0xffffffffu,0xffffffffu};
-    const int host_count =
-        g_retained_selector(
-            collection,
-            host_ids.data(),
-            4,
-            query,
-            mask);
-
-    if (host_count < 0 ||
-        host_count > 4 ||
-        static_cast<int>(selected_count) !=
-            host_count) {
-        telemetry::hot_count(g_mirror_diff);
-        return;
-    }
-
-    for (std::uint8_t i = 0u;
-         i < selected_count;
-         ++i) {
-        if (host_ids[i] != selected_ids[i]) {
-            telemetry::hot_count(g_mirror_diff);
-            return;
-        }
-    }
-    telemetry::hot_count(g_mirror_equal);
-#endif
-
-    if (selected_count == 0u)
-        return;
-
-    producer_snapshot snapshot{};
-    snapshot.owner =
+    producer_input_snapshot input{};
+    input.owner =
         reinterpret_cast<std::uintptr_t>(
             renderer_context);
-    snapshot.serial =
+    input.serial =
         g_serial.fetch_add(
             1u,
             std::memory_order_relaxed) + 1u;
-    snapshot.raw_selected_count =
-        selected_count;
-    // Legacy field name retained in the carrier ABI. At runtime this now
-    // means the single-pass selector is backed by the 488,602/0 equivalence
-    // proof; optional cross-check builds can still validate it live.
-    snapshot.selector_mirror_verified =
-        true;
 
-    for (std::uint8_t i = 0u;
-         i < selected_count;
-         ++i) {
-        if (!capture_source(
-                nodes[i],
-                snapshot.sources[i])) {
-            telemetry::hot_count(
-                g_source_capture_fail);
-            return;
-        }
+    const auto *renderer_bytes =
+        static_cast<const std::uint8_t *>(
+            renderer_context);
+    const auto *draw_bytes =
+        static_cast<const std::uint8_t *>(
+            draw);
 
-        if (snapshot.sources[i].source_id !=
-            selected_ids[i]) {
-            telemetry::hot_count(
-                g_source_capture_fail);
-            return;
-        }
-        telemetry::hot_count(
-            g_source_capture_ok);
+    // These exact objects/offsets are already live at the attested retail
+    // builder site. Snapshot only draw-local state; external collection/node
+    // memory is validated later, and only for an authorized PointLight draw.
+    std::memcpy(
+        &input.collection,
+        renderer_bytes + 0x2328u,
+        sizeof(input.collection));
+    std::memcpy(
+        input.query.data(),
+        draw_bytes + 0xD0u,
+        sizeof(input.query));
+    std::memcpy(
+        &input.mask,
+        draw_bytes + 0x3Au,
+        sizeof(input.mask));
+
+    if (input.collection == nullptr ||
+        (input.mask & 0x0fu) == 0u) {
+        telemetry::hot_count(g_collection_fail);
+        return;
     }
 
-    snapshot.valid = true;
-    publish_snapshot(snapshot);
+    input.valid = true;
+    g_producer_input_tls = input;
+    telemetry::hot_count(g_collection_ok);
     telemetry::hot_count(g_snapshot_publish);
 }
-
 void clustered_pnts_draw_runtime::selector_event(
     void *owner,
     const void *actual_material) noexcept
@@ -846,37 +697,25 @@ void clustered_pnts_draw_runtime::selector_event(
         actual_material == nullptr)
         return;
 
-    producer_snapshot snapshot{};
     const auto owner_key =
         reinterpret_cast<std::uintptr_t>(
             owner);
 
-    // Builder and selector callbacks are normally on the same render worker.
-    // Use the exact thread-local producer snapshot first; retain the existing
-    // synchronized registry as the cross-thread fallback. This removes the
-    // global mutex from the common join path without weakening fail-open
-    // semantics for cross-thread delivery.
-    if (g_producer_snapshot_tls.valid &&
-        g_producer_snapshot_tls.owner ==
+    // Exact same-thread handoff only. Cross-thread delivery intentionally
+    // fails open instead of resurrecting the old globally locked registry.
+    if (!g_producer_input_tls.valid ||
+        g_producer_input_tls.owner !=
             owner_key) {
-        snapshot = g_producer_snapshot_tls;
-    } else if (!lookup_snapshot(
-                   owner_key,
-                   snapshot)) {
-        telemetry::hot_count(g_owner_join_miss);
-        return;
-    }
-
-    if (!snapshot.valid ||
-        !snapshot.selector_mirror_verified) {
         telemetry::hot_count(g_owner_join_miss);
         return;
     }
     telemetry::hot_count(g_owner_join_hit);
 
-    if (!readable_range(
-            actual_material,
-            0x388u)) {
+    // The selector hook can execute millions of times. Cache the OS page
+    // validation per actual material object rather than VirtualQuery every
+    // event.
+    if (!actual_material_readable_cached(
+            actual_material)) {
         telemetry::hot_count(
             g_material_limit_fail);
         return;
@@ -896,14 +735,14 @@ void clustered_pnts_draw_runtime::selector_event(
     }
     telemetry::hot_count(g_material_limit_ok);
 
-    g_draw_selection.snapshot = snapshot;
+    g_draw_selection.input =
+        g_producer_input_tls;
     g_draw_selection.material_max = material_max;
     g_draw_selection.owner_verified = true;
     g_draw_selection.material_limit_ready =
         true;
     g_draw_selection.ready = true;
 }
-
 bool clustered_pnts_draw_runtime::prepare_sidecar(
     ID3D11DeviceContext *context,
     const operators::material_response::decision &material,
@@ -922,12 +761,104 @@ bool clustered_pnts_draw_runtime::prepare_sidecar(
         return false;
     }
 
+    const auto &input =
+        g_draw_selection.input;
+
+    // The integrated caller reaches prepare_sidecar only after exact receiver,
+    // direct material authority and material-resource gates. Heavy PTDE
+    // membership/source work is therefore paid only by a draw that can
+    // actually activate the PointLight island.
+    std::array<std::uint32_t,4> selected_ids{};
+    std::array<void *,4> nodes{};
+    std::uint8_t selected_count = 0u;
+
+    if (!input.valid ||
+        !select_first_four_exact(
+            input.collection,
+            input.query.data(),
+            input.mask,
+            selected_ids,
+            nodes,
+            selected_count)) {
+        telemetry::hot_count(g_mirror_diff);
+        telemetry::hot_count(g_sidecar_fail);
+        telemetry::hot_count(g_prepare_fail);
+        return false;
+    }
+    telemetry::hot_count(g_selector_calls);
+
+#if defined(DSRRL_CLUSTERED_SELECTOR_RUNTIME_CROSSCHECK)
+    if (g_retained_selector == nullptr) {
+        telemetry::hot_count(g_mirror_diff);
+        telemetry::hot_count(g_sidecar_fail);
+        telemetry::hot_count(g_prepare_fail);
+        return false;
+    }
+
+    std::array<std::uint32_t,4> host_ids{
+        0xffffffffu,0xffffffffu,
+        0xffffffffu,0xffffffffu};
+    const int host_count =
+        g_retained_selector(
+            input.collection,
+            host_ids.data(),
+            4,
+            input.query.data(),
+            input.mask);
+
+    if (host_count < 0 ||
+        host_count > 4 ||
+        static_cast<int>(selected_count) !=
+            host_count) {
+        telemetry::hot_count(g_mirror_diff);
+        telemetry::hot_count(g_sidecar_fail);
+        telemetry::hot_count(g_prepare_fail);
+        return false;
+    }
+
+    for (std::uint8_t i = 0u;
+         i < selected_count;
+         ++i) {
+        if (host_ids[i] != selected_ids[i]) {
+            telemetry::hot_count(g_mirror_diff);
+            telemetry::hot_count(g_sidecar_fail);
+            telemetry::hot_count(g_prepare_fail);
+            return false;
+        }
+    }
+    telemetry::hot_count(g_mirror_equal);
+#endif
+
+    if (selected_count == 0u) {
+        telemetry::hot_count(g_sidecar_fail);
+        telemetry::hot_count(g_prepare_fail);
+        return false;
+    }
+
+    std::array<source_raw,4> sources{};
+    for (std::uint8_t i = 0u;
+         i < selected_count;
+         ++i) {
+        if (!capture_source(
+                nodes[i],
+                sources[i]) ||
+            sources[i].source_id !=
+                selected_ids[i]) {
+            telemetry::hot_count(
+                g_source_capture_fail);
+            telemetry::hot_count(g_sidecar_fail);
+            telemetry::hot_count(g_prepare_fail);
+            return false;
+        }
+        telemetry::hot_count(
+            g_source_capture_ok);
+    }
+
     const auto built =
         operators::point_light::
             build_clustered_sidecar_v1(
-                g_draw_selection.snapshot.sources,
-                g_draw_selection.snapshot.
-                    raw_selected_count,
+                sources,
+                selected_count,
                 g_draw_selection.material_max,
                 material);
 
@@ -985,7 +916,7 @@ bool clustered_pnts_draw_runtime::prepare_sidecar(
     prepared.t19 = g_gpu.t19_srv;
     prepared.b12 = g_gpu.b12;
     prepared.producer_serial =
-        g_draw_selection.snapshot.serial;
+        input.serial;
     prepared.raw_selected_count =
         built.payload.raw_selected_count;
     prepared.material_max_pnt_lit_num =
@@ -993,9 +924,7 @@ bool clustered_pnts_draw_runtime::prepare_sidecar(
     prepared.effective_count =
         built.payload.effective_count;
     prepared.owner_verified = true;
-    prepared.selector_mirror_verified =
-        g_draw_selection.snapshot.
-            selector_mirror_verified;
+    prepared.selector_mirror_verified = true;
     prepared.ready = true;
 
     telemetry::hot_count(g_prepare_ok);
@@ -1072,8 +1001,9 @@ clustered_pnts_draw_runtime::telemetry() const noexcept
 void clustered_pnts_draw_runtime::reset() noexcept
 {
     consume_draw_selection();
-    g_producer_snapshot_tls = {};
-    clear_registry();
+    g_producer_input_tls = {};
+    g_material_validation_ptr = nullptr;
+    g_material_validation_ok = false;
 
     {
         std::lock_guard<std::mutex> lock(
