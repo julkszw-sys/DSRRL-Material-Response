@@ -5,7 +5,7 @@
 #include "dsrrl/operators/legacy_plan/dxbc_checksum.hpp"
 #include "dsrrl/operators/legacy_plan/dxbc_rdef_patch.hpp"
 #include "dsrrl/operators/legacy_plan/sha256_bytes.hpp"
-#include "dsrrl/operators/material_response/hemenvlerp_v211_materializer.hpp"
+#include "dsrrl/operators/material_response/material_response_diffuse_v1.hpp"
 #include "dsrrl/operators/resource_bridges/spec_rgb_consumer_materializer.hpp"
 #include "dsrrl/operators/surface/terminal_sat_rgb_patch.hpp"
 
@@ -506,6 +506,7 @@ bool final_postcondition(
 
 pmetal_rgba_lerp_materialize_outcome
 materialize_pmetal_rgba_lerp_receiver(
+    const core::feature_registry &features,
     const std::uint8_t *stock_source,
     std::size_t stock_size,
     std::vector<std::uint8_t> &output) noexcept
@@ -531,43 +532,57 @@ materialize_pmetal_rgba_lerp_receiver(
         return outcome;
     }
 
-    std::vector<std::uint8_t> v211;
+    std::vector<std::uint8_t> base;
     const auto mr =
-        material_response::materialize_hemenvlerp_v211_certified_stage(
-            stock_source,
-            stock_size,
-            v211);
+        material_response::
+            materialize_ptde_diffuse_response_v1(
+                features,
+                stock_source,
+                stock_size,
+                base,
+                true);
 
     using mr_result =
-        material_response::hemenvlerp_v211_result;
+        material_response::diffuse_v1_result;
 
-    if (mr.result == mr_result::pass_not_candidate) {
+    if (mr.result ==
+            mr_result::pass_not_candidate) {
         outcome.result =
-            pmetal_rgba_lerp_materialize_result::pass_not_candidate;
+            pmetal_rgba_lerp_materialize_result::
+                pass_not_candidate;
         return outcome;
     }
 
-    if (mr.result == mr_result::pass_unknown_exact_sha) {
+    if (mr.result ==
+            mr_result::pass_unknown_exact_sha) {
         outcome.result =
-            pmetal_rgba_lerp_materialize_result::pass_unknown_exact_sha;
+            pmetal_rgba_lerp_materialize_result::
+                pass_unknown_exact_sha;
         return outcome;
     }
 
-    if (mr.result != mr_result::applied) {
+    if (mr.result != mr_result::applied ||
+        mr.family !=
+            material_response::
+                diffuse_v1_family::hemenvlerp) {
         outcome.result =
-            pmetal_rgba_lerp_materialize_result::fail_v211_stage;
+            pmetal_rgba_lerp_materialize_result::
+                fail_diffuse_base;
         return outcome;
     }
 
-    const auto v211_digest =
-        hashing::sha256(v211.data(), v211.size());
+    const auto stock_digest =
+        hashing::sha256(
+            stock_source,
+            stock_size);
 
-    const generated_lerp::pmetal_hemenvlerp_site *site = nullptr;
+    const generated_lerp::pmetal_hemenvlerp_site
+        *site = nullptr;
     for (const auto &candidate :
          generated_lerp::k_pmetal_hemenvlerp_sites) {
         if (!hashing::matches_hex(
-                v211_digest,
-                candidate.v211_sha256))
+                stock_digest,
+                candidate.stock_sha256))
             continue;
 
         if (site != nullptr) {
@@ -582,13 +597,15 @@ materialize_pmetal_rgba_lerp_receiver(
 
     if (site == nullptr) {
         outcome.result =
-            pmetal_rgba_lerp_materialize_result::pass_unknown_exact_sha;
+            pmetal_rgba_lerp_materialize_result::
+                pass_unknown_exact_sha;
         return outcome;
     }
 
-    if (site->pair_index != mr.pair_index ||
+    if (site->pair_index !=
+            mr.family_index ||
         site->semantic_receiver_id !=
-            24u + static_cast<std::uint32_t>(mr.pair_index)) {
+            mr.receiver_id) {
         outcome.result =
             pmetal_rgba_lerp_materialize_result::
                 fail_operator_precondition;
@@ -604,8 +621,8 @@ materialize_pmetal_rgba_lerp_receiver(
     std::size_t code_index = 0u;
 
     if (!parse_dxbc(
-            v211.data(),
-            v211.size(),
+            base.data(),
+            base.size(),
             chunks,
             code_index,
             words)) {
@@ -721,9 +738,9 @@ materialize_pmetal_rgba_lerp_receiver(
         return outcome;
     }
 
-    // V2.11 already inserted b12 at words 11..14. Keep that ABI fixed
-    // and place the existing eight-lane PTDE LightBank carrier immediately
-    // after it, so all verified instruction sites shift uniformly by 4.
+    // The clean diffuse-v1 operator base inserted b12 at words 11..14.
+    // Keep that verified ABI fixed and place the independent PTDE LightBank
+    // carrier immediately after it, so all audited sites shift uniformly.
     if (words.size() < 15u ||
         words[11] != 0x04000059u ||
         words[12] != 0x00208e46u ||
@@ -752,8 +769,8 @@ materialize_pmetal_rgba_lerp_receiver(
 
     std::vector<std::uint8_t> envspec_base;
     if (!add_bridge_rdef(
-            v211.data(),
-            v211.size(),
+            base.data(),
+            base.size(),
             std::move(chunks),
             code_index,
             words,
