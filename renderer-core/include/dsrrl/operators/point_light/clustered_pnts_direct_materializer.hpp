@@ -14,6 +14,7 @@ enum class clustered_pnts_direct_materialize_result : std::uint8_t {
     pass_unknown_exact_sha,
     fail_invalid_dxbc,
     fail_patch_precondition,
+    fail_upper_lower_composition,
     fail_rebuild,
     fail_final_sha
 };
@@ -28,6 +29,7 @@ struct clustered_pnts_direct_materialize_outcome {
     std::uint32_t representative_shader_index = 0u;
     bool spc = false;
     bool blended_material = false;
+    bool upper_lower_composed = false;
 };
 
 clustered_pnts_direct_materialize_outcome
