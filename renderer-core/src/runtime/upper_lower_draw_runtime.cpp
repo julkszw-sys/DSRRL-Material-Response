@@ -87,6 +87,7 @@ struct producer_tls {
     float source_beta = 0.0f;
     bool reference_ready = false;
     bool evaluated_vectors_ready = false;
+    bool direct_ul_applied = false;
     std::array<f4,3> evaluated_directions{};
 };
 
@@ -107,6 +108,7 @@ struct lightbank_reference_token {
     bool source_ready = false;
     bool vectors_ready = false;
     bool upper_lower_ready = false;
+    bool direct_ul_applied = false;
     bool valid = false;
     bool available = false;
 };
@@ -407,6 +409,209 @@ struct raw_rgbm {
 };
 #pragma pack(pop)
 
+constexpr std::size_t k_direct_ul_cache_stamp_sets = 2048u;
+constexpr std::size_t k_direct_ul_cache_stamp_ways = 2u;
+constexpr std::uintptr_t k_direct_ul_cache_empty = 0u;
+constexpr std::uintptr_t k_direct_ul_cache_busy = 1u;
+
+struct direct_ul_cache_stamp_slot {
+    std::atomic<std::uintptr_t> record{
+        k_direct_ul_cache_empty};
+    std::array<std::atomic<std::uint32_t>,6>
+        rgb_bits{};
+};
+
+std::array<
+    direct_ul_cache_stamp_slot,
+    k_direct_ul_cache_stamp_sets *
+        k_direct_ul_cache_stamp_ways>
+    g_direct_ul_cache_stamps{};
+
+std::size_t direct_ul_cache_stamp_set(
+    const void *record) noexcept
+{
+    const auto key =
+        reinterpret_cast<std::uintptr_t>(
+            record);
+    return static_cast<std::size_t>(
+        ((key >> 4u) ^
+         (key >> 13u) ^
+         (key >> 23u)) &
+        (k_direct_ul_cache_stamp_sets - 1u));
+}
+
+bool direct_ul_cache_rgb_bits(
+    const void *record,
+    std::array<std::uint32_t,6> &bits) noexcept
+{
+    bits = {};
+    if (record == nullptr)
+        return false;
+
+    const auto *bytes =
+        static_cast<const std::uint8_t *>(
+            record);
+    std::memcpy(
+        bits.data(),
+        bytes + k_q_upper_offset,
+        3u * sizeof(std::uint32_t));
+    std::memcpy(
+        bits.data() + 3u,
+        bytes + k_q_lower_offset,
+        3u * sizeof(std::uint32_t));
+    return true;
+}
+
+bool mark_direct_ul_cache_record(
+    const void *record) noexcept
+{
+    const auto key =
+        reinterpret_cast<std::uintptr_t>(
+            record);
+    if (key <= k_direct_ul_cache_busy)
+        return false;
+
+    std::array<std::uint32_t,6> bits{};
+    if (!direct_ul_cache_rgb_bits(
+            record,
+            bits))
+        return false;
+
+    const auto base =
+        direct_ul_cache_stamp_set(record) *
+        k_direct_ul_cache_stamp_ways;
+
+    for (std::size_t way = 0u;
+         way < k_direct_ul_cache_stamp_ways;
+         ++way) {
+        auto &slot =
+            g_direct_ul_cache_stamps[
+                base + way];
+
+        auto observed =
+            slot.record.load(
+                std::memory_order_acquire);
+        if (observed != key &&
+            observed != k_direct_ul_cache_empty)
+            continue;
+
+        auto expected = observed;
+        if (!slot.record.compare_exchange_strong(
+                expected,
+                k_direct_ul_cache_busy,
+                std::memory_order_acq_rel,
+                std::memory_order_acquire))
+            continue;
+
+        for (std::size_t i = 0u;
+             i < bits.size();
+             ++i)
+            slot.rgb_bits[i].store(
+                bits[i],
+                std::memory_order_relaxed);
+
+        slot.record.store(
+            key,
+            std::memory_order_release);
+        return true;
+    }
+
+    // Collision pressure never authorizes the producer shortcut. A missing
+    // stamp simply forces the exact b13 draw bridge for the selected draw.
+    return false;
+}
+
+bool direct_ul_cache_record_matches(
+    const void *record) noexcept
+{
+    const auto key =
+        reinterpret_cast<std::uintptr_t>(
+            record);
+    if (key <= k_direct_ul_cache_busy)
+        return false;
+
+    std::array<std::uint32_t,6> current{};
+    if (!direct_ul_cache_rgb_bits(
+            record,
+            current))
+        return false;
+
+    const auto base =
+        direct_ul_cache_stamp_set(record) *
+        k_direct_ul_cache_stamp_ways;
+
+    for (std::size_t way = 0u;
+         way < k_direct_ul_cache_stamp_ways;
+         ++way) {
+        const auto &slot =
+            g_direct_ul_cache_stamps[
+                base + way];
+
+        const auto before =
+            slot.record.load(
+                std::memory_order_acquire);
+        if (before != key)
+            continue;
+
+        bool equal = true;
+        for (std::size_t i = 0u;
+             i < current.size();
+             ++i)
+            if (slot.rgb_bits[i].load(
+                    std::memory_order_relaxed) !=
+                current[i]) {
+                equal = false;
+                break;
+            }
+
+        const auto after =
+            slot.record.load(
+                std::memory_order_acquire);
+        return after == key && equal;
+    }
+
+    return false;
+}
+
+void clear_direct_ul_cache_stamps() noexcept
+{
+    for (auto &slot :
+         g_direct_ul_cache_stamps)
+        slot.record.store(
+            k_direct_ul_cache_empty,
+            std::memory_order_release);
+}
+
+const std::uint8_t *
+selected_cache_record_attested(
+    void *source,
+    std::int32_t selector) noexcept
+{
+    if (source == nullptr ||
+        selector < 0)
+        return nullptr;
+
+    const std::uint8_t *records = nullptr;
+    std::memcpy(
+        &records,
+        static_cast<const std::uint8_t *>(
+            source) + 0x20u,
+        sizeof(records));
+    if (records == nullptr)
+        return nullptr;
+
+    const auto index =
+        static_cast<std::size_t>(
+            selector);
+    if (index >
+        (std::numeric_limits<std::size_t>::max() /
+         k_record_stride))
+        return nullptr;
+
+    return records +
+        index * k_record_stride;
+}
+
 core::renderer_core *g_core = nullptr;
 upper_lower_draw_runtime *g_runtime = nullptr;
 std::uintptr_t g_base = 0u;
@@ -552,6 +757,8 @@ std::atomic_bool g_direct_ul_operator_changed{false};
 std::atomic<std::uint64_t> g_direct_ul_steady_inject{0};
 std::atomic<std::uint64_t> g_direct_ul_blend_inject{0};
 std::atomic<std::uint64_t> g_direct_ul_inject_fail{0};
+std::atomic<std::uint64_t> g_direct_ul_draw_ready{0};
+std::atomic<std::uint64_t> g_direct_ul_draw_fallback{0};
 
 void latch_thread_id_once(
     std::atomic<std::uint32_t> &slot) noexcept
@@ -1173,6 +1380,8 @@ void publish_reference_token(
     token.upper_lower_ready =
         producer.have_upper &&
         producer.have_lower;
+    token.direct_ul_applied =
+        producer.direct_ul_applied;
     if (token.vectors_ready)
         token.directions =
             producer.evaluated_directions;
@@ -2492,6 +2701,8 @@ void __fastcall hook_steady_cache_builder(
     if (rewrite_steady_cache_ptde_ul(
             dst,
             raw_row)) {
+        (void)mark_direct_ul_cache_record(
+            dst);
         if (!g_direct_ul_operator_changed.load(
                 std::memory_order_relaxed))
             g_direct_ul_operator_changed.store(
@@ -2691,6 +2902,103 @@ f4 lerp4(
         a.z + (b.z - a.z) * t,
         0.0f
     };
+}
+
+bool decode_reference_upper_lower(
+    void *source_a,
+    std::int32_t selector_a,
+    void *source_b,
+    std::int32_t selector_b,
+    float beta,
+    f4 &upper,
+    f4 &lower) noexcept
+{
+    upper = {};
+    lower = {};
+
+    if (!std::isfinite(beta))
+        return false;
+
+    const auto *raw_a =
+        resolve_raw_lightbank_record(
+            source_a,
+            selector_a);
+    const auto *raw_b =
+        resolve_raw_lightbank_record(
+            source_b,
+            selector_b);
+
+    const std::uint8_t *eval_a = raw_a;
+    const std::uint8_t *eval_b = raw_b;
+    float eval_beta = beta;
+
+    if (raw_a != nullptr &&
+        (selector_a == selector_b ||
+         raw_b == nullptr ||
+         beta <= 0.0f)) {
+        eval_b = raw_a;
+        eval_beta = 0.0f;
+    } else if (
+        raw_b != nullptr &&
+        (raw_a == nullptr ||
+         beta >= 1.0f)) {
+        eval_a = raw_b;
+        eval_b = raw_b;
+        eval_beta = 0.0f;
+    }
+
+    if (eval_a == nullptr ||
+        eval_b == nullptr)
+        return false;
+
+    raw_rgbm upper_a{};
+    raw_rgbm lower_a{};
+    raw_rgbm upper_b{};
+    raw_rgbm lower_b{};
+    std::memcpy(
+        &upper_a,
+        eval_a + 0x24u,
+        sizeof(upper_a));
+    std::memcpy(
+        &lower_a,
+        eval_a + 0x2Cu,
+        sizeof(lower_a));
+    std::memcpy(
+        &upper_b,
+        eval_b + 0x24u,
+        sizeof(upper_b));
+    std::memcpy(
+        &lower_b,
+        eval_b + 0x2Cu,
+        sizeof(lower_b));
+
+    const auto ua = decode_rgbm(upper_a);
+    const auto la = decode_rgbm(lower_a);
+    const auto ub = decode_rgbm(upper_b);
+    const auto lb = decode_rgbm(lower_b);
+
+    upper =
+        eval_beta == 0.0f
+            ? ua
+            : lerp4(
+                ua,
+                ub,
+                eval_beta);
+    lower =
+        eval_beta == 0.0f
+            ? la
+            : lerp4(
+                la,
+                lb,
+                eval_beta);
+
+    return
+        std::isfinite(upper.x) &&
+        std::isfinite(upper.y) &&
+        std::isfinite(upper.z) &&
+        std::isfinite(lower.x) &&
+        std::isfinite(lower.y) &&
+        std::isfinite(lower.z);
 }
 
 bool float_bits_equal(
@@ -3128,9 +3436,43 @@ void __fastcall hook_steady_packer(
                 g_producer) &&
             capture_evaluated_vectors(
                 dst,
-                g_producer))
+                g_producer)) {
+            const auto *selected_record =
+                selected_cache_record_attested(
+                    source,
+                    selector);
+            g_producer.direct_ul_applied =
+                selected_record != nullptr &&
+                direct_ul_cache_record_matches(
+                    selected_record);
+
+            if (!g_producer.direct_ul_applied) {
+                f4 exact_upper{};
+                f4 exact_lower{};
+                g_producer.have_upper = false;
+                g_producer.have_lower = false;
+                if (decode_reference_upper_lower(
+                        source,
+                        selector,
+                        source,
+                        selector,
+                        0.0f,
+                        exact_upper,
+                        exact_lower)) {
+                    g_producer.upper =
+                        exact_upper;
+                    g_producer.lower =
+                        exact_lower;
+                    g_producer.have_upper =
+                        true;
+                    g_producer.have_lower =
+                        true;
+                }
+            }
+
             telemetry::hot_count(
                 g_steady_pass);
+        }
         return;
     }
 
@@ -3299,6 +3641,7 @@ void *__fastcall hook_blend_packer(
             dst,
             g_producer.upper,
             g_producer.lower);
+        g_producer.direct_ul_applied = true;
         if (!g_direct_ul_operator_changed.load(
                 std::memory_order_relaxed))
             g_direct_ul_operator_changed.store(
@@ -3318,10 +3661,33 @@ void *__fastcall hook_blend_packer(
                 source_b,
                 selector_b,
                 beta,
-                g_producer))
-            (void)capture_evaluated_vectors(
+                g_producer) &&
+            capture_evaluated_vectors(
                 dst,
-                g_producer);
+                g_producer) &&
+            !g_producer.direct_ul_applied) {
+            f4 exact_upper{};
+            f4 exact_lower{};
+            g_producer.have_upper = false;
+            g_producer.have_lower = false;
+            if (decode_reference_upper_lower(
+                    source_a,
+                    selector_a,
+                    source_b,
+                    selector_b,
+                    beta,
+                    exact_upper,
+                    exact_lower)) {
+                g_producer.upper =
+                    exact_upper;
+                g_producer.lower =
+                    exact_lower;
+                g_producer.have_upper =
+                    true;
+                g_producer.have_lower =
+                    true;
+            }
+        }
         return result;
     }
 
@@ -3732,6 +4098,7 @@ void clear_snapshots() noexcept
         g_reference_token_victim[set] = 0u;
     }
     clear_b13_upload_slots();
+    clear_direct_ul_cache_stamps();
     // The bank verdict is keyed by an engine-owned base pointer. Drop the
     // current thread's verdicts at lifecycle boundaries so allocator address
     // reuse cannot resurrect a stale exact bank identity after teardown.
@@ -4033,6 +4400,24 @@ bool upper_lower_draw_runtime::direct_producer_active() const noexcept
         !g_quarantined.load(std::memory_order_acquire) &&
         g_direct_ul_producer_active.load(
             std::memory_order_acquire);
+}
+
+bool upper_lower_draw_runtime::
+direct_producer_ready_for_draw() const noexcept
+{
+    if (!direct_producer_active())
+        return false;
+
+    const bool ready =
+        g_draw_reference_token.valid &&
+        g_draw_reference_token.upper_lower_ready &&
+        g_draw_reference_token.direct_ul_applied;
+
+    telemetry::hot_count(
+        ready
+            ? g_direct_ul_draw_ready
+            : g_direct_ul_draw_fallback);
+    return ready;
 }
 
 bool upper_lower_draw_runtime::prepare_upper_lower_carrier(
@@ -4499,6 +4884,8 @@ upper_lower_draw_runtime::telemetry() const noexcept
         g_direct_ul_steady_inject.load(),
         g_direct_ul_blend_inject.load(),
         g_direct_ul_inject_fail.load(),
+        g_direct_ul_draw_ready.load(),
+        g_direct_ul_draw_fallback.load(),
         g_enabled.load(),
         g_pmetal_env_hook_armed.load(),
         g_direct_ul_producer_active.load(),
