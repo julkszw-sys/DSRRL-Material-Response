@@ -44,9 +44,14 @@ def main() -> int:
     routes_doc = json.loads(Path(args.routes).read_text(encoding="utf-8"))
     donor_text = Path(args.donors).read_text(encoding="utf-8")
 
-    bindings = bindings_doc.get("bindings") or bindings_doc.get("rows") or bindings_doc.get("routes")
+    bindings = (
+        bindings_doc.get("records")
+        or bindings_doc.get("bindings")
+        or bindings_doc.get("rows")
+        or bindings_doc.get("routes")
+    )
     if not isinstance(bindings, list):
-        raise SystemExit("exact-binding JSON has no bindings/rows/routes array")
+        raise SystemExit("exact-binding JSON has no records/bindings/rows/routes array")
 
     routes = routes_doc.get("routes")
     if not isinstance(routes, list):
