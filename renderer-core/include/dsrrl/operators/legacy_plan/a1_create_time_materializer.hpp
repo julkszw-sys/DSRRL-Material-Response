@@ -78,20 +78,17 @@ inline bool a1_materializable_owner(core::operator_id owner) noexcept
 
 // Recovered P2.2 plans are historical byte translations, not semantic
 // authority by themselves. The generator used to classify every instruction
-// gaining the SAT modifier as terminal_sat_rgb. PTDE evidence, however,
-// certifies this operator only for the exact Phn HemEnv/HemEnvLerp terminal
-// RGB write (MOV o0.xyz): 0x05000036 -> 0x05002036. Non/FaceEye and Gst
-// historical SAT candidates must therefore fail open until separately proven.
+// gaining the SAT modifier as terminal_sat_rgb. Current authority is narrower:
+// exact Phn HemEnv/HemEnvLerp only, with the recovered write shape tied to the
+// certified plan class. The 12 PntS plans use the direct-journal terminal MOV
+// shape; the 24 PntSS/PntSSSS plans use the PTDE-audited terminal MUL shape.
+// Gst and Non/FaceEye SAT candidates remain provenance-only and fail open.
 inline bool a1_op_semantically_authorized(
     const generated::a1_exact_patch_plan &plan,
     const generated::a1_exact_patch_op &op) noexcept
 {
     if (op.owner != core::operator_id::terminal_sat_rgb)
         return true;
-
-    const bool exact_rgb_terminal =
-        op.expected_old_word == 0x05000036u &&
-        op.replacement_word == 0x05002036u;
 
     const bool certified_phn_hemenv_plan =
         (plan.legacy_mask == 39u ||
@@ -105,8 +102,16 @@ inline bool a1_op_semantically_authorized(
             plan.representative,
             "HemEnv") != nullptr;
 
-    return exact_rgb_terminal &&
-        certified_phn_hemenv_plan;
+    const bool certified_write_shape =
+        (plan.legacy_mask == 39u &&
+         op.expected_old_word == 0x05000036u &&
+         op.replacement_word == 0x05002036u) ||
+        (plan.legacy_mask == 193u &&
+         op.expected_old_word == 0x09000037u &&
+         op.replacement_word == 0x09002037u);
+
+    return certified_phn_hemenv_plan &&
+        certified_write_shape;
 }
 
 // Lower-level transaction used only after the caller has already resolved an
