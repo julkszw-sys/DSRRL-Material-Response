@@ -4,6 +4,7 @@
 #include "dsrrl/core/types.hpp"
 
 #include <array>
+#include <atomic>
 #include <cstdint>
 #include <mutex>
 #include <optional>
@@ -120,6 +121,13 @@ public:
     bool register_receiver_recipe(const receiver_recipe &recipe);
     bool register_material_profile(const material_profile &profile);
 
+    // Registration is an AddonInit-only construction phase. Finalization
+    // sorts the immutable authority tables and publishes them with release
+    // semantics, allowing the draw hot path to evaluate without the registry
+    // mutex while preserving the exact same receiver/material gates.
+    bool finalize_registration();
+    bool registration_finalized() const noexcept;
+
     decision evaluate(
         std::uint32_t receiver_id,
         const std::optional<material_identity> &material,
@@ -148,6 +156,7 @@ private:
     mutable std::mutex mutex_;
     std::vector<receiver_recipe> receiver_recipes_;
     std::vector<material_profile> material_profiles_;
+    std::atomic_bool registration_finalized_{false};
 };
 
 } // namespace dsrrl::operators::material_response
