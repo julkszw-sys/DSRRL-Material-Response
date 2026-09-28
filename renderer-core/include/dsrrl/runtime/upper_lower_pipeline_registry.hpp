@@ -76,6 +76,21 @@ constexpr bool upper_lower_identity_runtime_shape_valid(
     return false;
 }
 
+constexpr bool upper_lower_direct_producer_bypass_allowed(
+    bool draw_direct_applied,
+    const upper_lower_receiver_identity &identity) noexcept
+{
+    // The direct stock-producer cut is certified only for ordinary stable
+    // HemEnv. Other exact U/L families retain their draw-local b13 consumer
+    // bridge until an equally strong producer->consumer proof exists.
+    return
+        draw_direct_applied &&
+        upper_lower_identity_runtime_shape_valid(identity) &&
+        identity.family ==
+            operators::lightbank::
+                upper_lower_hemenv_family::hemenv;
+}
+
 struct upper_lower_pipeline_telemetry {
     std::uint64_t created_code_attested = 0;
     std::uint64_t created_code_conflict = 0;
