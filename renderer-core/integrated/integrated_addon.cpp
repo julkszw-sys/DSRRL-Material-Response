@@ -4809,11 +4809,12 @@ bool AddonInit(
         reshade::log::level::info,
         "[DSRRL CORE+ISLANDS " DSRRL_CORE_ISLANDS_VERSION
         "] READY: shared Core draw-state transaction layer (PS/CB/SRV/sampler) "
-        "is active; Material Response reset uses only the direct stock->PTDE diffuse "
-        "material-domain operator in generic HemEnv/HemEnvLerp. PTDE c101/c102 remain "
-        "operator-local carriers for verified local-specular islands; generic SpecRGB->DSR "
-        "PBL pairing and the V2.11-rooted P_Metal EnvSpec replay are disabled/fail-open. "
-        "Runtime activation and PTDE pixel behavior remain separate validation stages; "
+        "is active; generic Material Response is the direct stock->PTDE diffuse "
+        "material-domain operator for HemEnv/HemEnvLerp. PTDE c101/c102 remain operator-local "
+        "carriers for verified EnvSpec/local-specular consumers; generic SpecRGB->DSR PBL "
+        "pairing is forbidden. P_Metal EnvSpec is rebuilt from exact stock identity through "
+        "the clean diffuse-v1 base and PTDE legacy EnvSpec window. Runtime activation and "
+        "PTDE pixel behavior remain separate validation stages; "
         "frozen legacy monolith is not linked.");
 
     return true;
