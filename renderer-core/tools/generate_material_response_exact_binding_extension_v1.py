@@ -9,7 +9,7 @@ from pathlib import Path
 
 DONOR_RE = re.compile(
     r'\{"(?P<sha>[0-9a-f]{64})", \{(?P<c100>[^}]+)\}, (?P<c100_tier>\d+), '
-    r'\{(?P<c101_ptde>[^}]+)\}, \{(?P<c101_f0q>[^}]+)\}, (?P<c101_tier>\d+), '
+    r'\{(?P<c101_ptde>[^}]+)\}, (?P<c101_tier>\d+), '
     r'(?P<c102>[^,]+), (?P<slot>-?\d+), (?P<has>true|false)\}'
 )
 
@@ -65,7 +65,6 @@ def main() -> int:
         donors[m.group("sha")] = {
             "c100": parse_vec(m.group("c100")),
             "c101_ptde": parse_vec(m.group("c101_ptde")),
-            "c101_f0q": parse_vec(m.group("c101_f0q")),
             "c102": float(m.group("c102").rstrip("f")),
             "slot": int(m.group("slot")),
             "has": m.group("has") == "true",
@@ -128,7 +127,6 @@ def main() -> int:
 
             same_constants = (
                 route_donor["c100"] == donor["c100"]
-                and route_donor["c101_f0q"] == donor["c101_f0q"]
                 and math.isclose(
                     float(route_donor["c102"]),
                     float(donor["c102"]),
@@ -167,7 +165,6 @@ def main() -> int:
                 "runtime_mtd_allowed": policy == "DIRECT_EXACT",
                 "c101": c101,
                 "c100": donor["c100"],
-                "c101_f0q": donor["c101_f0q"],
                 "c102": float(donor["c102"]),
                 "lod_min": lod_min,
                 "lod_max": lod_max,
@@ -204,7 +201,6 @@ def main() -> int:
         "    bool runtime_mtd_allowed;\n",
         "    float c101;\n",
         "    std::array<float,3> c100;\n",
-        "    std::array<float,3> c101_f0q;\n",
         "    float ptde_specular_power;\n",
         "    std::uint8_t lod_min;\n",
         "    std::uint8_t lod_max;\n",
@@ -215,9 +211,7 @@ def main() -> int:
 
     for r in records:
         c100 = r["c100"]
-        c101_f0q = r["c101_f0q"]
         assert isinstance(c100, tuple)
-        assert isinstance(c101_f0q, tuple)
         lines.append(
             "    {"
             f"{r['bridge_binding_id']}u,"
@@ -229,7 +223,6 @@ def main() -> int:
             f"{str(bool(r['runtime_mtd_allowed'])).lower()},"
             f"{f32_text(float(r['c101']))},"
             "{{" + ",".join(f32_text(float(x)) for x in c100) + "}},"
-            "{{" + ",".join(f32_text(float(x)) for x in c101_f0q) + "}},"
             f"{f32_text(float(r['c102']))},"
             f"{r['lod_min']}u,{r['lod_max']}u"
             "},\n"
