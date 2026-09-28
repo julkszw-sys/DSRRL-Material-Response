@@ -1,0 +1,76 @@
+{
+  "schema": "dsrrl.mr_envspec_subsurface_activation_closure.v1",
+  "status": "HIGH_CONFIDENCE_CONSTRUCTION_PASS_RUNTIME_OPEN",
+  "basis": {
+    "git_commit": "230c12f39c3406ab495465a1028745896585293e",
+    "exe_sha256": "a45aaa36dd2f6cc151670a639ea5547043cf38ea79ff4178b963c6ed71f98d7b"
+  },
+  "material_response": {
+    "generic_spec_rgb": "FORBIDDEN_DIFFUSE_V1_ONLY",
+    "generic_resource_router_spec_consumer_ready": false,
+    "replacement_tls_epoch_invalidation": "CONFIRMED_ON_INSERT_RELEASE_DEVICE_RESET",
+    "draw_transaction": "PS_B12_AND_OPTIONAL_B13_CAPTURE_BIND_RESTORE_FAIL_OPEN"
+  },
+  "selector_draw_lifetime": {
+    "selector_rva": "0x22BA20",
+    "direct_call_xrefs": [
+      {
+        "call_rva": "0x20E014",
+        "return_rva": "0x20E019",
+        "direct_draw_branches": [
+          "0x20E598",
+          "0x20E5C1"
+        ],
+        "loop_advance_rva": "0x20E631"
+      },
+      {
+        "call_rva": "0x20EB7A",
+        "return_rva": "0x20EB7F",
+        "direct_draw_branches": [
+          "0x20ED4A",
+          "0x20ED73"
+        ],
+        "loop_advance_rva": "0x20EDA7"
+      },
+      {
+        "call_rva": "0x20FB99",
+        "return_rva": "0x20FB9E",
+        "direct_draw_branches": [
+          "0x20FD9D",
+          "0x20FDF3"
+        ],
+        "loop_advance_rva": "0x20FE3E"
+      }
+    ],
+    "direct_xref_count": 3,
+    "conclusion": "Each known selector caller reaches one mutually-exclusive direct D3D11 draw branch before advancing its render loop. This supports retaining consume-once material identity and provides no evidence for a sticky cross-draw material token.",
+    "limitation": "This static observation proves the direct caller-body ordering; it is not runtime bridge-activation or pixel evidence."
+  },
+  "subsurface": {
+    "target_receivers": [
+      33,
+      34,
+      35
+    ],
+    "actual_carrier": "DRAW_TIME_MATERIAL_AWARE_PIXEL_SHADER_SUBSTITUTION",
+    "target_shader_materialization": "CREATE_TIME_OR_EARLY_CACHED_ORDINARY_TARGET_OBJECT",
+    "authorization_join": [
+      "exact DSBT owner/material",
+      "exact bound Subsurf receiver",
+      "exact body resource tuple",
+      "ordinary MR+UL+SpecRGB+Diffuse+Normal route"
+    ],
+    "old_create_time_carrier_label": "SUPERSEDED_SOURCE_NOMENCLATURE",
+    "runtime_activation": "OPEN",
+    "pixel_behavior": "OPEN"
+  },
+  "envspec": {
+    "path": "P_METAL_EXACT_ROUTE_RESOURCE_AND_CB_TRANSACTION_PRESENT",
+    "runtime_activation": "OPEN",
+    "pixel_behavior": "OPEN"
+  },
+  "exclusions": {
+    "envspec_packedgi_sidecar": "EXTERNAL_USER_OWNED_NOT_SEARCHED_NOT_AUDITED",
+    "cross_thread_command_list_migration": "NO_DSR_SPECIFIC_EVIDENCE_NO_CACHE_POLICY_CHANGE"
+  }
+}

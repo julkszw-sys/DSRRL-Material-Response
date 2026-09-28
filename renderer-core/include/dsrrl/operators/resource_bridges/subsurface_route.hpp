@@ -28,7 +28,11 @@ enum class subsurface_route_action : std::uint8_t {
 
 enum class subsurface_bypass_carrier : std::uint8_t {
     none = 0,
-    create_time_pixel_shader_substitution
+    // The ordinary PTDE-target PS is materialized/cached ahead of the draw,
+    // but authorization and substitution are draw-local. This preserves the
+    // exact DSBT material + Subsurf receiver join and avoids globally
+    // replacing a shader before material identity is available.
+    draw_time_material_aware_pixel_shader_substitution
 };
 
 enum class subsurface_route_reason : std::uint8_t {
@@ -178,12 +182,15 @@ inline const subsurface_receiver_route *find_subsurface_receiver_route(
 // an explicit target-verification gate.
 //
 // Static DXBC RE additionally proves the exact three Subsurf -> ordinary pairs
-// are create-time pixel-shader ABI compatible: pairwise ISGN/OSGN are
-// byte-identical, all five constant-buffer semantic layouts match, and the
-// ordinary target resource declarations are a strict subset that removes only
-// t10/s10 (gSMP_10 / gSMP_10Sampler). This authorizes create-time PS
-// substitution/reuse as the narrow bypass carrier. It does NOT authorize the
-// route unless the complete ordinary PTDE surface path is ready.
+// are pixel-shader ABI compatible: pairwise ISGN/OSGN are byte-identical, all
+// five constant-buffer semantic layouts match, and the ordinary target resource
+// declarations are a strict subset that removes only t10/s10
+// (gSMP_10 / gSMP_10Sampler). The target PS may therefore be materialized and
+// cached ahead of the draw, but the bypass itself is authorized only at the
+// draw boundary after exact DSBT material + Subsurf receiver + body-resource
+// identity have joined. This avoids requiring global create-time shader-owner
+// exclusivity. It does NOT authorize the route unless the complete ordinary
+// PTDE surface path is ready.
 //
 // Any incomplete identity, draw-path, surface-route or bypass carrier state
 // fails open to the host path.
@@ -328,7 +335,8 @@ inline subsurface_route_decision evaluate_subsurface_route(
         subsurface_route_action::route_to_ptde_plain_difspcbmp_surface;
     decision.reason = subsurface_route_reason::active;
     decision.carrier =
-        subsurface_bypass_carrier::create_time_pixel_shader_substitution;
+        subsurface_bypass_carrier::
+            draw_time_material_aware_pixel_shader_substitution;
     decision.bypass_dsr_subsurf = true;
     decision.preserve_dsr_sss = false;
     return decision;

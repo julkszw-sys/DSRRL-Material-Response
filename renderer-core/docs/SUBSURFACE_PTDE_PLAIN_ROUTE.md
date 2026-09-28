@@ -50,5 +50,16 @@ candidate only when all of the following are independently ready:
 - PTDE SpecRGB, Diffuse, Normal and Material Response routes;
 - a carrier that actually excludes the DSR-only Subsurf/SSS contribution.
 
+The current carrier is **draw-time material-aware pixel-shader substitution**.
+The ordinary receiver 33/34/35 PTDE-target shader object is materialized and
+cached ahead of use, but it is not globally substituted at pipeline creation.
+At the draw boundary the runtime first joins the exact DSBT owner/material,
+the exact bound Subsurf receiver, the exact body resource tuple and the full
+ordinary PTDE surface route. Only that authorized draw receives the replacement
+PS inside the shared transaction; the stock PS is restored immediately after
+the replayed draw. This is intentionally narrower than the older create-time
+carrier proposal, which would have required source-complete shader-owner
+exclusivity before material identity was available.
+
 Any missing coordinate preserves the host route. Construction of this gate does
 not promote runtime activation or PTDE-visible pixel equivalence.

@@ -81,6 +81,9 @@ int main()
         CHECK(decision.ptde_c101 == 1.0f);
         CHECK(decision.bypass_dsr_subsurf);
         CHECK(!decision.preserve_dsr_sss);
+        CHECK(decision.carrier ==
+              subsurface_bypass_carrier::
+                  draw_time_material_aware_pixel_shader_substitution);
     }
 
     auto context = valid_context(

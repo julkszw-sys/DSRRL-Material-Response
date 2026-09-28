@@ -217,7 +217,7 @@ bool subsurface_draw_runtime::prepare(
         decision.carrier !=
             operators::resource_bridges::
                 subsurface_bypass_carrier::
-                    create_time_pixel_shader_substitution) {
+                    draw_time_material_aware_pixel_shader_substitution) {
         release(prepared);
         telemetry::hot_count(surface_rejects_);
         return false;
