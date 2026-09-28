@@ -64,6 +64,12 @@ public:
     bool register_events() noexcept;
     void unregister_events() noexcept;
 
+    // Draw-local authority for shared MR profiles whose MTD name is reused
+    // outside the certified PTDE companion route. Checks the currently bound
+    // stock t1 logical identity and requires an actual PTDE SpecRGB companion.
+    bool exact_specular_companion_ready(
+        ID3D11DeviceContext *context) noexcept;
+
     bool prepare_draw_requests(
         ID3D11DeviceContext *context,
         std::uint32_t receiver_id,
