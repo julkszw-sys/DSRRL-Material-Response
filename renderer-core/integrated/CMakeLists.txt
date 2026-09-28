@@ -51,6 +51,11 @@ option(
     "Compile Core+Islands with runtime/effect/native-state telemetry always enabled"
     OFF)
 
+option(
+    DSRRL_EFFECT_TELEMETRY_DEFAULT_ON_ONLY
+    "Compile Core+Islands with low-overhead effect activation telemetry enabled by default"
+    OFF)
+
 set(
     RESHADE_INCLUDE_DIR
     ""
@@ -414,6 +419,11 @@ if(DSRRL_DIAGNOSTIC_TELEMETRY_DEFAULT_ON)
         $<$<COMPILE_LANGUAGE:CXX>:DSRRL_RUNTIME_TELEMETRY_DEFAULT_ON>
         $<$<COMPILE_LANGUAGE:CXX>:DSRRL_EFFECT_TELEMETRY_DEFAULT_ON>
         $<$<COMPILE_LANGUAGE:CXX>:DSRRL_RUNTIME_VERIFY_STATE_DEFAULT_ON>)
+elseif(DSRRL_EFFECT_TELEMETRY_DEFAULT_ON_ONLY)
+    target_compile_definitions(
+        dsrrl_renderer_core_integrated
+        PRIVATE
+        $<$<COMPILE_LANGUAGE:CXX>:DSRRL_EFFECT_TELEMETRY_DEFAULT_ON>)
 endif()
 
 if(MSVC)
