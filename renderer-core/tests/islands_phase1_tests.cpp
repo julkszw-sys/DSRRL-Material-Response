@@ -17,6 +17,7 @@
 #include "dsrrl/operators/resource_bridges/resource_bridge_islands.hpp"
 #include "dsrrl/operators/sfx/sfx_islands.hpp"
 #include "dsrrl/operators/surface/surface_shader_islands.hpp"
+#include "dsrrl/operators/surface/terminal_sat_rgb_patch.hpp"
 
 #include <array>
 #include <cstring>
@@ -24,6 +25,7 @@
 #include <iostream>
 #include <limits>
 #include <optional>
+#include <vector>
 
 using namespace dsrrl;
 using namespace dsrrl::operators::material_response;
@@ -1245,6 +1247,72 @@ int main()
     CHECK(operators::lightbank::hemdir3.id() == core::operator_id::hemdir3);
     CHECK(operators::point_light::pnts_attenuation.id() ==
           core::operator_id::pointlight_pnts_attenuation);
+
+    // HemEnvLerp MR composes terminal RGB SAT through a semantic word gate,
+    // not an unverified byte offset. Only one exact separate o0.xyz MOV is
+    // accepted; combined RGBA or ambiguous duplicate writes fail open.
+    std::vector<std::uint32_t> terminal_rgb_words{
+        0u,
+        7u,
+        0x05000036u,
+        0x00102072u,
+        0u,
+        0u,
+        0u
+    };
+    auto terminal_sat =
+        operators::surface::
+            apply_unique_terminal_rgb_sat_words(
+                terminal_rgb_words);
+    CHECK(terminal_sat ==
+          operators::surface::
+              terminal_sat_patch_result::applied);
+    CHECK(terminal_rgb_words[2] == 0x05002036u);
+    CHECK(operators::surface::
+              apply_unique_terminal_rgb_sat_words(
+                  terminal_rgb_words) ==
+          operators::surface::
+              terminal_sat_patch_result::
+                  already_saturated);
+
+    std::vector<std::uint32_t> combined_rgba_words{
+        0u,
+        7u,
+        0x05000036u,
+        0x001020f2u,
+        0u,
+        0u,
+        0u
+    };
+    CHECK(operators::surface::
+              apply_unique_terminal_rgb_sat_words(
+                  combined_rgba_words) ==
+          operators::surface::
+              terminal_sat_patch_result::
+                  fail_open_unverified_write_shape);
+
+    std::vector<std::uint32_t> duplicate_rgb_words{
+        0u,
+        12u,
+        0x05000036u,
+        0x00102072u,
+        0u,
+        0u,
+        0u,
+        0x05000036u,
+        0x00102072u,
+        0u,
+        0u,
+        0u
+    };
+    CHECK(operators::surface::
+              apply_unique_terminal_rgb_sat_words(
+                  duplicate_rgb_words) ==
+          operators::surface::
+              terminal_sat_patch_result::
+                  fail_open_unverified_write_shape);
+    CHECK(duplicate_rgb_words[2] == 0x05000036u);
+    CHECK(duplicate_rgb_words[7] == 0x05000036u);
 
     std::cout << "dsrrl_renderer_island_tests: PASS\n";
     return 0;
