@@ -76,6 +76,39 @@ inline bool a1_materializable_owner(core::operator_id owner) noexcept
          core::operator_bit(owner)) != 0u;
 }
 
+// Recovered P2.2 plans are historical byte translations, not semantic
+// authority by themselves. The generator used to classify every instruction
+// gaining the SAT modifier as terminal_sat_rgb. PTDE evidence, however,
+// certifies this operator only for the exact Phn HemEnv/HemEnvLerp terminal
+// RGB write (MOV o0.xyz): 0x05000036 -> 0x05002036. Non/FaceEye and Gst
+// historical SAT candidates must therefore fail open until separately proven.
+inline bool a1_op_semantically_authorized(
+    const generated::a1_exact_patch_plan &plan,
+    const generated::a1_exact_patch_op &op) noexcept
+{
+    if (op.owner != core::operator_id::terminal_sat_rgb)
+        return true;
+
+    const bool exact_rgb_terminal =
+        op.expected_old_word == 0x05000036u &&
+        op.replacement_word == 0x05002036u;
+
+    const bool certified_phn_hemenv_plan =
+        (plan.legacy_mask == 39u ||
+         plan.legacy_mask == 193u) &&
+        plan.representative != nullptr &&
+        std::strncmp(
+            plan.representative,
+            "FRPG_Phn_",
+            9u) == 0 &&
+        std::strstr(
+            plan.representative,
+            "HemEnv") != nullptr;
+
+    return exact_rgb_terminal &&
+        certified_phn_hemenv_plan;
+}
+
 // Lower-level transaction used only after the caller has already resolved an
 // exact original SHA-256 to one generated A1 plan.
 //
@@ -116,6 +149,11 @@ inline a1_create_time_outcome materialize_verified_a1_plan(
                 a1_create_time_result::fail_open_plan_inconsistent;
             return outcome;
         }
+
+        if (!a1_op_semantically_authorized(
+                plan,
+                op))
+            continue;
 
         if (!features.enabled(op.owner))
             continue;
@@ -162,7 +200,10 @@ inline a1_create_time_outcome materialize_verified_a1_plan(
         const auto &op =
             generated::k_a1_exact_patch_ops_v1[plan.first_op + i];
 
-        if ((outcome.selected_owners &
+        if (!a1_op_semantically_authorized(
+                plan,
+                op) ||
+            (outcome.selected_owners &
              core::operator_bit(op.owner)) == 0u)
             continue;
 
