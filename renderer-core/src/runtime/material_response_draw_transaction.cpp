@@ -4,6 +4,7 @@
 #include "dsrrl/runtime/runtime_hot_telemetry.hpp"
 #include "dsrrl/operators/material_response/generated_routes_v1.hpp"
 #include "dsrrl/operators/material_response/generated_material_constants_v1.hpp"
+#include "dsrrl/operators/legacy_plan/sha256_bytes.hpp"
 
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
@@ -295,6 +296,95 @@ bool material_response_draw_runtime::acquire_replacement(
         replacement.composed_owners,
         true);
 
+    return true;
+}
+
+bool material_response_draw_runtime::register_replacement_record(
+    std::unordered_map<std::uint32_t, replacement_record> &bank,
+    std::uint32_t receiver_id,
+    const void *dxbc,
+    std::size_t dxbc_size,
+    core::operator_mask composed_owners,
+    std::atomic<std::uint64_t> &ok_counter,
+    std::atomic<std::uint64_t> &fail_counter) noexcept
+{
+    if (dxbc == nullptr ||
+        dxbc_size == 0u ||
+        local_quarantine_.load() ||
+        transactions_.quarantined()) {
+        ++fail_counter;
+        return false;
+    }
+
+    const auto payload_sha256 =
+        operators::legacy_plan::hashing::sha256(
+            static_cast<const std::uint8_t *>(dxbc),
+            dxbc_size);
+
+    std::lock_guard<std::mutex> lock(mutex_);
+
+    if (device_ == nullptr) {
+        ++fail_counter;
+        return false;
+    }
+
+    const auto found =
+        bank.find(receiver_id);
+
+    if (found != bank.end()) {
+        const auto &existing =
+            found->second;
+
+        const bool same_payload =
+            existing.shader != nullptr &&
+            existing.composed_owners ==
+                composed_owners &&
+            existing.payload_size ==
+                dxbc_size &&
+            existing.payload_sha256 ==
+                payload_sha256;
+
+        if (same_payload) {
+            ++ok_counter;
+            return true;
+        }
+
+        // A replacement bank is addressed only by (bank, receiver_id) at
+        // draw time. Conflicting payloads for that key are therefore
+        // unresolvable later and must quarantine the island instead of
+        // silently overwriting the first materialized shader.
+        local_quarantine_.store(
+            true,
+            std::memory_order_release);
+        ++fail_counter;
+        return false;
+    }
+
+    ID3D11PixelShader *shader = nullptr;
+    if (FAILED(
+            device_->CreatePixelShader(
+                dxbc,
+                dxbc_size,
+                nullptr,
+                &shader)) ||
+        shader == nullptr) {
+        ++fail_counter;
+        return false;
+    }
+
+    bank.emplace(
+        receiver_id,
+        replacement_record{
+            shader,
+            composed_owners,
+            payload_sha256,
+            dxbc_size
+        });
+
+    resource_epoch_.fetch_add(
+        1u,
+        std::memory_order_release);
+    ++ok_counter;
     return true;
 }
 
