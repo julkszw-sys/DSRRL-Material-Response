@@ -2282,10 +2282,6 @@ bool on_create_pipeline(
                 v211_materialize_result;
 
         if (mr.result == mr_result::applied) {
-            const auto spec_owner =
-                dsrrl::core::operator_bit(
-                    dsrrl::core::operator_id::spec_rgb);
-
             // Base MR always preserves stock t1. SpecRGB is a paired shader
             // variant selected only after the draw-local t10 carrier succeeds.
             if (!g_mr_draw_runtime.has_receiver_replacement(
@@ -2378,10 +2374,6 @@ bool on_create_pipeline(
             const std::uint32_t lerp_receiver_id =
                 24u + static_cast<std::uint32_t>(
                     lerp_mr.pair_index);
-
-            const auto lerp_spec_owner =
-                dsrrl::core::operator_bit(
-                    dsrrl::core::operator_id::spec_rgb);
 
             // Material Response is operator-independent from U/L readiness.
             // Always register the certified Lerp MR-only replacement first.
