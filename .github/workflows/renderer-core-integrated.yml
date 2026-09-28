@@ -144,6 +144,7 @@ jobs:
         run: |
           python3 renderer-core/tools/audit_a1_protected_host_scope.py \
             --index renderer-core/data/a1_island_plan_index_v1.json
+          python3 renderer-core/tools/verify_a1_terminal_sat_semantic_scope.py
 
       - name: Configure Core+Islands addon
         shell: pwsh
