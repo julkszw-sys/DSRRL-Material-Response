@@ -19,6 +19,7 @@ enum class spec_rgb_consumer_result : std::uint8_t {
 spec_rgb_consumer_result materialize_spec_rgb_consumer(
     const std::uint8_t *source,
     std::size_t size,
-    std::vector<std::uint8_t> &output) noexcept;
+    std::vector<std::uint8_t> &output,
+    bool multiply_raw_ptde_c101 = false) noexcept;
 
 } // namespace dsrrl::operators::resource_bridges
