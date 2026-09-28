@@ -633,9 +633,10 @@ jobs:
             'generated_diffuse_response_v1',
             'diffuse_pow_site',
             'c100_sites',
-            'cb0[9]',
-            'b12[1]',
-            'does NOT consume c101',
+            'words[site] = 12u',
+            'words[site + 1u] = 1u',
+            '0x400ccccdu',
+            '0x3f800000u',
             'DSRRL_MaterialCarrier'
           )) {
             if ($mr -notmatch [regex]::Escape($required)) { throw "MR diffuse-v1 exact materializer invariant missing: $required" }
