@@ -128,29 +128,29 @@ bool enrich_exact_owner_mtd_identity(
     }
 
     core::sha256_digest raw_mtd_sha{};
-    // Exact raw-MTD identity comes from the dedicated generic registry or
-    // the evidence-certified special-route supplement. The supplement also
-    // carries the exact HOMOLOGOUS_NOSPC identities required by direct
-    // PointLight, but does not make generic coverage source-complete.
-    // Unknown/ambiguous semantic hashes still fail open. EnvSpec/SPX
-    // consumer membership is never used as an identity fallback.
-    if (!mr::generated::dsr_mtd_identity_resolve(semantic_hash, raw_mtd_sha) &&
-        !mr::generated::dsr_mtd_identity_supplement_resolve(semantic_hash, raw_mtd_sha)) {
-        const auto *extension =
-            find_exact_binding_extension(
-                semantic_hash);
-        if (extension == nullptr) {
-            cached = {
-                observation.flver_sha256,
-                observation.material_slot,
-                {},
-                true,
-                false
-            };
-            return false;
-        }
+    // The exact-binding MR authority is narrower than the legacy generic
+    // name->raw-MTD registry and carries the certified raw SHA for these
+    // eight semantic names. Prefer it explicitly: the generic registry is
+    // source-incomplete and currently contains a stale P_Leather[DSB] digest.
+    // Outside this exact extension, retain the generic/supplement fail-open
+    // policy used by the rest of the owner producer.
+    const auto *exact_extension =
+        find_exact_binding_extension(
+            semantic_hash);
+    if (exact_extension != nullptr) {
         raw_mtd_sha =
-            extension->raw_mtd_sha256;
+            exact_extension->raw_mtd_sha256;
+    } else if (
+        !mr::generated::dsr_mtd_identity_resolve(semantic_hash, raw_mtd_sha) &&
+        !mr::generated::dsr_mtd_identity_supplement_resolve(semantic_hash, raw_mtd_sha)) {
+        cached = {
+            observation.flver_sha256,
+            observation.material_slot,
+            {},
+            true,
+            false
+        };
+        return false;
     }
 
     resolved.valid = true;
