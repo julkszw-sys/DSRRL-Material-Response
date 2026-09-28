@@ -3,6 +3,7 @@
 #include "dsrrl/operators/material_response/generated_dsr_mtd_identity_v1.hpp"
 #include "dsrrl/operators/material_response/generated_dsr_mtd_identity_supplement_v1.hpp"
 #include "dsrrl/operators/material_response/generated_routes_v1.hpp"
+#include "dsrrl/operators/material_response/generated_exact_binding_mr_v1.hpp"
 #include "dsrrl/operators/material_response/mtd_semantic_census.hpp"
 #include "dsrrl/operators/legacy_plan/sha256_bytes.hpp"
 
@@ -52,6 +53,34 @@ std::size_t owner_material_cache_index(
     h *= 0x100000001b3ULL;
     return static_cast<std::size_t>(
         h % k_owner_material_cache_slots);
+}
+
+const operators::material_response::generated::
+    exact_binding_mr_record *
+find_exact_binding_extension(
+    std::uint64_t semantic_hash,
+    const core::sha256_digest *raw_mtd_sha256 = nullptr) noexcept
+{
+    namespace mr = operators::material_response;
+    const mr::generated::exact_binding_mr_record
+        *match = nullptr;
+
+    for (const auto &route :
+         mr::generated::k_exact_binding_mr_v1) {
+        if (mr::mtd_semantic_hash(
+                route.mtd_name) !=
+            semantic_hash)
+            continue;
+        if (raw_mtd_sha256 != nullptr &&
+            route.raw_mtd_sha256 !=
+                *raw_mtd_sha256)
+            continue;
+        if (match != nullptr)
+            return nullptr;
+        match = &route;
+    }
+
+    return match;
 }
 
 } // namespace
@@ -105,16 +134,27 @@ bool enrich_exact_owner_mtd_identity(
     // PointLight, but does not make generic coverage source-complete.
     // Unknown/ambiguous semantic hashes still fail open. EnvSpec/SPX
     // consumer membership is never used as an identity fallback.
-    if (!mr::generated::dsr_mtd_identity_resolve(semantic_hash, raw_mtd_sha) &&
-        !mr::generated::dsr_mtd_identity_supplement_resolve(semantic_hash, raw_mtd_sha)) {
-        cached = {
-            observation.flver_sha256,
-            observation.material_slot,
-            {},
-            true,
-            false
-        };
-        return false;
+    if (!mr::generated::dsr_mtd_identity_resolve(
+            semantic_hash,
+            raw_mtd_sha) &&
+        !mr::generated::dsr_mtd_identity_supplement_resolve(
+            semantic_hash,
+            raw_mtd_sha)) {
+        const auto *extension =
+            find_exact_binding_extension(
+                semantic_hash);
+        if (extension == nullptr) {
+            cached = {
+                observation.flver_sha256,
+                observation.material_slot,
+                {},
+                true,
+                false
+            };
+            return false;
+        }
+        raw_mtd_sha =
+            extension->raw_mtd_sha256;
     }
 
     resolved.valid = true;
@@ -166,6 +206,18 @@ bool enrich_exact_owner_mtd_identity(
         resolved.material_family_hash =
             mr::mtd_semantic_hash(
                 route_match->material_family);
+    } else {
+        const auto *extension =
+            find_exact_binding_extension(
+                semantic_hash,
+                &resolved.raw_mtd_sha256);
+        if (extension != nullptr) {
+            resolved.route_index =
+                extension->route_tag;
+            resolved.material_family_hash =
+                mr::mtd_semantic_hash(
+                    extension->material_family);
+        }
     }
 
     observation.material =
