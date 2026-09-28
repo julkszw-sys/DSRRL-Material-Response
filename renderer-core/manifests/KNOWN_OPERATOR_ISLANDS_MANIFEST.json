@@ -92,7 +92,8 @@
       ],
       "fail_open": "PRESERVE_STOCK_DSR_ENVSPEC_TERM",
       "owns": "DSR-only local EnvSpec contribution only",
-      "identity_recipe_import": "RECOVERED_EXACT_SELECTED_RECIPES_IN_REPO_NOT_YET_WIRED",
+      "identity_recipe_import": "WIRED_A1_CREATE_TIME_EXACT_DIGEST_PLAN_INDEX",
+      "construction_coverage": "12 exact DSR SHA plans / 24 DSR HemEnv-HemEnvLerp aliases; cross-renderer scope remains the canonical 48 substantive homolog count",
       "runtime_activation": "NOT_TESTED",
       "pixel": "OPEN"
     },
