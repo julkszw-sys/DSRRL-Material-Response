@@ -14,7 +14,8 @@ enum class fixed_local_specular_output_cut_result : std::uint8_t {
     fail_operand_contract,
     fail_fog_anchor,
     fail_join_shape,
-    fail_local_operand_shape
+    fail_local_operand_shape,
+    fail_local_component_liveness
 };
 
 struct fixed_local_specular_output_cut {
@@ -30,12 +31,19 @@ struct fixed_local_specular_output_cut {
     std::uint32_t join_word = 0u;
     std::uint16_t join_opcode = 0u;
 
-    // The last ADD source operand is the owned additive PointLight term.
-    // The materializer may redirect only this temp index to the PTDE island
-    // result, leaving the stock block executable but dead at the owned cut.
+    // The last ADD source operand is the owned additive PointLight RGB term.
+    // The materializer redirects only this temp index to the PTDE island
+    // result. Component liveness is attested separately: an unrelated lane
+    // may survive only when the owned PointLight windows never touch it.
     std::uint32_t local_operand_token_word = 0u;
     std::uint32_t local_operand_index_word = 0u;
     std::uint32_t stock_local_temp = 0u;
+    std::uint8_t stock_local_join_component_mask = 0u;
+    std::uint8_t stock_local_owned_window_component_mask = 0u;
+    std::uint8_t stock_local_downstream_component_mask = 0u;
+    std::uint32_t stock_local_owned_window_use_count = 0u;
+    std::uint32_t stock_local_downstream_use_count = 0u;
+    bool stock_local_owned_components_dead_after_join = false;
 
     std::uint32_t bridge_mov_word = 0u;
     std::uint32_t first_fog_word = 0u;
@@ -44,9 +52,12 @@ struct fixed_local_specular_output_cut {
 // Exact fixed PntSS/PntSSSS Spc output-cut locator. Positive activation first
 // requires the complete receiver/window/operand contract. The cut is accepted
 // only when the first instruction after the final fixed-light ENDIF is the
-// exact 7-DWORD ADD join. The downstream bridge/Fog path is independently
-// attested but may contain family-specific continuation instructions.
-// Any structural drift fails open.
+// exact 7-DWORD ADD join. The owned local term must be xyz, and component
+// liveness is checked through the remainder of the shader: no owned RGB lane
+// may be consumed after the join, and any surviving lane must be disjoint from
+// the components touched by the PointLight windows. The downstream bridge/Fog
+// path may contain family-specific continuation instructions. Any structural
+// drift fails open.
 fixed_local_specular_output_cut
 locate_fixed_local_specular_output_cut(
     const void *pixel_shader_code,

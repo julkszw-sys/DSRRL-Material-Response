@@ -127,12 +127,77 @@ bool has_cb0_index(
     return false;
 }
 
-bool temp_scalar_operand(
-    const std::uint32_t token) noexcept
+bool direct_temp_component_mask(
+    const std::uint32_t token,
+    std::uint8_t &mask) noexcept
 {
-    return ((token>>12u)&0xffu)==0u &&
-           ((token>>20u)&0x3u)==1u &&
-           ((token>>22u)&0x7u)==0u;
+    mask=0u;
+    if (((token>>12u)&0xffu)!=0u ||
+        ((token>>20u)&0x3u)!=1u ||
+        ((token>>22u)&0x7u)!=0u)
+        return false;
+
+    const auto components=token&0x3u;
+    if (components==1u) {
+        mask=0x1u;
+        return true;
+    }
+    if (components!=2u)
+        return false;
+
+    const auto mode=(token>>2u)&0x3u;
+    if (mode==0u) {
+        mask=static_cast<std::uint8_t>(
+            (token>>4u)&0xfu);
+        return mask!=0u;
+    }
+    if (mode==1u) {
+        const auto swizzle=(token>>4u)&0xffu;
+        for (std::uint32_t lane=0u;lane<4u;++lane)
+            mask=static_cast<std::uint8_t>(
+                mask |
+                (1u<<((swizzle>>(lane*2u))&0x3u)));
+        return mask!=0u;
+    }
+    if (mode==2u) {
+        mask=static_cast<std::uint8_t>(
+            1u<<((token>>4u)&0x3u));
+        return true;
+    }
+    return false;
+}
+
+bool accumulate_direct_temp_component_uses(
+    const std::uint32_t *words,
+    const instruction_view &instruction,
+    std::uint32_t temp_register,
+    std::uint8_t &mask,
+    std::uint32_t &use_count) noexcept
+{
+    if (instruction.opcode==k_op_customdata)
+        return true;
+
+    for (std::uint32_t w=instruction.start+1u;
+         w+1u<instruction.end;
+         ++w) {
+        const auto token=words[w];
+        if (((token>>12u)&0xffu)!=0u ||
+            ((token>>20u)&0x3u)!=1u ||
+            ((token>>22u)&0x7u)!=0u ||
+            words[w+1u]!=temp_register)
+            continue;
+
+        std::uint8_t current=0u;
+        if (!direct_temp_component_mask(
+                token,current))
+            return false;
+
+        mask=static_cast<std::uint8_t>(
+            mask|current);
+        ++use_count;
+        ++w;
+    }
+    return true;
 }
 
 } // namespace
@@ -234,11 +299,78 @@ locate_fixed_local_specular_output_cut(
     const std::uint32_t token_word=j.start+5u;
     const std::uint32_t index_word=j.start+6u;
 
+    std::uint8_t join_component_mask=0u;
     if (index_word>=word_count ||
-        !temp_scalar_operand(words[token_word])) {
+        !direct_temp_component_mask(
+            words[token_word],
+            join_component_mask) ||
+        join_component_mask!=0x7u) {
         out.result =
             fixed_local_specular_output_cut_result::
                 fail_local_operand_shape;
+        return out;
+    }
+
+    const auto stock_local_temp=words[index_word];
+    const auto first_window_word=
+        out.operands.plan.lights[0u].
+            microfacet_window.start_word;
+
+    std::uint8_t owned_window_mask=0u;
+    std::uint8_t downstream_mask=0u;
+    std::uint32_t owned_window_uses=0u;
+    std::uint32_t downstream_uses=0u;
+
+    for (std::size_t i=0u;
+         i<instruction_count;
+         ++i) {
+        const auto &instruction=instructions[i];
+        if (instruction.start>=first_window_word &&
+            instruction.end<=final_end_word) {
+            if (!accumulate_direct_temp_component_uses(
+                    words.data(),
+                    instruction,
+                    stock_local_temp,
+                    owned_window_mask,
+                    owned_window_uses)) {
+                out.result =
+                    fixed_local_specular_output_cut_result::
+                        fail_local_component_liveness;
+                return out;
+            }
+        }
+
+        if (i>join) {
+            if (!accumulate_direct_temp_component_uses(
+                    words.data(),
+                    instruction,
+                    stock_local_temp,
+                    downstream_mask,
+                    downstream_uses)) {
+                out.result =
+                    fixed_local_specular_output_cut_result::
+                        fail_local_component_liveness;
+                return out;
+            }
+        }
+    }
+
+    // Exact 48-body fixed-Spc liveness contract:
+    //   24 bodies: owned window xyz, downstream none
+    //   16 bodies: owned window xyzw, downstream none
+    //    8 bodies: owned window xyz, downstream w only
+    //
+    // The redirected PointLight join owns xyz. Any later xyz consumer would
+    // keep the DSR microfacet/local-light tail live outside the cut. A later
+    // component may survive only when the owned PointLight windows never
+    // touch that component. This preserves the eight unrelated o3.w carriers
+    // without allowing a DSR-only PointLight value to escape downstream.
+    if ((owned_window_mask&0x7u)!=0x7u ||
+        (downstream_mask&0x7u)!=0u ||
+        (owned_window_mask&downstream_mask)!=0u) {
+        out.result =
+            fixed_local_specular_output_cut_result::
+                fail_local_component_liveness;
         return out;
     }
 
@@ -246,7 +378,13 @@ locate_fixed_local_specular_output_cut(
     out.join_opcode=j.opcode;
     out.local_operand_token_word=token_word;
     out.local_operand_index_word=index_word;
-    out.stock_local_temp=words[index_word];
+    out.stock_local_temp=stock_local_temp;
+    out.stock_local_join_component_mask=join_component_mask;
+    out.stock_local_owned_window_component_mask=owned_window_mask;
+    out.stock_local_downstream_component_mask=downstream_mask;
+    out.stock_local_owned_window_use_count=owned_window_uses;
+    out.stock_local_downstream_use_count=downstream_uses;
+    out.stock_local_owned_components_dead_after_join=true;
     out.bridge_mov_word=instructions[bridge_mov].start;
     out.first_fog_word=instructions[fog].start;
     out.result=fixed_local_specular_output_cut_result::exact;

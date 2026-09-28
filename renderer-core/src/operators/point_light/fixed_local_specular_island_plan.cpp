@@ -71,7 +71,9 @@ build_fixed_local_specular_island_plan(
     out.ptde_specular_power_component=
         operands.ptde_specular_power_component;
     out.replace_complete_local_specular=true;
-    out.stock_microfacet_dead_at_output_cut=true;
+    out.stock_microfacet_dead_at_output_cut=
+        out.output_cut.
+            stock_local_owned_components_dead_after_join;
     out.preserve_downstream_fog=true;
     out.result=fixed_local_specular_island_plan_result::ready;
     return out;

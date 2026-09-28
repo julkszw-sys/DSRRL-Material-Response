@@ -1,0 +1,52 @@
+{
+  "schema": "dsrrl.fixed_local_pointlight_downstream_liveness.v1",
+  "status": "CONFIRMED_STATIC_DSR_CORPUS_RUNTIME_GATE_ADDED",
+  "source": {
+    "artifact_id": 99,
+    "artifact_sha256": "57314b36812dfa2867512052278a08dc0da8a41ea0414c1fbbe4ccdf45838076",
+    "member": "DSR/shader/FRPG_FlverPBL_fpo_DX11.shaderbnd.dcx"
+  },
+  "scope": {
+    "family": "fixed Spc PntSS/PntSSSS",
+    "unique_dxbc_bodies": 48,
+    "local_join": "first instruction after final per-light ENDIF",
+    "join_component_mask": "xyz"
+  },
+  "liveness_classes": [
+    {
+      "count": 24,
+      "owned_window_components": "xyz",
+      "downstream_same_temp_components": "none"
+    },
+    {
+      "count": 16,
+      "owned_window_components": "xyzw",
+      "downstream_same_temp_components": "none"
+    },
+    {
+      "count": 8,
+      "owned_window_components": "xyz",
+      "downstream_same_temp_components": "w"
+    }
+  ],
+  "downstream_w_only_bodies": [
+    "FRPG_Phn_DifSpcBmpMulLit____HemEnvLerpPntSS.fpo",
+    "FRPG_Phn_DifSpcBmpMulLit____HemEnvLerpPntSSSS.fpo",
+    "FRPG_Phn_DifSpcBmp___Lit____HemEnvLerpPntSS.fpo",
+    "FRPG_Phn_DifSpcBmp___Lit____HemEnvLerpPntSSSS.fpo",
+    "FRPG_Phn_DifSpc___MulLit____HemEnvLerpPntSS.fpo",
+    "FRPG_Phn_DifSpc___MulLit____HemEnvLerpPntSSSS.fpo",
+    "FRPG_Phn_DifSpc______Lit____HemEnvLerpPntSS.fpo",
+    "FRPG_Phn_DifSpc______Lit____HemEnvLerpPntSSSS.fpo"
+  ],
+  "conclusion": "No component touched by the stock fixed PointLight window remains live through the same local-temp register after the owned ADD cut. The eight downstream same-register uses are w-only and occur only in bodies whose PointLight windows touch xyz but not w. Redirecting the join's xyz source therefore kills the stock DSR local-light RGB contribution while preserving unrelated surviving lanes.",
+  "implementation": {
+    "file": "renderer-core/src/operators/point_light/fixed_local_specular_output_cut.cpp",
+    "gate": "join xyz + downstream xyz dead + owned/downstream component sets disjoint",
+    "failure": "fail_local_component_liveness",
+    "fail_open": true
+  },
+  "runtime_liveness": "OPEN_CURRENT_SOURCE",
+  "bridge_activation": "OPEN_CURRENT_SOURCE",
+  "pixel_behavior": "OPEN"
+}
