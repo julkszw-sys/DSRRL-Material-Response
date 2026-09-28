@@ -84,6 +84,102 @@ std::atomic<std::uint64_t> g_cube_created{0};
 std::atomic<std::uint64_t> g_cube_fail{0};
 std::atomic<std::uint64_t> g_prepare_ok{0};
 std::atomic<std::uint64_t> g_prepare_fail{0};
+std::atomic<std::uint64_t> g_snapshot_epoch{1u};
+
+struct envspec_snapshot_tls_entry {
+    std::uintptr_t stock_a = 0u;
+    std::uintptr_t stock_b = 0u;
+    std::uint8_t slot = 0u;
+    bool probe_b_required = false;
+    std::uint64_t epoch = 0u;
+    std::uint16_t probe_a = 0u;
+    std::uint16_t probe_b = 0u;
+    ID3D11ShaderResourceView *ptde_a = nullptr;
+    ID3D11ShaderResourceView *ptde_b = nullptr;
+    ID3D11SamplerState *sampler = nullptr;
+
+    ~envspec_snapshot_tls_entry()
+    {
+        clear();
+    }
+
+    void clear() noexcept
+    {
+        if (ptde_a != nullptr)
+            ptde_a->Release();
+        if (ptde_b != nullptr)
+            ptde_b->Release();
+        if (sampler != nullptr)
+            sampler->Release();
+
+        stock_a = 0u;
+        stock_b = 0u;
+        slot = 0u;
+        probe_b_required = false;
+        epoch = 0u;
+        probe_a = 0u;
+        probe_b = 0u;
+        ptde_a = nullptr;
+        ptde_b = nullptr;
+        sampler = nullptr;
+    }
+
+    void assign(
+        std::uintptr_t stock_a_key,
+        std::uintptr_t stock_b_key,
+        std::uint8_t env_slot,
+        bool require_b,
+        std::uint64_t snapshot_epoch,
+        std::uint16_t resolved_probe_a,
+        std::uint16_t resolved_probe_b,
+        ID3D11ShaderResourceView *resolved_a,
+        ID3D11ShaderResourceView *resolved_b,
+        ID3D11SamplerState *resolved_sampler) noexcept
+    {
+        clear();
+
+        stock_a = stock_a_key;
+        stock_b = stock_b_key;
+        slot = env_slot;
+        probe_b_required = require_b;
+        epoch = snapshot_epoch;
+        probe_a = resolved_probe_a;
+        probe_b = resolved_probe_b;
+        ptde_a = resolved_a;
+        ptde_b = resolved_b;
+        sampler = resolved_sampler;
+
+        if (ptde_a != nullptr)
+            ptde_a->AddRef();
+        if (ptde_b != nullptr)
+            ptde_b->AddRef();
+        if (sampler != nullptr)
+            sampler->AddRef();
+    }
+};
+
+constexpr std::size_t k_envspec_snapshot_tls_slots = 16u;
+thread_local std::array<
+    envspec_snapshot_tls_entry,
+    k_envspec_snapshot_tls_slots>
+    g_envspec_snapshot_tls{};
+
+std::size_t envspec_snapshot_tls_index(
+    std::uintptr_t stock_a,
+    std::uintptr_t stock_b,
+    std::uint8_t slot,
+    bool probe_b_required) noexcept
+{
+    const auto mixed =
+        (stock_a >> 4u) ^
+        (stock_b >> 9u) ^
+        (static_cast<std::uintptr_t>(slot) << 2u) ^
+        static_cast<std::uintptr_t>(
+            probe_b_required ? 0x9u : 0x3u);
+
+    return static_cast<std::size_t>(
+        mixed % k_envspec_snapshot_tls_slots);
+}
 
 std::filesystem::path process_dir()
 {
@@ -287,6 +383,10 @@ void release_carrier(
         if (g_device != device_ptr)
             return;
 
+        g_snapshot_epoch.fetch_add(
+            1u,
+            std::memory_order_release);
+
         cubes.swap(g_ptde_cubes);
         sampler_to_destroy =
             g_sampler;
@@ -378,6 +478,9 @@ void on_init_device(
         // sidecar is being admitted; in that case discard the cold result
         // instead of resurrecting an already-released carrier.
         if (g_device == device_ptr) {
+            g_snapshot_epoch.fetch_add(
+                1u,
+                std::memory_order_release);
             replaced_sampler = g_sampler;
             g_pack = std::move(pack);
             g_pack_ready = pack_ready;
@@ -496,6 +599,10 @@ void on_destroy_resource(
     g_native_resources.erase(
         resource_handle.handle);
 
+    g_snapshot_epoch.fetch_add(
+        1u,
+        std::memory_order_release);
+
     for (auto it =
              g_resource_by_view.begin();
          it != g_resource_by_view.end();) {
@@ -543,6 +650,9 @@ void on_init_resource_view(
             native->second.probe_ordinal
         };
 
+    g_snapshot_epoch.fetch_add(
+        1u,
+        std::memory_order_release);
     ++g_view_matches;
 }
 
@@ -560,8 +670,11 @@ void on_destroy_resource_view(
     if (device_ptr != g_device)
         return;
 
-    g_resource_by_view.erase(
-        view.handle);
+    if (g_resource_by_view.erase(
+            view.handle) != 0u)
+        g_snapshot_epoch.fetch_add(
+            1u,
+            std::memory_order_release);
 }
 
 bool probe_for_native_view(
@@ -613,6 +726,47 @@ bool snapshot_ready_envspec(
     if (stock_a == nullptr ||
         slot >= k_ptde_slots)
         return false;
+
+    const auto stock_a_key =
+        reinterpret_cast<std::uintptr_t>(
+            stock_a);
+    const auto stock_b_key =
+        probe_b_required
+            ? reinterpret_cast<std::uintptr_t>(
+                  stock_b)
+            : stock_a_key;
+    const auto epoch =
+        g_snapshot_epoch.load(
+            std::memory_order_acquire);
+
+    auto &cached =
+        g_envspec_snapshot_tls[
+            envspec_snapshot_tls_index(
+                stock_a_key,
+                stock_b_key,
+                slot,
+                probe_b_required)];
+
+    if (cached.epoch == epoch &&
+        cached.stock_a == stock_a_key &&
+        cached.stock_b == stock_b_key &&
+        cached.slot == slot &&
+        cached.probe_b_required ==
+            probe_b_required &&
+        cached.ptde_a != nullptr &&
+        cached.ptde_b != nullptr &&
+        cached.sampler != nullptr) {
+        probe_a = cached.probe_a;
+        probe_b = cached.probe_b;
+        ptde_a = cached.ptde_a;
+        ptde_b = cached.ptde_b;
+        sampler_native = cached.sampler;
+
+        ptde_a->AddRef();
+        ptde_b->AddRef();
+        sampler_native->AddRef();
+        return true;
+    }
 
     const auto resolve_probe_locked =
         [](ID3D11ShaderResourceView *view,
@@ -725,11 +879,27 @@ bool snapshot_ready_envspec(
         return false;
     }
 
-    // Retain the exact draw resources while the registry lock guarantees that
-    // a device teardown cannot remove their handles underneath this snapshot.
+    // One set of references belongs to the prepared caller. The TLS cache
+    // retains a second set; lifecycle epoch changes invalidate identity while
+    // those refs keep the cached D3D objects alive until the entry is replaced
+    // or the thread exits.
     ptde_a->AddRef();
     ptde_b->AddRef();
     sampler_native->AddRef();
+
+    cached.assign(
+        stock_a_key,
+        stock_b_key,
+        slot,
+        probe_b_required,
+        g_snapshot_epoch.load(
+            std::memory_order_relaxed),
+        probe_a,
+        probe_b,
+        ptde_a,
+        ptde_b,
+        sampler_native);
+
     return true;
 }
 
