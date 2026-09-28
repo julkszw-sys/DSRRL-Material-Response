@@ -168,8 +168,6 @@ constexpr std::size_t k_steady_cache_sets = 128u;
 constexpr std::size_t k_steady_cache_ways = 4u;
 constexpr std::size_t k_steady_cache_entries =
     k_steady_cache_sets * k_steady_cache_ways;
-constexpr std::size_t k_pmetal_cache_slots = 32u;
-
 thread_local std::array<steady_q_cache_entry,k_steady_cache_entries>
     g_steady_q_cache{};
 thread_local std::array<raw_record_cache_entry,k_steady_cache_entries>
@@ -183,8 +181,10 @@ thread_local std::array<std::uint8_t,k_steady_cache_sets>
 thread_local std::array<std::uint8_t,k_steady_cache_sets>
     g_d123_victim{};
 
-thread_local std::array<pmetal_bank_cache_entry,k_pmetal_cache_slots>
+thread_local std::array<pmetal_bank_cache_entry,k_steady_cache_entries>
     g_pmetal_bank_cache{};
+thread_local std::array<std::uint8_t,k_steady_cache_sets>
+    g_pmetal_bank_victim{};
 
 // b13 is draw-local data, but the D3D11 buffer object itself does not need to
 // be draw-local. Creating an immutable buffer per LightBank snapshot caused
@@ -813,16 +813,44 @@ d123_identity_cache_entry &d123_cache_for(
     return entry;
 }
 
-std::size_t pmetal_bank_cache_slot(
-    const void *ptr) noexcept
+pmetal_bank_cache_entry &pmetal_bank_cache_for(
+    const std::uint8_t *base_ptr) noexcept
 {
-    const auto value =
-        reinterpret_cast<std::uintptr_t>(ptr);
+    const auto set =
+        d123_cache_set(base_ptr);
+    const auto base =
+        set * k_steady_cache_ways;
 
-    return
+    for (std::size_t way = 0u;
+         way < k_steady_cache_ways;
+         ++way) {
+        auto &entry =
+            g_pmetal_bank_cache[base + way];
+        if (entry.valid &&
+            entry.base == base_ptr)
+            return entry;
+    }
+
+    for (std::size_t way = 0u;
+         way < k_steady_cache_ways;
+         ++way) {
+        auto &entry =
+            g_pmetal_bank_cache[base + way];
+        if (!entry.valid) {
+            entry = {};
+            return entry;
+        }
+    }
+
+    const auto victim =
         static_cast<std::size_t>(
-            (value >> 4u) &
-            (k_pmetal_cache_slots - 1u));
+            g_pmetal_bank_victim[set]++ &
+            static_cast<std::uint8_t>(
+                k_steady_cache_ways - 1u));
+    auto &entry =
+        g_pmetal_bank_cache[base + victim];
+    entry = {};
+    return entry;
 }
 
 std::uint64_t pmetal_fnv_byte(
@@ -1561,8 +1589,7 @@ resolve_pmetal_bank(
         return nullptr;
 
     auto &cached =
-        g_pmetal_bank_cache[
-            pmetal_bank_cache_slot(base)];
+        pmetal_bank_cache_for(base);
 
     // Legacy V13 already cached bank_index(base), including negative results.
     // The integrated runtime had accidentally dropped that layer, causing a
@@ -1708,8 +1735,7 @@ bool read_exact_pmetal_env_source(
             selector);
 
     auto &cached_bank =
-        g_pmetal_bank_cache[
-            pmetal_bank_cache_slot(base)];
+        pmetal_bank_cache_for(base);
 
     const pmetal_env_source_authority::bank_donor *bank = nullptr;
     std::uint16_t count = 0u;
@@ -3706,6 +3732,11 @@ void clear_snapshots() noexcept
         g_reference_token_victim[set] = 0u;
     }
     clear_b13_upload_slots();
+    // The bank verdict is keyed by an engine-owned base pointer. Drop the
+    // current thread's verdicts at lifecycle boundaries so allocator address
+    // reuse cannot resurrect a stale exact bank identity after teardown.
+    g_pmetal_bank_cache = {};
+    g_pmetal_bank_victim = {};
     g_selector_snapshot = {};
     g_selector_window = {};
     g_assignment_window = {};
