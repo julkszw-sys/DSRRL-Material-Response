@@ -135,6 +135,10 @@ private:
         ID3D11PixelShader *upper_lower = nullptr;
         core::operator_mask base_owners = 0;
         core::operator_mask upper_lower_owners = 0;
+        core::sha256_digest base_payload_sha256{};
+        core::sha256_digest upper_lower_payload_sha256{};
+        std::size_t base_payload_size = 0u;
+        std::size_t upper_lower_payload_size = 0u;
     };
 
     struct b12_context_cache {
@@ -156,6 +160,10 @@ private:
         replacements_;
     std::unordered_map<std::uint32_t,ID3D11PixelShader *>
         lerp_replacements_;
+    std::unordered_map<std::uint32_t,core::sha256_digest>
+        lerp_replacement_sha256_;
+    std::unordered_map<std::uint32_t,std::size_t>
+        lerp_replacement_size_;
     std::unordered_map<std::uintptr_t,b12_context_cache>
         b12_by_context_;
 
