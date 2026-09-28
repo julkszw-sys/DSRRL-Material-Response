@@ -12,11 +12,11 @@ ROUTE_RE = re.compile(
 )
 DONOR_RE = re.compile(
     r'\{"(?P<sha>[0-9a-f]{64})", \{[^}]+\}, \d+, '
-    r'\{[^}]+\}, \{[^}]+\}, \d+, '
+    r'\{[^}]+\}, \d+, '
     r'(?P<c102>[^,]+), [^,]+, (?P<has>true|false)\}'
 )
 GENERATED_RE = re.compile(
-    r'\{(?P<route>\d+)u,\{\{[^}]+\}\},\{\{[^}]+\}\},'
+    r'\{(?P<route>\d+)u,\{\{[^}]+\}\},'
     r'(?P<c102>[-0-9.]+)f,(?P<verified>true|false)\}'
 )
 
