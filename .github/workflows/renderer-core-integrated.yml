@@ -861,28 +861,35 @@ jobs:
       - name: Verify Material Response generated authority
         shell: pwsh
         run: |
-          python renderer-core/tools/generate_material_response_v211_plans.py --v29 runtime-v1/provenance/mr_v211/V29_SHADER_MANIFEST.json --v210 runtime-v1/provenance/mr_v211/V210_C101_MATERIAL_RESPONSE_AUDIT.json --v211 runtime-v1/provenance/mr_v211/V211_C101_UNBOUNDED_AUDIT.json --out "$env:RUNNER_TEMP/generated_v211_plans.hpp"
-          python renderer-core/tools/generate_material_response_constants_v1.py --routes renderer-core/include/dsrrl/operators/material_response/generated_routes_v1.hpp --donors runtime-v1/provenance/mr_v211/ptde_material_donor_registry.hpp --out "$env:RUNNER_TEMP/generated_material_constants_v1.hpp"
-          python renderer-core/tools/generate_hemenvlerp_v211_v1.py --input renderer-core/data/provenance/hemenvlerp_mr_v211_v1.tsv --output "$env:RUNNER_TEMP/generated_hemenvlerp_v211_v1.hpp"
-          python renderer-core/tools/generate_pmetal_envspec_hemenvlerp_v1.py --input renderer-core/data/provenance/pmetal_envspec_hemenvlerp_v1.tsv --output "$env:RUNNER_TEMP/generated_pmetal_envspec_hemenvlerp_v1.hpp"
-          $v211Expected = (Get-FileHash renderer-core/include/dsrrl/operators/material_response/generated_v211_plans.hpp -Algorithm SHA256).Hash
-          $v211Actual = (Get-FileHash "$env:RUNNER_TEMP/generated_v211_plans.hpp" -Algorithm SHA256).Hash
-          if ($v211Expected -ne $v211Actual) { throw "V2.11 plan header is not reproducible" }
+          python renderer-core/tools/generate_material_response_diffuse_v1.py --input renderer-core/data/provenance/material_response_diffuse_v1.tsv --output "$env:RUNNER_TEMP/generated_diffuse_response_v1.hpp"
+          python renderer-core/tools/generate_material_response_constants_v1.py --routes renderer-core/include/dsrrl/operators/material_response/generated_routes_v1.hpp --donors renderer-core/data/provenance/ptde_material_donor_registry.hpp --out "$env:RUNNER_TEMP/generated_material_constants_v1.hpp"
+
+          $diffuseBuilt = "build-integrated/generated/dsrrl/operators/material_response/generated_diffuse_response_v1.hpp"
+          if (!(Test-Path $diffuseBuilt)) { throw "Generated neutral Material Response diffuse authority missing from build" }
+          if ((Get-FileHash $diffuseBuilt -Algorithm SHA256).Hash -ne (Get-FileHash "$env:RUNNER_TEMP/generated_diffuse_response_v1.hpp" -Algorithm SHA256).Hash) {
+            throw "Material Response diffuse-v1 authority is not reproducible"
+          }
+
           $constExpected = (Get-FileHash renderer-core/include/dsrrl/operators/material_response/generated_material_constants_v1.hpp -Algorithm SHA256).Hash
           $constActual = (Get-FileHash "$env:RUNNER_TEMP/generated_material_constants_v1.hpp" -Algorithm SHA256).Hash
-          if ($constExpected -ne $constActual) { throw "MR b12 sidecar header is not reproducible" }
-          $lerpMrBuilt = "build-integrated/generated/dsrrl/operators/material_response/generated_hemenvlerp_v211_v1.hpp"
-          if (!(Test-Path $lerpMrBuilt)) { throw "Generated HemEnvLerp V2.11 authority missing from build" }
-          if ((Get-FileHash $lerpMrBuilt -Algorithm SHA256).Hash -ne (Get-FileHash "$env:RUNNER_TEMP/generated_hemenvlerp_v211_v1.hpp" -Algorithm SHA256).Hash) {
-            throw "HemEnvLerp V2.11 authority is not reproducible"
-          }
-          $lerpEnvBuilt = "build-integrated/generated/dsrrl/operators/env_spec/generated_pmetal_envspec_hemenvlerp_v1.hpp"
-          if (!(Test-Path $lerpEnvBuilt)) { throw "Generated P_Metal HemEnvLerp EnvSpec authority missing from build" }
-          if ((Get-FileHash $lerpEnvBuilt -Algorithm SHA256).Hash -ne (Get-FileHash "$env:RUNNER_TEMP/generated_pmetal_envspec_hemenvlerp_v1.hpp" -Algorithm SHA256).Hash) {
-            throw "P_Metal HemEnvLerp EnvSpec authority is not reproducible"
-          }
-          Write-Host "CORE_ISLANDS_MR_GENERATED_AUTHORITY_PASS"
+          if ($constExpected -ne $constActual) { throw "PTDE material donor/constants header is not reproducible" }
 
+          $cmake = Get-Content renderer-core/integrated/CMakeLists.txt -Raw
+          $entry = Get-Content renderer-core/integrated/integrated_addon.cpp -Raw
+          foreach ($forbidden in @(
+            'generate_material_response_v211_plans.py',
+            'generate_hemenvlerp_v211_v1.py',
+            'generated_v211_plans.hpp',
+            'generated_hemenvlerp_v211_v1.hpp',
+            'runtime-v1/provenance/mr_v211',
+            'material_response_v211_materializer.cpp',
+            'hemenvlerp_v211_materializer.cpp'
+          )) {
+            if (($cmake + $entry) -match [regex]::Escape($forbidden)) {
+              throw "Historical MR proxy leaked into active generated authority/build: $forbidden"
+            }
+          }
+          Write-Host "CORE_ISLANDS_MR_DIFFUSE_V1_GENERATED_AUTHORITY_PASS"
       - name: Build audit and package
         shell: pwsh
         run: |
