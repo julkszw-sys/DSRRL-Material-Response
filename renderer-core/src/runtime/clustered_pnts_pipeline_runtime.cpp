@@ -18,6 +18,7 @@ struct clustered_pnts_pipeline_runtime::record {
     ID3D11PixelShader *shader = nullptr;
     bool spc = false;
     bool blended_material = false;
+    bool upper_lower_composed = false;
     std::uint32_t representative_shader_index = 0u;
 
     ~record()
@@ -135,6 +136,8 @@ bool clustered_pnts_pipeline_runtime::register_candidate(
                 existing->spc != outcome.spc ||
                 existing->blended_material !=
                     outcome.blended_material ||
+                existing->upper_lower_composed !=
+                    outcome.upper_lower_composed ||
                 existing->representative_shader_index !=
                     outcome.representative_shader_index) {
                 quarantined_.store(true);
@@ -174,6 +177,8 @@ bool clustered_pnts_pipeline_runtime::register_candidate(
         mutable_record->spc = outcome.spc;
         mutable_record->blended_material =
             outcome.blended_material;
+        mutable_record->upper_lower_composed =
+            outcome.upper_lower_composed;
         mutable_record->representative_shader_index =
             outcome.representative_shader_index;
 
@@ -201,6 +206,8 @@ bool clustered_pnts_pipeline_runtime::register_candidate(
                 existing->spc != outcome.spc ||
                 existing->blended_material !=
                     outcome.blended_material ||
+                existing->upper_lower_composed !=
+                    outcome.upper_lower_composed ||
                 existing->representative_shader_index !=
                     outcome.representative_shader_index) {
                 quarantined_.store(true);
@@ -472,6 +479,8 @@ bool clustered_pnts_pipeline_runtime::prepare_bound_shader(
     prepared.spc = selected->spc;
     prepared.blended_material =
         selected->blended_material;
+    prepared.upper_lower_composed =
+        selected->upper_lower_composed;
     prepared.representative_shader_index =
         selected->representative_shader_index;
     prepared.ready = true;
