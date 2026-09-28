@@ -1011,6 +1011,31 @@ bool observe_draw_identity(
                 receiver_id,
                 out_material);
 
+    // Shared base-MTD extension rows are intentionally not authorized by
+    // owner identity alone. Their canonical gate requires the currently
+    // bound stock t1 logical resource to resolve to an actual PTDE SpecRGB
+    // companion. Probe that draw-local carrier only when the profile asks
+    // for it, then re-evaluate with the positive companion authority.
+    if (!direct_pointlight_receiver &&
+        !out_decision.active &&
+        out_decision.reason ==
+            dsrrl::operators::material_response::
+                decision_reason::ptde_companion_required) {
+        auto *context =
+            reinterpret_cast<ID3D11DeviceContext *>(
+                cmd_list != nullptr
+                    ? cmd_list->get_native()
+                    : 0u);
+        if (g_material_resources.
+                exact_specular_companion_ready(
+                    context))
+            out_decision =
+                g_material_response.evaluate(
+                    receiver_id,
+                    out_material,
+                    true);
+    }
+
     if (out_decision.active) {
         hot_count(g_mr_would_activate);
         if (rx != nullptr)
