@@ -172,7 +172,14 @@ bool material_response_island::register_receiver_recipe(const receiver_recipe &r
         recipe.certified_operations == response_none)
         return false;
 
+    if (registration_finalized_.load(
+            std::memory_order_acquire))
+        return false;
+
     std::lock_guard lock(mutex_);
+    if (registration_finalized_.load(
+            std::memory_order_relaxed))
+        return false;
     for (const auto &existing : receiver_recipes_) {
         if (existing.receiver_id != recipe.receiver_id)
             continue;
@@ -192,7 +199,14 @@ bool material_response_island::register_material_profile(const material_profile 
         profile.certified_operations == response_none)
         return false;
 
+    if (registration_finalized_.load(
+            std::memory_order_acquire))
+        return false;
+
     std::lock_guard lock(mutex_);
+    if (registration_finalized_.load(
+            std::memory_order_relaxed))
+        return false;
 
     for (const auto &existing : material_profiles_) {
         if (existing.route_index != profile.route_index ||
@@ -218,9 +232,75 @@ bool material_response_island::register_material_profile(const material_profile 
     return true;
 }
 
+bool material_response_island::finalize_registration()
+{
+    std::lock_guard lock(mutex_);
+
+    if (registration_finalized_.load(
+            std::memory_order_relaxed))
+        return true;
+
+    std::sort(
+        receiver_recipes_.begin(),
+        receiver_recipes_.end(),
+        [](const receiver_recipe &a,
+           const receiver_recipe &b) {
+            return a.receiver_id <
+                b.receiver_id;
+        });
+
+    std::sort(
+        material_profiles_.begin(),
+        material_profiles_.end(),
+        [](const material_profile &a,
+           const material_profile &b) {
+            if (a.route_index !=
+                b.route_index)
+                return a.route_index <
+                    b.route_index;
+            if (a.semantic_name_hash !=
+                b.semantic_name_hash)
+                return a.semantic_name_hash <
+                    b.semantic_name_hash;
+            return a.raw_mtd_sha256 <
+                b.raw_mtd_sha256;
+        });
+
+    registration_finalized_.store(
+        true,
+        std::memory_order_release);
+    return true;
+}
+
+bool material_response_island::
+registration_finalized() const noexcept
+{
+    return registration_finalized_.load(
+        std::memory_order_acquire);
+}
+
 std::optional<receiver_recipe> material_response_island::find_receiver(
     std::uint32_t receiver_id) const
 {
+    if (registration_finalized_.load(
+            std::memory_order_acquire)) {
+        const auto it =
+            std::lower_bound(
+                receiver_recipes_.begin(),
+                receiver_recipes_.end(),
+                receiver_id,
+                [](const receiver_recipe &recipe,
+                   std::uint32_t id) {
+                    return recipe.receiver_id < id;
+                });
+
+        if (it == receiver_recipes_.end() ||
+            it->receiver_id != receiver_id)
+            return std::nullopt;
+
+        return *it;
+    }
+
     std::optional<receiver_recipe> result;
 
     for (const auto &recipe : receiver_recipes_) {
@@ -245,9 +325,32 @@ std::optional<material_profile> material_response_island::resolve_material(
 
     std::optional<material_profile> result;
 
-    for (const auto &profile : material_profiles_) {
-        if (profile.route_index != identity.route_index)
+    auto first = material_profiles_.begin();
+    const auto last = material_profiles_.end();
+    const bool finalized =
+        registration_finalized_.load(
+            std::memory_order_acquire);
+
+    if (finalized) {
+        first = std::lower_bound(
+            first,
+            last,
+            identity.route_index,
+            [](const material_profile &profile,
+               std::uint32_t route) {
+                return profile.route_index < route;
+            });
+    }
+
+    for (auto it = first; it != last; ++it) {
+        const auto &profile = *it;
+
+        if (profile.route_index != identity.route_index) {
+            if (finalized &&
+                profile.route_index > identity.route_index)
+                break;
             continue;
+        }
         if (!receiver_allowed(profile, receiver_id))
             continue;
 
@@ -287,9 +390,32 @@ material_response_island::resolve_material_unscoped(
 
     std::optional<material_profile> result;
 
-    for (const auto &profile : material_profiles_) {
-        if (profile.route_index != identity.route_index)
+    auto first = material_profiles_.begin();
+    const auto last = material_profiles_.end();
+    const bool finalized =
+        registration_finalized_.load(
+            std::memory_order_acquire);
+
+    if (finalized) {
+        first = std::lower_bound(
+            first,
+            last,
+            identity.route_index,
+            [](const material_profile &profile,
+               std::uint32_t route) {
+                return profile.route_index < route;
+            });
+    }
+
+    for (auto it = first; it != last; ++it) {
+        const auto &profile = *it;
+
+        if (profile.route_index != identity.route_index) {
+            if (finalized &&
+                profile.route_index > identity.route_index)
+                break;
             continue;
+        }
 
         if (profile.semantic_name_required &&
             (identity.semantic_name_hash == 0u ||
@@ -323,7 +449,11 @@ decision material_response_island::evaluate(
     const std::optional<material_identity> &material,
     bool ptde_companion_verified) const
 {
-    std::lock_guard lock(mutex_);
+    std::unique_lock<std::mutex> lock;
+    if (!registration_finalized_.load(
+            std::memory_order_acquire))
+        lock = std::unique_lock<std::mutex>(
+            mutex_);
 
     const auto recipe = find_receiver(receiver_id);
     if (!recipe.has_value())
@@ -423,7 +553,11 @@ material_response_island::evaluate_direct_pointlight_material(
     const material_identity &material,
     bool require_legacy_specular) const
 {
-    std::lock_guard lock(mutex_);
+    std::unique_lock<std::mutex> lock;
+    if (!registration_finalized_.load(
+            std::memory_order_acquire))
+        lock = std::unique_lock<std::mutex>(
+            mutex_);
 
     if (!material.valid)
         return {false, decision_reason::material_required, 0u};
@@ -540,14 +674,24 @@ material_response_island::evaluate_direct_pointlight_material(
 
 std::size_t material_response_island::receiver_recipe_count() const noexcept
 {
+    if (registration_finalized_.load(
+            std::memory_order_acquire))
+        return receiver_recipes_.size();
+
     std::lock_guard lock(mutex_);
     return receiver_recipes_.size();
 }
 
 std::size_t material_response_island::material_profile_count() const noexcept
 {
+    if (registration_finalized_.load(
+            std::memory_order_acquire))
+        return material_profiles_.size();
+
     std::lock_guard lock(mutex_);
     return material_profiles_.size();
 }
+
+} // namespace dsrrl::operators::material_response
 
 } // namespace dsrrl::operators::material_response
