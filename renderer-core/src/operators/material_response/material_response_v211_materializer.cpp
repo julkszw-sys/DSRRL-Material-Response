@@ -420,6 +420,145 @@ bool compose_enabled_a1_islands(
 
 } // namespace
 
+v211_materialize_outcome materialize_ptde_diffuse_stable_receiver(
+    const core::feature_registry &features,
+    const std::uint8_t *source,
+    std::size_t size,
+    std::vector<std::uint8_t> &output) noexcept
+{
+    v211_materialize_outcome outcome{};
+    output.clear();
+
+    if (source == nullptr || size == 0u) {
+        outcome.result =
+            v211_materialize_result::fail_invalid_dxbc;
+        return outcome;
+    }
+
+    if (!candidate_size(size)) {
+        outcome.result =
+            v211_materialize_result::pass_not_candidate;
+        return outcome;
+    }
+
+    if (!legacy_plan::dxbc::checksum_container_valid(
+            source,
+            size)) {
+        outcome.result =
+            v211_materialize_result::fail_invalid_dxbc;
+        return outcome;
+    }
+
+    const auto *plan = find_plan(source, size);
+    if (plan == nullptr) {
+        outcome.result =
+            v211_materialize_result::pass_unknown_exact_sha;
+        return outcome;
+    }
+
+    outcome.receiver_id = plan->receiver_id;
+
+    std::vector<chunk> chunks;
+    std::vector<std::uint32_t> words;
+    std::size_t shex_index = 0u;
+
+    if (!parse_dxbc(
+            source,
+            size,
+            chunks,
+            shex_index) ||
+        !extract_words(
+            chunks,
+            shex_index,
+            words) ||
+        words.size() < 12u ||
+        words[1] != words.size()) {
+        outcome.result =
+            v211_materialize_result::fail_invalid_dxbc;
+        return outcome;
+    }
+
+    // Exact PTDE diffuse-material-domain cut:
+    //   stock cb0[9] diffuse material factor -> b12[1] PTDE c100
+    //   stock abs(Z)^2.2 material-domain transform -> linear Z
+    //
+    // These exact word sites are used only as stock-host identity guards.
+    // No V2.10/V2.11 c101/F0 patch is executed by this path.
+    for (const auto site : plan->cb_sites) {
+        if (site + 1u >= words.size() ||
+            words[site] != 0u ||
+            words[site + 1u] != 9u) {
+            outcome.result =
+                v211_materialize_result::fail_patch_precondition;
+            return outcome;
+        }
+    }
+
+    if (plan->pow_site + 2u >= words.size() ||
+        words[plan->pow_site] != 0x400ccccdu ||
+        words[plan->pow_site + 1u] != 0x400ccccdu ||
+        words[plan->pow_site + 2u] != 0x400ccccdu) {
+        outcome.result =
+            v211_materialize_result::fail_patch_precondition;
+        return outcome;
+    }
+
+    for (const auto site : plan->cb_sites) {
+        words[site] = 12u;
+        words[site + 1u] = 1u;
+    }
+
+    words[plan->pow_site] = 0x3f800000u;
+    words[plan->pow_site + 1u] = 0x3f800000u;
+    words[plan->pow_site + 2u] = 0x3f800000u;
+
+    try {
+        words.insert(
+            words.begin() + 11,
+            k_cb12_decl.begin(),
+            k_cb12_decl.end());
+    } catch (...) {
+        outcome.result =
+            v211_materialize_result::fail_rebuild;
+        return outcome;
+    }
+    words[1] += 4u;
+
+    if (!rebuild(
+            source,
+            size,
+            std::move(chunks),
+            shex_index,
+            words,
+            output) ||
+        output.empty()) {
+        output.clear();
+        outcome.result =
+            v211_materialize_result::fail_rebuild;
+        return outcome;
+    }
+
+    // The historical V2.9 hash is intentionally NOT an authorizer here.
+    // Correctness is guarded by exact stock SHA + exact operand preconditions,
+    // then independently composed surface operators and a valid DXBC checksum.
+    if (!compose_enabled_a1_islands(
+            features,
+            source,
+            size,
+            output,
+            outcome.composed_owners) ||
+        !augment_final_rdef_b12(output)) {
+        output.clear();
+        outcome.result =
+            v211_materialize_result::fail_patch_precondition;
+        return outcome;
+    }
+
+    outcome.result =
+        v211_materialize_result::applied;
+    return outcome;
+}
+
 v211_materialize_outcome materialize_v211_certified_stage(
     const std::uint8_t *source,
     std::size_t size,
