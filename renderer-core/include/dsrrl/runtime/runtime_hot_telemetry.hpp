@@ -36,10 +36,14 @@ inline bool environment_flag(
 
 inline bool hot_enabled() noexcept
 {
+#if defined(DSRRL_RUNTIME_TELEMETRY_DEFAULT_ON)
+    return true;
+#else
     static const bool enabled =
         environment_flag(
             "DSRRL_RUNTIME_TELEMETRY");
     return enabled;
+#endif
 }
 
 inline bool effect_enabled() noexcept
@@ -65,10 +69,14 @@ inline void hot_count(
 
 inline bool native_state_verification_enabled() noexcept
 {
+#if defined(DSRRL_RUNTIME_VERIFY_STATE_DEFAULT_ON)
+    return true;
+#else
     static const bool enabled =
         environment_flag(
             "DSRRL_RUNTIME_VERIFY_STATE");
     return enabled;
+#endif
 }
 
 } // namespace dsrrl::runtime::telemetry

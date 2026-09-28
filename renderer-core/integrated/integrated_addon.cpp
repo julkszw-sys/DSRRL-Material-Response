@@ -4635,6 +4635,12 @@ bool AddonInit(
         runtime_effect_telemetry_requested();
     reset_effect_probe();
 
+#if defined(DSRRL_POINTLIGHT_RUNTIME_DIAGNOSTIC)
+    reshade::log::message(
+        reshade::log::level::info,
+        "[DSRRL POINTLIGHT DIAGNOSTIC] normal-launch telemetry is built in; no launcher or environment variables are required. Hot counters, effect stages and native restore verification are active; unrelated Bloom FX diagnostic hooks remain disabled.");
+#endif
+
     g_a1_bridge.reset();
     g_draw_transactions.reset();
     g_mr_draw_runtime.reset();
@@ -4833,8 +4839,12 @@ bool AddonInit(
     // their registry/census work armed in production. The same explicit
     // telemetry switch used for render-hot counters enables the diagnostic
     // transport for census sessions.
+#if defined(DSRRL_POINTLIGHT_RUNTIME_DIAGNOSTIC)
+    const bool bloom_fx_diagnostics = false;
+#else
     const bool bloom_fx_diagnostics =
         g_hot_telemetry_enabled;
+#endif
     const bool bloom_fx_hooks =
         bloom_fx_diagnostics &&
         flver_hooks &&
