@@ -137,7 +137,7 @@ int main()
 
     operators::material_response::material_response_island mr{};
     CHECK(operators::material_response::
-          register_confirmed_receivers_v1(mr)==24u);
+          register_confirmed_material_receivers_v1(mr)==24u);
     CHECK(operators::material_response::
           register_confirmed_material_routes_v1(mr)==43u);
 
