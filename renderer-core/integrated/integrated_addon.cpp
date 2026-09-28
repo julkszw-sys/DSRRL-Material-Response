@@ -28,8 +28,7 @@
 #include "dsrrl/runtime/clustered_pnts_pipeline_runtime.hpp"
 #include "dsrrl/operators/material_response/material_response_island.hpp"
 #include "dsrrl/operators/material_response/material_response_seed.hpp"
-#include "dsrrl/operators/material_response/material_response_v211_materializer.hpp"
-#include "dsrrl/operators/material_response/hemenvlerp_v211_materializer.hpp"
+#include "dsrrl/operators/material_response/material_response_diffuse_v1.hpp"
 #include "dsrrl/operators/lightbank/hemdir3_b13_materializer.hpp"
 #include "dsrrl/operators/lightbank/upper_lower_hemenv_materializer.hpp"
 #include "dsrrl/operators/resource_bridges/spec_rgb_consumer_materializer.hpp"
@@ -2271,7 +2270,7 @@ bool on_create_pipeline(
         std::vector<std::uint8_t> mr_payload;
         const auto mr =
             dsrrl::operators::material_response::
-                materialize_ptde_diffuse_stable_receiver(
+                materialize_ptde_diffuse_response_v1(
                     g_core.features(),
                     source,
                     pixel_shader->code_size,
@@ -2279,9 +2278,12 @@ bool on_create_pipeline(
 
         using mr_result =
             dsrrl::operators::material_response::
-                v211_materialize_result;
+                diffuse_v1_result;
 
-        if (mr.result == mr_result::applied) {
+        if (mr.result == mr_result::applied &&
+            mr.family ==
+                dsrrl::operators::material_response::
+                    diffuse_v1_family::stable_hemenv) {
             // Base MR always preserves stock t1. SpecRGB is a paired shader
             // variant selected only after the draw-local t10 carrier succeeds.
             if (!g_mr_draw_runtime.has_receiver_replacement(
@@ -2346,21 +2348,22 @@ bool on_create_pipeline(
             }
         } else if (
             mr.result != mr_result::pass_not_candidate &&
-            mr.result != mr_result::pass_unknown_exact_sha) {
+            mr.result != mr_result::pass_unknown_exact_sha &&
+            !(mr.result == mr_result::applied &&
+              mr.family ==
+                  dsrrl::operators::material_response::
+                      diffuse_v1_family::hemenvlerp)) {
             ++g_mr_payload_materialize_fail;
         }
 
         // Exact HemEnvLerp is a distinct executable family that shares the
-        // semantic receiver namespace 24..47. Build and store a separate
-        // replacement object so stable HemEnv and Lerp never overwrite each
-        // other by receiver_id. The verified base supplies b12/MR; the
-        // exact stock Lerp plan supplies the b13 U/L consumer sites; SpecRGB
-        // is then split to t10 on the composed shader. Diffuse t0 and Normal
-        // t2 remain draw-local resource carriers and are attached later.
+        // semantic receiver namespace 24..47. Build the clean stock->PTDE
+        // diffuse response under a separate replacement object. c101/F0 and
+        // generic SpecRGB/PBL mutation are intentionally absent.
         std::vector<std::uint8_t> lerp_mr_payload;
         const auto lerp_mr =
             dsrrl::operators::material_response::
-                materialize_ptde_diffuse_hemenvlerp_receiver(
+                materialize_ptde_diffuse_response_v1(
                     g_core.features(),
                     source,
                     pixel_shader->code_size,
@@ -2368,12 +2371,14 @@ bool on_create_pipeline(
 
         using lerp_mr_result =
             dsrrl::operators::material_response::
-                hemenvlerp_v211_result;
+                diffuse_v1_result;
 
-        if (lerp_mr.result == lerp_mr_result::applied) {
+        if (lerp_mr.result == lerp_mr_result::applied &&
+            lerp_mr.family ==
+                dsrrl::operators::material_response::
+                    diffuse_v1_family::hemenvlerp) {
             const std::uint32_t lerp_receiver_id =
-                24u + static_cast<std::uint32_t>(
-                    lerp_mr.pair_index);
+                lerp_mr.receiver_id;
 
             // Material Response is operator-independent from U/L readiness.
             // Always register the certified Lerp MR-only replacement first.
@@ -2446,7 +2451,11 @@ bool on_create_pipeline(
             }
         } else if (
             lerp_mr.result != lerp_mr_result::pass_not_candidate &&
-            lerp_mr.result != lerp_mr_result::pass_unknown_exact_sha) {
+            lerp_mr.result != lerp_mr_result::pass_unknown_exact_sha &&
+            !(lerp_mr.result == lerp_mr_result::applied &&
+              lerp_mr.family ==
+                  dsrrl::operators::material_response::
+                      diffuse_v1_family::stable_hemenv)) {
             ++g_mr_payload_materialize_fail;
         }
 
