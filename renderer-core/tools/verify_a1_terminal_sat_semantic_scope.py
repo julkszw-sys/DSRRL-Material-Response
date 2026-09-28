@@ -49,14 +49,18 @@ for pos, (row, plan) in enumerate(zip(rows, plans)):
         if not is_sat_toggle:
             continue
 
-        exact_rgb_terminal = old == 0x05000036 and new == 0x05002036
         certified_scope = (
             mask in (39, 193)
             and name.startswith("FRPG_Phn_")
             and "HemEnv" in name
         )
+        certified_write_shape = (
+            (mask == 39 and old == 0x05000036 and new == 0x05002036)
+            or
+            (mask == 193 and old == 0x09000037 and new == 0x09002037)
+        )
 
-        if exact_rgb_terminal and certified_scope:
+        if certified_scope and certified_write_shape:
             certified += 1
         else:
             rejected += 1
@@ -78,6 +82,8 @@ required_runtime_tokens = (
     "a1_op_semantically_authorized",
     "0x05000036u",
     "0x05002036u",
+    "0x09000037u",
+    "0x09002037u",
     "plan.legacy_mask == 39u",
     "plan.legacy_mask == 193u",
     '"FRPG_Phn_"',
