@@ -287,6 +287,21 @@ jobs:
             if ($upperLower -notmatch [regex]::Escape($required)) { throw "PMetal same-owner tuple preservation invariant missing: $required" }
           }
 
+          # The assignment fingerprint and producer source payload are one
+          # semantic tuple. Never allow an exact draw fingerprint to authorize
+          # source/selectors captured from a different producer event.
+          foreach ($required in @(
+            'g_reference_publish_tuple_mismatch',
+            'producer.selector_a !=',
+            'producer.selector_b !=',
+            'producer_beta_bits != beta_bits'
+          )) {
+            if ($upperLower -notmatch [regex]::Escape($required)) { throw "PMetal reference payload/fingerprint tuple-integrity gate missing: $required" }
+          }
+          if ($entry -notmatch [regex]::Escape('ul_pub_tuple_miss=')) {
+            throw "PMetal reference tuple-integrity telemetry marker missing"
+          }
+
           foreach ($required in @(
             'k_subsurface_body_f_spec_hash',
             'k_subsurface_body_m_spec_hash',

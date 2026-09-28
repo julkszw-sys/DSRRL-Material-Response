@@ -74,6 +74,32 @@
         "draw_adapter"
       ],
       "purpose": "Differentiate exact activation frontier without changing renderer behavior."
+    },
+    "operator_delta_re": {
+      "status": "CONFIRMED_STATIC_SHADER_RE",
+      "report": "renderer-core/data/audits/subsurface_plain_operator_delta_v1.json",
+      "source_artifact_id": 99,
+      "pair_count": 3,
+      "instruction_delta_each": 37,
+      "delete_block_lengths": [
+        2,
+        5,
+        28,
+        1,
+        1
+      ],
+      "identical_delete_signature_3_of_3": true,
+      "surviving_operand_word_mismatches": {
+        "Csd": 147,
+        "Sdw": 144,
+        "Plain": 143
+      },
+      "direct_delete_patch_authorized": false,
+      "reason": "opcode-level operator delta is isolated but surviving operands/temp-register allocation are not byte-equivalent"
+    },
+    "creation_order_dependency": {
+      "status": "OPEN_FAIL_OPEN",
+      "detail": "Dedicated target replacement 33-35 is currently registered from ordinary HemEnv target materialization. No naive Subsurf-source re-lowering is authorized; a Subsurf draw before target replacement readiness safely preserves stock DSR."
     }
   },
   "envspec": {

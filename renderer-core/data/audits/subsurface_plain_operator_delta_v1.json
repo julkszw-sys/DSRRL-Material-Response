@@ -1,0 +1,250 @@
+{
+  "schema": "dsrrl.subsurface_plain_operator_delta.v1",
+  "status": "CONFIRMED",
+  "source_artifact_id": 99,
+  "source_artifact_sha256": "57314b36812dfa2867512052278a08dc0da8a41ea0414c1fbbe4ccdf45838076",
+  "source_member": "DSR/shader/FRPG_FlverPBL_fpo_DX11.shaderbnd.dcx",
+  "pairs": [
+    {
+      "variant": "Csd",
+      "source_subsurf_name": "FRPG_Phn_DifSpcBmp______Csd_HemEnvSubsurf.fpo",
+      "source_subsurf_sha256": "0b8288d686c8f349ad87352946be51ffd007462f25357326bf47e736e690e511",
+      "source_byte_size": 21052,
+      "target_plain_name": "FRPG_Phn_DifSpcBmp______Csd_HemEnv.fpo",
+      "target_plain_sha256": "35880c0b2f2330208dfc21af6dd3d944218fcc4540cd8e59404a0aefc13c0b24",
+      "target_byte_size": 19856,
+      "target_plain_receiver_id": 33,
+      "source_instruction_count": 445,
+      "target_instruction_count": 408,
+      "instruction_delta": 37,
+      "opcode_delete_blocks": [
+        [
+          "0x5A",
+          "0x58"
+        ],
+        [
+          "0x45",
+          "0x38",
+          "0x00",
+          "0x4B",
+          "0x38"
+        ],
+        [
+          "0x31",
+          "0x31",
+          "0x01",
+          "0x1F",
+          "0x36",
+          "0x38",
+          "0x48",
+          "0x38",
+          "0x38",
+          "0x38",
+          "0x0E",
+          "0x38",
+          "0x38",
+          "0x38",
+          "0x38",
+          "0x19",
+          "0x38",
+          "0x32",
+          "0x32",
+          "0x32",
+          "0x38",
+          "0x19",
+          "0x32",
+          "0x32",
+          "0x32",
+          "0x12",
+          "0x36",
+          "0x15"
+        ],
+        [
+          "0x1C"
+        ],
+        [
+          "0x38"
+        ]
+      ],
+      "opcode_delete_block_lengths": [
+        2,
+        5,
+        28,
+        1,
+        1
+      ],
+      "delete_only_opcode_transform": true,
+      "matched_opcode_instructions": 408,
+      "byte_identical_matched_instructions": 261,
+      "operand_or_token_word_mismatch_matched_instructions": 147,
+      "non_delete_opcode_edits": []
+    },
+    {
+      "variant": "Sdw",
+      "source_subsurf_name": "FRPG_Phn_DifSpcBmp______Sdw_HemEnvSubsurf.fpo",
+      "source_subsurf_sha256": "885337e50f3d29f086fd18e1f7524f28712031d0264964aef5f37037df7d7bcb",
+      "source_byte_size": 20752,
+      "target_plain_name": "FRPG_Phn_DifSpcBmp______Sdw_HemEnv.fpo",
+      "target_plain_sha256": "d6038de494509e7cbcbfb904c4046e9427f3b921f6a35735a0b0d316f9976837",
+      "target_byte_size": 19556,
+      "target_plain_receiver_id": 34,
+      "source_instruction_count": 437,
+      "target_instruction_count": 400,
+      "instruction_delta": 37,
+      "opcode_delete_blocks": [
+        [
+          "0x5A",
+          "0x58"
+        ],
+        [
+          "0x45",
+          "0x38",
+          "0x00",
+          "0x4B",
+          "0x38"
+        ],
+        [
+          "0x31",
+          "0x31",
+          "0x01",
+          "0x1F",
+          "0x36",
+          "0x38",
+          "0x48",
+          "0x38",
+          "0x38",
+          "0x38",
+          "0x0E",
+          "0x38",
+          "0x38",
+          "0x38",
+          "0x38",
+          "0x19",
+          "0x38",
+          "0x32",
+          "0x32",
+          "0x32",
+          "0x38",
+          "0x19",
+          "0x32",
+          "0x32",
+          "0x32",
+          "0x12",
+          "0x36",
+          "0x15"
+        ],
+        [
+          "0x1C"
+        ],
+        [
+          "0x38"
+        ]
+      ],
+      "opcode_delete_block_lengths": [
+        2,
+        5,
+        28,
+        1,
+        1
+      ],
+      "delete_only_opcode_transform": true,
+      "matched_opcode_instructions": 400,
+      "byte_identical_matched_instructions": 256,
+      "operand_or_token_word_mismatch_matched_instructions": 144,
+      "non_delete_opcode_edits": []
+    },
+    {
+      "variant": "Plain",
+      "source_subsurf_name": "FRPG_Phn_DifSpcBmp__________HemEnvSubsurf.fpo",
+      "source_subsurf_sha256": "3002cfb9aee6835412399c3be267ab94c5706d7d5030fc4cafc82bc54c55a860",
+      "source_byte_size": 19256,
+      "target_plain_name": "FRPG_Phn_DifSpcBmp__________HemEnv.fpo",
+      "target_plain_sha256": "7d03c75b69f5730eb741a4d327189d0bbed8a8450fb0ac04e1505f7b91763701",
+      "target_byte_size": 18060,
+      "target_plain_receiver_id": 35,
+      "source_instruction_count": 399,
+      "target_instruction_count": 362,
+      "instruction_delta": 37,
+      "opcode_delete_blocks": [
+        [
+          "0x5A",
+          "0x58"
+        ],
+        [
+          "0x45",
+          "0x38",
+          "0x00",
+          "0x4B",
+          "0x38"
+        ],
+        [
+          "0x31",
+          "0x31",
+          "0x01",
+          "0x1F",
+          "0x36",
+          "0x38",
+          "0x48",
+          "0x38",
+          "0x38",
+          "0x38",
+          "0x0E",
+          "0x38",
+          "0x38",
+          "0x38",
+          "0x38",
+          "0x19",
+          "0x38",
+          "0x32",
+          "0x32",
+          "0x32",
+          "0x38",
+          "0x19",
+          "0x32",
+          "0x32",
+          "0x32",
+          "0x12",
+          "0x36",
+          "0x15"
+        ],
+        [
+          "0x1C"
+        ],
+        [
+          "0x38"
+        ]
+      ],
+      "opcode_delete_block_lengths": [
+        2,
+        5,
+        28,
+        1,
+        1
+      ],
+      "delete_only_opcode_transform": true,
+      "matched_opcode_instructions": 362,
+      "byte_identical_matched_instructions": 219,
+      "operand_or_token_word_mismatch_matched_instructions": 143,
+      "non_delete_opcode_edits": []
+    }
+  ],
+  "cross_pair_invariants": {
+    "pair_count": 3,
+    "instruction_delta_each": 37,
+    "delete_block_count_each": 5,
+    "delete_block_lengths": [
+      2,
+      5,
+      28,
+      1,
+      1
+    ],
+    "same_opcode_delete_signature_3_of_3": true
+  },
+  "operator_interpretation": "The exact three DSR Subsurf receivers contain the same isolated 37-instruction opcode-level fork relative to their ordinary HemEnv targets. This strengthens the Subsurface/SSS operator-island boundary.",
+  "guardrail": "Opcode-level delete-only equivalence does NOT authorize deleting those instructions from the source shader at runtime: surviving instructions are not byte-identical because compiler temp/operand allocation differs. A direct source-to-target materializer requires independently proven operand/register re-lowering or exact target bytes. Current draw-time material-aware replacement remains fail-open.",
+  "creation_order_dependency": "OPEN_FAIL_OPEN: current dedicated 33-35 target replacement is registered when the corresponding ordinary HemEnv target is materialized; no source-to-target re-lowering is authorized by this audit.",
+  "runtime_activation": "OPEN",
+  "pixel_behavior": "OPEN",
+  "pass": true
+}
