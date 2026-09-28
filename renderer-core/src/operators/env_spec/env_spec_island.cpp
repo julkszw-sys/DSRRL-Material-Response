@@ -56,9 +56,10 @@ decision env_spec_island::gate(
         }
     }
 
-    return gate(
-        material_response::mtd_envspec_presence(query),
-        ptde_bridge_ready);
+    // Receiver/material identity is the authority boundary for EnvSpec.
+    // Never derive a positive bridge/delete decision from a weaker semantic
+    // presence fallback: a non-exact query must fail open to stock DSR.
+    return {action::preserve_host, false};
 }
 
 } // namespace dsrrl::operators::env_spec
