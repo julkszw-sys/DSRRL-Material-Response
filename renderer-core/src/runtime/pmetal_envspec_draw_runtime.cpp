@@ -169,6 +169,8 @@ release_resources() noexcept
             shader->Release();
     }
     lerp_replacements_.clear();
+    lerp_replacement_sha256_.clear();
+    lerp_replacement_size_.clear();
 
     for (auto &[_,entry] :
          b12_by_context_) {
@@ -246,6 +248,8 @@ on_destroy_device(
             shader->Release();
     }
     lerp_replacements_.clear();
+    lerp_replacement_sha256_.clear();
+    lerp_replacement_size_.clear();
 
     for (auto &[_,entry] :
          b12_by_context_) {
@@ -282,6 +286,12 @@ register_replacement(
         return false;
     }
 
+    const auto payload_sha256 =
+        hashing::sha256(
+            static_cast<const std::uint8_t *>(
+                dxbc),
+            dxbc_size);
+
     std::lock_guard<std::mutex> lock(
         mutex_);
 
@@ -290,22 +300,48 @@ register_replacement(
         return false;
     }
 
-    const auto existing =
-        replacements_.find(
-            outcome.receiver_id);
-    if (existing !=
-        replacements_.end()) {
-        auto *already =
-            outcome.upper_lower_composed
-                ? existing->second.upper_lower
-                : existing->second.base;
+    auto &pair =
+        replacements_[
+            outcome.receiver_id];
 
-        // receiver_id is bound to one exact stock SHA in the materializer
-        // authority. Within one device lifetime the resulting replacement is
-        // deterministic, so recreating the same D3D11 PS for every matching
-        // pipeline only adds driver work and pointer churn.
-        if (already != nullptr)
+    ID3D11PixelShader *&target =
+        outcome.upper_lower_composed
+            ? pair.upper_lower
+            : pair.base;
+    auto &owners =
+        outcome.upper_lower_composed
+            ? pair.upper_lower_owners
+            : pair.base_owners;
+    auto &stored_sha =
+        outcome.upper_lower_composed
+            ? pair.upper_lower_payload_sha256
+            : pair.base_payload_sha256;
+    auto &stored_size =
+        outcome.upper_lower_composed
+            ? pair.upper_lower_payload_size
+            : pair.base_payload_size;
+
+    if (target != nullptr) {
+        const bool same_payload =
+            owners ==
+                outcome.composed_owners &&
+            stored_size ==
+                dxbc_size &&
+            stored_sha ==
+                payload_sha256;
+
+        if (same_payload) {
+            ++replacement_register_ok_;
             return true;
+        }
+
+        // Draw-time identity for this bank is only receiver + base/UL mode.
+        // A second byte-distinct shader cannot be selected safely later.
+        quarantined_.store(
+            true,
+            std::memory_order_release);
+        ++replacement_register_fail_;
+        return false;
     }
 
     ID3D11PixelShader *shader = nullptr;
@@ -320,27 +356,13 @@ register_replacement(
         return false;
     }
 
-    auto &pair =
-        replacements_[
-            outcome.receiver_id];
-
-    ID3D11PixelShader *&target =
-        outcome.upper_lower_composed
-            ? pair.upper_lower
-            : pair.base;
-
-    if (target != nullptr)
-        target->Release();
-
     target = shader;
-
-    auto &owners =
-        outcome.upper_lower_composed
-            ? pair.upper_lower_owners
-            : pair.base_owners;
-
     owners =
         outcome.composed_owners;
+    stored_sha =
+        payload_sha256;
+    stored_size =
+        dxbc_size;
 
     ++replacement_register_ok_;
     return true;
@@ -373,6 +395,12 @@ register_lerp_replacement(
         return false;
     }
 
+    const auto payload_sha256 =
+        hashing::sha256(
+            static_cast<const std::uint8_t *>(
+                dxbc),
+            dxbc_size);
+
     std::lock_guard<std::mutex> lock(
         mutex_);
 
@@ -384,10 +412,38 @@ register_lerp_replacement(
     const auto existing =
         lerp_replacements_.find(
             outcome.semantic_receiver_id);
+
     if (existing !=
             lerp_replacements_.end() &&
-        existing->second != nullptr)
-        return true;
+        existing->second != nullptr) {
+        const auto sha_it =
+            lerp_replacement_sha256_.find(
+                outcome.semantic_receiver_id);
+        const auto size_it =
+            lerp_replacement_size_.find(
+                outcome.semantic_receiver_id);
+
+        const bool same_payload =
+            sha_it !=
+                lerp_replacement_sha256_.end() &&
+            size_it !=
+                lerp_replacement_size_.end() &&
+            sha_it->second ==
+                payload_sha256 &&
+            size_it->second ==
+                dxbc_size;
+
+        if (same_payload) {
+            ++lerp_replacement_register_ok_;
+            return true;
+        }
+
+        quarantined_.store(
+            true,
+            std::memory_order_release);
+        ++lerp_replacement_register_fail_;
+        return false;
+    }
 
     ID3D11PixelShader *shader = nullptr;
     if (FAILED(
@@ -401,14 +457,15 @@ register_lerp_replacement(
         return false;
     }
 
-    auto &target =
-        lerp_replacements_[
-            outcome.semantic_receiver_id];
-
-    if (target != nullptr)
-        target->Release();
-
-    target = shader;
+    lerp_replacements_[
+        outcome.semantic_receiver_id] =
+        shader;
+    lerp_replacement_sha256_[
+        outcome.semantic_receiver_id] =
+        payload_sha256;
+    lerp_replacement_size_[
+        outcome.semantic_receiver_id] =
+        dxbc_size;
 
     ++lerp_replacement_register_ok_;
     return true;
