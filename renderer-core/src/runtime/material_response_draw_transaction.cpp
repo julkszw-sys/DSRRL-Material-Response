@@ -1555,13 +1555,11 @@ bool material_response_draw_runtime::prepare_prevalidated_route_request(
     decision.receiver_id = receiver_id;
     decision.route_index = route_index;
     decision.certified_operations =
-        mr::diffuse_material_domain_linear |
-        mr::specular_factor_c101;
+        mr::diffuse_material_domain_linear;
     decision.c101 = seed->c101;
     decision.lod_min = seed->lod_min;
     decision.lod_max = seed->lod_max;
     decision.c100 = constants->c100;
-    decision.c101_f0q = constants->c101_f0q;
     decision.ptde_specular_power =
         constants->ptde_specular_power;
     decision.ptde_specular_power_verified =
@@ -1619,13 +1617,11 @@ prepare_prevalidated_route_request_with_upper_lower(
     decision.receiver_id = receiver_id;
     decision.route_index = route_index;
     decision.certified_operations =
-        mr::diffuse_material_domain_linear |
-        mr::specular_factor_c101;
+        mr::diffuse_material_domain_linear;
     decision.c101 = seed->c101;
     decision.lod_min = seed->lod_min;
     decision.lod_max = seed->lod_max;
     decision.c100 = constants->c100;
-    decision.c101_f0q = constants->c101_f0q;
     decision.ptde_specular_power =
         constants->ptde_specular_power;
     decision.ptde_specular_power_verified =
