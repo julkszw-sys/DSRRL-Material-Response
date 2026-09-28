@@ -2,6 +2,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <vector>
 
 namespace dsrrl::operators::surface {
 
@@ -26,5 +27,11 @@ terminal_sat_patch_result apply_terminal_rgb_sat(
     std::uint8_t *dxbc,
     std::size_t dxbc_size,
     const terminal_sat_patch_recipe &recipe) noexcept;
+
+// Find the unique DXBC SM4/5 MOV to o0.xyz in an already decoded code-token
+// stream and apply only its SAT modifier. Combined RGBA writes, multiple RGB
+// outputs, malformed instruction lengths and unknown shapes fail open.
+terminal_sat_patch_result apply_unique_terminal_rgb_sat_words(
+    std::vector<std::uint32_t> &words) noexcept;
 
 } // namespace dsrrl::operators::surface
