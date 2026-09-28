@@ -2,7 +2,7 @@
 
 #include "dsrrl/operators/env_spec/pmetal_rgba_authority.hpp"
 #include "dsrrl/operators/lightbank/upper_lower_hemenv_materializer.hpp"
-#include "dsrrl/operators/material_response/material_response_v211_materializer.hpp"
+#include "dsrrl/operators/material_response/material_response_diffuse_v1.hpp"
 #include "dsrrl/operators/resource_bridges/spec_rgb_consumer_materializer.hpp"
 #include "dsrrl/operators/surface/terminal_sat_rgb_patch.hpp"
 #include "dsrrl/operators/legacy_plan/a1_create_time_materializer.hpp"
@@ -384,7 +384,7 @@ bool compose_a1(
     const core::feature_registry &features,
     const std::uint8_t *stock,
     std::size_t stock_size,
-    std::vector<std::uint8_t> &v211,
+    std::vector<std::uint8_t> &base,
     const pmetal_rgba_authority::entry &authority,
     core::operator_mask &owners) noexcept
 {
@@ -408,14 +408,14 @@ bool compose_a1(
         code_payload_offset(
             stock,
             stock_size);
-    const auto v211_code =
+    const auto base_code =
         code_payload_offset(
-            v211.data(),
-            v211.size());
+            base.data(),
+            base.size());
 
     if (stock_code ==
             static_cast<std::size_t>(-1) ||
-        v211_code ==
+        base_code ==
             static_cast<std::size_t>(-1))
         return false;
 
@@ -454,21 +454,21 @@ bool compose_a1(
             return false;
 
         const auto target =
-            v211_code +
+            base_code +
             word * 4u;
 
         if (target >
-                v211.size() ||
-            v211.size() - target <
+                base.size() ||
+            base.size() - target <
                 4u ||
             read_u32(
-                v211.data() +
+                base.data() +
                 target) !=
                 op.expected_old_word)
             return false;
 
         write_u32(
-            v211.data() + target,
+            base.data() + target,
             op.replacement_word);
 
         owners |=
@@ -479,8 +479,8 @@ bool compose_a1(
     return
         legacy_plan::dxbc::
             fix_checksum(
-                v211.data(),
-                v211.size());
+                base.data(),
+                base.size());
 }
 
 bool terminal_rgb_output_word(
@@ -1163,23 +1163,24 @@ materialize_pmetal_rgba_receiver(
         return outcome;
     }
 
-    std::vector<std::uint8_t> v211;
+    std::vector<std::uint8_t> base;
     const auto mr =
         material_response::
-            materialize_v211_certified_stage(
+            materialize_ptde_diffuse_response_v1(
+                features,
                 stock_source,
                 stock_size,
-                v211);
+                base,
+                true);
 
     using mr_result =
         material_response::
-            v211_materialize_result;
+            diffuse_v1_result;
 
     if (mr.result ==
             mr_result::pass_not_candidate ||
         mr.result ==
-            mr_result::
-                pass_unknown_exact_sha) {
+            mr_result::pass_unknown_exact_sha) {
         outcome.result =
             pmetal_rgba_materialize_result::
                 pass_not_candidate;
@@ -1187,17 +1188,21 @@ materialize_pmetal_rgba_receiver(
     }
 
     if (mr.result !=
-            mr_result::applied) {
+            mr_result::applied ||
+        mr.family !=
+            material_response::
+                diffuse_v1_family::
+                    stable_hemenv) {
         outcome.result =
             pmetal_rgba_materialize_result::
-                fail_v211_stage;
+                fail_diffuse_base;
         return outcome;
     }
 
-    const auto digest =
+    const auto stock_digest =
         hashing::sha256(
-            v211.data(),
-            v211.size());
+            stock_source,
+            stock_size);
 
     const pmetal_rgba_authority::entry
         *authority = nullptr;
@@ -1205,12 +1210,19 @@ materialize_pmetal_rgba_receiver(
     for (const auto &candidate :
          pmetal_rgba_authority::
              k_entries) {
-        if (hashing::matches_hex(
-                digest,
-                candidate.input_v211_sha256)) {
-            authority = &candidate;
-            break;
+        if (!hashing::matches_hex(
+                stock_digest,
+                candidate.stock_sha256))
+            continue;
+
+        if (authority != nullptr) {
+            outcome.result =
+                pmetal_rgba_materialize_result::
+                    pass_unknown_exact_sha;
+            return outcome;
         }
+
+        authority = &candidate;
     }
 
     if (authority == nullptr ||
@@ -1225,11 +1237,13 @@ materialize_pmetal_rgba_receiver(
     outcome.receiver_id =
         mr.receiver_id;
 
+    // Compose only independent A1 owners that do not overlap the EnvSpec
+    // semantic cut. The clean diffuse base intentionally deferred them.
     if (!compose_a1(
             features,
             stock_source,
             stock_size,
-            v211,
+            base,
             *authority,
             outcome.composed_owners)) {
         outcome.result =
@@ -1238,24 +1252,16 @@ materialize_pmetal_rgba_receiver(
         return outcome;
     }
 
+    // Replace the complete DSR EnvSpec/PBL window with the PTDE legacy
+    // RGB/A + direct-R + raw-c101 material operator.
     if (!apply_build131(
-            v211,
+            base,
             *authority)) {
         outcome.result =
             pmetal_rgba_materialize_result::
                 fail_build131_precondition;
         return outcome;
     }
-
-    if (!add_b12_rdef(v211)) {
-        outcome.result =
-            pmetal_rgba_materialize_result::
-                fail_b12_rdef;
-        return outcome;
-    }
-
-    std::vector<std::uint8_t> base =
-        std::move(v211);
 
     if (compose_upper_lower) {
         std::vector<std::uint8_t> ul;
