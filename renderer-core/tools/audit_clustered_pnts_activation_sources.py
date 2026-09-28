@@ -30,10 +30,48 @@ def main():
     if (spc,nospc)!=(24,12):
         fail(f"unexpected clustered receiver partition {(spc,nospc)}")
 
+    # The direct replacement is a composed shader payload. Audit the exact
+    # create-time operator transforms in the journal instead of assuming the
+    # PointLight runtime is the sole shader owner.
+    for entry in entries:
+        counts={
+            "diffuse":0,
+            "atten_a":0,
+            "atten_b":0,
+            "envspec_delete":0,
+            "terminal_sat":0,
+        }
+        for op in entry.get("ops",[]):
+            old=op.get("old_tokens",[])
+            new=op.get("new_tokens",[])
+            if old==[0x400ccccd,0x400ccccd,0x400ccccd] and new==[0x3f800000,0x3f800000,0x3f800000]:
+                counts["diffuse"]+=1
+            elif old==[0x07000038] and new==[0x07000033]:
+                counts["atten_a"]+=1
+            elif old==[0x07002038] and new==[0x07002034]:
+                counts["atten_b"]+=1
+            elif old==[0x07000038] and new==[0x07000031]:
+                counts["envspec_delete"]+=1
+            elif old==[0x05000036] and new==[0x05002036]:
+                counts["terminal_sat"]+=1
+
+        expected_env=0 if entry.get("material_class")=="Spc" else 1
+        if counts!={
+            "diffuse":1,
+            "atten_a":1,
+            "atten_b":1,
+            "envspec_delete":expected_env,
+            "terminal_sat":1,
+        }:
+            fail(f"clustered composed shader ownership drift for {entry.get('shader_name')}: {counts}")
+
     sidecar_h=(root/"include/dsrrl/operators/point_light/clustered_sidecar.hpp").read_text(encoding="utf-8")
     sidecar_cpp=(root/"src/operators/point_light/clustered_sidecar.cpp").read_text(encoding="utf-8")
     draw_cpp=(root/"src/runtime/clustered_pnts_draw_runtime.cpp").read_text(encoding="utf-8")
     pipe_cpp=(root/"src/runtime/clustered_pnts_pipeline_runtime.cpp").read_text(encoding="utf-8")
+    pipe_h=(root/"include/dsrrl/runtime/clustered_pnts_pipeline_runtime.hpp").read_text(encoding="utf-8")
+    materializer_cpp=(root/"src/operators/point_light/clustered_pnts_direct_materializer.cpp").read_text(encoding="utf-8")
+    materializer_h=(root/"include/dsrrl/operators/point_light/clustered_pnts_direct_materializer.hpp").read_text(encoding="utf-8")
     flver_cpp=(root/"src/runtime/flver_engine_hooks.cpp").read_text(encoding="utf-8")
     integrated=(root/"integrated/integrated_addon.cpp").read_text(encoding="utf-8")
     mr_cpp=(root/"src/operators/material_response/material_response_island.cpp").read_text(encoding="utf-8")
@@ -164,8 +202,19 @@ def main():
         fail("clustered request duplicates primary in additional_owners")
     if "clustered.additional_resource_owners =\n                point | local_if_spc;" in integrated:
         fail("clustered resource ownership duplicates primary")
-    require(integrated,"? (point | mr)","Spc additional ownership")
-    require(integrated,": mr;","NoSpc additional ownership")
+
+    require(materializer_h,"composed_shader_owners","materializer composed shader owner ABI")
+    require(materializer_h,"clustered_pnts_required_composed_shader_owners","exact clustered static-owner contract")
+    require(materializer_cpp,"attest_composed_shader_owners","journal-derived static owner attestation")
+    require(materializer_cpp,"fail_patch_precondition","composition drift fail-open")
+    require(pipe_cpp,"composed_shader_owners","candidate/bound shader ownership transport")
+    require(pipe_h,"composed_shader_owners","prepared shader ownership ABI")
+    require(integrated,"static_shader_owners","draw-time static shader owner transport")
+    require(integrated,"expected_static_shader_owners","draw-time owner mask verification")
+    require(integrated,"dynamic_additional_owners","narrow dynamic owner mask")
+    require(integrated,"dynamic_additional_owners |\n                static_shader_owners","full composed owner set")
+    require(integrated,"clustered.additional_shader_owners =\n                clustered.additional_owners;","full replacement shader ownership")
+    require(integrated,"clustered.additional_constant_buffer_owners =\n                dynamic_additional_owners;","static operators excluded from b12 ownership")
     require(integrated,"12u,\n                prepared.clustered_carrier.b12","clustered b12 slot")
     require(integrated,"18u,\n                prepared.clustered_carrier.t18","clustered t18 slot")
     require(integrated,"19u,\n                prepared.clustered_carrier.t19","clustered t19 slot")
@@ -205,6 +254,8 @@ def main():
     print("  carrier=b12[3].x+t18+t19 material_max=uint32 min_after_first4")
     print("  material=25 exact HOMOLOGOUS_NOSPC pairs; identity=certified supplement; c100=bit-exact router authority")
     print("  chain=candidate>receiver>material>resources>selector>sources>sidecar>shader>draw-mutation>restore")
+    print("  shader_owners=dynamic PointLight/MR/local-spec + exact static diffuse-domain/attenuation/SAT (+NoSpc EnvSpec-delete)")
+    print("  cb_resources=dynamic owners only; static create-time owners remain shader-only")
     print("  draw=adapter-valid ownership + exact pipeline route + shared transaction")
     return 0
 
