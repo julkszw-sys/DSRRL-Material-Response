@@ -1,6 +1,7 @@
 #include "dsrrl/operators/material_response/hemenvlerp_v211_materializer.hpp"
 
 #include "dsrrl/operators/material_response/generated_hemenvlerp_v211_v1.hpp"
+#include "dsrrl/operators/surface/terminal_sat_rgb_patch.hpp"
 #include "dsrrl/operators/legacy_plan/dxbc_checksum.hpp"
 #include "dsrrl/operators/legacy_plan/sha256_bytes.hpp"
 
@@ -334,6 +335,84 @@ materialize_hemenvlerp_v211_certified_stage(
     }
 
     outcome.result = hemenvlerp_v211_result::applied;
+    return outcome;
+}
+
+hemenvlerp_v211_outcome
+materialize_hemenvlerp_v211_receiver(
+    const core::feature_registry &features,
+    const std::uint8_t *source,
+    std::size_t size,
+    std::vector<std::uint8_t> &output) noexcept
+{
+    auto outcome =
+        materialize_hemenvlerp_v211_certified_stage(
+            source,
+            size,
+            output);
+
+    if (outcome.result !=
+            hemenvlerp_v211_result::applied ||
+        !features.enabled(
+            core::operator_id::terminal_sat_rgb))
+        return outcome;
+
+    std::vector<chunk> chunks;
+    std::vector<std::uint32_t> words;
+    std::size_t code_index = 0u;
+
+    if (!parse(
+            output.data(),
+            output.size(),
+            chunks,
+            code_index,
+            words)) {
+        output.clear();
+        outcome.result =
+            hemenvlerp_v211_result::
+                fail_patch_precondition;
+        return outcome;
+    }
+
+    const auto sat =
+        operators::surface::
+            apply_unique_terminal_rgb_sat_words(
+                words);
+
+    using sat_result =
+        operators::surface::
+            terminal_sat_patch_result;
+
+    if (sat != sat_result::applied &&
+        sat != sat_result::already_saturated) {
+        output.clear();
+        outcome.result =
+            hemenvlerp_v211_result::
+                fail_patch_precondition;
+        return outcome;
+    }
+
+    if (sat == sat_result::applied) {
+        std::vector<std::uint8_t> composed;
+        if (!rebuild(
+                output.data(),
+                output.size(),
+                std::move(chunks),
+                code_index,
+                words,
+                composed)) {
+            output.clear();
+            outcome.result =
+                hemenvlerp_v211_result::
+                    fail_rebuild;
+            return outcome;
+        }
+        output = std::move(composed);
+    }
+
+    outcome.composed_owners |=
+        core::operator_bit(
+            core::operator_id::terminal_sat_rgb);
     return outcome;
 }
 
