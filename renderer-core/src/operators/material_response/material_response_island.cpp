@@ -62,6 +62,44 @@ struct direct_nospc_authority_match {
     std::uint32_t ordinal = 0u;
 };
 
+struct direct_nospc_cache_entry {
+    bool valid = false;
+    std::uint64_t semantic_name_hash = 0u;
+    core::sha256_digest raw_mtd_sha256{};
+    std::optional<direct_nospc_authority_match> result{};
+};
+
+constexpr std::size_t k_direct_nospc_cache_slots = 16u;
+thread_local std::array<
+    direct_nospc_cache_entry,
+    k_direct_nospc_cache_slots>
+    g_direct_nospc_cache{};
+
+std::size_t direct_nospc_cache_index(
+    const material_identity &identity) noexcept
+{
+    std::uint64_t mixed =
+        identity.semantic_name_hash;
+
+    for (std::size_t i = 0u;
+         i < identity.raw_mtd_sha256.size();
+         i += 8u) {
+        std::uint64_t lane = 0u;
+        std::memcpy(
+            &lane,
+            identity.raw_mtd_sha256.data() + i,
+            sizeof(lane));
+        mixed ^=
+            lane +
+            0x9e3779b97f4a7c15ULL +
+            (mixed << 6u) +
+            (mixed >> 2u);
+    }
+
+    return static_cast<std::size_t>(
+        mixed % k_direct_nospc_cache_slots);
+}
+
 std::optional<direct_nospc_authority_match>
 resolve_direct_nospc_authority(
     const material_identity &identity) noexcept
@@ -70,6 +108,18 @@ resolve_direct_nospc_authority(
         identity.semantic_name_hash == 0u ||
         digest_is_zero(identity.raw_mtd_sha256))
         return std::nullopt;
+
+    auto &cached =
+        g_direct_nospc_cache[
+            direct_nospc_cache_index(
+                identity)];
+
+    if (cached.valid &&
+        cached.semantic_name_hash ==
+            identity.semantic_name_hash &&
+        cached.raw_mtd_sha256 ==
+            identity.raw_mtd_sha256)
+        return cached.result;
 
     std::optional<direct_nospc_authority_match> result;
     for (std::size_t i = 0u;
@@ -87,8 +137,15 @@ resolve_direct_nospc_authority(
 
         // Exact-name + exact raw-MTD identity must remain single-valued.
         // Any future duplicate/ambiguity fails open instead of selecting one.
-        if (result.has_value())
+        if (result.has_value()) {
+            cached.valid = true;
+            cached.semantic_name_hash =
+                identity.semantic_name_hash;
+            cached.raw_mtd_sha256 =
+                identity.raw_mtd_sha256;
+            cached.result.reset();
             return std::nullopt;
+        }
 
         result = direct_nospc_authority_match{
             &record,
@@ -96,6 +153,12 @@ resolve_direct_nospc_authority(
         };
     }
 
+    cached.valid = true;
+    cached.semantic_name_hash =
+        identity.semantic_name_hash;
+    cached.raw_mtd_sha256 =
+        identity.raw_mtd_sha256;
+    cached.result = result;
     return result;
 }
 
