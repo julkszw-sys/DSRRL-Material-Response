@@ -647,7 +647,7 @@ thread_local selector_snapshot_tls g_selector_snapshot{};
 
 // The old owner->shared_ptr snapshot registry was correct but far too
 // expensive under geometry-heavy scenes. The cache-builder architecture uses
-// a bounded 2-way cross-thread registry carrying only references plus the
+// a bounded cross-thread registry carrying only references plus the
 // exact freshness fingerprint. Each set has a tiny spin guard: no heap,
 // shared_ptr, global unordered_map or global epoch participates in this path.
 //
