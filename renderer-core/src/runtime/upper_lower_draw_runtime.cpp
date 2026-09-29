@@ -761,6 +761,7 @@ std::atomic_bool g_reference_draw_token_vectors_ready{false};
 std::atomic_bool g_reference_draw_token_upper_lower_ready{false};
 std::atomic_bool g_direct_ul_producer_active{false};
 std::atomic_bool g_steady_cache_builder_active{false};
+std::atomic_bool g_reference_only_transport{false};
 std::atomic_bool g_direct_ul_operator_changed{false};
 std::atomic<std::uint64_t> g_direct_ul_steady_inject{0};
 std::atomic<std::uint64_t> g_direct_ul_blend_inject{0};
@@ -3478,45 +3479,56 @@ void __fastcall hook_steady_packer(
                 source,
                 selector,
                 0.0f,
-                g_producer) &&
-            capture_evaluated_vectors(
-                dst,
                 g_producer)) {
-            const auto *selected_record =
-                selected_cache_record_attested(
-                    source,
-                    selector);
-            g_producer.direct_ul_applied =
-                selected_record != nullptr &&
-                direct_ul_cache_record_matches(
-                    selected_record);
-
-            if (!g_producer.direct_ul_applied) {
-                f4 exact_upper{};
-                f4 exact_lower{};
-                g_producer.have_upper = false;
-                g_producer.have_lower = false;
-                if (decode_reference_upper_lower(
-                        source,
-                        selector,
-                        source,
-                        selector,
-                        0.0f,
-                        exact_upper,
-                        exact_lower)) {
-                    g_producer.upper =
-                        exact_upper;
-                    g_producer.lower =
-                        exact_lower;
-                    g_producer.have_upper =
-                        true;
-                    g_producer.have_lower =
-                        true;
-                }
+            if (g_reference_only_transport.load(
+                    std::memory_order_acquire)) {
+                // P_Metal EnvSpec requires only the exact source/selector
+                // tuple. Do not capture evaluated vectors or decode U/L/D123
+                // while the visible U/L operator is disabled.
+                telemetry::hot_count(
+                    g_steady_pass);
+                return;
             }
 
-            telemetry::hot_count(
-                g_steady_pass);
+            if (capture_evaluated_vectors(
+                    dst,
+                    g_producer)) {
+                const auto *selected_record =
+                    selected_cache_record_attested(
+                        source,
+                        selector);
+                g_producer.direct_ul_applied =
+                    selected_record != nullptr &&
+                    direct_ul_cache_record_matches(
+                        selected_record);
+
+                if (!g_producer.direct_ul_applied) {
+                    f4 exact_upper{};
+                    f4 exact_lower{};
+                    g_producer.have_upper = false;
+                    g_producer.have_lower = false;
+                    if (decode_reference_upper_lower(
+                            source,
+                            selector,
+                            source,
+                            selector,
+                            0.0f,
+                            exact_upper,
+                            exact_lower)) {
+                        g_producer.upper =
+                            exact_upper;
+                        g_producer.lower =
+                            exact_lower;
+                        g_producer.have_upper =
+                            true;
+                        g_producer.have_lower =
+                            true;
+                    }
+                }
+
+                telemetry::hot_count(
+                    g_steady_pass);
+            }
         }
         return;
     }
@@ -3706,31 +3718,36 @@ void *__fastcall hook_blend_packer(
                 source_b,
                 selector_b,
                 beta,
-                g_producer) &&
-            capture_evaluated_vectors(
-                dst,
-                g_producer) &&
-            !g_producer.direct_ul_applied) {
-            f4 exact_upper{};
-            f4 exact_lower{};
-            g_producer.have_upper = false;
-            g_producer.have_lower = false;
-            if (decode_reference_upper_lower(
-                    source_a,
-                    selector_a,
-                    source_b,
-                    selector_b,
-                    beta,
-                    exact_upper,
-                    exact_lower)) {
-                g_producer.upper =
-                    exact_upper;
-                g_producer.lower =
-                    exact_lower;
-                g_producer.have_upper =
-                    true;
-                g_producer.have_lower =
-                    true;
+                g_producer)) {
+            if (g_reference_only_transport.load(
+                    std::memory_order_acquire))
+                return result;
+
+            if (capture_evaluated_vectors(
+                    dst,
+                    g_producer) &&
+                !g_producer.direct_ul_applied) {
+                f4 exact_upper{};
+                f4 exact_lower{};
+                g_producer.have_upper = false;
+                g_producer.have_lower = false;
+                if (decode_reference_upper_lower(
+                        source_a,
+                        selector_a,
+                        source_b,
+                        selector_b,
+                        beta,
+                        exact_upper,
+                        exact_lower)) {
+                    g_producer.upper =
+                        exact_upper;
+                    g_producer.lower =
+                        exact_lower;
+                    g_producer.have_upper =
+                        true;
+                    g_producer.have_lower =
+                        true;
+                }
             }
         }
         return result;
@@ -4190,10 +4207,15 @@ void upper_lower_selector_event_bridge(
     fixed_pointlight_selector_event_bridge(owner);
 }
 
-bool upper_lower_draw_runtime::install() noexcept
+bool upper_lower_draw_runtime::install(
+    bool reference_only) noexcept
 {
     if (g_enabled.load())
-        return g_runtime == this;
+        return
+            g_runtime == this &&
+            g_reference_only_transport.load(
+                std::memory_order_acquire) ==
+                reference_only;
 
     if (g_runtime != nullptr &&
         g_runtime != this)
@@ -4211,10 +4233,16 @@ bool upper_lower_draw_runtime::install() noexcept
     g_base =
         reinterpret_cast<std::uintptr_t>(
             GetModuleHandleW(nullptr));
+    g_reference_only_transport.store(
+        reference_only,
+        std::memory_order_release);
 
     if (g_base == 0u ||
         !install_producer_hooks()) {
         (void)restore_producer_hooks();
+        g_reference_only_transport.store(
+            false,
+            std::memory_order_release);
         g_core = nullptr;
         g_runtime = nullptr;
         g_base = 0u;
@@ -4230,6 +4258,9 @@ bool upper_lower_draw_runtime::install() noexcept
 void upper_lower_draw_runtime::uninstall() noexcept
 {
     g_enabled.store(false);
+    g_reference_only_transport.store(
+        false,
+        std::memory_order_release);
     consume_draw_selection();
     clear_snapshots();
 
