@@ -95,6 +95,24 @@ add_custom_command(
 add_custom_target(dsrrl_mr_diffuse_v1_header
     DEPENDS "${DSRRL_MR_DIFFUSE_V1_HEADER}")
 
+set(DSRRL_POINTLIGHT_MATERIAL_AUTHORITY_SOURCE
+    "${CMAKE_CURRENT_SOURCE_DIR}/data/provenance/pointlight_material_authority_v1.json")
+set(DSRRL_POINTLIGHT_MATERIAL_AUTHORITY_HEADER
+    "${DSRRL_GENERATED_DIR}/dsrrl/operators/material_response/generated_pointlight_material_authority_v1.hpp")
+add_custom_command(
+    OUTPUT "${DSRRL_POINTLIGHT_MATERIAL_AUTHORITY_HEADER}"
+    COMMAND "${Python3_EXECUTABLE}"
+            "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_pointlight_material_authority_v1.py"
+            --input "${DSRRL_POINTLIGHT_MATERIAL_AUTHORITY_SOURCE}"
+            --output "${DSRRL_POINTLIGHT_MATERIAL_AUTHORITY_HEADER}"
+    DEPENDS
+        "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_pointlight_material_authority_v1.py"
+        "${DSRRL_POINTLIGHT_MATERIAL_AUTHORITY_SOURCE}"
+    VERBATIM
+)
+add_custom_target(dsrrl_pointlight_material_authority_header
+    DEPENDS "${DSRRL_POINTLIGHT_MATERIAL_AUTHORITY_HEADER}")
+
 set(DSRRL_LOCAL_SPECULAR_RECEIVER_HEADER
     "${DSRRL_GENERATED_DIR}/dsrrl/operators/point_light/generated_local_specular_receivers_v1.hpp")
 add_custom_command(
@@ -199,6 +217,7 @@ add_library(dsrrl_renderer_core STATIC
     "${DSRRL_MTD_IDENTITY_SUPPLEMENT_HEADER}"
     "${DSRRL_MR_EXACT_BINDING_HEADER}"
     "${DSRRL_MR_DIFFUSE_V1_HEADER}"
+    "${DSRRL_POINTLIGHT_MATERIAL_AUTHORITY_HEADER}"
     "${DSRRL_LOCAL_SPECULAR_RECEIVER_HEADER}"
     "${DSRRL_FIXED_LOCAL_SPECULAR_PTDE_REFERENCE_HEADER}"
     "${DSRRL_CLUSTERED_PNTS_DIRECT_HEADER}"
@@ -232,6 +251,7 @@ add_dependencies(
     dsrrl_dsr_mtd_identity_supplement_header
     dsrrl_mr_exact_binding_header
     dsrrl_mr_diffuse_v1_header
+    dsrrl_pointlight_material_authority_header
     dsrrl_local_specular_receiver_header
     dsrrl_fixed_local_specular_ptde_reference_header
     dsrrl_clustered_pnts_direct_header)
