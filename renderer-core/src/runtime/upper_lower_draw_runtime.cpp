@@ -1629,8 +1629,8 @@ bool consume_selected_reference_token_for_current_thread(
             continue;
 
         // Selector-owned state is persistent across ReShade draw callbacks.
-        // Do not consume it one-shot and do not compare it against unrelated
-        // later producer publications on the same thread.
+        // Do not consume it one-shot and do not require equality with the
+        // separate draw-side latest-publication TLS.
         out = entry;
         out.available = false;
         telemetry::hot_count(
@@ -5157,10 +5157,10 @@ upper_lower_draw_runtime::pmetal_draw_token_state() const noexcept
     out.latest_publish_serial =
         g_draw_thread_latest_publish_serial;
 
-    // In reference-only P_Metal transport, selector-authenticated state may
-    // legitimately outlive later unrelated producer publications. Freshness
-    // here is therefore exact producer-thread ownership plus a nonzero
-    // selector-proven producer serial; latest_publish_serial is telemetry only.
+    // In reference-only P_Metal transport, the draw-side latest-publication
+    // TLS is not authoritative for selector-owned state. Freshness here is
+    // exact producer-thread ownership plus a nonzero selector-proven producer
+    // serial; latest_publish_serial remains diagnostic telemetry only.
     const bool fresh =
         g_draw_reference_token.valid &&
         g_draw_reference_token.producer_tid ==
