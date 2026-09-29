@@ -75,7 +75,7 @@ def main() -> int:
         "    std::uint32_t router_index;\n",
         "    bool spc;\n",
         "    bool c101_scalar;\n",
-        "};\n\n",
+        "}};\n\n",
         f"inline constexpr std::array<pointlight_material_authority_record_v1,{len(cooked)}u> "
         "k_pointlight_material_authority_v1 = {{\n",
     ]
