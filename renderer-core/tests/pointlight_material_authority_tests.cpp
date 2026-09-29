@@ -1,5 +1,4 @@
 #include "dsrrl/operators/material_response/material_response_island.hpp"
-#include "dsrrl/operators/material_response/generated_dsr_flver_owner_tuples_v1.hpp"
 #include "dsrrl/operators/material_response/generated_pointlight_material_authority_v1.hpp"
 
 #include <array>
@@ -16,45 +15,6 @@ float f32(std::uint32_t bits)
     float value = 0.0f;
     std::memcpy(&value, &bits, sizeof(value));
     return value;
-}
-
-bool make_identity(
-    const dsrrl::operators::material_response::generated::
-        pointlight_material_authority_record_v1 &record,
-    dsrrl::operators::material_response::material_identity &out)
-{
-    namespace gen =
-        dsrrl::operators::material_response::generated;
-
-    for (const auto &group : gen::k_dsr_flver_owner_groups) {
-        for (std::uint32_t slot = 0u;
-             slot < group.material_count;
-             ++slot) {
-            const auto index =
-                static_cast<std::size_t>(
-                    group.first_material + slot);
-            if (index >=
-                    gen::k_dsr_flver_owner_mtd_hashes.size())
-                return false;
-            if (gen::k_dsr_flver_owner_mtd_hashes[index] !=
-                    record.semantic_name_hash)
-                continue;
-
-            out = {};
-            out.valid = true;
-            out.flver_sha256 = group.flver_sha256;
-            out.material_slot = slot;
-            out.material_slot_valid = true;
-            out.owner_tuple_exact = true;
-            out.semantic_name_hash =
-                record.semantic_name_hash;
-            out.raw_mtd_sha256 =
-                record.raw_mtd_sha256;
-            return true;
-        }
-    }
-
-    return false;
 }
 
 dsrrl::operators::material_response::material_identity
