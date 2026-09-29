@@ -205,8 +205,8 @@ def main() -> None:
         "bool upper_lower_draw_runtime::selected_pmetal_env_source("
     )
     selected_source_end = ul_cpp.index(
-        "\\npmetal_env_source_diagnostic",
-        selected_source_begin,
+        "pmetal_env_source_diagnostic",
+        selected_source_begin + 1,
     )
     if selected_source_begin < 0 or selected_source_end <= selected_source_begin:
         fail("cannot isolate selected P_Metal EnvSpec source consumer")
