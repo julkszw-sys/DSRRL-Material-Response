@@ -1613,16 +1613,17 @@ void invalidate_selected_reference_token_for_owner(
                 entry = {};
                 changed = true;
             }
-        }
 
-        if (changed) {
-            // Draw-side TLS copies are keyed by the producer-TID set
-            // generation. Advance only sets whose exact same-owner state was
-            // removed, so stale cached P_Metal sources fail closed.
-            g_selected_reference_generation[set].
-                fetch_add(
-                    1u,
-                    std::memory_order_release);
+            if (changed) {
+                // Draw-side TLS copies are keyed by the producer-TID set
+                // generation. Advance while the set lock is still held so
+                // no consumer can observe a cleared bank with the old cache
+                // generation.
+                g_selected_reference_generation[set].
+                    fetch_add(
+                        1u,
+                        std::memory_order_release);
+            }
         }
     }
 }
