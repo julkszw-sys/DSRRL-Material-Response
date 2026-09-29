@@ -2555,6 +2555,7 @@ void log_effect_matrix(
         "PMSRC obs=%u A=%s sel=%d count=%u sig=%016llX row=%u "
         "B=%s sel=%d count=%u sig=%016llX row=%u beta=%.6f "
         "REF pub=%u ptid=%u sel_evt=%u stid=%u cand=%u tuple=%u match=%u drawtok=%u src=%u vec=%u ul=%u "
+        "XTH consumer_tid=%u serial=%llu selected_pub=%llu draw_consume=%llu serial_miss=%llu "
         "SUB cand=%llu matrej=%llu piperej=%llu surfrej=%llu prep=%llu "
         "UL producer=%u changed=%u quarantine=%u restore_fail=%u "
         "Bloom diag_hooks=%u/%u model_hook=%u proof=%u contents=%u "
@@ -2608,6 +2609,16 @@ void log_effect_matrix(
         pmetal_source.draw_token_source_ready ? 1u : 0u,
         pmetal_source.draw_token_vectors_ready ? 1u : 0u,
         pmetal_source.draw_token_upper_lower_ready ? 1u : 0u,
+        static_cast<unsigned>(
+            pmetal_source.source_consumer_tid),
+        static_cast<unsigned long long>(
+            pmetal_source.source_consumer_serial),
+        static_cast<unsigned long long>(
+            pmetal_source.cross_thread_selected_publish),
+        static_cast<unsigned long long>(
+            pmetal_source.cross_thread_draw_consume),
+        static_cast<unsigned long long>(
+            pmetal_source.cross_thread_serial_miss),
         static_cast<unsigned long long>(
             subsurface.candidates),
         static_cast<unsigned long long>(
