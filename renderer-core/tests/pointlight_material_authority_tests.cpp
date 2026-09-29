@@ -57,6 +57,24 @@ bool make_identity(
     return false;
 }
 
+dsrrl::operators::material_response::material_identity
+make_runtime_identity(
+    const dsrrl::operators::material_response::generated::
+        pointlight_material_authority_record_v1 &record)
+{
+    dsrrl::operators::material_response::material_identity out{};
+    out.valid = true;
+    out.actual_material_exact = true;
+    out.semantic_name_hash =
+        record.semantic_name_hash;
+    out.raw_mtd_sha256 =
+        record.raw_mtd_sha256;
+    out.route_index =
+        0xA0000000u |
+        (record.router_index & 0x0000ffffu);
+    return out;
+}
+
 } // namespace
 
 int main()
@@ -113,7 +131,7 @@ int main()
 
     mr::material_identity identity{};
 
-    CHECK(make_identity(*nospc, identity));
+    identity = make_runtime_identity(*nospc);
     auto decision =
         island.evaluate_direct_pointlight_material(
             identity,
@@ -130,7 +148,7 @@ int main()
     // route namespace; the new corpus extends materials without rewriting it.
     CHECK((decision.route_index & 0x80000000u) != 0u);
 
-    CHECK(make_identity(*scalar_spc, identity));
+    identity = make_runtime_identity(*scalar_spc);
     decision =
         island.evaluate_direct_pointlight_material(
             identity,
@@ -154,7 +172,7 @@ int main()
     CHECK(wrong_family.reason ==
           mr::decision_reason::no_certified_operator);
 
-    CHECK(make_identity(*rgb_spc, identity));
+    identity = make_runtime_identity(*rgb_spc);
     const auto rgb_deferred =
         island.evaluate_direct_pointlight_material(
             identity,
@@ -170,7 +188,22 @@ int main()
             true);
     CHECK(!wrong_raw.active);
     CHECK(wrong_raw.reason ==
-          mr::decision_reason::unknown_material);
+          mr::decision_reason::owner_tuple_not_authenticated);
+
+    const auto *raw_scalar =
+        gen::find_pointlight_material_authority_by_raw_mtd_v1(
+            scalar_spc->raw_mtd_sha256);
+    CHECK(raw_scalar != nullptr);
+    CHECK(gen::pointlight_material_behavior_equal_v1(
+        *raw_scalar,
+        *scalar_spc));
+
+    const auto *conflict_record =
+        gen::find_pointlight_material_authority_v1(
+            0x5e35fabde6b7756eull);
+    CHECK(conflict_record != nullptr);
+    CHECK(gen::find_pointlight_material_authority_by_raw_mtd_v1(
+        conflict_record->raw_mtd_sha256) == nullptr);
 
     std::cout <<
         "pointlight_material_authority_tests: PASS "
