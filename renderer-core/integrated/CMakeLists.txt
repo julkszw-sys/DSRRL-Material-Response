@@ -52,6 +52,11 @@ option(
     OFF)
 
 option(
+    DSRRL_FULL_TELEMETRY_DEFAULT_ON
+    "Compile Core+Islands with runtime/effect telemetry enabled without native-state verification"
+    OFF)
+
+option(
     DSRRL_EFFECT_TELEMETRY_DEFAULT_ON_ONLY
     "Compile Core+Islands with low-overhead effect activation telemetry enabled by default"
     OFF)
@@ -419,6 +424,15 @@ if(DSRRL_DIAGNOSTIC_TELEMETRY_DEFAULT_ON)
         $<$<COMPILE_LANGUAGE:CXX>:DSRRL_RUNTIME_TELEMETRY_DEFAULT_ON>
         $<$<COMPILE_LANGUAGE:CXX>:DSRRL_EFFECT_TELEMETRY_DEFAULT_ON>
         $<$<COMPILE_LANGUAGE:CXX>:DSRRL_RUNTIME_VERIFY_STATE_DEFAULT_ON>)
+elseif(DSRRL_FULL_TELEMETRY_DEFAULT_ON)
+    # Full telemetry is intentionally distinct from full-runtime diagnostics:
+    # keep hot/effect counters on, but do not force native D3D state readbacks
+    # (PSGetShader/CB/SRV/Sampler) on every draw transaction.
+    target_compile_definitions(
+        dsrrl_renderer_core_integrated
+        PRIVATE
+        $<$<COMPILE_LANGUAGE:CXX>:DSRRL_RUNTIME_TELEMETRY_DEFAULT_ON>
+        $<$<COMPILE_LANGUAGE:CXX>:DSRRL_EFFECT_TELEMETRY_DEFAULT_ON>)
 elseif(DSRRL_EFFECT_TELEMETRY_DEFAULT_ON_ONLY)
     target_compile_definitions(
         dsrrl_renderer_core_integrated
