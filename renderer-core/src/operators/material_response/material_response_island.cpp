@@ -3,6 +3,7 @@
 #include "dsrrl/operators/material_response/generated_envspec_router_v1.hpp"
 #include "dsrrl/operators/material_response/generated_routes_v1.hpp"
 #include "dsrrl/operators/material_response/generated_exact_binding_mr_v1.hpp"
+#include "dsrrl/operators/material_response/generated_pointlight_material_authority_v1.hpp"
 #include "dsrrl/operators/material_response/mtd_semantic_census.hpp"
 #include "dsrrl/operators/legacy_plan/sha256_bytes.hpp"
 
@@ -689,6 +690,95 @@ material_response_island::evaluate_direct_pointlight_material(
             decision_reason::owner_tuple_not_authenticated,
             0u
         };
+
+    const auto *pointlight_authority =
+        generated::find_pointlight_material_authority_v1(
+            material.semantic_name_hash);
+
+    if (pointlight_authority != nullptr) {
+        if (material.raw_mtd_sha256 !=
+                pointlight_authority->raw_mtd_sha256)
+            return {
+                false,
+                decision_reason::unknown_material,
+                0u
+            };
+
+        if (pointlight_authority->spc !=
+                require_legacy_specular)
+            return {
+                false,
+                decision_reason::no_certified_operator,
+                0u
+            };
+
+        // Current b12 local-specular ABI carries scalar c101. The authority
+        // corpus exposes 12 authored RGB-c101 Spc rows; keep those fail-open
+        // rather than collapse a real PTDE vector into an invented scalar.
+        if (require_legacy_specular &&
+            !pointlight_authority->c101_scalar)
+            return {
+                false,
+                decision_reason::no_certified_operator,
+                0u
+            };
+
+        std::array<float, 3> c100{};
+        for (std::size_t i = 0u;
+             i < c100.size();
+             ++i)
+            c100[i] =
+                f32_from_bits(
+                    pointlight_authority->
+                        c100_bits[i]);
+
+        const float c101 =
+            require_legacy_specular
+                ? f32_from_bits(
+                    pointlight_authority->
+                        c101_bits[0])
+                : 0.0f;
+        const float c102 =
+            require_legacy_specular
+                ? f32_from_bits(
+                    pointlight_authority->
+                        c102_bits)
+                : 0.0f;
+
+        if (require_legacy_specular &&
+            (!(c101 >= 0.0f) ||
+             !(c102 > 0.0f)))
+            return {
+                false,
+                decision_reason::no_certified_operator,
+                0u
+            };
+
+        const std::uint32_t route_tag =
+            0xA0000000u |
+            (pointlight_authority->
+                 router_index & 0x0000ffffu);
+
+        return {
+            true,
+            decision_reason::active,
+            0u,
+            route_tag,
+            diffuse_material_domain_linear |
+                (require_legacy_specular
+                     ? specular_factor_c101
+                     : response_none),
+            c101,
+            0u,
+            7u,
+            require_legacy_specular
+                ? ptde_envspec_presence::present
+                : ptde_envspec_presence::absent,
+            c100,
+            c102,
+            require_legacy_specular
+        };
+    }
 
     const auto profile =
         resolve_material_unscoped(material);
