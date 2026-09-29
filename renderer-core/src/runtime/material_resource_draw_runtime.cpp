@@ -1988,6 +1988,21 @@ prepare_subsurface_body_requests(
     const bool exact_body_spec =
         exact_subsurface_body_spec_hash(h1);
 
+    // Runtime dd6bb17 proved one exact DSBT male-body tuple that is
+    // present in the live DSR binding and in the certified diffuse pair set,
+    // but is absent from the generic normal_routes_v12 corpus:
+    //   BD_M_body / BD_M_body_s / BD_M_body_n
+    // Keep this as a dedicated Subsurface-only exception. Do not broaden the
+    // generic equipment Normal route table from one receiver-local proof.
+    constexpr std::uint64_t k_subsurface_body_m_diffuse_hash =
+        0xcf6e2339c3593fb8ull;
+    constexpr std::uint64_t k_subsurface_body_m_normal_hash =
+        0x777ed32aecc3be51ull;
+    const bool dedicated_body_m_normal_tuple =
+        h0 == k_subsurface_body_m_diffuse_hash &&
+        h1 == k_subsurface_body_m_spec_hash &&
+        h2 == k_subsurface_body_m_normal_hash;
+
     const bool tuple_ready =
         body_texture !=
             operators::resource_bridges::
@@ -1998,10 +2013,11 @@ prepare_subsurface_body_requests(
         generated::diffuse_pair_allowed_v12(
             h1,
             h0) &&
-        generated::normal_tuple_allowed_v12(
-            h0,
-            h1,
-            h2);
+        (generated::normal_tuple_allowed_v12(
+             h0,
+             h1,
+             h2) ||
+         dedicated_body_m_normal_tuple);
 
     ID3D11ShaderResourceView *spec = nullptr;
     ID3D11ShaderResourceView *diff = nullptr;
