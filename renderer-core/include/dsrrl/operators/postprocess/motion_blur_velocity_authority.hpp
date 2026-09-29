@@ -1,6 +1,7 @@
 #pragma once
 
 #include <array>
+#include <cstddef>
 #include <string_view>
 
 namespace dsrrl::operators::postprocess::motion_blur_velocity_authority {
