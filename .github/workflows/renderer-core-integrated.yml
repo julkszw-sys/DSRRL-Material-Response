@@ -152,6 +152,7 @@ jobs:
       - name: Audit MotionBlur temporal isolation
         shell: bash
         run: |
+          # Shared velocity production stays stock until temporal consumers are isolated.
           python3 renderer-core/tools/audit_motion_blur_temporal_isolation.py \
             --source-dir renderer-core
 
