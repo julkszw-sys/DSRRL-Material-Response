@@ -1226,43 +1226,55 @@ unregister_events() noexcept
     g_core = nullptr;
 }
 
-bool material_resource_draw_runtime::
-exact_specular_companion_ready(
+specular_companion_probe material_resource_draw_runtime::
+probe_exact_specular_companion(
     ID3D11DeviceContext *context) noexcept
 {
-    if (context == nullptr ||
-        g_quarantined.load())
-        return false;
+    specular_companion_probe out{};
+    out.context_valid = context != nullptr;
+    out.quarantined = g_quarantined.load();
+
+    if (!out.context_valid ||
+        out.quarantined)
+        return out;
 
     ID3D11ShaderResourceView *stock = nullptr;
     context->PSGetShaderResources(
         1u,
         1u,
         &stock);
-    if (stock == nullptr)
-        return false;
+    out.stock_bound = stock != nullptr;
+    if (!out.stock_bound)
+        return out;
 
-    std::uint64_t logical_hash = 0u;
     ID3D11ShaderResourceView *companion = nullptr;
-    const bool snapshot =
+    out.snapshot_resolved =
         snapshot_companion_cached(
             stock,
             asset_class::specular,
-            logical_hash,
+            out.logical_hash,
             companion,
             true);
 
     release_view(stock);
 
-    const bool ready =
-        snapshot &&
-        logical_hash != 0u &&
+    out.logical_hash_allowed =
+        out.logical_hash != 0u &&
         generated::spec_equipment_name_hash_allowed_v12(
-            logical_hash) &&
+            out.logical_hash);
+    out.companion_ready =
         companion != nullptr;
 
     release_view(companion);
-    return ready;
+    return out;
+}
+
+bool material_resource_draw_runtime::
+exact_specular_companion_ready(
+    ID3D11DeviceContext *context) noexcept
+{
+    return probe_exact_specular_companion(
+        context).ready();
 }
 
 bool material_resource_draw_runtime::
