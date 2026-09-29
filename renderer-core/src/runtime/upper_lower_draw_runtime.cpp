@@ -693,10 +693,12 @@ thread_local std::uint32_t
 // different thread from the exact selector hook. Keep the selector-authenticated
 // token in a second process-wide bounded bank keyed by producer thread. The
 // current state is the latest EXACT SELECTOR-AUTHENTICATED token for that
-// producer thread, not the latest producer publication: runtime 827663f proved
-// unrelated later producer publications can occur while the engine selection
-// remains unchanged. producer_serial remains provenance, while selector
-// publication owns state lifetime. No process-global latest-token fallback.
+// producer thread, not a draw-side TLS copy of the latest producer serial.
+// Runtime dd6bb17 showed selector-authenticated publications accumulating for
+// the exact producer/consumer TID while draw consumption remained zero and the
+// P_Metal source gate reported TOKEN_INVALID. producer_serial remains exact
+// provenance; selector publication owns state lifetime. No process-global
+// latest-token fallback.
 std::array<
     lightbank_reference_token,
     k_reference_token_entries>
@@ -4859,10 +4861,12 @@ bool upper_lower_draw_runtime::selected_pmetal_env_source(
                 std::memory_order_relaxed,
                 std::memory_order_relaxed);
 
-        // Runtime 827663f proved that exact selector-owned LightBank state
-        // can remain current while unrelated later producer publications
-        // advance this thread's publication serial. Therefore selector state,
-        // not "latest producer serial", owns P_Metal source lifetime.
+        // Runtime dd6bb17 proved that exact selector-owned LightBank tokens
+        // reach the synchronized selected bank for the producer/consumer TID
+        // while the draw-side TLS latest-serial gate can still remain
+        // unavailable and force TOKEN_INVALID. Therefore the exact
+        // selector-authenticated per-producer state, not a separate TLS copy
+        // of "latest producer serial", owns P_Metal source lifetime.
         lightbank_reference_token
             cross_thread_token{};
         const lightbank_reference_token *token_ptr =
@@ -5199,11 +5203,11 @@ void upper_lower_draw_runtime::consume_draw_selection() noexcept
     if (g_reference_only_transport.load(
             std::memory_order_acquire)) {
         // Reference-only mode carries persistent engine LightBank selection
-        // state. ReShade draw completion must not invalidate it merely because
-        // this producer thread published unrelated LightBank work afterward.
-        // The synchronized selected-token bank is replaced only by a later
-        // exact selector event for the same producer thread; source queries
-        // refresh this TLS cache from that bank.
+        // state. ReShade draw completion must not invalidate it solely because
+        // the draw-side latest-publication TLS does not mirror the selector
+        // handoff. The synchronized selected-token bank is replaced only by a
+        // later exact selector event for the same producer thread; source
+        // queries refresh this TLS cache from that bank.
         const auto tid =
             static_cast<std::uint32_t>(
                 GetCurrentThreadId());
