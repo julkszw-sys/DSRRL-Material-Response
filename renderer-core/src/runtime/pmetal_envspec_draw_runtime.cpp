@@ -520,8 +520,6 @@ bool pmetal_envspec_draw_runtime::prepare(
          !core_.features().enabled(
              core::operator_id::spec_rgb) ||
          !core_.features().enabled(
-             core::operator_id::upper_lower) ||
-         !core_.features().enabled(
              core::operator_id::terminal_sat_rgb))) {
         telemetry::hot_count(semantic_rejects_);
         effect_fail(
