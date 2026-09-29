@@ -48,6 +48,30 @@ struct f4 {
     float w = 0.0f;
 };
 
+
+bool retail_lightbank_record_index(
+    std::int32_t selector,
+    std::uint32_t &index) noexcept
+{
+    index = 0u;
+    if (selector < 0)
+        return false;
+
+    // Retail DSR record selection is byte-indexed, not int-indexed.
+    // DarkSoulsRemastered.exe:
+    //   0x140563B98 test r8d,r8d
+    //   0x140563BA2 movzx edx,r8b
+    // and the blend path repeats the same rule at 0x140563CF1/CFB
+    // (and 0x14056389A/8A4 for the sibling packer).
+    // The upper bits remain part of selector/freshness identity, but the
+    // LightBank row-table consumer receives only the low byte.
+    index =
+        static_cast<std::uint32_t>(
+            static_cast<std::uint8_t>(
+                selector));
+    return true;
+}
+
 struct snapshot {
     operators::lightbank::lightbank_snapshot_fingerprint fingerprint{};
     alignas(16) std::array<f4,8> ul_payload{};
@@ -613,14 +637,15 @@ selected_cache_record_attested(
     if (records == nullptr)
         return nullptr;
 
-    const auto index =
-        static_cast<std::size_t>(
-            selector);
-    if (index >
-        (std::numeric_limits<std::size_t>::max() /
-         k_record_stride))
+    std::uint32_t retail_index = 0u;
+    if (!retail_lightbank_record_index(
+            selector,
+            retail_index))
         return nullptr;
 
+    const auto index =
+        static_cast<std::size_t>(
+            retail_index);
     return records +
         index * k_record_stride;
 }
@@ -2235,9 +2260,15 @@ bool read_exact_pmetal_env_source(
         return false;
     }
 
-    const auto index =
-        static_cast<std::uint32_t>(
-            selector);
+    std::uint32_t index = 0u;
+    if (!retail_lightbank_record_index(
+            selector,
+            index)) {
+        finish(
+            pmetal_env_source_diag_status::
+                token_invalid);
+        return false;
+    }
 
     auto &cached_bank =
         pmetal_bank_cache_for(base);
@@ -2276,8 +2307,7 @@ bool read_exact_pmetal_env_source(
             cached_bank.signature;
         bank = cached_bank.bank;
 
-        if (static_cast<std::uint32_t>(
-                index) >= count) {
+        if (index >= count) {
             finish(
                 pmetal_env_source_diag_status::
                     selector_oob);
@@ -2313,8 +2343,7 @@ bool read_exact_pmetal_env_source(
 
         local.bank_count = count;
 
-        if (static_cast<std::uint32_t>(
-                index) >= count) {
+        if (index >= count) {
             finish(
                 pmetal_env_source_diag_status::
                     selector_oob);
@@ -2602,6 +2631,12 @@ const std::uint8_t *resolve_raw_lightbank_record(
         selector < 0)
         return nullptr;
 
+    std::uint32_t retail_index = 0u;
+    if (!retail_lightbank_record_index(
+            selector,
+            retail_index))
+        return nullptr;
+
     auto &cached =
         raw_record_cache_for(
             source,
@@ -2635,12 +2670,10 @@ const std::uint8_t *resolve_raw_lightbank_record(
                 sizeof(live_count));
 
             if (live_type == 4u &&
-                static_cast<std::uint32_t>(
-                    selector) < live_count) {
+                retail_index < live_count) {
                 const auto index =
                     static_cast<std::size_t>(
-                        static_cast<std::uint32_t>(
-                            selector));
+                        retail_index);
                 std::uint32_t live_offset = 0u;
                 std::memcpy(
                     &live_offset,
@@ -2672,12 +2705,12 @@ const std::uint8_t *resolve_raw_lightbank_record(
     if (!safe_read(header + 0x08u, type) ||
         !safe_read(header + 0x0Au, count) ||
         type != 4u ||
-        static_cast<std::uint32_t>(selector) >= count)
+        retail_index >= count)
         return nullptr;
 
     const std::size_t index =
         static_cast<std::size_t>(
-            static_cast<std::uint32_t>(selector));
+            retail_index);
 
     std::uint32_t offset = 0u;
     if (!safe_read(
@@ -3022,6 +3055,12 @@ bool read_selected_ptde(
         selector < 0)
         return false;
 
+    std::uint32_t retail_index = 0u;
+    if (!retail_lightbank_record_index(
+            selector,
+            retail_index))
+        return false;
+
     auto &cached =
         steady_q_cache_for(
             source,
@@ -3060,8 +3099,7 @@ bool read_selected_ptde(
                 live_header + 0x0Au,
                 sizeof(live_count));
 
-            if (static_cast<std::uint32_t>(
-                    selector) < live_count)
+            if (retail_index < live_count)
                 record = cached.record;
             else
                 cached = {};
@@ -3083,8 +3121,7 @@ bool read_selected_ptde(
         if (!safe_read(
                 header + 0x0Au,
                 count) ||
-            static_cast<std::uint32_t>(
-                selector) >= count)
+            retail_index >= count)
             return false;
 
         const std::uint8_t *records = nullptr;
@@ -3098,7 +3135,7 @@ bool read_selected_ptde(
         record =
             records +
             static_cast<std::size_t>(
-                selector) *
+                retail_index) *
             k_record_stride;
 
         // Validate both q vectors once for this exact live
