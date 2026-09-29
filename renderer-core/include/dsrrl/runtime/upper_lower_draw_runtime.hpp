@@ -3,6 +3,7 @@
 #include "dsrrl/core/renderer_core.hpp"
 #include "dsrrl/runtime/island_draw_adapter.hpp"
 #include "dsrrl/operators/lightbank/snapshot_freshness.hpp"
+#include "dsrrl/operators/material_response/material_response_island.hpp"
 
 #include <reshade.hpp>
 
