@@ -10,6 +10,7 @@
 #include "dsrrl/runtime/flver_identity_transport.hpp"
 #include "dsrrl/operators/lightbank/snapshot_freshness.hpp"
 #include "dsrrl/operators/lightbank/hemdir3.hpp"
+#include "dsrrl/operators/material_response/mtd_semantic_census.hpp"
 #include "dsrrl/operators/legacy_plan/sha256_bytes.hpp"
 #include "dsrrl/runtime/generated_pmetal_env_source_authority.hpp"
 #include "dsrrl/runtime/fixed_pointlight_draw_runtime.hpp"
