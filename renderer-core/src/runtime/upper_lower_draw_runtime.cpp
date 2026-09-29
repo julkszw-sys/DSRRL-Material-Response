@@ -10,6 +10,7 @@
 #include "dsrrl/runtime/flver_identity_transport.hpp"
 #include "dsrrl/operators/lightbank/snapshot_freshness.hpp"
 #include "dsrrl/operators/lightbank/hemdir3.hpp"
+#include "dsrrl/operators/legacy_plan/sha256_bytes.hpp"
 #include "dsrrl/runtime/generated_pmetal_env_source_authority.hpp"
 #include "dsrrl/runtime/fixed_pointlight_draw_runtime.hpp"
 
@@ -32,6 +33,12 @@
 
 namespace dsrrl::runtime {
 namespace {
+
+constexpr std::uint32_t k_pmetal_material_route = 345u;
+constexpr const char *k_pmetal_material_name =
+    "P_Metal[DSB].mtd";
+constexpr const char *k_pmetal_material_sha256 =
+    "ece70f36bd2517d28c8495e276cea537f8b519d6bed981788e79a409ffbf763b";
 
 struct f4 {
     float x = 0.0f;
@@ -1544,6 +1551,61 @@ void publish_reference_token(
                 k_reference_token_ways - 1u));
     g_reference_tokens[base + victim] =
         token;
+}
+
+void invalidate_selected_reference_token_for_producer(
+    std::uint32_t producer_tid) noexcept
+{
+    if (producer_tid == 0u)
+        return;
+
+    const auto set =
+        reference_token_set(
+            static_cast<std::uintptr_t>(
+                producer_tid));
+    reference_token_set_guard guard(set);
+    const auto base =
+        set * k_reference_token_ways;
+
+    for (std::size_t way = 0u;
+         way < k_reference_token_ways;
+         ++way) {
+        auto &entry =
+            g_selected_reference_tokens[base + way];
+        if (entry.valid &&
+            entry.producer_tid == producer_tid)
+            entry = {};
+    }
+
+    // Always advance the generation for this producer-TID set. A draw thread
+    // may still hold a TLS copy even if the bounded bank entry was already
+    // evicted; generation invalidation makes that cached state fail closed.
+    g_selected_reference_generation[set].
+        fetch_add(
+            1u,
+            std::memory_order_release);
+}
+
+bool exact_pmetal_material_selection(
+    const operators::material_response::material_identity &material) noexcept
+{
+    namespace mr =
+        operators::material_response;
+    namespace hashing =
+        operators::legacy_plan::hashing;
+
+    return
+        material.valid &&
+        material.owner_tuple_exact &&
+        material.material_slot_valid &&
+        material.route_index ==
+            k_pmetal_material_route &&
+        material.semantic_name_hash ==
+            mr::mtd_semantic_hash(
+                k_pmetal_material_name) &&
+        hashing::matches_hex(
+            material.raw_mtd_sha256,
+            k_pmetal_material_sha256);
 }
 
 void publish_selected_reference_token(
@@ -4416,6 +4478,16 @@ void upper_lower_selector_event_bridge(
     fixed_pointlight_selector_event_bridge(owner);
 }
 
+void upper_lower_pmetal_material_event_bridge(
+    void *owner,
+    const operators::material_response::material_identity &material) noexcept
+{
+    if (g_runtime != nullptr)
+        g_runtime->pmetal_material_event(
+            owner,
+            material);
+}
+
 bool upper_lower_draw_runtime::install(
     bool reference_only) noexcept
 {
@@ -4587,8 +4659,14 @@ void upper_lower_draw_runtime::selector_event(
         latch_bool_once(
             g_reference_selector_tuple_match);
 
-        publish_selected_reference_token(
-            selected);
+        // The exact selector tuple authenticates which LightBank
+        // selection is current, but it does not identify the material that
+        // will consume it. Invalidate any previous P_Metal state for this
+        // producer immediately, stage this token on the selector thread, and
+        // wait for the same FLVER selector callback to prove exact P_Metal
+        // material identity before cross-thread publication.
+        invalidate_selected_reference_token_for_producer(
+            selected.producer_tid);
         g_draw_reference_token =
             selected;
         g_last_selected_producer_serial =
@@ -4683,6 +4761,36 @@ void upper_lower_draw_runtime::selector_event(
     g_draw_snapshot =
         std::move(selected);
     telemetry::hot_count(g_selector_match);
+}
+
+void upper_lower_draw_runtime::pmetal_material_event(
+    void *owner,
+    const operators::material_response::material_identity &material) noexcept
+{
+    if (!g_enabled.load(
+            std::memory_order_acquire) ||
+        g_quarantined.load(
+            std::memory_order_acquire) ||
+        owner == nullptr ||
+        !exact_pmetal_material_selection(
+            material))
+        return;
+
+    // selector_event() and this call are two phases of the same exact retail
+    // FLVER selector callback. The token must therefore still name the same
+    // owner and carry an exact producer provenance before it may become the
+    // cross-thread P_Metal source state.
+    if (!g_draw_reference_token.valid ||
+        !g_draw_reference_token.source_ready ||
+        g_draw_reference_token.producer_tid == 0u ||
+        g_draw_reference_token.producer_serial == 0u ||
+        g_draw_reference_token.fingerprint.owner !=
+            reinterpret_cast<std::uintptr_t>(
+                owner))
+        return;
+
+    publish_selected_reference_token(
+        g_draw_reference_token);
 }
 
 bool upper_lower_draw_runtime::direct_producer_active() const noexcept
