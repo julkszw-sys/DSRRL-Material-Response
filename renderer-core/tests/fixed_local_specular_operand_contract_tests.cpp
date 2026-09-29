@@ -67,9 +67,11 @@ local_specular_microfacet_window append_window(
 
     w.push_back(op(31u,1u)); // IF
 
-    // Structural witness for cb0[112+i].
-    w.push_back(op(0u,4u)); // ADD-shaped opaque test instruction
-    w.push_back(cb_xyz());
+    // Structural witness for cb0[112+i]. Retail fixed-local bodies encode
+    // this constant-buffer source with an extended operand token.
+    w.push_back(op(0u,5u)); // ADD-shaped opaque test instruction
+    w.push_back(cb_xyz() | 0x80000000u);
+    w.push_back(0x00000041u); // retail operand extension witness
     w.push_back(0u);
     w.push_back(position_cb);
 
