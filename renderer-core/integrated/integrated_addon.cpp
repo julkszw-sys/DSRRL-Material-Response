@@ -194,6 +194,7 @@ std::atomic<std::uint64_t> g_clustered_draw_operator_gate_ready{0};
 std::atomic<std::uint64_t> g_clustered_draw_sidecar_ready{0};
 std::atomic<std::uint64_t> g_clustered_draw_batch_ready{0};
 std::atomic<std::uint64_t> g_clustered_draw_applied{0};
+std::atomic<std::uint64_t> g_clustered_draw_neutral_noop{0};
 std::atomic<std::uint64_t> g_clustered_draw_fail_open{0};
 std::atomic<std::uint64_t> g_clustered_draw_restore_fail{0};
 
@@ -2922,11 +2923,11 @@ void log_state(const char *tag) noexcept
         "[DSRRL CLPNTS ACT] tag=%s "
         "builder=%llu collection=%llu/%llu selector=%llu mirror=%llu/%llu "
         "source=%llu/%llu publish=%llu owner=%llu/%llu max=%llu/%llu "
-        "sidecar=%llu/%llu gpu18=%llu/%llu gpu19=%llu/%llu b12=%llu/%llu prepare=%llu/%llu "
+        "sidecar=%llu/%llu gpu18=%llu/%llu gpu19=%llu/%llu b12=%llu/%llu prepare=%llu/%llu neutral=%llu "
         "failstage=pre:%llu sel:%llu empty:%llu build:%llu ctx:%llu/%llu/%llu gpu:%llu upload:%llu "
         "pipe_reg=%llu/%llu pipe_init=%llu pipe_bind=%llu/%llu "
         "draw_candidate=%llu pipeline_ready=%llu material_ready=%llu operator_gate_ready=%llu "
-        "sidecar_ready=%llu batch_ready=%llu applied=%llu target_failopen=%llu restore_fail=%llu "
+        "sidecar_ready=%llu batch_ready=%llu applied=%llu neutral_noop=%llu target_failopen=%llu restore_fail=%llu "
         "enabled=%u quarantine=%u/%u",
         tag,
         static_cast<unsigned long long>(clustered_pl.builder_seen),
@@ -2952,6 +2953,7 @@ void log_state(const char *tag) noexcept
         static_cast<unsigned long long>(clustered_pl.b12_hit),
         static_cast<unsigned long long>(clustered_pl.prepare_ok),
         static_cast<unsigned long long>(clustered_pl.prepare_fail),
+        static_cast<unsigned long long>(clustered_pl.prepare_neutral_empty),
         static_cast<unsigned long long>(clustered_pl.prepare_precondition_fail),
         static_cast<unsigned long long>(clustered_pl.selection_fail),
         static_cast<unsigned long long>(clustered_pl.selection_empty),
@@ -2973,6 +2975,7 @@ void log_state(const char *tag) noexcept
         static_cast<unsigned long long>(g_clustered_draw_sidecar_ready.load()),
         static_cast<unsigned long long>(g_clustered_draw_batch_ready.load()),
         static_cast<unsigned long long>(g_clustered_draw_applied.load()),
+        static_cast<unsigned long long>(g_clustered_draw_neutral_noop.load()),
         static_cast<unsigned long long>(g_clustered_draw_fail_open.load()),
         static_cast<unsigned long long>(g_clustered_draw_restore_fail.load()),
         clustered_pl.enabled ? 1u : 0u,
@@ -4384,6 +4387,7 @@ struct prepared_island_batch {
     dsrrl::runtime::prepared_clustered_pnts_shader clustered_shader{};
     dsrrl::runtime::prepared_clustered_pnts_draw clustered_carrier{};
     bool clustered_in_batch = false;
+    bool clustered_neutral_noop = false;
     bool fixed_in_batch = false;
     bool mr_in_batch = false;
     bool lerp_mr_in_batch = false;
@@ -4825,7 +4829,23 @@ bool prepare_island_batch(
                 decision,
                 prepared.clustered_carrier);
 
-        if (operator_gate_ready && !sidecar_ready) {
+        const bool neutral_no_pointlights =
+            operator_gate_ready &&
+            !sidecar_ready &&
+            prepared.clustered_carrier.neutral_no_pointlights;
+
+        if (neutral_no_pointlights) {
+            prepared.clustered_neutral_noop = true;
+            hot_count(g_clustered_draw_neutral_noop);
+            log_pointlight_prep_once(
+                1u << 3,
+                "clustered_no_pointlights_neutral",
+                prepared.clustered_shader.spc,
+                prepared.clustered_shader.blended_material,
+                direct_material_ready,
+                true,
+                false);
+        } else if (operator_gate_ready && !sidecar_ready) {
             log_pointlight_prep_once(
                 1u << 1,
                 "clustered_sidecar_not_ready",
@@ -4955,7 +4975,8 @@ bool prepare_island_batch(
             false);
     }
 
-    if (clustered_pointlight_bound)
+    if (clustered_pointlight_bound &&
+        !prepared.clustered_neutral_noop)
         hot_count(g_clustered_draw_fail_open);
 
     // Fixed PntSS/PntSSSS is a separate exact receiver namespace. Compose
@@ -5529,7 +5550,8 @@ bool prepare_island_batch(
         }
     }
 
-    return prepared.batch.island_count != 0u;
+    return prepared.batch.island_count != 0u ||
+           prepared.clustered_neutral_noop;
 }
 
 void observe_bloom_fx_draw_authority() noexcept
@@ -5720,6 +5742,12 @@ bool on_draw(
             effect_probe_stage::fail_open,
             receiver_id,
             decision.route_index);
+        return false;
+    }
+
+    if (prepared.clustered_neutral_noop &&
+        prepared.batch.island_count == 0u) {
+        release_prepared_island_batch(prepared);
         return false;
     }
 
@@ -5950,6 +5978,12 @@ bool on_draw_indexed(
             effect_probe_stage::fail_open,
             receiver_id,
             decision.route_index);
+        return false;
+    }
+
+    if (prepared.clustered_neutral_noop &&
+        prepared.batch.island_count == 0u) {
+        release_prepared_island_batch(prepared);
         return false;
     }
 
@@ -6210,6 +6244,7 @@ bool AddonInit(
     g_clustered_draw_sidecar_ready.store(0);
     g_clustered_draw_batch_ready.store(0);
     g_clustered_draw_applied.store(0);
+    g_clustered_draw_neutral_noop.store(0);
     g_clustered_draw_fail_open.store(0);
     g_clustered_draw_restore_fail.store(0);
     reset_integrated_draw_routes();
