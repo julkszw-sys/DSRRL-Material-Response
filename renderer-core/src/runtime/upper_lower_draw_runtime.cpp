@@ -961,6 +961,28 @@ constexpr std::uint64_t
     k_ptde_firelink_lightbank_signature =
         0xa710f288bd3aca82ULL;
 
+constexpr const auto *
+    k_ptde_firelink_diagnostic_bank =
+        pmetal_env_source_authority::find_bank(
+            k_ptde_firelink_lightbank_signature);
+
+static_assert(
+    k_ptde_firelink_diagnostic_bank != nullptr &&
+    k_ptde_firelink_diagnostic_bank->count == 64u &&
+    pmetal_env_source_authority::find_row(
+        *k_ptde_firelink_diagnostic_bank,
+        25u) != nullptr &&
+    pmetal_env_source_authority::find_row(
+        *k_ptde_firelink_diagnostic_bank,
+        25u)->m == 300u &&
+    pmetal_env_source_authority::find_row(
+        *k_ptde_firelink_diagnostic_bank,
+        29u) != nullptr &&
+    pmetal_env_source_authority::find_row(
+        *k_ptde_firelink_diagnostic_bank,
+        29u)->m == 50u,
+    "PTDE Firelink P_Metal EnvSpec diagnostic bank drifted");
+
 bool read_hardcoded_ptde_firelink_pmetal_env_source(
     void *source,
     std::int32_t selector,
