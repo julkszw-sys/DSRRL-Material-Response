@@ -253,6 +253,7 @@ enum class hdr_unblock_reason : std::uint8_t {
     bloom_input_semantics_not_ready,
     lightshaft_input_semantics_not_ready,
     legacy_hdr_transfer_not_ready,
+    ptde_output_handoff_not_closed,
     dsr_output_transfer_contract_not_ready,
     preserved_coloradjust_overlay_tail_not_ready,
     graph_insertion_not_ready,
@@ -287,6 +288,14 @@ struct hdr_unblock_context {
     bool bloom_input_semantics_ready = false;
     bool lightshaft_input_semantics_ready = false;
     bool legacy_hdr_transfer_ready = false;
+
+    // Keep the target and host contracts distinct. R24 proved the DSR host
+    // requires an explicit final-output contract, but that does not tell us
+    // whether the PTDE legacy result reaches the D3D9 backbuffer by identity,
+    // GammaTexture/ramp, or another transfer. Do not select a bridge until the
+    // PTDE HDR_ColAdj -> final-target handoff itself is closed.
+    bool ptde_output_handoff_closed = false;
+
     // R24 proved that dropping DSR's explicit ~pow(1/2.2) output transfer on a
     // non-sRGB swapchain violates the host output contract. A legacy HDR port
     // must therefore provide an explicit PTDE-result -> DSR backbuffer transfer
@@ -368,6 +377,10 @@ inline hdr_unblock_plan evaluate_hdr_unblock_preflight(
     }
     if (!c.legacy_hdr_transfer_ready) {
         out.reason = hdr_unblock_reason::legacy_hdr_transfer_not_ready;
+        return out;
+    }
+    if (!c.ptde_output_handoff_closed) {
+        out.reason = hdr_unblock_reason::ptde_output_handoff_not_closed;
         return out;
     }
     if (!c.dsr_output_transfer_contract_ready) {
