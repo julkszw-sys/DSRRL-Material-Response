@@ -6528,6 +6528,13 @@ bool AddonInit(
             reshade::log::level::warning,
             "[DSRRL CORE+ISLANDS " DSRRL_CORE_ISLANDS_VERSION
             "] LightBank reference-token transport FAIL-OPEN: U/L stays stock and P_Metal EnvSpec source routing is unavailable.");
+    } else if (
+        !upper_lower_enabled &&
+        pmetal_envspec_enabled &&
+        lightbank_reference_hooks) {
+        reshade::log::message(
+            reshade::log::level::info,
+            "[DSRRL PMETAL ENVSPEC] LightBank reference-only transport ACTIVE; U/L visible operator remains stock/off.");
     }
 
     {
