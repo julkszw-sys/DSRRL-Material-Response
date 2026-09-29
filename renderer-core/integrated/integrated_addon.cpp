@@ -2636,6 +2636,78 @@ void log_effect_matrix(
     reshade::log::message(
         reshade::log::level::info,
         detail);
+
+    char pmetal_frontier[2048]{};
+    std::snprintf(
+        pmetal_frontier,
+        sizeof(pmetal_frontier),
+        "[DSRRL PMETAL ENVSPEC FRONTIER] "
+        "candidate=%llu lerp_candidate=%llu request=%llu lerp_request=%llu "
+        "material_reject=%llu semantic_reject=%llu source_reject=%llu blend_hold=%llu "
+        "probe_reject=%llu spec_reject=%llu ul_ready=%llu ul_fallback=%llu "
+        "b12_upload=%llu b12_reuse=%llu q=%u fail=0x%08X "
+        "fail_feature=%u fail_lerp_feature=%u fail_material=%u fail_semantic=%u "
+        "fail_source=%u fail_blend=%u fail_lerp_ul_conflict=%u fail_context=%u "
+        "fail_replacement=%u fail_ul=%u fail_probe=%u fail_spec_rgb=%u "
+        "fail_device=%u fail_b12=%u fail_mutation=%u",
+        static_cast<unsigned long long>(pmetal.candidates),
+        static_cast<unsigned long long>(pmetal.lerp_candidates),
+        static_cast<unsigned long long>(pmetal.requests),
+        static_cast<unsigned long long>(pmetal.lerp_requests),
+        static_cast<unsigned long long>(pmetal.material_rejects),
+        static_cast<unsigned long long>(pmetal.semantic_rejects),
+        static_cast<unsigned long long>(pmetal.source_rejects),
+        static_cast<unsigned long long>(pmetal.blended_receiver_hold),
+        static_cast<unsigned long long>(pmetal.probe_rejects),
+        static_cast<unsigned long long>(pmetal.spec_rgb_rejects),
+        static_cast<unsigned long long>(pmetal.upper_lower_ready),
+        static_cast<unsigned long long>(pmetal.upper_lower_fallback),
+        static_cast<unsigned long long>(pmetal.b12_uploads),
+        static_cast<unsigned long long>(pmetal.b12_reuses),
+        pmetal.quarantined ? 1u : 0u,
+        static_cast<unsigned>(pmetal.effect_fail_mask),
+        (pmetal.effect_fail_mask & (1u << 0u)) ? 1u : 0u,
+        (pmetal.effect_fail_mask & (1u << 1u)) ? 1u : 0u,
+        (pmetal.effect_fail_mask & (1u << 2u)) ? 1u : 0u,
+        (pmetal.effect_fail_mask & (1u << 3u)) ? 1u : 0u,
+        (pmetal.effect_fail_mask & (1u << 4u)) ? 1u : 0u,
+        (pmetal.effect_fail_mask & (1u << 5u)) ? 1u : 0u,
+        (pmetal.effect_fail_mask & (1u << 6u)) ? 1u : 0u,
+        (pmetal.effect_fail_mask & (1u << 7u)) ? 1u : 0u,
+        (pmetal.effect_fail_mask & (1u << 8u)) ? 1u : 0u,
+        (pmetal.effect_fail_mask & (1u << 9u)) ? 1u : 0u,
+        (pmetal.effect_fail_mask & (1u << 10u)) ? 1u : 0u,
+        (pmetal.effect_fail_mask & (1u << 11u)) ? 1u : 0u,
+        (pmetal.effect_fail_mask & (1u << 12u)) ? 1u : 0u,
+        (pmetal.effect_fail_mask & (1u << 13u)) ? 1u : 0u,
+        (pmetal.effect_fail_mask & (1u << 14u)) ? 1u : 0u);
+    reshade::log::message(
+        reshade::log::level::info,
+        pmetal_frontier);
+
+    char subsurface_frontier[1536]{};
+    std::snprintf(
+        subsurface_frontier,
+        sizeof(subsurface_frontier),
+        "[DSRRL SUBSURFACE FRONTIER] "
+        "candidate=%llu pipeline_reject=%llu material_reject=%llu "
+        "surface_reject=%llu mr_reject=%llu resource_reject=%llu "
+        "spec_reject=%llu route_reject=%llu adapter_reject=%llu "
+        "ul_reject=%llu prepared=%llu",
+        static_cast<unsigned long long>(subsurface.candidates),
+        static_cast<unsigned long long>(subsurface.pipeline_rejects),
+        static_cast<unsigned long long>(subsurface.material_rejects),
+        static_cast<unsigned long long>(subsurface.surface_rejects),
+        static_cast<unsigned long long>(subsurface.mr_route_rejects),
+        static_cast<unsigned long long>(subsurface.resource_rejects),
+        static_cast<unsigned long long>(subsurface.spec_rgb_rejects),
+        static_cast<unsigned long long>(subsurface.route_rejects),
+        static_cast<unsigned long long>(subsurface.adapter_rejects),
+        static_cast<unsigned long long>(subsurface.upper_lower_rejects),
+        static_cast<unsigned long long>(subsurface.prepared));
+    reshade::log::message(
+        reshade::log::level::info,
+        subsurface_frontier);
 }
 
 void log_state(const char *tag) noexcept
