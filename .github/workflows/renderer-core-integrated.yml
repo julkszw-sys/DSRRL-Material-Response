@@ -409,10 +409,28 @@ jobs:
             'generated::spec_equipment_name_hash_allowed_v12',
             'generated::diffuse_pair_allowed_v12',
             'generated::normal_tuple_allowed_v12',
-            'generated::normal_diffuse_pair_allowed_v12',
             'build_island_draw_mutation'
           )) {
             if ($resourceRuntime -notmatch [regex]::Escape($required)) { throw "Material resource island adapter invariant missing: $required" }
+          }
+
+          # Clustered PntS PointLight owns only its operator-local b12/t18/t19
+          # carrier. Equipment texture companions must remain a separate route.
+          if ($resourceRuntime -match 'prepare_clustered_pointlight_material_requests') {
+            throw "Legacy clustered equipment texture prep API must remain absent"
+          }
+          if ($entry -match 'clustered_resources_not_ready' -or
+              $entry -match 'prepare_clustered_pointlight_material_requests') {
+            throw "Clustered PointLight regressed to the equipment texture gate"
+          }
+          foreach ($required in @(
+            'clustered_operator_gate_not_ready',
+            'g_clustered_pnts.prepare_sidecar',
+            'prepared.clustered_carrier.b12',
+            'prepared.clustered_carrier.t18',
+            'prepared.clustered_carrier.t19'
+          )) {
+            if ($entry -notmatch [regex]::Escape($required)) { throw "Clustered PointLight decoupled carrier invariant missing: $required" }
           }
 
           foreach ($required in @(
