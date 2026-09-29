@@ -171,6 +171,8 @@ release_resources() noexcept
     lerp_replacements_.clear();
     lerp_replacement_sha256_.clear();
     lerp_replacement_size_.clear();
+    lerp_replacement_upper_lower_composed_.clear();
+    lerp_replacement_upper_lower_composed_.clear();
 
     for (auto &[_,entry] :
          b12_by_context_) {
@@ -385,7 +387,8 @@ register_lerp_replacement(
         outcome.pair_index + 24u !=
             outcome.semantic_receiver_id ||
         !outcome.envdiffuse_preserved ||
-        !outcome.upper_lower_composed ||
+        !(outcome.upper_lower_composed ^
+          outcome.upper_lower_preserved_stock) ||
         !outcome.terminal_sat_rgb_composed ||
         !outcome.spec_rgb_consumer ||
         dxbc == nullptr ||
@@ -422,16 +425,23 @@ register_lerp_replacement(
         const auto size_it =
             lerp_replacement_size_.find(
                 outcome.semantic_receiver_id);
+        const auto mode_it =
+            lerp_replacement_upper_lower_composed_.find(
+                outcome.semantic_receiver_id);
 
         const bool same_payload =
             sha_it !=
                 lerp_replacement_sha256_.end() &&
             size_it !=
                 lerp_replacement_size_.end() &&
+            mode_it !=
+                lerp_replacement_upper_lower_composed_.end() &&
             sha_it->second ==
                 payload_sha256 &&
             size_it->second ==
-                dxbc_size;
+                dxbc_size &&
+            mode_it->second ==
+                outcome.upper_lower_composed;
 
         if (same_payload) {
             ++lerp_replacement_register_ok_;
@@ -466,6 +476,9 @@ register_lerp_replacement(
     lerp_replacement_size_[
         outcome.semantic_receiver_id] =
         dxbc_size;
+    lerp_replacement_upper_lower_composed_[
+        outcome.semantic_receiver_id] =
+        outcome.upper_lower_composed;
 
     ++lerp_replacement_register_ok_;
     return true;
@@ -629,6 +642,7 @@ bool pmetal_envspec_draw_runtime::prepare(
 
     replacement_pair pair{};
     ID3D11PixelShader *lerp_shader = nullptr;
+    bool lerp_upper_lower_composed = false;
 
     {
         std::lock_guard<std::mutex> lock(
@@ -640,10 +654,15 @@ bool pmetal_envspec_draw_runtime::prepare(
             const auto found =
                 lerp_replacements_.find(
                     decision.receiver_id);
+            const auto mode =
+                lerp_replacement_upper_lower_composed_.find(
+                    decision.receiver_id);
 
             if (found ==
                     lerp_replacements_.end() ||
-                found->second == nullptr) {
+                found->second == nullptr ||
+                mode ==
+                    lerp_replacement_upper_lower_composed_.end()) {
                 ++lerp_replacement_register_fail_;
                 effect_fail(
                     effect_fail_mask_,
@@ -653,6 +672,8 @@ bool pmetal_envspec_draw_runtime::prepare(
 
             lerp_shader =
                 found->second;
+            lerp_upper_lower_composed =
+                mode->second;
             lerp_shader->AddRef();
         } else {
             const auto found =
@@ -696,11 +717,14 @@ bool pmetal_envspec_draw_runtime::prepare(
 
     if (family ==
             pmetal_envspec_receiver_family::
-                hemenvlerp) {
-        // Exact Lerp materialization already owns the verified b0[7]/b0[8]
-        // -> b13[6]/b13[7] consumer remap. The matching PTDE carrier is
-        // therefore mandatory; missing producer state fails open to stock.
-        if (!lightbank_.
+                hemenvlerp &&
+        lerp_upper_lower_composed) {
+        // Only the explicitly U/L-composed Lerp payload reads b13. The
+        // U/L-off payload preserves stock DSR b0[7]/b0[8] and therefore does
+        // not require or bind a PTDE LightBank U/L carrier.
+        if (!core_.features().enabled(
+                core::operator_id::upper_lower) ||
+            !lightbank_.
                 prepare_upper_lower_carrier(
                     context,
                     prepared.upper_lower)) {
