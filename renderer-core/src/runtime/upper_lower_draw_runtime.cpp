@@ -705,10 +705,21 @@ std::array<
     g_selected_reference_tokens{};
 std::array<std::uint8_t,k_reference_token_sets>
     g_selected_reference_token_victim{};
+// Lock-free invalidation stamp for the synchronized selected-token bank.
+// A selector publication bumps only its hashed producer-TID set. Draw-side
+// consumers can therefore reuse an exact TLS copy while the selector-owned
+// state is unchanged, and take the set lock only after a selector transition
+// (or a harmless hash collision from another producer TID in the same set).
+std::array<
+    std::atomic<std::uint64_t>,
+    k_reference_token_sets>
+    g_selected_reference_generation{};
 std::atomic<std::uint64_t>
     g_reference_publish_serial{0u};
 thread_local std::uint64_t
     g_draw_thread_latest_publish_serial = 0u;
+thread_local std::uint64_t
+    g_draw_selected_reference_generation = 0u;
 std::atomic<std::uint64_t>
     g_reference_cross_thread_selected_publish{0u};
 std::atomic<std::uint64_t>
@@ -1564,6 +1575,10 @@ void publish_selected_reference_token(
             // is not the thread's numerically latest publication.
             entry = token;
             entry.available = true;
+            g_selected_reference_generation[set].
+                fetch_add(
+                    1u,
+                    std::memory_order_release);
             telemetry::hot_count(
                 g_reference_cross_thread_selected_publish);
             return;
@@ -1579,6 +1594,10 @@ void publish_selected_reference_token(
             !entry.available) {
             entry = token;
             entry.available = true;
+            g_selected_reference_generation[set].
+                fetch_add(
+                    1u,
+                    std::memory_order_release);
             telemetry::hot_count(
                 g_reference_cross_thread_selected_publish);
             return;
@@ -1594,6 +1613,10 @@ void publish_selected_reference_token(
         token;
     g_selected_reference_tokens[base + victim].
         available = true;
+    g_selected_reference_generation[set].
+        fetch_add(
+            1u,
+            std::memory_order_release);
     telemetry::hot_count(
         g_reference_cross_thread_selected_publish);
 }
@@ -4325,6 +4348,7 @@ void clear_snapshots() noexcept
     g_draw_snapshot.reset();
     g_draw_reference_token = {};
     g_draw_thread_latest_publish_serial = 0u;
+    g_draw_selected_reference_generation = 0u;
     g_last_selected_producer_serial = 0u;
     g_completed_draws_since_selector = 0xFFFFFFFFu;
     for (std::size_t set = 0u;
@@ -4341,6 +4365,10 @@ void clear_snapshots() noexcept
         }
         g_reference_token_victim[set] = 0u;
         g_selected_reference_token_victim[set] = 0u;
+        g_selected_reference_generation[set].
+            store(
+                0u,
+                std::memory_order_release);
     }
     clear_b13_upload_slots();
     clear_direct_ul_cache_stamps();
@@ -4872,15 +4900,40 @@ bool upper_lower_draw_runtime::selected_pmetal_env_source(
         const lightbank_reference_token *token_ptr =
             nullptr;
 
-        if (consume_selected_reference_token_for_current_thread(
+        const auto selected_set =
+            reference_token_set(
+                static_cast<std::uintptr_t>(
+                    source_consumer_tid));
+        const auto selected_generation =
+            g_selected_reference_generation[
+                selected_set].load(
+                    std::memory_order_acquire);
+
+        const bool cached_selected_current =
+            g_draw_reference_token.valid &&
+            g_draw_reference_token.producer_tid ==
+                source_consumer_tid &&
+            g_draw_reference_token.producer_serial != 0u &&
+            g_draw_selected_reference_generation ==
+                selected_generation;
+
+        if (cached_selected_current) {
+            token_ptr =
+                &g_draw_reference_token;
+        } else if (
+            consume_selected_reference_token_for_current_thread(
                 cross_thread_token)) {
-            // Refresh from the synchronized per-producer-thread selector state
-            // on every exact source query so a later selector transition
-            // replaces the cached token immediately.
+            // 86f runtime proved this path can be extremely hot (~90k
+            // synchronized consumes in one diagnostic session). Cache the
+            // exact selector-owned token and invalidate it with the lock-free
+            // per-set generation stamp instead of taking the spin lock on
+            // every P_Metal source query.
             g_draw_reference_token =
                 cross_thread_token;
             g_last_selected_producer_serial =
                 cross_thread_token.producer_serial;
+            g_draw_selected_reference_generation =
+                selected_generation;
             token_ptr =
                 &g_draw_reference_token;
         }
