@@ -59,8 +59,18 @@ def main() -> None:
     )
     require(
         integrated,
-        "exact_specular_companion_ready(",
-        "exact equipment companion liveness probe",
+        "probe_exact_specular_companion(",
+        "identity-level equipment companion liveness probe",
+    )
+    require(
+        integrated,
+        "owner=%016llx",
+        "equipment owner identity telemetry",
+    )
+    require(
+        integrated,
+        "hash=%016llx",
+        "logical SpecRGB identity telemetry",
     )
 
     legacy = """if (material.owner_tuple_exact) {
