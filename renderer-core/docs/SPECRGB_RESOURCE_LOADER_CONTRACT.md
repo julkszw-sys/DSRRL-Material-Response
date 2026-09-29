@@ -1,7 +1,10 @@
 # Renderer Core v1 — SpecRGB Resource Loader Contract
 
-Status: **RE/design closed; Renderer Core implementation pending**  
-Canonical: `renderer.core.islands.specrgb_resource_loader_architecture_v1` (rev 8895)
+Status: **carrier architecture retained; generic FULL24 consumer scope superseded by the Material Response reset**  
+Historical canonical: `renderer.core.islands.specrgb_resource_loader_architecture_v1` (rev 8895)  
+Current source scope: `renderer-core/data/provenance/spec_rgb_equipment_scope_v2.json`
+
+> Current production rule: PTDE SpecRGB sidecars are **equipment-only** resources. Exact equipment FLVER+slot ownership and exact stock-spec resource identity are mandatory. Sidecars may be consumed only by an explicit PTDE operator island that owns the SpecRGB semantic cut (currently fixed local-specular, P_Metal EnvSpec, and Ps_Body[DSBT] Subsurface). Generic HemEnv/HemEnvLerp Material Response and surviving DSR PBL/F0 tails must not consume PTDE SpecRGB. Clustered PointLight does not inherit the equipment sidecar by implication.
 
 ## Scope
 
