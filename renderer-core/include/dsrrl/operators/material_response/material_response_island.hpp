@@ -70,6 +70,12 @@ struct material_identity {
 bool exact_runtime_material_response_identity(
     const material_identity &identity) noexcept;
 
+// Exact material-object authority for direct PointLight only. This is
+// intentionally narrower than generic Material Response and carries no
+// resource/asset replacement authority.
+bool exact_runtime_pointlight_material_identity(
+    const material_identity &identity) noexcept;
+
 // Narrow P_Metal specialization retained for EnvSpec and other explicitly
 // scoped P_Metal consumers. Generic MR authority must not broaden those.
 bool exact_runtime_pmetal_material_identity(
