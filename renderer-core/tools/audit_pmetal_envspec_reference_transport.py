@@ -130,8 +130,8 @@ def main() -> None:
         )
 
     next_method = ul_cpp.find(
-        "\\nbool upper_lower_draw_runtime::",
-        pmetal_begin,
+        "bool upper_lower_draw_runtime::",
+        pmetal_begin + 1,
     )
     if next_method < 0:
         fail("cannot isolate P_Metal material event block")
