@@ -164,6 +164,8 @@ private:
         lerp_replacement_sha256_;
     std::unordered_map<std::uint32_t,std::size_t>
         lerp_replacement_size_;
+    std::unordered_map<std::uint32_t,bool>
+        lerp_replacement_upper_lower_composed_;
     std::unordered_map<std::uintptr_t,b12_context_cache>
         b12_by_context_;
 
