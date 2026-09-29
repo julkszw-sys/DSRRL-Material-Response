@@ -81,6 +81,7 @@ operators::postprocess::hdr_unblock_context ready_hdr()
     c.bloom_input_semantics_ready=true;
     c.lightshaft_input_semantics_ready=true;
     c.legacy_hdr_transfer_ready=true;
+    c.ptde_output_handoff_closed=true;
     c.dsr_output_transfer_contract_ready=true;
     c.preserved_coloradjust_overlay_tail_ready=true;
     c.graph_insertion_ready=true;
@@ -431,6 +432,11 @@ int main()
     CHECK(!hp.whole_c56_copy_allowed);
     CHECK(hp.requires_q8_scene_bridge);
     CHECK(hp.preserve_native_sfx_island);
+
+    hdr=ready_hdr();
+    hdr.ptde_output_handoff_closed=false;
+    hp=evaluate_hdr_unblock_preflight(hdr);
+    CHECK(hp.reason==hdr_unblock_reason::ptde_output_handoff_not_closed);
 
     hdr=ready_hdr();
     hdr.dsr_output_transfer_contract_ready=false;
