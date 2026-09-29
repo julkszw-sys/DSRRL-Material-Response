@@ -3,6 +3,7 @@
 #include "dsrrl/operators/material_response/material_response_seed.hpp"
 #include "dsrrl/operators/material_response/generated_dsr_flver_owner_tuples_v1.hpp"
 #include "dsrrl/operators/material_response/generated_exact_binding_mr_v1.hpp"
+#include "dsrrl/operators/material_response/generated_pointlight_material_authority_v1.hpp"
 #include <cstddef>
 #include <iostream>
 using namespace dsrrl;
@@ -58,19 +59,31 @@ int main()
     id = runtime::make_actual_material_identity(o);
     CHECK(!id.owner_tuple_exact);
 
-    // This source-complete owner tuple is intentionally outside the current
-    // partial generic raw-MTD identity registry. Exact FLVER+slot ownership
-    // alone must not manufacture raw-MTD identity from an operator-specific
-    // table; unresolved generic identity therefore fails open.
+    // PointLight material authority may now supply raw-MTD identity for an
+    // exact authenticated owner tuple that remains outside the partial generic
+    // MR identity registry. This enriches identity only; generic MR/resource
+    // authority is still evaluated independently downstream.
     runtime::actual_material_owner_observation exact{};
     exact.flver_sha256=digest(
         "002271e70f2b00efd4d273b3a53b711ece681e6920d22e763af5355498368e20");
     exact.material_slot=0u;
     exact.material_slot_valid=true;
-    CHECK(!runtime::enrich_exact_owner_mtd_identity(exact));
-    CHECK(!exact.material.valid);
+    std::uint64_t exact_semantic=0u;
+    CHECK(generated::dsr_flver_owner_mtd_hash(
+        exact.flver_sha256,
+        exact.material_slot,
+        exact_semantic));
+    const auto *exact_pointlight=
+        generated::find_pointlight_material_authority_v1(
+            exact_semantic);
+    CHECK(exact_pointlight!=nullptr);
+    CHECK(runtime::enrich_exact_owner_mtd_identity(exact));
+    CHECK(exact.material.valid);
+    CHECK(exact.material.semantic_name_hash==exact_semantic);
+    CHECK(exact.material.raw_mtd_sha256==
+          exact_pointlight->raw_mtd_sha256);
     const auto exact_id=runtime::make_actual_material_identity(exact);
-    CHECK(!exact_id.owner_tuple_exact);
+    CHECK(exact_id.owner_tuple_exact);
 
     runtime::actual_material_owner_observation pmetal{};
     pmetal.flver_sha256=digest(
