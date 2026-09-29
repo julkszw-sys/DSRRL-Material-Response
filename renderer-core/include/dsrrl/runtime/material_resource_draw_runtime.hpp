@@ -48,6 +48,14 @@ struct prepared_material_resource_draw {
     bool spec_rgb = false;
     bool diffuse = false;
     bool normal = false;
+
+    // Clustered PointLight keeps its material carrier separate from PTDE
+    // equipment asset replacement. Spc aliases the stock material specular
+    // SRV into private direct-island slots; NoSpc needs no extra SRV.
+    bool pointlight_surface_carrier = false;
+    bool pointlight_stock_spec_alias = false;
+    ID3D11ShaderResourceView *pointlight_spec_a = nullptr;
+    ID3D11ShaderResourceView *pointlight_spec_b = nullptr;
 };
 
 class material_resource_draw_runtime {
