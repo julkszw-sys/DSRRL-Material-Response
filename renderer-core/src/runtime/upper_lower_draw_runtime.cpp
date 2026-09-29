@@ -1580,37 +1580,51 @@ void publish_reference_token(
         token;
 }
 
-void invalidate_selected_reference_token_for_producer(
-    std::uint32_t producer_tid) noexcept
+void invalidate_selected_reference_token_for_owner(
+    std::uintptr_t owner) noexcept
 {
-    if (producer_tid == 0u)
+    if (owner == 0u)
         return;
 
-    const auto set =
-        reference_token_set(
-            static_cast<std::uintptr_t>(
-                producer_tid));
-    reference_token_set_guard guard(set);
-    const auto base =
-        set * k_reference_token_ways;
+    // P_Metal material identity is not known until the second phase of the
+    // exact FLVER selector callback. Invalidate only after that material gate
+    // has proven P_Metal. Scanning this bounded 128x4 selected bank is rare
+    // (P_Metal-only) and prevents unrelated materials sharing the same
+    // LightBank producer thread from erasing the current P_Metal state.
+    for (std::size_t set = 0u;
+         set < k_reference_token_sets;
+         ++set) {
+        bool changed = false;
+        {
+            reference_token_set_guard guard(set);
+            const auto base =
+                set * k_reference_token_ways;
 
-    for (std::size_t way = 0u;
-         way < k_reference_token_ways;
-         ++way) {
-        auto &entry =
-            g_selected_reference_tokens[base + way];
-        if (entry.valid &&
-            entry.producer_tid == producer_tid)
-            entry = {};
+            for (std::size_t way = 0u;
+                 way < k_reference_token_ways;
+                 ++way) {
+                auto &entry =
+                    g_selected_reference_tokens[
+                        base + way];
+                if (!entry.valid ||
+                    entry.fingerprint.owner != owner)
+                    continue;
+
+                entry = {};
+                changed = true;
+            }
+        }
+
+        if (changed) {
+            // Draw-side TLS copies are keyed by the producer-TID set
+            // generation. Advance only sets whose exact same-owner state was
+            // removed, so stale cached P_Metal sources fail closed.
+            g_selected_reference_generation[set].
+                fetch_add(
+                    1u,
+                    std::memory_order_release);
+        }
     }
-
-    // Always advance the generation for this producer-TID set. A draw thread
-    // may still hold a TLS copy even if the bounded bank entry was already
-    // evicted; generation invalidation makes that cached state fail closed.
-    g_selected_reference_generation[set].
-        fetch_add(
-            1u,
-            std::memory_order_release);
 }
 
 bool exact_pmetal_material_selection(
@@ -4678,12 +4692,10 @@ void upper_lower_draw_runtime::selector_event(
 
         // The exact selector tuple authenticates which LightBank
         // selection is current, but it does not identify the material that
-        // will consume it. Invalidate any previous P_Metal state for this
-        // producer immediately, stage this token on the selector thread, and
-        // wait for the same FLVER selector callback to prove exact P_Metal
-        // material identity before cross-thread publication.
-        invalidate_selected_reference_token_for_producer(
-            selected.producer_tid);
+        // will consume it. Stage the token only. Do not invalidate current
+        // P_Metal state here: this generic selector path also runs for
+        // non-P_Metal materials sharing the same producer thread. The second
+        // phase of this exact callback owns P_Metal-specific invalidation.
         g_draw_reference_token =
             selected;
         g_last_selected_producer_serial =
@@ -4794,16 +4806,24 @@ void upper_lower_draw_runtime::pmetal_material_event(
         return;
 
     // selector_event() and this call are two phases of the same exact retail
-    // FLVER selector callback. The token must therefore still name the same
-    // owner and carry an exact producer provenance before it may become the
-    // cross-thread P_Metal source state.
+    // FLVER selector callback. Only this exact P_Metal material phase is
+    // allowed to replace/invalidate persistent P_Metal source state. A generic
+    // LightBank selector event for another material must leave it untouched.
+    const auto owner_key =
+        reinterpret_cast<std::uintptr_t>(
+            owner);
+    invalidate_selected_reference_token_for_owner(
+        owner_key);
+
+    // If this exact P_Metal selector has no matching staged source token, the
+    // old same-owner state has already been invalidated above and we fail open
+    // instead of resurrecting a donor from a prior P_Metal draw.
     if (!g_draw_reference_token.valid ||
         !g_draw_reference_token.source_ready ||
         g_draw_reference_token.producer_tid == 0u ||
         g_draw_reference_token.producer_serial == 0u ||
         g_draw_reference_token.fingerprint.owner !=
-            reinterpret_cast<std::uintptr_t>(
-                owner))
+            owner_key)
         return;
 
     publish_selected_reference_token(
