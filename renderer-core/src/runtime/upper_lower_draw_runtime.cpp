@@ -93,6 +93,11 @@ struct producer_tls {
 
 struct lightbank_reference_token {
     operators::lightbank::lightbank_snapshot_fingerprint fingerprint{};
+    // Exact selector->draw cross-thread handoff identity. The producer thread
+    // and monotonically unique publication serial are carried with the same
+    // owner/selectorA/selectorB/beta fingerprint; they never replace it.
+    std::uint32_t producer_tid = 0u;
+    std::uint64_t producer_serial = 0u;
     void *source_a = nullptr;
     void *source_b = nullptr;
     std::int32_t selector_a = -1;
@@ -678,6 +683,32 @@ std::array<
     g_reference_token_locks{};
 thread_local lightbank_reference_token
     g_draw_reference_token{};
+// The producer hook and the ReShade draw callback are allowed to execute on a
+// different thread from the exact selector hook. Keep the selector-authenticated
+// token in a second process-wide bounded bank, but authorize draw consumption
+// only by the producer thread id AND that thread's exact latest publication
+// serial. A missing or stale serial therefore fails open instead of falling
+// back to a process-global "latest token".
+std::array<
+    lightbank_reference_token,
+    k_reference_token_entries>
+    g_selected_reference_tokens{};
+std::array<std::uint8_t,k_reference_token_sets>
+    g_selected_reference_token_victim{};
+std::atomic<std::uint64_t>
+    g_reference_publish_serial{0u};
+thread_local std::uint64_t
+    g_draw_thread_latest_publish_serial = 0u;
+std::atomic<std::uint64_t>
+    g_reference_cross_thread_selected_publish{0u};
+std::atomic<std::uint64_t>
+    g_reference_cross_thread_draw_consume{0u};
+std::atomic<std::uint64_t>
+    g_reference_cross_thread_serial_miss{0u};
+std::atomic<std::uint32_t>
+    g_reference_source_consumer_tid{0u};
+std::atomic<std::uint64_t>
+    g_reference_source_consumer_serial{0u};
 
 class reference_token_set_guard {
 public:
@@ -1414,6 +1445,13 @@ void publish_reference_token(
     latch_bool_once(
         g_reference_publish_seen);
 
+    token.producer_tid =
+        static_cast<std::uint32_t>(
+            GetCurrentThreadId());
+    token.producer_serial =
+        g_reference_publish_serial.fetch_add(
+            1u,
+            std::memory_order_relaxed) + 1u;
     token.source_a = producer.source_a;
     token.source_b = producer.source_b;
     token.selector_a = producer.selector_a;
@@ -1436,6 +1474,13 @@ void publish_reference_token(
     }
     token.valid = true;
     token.available = true;
+
+    // Draw-side consumption may happen on this producer thread after an exact
+    // selector event on another engine thread. Retain only the serial identity
+    // of this thread's most recent exact publication; the payload itself stays
+    // in the bounded synchronized registries.
+    g_draw_thread_latest_publish_serial =
+        token.producer_serial;
 
     const auto set =
         reference_token_set(
@@ -1478,6 +1523,125 @@ void publish_reference_token(
                 k_reference_token_ways - 1u));
     g_reference_tokens[base + victim] =
         token;
+}
+
+void publish_selected_reference_token(
+    const lightbank_reference_token &token) noexcept
+{
+    if (!token.valid ||
+        token.producer_tid == 0u ||
+        token.producer_serial == 0u)
+        return;
+
+    const auto set =
+        reference_token_set(
+            static_cast<std::uintptr_t>(
+                token.producer_tid));
+    reference_token_set_guard guard(set);
+    const auto base =
+        set * k_reference_token_ways;
+
+    for (std::size_t way = 0u;
+         way < k_reference_token_ways;
+         ++way) {
+        auto &entry =
+            g_selected_reference_tokens[base + way];
+        if (entry.valid &&
+            entry.producer_tid ==
+                token.producer_tid &&
+            entry.producer_serial ==
+                token.producer_serial) {
+            entry = token;
+            entry.available = true;
+            telemetry::hot_count(
+                g_reference_cross_thread_selected_publish);
+            return;
+        }
+    }
+
+    for (std::size_t way = 0u;
+         way < k_reference_token_ways;
+         ++way) {
+        auto &entry =
+            g_selected_reference_tokens[base + way];
+        if (!entry.valid ||
+            !entry.available) {
+            entry = token;
+            entry.available = true;
+            telemetry::hot_count(
+                g_reference_cross_thread_selected_publish);
+            return;
+        }
+    }
+
+    const auto victim =
+        static_cast<std::size_t>(
+            g_selected_reference_token_victim[set]++ &
+            static_cast<std::uint8_t>(
+                k_reference_token_ways - 1u));
+    g_selected_reference_tokens[base + victim] =
+        token;
+    g_selected_reference_tokens[base + victim].
+        available = true;
+    telemetry::hot_count(
+        g_reference_cross_thread_selected_publish);
+}
+
+bool consume_selected_reference_token_for_current_thread(
+    lightbank_reference_token &out) noexcept
+{
+    out = {};
+
+    const auto tid =
+        static_cast<std::uint32_t>(
+            GetCurrentThreadId());
+    const auto serial =
+        g_draw_thread_latest_publish_serial;
+
+    if (tid == 0u ||
+        serial == 0u)
+        return false;
+
+    const auto set =
+        reference_token_set(
+            static_cast<std::uintptr_t>(tid));
+    reference_token_set_guard guard(set);
+    const auto base =
+        set * k_reference_token_ways;
+
+    bool same_thread_selected = false;
+
+    for (std::size_t way = 0u;
+         way < k_reference_token_ways;
+         ++way) {
+        auto &entry =
+            g_selected_reference_tokens[base + way];
+        if (!entry.valid ||
+            !entry.available ||
+            entry.producer_tid != tid)
+            continue;
+
+        same_thread_selected = true;
+
+        if (entry.producer_serial != serial)
+            continue;
+
+        entry.available = false;
+        out = entry;
+        out.available = false;
+        telemetry::hot_count(
+            g_reference_cross_thread_draw_consume);
+        g_reference_source_consumer_serial.store(
+            serial,
+            std::memory_order_relaxed);
+        return true;
+    }
+
+    if (same_thread_selected)
+        telemetry::hot_count(
+            g_reference_cross_thread_serial_miss);
+
+    return false;
 }
 
 bool consume_reference_token(
@@ -4160,6 +4324,7 @@ void clear_snapshots() noexcept
 {
     g_draw_snapshot.reset();
     g_draw_reference_token = {};
+    g_draw_thread_latest_publish_serial = 0u;
     for (std::size_t set = 0u;
          set < k_reference_token_sets;
          ++set) {
@@ -4168,9 +4333,12 @@ void clear_snapshots() noexcept
             set * k_reference_token_ways;
         for (std::size_t way = 0u;
              way < k_reference_token_ways;
-             ++way)
+             ++way) {
             g_reference_tokens[base + way] = {};
+            g_selected_reference_tokens[base + way] = {};
+        }
         g_reference_token_victim[set] = 0u;
+        g_selected_reference_token_victim[set] = 0u;
     }
     clear_b13_upload_slots();
     clear_direct_ul_cache_stamps();
@@ -4389,6 +4557,8 @@ void upper_lower_draw_runtime::selector_event(
         latch_bool_once(
             g_reference_selector_tuple_match);
 
+        publish_selected_reference_token(
+            selected);
         g_draw_reference_token =
             selected;
         latch_bool_once(
@@ -4675,8 +4845,31 @@ bool upper_lower_draw_runtime::selected_pmetal_env_source(
 
     if (g_steady_cache_builder_active.load(
             std::memory_order_acquire)) {
+        const auto source_consumer_tid =
+            static_cast<std::uint32_t>(
+                GetCurrentThreadId());
+        std::uint32_t expected_zero = 0u;
+        (void)g_reference_source_consumer_tid.
+            compare_exchange_strong(
+                expected_zero,
+                source_consumer_tid,
+                std::memory_order_relaxed,
+                std::memory_order_relaxed);
+
+        lightbank_reference_token
+            cross_thread_token{};
+        const lightbank_reference_token *token_ptr =
+            &g_draw_reference_token;
+
+        if (!token_ptr->valid) {
+            if (consume_selected_reference_token_for_current_thread(
+                    cross_thread_token))
+                token_ptr =
+                    &cross_thread_token;
+        }
+
         const auto &token =
-            g_draw_reference_token;
+            *token_ptr;
         if (!token.valid ||
             !token.source_ready ||
             token.source_a == nullptr ||
@@ -4928,6 +5121,9 @@ void upper_lower_draw_runtime::consume_draw_selection() noexcept
 {
     g_draw_snapshot.reset();
     g_draw_reference_token = {};
+    // One selector publication is draw-scoped. Do not allow a serial from a
+    // previous draw callback to authorize a later cross-thread handoff.
+    g_draw_thread_latest_publish_serial = 0u;
 }
 
 void upper_lower_draw_runtime::on_destroy_device(
@@ -5038,6 +5234,12 @@ void upper_lower_draw_runtime::reset() noexcept
     g_reference_draw_token_source_ready.store(false);
     g_reference_draw_token_vectors_ready.store(false);
     g_reference_draw_token_upper_lower_ready.store(false);
+    g_reference_publish_serial.store(0u);
+    g_reference_cross_thread_selected_publish.store(0u);
+    g_reference_cross_thread_draw_consume.store(0u);
+    g_reference_cross_thread_serial_miss.store(0u);
+    g_reference_source_consumer_tid.store(0u);
+    g_reference_source_consumer_serial.store(0u);
     g_direct_ul_steady_inject.store(0);
     g_direct_ul_blend_inject.store(0);
     g_direct_ul_inject_fail.store(0);
