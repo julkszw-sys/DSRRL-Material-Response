@@ -860,6 +860,7 @@ constexpr std::uint64_t
         0xa710f288bd3aca82ULL;
 
 bool read_hardcoded_ptde_firelink_pmetal_env_source(
+    void *source,
     std::int32_t selector,
     f4 &out,
     std::uint64_t &bank_signature,
@@ -887,13 +888,55 @@ bool read_hardcoded_ptde_firelink_pmetal_env_source(
         return false;
     }
 
-    local.bank_count =
-        static_cast<std::uint16_t>(
-            bank->count);
+    if (source == nullptr ||
+        selector < 0) {
+        local.status =
+            pmetal_env_source_diag_status::
+                token_invalid;
+        if (probe != nullptr)
+            *probe = local;
+        return false;
+    }
 
-    if (selector < 0 ||
+    const std::uint8_t *base = nullptr;
+    if (!safe_read(
+            static_cast<const std::uint8_t *>(
+                source) + 0x18u,
+            base) ||
+        base == nullptr) {
+        local.status =
+            pmetal_env_source_diag_status::
+                base_null;
+        if (probe != nullptr)
+            *probe = local;
+        return false;
+    }
+
+    std::uint16_t version = 0u;
+    std::uint16_t live_count = 0u;
+    if (!safe_read(
+            base + 8u,
+            version) ||
+        !safe_read(
+            base + 10u,
+            live_count) ||
+        version != 4u ||
+        live_count == 0u ||
+        live_count > 256u) {
+        local.bank_count = live_count;
+        local.status =
+            pmetal_env_source_diag_status::
+                header_invalid;
+        if (probe != nullptr)
+            *probe = local;
+        return false;
+    }
+
+    local.bank_count = live_count;
+    const auto index =
         static_cast<std::uint32_t>(
-            selector) >= bank->count) {
+            selector);
+    if (index >= live_count) {
         local.status =
             pmetal_env_source_diag_status::
                 selector_oob;
@@ -902,9 +945,20 @@ bool read_hardcoded_ptde_firelink_pmetal_env_source(
         return false;
     }
 
-    row_id =
-        static_cast<std::uint32_t>(
-            selector);
+    const auto *entry =
+        base + 0x30u +
+        static_cast<std::size_t>(index) *
+            12u;
+    if (!safe_read(
+            entry,
+            row_id)) {
+        local.status =
+            pmetal_env_source_diag_status::
+                row_read_failed;
+        if (probe != nullptr)
+            *probe = local;
+        return false;
+    }
     local.row_id = row_id;
 
     const auto *row =
@@ -5206,6 +5260,7 @@ bool upper_lower_draw_runtime::selected_pmetal_env_source(
         const bool source_a_ready =
             hardcoded_ptde_drawparam
                 ? read_hardcoded_ptde_firelink_pmetal_env_source(
+                    token.source_a,
                     token.selector_a,
                     a,
                     bank_a,
@@ -5246,6 +5301,7 @@ bool upper_lower_draw_runtime::selected_pmetal_env_source(
             const bool source_b_ready =
                 hardcoded_ptde_drawparam
                     ? read_hardcoded_ptde_firelink_pmetal_env_source(
+                        token.source_b,
                         token.selector_b,
                         b,
                         bank_b,
