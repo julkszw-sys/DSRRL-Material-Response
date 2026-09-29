@@ -5,6 +5,14 @@
 
 namespace dsrrl::runtime {
 
+// Current visible DSBT->plain-body bridge is intentionally disabled after
+// runtime pixel falsification on source 86f35ff1: stable HemEnv replacement
+// produced an oily/wet body response and had no equivalent HemEnvLerp
+// Subsurface island, causing visible mode discontinuity. Keep the exact
+// receiver census available, but fail open to stock DSR until a complete
+// stable+lerp PTDE-equivalent operator is constructed and validated.
+bool subsurface_visible_bridge_enabled() noexcept;
+
 struct subsurface_pipeline_telemetry {
     std::uint64_t pipeline_inits = 0;
     std::uint64_t exact_hits = 0;
