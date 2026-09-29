@@ -1,0 +1,34 @@
+{
+  "schema": "dsrrl.renderer_core.spec_rgb_equipment_scope.v2",
+  "status": "CONSTRUCTION_SCOPE_LOCKED",
+  "target": "PTDE equipment SpecRGB sidecar carrier",
+  "authority": {
+    "owner": "exact FLVER sha256 + material slot owner tuple",
+    "resource": "exact currently-bound stock specular SRV logical identity",
+    "sidecar": "exact-name addon-owned PTDE Specular DDS/SRV companion",
+    "conjunction": "owner AND resource AND explicit consumer"
+  },
+  "legal_consumers": [
+    "fixed PointLight local-specular PTDE island",
+    "P_Metal PTDE EnvSpec island",
+    "Ps_Body[DSBT] -> PTDE plain-body Subsurface island"
+  ],
+  "excluded_consumers": [
+    "generic HemEnv Material Response",
+    "generic HemEnvLerp Material Response",
+    "surviving stock DSR PBL/F0 tail",
+    "world/map/static geometry",
+    "clustered PointLight by inheritance"
+  ],
+  "carrier": {
+    "stock_t1": "preserved; alpha/roughness remains DSR-authoritative",
+    "ptde_rgb": "consumer-local sidecar resource transaction",
+    "fail_open": "stock DSR resources when exact equipment owner/resource/consumer conjunction is absent"
+  },
+  "telemetry_rule": "SpecRGB candidate is emitted only for an exact equipment owner with one of the explicit legal consumers; owner_tuple_exact alone is insufficient.",
+  "source_basis": {
+    "candidate_scope_commit": "16791460e15b47245ed3f7a7e4ebc168bb307a7a",
+    "audit": "renderer-core/tools/audit_specrgb_equipment_scope.py"
+  },
+  "pixel_behavior": "consumer-owned; not promoted by resource-carrier construction"
+}
