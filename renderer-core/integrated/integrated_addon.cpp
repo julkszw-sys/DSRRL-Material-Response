@@ -43,8 +43,6 @@
 #include "dsrrl/operators/point_light/fixed_local_specular_island_plan.hpp"
 #include "dsrrl/operators/point_light/fixed_local_specular_single_materializer.hpp"
 #include "dsrrl/operators/point_light/clustered_pnts_direct_materializer.hpp"
-#include "dsrrl/operators/legacy_plan/dxbc_checksum.hpp"
-#include "dsrrl/operators/legacy_plan/sha256_bytes.hpp"
 
 #include <reshade.hpp>
 #include <d3d11.h>
@@ -868,363 +866,6 @@ const reshade::api::shader_desc *find_pixel_shader(
 
     return nullptr;
 }
-
-namespace camera_blur_disable {
-
-namespace hashing =
-    dsrrl::operators::legacy_plan::hashing;
-namespace dxbc =
-    dsrrl::operators::legacy_plan::dxbc;
-
-// Exact vanilla DSR FRPG_Fil_CameraBlur.fpo from
-// FRPG_Filter_DX11.shaderbnd.dcx. CameraBlurPower and every MotionBlur*
-// shader remain stock. This bridge changes no timing state and does not touch
-// the MotionBlurEntity velocity path.
-constexpr std::size_t k_shader_size = 6600u;
-constexpr const char *k_input_sha256 =
-    "9d94e68ef590ddcc55b2ba1662b23a9a4c26887d83fc248a0f9e1b70aadd9702";
-constexpr const char *k_output_sha256 =
-    "50300bd289f2b00c8bc18f31debfa6fec5f49ea9a8a85d92779c67dc4fe3726a";
-
-struct patch_word {
-    std::size_t offset;
-    std::uint32_t expected;
-};
-
-// These are the four CameraBlur tap-coordinate immediate vectors in SHEX.
-// The shader first computes the camera blur direction and multiplies it by
-// DL_FREG_057.x. These immediates then place taps at 1/8 ... 7/8 of that
-// vector. Setting only these offsets to zero collapses every spatial tap to
-// the center coordinate while preserving the rest of the pass, its resources,
-// and all independent MotionBlur* shaders.
-constexpr std::array<patch_word,16> k_patch_words{{
-    {0x12f4u,0x3e000000u},
-    {0x12f8u,0x3e000000u},
-    {0x12fcu,0x3e800000u},
-    {0x1300u,0x3e800000u},
-    {0x1480u,0x3ec00000u},
-    {0x1484u,0x3ec00000u},
-    {0x1488u,0x3f000000u},
-    {0x148cu,0x3f000000u},
-    {0x1628u,0x3f200000u},
-    {0x162cu,0x3f200000u},
-    {0x1630u,0x3f400000u},
-    {0x1634u,0x3f400000u},
-    {0x1658u,0x3f600000u},
-    {0x165cu,0x3f600000u},
-    {0x1660u,0x00000000u},
-    {0x1664u,0x00000000u}
-}};
-
-std::mutex g_mutex;
-std::vector<std::uint8_t> g_payload;
-std::unordered_map<std::uint64_t,bool> g_pipelines;
-std::atomic<std::uint64_t> g_candidate_size{0};
-std::atomic<std::uint64_t> g_exact_identity{0};
-std::atomic<std::uint64_t> g_materialized{0};
-std::atomic<std::uint64_t> g_fail_open{0};
-std::atomic<std::uint64_t> g_init_attested{0};
-std::atomic<std::uint64_t> g_binds{0};
-std::atomic_bool g_first_bind_logged{false};
-
-bool materialize(
-    const std::uint8_t *source,
-    std::size_t size,
-    std::vector<std::uint8_t> &replacement) noexcept
-{
-    replacement.clear();
-
-    if (source == nullptr ||
-        size != k_shader_size ||
-        !dxbc::checksum_container_valid(
-            source,
-            size))
-        return false;
-
-    const auto input_digest =
-        hashing::sha256(source, size);
-    if (!hashing::matches_hex(
-            input_digest,
-            k_input_sha256))
-        return false;
-
-    try {
-        replacement.assign(
-            source,
-            source + size);
-    } catch (...) {
-        replacement.clear();
-        return false;
-    }
-
-    for (const auto &site : k_patch_words) {
-        if (site.offset + sizeof(std::uint32_t) >
-                replacement.size() ||
-            dxbc::read_u32(
-                replacement.data() +
-                site.offset) != site.expected) {
-            replacement.clear();
-            return false;
-        }
-    }
-
-    for (const auto &site : k_patch_words)
-        dxbc::write_u32(
-            replacement.data() +
-            site.offset,
-            0u);
-
-    if (!dxbc::fix_checksum(
-            replacement.data(),
-            replacement.size())) {
-        replacement.clear();
-        return false;
-    }
-
-    const auto output_digest =
-        hashing::sha256(
-            replacement.data(),
-            replacement.size());
-    if (!hashing::matches_hex(
-            output_digest,
-            k_output_sha256)) {
-        replacement.clear();
-        return false;
-    }
-
-    return true;
-}
-
-bool on_create_pipeline(
-    std::uint32_t subobject_count,
-    const reshade::api::pipeline_subobject *subobjects) noexcept
-{
-    auto *shader =
-        const_cast<reshade::api::shader_desc *>(
-            find_pixel_shader(
-                subobject_count,
-                subobjects));
-
-    if (shader == nullptr ||
-        shader->code == nullptr ||
-        shader->code_size != k_shader_size)
-        return false;
-
-    g_candidate_size.fetch_add(
-        1u,
-        std::memory_order_relaxed);
-
-    const auto *source =
-        static_cast<const std::uint8_t *>(
-            shader->code);
-    const auto input_digest =
-        hashing::sha256(
-            source,
-            shader->code_size);
-
-    if (!hashing::matches_hex(
-            input_digest,
-            k_input_sha256))
-        return false;
-
-    g_exact_identity.fetch_add(
-        1u,
-        std::memory_order_relaxed);
-
-    try {
-        std::vector<std::uint8_t> replacement;
-        if (!materialize(
-                source,
-                shader->code_size,
-                replacement)) {
-            g_fail_open.fetch_add(
-                1u,
-                std::memory_order_relaxed);
-            return false;
-        }
-
-        std::lock_guard<std::mutex> lock(
-            g_mutex);
-
-        if (g_payload.empty()) {
-            g_payload = std::move(replacement);
-        } else if (g_payload != replacement) {
-            g_fail_open.fetch_add(
-                1u,
-                std::memory_order_relaxed);
-            return false;
-        }
-
-        shader->code =
-            g_payload.data();
-        shader->code_size =
-            g_payload.size();
-
-        g_materialized.fetch_add(
-            1u,
-            std::memory_order_relaxed);
-
-        reshade::log::message(
-            reshade::log::level::info,
-            "[DSRRL CAMERA BLUR] exact FRPG_Fil_CameraBlur matched; "
-            "spatial tap offsets neutralized; MotionBlur velocity path untouched.");
-
-        return true;
-    } catch (...) {
-        g_fail_open.fetch_add(
-            1u,
-            std::memory_order_relaxed);
-        return false;
-    }
-}
-
-void on_init_pipeline(
-    std::uint32_t subobject_count,
-    const reshade::api::pipeline_subobject *subobjects,
-    reshade::api::pipeline pipeline) noexcept
-{
-    if (pipeline.handle == 0u)
-        return;
-
-    const auto *shader =
-        find_pixel_shader(
-            subobject_count,
-            subobjects);
-    if (shader == nullptr ||
-        shader->code == nullptr ||
-        shader->code_size != k_shader_size)
-        return;
-
-    const auto digest =
-        hashing::sha256(
-            static_cast<const std::uint8_t *>(
-                shader->code),
-            shader->code_size);
-    if (!hashing::matches_hex(
-            digest,
-            k_output_sha256))
-        return;
-
-    try {
-        std::lock_guard<std::mutex> lock(
-            g_mutex);
-        const auto inserted =
-            g_pipelines.emplace(
-                pipeline.handle,
-                true).second;
-        if (inserted)
-            g_init_attested.fetch_add(
-                1u,
-                std::memory_order_relaxed);
-    } catch (...) {
-        g_fail_open.fetch_add(
-            1u,
-            std::memory_order_relaxed);
-    }
-}
-
-void on_destroy_pipeline(
-    reshade::api::pipeline pipeline) noexcept
-{
-    if (pipeline.handle == 0u)
-        return;
-
-    std::lock_guard<std::mutex> lock(
-        g_mutex);
-    g_pipelines.erase(
-        pipeline.handle);
-}
-
-void on_bind_pipeline(
-    reshade::api::pipeline_stage stages,
-    reshade::api::pipeline pipeline) noexcept
-{
-    if ((static_cast<std::uint32_t>(stages) &
-         static_cast<std::uint32_t>(
-             reshade::api::pipeline_stage::
-                pixel_shader)) == 0u ||
-        pipeline.handle == 0u)
-        return;
-
-    bool target = false;
-    {
-        std::lock_guard<std::mutex> lock(
-            g_mutex);
-        target =
-            g_pipelines.find(
-                pipeline.handle) !=
-            g_pipelines.end();
-    }
-
-    if (!target)
-        return;
-
-    g_binds.fetch_add(
-        1u,
-        std::memory_order_relaxed);
-
-    if (!g_first_bind_logged.exchange(
-            true,
-            std::memory_order_relaxed)) {
-        reshade::log::message(
-            reshade::log::level::info,
-            "[DSRRL CAMERA BLUR] FIRST_BIND exact neutralized CameraBlur pipeline.");
-    }
-}
-
-void log_state(
-    const char *tag) noexcept
-{
-    char line[384]{};
-    std::snprintf(
-        line,
-        sizeof(line),
-        "[DSRRL CAMERA BLUR] tag=%s candidate=%llu exact=%llu "
-        "materialized=%llu failopen=%llu init_ok=%llu binds=%llu "
-        "pixel=UNVERIFIED",
-        tag != nullptr ? tag : "UNKNOWN",
-        static_cast<unsigned long long>(
-            g_candidate_size.load(
-                std::memory_order_relaxed)),
-        static_cast<unsigned long long>(
-            g_exact_identity.load(
-                std::memory_order_relaxed)),
-        static_cast<unsigned long long>(
-            g_materialized.load(
-                std::memory_order_relaxed)),
-        static_cast<unsigned long long>(
-            g_fail_open.load(
-                std::memory_order_relaxed)),
-        static_cast<unsigned long long>(
-            g_init_attested.load(
-                std::memory_order_relaxed)),
-        static_cast<unsigned long long>(
-            g_binds.load(
-                std::memory_order_relaxed)));
-    reshade::log::message(
-        reshade::log::level::info,
-        line);
-}
-
-void reset() noexcept
-{
-    {
-        std::lock_guard<std::mutex> lock(
-            g_mutex);
-        g_pipelines.clear();
-        g_payload.clear();
-    }
-
-    g_candidate_size.store(0);
-    g_exact_identity.store(0);
-    g_materialized.store(0);
-    g_fail_open.store(0);
-    g_init_attested.store(0);
-    g_binds.store(0);
-    g_first_bind_logged.store(false);
-}
-
-} // namespace camera_blur_disable
 
 const char *pointlight_decision_reason_name(
     dsrrl::operators::material_response::decision_reason reason) noexcept
@@ -3261,17 +2902,11 @@ bool on_create_pipeline(
         }
     }
 
-    const bool camera_blur_changed =
-        !a1_changed &&
-        camera_blur_disable::on_create_pipeline(
-            subobject_count,
-            subobjects);
-
     (void)ul_identity_ready;
     (void)ul_replacement_ready;
     (void)h3_identity_ready;
     (void)h3_replacement_ready;
-    return a1_changed || camera_blur_changed;
+    return a1_changed;
 }
 
 void on_init_pipeline(
@@ -3287,10 +2922,6 @@ void on_init_pipeline(
         device, subobject_count, subobjects, pipeline);
     g_clustered_pnts_pipeline.on_init_pipeline(
         device, subobject_count, subobjects, pipeline);
-    camera_blur_disable::on_init_pipeline(
-        subobject_count,
-        subobjects,
-        pipeline);
 
     const auto *pixel_shader =
         find_pixel_shader(
@@ -3377,8 +3008,6 @@ void on_destroy_pipeline(
         pipeline.handle);
     g_fixed_pointlight_pipeline.on_destroy_pipeline(pipeline);
     g_clustered_pnts_pipeline.on_destroy_pipeline(pipeline);
-    camera_blur_disable::on_destroy_pipeline(
-        pipeline);
     g_a1_bridge.on_destroy_pipeline(device, pipeline);
 }
 
@@ -3391,10 +3020,6 @@ void on_bind_pipeline(
         (static_cast<std::uint32_t>(stages) &
          static_cast<std::uint32_t>(
              reshade::api::pipeline_stage::pixel_shader)) != 0u;
-
-    camera_blur_disable::on_bind_pipeline(
-        stages,
-        pipeline);
 
     const auto route_mask =
         observe_integrated_draw_route_bind(
@@ -5210,11 +4835,8 @@ void on_present(
             std::memory_order_relaxed) + 1u;
     if (present == 1u ||
         (g_hot_telemetry_enabled &&
-         (present % 300u) == 0u)) {
+         (present % 300u) == 0u))
         log_state("LIVE");
-        camera_blur_disable::log_state(
-            "LIVE");
-    }
 
     if (g_effect_telemetry_enabled &&
         (present == 1u ||
@@ -5279,7 +4901,6 @@ bool AddonInit(
     g_effect_telemetry_enabled =
         runtime_effect_telemetry_requested();
     reset_effect_probe();
-    camera_blur_disable::reset();
 
     g_a1_bridge.reset();
     g_draw_transactions.reset();
@@ -5568,8 +5189,6 @@ void AddonUninit(
     unregister_events();
     log_state("PRE_UNLOAD");
     log_effect_matrix("PRE_UNLOAD");
-    camera_blur_disable::log_state(
-        "PRE_UNLOAD");
     g_upper_lower.uninstall();
 
     if (g_upper_lower.telemetry().restore_failed)
@@ -5621,7 +5240,6 @@ void AddonUninit(
     g_mr_draw_runtime.reset();
     g_draw_transactions.reset();
     g_a1_bridge.reset();
-    camera_blur_disable::reset();
     disable_integrated_islands();
 
     reshade::unregister_addon(addon_module, reshade_module);
