@@ -855,6 +855,108 @@ bool experimental_pmetal_ptde_firelink_drawparam_enabled() noexcept
     return enabled;
 }
 
+void latch_thread_id_once(
+    std::atomic<std::uint32_t> &slot) noexcept
+{
+    if (!telemetry::effect_enabled())
+        return;
+
+    std::uint32_t expected = 0u;
+    (void)slot.compare_exchange_strong(
+        expected,
+        static_cast<std::uint32_t>(
+            GetCurrentThreadId()),
+        std::memory_order_relaxed,
+        std::memory_order_relaxed);
+}
+
+void latch_bool_once(
+    std::atomic_bool &slot) noexcept
+{
+    if (!telemetry::effect_enabled() ||
+        slot.load(std::memory_order_relaxed))
+        return;
+
+    slot.store(
+        true,
+        std::memory_order_relaxed);
+}
+
+bool readable_range(
+    const void *ptr,
+    std::size_t size) noexcept
+{
+    if (ptr == nullptr)
+        return false;
+    if (size == 0u)
+        return true;
+
+    auto cursor =
+        reinterpret_cast<std::uintptr_t>(ptr);
+    const auto end = cursor + size;
+    if (end < cursor)
+        return false;
+
+    while (cursor < end) {
+        MEMORY_BASIC_INFORMATION mbi{};
+        if (VirtualQuery(
+                reinterpret_cast<const void *>(cursor),
+                &mbi,
+                sizeof(mbi)) != sizeof(mbi))
+            return false;
+
+        if (mbi.State != MEM_COMMIT ||
+            (mbi.Protect & PAGE_GUARD) != 0u)
+            return false;
+
+        const DWORD access = mbi.Protect & 0xffu;
+        const bool readable =
+            access == PAGE_READONLY ||
+            access == PAGE_READWRITE ||
+            access == PAGE_WRITECOPY ||
+            access == PAGE_EXECUTE_READ ||
+            access == PAGE_EXECUTE_READWRITE ||
+            access == PAGE_EXECUTE_WRITECOPY;
+
+        if (!readable)
+            return false;
+
+        const auto region_begin =
+            reinterpret_cast<std::uintptr_t>(
+                mbi.BaseAddress);
+        const auto region_end =
+            region_begin + mbi.RegionSize;
+
+        if (region_end <= cursor ||
+            region_end < region_begin)
+            return false;
+
+        cursor =
+            std::min(
+                region_end,
+                end);
+    }
+
+    return true;
+}
+
+template <typename T>
+bool safe_read(
+    const void *ptr,
+    T &out) noexcept
+{
+    if (!readable_range(
+            ptr,
+            sizeof(T)))
+        return false;
+
+    std::memcpy(
+        &out,
+        ptr,
+        sizeof(T));
+    return true;
+}
+
 constexpr std::uint64_t
     k_ptde_firelink_lightbank_signature =
         0xa710f288bd3aca82ULL;
@@ -1007,107 +1109,6 @@ bool read_hardcoded_ptde_firelink_pmetal_env_source(
     return true;
 }
 
-void latch_thread_id_once(
-    std::atomic<std::uint32_t> &slot) noexcept
-{
-    if (!telemetry::effect_enabled())
-        return;
-
-    std::uint32_t expected = 0u;
-    (void)slot.compare_exchange_strong(
-        expected,
-        static_cast<std::uint32_t>(
-            GetCurrentThreadId()),
-        std::memory_order_relaxed,
-        std::memory_order_relaxed);
-}
-
-void latch_bool_once(
-    std::atomic_bool &slot) noexcept
-{
-    if (!telemetry::effect_enabled() ||
-        slot.load(std::memory_order_relaxed))
-        return;
-
-    slot.store(
-        true,
-        std::memory_order_relaxed);
-}
-
-bool readable_range(
-    const void *ptr,
-    std::size_t size) noexcept
-{
-    if (ptr == nullptr)
-        return false;
-    if (size == 0u)
-        return true;
-
-    auto cursor =
-        reinterpret_cast<std::uintptr_t>(ptr);
-    const auto end = cursor + size;
-    if (end < cursor)
-        return false;
-
-    while (cursor < end) {
-        MEMORY_BASIC_INFORMATION mbi{};
-        if (VirtualQuery(
-                reinterpret_cast<const void *>(cursor),
-                &mbi,
-                sizeof(mbi)) != sizeof(mbi))
-            return false;
-
-        if (mbi.State != MEM_COMMIT ||
-            (mbi.Protect & PAGE_GUARD) != 0u)
-            return false;
-
-        const DWORD access = mbi.Protect & 0xffu;
-        const bool readable =
-            access == PAGE_READONLY ||
-            access == PAGE_READWRITE ||
-            access == PAGE_WRITECOPY ||
-            access == PAGE_EXECUTE_READ ||
-            access == PAGE_EXECUTE_READWRITE ||
-            access == PAGE_EXECUTE_WRITECOPY;
-
-        if (!readable)
-            return false;
-
-        const auto region_begin =
-            reinterpret_cast<std::uintptr_t>(
-                mbi.BaseAddress);
-        const auto region_end =
-            region_begin + mbi.RegionSize;
-
-        if (region_end <= cursor ||
-            region_end < region_begin)
-            return false;
-
-        cursor =
-            std::min(
-                region_end,
-                end);
-    }
-
-    return true;
-}
-
-template <typename T>
-bool safe_read(
-    const void *ptr,
-    T &out) noexcept
-{
-    if (!readable_range(
-            ptr,
-            sizeof(T)))
-        return false;
-
-    std::memcpy(
-        &out,
-        ptr,
-        sizeof(T));
-    return true;
-}
 
 std::size_t steady_cache_set(
     const void *ptr,
