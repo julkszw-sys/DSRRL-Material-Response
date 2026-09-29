@@ -154,25 +154,59 @@ bool temp_pair(
            rep == 0u;
 }
 
+bool cb0_index_at(
+    const std::uint32_t *words,
+    std::uint32_t at,
+    std::uint32_t end,
+    std::uint32_t index) noexcept
+{
+    if (at >= end)
+        return false;
+
+    const auto token = words[at];
+    const auto type = (token>>12u)&0xffu;
+    const auto dim = (token>>20u)&0x3u;
+    const auto rep0 = (token>>22u)&0x7u;
+    const auto rep1 = (token>>25u)&0x7u;
+    if (type != 8u ||
+        dim != 2u ||
+        rep0 != 0u ||
+        rep1 != 0u)
+        return false;
+
+    // Retail fixed-local shaders use an extended constant-buffer operand for
+    // the cb0[112+i] position/begin witness (e.g. token 0x8020803A followed
+    // by extended token 0x41). The previous raw-DWORD probe interpreted the
+    // extension token as the first register index, so every exact fixed
+    // PntSS/PntSSSS body failed its operand contract even though the semantic
+    // audit found the correct cb0 operand. Walk the operand-extension chain
+    // before reading the two immediate32 indices.
+    std::uint32_t cursor = at + 1u;
+    auto extension = token;
+    while ((extension & 0x80000000u) != 0u) {
+        if (cursor >= end)
+            return false;
+        extension = words[cursor++];
+    }
+
+    return cursor + 1u < end &&
+           words[cursor] == 0u &&
+           words[cursor + 1u] == index;
+}
+
 bool has_cb0_index(
     const std::uint32_t *words,
     const instruction_view &instruction,
     std::uint32_t index) noexcept
 {
     for (std::uint32_t w=instruction.start+1u;
-         w+2u<instruction.end;
+         w<instruction.end;
          ++w) {
-        const auto token = words[w];
-        const auto type = (token>>12u)&0xffu;
-        const auto dim = (token>>20u)&0x3u;
-        const auto rep0 = (token>>22u)&0x7u;
-        const auto rep1 = (token>>25u)&0x7u;
-        if (type == 8u &&
-            dim == 2u &&
-            rep0 == 0u &&
-            rep1 == 0u &&
-            words[w+1u] == 0u &&
-            words[w+2u] == index)
+        if (cb0_index_at(
+                words,
+                w,
+                instruction.end,
+                index))
             return true;
     }
     return false;
