@@ -43,6 +43,8 @@
 #include "dsrrl/operators/point_light/fixed_local_specular_island_plan.hpp"
 #include "dsrrl/operators/point_light/fixed_local_specular_single_materializer.hpp"
 #include "dsrrl/operators/point_light/clustered_pnts_direct_materializer.hpp"
+#include "dsrrl/operators/legacy_plan/dxbc_checksum.hpp"
+#include "dsrrl/operators/legacy_plan/sha256_bytes.hpp"
 
 #include <reshade.hpp>
 #include <d3d11.h>
@@ -866,6 +868,387 @@ const reshade::api::shader_desc *find_pixel_shader(
 
     return nullptr;
 }
+
+const reshade::api::shader_desc *find_compute_shader(
+    std::uint32_t subobject_count,
+    const reshade::api::pipeline_subobject *subobjects) noexcept
+{
+    if (subobjects == nullptr)
+        return nullptr;
+
+    for (std::uint32_t i = 0; i < subobject_count; ++i) {
+        if (subobjects[i].type !=
+                reshade::api::pipeline_subobject_type::compute_shader ||
+            subobjects[i].count != 1u ||
+            subobjects[i].data == nullptr)
+            continue;
+
+        return static_cast<const reshade::api::shader_desc *>(
+            subobjects[i].data);
+    }
+
+    return nullptr;
+}
+
+namespace motion_blur_camera_fallback_disable {
+
+namespace hashing =
+    dsrrl::operators::legacy_plan::hashing;
+namespace dxbc =
+    dsrrl::operators::legacy_plan::dxbc;
+
+// Exact vanilla DSR FRPG_Compute_MotionBlurTiles(.cpo/_CB.cpo).
+// Both binder entries are byte-identical. The shader chooses between:
+//   object velocity  = velocityBuffer.xy, when velocityBuffer.x < 1
+//   camera fallback  = currentUV - previousUV reconstructed from depth,
+//                      inverseViewClipMtx, cameraWorldPosition and
+//                      prevWorldViewClipMtx.
+// This bridge changes only the four repeated MOVC fallback operands so
+// invalid/no-object-velocity pixels resolve to a known zero component instead
+// of reconstructed camera velocity:
+//
+//   v_out = valid_object_velocity ? v_object : 0
+//
+// MotionBlurPre/Final, velocityBuffer production, depth, matrix CB ABI and
+// DSR's 60 Hz temporal state remain stock.
+constexpr std::size_t k_shader_size = 7944u;
+constexpr const char *k_input_sha256 =
+    "0792f0bd2fe5cb0dc67447cc01f268f30eeb2af9a8c723f634c76c25af39691a";
+constexpr const char *k_output_sha256 =
+    "2c22acfc55a9b641f56cf8c29a66eec1074c01cb31a71244f82d012d335f42fb";
+
+struct patch_word {
+    std::size_t offset;
+    std::uint32_t expected;
+    std::uint32_t replacement;
+};
+
+// Four camera-fallback MOVC sources, one for each velocity sample processed
+// before the tile reduction. The selected .w components are proved zero by
+// the immediately preceding block-local initialization and are not written
+// before the corresponding MOVC.
+constexpr std::array<patch_word,8> k_patch_words{{
+    {0x06F4u,0x00100046u,0x00100FF6u}, // r1.xyxx -> r0.wwww
+    {0x06F8u,0x00000001u,0x00000000u},
+    {0x0ADCu,0x00100EA6u,0x00100FF6u}, // r0.zzzw -> r2.wwww
+    {0x0AE0u,0x00000000u,0x00000002u},
+    {0x0EA0u,0x00100EA6u,0x00100FF6u}, // r0.zzzw -> r1.wwww
+    {0x0EA4u,0x00000000u,0x00000001u},
+    {0x130Cu,0x00100EA6u,0x00100FF6u}, // r0.zzzw -> r1.wwww
+    {0x1310u,0x00000000u,0x00000001u}
+}};
+
+std::mutex g_mutex;
+std::vector<std::uint8_t> g_payload;
+std::unordered_map<std::uint64_t,bool> g_pipelines;
+std::atomic<std::uint64_t> g_candidate_size{0};
+std::atomic<std::uint64_t> g_exact_identity{0};
+std::atomic<std::uint64_t> g_materialized{0};
+std::atomic<std::uint64_t> g_fail_open{0};
+std::atomic<std::uint64_t> g_init_attested{0};
+std::atomic<std::uint64_t> g_compute_binds{0};
+std::atomic_bool g_first_bind_logged{false};
+
+bool materialize(
+    const std::uint8_t *source,
+    std::size_t size,
+    std::vector<std::uint8_t> &replacement) noexcept
+{
+    replacement.clear();
+
+    if (source == nullptr ||
+        size != k_shader_size ||
+        !dxbc::checksum_container_valid(
+            source,
+            size))
+        return false;
+
+    const auto input_digest =
+        hashing::sha256(source, size);
+    if (!hashing::matches_hex(
+            input_digest,
+            k_input_sha256))
+        return false;
+
+    try {
+        replacement.assign(
+            source,
+            source + size);
+    } catch (...) {
+        replacement.clear();
+        return false;
+    }
+
+    for (const auto &site : k_patch_words) {
+        if (site.offset + sizeof(std::uint32_t) >
+                replacement.size() ||
+            dxbc::read_u32(
+                replacement.data() +
+                site.offset) != site.expected) {
+            replacement.clear();
+            return false;
+        }
+    }
+
+    for (const auto &site : k_patch_words)
+        dxbc::write_u32(
+            replacement.data() +
+            site.offset,
+            site.replacement);
+
+    if (!dxbc::fix_checksum(
+            replacement.data(),
+            replacement.size())) {
+        replacement.clear();
+        return false;
+    }
+
+    const auto output_digest =
+        hashing::sha256(
+            replacement.data(),
+            replacement.size());
+    if (!hashing::matches_hex(
+            output_digest,
+            k_output_sha256)) {
+        replacement.clear();
+        return false;
+    }
+
+    return true;
+}
+
+bool on_create_pipeline(
+    std::uint32_t subobject_count,
+    const reshade::api::pipeline_subobject *subobjects) noexcept
+{
+    auto *shader =
+        const_cast<reshade::api::shader_desc *>(
+            find_compute_shader(
+                subobject_count,
+                subobjects));
+
+    if (shader == nullptr ||
+        shader->code == nullptr ||
+        shader->code_size != k_shader_size)
+        return false;
+
+    g_candidate_size.fetch_add(
+        1u,
+        std::memory_order_relaxed);
+
+    const auto *source =
+        static_cast<const std::uint8_t *>(
+            shader->code);
+    const auto input_digest =
+        hashing::sha256(
+            source,
+            shader->code_size);
+
+    if (!hashing::matches_hex(
+            input_digest,
+            k_input_sha256))
+        return false;
+
+    g_exact_identity.fetch_add(
+        1u,
+        std::memory_order_relaxed);
+
+    try {
+        std::vector<std::uint8_t> replacement;
+        if (!materialize(
+                source,
+                shader->code_size,
+                replacement)) {
+            g_fail_open.fetch_add(
+                1u,
+                std::memory_order_relaxed);
+            return false;
+        }
+
+        std::lock_guard<std::mutex> lock(
+            g_mutex);
+
+        if (g_payload.empty()) {
+            g_payload = std::move(replacement);
+        } else if (g_payload != replacement) {
+            g_fail_open.fetch_add(
+                1u,
+                std::memory_order_relaxed);
+            return false;
+        }
+
+        shader->code =
+            g_payload.data();
+        shader->code_size =
+            g_payload.size();
+
+        g_materialized.fetch_add(
+            1u,
+            std::memory_order_relaxed);
+
+        reshade::log::message(
+            reshade::log::level::info,
+            "[DSRRL MOTION BLUR] exact MotionBlurTiles matched; "
+            "camera-reprojection fallback velocity disabled; "
+            "object velocity path preserved.");
+
+        return true;
+    } catch (...) {
+        g_fail_open.fetch_add(
+            1u,
+            std::memory_order_relaxed);
+        return false;
+    }
+}
+
+void on_init_pipeline(
+    std::uint32_t subobject_count,
+    const reshade::api::pipeline_subobject *subobjects,
+    reshade::api::pipeline pipeline) noexcept
+{
+    if (pipeline.handle == 0u)
+        return;
+
+    const auto *shader =
+        find_compute_shader(
+            subobject_count,
+            subobjects);
+    if (shader == nullptr ||
+        shader->code == nullptr ||
+        shader->code_size != k_shader_size)
+        return;
+
+    const auto digest =
+        hashing::sha256(
+            static_cast<const std::uint8_t *>(
+                shader->code),
+            shader->code_size);
+    if (!hashing::matches_hex(
+            digest,
+            k_output_sha256))
+        return;
+
+    try {
+        std::lock_guard<std::mutex> lock(
+            g_mutex);
+        const auto inserted =
+            g_pipelines.emplace(
+                pipeline.handle,
+                true).second;
+        if (inserted)
+            g_init_attested.fetch_add(
+                1u,
+                std::memory_order_relaxed);
+    } catch (...) {
+        g_fail_open.fetch_add(
+            1u,
+            std::memory_order_relaxed);
+    }
+}
+
+void on_destroy_pipeline(
+    reshade::api::pipeline pipeline) noexcept
+{
+    if (pipeline.handle == 0u)
+        return;
+
+    std::lock_guard<std::mutex> lock(
+        g_mutex);
+    g_pipelines.erase(
+        pipeline.handle);
+}
+
+void on_bind_pipeline(
+    reshade::api::pipeline_stage stages,
+    reshade::api::pipeline pipeline) noexcept
+{
+    if ((static_cast<std::uint32_t>(stages) &
+         static_cast<std::uint32_t>(
+             reshade::api::pipeline_stage::
+                compute_shader)) == 0u ||
+        pipeline.handle == 0u)
+        return;
+
+    bool target = false;
+    {
+        std::lock_guard<std::mutex> lock(
+            g_mutex);
+        target =
+            g_pipelines.find(
+                pipeline.handle) !=
+            g_pipelines.end();
+    }
+
+    if (!target)
+        return;
+
+    g_compute_binds.fetch_add(
+        1u,
+        std::memory_order_relaxed);
+
+    if (!g_first_bind_logged.exchange(
+            true,
+            std::memory_order_relaxed)) {
+        reshade::log::message(
+            reshade::log::level::info,
+            "[DSRRL MOTION BLUR] FIRST_BIND exact camera-fallback-disabled "
+            "MotionBlurTiles compute pipeline.");
+    }
+}
+
+void log_state(
+    const char *tag) noexcept
+{
+    char line[384]{};
+    std::snprintf(
+        line,
+        sizeof(line),
+        "[DSRRL MOTION BLUR] tag=%s candidate=%llu exact=%llu "
+        "materialized=%llu failopen=%llu init_ok=%llu compute_binds=%llu "
+        "pixel=UNVERIFIED",
+        tag != nullptr ? tag : "UNKNOWN",
+        static_cast<unsigned long long>(
+            g_candidate_size.load(
+                std::memory_order_relaxed)),
+        static_cast<unsigned long long>(
+            g_exact_identity.load(
+                std::memory_order_relaxed)),
+        static_cast<unsigned long long>(
+            g_materialized.load(
+                std::memory_order_relaxed)),
+        static_cast<unsigned long long>(
+            g_fail_open.load(
+                std::memory_order_relaxed)),
+        static_cast<unsigned long long>(
+            g_init_attested.load(
+                std::memory_order_relaxed)),
+        static_cast<unsigned long long>(
+            g_compute_binds.load(
+                std::memory_order_relaxed)));
+    reshade::log::message(
+        reshade::log::level::info,
+        line);
+}
+
+void reset() noexcept
+{
+    {
+        std::lock_guard<std::mutex> lock(
+            g_mutex);
+        g_pipelines.clear();
+        g_payload.clear();
+    }
+
+    g_candidate_size.store(0);
+    g_exact_identity.store(0);
+    g_materialized.store(0);
+    g_fail_open.store(0);
+    g_init_attested.store(0);
+    g_compute_binds.store(0);
+    g_first_bind_logged.store(false);
+}
+
+} // namespace motion_blur_camera_fallback_disable
 
 const char *pointlight_decision_reason_name(
     dsrrl::operators::material_response::decision_reason reason) noexcept
@@ -2902,11 +3285,17 @@ bool on_create_pipeline(
         }
     }
 
+    const bool motion_blur_changed =
+        motion_blur_camera_fallback_disable::
+            on_create_pipeline(
+                subobject_count,
+                subobjects);
+
     (void)ul_identity_ready;
     (void)ul_replacement_ready;
     (void)h3_identity_ready;
     (void)h3_replacement_ready;
-    return a1_changed;
+    return a1_changed || motion_blur_changed;
 }
 
 void on_init_pipeline(
@@ -2922,6 +3311,11 @@ void on_init_pipeline(
         device, subobject_count, subobjects, pipeline);
     g_clustered_pnts_pipeline.on_init_pipeline(
         device, subobject_count, subobjects, pipeline);
+    motion_blur_camera_fallback_disable::
+        on_init_pipeline(
+            subobject_count,
+            subobjects,
+            pipeline);
 
     const auto *pixel_shader =
         find_pixel_shader(
@@ -3008,6 +3402,9 @@ void on_destroy_pipeline(
         pipeline.handle);
     g_fixed_pointlight_pipeline.on_destroy_pipeline(pipeline);
     g_clustered_pnts_pipeline.on_destroy_pipeline(pipeline);
+    motion_blur_camera_fallback_disable::
+        on_destroy_pipeline(
+            pipeline);
     g_a1_bridge.on_destroy_pipeline(device, pipeline);
 }
 
@@ -3020,6 +3417,11 @@ void on_bind_pipeline(
         (static_cast<std::uint32_t>(stages) &
          static_cast<std::uint32_t>(
              reshade::api::pipeline_stage::pixel_shader)) != 0u;
+
+    motion_blur_camera_fallback_disable::
+        on_bind_pipeline(
+            stages,
+            pipeline);
 
     const auto route_mask =
         observe_integrated_draw_route_bind(
@@ -4835,8 +5237,11 @@ void on_present(
             std::memory_order_relaxed) + 1u;
     if (present == 1u ||
         (g_hot_telemetry_enabled &&
-         (present % 300u) == 0u))
+         (present % 300u) == 0u)) {
         log_state("LIVE");
+        motion_blur_camera_fallback_disable::
+            log_state("LIVE");
+    }
 
     if (g_effect_telemetry_enabled &&
         (present == 1u ||
@@ -4901,6 +5306,8 @@ bool AddonInit(
     g_effect_telemetry_enabled =
         runtime_effect_telemetry_requested();
     reset_effect_probe();
+    motion_blur_camera_fallback_disable::
+        reset();
 
     g_a1_bridge.reset();
     g_draw_transactions.reset();
@@ -5189,6 +5596,8 @@ void AddonUninit(
     unregister_events();
     log_state("PRE_UNLOAD");
     log_effect_matrix("PRE_UNLOAD");
+    motion_blur_camera_fallback_disable::
+        log_state("PRE_UNLOAD");
     g_upper_lower.uninstall();
 
     if (g_upper_lower.telemetry().restore_failed)
@@ -5240,6 +5649,8 @@ void AddonUninit(
     g_mr_draw_runtime.reset();
     g_draw_transactions.reset();
     g_a1_bridge.reset();
+    motion_blur_camera_fallback_disable::
+        reset();
     disable_integrated_islands();
 
     reshade::unregister_addon(addon_module, reshade_module);
