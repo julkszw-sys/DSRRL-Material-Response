@@ -923,6 +923,13 @@ namespace velocity_authority =
     dsrrl::operators::postprocess::
         motion_blur_velocity_authority;
 
+// Shared velocity writers are consumed by temporal systems outside MotionBlur.
+// User runtime on a2391b9f reported TXAA corruption while the camera-neutral
+// VPO replacement was active. Until an exact MotionBlur-only semantic cut is
+// proven, preserve stock DSR velocity production and keep only the
+// MotionBlurTiles consumer-local fallback patch active.
+constexpr bool k_velocity_writer_patch_enabled = false;
+
 // Exact vanilla DSR FRPG_Compute_MotionBlurTiles(.cpo/_CB.cpo).
 // Both binder entries are byte-identical. The shader chooses between:
 //   object velocity  = velocityBuffer.xy, when velocityBuffer.x < 1
@@ -1639,6 +1646,7 @@ bool on_create_pipeline(
             subobject_count,
             subobjects);
     const bool velocity_changed =
+        k_velocity_writer_patch_enabled &&
         on_create_velocity_pipeline(
             subobject_count,
             subobjects);
@@ -1701,6 +1709,9 @@ void on_init_pipeline(
         subobject_count,
         subobjects,
         pipeline);
+
+    if (!k_velocity_writer_patch_enabled)
+        return;
 
     const auto *vertex_shader =
         find_vertex_shader(
@@ -1778,7 +1789,8 @@ void on_bind_pipeline(
                 g_pipelines.find(
                     pipeline.handle) !=
                 g_pipelines.end();
-        if (vertex_bound)
+        if (k_velocity_writer_patch_enabled &&
+            vertex_bound)
             velocity_target =
                 g_velocity_pipelines.find(
                     pipeline.handle) !=
@@ -1828,7 +1840,7 @@ void log_state(
         "tiles_failopen=%llu tiles_init=%llu compute_binds=%llu "
         "velocity_candidate=%llu velocity_exact=%llu velocity_materialized=%llu "
         "velocity_failopen=%llu velocity_init=%llu velocity_binds=%llu "
-        "pixel=UNVERIFIED",
+        "velocity_writer=%s pixel=UNVERIFIED",
         tag != nullptr ? tag : "UNKNOWN",
         static_cast<unsigned long long>(
             g_candidate_size.load(
@@ -1865,7 +1877,10 @@ void log_state(
                 std::memory_order_relaxed)),
         static_cast<unsigned long long>(
             g_velocity_binds.load(
-                std::memory_order_relaxed)));
+                std::memory_order_relaxed)),
+        k_velocity_writer_patch_enabled
+            ? "PATCHED"
+            : "STOCK_TAA_GUARD");
     reshade::log::message(
         reshade::log::level::info,
         line);
