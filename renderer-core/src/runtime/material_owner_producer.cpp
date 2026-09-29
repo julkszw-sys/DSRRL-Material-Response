@@ -2,6 +2,7 @@
 #include "dsrrl/operators/material_response/generated_dsr_flver_owner_tuples_v1.hpp"
 #include "dsrrl/operators/material_response/generated_dsr_mtd_identity_v1.hpp"
 #include "dsrrl/operators/material_response/generated_dsr_mtd_identity_supplement_v1.hpp"
+#include "dsrrl/operators/material_response/generated_pointlight_material_authority_v1.hpp"
 #include "dsrrl/operators/material_response/generated_routes_v1.hpp"
 #include "dsrrl/operators/material_response/generated_exact_binding_mr_v1.hpp"
 #include "dsrrl/operators/material_response/mtd_semantic_census.hpp"
@@ -132,8 +133,11 @@ bool enrich_exact_owner_mtd_identity(
     // name->raw-MTD registry and carries the certified raw SHA for these
     // eight semantic names. Prefer it explicitly: the generic registry is
     // source-incomplete and currently contains a stale P_Leather[DSB] digest.
-    // Outside this exact extension, retain the generic/supplement fail-open
-    // policy used by the rest of the owner producer.
+    // Outside the exact MR extension, retain the generic/supplement
+    // authorities first. PointLight then gets one additional narrow fallback:
+    // the exact-SPX, unambiguous semantic/raw-MTD corpus. This publishes only
+    // owner identity; it does not grant generic MR or texture-replacement
+    // authority to non-equipment draws.
     const auto *exact_extension =
         find_exact_binding_extension(
             semantic_hash);
@@ -142,7 +146,10 @@ bool enrich_exact_owner_mtd_identity(
             exact_extension->raw_mtd_sha256;
     } else if (
         !mr::generated::dsr_mtd_identity_resolve(semantic_hash, raw_mtd_sha) &&
-        !mr::generated::dsr_mtd_identity_supplement_resolve(semantic_hash, raw_mtd_sha)) {
+        !mr::generated::dsr_mtd_identity_supplement_resolve(semantic_hash, raw_mtd_sha) &&
+        !mr::generated::resolve_pointlight_material_raw_mtd_v1(
+            semantic_hash,
+            raw_mtd_sha)) {
         cached = {
             observation.flver_sha256,
             observation.material_slot,

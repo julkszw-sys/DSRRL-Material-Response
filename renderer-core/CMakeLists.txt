@@ -95,6 +95,36 @@ add_custom_command(
 add_custom_target(dsrrl_mr_diffuse_v1_header
     DEPENDS "${DSRRL_MR_DIFFUSE_V1_HEADER}")
 
+set(DSRRL_POINTLIGHT_MATERIAL_AUTHORITY_SOURCE
+    "${CMAKE_CURRENT_SOURCE_DIR}/data/provenance/pointlight_material_authority_v1.json")
+set(DSRRL_POINTLIGHT_MATERIAL_AUTHORITY_HEADER
+    "${DSRRL_GENERATED_DIR}/dsrrl/operators/material_response/generated_pointlight_material_authority_v1.hpp")
+add_custom_command(
+    OUTPUT "${DSRRL_POINTLIGHT_MATERIAL_AUTHORITY_HEADER}"
+    COMMAND "${Python3_EXECUTABLE}"
+            "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_pointlight_material_authority_v1.py"
+            --input "${DSRRL_POINTLIGHT_MATERIAL_AUTHORITY_SOURCE}"
+            --output "${DSRRL_POINTLIGHT_MATERIAL_AUTHORITY_HEADER}"
+    DEPENDS
+        "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_pointlight_material_authority_v1.py"
+        "${DSRRL_POINTLIGHT_MATERIAL_AUTHORITY_SOURCE}"
+    VERBATIM
+)
+add_custom_target(dsrrl_pointlight_material_authority_header
+    DEPENDS "${DSRRL_POINTLIGHT_MATERIAL_AUTHORITY_HEADER}")
+
+add_custom_target(dsrrl_pointlight_material_authority_audit
+    COMMAND "${Python3_EXECUTABLE}"
+            "${CMAKE_CURRENT_SOURCE_DIR}/tools/audit_pointlight_material_authority_v1.py"
+            --router "${CMAKE_CURRENT_SOURCE_DIR}/data/census/ptde_mtd_envspec_router_v1.json"
+            --authority "${DSRRL_POINTLIGHT_MATERIAL_AUTHORITY_SOURCE}"
+    DEPENDS
+        "${CMAKE_CURRENT_SOURCE_DIR}/tools/audit_pointlight_material_authority_v1.py"
+        "${CMAKE_CURRENT_SOURCE_DIR}/data/census/ptde_mtd_envspec_router_v1.json"
+        "${DSRRL_POINTLIGHT_MATERIAL_AUTHORITY_SOURCE}"
+    VERBATIM
+)
+
 set(DSRRL_LOCAL_SPECULAR_RECEIVER_HEADER
     "${DSRRL_GENERATED_DIR}/dsrrl/operators/point_light/generated_local_specular_receivers_v1.hpp")
 add_custom_command(
@@ -199,6 +229,7 @@ add_library(dsrrl_renderer_core STATIC
     "${DSRRL_MTD_IDENTITY_SUPPLEMENT_HEADER}"
     "${DSRRL_MR_EXACT_BINDING_HEADER}"
     "${DSRRL_MR_DIFFUSE_V1_HEADER}"
+    "${DSRRL_POINTLIGHT_MATERIAL_AUTHORITY_HEADER}"
     "${DSRRL_LOCAL_SPECULAR_RECEIVER_HEADER}"
     "${DSRRL_FIXED_LOCAL_SPECULAR_PTDE_REFERENCE_HEADER}"
     "${DSRRL_CLUSTERED_PNTS_DIRECT_HEADER}"
@@ -232,6 +263,8 @@ add_dependencies(
     dsrrl_dsr_mtd_identity_supplement_header
     dsrrl_mr_exact_binding_header
     dsrrl_mr_diffuse_v1_header
+    dsrrl_pointlight_material_authority_header
+    dsrrl_pointlight_material_authority_audit
     dsrrl_local_specular_receiver_header
     dsrrl_fixed_local_specular_ptde_reference_header
     dsrrl_clustered_pnts_direct_header)
@@ -306,6 +339,15 @@ add_executable(dsrrl_renderer_clustered_sidecar_tests
     tests/clustered_sidecar_tests.cpp)
 target_link_libraries(dsrrl_renderer_clustered_sidecar_tests PRIVATE dsrrl_renderer_core)
 target_compile_features(dsrrl_renderer_clustered_sidecar_tests PRIVATE cxx_std_17)
+
+add_executable(dsrrl_renderer_pointlight_material_authority_tests
+    tests/pointlight_material_authority_tests.cpp)
+target_link_libraries(dsrrl_renderer_pointlight_material_authority_tests PRIVATE dsrrl_renderer_core)
+target_compile_features(dsrrl_renderer_pointlight_material_authority_tests PRIVATE cxx_std_17)
+add_dependencies(
+    dsrrl_renderer_pointlight_material_authority_tests
+    dsrrl_dsr_flver_owner_tuple_header
+    dsrrl_pointlight_material_authority_header)
 
 add_executable(dsrrl_renderer_clustered_pnts_materializer_tests
     tests/clustered_pnts_direct_materializer_tests.cpp)
@@ -416,6 +458,7 @@ if(MSVC)
     target_compile_options(dsrrl_renderer_future_runtime_tests PRIVATE /W4 /WX)
     target_compile_options(dsrrl_renderer_faceeye_pointlight_tests PRIVATE /W4 /WX)
     target_compile_options(dsrrl_renderer_clustered_sidecar_tests PRIVATE /W4 /WX)
+    target_compile_options(dsrrl_renderer_pointlight_material_authority_tests PRIVATE /W4 /WX)
     target_compile_options(dsrrl_renderer_clustered_pnts_materializer_tests PRIVATE /W4 /WX)
     target_compile_options(dsrrl_renderer_clustered_pnts_draw_adapter_tests PRIVATE /W4 /WX)
     target_compile_options(dsrrl_renderer_local_specular_receiver_tests PRIVATE /W4 /WX)
@@ -446,6 +489,7 @@ else()
     target_compile_options(dsrrl_renderer_future_runtime_tests PRIVATE -Wall -Wextra -Wpedantic -Werror)
     target_compile_options(dsrrl_renderer_faceeye_pointlight_tests PRIVATE -Wall -Wextra -Wpedantic -Werror)
     target_compile_options(dsrrl_renderer_clustered_sidecar_tests PRIVATE -Wall -Wextra -Wpedantic -Werror)
+    target_compile_options(dsrrl_renderer_pointlight_material_authority_tests PRIVATE -Wall -Wextra -Wpedantic -Werror)
     target_compile_options(dsrrl_renderer_clustered_pnts_materializer_tests PRIVATE -Wall -Wextra -Wpedantic -Werror)
     target_compile_options(dsrrl_renderer_clustered_pnts_draw_adapter_tests PRIVATE -Wall -Wextra -Wpedantic -Werror)
     target_compile_options(dsrrl_renderer_local_specular_receiver_tests PRIVATE -Wall -Wextra -Wpedantic -Werror)
@@ -539,3 +583,6 @@ add_test(
             --donors "${CMAKE_CURRENT_SOURCE_DIR}/data/provenance/ptde_material_donor_registry.hpp"
             --generated "${CMAKE_CURRENT_SOURCE_DIR}/include/dsrrl/operators/material_response/generated_material_constants_v1.hpp"
 )
+
+add_test(NAME renderer_pointlight_material_authority
+    COMMAND dsrrl_renderer_pointlight_material_authority_tests)

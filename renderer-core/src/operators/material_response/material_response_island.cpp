@@ -3,6 +3,7 @@
 #include "dsrrl/operators/material_response/generated_envspec_router_v1.hpp"
 #include "dsrrl/operators/material_response/generated_routes_v1.hpp"
 #include "dsrrl/operators/material_response/generated_exact_binding_mr_v1.hpp"
+#include "dsrrl/operators/material_response/generated_pointlight_material_authority_v1.hpp"
 #include "dsrrl/operators/material_response/mtd_semantic_census.hpp"
 #include "dsrrl/operators/legacy_plan/sha256_bytes.hpp"
 
@@ -264,6 +265,30 @@ bool exact_runtime_material_response_identity(
     }
 
     return extension_match != nullptr;
+}
+
+bool exact_runtime_pointlight_material_identity(
+    const material_identity &identity) noexcept
+{
+    if (!identity.valid ||
+        !identity.actual_material_exact ||
+        identity.semantic_name_hash == 0u)
+        return false;
+
+    const auto *record =
+        generated::find_pointlight_material_authority_v1(
+            identity.semantic_name_hash);
+    if (record == nullptr ||
+        record->raw_mtd_sha256 !=
+            identity.raw_mtd_sha256)
+        return false;
+
+    const std::uint32_t expected_route =
+        0xA0000000u |
+        (record->router_index &
+         0x0000ffffu);
+    return identity.route_index ==
+        expected_route;
 }
 
 bool exact_runtime_pmetal_material_identity(
@@ -677,13 +702,23 @@ material_response_island::evaluate_direct_pointlight_material(
     if (!material.valid)
         return {false, decision_reason::material_required, 0u};
 
-    if (!material.owner_tuple_exact ||
-        !material.material_slot_valid ||
-        material.semantic_name_hash == 0u ||
-        !generated::dsr_flver_owner_tuple_authenticated(
+    const bool flver_owner_authenticated =
+        material.owner_tuple_exact &&
+        material.material_slot_valid &&
+        material.semantic_name_hash != 0u &&
+        generated::dsr_flver_owner_tuple_authenticated(
             material.flver_sha256,
             material.material_slot,
-            material.semantic_name_hash))
+            material.semantic_name_hash);
+
+    const bool runtime_material_authenticated =
+        exact_runtime_material_response_identity(
+            material) ||
+        exact_runtime_pointlight_material_identity(
+            material);
+
+    if (!flver_owner_authenticated &&
+        !runtime_material_authenticated)
         return {
             false,
             decision_reason::owner_tuple_not_authenticated,
@@ -701,12 +736,95 @@ material_response_island::evaluate_direct_pointlight_material(
     if (!profile.has_value()) {
         const auto nospc =
             resolve_direct_nospc_authority(material);
-        if (!nospc.has_value())
+        if (!nospc.has_value()) {
+            const auto *pointlight_authority =
+                generated::find_pointlight_material_authority_v1(
+                    material.semantic_name_hash);
+
+            if (pointlight_authority == nullptr ||
+                material.raw_mtd_sha256 !=
+                    pointlight_authority->raw_mtd_sha256)
+                return {
+                    false,
+                    decision_reason::unknown_material,
+                    0u
+                };
+
+            if (pointlight_authority->spc !=
+                    require_legacy_specular)
+                return {
+                    false,
+                    decision_reason::no_certified_operator,
+                    0u
+                };
+
+            // Current b12 local-specular ABI carries scalar c101. The
+            // authority corpus exposes 12 authored RGB-c101 Spc rows; keep
+            // those fail-open rather than collapse a PTDE vector to scalar.
+            if (require_legacy_specular &&
+                !pointlight_authority->c101_scalar)
+                return {
+                    false,
+                    decision_reason::no_certified_operator,
+                    0u
+                };
+
+            std::array<float, 3> c100{};
+            for (std::size_t i = 0u;
+                 i < c100.size();
+                 ++i)
+                c100[i] =
+                    f32_from_bits(
+                        pointlight_authority->
+                            c100_bits[i]);
+
+            const float c101 =
+                require_legacy_specular
+                    ? f32_from_bits(
+                        pointlight_authority->
+                            c101_bits[0])
+                    : 0.0f;
+            const float c102 =
+                require_legacy_specular
+                    ? f32_from_bits(
+                        pointlight_authority->
+                            c102_bits)
+                    : 0.0f;
+
+            if (require_legacy_specular &&
+                (!(c101 >= 0.0f) ||
+                 !(c102 > 0.0f)))
+                return {
+                    false,
+                    decision_reason::no_certified_operator,
+                    0u
+                };
+
+            const std::uint32_t route_tag =
+                0xA0000000u |
+                (pointlight_authority->
+                     router_index & 0x0000ffffu);
+
             return {
-                false,
-                decision_reason::unknown_material,
-                0u
+                true,
+                decision_reason::active,
+                0u,
+                route_tag,
+                diffuse_material_domain_linear |
+                    (require_legacy_specular
+                         ? specular_factor_c101
+                         : response_none),
+                c101,
+                0u,
+                7u,
+                require_legacy_specular
+                    ? ptde_envspec_presence::present
+                    : ptde_envspec_presence::absent,
+                c100,
+                c102,
+                require_legacy_specular
             };
+        }
 
         if (require_legacy_specular)
             return {

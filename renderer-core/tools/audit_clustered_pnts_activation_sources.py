@@ -74,6 +74,8 @@ def main():
     materializer_h=(root/"include/dsrrl/operators/point_light/clustered_pnts_direct_materializer.hpp").read_text(encoding="utf-8")
     flver_cpp=(root/"src/runtime/flver_engine_hooks.cpp").read_text(encoding="utf-8")
     integrated=(root/"integrated/integrated_addon.cpp").read_text(encoding="utf-8")
+    resources_cpp=(root/"src/runtime/material_resource_draw_runtime.cpp").read_text(encoding="utf-8")
+    resources_h=(root/"include/dsrrl/runtime/material_resource_draw_runtime.hpp").read_text(encoding="utf-8")
     mr_cpp=(root/"src/operators/material_response/material_response_island.cpp").read_text(encoding="utf-8")
     owner_cpp=(root/"src/runtime/material_owner_producer.cpp").read_text(encoding="utf-8")
     policy=(root/"include/dsrrl/core/draw_transaction_policy.hpp").read_text(encoding="utf-8")
@@ -193,10 +195,36 @@ def main():
     require(integrated,"direct_pointlight_requires_specular","receiver-derived specular requirement")
     require(integrated,"[DSRRL POINTLIGHT GATE]","one-shot direct PointLight rejection trace")
     require(integrated,"clustered_metadata_unbound","pipeline-route versus bound-metadata rejection trace")
-    resources_gate=integrated.find("const bool resources_ready =")
+    carrier_gate=integrated.find("const bool material_carrier_ready =")
     prepare_call=integrated.find("g_clustered_pnts.prepare_sidecar(")
-    if resources_gate<0 or prepare_call<0 or not resources_gate<prepare_call:
-        fail("clustered heavy source selection is not downstream of the material-resource gate")
+    if carrier_gate<0 or prepare_call<0 or not carrier_gate<prepare_call:
+        fail("clustered heavy source selection is not downstream of the PointLight material-carrier gate")
+
+    require(resources_h,"pointlight_surface_carrier","PointLight surface-carrier ABI")
+    require(resources_h,"pointlight_stock_spec_alias","PointLight stock-spec alias ABI")
+    require(resources_cpp,"PointLight is a lighting operator.","operator/resource isolation")
+    require(resources_cpp,"prepared.pointlight_surface_carrier = true;","PointLight carrier readiness")
+    require(resources_cpp,"prepared.pointlight_stock_spec_alias = true;","Spc stock-spec carrier readiness")
+    require(integrated,"prepared.resources.pointlight_surface_carrier","integrated PointLight carrier gate")
+    require(integrated,"prepared.resources.pointlight_stock_spec_alias","integrated Spc alias gate")
+    require(integrated,"10u,\n                        prepared.resources.pointlight_spec_a","stock t1 -> private t10 alias")
+    require(integrated,"16u,\n                            prepared.resources.pointlight_spec_b","stock t4 -> private t16 alias")
+
+    clustered_prepare_start=resources_cpp.find("prepare_clustered_pointlight_material_requests(")
+    clustered_prepare_end=resources_cpp.find("prepare_subsurface_body_requests(",clustered_prepare_start)
+    if clustered_prepare_start<0 or clustered_prepare_end<0:
+        fail("clustered PointLight material-carrier function is missing")
+    clustered_prepare=resources_cpp[clustered_prepare_start:clustered_prepare_end]
+    for forbidden in [
+        "prepare_fixed_pointlight_material_requests(",
+        "spec_equipment_name_hash_allowed_v12",
+        "normal_diffuse_pair_allowed_v12",
+        "lookup_many(",
+        "asset_class::diffuse",
+        "asset_class::normal",
+    ]:
+        if forbidden in clustered_prepare:
+            fail(f"clustered PointLight still depends on equipment sidecar routing: {forbidden}")
 
     if "clustered.additional_owners =\n                point | mr | local_if_spc;" in integrated:
         fail("clustered request duplicates primary in additional_owners")
@@ -253,7 +281,8 @@ def main():
     print("  producer=builder-input-snapshot>same-thread-material-join>authorized-draw-first4+raw-source")
     print("  carrier=b12[3].x+t18+t19 material_max=uint32 min_after_first4")
     print("  material=25 exact HOMOLOGOUS_NOSPC pairs; identity=certified supplement; c100=bit-exact router authority")
-    print("  chain=candidate>receiver>material>resources>selector>sources>sidecar>shader>draw-mutation>restore")
+    print("  chain=candidate>receiver>material>pointlight-carrier>selector>sources>sidecar>shader>draw-mutation>restore")
+    print("  material_carrier=NoSpc host t0/t2; Spc stock t1/t4 aliases -> private t10/t16; PTDE equipment sidecars are not activation prerequisites")
     print("  shader_owners=dynamic PointLight/MR/local-spec + exact static diffuse-domain/attenuation/SAT (+NoSpc EnvSpec-delete)")
     print("  cb_resources=dynamic owners only; static create-time owners remain shader-only")
     print("  draw=adapter-valid ownership + exact pipeline route + shared transaction")

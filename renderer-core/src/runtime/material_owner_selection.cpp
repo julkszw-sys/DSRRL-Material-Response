@@ -103,6 +103,13 @@ bool material_owner_selection_publish(
         operators::material_response::
             exact_runtime_material_response_identity(
                 identity);
+    const bool exact_runtime_pointlight =
+        operators::material_response::
+            exact_runtime_pointlight_material_identity(
+                identity);
+    const bool exact_runtime_authority =
+        exact_runtime_material ||
+        exact_runtime_pointlight;
 
     const bool flver_shape_valid =
         identity.valid &&
@@ -110,7 +117,7 @@ bool material_owner_selection_publish(
         identity.material_slot_valid &&
         identity.semantic_name_hash != 0u;
 
-    if (!exact_runtime_material &&
+    if (!exact_runtime_authority &&
         !flver_shape_valid) {
         telemetry::hot_count(g_fail_open);
         g_current.reset();
@@ -119,7 +126,7 @@ bool material_owner_selection_publish(
 
     telemetry::hot_count(g_owner_enriched);
 
-    if (!exact_runtime_material &&
+    if (!exact_runtime_authority &&
         !owner_tuple_authenticated_cached(
             identity)) {
         telemetry::hot_count(g_fail_open);
@@ -127,7 +134,7 @@ bool material_owner_selection_publish(
         return false;
     }
 
-    if (exact_runtime_material)
+    if (exact_runtime_authority)
         telemetry::hot_count(
             g_actual_material_authenticated);
     else

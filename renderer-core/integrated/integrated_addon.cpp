@@ -3554,7 +3554,11 @@ bool prepare_island_batch(
         clustered_query.ownership.exact =
             material.owner_tuple_exact;
 
-        const bool resources_ready =
+        // Clustered PointLight has its own material carrier. NoSpc consumes
+        // the host t0/t2 surface directly; Spc aliases stock t1/t4 into the
+        // direct island's private t10/t16. PTDE equipment texture sidecars are
+        // independently authorized and are not an activation prerequisite.
+        const bool material_carrier_ready =
             context != nullptr &&
             direct_material_ready &&
             g_material_resources.
@@ -3565,17 +3569,14 @@ bool prepare_island_batch(
                     prepared.clustered_shader.spc,
                     prepared.clustered_shader.blended_material,
                     prepared.resources) &&
-            prepared.resources.diffuse &&
-            prepared.resources.normal &&
-            (!prepared.clustered_shader.spc ||
-             prepared.resources.spec_rgb);
+            prepared.resources.pointlight_surface_carrier;
 
-        if (resources_ready) {
+        if (material_carrier_ready) {
             hot_count(g_clustered_draw_resources_ready);
         } else {
             log_pointlight_prep_once(
                 1u << 0,
-                "clustered_resources_not_ready",
+                "clustered_material_carrier_not_ready",
                 prepared.clustered_shader.spc,
                 prepared.clustered_shader.blended_material,
                 direct_material_ready,
@@ -3584,13 +3585,13 @@ bool prepare_island_batch(
         }
 
         const bool sidecar_ready =
-            resources_ready &&
+            material_carrier_ready &&
             g_clustered_pnts.prepare_sidecar(
                 context,
                 decision,
                 prepared.clustered_carrier);
 
-        if (resources_ready && !sidecar_ready) {
+        if (material_carrier_ready && !sidecar_ready) {
             log_pointlight_prep_once(
                 1u << 1,
                 "clustered_sidecar_not_ready",
@@ -3692,6 +3693,37 @@ bool prepare_island_batch(
                 prepared.clustered_carrier.t19
             };
             clustered.srv_count = 2u;
+
+            if (prepared.clustered_shader.spc) {
+                if (!prepared.resources.pointlight_stock_spec_alias ||
+                    prepared.resources.pointlight_spec_a == nullptr ||
+                    (prepared.clustered_shader.blended_material &&
+                     prepared.resources.pointlight_spec_b == nullptr)) {
+                    g_material_resources.release_prepared_draw(
+                        prepared.resources);
+                    g_clustered_pnts.release_prepared_draw(
+                        prepared.clustered_carrier);
+                    g_clustered_pnts_pipeline.release_prepared_shader(
+                        prepared.clustered_shader);
+                    prepared.batch = {};
+                    hot_count(g_clustered_draw_fail_open);
+                    return false;
+                }
+
+                clustered.srvs[
+                    clustered.srv_count++] = {
+                        10u,
+                        prepared.resources.pointlight_spec_a
+                    };
+
+                if (prepared.clustered_shader.blended_material) {
+                    clustered.srvs[
+                        clustered.srv_count++] = {
+                            16u,
+                            prepared.resources.pointlight_spec_b
+                        };
+                }
+            }
 
             if (dsrrl::runtime::append_island_draw_request(
                     prepared.batch,

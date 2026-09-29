@@ -740,9 +740,10 @@ bool clustered_pnts_draw_runtime::prepare_sidecar(
         g_draw_selection.input;
 
     // The integrated caller reaches prepare_sidecar only after exact receiver,
-    // direct material authority and material-resource gates. Heavy PTDE
-    // membership/source work is therefore paid only by a draw that can
-    // actually activate the PointLight island.
+    // direct material authority and the PointLight-local surface-carrier gate.
+    // PTDE equipment texture sidecars are intentionally not a prerequisite.
+    // Heavy membership/source work is paid only by a draw that can actually
+    // activate the PointLight island.
     std::array<std::uint32_t,4> selected_ids{};
     std::array<void *,4> nodes{};
     std::uint8_t selected_count = 0u;

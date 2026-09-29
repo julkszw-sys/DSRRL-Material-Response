@@ -370,16 +370,22 @@ int main()
     const auto runtime_direct_pointlight =
         seeded.evaluate_direct_pointlight_material(
             runtime_pmetal);
-    CHECK(!runtime_direct_pointlight.active);
+    CHECK(runtime_direct_pointlight.active);
     CHECK(runtime_direct_pointlight.reason==
-          decision_reason::owner_tuple_not_authenticated);
+          decision_reason::active);
+    CHECK(runtime_direct_pointlight.route_index==345u);
+    CHECK(runtime_direct_pointlight.ptde_specular_power_verified);
+    CHECK(runtime_direct_pointlight.ptde_specular_power==8.5f);
 
     const auto runtime_cmetal_direct =
         seeded.evaluate_direct_pointlight_material(
             runtime_cmetal);
-    CHECK(!runtime_cmetal_direct.active);
+    CHECK(runtime_cmetal_direct.active);
     CHECK(runtime_cmetal_direct.reason==
-          decision_reason::owner_tuple_not_authenticated);
+          decision_reason::active);
+    CHECK(runtime_cmetal_direct.route_index==229u);
+    CHECK(runtime_cmetal_direct.ptde_specular_power_verified);
+    CHECK(runtime_cmetal_direct.ptde_specular_power==8.5f);
 
     const auto direct_pointlight =
         seeded.evaluate_direct_pointlight_material(
