@@ -4788,24 +4788,34 @@ void observe_equipment_specrgb_carrier(
     static std::atomic_bool ready_logged{false};
     static std::atomic_bool miss_logged{false};
 
-    const bool ready =
+    const auto probe =
         g_material_resources.
-            exact_specular_companion_ready(
+            probe_exact_specular_companion(
                 context);
+    const bool ready =
+        probe.ready();
 
     if (ready) {
         if (!ready_logged.exchange(
                 true,
                 std::memory_order_relaxed)) {
-            char line[320]{};
+            char line[512]{};
             std::snprintf(
                 line,
                 sizeof(line),
-                "[DSRRL SPECRGB CARRIER] stage=equipment_companion_ready slot=%u route=%u",
+                "[DSRRL SPECRGB CARRIER] stage=equipment_companion_ready owner=%016llx slot=%u route=%u stock=%u snapshot=%u hash=%016llx allowed=%u companion=%u",
+                static_cast<unsigned long long>(
+                    material.flver_identity_hash),
                 static_cast<unsigned>(
                     material.material_slot),
                 static_cast<unsigned>(
-                    decision.route_index));
+                    decision.route_index),
+                probe.stock_bound ? 1u : 0u,
+                probe.snapshot_resolved ? 1u : 0u,
+                static_cast<unsigned long long>(
+                    probe.logical_hash),
+                probe.logical_hash_allowed ? 1u : 0u,
+                probe.companion_ready ? 1u : 0u);
             reshade::log::message(
                 reshade::log::level::info,
                 line);
@@ -4813,15 +4823,24 @@ void observe_equipment_specrgb_carrier(
     } else if (!miss_logged.exchange(
                    true,
                    std::memory_order_relaxed)) {
-        char line[320]{};
+        char line[512]{};
         std::snprintf(
             line,
             sizeof(line),
-            "[DSRRL SPECRGB CARRIER] stage=equipment_companion_not_ready slot=%u route=%u",
+            "[DSRRL SPECRGB CARRIER] stage=equipment_companion_not_ready owner=%016llx slot=%u route=%u stock=%u snapshot=%u hash=%016llx allowed=%u companion=%u quarantine=%u",
+            static_cast<unsigned long long>(
+                material.flver_identity_hash),
             static_cast<unsigned>(
                 material.material_slot),
             static_cast<unsigned>(
-                decision.route_index));
+                decision.route_index),
+            probe.stock_bound ? 1u : 0u,
+            probe.snapshot_resolved ? 1u : 0u,
+            static_cast<unsigned long long>(
+                probe.logical_hash),
+            probe.logical_hash_allowed ? 1u : 0u,
+            probe.companion_ready ? 1u : 0u,
+            probe.quarantined ? 1u : 0u);
         reshade::log::message(
             reshade::log::level::info,
             line);
