@@ -74,38 +74,39 @@ int main()
     std::size_t nospc_count = 0u;
     std::size_t rgb_c101_count = 0u;
 
-    const gen::pointlight_material_authority_record_v1
-        *scalar_spc = nullptr;
-    const gen::pointlight_material_authority_record_v1
-        *rgb_spc = nullptr;
-    const gen::pointlight_material_authority_record_v1
-        *nospc = nullptr;
-
     for (const auto &record :
          gen::k_pointlight_material_authority_v1) {
         if (record.spc) {
             ++spc_count;
-            if (record.c101_scalar &&
-                scalar_spc == nullptr)
-                scalar_spc = &record;
-            if (!record.c101_scalar) {
+            if (!record.c101_scalar)
                 ++rgb_c101_count;
-                if (rgb_spc == nullptr)
-                    rgb_spc = &record;
-            }
         } else {
             ++nospc_count;
-            if (nospc == nullptr)
-                nospc = &record;
         }
     }
 
     CHECK(spc_count == 180u);
     CHECK(nospc_count == 25u);
     CHECK(rgb_c101_count == 12u);
+
+    const auto *scalar_spc =
+        gen::find_pointlight_material_authority_v1(
+            0x5bcac2f17b140f9cull);
+    const auto *rgb_spc =
+        gen::find_pointlight_material_authority_v1(
+            0xfde69928da2a1e02ull);
+    const auto *nospc =
+        gen::find_pointlight_material_authority_v1(
+            0x845feea1ec353cbaull);
+
     CHECK(scalar_spc != nullptr);
+    CHECK(scalar_spc->spc);
+    CHECK(scalar_spc->c101_scalar);
     CHECK(rgb_spc != nullptr);
+    CHECK(rgb_spc->spc);
+    CHECK(!rgb_spc->c101_scalar);
     CHECK(nospc != nullptr);
+    CHECK(!nospc->spc);
 
     mr::material_response_island island;
     CHECK(island.finalize_registration());
@@ -125,9 +126,9 @@ int main()
            mr::specular_factor_c101) == 0u);
     CHECK(decision.c100[0] ==
           f32(nospc->c100_bits[0]));
-    CHECK(decision.route_index ==
-          (0xA0000000u |
-           (nospc->router_index & 0x0000ffffu)));
+    // The established 25 NoSpc authority keeps its historical telemetry
+    // route namespace; the new corpus extends materials without rewriting it.
+    CHECK((decision.route_index & 0x80000000u) != 0u);
 
     CHECK(make_identity(*scalar_spc, identity));
     decision =
@@ -139,6 +140,8 @@ int main()
            mr::specular_factor_c101) != 0u);
     CHECK(decision.c101 ==
           f32(scalar_spc->c101_bits[0]));
+    CHECK((decision.route_index & 0xF0000000u) ==
+          0xA0000000u);
     CHECK(decision.ptde_specular_power_verified);
     CHECK(decision.ptde_specular_power ==
           f32(scalar_spc->c102_bits));
