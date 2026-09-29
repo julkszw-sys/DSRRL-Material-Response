@@ -90,6 +90,7 @@ std::atomic<std::uint64_t> g_b12_create{0u};
 std::atomic<std::uint64_t> g_b12_hit{0u};
 std::atomic<std::uint64_t> g_prepare_ok{0u};
 std::atomic<std::uint64_t> g_prepare_fail{0u};
+std::atomic<std::uint64_t> g_prepare_neutral_empty{0u};
 std::atomic<std::uint64_t> g_prepare_precondition_fail{0u};
 std::atomic<std::uint64_t> g_selection_fail{0u};
 std::atomic<std::uint64_t> g_selection_empty{0u};
@@ -833,11 +834,16 @@ bool clustered_pnts_draw_runtime::prepare_sidecar(
 #endif
 
     if (selected_count == 0u) {
-        prepared.failure =
-            clustered_pnts_prepare_failure::empty_selection;
+        prepared.producer_serial = input.serial;
+        prepared.raw_selected_count = 0u;
+        prepared.material_max_pnt_lit_num =
+            g_draw_selection.material_max;
+        prepared.effective_count = 0u;
+        prepared.owner_verified = true;
+        prepared.selector_mirror_verified = true;
+        prepared.neutral_no_pointlights = true;
         telemetry::hot_count(g_selection_empty);
-        telemetry::hot_count(g_sidecar_fail);
-        telemetry::hot_count(g_prepare_fail);
+        telemetry::hot_count(g_prepare_neutral_empty);
         return false;
     }
 
@@ -1023,6 +1029,7 @@ clustered_pnts_draw_runtime::telemetry() const noexcept
         g_b12_hit.load(),
         g_prepare_ok.load(),
         g_prepare_fail.load(),
+        g_prepare_neutral_empty.load(),
         g_prepare_precondition_fail.load(),
         g_selection_fail.load(),
         g_selection_empty.load(),
@@ -1073,6 +1080,7 @@ void clustered_pnts_draw_runtime::reset() noexcept
     g_b12_hit.store(0u);
     g_prepare_ok.store(0u);
     g_prepare_fail.store(0u);
+    g_prepare_neutral_empty.store(0u);
     g_prepare_precondition_fail.store(0u);
     g_selection_fail.store(0u);
     g_selection_empty.store(0u);
