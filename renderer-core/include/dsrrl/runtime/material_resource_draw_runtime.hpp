@@ -34,6 +34,27 @@ struct material_resource_telemetry {
     bool quarantined = false;
 };
 
+struct specular_companion_probe {
+    bool context_valid = false;
+    bool quarantined = false;
+    bool stock_bound = false;
+    bool snapshot_resolved = false;
+    std::uint64_t logical_hash = 0;
+    bool logical_hash_allowed = false;
+    bool companion_ready = false;
+
+    bool ready() const noexcept
+    {
+        return context_valid &&
+            !quarantined &&
+            stock_bound &&
+            snapshot_resolved &&
+            logical_hash != 0u &&
+            logical_hash_allowed &&
+            companion_ready;
+    }
+};
+
 struct prepared_material_resource_draw {
     std::array<
         island_draw_adapter_request,
@@ -67,6 +88,9 @@ public:
     // Draw-local authority for shared MR profiles whose MTD name is reused
     // outside the certified PTDE companion route. Checks the currently bound
     // stock t1 logical identity and requires an actual PTDE SpecRGB companion.
+    specular_companion_probe probe_exact_specular_companion(
+        ID3D11DeviceContext *context) noexcept;
+
     bool exact_specular_companion_ready(
         ID3D11DeviceContext *context) noexcept;
 
