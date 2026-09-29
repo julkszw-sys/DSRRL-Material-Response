@@ -145,7 +145,7 @@ def main():
             f"{symbol}.data(), {size}u"
             "},")
     out.extend([
-        "};",
+        "}};",
         "",
         "} // namespace dsrrl::operators::resource_bridges::generated",
         "",
