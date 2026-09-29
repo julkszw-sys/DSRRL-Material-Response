@@ -116,6 +116,10 @@ constexpr std::uint32_t k_caps2_cubemap = 0x200u;
 core::renderer_core *g_core = nullptr;
 std::mutex g_mutex;
 std::unordered_map<std::uint64_t, companion_set> g_cache;
+// A live native SRV handle observed under more than one exact logical texture
+// identity is not resolvable at draw time. Keep the handle quarantined until
+// its resource-view lifetime ends instead of allowing last-writer-wins identity.
+std::unordered_map<std::uint64_t, ID3D11Device *> g_ambiguous_view_device;
 std::atomic<std::uint64_t> g_cache_epoch{1u};
 thread_local bool g_internal_create = false;
 
@@ -286,6 +290,7 @@ void release_cache() noexcept
             1u,
             std::memory_order_release);
         dead.swap(g_cache);
+        g_ambiguous_view_device.clear();
     }
 
     for (auto &entry : dead)
@@ -309,6 +314,16 @@ void release_cache_for_device(
             if (it->second.device == device) {
                 dead.push_back(it->second);
                 it = g_cache.erase(it);
+                changed = true;
+            } else {
+                ++it;
+            }
+        }
+
+        for (auto it = g_ambiguous_view_device.begin();
+             it != g_ambiguous_view_device.end();) {
+            if (it->second == device) {
+                it = g_ambiguous_view_device.erase(it);
                 changed = true;
             } else {
                 ++it;
@@ -778,28 +793,31 @@ bool snapshot_companion_cached(
             g_cache_epoch.load(
                 std::memory_order_relaxed);
 
-        const auto found =
-            g_cache.find(key);
-        if (found != g_cache.end()) {
-            present = true;
-            logical_hash =
-                found->second.logical_hash;
-            spec =
-                found->second.specular;
-            diff =
-                found->second.diffuse;
-            norm =
-                found->second.normal;
+        if (g_ambiguous_view_device.find(key) ==
+                g_ambiguous_view_device.end()) {
+            const auto found =
+                g_cache.find(key);
+            if (found != g_cache.end()) {
+                present = true;
+                logical_hash =
+                    found->second.logical_hash;
+                spec =
+                    found->second.specular;
+                diff =
+                    found->second.diffuse;
+                norm =
+                    found->second.normal;
 
-            // These references become TLS cache ownership after the mutex is
-            // released. Holding them before unlock prevents a concurrent
-            // resource-view destruction from invalidating the snapshot.
-            if (spec != nullptr)
-                spec->AddRef();
-            if (diff != nullptr)
-                diff->AddRef();
-            if (norm != nullptr)
-                norm->AddRef();
+                // These references become TLS cache ownership after the mutex is
+                // released. Holding them before unlock prevents a concurrent
+                // resource-view destruction from invalidating the snapshot.
+                if (spec != nullptr)
+                    spec->AddRef();
+                if (diff != nullptr)
+                    diff->AddRef();
+                if (norm != nullptr)
+                    norm->AddRef();
+            }
         }
     }
 
@@ -1006,33 +1024,57 @@ void on_init_resource_view(
 
     companion_set old{};
     bool had_old = false;
+    bool accepted = false;
 
     {
         std::lock_guard<std::mutex> lock(
             g_mutex);
 
-        const auto found =
-            g_cache.find(key);
+        if (g_ambiguous_view_device.find(key) ==
+            g_ambiguous_view_device.end()) {
+            const auto found =
+                g_cache.find(key);
 
-        if (found != g_cache.end()) {
-            old = found->second;
-            found->second = set;
-            had_old = true;
-        } else {
-            g_cache.emplace(
-                key,
-                set);
+            if (found != g_cache.end() &&
+                found->second.logical_hash != logical_hash) {
+                // The native handle is still live but now claims a different
+                // exact logical identity. Neither association is safe. Remove
+                // the previous record and quarantine this handle until its
+                // destroy_resource_view callback.
+                old = found->second;
+                g_cache.erase(found);
+                g_ambiguous_view_device.emplace(
+                    key,
+                    native_device);
+                had_old = true;
+            } else if (found != g_cache.end()) {
+                old = found->second;
+                found->second = set;
+                had_old = true;
+                accepted = true;
+            } else {
+                g_cache.emplace(
+                    key,
+                    set);
+                accepted = true;
+            }
+
+            g_cache_epoch.fetch_add(
+                1u,
+                std::memory_order_release);
         }
-
-        g_cache_epoch.fetch_add(
-            1u,
-            std::memory_order_release);
     }
 
-    set = {};
+    if (accepted)
+        set = {};
 
     if (had_old)
         release_set(old);
+
+    // If this handle was already quarantined, or this observation created the
+    // conflict, the newly created companion set never becomes authoritative.
+    if (!accepted)
+        release_set(set);
 
     ++g_named_views;
 }
@@ -1043,24 +1085,33 @@ void on_destroy_resource_view(
 {
     companion_set dead{};
     bool found = false;
+    bool changed = false;
 
     {
         std::lock_guard<std::mutex> lock(
             g_mutex);
 
+        const auto key =
+            static_cast<std::uint64_t>(
+                view.handle);
+
+        if (g_ambiguous_view_device.erase(key) != 0u)
+            changed = true;
+
         const auto it =
-            g_cache.find(
-                static_cast<std::uint64_t>(
-                    view.handle));
+            g_cache.find(key);
 
         if (it != g_cache.end()) {
             dead = it->second;
             g_cache.erase(it);
+            found = true;
+            changed = true;
+        }
+
+        if (changed)
             g_cache_epoch.fetch_add(
                 1u,
                 std::memory_order_release);
-            found = true;
-        }
     }
 
     if (found)
