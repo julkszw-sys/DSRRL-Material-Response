@@ -139,17 +139,28 @@ def main() -> None:
     invalidate_at = pmetal_block.find(
         "invalidate_selected_reference_token_for_owner("
     )
+    materialize_at = pmetal_block.find(
+        "materialize_selected_pmetal_env_source("
+    )
     publish_at = pmetal_block.find(
         "publish_selected_reference_token("
     )
     gate_at = pmetal_block.find(
         "exact_pmetal_material_selection("
     )
-    if gate_at < 0 or invalidate_at < 0 or publish_at < 0:
+    if (
+        gate_at < 0
+        or invalidate_at < 0
+        or materialize_at < 0
+        or publish_at < 0
+    ):
         fail("P_Metal material-gated state transition is incomplete")
-    if not (gate_at < invalidate_at < publish_at):
+    if not (
+        gate_at < invalidate_at < materialize_at < publish_at
+    ):
         fail(
-            "P_Metal selected-state invalidation/publication ordering is unsafe"
+            "P_Metal selected-state invalidation/materialization/publication "
+            "ordering is unsafe"
         )
     require(
         ul_cpp,
@@ -183,6 +194,32 @@ def main() -> None:
         ul_cpp,
         "read_exact_pmetal_env_source(",
         "exact PTDE donor source resolver",
+    )
+    require(
+        ul_cpp,
+        "materialize_selected_pmetal_env_source(",
+        "P_Metal selector-material source materializer",
+    )
+
+    selected_source_begin = ul_cpp.index(
+        "bool upper_lower_draw_runtime::selected_pmetal_env_source("
+    )
+    selected_source_end = ul_cpp.index(
+        "pmetal_env_source_diagnostic",
+        selected_source_begin + 1,
+    )
+    if selected_source_begin < 0 or selected_source_end <= selected_source_begin:
+        fail("cannot isolate selected P_Metal EnvSpec source consumer")
+    selected_source_block = ul_cpp[selected_source_begin:selected_source_end]
+    if "read_exact_pmetal_env_source(" in selected_source_block:
+        fail(
+            "draw-time P_Metal source consumer still dereferences engine "
+            "LightBank source pointers"
+        )
+    require(
+        selected_source_block,
+        "out = token.pmetal_env;",
+        "immutable P_Metal source handoff to draw",
     )
 
     # Bank identity must retain the exact historical V13 FNV equation while
@@ -243,7 +280,8 @@ def main() -> None:
     print("  selected state=exact selector + exact actual P_Metal material")
     print("  persistent P_Metal invalidation=material-gated; generic selectors preserve state")
     print("  selector row address=retail low byte; full selector retained for identity")
-    print("  P_Metal source decode=exact V13 bank signature + PTDE donor after consumer gate")
+    print("  P_Metal source decode=exact V13 bank signature + PTDE donor after exact material gate")
+    print("  draw source=immutable decoded A/B+beta+bank/row; no late source-pointer dereference")
     print("  HemEnvLerp U/L-off=stock b0 operands preserved; no b13 requirement")
 
 
