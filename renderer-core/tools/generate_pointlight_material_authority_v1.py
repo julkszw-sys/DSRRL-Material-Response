@@ -116,6 +116,17 @@ def main() -> int:
         "        return nullptr;\n",
         "    return &k_pointlight_material_authority_v1[lo];\n",
         "}\n\n",
+        "constexpr bool resolve_pointlight_material_raw_mtd_v1(\n",
+        "    std::uint64_t semantic_name_hash,\n",
+        "    std::array<std::uint8_t,32> &raw_mtd_sha256) noexcept\n",
+        "{\n",
+        "    raw_mtd_sha256 = {};\n",
+        "    const auto *record = find_pointlight_material_authority_v1(semantic_name_hash);\n",
+        "    if (record == nullptr)\n",
+        "        return false;\n",
+        "    raw_mtd_sha256 = record->raw_mtd_sha256;\n",
+        "    return true;\n",
+        "}\n\n",
         "} // namespace dsrrl::operators::material_response::generated\n",
     ]
 
