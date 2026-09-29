@@ -15,6 +15,7 @@ on:
       - "renderer-core/tools/verify_a1_terminal_sat_semantic_scope.py"
       - "renderer-core/tools/audit_clustered_pnts_activation_sources.py"
       - "renderer-core/tools/audit_specrgb_equipment_scope.py"
+      - "renderer-core/tools/audit_pmetal_envspec_reference_transport.py"
       - "renderer-core/data/provenance/spec_rgb_equipment_scope_v2.json"
       - "renderer-core/CMakeLists.txt"
       - "renderer-core/tests/dsr_mtd_identity_supplement_tests.cpp"
@@ -57,6 +58,7 @@ on:
       - "renderer-core/tools/generate_dsr_mtd_identity_supplement.py"
       - "renderer-core/tools/audit_clustered_pnts_activation_sources.py"
       - "renderer-core/tools/audit_specrgb_equipment_scope.py"
+      - "renderer-core/tools/audit_pmetal_envspec_reference_transport.py"
       - "renderer-core/data/provenance/spec_rgb_equipment_scope_v2.json"
       - "renderer-core/data/census/dsr_mtd_identity_certified_supplement_v1.json"
       - "renderer-core/include/dsrrl/operators/**"
@@ -166,6 +168,12 @@ jobs:
         shell: bash
         run: |
           python3 renderer-core/tools/audit_specrgb_equipment_scope.py \
+            --source-dir renderer-core
+
+      - name: Audit P_Metal EnvSpec reference transport
+        shell: bash
+        run: |
+          python3 renderer-core/tools/audit_pmetal_envspec_reference_transport.py \
             --source-dir renderer-core
 
       - name: Configure Core+Islands addon
