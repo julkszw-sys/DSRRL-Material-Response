@@ -137,7 +137,10 @@ public:
     explicit upper_lower_draw_runtime(
         core::renderer_core &core) noexcept;
 
-    bool install() noexcept;
+    // reference_only=true arms only the exact LightBank producer/selector
+    // reference transport required by downstream operators such as P_Metal
+    // EnvSpec. It does not decode/materialize U/L/D123 producer payloads.
+    bool install(bool reference_only = false) noexcept;
     void uninstall() noexcept;
 
     // Fed by the already-owned exact material selector hook at 0x22BA20.
