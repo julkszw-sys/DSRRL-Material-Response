@@ -65,7 +65,8 @@ bool subsurface_draw_runtime::prepare(
 
     if (cmd_list == nullptr ||
         !core_.features().enabled(
-            core::operator_id::subsurface))
+            core::operator_id::subsurface) ||
+        !subsurface_visible_bridge_enabled())
         return false;
 
     telemetry::hot_count(candidates_);
