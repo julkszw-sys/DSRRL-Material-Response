@@ -200,6 +200,9 @@ std::atomic<std::uint64_t> g_diffuse_requests{0};
 std::atomic<std::uint64_t> g_normal_requests{0};
 std::atomic<std::uint64_t> g_fail_open{0};
 std::atomic_bool g_quarantined{false};
+std::atomic_bool g_subsurface_body_f_diag_logged{false};
+std::atomic_bool g_subsurface_body_m_diag_logged{false};
+std::atomic_bool g_subsurface_body_unknown_diag_logged{false};
 bool g_hot_telemetry_enabled = false;
 
 // Exact DSR body SpecMap identities used only by the Ps_Body[DSBT]
@@ -2022,6 +2025,50 @@ prepare_subsurface_body_requests(
     if (spec == nullptr ||
         diff == nullptr ||
         norm == nullptr) {
+        if (dsrrl::runtime::telemetry::
+                effect_enabled()) {
+            std::atomic_bool *logged =
+                &g_subsurface_body_unknown_diag_logged;
+            const char *body_name = "UNKNOWN";
+            if (body_texture ==
+                operators::resource_bridges::
+                    subsurface_body_texture::bd_f_body_s) {
+                logged =
+                    &g_subsurface_body_f_diag_logged;
+                body_name = "BD_F_body_s";
+            } else if (
+                body_texture ==
+                operators::resource_bridges::
+                    subsurface_body_texture::bd_m_body_s) {
+                logged =
+                    &g_subsurface_body_m_diag_logged;
+                body_name = "BD_M_body_s";
+            }
+
+            if (!logged->exchange(
+                    true,
+                    std::memory_order_relaxed)) {
+                char line[768]{};
+                std::snprintf(
+                    line,
+                    sizeof(line),
+                    "[DSRRL SUBSURFACE RESOURCE] body=%s target_rx=%u tuple=%u h0=%016llx h1=%016llx h2=%016llx spec=%u diff=%u norm=%u",
+                    body_name,
+                    static_cast<unsigned>(
+                        target_plain_receiver_id),
+                    tuple_ready ? 1u : 0u,
+                    static_cast<unsigned long long>(h0),
+                    static_cast<unsigned long long>(h1),
+                    static_cast<unsigned long long>(h2),
+                    spec != nullptr ? 1u : 0u,
+                    diff != nullptr ? 1u : 0u,
+                    norm != nullptr ? 1u : 0u);
+                reshade::log::message(
+                    reshade::log::level::info,
+                    line);
+            }
+        }
+
         release_view(spec);
         release_view(diff);
         release_view(norm);
@@ -2193,6 +2240,9 @@ reset() noexcept
     g_diffuse_requests.store(0u);
     g_normal_requests.store(0u);
     g_fail_open.store(0u);
+    g_subsurface_body_f_diag_logged.store(false);
+    g_subsurface_body_m_diag_logged.store(false);
+    g_subsurface_body_unknown_diag_logged.store(false);
     g_quarantined.store(false);
 }
 
