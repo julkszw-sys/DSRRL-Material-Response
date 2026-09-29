@@ -114,6 +114,16 @@ struct pmetal_env_source_diagnostic {
     bool draw_token_source_ready = false;
     bool draw_token_vectors_ready = false;
     bool draw_token_upper_lower_ready = false;
+
+    // Exact selector->producer/draw handoff diagnostics. These distinguish
+    // successful global selector authentication from consumption on the
+    // producer/draw thread without making thread identity an authority by
+    // itself: producer_serial must also match exactly.
+    std::uint32_t source_consumer_tid = 0u;
+    std::uint64_t source_consumer_serial = 0u;
+    std::uint64_t cross_thread_selected_publish = 0u;
+    std::uint64_t cross_thread_draw_consume = 0u;
+    std::uint64_t cross_thread_serial_miss = 0u;
 };
 
 struct prepared_hemdir3_carrier {
