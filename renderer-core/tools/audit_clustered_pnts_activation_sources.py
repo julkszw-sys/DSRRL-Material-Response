@@ -30,6 +30,39 @@ def main():
     if (spc,nospc)!=(24,12):
         fail(f"unexpected clustered receiver partition {(spc,nospc)}")
 
+    # Exact replacement resource ABI. Every 36-plan journal rewrites the
+    # stock clustered structured declarations into the PointLight-local
+    # t18/t19 carrier and adds cb12. It does not introduce a private material
+    # t10/t16 carrier.
+    cb12_decl=[0x04000059,0x00208e46,12,4]
+    old_t16_stride4=[16,4]
+    new_t18_stride48=[18,48]
+    old_t17_and_t18=[
+        17,4,
+        0x040000a2,0x00107000,18,48,
+    ]
+    new_t19_stride16=[19,16]
+    for entry in entries:
+        ops=entry.get("ops",[])
+        if sum(
+            op.get("old_tokens",[])==[] and
+            op.get("new_tokens",[])==cb12_decl
+            for op in ops
+        )!=1:
+            fail(f"clustered cb12 declaration drift for {entry.get('shader_name')}")
+        if sum(
+            op.get("old_tokens",[])==old_t16_stride4 and
+            op.get("new_tokens",[])==new_t18_stride48
+            for op in ops
+        )!=1:
+            fail(f"clustered t16->t18 carrier remap drift for {entry.get('shader_name')}")
+        if sum(
+            op.get("old_tokens",[])==old_t17_and_t18 and
+            op.get("new_tokens",[])==new_t19_stride16
+            for op in ops
+        )!=1:
+            fail(f"clustered t17/t18->t19 carrier remap drift for {entry.get('shader_name')}")
+
     # The direct replacement is a composed shader payload. Audit the exact
     # create-time operator transforms in the journal instead of assuming the
     # PointLight runtime is the sole shader owner.
@@ -68,6 +101,8 @@ def main():
     sidecar_h=(root/"include/dsrrl/operators/point_light/clustered_sidecar.hpp").read_text(encoding="utf-8")
     sidecar_cpp=(root/"src/operators/point_light/clustered_sidecar.cpp").read_text(encoding="utf-8")
     draw_cpp=(root/"src/runtime/clustered_pnts_draw_runtime.cpp").read_text(encoding="utf-8")
+    material_resource_cpp=(root/"src/runtime/material_resource_draw_runtime.cpp").read_text(encoding="utf-8")
+    material_resource_h=(root/"include/dsrrl/runtime/material_resource_draw_runtime.hpp").read_text(encoding="utf-8")
     pipe_cpp=(root/"src/runtime/clustered_pnts_pipeline_runtime.cpp").read_text(encoding="utf-8")
     pipe_h=(root/"include/dsrrl/runtime/clustered_pnts_pipeline_runtime.hpp").read_text(encoding="utf-8")
     materializer_cpp=(root/"src/operators/point_light/clustered_pnts_direct_materializer.cpp").read_text(encoding="utf-8")
@@ -185,6 +220,17 @@ def main():
     require(owner_cpp,"dsr_mtd_identity_supplement_resolve(semantic_hash, raw_mtd_sha)","certified NoSpc owner raw-MTD authority")
     if "generated_envspec_router_v1.hpp" in owner_cpp or "k_envspec_router_v1" in owner_cpp:
         fail("material owner producer must not use EnvSpec/SPX router as raw-MTD identity fallback")
+    direct_start=mr_cpp.find("material_response_island::evaluate_direct_pointlight_material(")
+    direct_end=mr_cpp.find("std::size_t material_response_island::receiver_recipe_count()",direct_start)
+    if direct_start<0 or direct_end<0:
+        fail("direct PointLight material resolver boundaries are missing")
+    direct_body=mr_cpp[direct_start:direct_end]
+    require(direct_body,"material.owner_tuple_exact","direct PointLight exact owner gate")
+    require(direct_body,"dsr_flver_owner_tuple_authenticated","direct PointLight FLVER+slot authority")
+    if "ptde_companion" in direct_body or "spec_rgb_bridge" in direct_body or \
+       "diffuse_bridge" in direct_body or "normal_bridge" in direct_body:
+        fail("direct PointLight material resolver leaked equipment texture authority")
+
     require(mr_cpp,"resolve_direct_nospc_authority","direct NoSpc material resolver")
     require(mr_cpp,"record.raw_mtd_sha256","direct NoSpc raw-MTD gate")
     require(mr_cpp,"f32_from_bits","bit-exact PTDE c100 decode")
@@ -193,10 +239,33 @@ def main():
     require(integrated,"direct_pointlight_requires_specular","receiver-derived specular requirement")
     require(integrated,"[DSRRL POINTLIGHT GATE]","one-shot direct PointLight rejection trace")
     require(integrated,"clustered_metadata_unbound","pipeline-route versus bound-metadata rejection trace")
-    resources_gate=integrated.find("const bool resources_ready =")
-    prepare_call=integrated.find("g_clustered_pnts.prepare_sidecar(")
-    if resources_gate<0 or prepare_call<0 or not resources_gate<prepare_call:
-        fail("clustered heavy source selection is not downstream of the material-resource gate")
+    clustered_begin=integrated.find("// Clustered PntS owns PTDE first-four membership")
+    fixed_begin=integrated.find("// Fixed PntSS/PntSSSS is a separate exact receiver namespace.",clustered_begin)
+    if clustered_begin<0 or fixed_begin<0 or not clustered_begin<fixed_begin:
+        fail("clustered/fixed runtime boundaries are missing")
+    clustered_block=integrated[clustered_begin:fixed_begin]
+    require(clustered_block,"const bool carrier_ready =","PointLight-local carrier gate")
+    require(clustered_block,"carrier_ready &&\n            g_clustered_pnts.prepare_sidecar(","sidecar downstream of PointLight-local carrier")
+    if "prepare_clustered_pointlight_material_requests" in clustered_block:
+        fail("clustered PointLight still delegates to equipment material-resource preparation")
+    for forbidden in (
+        "prepared.resources.diffuse",
+        "prepared.resources.normal",
+        "prepared.resources.spec_rgb",
+        "prepared.resources.requests",
+        "g_material_resources.release_prepared_draw",
+    ):
+        if forbidden in clustered_block:
+            fail(f"clustered PointLight still depends on equipment resource state: {forbidden}")
+    if "prepare_clustered_pointlight_material_requests" in material_resource_cpp or \
+       "prepare_clustered_pointlight_material_requests" in material_resource_h:
+        fail("obsolete clustered equipment-resource prep API still exists")
+    require(clustered_block,"18u,\n                prepared.clustered_carrier.t18","clustered t18 local carrier")
+    require(clustered_block,"19u,\n                prepared.clustered_carrier.t19","clustered t19 local carrier")
+    require(clustered_block,"clustered.srv_count = 2u;","clustered exact SRV carrier width")
+    if "10u,\n                prepared.clustered_carrier" in clustered_block or \
+       "16u,\n                prepared.clustered_carrier" in clustered_block:
+        fail("clustered PointLight introduced an unproven private t10/t16 material carrier")
 
     if "clustered.additional_owners =\n                point | mr | local_if_spc;" in integrated:
         fail("clustered request duplicates primary in additional_owners")
@@ -253,7 +322,8 @@ def main():
     print("  producer=builder-input-snapshot>same-thread-material-join>authorized-draw-first4+raw-source")
     print("  carrier=b12[3].x+t18+t19 material_max=uint32 min_after_first4")
     print("  material=25 exact HOMOLOGOUS_NOSPC pairs; identity=certified supplement; c100=bit-exact router authority")
-    print("  chain=candidate>receiver>material>resources>selector>sources>sidecar>shader>draw-mutation>restore")
+    print("  chain=candidate>receiver>material>PointLight-local-carrier>selector>sources>sidecar>shader>draw-mutation>restore")
+    print("  material_resources=stock-host passthrough; equipment PTDE textures remain independent")
     print("  shader_owners=dynamic PointLight/MR/local-spec + exact static diffuse-domain/attenuation/SAT (+NoSpc EnvSpec-delete)")
     print("  cb_resources=dynamic owners only; static create-time owners remain shader-only")
     print("  draw=adapter-valid ownership + exact pipeline route + shared transaction")

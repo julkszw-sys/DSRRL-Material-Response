@@ -186,7 +186,7 @@ std::atomic<std::uint64_t> g_fixed_draw_fail_open{0};
 std::atomic<std::uint64_t> g_clustered_draw_candidates{0};
 std::atomic<std::uint64_t> g_clustered_draw_pipeline_ready{0};
 std::atomic<std::uint64_t> g_clustered_draw_material_ready{0};
-std::atomic<std::uint64_t> g_clustered_draw_resources_ready{0};
+std::atomic<std::uint64_t> g_clustered_draw_carrier_ready{0};
 std::atomic<std::uint64_t> g_clustered_draw_sidecar_ready{0};
 std::atomic<std::uint64_t> g_clustered_draw_batch_ready{0};
 std::atomic<std::uint64_t> g_clustered_draw_applied{0};
@@ -940,7 +940,7 @@ void log_pointlight_prep_once(
     bool spc,
     bool blended,
     bool material_ready,
-    bool resources_ready,
+    bool carrier_ready,
     bool sidecar_ready) noexcept
 {
     const auto previous =
@@ -954,12 +954,12 @@ void log_pointlight_prep_once(
     std::snprintf(
         line,
         sizeof(line),
-        "[DSRRL POINTLIGHT PREP] stage=%s spc=%u blended=%u material=%u resources=%u sidecar=%u",
+        "[DSRRL POINTLIGHT PREP] stage=%s spc=%u blended=%u material=%u carrier=%u sidecar=%u",
         stage == nullptr ? "unknown" : stage,
         spc ? 1u : 0u,
         blended ? 1u : 0u,
         material_ready ? 1u : 0u,
-        resources_ready ? 1u : 0u,
+        carrier_ready ? 1u : 0u,
         sidecar_ready ? 1u : 0u);
     reshade::log::message(
         reshade::log::level::info,
@@ -1849,7 +1849,7 @@ void log_state(const char *tag) noexcept
         "source=%llu/%llu publish=%llu owner=%llu/%llu max=%llu/%llu "
         "sidecar=%llu/%llu gpu18=%llu/%llu gpu19=%llu/%llu b12=%llu/%llu prepare=%llu/%llu "
         "pipe_reg=%llu/%llu pipe_init=%llu pipe_bind=%llu/%llu "
-        "draw_candidate=%llu pipeline_ready=%llu material_ready=%llu resources_ready=%llu "
+        "draw_candidate=%llu pipeline_ready=%llu material_ready=%llu carrier_ready=%llu "
         "sidecar_ready=%llu batch_ready=%llu applied=%llu target_failopen=%llu restore_fail=%llu "
         "enabled=%u quarantine=%u/%u",
         tag,
@@ -1884,7 +1884,7 @@ void log_state(const char *tag) noexcept
         static_cast<unsigned long long>(g_clustered_draw_candidates.load()),
         static_cast<unsigned long long>(g_clustered_draw_pipeline_ready.load()),
         static_cast<unsigned long long>(g_clustered_draw_material_ready.load()),
-        static_cast<unsigned long long>(g_clustered_draw_resources_ready.load()),
+        static_cast<unsigned long long>(g_clustered_draw_carrier_ready.load()),
         static_cast<unsigned long long>(g_clustered_draw_sidecar_ready.load()),
         static_cast<unsigned long long>(g_clustered_draw_batch_ready.load()),
         static_cast<unsigned long long>(g_clustered_draw_applied.load()),
@@ -3451,8 +3451,6 @@ void release_prepared_island_batch(
     prepared_island_batch &prepared) noexcept
 {
     if (prepared.clustered_in_batch) {
-        g_material_resources.release_prepared_draw(
-            prepared.resources);
         g_clustered_pnts.release_prepared_draw(
             prepared.clustered_carrier);
         g_clustered_pnts_pipeline.release_prepared_shader(
@@ -3539,43 +3537,24 @@ bool prepare_island_batch(
         if (direct_material_ready)
             hot_count(g_clustered_draw_material_ready);
 
-        dsrrl::operators::material_response::
-            mtd_semantic_query clustered_query{};
-        clustered_query.material = material;
-        clustered_query.receiver_id = 0u;
-        clustered_query.ownership.flver_sha256 =
-            material.flver_sha256;
-        clustered_query.ownership.flver_identity_hash =
-            material.flver_identity_hash;
-        clustered_query.ownership.material_slot =
-            material.material_slot;
-        clustered_query.ownership.material_slot_valid =
-            material.material_slot_valid;
-        clustered_query.ownership.exact =
-            material.owner_tuple_exact;
-
-        const bool resources_ready =
+        // Clustered PntS replacement preserves the stock material texture
+        // ABI. Exact journal attestation changes only the PointLight-local
+        // carrier (cb12 + structured t18/t19); it does not introduce private
+        // material SRVs. Keep stock DSR material resources bound here.
+        //
+        // PTDE Diffuse/Normal/SpecRGB replacement remains an independent,
+        // equipment-only bridge and is never an activation prerequisite for
+        // the scene PointLight operator.
+        const bool carrier_ready =
             context != nullptr &&
-            direct_material_ready &&
-            g_material_resources.
-                prepare_clustered_pointlight_material_requests(
-                    context,
-                    clustered_query,
-                    true,
-                    prepared.clustered_shader.spc,
-                    prepared.clustered_shader.blended_material,
-                    prepared.resources) &&
-            prepared.resources.diffuse &&
-            prepared.resources.normal &&
-            (!prepared.clustered_shader.spc ||
-             prepared.resources.spec_rgb);
+            direct_material_ready;
 
-        if (resources_ready) {
-            hot_count(g_clustered_draw_resources_ready);
+        if (carrier_ready) {
+            hot_count(g_clustered_draw_carrier_ready);
         } else {
             log_pointlight_prep_once(
                 1u << 0,
-                "clustered_resources_not_ready",
+                "clustered_carrier_not_ready",
                 prepared.clustered_shader.spc,
                 prepared.clustered_shader.blended_material,
                 direct_material_ready,
@@ -3584,13 +3563,13 @@ bool prepare_island_batch(
         }
 
         const bool sidecar_ready =
-            resources_ready &&
+            carrier_ready &&
             g_clustered_pnts.prepare_sidecar(
                 context,
                 decision,
                 prepared.clustered_carrier);
 
-        if (resources_ready && !sidecar_ready) {
+        if (carrier_ready && !sidecar_ready) {
             log_pointlight_prep_once(
                 1u << 1,
                 "clustered_sidecar_not_ready",
@@ -3628,8 +3607,6 @@ bool prepare_island_batch(
             if (static_shader_owners !=
                     expected_static_shader_owners ||
                 static_shader_owners == 0u) {
-                g_material_resources.release_prepared_draw(
-                    prepared.resources);
                 g_clustered_pnts.release_prepared_draw(
                     prepared.clustered_carrier);
                 g_clustered_pnts_pipeline.release_prepared_shader(
@@ -3697,29 +3674,12 @@ bool prepare_island_batch(
                     prepared.batch,
                     clustered) ==
                 dsrrl::runtime::island_draw_batch_result::ready) {
-                bool resources_appended = true;
-                for (std::uint32_t i = 0u;
-                     i < prepared.resources.request_count;
-                     ++i) {
-                    if (dsrrl::runtime::append_island_draw_request(
-                            prepared.batch,
-                            prepared.resources.requests[i]) !=
-                        dsrrl::runtime::island_draw_batch_result::ready) {
-                        resources_appended = false;
-                        break;
-                    }
-                }
-
-                if (resources_appended) {
-                    prepared.clustered_in_batch = true;
-                    hot_count(g_clustered_draw_batch_ready);
-                    return true;
-                }
+                prepared.clustered_in_batch = true;
+                hot_count(g_clustered_draw_batch_ready);
+                return true;
             }
         }
 
-        g_material_resources.release_prepared_draw(
-            prepared.resources);
         g_clustered_pnts.release_prepared_draw(
             prepared.clustered_carrier);
         g_clustered_pnts_pipeline.release_prepared_shader(
@@ -4982,7 +4942,7 @@ bool AddonInit(
     g_clustered_draw_candidates.store(0);
     g_clustered_draw_pipeline_ready.store(0);
     g_clustered_draw_material_ready.store(0);
-    g_clustered_draw_resources_ready.store(0);
+    g_clustered_draw_carrier_ready.store(0);
     g_clustered_draw_sidecar_ready.store(0);
     g_clustered_draw_batch_ready.store(0);
     g_clustered_draw_applied.store(0);
