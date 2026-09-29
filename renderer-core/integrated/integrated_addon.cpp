@@ -4600,19 +4600,42 @@ effect_probe_mask candidate_effect_mask(
                 effect_probe_id::local_specular);
     }
 
-    if (material.owner_tuple_exact) {
+    const bool equipment_owner_exact =
+        material.valid &&
+        material.owner_tuple_exact &&
+        material.material_slot_valid;
+
+    const bool pmetal_envspec_candidate =
+        decision.active &&
+        decision.route_index == 345u &&
+        decision.receiver_id >= 33u &&
+        decision.receiver_id <= 35u;
+
+    // PTDE SpecRGB sidecars are equipment-only resources. They are not a
+    // generic HemEnv/PBL material effect and must never be inferred merely
+    // from a matching receiver or MTD. Candidate telemetry is emitted only
+    // when an exact equipment owner is present AND an explicit PTDE consumer
+    // owns the sidecar: fixed local-specular, DSBT Subsurface, or P_Metal
+    // EnvSpec. Clustered PointLight remains independent until a separately
+    // proven equipment-local SpecRGB consumer cut exists.
+    const bool equipment_spec_rgb_consumer =
+        equipment_owner_exact &&
+        (fixed_pointlight_bound ||
+         subsurface_bound ||
+         pmetal_envspec_candidate);
+
+    if (equipment_spec_rgb_consumer)
         mask |= effect_probe_bit(
             effect_probe_id::spec_rgb);
+
+    if (equipment_owner_exact) {
         mask |= effect_probe_bit(
             effect_probe_id::diffuse);
         mask |= effect_probe_bit(
             effect_probe_id::normal);
     }
 
-    if (decision.active &&
-        decision.route_index == 345u &&
-        decision.receiver_id >= 33u &&
-        decision.receiver_id <= 35u)
+    if (pmetal_envspec_candidate)
         mask |= effect_probe_bit(
             effect_probe_id::pmetal_envspec);
 
