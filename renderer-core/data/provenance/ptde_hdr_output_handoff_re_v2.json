@@ -3,27 +3,26 @@
   "status": "OPEN_NARROWED",
   "ptde_exe_sha256": "88d1eec18eba2542c9c7e5e6903e89f9c075b20be5cd045ce6e568e7b22bea9d",
   "confirmed": {
-    "legacy_combine_va": "0x00DA9E60",
-    "legacy_combine_dispatch_calls": ["0x00DAE11B", "0x00DAE12F"],
-    "postprocess_pair_constructor_va": "0x00FFE140",
-    "pair_pass_ids": ["0x20", "0x21"],
-    "pass20_node_call_va": "0x00FFE20F",
-    "pass21_node_call_va": "0x00FFE246",
-    "paired_handler_va": "0x00DAA700",
-    "paired_dispatch_wrappers": ["0x00DAE0BF", "0x00DAE0D4"],
-    "graph_parent_constructs_pair_va": "0x00DB06D0"
+    "image_process_combine_va": "0x00DA9E60",
+    "default_gamma_ramp": "IDENTITY",
+    "present_callsite": "CONFIRMED_D3D9_DEVICE_VTABLE_PLUS_0x44",
+    "pass_0x20_0x21_semantics": "CAMERABLUR_NOT_FINAL_GAMMA_OUTPUT"
+  },
+  "excluded_as_output_transfer": {
+    "pair_constructor_va": "0x00FFE140",
+    "pass_ids": ["0x20", "0x21"],
+    "shared_handler_va": "0x00DAA700",
+    "reason": "canonical renderer.ptde.pass_0x20_0x21_camerablur identifies this pair as ImageProcessCameraBlur"
   },
   "not_yet_proven": [
-    "default PTDE runtime execution of pass 0x20 versus 0x21",
-    "exact transfer equation of the selected pass",
-    "whether the selected pass is the final D3D9 backbuffer write",
-    "hardware gamma-ramp participation after shader composition"
+    "exact object-level render-target handoff from ImageProcessCombine/HDR_ColAdj output to the implicit D3D9 backbuffer"
   ],
   "release_rule": {
     "ptde_output_handoff_closed": false,
-    "allow_assume_identity": false,
-    "allow_assume_pow_inv_2p2": false,
-    "stock_dsr_hdr_remains_fail_open_until_closed": true
+    "invent_additional_gamma_or_gain_operator": false,
+    "default_gamma_ramp_is_identity": true,
+    "pass20_21_must_not_be_used_as_output_transfer": true,
+    "stock_dsr_hdr_remains_fail_open_until_resource_handoff_closed": true
   },
-  "note": "Constructor presence is not runtime execution. This evidence narrows the final HDR residual but does not promote an output transfer."
+  "note": "The residual is resource plumbing, not evidence for a missing PTDE gamma/gain/tone-map operator. DSR host output semantics remain a separate contract."
 }
