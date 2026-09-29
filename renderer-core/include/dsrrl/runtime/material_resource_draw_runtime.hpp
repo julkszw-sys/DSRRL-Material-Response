@@ -86,14 +86,6 @@ public:
         bool blended_material,
         prepared_material_resource_draw &prepared) noexcept;
 
-    bool prepare_clustered_pointlight_material_requests(
-        ID3D11DeviceContext *context,
-        const operators::material_response::mtd_semantic_query &query,
-        bool direct_pointlight_material_authorized,
-        bool spc,
-        bool blended_material,
-        prepared_material_resource_draw &prepared) noexcept;
-
     bool prepare_subsurface_body_requests(
         ID3D11DeviceContext *context,
         std::uint32_t target_plain_receiver_id,
