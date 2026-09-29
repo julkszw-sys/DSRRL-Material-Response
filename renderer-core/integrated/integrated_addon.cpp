@@ -1968,6 +1968,25 @@ void log_pointlight_gate_once(
         line);
 }
 
+const char *clustered_prepare_failure_name(
+    dsrrl::runtime::clustered_pnts_prepare_failure failure) noexcept
+{
+    using failure_t =
+        dsrrl::runtime::clustered_pnts_prepare_failure;
+    switch (failure) {
+    case failure_t::none: return "none";
+    case failure_t::precondition: return "precondition";
+    case failure_t::selection: return "selection";
+    case failure_t::empty_selection: return "empty_selection";
+    case failure_t::source_capture: return "source_capture";
+    case failure_t::sidecar_build: return "sidecar_build";
+    case failure_t::gpu_prepare: return "gpu_prepare";
+    case failure_t::gpu_resources: return "gpu_resources";
+    case failure_t::upload: return "upload";
+    default: return "unknown";
+    }
+}
+
 void log_pointlight_prep_once(
     std::uint32_t bit,
     const char *stage,
@@ -1975,7 +1994,10 @@ void log_pointlight_prep_once(
     bool blended,
     bool material_ready,
     bool operator_gate_ready,
-    bool sidecar_ready) noexcept
+    bool sidecar_ready,
+    dsrrl::runtime::clustered_pnts_prepare_failure failure =
+        dsrrl::runtime::clustered_pnts_prepare_failure::none,
+    std::uint8_t sidecar_result_code = 0u) noexcept
 {
     const auto previous =
         g_pointlight_prep_log_mask.fetch_or(
@@ -1988,13 +2010,17 @@ void log_pointlight_prep_once(
     std::snprintf(
         line,
         sizeof(line),
-        "[DSRRL POINTLIGHT PREP] stage=%s spc=%u blended=%u material=%u operator_gate=%u sidecar=%u",
+        "[DSRRL POINTLIGHT PREP] stage=%s spc=%u blended=%u material=%u operator_gate=%u sidecar=%u "
+        "failure=%s(%u) sidecar_result=%u",
         stage == nullptr ? "unknown" : stage,
         spc ? 1u : 0u,
         blended ? 1u : 0u,
         material_ready ? 1u : 0u,
         operator_gate_ready ? 1u : 0u,
-        sidecar_ready ? 1u : 0u);
+        sidecar_ready ? 1u : 0u,
+        clustered_prepare_failure_name(failure),
+        static_cast<unsigned>(failure),
+        static_cast<unsigned>(sidecar_result_code));
     reshade::log::message(
         reshade::log::level::info,
         line);
@@ -4792,7 +4818,9 @@ bool prepare_island_batch(
                 prepared.clustered_shader.blended_material,
                 direct_material_ready,
                 true,
-                false);
+                false,
+                prepared.clustered_carrier.failure,
+                prepared.clustered_carrier.sidecar_result_code);
         }
 
         if (sidecar_ready) {
