@@ -4758,6 +4758,8 @@ bool prepare_island_batch(
         // replacement journals add only the PointLight-local t19 carrier;
         // stock material texture reads remain on the host path unless a
         // separate equipment draw route authorizes replacement.
+        // The native command list may wrap either an immediate or a deferred
+        // D3D11 context; prepare_sidecar owns the API-valid context handling.
         const bool operator_gate_ready =
             context != nullptr &&
             direct_material_ready;
