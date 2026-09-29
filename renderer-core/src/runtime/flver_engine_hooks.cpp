@@ -534,6 +534,13 @@ extern "C" void dsrrl_flver_selector_observer(
            observation);
    if(identity.owner_tuple_exact &&
       material_owner_selection_publish(identity)){
+    // Complete the P_Metal LightBank semantic join only after this exact
+    // selector event has proven the actual FLVER/material owner tuple. The
+    // LightBank selector bridge above merely staged the matching source token;
+    // non-P_Metal materials must never publish it into P_Metal draw state.
+    upper_lower_pmetal_material_event_bridge(
+        owner,
+        identity);
     telemetry::hot_count(g_exact_owner_ready);
     return;
    }
