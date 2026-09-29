@@ -22,6 +22,7 @@ def main() -> None:
     ul_h = (root / "include/dsrrl/runtime/upper_lower_draw_runtime.hpp").read_text(encoding="utf-8")
     ul_cpp = (root / "src/runtime/upper_lower_draw_runtime.cpp").read_text(encoding="utf-8")
     env_cpp = (root / "src/runtime/pmetal_envspec_draw_runtime.cpp").read_text(encoding="utf-8")
+    flver_cpp = (root / "src/runtime/flver_engine_hooks.cpp").read_text(encoding="utf-8")
     lerp_cpp = (root / "src/operators/env_spec/pmetal_rgba_lerp_materializer.cpp").read_text(encoding="utf-8")
     lerp_h = (root / "include/dsrrl/operators/env_spec/pmetal_rgba_lerp_materializer.hpp").read_text(encoding="utf-8")
 
@@ -96,6 +97,34 @@ def main() -> None:
         "source frontier telemetry",
     )
 
+    # P_Metal selected state requires the conjunction of exact selector state
+    # and exact actual material identity from the same FLVER selector callback.
+    require(
+        ul_h,
+        "upper_lower_pmetal_material_event_bridge(",
+        "P_Metal selector-material join API",
+    )
+    require(
+        ul_cpp,
+        "invalidate_selected_reference_token_for_producer(",
+        "selector invalidation of stale P_Metal state",
+    )
+    require(
+        ul_cpp,
+        "exact_pmetal_material_selection(",
+        "exact P_Metal material gate",
+    )
+    require(
+        ul_cpp,
+        "g_draw_reference_token.fingerprint.owner !=",
+        "selector/material owner continuity",
+    )
+    require(
+        flver_cpp,
+        "upper_lower_pmetal_material_event_bridge(",
+        "FLVER selector material authorization bridge",
+    )
+
     # HemEnvLerp EnvSpec must remain usable while visible U/L is intentionally
     # OFF. The U/L-off payload preserves stock b0[7]/b0[8] operands and does
     # not require/bind b13; the composed PTDE-b13 variant remains available
@@ -132,6 +161,7 @@ def main() -> None:
     print("  U/L visible operator=OFF remains stock when not explicitly enabled")
     print("  LightBank reference carrier=ON for P_Metal EnvSpec")
     print("  producer payload=owner+sourceA/B+selectorA/B+beta only")
+    print("  selected state=exact selector + exact actual P_Metal material")
     print("  P_Metal source decode=consumer-local after exact material/semantic gate")
     print("  HemEnvLerp U/L-off=stock b0 operands preserved; no b13 requirement")
 
