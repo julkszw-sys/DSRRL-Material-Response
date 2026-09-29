@@ -82,6 +82,12 @@ public:
     bool pipeline_attested(
         std::uint64_t pipeline_handle) const noexcept;
 
+    // Bind-time exact registry lookup with a small epoch-invalidated TLS
+    // cache. This is the authoritative recovery path when the integrated
+    // route cache has lost the PointLight bit.
+    bool pipeline_attested_cached(
+        std::uint64_t pipeline_handle) const noexcept;
+
     bool bound_metadata(
         reshade::api::command_list *cmd_list,
         bool &spc,
@@ -122,7 +128,18 @@ private:
         bool present = false;
     };
 
+    struct attestation_tls_entry {
+        const clustered_pnts_pipeline_runtime *runtime = nullptr;
+        std::uint64_t pipeline = 0u;
+        std::uint64_t epoch = 0u;
+        bool present = false;
+    };
+
+    static constexpr std::size_t k_attestation_cache_size = 64u;
     static thread_local bound_tls_state bound_tls_;
+    static thread_local std::array<
+        attestation_tls_entry,
+        k_attestation_cache_size> attestation_tls_;
 
     static const reshade::api::shader_desc *find_pixel_shader(
         std::uint32_t subobject_count,
@@ -141,6 +158,7 @@ private:
         std::shared_ptr<const record>> bound_;
     reshade::api::device *device_ = nullptr;
     std::atomic<std::uint64_t> bound_epoch_{1u};
+    std::atomic<std::uint64_t> pipeline_epoch_{1u};
 
     std::atomic<std::uint64_t> candidates_seen_{0};
     std::atomic<std::uint64_t> candidate_create_ok_{0};
