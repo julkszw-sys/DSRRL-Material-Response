@@ -199,6 +199,36 @@ jobs:
           --output-on-failure
           -R "dsrrl_renderer_clustered_(sidecar|pnts_materializer|pnts_draw_adapter)_tests"
 
+      - name: Test EnvSpec exact sidecar stager fail-open
+        shell: pwsh
+        run: |
+          $fake = Join-Path $env:RUNNER_TEMP "DSRRL_BAD_ENVSPEC_PACK.bin"
+          $game = Join-Path $env:RUNNER_TEMP "DSRRL_ENVSPEC_STAGE_TEST"
+          New-Item -ItemType Directory -Force -Path $game | Out-Null
+          [System.IO.File]::WriteAllBytes($fake, [byte[]](0x44, 0x53, 0x52, 0x52, 0x4c))
+
+          $expected = "ENVSPEC_SIDECAR_SOURCE_SIZE_MISMATCH"
+          $rejected = $false
+          try {
+            & renderer-core/integrated/STAGE_ENVSPEC_SIDECAR.ps1 -SourcePath $fake -GameDir $game
+          } catch {
+            if ($_.Exception.Message -notmatch [regex]::Escape($expected)) {
+              throw
+            }
+            $rejected = $true
+          }
+
+          if (-not $rejected) {
+            throw "EnvSpec sidecar stager accepted a non-canonical source"
+          }
+
+          $target = Join-Path $game "DSRRL\EnvSpec\PackedGI\PTDE_GI_ENVSPEC_PACK_RGBA.bin"
+          if (Test-Path -LiteralPath $target) {
+            throw "EnvSpec sidecar stager left a destination after source rejection"
+          }
+
+          Write-Host "ENVSPEC_SIDECAR_STAGE_FAILOPEN_PASS"
+
       - name: Audit active operator boundary
         shell: pwsh
         run: |
