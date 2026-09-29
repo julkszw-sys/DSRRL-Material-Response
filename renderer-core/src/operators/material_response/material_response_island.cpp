@@ -278,10 +278,17 @@ bool exact_runtime_pointlight_material_identity(
     const auto *record =
         generated::find_pointlight_material_authority_v1(
             identity.semantic_name_hash);
-    return
-        record != nullptr &&
-        record->raw_mtd_sha256 ==
-            identity.raw_mtd_sha256;
+    if (record == nullptr ||
+        record->raw_mtd_sha256 !=
+            identity.raw_mtd_sha256)
+        return false;
+
+    const std::uint32_t expected_route =
+        0xA0000000u |
+        (record->router_index &
+         0x0000ffffu);
+    return identity.route_index ==
+        expected_route;
 }
 
 bool exact_runtime_pmetal_material_identity(
