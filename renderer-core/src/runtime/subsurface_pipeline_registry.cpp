@@ -54,6 +54,25 @@ find_route(
     return nullptr;
 }
 
+void forget_pipeline_locked(std::uint64_t pipeline_handle) noexcept
+{
+    bool changed =
+        g_pipeline_target.erase(pipeline_handle) != 0u;
+
+    for (auto it = g_bound.begin();
+         it != g_bound.end();) {
+        if (it->second.pipeline_handle == pipeline_handle) {
+            it = g_bound.erase(it);
+            changed = true;
+        } else {
+            ++it;
+        }
+    }
+
+    if (changed)
+        ++g_bound_epoch;
+}
+
 } // namespace
 
 bool subsurface_receiver_observe_pipeline(
@@ -77,8 +96,22 @@ bool subsurface_receiver_observe_pipeline(
     const auto *route =
         find_route(digest);
 
-    if (route == nullptr)
+    if (route == nullptr) {
+        // A pipeline handle is not an identity. If the backend reuses a
+        // handle for a different pixel shader, retaining the previous exact
+        // SubSurf receiver mapping would turn a negative identity result into
+        // a false-positive draw route. Purge any stale mapping at observation
+        // time; this is create-time work and stays off the draw hot path.
+        try {
+            std::lock_guard<std::mutex> lock(g_mutex);
+            forget_pipeline_locked(pipeline_handle);
+        } catch (...) {
+            // Fail open: a negative identity observation must never create or
+            // refresh SubSurf authority. Existing state is left untouched only
+            // if the registry itself cannot be safely mutated.
+        }
         return false;
+    }
 
     try {
         std::lock_guard<std::mutex> lock(g_mutex);
@@ -89,7 +122,7 @@ bool subsurface_receiver_observe_pipeline(
         if (found != g_pipeline_target.end() &&
             found->second !=
                 route->target_plain_receiver_id) {
-            g_pipeline_target.erase(found);
+            forget_pipeline_locked(pipeline_handle);
             return false;
         }
 
@@ -110,18 +143,7 @@ void subsurface_receiver_forget_pipeline(
         return;
 
     std::lock_guard<std::mutex> lock(g_mutex);
-    g_pipeline_target.erase(pipeline_handle);
-
-    for (auto it = g_bound.begin();
-         it != g_bound.end();) {
-        if (it->second.pipeline_handle ==
-            pipeline_handle)
-            it = g_bound.erase(it);
-        else
-            ++it;
-    }
-
-    ++g_bound_epoch;
+    forget_pipeline_locked(pipeline_handle);
 }
 
 void subsurface_receiver_observe_bind(
