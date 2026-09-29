@@ -3554,21 +3554,35 @@ bool prepare_island_batch(
         clustered_query.ownership.exact =
             material.owner_tuple_exact;
 
-        const bool resources_ready =
-            context != nullptr &&
-            direct_material_ready &&
+        // Clustered NoSpc is a lighting-only material path. Its direct PTDE
+        // shader consumes the host t0/t2 surface and the PointLight b12/t18/t19
+        // carriers, so PTDE equipment Diffuse/Normal sidecars are not an
+        // activation prerequisite. Spc still keeps the existing atomic
+        // SpecRGB+Diffuse+Normal resource gate until its independent stock/PTDE
+        // specular carrier is isolated.
+        const bool nospc_host_surface_ready =
+            !prepared.clustered_shader.spc &&
+            !prepared.clustered_shader.blended_material;
+
+        const bool spc_resources_ready =
+            prepared.clustered_shader.spc &&
             g_material_resources.
                 prepare_clustered_pointlight_material_requests(
                     context,
                     clustered_query,
                     true,
-                    prepared.clustered_shader.spc,
+                    true,
                     prepared.clustered_shader.blended_material,
                     prepared.resources) &&
             prepared.resources.diffuse &&
             prepared.resources.normal &&
-            (!prepared.clustered_shader.spc ||
-             prepared.resources.spec_rgb);
+            prepared.resources.spec_rgb;
+
+        const bool resources_ready =
+            context != nullptr &&
+            direct_material_ready &&
+            (nospc_host_surface_ready ||
+             spc_resources_ready);
 
         if (resources_ready) {
             hot_count(g_clustered_draw_resources_ready);
