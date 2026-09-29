@@ -169,6 +169,16 @@ def main():
     require(prepare_body,"material.active","authorized material gate before heavy work")
     require(prepare_body,"select_first_four_exact(","authorized-draw exact first-four selector")
     require(prepare_body,"capture_source(","authorized-draw raw source capture")
+    require(prepare_body,"context_type == D3D11_DEVICE_CONTEXT_DEFERRED","deferred-context activation telemetry")
+    require(draw_cpp,"D3D11_USAGE_DYNAMIC","dynamic clustered sidecar resources")
+    require(draw_cpp,"D3D11_MAP_WRITE_DISCARD","deferred-compatible sidecar upload")
+    ensure_start=draw_cpp.find("bool ensure_gpu(")
+    update_start=draw_cpp.find("bool update_buffer(",ensure_start)
+    if ensure_start<0 or update_start<0:
+        fail("clustered GPU preparation boundaries are missing")
+    ensure_body=draw_cpp[ensure_start:update_start]
+    if "context->GetType() !=" in ensure_body or        "D3D11_DEVICE_CONTEXT_IMMEDIATE)" in ensure_body:
+        fail("clustered sidecar still has an immediate-context-only activation gate")
     require(draw_cpp,"DSRRL_CLUSTERED_SELECTOR_RUNTIME_CROSSCHECK","optional retained-selector cross-check gate")
     require(draw_cpp,"g_retained_selector","retained selector available only for optional cross-check")
     require(draw_cpp,"spatial_overlap_xyz_unchecked","single node-range validation overlap path")
@@ -276,6 +286,7 @@ def main():
     print("  material=25 exact HOMOLOGOUS_NOSPC pairs; identity=certified supplement; c100=bit-exact router authority")
     print("  chain=candidate>receiver>material>operator-gate>selector>sources>b12+t18+t19>shader>draw-mutation>restore")
     print("  equipment_textures=independent; no clustered Diffuse/Normal/SpecRGB prerequisite")
+    print("  d3d11_context=immediate_or_deferred; dynamic WRITE_DISCARD carrier; stage telemetry enforced")
     print("  shader_owners=dynamic PointLight/MR/local-spec + exact static diffuse-domain/attenuation/SAT (+NoSpc EnvSpec-delete)")
     print("  cb_resources=dynamic owners only; static create-time owners remain shader-only")
     print("  draw=adapter-valid ownership + exact pipeline route + shared transaction")
