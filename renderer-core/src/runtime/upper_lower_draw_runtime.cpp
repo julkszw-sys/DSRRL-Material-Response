@@ -3609,6 +3609,17 @@ void *__fastcall hook_blend(
 {
     telemetry::hot_count(g_blend_seen);
 
+    if (g_reference_only_transport.load(
+            std::memory_order_acquire)) {
+        return g_blend_orig != nullptr
+            ? g_blend_orig(
+                dst,
+                a,
+                b,
+                beta)
+            : nullptr;
+    }
+
 #if defined(_MSC_VER)
     const auto return_address =
         reinterpret_cast<std::uintptr_t>(
