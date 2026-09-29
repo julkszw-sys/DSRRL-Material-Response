@@ -190,7 +190,7 @@ std::atomic<std::uint64_t> g_fixed_draw_fail_open{0};
 std::atomic<std::uint64_t> g_clustered_draw_candidates{0};
 std::atomic<std::uint64_t> g_clustered_draw_pipeline_ready{0};
 std::atomic<std::uint64_t> g_clustered_draw_material_ready{0};
-std::atomic<std::uint64_t> g_clustered_draw_resources_ready{0};
+std::atomic<std::uint64_t> g_clustered_draw_operator_gate_ready{0};
 std::atomic<std::uint64_t> g_clustered_draw_sidecar_ready{0};
 std::atomic<std::uint64_t> g_clustered_draw_batch_ready{0};
 std::atomic<std::uint64_t> g_clustered_draw_applied{0};
@@ -1974,7 +1974,7 @@ void log_pointlight_prep_once(
     bool spc,
     bool blended,
     bool material_ready,
-    bool resources_ready,
+    bool operator_gate_ready,
     bool sidecar_ready) noexcept
 {
     const auto previous =
@@ -1988,12 +1988,12 @@ void log_pointlight_prep_once(
     std::snprintf(
         line,
         sizeof(line),
-        "[DSRRL POINTLIGHT PREP] stage=%s spc=%u blended=%u material=%u resources=%u sidecar=%u",
+        "[DSRRL POINTLIGHT PREP] stage=%s spc=%u blended=%u material=%u operator_gate=%u sidecar=%u",
         stage == nullptr ? "unknown" : stage,
         spc ? 1u : 0u,
         blended ? 1u : 0u,
         material_ready ? 1u : 0u,
-        resources_ready ? 1u : 0u,
+        operator_gate_ready ? 1u : 0u,
         sidecar_ready ? 1u : 0u);
     reshade::log::message(
         reshade::log::level::info,
@@ -2883,7 +2883,7 @@ void log_state(const char *tag) noexcept
         "source=%llu/%llu publish=%llu owner=%llu/%llu max=%llu/%llu "
         "sidecar=%llu/%llu gpu18=%llu/%llu gpu19=%llu/%llu b12=%llu/%llu prepare=%llu/%llu "
         "pipe_reg=%llu/%llu pipe_init=%llu pipe_bind=%llu/%llu "
-        "draw_candidate=%llu pipeline_ready=%llu material_ready=%llu resources_ready=%llu "
+        "draw_candidate=%llu pipeline_ready=%llu material_ready=%llu operator_gate_ready=%llu "
         "sidecar_ready=%llu batch_ready=%llu applied=%llu target_failopen=%llu restore_fail=%llu "
         "enabled=%u quarantine=%u/%u",
         tag,
@@ -2918,7 +2918,7 @@ void log_state(const char *tag) noexcept
         static_cast<unsigned long long>(g_clustered_draw_candidates.load()),
         static_cast<unsigned long long>(g_clustered_draw_pipeline_ready.load()),
         static_cast<unsigned long long>(g_clustered_draw_material_ready.load()),
-        static_cast<unsigned long long>(g_clustered_draw_resources_ready.load()),
+        static_cast<unsigned long long>(g_clustered_draw_operator_gate_ready.load()),
         static_cast<unsigned long long>(g_clustered_draw_sidecar_ready.load()),
         static_cast<unsigned long long>(g_clustered_draw_batch_ready.load()),
         static_cast<unsigned long long>(g_clustered_draw_applied.load()),
@@ -4655,8 +4655,6 @@ void release_prepared_island_batch(
     prepared_island_batch &prepared) noexcept
 {
     if (prepared.clustered_in_batch) {
-        g_material_resources.release_prepared_draw(
-            prepared.resources);
         g_clustered_pnts.release_prepared_draw(
             prepared.clustered_carrier);
         g_clustered_pnts_pipeline.release_prepared_shader(
@@ -4720,9 +4718,11 @@ bool prepare_island_batch(
     prepared = {};
 
     // Clustered PntS owns PTDE first-four membership, source geometry/raw-q,
-    // diffuse and (for Spc) legacy local specular. The replacement PS is
-    // attested independently from the post-A1 host, while all draw-local
-    // carriers are bound atomically and restored by the shared transaction.
+    // PointLight material constants and (for Spc) legacy local specular.
+    // The replacement PS is attested independently from the post-A1 host.
+    // Equipment Diffuse/Normal/SpecRGB replacement is not a PointLight
+    // prerequisite; b12/t18/t19 are bound atomically and restored by the
+    // shared transaction.
     if (clustered_pointlight_bound)
         hot_count(g_clustered_draw_candidates);
 
@@ -4743,43 +4743,21 @@ bool prepare_island_batch(
         if (direct_material_ready)
             hot_count(g_clustered_draw_material_ready);
 
-        dsrrl::operators::material_response::
-            mtd_semantic_query clustered_query{};
-        clustered_query.material = material;
-        clustered_query.receiver_id = 0u;
-        clustered_query.ownership.flver_sha256 =
-            material.flver_sha256;
-        clustered_query.ownership.flver_identity_hash =
-            material.flver_identity_hash;
-        clustered_query.ownership.material_slot =
-            material.material_slot;
-        clustered_query.ownership.material_slot_valid =
-            material.material_slot_valid;
-        clustered_query.ownership.exact =
-            material.owner_tuple_exact;
-
-        const bool resources_ready =
+        // Clustered PointLight material constants and source carriers are
+        // independent of the equipment PTDE texture bridge. The exact
+        // replacement journals add only the PointLight-local t19 carrier;
+        // stock material texture reads remain on the host path unless a
+        // separate equipment draw route authorizes replacement.
+        const bool operator_gate_ready =
             context != nullptr &&
-            direct_material_ready &&
-            g_material_resources.
-                prepare_clustered_pointlight_material_requests(
-                    context,
-                    clustered_query,
-                    true,
-                    prepared.clustered_shader.spc,
-                    prepared.clustered_shader.blended_material,
-                    prepared.resources) &&
-            prepared.resources.diffuse &&
-            prepared.resources.normal &&
-            (!prepared.clustered_shader.spc ||
-             prepared.resources.spec_rgb);
+            direct_material_ready;
 
-        if (resources_ready) {
-            hot_count(g_clustered_draw_resources_ready);
+        if (operator_gate_ready) {
+            hot_count(g_clustered_draw_operator_gate_ready);
         } else {
             log_pointlight_prep_once(
                 1u << 0,
-                "clustered_resources_not_ready",
+                "clustered_operator_gate_not_ready",
                 prepared.clustered_shader.spc,
                 prepared.clustered_shader.blended_material,
                 direct_material_ready,
@@ -4788,13 +4766,13 @@ bool prepare_island_batch(
         }
 
         const bool sidecar_ready =
-            resources_ready &&
+            operator_gate_ready &&
             g_clustered_pnts.prepare_sidecar(
                 context,
                 decision,
                 prepared.clustered_carrier);
 
-        if (resources_ready && !sidecar_ready) {
+        if (operator_gate_ready && !sidecar_ready) {
             log_pointlight_prep_once(
                 1u << 1,
                 "clustered_sidecar_not_ready",
@@ -4832,8 +4810,6 @@ bool prepare_island_batch(
             if (static_shader_owners !=
                     expected_static_shader_owners ||
                 static_shader_owners == 0u) {
-                g_material_resources.release_prepared_draw(
-                    prepared.resources);
                 g_clustered_pnts.release_prepared_draw(
                     prepared.clustered_carrier);
                 g_clustered_pnts_pipeline.release_prepared_shader(
@@ -4858,8 +4834,9 @@ bool prepare_island_batch(
             // contains exact create-time operator islands recovered from the
             // journal (diffuse domain, clustered attenuation, terminal SAT,
             // plus NoSpc EnvSpec deletion). They are shader-only owners here:
-            // draw-local b12/t18/t19/resource mutations retain their narrower
-            // PointLight/MR/local-specular ownership.
+            // draw-local b12/t18/t19 mutations retain their narrower
+            // PointLight/MR/local-specular ownership. Equipment texture
+            // replacement is a separate authority and is not inherited here.
             const auto dynamic_additional_owners =
                 prepared.clustered_shader.spc
                     ? (point | mr)
@@ -4901,29 +4878,12 @@ bool prepare_island_batch(
                     prepared.batch,
                     clustered) ==
                 dsrrl::runtime::island_draw_batch_result::ready) {
-                bool resources_appended = true;
-                for (std::uint32_t i = 0u;
-                     i < prepared.resources.request_count;
-                     ++i) {
-                    if (dsrrl::runtime::append_island_draw_request(
-                            prepared.batch,
-                            prepared.resources.requests[i]) !=
-                        dsrrl::runtime::island_draw_batch_result::ready) {
-                        resources_appended = false;
-                        break;
-                    }
-                }
-
-                if (resources_appended) {
-                    prepared.clustered_in_batch = true;
-                    hot_count(g_clustered_draw_batch_ready);
-                    return true;
-                }
+                prepared.clustered_in_batch = true;
+                hot_count(g_clustered_draw_batch_ready);
+                return true;
             }
         }
 
-        g_material_resources.release_prepared_draw(
-            prepared.resources);
         g_clustered_pnts.release_prepared_draw(
             prepared.clustered_carrier);
         g_clustered_pnts_pipeline.release_prepared_shader(
@@ -6191,7 +6151,7 @@ bool AddonInit(
     g_clustered_draw_candidates.store(0);
     g_clustered_draw_pipeline_ready.store(0);
     g_clustered_draw_material_ready.store(0);
-    g_clustered_draw_resources_ready.store(0);
+    g_clustered_draw_operator_gate_ready.store(0);
     g_clustered_draw_sidecar_ready.store(0);
     g_clustered_draw_batch_ready.store(0);
     g_clustered_draw_applied.store(0);

@@ -74,6 +74,8 @@ def main():
     materializer_h=(root/"include/dsrrl/operators/point_light/clustered_pnts_direct_materializer.hpp").read_text(encoding="utf-8")
     flver_cpp=(root/"src/runtime/flver_engine_hooks.cpp").read_text(encoding="utf-8")
     integrated=(root/"integrated/integrated_addon.cpp").read_text(encoding="utf-8")
+    material_resource_cpp=(root/"src/runtime/material_resource_draw_runtime.cpp").read_text(encoding="utf-8")
+    material_resource_h=(root/"include/dsrrl/runtime/material_resource_draw_runtime.hpp").read_text(encoding="utf-8")
     mr_cpp=(root/"src/operators/material_response/material_response_island.cpp").read_text(encoding="utf-8")
     owner_cpp=(root/"src/runtime/material_owner_producer.cpp").read_text(encoding="utf-8")
     policy=(root/"include/dsrrl/core/draw_transaction_policy.hpp").read_text(encoding="utf-8")
@@ -193,10 +195,29 @@ def main():
     require(integrated,"direct_pointlight_requires_specular","receiver-derived specular requirement")
     require(integrated,"[DSRRL POINTLIGHT GATE]","one-shot direct PointLight rejection trace")
     require(integrated,"clustered_metadata_unbound","pipeline-route versus bound-metadata rejection trace")
-    resources_gate=integrated.find("const bool resources_ready =")
-    prepare_call=integrated.find("g_clustered_pnts.prepare_sidecar(")
-    if resources_gate<0 or prepare_call<0 or not resources_gate<prepare_call:
-        fail("clustered heavy source selection is not downstream of the material-resource gate")
+    clustered_marker=integrated.find("// Clustered PntS owns PTDE first-four membership")
+    clustered_begin=integrated.find("if (clustered_pointlight_bound &&",clustered_marker)
+    fixed_begin=integrated.find("// Fixed PntSS/PntSSSS is a separate exact receiver namespace.",clustered_begin)
+    if clustered_marker<0 or clustered_begin<0 or fixed_begin<0 or not clustered_begin<fixed_begin:
+        fail("clustered/fixed integrated branch boundaries are missing")
+    clustered_block=integrated[clustered_begin:fixed_begin]
+    require(clustered_block,"const bool operator_gate_ready =","clustered operator-local activation gate")
+    require(clustered_block,"context != nullptr &&\n            direct_material_ready","clustered context+material prerequisite")
+    prepare_call=clustered_block.find("g_clustered_pnts.prepare_sidecar(")
+    operator_gate=clustered_block.find("const bool operator_gate_ready =")
+    if prepare_call<0 or operator_gate<0 or not operator_gate<prepare_call:
+        fail("clustered sidecar is not downstream of the PointLight-local gate")
+    for forbidden,label in [
+        ("prepare_clustered_pointlight_material_requests","legacy clustered equipment texture prep"),
+        ("prepare_fixed_pointlight_material_requests","fixed equipment texture prep"),
+        ("prepared.resources","equipment resource batch"),
+        ("clustered_resources_not_ready","legacy equipment resource failure gate")
+    ]:
+        if forbidden in clustered_block:
+            fail(f"clustered PointLight still depends on {label}")
+    if "prepare_clustered_pointlight_material_requests" in material_resource_cpp or \
+       "prepare_clustered_pointlight_material_requests" in material_resource_h:
+        fail("legacy clustered material-resource API still exists")
 
     if "clustered.additional_owners =\n                point | mr | local_if_spc;" in integrated:
         fail("clustered request duplicates primary in additional_owners")
@@ -253,7 +274,8 @@ def main():
     print("  producer=builder-input-snapshot>same-thread-material-join>authorized-draw-first4+raw-source")
     print("  carrier=b12[3].x+t18+t19 material_max=uint32 min_after_first4")
     print("  material=25 exact HOMOLOGOUS_NOSPC pairs; identity=certified supplement; c100=bit-exact router authority")
-    print("  chain=candidate>receiver>material>resources>selector>sources>sidecar>shader>draw-mutation>restore")
+    print("  chain=candidate>receiver>material>operator-gate>selector>sources>b12+t18+t19>shader>draw-mutation>restore")
+    print("  equipment_textures=independent; no clustered Diffuse/Normal/SpecRGB prerequisite")
     print("  shader_owners=dynamic PointLight/MR/local-spec + exact static diffuse-domain/attenuation/SAT (+NoSpc EnvSpec-delete)")
     print("  cb_resources=dynamic owners only; static create-time owners remain shader-only")
     print("  draw=adapter-valid ownership + exact pipeline route + shared transaction")
