@@ -2015,15 +2015,6 @@ bool pmetal_bank_signature(
         count > 256u)
         return false;
 
-    const std::size_t table_bytes =
-        0x30u +
-        static_cast<std::size_t>(count) * 12u;
-
-    if (!readable_range(
-            base,
-            table_bytes))
-        return false;
-
     std::uint64_t hash = 0xcbf29ce484222325ULL;
     hash = pmetal_fnv_byte(
         hash,
@@ -2036,8 +2027,6 @@ bool pmetal_bank_signature(
         0x30u +
         static_cast<std::uint32_t>(count) * 12u;
 
-    readable_window name_window{};
-
     for (std::uint32_t i = 0u;
          i < count;
          ++i) {
@@ -2047,14 +2036,9 @@ bool pmetal_bank_signature(
 
         std::uint32_t row_id = 0u;
         std::uint32_t name_offset = 0u;
-        std::memcpy(
-            &row_id,
-            entry,
-            sizeof(row_id));
-        std::memcpy(
-            &name_offset,
-            entry + 8u,
-            sizeof(name_offset));
+        if (!safe_read(entry, row_id) ||
+            !safe_read(entry + 8u, name_offset))
+            return false;
 
         if (name_offset < minimum_name ||
             name_offset > 0x100000u)
@@ -2078,16 +2062,9 @@ bool pmetal_bank_signature(
                     name_offset) +
                 j;
 
-            if (!ensure_readable_window(
-                    name_byte,
-                    name_window))
-                return false;
-
             std::uint8_t ch = 0u;
-            std::memcpy(
-                &ch,
-                name_byte,
-                sizeof(ch));
+            if (!safe_read(name_byte, ch))
+                return false;
 
             hash = pmetal_fnv_byte(
                 hash,
