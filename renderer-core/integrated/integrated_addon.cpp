@@ -2874,7 +2874,7 @@ void log_state(const char *tag) noexcept
         g_clustered_pnts.telemetry();
     const auto clustered_pipe =
         g_clustered_pnts_pipeline.telemetry();
-    char clustered_pl_line[1536]{};
+    char clustered_pl_line[2048]{};
     std::snprintf(
         clustered_pl_line,
         sizeof(clustered_pl_line),
@@ -2882,6 +2882,7 @@ void log_state(const char *tag) noexcept
         "builder=%llu collection=%llu/%llu selector=%llu mirror=%llu/%llu "
         "source=%llu/%llu publish=%llu owner=%llu/%llu max=%llu/%llu "
         "sidecar=%llu/%llu gpu18=%llu/%llu gpu19=%llu/%llu b12=%llu/%llu prepare=%llu/%llu "
+        "failstage=pre:%llu sel:%llu empty:%llu build:%llu ctx:%llu/%llu/%llu gpu:%llu upload:%llu "
         "pipe_reg=%llu/%llu pipe_init=%llu pipe_bind=%llu/%llu "
         "draw_candidate=%llu pipeline_ready=%llu material_ready=%llu operator_gate_ready=%llu "
         "sidecar_ready=%llu batch_ready=%llu applied=%llu target_failopen=%llu restore_fail=%llu "
@@ -2910,6 +2911,15 @@ void log_state(const char *tag) noexcept
         static_cast<unsigned long long>(clustered_pl.b12_hit),
         static_cast<unsigned long long>(clustered_pl.prepare_ok),
         static_cast<unsigned long long>(clustered_pl.prepare_fail),
+        static_cast<unsigned long long>(clustered_pl.prepare_precondition_fail),
+        static_cast<unsigned long long>(clustered_pl.selection_fail),
+        static_cast<unsigned long long>(clustered_pl.selection_empty),
+        static_cast<unsigned long long>(clustered_pl.sidecar_build_fail),
+        static_cast<unsigned long long>(clustered_pl.context_immediate),
+        static_cast<unsigned long long>(clustered_pl.context_deferred),
+        static_cast<unsigned long long>(clustered_pl.context_other),
+        static_cast<unsigned long long>(clustered_pl.gpu_prepare_fail),
+        static_cast<unsigned long long>(clustered_pl.upload_fail),
         static_cast<unsigned long long>(clustered_pipe.candidate_create_ok),
         static_cast<unsigned long long>(clustered_pipe.candidate_create_fail),
         static_cast<unsigned long long>(clustered_pipe.init_attested),
