@@ -49,13 +49,18 @@ def main() -> None:
     )
     require(
         integrated,
-        "const bool equipment_spec_rgb_consumer =",
-        "consumer-local SpecRGB candidate gate",
+        "Do not pre-mark\n    // it as an effect candidate here.",
+        "no generic SpecRGB effect candidate",
     )
     require(
         integrated,
-        "(fixed_pointlight_bound ||\n         subsurface_bound ||\n         pmetal_envspec_candidate)",
-        "explicit legal SpecRGB consumer set",
+        "observe_equipment_specrgb_carrier(",
+        "passive equipment carrier probe",
+    )
+    require(
+        integrated,
+        "exact_specular_companion_ready(",
+        "exact equipment companion liveness probe",
     )
 
     legacy = """if (material.owner_tuple_exact) {
@@ -113,7 +118,9 @@ def main() -> None:
 
     print("DSRRL_SPECRGB_EQUIPMENT_SCOPE_PASS")
     print("  carrier=exact equipment owner/resource -> PTDE sidecar -> consumer-local transaction")
+    print("  carrier_probe=passive_no_bind")
     print("  legal_consumers=fixed_local_specular,pmetal_envspec,subsurface")
+    print("  effect_probe=prepared_resource_only")
     print("  generic_mr=stock_t1_no_specrgb")
     print("  clustered_pointlight=independent_no_inherited_specrgb")
 
