@@ -284,60 +284,94 @@ void fixed_pointlight_pipeline_runtime::on_init_pipeline(
     ++init_attested_;
 }
 
-void fixed_pointlight_pipeline_runtime::on_bind_pipeline(
+bool fixed_pointlight_pipeline_runtime::on_bind_pipeline(
     reshade::api::command_list *cmd_list,
     reshade::api::pipeline_stage stages,
     reshade::api::pipeline pipeline) noexcept
 {
     if (cmd_list == nullptr)
-        return;
+        return false;
 
-    const auto pixel =
+    const bool pixel =
         (static_cast<std::uint32_t>(stages) &
          static_cast<std::uint32_t>(
              reshade::api::pipeline_stage::pixel_shader)) != 0u;
     if (!pixel)
-        return;
+        return false;
 
     const auto command =
         static_cast<std::uint64_t>(
             reinterpret_cast<std::uintptr_t>(
                 cmd_list));
 
-    std::lock_guard<std::mutex> lock(mutex_);
+    // The exact PointLight pipeline registry is the bind-time authority.
+    // The integrated route cache is only an optimization and may not suppress
+    // this lookup. Negative lookups are epoch-cached per thread, so ordinary
+    // non-PointLight binds do not take this runtime's mutex repeatedly.
+    if (!pipeline_attested_cached(
+            pipeline.handle)) {
+        if (!any_bound_.load(
+                std::memory_order_acquire)) {
+            bound_tls_ = {
+                this,
+                command,
+                {},
+                bound_epoch_.load(
+                    std::memory_order_relaxed),
+                false
+            };
+            return false;
+        }
 
+        std::lock_guard<std::mutex> lock(mutex_);
+        bound_.erase(command);
+        any_bound_.store(
+            !bound_.empty(),
+            std::memory_order_release);
+        bound_tls_ = {
+            this,
+            command,
+            {},
+            bound_epoch_.load(
+                std::memory_order_relaxed),
+            false
+        };
+        return false;
+    }
+
+    std::lock_guard<std::mutex> lock(mutex_);
     const auto epoch =
         bound_epoch_.load(
             std::memory_order_relaxed);
 
     if (quarantined_.load()) {
         bound_.erase(command);
-        bound_tls_ = {
-            this,
-            command,
-            {},
-            epoch,
-            false
-        };
-        return;
+        any_bound_.store(
+            !bound_.empty(),
+            std::memory_order_release);
+        bound_tls_ = {this,command,{},epoch,false};
+        return false;
     }
 
     const auto found =
         pipelines_.find(pipeline.handle);
     if (found == pipelines_.end()) {
+        // A destroy can race the cached positive verdict. Fail open and
+        // invalidate the current command-list binding rather than replaying
+        // a stale PointLight replacement.
         bound_.erase(command);
-        bound_tls_ = {
-            this,
-            command,
-            {},
-            epoch,
-            false
-        };
+        any_bound_.store(
+            !bound_.empty(),
+            std::memory_order_release);
+        bound_tls_ = {this,command,{},epoch,false};
         telemetry::hot_count(bind_misses_);
-        return;
+        return false;
     }
 
     bound_[command] = found->second;
+    any_bound_.store(
+        true,
+        std::memory_order_release);
     bound_tls_ = {
         this,
         command,
@@ -346,8 +380,8 @@ void fixed_pointlight_pipeline_runtime::on_bind_pipeline(
         true
     };
     telemetry::hot_count(bind_hits_);
+    return true;
 }
-
 void fixed_pointlight_pipeline_runtime::on_destroy_pipeline(
     reshade::api::pipeline pipeline) noexcept
 {
@@ -374,6 +408,9 @@ void fixed_pointlight_pipeline_runtime::on_destroy_pipeline(
         else
             ++it;
     }
+    any_bound_.store(
+        !bound_.empty(),
+        std::memory_order_release);
     bound_epoch_.fetch_add(
         1u,
         std::memory_order_release);
@@ -390,6 +427,9 @@ void fixed_pointlight_pipeline_runtime::on_destroy_device(
         return;
 
     bound_.clear();
+    any_bound_.store(
+        false,
+        std::memory_order_release);
     pipelines_.clear();
     pipeline_epoch_.fetch_add(
         1u,
@@ -611,6 +651,9 @@ void fixed_pointlight_pipeline_runtime::reset() noexcept
 {
     std::lock_guard<std::mutex> lock(mutex_);
     bound_.clear();
+    any_bound_.store(
+        false,
+        std::memory_order_release);
     pipelines_.clear();
     pipeline_epoch_.fetch_add(
         1u,
