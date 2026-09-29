@@ -1,0 +1,5208 @@
+{
+  "schema": "DSRRL_POINTLIGHT_MATERIAL_AUTHORITY_V1",
+  "status": "CONSTRUCTION_AUTHORITY_CORPUS",
+  "source": {
+    "path": "renderer-core/data/census/ptde_mtd_envspec_router_v1.json",
+    "git_blob_sha": "df76f7db7eaed306fc83f631a62d75a61d303de8",
+    "source_schema": 1
+  },
+  "policy": {
+    "target": "PTDE PointLight material constants only",
+    "active_requirements": [
+      "exact DSR raw MTD SHA",
+      "unambiguous semantic-name hash",
+      "homologous PointLight material family",
+      "EXACT_SPX cross-version route"
+    ],
+    "explicitly_not_authorized": [
+      "PTDE Diffuse replacement outside equipment",
+      "PTDE Normal replacement outside equipment",
+      "PTDE SpecRGB replacement outside equipment",
+      "receiver-family widening",
+      "V4/V5 PointLight amplitude or range heuristics"
+    ],
+    "runtime_gate": "Exact receiver and exact authenticated FLVER/material owner remain independent mandatory gates."
+  },
+  "summary": {
+    "active_records": 205,
+    "spc_records": 180,
+    "nospc_records": 25,
+    "spc_non_scalar_c101_records": 12,
+    "deferred_family_variant_records": 31,
+    "deferred_ambiguous_rows": 2
+  },
+  "active_records": [
+    {
+      "router_index": 1,
+      "mtd_name": "A02_C5000_Slime[DSB]_Alp.mtd",
+      "semantic_name_hash_fnv1a_utf8": "0xfde69928da2a1e02",
+      "dsr_mtd_sha256": "3419cf5db5e292a1a03434396349d3bebc9ae68dc23277d71724a7fc5b631317",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmpLit.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmpLit.spx",
+      "c100_f32_bits": [
+        "0x3f000000",
+        "0x3f000000",
+        "0x3f000000"
+      ],
+      "c101_f32_bits": [
+        "0x4019b9ba",
+        "0x40137374",
+        "0x40137374"
+      ],
+      "c102_f32_bits": "0x428c0000",
+      "material_mode": "SPC",
+      "c101_scalar": false,
+      "authority": "POINTLIGHT_MATERIAL_CONSTANTS_ONLY"
+    },
+    {
+      "router_index": 3,
+      "mtd_name": "A03_1Wood[DSB][L].mtd",
+      "semantic_name_hash_fnv1a_utf8": "0x5bcac2f17b140f9c",
+      "dsr_mtd_sha256": "66bab9da9dda0e708f2a45004f658fcf32ca0470e5b7cdf722018c35b35206f1",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmpLit.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmpLit.spx",
+      "c100_f32_bits": [
+        "0x3f19999a",
+        "0x3f19999a",
+        "0x3f19999a"
+      ],
+      "c101_f32_bits": [
+        "0x3f800000",
+        "0x3f800000",
+        "0x3f800000"
+      ],
+      "c102_f32_bits": "0x40000000",
+      "material_mode": "SPC",
+      "c101_scalar": true,
+      "authority": "POINTLIGHT_MATERIAL_CONSTANTS_ONLY"
+    },
+    {
+      "router_index": 4,
+      "mtd_name": "A03_4Stone[DSB][L].mtd",
+      "semantic_name_hash_fnv1a_utf8": "0xd117923f3c88370f",
+      "dsr_mtd_sha256": "4f0cc6f4946abf397d64fd0241023f152dd2d1447bd52662cc8614409e2cf074",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmpLit.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmpLit.spx",
+      "c100_f32_bits": [
+        "0x3f19999a",
+        "0x3f19999a",
+        "0x3f19999a"
+      ],
+      "c101_f32_bits": [
+        "0x3fc00000",
+        "0x3fc00000",
+        "0x3fc00000"
+      ],
+      "c102_f32_bits": "0x40800000",
+      "material_mode": "SPC",
+      "c101_scalar": true,
+      "authority": "POINTLIGHT_MATERIAL_CONSTANTS_ONLY"
+    },
+    {
+      "router_index": 5,
+      "mtd_name": "A03_4Stone[DSB][ML].mtd",
+      "semantic_name_hash_fnv1a_utf8": "0xe5aecd526c43fe92",
+      "dsr_mtd_sha256": "cd29369ef71f08192301e7b3158d62a0b74179d2ac0682d3478ba2e2bd0774fc",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmpMulLit.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmpMulLit.spx",
+      "c100_f32_bits": [
+        "0x3f19999a",
+        "0x3f19999a",
+        "0x3f19999a"
+      ],
+      "c101_f32_bits": [
+        "0x3fc00000",
+        "0x3fc00000",
+        "0x3fc00000"
+      ],
+      "c102_f32_bits": "0x40800000",
+      "material_mode": "SPC",
+      "c101_scalar": true,
+      "authority": "POINTLIGHT_MATERIAL_CONSTANTS_ONLY"
+    },
+    {
+      "router_index": 6,
+      "mtd_name": "A03_7Metal[DSB][L].mtd",
+      "semantic_name_hash_fnv1a_utf8": "0x5e35fabde6b7756e",
+      "dsr_mtd_sha256": "a557affd0cddeea208bdb3f1208a5a9bafd7a1dc20f7e5d194b827046c35da59",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmpLit.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmpLit.spx",
+      "c100_f32_bits": [
+        "0x3f19999a",
+        "0x3f19999a",
+        "0x3f19999a"
+      ],
+      "c101_f32_bits": [
+        "0x40000000",
+        "0x40000000",
+        "0x40000000"
+      ],
+      "c102_f32_bits": "0x40e00000",
+      "material_mode": "SPC",
+      "c101_scalar": true,
+      "authority": "POINTLIGHT_MATERIAL_CONSTANTS_ONLY"
+    },
+    {
+      "router_index": 26,
+      "mtd_name": "A05_1Wood[DSB].mtd",
+      "semantic_name_hash_fnv1a_utf8": "0xcb4eff12b018cb5e",
+      "dsr_mtd_sha256": "1a5d047261446c7c7edad2360ca406acfe4e7d7218f6867b61d4b16bd9c0476b",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "c100_f32_bits": [
+        "0x3f19999a",
+        "0x3f19999a",
+        "0x3f19999a"
+      ],
+      "c101_f32_bits": [
+        "0x3f800000",
+        "0x3f800000",
+        "0x3f800000"
+      ],
+      "c102_f32_bits": "0x40000000",
+      "material_mode": "SPC",
+      "c101_scalar": true,
+      "authority": "POINTLIGHT_MATERIAL_CONSTANTS_ONLY"
+    },
+    {
+      "router_index": 27,
+      "mtd_name": "A05_1Wood[DSB][L].mtd",
+      "semantic_name_hash_fnv1a_utf8": "0xe517c1f0672d3ebe",
+      "dsr_mtd_sha256": "0fc1fe7ef77546ba2f2a5118728ec0d468fedd0e2c02f1ffea261118ec797576",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmpLit.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmpLit.spx",
+      "c100_f32_bits": [
+        "0x3f19999a",
+        "0x3f19999a",
+        "0x3f19999a"
+      ],
+      "c101_f32_bits": [
+        "0x3f800000",
+        "0x3f800000",
+        "0x3f800000"
+      ],
+      "c102_f32_bits": "0x40000000",
+      "material_mode": "SPC",
+      "c101_scalar": true,
+      "authority": "POINTLIGHT_MATERIAL_CONSTANTS_ONLY"
+    },
+    {
+      "router_index": 28,
+      "mtd_name": "A05_4Stone[DSB].mtd",
+      "semantic_name_hash_fnv1a_utf8": "0x214d5fb371b11f1b",
+      "dsr_mtd_sha256": "7467799eb234ca4ea168226181d2f7db120bf927158882f180a098f2fece6798",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "c100_f32_bits": [
+        "0x3f19999a",
+        "0x3f19999a",
+        "0x3f19999a"
+      ],
+      "c101_f32_bits": [
+        "0x3fc00000",
+        "0x3fc00000",
+        "0x3fc00000"
+      ],
+      "c102_f32_bits": "0x40800000",
+      "material_mode": "SPC",
+      "c101_scalar": true,
+      "authority": "POINTLIGHT_MATERIAL_CONSTANTS_ONLY"
+    },
+    {
+      "router_index": 29,
+      "mtd_name": "A05_4Stone[DSB][L].mtd",
+      "semantic_name_hash_fnv1a_utf8": "0x9ba67787519c72cd",
+      "dsr_mtd_sha256": "4f0cc6f4946abf397d64fd0241023f152dd2d1447bd52662cc8614409e2cf074",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmpLit.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmpLit.spx",
+      "c100_f32_bits": [
+        "0x3f19999a",
+        "0x3f19999a",
+        "0x3f19999a"
+      ],
+      "c101_f32_bits": [
+        "0x3fc00000",
+        "0x3fc00000",
+        "0x3fc00000"
+      ],
+      "c102_f32_bits": "0x40800000",
+      "material_mode": "SPC",
+      "c101_scalar": true,
+      "authority": "POINTLIGHT_MATERIAL_CONSTANTS_ONLY"
+    },
+    {
+      "router_index": 30,
+      "mtd_name": "A05_4Stone[DSB][ML].mtd",
+      "semantic_name_hash_fnv1a_utf8": "0xe94dbed05601e42c",
+      "dsr_mtd_sha256": "cd29369ef71f08192301e7b3158d62a0b74179d2ac0682d3478ba2e2bd0774fc",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmpMulLit.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmpMulLit.spx",
+      "c100_f32_bits": [
+        "0x3f19999a",
+        "0x3f19999a",
+        "0x3f19999a"
+      ],
+      "c101_f32_bits": [
+        "0x3fc00000",
+        "0x3fc00000",
+        "0x3fc00000"
+      ],
+      "c102_f32_bits": "0x40800000",
+      "material_mode": "SPC",
+      "c101_scalar": true,
+      "authority": "POINTLIGHT_MATERIAL_CONSTANTS_ONLY"
+    },
+    {
+      "router_index": 31,
+      "mtd_name": "A05_7Metal[DSB].mtd",
+      "semantic_name_hash_fnv1a_utf8": "0x485607836bdef14c",
+      "dsr_mtd_sha256": "29b417cf4b76455c393c35e3288d0e2af57aa19d2a0ef076f2a0646065d43f55",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "c100_f32_bits": [
+        "0x3f19999a",
+        "0x3f19999a",
+        "0x3f19999a"
+      ],
+      "c101_f32_bits": [
+        "0x40000000",
+        "0x40000000",
+        "0x40000000"
+      ],
+      "c102_f32_bits": "0x40e00000",
+      "material_mode": "SPC",
+      "c101_scalar": true,
+      "authority": "POINTLIGHT_MATERIAL_CONSTANTS_ONLY"
+    },
+    {
+      "router_index": 32,
+      "mtd_name": "A05_9Glass[DSB].mtd",
+      "semantic_name_hash_fnv1a_utf8": "0x90bd9b1cec830e7b",
+      "dsr_mtd_sha256": "e0e6b382e2650cf03b89e19fd994fa110b4369f492da3e0e557dd4f17aeb30a4",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "c100_f32_bits": [
+        "0x3f19999a",
+        "0x3f19999a",
+        "0x3f19999a"
+      ],
+      "c101_f32_bits": [
+        "0x40000000",
+        "0x40000000",
+        "0x40000000"
+      ],
+      "c102_f32_bits": "0x42700000",
+      "material_mode": "SPC",
+      "c101_scalar": true,
+      "authority": "POINTLIGHT_MATERIAL_CONSTANTS_ONLY"
+    },
+    {
+      "router_index": 35,
+      "mtd_name": "A05water03[DSB]_Alp.mtd",
+      "semantic_name_hash_fnv1a_utf8": "0x8dbc2ebe8023d8f9",
+      "dsr_mtd_sha256": "b264f6f11f4a2475ca8a4186de7fc49129ef016f7559a63f50734b1906320f6a",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "c100_f32_bits": [
+        "0x3f19999a",
+        "0x3f19999a",
+        "0x3f19999a"
+      ],
+      "c101_f32_bits": [
+        "0x40000000",
+        "0x40000000",
+        "0x40000000"
+      ],
+      "c102_f32_bits": "0x40e00000",
+      "material_mode": "SPC",
+      "c101_scalar": true,
+      "authority": "POINTLIGHT_MATERIAL_CONSTANTS_ONLY"
+    },
+    {
+      "router_index": 41,
+      "mtd_name": "A07_yuki[DSB][L].mtd",
+      "semantic_name_hash_fnv1a_utf8": "0xce3fdb3cac5572d0",
+      "dsr_mtd_sha256": "d285969e51313f2070fe72c39163f49343a2737abce3d1baf5cabcc6e48a7efa",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmpLit.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmpLit.spx",
+      "c100_f32_bits": [
+        "0x3f19999a",
+        "0x3f19999a",
+        "0x3f19999a"
+      ],
+      "c101_f32_bits": [
+        "0x3f800000",
+        "0x3f800000",
+        "0x3f800000"
+      ],
+      "c102_f32_bits": "0x40000000",
+      "material_mode": "SPC",
+      "c101_scalar": true,
+      "authority": "POINTLIGHT_MATERIAL_CONSTANTS_ONLY"
+    },
+    {
+      "router_index": 42,
+      "mtd_name": "A07_yuki[DSB][L]Alp.mtd",
+      "semantic_name_hash_fnv1a_utf8": "0x292a74575ed32b89",
+      "dsr_mtd_sha256": "8979a303e9672032c0fe6c56913664d72b63ea63a686c7f09fcd59bc609f6dd0",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmpLit.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmpLit.spx",
+      "c100_f32_bits": [
+        "0x3f19999a",
+        "0x3f19999a",
+        "0x3f19999a"
+      ],
+      "c101_f32_bits": [
+        "0x3f800000",
+        "0x3f800000",
+        "0x3f800000"
+      ],
+      "c102_f32_bits": "0x40000000",
+      "material_mode": "SPC",
+      "c101_scalar": true,
+      "authority": "POINTLIGHT_MATERIAL_CONSTANTS_ONLY"
+    },
+    {
+      "router_index": 45,
+      "mtd_name": "A10_00_Water_slope.mtd",
+      "semantic_name_hash_fnv1a_utf8": "0x9d14e4c978bf1aff",
+      "dsr_mtd_sha256": "ee3b52a4231fb26b958dd573c80fa55d930bc0cdca1c514b158917b1ef087548",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "c100_f32_bits": [
+        "0x3cc0c0c2",
+        "0x3cc0c0c2",
+        "0x3c40c0c2"
+      ],
+      "c101_f32_bits": [
+        "0x3f7d7d7f",
+        "0x3f5a5a5b",
+        "0x3f19191a"
+      ],
+      "c102_f32_bits": "0x41080000",
+      "material_mode": "SPC",
+      "c101_scalar": false,
+      "authority": "POINTLIGHT_MATERIAL_CONSTANTS_ONLY"
+    },
+    {
+      "router_index": 46,
+      "mtd_name": "A10_BG_cloud[Dn]_Add.mtd",
+      "semantic_name_hash_fnv1a_utf8": "0xc431aa13effdd6a4",
+      "dsr_mtd_sha256": "b3ec0ccf59bfdac94db7eb6292484c43755c09252a711b4aa2f2131b32c33543",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDif.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDif.spx",
+      "c100_f32_bits": [
+        "0x00000000",
+        "0x00000000",
+        "0x00000000"
+      ],
+      "c101_f32_bits": [
+        "0x00000000",
+        "0x00000000",
+        "0x00000000"
+      ],
+      "c102_f32_bits": "0x00000000",
+      "material_mode": "NOSPC",
+      "c101_scalar": true,
+      "authority": "POINTLIGHT_MATERIAL_CONSTANTS_ONLY"
+    },
+    {
+      "router_index": 49,
+      "mtd_name": "A10_Sky[Dn].mtd",
+      "semantic_name_hash_fnv1a_utf8": "0xa37389dea2e4b61c",
+      "dsr_mtd_sha256": "cfceaf053d7b8a674e758bbfc5da0185d7080a2bf2787a4c478a5c95b0ea1025",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDif.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDif.spx",
+      "c100_f32_bits": [
+        "0x40e00000",
+        "0x40e00000",
+        "0x40e00000"
+      ],
+      "c101_f32_bits": [
+        "0x00000000",
+        "0x00000000",
+        "0x00000000"
+      ],
+      "c102_f32_bits": "0x00000000",
+      "material_mode": "NOSPC",
+      "c101_scalar": true,
+      "authority": "POINTLIGHT_MATERIAL_CONSTANTS_ONLY"
+    },
+    {
+      "router_index": 50,
+      "mtd_name": "A10_Sky[Dn]_LS.mtd",
+      "semantic_name_hash_fnv1a_utf8": "0x845feea1ec353cba",
+      "dsr_mtd_sha256": "9e15f7569b6e68245e4bcae56cf6204d5c2784cbee132ca7f9da9aa93751690f",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDif.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDif.spx",
+      "c100_f32_bits": [
+        "0x40e00000",
+        "0x40e00000",
+        "0x40e00000"
+      ],
+      "c101_f32_bits": [
+        "0x00000000",
+        "0x00000000",
+        "0x00000000"
+      ],
+      "c102_f32_bits": "0x00000000",
+      "material_mode": "NOSPC",
+      "c101_scalar": true,
+      "authority": "POINTLIGHT_MATERIAL_CONSTANTS_ONLY"
+    },
+    {
+      "router_index": 51,
+      "mtd_name": "A10_Stone[DSB].mtd",
+      "semantic_name_hash_fnv1a_utf8": "0x9481dc4aac2263ad",
+      "dsr_mtd_sha256": "e70ef9f18a425e88dc3fa8f7c508624b0f1b990b192ad272597566862e38b756",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "c100_f32_bits": [
+        "0x3f000000",
+        "0x3f000000",
+        "0x3f000000"
+      ],
+      "c101_f32_bits": [
+        "0x3f800000",
+        "0x3f800000",
+        "0x3f800000"
+      ],
+      "c102_f32_bits": "0x3f333333",
+      "material_mode": "SPC",
+      "c101_scalar": true,
+      "authority": "POINTLIGHT_MATERIAL_CONSTANTS_ONLY"
+    },
+    {
+      "router_index": 52,
+      "mtd_name": "A10_Stone[DSB][L].mtd",
+      "semantic_name_hash_fnv1a_utf8": "0x7d0ae0315d2b1e1f",
+      "dsr_mtd_sha256": "f27c8fb64f41ecf8ea0c2185839c022ab274a72d2014bf87043319e6de48ad7b",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmpLit.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmpLit.spx",
+      "c100_f32_bits": [
+        "0x3ec7ae14",
+        "0x3ec7ae14",
+        "0x3ec7ae14"
+      ],
+      "c101_f32_bits": [
+        "0x40600000",
+        "0x40600000",
+        "0x40600000"
+      ],
+      "c102_f32_bits": "0x42200000",
+      "material_mode": "SPC",
+      "c101_scalar": true,
+      "authority": "POINTLIGHT_MATERIAL_CONSTANTS_ONLY"
+    },
+    {
+      "router_index": 53,
+      "mtd_name": "A10_Stone[DSB][L]_DetB.mtd",
+      "semantic_name_hash_fnv1a_utf8": "0x044909fcfcdf431b",
+      "dsr_mtd_sha256": "b7bedc82f1dc4b99f88d2201cc7a11d741a344ea331cf3aa513d08be2c3e78bc",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmpLit.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmpLit.spx",
+      "c100_f32_bits": [
+        "0x3f19999a",
+        "0x3f19999a",
+        "0x3f19999a"
+      ],
+      "c101_f32_bits": [
+        "0x3fc00000",
+        "0x3fc00000",
+        "0x3fc00000"
+      ],
+      "c102_f32_bits": "0x40800000",
+      "material_mode": "SPC",
+      "c101_scalar": true,
+      "authority": "POINTLIGHT_MATERIAL_CONSTANTS_ONLY"
+    },
+    {
+      "router_index": 54,
+      "mtd_name": "A10_Wet[DSB][L]_Alp.mtd",
+      "semantic_name_hash_fnv1a_utf8": "0xbdaf6c5db2f669a2",
+      "dsr_mtd_sha256": "cc90adc9469bfc46d0fb6d0c209fff4909d7d9ce61dde00b97f340ef139c1fab",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmpLit.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmpLit.spx",
+      "c100_f32_bits": [
+        "0x3ecccccd",
+        "0x3ecccccd",
+        "0x3ecccccd"
+      ],
+      "c101_f32_bits": [
+        "0x40200000",
+        "0x40200000",
+        "0x40200000"
+      ],
+      "c102_f32_bits": "0x42200000",
+      "material_mode": "SPC",
+      "c101_scalar": true,
+      "authority": "POINTLIGHT_MATERIAL_CONSTANTS_ONLY"
+    },
+    {
+      "router_index": 55,
+      "mtd_name": "A10_Wet[DSB]_Alp.mtd",
+      "semantic_name_hash_fnv1a_utf8": "0x11e72450c49be97a",
+      "dsr_mtd_sha256": "4c311ce6f9eacc52368d638218d548cc1c308187176577de32a49c5e287663c1",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "c100_f32_bits": [
+        "0x3f000000",
+        "0x3f000000",
+        "0x3f000000"
+      ],
+      "c101_f32_bits": [
+        "0x40000000",
+        "0x40000000",
+        "0x40000000"
+      ],
+      "c102_f32_bits": "0x41700000",
+      "material_mode": "SPC",
+      "c101_scalar": true,
+      "authority": "POINTLIGHT_MATERIAL_CONSTANTS_ONLY"
+    },
+    {
+      "router_index": 56,
+      "mtd_name": "A10_cloud[DB]_Alp.mtd",
+      "semantic_name_hash_fnv1a_utf8": "0xe8f29ac88be5f5b0",
+      "dsr_mtd_sha256": "796621ebbd08d877658d93beac4bb201589338f69a1b73b8776bd497973d1293",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifBmp.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifBmp.spx",
+      "c100_f32_bits": [
+        "0x3f19999a",
+        "0x3f19999a",
+        "0x3f19999a"
+      ],
+      "c101_f32_bits": [
+        "0x00000000",
+        "0x00000000",
+        "0x00000000"
+      ],
+      "c102_f32_bits": "0x00000000",
+      "material_mode": "NOSPC",
+      "c101_scalar": true,
+      "authority": "POINTLIGHT_MATERIAL_CONSTANTS_ONLY"
+    },
+    {
+      "router_index": 57,
+      "mtd_name": "A10_cloud[Dn]_Add.mtd",
+      "semantic_name_hash_fnv1a_utf8": "0xa5f311498a2c4f98",
+      "dsr_mtd_sha256": "4ee0a7798328c17b66da020c7dbef086e4a4dd313887ccca54bf67a7a1b08aeb",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDif.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDif.spx",
+      "c100_f32_bits": [
+        "0x3eddaa78",
+        "0x3ed8d8da",
+        "0x3ef5c28f"
+      ],
+      "c101_f32_bits": [
+        "0x00000000",
+        "0x00000000",
+        "0x00000000"
+      ],
+      "c102_f32_bits": "0x00000000",
+      "material_mode": "NOSPC",
+      "c101_scalar": true,
+      "authority": "POINTLIGHT_MATERIAL_CONSTANTS_ONLY"
+    },
+    {
+      "router_index": 60,
+      "mtd_name": "A10_sludge[DSB].mtd",
+      "semantic_name_hash_fnv1a_utf8": "0xda28184a821d13fc",
+      "dsr_mtd_sha256": "179409a3b4d9c73f201ab763c23c541f5fcb84ee96c3b37561a0b4a55cad4e03",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "c100_f32_bits": [
+        "0x3f000000",
+        "0x3f000000",
+        "0x3f000000"
+      ],
+      "c101_f32_bits": [
+        "0x40400000",
+        "0x401a5a5b",
+        "0x3fe9696a"
+      ],
+      "c102_f32_bits": "0x41700000",
+      "material_mode": "SPC",
+      "c101_scalar": false,
+      "authority": "POINTLIGHT_MATERIAL_CONSTANTS_ONLY"
+    },
+    {
+      "router_index": 61,
+      "mtd_name": "A10_sludge[DSB][L].mtd",
+      "semantic_name_hash_fnv1a_utf8": "0x68db46b2650afbc4",
+      "dsr_mtd_sha256": "ce25076f9ef8b2f6d76fbba50603f1ef9031407e767afb6c585e799da3ccf324",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmpLit.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmpLit.spx",
+      "c100_f32_bits": [
+        "0x3f000000",
+        "0x3f000000",
+        "0x3f000000"
+      ],
+      "c101_f32_bits": [
+        "0x40400000",
+        "0x401a5a5b",
+        "0x3fe9696a"
+      ],
+      "c102_f32_bits": "0x41700000",
+      "material_mode": "SPC",
+      "c101_scalar": false,
+      "authority": "POINTLIGHT_MATERIAL_CONSTANTS_ONLY"
+    },
+    {
+      "router_index": 62,
+      "mtd_name": "A10_sludge[DSB][L]_Alp.mtd",
+      "semantic_name_hash_fnv1a_utf8": "0xbf2fb0307701e4d8",
+      "dsr_mtd_sha256": "83f805510705448ce3856a75500915163c280ee7553a3b4e5ee247b37b61d79e",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmpLit.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmpLit.spx",
+      "c100_f32_bits": [
+        "0x3f000000",
+        "0x3f000000",
+        "0x3f000000"
+      ],
+      "c101_f32_bits": [
+        "0x40400000",
+        "0x401a5a5b",
+        "0x3fe9696a"
+      ],
+      "c102_f32_bits": "0x41700000",
+      "material_mode": "SPC",
+      "c101_scalar": false,
+      "authority": "POINTLIGHT_MATERIAL_CONSTANTS_ONLY"
+    },
+    {
+      "router_index": 63,
+      "mtd_name": "A10_sludge[DSB]_Alp.mtd",
+      "semantic_name_hash_fnv1a_utf8": "0xffd8083c17d142b0",
+      "dsr_mtd_sha256": "5abf705858b093bd0ceaacf086a51a7d1e15e3a04ed71bea638de209a43c3dc8",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "c100_f32_bits": [
+        "0x3f000000",
+        "0x3f000000",
+        "0x3f000000"
+      ],
+      "c101_f32_bits": [
+        "0x40400000",
+        "0x401a5a5b",
+        "0x3fe9696a"
+      ],
+      "c102_f32_bits": "0x41700000",
+      "material_mode": "SPC",
+      "c101_scalar": false,
+      "authority": "POINTLIGHT_MATERIAL_CONSTANTS_ONLY"
+    },
+    {
+      "router_index": 64,
+      "mtd_name": "A10_waterfall[DSB]_Alp.mtd",
+      "semantic_name_hash_fnv1a_utf8": "0xc61ec9e06311d9bc",
+      "dsr_mtd_sha256": "8bc6c5d61e8d57adae45aaeaa8093c8bb14287b4068f532b55f58911077356a8",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "c100_f32_bits": [
+        "0x3f19999a",
+        "0x3f19999a",
+        "0x3f19999a"
+      ],
+      "c101_f32_bits": [
+        "0x40000000",
+        "0x40000000",
+        "0x40000000"
+      ],
+      "c102_f32_bits": "0x42700000",
+      "material_mode": "SPC",
+      "c101_scalar": true,
+      "authority": "POINTLIGHT_MATERIAL_CONSTANTS_ONLY"
+    },
+    {
+      "router_index": 65,
+      "mtd_name": "A11_Cloud[Dn]_Add.mtd",
+      "semantic_name_hash_fnv1a_utf8": "0x1953fd92689cb2b7",
+      "dsr_mtd_sha256": "ba7b802867cba5bbfb003e6587fed8e46ce160c9a42340c478e17770d0679764",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDif.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDif.spx",
+      "c100_f32_bits": [
+        "0x3d20a0a2",
+        "0x3d48c8ca",
+        "0x3d30b0b2"
+      ],
+      "c101_f32_bits": [
+        "0x00000000",
+        "0x00000000",
+        "0x00000000"
+      ],
+      "c102_f32_bits": "0x00000000",
+      "material_mode": "NOSPC",
+      "c101_scalar": true,
+      "authority": "POINTLIGHT_MATERIAL_CONSTANTS_ONLY"
+    },
+    {
+      "router_index": 66,
+      "mtd_name": "A11_Sky[Dn].mtd",
+      "semantic_name_hash_fnv1a_utf8": "0xb8d08fa6cf6055bf",
+      "dsr_mtd_sha256": "87adc329de440b39aad78f3525b90c9857d3a97d3242970ccf2c8de78a72d728",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDif.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDif.spx",
+      "c100_f32_bits": [
+        "0x3ff0f0f2",
+        "0x40169697",
+        "0x40078788"
+      ],
+      "c101_f32_bits": [
+        "0x00000000",
+        "0x00000000",
+        "0x00000000"
+      ],
+      "c102_f32_bits": "0x00000000",
+      "material_mode": "NOSPC",
+      "c101_scalar": true,
+      "authority": "POINTLIGHT_MATERIAL_CONSTANTS_ONLY"
+    },
+    {
+      "router_index": 67,
+      "mtd_name": "A12_Darkobj[DSB].mtd",
+      "semantic_name_hash_fnv1a_utf8": "0x88d433552753545f",
+      "dsr_mtd_sha256": "f2293576a66ff7b471d7f7450dbe49651bd9728b5924e8850611276c714ea773",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "c100_f32_bits": [
+        "0x3f000000",
+        "0x3f000000",
+        "0x3f000000"
+      ],
+      "c101_f32_bits": [
+        "0x3f9b9b9c",
+        "0x3fcdcdcf",
+        "0x40000000"
+      ],
+      "c102_f32_bits": "0x41700000",
+      "material_mode": "SPC",
+      "c101_scalar": false,
+      "authority": "POINTLIGHT_MATERIAL_CONSTANTS_ONLY"
+    },
+    {
+      "router_index": 74,
+      "mtd_name": "A12_Ground[DSB].mtd",
+      "semantic_name_hash_fnv1a_utf8": "0xcb3ac32357c95d75",
+      "dsr_mtd_sha256": "263f9742ef4c012a43e93f5591ba78837448b1d61f1d50b9d1887278370d9a73",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "c100_f32_bits": [
+        "0x3f000000",
+        "0x3f000000",
+        "0x3f000000"
+      ],
+      "c101_f32_bits": [
+        "0x3f99999a",
+        "0x3f99999a",
+        "0x3f99999a"
+      ],
+      "c102_f32_bits": "0x3fc00000",
+      "material_mode": "SPC",
+      "c101_scalar": true,
+      "authority": "POINTLIGHT_MATERIAL_CONSTANTS_ONLY"
+    },
+    {
+      "router_index": 75,
+      "mtd_name": "A12_Ground[DSB][L].mtd",
+      "semantic_name_hash_fnv1a_utf8": "0x15b91e29af81ada7",
+      "dsr_mtd_sha256": "e59e47a92df506fda81dc72e58ac0d755b4b73543795c34d27088564825180c0",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmpLit.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmpLit.spx",
+      "c100_f32_bits": [
+        "0x3f000000",
+        "0x3f000000",
+        "0x3f000000"
+      ],
+      "c101_f32_bits": [
+        "0x3f99999a",
+        "0x3f99999a",
+        "0x3f99999a"
+      ],
+      "c102_f32_bits": "0x3fc00000",
+      "material_mode": "SPC",
+      "c101_scalar": true,
+      "authority": "POINTLIGHT_MATERIAL_CONSTANTS_ONLY"
+    },
+    {
+      "router_index": 76,
+      "mtd_name": "A12_Ground[DSB][L]_Alp.mtd",
+      "semantic_name_hash_fnv1a_utf8": "0x725c75f6d0b23eb3",
+      "dsr_mtd_sha256": "c7ab209198cf74e5964337be5e4a389eab083233f0a0bc2191ad2eda70a4b362",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmpLit.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmpLit.spx",
+      "c100_f32_bits": [
+        "0x3f000000",
+        "0x3f000000",
+        "0x3f000000"
+      ],
+      "c101_f32_bits": [
+        "0x3f99999a",
+        "0x3f99999a",
+        "0x3f99999a"
+      ],
+      "c102_f32_bits": "0x3fc00000",
+      "material_mode": "SPC",
+      "c101_scalar": true,
+      "authority": "POINTLIGHT_MATERIAL_CONSTANTS_ONLY"
+    },
+    {
+      "router_index": 77,
+      "mtd_name": "A12_Ground[DSB]_Alp.mtd",
+      "semantic_name_hash_fnv1a_utf8": "0xc3602c8738df658d",
+      "dsr_mtd_sha256": "c97191ebe93771e0b42f560499d0a726c3ae6b7ce12afd2196d8449a3b275296",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "c100_f32_bits": [
+        "0x3f000000",
+        "0x3f000000",
+        "0x3f000000"
+      ],
+      "c101_f32_bits": [
+        "0x3f99999a",
+        "0x3f99999a",
+        "0x3f99999a"
+      ],
+      "c102_f32_bits": "0x3fc00000",
+      "material_mode": "SPC",
+      "c101_scalar": true,
+      "authority": "POINTLIGHT_MATERIAL_CONSTANTS_ONLY"
+    },
+    {
+      "router_index": 80,
+      "mtd_name": "A12_Little waterfall[DSB]_Alp.mtd",
+      "semantic_name_hash_fnv1a_utf8": "0x02d73c07a9c1eeca",
+      "dsr_mtd_sha256": "cdf16ac440878084be704b15d94cdcdd858441073e9a34a5398068b808428539",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "c100_f32_bits": [
+        "0x3e048485",
+        "0x3e1c9c9e",
+        "0x3e4ccccd"
+      ],
+      "c101_f32_bits": [
+        "0x3f800000",
+        "0x3f800000",
+        "0x3f800000"
+      ],
+      "c102_f32_bits": "0x42c80000",
+      "material_mode": "SPC",
+      "c101_scalar": true,
+      "authority": "POINTLIGHT_MATERIAL_CONSTANTS_ONLY"
+    },
+    {
+      "router_index": 81,
+      "mtd_name": "A12_Wall+Ground[DSB][M].mtd",
+      "semantic_name_hash_fnv1a_utf8": "0x15edc627ad918eb7",
+      "dsr_mtd_sha256": "beec3e4d477ec88e7a8fa8a47ec61fee7dac194dbdcbf9ea7dc93d60d5316cde",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmpMul.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmpMul.spx",
+      "c100_f32_bits": [
+        "0x3f000000",
+        "0x3f000000",
+        "0x3f000000"
+      ],
+      "c101_f32_bits": [
+        "0x3f99999a",
+        "0x3f99999a",
+        "0x3f99999a"
+      ],
+      "c102_f32_bits": "0x3fc00000",
+      "material_mode": "SPC",
+      "c101_scalar": true,
+      "authority": "POINTLIGHT_MATERIAL_CONSTANTS_ONLY"
+    },
+    {
+      "router_index": 82,
+      "mtd_name": "A12_Wall+Ground[DSB][M][L].mtd",
+      "semantic_name_hash_fnv1a_utf8": "0xf9e9ccbbf9824871",
+      "dsr_mtd_sha256": "8e14ca0fd21032c6731cd7b135b03c09ef33b999fc72be57fa959832156a67cb",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmpMulLit.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmpMulLit.spx",
+      "c100_f32_bits": [
+        "0x3f000000",
+        "0x3f000000",
+        "0x3f000000"
+      ],
+      "c101_f32_bits": [
+        "0x3f99999a",
+        "0x3f99999a",
+        "0x3f99999a"
+      ],
+      "c102_f32_bits": "0x3fc00000",
+      "material_mode": "SPC",
+      "c101_scalar": true,
+      "authority": "POINTLIGHT_MATERIAL_CONSTANTS_ONLY"
+    },
+    {
+      "router_index": 83,
+      "mtd_name": "A12_Wall[DSB].mtd",
+      "semantic_name_hash_fnv1a_utf8": "0x0a3de328eead13f0",
+      "dsr_mtd_sha256": "2898dc1319af83cd22c7072c4b1cdec2bddc7d0d643502bd358892430485e7b1",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "c100_f32_bits": [
+        "0x3f19999a",
+        "0x3f19999a",
+        "0x3f19999a"
+      ],
+      "c101_f32_bits": [
+        "0x3fc00000",
+        "0x3fc00000",
+        "0x3fc00000"
+      ],
+      "c102_f32_bits": "0x40800000",
+      "material_mode": "SPC",
+      "c101_scalar": true,
+      "authority": "POINTLIGHT_MATERIAL_CONSTANTS_ONLY"
+    },
+    {
+      "router_index": 84,
+      "mtd_name": "A12_Wall[DSB][L].mtd",
+      "semantic_name_hash_fnv1a_utf8": "0x7cb6e439c3362330",
+      "dsr_mtd_sha256": "c59667f4efc8185f965c87313cb4267f927d7fdd76601b156e94d5bee4a22870",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmpLit.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmpLit.spx",
+      "c100_f32_bits": [
+        "0x3f19999a",
+        "0x3f19999a",
+        "0x3f19999a"
+      ],
+      "c101_f32_bits": [
+        "0x3fc00000",
+        "0x3fc00000",
+        "0x3fc00000"
+      ],
+      "c102_f32_bits": "0x40800000",
+      "material_mode": "SPC",
+      "c101_scalar": true,
+      "authority": "POINTLIGHT_MATERIAL_CONSTANTS_ONLY"
+    },
+    {
+      "router_index": 85,
+      "mtd_name": "A12_Wall[DSB][L]_Alp.mtd",
+      "semantic_name_hash_fnv1a_utf8": "0xe9024a2f13336004",
+      "dsr_mtd_sha256": "c59667f4efc8185f965c87313cb4267f927d7fdd76601b156e94d5bee4a22870",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmpLit.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmpLit.spx",
+      "c100_f32_bits": [
+        "0x3f19999a",
+        "0x3f19999a",
+        "0x3f19999a"
+      ],
+      "c101_f32_bits": [
+        "0x3fc00000",
+        "0x3fc00000",
+        "0x3fc00000"
+      ],
+      "c102_f32_bits": "0x40800000",
+      "material_mode": "SPC",
+      "c101_scalar": true,
+      "authority": "POINTLIGHT_MATERIAL_CONSTANTS_ONLY"
+    },
+    {
+      "router_index": 86,
+      "mtd_name": "A12_Wet Ground[DSB][L].mtd",
+      "semantic_name_hash_fnv1a_utf8": "0x05a1227575eb92a3",
+      "dsr_mtd_sha256": "a1c842b239b6ce08004e8960c47a85b1b6f01dc3ef71e560d2463c3e0d259fe7",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmpLit.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmpLit.spx",
+      "c100_f32_bits": [
+        "0x3f4ccccd",
+        "0x3ef8f8fa",
+        "0x00000000"
+      ],
+      "c101_f32_bits": [
+        "0x40c28283",
+        "0x4100a0a1",
+        "0x41200000"
+      ],
+      "c102_f32_bits": "0x42c80000",
+      "material_mode": "SPC",
+      "c101_scalar": false,
+      "authority": "POINTLIGHT_MATERIAL_CONSTANTS_ONLY"
+    },
+    {
+      "router_index": 87,
+      "mtd_name": "A12_waterfall[DSB]_Alp.mtd",
+      "semantic_name_hash_fnv1a_utf8": "0x6807861cb72feeb6",
+      "dsr_mtd_sha256": "fd54ca33a105395cd3756e77f8b6497273eca4f23b4b4cd4a839977225896bf6",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "c100_f32_bits": [
+        "0x3fc6c6c8",
+        "0x3feaeaed",
+        "0x4019999a"
+      ],
+      "c101_f32_bits": [
+        "0x40000000",
+        "0x40000000",
+        "0x40000000"
+      ],
+      "c102_f32_bits": "0x42700000",
+      "material_mode": "SPC",
+      "c101_scalar": true,
+      "authority": "POINTLIGHT_MATERIAL_CONSTANTS_ONLY"
+    },
+    {
+      "router_index": 91,
+      "mtd_name": "A13_waterfall[DSB]_Alp.mtd",
+      "semantic_name_hash_fnv1a_utf8": "0x41d9ff4ac401ae07",
+      "dsr_mtd_sha256": "e9b20bc62adc0de99020f46e2d8178f35db933723a0020102aae453e220ee8e5",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "c100_f32_bits": [
+        "0x3f800000",
+        "0x3f800000",
+        "0x3f800000"
+      ],
+      "c101_f32_bits": [
+        "0x3f800000",
+        "0x3f800000",
+        "0x3f800000"
+      ],
+      "c102_f32_bits": "0x3f800000",
+      "material_mode": "SPC",
+      "c101_scalar": true,
+      "authority": "POINTLIGHT_MATERIAL_CONSTANTS_ONLY"
+    },
+    {
+      "router_index": 92,
+      "mtd_name": "A13_waterfall[DSB]_Alp_sc1.8.mtd",
+      "semantic_name_hash_fnv1a_utf8": "0xb2e3f6d82e560a97",
+      "dsr_mtd_sha256": "119411909556c311c40bcd5d3d8557f04ffaa6ca3ccf8ea8371526cbfe2f3f55",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "c100_f32_bits": [
+        "0x3f800000",
+        "0x3f800000",
+        "0x3f800000"
+      ],
+      "c101_f32_bits": [
+        "0x3f800000",
+        "0x3f800000",
+        "0x3f800000"
+      ],
+      "c102_f32_bits": "0x3f800000",
+      "material_mode": "SPC",
+      "c101_scalar": true,
+      "authority": "POINTLIGHT_MATERIAL_CONSTANTS_ONLY"
+    },
+    {
+      "router_index": 93,
+      "mtd_name": "A13_waterfall[DSB]_Alp_sc2.mtd",
+      "semantic_name_hash_fnv1a_utf8": "0xccfb4d680b784718",
+      "dsr_mtd_sha256": "73096b4e49897d784203118993e019a7e4bb7a5251502c3cf20bdee7b701fd87",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "c100_f32_bits": [
+        "0x3f800000",
+        "0x3f800000",
+        "0x3f800000"
+      ],
+      "c101_f32_bits": [
+        "0x3f800000",
+        "0x3f800000",
+        "0x3f800000"
+      ],
+      "c102_f32_bits": "0x3f800000",
+      "material_mode": "SPC",
+      "c101_scalar": true,
+      "authority": "POINTLIGHT_MATERIAL_CONSTANTS_ONLY"
+    },
+    {
+      "router_index": 98,
+      "mtd_name": "A15_BG_cloud[Dn]_Alp.mtd",
+      "semantic_name_hash_fnv1a_utf8": "0x444206c752dae2e9",
+      "dsr_mtd_sha256": "b5064fcea230debc23c06c3633f7949e870116b544b6a9ddc2e114975a59b15f",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDif.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDif.spx",
+      "c100_f32_bits": [
+        "0x3f800000",
+        "0x3f800000",
+        "0x3f800000"
+      ],
+      "c101_f32_bits": [
+        "0x00000000",
+        "0x00000000",
+        "0x00000000"
+      ],
+      "c102_f32_bits": "0x00000000",
+      "material_mode": "NOSPC",
+      "c101_scalar": true,
+      "authority": "POINTLIGHT_MATERIAL_CONSTANTS_ONLY"
+    },
+    {
+      "router_index": 99,
+      "mtd_name": "A15_Chain_tex_scroll.mtd",
+      "semantic_name_hash_fnv1a_utf8": "0xa029373f0e23bc7b",
+      "dsr_mtd_sha256": "fa2877419a2340209fb8ff9b18f3ad9aed10a6168bc9cc86c0a177d53fc5891d",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "c100_f32_bits": [
+        "0x3f19999a",
+        "0x3f19999a",
+        "0x3f19999a"
+      ],
+      "c101_f32_bits": [
+        "0x3fc00000",
+        "0x3fc00000",
+        "0x3fc00000"
+      ],
+      "c102_f32_bits": "0x40800000",
+      "material_mode": "SPC",
+      "c101_scalar": true,
+      "authority": "POINTLIGHT_MATERIAL_CONSTANTS_ONLY"
+    },
+    {
+      "router_index": 100,
+      "mtd_name": "A15_Stainedglass[DSB]_Alp.mtd",
+      "semantic_name_hash_fnv1a_utf8": "0x1bbfc15f08b8020d",
+      "dsr_mtd_sha256": "61c91397946c09f0f8a600a03242698ddf65d072ecb64d6aeea21b3f0ab1b025",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "c100_f32_bits": [
+        "0x40000000",
+        "0x40000000",
+        "0x40000000"
+      ],
+      "c101_f32_bits": [
+        "0x40000000",
+        "0x40000000",
+        "0x40000000"
+      ],
+      "c102_f32_bits": "0x42700000",
+      "material_mode": "SPC",
+      "c101_scalar": true,
+      "authority": "POINTLIGHT_MATERIAL_CONSTANTS_ONLY"
+    },
+    {
+      "router_index": 101,
+      "mtd_name": "A17_Alarm[DSB]_DetB.mtd",
+      "semantic_name_hash_fnv1a_utf8": "0x6f69b9f8fa1da974",
+      "dsr_mtd_sha256": "ed021b35829728e012f39501a24ce7eb65c08cea763b69eac10920ed5b9fac3a",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "c100_f32_bits": [
+        "0x3ec24243",
+        "0x3ecb4b4c",
+        "0x3ee66666"
+      ],
+      "c101_f32_bits": [
+        "0x40000000",
+        "0x3fc3c3c5",
+        "0x3f9b9b9c"
+      ],
+      "c102_f32_bits": "0x41080000",
+      "material_mode": "SPC",
+      "c101_scalar": false,
+      "authority": "POINTLIGHT_MATERIAL_CONSTANTS_ONLY"
+    },
+    {
+      "router_index": 102,
+      "mtd_name": "A17_Crystal Wey[DSB]_Alp.mtd",
+      "semantic_name_hash_fnv1a_utf8": "0x578b7886dc5ade2e",
+      "dsr_mtd_sha256": "59dc7efff510153b6cd7386cc7a3bab5a0aaef758f802e81500837a1e5c4a570",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "c100_f32_bits": [
+        "0x3f19999a",
+        "0x3f19999a",
+        "0x3f19999a"
+      ],
+      "c101_f32_bits": [
+        "0x40000000",
+        "0x40000000",
+        "0x40000000"
+      ],
+      "c102_f32_bits": "0x42700000",
+      "material_mode": "SPC",
+      "c101_scalar": true,
+      "authority": "POINTLIGHT_MATERIAL_CONSTANTS_ONLY"
+    },
+    {
+      "router_index": 103,
+      "mtd_name": "A17_Crystal[DSB].mtd",
+      "semantic_name_hash_fnv1a_utf8": "0x57bbf234d551905f",
+      "dsr_mtd_sha256": "7c857cedc67e8fff77b69f4f6b40fba3b8e009bf1da7c952bd53da79e5b25448",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "c100_f32_bits": [
+        "0x3f19999a",
+        "0x3f19999a",
+        "0x3f19999a"
+      ],
+      "c101_f32_bits": [
+        "0x40000000",
+        "0x40000000",
+        "0x40000000"
+      ],
+      "c102_f32_bits": "0x42700000",
+      "material_mode": "SPC",
+      "c101_scalar": true,
+      "authority": "POINTLIGHT_MATERIAL_CONSTANTS_ONLY"
+    },
+    {
+      "router_index": 104,
+      "mtd_name": "A17_Crystal[DSB][L].mtd",
+      "semantic_name_hash_fnv1a_utf8": "0xd0b08dbea795fd59",
+      "dsr_mtd_sha256": "be36601479e0c6f63e5393eea91562115a5d5b7b8bddca734e22c415a29f108a",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmpLit.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmpLit.spx",
+      "c100_f32_bits": [
+        "0x3f19999a",
+        "0x3f19999a",
+        "0x3f19999a"
+      ],
+      "c101_f32_bits": [
+        "0x40000000",
+        "0x40000000",
+        "0x40000000"
+      ],
+      "c102_f32_bits": "0x42700000",
+      "material_mode": "SPC",
+      "c101_scalar": true,
+      "authority": "POINTLIGHT_MATERIAL_CONSTANTS_ONLY"
+    },
+    {
+      "router_index": 105,
+      "mtd_name": "A17_Crystal[DSB][L]_Alp.mtd",
+      "semantic_name_hash_fnv1a_utf8": "0x971eb3abbb3f9c31",
+      "dsr_mtd_sha256": "2be81694a75c2de769af96e1b626335bd78692b1d91dcc9b3130805982f0deb6",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmpLit.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmpLit.spx",
+      "c100_f32_bits": [
+        "0x3f19999a",
+        "0x3f19999a",
+        "0x3f19999a"
+      ],
+      "c101_f32_bits": [
+        "0x40000000",
+        "0x40000000",
+        "0x40000000"
+      ],
+      "c102_f32_bits": "0x42700000",
+      "material_mode": "SPC",
+      "c101_scalar": true,
+      "authority": "POINTLIGHT_MATERIAL_CONSTANTS_ONLY"
+    },
+    {
+      "router_index": 106,
+      "mtd_name": "A17_Crystal[DSB][L]_Edge.mtd",
+      "semantic_name_hash_fnv1a_utf8": "0x5ed87ac2580453bd",
+      "dsr_mtd_sha256": "c61a8e4bd2048bbaca8a5fb68f8fddf0bf9608068f2265ef4a699c3b8c09b23f",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmpLit.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmpLit.spx",
+      "c100_f32_bits": [
+        "0x3f19999a",
+        "0x3f19999a",
+        "0x3f19999a"
+      ],
+      "c101_f32_bits": [
+        "0x40000000",
+        "0x40000000",
+        "0x40000000"
+      ],
+      "c102_f32_bits": "0x42700000",
+      "material_mode": "SPC",
+      "c101_scalar": true,
+      "authority": "POINTLIGHT_MATERIAL_CONSTANTS_ONLY"
+    },
+    {
+      "router_index": 107,
+      "mtd_name": "A17_Crystal[DSB]_Alp.mtd",
+      "semantic_name_hash_fnv1a_utf8": "0xb98bc0ddd2ab18ab",
+      "dsr_mtd_sha256": "770d5bf765a8eafc0001baf3ad0ae3148a303bc4243b9eb8d30b3caabcc30f13",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "c100_f32_bits": [
+        "0x3f19999a",
+        "0x3f19999a",
+        "0x3f19999a"
+      ],
+      "c101_f32_bits": [
+        "0x40000000",
+        "0x40000000",
+        "0x40000000"
+      ],
+      "c102_f32_bits": "0x42700000",
+      "material_mode": "SPC",
+      "c101_scalar": true,
+      "authority": "POINTLIGHT_MATERIAL_CONSTANTS_ONLY"
+    },
+    {
+      "router_index": 108,
+      "mtd_name": "A17_Crystal[DSB]_Edge.mtd",
+      "semantic_name_hash_fnv1a_utf8": "0xf96cf9643eb7d23f",
+      "dsr_mtd_sha256": "b28149d2cd95bcba9dfa5e7b82092b4b0c84755d2bc46b2125050e919d42465c",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "c100_f32_bits": [
+        "0x3f19999a",
+        "0x3f19999a",
+        "0x3f19999a"
+      ],
+      "c101_f32_bits": [
+        "0x40000000",
+        "0x40000000",
+        "0x40000000"
+      ],
+      "c102_f32_bits": "0x42700000",
+      "material_mode": "SPC",
+      "c101_scalar": true,
+      "authority": "POINTLIGHT_MATERIAL_CONSTANTS_ONLY"
+    },
+    {
+      "router_index": 109,
+      "mtd_name": "A17_Eternal Crystal[DSB].mtd",
+      "semantic_name_hash_fnv1a_utf8": "0x907d4a5e3e3df054",
+      "dsr_mtd_sha256": "3b06fbe5143e055c8566bb898173666c71fd77956724184aba8fcb0819ca64b2",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "c100_f32_bits": [
+        "0x40000000",
+        "0x40000000",
+        "0x40000000"
+      ],
+      "c101_f32_bits": [
+        "0x40c00000",
+        "0x40c00000",
+        "0x40c00000"
+      ],
+      "c102_f32_bits": "0x42c80000",
+      "material_mode": "SPC",
+      "c101_scalar": true,
+      "authority": "POINTLIGHT_MATERIAL_CONSTANTS_ONLY"
+    },
+    {
+      "router_index": 110,
+      "mtd_name": "A17_Eternal Crystal[DSB]_Alp.mtd",
+      "semantic_name_hash_fnv1a_utf8": "0x56636f4607fa1ae8",
+      "dsr_mtd_sha256": "001e4b0118b14615337072bd72590a08b08bf871021cc18eeb7fbdea81ddebaa",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "c100_f32_bits": [
+        "0x40000000",
+        "0x40000000",
+        "0x40000000"
+      ],
+      "c101_f32_bits": [
+        "0x40c00000",
+        "0x40c00000",
+        "0x40c00000"
+      ],
+      "c102_f32_bits": "0x42c80000",
+      "material_mode": "SPC",
+      "c101_scalar": true,
+      "authority": "POINTLIGHT_MATERIAL_CONSTANTS_ONLY"
+    },
+    {
+      "router_index": 111,
+      "mtd_name": "A17_Ground[DSB].mtd",
+      "semantic_name_hash_fnv1a_utf8": "0x7280aea25cfdf1d6",
+      "dsr_mtd_sha256": "263f9742ef4c012a43e93f5591ba78837448b1d61f1d50b9d1887278370d9a73",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "c100_f32_bits": [
+        "0x3f000000",
+        "0x3f000000",
+        "0x3f000000"
+      ],
+      "c101_f32_bits": [
+        "0x3f99999a",
+        "0x3f99999a",
+        "0x3f99999a"
+      ],
+      "c102_f32_bits": "0x3fc00000",
+      "material_mode": "SPC",
+      "c101_scalar": true,
+      "authority": "POINTLIGHT_MATERIAL_CONSTANTS_ONLY"
+    },
+    {
+      "router_index": 112,
+      "mtd_name": "A17_Ground[DSB][L].mtd",
+      "semantic_name_hash_fnv1a_utf8": "0x86b798993a01fe96",
+      "dsr_mtd_sha256": "6070c4c4ad7c756447166bea99ff7ef88756e4d2c39aa6d7e682aa7f9e6f1485",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmpLit.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmpLit.spx",
+      "c100_f32_bits": [
+        "0x3f000000",
+        "0x3f000000",
+        "0x3f000000"
+      ],
+      "c101_f32_bits": [
+        "0x3f99999a",
+        "0x3f99999a",
+        "0x3f99999a"
+      ],
+      "c102_f32_bits": "0x3fc00000",
+      "material_mode": "SPC",
+      "c101_scalar": true,
+      "authority": "POINTLIGHT_MATERIAL_CONSTANTS_ONLY"
+    },
+    {
+      "router_index": 113,
+      "mtd_name": "A17_Ground[DSB][L]_Alp.mtd",
+      "semantic_name_hash_fnv1a_utf8": "0x97d49ab782c1a07e",
+      "dsr_mtd_sha256": "836b766bbb2340009b04a269b3a59b692638433816f0860d07ea3464cd7dc098",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmpLit.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmpLit.spx",
+      "c100_f32_bits": [
+        "0x3f000000",
+        "0x3f000000",
+        "0x3f000000"
+      ],
+      "c101_f32_bits": [
+        "0x3f99999a",
+        "0x3f99999a",
+        "0x3f99999a"
+      ],
+      "c102_f32_bits": "0x3fc00000",
+      "material_mode": "SPC",
+      "c101_scalar": true,
+      "authority": "POINTLIGHT_MATERIAL_CONSTANTS_ONLY"
+    },
+    {
+      "router_index": 116,
+      "mtd_name": "A17_RustyDoor[DSB]_DetB.mtd",
+      "semantic_name_hash_fnv1a_utf8": "0x8a3343691307be90",
+      "dsr_mtd_sha256": "405e9246e710fd8beaa5de0a61f77c9a95ebad07837a3054dc2213daa59260ea",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "c100_f32_bits": [
+        "0x3f19999a",
+        "0x3f19999a",
+        "0x3f19999a"
+      ],
+      "c101_f32_bits": [
+        "0x40200000",
+        "0x40200000",
+        "0x40200000"
+      ],
+      "c102_f32_bits": "0x41080000",
+      "material_mode": "SPC",
+      "c101_scalar": true,
+      "authority": "POINTLIGHT_MATERIAL_CONSTANTS_ONLY"
+    },
+    {
+      "router_index": 117,
+      "mtd_name": "A17_RustyMetal2[DSB][L]_DetB.mtd",
+      "semantic_name_hash_fnv1a_utf8": "0xce6b09804461fee9",
+      "dsr_mtd_sha256": "16dd3aee371f76d45a3906bf441702e89bce3fbb22124f604d3ee37ee7945f3a",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmpLit.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmpLit.spx",
+      "c100_f32_bits": [
+        "0x3f19999a",
+        "0x3f19999a",
+        "0x3f19999a"
+      ],
+      "c101_f32_bits": [
+        "0x40200000",
+        "0x40200000",
+        "0x40200000"
+      ],
+      "c102_f32_bits": "0x41080000",
+      "material_mode": "SPC",
+      "c101_scalar": true,
+      "authority": "POINTLIGHT_MATERIAL_CONSTANTS_ONLY"
+    },
+    {
+      "router_index": 118,
+      "mtd_name": "A18_Sky[Dn].mtd",
+      "semantic_name_hash_fnv1a_utf8": "0x254312a82bd7d874",
+      "dsr_mtd_sha256": "905abfffb3d4ecf33b287ed0c16321cc4460a5afaee23033b1dbecceaefa6312",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDif.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDif.spx",
+      "c100_f32_bits": [
+        "0x40e00000",
+        "0x40e00000",
+        "0x40e00000"
+      ],
+      "c101_f32_bits": [
+        "0x00000000",
+        "0x00000000",
+        "0x00000000"
+      ],
+      "c102_f32_bits": "0x00000000",
+      "material_mode": "NOSPC",
+      "c101_scalar": true,
+      "authority": "POINTLIGHT_MATERIAL_CONSTANTS_ONLY"
+    },
+    {
+      "router_index": 119,
+      "mtd_name": "A18_WhitePassage[Dn].mtd",
+      "semantic_name_hash_fnv1a_utf8": "0x34d4c80562b5a1ea",
+      "dsr_mtd_sha256": "1245c1a4520333a54b767ac6a723f92ac20e68f32ddd824c2089663b9983f5d6",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDif.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDif.spx",
+      "c100_f32_bits": [
+        "0x40e00000",
+        "0x40e00000",
+        "0x40e00000"
+      ],
+      "c101_f32_bits": [
+        "0x00000000",
+        "0x00000000",
+        "0x00000000"
+      ],
+      "c102_f32_bits": "0x00000000",
+      "material_mode": "NOSPC",
+      "c101_scalar": true,
+      "authority": "POINTLIGHT_MATERIAL_CONSTANTS_ONLY"
+    },
+    {
+      "router_index": 121,
+      "mtd_name": "A18_cloud[Dn]_Alp.mtd",
+      "semantic_name_hash_fnv1a_utf8": "0x44e3a31fee152f64",
+      "dsr_mtd_sha256": "a1f29a9b80a295e5c9a1dbb5fd70dca1820b8eea53cd013fae40edebcf60f675",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDif.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDif.spx",
+      "c100_f32_bits": [
+        "0x3f19999a",
+        "0x3f19999a",
+        "0x3f19999a"
+      ],
+      "c101_f32_bits": [
+        "0x00000000",
+        "0x00000000",
+        "0x00000000"
+      ],
+      "c102_f32_bits": "0x00000000",
+      "material_mode": "NOSPC",
+      "c101_scalar": true,
+      "authority": "POINTLIGHT_MATERIAL_CONSTANTS_ONLY"
+    },
+    {
+      "router_index": 124,
+      "mtd_name": "A19_Sky[Dn].mtd",
+      "semantic_name_hash_fnv1a_utf8": "0x682589827bcae977",
+      "dsr_mtd_sha256": "ab697d8587146f9da383849916cb7f00d742aa1fd162a601799f95df2896fb4c",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDif.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDif.spx",
+      "c100_f32_bits": [
+        "0x40000000",
+        "0x40000000",
+        "0x40000000"
+      ],
+      "c101_f32_bits": [
+        "0x00000000",
+        "0x00000000",
+        "0x00000000"
+      ],
+      "c102_f32_bits": "0x00000000",
+      "material_mode": "NOSPC",
+      "c101_scalar": true,
+      "authority": "POINTLIGHT_MATERIAL_CONSTANTS_ONLY"
+    },
+    {
+      "router_index": 125,
+      "mtd_name": "A19_cloud[Dn]_Alp.mtd",
+      "semantic_name_hash_fnv1a_utf8": "0x89110284b09e4ab3",
+      "dsr_mtd_sha256": "aa0da11a5d5b4f7757925ed8144d8d96ab95a807f568f125e139d6106f8391c9",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDif.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDif.spx",
+      "c100_f32_bits": [
+        "0x3fe66666",
+        "0x3fe66666",
+        "0x3fe66666"
+      ],
+      "c101_f32_bits": [
+        "0x00000000",
+        "0x00000000",
+        "0x00000000"
+      ],
+      "c102_f32_bits": "0x00000000",
+      "material_mode": "NOSPC",
+      "c101_scalar": true,
+      "authority": "POINTLIGHT_MATERIAL_CONSTANTS_ONLY"
+    },
+    {
+      "router_index": 126,
+      "mtd_name": "A19_insect[DSB]_edge.mtd",
+      "semantic_name_hash_fnv1a_utf8": "0xb0247b52d59a26ed",
+      "dsr_mtd_sha256": "21b4a4b437df91e8c5edbc2181da0023a27b6793ed087a22e012574b7e712e4b",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmpLit.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmpLit.spx",
+      "c100_f32_bits": [
+        "0x3f19999a",
+        "0x3f19999a",
+        "0x3f19999a"
+      ],
+      "c101_f32_bits": [
+        "0x3fc00000",
+        "0x3fc00000",
+        "0x3fc00000"
+      ],
+      "c102_f32_bits": "0x40800000",
+      "material_mode": "SPC",
+      "c101_scalar": true,
+      "authority": "POINTLIGHT_MATERIAL_CONSTANTS_ONLY"
+    },
+    {
+      "router_index": 128,
+      "mtd_name": "A19_mountains[Dn]_Edge.mtd",
+      "semantic_name_hash_fnv1a_utf8": "0x163b59f1481db524",
+      "dsr_mtd_sha256": "1a45ec2e74f791f326d4b09fc91c6f4cc6d8fe004c194f1734e9473ac4c9b6ea",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDif.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDif.spx",
+      "c100_f32_bits": [
+        "0x3f800000",
+        "0x3f800000",
+        "0x3f800000"
+      ],
+      "c101_f32_bits": [
+        "0x00000000",
+        "0x00000000",
+        "0x00000000"
+      ],
+      "c102_f32_bits": "0x00000000",
+      "material_mode": "NOSPC",
+      "c101_scalar": true,
+      "authority": "POINTLIGHT_MATERIAL_CONSTANTS_ONLY"
+    },
+    {
+      "router_index": 135,
+      "mtd_name": "C_2231_Body[DSB].mtd",
+      "semantic_name_hash_fnv1a_utf8": "0xd15fc87c3118fbc0",
+      "dsr_mtd_sha256": "f0a73db801b91298531f7ebfcfc30b6d738af3d9d3337e13ea26151b27f4397b",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "c100_f32_bits": [
+        "0x3f000000",
+        "0x3f000000",
+        "0x3f000000"
+      ],
+      "c101_f32_bits": [
+        "0x40000000",
+        "0x40000000",
+        "0x40000000"
+      ],
+      "c102_f32_bits": "0x40a00000",
+      "material_mode": "SPC",
+      "c101_scalar": true,
+      "authority": "POINTLIGHT_MATERIAL_CONSTANTS_ONLY"
+    },
+    {
+      "router_index": 136,
+      "mtd_name": "C_2320_Metal[DSB].mtd",
+      "semantic_name_hash_fnv1a_utf8": "0xd9dd372226a5f07e",
+      "dsr_mtd_sha256": "03d46faee57fd70c3af82939802bb1c2115aa62f80003346512276d1b9bd5e0a",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "c100_f32_bits": [
+        "0x3f000000",
+        "0x3f000000",
+        "0x3f000000"
+      ],
+      "c101_f32_bits": [
+        "0x40200000",
+        "0x40200000",
+        "0x40200000"
+      ],
+      "c102_f32_bits": "0x41080000",
+      "material_mode": "SPC",
+      "c101_scalar": true,
+      "authority": "POINTLIGHT_MATERIAL_CONSTANTS_ONLY"
+    },
+    {
+      "router_index": 137,
+      "mtd_name": "C_2680_Ghost[DSB]_Add_Depth_Edge.mtd",
+      "semantic_name_hash_fnv1a_utf8": "0x7367fe7c59ca1c37",
+      "dsr_mtd_sha256": "6d77f0f6c8640d2aa54a2c9ba0a674f452f3f2252d9f5fed637d5ca2b02009c3",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "c100_f32_bits": [
+        "0x3e99999a",
+        "0x3e99999a",
+        "0x3e99999a"
+      ],
+      "c101_f32_bits": [
+        "0x3f800000",
+        "0x3f800000",
+        "0x3f800000"
+      ],
+      "c102_f32_bits": "0x40000000",
+      "material_mode": "SPC",
+      "c101_scalar": true,
+      "authority": "POINTLIGHT_MATERIAL_CONSTANTS_ONLY"
+    },
+    {
+      "router_index": 138,
+      "mtd_name": "C_2680_Ghost[DSB]__Add_Depth.mtd",
+      "semantic_name_hash_fnv1a_utf8": "0xf01cd3a52e511e92",
+      "dsr_mtd_sha256": "93205eaea28d274860c9ceb516e9d5d28bedd6bc1b54d926724ff0b5fd15a2ca",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "c100_f32_bits": [
+        "0x3e99999a",
+        "0x3e99999a",
+        "0x3e99999a"
+      ],
+      "c101_f32_bits": [
+        "0x3f800000",
+        "0x3f800000",
+        "0x3f800000"
+      ],
+      "c102_f32_bits": "0x40000000",
+      "material_mode": "SPC",
+      "c101_scalar": true,
+      "authority": "POINTLIGHT_MATERIAL_CONSTANTS_ONLY"
+    },
+    {
+      "router_index": 139,
+      "mtd_name": "C_3500_Slime[DSB].mtd",
+      "semantic_name_hash_fnv1a_utf8": "0xbf35b49c796975a8",
+      "dsr_mtd_sha256": "3a9d511ca4c1452d617b055a55dfe4b8f76761df4529e8db2b35f27f7a31a095",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "c100_f32_bits": [
+        "0x3f000000",
+        "0x3f000000",
+        "0x3f000000"
+      ],
+      "c101_f32_bits": [
+        "0x4019b9ba",
+        "0x40137374",
+        "0x40137374"
+      ],
+      "c102_f32_bits": "0x428c0000",
+      "material_mode": "SPC",
+      "c101_scalar": false,
+      "authority": "POINTLIGHT_MATERIAL_CONSTANTS_ONLY"
+    },
+    {
+      "router_index": 140,
+      "mtd_name": "C_3530_Unique_Wet[DSB].mtd",
+      "semantic_name_hash_fnv1a_utf8": "0xd400d3647afce7ab",
+      "dsr_mtd_sha256": "ae7f795b03dcb2c204948e9a8e3b2798abe1c9b8912812e3817c095b07e5cd8f",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "c100_f32_bits": [
+        "0x3f000000",
+        "0x3f000000",
+        "0x3f000000"
+      ],
+      "c101_f32_bits": [
+        "0x40000000",
+        "0x40000000",
+        "0x40000000"
+      ],
+      "c102_f32_bits": "0x41700000",
+      "material_mode": "SPC",
+      "c101_scalar": true,
+      "authority": "POINTLIGHT_MATERIAL_CONSTANTS_ONLY"
+    },
+    {
+      "router_index": 141,
+      "mtd_name": "C_3530_Unique_Wet[DSB]_Edge.mtd",
+      "semantic_name_hash_fnv1a_utf8": "0xb76b8227c08f060b",
+      "dsr_mtd_sha256": "833bb7b09f0dd02a61c75e9edbb76ad5ec14bdab44d663c1c652f53963eee963",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "c100_f32_bits": [
+        "0x3f000000",
+        "0x3f000000",
+        "0x3f000000"
+      ],
+      "c101_f32_bits": [
+        "0x40000000",
+        "0x40000000",
+        "0x40000000"
+      ],
+      "c102_f32_bits": "0x41700000",
+      "material_mode": "SPC",
+      "c101_scalar": true,
+      "authority": "POINTLIGHT_MATERIAL_CONSTANTS_ONLY"
+    },
+    {
+      "router_index": 142,
+      "mtd_name": "C_4500_DarkArm[D]_Sub.mtd",
+      "semantic_name_hash_fnv1a_utf8": "0xd4bfc93c76a4bf3d",
+      "dsr_mtd_sha256": "efff0810ab46ba0c3050c032daf9105d121bd8c2d4825ecd65a9af9bd0efb568",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmpMul.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmpMul.spx",
+      "c100_f32_bits": [
+        "0x3f000000",
+        "0x3f000000",
+        "0x3f000000"
+      ],
+      "c101_f32_bits": [
+        "0x3f800000",
+        "0x3f800000",
+        "0x3f800000"
+      ],
+      "c102_f32_bits": "0x40000000",
+      "material_mode": "SPC",
+      "c101_scalar": true,
+      "authority": "POINTLIGHT_MATERIAL_CONSTANTS_ONLY"
+    },
+    {
+      "router_index": 143,
+      "mtd_name": "C_4500_Eyes1[DSB].mtd",
+      "semantic_name_hash_fnv1a_utf8": "0x8d82860e9239779a",
+      "dsr_mtd_sha256": "fbc31ffeb902c9f0b95e36538d0ede0e18e7807fb44e0c825256e83944f62237",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "c100_f32_bits": [
+        "0x3f000000",
+        "0x3f000000",
+        "0x3f000000"
+      ],
+      "c101_f32_bits": [
+        "0x41200000",
+        "0x41200000",
+        "0x41200000"
+      ],
+      "c102_f32_bits": "0x40000000",
+      "material_mode": "SPC",
+      "c101_scalar": true,
+      "authority": "POINTLIGHT_MATERIAL_CONSTANTS_ONLY"
+    },
+    {
+      "router_index": 144,
+      "mtd_name": "C_4500_Eyes2[DSB]_Alp.mtd",
+      "semantic_name_hash_fnv1a_utf8": "0x2fcfcd7d635ac609",
+      "dsr_mtd_sha256": "e116ed382f74d074a5acdbfefec9c64f599db3f145ab32b30fea8985914bf362",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "c100_f32_bits": [
+        "0x00000000",
+        "0x00000000",
+        "0x00000000"
+      ],
+      "c101_f32_bits": [
+        "0x41200000",
+        "0x41200000",
+        "0x00000000"
+      ],
+      "c102_f32_bits": "0x41080000",
+      "material_mode": "SPC",
+      "c101_scalar": false,
+      "authority": "POINTLIGHT_MATERIAL_CONSTANTS_ONLY"
+    },
+    {
+      "router_index": 145,
+      "mtd_name": "C_5230_Unique[DSB].mtd",
+      "semantic_name_hash_fnv1a_utf8": "0x51ee1f8754142dc1",
+      "dsr_mtd_sha256": "b0facae8f42f40d68a73908a7ac7d5f84eee5a2f0c96378a949b08a655727428",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "c100_f32_bits": [
+        "0x3fd9999a",
+        "0x3fd9999a",
+        "0x3fd9999a"
+      ],
+      "c101_f32_bits": [
+        "0x3f800000",
+        "0x3f800000",
+        "0x3f800000"
+      ],
+      "c102_f32_bits": "0x40000000",
+      "material_mode": "SPC",
+      "c101_scalar": true,
+      "authority": "POINTLIGHT_MATERIAL_CONSTANTS_ONLY"
+    },
+    {
+      "router_index": 146,
+      "mtd_name": "C_5250_Fire_DullLeather[DSB].mtd",
+      "semantic_name_hash_fnv1a_utf8": "0x0f456fc48a2c8bab",
+      "dsr_mtd_sha256": "23dbc2903320f8ccc56fb42b3c7c9377e71f9366c914b1d1619b2dad60174faa",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "c100_f32_bits": [
+        "0x3f48c8ca",
+        "0x3f800000",
+        "0x3f800000"
+      ],
+      "c101_f32_bits": [
+        "0x3f000000",
+        "0x3f000000",
+        "0x3f000000"
+      ],
+      "c102_f32_bits": "0x40000000",
+      "material_mode": "SPC",
+      "c101_scalar": true,
+      "authority": "POINTLIGHT_MATERIAL_CONSTANTS_ONLY"
+    },
+    {
+      "router_index": 147,
+      "mtd_name": "C_5260_Leather[DSB].mtd",
+      "semantic_name_hash_fnv1a_utf8": "0x321c23f48240775c",
+      "dsr_mtd_sha256": "0c27e030221fad13efe963cd162ec40f48f2ce7952fcb150a131cca22dc483f8",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "c100_f32_bits": [
+        "0x3f000000",
+        "0x3f000000",
+        "0x3f000000"
+      ],
+      "c101_f32_bits": [
+        "0x3fc00000",
+        "0x3fc00000",
+        "0x3fc00000"
+      ],
+      "c102_f32_bits": "0x40800000",
+      "material_mode": "SPC",
+      "c101_scalar": true,
+      "authority": "POINTLIGHT_MATERIAL_CONSTANTS_ONLY"
+    },
+    {
+      "router_index": 148,
+      "mtd_name": "C_5290_Body[DSB].mtd",
+      "semantic_name_hash_fnv1a_utf8": "0x3964374ae6860612",
+      "dsr_mtd_sha256": "915560f2453b1a385abf51b5d0675a61d1b31b52d16714484b57830c8e6e4253",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "c100_f32_bits": [
+        "0x3fc00000",
+        "0x3fc00000",
+        "0x3fc00000"
+      ],
+      "c101_f32_bits": [
+        "0x40000000",
+        "0x40000000",
+        "0x40000000"
+      ],
+      "c102_f32_bits": "0x41700000",
+      "material_mode": "SPC",
+      "c101_scalar": true,
+      "authority": "POINTLIGHT_MATERIAL_CONSTANTS_ONLY"
+    },
+    {
+      "router_index": 149,
+      "mtd_name": "C_5290_Body[DSB][M].mtd",
+      "semantic_name_hash_fnv1a_utf8": "0xe792ac9ec044628b",
+      "dsr_mtd_sha256": "791145a213c2791140934d2c78bd2d6582af0458c2e8fc7c4165dde11cab0e84",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmpMul.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmpMul.spx",
+      "c100_f32_bits": [
+        "0x3fc00000",
+        "0x3fc00000",
+        "0x3fc00000"
+      ],
+      "c101_f32_bits": [
+        "0x40000000",
+        "0x40000000",
+        "0x40000000"
+      ],
+      "c102_f32_bits": "0x41700000",
+      "material_mode": "SPC",
+      "c101_scalar": true,
+      "authority": "POINTLIGHT_MATERIAL_CONSTANTS_ONLY"
+    },
+    {
+      "router_index": 150,
+      "mtd_name": "C_5290_Wing[DSB]_Alp.mtd",
+      "semantic_name_hash_fnv1a_utf8": "0xba68ee604cd2ce87",
+      "dsr_mtd_sha256": "b3553ca598b25799aa132fa369956dd70bd38bb65681dd68b36fc6421ce92618",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "c100_f32_bits": [
+        "0x40400000",
+        "0x40400000",
+        "0x40400000"
+      ],
+      "c101_f32_bits": [
+        "0x40200000",
+        "0x40200000",
+        "0x40200000"
+      ],
+      "c102_f32_bits": "0x40800000",
+      "material_mode": "SPC",
+      "c101_scalar": true,
+      "authority": "POINTLIGHT_MATERIAL_CONSTANTS_ONLY"
+    },
+    {
+      "router_index": 151,
+      "mtd_name": "C_5350_body[DSB].mtd",
+      "semantic_name_hash_fnv1a_utf8": "0x5d95c87aabcc94f9",
+      "dsr_mtd_sha256": "2e14e4f8b7db61eb15a8682c577ae74842dfe680cc677063e8b31ca385b0902f",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "c100_f32_bits": [
+        "0x3f000000",
+        "0x3f000000",
+        "0x3f000000"
+      ],
+      "c101_f32_bits": [
+        "0x3f800000",
+        "0x3f800000",
+        "0x3f800000"
+      ],
+      "c102_f32_bits": "0x40000000",
+      "material_mode": "SPC",
+      "c101_scalar": true,
+      "authority": "POINTLIGHT_MATERIAL_CONSTANTS_ONLY"
+    },
+    {
+      "router_index": 152,
+      "mtd_name": "C_5400_Unique[DSB].mtd",
+      "semantic_name_hash_fnv1a_utf8": "0x6cc1e73d3ca19fac",
+      "dsr_mtd_sha256": "4a6d950a9994d3ff0411b620dc035bfd8c082729e41fd08f4c59e933980d63e5",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "c100_f32_bits": [
+        "0x40a00000",
+        "0x40a00000",
+        "0x40a00000"
+      ],
+      "c101_f32_bits": [
+        "0x40a00000",
+        "0x40a00000",
+        "0x40a00000"
+      ],
+      "c102_f32_bits": "0x40000000",
+      "material_mode": "SPC",
+      "c101_scalar": true,
+      "authority": "POINTLIGHT_MATERIAL_CONSTANTS_ONLY"
+    },
+    {
+      "router_index": 153,
+      "mtd_name": "C_DullLeather[DSB].mtd",
+      "semantic_name_hash_fnv1a_utf8": "0x9979f8009c54acdf",
+      "dsr_mtd_sha256": "613a3296e7906b2dea5c0cd48bda37c8628b850bad9988688a40595c4c49eaad",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "c100_f32_bits": [
+        "0x3f000000",
+        "0x3f000000",
+        "0x3f000000"
+      ],
+      "c101_f32_bits": [
+        "0x3f800000",
+        "0x3f800000",
+        "0x3f800000"
+      ],
+      "c102_f32_bits": "0x40000000",
+      "material_mode": "SPC",
+      "c101_scalar": true,
+      "authority": "POINTLIGHT_MATERIAL_CONSTANTS_ONLY"
+    },
+    {
+      "router_index": 154,
+      "mtd_name": "C_DullLeather[DSB][L].mtd",
+      "semantic_name_hash_fnv1a_utf8": "0xfd8cbc92647106d9",
+      "dsr_mtd_sha256": "6352d64c658a78c3c5c3a0bf20ca0da0726ccab88573a2c0d3b70fba6573fd5c",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmpLit.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmpLit.spx",
+      "c100_f32_bits": [
+        "0x3f000000",
+        "0x3f000000",
+        "0x3f000000"
+      ],
+      "c101_f32_bits": [
+        "0x3f800000",
+        "0x3f800000",
+        "0x3f800000"
+      ],
+      "c102_f32_bits": "0x40000000",
+      "material_mode": "SPC",
+      "c101_scalar": true,
+      "authority": "POINTLIGHT_MATERIAL_CONSTANTS_ONLY"
+    },
+    {
+      "router_index": 155,
+      "mtd_name": "C_DullLeather[DSB][L]_Alp.mtd",
+      "semantic_name_hash_fnv1a_utf8": "0x5dbab2d485c9fdb1",
+      "dsr_mtd_sha256": "af64a2f6fa374e2d8fce6b701827c31df30227d9bd076e07180b829a7bc487e3",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmpLit.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmpLit.spx",
+      "c100_f32_bits": [
+        "0x3f000000",
+        "0x3f000000",
+        "0x3f000000"
+      ],
+      "c101_f32_bits": [
+        "0x3f800000",
+        "0x3f800000",
+        "0x3f800000"
+      ],
+      "c102_f32_bits": "0x40000000",
+      "material_mode": "SPC",
+      "c101_scalar": true,
+      "authority": "POINTLIGHT_MATERIAL_CONSTANTS_ONLY"
+    },
+    {
+      "router_index": 156,
+      "mtd_name": "C_DullLeather[DSB]_Alp.mtd",
+      "semantic_name_hash_fnv1a_utf8": "0xceb8d2a7badc3d2b",
+      "dsr_mtd_sha256": "c1b1baca69cc33b449f7ff06bb08a959a1b74c90862d67acd003194062306dff",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "c100_f32_bits": [
+        "0x3f000000",
+        "0x3f000000",
+        "0x3f000000"
+      ],
+      "c101_f32_bits": [
+        "0x3f800000",
+        "0x3f800000",
+        "0x3f800000"
+      ],
+      "c102_f32_bits": "0x40000000",
+      "material_mode": "SPC",
+      "c101_scalar": true,
+      "authority": "POINTLIGHT_MATERIAL_CONSTANTS_ONLY"
+    },
+    {
+      "router_index": 157,
+      "mtd_name": "C_DullLeather[DSB]_Edge.mtd",
+      "semantic_name_hash_fnv1a_utf8": "0x2626b379ca38d7bf",
+      "dsr_mtd_sha256": "e2d819b90e8201a93e67e84e1179e9c3bf3f57988d5f86b44c5e024d05dee1a1",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "c100_f32_bits": [
+        "0x3f000000",
+        "0x3f000000",
+        "0x3f000000"
+      ],
+      "c101_f32_bits": [
+        "0x3f800000",
+        "0x3f800000",
+        "0x3f800000"
+      ],
+      "c102_f32_bits": "0x40000000",
+      "material_mode": "SPC",
+      "c101_scalar": true,
+      "authority": "POINTLIGHT_MATERIAL_CONSTANTS_ONLY"
+    },
+    {
+      "router_index": 158,
+      "mtd_name": "C_Fire_DullLeather[DSB].mtd",
+      "semantic_name_hash_fnv1a_utf8": "0x69948d80f13d817c",
+      "dsr_mtd_sha256": "29318e9f36bc5b15f906b3129b64b0e75e1defe07c376b5747d466ef7a017594",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "c100_f32_bits": [
+        "0x3f000000",
+        "0x3f000000",
+        "0x3f000000"
+      ],
+      "c101_f32_bits": [
+        "0x40400000",
+        "0x40400000",
+        "0x40400000"
+      ],
+      "c102_f32_bits": "0x40000000",
+      "material_mode": "SPC",
+      "c101_scalar": true,
+      "authority": "POINTLIGHT_MATERIAL_CONSTANTS_ONLY"
+    },
+    {
+      "router_index": 159,
+      "mtd_name": "C_Fire_DullLeather[DSB]_Edge.mtd",
+      "semantic_name_hash_fnv1a_utf8": "0xe72ab360a0a5da72",
+      "dsr_mtd_sha256": "d2b73d50ad2d413208857a96e865359f30c5c0e9a96f5d548af5d2112c2ce446",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "c100_f32_bits": [
+        "0x3f000000",
+        "0x3f000000",
+        "0x3f000000"
+      ],
+      "c101_f32_bits": [
+        "0x40400000",
+        "0x40400000",
+        "0x40400000"
+      ],
+      "c102_f32_bits": "0x40000000",
+      "material_mode": "SPC",
+      "c101_scalar": true,
+      "authority": "POINTLIGHT_MATERIAL_CONSTANTS_ONLY"
+    },
+    {
+      "router_index": 160,
+      "mtd_name": "C_Leather[DSB].mtd",
+      "semantic_name_hash_fnv1a_utf8": "0xcddb8984b722d624",
+      "dsr_mtd_sha256": "236bb0a0614e4bf3326d610915f8b22c3cacb09ee1c0523a51fa08200dfbe524",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "c100_f32_bits": [
+        "0x3f000000",
+        "0x3f000000",
+        "0x3f000000"
+      ],
+      "c101_f32_bits": [
+        "0x3fc00000",
+        "0x3fc00000",
+        "0x3fc00000"
+      ],
+      "c102_f32_bits": "0x40800000",
+      "material_mode": "SPC",
+      "c101_scalar": true,
+      "authority": "POINTLIGHT_MATERIAL_CONSTANTS_ONLY"
+    },
+    {
+      "router_index": 161,
+      "mtd_name": "C_Leather[DSB]_Alp.mtd",
+      "semantic_name_hash_fnv1a_utf8": "0xddfbb6485919c3b8",
+      "dsr_mtd_sha256": "9ef69c874a7ceff3797a3513026677d131f622f3f8476015a5ce4b70fcd6e190",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "c100_f32_bits": [
+        "0x3f000000",
+        "0x3f000000",
+        "0x3f000000"
+      ],
+      "c101_f32_bits": [
+        "0x3fc00000",
+        "0x3fc00000",
+        "0x3fc00000"
+      ],
+      "c102_f32_bits": "0x40800000",
+      "material_mode": "SPC",
+      "c101_scalar": true,
+      "authority": "POINTLIGHT_MATERIAL_CONSTANTS_ONLY"
+    },
+    {
+      "router_index": 162,
+      "mtd_name": "C_Leather[DSB]_Edge.mtd",
+      "semantic_name_hash_fnv1a_utf8": "0x0d31f8d7d59d3d9a",
+      "dsr_mtd_sha256": "25ffd8635203147f291c8f8af945dbad1898a1b5dfdcf31bb4136083fbda4d39",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "c100_f32_bits": [
+        "0x3f000000",
+        "0x3f000000",
+        "0x3f000000"
+      ],
+      "c101_f32_bits": [
+        "0x3fc00000",
+        "0x3fc00000",
+        "0x3fc00000"
+      ],
+      "c102_f32_bits": "0x40800000",
+      "material_mode": "SPC",
+      "c101_scalar": true,
+      "authority": "POINTLIGHT_MATERIAL_CONSTANTS_ONLY"
+    },
+    {
+      "router_index": 163,
+      "mtd_name": "C_Metal[DSB].mtd",
+      "semantic_name_hash_fnv1a_utf8": "0x55b1ac20674eff6a",
+      "dsr_mtd_sha256": "ae2e8df867fe2859eef37104c13c939e7e7fe4f703b7fe49c408d0230fc71d85",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "c100_f32_bits": [
+        "0x3f000000",
+        "0x3f000000",
+        "0x3f000000"
+      ],
+      "c101_f32_bits": [
+        "0x40200000",
+        "0x40200000",
+        "0x40200000"
+      ],
+      "c102_f32_bits": "0x41080000",
+      "material_mode": "SPC",
+      "c101_scalar": true,
+      "authority": "POINTLIGHT_MATERIAL_CONSTANTS_ONLY"
+    },
+    {
+      "router_index": 164,
+      "mtd_name": "C_Metal[DSB]_Alp.mtd",
+      "semantic_name_hash_fnv1a_utf8": "0xb656ea912dca1e92",
+      "dsr_mtd_sha256": "45eb950965998f67d2d2b62fbcfc841f07e71e24097e1c6ceb97758752a651f0",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "c100_f32_bits": [
+        "0x3f000000",
+        "0x3f000000",
+        "0x3f000000"
+      ],
+      "c101_f32_bits": [
+        "0x40200000",
+        "0x40200000",
+        "0x40200000"
+      ],
+      "c102_f32_bits": "0x41080000",
+      "material_mode": "SPC",
+      "c101_scalar": true,
+      "authority": "POINTLIGHT_MATERIAL_CONSTANTS_ONLY"
+    },
+    {
+      "router_index": 165,
+      "mtd_name": "C_Metal[DSB]_Edge.mtd",
+      "semantic_name_hash_fnv1a_utf8": "0xbf9481216b3dac0c",
+      "dsr_mtd_sha256": "f797c63ac4f476ab7ebb7bc150ecc2a9c61851999f5051ceb864b62c95d924d9",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "c100_f32_bits": [
+        "0x3f000000",
+        "0x3f000000",
+        "0x3f000000"
+      ],
+      "c101_f32_bits": [
+        "0x40200000",
+        "0x40200000",
+        "0x40200000"
+      ],
+      "c102_f32_bits": "0x41080000",
+      "material_mode": "SPC",
+      "c101_scalar": true,
+      "authority": "POINTLIGHT_MATERIAL_CONSTANTS_ONLY"
+    },
+    {
+      "router_index": 166,
+      "mtd_name": "C_RoughCloth[DSB].mtd",
+      "semantic_name_hash_fnv1a_utf8": "0x477b8b93bbb8ced8",
+      "dsr_mtd_sha256": "9885c34b18f247b9f4446dbaeddef427e2058597d58e6297a1b9e6e8e21b8e51",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "c100_f32_bits": [
+        "0x3f000000",
+        "0x3f000000",
+        "0x3f000000"
+      ],
+      "c101_f32_bits": [
+        "0x3f800000",
+        "0x3f800000",
+        "0x3f800000"
+      ],
+      "c102_f32_bits": "0x40000000",
+      "material_mode": "SPC",
+      "c101_scalar": true,
+      "authority": "POINTLIGHT_MATERIAL_CONSTANTS_ONLY"
+    },
+    {
+      "router_index": 167,
+      "mtd_name": "C_RoughCloth[DSB]_Edge.mtd",
+      "semantic_name_hash_fnv1a_utf8": "0xc51d6e900d2da68e",
+      "dsr_mtd_sha256": "0a29732f36dc7ba939bd0114c02af09e5b72a11745c76f90e9ed4991752994bd",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "c100_f32_bits": [
+        "0x3f000000",
+        "0x3f000000",
+        "0x3f000000"
+      ],
+      "c101_f32_bits": [
+        "0x3f800000",
+        "0x3f800000",
+        "0x3f800000"
+      ],
+      "c102_f32_bits": "0x40000000",
+      "material_mode": "SPC",
+      "c101_scalar": true,
+      "authority": "POINTLIGHT_MATERIAL_CONSTANTS_ONLY"
+    },
+    {
+      "router_index": 168,
+      "mtd_name": "C_Wet[DSB].mtd",
+      "semantic_name_hash_fnv1a_utf8": "0x522b4a76e420327f",
+      "dsr_mtd_sha256": "d3885a4c00b844cdb1a09b571cb037343e5bad31249e7ec80ed5e7da195b9e6f",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "c100_f32_bits": [
+        "0x3f000000",
+        "0x3f000000",
+        "0x3f000000"
+      ],
+      "c101_f32_bits": [
+        "0x40000000",
+        "0x40000000",
+        "0x40000000"
+      ],
+      "c102_f32_bits": "0x41700000",
+      "material_mode": "SPC",
+      "c101_scalar": true,
+      "authority": "POINTLIGHT_MATERIAL_CONSTANTS_ONLY"
+    },
+    {
+      "router_index": 169,
+      "mtd_name": "C_Wet[DSB][M].mtd",
+      "semantic_name_hash_fnv1a_utf8": "0x39360fe5cd752490",
+      "dsr_mtd_sha256": "5910889ba3c575a33593b4035a3b50351c95ba7e687039424fa9d317b0ea788b",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmpMul.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmpMul.spx",
+      "c100_f32_bits": [
+        "0x3f000000",
+        "0x3f000000",
+        "0x3f000000"
+      ],
+      "c101_f32_bits": [
+        "0x40000000",
+        "0x40000000",
+        "0x40000000"
+      ],
+      "c102_f32_bits": "0x41700000",
+      "material_mode": "SPC",
+      "c101_scalar": true,
+      "authority": "POINTLIGHT_MATERIAL_CONSTANTS_ONLY"
+    },
+    {
+      "router_index": 170,
+      "mtd_name": "C_Wet[DSB]_Alp.mtd",
+      "semantic_name_hash_fnv1a_utf8": "0xd4bc038930defbcb",
+      "dsr_mtd_sha256": "9c46069d7ee8c7e964704d5e805594d1cdf0263123e0f68c65ff38ef4420e7d9",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "c100_f32_bits": [
+        "0x3f000000",
+        "0x3f000000",
+        "0x3f000000"
+      ],
+      "c101_f32_bits": [
+        "0x40000000",
+        "0x40000000",
+        "0x40000000"
+      ],
+      "c102_f32_bits": "0x41700000",
+      "material_mode": "SPC",
+      "c101_scalar": true,
+      "authority": "POINTLIGHT_MATERIAL_CONSTANTS_ONLY"
+    },
+    {
+      "router_index": 171,
+      "mtd_name": "C_Wet[DSB]_Edge.mtd",
+      "semantic_name_hash_fnv1a_utf8": "0xc97ad01bcb92ba5f",
+      "dsr_mtd_sha256": "94fb44042dee45d9b022b51ee5a030382ad7d4b7b10d7ec44e213f06fa1f377a",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "c100_f32_bits": [
+        "0x3f000000",
+        "0x3f000000",
+        "0x3f000000"
+      ],
+      "c101_f32_bits": [
+        "0x40000000",
+        "0x40000000",
+        "0x40000000"
+      ],
+      "c102_f32_bits": "0x41700000",
+      "material_mode": "SPC",
+      "c101_scalar": true,
+      "authority": "POINTLIGHT_MATERIAL_CONSTANTS_ONLY"
+    },
+    {
+      "router_index": 181,
+      "mtd_name": "M99_water00[DSB]_Alp.mtd",
+      "semantic_name_hash_fnv1a_utf8": "0x4f206a082a9775b2",
+      "dsr_mtd_sha256": "932f8cc32b345bbaa8dc86282a1887d14149dc9e5f4628fccf542d765df660c8",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "c100_f32_bits": [
+        "0x3f000000",
+        "0x3f000000",
+        "0x3f000000"
+      ],
+      "c101_f32_bits": [
+        "0x3f800000",
+        "0x3f800000",
+        "0x3f800000"
+      ],
+      "c102_f32_bits": "0x42a00000",
+      "material_mode": "SPC",
+      "c101_scalar": true,
+      "authority": "POINTLIGHT_MATERIAL_CONSTANTS_ONLY"
+    },
+    {
+      "router_index": 182,
+      "mtd_name": "M99_water01[DSB]_Alp.mtd",
+      "semantic_name_hash_fnv1a_utf8": "0xa5ee92a624dc6d47",
+      "dsr_mtd_sha256": "305e2c59af6def9f3f15877a5d9ca416482056163150f470f1a50837d35a8e34",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "c100_f32_bits": [
+        "0x3f000000",
+        "0x3f000000",
+        "0x3f000000"
+      ],
+      "c101_f32_bits": [
+        "0x3f800000",
+        "0x3f800000",
+        "0x3f800000"
+      ],
+      "c102_f32_bits": "0x41a00000",
+      "material_mode": "SPC",
+      "c101_scalar": true,
+      "authority": "POINTLIGHT_MATERIAL_CONSTANTS_ONLY"
+    },
+    {
+      "router_index": 201,
+      "mtd_name": "M_1Wood[DSB].mtd",
+      "semantic_name_hash_fnv1a_utf8": "0xa505e17c53f1755f",
+      "dsr_mtd_sha256": "5df665f51f41d28d6a164dce28ce336f8c8db4cd8318faea6b30bb135ee4763d",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "c100_f32_bits": [
+        "0x3f19999a",
+        "0x3f19999a",
+        "0x3f19999a"
+      ],
+      "c101_f32_bits": [
+        "0x3f800000",
+        "0x3f800000",
+        "0x3f800000"
+      ],
+      "c102_f32_bits": "0x40000000",
+      "material_mode": "SPC",
+      "c101_scalar": true,
+      "authority": "POINTLIGHT_MATERIAL_CONSTANTS_ONLY"
+    },
+    {
+      "router_index": 202,
+      "mtd_name": "M_1Wood[DSB][L].mtd",
+      "semantic_name_hash_fnv1a_utf8": "0xd40113fe8499f459",
+      "dsr_mtd_sha256": "0fc1fe7ef77546ba2f2a5118728ec0d468fedd0e2c02f1ffea261118ec797576",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmpLit.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmpLit.spx",
+      "c100_f32_bits": [
+        "0x3f19999a",
+        "0x3f19999a",
+        "0x3f19999a"
+      ],
+      "c101_f32_bits": [
+        "0x3f800000",
+        "0x3f800000",
+        "0x3f800000"
+      ],
+      "c102_f32_bits": "0x40000000",
+      "material_mode": "SPC",
+      "c101_scalar": true,
+      "authority": "POINTLIGHT_MATERIAL_CONSTANTS_ONLY"
+    },
+    {
+      "router_index": 203,
+      "mtd_name": "M_1Wood[DSB][L]_Alp.mtd",
+      "semantic_name_hash_fnv1a_utf8": "0xa1dd72f2f6e28331",
+      "dsr_mtd_sha256": "be2fd0b64b833c7a430b390abddec2f1772596f7042f0adb8d01e3a72ad0ff33",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmpLit.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmpLit.spx",
+      "c100_f32_bits": [
+        "0x3f19999a",
+        "0x3f19999a",
+        "0x3f19999a"
+      ],
+      "c101_f32_bits": [
+        "0x3f800000",
+        "0x3f800000",
+        "0x3f800000"
+      ],
+      "c102_f32_bits": "0x40000000",
+      "material_mode": "SPC",
+      "c101_scalar": true,
+      "authority": "POINTLIGHT_MATERIAL_CONSTANTS_ONLY"
+    },
+    {
+      "router_index": 204,
+      "mtd_name": "M_1Wood[DSB][L]_Edge.mtd",
+      "semantic_name_hash_fnv1a_utf8": "0x43de80ccadd2d8bd",
+      "dsr_mtd_sha256": "2bb47a3f53faade5e588e3f1a7dc1232d2eb6b725b8cba3adc735a155caed607",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmpLit.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmpLit.spx",
+      "c100_f32_bits": [
+        "0x3f19999a",
+        "0x3f19999a",
+        "0x3f19999a"
+      ],
+      "c101_f32_bits": [
+        "0x3f800000",
+        "0x3f800000",
+        "0x3f800000"
+      ],
+      "c102_f32_bits": "0x40000000",
+      "material_mode": "SPC",
+      "c101_scalar": true,
+      "authority": "POINTLIGHT_MATERIAL_CONSTANTS_ONLY"
+    },
+    {
+      "router_index": 205,
+      "mtd_name": "M_1Wood[DSB][ML].mtd",
+      "semantic_name_hash_fnv1a_utf8": "0x0039ba164e8e6ee8",
+      "dsr_mtd_sha256": "4c56ac0d2b8ecaaffce858e6e133dea1e5cee72e9b160221a5a220c5669fe3f9",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmpMulLit.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmpMulLit.spx",
+      "c100_f32_bits": [
+        "0x3f19999a",
+        "0x3f19999a",
+        "0x3f19999a"
+      ],
+      "c101_f32_bits": [
+        "0x3f800000",
+        "0x3f800000",
+        "0x3f800000"
+      ],
+      "c102_f32_bits": "0x40000000",
+      "material_mode": "SPC",
+      "c101_scalar": true,
+      "authority": "POINTLIGHT_MATERIAL_CONSTANTS_ONLY"
+    },
+    {
+      "router_index": 206,
+      "mtd_name": "M_1Wood[DSB][M].mtd",
+      "semantic_name_hash_fnv1a_utf8": "0x010b70b94a902bb0",
+      "dsr_mtd_sha256": "419ea5e6e3682aa9e89ba0f7bbd9b2d42675a53d1b244757d12e2404d637d6fb",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmpMul.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmpMul.spx",
+      "c100_f32_bits": [
+        "0x3f19999a",
+        "0x3f19999a",
+        "0x3f19999a"
+      ],
+      "c101_f32_bits": [
+        "0x3f800000",
+        "0x3f800000",
+        "0x3f800000"
+      ],
+      "c102_f32_bits": "0x40000000",
+      "material_mode": "SPC",
+      "c101_scalar": true,
+      "authority": "POINTLIGHT_MATERIAL_CONSTANTS_ONLY"
+    },
+    {
+      "router_index": 207,
+      "mtd_name": "M_1Wood[DSB]_Alp.mtd",
+      "semantic_name_hash_fnv1a_utf8": "0x5f56df626067cdab",
+      "dsr_mtd_sha256": "11b70ad9f65f834233f81be59994500e3f807776a87c3748ccc102a6a0915e1e",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "c100_f32_bits": [
+        "0x3f19999a",
+        "0x3f19999a",
+        "0x3f19999a"
+      ],
+      "c101_f32_bits": [
+        "0x3f800000",
+        "0x3f800000",
+        "0x3f800000"
+      ],
+      "c102_f32_bits": "0x40000000",
+      "material_mode": "SPC",
+      "c101_scalar": true,
+      "authority": "POINTLIGHT_MATERIAL_CONSTANTS_ONLY"
+    },
+    {
+      "router_index": 208,
+      "mtd_name": "M_1Wood[DSB]_Edge.mtd",
+      "semantic_name_hash_fnv1a_utf8": "0x6e46d4a1165f613f",
+      "dsr_mtd_sha256": "3436772bbbe8f119b25d5466a7427777dfcc693fe976a50fc5d6f6685d76bea7",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "c100_f32_bits": [
+        "0x3f19999a",
+        "0x3f19999a",
+        "0x3f19999a"
+      ],
+      "c101_f32_bits": [
+        "0x3f800000",
+        "0x3f800000",
+        "0x3f800000"
+      ],
+      "c102_f32_bits": "0x40000000",
+      "material_mode": "SPC",
+      "c101_scalar": true,
+      "authority": "POINTLIGHT_MATERIAL_CONSTANTS_ONLY"
+    },
+    {
+      "router_index": 214,
+      "mtd_name": "M_4Stone[DSB].mtd",
+      "semantic_name_hash_fnv1a_utf8": "0xf4c13958969886b4",
+      "dsr_mtd_sha256": "b0fa86806e8c6b6249660971dba7ac0dfcc76e11b14c31f16216a4fde3ab6d70",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "c100_f32_bits": [
+        "0x3f19999a",
+        "0x3f19999a",
+        "0x3f19999a"
+      ],
+      "c101_f32_bits": [
+        "0x3fc00000",
+        "0x3fc00000",
+        "0x3fc00000"
+      ],
+      "c102_f32_bits": "0x40800000",
+      "material_mode": "SPC",
+      "c101_scalar": true,
+      "authority": "POINTLIGHT_MATERIAL_CONSTANTS_ONLY"
+    },
+    {
+      "router_index": 215,
+      "mtd_name": "M_4Stone[DSB][L].mtd",
+      "semantic_name_hash_fnv1a_utf8": "0xee4bafc9517f0a7c",
+      "dsr_mtd_sha256": "190f45292f706f2e022879d0b333f0e98ba1ba3a580d329326371e1d9e58c767",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmpLit.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmpLit.spx",
+      "c100_f32_bits": [
+        "0x3f19999a",
+        "0x3f19999a",
+        "0x3f19999a"
+      ],
+      "c101_f32_bits": [
+        "0x3fc00000",
+        "0x3fc00000",
+        "0x3fc00000"
+      ],
+      "c102_f32_bits": "0x40800000",
+      "material_mode": "SPC",
+      "c101_scalar": true,
+      "authority": "POINTLIGHT_MATERIAL_CONSTANTS_ONLY"
+    },
+    {
+      "router_index": 216,
+      "mtd_name": "M_4Stone[DSB][L]_Alp.mtd",
+      "semantic_name_hash_fnv1a_utf8": "0x07db837287d3e130",
+      "dsr_mtd_sha256": "5ef68e287cabf2a240dcb9aca6548b4d3c04c4ac58c702c9bba073accf0fd74a",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmpLit.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmpLit.spx",
+      "c100_f32_bits": [
+        "0x3f19999a",
+        "0x3f19999a",
+        "0x3f19999a"
+      ],
+      "c101_f32_bits": [
+        "0x3fc00000",
+        "0x3fc00000",
+        "0x3fc00000"
+      ],
+      "c102_f32_bits": "0x40800000",
+      "material_mode": "SPC",
+      "c101_scalar": true,
+      "authority": "POINTLIGHT_MATERIAL_CONSTANTS_ONLY"
+    },
+    {
+      "router_index": 217,
+      "mtd_name": "M_4Stone[DSB][L]_Edge.mtd",
+      "semantic_name_hash_fnv1a_utf8": "0xfec01b5743b7d572",
+      "dsr_mtd_sha256": "2d551d2b2fb7a6436beed97ff670289fb3f12e6f4a73de8b4b2b5a0bd5cb90d9",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmpLit.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmpLit.spx",
+      "c100_f32_bits": [
+        "0x3f19999a",
+        "0x3f19999a",
+        "0x3f19999a"
+      ],
+      "c101_f32_bits": [
+        "0x3fc00000",
+        "0x3fc00000",
+        "0x3fc00000"
+      ],
+      "c102_f32_bits": "0x40800000",
+      "material_mode": "SPC",
+      "c101_scalar": true,
+      "authority": "POINTLIGHT_MATERIAL_CONSTANTS_ONLY"
+    },
+    {
+      "router_index": 218,
+      "mtd_name": "M_4Stone[DSB][ML].mtd",
+      "semantic_name_hash_fnv1a_utf8": "0x2b3a0ff96ac244e3",
+      "dsr_mtd_sha256": "4dcdc7b126fa391af0c4cb338fc0616792a6c65ee8475e71fde3fb63557dab20",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmpMulLit.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmpMulLit.spx",
+      "c100_f32_bits": [
+        "0x3f19999a",
+        "0x3f19999a",
+        "0x3f19999a"
+      ],
+      "c101_f32_bits": [
+        "0x3fc00000",
+        "0x3fc00000",
+        "0x3fc00000"
+      ],
+      "c102_f32_bits": "0x40800000",
+      "material_mode": "SPC",
+      "c101_scalar": true,
+      "authority": "POINTLIGHT_MATERIAL_CONSTANTS_ONLY"
+    },
+    {
+      "router_index": 219,
+      "mtd_name": "M_4Stone[DSB][ML]_Alp.mtd",
+      "semantic_name_hash_fnv1a_utf8": "0x48a623e5ec9b2fcf",
+      "dsr_mtd_sha256": "39b4831195b424fbdbe2de7f2965f9b29922b6c444b6d0d4191ea490d565e164",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmpMulLit.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmpMulLit.spx",
+      "c100_f32_bits": [
+        "0x3f19999a",
+        "0x3f19999a",
+        "0x3f19999a"
+      ],
+      "c101_f32_bits": [
+        "0x3fc00000",
+        "0x3fc00000",
+        "0x3fc00000"
+      ],
+      "c102_f32_bits": "0x40800000",
+      "material_mode": "SPC",
+      "c101_scalar": true,
+      "authority": "POINTLIGHT_MATERIAL_CONSTANTS_ONLY"
+    },
+    {
+      "router_index": 220,
+      "mtd_name": "M_4Stone[DSB][ML]_Edge.mtd",
+      "semantic_name_hash_fnv1a_utf8": "0x5320cbe920c64c23",
+      "dsr_mtd_sha256": "bbeca86582253d419a2b09241d03ac7238732cb592cc95fc5f31563d59229fc8",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmpMulLit.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmpMulLit.spx",
+      "c100_f32_bits": [
+        "0x3f19999a",
+        "0x3f19999a",
+        "0x3f19999a"
+      ],
+      "c101_f32_bits": [
+        "0x3fc00000",
+        "0x3fc00000",
+        "0x3fc00000"
+      ],
+      "c102_f32_bits": "0x40800000",
+      "material_mode": "SPC",
+      "c101_scalar": true,
+      "authority": "POINTLIGHT_MATERIAL_CONSTANTS_ONLY"
+    },
+    {
+      "router_index": 221,
+      "mtd_name": "M_4Stone[DSB][M].mtd",
+      "semantic_name_hash_fnv1a_utf8": "0x3c6d8c97dd1abf65",
+      "dsr_mtd_sha256": "d7e50b3c335c437c72620209059f9e3c99ccaab04eb0167b45b3035001f0f611",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmpMul.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmpMul.spx",
+      "c100_f32_bits": [
+        "0x3f19999a",
+        "0x3f19999a",
+        "0x3f19999a"
+      ],
+      "c101_f32_bits": [
+        "0x3fc00000",
+        "0x3fc00000",
+        "0x3fc00000"
+      ],
+      "c102_f32_bits": "0x40800000",
+      "material_mode": "SPC",
+      "c101_scalar": true,
+      "authority": "POINTLIGHT_MATERIAL_CONSTANTS_ONLY"
+    },
+    {
+      "router_index": 222,
+      "mtd_name": "M_4Stone[DSB][M]_Alp.mtd",
+      "semantic_name_hash_fnv1a_utf8": "0xf74dd2a2ec06d8fd",
+      "dsr_mtd_sha256": "805f1501e3594e42337a54d671d8b1f2278d94bded532849cfd701f43854b79f",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmpMul.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmpMul.spx",
+      "c100_f32_bits": [
+        "0x3f19999a",
+        "0x3f19999a",
+        "0x3f19999a"
+      ],
+      "c101_f32_bits": [
+        "0x3fc00000",
+        "0x3fc00000",
+        "0x3fc00000"
+      ],
+      "c102_f32_bits": "0x40800000",
+      "material_mode": "SPC",
+      "c101_scalar": true,
+      "authority": "POINTLIGHT_MATERIAL_CONSTANTS_ONLY"
+    },
+    {
+      "router_index": 223,
+      "mtd_name": "M_4Stone[DSB][M]_Edge.mtd",
+      "semantic_name_hash_fnv1a_utf8": "0xe8e581ca5ef0a959",
+      "dsr_mtd_sha256": "bd4a982ff541a004c0ead2c74f5b350439401f2e9bfcdd4f4ea38dcebd2534bc",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmpMul.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmpMul.spx",
+      "c100_f32_bits": [
+        "0x3f19999a",
+        "0x3f19999a",
+        "0x3f19999a"
+      ],
+      "c101_f32_bits": [
+        "0x3fc00000",
+        "0x3fc00000",
+        "0x3fc00000"
+      ],
+      "c102_f32_bits": "0x40800000",
+      "material_mode": "SPC",
+      "c101_scalar": true,
+      "authority": "POINTLIGHT_MATERIAL_CONSTANTS_ONLY"
+    },
+    {
+      "router_index": 224,
+      "mtd_name": "M_4Stone[DSB]_Alp.mtd",
+      "semantic_name_hash_fnv1a_utf8": "0x044b65906bc358c8",
+      "dsr_mtd_sha256": "e68c6e76917c9a485e9bc97747b45e77b7dd42b0a7bcceaea80ea46f394657d7",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "c100_f32_bits": [
+        "0x3f19999a",
+        "0x3f19999a",
+        "0x3f19999a"
+      ],
+      "c101_f32_bits": [
+        "0x3fc00000",
+        "0x3fc00000",
+        "0x3fc00000"
+      ],
+      "c102_f32_bits": "0x40800000",
+      "material_mode": "SPC",
+      "c101_scalar": true,
+      "authority": "POINTLIGHT_MATERIAL_CONSTANTS_ONLY"
+    },
+    {
+      "router_index": 225,
+      "mtd_name": "M_4Stone[DSB]_Edge.mtd",
+      "semantic_name_hash_fnv1a_utf8": "0xda9a932b0534dc2a",
+      "dsr_mtd_sha256": "9bf51f13fee89812205c8ff184781a56143187d02e364f4d1647faab028d2c5e",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "c100_f32_bits": [
+        "0x3f19999a",
+        "0x3f19999a",
+        "0x3f19999a"
+      ],
+      "c101_f32_bits": [
+        "0x3fc00000",
+        "0x3fc00000",
+        "0x3fc00000"
+      ],
+      "c102_f32_bits": "0x40800000",
+      "material_mode": "SPC",
+      "c101_scalar": true,
+      "authority": "POINTLIGHT_MATERIAL_CONSTANTS_ONLY"
+    },
+    {
+      "router_index": 232,
+      "mtd_name": "M_7Metal[DSB].mtd",
+      "semantic_name_hash_fnv1a_utf8": "0x0e3a4cea2664c68b",
+      "dsr_mtd_sha256": "884c9dbff44b174af78b3db22302dd4855fbb5283e8197e430cb998419fe8b8c",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "c100_f32_bits": [
+        "0x3f19999a",
+        "0x3f19999a",
+        "0x3f19999a"
+      ],
+      "c101_f32_bits": [
+        "0x40200000",
+        "0x40200000",
+        "0x40200000"
+      ],
+      "c102_f32_bits": "0x41080000",
+      "material_mode": "SPC",
+      "c101_scalar": true,
+      "authority": "POINTLIGHT_MATERIAL_CONSTANTS_ONLY"
+    },
+    {
+      "router_index": 233,
+      "mtd_name": "M_7Metal[DSB][L].mtd",
+      "semantic_name_hash_fnv1a_utf8": "0x5fd4bde2d80a4e9d",
+      "dsr_mtd_sha256": "a557affd0cddeea208bdb3f1208a5a9bafd7a1dc20f7e5d194b827046c35da59",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmpLit.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmpLit.spx",
+      "c100_f32_bits": [
+        "0x3f19999a",
+        "0x3f19999a",
+        "0x3f19999a"
+      ],
+      "c101_f32_bits": [
+        "0x40200000",
+        "0x40200000",
+        "0x40200000"
+      ],
+      "c102_f32_bits": "0x41080000",
+      "material_mode": "SPC",
+      "c101_scalar": true,
+      "authority": "POINTLIGHT_MATERIAL_CONSTANTS_ONLY"
+    },
+    {
+      "router_index": 234,
+      "mtd_name": "M_7Metal[DSB][L]_Alp.mtd",
+      "semantic_name_hash_fnv1a_utf8": "0xbf7082e2abc1f4f5",
+      "dsr_mtd_sha256": "f2668d9f5c07dae1f0b48653968452e51d71a7fc17244481f9e91e18f786c8e1",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmpLit.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmpLit.spx",
+      "c100_f32_bits": [
+        "0x3f19999a",
+        "0x3f19999a",
+        "0x3f19999a"
+      ],
+      "c101_f32_bits": [
+        "0x40200000",
+        "0x40200000",
+        "0x40200000"
+      ],
+      "c102_f32_bits": "0x41080000",
+      "material_mode": "SPC",
+      "c101_scalar": true,
+      "authority": "POINTLIGHT_MATERIAL_CONSTANTS_ONLY"
+    },
+    {
+      "router_index": 235,
+      "mtd_name": "M_7Metal[DSB][L]_DetB.mtd",
+      "semantic_name_hash_fnv1a_utf8": "0x26c8fbe8fa1f0b45",
+      "dsr_mtd_sha256": "1d36fffa7adad31987d59569bc28289b513cf4bf34b6b1142c356ff28b643965",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmpLit.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmpLit.spx",
+      "c100_f32_bits": [
+        "0x3f19999a",
+        "0x3f19999a",
+        "0x3f19999a"
+      ],
+      "c101_f32_bits": [
+        "0x40200000",
+        "0x40200000",
+        "0x40200000"
+      ],
+      "c102_f32_bits": "0x41080000",
+      "material_mode": "SPC",
+      "c101_scalar": true,
+      "authority": "POINTLIGHT_MATERIAL_CONSTANTS_ONLY"
+    },
+    {
+      "router_index": 236,
+      "mtd_name": "M_7Metal[DSB][L]_Edge.mtd",
+      "semantic_name_hash_fnv1a_utf8": "0x041cab19889df091",
+      "dsr_mtd_sha256": "b551edc768f0da463b530268a4d2f09c6fb0cb6ff21a9173335f1cb481bf4ebe",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmpLit.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmpLit.spx",
+      "c100_f32_bits": [
+        "0x3f19999a",
+        "0x3f19999a",
+        "0x3f19999a"
+      ],
+      "c101_f32_bits": [
+        "0x40200000",
+        "0x40200000",
+        "0x40200000"
+      ],
+      "c102_f32_bits": "0x41080000",
+      "material_mode": "SPC",
+      "c101_scalar": true,
+      "authority": "POINTLIGHT_MATERIAL_CONSTANTS_ONLY"
+    },
+    {
+      "router_index": 237,
+      "mtd_name": "M_7Metal[DSB][ML].mtd",
+      "semantic_name_hash_fnv1a_utf8": "0x4f4281d6b34c3f9c",
+      "dsr_mtd_sha256": "c5e95740d4c7c11e3e2949eeec68acdcc86caa9a966f652058148e4d076074b4",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmpMulLit.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmpMulLit.spx",
+      "c100_f32_bits": [
+        "0x3f19999a",
+        "0x3f19999a",
+        "0x3f19999a"
+      ],
+      "c101_f32_bits": [
+        "0x40200000",
+        "0x40200000",
+        "0x40200000"
+      ],
+      "c102_f32_bits": "0x41080000",
+      "material_mode": "SPC",
+      "c101_scalar": true,
+      "authority": "POINTLIGHT_MATERIAL_CONSTANTS_ONLY"
+    },
+    {
+      "router_index": 238,
+      "mtd_name": "M_7Metal[DSB][ML]_Alp.mtd",
+      "semantic_name_hash_fnv1a_utf8": "0x1d0c911c9a3b7cd0",
+      "dsr_mtd_sha256": "1e0052996a86e27b2f9b35f50d6b38c26f2aca68a27edba525ae3c98b9a4b855",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmpMulLit.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmpMulLit.spx",
+      "c100_f32_bits": [
+        "0x3f19999a",
+        "0x3f19999a",
+        "0x3f19999a"
+      ],
+      "c101_f32_bits": [
+        "0x40200000",
+        "0x40200000",
+        "0x40200000"
+      ],
+      "c102_f32_bits": "0x41080000",
+      "material_mode": "SPC",
+      "c101_scalar": true,
+      "authority": "POINTLIGHT_MATERIAL_CONSTANTS_ONLY"
+    },
+    {
+      "router_index": 239,
+      "mtd_name": "M_7Metal[DSB][ML]_Edge.mtd",
+      "semantic_name_hash_fnv1a_utf8": "0xba75397b3fd64312",
+      "dsr_mtd_sha256": "c59f8155af15db3cdbc9380b9cdd8a33bfda0c2f73d0a49b96da92cd46960ba4",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmpMulLit.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmpMulLit.spx",
+      "c100_f32_bits": [
+        "0x3f19999a",
+        "0x3f19999a",
+        "0x3f19999a"
+      ],
+      "c101_f32_bits": [
+        "0x40200000",
+        "0x40200000",
+        "0x40200000"
+      ],
+      "c102_f32_bits": "0x41080000",
+      "material_mode": "SPC",
+      "c101_scalar": true,
+      "authority": "POINTLIGHT_MATERIAL_CONSTANTS_ONLY"
+    },
+    {
+      "router_index": 240,
+      "mtd_name": "M_7Metal[DSB][M].mtd",
+      "semantic_name_hash_fnv1a_utf8": "0x27679866a9da3854",
+      "dsr_mtd_sha256": "6d30215f2b488605194b943003d906475280c466c0b247dce112dabbdb51bb74",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmpMul.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmpMul.spx",
+      "c100_f32_bits": [
+        "0x3f19999a",
+        "0x3f19999a",
+        "0x3f19999a"
+      ],
+      "c101_f32_bits": [
+        "0x40200000",
+        "0x40200000",
+        "0x40200000"
+      ],
+      "c102_f32_bits": "0x41080000",
+      "material_mode": "SPC",
+      "c101_scalar": true,
+      "authority": "POINTLIGHT_MATERIAL_CONSTANTS_ONLY"
+    },
+    {
+      "router_index": 241,
+      "mtd_name": "M_7Metal[DSB][M]_Alp.mtd",
+      "semantic_name_hash_fnv1a_utf8": "0x8b8ed89ca85ee2e8",
+      "dsr_mtd_sha256": "bcc65d96476cd70a036c382e4690099605fe6080b91ce5192a8194f6f61377fc",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmpMul.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmpMul.spx",
+      "c100_f32_bits": [
+        "0x3f19999a",
+        "0x3f19999a",
+        "0x3f19999a"
+      ],
+      "c101_f32_bits": [
+        "0x40200000",
+        "0x40200000",
+        "0x40200000"
+      ],
+      "c102_f32_bits": "0x41080000",
+      "material_mode": "SPC",
+      "c101_scalar": true,
+      "authority": "POINTLIGHT_MATERIAL_CONSTANTS_ONLY"
+    },
+    {
+      "router_index": 242,
+      "mtd_name": "M_7Metal[DSB][M]_Edge.mtd",
+      "semantic_name_hash_fnv1a_utf8": "0xe17b280f0e24a54a",
+      "dsr_mtd_sha256": "b9e4715f0befd6af524dbcd152f6e6de4b6ab34f395576dc1793a15fa6b7e8b3",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmpMul.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmpMul.spx",
+      "c100_f32_bits": [
+        "0x3f19999a",
+        "0x3f19999a",
+        "0x3f19999a"
+      ],
+      "c101_f32_bits": [
+        "0x40200000",
+        "0x40200000",
+        "0x40200000"
+      ],
+      "c102_f32_bits": "0x41080000",
+      "material_mode": "SPC",
+      "c101_scalar": true,
+      "authority": "POINTLIGHT_MATERIAL_CONSTANTS_ONLY"
+    },
+    {
+      "router_index": 243,
+      "mtd_name": "M_7Metal[DSB]_Alp.mtd",
+      "semantic_name_hash_fnv1a_utf8": "0xa9c616a12869f797",
+      "dsr_mtd_sha256": "5130a555ae23c286cdab36add5416cad7e508a17b66ea00e0cc388752fecb0bd",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "c100_f32_bits": [
+        "0x3f19999a",
+        "0x3f19999a",
+        "0x3f19999a"
+      ],
+      "c101_f32_bits": [
+        "0x40200000",
+        "0x40200000",
+        "0x40200000"
+      ],
+      "c102_f32_bits": "0x41080000",
+      "material_mode": "SPC",
+      "c101_scalar": true,
+      "authority": "POINTLIGHT_MATERIAL_CONSTANTS_ONLY"
+    },
+    {
+      "router_index": 244,
+      "mtd_name": "M_7Metal[DSB]_DetB.mtd",
+      "semantic_name_hash_fnv1a_utf8": "0xfd9c758c95f3071f",
+      "dsr_mtd_sha256": "c32dfbdd3b244bbb23f268eef820bc79d2d3ba768a60ce8d6c18ad254ae67320",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "c100_f32_bits": [
+        "0x3f19999a",
+        "0x3f19999a",
+        "0x3f19999a"
+      ],
+      "c101_f32_bits": [
+        "0x40200000",
+        "0x40200000",
+        "0x40200000"
+      ],
+      "c102_f32_bits": "0x41080000",
+      "material_mode": "SPC",
+      "c101_scalar": true,
+      "authority": "POINTLIGHT_MATERIAL_CONSTANTS_ONLY"
+    },
+    {
+      "router_index": 245,
+      "mtd_name": "M_7Metal[DSB]_Edge.mtd",
+      "semantic_name_hash_fnv1a_utf8": "0x04901ede004d4b6b",
+      "dsr_mtd_sha256": "6d200ebfadb5c5a46f4664b120b0c630a69783ed2b16529416913dcaeaf1d462",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "c100_f32_bits": [
+        "0x3f19999a",
+        "0x3f19999a",
+        "0x3f19999a"
+      ],
+      "c101_f32_bits": [
+        "0x40200000",
+        "0x40200000",
+        "0x40200000"
+      ],
+      "c102_f32_bits": "0x41080000",
+      "material_mode": "SPC",
+      "c101_scalar": true,
+      "authority": "POINTLIGHT_MATERIAL_CONSTANTS_ONLY"
+    },
+    {
+      "router_index": 251,
+      "mtd_name": "M_9Glass[DSB].mtd",
+      "semantic_name_hash_fnv1a_utf8": "0xce91d872734184bc",
+      "dsr_mtd_sha256": "14a82945df959cab55bf9475ecba2822248b6a90911c6b017a86e57e2d60a52c",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "c100_f32_bits": [
+        "0x3f19999a",
+        "0x3f19999a",
+        "0x3f19999a"
+      ],
+      "c101_f32_bits": [
+        "0x40000000",
+        "0x40000000",
+        "0x40000000"
+      ],
+      "c102_f32_bits": "0x42700000",
+      "material_mode": "SPC",
+      "c101_scalar": true,
+      "authority": "POINTLIGHT_MATERIAL_CONSTANTS_ONLY"
+    },
+    {
+      "router_index": 252,
+      "mtd_name": "M_9Glass[DSB][L].mtd",
+      "semantic_name_hash_fnv1a_utf8": "0x94a297c009696c84",
+      "dsr_mtd_sha256": "28710f672c6c137181bd4524772a050543a6e7069c94a57f4ec9f264dbc48f01",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmpLit.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmpLit.spx",
+      "c100_f32_bits": [
+        "0x3f19999a",
+        "0x3f19999a",
+        "0x3f19999a"
+      ],
+      "c101_f32_bits": [
+        "0x40000000",
+        "0x40000000",
+        "0x40000000"
+      ],
+      "c102_f32_bits": "0x42700000",
+      "material_mode": "SPC",
+      "c101_scalar": true,
+      "authority": "POINTLIGHT_MATERIAL_CONSTANTS_ONLY"
+    },
+    {
+      "router_index": 253,
+      "mtd_name": "M_9Glass[DSB][L]_Alp.mtd",
+      "semantic_name_hash_fnv1a_utf8": "0xb6adf3e29bf61298",
+      "dsr_mtd_sha256": "582398956f6a900d0b39250ba72790f44844d4e0d981734771a8be39fd746f65",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmpLit.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmpLit.spx",
+      "c100_f32_bits": [
+        "0x3f19999a",
+        "0x3f19999a",
+        "0x3f19999a"
+      ],
+      "c101_f32_bits": [
+        "0x40000000",
+        "0x40000000",
+        "0x40000000"
+      ],
+      "c102_f32_bits": "0x42700000",
+      "material_mode": "SPC",
+      "c101_scalar": true,
+      "authority": "POINTLIGHT_MATERIAL_CONSTANTS_ONLY"
+    },
+    {
+      "router_index": 254,
+      "mtd_name": "M_9Glass[DSB][L]_Edge.mtd",
+      "semantic_name_hash_fnv1a_utf8": "0x205ec5f771f5fdfa",
+      "dsr_mtd_sha256": "1cff0dea6e18372d8411d4b739674eecae5c02ac1921f126811870540d86ff7e",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmpLit.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmpLit.spx",
+      "c100_f32_bits": [
+        "0x3f19999a",
+        "0x3f19999a",
+        "0x3f19999a"
+      ],
+      "c101_f32_bits": [
+        "0x40000000",
+        "0x40000000",
+        "0x40000000"
+      ],
+      "c102_f32_bits": "0x42700000",
+      "material_mode": "SPC",
+      "c101_scalar": true,
+      "authority": "POINTLIGHT_MATERIAL_CONSTANTS_ONLY"
+    },
+    {
+      "router_index": 255,
+      "mtd_name": "M_9Glass[DSB][ML].mtd",
+      "semantic_name_hash_fnv1a_utf8": "0x13b1af716142ff2b",
+      "dsr_mtd_sha256": "4cefb77faf14f4b0d49f978f01dc401a7628ae6948dc14270bcfc53d8e3bc792",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmpMulLit.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmpMulLit.spx",
+      "c100_f32_bits": [
+        "0x3f19999a",
+        "0x3f19999a",
+        "0x3f19999a"
+      ],
+      "c101_f32_bits": [
+        "0x40000000",
+        "0x40000000",
+        "0x40000000"
+      ],
+      "c102_f32_bits": "0x42700000",
+      "material_mode": "SPC",
+      "c101_scalar": true,
+      "authority": "POINTLIGHT_MATERIAL_CONSTANTS_ONLY"
+    },
+    {
+      "router_index": 256,
+      "mtd_name": "M_9Glass[DSB][ML]_Alp.mtd",
+      "semantic_name_hash_fnv1a_utf8": "0x0d6109a2a69ff337",
+      "dsr_mtd_sha256": "ec3fb988bd9886c03d55103988bfa048fb0af0e3ef7c4349f0e79bfbff939028",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmpMulLit.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmpMulLit.spx",
+      "c100_f32_bits": [
+        "0x3f19999a",
+        "0x3f19999a",
+        "0x3f19999a"
+      ],
+      "c101_f32_bits": [
+        "0x40000000",
+        "0x40000000",
+        "0x40000000"
+      ],
+      "c102_f32_bits": "0x42700000",
+      "material_mode": "SPC",
+      "c101_scalar": true,
+      "authority": "POINTLIGHT_MATERIAL_CONSTANTS_ONLY"
+    },
+    {
+      "router_index": 257,
+      "mtd_name": "M_9Glass[DSB][ML]_Edge.mtd",
+      "semantic_name_hash_fnv1a_utf8": "0xafaf969893e51c8b",
+      "dsr_mtd_sha256": "68afd5801d090bfd8b14923eca3c3a6d475f42f99d0b0aac11b787d7ddade8f7",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmpMulLit.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmpMulLit.spx",
+      "c100_f32_bits": [
+        "0x3f19999a",
+        "0x3f19999a",
+        "0x3f19999a"
+      ],
+      "c101_f32_bits": [
+        "0x40000000",
+        "0x40000000",
+        "0x40000000"
+      ],
+      "c102_f32_bits": "0x42700000",
+      "material_mode": "SPC",
+      "c101_scalar": true,
+      "authority": "POINTLIGHT_MATERIAL_CONSTANTS_ONLY"
+    },
+    {
+      "router_index": 258,
+      "mtd_name": "M_9Glass[DSB][M].mtd",
+      "semantic_name_hash_fnv1a_utf8": "0xcc1374b3ac9ee0cd",
+      "dsr_mtd_sha256": "b3a7e62678e88d0a2d081063a7376421db777932f769eb61994e57febdd7de88",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmpMul.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmpMul.spx",
+      "c100_f32_bits": [
+        "0x3f19999a",
+        "0x3f19999a",
+        "0x3f19999a"
+      ],
+      "c101_f32_bits": [
+        "0x40000000",
+        "0x40000000",
+        "0x40000000"
+      ],
+      "c102_f32_bits": "0x42700000",
+      "material_mode": "SPC",
+      "c101_scalar": true,
+      "authority": "POINTLIGHT_MATERIAL_CONSTANTS_ONLY"
+    },
+    {
+      "router_index": 259,
+      "mtd_name": "M_9Glass[DSB][M]_Alp.mtd",
+      "semantic_name_hash_fnv1a_utf8": "0x707105ad2d155025",
+      "dsr_mtd_sha256": "5042aac0fb56cee17f876329c024ba7137d5a061173adb4919641f8ce5179962",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmpMul.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmpMul.spx",
+      "c100_f32_bits": [
+        "0x3f19999a",
+        "0x3f19999a",
+        "0x3f19999a"
+      ],
+      "c101_f32_bits": [
+        "0x40000000",
+        "0x40000000",
+        "0x40000000"
+      ],
+      "c102_f32_bits": "0x42700000",
+      "material_mode": "SPC",
+      "c101_scalar": true,
+      "authority": "POINTLIGHT_MATERIAL_CONSTANTS_ONLY"
+    },
+    {
+      "router_index": 260,
+      "mtd_name": "M_9Glass[DSB][M]_Edge.mtd",
+      "semantic_name_hash_fnv1a_utf8": "0xec07d34c4521f241",
+      "dsr_mtd_sha256": "78c9c95c917106cac371eb22e381ba980fda10df1ca8de7a6660f31d27f73a2e",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmpMul.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmpMul.spx",
+      "c100_f32_bits": [
+        "0x3f19999a",
+        "0x3f19999a",
+        "0x3f19999a"
+      ],
+      "c101_f32_bits": [
+        "0x40000000",
+        "0x40000000",
+        "0x40000000"
+      ],
+      "c102_f32_bits": "0x42700000",
+      "material_mode": "SPC",
+      "c101_scalar": true,
+      "authority": "POINTLIGHT_MATERIAL_CONSTANTS_ONLY"
+    },
+    {
+      "router_index": 261,
+      "mtd_name": "M_9Glass[DSB]_Alp.mtd",
+      "semantic_name_hash_fnv1a_utf8": "0xd2d6f33808ebce70",
+      "dsr_mtd_sha256": "b86e5df9cc88b1f52b30f02a94a40a66755d27aa7b6484116c9a202ab3e78e1a",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "c100_f32_bits": [
+        "0x3f19999a",
+        "0x3f19999a",
+        "0x3f19999a"
+      ],
+      "c101_f32_bits": [
+        "0x40000000",
+        "0x40000000",
+        "0x40000000"
+      ],
+      "c102_f32_bits": "0x42700000",
+      "material_mode": "SPC",
+      "c101_scalar": true,
+      "authority": "POINTLIGHT_MATERIAL_CONSTANTS_ONLY"
+    },
+    {
+      "router_index": 262,
+      "mtd_name": "M_9Glass[DSB]_Edge.mtd",
+      "semantic_name_hash_fnv1a_utf8": "0xffa1e35215270fb2",
+      "dsr_mtd_sha256": "ac6bd92068cab0dd10493fd488176d00bd1cc80bac5f4e32a0d38be0e605a5de",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "c100_f32_bits": [
+        "0x3f19999a",
+        "0x3f19999a",
+        "0x3f19999a"
+      ],
+      "c101_f32_bits": [
+        "0x40000000",
+        "0x40000000",
+        "0x40000000"
+      ],
+      "c102_f32_bits": "0x42700000",
+      "material_mode": "SPC",
+      "c101_scalar": true,
+      "authority": "POINTLIGHT_MATERIAL_CONSTANTS_ONLY"
+    },
+    {
+      "router_index": 268,
+      "mtd_name": "M_Blood_letter[DSB]_Alp.mtd",
+      "semantic_name_hash_fnv1a_utf8": "0xf5cfa9ca1d16fdc0",
+      "dsr_mtd_sha256": "5bfd664a37353c0e0022ed2344f4c7a56e8926611c4f33efe6cf085590a1e65a",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "c100_f32_bits": [
+        "0x3f800000",
+        "0x3f800000",
+        "0x3f800000"
+      ],
+      "c101_f32_bits": [
+        "0x3f800000",
+        "0x3f800000",
+        "0x3f800000"
+      ],
+      "c102_f32_bits": "0x42a00000",
+      "material_mode": "SPC",
+      "c101_scalar": true,
+      "authority": "POINTLIGHT_MATERIAL_CONSTANTS_ONLY"
+    },
+    {
+      "router_index": 269,
+      "mtd_name": "M_MagicBarrier.mtd",
+      "semantic_name_hash_fnv1a_utf8": "0xec4108dd8b9b3b3a",
+      "dsr_mtd_sha256": "a6ee04fdbb6c5b7af95841d2b722899467e7e4ee08c83e9d667114458e770683",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifMul.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifMul.spx",
+      "c100_f32_bits": [
+        "0x3f933333",
+        "0x3f933333",
+        "0x3f933333"
+      ],
+      "c101_f32_bits": [
+        "0x00000000",
+        "0x00000000",
+        "0x00000000"
+      ],
+      "c102_f32_bits": "0x00000000",
+      "material_mode": "NOSPC",
+      "c101_scalar": true,
+      "authority": "POINTLIGHT_MATERIAL_CONSTANTS_ONLY"
+    },
+    {
+      "router_index": 270,
+      "mtd_name": "M_Sky[Dn].mtd",
+      "semantic_name_hash_fnv1a_utf8": "0x2c05af0f2ab4f72d",
+      "dsr_mtd_sha256": "9fbe6db7035256823acecee9ad376c8c3106ef730ba2294efa4955b1a68bd8d1",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDif.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDif.spx",
+      "c100_f32_bits": [
+        "0x3f800000",
+        "0x3f800000",
+        "0x3f800000"
+      ],
+      "c101_f32_bits": [
+        "0x00000000",
+        "0x00000000",
+        "0x00000000"
+      ],
+      "c102_f32_bits": "0x00000000",
+      "material_mode": "NOSPC",
+      "c101_scalar": true,
+      "authority": "POINTLIGHT_MATERIAL_CONSTANTS_ONLY"
+    },
+    {
+      "router_index": 271,
+      "mtd_name": "M_Sky[Dn]_Edge.mtd",
+      "semantic_name_hash_fnv1a_utf8": "0x651b0e138bb51ea1",
+      "dsr_mtd_sha256": "f0f8a1eff2407c9f27825e9f45b052a96f4c08bc980919cffa56deedca3fc0ee",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDif.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDif.spx",
+      "c100_f32_bits": [
+        "0x3f800000",
+        "0x3f800000",
+        "0x3f800000"
+      ],
+      "c101_f32_bits": [
+        "0x00000000",
+        "0x00000000",
+        "0x00000000"
+      ],
+      "c102_f32_bits": "0x00000000",
+      "material_mode": "NOSPC",
+      "c101_scalar": true,
+      "authority": "POINTLIGHT_MATERIAL_CONSTANTS_ONLY"
+    },
+    {
+      "router_index": 272,
+      "mtd_name": "M_Sky_dark[Dn].mtd",
+      "semantic_name_hash_fnv1a_utf8": "0x780ebd98c345c8b8",
+      "dsr_mtd_sha256": "2749baa5e03f9bbc80feafd72ed0bb30e57fb8e47eec422006fd0f0c7d03fc97",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDif.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDif.spx",
+      "c100_f32_bits": [
+        "0x3f19999a",
+        "0x3f19999a",
+        "0x3f19999a"
+      ],
+      "c101_f32_bits": [
+        "0x00000000",
+        "0x00000000",
+        "0x00000000"
+      ],
+      "c102_f32_bits": "0x00000000",
+      "material_mode": "NOSPC",
+      "c101_scalar": true,
+      "authority": "POINTLIGHT_MATERIAL_CONSTANTS_ONLY"
+    },
+    {
+      "router_index": 273,
+      "mtd_name": "M_Sky_light[Dn].mtd",
+      "semantic_name_hash_fnv1a_utf8": "0x179b85c19c990c9e",
+      "dsr_mtd_sha256": "9fe3316e3ca74a7392374f55eefd6d055626c461688ef215eaf8e98297efcacd",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDif.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDif.spx",
+      "c100_f32_bits": [
+        "0x3fc00000",
+        "0x3fc00000",
+        "0x3fc00000"
+      ],
+      "c101_f32_bits": [
+        "0x00000000",
+        "0x00000000",
+        "0x00000000"
+      ],
+      "c102_f32_bits": "0x00000000",
+      "material_mode": "NOSPC",
+      "c101_scalar": true,
+      "authority": "POINTLIGHT_MATERIAL_CONSTANTS_ONLY"
+    },
+    {
+      "router_index": 276,
+      "mtd_name": "P_Damage_L_DullLeather[DSB].mtd",
+      "semantic_name_hash_fnv1a_utf8": "0x2c4825f57438178f",
+      "dsr_mtd_sha256": "0f8ca2b6896c9fbe81bfdb30eb0d53a48670cb4c1719ab35533a05f03c46cc00",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "c100_f32_bits": [
+        "0x3e99999a",
+        "0x3e99999a",
+        "0x3e99999a"
+      ],
+      "c101_f32_bits": [
+        "0x3e800000",
+        "0x3e800000",
+        "0x3e800000"
+      ],
+      "c102_f32_bits": "0x3f000000",
+      "material_mode": "SPC",
+      "c101_scalar": true,
+      "authority": "POINTLIGHT_MATERIAL_CONSTANTS_ONLY"
+    },
+    {
+      "router_index": 277,
+      "mtd_name": "P_Damage_L_Leather[DSB].mtd",
+      "semantic_name_hash_fnv1a_utf8": "0x06a300cdf11f9474",
+      "dsr_mtd_sha256": "0f8ca2b6896c9fbe81bfdb30eb0d53a48670cb4c1719ab35533a05f03c46cc00",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "c100_f32_bits": [
+        "0x3e99999a",
+        "0x3e99999a",
+        "0x3e99999a"
+      ],
+      "c101_f32_bits": [
+        "0x3f000000",
+        "0x3f000000",
+        "0x3f000000"
+      ],
+      "c102_f32_bits": "0x3fa00000",
+      "material_mode": "SPC",
+      "c101_scalar": true,
+      "authority": "POINTLIGHT_MATERIAL_CONSTANTS_ONLY"
+    },
+    {
+      "router_index": 278,
+      "mtd_name": "P_Damage_L_Metal[DSB].mtd",
+      "semantic_name_hash_fnv1a_utf8": "0x153e02cdc8b74eda",
+      "dsr_mtd_sha256": "8163bc886a043fca719c10c7764a3d9ee453ddf819e798a0f57b92af305a90f7",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "c100_f32_bits": [
+        "0x3e4ccccd",
+        "0x3e4ccccd",
+        "0x3e4ccccd"
+      ],
+      "c101_f32_bits": [
+        "0x3e800000",
+        "0x3e800000",
+        "0x3e800000"
+      ],
+      "c102_f32_bits": "0x3f600000",
+      "material_mode": "SPC",
+      "c101_scalar": true,
+      "authority": "POINTLIGHT_MATERIAL_CONSTANTS_ONLY"
+    },
+    {
+      "router_index": 279,
+      "mtd_name": "P_Damage_L_Wet[DSB].mtd",
+      "semantic_name_hash_fnv1a_utf8": "0x78af56d7c9e79bcf",
+      "dsr_mtd_sha256": "28610066d4831bc7a3b4b44c3dff33bbd7cfc18b87ebaabfa5c7c0c95846e513",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "c100_f32_bits": [
+        "0x3f000000",
+        "0x3f000000",
+        "0x3f000000"
+      ],
+      "c101_f32_bits": [
+        "0x3f800000",
+        "0x3f800000",
+        "0x3f800000"
+      ],
+      "c102_f32_bits": "0x41c80000",
+      "material_mode": "SPC",
+      "c101_scalar": true,
+      "authority": "POINTLIGHT_MATERIAL_CONSTANTS_ONLY"
+    },
+    {
+      "router_index": 280,
+      "mtd_name": "P_Damage_S_DullLeather[DSB].mtd",
+      "semantic_name_hash_fnv1a_utf8": "0xe19d711f32696374",
+      "dsr_mtd_sha256": "c28d101192023595b0d41b556b04c42f30f3b65c6a0a7662a314e2c5c9b672f1",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "c100_f32_bits": [
+        "0x3f000000",
+        "0x3f000000",
+        "0x3f000000"
+      ],
+      "c101_f32_bits": [
+        "0x3f000000",
+        "0x3f000000",
+        "0x3f000000"
+      ],
+      "c102_f32_bits": "0x3f800000",
+      "material_mode": "SPC",
+      "c101_scalar": true,
+      "authority": "POINTLIGHT_MATERIAL_CONSTANTS_ONLY"
+    },
+    {
+      "router_index": 281,
+      "mtd_name": "P_Damage_S_Leather[DSB].mtd",
+      "semantic_name_hash_fnv1a_utf8": "0x0fc6d456f458aeaf",
+      "dsr_mtd_sha256": "c28d101192023595b0d41b556b04c42f30f3b65c6a0a7662a314e2c5c9b672f1",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "c100_f32_bits": [
+        "0x3f000000",
+        "0x3f000000",
+        "0x3f000000"
+      ],
+      "c101_f32_bits": [
+        "0x3f800000",
+        "0x3f800000",
+        "0x3f800000"
+      ],
+      "c102_f32_bits": "0x40200000",
+      "material_mode": "SPC",
+      "c101_scalar": true,
+      "authority": "POINTLIGHT_MATERIAL_CONSTANTS_ONLY"
+    },
+    {
+      "router_index": 282,
+      "mtd_name": "P_Damage_S_Metal[DSB].mtd",
+      "semantic_name_hash_fnv1a_utf8": "0x1a9ed2b4fda8b4d1",
+      "dsr_mtd_sha256": "92d5b94bd62e74fdb3f0e702c7926e2b5d771442fbdd9dc002e7ca49b98a8949",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "c100_f32_bits": [
+        "0x3e99999a",
+        "0x3e99999a",
+        "0x3e99999a"
+      ],
+      "c101_f32_bits": [
+        "0x3f800000",
+        "0x3f800000",
+        "0x3f800000"
+      ],
+      "c102_f32_bits": "0x3fe00000",
+      "material_mode": "SPC",
+      "c101_scalar": true,
+      "authority": "POINTLIGHT_MATERIAL_CONSTANTS_ONLY"
+    },
+    {
+      "router_index": 283,
+      "mtd_name": "P_Damage_S_Wet[DSB].mtd",
+      "semantic_name_hash_fnv1a_utf8": "0x3e08e920a49c242c",
+      "dsr_mtd_sha256": "28610066d4831bc7a3b4b44c3dff33bbd7cfc18b87ebaabfa5c7c0c95846e513",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "c100_f32_bits": [
+        "0x3f000000",
+        "0x3f000000",
+        "0x3f000000"
+      ],
+      "c101_f32_bits": [
+        "0x40000000",
+        "0x40000000",
+        "0x40000000"
+      ],
+      "c102_f32_bits": "0x42480000",
+      "material_mode": "SPC",
+      "c101_scalar": true,
+      "authority": "POINTLIGHT_MATERIAL_CONSTANTS_ONLY"
+    },
+    {
+      "router_index": 286,
+      "mtd_name": "P_DullLeather[DSB]_Edge.mtd",
+      "semantic_name_hash_fnv1a_utf8": "0xe3d219814a0bd57e",
+      "dsr_mtd_sha256": "44e1188bafa99d49349883dcc2052c13365f196e341ca5e7c788cbad0a4e058d",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "c100_f32_bits": [
+        "0x3f000000",
+        "0x3f000000",
+        "0x3f000000"
+      ],
+      "c101_f32_bits": [
+        "0x3f800000",
+        "0x3f800000",
+        "0x3f800000"
+      ],
+      "c102_f32_bits": "0x40000000",
+      "material_mode": "SPC",
+      "c101_scalar": true,
+      "authority": "POINTLIGHT_MATERIAL_CONSTANTS_ONLY"
+    },
+    {
+      "router_index": 287,
+      "mtd_name": "P_Leather[DSB].mtd",
+      "semantic_name_hash_fnv1a_utf8": "0xabbcca95a57070c3",
+      "dsr_mtd_sha256": "0f2b9a1012b83c4dfc909c311d29a11147de8c15191bc62398ce0d5e1cc6757e",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "c100_f32_bits": [
+        "0x3f000000",
+        "0x3f000000",
+        "0x3f000000"
+      ],
+      "c101_f32_bits": [
+        "0x3fc00000",
+        "0x3fc00000",
+        "0x3fc00000"
+      ],
+      "c102_f32_bits": "0x40800000",
+      "material_mode": "SPC",
+      "c101_scalar": true,
+      "authority": "POINTLIGHT_MATERIAL_CONSTANTS_ONLY"
+    },
+    {
+      "router_index": 288,
+      "mtd_name": "P_Leather[DSB]_Alp.mtd",
+      "semantic_name_hash_fnv1a_utf8": "0x2d83d3f2d31f942f",
+      "dsr_mtd_sha256": "4c728a9b5957a75d0eb82b2b77b800829e1973632c7c0690a7e31a074c85e7fb",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "c100_f32_bits": [
+        "0x3f000000",
+        "0x3f000000",
+        "0x3f000000"
+      ],
+      "c101_f32_bits": [
+        "0x3fc00000",
+        "0x3fc00000",
+        "0x3fc00000"
+      ],
+      "c102_f32_bits": "0x40800000",
+      "material_mode": "SPC",
+      "c101_scalar": true,
+      "authority": "POINTLIGHT_MATERIAL_CONSTANTS_ONLY"
+    },
+    {
+      "router_index": 289,
+      "mtd_name": "P_Leather[DSB]_Edge.mtd",
+      "semantic_name_hash_fnv1a_utf8": "0xfe464ae496796883",
+      "dsr_mtd_sha256": "cf968a22722667777d10429a03a2e4a87f867412949a7fe5590cb8cefaa2bfa4",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "c100_f32_bits": [
+        "0x3f000000",
+        "0x3f000000",
+        "0x3f000000"
+      ],
+      "c101_f32_bits": [
+        "0x3fc00000",
+        "0x3fc00000",
+        "0x3fc00000"
+      ],
+      "c102_f32_bits": "0x40800000",
+      "material_mode": "SPC",
+      "c101_scalar": true,
+      "authority": "POINTLIGHT_MATERIAL_CONSTANTS_ONLY"
+    },
+    {
+      "router_index": 291,
+      "mtd_name": "P_Metal[DSB].mtd",
+      "semantic_name_hash_fnv1a_utf8": "0xfd72a0409ae13e45",
+      "dsr_mtd_sha256": "ece70f36bd2517d28c8495e276cea537f8b519d6bed981788e79a409ffbf763b",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "c100_f32_bits": [
+        "0x3f000000",
+        "0x3f000000",
+        "0x3f000000"
+      ],
+      "c101_f32_bits": [
+        "0x40200000",
+        "0x40200000",
+        "0x40200000"
+      ],
+      "c102_f32_bits": "0x41080000",
+      "material_mode": "SPC",
+      "c101_scalar": true,
+      "authority": "POINTLIGHT_MATERIAL_CONSTANTS_ONLY"
+    },
+    {
+      "router_index": 292,
+      "mtd_name": "P_Metal[DSB]_Alp.mtd",
+      "semantic_name_hash_fnv1a_utf8": "0x41013a4f583c5add",
+      "dsr_mtd_sha256": "45b985a46381199775b0089e9ac6ad5ea14a97b215421bfe29c29bd7ad97535a",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "c100_f32_bits": [
+        "0x3f000000",
+        "0x3f000000",
+        "0x3f000000"
+      ],
+      "c101_f32_bits": [
+        "0x40200000",
+        "0x40200000",
+        "0x40200000"
+      ],
+      "c102_f32_bits": "0x41080000",
+      "material_mode": "SPC",
+      "c101_scalar": true,
+      "authority": "POINTLIGHT_MATERIAL_CONSTANTS_ONLY"
+    },
+    {
+      "router_index": 293,
+      "mtd_name": "P_Metal[DSB]_Edge.mtd",
+      "semantic_name_hash_fnv1a_utf8": "0xa854f3b1d7200e39",
+      "dsr_mtd_sha256": "8b730ce8655401c5cae694ba5535efb088d9d67db2a157d8f142cb5629293485",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "c100_f32_bits": [
+        "0x3f000000",
+        "0x3f000000",
+        "0x3f000000"
+      ],
+      "c101_f32_bits": [
+        "0x40200000",
+        "0x40200000",
+        "0x40200000"
+      ],
+      "c102_f32_bits": "0x41080000",
+      "material_mode": "SPC",
+      "c101_scalar": true,
+      "authority": "POINTLIGHT_MATERIAL_CONSTANTS_ONLY"
+    },
+    {
+      "router_index": 294,
+      "mtd_name": "P_RoughCloth[DSB].mtd",
+      "semantic_name_hash_fnv1a_utf8": "0xd2335b40154d8bbd",
+      "dsr_mtd_sha256": "db197a28abd96f55ce54da65dfea74e8788464dd6ae13ca7ceee038c56d281b1",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "c100_f32_bits": [
+        "0x3f000000",
+        "0x3f000000",
+        "0x3f000000"
+      ],
+      "c101_f32_bits": [
+        "0x3f800000",
+        "0x3f800000",
+        "0x3f800000"
+      ],
+      "c102_f32_bits": "0x40000000",
+      "material_mode": "SPC",
+      "c101_scalar": true,
+      "authority": "POINTLIGHT_MATERIAL_CONSTANTS_ONLY"
+    },
+    {
+      "router_index": 295,
+      "mtd_name": "P_RoughCloth[DSB]_Edge.mtd",
+      "semantic_name_hash_fnv1a_utf8": "0x8f4fcdeed8a4d431",
+      "dsr_mtd_sha256": "4b3451c1d83d31f5ac1aad11bb5a16985ce49928bca3fcc10005032c784e45b8",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "c100_f32_bits": [
+        "0x3f000000",
+        "0x3f000000",
+        "0x3f000000"
+      ],
+      "c101_f32_bits": [
+        "0x3f800000",
+        "0x3f800000",
+        "0x3f800000"
+      ],
+      "c102_f32_bits": "0x40000000",
+      "material_mode": "SPC",
+      "c101_scalar": true,
+      "authority": "POINTLIGHT_MATERIAL_CONSTANTS_ONLY"
+    },
+    {
+      "router_index": 296,
+      "mtd_name": "P_Wet[DSB].mtd",
+      "semantic_name_hash_fnv1a_utf8": "0x7b957dfd788f52f8",
+      "dsr_mtd_sha256": "7af76c9ed5adbb22a574b2afa382a10dfec37dc17470a3d9ea47be3bfb1ea97b",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "c100_f32_bits": [
+        "0x3f000000",
+        "0x3f000000",
+        "0x3f000000"
+      ],
+      "c101_f32_bits": [
+        "0x40000000",
+        "0x40000000",
+        "0x40000000"
+      ],
+      "c102_f32_bits": "0x42700000",
+      "material_mode": "SPC",
+      "c101_scalar": true,
+      "authority": "POINTLIGHT_MATERIAL_CONSTANTS_ONLY"
+    },
+    {
+      "router_index": 297,
+      "mtd_name": "P_Wet[DSB]_Edge.mtd",
+      "semantic_name_hash_fnv1a_utf8": "0x1fbe36236f5451ae",
+      "dsr_mtd_sha256": "a7f73fd656797fea6eeb59131a5bd5c25198ad5c654524dadf76798c57aebb86",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "c100_f32_bits": [
+        "0x3f000000",
+        "0x3f000000",
+        "0x3f000000"
+      ],
+      "c101_f32_bits": [
+        "0x40000000",
+        "0x40000000",
+        "0x40000000"
+      ],
+      "c102_f32_bits": "0x42700000",
+      "material_mode": "SPC",
+      "c101_scalar": true,
+      "authority": "POINTLIGHT_MATERIAL_CONSTANTS_ONLY"
+    },
+    {
+      "router_index": 298,
+      "mtd_name": "Ps_Body[DSB].mtd",
+      "semantic_name_hash_fnv1a_utf8": "0x0a970c711b27e2cf",
+      "dsr_mtd_sha256": "af2f108831b783a43b0e02f047919719d14f38e68d6c5a97b80678d593ba1c95",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "c100_f32_bits": [
+        "0x3f000000",
+        "0x3f000000",
+        "0x3f000000"
+      ],
+      "c101_f32_bits": [
+        "0x3f800000",
+        "0x3f800000",
+        "0x3f800000"
+      ],
+      "c102_f32_bits": "0x41000000",
+      "material_mode": "SPC",
+      "c101_scalar": true,
+      "authority": "POINTLIGHT_MATERIAL_CONSTANTS_ONLY"
+    },
+    {
+      "router_index": 299,
+      "mtd_name": "Ps_Body[DSB][M].mtd",
+      "semantic_name_hash_fnv1a_utf8": "0xf72473d07b34d240",
+      "dsr_mtd_sha256": "d96f22bb5c1127e1e5b08dd79f4062c9e695ffbbd10e11827405dc1889e91842",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmpMul.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmpMul.spx",
+      "c100_f32_bits": [
+        "0x3f000000",
+        "0x3f000000",
+        "0x3f000000"
+      ],
+      "c101_f32_bits": [
+        "0x3f800000",
+        "0x3f800000",
+        "0x3f800000"
+      ],
+      "c102_f32_bits": "0x41000000",
+      "material_mode": "SPC",
+      "c101_scalar": true,
+      "authority": "POINTLIGHT_MATERIAL_CONSTANTS_ONLY"
+    },
+    {
+      "router_index": 300,
+      "mtd_name": "Ps_Body[DSB]_Alp.mtd",
+      "semantic_name_hash_fnv1a_utf8": "0xf20160463b8cbc9b",
+      "dsr_mtd_sha256": "024f15bad3c22cd7476c82229b429eb81c3ea01626c18f8887e98f802f390aab",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "c100_f32_bits": [
+        "0x3f000000",
+        "0x3f000000",
+        "0x3f000000"
+      ],
+      "c101_f32_bits": [
+        "0x3f800000",
+        "0x3f800000",
+        "0x3f800000"
+      ],
+      "c102_f32_bits": "0x41000000",
+      "material_mode": "SPC",
+      "c101_scalar": true,
+      "authority": "POINTLIGHT_MATERIAL_CONSTANTS_ONLY"
+    },
+    {
+      "router_index": 301,
+      "mtd_name": "Ps_Eye[DS].mtd",
+      "semantic_name_hash_fnv1a_utf8": "0x16058de1a885f4f8",
+      "dsr_mtd_sha256": "e806f10306b9e7fbeaffd3e9160a5db2f446dc3d7a9ec148abede5e609b1e5c3",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_FaceEye.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_FaceEye.spx",
+      "c100_f32_bits": [
+        "0x3f000000",
+        "0x3f000000",
+        "0x3f000000"
+      ],
+      "c101_f32_bits": [
+        "0x00000000",
+        "0x00000000",
+        "0x00000000"
+      ],
+      "c102_f32_bits": "0x00000000",
+      "material_mode": "NOSPC",
+      "c101_scalar": true,
+      "authority": "POINTLIGHT_MATERIAL_CONSTANTS_ONLY"
+    },
+    {
+      "router_index": 302,
+      "mtd_name": "Ps_FaceGen[DS][M].mtd",
+      "semantic_name_hash_fnv1a_utf8": "0x28a2986a089ca23d",
+      "dsr_mtd_sha256": "d3854175a7b2969366ae346d686c0ea36f712a5097a5994b1a604cc64db82607",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmpMul.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmpMul.spx",
+      "c100_f32_bits": [
+        "0x3f000000",
+        "0x3f000000",
+        "0x3f000000"
+      ],
+      "c101_f32_bits": [
+        "0x3f800000",
+        "0x3f800000",
+        "0x3f800000"
+      ],
+      "c102_f32_bits": "0x41000000",
+      "material_mode": "SPC",
+      "c101_scalar": true,
+      "authority": "POINTLIGHT_MATERIAL_CONSTANTS_ONLY"
+    },
+    {
+      "router_index": 303,
+      "mtd_name": "Ps_Hair[DSB].mtd",
+      "semantic_name_hash_fnv1a_utf8": "0x31d7c936239f6bdb",
+      "dsr_mtd_sha256": "69fc66a071fd50a6c7051b3a6fefd579dad66648e5c62c0dd0cba21456b2e3b1",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "c100_f32_bits": [
+        "0x3f000000",
+        "0x3f000000",
+        "0x3f000000"
+      ],
+      "c101_f32_bits": [
+        "0x40000000",
+        "0x40000000",
+        "0x40000000"
+      ],
+      "c102_f32_bits": "0x40a00000",
+      "material_mode": "SPC",
+      "c101_scalar": true,
+      "authority": "POINTLIGHT_MATERIAL_CONSTANTS_ONLY"
+    },
+    {
+      "router_index": 304,
+      "mtd_name": "Ps_Hair[DSB]_Alp.mtd",
+      "semantic_name_hash_fnv1a_utf8": "0x958459ee900372e7",
+      "dsr_mtd_sha256": "76c66c8532af6f1d4073ced3a88b6fe88108066b5347014de9473d00b8af0988",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "c100_f32_bits": [
+        "0x3f000000",
+        "0x3f000000",
+        "0x3f000000"
+      ],
+      "c101_f32_bits": [
+        "0x40000000",
+        "0x40000000",
+        "0x40000000"
+      ],
+      "c102_f32_bits": "0x40a00000",
+      "material_mode": "SPC",
+      "c101_scalar": true,
+      "authority": "POINTLIGHT_MATERIAL_CONSTANTS_ONLY"
+    },
+    {
+      "router_index": 305,
+      "mtd_name": "Ps_Hair[DSB]_Edge.mtd",
+      "semantic_name_hash_fnv1a_utf8": "0x74ed3c9f621314bb",
+      "dsr_mtd_sha256": "d737605f1aa281e6e90030f04acc07cfde0c83e1b25a90c2023126bf407e05ad",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "c100_f32_bits": [
+        "0x3f000000",
+        "0x3f000000",
+        "0x3f000000"
+      ],
+      "c101_f32_bits": [
+        "0x40000000",
+        "0x40000000",
+        "0x40000000"
+      ],
+      "c102_f32_bits": "0x40a00000",
+      "material_mode": "SPC",
+      "c101_scalar": true,
+      "authority": "POINTLIGHT_MATERIAL_CONSTANTS_ONLY"
+    },
+    {
+      "router_index": 312,
+      "mtd_name": "Ps_Magic_Test[DSB].mtd",
+      "semantic_name_hash_fnv1a_utf8": "0x7dd0fd8ca6e8e863",
+      "dsr_mtd_sha256": "6373e40adbc7122d76979a80bbc5229cfc7deffae5372f560b10afeedd631315",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "c100_f32_bits": [
+        "0x3f000000",
+        "0x3f000000",
+        "0x3f000000"
+      ],
+      "c101_f32_bits": [
+        "0x40000000",
+        "0x40000000",
+        "0x40000000"
+      ],
+      "c102_f32_bits": "0x40e00000",
+      "material_mode": "SPC",
+      "c101_scalar": true,
+      "authority": "POINTLIGHT_MATERIAL_CONSTANTS_ONLY"
+    },
+    {
+      "router_index": 313,
+      "mtd_name": "S[DB].mtd",
+      "semantic_name_hash_fnv1a_utf8": "0x5b38314d307f5285",
+      "dsr_mtd_sha256": "3bafd8d9548ac37aa2f5d0ab61e6259b962e2f3e31a6af9314115abe269968e4",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifBmp.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifBmp.spx",
+      "c100_f32_bits": [
+        "0x3f19999a",
+        "0x3f19999a",
+        "0x3f19999a"
+      ],
+      "c101_f32_bits": [
+        "0x00000000",
+        "0x00000000",
+        "0x00000000"
+      ],
+      "c102_f32_bits": "0x00000000",
+      "material_mode": "NOSPC",
+      "c101_scalar": true,
+      "authority": "POINTLIGHT_MATERIAL_CONSTANTS_ONLY"
+    },
+    {
+      "router_index": 314,
+      "mtd_name": "S[DSB]_Opacity.mtd",
+      "semantic_name_hash_fnv1a_utf8": "0x6fc2239ed8d9f98c",
+      "dsr_mtd_sha256": "2bf6cd6da8431db9ae3b6d85ea9785cd9a801042a0960551c2fcace8a52dacba",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "c100_f32_bits": [
+        "0x3f800000",
+        "0x3f800000",
+        "0x3f800000"
+      ],
+      "c101_f32_bits": [
+        "0x3f800000",
+        "0x3f800000",
+        "0x3f800000"
+      ],
+      "c102_f32_bits": "0x3f800000",
+      "material_mode": "SPC",
+      "c101_scalar": true,
+      "authority": "POINTLIGHT_MATERIAL_CONSTANTS_ONLY"
+    },
+    {
+      "router_index": 315,
+      "mtd_name": "S[D].mtd",
+      "semantic_name_hash_fnv1a_utf8": "0x7f46ecdfd0762675",
+      "dsr_mtd_sha256": "6c6129c206c1d93d260d4c128a1e71c03da2b9b12591a6ddde423fcf69418c22",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDif.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDif.spx",
+      "c100_f32_bits": [
+        "0x3f800000",
+        "0x3f800000",
+        "0x3f800000"
+      ],
+      "c101_f32_bits": [
+        "0x00000000",
+        "0x00000000",
+        "0x00000000"
+      ],
+      "c102_f32_bits": "0x00000000",
+      "material_mode": "NOSPC",
+      "c101_scalar": true,
+      "authority": "POINTLIGHT_MATERIAL_CONSTANTS_ONLY"
+    },
+    {
+      "router_index": 316,
+      "mtd_name": "S[D]_Add_test.mtd",
+      "semantic_name_hash_fnv1a_utf8": "0xa6d9c8114cf08dc8",
+      "dsr_mtd_sha256": "84fc06d2575dd1f3e553a4d47c4ac883a14f562ae16a0d6da60b70a5f25af93f",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "c100_f32_bits": [
+        "0x3f800000",
+        "0x3f800000",
+        "0x3f800000"
+      ],
+      "c101_f32_bits": [
+        "0x3f800000",
+        "0x3f800000",
+        "0x3f800000"
+      ],
+      "c102_f32_bits": "0x3f800000",
+      "material_mode": "SPC",
+      "c101_scalar": true,
+      "authority": "POINTLIGHT_MATERIAL_CONSTANTS_ONLY"
+    },
+    {
+      "router_index": 317,
+      "mtd_name": "S[D]_Sub.mtd",
+      "semantic_name_hash_fnv1a_utf8": "0xf6724a41798632a4",
+      "dsr_mtd_sha256": "97c831c047b0f7e2b15358bbc5d1402b5fbf600c8a2f2ba7e8b8165a8a80f78d",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDif.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDif.spx",
+      "c100_f32_bits": [
+        "0x3f800000",
+        "0x3f800000",
+        "0x3f800000"
+      ],
+      "c101_f32_bits": [
+        "0x00000000",
+        "0x00000000",
+        "0x00000000"
+      ],
+      "c102_f32_bits": "0x00000000",
+      "material_mode": "NOSPC",
+      "c101_scalar": true,
+      "authority": "POINTLIGHT_MATERIAL_CONSTANTS_ONLY"
+    },
+    {
+      "router_index": 318,
+      "mtd_name": "S[magic circle].mtd",
+      "semantic_name_hash_fnv1a_utf8": "0xd378fb8ef207dd64",
+      "dsr_mtd_sha256": "79234092c8ff5193dc504a210d44eaeaa2a8c212d94e1a178af9ab31315d4a80",
+      "dsr_spx": "N:\\DS2\\data\\Material\\spx\\FRPG_Phn_ColDif.spx",
+      "ptde_spx": "N:\\DS2\\data\\Material\\spx\\FRPG_Phn_ColDif.spx",
+      "c100_f32_bits": [
+        "0x3f800000",
+        "0x3f800000",
+        "0x3f800000"
+      ],
+      "c101_f32_bits": [
+        "0x00000000",
+        "0x00000000",
+        "0x00000000"
+      ],
+      "c102_f32_bits": "0x00000000",
+      "material_mode": "NOSPC",
+      "c101_scalar": true,
+      "authority": "POINTLIGHT_MATERIAL_CONSTANTS_ONLY"
+    },
+    {
+      "router_index": 319,
+      "mtd_name": "S_A03_Thunder00[Dn].mtd",
+      "semantic_name_hash_fnv1a_utf8": "0x630bc5f5f0b78949",
+      "dsr_mtd_sha256": "b2ddceaf17692b839a0f26e01828401b2c0662b8d55ab848b7e5906d8366d617",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDif.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDif.spx",
+      "c100_f32_bits": [
+        "0x3f119192",
+        "0x3f078788",
+        "0x3f800000"
+      ],
+      "c101_f32_bits": [
+        "0x00000000",
+        "0x00000000",
+        "0x00000000"
+      ],
+      "c102_f32_bits": "0x00000000",
+      "material_mode": "NOSPC",
+      "c101_scalar": true,
+      "authority": "POINTLIGHT_MATERIAL_CONSTANTS_ONLY"
+    },
+    {
+      "router_index": 320,
+      "mtd_name": "S_A17_Crystal[DSB].mtd",
+      "semantic_name_hash_fnv1a_utf8": "0x46c08fa8a2090615",
+      "dsr_mtd_sha256": "88c09eaa91590bd1c46ba2efc86edbf8fbac2ffb1f62371f0481f63178b3d31f",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "c100_f32_bits": [
+        "0x3f4d0d0e",
+        "0x3f569697",
+        "0x3f733333"
+      ],
+      "c101_f32_bits": [
+        "0x41000000",
+        "0x41000000",
+        "0x41000000"
+      ],
+      "c102_f32_bits": "0x428c0000",
+      "material_mode": "SPC",
+      "c101_scalar": true,
+      "authority": "POINTLIGHT_MATERIAL_CONSTANTS_ONLY"
+    },
+    {
+      "router_index": 321,
+      "mtd_name": "S_Metal[DSB]_Edge.mtd",
+      "semantic_name_hash_fnv1a_utf8": "0x19b45a9eaac4b01c",
+      "dsr_mtd_sha256": "8b730ce8655401c5cae694ba5535efb088d9d67db2a157d8f142cb5629293485",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "c100_f32_bits": [
+        "0x3f000000",
+        "0x3f000000",
+        "0x3f000000"
+      ],
+      "c101_f32_bits": [
+        "0x40200000",
+        "0x40200000",
+        "0x40200000"
+      ],
+      "c102_f32_bits": "0x41080000",
+      "material_mode": "SPC",
+      "c101_scalar": true,
+      "authority": "POINTLIGHT_MATERIAL_CONSTANTS_ONLY"
+    },
+    {
+      "router_index": 322,
+      "mtd_name": "S_Wet[DSB].mtd",
+      "semantic_name_hash_fnv1a_utf8": "0xf5dc2ba73d4003ef",
+      "dsr_mtd_sha256": "2248baf756057415e6d81a418b7ebade2ae1c26466b27e146f33d809b21e6637",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "c100_f32_bits": [
+        "0x3f000000",
+        "0x3f000000",
+        "0x3f000000"
+      ],
+      "c101_f32_bits": [
+        "0x40000000",
+        "0x40000000",
+        "0x40000000"
+      ],
+      "c102_f32_bits": "0x41700000",
+      "material_mode": "SPC",
+      "c101_scalar": true,
+      "authority": "POINTLIGHT_MATERIAL_CONSTANTS_ONLY"
+    },
+    {
+      "router_index": 323,
+      "mtd_name": "S_Wet[DS].mtd",
+      "semantic_name_hash_fnv1a_utf8": "0x0a1c9f00f399ee37",
+      "dsr_mtd_sha256": "c0de14b722e6fb40b601f18a9268d7176d34aebd4754cc29305b14cf2e0a357a",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpc.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpc.spx",
+      "c100_f32_bits": [
+        "0x3f000000",
+        "0x3f000000",
+        "0x3f000000"
+      ],
+      "c101_f32_bits": [
+        "0x40000000",
+        "0x40000000",
+        "0x40000000"
+      ],
+      "c102_f32_bits": "0x41700000",
+      "material_mode": "SPC",
+      "c101_scalar": true,
+      "authority": "POINTLIGHT_MATERIAL_CONSTANTS_ONLY"
+    },
+    {
+      "router_index": 324,
+      "mtd_name": "S_o5260breathe[DSB].mtd",
+      "semantic_name_hash_fnv1a_utf8": "0xc8d65947f6bd8f8a",
+      "dsr_mtd_sha256": "8c1e29c839ba9ab2b62f5c55d2b1b408a99c2cc87c456330f7c69d5a9a6bc521",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "c100_f32_bits": [
+        "0x3f99595a",
+        "0x3fa66666",
+        "0x3f8c4c4d"
+      ],
+      "c101_f32_bits": [
+        "0x40800000",
+        "0x401b9b9c",
+        "0x404dcdcf"
+      ],
+      "c102_f32_bits": "0x41800000",
+      "material_mode": "SPC",
+      "c101_scalar": false,
+      "authority": "POINTLIGHT_MATERIAL_CONSTANTS_ONLY"
+    }
+  ],
+  "deferred_records": [
+    {
+      "router_index": 17,
+      "mtd_name": "A04_blood[DS][L]_Alp.mtd",
+      "semantic_name_hash_fnv1a_utf8": "0x572f9192f674cfaf",
+      "dsr_mtd_sha256": "b5e45e710e566ce112f4ac47adfc012df137f0419c55f2400a043971a210b216",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmpLit.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcLit.spx",
+      "c100_f32_bits": [
+        "0x3f19999a",
+        "0x3f19999a",
+        "0x3f19999a"
+      ],
+      "c101_f32_bits": [
+        "0x3f800000",
+        "0x3f800000",
+        "0x3f800000"
+      ],
+      "c102_f32_bits": "0x40000000",
+      "reason": "SPC_BOTH_FAMILY_VARIANT_REQUIRES_RECEIVER_FAMILY_PROOF"
+    },
+    {
+      "router_index": 47,
+      "mtd_name": "A10_Metal[DS].mtd",
+      "semantic_name_hash_fnv1a_utf8": "0x916bec6a71d01023",
+      "dsr_mtd_sha256": "93b7b44b1cd16ca7874637281d9e0595af24d91b2c47a91c29d8730072d5a038",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpc.spx",
+      "c100_f32_bits": [
+        "0x3f19999a",
+        "0x3f19999a",
+        "0x3f19999a"
+      ],
+      "c101_f32_bits": [
+        "0x40200000",
+        "0x40200000",
+        "0x40200000"
+      ],
+      "c102_f32_bits": "0x41080000",
+      "reason": "SPC_BOTH_FAMILY_VARIANT_REQUIRES_RECEIVER_FAMILY_PROOF"
+    },
+    {
+      "router_index": 48,
+      "mtd_name": "A10_Metal[DS][L].mtd",
+      "semantic_name_hash_fnv1a_utf8": "0xaa82e8366b7e24f5",
+      "dsr_mtd_sha256": "cca68946decf3ad297592fd366c9f382ad38f4d51fe87db5191e7ac17a8353a9",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmpLit.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcLit.spx",
+      "c100_f32_bits": [
+        "0x3f19999a",
+        "0x3f19999a",
+        "0x3f19999a"
+      ],
+      "c101_f32_bits": [
+        "0x40200000",
+        "0x40200000",
+        "0x40200000"
+      ],
+      "c102_f32_bits": "0x41080000",
+      "reason": "SPC_BOTH_FAMILY_VARIANT_REQUIRES_RECEIVER_FAMILY_PROOF"
+    },
+    {
+      "router_index": 68,
+      "mtd_name": "A12_Grass[DS][L]_Edg.mtd",
+      "semantic_name_hash_fnv1a_utf8": "0x23d51bfb719cdcdd",
+      "dsr_mtd_sha256": "e551b88d3a2557b4232433c15898e4a92fcb6ee078cb79e946ddd04a04306c3e",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmpLit.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcLit.spx",
+      "c100_f32_bits": [
+        "0x3f19999a",
+        "0x3f19999a",
+        "0x3f19999a"
+      ],
+      "c101_f32_bits": [
+        "0x3f800000",
+        "0x3f800000",
+        "0x3f800000"
+      ],
+      "c102_f32_bits": "0x40000000",
+      "reason": "SPC_BOTH_FAMILY_VARIANT_REQUIRES_RECEIVER_FAMILY_PROOF"
+    },
+    {
+      "router_index": 69,
+      "mtd_name": "A12_Grass[DS]_Edg.mtd",
+      "semantic_name_hash_fnv1a_utf8": "0x71da5813d40b5ce5",
+      "dsr_mtd_sha256": "948afa282f666e932c42c52b0616ef8eddd34ad1571f9b8174ba9bfed12a8436",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpc.spx",
+      "c100_f32_bits": [
+        "0x3f19999a",
+        "0x3f19999a",
+        "0x3f19999a"
+      ],
+      "c101_f32_bits": [
+        "0x3f800000",
+        "0x3f800000",
+        "0x3f800000"
+      ],
+      "c102_f32_bits": "0x40000000",
+      "reason": "SPC_BOTH_FAMILY_VARIANT_REQUIRES_RECEIVER_FAMILY_PROOF"
+    },
+    {
+      "router_index": 173,
+      "mtd_name": "M99_cloudshadow11[DS][ML].mtd",
+      "semantic_name_hash_fnv1a_utf8": "0x85d89ba3d2d48dfb",
+      "dsr_mtd_sha256": "7a951c0cb8d7b317dffe913600487a4648054a956dd2a316a001b373b3280d16",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmpMulLit.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcMulLit.spx",
+      "c100_f32_bits": [
+        "0x3f19999a",
+        "0x3f19999a",
+        "0x3f19999a"
+      ],
+      "c101_f32_bits": [
+        "0x3f800000",
+        "0x3f800000",
+        "0x3f800000"
+      ],
+      "c102_f32_bits": "0x40800000",
+      "reason": "SPC_BOTH_FAMILY_VARIANT_REQUIRES_RECEIVER_FAMILY_PROOF"
+    },
+    {
+      "router_index": 209,
+      "mtd_name": "M_1Wood[DS].mtd",
+      "semantic_name_hash_fnv1a_utf8": "0x86bf311394e45bc7",
+      "dsr_mtd_sha256": "3b1ce6088d0aa49a12ac8fb285c77827f426a1f4ee9fb355ffd5b32b6d2a1389",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpc.spx",
+      "c100_f32_bits": [
+        "0x3f19999a",
+        "0x3f19999a",
+        "0x3f19999a"
+      ],
+      "c101_f32_bits": [
+        "0x3f800000",
+        "0x3f800000",
+        "0x3f800000"
+      ],
+      "c102_f32_bits": "0x40000000",
+      "reason": "SPC_BOTH_FAMILY_VARIANT_REQUIRES_RECEIVER_FAMILY_PROOF"
+    },
+    {
+      "router_index": 210,
+      "mtd_name": "M_1Wood[DS][L].mtd",
+      "semantic_name_hash_fnv1a_utf8": "0x3dbb8b9187fe03e1",
+      "dsr_mtd_sha256": "de42cf7fad48b111357a148b8b8a9d5baed8617a5e4650b44cdfae6ef5762d70",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmpLit.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcLit.spx",
+      "c100_f32_bits": [
+        "0x3f19999a",
+        "0x3f19999a",
+        "0x3f19999a"
+      ],
+      "c101_f32_bits": [
+        "0x3f800000",
+        "0x3f800000",
+        "0x3f800000"
+      ],
+      "c102_f32_bits": "0x40000000",
+      "reason": "SPC_BOTH_FAMILY_VARIANT_REQUIRES_RECEIVER_FAMILY_PROOF"
+    },
+    {
+      "router_index": 211,
+      "mtd_name": "M_1Wood[DS][L]_Alp.mtd",
+      "semantic_name_hash_fnv1a_utf8": "0x382d343202aaf559",
+      "dsr_mtd_sha256": "7ec6192d07052a206494670af1e85fb35ef059d46137c80a66ed7662fa3c82e3",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmpLit.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcLit.spx",
+      "c100_f32_bits": [
+        "0x3f19999a",
+        "0x3f19999a",
+        "0x3f19999a"
+      ],
+      "c101_f32_bits": [
+        "0x3f800000",
+        "0x3f800000",
+        "0x3f800000"
+      ],
+      "c102_f32_bits": "0x40000000",
+      "reason": "SPC_BOTH_FAMILY_VARIANT_REQUIRES_RECEIVER_FAMILY_PROOF"
+    },
+    {
+      "router_index": 212,
+      "mtd_name": "M_1Wood[DS][ML].mtd",
+      "semantic_name_hash_fnv1a_utf8": "0x35de1b89b9e07cd0",
+      "dsr_mtd_sha256": "1a751dace80012a9d4b8720a52c846cfdc8c6178448601ee3a45167ee82bbe71",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmpMulLit.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcMulLit.spx",
+      "c100_f32_bits": [
+        "0x3f19999a",
+        "0x3f19999a",
+        "0x3f19999a"
+      ],
+      "c101_f32_bits": [
+        "0x3f800000",
+        "0x3f800000",
+        "0x3f800000"
+      ],
+      "c102_f32_bits": "0x40000000",
+      "reason": "SPC_BOTH_FAMILY_VARIANT_REQUIRES_RECEIVER_FAMILY_PROOF"
+    },
+    {
+      "router_index": 213,
+      "mtd_name": "M_1Wood[DS][M].mtd",
+      "semantic_name_hash_fnv1a_utf8": "0x8662271c7340fcb8",
+      "dsr_mtd_sha256": "b83732268f7332a3888b20e8eb16a2fb03bd4fb46bab25365254ff778228bdf7",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmpMul.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcMul.spx",
+      "c100_f32_bits": [
+        "0x3f19999a",
+        "0x3f19999a",
+        "0x3f19999a"
+      ],
+      "c101_f32_bits": [
+        "0x3f800000",
+        "0x3f800000",
+        "0x3f800000"
+      ],
+      "c102_f32_bits": "0x40000000",
+      "reason": "SPC_BOTH_FAMILY_VARIANT_REQUIRES_RECEIVER_FAMILY_PROOF"
+    },
+    {
+      "router_index": 226,
+      "mtd_name": "M_4Stone[DS].mtd",
+      "semantic_name_hash_fnv1a_utf8": "0xe26c78def8fbec26",
+      "dsr_mtd_sha256": "d0492773e16838f3f5ddc3a3319cb160b73f830883626a131f70397e57580019",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpc.spx",
+      "c100_f32_bits": [
+        "0x3f19999a",
+        "0x3f19999a",
+        "0x3f19999a"
+      ],
+      "c101_f32_bits": [
+        "0x3fc00000",
+        "0x3fc00000",
+        "0x3fc00000"
+      ],
+      "c102_f32_bits": "0x40800000",
+      "reason": "SPC_BOTH_FAMILY_VARIANT_REQUIRES_RECEIVER_FAMILY_PROOF"
+    },
+    {
+      "router_index": 227,
+      "mtd_name": "M_4Stone[DS][L].mtd",
+      "semantic_name_hash_fnv1a_utf8": "0x6bca5f537a6bf4c6",
+      "dsr_mtd_sha256": "5ab39d56b336c44063a3918d27b9b5c74c246d91cadea84ecabe8d3ba003f69e",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmpLit.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcLit.spx",
+      "c100_f32_bits": [
+        "0x3f19999a",
+        "0x3f19999a",
+        "0x3f19999a"
+      ],
+      "c101_f32_bits": [
+        "0x3fc00000",
+        "0x3fc00000",
+        "0x3fc00000"
+      ],
+      "c102_f32_bits": "0x40800000",
+      "reason": "SPC_BOTH_FAMILY_VARIANT_REQUIRES_RECEIVER_FAMILY_PROOF"
+    },
+    {
+      "router_index": 228,
+      "mtd_name": "M_4Stone[DS][L]_Alp.mtd",
+      "semantic_name_hash_fnv1a_utf8": "0x14840f6f5208332e",
+      "dsr_mtd_sha256": "7e89b0fca47ea83ac6601e9615f5049643b4da71e61abe896acd02935e10b7bf",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmpLit.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcLit.spx",
+      "c100_f32_bits": [
+        "0x3f19999a",
+        "0x3f19999a",
+        "0x3f19999a"
+      ],
+      "c101_f32_bits": [
+        "0x3fc00000",
+        "0x3fc00000",
+        "0x3fc00000"
+      ],
+      "c102_f32_bits": "0x40800000",
+      "reason": "SPC_BOTH_FAMILY_VARIANT_REQUIRES_RECEIVER_FAMILY_PROOF"
+    },
+    {
+      "router_index": 229,
+      "mtd_name": "M_4Stone[DS][ML].mtd",
+      "semantic_name_hash_fnv1a_utf8": "0xcee11689959f2ed9",
+      "dsr_mtd_sha256": "e4fb89d557e2111856f8a1c4339c3e4e492d9b4ab55dc08bcec1eb962d6ef197",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmpMulLit.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcMulLit.spx",
+      "c100_f32_bits": [
+        "0x3f19999a",
+        "0x3f19999a",
+        "0x3f19999a"
+      ],
+      "c101_f32_bits": [
+        "0x3fc00000",
+        "0x3fc00000",
+        "0x3fc00000"
+      ],
+      "c102_f32_bits": "0x40800000",
+      "reason": "SPC_BOTH_FAMILY_VARIANT_REQUIRES_RECEIVER_FAMILY_PROOF"
+    },
+    {
+      "router_index": 230,
+      "mtd_name": "M_4Stone[DS][M].mtd",
+      "semantic_name_hash_fnv1a_utf8": "0xfa6fb51358bad787",
+      "dsr_mtd_sha256": "5199e29c6973809348dd00c6e63f276596ab9fd33465d81cb8289712f52c33dc",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmpMul.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcMul.spx",
+      "c100_f32_bits": [
+        "0x3f19999a",
+        "0x3f19999a",
+        "0x3f19999a"
+      ],
+      "c101_f32_bits": [
+        "0x3fc00000",
+        "0x3fc00000",
+        "0x3fc00000"
+      ],
+      "c102_f32_bits": "0x40800000",
+      "reason": "SPC_BOTH_FAMILY_VARIANT_REQUIRES_RECEIVER_FAMILY_PROOF"
+    },
+    {
+      "router_index": 231,
+      "mtd_name": "M_4Stone[DS]_Alp.mtd",
+      "semantic_name_hash_fnv1a_utf8": "0xc44a72e35f35ec0e",
+      "dsr_mtd_sha256": "64b87a013fab559d5e68c34c454449dc84245d38041e95e6b7430ebcc1264afd",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpc.spx",
+      "c100_f32_bits": [
+        "0x3f19999a",
+        "0x3f19999a",
+        "0x3f19999a"
+      ],
+      "c101_f32_bits": [
+        "0x3fc00000",
+        "0x3fc00000",
+        "0x3fc00000"
+      ],
+      "c102_f32_bits": "0x40800000",
+      "reason": "SPC_BOTH_FAMILY_VARIANT_REQUIRES_RECEIVER_FAMILY_PROOF"
+    },
+    {
+      "router_index": 246,
+      "mtd_name": "M_7Metal[DS].mtd",
+      "semantic_name_hash_fnv1a_utf8": "0x245689e4f07064cb",
+      "dsr_mtd_sha256": "93b7b44b1cd16ca7874637281d9e0595af24d91b2c47a91c29d8730072d5a038",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpc.spx",
+      "c100_f32_bits": [
+        "0x3f19999a",
+        "0x3f19999a",
+        "0x3f19999a"
+      ],
+      "c101_f32_bits": [
+        "0x40200000",
+        "0x40200000",
+        "0x40200000"
+      ],
+      "c102_f32_bits": "0x41080000",
+      "reason": "SPC_BOTH_FAMILY_VARIANT_REQUIRES_RECEIVER_FAMILY_PROOF"
+    },
+    {
+      "router_index": 247,
+      "mtd_name": "M_7Metal[DS][L].mtd",
+      "semantic_name_hash_fnv1a_utf8": "0x0e768913a1acaedd",
+      "dsr_mtd_sha256": "cca68946decf3ad297592fd366c9f382ad38f4d51fe87db5191e7ac17a8353a9",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmpLit.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcLit.spx",
+      "c100_f32_bits": [
+        "0x3f19999a",
+        "0x3f19999a",
+        "0x3f19999a"
+      ],
+      "c101_f32_bits": [
+        "0x40200000",
+        "0x40200000",
+        "0x40200000"
+      ],
+      "c102_f32_bits": "0x41080000",
+      "reason": "SPC_BOTH_FAMILY_VARIANT_REQUIRES_RECEIVER_FAMILY_PROOF"
+    },
+    {
+      "router_index": 248,
+      "mtd_name": "M_7Metal[DS][L]_Alp.mtd",
+      "semantic_name_hash_fnv1a_utf8": "0x7b9226d08be09b35",
+      "dsr_mtd_sha256": "469a8097d652e715af6173ec14b23f52f6c0ac3de591ea026cc6bbbd7f5997cc",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmpLit.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcLit.spx",
+      "c100_f32_bits": [
+        "0x3f19999a",
+        "0x3f19999a",
+        "0x3f19999a"
+      ],
+      "c101_f32_bits": [
+        "0x40200000",
+        "0x40200000",
+        "0x40200000"
+      ],
+      "c102_f32_bits": "0x41080000",
+      "reason": "SPC_BOTH_FAMILY_VARIANT_REQUIRES_RECEIVER_FAMILY_PROOF"
+    },
+    {
+      "router_index": 249,
+      "mtd_name": "M_7Metal[DS][ML].mtd",
+      "semantic_name_hash_fnv1a_utf8": "0xb0371f2bffaa40dc",
+      "dsr_mtd_sha256": "e28cbe02ea4f43ef55f960742246ca35484b6c282dbc9f6e70c77f8f5a32f50e",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmpMulLit.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcMulLit.spx",
+      "c100_f32_bits": [
+        "0x3f19999a",
+        "0x3f19999a",
+        "0x3f19999a"
+      ],
+      "c101_f32_bits": [
+        "0x40200000",
+        "0x40200000",
+        "0x40200000"
+      ],
+      "c102_f32_bits": "0x41080000",
+      "reason": "SPC_BOTH_FAMILY_VARIANT_REQUIRES_RECEIVER_FAMILY_PROOF"
+    },
+    {
+      "router_index": 250,
+      "mtd_name": "M_7Metal[DS][M].mtd",
+      "semantic_name_hash_fnv1a_utf8": "0xd6096397737c9894",
+      "dsr_mtd_sha256": "c717aaf76b7970d8bd33e9f44a1d785f4392d207ec748db0acb7e3d1525090fa",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmpMul.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcMul.spx",
+      "c100_f32_bits": [
+        "0x3f19999a",
+        "0x3f19999a",
+        "0x3f19999a"
+      ],
+      "c101_f32_bits": [
+        "0x40200000",
+        "0x40200000",
+        "0x40200000"
+      ],
+      "c102_f32_bits": "0x41080000",
+      "reason": "SPC_BOTH_FAMILY_VARIANT_REQUIRES_RECEIVER_FAMILY_PROOF"
+    },
+    {
+      "router_index": 263,
+      "mtd_name": "M_9Glass[DS].mtd",
+      "semantic_name_hash_fnv1a_utf8": "0x67e64c056d44f9be",
+      "dsr_mtd_sha256": "1b32bdacb81f2c083463f8e0318c9565c22ae54fa8621414c1347165c438d441",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpc.spx",
+      "c100_f32_bits": [
+        "0x3f19999a",
+        "0x3f19999a",
+        "0x3f19999a"
+      ],
+      "c101_f32_bits": [
+        "0x40000000",
+        "0x40000000",
+        "0x40000000"
+      ],
+      "c102_f32_bits": "0x42700000",
+      "reason": "SPC_BOTH_FAMILY_VARIANT_REQUIRES_RECEIVER_FAMILY_PROOF"
+    },
+    {
+      "router_index": 264,
+      "mtd_name": "M_9Glass[DS][L].mtd",
+      "semantic_name_hash_fnv1a_utf8": "0x46be5648b0e5e05e",
+      "dsr_mtd_sha256": "565b149120f9e28513ddc3ad8b109dfc924dd6d8684271b54f754683cb16b0c3",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmpLit.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcLit.spx",
+      "c100_f32_bits": [
+        "0x3f19999a",
+        "0x3f19999a",
+        "0x3f19999a"
+      ],
+      "c101_f32_bits": [
+        "0x40000000",
+        "0x40000000",
+        "0x40000000"
+      ],
+      "c102_f32_bits": "0x42700000",
+      "reason": "SPC_BOTH_FAMILY_VARIANT_REQUIRES_RECEIVER_FAMILY_PROOF"
+    },
+    {
+      "router_index": 265,
+      "mtd_name": "M_9Glass[DS][L]_Alp.mtd",
+      "semantic_name_hash_fnv1a_utf8": "0xf351a2b67b3e00e6",
+      "dsr_mtd_sha256": "be568bec32dbcf900b73b2d71da252765fa23c7f53fdc3c7a659922553b43d55",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmpLit.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcLit.spx",
+      "c100_f32_bits": [
+        "0x3f19999a",
+        "0x3f19999a",
+        "0x3f19999a"
+      ],
+      "c101_f32_bits": [
+        "0x40000000",
+        "0x40000000",
+        "0x40000000"
+      ],
+      "c102_f32_bits": "0x42700000",
+      "reason": "SPC_BOTH_FAMILY_VARIANT_REQUIRES_RECEIVER_FAMILY_PROOF"
+    },
+    {
+      "router_index": 266,
+      "mtd_name": "M_9Glass[DS][ML].mtd",
+      "semantic_name_hash_fnv1a_utf8": "0x2b90b76bf2638371",
+      "dsr_mtd_sha256": "4a6b7e33fd6fb5bc39ccc8af26a5939790a106c99a4652ee37e0c9c55ccb682d",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmpMulLit.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcMulLit.spx",
+      "c100_f32_bits": [
+        "0x3f19999a",
+        "0x3f19999a",
+        "0x3f19999a"
+      ],
+      "c101_f32_bits": [
+        "0x40000000",
+        "0x40000000",
+        "0x40000000"
+      ],
+      "c102_f32_bits": "0x42700000",
+      "reason": "SPC_BOTH_FAMILY_VARIANT_REQUIRES_RECEIVER_FAMILY_PROOF"
+    },
+    {
+      "router_index": 267,
+      "mtd_name": "M_9Glass[DS][M].mtd",
+      "semantic_name_hash_fnv1a_utf8": "0x66c956aaf071b9ff",
+      "dsr_mtd_sha256": "b2082eca957afe1861c46c3ff92a3d9f3ab1c336c46a66dfe088a02140f4493c",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmpMul.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcMul.spx",
+      "c100_f32_bits": [
+        "0x3f19999a",
+        "0x3f19999a",
+        "0x3f19999a"
+      ],
+      "c101_f32_bits": [
+        "0x40000000",
+        "0x40000000",
+        "0x40000000"
+      ],
+      "c102_f32_bits": "0x42700000",
+      "reason": "SPC_BOTH_FAMILY_VARIANT_REQUIRES_RECEIVER_FAMILY_PROOF"
+    },
+    {
+      "router_index": 284,
+      "mtd_name": "P_DullLeather[DSB].mtd",
+      "semantic_name_hash_fnv1a_utf8": "0x73ec84781e69fdc8",
+      "dsr_mtd_sha256": "7ea7d6ce9bb7148db62e8c27ee45edefb9547018d0b723dd4753d4c37e29f293",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "c100_f32_bits": [
+        "0x3f000000",
+        "0x3f000000",
+        "0x3f000000"
+      ],
+      "c101_f32_bits": [
+        "0x3f800000",
+        "0x3f800000",
+        "0x3f800000"
+      ],
+      "c102_f32_bits": "0x40000000",
+      "reason": "AMBIGUOUS_SEMANTIC_NAME_HAS_MULTIPLE_DSR_RAW_MTD_SHA"
+    },
+    {
+      "router_index": 285,
+      "mtd_name": "P_DullLeather[DSB].mtd",
+      "semantic_name_hash_fnv1a_utf8": "0x73ec84781e69fdc8",
+      "dsr_mtd_sha256": "9376d84c81f0b1e77dc728dc469ce9fa281c41d6a7ccd23ec415471aa28341a3",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "c100_f32_bits": [
+        "0x3f000000",
+        "0x3f000000",
+        "0x3f000000"
+      ],
+      "c101_f32_bits": [
+        "0x3f800000",
+        "0x3f800000",
+        "0x3f800000"
+      ],
+      "c102_f32_bits": "0x40000000",
+      "reason": "AMBIGUOUS_SEMANTIC_NAME_HAS_MULTIPLE_DSR_RAW_MTD_SHA"
+    },
+    {
+      "router_index": 290,
+      "mtd_name": "P_Leather[DS].mtd",
+      "semantic_name_hash_fnv1a_utf8": "0xc5b80e0fb113e2d3",
+      "dsr_mtd_sha256": "53819ead337c1ecd8593d8535c1fc1fdde589f00eb8ea015a8ae347da71073ea",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpc.spx",
+      "c100_f32_bits": [
+        "0x3f000000",
+        "0x3f000000",
+        "0x3f000000"
+      ],
+      "c101_f32_bits": [
+        "0x3fc00000",
+        "0x3fc00000",
+        "0x3fc00000"
+      ],
+      "c102_f32_bits": "0x40800000",
+      "reason": "SPC_BOTH_FAMILY_VARIANT_REQUIRES_RECEIVER_FAMILY_PROOF"
+    },
+    {
+      "router_index": 306,
+      "mtd_name": "Ps_Hair[DS].mtd",
+      "semantic_name_hash_fnv1a_utf8": "0xaf184fe9bfb687bb",
+      "dsr_mtd_sha256": "c628feb3773af7edb0bec7276f80d7bdb41220aa0c2754dad198b2398b4e82c3",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpc.spx",
+      "c100_f32_bits": [
+        "0x3f000000",
+        "0x3f000000",
+        "0x3f000000"
+      ],
+      "c101_f32_bits": [
+        "0x40000000",
+        "0x40000000",
+        "0x40000000"
+      ],
+      "c102_f32_bits": "0x40a00000",
+      "reason": "SPC_BOTH_FAMILY_VARIANT_REQUIRES_RECEIVER_FAMILY_PROOF"
+    },
+    {
+      "router_index": 307,
+      "mtd_name": "Ps_Hair[DS]_Alp.mtd",
+      "semantic_name_hash_fnv1a_utf8": "0xa39ea1d9783b3e47",
+      "dsr_mtd_sha256": "43ef07edf1fa3ae392aecc2bc02add7ef51f16538eb6b60e438c05a045a8a36e",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpc.spx",
+      "c100_f32_bits": [
+        "0x3f000000",
+        "0x3f000000",
+        "0x3f000000"
+      ],
+      "c101_f32_bits": [
+        "0x40000000",
+        "0x40000000",
+        "0x40000000"
+      ],
+      "c102_f32_bits": "0x40a00000",
+      "reason": "SPC_BOTH_FAMILY_VARIANT_REQUIRES_RECEIVER_FAMILY_PROOF"
+    },
+    {
+      "router_index": 308,
+      "mtd_name": "Ps_Hair[DS]_Edge.mtd",
+      "semantic_name_hash_fnv1a_utf8": "0x6429af319fb65a1b",
+      "dsr_mtd_sha256": "4eaa551380c3943be768de1e78eca9a43c5a9356ea13e401274ad6c8faef749c",
+      "dsr_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpcBmp.spx",
+      "ptde_spx": "N:\\FRPG\\data\\Material\\spx\\FRPG_Phn_ColDifSpc.spx",
+      "c100_f32_bits": [
+        "0x3f000000",
+        "0x3f000000",
+        "0x3f000000"
+      ],
+      "c101_f32_bits": [
+        "0x40000000",
+        "0x40000000",
+        "0x40000000"
+      ],
+      "c102_f32_bits": "0x40a00000",
+      "reason": "SPC_BOTH_FAMILY_VARIANT_REQUIRES_RECEIVER_FAMILY_PROOF"
+    }
+  ]
+}
