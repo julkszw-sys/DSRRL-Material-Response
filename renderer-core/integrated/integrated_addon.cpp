@@ -6512,7 +6512,8 @@ bool AddonInit(
     const bool lightbank_reference_hooks =
         !lightbank_reference_transport_required ||
         (flver_hooks &&
-         g_upper_lower.install());
+         g_upper_lower.install(
+             !upper_lower_enabled));
 
     if (!upper_lower_enabled) {
         reshade::log::message(
