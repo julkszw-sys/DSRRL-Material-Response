@@ -744,6 +744,8 @@ bool clustered_pnts_draw_runtime::prepare_sidecar(
         !g_draw_selection.owner_verified ||
         !g_draw_selection.material_limit_ready ||
         !material.active) {
+        prepared.failure =
+            clustered_pnts_prepare_failure::precondition;
         telemetry::hot_count(g_prepare_precondition_fail);
         telemetry::hot_count(g_prepare_fail);
         return false;
@@ -769,6 +771,8 @@ bool clustered_pnts_draw_runtime::prepare_sidecar(
             selected_ids,
             nodes,
             selected_count)) {
+        prepared.failure =
+            clustered_pnts_prepare_failure::selection;
         telemetry::hot_count(g_mirror_diff);
         telemetry::hot_count(g_selection_fail);
         telemetry::hot_count(g_sidecar_fail);
@@ -779,7 +783,10 @@ bool clustered_pnts_draw_runtime::prepare_sidecar(
 
 #if defined(DSRRL_CLUSTERED_SELECTOR_RUNTIME_CROSSCHECK)
     if (g_retained_selector == nullptr) {
+        prepared.failure =
+            clustered_pnts_prepare_failure::selection;
         telemetry::hot_count(g_mirror_diff);
+        telemetry::hot_count(g_selection_fail);
         telemetry::hot_count(g_sidecar_fail);
         telemetry::hot_count(g_prepare_fail);
         return false;
@@ -800,7 +807,10 @@ bool clustered_pnts_draw_runtime::prepare_sidecar(
         host_count > 4 ||
         static_cast<int>(selected_count) !=
             host_count) {
+        prepared.failure =
+            clustered_pnts_prepare_failure::selection;
         telemetry::hot_count(g_mirror_diff);
+        telemetry::hot_count(g_selection_fail);
         telemetry::hot_count(g_sidecar_fail);
         telemetry::hot_count(g_prepare_fail);
         return false;
@@ -810,7 +820,10 @@ bool clustered_pnts_draw_runtime::prepare_sidecar(
          i < selected_count;
          ++i) {
         if (host_ids[i] != selected_ids[i]) {
+            prepared.failure =
+                clustered_pnts_prepare_failure::selection;
             telemetry::hot_count(g_mirror_diff);
+            telemetry::hot_count(g_selection_fail);
             telemetry::hot_count(g_sidecar_fail);
             telemetry::hot_count(g_prepare_fail);
             return false;
@@ -820,6 +833,8 @@ bool clustered_pnts_draw_runtime::prepare_sidecar(
 #endif
 
     if (selected_count == 0u) {
+        prepared.failure =
+            clustered_pnts_prepare_failure::empty_selection;
         telemetry::hot_count(g_selection_empty);
         telemetry::hot_count(g_sidecar_fail);
         telemetry::hot_count(g_prepare_fail);
@@ -835,6 +850,8 @@ bool clustered_pnts_draw_runtime::prepare_sidecar(
                 sources[i]) ||
             sources[i].source_id !=
                 selected_ids[i]) {
+            prepared.failure =
+                clustered_pnts_prepare_failure::source_capture;
             telemetry::hot_count(
                 g_source_capture_fail);
             telemetry::hot_count(g_sidecar_fail);
@@ -853,10 +870,15 @@ bool clustered_pnts_draw_runtime::prepare_sidecar(
                 g_draw_selection.material_max,
                 material);
 
+    prepared.sidecar_result_code =
+        static_cast<std::uint8_t>(built.result);
+
     if (built.result !=
             operators::point_light::
                 clustered_sidecar_result_v1::ready ||
         !built.payload.ready) {
+        prepared.failure =
+            clustered_pnts_prepare_failure::sidecar_build;
         telemetry::hot_count(g_sidecar_build_fail);
         telemetry::hot_count(g_sidecar_fail);
         telemetry::hot_count(g_prepare_fail);
@@ -873,6 +895,8 @@ bool clustered_pnts_draw_runtime::prepare_sidecar(
         telemetry::hot_count(g_context_other);
 
     if (!ensure_gpu(context)) {
+        prepared.failure =
+            clustered_pnts_prepare_failure::gpu_prepare;
         telemetry::hot_count(g_gpu_prepare_fail);
         telemetry::hot_count(g_prepare_fail);
         return false;
@@ -886,6 +910,8 @@ bool clustered_pnts_draw_runtime::prepare_sidecar(
         g_gpu.t19_buffer == nullptr ||
         g_gpu.t19_srv == nullptr ||
         g_gpu.b12 == nullptr) {
+        prepared.failure =
+            clustered_pnts_prepare_failure::gpu_resources;
         telemetry::hot_count(g_prepare_fail);
         return false;
     }
@@ -905,6 +931,8 @@ bool clustered_pnts_draw_runtime::prepare_sidecar(
             g_gpu.b12,
             built.payload.b12.data(),
             sizeof(built.payload.b12))) {
+        prepared.failure =
+            clustered_pnts_prepare_failure::upload;
         telemetry::hot_count(g_upload_fail);
         telemetry::hot_count(g_prepare_fail);
         return false;
