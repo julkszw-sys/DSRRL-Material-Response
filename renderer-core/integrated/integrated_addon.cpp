@@ -2435,30 +2435,33 @@ bool observe_draw_identity(
     return true;
 }
 
-bool upper_lower_bridge_requested() noexcept
+bool integrated_operator_enabled_by_policy(
+    dsrrl::core::operator_id op) noexcept
 {
-    // Current U/L draw-time consumer bridge is pixel-falsified in live play:
-    // broad receiver coverage can produce a ruler-straight hemispheric boundary
-    // on world geometry, while the LightBank capture stack is also a known
-    // geometry-scaled performance risk. Preserve stock DSR by default until
-    // the PTDE consumer cut is re-isolated. Keep an explicit opt-in only for
-    // focused diagnostics so the falsified bridge remains reproducible.
-    static const bool enabled =
-        dsrrl::runtime::telemetry::environment_flag(
-            "DSRRL_EXPERIMENTAL_UPPER_LOWER_BRIDGE");
-    return enabled;
+    // Active runtime policy 2026-09-29:
+    //   * Subsurface stays stock DSR after the oily/wet + Lerp pixel falsifier.
+    //   * HemDir3 stays stock DSR; no visible bridge is shipped.
+    //   * Upper/Lower stays stock DSR after the world/FaceEye pixel falsifiers.
+    //
+    // U/L's LightBank reference transport is intentionally NOT disabled here:
+    // P_Metal EnvSpec consumes that exact selector/source carrier independently
+    // of the visible U/L operator and installs it later in reference-only mode.
+    switch (op) {
+    case dsrrl::core::operator_id::subsurface:
+    case dsrrl::core::operator_id::upper_lower:
+    case dsrrl::core::operator_id::hemdir3:
+        return false;
+    default:
+        return true;
+    }
 }
 
 bool enable_integrated_islands() noexcept
 {
-    const bool upper_lower_enabled =
-        upper_lower_bridge_requested();
-
     for (const auto op : k_integrated_islands) {
-        const bool enabled =
-            op != dsrrl::core::operator_id::upper_lower ||
-            upper_lower_enabled;
-        if (!g_core.features().set(op, enabled))
+        if (!g_core.features().set(
+                op,
+                integrated_operator_enabled_by_policy(op)))
             return false;
     }
 
@@ -6568,15 +6571,32 @@ bool AddonInit(
             "] Bloom FX diagnostic hooks disabled for production runtime.");
     }
 
+    const bool hemdir3_enabled =
+        g_core.features().enabled(
+            dsrrl::core::operator_id::hemdir3);
     const bool hemdir3_mode_hooks =
-        flver_hooks &&
-        dsrrl::runtime::hemdir3_mode_transport::install();
+        !hemdir3_enabled ||
+        (flver_hooks &&
+         dsrrl::runtime::hemdir3_mode_transport::install());
 
-    if (!hemdir3_mode_hooks) {
+    if (hemdir3_enabled && !hemdir3_mode_hooks) {
         reshade::log::message(
             reshade::log::level::warning,
             "[DSRRL CORE+ISLANDS " DSRRL_CORE_ISLANDS_VERSION
             "] HemDir3 effective-mode hooks FAIL-OPEN: HemDir3 remains stock.");
+    } else if (!hemdir3_enabled) {
+        reshade::log::message(
+            reshade::log::level::info,
+            "[DSRRL CORE+ISLANDS " DSRRL_CORE_ISLANDS_VERSION
+            "] HemDir3 visible bridge DISABLED by runtime policy; mode hooks not installed and stock DSR is preserved.");
+    }
+
+    if (!g_core.features().enabled(
+            dsrrl::core::operator_id::subsurface)) {
+        reshade::log::message(
+            reshade::log::level::info,
+            "[DSRRL CORE+ISLANDS " DSRRL_CORE_ISLANDS_VERSION
+            "] Subsurface visible bridge DISABLED by runtime policy; stock DSR body/Subsurface is preserved.");
     }
 
     const bool upper_lower_enabled =
@@ -6605,7 +6625,7 @@ bool AddonInit(
         reshade::log::message(
             reshade::log::level::info,
             "[DSRRL CORE+ISLANDS " DSRRL_CORE_ISLANDS_VERSION
-            "] Upper/Lower bridge DEFAULT FAIL-OPEN: stock DSR U/L preserved; LightBank reference-token transport may remain active for isolated downstream consumers such as P_Metal EnvSpec. Set DSRRL_EXPERIMENTAL_UPPER_LOWER_BRIDGE=1 only for focused U/L diagnostics.");
+            "] Upper/Lower visible bridge DISABLED by runtime policy: stock DSR U/L preserved; LightBank reference-token transport may remain active only as an isolated carrier for downstream consumers such as P_Metal EnvSpec.");
     }
 
     if (lightbank_reference_transport_required &&
