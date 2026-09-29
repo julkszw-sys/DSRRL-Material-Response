@@ -14,6 +14,8 @@ on:
       - "renderer-core/tests/a1_create_time_materializer_tests.cpp"
       - "renderer-core/tools/verify_a1_terminal_sat_semantic_scope.py"
       - "renderer-core/tools/audit_clustered_pnts_activation_sources.py"
+      - "renderer-core/tools/audit_specrgb_equipment_scope.py"
+      - "renderer-core/data/provenance/spec_rgb_equipment_scope_v2.json"
       - "renderer-core/CMakeLists.txt"
       - "renderer-core/tests/dsr_mtd_identity_supplement_tests.cpp"
       - "renderer-core/tests/material_owner_producer_tests.cpp"
@@ -54,6 +56,8 @@ on:
       - "renderer-core/tests/material_owner_producer_tests.cpp"
       - "renderer-core/tools/generate_dsr_mtd_identity_supplement.py"
       - "renderer-core/tools/audit_clustered_pnts_activation_sources.py"
+      - "renderer-core/tools/audit_specrgb_equipment_scope.py"
+      - "renderer-core/data/provenance/spec_rgb_equipment_scope_v2.json"
       - "renderer-core/data/census/dsr_mtd_identity_certified_supplement_v1.json"
       - "renderer-core/include/dsrrl/operators/**"
       - "renderer-core/src/operators/**"
@@ -156,6 +160,12 @@ jobs:
         run: |
           # Shared velocity production stays stock until temporal consumers are isolated.
           python3 renderer-core/tools/audit_motion_blur_temporal_isolation.py \
+            --source-dir renderer-core
+
+      - name: Audit SpecRGB equipment-only carrier
+        shell: bash
+        run: |
+          python3 renderer-core/tools/audit_specrgb_equipment_scope.py \
             --source-dir renderer-core
 
       - name: Configure Core+Islands addon
@@ -1087,6 +1097,8 @@ jobs:
           $clusteredDrawRuntimeHash = (Get-FileHash "renderer-core/src/runtime/clustered_pnts_draw_runtime.cpp" -Algorithm SHA256).Hash.ToLowerInvariant()
           $clusteredPipelineRuntimeHash = (Get-FileHash "renderer-core/src/runtime/clustered_pnts_pipeline_runtime.cpp" -Algorithm SHA256).Hash.ToLowerInvariant()
           $clusteredSourceAuditHash = (Get-FileHash "renderer-core/tools/audit_clustered_pnts_activation_sources.py" -Algorithm SHA256).Hash.ToLowerInvariant()
+          $specRgbScopeAuditHash = (Get-FileHash "renderer-core/tools/audit_specrgb_equipment_scope.py" -Algorithm SHA256).Hash.ToLowerInvariant()
+          $specRgbScopeProvenanceHash = (Get-FileHash "renderer-core/data/provenance/spec_rgb_equipment_scope_v2.json" -Algorithm SHA256).Hash.ToLowerInvariant()
           $clusteredAdapterTestHash = (Get-FileHash "renderer-core/tests/clustered_pnts_draw_adapter_tests.cpp" -Algorithm SHA256).Hash.ToLowerInvariant()
           $envspecMaterializerHash = (Get-FileHash "renderer-core/src/operators/env_spec/pmetal_rgba_materializer.cpp" -Algorithm SHA256).Hash.ToLowerInvariant()
           $envspecAuthorityHash = (Get-FileHash "renderer-core/include/dsrrl/operators/env_spec/pmetal_rgba_authority.hpp" -Algorithm SHA256).Hash.ToLowerInvariant()
@@ -1204,6 +1216,8 @@ jobs:
             clustered_pnts_draw_runtime_sha256 = $clusteredDrawRuntimeHash
             clustered_pnts_pipeline_runtime_sha256 = $clusteredPipelineRuntimeHash
             clustered_pnts_activation_source_audit_sha256 = $clusteredSourceAuditHash
+            spec_rgb_equipment_scope_audit_sha256 = $specRgbScopeAuditHash
+            spec_rgb_equipment_scope_provenance_sha256 = $specRgbScopeProvenanceHash
             clustered_pnts_draw_adapter_test_sha256 = $clusteredAdapterTestHash
             clustered_pnts_receiver_count = 36
             clustered_pnts_spc_receiver_count = 24
@@ -1211,7 +1225,8 @@ jobs:
             clustered_pnts_stock_membership = "T16_T17_BYPASSED_PRIVATE_FIRST4"
             clustered_pnts_carriers = "B12_SLOT12_T18_SLOT18_T19_SLOT19"
             clustered_pnts_pre_runtime_activation = "STATIC_PATH_AND_WINDOWS_CI_PASS_RUNTIME_NOT_TESTED"
-            clustered_pnts_external_asset_prerequisite = @("DSRRL\\Specular","DSRRL\\Diffuse","DSRRL\\Normals")
+            clustered_pnts_external_asset_prerequisite = @()
+            clustered_pnts_equipment_texture_bridge = "INDEPENDENT_EXPLICIT_CONSUMER_AUTHORITY"
             clustered_pnts_runtime_activation = "NOT_TESTED"
             clustered_pnts_pixel_behavior = "OPEN"
             pmetal_envspec_materializer_sha256 = $envspecMaterializerHash
