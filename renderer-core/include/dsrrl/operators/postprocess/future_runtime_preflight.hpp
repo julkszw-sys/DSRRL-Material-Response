@@ -289,11 +289,12 @@ struct hdr_unblock_context {
     bool lightshaft_input_semantics_ready = false;
     bool legacy_hdr_transfer_ready = false;
 
-    // Keep the target and host contracts distinct. R24 proved the DSR host
-    // requires an explicit final-output contract, but that does not tell us
-    // whether the PTDE legacy result reaches the D3D9 backbuffer by identity,
-    // GammaTexture/ramp, or another transfer. Do not select a bridge until the
-    // PTDE HDR_ColAdj -> final-target handoff itself is closed.
+    // Keep target and host contracts distinct. PTDE pass IDs 0x20/0x21 are
+    // independently CONFIRMED CameraBlur and are not a GammaTexture/output
+    // stage. PTDE's default D3D9 GammaRamp is independently CONFIRMED identity,
+    // and Present is known, but the exact object-level HDR_ColAdj -> backbuffer
+    // render-target handoff remains OPEN. Keep that resource-plumbing proof as
+    // a separate gate instead of inventing an extra transfer operator.
     bool ptde_output_handoff_closed = false;
 
     // R24 proved that dropping DSR's explicit ~pow(1/2.2) output transfer on a
