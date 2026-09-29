@@ -1398,12 +1398,42 @@ jobs:
           path: DSRRL_Core_Islands_FULL_RUNTIME_DIAG.addon64
           if-no-files-found: error
 
-      - name: Publish full-telemetry runtime alias
+      - name: Configure full-telemetry addon without native state verification
+        shell: pwsh
+        run: >
+          cmake
+          -S renderer-core/integrated
+          -B build-integrated-full-telemetry
+          -A x64
+          -DRESHADE_INCLUDE_DIR="${{ github.workspace }}/_reshade/include"
+          -DDSRRL_SOURCE_COMMIT="$env:DSRRL_CHECKOUT_COMMIT"
+          -DDSRRL_BUILD_FLAVOR="full_telemetry_safe"
+          -DDSRRL_FULL_TELEMETRY_DEFAULT_ON=ON
+
+      - name: Verify full-telemetry build profile
         shell: pwsh
         run: |
-          Copy-Item DSRRL_Core_Islands_FULL_RUNTIME_DIAG.addon64 DSRRL_Core_Islands_FULL_TELEMETRY.addon64 -Force
-          $hash = (Get-FileHash DSRRL_Core_Islands_FULL_TELEMETRY.addon64 -Algorithm SHA256).Hash.ToLowerInvariant()
-          Write-Host "FULL_TELEMETRY=DSRRL_Core_Islands_FULL_TELEMETRY.addon64"
+          $cache = Get-Content build-integrated-full-telemetry/CMakeCache.txt -Raw
+          if ($cache -notmatch "DSRRL_FULL_TELEMETRY_DEFAULT_ON:BOOL=ON") {
+            throw "Full telemetry profile did not enable DSRRL_FULL_TELEMETRY_DEFAULT_ON"
+          }
+          if ($cache -notmatch "DSRRL_DIAGNOSTIC_TELEMETRY_DEFAULT_ON:BOOL=OFF") {
+            throw "Full telemetry profile unexpectedly enabled native-state diagnostic telemetry"
+          }
+
+      - name: Build full-telemetry addon
+        shell: pwsh
+        run: |
+          cmake --build build-integrated-full-telemetry --config Release --target dsrrl_renderer_core_integrated
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $addons = @(Get-ChildItem build-integrated-full-telemetry -Recurse -Filter *.addon64)
+          if ($addons.Count -ne 1) {
+            throw "Expected exactly one full-telemetry addon, found $($addons.Count)"
+          }
+          $full = "DSRRL_Core_Islands_FULL_TELEMETRY.addon64"
+          Copy-Item $addons[0].FullName $full -Force
+          $hash = (Get-FileHash $full -Algorithm SHA256).Hash.ToLowerInvariant()
+          Write-Host "FULL_TELEMETRY=$full"
           Write-Host "FULL_TELEMETRY_SHA256=$hash"
 
       - name: Upload full-telemetry runtime addon
