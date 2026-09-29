@@ -1,0 +1,45 @@
+{
+  "schema": "dsrrl.postprocess_scene_consumer_cut_re.v1",
+  "operator_scope": ["post.bloom", "post.hdr"],
+  "status": "CONFIRMED_STATIC_RE_WITH_OPEN_DSR_SOURCE_DOMAIN",
+  "ptde": {
+    "exe_sha256": "88d1eec18eba2542c9c7e5e6903e89f9c075b20be5cd045ce6e568e7b22bea9d",
+    "rt_manager_global": "0x013E3874",
+    "rt_manager_ctor_va": "0x01037180",
+    "scene_resources": {
+      "front_srv_offset": "0x60",
+      "back_srv_offset": "0x84",
+      "front_rt_page_offset": "0x5C",
+      "back_rt_page_offset": "0x80",
+      "engine_format": "0x06",
+      "d3d9_format": "A8R8G8B8",
+      "normalized_q8_storage": true
+    },
+    "image_process_combine_va": "0x00DA9E60",
+    "scene_select_range": "0x00DAA080-0x00DAA09B",
+    "graph_pass_1e_constructor_va": "0x00FFE39E",
+    "tonemap_samplelum_scene_read_va": "0x00FFE509",
+    "consumer_cut": "selected current-frame normalized Q8 scene resource",
+    "storage_boundary": "SAT/clamp plus normalized 8-bit quantization",
+    "extra_gain_gamma_exposure_between_scene_storage_and_legacy_consumers": false
+  },
+  "dsr_host": {
+    "stock_late_scene_domain": "R11G11B10 decoded-linear/HDR",
+    "stock_late_scene_is_ptde_scene_code_equivalent": false,
+    "required_before_q8_store": "producer-side proof that the selected current-frame source is PTDE-equivalent scene code"
+  },
+  "construction_rule": {
+    "bloom_hdr_local_responsibility": "authenticate PTDE-equivalent current-frame scene at the consumer cut, then preserve the Q8 storage boundary",
+    "full_upstream_writer_history_required_for_release": false,
+    "full_upstream_writer_history_scope": "diagnostic scene-history reconstruction",
+    "arbitrary_gain_gamma_exposure_allowed_at_q8_store": false,
+    "stock_dsr_sfx_policy": "preserve as separate host island unless separately proven"
+  },
+  "open": [
+    "DSR producer-side PTDE scene-code equivalence at the selected current-frame source",
+    "GPU population path for the Q8 sidecar",
+    "runtime activation",
+    "pixel equivalence",
+    "PTDE HDR_ColAdj final backbuffer handoff"
+  ]
+}
