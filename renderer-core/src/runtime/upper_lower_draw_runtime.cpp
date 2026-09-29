@@ -691,10 +691,12 @@ thread_local std::uint32_t
     g_completed_draws_since_selector = 0xFFFFFFFFu;
 // The producer hook and the ReShade draw callback are allowed to execute on a
 // different thread from the exact selector hook. Keep the selector-authenticated
-// token in a second process-wide bounded bank, but authorize draw consumption
-// only by the producer thread id AND that thread's exact latest publication
-// serial. A missing or stale serial therefore fails open instead of falling
-// back to a process-global "latest token".
+// token in a second process-wide bounded bank keyed by producer thread. The
+// current state is the latest EXACT SELECTOR-AUTHENTICATED token for that
+// producer thread, not the latest producer publication: runtime 827663f proved
+// unrelated later producer publications can occur while the engine selection
+// remains unchanged. producer_serial remains provenance, while selector
+// publication owns state lifetime. No process-global latest-token fallback.
 std::array<
     lightbank_reference_token,
     k_reference_token_entries>
@@ -1554,9 +1556,10 @@ void publish_selected_reference_token(
             g_selected_reference_tokens[base + way];
         if (entry.valid &&
             entry.producer_tid ==
-                token.producer_tid &&
-            entry.producer_serial ==
-                token.producer_serial) {
+                token.producer_tid) {
+            // One current exact selector-owned state per producer thread.
+            // A later exact selector replaces it even when its producer serial
+            // is not the thread's numerically latest publication.
             entry = token;
             entry.available = true;
             telemetry::hot_count(
@@ -1601,11 +1604,8 @@ bool consume_selected_reference_token_for_current_thread(
     const auto tid =
         static_cast<std::uint32_t>(
             GetCurrentThreadId());
-    const auto serial =
-        g_draw_thread_latest_publish_serial;
 
-    if (tid == 0u ||
-        serial == 0u)
+    if (tid == 0u)
         return false;
 
     const auto set =
@@ -1615,37 +1615,29 @@ bool consume_selected_reference_token_for_current_thread(
     const auto base =
         set * k_reference_token_ways;
 
-    bool same_thread_selected = false;
-
     for (std::size_t way = 0u;
          way < k_reference_token_ways;
          ++way) {
-        auto &entry =
+        const auto &entry =
             g_selected_reference_tokens[base + way];
         if (!entry.valid ||
             !entry.available ||
-            entry.producer_tid != tid)
+            entry.producer_tid != tid ||
+            entry.producer_serial == 0u)
             continue;
 
-        same_thread_selected = true;
-
-        if (entry.producer_serial != serial)
-            continue;
-
-        entry.available = false;
+        // Selector-owned state is persistent across ReShade draw callbacks.
+        // Do not consume it one-shot and do not compare it against unrelated
+        // later producer publications on the same thread.
         out = entry;
         out.available = false;
         telemetry::hot_count(
             g_reference_cross_thread_draw_consume);
         g_reference_source_consumer_serial.store(
-            serial,
+            entry.producer_serial,
             std::memory_order_relaxed);
         return true;
     }
-
-    if (same_thread_selected)
-        telemetry::hot_count(
-            g_reference_cross_thread_serial_miss);
 
     return false;
 }
@@ -4867,36 +4859,20 @@ bool upper_lower_draw_runtime::selected_pmetal_env_source(
                 std::memory_order_relaxed,
                 std::memory_order_relaxed);
 
-        // Runtime dd6bb17 proved that an exact authenticated LightBank
-        // selector can precede the P_Metal consumer by multiple ReShade draw
-        // callbacks (first observed distance: 9). The previous per-draw clear
-        // therefore destroyed valid producer state. Retain the selected token
-        // as producer state, but only while the exact producer TID+serial is
-        // still current. A new producer publication or selector event makes it
-        // stale immediately; no draw-count heuristic is used.
-        const auto latest_serial =
-            g_draw_thread_latest_publish_serial;
-        const bool local_token_fresh =
-            g_draw_reference_token.valid &&
-            g_draw_reference_token.producer_tid ==
-                source_consumer_tid &&
-            g_draw_reference_token.producer_serial != 0u &&
-            g_draw_reference_token.producer_serial ==
-                latest_serial;
-
+        // Runtime 827663f proved that exact selector-owned LightBank state
+        // can remain current while unrelated later producer publications
+        // advance this thread's publication serial. Therefore selector state,
+        // not "latest producer serial", owns P_Metal source lifetime.
         lightbank_reference_token
             cross_thread_token{};
         const lightbank_reference_token *token_ptr =
-            local_token_fresh
-                ? &g_draw_reference_token
-                : nullptr;
+            nullptr;
 
-        if (token_ptr == nullptr &&
-            consume_selected_reference_token_for_current_thread(
+        if (consume_selected_reference_token_for_current_thread(
                 cross_thread_token)) {
-            // Cache the exact cross-thread selection on its producer thread so
-            // subsequent draws may consume the same persistent LightBank
-            // state until producer serial or selector identity changes.
+            // Refresh from the synchronized per-producer-thread selector state
+            // on every exact source query so a later selector transition
+            // replaces the cached token immediately.
             g_draw_reference_token =
                 cross_thread_token;
             g_last_selected_producer_serial =
@@ -5177,13 +5153,15 @@ upper_lower_draw_runtime::pmetal_draw_token_state() const noexcept
     out.latest_publish_serial =
         g_draw_thread_latest_publish_serial;
 
+    // In reference-only P_Metal transport, selector-authenticated state may
+    // legitimately outlive later unrelated producer publications. Freshness
+    // here is therefore exact producer-thread ownership plus a nonzero
+    // selector-proven producer serial; latest_publish_serial is telemetry only.
     const bool fresh =
         g_draw_reference_token.valid &&
         g_draw_reference_token.producer_tid ==
             out.current_tid &&
-        g_draw_reference_token.producer_serial != 0u &&
-        g_draw_reference_token.producer_serial ==
-            out.latest_publish_serial;
+        g_draw_reference_token.producer_serial != 0u;
 
     out.local_token_valid = fresh;
     out.local_source_ready =
@@ -5220,19 +5198,18 @@ void upper_lower_draw_runtime::consume_draw_selection() noexcept
 
     if (g_reference_only_transport.load(
             std::memory_order_acquire)) {
-        // Reference-only mode carries engine LightBank selection state, not a
-        // one-ReShade-draw temporary. Keep an exact selected token across
-        // callbacks only while it still matches this producer thread's latest
-        // publication serial. selector_event() clears/replaces it on selector
-        // transitions; a newer producer serial makes it stale immediately.
+        // Reference-only mode carries persistent engine LightBank selection
+        // state. ReShade draw completion must not invalidate it merely because
+        // this producer thread published unrelated LightBank work afterward.
+        // The synchronized selected-token bank is replaced only by a later
+        // exact selector event for the same producer thread; source queries
+        // refresh this TLS cache from that bank.
         const auto tid =
             static_cast<std::uint32_t>(
                 GetCurrentThreadId());
         if (g_draw_reference_token.valid &&
             (g_draw_reference_token.producer_tid != tid ||
-             g_draw_reference_token.producer_serial == 0u ||
-             g_draw_reference_token.producer_serial !=
-                 g_draw_thread_latest_publish_serial))
+             g_draw_reference_token.producer_serial == 0u))
             g_draw_reference_token = {};
     } else {
         // Non-reference U/L/HemDir3 transport retains the historical
