@@ -841,6 +841,118 @@ bool direct_ul_mutation_enabled() noexcept
     return enabled;
 }
 
+
+bool experimental_pmetal_ptde_firelink_drawparam_enabled() noexcept
+{
+    // Focused P_Metal-only diagnostic. It does not mutate DrawParam, LightBank
+    // cache contents, or any non-P_Metal receiver. The exact P_Metal selector
+    // token supplies row A/B + beta; the EnvSpec RGBM value itself is taken
+    // directly from the immutable PTDE Firelink LightBank donor corpus and is
+    // injected only into the P_Metal b12 source equation.
+    static const bool enabled =
+        telemetry::environment_flag(
+            "DSRRL_EXPERIMENTAL_PMETAL_PTDE_FIRELINK_DRAWPARAM");
+    return enabled;
+}
+
+constexpr std::uint64_t
+    k_ptde_firelink_lightbank_signature =
+        0xa710f288bd3aca82ULL;
+
+bool read_hardcoded_ptde_firelink_pmetal_env_source(
+    std::int32_t selector,
+    f4 &out,
+    std::uint64_t &bank_signature,
+    std::uint32_t &row_id,
+    pmetal_source_probe *probe = nullptr) noexcept
+{
+    out = {};
+    bank_signature =
+        k_ptde_firelink_lightbank_signature;
+    row_id = 0u;
+
+    pmetal_source_probe local{};
+    local.selector = selector;
+    local.bank_signature = bank_signature;
+
+    const auto *bank =
+        pmetal_env_source_authority::find_bank(
+            k_ptde_firelink_lightbank_signature);
+    if (bank == nullptr) {
+        local.status =
+            pmetal_env_source_diag_status::
+                bank_unknown;
+        if (probe != nullptr)
+            *probe = local;
+        return false;
+    }
+
+    local.bank_count =
+        static_cast<std::uint16_t>(
+            bank->count);
+
+    if (selector < 0 ||
+        static_cast<std::uint32_t>(
+            selector) >= bank->count) {
+        local.status =
+            pmetal_env_source_diag_status::
+                selector_oob;
+        if (probe != nullptr)
+            *probe = local;
+        return false;
+    }
+
+    row_id =
+        static_cast<std::uint32_t>(
+            selector);
+    local.row_id = row_id;
+
+    const auto *row =
+        pmetal_env_source_authority::find_row(
+            *bank,
+            row_id);
+    if (row == nullptr) {
+        local.status =
+            pmetal_env_source_diag_status::
+                row_unknown;
+        if (probe != nullptr)
+            *probe = local;
+        return false;
+    }
+
+    const float scale =
+        static_cast<float>(row->m) *
+        0.01f;
+
+    out = {
+        static_cast<float>(row->r) /
+            255.0f * scale,
+        static_cast<float>(row->g) /
+            255.0f * scale,
+        static_cast<float>(row->b) /
+            255.0f * scale,
+        0.0f
+    };
+
+    if (!std::isfinite(out.x) ||
+        !std::isfinite(out.y) ||
+        !std::isfinite(out.z)) {
+        local.status =
+            pmetal_env_source_diag_status::
+                nonfinite;
+        if (probe != nullptr)
+            *probe = local;
+        return false;
+    }
+
+    local.status =
+        pmetal_env_source_diag_status::
+            success;
+    if (probe != nullptr)
+        *probe = local;
+    return true;
+}
+
 void latch_thread_id_once(
     std::atomic<std::uint32_t> &slot) noexcept
 {
@@ -5087,14 +5199,26 @@ bool upper_lower_draw_runtime::selected_pmetal_env_source(
         std::uint32_t row_a = 0u;
         std::uint32_t row_b = 0u;
 
+        const bool hardcoded_ptde_drawparam =
+            experimental_pmetal_ptde_firelink_drawparam_enabled();
+
         pmetal_source_probe probe_a{};
-        if (!read_exact_pmetal_env_source(
-                token.source_a,
-                token.selector_a,
-                a,
-                bank_a,
-                row_a,
-                &probe_a)) {
+        const bool source_a_ready =
+            hardcoded_ptde_drawparam
+                ? read_hardcoded_ptde_firelink_pmetal_env_source(
+                    token.selector_a,
+                    a,
+                    bank_a,
+                    row_a,
+                    &probe_a)
+                : read_exact_pmetal_env_source(
+                    token.source_a,
+                    token.selector_a,
+                    a,
+                    bank_a,
+                    row_a,
+                    &probe_a);
+        if (!source_a_ready) {
             publish_pmetal_source_probe(
                 false,
                 probe_a,
@@ -5119,13 +5243,22 @@ bool upper_lower_draw_runtime::selected_pmetal_env_source(
                 token.beta);
         } else {
             pmetal_source_probe probe_b{};
-            if (!read_exact_pmetal_env_source(
-                    token.source_b,
-                    token.selector_b,
-                    b,
-                    bank_b,
-                    row_b,
-                    &probe_b)) {
+            const bool source_b_ready =
+                hardcoded_ptde_drawparam
+                    ? read_hardcoded_ptde_firelink_pmetal_env_source(
+                        token.selector_b,
+                        b,
+                        bank_b,
+                        row_b,
+                        &probe_b)
+                    : read_exact_pmetal_env_source(
+                        token.source_b,
+                        token.selector_b,
+                        b,
+                        bank_b,
+                        row_b,
+                        &probe_b);
+            if (!source_b_ready) {
                 publish_pmetal_source_probe(
                     true,
                     probe_b,
