@@ -1,6 +1,7 @@
 #pragma once
 
 #include "dsrrl/core/operator_catalog.hpp"
+#include "dsrrl/operators/postprocess/legacy_scene_consumer_cut.hpp"
 
 #include <cstdint>
 
@@ -16,8 +17,17 @@ enum class postprocess_sfx_scope : std::uint8_t {
     full_frame_diagnostic
 };
 
+// Production Bloom/HDR activation is bounded at the consumer semantic cut.
+// Full PTDE writer-history reconstruction is a separate diagnostic scope and
+// must not be silently promoted into a release prerequisite.
+enum class postprocess_scene_scope : std::uint8_t {
+    consumer_cut_only = 0,
+    full_ptde_scene_history_diagnostic
+};
+
 enum class bloom_unblock_reason : std::uint8_t {
     ready_for_partial = 0,
+    consumer_scene_cut_not_ready,
     history_writer_set_not_closed,
     history_writer_order_not_closed,
     history_draw_recurrence_not_closed,
@@ -45,10 +55,16 @@ enum class bloom_unblock_reason : std::uint8_t {
 };
 
 struct bloom_unblock_context {
-    // Exact PTDE Q8 cannot be reconstructed by a universal late transform.
-    // Authorize the scene source only after the known writer set, execution
-    // order and per-draw target recurrence are closed. FX/SFX recurrence is
-    // independent because additive/blended writes participate in Q8 history.
+    // Release path: authenticate the PTDE-equivalent scene value at the actual
+    // Bloom/HDR consumer cut. Writer provenance belongs to upstream scene
+    // production and is not a Bloom-local gate.
+    postprocess_scene_scope scene_scope =
+        postprocess_scene_scope::consumer_cut_only;
+    bool consumer_scene_cut_ready = false;
+
+    // Diagnostic-only full-history reconstruction. These remain valuable when
+    // reproducing the entire PTDE scene target, including FX/SFX recurrence,
+    // but production does not require them when stock DSR SFX stays isolated.
     bool history_writer_set_closed = false;
     bool history_writer_order_closed = false;
     bool history_draw_recurrence_closed = false;
@@ -106,22 +122,33 @@ inline bloom_unblock_plan evaluate_bloom_unblock_preflight(
     const bloom_unblock_context &c) noexcept
 {
     bloom_unblock_plan out;
-    if (!c.history_writer_set_closed) {
-        out.reason = bloom_unblock_reason::history_writer_set_not_closed;
+    if (!c.consumer_scene_cut_ready) {
+        out.reason = bloom_unblock_reason::consumer_scene_cut_not_ready;
         return out;
     }
-    if (!c.history_writer_order_closed) {
-        out.reason = bloom_unblock_reason::history_writer_order_not_closed;
-        return out;
+
+    if (c.scene_scope ==
+        postprocess_scene_scope::full_ptde_scene_history_diagnostic) {
+        if (!c.history_writer_set_closed) {
+            out.reason = bloom_unblock_reason::history_writer_set_not_closed;
+            return out;
+        }
+        if (!c.history_writer_order_closed) {
+            out.reason = bloom_unblock_reason::history_writer_order_not_closed;
+            return out;
+        }
+        if (!c.history_draw_recurrence_closed) {
+            out.reason =
+                bloom_unblock_reason::history_draw_recurrence_not_closed;
+            return out;
+        }
+        if (!c.history_sfx_recurrence_closed) {
+            out.reason =
+                bloom_unblock_reason::history_sfx_recurrence_not_closed;
+            return out;
+        }
     }
-    if (!c.history_draw_recurrence_closed) {
-        out.reason = bloom_unblock_reason::history_draw_recurrence_not_closed;
-        return out;
-    }
-    if (!c.history_sfx_recurrence_closed) {
-        out.reason = bloom_unblock_reason::history_sfx_recurrence_not_closed;
-        return out;
-    }
+
     if (!c.scene_domain_bridge_ready) {
         out.reason = bloom_unblock_reason::scene_domain_bridge_not_ready;
         return out;
@@ -217,6 +244,7 @@ inline bloom_unblock_plan evaluate_bloom_unblock_preflight(
 
 enum class hdr_unblock_reason : std::uint8_t {
     ready_for_partial = 0,
+    consumer_scene_cut_not_ready,
     scene_domain_bridge_not_ready,
     q8_scene_source_not_ready,
     legacy_scene_scale_lane_not_ready,
@@ -225,6 +253,7 @@ enum class hdr_unblock_reason : std::uint8_t {
     bloom_input_semantics_not_ready,
     lightshaft_input_semantics_not_ready,
     legacy_hdr_transfer_not_ready,
+    ptde_output_handoff_not_closed,
     dsr_output_transfer_contract_not_ready,
     preserved_coloradjust_overlay_tail_not_ready,
     graph_insertion_not_ready,
@@ -241,6 +270,11 @@ enum class hdr_unblock_reason : std::uint8_t {
 };
 
 struct hdr_unblock_context {
+    // Shared PTDE scene semantic cut. This is independent from the provenance
+    // of upstream writers and must be validated before legacy HDR can consume
+    // a Q8 sidecar.
+    bool consumer_scene_cut_ready = false;
+
     // R24 failure must not recur: legacy HDR consumes stored PTDE scene code,
     // not the stock DSR decoded-linear HDR t0 signal.
     bool scene_domain_bridge_ready = false;
@@ -254,6 +288,14 @@ struct hdr_unblock_context {
     bool bloom_input_semantics_ready = false;
     bool lightshaft_input_semantics_ready = false;
     bool legacy_hdr_transfer_ready = false;
+
+    // Keep the target and host contracts distinct. R24 proved the DSR host
+    // requires an explicit final-output contract, but that does not tell us
+    // whether the PTDE legacy result reaches the D3D9 backbuffer by identity,
+    // GammaTexture/ramp, or another transfer. Do not select a bridge until the
+    // PTDE HDR_ColAdj -> final-target handoff itself is closed.
+    bool ptde_output_handoff_closed = false;
+
     // R24 proved that dropping DSR's explicit ~pow(1/2.2) output transfer on a
     // non-sRGB swapchain violates the host output contract. A legacy HDR port
     // must therefore provide an explicit PTDE-result -> DSR backbuffer transfer
@@ -301,6 +343,10 @@ inline hdr_unblock_plan evaluate_hdr_unblock_preflight(
     const hdr_unblock_context &c) noexcept
 {
     hdr_unblock_plan out;
+    if (!c.consumer_scene_cut_ready) {
+        out.reason = hdr_unblock_reason::consumer_scene_cut_not_ready;
+        return out;
+    }
     if (!c.scene_domain_bridge_ready) {
         out.reason = hdr_unblock_reason::scene_domain_bridge_not_ready;
         return out;
@@ -331,6 +377,10 @@ inline hdr_unblock_plan evaluate_hdr_unblock_preflight(
     }
     if (!c.legacy_hdr_transfer_ready) {
         out.reason = hdr_unblock_reason::legacy_hdr_transfer_not_ready;
+        return out;
+    }
+    if (!c.ptde_output_handoff_closed) {
+        out.reason = hdr_unblock_reason::ptde_output_handoff_not_closed;
         return out;
     }
     if (!c.dsr_output_transfer_contract_ready) {

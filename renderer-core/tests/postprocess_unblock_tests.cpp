@@ -3,6 +3,7 @@
 #include "dsrrl/operators/postprocess/future_runtime_preflight.hpp"
 #include "dsrrl/operators/postprocess/bloom_scene_bridge.hpp"
 #include "dsrrl/operators/postprocess/bloom_scene_static_authority.hpp"
+#include "dsrrl/operators/postprocess/legacy_scene_consumer_cut.hpp"
 #include "dsrrl/operators/postprocess/bloom_legacy_graph.hpp"
 #include "dsrrl/operators/postprocess/waterwave_authored_identity.hpp"
 #include "dsrrl/runtime/bloom_fx_draw_transport.hpp"
@@ -24,6 +25,7 @@ bool check(bool condition,const char *expr,int line)
 operators::postprocess::bloom_unblock_context ready_bloom()
 {
     operators::postprocess::bloom_unblock_context c;
+    c.consumer_scene_cut_ready=true;
     c.history_writer_set_closed=true;
     c.history_writer_order_closed=true;
     c.history_draw_recurrence_closed=true;
@@ -70,6 +72,7 @@ operators::postprocess::bloom_legacy_graph_carrier ready_bloom_graph()
 operators::postprocess::hdr_unblock_context ready_hdr()
 {
     operators::postprocess::hdr_unblock_context c;
+    c.consumer_scene_cut_ready=true;
     c.scene_domain_bridge_ready=true;
     c.q8_scene_source_ready=true;
     c.legacy_scene_scale_lane_ready=true;
@@ -78,6 +81,7 @@ operators::postprocess::hdr_unblock_context ready_hdr()
     c.bloom_input_semantics_ready=true;
     c.lightshaft_input_semantics_ready=true;
     c.legacy_hdr_transfer_ready=true;
+    c.ptde_output_handoff_closed=true;
     c.dsr_output_transfer_contract_ready=true;
     c.preserved_coloradjust_overlay_tail_ready=true;
     c.graph_insertion_ready=true;
@@ -216,6 +220,35 @@ int main()
           runtime::bloom_fx_draw_transport::waterwave_draw_authority_result::
               authorized);
 
+    // Bloom/HDR are bounded at their consumer semantic cut. A stock DSR
+    // decoded-linear scene is not automatically a PTDE scene-code source.
+    legacy_scene_consumer_cut_carrier cut{};
+    cut.source_domain=legacy_scene_cut_domain::dsr_decoded_linear;
+    cut.transfer=legacy_scene_q8_transfer::sat_quantize_unorm8;
+    cut.current_frame_source_verified=true;
+    cut.selected_scene_route_verified=true;
+    cut.q8_b8g8r8a8_unorm_storage_verified=true;
+    cut.no_extra_gain_gamma_exposure=true;
+    cut.bloom_consumer_verified=true;
+    cut.hdr_consumer_verified=true;
+    CHECK(validate_bloom_scene_consumer_cut(cut)==
+          legacy_scene_consumer_cut_result::
+              source_domain_not_ptde_equivalent);
+
+    // Once an upstream producer has established PTDE-equivalent scene code,
+    // Bloom/HDR own only the exact storage boundary: SAT + UNORM8 Q8, with no
+    // extra gain/gamma/exposure compensation.
+    cut.source_domain=legacy_scene_cut_domain::ptde_scene_code_float;
+    CHECK(validate_bloom_scene_consumer_cut(cut)==
+          legacy_scene_consumer_cut_result::exact_construction);
+    CHECK(validate_hdr_scene_consumer_cut(cut)==
+          legacy_scene_consumer_cut_result::exact_construction);
+
+    cut.no_extra_gain_gamma_exposure=false;
+    CHECK(validate_bloom_scene_consumer_cut(cut)==
+          legacy_scene_consumer_cut_result::extra_color_operator_present);
+    cut.no_extra_gain_gamma_exposure=true;
+
     // Canonical static authority is deliberately incomplete. Rev9384 closes
     // FXHG collector insertion -> entity callback, not writer exhaustiveness
     // or material identity transport. It must therefore fail open.
@@ -298,7 +331,8 @@ int main()
     CHECK(validate_bloom_legacy_graph_carrier(graph)==
           bloom_legacy_graph_result::second_pass04_role_mismatch);
 
-    // Bloom scene bridge remains the first real blocker.
+    // Bloom release path is bounded at the consumer semantic cut. Full
+    // PTDE writer-history reconstruction is a separate diagnostic scope.
     bloom_unblock_context bloom{};
     bloom.packed_depth_logical_bridge_ready=true;
     bloom.type06_host_verified=true;
@@ -308,11 +342,31 @@ int main()
 
     auto bp=evaluate_bloom_unblock_preflight(bloom);
     CHECK(bp.state==post_unblock_state::blocked);
-    CHECK(bp.reason==bloom_unblock_reason::history_writer_set_not_closed);
+    CHECK(bp.reason==bloom_unblock_reason::consumer_scene_cut_not_ready);
     CHECK(!bp.direct_shader_body_swap_allowed);
     CHECK(bp.requires_q8_scene_bridge);
     CHECK(bp.requires_fixed_rgba_sidecars);
     CHECK(bp.preserve_stock_hdr_until_separately_ready);
+
+    // Closed consumer-cut construction must not be held hostage by unrelated
+    // writer-history proof when stock DSR SFX is preserved outside the island.
+    bloom=ready_bloom();
+    bloom.history_writer_set_closed=false;
+    bloom.history_writer_order_closed=false;
+    bloom.history_draw_recurrence_closed=false;
+    bloom.history_sfx_recurrence_closed=false;
+    bp=evaluate_bloom_unblock_preflight(bloom);
+    CHECK(bp.state==post_unblock_state::ready_for_partial);
+
+    // The full-history diagnostic remains strict and still requires the writer
+    // census/order/recurrence proof.
+    bloom=ready_bloom();
+    bloom.scene_scope=
+        postprocess_scene_scope::full_ptde_scene_history_diagnostic;
+    bloom.history_writer_set_closed=false;
+    bp=evaluate_bloom_unblock_preflight(bloom);
+    CHECK(bp.state==post_unblock_state::blocked);
+    CHECK(bp.reason==bloom_unblock_reason::history_writer_set_not_closed);
 
     bloom=ready_bloom();
     bloom.packed_depth_quantization_closed=false;
@@ -368,11 +422,21 @@ int main()
 
     auto hp=evaluate_hdr_unblock_preflight(hdr);
     CHECK(hp.state==post_unblock_state::blocked);
+    CHECK(hp.reason==hdr_unblock_reason::consumer_scene_cut_not_ready);
+
+    hdr.consumer_scene_cut_ready=true;
+    hp=evaluate_hdr_unblock_preflight(hdr);
+    CHECK(hp.state==post_unblock_state::blocked);
     CHECK(hp.reason==hdr_unblock_reason::scene_domain_bridge_not_ready);
     CHECK(!hp.direct_legacy_body_swap_allowed);
     CHECK(!hp.whole_c56_copy_allowed);
     CHECK(hp.requires_q8_scene_bridge);
     CHECK(hp.preserve_native_sfx_island);
+
+    hdr=ready_hdr();
+    hdr.ptde_output_handoff_closed=false;
+    hp=evaluate_hdr_unblock_preflight(hdr);
+    CHECK(hp.reason==hdr_unblock_reason::ptde_output_handoff_not_closed);
 
     hdr=ready_hdr();
     hdr.dsr_output_transfer_contract_ready=false;
