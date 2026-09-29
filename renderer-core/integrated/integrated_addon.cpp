@@ -3371,7 +3371,7 @@ bool register_subsurface_plain_target_chain(
                 upper_lower_hemenv_materialize_result::applied ||
         mr_ul.family !=
             dsrrl::operators::lightbank::
-                upper_lower_hemenv_family::stable_hemenv ||
+                upper_lower_hemenv_family::hemenv ||
         mr_ul.stratum !=
             dsrrl::operators::lightbank::
                 upper_lower_hemenv_stratum::spc ||
