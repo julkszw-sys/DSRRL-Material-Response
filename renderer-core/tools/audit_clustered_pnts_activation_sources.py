@@ -196,7 +196,27 @@ def main():
     resources_gate=integrated.find("const bool resources_ready =")
     prepare_call=integrated.find("g_clustered_pnts.prepare_sidecar(")
     if resources_gate<0 or prepare_call<0 or not resources_gate<prepare_call:
-        fail("clustered heavy source selection is not downstream of the material-resource gate")
+        fail("clustered heavy source selection is not downstream of the material/surface-carrier gate")
+
+    require(
+        integrated,
+        "const bool nospc_host_surface_ready =",
+        "clustered NoSpc host-surface gate",
+    )
+    require(
+        integrated,
+        "!prepared.clustered_shader.spc &&\n            !prepared.clustered_shader.blended_material",
+        "NoSpc single-endpoint receiver gate",
+    )
+    require(
+        integrated,
+        "const bool spc_resources_ready =",
+        "clustered Spc resource gate",
+    )
+    no_spc_gate=integrated.find("const bool nospc_host_surface_ready =")
+    spc_gate=integrated.find("const bool spc_resources_ready =")
+    if no_spc_gate<0 or spc_gate<0 or not no_spc_gate<spc_gate<resources_gate:
+        fail("clustered NoSpc/Spc material gate partition drift")
 
     if "clustered.additional_owners =\n                point | mr | local_if_spc;" in integrated:
         fail("clustered request duplicates primary in additional_owners")
@@ -253,7 +273,8 @@ def main():
     print("  producer=builder-input-snapshot>same-thread-material-join>authorized-draw-first4+raw-source")
     print("  carrier=b12[3].x+t18+t19 material_max=uint32 min_after_first4")
     print("  material=25 exact HOMOLOGOUS_NOSPC pairs; identity=certified supplement; c100=bit-exact router authority")
-    print("  chain=candidate>receiver>material>resources>selector>sources>sidecar>shader>draw-mutation>restore")
+    print("  chain=candidate>receiver>material>surface-carrier>selector>sources>sidecar>shader>draw-mutation>restore")
+    print("  NoSpc=stock t0/t2 host surface, no PTDE equipment sidecar prerequisite; Spc retains exact resource gate")
     print("  shader_owners=dynamic PointLight/MR/local-spec + exact static diffuse-domain/attenuation/SAT (+NoSpc EnvSpec-delete)")
     print("  cb_resources=dynamic owners only; static create-time owners remain shader-only")
     print("  draw=adapter-valid ownership + exact pipeline route + shared transaction")
