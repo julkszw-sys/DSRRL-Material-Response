@@ -48,8 +48,8 @@ that PTDE-derived binary.
 For reproducible deployment, the ZIP includes
 `STAGE_ENVSPEC_SIDECAR.ps1`. Give it an already-obtained source file; the
 script accepts **only** the exact size/SHA above, copies through a temporary
-file, re-verifies the staged bytes, and atomically moves them to the required
-game-root path. It does not download or discover assets:
+file in the destination directory, verifies those bytes, moves them to the
+required game-root path, and verifies the destination again. It does not download or discover assets:
 
 `./STAGE_ENVSPEC_SIDECAR.ps1 -SourcePath <PTDE_GI_ENVSPEC_PACK_RGBA.bin> -GameDir <DarkSoulsRemastered-directory>`
 
