@@ -135,6 +135,12 @@ struct lightbank_reference_token {
     std::int32_t selector_a = -1;
     std::int32_t selector_b = -1;
     float beta = 0.0f;
+    // P_Metal donor source is decoded only after the exact selector+material
+    // semantic join, while the engine source tuple is still the authenticated
+    // input. Draw-time replay consumes this immutable payload instead of
+    // dereferencing producer-owned source pointers later.
+    pmetal_env_source pmetal_env{};
+    bool pmetal_env_ready = false;
     std::array<f4,3> directions{};
     f4 upper{};
     f4 lower{};
@@ -2417,6 +2423,108 @@ bool read_exact_pmetal_env_source(
         pmetal_env_source_diag_status::
             success);
     return true;
+}
+
+bool materialize_selected_pmetal_env_source(
+    lightbank_reference_token &token) noexcept
+{
+    token.pmetal_env = {};
+    token.pmetal_env_ready = false;
+
+    if (!token.valid ||
+        !token.source_ready ||
+        token.source_a == nullptr ||
+        token.source_b == nullptr ||
+        token.selector_a < 0 ||
+        token.selector_b < 0 ||
+        !std::isfinite(token.beta))
+        return false;
+
+    f4 a{};
+    f4 b{};
+    std::uint64_t bank_a = 0u;
+    std::uint64_t bank_b = 0u;
+    std::uint32_t row_a = 0u;
+    std::uint32_t row_b = 0u;
+
+    pmetal_source_probe probe_a{};
+    if (!read_exact_pmetal_env_source(
+            token.source_a,
+            token.selector_a,
+            a,
+            bank_a,
+            row_a,
+            &probe_a)) {
+        publish_pmetal_source_probe(
+            false,
+            probe_a,
+            token.beta);
+        return false;
+    }
+    publish_pmetal_source_probe(
+        false,
+        probe_a,
+        token.beta);
+
+    if (token.beta <= 0.0f) {
+        b = a;
+        bank_b = bank_a;
+        row_b = row_a;
+        auto probe_b = probe_a;
+        probe_b.selector = token.selector_b;
+        publish_pmetal_source_probe(
+            true,
+            probe_b,
+            token.beta);
+    } else {
+        pmetal_source_probe probe_b{};
+        if (!read_exact_pmetal_env_source(
+                token.source_b,
+                token.selector_b,
+                b,
+                bank_b,
+                row_b,
+                &probe_b)) {
+            publish_pmetal_source_probe(
+                true,
+                probe_b,
+                token.beta);
+            return false;
+        }
+        publish_pmetal_source_probe(
+            true,
+            probe_b,
+            token.beta);
+    }
+
+    if (token.beta >= 1.0f) {
+        a = b;
+        bank_a = bank_b;
+        row_a = row_b;
+    }
+
+    token.pmetal_env.a = {a.x,a.y,a.z};
+    token.pmetal_env.b = {b.x,b.y,b.z};
+    token.pmetal_env.beta =
+        std::clamp(
+            token.beta,
+            0.0f,
+            1.0f);
+    token.pmetal_env.bank_signature_a = bank_a;
+    token.pmetal_env.bank_signature_b = bank_b;
+    token.pmetal_env.row_id_a = row_a;
+    token.pmetal_env.row_id_b = row_b;
+
+    token.pmetal_env_ready =
+        std::isfinite(token.pmetal_env.a[0]) &&
+        std::isfinite(token.pmetal_env.a[1]) &&
+        std::isfinite(token.pmetal_env.a[2]) &&
+        std::isfinite(token.pmetal_env.b[0]) &&
+        std::isfinite(token.pmetal_env.b[1]) &&
+        std::isfinite(token.pmetal_env.b[2]) &&
+        std::isfinite(token.pmetal_env.beta);
+
+    return token.pmetal_env_ready;
 }
 
 bool write_bytes(
@@ -4827,8 +4935,21 @@ void upper_lower_draw_runtime::pmetal_material_event(
             owner_key)
         return;
 
+    auto selected_token =
+        g_draw_reference_token;
+
+    // V13 decoded the donor while the engine source tuple was live. Preserve
+    // that data-lifetime property without restoring geometry-scaled producer
+    // work: perform the exact donor decode only after this P_Metal material
+    // gate, then publish immutable A/B+beta+bank/row state for draw replay.
+    if (!materialize_selected_pmetal_env_source(
+            selected_token))
+        return;
+
+    g_draw_reference_token =
+        selected_token;
     publish_selected_reference_token(
-        g_draw_reference_token);
+        selected_token);
 }
 
 bool upper_lower_draw_runtime::direct_producer_active() const noexcept
@@ -5090,13 +5211,10 @@ bool upper_lower_draw_runtime::selected_pmetal_env_source(
             token_ptr != nullptr
                 ? *token_ptr
                 : invalid_token;
+
         if (!token.valid ||
-            !token.source_ready ||
-            token.source_a == nullptr ||
-            token.source_b == nullptr ||
-            token.selector_a < 0 ||
-            token.selector_b < 0 ||
-            !std::isfinite(token.beta)) {
+            !token.pmetal_env_ready ||
+            !std::isfinite(token.pmetal_env.beta)) {
             pmetal_source_probe invalid_a{};
             invalid_a.status =
                 pmetal_env_source_diag_status::
@@ -5118,93 +5236,15 @@ bool upper_lower_draw_runtime::selected_pmetal_env_source(
             return false;
         }
 
-        f4 a{};
-        f4 b{};
-        std::uint64_t bank_a = 0u;
-        std::uint64_t bank_b = 0u;
-        std::uint32_t row_a = 0u;
-        std::uint32_t row_b = 0u;
-
-        pmetal_source_probe probe_a{};
-        const bool source_a_ready =
-            read_exact_pmetal_env_source(
-                token.source_a,
-                token.selector_a,
-                a,
-                bank_a,
-                row_a,
-                &probe_a);
-        if (!source_a_ready) {
-            publish_pmetal_source_probe(
-                false,
-                probe_a,
-                token.beta);
-            return false;
-        }
-        publish_pmetal_source_probe(
-            false,
-            probe_a,
-            token.beta);
-
-        if (token.beta <= 0.0f) {
-            b = a;
-            bank_b = bank_a;
-            row_b = row_a;
-            auto probe_b = probe_a;
-            probe_b.selector =
-                token.selector_b;
-            publish_pmetal_source_probe(
-                true,
-                probe_b,
-                token.beta);
-        } else {
-            pmetal_source_probe probe_b{};
-            const bool source_b_ready =
-                read_exact_pmetal_env_source(
-                    token.source_b,
-                    token.selector_b,
-                    b,
-                    bank_b,
-                    row_b,
-                    &probe_b);
-            if (!source_b_ready) {
-                publish_pmetal_source_probe(
-                    true,
-                    probe_b,
-                    token.beta);
-                return false;
-            }
-            publish_pmetal_source_probe(
-                true,
-                probe_b,
-                token.beta);
-        }
-
-        if (token.beta >= 1.0f) {
-            a = b;
-            bank_a = bank_b;
-            row_a = row_b;
-        }
-
-        out.a = {a.x,a.y,a.z};
-        out.b = {b.x,b.y,b.z};
-        out.beta =
-            std::clamp(
-                token.beta,
-                0.0f,
-                1.0f);
-        out.bank_signature_a = bank_a;
-        out.bank_signature_b = bank_b;
-        out.row_id_a = row_a;
-        out.row_id_b = row_b;
-
+        out = token.pmetal_env;
         return
             std::isfinite(out.a[0]) &&
             std::isfinite(out.a[1]) &&
             std::isfinite(out.a[2]) &&
             std::isfinite(out.b[0]) &&
             std::isfinite(out.b[1]) &&
-            std::isfinite(out.b[2]);
+            std::isfinite(out.b[2]) &&
+            std::isfinite(out.beta);
     }
 
     if (!g_pmetal_env_hook_armed.load() ||
