@@ -1963,6 +1963,10 @@ prepare_subsurface_body_requests(
     const auto h0 = hashes[0];
     const auto h1 = hashes[1];
     const auto h2 = hashes[2];
+    const std::uint32_t native_012_mask =
+        (views[0] != nullptr ? 1u << 0u : 0u) |
+        (views[1] != nullptr ? 1u << 1u : 0u) |
+        (views[2] != nullptr ? 1u << 2u : 0u);
 
     if (h1 == k_subsurface_body_f_spec_hash) {
         body_texture =
@@ -2049,15 +2053,36 @@ prepare_subsurface_body_requests(
             if (!logged->exchange(
                     true,
                     std::memory_order_relaxed)) {
-                char line[768]{};
+                std::uint32_t native_0_15_mask = 0u;
+                ID3D11ShaderResourceView *diag_views[16]{};
+                context->PSGetShaderResources(
+                    0u,
+                    16u,
+                    diag_views);
+                for (std::uint32_t slot = 0u;
+                     slot < 16u;
+                     ++slot) {
+                    if (diag_views[slot] != nullptr)
+                        native_0_15_mask |=
+                            1u << slot;
+                    release_view(diag_views[slot]);
+                }
+
+                char line[896]{};
                 std::snprintf(
                     line,
                     sizeof(line),
-                    "[DSRRL SUBSURFACE RESOURCE] body=%s target_rx=%u tuple=%u h0=%016llx h1=%016llx h2=%016llx spec=%u diff=%u norm=%u",
+                    "[DSRRL SUBSURFACE RESOURCE] body=%s target_rx=%u tuple=%u ctx_type=%u native012=0x%02X native0_15=0x%04X h0=%016llx h1=%016llx h2=%016llx spec=%u diff=%u norm=%u",
                     body_name,
                     static_cast<unsigned>(
                         target_plain_receiver_id),
                     tuple_ready ? 1u : 0u,
+                    static_cast<unsigned>(
+                        context->GetType()),
+                    static_cast<unsigned>(
+                        native_012_mask),
+                    static_cast<unsigned>(
+                        native_0_15_mask),
                     static_cast<unsigned long long>(h0),
                     static_cast<unsigned long long>(h1),
                     static_cast<unsigned long long>(h2),
