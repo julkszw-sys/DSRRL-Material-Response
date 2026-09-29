@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import argparse
 import hashlib
+import zlib
 from pathlib import Path
 
 RECORDS = [
@@ -8,16 +9,19 @@ RECORDS = [
      "0b8288d686c8f349ad87352946be51ffd007462f25357326bf47e736e690e511",
      "35880c0b2f2330208dfc21af6dd3d944218fcc4540cd8e59404a0aefc13c0b24",
      "5610f33a208fc7eb723d7b9d83f883ad61c5606a01950e402f64b8d3f708a317",
+     "bdf1e560291b239528b35d77e987b8ad61dd532d0cc2b8e57bfa2b7a3b093a3d",
      21052, 19856),
     ("Sdw", 34,
      "885337e50f3d29f086fd18e1f7524f28712031d0264964aef5f37037df7d7bcb",
      "d6038de494509e7cbcbfb904c4046e9427f3b921f6a35735a0b0d316f9976837",
      "847b762168b8da59146c23b00523bf8f01685f1b4d95cf3fe92de10bae325b08",
+     "ece91d19a0fc3d8306976df84380d7f8df4f6ce75f627e85a045565bf307f0b3",
      20752, 19556),
     ("Plain", 35,
      "3002cfb9aee6835412399c3be267ab94c5706d7d5030fc4cafc82bc54c55a860",
      "7d03c75b69f5730eb741a4d327189d0bbed8a8450fb0ac04e1505f7b91763701",
      "93e9c7432c5fda2dc26f72a1f51ffd0608b5fea0ae3ad1e34d14a4f00912fe2f",
+     "d3e85a585f31135e813521aa46b4da687ae87e7cd57108c3b4573436ee4b13c7",
      19256, 18060),
 ]
 
@@ -85,9 +89,15 @@ def main():
     rows = []
     for (
         label, receiver, source_sha, target_sha, patch_sha,
-        source_size, target_size
+        compressed_sha, source_size, target_size
     ) in RECORDS:
-        data = (root / f"{label}.bin").read_bytes()
+        compressed = (root / f"{label}.bin.z").read_bytes()
+        if hashlib.sha256(compressed).hexdigest() != compressed_sha:
+            raise SystemExit(f"{label}: compressed patch SHA-256 mismatch")
+        try:
+            data = zlib.decompress(compressed)
+        except zlib.error as exc:
+            raise SystemExit(f"{label}: zlib decode failed: {exc}") from exc
         validate_patch(
             label, data, patch_sha, source_size, target_size)
         symbol = f"k_subsurface_plain_patch_{label.lower()}"
