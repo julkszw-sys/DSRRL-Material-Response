@@ -756,8 +756,8 @@ jobs:
           }
 
           foreach ($required in @(
-            'register_subsurface_upper_lower_spec_replacement',
-            'subsurface_upper_lower_spec_replacements_',
+            'register_subsurface_spec_replacement',
+            'subsurface_spec_replacements_',
             'promote_prevalidated_subsurface_to_spec_rgb'
           )) {
             if (($entry + $tx + $subsurface) -notmatch [regex]::Escape($required)) { throw "Exact Subsurface paired SpecRGB materialization missing: $required" }
@@ -771,6 +771,14 @@ jobs:
             'operator_id::subsurface'
           )) {
             if ($subsurface -notmatch [regex]::Escape($required)) { throw "Subsurface exact-route adapter invariant missing: $required" }
+          }
+
+          foreach ($forbidden in @(
+            'prepare_upper_lower_carrier',
+            'prepare_prevalidated_route_request_with_upper_lower',
+            'prepared.upper_lower'
+          )) {
+            if ($subsurface -match [regex]::Escape($forbidden)) { throw "Subsurface regressed to visible Upper/Lower dependency: $forbidden" }
           }
 
           foreach ($required in @(
