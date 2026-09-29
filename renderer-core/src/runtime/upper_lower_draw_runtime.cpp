@@ -5108,6 +5108,21 @@ upper_lower_draw_runtime::pmetal_source_diagnostic() const noexcept
     out.draw_token_upper_lower_ready =
         g_reference_draw_token_upper_lower_ready.load(
             std::memory_order_relaxed);
+    out.source_consumer_tid =
+        g_reference_source_consumer_tid.load(
+            std::memory_order_relaxed);
+    out.source_consumer_serial =
+        g_reference_source_consumer_serial.load(
+            std::memory_order_relaxed);
+    out.cross_thread_selected_publish =
+        g_reference_cross_thread_selected_publish.load(
+            std::memory_order_relaxed);
+    out.cross_thread_draw_consume =
+        g_reference_cross_thread_draw_consume.load(
+            std::memory_order_relaxed);
+    out.cross_thread_serial_miss =
+        g_reference_cross_thread_serial_miss.load(
+            std::memory_order_relaxed);
     return out;
 }
 
