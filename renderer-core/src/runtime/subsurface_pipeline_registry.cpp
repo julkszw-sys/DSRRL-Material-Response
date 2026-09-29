@@ -11,6 +11,8 @@
 namespace dsrrl::runtime {
 namespace {
 
+constexpr bool k_subsurface_visible_bridge_enabled = false;
+
 struct bound_subsurface {
     std::uint64_t pipeline_handle = 0;
     std::uint32_t target_receiver = 0;
@@ -75,12 +77,20 @@ void forget_pipeline_locked(std::uint64_t pipeline_handle) noexcept
 
 } // namespace
 
+bool subsurface_visible_bridge_enabled() noexcept
+{
+    return k_subsurface_visible_bridge_enabled;
+}
+
 bool subsurface_receiver_observe_pipeline(
     std::uint64_t pipeline_handle,
     const void *pixel_shader_code,
     std::size_t pixel_shader_size) noexcept
 {
     ++g_pipeline_inits;
+
+    if (!subsurface_visible_bridge_enabled())
+        return false;
 
     if (pipeline_handle == 0u ||
         pixel_shader_code == nullptr ||
@@ -151,7 +161,8 @@ void subsurface_receiver_observe_bind(
     bool pixel_stage_bound,
     std::uint64_t pipeline_handle) noexcept
 {
-    if (!pixel_stage_bound ||
+    if (!subsurface_visible_bridge_enabled() ||
+        !pixel_stage_bound ||
         command_list_key == nullptr)
         return;
 
@@ -207,6 +218,9 @@ bool subsurface_receiver_bound(
     std::uint32_t &target_plain_receiver_id) noexcept
 {
     target_plain_receiver_id = 0u;
+
+    if (!subsurface_visible_bridge_enabled())
+        return false;
 
     if (command_list_key == nullptr) {
         telemetry::hot_count(g_lookup_misses);
