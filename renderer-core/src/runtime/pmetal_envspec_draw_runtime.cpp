@@ -15,6 +15,7 @@
 
 #include <array>
 #include <cmath>
+#include <cstdio>
 #include <cstring>
 
 namespace dsrrl::runtime {
@@ -44,6 +45,8 @@ constexpr std::uint32_t k_effect_fail_spec_rgb = 1u << 11u;
 constexpr std::uint32_t k_effect_fail_device = 1u << 12u;
 constexpr std::uint32_t k_effect_fail_b12 = 1u << 13u;
 constexpr std::uint32_t k_effect_fail_mutation = 1u << 14u;
+
+std::atomic_bool g_source_cut_logged{false};
 
 void effect_latch(std::atomic_bool &flag) noexcept
 {
@@ -598,6 +601,45 @@ bool pmetal_envspec_draw_runtime::prepare(
         effect_fail(
             effect_fail_mask_,
             k_effect_fail_source);
+
+        if (telemetry::effect_enabled() &&
+            !g_source_cut_logged.exchange(
+                true,
+                std::memory_order_relaxed)) {
+            const auto cut =
+                lightbank_.pmetal_draw_token_state();
+            char line[1024]{};
+            std::snprintf(
+                line,
+                sizeof(line),
+                "[DSRRL PMETAL SOURCE CUT] tid=%u rx=%u route=%u owner=%016llx slot=%u local_valid=%u local_source=%u token_ptid=%u token_serial=%llu last_selected_serial=%llu latest_publish_serial=%llu draws_since_selector=%u sel_a=%d sel_b=%d beta=%.6f",
+                static_cast<unsigned>(cut.current_tid),
+                static_cast<unsigned>(decision.receiver_id),
+                static_cast<unsigned>(decision.route_index),
+                static_cast<unsigned long long>(
+                    material.flver_identity_hash),
+                static_cast<unsigned>(
+                    material.material_slot),
+                cut.local_token_valid ? 1u : 0u,
+                cut.local_source_ready ? 1u : 0u,
+                static_cast<unsigned>(
+                    cut.token_producer_tid),
+                static_cast<unsigned long long>(
+                    cut.token_producer_serial),
+                static_cast<unsigned long long>(
+                    cut.last_selected_producer_serial),
+                static_cast<unsigned long long>(
+                    cut.latest_publish_serial),
+                static_cast<unsigned>(
+                    cut.completed_draws_since_selector),
+                static_cast<int>(cut.selector_a),
+                static_cast<int>(cut.selector_b),
+                static_cast<double>(cut.beta));
+            reshade::log::message(
+                reshade::log::level::info,
+                line);
+        }
+
         return false;
     }
     effect_latch(effect_source_ready_);
@@ -1252,6 +1294,7 @@ void pmetal_envspec_draw_runtime::reset() noexcept
     effect_b12_ready_.store(false);
     effect_request_ready_.store(false);
     effect_fail_mask_.store(0u);
+    g_source_cut_logged.store(false);
     quarantined_.store(false);
 }
 
