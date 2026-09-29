@@ -1867,153 +1867,88 @@ prepare_clustered_pointlight_material_requests(
     bool blended_material,
     prepared_material_resource_draw &prepared) noexcept
 {
-    if (spc)
-        return prepare_fixed_pointlight_material_requests(
-            context,
-            query,
-            true,
-            direct_pointlight_material_authorized,
-            blended_material,
-            prepared);
-
     prepared = {};
 
-    // The exact 12 NoSpc PntS bodies declare t0 diffuse + t2 normal and no
-    // t1 SpecRGB. They are all single-endpoint material bodies.
+    // PointLight is a lighting operator. PTDE Diffuse/Normal/SpecRGB
+    // replacements remain independently equipment-only and must not be a
+    // prerequisite for scene-wide clustered-light activation.
     if (context == nullptr ||
         g_quarantined.load() ||
         !direct_pointlight_material_authorized ||
-        blended_material ||
-        !core_.features().enabled(
-            core::operator_id::diffuse) ||
-        !core_.features().enabled(
-            core::operator_id::normal) ||
         !query.material.valid ||
         !query.material.owner_tuple_exact)
         return false;
 
-    ID3D11ShaderResourceView *views[3]{};
+    if (!spc) {
+        if (blended_material) {
+            hot_count(g_fail_open);
+            return true;
+        }
+
+        prepared.pointlight_surface_carrier = true;
+        return true;
+    }
+
+    // The direct Spc island reads its material-specular sample from private
+    // t10/t16. Preserve the host material response on non-equipment surfaces
+    // by aliasing the already-bound stock t1/t4 into those private slots.
+    // Stock t1/t4 stay untouched, and this path never loads a PTDE sidecar.
+    ID3D11ShaderResourceView *stock_spec_a = nullptr;
+    ID3D11ShaderResourceView *stock_spec_b = nullptr;
+
     context->PSGetShaderResources(
-        0u,
-        3u,
-        views);
+        1u,
+        1u,
+        &stock_spec_a);
 
-    auto release_all = [&]() noexcept {
-        for (auto *&view : views)
-            release_view(view);
-    };
+    if (blended_material) {
+        context->PSGetShaderResources(
+            4u,
+            1u,
+            &stock_spec_b);
+    }
 
-    std::uint64_t hashes[3]{};
-    logical_hashes_for(
-        views,
-        3u,
-        hashes);
-
-    const bool exact_diffuse_normal_pair =
-        hashes[0] != 0u &&
-        hashes[2] != 0u &&
-        generated::normal_diffuse_pair_allowed_v12(
-            hashes[0],
-            hashes[2]);
-
-    if (views[0] == nullptr ||
-        views[2] == nullptr ||
-        !exact_diffuse_normal_pair) {
-        release_all();
+    if (stock_spec_a == nullptr ||
+        (blended_material &&
+         stock_spec_b == nullptr)) {
+        release_view(stock_spec_a);
+        release_view(stock_spec_b);
         hot_count(g_fail_open);
         return true;
     }
 
-    const companion_lookup_request
-        requests[2]{
-            {views[0], asset_class::diffuse},
-            {views[2], asset_class::normal}
-        };
-    ID3D11ShaderResourceView *companions[2]{};
-    lookup_many(
-        requests,
-        2u,
-        companions);
-
-    auto *diffuse = companions[0];
-    auto *normal = companions[1];
-
-    if (diffuse == nullptr ||
-        normal == nullptr) {
-        release_view(diffuse);
-        release_view(normal);
-        release_all();
+    const std::uint32_t retained_needed =
+        blended_material ? 2u : 1u;
+    if (prepared.retained_count +
+            retained_needed >
+        prepared.retained_views.size()) {
+        release_view(stock_spec_a);
+        release_view(stock_spec_b);
         hot_count(g_fail_open);
         return true;
     }
 
-    island_draw_adapter_request diffuse_request{};
-    diffuse_request.primary =
-        core::operator_id::diffuse;
-    diffuse_request.receiver_verified = true;
-    diffuse_request.material_verified = true;
-    diffuse_request.srvs[0] = {
-        0u,
-        diffuse
-    };
-    diffuse_request.srv_count = 1u;
-
-    island_draw_adapter_request normal_request{};
-    normal_request.primary =
-        core::operator_id::normal;
-    normal_request.receiver_verified = true;
-    normal_request.material_verified = true;
-    normal_request.srvs[0] = {
-        2u,
-        normal
-    };
-    normal_request.srv_count = 1u;
-
-    draw_tx_mutation verify_diff{};
-    draw_tx_mutation verify_norm{};
-    if (build_island_draw_mutation(
-            diffuse_request,
-            verify_diff) !=
-            island_draw_adapter_result::ready ||
-        build_island_draw_mutation(
-            normal_request,
-            verify_norm) !=
-            island_draw_adapter_result::ready ||
-        prepared.request_count + 2u >
-            prepared.requests.size() ||
-        prepared.retained_count + 2u >
-            prepared.retained_views.size()) {
-        release_view(diffuse);
-        release_view(normal);
-        release_all();
-        hot_count(g_fail_open);
-        return true;
-    }
-
-    prepared.requests[
-        prepared.request_count++] =
-        diffuse_request;
-    prepared.requests[
-        prepared.request_count++] =
-        normal_request;
-
+    prepared.pointlight_spec_a =
+        stock_spec_a;
     prepared.retained_views[
         prepared.retained_count++] =
-        diffuse;
-    diffuse = nullptr;
-    prepared.retained_views[
-        prepared.retained_count++] =
-        normal;
-    normal = nullptr;
+        stock_spec_a;
+    stock_spec_a = nullptr;
 
-    prepared.diffuse = true;
-    prepared.normal = true;
-    hot_count(g_diffuse_requests);
-    hot_count(g_normal_requests);
+    if (blended_material) {
+        prepared.pointlight_spec_b =
+            stock_spec_b;
+        prepared.retained_views[
+            prepared.retained_count++] =
+            stock_spec_b;
+        stock_spec_b = nullptr;
+    }
 
-    release_view(diffuse);
-    release_view(normal);
-    release_all();
+    prepared.pointlight_stock_spec_alias = true;
+    prepared.pointlight_surface_carrier = true;
+
+    release_view(stock_spec_a);
+    release_view(stock_spec_b);
     return true;
 }
 
