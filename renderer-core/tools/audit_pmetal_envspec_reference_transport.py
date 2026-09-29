@@ -106,14 +106,51 @@ def main() -> None:
     )
     require(
         ul_cpp,
-        "invalidate_selected_reference_token_for_producer(",
-        "selector invalidation of stale P_Metal state",
+        "invalidate_selected_reference_token_for_owner(",
+        "material-gated invalidation of stale P_Metal state",
     )
     require(
         ul_cpp,
         "exact_pmetal_material_selection(",
         "exact P_Metal material gate",
     )
+
+    selector_begin = ul_cpp.index(
+        "void upper_lower_draw_runtime::selector_event("
+    )
+    pmetal_begin = ul_cpp.index(
+        "void upper_lower_draw_runtime::pmetal_material_event("
+    )
+    if selector_begin < 0 or pmetal_begin <= selector_begin:
+        fail("cannot isolate selector/P_Metal material event blocks")
+    selector_block = ul_cpp[selector_begin:pmetal_begin]
+    if "invalidate_selected_reference_token_for_" in selector_block:
+        fail(
+            "generic LightBank selector still invalidates persistent P_Metal state"
+        )
+
+    next_method = ul_cpp.find(
+        "bool upper_lower_draw_runtime::",
+        pmetal_begin + 1,
+    )
+    if next_method < 0:
+        fail("cannot isolate P_Metal material event block")
+    pmetal_block = ul_cpp[pmetal_begin:next_method]
+    invalidate_at = pmetal_block.find(
+        "invalidate_selected_reference_token_for_owner("
+    )
+    publish_at = pmetal_block.find(
+        "publish_selected_reference_token("
+    )
+    gate_at = pmetal_block.find(
+        "exact_pmetal_material_selection("
+    )
+    if gate_at < 0 or invalidate_at < 0 or publish_at < 0:
+        fail("P_Metal material-gated state transition is incomplete")
+    if not (gate_at < invalidate_at < publish_at):
+        fail(
+            "P_Metal selected-state invalidation/publication ordering is unsafe"
+        )
     require(
         ul_cpp,
         "g_draw_reference_token.fingerprint.owner !=",
@@ -204,6 +241,7 @@ def main() -> None:
     print("  LightBank reference carrier=ON for P_Metal EnvSpec")
     print("  producer payload=owner+sourceA/B+selectorA/B+beta only")
     print("  selected state=exact selector + exact actual P_Metal material")
+    print("  persistent P_Metal invalidation=material-gated; generic selectors preserve state")
     print("  selector row address=retail low byte; full selector retained for identity")
     print("  P_Metal source decode=exact V13 bank signature + PTDE donor after consumer gate")
     print("  HemEnvLerp U/L-off=stock b0 operands preserved; no b13 requirement")
