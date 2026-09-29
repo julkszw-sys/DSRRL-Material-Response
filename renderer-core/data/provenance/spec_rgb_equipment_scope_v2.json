@@ -25,10 +25,11 @@
     "ptde_rgb": "consumer-local sidecar resource transaction",
     "fail_open": "stock DSR resources when exact equipment owner/resource/consumer conjunction is absent"
   },
-  "telemetry_rule": "SpecRGB candidate is emitted only for an exact equipment owner with one of the explicit legal consumers; owner_tuple_exact alone is insufficient.",
+  "telemetry_rule": "SpecRGB is not pre-marked as a generic effect candidate. A passive no-bind probe validates exact equipment stock-t1 -> PTDE sidecar companion liveness; effect-matrix authority/prepared/applied is emitted only by an explicit consumer-retained resource request.",
   "source_basis": {
     "candidate_scope_commit": "16791460e15b47245ed3f7a7e4ebc168bb307a7a",
-    "audit": "renderer-core/tools/audit_specrgb_equipment_scope.py"
+    "audit": "renderer-core/tools/audit_specrgb_equipment_scope.py",
+    "carrier_probe_commit": "e671dfa1d7ff1e43371b2b7d963cdf53d886e2d5"
   },
   "pixel_behavior": "consumer-owned; not promoted by resource-carrier construction"
 }
