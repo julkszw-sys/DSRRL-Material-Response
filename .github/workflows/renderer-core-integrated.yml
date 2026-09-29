@@ -6,6 +6,7 @@ on:
       - main
       - dev/renderer-core-v1-islands
       - agent/integrated-single-addon-a1-20260924
+      - verify-motionblur-camera-neutral
     paths:
       - "renderer-core/integrated/**"
       - "renderer-core/include/dsrrl/runtime/**"
