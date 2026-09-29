@@ -5313,6 +5313,8 @@ bool prepare_island_batch(
                 upper_lower_identity);
 
     const bool envspec_ul_verified =
+        g_core.features().enabled(
+            dsrrl::core::operator_id::upper_lower) &&
         upper_lower_bound &&
         upper_lower_identity.stratum ==
             dsrrl::operators::lightbank::
@@ -6494,8 +6496,21 @@ bool AddonInit(
     const bool upper_lower_enabled =
         g_core.features().enabled(
             dsrrl::core::operator_id::upper_lower);
-    const bool upper_lower_hooks =
-        !upper_lower_enabled ||
+    const bool pmetal_envspec_enabled =
+        g_core.features().enabled(
+            dsrrl::core::operator_id::env_spec);
+
+    // The LightBank reference-token transport is a shared semantic carrier,
+    // not the Upper/Lower visible operator. P_Metal EnvSpec requires the
+    // producer/selector source tuple even while the pixel-falsified U/L bridge
+    // remains disabled. Keep transport liveness independent from U/L effect
+    // activation; direct U/L mutation is separately guarded inside the
+    // runtime and remains OFF unless explicitly opted in.
+    const bool lightbank_reference_transport_required =
+        upper_lower_enabled ||
+        pmetal_envspec_enabled;
+    const bool lightbank_reference_hooks =
+        !lightbank_reference_transport_required ||
         (flver_hooks &&
          g_upper_lower.install());
 
@@ -6503,12 +6518,15 @@ bool AddonInit(
         reshade::log::message(
             reshade::log::level::info,
             "[DSRRL CORE+ISLANDS " DSRRL_CORE_ISLANDS_VERSION
-            "] Upper/Lower bridge DEFAULT FAIL-OPEN: current draw-time consumer path is pixel-falsified; stock DSR U/L preserved. Set DSRRL_EXPERIMENTAL_UPPER_LOWER_BRIDGE=1 only for focused diagnostics.");
-    } else if (!upper_lower_hooks) {
+            "] Upper/Lower bridge DEFAULT FAIL-OPEN: stock DSR U/L preserved; LightBank reference-token transport may remain active for isolated downstream consumers such as P_Metal EnvSpec. Set DSRRL_EXPERIMENTAL_UPPER_LOWER_BRIDGE=1 only for focused U/L diagnostics.");
+    }
+
+    if (lightbank_reference_transport_required &&
+        !lightbank_reference_hooks) {
         reshade::log::message(
             reshade::log::level::warning,
             "[DSRRL CORE+ISLANDS " DSRRL_CORE_ISLANDS_VERSION
-            "] Upper/Lower producer hooks FAIL-OPEN: stock DSR b13 preserved.");
+            "] LightBank reference-token transport FAIL-OPEN: U/L stays stock and P_Metal EnvSpec source routing is unavailable.");
     }
 
     {
