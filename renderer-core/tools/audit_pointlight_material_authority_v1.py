@@ -69,6 +69,41 @@ def main() -> int:
         if not str(row.get("c102_f32_bits", "")).startswith("0x"):
             raise SystemExit("invalid c102 bits")
 
+    raw_groups: dict[str, list[dict]] = {}
+    for row in active:
+        raw_groups.setdefault(str(row["dsr_mtd_sha256"]), []).append(row)
+
+    conflicting_raw = []
+    safe_raw_rows = 0
+    for sha, rows in raw_groups.items():
+        signatures = {
+            (
+                row.get("material_mode"),
+                tuple(row.get("c100_f32_bits", [])),
+                tuple(row.get("c101_f32_bits", [])),
+                row.get("c102_f32_bits"),
+                bool(row.get("c101_scalar", False)),
+            )
+            for row in rows
+        }
+        if len(signatures) > 1:
+            conflicting_raw.append((sha, rows))
+        else:
+            safe_raw_rows += len(rows)
+
+    safe_raw_groups = len(raw_groups) - len(conflicting_raw)
+    if len(raw_groups) != 195:
+        raise SystemExit(f"raw-MTD identity count drift: {len(raw_groups)}")
+    if len(conflicting_raw) != 4:
+        raise SystemExit(
+            f"PointLight raw-MTD behavior ambiguity drift: {len(conflicting_raw)}"
+        )
+    if safe_raw_groups != 191 or safe_raw_rows != 197:
+        raise SystemExit(
+            f"safe raw-MTD authority drift: groups={safe_raw_groups} "
+            f"rows={safe_raw_rows}"
+        )
+
     variants = [
         x for x in deferred
         if x.get("reason") ==
@@ -99,7 +134,9 @@ def main() -> int:
     print(
         "POINTLIGHT_MATERIAL_AUTHORITY_PASS "
         f"active={len(active)} spc={len(spc)} nospc={len(nospc)} "
-        f"rgb_c101={len(non_scalar)} deferred_variant={len(variants)} "
+        f"rgb_c101={len(non_scalar)} raw_safe_groups={safe_raw_groups} "
+        f"raw_safe_rows={safe_raw_rows} raw_conflicts={len(conflicting_raw)} "
+        f"deferred_variant={len(variants)} "
         f"deferred_ambiguous={len(ambiguous)}"
     )
     return 0
