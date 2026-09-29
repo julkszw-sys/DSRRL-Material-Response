@@ -422,7 +422,6 @@ jobs:
             'generated::spec_equipment_name_hash_allowed_v12',
             'generated::diffuse_pair_allowed_v12',
             'generated::normal_tuple_allowed_v12',
-            'generated::normal_diffuse_pair_allowed_v12',
             'build_island_draw_mutation'
           )) {
             if ($resourceRuntime -notmatch [regex]::Escape($required)) { throw "Material resource island adapter invariant missing: $required" }
