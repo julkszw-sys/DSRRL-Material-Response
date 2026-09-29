@@ -30,6 +30,10 @@ struct clustered_pnts_pipeline_runtime::record {
 
 thread_local clustered_pnts_pipeline_runtime::bound_tls_state
     clustered_pnts_pipeline_runtime::bound_tls_{};
+thread_local std::array<
+    clustered_pnts_pipeline_runtime::attestation_tls_entry,
+    clustered_pnts_pipeline_runtime::k_attestation_cache_size>
+    clustered_pnts_pipeline_runtime::attestation_tls_{};
 
 clustered_pnts_pipeline_runtime::~clustered_pnts_pipeline_runtime()
 {
@@ -264,28 +268,66 @@ void clustered_pnts_pipeline_runtime::on_init_pipeline(
     }
 
     pipelines_[pipeline.handle] = found->second;
+    pipeline_epoch_.fetch_add(
+        1u,
+        std::memory_order_release);
     telemetry::hot_count(init_attested_);
 }
 
-void clustered_pnts_pipeline_runtime::on_bind_pipeline(
+bool clustered_pnts_pipeline_runtime::on_bind_pipeline(
     reshade::api::command_list *cmd_list,
     reshade::api::pipeline_stage stages,
     reshade::api::pipeline pipeline) noexcept
 {
     if (cmd_list == nullptr)
-        return;
+        return false;
 
     const bool pixel =
         (static_cast<std::uint32_t>(stages) &
          static_cast<std::uint32_t>(
              reshade::api::pipeline_stage::pixel_shader)) != 0u;
     if (!pixel)
-        return;
+        return false;
 
     const auto command =
         static_cast<std::uint64_t>(
             reinterpret_cast<std::uintptr_t>(
                 cmd_list));
+
+    // The exact PointLight pipeline registry is the bind-time authority.
+    // The integrated route cache is only an optimization and may not suppress
+    // this lookup. Negative lookups are epoch-cached per thread, so ordinary
+    // non-PointLight binds do not take this runtime's mutex repeatedly.
+    if (!pipeline_attested_cached(
+            pipeline.handle)) {
+        if (!any_bound_.load(
+                std::memory_order_acquire)) {
+            bound_tls_ = {
+                this,
+                command,
+                {},
+                bound_epoch_.load(
+                    std::memory_order_relaxed),
+                false
+            };
+            return false;
+        }
+
+        std::lock_guard<std::mutex> lock(mutex_);
+        bound_.erase(command);
+        any_bound_.store(
+            !bound_.empty(),
+            std::memory_order_release);
+        bound_tls_ = {
+            this,
+            command,
+            {},
+            bound_epoch_.load(
+                std::memory_order_relaxed),
+            false
+        };
+        return false;
+    }
 
     std::lock_guard<std::mutex> lock(mutex_);
     const auto epoch =
@@ -294,20 +336,32 @@ void clustered_pnts_pipeline_runtime::on_bind_pipeline(
 
     if (quarantined_.load()) {
         bound_.erase(command);
+        any_bound_.store(
+            !bound_.empty(),
+            std::memory_order_release);
         bound_tls_ = {this,command,{},epoch,false};
-        return;
+        return false;
     }
 
     const auto found =
         pipelines_.find(pipeline.handle);
     if (found == pipelines_.end()) {
+        // A destroy can race the cached positive verdict. Fail open and
+        // invalidate the current command-list binding rather than replaying
+        // a stale PointLight replacement.
         bound_.erase(command);
+        any_bound_.store(
+            !bound_.empty(),
+            std::memory_order_release);
         bound_tls_ = {this,command,{},epoch,false};
         telemetry::hot_count(bind_misses_);
-        return;
+        return false;
     }
 
     bound_[command] = found->second;
+    any_bound_.store(
+        true,
+        std::memory_order_release);
     bound_tls_ = {
         this,
         command,
@@ -316,8 +370,8 @@ void clustered_pnts_pipeline_runtime::on_bind_pipeline(
         true
     };
     telemetry::hot_count(bind_hits_);
+    return true;
 }
-
 void clustered_pnts_pipeline_runtime::on_destroy_pipeline(
     reshade::api::pipeline pipeline) noexcept
 {
@@ -332,6 +386,9 @@ void clustered_pnts_pipeline_runtime::on_destroy_pipeline(
 
     const auto dead = found->second;
     pipelines_.erase(found);
+    pipeline_epoch_.fetch_add(
+        1u,
+        std::memory_order_release);
 
     for (auto it = bound_.begin();
          it != bound_.end();) {
@@ -341,10 +398,14 @@ void clustered_pnts_pipeline_runtime::on_destroy_pipeline(
             ++it;
     }
 
+    any_bound_.store(
+        !bound_.empty(),
+        std::memory_order_release);
     bound_epoch_.fetch_add(
         1u,
         std::memory_order_release);
     bound_tls_ = {};
+    attestation_tls_ = {};
 }
 
 void clustered_pnts_pipeline_runtime::on_destroy_device(
@@ -355,27 +416,76 @@ void clustered_pnts_pipeline_runtime::on_destroy_device(
         return;
 
     bound_.clear();
+    any_bound_.store(
+        false,
+        std::memory_order_release);
     pipelines_.clear();
+    pipeline_epoch_.fetch_add(
+        1u,
+        std::memory_order_release);
     candidates_.clear();
     device_ = nullptr;
     bound_epoch_.fetch_add(
         1u,
         std::memory_order_release);
     bound_tls_ = {};
+    attestation_tls_ = {};
 }
 
-bool clustered_pnts_pipeline_runtime::pipeline_attested(
+bool clustered_pnts_pipeline_runtime::pipeline_attested_cached(
     std::uint64_t pipeline_handle) const noexcept
 {
     if (pipeline_handle == 0u ||
         quarantined_.load())
         return false;
 
-    std::lock_guard<std::mutex> lock(mutex_);
-    return pipelines_.find(
-        pipeline_handle) != pipelines_.end();
+    const auto epoch =
+        pipeline_epoch_.load(
+            std::memory_order_acquire);
+    const auto mixed =
+        (pipeline_handle >> 4u) ^
+        (pipeline_handle >> 17u) ^
+        (pipeline_handle >> 31u);
+    auto &cached =
+        attestation_tls_[
+            static_cast<std::size_t>(
+                mixed &
+                (k_attestation_cache_size - 1u))];
+
+    if (cached.runtime == this &&
+        cached.pipeline == pipeline_handle &&
+        cached.epoch == epoch &&
+        pipeline_epoch_.load(
+            std::memory_order_acquire) == epoch)
+        return cached.present;
+
+    bool present = false;
+    std::uint64_t stable_epoch = epoch;
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        present =
+            pipelines_.find(pipeline_handle) !=
+            pipelines_.end();
+        stable_epoch =
+            pipeline_epoch_.load(
+                std::memory_order_relaxed);
+    }
+
+    cached = {
+        this,
+        pipeline_handle,
+        stable_epoch,
+        present
+    };
+    return present;
 }
 
+bool clustered_pnts_pipeline_runtime::pipeline_attested(
+    std::uint64_t pipeline_handle) const noexcept
+{
+    return pipeline_attested_cached(
+        pipeline_handle);
+}
 bool clustered_pnts_pipeline_runtime::bound_metadata(
     reshade::api::command_list *cmd_list,
     bool &spc,
@@ -512,13 +622,20 @@ void clustered_pnts_pipeline_runtime::reset() noexcept
 {
     std::lock_guard<std::mutex> lock(mutex_);
     bound_.clear();
+    any_bound_.store(
+        false,
+        std::memory_order_release);
     pipelines_.clear();
+    pipeline_epoch_.fetch_add(
+        1u,
+        std::memory_order_release);
     candidates_.clear();
     device_ = nullptr;
     bound_epoch_.fetch_add(
         1u,
         std::memory_order_release);
     bound_tls_ = {};
+    attestation_tls_ = {};
 
     candidates_seen_.store(0u);
     candidate_create_ok_.store(0u);

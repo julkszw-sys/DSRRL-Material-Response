@@ -4354,11 +4354,47 @@ void on_bind_pipeline(
             stages,
             pipeline);
 
-    const auto route_mask =
+    auto route_mask =
         observe_integrated_draw_route_bind(
             cmd_list,
             pixel_stage_bound,
             pipeline.handle);
+
+    // PointLight pipeline registries are the exact receiver authority at
+    // bind-time. The integrated route map is an optimization only: the bfb458
+    // runtime proved both PointLight registries could attest init pipelines
+    // while the route cache suppressed every bind (fixed 0/0, clustered 0/0).
+    // Query the epoch-cached exact registries on every pixel bind, then repair
+    // this command-list's route TLS from the authoritative result.
+    if (pixel_stage_bound) {
+        const bool fixed_pointlight_exact =
+            g_fixed_pointlight_pipeline.on_bind_pipeline(
+                cmd_list,
+                stages,
+                pipeline);
+        const bool clustered_pointlight_exact =
+            g_clustered_pnts_pipeline.on_bind_pipeline(
+                cmd_list,
+                stages,
+                pipeline);
+
+        if (fixed_pointlight_exact)
+            route_mask |= k_route_fixed_pointlight;
+        else
+            route_mask &= static_cast<std::uint8_t>(
+                ~k_route_fixed_pointlight);
+
+        if (clustered_pointlight_exact)
+            route_mask |= k_route_clustered_pointlight;
+        else
+            route_mask &= static_cast<std::uint8_t>(
+                ~k_route_clustered_pointlight);
+
+        if (g_integrated_draw_route_tls.command_list_key ==
+                cmd_list)
+            g_integrated_draw_route_tls.mask =
+                route_mask;
+    }
 
     if (pixel_stage_bound && route_mask != 0u) {
         if ((route_mask & k_route_stable) != 0u)
@@ -4382,22 +4418,6 @@ void on_bind_pipeline(
     dsrrl::core::operator_mask selected_owners = 0u;
     std::uint16_t selected_ops = 0u;
     std::uint32_t receiver_id = 0u;
-
-    if (pixel_stage_bound &&
-        (route_mask &
-         k_route_fixed_pointlight) != 0u)
-        g_fixed_pointlight_pipeline.on_bind_pipeline(
-            cmd_list,
-            stages,
-            pipeline);
-
-    if (pixel_stage_bound &&
-        (route_mask &
-         k_route_clustered_pointlight) != 0u)
-        g_clustered_pnts_pipeline.on_bind_pipeline(
-            cmd_list,
-            stages,
-            pipeline);
 
     const bool target =
         pixel_stage_bound &&
