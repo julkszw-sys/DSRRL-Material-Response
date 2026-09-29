@@ -4722,6 +4722,13 @@ bool upper_lower_draw_runtime::install(
     g_quarantined.store(false);
     g_restore_failed.store(false);
     g_enabled.store(true);
+
+    if (experimental_pmetal_ptde_firelink_drawparam_enabled()) {
+        reshade::log::message(
+            reshade::log::level::info,
+            "[DSRRL PMETAL TEST] exact P_Metal only: PTDE Firelink LightBank EnvSpec donor is hard-coded into the P_Metal b12 source equation; live row selection and beta are preserved.");
+    }
+
     return true;
 }
 
