@@ -1,5 +1,7 @@
 #pragma once
 
+// Isolated CI verification branch marker; no runtime semantics.
+
 #include <array>
 #include <cstddef>
 #include <string_view>
