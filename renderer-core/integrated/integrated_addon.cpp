@@ -104,8 +104,7 @@ dsrrl::runtime::subsurface_draw_runtime
     g_subsurface(
         g_core,
         g_mr_draw_runtime,
-        g_material_resources,
-        g_upper_lower);
+        g_material_resources);
 dsrrl::runtime::upper_lower_hemenv_draw_runtime
     g_upper_lower_hemenv(g_core, g_upper_lower);
 dsrrl::runtime::hemdir3_draw_runtime
@@ -3409,35 +3408,17 @@ bool register_subsurface_plain_target_chain(
         mr.receiver_id != expected_receiver_id)
         return false;
 
-    std::vector<std::uint8_t> mr_ul_payload;
-    const auto mr_ul =
-        dsrrl::operators::lightbank::
-            augment_upper_lower_hemenv_verified_base(
-                plain_source,
-                plain_size,
-                mr_payload.data(),
-                mr_payload.size(),
-                4u,
-                mr_ul_payload);
-
-    if (mr_ul.result !=
-            dsrrl::operators::lightbank::
-                upper_lower_hemenv_materialize_result::applied ||
-        mr_ul.family !=
-            dsrrl::operators::lightbank::
-                upper_lower_hemenv_family::hemenv ||
-        mr_ul.stratum !=
-            dsrrl::operators::lightbank::
-                upper_lower_hemenv_stratum::spc ||
-        mr_ul.stable_receiver_id != expected_receiver_id)
-        return false;
-
+    // Subsurface removes only the DSR-only SSS fork. Its ordinary PTDE
+    // surface target must preserve stock DSR Upper/Lower unless the
+    // independently-authorized U/L island is active. Therefore the dedicated
+    // SpecRGB consumer is derived directly from the stable MR target, never
+    // from the MR+U/L composed shader and never from a b13 dependency.
     std::vector<std::uint8_t> subsurface_spec_payload;
     const auto spec_result =
         dsrrl::operators::resource_bridges::
             materialize_spec_rgb_consumer(
-                mr_ul_payload.data(),
-                mr_ul_payload.size(),
+                mr_payload.data(),
+                mr_payload.size(),
                 subsurface_spec_payload,
                 false);
 
@@ -3456,39 +3437,24 @@ bool register_subsurface_plain_target_chain(
             mr_payload.data(),
             mr_payload.size(),
             mr.composed_owners);
-    const bool ul_ok =
-        g_mr_draw_runtime.register_receiver_upper_lower_replacement(
-            expected_receiver_id,
-            mr_ul_payload.data(),
-            mr_ul_payload.size(),
-            mr.composed_owners);
     const bool spec_ok =
-        g_mr_draw_runtime.
-            register_subsurface_upper_lower_spec_replacement(
-                expected_receiver_id,
-                subsurface_spec_payload.data(),
-                subsurface_spec_payload.size(),
-                mr.composed_owners |
-                    spec_owner);
+        g_mr_draw_runtime.register_subsurface_spec_replacement(
+            expected_receiver_id,
+            subsurface_spec_payload.data(),
+            subsurface_spec_payload.size(),
+            mr.composed_owners |
+                spec_owner);
 
     if (mr_ok)
         ++g_mr_payload_materialize_ok;
     else
         ++g_mr_payload_materialize_fail;
 
-    if (ul_ok)
-        ++g_mr_ul_payload_materialize_ok;
-    else
-        ++g_mr_ul_payload_materialize_fail;
-
     if (spec_ok)
         ++g_subsurface_spec_payload_materialize_ok;
 
-    // The caller owns the single aggregate Subsurface failure count so
-    // materializer failures and registration failures cannot double-count.
-    return mr_ok && ul_ok && spec_ok;
+    return mr_ok && spec_ok;
 }
-
 bool on_create_pipeline(
     reshade::api::device *device,
     reshade::api::pipeline_layout layout,
@@ -3542,8 +3508,6 @@ bool on_create_pipeline(
                 dsrrl::core::operator_id::subsurface) &&
             g_core.features().enabled(
                 dsrrl::core::operator_id::material_response) &&
-            g_core.features().enabled(
-                dsrrl::core::operator_id::upper_lower) &&
             g_core.features().enabled(
                 dsrrl::core::operator_id::spec_rgb)) {
             std::vector<std::uint8_t> plain_target;
@@ -3746,9 +3710,60 @@ bool on_create_pipeline(
             else
                 ++g_mr_payload_materialize_fail;
 
-            // MR reset: generic diffuse response must never feed PTDE SpecRGB
-            // into the surviving DSR F0/PBL receiver. SpecRGB is owned only by
-            // verified PTDE EnvSpec/local-specular operator islands.
+            // Subsurface is the only post-reset stable-HemEnv route allowed
+            // to pair generic diffuse-v1 with a t10 SpecRGB consumer. Keep it
+            // operator-local: derive from the stable MR target so stock DSR
+            // Upper/Lower remains untouched while the SSS fork is bypassed.
+            bool subsurface_target = false;
+            for (const auto &route :
+                 dsrrl::operators::resource_bridges::
+                     k_subsurface_receiver_routes) {
+                if (route.target_plain_receiver_id ==
+                    mr.receiver_id) {
+                    subsurface_target = true;
+                    break;
+                }
+            }
+
+            if (subsurface_target &&
+                g_core.features().enabled(
+                    dsrrl::core::operator_id::subsurface) &&
+                g_core.features().enabled(
+                    dsrrl::core::operator_id::spec_rgb)) {
+                std::vector<std::uint8_t>
+                    subsurface_spec_payload;
+                const auto spec_result =
+                    dsrrl::operators::resource_bridges::
+                        materialize_spec_rgb_consumer(
+                            mr_payload.data(),
+                            mr_payload.size(),
+                            subsurface_spec_payload,
+                            false);
+
+                if (spec_result ==
+                    dsrrl::operators::resource_bridges::
+                        spec_rgb_consumer_result::applied) {
+                    const auto spec_owner =
+                        dsrrl::core::operator_bit(
+                            dsrrl::core::operator_id::
+                                spec_rgb);
+                    if (g_mr_draw_runtime.
+                            register_subsurface_spec_replacement(
+                                mr.receiver_id,
+                                subsurface_spec_payload.data(),
+                                subsurface_spec_payload.size(),
+                                mr.composed_owners |
+                                    spec_owner))
+                        ++g_subsurface_spec_payload_materialize_ok;
+                    else
+                        ++g_subsurface_spec_payload_materialize_fail;
+                } else {
+                    ++g_subsurface_spec_payload_materialize_fail;
+                }
+            }
+
+            // Upper/Lower is independently materialized for its own exact
+            // consumer path. Subsurface never depends on this replacement.
             std::vector<std::uint8_t> mr_ul_payload;
             const auto mr_ul =
                 dsrrl::operators::lightbank::
@@ -3777,57 +3792,6 @@ bool on_create_pipeline(
                     ++g_mr_ul_payload_materialize_ok;
                 else
                     ++g_mr_ul_payload_materialize_fail;
-
-                // Subsurface is the only post-reset path allowed to pair this
-                // generic diffuse-v1 base with a t10 SpecRGB consumer. Build
-                // the pair only for the three exact PTDE plain-body targets;
-                // draw-time use remains gated by exact DSBT material +
-                // Subsurf receiver + body sidecar in subsurface_draw_runtime.
-                bool subsurface_target = false;
-                for (const auto &route :
-                     dsrrl::operators::resource_bridges::
-                         k_subsurface_receiver_routes) {
-                    if (route.target_plain_receiver_id ==
-                        mr.receiver_id) {
-                        subsurface_target = true;
-                        break;
-                    }
-                }
-
-                if (subsurface_target) {
-                    std::vector<std::uint8_t>
-                        subsurface_spec_payload;
-                    const auto spec_result =
-                        dsrrl::operators::resource_bridges::
-                            materialize_spec_rgb_consumer(
-                                mr_ul_payload.data(),
-                                mr_ul_payload.size(),
-                                subsurface_spec_payload,
-                                false);
-
-                    if (spec_result ==
-                        dsrrl::operators::resource_bridges::
-                            spec_rgb_consumer_result::applied) {
-                        const auto spec_owner =
-                            dsrrl::core::operator_bit(
-                                dsrrl::core::operator_id::
-                                    spec_rgb);
-                        if (g_mr_draw_runtime.
-                                register_subsurface_upper_lower_spec_replacement(
-                                    mr.receiver_id,
-                                    subsurface_spec_payload.data(),
-                                    subsurface_spec_payload.size(),
-                                    mr.composed_owners |
-                                        spec_owner))
-                            ++g_subsurface_spec_payload_materialize_ok;
-                        else
-                            ++g_subsurface_spec_payload_materialize_fail;
-                    } else {
-                        ++g_subsurface_spec_payload_materialize_fail;
-                    }
-                }
-
-                // No generic MR+SpecRGB variant: see anti-hybrid rule above.
             } else if (
                 mr_ul.result !=
                     dsrrl::operators::lightbank::

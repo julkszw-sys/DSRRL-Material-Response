@@ -108,9 +108,10 @@ public:
     bool has_receiver_upper_lower_replacement(
         std::uint32_t receiver_id) const noexcept;
 
-    // Dedicated exact-Subsurface paired consumer. This bank is intentionally
-    // unreachable from generic MR draw preparation.
-    bool register_subsurface_upper_lower_spec_replacement(
+    // Dedicated exact-Subsurface paired SpecRGB consumer. It is derived from
+    // the stable MR target and therefore preserves stock DSR Upper/Lower.
+    // This bank is intentionally unreachable from generic MR draw preparation.
+    bool register_subsurface_spec_replacement(
         std::uint32_t receiver_id,
         const void *dxbc,
         std::size_t dxbc_size,
@@ -205,7 +206,7 @@ private:
         lerp,
         lerp_upper_lower,
         upper_lower,
-        subsurface_upper_lower_spec
+        subsurface_spec
     };
 
     bool acquire_replacement(
@@ -238,7 +239,7 @@ private:
     std::unordered_map<std::uint32_t, replacement_record>
         upper_lower_replacements_;
     std::unordered_map<std::uint32_t, replacement_record>
-        subsurface_upper_lower_spec_replacements_;
+        subsurface_spec_replacements_;
     std::unordered_map<std::uint32_t, ID3D11Buffer *> b12_by_route_;
     std::atomic<std::uint64_t> resource_epoch_{1u};
 

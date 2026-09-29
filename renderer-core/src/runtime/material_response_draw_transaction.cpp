@@ -147,7 +147,7 @@ struct replacement_tls_cache_entry {
 
 // Replacement identity is (bank, receiver). Five active banks share the
 // receiver namespace after the MR reset: stable, Lerp, their U/L compositions,
-// plus the narrow 33-35 Subsurface U/L+SpecRGB bank. 128 slots cover the
+// plus the narrow 33-35 Subsurface stock-U/L+SpecRGB bank. 128 slots cover the
 // complete current key surface without resurrecting generic SpecRGB banks.
 constexpr std::size_t k_replacement_tls_cache_slots = 128u;
 thread_local std::array<
@@ -292,9 +292,9 @@ bool material_response_draw_runtime::acquire_replacement(
     case replacement_bank::upper_lower:
         source = &upper_lower_replacements_;
         break;
-    case replacement_bank::subsurface_upper_lower_spec:
+    case replacement_bank::subsurface_spec:
         source =
-            &subsurface_upper_lower_spec_replacements_;
+            &subsurface_spec_replacements_;
         break;
     }
 
@@ -470,12 +470,12 @@ void material_response_draw_runtime::release_resources() noexcept
     upper_lower_replacements_.clear();
 
     for (auto &entry :
-         subsurface_upper_lower_spec_replacements_) {
+         subsurface_spec_replacements_) {
         auto *shader = entry.second.shader;
         if (shader != nullptr)
             shader->Release();
     }
-    subsurface_upper_lower_spec_replacements_.clear();
+    subsurface_spec_replacements_.clear();
 
     for (auto &entry : b12_by_route_) {
         auto *buffer = entry.second;
@@ -560,12 +560,12 @@ void material_response_draw_runtime::on_destroy_device(
     upper_lower_replacements_.clear();
 
     for (auto &entry :
-         subsurface_upper_lower_spec_replacements_) {
+         subsurface_spec_replacements_) {
         auto *shader = entry.second.shader;
         if (shader != nullptr)
             shader->Release();
     }
-    subsurface_upper_lower_spec_replacements_.clear();
+    subsurface_spec_replacements_.clear();
 
     for (auto &entry : b12_by_route_) {
         auto *buffer = entry.second;
@@ -764,7 +764,7 @@ has_receiver_upper_lower_replacement(
 }
 
 bool material_response_draw_runtime::
-register_subsurface_upper_lower_spec_replacement(
+register_subsurface_spec_replacement(
     std::uint32_t receiver_id,
     const void *dxbc,
     std::size_t dxbc_size,
@@ -797,7 +797,7 @@ register_subsurface_upper_lower_spec_replacement(
     }
 
     return register_replacement_record(
-        subsurface_upper_lower_spec_replacements_,
+        subsurface_spec_replacements_,
         receiver_id,
         dxbc,
         dxbc_size,
@@ -1230,7 +1230,7 @@ promote_prevalidated_subsurface_to_spec_rgb(
         prepared.receiver_id > 35u ||
         prepared.family !=
             material_response_replacement_family::
-                stable_upper_lower ||
+                stable ||
         local_quarantine_.load() ||
         transactions_.quarantined())
         return false;
@@ -1238,7 +1238,7 @@ promote_prevalidated_subsurface_to_spec_rgb(
     replacement_record replacement{};
     if (!acquire_replacement(
             replacement_bank::
-                subsurface_upper_lower_spec,
+                subsurface_spec,
             prepared.receiver_id,
             replacement))
         return false;

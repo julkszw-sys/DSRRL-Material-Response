@@ -61,5 +61,16 @@ the replayed draw. This is intentionally narrower than the older create-time
 carrier proposal, which would have required source-complete shader-owner
 exclusivity before material identity was available.
 
+### Upper/Lower isolation
+
+Subsurface owns only the DSR-only `ColDifSpcBmpSubsurf` fork. Upper/Lower is
+an independent operator and is not an activation prerequisite for the
+DSBT->DSB bypass. The dedicated Subsurface `MR + SpecRGB` target is derived
+from the stable ordinary HemEnv target, not from an `MR + UpperLower`
+composition, and the draw runtime does not request or bind a PTDE b13 carrier.
+Therefore stock DSR Upper/Lower is preserved while the visible U/L bridge is
+disabled. Enabling a separate U/L island later must be proven and composed
+independently rather than smuggled into the Subsurface carrier.
+
 Any missing coordinate preserves the host route. Construction of this gate does
 not promote runtime activation or PTDE-visible pixel equivalence.
