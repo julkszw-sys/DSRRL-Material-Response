@@ -62,7 +62,7 @@ public:
         const reshade::api::pipeline_subobject *subobjects,
         reshade::api::pipeline pipeline) noexcept;
 
-    void on_bind_pipeline(
+    bool on_bind_pipeline(
         reshade::api::command_list *cmd_list,
         reshade::api::pipeline_stage stages,
         reshade::api::pipeline pipeline) noexcept;
@@ -151,6 +151,7 @@ private:
     reshade::api::device *device_ = nullptr;
     std::atomic<std::uint64_t> bound_epoch_{1u};
     std::atomic<std::uint64_t> pipeline_epoch_{1u};
+    std::atomic_bool any_bound_{false};
 
     std::atomic<std::uint64_t> candidates_seen_{0};
     std::atomic<std::uint64_t> candidate_create_ok_{0};
