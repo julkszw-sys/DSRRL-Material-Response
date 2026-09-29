@@ -135,6 +135,7 @@ std::atomic_bool g_mr_once_identity{false};
 std::atomic_bool g_mr_once_batch_ready{false};
 std::atomic_bool g_mr_once_draw_issued{false};
 std::atomic<std::uint32_t> g_pointlight_gate_log_mask{0u};
+std::atomic<std::uint32_t> g_pointlight_prep_log_mask{0u};
 std::atomic_bool g_pointlight_active_logged{false};
 std::atomic<std::uint64_t> g_mr_ul_payload_materialize_ok{0};
 std::atomic<std::uint64_t> g_mr_ul_payload_materialize_fail{0};
@@ -263,6 +264,17 @@ std::array<
     effect_probe_state,
     k_effect_probe_count>
     g_effect_probe{};
+
+// Effect telemetry is a diagnostic surface, not part of the renderer
+// operator. Once a stage/effect bit has been observed, keep a compact stage
+// mask so render-hot calls can return after one relaxed atomic load instead of
+// scanning all 17 effect flags on every routed draw. Individual flags remain
+// the source used by the matrix logger.
+constexpr std::size_t k_effect_probe_stage_count = 6u;
+std::array<
+    std::atomic<std::uint32_t>,
+    k_effect_probe_stage_count>
+    g_effect_probe_stage_mask{};
 
 const char *effect_probe_name(
     effect_probe_id id) noexcept
@@ -410,6 +422,18 @@ void mark_effect_probe(
             std::memory_order_relaxed))
         return;
 
+    const auto stage_index =
+        static_cast<std::size_t>(stage);
+    if (stage_index < k_effect_probe_stage_count) {
+        const auto bit =
+            std::uint32_t{1u} <<
+            static_cast<std::uint8_t>(id);
+        g_effect_probe_stage_mask[stage_index].
+            fetch_or(
+                bit,
+                std::memory_order_relaxed);
+    }
+
     char line[320]{};
     if (receiver_id != 0xffffffffu ||
         route_index != 0xffffffffu) {
@@ -495,12 +519,29 @@ void mark_effect_probe_mask(
         mask == 0u)
         return;
 
+    const auto stage_index =
+        static_cast<std::size_t>(stage);
+    if (stage_index >= k_effect_probe_stage_count)
+        return;
+
+    // Most calls hit an already-observed stage. The old implementation still
+    // walked every effect on every routed draw, which made the LIVE telemetry
+    // binary scale with scene draw density. Keep only unseen bits on the hot
+    // path; mark_effect_probe remains the race-safe one-shot publisher.
+    const auto seen =
+        g_effect_probe_stage_mask[stage_index].
+            load(std::memory_order_relaxed);
+    const auto pending =
+        mask & ~seen;
+    if (pending == 0u)
+        return;
+
     for (std::size_t i = 0u;
          i < k_effect_probe_count;
          ++i) {
         const auto id =
             static_cast<effect_probe_id>(i);
-        if ((mask & effect_probe_bit(id)) != 0u)
+        if ((pending & effect_probe_bit(id)) != 0u)
             mark_effect_probe(
                 id,
                 stage,
@@ -511,6 +552,11 @@ void mark_effect_probe_mask(
 
 void reset_effect_probe() noexcept
 {
+    for (auto &stage_mask : g_effect_probe_stage_mask)
+        stage_mask.store(
+            0u,
+            std::memory_order_relaxed);
+
     for (auto &state : g_effect_probe) {
         state.candidate.store(false);
         state.authority.store(false);
@@ -883,6 +929,38 @@ void log_pointlight_gate_once(
         pointlight_decision_reason_name(decision.reason),
         static_cast<unsigned>(decision.reason),
         decision.route_index);
+    reshade::log::message(
+        reshade::log::level::info,
+        line);
+}
+
+void log_pointlight_prep_once(
+    std::uint32_t bit,
+    const char *stage,
+    bool spc,
+    bool blended,
+    bool material_ready,
+    bool resources_ready,
+    bool sidecar_ready) noexcept
+{
+    const auto previous =
+        g_pointlight_prep_log_mask.fetch_or(
+            bit,
+            std::memory_order_relaxed);
+    if ((previous & bit) != 0u)
+        return;
+
+    char line[384]{};
+    std::snprintf(
+        line,
+        sizeof(line),
+        "[DSRRL POINTLIGHT PREP] stage=%s spc=%u blended=%u material=%u resources=%u sidecar=%u",
+        stage == nullptr ? "unknown" : stage,
+        spc ? 1u : 0u,
+        blended ? 1u : 0u,
+        material_ready ? 1u : 0u,
+        resources_ready ? 1u : 0u,
+        sidecar_ready ? 1u : 0u);
     reshade::log::message(
         reshade::log::level::info,
         line);
@@ -3469,8 +3547,18 @@ bool prepare_island_batch(
             (!prepared.clustered_shader.spc ||
              prepared.resources.spec_rgb);
 
-        if (resources_ready)
+        if (resources_ready) {
             hot_count(g_clustered_draw_resources_ready);
+        } else {
+            log_pointlight_prep_once(
+                1u << 0,
+                "clustered_resources_not_ready",
+                prepared.clustered_shader.spc,
+                prepared.clustered_shader.blended_material,
+                direct_material_ready,
+                false,
+                false);
+        }
 
         const bool sidecar_ready =
             resources_ready &&
@@ -3478,6 +3566,17 @@ bool prepare_island_batch(
                 context,
                 decision,
                 prepared.clustered_carrier);
+
+        if (resources_ready && !sidecar_ready) {
+            log_pointlight_prep_once(
+                1u << 1,
+                "clustered_sidecar_not_ready",
+                prepared.clustered_shader.spc,
+                prepared.clustered_shader.blended_material,
+                direct_material_ready,
+                true,
+                false);
+        }
 
         if (sidecar_ready) {
             hot_count(g_clustered_draw_sidecar_ready);
@@ -3603,6 +3702,15 @@ bool prepare_island_batch(
         g_clustered_pnts_pipeline.release_prepared_shader(
             prepared.clustered_shader);
         prepared.batch = {};
+    } else if (clustered_pointlight_bound) {
+        log_pointlight_prep_once(
+            1u << 2,
+            "clustered_pipeline_not_ready",
+            false,
+            false,
+            decision.active,
+            false,
+            false);
     }
 
     if (clustered_pointlight_bound)
@@ -4800,6 +4908,7 @@ bool AddonInit(
     g_mr_once_batch_ready.store(false);
     g_mr_once_draw_issued.store(false);
     g_pointlight_gate_log_mask.store(0u);
+    g_pointlight_prep_log_mask.store(0u);
     g_pointlight_active_logged.store(false);
     g_mr_ul_payload_materialize_ok.store(0);
     g_mr_ul_payload_materialize_fail.store(0);
