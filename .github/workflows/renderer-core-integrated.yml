@@ -149,6 +149,12 @@ jobs:
             --index renderer-core/data/a1_island_plan_index_v1.json
           python3 renderer-core/tools/verify_a1_terminal_sat_semantic_scope.py
 
+      - name: Audit MotionBlur temporal isolation
+        shell: bash
+        run: |
+          python3 renderer-core/tools/audit_motion_blur_temporal_isolation.py \
+            --source-dir renderer-core
+
       - name: Configure Core+Islands addon
         shell: pwsh
         run: >
