@@ -267,6 +267,23 @@ bool exact_runtime_material_response_identity(
     return extension_match != nullptr;
 }
 
+bool exact_runtime_pointlight_material_identity(
+    const material_identity &identity) noexcept
+{
+    if (!identity.valid ||
+        !identity.actual_material_exact ||
+        identity.semantic_name_hash == 0u)
+        return false;
+
+    const auto *record =
+        generated::find_pointlight_material_authority_v1(
+            identity.semantic_name_hash);
+    return
+        record != nullptr &&
+        record->raw_mtd_sha256 ==
+            identity.raw_mtd_sha256;
+}
+
 bool exact_runtime_pmetal_material_identity(
     const material_identity &identity) noexcept
 {
@@ -678,13 +695,23 @@ material_response_island::evaluate_direct_pointlight_material(
     if (!material.valid)
         return {false, decision_reason::material_required, 0u};
 
-    if (!material.owner_tuple_exact ||
-        !material.material_slot_valid ||
-        material.semantic_name_hash == 0u ||
-        !generated::dsr_flver_owner_tuple_authenticated(
+    const bool flver_owner_authenticated =
+        material.owner_tuple_exact &&
+        material.material_slot_valid &&
+        material.semantic_name_hash != 0u &&
+        generated::dsr_flver_owner_tuple_authenticated(
             material.flver_sha256,
             material.material_slot,
-            material.semantic_name_hash))
+            material.semantic_name_hash);
+
+    const bool runtime_material_authenticated =
+        exact_runtime_material_response_identity(
+            material) ||
+        exact_runtime_pointlight_material_identity(
+            material);
+
+    if (!flver_owner_authenticated &&
+        !runtime_material_authenticated)
         return {
             false,
             decision_reason::owner_tuple_not_authenticated,
