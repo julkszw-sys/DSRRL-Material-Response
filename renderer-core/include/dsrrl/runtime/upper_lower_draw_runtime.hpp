@@ -126,6 +126,20 @@ struct pmetal_env_source_diagnostic {
     std::uint64_t cross_thread_serial_miss = 0u;
 };
 
+struct pmetal_draw_token_frontier {
+    std::uint32_t current_tid = 0u;
+    bool local_token_valid = false;
+    bool local_source_ready = false;
+    std::uint32_t token_producer_tid = 0u;
+    std::uint64_t token_producer_serial = 0u;
+    std::int32_t selector_a = -1;
+    std::int32_t selector_b = -1;
+    float beta = 0.0f;
+    std::uint64_t latest_publish_serial = 0u;
+    std::uint64_t last_selected_producer_serial = 0u;
+    std::uint32_t completed_draws_since_selector = 0xFFFFFFFFu;
+};
+
 struct prepared_hemdir3_carrier {
     ID3D11Buffer *b13 = nullptr;
     operators::lightbank::lightbank_snapshot_fingerprint fingerprint{};
@@ -194,6 +208,12 @@ public:
 
     pmetal_env_source_diagnostic
     pmetal_source_diagnostic() const noexcept;
+
+    // Passive draw-boundary diagnostic. It exposes only the exact token
+    // currently visible on this callback thread plus selector-to-draw
+    // distance; it never consumes or extends token lifetime.
+    pmetal_draw_token_frontier
+    pmetal_draw_token_state() const noexcept;
 
     // Selection is one draw-scoped semantic event. Never carry it forward.
     void consume_draw_selection() noexcept;
