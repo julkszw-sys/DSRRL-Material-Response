@@ -143,6 +143,26 @@ add_custom_command(
 add_custom_target(dsrrl_clustered_pnts_direct_header
     DEPENDS "${DSRRL_CLUSTERED_PNTS_DIRECT_HEADER}")
 
+set(DSRRL_SUBSURFACE_PLAIN_PATCH_DIR
+    "${CMAKE_CURRENT_SOURCE_DIR}/data/provenance/subsurface_plain_exact_patches_v1")
+set(DSRRL_SUBSURFACE_PLAIN_PATCH_HEADER
+    "${DSRRL_GENERATED_DIR}/dsrrl/operators/resource_bridges/generated_subsurface_plain_patches_v1.hpp")
+add_custom_command(
+    OUTPUT "${DSRRL_SUBSURFACE_PLAIN_PATCH_HEADER}"
+    COMMAND "${Python3_EXECUTABLE}"
+            "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_subsurface_plain_exact_patches_v1.py"
+            --input-dir "${DSRRL_SUBSURFACE_PLAIN_PATCH_DIR}"
+            --output "${DSRRL_SUBSURFACE_PLAIN_PATCH_HEADER}"
+    DEPENDS
+        "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_subsurface_plain_exact_patches_v1.py"
+        "${DSRRL_SUBSURFACE_PLAIN_PATCH_DIR}/Csd.bin"
+        "${DSRRL_SUBSURFACE_PLAIN_PATCH_DIR}/Sdw.bin"
+        "${DSRRL_SUBSURFACE_PLAIN_PATCH_DIR}/Plain.bin"
+    VERBATIM
+)
+add_custom_target(dsrrl_subsurface_plain_patch_header
+    DEPENDS "${DSRRL_SUBSURFACE_PLAIN_PATCH_HEADER}")
+
 option(DSRRL_BUILD_PHASE0_PROBE "Build the pixel-inert ReShade API20 Phase 0 probe addon" OFF)
 set(RESHade_INCLUDE_DIR "" CACHE PATH "Path to pinned ReShade include directory")
 
@@ -192,6 +212,7 @@ add_library(dsrrl_renderer_core STATIC
     src/operators/lightbank/upper_lower.cpp
     src/operators/lightbank/hemdir3.cpp
     src/operators/resource_bridges/spec_rgb_bridge.cpp
+    src/operators/resource_bridges/subsurface_plain_target_materializer.cpp
     src/operators/resource_bridges/normal_bridge.cpp
     src/operators/resource_bridges/diffuse_bridge.cpp
     "${DSRRL_NATIVE_PROBE_HEADER}"
@@ -202,6 +223,7 @@ add_library(dsrrl_renderer_core STATIC
     "${DSRRL_LOCAL_SPECULAR_RECEIVER_HEADER}"
     "${DSRRL_FIXED_LOCAL_SPECULAR_PTDE_REFERENCE_HEADER}"
     "${DSRRL_CLUSTERED_PNTS_DIRECT_HEADER}"
+    "${DSRRL_SUBSURFACE_PLAIN_PATCH_HEADER}"
 )
 add_custom_target(dsrrl_pointlight_core_source_audit
     COMMAND "${Python3_EXECUTABLE}"
@@ -234,7 +256,8 @@ add_dependencies(
     dsrrl_mr_diffuse_v1_header
     dsrrl_local_specular_receiver_header
     dsrrl_fixed_local_specular_ptde_reference_header
-    dsrrl_clustered_pnts_direct_header)
+    dsrrl_clustered_pnts_direct_header
+    dsrrl_subsurface_plain_patch_header)
 target_include_directories(dsrrl_renderer_core PUBLIC
     ${DSRRL_GENERATED_DIR}
     ${CMAKE_CURRENT_SOURCE_DIR}/include)
