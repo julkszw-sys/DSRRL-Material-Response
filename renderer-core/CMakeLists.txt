@@ -155,9 +155,9 @@ add_custom_command(
             --output "${DSRRL_SUBSURFACE_PLAIN_PATCH_HEADER}"
     DEPENDS
         "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_subsurface_plain_exact_patches_v1.py"
-        "${DSRRL_SUBSURFACE_PLAIN_PATCH_DIR}/Csd.bin"
-        "${DSRRL_SUBSURFACE_PLAIN_PATCH_DIR}/Sdw.bin"
-        "${DSRRL_SUBSURFACE_PLAIN_PATCH_DIR}/Plain.bin"
+        "${DSRRL_SUBSURFACE_PLAIN_PATCH_DIR}/Csd.bin.z"
+        "${DSRRL_SUBSURFACE_PLAIN_PATCH_DIR}/Sdw.bin.z"
+        "${DSRRL_SUBSURFACE_PLAIN_PATCH_DIR}/Plain.bin.z"
     VERBATIM
 )
 add_custom_target(dsrrl_subsurface_plain_patch_header
