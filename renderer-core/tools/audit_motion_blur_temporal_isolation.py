@@ -47,8 +47,13 @@ def main() -> None:
     )
     require(
         integrated,
-        "camera-fallback-disabled MotionBlurTiles compute pipeline",
-        "MotionBlurTiles runtime attestation",
+        "camera-fallback-disabled ",
+        "MotionBlurTiles runtime attestation prefix",
+    )
+    require(
+        integrated,
+        "MotionBlurTiles compute pipeline.",
+        "MotionBlurTiles runtime attestation target",
     )
     require(
         integrated,
