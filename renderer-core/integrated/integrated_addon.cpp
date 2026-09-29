@@ -3429,9 +3429,9 @@ bool register_subsurface_plain_target_chain(
 
     if (spec_ok)
         ++g_subsurface_spec_payload_materialize_ok;
-    else
-        ++g_subsurface_spec_payload_materialize_fail;
 
+    // The caller owns the single aggregate Subsurface failure count so
+    // materializer failures and registration failures cannot double-count.
     return mr_ok && ul_ok && spec_ok;
 }
 
