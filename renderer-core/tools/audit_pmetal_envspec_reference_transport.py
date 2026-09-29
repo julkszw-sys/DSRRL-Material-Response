@@ -22,6 +22,8 @@ def main() -> None:
     ul_h = (root / "include/dsrrl/runtime/upper_lower_draw_runtime.hpp").read_text(encoding="utf-8")
     ul_cpp = (root / "src/runtime/upper_lower_draw_runtime.cpp").read_text(encoding="utf-8")
     env_cpp = (root / "src/runtime/pmetal_envspec_draw_runtime.cpp").read_text(encoding="utf-8")
+    lerp_cpp = (root / "src/operators/env_spec/pmetal_rgba_lerp_materializer.cpp").read_text(encoding="utf-8")
+    lerp_h = (root / "include/dsrrl/operators/env_spec/pmetal_rgba_lerp_materializer.hpp").read_text(encoding="utf-8")
 
     # P_Metal source transport is independent of visible U/L activation.
     require(
@@ -94,11 +96,44 @@ def main() -> None:
         "source frontier telemetry",
     )
 
+    # HemEnvLerp EnvSpec must remain usable while visible U/L is intentionally
+    # OFF. The U/L-off payload preserves stock b0[7]/b0[8] operands and does
+    # not require/bind b13; the composed PTDE-b13 variant remains available
+    # only when the U/L feature is explicitly enabled.
+    require(
+        lerp_cpp,
+        "const bool compose_upper_lower =\n        features.enabled(\n            core::operator_id::upper_lower);",
+        "Lerp materialization feature split",
+    )
+    require(
+        lerp_cpp,
+        "outcome.upper_lower_preserved_stock =\n        !compose_upper_lower;",
+        "stock-U/L Lerp outcome",
+    )
+    require(
+        lerp_cpp,
+        "if (compose_upper_lower) {\n        for (const auto &[slot_word, source_register]",
+        "conditional b13 operand remap",
+    )
+    require(
+        env_cpp,
+        "!(outcome.upper_lower_composed ^\n          outcome.upper_lower_preserved_stock)",
+        "exclusive Lerp U/L mode registration",
+    )
+    require(
+        env_cpp,
+        "hemenvlerp &&\n        lerp_upper_lower_composed",
+        "runtime b13 only for composed Lerp",
+    )
+    if "core::operator_id::upper_lower) ||\n         !core_.features().enabled(\n             core::operator_id::terminal_sat_rgb" in env_cpp:
+        fail("HemEnvLerp still hard-requires the visible U/L feature")
+
     print("DSRRL_PMETAL_ENVSPEC_REFERENCE_TRANSPORT_PASS")
     print("  U/L visible operator=OFF remains stock when not explicitly enabled")
     print("  LightBank reference carrier=ON for P_Metal EnvSpec")
     print("  producer payload=owner+sourceA/B+selectorA/B+beta only")
     print("  P_Metal source decode=consumer-local after exact material/semantic gate")
+    print("  HemEnvLerp U/L-off=stock b0 operands preserved; no b13 requirement")
 
 
 if __name__ == "__main__":
