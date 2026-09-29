@@ -156,6 +156,14 @@ void upper_lower_selector_event_bridge(
     void *r14,
     void *r15) noexcept;
 
+// Second half of the exact selector join. The selector bridge above stages an
+// exact LightBank token only; publication into the P_Metal selected-state bank
+// is authorized here after the same FLVER selector callback has resolved the
+// exact actual material. Non-P_Metal or unresolved material never publishes.
+void upper_lower_pmetal_material_event_bridge(
+    void *owner,
+    const operators::material_response::material_identity &material) noexcept;
+
 class upper_lower_draw_runtime {
 public:
     explicit upper_lower_draw_runtime(
@@ -173,6 +181,13 @@ public:
         void *return_address,
         void *r14,
         void *r15) noexcept;
+
+    // Completes the selector->material semantic cut for P_Metal. The exact
+    // LightBank token staged by selector_event is published cross-thread only
+    // when this same selector callback proves an exact P_Metal owner tuple.
+    void pmetal_material_event(
+        void *owner,
+        const operators::material_response::material_identity &material) noexcept;
 
     // True only when both steady and blended PTDE-linear U/L producer
     // injection are construction-armed. Integrated routing may bypass the
