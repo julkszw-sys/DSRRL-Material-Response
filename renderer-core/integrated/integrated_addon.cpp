@@ -147,6 +147,10 @@ std::atomic<std::uint64_t> g_subsurface_spec_payload_materialize_fail{0};
 std::atomic<std::uint64_t> g_lerp_full_draw_ready{0};
 std::atomic<std::uint64_t> g_lerp_full_draw_fallback{0};
 std::atomic_bool g_lerp_once_receiver_hit{false};
+std::atomic<std::uint64_t> g_lightbank_selected_draws{0u};
+std::atomic<std::uint64_t> g_lightbank_selected_pmetal_draws{0u};
+std::atomic<std::uint64_t> g_lightbank_selected_other_draws{0u};
+std::atomic<std::uint64_t> g_pmetal_draws_without_selected_token{0u};
 std::atomic_bool g_lerp_once_mr_ul_ready{false};
 std::atomic_bool g_lerp_once_mr_only_ready{false};
 std::atomic_bool g_lerp_once_batch_ready{false};
@@ -2647,6 +2651,27 @@ void log_effect_matrix(
     reshade::log::message(
         reshade::log::level::info,
         detail);
+
+    char lightbank_draw_frontier[512]{};
+    std::snprintf(
+        lightbank_draw_frontier,
+        sizeof(lightbank_draw_frontier),
+        "[DSRRL LIGHTBANK DRAW FRONTIER] selected=%llu selected_pmetal=%llu selected_other=%llu pmetal_no_token=%llu",
+        static_cast<unsigned long long>(
+            g_lightbank_selected_draws.load(
+                std::memory_order_relaxed)),
+        static_cast<unsigned long long>(
+            g_lightbank_selected_pmetal_draws.load(
+                std::memory_order_relaxed)),
+        static_cast<unsigned long long>(
+            g_lightbank_selected_other_draws.load(
+                std::memory_order_relaxed)),
+        static_cast<unsigned long long>(
+            g_pmetal_draws_without_selected_token.load(
+                std::memory_order_relaxed)));
+    reshade::log::message(
+        reshade::log::level::info,
+        lightbank_draw_frontier);
 
     char pmetal_frontier[2048]{};
     std::snprintf(
@@ -5375,6 +5400,21 @@ bool prepare_island_batch(
         hemenvlerp_bound
             ? dsrrl::runtime::pmetal_envspec_receiver_family::hemenvlerp
             : dsrrl::runtime::pmetal_envspec_receiver_family::stable_hemenv;
+
+    const auto pmetal_token_at_draw =
+        g_upper_lower.pmetal_draw_token_state();
+    if (pmetal_token_at_draw.local_token_valid) {
+        hot_count(g_lightbank_selected_draws);
+        if (decision.active &&
+            decision.route_index == 345u)
+            hot_count(g_lightbank_selected_pmetal_draws);
+        else
+            hot_count(g_lightbank_selected_other_draws);
+    } else if (
+        decision.active &&
+        decision.route_index == 345u) {
+        hot_count(g_pmetal_draws_without_selected_token);
+    }
 
     if (decision.active &&
         g_pmetal_envspec.prepare(
