@@ -782,6 +782,20 @@ jobs:
           }
 
           foreach ($required in @(
+            '[DSRRL PMETAL ENVSPEC FRONTIER]',
+            'fail_probe=%u',
+            'fail_spec_rgb=%u',
+            '[DSRRL SUBSURFACE FRONTIER]',
+            'mr_reject=%llu',
+            'resource_reject=%llu',
+            'spec_reject=%llu',
+            'route_reject=%llu',
+            'adapter_reject=%llu'
+          )) {
+            if ($entry -notmatch [regex]::Escape($required)) { throw "Full runtime telemetry frontier missing: $required" }
+          }
+
+          foreach ($required in @(
             'k_subsurface_receiver_routes',
             'subsurface_receiver_observe_pipeline',
             'subsurface_receiver_observe_bind',
@@ -1382,6 +1396,21 @@ jobs:
         with:
           name: DSRRL_Core_Islands_FULL_RUNTIME_DIAG
           path: DSRRL_Core_Islands_FULL_RUNTIME_DIAG.addon64
+          if-no-files-found: error
+
+      - name: Publish full-telemetry runtime alias
+        shell: pwsh
+        run: |
+          Copy-Item DSRRL_Core_Islands_FULL_RUNTIME_DIAG.addon64 DSRRL_Core_Islands_FULL_TELEMETRY.addon64 -Force
+          $hash = (Get-FileHash DSRRL_Core_Islands_FULL_TELEMETRY.addon64 -Algorithm SHA256).Hash.ToLowerInvariant()
+          Write-Host "FULL_TELEMETRY=DSRRL_Core_Islands_FULL_TELEMETRY.addon64"
+          Write-Host "FULL_TELEMETRY_SHA256=$hash"
+
+      - name: Upload full-telemetry runtime addon
+        uses: actions/upload-artifact@v4
+        with:
+          name: DSRRL_Core_Islands_FULL_TELEMETRY
+          path: DSRRL_Core_Islands_FULL_TELEMETRY.addon64
           if-no-files-found: error
 
       - name: Configure live effect-telemetry addon
