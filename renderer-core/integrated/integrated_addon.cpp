@@ -1356,11 +1356,32 @@ bool observe_draw_identity(
     return true;
 }
 
+bool upper_lower_bridge_requested() noexcept
+{
+    // Current U/L draw-time consumer bridge is pixel-falsified in live play:
+    // broad receiver coverage can produce a ruler-straight hemispheric boundary
+    // on world geometry, while the LightBank capture stack is also a known
+    // geometry-scaled performance risk. Preserve stock DSR by default until
+    // the PTDE consumer cut is re-isolated. Keep an explicit opt-in only for
+    // focused diagnostics so the falsified bridge remains reproducible.
+    static const bool enabled =
+        dsrrl::runtime::telemetry::environment_flag(
+            "DSRRL_EXPERIMENTAL_UPPER_LOWER_BRIDGE");
+    return enabled;
+}
+
 bool enable_integrated_islands() noexcept
 {
-    for (const auto op : k_integrated_islands)
-        if (!g_core.features().set(op, true))
+    const bool upper_lower_enabled =
+        upper_lower_bridge_requested();
+
+    for (const auto op : k_integrated_islands) {
+        const bool enabled =
+            op != dsrrl::core::operator_id::upper_lower ||
+            upper_lower_enabled;
+        if (!g_core.features().set(op, enabled))
             return false;
+    }
 
     return true;
 }
@@ -2954,7 +2975,9 @@ void on_init_pipeline(
                     pixel_shader->code_size))
             draw_route_mask |= k_route_hemdir3;
 
-        if (dsrrl::runtime::
+        if (g_core.features().enabled(
+                dsrrl::core::operator_id::upper_lower) &&
+            dsrrl::runtime::
                 upper_lower_receiver_observe_pipeline(
                     pipeline.handle,
                     pixel_shader->code,
@@ -5109,11 +5132,20 @@ bool AddonInit(
             "] HemDir3 effective-mode hooks FAIL-OPEN: HemDir3 remains stock.");
     }
 
+    const bool upper_lower_enabled =
+        g_core.features().enabled(
+            dsrrl::core::operator_id::upper_lower);
     const bool upper_lower_hooks =
-        flver_hooks &&
-        g_upper_lower.install();
+        !upper_lower_enabled ||
+        (flver_hooks &&
+         g_upper_lower.install());
 
-    if (!upper_lower_hooks) {
+    if (!upper_lower_enabled) {
+        reshade::log::message(
+            reshade::log::level::info,
+            "[DSRRL CORE+ISLANDS " DSRRL_CORE_ISLANDS_VERSION
+            "] Upper/Lower bridge DEFAULT FAIL-OPEN: current draw-time consumer path is pixel-falsified; stock DSR U/L preserved. Set DSRRL_EXPERIMENTAL_UPPER_LOWER_BRIDGE=1 only for focused diagnostics.");
+    } else if (!upper_lower_hooks) {
         reshade::log::message(
             reshade::log::level::warning,
             "[DSRRL CORE+ISLANDS " DSRRL_CORE_ISLANDS_VERSION
