@@ -327,6 +327,15 @@ add_executable(dsrrl_renderer_clustered_sidecar_tests
 target_link_libraries(dsrrl_renderer_clustered_sidecar_tests PRIVATE dsrrl_renderer_core)
 target_compile_features(dsrrl_renderer_clustered_sidecar_tests PRIVATE cxx_std_17)
 
+add_executable(dsrrl_renderer_pointlight_material_authority_tests
+    tests/pointlight_material_authority_tests.cpp)
+target_link_libraries(dsrrl_renderer_pointlight_material_authority_tests PRIVATE dsrrl_renderer_core)
+target_compile_features(dsrrl_renderer_pointlight_material_authority_tests PRIVATE cxx_std_17)
+add_dependencies(
+    dsrrl_renderer_pointlight_material_authority_tests
+    dsrrl_dsr_flver_owner_tuple_header
+    dsrrl_pointlight_material_authority_header)
+
 add_executable(dsrrl_renderer_clustered_pnts_materializer_tests
     tests/clustered_pnts_direct_materializer_tests.cpp)
 target_link_libraries(dsrrl_renderer_clustered_pnts_materializer_tests PRIVATE dsrrl_renderer_core)
@@ -436,6 +445,7 @@ if(MSVC)
     target_compile_options(dsrrl_renderer_future_runtime_tests PRIVATE /W4 /WX)
     target_compile_options(dsrrl_renderer_faceeye_pointlight_tests PRIVATE /W4 /WX)
     target_compile_options(dsrrl_renderer_clustered_sidecar_tests PRIVATE /W4 /WX)
+    target_compile_options(dsrrl_renderer_pointlight_material_authority_tests PRIVATE /W4 /WX)
     target_compile_options(dsrrl_renderer_clustered_pnts_materializer_tests PRIVATE /W4 /WX)
     target_compile_options(dsrrl_renderer_clustered_pnts_draw_adapter_tests PRIVATE /W4 /WX)
     target_compile_options(dsrrl_renderer_local_specular_receiver_tests PRIVATE /W4 /WX)
@@ -466,6 +476,7 @@ else()
     target_compile_options(dsrrl_renderer_future_runtime_tests PRIVATE -Wall -Wextra -Wpedantic -Werror)
     target_compile_options(dsrrl_renderer_faceeye_pointlight_tests PRIVATE -Wall -Wextra -Wpedantic -Werror)
     target_compile_options(dsrrl_renderer_clustered_sidecar_tests PRIVATE -Wall -Wextra -Wpedantic -Werror)
+    target_compile_options(dsrrl_renderer_pointlight_material_authority_tests PRIVATE -Wall -Wextra -Wpedantic -Werror)
     target_compile_options(dsrrl_renderer_clustered_pnts_materializer_tests PRIVATE -Wall -Wextra -Wpedantic -Werror)
     target_compile_options(dsrrl_renderer_clustered_pnts_draw_adapter_tests PRIVATE -Wall -Wextra -Wpedantic -Werror)
     target_compile_options(dsrrl_renderer_local_specular_receiver_tests PRIVATE -Wall -Wextra -Wpedantic -Werror)
@@ -559,3 +570,6 @@ add_test(
             --donors "${CMAKE_CURRENT_SOURCE_DIR}/data/provenance/ptde_material_donor_registry.hpp"
             --generated "${CMAKE_CURRENT_SOURCE_DIR}/include/dsrrl/operators/material_response/generated_material_constants_v1.hpp"
 )
+
+add_test(NAME renderer_pointlight_material_authority
+    COMMAND dsrrl_renderer_pointlight_material_authority_tests)
