@@ -378,6 +378,7 @@ bool add_bridge_rdef(
     std::vector<chunk> chunks,
     std::size_t code_index,
     const std::vector<std::uint32_t> &words,
+    bool compose_upper_lower,
     std::vector<std::uint8_t> &output) noexcept
 {
     auto *rdef = unique_rdef(chunks);
@@ -393,7 +394,10 @@ bool add_bridge_rdef(
             rdef->payload,
             "DSRRL_MaterialCarrier",
             12u,
-            64u) ||
+            64u))
+        return false;
+
+    if (compose_upper_lower &&
         !legacy_plan::dxbc::rdef::append_constant_buffer_binding(
             rdef->payload,
             "DSRRL_LightBankCarrier",
@@ -425,7 +429,8 @@ std::size_t adjacent_pair_count(
 bool final_postcondition(
     const std::vector<std::uint8_t> &bytes,
     const generated_lerp::pmetal_hemenvlerp_site &site,
-    const std::vector<std::uint32_t> &preserved_envdiffuse) noexcept
+    const std::vector<std::uint32_t> &preserved_envdiffuse,
+    bool upper_lower_composed) noexcept
 {
     std::vector<chunk> chunks;
     std::vector<std::uint32_t> words;
@@ -443,10 +448,14 @@ bool final_postcondition(
     if (rdef == nullptr ||
         !legacy_plan::dxbc::rdef::has_constant_buffer_binding(
             rdef->payload,
-            12u) ||
-        !legacy_plan::dxbc::rdef::has_constant_buffer_binding(
+            12u))
+        return false;
+
+    const bool has_cb13 =
+        legacy_plan::dxbc::rdef::has_constant_buffer_binding(
             rdef->payload,
-            13u))
+            13u);
+    if (has_cb13 != upper_lower_composed)
         return false;
 
     if (site.t11_word <= site.t12_word ||
@@ -488,12 +497,20 @@ bool final_postcondition(
             preserved_envdiffuse))
         return false;
 
+    const bool upper_lower_shape_ok =
+        upper_lower_composed
+            ? (adjacent_pair_count(words, 0u, 7u) == 0u &&
+               adjacent_pair_count(words, 0u, 8u) == 0u &&
+               adjacent_pair_count(words, 13u, 6u) == 1u &&
+               adjacent_pair_count(words, 13u, 7u) == 2u)
+            : (adjacent_pair_count(words, 0u, 7u) == 1u &&
+               adjacent_pair_count(words, 0u, 8u) == 2u &&
+               adjacent_pair_count(words, 13u, 6u) == 0u &&
+               adjacent_pair_count(words, 13u, 7u) == 0u);
+
     return
         terminal_rgb_sat_exact(words) &&
-        adjacent_pair_count(words, 0u, 7u) == 0u &&
-        adjacent_pair_count(words, 0u, 8u) == 0u &&
-        adjacent_pair_count(words, 13u, 6u) == 1u &&
-        adjacent_pair_count(words, 13u, 7u) == 2u &&
+        upper_lower_shape_ok &&
         sample_count(words, 9u) == 0u &&
         sample_count(words, 10u) == 1u &&
         sample_count(words, 11u) == 1u &&
@@ -616,6 +633,10 @@ materialize_pmetal_rgba_lerp_receiver(
     outcome.semantic_receiver_id =
         site->semantic_receiver_id;
 
+    const bool compose_upper_lower =
+        features.enabled(
+            core::operator_id::upper_lower);
+
     std::vector<chunk> chunks;
     std::vector<std::uint32_t> words;
     std::size_t code_index = 0u;
@@ -714,16 +735,19 @@ materialize_pmetal_rgba_lerp_receiver(
         return outcome;
     }
 
-    // Upper/Lower is an independent operator, but the exact HemEnvLerp
-    // consumer executes it inside the same pixel shader. Rebind only its
-    // three verified b0[7]/b0[8] operands to the existing b13 PTDE carrier.
-    for (const auto &[slot_word, source_register] :
-         upper_lower_patches) {
-        words[slot_word] = 13u;
-        words[slot_word + 1u] =
-            source_register == 7u
-                ? 6u
-                : 7u;
+    // Upper/Lower is independent from EnvSpec. Compose PTDE b13 only when the
+    // U/L feature is explicitly enabled. With U/L OFF, preserve the exact
+    // stock DSR b0[7]/b0[8] operands byte-for-byte while still porting the
+    // P_Metal EnvSpec/SpecRGB/terminal-SAT island.
+    if (compose_upper_lower) {
+        for (const auto &[slot_word, source_register] :
+             upper_lower_patches) {
+            words[slot_word] = 13u;
+            words[slot_word + 1u] =
+                source_register == 7u
+                    ? 6u
+                    : 7u;
+        }
     }
 
     // PTDE Phn HemEnv/HemEnvLerp terminates with RGB-only SAT. This is a
@@ -739,8 +763,8 @@ materialize_pmetal_rgba_lerp_receiver(
     }
 
     // The clean diffuse-v1 operator base inserted b12 at words 11..14.
-    // Keep that verified ABI fixed and place the independent PTDE LightBank
-    // carrier immediately after it, so all audited sites shift uniformly.
+    // Add b13 only for the explicitly enabled U/L-composed variant. The
+    // U/L-off EnvSpec variant retains the original stock U/L ABI.
     if (words.size() < 15u ||
         words[11] != 0x04000059u ||
         words[12] != 0x00208e46u ||
@@ -752,20 +776,22 @@ materialize_pmetal_rgba_lerp_receiver(
         return outcome;
     }
 
-    try {
-        words.insert(
-            words.begin() + 15,
-            k_cb13_decl.begin(),
-            k_cb13_decl.end());
-    } catch (...) {
-        outcome.result =
-            pmetal_rgba_lerp_materialize_result::
-                fail_rebuild;
-        return outcome;
+    if (compose_upper_lower) {
+        try {
+            words.insert(
+                words.begin() + 15,
+                k_cb13_decl.begin(),
+                k_cb13_decl.end());
+        } catch (...) {
+            outcome.result =
+                pmetal_rgba_lerp_materialize_result::
+                    fail_rebuild;
+            return outcome;
+        }
+        words[1] +=
+            static_cast<std::uint32_t>(
+                k_cb13_decl.size());
     }
-    words[1] +=
-        static_cast<std::uint32_t>(
-            k_cb13_decl.size());
 
     std::vector<std::uint8_t> envspec_base;
     if (!add_bridge_rdef(
@@ -774,6 +800,7 @@ materialize_pmetal_rgba_lerp_receiver(
             std::move(chunks),
             code_index,
             words,
+            compose_upper_lower,
             envspec_base)) {
         outcome.result =
             pmetal_rgba_lerp_materialize_result::fail_b12_rdef;
@@ -796,14 +823,18 @@ materialize_pmetal_rgba_lerp_receiver(
     if (!final_postcondition(
             spec_rgb_base,
             *site,
-            preserved_envdiffuse)) {
+            preserved_envdiffuse,
+            compose_upper_lower)) {
         outcome.result =
             pmetal_rgba_lerp_materialize_result::fail_postcondition;
         return outcome;
     }
 
     outcome.envdiffuse_preserved = true;
-    outcome.upper_lower_composed = true;
+    outcome.upper_lower_composed =
+        compose_upper_lower;
+    outcome.upper_lower_preserved_stock =
+        !compose_upper_lower;
     outcome.terminal_sat_rgb_composed = true;
     outcome.spec_rgb_consumer = true;
     output = std::move(spec_rgb_base);
