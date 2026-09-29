@@ -2024,20 +2024,26 @@ prepare_subsurface_body_requests(
     ID3D11ShaderResourceView *norm = nullptr;
 
     if (tuple_ready) {
-        const companion_lookup_request
-            companion_requests[3]{
-                {views[1], asset_class::specular},
-                {views[0], asset_class::diffuse},
-                {views[2], asset_class::normal}
-            };
-        ID3D11ShaderResourceView *companions[3]{};
+        // Ps_Body[DSBT] is not an equipment texture replacement case for
+        // diffuse/normal. The Common Body diffuse and normal payloads are
+        // homologous between PTDE and DSR, so preserve the exact stock DSR
+        // resources already bound at t0/t2. Only body SpecRGB is a dedicated
+        // PTDE sidecar carrier. This keeps the Subsurface operator island
+        // narrow and avoids inventing nonexistent Common Body Diffuse/Normal
+        // sidecars.
+        const companion_lookup_request spec_request{
+            views[1],
+            asset_class::specular
+        };
         lookup_many(
-            companion_requests,
-            3u,
-            companions);
-        spec = companions[0];
-        diff = companions[1];
-        norm = companions[2];
+            &spec_request,
+            1u,
+            &spec);
+
+        diff = views[0];
+        views[0] = nullptr;
+        norm = views[2];
+        views[2] = nullptr;
     }
 
     for (auto *&view : views)
