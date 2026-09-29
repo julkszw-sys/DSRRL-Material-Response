@@ -41,6 +41,15 @@ struct clustered_pnts_telemetry {
     std::uint64_t b12_hit = 0;
     std::uint64_t prepare_ok = 0;
     std::uint64_t prepare_fail = 0;
+    std::uint64_t prepare_precondition_fail = 0;
+    std::uint64_t selection_fail = 0;
+    std::uint64_t selection_empty = 0;
+    std::uint64_t sidecar_build_fail = 0;
+    std::uint64_t context_immediate = 0;
+    std::uint64_t context_deferred = 0;
+    std::uint64_t context_other = 0;
+    std::uint64_t gpu_prepare_fail = 0;
+    std::uint64_t upload_fail = 0;
     bool enabled = false;
     bool quarantined = false;
 };
