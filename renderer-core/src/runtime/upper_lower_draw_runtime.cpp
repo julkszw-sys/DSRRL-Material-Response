@@ -683,6 +683,12 @@ std::array<
     g_reference_token_locks{};
 thread_local lightbank_reference_token
     g_draw_reference_token{};
+// Diagnostic-only selector->draw distance. This does not authorize reuse:
+// consume_draw_selection still clears the actual draw token and latest serial.
+thread_local std::uint64_t
+    g_last_selected_producer_serial = 0u;
+thread_local std::uint32_t
+    g_completed_draws_since_selector = 0xFFFFFFFFu;
 // The producer hook and the ReShade draw callback are allowed to execute on a
 // different thread from the exact selector hook. Keep the selector-authenticated
 // token in a second process-wide bounded bank, but authorize draw consumption
@@ -4325,6 +4331,8 @@ void clear_snapshots() noexcept
     g_draw_snapshot.reset();
     g_draw_reference_token = {};
     g_draw_thread_latest_publish_serial = 0u;
+    g_last_selected_producer_serial = 0u;
+    g_completed_draws_since_selector = 0xFFFFFFFFu;
     for (std::size_t set = 0u;
          set < k_reference_token_sets;
          ++set) {
@@ -4561,6 +4569,9 @@ void upper_lower_draw_runtime::selector_event(
             selected);
         g_draw_reference_token =
             selected;
+        g_last_selected_producer_serial =
+            selected.producer_serial;
+        g_completed_draws_since_selector = 0u;
         latch_bool_once(
             g_reference_draw_token_selected);
         if (selected.source_ready)
@@ -5126,6 +5137,36 @@ upper_lower_draw_runtime::pmetal_source_diagnostic() const noexcept
     return out;
 }
 
+pmetal_draw_token_frontier
+upper_lower_draw_runtime::pmetal_draw_token_state() const noexcept
+{
+    pmetal_draw_token_frontier out{};
+    out.current_tid =
+        static_cast<std::uint32_t>(
+            GetCurrentThreadId());
+    out.local_token_valid =
+        g_draw_reference_token.valid;
+    out.local_source_ready =
+        g_draw_reference_token.source_ready;
+    out.token_producer_tid =
+        g_draw_reference_token.producer_tid;
+    out.token_producer_serial =
+        g_draw_reference_token.producer_serial;
+    out.selector_a =
+        g_draw_reference_token.selector_a;
+    out.selector_b =
+        g_draw_reference_token.selector_b;
+    out.beta =
+        g_draw_reference_token.beta;
+    out.latest_publish_serial =
+        g_draw_thread_latest_publish_serial;
+    out.last_selected_producer_serial =
+        g_last_selected_producer_serial;
+    out.completed_draws_since_selector =
+        g_completed_draws_since_selector;
+    return out;
+}
+
 void upper_lower_draw_runtime::release_prepared_draw(
     prepared_upper_lower_draw &prepared) noexcept
 {
@@ -5139,6 +5180,12 @@ void upper_lower_draw_runtime::consume_draw_selection() noexcept
     // One selector publication is draw-scoped. Do not allow a serial from a
     // previous draw callback to authorize a later cross-thread handoff.
     g_draw_thread_latest_publish_serial = 0u;
+
+    // Keep only a passive distance counter so the next diagnostic run can
+    // prove whether P_Metal is the direct selector-owned draw or a later draw.
+    if (g_completed_draws_since_selector != 0xFFFFFFFFu &&
+        g_completed_draws_since_selector != 0xFFFFFFFEu)
+        ++g_completed_draws_since_selector;
 }
 
 void upper_lower_draw_runtime::on_destroy_device(
