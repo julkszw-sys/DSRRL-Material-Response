@@ -68,7 +68,12 @@ def main() -> None:
     require(
         ul_cpp,
         "if (g_reference_only_transport.load(\n                    std::memory_order_acquire))\n                return result;",
-        "blend reference-only branch",
+        "blend packer reference-only branch",
+    )
+    require(
+        ul_cpp,
+        "if (g_reference_only_transport.load(\n            std::memory_order_acquire)) {\n        return g_blend_orig != nullptr",
+        "blend helper reference-only bypass",
     )
 
     # The old producer-local P_Metal semantic decode stays disabled. EnvSpec
