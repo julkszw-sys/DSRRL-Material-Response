@@ -125,6 +125,9 @@ def main() -> None:
         "FLVER selector material authorization bridge",
     )
 
+    if ul_cpp.count("publish_selected_reference_token(") != 2:
+        fail("P_Metal selected state has an unexpected publication surface")
+
     # HemEnvLerp EnvSpec must remain usable while visible U/L is intentionally
     # OFF. The U/L-off payload preserves stock b0[7]/b0[8] operands and does
     # not require/bind b13; the composed PTDE-b13 variant remains available
