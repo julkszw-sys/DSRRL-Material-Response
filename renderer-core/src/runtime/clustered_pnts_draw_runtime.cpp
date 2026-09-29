@@ -90,6 +90,15 @@ std::atomic<std::uint64_t> g_b12_create{0u};
 std::atomic<std::uint64_t> g_b12_hit{0u};
 std::atomic<std::uint64_t> g_prepare_ok{0u};
 std::atomic<std::uint64_t> g_prepare_fail{0u};
+std::atomic<std::uint64_t> g_prepare_precondition_fail{0u};
+std::atomic<std::uint64_t> g_selection_fail{0u};
+std::atomic<std::uint64_t> g_selection_empty{0u};
+std::atomic<std::uint64_t> g_sidecar_build_fail{0u};
+std::atomic<std::uint64_t> g_context_immediate{0u};
+std::atomic<std::uint64_t> g_context_deferred{0u};
+std::atomic<std::uint64_t> g_context_other{0u};
+std::atomic<std::uint64_t> g_gpu_prepare_fail{0u};
+std::atomic<std::uint64_t> g_upload_fail{0u};
 
 std::uintptr_t g_base = 0u;
 
@@ -420,9 +429,12 @@ bool create_structured(
 bool ensure_gpu(
     ID3D11DeviceContext *context) noexcept
 {
-    if (context == nullptr ||
-        context->GetType() !=
-            D3D11_DEVICE_CONTEXT_IMMEDIATE)
+    // DSR records ordinary draws on both immediate and deferred D3D11
+    // contexts. The clustered sidecar uses only device-side resource creation
+    // plus D3D11_USAGE_DYNAMIC resources mapped with WRITE_DISCARD, which is
+    // valid on a deferred context. Rejecting every non-immediate context here
+    // was therefore a host-scheduling gate, not a PointLight semantic guard.
+    if (context == nullptr)
         return false;
 
     ID3D11Device *device = nullptr;
@@ -732,6 +744,7 @@ bool clustered_pnts_draw_runtime::prepare_sidecar(
         !g_draw_selection.owner_verified ||
         !g_draw_selection.material_limit_ready ||
         !material.active) {
+        telemetry::hot_count(g_prepare_precondition_fail);
         telemetry::hot_count(g_prepare_fail);
         return false;
     }
@@ -757,6 +770,7 @@ bool clustered_pnts_draw_runtime::prepare_sidecar(
             nodes,
             selected_count)) {
         telemetry::hot_count(g_mirror_diff);
+        telemetry::hot_count(g_selection_fail);
         telemetry::hot_count(g_sidecar_fail);
         telemetry::hot_count(g_prepare_fail);
         return false;
@@ -806,6 +820,7 @@ bool clustered_pnts_draw_runtime::prepare_sidecar(
 #endif
 
     if (selected_count == 0u) {
+        telemetry::hot_count(g_selection_empty);
         telemetry::hot_count(g_sidecar_fail);
         telemetry::hot_count(g_prepare_fail);
         return false;
@@ -842,13 +857,23 @@ bool clustered_pnts_draw_runtime::prepare_sidecar(
             operators::point_light::
                 clustered_sidecar_result_v1::ready ||
         !built.payload.ready) {
+        telemetry::hot_count(g_sidecar_build_fail);
         telemetry::hot_count(g_sidecar_fail);
         telemetry::hot_count(g_prepare_fail);
         return false;
     }
     telemetry::hot_count(g_sidecar_ready);
 
+    const auto context_type = context->GetType();
+    if (context_type == D3D11_DEVICE_CONTEXT_IMMEDIATE)
+        telemetry::hot_count(g_context_immediate);
+    else if (context_type == D3D11_DEVICE_CONTEXT_DEFERRED)
+        telemetry::hot_count(g_context_deferred);
+    else
+        telemetry::hot_count(g_context_other);
+
     if (!ensure_gpu(context)) {
+        telemetry::hot_count(g_gpu_prepare_fail);
         telemetry::hot_count(g_prepare_fail);
         return false;
     }
@@ -880,6 +905,7 @@ bool clustered_pnts_draw_runtime::prepare_sidecar(
             g_gpu.b12,
             built.payload.b12.data(),
             sizeof(built.payload.b12))) {
+        telemetry::hot_count(g_upload_fail);
         telemetry::hot_count(g_prepare_fail);
         return false;
     }
@@ -969,6 +995,15 @@ clustered_pnts_draw_runtime::telemetry() const noexcept
         g_b12_hit.load(),
         g_prepare_ok.load(),
         g_prepare_fail.load(),
+        g_prepare_precondition_fail.load(),
+        g_selection_fail.load(),
+        g_selection_empty.load(),
+        g_sidecar_build_fail.load(),
+        g_context_immediate.load(),
+        g_context_deferred.load(),
+        g_context_other.load(),
+        g_gpu_prepare_fail.load(),
+        g_upload_fail.load(),
         g_enabled.load(),
         g_quarantined.load()
     };
@@ -1010,6 +1045,15 @@ void clustered_pnts_draw_runtime::reset() noexcept
     g_b12_hit.store(0u);
     g_prepare_ok.store(0u);
     g_prepare_fail.store(0u);
+    g_prepare_precondition_fail.store(0u);
+    g_selection_fail.store(0u);
+    g_selection_empty.store(0u);
+    g_sidecar_build_fail.store(0u);
+    g_context_immediate.store(0u);
+    g_context_deferred.store(0u);
+    g_context_other.store(0u);
+    g_gpu_prepare_fail.store(0u);
+    g_upload_fail.store(0u);
     g_quarantined.store(false);
 }
 
