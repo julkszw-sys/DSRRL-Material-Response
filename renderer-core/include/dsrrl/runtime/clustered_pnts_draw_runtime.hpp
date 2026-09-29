@@ -41,6 +41,7 @@ struct clustered_pnts_telemetry {
     std::uint64_t b12_hit = 0;
     std::uint64_t prepare_ok = 0;
     std::uint64_t prepare_fail = 0;
+    std::uint64_t prepare_neutral_empty = 0;
     std::uint64_t prepare_precondition_fail = 0;
     std::uint64_t selection_fail = 0;
     std::uint64_t selection_empty = 0;
@@ -76,6 +77,7 @@ struct prepared_clustered_pnts_draw {
     std::uint8_t effective_count = 0;
     bool owner_verified = false;
     bool selector_mirror_verified = false;
+    bool neutral_no_pointlights = false;
     bool ready = false;
     clustered_pnts_prepare_failure failure =
         clustered_pnts_prepare_failure::none;
