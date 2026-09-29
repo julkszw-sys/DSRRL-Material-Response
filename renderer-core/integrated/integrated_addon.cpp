@@ -32,6 +32,7 @@
 #include "dsrrl/operators/lightbank/hemdir3_b13_materializer.hpp"
 #include "dsrrl/operators/lightbank/upper_lower_hemenv_materializer.hpp"
 #include "dsrrl/operators/resource_bridges/spec_rgb_consumer_materializer.hpp"
+#include "dsrrl/operators/resource_bridges/subsurface_plain_target_materializer.hpp"
 #include "dsrrl/operators/resource_bridges/subsurface_route.hpp"
 #include "dsrrl/operators/env_spec/pmetal_rgba_materializer.hpp"
 #include "dsrrl/operators/env_spec/pmetal_rgba_lerp_materializer.hpp"
@@ -2673,6 +2674,117 @@ void on_destroy_device(reshade::api::device *device)
     g_a1_bridge.on_destroy_device(device);
 }
 
+bool register_subsurface_plain_target_chain(
+    const std::uint8_t *plain_source,
+    std::size_t plain_size,
+    std::uint32_t expected_receiver_id) noexcept
+{
+    if (plain_source == nullptr ||
+        plain_size == 0u ||
+        expected_receiver_id < 33u ||
+        expected_receiver_id > 35u)
+        return false;
+
+    std::vector<std::uint8_t> mr_payload;
+    const auto mr =
+        dsrrl::operators::material_response::
+            materialize_ptde_diffuse_response_v1(
+                g_core.features(),
+                plain_source,
+                plain_size,
+                mr_payload);
+
+    using mr_result =
+        dsrrl::operators::material_response::
+            diffuse_v1_result;
+
+    if (mr.result != mr_result::applied ||
+        mr.family !=
+            dsrrl::operators::material_response::
+                diffuse_v1_family::stable_hemenv ||
+        mr.receiver_id != expected_receiver_id)
+        return false;
+
+    std::vector<std::uint8_t> mr_ul_payload;
+    const auto mr_ul =
+        dsrrl::operators::lightbank::
+            augment_upper_lower_hemenv_verified_base(
+                plain_source,
+                plain_size,
+                mr_payload.data(),
+                mr_payload.size(),
+                4u,
+                mr_ul_payload);
+
+    if (mr_ul.result !=
+            dsrrl::operators::lightbank::
+                upper_lower_hemenv_materialize_result::applied ||
+        mr_ul.family !=
+            dsrrl::operators::lightbank::
+                upper_lower_hemenv_family::stable_hemenv ||
+        mr_ul.stratum !=
+            dsrrl::operators::lightbank::
+                upper_lower_hemenv_stratum::spc ||
+        mr_ul.stable_receiver_id != expected_receiver_id)
+        return false;
+
+    std::vector<std::uint8_t> subsurface_spec_payload;
+    const auto spec_result =
+        dsrrl::operators::resource_bridges::
+            materialize_spec_rgb_consumer(
+                mr_ul_payload.data(),
+                mr_ul_payload.size(),
+                subsurface_spec_payload,
+                false);
+
+    if (spec_result !=
+        dsrrl::operators::resource_bridges::
+            spec_rgb_consumer_result::applied)
+        return false;
+
+    const auto spec_owner =
+        dsrrl::core::operator_bit(
+            dsrrl::core::operator_id::spec_rgb);
+
+    const bool mr_ok =
+        g_mr_draw_runtime.register_receiver_replacement(
+            expected_receiver_id,
+            mr_payload.data(),
+            mr_payload.size(),
+            mr.composed_owners);
+    const bool ul_ok =
+        g_mr_draw_runtime.register_receiver_upper_lower_replacement(
+            expected_receiver_id,
+            mr_ul_payload.data(),
+            mr_ul_payload.size(),
+            mr.composed_owners);
+    const bool spec_ok =
+        g_mr_draw_runtime.
+            register_subsurface_upper_lower_spec_replacement(
+                expected_receiver_id,
+                subsurface_spec_payload.data(),
+                subsurface_spec_payload.size(),
+                mr.composed_owners |
+                    spec_owner);
+
+    if (mr_ok)
+        ++g_mr_payload_materialize_ok;
+    else
+        ++g_mr_payload_materialize_fail;
+
+    if (ul_ok)
+        ++g_mr_ul_payload_materialize_ok;
+    else
+        ++g_mr_ul_payload_materialize_fail;
+
+    if (spec_ok)
+        ++g_subsurface_spec_payload_materialize_ok;
+    else
+        ++g_subsurface_spec_payload_materialize_fail;
+
+    return mr_ok && ul_ok && spec_ok;
+}
+
 bool on_create_pipeline(
     reshade::api::device *device,
     reshade::api::pipeline_layout layout,
@@ -2715,6 +2827,46 @@ bool on_create_pipeline(
         const auto *source =
             static_cast<const std::uint8_t *>(
                 pixel_shader->code);
+
+        // Close the Subsurface creation-order gap at the source receiver
+        // itself. For the three exact Subsurf shaders, reconstruct the
+        // corresponding ordinary HemEnv target from the certified
+        // source->target patch, verify its exact target SHA, then seed the
+        // complete MR + U/L + SpecRGB replacement bank before this pipeline
+        // can ever reach a draw. Unknown or malformed sources fail open.
+        if (g_core.features().enabled(
+                dsrrl::core::operator_id::subsurface) &&
+            g_core.features().enabled(
+                dsrrl::core::operator_id::material_response) &&
+            g_core.features().enabled(
+                dsrrl::core::operator_id::upper_lower) &&
+            g_core.features().enabled(
+                dsrrl::core::operator_id::spec_rgb)) {
+            std::vector<std::uint8_t> plain_target;
+            const auto plain =
+                dsrrl::operators::resource_bridges::
+                    materialize_subsurface_plain_target(
+                        source,
+                        pixel_shader->code_size,
+                        plain_target);
+
+            using plain_result =
+                dsrrl::operators::resource_bridges::
+                    subsurface_plain_target_materialize_result;
+
+            if (plain.result ==
+                    plain_result::applied) {
+                if (!register_subsurface_plain_target_chain(
+                        plain_target.data(),
+                        plain_target.size(),
+                        plain.target_plain_receiver_id))
+                    ++g_subsurface_spec_payload_materialize_fail;
+            } else if (
+                plain.result !=
+                    plain_result::pass_not_candidate) {
+                ++g_subsurface_spec_payload_materialize_fail;
+            }
+        }
 
         clustered_pnts =
             dsrrl::operators::point_light::
