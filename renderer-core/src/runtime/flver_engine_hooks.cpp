@@ -16,6 +16,7 @@
 #include "dsrrl/operators/material_response/mtd_semantic_census.hpp"
 #include "dsrrl/operators/material_response/generated_routes_v1.hpp"
 #include "dsrrl/operators/material_response/generated_exact_binding_mr_v1.hpp"
+#include "dsrrl/operators/material_response/generated_pointlight_material_authority_v1.hpp"
 #include "dsrrl/operators/legacy_plan/sha256_bytes.hpp"
 #include <Windows.h>
 #include <bcrypt.h>
@@ -87,11 +88,19 @@ exact_material_cache<
     k_exact_material_cache_ways>
     g_exact_runtime_materials{};
 
-constexpr std::size_t k_exact_runtime_route_count =
+constexpr std::size_t k_exact_runtime_mr_route_count =
     operators::material_response::generated::
         k_material_route_count_v1 +
     operators::material_response::generated::
         k_exact_binding_mr_v1.size();
+
+constexpr std::size_t k_exact_runtime_pointlight_base =
+    k_exact_runtime_mr_route_count;
+
+constexpr std::size_t k_exact_runtime_route_count =
+    k_exact_runtime_pointlight_base +
+    operators::material_response::generated::
+        k_pointlight_material_authority_v1.size();
 
 static_assert(
     k_exact_runtime_route_count < 0xffffu,
@@ -188,13 +197,38 @@ bool classify_exact_runtime_route(
   extension_index=i;
  }
 
- if(extension_match==nullptr)
+ if(extension_match!=nullptr){
+  const auto combined_ordinal=
+      operators::material_response::generated::
+          k_material_route_count_v1+
+      extension_index;
+  if(combined_ordinal>=0xffffu)
+   return false;
+
+  route_ordinal=
+      static_cast<std::uint16_t>(
+          combined_ordinal);
+  return true;
+ }
+
+ // PointLight-only runtime material authority is admitted by exact raw-MTD
+ // digest only when every active record sharing that digest has identical
+ // PointLight behavior. Conflicting same-byte semantic aliases fail open.
+ const auto *pointlight=
+     operators::material_response::generated::
+         find_pointlight_material_authority_by_raw_mtd_v1(
+             digest);
+ if(pointlight==nullptr)
   return false;
 
+ const auto pointlight_index=
+     static_cast<std::size_t>(
+         pointlight-
+         operators::material_response::generated::
+             k_pointlight_material_authority_v1.data());
  const auto combined_ordinal=
-     operators::material_response::generated::
-         k_material_route_count_v1+
-     extension_index;
+     k_exact_runtime_pointlight_base+
+     pointlight_index;
  if(combined_ordinal>=0xffffu)
   return false;
 
@@ -349,7 +383,9 @@ bool lookup_exact_runtime_material(
       operators::material_response::
           mtd_semantic_hash(
               route.material_family);
- } else {
+ } else if (
+     route_ordinal<
+         k_exact_runtime_pointlight_base) {
   const auto extension_index=
       static_cast<std::size_t>(
           route_ordinal-standard_count);
@@ -376,6 +412,34 @@ bool lookup_exact_runtime_material(
       operators::material_response::
           mtd_semantic_hash(
               route.material_family);
+ } else {
+  const auto pointlight_index=
+      static_cast<std::size_t>(
+          route_ordinal-
+          k_exact_runtime_pointlight_base);
+  if(pointlight_index>=
+         operators::material_response::generated::
+             k_pointlight_material_authority_v1.size())
+   return false;
+
+  const auto &record=
+      operators::material_response::generated::
+          k_pointlight_material_authority_v1[
+              pointlight_index];
+
+  identity.route_index=
+      0xA0000000u |
+      (record.router_index &
+       0x0000ffffu);
+  identity.semantic_name_hash=
+      record.semantic_name_hash;
+  identity.raw_mtd_sha256=
+      record.raw_mtd_sha256;
+  identity.material_family_hash=0u;
+
+  return operators::material_response::
+      exact_runtime_pointlight_material_identity(
+          identity);
  }
 
  return operators::material_response::
