@@ -128,29 +128,44 @@ def main() -> None:
     if ul_cpp.count("publish_selected_reference_token(") != 2:
         fail("P_Metal selected state has an unexpected publication surface")
 
-    # Focused diagnostic: only the exact P_Metal selected-state path may
-    # substitute the immutable PTDE Firelink LightBank EnvSpec donor values.
-    # It must remain opt-in and must not mutate global LightBank/DrawParam state.
+    # The consumer-visible selector is a packed engine value. Retail DSR
+    # record-table addressing uses only the low byte after the non-negative
+    # sentinel check (steady 0x140563BA2, blend 0x140563CFB/0x140563D04).
+    # The full selector remains part of freshness identity.
     require(
         ul_cpp,
-        "DSRRL_EXPERIMENTAL_PMETAL_PTDE_FIRELINK_DRAWPARAM",
-        "P_Metal-only hardcoded PTDE DrawParam diagnostic opt-in",
+        "bool retail_lightbank_record_index(",
+        "retail LightBank selector normalization",
     )
     require(
         ul_cpp,
-        "k_ptde_firelink_lightbank_signature =\n        0xa710f288bd3aca82ULL;",
-        "exact PTDE Firelink donor bank",
+        "static_cast<std::uint8_t>(\n                selector)",
+        "retail low-byte selector semantics",
     )
     require(
         ul_cpp,
-        "read_hardcoded_ptde_firelink_pmetal_env_source(",
-        "hardcoded PTDE EnvSpec source",
+        "read_exact_pmetal_env_source(",
+        "exact PTDE donor source resolver",
+    )
+
+    # Bank identity must retain the exact historical V13 FNV equation while
+    # avoiding the integrated whole-region assumption that produced
+    # SIGNATURE_INVALID on live type=4/count=64 banks.
+    require(
+        ul_cpp,
+        "if (!safe_read(entry, row_id) ||\n            !safe_read(entry + 8u, name_offset))",
+        "region-safe V13 bank row identity",
     )
     require(
         ul_cpp,
-        "hardcoded_ptde_drawparam\n                ? read_hardcoded_ptde_firelink_pmetal_env_source(",
-        "P_Metal source-equation substitution",
+        "if (!safe_read(name_byte, ch))",
+        "region-safe V13 bank name identity",
     )
+
+    if "DSRRL_EXPERIMENTAL_PMETAL_PTDE_FIRELINK_DRAWPARAM" in ul_cpp:
+        fail("obsolete hardcoded Firelink EnvSpec diagnostic still present")
+    if "read_hardcoded_ptde_firelink_pmetal_env_source" in ul_cpp:
+        fail("obsolete hardcoded Firelink donor resolver still present")
 
     # HemEnvLerp EnvSpec must remain usable while visible U/L is intentionally
     # OFF. The U/L-off payload preserves stock b0[7]/b0[8] operands and does
@@ -189,7 +204,8 @@ def main() -> None:
     print("  LightBank reference carrier=ON for P_Metal EnvSpec")
     print("  producer payload=owner+sourceA/B+selectorA/B+beta only")
     print("  selected state=exact selector + exact actual P_Metal material")
-    print("  P_Metal source decode=consumer-local after exact material/semantic gate")
+    print("  selector row address=retail low byte; full selector retained for identity")
+    print("  P_Metal source decode=exact V13 bank signature + PTDE donor after consumer gate")
     print("  HemEnvLerp U/L-off=stock b0 operands preserved; no b13 requirement")
 
 
