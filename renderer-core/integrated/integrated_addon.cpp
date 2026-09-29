@@ -4405,9 +4405,8 @@ effect_probe_mask prepared_effect_mask(
             effect_probe_id::material_response);
         mask |= resource_effect_mask(
             prepared.subsurface.resources);
-        if (prepared.subsurface.upper_lower.ready)
-            mask |= effect_probe_bit(
-                effect_probe_id::upper_lower);
+        // Subsurface is isolated from the visible Upper/Lower bridge. Do not
+        // report U/L as prepared/applied merely because Subsurface is active.
     }
 
     if (prepared.hemdir3_in_batch) {
