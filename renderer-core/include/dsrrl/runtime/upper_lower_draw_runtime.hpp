@@ -116,9 +116,9 @@ struct pmetal_env_source_diagnostic {
     bool draw_token_upper_lower_ready = false;
 
     // Exact selector->producer/draw handoff diagnostics. These distinguish
-    // successful global selector authentication from consumption on the
-    // producer/draw thread without making thread identity an authority by
-    // itself: producer_serial must also match exactly.
+    // selector authentication, exact P_Metal material authorization and
+    // consumption on the producer/draw thread. producer_serial is retained as
+    // provenance for the selected state; it is not a separate lifetime clock.
     std::uint32_t source_consumer_tid = 0u;
     std::uint64_t source_consumer_serial = 0u;
     std::uint64_t cross_thread_selected_publish = 0u;
