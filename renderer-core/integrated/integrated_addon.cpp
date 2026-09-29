@@ -4611,23 +4611,12 @@ effect_probe_mask candidate_effect_mask(
         decision.receiver_id >= 33u &&
         decision.receiver_id <= 35u;
 
-    // PTDE SpecRGB sidecars are equipment-only resources. They are not a
-    // generic HemEnv/PBL material effect and must never be inferred merely
-    // from a matching receiver or MTD. Candidate telemetry is emitted only
-    // when an exact equipment owner is present AND an explicit PTDE consumer
-    // owns the sidecar: fixed local-specular, DSBT Subsurface, or P_Metal
-    // EnvSpec. Clustered PointLight remains independent until a separately
-    // proven equipment-local SpecRGB consumer cut exists.
-    const bool equipment_spec_rgb_consumer =
-        equipment_owner_exact &&
-        (fixed_pointlight_bound ||
-         subsurface_bound ||
-         pmetal_envspec_candidate);
-
-    if (equipment_spec_rgb_consumer)
-        mask |= effect_probe_bit(
-            effect_probe_id::spec_rgb);
-
+    // PTDE SpecRGB sidecars are equipment-only resources, but SpecRGB is a
+    // carrier rather than a generic visible material effect. Do not pre-mark
+    // it as an effect candidate here. The effect matrix promotes SpecRGB only
+    // when an explicit consumer actually materializes a retained resource
+    // request (fixed local-specular, P_Metal EnvSpec or DSBT Subsurface).
+    // Carrier liveness is observed separately without mutating draw state.
     if (equipment_owner_exact) {
         mask |= effect_probe_bit(
             effect_probe_id::diffuse);
@@ -4778,6 +4767,67 @@ struct draw_semantic_selection_guard {
     }
 };
 
+void observe_equipment_specrgb_carrier(
+    reshade::api::command_list *cmd_list,
+    const dsrrl::operators::material_response::material_identity &material,
+    const dsrrl::operators::material_response::decision &decision) noexcept
+{
+    if (!g_effect_telemetry_enabled ||
+        cmd_list == nullptr ||
+        !material.valid ||
+        !material.owner_tuple_exact ||
+        !material.material_slot_valid)
+        return;
+
+    auto *context =
+        reinterpret_cast<ID3D11DeviceContext *>(
+            cmd_list->get_native());
+    if (context == nullptr)
+        return;
+
+    static std::atomic_bool ready_logged{false};
+    static std::atomic_bool miss_logged{false};
+
+    const bool ready =
+        g_material_resources.
+            exact_specular_companion_ready(
+                context);
+
+    if (ready) {
+        if (!ready_logged.exchange(
+                true,
+                std::memory_order_relaxed)) {
+            char line[320]{};
+            std::snprintf(
+                line,
+                sizeof(line),
+                "[DSRRL SPECRGB CARRIER] stage=equipment_companion_ready slot=%u route=%u",
+                static_cast<unsigned>(
+                    material.material_slot),
+                static_cast<unsigned>(
+                    decision.route_index));
+            reshade::log::message(
+                reshade::log::level::info,
+                line);
+        }
+    } else if (!miss_logged.exchange(
+                   true,
+                   std::memory_order_relaxed)) {
+        char line[320]{};
+        std::snprintf(
+            line,
+            sizeof(line),
+            "[DSRRL SPECRGB CARRIER] stage=equipment_companion_not_ready slot=%u route=%u",
+            static_cast<unsigned>(
+                material.material_slot),
+            static_cast<unsigned>(
+                decision.route_index));
+        reshade::log::message(
+            reshade::log::level::info,
+            line);
+    }
+}
+
 bool prepare_island_batch(
     reshade::api::command_list *cmd_list,
     bool fixed_pointlight_bound,
@@ -4794,6 +4844,14 @@ bool prepare_island_batch(
     prepared_island_batch &prepared) noexcept
 {
     prepared = {};
+
+    // Passive diagnostic only: prove the equipment SpecRGB producer/cache
+    // independently from any downstream consumer. This performs no bind and
+    // never changes stock t1/t10 state.
+    observe_equipment_specrgb_carrier(
+        cmd_list,
+        material,
+        decision);
 
     // Clustered PntS owns PTDE first-four membership, source geometry/raw-q,
     // PointLight material constants and (for Spc) legacy local specular.
