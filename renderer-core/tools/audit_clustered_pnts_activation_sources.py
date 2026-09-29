@@ -67,6 +67,7 @@ def main():
 
     sidecar_h=(root/"include/dsrrl/operators/point_light/clustered_sidecar.hpp").read_text(encoding="utf-8")
     sidecar_cpp=(root/"src/operators/point_light/clustered_sidecar.cpp").read_text(encoding="utf-8")
+    draw_h=(root/"include/dsrrl/runtime/clustered_pnts_draw_runtime.hpp").read_text(encoding="utf-8")
     draw_cpp=(root/"src/runtime/clustered_pnts_draw_runtime.cpp").read_text(encoding="utf-8")
     pipe_cpp=(root/"src/runtime/clustered_pnts_pipeline_runtime.cpp").read_text(encoding="utf-8")
     pipe_h=(root/"include/dsrrl/runtime/clustered_pnts_pipeline_runtime.hpp").read_text(encoding="utf-8")
@@ -169,6 +170,21 @@ def main():
     require(prepare_body,"material.active","authorized material gate before heavy work")
     require(prepare_body,"select_first_four_exact(","authorized-draw exact first-four selector")
     require(prepare_body,"capture_source(","authorized-draw raw source capture")
+    require(draw_h,"neutral_no_pointlights","zero-light neutral ABI")
+    require(draw_h,"prepare_neutral_empty","zero-light neutral telemetry ABI")
+    require(prepare_body,"prepared.neutral_no_pointlights = true;","zero-light neutral classification")
+    require(prepare_body,"g_prepare_neutral_empty","zero-light neutral preparation telemetry")
+    empty_start=prepare_body.find("if (selected_count == 0u)")
+    source_start=prepare_body.find("std::array<source_raw,4> sources",empty_start)
+    if empty_start<0 or source_start<0 or not empty_start<source_start:
+        fail("zero-light selector branch is missing")
+    empty_body=prepare_body[empty_start:source_start]
+    if "g_sidecar_fail" in empty_body or "g_prepare_fail" in empty_body:
+        fail("zero-light exact membership is still classified as a prepare/sidecar failure")
+    require(integrated,"clustered_no_pointlights_neutral","zero-light neutral runtime stage")
+    require(integrated,"g_clustered_draw_neutral_noop","zero-light neutral draw telemetry")
+    require(integrated,"!prepared.clustered_neutral_noop","zero-light fail-open exclusion")
+    require(integrated,"prepared.batch.island_count != 0u ||\n           prepared.clustered_neutral_noop","neutral-only prepare success")
     require(prepare_body,"context_type == D3D11_DEVICE_CONTEXT_DEFERRED","deferred-context activation telemetry")
     require(draw_cpp,"D3D11_USAGE_DYNAMIC","dynamic clustered sidecar resources")
     require(draw_cpp,"D3D11_MAP_WRITE_DISCARD","deferred-compatible sidecar upload")
@@ -286,6 +302,7 @@ def main():
     print("  material=25 exact HOMOLOGOUS_NOSPC pairs; identity=certified supplement; c100=bit-exact router authority")
     print("  chain=candidate>receiver>material>operator-gate>selector>sources>b12+t18+t19>shader>draw-mutation>restore")
     print("  equipment_textures=independent; no clustered Diffuse/Normal/SpecRGB prerequisite")
+    print("  zero_light=exact first-four empty membership is neutral stock-equivalent no-op, not fail-open")
     print("  d3d11_context=immediate_or_deferred; dynamic WRITE_DISCARD carrier; stage telemetry enforced")
     print("  shader_owners=dynamic PointLight/MR/local-spec + exact static diffuse-domain/attenuation/SAT (+NoSpc EnvSpec-delete)")
     print("  cb_resources=dynamic owners only; static create-time owners remain shader-only")
