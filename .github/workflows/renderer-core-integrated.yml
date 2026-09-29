@@ -69,6 +69,19 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Audit PointLight material authority
+        shell: pwsh
+        run: |
+          python renderer-core/tools/audit_pointlight_material_authority_v1.py `
+            --router renderer-core/data/census/ptde_mtd_envspec_router_v1.json `
+            --authority renderer-core/data/provenance/pointlight_material_authority_v1.json
+
+      - name: Audit clustered PntS activation sources
+        shell: pwsh
+        run: |
+          python renderer-core/tools/audit_clustered_pnts_activation_sources.py `
+            --source-dir renderer-core
+
       - name: Resolve exact source lineage
         shell: pwsh
         run: |
@@ -1184,7 +1197,8 @@ jobs:
             clustered_pnts_stock_membership = "T16_T17_BYPASSED_PRIVATE_FIRST4"
             clustered_pnts_carriers = "B12_SLOT12_T18_SLOT18_T19_SLOT19"
             clustered_pnts_pre_runtime_activation = "STATIC_PATH_AND_WINDOWS_CI_PASS_RUNTIME_NOT_TESTED"
-            clustered_pnts_external_asset_prerequisite = @("DSRRL\\Specular","DSRRL\\Diffuse","DSRRL\\Normals")
+            clustered_pnts_external_asset_prerequisite = @()
+            clustered_pnts_material_resource_policy = "STOCK_HOST_PASSTHROUGH_EQUIPMENT_PTDE_TEXTURES_INDEPENDENT"
             clustered_pnts_runtime_activation = "NOT_TESTED"
             clustered_pnts_pixel_behavior = "OPEN"
             pmetal_envspec_materializer_sha256 = $envspecMaterializerHash
