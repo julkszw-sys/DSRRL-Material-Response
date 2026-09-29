@@ -32,6 +32,7 @@
 #include "dsrrl/operators/lightbank/hemdir3_b13_materializer.hpp"
 #include "dsrrl/operators/lightbank/upper_lower_hemenv_materializer.hpp"
 #include "dsrrl/operators/resource_bridges/spec_rgb_consumer_materializer.hpp"
+#include "dsrrl/operators/resource_bridges/subsurface_plain_target_materializer.hpp"
 #include "dsrrl/operators/resource_bridges/subsurface_route.hpp"
 #include "dsrrl/operators/env_spec/pmetal_rgba_materializer.hpp"
 #include "dsrrl/operators/env_spec/pmetal_rgba_lerp_materializer.hpp"
@@ -45,6 +46,7 @@
 #include "dsrrl/operators/point_light/clustered_pnts_direct_materializer.hpp"
 #include "dsrrl/operators/legacy_plan/dxbc_checksum.hpp"
 #include "dsrrl/operators/legacy_plan/sha256_bytes.hpp"
+#include "dsrrl/operators/postprocess/motion_blur_velocity_authority.hpp"
 
 #include <reshade.hpp>
 #include <d3d11.h>
@@ -869,6 +871,27 @@ const reshade::api::shader_desc *find_pixel_shader(
     return nullptr;
 }
 
+const reshade::api::shader_desc *find_vertex_shader(
+    std::uint32_t subobject_count,
+    const reshade::api::pipeline_subobject *subobjects) noexcept
+{
+    if (subobjects == nullptr)
+        return nullptr;
+
+    for (std::uint32_t i = 0; i < subobject_count; ++i) {
+        if (subobjects[i].type !=
+                reshade::api::pipeline_subobject_type::vertex_shader ||
+            subobjects[i].count != 1u ||
+            subobjects[i].data == nullptr)
+            continue;
+
+        return static_cast<const reshade::api::shader_desc *>(
+            subobjects[i].data);
+    }
+
+    return nullptr;
+}
+
 const reshade::api::shader_desc *find_compute_shader(
     std::uint32_t subobject_count,
     const reshade::api::pipeline_subobject *subobjects) noexcept
@@ -896,6 +919,9 @@ namespace hashing =
     dsrrl::operators::legacy_plan::hashing;
 namespace dxbc =
     dsrrl::operators::legacy_plan::dxbc;
+namespace velocity_authority =
+    dsrrl::operators::postprocess::
+        motion_blur_velocity_authority;
 
 // Exact vanilla DSR FRPG_Compute_MotionBlurTiles(.cpo/_CB.cpo).
 // Both binder entries are byte-identical. The shader chooses between:
@@ -938,16 +964,519 @@ constexpr std::array<patch_word,8> k_patch_words{{
     {0x1310u,0x00000000u,0x00000001u}
 }};
 
+struct velocity_payload_cache_entry {
+    hashing::sha256_digest input_digest{};
+    hashing::sha256_digest output_digest{};
+    std::vector<std::uint8_t> bytes;
+};
+
 std::mutex g_mutex;
 std::vector<std::uint8_t> g_payload;
+std::vector<velocity_payload_cache_entry>
+    g_velocity_payloads;
 std::unordered_map<std::uint64_t,bool> g_pipelines;
+std::unordered_map<std::uint64_t,bool>
+    g_velocity_pipelines;
 std::atomic<std::uint64_t> g_candidate_size{0};
 std::atomic<std::uint64_t> g_exact_identity{0};
 std::atomic<std::uint64_t> g_materialized{0};
 std::atomic<std::uint64_t> g_fail_open{0};
 std::atomic<std::uint64_t> g_init_attested{0};
 std::atomic<std::uint64_t> g_compute_binds{0};
+std::atomic<std::uint64_t> g_velocity_candidates{0};
+std::atomic<std::uint64_t> g_velocity_exact{0};
+std::atomic<std::uint64_t> g_velocity_materialized{0};
+std::atomic<std::uint64_t> g_velocity_fail_open{0};
+std::atomic<std::uint64_t> g_velocity_init_attested{0};
+std::atomic<std::uint64_t> g_velocity_binds{0};
 std::atomic_bool g_first_bind_logged{false};
+std::atomic_bool g_velocity_first_materialize_logged{false};
+std::atomic_bool g_velocity_first_bind_logged{false};
+
+bool velocity_digest_authorized(
+    const hashing::sha256_digest &digest) noexcept
+{
+    for (const auto expected :
+         velocity_authority::
+            k_dsr_velocity_vpo_sha256) {
+        if (hashing::matches_hex(
+                digest,
+                expected))
+            return true;
+    }
+
+    return false;
+}
+
+bool locate_velocity_previous_projection_sites(
+    const std::uint8_t *bytes,
+    std::size_t size,
+    std::array<std::size_t,4> &sites) noexcept
+{
+    sites.fill(0u);
+
+    if (!dxbc::checksum_container_valid(
+            bytes,
+            size) ||
+        size < 32u)
+        return false;
+
+    const auto chunk_count =
+        dxbc::read_u32(bytes + 28u);
+    if (chunk_count == 0u ||
+        chunk_count > 64u ||
+        32u +
+            static_cast<std::size_t>(
+                chunk_count) * 4u >
+            size)
+        return false;
+
+    constexpr std::uint32_t k_shex =
+        0x58454853u; // "SHEX"
+    constexpr std::uint32_t k_shdr =
+        0x52444853u; // "SHDR"
+    constexpr std::uint32_t k_opcode_dp4 = 17u;
+    constexpr std::uint32_t k_opcode_customdata = 52u;
+
+    const std::uint8_t *shader = nullptr;
+    std::size_t shader_size = 0u;
+    std::size_t shader_file_offset = 0u;
+
+    for (std::uint32_t i = 0u;
+         i < chunk_count;
+         ++i) {
+        const auto chunk_offset =
+            static_cast<std::size_t>(
+                dxbc::read_u32(
+                    bytes + 32u + i * 4u));
+
+        if (chunk_offset + 8u > size)
+            return false;
+
+        const auto fourcc =
+            dxbc::read_u32(
+                bytes + chunk_offset);
+        if (fourcc != k_shex &&
+            fourcc != k_shdr)
+            continue;
+
+        const auto payload_size =
+            static_cast<std::size_t>(
+                dxbc::read_u32(
+                    bytes +
+                    chunk_offset + 4u));
+
+        if (payload_size < 8u ||
+            (payload_size & 3u) != 0u ||
+            chunk_offset + 8u +
+                payload_size >
+                size)
+            return false;
+
+        shader =
+            bytes + chunk_offset + 8u;
+        shader_size = payload_size;
+        shader_file_offset =
+            chunk_offset + 8u;
+        break;
+    }
+
+    if (shader == nullptr)
+        return false;
+
+    const auto token_count =
+        static_cast<std::size_t>(
+            dxbc::read_u32(
+                shader + 4u));
+
+    if (token_count < 3u ||
+        token_count * 4u !=
+            shader_size)
+        return false;
+
+    std::array<std::uint32_t,8>
+        observed{};
+    std::size_t observed_count = 0u;
+    std::size_t token = 2u;
+
+    while (token < token_count) {
+        const auto opcode_token =
+            dxbc::read_u32(
+                shader + token * 4u);
+        const auto opcode =
+            opcode_token & 0x7FFu;
+
+        std::size_t instruction_length = 0u;
+        if (opcode ==
+            k_opcode_customdata) {
+            if (token + 1u >=
+                token_count)
+                return false;
+            instruction_length =
+                static_cast<std::size_t>(
+                    dxbc::read_u32(
+                        shader +
+                        (token + 1u) *
+                            4u));
+        } else {
+            instruction_length =
+                static_cast<std::size_t>(
+                    (opcode_token >> 24u) &
+                    0x7Fu);
+        }
+
+        if (instruction_length == 0u ||
+            token +
+                instruction_length >
+                token_count)
+            return false;
+
+        if (opcode == k_opcode_dp4) {
+            for (std::size_t j = 1u;
+                 j + 2u <
+                    instruction_length;
+                 ++j) {
+                const auto operand =
+                    dxbc::read_u32(
+                        shader +
+                        (token + j) *
+                            4u);
+
+                const auto operand_type =
+                    (operand >> 12u) &
+                    0xFFu;
+                const auto index_dimension =
+                    (operand >> 20u) &
+                    0x3u;
+                const auto index_rep0 =
+                    (operand >> 22u) &
+                    0x7u;
+                const auto index_rep1 =
+                    (operand >> 25u) &
+                    0x7u;
+
+                if (operand_type != 8u ||
+                    index_dimension != 2u ||
+                    index_rep0 != 0u ||
+                    index_rep1 != 0u)
+                    continue;
+
+                const auto cb_slot =
+                    dxbc::read_u32(
+                        shader +
+                        (token + j + 1u) *
+                            4u);
+                const auto cb_register =
+                    dxbc::read_u32(
+                        shader +
+                        (token + j + 2u) *
+                            4u);
+
+                if (cb_slot != 0u ||
+                    cb_register < 8u ||
+                    cb_register > 15u)
+                    continue;
+
+                if (observed_count >=
+                    observed.size())
+                    return false;
+
+                observed[
+                    observed_count] =
+                    cb_register;
+
+                if (observed_count >= 4u) {
+                    sites[
+                        observed_count - 4u] =
+                        shader_file_offset +
+                        (token + j + 2u) *
+                            4u;
+                }
+
+                ++observed_count;
+            }
+        }
+
+        token += instruction_length;
+    }
+
+    if (token != token_count ||
+        observed_count != 8u)
+        return false;
+
+    constexpr std::array<
+        std::uint32_t,8>
+        k_expected{{
+            12u,13u,14u,15u,
+            8u,9u,10u,11u
+        }};
+
+    if (observed != k_expected)
+        return false;
+
+    for (std::size_t i = 0u;
+         i < sites.size();
+         ++i) {
+        if (sites[i] == 0u ||
+            sites[i] + 4u > size ||
+            dxbc::read_u32(
+                bytes + sites[i]) !=
+                8u + i)
+            return false;
+    }
+
+    return true;
+}
+
+bool velocity_patch_scope_valid(
+    const std::uint8_t *source,
+    const std::vector<std::uint8_t>
+        &replacement,
+    const std::array<std::size_t,4>
+        &sites) noexcept
+{
+    if (source == nullptr)
+        return false;
+
+    for (std::size_t i = 0u;
+         i < replacement.size();
+         ++i) {
+        if (source[i] ==
+            replacement[i])
+            continue;
+
+        const bool checksum_byte =
+            i >= 4u && i < 20u;
+
+        bool site_byte = false;
+        for (const auto site :
+             sites) {
+            if (i >= site &&
+                i < site + 4u) {
+                site_byte = true;
+                break;
+            }
+        }
+
+        if (!checksum_byte &&
+            !site_byte)
+            return false;
+    }
+
+    return true;
+}
+
+bool materialize_velocity_shader(
+    const std::uint8_t *source,
+    std::size_t size,
+    const hashing::sha256_digest
+        &input_digest,
+    std::vector<std::uint8_t>
+        &replacement,
+    hashing::sha256_digest
+        &output_digest) noexcept
+{
+    replacement.clear();
+    output_digest = {};
+
+    if (!velocity_digest_authorized(
+            input_digest))
+        return false;
+
+    std::array<std::size_t,4>
+        sites{};
+    if (!locate_velocity_previous_projection_sites(
+            source,
+            size,
+            sites))
+        return false;
+
+    try {
+        replacement.assign(
+            source,
+            source + size);
+    } catch (...) {
+        replacement.clear();
+        return false;
+    }
+
+    for (std::size_t i = 0u;
+         i < sites.size();
+         ++i)
+        dxbc::write_u32(
+            replacement.data() +
+                sites[i],
+            static_cast<std::uint32_t>(
+                12u + i));
+
+    if (!dxbc::fix_checksum(
+            replacement.data(),
+            replacement.size()) ||
+        !velocity_patch_scope_valid(
+            source,
+            replacement,
+            sites)) {
+        replacement.clear();
+        return false;
+    }
+
+    output_digest =
+        hashing::sha256(
+            replacement.data(),
+            replacement.size());
+
+    return output_digest !=
+        input_digest;
+}
+
+bool on_create_velocity_pipeline(
+    std::uint32_t subobject_count,
+    const reshade::api::pipeline_subobject
+        *subobjects) noexcept
+{
+    auto *shader =
+        const_cast<reshade::api::shader_desc *>(
+            find_vertex_shader(
+                subobject_count,
+                subobjects));
+
+    if (shader == nullptr ||
+        shader->code == nullptr ||
+        shader->code_size < 7000u ||
+        shader->code_size > 11000u)
+        return false;
+
+    g_velocity_candidates.fetch_add(
+        1u,
+        std::memory_order_relaxed);
+
+    const auto *source =
+        static_cast<const std::uint8_t *>(
+            shader->code);
+    const auto input_digest =
+        hashing::sha256(
+            source,
+            shader->code_size);
+
+    if (!velocity_digest_authorized(
+            input_digest))
+        return false;
+
+    g_velocity_exact.fetch_add(
+        1u,
+        std::memory_order_relaxed);
+
+    try {
+        std::vector<std::uint8_t>
+            replacement;
+        hashing::sha256_digest
+            output_digest{};
+
+        if (!materialize_velocity_shader(
+                source,
+                shader->code_size,
+                input_digest,
+                replacement,
+                output_digest)) {
+            g_velocity_fail_open.fetch_add(
+                1u,
+                std::memory_order_relaxed);
+            return false;
+        }
+
+        std::lock_guard<std::mutex> lock(
+            g_mutex);
+
+        velocity_payload_cache_entry
+            *cached = nullptr;
+
+        for (auto &entry :
+             g_velocity_payloads) {
+            if (entry.input_digest ==
+                input_digest) {
+                cached = &entry;
+                break;
+            }
+        }
+
+        if (cached == nullptr) {
+            g_velocity_payloads.push_back(
+                {
+                    input_digest,
+                    output_digest,
+                    std::move(
+                        replacement)
+                });
+            cached =
+                &g_velocity_payloads.back();
+        } else if (
+            cached->output_digest !=
+                output_digest ||
+            cached->bytes !=
+                replacement) {
+            g_velocity_fail_open.fetch_add(
+                1u,
+                std::memory_order_relaxed);
+            return false;
+        }
+
+        shader->code =
+            cached->bytes.data();
+        shader->code_size =
+            cached->bytes.size();
+
+        g_velocity_materialized.fetch_add(
+            1u,
+            std::memory_order_relaxed);
+
+        if (!g_velocity_first_materialize_logged.exchange(
+                true,
+                std::memory_order_relaxed)) {
+            reshade::log::message(
+                reshade::log::level::info,
+                "[DSRRL MOTION BLUR] exact velocity VPO family matched; "
+                "previous pose now uses current camera projection "
+                "(CommonREG12), preserving pose/object motion while "
+                "removing the CommonREG8 previous-camera contribution.");
+        }
+
+        return true;
+    } catch (...) {
+        g_velocity_fail_open.fetch_add(
+            1u,
+            std::memory_order_relaxed);
+        return false;
+    }
+}
+
+bool velocity_pipeline_attested(
+    const reshade::api::shader_desc
+        *shader) noexcept
+{
+    if (shader == nullptr ||
+        shader->code == nullptr ||
+        shader->code_size == 0u)
+        return false;
+
+    const auto digest =
+        hashing::sha256(
+            static_cast<
+                const std::uint8_t *>(
+                shader->code),
+            shader->code_size);
+
+    std::lock_guard<std::mutex> lock(
+        g_mutex);
+
+    for (const auto &entry :
+         g_velocity_payloads) {
+        if (entry.output_digest ==
+            digest)
+            return true;
+    }
+
+    return false;
+}
 
 bool materialize(
     const std::uint8_t *source,
@@ -1017,7 +1546,7 @@ bool materialize(
     return true;
 }
 
-bool on_create_pipeline(
+bool on_create_compute_pipeline(
     std::uint32_t subobject_count,
     const reshade::api::pipeline_subobject *subobjects) noexcept
 {
@@ -1101,7 +1630,24 @@ bool on_create_pipeline(
     }
 }
 
-void on_init_pipeline(
+bool on_create_pipeline(
+    std::uint32_t subobject_count,
+    const reshade::api::pipeline_subobject *subobjects) noexcept
+{
+    const bool compute_changed =
+        on_create_compute_pipeline(
+            subobject_count,
+            subobjects);
+    const bool velocity_changed =
+        on_create_velocity_pipeline(
+            subobject_count,
+            subobjects);
+
+    return compute_changed ||
+           velocity_changed;
+}
+
+void on_init_compute_pipeline(
     std::uint32_t subobject_count,
     const reshade::api::pipeline_subobject *subobjects,
     reshade::api::pipeline pipeline) noexcept
@@ -1146,6 +1692,44 @@ void on_init_pipeline(
     }
 }
 
+void on_init_pipeline(
+    std::uint32_t subobject_count,
+    const reshade::api::pipeline_subobject *subobjects,
+    reshade::api::pipeline pipeline) noexcept
+{
+    on_init_compute_pipeline(
+        subobject_count,
+        subobjects,
+        pipeline);
+
+    const auto *vertex_shader =
+        find_vertex_shader(
+            subobject_count,
+            subobjects);
+
+    if (!velocity_pipeline_attested(
+            vertex_shader) ||
+        pipeline.handle == 0u)
+        return;
+
+    try {
+        std::lock_guard<std::mutex> lock(
+            g_mutex);
+        const auto inserted =
+            g_velocity_pipelines.emplace(
+                pipeline.handle,
+                true).second;
+        if (inserted)
+            g_velocity_init_attested.fetch_add(
+                1u,
+                std::memory_order_relaxed);
+    } catch (...) {
+        g_velocity_fail_open.fetch_add(
+            1u,
+            std::memory_order_relaxed);
+    }
+}
+
 void on_destroy_pipeline(
     reshade::api::pipeline pipeline) noexcept
 {
@@ -1156,55 +1740,94 @@ void on_destroy_pipeline(
         g_mutex);
     g_pipelines.erase(
         pipeline.handle);
+    g_velocity_pipelines.erase(
+        pipeline.handle);
 }
 
 void on_bind_pipeline(
     reshade::api::pipeline_stage stages,
     reshade::api::pipeline pipeline) noexcept
 {
-    if ((static_cast<std::uint32_t>(stages) &
-         static_cast<std::uint32_t>(
-             reshade::api::pipeline_stage::
-                compute_shader)) == 0u ||
-        pipeline.handle == 0u)
+    if (pipeline.handle == 0u)
         return;
 
-    bool target = false;
+    const auto stage_bits =
+        static_cast<std::uint32_t>(
+            stages);
+
+    const bool compute_bound =
+        (stage_bits &
+         static_cast<std::uint32_t>(
+             reshade::api::pipeline_stage::
+                compute_shader)) != 0u;
+
+    const bool vertex_bound =
+        (stage_bits &
+         static_cast<std::uint32_t>(
+             reshade::api::pipeline_stage::
+                vertex_shader)) != 0u;
+
+    bool compute_target = false;
+    bool velocity_target = false;
+
     {
         std::lock_guard<std::mutex> lock(
             g_mutex);
-        target =
-            g_pipelines.find(
-                pipeline.handle) !=
-            g_pipelines.end();
+        if (compute_bound)
+            compute_target =
+                g_pipelines.find(
+                    pipeline.handle) !=
+                g_pipelines.end();
+        if (vertex_bound)
+            velocity_target =
+                g_velocity_pipelines.find(
+                    pipeline.handle) !=
+                g_velocity_pipelines.end();
     }
 
-    if (!target)
-        return;
+    if (compute_target) {
+        g_compute_binds.fetch_add(
+            1u,
+            std::memory_order_relaxed);
 
-    g_compute_binds.fetch_add(
-        1u,
-        std::memory_order_relaxed);
+        if (!g_first_bind_logged.exchange(
+                true,
+                std::memory_order_relaxed)) {
+            reshade::log::message(
+                reshade::log::level::info,
+                "[DSRRL MOTION BLUR] FIRST_BIND exact camera-fallback-disabled "
+                "MotionBlurTiles compute pipeline.");
+        }
+    }
 
-    if (!g_first_bind_logged.exchange(
-            true,
-            std::memory_order_relaxed)) {
-        reshade::log::message(
-            reshade::log::level::info,
-            "[DSRRL MOTION BLUR] FIRST_BIND exact camera-fallback-disabled "
-            "MotionBlurTiles compute pipeline.");
+    if (velocity_target) {
+        g_velocity_binds.fetch_add(
+            1u,
+            std::memory_order_relaxed);
+
+        if (!g_velocity_first_bind_logged.exchange(
+                true,
+                std::memory_order_relaxed)) {
+            reshade::log::message(
+                reshade::log::level::info,
+                "[DSRRL MOTION BLUR] FIRST_BIND exact camera-neutral "
+                "velocity vertex pipeline.");
+        }
     }
 }
 
 void log_state(
     const char *tag) noexcept
 {
-    char line[384]{};
+    char line[768]{};
     std::snprintf(
         line,
         sizeof(line),
-        "[DSRRL MOTION BLUR] tag=%s candidate=%llu exact=%llu "
-        "materialized=%llu failopen=%llu init_ok=%llu compute_binds=%llu "
+        "[DSRRL MOTION BLUR] tag=%s "
+        "tiles_candidate=%llu tiles_exact=%llu tiles_materialized=%llu "
+        "tiles_failopen=%llu tiles_init=%llu compute_binds=%llu "
+        "velocity_candidate=%llu velocity_exact=%llu velocity_materialized=%llu "
+        "velocity_failopen=%llu velocity_init=%llu velocity_binds=%llu "
         "pixel=UNVERIFIED",
         tag != nullptr ? tag : "UNKNOWN",
         static_cast<unsigned long long>(
@@ -1224,6 +1847,24 @@ void log_state(
                 std::memory_order_relaxed)),
         static_cast<unsigned long long>(
             g_compute_binds.load(
+                std::memory_order_relaxed)),
+        static_cast<unsigned long long>(
+            g_velocity_candidates.load(
+                std::memory_order_relaxed)),
+        static_cast<unsigned long long>(
+            g_velocity_exact.load(
+                std::memory_order_relaxed)),
+        static_cast<unsigned long long>(
+            g_velocity_materialized.load(
+                std::memory_order_relaxed)),
+        static_cast<unsigned long long>(
+            g_velocity_fail_open.load(
+                std::memory_order_relaxed)),
+        static_cast<unsigned long long>(
+            g_velocity_init_attested.load(
+                std::memory_order_relaxed)),
+        static_cast<unsigned long long>(
+            g_velocity_binds.load(
                 std::memory_order_relaxed)));
     reshade::log::message(
         reshade::log::level::info,
@@ -1236,7 +1877,9 @@ void reset() noexcept
         std::lock_guard<std::mutex> lock(
             g_mutex);
         g_pipelines.clear();
+        g_velocity_pipelines.clear();
         g_payload.clear();
+        g_velocity_payloads.clear();
     }
 
     g_candidate_size.store(0);
@@ -1245,7 +1888,15 @@ void reset() noexcept
     g_fail_open.store(0);
     g_init_attested.store(0);
     g_compute_binds.store(0);
+    g_velocity_candidates.store(0);
+    g_velocity_exact.store(0);
+    g_velocity_materialized.store(0);
+    g_velocity_fail_open.store(0);
+    g_velocity_init_attested.store(0);
+    g_velocity_binds.store(0);
     g_first_bind_logged.store(false);
+    g_velocity_first_materialize_logged.store(false);
+    g_velocity_first_bind_logged.store(false);
 }
 
 } // namespace motion_blur_camera_fallback_disable
@@ -2673,6 +3324,117 @@ void on_destroy_device(reshade::api::device *device)
     g_a1_bridge.on_destroy_device(device);
 }
 
+bool register_subsurface_plain_target_chain(
+    const std::uint8_t *plain_source,
+    std::size_t plain_size,
+    std::uint32_t expected_receiver_id) noexcept
+{
+    if (plain_source == nullptr ||
+        plain_size == 0u ||
+        expected_receiver_id < 33u ||
+        expected_receiver_id > 35u)
+        return false;
+
+    std::vector<std::uint8_t> mr_payload;
+    const auto mr =
+        dsrrl::operators::material_response::
+            materialize_ptde_diffuse_response_v1(
+                g_core.features(),
+                plain_source,
+                plain_size,
+                mr_payload);
+
+    using mr_result =
+        dsrrl::operators::material_response::
+            diffuse_v1_result;
+
+    if (mr.result != mr_result::applied ||
+        mr.family !=
+            dsrrl::operators::material_response::
+                diffuse_v1_family::stable_hemenv ||
+        mr.receiver_id != expected_receiver_id)
+        return false;
+
+    std::vector<std::uint8_t> mr_ul_payload;
+    const auto mr_ul =
+        dsrrl::operators::lightbank::
+            augment_upper_lower_hemenv_verified_base(
+                plain_source,
+                plain_size,
+                mr_payload.data(),
+                mr_payload.size(),
+                4u,
+                mr_ul_payload);
+
+    if (mr_ul.result !=
+            dsrrl::operators::lightbank::
+                upper_lower_hemenv_materialize_result::applied ||
+        mr_ul.family !=
+            dsrrl::operators::lightbank::
+                upper_lower_hemenv_family::stable_hemenv ||
+        mr_ul.stratum !=
+            dsrrl::operators::lightbank::
+                upper_lower_hemenv_stratum::spc ||
+        mr_ul.stable_receiver_id != expected_receiver_id)
+        return false;
+
+    std::vector<std::uint8_t> subsurface_spec_payload;
+    const auto spec_result =
+        dsrrl::operators::resource_bridges::
+            materialize_spec_rgb_consumer(
+                mr_ul_payload.data(),
+                mr_ul_payload.size(),
+                subsurface_spec_payload,
+                false);
+
+    if (spec_result !=
+        dsrrl::operators::resource_bridges::
+            spec_rgb_consumer_result::applied)
+        return false;
+
+    const auto spec_owner =
+        dsrrl::core::operator_bit(
+            dsrrl::core::operator_id::spec_rgb);
+
+    const bool mr_ok =
+        g_mr_draw_runtime.register_receiver_replacement(
+            expected_receiver_id,
+            mr_payload.data(),
+            mr_payload.size(),
+            mr.composed_owners);
+    const bool ul_ok =
+        g_mr_draw_runtime.register_receiver_upper_lower_replacement(
+            expected_receiver_id,
+            mr_ul_payload.data(),
+            mr_ul_payload.size(),
+            mr.composed_owners);
+    const bool spec_ok =
+        g_mr_draw_runtime.
+            register_subsurface_upper_lower_spec_replacement(
+                expected_receiver_id,
+                subsurface_spec_payload.data(),
+                subsurface_spec_payload.size(),
+                mr.composed_owners |
+                    spec_owner);
+
+    if (mr_ok)
+        ++g_mr_payload_materialize_ok;
+    else
+        ++g_mr_payload_materialize_fail;
+
+    if (ul_ok)
+        ++g_mr_ul_payload_materialize_ok;
+    else
+        ++g_mr_ul_payload_materialize_fail;
+
+    if (spec_ok)
+        ++g_subsurface_spec_payload_materialize_ok;
+    else
+        ++g_subsurface_spec_payload_materialize_fail;
+
+    return mr_ok && ul_ok && spec_ok;
+}
+
 bool on_create_pipeline(
     reshade::api::device *device,
     reshade::api::pipeline_layout layout,
@@ -2715,6 +3477,46 @@ bool on_create_pipeline(
         const auto *source =
             static_cast<const std::uint8_t *>(
                 pixel_shader->code);
+
+        // Close the Subsurface creation-order gap at the source receiver
+        // itself. For the three exact Subsurf shaders, reconstruct the
+        // corresponding ordinary HemEnv target from the certified
+        // source->target patch, verify its exact target SHA, then seed the
+        // complete MR + U/L + SpecRGB replacement bank before this pipeline
+        // can ever reach a draw. Unknown or malformed sources fail open.
+        if (g_core.features().enabled(
+                dsrrl::core::operator_id::subsurface) &&
+            g_core.features().enabled(
+                dsrrl::core::operator_id::material_response) &&
+            g_core.features().enabled(
+                dsrrl::core::operator_id::upper_lower) &&
+            g_core.features().enabled(
+                dsrrl::core::operator_id::spec_rgb)) {
+            std::vector<std::uint8_t> plain_target;
+            const auto plain =
+                dsrrl::operators::resource_bridges::
+                    materialize_subsurface_plain_target(
+                        source,
+                        pixel_shader->code_size,
+                        plain_target);
+
+            using plain_result =
+                dsrrl::operators::resource_bridges::
+                    subsurface_plain_target_materialize_result;
+
+            if (plain.result ==
+                    plain_result::applied) {
+                if (!register_subsurface_plain_target_chain(
+                        plain_target.data(),
+                        plain_target.size(),
+                        plain.target_plain_receiver_id))
+                    ++g_subsurface_spec_payload_materialize_fail;
+            } else if (
+                plain.result !=
+                    plain_result::pass_not_candidate) {
+                ++g_subsurface_spec_payload_materialize_fail;
+            }
+        }
 
         clustered_pnts =
             dsrrl::operators::point_light::
