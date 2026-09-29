@@ -128,6 +128,30 @@ def main() -> None:
     if ul_cpp.count("publish_selected_reference_token(") != 2:
         fail("P_Metal selected state has an unexpected publication surface")
 
+    # Focused diagnostic: only the exact P_Metal selected-state path may
+    # substitute the immutable PTDE Firelink LightBank EnvSpec donor values.
+    # It must remain opt-in and must not mutate global LightBank/DrawParam state.
+    require(
+        ul_cpp,
+        "DSRRL_EXPERIMENTAL_PMETAL_PTDE_FIRELINK_DRAWPARAM",
+        "P_Metal-only hardcoded PTDE DrawParam diagnostic opt-in",
+    )
+    require(
+        ul_cpp,
+        "k_ptde_firelink_lightbank_signature =\n        0xa710f288bd3aca82ULL;",
+        "exact PTDE Firelink donor bank",
+    )
+    require(
+        ul_cpp,
+        "read_hardcoded_ptde_firelink_pmetal_env_source(",
+        "hardcoded PTDE EnvSpec source",
+    )
+    require(
+        ul_cpp,
+        "hardcoded_ptde_drawparam\n                ? read_hardcoded_ptde_firelink_pmetal_env_source(",
+        "P_Metal source-equation substitution",
+    )
+
     # HemEnvLerp EnvSpec must remain usable while visible U/L is intentionally
     # OFF. The U/L-off payload preserves stock b0[7]/b0[8] operands and does
     # not require/bind b13; the composed PTDE-b13 variant remains available
