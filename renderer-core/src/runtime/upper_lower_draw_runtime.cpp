@@ -2241,10 +2241,10 @@ bool read_exact_pmetal_env_source(
         return false;
     }
 
-    // Both callers are exact engine producer hooks and invoke this only
-    // after the original producer returned successfully, so 'source' is
-    // engine-attested for this call. On the steady hot path, first reuse the
-    // immutable bank verdict by exact base pointer.
+    // Producer-hook callers arrive with an engine-attested source. The
+    // selector/material P_Metal path additionally revalidates the carried
+    // source object before entering here. Once source+0x18 is authorized,
+    // reuse the immutable bank verdict by exact base pointer.
     const std::uint8_t *base = nullptr;
     std::memcpy(
         &base,
@@ -2438,6 +2438,20 @@ bool materialize_selected_pmetal_env_source(
         token.selector_a < 0 ||
         token.selector_b < 0 ||
         !std::isfinite(token.beta))
+        return false;
+
+    // At the producer hook these pointers were engine-attested. This decode is
+    // deliberately delayed until the exact P_Metal material gate, so validate
+    // the minimal source object range again before dereferencing source+0x18.
+    // This runs only for exact P_Metal selector events, not the geometry hot
+    // path.
+    if (!readable_range(
+            token.source_a,
+            0x20u) ||
+        (token.beta > 0.0f &&
+         !readable_range(
+             token.source_b,
+             0x20u)))
         return false;
 
     f4 a{};
