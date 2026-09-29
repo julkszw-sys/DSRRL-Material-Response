@@ -54,6 +54,18 @@ struct clustered_pnts_telemetry {
     bool quarantined = false;
 };
 
+enum class clustered_pnts_prepare_failure : std::uint8_t {
+    none = 0,
+    precondition,
+    selection,
+    empty_selection,
+    source_capture,
+    sidecar_build,
+    gpu_prepare,
+    gpu_resources,
+    upload
+};
+
 struct prepared_clustered_pnts_draw {
     ID3D11ShaderResourceView *t18 = nullptr;
     ID3D11ShaderResourceView *t19 = nullptr;
@@ -65,6 +77,9 @@ struct prepared_clustered_pnts_draw {
     bool owner_verified = false;
     bool selector_mirror_verified = false;
     bool ready = false;
+    clustered_pnts_prepare_failure failure =
+        clustered_pnts_prepare_failure::none;
+    std::uint8_t sidecar_result_code = 0u;
 };
 
 void clustered_pnts_builder_event_bridge(
