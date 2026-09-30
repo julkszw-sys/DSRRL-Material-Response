@@ -287,6 +287,7 @@ int main()
           decision_reason::owner_tuple_not_authenticated);
 
     auto direct_nospc_wrong_sha=exact_nospc;
+    direct_nospc_wrong_sha.actual_material_exact=true;
     direct_nospc_wrong_sha.raw_mtd_sha256.fill(0xffu);
     const auto direct_nospc_bad_identity=
         seeded.evaluate_direct_pointlight_material(
