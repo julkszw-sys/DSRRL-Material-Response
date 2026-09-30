@@ -2439,32 +2439,6 @@ bool read_exact_pmetal_env_source(
     return true;
 }
 
-bool materialize_selected_pmetal_env_source(
-    lightbank_reference_token &token) noexcept
-{
-    // Source A/B ownership ends at the retail LightBank producer. The token
-    // must already contain immutable V13 donor state by the time the exact
-    // P_Metal material gate runs.
-    if (!token.valid ||
-        !token.source_ready ||
-        !token.pmetal_env_ready ||
-        !std::isfinite(token.pmetal_env.a[0]) ||
-        !std::isfinite(token.pmetal_env.a[1]) ||
-        !std::isfinite(token.pmetal_env.a[2]) ||
-        !std::isfinite(token.pmetal_env.b[0]) ||
-        !std::isfinite(token.pmetal_env.b[1]) ||
-        !std::isfinite(token.pmetal_env.b[2]) ||
-        !std::isfinite(token.pmetal_env.beta))
-        return false;
-
-    token.pmetal_env.beta =
-        std::clamp(
-            token.pmetal_env.beta,
-            0.0f,
-            1.0f);
-    return true;
-}
-
 bool write_bytes(
     void *dst,
     const void *src,
@@ -4890,21 +4864,12 @@ void upper_lower_draw_runtime::pmetal_material_event(
             owner_key)
         return;
 
-    auto selected_token =
-        g_draw_reference_token;
-
-    // V13 decoded the donor while the engine source tuple was live. The
-    // reference token must already carry immutable A/B+beta+bank/row state.
-    // This exact material gate authorizes publication but never re-dereferences
-    // delayed engine source pointers.
-    if (!materialize_selected_pmetal_env_source(
-            selected_token))
-        return;
-
-    g_draw_reference_token =
-        selected_token;
+    // Publish only the exact selector-authenticated source tuple here.
+    // Expensive bank identity and PTDE EnvSpec donor decoding are intentionally
+    // delayed until selected_pmetal_env_source(), which is reached only after
+    // the P_Metal material and EnvSpec receiver gates.
     publish_selected_reference_token(
-        selected_token);
+        g_draw_reference_token);
 }
 
 bool upper_lower_draw_runtime::direct_producer_active() const noexcept
