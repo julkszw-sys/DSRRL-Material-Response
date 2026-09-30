@@ -4505,6 +4505,82 @@ bool install_optional_pmetal_env_hook() noexcept
     return true;
 }
 
+bool install_pmetal_source_only_carrier() noexcept
+{
+    if (g_base == 0u)
+        return false;
+
+    if (!prepare_hook(
+            g_hooks[3],
+            k_rva_steady_packer,
+            k_steady_packer_bytes,
+            reinterpret_cast<void *>(
+                &hook_steady_packer)))
+        return false;
+
+    g_steady_packer_orig =
+        reinterpret_cast<steady_packer_fn>(
+            g_hooks[3].trampoline);
+
+    if (!prepare_hook(
+            g_pmetal_env_hook,
+            k_rva_pmetal_env_blend,
+            k_pmetal_env_blend_bytes,
+            reinterpret_cast<void *>(
+                &hook_pmetal_env_blend))) {
+        (void)restore_hook(g_hooks[3]);
+        g_steady_packer_orig = nullptr;
+        return false;
+    }
+
+    g_pmetal_env_blend_orig =
+        reinterpret_cast<pmetal_env_blend_fn>(
+            g_pmetal_env_hook.trampoline);
+
+    g_pmetal_source_only_enabled.store(
+        true,
+        std::memory_order_release);
+
+    if (!arm_hook(g_hooks[3]) ||
+        !arm_hook(g_pmetal_env_hook)) {
+        g_pmetal_source_only_enabled.store(
+            false,
+            std::memory_order_release);
+        (void)restore_hook(g_pmetal_env_hook);
+        (void)restore_hook(g_hooks[3]);
+        g_steady_packer_orig = nullptr;
+        g_pmetal_env_blend_orig = nullptr;
+        return false;
+    }
+
+    g_pmetal_env_hook_armed.store(
+        true,
+        std::memory_order_release);
+    return true;
+}
+
+bool restore_pmetal_source_only_carrier() noexcept
+{
+    g_pmetal_source_only_enabled.store(
+        false,
+        std::memory_order_release);
+    g_pmetal_env_hook_armed.store(
+        false,
+        std::memory_order_release);
+
+    bool ok =
+        restore_hook(g_pmetal_env_hook);
+    ok =
+        restore_hook(g_hooks[3]) &&
+        ok;
+
+    if (ok) {
+        g_steady_packer_orig = nullptr;
+        g_pmetal_env_blend_orig = nullptr;
+    }
+    return ok;
+}
+
 bool install_producer_hooks() noexcept
 {
     if (g_base == 0u)
