@@ -24,31 +24,30 @@ struct owner_auth_cache_entry {
     bool authenticated = false;
 };
 
-constexpr std::size_t k_owner_auth_cache_slots = 32u;
+constexpr std::size_t k_owner_auth_cache_slots = 256u;
 thread_local std::array<
     owner_auth_cache_entry,
     k_owner_auth_cache_slots>
     g_owner_auth_cache{};
 
 std::size_t owner_auth_cache_index(
-    const core::sha256_digest &digest,
+    std::uint64_t flver_identity_hash,
     std::uint32_t material_slot,
     std::uint64_t semantic_name_hash) noexcept
 {
+    // flver_identity_hash is index entropy only. Full SHA-256 remains part of
+    // the cache-hit equality gate below and remains the positive authority.
     std::uint64_t h =
-        0xcbf29ce484222325ULL;
-    for (const auto byte : digest) {
-        h ^= byte;
-        h *= 0x100000001b3ULL;
-    }
-
-    h ^= material_slot;
-    h *= 0x100000001b3ULL;
-    h ^= semantic_name_hash;
-    h *= 0x100000001b3ULL;
+        flver_identity_hash ^
+        (static_cast<std::uint64_t>(material_slot) *
+         0x9E3779B185EBCA87ULL);
+    h ^= semantic_name_hash +
+         0x9E3779B97F4A7C15ULL +
+         (h << 6u) +
+         (h >> 2u);
 
     return static_cast<std::size_t>(
-        h % k_owner_auth_cache_slots);
+        h & (k_owner_auth_cache_slots - 1u));
 }
 
 bool owner_tuple_authenticated_cached(
@@ -58,7 +57,7 @@ bool owner_tuple_authenticated_cached(
     auto &cached =
         g_owner_auth_cache[
             owner_auth_cache_index(
-                identity.flver_sha256,
+                identity.flver_identity_hash,
                 identity.material_slot,
                 identity.semantic_name_hash)];
 
