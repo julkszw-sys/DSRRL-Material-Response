@@ -3909,23 +3909,29 @@ void __fastcall hook_steady_packer(
 {
     telemetry::hot_count(g_steady_seen);
 
-    if (g_steady_packer_orig != nullptr)
-        g_steady_packer_orig(
-            source,
-            dst,
-            selector);
-
     if (g_pmetal_source_only_enabled.load(
             std::memory_order_acquire)) {
+        // Preserve the recovered V13 lifetime contract: decode the donor
+        // while the incoming source object is unquestionably live, execute
+        // the original DSR operator, then publish only immutable PTDE data.
         f4 env{};
         std::uint64_t bank = 0u;
         std::uint32_t row = 0u;
-        if (read_exact_pmetal_env_source(
+        const bool have_env =
+            read_exact_pmetal_env_source(
                 source,
                 selector,
                 env,
                 bank,
-                row)) {
+                row);
+
+        if (g_steady_packer_orig != nullptr)
+            g_steady_packer_orig(
+                source,
+                dst,
+                selector);
+
+        if (have_env) {
             publish_pmetal_source_only(
                 env, env, 0.0f,
                 bank, bank, row, row);
@@ -3939,6 +3945,12 @@ void __fastcall hook_steady_packer(
             g_steady_pass);
         return;
     }
+
+    if (g_steady_packer_orig != nullptr)
+        g_steady_packer_orig(
+            source,
+            dst,
+            selector);
 
     if (g_steady_cache_builder_active.load(
             std::memory_order_acquire)) {
