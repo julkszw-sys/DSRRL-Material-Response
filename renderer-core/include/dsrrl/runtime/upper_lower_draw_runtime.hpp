@@ -155,7 +155,8 @@ void upper_lower_selector_event_bridge(
     void *owner,
     void *return_address,
     void *r14,
-    void *r15) noexcept;
+    void *r15,
+    bool pointlight_runtime_enabled) noexcept;
 
 // Second half of the exact selector join. The selector bridge above stages an
 // exact LightBank token only; publication into the P_Metal selected-state bank
