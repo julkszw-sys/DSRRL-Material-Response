@@ -382,6 +382,17 @@ def main():
     require(register_body,
         "reshade::register_event<reshade::addon_event::draw_indexed>(on_draw_indexed);",
         "indexed draw callback conditional registration")
+    draw_gate=register_body.find(
+        "if (k_drawtime_islands_runtime_enabled) {")
+    draw_gate_end=register_body.find(
+        "}\n}",
+        draw_gate)
+    if draw_gate<0 or draw_gate_end<0:
+        fail("draw-time event gate boundary missing")
+    gated_events=register_body[draw_gate:draw_gate_end]
+    require(gated_events,
+        "addon_event::present>(on_present)",
+        "present callback omitted with draw-time runtime")
 
     init_marker=integrated.find(
         "if (!k_drawtime_islands_runtime_enabled) {\n        reshade::log::message(")
