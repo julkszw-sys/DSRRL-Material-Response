@@ -48,6 +48,64 @@ def main() -> None:
         "bool install_pmetal_source_only_carrier() noexcept",
         "isolated source-only installer",
     )
+
+    source_install_begin = ul_cpp.index(
+        "bool install_pmetal_source_only_carrier() noexcept"
+    )
+    source_install_end = ul_cpp.index(
+        "\nbool restore_pmetal_source_only_carrier() noexcept",
+        source_install_begin,
+    )
+    if source_install_begin < 0 or source_install_end <= source_install_begin:
+        fail("cannot isolate P_Metal source-only install block")
+    source_install = ul_cpp[source_install_begin:source_install_end]
+
+    require(
+        source_install,
+        "g_hooks[3]",
+        "isolated steady source cut 0x563B80",
+    )
+    require(
+        source_install,
+        "g_pmetal_env_hook",
+        "isolated blended source cut 0x563C30",
+    )
+    require(
+        source_install,
+        "g_pmetal_source_only_enabled.store(",
+        "source-only runtime activation latch",
+    )
+    for forbidden in (
+        "g_hooks[0]",
+        "g_hooks[1]",
+        "g_hooks[2]",
+        "g_hooks[4]",
+        "g_steady_eval_tail_hook",
+        "g_steady_cache_builder_hook",
+        "g_upper_lower.install",
+    ):
+        if forbidden in source_install:
+            fail(
+                "isolated P_Metal EnvSpec carrier widened into shared U/L "
+                f"hook surface: {forbidden}"
+            )
+
+    ul_install_begin = ul_cpp.index(
+        "bool upper_lower_draw_runtime::install("
+    )
+    ul_install_end = ul_cpp.index(
+        "\nvoid upper_lower_draw_runtime::uninstall()",
+        ul_install_begin,
+    )
+    if ul_install_begin < 0 or ul_install_end <= ul_install_begin:
+        fail("cannot isolate visible U/L install block")
+    ul_install = ul_cpp[ul_install_begin:ul_install_end]
+    require(
+        ul_install,
+        "if (g_pmetal_source_only_enabled.load(std::memory_order_acquire))\n        return false;",
+        "mutual exclusion between isolated EnvSpec carrier and visible U/L runtime",
+    )
+
     require(
         env_cpp,
         "source_.latest(source)",
@@ -350,6 +408,8 @@ def main() -> None:
     print("  U/L visible operator=OFF remains stock when not explicitly enabled")
     print("  shared U/L runtime=OFF when U/L is OFF")
     print("  P_Metal EnvSpec source=isolated V13 carrier")
+    print("  isolated hook surface=0x563B80 steady + 0x563C30 blend only")
+    print("  shared U/L wrapper/blend/cache-builder hooks=forbidden in source-only installer")
     print("  EnvSpec source does not require visible U/L transport")
     print("  selected state=exact selector + exact actual P_Metal material")
     print("  persistent P_Metal invalidation=material-gated O(1) producer set; generic selectors preserve state")
