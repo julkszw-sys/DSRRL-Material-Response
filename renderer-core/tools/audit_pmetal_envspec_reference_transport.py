@@ -90,6 +90,90 @@ def main() -> None:
                 f"hook surface: {forbidden}"
             )
 
+    enabled_at = source_install.find(
+        "g_pmetal_source_only_enabled.store("
+    )
+    steady_arm_at = source_install.find(
+        "arm_hook(g_hooks[3])"
+    )
+    blend_arm_at = source_install.find(
+        "arm_hook(g_pmetal_env_hook)"
+    )
+    if (
+        enabled_at < 0
+        or steady_arm_at < 0
+        or blend_arm_at < 0
+        or enabled_at < steady_arm_at
+        or enabled_at < blend_arm_at
+    ):
+        fail(
+            "source-only activation latch must publish only after both retail "
+            "cuts are armed"
+        )
+
+    blend_hook_begin = ul_cpp.index(
+        "void __fastcall hook_pmetal_env_blend("
+    )
+    blend_hook_end = ul_cpp.index(
+        "\nbool install_optional_pmetal_env_hook() noexcept",
+        blend_hook_begin,
+    )
+    if blend_hook_begin < 0 or blend_hook_end <= blend_hook_begin:
+        fail("cannot isolate P_Metal blend detour")
+    blend_hook = ul_cpp[blend_hook_begin:blend_hook_end]
+
+    require(
+        blend_hook,
+        "const bool endpoint_a =",
+        "retail endpoint-A mode",
+    )
+    require(
+        blend_hook,
+        "beta <= 0.0f",
+        "retail endpoint-A collapse condition",
+    )
+    require(
+        blend_hook,
+        "const bool endpoint_b =",
+        "retail endpoint-B mode",
+    )
+    require(
+        blend_hook,
+        "beta >= 1.0f",
+        "retail endpoint-B collapse condition",
+    )
+    require(
+        blend_hook,
+        "if (endpoint_a || endpoint_b) {",
+        "endpoint collapse delegated to steady source cut",
+    )
+    require(
+        blend_hook,
+        "const bool interior_blend =",
+        "interior blend gate",
+    )
+    require(
+        blend_hook,
+        "if (interior_blend) {",
+        "A/B decode restricted to true interior blend",
+    )
+    require(
+        blend_hook,
+        "source_serial advanced without a publication",
+        "failed event invalidates stale source by serial advance",
+    )
+
+    require(
+        ul_cpp,
+        "out.serial != latest_source_serial",
+        "draw consumer rejects stale source payload",
+    )
+    require(
+        ul_cpp,
+        "g_pmetal_source_serial.fetch_add(",
+        "source events carry monotonic freshness serial",
+    )
+
     ul_install_begin = ul_cpp.index(
         "bool upper_lower_draw_runtime::install("
     )
@@ -409,6 +493,10 @@ def main() -> None:
     print("  shared U/L runtime=OFF when U/L is OFF")
     print("  P_Metal EnvSpec source=isolated V13 carrier")
     print("  isolated hook surface=0x563B80 steady + 0x563C30 blend only")
+    print("  0x563C30 endpoint collapse=delegated to hooked retail 0x563B80 exactly once")
+    print("  0x563C30 interior blend=only path that decodes both A/B endpoints")
+    print("  source freshness=monotonic event serial; stale payload replay is rejected")
+    print("  source-only active latch=published only after both hooks are armed")
     print("  shared U/L wrapper/blend/cache-builder hooks=forbidden in source-only installer")
     print("  EnvSpec source does not require visible U/L transport")
     print("  selected state=exact selector + exact actual P_Metal material")

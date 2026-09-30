@@ -2460,7 +2460,8 @@ void publish_pmetal_source_only(
     std::uint64_t bank_a,
     std::uint64_t bank_b,
     std::uint32_t row_a,
-    std::uint32_t row_b) noexcept
+    std::uint32_t row_b,
+    std::uint64_t source_serial) noexcept
 {
     if (!std::isfinite(a.x) ||
         !std::isfinite(a.y) ||
@@ -2490,11 +2491,7 @@ void publish_pmetal_source_only(
     next.bank_signature_b = bank_b;
     next.row_id_a = row_a;
     next.row_id_b = row_b;
-    next.serial =
-        g_pmetal_source_serial.fetch_add(
-            1u,
-            std::memory_order_relaxed) +
-        1u;
+    next.serial = source_serial;
 
     g_pmetal_source_payload = next;
     g_pmetal_source_payload_valid = true;
@@ -2536,8 +2533,13 @@ bool consume_pmetal_source_only(
     g_pmetal_source_payload_guard.clear(
         std::memory_order_release);
 
+    const auto latest_source_serial =
+        g_pmetal_source_serial.load(
+            std::memory_order_acquire);
+
     if (!valid ||
         out.serial == 0u ||
+        out.serial != latest_source_serial ||
         !std::isfinite(out.a[0]) ||
         !std::isfinite(out.a[1]) ||
         !std::isfinite(out.a[2]) ||
@@ -3914,6 +3916,12 @@ void __fastcall hook_steady_packer(
         // Preserve the recovered V13 lifetime contract: decode the donor
         // while the incoming source object is unquestionably live, execute
         // the original DSR operator, then publish only immutable PTDE data.
+        const auto source_serial =
+            g_pmetal_source_serial.fetch_add(
+                1u,
+                std::memory_order_acq_rel) +
+            1u;
+
         f4 env{};
         std::uint64_t bank = 0u;
         std::uint32_t row = 0u;
@@ -3934,7 +3942,8 @@ void __fastcall hook_steady_packer(
         if (have_env) {
             publish_pmetal_source_only(
                 env, env, 0.0f,
-                bank, bank, row, row);
+                bank, bank, row, row,
+                source_serial);
             telemetry::hot_count(
                 g_pmetal_env_steady);
         } else {
@@ -4378,6 +4387,48 @@ void __fastcall hook_pmetal_env_blend(
 {
     if (g_pmetal_source_only_enabled.load(
             std::memory_order_acquire)) {
+        // Retail 0x563C30 collapses beta endpoints by tail-jumping into
+        // 0x563B80. That target is already hooked by the isolated carrier, so
+        // endpoint cases must flow through the steady hook exactly once.
+        // Only the true interior blend path is decoded here.
+        const bool finite_beta =
+            std::isfinite(beta);
+        const bool endpoint_a =
+            finite_beta &&
+            (selector_a == selector_b ||
+             beta <= 0.0f) &&
+            source_a != nullptr;
+        const bool endpoint_b =
+            finite_beta &&
+            !endpoint_a &&
+            (selector_a == selector_b ||
+             beta >= 1.0f) &&
+            source_b != nullptr;
+        const bool interior_blend =
+            finite_beta &&
+            !endpoint_a &&
+            !endpoint_b &&
+            source_a != nullptr &&
+            source_b != nullptr;
+
+        if (endpoint_a || endpoint_b) {
+            if (g_pmetal_env_blend_orig != nullptr)
+                g_pmetal_env_blend_orig(
+                    out,
+                    source_a,
+                    selector_a,
+                    source_b,
+                    selector_b,
+                    beta);
+            return;
+        }
+
+        const auto source_serial =
+            g_pmetal_source_serial.fetch_add(
+                1u,
+                std::memory_order_acq_rel) +
+            1u;
+
         f4 a{};
         f4 b{};
         std::uint64_t bank_a = 0u;
@@ -4385,20 +4436,24 @@ void __fastcall hook_pmetal_env_blend(
         std::uint32_t row_a = 0u;
         std::uint32_t row_b = 0u;
 
-        const bool have_a =
-            read_exact_pmetal_env_source(
-                source_a,
-                selector_a,
-                a,
-                bank_a,
-                row_a);
-        bool have_b =
-            read_exact_pmetal_env_source(
-                source_b,
-                selector_b,
-                b,
-                bank_b,
-                row_b);
+        bool have_a = false;
+        bool have_b = false;
+        if (interior_blend) {
+            have_a =
+                read_exact_pmetal_env_source(
+                    source_a,
+                    selector_a,
+                    a,
+                    bank_a,
+                    row_a);
+            have_b =
+                read_exact_pmetal_env_source(
+                    source_b,
+                    selector_b,
+                    b,
+                    bank_b,
+                    row_b);
+        }
 
         if (g_pmetal_env_blend_orig != nullptr)
             g_pmetal_env_blend_orig(
@@ -4409,9 +4464,9 @@ void __fastcall hook_pmetal_env_blend(
                 selector_b,
                 beta);
 
-        if (have_a &&
-            have_b &&
-            std::isfinite(beta)) {
+        if (interior_blend &&
+            have_a &&
+            have_b) {
             publish_pmetal_source_only(
                 a,
                 b,
@@ -4419,32 +4474,13 @@ void __fastcall hook_pmetal_env_blend(
                 bank_a,
                 bank_b,
                 row_a,
-                row_b);
-            telemetry::hot_count(
-                g_pmetal_env_blend);
-        } else if (have_a) {
-            publish_pmetal_source_only(
-                a,
-                a,
-                0.0f,
-                bank_a,
-                bank_a,
-                row_a,
-                row_a);
-            telemetry::hot_count(
-                g_pmetal_env_blend);
-        } else if (have_b) {
-            publish_pmetal_source_only(
-                b,
-                b,
-                0.0f,
-                bank_b,
-                bank_b,
                 row_b,
-                row_b);
+                source_serial);
             telemetry::hot_count(
                 g_pmetal_env_blend);
         } else {
+            // source_serial advanced without a publication. latest() will
+            // reject any older payload rather than replay stale EnvSpec state.
             telemetry::hot_count(
                 g_pmetal_env_miss);
         }
@@ -4564,15 +4600,13 @@ bool install_pmetal_source_only_carrier() noexcept
         reinterpret_cast<pmetal_env_blend_fn>(
             g_pmetal_env_hook.trampoline);
 
-    g_pmetal_source_only_enabled.store(
-        true,
-        std::memory_order_release);
-
+    // Arm both entry points while the source-only latch is still OFF.
+    // If another engine thread reaches either detour during installation it
+    // executes the stock operator path only. Publish the active latch only
+    // after both hooks are present, eliminating a partially-installed source
+    // carrier state.
     if (!arm_hook(g_hooks[3]) ||
         !arm_hook(g_pmetal_env_hook)) {
-        g_pmetal_source_only_enabled.store(
-            false,
-            std::memory_order_release);
         (void)restore_hook(g_pmetal_env_hook);
         (void)restore_hook(g_hooks[3]);
         g_steady_packer_orig = nullptr;
@@ -4581,6 +4615,9 @@ bool install_pmetal_source_only_carrier() noexcept
     }
 
     g_pmetal_env_hook_armed.store(
+        true,
+        std::memory_order_release);
+    g_pmetal_source_only_enabled.store(
         true,
         std::memory_order_release);
     return true;
