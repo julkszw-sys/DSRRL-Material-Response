@@ -41,6 +41,7 @@ def main():
     pmetal=(root/"src/runtime/pmetal_envspec_draw_runtime.cpp").read_text(encoding="utf-8")
     resources=(root/"src/runtime/material_resource_draw_runtime.cpp").read_text(encoding="utf-8")
     hemdir3_mode=(root/"src/runtime/hemdir3_mode_transport.cpp").read_text(encoding="utf-8")
+    draw_tx=(root/"src/runtime/draw_state_transaction.cpp").read_text(encoding="utf-8")
 
     # Feature flags are queried from render-hot paths. Keep reads lock-free,
     # while snapshot/set may retain coherent writer serialization.
@@ -221,6 +222,38 @@ def main():
     require(owner_body,"const bool ownerless_island_enabled =","ownerless route policy")
     require(owner_body,"return ownerless_island_enabled;","ownerless draw early exit")
 
+    # Constant-buffer window preservation still requires
+    # ID3D11DeviceContext1, but QueryInterface must be cold-path only. The
+    # replay begin path borrows a cached Context1 pointer and device teardown
+    # invalidates the cache.
+    draw_begin=function_body(
+        draw_tx,
+        "draw_state_transaction_runtime::begin(",
+        "draw_state_transaction_runtime::restore(")
+    if "QueryInterface(" in draw_begin:
+        fail("draw replay regressed to per-draw ID3D11DeviceContext1 QueryInterface")
+    require(draw_begin,
+        "ctx1 = context1_for(ctx);",
+        "draw replay Context1 cache use")
+    context1_body=function_body(
+        draw_tx,
+        "draw_state_transaction_runtime::context1_for(",
+        "draw_state_transaction_runtime::release_context1_cache(")
+    require(context1_body,
+        "g_context1_tls_cache",
+        "Context1 TLS fast path")
+    require_before(
+        context1_body,
+        "if (tls.owner == this",
+        "context->QueryInterface(",
+        "Context1 TLS before QueryInterface")
+    require(draw_tx,
+        "draw_state_transaction_runtime::on_destroy_device(",
+        "Context1 device-lifetime invalidation")
+    require(integrated,
+        "g_draw_transactions.on_destroy_device(device);",
+        "integrated Context1 cache teardown")
+
     print("Active-islands hot-path audit: PASS")
     print("  feature_reads=atomic")
     print("  flver_identity=256-entry TLS before global map lock")
@@ -230,6 +263,7 @@ def main():
     print("  pmetal=exact material/route prefilter before feature reads")
     print("  resources=exact-owner/impossible-receiver prefilter before PSGetShaderResources")
     print("  ownerless_draws=stop before batch preparation under current policy")
+    print("  draw_replay=Context1 TLS cache; QueryInterface cold-path only")
     return 0
 
 if __name__=="__main__":
