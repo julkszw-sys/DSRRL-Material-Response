@@ -380,6 +380,37 @@ def main() -> None:
     if "safe_read(name_byte, ch)" in ul_cpp:
         fail("P_Metal bank scan regressed to per-byte VirtualQuery")
 
+    require(
+        ul_cpp,
+        "std::size_t pmetal_bank_cache_set(",
+        "dedicated P_Metal bank-cache set mixer",
+    )
+    require(
+        ul_cpp,
+        "(value >> 13u)",
+        "P_Metal bank-cache hash uses higher address bits",
+    )
+    require(
+        ul_cpp,
+        "(value >> 23u)",
+        "P_Metal bank-cache hash avoids low-bit alignment collapse",
+    )
+    require(
+        ul_cpp,
+        "pmetal_bank_cache_set(base_ptr)",
+        "P_Metal bank cache uses dedicated mixed set index",
+    )
+    pmetal_cache_begin = ul_cpp.index(
+        "pmetal_bank_cache_entry &pmetal_bank_cache_for("
+    )
+    pmetal_cache_end = ul_cpp.index(
+        "\nstd::uint64_t pmetal_fnv_byte(",
+        pmetal_cache_begin,
+    )
+    pmetal_cache = ul_cpp[pmetal_cache_begin:pmetal_cache_end]
+    if "d123_cache_set(base_ptr)" in pmetal_cache:
+        fail("P_Metal bank cache regressed to low-bit d123 set indexing")
+
     if "DSRRL_EXPERIMENTAL_PMETAL_PTDE_FIRELINK_DRAWPARAM" in ul_cpp:
         fail("obsolete hardcoded Firelink EnvSpec diagnostic still present")
     if "read_hardcoded_ptde_firelink_pmetal_env_source" in ul_cpp:
