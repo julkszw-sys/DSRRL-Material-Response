@@ -207,16 +207,19 @@ def main():
     require(flver_cpp,"k_builder=0x22084Fu","ordinary builder hook")
     require(flver_cpp,"builder_armed=true","builder hook attestation")
 
-    # Exact PTDE NoSpc material authority is intentionally direct-PointLight
-    # only: authenticated FLVER+slot owner -> exact semantic name/raw-MTD pair
-    # -> bit-exact PTDE c100. It must not expand the generic MR route cohort.
-    require(owner_cpp,"dsr_mtd_identity_supplement_resolve(semantic_hash, raw_mtd_sha)","certified NoSpc owner raw-MTD authority")
+    # Direct PointLight owns its dedicated 205-row exact material authority
+    # (180 Spc + 25 NoSpc). Generic MR profile coverage must not decide whether
+    # the PointLight operator has c100/c101/c102 authority.
+    require(owner_cpp,"dsr_mtd_identity_supplement_resolve(semantic_hash, raw_mtd_sha)","certified owner raw-MTD transport")
     if "generated_envspec_router_v1.hpp" in owner_cpp or "k_envspec_router_v1" in owner_cpp:
         fail("material owner producer must not use EnvSpec/SPX router as raw-MTD identity fallback")
-    require(mr_cpp,"resolve_direct_nospc_authority","direct NoSpc material resolver")
-    require(mr_cpp,"record.raw_mtd_sha256","direct NoSpc raw-MTD gate")
-    require(mr_cpp,"f32_from_bits","bit-exact PTDE c100 decode")
-    require(mr_cpp,"if (require_legacy_specular)","NoSpc specular exclusion")
+    require(mr_cpp,"generated_pointlight_material_authority_v1.hpp","dedicated PointLight material authority include")
+    require(mr_cpp,"resolve_direct_pointlight_authority","direct PointLight material resolver")
+    require(mr_cpp,"identity.raw_mtd_sha256 !=\n            begin->raw_mtd_sha256","exact PointLight raw-MTD gate")
+    require(mr_cpp,"pointlight_material_mode::spc","Spc/NoSpc PointLight mode gate")
+    require(mr_cpp,"record.c101_scalar","RGB c101 fail-open guard")
+    require(mr_cpp,"f32_from_bits","bit-exact PTDE PointLight constants decode")
+    require(mr_cpp,"record_spc != require_legacy_specular","receiver-derived Spc/NoSpc exclusion")
     require(integrated,"evaluate_direct_pointlight_material","direct PointLight material resolver call")
     require(integrated,"direct_pointlight_requires_specular","receiver-derived specular requirement")
     require(integrated,"[DSRRL POINTLIGHT GATE]","one-shot direct PointLight rejection trace")
