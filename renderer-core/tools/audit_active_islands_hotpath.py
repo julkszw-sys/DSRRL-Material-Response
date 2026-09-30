@@ -406,6 +406,18 @@ def main():
         "return true;",
         "draw-time bypass exits before dynamic hook installation")
 
+    # Bloom Q8 has no authorized production writer/consumer yet. Avoid even
+    # the fixed 1024x720 texture/RTV/SRV allocation outside explicit telemetry.
+    init_device_body=function_body(
+        integrated,
+        "void on_init_device(reshade::api::device *device)",
+        "void on_destroy_device(reshade::api::device *device)")
+    require_before(
+        init_device_body,
+        "if (g_hot_telemetry_enabled)",
+        "g_bloom_scene_sidecar.on_init_device(device);",
+        "Bloom Q8 diagnostic-only resource allocation")
+
     print("Active-islands hot-path audit: PASS")
     print("  feature_reads=atomic")
     print("  flver_identity=256-entry TLS before global map lock")
@@ -421,6 +433,7 @@ def main():
     print("  envspec=unrelated SRV creation preserves snapshot TLS; destroy invalidates")
     print("  material_resources=256-entry TLS companion working set; negative-cache invalidation retained")
     print("  drawtime_falsifier=no draw callbacks/no FLVER-texture-resource-PMetal-PointLight transports; A1+MotionBlur create-time retained")
+    print("  bloom_q8=no production resource allocation without telemetry authority")
     return 0
 
 if __name__=="__main__":
