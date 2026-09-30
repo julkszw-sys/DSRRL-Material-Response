@@ -63,13 +63,13 @@ def main() -> None:
 
     require(
         source_install,
-        "g_hooks[3]",
-        "isolated steady source cut 0x563B80",
+        "g_pmetal_source_steady_hook",
+        "dedicated steady source cut 0x563B80",
     )
     require(
         source_install,
-        "g_pmetal_env_hook",
-        "isolated blended source cut 0x563C30",
+        "g_pmetal_source_blend_hook",
+        "dedicated blended source cut 0x563C30",
     )
     require(
         source_install,
@@ -80,7 +80,9 @@ def main() -> None:
         "g_hooks[0]",
         "g_hooks[1]",
         "g_hooks[2]",
+        "g_hooks[3]",
         "g_hooks[4]",
+        "g_pmetal_env_hook",
         "g_steady_eval_tail_hook",
         "g_steady_cache_builder_hook",
         "g_upper_lower.install",
@@ -95,10 +97,10 @@ def main() -> None:
         "g_pmetal_source_only_enabled.store("
     )
     steady_arm_at = source_install.find(
-        "arm_hook(g_hooks[3])"
+        "arm_hook(\n            g_pmetal_source_steady_hook)"
     )
     blend_arm_at = source_install.find(
-        "arm_hook(g_pmetal_env_hook)"
+        "arm_hook(\n            g_pmetal_source_blend_hook)"
     )
     if (
         enabled_at < 0
@@ -113,10 +115,10 @@ def main() -> None:
         )
 
     blend_hook_begin = ul_cpp.index(
-        "void __fastcall hook_pmetal_env_blend("
+        "void __fastcall hook_pmetal_source_blend("
     )
     blend_hook_end = ul_cpp.index(
-        "\nbool install_optional_pmetal_env_hook() noexcept",
+        "\nvoid __fastcall hook_steady_packer(",
         blend_hook_begin,
     )
     if blend_hook_begin < 0 or blend_hook_end <= blend_hook_begin:
@@ -160,7 +162,7 @@ def main() -> None:
     )
     require(
         blend_hook,
-        "source_serial advanced without a publication",
+        "Advancing the serial before any attempted decode invalidates an older",
         "failed event invalidates stale source by serial advance",
     )
 
@@ -196,6 +198,36 @@ def main() -> None:
         "source_.latest(source)",
         "isolated source consumer",
     )
+
+    steady_generic_begin = ul_cpp.index(
+        "void __fastcall hook_steady_packer("
+    )
+    steady_generic_end = ul_cpp.index(
+        "\nvoid *__fastcall hook_blend(",
+        steady_generic_begin,
+    )
+    generic_steady = ul_cpp[steady_generic_begin:steady_generic_end]
+    if "g_pmetal_source_only_enabled" in generic_steady:
+        fail("isolated EnvSpec source path re-entered generic U/L steady detour")
+
+    generic_blend_begin = ul_cpp.index(
+        "void __fastcall hook_pmetal_env_blend("
+    )
+    generic_blend_end = ul_cpp.index(
+        "\nbool install_optional_pmetal_env_hook() noexcept",
+        generic_blend_begin,
+    )
+    generic_blend = ul_cpp[generic_blend_begin:generic_blend_end]
+    if "g_pmetal_source_only_enabled" in generic_blend:
+        fail("isolated EnvSpec source path re-entered generic U/L blend detour")
+
+    for required in (
+        "inline_hook g_pmetal_source_steady_hook{};",
+        "inline_hook g_pmetal_source_blend_hook{};",
+        "g_pmetal_source_steady_orig",
+        "g_pmetal_source_blend_orig",
+    ):
+        require(ul_cpp, required, "dedicated EnvSpec source hook ownership")
 
     # The active EnvSpec draw runtime must have no dependency on the U/L
     # runtime at all. U/L-off is not merely a feature branch: no b13 carrier,
@@ -264,13 +296,13 @@ def main() -> None:
     # its own runtime, but EnvSpec must not consume it.
     require(
         ul_cpp,
-        "void __fastcall hook_steady_packer(",
-        "steady source cut implementation",
+        "void __fastcall hook_pmetal_source_steady(",
+        "dedicated steady source cut implementation",
     )
     require(
         ul_cpp,
-        "void __fastcall hook_pmetal_env_blend(",
-        "blend source cut implementation",
+        "void __fastcall hook_pmetal_source_blend(",
+        "dedicated blend source cut implementation",
     )
     require(
         ul_cpp,
@@ -333,7 +365,8 @@ def main() -> None:
     print("  U/L visible operator=OFF")
     print("  shared U/L runtime=OFF when U/L is OFF")
     print("  P_Metal EnvSpec source=isolated V13 carrier")
-    print("  isolated hook surface=0x563B80 steady + 0x563C30 blend only")
+    print("  isolated hook surface=dedicated objects at 0x563B80 steady + 0x563C30 blend only")
+    print("  source-only detours do not enter generic U/L steady/blend detours")
     print("  0x563C30 endpoint collapse=delegated to hooked retail 0x563B80 exactly once")
     print("  0x563C30 interior blend=only path that decodes both A/B endpoints")
     print("  source freshness=monotonic event serial; stale payload replay is rejected")

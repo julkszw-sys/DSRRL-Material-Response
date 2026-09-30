@@ -662,6 +662,8 @@ upper_lower_draw_runtime *g_runtime = nullptr;
 std::uintptr_t g_base = 0u;
 std::array<inline_hook,5> g_hooks{};
 inline_hook g_pmetal_env_hook{};
+inline_hook g_pmetal_source_steady_hook{};
+inline_hook g_pmetal_source_blend_hook{};
 inline_hook g_steady_eval_tail_hook{};
 inline_hook g_steady_cache_builder_hook{};
 
@@ -672,6 +674,8 @@ steady_packer_fn g_steady_packer_orig = nullptr;
 steady_eval_tail_fn g_steady_eval_tail_orig = nullptr;
 lightbank_blend_packer_fn g_blend_packer_orig = nullptr;
 pmetal_env_blend_fn g_pmetal_env_blend_orig = nullptr;
+steady_packer_fn g_pmetal_source_steady_orig = nullptr;
+pmetal_env_blend_fn g_pmetal_source_blend_orig = nullptr;
 steady_cache_builder_fn g_steady_cache_builder_orig = nullptr;
 
 std::mutex g_snapshot_mutex;
@@ -835,6 +839,11 @@ std::atomic<std::uint64_t> g_pmetal_source_publish{0u};
 std::atomic<std::uint64_t> g_pmetal_source_busy_drop{0u};
 std::atomic<std::uint64_t> g_pmetal_source_consumer_ok{0u};
 std::atomic<std::uint64_t> g_pmetal_source_consumer_fail{0u};
+std::atomic<std::uint64_t> g_pmetal_source_steady_seen{0u};
+std::atomic<std::uint64_t> g_pmetal_source_blend_seen{0u};
+std::atomic<std::uint64_t> g_pmetal_source_decode_fail{0u};
+std::atomic_bool g_pmetal_source_quarantined{false};
+std::atomic_bool g_pmetal_source_restore_failed{false};
 
 
 std::atomic<std::uint32_t> g_pmetal_diag_status_a{0u};
@@ -2509,7 +2518,7 @@ bool consume_pmetal_source_only(
 
     if (!g_pmetal_source_only_enabled.load(
             std::memory_order_acquire) ||
-        g_quarantined.load(
+        g_pmetal_source_quarantined.load(
             std::memory_order_relaxed)) {
         g_pmetal_source_consumer_fail.fetch_add(
             1u,
@@ -3904,56 +3913,196 @@ void __fastcall hook_steady_eval_tail(
     telemetry::hot_count(g_direct_ul_steady_inject);
 }
 
+void __fastcall hook_pmetal_source_steady(
+    void *source,
+    void *dst,
+    std::int32_t selector) noexcept
+{
+    if (!g_pmetal_source_only_enabled.load(
+            std::memory_order_acquire)) {
+        if (g_pmetal_source_steady_orig != nullptr)
+            g_pmetal_source_steady_orig(
+                source,
+                dst,
+                selector);
+        return;
+    }
+
+    g_pmetal_source_steady_seen.fetch_add(
+        1u,
+        std::memory_order_relaxed);
+
+    // Decode only while the retail source object is engine-live. The original
+    // operator still executes unmodified; only immutable donor state leaves
+    // this cut.
+    const auto source_serial =
+        g_pmetal_source_serial.fetch_add(
+            1u,
+            std::memory_order_acq_rel) +
+        1u;
+
+    f4 env{};
+    std::uint64_t bank = 0u;
+    std::uint32_t row = 0u;
+    const bool have_env =
+        read_exact_pmetal_env_source(
+            source,
+            selector,
+            env,
+            bank,
+            row);
+
+    if (g_pmetal_source_steady_orig != nullptr)
+        g_pmetal_source_steady_orig(
+            source,
+            dst,
+            selector);
+
+    if (have_env) {
+        publish_pmetal_source_only(
+            env,
+            env,
+            0.0f,
+            bank,
+            bank,
+            row,
+            row,
+            source_serial);
+    } else {
+        g_pmetal_source_decode_fail.fetch_add(
+            1u,
+            std::memory_order_relaxed);
+    }
+}
+
+void __fastcall hook_pmetal_source_blend(
+    float *out,
+    void *source_a,
+    std::int32_t selector_a,
+    void *source_b,
+    std::int32_t selector_b,
+    float beta) noexcept
+{
+    if (!g_pmetal_source_only_enabled.load(
+            std::memory_order_acquire)) {
+        if (g_pmetal_source_blend_orig != nullptr)
+            g_pmetal_source_blend_orig(
+                out,
+                source_a,
+                selector_a,
+                source_b,
+                selector_b,
+                beta);
+        return;
+    }
+
+    g_pmetal_source_blend_seen.fetch_add(
+        1u,
+        std::memory_order_relaxed);
+
+    // Canonical DSR 0x563C30 collapses endpoint cases by tail-jumping into
+    // 0x563B80. Let the untouched retail branch do exactly that; because the
+    // steady cut has its own dedicated hook, the selected endpoint is captured
+    // exactly once there. Only the true interior blend reads both source banks.
+    const bool finite_beta =
+        std::isfinite(beta);
+    const bool endpoint_a =
+        finite_beta &&
+        (selector_a == selector_b ||
+         beta <= 0.0f) &&
+        source_a != nullptr;
+    const bool endpoint_b =
+        finite_beta &&
+        !endpoint_a &&
+        (selector_a == selector_b ||
+         beta >= 1.0f) &&
+        source_b != nullptr;
+
+    if (endpoint_a || endpoint_b) {
+        if (g_pmetal_source_blend_orig != nullptr)
+            g_pmetal_source_blend_orig(
+                out,
+                source_a,
+                selector_a,
+                source_b,
+                selector_b,
+                beta);
+        return;
+    }
+
+    // Advancing the serial before any attempted decode invalidates an older
+    // payload if this source event cannot produce a complete exact donor.
+    const auto source_serial =
+        g_pmetal_source_serial.fetch_add(
+            1u,
+            std::memory_order_acq_rel) +
+        1u;
+
+    const bool interior_blend =
+        finite_beta &&
+        source_a != nullptr &&
+        source_b != nullptr;
+
+    f4 a{};
+    f4 b{};
+    std::uint64_t bank_a = 0u;
+    std::uint64_t bank_b = 0u;
+    std::uint32_t row_a = 0u;
+    std::uint32_t row_b = 0u;
+
+    bool have_a = false;
+    bool have_b = false;
+    if (interior_blend) {
+        have_a =
+            read_exact_pmetal_env_source(
+                source_a,
+                selector_a,
+                a,
+                bank_a,
+                row_a);
+        have_b =
+            read_exact_pmetal_env_source(
+                source_b,
+                selector_b,
+                b,
+                bank_b,
+                row_b);
+    }
+
+    if (g_pmetal_source_blend_orig != nullptr)
+        g_pmetal_source_blend_orig(
+            out,
+            source_a,
+            selector_a,
+            source_b,
+            selector_b,
+            beta);
+
+    if (interior_blend &&
+        have_a &&
+        have_b) {
+        publish_pmetal_source_only(
+            a,
+            b,
+            std::clamp(beta,0.0f,1.0f),
+            bank_a,
+            bank_b,
+            row_a,
+            row_b,
+            source_serial);
+    } else {
+        g_pmetal_source_decode_fail.fetch_add(
+            1u,
+            std::memory_order_relaxed);
+    }
+}
+
 void __fastcall hook_steady_packer(
     void *source,
     void *dst,
     std::int32_t selector) noexcept
 {
     telemetry::hot_count(g_steady_seen);
-
-    if (g_pmetal_source_only_enabled.load(
-            std::memory_order_acquire)) {
-        // Preserve the recovered V13 lifetime contract: decode the donor
-        // while the incoming source object is unquestionably live, execute
-        // the original DSR operator, then publish only immutable PTDE data.
-        const auto source_serial =
-            g_pmetal_source_serial.fetch_add(
-                1u,
-                std::memory_order_acq_rel) +
-            1u;
-
-        f4 env{};
-        std::uint64_t bank = 0u;
-        std::uint32_t row = 0u;
-        const bool have_env =
-            read_exact_pmetal_env_source(
-                source,
-                selector,
-                env,
-                bank,
-                row);
-
-        if (g_steady_packer_orig != nullptr)
-            g_steady_packer_orig(
-                source,
-                dst,
-                selector);
-
-        if (have_env) {
-            publish_pmetal_source_only(
-                env, env, 0.0f,
-                bank, bank, row, row,
-                source_serial);
-            telemetry::hot_count(
-                g_pmetal_env_steady);
-        } else {
-            telemetry::hot_count(
-                g_pmetal_env_miss);
-        }
-        telemetry::hot_count(
-            g_steady_pass);
-        return;
-    }
 
     if (g_steady_packer_orig != nullptr)
         g_steady_packer_orig(
@@ -4385,108 +4534,6 @@ void __fastcall hook_pmetal_env_blend(
     std::int32_t selector_b,
     float beta) noexcept
 {
-    if (g_pmetal_source_only_enabled.load(
-            std::memory_order_acquire)) {
-        // Retail 0x563C30 collapses beta endpoints by tail-jumping into
-        // 0x563B80. That target is already hooked by the isolated carrier, so
-        // endpoint cases must flow through the steady hook exactly once.
-        // Only the true interior blend path is decoded here.
-        const bool finite_beta =
-            std::isfinite(beta);
-        const bool endpoint_a =
-            finite_beta &&
-            (selector_a == selector_b ||
-             beta <= 0.0f) &&
-            source_a != nullptr;
-        const bool endpoint_b =
-            finite_beta &&
-            !endpoint_a &&
-            (selector_a == selector_b ||
-             beta >= 1.0f) &&
-            source_b != nullptr;
-        const bool interior_blend =
-            finite_beta &&
-            !endpoint_a &&
-            !endpoint_b &&
-            source_a != nullptr &&
-            source_b != nullptr;
-
-        if (endpoint_a || endpoint_b) {
-            if (g_pmetal_env_blend_orig != nullptr)
-                g_pmetal_env_blend_orig(
-                    out,
-                    source_a,
-                    selector_a,
-                    source_b,
-                    selector_b,
-                    beta);
-            return;
-        }
-
-        const auto source_serial =
-            g_pmetal_source_serial.fetch_add(
-                1u,
-                std::memory_order_acq_rel) +
-            1u;
-
-        f4 a{};
-        f4 b{};
-        std::uint64_t bank_a = 0u;
-        std::uint64_t bank_b = 0u;
-        std::uint32_t row_a = 0u;
-        std::uint32_t row_b = 0u;
-
-        bool have_a = false;
-        bool have_b = false;
-        if (interior_blend) {
-            have_a =
-                read_exact_pmetal_env_source(
-                    source_a,
-                    selector_a,
-                    a,
-                    bank_a,
-                    row_a);
-            have_b =
-                read_exact_pmetal_env_source(
-                    source_b,
-                    selector_b,
-                    b,
-                    bank_b,
-                    row_b);
-        }
-
-        if (g_pmetal_env_blend_orig != nullptr)
-            g_pmetal_env_blend_orig(
-                out,
-                source_a,
-                selector_a,
-                source_b,
-                selector_b,
-                beta);
-
-        if (interior_blend &&
-            have_a &&
-            have_b) {
-            publish_pmetal_source_only(
-                a,
-                b,
-                std::clamp(beta,0.0f,1.0f),
-                bank_a,
-                bank_b,
-                row_a,
-                row_b,
-                source_serial);
-            telemetry::hot_count(
-                g_pmetal_env_blend);
-        } else {
-            // source_serial advanced without a publication. latest() will
-            // reject any older payload rather than replay stale EnvSpec state.
-            telemetry::hot_count(
-                g_pmetal_env_miss);
-        }
-        return;
-    }
-
     if (g_pmetal_env_blend_orig != nullptr)
         g_pmetal_env_blend_orig(
             out,
@@ -4524,8 +4571,6 @@ void __fastcall hook_pmetal_env_blend(
         g_producer.pmetal_env_a = a;
         g_producer.pmetal_env_b = b;
         // V13 producer contract publishes clamp01(beta) into b12[3].w.
-        // Preserve that operator behavior rather than exporting an unchecked
-        // transport value.
         g_producer.pmetal_env_beta =
             std::clamp(
                 beta,
@@ -4535,10 +4580,12 @@ void __fastcall hook_pmetal_env_blend(
         g_producer.pmetal_bank_b = bank_b;
         g_producer.pmetal_row_a = row_a;
         g_producer.pmetal_row_b = row_b;
-        telemetry::hot_count(g_pmetal_env_blend);
+        telemetry::hot_count(
+            g_pmetal_env_blend);
     } else {
         g_producer.have_pmetal_env = false;
-        telemetry::hot_count(g_pmetal_env_miss);
+        telemetry::hot_count(
+            g_pmetal_env_miss);
     }
 }
 
@@ -4574,49 +4621,49 @@ bool install_pmetal_source_only_carrier() noexcept
         return false;
 
     if (!prepare_hook(
-            g_hooks[3],
+            g_pmetal_source_steady_hook,
             k_rva_steady_packer,
             k_steady_packer_bytes,
             reinterpret_cast<void *>(
-                &hook_steady_packer)))
+                &hook_pmetal_source_steady)))
         return false;
 
-    g_steady_packer_orig =
+    g_pmetal_source_steady_orig =
         reinterpret_cast<steady_packer_fn>(
-            g_hooks[3].trampoline);
+            g_pmetal_source_steady_hook.trampoline);
 
     if (!prepare_hook(
-            g_pmetal_env_hook,
+            g_pmetal_source_blend_hook,
             k_rva_pmetal_env_blend,
             k_pmetal_env_blend_bytes,
             reinterpret_cast<void *>(
-                &hook_pmetal_env_blend))) {
-        (void)restore_hook(g_hooks[3]);
-        g_steady_packer_orig = nullptr;
+                &hook_pmetal_source_blend))) {
+        (void)restore_hook(
+            g_pmetal_source_steady_hook);
+        g_pmetal_source_steady_orig = nullptr;
         return false;
     }
 
-    g_pmetal_env_blend_orig =
+    g_pmetal_source_blend_orig =
         reinterpret_cast<pmetal_env_blend_fn>(
-            g_pmetal_env_hook.trampoline);
+            g_pmetal_source_blend_hook.trampoline);
 
-    // Arm both entry points while the source-only latch is still OFF.
-    // If another engine thread reaches either detour during installation it
-    // executes the stock operator path only. Publish the active latch only
-    // after both hooks are present, eliminating a partially-installed source
-    // carrier state.
-    if (!arm_hook(g_hooks[3]) ||
-        !arm_hook(g_pmetal_env_hook)) {
-        (void)restore_hook(g_pmetal_env_hook);
-        (void)restore_hook(g_hooks[3]);
-        g_steady_packer_orig = nullptr;
-        g_pmetal_env_blend_orig = nullptr;
+    // Arm both dedicated source cuts while the active latch is still OFF.
+    // The detours therefore execute only the stock trampolines until both
+    // patches are present, and they never enter the generic U/L detours.
+    if (!arm_hook(
+            g_pmetal_source_steady_hook) ||
+        !arm_hook(
+            g_pmetal_source_blend_hook)) {
+        (void)restore_hook(
+            g_pmetal_source_blend_hook);
+        (void)restore_hook(
+            g_pmetal_source_steady_hook);
+        g_pmetal_source_steady_orig = nullptr;
+        g_pmetal_source_blend_orig = nullptr;
         return false;
     }
 
-    g_pmetal_env_hook_armed.store(
-        true,
-        std::memory_order_release);
     g_pmetal_source_only_enabled.store(
         true,
         std::memory_order_release);
@@ -4628,22 +4675,22 @@ bool restore_pmetal_source_only_carrier() noexcept
     g_pmetal_source_only_enabled.store(
         false,
         std::memory_order_release);
-    g_pmetal_env_hook_armed.store(
-        false,
-        std::memory_order_release);
 
     bool ok =
-        restore_hook(g_pmetal_env_hook);
+        restore_hook(
+            g_pmetal_source_blend_hook);
     ok =
-        restore_hook(g_hooks[3]) &&
+        restore_hook(
+            g_pmetal_source_steady_hook) &&
         ok;
 
     if (ok) {
-        g_steady_packer_orig = nullptr;
-        g_pmetal_env_blend_orig = nullptr;
+        g_pmetal_source_steady_orig = nullptr;
+        g_pmetal_source_blend_orig = nullptr;
     }
     return ok;
 }
+
 
 bool install_producer_hooks() noexcept
 {
@@ -4974,10 +5021,10 @@ bool pmetal_env_source_runtime::install() noexcept
     if (g_base == 0u)
         return false;
 
-    g_quarantined.store(
+    g_pmetal_source_quarantined.store(
         false,
         std::memory_order_release);
-    g_restore_failed.store(
+    g_pmetal_source_restore_failed.store(
         false,
         std::memory_order_release);
 
@@ -4997,10 +5044,10 @@ void pmetal_env_source_runtime::uninstall() noexcept
         return;
 
     if (!restore_pmetal_source_only_carrier()) {
-        g_restore_failed.store(
+        g_pmetal_source_restore_failed.store(
             true,
             std::memory_order_release);
-        g_quarantined.store(
+        g_pmetal_source_quarantined.store(
             true,
             std::memory_order_release);
         return;
@@ -5020,15 +5067,15 @@ pmetal_env_source_runtime::telemetry() const noexcept
 {
     pmetal_env_source_runtime_telemetry out{};
     out.steady_seen =
-        g_steady_seen.load();
+        g_pmetal_source_steady_seen.load();
     out.blend_seen =
-        g_pmetal_env_blend.load();
+        g_pmetal_source_blend_seen.load();
     out.exact_publish =
         g_pmetal_source_publish.load();
     out.bank_unknown =
-        g_pmetal_env_miss.load();
+        g_pmetal_source_decode_fail.load();
     out.decode_fail =
-        g_pmetal_env_miss.load();
+        g_pmetal_source_decode_fail.load();
     out.publish_busy_drop =
         g_pmetal_source_busy_drop.load();
     out.consumer_ok =
@@ -5036,13 +5083,13 @@ pmetal_env_source_runtime::telemetry() const noexcept
     out.consumer_fail =
         g_pmetal_source_consumer_fail.load();
     out.steady_carrier_active =
-        g_hooks[3].patched;
+        g_pmetal_source_steady_hook.patched;
     out.blend_carrier_active =
-        g_pmetal_env_hook.patched;
+        g_pmetal_source_blend_hook.patched;
     out.quarantined =
-        g_quarantined.load();
+        g_pmetal_source_quarantined.load();
     out.restore_failed =
-        g_restore_failed.load();
+        g_pmetal_source_restore_failed.load();
     return out;
 }
 
@@ -5052,6 +5099,9 @@ void pmetal_env_source_runtime::reset() noexcept
     g_pmetal_source_busy_drop.store(0u);
     g_pmetal_source_consumer_ok.store(0u);
     g_pmetal_source_consumer_fail.store(0u);
+    g_pmetal_source_steady_seen.store(0u);
+    g_pmetal_source_blend_seen.store(0u);
+    g_pmetal_source_decode_fail.store(0u);
     g_pmetal_source_serial.store(0u);
 
     if (!g_pmetal_source_payload_guard.test_and_set(
@@ -5061,6 +5111,9 @@ void pmetal_env_source_runtime::reset() noexcept
         g_pmetal_source_payload_guard.clear(
             std::memory_order_release);
     }
+
+    g_pmetal_bank_cache = {};
+    g_pmetal_bank_victim = {};
 }
 
 upper_lower_draw_runtime::upper_lower_draw_runtime(
