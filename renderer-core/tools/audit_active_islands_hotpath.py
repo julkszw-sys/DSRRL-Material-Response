@@ -104,6 +104,9 @@ def main():
     require(integrated,
         "if (k_pointlight_drawtime_runtime_enabled &&\n        clustered_pnts_candidate)",
         "PointLight post-A1 registration bypass")
+    require(flver_cpp,
+        "if(g_state.builder_armed)\n  clustered_pnts_selector_event_bridge(",
+        "clustered selector bridge follows builder arm state")
 
     # Disabled islands must not keep receiver/materialization work alive.
     require(integrated,
