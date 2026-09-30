@@ -6652,14 +6652,30 @@ bool AddonInit(
     }
 
     if (pmetal_envspec_enabled &&
-        !upper_lower_enabled) {
+        upper_lower_enabled) {
         (void)g_core.features().set(
             dsrrl::core::operator_id::env_spec,
             false);
         pmetal_envspec_enabled = false;
         reshade::log::message(
             reshade::log::level::warning,
-            "[DSRRL PMETAL ENVSPEC] SOURCE TRANSPORT FAIL-OPEN: shared LightBank hooks are disabled after runtime-liveness failures; stock DSR EnvSpec is preserved until a narrow verified source cut replaces them.");
+            "[DSRRL PMETAL ENVSPEC] SOURCE FAIL-OPEN: EnvSpec source carrier is exclusive with visible U/L.");
+    } else if (
+        pmetal_envspec_enabled &&
+        !pmetal_source_ready) {
+        (void)g_core.features().set(
+            dsrrl::core::operator_id::env_spec,
+            false);
+        pmetal_envspec_enabled = false;
+        reshade::log::message(
+            reshade::log::level::warning,
+            "[DSRRL PMETAL ENVSPEC] SOURCE FAIL-OPEN: isolated V13 carrier unavailable; stock DSR EnvSpec preserved.");
+    } else if (
+        pmetal_envspec_enabled &&
+        pmetal_source_ready) {
+        reshade::log::message(
+            reshade::log::level::info,
+            "[DSRRL PMETAL ENVSPEC] isolated V13 source carrier ACTIVE; visible U/L remains stock/off.");
     }
 
     {
