@@ -8,6 +8,7 @@
 #include "dsrrl/runtime/envspec_resource_runtime.hpp"
 #include "dsrrl/runtime/island_draw_adapter.hpp"
 #include "dsrrl/runtime/material_resource_draw_runtime.hpp"
+#include "dsrrl/runtime/pmetal_env_source_runtime.hpp"
 #include "dsrrl/runtime/upper_lower_draw_runtime.hpp"
 
 #include <reshade.hpp>
@@ -85,6 +86,7 @@ class pmetal_envspec_draw_runtime {
 public:
     pmetal_envspec_draw_runtime(
         core::renderer_core &core,
+        pmetal_env_source_runtime &source,
         upper_lower_draw_runtime &lightbank,
         envspec_resource_runtime &env_resources,
         material_resource_draw_runtime &material_resources) noexcept;
@@ -150,6 +152,7 @@ private:
     void release_resources() noexcept;
 
     core::renderer_core &core_;
+    pmetal_env_source_runtime &source_;
     upper_lower_draw_runtime &lightbank_;
     envspec_resource_runtime &env_resources_;
     material_resource_draw_runtime &material_resources_;

@@ -100,6 +100,8 @@ dsrrl::runtime::bloom_scene_sidecar_runtime
     g_bloom_scene_sidecar;
 dsrrl::runtime::upper_lower_draw_runtime
     g_upper_lower(g_core);
+dsrrl::runtime::pmetal_env_source_runtime
+    g_pmetal_source;
 dsrrl::runtime::subsurface_draw_runtime
     g_subsurface(
         g_core,
@@ -120,6 +122,7 @@ dsrrl::runtime::clustered_pnts_pipeline_runtime
 dsrrl::runtime::pmetal_envspec_draw_runtime
     g_pmetal_envspec(
         g_core,
+        g_pmetal_source,
         g_upper_lower,
         g_envspec_resources,
         g_material_resources);
@@ -6365,6 +6368,7 @@ bool AddonInit(
     g_bloom_scene_sidecar.reset();
     dsrrl::runtime::bloom_fx_draw_transport::reset_stats();
     g_pmetal_envspec.reset();
+    g_pmetal_source.reset();
     g_upper_lower.reset();
     g_upper_lower_hemenv.reset();
     g_hemdir3.reset();
@@ -6611,15 +6615,18 @@ bool AddonInit(
     bool pmetal_envspec_enabled =
         g_core.features().enabled(
             dsrrl::core::operator_id::env_spec);
+    const bool pmetal_source_ready =
+        !pmetal_envspec_enabled ||
+        upper_lower_enabled ||
+        (flver_hooks &&
+         g_pmetal_source.install());
 
     // Runtime-liveness guard: do not arm the Upper/Lower LightBank hook set
     // solely as a carrier for P_Metal EnvSpec. Two consecutive owner runtime
-    // failures showed that both attempted source-carrier variants are unsafe:
-    // the dedicated 0x563C30 hook violated the unknown native ABI, while the
-    // generic steady/blend packer fallback performs P_Metal bank work on a
-    // renderer-hot producer path. Until a narrow source cut is independently
-    // verified, EnvSpec must fail open rather than keeping shared LightBank
-    // hooks alive while visible U/L itself is disabled.
+    // failures occurred while EnvSpec source capture was coupled to the broad
+    // shared U/L reference runtime, so they do not isolate the recovered V13
+    // source carrier by itself. The EnvSpec carrier is now independent; shared
+    // visible U/L state remains disabled unless U/L is explicitly enabled.
     const bool lightbank_reference_transport_required =
         upper_lower_enabled;
     const bool lightbank_reference_hooks =
@@ -6643,14 +6650,30 @@ bool AddonInit(
     }
 
     if (pmetal_envspec_enabled &&
-        !upper_lower_enabled) {
+        upper_lower_enabled) {
         (void)g_core.features().set(
             dsrrl::core::operator_id::env_spec,
             false);
         pmetal_envspec_enabled = false;
         reshade::log::message(
             reshade::log::level::warning,
-            "[DSRRL PMETAL ENVSPEC] SOURCE TRANSPORT FAIL-OPEN: shared LightBank hooks are disabled after runtime-liveness failures; stock DSR EnvSpec is preserved until a narrow verified source cut replaces them.");
+            "[DSRRL PMETAL ENVSPEC] SOURCE FAIL-OPEN: EnvSpec source carrier is exclusive with visible U/L.");
+    } else if (
+        pmetal_envspec_enabled &&
+        !pmetal_source_ready) {
+        (void)g_core.features().set(
+            dsrrl::core::operator_id::env_spec,
+            false);
+        pmetal_envspec_enabled = false;
+        reshade::log::message(
+            reshade::log::level::warning,
+            "[DSRRL PMETAL ENVSPEC] SOURCE FAIL-OPEN: isolated V13 carrier unavailable; stock DSR EnvSpec preserved.");
+    } else if (
+        pmetal_envspec_enabled &&
+        pmetal_source_ready) {
+        reshade::log::message(
+            reshade::log::level::info,
+            "[DSRRL PMETAL ENVSPEC] isolated V13 source carrier ACTIVE; visible U/L remains stock/off.");
     }
 
     {
@@ -6693,6 +6716,7 @@ void AddonUninit(
     log_effect_matrix("PRE_UNLOAD");
     motion_blur_camera_fallback_disable::
         log_state("PRE_UNLOAD");
+    g_pmetal_source.uninstall();
     g_upper_lower.uninstall();
 
     if (g_upper_lower.telemetry().restore_failed)
@@ -6730,6 +6754,7 @@ void AddonUninit(
     g_envspec_resources.unregister_events();
     g_material_resources.unregister_events();
     g_pmetal_envspec.reset();
+    g_pmetal_source.reset();
     g_envspec_resources.reset_stats();
     g_bloom_scene_sidecar.reset();
     dsrrl::runtime::bloom_fx_draw_transport::reset_stats();

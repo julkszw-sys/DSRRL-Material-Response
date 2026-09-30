@@ -142,10 +142,12 @@ struct f4 {
 pmetal_envspec_draw_runtime::
 pmetal_envspec_draw_runtime(
     core::renderer_core &core,
+    pmetal_env_source_runtime &source,
     upper_lower_draw_runtime &lightbank,
     envspec_resource_runtime &env_resources,
     material_resource_draw_runtime &material_resources) noexcept
     : core_(core),
+      source_(source),
       lightbank_(lightbank),
       env_resources_(env_resources),
       material_resources_(material_resources)
@@ -599,10 +601,8 @@ bool pmetal_envspec_draw_runtime::prepare(
     }
     effect_latch(effect_semantic_ready_);
 
-    pmetal_env_source source{};
-    if (!lightbank_.
-            selected_pmetal_env_source(
-                source) ||
+    pmetal_envspec_source source{};
+    if (!source_.latest(source) ||
         !std::isfinite(source.beta)) {
         telemetry::hot_count(source_rejects_);
         effect_fail(
@@ -614,34 +614,32 @@ bool pmetal_envspec_draw_runtime::prepare(
                 true,
                 std::memory_order_relaxed)) {
             const auto cut =
-                lightbank_.pmetal_draw_token_state();
-            char line[1024]{};
+                source_.telemetry();
+            char line[768]{};
             std::snprintf(
                 line,
                 sizeof(line),
-                "[DSRRL PMETAL SOURCE CUT] tid=%u rx=%u route=%u owner=%016llx slot=%u local_valid=%u local_source=%u token_ptid=%u token_serial=%llu last_selected_serial=%llu latest_publish_serial=%llu draws_since_selector=%u sel_a=%d sel_b=%d beta=%.6f",
-                static_cast<unsigned>(cut.current_tid),
+                "[DSRRL PMETAL SOURCE CUT] rx=%u route=%u owner=%016llx slot=%u steady=%llu blend=%llu publish=%llu busy_drop=%llu consume_ok=%llu consume_fail=%llu steady_active=%u blend_active=%u",
                 static_cast<unsigned>(decision.receiver_id),
                 static_cast<unsigned>(decision.route_index),
                 static_cast<unsigned long long>(
                     material.flver_identity_hash),
                 static_cast<unsigned>(
                     material.material_slot),
-                cut.local_token_valid ? 1u : 0u,
-                cut.local_source_ready ? 1u : 0u,
-                static_cast<unsigned>(
-                    cut.token_producer_tid),
                 static_cast<unsigned long long>(
-                    cut.token_producer_serial),
+                    cut.steady_seen),
                 static_cast<unsigned long long>(
-                    cut.last_selected_producer_serial),
+                    cut.blend_seen),
                 static_cast<unsigned long long>(
-                    cut.latest_publish_serial),
-                static_cast<unsigned>(
-                    cut.completed_draws_since_selector),
-                static_cast<int>(cut.selector_a),
-                static_cast<int>(cut.selector_b),
-                static_cast<double>(cut.beta));
+                    cut.exact_publish),
+                static_cast<unsigned long long>(
+                    cut.publish_busy_drop),
+                static_cast<unsigned long long>(
+                    cut.consumer_ok),
+                static_cast<unsigned long long>(
+                    cut.consumer_fail),
+                cut.steady_carrier_active ? 1u : 0u,
+                cut.blend_carrier_active ? 1u : 0u);
             reshade::log::message(
                 reshade::log::level::info,
                 line);
@@ -788,6 +786,8 @@ bool pmetal_envspec_draw_runtime::prepare(
         use_upper_lower = true;
         telemetry::hot_count(upper_lower_ready_);
     } else if (
+        core_.features().enabled(
+            core::operator_id::upper_lower) &&
         upper_lower_receiver_verified &&
         pair.upper_lower != nullptr &&
         lightbank_.

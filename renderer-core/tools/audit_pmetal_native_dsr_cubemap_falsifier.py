@@ -48,8 +48,8 @@ def main() -> None:
     )
     require(
         pmetal_cpp,
-        "selected_pmetal_env_source(",
-        "PTDE LightBank source feed retained",
+        "source_.latest(source)",
+        "PTDE LightBank source feed retained through isolated V13 carrier",
     )
     require(
         pmetal_cpp,

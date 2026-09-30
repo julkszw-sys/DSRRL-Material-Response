@@ -22,52 +22,37 @@ def main() -> None:
     ul_h = (root / "include/dsrrl/runtime/upper_lower_draw_runtime.hpp").read_text(encoding="utf-8")
     ul_cpp = (root / "src/runtime/upper_lower_draw_runtime.cpp").read_text(encoding="utf-8")
     env_cpp = (root / "src/runtime/pmetal_envspec_draw_runtime.cpp").read_text(encoding="utf-8")
+    source_h = (root / "include/dsrrl/runtime/pmetal_env_source_runtime.hpp").read_text(encoding="utf-8")
     flver_cpp = (root / "src/runtime/flver_engine_hooks.cpp").read_text(encoding="utf-8")
     lerp_cpp = (root / "src/operators/env_spec/pmetal_rgba_lerp_materializer.cpp").read_text(encoding="utf-8")
     lerp_h = (root / "include/dsrrl/operators/env_spec/pmetal_rgba_lerp_materializer.hpp").read_text(encoding="utf-8")
 
-    # Runtime safety policy: P_Metal EnvSpec must not arm the shared
-    # Upper/Lower LightBank hook set while visible U/L is disabled. Both the
-    # dedicated 0x563C30 source hook and the generic packer decode fallback
-    # have owner-observed runtime-liveness failures. Until a narrow source cut
-    # is independently verified, EnvSpec fails open to stock DSR.
-    require(
-        integrated,
-        "bool pmetal_envspec_enabled =",
-        "P_Metal EnvSpec feature gate",
-    )
+    # EnvSpec source transport is independent from visible U/L.
+    require(integrated, "g_pmetal_source;", "isolated source instance")
+    require(integrated, "g_pmetal_source.install()", "isolated source activation")
     require(
         integrated,
         "const bool lightbank_reference_transport_required =\n        upper_lower_enabled;",
-        "LightBank hooks scoped to actual U/L activation",
+        "U/L transport remains U/L-only",
+    )
+    if "upper_lower_enabled ||\n        pmetal_envspec_enabled" in integrated:
+        fail("EnvSpec still forces shared U/L transport")
+
+    require(
+        source_h,
+        "class pmetal_env_source_runtime",
+        "isolated source runtime API",
     )
     require(
-        integrated,
-        "g_upper_lower.install(false)",
-        "visible U/L install only when U/L feature is enabled",
+        ul_cpp,
+        "bool install_pmetal_source_only_carrier() noexcept",
+        "isolated source-only installer",
     )
     require(
-        integrated,
-        "if (pmetal_envspec_enabled &&\n        !upper_lower_enabled) {",
-        "P_Metal source fail-open gate",
+        env_cpp,
+        "source_.latest(source)",
+        "isolated source consumer",
     )
-    require(
-        integrated,
-        "g_core.features().set(\n            dsrrl::core::operator_id::env_spec,\n            false);",
-        "P_Metal EnvSpec runtime disable",
-    )
-    require(
-        integrated,
-        "SOURCE TRANSPORT FAIL-OPEN",
-        "P_Metal source fail-open runtime marker",
-    )
-    if (
-        "upper_lower_enabled ||\n        pmetal_envspec_enabled" in integrated
-        or "g_upper_lower.install(\n             !upper_lower_enabled)" in integrated
-    ):
-        fail(
-            "P_Metal EnvSpec still authorizes shared LightBank hooks while U/L is disabled"
-        )
 
     # Installing the shared carrier must never silently re-enable U/L inside
     # the EnvSpec composite.
@@ -125,8 +110,8 @@ def main() -> None:
     )
     require(
         env_cpp,
-        "selected_pmetal_env_source(",
-        "consumer-local P_Metal source decode",
+        "source_.latest(source)",
+        "consumer-local isolated P_Metal source read",
     )
     require(
         env_cpp,
@@ -363,9 +348,9 @@ def main() -> None:
 
     print("DSRRL_PMETAL_ENVSPEC_REFERENCE_TRANSPORT_PASS")
     print("  U/L visible operator=OFF remains stock when not explicitly enabled")
-    print("  LightBank hook set=OFF when U/L is OFF")
-    print("  P_Metal EnvSpec source=FAIL-OPEN to stock DSR until a narrow source cut is verified")
-    print("  latent producer payload code=not authorized by the U/L-off startup path")
+    print("  shared U/L runtime=OFF when U/L is OFF")
+    print("  P_Metal EnvSpec source=isolated V13 carrier")
+    print("  EnvSpec source does not require visible U/L transport")
     print("  selected state=exact selector + exact actual P_Metal material")
     print("  persistent P_Metal invalidation=material-gated O(1) producer set; generic selectors preserve state")
     print("  selector row address=retail low byte; full selector retained for identity")
