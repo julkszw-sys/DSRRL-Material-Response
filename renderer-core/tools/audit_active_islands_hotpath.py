@@ -42,6 +42,8 @@ def main():
     resources=(root/"src/runtime/material_resource_draw_runtime.cpp").read_text(encoding="utf-8")
     hemdir3_mode=(root/"src/runtime/hemdir3_mode_transport.cpp").read_text(encoding="utf-8")
     draw_tx=(root/"src/runtime/draw_state_transaction.cpp").read_text(encoding="utf-8")
+    owner_selection=(root/"src/runtime/material_owner_selection.cpp").read_text(encoding="utf-8")
+    owner_producer=(root/"src/runtime/material_owner_producer.cpp").read_text(encoding="utf-8")
 
     # Feature flags are queried from render-hot paths. Keep reads lock-free,
     # while snapshot/set may retain coherent writer serialization.
@@ -261,6 +263,27 @@ def main():
     if draw_tx.count("auto *ctx = state.context;") < 3:
         fail("draw replay/restore do not consistently reuse retained native context")
 
+    # Owner/material caches use the already-computed 64-bit FLVER token only
+    # as bucket entropy. Positive cache hits must still compare the full SHA-256.
+    require(owner_selection,
+        "k_owner_auth_cache_slots = 256u",
+        "owner auth TLS working set")
+    require(owner_selection,
+        "identity.flver_identity_hash",
+        "owner auth precomputed hash index")
+    require(owner_selection,
+        "cached.flver_sha256 ==\n            identity.flver_sha256",
+        "owner auth full SHA hit gate")
+    require(owner_producer,
+        "k_owner_material_cache_slots = 256u",
+        "owner material TLS working set")
+    require(owner_producer,
+        "observation.flver_identity_hash",
+        "owner material precomputed hash index")
+    require(owner_producer,
+        "cached.flver_sha256 ==\n            observation.flver_sha256",
+        "owner material full SHA hit gate")
+
     print("Active-islands hot-path audit: PASS")
     print("  feature_reads=atomic")
     print("  flver_identity=256-entry TLS before global map lock")
@@ -271,6 +294,7 @@ def main():
     print("  resources=exact-owner/impossible-receiver prefilter before PSGetShaderResources")
     print("  ownerless_draws=stop before batch preparation under current policy")
     print("  draw_replay=Context1 TLS cache; QueryInterface cold-path only")
+    print("  material_owner=256-entry TLS caches indexed by precomputed FLVER hash; full SHA authority retained")
     return 0
 
 if __name__=="__main__":
