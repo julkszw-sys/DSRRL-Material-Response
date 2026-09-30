@@ -331,9 +331,9 @@ def main() -> None:
 
     print("DSRRL_PMETAL_ENVSPEC_REFERENCE_TRANSPORT_PASS")
     print("  U/L visible operator=OFF remains stock when not explicitly enabled")
-    print("  LightBank hook set=OFF when U/L is OFF")
-    print("  P_Metal EnvSpec source=FAIL-OPEN to stock DSR until a narrow source cut is verified")
-    print("  latent producer payload code=not authorized by the U/L-off startup path")
+    print("  shared U/L runtime=OFF when U/L is OFF")
+    print("  P_Metal EnvSpec source=isolated V13 carrier")
+    print("  EnvSpec source does not require visible U/L transport")
     print("  selected state=exact selector + exact actual P_Metal material")
     print("  persistent P_Metal invalidation=material-gated O(1) producer set; generic selectors preserve state")
     print("  selector row address=retail low byte; full selector retained for identity")
