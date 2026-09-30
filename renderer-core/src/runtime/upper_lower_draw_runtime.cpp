@@ -4557,81 +4557,6 @@ void __fastcall hook_pmetal_env_blend(
     float beta) noexcept
 {
     if (g_pmetal_env_blend_orig != nullptr)
-                g_pmetal_env_blend_orig(
-                    out,
-                    source_a,
-                    selector_a,
-                    source_b,
-                    selector_b,
-                    beta);
-            return;
-        }
-
-        const auto source_serial =
-            g_pmetal_source_serial.fetch_add(
-                1u,
-                std::memory_order_acq_rel) +
-            1u;
-
-        f4 a{};
-        f4 b{};
-        std::uint64_t bank_a = 0u;
-        std::uint64_t bank_b = 0u;
-        std::uint32_t row_a = 0u;
-        std::uint32_t row_b = 0u;
-
-        bool have_a = false;
-        bool have_b = false;
-        if (interior_blend) {
-            have_a =
-                read_exact_pmetal_env_source(
-                    source_a,
-                    selector_a,
-                    a,
-                    bank_a,
-                    row_a);
-            have_b =
-                read_exact_pmetal_env_source(
-                    source_b,
-                    selector_b,
-                    b,
-                    bank_b,
-                    row_b);
-        }
-
-        if (g_pmetal_env_blend_orig != nullptr)
-            g_pmetal_env_blend_orig(
-                out,
-                source_a,
-                selector_a,
-                source_b,
-                selector_b,
-                beta);
-
-        if (interior_blend &&
-            have_a &&
-            have_b) {
-            publish_pmetal_source_only(
-                a,
-                b,
-                std::clamp(beta,0.0f,1.0f),
-                bank_a,
-                bank_b,
-                row_a,
-                row_b,
-                source_serial);
-            telemetry::hot_count(
-                g_pmetal_env_blend);
-        } else {
-            // source_serial advanced without a publication. latest() will
-            // reject any older payload rather than replay stale EnvSpec state.
-            telemetry::hot_count(
-                g_pmetal_env_miss);
-        }
-        return;
-    }
-
-    if (g_pmetal_env_blend_orig != nullptr)
         g_pmetal_env_blend_orig(
             out,
             source_a,
@@ -4668,8 +4593,6 @@ void __fastcall hook_pmetal_env_blend(
         g_producer.pmetal_env_a = a;
         g_producer.pmetal_env_b = b;
         // V13 producer contract publishes clamp01(beta) into b12[3].w.
-        // Preserve that operator behavior rather than exporting an unchecked
-        // transport value.
         g_producer.pmetal_env_beta =
             std::clamp(
                 beta,
@@ -4679,10 +4602,12 @@ void __fastcall hook_pmetal_env_blend(
         g_producer.pmetal_bank_b = bank_b;
         g_producer.pmetal_row_a = row_a;
         g_producer.pmetal_row_b = row_b;
-        telemetry::hot_count(g_pmetal_env_blend);
+        telemetry::hot_count(
+            g_pmetal_env_blend);
     } else {
         g_producer.have_pmetal_env = false;
-        telemetry::hot_count(g_pmetal_env_miss);
+        telemetry::hot_count(
+            g_pmetal_env_miss);
     }
 }
 
