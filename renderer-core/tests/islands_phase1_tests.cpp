@@ -473,7 +473,12 @@ int main()
     CHECK(direct_pointlight.active);
     CHECK(direct_pointlight.reason==decision_reason::active);
     CHECK(direct_pointlight.receiver_id==0u);
-    CHECK(direct_pointlight.route_index==345u);
+    CHECK((direct_pointlight.route_index &
+           0x80000000u)!=0u);
+    CHECK(direct_pointlight.c100[0]==0.5f);
+    CHECK(direct_pointlight.c100[1]==0.5f);
+    CHECK(direct_pointlight.c100[2]==0.5f);
+    CHECK(direct_pointlight.c101==2.5f);
     CHECK(direct_pointlight.ptde_specular_power_verified);
     CHECK(direct_pointlight.ptde_specular_power==8.5f);
 
