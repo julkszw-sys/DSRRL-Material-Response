@@ -422,6 +422,21 @@ def main():
         "if (g_hot_telemetry_enabled &&\n        dsrrl::runtime::bloom_fx_draw_transport::\n            active_draw_scope())") != 2:
         fail("Bloom FX active-draw scope must be skipped on both production draw paths")
 
+    guard_start=integrated.find("struct draw_semantic_selection_guard")
+    guard_end=integrated.find("void observe_equipment_specrgb_carrier(",guard_start)
+    if guard_start<0 or guard_end<0:
+        fail("draw semantic selection guard boundary missing")
+    guard_body=integrated[guard_start:guard_end]
+    for token in (
+        "g_upper_lower_selection_transport_active.load(",
+        "g_hemdir3_selection_transport_active.load(",
+        "g_fixed_pointlight_selection_transport_active.load(",
+        "g_clustered_pointlight_selection_transport_active.load(",
+    ):
+        require(guard_body,token,"selection drain installed-transport gate")
+    if "g_upper_lower.consume_draw_selection();\n        g_fixed_pointlight.consume_draw_selection();" in guard_body:
+        fail("selection guard regressed to unconditional disabled-island drains")
+
     print("Active-islands hot-path audit: PASS")
     print("  feature_reads=atomic")
     print("  flver_identity=256-entry TLS before global map lock")
@@ -439,6 +454,7 @@ def main():
     print("  drawtime_falsifier=no draw callbacks/no FLVER-texture-resource-PMetal-PointLight transports; A1+MotionBlur create-time retained")
     print("  bloom_q8=no production resource allocation without telemetry authority")
     print("  bloom_fx=no production per-draw scope check outside telemetry")
+    print("  selection_guard=only installed producer transports drain draw-scoped TLS")
     return 0
 
 if __name__=="__main__":
