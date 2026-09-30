@@ -398,6 +398,7 @@ bool draw_state_transaction_runtime::begin(
     auto *ctx =
         reinterpret_cast<ID3D11DeviceContext *>(
             cmd_list->get_native());
+    state.context = ctx;
     if (ctx == nullptr) {
         telemetry::hot_count(begin_fail_);
         return false;
@@ -700,9 +701,7 @@ bool draw_state_transaction_runtime::restore(
         return false;
     }
 
-    auto *ctx =
-        reinterpret_cast<ID3D11DeviceContext *>(
-            cmd_list->get_native());
+    auto *ctx = state.context;
     if (ctx == nullptr) {
         if (state.core_started && state.command != 0u)
             core_restored =
@@ -903,9 +902,7 @@ draw_tx_result draw_state_transaction_runtime::replay_draw(
     if (!begin(cmd_list, mutation, state))
         return draw_tx_result::not_issued;
 
-    auto *ctx =
-        reinterpret_cast<ID3D11DeviceContext *>(
-            cmd_list->get_native());
+    auto *ctx = state.context;
 
     if (instance_count == 1u &&
         first_instance == 0u) {
@@ -941,9 +938,7 @@ draw_state_transaction_runtime::replay_draw_indexed(
     if (!begin(cmd_list, mutation, state))
         return draw_tx_result::not_issued;
 
-    auto *ctx =
-        reinterpret_cast<ID3D11DeviceContext *>(
-            cmd_list->get_native());
+    auto *ctx = state.context;
 
     if (instance_count == 1u &&
         first_instance == 0u) {
