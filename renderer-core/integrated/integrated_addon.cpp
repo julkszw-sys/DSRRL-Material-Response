@@ -5374,7 +5374,11 @@ bool prepare_island_batch(
             ? dsrrl::runtime::pmetal_envspec_receiver_family::hemenvlerp
             : dsrrl::runtime::pmetal_envspec_receiver_family::stable_hemenv;
 
+    // Route 345 is a necessary (not sufficient) P_Metal condition. Keep the
+    // exact semantic/raw-MTD/owner authority inside pmetal_envspec::prepare,
+    // but do not enter that island at all for ordinary active MR routes.
     if (decision.active &&
+        decision.route_index == 345u &&
         g_pmetal_envspec.prepare(
             cmd_list,
             material,
