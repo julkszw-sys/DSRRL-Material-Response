@@ -46,6 +46,7 @@ def main():
     owner_producer=(root/"src/runtime/material_owner_producer.cpp").read_text(encoding="utf-8")
     mr_draw=(root/"src/runtime/material_response_draw_transaction.cpp").read_text(encoding="utf-8")
     envspec=(root/"src/runtime/envspec_resource_runtime.cpp").read_text(encoding="utf-8")
+    material_resource=(root/"src/runtime/material_resource_draw_runtime.cpp").read_text(encoding="utf-8")
 
     # Feature flags are queried from render-hot paths. Keep reads lock-free,
     # while snapshot/set may retain coherent writer serialization.
@@ -335,6 +336,13 @@ def main():
         "g_snapshot_epoch.fetch_add(",
         "EnvSpec view-destroy snapshot invalidation")
 
+    require(material_resource,
+        "k_companion_tls_slots = 256u",
+        "material resource TLS working set")
+    require(material_resource,
+        "(k_companion_tls_slots - 1u)",
+        "material resource power-of-two TLS index")
+
     print("Active-islands hot-path audit: PASS")
     print("  feature_reads=atomic")
     print("  flver_identity=256-entry TLS before global map lock")
@@ -348,6 +356,7 @@ def main():
     print("  material_owner=256-entry TLS caches use optional legacy token or cheap SHA fold; full SHA authority retained")
     print("  mr_replacement=append-only streaming preserves unrelated TLS entries; teardown invalidates")
     print("  envspec=unrelated SRV creation preserves snapshot TLS; destroy invalidates")
+    print("  material_resources=256-entry TLS companion working set; negative-cache invalidation retained")
     return 0
 
 if __name__=="__main__":
