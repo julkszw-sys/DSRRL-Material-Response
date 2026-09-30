@@ -143,12 +143,10 @@ pmetal_envspec_draw_runtime::
 pmetal_envspec_draw_runtime(
     core::renderer_core &core,
     pmetal_env_source_runtime &source,
-    upper_lower_draw_runtime &lightbank,
     envspec_resource_runtime &env_resources,
     material_resource_draw_runtime &material_resources) noexcept
     : core_(core),
       source_(source),
-      lightbank_(lightbank),
       env_resources_(env_resources),
       material_resources_(material_resources)
 {
@@ -166,12 +164,10 @@ release_resources() noexcept
     std::lock_guard<std::mutex> lock(
         mutex_);
 
-    for (auto &[_,pair] :
+    for (auto &[_,record] :
          replacements_) {
-        if (pair.base != nullptr)
-            pair.base->Release();
-        if (pair.upper_lower != nullptr)
-            pair.upper_lower->Release();
+        if (record.shader != nullptr)
+            record.shader->Release();
     }
     replacements_.clear();
 
@@ -183,8 +179,6 @@ release_resources() noexcept
     lerp_replacements_.clear();
     lerp_replacement_sha256_.clear();
     lerp_replacement_size_.clear();
-    lerp_replacement_upper_lower_composed_.clear();
-    lerp_replacement_upper_lower_composed_.clear();
 
     for (auto &[_,entry] :
          b12_by_context_) {
@@ -247,12 +241,10 @@ on_destroy_device(
     if (native != device_)
         return;
 
-    for (auto &[_,pair] :
+    for (auto &[_,record] :
          replacements_) {
-        if (pair.base != nullptr)
-            pair.base->Release();
-        if (pair.upper_lower != nullptr)
-            pair.upper_lower->Release();
+        if (record.shader != nullptr)
+            record.shader->Release();
     }
     replacements_.clear();
 
@@ -289,9 +281,13 @@ register_replacement(
         operators::env_spec::
             pmetal_rgba_materialize_result;
 
+    // Final Renderer Edition policy keeps visible U/L disabled. P_Metal
+    // EnvSpec therefore accepts only the U/L-independent payload that
+    // preserves the stock DSR b0[7]/b0[8] continuation.
     if (outcome.result != result::applied ||
         outcome.receiver_id < 33u ||
         outcome.receiver_id > 35u ||
+        outcome.upper_lower_composed ||
         !outcome.spec_rgb_consumer ||
         dxbc == nullptr ||
         dxbc_size == 0u ||
@@ -314,34 +310,16 @@ register_replacement(
         return false;
     }
 
-    auto &pair =
-        replacements_[
-            outcome.receiver_id];
+    auto &record =
+        replacements_[outcome.receiver_id];
 
-    ID3D11PixelShader *&target =
-        outcome.upper_lower_composed
-            ? pair.upper_lower
-            : pair.base;
-    auto &owners =
-        outcome.upper_lower_composed
-            ? pair.upper_lower_owners
-            : pair.base_owners;
-    auto &stored_sha =
-        outcome.upper_lower_composed
-            ? pair.upper_lower_payload_sha256
-            : pair.base_payload_sha256;
-    auto &stored_size =
-        outcome.upper_lower_composed
-            ? pair.upper_lower_payload_size
-            : pair.base_payload_size;
-
-    if (target != nullptr) {
+    if (record.shader != nullptr) {
         const bool same_payload =
-            owners ==
+            record.composed_owners ==
                 outcome.composed_owners &&
-            stored_size ==
+            record.payload_size ==
                 dxbc_size &&
-            stored_sha ==
+            record.payload_sha256 ==
                 payload_sha256;
 
         if (same_payload) {
@@ -349,8 +327,6 @@ register_replacement(
             return true;
         }
 
-        // Draw-time identity for this bank is only receiver + base/UL mode.
-        // A second byte-distinct shader cannot be selected safely later.
         quarantined_.store(
             true,
             std::memory_order_release);
@@ -370,12 +346,12 @@ register_replacement(
         return false;
     }
 
-    target = shader;
-    owners =
+    record.shader = shader;
+    record.composed_owners =
         outcome.composed_owners;
-    stored_sha =
+    record.payload_sha256 =
         payload_sha256;
-    stored_size =
+    record.payload_size =
         dxbc_size;
 
     ++replacement_register_ok_;
@@ -399,8 +375,8 @@ register_lerp_replacement(
         outcome.pair_index + 24u !=
             outcome.semantic_receiver_id ||
         !outcome.envdiffuse_preserved ||
-        !(outcome.upper_lower_composed ^
-          outcome.upper_lower_preserved_stock) ||
+        outcome.upper_lower_composed ||
+        !outcome.upper_lower_preserved_stock ||
         !outcome.terminal_sat_rgb_composed ||
         !outcome.spec_rgb_consumer ||
         dxbc == nullptr ||
@@ -437,23 +413,15 @@ register_lerp_replacement(
         const auto size_it =
             lerp_replacement_size_.find(
                 outcome.semantic_receiver_id);
-        const auto mode_it =
-            lerp_replacement_upper_lower_composed_.find(
-                outcome.semantic_receiver_id);
-
         const bool same_payload =
             sha_it !=
                 lerp_replacement_sha256_.end() &&
             size_it !=
                 lerp_replacement_size_.end() &&
-            mode_it !=
-                lerp_replacement_upper_lower_composed_.end() &&
             sha_it->second ==
                 payload_sha256 &&
             size_it->second ==
-                dxbc_size &&
-            mode_it->second ==
-                outcome.upper_lower_composed;
+                dxbc_size;
 
         if (same_payload) {
             ++lerp_replacement_register_ok_;
@@ -488,9 +456,6 @@ register_lerp_replacement(
     lerp_replacement_size_[
         outcome.semantic_receiver_id] =
         dxbc_size;
-    lerp_replacement_upper_lower_composed_[
-        outcome.semantic_receiver_id] =
-        outcome.upper_lower_composed;
 
     ++lerp_replacement_register_ok_;
     return true;
@@ -500,7 +465,6 @@ bool pmetal_envspec_draw_runtime::prepare(
     reshade::api::command_list *cmd_list,
     const mr::material_identity &material,
     const mr::decision &decision,
-    bool upper_lower_receiver_verified,
     prepared_pmetal_envspec_draw &prepared) noexcept
 {
     return prepare(
@@ -509,7 +473,6 @@ bool pmetal_envspec_draw_runtime::prepare(
         decision,
         pmetal_envspec_receiver_family::
             stable_hemenv,
-        upper_lower_receiver_verified,
         prepared);
 }
 
@@ -518,7 +481,6 @@ bool pmetal_envspec_draw_runtime::prepare(
     const mr::material_identity &material,
     const mr::decision &decision,
     pmetal_envspec_receiver_family family,
-    bool upper_lower_receiver_verified,
     prepared_pmetal_envspec_draw &prepared) noexcept
 {
     prepared = {};
@@ -580,10 +542,6 @@ bool pmetal_envspec_draw_runtime::prepare(
         mr::classify_mtd_envspec_semantics(
             query);
 
-    // classify_mtd_semantic(...env_spec) begins by running the same exact
-    // EnvSpec router lookup again. At this point P_Metal material + route are
-    // already exact, so the exact router result is the authoritative semantic
-    // gate. Avoid scanning the 325-record router twice per candidate draw.
     if (!env_semantics.exact_identity_match ||
         env_semantics.presence !=
             mr::ptde_envspec_presence::
@@ -649,9 +607,6 @@ bool pmetal_envspec_draw_runtime::prepare(
     }
     effect_latch(effect_source_ready_);
 
-    // Stable HemEnv remains a one-endpoint consumer. HemEnvLerp is an
-    // independently attested A/B+beta consumer and is the only family allowed
-    // to carry finite blended source state through this island.
     if (family ==
             pmetal_envspec_receiver_family::
                 stable_hemenv &&
@@ -660,17 +615,6 @@ bool pmetal_envspec_draw_runtime::prepare(
         effect_fail(
             effect_fail_mask_,
             k_effect_fail_blend);
-        return false;
-    }
-
-    if (family ==
-            pmetal_envspec_receiver_family::
-                hemenvlerp &&
-        upper_lower_receiver_verified) {
-        telemetry::hot_count(semantic_rejects_);
-        effect_fail(
-            effect_fail_mask_,
-            k_effect_fail_lerp_ul_conflict);
         return false;
     }
     effect_latch(effect_receiver_source_ready_);
@@ -687,9 +631,8 @@ bool pmetal_envspec_draw_runtime::prepare(
         return false;
     }
 
-    replacement_pair pair{};
-    ID3D11PixelShader *lerp_shader = nullptr;
-    bool lerp_upper_lower_composed = false;
+    ID3D11PixelShader *shader = nullptr;
+    core::operator_mask composed_owners = 0u;
 
     {
         std::lock_guard<std::mutex> lock(
@@ -701,15 +644,10 @@ bool pmetal_envspec_draw_runtime::prepare(
             const auto found =
                 lerp_replacements_.find(
                     decision.receiver_id);
-            const auto mode =
-                lerp_replacement_upper_lower_composed_.find(
-                    decision.receiver_id);
 
             if (found ==
                     lerp_replacements_.end() ||
-                found->second == nullptr ||
-                mode ==
-                    lerp_replacement_upper_lower_composed_.end()) {
+                found->second == nullptr) {
                 ++lerp_replacement_register_fail_;
                 effect_fail(
                     effect_fail_mask_,
@@ -717,18 +655,16 @@ bool pmetal_envspec_draw_runtime::prepare(
                 return false;
             }
 
-            lerp_shader =
-                found->second;
-            lerp_upper_lower_composed =
-                mode->second;
-            lerp_shader->AddRef();
+            shader = found->second;
+            shader->AddRef();
         } else {
             const auto found =
                 replacements_.find(
                     decision.receiver_id);
 
             if (found ==
-                replacements_.end()) {
+                    replacements_.end() ||
+                found->second.shader == nullptr) {
                 ++replacement_register_fail_;
                 effect_fail(
                     effect_fail_mask_,
@@ -736,99 +672,14 @@ bool pmetal_envspec_draw_runtime::prepare(
                 return false;
             }
 
-            pair =
-                found->second;
-
-            if (pair.base != nullptr)
-                pair.base->AddRef();
-            if (pair.upper_lower != nullptr)
-                pair.upper_lower->AddRef();
+            shader = found->second.shader;
+            composed_owners =
+                found->second.composed_owners;
+            shader->AddRef();
         }
     }
 
-    if (family ==
-            pmetal_envspec_receiver_family::
-                stable_hemenv &&
-        pair.base == nullptr) {
-        if (pair.upper_lower != nullptr)
-            pair.upper_lower->Release();
-        ++replacement_register_fail_;
-        effect_fail(
-            effect_fail_mask_,
-            k_effect_fail_replacement);
-        return false;
-    }
     effect_latch(effect_replacement_ready_);
-
-    bool use_upper_lower = false;
-
-    if (family ==
-            pmetal_envspec_receiver_family::
-                hemenvlerp &&
-        lerp_upper_lower_composed) {
-        // Only the explicitly U/L-composed Lerp payload reads b13. The
-        // U/L-off payload preserves stock DSR b0[7]/b0[8] and therefore does
-        // not require or bind a PTDE LightBank U/L carrier.
-        if (!core_.features().enabled(
-                core::operator_id::upper_lower) ||
-            !lightbank_.
-                prepare_upper_lower_carrier(
-                    context,
-                    prepared.upper_lower)) {
-            if (lerp_shader != nullptr)
-                lerp_shader->Release();
-            telemetry::hot_count(upper_lower_fallback_);
-            effect_fail(
-                effect_fail_mask_,
-                k_effect_fail_ul);
-            return false;
-        }
-        use_upper_lower = true;
-        telemetry::hot_count(upper_lower_ready_);
-    } else if (
-        core_.features().enabled(
-            core::operator_id::upper_lower) &&
-        upper_lower_receiver_verified &&
-        pair.upper_lower != nullptr &&
-        lightbank_.
-            prepare_upper_lower_carrier(
-                context,
-                prepared.upper_lower)) {
-        use_upper_lower = true;
-        telemetry::hot_count(upper_lower_ready_);
-    } else {
-        telemetry::hot_count(upper_lower_fallback_);
-    }
-
-    ID3D11PixelShader *shader =
-        family ==
-            pmetal_envspec_receiver_family::
-                hemenvlerp
-            ? lerp_shader
-            : (use_upper_lower
-                ? pair.upper_lower
-                : pair.base);
-
-    core::operator_mask composed_owners =
-        family ==
-            pmetal_envspec_receiver_family::
-                hemenvlerp
-            ? 0u
-            : (use_upper_lower
-                ? pair.upper_lower_owners
-                : pair.base_owners);
-
-    if (family ==
-        pmetal_envspec_receiver_family::
-            stable_hemenv) {
-        if (use_upper_lower) {
-            pair.base->Release();
-            pair.base = nullptr;
-        } else if (pair.upper_lower != nullptr) {
-            pair.upper_lower->Release();
-            pair.upper_lower = nullptr;
-        }
-    }
 
     const bool probe_b_required =
         family ==
@@ -852,8 +703,6 @@ bool pmetal_envspec_draw_runtime::prepare(
     if (!env_resource_ready) {
         if (shader != nullptr)
             shader->Release();
-        lightbank_.release_prepared_draw(
-            prepared.upper_lower);
         telemetry::hot_count(probe_rejects_);
         effect_fail(
             effect_fail_mask_,
@@ -895,8 +744,6 @@ bool pmetal_envspec_draw_runtime::prepare(
             shader->Release();
         env_resources_.release(
             prepared.env_resources);
-        lightbank_.release_prepared_draw(
-            prepared.upper_lower);
         material_resources_.
             release_prepared_draw(
                 prepared.material_resources);
@@ -944,8 +791,6 @@ bool pmetal_envspec_draw_runtime::prepare(
             shader->Release();
         env_resources_.release(
             prepared.env_resources);
-        lightbank_.release_prepared_draw(
-            prepared.upper_lower);
         material_resources_.
             release_prepared_draw(
                 prepared.material_resources);
@@ -973,8 +818,6 @@ bool pmetal_envspec_draw_runtime::prepare(
                 shader->Release();
             env_resources_.release(
                 prepared.env_resources);
-            lightbank_.release_prepared_draw(
-                prepared.upper_lower);
             material_resources_.
                 release_prepared_draw(
                     prepared.material_resources);
@@ -1024,8 +867,6 @@ bool pmetal_envspec_draw_runtime::prepare(
                     shader->Release();
                 env_resources_.release(
                     prepared.env_resources);
-                lightbank_.release_prepared_draw(
-                    prepared.upper_lower);
                 material_resources_.
                     release_prepared_draw(
                         prepared.material_resources);
@@ -1063,8 +904,6 @@ bool pmetal_envspec_draw_runtime::prepare(
                 shader->Release();
             env_resources_.release(
                 prepared.env_resources);
-            lightbank_.release_prepared_draw(
-                prepared.upper_lower);
             material_resources_.
                 release_prepared_draw(
                     prepared.material_resources);
@@ -1129,16 +968,8 @@ bool pmetal_envspec_draw_runtime::prepare(
         core::operator_bit(
             core::operator_id::
                 terminal_sat_rgb);
-    const auto ul_owner =
-        core::operator_bit(
-            core::operator_id::
-                upper_lower);
-
     prepared.shader = shader;
     prepared.b12 = b12;
-    prepared.upper_lower_composed =
-        use_upper_lower;
-
     prepared.request.primary =
         core::operator_id::env_spec;
 
@@ -1159,17 +990,6 @@ bool pmetal_envspec_draw_runtime::prepare(
     prepared.request.additional_constant_buffer_owners =
         mr_owner;
 
-    if (use_upper_lower) {
-        prepared.request.additional_owners |=
-            ul_owner;
-        prepared.request.additional_shader_owners |=
-            ul_owner;
-        prepared.request.additional_constant_buffer_owners |=
-            ul_owner;
-        prepared.request.additional_carrier_owners |=
-            ul_owner;
-    }
-
     prepared.request.receiver_verified = true;
     prepared.request.material_verified = true;
     prepared.request.pixel_shader =
@@ -1184,15 +1004,6 @@ bool pmetal_envspec_draw_runtime::prepare(
     };
     prepared.request.constant_buffer_count =
         1u;
-
-    if (use_upper_lower) {
-        prepared.request.constant_buffers[
-            prepared.request.constant_buffer_count++] = {
-                13u,
-                prepared.upper_lower.b13,
-                ul_owner
-            };
-    }
 
     prepared.request.srvs[0] = {
         12u,
@@ -1246,8 +1057,6 @@ void pmetal_envspec_draw_runtime::release(
     env_resources_.release(
         prepared.env_resources);
 
-    lightbank_.release_prepared_draw(
-        prepared.upper_lower);
 
     if (prepared.b12 != nullptr)
         prepared.b12->Release();

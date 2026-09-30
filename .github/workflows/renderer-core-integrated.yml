@@ -617,15 +617,12 @@ jobs:
             'source_.latest(source)',
             'source.beta != 0.0f',
             'blended_receiver_hold_',
-            'prepare_upper_lower_carrier',
             'prepare_draw_requests',
             'operator_id::env_spec',
             'operator_id::spec_rgb',
             'operator_id::terminal_sat_rgb',
             'outcome.upper_lower_composed',
             'outcome.terminal_sat_rgb_composed',
-            'core::operator_id::upper_lower',
-            'prepare_upper_lower_carrier',
             'additional_constant_buffer_owners',
             'b12_uploads_',
             'b12_reuses_',
@@ -635,6 +632,16 @@ jobs:
             '14u'
           )) {
             if ($envspecRuntime -notmatch [regex]::Escape($required)) { throw "P_Metal EnvSpec shared-batch runtime invariant missing: $required" }
+          }
+
+          foreach ($forbidden in @(
+            'prepare_upper_lower_carrier',
+            'core::operator_id::upper_lower',
+            'lightbank_',
+            'prepared.upper_lower',
+            'upper_lower_receiver_verified'
+          )) {
+            if ($envspecRuntime -match [regex]::Escape($forbidden)) { throw "P_Metal EnvSpec active runtime still depends on U/L: $forbidden" }
           }
 
           foreach ($required in @(

@@ -123,7 +123,6 @@ dsrrl::runtime::pmetal_envspec_draw_runtime
     g_pmetal_envspec(
         g_core,
         g_pmetal_source,
-        g_upper_lower,
         g_envspec_resources,
         g_material_resources);
 
@@ -150,10 +149,6 @@ std::atomic<std::uint64_t> g_subsurface_spec_payload_materialize_fail{0};
 std::atomic<std::uint64_t> g_lerp_full_draw_ready{0};
 std::atomic<std::uint64_t> g_lerp_full_draw_fallback{0};
 std::atomic_bool g_lerp_once_receiver_hit{false};
-std::atomic<std::uint64_t> g_lightbank_selected_draws{0u};
-std::atomic<std::uint64_t> g_lightbank_selected_pmetal_draws{0u};
-std::atomic<std::uint64_t> g_lightbank_selected_other_draws{0u};
-std::atomic<std::uint64_t> g_pmetal_draws_without_selected_token{0u};
 std::atomic_bool g_lerp_once_mr_ul_ready{false};
 std::atomic_bool g_lerp_once_mr_only_ready{false};
 std::atomic_bool g_lerp_once_batch_ready{false};
@@ -348,40 +343,6 @@ const char *effect_probe_stage_name(
         return "restore_failed";
     default:
         return "unknown";
-    }
-}
-
-const char *pmetal_source_diag_name(
-    dsrrl::runtime::pmetal_env_source_diag_status status) noexcept
-{
-    using status_t =
-        dsrrl::runtime::pmetal_env_source_diag_status;
-
-    switch (status) {
-    case status_t::none:
-        return "NONE";
-    case status_t::success:
-        return "SUCCESS";
-    case status_t::token_invalid:
-        return "TOKEN_INVALID";
-    case status_t::base_null:
-        return "BASE_NULL";
-    case status_t::header_invalid:
-        return "HEADER_INVALID";
-    case status_t::selector_oob:
-        return "SELECTOR_OOB";
-    case status_t::signature_invalid:
-        return "SIGNATURE_INVALID";
-    case status_t::bank_unknown:
-        return "BANK_UNKNOWN";
-    case status_t::row_read_failed:
-        return "ROW_READ_FAILED";
-    case status_t::row_unknown:
-        return "ROW_UNKNOWN";
-    case status_t::nonfinite:
-        return "NONFINITE";
-    default:
-        return "UNKNOWN";
     }
 }
 
@@ -2446,9 +2407,8 @@ bool integrated_operator_enabled_by_policy(
     //   * HemDir3 stays stock DSR; no visible bridge is shipped.
     //   * Upper/Lower stays stock DSR after the world/FaceEye pixel falsifiers.
     //
-    // U/L's LightBank reference transport is intentionally NOT disabled here:
-    // P_Metal EnvSpec consumes that exact selector/source carrier independently
-    // of the visible U/L operator and installs it later in reference-only mode.
+    // P_Metal EnvSpec owns an isolated source carrier (0x563B80/0x563C30)
+    // and must not depend on the visible U/L runtime or its reference transport.
     switch (op) {
     case dsrrl::core::operator_id::subsurface:
     case dsrrl::core::operator_id::upper_lower:
@@ -2550,7 +2510,7 @@ void log_effect_matrix(
     const auto pmetal =
         g_pmetal_envspec.telemetry();
     const auto pmetal_source =
-        g_upper_lower.pmetal_source_diagnostic();
+        g_pmetal_source.telemetry();
     const auto subsurface =
         g_subsurface.telemetry();
 
@@ -2562,10 +2522,8 @@ void log_effect_matrix(
         "MR mtd_classified=%u cache_hit=%u selection_published=%u "
         "PMetal entry=%u feature=%u material=%u semantic=%u source=%u "
         "receiver_source=%u repl=%u probe=%u spec=%u b12=%u request=%u fail=0x%08X "
-        "PMSRC obs=%u A=%s sel=%d count=%u sig=%016llX row=%u "
-        "B=%s sel=%d count=%u sig=%016llX row=%u beta=%.6f "
-        "REF pub=%u ptid=%u sel_evt=%u stid=%u cand=%u tuple=%u match=%u drawtok=%u src=%u vec=%u ul=%u "
-        "XTH consumer_tid=%u serial=%llu selected_pub=%llu draw_consume=%llu serial_miss=%llu "
+        "PMSRC steady=%llu blend=%llu publish=%llu bank_unknown=%llu decode_fail=%llu "
+        "busy_drop=%llu consume=%llu/%llu carrier=%u/%u q=%u restore_fail=%u "
         "SUB cand=%llu matrej=%llu piperej=%llu surfrej=%llu prep=%llu "
         "UL producer=%u changed=%u quarantine=%u restore_fail=%u "
         "Bloom diag_hooks=%u/%u model_hook=%u proof=%u contents=%u "
@@ -2585,60 +2543,23 @@ void log_effect_matrix(
         pmetal.effect_b12_ready ? 1u : 0u,
         pmetal.effect_request_ready ? 1u : 0u,
         static_cast<unsigned>(pmetal.effect_fail_mask),
-        pmetal_source.observed ? 1u : 0u,
-        pmetal_source_diag_name(
-            pmetal_source.a.status),
-        static_cast<int>(
-            pmetal_source.a.selector),
-        static_cast<unsigned>(
-            pmetal_source.a.bank_count),
-        static_cast<unsigned long long>(
-            pmetal_source.a.bank_signature),
-        static_cast<unsigned>(
-            pmetal_source.a.row_id),
-        pmetal_source_diag_name(
-            pmetal_source.b.status),
-        static_cast<int>(
-            pmetal_source.b.selector),
-        static_cast<unsigned>(
-            pmetal_source.b.bank_count),
-        static_cast<unsigned long long>(
-            pmetal_source.b.bank_signature),
-        static_cast<unsigned>(
-            pmetal_source.b.row_id),
-        static_cast<double>(
-            pmetal_source.beta),
-        pmetal_source.producer_publish_seen ? 1u : 0u,
-        static_cast<unsigned>(pmetal_source.producer_publish_tid),
-        pmetal_source.selector_relevant_seen ? 1u : 0u,
-        static_cast<unsigned>(pmetal_source.selector_tid),
-        pmetal_source.selector_candidate_found ? 1u : 0u,
-        pmetal_source.selector_tuple_read ? 1u : 0u,
-        pmetal_source.selector_tuple_match ? 1u : 0u,
-        pmetal_source.draw_token_selected ? 1u : 0u,
-        pmetal_source.draw_token_source_ready ? 1u : 0u,
-        pmetal_source.draw_token_vectors_ready ? 1u : 0u,
-        pmetal_source.draw_token_upper_lower_ready ? 1u : 0u,
-        static_cast<unsigned>(
-            pmetal_source.source_consumer_tid),
-        static_cast<unsigned long long>(
-            pmetal_source.source_consumer_serial),
-        static_cast<unsigned long long>(
-            pmetal_source.cross_thread_selected_publish),
-        static_cast<unsigned long long>(
-            pmetal_source.cross_thread_draw_consume),
-        static_cast<unsigned long long>(
-            pmetal_source.cross_thread_serial_miss),
-        static_cast<unsigned long long>(
-            subsurface.candidates),
-        static_cast<unsigned long long>(
-            subsurface.material_rejects),
-        static_cast<unsigned long long>(
-            subsurface.pipeline_rejects),
-        static_cast<unsigned long long>(
-            subsurface.surface_rejects),
-        static_cast<unsigned long long>(
-            subsurface.prepared),
+        static_cast<unsigned long long>(pmetal_source.steady_seen),
+        static_cast<unsigned long long>(pmetal_source.blend_seen),
+        static_cast<unsigned long long>(pmetal_source.exact_publish),
+        static_cast<unsigned long long>(pmetal_source.bank_unknown),
+        static_cast<unsigned long long>(pmetal_source.decode_fail),
+        static_cast<unsigned long long>(pmetal_source.publish_busy_drop),
+        static_cast<unsigned long long>(pmetal_source.consumer_ok),
+        static_cast<unsigned long long>(pmetal_source.consumer_fail),
+        pmetal_source.steady_carrier_active ? 1u : 0u,
+        pmetal_source.blend_carrier_active ? 1u : 0u,
+        pmetal_source.quarantined ? 1u : 0u,
+        pmetal_source.restore_failed ? 1u : 0u,
+        static_cast<unsigned long long>(subsurface.candidates),
+        static_cast<unsigned long long>(subsurface.material_rejects),
+        static_cast<unsigned long long>(subsurface.pipeline_rejects),
+        static_cast<unsigned long long>(subsurface.surface_rejects),
+        static_cast<unsigned long long>(subsurface.prepared),
         ul.direct_ul_producer_active ? 1u : 0u,
         ul.direct_ul_operator_changed ? 1u : 0u,
         ul.quarantined ? 1u : 0u,
@@ -2658,27 +2579,6 @@ void log_effect_matrix(
         reshade::log::level::info,
         detail);
 
-    char lightbank_draw_frontier[512]{};
-    std::snprintf(
-        lightbank_draw_frontier,
-        sizeof(lightbank_draw_frontier),
-        "[DSRRL LIGHTBANK DRAW FRONTIER] selected=%llu selected_pmetal=%llu selected_other=%llu pmetal_no_token=%llu",
-        static_cast<unsigned long long>(
-            g_lightbank_selected_draws.load(
-                std::memory_order_relaxed)),
-        static_cast<unsigned long long>(
-            g_lightbank_selected_pmetal_draws.load(
-                std::memory_order_relaxed)),
-        static_cast<unsigned long long>(
-            g_lightbank_selected_other_draws.load(
-                std::memory_order_relaxed)),
-        static_cast<unsigned long long>(
-            g_pmetal_draws_without_selected_token.load(
-                std::memory_order_relaxed)));
-    reshade::log::message(
-        reshade::log::level::info,
-        lightbank_draw_frontier);
-
     char pmetal_frontier[2048]{};
     std::snprintf(
         pmetal_frontier,
@@ -2686,7 +2586,7 @@ void log_effect_matrix(
         "[DSRRL PMETAL ENVSPEC FRONTIER] "
         "candidate=%llu lerp_candidate=%llu request=%llu lerp_request=%llu "
         "material_reject=%llu semantic_reject=%llu source_reject=%llu blend_hold=%llu "
-        "probe_reject=%llu spec_reject=%llu ul_ready=%llu ul_fallback=%llu "
+        "probe_reject=%llu spec_reject=%llu "
         "b12_upload=%llu b12_reuse=%llu q=%u fail=0x%08X "
         "fail_feature=%u fail_lerp_feature=%u fail_material=%u fail_semantic=%u "
         "fail_source=%u fail_blend=%u fail_lerp_ul_conflict=%u fail_context=%u "
@@ -2702,8 +2602,6 @@ void log_effect_matrix(
         static_cast<unsigned long long>(pmetal.blended_receiver_hold),
         static_cast<unsigned long long>(pmetal.probe_rejects),
         static_cast<unsigned long long>(pmetal.spec_rgb_rejects),
-        static_cast<unsigned long long>(pmetal.upper_lower_ready),
-        static_cast<unsigned long long>(pmetal.upper_lower_fallback),
         static_cast<unsigned long long>(pmetal.b12_uploads),
         static_cast<unsigned long long>(pmetal.b12_reuses),
         pmetal.quarantined ? 1u : 0u,
@@ -4027,41 +3925,38 @@ bool on_create_pipeline(
         // consumed or authorized anywhere in this construction.
         if (g_core.features().enabled(
                 dsrrl::core::operator_id::env_spec)) {
-            for (const bool with_upper_lower :
-                 {false, true}) {
-                std::vector<std::uint8_t>
-                    envspec_payload;
+            std::vector<std::uint8_t>
+                envspec_payload;
 
-                const auto envspec =
-                    dsrrl::operators::env_spec::
-                        materialize_pmetal_rgba_receiver(
-                            g_core.features(),
-                            source,
-                            pixel_shader->code_size,
-                            with_upper_lower,
-                            envspec_payload);
+            const auto envspec =
+                dsrrl::operators::env_spec::
+                    materialize_pmetal_rgba_receiver(
+                        g_core.features(),
+                        source,
+                        pixel_shader->code_size,
+                        false,
+                        envspec_payload);
 
-                using envspec_result =
-                    dsrrl::operators::env_spec::
-                        pmetal_rgba_materialize_result;
+            using envspec_result =
+                dsrrl::operators::env_spec::
+                    pmetal_rgba_materialize_result;
 
-                if (envspec.result ==
-                    envspec_result::applied) {
-                    if (g_pmetal_envspec.
-                            register_replacement(
-                                envspec,
-                                envspec_payload.data(),
-                                envspec_payload.size()))
-                        ++g_envspec_payload_materialize_ok;
-                    else
-                        ++g_envspec_payload_materialize_fail;
-                } else if (
-                    envspec.result !=
-                        envspec_result::pass_not_candidate &&
-                    envspec.result !=
-                        envspec_result::pass_unknown_exact_sha) {
+            if (envspec.result ==
+                envspec_result::applied) {
+                if (g_pmetal_envspec.
+                        register_replacement(
+                            envspec,
+                            envspec_payload.data(),
+                            envspec_payload.size()))
+                    ++g_envspec_payload_materialize_ok;
+                else
                     ++g_envspec_payload_materialize_fail;
-                }
+            } else if (
+                envspec.result !=
+                    envspec_result::pass_not_candidate &&
+                envspec.result !=
+                    envspec_result::pass_unknown_exact_sha) {
+                ++g_envspec_payload_materialize_fail;
             }
 
             std::vector<std::uint8_t>
@@ -4544,9 +4439,8 @@ effect_probe_mask prepared_effect_mask(
             effect_probe_id::material_response);
         mask |= resource_effect_mask(
             prepared.envspec.material_resources);
-        if (prepared.envspec.upper_lower_composed)
-            mask |= effect_probe_bit(
-                effect_probe_id::upper_lower);
+        // P_Metal EnvSpec is U/L-independent by construction. Never promote
+        // UpperLower telemetry from an EnvSpec batch.
     }
 
     if (prepared.clustered_in_batch) {
@@ -5395,38 +5289,14 @@ bool prepare_island_batch(
                 direct_ul_draw_applied,
                 upper_lower_identity);
 
-    const bool envspec_ul_verified =
-        g_core.features().enabled(
-            dsrrl::core::operator_id::upper_lower) &&
-        upper_lower_bound &&
-        upper_lower_identity.stratum ==
-            dsrrl::operators::lightbank::
-                upper_lower_hemenv_stratum::spc &&
-        upper_lower_identity.stable_receiver_id ==
-            decision.receiver_id;
-
     // P_Metal EnvSpec owns the complete PS+b12+t12/t14+s12/s14 semantic
-    // island. If any exact source/material/probe/resource precondition fails,
-    // fall through to ordinary MR/U-L/resource routing for this draw.
+    // island. Its source carrier and shader/CB/resource transaction are
+    // independent of visible U/L. Failure falls through to ordinary MR/U-L
+    // routing without borrowing any U/L state for EnvSpec.
     const auto envspec_family =
         hemenvlerp_bound
             ? dsrrl::runtime::pmetal_envspec_receiver_family::hemenvlerp
             : dsrrl::runtime::pmetal_envspec_receiver_family::stable_hemenv;
-
-    const auto pmetal_token_at_draw =
-        g_upper_lower.pmetal_draw_token_state();
-    if (pmetal_token_at_draw.local_token_valid) {
-        hot_count(g_lightbank_selected_draws);
-        if (decision.active &&
-            decision.route_index == 345u)
-            hot_count(g_lightbank_selected_pmetal_draws);
-        else
-            hot_count(g_lightbank_selected_other_draws);
-    } else if (
-        decision.active &&
-        decision.route_index == 345u) {
-        hot_count(g_pmetal_draws_without_selected_token);
-    }
 
     if (decision.active &&
         g_pmetal_envspec.prepare(
@@ -5434,9 +5304,6 @@ bool prepare_island_batch(
             material,
             decision,
             envspec_family,
-            !direct_ul_producer &&
-                envspec_ul_verified &&
-                !hemenvlerp_bound,
             prepared.envspec)) {
         prepared.envspec_in_batch = true;
 
