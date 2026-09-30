@@ -12,6 +12,11 @@ for token in ['0x55bc00u','0x55d0b0u','pair.beta','count!=64u','id!=i||off!=firs
     require(header,token)
 for forbidden in ['VirtualProtect','write_bytes','create_hook','install_hook','fetch_add']:
     if forbidden in header: raise SystemExit('Unexpected source mutation/global hook: '+forbidden)
+identity=read('include/dsrrl/runtime/pointlight_ptde_source.hpp')
+require(identity,'thread_local std::array<cache_entry,8> cache{}')
+require(identity,'std::memcmp(rows,entry.bank->dsr.data(),sizeof(entry.bank->dsr))==0')
+if identity.index('return entry.bank;') < identity.index('std::memcmp(rows,entry.bank->dsr.data(),sizeof(entry.bank->dsr))==0'):
+    raise SystemExit('PointLight bank cache became pointer-only authority')
 fixed=read('src/runtime/fixed_pointlight_draw_runtime.cpp')
 clustered=read('src/runtime/clustered_pnts_draw_runtime.cpp')
 require(fixed,'pointlight_ptde_source::capture(source,g_base,donor_raw)')
