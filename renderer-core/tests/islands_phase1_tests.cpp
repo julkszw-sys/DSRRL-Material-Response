@@ -367,6 +367,7 @@ int main()
     CHECK(direct_m7metal.ptde_specular_power==8.5f);
 
     auto bad_m7metal=exact_m7metal;
+    bad_m7metal.actual_material_exact=true;
     bad_m7metal.raw_mtd_sha256.fill(0x5au);
     const auto bad_m7metal_result=
         seeded.evaluate_direct_pointlight_material(
