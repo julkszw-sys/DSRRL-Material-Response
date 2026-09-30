@@ -47,8 +47,8 @@ def main():
     require(feature_h,"std::atomic<operator_mask> enabled_mask_","lock-free feature mask ABI")
     enabled_body=function_body(
         feature_cpp,
-        "bool feature_registry::enabled(",
-        "bool feature_registry::all_disabled(")
+        "feature_registry::enabled(",
+        "feature_registry::all_disabled(")
     require(enabled_body,"enabled_mask_.load(","lock-free feature read")
     if "lock_guard" in enabled_body or "mutex_" in enabled_body:
         fail("feature_registry::enabled regressed to a mutex-backed hot read")
@@ -132,8 +132,8 @@ def main():
     # feature-registry reads on ordinary MR draws.
     pmetal_prepare=function_body(
         pmetal,
-        "bool pmetal_envspec_draw_runtime::prepare(",
-        "void pmetal_envspec_draw_runtime::release(")
+        "pmetal_envspec_draw_runtime::prepare(",
+        "pmetal_envspec_draw_runtime::release(")
     require_before(
         pmetal_prepare,
         "if (!exact_pmetal_material(",
@@ -144,8 +144,8 @@ def main():
     # draws must not do PSGetShaderResources/COM retains or texture lookups.
     resource_prepare=function_body(
         resources,
-        "bool material_resource_draw_runtime::prepare_draw_requests(",
-        "bool material_resource_draw_runtime::prepare_fixed_pointlight_material_requests(")
+        "material_resource_draw_runtime::prepare_draw_requests(",
+        "material_resource_draw_runtime::prepare_fixed_pointlight_material_requests(")
     require_before(
         resource_prepare,
         "if (!exact_material)",
