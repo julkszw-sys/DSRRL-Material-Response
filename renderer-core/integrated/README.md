@@ -43,9 +43,20 @@ SHA-256 is
 `c16c3fd75bcf34f3cc075da6da1ad10c9440ee4a3ca580fe7f74d07a2ce4eac3`.
 Missing, wrong-size or wrong-hash data deliberately fails open to stock DSR;
 it is not a runtime or pixel PASS. The development ZIP does not redistribute
-that PTDE-derived binary. It includes `VERIFY_ENVSPEC_SIDECAR.ps1`; run it
-from the game root, or pass `-GameDir <path>`, before treating EnvSpec as
-eligible for bridge activation.
+that PTDE-derived binary.
+
+For reproducible deployment, the ZIP includes
+`STAGE_ENVSPEC_SIDECAR.ps1`. Give it an already-obtained source file; the
+script accepts **only** the exact size/SHA above, copies through a temporary
+file in the destination directory, verifies those bytes, moves them to the
+required game-root path, and verifies the destination again. It does not download or discover assets:
+
+`./STAGE_ENVSPEC_SIDECAR.ps1 -SourcePath <PTDE_GI_ENVSPEC_PACK_RGBA.bin> -GameDir <DarkSoulsRemastered-directory>`
+
+Then run `VERIFY_ENVSPEC_SIDECAR.ps1 -GameDir <path>`. Only a
+`ENVSPEC_SIDECAR_STAGE_PASS` followed by `ENVSPEC_SIDECAR_PASS` establishes
+the external-asset deployment prerequisite. It still does not establish
+runtime bridge activation or PTDE-visible pixel equivalence.
 
 ## Bloom / HDR diagnostic boundary
 
