@@ -838,6 +838,13 @@ std::atomic<std::uint64_t> g_pmetal_source_consumer_fail{0u};
 std::atomic<std::uint32_t> g_pmetal_source_last_publish_tid{0u};
 std::atomic<std::uint32_t> g_pmetal_source_last_consumer_tid{0u};
 std::atomic_bool g_pmetal_source_last_consumer_local_valid{false};
+std::atomic_bool g_pmetal_source_selector_exact_seen{false};
+std::atomic_bool g_pmetal_source_parent_gate_ok{false};
+std::atomic_bool g_pmetal_source_descriptor_gate_ok{false};
+std::atomic_bool g_pmetal_source_endpoint_gate_ok{false};
+std::atomic_bool g_pmetal_source_manager_gate_ok{false};
+std::atomic_bool g_pmetal_source_a_decode_ok{false};
+std::atomic_bool g_pmetal_source_b_decode_ok{false};
 std::atomic<std::uint64_t> g_pmetal_source_steady_seen{0u};
 std::atomic<std::uint64_t> g_pmetal_source_blend_seen{0u};
 std::atomic<std::uint64_t> g_pmetal_source_decode_fail{0u};
@@ -4731,6 +4738,11 @@ void pmetal_env_source_selector_event(
         !exact_pmetal_material_selection(material) || !owner || !return_address)
         return;
 
+    if (telemetry::effect_enabled())
+        g_pmetal_source_selector_exact_seen.store(
+            true,
+            std::memory_order_relaxed);
+
     const auto absolute = reinterpret_cast<std::uintptr_t>(return_address);
     if (absolute < g_base) return;
     const auto rva = absolute - g_base;
@@ -4745,8 +4757,14 @@ void pmetal_env_source_selector_event(
     std::uintptr_t parent_return = 0u;
     const auto parent_offset = rva == k_ret_sel_1 ? 0x170u : 0xF0u;
     if (!safe_read(static_cast<const std::uint8_t *>(selector_stack) + parent_offset,
-                   parent_return) || parent_return != g_base + 0x220CF0u ||
-        !readable_range(descriptor, 0x151u)) return;
+                   parent_return) || parent_return != g_base + 0x220CF0u)
+        return;
+    if (telemetry::effect_enabled())
+        g_pmetal_source_parent_gate_ok.store(
+            true,
+            std::memory_order_relaxed);
+    if (!readable_range(descriptor, 0x151u))
+        return;
 
     // RE: 2200D0 stores owner at descriptor+0, A/B at +4C/+4E,
     // beta at +50 and the type6 branch predicate at +150.
@@ -4758,14 +4776,30 @@ void pmetal_env_source_selector_event(
     std::memcpy(&raw_b, descriptor + 0x4Eu, sizeof(raw_b));
     std::memcpy(&beta, descriptor + 0x50u, sizeof(beta));
     const auto character = descriptor[0x150u];
-    if (descriptor_owner != owner || character > 1u) return;
+    if (descriptor_owner != owner || character > 1u)
+        return;
+    if (telemetry::effect_enabled())
+        g_pmetal_source_descriptor_gate_ok.store(
+            true,
+            std::memory_order_relaxed);
+
     const auto endpoints = pmetal_selector_policy::select(
         static_cast<std::int16_t>(raw_a), static_cast<std::int16_t>(raw_b), beta);
-    if (!endpoints.valid) return;
+    if (!endpoints.valid)
+        return;
+    if (telemetry::effect_enabled())
+        g_pmetal_source_endpoint_gate_ok.store(
+            true,
+            std::memory_order_relaxed);
 
     const std::uint8_t *wrapper = nullptr, *manager = nullptr;
     if (!safe_read(static_cast<const std::uint8_t *>(owner) + 0x2318u, wrapper) ||
-        !wrapper || !safe_read(wrapper + 0x40u, manager) || !manager) return;
+        !wrapper || !safe_read(wrapper + 0x40u, manager) || !manager)
+        return;
+    if (telemetry::effect_enabled())
+        g_pmetal_source_manager_gate_ok.store(
+            true,
+            std::memory_order_relaxed);
     bool lookup_valid = true;
     auto lookup = [&](unsigned area, unsigned type) noexcept -> void * {
         const std::uint8_t *table = nullptr;
@@ -4798,11 +4832,19 @@ void pmetal_env_source_selector_event(
     if (!decode(endpoints.a, a, next.bank_signature_a, next.row_id_a)) {
         telemetry::hot_count(g_pmetal_source_decode_fail); return;
     }
+    if (telemetry::effect_enabled())
+        g_pmetal_source_a_decode_ok.store(
+            true,
+            std::memory_order_relaxed);
     if (endpoints.a == endpoints.b) {
         b = a; next.bank_signature_b = next.bank_signature_a; next.row_id_b = next.row_id_a;
     } else if (!decode(endpoints.b, b, next.bank_signature_b, next.row_id_b)) {
         telemetry::hot_count(g_pmetal_source_decode_fail); return;
     }
+    if (telemetry::effect_enabled())
+        g_pmetal_source_b_decode_ok.store(
+            true,
+            std::memory_order_relaxed);
     next.a = {a.x,a.y,a.z}; next.b = {b.x,b.y,b.z}; next.beta = endpoints.beta;
     next.serial = g_pmetal_selector_epoch.load(std::memory_order_relaxed);
     g_pmetal_selected_source = next;
@@ -4862,6 +4904,27 @@ pmetal_env_source_runtime_telemetry pmetal_env_source_runtime::telemetry() const
     out.last_consumer_local_valid =
         g_pmetal_source_last_consumer_local_valid.load(
             std::memory_order_relaxed);
+    out.selector_exact_seen =
+        g_pmetal_source_selector_exact_seen.load(
+            std::memory_order_relaxed);
+    out.parent_gate_ok =
+        g_pmetal_source_parent_gate_ok.load(
+            std::memory_order_relaxed);
+    out.descriptor_gate_ok =
+        g_pmetal_source_descriptor_gate_ok.load(
+            std::memory_order_relaxed);
+    out.endpoint_gate_ok =
+        g_pmetal_source_endpoint_gate_ok.load(
+            std::memory_order_relaxed);
+    out.manager_gate_ok =
+        g_pmetal_source_manager_gate_ok.load(
+            std::memory_order_relaxed);
+    out.source_a_decode_ok =
+        g_pmetal_source_a_decode_ok.load(
+            std::memory_order_relaxed);
+    out.source_b_decode_ok =
+        g_pmetal_source_b_decode_ok.load(
+            std::memory_order_relaxed);
     // Both global source hook flags are permanently false.
     out.selector_carrier_active = g_pmetal_selector_enabled.load();
     return out;
@@ -4877,6 +4940,13 @@ void pmetal_env_source_runtime::reset() noexcept
     g_pmetal_source_last_publish_tid.store(0u);
     g_pmetal_source_last_consumer_tid.store(0u);
     g_pmetal_source_last_consumer_local_valid.store(false);
+    g_pmetal_source_selector_exact_seen.store(false);
+    g_pmetal_source_parent_gate_ok.store(false);
+    g_pmetal_source_descriptor_gate_ok.store(false);
+    g_pmetal_source_endpoint_gate_ok.store(false);
+    g_pmetal_source_manager_gate_ok.store(false);
+    g_pmetal_source_a_decode_ok.store(false);
+    g_pmetal_source_b_decode_ok.store(false);
     g_pmetal_source_steady_seen.store(0u);
     g_pmetal_source_blend_seen.store(0u);
     g_pmetal_source_decode_fail.store(0u);
