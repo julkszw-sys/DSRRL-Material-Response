@@ -346,6 +346,55 @@ def main():
         "(k_companion_tls_slots - 1u)",
         "material resource power-of-two TLS index")
 
+    # Full draw-time falsifier must preserve only true create-time islands.
+    # It must not merely make draw handlers return early: the draw callbacks
+    # themselves and all dynamic transports are absent from the profile.
+    require(integrated,
+        "constexpr bool k_drawtime_islands_runtime_enabled = false;",
+        "draw-time bypass compile policy")
+    create_start=integrated.find(
+        "bool on_create_pipeline(\n    reshade::api::device *device")
+    create_end=integrated.find(
+        "void on_init_pipeline(\n    reshade::api::device *device",
+        create_start)
+    if create_start<0 or create_end<0:
+        fail("integrated create-pipeline boundaries missing")
+    create_body=integrated[create_start:create_end]
+    require_before(
+        create_body,
+        "if (!k_drawtime_islands_runtime_enabled)",
+        "const auto *pixel_shader =",
+        "draw-time bypass before dynamic create-time census")
+    require(create_body,
+        "g_a1_bridge.on_create_pipeline(",
+        "A1 preserved in draw-time bypass")
+    require(create_body,
+        "motion_blur_camera_fallback_disable::\n                on_create_pipeline(",
+        "MotionBlur preserved in draw-time bypass")
+
+    register_body=function_body(
+        integrated,
+        "void register_events()",
+        "void unregister_events()")
+    require(register_body,
+        "if (k_drawtime_islands_runtime_enabled) {\n        reshade::register_event<reshade::addon_event::draw>(on_draw);",
+        "draw callback omitted in draw-time bypass")
+    require(register_body,
+        "reshade::register_event<reshade::addon_event::draw_indexed>(on_draw_indexed);",
+        "indexed draw callback conditional registration")
+
+    init_marker=integrated.find(
+        "if (!k_drawtime_islands_runtime_enabled) {\n        reshade::log::message(")
+    dynamic_events=integrated.find(
+        "g_material_resources.register_events()",
+        init_marker)
+    if init_marker<0 or dynamic_events<0 or not init_marker<dynamic_events:
+        fail("AddonInit draw-time bypass does not precede dynamic resource transport")
+    init_bypass=integrated[init_marker:dynamic_events]
+    require(init_bypass,
+        "return true;",
+        "draw-time bypass exits before dynamic hook installation")
+
     print("Active-islands hot-path audit: PASS")
     print("  feature_reads=atomic")
     print("  flver_identity=256-entry TLS before global map lock")
@@ -360,6 +409,7 @@ def main():
     print("  mr_replacement=append-only streaming preserves unrelated TLS entries; teardown invalidates")
     print("  envspec=unrelated SRV creation preserves snapshot TLS; destroy invalidates")
     print("  material_resources=256-entry TLS companion working set; negative-cache invalidation retained")
+    print("  drawtime_falsifier=no draw callbacks/no FLVER-texture-resource-PMetal-PointLight transports; A1+MotionBlur create-time retained")
     return 0
 
 if __name__=="__main__":
