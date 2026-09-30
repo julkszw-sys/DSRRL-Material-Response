@@ -11,8 +11,12 @@
 #include <array>
 #include <atomic>
 #include <cstdint>
+#include <mutex>
+#include <unordered_map>
 
 struct ID3D11Buffer;
+struct ID3D11Device;
+struct ID3D11DeviceContext;
 struct ID3D11DeviceContext1;
 struct ID3D11PixelShader;
 struct ID3D11SamplerState;
@@ -116,6 +120,8 @@ public:
 
     draw_tx_telemetry telemetry() const noexcept;
     bool quarantined() const noexcept;
+    void on_destroy_device(
+        reshade::api::device *device) noexcept;
     void reset() noexcept;
 
 private:
@@ -174,7 +180,21 @@ private:
 
     void release_state(transaction_state &state) noexcept;
 
+    struct context1_cache_record {
+        ID3D11Device *device = nullptr;
+        ID3D11DeviceContext1 *context1 = nullptr;
+    };
+
+    ID3D11DeviceContext1 *context1_for(
+        ID3D11DeviceContext *context) noexcept;
+    void release_context1_cache() noexcept;
+
     core::renderer_core &core_;
+    std::mutex context1_cache_mutex_;
+    std::unordered_map<
+        ID3D11DeviceContext *,
+        context1_cache_record> context1_cache_;
+    std::atomic<std::uint64_t> context1_cache_epoch_{1u};
     std::atomic<std::uint64_t> draw_serial_{0};
     std::atomic<std::uint64_t> begin_ok_{0};
     std::atomic<std::uint64_t> begin_fail_{0};
