@@ -71,6 +71,11 @@ option(
     "Diagnostic: disable PointLight producer hooks, runtime pipeline binding and draw-time carrier/replay while preserving all non-PointLight runtime paths"
     OFF)
 
+option(
+    DSRRL_DRAWTIME_ISLANDS_BYPASS
+    "Diagnostic: disable all draw-time island routing/hooks/replay while preserving create-time A1 and MotionBlur shader replacements"
+    OFF)
+
 set(
     RESHADE_INCLUDE_DIR
     ""
@@ -462,6 +467,13 @@ if(DSRRL_POINTLIGHT_DRAWTIME_BYPASS)
         dsrrl_renderer_core_integrated
         PRIVATE
         $<$<COMPILE_LANGUAGE:CXX>:DSRRL_POINTLIGHT_DRAWTIME_BYPASS>)
+endif()
+
+if(DSRRL_DRAWTIME_ISLANDS_BYPASS)
+    target_compile_definitions(
+        dsrrl_renderer_core_integrated
+        PRIVATE
+        $<$<COMPILE_LANGUAGE:CXX>:DSRRL_DRAWTIME_ISLANDS_BYPASS>)
 endif()
 
 if(MSVC)
