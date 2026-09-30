@@ -6441,7 +6441,8 @@ bool AddonInit(
     }
 
     const bool flver_hooks =
-        dsrrl::runtime::flver_identity_transport::install();
+        dsrrl::runtime::flver_identity_transport::install(
+            k_pointlight_drawtime_runtime_enabled);
 
     if (!flver_hooks) {
         reshade::log::message(
