@@ -58,6 +58,17 @@ public:
         bool probe_b_required,
         prepared_envspec_resources &prepared) noexcept;
 
+    // Diagnostic resource falsifier: preserve the exact PTDE EnvSpec shader,
+    // A/B LightBank feed and PTDE sampler while feeding the currently bound,
+    // exact-identity DSR BC6H probe SRVs instead of materialized PackedGI.
+    // This isolates resource content/encoding/mapping from the consumer
+    // equation. Unknown native probe identity remains fail-open.
+    bool prepare_native_dsr(
+        ID3D11DeviceContext *context,
+        std::uint8_t slot,
+        bool probe_b_required,
+        prepared_envspec_resources &prepared) noexcept;
+
     void release(
         prepared_envspec_resources &prepared) noexcept;
 

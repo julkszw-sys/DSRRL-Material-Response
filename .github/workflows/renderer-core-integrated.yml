@@ -1596,3 +1596,73 @@ jobs:
           name: DSRRL_Core_Islands_LIVE_TELEMETRY
           path: DSRRL_Core_Islands_LIVE_TELEMETRY.addon64
           if-no-files-found: error
+
+      - name: Audit PTDE operator with native DSR cubemap falsifier
+        shell: bash
+        run: |
+          python3 renderer-core/tools/audit_pmetal_native_dsr_cubemap_falsifier.py \
+            --source-dir renderer-core
+
+      - name: Configure P_Metal native-DSR-cubemap diagnostic addon
+        shell: pwsh
+        run: >
+          cmake
+          -S renderer-core/integrated
+          -B build-integrated-pmetal-dsr-cube
+          -A x64
+          -DRESHADE_INCLUDE_DIR="${{ github.workspace }}/_reshade/include"
+          -DDSRRL_SOURCE_COMMIT="$env:DSRRL_CHECKOUT_COMMIT"
+          -DDSRRL_BUILD_FLAVOR="pmetal_ptde_op_dsr_cubemap_diag"
+          -DDSRRL_EFFECT_TELEMETRY_DEFAULT_ON_ONLY=ON
+          -DDSRRL_PMETAL_NATIVE_DSR_CUBEMAP_FEED=ON
+
+      - name: Verify P_Metal native-DSR-cubemap diagnostic profile
+        shell: pwsh
+        run: |
+          $cache = Get-Content build-integrated-pmetal-dsr-cube/CMakeCache.txt -Raw
+          if ($cache -notmatch "DSRRL_PMETAL_NATIVE_DSR_CUBEMAP_FEED:BOOL=ON") {
+            throw "Native DSR cubemap feed profile is not enabled"
+          }
+          if ($cache -notmatch "DSRRL_EFFECT_TELEMETRY_DEFAULT_ON_ONLY:BOOL=ON") {
+            throw "Low-overhead effect telemetry is not enabled"
+          }
+
+      - name: Build P_Metal native-DSR-cubemap diagnostic addon
+        shell: pwsh
+        run: |
+          cmake --build build-integrated-pmetal-dsr-cube --config Release --target dsrrl_renderer_core_integrated
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $addons = @(Get-ChildItem build-integrated-pmetal-dsr-cube -Recurse -Filter *.addon64)
+          if ($addons.Count -ne 1) {
+            throw "Expected exactly one P_Metal DSR-cubemap diagnostic addon, found $($addons.Count)"
+          }
+          $diag = "DSRRL_Core_Islands_PMETAL_PTDE_OP_DSR_CUBEMAP_DIAG.addon64"
+          Copy-Item $addons[0].FullName $diag -Force
+          $hash = (Get-FileHash $diag -Algorithm SHA256).Hash.ToLowerInvariant()
+          Write-Host "PMETAL_DSR_CUBEMAP_DIAG=$diag"
+          Write-Host "PMETAL_DSR_CUBEMAP_DIAG_SHA256=$hash"
+
+      - name: Verify P_Metal native-DSR-cubemap binary identity
+        shell: pwsh
+        run: |
+          $path = "DSRRL_Core_Islands_PMETAL_PTDE_OP_DSR_CUBEMAP_DIAG.addon64"
+          $ascii = [System.Text.Encoding]::ASCII.GetString(
+            [System.IO.File]::ReadAllBytes($path))
+          $expectedCommit = $env:DSRRL_CHECKOUT_COMMIT
+          $expectedFlavor = "pmetal_ptde_op_dsr_cubemap_diag"
+
+          if (-not $ascii.Contains($expectedCommit)) {
+            throw "P_Metal DSR-cubemap diagnostic does not embed checkout commit"
+          }
+          if (-not $ascii.Contains($expectedFlavor)) {
+            throw "P_Metal DSR-cubemap diagnostic does not embed diagnostic flavor"
+          }
+
+          Write-Host "PMETAL_DSR_CUBEMAP_DIAG_BINARY_IDENTITY_PASS commit=$expectedCommit"
+
+      - name: Upload P_Metal native-DSR-cubemap diagnostic addon
+        uses: actions/upload-artifact@v4
+        with:
+          name: DSRRL_Core_Islands_PMETAL_PTDE_OP_DSR_CUBEMAP_DIAG
+          path: DSRRL_Core_Islands_PMETAL_PTDE_OP_DSR_CUBEMAP_DIAG.addon64
+          if-no-files-found: error

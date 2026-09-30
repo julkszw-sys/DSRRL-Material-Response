@@ -61,6 +61,11 @@ option(
     "Compile Core+Islands with low-overhead effect activation telemetry enabled by default"
     OFF)
 
+option(
+    DSRRL_PMETAL_NATIVE_DSR_CUBEMAP_FEED
+    "Diagnostic: feed exact native DSR BC6H cubemaps into the PTDE P_Metal EnvSpec operator"
+    OFF)
+
 set(
     RESHADE_INCLUDE_DIR
     ""
@@ -438,6 +443,13 @@ elseif(DSRRL_EFFECT_TELEMETRY_DEFAULT_ON_ONLY)
         dsrrl_renderer_core_integrated
         PRIVATE
         $<$<COMPILE_LANGUAGE:CXX>:DSRRL_EFFECT_TELEMETRY_DEFAULT_ON>)
+endif()
+
+if(DSRRL_PMETAL_NATIVE_DSR_CUBEMAP_FEED)
+    target_compile_definitions(
+        dsrrl_renderer_core_integrated
+        PRIVATE
+        $<$<COMPILE_LANGUAGE:CXX>:DSRRL_PMETAL_NATIVE_DSR_CUBEMAP_FEED>)
 endif()
 
 if(MSVC)
