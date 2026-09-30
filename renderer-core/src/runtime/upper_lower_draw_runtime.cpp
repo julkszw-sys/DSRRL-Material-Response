@@ -114,6 +114,11 @@ struct producer_tls {
     // gate is known.
     void *source_a = nullptr;
     void *source_b = nullptr;
+    // Stable LightBank resource bases are copied while source_a/source_b are
+    // engine-live. P_Metal draw-time decode uses these bases and never
+    // dereferences the shorter-lived producer source objects.
+    const std::uint8_t *pmetal_bank_base_a = nullptr;
+    const std::uint8_t *pmetal_bank_base_b = nullptr;
     std::int32_t selector_a = -1;
     std::int32_t selector_b = -1;
     float source_beta = 0.0f;
@@ -132,13 +137,14 @@ struct lightbank_reference_token {
     std::uint64_t producer_serial = 0u;
     void *source_a = nullptr;
     void *source_b = nullptr;
+    const std::uint8_t *pmetal_bank_base_a = nullptr;
+    const std::uint8_t *pmetal_bank_base_b = nullptr;
     std::int32_t selector_a = -1;
     std::int32_t selector_b = -1;
     float beta = 0.0f;
-    // P_Metal donor source is decoded only after the exact selector+material
-    // semantic join, while the engine source tuple is still the authenticated
-    // input. Draw-time replay consumes this immutable payload instead of
-    // dereferencing producer-owned source pointers later.
+    // Legacy immutable donor payload remains available for non-reference
+    // transport. Reference-only P_Metal uses stable bank bases plus selectors
+    // and decodes only at the exact consumer gate.
     pmetal_env_source pmetal_env{};
     bool pmetal_env_ready = false;
     std::array<f4,3> directions{};
@@ -1515,6 +1521,10 @@ void publish_reference_token(
             std::memory_order_relaxed) + 1u;
     token.source_a = producer.source_a;
     token.source_b = producer.source_b;
+    token.pmetal_bank_base_a =
+        producer.pmetal_bank_base_a;
+    token.pmetal_bank_base_b =
+        producer.pmetal_bank_base_b;
     token.selector_a = producer.selector_a;
     token.selector_b = producer.selector_b;
     token.beta = assignment_beta;
@@ -1894,8 +1904,30 @@ bool capture_source_reference(
         !std::isfinite(beta))
         return false;
 
+    // The original engine packer has already consumed these source objects,
+    // so source+0x18 is live at this exact producer cut. Copy only the stable
+    // bank resource pointer here; do not hash or decode any bank globally.
+    const std::uint8_t *bank_base_a = nullptr;
+    const std::uint8_t *bank_base_b = nullptr;
+    std::memcpy(
+        &bank_base_a,
+        static_cast<const std::uint8_t *>(
+            source_a) + 0x18u,
+        sizeof(bank_base_a));
+    if (source_a == source_b) {
+        bank_base_b = bank_base_a;
+    } else {
+        std::memcpy(
+            &bank_base_b,
+            static_cast<const std::uint8_t *>(
+                source_b) + 0x18u,
+            sizeof(bank_base_b));
+    }
+
     producer.source_a = source_a;
     producer.source_b = source_b;
+    producer.pmetal_bank_base_a = bank_base_a;
+    producer.pmetal_bank_base_b = bank_base_b;
     producer.selector_a = selector_a;
     producer.selector_b = selector_b;
     producer.source_beta = beta;
@@ -2228,8 +2260,8 @@ void publish_pmetal_source_probe(
         std::memory_order_release);
 }
 
-bool read_exact_pmetal_env_source(
-    void *source,
+bool read_exact_pmetal_env_base(
+    const std::uint8_t *base,
     std::int32_t selector,
     f4 &out,
     std::uint64_t &bank_signature,
@@ -2250,24 +2282,14 @@ bool read_exact_pmetal_env_source(
             *probe = local;
     };
 
-    if (source == nullptr ||
-        selector < 0) {
+    if (selector < 0) {
         finish(
             pmetal_env_source_diag_status::
                 token_invalid);
         return false;
     }
 
-    // Producer-hook callers arrive with an engine-attested source. The
-    // selector/material P_Metal path additionally revalidates the carried
-    // source object before entering here. Once source+0x18 is authorized,
-    // reuse the immutable bank verdict by exact base pointer.
-    const std::uint8_t *base = nullptr;
-    if (!safe_read(
-            static_cast<const std::uint8_t *>(
-                source) + 0x18u,
-            base) ||
-        base == nullptr) {
+    if (base == nullptr) {
         finish(
             pmetal_env_source_diag_status::
                 base_null);
@@ -2437,6 +2459,44 @@ bool read_exact_pmetal_env_source(
         pmetal_env_source_diag_status::
             success);
     return true;
+}
+
+bool read_exact_pmetal_env_source(
+    void *source,
+    std::int32_t selector,
+    f4 &out,
+    std::uint64_t &bank_signature,
+    std::uint32_t &row_id,
+    pmetal_source_probe *probe = nullptr) noexcept
+{
+    if (source == nullptr) {
+        if (probe != nullptr) {
+            *probe = {};
+            probe->status =
+                pmetal_env_source_diag_status::
+                    token_invalid;
+            probe->selector = selector;
+        }
+        out = {};
+        bank_signature = 0u;
+        row_id = 0u;
+        return false;
+    }
+
+    const std::uint8_t *base = nullptr;
+    if (!safe_read(
+            static_cast<const std::uint8_t *>(
+                source) + 0x18u,
+            base))
+        base = nullptr;
+
+    return read_exact_pmetal_env_base(
+        base,
+        selector,
+        out,
+        bank_signature,
+        row_id,
+        probe);
 }
 
 bool write_bytes(
@@ -5134,8 +5194,8 @@ bool upper_lower_draw_runtime::selected_pmetal_env_source(
 
         if (!token.valid ||
             !token.source_ready ||
-            token.source_a == nullptr ||
-            token.source_b == nullptr ||
+            token.pmetal_bank_base_a == nullptr ||
+            token.pmetal_bank_base_b == nullptr ||
             token.selector_a < 0 ||
             token.selector_b < 0 ||
             !std::isfinite(token.beta)) {
@@ -5175,8 +5235,8 @@ bool upper_lower_draw_runtime::selected_pmetal_env_source(
         pmetal_source_probe probe_b{};
 
         const bool have_a =
-            read_exact_pmetal_env_source(
-                token.source_a,
+            read_exact_pmetal_env_base(
+                token.pmetal_bank_base_a,
                 token.selector_a,
                 a,
                 bank_a,
@@ -5185,7 +5245,8 @@ bool upper_lower_draw_runtime::selected_pmetal_env_source(
 
         bool have_b = false;
         if (token.beta <= 0.0f ||
-            (token.source_a == token.source_b &&
+            (token.pmetal_bank_base_a ==
+                 token.pmetal_bank_base_b &&
              token.selector_a == token.selector_b)) {
             b = a;
             bank_b = bank_a;
@@ -5196,8 +5257,8 @@ bool upper_lower_draw_runtime::selected_pmetal_env_source(
             have_b = have_a;
         } else {
             have_b =
-                read_exact_pmetal_env_source(
-                    token.source_b,
+                read_exact_pmetal_env_base(
+                    token.pmetal_bank_base_b,
                     token.selector_b,
                     b,
                     bank_b,
