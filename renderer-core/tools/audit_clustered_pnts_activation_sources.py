@@ -272,8 +272,27 @@ def main():
     require(integrated,"dsrrl::core::operator_id::point_light,","full PointLight feature enable")
     require(integrated,"dsrrl::core::operator_id::local_specular_legacy,","legacy spec feature enable")
     require(integrated,"g_clustered_pnts.install()","clustered producer install")
-    require(integrated,"g_clustered_pnts_pipeline.on_init_pipeline","clustered pipeline attestation")
+    require(integrated,"const bool clustered_pointlight_init_exact =","clustered init-time exact authority")
+    require(integrated,"if (clustered_pointlight_init_exact)","clustered init-time route publication")
     require(integrated,"g_clustered_pnts_pipeline.on_bind_pipeline","clustered pipeline bind")
+    global_bind_marker=integrated.find(
+        "// PointLight bind work is restricted to pipelines that were attested by"
+    )
+    if global_bind_marker < 0:
+        fail("PointLight bind-time route gate is missing")
+    bind_tail=integrated[global_bind_marker:global_bind_marker+2200]
+    require(
+        bind_tail,
+        "(route_mask &\n         k_route_clustered_pointlight) != 0u",
+        "clustered bind restricted to init-attested route",
+    )
+    pre_bind=integrated[
+        integrated.find("auto route_mask =", global_bind_marker-4000):
+        global_bind_marker
+    ]
+    if "g_clustered_pnts_pipeline.on_bind_pipeline(" in pre_bind or \
+       "g_fixed_pointlight_pipeline.on_bind_pipeline(" in pre_bind:
+        fail("PointLight exact registries are still queried on every pixel bind")
 
     a1=integrated.find("g_a1_bridge.on_create_pipeline")
     reg=integrated.find("g_clustered_pnts_pipeline.register_candidate")
