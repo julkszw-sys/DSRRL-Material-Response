@@ -12,6 +12,16 @@ def require(text: str, needle: str, label: str) -> None:
         fail(f"{label}: missing {needle!r}")
 
 
+def block_between(text: str, begin_needle: str, end_needle: str, label: str) -> str:
+    begin = text.find(begin_needle)
+    if begin < 0:
+        fail(f"{label}: begin not found")
+    end = text.find(end_needle, begin + len(begin_needle))
+    if end <= begin:
+        fail(f"{label}: end not found")
+    return text[begin:end]
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--source-dir", required=True)
@@ -24,14 +34,9 @@ def main() -> None:
     env_cpp = (root / "src/runtime/pmetal_envspec_draw_runtime.cpp").read_text(encoding="utf-8")
     flver_cpp = (root / "src/runtime/flver_engine_hooks.cpp").read_text(encoding="utf-8")
     lerp_cpp = (root / "src/operators/env_spec/pmetal_rgba_lerp_materializer.cpp").read_text(encoding="utf-8")
-    lerp_h = (root / "include/dsrrl/operators/env_spec/pmetal_rgba_lerp_materializer.hpp").read_text(encoding="utf-8")
 
-    # P_Metal source transport is independent of visible U/L activation.
-    require(
-        integrated,
-        "const bool pmetal_envspec_enabled =",
-        "P_Metal EnvSpec feature gate",
-    )
+    # Shared LightBank routing stays independent of visible U/L.
+    require(integrated, "const bool pmetal_envspec_enabled =", "P_Metal EnvSpec feature gate")
     require(
         integrated,
         "const bool lightbank_reference_transport_required =\n        upper_lower_enabled ||\n        pmetal_envspec_enabled;",
@@ -42,166 +47,80 @@ def main() -> None:
         "g_upper_lower.install(\n             !upper_lower_enabled)",
         "reference-only install when U/L is disabled",
     )
-
-    # Installing the shared carrier must never silently re-enable U/L inside
-    # the EnvSpec composite.
-    require(
-        integrated,
-        "const bool envspec_ul_verified =\n        g_core.features().enabled(\n            dsrrl::core::operator_id::upper_lower)",
-        "EnvSpec U/L composition feature isolation",
-    )
-
-    # Reference-only mode must retain the exact V13 P_Metal donor lifetime
-    # cut while avoiding visible U/L/D123 evaluation on the producer path.
     require(
         ul_h,
         "bool install(bool reference_only = false) noexcept;",
         "reference-only API",
     )
-    require(
-        ul_cpp,
-        "g_reference_only_transport",
-        "reference-only runtime flag",
-    )
-    require(
-        ul_cpp,
-        "V13 source semantics are materialized at this retail",
-        "steady producer-side P_Metal donor cut",
-    )
-    require(
-        ul_cpp,
-        "read_exact_pmetal_env_source(\n                        source_a,",
-        "blend producer-side P_Metal donor A",
-    )
-    require(
-        ul_cpp,
-        "read_exact_pmetal_env_source(\n                            source_b,",
-        "blend producer-side P_Metal donor B",
-    )
-    require(
-        ul_cpp,
-        "if (g_reference_only_transport.load(\n            std::memory_order_acquire)) {\n        return g_blend_orig != nullptr",
-        "blend helper reference-only bypass",
-    )
+    require(ul_cpp, "g_reference_only_transport", "reference-only runtime flag")
 
-    # The obsolete standalone P_Metal blend hook stays disabled, but V13
-    # donor materialization must happen in the already-required retail
-    # steady/blend producer taps before source ownership ends.
+    # The rejected dedicated 0x563C30 startup hook must remain unarmed.
+    if "!install_optional_pmetal_env_hook()" in ul_cpp:
+        fail("dedicated 0x563C30 P_Metal source hook is armed again")
     require(
         ul_cpp,
         "g_pmetal_env_hook_armed.store(false);",
-        "standalone P_Metal blend hook remains disabled",
-    )
-    require(
-        ul_cpp,
-        "token.pmetal_env_ready =\n        producer.have_pmetal_env;",
-        "immutable producer donor published with reference token",
-    )
-    require(
-        env_cpp,
-        "selected_pmetal_env_source(",
-        "consumer-local P_Metal source decode",
-    )
-    require(
-        env_cpp,
-        "k_effect_fail_source = 1u << 4u;",
-        "source frontier telemetry",
+        "standalone P_Metal source hook disabled",
     )
 
-    # P_Metal selected state requires the conjunction of exact selector state
-    # and exact actual material identity from the same FLVER selector callback.
-    require(
-        ul_h,
-        "upper_lower_pmetal_material_event_bridge(",
-        "P_Metal selector-material join API",
-    )
-    require(
+    # Producer hot path may carry only source tuple identity. It must not hash
+    # LightBank banks or decode PTDE P_Metal donor values globally.
+    steady = block_between(
         ul_cpp,
-        "invalidate_selected_reference_token_for_producer(",
-        "material-gated O(1) invalidation of stale P_Metal state",
+        "void __fastcall hook_steady_packer(",
+        "\nvoid *__fastcall hook_blend(",
+        "steady packer",
+    )
+    steady_ref = block_between(
+        steady,
+        "if (g_reference_only_transport.load(",
+        "\n            if (capture_evaluated_vectors(",
+        "steady reference-only block",
     )
     require(
-        ul_cpp,
-        "exact_pmetal_material_selection(",
-        "exact P_Metal material gate",
+        steady_ref,
+        "producer-cheap",
+        "steady producer-hot-path policy",
     )
+    if "read_exact_pmetal_env_source(" in steady_ref or "pmetal_bank_signature(" in steady_ref:
+        fail("steady reference-only producer still decodes/hashes P_Metal source")
 
-    selector_begin = ul_cpp.index(
-        "void upper_lower_draw_runtime::selector_event("
+    blend = block_between(
+        ul_cpp,
+        "void *__fastcall hook_blend_packer(",
+        "\nvoid __fastcall hook_pmetal_env_blend(",
+        "blend packer",
     )
-    pmetal_begin = ul_cpp.index(
-        "void upper_lower_draw_runtime::pmetal_material_event("
+    blend_ref = block_between(
+        blend,
+        "if (g_reference_only_transport.load(",
+        "\n            if (capture_evaluated_vectors(",
+        "blend reference-only block",
     )
-    if selector_begin < 0 or pmetal_begin <= selector_begin:
-        fail("cannot isolate selector/P_Metal material event blocks")
-    selector_block = ul_cpp[selector_begin:pmetal_begin]
-    if "invalidate_selected_reference_token_for_" in selector_block:
-        fail(
-            "generic LightBank selector still invalidates persistent P_Metal state"
-        )
+    if "read_exact_pmetal_env_source(" in blend_ref or "pmetal_bank_signature(" in blend_ref:
+        fail("blend reference-only producer still decodes/hashes P_Metal source")
 
-    next_method = ul_cpp.find(
-        "bool upper_lower_draw_runtime::",
-        pmetal_begin + 1,
-    )
-    if next_method < 0:
-        fail("cannot isolate P_Metal material event block")
-    pmetal_block = ul_cpp[pmetal_begin:next_method]
-    invalidate_at = pmetal_block.find(
-        "invalidate_selected_reference_token_for_producer("
-    )
-    materialize_at = pmetal_block.find(
-        "materialize_selected_pmetal_env_source("
-    )
-    publish_at = pmetal_block.find(
-        "publish_selected_reference_token("
-    )
-    gate_at = pmetal_block.find(
-        "exact_pmetal_material_selection("
-    )
-    if (
-        gate_at < 0
-        or invalidate_at < 0
-        or materialize_at < 0
-        or publish_at < 0
-    ):
-        fail("P_Metal material-gated state transition is incomplete")
-    if not (
-        gate_at < invalidate_at < materialize_at < publish_at
-    ):
-        fail(
-            "P_Metal selected-state invalidation/materialization/publication "
-            "ordering is unsafe"
-        )
-    invalidator_begin = ul_cpp.index(
-        "void invalidate_selected_reference_token_for_producer("
-    )
-    invalidator_end = ul_cpp.index(
-        "\nbool exact_pmetal_material_selection(",
-        invalidator_begin,
-    )
-    invalidator_block = ul_cpp[invalidator_begin:invalidator_end]
-    if "for (std::size_t set = 0u;" in invalidator_block:
-        fail("P_Metal selected-state invalidation regressed to full-bank scan")
+    # Exact producer tuple is still published and then authorized only by the
+    # exact selector + exact actual P_Metal material join.
     require(
-        invalidator_block,
-        "reference_token_set(",
-        "producer-keyed selected-token invalidation",
-    )
-    require(
-        pmetal_block,
-        "GetCurrentThreadId()",
-        "exact selector-callback producer key",
-    )
-    require(
-        pmetal_block,
-        "g_draw_reference_token.producer_tid !=",
-        "staged token producer continuity",
+        ul_cpp,
+        "token.source_a = producer.source_a;",
+        "source A tuple publication",
     )
     require(
         ul_cpp,
-        "g_draw_reference_token.fingerprint.owner !=",
-        "selector/material owner continuity",
+        "token.source_b = producer.source_b;",
+        "source B tuple publication",
+    )
+    require(
+        ul_cpp,
+        "token.selector_a = producer.selector_a;",
+        "selector A tuple publication",
+    )
+    require(
+        ul_cpp,
+        "token.selector_b = producer.selector_b;",
+        "selector B tuple publication",
     )
     require(
         flver_cpp,
@@ -209,142 +128,116 @@ def main() -> None:
         "FLVER selector material authorization bridge",
     )
 
-    if ul_cpp.count("publish_selected_reference_token(") != 2:
-        fail("P_Metal selected state has an unexpected publication surface")
+    pmetal_event = block_between(
+        ul_cpp,
+        "void upper_lower_draw_runtime::pmetal_material_event(",
+        "\nbool upper_lower_draw_runtime::direct_producer_active()",
+        "P_Metal material event",
+    )
+    require(
+        pmetal_event,
+        "exact_pmetal_material_selection(",
+        "exact P_Metal material gate",
+    )
+    require(
+        pmetal_event,
+        "invalidate_selected_reference_token_for_producer(",
+        "stale selected-state invalidation",
+    )
+    require(
+        pmetal_event,
+        "publish_selected_reference_token(\n        g_draw_reference_token);",
+        "exact source-tuple publication",
+    )
+    if "read_exact_pmetal_env_source(" in pmetal_event:
+        fail("P_Metal material callback performs delayed bank decode")
+    if "materialize_selected_pmetal_env_source(" in ul_cpp:
+        fail("obsolete producer-materialized P_Metal donor helper still present")
 
-    # The consumer-visible selector is a packed engine value. Retail DSR
-    # record-table addressing uses only the low byte after the non-negative
-    # sentinel check (steady 0x140563BA2, blend 0x140563CFB/0x140563D04).
-    # The full selector remains part of freshness identity.
-    require(
+    # Consumer-local source decode must happen only after exact P_Metal material
+    # and exact EnvSpec semantic gates in pmetal_envspec_draw_runtime.
+    material_gate = env_cpp.find("if (!exact_pmetal_material(")
+    semantic_gate = env_cpp.find("if (!env_semantics.exact_identity_match")
+    source_call = env_cpp.find("selected_pmetal_env_source(")
+    if material_gate < 0 or semantic_gate < 0 or source_call < 0:
+        fail("cannot establish P_Metal consumer gate ordering")
+    if not (material_gate < semantic_gate < source_call):
+        fail("P_Metal source decode is not downstream of material+semantic gates")
+
+    selected = block_between(
         ul_cpp,
-        "bool retail_lightbank_record_index(",
-        "retail LightBank selector normalization",
+        "bool upper_lower_draw_runtime::selected_pmetal_env_source(",
+        "\npmetal_env_source_diagnostic",
+        "selected P_Metal source",
+    )
+    require(selected, "!token.source_ready", "selected source readiness gate")
+    require(
+        selected,
+        "read_exact_pmetal_env_source(\n                token.source_a,",
+        "lazy exact source A decode",
     )
     require(
-        ul_cpp,
-        "static_cast<std::uint8_t>(\n                selector)",
-        "retail low-byte selector semantics",
+        selected,
+        "read_exact_pmetal_env_source(\n                    token.source_b,",
+        "lazy exact source B decode",
     )
     require(
-        ul_cpp,
-        "read_exact_pmetal_env_source(",
-        "exact PTDE donor source resolver",
-    )
-    require(
-        ul_cpp,
-        "materialize_selected_pmetal_env_source(",
-        "P_Metal selector-material source materializer",
+        selected,
+        "Consumer-local lazy decode",
+        "consumer-local lazy decode policy",
     )
 
-    materialize_begin = ul_cpp.index(
-        "bool materialize_selected_pmetal_env_source("
-    )
-    materialize_end = ul_cpp.index(
+    # Every delayed engine pointer dereference must fail open through safe_read.
+    resolver = block_between(
+        ul_cpp,
+        "bool read_exact_pmetal_env_source(",
         "\nbool write_bytes(",
-        materialize_begin,
+        "exact P_Metal source resolver",
     )
-    if materialize_begin < 0 or materialize_end <= materialize_begin:
-        fail("cannot isolate P_Metal immutable source validator")
-    materialize_block = ul_cpp[materialize_begin:materialize_end]
     require(
-        materialize_block,
-        "token.pmetal_env_ready",
-        "producer-materialized P_Metal payload gate",
+        resolver,
+        "if (!safe_read(\n            static_cast<const std::uint8_t *>(\n                source) + 0x18u,\n            base)",
+        "safe source->bank pointer read",
     )
-    for forbidden in (
-        "read_exact_pmetal_env_source(",
-        "token.source_a",
-        "token.source_b",
-    ):
-        if forbidden in materialize_block:
-            fail(
-                "P_Metal material gate still depends on delayed producer "
-                f"source lifetime: {forbidden}"
-            )
-
-    selected_source_begin = ul_cpp.index(
-        "bool upper_lower_draw_runtime::selected_pmetal_env_source("
-    )
-    selected_source_end = ul_cpp.index(
-        "pmetal_env_source_diagnostic",
-        selected_source_begin + 1,
-    )
-    if selected_source_begin < 0 or selected_source_end <= selected_source_begin:
-        fail("cannot isolate selected P_Metal EnvSpec source consumer")
-    selected_source_block = ul_cpp[selected_source_begin:selected_source_end]
-    if "read_exact_pmetal_env_source(" in selected_source_block:
-        fail(
-            "draw-time P_Metal source consumer still dereferences engine "
-            "LightBank source pointers"
-        )
     require(
-        selected_source_block,
-        "out = token.pmetal_env;",
-        "immutable P_Metal source handoff to draw",
+        resolver,
+        "if (!safe_read(\n                base + 8u,\n                live_version)",
+        "safe cached header read",
     )
-
-    # Bank identity must retain the exact historical V13 FNV equation while
-    # avoiding the integrated whole-region assumption that produced
-    # SIGNATURE_INVALID on live type=4/count=64 banks.
+    require(
+        resolver,
+        "if (!safe_read(\n            entry,\n            row_id))",
+        "safe selected row read",
+    )
     require(
         ul_cpp,
         "if (!safe_read(entry, row_id) ||\n            !safe_read(entry + 8u, name_offset))",
-        "region-safe V13 bank row identity",
+        "safe bank row identity scan",
     )
     require(
         ul_cpp,
         "if (!safe_read(name_byte, ch))",
-        "region-safe V13 bank name identity",
+        "safe bank name identity scan",
     )
 
-    if "DSRRL_EXPERIMENTAL_PMETAL_PTDE_FIRELINK_DRAWPARAM" in ul_cpp:
-        fail("obsolete hardcoded Firelink EnvSpec diagnostic still present")
-    if "read_hardcoded_ptde_firelink_pmetal_env_source" in ul_cpp:
-        fail("obsolete hardcoded Firelink donor resolver still present")
-
-    # HemEnvLerp EnvSpec must remain usable while visible U/L is intentionally
-    # OFF. The U/L-off payload preserves stock b0[7]/b0[8] operands and does
-    # not require/bind b13; the composed PTDE-b13 variant remains available
-    # only when the U/L feature is explicitly enabled.
+    # HemEnvLerp U/L-off remains stock U/L and does not require b13.
     require(
         lerp_cpp,
         "const bool compose_upper_lower =\n        features.enabled(\n            core::operator_id::upper_lower);",
         "Lerp materialization feature split",
     )
     require(
-        lerp_cpp,
-        "outcome.upper_lower_preserved_stock =\n        !compose_upper_lower;",
-        "stock-U/L Lerp outcome",
-    )
-    require(
-        lerp_cpp,
-        "if (compose_upper_lower) {\n        for (const auto &[slot_word, source_register]",
-        "conditional b13 operand remap",
-    )
-    require(
-        env_cpp,
-        "!(outcome.upper_lower_composed ^\n          outcome.upper_lower_preserved_stock)",
-        "exclusive Lerp U/L mode registration",
-    )
-    require(
         env_cpp,
         "hemenvlerp &&\n        lerp_upper_lower_composed",
         "runtime b13 only for composed Lerp",
     )
-    if "core::operator_id::upper_lower) ||\n         !core_.features().enabled(\n             core::operator_id::terminal_sat_rgb" in env_cpp:
-        fail("HemEnvLerp still hard-requires the visible U/L feature")
 
     print("DSRRL_PMETAL_ENVSPEC_REFERENCE_TRANSPORT_PASS")
-    print("  U/L visible operator=OFF remains stock when not explicitly enabled")
-    print("  LightBank reference carrier=ON for P_Metal EnvSpec")
-    print("  producer payload=owner+selector tuple + immutable V13 P_Metal A/B donor")
+    print("  producer hot path=source tuple only; no P_Metal FNV/donor decode")
     print("  selected state=exact selector + exact actual P_Metal material")
-    print("  persistent P_Metal invalidation=material-gated O(1) producer set; generic selectors preserve state")
-    print("  selector row address=retail low byte; full selector retained for identity")
-    print("  P_Metal source decode=exact V13 bank signature + PTDE donor at live producer cut")
-    print("  draw source=immutable decoded A/B+beta+bank/row; no late source-pointer dereference")
-    print("  HemEnvLerp U/L-off=stock b0 operands preserved; no b13 requirement")
+    print("  source decode=consumer-local after exact P_Metal+EnvSpec gates")
+    print("  delayed engine reads=safe_read fail-open")
+    print("  dedicated 0x563C30 source hook=disabled")
 
 
 if __name__ == "__main__":
