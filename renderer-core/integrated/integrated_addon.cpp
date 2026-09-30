@@ -5775,7 +5775,8 @@ bool on_draw(
     std::uint32_t first_vertex,
     std::uint32_t first_instance)
 {
-    if (dsrrl::runtime::bloom_fx_draw_transport::
+    if (g_hot_telemetry_enabled &&
+        dsrrl::runtime::bloom_fx_draw_transport::
             active_draw_scope())
         observe_bloom_fx_draw_authority();
 
@@ -6040,7 +6041,8 @@ bool on_draw_indexed(
     std::int32_t vertex_offset,
     std::uint32_t first_instance)
 {
-    if (dsrrl::runtime::bloom_fx_draw_transport::
+    if (g_hot_telemetry_enabled &&
+        dsrrl::runtime::bloom_fx_draw_transport::
             active_draw_scope())
         observe_bloom_fx_draw_authority();
 
