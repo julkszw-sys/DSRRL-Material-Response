@@ -114,6 +114,18 @@ def main():
         "if (g_core.features().enabled(\n                dsrrl::core::operator_id::hemdir3)) {\n            std::vector<std::uint8_t> h3_payload;",
         "HemDir3 create materializer gate")
 
+    # The diffuse-v1 classifier returns the receiver family itself. Do not
+    # parse/hash the same shader twice for stable and Lerp branches, and do
+    # not build MR+U/L composed variants while U/L is disabled.
+    if integrated.count("materialize_ptde_diffuse_response_v1(") != 2:
+        fail("diffuse-v1 materializer must run once in on_create_pipeline plus once in the subsurface helper")
+    require(integrated,
+        "const auto &lerp_mr = mr;\n        const auto &lerp_mr_payload = mr_payload;",
+        "single-pass stable/Lerp MR classification")
+    if integrated.count(
+        "if (g_core.features().enabled(\n                    dsrrl::core::operator_id::upper_lower)) {") < 2:
+        fail("stable and Lerp MR+U/L construction must both be feature-gated")
+
     selector_body=function_body(
         hemdir3_mode,
         "void selector_begin(",
