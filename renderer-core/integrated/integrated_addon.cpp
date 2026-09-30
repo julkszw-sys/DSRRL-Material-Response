@@ -71,7 +71,13 @@
 #define DSRRL_BUILD_FLAVOR "default"
 #endif
 
-#ifdef DSRRL_POINTLIGHT_DRAWTIME_BYPASS
+#ifdef DSRRL_DRAWTIME_ISLANDS_BYPASS
+constexpr bool k_drawtime_islands_runtime_enabled = false;
+#else
+constexpr bool k_drawtime_islands_runtime_enabled = true;
+#endif
+
+#if defined(DSRRL_POINTLIGHT_DRAWTIME_BYPASS) || defined(DSRRL_DRAWTIME_ISLANDS_BYPASS)
 constexpr bool k_pointlight_drawtime_runtime_enabled = false;
 #else
 constexpr bool k_pointlight_drawtime_runtime_enabled = true;
@@ -3429,8 +3435,11 @@ void log_state(const char *tag) noexcept
 
 void on_init_device(reshade::api::device *device)
 {
-    g_bloom_scene_sidecar.on_init_device(device);
     g_a1_bridge.on_init_device(device);
+    if (!k_drawtime_islands_runtime_enabled)
+        return;
+
+    g_bloom_scene_sidecar.on_init_device(device);
     g_mr_draw_runtime.on_init_device(device);
     g_pmetal_envspec.on_init_device(device);
     g_upper_lower_hemenv.on_init_device(device);
@@ -3439,17 +3448,19 @@ void on_init_device(reshade::api::device *device)
 
 void on_destroy_device(reshade::api::device *device)
 {
-    g_draw_transactions.on_destroy_device(device);
-    g_bloom_scene_sidecar.on_destroy_device(device);
-    g_upper_lower.on_destroy_device(device);
-    g_upper_lower_hemenv.on_destroy_device(device);
-    g_hemdir3.on_destroy_device(device);
-    g_pmetal_envspec.on_destroy_device(device);
-    g_fixed_pointlight.on_destroy_device(device);
-    g_fixed_pointlight_pipeline.on_destroy_device(device);
-    g_clustered_pnts.on_destroy_device(device);
-    g_clustered_pnts_pipeline.on_destroy_device(device);
-    g_mr_draw_runtime.on_destroy_device(device);
+    if (k_drawtime_islands_runtime_enabled) {
+        g_draw_transactions.on_destroy_device(device);
+        g_bloom_scene_sidecar.on_destroy_device(device);
+        g_upper_lower.on_destroy_device(device);
+        g_upper_lower_hemenv.on_destroy_device(device);
+        g_hemdir3.on_destroy_device(device);
+        g_pmetal_envspec.on_destroy_device(device);
+        g_fixed_pointlight.on_destroy_device(device);
+        g_fixed_pointlight_pipeline.on_destroy_device(device);
+        g_clustered_pnts.on_destroy_device(device);
+        g_clustered_pnts_pipeline.on_destroy_device(device);
+        g_mr_draw_runtime.on_destroy_device(device);
+    }
     g_a1_bridge.on_destroy_device(device);
 }
 
@@ -3537,6 +3548,21 @@ bool on_create_pipeline(
     std::uint32_t subobject_count,
     const reshade::api::pipeline_subobject *subobjects)
 {
+    if (!k_drawtime_islands_runtime_enabled) {
+        const bool a1_changed =
+            g_a1_bridge.on_create_pipeline(
+                device,
+                layout,
+                subobject_count,
+                subobjects);
+        const bool motion_blur_changed =
+            motion_blur_camera_fallback_disable::
+                on_create_pipeline(
+                    subobject_count,
+                    subobjects);
+        return a1_changed || motion_blur_changed;
+    }
+
     const auto *pixel_shader =
         find_pixel_shader(
             subobject_count,
@@ -4220,6 +4246,9 @@ void on_init_pipeline(
             subobjects,
             pipeline);
 
+    if (!k_drawtime_islands_runtime_enabled)
+        return;
+
     const auto *pixel_shader =
         find_pixel_shader(
             subobject_count,
@@ -4296,20 +4325,22 @@ void on_destroy_pipeline(
     reshade::api::device *device,
     reshade::api::pipeline pipeline)
 {
-    forget_integrated_draw_route(
-        pipeline.handle);
-    dsrrl::runtime::stable_receiver_forget_pipeline(
-        pipeline.handle);
-    dsrrl::runtime::hemenvlerp_receiver_forget_pipeline(
-        pipeline.handle);
-    dsrrl::runtime::subsurface_receiver_forget_pipeline(
-        pipeline.handle);
-    dsrrl::runtime::hemdir3_receiver_forget_pipeline(
-        pipeline.handle);
-    dsrrl::runtime::upper_lower_receiver_forget_pipeline(
-        pipeline.handle);
-    g_fixed_pointlight_pipeline.on_destroy_pipeline(pipeline);
-    g_clustered_pnts_pipeline.on_destroy_pipeline(pipeline);
+    if (k_drawtime_islands_runtime_enabled) {
+        forget_integrated_draw_route(
+            pipeline.handle);
+        dsrrl::runtime::stable_receiver_forget_pipeline(
+            pipeline.handle);
+        dsrrl::runtime::hemenvlerp_receiver_forget_pipeline(
+            pipeline.handle);
+        dsrrl::runtime::subsurface_receiver_forget_pipeline(
+            pipeline.handle);
+        dsrrl::runtime::hemdir3_receiver_forget_pipeline(
+            pipeline.handle);
+        dsrrl::runtime::upper_lower_receiver_forget_pipeline(
+            pipeline.handle);
+        g_fixed_pointlight_pipeline.on_destroy_pipeline(pipeline);
+        g_clustered_pnts_pipeline.on_destroy_pipeline(pipeline);
+    }
     motion_blur_camera_fallback_disable::
         on_destroy_pipeline(
             pipeline);
@@ -4330,6 +4361,9 @@ void on_bind_pipeline(
         on_bind_pipeline(
             stages,
             pipeline);
+
+    if (!k_drawtime_islands_runtime_enabled)
+        return;
 
     auto route_mask =
         observe_integrated_draw_route_bind(
@@ -6277,16 +6311,20 @@ void register_events()
     reshade::register_event<reshade::addon_event::init_pipeline>(on_init_pipeline);
     reshade::register_event<reshade::addon_event::destroy_pipeline>(on_destroy_pipeline);
     reshade::register_event<reshade::addon_event::bind_pipeline>(on_bind_pipeline);
-    reshade::register_event<reshade::addon_event::draw>(on_draw);
-    reshade::register_event<reshade::addon_event::draw_indexed>(on_draw_indexed);
+    if (k_drawtime_islands_runtime_enabled) {
+        reshade::register_event<reshade::addon_event::draw>(on_draw);
+        reshade::register_event<reshade::addon_event::draw_indexed>(on_draw_indexed);
+    }
     reshade::register_event<reshade::addon_event::present>(on_present);
 }
 
 void unregister_events()
 {
     reshade::unregister_event<reshade::addon_event::present>(on_present);
-    reshade::unregister_event<reshade::addon_event::draw_indexed>(on_draw_indexed);
-    reshade::unregister_event<reshade::addon_event::draw>(on_draw);
+    if (k_drawtime_islands_runtime_enabled) {
+        reshade::unregister_event<reshade::addon_event::draw_indexed>(on_draw_indexed);
+        reshade::unregister_event<reshade::addon_event::draw>(on_draw);
+    }
     reshade::unregister_event<reshade::addon_event::bind_pipeline>(on_bind_pipeline);
     reshade::unregister_event<reshade::addon_event::destroy_pipeline>(on_destroy_pipeline);
     reshade::unregister_event<reshade::addon_event::init_pipeline>(on_init_pipeline);
@@ -6462,6 +6500,26 @@ bool AddonInit(
     }
 
     register_events();
+
+    if (!k_drawtime_islands_runtime_enabled) {
+        reshade::log::message(
+            reshade::log::level::info,
+            "[DSRRL CORE+ISLANDS " DSRRL_CORE_ISLANDS_VERSION
+            "] DRAW-TIME ISLANDS BYPASSED: A1 and MotionBlur create-time replacements remain active; FLVER/MTD selector transport, texture/resource bridges, P_Metal, PointLight and draw replay are not installed.");
+
+        char build_identity[768]{};
+        std::snprintf(
+            build_identity,
+            sizeof(build_identity),
+            "[DSRRL BUILD_ID] version=%s source_commit=%s flavor=%s",
+            DSRRL_CORE_ISLANDS_VERSION,
+            DSRRL_SOURCE_COMMIT,
+            DSRRL_BUILD_FLAVOR);
+        reshade::log::message(
+            reshade::log::level::info,
+            build_identity);
+        return true;
+    }
 
     if (!g_material_resources.register_events()) {
         unregister_events();
