@@ -107,6 +107,31 @@ def main():
         "telemetry::hot_count(g_selector_begin)",
         "disabled HemDir3 selector no-op")
 
+    # Central bind routing must retain a realistic per-thread working set.
+    # Adding an unrelated new pipeline must not globally invalidate already
+    # cached route verdicts; destroy/change remains the invalidation boundary.
+    require(integrated,
+        "constexpr std::size_t k_integrated_route_cache_size = 256u;",
+        "integrated route TLS capacity")
+    remember_start=integrated.find("void remember_integrated_draw_route(")
+    remember_end=integrated.find("void forget_integrated_draw_route(",remember_start)
+    if remember_start<0 or remember_end<0:
+        fail("integrated route remember boundary missing")
+    remember_body=integrated[remember_start:remember_end]
+    require(remember_body,
+        "g_integrated_draw_routes.emplace(",
+        "new route insertion without global invalidation")
+    new_insert=remember_body.find(
+        "found ==\n                g_integrated_draw_routes.end()")
+    emplace=remember_body.find(
+        "g_integrated_draw_routes.emplace(",
+        new_insert)
+    if new_insert<0 or emplace<0:
+        fail("new integrated route insertion branch missing")
+    insertion_branch=remember_body[new_insert:emplace]
+    if "g_integrated_draw_route_epoch.fetch_add" in insertion_branch:
+        fail("new unrelated pipeline still globally invalidates route TLS")
+
     # Create-time A1 replacement is already live in the host pipeline; if no
     # draw-specific route is present, do not enter semantic join/replay.
     require(integrated,"constexpr std::uint8_t k_dynamic_draw_route_mask","dynamic route mask")
