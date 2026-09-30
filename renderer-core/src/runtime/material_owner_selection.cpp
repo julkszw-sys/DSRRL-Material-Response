@@ -4,6 +4,7 @@
 #include <array>
 #include <atomic>
 #include <cstddef>
+#include <cstring>
 #include <optional>
 
 namespace dsrrl::runtime {
@@ -30,18 +31,36 @@ thread_local std::array<
     k_owner_auth_cache_slots>
     g_owner_auth_cache{};
 
-std::size_t owner_auth_cache_index(
-    std::uint64_t flver_identity_hash,
-    std::uint32_t material_slot,
-    std::uint64_t semantic_name_hash) noexcept
+std::uint64_t owner_cache_entropy(
+    const operators::material_response::
+        material_identity &identity) noexcept
 {
-    // flver_identity_hash is index entropy only. Full SHA-256 remains part of
-    // the cache-hit equality gate below and remains the positive authority.
+    if (identity.flver_identity_hash != 0u)
+        return identity.flver_identity_hash;
+
+    std::uint64_t folded = 0u;
+    static_assert(
+        sizeof(folded) <=
+        core::sha256_digest{}.size());
+    std::memcpy(
+        &folded,
+        identity.flver_sha256.data(),
+        sizeof(folded));
+    return folded;
+}
+
+std::size_t owner_auth_cache_index(
+    const operators::material_response::
+        material_identity &identity) noexcept
+{
+    // The legacy 64-bit token is optional. When absent, a cheap 64-bit fold
+    // from the authoritative SHA is bucket entropy only; the complete SHA-256
+    // remains the cache-hit authority below.
     std::uint64_t h =
-        flver_identity_hash ^
-        (static_cast<std::uint64_t>(material_slot) *
+        owner_cache_entropy(identity) ^
+        (static_cast<std::uint64_t>(identity.material_slot) *
          0x9E3779B185EBCA87ULL);
-    h ^= semantic_name_hash +
+    h ^= identity.semantic_name_hash +
          0x9E3779B97F4A7C15ULL +
          (h << 6u) +
          (h >> 2u);
@@ -57,9 +76,7 @@ bool owner_tuple_authenticated_cached(
     auto &cached =
         g_owner_auth_cache[
             owner_auth_cache_index(
-                identity.flver_identity_hash,
-                identity.material_slot,
-                identity.semantic_name_hash)];
+                identity)];
 
     if (cached.occupied &&
         cached.material_slot ==
