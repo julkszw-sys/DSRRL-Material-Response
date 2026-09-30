@@ -4413,10 +4413,10 @@ bool install_producer_hooks() noexcept
         direct_ul_mutation_enabled(),
         std::memory_order_release);
 
-    // P_Metal/HemDir3 capture must not piggyback on steady U/L evaluation.
-    // Owner runtime isolated that shared semantic-capture stack as the
-    // geometry-scaled bottleneck. Those operators fail open to stock DSR
-    // until they get their own producer-local carriers.
+    // The old standalone P_Metal blend hook stays disabled. Exact V13 donor
+    // capture now lives in the already-required steady/blend packer taps and
+    // carries only immutable P_Metal source data; visible U/L and HemDir3
+    // evaluation remain disabled in reference-only mode.
     g_pmetal_env_hook_armed.store(false);
 
     return true;
@@ -4970,10 +4970,10 @@ void upper_lower_draw_runtime::pmetal_material_event(
     auto selected_token =
         g_draw_reference_token;
 
-    // V13 decoded the donor while the engine source tuple was live. Preserve
-    // that data-lifetime property without restoring geometry-scaled producer
-    // work: perform the exact donor decode only after this P_Metal material
-    // gate, then publish immutable A/B+beta+bank/row state for draw replay.
+    // V13 decoded the donor while the engine source tuple was live. The
+    // reference token must already carry immutable A/B+beta+bank/row state.
+    // This exact material gate authorizes publication but never re-dereferences
+    // delayed engine source pointers.
     if (!materialize_selected_pmetal_env_source(
             selected_token))
         return;
