@@ -717,7 +717,7 @@ bool pmetal_envspec_draw_runtime::prepare(
         std::snprintf(
             line,
             sizeof(line),
-            "[DSRRL PMETAL ENVSPEC RESOURCE] mode=native_dsr_bc6h_ptde_operator sampler=ptde_lod0 slot=%u probe_a=%u probe_b=%u",
+            "[DSRRL PMETAL ENVSPEC RESOURCE] mode=native_dsr_bc6h_mip3_as_lod0_ptde_operator sampler=ptde_lod0 slot=%u probe_a=%u probe_b=%u",
             static_cast<unsigned>(
                 env_semantics.envspc_slot),
             static_cast<unsigned>(
