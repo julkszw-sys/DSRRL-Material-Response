@@ -1442,6 +1442,27 @@ jobs:
           Write-Host "FULL_RUNTIME_DIAG=$diag"
           Write-Host "FULL_RUNTIME_DIAG_SHA256=$hash"
 
+      - name: Verify full-runtime diagnostic binary self-identity
+        shell: pwsh
+        run: |
+          $path = "DSRRL_Core_Islands_FULL_RUNTIME_DIAG.addon64"
+          $ascii = [System.Text.Encoding]::ASCII.GetString(
+            [System.IO.File]::ReadAllBytes($path))
+          $expectedCommit = $env:DSRRL_CHECKOUT_COMMIT
+          $expectedFlavor = "full_runtime_diagnostic"
+
+          if ([string]::IsNullOrWhiteSpace($expectedCommit)) {
+            throw "Missing DSRRL_CHECKOUT_COMMIT"
+          }
+          if (-not $ascii.Contains($expectedCommit)) {
+            throw "FULL_RUNTIME_DIAG binary does not embed checkout commit $expectedCommit"
+          }
+          if (-not $ascii.Contains($expectedFlavor)) {
+            throw "FULL_RUNTIME_DIAG binary does not embed flavor $expectedFlavor"
+          }
+
+          Write-Host "FULL_RUNTIME_DIAG_BINARY_IDENTITY_PASS commit=$expectedCommit flavor=$expectedFlavor"
+
       - name: Upload full-runtime diagnostic addon
         uses: actions/upload-artifact@v4
         with:
@@ -1487,6 +1508,30 @@ jobs:
           Write-Host "FULL_TELEMETRY=$full"
           Write-Host "FULL_TELEMETRY_SHA256=$hash"
 
+      - name: Verify full-telemetry binary self-identity
+        shell: pwsh
+        run: |
+          $path = "DSRRL_Core_Islands_FULL_TELEMETRY.addon64"
+          $ascii = [System.Text.Encoding]::ASCII.GetString(
+            [System.IO.File]::ReadAllBytes($path))
+          $expectedCommit = $env:DSRRL_CHECKOUT_COMMIT
+          $expectedFlavor = "full_telemetry_safe"
+
+          if ([string]::IsNullOrWhiteSpace($expectedCommit)) {
+            throw "Missing DSRRL_CHECKOUT_COMMIT"
+          }
+          if (-not $ascii.Contains($expectedCommit)) {
+            throw "FULL_TELEMETRY binary does not embed checkout commit $expectedCommit"
+          }
+          if (-not $ascii.Contains($expectedFlavor)) {
+            throw "FULL_TELEMETRY binary does not embed flavor $expectedFlavor"
+          }
+          if ($ascii.Contains("full_runtime_diagnostic")) {
+            throw "FULL_TELEMETRY binary contains forbidden full_runtime_diagnostic identity"
+          }
+
+          Write-Host "FULL_TELEMETRY_BINARY_IDENTITY_PASS commit=$expectedCommit flavor=$expectedFlavor"
+
       - name: Upload full-telemetry runtime addon
         uses: actions/upload-artifact@v4
         with:
@@ -1520,6 +1565,30 @@ jobs:
           $hash = (Get-FileHash $live -Algorithm SHA256).Hash.ToLowerInvariant()
           Write-Host "LIVE_TELEMETRY=$live"
           Write-Host "LIVE_TELEMETRY_SHA256=$hash"
+
+      - name: Verify live effect-telemetry binary self-identity
+        shell: pwsh
+        run: |
+          $path = "DSRRL_Core_Islands_LIVE_TELEMETRY.addon64"
+          $ascii = [System.Text.Encoding]::ASCII.GetString(
+            [System.IO.File]::ReadAllBytes($path))
+          $expectedCommit = $env:DSRRL_CHECKOUT_COMMIT
+          $expectedFlavor = "live_effect_telemetry_safe"
+
+          if ([string]::IsNullOrWhiteSpace($expectedCommit)) {
+            throw "Missing DSRRL_CHECKOUT_COMMIT"
+          }
+          if (-not $ascii.Contains($expectedCommit)) {
+            throw "LIVE_TELEMETRY binary does not embed checkout commit $expectedCommit"
+          }
+          if (-not $ascii.Contains($expectedFlavor)) {
+            throw "LIVE_TELEMETRY binary does not embed flavor $expectedFlavor"
+          }
+          if ($ascii.Contains("full_runtime_diagnostic")) {
+            throw "LIVE_TELEMETRY binary contains forbidden full_runtime_diagnostic identity"
+          }
+
+          Write-Host "LIVE_TELEMETRY_BINARY_IDENTITY_PASS commit=$expectedCommit flavor=$expectedFlavor"
 
       - name: Upload live effect-telemetry addon
         uses: actions/upload-artifact@v4
