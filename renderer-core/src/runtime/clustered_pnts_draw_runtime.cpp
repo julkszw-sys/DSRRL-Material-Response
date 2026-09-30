@@ -1181,7 +1181,7 @@ void clustered_pnts_draw_runtime::reset() noexcept
     {
         std::lock_guard<std::mutex> lock(
             g_resource_mutex);
-        release_gpu_locked();
+        release_all_gpu_locked();
     }
 
     g_serial.store(0u);
