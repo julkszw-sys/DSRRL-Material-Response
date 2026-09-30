@@ -2045,13 +2045,13 @@ bool pmetal_bank_signature(
     if (base == nullptr)
         return false;
 
-    // Bank identity is immutable resource metadata, but this function may sit
-    // on the steady LightBank hot path. The previous implementation performed
-    // safe_read -> VirtualQuery for every row field and every name byte.
-    // Preserve the exact FNV identity equation while validating the fixed
-    // header/table once and reusing a validated VM window while scanning
-    // strings. This removes per-byte VirtualQuery without introducing a stale
-    // identity cache or weakening fail-open semantics.
+    // Bank identity is immutable resource metadata, but this function runs
+    // from the retail steady/blend LightBank producer cuts. Never issue a
+    // VirtualQuery-backed safe_read for every row field or every name byte:
+    // that turns exact donor classification into a renderer-wide syscall hot
+    // path. Validate the fixed header/table once, then reuse one validated VM
+    // window while hashing the immutable name strings. The FNV identity
+    // equation and fail-open bounds are unchanged.
     if (!readable_range(
             base + 8u,
             sizeof(std::uint16_t) * 2u))
@@ -2073,6 +2073,15 @@ bool pmetal_bank_signature(
         count > 256u)
         return false;
 
+    const std::size_t table_bytes =
+        0x30u +
+        static_cast<std::size_t>(count) * 12u;
+    if (table_bytes < 8u ||
+        !readable_range(
+            base + 8u,
+            table_bytes - 8u))
+        return false;
+
     std::uint64_t hash = 0xcbf29ce484222325ULL;
     hash = pmetal_fnv_byte(
         hash,
@@ -2085,6 +2094,8 @@ bool pmetal_bank_signature(
         0x30u +
         static_cast<std::uint32_t>(count) * 12u;
 
+    readable_window name_window{};
+
     for (std::uint32_t i = 0u;
          i < count;
          ++i) {
@@ -2094,9 +2105,14 @@ bool pmetal_bank_signature(
 
         std::uint32_t row_id = 0u;
         std::uint32_t name_offset = 0u;
-        if (!safe_read(entry, row_id) ||
-            !safe_read(entry + 8u, name_offset))
-            return false;
+        std::memcpy(
+            &row_id,
+            entry,
+            sizeof(row_id));
+        std::memcpy(
+            &name_offset,
+            entry + 8u,
+            sizeof(name_offset));
 
         if (name_offset < minimum_name ||
             name_offset > 0x100000u)
@@ -2110,28 +2126,55 @@ bool pmetal_bank_signature(
                 static_cast<std::uint8_t>(
                     row_id >> shift));
 
+        const auto *name =
+            base +
+            static_cast<std::size_t>(
+                name_offset);
+        std::uint32_t consumed = 0u;
         bool terminated = false;
-        for (std::uint32_t j = 0u;
-             j < 256u;
-             ++j) {
-            const auto *name_byte =
-                base +
-                static_cast<std::size_t>(
-                    name_offset) +
-                j;
 
-            std::uint8_t ch = 0u;
-            if (!safe_read(name_byte, ch))
+        while (consumed < 256u) {
+            const auto *cursor =
+                name + consumed;
+            if (!ensure_readable_window(
+                    cursor,
+                    name_window))
                 return false;
 
-            hash = pmetal_fnv_byte(
-                hash,
-                ch);
+            const auto address =
+                reinterpret_cast<std::uintptr_t>(
+                    cursor);
+            if (name_window.end <= address)
+                return false;
 
-            if (ch == 0u) {
-                terminated = true;
-                break;
+            const auto room =
+                static_cast<std::size_t>(
+                    name_window.end - address);
+            const auto chunk =
+                std::min<std::size_t>(
+                    256u - consumed,
+                    room);
+            if (chunk == 0u)
+                return false;
+
+            for (std::size_t j = 0u;
+                 j < chunk;
+                 ++j) {
+                const auto ch =
+                    cursor[j];
+                hash = pmetal_fnv_byte(
+                    hash,
+                    ch);
+                ++consumed;
+
+                if (ch == 0u) {
+                    terminated = true;
+                    break;
+                }
             }
+
+            if (terminated)
+                break;
         }
 
         if (!terminated)
