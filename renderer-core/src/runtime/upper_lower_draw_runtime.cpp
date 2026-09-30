@@ -3811,10 +3811,34 @@ void __fastcall hook_steady_packer(
                 g_producer)) {
             if (g_reference_only_transport.load(
                     std::memory_order_acquire)) {
-                // Reference-only transport must stay cheap and semantically
-                // narrow. This generic LightBank packer carries only the
-                // exact source/selector tuple. P_Metal donor decoding belongs
-                // to the dedicated EnvSpec source operator at 0x563C30.
+                // V13 source semantics are materialized at this retail
+                // LightBank producer cut while the source is engine-live.
+                // Keep visible U/L and D123 disabled; only the immutable
+                // P_Metal EnvSpec donor is captured.
+                f4 env{};
+                std::uint64_t bank = 0u;
+                std::uint32_t row = 0u;
+                if (read_exact_pmetal_env_source(
+                        source,
+                        selector,
+                        env,
+                        bank,
+                        row)) {
+                    g_producer.have_pmetal_env = true;
+                    g_producer.pmetal_env_a = env;
+                    g_producer.pmetal_env_b = env;
+                    g_producer.pmetal_env_beta = 0.0f;
+                    g_producer.pmetal_bank_a = bank;
+                    g_producer.pmetal_bank_b = bank;
+                    g_producer.pmetal_row_a = row;
+                    g_producer.pmetal_row_b = row;
+                    telemetry::hot_count(
+                        g_pmetal_env_steady);
+                } else {
+                    g_producer.have_pmetal_env = false;
+                    telemetry::hot_count(
+                        g_pmetal_env_miss);
+                }
                 telemetry::hot_count(
                     g_steady_pass);
                 return;
@@ -4062,10 +4086,61 @@ void *__fastcall hook_blend_packer(
                 g_producer)) {
             if (g_reference_only_transport.load(
                     std::memory_order_acquire)) {
-                // Do not decode P_Metal semantics in the generic LightBank
-                // blend packer. The dedicated 0x563C30 EnvSpec producer hook
-                // materializes the immutable donor while source ownership is
-                // live; this path only preserves the exact tuple.
+                f4 a{};
+                f4 b{};
+                std::uint64_t bank_a = 0u;
+                std::uint64_t bank_b = 0u;
+                std::uint32_t row_a = 0u;
+                std::uint32_t row_b = 0u;
+
+                const bool have_a =
+                    read_exact_pmetal_env_source(
+                        source_a,
+                        selector_a,
+                        a,
+                        bank_a,
+                        row_a);
+                bool have_b = false;
+                if (beta <= 0.0f ||
+                    (source_a == source_b &&
+                     selector_a == selector_b)) {
+                    b = a;
+                    bank_b = bank_a;
+                    row_b = row_a;
+                    have_b = have_a;
+                } else {
+                    have_b =
+                        read_exact_pmetal_env_source(
+                            source_b,
+                            selector_b,
+                            b,
+                            bank_b,
+                            row_b);
+                }
+
+                if (have_a && have_b &&
+                    std::isfinite(beta)) {
+                    if (beta >= 1.0f) {
+                        a = b;
+                        bank_a = bank_b;
+                        row_a = row_b;
+                    }
+                    g_producer.have_pmetal_env = true;
+                    g_producer.pmetal_env_a = a;
+                    g_producer.pmetal_env_b = b;
+                    g_producer.pmetal_env_beta =
+                        std::clamp(beta, 0.0f, 1.0f);
+                    g_producer.pmetal_bank_a = bank_a;
+                    g_producer.pmetal_bank_b = bank_b;
+                    g_producer.pmetal_row_a = row_a;
+                    g_producer.pmetal_row_b = row_b;
+                    telemetry::hot_count(
+                        g_pmetal_env_blend);
+                } else {
+                    g_producer.have_pmetal_env = false;
+                    telemetry::hot_count(
+                        g_pmetal_env_miss);
+                }
                 return result;
             }
 
@@ -4316,15 +4391,6 @@ bool install_producer_hooks() noexcept
             g_steady_cache_builder_hook))
         return false;
 
-    // Reference-only mode exists solely to feed verified downstream
-    // P_Metal EnvSpec consumers while visible U/L and HemDir3 stay stock.
-    // Materialize the V13 donor at the dedicated DSR EnvSpec source operator
-    // instead of doing bank/signature work in every generic LightBank packer.
-    if (g_reference_only_transport.load(
-            std::memory_order_acquire) &&
-        !install_optional_pmetal_env_hook())
-        return false;
-
     g_steady_cache_builder_active.store(
         true,
         std::memory_order_release);
@@ -4336,6 +4402,12 @@ bool install_producer_hooks() noexcept
     g_direct_ul_producer_active.store(
         direct_ul_mutation_enabled(),
         std::memory_order_release);
+
+    // The old standalone P_Metal blend hook stays disabled. Exact V13 donor
+    // capture now lives in the already-required steady/blend packer taps and
+    // carries only immutable P_Metal source data; visible U/L and HemDir3
+    // evaluation remain disabled in reference-only mode.
+    g_pmetal_env_hook_armed.store(false);
 
     return true;
 }
