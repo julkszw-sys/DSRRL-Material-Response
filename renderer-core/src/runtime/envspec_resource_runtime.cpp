@@ -509,9 +509,15 @@ void on_init_device(
         ++g_pack_admit_fail;
 
     if (!pack_ready) {
+#if defined(DSRRL_PMETAL_NATIVE_DSR_CUBEMAP_FEED)
+        reshade::log::message(
+            reshade::log::level::info,
+            "DSRRL EnvSpec diagnostic: PackedGI is not required for the native-DSR-cubemap feed; exact PTDE sampler/resource identity gates remain active.");
+#else
         reshade::log::message(
             reshade::log::level::warning,
             "DSRRL EnvSpec: exact PTDE PackedGI sidecar unavailable or invalid; EnvSpec fails open to stock DSR. Run VERIFY_ENVSPEC_SIDECAR.ps1 from the game root.");
+#endif
     } else if (!sampler_ready) {
         reshade::log::message(
             reshade::log::level::warning,
