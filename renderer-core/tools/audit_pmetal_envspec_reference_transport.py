@@ -65,18 +65,18 @@ def main() -> None:
     )
     require(
         ul_cpp,
-        "k_rva_pmetal_env_blend = 0x563C30u;",
-        "dedicated P_Metal EnvSpec source operator cut",
+        "V13 source semantics are materialized at this retail",
+        "steady producer-side P_Metal donor cut",
     )
     require(
         ul_cpp,
-        "read_exact_pmetal_env_source(\n            source_a,",
-        "dedicated P_Metal donor endpoint A",
+        "read_exact_pmetal_env_source(\n                        source_a,",
+        "blend producer-side P_Metal donor A",
     )
     require(
         ul_cpp,
-        "read_exact_pmetal_env_source(\n            source_b,",
-        "dedicated P_Metal donor endpoint B",
+        "read_exact_pmetal_env_source(\n                            source_b,",
+        "blend producer-side P_Metal donor B",
     )
     require(
         ul_cpp,
@@ -84,12 +84,13 @@ def main() -> None:
         "blend helper reference-only bypass",
     )
 
-    # The dedicated P_Metal source hook owns V13 donor materialization; generic
-    # LightBank packers remain tuple transport only.
+    # The obsolete standalone P_Metal blend hook stays disabled, but V13
+    # donor materialization must happen in the already-required retail
+    # steady/blend producer taps before source ownership ends.
     require(
         ul_cpp,
-        "!install_optional_pmetal_env_hook()",
-        "reference-only P_Metal source hook install",
+        "g_pmetal_env_hook_armed.store(false);",
+        "standalone P_Metal blend hook remains disabled",
     )
     require(
         ul_cpp,
