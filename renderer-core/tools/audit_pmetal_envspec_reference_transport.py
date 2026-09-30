@@ -60,6 +60,25 @@ def main() -> None:
                    "material.raw_mtd_sha256 !=", "g_pmetal_selector_epoch.load"):
         require(consumer, needle, "source lifetime/material mismatch fail-open")
     require(ul_cpp, "thread_local pmetal_envspec_source g_pmetal_selected_source", "no process-global latest donor")
+
+    # Thread provenance is diagnostic only. It may falsify the selector-TLS
+    # lifetime assumption, but must never become source authority.
+    for needle in (
+        "g_pmetal_source_last_publish_tid",
+        "g_pmetal_source_last_consumer_tid",
+        "g_pmetal_source_last_consumer_local_valid",
+        "GetCurrentThreadId()",
+    ):
+        require(ul_cpp, needle, "P_Metal selector/consumer thread diagnostic")
+    for forbidden in (
+        "last_publish_tid ==",
+        "last_consumer_tid ==",
+        "g_pmetal_source_last_publish_tid.load() ==",
+        "g_pmetal_source_last_consumer_tid.load() ==",
+    ):
+        if forbidden in consumer:
+            fail(f"P_Metal diagnostic thread provenance became source authority: {forbidden}")
+    require(env_cpp, "publish_tid=%u consumer_tid=%u local_valid=%u", "P_Metal source-cut thread provenance log")
     require(env_cpp, "source_.latest(material, source)", "material-scoped source consumer")
 
     # The active EnvSpec draw runtime must have no dependency on the U/L
@@ -209,7 +228,7 @@ def main() -> None:
     print("DSRRL_PMETAL_ENVSPEC_REFERENCE_TRANSPORT_PASS")
     print("  EnvSpec global LightBank hooks=0; existing exact FLVER selector only")
     print("  source=embedded PTDE donors, selected by exact material+bank+row+A/B")
-    print("  TLS lifetime=selector interval; material/epoch mismatch fails open")
+    print("  TLS lifetime=selector interval under test; publish/consumer TID diagnostic can falsify it")
     print("  PTDE PackedGI + stock U/L continuation preserved; pixel status OPEN")
 
 
