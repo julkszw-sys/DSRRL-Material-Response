@@ -158,6 +158,51 @@ int main()
     CHECK(shared_with_companion.route_index==
           leather_extension->route_tag);
 
+    // Regression lock from the 2026-09-30 owner runtime: M_7Metal[DSB]
+    // reached an authenticated FLVER/material owner but direct PointLight
+    // rejected it as unknown because the resolver only had generic MR + NoSpc
+    // authority. Prove the real owner producer yields the exact raw MTD needed
+    // by the dedicated PointLight authority.
+    const auto m7_semantic =
+        operators::material_response::mtd_semantic_hash(
+            "M_7Metal[DSB].mtd");
+    runtime::actual_material_owner_observation m7{};
+    bool m7_owner_found=false;
+    for(const auto &group: generated::k_dsr_flver_owner_groups){
+        for(std::uint32_t slot=0u;slot<group.material_count;++slot){
+            const auto index=
+                static_cast<std::size_t>(group.first_material)+slot;
+            if(generated::k_dsr_flver_owner_mtd_hashes[index]!=m7_semantic)
+                continue;
+            m7.flver_sha256=group.flver_sha256;
+            m7.material_slot=slot;
+            m7.material_slot_valid=true;
+            m7_owner_found=true;
+            break;
+        }
+        if(m7_owner_found) break;
+    }
+    CHECK(m7_owner_found);
+    CHECK(runtime::enrich_exact_owner_mtd_identity(m7));
+    CHECK(m7.material.valid);
+    CHECK(m7.material.semantic_name_hash==m7_semantic);
+    CHECK(m7.material.raw_mtd_sha256==digest(
+        "884c9dbff44b174af78b3db22302dd4855fbb5283e8197e430cb998419fe8b8c"));
+    const auto m7_id=
+        runtime::make_actual_material_identity(m7);
+    CHECK(m7_id.owner_tuple_exact);
+
+    const auto direct_m7=
+        mr.evaluate_direct_pointlight_material(
+            m7_id,
+            true);
+    CHECK(direct_m7.active);
+    CHECK(direct_m7.reason==
+          operators::material_response::decision_reason::active);
+    CHECK(direct_m7.c101==2.5f);
+    CHECK(direct_m7.ptde_specular_power_verified);
+    CHECK(direct_m7.ptde_specular_power==8.5f);
+
     // Direct PointLight NoSpc authority: exact PTDE/DSR homology supplies
     // raw-MTD identity for the owner producer without promoting the material
     // into the ordinary 35-route Material Response cohort.
