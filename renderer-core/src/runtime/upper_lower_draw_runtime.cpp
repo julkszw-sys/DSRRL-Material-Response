@@ -4185,8 +4185,64 @@ void *__fastcall hook_blend_packer(
                 beta,
                 g_producer)) {
             if (g_reference_only_transport.load(
-                    std::memory_order_acquire))
+                    std::memory_order_acquire)) {
+                f4 a{};
+                f4 b{};
+                std::uint64_t bank_a = 0u;
+                std::uint64_t bank_b = 0u;
+                std::uint32_t row_a = 0u;
+                std::uint32_t row_b = 0u;
+
+                const bool have_a =
+                    read_exact_pmetal_env_source(
+                        source_a,
+                        selector_a,
+                        a,
+                        bank_a,
+                        row_a);
+                bool have_b = false;
+                if (beta <= 0.0f ||
+                    (source_a == source_b &&
+                     selector_a == selector_b)) {
+                    b = a;
+                    bank_b = bank_a;
+                    row_b = row_a;
+                    have_b = have_a;
+                } else {
+                    have_b =
+                        read_exact_pmetal_env_source(
+                            source_b,
+                            selector_b,
+                            b,
+                            bank_b,
+                            row_b);
+                }
+
+                if (have_a && have_b &&
+                    std::isfinite(beta)) {
+                    if (beta >= 1.0f) {
+                        a = b;
+                        bank_a = bank_b;
+                        row_a = row_b;
+                    }
+                    g_producer.have_pmetal_env = true;
+                    g_producer.pmetal_env_a = a;
+                    g_producer.pmetal_env_b = b;
+                    g_producer.pmetal_env_beta =
+                        std::clamp(beta, 0.0f, 1.0f);
+                    g_producer.pmetal_bank_a = bank_a;
+                    g_producer.pmetal_bank_b = bank_b;
+                    g_producer.pmetal_row_a = row_a;
+                    g_producer.pmetal_row_b = row_b;
+                    telemetry::hot_count(
+                        g_pmetal_env_blend);
+                } else {
+                    g_producer.have_pmetal_env = false;
+                    telemetry::hot_count(
+                        g_pmetal_env_miss);
+                }
                 return result;
+            }
 
             if (capture_evaluated_vectors(
                     dst,
