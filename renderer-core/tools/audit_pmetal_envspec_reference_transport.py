@@ -325,19 +325,34 @@ def main() -> None:
         "source frontier telemetry",
     )
 
-    # Bank identity must retain the exact historical V13 FNV equation while
-    # avoiding the integrated whole-region assumption that produced
-    # SIGNATURE_INVALID on live type=4/count=64 banks.
+    # Bank identity must retain the exact historical V13 FNV equation without
+    # turning the globally hooked LightBank producer into a VirtualQuery
+    # syscall hot path. Validate the fixed header/table once, read its immutable
+    # row fields directly, and reuse a validated VM window across name bytes.
     require(
         ul_cpp,
-        "if (!safe_read(entry, row_id) ||\n            !safe_read(entry + 8u, name_offset))",
-        "region-safe V13 bank row identity",
+        "table_bytes - 8u",
+        "bounded V13 fixed-table validation",
     )
     require(
         ul_cpp,
-        "if (!safe_read(name_byte, ch))",
-        "region-safe V13 bank name identity",
+        "readable_window name_window{};",
+        "cached V13 bank-name VM window",
     )
+    require(
+        ul_cpp,
+        "ensure_readable_window(\n                    cursor,\n                    name_window)",
+        "region-safe V13 bank name window",
+    )
+    require(
+        ul_cpp,
+        "std::memcpy(\n            &row_id,\n            entry,",
+        "direct immutable V13 row identity read",
+    )
+    if "safe_read(entry, row_id)" in ul_cpp:
+        fail("P_Metal bank scan regressed to per-row VirtualQuery")
+    if "safe_read(name_byte, ch)" in ul_cpp:
+        fail("P_Metal bank scan regressed to per-byte VirtualQuery")
 
     if "DSRRL_EXPERIMENTAL_PMETAL_PTDE_FIRELINK_DRAWPARAM" in ul_cpp:
         fail("obsolete hardcoded Firelink EnvSpec diagnostic still present")
