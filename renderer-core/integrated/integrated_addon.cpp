@@ -77,6 +77,18 @@ constexpr bool k_drawtime_islands_runtime_enabled = false;
 constexpr bool k_drawtime_islands_runtime_enabled = true;
 #endif
 
+#ifdef DSRRL_DRAW_CALLBACKS_BYPASS
+constexpr bool k_draw_callbacks_runtime_enabled = false;
+#else
+constexpr bool k_draw_callbacks_runtime_enabled = true;
+#endif
+
+#ifdef DSRRL_DRAW_REPLAY_BYPASS
+constexpr bool k_draw_replay_runtime_enabled = false;
+#else
+constexpr bool k_draw_replay_runtime_enabled = true;
+#endif
+
 #if defined(DSRRL_POINTLIGHT_DRAWTIME_BYPASS) || defined(DSRRL_DRAWTIME_ISLANDS_BYPASS)
 constexpr bool k_pointlight_drawtime_runtime_enabled = false;
 #else
@@ -5980,6 +5992,11 @@ bool on_draw(
         receiver_id,
         decision.route_index);
 
+    if (!k_draw_replay_runtime_enabled) {
+        release_prepared_island_batch(prepared);
+        return false;
+    }
+
     const auto dispatch =
         dsrrl::runtime::dispatch_island_draw_batch(
             g_draw_transactions,
@@ -6228,6 +6245,11 @@ bool on_draw_indexed(
         receiver_id,
         decision.route_index);
 
+    if (!k_draw_replay_runtime_enabled) {
+        release_prepared_island_batch(prepared);
+        return false;
+    }
+
     const auto dispatch =
         dsrrl::runtime::dispatch_island_draw_indexed_batch(
             g_draw_transactions,
@@ -6336,7 +6358,8 @@ void register_events()
     reshade::register_event<reshade::addon_event::init_pipeline>(on_init_pipeline);
     reshade::register_event<reshade::addon_event::destroy_pipeline>(on_destroy_pipeline);
     reshade::register_event<reshade::addon_event::bind_pipeline>(on_bind_pipeline);
-    if (k_drawtime_islands_runtime_enabled) {
+    if (k_drawtime_islands_runtime_enabled &&
+        k_draw_callbacks_runtime_enabled) {
         reshade::register_event<reshade::addon_event::draw>(on_draw);
         reshade::register_event<reshade::addon_event::draw_indexed>(on_draw_indexed);
         reshade::register_event<reshade::addon_event::present>(on_present);
@@ -6345,7 +6368,8 @@ void register_events()
 
 void unregister_events()
 {
-    if (k_drawtime_islands_runtime_enabled) {
+    if (k_drawtime_islands_runtime_enabled &&
+        k_draw_callbacks_runtime_enabled) {
         reshade::unregister_event<reshade::addon_event::present>(on_present);
         reshade::unregister_event<reshade::addon_event::draw_indexed>(on_draw_indexed);
         reshade::unregister_event<reshade::addon_event::draw>(on_draw);
@@ -6530,6 +6554,20 @@ bool AddonInit(
     }
 
     register_events();
+
+    if (k_drawtime_islands_runtime_enabled &&
+        !k_draw_callbacks_runtime_enabled) {
+        reshade::log::message(
+            reshade::log::level::info,
+            "[DSRRL CORE+ISLANDS " DSRRL_CORE_ISLANDS_VERSION
+            "] DRAW CALLBACKS BYPASSED: all dynamic FLVER/MTD/resource transports remain installed; draw/draw_indexed/present callbacks are omitted.");
+    } else if (k_drawtime_islands_runtime_enabled &&
+               !k_draw_replay_runtime_enabled) {
+        reshade::log::message(
+            reshade::log::level::info,
+            "[DSRRL CORE+ISLANDS " DSRRL_CORE_ISLANDS_VERSION
+            "] DRAW REPLAY BYPASSED: dynamic transports, draw routing, semantic joins and island preparation remain active; prepared islands are released before snapshot/mutate/replay/restore.");
+    }
 
     if (!k_drawtime_islands_runtime_enabled) {
         reshade::log::message(
