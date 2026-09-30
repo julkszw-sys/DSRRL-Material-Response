@@ -123,7 +123,6 @@ dsrrl::runtime::pmetal_envspec_draw_runtime
     g_pmetal_envspec(
         g_core,
         g_pmetal_source,
-        g_upper_lower,
         g_envspec_resources,
         g_material_resources);
 
@@ -2446,9 +2445,8 @@ bool integrated_operator_enabled_by_policy(
     //   * HemDir3 stays stock DSR; no visible bridge is shipped.
     //   * Upper/Lower stays stock DSR after the world/FaceEye pixel falsifiers.
     //
-    // U/L's LightBank reference transport is intentionally NOT disabled here:
-    // P_Metal EnvSpec consumes that exact selector/source carrier independently
-    // of the visible U/L operator and installs it later in reference-only mode.
+    // P_Metal EnvSpec owns an isolated source carrier (0x563B80/0x563C30)
+    // and must not depend on the visible U/L runtime or its reference transport.
     switch (op) {
     case dsrrl::core::operator_id::subsurface:
     case dsrrl::core::operator_id::upper_lower:
@@ -4027,41 +4025,38 @@ bool on_create_pipeline(
         // consumed or authorized anywhere in this construction.
         if (g_core.features().enabled(
                 dsrrl::core::operator_id::env_spec)) {
-            for (const bool with_upper_lower :
-                 {false, true}) {
-                std::vector<std::uint8_t>
-                    envspec_payload;
+            std::vector<std::uint8_t>
+                envspec_payload;
 
-                const auto envspec =
-                    dsrrl::operators::env_spec::
-                        materialize_pmetal_rgba_receiver(
-                            g_core.features(),
-                            source,
-                            pixel_shader->code_size,
-                            with_upper_lower,
-                            envspec_payload);
+            const auto envspec =
+                dsrrl::operators::env_spec::
+                    materialize_pmetal_rgba_receiver(
+                        g_core.features(),
+                        source,
+                        pixel_shader->code_size,
+                        false,
+                        envspec_payload);
 
-                using envspec_result =
-                    dsrrl::operators::env_spec::
-                        pmetal_rgba_materialize_result;
+            using envspec_result =
+                dsrrl::operators::env_spec::
+                    pmetal_rgba_materialize_result;
 
-                if (envspec.result ==
-                    envspec_result::applied) {
-                    if (g_pmetal_envspec.
-                            register_replacement(
-                                envspec,
-                                envspec_payload.data(),
-                                envspec_payload.size()))
-                        ++g_envspec_payload_materialize_ok;
-                    else
-                        ++g_envspec_payload_materialize_fail;
-                } else if (
-                    envspec.result !=
-                        envspec_result::pass_not_candidate &&
-                    envspec.result !=
-                        envspec_result::pass_unknown_exact_sha) {
+            if (envspec.result ==
+                envspec_result::applied) {
+                if (g_pmetal_envspec.
+                        register_replacement(
+                            envspec,
+                            envspec_payload.data(),
+                            envspec_payload.size()))
+                    ++g_envspec_payload_materialize_ok;
+                else
                     ++g_envspec_payload_materialize_fail;
-                }
+            } else if (
+                envspec.result !=
+                    envspec_result::pass_not_candidate &&
+                envspec.result !=
+                    envspec_result::pass_unknown_exact_sha) {
+                ++g_envspec_payload_materialize_fail;
             }
 
             std::vector<std::uint8_t>
@@ -5395,38 +5390,14 @@ bool prepare_island_batch(
                 direct_ul_draw_applied,
                 upper_lower_identity);
 
-    const bool envspec_ul_verified =
-        g_core.features().enabled(
-            dsrrl::core::operator_id::upper_lower) &&
-        upper_lower_bound &&
-        upper_lower_identity.stratum ==
-            dsrrl::operators::lightbank::
-                upper_lower_hemenv_stratum::spc &&
-        upper_lower_identity.stable_receiver_id ==
-            decision.receiver_id;
-
     // P_Metal EnvSpec owns the complete PS+b12+t12/t14+s12/s14 semantic
-    // island. If any exact source/material/probe/resource precondition fails,
-    // fall through to ordinary MR/U-L/resource routing for this draw.
+    // island. Its source carrier and shader/CB/resource transaction are
+    // independent of visible U/L. Failure falls through to ordinary MR/U-L
+    // routing without borrowing any U/L state for EnvSpec.
     const auto envspec_family =
         hemenvlerp_bound
             ? dsrrl::runtime::pmetal_envspec_receiver_family::hemenvlerp
             : dsrrl::runtime::pmetal_envspec_receiver_family::stable_hemenv;
-
-    const auto pmetal_token_at_draw =
-        g_upper_lower.pmetal_draw_token_state();
-    if (pmetal_token_at_draw.local_token_valid) {
-        hot_count(g_lightbank_selected_draws);
-        if (decision.active &&
-            decision.route_index == 345u)
-            hot_count(g_lightbank_selected_pmetal_draws);
-        else
-            hot_count(g_lightbank_selected_other_draws);
-    } else if (
-        decision.active &&
-        decision.route_index == 345u) {
-        hot_count(g_pmetal_draws_without_selected_token);
-    }
 
     if (decision.active &&
         g_pmetal_envspec.prepare(
@@ -5434,9 +5405,6 @@ bool prepare_island_batch(
             material,
             decision,
             envspec_family,
-            !direct_ul_producer &&
-                envspec_ul_verified &&
-                !hemenvlerp_bound,
             prepared.envspec)) {
         prepared.envspec_in_batch = true;
 
