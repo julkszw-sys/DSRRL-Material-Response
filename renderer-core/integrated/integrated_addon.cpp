@@ -6623,12 +6623,10 @@ bool AddonInit(
 
     // Runtime-liveness guard: do not arm the Upper/Lower LightBank hook set
     // solely as a carrier for P_Metal EnvSpec. Two consecutive owner runtime
-    // failures showed that both attempted source-carrier variants are unsafe:
-    // the dedicated 0x563C30 hook violated the unknown native ABI, while the
-    // generic steady/blend packer fallback performs P_Metal bank work on a
-    // renderer-hot producer path. Until a narrow source cut is independently
-    // verified, EnvSpec must fail open rather than keeping shared LightBank
-    // hooks alive while visible U/L itself is disabled.
+    // failures occurred while EnvSpec source capture was coupled to the broad
+    // shared U/L reference runtime, so they do not isolate the recovered V13
+    // source carrier by itself. The EnvSpec carrier is now independent; shared
+    // visible U/L state remains disabled unless U/L is explicitly enabled.
     const bool lightbank_reference_transport_required =
         upper_lower_enabled;
     const bool lightbank_reference_hooks =
