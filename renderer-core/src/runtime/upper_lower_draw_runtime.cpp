@@ -4891,6 +4891,114 @@ void clear_snapshots() noexcept
 
 } // namespace
 
+bool pmetal_env_source_runtime::install() noexcept
+{
+    if (g_pmetal_source_only_enabled.load(
+            std::memory_order_acquire))
+        return true;
+
+    // Exclusive ownership: the isolated EnvSpec carrier and the full U/L
+    // runtime share the same retail LightBank source sites and may never be
+    // armed together.
+    if (g_enabled.load(
+            std::memory_order_acquire))
+        return false;
+
+    g_base =
+        reinterpret_cast<std::uintptr_t>(
+            GetModuleHandleW(nullptr));
+    if (g_base == 0u)
+        return false;
+
+    g_quarantined.store(
+        false,
+        std::memory_order_release);
+    g_restore_failed.store(
+        false,
+        std::memory_order_release);
+
+    if (!install_pmetal_source_only_carrier()) {
+        (void)restore_pmetal_source_only_carrier();
+        g_base = 0u;
+        return false;
+    }
+
+    return true;
+}
+
+void pmetal_env_source_runtime::uninstall() noexcept
+{
+    if (!g_pmetal_source_only_enabled.load(
+            std::memory_order_acquire))
+        return;
+
+    if (!restore_pmetal_source_only_carrier()) {
+        g_restore_failed.store(
+            true,
+            std::memory_order_release);
+        g_quarantined.store(
+            true,
+            std::memory_order_release);
+        return;
+    }
+
+    g_base = 0u;
+}
+
+bool pmetal_env_source_runtime::latest(
+    pmetal_envspec_source &out) const noexcept
+{
+    return consume_pmetal_source_only(out);
+}
+
+pmetal_env_source_runtime_telemetry
+pmetal_env_source_runtime::telemetry() const noexcept
+{
+    pmetal_env_source_runtime_telemetry out{};
+    out.steady_seen =
+        g_steady_seen.load();
+    out.blend_seen =
+        g_pmetal_env_blend.load();
+    out.exact_publish =
+        g_pmetal_source_publish.load();
+    out.bank_unknown =
+        g_pmetal_env_miss.load();
+    out.decode_fail =
+        g_pmetal_env_miss.load();
+    out.publish_busy_drop =
+        g_pmetal_source_busy_drop.load();
+    out.consumer_ok =
+        g_pmetal_source_consumer_ok.load();
+    out.consumer_fail =
+        g_pmetal_source_consumer_fail.load();
+    out.steady_carrier_active =
+        g_hooks[3].patched;
+    out.blend_carrier_active =
+        g_pmetal_env_hook.patched;
+    out.quarantined =
+        g_quarantined.load();
+    out.restore_failed =
+        g_restore_failed.load();
+    return out;
+}
+
+void pmetal_env_source_runtime::reset() noexcept
+{
+    g_pmetal_source_publish.store(0u);
+    g_pmetal_source_busy_drop.store(0u);
+    g_pmetal_source_consumer_ok.store(0u);
+    g_pmetal_source_consumer_fail.store(0u);
+    g_pmetal_source_serial.store(0u);
+
+    if (!g_pmetal_source_payload_guard.test_and_set(
+            std::memory_order_acquire)) {
+        g_pmetal_source_payload = {};
+        g_pmetal_source_payload_valid = false;
+        g_pmetal_source_payload_guard.clear(
+            std::memory_order_release);
+    }
+}
+
 upper_lower_draw_runtime::upper_lower_draw_runtime(
     core::renderer_core &core) noexcept
     : core_(core)
