@@ -123,6 +123,26 @@ def main() -> None:
         "selector B tuple publication",
     )
     require(
+        ul_cpp,
+        "producer.pmetal_bank_base_a = bank_base_a;",
+        "engine-live stable bank A capture",
+    )
+    require(
+        ul_cpp,
+        "producer.pmetal_bank_base_b = bank_base_b;",
+        "engine-live stable bank B capture",
+    )
+    require(
+        ul_cpp,
+        "token.pmetal_bank_base_a =",
+        "stable bank A token publication",
+    )
+    require(
+        ul_cpp,
+        "token.pmetal_bank_base_b =",
+        "stable bank B token publication",
+    )
+    require(
         flver_cpp,
         "upper_lower_pmetal_material_event_bridge(",
         "FLVER selector material authorization bridge",
@@ -173,14 +193,16 @@ def main() -> None:
     require(selected, "!token.source_ready", "selected source readiness gate")
     require(
         selected,
-        "read_exact_pmetal_env_source(\n                token.source_a,",
-        "lazy exact source A decode",
+        "read_exact_pmetal_env_base(\n                token.pmetal_bank_base_a,",
+        "lazy exact bank A decode",
     )
     require(
         selected,
-        "read_exact_pmetal_env_source(\n                    token.source_b,",
-        "lazy exact source B decode",
+        "read_exact_pmetal_env_base(\n                    token.pmetal_bank_base_b,",
+        "lazy exact bank B decode",
     )
+    if "token.source_a" in selected or "token.source_b" in selected:
+        fail("selected P_Metal source consumer dereferences producer source objects")
     require(
         selected,
         "Consumer-local lazy decode",
@@ -190,14 +212,9 @@ def main() -> None:
     # Every delayed engine pointer dereference must fail open through safe_read.
     resolver = block_between(
         ul_cpp,
-        "bool read_exact_pmetal_env_source(",
-        "\nbool write_bytes(",
-        "exact P_Metal source resolver",
-    )
-    require(
-        resolver,
-        "if (!safe_read(\n            static_cast<const std::uint8_t *>(\n                source) + 0x18u,\n            base)",
-        "safe source->bank pointer read",
+        "bool read_exact_pmetal_env_base(",
+        "\nbool read_exact_pmetal_env_source(",
+        "exact P_Metal bank resolver",
     )
     require(
         resolver,
@@ -208,6 +225,18 @@ def main() -> None:
         resolver,
         "if (!safe_read(\n            entry,\n            row_id))",
         "safe selected row read",
+    )
+
+    source_wrapper = block_between(
+        ul_cpp,
+        "bool read_exact_pmetal_env_source(",
+        "\nbool write_bytes(",
+        "legacy safe source wrapper",
+    )
+    require(
+        source_wrapper,
+        "if (!safe_read(\n            static_cast<const std::uint8_t *>(\n                source) + 0x18u,\n            base)",
+        "safe legacy source->bank pointer read",
     )
     require(
         ul_cpp,
@@ -236,7 +265,8 @@ def main() -> None:
     print("  producer hot path=source tuple only; no P_Metal FNV/donor decode")
     print("  selected state=exact selector + exact actual P_Metal material")
     print("  source decode=consumer-local after exact P_Metal+EnvSpec gates")
-    print("  delayed engine reads=safe_read fail-open")
+    print("  draw carrier=stable bank_base+selector; producer source object is not dereferenced")
+    print("  delayed bank reads=safe_read fail-open")
     print("  dedicated 0x563C30 source hook=disabled")
 
 
