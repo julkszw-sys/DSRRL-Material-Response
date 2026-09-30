@@ -253,6 +253,13 @@ def main():
     require(integrated,
         "g_draw_transactions.on_destroy_device(device);",
         "integrated Context1 cache teardown")
+    if draw_tx.count("cmd_list->get_native()") != 1:
+        fail("draw replay must resolve native D3D11 context once in begin and reuse it through draw/restore")
+    require(draw_tx,
+        "state.context = ctx;",
+        "draw replay retained native context")
+    if draw_tx.count("auto *ctx = state.context;") < 3:
+        fail("draw replay/restore do not consistently reuse retained native context")
 
     print("Active-islands hot-path audit: PASS")
     print("  feature_reads=atomic")
