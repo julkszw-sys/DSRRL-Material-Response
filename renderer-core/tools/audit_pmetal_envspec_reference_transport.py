@@ -51,8 +51,8 @@ def main() -> None:
         "EnvSpec U/L composition feature isolation",
     )
 
-    # Reference-only mode must carry exact source/selector tuples but avoid
-    # heavy U/L/D123 evaluation on the producer hot path.
+    # Reference-only mode must retain the exact V13 P_Metal donor lifetime
+    # cut while avoiding visible U/L/D123 evaluation on the producer path.
     require(
         ul_h,
         "bool install(bool reference_only = false) noexcept;",
@@ -65,13 +65,18 @@ def main() -> None:
     )
     require(
         ul_cpp,
-        "P_Metal EnvSpec requires only the exact source/selector",
-        "steady reference-only branch",
+        "V13 source semantics are materialized at this retail",
+        "steady producer-side P_Metal donor cut",
     )
     require(
         ul_cpp,
-        "if (g_reference_only_transport.load(\n                    std::memory_order_acquire))\n                return result;",
-        "blend packer reference-only branch",
+        "read_exact_pmetal_env_source(\n                        source_a,",
+        "blend producer-side P_Metal donor A",
+    )
+    require(
+        ul_cpp,
+        "read_exact_pmetal_env_source(\n                            source_b,",
+        "blend producer-side P_Metal donor B",
     )
     require(
         ul_cpp,
@@ -79,12 +84,18 @@ def main() -> None:
         "blend helper reference-only bypass",
     )
 
-    # The old producer-local P_Metal semantic decode stays disabled. EnvSpec
-    # now resolves the source lazily only after the exact draw consumer gate.
+    # The obsolete standalone P_Metal blend hook stays disabled, but V13
+    # donor materialization must happen in the already-required retail
+    # steady/blend producer taps before source ownership ends.
     require(
         ul_cpp,
         "g_pmetal_env_hook_armed.store(false);",
-        "no shared producer-local P_Metal decode",
+        "standalone P_Metal blend hook remains disabled",
+    )
+    require(
+        ul_cpp,
+        "token.pmetal_env_ready =\n        producer.have_pmetal_env;",
+        "immutable producer donor published with reference token",
     )
     require(
         env_cpp,
@@ -106,8 +117,8 @@ def main() -> None:
     )
     require(
         ul_cpp,
-        "invalidate_selected_reference_token_for_owner(",
-        "material-gated invalidation of stale P_Metal state",
+        "invalidate_selected_reference_token_for_producer(",
+        "material-gated O(1) invalidation of stale P_Metal state",
     )
     require(
         ul_cpp,
@@ -137,7 +148,7 @@ def main() -> None:
         fail("cannot isolate P_Metal material event block")
     pmetal_block = ul_cpp[pmetal_begin:next_method]
     invalidate_at = pmetal_block.find(
-        "invalidate_selected_reference_token_for_owner("
+        "invalidate_selected_reference_token_for_producer("
     )
     materialize_at = pmetal_block.find(
         "materialize_selected_pmetal_env_source("
@@ -162,6 +173,31 @@ def main() -> None:
             "P_Metal selected-state invalidation/materialization/publication "
             "ordering is unsafe"
         )
+    invalidator_begin = ul_cpp.index(
+        "void invalidate_selected_reference_token_for_producer("
+    )
+    invalidator_end = ul_cpp.index(
+        "\nbool exact_pmetal_material_selection(",
+        invalidator_begin,
+    )
+    invalidator_block = ul_cpp[invalidator_begin:invalidator_end]
+    if "for (std::size_t set = 0u;" in invalidator_block:
+        fail("P_Metal selected-state invalidation regressed to full-bank scan")
+    require(
+        invalidator_block,
+        "reference_token_set(",
+        "producer-keyed selected-token invalidation",
+    )
+    require(
+        pmetal_block,
+        "GetCurrentThreadId()",
+        "exact selector-callback producer key",
+    )
+    require(
+        pmetal_block,
+        "g_draw_reference_token.producer_tid !=",
+        "staged token producer continuity",
+    )
     require(
         ul_cpp,
         "g_draw_reference_token.fingerprint.owner !=",
@@ -200,6 +236,32 @@ def main() -> None:
         "materialize_selected_pmetal_env_source(",
         "P_Metal selector-material source materializer",
     )
+
+    materialize_begin = ul_cpp.index(
+        "bool materialize_selected_pmetal_env_source("
+    )
+    materialize_end = ul_cpp.index(
+        "\nbool write_bytes(",
+        materialize_begin,
+    )
+    if materialize_begin < 0 or materialize_end <= materialize_begin:
+        fail("cannot isolate P_Metal immutable source validator")
+    materialize_block = ul_cpp[materialize_begin:materialize_end]
+    require(
+        materialize_block,
+        "token.pmetal_env_ready",
+        "producer-materialized P_Metal payload gate",
+    )
+    for forbidden in (
+        "read_exact_pmetal_env_source(",
+        "token.source_a",
+        "token.source_b",
+    ):
+        if forbidden in materialize_block:
+            fail(
+                "P_Metal material gate still depends on delayed producer "
+                f"source lifetime: {forbidden}"
+            )
 
     selected_source_begin = ul_cpp.index(
         "bool upper_lower_draw_runtime::selected_pmetal_env_source("
@@ -276,11 +338,11 @@ def main() -> None:
     print("DSRRL_PMETAL_ENVSPEC_REFERENCE_TRANSPORT_PASS")
     print("  U/L visible operator=OFF remains stock when not explicitly enabled")
     print("  LightBank reference carrier=ON for P_Metal EnvSpec")
-    print("  producer payload=owner+sourceA/B+selectorA/B+beta only")
+    print("  producer payload=owner+selector tuple + immutable V13 P_Metal A/B donor")
     print("  selected state=exact selector + exact actual P_Metal material")
-    print("  persistent P_Metal invalidation=material-gated; generic selectors preserve state")
+    print("  persistent P_Metal invalidation=material-gated O(1) producer set; generic selectors preserve state")
     print("  selector row address=retail low byte; full selector retained for identity")
-    print("  P_Metal source decode=exact V13 bank signature + PTDE donor after exact material gate")
+    print("  P_Metal source decode=exact V13 bank signature + PTDE donor at live producer cut")
     print("  draw source=immutable decoded A/B+beta+bank/row; no late source-pointer dereference")
     print("  HemEnvLerp U/L-off=stock b0 operands preserved; no b13 requirement")
 

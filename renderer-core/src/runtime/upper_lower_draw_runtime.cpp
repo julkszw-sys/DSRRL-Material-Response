@@ -1519,6 +1519,33 @@ void publish_reference_token(
     token.selector_b = producer.selector_b;
     token.beta = assignment_beta;
     token.source_ready = true;
+    token.pmetal_env_ready =
+        producer.have_pmetal_env;
+    if (token.pmetal_env_ready) {
+        token.pmetal_env.a = {
+            producer.pmetal_env_a.x,
+            producer.pmetal_env_a.y,
+            producer.pmetal_env_a.z
+        };
+        token.pmetal_env.b = {
+            producer.pmetal_env_b.x,
+            producer.pmetal_env_b.y,
+            producer.pmetal_env_b.z
+        };
+        token.pmetal_env.beta =
+            std::clamp(
+                producer.pmetal_env_beta,
+                0.0f,
+                1.0f);
+        token.pmetal_env.bank_signature_a =
+            producer.pmetal_bank_a;
+        token.pmetal_env.bank_signature_b =
+            producer.pmetal_bank_b;
+        token.pmetal_env.row_id_a =
+            producer.pmetal_row_a;
+        token.pmetal_env.row_id_b =
+            producer.pmetal_row_b;
+    }
     token.vectors_ready =
         producer.evaluated_vectors_ready;
     token.upper_lower_ready =
@@ -1586,52 +1613,42 @@ void publish_reference_token(
         token;
 }
 
-void invalidate_selected_reference_token_for_owner(
-    std::uintptr_t owner) noexcept
+void invalidate_selected_reference_token_for_producer(
+    std::uint32_t producer_tid) noexcept
 {
-    if (owner == 0u)
+    if (producer_tid == 0u)
         return;
 
-    // P_Metal material identity is not known until the second phase of the
-    // exact FLVER selector callback. Invalidate only after that material gate
-    // has proven P_Metal. Scanning this bounded 128x4 selected bank is rare
-    // (P_Metal-only) and prevents unrelated materials sharing the same
-    // LightBank producer thread from erasing the current P_Metal state.
-    for (std::size_t set = 0u;
-         set < k_reference_token_sets;
-         ++set) {
-        bool changed = false;
-        {
-            reference_token_set_guard guard(set);
-            const auto base =
-                set * k_reference_token_ways;
+    // This helper is called only after exact P_Metal material identity has
+    // been proven in the second phase of the retail selector callback. Keep
+    // invalidation O(1): the selected-token bank is keyed by producer TID, so
+    // scanning every 128x4 set here is unnecessary hot-path work.
+    const auto set =
+        reference_token_set(
+            static_cast<std::uintptr_t>(
+                producer_tid));
+    reference_token_set_guard guard(set);
+    const auto base =
+        set * k_reference_token_ways;
 
-            for (std::size_t way = 0u;
-                 way < k_reference_token_ways;
-                 ++way) {
-                auto &entry =
-                    g_selected_reference_tokens[
-                        base + way];
-                if (!entry.valid ||
-                    entry.fingerprint.owner != owner)
-                    continue;
-
-                entry = {};
-                changed = true;
-            }
-
-            if (changed) {
-                // Draw-side TLS copies are keyed by the producer-TID set
-                // generation. Advance while the set lock is still held so
-                // no consumer can observe a cleared bank with the old cache
-                // generation.
-                g_selected_reference_generation[set].
-                    fetch_add(
-                        1u,
-                        std::memory_order_release);
-            }
-        }
+    for (std::size_t way = 0u;
+         way < k_reference_token_ways;
+         ++way) {
+        auto &entry =
+            g_selected_reference_tokens[base + way];
+        if (entry.valid &&
+            entry.producer_tid ==
+                producer_tid)
+            entry = {};
     }
+
+    // Always invalidate the draw-side TLS generation for this producer set.
+    // A stale token may already have been evicted from the bounded bank while
+    // a consumer thread still holds a cached copy.
+    g_selected_reference_generation[set].
+        fetch_add(
+            1u,
+            std::memory_order_release);
 }
 
 bool exact_pmetal_material_selection(
@@ -2428,117 +2445,27 @@ bool read_exact_pmetal_env_source(
 bool materialize_selected_pmetal_env_source(
     lightbank_reference_token &token) noexcept
 {
-    token.pmetal_env = {};
-    token.pmetal_env_ready = false;
-
+    // Source A/B ownership ends at the retail LightBank producer. The token
+    // must already contain immutable V13 donor state by the time the exact
+    // P_Metal material gate runs.
     if (!token.valid ||
         !token.source_ready ||
-        token.source_a == nullptr ||
-        token.source_b == nullptr ||
-        token.selector_a < 0 ||
-        token.selector_b < 0 ||
-        !std::isfinite(token.beta))
+        !token.pmetal_env_ready ||
+        !std::isfinite(token.pmetal_env.a[0]) ||
+        !std::isfinite(token.pmetal_env.a[1]) ||
+        !std::isfinite(token.pmetal_env.a[2]) ||
+        !std::isfinite(token.pmetal_env.b[0]) ||
+        !std::isfinite(token.pmetal_env.b[1]) ||
+        !std::isfinite(token.pmetal_env.b[2]) ||
+        !std::isfinite(token.pmetal_env.beta))
         return false;
 
-    // At the producer hook these pointers were engine-attested. This decode is
-    // deliberately delayed until the exact P_Metal material gate, so validate
-    // the minimal source object range again before dereferencing source+0x18.
-    // This runs only for exact P_Metal selector events, not the geometry hot
-    // path.
-    if (!readable_range(
-            token.source_a,
-            0x20u) ||
-        (token.beta > 0.0f &&
-         !readable_range(
-             token.source_b,
-             0x20u)))
-        return false;
-
-    f4 a{};
-    f4 b{};
-    std::uint64_t bank_a = 0u;
-    std::uint64_t bank_b = 0u;
-    std::uint32_t row_a = 0u;
-    std::uint32_t row_b = 0u;
-
-    pmetal_source_probe probe_a{};
-    if (!read_exact_pmetal_env_source(
-            token.source_a,
-            token.selector_a,
-            a,
-            bank_a,
-            row_a,
-            &probe_a)) {
-        publish_pmetal_source_probe(
-            false,
-            probe_a,
-            token.beta);
-        return false;
-    }
-    publish_pmetal_source_probe(
-        false,
-        probe_a,
-        token.beta);
-
-    if (token.beta <= 0.0f) {
-        b = a;
-        bank_b = bank_a;
-        row_b = row_a;
-        auto probe_b = probe_a;
-        probe_b.selector = token.selector_b;
-        publish_pmetal_source_probe(
-            true,
-            probe_b,
-            token.beta);
-    } else {
-        pmetal_source_probe probe_b{};
-        if (!read_exact_pmetal_env_source(
-                token.source_b,
-                token.selector_b,
-                b,
-                bank_b,
-                row_b,
-                &probe_b)) {
-            publish_pmetal_source_probe(
-                true,
-                probe_b,
-                token.beta);
-            return false;
-        }
-        publish_pmetal_source_probe(
-            true,
-            probe_b,
-            token.beta);
-    }
-
-    if (token.beta >= 1.0f) {
-        a = b;
-        bank_a = bank_b;
-        row_a = row_b;
-    }
-
-    token.pmetal_env.a = {a.x,a.y,a.z};
-    token.pmetal_env.b = {b.x,b.y,b.z};
     token.pmetal_env.beta =
         std::clamp(
-            token.beta,
+            token.pmetal_env.beta,
             0.0f,
             1.0f);
-    token.pmetal_env.bank_signature_a = bank_a;
-    token.pmetal_env.bank_signature_b = bank_b;
-    token.pmetal_env.row_id_a = row_a;
-    token.pmetal_env.row_id_b = row_b;
-
-    token.pmetal_env_ready =
-        std::isfinite(token.pmetal_env.a[0]) &&
-        std::isfinite(token.pmetal_env.a[1]) &&
-        std::isfinite(token.pmetal_env.a[2]) &&
-        std::isfinite(token.pmetal_env.b[0]) &&
-        std::isfinite(token.pmetal_env.b[1]) &&
-        std::isfinite(token.pmetal_env.b[2]) &&
-        std::isfinite(token.pmetal_env.beta);
-
-    return token.pmetal_env_ready;
+    return true;
 }
 
 bool write_bytes(
@@ -3884,9 +3811,34 @@ void __fastcall hook_steady_packer(
                 g_producer)) {
             if (g_reference_only_transport.load(
                     std::memory_order_acquire)) {
-                // P_Metal EnvSpec requires only the exact source/selector
-                // tuple. Do not capture evaluated vectors or decode U/L/D123
-                // while the visible U/L operator is disabled.
+                // V13 source semantics are materialized at this retail
+                // LightBank producer cut while the source is engine-live.
+                // Keep visible U/L and D123 disabled; only the immutable
+                // P_Metal EnvSpec donor is captured.
+                f4 env{};
+                std::uint64_t bank = 0u;
+                std::uint32_t row = 0u;
+                if (read_exact_pmetal_env_source(
+                        source,
+                        selector,
+                        env,
+                        bank,
+                        row)) {
+                    g_producer.have_pmetal_env = true;
+                    g_producer.pmetal_env_a = env;
+                    g_producer.pmetal_env_b = env;
+                    g_producer.pmetal_env_beta = 0.0f;
+                    g_producer.pmetal_bank_a = bank;
+                    g_producer.pmetal_bank_b = bank;
+                    g_producer.pmetal_row_a = row;
+                    g_producer.pmetal_row_b = row;
+                    telemetry::hot_count(
+                        g_pmetal_env_steady);
+                } else {
+                    g_producer.have_pmetal_env = false;
+                    telemetry::hot_count(
+                        g_pmetal_env_miss);
+                }
                 telemetry::hot_count(
                     g_steady_pass);
                 return;
@@ -4133,8 +4085,64 @@ void *__fastcall hook_blend_packer(
                 beta,
                 g_producer)) {
             if (g_reference_only_transport.load(
-                    std::memory_order_acquire))
+                    std::memory_order_acquire)) {
+                f4 a{};
+                f4 b{};
+                std::uint64_t bank_a = 0u;
+                std::uint64_t bank_b = 0u;
+                std::uint32_t row_a = 0u;
+                std::uint32_t row_b = 0u;
+
+                const bool have_a =
+                    read_exact_pmetal_env_source(
+                        source_a,
+                        selector_a,
+                        a,
+                        bank_a,
+                        row_a);
+                bool have_b = false;
+                if (beta <= 0.0f ||
+                    (source_a == source_b &&
+                     selector_a == selector_b)) {
+                    b = a;
+                    bank_b = bank_a;
+                    row_b = row_a;
+                    have_b = have_a;
+                } else {
+                    have_b =
+                        read_exact_pmetal_env_source(
+                            source_b,
+                            selector_b,
+                            b,
+                            bank_b,
+                            row_b);
+                }
+
+                if (have_a && have_b &&
+                    std::isfinite(beta)) {
+                    if (beta >= 1.0f) {
+                        a = b;
+                        bank_a = bank_b;
+                        row_a = row_b;
+                    }
+                    g_producer.have_pmetal_env = true;
+                    g_producer.pmetal_env_a = a;
+                    g_producer.pmetal_env_b = b;
+                    g_producer.pmetal_env_beta =
+                        std::clamp(beta, 0.0f, 1.0f);
+                    g_producer.pmetal_bank_a = bank_a;
+                    g_producer.pmetal_bank_b = bank_b;
+                    g_producer.pmetal_row_a = row_a;
+                    g_producer.pmetal_row_b = row_b;
+                    telemetry::hot_count(
+                        g_pmetal_env_blend);
+                } else {
+                    g_producer.have_pmetal_env = false;
+                    telemetry::hot_count(
+                        g_pmetal_env_miss);
+                }
                 return result;
+            }
 
             if (capture_evaluated_vectors(
                     dst,
@@ -4395,10 +4403,10 @@ bool install_producer_hooks() noexcept
         direct_ul_mutation_enabled(),
         std::memory_order_release);
 
-    // P_Metal/HemDir3 capture must not piggyback on steady U/L evaluation.
-    // Owner runtime isolated that shared semantic-capture stack as the
-    // geometry-scaled bottleneck. Those operators fail open to stock DSR
-    // until they get their own producer-local carriers.
+    // The old standalone P_Metal blend hook stays disabled. Exact V13 donor
+    // capture now lives in the already-required steady/blend packer taps and
+    // carries only immutable P_Metal source data; visible U/L and HemDir3
+    // evaluation remain disabled in reference-only mode.
     g_pmetal_env_hook_armed.store(false);
 
     return true;
@@ -4935,15 +4943,25 @@ void upper_lower_draw_runtime::pmetal_material_event(
     const auto owner_key =
         reinterpret_cast<std::uintptr_t>(
             owner);
-    invalidate_selected_reference_token_for_owner(
-        owner_key);
+    const auto producer_tid =
+        static_cast<std::uint32_t>(
+            GetCurrentThreadId());
+
+    // selector_event() and pmetal_material_event() are phases of the same
+    // retail callback, so producer TID is the exact selected-token bank key.
+    // Invalidate only after the P_Metal material gate, but do it in O(1)
+    // rather than scanning every selected-token set.
+    invalidate_selected_reference_token_for_producer(
+        producer_tid);
 
     // If this exact P_Metal selector has no matching staged source token, the
-    // old same-owner state has already been invalidated above and we fail open
-    // instead of resurrecting a donor from a prior P_Metal draw.
+    // current producer-thread state has already been invalidated above and we
+    // fail open instead of resurrecting a donor from a prior P_Metal draw.
     if (!g_draw_reference_token.valid ||
         !g_draw_reference_token.source_ready ||
-        g_draw_reference_token.producer_tid == 0u ||
+        producer_tid == 0u ||
+        g_draw_reference_token.producer_tid !=
+            producer_tid ||
         g_draw_reference_token.producer_serial == 0u ||
         g_draw_reference_token.fingerprint.owner !=
             owner_key)
@@ -4952,10 +4970,10 @@ void upper_lower_draw_runtime::pmetal_material_event(
     auto selected_token =
         g_draw_reference_token;
 
-    // V13 decoded the donor while the engine source tuple was live. Preserve
-    // that data-lifetime property without restoring geometry-scaled producer
-    // work: perform the exact donor decode only after this P_Metal material
-    // gate, then publish immutable A/B+beta+bank/row state for draw replay.
+    // V13 decoded the donor while the engine source tuple was live. The
+    // reference token must already carry immutable A/B+beta+bank/row state.
+    // This exact material gate authorizes publication but never re-dereferences
+    // delayed engine source pointers.
     if (!materialize_selected_pmetal_env_source(
             selected_token))
         return;

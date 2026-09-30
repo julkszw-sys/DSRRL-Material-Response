@@ -62,7 +62,7 @@ public:
         const std::uint8_t *replacement,
         std::size_t replacement_size) noexcept;
 
-    void on_init_pipeline(
+    bool on_init_pipeline(
         reshade::api::device *device,
         std::uint32_t subobject_count,
         const reshade::api::pipeline_subobject *subobjects,

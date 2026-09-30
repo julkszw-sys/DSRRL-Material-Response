@@ -4238,10 +4238,12 @@ void on_init_pipeline(
 {
     g_a1_bridge.on_init_pipeline(
         device, layout, subobject_count, subobjects, pipeline);
-    g_fixed_pointlight_pipeline.on_init_pipeline(
-        device, subobject_count, subobjects, pipeline);
-    g_clustered_pnts_pipeline.on_init_pipeline(
-        device, subobject_count, subobjects, pipeline);
+    const bool fixed_pointlight_init_exact =
+        g_fixed_pointlight_pipeline.on_init_pipeline(
+            device, subobject_count, subobjects, pipeline);
+    const bool clustered_pointlight_init_exact =
+        g_clustered_pnts_pipeline.on_init_pipeline(
+            device, subobject_count, subobjects, pipeline);
     motion_blur_camera_fallback_disable::
         on_init_pipeline(
             subobject_count,
@@ -4259,13 +4261,14 @@ void on_init_pipeline(
             pipeline.handle))
         draw_route_mask |= k_route_a1;
 
-    if (g_fixed_pointlight_pipeline.pipeline_attested(
-            pipeline.handle))
+    // Carry the exact PointLight result directly out of the init-time
+    // registry transaction. This avoids re-looking up the same pipeline and
+    // makes the integrated route map authoritative before any draw bind.
+    if (fixed_pointlight_init_exact)
         draw_route_mask |=
             k_route_fixed_pointlight;
 
-    if (g_clustered_pnts_pipeline.pipeline_attested(
-            pipeline.handle))
+    if (clustered_pointlight_init_exact)
         draw_route_mask |=
             k_route_clustered_pointlight;
 
@@ -4360,42 +4363,6 @@ void on_bind_pipeline(
             pixel_stage_bound,
             pipeline.handle);
 
-    // PointLight pipeline registries are the exact receiver authority at
-    // bind-time. The integrated route map is an optimization only: the bfb458
-    // runtime proved both PointLight registries could attest init pipelines
-    // while the route cache suppressed every bind (fixed 0/0, clustered 0/0).
-    // Query the epoch-cached exact registries on every pixel bind, then repair
-    // this command-list's route TLS from the authoritative result.
-    if (pixel_stage_bound) {
-        const bool fixed_pointlight_exact =
-            g_fixed_pointlight_pipeline.on_bind_pipeline(
-                cmd_list,
-                stages,
-                pipeline);
-        const bool clustered_pointlight_exact =
-            g_clustered_pnts_pipeline.on_bind_pipeline(
-                cmd_list,
-                stages,
-                pipeline);
-
-        if (fixed_pointlight_exact)
-            route_mask |= k_route_fixed_pointlight;
-        else
-            route_mask &= static_cast<std::uint8_t>(
-                ~k_route_fixed_pointlight);
-
-        if (clustered_pointlight_exact)
-            route_mask |= k_route_clustered_pointlight;
-        else
-            route_mask &= static_cast<std::uint8_t>(
-                ~k_route_clustered_pointlight);
-
-        if (g_integrated_draw_route_tls.command_list_key ==
-                cmd_list)
-            g_integrated_draw_route_tls.mask =
-                route_mask;
-    }
-
     if (pixel_stage_bound && route_mask != 0u) {
         if ((route_mask & k_route_stable) != 0u)
             dsrrl::runtime::stable_receiver_observe_bind(
@@ -4413,6 +4380,25 @@ void on_bind_pipeline(
             dsrrl::runtime::upper_lower_receiver_observe_bind(
                 cmd_list, true, pipeline.handle);
     }
+
+    // PointLight bind work is restricted to pipelines that were attested by
+    // the exact registry during init. Never query the PointLight registries on
+    // unrelated pixel binds.
+    if (pixel_stage_bound &&
+        (route_mask &
+         k_route_fixed_pointlight) != 0u)
+        (void)g_fixed_pointlight_pipeline.on_bind_pipeline(
+            cmd_list,
+            stages,
+            pipeline);
+
+    if (pixel_stage_bound &&
+        (route_mask &
+         k_route_clustered_pointlight) != 0u)
+        (void)g_clustered_pnts_pipeline.on_bind_pipeline(
+            cmd_list,
+            stages,
+            pipeline);
 
     std::uint16_t first_plan = 0xFFFFu;
     dsrrl::core::operator_mask selected_owners = 0u;

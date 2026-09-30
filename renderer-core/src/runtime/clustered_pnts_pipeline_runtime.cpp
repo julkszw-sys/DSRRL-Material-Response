@@ -229,7 +229,7 @@ bool clustered_pnts_pipeline_runtime::register_candidate(
     }
 }
 
-void clustered_pnts_pipeline_runtime::on_init_pipeline(
+bool clustered_pnts_pipeline_runtime::on_init_pipeline(
     reshade::api::device *device,
     std::uint32_t subobject_count,
     const reshade::api::pipeline_subobject *subobjects,
@@ -238,7 +238,7 @@ void clustered_pnts_pipeline_runtime::on_init_pipeline(
     if (device == nullptr ||
         pipeline.handle == 0u ||
         quarantined_.load())
-        return;
+        return false;
 
     const auto *pixel_shader =
         find_pixel_shader(
@@ -247,7 +247,7 @@ void clustered_pnts_pipeline_runtime::on_init_pipeline(
     if (pixel_shader == nullptr ||
         pixel_shader->code == nullptr ||
         pixel_shader->code_size == 0u)
-        return;
+        return false;
 
     const digest_key key{
         hashing::sha256(
@@ -259,12 +259,12 @@ void clustered_pnts_pipeline_runtime::on_init_pipeline(
 
     std::lock_guard<std::mutex> lock(mutex_);
     if (device_ != device)
-        return;
+        return false;
 
     const auto found = candidates_.find(key);
     if (found == candidates_.end()) {
         telemetry::hot_count(init_miss_);
-        return;
+        return false;
     }
 
     pipelines_[pipeline.handle] = found->second;
@@ -272,6 +272,7 @@ void clustered_pnts_pipeline_runtime::on_init_pipeline(
         1u,
         std::memory_order_release);
     telemetry::hot_count(init_attested_);
+    return true;
 }
 
 bool clustered_pnts_pipeline_runtime::on_bind_pipeline(
