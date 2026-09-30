@@ -3439,6 +3439,7 @@ void on_init_device(reshade::api::device *device)
 
 void on_destroy_device(reshade::api::device *device)
 {
+    g_draw_transactions.on_destroy_device(device);
     g_bloom_scene_sidecar.on_destroy_device(device);
     g_upper_lower.on_destroy_device(device);
     g_upper_lower_hemenv.on_destroy_device(device);
