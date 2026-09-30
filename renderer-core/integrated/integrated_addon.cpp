@@ -6756,6 +6756,7 @@ void AddonUninit(
     g_envspec_resources.unregister_events();
     g_material_resources.unregister_events();
     g_pmetal_envspec.reset();
+    g_pmetal_source.reset();
     g_envspec_resources.reset_stats();
     g_bloom_scene_sidecar.reset();
     dsrrl::runtime::bloom_fx_draw_transport::reset_stats();
