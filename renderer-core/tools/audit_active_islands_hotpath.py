@@ -107,6 +107,9 @@ def main():
     require(flver_cpp,
         "if(g_state.builder_armed)\n  clustered_pnts_selector_event_bridge(",
         "clustered selector bridge follows builder arm state")
+    require(flver_cpp,
+        "r15,\n     g_state.builder_armed);",
+        "fixed selector bridge follows PointLight runtime policy")
 
     # Disabled islands must not keep receiver/materialization work alive.
     require(integrated,
