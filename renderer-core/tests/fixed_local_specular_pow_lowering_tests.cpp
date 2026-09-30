@@ -24,7 +24,7 @@ int main()
         fixed_local_specular_pow_emit_result::exact);
 
     constexpr std::array<std::uint32_t,25> expected_stock{{
-        0x08000034u,
+        0x07000034u,
         0x00100012u,0x00000000u,
         0x0010000au,0x00000000u,
         0x00004001u,0x00000000u,
@@ -40,6 +40,16 @@ int main()
         0x0010000au,0x00000000u
     }};
     CHECK(stock.words==expected_stock);
+    // Parse independently by encoded instruction length: literal-array equality
+    // previously mirrored an eight-word MAX that only emitted seven words.
+    std::size_t cursor=0u,instruction_count=0u;
+    while(cursor<stock.words.size()) {
+        const auto length=(stock.words[cursor]>>24u)&0x7fu;
+        CHECK(length!=0u && length<=stock.words.size()-cursor);
+        cursor+=length;++instruction_count;
+    }
+    CHECK(cursor==stock.words.size() && instruction_count==4u);
+
 
     fixed_local_specular_pow_lowering ptde{};
     CHECK(emit_fixed_local_specular_ptde_pow(

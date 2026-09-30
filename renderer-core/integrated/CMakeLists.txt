@@ -474,3 +474,18 @@ set_target_properties(
     PREFIX ""
     OUTPUT_NAME "${DSRRL_CORE_ISLANDS_ARTIFACT_STEM}"
     SUFFIX ".addon64")
+
+# Tests the real producer/selector/GPU cache without installing a game hook.
+add_executable(dsrrl_fixed_pointlight_transport_windows_tests
+    "${DSRRL_RENDERER_CORE_ROOT}/tests/fixed_pointlight_transport_windows_tests.cpp")
+target_include_directories(dsrrl_fixed_pointlight_transport_windows_tests PRIVATE
+    "${DSRRL_RENDERER_CORE_ROOT}/include" "${RESHADE_INCLUDE_DIR}")
+target_compile_features(dsrrl_fixed_pointlight_transport_windows_tests PRIVATE cxx_std_17)
+target_link_libraries(dsrrl_fixed_pointlight_transport_windows_tests PRIVATE d3d11)
+add_test(NAME dsrrl_fixed_pointlight_transport_windows_tests COMMAND dsrrl_fixed_pointlight_transport_windows_tests)
+
+add_executable(dsrrl_fixed_pointlight_corpus_native_check
+    "${DSRRL_RENDERER_CORE_ROOT}/tests/fixed_pointlight_corpus_native_check.cpp")
+target_include_directories(dsrrl_fixed_pointlight_corpus_native_check PRIVATE "${DSRRL_RENDERER_CORE_ROOT}/include")
+target_compile_features(dsrrl_fixed_pointlight_corpus_native_check PRIVATE cxx_std_17)
+target_link_libraries(dsrrl_fixed_pointlight_corpus_native_check PRIVATE dsrrl_renderer_core d3d11)

@@ -1112,6 +1112,13 @@ materialize_fixed_local_specular_single(
         return out;
     }
 
+    // Check the emitted stream, not just the outer DXBC checksum. A malformed
+    // instruction length can stall the native parser despite a valid checksum.
+    if(!decode(words,instructions)) {
+        out.result=fixed_local_single_materialize_result::fail_postcondition;
+        return out;
+    }
+
     if(!strip_rdef(chunks,out.rdef_stripped) ||
        !rebuild(
             source,size,

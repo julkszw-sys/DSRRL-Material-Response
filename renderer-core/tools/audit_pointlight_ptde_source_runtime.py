@@ -15,7 +15,14 @@ for forbidden in ['VirtualProtect','write_bytes','create_hook','install_hook','f
 fixed=read('src/runtime/fixed_pointlight_draw_runtime.cpp')
 clustered=read('src/runtime/clustered_pnts_draw_runtime.cpp')
 require(fixed,'pointlight_ptde_source::capture(source,g_base,donor_raw)')
-require(fixed,'g_snapshots.erase(owner_key)')
+require(fixed,'current={};')
+require(fixed,'g_gpu_by_context.try_emplace(context)')
+require(fixed,'D3D11_MAP_WRITE_DISCARD')
+producer=fixed[fixed.index('void __fastcall capture_callback('):fixed.index('bool build_capture_stub(')]
+selector=fixed[fixed.index('void fixed_pointlight_draw_runtime::selector_event('):fixed.index('bool fixed_pointlight_draw_runtime::prepare_t19(')]
+for hot in (producer,selector):
+    for forbidden in ('lock_guard','make_shared','fetch_add','unordered_map','CreateBuffer'):
+        if forbidden in hot: raise SystemExit('Global work in fixed producer/selector: '+forbidden)
 require(fixed,'view_desc.Buffer.NumElements=8u')
 require(clustered,'pointlight_ptde_source::capture(node, g_base, raw)')
 shader=read('src/operators/point_light/fixed_local_specular_single_materializer.cpp')
