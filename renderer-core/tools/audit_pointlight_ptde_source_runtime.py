@@ -36,11 +36,31 @@ require(clustered,'readable_region_cache node_region{}')
 require(clustered,'!readable_range_cached(')
 if '!readable_range(node, 0x50u)' in clustered:
     raise SystemExit('Clustered selector regressed to per-node VirtualQuery validation')
-capture=clustered[clustered.index('bool capture_source('):clustered.index('void release_gpu_locked()')]
+capture=clustered[clustered.index('bool capture_source('):clustered.index('void release_gpu(')]
 require(capture,'target_address != g_base + 0x55BC00u')
 require(capture,'target_address != g_base + 0x55D0B0u')
 if capture.index('fn(node, raw.data());') < capture.index('target_address != g_base + 0x55BC00u'):
     raise SystemExit('Clustered PointLight calls host source vfunc before exact donor-class prefilter')
+
+# Clustered dynamic t18/t19/b12 must be recording-context local just like the
+# fixed PointLight carrier. A process-global DISCARD buffer lets another
+# immediate/deferred context replace payload between prepare and bind.
+require(clustered,'std::unordered_map<ID3D11DeviceContext *,gpu_resources>')
+require(clustered,'g_gpu_by_context{}')
+require(clustered,'g_gpu_by_context.try_emplace(')
+require(clustered,'gpu_resources *gpu = nullptr;')
+require(clustered,'ensure_gpu_locked(')
+require(clustered,'release_all_gpu_locked();')
+if 'gpu_resources g_gpu{}' in clustered:
+    raise SystemExit('Clustered PointLight regressed to one process-global GPU carrier')
+if 'bool ensure_gpu(' in clustered:
+    raise SystemExit('Clustered PointLight regressed to separate locked ensure_gpu pass')
+
+prepare=clustered[clustered.index('bool clustered_pnts_draw_runtime::prepare_sidecar('):clustered.index('void clustered_pnts_draw_runtime::release_prepared_draw(')]
+if prepare.count('std::lock_guard<std::mutex> lock(') != 1:
+    raise SystemExit('Clustered PointLight prepare must use one carrier synchronization point')
+for token in ['gpu->t18_buffer','gpu->t19_buffer','gpu->b12','gpu->t18_srv->AddRef()','gpu->t19_srv->AddRef()','gpu->b12->AddRef()']:
+    require(prepare,token)
 shader=read('src/operators/point_light/fixed_local_specular_single_materializer.cpp')
 for token in ['range_compare.erase_words=8u','range_load.words[6]=4u+light','SAT((PTDE End-distance)*PTDE invRange)','a.erase_words>b.erase_words']:
     require(shader,token)
