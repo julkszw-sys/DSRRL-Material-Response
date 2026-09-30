@@ -25,6 +25,18 @@ def main()->int:
     active=doc.get("active_records",[])
     if len(active)!=205:
         raise SystemExit(f"expected 205 active records, got {len(active)}")
+    spc=sum(1 for r in active if r.get("material_mode")=="SPC")
+    nospc=sum(1 for r in active if r.get("material_mode")=="NOSPC")
+    rgb_c101=sum(
+        1 for r in active
+        if r.get("material_mode")=="SPC"
+        and len(set(r.get("c101_f32_bits",[])))>1
+    )
+    if (spc,nospc,rgb_c101)!=(180,25,12):
+        raise SystemExit(
+            "PointLight authority partition drift: "
+            f"spc={spc} nospc={nospc} rgb_c101={rgb_c101}"
+        )
 
     seen={}
     rows=[]
@@ -66,7 +78,7 @@ def main()->int:
     out += ["}};\n","} // namespace dsrrl::operators::point_light::generated\n"]
     ns.output.parent.mkdir(parents=True,exist_ok=True)
     ns.output.write_text("".join(out),encoding="utf-8",newline="\n")
-    print(f"POINTLIGHT_MATERIAL_AUTHORITY_HEADER_PASS records={len(rows)}")
+    print(f"POINTLIGHT_MATERIAL_AUTHORITY_HEADER_PASS records={len(rows)} spc={spc} nospc={nospc} rgb_c101={rgb_c101}")
     return 0
 
 if __name__=="__main__":
