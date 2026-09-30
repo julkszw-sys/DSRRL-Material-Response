@@ -44,6 +44,7 @@ def main():
     draw_tx=(root/"src/runtime/draw_state_transaction.cpp").read_text(encoding="utf-8")
     owner_selection=(root/"src/runtime/material_owner_selection.cpp").read_text(encoding="utf-8")
     owner_producer=(root/"src/runtime/material_owner_producer.cpp").read_text(encoding="utf-8")
+    mr_draw=(root/"src/runtime/material_response_draw_transaction.cpp").read_text(encoding="utf-8")
 
     # Feature flags are queried from render-hot paths. Keep reads lock-free,
     # while snapshot/set may retain coherent writer serialization.
@@ -284,6 +285,28 @@ def main():
         "cached.flver_sha256 ==\n            observation.flver_sha256",
         "owner material full SHA hit gate")
 
+    # MR replacement registration is append-only for an existing
+    # (bank,receiver) namespace. Streaming an unrelated shader must not
+    # invalidate every TLS replacement hit; destructive teardown still bumps
+    # the shared epoch.
+    reg_start=mr_draw.find("bool material_response_draw_runtime::register_replacement_record(")
+    rel_start=mr_draw.find("void material_response_draw_runtime::release_resources()",reg_start)
+    if reg_start<0 or rel_start<0:
+        fail("MR replacement registration boundaries missing")
+    reg_body=mr_draw[reg_start:rel_start]
+    require(reg_body,
+        "bank.emplace(",
+        "MR append-only replacement registration")
+    if "resource_epoch_.fetch_add" in reg_body:
+        fail("unrelated MR replacement streaming still globally invalidates draw TLS")
+    release_body=function_body(
+        mr_draw,
+        "void material_response_draw_runtime::release_resources()",
+        "void material_response_draw_runtime::on_init_device(")
+    require(release_body,
+        "resource_epoch_.fetch_add(",
+        "MR destructive cache invalidation")
+
     print("Active-islands hot-path audit: PASS")
     print("  feature_reads=atomic")
     print("  flver_identity=256-entry TLS before global map lock")
@@ -295,6 +318,7 @@ def main():
     print("  ownerless_draws=stop before batch preparation under current policy")
     print("  draw_replay=Context1 TLS cache; QueryInterface cold-path only")
     print("  material_owner=256-entry TLS caches indexed by precomputed FLVER hash; full SHA authority retained")
+    print("  mr_replacement=append-only streaming preserves unrelated TLS entries; teardown invalidates")
     return 0
 
 if __name__=="__main__":
