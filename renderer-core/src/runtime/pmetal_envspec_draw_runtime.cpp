@@ -36,10 +36,8 @@ constexpr std::uint32_t k_effect_fail_material = 1u << 2u;
 constexpr std::uint32_t k_effect_fail_semantic = 1u << 3u;
 constexpr std::uint32_t k_effect_fail_source = 1u << 4u;
 constexpr std::uint32_t k_effect_fail_blend = 1u << 5u;
-constexpr std::uint32_t k_effect_fail_lerp_ul_conflict = 1u << 6u;
 constexpr std::uint32_t k_effect_fail_context = 1u << 7u;
 constexpr std::uint32_t k_effect_fail_replacement = 1u << 8u;
-constexpr std::uint32_t k_effect_fail_ul = 1u << 9u;
 constexpr std::uint32_t k_effect_fail_probe = 1u << 10u;
 constexpr std::uint32_t k_effect_fail_spec_rgb = 1u << 11u;
 constexpr std::uint32_t k_effect_fail_device = 1u << 12u;
@@ -1083,8 +1081,6 @@ pmetal_envspec_draw_runtime::telemetry() const noexcept
         blended_receiver_hold_.load(),
         probe_rejects_.load(),
         spec_rgb_rejects_.load(),
-        upper_lower_ready_.load(),
-        upper_lower_fallback_.load(),
         requests_.load(),
         lerp_requests_.load(),
         b12_uploads_.load(),
@@ -1121,8 +1117,6 @@ void pmetal_envspec_draw_runtime::reset() noexcept
     blended_receiver_hold_.store(0u);
     probe_rejects_.store(0u);
     spec_rgb_rejects_.store(0u);
-    upper_lower_ready_.store(0u);
-    upper_lower_fallback_.store(0u);
     requests_.store(0u);
     lerp_requests_.store(0u);
     b12_uploads_.store(0u);
