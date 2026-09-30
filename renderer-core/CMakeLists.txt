@@ -143,6 +143,22 @@ add_custom_command(
 add_custom_target(dsrrl_clustered_pnts_direct_header
     DEPENDS "${DSRRL_CLUSTERED_PNTS_DIRECT_HEADER}")
 
+set(DSRRL_POINTLIGHT_MATERIAL_AUTHORITY_HEADER
+    "${DSRRL_GENERATED_DIR}/dsrrl/operators/point_light/generated_pointlight_material_authority_v1.hpp")
+add_custom_command(
+    OUTPUT "${DSRRL_POINTLIGHT_MATERIAL_AUTHORITY_HEADER}"
+    COMMAND "${Python3_EXECUTABLE}"
+            "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_pointlight_material_authority_v1.py"
+            --input "${CMAKE_CURRENT_SOURCE_DIR}/data/provenance/pointlight_material_authority_v1.json"
+            --output "${DSRRL_POINTLIGHT_MATERIAL_AUTHORITY_HEADER}"
+    DEPENDS
+        "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_pointlight_material_authority_v1.py"
+        "${CMAKE_CURRENT_SOURCE_DIR}/data/provenance/pointlight_material_authority_v1.json"
+    VERBATIM
+)
+add_custom_target(dsrrl_pointlight_material_authority_header
+    DEPENDS "${DSRRL_POINTLIGHT_MATERIAL_AUTHORITY_HEADER}")
+
 set(DSRRL_SUBSURFACE_PLAIN_PATCH_DIR
     "${CMAKE_CURRENT_SOURCE_DIR}/data/provenance/subsurface_plain_exact_patches_v1")
 set(DSRRL_SUBSURFACE_PLAIN_PATCH_HEADER
@@ -223,6 +239,7 @@ add_library(dsrrl_renderer_core STATIC
     "${DSRRL_LOCAL_SPECULAR_RECEIVER_HEADER}"
     "${DSRRL_FIXED_LOCAL_SPECULAR_PTDE_REFERENCE_HEADER}"
     "${DSRRL_CLUSTERED_PNTS_DIRECT_HEADER}"
+    "${DSRRL_POINTLIGHT_MATERIAL_AUTHORITY_HEADER}"
     "${DSRRL_SUBSURFACE_PLAIN_PATCH_HEADER}"
 )
 add_custom_target(dsrrl_pointlight_core_source_audit
@@ -257,6 +274,7 @@ add_dependencies(
     dsrrl_local_specular_receiver_header
     dsrrl_fixed_local_specular_ptde_reference_header
     dsrrl_clustered_pnts_direct_header
+    dsrrl_pointlight_material_authority_header
     dsrrl_subsurface_plain_patch_header)
 target_include_directories(dsrrl_renderer_core PUBLIC
     ${DSRRL_GENERATED_DIR}
