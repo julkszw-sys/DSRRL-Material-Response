@@ -216,9 +216,20 @@ def main() -> None:
         "operator_id::upper_lower",
         "upper_lower_receiver_verified",
         "use_upper_lower",
+        "upper_lower_ready_",
+        "upper_lower_fallback_",
+        "k_effect_fail_lerp_ul_conflict",
+        "k_effect_fail_ul",
     ):
         if forbidden in env_cpp:
             fail(f"P_Metal EnvSpec draw runtime still depends on U/L: {forbidden}")
+
+    for forbidden in (
+        "upper_lower_ready",
+        "upper_lower_fallback",
+    ):
+        if forbidden in env_h:
+            fail(f"P_Metal EnvSpec telemetry still exposes U/L state: {forbidden}")
 
     require(
         integrated,
