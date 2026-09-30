@@ -239,10 +239,14 @@ def main():
     require(draw_begin,
         "ctx1 = context1_for(ctx);",
         "draw replay Context1 cache use")
-    context1_body=function_body(
-        draw_tx,
-        "draw_state_transaction_runtime::context1_for(",
-        "draw_state_transaction_runtime::release_context1_cache(")
+    context1_start=draw_tx.find(
+        "draw_state_transaction_runtime::context1_for(")
+    context1_end=draw_tx.find(
+        "release_context1_cache() noexcept",
+        context1_start)
+    if context1_start<0 or context1_end<0:
+        fail("Context1 cache function boundaries missing")
+    context1_body=draw_tx[context1_start:context1_end]
     require(context1_body,
         "g_context1_tls_cache",
         "Context1 TLS fast path")
