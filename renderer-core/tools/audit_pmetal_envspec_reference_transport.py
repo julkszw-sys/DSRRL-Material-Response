@@ -56,7 +56,7 @@ def main() -> None:
         if forbidden in capture: fail(f"global synchronization/hook in selector source: {forbidden}")
     consumer = ul_cpp.split("bool pmetal_env_source_runtime::latest(",1)[1].split(
         "pmetal_env_source_runtime_telemetry pmetal_env_source_runtime::telemetry",1)[0]
-    for needle in ("!g_pmetal_selected_valid", "material.flver_sha256 !=", "material.material_slot !=",
+    for needle in ("const bool local_valid =", "!local_valid", "material.flver_sha256 !=", "material.material_slot !=",
                    "material.raw_mtd_sha256 !=", "g_pmetal_selector_epoch.load"):
         require(consumer, needle, "source lifetime/material mismatch fail-open")
     require(ul_cpp, "thread_local pmetal_envspec_source g_pmetal_selected_source", "no process-global latest donor")
