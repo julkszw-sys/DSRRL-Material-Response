@@ -26,6 +26,11 @@ struct pmetal_env_source_runtime_telemetry {
     std::uint64_t publish_busy_drop = 0u;
     std::uint64_t consumer_ok = 0u;
     std::uint64_t consumer_fail = 0u;
+    // Diagnostic-only thread provenance. These fields never authorize source
+    // reuse; they exist only to falsify the selector-thread TLS lifetime.
+    std::uint32_t last_publish_tid = 0u;
+    std::uint32_t last_consumer_tid = 0u;
+    bool last_consumer_local_valid = false;
     bool selector_carrier_active = false;
     bool steady_carrier_active = false;
     bool blend_carrier_active = false;
