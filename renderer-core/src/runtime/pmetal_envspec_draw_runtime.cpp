@@ -47,6 +47,13 @@ constexpr std::uint32_t k_effect_fail_b12 = 1u << 13u;
 constexpr std::uint32_t k_effect_fail_mutation = 1u << 14u;
 
 std::atomic_bool g_source_cut_logged{false};
+std::atomic_bool g_resource_mode_logged{false};
+
+#if defined(DSRRL_PMETAL_NATIVE_DSR_CUBEMAP_FEED)
+constexpr bool k_native_dsr_cubemap_feed = true;
+#else
+constexpr bool k_native_dsr_cubemap_feed = false;
+#endif
 
 void effect_latch(std::atomic_bool &flag) noexcept
 {
@@ -829,11 +836,20 @@ bool pmetal_envspec_draw_runtime::prepare(
                 hemenvlerp ||
         source.beta != 0.0f;
 
-    if (!env_resources_.prepare(
-            context,
-            env_semantics.envspc_slot,
-            probe_b_required,
-            prepared.env_resources)) {
+    const bool env_resource_ready =
+        k_native_dsr_cubemap_feed
+            ? env_resources_.prepare_native_dsr(
+                  context,
+                  env_semantics.envspc_slot,
+                  probe_b_required,
+                  prepared.env_resources)
+            : env_resources_.prepare(
+                  context,
+                  env_semantics.envspc_slot,
+                  probe_b_required,
+                  prepared.env_resources);
+
+    if (!env_resource_ready) {
         if (shader != nullptr)
             shader->Release();
         lightbank_.release_prepared_draw(
@@ -845,6 +861,26 @@ bool pmetal_envspec_draw_runtime::prepare(
         return false;
     }
     effect_latch(effect_probe_ready_);
+
+    if (k_native_dsr_cubemap_feed &&
+        !g_resource_mode_logged.exchange(
+            true,
+            std::memory_order_relaxed)) {
+        char line[384]{};
+        std::snprintf(
+            line,
+            sizeof(line),
+            "[DSRRL PMETAL ENVSPEC RESOURCE] mode=native_dsr_bc6h_ptde_operator sampler=ptde_lod0 slot=%u probe_a=%u probe_b=%u",
+            static_cast<unsigned>(
+                env_semantics.envspc_slot),
+            static_cast<unsigned>(
+                prepared.env_resources.probe_a),
+            static_cast<unsigned>(
+                prepared.env_resources.probe_b));
+        reshade::log::message(
+            reshade::log::level::info,
+            line);
+    }
 
     if (!material_resources_.
             prepare_draw_requests(
@@ -1295,6 +1331,7 @@ void pmetal_envspec_draw_runtime::reset() noexcept
     effect_request_ready_.store(false);
     effect_fail_mask_.store(0u);
     g_source_cut_logged.store(false);
+    g_resource_mode_logged.store(false);
     quarantined_.store(false);
 }
 
