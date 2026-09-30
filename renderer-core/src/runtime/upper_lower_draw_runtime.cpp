@@ -6,6 +6,7 @@
 #endif
 
 #include "dsrrl/runtime/upper_lower_draw_runtime.hpp"
+#include "dsrrl/runtime/pmetal_env_source_runtime.hpp"
 #include "dsrrl/runtime/runtime_hot_telemetry.hpp"
 #include "dsrrl/runtime/flver_identity_transport.hpp"
 #include "dsrrl/operators/lightbank/snapshot_freshness.hpp"
@@ -825,6 +826,16 @@ std::atomic<std::uint64_t> g_pmetal_env_steady{0};
 std::atomic<std::uint64_t> g_pmetal_env_blend{0};
 std::atomic<std::uint64_t> g_pmetal_env_miss{0};
 std::atomic_bool g_pmetal_env_hook_armed{false};
+std::atomic_bool g_pmetal_source_only_enabled{false};
+std::atomic_flag g_pmetal_source_payload_guard = ATOMIC_FLAG_INIT;
+pmetal_envspec_source g_pmetal_source_payload{};
+bool g_pmetal_source_payload_valid = false;
+std::atomic<std::uint64_t> g_pmetal_source_serial{0u};
+std::atomic<std::uint64_t> g_pmetal_source_publish{0u};
+std::atomic<std::uint64_t> g_pmetal_source_busy_drop{0u};
+std::atomic<std::uint64_t> g_pmetal_source_consumer_ok{0u};
+std::atomic<std::uint64_t> g_pmetal_source_consumer_fail{0u};
+
 
 std::atomic<std::uint32_t> g_pmetal_diag_status_a{0u};
 std::atomic<std::uint32_t> g_pmetal_diag_status_b{0u};
