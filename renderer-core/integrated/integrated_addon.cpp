@@ -3569,9 +3569,10 @@ bool on_create_pipeline(
             }
         }
 
-        clustered_pnts =
-            dsrrl::operators::point_light::
-                materialize_clustered_pnts_direct_ptde(
+        if (k_pointlight_drawtime_runtime_enabled) {
+            clustered_pnts =
+                dsrrl::operators::point_light::
+                    materialize_clustered_pnts_direct_ptde(
                     source,
                     pixel_shader->code_size,
                     clustered_pnts_payload);
@@ -3713,6 +3714,7 @@ bool on_create_pipeline(
                 ++g_local_specular_window_fail;
                 ++g_local_specular_fixed_plan_fail;
             }
+        }
         }
 
         std::vector<std::uint8_t> mr_payload;
@@ -4013,44 +4015,50 @@ bool on_create_pipeline(
             }
         }
 
-        std::vector<std::uint8_t> ul_payload;
-        ul =
-            dsrrl::operators::lightbank::
-                materialize_upper_lower_hemenv_receiver(
-                    g_core.features(),
-                    source,
-                    pixel_shader->code_size,
-                    ul_payload);
+        if (g_core.features().enabled(
+                dsrrl::core::operator_id::upper_lower)) {
+            std::vector<std::uint8_t> ul_payload;
+            ul =
+                dsrrl::operators::lightbank::
+                    materialize_upper_lower_hemenv_receiver(
+                        g_core.features(),
+                        source,
+                        pixel_shader->code_size,
+                        ul_payload);
 
-        if (ul.result ==
-            dsrrl::operators::lightbank::
-                upper_lower_hemenv_materialize_result::applied) {
-            ul_identity_ready = true;
-            ul_replacement_ready =
-                g_upper_lower_hemenv.register_replacement(
-                    ul,
-                    ul_payload.data(),
-                    ul_payload.size());
+            if (ul.result ==
+                dsrrl::operators::lightbank::
+                    upper_lower_hemenv_materialize_result::applied) {
+                ul_identity_ready = true;
+                ul_replacement_ready =
+                    g_upper_lower_hemenv.register_replacement(
+                        ul,
+                        ul_payload.data(),
+                        ul_payload.size());
+            }
         }
 
-        std::vector<std::uint8_t> h3_payload;
-        h3 =
-            dsrrl::operators::lightbank::
-                materialize_hemdir3_b13_receiver(
-                    g_core.features(),
-                    source,
-                    pixel_shader->code_size,
-                    h3_payload);
+        if (g_core.features().enabled(
+                dsrrl::core::operator_id::hemdir3)) {
+            std::vector<std::uint8_t> h3_payload;
+            h3 =
+                dsrrl::operators::lightbank::
+                    materialize_hemdir3_b13_receiver(
+                        g_core.features(),
+                        source,
+                        pixel_shader->code_size,
+                        h3_payload);
 
-        if (h3.result ==
-            dsrrl::operators::lightbank::
-                hemdir3_b13_materialize_result::applied) {
-            h3_identity_ready = true;
-            h3_replacement_ready =
-                g_hemdir3.register_replacement(
-                    h3,
-                    h3_payload.data(),
-                    h3_payload.size());
+            if (h3.result ==
+                dsrrl::operators::lightbank::
+                    hemdir3_b13_materialize_result::applied) {
+                h3_identity_ready = true;
+                h3_replacement_ready =
+                    g_hemdir3.register_replacement(
+                        h3,
+                        h3_payload.data(),
+                        h3_payload.size());
+            }
         }
     }
 
@@ -4061,7 +4069,8 @@ bool on_create_pipeline(
             subobject_count,
             subobjects);
 
-    if (clustered_pnts_candidate) {
+    if (k_pointlight_drawtime_runtime_enabled &&
+        clustered_pnts_candidate) {
         const auto *attested_host =
             find_pixel_shader(
                 subobject_count,
