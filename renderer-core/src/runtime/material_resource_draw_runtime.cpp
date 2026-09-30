@@ -176,7 +176,7 @@ struct companion_tls_entry {
     }
 };
 
-constexpr std::size_t k_companion_tls_slots = 64u;
+constexpr std::size_t k_companion_tls_slots = 256u;
 thread_local std::array<
     companion_tls_entry,
     k_companion_tls_slots>
@@ -186,8 +186,8 @@ std::size_t companion_tls_index(
     std::uint64_t key) noexcept
 {
     return static_cast<std::size_t>(
-        ((key >> 4u) ^ (key >> 13u)) %
-        k_companion_tls_slots);
+        ((key >> 4u) ^ (key >> 13u) ^ (key >> 23u)) &
+        (k_companion_tls_slots - 1u));
 }
 
 std::atomic<std::uint64_t> g_named_views{0};
