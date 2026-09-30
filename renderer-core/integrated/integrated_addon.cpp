@@ -4439,9 +4439,8 @@ effect_probe_mask prepared_effect_mask(
             effect_probe_id::material_response);
         mask |= resource_effect_mask(
             prepared.envspec.material_resources);
-        if (prepared.envspec.upper_lower_composed)
-            mask |= effect_probe_bit(
-                effect_probe_id::upper_lower);
+        // P_Metal EnvSpec is U/L-independent by construction. Never promote
+        // UpperLower telemetry from an EnvSpec batch.
     }
 
     if (prepared.clustered_in_batch) {
