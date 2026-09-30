@@ -4105,28 +4105,6 @@ void __fastcall hook_steady_packer(
     telemetry::hot_count(g_steady_seen);
 
     if (g_steady_packer_orig != nullptr)
-            g_steady_packer_orig(
-                source,
-                dst,
-                selector);
-
-        if (have_env) {
-            publish_pmetal_source_only(
-                env, env, 0.0f,
-                bank, bank, row, row,
-                source_serial);
-            telemetry::hot_count(
-                g_pmetal_env_steady);
-        } else {
-            telemetry::hot_count(
-                g_pmetal_env_miss);
-        }
-        telemetry::hot_count(
-            g_steady_pass);
-        return;
-    }
-
-    if (g_steady_packer_orig != nullptr)
         g_steady_packer_orig(
             source,
             dst,
