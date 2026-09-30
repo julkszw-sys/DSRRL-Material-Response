@@ -4373,6 +4373,66 @@ void __fastcall hook_pmetal_env_blend(
             selector_b,
             beta);
 
+    if (g_pmetal_source_only_enabled.load(
+            std::memory_order_acquire)) {
+        f4 a{};
+        f4 b{};
+        std::uint64_t bank_a = 0u;
+        std::uint64_t bank_b = 0u;
+        std::uint32_t row_a = 0u;
+        std::uint32_t row_b = 0u;
+
+        const bool have_a =
+            read_exact_pmetal_env_source(
+                source_a,
+                selector_a,
+                a,
+                bank_a,
+                row_a);
+        bool have_b = false;
+
+        if (have_a &&
+            (beta <= 0.0f ||
+             (source_a == source_b &&
+              selector_a == selector_b))) {
+            b = a;
+            bank_b = bank_a;
+            row_b = row_a;
+            have_b = true;
+        } else if (have_a) {
+            have_b =
+                read_exact_pmetal_env_source(
+                    source_b,
+                    selector_b,
+                    b,
+                    bank_b,
+                    row_b);
+        }
+
+        if (have_a &&
+            have_b &&
+            std::isfinite(beta)) {
+            float t =
+                std::clamp(beta,0.0f,1.0f);
+            if (t >= 1.0f) {
+                a = b;
+                bank_a = bank_b;
+                row_a = row_b;
+                t = 0.0f;
+            }
+            publish_pmetal_source_only(
+                a, b, t,
+                bank_a, bank_b,
+                row_a, row_b);
+            telemetry::hot_count(
+                g_pmetal_env_blend);
+        } else {
+            telemetry::hot_count(
+                g_pmetal_env_miss);
+        }
+        return;
+    }
+
     if (!g_producer.active ||
         !g_pmetal_env_hook_armed.load())
         return;
