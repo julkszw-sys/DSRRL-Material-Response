@@ -165,6 +165,71 @@ bool readable_range(
     return true;
 }
 
+struct readable_region_cache {
+    std::uintptr_t begin = 0u;
+    std::uintptr_t end = 0u;
+};
+
+bool readable_range_cached(
+    const void *ptr,
+    std::size_t size,
+    readable_region_cache &cache) noexcept
+{
+    if (ptr == nullptr)
+        return false;
+    if (size == 0u)
+        return true;
+
+    const auto begin =
+        reinterpret_cast<std::uintptr_t>(ptr);
+    const auto end = begin + size;
+    if (end < begin)
+        return false;
+
+    if (cache.begin <= begin &&
+        end <= cache.end)
+        return true;
+
+    MEMORY_BASIC_INFORMATION mbi{};
+    if (VirtualQuery(
+            ptr,
+            &mbi,
+            sizeof(mbi)) != sizeof(mbi) ||
+        mbi.State != MEM_COMMIT ||
+        (mbi.Protect & PAGE_GUARD) != 0u)
+        return false;
+
+    const DWORD access = mbi.Protect & 0xffu;
+    const bool readable =
+        access == PAGE_READONLY ||
+        access == PAGE_READWRITE ||
+        access == PAGE_WRITECOPY ||
+        access == PAGE_EXECUTE_READ ||
+        access == PAGE_EXECUTE_READWRITE ||
+        access == PAGE_EXECUTE_WRITECOPY;
+    if (!readable)
+        return false;
+
+    const auto region_begin =
+        reinterpret_cast<std::uintptr_t>(
+            mbi.BaseAddress);
+    const auto region_end =
+        region_begin + mbi.RegionSize;
+    if (region_end <= begin ||
+        region_end < region_begin)
+        return false;
+
+    // Cache is deliberately draw-local at the caller. If an object crosses a
+    // VM region boundary, retain the original full validator instead of
+    // widening authority.
+    if (end > region_end)
+        return readable_range(ptr, size);
+
+    cache.begin = region_begin;
+    cache.end = region_end;
+    return true;
+}
+
 bool executable_address(
     const void *ptr) noexcept
 {
@@ -247,6 +312,10 @@ bool select_first_four_exact(
 
     auto *base =
         static_cast<std::uint8_t *>(collection);
+    // Valid only for this selector pass. Nodes allocated in the same committed
+    // VM region reuse one VirtualQuery result, but no region verdict survives
+    // into the next draw.
+    readable_region_cache node_region{};
 
     for (std::uint32_t bucket = 0u;
          bucket < 4u && count < 4u;
@@ -267,7 +336,10 @@ bool select_first_four_exact(
             // redundantly VirtualQuery'd the same node again inside the
             // overlap helper, which scaled badly with dense light lists.
             if (++guard > 4096u ||
-                !readable_range(node, 0x50u))
+                !readable_range_cached(
+                    node,
+                    0x50u,
+                    node_region))
                 return false;
 
             if (spatial_overlap_xyz_unchecked(
