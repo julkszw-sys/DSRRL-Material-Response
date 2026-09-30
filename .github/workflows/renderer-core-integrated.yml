@@ -1490,6 +1490,67 @@ jobs:
           path: DSRRL_Core_Islands_POINTLIGHT_DRAWTIME_BYPASS.addon64
           if-no-files-found: error
 
+      - name: Configure full draw-time islands bypass falsifier
+        shell: pwsh
+        run: >
+          cmake
+          -S renderer-core/integrated
+          -B build-integrated-drawtime-bypass
+          -A x64
+          -DRESHADE_INCLUDE_DIR="${{ github.workspace }}/_reshade/include"
+          -DDSRRL_SOURCE_COMMIT="$env:DSRRL_CHECKOUT_COMMIT"
+          -DDSRRL_BUILD_FLAVOR="drawtime_islands_bypass"
+          -DDSRRL_DRAWTIME_ISLANDS_BYPASS=ON
+
+      - name: Verify full draw-time bypass build profile
+        shell: pwsh
+        run: |
+          $cache = Get-Content build-integrated-drawtime-bypass/CMakeCache.txt -Raw
+          if ($cache -notmatch "DSRRL_DRAWTIME_ISLANDS_BYPASS:BOOL=ON") {
+            throw "Draw-time bypass profile did not enable DSRRL_DRAWTIME_ISLANDS_BYPASS"
+          }
+          if ($cache -match "DSRRL_FULL_TELEMETRY_DEFAULT_ON:BOOL=ON" -or
+              $cache -match "DSRRL_DIAGNOSTIC_TELEMETRY_DEFAULT_ON:BOOL=ON") {
+            throw "Draw-time bypass performance falsifier unexpectedly enables heavy telemetry"
+          }
+
+      - name: Build full draw-time islands bypass falsifier
+        shell: pwsh
+        run: |
+          cmake --build build-integrated-drawtime-bypass --config Release --target dsrrl_renderer_core_integrated
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $addons = @(Get-ChildItem build-integrated-drawtime-bypass -Recurse -Filter *.addon64)
+          if ($addons.Count -ne 1) {
+            throw "Expected exactly one draw-time bypass addon, found $($addons.Count)"
+          }
+          $out = "DSRRL_Core_Islands_DRAWTIME_ISLANDS_BYPASS.addon64"
+          Copy-Item $addons[0].FullName $out -Force
+          $hash = (Get-FileHash $out -Algorithm SHA256).Hash.ToLowerInvariant()
+          Write-Host "DRAWTIME_ISLANDS_BYPASS=$out"
+          Write-Host "DRAWTIME_ISLANDS_BYPASS_SHA256=$hash"
+
+      - name: Verify full draw-time bypass binary self-identity
+        shell: pwsh
+        run: |
+          $path = "DSRRL_Core_Islands_DRAWTIME_ISLANDS_BYPASS.addon64"
+          $ascii = [System.Text.Encoding]::ASCII.GetString(
+            [System.IO.File]::ReadAllBytes($path))
+          $expectedCommit = $env:DSRRL_CHECKOUT_COMMIT
+          $expectedFlavor = "drawtime_islands_bypass"
+          if (-not $ascii.Contains($expectedCommit)) {
+            throw "Draw-time bypass binary does not embed checkout commit $expectedCommit"
+          }
+          if (-not $ascii.Contains($expectedFlavor)) {
+            throw "Draw-time bypass binary does not embed flavor $expectedFlavor"
+          }
+
+      - name: Upload full draw-time islands bypass falsifier
+        uses: actions/upload-artifact@v4
+        with:
+          name: DSRRL_Core_Islands_DRAWTIME_ISLANDS_BYPASS
+          path: DSRRL_Core_Islands_DRAWTIME_ISLANDS_BYPASS.addon64
+          if-no-files-found: error
+
       - name: Configure full-runtime diagnostic addon
         shell: pwsh
         run: >
