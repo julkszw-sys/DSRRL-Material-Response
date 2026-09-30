@@ -58,6 +58,23 @@ def main():
     # destroy, preserving the old fail-open invalidation semantics.
     require(flver_registry,"k_lookup_tls_cache_size = 256u","interleaved FLVER TLS cache")
     require(flver_registry,"thread_local std::array<","FLVER TLS cache storage")
+    parse_body=function_body(
+        flver_registry,
+        "flver_identity_observe_parse(",
+        "flver_identity_observe_destroy(")
+    require(parse_body,
+        "if (found == g_by_model.end())",
+        "FLVER unrelated-streaming insertion branch")
+    insert_branch_start=parse_body.find(
+        "if (found == g_by_model.end())")
+    change_branch=parse_body.find(
+        "} else if (found->second != sha)",
+        insert_branch_start)
+    if insert_branch_start<0 or change_branch<0:
+        fail("FLVER parse insertion/change branches missing")
+    if "g_epoch.fetch_add" in parse_body[insert_branch_start:change_branch]:
+        fail("new unrelated FLVER still globally invalidates lookup TLS")
+
     lookup_body=function_body(
         flver_registry,
         "bool flver_identity_lookup(",
