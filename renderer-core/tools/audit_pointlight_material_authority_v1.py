@@ -83,6 +83,14 @@ def main() -> int:
         raise SystemExit(f"family-variant deferred drift: {len(variants)}")
     if len(ambiguous) != 2:
         raise SystemExit(f"ambiguous deferred drift: {len(ambiguous)}")
+    ambiguous_semantics = {
+        str(x.get("semantic_name_hash_fnv1a_utf8", ""))
+        for x in ambiguous
+    }
+    if any(x in seen_semantic for x in ambiguous_semantics):
+        raise SystemExit(
+            "ambiguous semantic leaked into active PointLight authority"
+        )
 
     policy = authority.get("policy", {})
     forbidden = set(policy.get("explicitly_not_authorized", []))
