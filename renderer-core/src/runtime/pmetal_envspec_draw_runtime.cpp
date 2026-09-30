@@ -485,8 +485,36 @@ bool pmetal_envspec_draw_runtime::prepare(
     effect_latch(effect_entry_seen_);
 
     if (cmd_list == nullptr ||
-        quarantined_.load() ||
-        !core_.features().enabled(
+        quarantined_.load()) {
+        effect_fail(
+            effect_fail_mask_,
+            k_effect_fail_feature);
+        return false;
+    }
+
+    // P_Metal is a very narrow route. Reject ordinary MR draws before taking
+    // the feature-registry mutexes below; otherwise every active material draw
+    // pays EnvSpec feature checks even though only exact route 345 / P_Metal
+    // can ever reach this island.
+    telemetry::hot_count(candidates_);
+    if (family ==
+        pmetal_envspec_receiver_family::
+            hemenvlerp)
+        telemetry::hot_count(lerp_candidates_);
+
+    if (!exact_pmetal_material(
+            material) ||
+        !exact_pmetal_decision(
+            decision)) {
+        telemetry::hot_count(material_rejects_);
+        effect_fail(
+            effect_fail_mask_,
+            k_effect_fail_material);
+        return false;
+    }
+    effect_latch(effect_material_ready_);
+
+    if (!core_.features().enabled(
             core::operator_id::env_spec)) {
         effect_fail(
             effect_fail_mask_,
@@ -512,24 +540,6 @@ bool pmetal_envspec_draw_runtime::prepare(
             k_effect_fail_lerp_feature);
         return false;
     }
-
-    telemetry::hot_count(candidates_);
-    if (family ==
-        pmetal_envspec_receiver_family::
-            hemenvlerp)
-        telemetry::hot_count(lerp_candidates_);
-
-    if (!exact_pmetal_material(
-            material) ||
-        !exact_pmetal_decision(
-            decision)) {
-        telemetry::hot_count(material_rejects_);
-        effect_fail(
-            effect_fail_mask_,
-            k_effect_fail_material);
-        return false;
-    }
-    effect_latch(effect_material_ready_);
 
     const auto query =
         make_query(
