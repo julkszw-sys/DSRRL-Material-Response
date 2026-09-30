@@ -146,6 +146,9 @@ private:
     };
 
     struct transaction_state {
+        // Borrowed for the synchronous replay lifetime. This avoids repeated
+        // command_list->get_native() virtual calls between begin/draw/restore.
+        ID3D11DeviceContext *context = nullptr;
         ID3D11PixelShader *old_shader = nullptr;
         std::array<void *, draw_tx_max_class_instances> old_classes{};
         std::uint32_t old_class_count = 0;
