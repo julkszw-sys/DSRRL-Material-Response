@@ -214,12 +214,17 @@ int main()
         mtd_semantic_hash("A10_Sky[Dn]_LS.mtd");
     bool nospc_record_found=false;
     for(const auto &record:
-        generated::k_envspec_router_v1){
-        if(record.state!=generated::envspec_router_state::nospc_host ||
-           record.semantic_name_hash!=exact_nospc.semantic_name_hash)
+        operators::point_light::generated::
+            k_pointlight_material_authority_v1){
+        if(record.mode!=
+               operators::point_light::generated::
+                   pointlight_material_mode::nospc ||
+           record.semantic_name_hash!=
+               exact_nospc.semantic_name_hash)
             continue;
         CHECK(!nospc_record_found);
-        exact_nospc.raw_mtd_sha256=record.raw_mtd_sha256;
+        exact_nospc.raw_mtd_sha256=
+            record.raw_mtd_sha256;
         nospc_record_found=true;
     }
     CHECK(nospc_record_found);
