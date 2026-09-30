@@ -66,6 +66,11 @@ option(
     "Diagnostic: feed exact native DSR BC6H cubemaps into the PTDE P_Metal EnvSpec operator"
     OFF)
 
+option(
+    DSRRL_POINTLIGHT_DRAWTIME_BYPASS
+    "Diagnostic: disable PointLight producer hooks, runtime pipeline binding and draw-time carrier/replay while preserving all non-PointLight runtime paths"
+    OFF)
+
 set(
     RESHADE_INCLUDE_DIR
     ""
@@ -450,6 +455,13 @@ if(DSRRL_PMETAL_NATIVE_DSR_CUBEMAP_FEED)
         dsrrl_renderer_core_integrated
         PRIVATE
         $<$<COMPILE_LANGUAGE:CXX>:DSRRL_PMETAL_NATIVE_DSR_CUBEMAP_FEED>)
+endif()
+
+if(DSRRL_POINTLIGHT_DRAWTIME_BYPASS)
+    target_compile_definitions(
+        dsrrl_renderer_core_integrated
+        PRIVATE
+        $<$<COMPILE_LANGUAGE:CXX>:DSRRL_POINTLIGHT_DRAWTIME_BYPASS>)
 endif()
 
 if(MSVC)
