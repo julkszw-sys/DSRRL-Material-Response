@@ -760,7 +760,7 @@ jobs:
             'finalize_registration',
             'registration_finalized_.load',
             'std::lower_bound',
-            'k_direct_nospc_cache_slots = 16u'
+            'resolve_direct_pointlight_authority'
           )) {
             if ($mrIsland -notmatch [regex]::Escape($required)) { throw "MR finalized hot-path authority invariant missing: $required" }
           }
