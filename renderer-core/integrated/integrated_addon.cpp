@@ -346,40 +346,6 @@ const char *effect_probe_stage_name(
     }
 }
 
-const char *pmetal_source_diag_name(
-    dsrrl::runtime::pmetal_env_source_diag_status status) noexcept
-{
-    using status_t =
-        dsrrl::runtime::pmetal_env_source_diag_status;
-
-    switch (status) {
-    case status_t::none:
-        return "NONE";
-    case status_t::success:
-        return "SUCCESS";
-    case status_t::token_invalid:
-        return "TOKEN_INVALID";
-    case status_t::base_null:
-        return "BASE_NULL";
-    case status_t::header_invalid:
-        return "HEADER_INVALID";
-    case status_t::selector_oob:
-        return "SELECTOR_OOB";
-    case status_t::signature_invalid:
-        return "SIGNATURE_INVALID";
-    case status_t::bank_unknown:
-        return "BANK_UNKNOWN";
-    case status_t::row_read_failed:
-        return "ROW_READ_FAILED";
-    case status_t::row_unknown:
-        return "ROW_UNKNOWN";
-    case status_t::nonfinite:
-        return "NONFINITE";
-    default:
-        return "UNKNOWN";
-    }
-}
-
 std::atomic_bool &effect_probe_flag(
     effect_probe_state &state,
     effect_probe_stage stage) noexcept
