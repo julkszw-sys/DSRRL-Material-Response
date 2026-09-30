@@ -69,12 +69,6 @@ public:
         bool probe_b_required,
         prepared_envspec_resources &prepared) noexcept;
 
-    bool prepare_native_dsr_mip3(
-        ID3D11DeviceContext *context,
-        std::uint8_t slot,
-        bool probe_b_required,
-        prepared_envspec_resources &prepared) noexcept;
-
     void release(
         prepared_envspec_resources &prepared) noexcept;
 
