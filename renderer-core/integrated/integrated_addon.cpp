@@ -154,6 +154,13 @@ std::atomic_bool g_mr_once_draw_issued{false};
 std::atomic<std::uint32_t> g_pointlight_gate_log_mask{0u};
 std::atomic<std::uint32_t> g_pointlight_prep_log_mask{0u};
 std::atomic_bool g_pointlight_active_logged{false};
+// Exact producer transports that may publish draw-scoped TLS. The selection
+// guard only drains transports that are actually installed; disabled islands
+// must not add function-call traffic to every host draw.
+std::atomic_bool g_upper_lower_selection_transport_active{false};
+std::atomic_bool g_hemdir3_selection_transport_active{false};
+std::atomic_bool g_fixed_pointlight_selection_transport_active{false};
+std::atomic_bool g_clustered_pointlight_selection_transport_active{false};
 std::atomic<std::uint64_t> g_mr_ul_payload_materialize_ok{0};
 std::atomic<std::uint64_t> g_mr_ul_payload_materialize_fail{0};
 std::atomic<std::uint64_t> g_subsurface_spec_payload_materialize_ok{0};
@@ -4849,11 +4856,19 @@ void release_prepared_island_batch(
 struct draw_semantic_selection_guard {
     ~draw_semantic_selection_guard()
     {
-        g_upper_lower.consume_draw_selection();
-        g_fixed_pointlight.consume_draw_selection();
-        g_clustered_pnts.consume_draw_selection();
-        dsrrl::runtime::hemdir3_mode_transport::
-            consume_draw_selection();
+        if (g_upper_lower_selection_transport_active.load(
+                std::memory_order_relaxed))
+            g_upper_lower.consume_draw_selection();
+        if (g_fixed_pointlight_selection_transport_active.load(
+                std::memory_order_relaxed))
+            g_fixed_pointlight.consume_draw_selection();
+        if (g_clustered_pointlight_selection_transport_active.load(
+                std::memory_order_relaxed))
+            g_clustered_pnts.consume_draw_selection();
+        if (g_hemdir3_selection_transport_active.load(
+                std::memory_order_relaxed))
+            dsrrl::runtime::hemdir3_mode_transport::
+                consume_draw_selection();
     }
 };
 
@@ -6404,6 +6419,10 @@ bool AddonInit(
     g_pointlight_gate_log_mask.store(0u);
     g_pointlight_prep_log_mask.store(0u);
     g_pointlight_active_logged.store(false);
+    g_upper_lower_selection_transport_active.store(false);
+    g_hemdir3_selection_transport_active.store(false);
+    g_fixed_pointlight_selection_transport_active.store(false);
+    g_clustered_pointlight_selection_transport_active.store(false);
     g_mr_ul_payload_materialize_ok.store(0);
     g_mr_ul_payload_materialize_fail.store(0);
     g_subsurface_spec_payload_materialize_ok.store(0);
@@ -6572,6 +6591,10 @@ bool AddonInit(
         flver_hooks &&
         g_fixed_pointlight.install();
 
+    g_fixed_pointlight_selection_transport_active.store(
+        fixed_pointlight_hooks,
+        std::memory_order_release);
+
     if (!k_pointlight_drawtime_runtime_enabled) {
         reshade::log::message(
             reshade::log::level::info,
@@ -6588,6 +6611,10 @@ bool AddonInit(
         k_pointlight_drawtime_runtime_enabled &&
         flver_hooks &&
         g_clustered_pnts.install();
+
+    g_clustered_pointlight_selection_transport_active.store(
+        clustered_pointlight_hooks,
+        std::memory_order_release);
 
     if (k_pointlight_drawtime_runtime_enabled &&
         !clustered_pointlight_hooks) {
@@ -6630,6 +6657,10 @@ bool AddonInit(
         (flver_hooks &&
          dsrrl::runtime::hemdir3_mode_transport::install());
 
+    g_hemdir3_selection_transport_active.store(
+        hemdir3_enabled && hemdir3_mode_hooks,
+        std::memory_order_release);
+
     if (hemdir3_enabled && !hemdir3_mode_hooks) {
         reshade::log::message(
             reshade::log::level::warning,
@@ -6669,6 +6700,10 @@ bool AddonInit(
         !lightbank_reference_transport_required ||
         (flver_hooks &&
          g_upper_lower.install(false));
+
+    g_upper_lower_selection_transport_active.store(
+        upper_lower_enabled && lightbank_reference_hooks,
+        std::memory_order_release);
 
     if (!upper_lower_enabled) {
         reshade::log::message(
