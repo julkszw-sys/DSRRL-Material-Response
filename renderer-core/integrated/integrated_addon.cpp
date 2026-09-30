@@ -3839,9 +3839,12 @@ bool on_create_pipeline(
                 }
             }
 
-            // Upper/Lower is independently materialized for its own exact
-            // consumer path. Subsurface never depends on this replacement.
-            std::vector<std::uint8_t> mr_ul_payload;
+            // Upper/Lower composition is construction work for an optional
+            // island. When U/L is disabled, do not build/register dead shader
+            // variants while an area is streaming.
+            if (g_core.features().enabled(
+                    dsrrl::core::operator_id::upper_lower)) {
+                std::vector<std::uint8_t> mr_ul_payload;
             const auto mr_ul =
                 dsrrl::operators::lightbank::
                     augment_upper_lower_hemenv_verified_base(
@@ -3880,6 +3883,7 @@ bool on_create_pipeline(
                             pass_unknown_exact_sha) {
                 ++g_mr_ul_payload_materialize_fail;
             }
+            }
         } else if (
             mr.result != mr_result::pass_not_candidate &&
             mr.result != mr_result::pass_unknown_exact_sha &&
@@ -3890,22 +3894,12 @@ bool on_create_pipeline(
             ++g_mr_payload_materialize_fail;
         }
 
-        // Exact HemEnvLerp is a distinct executable family that shares the
-        // semantic receiver namespace 24..47. Build the clean stock->PTDE
-        // diffuse response under a separate replacement object. c101/F0 and
-        // generic SpecRGB/PBL mutation are intentionally absent.
-        std::vector<std::uint8_t> lerp_mr_payload;
-        const auto lerp_mr =
-            dsrrl::operators::material_response::
-                materialize_ptde_diffuse_response_v1(
-                    g_core.features(),
-                    source,
-                    pixel_shader->code_size,
-                    lerp_mr_payload);
-
-        using lerp_mr_result =
-            dsrrl::operators::material_response::
-                diffuse_v1_result;
+        // The single diffuse-v1 materialization above already classifies
+        // stable HemEnv versus HemEnvLerp. Reuse its exact output instead of
+        // reparsing/rehashing the same DXBC a second time during streaming.
+        const auto &lerp_mr = mr;
+        const auto &lerp_mr_payload = mr_payload;
+        using lerp_mr_result = mr_result;
 
         if (lerp_mr.result == lerp_mr_result::applied &&
             lerp_mr.family ==
@@ -3929,9 +3923,11 @@ bool on_create_pipeline(
             // MR reset: do not pair PTDE SpecRGB with the stock DSR
             // HemEnvLerp PBL tail. SpecRGB is operator-local elsewhere.
 
-            // U/L is an optional composed operator. Its failure must never
-            // remove the independently certified Lerp Material Response path.
-            std::vector<std::uint8_t> lerp_mr_ul_payload;
+            // U/L is optional and currently disabled by policy. Build its
+            // composed Lerp variant only when that island is explicitly on.
+            if (g_core.features().enabled(
+                    dsrrl::core::operator_id::upper_lower)) {
+                std::vector<std::uint8_t> lerp_mr_ul_payload;
             const auto lerp_mr_ul =
                 dsrrl::operators::lightbank::
                     augment_upper_lower_hemenv_verified_base(
@@ -3974,6 +3970,7 @@ bool on_create_pipeline(
                         upper_lower_hemenv_materialize_result::
                             pass_unknown_exact_sha) {
                 ++g_mr_ul_payload_materialize_fail;
+            }
             }
         } else if (
             lerp_mr.result != lerp_mr_result::pass_not_candidate &&
