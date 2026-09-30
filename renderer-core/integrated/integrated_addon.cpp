@@ -6615,6 +6615,11 @@ bool AddonInit(
     bool pmetal_envspec_enabled =
         g_core.features().enabled(
             dsrrl::core::operator_id::env_spec);
+    const bool pmetal_source_ready =
+        !pmetal_envspec_enabled ||
+        upper_lower_enabled ||
+        (flver_hooks &&
+         g_pmetal_source.install());
 
     // Runtime-liveness guard: do not arm the Upper/Lower LightBank hook set
     // solely as a carrier for P_Metal EnvSpec. Two consecutive owner runtime
