@@ -835,6 +835,9 @@ thread_local bool g_pmetal_selected_valid = false;
 std::atomic<std::uint64_t> g_pmetal_source_publish{0u};
 std::atomic<std::uint64_t> g_pmetal_source_consumer_ok{0u};
 std::atomic<std::uint64_t> g_pmetal_source_consumer_fail{0u};
+std::atomic<std::uint32_t> g_pmetal_source_last_publish_tid{0u};
+std::atomic<std::uint32_t> g_pmetal_source_last_consumer_tid{0u};
+std::atomic_bool g_pmetal_source_last_consumer_local_valid{false};
 std::atomic<std::uint64_t> g_pmetal_source_steady_seen{0u};
 std::atomic<std::uint64_t> g_pmetal_source_blend_seen{0u};
 std::atomic<std::uint64_t> g_pmetal_source_decode_fail{0u};
@@ -4805,6 +4808,10 @@ void pmetal_env_source_selector_event(
     g_pmetal_selected_source = next;
     g_pmetal_selected_material = material;
     g_pmetal_selected_valid = true;
+    if (telemetry::effect_enabled())
+        g_pmetal_source_last_publish_tid.store(
+            static_cast<std::uint32_t>(GetCurrentThreadId()),
+            std::memory_order_relaxed);
     telemetry::hot_count(g_pmetal_source_publish);
     telemetry::hot_count(endpoints.beta == 0.0f ? g_pmetal_source_steady_seen : g_pmetal_source_blend_seen);
 }
@@ -4814,8 +4821,18 @@ bool pmetal_env_source_runtime::latest(
     pmetal_envspec_source &out) const noexcept
 {
     out = {};
+    const bool local_valid =
+        g_pmetal_selected_valid;
+    if (telemetry::effect_enabled()) {
+        g_pmetal_source_last_consumer_tid.store(
+            static_cast<std::uint32_t>(GetCurrentThreadId()),
+            std::memory_order_relaxed);
+        g_pmetal_source_last_consumer_local_valid.store(
+            local_valid,
+            std::memory_order_relaxed);
+    }
     if (!g_pmetal_selector_enabled.load(std::memory_order_acquire) ||
-        !g_pmetal_selected_valid || !exact_pmetal_material_selection(material) ||
+        !local_valid || !exact_pmetal_material_selection(material) ||
         g_pmetal_selected_source.serial != g_pmetal_selector_epoch.load(std::memory_order_relaxed) ||
         material.flver_sha256 != g_pmetal_selected_material.flver_sha256 ||
         material.material_slot != g_pmetal_selected_material.material_slot ||
@@ -4836,6 +4853,15 @@ pmetal_env_source_runtime_telemetry pmetal_env_source_runtime::telemetry() const
     out.decode_fail = g_pmetal_source_decode_fail.load();
     out.consumer_ok = g_pmetal_source_consumer_ok.load();
     out.consumer_fail = g_pmetal_source_consumer_fail.load();
+    out.last_publish_tid =
+        g_pmetal_source_last_publish_tid.load(
+            std::memory_order_relaxed);
+    out.last_consumer_tid =
+        g_pmetal_source_last_consumer_tid.load(
+            std::memory_order_relaxed);
+    out.last_consumer_local_valid =
+        g_pmetal_source_last_consumer_local_valid.load(
+            std::memory_order_relaxed);
     // Both global source hook flags are permanently false.
     out.selector_carrier_active = g_pmetal_selector_enabled.load();
     return out;
@@ -4848,6 +4874,9 @@ void pmetal_env_source_runtime::reset() noexcept
     g_pmetal_source_publish.store(0u);
     g_pmetal_source_consumer_ok.store(0u);
     g_pmetal_source_consumer_fail.store(0u);
+    g_pmetal_source_last_publish_tid.store(0u);
+    g_pmetal_source_last_consumer_tid.store(0u);
+    g_pmetal_source_last_consumer_local_valid.store(false);
     g_pmetal_source_steady_seen.store(0u);
     g_pmetal_source_blend_seen.store(0u);
     g_pmetal_source_decode_fail.store(0u);
