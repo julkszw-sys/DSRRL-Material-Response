@@ -4385,20 +4385,57 @@ void __fastcall hook_pmetal_env_blend(
         std::uint32_t row_a = 0u;
         std::uint32_t row_b = 0u;
 
-        const bool have_a =
-            read_exact_pmetal_env_source(
-                source_a,
-                selector_a,
-                a,
-                bank_a,
-                row_a);
-        bool have_b =
-            read_exact_pmetal_env_source(
-                source_b,
-                selector_b,
-                b,
-                bank_b,
-                row_b);
+        // Mirror the retail 0x563C30 branch contract exactly before touching
+        // an endpoint. DSR does not require both source pointers on endpoint
+        // collapse paths, so the source-only carrier must not probe an
+        // otherwise-unused pointer merely because it was passed in a register.
+        enum class source_mode : std::uint8_t {
+            none,
+            endpoint_a,
+            endpoint_b,
+            blend
+        };
+
+        source_mode mode = source_mode::none;
+        if (std::isfinite(beta)) {
+            if ((selector_a == selector_b ||
+                 beta <= 0.0f) &&
+                source_a != nullptr) {
+                mode = source_mode::endpoint_a;
+            } else if (
+                (selector_a == selector_b ||
+                 beta >= 1.0f) &&
+                source_b != nullptr) {
+                mode = source_mode::endpoint_b;
+            } else if (
+                source_a != nullptr &&
+                source_b != nullptr) {
+                mode = source_mode::blend;
+            }
+        }
+
+        bool have_a = false;
+        bool have_b = false;
+
+        if (mode == source_mode::endpoint_a ||
+            mode == source_mode::blend)
+            have_a =
+                read_exact_pmetal_env_source(
+                    source_a,
+                    selector_a,
+                    a,
+                    bank_a,
+                    row_a);
+
+        if (mode == source_mode::endpoint_b ||
+            mode == source_mode::blend)
+            have_b =
+                read_exact_pmetal_env_source(
+                    source_b,
+                    selector_b,
+                    b,
+                    bank_b,
+                    row_b);
 
         if (g_pmetal_env_blend_orig != nullptr)
             g_pmetal_env_blend_orig(
@@ -4409,20 +4446,8 @@ void __fastcall hook_pmetal_env_blend(
                 selector_b,
                 beta);
 
-        if (have_a &&
-            have_b &&
-            std::isfinite(beta)) {
-            publish_pmetal_source_only(
-                a,
-                b,
-                std::clamp(beta,0.0f,1.0f),
-                bank_a,
-                bank_b,
-                row_a,
-                row_b);
-            telemetry::hot_count(
-                g_pmetal_env_blend);
-        } else if (have_a) {
+        if (mode == source_mode::endpoint_a &&
+            have_a) {
             publish_pmetal_source_only(
                 a,
                 a,
@@ -4433,7 +4458,9 @@ void __fastcall hook_pmetal_env_blend(
                 row_a);
             telemetry::hot_count(
                 g_pmetal_env_blend);
-        } else if (have_b) {
+        } else if (
+            mode == source_mode::endpoint_b &&
+            have_b) {
             publish_pmetal_source_only(
                 b,
                 b,
@@ -4441,6 +4468,20 @@ void __fastcall hook_pmetal_env_blend(
                 bank_b,
                 bank_b,
                 row_b,
+                row_b);
+            telemetry::hot_count(
+                g_pmetal_env_blend);
+        } else if (
+            mode == source_mode::blend &&
+            have_a &&
+            have_b) {
+            publish_pmetal_source_only(
+                a,
+                b,
+                std::clamp(beta,0.0f,1.0f),
+                bank_a,
+                bank_b,
+                row_a,
                 row_b);
             telemetry::hot_count(
                 g_pmetal_env_blend);
@@ -4564,15 +4605,13 @@ bool install_pmetal_source_only_carrier() noexcept
         reinterpret_cast<pmetal_env_blend_fn>(
             g_pmetal_env_hook.trampoline);
 
-    g_pmetal_source_only_enabled.store(
-        true,
-        std::memory_order_release);
-
+    // Arm both entry points while the source-only latch is still OFF.
+    // If another engine thread reaches either detour during installation it
+    // executes the stock operator path only. Publish the active latch only
+    // after both hooks are present, eliminating a partially-installed source
+    // carrier state.
     if (!arm_hook(g_hooks[3]) ||
         !arm_hook(g_pmetal_env_hook)) {
-        g_pmetal_source_only_enabled.store(
-            false,
-            std::memory_order_release);
         (void)restore_hook(g_pmetal_env_hook);
         (void)restore_hook(g_hooks[3]);
         g_steady_packer_orig = nullptr;
@@ -4581,6 +4620,9 @@ bool install_pmetal_source_only_carrier() noexcept
     }
 
     g_pmetal_env_hook_armed.store(
+        true,
+        std::memory_order_release);
+    g_pmetal_source_only_enabled.store(
         true,
         std::memory_order_release);
     return true;
