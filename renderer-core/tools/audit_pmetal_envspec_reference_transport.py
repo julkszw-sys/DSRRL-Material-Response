@@ -124,23 +124,54 @@ def main() -> None:
 
     require(
         blend_hook,
-        "selector_a == selector_b ||\n                 beta <= 0.0f",
+        "const bool endpoint_a =",
+        "retail endpoint-A mode",
+    )
+    require(
+        blend_hook,
+        "beta <= 0.0f",
         "retail endpoint-A collapse condition",
     )
     require(
         blend_hook,
-        "selector_a == selector_b ||\n                 beta >= 1.0f",
+        "const bool endpoint_b =",
+        "retail endpoint-B mode",
+    )
+    require(
+        blend_hook,
+        "beta >= 1.0f",
         "retail endpoint-B collapse condition",
     )
     require(
         blend_hook,
-        "mode == source_mode::endpoint_a ||\n            mode == source_mode::blend",
-        "endpoint-A decode only when retail path can consume A",
+        "if (endpoint_a || endpoint_b) {",
+        "endpoint collapse delegated to steady source cut",
     )
     require(
         blend_hook,
-        "mode == source_mode::endpoint_b ||\n            mode == source_mode::blend",
-        "endpoint-B decode only when retail path can consume B",
+        "const bool interior_blend =",
+        "interior blend gate",
+    )
+    require(
+        blend_hook,
+        "if (interior_blend) {",
+        "A/B decode restricted to true interior blend",
+    )
+    require(
+        blend_hook,
+        "source_serial advanced without a publication",
+        "failed event invalidates stale source by serial advance",
+    )
+
+    require(
+        ul_cpp,
+        "out.serial != latest_source_serial",
+        "draw consumer rejects stale source payload",
+    )
+    require(
+        ul_cpp,
+        "g_pmetal_source_serial.fetch_add(",
+        "source events carry monotonic freshness serial",
     )
 
     ul_install_begin = ul_cpp.index(
@@ -462,7 +493,9 @@ def main() -> None:
     print("  shared U/L runtime=OFF when U/L is OFF")
     print("  P_Metal EnvSpec source=isolated V13 carrier")
     print("  isolated hook surface=0x563B80 steady + 0x563C30 blend only")
-    print("  0x563C30 endpoint reads=retail branch-equivalent; unused pointers are not probed")
+    print("  0x563C30 endpoint collapse=delegated to hooked retail 0x563B80 exactly once")
+    print("  0x563C30 interior blend=only path that decodes both A/B endpoints")
+    print("  source freshness=monotonic event serial; stale payload replay is rejected")
     print("  source-only active latch=published only after both hooks are armed")
     print("  shared U/L wrapper/blend/cache-builder hooks=forbidden in source-only installer")
     print("  EnvSpec source does not require visible U/L transport")
