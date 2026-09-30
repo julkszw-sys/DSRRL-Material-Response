@@ -142,10 +142,12 @@ struct f4 {
 pmetal_envspec_draw_runtime::
 pmetal_envspec_draw_runtime(
     core::renderer_core &core,
+    pmetal_env_source_runtime &source,
     upper_lower_draw_runtime &lightbank,
     envspec_resource_runtime &env_resources,
     material_resource_draw_runtime &material_resources) noexcept
     : core_(core),
+      source_(source),
       lightbank_(lightbank),
       env_resources_(env_resources),
       material_resources_(material_resources)
@@ -599,10 +601,8 @@ bool pmetal_envspec_draw_runtime::prepare(
     }
     effect_latch(effect_semantic_ready_);
 
-    pmetal_env_source source{};
-    if (!lightbank_.
-            selected_pmetal_env_source(
-                source) ||
+    pmetal_envspec_source source{};
+    if (!source_.latest(source) ||
         !std::isfinite(source.beta)) {
         telemetry::hot_count(source_rejects_);
         effect_fail(
