@@ -583,3 +583,8 @@ add_test(
             --donors "${CMAKE_CURRENT_SOURCE_DIR}/data/provenance/ptde_material_donor_registry.hpp"
             --generated "${CMAKE_CURRENT_SOURCE_DIR}/include/dsrrl/operators/material_response/generated_material_constants_v1.hpp"
 )
+
+add_executable(dsrrl_pmetal_selector_policy_tests tests/pmetal_selector_policy_tests.cpp)
+target_include_directories(dsrrl_pmetal_selector_policy_tests PRIVATE include)
+target_compile_features(dsrrl_pmetal_selector_policy_tests PRIVATE cxx_std_17)
+add_test(NAME dsrrl_pmetal_selector_policy_tests COMMAND dsrrl_pmetal_selector_policy_tests)

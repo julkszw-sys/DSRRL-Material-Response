@@ -11,6 +11,7 @@
 #include "dsrrl/runtime/material_owner_selection.hpp"
 #include "dsrrl/runtime/material_owner_producer.hpp"
 #include "dsrrl/runtime/upper_lower_draw_runtime.hpp"
+#include "dsrrl/runtime/pmetal_env_source_runtime.hpp"
 #include "dsrrl/runtime/hemdir3_mode_transport.hpp"
 #include "dsrrl/runtime/clustered_pnts_draw_runtime.hpp"
 #include "dsrrl/operators/material_response/mtd_semantic_census.hpp"
@@ -489,10 +490,12 @@ extern "C" void dsrrl_flver_selector_observer(
     void *r14,
     void *r15,
     std::int32_t material_index,
-    std::uint32_t incoming_mode) noexcept
+    std::uint32_t incoming_mode,
+    const void *selector_stack) noexcept
 {
  telemetry::hot_count(g_selector_events);
  material_owner_selection_clear();
+ pmetal_env_source_selector_clear();
 
  hemdir3_mode_transport::selector_begin(
      incoming_mode);
@@ -541,6 +544,7 @@ extern "C" void dsrrl_flver_selector_observer(
     upper_lower_pmetal_material_event_bridge(
         owner,
         identity);
+    pmetal_env_source_selector_event(owner, ret, r14, r15, selector_stack, identity);
     telemetry::hot_count(g_exact_owner_ready);
     return;
    }
@@ -608,6 +612,7 @@ void uninstall() noexcept {
  g_mo=nullptr;
  clear_exact_material_cache();
  material_owner_selection_clear();
+ pmetal_env_source_selector_clear();
  flver_identity_reset();
  g_state={};
 }

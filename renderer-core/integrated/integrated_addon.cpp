@@ -2523,7 +2523,7 @@ void log_effect_matrix(
         "PMetal entry=%u feature=%u material=%u semantic=%u source=%u "
         "receiver_source=%u repl=%u probe=%u spec=%u b12=%u request=%u fail=0x%08X "
         "PMSRC steady=%llu blend=%llu publish=%llu bank_unknown=%llu decode_fail=%llu "
-        "busy_drop=%llu consume=%llu/%llu carrier=%u/%u q=%u restore_fail=%u "
+        "busy_drop=%llu consume=%llu/%llu carrier=%u/%u selector=%u q=%u restore_fail=%u "
         "SUB cand=%llu matrej=%llu piperej=%llu surfrej=%llu prep=%llu "
         "UL producer=%u changed=%u quarantine=%u restore_fail=%u "
         "Bloom diag_hooks=%u/%u model_hook=%u proof=%u contents=%u "
@@ -2553,6 +2553,7 @@ void log_effect_matrix(
         static_cast<unsigned long long>(pmetal_source.consumer_fail),
         pmetal_source.steady_carrier_active ? 1u : 0u,
         pmetal_source.blend_carrier_active ? 1u : 0u,
+        pmetal_source.selector_carrier_active ? 1u : 0u,
         pmetal_source.quarantined ? 1u : 0u,
         pmetal_source.restore_failed ? 1u : 0u,
         static_cast<unsigned long long>(subsurface.candidates),
@@ -6481,16 +6482,11 @@ bool AddonInit(
             dsrrl::core::operator_id::env_spec);
     const bool pmetal_source_ready =
         !pmetal_envspec_enabled ||
-        upper_lower_enabled ||
         (flver_hooks &&
          g_pmetal_source.install());
 
-    // Runtime-liveness guard: do not arm the Upper/Lower LightBank hook set
-    // solely as a carrier for P_Metal EnvSpec. Two consecutive owner runtime
-    // failures occurred while EnvSpec source capture was coupled to the broad
-    // shared U/L reference runtime, so they do not isolate the recovered V13
-    // source carrier by itself. The EnvSpec carrier is now independent; shared
-    // visible U/L state remains disabled unless U/L is explicitly enabled.
+    // EnvSpec uses embedded PTDE donors selected by an exact FLVER callback.
+    // Only visible U/L may arm the global LightBank hook set.
     const bool lightbank_reference_transport_required =
         upper_lower_enabled;
     const bool lightbank_reference_hooks =
@@ -6513,16 +6509,7 @@ bool AddonInit(
             "] LightBank transport FAIL-OPEN: U/L stays stock.");
     }
 
-    if (pmetal_envspec_enabled &&
-        upper_lower_enabled) {
-        (void)g_core.features().set(
-            dsrrl::core::operator_id::env_spec,
-            false);
-        pmetal_envspec_enabled = false;
-        reshade::log::message(
-            reshade::log::level::warning,
-            "[DSRRL PMETAL ENVSPEC] SOURCE FAIL-OPEN: EnvSpec source carrier is exclusive with visible U/L.");
-    } else if (
+    if (
         pmetal_envspec_enabled &&
         !pmetal_source_ready) {
         (void)g_core.features().set(
@@ -6531,13 +6518,13 @@ bool AddonInit(
         pmetal_envspec_enabled = false;
         reshade::log::message(
             reshade::log::level::warning,
-            "[DSRRL PMETAL ENVSPEC] SOURCE FAIL-OPEN: isolated V13 carrier unavailable; stock DSR EnvSpec preserved.");
+            "[DSRRL PMETAL ENVSPEC] SOURCE FAIL-OPEN: exact selector PTDE donor carrier unavailable; stock DSR EnvSpec preserved.");
     } else if (
         pmetal_envspec_enabled &&
         pmetal_source_ready) {
         reshade::log::message(
             reshade::log::level::info,
-            "[DSRRL PMETAL ENVSPEC] isolated V13 source carrier ACTIVE; visible U/L remains stock/off.");
+            "[DSRRL PMETAL ENVSPEC] exact P_Metal selector PTDE donor carrier ACTIVE; global LightBank source hooks=0/0; visible U/L remains stock/off.");
     }
 
     {

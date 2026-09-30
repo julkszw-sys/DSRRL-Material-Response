@@ -7,6 +7,7 @@
 
 #include "dsrrl/runtime/upper_lower_draw_runtime.hpp"
 #include "dsrrl/runtime/pmetal_env_source_runtime.hpp"
+#include "dsrrl/runtime/pmetal_selector_policy.hpp"
 #include "dsrrl/runtime/runtime_hot_telemetry.hpp"
 #include "dsrrl/runtime/flver_identity_transport.hpp"
 #include "dsrrl/operators/lightbank/snapshot_freshness.hpp"
@@ -662,8 +663,6 @@ upper_lower_draw_runtime *g_runtime = nullptr;
 std::uintptr_t g_base = 0u;
 std::array<inline_hook,5> g_hooks{};
 inline_hook g_pmetal_env_hook{};
-inline_hook g_pmetal_source_steady_hook{};
-inline_hook g_pmetal_source_blend_hook{};
 inline_hook g_steady_eval_tail_hook{};
 inline_hook g_steady_cache_builder_hook{};
 
@@ -674,8 +673,6 @@ steady_packer_fn g_steady_packer_orig = nullptr;
 steady_eval_tail_fn g_steady_eval_tail_orig = nullptr;
 lightbank_blend_packer_fn g_blend_packer_orig = nullptr;
 pmetal_env_blend_fn g_pmetal_env_blend_orig = nullptr;
-steady_packer_fn g_pmetal_source_steady_orig = nullptr;
-pmetal_env_blend_fn g_pmetal_source_blend_orig = nullptr;
 steady_cache_builder_fn g_steady_cache_builder_orig = nullptr;
 
 std::mutex g_snapshot_mutex;
@@ -830,20 +827,17 @@ std::atomic<std::uint64_t> g_pmetal_env_steady{0};
 std::atomic<std::uint64_t> g_pmetal_env_blend{0};
 std::atomic<std::uint64_t> g_pmetal_env_miss{0};
 std::atomic_bool g_pmetal_env_hook_armed{false};
-std::atomic_bool g_pmetal_source_only_enabled{false};
-std::atomic_flag g_pmetal_source_payload_guard = ATOMIC_FLAG_INIT;
-pmetal_envspec_source g_pmetal_source_payload{};
-bool g_pmetal_source_payload_valid = false;
-std::atomic<std::uint64_t> g_pmetal_source_serial{0u};
+std::atomic_bool g_pmetal_selector_enabled{false};
+std::atomic<std::uint64_t> g_pmetal_selector_epoch{1u};
+thread_local pmetal_envspec_source g_pmetal_selected_source{};
+thread_local operators::material_response::material_identity g_pmetal_selected_material{};
+thread_local bool g_pmetal_selected_valid = false;
 std::atomic<std::uint64_t> g_pmetal_source_publish{0u};
-std::atomic<std::uint64_t> g_pmetal_source_busy_drop{0u};
 std::atomic<std::uint64_t> g_pmetal_source_consumer_ok{0u};
 std::atomic<std::uint64_t> g_pmetal_source_consumer_fail{0u};
 std::atomic<std::uint64_t> g_pmetal_source_steady_seen{0u};
 std::atomic<std::uint64_t> g_pmetal_source_blend_seen{0u};
 std::atomic<std::uint64_t> g_pmetal_source_decode_fail{0u};
-std::atomic_bool g_pmetal_source_quarantined{false};
-std::atomic_bool g_pmetal_source_restore_failed{false};
 
 
 std::atomic<std::uint32_t> g_pmetal_diag_status_a{0u};
@@ -2529,113 +2523,6 @@ bool read_exact_pmetal_env_source(
     return true;
 }
 
-void publish_pmetal_source_only(
-    const f4 &a,
-    const f4 &b,
-    float beta,
-    std::uint64_t bank_a,
-    std::uint64_t bank_b,
-    std::uint32_t row_a,
-    std::uint32_t row_b,
-    std::uint64_t source_serial) noexcept
-{
-    if (!std::isfinite(a.x) ||
-        !std::isfinite(a.y) ||
-        !std::isfinite(a.z) ||
-        !std::isfinite(b.x) ||
-        !std::isfinite(b.y) ||
-        !std::isfinite(b.z) ||
-        !std::isfinite(beta))
-        return;
-
-    // Never spin on the render/LightBank path. A concurrent publication is
-    // allowed to win and this event simply fails open.
-    if (g_pmetal_source_payload_guard.test_and_set(
-            std::memory_order_acquire)) {
-        g_pmetal_source_busy_drop.fetch_add(
-            1u,
-            std::memory_order_relaxed);
-        return;
-    }
-
-    pmetal_envspec_source next{};
-    next.a = {a.x,a.y,a.z};
-    next.b = {b.x,b.y,b.z};
-    next.beta =
-        std::clamp(beta,0.0f,1.0f);
-    next.bank_signature_a = bank_a;
-    next.bank_signature_b = bank_b;
-    next.row_id_a = row_a;
-    next.row_id_b = row_b;
-    next.serial = source_serial;
-
-    g_pmetal_source_payload = next;
-    g_pmetal_source_payload_valid = true;
-    g_pmetal_source_payload_guard.clear(
-        std::memory_order_release);
-    g_pmetal_source_publish.fetch_add(
-        1u,
-        std::memory_order_relaxed);
-}
-
-bool consume_pmetal_source_only(
-    pmetal_envspec_source &out) noexcept
-{
-    out = {};
-
-    if (!g_pmetal_source_only_enabled.load(
-            std::memory_order_acquire) ||
-        g_pmetal_source_quarantined.load(
-            std::memory_order_relaxed)) {
-        g_pmetal_source_consumer_fail.fetch_add(
-            1u,
-            std::memory_order_relaxed);
-        return false;
-    }
-
-    if (g_pmetal_source_payload_guard.test_and_set(
-            std::memory_order_acquire)) {
-        g_pmetal_source_consumer_fail.fetch_add(
-            1u,
-            std::memory_order_relaxed);
-        return false;
-    }
-
-    const bool valid =
-        g_pmetal_source_payload_valid;
-    if (valid)
-        out = g_pmetal_source_payload;
-
-    g_pmetal_source_payload_guard.clear(
-        std::memory_order_release);
-
-    const auto latest_source_serial =
-        g_pmetal_source_serial.load(
-            std::memory_order_acquire);
-
-    if (!valid ||
-        out.serial == 0u ||
-        out.serial != latest_source_serial ||
-        !std::isfinite(out.a[0]) ||
-        !std::isfinite(out.a[1]) ||
-        !std::isfinite(out.a[2]) ||
-        !std::isfinite(out.b[0]) ||
-        !std::isfinite(out.b[1]) ||
-        !std::isfinite(out.b[2]) ||
-        !std::isfinite(out.beta)) {
-        out = {};
-        g_pmetal_source_consumer_fail.fetch_add(
-            1u,
-            std::memory_order_relaxed);
-        return false;
-    }
-
-    g_pmetal_source_consumer_ok.fetch_add(
-        1u,
-        std::memory_order_relaxed);
-    return true;
-}
-
 bool materialize_selected_pmetal_env_source(
     lightbank_reference_token &token) noexcept
 {
@@ -3980,186 +3867,6 @@ void __fastcall hook_steady_eval_tail(
     telemetry::hot_count(g_direct_ul_steady_inject);
 }
 
-void __fastcall hook_pmetal_source_steady(
-    void *source,
-    void *dst,
-    std::int32_t selector) noexcept
-{
-    if (!g_pmetal_source_only_enabled.load(
-            std::memory_order_acquire)) {
-        if (g_pmetal_source_steady_orig != nullptr)
-            g_pmetal_source_steady_orig(
-                source,
-                dst,
-                selector);
-        return;
-    }
-
-    // Decode while the engine-owned source is live, but do not mutate shared
-    // P_Metal freshness until the event is proven to be an exact PTDE donor.
-    // Foreign LightBank traffic is outside this semantic cut and must be
-    // neutral to both performance and the last valid P_Metal publication.
-    f4 env{};
-    std::uint64_t bank = 0u;
-    std::uint32_t row = 0u;
-    const bool have_env =
-        read_exact_pmetal_env_source(
-            source,
-            selector,
-            env,
-            bank,
-            row);
-
-    if (g_pmetal_source_steady_orig != nullptr)
-        g_pmetal_source_steady_orig(
-            source,
-            dst,
-            selector);
-
-    if (have_env) {
-        const auto source_serial =
-            g_pmetal_source_serial.fetch_add(
-                1u,
-                std::memory_order_relaxed) +
-            1u;
-
-        publish_pmetal_source_only(
-            env,
-            env,
-            0.0f,
-            bank,
-            bank,
-            row,
-            row,
-            source_serial);
-
-        if (telemetry::effect_enabled())
-            g_pmetal_source_steady_seen.fetch_add(
-                1u,
-                std::memory_order_relaxed);
-    }
-}
-
-void __fastcall hook_pmetal_source_blend(
-    float *out,
-    void *source_a,
-    std::int32_t selector_a,
-    void *source_b,
-    std::int32_t selector_b,
-    float beta) noexcept
-{
-    if (!g_pmetal_source_only_enabled.load(
-            std::memory_order_acquire)) {
-        if (g_pmetal_source_blend_orig != nullptr)
-            g_pmetal_source_blend_orig(
-                out,
-                source_a,
-                selector_a,
-                source_b,
-                selector_b,
-                beta);
-        return;
-    }
-
-    // Canonical DSR 0x563C30 collapses endpoint cases by tail-jumping into
-    // 0x563B80. Let the untouched retail branch do exactly that; because the
-    // steady cut has its own dedicated hook, the selected endpoint is captured
-    // exactly once there. Only the true interior blend reads both source banks.
-    const bool finite_beta =
-        std::isfinite(beta);
-    const bool endpoint_a =
-        finite_beta &&
-        (selector_a == selector_b ||
-         beta <= 0.0f) &&
-        source_a != nullptr;
-    const bool endpoint_b =
-        finite_beta &&
-        !endpoint_a &&
-        (selector_a == selector_b ||
-         beta >= 1.0f) &&
-        source_b != nullptr;
-
-    if (endpoint_a || endpoint_b) {
-        if (g_pmetal_source_blend_orig != nullptr)
-            g_pmetal_source_blend_orig(
-                out,
-                source_a,
-                selector_a,
-                source_b,
-                selector_b,
-                beta);
-        return;
-    }
-
-    const bool interior_blend =
-        finite_beta &&
-        source_a != nullptr &&
-        source_b != nullptr;
-
-    f4 a{};
-    f4 b{};
-    std::uint64_t bank_a = 0u;
-    std::uint64_t bank_b = 0u;
-    std::uint32_t row_a = 0u;
-    std::uint32_t row_b = 0u;
-
-    bool have_a = false;
-    bool have_b = false;
-    if (interior_blend) {
-        have_a =
-            read_exact_pmetal_env_source(
-                source_a,
-                selector_a,
-                a,
-                bank_a,
-                row_a);
-        have_b =
-            read_exact_pmetal_env_source(
-                source_b,
-                selector_b,
-                b,
-                bank_b,
-                row_b);
-    }
-
-    if (g_pmetal_source_blend_orig != nullptr)
-        g_pmetal_source_blend_orig(
-            out,
-            source_a,
-            selector_a,
-            source_b,
-            selector_b,
-            beta);
-
-    if (interior_blend &&
-        have_a &&
-        have_b) {
-        // Freshness belongs to an exact publication, not to arbitrary global
-        // LightBank traffic. Failed/foreign events leave the last exact donor
-        // untouched rather than invalidating P_Metal before its draw.
-        const auto source_serial =
-            g_pmetal_source_serial.fetch_add(
-                1u,
-                std::memory_order_relaxed) +
-            1u;
-
-        publish_pmetal_source_only(
-            a,
-            b,
-            std::clamp(beta,0.0f,1.0f),
-            bank_a,
-            bank_b,
-            row_a,
-            row_b,
-            source_serial);
-
-        if (telemetry::effect_enabled())
-            g_pmetal_source_blend_seen.fetch_add(
-                1u,
-                std::memory_order_relaxed);
-    }
-}
-
 void __fastcall hook_steady_packer(
     void *source,
     void *dst,
@@ -4678,83 +4385,6 @@ bool install_optional_pmetal_env_hook() noexcept
     return true;
 }
 
-bool install_pmetal_source_only_carrier() noexcept
-{
-    if (g_base == 0u)
-        return false;
-
-    if (!prepare_hook(
-            g_pmetal_source_steady_hook,
-            k_rva_steady_packer,
-            k_steady_packer_bytes,
-            reinterpret_cast<void *>(
-                &hook_pmetal_source_steady)))
-        return false;
-
-    g_pmetal_source_steady_orig =
-        reinterpret_cast<steady_packer_fn>(
-            g_pmetal_source_steady_hook.trampoline);
-
-    if (!prepare_hook(
-            g_pmetal_source_blend_hook,
-            k_rva_pmetal_env_blend,
-            k_pmetal_env_blend_bytes,
-            reinterpret_cast<void *>(
-                &hook_pmetal_source_blend))) {
-        (void)restore_hook(
-            g_pmetal_source_steady_hook);
-        g_pmetal_source_steady_orig = nullptr;
-        return false;
-    }
-
-    g_pmetal_source_blend_orig =
-        reinterpret_cast<pmetal_env_blend_fn>(
-            g_pmetal_source_blend_hook.trampoline);
-
-    // Arm both dedicated source cuts while the active latch is still OFF.
-    // The detours therefore execute only the stock trampolines until both
-    // patches are present, and they never enter the generic U/L detours.
-    if (!arm_hook(
-            g_pmetal_source_steady_hook) ||
-        !arm_hook(
-            g_pmetal_source_blend_hook)) {
-        (void)restore_hook(
-            g_pmetal_source_blend_hook);
-        (void)restore_hook(
-            g_pmetal_source_steady_hook);
-        g_pmetal_source_steady_orig = nullptr;
-        g_pmetal_source_blend_orig = nullptr;
-        return false;
-    }
-
-    g_pmetal_source_only_enabled.store(
-        true,
-        std::memory_order_release);
-    return true;
-}
-
-bool restore_pmetal_source_only_carrier() noexcept
-{
-    g_pmetal_source_only_enabled.store(
-        false,
-        std::memory_order_release);
-
-    bool ok =
-        restore_hook(
-            g_pmetal_source_blend_hook);
-    ok =
-        restore_hook(
-            g_pmetal_source_steady_hook) &&
-        ok;
-
-    if (ok) {
-        g_pmetal_source_steady_orig = nullptr;
-        g_pmetal_source_blend_orig = nullptr;
-    }
-    return ok;
-}
-
-
 bool install_producer_hooks() noexcept
 {
     if (g_base == 0u)
@@ -5065,116 +4695,162 @@ void clear_snapshots() noexcept
 
 } // namespace
 
+// Called only after the existing FLVER installer attests the exact EXE SHA.
+// This source runtime installs NO LightBank hooks.
 bool pmetal_env_source_runtime::install() noexcept
 {
-    if (g_pmetal_source_only_enabled.load(
-            std::memory_order_acquire))
-        return true;
-
-    // Exclusive ownership: the isolated EnvSpec carrier and the full U/L
-    // runtime share the same retail LightBank source sites and may never be
-    // armed together.
-    if (g_enabled.load(
-            std::memory_order_acquire))
-        return false;
-
-    g_base =
-        reinterpret_cast<std::uintptr_t>(
-            GetModuleHandleW(nullptr));
-    if (g_base == 0u)
-        return false;
-
-    g_pmetal_source_quarantined.store(
-        false,
-        std::memory_order_release);
-    g_pmetal_source_restore_failed.store(
-        false,
-        std::memory_order_release);
-
-    if (!install_pmetal_source_only_carrier()) {
-        (void)restore_pmetal_source_only_carrier();
-        g_base = 0u;
-        return false;
-    }
-
-    return true;
+    g_base = reinterpret_cast<std::uintptr_t>(GetModuleHandleW(nullptr));
+    g_pmetal_selector_epoch.fetch_add(1u, std::memory_order_relaxed);
+    g_pmetal_selector_enabled.store(g_base != 0u, std::memory_order_release);
+    return g_base != 0u;
 }
 
 void pmetal_env_source_runtime::uninstall() noexcept
 {
-    if (!g_pmetal_source_only_enabled.load(
-            std::memory_order_acquire))
+    g_pmetal_selector_enabled.store(false, std::memory_order_release);
+    g_pmetal_selector_epoch.fetch_add(1u, std::memory_order_relaxed);
+    pmetal_env_source_selector_clear();
+}
+
+void pmetal_env_source_selector_clear() noexcept
+{
+    // Same selector lifetime as material_owner_selection; never reuse a donor
+    // across a failed, foreign, or unrecognized selector. No atomic RMW.
+    g_pmetal_selected_valid = false;
+}
+
+void pmetal_env_source_selector_event(
+    void *owner, void *return_address, void *r14, void *r15, const void *selector_stack,
+    const operators::material_response::material_identity &material) noexcept
+{
+    g_pmetal_selected_valid = false;
+    if (!g_pmetal_selector_enabled.load(std::memory_order_acquire) ||
+        !exact_pmetal_material_selection(material) || !owner || !return_address)
         return;
 
-    if (!restore_pmetal_source_only_carrier()) {
-        g_pmetal_source_restore_failed.store(
-            true,
-            std::memory_order_release);
-        g_pmetal_source_quarantined.store(
-            true,
-            std::memory_order_release);
-        return;
+    const auto absolute = reinterpret_cast<std::uintptr_t>(return_address);
+    if (absolute < g_base) return;
+    const auto rva = absolute - g_base;
+    const auto *descriptor = static_cast<const std::uint8_t *>(
+        (rva == k_ret_sel_1 || rva == k_ret_sel_3) ? r15 :
+        rva == k_ret_sel_2 ? r14 : nullptr);
+    if (!descriptor || !selector_stack) return;
+    // Only the ordinary 2200D0 builder is proven here. At the three exact
+    // selector return sites the parent return slot is entry RSP+170/F0.
+    // Require its direct 220CED call -> 220CF0 continuation. Other builders
+    // (including 2162D0) have different tail fields and MUST fail open.
+    std::uintptr_t parent_return = 0u;
+    const auto parent_offset = rva == k_ret_sel_1 ? 0x170u : 0xF0u;
+    if (!safe_read(static_cast<const std::uint8_t *>(selector_stack) + parent_offset,
+                   parent_return) || parent_return != g_base + 0x220CF0u ||
+        !readable_range(descriptor, 0x151u)) return;
+
+    // RE: 2200D0 stores owner at descriptor+0, A/B at +4C/+4E,
+    // beta at +50 and the type6 branch predicate at +150.
+    void *descriptor_owner = nullptr;
+    std::uint16_t raw_a = 0u, raw_b = 0u;
+    float beta = 0.0f;
+    std::memcpy(&descriptor_owner, descriptor, sizeof(descriptor_owner));
+    std::memcpy(&raw_a, descriptor + 0x4Cu, sizeof(raw_a));
+    std::memcpy(&raw_b, descriptor + 0x4Eu, sizeof(raw_b));
+    std::memcpy(&beta, descriptor + 0x50u, sizeof(beta));
+    const auto character = descriptor[0x150u];
+    if (descriptor_owner != owner || character > 1u) return;
+    const auto endpoints = pmetal_selector_policy::select(
+        static_cast<std::int16_t>(raw_a), static_cast<std::int16_t>(raw_b), beta);
+    if (!endpoints.valid) return;
+
+    const std::uint8_t *wrapper = nullptr, *manager = nullptr;
+    if (!safe_read(static_cast<const std::uint8_t *>(owner) + 0x2318u, wrapper) ||
+        !wrapper || !safe_read(wrapper + 0x40u, manager) || !manager) return;
+    bool lookup_valid = true;
+    auto lookup = [&](unsigned area, unsigned type) noexcept -> void * {
+        const std::uint8_t *table = nullptr;
+        void *source = nullptr;
+        if (!safe_read(manager + 0x20u + area * 0x1B0u, table) || !table ||
+            !safe_read(table + type * 0x10u + 8u, source)) {
+            lookup_valid = false;
+            return nullptr;
+        }
+        return source;
+    };
+    auto decode = [&](std::int16_t selector, f4 &value,
+                      std::uint64_t &bank, std::uint32_t &row) noexcept {
+        void *source = pmetal_selector_policy::source(selector, character != 0u, lookup);
+        const std::uint8_t *base = nullptr;
+        // Do not carry engine pointers out of this exact selector callback.
+        // The cached decoder reads the header/table directly: validate its
+        // complete fixed range here, including cache-hit calls.
+        if (!lookup_valid || !source ||
+            !safe_read(static_cast<const std::uint8_t *>(source) + 0x18u, base) ||
+            !base || !readable_range(base, 0x30u)) return false;
+        std::uint16_t count = 0u;
+        std::memcpy(&count, base + 10u, sizeof(count));
+        if (count == 0u || count > 256u ||
+            !readable_range(base, 0x30u + count * 12u)) return false;
+        return read_exact_pmetal_env_source(source, selector, value, bank, row);
+    };
+    f4 a{}, b{};
+    pmetal_envspec_source next{};
+    if (!decode(endpoints.a, a, next.bank_signature_a, next.row_id_a)) {
+        telemetry::hot_count(g_pmetal_source_decode_fail); return;
     }
-
-    g_base = 0u;
+    if (endpoints.a == endpoints.b) {
+        b = a; next.bank_signature_b = next.bank_signature_a; next.row_id_b = next.row_id_a;
+    } else if (!decode(endpoints.b, b, next.bank_signature_b, next.row_id_b)) {
+        telemetry::hot_count(g_pmetal_source_decode_fail); return;
+    }
+    next.a = {a.x,a.y,a.z}; next.b = {b.x,b.y,b.z}; next.beta = endpoints.beta;
+    next.serial = g_pmetal_selector_epoch.load(std::memory_order_relaxed);
+    g_pmetal_selected_source = next;
+    g_pmetal_selected_material = material;
+    g_pmetal_selected_valid = true;
+    telemetry::hot_count(g_pmetal_source_publish);
+    telemetry::hot_count(endpoints.beta == 0.0f ? g_pmetal_source_steady_seen : g_pmetal_source_blend_seen);
 }
 
 bool pmetal_env_source_runtime::latest(
+    const operators::material_response::material_identity &material,
     pmetal_envspec_source &out) const noexcept
 {
-    return consume_pmetal_source_only(out);
+    out = {};
+    if (!g_pmetal_selector_enabled.load(std::memory_order_acquire) ||
+        !g_pmetal_selected_valid || !exact_pmetal_material_selection(material) ||
+        g_pmetal_selected_source.serial != g_pmetal_selector_epoch.load(std::memory_order_relaxed) ||
+        material.flver_sha256 != g_pmetal_selected_material.flver_sha256 ||
+        material.material_slot != g_pmetal_selected_material.material_slot ||
+        material.raw_mtd_sha256 != g_pmetal_selected_material.raw_mtd_sha256) {
+        telemetry::hot_count(g_pmetal_source_consumer_fail); return false;
+    }
+    out = g_pmetal_selected_source;
+    telemetry::hot_count(g_pmetal_source_consumer_ok);
+    return true;
 }
 
-pmetal_env_source_runtime_telemetry
-pmetal_env_source_runtime::telemetry() const noexcept
+pmetal_env_source_runtime_telemetry pmetal_env_source_runtime::telemetry() const noexcept
 {
     pmetal_env_source_runtime_telemetry out{};
-    out.steady_seen =
-        g_pmetal_source_steady_seen.load();
-    out.blend_seen =
-        g_pmetal_source_blend_seen.load();
-    out.exact_publish =
-        g_pmetal_source_publish.load();
-    out.bank_unknown =
-        g_pmetal_source_decode_fail.load();
-    out.decode_fail =
-        g_pmetal_source_decode_fail.load();
-    out.publish_busy_drop =
-        g_pmetal_source_busy_drop.load();
-    out.consumer_ok =
-        g_pmetal_source_consumer_ok.load();
-    out.consumer_fail =
-        g_pmetal_source_consumer_fail.load();
-    out.steady_carrier_active =
-        g_pmetal_source_steady_hook.patched;
-    out.blend_carrier_active =
-        g_pmetal_source_blend_hook.patched;
-    out.quarantined =
-        g_pmetal_source_quarantined.load();
-    out.restore_failed =
-        g_pmetal_source_restore_failed.load();
+    out.steady_seen = g_pmetal_source_steady_seen.load();
+    out.blend_seen = g_pmetal_source_blend_seen.load();
+    out.exact_publish = g_pmetal_source_publish.load();
+    out.decode_fail = g_pmetal_source_decode_fail.load();
+    out.consumer_ok = g_pmetal_source_consumer_ok.load();
+    out.consumer_fail = g_pmetal_source_consumer_fail.load();
+    // Both global source hook flags are permanently false.
+    out.selector_carrier_active = g_pmetal_selector_enabled.load();
     return out;
 }
 
 void pmetal_env_source_runtime::reset() noexcept
 {
+    g_pmetal_selector_epoch.fetch_add(1u, std::memory_order_relaxed);
+    pmetal_env_source_selector_clear();
     g_pmetal_source_publish.store(0u);
-    g_pmetal_source_busy_drop.store(0u);
     g_pmetal_source_consumer_ok.store(0u);
     g_pmetal_source_consumer_fail.store(0u);
     g_pmetal_source_steady_seen.store(0u);
     g_pmetal_source_blend_seen.store(0u);
     g_pmetal_source_decode_fail.store(0u);
-    g_pmetal_source_serial.store(0u);
-
-    if (!g_pmetal_source_payload_guard.test_and_set(
-            std::memory_order_acquire)) {
-        g_pmetal_source_payload = {};
-        g_pmetal_source_payload_valid = false;
-        g_pmetal_source_payload_guard.clear(
-            std::memory_order_release);
-    }
-
     g_pmetal_bank_cache = {};
     g_pmetal_bank_victim = {};
 }
@@ -5217,8 +4893,6 @@ void upper_lower_pmetal_material_event_bridge(
 bool upper_lower_draw_runtime::install(
     bool reference_only) noexcept
 {
-    if (g_pmetal_source_only_enabled.load(std::memory_order_acquire))
-        return false;
 
     if (g_enabled.load())
         return

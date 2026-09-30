@@ -1,0 +1,28 @@
+{
+  "schema": 1,
+  "reference_exe_sha256": "a45aaa36dd2f6cc151670a639ea5547043cf38ea79ff4178b963c6ed71f98d7b",
+  "scope": "Exact P_Metal FLVER/material slot/MTD on the verified ordinary model draw path only",
+  "source": "Embedded PTDE donor corpus: 20 banks, 1246 rows. Runtime supplies identity and selection only, never DSR-authored RGB or intensity.",
+  "transport": "Existing exact material selector callback; immutable thread-local donor values tied to current material and selector lifetime. No global LightBank hook is installed for EnvSpec.",
+  "verification": "Static reference EXE analysis checked ordinary-builder provenance, selector tuple, manager bank lookup and fallback ordering. The raw binary-derived report remains local and is not included in this repository.",
+  "fail_open": [
+    "other parent draw paths",
+    "unrecognized bank/row",
+    "invalid memory or nonfinite blend",
+    "material mismatch",
+    "selector invalidation",
+    "existing resource/shader/CB gates"
+  ],
+  "unchanged": [
+    "PTDE PackedGI cubemaps",
+    "PTDE EnvSpec shader and SpecRGB gates",
+    "stock U/L continuation",
+    "independent DSR operators"
+  ],
+  "status": {
+    "construction": "PENDING_CI",
+    "runtime_liveness": "NOT_TESTED",
+    "bridge_activation": "OPEN",
+    "pixel_behavior": "OPEN"
+  }
+}

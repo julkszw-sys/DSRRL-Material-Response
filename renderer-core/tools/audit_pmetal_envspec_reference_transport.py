@@ -28,232 +28,39 @@ def main() -> None:
     lerp_cpp = (root / "src/operators/env_spec/pmetal_rgba_lerp_materializer.cpp").read_text(encoding="utf-8")
     lerp_h = (root / "include/dsrrl/operators/env_spec/pmetal_rgba_lerp_materializer.hpp").read_text(encoding="utf-8")
 
-    # EnvSpec source transport is independent from visible U/L.
-    require(integrated, "g_pmetal_source;", "isolated source instance")
-    require(integrated, "g_pmetal_source.install()", "isolated source activation")
-    require(
-        integrated,
-        "const bool lightbank_reference_transport_required =\n        upper_lower_enabled;",
-        "U/L transport remains U/L-only",
-    )
-    if "upper_lower_enabled ||\n        pmetal_envspec_enabled" in integrated:
-        fail("EnvSpec still forces shared U/L transport")
-
-    require(
-        source_h,
-        "class pmetal_env_source_runtime",
-        "isolated source runtime API",
-    )
-    require(
-        ul_cpp,
-        "bool install_pmetal_source_only_carrier() noexcept",
-        "isolated source-only installer",
-    )
-
-    source_install_begin = ul_cpp.index(
-        "bool install_pmetal_source_only_carrier() noexcept"
-    )
-    source_install_end = ul_cpp.index(
-        "\nbool restore_pmetal_source_only_carrier() noexcept",
-        source_install_begin,
-    )
-    if source_install_begin < 0 or source_install_end <= source_install_begin:
-        fail("cannot isolate P_Metal source-only install block")
-    source_install = ul_cpp[source_install_begin:source_install_end]
-
-    require(
-        source_install,
-        "g_pmetal_source_steady_hook",
-        "dedicated steady source cut 0x563B80",
-    )
-    require(
-        source_install,
-        "g_pmetal_source_blend_hook",
-        "dedicated blended source cut 0x563C30",
-    )
-    require(
-        source_install,
-        "g_pmetal_source_only_enabled.store(",
-        "source-only runtime activation latch",
-    )
-    for forbidden in (
-        "g_hooks[0]",
-        "g_hooks[1]",
-        "g_hooks[2]",
-        "g_hooks[3]",
-        "g_hooks[4]",
-        "g_pmetal_env_hook",
-        "g_steady_eval_tail_hook",
-        "g_steady_cache_builder_hook",
-        "g_upper_lower.install",
-    ):
-        if forbidden in source_install:
-            fail(
-                "isolated P_Metal EnvSpec carrier widened into shared U/L "
-                f"hook surface: {forbidden}"
-            )
-
-    enabled_at = source_install.find(
-        "g_pmetal_source_only_enabled.store("
-    )
-    steady_arm_at = source_install.find(
-        "arm_hook(\n            g_pmetal_source_steady_hook)"
-    )
-    blend_arm_at = source_install.find(
-        "arm_hook(\n            g_pmetal_source_blend_hook)"
-    )
-    if (
-        enabled_at < 0
-        or steady_arm_at < 0
-        or blend_arm_at < 0
-        or enabled_at < steady_arm_at
-        or enabled_at < blend_arm_at
-    ):
-        fail(
-            "source-only activation latch must publish only after both retail "
-            "cuts are armed"
-        )
-
-    blend_hook_begin = ul_cpp.index(
-        "void __fastcall hook_pmetal_source_blend("
-    )
-    blend_hook_end = ul_cpp.index(
-        "\nvoid __fastcall hook_steady_packer(",
-        blend_hook_begin,
-    )
-    if blend_hook_begin < 0 or blend_hook_end <= blend_hook_begin:
-        fail("cannot isolate P_Metal blend detour")
-    blend_hook = ul_cpp[blend_hook_begin:blend_hook_end]
-
-    require(
-        blend_hook,
-        "const bool endpoint_a =",
-        "retail endpoint-A mode",
-    )
-    require(
-        blend_hook,
-        "beta <= 0.0f",
-        "retail endpoint-A collapse condition",
-    )
-    require(
-        blend_hook,
-        "const bool endpoint_b =",
-        "retail endpoint-B mode",
-    )
-    require(
-        blend_hook,
-        "beta >= 1.0f",
-        "retail endpoint-B collapse condition",
-    )
-    require(
-        blend_hook,
-        "if (endpoint_a || endpoint_b) {",
-        "endpoint collapse delegated to steady source cut",
-    )
-    require(
-        blend_hook,
-        "const bool interior_blend =",
-        "interior blend gate",
-    )
-    require(
-        blend_hook,
-        "if (interior_blend) {",
-        "A/B decode restricted to true interior blend",
-    )
-    if "Advancing the serial before any attempted decode invalidates an older" in blend_hook:
-        fail("P_Metal source freshness regressed to foreign-event invalidation")
-
-    require(
-        blend_hook,
-        "Freshness belongs to an exact publication",
-        "blend freshness is exact-publication scoped",
-    )
-    require(
-        ul_cpp,
-        "out.serial != latest_source_serial",
-        "draw consumer rejects superseded exact source payload",
-    )
-    require(
-        ul_cpp,
-        "const auto source_serial =\n            g_pmetal_source_serial.fetch_add(",
-        "exact publications carry monotonic freshness serial",
-    )
-
-    steady_hook_begin = ul_cpp.index(
-        "void __fastcall hook_pmetal_source_steady("
-    )
-    steady_hook_end = ul_cpp.index(
-        "\nvoid __fastcall hook_pmetal_source_blend(",
-        steady_hook_begin,
-    )
-    if steady_hook_begin < 0 or steady_hook_end <= steady_hook_begin:
-        fail("cannot isolate P_Metal steady detour")
-    steady_hook = ul_cpp[steady_hook_begin:steady_hook_end]
-    have_env_pos = steady_hook.index("if (have_env) {")
-    serial_pos = steady_hook.index("g_pmetal_source_serial.fetch_add(")
-    if serial_pos < have_env_pos:
-        fail("steady P_Metal freshness advances before exact donor proof")
-
-    have_blend_pos = blend_hook.index(
-        "if (interior_blend &&\n        have_a &&\n        have_b) {"
-    )
-    blend_serial_pos = blend_hook.index(
-        "g_pmetal_source_serial.fetch_add("
-    )
-    if blend_serial_pos < have_blend_pos:
-        fail("blend P_Metal freshness advances before exact A/B donor proof")
-
-    ul_install_begin = ul_cpp.index(
-        "bool upper_lower_draw_runtime::install("
-    )
-    ul_install_end = ul_cpp.index(
-        "\nvoid upper_lower_draw_runtime::uninstall()",
-        ul_install_begin,
-    )
-    if ul_install_begin < 0 or ul_install_end <= ul_install_begin:
-        fail("cannot isolate visible U/L install block")
-    ul_install = ul_cpp[ul_install_begin:ul_install_end]
-    require(
-        ul_install,
-        "if (g_pmetal_source_only_enabled.load(std::memory_order_acquire))\n        return false;",
-        "mutual exclusion between isolated EnvSpec carrier and visible U/L runtime",
-    )
-
-    require(
-        env_cpp,
-        "source_.latest(source)",
-        "isolated source consumer",
-    )
-
-    steady_generic_begin = ul_cpp.index(
-        "void __fastcall hook_steady_packer("
-    )
-    steady_generic_end = ul_cpp.index(
-        "\nvoid *__fastcall hook_blend(",
-        steady_generic_begin,
-    )
-    generic_steady = ul_cpp[steady_generic_begin:steady_generic_end]
-    if "g_pmetal_source_only_enabled" in generic_steady:
-        fail("isolated EnvSpec source path re-entered generic U/L steady detour")
-
-    generic_blend_begin = ul_cpp.index(
-        "void __fastcall hook_pmetal_env_blend("
-    )
-    generic_blend_end = ul_cpp.index(
-        "\nbool install_optional_pmetal_env_hook() noexcept",
-        generic_blend_begin,
-    )
-    generic_blend = ul_cpp[generic_blend_begin:generic_blend_end]
-    if "g_pmetal_source_only_enabled" in generic_blend:
-        fail("isolated EnvSpec source path re-entered generic U/L blend detour")
-
-    for required in (
-        "inline_hook g_pmetal_source_steady_hook{};",
-        "inline_hook g_pmetal_source_blend_hook{};",
-        "g_pmetal_source_steady_orig",
-        "g_pmetal_source_blend_orig",
-    ):
-        require(ul_cpp, required, "dedicated EnvSpec source hook ownership")
+    # EnvSpec must NEVER install a global LightBank source hook, even when
+    # the visible Upper/Lower feature is disabled.
+    for forbidden in ("hook_pmetal_source_steady", "hook_pmetal_source_blend",
+                      "install_pmetal_source_only_carrier", "g_pmetal_source_payload",
+                      "g_pmetal_source_serial", "consume_pmetal_source_only"):
+        if forbidden in ul_cpp:
+            fail(f"global EnvSpec source carrier returned: {forbidden}")
+    install = ul_cpp.split("bool pmetal_env_source_runtime::install() noexcept",1)[1].split(
+        "void pmetal_env_source_runtime::uninstall()",1)[0]
+    for forbidden in ("prepare_hook", "arm_hook", "install_producer_hooks", "g_upper_lower"):
+        if forbidden in install: fail(f"EnvSpec installs global hook: {forbidden}")
+    require(integrated, "const bool lightbank_reference_transport_required =\n        upper_lower_enabled;", "U/L-only global hook ownership")
+    require(flver_cpp, "pmetal_env_source_selector_clear();", "invalidate on every selector")
+    require(flver_cpp, "pmetal_env_source_selector_event(owner, ret, r14, r15, selector_stack, identity);", "exact material callback")
+    capture = ul_cpp.split("void pmetal_env_source_selector_event(",1)[1].split(
+        "bool pmetal_env_source_runtime::latest(",1)[0]
+    require(capture, "!exact_pmetal_material_selection(material)", "exact material gate")
+    if capture.index("!exact_pmetal_material_selection(material)") > capture.index("readable_range"):
+        fail("source memory work precedes exact P_Metal material gate")
+    for needle in ("parent_return != g_base + 0x220CF0u", "descriptor_owner != owner", "descriptor + 0x4Cu", "descriptor + 0x4Eu",
+                   "descriptor + 0x50u", "descriptor[0x150u]", "+ 0x2318u", "wrapper + 0x40u",
+                   "pmetal_selector_policy::source", "read_exact_pmetal_env_source",
+                   "g_pmetal_selected_material = material"):
+        require(capture, needle, "exact selector source proof")
+    for forbidden in ("arm_hook", "fetch_add", "mutex", "spin", "publish_pmetal_source_only"):
+        if forbidden in capture: fail(f"global synchronization/hook in selector source: {forbidden}")
+    consumer = ul_cpp.split("bool pmetal_env_source_runtime::latest(",1)[1].split(
+        "pmetal_env_source_runtime_telemetry pmetal_env_source_runtime::telemetry",1)[0]
+    for needle in ("!g_pmetal_selected_valid", "material.flver_sha256 !=", "material.material_slot !=",
+                   "material.raw_mtd_sha256 !=", "g_pmetal_selector_epoch.load"):
+        require(consumer, needle, "source lifetime/material mismatch fail-open")
+    require(ul_cpp, "thread_local pmetal_envspec_source g_pmetal_selected_source", "no process-global latest donor")
+    require(env_cpp, "source_.latest(material, source)", "material-scoped source consumer")
 
     # The active EnvSpec draw runtime must have no dependency on the U/L
     # runtime at all. U/L-off is not merely a feature branch: no b13 carrier,
@@ -315,40 +122,6 @@ def main() -> None:
         integrated,
         "materialize_pmetal_rgba_receiver(\n                        g_core.features(),\n                        source,\n                        pixel_shader->code_size,\n                        false,",
         "stable EnvSpec materialization is permanently U/L-off",
-    )
-
-    # The isolated source carrier owns only the two recovered retail source
-    # cuts. The legacy U/L selector/reference-token machinery may remain in
-    # its own runtime, but EnvSpec must not consume it.
-    require(
-        ul_cpp,
-        "void __fastcall hook_pmetal_source_steady(",
-        "dedicated steady source cut implementation",
-    )
-    require(
-        ul_cpp,
-        "void __fastcall hook_pmetal_source_blend(",
-        "dedicated blend source cut implementation",
-    )
-    require(
-        ul_cpp,
-        "publish_pmetal_source_only(",
-        "immutable isolated source publication",
-    )
-    require(
-        ul_cpp,
-        "out.serial != latest_source_serial",
-        "stale isolated source rejection",
-    )
-    require(
-        env_cpp,
-        "source_.latest(source)",
-        "consumer-local isolated P_Metal source read",
-    )
-    require(
-        env_cpp,
-        "k_effect_fail_source = 1u << 4u;",
-        "source frontier telemetry",
     )
 
     # Bank identity must retain the exact historical V13 FNV equation without
@@ -434,21 +207,10 @@ def main() -> None:
 
 
     print("DSRRL_PMETAL_ENVSPEC_REFERENCE_TRANSPORT_PASS")
-    print("  U/L visible operator=OFF")
-    print("  shared U/L runtime=OFF when U/L is OFF")
-    print("  P_Metal EnvSpec source=isolated V13 carrier")
-    print("  isolated hook surface=dedicated objects at 0x563B80 steady + 0x563C30 blend only")
-    print("  source-only detours do not enter generic U/L steady/blend detours")
-    print("  0x563C30 endpoint collapse=delegated to hooked retail 0x563B80 exactly once")
-    print("  0x563C30 interior blend=only path that decodes both A/B endpoints")
-    print("  source freshness=monotonic event serial; stale payload replay is rejected")
-    print("  source-only active latch=published only after both hooks are armed")
-    print("  shared U/L wrapper/blend/cache-builder hooks=forbidden in source-only installer")
-    print("  EnvSpec source/draw/materialization/telemetry do not consume U/L runtime state")
-    print("  selector row address=retail low byte; full selector retained for identity")
-    print("  P_Metal source decode=exact V13 bank signature + PTDE donor at live producer cut")
-    print("  draw source=isolated immutable A/B+beta+bank/row carrier")
-    print("  HemEnvLerp U/L-off=stock b0 operands preserved; no b13 requirement")
+    print("  EnvSpec global LightBank hooks=0; existing exact FLVER selector only")
+    print("  source=embedded PTDE donors, selected by exact material+bank+row+A/B")
+    print("  TLS lifetime=selector interval; material/epoch mismatch fails open")
+    print("  PTDE PackedGI + stock U/L continuation preserved; pixel status OPEN")
 
 
 if __name__ == "__main__":

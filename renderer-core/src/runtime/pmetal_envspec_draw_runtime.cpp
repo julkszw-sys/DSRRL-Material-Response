@@ -558,7 +558,7 @@ bool pmetal_envspec_draw_runtime::prepare(
     effect_latch(effect_semantic_ready_);
 
     pmetal_envspec_source source{};
-    if (!source_.latest(source) ||
+    if (!source_.latest(material, source) ||
         !std::isfinite(source.beta)) {
         telemetry::hot_count(source_rejects_);
         effect_fail(

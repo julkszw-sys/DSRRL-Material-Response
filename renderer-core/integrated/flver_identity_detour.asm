@@ -19,7 +19,7 @@ dsrrl_flver_selector_hook_entry PROC
     push r11
     sub rsp,0A8h
 
-    ; 20h..2Fh are arg5/arg6; 30h is arg7. Keep XMM saves above it.
+    ; 20h..38h are arg5..arg8. Keep XMM saves above them.
     movdqu xmmword ptr [rsp+40h],xmm0
     movdqu xmmword ptr [rsp+50h],xmm1
     movdqu xmmword ptr [rsp+60h],xmm2
@@ -42,6 +42,8 @@ dsrrl_flver_selector_hook_entry PROC
     mov qword ptr [rsp+28h],rax
     mov rax,qword ptr [rsp+0B8h]
     mov qword ptr [rsp+30h],rax
+    lea rax,[rsp+0E8h] ; original selector entry RSP / return slot
+    mov qword ptr [rsp+38h],rax
     call dsrrl_flver_selector_observer
 
     movdqu xmm0,xmmword ptr [rsp+40h]
