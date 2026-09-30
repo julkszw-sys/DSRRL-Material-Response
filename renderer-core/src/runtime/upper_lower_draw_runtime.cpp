@@ -5037,6 +5037,9 @@ void upper_lower_pmetal_material_event_bridge(
 bool upper_lower_draw_runtime::install(
     bool reference_only) noexcept
 {
+    if (g_pmetal_source_only_enabled.load(std::memory_order_acquire))
+        return false;
+
     if (g_enabled.load())
         return
             g_runtime == this &&
