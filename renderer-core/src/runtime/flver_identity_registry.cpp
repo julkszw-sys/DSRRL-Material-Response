@@ -131,10 +131,20 @@ bool flver_identity_observe_parse(const void *model,const void *raw,std::size_t 
     const auto sha=digest(raw,static_cast<std::size_t>(total));
     try {
         std::lock_guard<std::mutex> lock(g_mutex);
-        g_by_model[model]=sha;
-        g_epoch.fetch_add(
-            1u,
-            std::memory_order_release);
+        const auto found =
+            g_by_model.find(model);
+        if (found == g_by_model.end()) {
+            // Loading an unrelated FLVER cannot invalidate cached identities
+            // for already-live models. Pointer reuse is covered by the
+            // destructor path, which advances the global epoch before a new
+            // object at that address can become authoritative.
+            g_by_model.emplace(model, sha);
+        } else if (found->second != sha) {
+            found->second = sha;
+            g_epoch.fetch_add(
+                1u,
+                std::memory_order_release);
+        }
     } catch (...) {
         ++g_invalid;
         return false;
