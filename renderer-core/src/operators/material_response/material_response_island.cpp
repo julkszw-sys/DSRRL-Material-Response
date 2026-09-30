@@ -1,6 +1,7 @@
 #include "dsrrl/operators/material_response/material_response_island.hpp"
 #include "dsrrl/operators/material_response/generated_dsr_flver_owner_tuples_v1.hpp"
 #include "dsrrl/operators/material_response/generated_envspec_router_v1.hpp"
+#include "dsrrl/operators/point_light/generated_pointlight_material_authority_v1.hpp"
 #include "dsrrl/operators/material_response/generated_routes_v1.hpp"
 #include "dsrrl/operators/material_response/generated_exact_binding_mr_v1.hpp"
 #include "dsrrl/operators/material_response/mtd_semantic_census.hpp"
@@ -9,6 +10,7 @@
 #include <algorithm>
 #include <cstring>
 #include <iterator>
+#include <cmath>
 
 namespace dsrrl::operators::material_response {
 namespace {
@@ -57,109 +59,56 @@ bool receiver_allowed(const material_profile &profile, std::uint32_t receiver_id
     return false;
 }
 
-struct direct_nospc_authority_match {
-    const generated::envspec_router_record *record = nullptr;
-    std::uint32_t ordinal = 0u;
+struct direct_pointlight_authority_match {
+    const point_light::generated::pointlight_material_authority_record
+        *record = nullptr;
 };
 
-struct direct_nospc_cache_entry {
-    bool valid = false;
-    std::uint64_t semantic_name_hash = 0u;
-    core::sha256_digest raw_mtd_sha256{};
-    std::optional<direct_nospc_authority_match> result{};
-};
-
-constexpr std::size_t k_direct_nospc_cache_slots = 16u;
-thread_local std::array<
-    direct_nospc_cache_entry,
-    k_direct_nospc_cache_slots>
-    g_direct_nospc_cache{};
-
-std::size_t direct_nospc_cache_index(
-    const material_identity &identity) noexcept
-{
-    std::uint64_t mixed =
-        identity.semantic_name_hash;
-
-    for (std::size_t i = 0u;
-         i < identity.raw_mtd_sha256.size();
-         i += 8u) {
-        std::uint64_t lane = 0u;
-        std::memcpy(
-            &lane,
-            identity.raw_mtd_sha256.data() + i,
-            sizeof(lane));
-        mixed ^=
-            lane +
-            0x9e3779b97f4a7c15ULL +
-            (mixed << 6u) +
-            (mixed >> 2u);
-    }
-
-    return static_cast<std::size_t>(
-        mixed % k_direct_nospc_cache_slots);
-}
-
-std::optional<direct_nospc_authority_match>
-resolve_direct_nospc_authority(
+std::optional<direct_pointlight_authority_match>
+resolve_direct_pointlight_authority(
     const material_identity &identity) noexcept
 {
     if (!identity.valid ||
-        identity.semantic_name_hash == 0u ||
-        digest_is_zero(identity.raw_mtd_sha256))
+        identity.semantic_name_hash == 0u)
         return std::nullopt;
 
-    auto &cached =
-        g_direct_nospc_cache[
-            direct_nospc_cache_index(
-                identity)];
+    const auto &authority =
+        point_light::generated::k_pointlight_material_authority_v1;
 
-    if (cached.valid &&
-        cached.semantic_name_hash ==
-            identity.semantic_name_hash &&
-        cached.raw_mtd_sha256 ==
-            identity.raw_mtd_sha256)
-        return cached.result;
+    const auto begin =
+        std::lower_bound(
+            authority.begin(),
+            authority.end(),
+            identity.semantic_name_hash,
+            [](const auto &record,
+               std::uint64_t semantic) {
+                return record.semantic_name_hash < semantic;
+            });
 
-    std::optional<direct_nospc_authority_match> result;
-    for (std::size_t i = 0u;
-         i < generated::k_envspec_router_v1.size();
-         ++i) {
-        const auto &record =
-            generated::k_envspec_router_v1[i];
-        if (record.state !=
-                generated::envspec_router_state::nospc_host ||
-            record.semantic_name_hash !=
-                identity.semantic_name_hash ||
-            record.raw_mtd_sha256 !=
-                identity.raw_mtd_sha256)
-            continue;
+    if (begin == authority.end() ||
+        begin->semantic_name_hash !=
+            identity.semantic_name_hash)
+        return std::nullopt;
 
-        // Exact-name + exact raw-MTD identity must remain single-valued.
-        // Any future duplicate/ambiguity fails open instead of selecting one.
-        if (result.has_value()) {
-            cached.valid = true;
-            cached.semantic_name_hash =
-                identity.semantic_name_hash;
-            cached.raw_mtd_sha256 =
-                identity.raw_mtd_sha256;
-            cached.result.reset();
-            return std::nullopt;
-        }
+    const auto next = std::next(begin);
+    if (next != authority.end() &&
+        next->semantic_name_hash ==
+            identity.semantic_name_hash)
+        return std::nullopt;
 
-        result = direct_nospc_authority_match{
-            &record,
-            static_cast<std::uint32_t>(i)
-        };
-    }
+    // When the retail MTD parser has authenticated the actual material bytes,
+    // the raw SHA must agree with the dedicated PointLight authority. For the
+    // source-complete FLVER+slot owner carrier, the authority's unique
+    // semantic->raw mapping is the exact DSR raw-MTD identity; do not inherit
+    // the older generic MR registry's stale/non-PointLight digest.
+    if (identity.actual_material_exact &&
+        identity.raw_mtd_sha256 !=
+            begin->raw_mtd_sha256)
+        return std::nullopt;
 
-    cached.valid = true;
-    cached.semantic_name_hash =
-        identity.semantic_name_hash;
-    cached.raw_mtd_sha256 =
-        identity.raw_mtd_sha256;
-    cached.result = result;
-    return result;
+    return direct_pointlight_authority_match{
+        &*begin
+    };
 }
 
 float f32_from_bits(std::uint32_t bits) noexcept
@@ -690,42 +639,41 @@ material_response_island::evaluate_direct_pointlight_material(
             0u
         };
 
-    const auto profile =
-        resolve_material_unscoped(material);
+    const auto authority =
+        resolve_direct_pointlight_authority(
+            material);
+    if (!authority.has_value())
+        return {
+            false,
+            decision_reason::unknown_material,
+            0u
+        };
 
-    // The ordinary MR profile surface plus exact-binding extensions remain
-    // separate from PointLight. Direct PointLight may additionally consume the exact
-    // PTDE NoSpc c100 authority carried by the 325-row pairwise MTD router,
-    // but only after the FLVER+slot owner tuple above has authenticated the
-    // draw and only on an exact semantic-name + raw-MTD match.
-    if (!profile.has_value()) {
-        const auto nospc =
-            resolve_direct_nospc_authority(material);
-        if (!nospc.has_value())
-            return {
-                false,
-                decision_reason::unknown_material,
-                0u
-            };
+    const auto &record =
+        *authority->record;
+    const bool record_spc =
+        record.mode ==
+        point_light::generated::
+            pointlight_material_mode::spc;
 
-        if (require_legacy_specular)
-            return {
-                false,
-                decision_reason::no_certified_operator,
-                0u
-            };
+    if (record_spc != require_legacy_specular)
+        return {
+            false,
+            decision_reason::no_certified_operator,
+            0u
+        };
 
-        std::array<float, 3> c100{};
-        for (std::size_t i = 0u; i < c100.size(); ++i)
-            c100[i] =
-                f32_from_bits(
-                    nospc->record->c100_bits[i]);
+    std::array<float,3> c100{};
+    for (std::size_t i=0u;i<c100.size();++i)
+        c100[i]=
+            f32_from_bits(
+                record.c100_bits[i]);
 
-        // High-bit route tags are telemetry-only and cannot alias the normal
-        // Material Response route namespace.
-        const std::uint32_t route_tag =
-            0x80000000u | nospc->ordinal;
+    const std::uint32_t route_tag =
+        0x80000000u |
+        record.source_ordinal;
 
+    if (!record_spc) {
         return {
             true,
             decision_reason::active,
@@ -742,48 +690,49 @@ material_response_island::evaluate_direct_pointlight_material(
         };
     }
 
-    // Exact-binding MR extensions are explicitly NO_USE for PointLight in
-    // the semantic census. Registering their ordinary MR profile must not
-    // broaden that authority into the direct PointLight island.
-    if (generated::is_exact_binding_mr_route_tag(
-            profile->route_index))
+    // Current local-specular payload has one scalar c101. Preserve the
+    // dedicated authority's 12 authored RGB-c101 rows as fail-open until the
+    // operator carrier is widened deliberately; never collapse them to one
+    // channel.
+    if (!record.c101_scalar)
         return {
             false,
             decision_reason::no_certified_operator,
             0u,
-            profile->route_index
+            route_tag
         };
 
-    const auto required =
-        diffuse_material_domain_linear |
-        (require_legacy_specular
-             ? specular_factor_c101
-             : response_none);
+    const float c101 =
+        f32_from_bits(
+            record.c101_bits[0]);
+    const float c102 =
+        f32_from_bits(
+            record.c102_bits);
 
-    if ((profile->certified_operations & required) != required ||
-        (require_legacy_specular &&
-         (!profile->ptde_specular_power_verified ||
-          !(profile->ptde_specular_power > 0.0f))))
+    if (!std::isfinite(c101) ||
+        !std::isfinite(c102) ||
+        !(c102 > 0.0f))
         return {
             false,
             decision_reason::no_certified_operator,
             0u,
-            profile->route_index
+            route_tag
         };
 
     return {
         true,
         decision_reason::active,
         0u,
-        profile->route_index,
-        required,
-        profile->c101,
-        profile->lod_min,
-        profile->lod_max,
-        profile->envspec,
-        profile->c100,
-        profile->ptde_specular_power,
-        profile->ptde_specular_power_verified
+        route_tag,
+        diffuse_material_domain_linear |
+            specular_factor_c101,
+        c101,
+        0u,
+        7u,
+        ptde_envspec_presence::unknown,
+        c100,
+        c102,
+        true
     };
 }
 
