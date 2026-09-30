@@ -6368,6 +6368,7 @@ bool AddonInit(
     g_bloom_scene_sidecar.reset();
     dsrrl::runtime::bloom_fx_draw_transport::reset_stats();
     g_pmetal_envspec.reset();
+    g_pmetal_source.reset();
     g_upper_lower.reset();
     g_upper_lower_hemenv.reset();
     g_hemdir3.reset();
