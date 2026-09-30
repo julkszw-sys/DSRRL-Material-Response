@@ -633,9 +633,11 @@ materialize_pmetal_rgba_lerp_receiver(
     outcome.semantic_receiver_id =
         site->semantic_receiver_id;
 
-    const bool compose_upper_lower =
-        features.enabled(
-            core::operator_id::upper_lower);
+    // P_Metal EnvSpec is an operator-local island. Upper/Lower is a
+    // separate LightBank operator and must never be composed into this
+    // HemEnvLerp payload. Preserve the exact stock DSR b0[7]/b0[8]
+    // continuation regardless of the global U/L feature state.
+    const bool compose_upper_lower = false;
 
     std::vector<chunk> chunks;
     std::vector<std::uint32_t> words;
