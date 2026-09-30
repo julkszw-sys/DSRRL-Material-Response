@@ -51,8 +51,8 @@ def main() -> None:
         "EnvSpec U/L composition feature isolation",
     )
 
-    # Reference-only mode must carry exact source/selector tuples but avoid
-    # heavy U/L/D123 evaluation on the producer hot path.
+    # Reference-only mode must retain the exact V13 P_Metal donor lifetime
+    # cut while avoiding visible U/L/D123 evaluation on the producer path.
     require(
         ul_h,
         "bool install(bool reference_only = false) noexcept;",
@@ -65,13 +65,18 @@ def main() -> None:
     )
     require(
         ul_cpp,
-        "P_Metal EnvSpec requires only the exact source/selector",
-        "steady reference-only branch",
+        "V13 source semantics are materialized at this retail",
+        "steady producer-side P_Metal donor cut",
     )
     require(
         ul_cpp,
-        "if (g_reference_only_transport.load(\n                    std::memory_order_acquire))\n                return result;",
-        "blend packer reference-only branch",
+        "read_exact_pmetal_env_source(\n                        source_a,",
+        "blend producer-side P_Metal donor A",
+    )
+    require(
+        ul_cpp,
+        "read_exact_pmetal_env_source(\n                            source_b,",
+        "blend producer-side P_Metal donor B",
     )
     require(
         ul_cpp,
@@ -79,12 +84,18 @@ def main() -> None:
         "blend helper reference-only bypass",
     )
 
-    # The old producer-local P_Metal semantic decode stays disabled. EnvSpec
-    # now resolves the source lazily only after the exact draw consumer gate.
+    # The obsolete standalone P_Metal blend hook stays disabled, but V13
+    # donor materialization must happen in the already-required retail
+    # steady/blend producer taps before source ownership ends.
     require(
         ul_cpp,
         "g_pmetal_env_hook_armed.store(false);",
-        "no shared producer-local P_Metal decode",
+        "standalone P_Metal blend hook remains disabled",
+    )
+    require(
+        ul_cpp,
+        "token.pmetal_env_ready =\n        producer.have_pmetal_env;",
+        "immutable producer donor published with reference token",
     )
     require(
         env_cpp,
@@ -276,11 +287,11 @@ def main() -> None:
     print("DSRRL_PMETAL_ENVSPEC_REFERENCE_TRANSPORT_PASS")
     print("  U/L visible operator=OFF remains stock when not explicitly enabled")
     print("  LightBank reference carrier=ON for P_Metal EnvSpec")
-    print("  producer payload=owner+sourceA/B+selectorA/B+beta only")
+    print("  producer payload=owner+selector tuple + immutable V13 P_Metal A/B donor")
     print("  selected state=exact selector + exact actual P_Metal material")
     print("  persistent P_Metal invalidation=material-gated; generic selectors preserve state")
     print("  selector row address=retail low byte; full selector retained for identity")
-    print("  P_Metal source decode=exact V13 bank signature + PTDE donor after exact material gate")
+    print("  P_Metal source decode=exact V13 bank signature + PTDE donor at live producer cut")
     print("  draw source=immutable decoded A/B+beta+bank/row; no late source-pointer dereference")
     print("  HemEnvLerp U/L-off=stock b0 operands preserved; no b13 requirement")
 
