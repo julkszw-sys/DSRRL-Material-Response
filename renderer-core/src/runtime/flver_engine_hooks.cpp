@@ -504,7 +504,8 @@ extern "C" void dsrrl_flver_selector_observer(
      owner,
      ret,
      r14,
-     r15);
+     r15,
+     g_state.builder_armed);
 
  if(g_base==0u || ret==nullptr || material_index<0){telemetry::hot_count(g_owner_fail_open);return;}
  const auto ret_addr=reinterpret_cast<std::uintptr_t>(ret);
