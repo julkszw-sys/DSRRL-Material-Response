@@ -3911,9 +3911,34 @@ void __fastcall hook_steady_packer(
                 g_producer)) {
             if (g_reference_only_transport.load(
                     std::memory_order_acquire)) {
-                // P_Metal EnvSpec requires only the exact source/selector
-                // tuple. Do not capture evaluated vectors or decode U/L/D123
-                // while the visible U/L operator is disabled.
+                // V13 source semantics are materialized at this retail
+                // LightBank producer cut while the source is engine-live.
+                // Keep visible U/L and D123 disabled; only the immutable
+                // P_Metal EnvSpec donor is captured.
+                f4 env{};
+                std::uint64_t bank = 0u;
+                std::uint32_t row = 0u;
+                if (read_exact_pmetal_env_source(
+                        source,
+                        selector,
+                        env,
+                        bank,
+                        row)) {
+                    g_producer.have_pmetal_env = true;
+                    g_producer.pmetal_env_a = env;
+                    g_producer.pmetal_env_b = env;
+                    g_producer.pmetal_env_beta = 0.0f;
+                    g_producer.pmetal_bank_a = bank;
+                    g_producer.pmetal_bank_b = bank;
+                    g_producer.pmetal_row_a = row;
+                    g_producer.pmetal_row_b = row;
+                    telemetry::hot_count(
+                        g_pmetal_env_steady);
+                } else {
+                    g_producer.have_pmetal_env = false;
+                    telemetry::hot_count(
+                        g_pmetal_env_miss);
+                }
                 telemetry::hot_count(
                     g_steady_pass);
                 return;
