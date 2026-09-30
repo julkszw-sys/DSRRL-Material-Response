@@ -1154,11 +1154,35 @@ d123_identity_cache_entry &d123_cache_for(
     return entry;
 }
 
+std::size_t pmetal_bank_cache_set(
+    const void *ptr) noexcept
+{
+    const auto value =
+        reinterpret_cast<std::uintptr_t>(ptr);
+
+    // LightBank bases are commonly strongly aligned. Indexing only with
+    // (value >> 4) leaves the 128x4 bank cache vulnerable to pathological set
+    // collapse: page-/arena-aligned bases share the same low address bits and
+    // continually evict one another, forcing a full V13 FNV bank scan again.
+    // Mix independent higher address lanes while preserving the fixed bounded
+    // TLS cache and exact base-pointer identity inside each set.
+    const auto mixed =
+        (value >> 4u) ^
+        (value >> 13u) ^
+        (value >> 23u) ^
+        (value >> 33u);
+
+    return
+        static_cast<std::size_t>(
+            mixed &
+            (k_steady_cache_sets - 1u));
+}
+
 pmetal_bank_cache_entry &pmetal_bank_cache_for(
     const std::uint8_t *base_ptr) noexcept
 {
     const auto set =
-        d123_cache_set(base_ptr);
+        pmetal_bank_cache_set(base_ptr);
     const auto base =
         set * k_steady_cache_ways;
 
