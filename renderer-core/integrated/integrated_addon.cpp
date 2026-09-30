@@ -161,6 +161,7 @@ std::atomic_bool g_upper_lower_selection_transport_active{false};
 std::atomic_bool g_hemdir3_selection_transport_active{false};
 std::atomic_bool g_fixed_pointlight_selection_transport_active{false};
 std::atomic_bool g_clustered_pointlight_selection_transport_active{false};
+std::atomic_bool g_any_draw_selection_transport_active{false};
 std::atomic<std::uint64_t> g_mr_ul_payload_materialize_ok{0};
 std::atomic<std::uint64_t> g_mr_ul_payload_materialize_fail{0};
 std::atomic<std::uint64_t> g_subsurface_spec_payload_materialize_ok{0};
@@ -4856,6 +4857,10 @@ void release_prepared_island_batch(
 struct draw_semantic_selection_guard {
     ~draw_semantic_selection_guard()
     {
+        if (!g_any_draw_selection_transport_active.load(
+                std::memory_order_relaxed))
+            return;
+
         if (g_upper_lower_selection_transport_active.load(
                 std::memory_order_relaxed))
             g_upper_lower.consume_draw_selection();
@@ -6423,6 +6428,7 @@ bool AddonInit(
     g_hemdir3_selection_transport_active.store(false);
     g_fixed_pointlight_selection_transport_active.store(false);
     g_clustered_pointlight_selection_transport_active.store(false);
+    g_any_draw_selection_transport_active.store(false);
     g_mr_ul_payload_materialize_ok.store(0);
     g_mr_ul_payload_materialize_fail.store(0);
     g_subsurface_spec_payload_materialize_ok.store(0);
@@ -6703,6 +6709,17 @@ bool AddonInit(
 
     g_upper_lower_selection_transport_active.store(
         upper_lower_enabled && lightbank_reference_hooks,
+        std::memory_order_release);
+
+    g_any_draw_selection_transport_active.store(
+        g_upper_lower_selection_transport_active.load(
+            std::memory_order_relaxed) ||
+        g_hemdir3_selection_transport_active.load(
+            std::memory_order_relaxed) ||
+        g_fixed_pointlight_selection_transport_active.load(
+            std::memory_order_relaxed) ||
+        g_clustered_pointlight_selection_transport_active.load(
+            std::memory_order_relaxed),
         std::memory_order_release);
 
     if (!upper_lower_enabled) {
