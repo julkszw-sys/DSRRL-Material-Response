@@ -281,8 +281,8 @@ def main():
         "k_owner_auth_cache_slots = 256u",
         "owner auth TLS working set")
     require(owner_selection,
-        "identity.flver_identity_hash",
-        "owner auth precomputed hash index")
+        "owner_cache_entropy(identity)",
+        "owner auth cheap cache entropy")
     require(owner_selection,
         "cached.flver_sha256 ==\n            identity.flver_sha256",
         "owner auth full SHA hit gate")
@@ -290,8 +290,8 @@ def main():
         "k_owner_material_cache_slots = 256u",
         "owner material TLS working set")
     require(owner_producer,
-        "observation.flver_identity_hash",
-        "owner material precomputed hash index")
+        "owner_material_cache_entropy(observation)",
+        "owner material cheap cache entropy")
     require(owner_producer,
         "cached.flver_sha256 ==\n            observation.flver_sha256",
         "owner material full SHA hit gate")
@@ -345,7 +345,7 @@ def main():
     print("  resources=exact-owner/impossible-receiver prefilter before PSGetShaderResources")
     print("  ownerless_draws=stop before batch preparation under current policy")
     print("  draw_replay=Context1 TLS cache; QueryInterface cold-path only")
-    print("  material_owner=256-entry TLS caches indexed by precomputed FLVER hash; full SHA authority retained")
+    print("  material_owner=256-entry TLS caches use optional legacy token or cheap SHA fold; full SHA authority retained")
     print("  mr_replacement=append-only streaming preserves unrelated TLS entries; teardown invalidates")
     print("  envspec=unrelated SRV creation preserves snapshot TLS; destroy invalidates")
     return 0
