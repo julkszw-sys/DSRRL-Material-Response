@@ -427,6 +427,11 @@ def main():
     if guard_start<0 or guard_end<0:
         fail("draw semantic selection guard boundary missing")
     guard_body=integrated[guard_start:guard_end]
+    require_before(
+        guard_body,
+        "if (!g_any_draw_selection_transport_active.load(",
+        "g_upper_lower_selection_transport_active.load(",
+        "aggregate selection-transport fast reject")
     for token in (
         "g_upper_lower_selection_transport_active.load(",
         "g_hemdir3_selection_transport_active.load(",
