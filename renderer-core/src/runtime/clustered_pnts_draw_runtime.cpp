@@ -321,6 +321,16 @@ bool capture_source(
         &target,
         vtable + 12u,
         sizeof(target));
+
+    // The PTDE donor bridge accepts exactly these two attested retail source
+    // classes. Reject every other source before calling its host vfunc: the
+    // previous ordering paid a virtual call (and then exact donor validation)
+    // for nodes that were guaranteed to fail open immediately afterwards.
+    const auto target_address =
+        reinterpret_cast<std::uintptr_t>(target);
+    if (target_address != g_base + 0x55BC00u &&
+        target_address != g_base + 0x55D0B0u)
+        return false;
     if (!executable_address(target))
         return false;
 
