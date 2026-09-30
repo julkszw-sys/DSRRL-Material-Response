@@ -71,6 +71,12 @@
 #define DSRRL_BUILD_FLAVOR "default"
 #endif
 
+#ifdef DSRRL_POINTLIGHT_DRAWTIME_BYPASS
+constexpr bool k_pointlight_drawtime_runtime_enabled = false;
+#else
+constexpr bool k_pointlight_drawtime_runtime_enabled = true;
+#endif
+
 #include <array>
 #include <atomic>
 #include <cstdint>
@@ -4135,9 +4141,11 @@ void on_init_pipeline(
     g_a1_bridge.on_init_pipeline(
         device, layout, subobject_count, subobjects, pipeline);
     const bool fixed_pointlight_init_exact =
+        k_pointlight_drawtime_runtime_enabled &&
         g_fixed_pointlight_pipeline.on_init_pipeline(
             device, subobject_count, subobjects, pipeline);
     const bool clustered_pointlight_init_exact =
+        k_pointlight_drawtime_runtime_enabled &&
         g_clustered_pnts_pipeline.on_init_pipeline(
             device, subobject_count, subobjects, pipeline);
     motion_blur_camera_fallback_disable::
@@ -6400,10 +6408,16 @@ bool AddonInit(
     }
 
     const bool fixed_pointlight_hooks =
+        k_pointlight_drawtime_runtime_enabled &&
         flver_hooks &&
         g_fixed_pointlight.install();
 
-    if (!fixed_pointlight_hooks) {
+    if (!k_pointlight_drawtime_runtime_enabled) {
+        reshade::log::message(
+            reshade::log::level::info,
+            "[DSRRL CORE+ISLANDS " DSRRL_CORE_ISLANDS_VERSION
+            "] PointLight draw-time runtime BYPASSED by diagnostic policy: fixed producer hook, clustered producer hook, PointLight pipeline routing and draw-time carrier/replay are inactive; stock DSR PointLight is preserved.");
+    } else if (!fixed_pointlight_hooks) {
         reshade::log::message(
             reshade::log::level::warning,
             "[DSRRL CORE+ISLANDS " DSRRL_CORE_ISLANDS_VERSION
@@ -6411,10 +6425,12 @@ bool AddonInit(
     }
 
     const bool clustered_pointlight_hooks =
+        k_pointlight_drawtime_runtime_enabled &&
         flver_hooks &&
         g_clustered_pnts.install();
 
-    if (!clustered_pointlight_hooks) {
+    if (k_pointlight_drawtime_runtime_enabled &&
+        !clustered_pointlight_hooks) {
         reshade::log::message(
             reshade::log::level::warning,
             "[DSRRL CORE+ISLANDS " DSRRL_CORE_ISLANDS_VERSION
