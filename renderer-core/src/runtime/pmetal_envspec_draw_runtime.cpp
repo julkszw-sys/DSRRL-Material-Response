@@ -575,7 +575,7 @@ bool pmetal_envspec_draw_runtime::prepare(
             std::snprintf(
                 line,
                 sizeof(line),
-                "[DSRRL PMETAL SOURCE CUT] rx=%u route=%u owner=%016llx slot=%u steady=%llu blend=%llu publish=%llu decode_fail=%llu consume_ok=%llu consume_fail=%llu publish_tid=%u consumer_tid=%u local_valid=%u selector_active=%u global_hooks=%u/%u",
+                "[DSRRL PMETAL SOURCE CUT] rx=%u route=%u owner=%016llx slot=%u steady=%llu blend=%llu publish=%llu decode_fail=%llu consume_ok=%llu consume_fail=%llu publish_tid=%u consumer_tid=%u local_valid=%u frontier=%u/%u/%u/%u/%u/%u/%u selector_active=%u global_hooks=%u/%u",
                 static_cast<unsigned>(decision.receiver_id),
                 static_cast<unsigned>(decision.route_index),
                 static_cast<unsigned long long>(
@@ -599,6 +599,13 @@ bool pmetal_envspec_draw_runtime::prepare(
                 static_cast<unsigned>(
                     cut.last_consumer_tid),
                 cut.last_consumer_local_valid ? 1u : 0u,
+                cut.selector_exact_seen ? 1u : 0u,
+                cut.parent_gate_ok ? 1u : 0u,
+                cut.descriptor_gate_ok ? 1u : 0u,
+                cut.endpoint_gate_ok ? 1u : 0u,
+                cut.manager_gate_ok ? 1u : 0u,
+                cut.source_a_decode_ok ? 1u : 0u,
+                cut.source_b_decode_ok ? 1u : 0u,
                 cut.selector_carrier_active ? 1u : 0u,
                 cut.steady_carrier_active ? 1u : 0u,
                 cut.blend_carrier_active ? 1u : 0u);
