@@ -339,6 +339,9 @@ def main():
     require(material_resource,
         "k_companion_tls_slots = 256u",
         "material resource TLS working set")
+    require(integrated,
+        "decision.route_index == 345u &&\n        g_pmetal_envspec.prepare(",
+        "P_Metal route prefilter before island prepare")
     require(material_resource,
         "(k_companion_tls_slots - 1u)",
         "material resource power-of-two TLS index")
