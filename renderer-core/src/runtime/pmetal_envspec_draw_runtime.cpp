@@ -786,6 +786,8 @@ bool pmetal_envspec_draw_runtime::prepare(
         use_upper_lower = true;
         telemetry::hot_count(upper_lower_ready_);
     } else if (
+        core_.features().enabled(
+            core::operator_id::upper_lower) &&
         upper_lower_receiver_verified &&
         pair.upper_lower != nullptr &&
         lightbank_.
