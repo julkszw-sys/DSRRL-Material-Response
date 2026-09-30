@@ -6314,14 +6314,14 @@ void register_events()
     if (k_drawtime_islands_runtime_enabled) {
         reshade::register_event<reshade::addon_event::draw>(on_draw);
         reshade::register_event<reshade::addon_event::draw_indexed>(on_draw_indexed);
+        reshade::register_event<reshade::addon_event::present>(on_present);
     }
-    reshade::register_event<reshade::addon_event::present>(on_present);
 }
 
 void unregister_events()
 {
-    reshade::unregister_event<reshade::addon_event::present>(on_present);
     if (k_drawtime_islands_runtime_enabled) {
+        reshade::unregister_event<reshade::addon_event::present>(on_present);
         reshade::unregister_event<reshade::addon_event::draw_indexed>(on_draw_indexed);
         reshade::unregister_event<reshade::addon_event::draw>(on_draw);
     }
