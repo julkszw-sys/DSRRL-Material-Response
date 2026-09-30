@@ -76,6 +76,16 @@ option(
     "Diagnostic: disable all draw-time island routing/hooks/replay while preserving create-time A1 and MotionBlur shader replacements"
     OFF)
 
+option(
+    DSRRL_DRAW_CALLBACKS_BYPASS
+    "Diagnostic: keep dynamic transports/hooks installed but omit draw/draw_indexed/present callbacks"
+    OFF)
+
+option(
+    DSRRL_DRAW_REPLAY_BYPASS
+    "Diagnostic: keep dynamic draw routing and preparation but release prepared islands before replay/restore"
+    OFF)
+
 set(
     RESHADE_INCLUDE_DIR
     ""
@@ -474,6 +484,20 @@ if(DSRRL_DRAWTIME_ISLANDS_BYPASS)
         dsrrl_renderer_core_integrated
         PRIVATE
         $<$<COMPILE_LANGUAGE:CXX>:DSRRL_DRAWTIME_ISLANDS_BYPASS>)
+endif()
+
+if(DSRRL_DRAW_CALLBACKS_BYPASS)
+    target_compile_definitions(
+        dsrrl_renderer_core_integrated
+        PRIVATE
+        $<$<COMPILE_LANGUAGE:CXX>:DSRRL_DRAW_CALLBACKS_BYPASS>)
+endif()
+
+if(DSRRL_DRAW_REPLAY_BYPASS)
+    target_compile_definitions(
+        dsrrl_renderer_core_integrated
+        PRIVATE
+        $<$<COMPILE_LANGUAGE:CXX>:DSRRL_DRAW_REPLAY_BYPASS>)
 endif()
 
 if(MSVC)
