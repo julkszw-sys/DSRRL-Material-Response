@@ -144,8 +144,8 @@ def main():
     # draws must not do PSGetShaderResources/COM retains or texture lookups.
     resource_prepare=function_body(
         resources,
-        "material_resource_draw_runtime::prepare_draw_requests(",
-        "material_resource_draw_runtime::prepare_fixed_pointlight_material_requests(")
+        "prepare_draw_requests(",
+        "prepare_fixed_pointlight_material_requests(")
     require_before(
         resource_prepare,
         "if (!exact_material)",
