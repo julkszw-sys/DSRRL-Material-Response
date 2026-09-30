@@ -2407,7 +2407,7 @@ bool integrated_operator_enabled_by_policy(
     //   * HemDir3 stays stock DSR; no visible bridge is shipped.
     //   * Upper/Lower stays stock DSR after the world/FaceEye pixel falsifiers.
     //
-    // P_Metal EnvSpec owns an isolated source carrier (0x563B80/0x563C30)
+    // P_Metal EnvSpec reads PTDE donors at the exact material selector cut
     // and must not depend on the visible U/L runtime or its reference transport.
     switch (op) {
     case dsrrl::core::operator_id::subsurface:
