@@ -2453,6 +2453,111 @@ bool read_exact_pmetal_env_source(
     return true;
 }
 
+void publish_pmetal_source_only(
+    const f4 &a,
+    const f4 &b,
+    float beta,
+    std::uint64_t bank_a,
+    std::uint64_t bank_b,
+    std::uint32_t row_a,
+    std::uint32_t row_b) noexcept
+{
+    if (!std::isfinite(a.x) ||
+        !std::isfinite(a.y) ||
+        !std::isfinite(a.z) ||
+        !std::isfinite(b.x) ||
+        !std::isfinite(b.y) ||
+        !std::isfinite(b.z) ||
+        !std::isfinite(beta))
+        return;
+
+    // Never spin on the render/LightBank path. A concurrent publication is
+    // allowed to win and this event simply fails open.
+    if (g_pmetal_source_payload_guard.test_and_set(
+            std::memory_order_acquire)) {
+        g_pmetal_source_busy_drop.fetch_add(
+            1u,
+            std::memory_order_relaxed);
+        return;
+    }
+
+    pmetal_envspec_source next{};
+    next.a = {a.x,a.y,a.z};
+    next.b = {b.x,b.y,b.z};
+    next.beta =
+        std::clamp(beta,0.0f,1.0f);
+    next.bank_signature_a = bank_a;
+    next.bank_signature_b = bank_b;
+    next.row_id_a = row_a;
+    next.row_id_b = row_b;
+    next.serial =
+        g_pmetal_source_serial.fetch_add(
+            1u,
+            std::memory_order_relaxed) +
+        1u;
+
+    g_pmetal_source_payload = next;
+    g_pmetal_source_payload_valid = true;
+    g_pmetal_source_payload_guard.clear(
+        std::memory_order_release);
+    g_pmetal_source_publish.fetch_add(
+        1u,
+        std::memory_order_relaxed);
+}
+
+bool consume_pmetal_source_only(
+    pmetal_envspec_source &out) noexcept
+{
+    out = {};
+
+    if (!g_pmetal_source_only_enabled.load(
+            std::memory_order_acquire) ||
+        g_quarantined.load(
+            std::memory_order_relaxed)) {
+        g_pmetal_source_consumer_fail.fetch_add(
+            1u,
+            std::memory_order_relaxed);
+        return false;
+    }
+
+    if (g_pmetal_source_payload_guard.test_and_set(
+            std::memory_order_acquire)) {
+        g_pmetal_source_consumer_fail.fetch_add(
+            1u,
+            std::memory_order_relaxed);
+        return false;
+    }
+
+    const bool valid =
+        g_pmetal_source_payload_valid;
+    if (valid)
+        out = g_pmetal_source_payload;
+
+    g_pmetal_source_payload_guard.clear(
+        std::memory_order_release);
+
+    if (!valid ||
+        out.serial == 0u ||
+        !std::isfinite(out.a[0]) ||
+        !std::isfinite(out.a[1]) ||
+        !std::isfinite(out.a[2]) ||
+        !std::isfinite(out.b[0]) ||
+        !std::isfinite(out.b[1]) ||
+        !std::isfinite(out.b[2]) ||
+        !std::isfinite(out.beta)) {
+        out = {};
+        g_pmetal_source_consumer_fail.fetch_add(
+            1u,
+            std::memory_order_relaxed);
+        return false;
+    }
+
+    g_pmetal_source_consumer_ok.fetch_add(
+        1u,
+        std::memory_order_relaxed);
+    return true;
+}
+
 bool materialize_selected_pmetal_env_source(
     lightbank_reference_token &token) noexcept
 {
