@@ -23,6 +23,7 @@
 #include <cstdint>
 #include <cstring>
 #include <mutex>
+#include <unordered_map>
 
 namespace dsrrl::runtime {
 namespace {
@@ -60,7 +61,11 @@ struct gpu_resources {
 };
 
 std::mutex g_resource_mutex;
-gpu_resources g_gpu{};
+// Dynamic DISCARD payloads are recording-context local. A shared resource
+// would let a second immediate/deferred context replace t18/t19/b12 between
+// prepare and bind for the first context.
+std::unordered_map<ID3D11DeviceContext *,gpu_resources>
+    g_gpu_by_context{};
 
 clustered_pnts_draw_runtime *g_runtime = nullptr;
 std::atomic_bool g_enabled{false};
@@ -442,21 +447,29 @@ bool capture_source(
     return true;
 }
 
-void release_gpu_locked() noexcept
+void release_gpu(
+    gpu_resources &gpu) noexcept
 {
-    if (g_gpu.b12 != nullptr)
-        g_gpu.b12->Release();
-    if (g_gpu.t19_srv != nullptr)
-        g_gpu.t19_srv->Release();
-    if (g_gpu.t19_buffer != nullptr)
-        g_gpu.t19_buffer->Release();
-    if (g_gpu.t18_srv != nullptr)
-        g_gpu.t18_srv->Release();
-    if (g_gpu.t18_buffer != nullptr)
-        g_gpu.t18_buffer->Release();
-    if (g_gpu.device != nullptr)
-        g_gpu.device->Release();
-    g_gpu = {};
+    if (gpu.b12 != nullptr)
+        gpu.b12->Release();
+    if (gpu.t19_srv != nullptr)
+        gpu.t19_srv->Release();
+    if (gpu.t19_buffer != nullptr)
+        gpu.t19_buffer->Release();
+    if (gpu.t18_srv != nullptr)
+        gpu.t18_srv->Release();
+    if (gpu.t18_buffer != nullptr)
+        gpu.t18_buffer->Release();
+    if (gpu.device != nullptr)
+        gpu.device->Release();
+    gpu = {};
+}
+
+void release_all_gpu_locked() noexcept
+{
+    for (auto &entry : g_gpu_by_context)
+        release_gpu(entry.second);
+    g_gpu_by_context.clear();
 }
 
 bool create_structured(
@@ -512,43 +525,47 @@ bool create_structured(
     return true;
 }
 
-bool ensure_gpu(
-    ID3D11DeviceContext *context) noexcept
+bool ensure_gpu_locked(
+    ID3D11DeviceContext *context,
+    ID3D11Device *device,
+    gpu_resources *&out) noexcept
 {
-    // DSR records ordinary draws on both immediate and deferred D3D11
-    // contexts. The clustered sidecar uses only device-side resource creation
-    // plus D3D11_USAGE_DYNAMIC resources mapped with WRITE_DISCARD, which is
-    // valid on a deferred context. Rejecting every non-immediate context here
-    // was therefore a host-scheduling gate, not a PointLight semantic guard.
-    if (context == nullptr)
+    out = nullptr;
+    if (context == nullptr || device == nullptr)
         return false;
 
-    ID3D11Device *device = nullptr;
-    context->GetDevice(&device);
-    if (device == nullptr)
+    decltype(g_gpu_by_context)::iterator entry;
+    try {
+        entry =
+            g_gpu_by_context.try_emplace(
+                context).first;
+    } catch (...) {
         return false;
+    }
 
-    std::lock_guard<std::mutex> lock(
-        g_resource_mutex);
+    auto &gpu = entry->second;
+    if (gpu.device != nullptr &&
+        gpu.device != device)
+        release_gpu(gpu);
 
-    if (g_gpu.device != nullptr &&
-        g_gpu.device != device)
-        release_gpu_locked();
+    const bool complete =
+        gpu.device == device &&
+        gpu.t18_buffer != nullptr &&
+        gpu.t18_srv != nullptr &&
+        gpu.t19_buffer != nullptr &&
+        gpu.t19_srv != nullptr &&
+        gpu.b12 != nullptr;
 
-    if (g_gpu.device == device &&
-        g_gpu.t18_buffer != nullptr &&
-        g_gpu.t18_srv != nullptr &&
-        g_gpu.t19_buffer != nullptr &&
-        g_gpu.t19_srv != nullptr &&
-        g_gpu.b12 != nullptr) {
+    if (complete) {
         telemetry::hot_count(g_t18_hit);
         telemetry::hot_count(g_t19_hit);
         telemetry::hot_count(g_b12_hit);
-        device->Release();
+        out = &gpu;
         return true;
     }
 
-    release_gpu_locked();
+    // Never reuse a partial carrier after a failed creation attempt.
+    release_gpu(gpu);
 
     if (!create_structured(
             device,
@@ -561,11 +578,9 @@ bool ensure_gpu(
                 sizeof(
                     operators::point_light::
                         clustered_t18_record_v1)),
-            &g_gpu.t18_buffer,
-            &g_gpu.t18_srv)) {
-        device->Release();
+            &gpu.t18_buffer,
+            &gpu.t18_srv))
         return false;
-    }
     telemetry::hot_count(g_t18_create);
 
     if (!create_structured(
@@ -575,10 +590,9 @@ bool ensure_gpu(
                 4u),
             static_cast<UINT>(
                 sizeof(std::array<float,4>)),
-            &g_gpu.t19_buffer,
-            &g_gpu.t19_srv)) {
-        release_gpu_locked();
-        device->Release();
+            &gpu.t19_buffer,
+            &gpu.t19_srv)) {
+        release_gpu(gpu);
         return false;
     }
     telemetry::hot_count(g_t19_create);
@@ -592,15 +606,16 @@ bool ensure_gpu(
     if (FAILED(device->CreateBuffer(
             &cb,
             nullptr,
-            &g_gpu.b12)) ||
-        g_gpu.b12 == nullptr) {
-        release_gpu_locked();
-        device->Release();
+            &gpu.b12)) ||
+        gpu.b12 == nullptr) {
+        release_gpu(gpu);
         return false;
     }
     telemetry::hot_count(g_b12_create);
 
-    g_gpu.device = device;
+    gpu.device = device;
+    gpu.device->AddRef();
+    out = &gpu;
     return true;
 }
 
@@ -694,7 +709,7 @@ void clustered_pnts_draw_runtime::uninstall() noexcept
     {
         std::lock_guard<std::mutex> lock(
             g_resource_mutex);
-        release_gpu_locked();
+        release_all_gpu_locked();
     }
 
     g_retained_selector = nullptr;
@@ -985,7 +1000,9 @@ bool clustered_pnts_draw_runtime::prepare_sidecar(
     else
         telemetry::hot_count(g_context_other);
 
-    if (!ensure_gpu(context)) {
+    ID3D11Device *device = nullptr;
+    context->GetDevice(&device);
+    if (device == nullptr) {
         prepared.failure =
             clustered_pnts_prepare_failure::gpu_prepare;
         telemetry::hot_count(g_gpu_prepare_fail);
@@ -993,14 +1010,32 @@ bool clustered_pnts_draw_runtime::prepare_sidecar(
         return false;
     }
 
+    // One synchronization point owns lookup/create, DISCARD upload and retain
+    // for this recording context. No second context can alias this carrier,
+    // and the device-destroy path cannot release it mid-transaction.
     std::lock_guard<std::mutex> lock(
         g_resource_mutex);
 
-    if (g_gpu.t18_buffer == nullptr ||
-        g_gpu.t18_srv == nullptr ||
-        g_gpu.t19_buffer == nullptr ||
-        g_gpu.t19_srv == nullptr ||
-        g_gpu.b12 == nullptr) {
+    gpu_resources *gpu = nullptr;
+    if (!ensure_gpu_locked(
+            context,
+            device,
+            gpu)) {
+        device->Release();
+        prepared.failure =
+            clustered_pnts_prepare_failure::gpu_prepare;
+        telemetry::hot_count(g_gpu_prepare_fail);
+        telemetry::hot_count(g_prepare_fail);
+        return false;
+    }
+    device->Release();
+
+    if (gpu == nullptr ||
+        gpu->t18_buffer == nullptr ||
+        gpu->t18_srv == nullptr ||
+        gpu->t19_buffer == nullptr ||
+        gpu->t19_srv == nullptr ||
+        gpu->b12 == nullptr) {
         prepared.failure =
             clustered_pnts_prepare_failure::gpu_resources;
         telemetry::hot_count(g_prepare_fail);
@@ -1009,17 +1044,17 @@ bool clustered_pnts_draw_runtime::prepare_sidecar(
 
     if (!update_buffer(
             context,
-            g_gpu.t18_buffer,
+            gpu->t18_buffer,
             built.payload.t18.data(),
             sizeof(built.payload.t18)) ||
         !update_buffer(
             context,
-            g_gpu.t19_buffer,
+            gpu->t19_buffer,
             built.payload.t19.data(),
             sizeof(built.payload.t19)) ||
         !update_buffer(
             context,
-            g_gpu.b12,
+            gpu->b12,
             built.payload.b12.data(),
             sizeof(built.payload.b12))) {
         prepared.failure =
@@ -1029,13 +1064,13 @@ bool clustered_pnts_draw_runtime::prepare_sidecar(
         return false;
     }
 
-    g_gpu.t18_srv->AddRef();
-    g_gpu.t19_srv->AddRef();
-    g_gpu.b12->AddRef();
+    gpu->t18_srv->AddRef();
+    gpu->t19_srv->AddRef();
+    gpu->b12->AddRef();
 
-    prepared.t18 = g_gpu.t18_srv;
-    prepared.t19 = g_gpu.t19_srv;
-    prepared.b12 = g_gpu.b12;
+    prepared.t18 = gpu->t18_srv;
+    prepared.t19 = gpu->t19_srv;
+    prepared.b12 = gpu->b12;
     prepared.producer_serial =
         input.serial;
     prepared.raw_selected_count =
@@ -1082,8 +1117,17 @@ void clustered_pnts_draw_runtime::on_destroy_device(
     std::lock_guard<std::mutex> lock(
         g_resource_mutex);
 
-    if (g_gpu.device == native)
-        release_gpu_locked();
+    for (auto it =
+             g_gpu_by_context.begin();
+         it != g_gpu_by_context.end();) {
+        if (it->second.device == native) {
+            release_gpu(it->second);
+            it =
+                g_gpu_by_context.erase(it);
+        } else {
+            ++it;
+        }
+    }
 }
 
 clustered_pnts_telemetry
