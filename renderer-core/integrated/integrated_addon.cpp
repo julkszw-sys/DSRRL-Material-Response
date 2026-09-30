@@ -2589,8 +2589,8 @@ void log_effect_matrix(
         "probe_reject=%llu spec_reject=%llu "
         "b12_upload=%llu b12_reuse=%llu q=%u fail=0x%08X "
         "fail_feature=%u fail_lerp_feature=%u fail_material=%u fail_semantic=%u "
-        "fail_source=%u fail_blend=%u fail_lerp_ul_conflict=%u fail_context=%u "
-        "fail_replacement=%u fail_ul=%u fail_probe=%u fail_spec_rgb=%u "
+        "fail_source=%u fail_blend=%u fail_context=%u "
+        "fail_replacement=%u fail_probe=%u fail_spec_rgb=%u "
         "fail_device=%u fail_b12=%u fail_mutation=%u",
         static_cast<unsigned long long>(pmetal.candidates),
         static_cast<unsigned long long>(pmetal.lerp_candidates),
@@ -2612,10 +2612,8 @@ void log_effect_matrix(
         (pmetal.effect_fail_mask & (1u << 3u)) ? 1u : 0u,
         (pmetal.effect_fail_mask & (1u << 4u)) ? 1u : 0u,
         (pmetal.effect_fail_mask & (1u << 5u)) ? 1u : 0u,
-        (pmetal.effect_fail_mask & (1u << 6u)) ? 1u : 0u,
         (pmetal.effect_fail_mask & (1u << 7u)) ? 1u : 0u,
         (pmetal.effect_fail_mask & (1u << 8u)) ? 1u : 0u,
-        (pmetal.effect_fail_mask & (1u << 9u)) ? 1u : 0u,
         (pmetal.effect_fail_mask & (1u << 10u)) ? 1u : 0u,
         (pmetal.effect_fail_mask & (1u << 11u)) ? 1u : 0u,
         (pmetal.effect_fail_mask & (1u << 12u)) ? 1u : 0u,
