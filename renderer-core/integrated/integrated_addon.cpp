@@ -607,7 +607,10 @@ struct integrated_pipeline_route_cache_entry {
     std::uint8_t mask = 0u;
 };
 
-constexpr std::size_t k_integrated_route_cache_size = 16u;
+// Complex areas bind far more than sixteen pixel pipelines in a frame.
+// Keep a modest per-thread route working set so ordinary interleaving does
+// not fall back to the shared route map on cache collisions.
+constexpr std::size_t k_integrated_route_cache_size = 256u;
 thread_local std::array<
     integrated_pipeline_route_cache_entry,
     k_integrated_route_cache_size>
@@ -637,15 +640,37 @@ void remember_integrated_draw_route(
     try {
         std::unique_lock<std::shared_mutex> lock(
             g_integrated_draw_route_mutex);
-        g_integrated_draw_route_epoch.fetch_add(
-            1u,
-            std::memory_order_acq_rel);
-        if (mask == 0u)
-            g_integrated_draw_routes.erase(
+
+        const auto found =
+            g_integrated_draw_routes.find(
                 pipeline_handle);
-        else
-            g_integrated_draw_routes[
-                pipeline_handle] = mask;
+
+        if (mask == 0u) {
+            // A zero route is normally a first observation and therefore has
+            // no cached positive state to invalidate. If this handle already
+            // had a route, however, invalidate all TLS verdicts before erase.
+            if (found !=
+                g_integrated_draw_routes.end()) {
+                g_integrated_draw_route_epoch.fetch_add(
+                    1u,
+                    std::memory_order_acq_rel);
+                g_integrated_draw_routes.erase(found);
+            }
+        } else if (
+            found ==
+                g_integrated_draw_routes.end()) {
+            // Init of an unrelated new pipeline cannot invalidate cached
+            // routes for existing handles. Destroy/reuse still advances the
+            // epoch in forget_integrated_draw_route().
+            g_integrated_draw_routes.emplace(
+                pipeline_handle,
+                mask);
+        } else if (found->second != mask) {
+            g_integrated_draw_route_epoch.fetch_add(
+                1u,
+                std::memory_order_acq_rel);
+            found->second = mask;
+        }
     } catch (...) {
         try {
             std::unique_lock<std::shared_mutex> lock(
