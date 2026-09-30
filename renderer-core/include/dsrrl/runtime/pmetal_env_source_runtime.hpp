@@ -31,6 +31,15 @@ struct pmetal_env_source_runtime_telemetry {
     std::uint32_t last_publish_tid = 0u;
     std::uint32_t last_consumer_tid = 0u;
     bool last_consumer_local_valid = false;
+    // Monotonic diagnostic frontier for the exact FLVER-selector source path.
+    // These are observations only and never authorize a donor.
+    bool selector_exact_seen = false;
+    bool parent_gate_ok = false;
+    bool descriptor_gate_ok = false;
+    bool endpoint_gate_ok = false;
+    bool manager_gate_ok = false;
+    bool source_a_decode_ok = false;
+    bool source_b_decode_ok = false;
     bool selector_carrier_active = false;
     bool steady_carrier_active = false;
     bool blend_carrier_active = false;
