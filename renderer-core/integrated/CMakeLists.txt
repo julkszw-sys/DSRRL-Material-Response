@@ -63,7 +63,7 @@ option(
 
 option(
     DSRRL_PMETAL_NATIVE_DSR_CUBEMAP_FEED
-    "Diagnostic: feed native DSR BC6H mip3 as LOD0 into the PTDE P_Metal EnvSpec operator"
+    "Diagnostic: feed exact native DSR BC6H cubemaps into the PTDE P_Metal EnvSpec operator"
     OFF)
 
 set(
