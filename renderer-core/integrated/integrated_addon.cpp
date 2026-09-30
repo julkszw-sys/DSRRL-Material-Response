@@ -580,6 +580,15 @@ enum integrated_draw_route_bit : std::uint8_t {
     k_route_clustered_pointlight = 1u << 7
 };
 
+constexpr std::uint8_t k_dynamic_draw_route_mask =
+    k_route_stable |
+    k_route_hemenvlerp |
+    k_route_subsurface |
+    k_route_hemdir3 |
+    k_route_upper_lower |
+    k_route_fixed_pointlight |
+    k_route_clustered_pointlight;
+
 struct integrated_draw_route_tls {
     const void *command_list_key = nullptr;
     std::uint8_t mask = 0u;
@@ -1751,6 +1760,14 @@ void on_bind_pipeline(
          static_cast<std::uint32_t>(
              reshade::api::pipeline_stage::
                 vertex_shader)) != 0u;
+
+    // The consumer-local MotionBlur patch is compute-only in the active
+    // policy (the shared velocity writer is disabled). Do not serialize every
+    // unrelated PS/VS pipeline bind through the MotionBlur registry mutex.
+    if (!compute_bound &&
+        !(k_velocity_writer_patch_enabled &&
+          vertex_bound))
+        return;
 
     bool compute_target = false;
     bool velocity_target = false;
@@ -4193,14 +4210,18 @@ void on_init_pipeline(
                     pixel_shader->code_size))
             draw_route_mask |= k_route_hemenvlerp;
 
-        if (dsrrl::runtime::
+        if (g_core.features().enabled(
+                dsrrl::core::operator_id::subsurface) &&
+            dsrrl::runtime::
                 subsurface_receiver_observe_pipeline(
                     pipeline.handle,
                     pixel_shader->code,
                     pixel_shader->code_size))
             draw_route_mask |= k_route_subsurface;
 
-        if (dsrrl::runtime::
+        if (g_core.features().enabled(
+                dsrrl::core::operator_id::hemdir3) &&
+            dsrrl::runtime::
                 hemdir3_receiver_observe_pipeline(
                     pipeline.handle,
                     pixel_shader->code,
@@ -5692,6 +5713,17 @@ bool on_draw(
             a1_effects,
             effect_probe_stage::applied);
 
+    // A1 owners are fully materialized at CreatePipeline. If no island on
+    // this bound pipeline needs a draw-specific carrier, the stock draw
+    // already executes the replacement shader and there is nothing to join,
+    // snapshot, replay or restore here.
+    if ((route_mask & k_dynamic_draw_route_mask) == 0u) {
+        hot_count(g_draw_fast_skip);
+        dsrrl::runtime::
+            material_owner_selection_clear();
+        return false;
+    }
+
     const auto route_candidates =
         route_candidate_effect_mask(
             route_mask);
@@ -5945,6 +5977,17 @@ bool on_draw_indexed(
         mark_effect_probe_mask(
             a1_effects,
             effect_probe_stage::applied);
+
+    // A1 owners are fully materialized at CreatePipeline. If no island on
+    // this bound pipeline needs a draw-specific carrier, the stock draw
+    // already executes the replacement shader and there is nothing to join,
+    // snapshot, replay or restore here.
+    if ((route_mask & k_dynamic_draw_route_mask) == 0u) {
+        hot_count(g_draw_fast_skip);
+        dsrrl::runtime::
+            material_owner_selection_clear();
+        return false;
+    }
 
     const auto route_candidates =
         route_candidate_effect_mask(
