@@ -6718,6 +6718,7 @@ void AddonUninit(
     log_effect_matrix("PRE_UNLOAD");
     motion_blur_camera_fallback_disable::
         log_state("PRE_UNLOAD");
+    g_pmetal_source.uninstall();
     g_upper_lower.uninstall();
 
     if (g_upper_lower.telemetry().restore_failed)
