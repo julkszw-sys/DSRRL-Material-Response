@@ -45,6 +45,7 @@ def main():
     owner_selection=(root/"src/runtime/material_owner_selection.cpp").read_text(encoding="utf-8")
     owner_producer=(root/"src/runtime/material_owner_producer.cpp").read_text(encoding="utf-8")
     mr_draw=(root/"src/runtime/material_response_draw_transaction.cpp").read_text(encoding="utf-8")
+    envspec=(root/"src/runtime/envspec_resource_runtime.cpp").read_text(encoding="utf-8")
 
     # Feature flags are queried from render-hot paths. Keep reads lock-free,
     # while snapshot/set may retain coherent writer serialization.
@@ -307,6 +308,23 @@ def main():
         "resource_epoch_.fetch_add(",
         "MR destructive cache invalidation")
 
+    # EnvSpec snapshot cache keys already include stock SRV identity and hold
+    # strong PTDE resource references. Appending an unrelated stock SRV must
+    # not invalidate every existing snapshot; destroy remains the epoch cut.
+    init_view=function_body(
+        envspec,
+        "void on_init_resource_view(",
+        "void on_destroy_resource_view(")
+    if "g_snapshot_epoch.fetch_add" in init_view:
+        fail("unrelated EnvSpec SRV creation still globally invalidates snapshot TLS")
+    destroy_view=function_body(
+        envspec,
+        "void on_destroy_resource_view(",
+        "bool probe_for_native_view(")
+    require(destroy_view,
+        "g_snapshot_epoch.fetch_add(",
+        "EnvSpec view-destroy snapshot invalidation")
+
     print("Active-islands hot-path audit: PASS")
     print("  feature_reads=atomic")
     print("  flver_identity=256-entry TLS before global map lock")
@@ -319,6 +337,7 @@ def main():
     print("  draw_replay=Context1 TLS cache; QueryInterface cold-path only")
     print("  material_owner=256-entry TLS caches indexed by precomputed FLVER hash; full SHA authority retained")
     print("  mr_replacement=append-only streaming preserves unrelated TLS entries; teardown invalidates")
+    print("  envspec=unrelated SRV creation preserves snapshot TLS; destroy invalidates")
     return 0
 
 if __name__=="__main__":
