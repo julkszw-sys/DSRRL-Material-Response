@@ -66,6 +66,12 @@ std::unordered_map<std::uint64_t,native_view_record>
     g_resource_by_view;
 std::unordered_map<std::uint32_t,rgba_cube>
     g_ptde_cubes;
+struct native_mip3_view_record {
+    ID3D11ShaderResourceView *source = nullptr;
+    ID3D11ShaderResourceView *view = nullptr;
+};
+std::unordered_map<std::uintptr_t,native_mip3_view_record>
+    g_native_mip3_views;
 
 device *g_device = nullptr;
 std::vector<std::uint8_t> g_pack;
@@ -365,6 +371,138 @@ bool extract_tight_bc6h(
         k_dsr_tight_bc6h_bytes;
 }
 
+bool get_native_mip3_view(
+    ID3D11ShaderResourceView *stock,
+    ID3D11ShaderResourceView *&out) noexcept
+{
+    out = nullptr;
+    if (stock == nullptr)
+        return false;
+
+    const auto key =
+        reinterpret_cast<std::uintptr_t>(stock);
+
+    {
+        std::lock_guard<std::mutex> lock(g_mutex);
+        const auto found =
+            g_native_mip3_views.find(key);
+        if (found != g_native_mip3_views.end() &&
+            found->second.view != nullptr) {
+            out = found->second.view;
+            out->AddRef();
+            return true;
+        }
+        if (g_device == nullptr)
+            return false;
+    }
+
+    D3D11_SHADER_RESOURCE_VIEW_DESC source_desc{};
+    stock->GetDesc(&source_desc);
+    if (source_desc.ViewDimension !=
+            D3D11_SRV_DIMENSION_TEXTURECUBE ||
+        (source_desc.Format != DXGI_FORMAT_BC6H_UF16 &&
+         source_desc.Format != DXGI_FORMAT_BC6H_SF16))
+        return false;
+
+    ID3D11Resource *resource = nullptr;
+    stock->GetResource(&resource);
+    if (resource == nullptr)
+        return false;
+
+    ID3D11Texture2D *texture = nullptr;
+    const HRESULT qi =
+        resource->QueryInterface(
+            __uuidof(ID3D11Texture2D),
+            reinterpret_cast<void **>(&texture));
+    resource->Release();
+
+    if (FAILED(qi) || texture == nullptr)
+        return false;
+
+    D3D11_TEXTURE2D_DESC texture_desc{};
+    texture->GetDesc(&texture_desc);
+
+    constexpr UINT k_ptde_equivalent_mip = 3u;
+    const UINT first_mip =
+        source_desc.TextureCube.MostDetailedMip;
+    const UINT exposed_mips =
+        source_desc.TextureCube.MipLevels;
+
+    const bool source_exposes_mip3 =
+        exposed_mips == static_cast<UINT>(-1) ||
+        exposed_mips > k_ptde_equivalent_mip;
+
+    if (texture_desc.Width != k_dsr_size ||
+        texture_desc.Height != k_dsr_size ||
+        texture_desc.MipLevels != k_dsr_levels ||
+        texture_desc.ArraySize != k_faces ||
+        (texture_desc.MiscFlags &
+         D3D11_RESOURCE_MISC_TEXTURECUBE) == 0u ||
+        !source_exposes_mip3 ||
+        first_mip + k_ptde_equivalent_mip >=
+            texture_desc.MipLevels) {
+        texture->Release();
+        return false;
+    }
+
+    D3D11_SHADER_RESOURCE_VIEW_DESC mip_desc =
+        source_desc;
+    mip_desc.TextureCube.MostDetailedMip =
+        first_mip + k_ptde_equivalent_mip;
+    mip_desc.TextureCube.MipLevels = 1u;
+
+    ID3D11Device *device = nullptr;
+    texture->GetDevice(&device);
+    if (device == nullptr) {
+        texture->Release();
+        return false;
+    }
+
+    ID3D11ShaderResourceView *created = nullptr;
+    const HRESULT created_hr =
+        device->CreateShaderResourceView(
+            texture,
+            &mip_desc,
+            &created);
+
+    device->Release();
+    texture->Release();
+
+    if (FAILED(created_hr) || created == nullptr)
+        return false;
+
+    bool adopted = false;
+    {
+        std::lock_guard<std::mutex> lock(g_mutex);
+
+        if (g_device != nullptr) {
+            const auto found =
+                g_native_mip3_views.find(key);
+            if (found != g_native_mip3_views.end() &&
+                found->second.view != nullptr) {
+                out = found->second.view;
+                out->AddRef();
+            } else {
+                stock->AddRef();
+                g_native_mip3_views.emplace(
+                    key,
+                    native_mip3_view_record{
+                        stock,
+                        created
+                    });
+                out = created;
+                out->AddRef();
+                adopted = true;
+            }
+        }
+    }
+
+    if (!adopted)
+        created->Release();
+
+    return out != nullptr;
+}
+
 void release_carrier(
     device *device_ptr) noexcept
 {
@@ -375,6 +513,9 @@ void release_carrier(
         std::uint32_t,
         rgba_cube> cubes;
     sampler sampler_to_destroy{};
+    std::unordered_map<
+        std::uintptr_t,
+        native_mip3_view_record> mip3_views;
 
     {
         std::lock_guard<std::mutex> lock(
@@ -388,6 +529,7 @@ void release_carrier(
             std::memory_order_release);
 
         cubes.swap(g_ptde_cubes);
+        mip3_views.swap(g_native_mip3_views);
         sampler_to_destroy =
             g_sampler;
         g_sampler = {};
@@ -407,6 +549,13 @@ void release_carrier(
         if (cube.texture.handle != 0u)
             device_ptr->destroy_resource(
                 cube.texture);
+    }
+
+    for (const auto &[_,entry] : mip3_views) {
+        if (entry.view != nullptr)
+            entry.view->Release();
+        if (entry.source != nullptr)
+            entry.source->Release();
     }
 
     if (sampler_to_destroy.handle != 0u)
@@ -442,6 +591,8 @@ void on_init_device(
         g_ptde_cubes.reserve(
             env::k_legacy_envspec_probe_count *
             k_ptde_slots);
+        g_native_mip3_views.reserve(
+            env::k_legacy_envspec_probe_count * 2u);
     }
 
     std::vector<std::uint8_t> pack;
@@ -1407,6 +1558,148 @@ bool envspec_resource_runtime::prepare_native_dsr(
         probe_b;
     prepared.slot =
         slot;
+    prepared.probe_b_required =
+        probe_b_required;
+    prepared.ready = true;
+
+    telemetry::hot_count(g_prepare_ok);
+    return true;
+}
+
+bool envspec_resource_runtime::prepare_native_dsr_mip3(
+    ID3D11DeviceContext *context,
+    std::uint8_t slot,
+    bool probe_b_required,
+    prepared_envspec_resources &prepared) noexcept
+{
+    prepared = {};
+
+    if (context == nullptr ||
+        slot >= k_ptde_slots) {
+        telemetry::hot_count(g_prepare_fail);
+        return false;
+    }
+
+    ID3D11ShaderResourceView *stock_views[3]{};
+    if (probe_b_required)
+        context->PSGetShaderResources(
+            12u, 3u, stock_views);
+    else
+        context->PSGetShaderResources(
+            12u, 1u, stock_views);
+
+    auto *stock_a = stock_views[0];
+    auto *stock_b =
+        probe_b_required
+            ? stock_views[2]
+            : stock_views[0];
+
+    std::uint16_t probe_a = 0u;
+    std::uint16_t probe_b = 0u;
+    ID3D11SamplerState *sampler_native = nullptr;
+    bool identity_ready = false;
+
+    {
+        std::lock_guard<std::mutex> lock(g_mutex);
+
+        const auto resolve_probe_locked =
+            [](ID3D11ShaderResourceView *view,
+               std::uint16_t &probe) noexcept {
+                if (view == nullptr)
+                    return false;
+
+                const auto key =
+                    static_cast<std::uint64_t>(
+                        reinterpret_cast<std::uintptr_t>(
+                            view));
+                const auto found =
+                    g_resource_by_view.find(key);
+                if (found ==
+                    g_resource_by_view.end())
+                    return false;
+
+                probe = found->second.probe_ordinal;
+                return
+                    probe <
+                    env::k_legacy_envspec_probe_count;
+            };
+
+        if (g_device != nullptr &&
+            g_sampler_ready &&
+            g_sampler.handle != 0u &&
+            resolve_probe_locked(
+                stock_a,
+                probe_a) &&
+            (!probe_b_required ||
+             resolve_probe_locked(
+                 stock_b,
+                 probe_b))) {
+            if (!probe_b_required)
+                probe_b = probe_a;
+
+            sampler_native =
+                reinterpret_cast<
+                    ID3D11SamplerState *>(
+                        static_cast<std::uintptr_t>(
+                            g_sampler.handle));
+            if (sampler_native != nullptr) {
+                sampler_native->AddRef();
+                identity_ready = true;
+            }
+        }
+    }
+
+    if (stock_views[1] != nullptr)
+        stock_views[1]->Release();
+
+    ID3D11ShaderResourceView *mip3_a = nullptr;
+    ID3D11ShaderResourceView *mip3_b = nullptr;
+
+    bool mip_ready =
+        identity_ready &&
+        stock_a != nullptr &&
+        stock_b != nullptr &&
+        get_native_mip3_view(
+            stock_a,
+            mip3_a);
+
+    if (mip_ready) {
+        if (probe_b_required) {
+            mip_ready =
+                get_native_mip3_view(
+                    stock_b,
+                    mip3_b);
+        } else {
+            mip3_b = mip3_a;
+            mip3_b->AddRef();
+        }
+    }
+
+    if (stock_views[0] != nullptr)
+        stock_views[0]->Release();
+    if (stock_views[2] != nullptr)
+        stock_views[2]->Release();
+
+    if (!mip_ready ||
+        mip3_a == nullptr ||
+        mip3_b == nullptr ||
+        sampler_native == nullptr) {
+        if (mip3_a != nullptr)
+            mip3_a->Release();
+        if (mip3_b != nullptr)
+            mip3_b->Release();
+        if (sampler_native != nullptr)
+            sampler_native->Release();
+        telemetry::hot_count(g_prepare_fail);
+        return false;
+    }
+
+    prepared.ptde_a = mip3_a;
+    prepared.ptde_b = mip3_b;
+    prepared.sampler = sampler_native;
+    prepared.probe_a = probe_a;
+    prepared.probe_b = probe_b;
+    prepared.slot = slot;
     prepared.probe_b_required =
         probe_b_required;
     prepared.ready = true;
