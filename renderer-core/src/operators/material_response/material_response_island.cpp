@@ -96,12 +96,11 @@ resolve_direct_pointlight_authority(
             identity.semantic_name_hash)
         return std::nullopt;
 
-    // When the retail MTD parser has authenticated the actual material bytes,
-    // the raw SHA must agree with the dedicated PointLight authority. For the
-    // source-complete FLVER+slot owner carrier, the authority's unique
-    // semantic->raw mapping is the exact DSR raw-MTD identity; do not inherit
-    // the older generic MR registry's stale/non-PointLight digest.
-    if (identity.actual_material_exact &&
+    // PointLight material authority requires the exact DSR raw-MTD identity
+    // independently of the generic MR profile surface. The authenticated
+    // FLVER+slot tuple proves ownership; semantic hash + full SHA proves the
+    // material constants row. Never accept semantic-only aliases.
+    if (digest_is_zero(identity.raw_mtd_sha256) ||
         identity.raw_mtd_sha256 !=
             begin->raw_mtd_sha256)
         return std::nullopt;
