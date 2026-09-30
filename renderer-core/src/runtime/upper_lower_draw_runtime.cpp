@@ -1613,52 +1613,42 @@ void publish_reference_token(
         token;
 }
 
-void invalidate_selected_reference_token_for_owner(
-    std::uintptr_t owner) noexcept
+void invalidate_selected_reference_token_for_producer(
+    std::uint32_t producer_tid) noexcept
 {
-    if (owner == 0u)
+    if (producer_tid == 0u)
         return;
 
-    // P_Metal material identity is not known until the second phase of the
-    // exact FLVER selector callback. Invalidate only after that material gate
-    // has proven P_Metal. Scanning this bounded 128x4 selected bank is rare
-    // (P_Metal-only) and prevents unrelated materials sharing the same
-    // LightBank producer thread from erasing the current P_Metal state.
-    for (std::size_t set = 0u;
-         set < k_reference_token_sets;
-         ++set) {
-        bool changed = false;
-        {
-            reference_token_set_guard guard(set);
-            const auto base =
-                set * k_reference_token_ways;
+    // This helper is called only after exact P_Metal material identity has
+    // been proven in the second phase of the retail selector callback. Keep
+    // invalidation O(1): the selected-token bank is keyed by producer TID, so
+    // scanning every 128x4 set here is unnecessary hot-path work.
+    const auto set =
+        reference_token_set(
+            static_cast<std::uintptr_t>(
+                producer_tid));
+    reference_token_set_guard guard(set);
+    const auto base =
+        set * k_reference_token_ways;
 
-            for (std::size_t way = 0u;
-                 way < k_reference_token_ways;
-                 ++way) {
-                auto &entry =
-                    g_selected_reference_tokens[
-                        base + way];
-                if (!entry.valid ||
-                    entry.fingerprint.owner != owner)
-                    continue;
-
-                entry = {};
-                changed = true;
-            }
-
-            if (changed) {
-                // Draw-side TLS copies are keyed by the producer-TID set
-                // generation. Advance while the set lock is still held so
-                // no consumer can observe a cleared bank with the old cache
-                // generation.
-                g_selected_reference_generation[set].
-                    fetch_add(
-                        1u,
-                        std::memory_order_release);
-            }
-        }
+    for (std::size_t way = 0u;
+         way < k_reference_token_ways;
+         ++way) {
+        auto &entry =
+            g_selected_reference_tokens[base + way];
+        if (entry.valid &&
+            entry.producer_tid ==
+                producer_tid)
+            entry = {};
     }
+
+    // Always invalidate the draw-side TLS generation for this producer set.
+    // A stale token may already have been evicted from the bounded bank while
+    // a consumer thread still holds a cached copy.
+    g_selected_reference_generation[set].
+        fetch_add(
+            1u,
+            std::memory_order_release);
 }
 
 bool exact_pmetal_material_selection(
@@ -4953,15 +4943,25 @@ void upper_lower_draw_runtime::pmetal_material_event(
     const auto owner_key =
         reinterpret_cast<std::uintptr_t>(
             owner);
-    invalidate_selected_reference_token_for_owner(
-        owner_key);
+    const auto producer_tid =
+        static_cast<std::uint32_t>(
+            GetCurrentThreadId());
+
+    // selector_event() and pmetal_material_event() are phases of the same
+    // retail callback, so producer TID is the exact selected-token bank key.
+    // Invalidate only after the P_Metal material gate, but do it in O(1)
+    // rather than scanning every selected-token set.
+    invalidate_selected_reference_token_for_producer(
+        producer_tid);
 
     // If this exact P_Metal selector has no matching staged source token, the
-    // old same-owner state has already been invalidated above and we fail open
-    // instead of resurrecting a donor from a prior P_Metal draw.
+    // current producer-thread state has already been invalidated above and we
+    // fail open instead of resurrecting a donor from a prior P_Metal draw.
     if (!g_draw_reference_token.valid ||
         !g_draw_reference_token.source_ready ||
-        g_draw_reference_token.producer_tid == 0u ||
+        producer_tid == 0u ||
+        g_draw_reference_token.producer_tid !=
+            producer_tid ||
         g_draw_reference_token.producer_serial == 0u ||
         g_draw_reference_token.fingerprint.owner !=
             owner_key)
