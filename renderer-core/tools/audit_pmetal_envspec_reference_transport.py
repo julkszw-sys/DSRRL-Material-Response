@@ -22,6 +22,7 @@ def main() -> None:
     ul_h = (root / "include/dsrrl/runtime/upper_lower_draw_runtime.hpp").read_text(encoding="utf-8")
     ul_cpp = (root / "src/runtime/upper_lower_draw_runtime.cpp").read_text(encoding="utf-8")
     env_cpp = (root / "src/runtime/pmetal_envspec_draw_runtime.cpp").read_text(encoding="utf-8")
+    source_h = (root / "include/dsrrl/runtime/pmetal_env_source_runtime.hpp").read_text(encoding="utf-8")
     flver_cpp = (root / "src/runtime/flver_engine_hooks.cpp").read_text(encoding="utf-8")
     lerp_cpp = (root / "src/operators/env_spec/pmetal_rgba_lerp_materializer.cpp").read_text(encoding="utf-8")
     lerp_h = (root / "include/dsrrl/operators/env_spec/pmetal_rgba_lerp_materializer.hpp").read_text(encoding="utf-8")
@@ -36,6 +37,22 @@ def main() -> None:
     )
     if "upper_lower_enabled ||\n        pmetal_envspec_enabled" in integrated:
         fail("EnvSpec still forces shared U/L transport")
+
+    require(
+        source_h,
+        "class pmetal_env_source_runtime",
+        "isolated source runtime API",
+    )
+    require(
+        ul_cpp,
+        "bool install_pmetal_source_only_carrier() noexcept",
+        "isolated source-only installer",
+    )
+    require(
+        env_cpp,
+        "source_.latest(source)",
+        "isolated source consumer",
+    )
 
     # Installing the shared carrier must never silently re-enable U/L inside
     # the EnvSpec composite.
