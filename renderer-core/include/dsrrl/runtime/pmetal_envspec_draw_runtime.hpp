@@ -9,7 +9,6 @@
 #include "dsrrl/runtime/island_draw_adapter.hpp"
 #include "dsrrl/runtime/material_resource_draw_runtime.hpp"
 #include "dsrrl/runtime/pmetal_env_source_runtime.hpp"
-#include "dsrrl/runtime/upper_lower_draw_runtime.hpp"
 
 #include <reshade.hpp>
 
@@ -35,12 +34,9 @@ struct prepared_pmetal_envspec_draw {
     island_draw_adapter_request request{};
     prepared_envspec_resources env_resources{};
     prepared_material_resource_draw material_resources{};
-    prepared_upper_lower_draw upper_lower{};
-
     ID3D11PixelShader *shader = nullptr;
     ID3D11Buffer *b12 = nullptr;
 
-    bool upper_lower_composed = false;
     bool ready = false;
 };
 
@@ -87,7 +83,6 @@ public:
     pmetal_envspec_draw_runtime(
         core::renderer_core &core,
         pmetal_env_source_runtime &source,
-        upper_lower_draw_runtime &lightbank,
         envspec_resource_runtime &env_resources,
         material_resource_draw_runtime &material_resources) noexcept;
 
@@ -114,7 +109,6 @@ public:
         reshade::api::command_list *cmd_list,
         const operators::material_response::material_identity &material,
         const operators::material_response::decision &decision,
-        bool upper_lower_receiver_verified,
         prepared_pmetal_envspec_draw &prepared) noexcept;
 
     bool prepare(
@@ -122,7 +116,6 @@ public:
         const operators::material_response::material_identity &material,
         const operators::material_response::decision &decision,
         pmetal_envspec_receiver_family family,
-        bool upper_lower_receiver_verified,
         prepared_pmetal_envspec_draw &prepared) noexcept;
 
     void release(
@@ -132,15 +125,11 @@ public:
     void reset() noexcept;
 
 private:
-    struct replacement_pair {
-        ID3D11PixelShader *base = nullptr;
-        ID3D11PixelShader *upper_lower = nullptr;
-        core::operator_mask base_owners = 0;
-        core::operator_mask upper_lower_owners = 0;
-        core::sha256_digest base_payload_sha256{};
-        core::sha256_digest upper_lower_payload_sha256{};
-        std::size_t base_payload_size = 0u;
-        std::size_t upper_lower_payload_size = 0u;
+    struct replacement_record {
+        ID3D11PixelShader *shader = nullptr;
+        core::operator_mask composed_owners = 0;
+        core::sha256_digest payload_sha256{};
+        std::size_t payload_size = 0u;
     };
 
     struct b12_context_cache {
@@ -153,13 +142,12 @@ private:
 
     core::renderer_core &core_;
     pmetal_env_source_runtime &source_;
-    upper_lower_draw_runtime &lightbank_;
     envspec_resource_runtime &env_resources_;
     material_resource_draw_runtime &material_resources_;
 
     mutable std::mutex mutex_;
     ID3D11Device *device_ = nullptr;
-    std::unordered_map<std::uint32_t,replacement_pair>
+    std::unordered_map<std::uint32_t,replacement_record>
         replacements_;
     std::unordered_map<std::uint32_t,ID3D11PixelShader *>
         lerp_replacements_;
@@ -167,8 +155,6 @@ private:
         lerp_replacement_sha256_;
     std::unordered_map<std::uint32_t,std::size_t>
         lerp_replacement_size_;
-    std::unordered_map<std::uint32_t,bool>
-        lerp_replacement_upper_lower_composed_;
     std::unordered_map<std::uintptr_t,b12_context_cache>
         b12_by_context_;
 
