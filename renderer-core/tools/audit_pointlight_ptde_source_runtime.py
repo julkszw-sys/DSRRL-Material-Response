@@ -30,6 +30,10 @@ for hot in (producer,selector):
         if forbidden in hot: raise SystemExit('Global work in fixed producer/selector: '+forbidden)
 require(fixed,'view_desc.Buffer.NumElements=8u')
 require(clustered,'pointlight_ptde_source::capture(node, g_base, raw)')
+require(clustered,'readable_region_cache node_region{}')
+require(clustered,'!readable_range_cached(')
+if '!readable_range(node, 0x50u)' in clustered:
+    raise SystemExit('Clustered selector regressed to per-node VirtualQuery validation')
 capture=clustered[clustered.index('bool capture_source('):clustered.index('void release_gpu_locked()')]
 require(capture,'target_address != g_base + 0x55BC00u')
 require(capture,'target_address != g_base + 0x55D0B0u')
