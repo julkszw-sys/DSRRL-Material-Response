@@ -122,6 +122,7 @@ dsrrl::runtime::clustered_pnts_pipeline_runtime
 dsrrl::runtime::pmetal_envspec_draw_runtime
     g_pmetal_envspec(
         g_core,
+        g_pmetal_source,
         g_upper_lower,
         g_envspec_resources,
         g_material_resources);
