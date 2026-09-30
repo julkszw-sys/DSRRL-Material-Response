@@ -25,6 +25,11 @@ for hot in (producer,selector):
         if forbidden in hot: raise SystemExit('Global work in fixed producer/selector: '+forbidden)
 require(fixed,'view_desc.Buffer.NumElements=8u')
 require(clustered,'pointlight_ptde_source::capture(node, g_base, raw)')
+capture=clustered[clustered.index('bool capture_source('):clustered.index('void release_gpu_locked()')]
+require(capture,'target_address != g_base + 0x55BC00u')
+require(capture,'target_address != g_base + 0x55D0B0u')
+if capture.index('fn(node, raw.data());') < capture.index('target_address != g_base + 0x55BC00u'):
+    raise SystemExit('Clustered PointLight calls host source vfunc before exact donor-class prefilter')
 shader=read('src/operators/point_light/fixed_local_specular_single_materializer.cpp')
 for token in ['range_compare.erase_words=8u','range_load.words[6]=4u+light','SAT((PTDE End-distance)*PTDE invRange)','a.erase_words>b.erase_words']:
     require(shader,token)
