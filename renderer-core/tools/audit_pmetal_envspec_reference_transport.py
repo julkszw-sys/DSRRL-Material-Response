@@ -93,8 +93,8 @@ def main() -> None:
     )
     require(
         env_cpp,
-        "selected_pmetal_env_source(",
-        "consumer-local P_Metal source decode",
+        "source_.latest(source)",
+        "consumer-local isolated P_Metal source read",
     )
     require(
         env_cpp,
