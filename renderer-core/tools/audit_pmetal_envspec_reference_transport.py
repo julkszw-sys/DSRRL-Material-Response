@@ -160,22 +160,48 @@ def main() -> None:
         "if (interior_blend) {",
         "A/B decode restricted to true interior blend",
     )
+    if "Advancing the serial before any attempted decode invalidates an older" in blend_hook:
+        fail("P_Metal source freshness regressed to foreign-event invalidation")
+
     require(
         blend_hook,
-        "Advancing the serial before any attempted decode invalidates an older",
-        "failed event invalidates stale source by serial advance",
+        "Freshness belongs to an exact publication",
+        "blend freshness is exact-publication scoped",
     )
-
     require(
         ul_cpp,
         "out.serial != latest_source_serial",
-        "draw consumer rejects stale source payload",
+        "draw consumer rejects superseded exact source payload",
     )
     require(
         ul_cpp,
-        "g_pmetal_source_serial.fetch_add(",
-        "source events carry monotonic freshness serial",
+        "const auto source_serial =\n            g_pmetal_source_serial.fetch_add(",
+        "exact publications carry monotonic freshness serial",
     )
+
+    steady_hook_begin = ul_cpp.index(
+        "void __fastcall hook_pmetal_source_steady("
+    )
+    steady_hook_end = ul_cpp.index(
+        "\nvoid __fastcall hook_pmetal_source_blend(",
+        steady_hook_begin,
+    )
+    if steady_hook_begin < 0 or steady_hook_end <= steady_hook_begin:
+        fail("cannot isolate P_Metal steady detour")
+    steady_hook = ul_cpp[steady_hook_begin:steady_hook_end]
+    have_env_pos = steady_hook.index("if (have_env) {")
+    serial_pos = steady_hook.index("g_pmetal_source_serial.fetch_add(")
+    if serial_pos < have_env_pos:
+        fail("steady P_Metal freshness advances before exact donor proof")
+
+    have_blend_pos = blend_hook.index(
+        "if (interior_blend &&\n        have_a &&\n        have_b) {"
+    )
+    blend_serial_pos = blend_hook.index(
+        "g_pmetal_source_serial.fetch_add("
+    )
+    if blend_serial_pos < have_blend_pos:
+        fail("blend P_Metal freshness advances before exact A/B donor proof")
 
     ul_install_begin = ul_cpp.index(
         "bool upper_lower_draw_runtime::install("
