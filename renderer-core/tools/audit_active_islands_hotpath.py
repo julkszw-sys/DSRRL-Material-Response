@@ -418,6 +418,10 @@ def main():
         "g_bloom_scene_sidecar.on_init_device(device);",
         "Bloom Q8 diagnostic-only resource allocation")
 
+    if integrated.count(
+        "if (g_hot_telemetry_enabled &&\n        dsrrl::runtime::bloom_fx_draw_transport::\n            active_draw_scope())") != 2:
+        fail("Bloom FX active-draw scope must be skipped on both production draw paths")
+
     print("Active-islands hot-path audit: PASS")
     print("  feature_reads=atomic")
     print("  flver_identity=256-entry TLS before global map lock")
@@ -434,6 +438,7 @@ def main():
     print("  material_resources=256-entry TLS companion working set; negative-cache invalidation retained")
     print("  drawtime_falsifier=no draw callbacks/no FLVER-texture-resource-PMetal-PointLight transports; A1+MotionBlur create-time retained")
     print("  bloom_q8=no production resource allocation without telemetry authority")
+    print("  bloom_fx=no production per-draw scope check outside telemetry")
     return 0
 
 if __name__=="__main__":
