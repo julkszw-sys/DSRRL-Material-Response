@@ -3971,19 +3971,10 @@ void __fastcall hook_pmetal_source_steady(
         return;
     }
 
-    g_pmetal_source_steady_seen.fetch_add(
-        1u,
-        std::memory_order_relaxed);
-
-    // Decode only while the retail source object is engine-live. The original
-    // operator still executes unmodified; only immutable donor state leaves
-    // this cut.
-    const auto source_serial =
-        g_pmetal_source_serial.fetch_add(
-            1u,
-            std::memory_order_acq_rel) +
-        1u;
-
+    // Decode while the engine-owned source is live, but do not mutate shared
+    // P_Metal freshness until the event is proven to be an exact PTDE donor.
+    // Foreign LightBank traffic is outside this semantic cut and must be
+    // neutral to both performance and the last valid P_Metal publication.
     f4 env{};
     std::uint64_t bank = 0u;
     std::uint32_t row = 0u;
@@ -4002,6 +3993,12 @@ void __fastcall hook_pmetal_source_steady(
             selector);
 
     if (have_env) {
+        const auto source_serial =
+            g_pmetal_source_serial.fetch_add(
+                1u,
+                std::memory_order_relaxed) +
+            1u;
+
         publish_pmetal_source_only(
             env,
             env,
@@ -4011,10 +4008,11 @@ void __fastcall hook_pmetal_source_steady(
             row,
             row,
             source_serial);
-    } else {
-        g_pmetal_source_decode_fail.fetch_add(
-            1u,
-            std::memory_order_relaxed);
+
+        if (telemetry::effect_enabled())
+            g_pmetal_source_steady_seen.fetch_add(
+                1u,
+                std::memory_order_relaxed);
     }
 }
 
@@ -4038,10 +4036,6 @@ void __fastcall hook_pmetal_source_blend(
                 beta);
         return;
     }
-
-    g_pmetal_source_blend_seen.fetch_add(
-        1u,
-        std::memory_order_relaxed);
 
     // Canonical DSR 0x563C30 collapses endpoint cases by tail-jumping into
     // 0x563B80. Let the untouched retail branch do exactly that; because the
@@ -4072,14 +4066,6 @@ void __fastcall hook_pmetal_source_blend(
                 beta);
         return;
     }
-
-    // Advancing the serial before any attempted decode invalidates an older
-    // payload if this source event cannot produce a complete exact donor.
-    const auto source_serial =
-        g_pmetal_source_serial.fetch_add(
-            1u,
-            std::memory_order_acq_rel) +
-        1u;
 
     const bool interior_blend =
         finite_beta &&
@@ -4124,6 +4110,15 @@ void __fastcall hook_pmetal_source_blend(
     if (interior_blend &&
         have_a &&
         have_b) {
+        // Freshness belongs to an exact publication, not to arbitrary global
+        // LightBank traffic. Failed/foreign events leave the last exact donor
+        // untouched rather than invalidating P_Metal before its draw.
+        const auto source_serial =
+            g_pmetal_source_serial.fetch_add(
+                1u,
+                std::memory_order_relaxed) +
+            1u;
+
         publish_pmetal_source_only(
             a,
             b,
@@ -4133,10 +4128,11 @@ void __fastcall hook_pmetal_source_blend(
             row_a,
             row_b,
             source_serial);
-    } else {
-        g_pmetal_source_decode_fail.fetch_add(
-            1u,
-            std::memory_order_relaxed);
+
+        if (telemetry::effect_enabled())
+            g_pmetal_source_blend_seen.fetch_add(
+                1u,
+                std::memory_order_relaxed);
     }
 }
 
