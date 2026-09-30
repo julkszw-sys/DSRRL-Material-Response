@@ -26,22 +26,48 @@ def main() -> None:
     lerp_cpp = (root / "src/operators/env_spec/pmetal_rgba_lerp_materializer.cpp").read_text(encoding="utf-8")
     lerp_h = (root / "include/dsrrl/operators/env_spec/pmetal_rgba_lerp_materializer.hpp").read_text(encoding="utf-8")
 
-    # P_Metal source transport is independent of visible U/L activation.
+    # Runtime safety policy: P_Metal EnvSpec must not arm the shared
+    # Upper/Lower LightBank hook set while visible U/L is disabled. Both the
+    # dedicated 0x563C30 source hook and the generic packer decode fallback
+    # have owner-observed runtime-liveness failures. Until a narrow source cut
+    # is independently verified, EnvSpec fails open to stock DSR.
     require(
         integrated,
-        "const bool pmetal_envspec_enabled =",
+        "bool pmetal_envspec_enabled =",
         "P_Metal EnvSpec feature gate",
     )
     require(
         integrated,
-        "const bool lightbank_reference_transport_required =\n        upper_lower_enabled ||\n        pmetal_envspec_enabled;",
-        "LightBank transport independent of U/L",
+        "const bool lightbank_reference_transport_required =\n        upper_lower_enabled;",
+        "LightBank hooks scoped to actual U/L activation",
     )
     require(
         integrated,
-        "g_upper_lower.install(\n             !upper_lower_enabled)",
-        "reference-only install when U/L is disabled",
+        "g_upper_lower.install(false)",
+        "visible U/L install only when U/L feature is enabled",
     )
+    require(
+        integrated,
+        "if (pmetal_envspec_enabled &&\n        !upper_lower_enabled) {",
+        "P_Metal source fail-open gate",
+    )
+    require(
+        integrated,
+        "g_core.features().set(\n            dsrrl::core::operator_id::env_spec,\n            false);",
+        "P_Metal EnvSpec runtime disable",
+    )
+    require(
+        integrated,
+        "SOURCE TRANSPORT FAIL-OPEN",
+        "P_Metal source fail-open runtime marker",
+    )
+    if (
+        "upper_lower_enabled ||\n        pmetal_envspec_enabled" in integrated
+        or "g_upper_lower.install(\n             !upper_lower_enabled)" in integrated
+    ):
+        fail(
+            "P_Metal EnvSpec still authorizes shared LightBank hooks while U/L is disabled"
+        )
 
     # Installing the shared carrier must never silently re-enable U/L inside
     # the EnvSpec composite.
@@ -337,8 +363,9 @@ def main() -> None:
 
     print("DSRRL_PMETAL_ENVSPEC_REFERENCE_TRANSPORT_PASS")
     print("  U/L visible operator=OFF remains stock when not explicitly enabled")
-    print("  LightBank reference carrier=ON for P_Metal EnvSpec")
-    print("  producer payload=owner+selector tuple + immutable V13 P_Metal A/B donor")
+    print("  LightBank hook set=OFF when U/L is OFF")
+    print("  P_Metal EnvSpec source=FAIL-OPEN to stock DSR until a narrow source cut is verified")
+    print("  latent producer payload code=not authorized by the U/L-off startup path")
     print("  selected state=exact selector + exact actual P_Metal material")
     print("  persistent P_Metal invalidation=material-gated O(1) producer set; generic selectors preserve state")
     print("  selector row address=retail low byte; full selector retained for identity")

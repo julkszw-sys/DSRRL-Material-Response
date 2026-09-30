@@ -6608,45 +6608,49 @@ bool AddonInit(
     const bool upper_lower_enabled =
         g_core.features().enabled(
             dsrrl::core::operator_id::upper_lower);
-    const bool pmetal_envspec_enabled =
+    bool pmetal_envspec_enabled =
         g_core.features().enabled(
             dsrrl::core::operator_id::env_spec);
 
-    // The LightBank reference-token transport is a shared semantic carrier,
-    // not the Upper/Lower visible operator. P_Metal EnvSpec requires the
-    // producer/selector source tuple even while the pixel-falsified U/L bridge
-    // remains disabled. Keep transport liveness independent from U/L effect
-    // activation; direct U/L mutation is separately guarded inside the
-    // runtime and remains OFF unless explicitly opted in.
+    // Runtime-liveness guard: do not arm the Upper/Lower LightBank hook set
+    // solely as a carrier for P_Metal EnvSpec. Two consecutive owner runtime
+    // failures showed that both attempted source-carrier variants are unsafe:
+    // the dedicated 0x563C30 hook violated the unknown native ABI, while the
+    // generic steady/blend packer fallback performs P_Metal bank work on a
+    // renderer-hot producer path. Until a narrow source cut is independently
+    // verified, EnvSpec must fail open rather than keeping shared LightBank
+    // hooks alive while visible U/L itself is disabled.
     const bool lightbank_reference_transport_required =
-        upper_lower_enabled ||
-        pmetal_envspec_enabled;
+        upper_lower_enabled;
     const bool lightbank_reference_hooks =
         !lightbank_reference_transport_required ||
         (flver_hooks &&
-         g_upper_lower.install(
-             !upper_lower_enabled));
+         g_upper_lower.install(false));
 
     if (!upper_lower_enabled) {
         reshade::log::message(
             reshade::log::level::info,
             "[DSRRL CORE+ISLANDS " DSRRL_CORE_ISLANDS_VERSION
-            "] Upper/Lower visible bridge DISABLED by runtime policy: stock DSR U/L preserved; LightBank reference-token transport may remain active only as an isolated carrier for downstream consumers such as P_Metal EnvSpec.");
+            "] Upper/Lower visible bridge DISABLED by runtime policy: stock DSR U/L preserved; LightBank U/L/reference hooks are not installed.");
     }
 
-    if (lightbank_reference_transport_required &&
+    if (upper_lower_enabled &&
         !lightbank_reference_hooks) {
         reshade::log::message(
             reshade::log::level::warning,
             "[DSRRL CORE+ISLANDS " DSRRL_CORE_ISLANDS_VERSION
-            "] LightBank reference-token transport FAIL-OPEN: U/L stays stock and P_Metal EnvSpec source routing is unavailable.");
-    } else if (
-        !upper_lower_enabled &&
-        pmetal_envspec_enabled &&
-        lightbank_reference_hooks) {
+            "] LightBank transport FAIL-OPEN: U/L stays stock.");
+    }
+
+    if (pmetal_envspec_enabled &&
+        !upper_lower_enabled) {
+        (void)g_core.features().set(
+            dsrrl::core::operator_id::env_spec,
+            false);
+        pmetal_envspec_enabled = false;
         reshade::log::message(
-            reshade::log::level::info,
-            "[DSRRL PMETAL ENVSPEC] LightBank reference-only transport ACTIVE; U/L visible operator remains stock/off.");
+            reshade::log::level::warning,
+            "[DSRRL PMETAL ENVSPEC] SOURCE TRANSPORT FAIL-OPEN: shared LightBank hooks are disabled after runtime-liveness failures; stock DSR EnvSpec is preserved until a narrow verified source cut replaces them.");
     }
 
     {
@@ -6670,8 +6674,9 @@ bool AddonInit(
         "is active; generic Material Response is the direct stock->PTDE diffuse "
         "material-domain operator for HemEnv/HemEnvLerp. PTDE c101/c102 remain operator-local "
         "carriers for verified EnvSpec/local-specular consumers; generic SpecRGB->DSR PBL "
-        "pairing is forbidden. P_Metal EnvSpec is rebuilt from exact stock identity through "
-        "the clean diffuse-v1 base and PTDE legacy EnvSpec window. Runtime activation and "
+        "pairing is forbidden. P_Metal EnvSpec stays stock when its narrow source carrier is "
+        "unavailable; the U/L-off runtime does not arm shared LightBank hooks merely to feed "
+        "EnvSpec. Runtime activation and "
         "PTDE pixel behavior remain separate validation stages; "
         "frozen legacy monolith is not linked.");
 
