@@ -1519,6 +1519,33 @@ void publish_reference_token(
     token.selector_b = producer.selector_b;
     token.beta = assignment_beta;
     token.source_ready = true;
+    token.pmetal_env_ready =
+        producer.have_pmetal_env;
+    if (token.pmetal_env_ready) {
+        token.pmetal_env.a = {
+            producer.pmetal_env_a.x,
+            producer.pmetal_env_a.y,
+            producer.pmetal_env_a.z
+        };
+        token.pmetal_env.b = {
+            producer.pmetal_env_b.x,
+            producer.pmetal_env_b.y,
+            producer.pmetal_env_b.z
+        };
+        token.pmetal_env.beta =
+            std::clamp(
+                producer.pmetal_env_beta,
+                0.0f,
+                1.0f);
+        token.pmetal_env.bank_signature_a =
+            producer.pmetal_bank_a;
+        token.pmetal_env.bank_signature_b =
+            producer.pmetal_bank_b;
+        token.pmetal_env.row_id_a =
+            producer.pmetal_row_a;
+        token.pmetal_env.row_id_b =
+            producer.pmetal_row_b;
+    }
     token.vectors_ready =
         producer.evaluated_vectors_ready;
     token.upper_lower_ready =
