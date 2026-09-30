@@ -2263,12 +2263,11 @@ bool read_exact_pmetal_env_source(
     // source object before entering here. Once source+0x18 is authorized,
     // reuse the immutable bank verdict by exact base pointer.
     const std::uint8_t *base = nullptr;
-    std::memcpy(
-        &base,
-        static_cast<const std::uint8_t *>(
-            source) + 0x18u,
-        sizeof(base));
-    if (base == nullptr) {
+    if (!safe_read(
+            static_cast<const std::uint8_t *>(
+                source) + 0x18u,
+            base) ||
+        base == nullptr) {
         finish(
             pmetal_env_source_diag_status::
                 base_null);
@@ -2295,14 +2294,18 @@ bool read_exact_pmetal_env_source(
         cached_bank.base == base) {
         std::uint16_t live_version = 0u;
         std::uint16_t live_count = 0u;
-        std::memcpy(
-            &live_version,
-            base + 8u,
-            sizeof(live_version));
-        std::memcpy(
-            &live_count,
-            base + 10u,
-            sizeof(live_count));
+        if (!safe_read(
+                base + 8u,
+                live_version) ||
+            !safe_read(
+                base + 10u,
+                live_count)) {
+            cached_bank = {};
+            finish(
+                pmetal_env_source_diag_status::
+                    header_invalid);
+            return false;
+        }
 
         local.bank_count = live_count;
 
@@ -2387,15 +2390,9 @@ bool read_exact_pmetal_env_source(
         base + 0x30u +
         static_cast<std::size_t>(index) * 12u;
 
-    if (cached_bank.valid &&
-        cached_bank.base == base) {
-        std::memcpy(
-            &row_id,
+    if (!safe_read(
             entry,
-            sizeof(row_id));
-    } else if (!safe_read(
-                   entry,
-                   row_id)) {
+            row_id)) {
         finish(
             pmetal_env_source_diag_status::
                 row_read_failed);
@@ -3811,34 +3808,12 @@ void __fastcall hook_steady_packer(
                 g_producer)) {
             if (g_reference_only_transport.load(
                     std::memory_order_acquire)) {
-                // V13 source semantics are materialized at this retail
-                // LightBank producer cut while the source is engine-live.
-                // Keep visible U/L and D123 disabled; only the immutable
-                // P_Metal EnvSpec donor is captured.
-                f4 env{};
-                std::uint64_t bank = 0u;
-                std::uint32_t row = 0u;
-                if (read_exact_pmetal_env_source(
-                        source,
-                        selector,
-                        env,
-                        bank,
-                        row)) {
-                    g_producer.have_pmetal_env = true;
-                    g_producer.pmetal_env_a = env;
-                    g_producer.pmetal_env_b = env;
-                    g_producer.pmetal_env_beta = 0.0f;
-                    g_producer.pmetal_bank_a = bank;
-                    g_producer.pmetal_bank_b = bank;
-                    g_producer.pmetal_row_a = row;
-                    g_producer.pmetal_row_b = row;
-                    telemetry::hot_count(
-                        g_pmetal_env_steady);
-                } else {
-                    g_producer.have_pmetal_env = false;
-                    telemetry::hot_count(
-                        g_pmetal_env_miss);
-                }
+                // Reference-only mode must stay producer-cheap. Capture only
+                // the exact engine-live source/selector tuple here. P_Metal
+                // bank identification and PTDE EnvSpec source decoding are
+                // deferred until the exact P_Metal material+receiver consumer
+                // gate asks for them.
+                g_producer.have_pmetal_env = false;
                 telemetry::hot_count(
                     g_steady_pass);
                 return;
@@ -4086,61 +4061,9 @@ void *__fastcall hook_blend_packer(
                 g_producer)) {
             if (g_reference_only_transport.load(
                     std::memory_order_acquire)) {
-                f4 a{};
-                f4 b{};
-                std::uint64_t bank_a = 0u;
-                std::uint64_t bank_b = 0u;
-                std::uint32_t row_a = 0u;
-                std::uint32_t row_b = 0u;
-
-                const bool have_a =
-                    read_exact_pmetal_env_source(
-                        source_a,
-                        selector_a,
-                        a,
-                        bank_a,
-                        row_a);
-                bool have_b = false;
-                if (beta <= 0.0f ||
-                    (source_a == source_b &&
-                     selector_a == selector_b)) {
-                    b = a;
-                    bank_b = bank_a;
-                    row_b = row_a;
-                    have_b = have_a;
-                } else {
-                    have_b =
-                        read_exact_pmetal_env_source(
-                            source_b,
-                            selector_b,
-                            b,
-                            bank_b,
-                            row_b);
-                }
-
-                if (have_a && have_b &&
-                    std::isfinite(beta)) {
-                    if (beta >= 1.0f) {
-                        a = b;
-                        bank_a = bank_b;
-                        row_a = row_b;
-                    }
-                    g_producer.have_pmetal_env = true;
-                    g_producer.pmetal_env_a = a;
-                    g_producer.pmetal_env_b = b;
-                    g_producer.pmetal_env_beta =
-                        std::clamp(beta, 0.0f, 1.0f);
-                    g_producer.pmetal_bank_a = bank_a;
-                    g_producer.pmetal_bank_b = bank_b;
-                    g_producer.pmetal_row_a = row_a;
-                    g_producer.pmetal_row_b = row_b;
-                    telemetry::hot_count(
-                        g_pmetal_env_blend);
-                } else {
-                    g_producer.have_pmetal_env = false;
-                    telemetry::hot_count(
-                        g_pmetal_env_miss);
-                }
+                // Same rule as steady: no bank hashing or PTDE donor decode
+                // in the global blended LightBank producer hot path.
+                g_producer.have_pmetal_env = false;
                 return result;
             }
 
@@ -5245,8 +5168,12 @@ bool upper_lower_draw_runtime::selected_pmetal_env_source(
                 : invalid_token;
 
         if (!token.valid ||
-            !token.pmetal_env_ready ||
-            !std::isfinite(token.pmetal_env.beta)) {
+            !token.source_ready ||
+            token.source_a == nullptr ||
+            token.source_b == nullptr ||
+            token.selector_a < 0 ||
+            token.selector_b < 0 ||
+            !std::isfinite(token.beta)) {
             pmetal_source_probe invalid_a{};
             invalid_a.status =
                 pmetal_env_source_diag_status::
@@ -5268,7 +5195,82 @@ bool upper_lower_draw_runtime::selected_pmetal_env_source(
             return false;
         }
 
-        out = token.pmetal_env;
+        // Consumer-local lazy decode: this function is called only after
+        // exact P_Metal material identity and EnvSpec receiver semantics have
+        // been established by pmetal_envspec_draw_runtime. Keep expensive
+        // bank identity/FNV work off the renderer-wide LightBank producer
+        // path, and revalidate every engine pointer before dereferencing it.
+        f4 a{};
+        f4 b{};
+        std::uint64_t bank_a = 0u;
+        std::uint64_t bank_b = 0u;
+        std::uint32_t row_a = 0u;
+        std::uint32_t row_b = 0u;
+        pmetal_source_probe probe_a{};
+        pmetal_source_probe probe_b{};
+
+        const bool have_a =
+            read_exact_pmetal_env_source(
+                token.source_a,
+                token.selector_a,
+                a,
+                bank_a,
+                row_a,
+                &probe_a);
+
+        bool have_b = false;
+        if (token.beta <= 0.0f ||
+            (token.source_a == token.source_b &&
+             token.selector_a == token.selector_b)) {
+            b = a;
+            bank_b = bank_a;
+            row_b = row_a;
+            probe_b = probe_a;
+            probe_b.selector =
+                token.selector_b;
+            have_b = have_a;
+        } else {
+            have_b =
+                read_exact_pmetal_env_source(
+                    token.source_b,
+                    token.selector_b,
+                    b,
+                    bank_b,
+                    row_b,
+                    &probe_b);
+        }
+
+        publish_pmetal_source_probe(
+            false,
+            probe_a,
+            token.beta);
+        publish_pmetal_source_probe(
+            true,
+            probe_b,
+            token.beta);
+
+        if (!have_a ||
+            !have_b)
+            return false;
+
+        if (token.beta >= 1.0f) {
+            a = b;
+            bank_a = bank_b;
+            row_a = row_b;
+        }
+
+        out.a = {a.x, a.y, a.z};
+        out.b = {b.x, b.y, b.z};
+        out.beta =
+            std::clamp(
+                token.beta,
+                0.0f,
+                1.0f);
+        out.bank_signature_a = bank_a;
+        out.bank_signature_b = bank_b;
+        out.row_id_a = row_a;
+        out.row_id_b = row_b;
+
         return
             std::isfinite(out.a[0]) &&
             std::isfinite(out.a[1]) &&
