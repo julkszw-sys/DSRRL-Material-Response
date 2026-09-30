@@ -212,6 +212,32 @@ def main() -> None:
         "P_Metal selector-material source materializer",
     )
 
+    materialize_begin = ul_cpp.index(
+        "bool materialize_selected_pmetal_env_source("
+    )
+    materialize_end = ul_cpp.index(
+        "\nbool write_bytes(",
+        materialize_begin,
+    )
+    if materialize_begin < 0 or materialize_end <= materialize_begin:
+        fail("cannot isolate P_Metal immutable source validator")
+    materialize_block = ul_cpp[materialize_begin:materialize_end]
+    require(
+        materialize_block,
+        "token.pmetal_env_ready",
+        "producer-materialized P_Metal payload gate",
+    )
+    for forbidden in (
+        "read_exact_pmetal_env_source(",
+        "token.source_a",
+        "token.source_b",
+    ):
+        if forbidden in materialize_block:
+            fail(
+                "P_Metal material gate still depends on delayed producer "
+                f"source lifetime: {forbidden}"
+            )
+
     selected_source_begin = ul_cpp.index(
         "bool upper_lower_draw_runtime::selected_pmetal_env_source("
     )
