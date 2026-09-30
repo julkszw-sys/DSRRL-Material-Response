@@ -6,6 +6,7 @@
 #endif
 
 #include "dsrrl/runtime/fixed_pointlight_draw_runtime.hpp"
+#include "dsrrl/runtime/pointlight_ptde_source_runtime.hpp"
 #include "dsrrl/runtime/runtime_hot_telemetry.hpp"
 #include "dsrrl/runtime/flver_identity_transport.hpp"
 
@@ -37,7 +38,7 @@ struct f4 {
 struct snapshot {
     std::uintptr_t owner=0u;
     std::uint64_t serial=0u;
-    std::array<f4,4> raw_q{};
+    std::array<f4,8> raw_q{}; // q/End slots 0..3; PTDE invRange slots 4..7
     std::uint8_t valid_mask=0u;
     std::uint8_t captured_count=0u;
     mutable std::atomic_bool consumed{false};
@@ -182,7 +183,7 @@ void __fastcall capture_callback(
     void *owner,
     std::uint32_t slot,
     const float *raw,
-    void *) noexcept
+    void *source) noexcept
 {
     try {
         if(!g_enabled.load() || g_quarantined.load() ||
@@ -191,8 +192,11 @@ void __fastcall capture_callback(
             return;
         }
 
+        std::array<float,8> donor_raw{};
+        std::memcpy(donor_raw.data(),raw-4,sizeof(donor_raw));
+        const bool donor_ready=pointlight_ptde_source::capture(source,g_base,donor_raw);
         f4 value{};
-        std::memcpy(&value,raw,sizeof(value));
+        std::memcpy(&value,donor_raw.data()+4,sizeof(value));
         if(!std::isfinite(value.x) || !std::isfinite(value.y) ||
            !std::isfinite(value.z) || !std::isfinite(value.w)){
             telemetry::hot_count(g_rejects);
@@ -218,6 +222,16 @@ void __fastcall capture_callback(
         }
 
         current->raw_q[slot]=value;
+        current->raw_q[4u+slot]={0.0f,0.0f,0.0f,donor_raw[3]};
+        if(!donor_ready) {
+            // Publish no partial PTDE/DSR hybrid when one selected source is unknown.
+            current->valid_mask=0u;
+            g_producer_snapshot.reset();
+            std::lock_guard<std::mutex> lock(g_mutex);
+            g_snapshots.erase(owner_key);
+            g_snapshot_epoch.fetch_add(1u,std::memory_order_release);
+            return;
+        }
         current->valid_mask=static_cast<std::uint8_t>(
             current->valid_mask | (1u<<slot));
         current->captured_count=static_cast<std::uint8_t>(slot+1u);
@@ -421,7 +435,7 @@ ID3D11ShaderResourceView *realize_t19(
     view_desc.Format=DXGI_FORMAT_UNKNOWN;
     view_desc.ViewDimension=D3D11_SRV_DIMENSION_BUFFER;
     view_desc.Buffer.FirstElement=0u;
-    view_desc.Buffer.NumElements=4u;
+    view_desc.Buffer.NumElements=8u;
 
     ID3D11ShaderResourceView *srv=nullptr;
     if(FAILED(device->CreateShaderResourceView(buffer,&view_desc,&srv)) || srv==nullptr){

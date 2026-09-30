@@ -1,3 +1,4 @@
+#include "dsrrl/runtime/pointlight_ptde_source_runtime.hpp"
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
 #endif
@@ -330,6 +331,8 @@ bool capture_source(
 
     alignas(16) std::array<float,8> raw{};
     fn(node, raw.data());
+    if (!pointlight_ptde_source::capture(node, g_base, raw))
+        return false;
 
     for (const auto value : raw)
         if (!std::isfinite(value))
