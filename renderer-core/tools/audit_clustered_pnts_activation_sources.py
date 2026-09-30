@@ -215,7 +215,10 @@ def main():
         fail("material owner producer must not use EnvSpec/SPX router as raw-MTD identity fallback")
     require(mr_cpp,"generated_pointlight_material_authority_v1.hpp","dedicated PointLight material authority include")
     require(mr_cpp,"resolve_direct_pointlight_authority","direct PointLight material resolver")
-    require(mr_cpp,"identity.raw_mtd_sha256 !=\n            begin->raw_mtd_sha256","exact PointLight raw-MTD gate")
+    require(mr_cpp,"identity.actual_material_exact &&","runtime-MTD-only PointLight raw-SHA gate")
+    require(mr_cpp,"identity.raw_mtd_sha256 !=","exact PointLight runtime raw-MTD gate")
+    if "generated_pointlight_material_authority_v1.hpp" in owner_cpp:
+        fail("generic material owner producer must not inherit PointLight-local raw-MTD authority")
     require(mr_cpp,"pointlight_material_mode::spc","Spc/NoSpc PointLight mode gate")
     require(mr_cpp,"record.c101_scalar","RGB c101 fail-open guard")
     require(mr_cpp,"f32_from_bits","bit-exact PTDE PointLight constants decode")
