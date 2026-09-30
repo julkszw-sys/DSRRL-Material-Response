@@ -867,8 +867,6 @@ bool pmetal_envspec_draw_runtime::prepare(
                     shader->Release();
                 env_resources_.release(
                     prepared.env_resources);
-                lightbank_.release_prepared_draw(
-                    prepared.upper_lower);
                 material_resources_.
                     release_prepared_draw(
                         prepared.material_resources);
