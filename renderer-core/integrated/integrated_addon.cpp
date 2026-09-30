@@ -2282,7 +2282,24 @@ bool observe_draw_identity(
             clustered_pointlight_receiver,
             clustered_pointlight_spc,
             false, out_material, out_decision);
-        return true;
+
+        // Generic MR, resource bridges, P_Metal and direct PointLight all
+        // require a material owner. Preserve the previous ownerless
+        // continuation only for explicitly enabled standalone islands that
+        // may carry their own authority. Under the current policy U/L,
+        // HemDir3 and Subsurface are disabled, so receiver-only draws stop
+        // here instead of entering batch/resource preparation.
+        const bool ownerless_island_enabled =
+            (upper_lower_bound &&
+             g_core.features().enabled(
+                 dsrrl::core::operator_id::upper_lower)) ||
+            (hemdir3_bound &&
+             g_core.features().enabled(
+                 dsrrl::core::operator_id::hemdir3)) ||
+            (subsurface_bound &&
+             g_core.features().enabled(
+                 dsrrl::core::operator_id::subsurface));
+        return ownerless_island_enabled;
     }
 
     hot_count(g_draw_joins);
