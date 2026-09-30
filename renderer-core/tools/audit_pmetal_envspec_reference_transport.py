@@ -79,6 +79,24 @@ def main() -> None:
         if forbidden in consumer:
             fail(f"P_Metal diagnostic thread provenance became source authority: {forbidden}")
     require(env_cpp, "publish_tid=%u consumer_tid=%u local_valid=%u", "P_Metal source-cut thread provenance log")
+    require(env_cpp, "frontier=%u/%u/%u/%u/%u/%u/%u", "P_Metal source-cut exact gate frontier log")
+    frontier = (
+        "g_pmetal_source_selector_exact_seen",
+        "g_pmetal_source_parent_gate_ok",
+        "g_pmetal_source_descriptor_gate_ok",
+        "g_pmetal_source_endpoint_gate_ok",
+        "g_pmetal_source_manager_gate_ok",
+        "g_pmetal_source_a_decode_ok",
+        "g_pmetal_source_b_decode_ok",
+    )
+    for needle in frontier:
+        require(ul_cpp, needle, "P_Metal diagnostic source frontier")
+    positions = [capture.find(needle) for needle in frontier]
+    if any(pos < 0 for pos in positions) or positions != sorted(positions):
+        fail("P_Metal exact source frontier is missing or out of semantic order")
+    for needle in frontier:
+        if needle + ".load" in consumer:
+            fail(f"P_Metal diagnostic source frontier became draw-side authority: {needle}")
     require(env_cpp, "source_.latest(material, source)", "material-scoped source consumer")
 
     # The active EnvSpec draw runtime must have no dependency on the U/L
