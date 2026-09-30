@@ -236,6 +236,19 @@ def main() -> None:
         "g_pmetal_envspec(\n        g_core,\n        g_pmetal_source,\n        g_envspec_resources,\n        g_material_resources);",
         "EnvSpec constructor has no U/L runtime dependency",
     )
+    require(
+        integrated,
+        "const auto env_source =\n        g_pmetal_source.telemetry();",
+        "EnvSpec telemetry reads isolated source carrier",
+    )
+    for forbidden in (
+        "ul.pmetal_env_steady",
+        "ul.pmetal_env_blend",
+        "ul.pmetal_env_miss",
+        "ul.pmetal_env_hook_armed",
+    ):
+        if forbidden in integrated:
+            fail(f"EnvSpec telemetry still reads U/L-owned source state: {forbidden}")
     if "g_upper_lower.pmetal_draw_token_state()" in integrated:
         fail("EnvSpec draw routing still consumes an UpperLower token")
     if "g_upper_lower.pmetal_source_diagnostic()" in integrated:
