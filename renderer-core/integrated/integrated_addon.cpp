@@ -3439,7 +3439,10 @@ void on_init_device(reshade::api::device *device)
     if (!k_drawtime_islands_runtime_enabled)
         return;
 
-    g_bloom_scene_sidecar.on_init_device(device);
+    // Q8 Bloom scene sidecar has no authorized production writer/consumer.
+    // Keep its resource allocation diagnostic-only until that graph closes.
+    if (g_hot_telemetry_enabled)
+        g_bloom_scene_sidecar.on_init_device(device);
     g_mr_draw_runtime.on_init_device(device);
     g_pmetal_envspec.on_init_device(device);
     g_upper_lower_hemenv.on_init_device(device);
