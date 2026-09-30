@@ -32,27 +32,24 @@ struct owner_material_cache_entry {
     bool resolved = false;
 };
 
-constexpr std::size_t k_owner_material_cache_slots = 32u;
+constexpr std::size_t k_owner_material_cache_slots = 256u;
 thread_local std::array<
     owner_material_cache_entry,
     k_owner_material_cache_slots>
     g_owner_material_cache{};
 
 std::size_t owner_material_cache_index(
-    const core::sha256_digest &digest,
+    std::uint64_t flver_identity_hash,
     std::uint32_t material_slot) noexcept
 {
-    std::uint64_t h =
-        0xcbf29ce484222325ULL;
-    for (const auto byte : digest) {
-        h ^= byte;
-        h *= 0x100000001b3ULL;
-    }
-
-    h ^= material_slot;
-    h *= 0x100000001b3ULL;
+    // Index only. The cached hit still validates the complete FLVER SHA-256
+    // and material slot before any material authority is reused.
+    const std::uint64_t h =
+        flver_identity_hash ^
+        (static_cast<std::uint64_t>(material_slot) *
+         0x9E3779B185EBCA87ULL);
     return static_cast<std::size_t>(
-        h % k_owner_material_cache_slots);
+        h & (k_owner_material_cache_slots - 1u));
 }
 
 const operators::material_response::generated::
@@ -98,7 +95,7 @@ bool enrich_exact_owner_mtd_identity(
     auto &cached =
         g_owner_material_cache[
             owner_material_cache_index(
-                observation.flver_sha256,
+                observation.flver_identity_hash,
                 observation.material_slot)];
 
     if (cached.occupied &&
