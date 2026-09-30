@@ -80,7 +80,9 @@ def main() -> None:
         "g_hooks[0]",
         "g_hooks[1]",
         "g_hooks[2]",
+        "g_hooks[3]",
         "g_hooks[4]",
+        "g_pmetal_env_hook",
         "g_steady_eval_tail_hook",
         "g_steady_cache_builder_hook",
         "g_upper_lower.install",
@@ -95,10 +97,10 @@ def main() -> None:
         "g_pmetal_source_only_enabled.store("
     )
     steady_arm_at = source_install.find(
-        "g_pmetal_source_steady_hook)"
+        "arm_hook(\n            g_pmetal_source_steady_hook)"
     )
     blend_arm_at = source_install.find(
-        "g_pmetal_source_blend_hook)"
+        "arm_hook(\n            g_pmetal_source_blend_hook)"
     )
     if (
         enabled_at < 0
