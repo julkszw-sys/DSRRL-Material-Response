@@ -3915,6 +3915,31 @@ void __fastcall hook_steady_packer(
             dst,
             selector);
 
+    if (g_pmetal_source_only_enabled.load(
+            std::memory_order_acquire)) {
+        f4 env{};
+        std::uint64_t bank = 0u;
+        std::uint32_t row = 0u;
+        if (read_exact_pmetal_env_source(
+                source,
+                selector,
+                env,
+                bank,
+                row)) {
+            publish_pmetal_source_only(
+                env, env, 0.0f,
+                bank, bank, row, row);
+            telemetry::hot_count(
+                g_pmetal_env_steady);
+        } else {
+            telemetry::hot_count(
+                g_pmetal_env_miss);
+        }
+        telemetry::hot_count(
+            g_steady_pass);
+        return;
+    }
+
     if (g_steady_cache_builder_active.load(
             std::memory_order_acquire)) {
         if (g_producer.active &&
