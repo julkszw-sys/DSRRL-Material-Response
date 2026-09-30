@@ -81,14 +81,41 @@ std::mutex g_mutex;
 std::unordered_map<const void*,std::array<std::uint8_t,32>> g_by_model;
 std::atomic<std::uint64_t> g_epoch{1u};
 
-struct lookup_tls_cache {
+struct lookup_tls_cache_entry {
     const void *model = nullptr;
     std::uint64_t epoch = 0u;
     std::array<std::uint8_t,32> sha{};
     bool present = false;
 };
 
-thread_local lookup_tls_cache g_lookup_cache{};
+// Selector order interleaves many FLVER owners in one frame. A single-entry
+// TLS cache degenerates to the global mutex/map path whenever A/B/C owners
+// alternate. Keep the same global mutation epoch (parse/destroy still
+// invalidates every cached verdict), but retain enough per-thread identities
+// to make steady interleaved selector traffic lock-free.
+constexpr std::size_t k_lookup_tls_cache_size = 256u;
+static_assert(
+    (k_lookup_tls_cache_size &
+     (k_lookup_tls_cache_size - 1u)) == 0u,
+    "FLVER TLS lookup cache size must be a power of two");
+
+thread_local std::array<
+    lookup_tls_cache_entry,
+    k_lookup_tls_cache_size> g_lookup_cache{};
+
+std::size_t lookup_tls_cache_index(
+    const void *model) noexcept
+{
+    const auto value =
+        static_cast<std::uint64_t>(
+            reinterpret_cast<std::uintptr_t>(model));
+    const auto mixed =
+        (value >> 4u) ^
+        (value >> 13u) ^
+        (value >> 23u);
+    return static_cast<std::size_t>(
+        mixed & (k_lookup_tls_cache_size - 1u));
+}
 std::atomic<std::uint64_t> g_inserts{0},g_lookups{0},g_hits{0},g_misses{0},g_erases{0},g_invalid{0};
 
 } // namespace
@@ -149,14 +176,18 @@ bool flver_identity_lookup(const void *selector_container,std::array<std::uint8_
         g_epoch.load(
             std::memory_order_acquire);
 
-    if(g_lookup_cache.model==model &&
-       g_lookup_cache.epoch==epoch){
-        if(!g_lookup_cache.present){
+    auto &cached =
+        g_lookup_cache[
+            lookup_tls_cache_index(model)];
+
+    if(cached.model==model &&
+       cached.epoch==epoch){
+        if(!cached.present){
             telemetry::hot_count(g_misses);
             return false;
         }
 
-        sha256=g_lookup_cache.sha;
+        sha256=cached.sha;
         telemetry::hot_count(g_hits);
         return true;
     }
@@ -164,7 +195,7 @@ bool flver_identity_lookup(const void *selector_container,std::array<std::uint8_
     std::lock_guard<std::mutex> lock(g_mutex);
     const auto it=g_by_model.find(model);
     if(it==g_by_model.end()){
-        g_lookup_cache={
+        cached={
             model,
             g_epoch.load(
                 std::memory_order_relaxed),
@@ -176,7 +207,7 @@ bool flver_identity_lookup(const void *selector_container,std::array<std::uint8_
     }
 
     sha256=it->second;
-    g_lookup_cache={
+    cached={
         model,
         g_epoch.load(
             std::memory_order_relaxed),
@@ -204,7 +235,7 @@ void flver_identity_reset() noexcept {
     g_epoch.fetch_add(
         1u,
         std::memory_order_release);
-    g_lookup_cache={};
+    g_lookup_cache = {};
 }
 flver_identity_telemetry flver_identity_stats() noexcept {return {g_inserts.load(),g_lookups.load(),g_hits.load(),g_misses.load(),g_erases.load(),g_invalid.load()};}
 
