@@ -100,6 +100,8 @@ dsrrl::runtime::bloom_scene_sidecar_runtime
     g_bloom_scene_sidecar;
 dsrrl::runtime::upper_lower_draw_runtime
     g_upper_lower(g_core);
+dsrrl::runtime::pmetal_env_source_runtime
+    g_pmetal_source;
 dsrrl::runtime::subsurface_draw_runtime
     g_subsurface(
         g_core,
