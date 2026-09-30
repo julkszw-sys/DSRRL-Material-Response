@@ -117,8 +117,8 @@ def main() -> None:
     )
     require(
         ul_cpp,
-        "invalidate_selected_reference_token_for_owner(",
-        "material-gated invalidation of stale P_Metal state",
+        "invalidate_selected_reference_token_for_producer(",
+        "material-gated O(1) invalidation of stale P_Metal state",
     )
     require(
         ul_cpp,
@@ -148,7 +148,7 @@ def main() -> None:
         fail("cannot isolate P_Metal material event block")
     pmetal_block = ul_cpp[pmetal_begin:next_method]
     invalidate_at = pmetal_block.find(
-        "invalidate_selected_reference_token_for_owner("
+        "invalidate_selected_reference_token_for_producer("
     )
     materialize_at = pmetal_block.find(
         "materialize_selected_pmetal_env_source("
@@ -173,6 +173,31 @@ def main() -> None:
             "P_Metal selected-state invalidation/materialization/publication "
             "ordering is unsafe"
         )
+    invalidator_begin = ul_cpp.index(
+        "void invalidate_selected_reference_token_for_producer("
+    )
+    invalidator_end = ul_cpp.index(
+        "\nbool exact_pmetal_material_selection(",
+        invalidator_begin,
+    )
+    invalidator_block = ul_cpp[invalidator_begin:invalidator_end]
+    if "for (std::size_t set = 0u;" in invalidator_block:
+        fail("P_Metal selected-state invalidation regressed to full-bank scan")
+    require(
+        invalidator_block,
+        "reference_token_set(",
+        "producer-keyed selected-token invalidation",
+    )
+    require(
+        pmetal_block,
+        "GetCurrentThreadId()",
+        "exact selector-callback producer key",
+    )
+    require(
+        pmetal_block,
+        "g_draw_reference_token.producer_tid !=",
+        "staged token producer continuity",
+    )
     require(
         ul_cpp,
         "g_draw_reference_token.fingerprint.owner !=",
@@ -315,7 +340,7 @@ def main() -> None:
     print("  LightBank reference carrier=ON for P_Metal EnvSpec")
     print("  producer payload=owner+selector tuple + immutable V13 P_Metal A/B donor")
     print("  selected state=exact selector + exact actual P_Metal material")
-    print("  persistent P_Metal invalidation=material-gated; generic selectors preserve state")
+    print("  persistent P_Metal invalidation=material-gated O(1) producer set; generic selectors preserve state")
     print("  selector row address=retail low byte; full selector retained for identity")
     print("  P_Metal source decode=exact V13 bank signature + PTDE donor at live producer cut")
     print("  draw source=immutable decoded A/B+beta+bank/row; no late source-pointer dereference")
