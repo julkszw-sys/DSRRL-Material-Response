@@ -296,6 +296,86 @@ int main()
     CHECK(direct_nospc_bad_identity.reason==
           decision_reason::unknown_material);
 
+    // Owner runtime 2026-09-30 hit this exact material and the old direct
+    // PointLight path rejected it as unknown even though the dedicated
+    // PointLight authority contains an exact-SPX SPC row. Lock that observed
+    // regression down explicitly.
+    material_identity exact_m7metal{};
+    exact_m7metal.valid=true;
+    exact_m7metal.semantic_name_hash=
+        mtd_semantic_hash("M_7Metal[DSB].mtd");
+
+    bool m7_authority_found=false;
+    for(const auto &record:
+        operators::point_light::generated::
+            k_pointlight_material_authority_v1){
+        if(record.semantic_name_hash!=
+               exact_m7metal.semantic_name_hash)
+            continue;
+        CHECK(!m7_authority_found);
+        CHECK(record.mode==
+              operators::point_light::generated::
+                  pointlight_material_mode::spc);
+        CHECK(record.c101_scalar);
+        exact_m7metal.raw_mtd_sha256=
+            record.raw_mtd_sha256;
+        m7_authority_found=true;
+    }
+    CHECK(m7_authority_found);
+
+    bool m7_owner_found=false;
+    for(const auto &group:
+        generated::k_dsr_flver_owner_groups){
+        for(std::uint32_t slot=0u;
+            slot<group.material_count;
+            ++slot){
+            const auto index=
+                static_cast<std::size_t>(
+                    group.first_material)+slot;
+            if(generated::k_dsr_flver_owner_mtd_hashes[index]!=
+               exact_m7metal.semantic_name_hash)
+                continue;
+            exact_m7metal.flver_sha256=
+                group.flver_sha256;
+            exact_m7metal.material_slot=slot;
+            exact_m7metal.material_slot_valid=true;
+            exact_m7metal.owner_tuple_exact=true;
+            m7_owner_found=true;
+            break;
+        }
+        if(m7_owner_found) break;
+    }
+    CHECK(m7_owner_found);
+
+    const auto direct_m7metal=
+        seeded.evaluate_direct_pointlight_material(
+            exact_m7metal,
+            true);
+    CHECK(direct_m7metal.active);
+    CHECK(direct_m7metal.reason==
+          decision_reason::active);
+    CHECK((direct_m7metal.route_index &
+           0x80000000u)!=0u);
+    CHECK(std::fabs(
+              direct_m7metal.c100[0]-0.6f)<1e-6f);
+    CHECK(std::fabs(
+              direct_m7metal.c100[1]-0.6f)<1e-6f);
+    CHECK(std::fabs(
+              direct_m7metal.c100[2]-0.6f)<1e-6f);
+    CHECK(direct_m7metal.c101==2.5f);
+    CHECK(direct_m7metal.ptde_specular_power_verified);
+    CHECK(direct_m7metal.ptde_specular_power==8.5f);
+
+    auto bad_m7metal=exact_m7metal;
+    bad_m7metal.raw_mtd_sha256.fill(0x5au);
+    const auto bad_m7metal_result=
+        seeded.evaluate_direct_pointlight_material(
+            bad_m7metal,
+            true);
+    CHECK(!bad_m7metal_result.active);
+    CHECK(bad_m7metal_result.reason==
+          decision_reason::unknown_material);
+
     material_identity exact_pmetal{};
     exact_pmetal.valid=true;
     exact_pmetal.flver_sha256={
