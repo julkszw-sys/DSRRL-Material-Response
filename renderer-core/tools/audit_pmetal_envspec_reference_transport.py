@@ -26,48 +26,16 @@ def main() -> None:
     lerp_cpp = (root / "src/operators/env_spec/pmetal_rgba_lerp_materializer.cpp").read_text(encoding="utf-8")
     lerp_h = (root / "include/dsrrl/operators/env_spec/pmetal_rgba_lerp_materializer.hpp").read_text(encoding="utf-8")
 
-    # Runtime safety policy: P_Metal EnvSpec must not arm the shared
-    # Upper/Lower LightBank hook set while visible U/L is disabled. Both the
-    # dedicated 0x563C30 source hook and the generic packer decode fallback
-    # have owner-observed runtime-liveness failures. Until a narrow source cut
-    # is independently verified, EnvSpec fails open to stock DSR.
-    require(
-        integrated,
-        "bool pmetal_envspec_enabled =",
-        "P_Metal EnvSpec feature gate",
-    )
+    # EnvSpec source transport is independent from visible U/L.
+    require(integrated, "g_pmetal_source;", "isolated source instance")
+    require(integrated, "g_pmetal_source.install()", "isolated source activation")
     require(
         integrated,
         "const bool lightbank_reference_transport_required =\n        upper_lower_enabled;",
-        "LightBank hooks scoped to actual U/L activation",
+        "U/L transport remains U/L-only",
     )
-    require(
-        integrated,
-        "g_upper_lower.install(false)",
-        "visible U/L install only when U/L feature is enabled",
-    )
-    require(
-        integrated,
-        "if (pmetal_envspec_enabled &&\n        !upper_lower_enabled) {",
-        "P_Metal source fail-open gate",
-    )
-    require(
-        integrated,
-        "g_core.features().set(\n            dsrrl::core::operator_id::env_spec,\n            false);",
-        "P_Metal EnvSpec runtime disable",
-    )
-    require(
-        integrated,
-        "SOURCE TRANSPORT FAIL-OPEN",
-        "P_Metal source fail-open runtime marker",
-    )
-    if (
-        "upper_lower_enabled ||\n        pmetal_envspec_enabled" in integrated
-        or "g_upper_lower.install(\n             !upper_lower_enabled)" in integrated
-    ):
-        fail(
-            "P_Metal EnvSpec still authorizes shared LightBank hooks while U/L is disabled"
-        )
+    if "upper_lower_enabled ||\n        pmetal_envspec_enabled" in integrated:
+        fail("EnvSpec still forces shared U/L transport")
 
     # Installing the shared carrier must never silently re-enable U/L inside
     # the EnvSpec composite.
