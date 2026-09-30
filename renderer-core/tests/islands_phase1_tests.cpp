@@ -13,6 +13,7 @@
 #include "dsrrl/operators/lightbank/lightbank_islands.hpp"
 #include "dsrrl/runtime/upper_lower_pipeline_registry.hpp"
 #include "dsrrl/operators/point_light/point_light_islands.hpp"
+#include "dsrrl/operators/point_light/generated_pointlight_material_authority_v1.hpp"
 #include "dsrrl/operators/postprocess/postprocess_islands.hpp"
 #include "dsrrl/operators/resource_bridges/resource_bridge_islands.hpp"
 #include "dsrrl/operators/sfx/sfx_islands.hpp"
