@@ -520,9 +520,10 @@ extern "C" void dsrrl_flver_selector_observer(
          container,
          material_index);
 
- clustered_pnts_selector_event_bridge(
-     owner,
-     actual_material);
+ if(g_state.builder_armed)
+  clustered_pnts_selector_event_bridge(
+      owner,
+      actual_material);
 
  actual_material_owner_observation observation{};
  if(flver_identity_enrich_owner(
