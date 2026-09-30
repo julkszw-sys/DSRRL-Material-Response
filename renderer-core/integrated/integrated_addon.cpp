@@ -2589,8 +2589,8 @@ void log_effect_matrix(
         "probe_reject=%llu spec_reject=%llu "
         "b12_upload=%llu b12_reuse=%llu q=%u fail=0x%08X "
         "fail_feature=%u fail_lerp_feature=%u fail_material=%u fail_semantic=%u "
-        "fail_source=%u fail_blend=%u fail_lerp_ul_conflict=%u fail_context=%u "
-        "fail_replacement=%u fail_ul=%u fail_probe=%u fail_spec_rgb=%u "
+        "fail_source=%u fail_blend=%u fail_context=%u "
+        "fail_replacement=%u fail_probe=%u fail_spec_rgb=%u "
         "fail_device=%u fail_b12=%u fail_mutation=%u",
         static_cast<unsigned long long>(pmetal.candidates),
         static_cast<unsigned long long>(pmetal.lerp_candidates),
@@ -2612,10 +2612,8 @@ void log_effect_matrix(
         (pmetal.effect_fail_mask & (1u << 3u)) ? 1u : 0u,
         (pmetal.effect_fail_mask & (1u << 4u)) ? 1u : 0u,
         (pmetal.effect_fail_mask & (1u << 5u)) ? 1u : 0u,
-        (pmetal.effect_fail_mask & (1u << 6u)) ? 1u : 0u,
         (pmetal.effect_fail_mask & (1u << 7u)) ? 1u : 0u,
         (pmetal.effect_fail_mask & (1u << 8u)) ? 1u : 0u,
-        (pmetal.effect_fail_mask & (1u << 9u)) ? 1u : 0u,
         (pmetal.effect_fail_mask & (1u << 10u)) ? 1u : 0u,
         (pmetal.effect_fail_mask & (1u << 11u)) ? 1u : 0u,
         (pmetal.effect_fail_mask & (1u << 12u)) ? 1u : 0u,
@@ -3165,6 +3163,8 @@ void log_state(const char *tag) noexcept
         g_envspec_resources.telemetry();
     const auto env_draw =
         g_pmetal_envspec.telemetry();
+    const auto env_source =
+        g_pmetal_source.telemetry();
     const auto env_lerp =
         dsrrl::runtime::
             hemenvlerp_receiver_pipeline_stats();
@@ -3174,10 +3174,10 @@ void log_state(const char *tag) noexcept
         env_line,
         sizeof(env_line),
         "[DSRRL CORE+ISLANDS " DSRRL_CORE_ISLANDS_VERSION "] %s_ENVSPEC "
-        "ps_mat=%llu/%llu src_steady=%llu src_blend=%llu src_miss=%llu src_hook=%u "
+        "ps_mat=%llu/%llu src_steady=%llu src_blend=%llu src_miss=%llu src_hook=%u/%u "
         "native=%llu/%llu hash_miss=%llu views=%llu pack=%llu/%llu pack_ready=%u sampler=%u "
         "cube=%llu/%llu prepare=%llu/%llu candidate=%llu material_reject=%llu semantic_reject=%llu "
-        "source_reject=%llu blend_hold=%llu probe_reject=%llu spec_reject=%llu ul=%llu/%llu req=%llu b12_map=%llu/%llu q=%u "
+        "source_reject=%llu blend_hold=%llu probe_reject=%llu spec_reject=%llu req=%llu b12_map=%llu/%llu q=%u "
         "lerp_reg=%llu/%llu lerp_candidate=%llu lerp_req=%llu lerp_pipe=%llu/%llu bind=%llu/%llu miss=%llu conflict=%llu",
         tag,
         static_cast<unsigned long long>(
@@ -3185,12 +3185,13 @@ void log_state(const char *tag) noexcept
         static_cast<unsigned long long>(
             g_envspec_payload_materialize_fail.load()),
         static_cast<unsigned long long>(
-            ul.pmetal_env_steady),
+            env_source.steady_seen),
         static_cast<unsigned long long>(
-            ul.pmetal_env_blend),
+            env_source.blend_seen),
         static_cast<unsigned long long>(
-            ul.pmetal_env_miss),
-        ul.pmetal_env_hook_armed ? 1u : 0u,
+            env_source.decode_fail),
+        env_source.steady_carrier_active ? 1u : 0u,
+        env_source.blend_carrier_active ? 1u : 0u,
         static_cast<unsigned long long>(
             env_res.native_candidates),
         static_cast<unsigned long long>(
@@ -3227,10 +3228,6 @@ void log_state(const char *tag) noexcept
             env_draw.probe_rejects),
         static_cast<unsigned long long>(
             env_draw.spec_rgb_rejects),
-        static_cast<unsigned long long>(
-            env_draw.upper_lower_ready),
-        static_cast<unsigned long long>(
-            env_draw.upper_lower_fallback),
         static_cast<unsigned long long>(
             env_draw.requests),
         static_cast<unsigned long long>(
