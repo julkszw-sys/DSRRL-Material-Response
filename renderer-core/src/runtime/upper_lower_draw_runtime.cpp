@@ -4376,15 +4376,6 @@ void __fastcall hook_pmetal_env_blend(
     std::int32_t selector_b,
     float beta) noexcept
 {
-    if (g_pmetal_env_blend_orig != nullptr)
-        g_pmetal_env_blend_orig(
-            out,
-            source_a,
-            selector_a,
-            source_b,
-            selector_b,
-            beta);
-
     if (g_pmetal_source_only_enabled.load(
             std::memory_order_acquire)) {
         f4 a{};
@@ -4401,41 +4392,56 @@ void __fastcall hook_pmetal_env_blend(
                 a,
                 bank_a,
                 row_a);
-        bool have_b = false;
+        bool have_b =
+            read_exact_pmetal_env_source(
+                source_b,
+                selector_b,
+                b,
+                bank_b,
+                row_b);
 
-        if (have_a &&
-            (beta <= 0.0f ||
-             (source_a == source_b &&
-              selector_a == selector_b))) {
-            b = a;
-            bank_b = bank_a;
-            row_b = row_a;
-            have_b = true;
-        } else if (have_a) {
-            have_b =
-                read_exact_pmetal_env_source(
-                    source_b,
-                    selector_b,
-                    b,
-                    bank_b,
-                    row_b);
-        }
+        if (g_pmetal_env_blend_orig != nullptr)
+            g_pmetal_env_blend_orig(
+                out,
+                source_a,
+                selector_a,
+                source_b,
+                selector_b,
+                beta);
 
         if (have_a &&
             have_b &&
             std::isfinite(beta)) {
-            float t =
-                std::clamp(beta,0.0f,1.0f);
-            if (t >= 1.0f) {
-                a = b;
-                bank_a = bank_b;
-                row_a = row_b;
-                t = 0.0f;
-            }
             publish_pmetal_source_only(
-                a, b, t,
-                bank_a, bank_b,
-                row_a, row_b);
+                a,
+                b,
+                std::clamp(beta,0.0f,1.0f),
+                bank_a,
+                bank_b,
+                row_a,
+                row_b);
+            telemetry::hot_count(
+                g_pmetal_env_blend);
+        } else if (have_a) {
+            publish_pmetal_source_only(
+                a,
+                a,
+                0.0f,
+                bank_a,
+                bank_a,
+                row_a,
+                row_a);
+            telemetry::hot_count(
+                g_pmetal_env_blend);
+        } else if (have_b) {
+            publish_pmetal_source_only(
+                b,
+                b,
+                0.0f,
+                bank_b,
+                bank_b,
+                row_b,
+                row_b);
             telemetry::hot_count(
                 g_pmetal_env_blend);
         } else {
@@ -4444,6 +4450,15 @@ void __fastcall hook_pmetal_env_blend(
         }
         return;
     }
+
+    if (g_pmetal_env_blend_orig != nullptr)
+        g_pmetal_env_blend_orig(
+            out,
+            source_a,
+            selector_a,
+            source_b,
+            selector_b,
+            beta);
 
     if (!g_producer.active ||
         !g_pmetal_env_hook_armed.load())
