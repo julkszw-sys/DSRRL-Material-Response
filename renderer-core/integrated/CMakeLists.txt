@@ -139,7 +139,7 @@ option(
 option(
     DSRRL_PHYSICAL_CUT_UL_H3_SUBSURFACE
     "Diagnostic: physically exclude Upper/Lower, HemDir3 and Subsurface runtime implementation units while preserving P_Metal source runtime"
-    OFF)
+    ON)
 
 set(
     RESHADE_INCLUDE_DIR
@@ -439,6 +439,16 @@ if(DSRRL_PHYSICAL_CUT_UL_H3_SUBSURFACE)
     if(NOT DSRRL_PHYSICAL_CUT_GENERATE_RESULT EQUAL 0)
         message(FATAL_ERROR "Failed to generate Runtime v2 physical-cut integrated source")
     endif()
+
+    execute_process(
+        COMMAND
+            "${Python3_EXECUTABLE}"
+            "${DSRRL_RENDERER_CORE_ROOT}/tools/audit_runtime_v2_physical_cut.py"
+            --source-dir "${DSRRL_RENDERER_CORE_ROOT}"
+        RESULT_VARIABLE DSRRL_PHYSICAL_CUT_SOURCE_AUDIT_RESULT)
+    if(NOT DSRRL_PHYSICAL_CUT_SOURCE_AUDIT_RESULT EQUAL 0)
+        message(FATAL_ERROR "Runtime v2 physical-cut source audit failed")
+    endif()
 endif()
 
 add_library(
@@ -684,6 +694,19 @@ set_target_properties(
     PREFIX ""
     OUTPUT_NAME "${DSRRL_CORE_ISLANDS_ARTIFACT_STEM}"
     SUFFIX ".addon64")
+
+if(DSRRL_PHYSICAL_CUT_UL_H3_SUBSURFACE)
+    add_custom_command(
+        TARGET dsrrl_renderer_core_integrated
+        POST_BUILD
+        COMMAND
+            "${Python3_EXECUTABLE}"
+            "${DSRRL_RENDERER_CORE_ROOT}/tools/audit_runtime_v2_physical_cut.py"
+            --source-dir "${DSRRL_RENDERER_CORE_ROOT}"
+            --build-dir "${CMAKE_BINARY_DIR}"
+            --post-build
+        VERBATIM)
+endif()
 
 # Tests the real producer/selector/GPU cache without installing a game hook.
 add_executable(dsrrl_fixed_pointlight_transport_windows_tests
