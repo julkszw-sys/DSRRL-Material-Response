@@ -145,6 +145,12 @@ constexpr bool k_draw_callback_only_bisect = true;
 constexpr bool k_draw_callback_only_bisect = false;
 #endif
 
+#ifdef DSRRL_PMETAL_SRV_SHADOW_EXPERIMENT
+constexpr bool k_pmetal_srv_shadow_runtime_enabled = true;
+#else
+constexpr bool k_pmetal_srv_shadow_runtime_enabled = false;
+#endif
+
 #if defined(DSRRL_POINTLIGHT_DRAWTIME_BYPASS) || defined(DSRRL_DRAWTIME_ISLANDS_BYPASS)
 constexpr bool k_pointlight_drawtime_runtime_enabled = false;
 #else
@@ -6631,7 +6637,8 @@ void register_events()
     reshade::register_event<reshade::addon_event::init_pipeline>(on_init_pipeline);
     reshade::register_event<reshade::addon_event::destroy_pipeline>(on_destroy_pipeline);
     reshade::register_event<reshade::addon_event::bind_pipeline>(on_bind_pipeline);
-    if (k_drawtime_islands_runtime_enabled)
+    if (k_drawtime_islands_runtime_enabled &&
+        k_pmetal_srv_shadow_runtime_enabled)
         reshade::register_event<reshade::addon_event::push_descriptors>(on_push_descriptors);
     if (k_drawtime_islands_runtime_enabled &&
         k_draw_callbacks_runtime_enabled) {
@@ -6649,7 +6656,8 @@ void unregister_events()
         reshade::unregister_event<reshade::addon_event::draw_indexed>(on_draw_indexed);
         reshade::unregister_event<reshade::addon_event::draw>(on_draw);
     }
-    if (k_drawtime_islands_runtime_enabled)
+    if (k_drawtime_islands_runtime_enabled &&
+        k_pmetal_srv_shadow_runtime_enabled)
         reshade::unregister_event<reshade::addon_event::push_descriptors>(on_push_descriptors);
     reshade::unregister_event<reshade::addon_event::bind_pipeline>(on_bind_pipeline);
     reshade::unregister_event<reshade::addon_event::destroy_pipeline>(on_destroy_pipeline);
