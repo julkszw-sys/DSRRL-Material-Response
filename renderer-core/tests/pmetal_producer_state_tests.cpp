@@ -28,6 +28,9 @@ int main()
     runtime::pmetal_producer_state_clear();
     assert(!runtime::pmetal_producer_state_valid());
 
+    runtime::pmetal_producer_state_begin(
+        material,
+        100u);
     runtime::pmetal_producer_state_publish(
         material,
         source,
@@ -70,7 +73,39 @@ int main()
         101u,
         out));
 
+    // Simulate selector -> draw thread handoff by dropping only TLS. The exact
+    // immutable synchronized value must remain available.
     runtime::pmetal_producer_state_clear();
     assert(!runtime::pmetal_producer_state_valid());
+    runtime::pmetal_envspec_source synchronized{};
+    assert(runtime::pmetal_producer_state_latest(
+        material,
+        100u,
+        synchronized));
+    assert(synchronized.beta == 0.75f);
+
+    // A new exact selector attempt invalidates the old synchronized value
+    // before decode. No stale source may survive a failed selector.
+    runtime::pmetal_producer_state_begin(
+        material,
+        100u);
+    runtime::pmetal_envspec_source stale{};
+    assert(!runtime::pmetal_producer_state_latest(
+        material,
+        100u,
+        stale));
+
+    runtime::pmetal_producer_state_publish(
+        material,
+        source,
+        100u);
+    runtime::pmetal_producer_state_clear();
+    runtime::pmetal_envspec_source republished{};
+    assert(runtime::pmetal_producer_state_latest(
+        material,
+        100u,
+        republished));
+    assert(republished.beta == 0.75f);
+
     return 0;
 }
