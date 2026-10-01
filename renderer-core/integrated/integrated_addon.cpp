@@ -2867,7 +2867,8 @@ void log_effect_matrix(
         "PMetal entry=%u feature=%u material=%u semantic=%u source=%u "
         "receiver_source=%u repl=%u probe=%u spec=%u b12=%u request=%u fail=0x%08X "
         "PMSRC steady=%llu blend=%llu publish=%llu bank_unknown=%llu decode_fail=%llu "
-        "busy_drop=%llu consume=%llu/%llu carrier=%u/%u selector=%u q=%u restore_fail=%u "
+        "busy_drop=%llu consume=%llu/%llu ep_cache=%llu/%llu/%llu region=%llu/%llu gen=%llu "
+        "carrier=%u/%u selector=%u q=%u restore_fail=%u "
         "SUB cand=%llu matrej=%llu piperej=%llu surfrej=%llu prep=%llu "
         "UL producer=%u changed=%u quarantine=%u restore_fail=%u "
         "Bloom diag_hooks=%u/%u model_hook=%u proof=%u contents=%u "
@@ -2897,6 +2898,12 @@ void log_effect_matrix(
         static_cast<unsigned long long>(pmetal_source.publish_busy_drop),
         static_cast<unsigned long long>(pmetal_source.consumer_ok),
         static_cast<unsigned long long>(pmetal_source.consumer_fail),
+        static_cast<unsigned long long>(pmetal_source.endpoint_cache_hit),
+        static_cast<unsigned long long>(pmetal_source.endpoint_cache_miss),
+        static_cast<unsigned long long>(pmetal_source.endpoint_cache_fill),
+        static_cast<unsigned long long>(pmetal_source.region_cache_hit),
+        static_cast<unsigned long long>(pmetal_source.region_cache_miss),
+        static_cast<unsigned long long>(pmetal_source.cache_generation),
         pmetal_source.steady_carrier_active ? 1u : 0u,
         pmetal_source.blend_carrier_active ? 1u : 0u,
         pmetal_source.selector_carrier_active ? 1u : 0u,

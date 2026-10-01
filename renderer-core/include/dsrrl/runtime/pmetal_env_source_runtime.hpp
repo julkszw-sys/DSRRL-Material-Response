@@ -30,6 +30,12 @@ struct pmetal_env_source_runtime_telemetry {
     std::uint64_t publish_busy_drop = 0u;
     std::uint64_t consumer_ok = 0u;
     std::uint64_t consumer_fail = 0u;
+    std::uint64_t endpoint_cache_hit = 0u;
+    std::uint64_t endpoint_cache_miss = 0u;
+    std::uint64_t endpoint_cache_fill = 0u;
+    std::uint64_t region_cache_hit = 0u;
+    std::uint64_t region_cache_miss = 0u;
+    std::uint64_t cache_generation = 0u;
     // Diagnostic-only thread provenance. These fields never authorize source
     // reuse; they exist only to falsify the selector-thread TLS lifetime.
     std::uint32_t last_publish_tid = 0u;
@@ -52,6 +58,7 @@ struct pmetal_env_source_runtime_telemetry {
 };
 
 void pmetal_env_source_selector_clear() noexcept;
+void pmetal_env_source_cache_invalidate() noexcept;
 void pmetal_env_source_selector_event(
     void *owner, void *return_address, void *r14, void *r15, const void *selector_stack,
     const operators::material_response::material_identity &material) noexcept;

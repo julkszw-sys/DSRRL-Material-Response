@@ -860,6 +860,8 @@ void __fastcall parse_entry(void*m,const void*r) noexcept {
      1u,
      std::memory_order_relaxed);
 #endif
+ if(m)
+  pmetal_env_source_cache_invalidate();
  if(m)flver_identity_observe_destroy(m);
  if(m&&r&&range_ok(r,0x18)){
   std::uint32_t o=0,l=0;
@@ -879,6 +881,8 @@ void __fastcall destroy_entry(void*m) noexcept {
      1u,
      std::memory_order_relaxed);
 #endif
+ if(m)
+  pmetal_env_source_cache_invalidate();
  flver_identity_observe_destroy(m);
  if(g_do)g_do(m);
 }

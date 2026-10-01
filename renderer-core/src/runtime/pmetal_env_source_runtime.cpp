@@ -49,6 +49,181 @@ struct readable_window {
     std::uintptr_t end = 0u;
 };
 
+std::atomic<std::uint64_t> g_source_cache_generation{1u};
+std::atomic<std::uint64_t> g_endpoint_cache_hit{0u};
+std::atomic<std::uint64_t> g_endpoint_cache_miss{0u};
+std::atomic<std::uint64_t> g_endpoint_cache_fill{0u};
+std::atomic<std::uint64_t> g_region_cache_hit{0u};
+std::atomic<std::uint64_t> g_region_cache_miss{0u};
+
+struct readable_region_cache_entry {
+    std::uintptr_t begin = 0u;
+    std::uintptr_t end = 0u;
+    std::uint64_t generation = 0u;
+    bool readable = false;
+    bool valid = false;
+};
+
+constexpr std::size_t k_region_cache_sets = 64u;
+constexpr std::size_t k_region_cache_ways = 2u;
+constexpr std::size_t k_region_cache_entries =
+    k_region_cache_sets * k_region_cache_ways;
+
+thread_local std::array<
+    readable_region_cache_entry,
+    k_region_cache_entries>
+    g_region_cache{};
+thread_local std::array<
+    std::uint8_t,
+    k_region_cache_sets>
+    g_region_cache_victim{};
+
+std::size_t region_cache_set(
+    const void *ptr) noexcept
+{
+    const auto value =
+        reinterpret_cast<std::uintptr_t>(ptr);
+    const auto mixed =
+        (value >> 12u) ^
+        (value >> 21u) ^
+        (value >> 31u);
+
+    return static_cast<std::size_t>(
+        mixed & (k_region_cache_sets - 1u));
+}
+
+bool query_region(
+    const void *ptr,
+    readable_window &window,
+    bool &is_readable) noexcept
+{
+    window = {};
+    is_readable = false;
+    if (ptr == nullptr)
+        return false;
+
+    MEMORY_BASIC_INFORMATION mbi{};
+    if (VirtualQuery(
+            ptr,
+            &mbi,
+            sizeof(mbi)) != sizeof(mbi))
+        return false;
+
+    const auto begin =
+        reinterpret_cast<std::uintptr_t>(
+            mbi.BaseAddress);
+    const auto end =
+        begin + mbi.RegionSize;
+    const auto address =
+        reinterpret_cast<std::uintptr_t>(ptr);
+
+    if (end <= address ||
+        end < begin)
+        return false;
+
+    const DWORD access =
+        mbi.Protect & 0xffu;
+    is_readable =
+        mbi.State == MEM_COMMIT &&
+        (mbi.Protect & PAGE_GUARD) == 0u &&
+        (access == PAGE_READONLY ||
+         access == PAGE_READWRITE ||
+         access == PAGE_WRITECOPY ||
+         access == PAGE_EXECUTE_READ ||
+         access == PAGE_EXECUTE_READWRITE ||
+         access == PAGE_EXECUTE_WRITECOPY);
+
+    window.begin = begin;
+    window.end = end;
+    return true;
+}
+
+bool cached_readable_window(
+    const void *ptr,
+    readable_window &window) noexcept
+{
+    window = {};
+    if (ptr == nullptr)
+        return false;
+
+    const auto address =
+        reinterpret_cast<std::uintptr_t>(ptr);
+    const auto generation =
+        g_source_cache_generation.load(
+            std::memory_order_relaxed);
+    const auto set =
+        region_cache_set(ptr);
+    const auto base =
+        set * k_region_cache_ways;
+
+    for (std::size_t way = 0u;
+         way < k_region_cache_ways;
+         ++way) {
+        const auto &entry =
+            g_region_cache[base + way];
+        if (entry.valid &&
+            entry.generation == generation &&
+            entry.begin <= address &&
+            address < entry.end) {
+            g_region_cache_hit.fetch_add(
+                1u,
+                std::memory_order_relaxed);
+            if (!entry.readable)
+                return false;
+            window.begin = entry.begin;
+            window.end = entry.end;
+            return true;
+        }
+    }
+
+    g_region_cache_miss.fetch_add(
+        1u,
+        std::memory_order_relaxed);
+
+    readable_window queried{};
+    bool is_readable = false;
+    if (!query_region(
+            ptr,
+            queried,
+            is_readable))
+        return false;
+
+    std::size_t target = k_region_cache_ways;
+    for (std::size_t way = 0u;
+         way < k_region_cache_ways;
+         ++way) {
+        const auto &entry =
+            g_region_cache[base + way];
+        if (!entry.valid ||
+            entry.generation != generation) {
+            target = way;
+            break;
+        }
+    }
+
+    if (target == k_region_cache_ways) {
+        target =
+            static_cast<std::size_t>(
+                g_region_cache_victim[set]++ &
+                static_cast<std::uint8_t>(
+                    k_region_cache_ways - 1u));
+    }
+
+    auto &entry =
+        g_region_cache[base + target];
+    entry.begin = queried.begin;
+    entry.end = queried.end;
+    entry.generation = generation;
+    entry.readable = is_readable;
+    entry.valid = true;
+
+    if (!is_readable)
+        return false;
+
+    window = queried;
+    return true;
+}
+
 bool readable_range(
     const void *ptr,
     std::size_t size) noexcept
@@ -65,43 +240,18 @@ bool readable_range(
         return false;
 
     while (cursor < end) {
-        MEMORY_BASIC_INFORMATION mbi{};
-        if (VirtualQuery(
+        readable_window window{};
+        if (!cached_readable_window(
                 reinterpret_cast<const void *>(cursor),
-                &mbi,
-                sizeof(mbi)) != sizeof(mbi))
+                window))
             return false;
 
-        if (mbi.State != MEM_COMMIT ||
-            (mbi.Protect & PAGE_GUARD) != 0u)
-            return false;
-
-        const DWORD access =
-            mbi.Protect & 0xffu;
-        const bool readable =
-            access == PAGE_READONLY ||
-            access == PAGE_READWRITE ||
-            access == PAGE_WRITECOPY ||
-            access == PAGE_EXECUTE_READ ||
-            access == PAGE_EXECUTE_READWRITE ||
-            access == PAGE_EXECUTE_WRITECOPY;
-
-        if (!readable)
-            return false;
-
-        const auto region_begin =
-            reinterpret_cast<std::uintptr_t>(
-                mbi.BaseAddress);
-        const auto region_end =
-            region_begin + mbi.RegionSize;
-
-        if (region_end <= cursor ||
-            region_end < region_begin)
+        if (window.end <= cursor)
             return false;
 
         cursor =
             std::min(
-                region_end,
+                window.end,
                 end);
     }
 
@@ -129,53 +279,17 @@ bool ensure_readable_window(
     const void *ptr,
     readable_window &window) noexcept
 {
-    if (ptr == nullptr)
-        return false;
-
     const auto address =
         reinterpret_cast<std::uintptr_t>(ptr);
 
-    if (window.begin <= address &&
+    if (ptr != nullptr &&
+        window.begin <= address &&
         address < window.end)
         return true;
 
-    MEMORY_BASIC_INFORMATION mbi{};
-    if (VirtualQuery(
-            ptr,
-            &mbi,
-            sizeof(mbi)) != sizeof(mbi))
-        return false;
-
-    if (mbi.State != MEM_COMMIT ||
-        (mbi.Protect & PAGE_GUARD) != 0u)
-        return false;
-
-    const DWORD access =
-        mbi.Protect & 0xffu;
-    const bool readable =
-        access == PAGE_READONLY ||
-        access == PAGE_READWRITE ||
-        access == PAGE_WRITECOPY ||
-        access == PAGE_EXECUTE_READ ||
-        access == PAGE_EXECUTE_READWRITE ||
-        access == PAGE_EXECUTE_WRITECOPY;
-
-    if (!readable)
-        return false;
-
-    const auto begin =
-        reinterpret_cast<std::uintptr_t>(
-            mbi.BaseAddress);
-    const auto end =
-        begin + mbi.RegionSize;
-
-    if (end <= address ||
-        end < begin)
-        return false;
-
-    window.begin = begin;
-    window.end = end;
-    return true;
+    return cached_readable_window(
+        ptr,
+        window);
 }
 
 bool exact_pmetal_material_selection(
@@ -219,6 +333,7 @@ bool retail_lightbank_record_index(
 struct bank_cache_entry {
     const std::uint8_t *base = nullptr;
     std::uint16_t count = 0u;
+    std::uint64_t generation = 0u;
     std::uint64_t signature = 0u;
     const pmetal_env_source_authority::
         bank_donor *bank = nullptr;
@@ -259,6 +374,9 @@ std::size_t bank_cache_set(
 bank_cache_entry &bank_cache_for(
     const std::uint8_t *base_ptr) noexcept
 {
+    const auto generation =
+        g_source_cache_generation.load(
+            std::memory_order_relaxed);
     const auto set =
         bank_cache_set(base_ptr);
     const auto base =
@@ -270,6 +388,7 @@ bank_cache_entry &bank_cache_for(
         auto &entry =
             g_bank_cache[base + way];
         if (entry.valid &&
+            entry.generation == generation &&
             entry.base == base_ptr)
             return entry;
     }
@@ -279,8 +398,10 @@ bank_cache_entry &bank_cache_for(
          ++way) {
         auto &entry =
             g_bank_cache[base + way];
-        if (!entry.valid) {
+        if (!entry.valid ||
+            entry.generation != generation) {
             entry = {};
+            entry.generation = generation;
             return entry;
         }
     }
@@ -293,6 +414,7 @@ bank_cache_entry &bank_cache_for(
     auto &entry =
         g_bank_cache[base + victim];
     entry = {};
+    entry.generation = generation;
     return entry;
 }
 
@@ -469,10 +591,14 @@ resolve_bank(
         count == 0u)
         return nullptr;
 
+    const auto generation =
+        g_source_cache_generation.load(
+            std::memory_order_relaxed);
     auto &cached =
         bank_cache_for(base);
 
     if (cached.valid &&
+        cached.generation == generation &&
         cached.base == base &&
         cached.count == count) {
         signature =
@@ -494,12 +620,169 @@ resolve_bank(
 
     cached.base = base;
     cached.count = count;
+    cached.generation = generation;
     cached.signature = decoded;
     cached.bank = bank;
     cached.valid = true;
 
     signature = decoded;
     return bank;
+}
+
+
+struct endpoint_cache_entry {
+    void *source = nullptr;
+    const std::uint8_t *base = nullptr;
+    std::uint16_t count = 0u;
+    std::uint32_t index = 0u;
+    std::uint32_t row_id = 0u;
+    std::uint64_t generation = 0u;
+    std::uint64_t signature = 0u;
+    f4 value{};
+    bool valid = false;
+};
+
+constexpr std::size_t k_endpoint_cache_sets = 256u;
+constexpr std::size_t k_endpoint_cache_ways = 2u;
+constexpr std::size_t k_endpoint_cache_entries =
+    k_endpoint_cache_sets *
+    k_endpoint_cache_ways;
+
+thread_local std::array<
+    endpoint_cache_entry,
+    k_endpoint_cache_entries>
+    g_endpoint_cache{};
+thread_local std::array<
+    std::uint8_t,
+    k_endpoint_cache_sets>
+    g_endpoint_cache_victim{};
+
+std::size_t endpoint_cache_set(
+    const void *source,
+    const void *base_ptr,
+    std::uint32_t index) noexcept
+{
+    auto value =
+        reinterpret_cast<std::uintptr_t>(source);
+    value ^=
+        reinterpret_cast<std::uintptr_t>(base_ptr) >> 4u;
+    value ^=
+        static_cast<std::uintptr_t>(index) << 9u;
+    value ^=
+        value >> 17u;
+    value ^=
+        value >> 31u;
+
+    return static_cast<std::size_t>(
+        value & (k_endpoint_cache_sets - 1u));
+}
+
+bool endpoint_cache_lookup(
+    void *source,
+    const std::uint8_t *base,
+    std::uint16_t count,
+    std::uint32_t index,
+    std::uint32_t row_id,
+    f4 &value,
+    std::uint64_t &signature) noexcept
+{
+    const auto generation =
+        g_source_cache_generation.load(
+            std::memory_order_relaxed);
+    const auto set =
+        endpoint_cache_set(
+            source,
+            base,
+            index);
+    const auto first =
+        set * k_endpoint_cache_ways;
+
+    for (std::size_t way = 0u;
+         way < k_endpoint_cache_ways;
+         ++way) {
+        const auto &entry =
+            g_endpoint_cache[first + way];
+        if (entry.valid &&
+            entry.generation == generation &&
+            entry.source == source &&
+            entry.base == base &&
+            entry.count == count &&
+            entry.index == index &&
+            entry.row_id == row_id) {
+            value = entry.value;
+            signature = entry.signature;
+            g_endpoint_cache_hit.fetch_add(
+                1u,
+                std::memory_order_relaxed);
+            return true;
+        }
+    }
+
+    g_endpoint_cache_miss.fetch_add(
+        1u,
+        std::memory_order_relaxed);
+    return false;
+}
+
+void endpoint_cache_publish(
+    void *source,
+    const std::uint8_t *base,
+    std::uint16_t count,
+    std::uint32_t index,
+    std::uint32_t row_id,
+    const f4 &value,
+    std::uint64_t signature) noexcept
+{
+    const auto generation =
+        g_source_cache_generation.load(
+            std::memory_order_relaxed);
+    const auto set =
+        endpoint_cache_set(
+            source,
+            base,
+            index);
+    const auto first =
+        set * k_endpoint_cache_ways;
+
+    std::size_t target = k_endpoint_cache_ways;
+    for (std::size_t way = 0u;
+         way < k_endpoint_cache_ways;
+         ++way) {
+        const auto &entry =
+            g_endpoint_cache[first + way];
+        if (!entry.valid ||
+            entry.generation != generation ||
+            (entry.source == source &&
+             entry.base == base &&
+             entry.index == index)) {
+            target = way;
+            break;
+        }
+    }
+
+    if (target == k_endpoint_cache_ways) {
+        target =
+            static_cast<std::size_t>(
+                g_endpoint_cache_victim[set]++ &
+                static_cast<std::uint8_t>(
+                    k_endpoint_cache_ways - 1u));
+    }
+
+    auto &entry =
+        g_endpoint_cache[first + target];
+    entry.source = source;
+    entry.base = base;
+    entry.count = count;
+    entry.index = index;
+    entry.row_id = row_id;
+    entry.generation = generation;
+    entry.signature = signature;
+    entry.value = value;
+    entry.valid = true;
+
+    g_endpoint_cache_fill.fetch_add(
+        1u,
+        std::memory_order_relaxed);
 }
 
 bool read_exact_source(
@@ -518,13 +801,12 @@ bool read_exact_source(
         return false;
 
     const std::uint8_t *base = nullptr;
-    std::memcpy(
-        &base,
-        static_cast<const std::uint8_t *>(
-            source) + 0x18u,
-        sizeof(base));
-
-    if (base == nullptr)
+    if (!safe_read(
+            static_cast<const std::uint8_t *>(
+                source) +
+                0x18u,
+            base) ||
+        base == nullptr)
         return false;
 
     std::uint32_t index = 0u;
@@ -533,64 +815,19 @@ bool read_exact_source(
             index))
         return false;
 
-    auto &cached =
-        bank_cache_for(base);
-
-    const pmetal_env_source_authority::
-        bank_donor *bank = nullptr;
+    std::uint16_t version = 0u;
     std::uint16_t count = 0u;
-
-    if (cached.valid &&
-        cached.base == base) {
-        std::uint16_t version = 0u;
-        std::uint16_t live_count = 0u;
-
-        std::memcpy(
-            &version,
+    if (!safe_read(
             base + 8u,
-            sizeof(version));
-        std::memcpy(
-            &live_count,
+            version) ||
+        !safe_read(
             base + 10u,
-            sizeof(live_count));
-
-        if (version != 4u ||
-            live_count != cached.count ||
-            live_count == 0u ||
-            live_count > 256u) {
-            cached = {};
-            return false;
-        }
-
-        count = live_count;
-        signature = cached.signature;
-        bank = cached.bank;
-
-        if (index >= count ||
-            bank == nullptr)
-            return false;
-    } else {
-        std::uint16_t version = 0u;
-        if (!safe_read(
-                base + 8u,
-                version) ||
-            !safe_read(
-                base + 10u,
-                count) ||
-            version != 4u ||
-            count == 0u ||
-            count > 256u ||
-            index >= count)
-            return false;
-
-        bank =
-            resolve_bank(
-                base,
-                count,
-                signature);
-        if (bank == nullptr)
-            return false;
-    }
+            count) ||
+        version != 4u ||
+        count == 0u ||
+        count > 256u ||
+        index >= count)
+        return false;
 
     const auto *entry =
         base +
@@ -598,17 +835,28 @@ bool read_exact_source(
         static_cast<std::size_t>(
             index) * 12u;
 
-    if (cached.valid &&
-        cached.base == base) {
-        std::memcpy(
-            &row_id,
+    if (!safe_read(
             entry,
-            sizeof(row_id));
-    } else if (!safe_read(
-                   entry,
-                   row_id)) {
+            row_id))
         return false;
-    }
+
+    if (endpoint_cache_lookup(
+            source,
+            base,
+            count,
+            index,
+            row_id,
+            out,
+            signature))
+        return true;
+
+    const auto *bank =
+        resolve_bank(
+            base,
+            count,
+            signature);
+    if (bank == nullptr)
+        return false;
 
     const auto *row =
         pmetal_env_source_authority::
@@ -636,10 +884,20 @@ bool read_exact_source(
         0.0f
     };
 
-    return
-        std::isfinite(out.x) &&
-        std::isfinite(out.y) &&
-        std::isfinite(out.z);
+    if (!std::isfinite(out.x) ||
+        !std::isfinite(out.y) ||
+        !std::isfinite(out.z))
+        return false;
+
+    endpoint_cache_publish(
+        source,
+        base,
+        count,
+        index,
+        row_id,
+        out,
+        signature);
+    return true;
 }
 
 std::uintptr_t g_source_base = 0u;
@@ -667,8 +925,17 @@ std::atomic_bool g_source_b_decode_ok{false};
 
 } // namespace
 
+void pmetal_env_source_cache_invalidate() noexcept
+{
+    g_source_cache_generation.fetch_add(
+        1u,
+        std::memory_order_relaxed);
+}
+
 bool pmetal_env_source_runtime::install() noexcept
 {
+    pmetal_env_source_cache_invalidate();
+
     g_source_base =
         reinterpret_cast<std::uintptr_t>(
             GetModuleHandleW(nullptr));
@@ -692,6 +959,7 @@ void pmetal_env_source_runtime::uninstall() noexcept
     g_selector_epoch.fetch_add(
         1u,
         std::memory_order_relaxed);
+    pmetal_env_source_cache_invalidate();
     pmetal_env_source_selector_clear();
 }
 
@@ -883,37 +1151,8 @@ void pmetal_env_source_selector_event(
                         character != 0u,
                         lookup);
 
-            const std::uint8_t *base =
-                nullptr;
-
             if (!lookup_valid ||
-                source == nullptr ||
-                !safe_read(
-                    static_cast<
-                        const std::uint8_t *>(
-                            source) +
-                        0x18u,
-                    base) ||
-                base == nullptr ||
-                !readable_range(
-                    base,
-                    0x30u))
-                return false;
-
-            std::uint16_t count = 0u;
-            std::memcpy(
-                &count,
-                base + 10u,
-                sizeof(count));
-
-            if (count == 0u ||
-                count > 256u ||
-                !readable_range(
-                    base,
-                    0x30u +
-                        static_cast<std::size_t>(
-                            count) *
-                            12u))
+                source == nullptr)
                 return false;
 
             return read_exact_source(
@@ -1067,6 +1306,24 @@ pmetal_env_source_runtime::telemetry() const noexcept
     out.consumer_fail =
         g_consumer_fail.load(
             std::memory_order_relaxed);
+    out.endpoint_cache_hit =
+        g_endpoint_cache_hit.load(
+            std::memory_order_relaxed);
+    out.endpoint_cache_miss =
+        g_endpoint_cache_miss.load(
+            std::memory_order_relaxed);
+    out.endpoint_cache_fill =
+        g_endpoint_cache_fill.load(
+            std::memory_order_relaxed);
+    out.region_cache_hit =
+        g_region_cache_hit.load(
+            std::memory_order_relaxed);
+    out.region_cache_miss =
+        g_region_cache_miss.load(
+            std::memory_order_relaxed);
+    out.cache_generation =
+        g_source_cache_generation.load(
+            std::memory_order_relaxed);
 
     out.last_publish_tid =
         g_last_publish_tid.load(
@@ -1112,6 +1369,7 @@ void pmetal_env_source_runtime::reset() noexcept
     g_selector_epoch.fetch_add(
         1u,
         std::memory_order_relaxed);
+    pmetal_env_source_cache_invalidate();
     pmetal_env_source_selector_clear();
 
     g_publish.store(
@@ -1130,6 +1388,21 @@ void pmetal_env_source_runtime::reset() noexcept
         0u,
         std::memory_order_relaxed);
     g_blend_seen.store(
+        0u,
+        std::memory_order_relaxed);
+    g_endpoint_cache_hit.store(
+        0u,
+        std::memory_order_relaxed);
+    g_endpoint_cache_miss.store(
+        0u,
+        std::memory_order_relaxed);
+    g_endpoint_cache_fill.store(
+        0u,
+        std::memory_order_relaxed);
+    g_region_cache_hit.store(
+        0u,
+        std::memory_order_relaxed);
+    g_region_cache_miss.store(
         0u,
         std::memory_order_relaxed);
 
@@ -1167,6 +1440,10 @@ void pmetal_env_source_runtime::reset() noexcept
 
     g_bank_cache = {};
     g_bank_victim = {};
+    g_endpoint_cache = {};
+    g_endpoint_cache_victim = {};
+    g_region_cache = {};
+    g_region_cache_victim = {};
 }
 
 } // namespace dsrrl::runtime
