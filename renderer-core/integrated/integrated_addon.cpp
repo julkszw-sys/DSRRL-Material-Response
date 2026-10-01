@@ -95,6 +95,18 @@ constexpr bool k_empty_draw_callback_bisect = true;
 constexpr bool k_empty_draw_callback_bisect = false;
 #endif
 
+#ifdef DSRRL_STATE_TRANSACTION_ONLY_BISECT
+constexpr bool k_state_transaction_only_bisect = true;
+#else
+constexpr bool k_state_transaction_only_bisect = false;
+#endif
+
+#ifdef DSRRL_RAW_DRAW_REPLAY_BISECT
+constexpr bool k_raw_draw_replay_bisect = true;
+#else
+constexpr bool k_raw_draw_replay_bisect = false;
+#endif
+
 #if defined(DSRRL_POINTLIGHT_DRAWTIME_BYPASS) || defined(DSRRL_DRAWTIME_ISLANDS_BYPASS)
 constexpr bool k_pointlight_drawtime_runtime_enabled = false;
 #else
@@ -155,6 +167,8 @@ dsrrl::runtime::pmetal_envspec_draw_runtime
         g_pmetal_source,
         g_envspec_resources,
         g_material_resources);
+
+thread_local bool g_raw_draw_replay_recursing = false;
 
 std::atomic<std::uint64_t> g_present_count{0};
 std::atomic<std::uint64_t> g_mr_draw_eval{0};
@@ -5813,6 +5827,22 @@ bool on_draw(
     std::uint32_t first_vertex,
     std::uint32_t first_instance)
 {
+    if (g_raw_draw_replay_recursing)
+        return false;
+
+    if (k_raw_draw_replay_bisect) {
+        g_raw_draw_replay_recursing = true;
+        const bool issued =
+            g_draw_transactions.raw_replay_draw(
+                cmd_list,
+                vertex_count,
+                instance_count,
+                first_vertex,
+                first_instance);
+        g_raw_draw_replay_recursing = false;
+        return issued;
+    }
+
     if (k_empty_draw_callback_bisect)
         return false;
 
@@ -6001,6 +6031,14 @@ bool on_draw(
         receiver_id,
         decision.route_index);
 
+    if (k_state_transaction_only_bisect) {
+        (void)g_draw_transactions.mutate_restore_only(
+            cmd_list,
+            prepared.batch.mutation);
+        release_prepared_island_batch(prepared);
+        return false;
+    }
+
     if (!k_draw_replay_runtime_enabled) {
         release_prepared_island_batch(prepared);
         return false;
@@ -6087,6 +6125,23 @@ bool on_draw_indexed(
     std::int32_t vertex_offset,
     std::uint32_t first_instance)
 {
+    if (g_raw_draw_replay_recursing)
+        return false;
+
+    if (k_raw_draw_replay_bisect) {
+        g_raw_draw_replay_recursing = true;
+        const bool issued =
+            g_draw_transactions.raw_replay_draw_indexed(
+                cmd_list,
+                index_count,
+                instance_count,
+                first_index,
+                vertex_offset,
+                first_instance);
+        g_raw_draw_replay_recursing = false;
+        return issued;
+    }
+
     if (k_empty_draw_callback_bisect)
         return false;
 
@@ -6256,6 +6311,14 @@ bool on_draw_indexed(
         effect_probe_stage::prepared,
         receiver_id,
         decision.route_index);
+
+    if (k_state_transaction_only_bisect) {
+        (void)g_draw_transactions.mutate_restore_only(
+            cmd_list,
+            prepared.batch.mutation);
+        release_prepared_island_batch(prepared);
+        return false;
+    }
 
     if (!k_draw_replay_runtime_enabled) {
         release_prepared_island_batch(prepared);
@@ -6568,6 +6631,20 @@ bool AddonInit(
     register_events();
 
     if (k_drawtime_islands_runtime_enabled &&
+        k_draw_callbacks_runtime_enabled &&
+        k_raw_draw_replay_bisect) {
+        reshade::log::message(
+            reshade::log::level::info,
+            "[DSRRL CORE+ISLANDS " DSRRL_CORE_ISLANDS_VERSION
+            "] RAW DRAW REPLAY BISECT: draw callbacks issue one stock native Draw/DrawIndexed and suppress the original; DSRRL semantic preparation and state mutation are skipped.");
+    } else if (k_drawtime_islands_runtime_enabled &&
+               k_draw_callbacks_runtime_enabled &&
+               k_state_transaction_only_bisect) {
+        reshade::log::message(
+            reshade::log::level::info,
+            "[DSRRL CORE+ISLANDS " DSRRL_CORE_ISLANDS_VERSION
+            "] STATE TRANSACTION ONLY BISECT: full routing/preparation plus begin(snapshot+mutation) and restore are active, but no replacement Draw/DrawIndexed is issued.");
+    } else if (k_drawtime_islands_runtime_enabled &&
         k_draw_callbacks_runtime_enabled &&
         k_empty_draw_callback_bisect) {
         reshade::log::message(
