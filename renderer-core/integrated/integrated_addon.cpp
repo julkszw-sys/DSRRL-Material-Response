@@ -7235,13 +7235,16 @@ void unregister_events()
     if (k_drawtime_islands_runtime_enabled &&
         k_draw_callbacks_runtime_enabled) {
         reshade::unregister_event<reshade::addon_event::present>(on_present);
+        reshade::unregister_event<reshade::addon_event::draw_indexed>(on_draw_indexed);
+        reshade::unregister_event<reshade::addon_event::draw>(on_draw);
+    }
+
+    if (k_drawtime_islands_runtime_enabled &&
+        k_draw_callbacks_runtime_enabled)
         reshade::unregister_event<
             reshade::addon_event::
                 bind_render_targets_and_depth_stencil>(
                     on_bind_render_targets_and_depth_stencil_profile);
-        reshade::unregister_event<reshade::addon_event::draw_indexed>(on_draw_indexed);
-        reshade::unregister_event<reshade::addon_event::draw>(on_draw);
-    }
     if (k_drawtime_islands_runtime_enabled &&
         k_pmetal_srv_shadow_runtime_enabled)
         reshade::unregister_event<reshade::addon_event::push_descriptors>(on_push_descriptors);
