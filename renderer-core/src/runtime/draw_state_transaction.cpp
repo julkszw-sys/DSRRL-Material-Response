@@ -372,7 +372,8 @@ void draw_state_transaction_runtime::release_state(
     for (std::uint32_t i = 0;
          i < state.sampler_count;
          ++i)
-        if (state.samplers[i].sampler != nullptr)
+        if (state.samplers[i].sampler != nullptr &&
+            state.samplers[i].owns_reference)
             state.samplers[i].sampler->Release();
 
     // context1 is borrowed from the runtime cache. The cache owns the COM
@@ -517,10 +518,26 @@ bool draw_state_transaction_runtime::begin(
          ++i) {
         auto &capture = state.samplers[i];
         capture.slot = mutation.samplers[i].slot;
-        ctx->PSGetSamplers(
-            capture.slot,
-            1u,
-            &capture.sampler);
+
+        ID3D11SamplerState *shadow = nullptr;
+        if (pixel_sampler_shadow_snapshot(
+                cmd_list,
+                capture.slot,
+                1u,
+                &shadow)) {
+            capture.sampler = shadow;
+            if (capture.sampler != nullptr) {
+                capture.sampler->AddRef();
+                capture.owns_reference = true;
+            }
+        } else {
+            ctx->PSGetSamplers(
+                capture.slot,
+                1u,
+                &capture.sampler);
+            capture.owns_reference =
+                capture.sampler != nullptr;
+        }
     }
 
     core::render_patch_plan plan{};
