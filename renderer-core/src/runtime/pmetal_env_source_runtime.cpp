@@ -946,6 +946,471 @@ bool read_exact_source(
     return true;
 }
 
+
+bool write_source_hook_code(
+    void *target,
+    const void *bytes,
+    std::size_t size) noexcept
+{
+    DWORD old = 0u;
+    if (target == nullptr ||
+        bytes == nullptr ||
+        size == 0u ||
+        !VirtualProtect(
+            target,
+            size,
+            PAGE_EXECUTE_READWRITE,
+            &old))
+        return false;
+
+    std::memcpy(
+        target,
+        bytes,
+        size);
+    const bool flushed =
+        FlushInstructionCache(
+            GetCurrentProcess(),
+            target,
+            size) != FALSE;
+
+    DWORD ignored = 0u;
+    VirtualProtect(
+        target,
+        size,
+        old,
+        &ignored);
+    return flushed;
+}
+
+bool prepare_source_hook(
+    source_hook &hook,
+    std::uintptr_t base,
+    std::uintptr_t rva,
+    const std::array<std::uint8_t,14> &preimage,
+    void *detour) noexcept
+{
+    auto *target =
+        reinterpret_cast<std::uint8_t *>(
+            base + rva);
+
+    if (base == 0u ||
+        detour == nullptr ||
+        !readable_range(
+            target,
+            preimage.size()) ||
+        std::memcmp(
+            target,
+            preimage.data(),
+            preimage.size()) != 0)
+        return false;
+
+    auto *trampoline =
+        static_cast<std::uint8_t *>(
+            VirtualAlloc(
+                nullptr,
+                preimage.size() + 14u,
+                MEM_COMMIT | MEM_RESERVE,
+                PAGE_EXECUTE_READWRITE));
+    if (trampoline == nullptr)
+        return false;
+
+    std::memcpy(
+        trampoline,
+        target,
+        preimage.size());
+
+    auto *tail =
+        trampoline +
+        preimage.size();
+    tail[0] = 0xffu;
+    tail[1] = 0x25u;
+    std::uint32_t zero = 0u;
+    std::memcpy(
+        tail + 2u,
+        &zero,
+        sizeof(zero));
+    const auto return_address =
+        static_cast<std::uint64_t>(
+            reinterpret_cast<std::uintptr_t>(
+                target + preimage.size()));
+    std::memcpy(
+        tail + 6u,
+        &return_address,
+        sizeof(return_address));
+
+    if (FlushInstructionCache(
+            GetCurrentProcess(),
+            trampoline,
+            preimage.size() + 14u) == FALSE) {
+        VirtualFree(
+            trampoline,
+            0u,
+            MEM_RELEASE);
+        return false;
+    }
+
+    hook.target = target;
+    hook.trampoline = trampoline;
+    hook.detour = detour;
+    hook.stolen = preimage.size();
+    hook.original = preimage;
+    hook.patched = false;
+    return true;
+}
+
+bool arm_source_hook(
+    source_hook &hook) noexcept
+{
+    if (hook.target == nullptr ||
+        hook.trampoline == nullptr ||
+        hook.detour == nullptr ||
+        hook.stolen != 14u)
+        return false;
+
+    std::array<std::uint8_t,14> patch{};
+    patch[0] = 0xffu;
+    patch[1] = 0x25u;
+    std::uint32_t zero = 0u;
+    std::memcpy(
+        patch.data() + 2u,
+        &zero,
+        sizeof(zero));
+    const auto destination =
+        static_cast<std::uint64_t>(
+            reinterpret_cast<std::uintptr_t>(
+                hook.detour));
+    std::memcpy(
+        patch.data() + 6u,
+        &destination,
+        sizeof(destination));
+
+    if (!write_source_hook_code(
+            hook.target,
+            patch.data(),
+            patch.size()))
+        return false;
+
+    hook.patched = true;
+    return true;
+}
+
+bool restore_source_hook(
+    source_hook &hook) noexcept
+{
+    if (hook.patched) {
+        if (hook.target == nullptr ||
+            !write_source_hook_code(
+                hook.target,
+                hook.original.data(),
+                hook.stolen) ||
+            std::memcmp(
+                hook.target,
+                hook.original.data(),
+                hook.stolen) != 0)
+            return false;
+        hook.patched = false;
+    }
+
+    if (hook.trampoline != nullptr &&
+        VirtualFree(
+            hook.trampoline,
+            0u,
+            MEM_RELEASE) == FALSE)
+        return false;
+
+    hook = {};
+    return true;
+}
+
+void publish_hook_source(
+    const f4 &a,
+    const f4 &b,
+    float beta,
+    std::uint64_t bank_a,
+    std::uint64_t bank_b,
+    std::uint32_t row_a,
+    std::uint32_t row_b) noexcept
+{
+    if (!std::isfinite(beta))
+        return;
+
+    pmetal_envspec_source next{};
+    next.a = {a.x,a.y,a.z};
+    next.b = {b.x,b.y,b.z};
+    next.beta =
+        std::clamp(
+            beta,
+            0.0f,
+            1.0f);
+    next.bank_signature_a = bank_a;
+    next.bank_signature_b = bank_b;
+    next.row_id_a = row_a;
+    next.row_id_b = row_b;
+
+    const auto serial =
+        g_hook_source_serial.fetch_add(
+            1u,
+            std::memory_order_relaxed) +
+        1u;
+    next.serial = serial;
+    next.generation = serial;
+
+    g_hook_source_tls = {
+        next,
+        serial,
+        true
+    };
+
+    {
+        std::lock_guard<std::mutex> lock(
+            g_hook_source_mutex);
+        g_hook_source_global = {
+            next,
+            serial,
+            true
+        };
+    }
+
+    g_hook_publish.fetch_add(
+        1u,
+        std::memory_order_relaxed);
+}
+
+bool consume_hook_source(
+    pmetal_envspec_source &out) noexcept
+{
+    out = {};
+
+    if (g_hook_source_tls.valid) {
+        out =
+            g_hook_source_tls.source;
+        g_hook_source_tls.valid = false;
+        g_hook_consume.fetch_add(
+            1u,
+            std::memory_order_relaxed);
+        return true;
+    }
+
+    std::lock_guard<std::mutex> lock(
+        g_hook_source_mutex);
+    if (!g_hook_source_global.valid ||
+        g_hook_source_global.serial == 0u ||
+        g_hook_source_global.serial ==
+            g_hook_source_consumed_serial)
+        return false;
+
+    out =
+        g_hook_source_global.source;
+    g_hook_source_consumed_serial =
+        g_hook_source_global.serial;
+    g_hook_consume.fetch_add(
+        1u,
+        std::memory_order_relaxed);
+    return true;
+}
+
+void clear_hook_source() noexcept
+{
+    g_hook_source_tls = {};
+    std::lock_guard<std::mutex> lock(
+        g_hook_source_mutex);
+    g_hook_source_global = {};
+    g_hook_source_consumed_serial = 0u;
+}
+
+void __fastcall envspec_single_hook_entry(
+    void *source,
+    float *host_out,
+    int selector) noexcept
+{
+    g_hook_single_seen.fetch_add(
+        1u,
+        std::memory_order_relaxed);
+
+    f4 donor{};
+    std::uint64_t bank = 0u;
+    std::uint32_t row = 0u;
+    const bool donor_ok =
+        read_exact_source(
+            source,
+            selector,
+            donor,
+            bank,
+            row);
+
+    if (g_envspec_single_original != nullptr)
+        g_envspec_single_original(
+            source,
+            host_out,
+            selector);
+
+    if (donor_ok)
+        publish_hook_source(
+            donor,
+            donor,
+            0.0f,
+            bank,
+            bank,
+            row,
+            row);
+}
+
+void __fastcall envspec_blend_hook_entry(
+    float *host_out,
+    void *source_a,
+    int selector_a,
+    void *source_b,
+    int selector_b,
+    float beta) noexcept
+{
+    g_hook_blend_seen.fetch_add(
+        1u,
+        std::memory_order_relaxed);
+
+    const auto endpoints =
+        pmetal_selector_policy::select(
+            static_cast<std::int16_t>(
+                selector_a),
+            static_cast<std::int16_t>(
+                selector_b),
+            beta);
+
+    f4 a{};
+    f4 b{};
+    std::uint64_t bank_a = 0u;
+    std::uint64_t bank_b = 0u;
+    std::uint32_t row_a = 0u;
+    std::uint32_t row_b = 0u;
+
+    bool donor_ok = false;
+    if (endpoints.valid) {
+        donor_ok =
+            read_exact_source(
+                source_a,
+                endpoints.a,
+                a,
+                bank_a,
+                row_a);
+
+        if (donor_ok) {
+            if (endpoints.beta == 0.0f ||
+                endpoints.a == endpoints.b) {
+                b = a;
+                bank_b = bank_a;
+                row_b = row_a;
+            } else {
+                donor_ok =
+                    read_exact_source(
+                        source_b,
+                        endpoints.b,
+                        b,
+                        bank_b,
+                        row_b);
+            }
+        }
+    }
+
+    if (g_envspec_blend_original != nullptr)
+        g_envspec_blend_original(
+            host_out,
+            source_a,
+            selector_a,
+            source_b,
+            selector_b,
+            beta);
+
+    if (donor_ok)
+        publish_hook_source(
+            a,
+            b,
+            endpoints.beta,
+            bank_a,
+            bank_b,
+            row_a,
+            row_b);
+}
+
+bool install_envspec_source_hooks(
+    std::uintptr_t base) noexcept
+{
+    if (g_envspec_single_hook.patched ||
+        g_envspec_blend_hook.patched)
+        return false;
+
+    if (!prepare_source_hook(
+            g_envspec_single_hook,
+            base,
+            k_envspec_single_rva,
+            k_envspec_single_preimage,
+            reinterpret_cast<void *>(
+                &envspec_single_hook_entry)))
+        return false;
+
+    g_envspec_single_original =
+        reinterpret_cast<envspec_single_fn>(
+            g_envspec_single_hook.trampoline);
+
+    if (!prepare_source_hook(
+            g_envspec_blend_hook,
+            base,
+            k_envspec_blend_rva,
+            k_envspec_blend_preimage,
+            reinterpret_cast<void *>(
+                &envspec_blend_hook_entry))) {
+        (void)restore_source_hook(
+            g_envspec_single_hook);
+        g_envspec_single_original = nullptr;
+        return false;
+    }
+
+    g_envspec_blend_original =
+        reinterpret_cast<envspec_blend_fn>(
+            g_envspec_blend_hook.trampoline);
+
+    if (!arm_source_hook(
+            g_envspec_single_hook) ||
+        !arm_source_hook(
+            g_envspec_blend_hook)) {
+        const bool blend_restored =
+            restore_source_hook(
+                g_envspec_blend_hook);
+        const bool single_restored =
+            restore_source_hook(
+                g_envspec_single_hook);
+        g_hook_restore_failed.store(
+            !(blend_restored &&
+              single_restored),
+            std::memory_order_relaxed);
+        g_envspec_single_original = nullptr;
+        g_envspec_blend_original = nullptr;
+        return false;
+    }
+
+    return true;
+}
+
+bool uninstall_envspec_source_hooks() noexcept
+{
+    const bool blend_ok =
+        restore_source_hook(
+            g_envspec_blend_hook);
+    const bool single_ok =
+        restore_source_hook(
+            g_envspec_single_hook);
+
+    if (!(blend_ok &&
+          single_ok)) {
+        g_hook_restore_failed.store(
+            true,
+            std::memory_order_relaxed);
+        return false;
+    }
+
+    g_envspec_single_original = nullptr;
+    g_envspec_blend_original = nullptr;
+    return true;
+}
+
 std::uintptr_t g_source_base = 0u;
 std::atomic_bool g_selector_enabled{false};
 std::atomic<std::uint64_t> g_selector_epoch{1u};
