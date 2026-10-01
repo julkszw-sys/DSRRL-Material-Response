@@ -6,7 +6,6 @@
 #endif
 
 #include "dsrrl/runtime/fixed_pointlight_draw_runtime.hpp"
-#include "dsrrl/runtime/pointlight_ptde_source_runtime.hpp"
 #include "dsrrl/runtime/runtime_hot_telemetry.hpp"
 #include "dsrrl/runtime/flver_identity_transport.hpp"
 
@@ -37,14 +36,24 @@ struct f4 {
 
 struct snapshot {
     std::uintptr_t owner=0u;
-    std::uint64_t serial=0u,epoch=0u;
-    std::array<f4,8> raw_q{};
-    std::uint8_t valid_mask=0u,captured_count=0u;
-};
-struct gpu_payload {
-    ID3D11Device *device=nullptr;
-    ID3D11Buffer *buffer=nullptr;
-    ID3D11ShaderResourceView *srv=nullptr;
+    std::uint64_t serial=0u;
+    std::array<f4,4> raw_q{};
+    std::uint8_t valid_mask=0u;
+    std::uint8_t captured_count=0u;
+    mutable std::atomic_bool consumed{false};
+    std::shared_ptr<std::atomic<std::uint64_t>> owner_consumed_serial{};
+
+    mutable std::mutex gpu_mutex;
+    mutable ID3D11Device *device=nullptr;
+    mutable ID3D11Buffer *buffer=nullptr;
+    mutable ID3D11ShaderResourceView *srv=nullptr;
+
+    ~snapshot()
+    {
+        if(srv!=nullptr) srv->Release();
+        if(buffer!=nullptr) buffer->Release();
+        if(device!=nullptr) device->Release();
+    }
 };
 
 struct capture_hook {
@@ -65,16 +74,30 @@ std::uintptr_t g_base=0u;
 fixed_pointlight_draw_runtime *g_runtime=nullptr;
 capture_hook g_hook{};
 
-// No process-wide producer publication. Cross-thread joins fail open.
+std::mutex g_mutex;
+std::unordered_map<std::uintptr_t,std::shared_ptr<snapshot>> g_snapshots;
+std::unordered_map<
+    std::uintptr_t,
+    std::shared_ptr<std::atomic<std::uint64_t>>>
+    g_owner_consumed_serial;
+std::atomic_bool g_have_snapshots{false};
 std::atomic<std::uint64_t> g_snapshot_epoch{1u};
-thread_local snapshot g_producer_snapshot{},g_draw_snapshot{};
-thread_local std::uint64_t g_local_serial=0u,g_consumed_serial=0u;
-std::mutex g_gpu_mutex;
-std::unordered_map<ID3D11DeviceContext *,gpu_payload> g_gpu_by_context;
+
+struct selector_snapshot_tls {
+    std::uintptr_t owner=0u;
+    std::uint64_t epoch=0u;
+    std::shared_ptr<const snapshot> selected{};
+    bool present=false;
+};
+
+thread_local std::shared_ptr<snapshot> g_producer_snapshot{};
+thread_local std::shared_ptr<const snapshot> g_draw_snapshot{};
+thread_local selector_snapshot_tls g_selector_cache{};
 
 std::atomic_bool g_enabled{false};
 std::atomic_bool g_quarantined{false};
 std::atomic_bool g_restore_failed{false};
+std::atomic<std::uint64_t> g_serial{0u};
 std::atomic<std::uint64_t> g_captures{0u};
 std::atomic<std::uint64_t> g_restarts{0u};
 std::atomic<std::uint64_t> g_rejects{0u};
@@ -159,47 +182,75 @@ void __fastcall capture_callback(
     void *owner,
     std::uint32_t slot,
     const float *raw,
-    void *source) noexcept
+    void *) noexcept
 {
     try {
         if(!g_enabled.load() || g_quarantined.load() ||
            owner==nullptr || raw==nullptr || slot>=4u){
-            g_producer_snapshot={};
             telemetry::hot_count(g_rejects);
             return;
         }
 
-        std::array<float,8> donor_raw{};
-        std::memcpy(donor_raw.data(),raw-4,sizeof(donor_raw));
-        const bool donor_ready=pointlight_ptde_source::capture(source,g_base,donor_raw);
         f4 value{};
-        std::memcpy(&value,donor_raw.data()+4,sizeof(value));
+        std::memcpy(&value,raw,sizeof(value));
         if(!std::isfinite(value.x) || !std::isfinite(value.y) ||
            !std::isfinite(value.z) || !std::isfinite(value.w)){
-            g_producer_snapshot={};
             telemetry::hot_count(g_rejects);
             return;
         }
 
         const auto owner_key=reinterpret_cast<std::uintptr_t>(owner);
-        const auto epoch=g_snapshot_epoch.load(std::memory_order_acquire);
+
         if(slot==0u){
-            g_producer_snapshot={};
-            g_producer_snapshot.owner=owner_key;
-            g_producer_snapshot.serial=++g_local_serial;
-            g_producer_snapshot.epoch=epoch;
+            auto next=std::make_shared<snapshot>();
+            next->owner=owner_key;
+            next->serial=g_serial.fetch_add(1u,std::memory_order_relaxed)+1u;
+            g_producer_snapshot=std::move(next);
             telemetry::hot_count(g_restarts);
         }
-        auto &current=g_producer_snapshot;
-        if(!donor_ready || current.epoch!=epoch || current.owner!=owner_key || current.captured_count!=slot){
+
+        auto current=g_producer_snapshot;
+        if(!current || current->owner!=owner_key ||
+           current->captured_count!=slot){
             telemetry::hot_count(g_rejects);
-            current={};
+            g_producer_snapshot.reset();
             return;
         }
-        current.raw_q[slot]=value;
-        current.raw_q[4u+slot]={0.0f,0.0f,0.0f,donor_raw[3]};
-        current.valid_mask=static_cast<std::uint8_t>(current.valid_mask | (1u<<slot));
-        current.captured_count=static_cast<std::uint8_t>(slot+1u);
+
+        current->raw_q[slot]=value;
+        current->valid_mask=static_cast<std::uint8_t>(
+            current->valid_mask | (1u<<slot));
+        current->captured_count=static_cast<std::uint8_t>(slot+1u);
+
+        // Only 2-light and 4-light payloads are legal Fixed PointLight
+        // consumer states. Publishing slot 0/2 partials only invalidates every
+        // selector TLS cache and takes the global map mutex for states that
+        // prepare_t19() must reject anyway.
+        const bool publishable_count =
+            current->captured_count==2u ||
+            current->captured_count==4u;
+        if(publishable_count){
+            std::lock_guard<std::mutex> lock(g_mutex);
+
+            if(!current->owner_consumed_serial){
+                auto &owner_serial=
+                    g_owner_consumed_serial[owner_key];
+                if(!owner_serial)
+                    owner_serial=
+                        std::make_shared<
+                            std::atomic<std::uint64_t>>(0u);
+                current->owner_consumed_serial=
+                    owner_serial;
+            }
+
+            g_snapshots[owner_key]=current;
+            g_snapshot_epoch.fetch_add(
+                1u,
+                std::memory_order_release);
+            g_have_snapshots.store(
+                true,
+                std::memory_order_release);
+        }
 
         telemetry::hot_count(g_captures);
     } catch (...) {
@@ -342,55 +393,74 @@ bool restore_capture_hook() noexcept
     return ok;
 }
 
-void release_gpu(gpu_payload &gpu) noexcept {
-    if(gpu.srv) gpu.srv->Release();
-    if(gpu.buffer) gpu.buffer->Release();
-    if(gpu.device) gpu.device->Release();
-    gpu={};
+ID3D11ShaderResourceView *realize_t19(
+    const std::shared_ptr<const snapshot> &selected,
+    ID3D11Device *device) noexcept
+{
+    if(!selected || device==nullptr)
+        return nullptr;
+
+    std::lock_guard<std::mutex> lock(selected->gpu_mutex);
+    if(selected->device!=nullptr && selected->device!=device)
+        return nullptr;
+
+    if(selected->srv!=nullptr){
+        selected->srv->AddRef();
+        telemetry::hot_count(g_t19_hit);
+        return selected->srv;
+    }
+
+    D3D11_BUFFER_DESC desc{};
+    desc.ByteWidth=static_cast<UINT>(sizeof(selected->raw_q));
+    desc.Usage=D3D11_USAGE_IMMUTABLE;
+    desc.BindFlags=D3D11_BIND_SHADER_RESOURCE;
+    desc.MiscFlags=D3D11_RESOURCE_MISC_BUFFER_STRUCTURED;
+    desc.StructureByteStride=sizeof(f4);
+
+    D3D11_SUBRESOURCE_DATA init{};
+    init.pSysMem=selected->raw_q.data();
+
+    ID3D11Buffer *buffer=nullptr;
+    if(FAILED(device->CreateBuffer(&desc,&init,&buffer)) || buffer==nullptr)
+        return nullptr;
+
+    D3D11_SHADER_RESOURCE_VIEW_DESC view_desc{};
+    view_desc.Format=DXGI_FORMAT_UNKNOWN;
+    view_desc.ViewDimension=D3D11_SRV_DIMENSION_BUFFER;
+    view_desc.Buffer.FirstElement=0u;
+    view_desc.Buffer.NumElements=4u;
+
+    ID3D11ShaderResourceView *srv=nullptr;
+    if(FAILED(device->CreateShaderResourceView(buffer,&view_desc,&srv)) || srv==nullptr){
+        buffer->Release();
+        return nullptr;
+    }
+
+    if(selected->device==nullptr){
+        selected->device=device;
+        device->AddRef();
+    }
+    selected->buffer=buffer;
+    selected->srv=srv;
+    srv->AddRef();
+    telemetry::hot_count(g_t19_create);
+    return srv;
 }
-ID3D11ShaderResourceView *realize_t19(const snapshot &selected,ID3D11DeviceContext *context) noexcept {
-    ID3D11Device *device=nullptr; context->GetDevice(&device);
-    if(!device) return nullptr;
-    std::lock_guard<std::mutex> lock(g_gpu_mutex);
-    decltype(g_gpu_by_context)::iterator entry;
-    try { entry=g_gpu_by_context.try_emplace(context).first; }
-    catch(...) { device->Release(); return nullptr; }
-    auto &gpu=entry->second;
-    if(gpu.device && gpu.device!=device) release_gpu(gpu);
-    if(!gpu.buffer){
-        D3D11_BUFFER_DESC desc{};
-        desc.ByteWidth=sizeof(selected.raw_q);
-        desc.Usage=D3D11_USAGE_DYNAMIC;
-        desc.BindFlags=D3D11_BIND_SHADER_RESOURCE;
-        desc.CPUAccessFlags=D3D11_CPU_ACCESS_WRITE;
-        desc.MiscFlags=D3D11_RESOURCE_MISC_BUFFER_STRUCTURED;
-        desc.StructureByteStride=sizeof(f4);
-        if(FAILED(device->CreateBuffer(&desc,nullptr,&gpu.buffer))){device->Release();return nullptr;}
-        D3D11_SHADER_RESOURCE_VIEW_DESC view_desc{};
-        view_desc.Format=DXGI_FORMAT_UNKNOWN;
-        view_desc.ViewDimension=D3D11_SRV_DIMENSION_BUFFER;
-        view_desc.Buffer.NumElements=8u;
-        if(FAILED(device->CreateShaderResourceView(gpu.buffer,&view_desc,&gpu.srv))){
-            release_gpu(gpu);device->Release();return nullptr;
-        }
-        gpu.device=device; device->AddRef();
-        telemetry::hot_count(g_t19_create);
-    }else telemetry::hot_count(g_t19_hit);
-    device->Release();
-    D3D11_MAPPED_SUBRESOURCE mapped{};
-    // One resource per recording context prevents another context's Map from
-    // replacing the payload between prepare and bind. DISCARD owns each draw.
-    if(FAILED(context->Map(gpu.buffer,0u,D3D11_MAP_WRITE_DISCARD,0u,&mapped)))return nullptr;
-    std::memcpy(mapped.pData,selected.raw_q.data(),sizeof(selected.raw_q));
-    context->Unmap(gpu.buffer,0u);
-    gpu.srv->AddRef();return gpu.srv;
-}
-void clear_state() noexcept {
-    g_snapshot_epoch.fetch_add(1u,std::memory_order_acq_rel);
-    g_producer_snapshot={};g_draw_snapshot={};
-    std::lock_guard<std::mutex> lock(g_gpu_mutex);
-    for(auto &entry:g_gpu_by_context) release_gpu(entry.second);
-    g_gpu_by_context.clear();
+
+void clear_state() noexcept
+{
+    g_producer_snapshot.reset();
+    g_draw_snapshot.reset();
+    std::lock_guard<std::mutex> lock(g_mutex);
+    g_snapshots.clear();
+    g_owner_consumed_serial.clear();
+    g_snapshot_epoch.fetch_add(
+        1u,
+        std::memory_order_release);
+    g_selector_cache={};
+    g_have_snapshots.store(
+        false,
+        std::memory_order_release);
 }
 
 } // namespace
@@ -445,37 +515,165 @@ void fixed_pointlight_draw_runtime::uninstall() noexcept
     g_base=0u;
 }
 
-void fixed_pointlight_draw_runtime::selector_event(void *owner) noexcept {
+void fixed_pointlight_draw_runtime::selector_event(void *owner) noexcept
+{
     telemetry::hot_count(g_selector_seen);
-    g_draw_snapshot={};
-    if(!g_enabled.load() || g_quarantined.load() || !owner) return;
-    const auto &selected=g_producer_snapshot;
-    if(selected.owner!=reinterpret_cast<std::uintptr_t>(owner)||
-       selected.epoch!=g_snapshot_epoch.load(std::memory_order_acquire)||
-       !selected.serial||selected.serial<=g_consumed_serial){
-        telemetry::hot_count(g_selector_stale);return;
+    g_draw_snapshot.reset();
+
+    if(!g_enabled.load() || g_quarantined.load() || owner==nullptr)
+        return;
+
+    const auto key=reinterpret_cast<std::uintptr_t>(owner);
+
+    // Producer and selector normally execute on the same renderer thread.
+    // Reuse the engine-live producer snapshot directly when it already
+    // represents a legal 2/4-light payload. The synchronized owner map remains
+    // the cross-thread fallback, not the normal path.
+    const auto producer=g_producer_snapshot;
+    if(producer &&
+       producer->owner==key &&
+       (producer->captured_count==2u ||
+        producer->captured_count==4u) &&
+       producer->owner_consumed_serial){
+        g_draw_snapshot=producer;
+        g_selector_cache={
+            key,
+            g_snapshot_epoch.load(
+                std::memory_order_relaxed),
+            producer,
+            true
+        };
+        telemetry::hot_count(g_selector_match);
+        return;
     }
-    g_draw_snapshot=selected;
+
+    // The FLVER selector semantic cut is shared infrastructure, so this
+    // PointLight-local callback can still be invoked at very high frequency
+    // even when the fixed PointLight producer has never published a complete
+    // snapshot. Avoid a guaranteed mutex/map miss in that state.
+    if(!g_have_snapshots.load(
+            std::memory_order_acquire)){
+        telemetry::hot_count(g_selector_stale);
+        return;
+    }
+
+    const auto epoch=
+        g_snapshot_epoch.load(
+            std::memory_order_acquire);
+    std::shared_ptr<const snapshot> selected{};
+
+    if(g_selector_cache.owner==key &&
+       g_selector_cache.epoch==epoch){
+        if(!g_selector_cache.present){
+            telemetry::hot_count(g_selector_stale);
+            return;
+        }
+        selected=g_selector_cache.selected;
+    }else{
+        std::lock_guard<std::mutex> lock(g_mutex);
+        const auto it=g_snapshots.find(key);
+        if(it!=g_snapshots.end())
+            selected=it->second;
+
+        g_selector_cache={
+            key,
+            g_snapshot_epoch.load(
+                std::memory_order_relaxed),
+            selected,
+            selected!=nullptr
+        };
+    }
+
+    if(!selected){
+        telemetry::hot_count(g_selector_stale);
+        return;
+    }
+
+    g_draw_snapshot=std::move(selected);
     telemetry::hot_count(g_selector_match);
 }
+
 bool fixed_pointlight_draw_runtime::prepare_t19(
-    ID3D11DeviceContext *context,std::uint8_t expected_count,
-    prepared_fixed_pointlight_draw &prepared) noexcept {
+    ID3D11DeviceContext *context,
+    std::uint8_t expected_count,
+    prepared_fixed_pointlight_draw &prepared) noexcept
+{
     prepared={};
-    if(!g_enabled.load()||g_quarantined.load()||!context||
-       (expected_count!=2u&&expected_count!=4u))return false;
-    const auto &selected=g_draw_snapshot;
-    if(!selected.owner||selected.epoch!=g_snapshot_epoch.load(std::memory_order_acquire)||
-       selected.serial<=g_consumed_serial||selected.captured_count!=expected_count||
-       selected.valid_mask!=static_cast<std::uint8_t>((1u<<expected_count)-1u))return false;
-    auto *srv=realize_t19(selected,context);
-    if(!srv)return false;
-    g_consumed_serial=selected.serial;
+    if(!g_enabled.load() || g_quarantined.load() ||
+       context==nullptr || !g_draw_snapshot ||
+       (expected_count!=2u && expected_count!=4u))
+        return false;
+
+    const auto selected=g_draw_snapshot;
+    const auto expected_mask=static_cast<std::uint8_t>((1u<<expected_count)-1u);
+    if(selected->captured_count!=expected_count ||
+       selected->valid_mask!=expected_mask ||
+       !selected->owner_consumed_serial)
+        return false;
+
+    const auto last_consumed=
+        selected->owner_consumed_serial->load(
+            std::memory_order_acquire);
+    if(last_consumed>=selected->serial){
+        telemetry::hot_count(g_selector_stale);
+        return false;
+    }
+
+    bool expected_consumed=false;
+    if(!selected->consumed.compare_exchange_strong(
+            expected_consumed,
+            true,
+            std::memory_order_acq_rel,
+            std::memory_order_acquire)){
+        telemetry::hot_count(g_selector_stale);
+        return false;
+    }
+
+    ID3D11Device *device=nullptr;
+    context->GetDevice(&device);
+    if(device==nullptr){
+        selected->consumed.store(
+            false,
+            std::memory_order_release);
+        return false;
+    }
+
+    auto *srv=realize_t19(selected,device);
+    device->Release();
+    if(srv==nullptr){
+        selected->consumed.store(
+            false,
+            std::memory_order_release);
+        return false;
+    }
+
+    auto observed=
+        selected->owner_consumed_serial->load(
+            std::memory_order_acquire);
+    for(;;){
+        if(observed>=selected->serial){
+            srv->Release();
+            telemetry::hot_count(g_selector_stale);
+            return false;
+        }
+
+        if(selected->owner_consumed_serial->
+                compare_exchange_weak(
+                    observed,
+                    selected->serial,
+                    std::memory_order_acq_rel,
+                    std::memory_order_acquire))
+            break;
+    }
+
     prepared.t19=srv;
-    prepared.producer_serial=selected.serial;
-    prepared.captured_light_count=selected.captured_count;
-    prepared.owner_verified=true;prepared.producer_serial_fresh=true;prepared.ready=true;
-    telemetry::hot_count(g_requests);return true;
+    prepared.producer_serial=selected->serial;
+    prepared.captured_light_count=selected->captured_count;
+    prepared.owner_verified=true;
+    prepared.producer_serial_fresh=true;
+    prepared.ready=true;
+    telemetry::hot_count(g_requests);
+    return true;
 }
 
 void fixed_pointlight_draw_runtime::release_prepared_draw(
@@ -488,7 +686,7 @@ void fixed_pointlight_draw_runtime::release_prepared_draw(
 
 void fixed_pointlight_draw_runtime::consume_draw_selection() noexcept
 {
-    g_draw_snapshot={};
+    g_draw_snapshot.reset();
 }
 
 void fixed_pointlight_draw_runtime::on_destroy_device(
@@ -502,10 +700,16 @@ void fixed_pointlight_draw_runtime::on_destroy_device(
     if(native==nullptr)
         return;
 
-    std::lock_guard<std::mutex> lock(g_gpu_mutex);
-    for(auto it=g_gpu_by_context.begin();it!=g_gpu_by_context.end();){
-        if(it->second.device==native){release_gpu(it->second);it=g_gpu_by_context.erase(it);}
-        else ++it;
+    std::lock_guard<std::mutex> lock(g_mutex);
+    for(auto &entry:g_snapshots){
+        auto &s=entry.second;
+        if(!s) continue;
+        std::lock_guard<std::mutex> gpu(s->gpu_mutex);
+        if(s->device!=native)
+            continue;
+        if(s->srv!=nullptr){s->srv->Release();s->srv=nullptr;}
+        if(s->buffer!=nullptr){s->buffer->Release();s->buffer=nullptr;}
+        if(s->device!=nullptr){s->device->Release();s->device=nullptr;}
     }
 }
 
@@ -530,6 +734,8 @@ fixed_pointlight_telemetry fixed_pointlight_draw_runtime::telemetry() const noex
 void fixed_pointlight_draw_runtime::reset() noexcept
 {
     clear_state();
+    g_selector_cache={};
+    g_serial.store(0u);
     g_captures.store(0u);
     g_restarts.store(0u);
     g_rejects.store(0u);
