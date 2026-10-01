@@ -840,26 +840,29 @@ bool install(
  g_base=reinterpret_cast<std::uintptr_t>(GetModuleHandleW(nullptr));
  if(!g_base)return false;
  g_state.provenance_ok=true;
+
+ // FLVER bisect E: keep parser/destructor/MTD support hooks, but do not
+ // install the selector hot-path hook. This isolates selector callback cost.
  if(!prep(g_p,k_parse,k_parse_b,reinterpret_cast<void*>(&parse_entry)))goto fail;
  g_po=reinterpret_cast<parser_fn>(g_p.trampoline);
  if(!prep(g_d,k_destroy,k_destroy_b,reinterpret_cast<void*>(&destroy_entry)))goto fail;
  g_do=reinterpret_cast<destructor_fn>(g_d.trampoline);
  if(!prep(g_m,k_mtd,k_mtd_b,reinterpret_cast<void*>(&mtd_entry)))goto fail;
  g_mo=reinterpret_cast<mtd_fn>(g_m.trampoline);
- if(!prep(g_s,k_selector,k_selector_b,reinterpret_cast<void*>(&dsrrl_flver_selector_hook_entry)))goto fail;
- g_dsrrl_flver_selector_trampoline=g_s.trampoline;
+ g_dsrrl_flver_selector_trampoline=nullptr;
+
  if(enable_clustered_builder){
   if(!prep(g_b,k_builder,k_builder_b,reinterpret_cast<void*>(&dsrrl_clustered_pnts_builder_hook_entry)))goto fail;
   g_dsrrl_flver_builder_trampoline=g_b.trampoline;
  }
- if(!arm(g_p)||!arm(g_d)||!arm(g_m)||!arm(g_s)||
+ if(!arm(g_p)||!arm(g_d)||!arm(g_m)||
     (enable_clustered_builder&&!arm(g_b)))goto fail;
  g_state.parser_armed=true;
  g_state.destructor_armed=true;
  g_state.mtd_armed=true;
- g_state.selector_armed=true;
+ g_state.selector_armed=false;
  g_state.builder_armed=enable_clustered_builder;
- g_state.selector_owner_enrichment=true;
+ g_state.selector_owner_enrichment=false;
  g_state.exact_runtime_material_carrier=true;
  return true;
 fail:
