@@ -36,6 +36,10 @@ jobs:
         shell: pwsh
         run: python renderer-core/tools/audit_runtime_v2_hotpaths.py renderer-core
 
+      - name: Audit Runtime v2 P_Metal single-pass contract
+        shell: pwsh
+        run: python renderer-core/tools/audit_runtime_v2_pmetal_single_pass.py --source-dir renderer-core
+
       - name: Configure Runtime v2 addon
         shell: pwsh
         run: >
