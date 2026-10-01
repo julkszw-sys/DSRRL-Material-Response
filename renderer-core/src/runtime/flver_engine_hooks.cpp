@@ -1359,4 +1359,84 @@ selector_owner_telemetry selector_owner_stats() noexcept
         g_owner_consume_misses.load()
     };
 }
+
+selector_profile_telemetry selector_profile_stats() noexcept
+{
+    selector_profile_telemetry out{};
+#ifdef DSRRL_FLVER_SELECTOR_PROFILE
+    LARGE_INTEGER frequency{};
+    if (QueryPerformanceFrequency(
+            &frequency))
+        out.qpc_frequency =
+            static_cast<std::uint64_t>(
+                frequency.QuadPart);
+
+    out.sample_period =
+        k_selector_profile_sample_period;
+    out.samples =
+        g_selector_profile_samples.load(
+            std::memory_order_relaxed);
+    out.total_ticks =
+        g_selector_profile_total.ticks.load(
+            std::memory_order_relaxed);
+    out.max_total_ticks =
+        g_selector_profile_total.max_ticks.load(
+            std::memory_order_relaxed);
+    out.prefix_ticks =
+        g_selector_profile_prefix.ticks.load(
+            std::memory_order_relaxed);
+    out.resolve_material_ticks =
+        g_selector_profile_resolve_material.ticks.load(
+            std::memory_order_relaxed);
+    out.final_cache_lookup_ticks =
+        g_selector_profile_final_cache.ticks.load(
+            std::memory_order_relaxed);
+    out.final_cache_publish_ticks =
+        g_selector_profile_cache_publish.ticks.load(
+            std::memory_order_relaxed);
+    out.owner_lookup_ticks =
+        g_selector_profile_owner_lookup.ticks.load(
+            std::memory_order_relaxed);
+    out.owner_mtd_enrich_ticks =
+        g_selector_profile_owner_mtd.ticks.load(
+            std::memory_order_relaxed);
+    out.selection_publish_ticks =
+        g_selector_profile_selection_publish.ticks.load(
+            std::memory_order_relaxed);
+    out.pmetal_source_ticks =
+        g_selector_profile_pmetal.ticks.load(
+            std::memory_order_relaxed);
+    out.runtime_mtd_lookup_ticks =
+        g_selector_profile_runtime_mtd.ticks.load(
+            std::memory_order_relaxed);
+    out.runtime_publish_ticks =
+        g_selector_profile_runtime_publish.ticks.load(
+            std::memory_order_relaxed);
+    out.sampled_cache_path =
+        g_selector_profile_cache_path.load(
+            std::memory_order_relaxed);
+    out.sampled_owner_path =
+        g_selector_profile_owner_path.load(
+            std::memory_order_relaxed);
+    out.sampled_runtime_mtd_path =
+        g_selector_profile_runtime_path.load(
+            std::memory_order_relaxed);
+    out.sampled_fail_open_path =
+        g_selector_profile_fail_path.load(
+            std::memory_order_relaxed);
+    out.sampled_early_reject_path =
+        g_selector_profile_early_path.load(
+            std::memory_order_relaxed);
+    out.parse_events =
+        g_selector_profile_parse_events.load(
+            std::memory_order_relaxed);
+    out.mtd_events =
+        g_selector_profile_mtd_events.load(
+            std::memory_order_relaxed);
+    out.destroy_events =
+        g_selector_profile_destroy_events.load(
+            std::memory_order_relaxed);
+#endif
+    return out;
+}
 }
