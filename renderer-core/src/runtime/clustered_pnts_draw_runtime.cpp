@@ -50,6 +50,7 @@ struct draw_selection_tls {
 
 thread_local draw_selection_tls g_draw_selection{};
 thread_local producer_input_snapshot g_producer_input_tls{};
+thread_local std::uint64_t g_local_serial = 0u;
 
 struct gpu_resources {
     ID3D11Device *device = nullptr;
@@ -70,8 +71,6 @@ std::unordered_map<ID3D11DeviceContext *,gpu_resources>
 clustered_pnts_draw_runtime *g_runtime = nullptr;
 std::atomic_bool g_enabled{false};
 std::atomic_bool g_quarantined{false};
-std::atomic<std::uint64_t> g_serial{0u};
-
 std::atomic<std::uint64_t> g_builder_seen{0u};
 std::atomic<std::uint64_t> g_collection_ok{0u};
 std::atomic<std::uint64_t> g_collection_fail{0u};
@@ -705,6 +704,7 @@ void clustered_pnts_draw_runtime::uninstall() noexcept
     g_enabled.store(false);
     consume_draw_selection();
     g_producer_input_tls = {};
+    g_local_serial = 0u;
 
     {
         std::lock_guard<std::mutex> lock(
@@ -739,10 +739,11 @@ void clustered_pnts_draw_runtime::builder_event(
     input.owner =
         reinterpret_cast<std::uintptr_t>(
             renderer_context);
+    // Producer snapshot and selector join are both thread-local and
+    // explicitly fail open across threads. A process-wide atomic serial added
+    // a locked RMW to this extremely hot builder for no semantic benefit.
     input.serial =
-        g_serial.fetch_add(
-            1u,
-            std::memory_order_relaxed) + 1u;
+        ++g_local_serial;
 
     const auto *renderer_bytes =
         static_cast<const std::uint8_t *>(
