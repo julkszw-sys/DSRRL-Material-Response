@@ -516,11 +516,12 @@ void fixed_pointlight_draw_runtime::selector_event(void *owner) noexcept
     if(!g_enabled.load() || g_quarantined.load() || owner==nullptr)
         return;
 
-    // The selector bridge is shared with Upper/Lower, so this callback can be
-    // invoked at very high frequency even when the fixed PointLight producer
-    // has never published a snapshot. Avoid a guaranteed mutex/map miss in
-    // that state. Publication sets this flag under the same map lock before
-    // unlock; clearing resets it under the lock after erasing the map.
+    // The FLVER selector semantic cut is shared infrastructure, so this
+    // PointLight-local callback can still be invoked at very high frequency
+    // even when the fixed PointLight producer has never published a snapshot.
+    // Avoid a guaranteed mutex/map miss in that state. Publication sets this
+    // flag under the same map lock before unlock; clearing resets it under the
+    // lock after erasing the map.
     if(!g_have_snapshots.load(
             std::memory_order_acquire)){
         telemetry::hot_count(g_selector_stale);
