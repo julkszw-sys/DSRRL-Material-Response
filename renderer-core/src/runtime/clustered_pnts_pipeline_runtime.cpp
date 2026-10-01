@@ -295,6 +295,28 @@ bool clustered_pnts_pipeline_runtime::on_bind_pipeline(
             reinterpret_cast<std::uintptr_t>(
                 cmd_list));
 
+    // Common case: the same exact clustered PointLight PS remains bound on
+    // the same command list. Reuse the init-attested TLS state directly and
+    // avoid both registry/map mutexes. Epochs invalidate the shadow on
+    // pipeline destruction/reset or command-binding invalidation.
+    const auto cached_bound_epoch =
+        bound_epoch_.load(
+            std::memory_order_acquire);
+    const auto cached_pipeline_epoch =
+        pipeline_epoch_.load(
+            std::memory_order_acquire);
+    if (bound_tls_.runtime == this &&
+        bound_tls_.command == command &&
+        bound_tls_.epoch == cached_bound_epoch &&
+        bound_tls_.pipeline == pipeline.handle &&
+        bound_tls_.pipeline_epoch ==
+            cached_pipeline_epoch &&
+        bound_tls_.present &&
+        bound_tls_.selected != nullptr) {
+        telemetry::hot_count(bind_hits_);
+        return true;
+    }
+
     // The exact PointLight pipeline registry is the bind-time authority.
     // The integrated route cache is only an optimization and may not suppress
     // this lookup. Negative lookups are epoch-cached per thread, so ordinary
@@ -368,7 +390,10 @@ bool clustered_pnts_pipeline_runtime::on_bind_pipeline(
         command,
         found->second,
         epoch,
-        true
+        true,
+        pipeline.handle,
+        pipeline_epoch_.load(
+            std::memory_order_relaxed)
     };
     telemetry::hot_count(bind_hits_);
     return true;
