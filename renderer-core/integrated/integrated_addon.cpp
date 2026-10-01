@@ -2896,7 +2896,7 @@ void log_state(const char *tag) noexcept
         "unknown=%llu no_owner=%llu failopen=%llu init_ok=%llu "
         "init_bad=%llu binds=%llu quarantine=%u "
         "flver_hook=%u/%u/%u mtd_hook=%u prov=%u owner_enrich=%u actual_carrier=%u restore_fail=%u "
-        "inserts=%llu lookups=%llu hits=%llu misses=%llu erases=%llu invalid=%llu "
+        "inserts=%llu lookups=%llu hits=%llu misses=%llu tls_hit=%llu mutex_fb=%llu erases=%llu invalid=%llu "
         "owner_sel=%llu owner_enriched=%llu owner_auth=%llu owner_actual=%llu owner_fo=%llu "
         "mr_ready=%u mr_eval=%llu mr_would_activate=%llu mr_fo=%llu "
         "mr_payload_ok=%llu mr_payload_fail=%llu "
@@ -2939,6 +2939,8 @@ void log_state(const char *tag) noexcept
         static_cast<unsigned long long>(f.lookups),
         static_cast<unsigned long long>(f.hits),
         static_cast<unsigned long long>(f.misses),
+        static_cast<unsigned long long>(f.tls_hits),
+        static_cast<unsigned long long>(f.mutex_fallbacks),
         static_cast<unsigned long long>(f.erases),
         static_cast<unsigned long long>(f.invalid_raw),
         static_cast<unsigned long long>(m.selector_events),
