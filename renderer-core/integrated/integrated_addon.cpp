@@ -2667,7 +2667,7 @@ void log_effect_matrix(
         detail,
         sizeof(detail),
         "[DSRRL EFFECT DETAIL] "
-        "MR mtd_classified=%u cache_hit=%u selection_published=%u "
+        "MR mtd_classified=%u cache_hit=%u selection_published=%u selector_gates_ul=%u h3=%u "
         "PMetal entry=%u feature=%u material=%u semantic=%u source=%u "
         "receiver_source=%u repl=%u probe=%u spec=%u b12=%u request=%u fail=0x%08X "
         "PMSRC steady=%llu blend=%llu publish=%llu bank_unknown=%llu decode_fail=%llu "
@@ -2679,6 +2679,8 @@ void log_effect_matrix(
         flver.runtime_mtd_classified ? 1u : 0u,
         flver.runtime_mtd_cache_hit ? 1u : 0u,
         flver.runtime_mtd_selection_published ? 1u : 0u,
+        flver.upper_lower_selector_enabled ? 1u : 0u,
+        flver.hemdir3_selector_enabled ? 1u : 0u,
         pmetal.effect_entry_seen ? 1u : 0u,
         pmetal.effect_feature_ready ? 1u : 0u,
         pmetal.effect_material_ready ? 1u : 0u,
