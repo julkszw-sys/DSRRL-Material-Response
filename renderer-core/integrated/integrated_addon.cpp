@@ -6862,9 +6862,18 @@ bool AddonInit(
             "] texture identity hooks FAIL-OPEN: SpecRGB/Diffuse/Normal sidecars remain stock.");
     }
 
+    const bool upper_lower_enabled =
+        g_core.features().enabled(
+            dsrrl::core::operator_id::upper_lower);
+    const bool hemdir3_enabled =
+        g_core.features().enabled(
+            dsrrl::core::operator_id::hemdir3);
+
     const bool flver_hooks =
         dsrrl::runtime::flver_identity_transport::install(
-            k_pointlight_drawtime_runtime_enabled);
+            k_pointlight_drawtime_runtime_enabled,
+            upper_lower_enabled,
+            hemdir3_enabled);
 
     if (!flver_hooks) {
         reshade::log::message(
@@ -6936,9 +6945,6 @@ bool AddonInit(
             "] Bloom FX diagnostic hooks disabled for production runtime.");
     }
 
-    const bool hemdir3_enabled =
-        g_core.features().enabled(
-            dsrrl::core::operator_id::hemdir3);
     const bool hemdir3_mode_hooks =
         !hemdir3_enabled ||
         (flver_hooks &&
@@ -6968,9 +6974,6 @@ bool AddonInit(
             "] Subsurface visible bridge DISABLED by runtime policy; stock DSR body/Subsurface is preserved.");
     }
 
-    const bool upper_lower_enabled =
-        g_core.features().enabled(
-            dsrrl::core::operator_id::upper_lower);
     bool pmetal_envspec_enabled =
         g_core.features().enabled(
             dsrrl::core::operator_id::env_spec);
