@@ -10,9 +10,11 @@
 #include "dsrrl/runtime/runtime_hot_telemetry.hpp"
 #include "dsrrl/runtime/material_owner_selection.hpp"
 #include "dsrrl/runtime/material_owner_producer.hpp"
+#ifndef DSRRL_PHYSICAL_CUT_UL_H3_SUBSURFACE
 #include "dsrrl/runtime/upper_lower_draw_runtime.hpp"
-#include "dsrrl/runtime/pmetal_env_source_runtime.hpp"
 #include "dsrrl/runtime/hemdir3_mode_transport.hpp"
+#endif
+#include "dsrrl/runtime/pmetal_env_source_runtime.hpp"
 #include "dsrrl/runtime/clustered_pnts_draw_runtime.hpp"
 #include "dsrrl/runtime/fixed_pointlight_draw_runtime.hpp"
 #include "dsrrl/operators/material_response/mtd_semantic_census.hpp"
@@ -645,11 +647,13 @@ bool publish_exact_selector_identity(
             identity))
         return false;
 
+#ifndef DSRRL_PHYSICAL_CUT_UL_H3_SUBSURFACE
     if (g_selector_upper_lower_enabled.load(
             std::memory_order_relaxed))
         upper_lower_pmetal_material_event_bridge(
             owner,
             identity);
+#endif
 
     // Route 345 is necessary but not sufficient. The isolated source runtime
     // retains exact semantic/raw-MTD validation before donor decode.
@@ -690,15 +694,20 @@ extern "C" void dsrrl_flver_selector_observer(
  material_owner_selection_clear();
  pmetal_env_source_selector_clear();
 
+#ifndef DSRRL_PHYSICAL_CUT_UL_H3_SUBSURFACE
  if (g_selector_hemdir3_enabled.load(
          std::memory_order_relaxed))
   hemdir3_mode_transport::selector_begin(
       incoming_mode);
+#else
+ (void)incoming_mode;
+#endif
 
  // PointLight owns this exact selector association directly. The bridge is
  // inert unless Fixed PointLight is installed and no longer depends on U/L.
  fixed_pointlight_selector_event_bridge(owner);
 
+#ifndef DSRRL_PHYSICAL_CUT_UL_H3_SUBSURFACE
  if (g_selector_upper_lower_enabled.load(
          std::memory_order_relaxed))
   upper_lower_selector_event_bridge(
@@ -706,6 +715,7 @@ extern "C" void dsrrl_flver_selector_observer(
       ret,
       r14,
       r15);
+#endif
 
  if(g_base==0u || ret==nullptr || material_index<0){telemetry::hot_count(g_owner_fail_open);return;}
  const auto ret_addr=reinterpret_cast<std::uintptr_t>(ret);
@@ -810,12 +820,19 @@ bool install(
     bool enable_hemdir3_selector) noexcept {
  if(g_p.patched||g_s.patched||g_d.patched||g_m.patched||g_b.patched)return false;
  g_state={};
+#ifdef DSRRL_PHYSICAL_CUT_UL_H3_SUBSURFACE
+ (void)enable_upper_lower_selector;
+ (void)enable_hemdir3_selector;
+ g_selector_upper_lower_enabled.store(false,std::memory_order_relaxed);
+ g_selector_hemdir3_enabled.store(false,std::memory_order_relaxed);
+#else
  g_selector_upper_lower_enabled.store(
      enable_upper_lower_selector,
      std::memory_order_relaxed);
  g_selector_hemdir3_enabled.store(
      enable_hemdir3_selector,
      std::memory_order_relaxed);
+#endif
  g_runtime_mtd_classified.store(false);
  g_runtime_mtd_cache_hit.store(false);
  g_runtime_mtd_selection_published.store(false);
