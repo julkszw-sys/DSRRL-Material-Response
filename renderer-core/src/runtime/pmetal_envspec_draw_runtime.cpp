@@ -822,6 +822,25 @@ bool pmetal_envspec_draw_runtime::prepare(
         return false;
     }
 
+    std::array<std::uint32_t,4> material_bits{};
+    static_assert(sizeof(float) == sizeof(std::uint32_t));
+    std::memcpy(
+        &material_bits[0],
+        &decision.c101,
+        sizeof(std::uint32_t));
+    std::memcpy(
+        &material_bits[1],
+        &decision.c100[0],
+        sizeof(std::uint32_t));
+    std::memcpy(
+        &material_bits[2],
+        &decision.c100[1],
+        sizeof(std::uint32_t));
+    std::memcpy(
+        &material_bits[3],
+        &decision.c100[2],
+        sizeof(std::uint32_t));
+
     ID3D11Buffer *b12 = nullptr;
     bool upload_required = true;
     const auto b12_key =
@@ -862,10 +881,14 @@ bool pmetal_envspec_draw_runtime::prepare(
             b12->AddRef();
             upload_required =
                 !found->second.payload_valid ||
-                std::memcmp(
-                    found->second.payload.data(),
-                    payload.data(),
-                    sizeof(payload)) != 0;
+                found->second.source_generation !=
+                    source.generation ||
+                found->second.receiver_id !=
+                    decision.receiver_id ||
+                found->second.route_index !=
+                    decision.route_index ||
+                found->second.material_bits !=
+                    material_bits;
         } else {
             D3D11_BUFFER_DESC desc{};
             desc.ByteWidth = 64u;
@@ -953,10 +976,14 @@ bool pmetal_envspec_draw_runtime::prepare(
             if (found !=
                     b12_by_context_.end() &&
                 found->second.buffer == b12) {
-                std::memcpy(
-                    found->second.payload.data(),
-                    payload.data(),
-                    sizeof(payload));
+                found->second.source_generation =
+                    source.generation;
+                found->second.receiver_id =
+                    decision.receiver_id;
+                found->second.route_index =
+                    decision.route_index;
+                found->second.material_bits =
+                    material_bits;
                 found->second.payload_valid = true;
             }
         }
