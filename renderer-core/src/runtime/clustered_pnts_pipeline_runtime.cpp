@@ -468,12 +468,13 @@ void clustered_pnts_pipeline_runtime::on_destroy_device(
     attestation_tls_ = {};
 }
 
-bool clustered_pnts_pipeline_runtime::pipeline_attested_cached(
+std::shared_ptr<const clustered_pnts_pipeline_runtime::record>
+clustered_pnts_pipeline_runtime::pipeline_record_cached(
     std::uint64_t pipeline_handle) const noexcept
 {
     if (pipeline_handle == 0u ||
         quarantined_.load())
-        return false;
+        return {};
 
     const auto epoch =
         pipeline_epoch_.load(
@@ -493,15 +494,18 @@ bool clustered_pnts_pipeline_runtime::pipeline_attested_cached(
         cached.epoch == epoch &&
         pipeline_epoch_.load(
             std::memory_order_acquire) == epoch)
-        return cached.present;
+        return cached.present
+            ? cached.selected
+            : std::shared_ptr<const record>{};
 
-    bool present = false;
+    std::shared_ptr<const record> selected{};
     std::uint64_t stable_epoch = epoch;
     {
         std::lock_guard<std::mutex> lock(mutex_);
-        present =
-            pipelines_.find(pipeline_handle) !=
-            pipelines_.end();
+        const auto found =
+            pipelines_.find(pipeline_handle);
+        if (found != pipelines_.end())
+            selected = found->second;
         stable_epoch =
             pipeline_epoch_.load(
                 std::memory_order_relaxed);
@@ -511,9 +515,17 @@ bool clustered_pnts_pipeline_runtime::pipeline_attested_cached(
         this,
         pipeline_handle,
         stable_epoch,
-        present
+        selected,
+        selected != nullptr
     };
-    return present;
+    return selected;
+}
+
+bool clustered_pnts_pipeline_runtime::pipeline_attested_cached(
+    std::uint64_t pipeline_handle) const noexcept
+{
+    return pipeline_record_cached(
+        pipeline_handle) != nullptr;
 }
 
 bool clustered_pnts_pipeline_runtime::pipeline_attested(
