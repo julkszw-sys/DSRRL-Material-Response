@@ -632,19 +632,12 @@ fixed_pointlight_pipeline_runtime::telemetry() const noexcept
 void fixed_pointlight_pipeline_runtime::reset() noexcept
 {
     std::lock_guard<std::mutex> lock(mutex_);
-    bound_.clear();
-    any_bound_.store(
-        false,
-        std::memory_order_release);
     pipelines_.clear();
     pipeline_epoch_.fetch_add(
         1u,
         std::memory_order_release);
     candidates_.clear();
     device_ = nullptr;
-    bound_epoch_.fetch_add(
-        1u,
-        std::memory_order_release);
     bound_tls_ = {};
     attestation_tls_ = {};
 
