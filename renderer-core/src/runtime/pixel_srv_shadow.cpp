@@ -21,6 +21,7 @@ namespace {
 struct shadow_record {
     void *command_list_key = nullptr;
     std::array<ID3D11ShaderResourceView *,k_pixel_srv_shadow_slots> srvs{};
+    std::uint32_t srv_valid_mask = 0u;
     std::uint64_t serial = 0u;
 };
 
@@ -91,10 +92,14 @@ void pixel_srv_shadow_on_push_descriptors(
                 update.binding);
 
     for (std::uint32_t i = 0u; i < count; ++i) {
-        record.srvs[update.binding + i] =
+        const auto slot =
+            update.binding + i;
+        record.srvs[slot] =
             reinterpret_cast<ID3D11ShaderResourceView *>(
                 static_cast<std::uintptr_t>(
                     views[i].handle));
+        record.srv_valid_mask |=
+            std::uint32_t{1u} << slot;
     }
 
     record.serial = ++g_serial;
@@ -131,6 +136,14 @@ bool pixel_srv_shadow_snapshot(
 
     if (record.command_list_key != key ||
         record.serial == 0u)
+        return false;
+
+    const auto requested_mask =
+        ((std::uint32_t{1u} << count) - 1u) <<
+        first;
+    if ((record.srv_valid_mask &
+         requested_mask) !=
+        requested_mask)
         return false;
 
     for (std::uint32_t i = 0u; i < count; ++i)
