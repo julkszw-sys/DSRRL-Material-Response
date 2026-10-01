@@ -1776,6 +1776,126 @@ jobs:
           path: DSRRL_Core_Islands_RAW_DRAW_REPLAY_BISECT.addon64
           if-no-files-found: error
 
+      - name: Configure state-capture-only bisect
+        shell: pwsh
+        run: >
+          cmake
+          -S renderer-core/integrated
+          -B build-integrated-state-capture-only
+          -A x64
+          -DRESHADE_INCLUDE_DIR="${{ github.workspace }}/_reshade/include"
+          -DDSRRL_SOURCE_COMMIT="$env:DSRRL_CHECKOUT_COMMIT"
+          -DDSRRL_BUILD_FLAVOR="state_capture_only_bisect"
+          -DDSRRL_STATE_CAPTURE_ONLY_BISECT=ON
+
+      - name: Build state-capture-only bisect
+        shell: pwsh
+        run: |
+          cmake --build build-integrated-state-capture-only --config Release --target dsrrl_renderer_core_integrated
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $addon = @(Get-ChildItem build-integrated-state-capture-only -Recurse -Filter *.addon64)
+          if ($addon.Count -ne 1) { throw "Expected exactly one state-capture addon, found $($addon.Count)" }
+          $out = "DSRRL_Core_Islands_STATE_CAPTURE_ONLY_BISECT.addon64"
+          Copy-Item $addon[0].FullName $out -Force
+          Write-Host "STATE_CAPTURE_ONLY_BISECT_SHA256=$((Get-FileHash $out -Algorithm SHA256).Hash.ToLowerInvariant())"
+
+      - name: Upload state-capture-only bisect
+        uses: actions/upload-artifact@v4
+        with:
+          name: DSRRL_Core_Islands_STATE_CAPTURE_ONLY_BISECT
+          path: DSRRL_Core_Islands_STATE_CAPTURE_ONLY_BISECT.addon64
+          if-no-files-found: error
+
+      - name: Configure native-state mutate-restore-only bisect
+        shell: pwsh
+        run: >
+          cmake
+          -S renderer-core/integrated
+          -B build-integrated-native-state-only
+          -A x64
+          -DRESHADE_INCLUDE_DIR="${{ github.workspace }}/_reshade/include"
+          -DDSRRL_SOURCE_COMMIT="$env:DSRRL_CHECKOUT_COMMIT"
+          -DDSRRL_BUILD_FLAVOR="native_state_mutate_restore_only_bisect"
+          -DDSRRL_NATIVE_STATE_MUTATE_RESTORE_ONLY_BISECT=ON
+
+      - name: Build native-state mutate-restore-only bisect
+        shell: pwsh
+        run: |
+          cmake --build build-integrated-native-state-only --config Release --target dsrrl_renderer_core_integrated
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $addon = @(Get-ChildItem build-integrated-native-state-only -Recurse -Filter *.addon64)
+          if ($addon.Count -ne 1) { throw "Expected exactly one native-state addon, found $($addon.Count)" }
+          $out = "DSRRL_Core_Islands_NATIVE_STATE_MUTATE_RESTORE_ONLY_BISECT.addon64"
+          Copy-Item $addon[0].FullName $out -Force
+          Write-Host "NATIVE_STATE_MUTATE_RESTORE_ONLY_BISECT_SHA256=$((Get-FileHash $out -Algorithm SHA256).Hash.ToLowerInvariant())"
+
+      - name: Upload native-state mutate-restore-only bisect
+        uses: actions/upload-artifact@v4
+        with:
+          name: DSRRL_Core_Islands_NATIVE_STATE_MUTATE_RESTORE_ONLY_BISECT
+          path: DSRRL_Core_Islands_NATIVE_STATE_MUTATE_RESTORE_ONLY_BISECT.addon64
+          if-no-files-found: error
+
+      - name: Configure core-transaction-only bisect
+        shell: pwsh
+        run: >
+          cmake
+          -S renderer-core/integrated
+          -B build-integrated-core-transaction-only
+          -A x64
+          -DRESHADE_INCLUDE_DIR="${{ github.workspace }}/_reshade/include"
+          -DDSRRL_SOURCE_COMMIT="$env:DSRRL_CHECKOUT_COMMIT"
+          -DDSRRL_BUILD_FLAVOR="core_transaction_only_bisect"
+          -DDSRRL_CORE_TRANSACTION_ONLY_BISECT=ON
+
+      - name: Build core-transaction-only bisect
+        shell: pwsh
+        run: |
+          cmake --build build-integrated-core-transaction-only --config Release --target dsrrl_renderer_core_integrated
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $addon = @(Get-ChildItem build-integrated-core-transaction-only -Recurse -Filter *.addon64)
+          if ($addon.Count -ne 1) { throw "Expected exactly one core-transaction addon, found $($addon.Count)" }
+          $out = "DSRRL_Core_Islands_CORE_TRANSACTION_ONLY_BISECT.addon64"
+          Copy-Item $addon[0].FullName $out -Force
+          Write-Host "CORE_TRANSACTION_ONLY_BISECT_SHA256=$((Get-FileHash $out -Algorithm SHA256).Hash.ToLowerInvariant())"
+
+      - name: Upload core-transaction-only bisect
+        uses: actions/upload-artifact@v4
+        with:
+          name: DSRRL_Core_Islands_CORE_TRANSACTION_ONLY_BISECT
+          path: DSRRL_Core_Islands_CORE_TRANSACTION_ONLY_BISECT.addon64
+          if-no-files-found: error
+
+      - name: Configure raw-native-draw reentry-min bisect
+        shell: pwsh
+        run: >
+          cmake
+          -S renderer-core/integrated
+          -B build-integrated-raw-native-reentry-min
+          -A x64
+          -DRESHADE_INCLUDE_DIR="${{ github.workspace }}/_reshade/include"
+          -DDSRRL_SOURCE_COMMIT="$env:DSRRL_CHECKOUT_COMMIT"
+          -DDSRRL_BUILD_FLAVOR="raw_native_draw_reentry_min_bisect"
+          -DDSRRL_RAW_NATIVE_DRAW_REENTRY_MIN_BISECT=ON
+
+      - name: Build raw-native-draw reentry-min bisect
+        shell: pwsh
+        run: |
+          cmake --build build-integrated-raw-native-reentry-min --config Release --target dsrrl_renderer_core_integrated
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $addon = @(Get-ChildItem build-integrated-raw-native-reentry-min -Recurse -Filter *.addon64)
+          if ($addon.Count -ne 1) { throw "Expected exactly one raw-native-reentry addon, found $($addon.Count)" }
+          $out = "DSRRL_Core_Islands_RAW_NATIVE_DRAW_REENTRY_MIN_BISECT.addon64"
+          Copy-Item $addon[0].FullName $out -Force
+          Write-Host "RAW_NATIVE_DRAW_REENTRY_MIN_BISECT_SHA256=$((Get-FileHash $out -Algorithm SHA256).Hash.ToLowerInvariant())"
+
+      - name: Upload raw-native-draw reentry-min bisect
+        uses: actions/upload-artifact@v4
+        with:
+          name: DSRRL_Core_Islands_RAW_NATIVE_DRAW_REENTRY_MIN_BISECT
+          path: DSRRL_Core_Islands_RAW_NATIVE_DRAW_REENTRY_MIN_BISECT.addon64
+          if-no-files-found: error
+
       - name: Configure full-runtime diagnostic addon
         shell: pwsh
         run: >
