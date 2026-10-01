@@ -394,23 +394,8 @@ void fixed_pointlight_pipeline_runtime::on_destroy_pipeline(
     if (found == pipelines_.end())
         return;
 
-    const auto dead = found->second;
     pipelines_.erase(found);
     pipeline_epoch_.fetch_add(
-        1u,
-        std::memory_order_release);
-
-    for (auto it = bound_.begin();
-         it != bound_.end();) {
-        if (it->second == dead)
-            it = bound_.erase(it);
-        else
-            ++it;
-    }
-    any_bound_.store(
-        !bound_.empty(),
-        std::memory_order_release);
-    bound_epoch_.fetch_add(
         1u,
         std::memory_order_release);
     bound_tls_ = {};
