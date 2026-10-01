@@ -5854,7 +5854,8 @@ bool on_draw(
     if (g_raw_draw_replay_recursing)
         return false;
 
-    if (k_raw_draw_replay_bisect) {
+    if (k_raw_draw_replay_bisect ||
+        k_raw_native_draw_reentry_min_bisect) {
         g_raw_draw_replay_recursing = true;
         const bool issued =
             g_draw_transactions.raw_replay_draw(
