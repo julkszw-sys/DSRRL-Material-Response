@@ -925,8 +925,17 @@ std::atomic_bool g_source_b_decode_ok{false};
 
 } // namespace
 
+void pmetal_env_source_cache_invalidate() noexcept
+{
+    g_source_cache_generation.fetch_add(
+        1u,
+        std::memory_order_relaxed);
+}
+
 bool pmetal_env_source_runtime::install() noexcept
 {
+    pmetal_env_source_cache_invalidate();
+
     g_source_base =
         reinterpret_cast<std::uintptr_t>(
             GetModuleHandleW(nullptr));
@@ -950,6 +959,7 @@ void pmetal_env_source_runtime::uninstall() noexcept
     g_selector_epoch.fetch_add(
         1u,
         std::memory_order_relaxed);
+    pmetal_env_source_cache_invalidate();
     pmetal_env_source_selector_clear();
 }
 
@@ -1141,37 +1151,8 @@ void pmetal_env_source_selector_event(
                         character != 0u,
                         lookup);
 
-            const std::uint8_t *base =
-                nullptr;
-
             if (!lookup_valid ||
-                source == nullptr ||
-                !safe_read(
-                    static_cast<
-                        const std::uint8_t *>(
-                            source) +
-                        0x18u,
-                    base) ||
-                base == nullptr ||
-                !readable_range(
-                    base,
-                    0x30u))
-                return false;
-
-            std::uint16_t count = 0u;
-            std::memcpy(
-                &count,
-                base + 10u,
-                sizeof(count));
-
-            if (count == 0u ||
-                count > 256u ||
-                !readable_range(
-                    base,
-                    0x30u +
-                        static_cast<std::size_t>(
-                            count) *
-                            12u))
+                source == nullptr)
                 return false;
 
             return read_exact_source(
@@ -1325,6 +1306,24 @@ pmetal_env_source_runtime::telemetry() const noexcept
     out.consumer_fail =
         g_consumer_fail.load(
             std::memory_order_relaxed);
+    out.endpoint_cache_hit =
+        g_endpoint_cache_hit.load(
+            std::memory_order_relaxed);
+    out.endpoint_cache_miss =
+        g_endpoint_cache_miss.load(
+            std::memory_order_relaxed);
+    out.endpoint_cache_fill =
+        g_endpoint_cache_fill.load(
+            std::memory_order_relaxed);
+    out.region_cache_hit =
+        g_region_cache_hit.load(
+            std::memory_order_relaxed);
+    out.region_cache_miss =
+        g_region_cache_miss.load(
+            std::memory_order_relaxed);
+    out.cache_generation =
+        g_source_cache_generation.load(
+            std::memory_order_relaxed);
 
     out.last_publish_tid =
         g_last_publish_tid.load(
@@ -1370,6 +1369,7 @@ void pmetal_env_source_runtime::reset() noexcept
     g_selector_epoch.fetch_add(
         1u,
         std::memory_order_relaxed);
+    pmetal_env_source_cache_invalidate();
     pmetal_env_source_selector_clear();
 
     g_publish.store(
@@ -1388,6 +1388,21 @@ void pmetal_env_source_runtime::reset() noexcept
         0u,
         std::memory_order_relaxed);
     g_blend_seen.store(
+        0u,
+        std::memory_order_relaxed);
+    g_endpoint_cache_hit.store(
+        0u,
+        std::memory_order_relaxed);
+    g_endpoint_cache_miss.store(
+        0u,
+        std::memory_order_relaxed);
+    g_endpoint_cache_fill.store(
+        0u,
+        std::memory_order_relaxed);
+    g_region_cache_hit.store(
+        0u,
+        std::memory_order_relaxed);
+    g_region_cache_miss.store(
         0u,
         std::memory_order_relaxed);
 
@@ -1425,6 +1440,10 @@ void pmetal_env_source_runtime::reset() noexcept
 
     g_bank_cache = {};
     g_bank_victim = {};
+    g_endpoint_cache = {};
+    g_endpoint_cache_victim = {};
+    g_region_cache = {};
+    g_region_cache_victim = {};
 }
 
 } // namespace dsrrl::runtime
