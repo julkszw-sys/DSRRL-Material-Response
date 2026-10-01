@@ -850,17 +850,23 @@ bool install(
  if(!prep(g_s,k_selector,k_selector_b,reinterpret_cast<void*>(&dsrrl_flver_selector_hook_entry)))goto fail;
  g_dsrrl_flver_selector_trampoline=g_s.trampoline;
 
- // Builder is intentionally omitted here even if requested: PR158 already
- // bypasses PointLight, so this keeps the test scoped to selector hot-path cost.
- (void)enable_clustered_builder;
- g_dsrrl_flver_builder_trampoline=nullptr;
+ // Preserve the certified optional-builder source contract. PR158 passes
+ // enable_clustered_builder=false because PointLight is bypassed, so the
+ // diagnostic runtime artifact remains selector-only.
+ if(enable_clustered_builder){
+  if(!prep(g_b,k_builder,k_builder_b,reinterpret_cast<void*>(&dsrrl_clustered_pnts_builder_hook_entry)))goto fail;
+  g_dsrrl_flver_builder_trampoline=g_b.trampoline;
+ } else {
+  g_dsrrl_flver_builder_trampoline=nullptr;
+ }
 
- if(!arm(g_s))goto fail;
+ if(!arm(g_s)||
+    (enable_clustered_builder&&!arm(g_b)))goto fail;
  g_state.parser_armed=false;
  g_state.destructor_armed=false;
  g_state.mtd_armed=false;
  g_state.selector_armed=true;
- g_state.builder_armed=false;
+ g_state.builder_armed=enable_clustered_builder;
  g_state.selector_owner_enrichment=true;
  g_state.exact_runtime_material_carrier=false;
  return true;
