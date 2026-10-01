@@ -1185,7 +1185,7 @@ void clustered_pnts_draw_runtime::reset() noexcept
         release_all_gpu_locked();
     }
 
-    g_serial.store(0u);
+    g_local_serial = 0u;
     g_builder_seen.store(0u);
     g_collection_ok.store(0u);
     g_collection_fail.store(0u);
