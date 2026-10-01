@@ -1164,25 +1164,41 @@ bool envspec_resource_runtime::prepare(
     }
 
     ID3D11ShaderResourceView *stock_views[3]{};
-    if (probe_b_required) {
-        // HemEnvLerp needs both stock endpoints. One contiguous fetch is
-        // cheaper than two calls even though t13 is intentionally ignored.
-        context->PSGetShaderResources(
-            12u,
-            3u,
-            stock_views);
-    } else {
-        // Stable HemEnv resolves its logical probe from t12 only. The PTDE
-        // replacement still binds its required t14/s14 carrier, but reading
-        // stock t13/t14 here would only add two COM retains/releases per draw.
-        context->PSGetShaderResources(
-            12u,
-            1u,
-            stock_views);
-    }
+    context->PSGetShaderResources(
+        12u,
+        probe_b_required ? 3u : 1u,
+        stock_views);
 
-    auto *stock_a = stock_views[0];
-    auto *stock_b = stock_views[2];
+    const bool ready =
+        prepare_bound(
+            stock_views[0],
+            probe_b_required ? stock_views[2] : nullptr,
+            slot,
+            probe_b_required,
+            prepared);
+
+    for (auto *view : stock_views)
+        if (view != nullptr)
+            view->Release();
+
+    return ready;
+}
+
+bool envspec_resource_runtime::prepare_bound(
+    ID3D11ShaderResourceView *stock_a,
+    ID3D11ShaderResourceView *stock_b,
+    std::uint8_t slot,
+    bool probe_b_required,
+    prepared_envspec_resources &prepared) noexcept
+{
+    prepared = {};
+
+    if (stock_a == nullptr ||
+        (probe_b_required && stock_b == nullptr) ||
+        slot >= k_ptde_slots) {
+        telemetry::hot_count(g_prepare_fail);
+        return false;
+    }
 
     std::uint16_t probe_a = 0u;
     std::uint16_t probe_b = 0u;
@@ -1223,9 +1239,6 @@ bool envspec_resource_runtime::prepare(
         }
 
         if (materialized) {
-            // Materialization is a cold miss. Re-enter the single-lock
-            // snapshot path so normal draws keep resource identity + cube +
-            // sampler lookup atomic and do not repeat independent map locks.
             needs_cube = false;
             ready =
                 snapshot_ready_envspec(
@@ -1241,10 +1254,6 @@ bool envspec_resource_runtime::prepare(
                     needs_cube);
         }
     }
-
-    for (auto *view : stock_views)
-        if (view != nullptr)
-            view->Release();
 
     if (!ready ||
         a_native == nullptr ||
