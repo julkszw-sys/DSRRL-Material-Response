@@ -876,107 +876,79 @@ bool read_exact_source(
     signature = 0u;
     row_id = 0u;
 
-    if (source == nullptr ||
-        selector < 0)
+    std::uint32_t version_u32 = 0u;
+    std::uint32_t count_u32 = 0u;
+    std::uint32_t index = 0u;
+
+    if (source == nullptr || selector < 0) {
+        record_hook_decode(hook_decode_source_invalid,version_u32,count_u32,index,row_id,signature);
         return false;
+    }
 
     const std::uint8_t *base = nullptr;
-    if (!safe_read(
-            static_cast<const std::uint8_t *>(
-                source) +
-                0x18u,
-            base) ||
-        base == nullptr)
+    if (!safe_read(static_cast<const std::uint8_t *>(source) + 0x18u,base) || base == nullptr) {
+        record_hook_decode(hook_decode_base_invalid,version_u32,count_u32,index,row_id,signature);
         return false;
+    }
 
-    std::uint32_t index = 0u;
-    if (!retail_lightbank_record_index(
-            selector,
-            index))
+    if (!retail_lightbank_record_index(selector,index)) {
+        record_hook_decode(hook_decode_selector_invalid,version_u32,count_u32,index,row_id,signature);
         return false;
+    }
 
     std::uint16_t version = 0u;
     std::uint16_t count = 0u;
-    if (!safe_read(
-            base + 8u,
-            version) ||
-        !safe_read(
-            base + 10u,
-            count) ||
-        version != 4u ||
-        count == 0u ||
-        count > 256u ||
-        index >= count)
+    if (!safe_read(base + 8u,version) || !safe_read(base + 10u,count)) {
+        record_hook_decode(hook_decode_header_invalid,version_u32,count_u32,index,row_id,signature);
         return false;
+    }
 
-    const auto *entry =
-        base +
-        0x30u +
-        static_cast<std::size_t>(
-            index) * 12u;
+    version_u32 = version;
+    count_u32 = count;
 
-    if (!safe_read(
-            entry,
-            row_id))
+    if (version != 4u || count == 0u || count > 256u || index >= count) {
+        record_hook_decode(hook_decode_header_invalid,version_u32,count_u32,index,row_id,signature);
         return false;
+    }
 
-    if (endpoint_cache_lookup(
-            source,
-            base,
-            count,
-            index,
-            row_id,
-            out,
-            signature))
+    const auto *entry = base + 0x30u + static_cast<std::size_t>(index) * 12u;
+    if (!safe_read(entry,row_id)) {
+        record_hook_decode(hook_decode_row_read_invalid,version_u32,count_u32,index,row_id,signature);
+        return false;
+    }
+
+    if (endpoint_cache_lookup(source,base,count,index,row_id,out,signature)) {
+        record_hook_decode(hook_decode_ok,version_u32,count_u32,index,row_id,signature);
         return true;
+    }
 
-    const auto *bank =
-        resolve_bank(
-            base,
-            count,
-            signature);
-    if (bank == nullptr)
+    const auto *bank = resolve_bank(base,count,signature);
+    if (bank == nullptr) {
+        record_hook_decode(hook_decode_bank_unknown,version_u32,count_u32,index,row_id,signature);
         return false;
+    }
 
-    const auto *row =
-        pmetal_env_source_authority::
-            find_row(
-                *bank,
-                row_id);
-    if (row == nullptr)
+    const auto *row = pmetal_env_source_authority::find_row(*bank,row_id);
+    if (row == nullptr) {
+        record_hook_decode(hook_decode_row_unknown,version_u32,count_u32,index,row_id,signature);
         return false;
+    }
 
-    const float scale =
-        static_cast<float>(
-            row->m) *
-        0.01f;
-
+    const float scale = static_cast<float>(row->m) * 0.01f;
     out = {
-        static_cast<float>(
-            row->r) /
-            255.0f * scale,
-        static_cast<float>(
-            row->g) /
-            255.0f * scale,
-        static_cast<float>(
-            row->b) /
-            255.0f * scale,
+        static_cast<float>(row->r) / 255.0f * scale,
+        static_cast<float>(row->g) / 255.0f * scale,
+        static_cast<float>(row->b) / 255.0f * scale,
         0.0f
     };
 
-    if (!std::isfinite(out.x) ||
-        !std::isfinite(out.y) ||
-        !std::isfinite(out.z))
+    if (!std::isfinite(out.x) || !std::isfinite(out.y) || !std::isfinite(out.z)) {
+        record_hook_decode(hook_decode_nonfinite,version_u32,count_u32,index,row_id,signature);
         return false;
+    }
 
-    endpoint_cache_publish(
-        source,
-        base,
-        count,
-        index,
-        row_id,
-        out,
-        signature);
+    endpoint_cache_publish(source,base,count,index,row_id,out,signature);
+    record_hook_decode(hook_decode_ok,version_u32,count_u32,index,row_id,signature);
     return true;
 }
 
