@@ -101,6 +101,26 @@ option(
     "Diagnostic: issue only a raw stock Draw/DrawIndexed from the callback and suppress the original, without DSRRL state mutation"
     OFF)
 
+option(
+    DSRRL_STATE_CAPTURE_ONLY_BISECT
+    "Diagnostic: run native PS state capture only for prepared island mutations; no Set, core transaction, replay or restore"
+    OFF)
+
+option(
+    DSRRL_NATIVE_STATE_MUTATE_RESTORE_ONLY_BISECT
+    "Diagnostic: run native D3D11 state capture+mutation+restore without core transaction bookkeeping or replay"
+    OFF)
+
+option(
+    DSRRL_CORE_TRANSACTION_ONLY_BISECT
+    "Diagnostic: run renderer-core transaction begin+restore bookkeeping only, without native PS Get/Set or replay"
+    OFF)
+
+option(
+    DSRRL_RAW_NATIVE_DRAW_REENTRY_MIN_BISECT
+    "Diagnostic: minimal native Draw/DrawIndexed re-entry from ReShade callback with recursion guard and no semantic preparation"
+    OFF)
+
 set(
     RESHADE_INCLUDE_DIR
     ""
