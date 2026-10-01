@@ -107,6 +107,30 @@ constexpr bool k_raw_draw_replay_bisect = true;
 constexpr bool k_raw_draw_replay_bisect = false;
 #endif
 
+#ifdef DSRRL_STATE_CAPTURE_ONLY_BISECT
+constexpr bool k_state_capture_only_bisect = true;
+#else
+constexpr bool k_state_capture_only_bisect = false;
+#endif
+
+#ifdef DSRRL_NATIVE_STATE_MUTATE_RESTORE_ONLY_BISECT
+constexpr bool k_native_state_mutate_restore_only_bisect = true;
+#else
+constexpr bool k_native_state_mutate_restore_only_bisect = false;
+#endif
+
+#ifdef DSRRL_CORE_TRANSACTION_ONLY_BISECT
+constexpr bool k_core_transaction_only_bisect = true;
+#else
+constexpr bool k_core_transaction_only_bisect = false;
+#endif
+
+#ifdef DSRRL_RAW_NATIVE_DRAW_REENTRY_MIN_BISECT
+constexpr bool k_raw_native_draw_reentry_min_bisect = true;
+#else
+constexpr bool k_raw_native_draw_reentry_min_bisect = false;
+#endif
+
 #if defined(DSRRL_POINTLIGHT_DRAWTIME_BYPASS) || defined(DSRRL_DRAWTIME_ISLANDS_BYPASS)
 constexpr bool k_pointlight_drawtime_runtime_enabled = false;
 #else
@@ -5830,7 +5854,8 @@ bool on_draw(
     if (g_raw_draw_replay_recursing)
         return false;
 
-    if (k_raw_draw_replay_bisect) {
+    if (k_raw_draw_replay_bisect ||
+        k_raw_native_draw_reentry_min_bisect) {
         g_raw_draw_replay_recursing = true;
         const bool issued =
             g_draw_transactions.raw_replay_draw(
@@ -6031,6 +6056,54 @@ bool on_draw(
         receiver_id,
         decision.route_index);
 
+    if (k_state_capture_only_bisect) {
+        (void)g_draw_transactions.capture_only(
+            cmd_list,
+            prepared.batch.mutation);
+        release_prepared_island_batch(prepared);
+        return false;
+    }
+
+    if (k_native_state_mutate_restore_only_bisect) {
+        (void)g_draw_transactions.native_mutate_restore_only(
+            cmd_list,
+            prepared.batch.mutation);
+        release_prepared_island_batch(prepared);
+        return false;
+    }
+
+    if (k_core_transaction_only_bisect) {
+        (void)g_draw_transactions.core_transaction_only(
+            cmd_list,
+            prepared.batch.mutation);
+        release_prepared_island_batch(prepared);
+        return false;
+    }
+
+    if (k_state_capture_only_bisect) {
+        (void)g_draw_transactions.capture_only(
+            cmd_list,
+            prepared.batch.mutation);
+        release_prepared_island_batch(prepared);
+        return false;
+    }
+
+    if (k_native_state_mutate_restore_only_bisect) {
+        (void)g_draw_transactions.native_mutate_restore_only(
+            cmd_list,
+            prepared.batch.mutation);
+        release_prepared_island_batch(prepared);
+        return false;
+    }
+
+    if (k_core_transaction_only_bisect) {
+        (void)g_draw_transactions.core_transaction_only(
+            cmd_list,
+            prepared.batch.mutation);
+        release_prepared_island_batch(prepared);
+        return false;
+    }
+
     if (k_state_transaction_only_bisect) {
         (void)g_draw_transactions.mutate_restore_only(
             cmd_list,
@@ -6128,7 +6201,8 @@ bool on_draw_indexed(
     if (g_raw_draw_replay_recursing)
         return false;
 
-    if (k_raw_draw_replay_bisect) {
+    if (k_raw_draw_replay_bisect ||
+        k_raw_native_draw_reentry_min_bisect) {
         g_raw_draw_replay_recursing = true;
         const bool issued =
             g_draw_transactions.raw_replay_draw_indexed(

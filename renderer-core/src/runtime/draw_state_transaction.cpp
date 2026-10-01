@@ -972,6 +972,277 @@ bool draw_state_transaction_runtime::mutate_restore_only(
     return restore(cmd_list, state);
 }
 
+bool draw_state_transaction_runtime::capture_only(
+    reshade::api::command_list *cmd_list,
+    const draw_tx_mutation &mutation) noexcept
+{
+    if (cmd_list == nullptr ||
+        quarantined_.load() ||
+        !validate_mutation(mutation))
+        return false;
+
+    auto *ctx = reinterpret_cast<ID3D11DeviceContext *>(
+        cmd_list->get_native());
+    if (ctx == nullptr)
+        return false;
+
+    transaction_state state{};
+    state.context = ctx;
+
+    if (mutation.constant_buffer_count != 0u)
+        state.context1 = context1_for(ctx);
+
+    if (mutation.replace_pixel_shader) {
+        std::array<ID3D11ClassInstance *,
+                   draw_tx_max_class_instances> classes{};
+        UINT class_count = static_cast<UINT>(classes.size());
+        ctx->PSGetShader(
+            &state.old_shader,
+            classes.data(),
+            &class_count);
+        if (state.old_shader == nullptr ||
+            class_count > classes.size()) {
+            release_state(state);
+            return false;
+        }
+        state.old_class_count = class_count;
+        for (std::uint32_t i = 0; i < class_count; ++i)
+            state.old_classes[i] = classes[i];
+        state.shader_captured = true;
+    }
+
+    state.cb_count = mutation.constant_buffer_count;
+    for (std::uint32_t i = 0; i < state.cb_count; ++i) {
+        auto &capture = state.cbs[i];
+        capture.slot = mutation.constant_buffers[i].slot;
+        ctx->PSGetConstantBuffers(capture.slot, 1u, &capture.base);
+
+        if (state.context1 != nullptr) {
+            UINT first = 0u;
+            UINT count = 0u;
+            state.context1->PSGetConstantBuffers1(
+                capture.slot,
+                1u,
+                &capture.window,
+                &first,
+                &count);
+            capture.first = first;
+            capture.count = count;
+            capture.coherent = capture.base == capture.window;
+            capture.explicit_window =
+                capture.window != nullptr &&
+                count >= 16u &&
+                (first % 16u) == 0u &&
+                (count % 16u) == 0u;
+        }
+
+        if (!capture.coherent) {
+            release_state(state);
+            return false;
+        }
+    }
+
+    state.srv_count = mutation.srv_count;
+    for (std::uint32_t i = 0; i < state.srv_count; ++i) {
+        state.srvs[i].slot = mutation.srvs[i].slot;
+        ctx->PSGetShaderResources(
+            state.srvs[i].slot,
+            1u,
+            &state.srvs[i].srv);
+    }
+
+    state.sampler_count = mutation.sampler_count;
+    for (std::uint32_t i = 0; i < state.sampler_count; ++i) {
+        state.samplers[i].slot = mutation.samplers[i].slot;
+        ctx->PSGetSamplers(
+            state.samplers[i].slot,
+            1u,
+            &state.samplers[i].sampler);
+    }
+
+    release_state(state);
+    return true;
+}
+
+bool draw_state_transaction_runtime::native_mutate_restore_only(
+    reshade::api::command_list *cmd_list,
+    const draw_tx_mutation &mutation) noexcept
+{
+    if (cmd_list == nullptr ||
+        quarantined_.load() ||
+        !validate_mutation(mutation))
+        return false;
+
+    auto *ctx = reinterpret_cast<ID3D11DeviceContext *>(
+        cmd_list->get_native());
+    if (ctx == nullptr)
+        return false;
+
+    transaction_state state{};
+    state.context = ctx;
+
+    if (mutation.constant_buffer_count != 0u)
+        state.context1 = context1_for(ctx);
+
+    if (mutation.replace_pixel_shader) {
+        std::array<ID3D11ClassInstance *,
+                   draw_tx_max_class_instances> classes{};
+        UINT class_count = static_cast<UINT>(classes.size());
+        ctx->PSGetShader(
+            &state.old_shader,
+            classes.data(),
+            &class_count);
+        if (state.old_shader == nullptr ||
+            class_count > classes.size()) {
+            release_state(state);
+            return false;
+        }
+        state.old_class_count = class_count;
+        for (std::uint32_t i = 0; i < class_count; ++i)
+            state.old_classes[i] = classes[i];
+        state.shader_captured = true;
+    }
+
+    state.cb_count = mutation.constant_buffer_count;
+    for (std::uint32_t i = 0; i < state.cb_count; ++i) {
+        auto &capture = state.cbs[i];
+        capture.slot = mutation.constant_buffers[i].slot;
+        ctx->PSGetConstantBuffers(capture.slot, 1u, &capture.base);
+        if (state.context1 != nullptr) {
+            UINT first = 0u, count = 0u;
+            state.context1->PSGetConstantBuffers1(
+                capture.slot, 1u, &capture.window, &first, &count);
+            capture.first = first;
+            capture.count = count;
+            capture.coherent = capture.base == capture.window;
+            capture.explicit_window =
+                capture.window != nullptr &&
+                count >= 16u &&
+                (first % 16u) == 0u &&
+                (count % 16u) == 0u;
+        }
+        if (!capture.coherent) {
+            release_state(state);
+            return false;
+        }
+    }
+
+    state.srv_count = mutation.srv_count;
+    for (std::uint32_t i = 0; i < state.srv_count; ++i) {
+        state.srvs[i].slot = mutation.srvs[i].slot;
+        ctx->PSGetShaderResources(
+            state.srvs[i].slot, 1u, &state.srvs[i].srv);
+    }
+
+    state.sampler_count = mutation.sampler_count;
+    for (std::uint32_t i = 0; i < state.sampler_count; ++i) {
+        state.samplers[i].slot = mutation.samplers[i].slot;
+        ctx->PSGetSamplers(
+            state.samplers[i].slot, 1u, &state.samplers[i].sampler);
+    }
+
+    if (mutation.replace_pixel_shader)
+        ctx->PSSetShader(mutation.pixel_shader, nullptr, 0u);
+    for (std::uint32_t i = 0; i < mutation.constant_buffer_count; ++i) {
+        auto *buffer = mutation.constant_buffers[i].buffer;
+        ctx->PSSetConstantBuffers(
+            mutation.constant_buffers[i].slot, 1u, &buffer);
+    }
+    for (std::uint32_t i = 0; i < mutation.srv_count; ++i) {
+        auto *srv = mutation.srvs[i].srv;
+        ctx->PSSetShaderResources(mutation.srvs[i].slot, 1u, &srv);
+    }
+    for (std::uint32_t i = 0; i < mutation.sampler_count; ++i) {
+        auto *sampler = mutation.samplers[i].sampler;
+        ctx->PSSetSamplers(mutation.samplers[i].slot, 1u, &sampler);
+    }
+
+    if (state.shader_captured) {
+        std::array<ID3D11ClassInstance *,
+                   draw_tx_max_class_instances> classes{};
+        for (std::uint32_t i = 0; i < state.old_class_count; ++i)
+            classes[i] = reinterpret_cast<ID3D11ClassInstance *>(
+                state.old_classes[i]);
+        ctx->PSSetShader(
+            state.old_shader,
+            classes.data(),
+            state.old_class_count);
+    }
+    for (std::uint32_t i = 0; i < state.cb_count; ++i) {
+        const auto &capture = state.cbs[i];
+        restore_ps_constant_buffer_window(
+            ctx,
+            state.context1,
+            capture.slot,
+            capture.explicit_window ? capture.window : capture.base,
+            capture.explicit_window,
+            static_cast<UINT>(capture.first),
+            static_cast<UINT>(capture.count));
+    }
+    for (std::uint32_t i = 0; i < state.srv_count; ++i) {
+        auto *srv = state.srvs[i].srv;
+        ctx->PSSetShaderResources(state.srvs[i].slot, 1u, &srv);
+    }
+    for (std::uint32_t i = 0; i < state.sampler_count; ++i) {
+        auto *sampler = state.samplers[i].sampler;
+        ctx->PSSetSamplers(state.samplers[i].slot, 1u, &sampler);
+    }
+
+    release_state(state);
+    return true;
+}
+
+bool draw_state_transaction_runtime::core_transaction_only(
+    reshade::api::command_list *cmd_list,
+    const draw_tx_mutation &mutation) noexcept
+{
+    if (cmd_list == nullptr ||
+        quarantined_.load() ||
+        !validate_mutation(mutation))
+        return false;
+
+    auto *ctx = reinterpret_cast<ID3D11DeviceContext *>(
+        cmd_list->get_native());
+    if (ctx == nullptr)
+        return false;
+
+    core::render_patch_plan plan{};
+    for (std::size_t i = 0; i < core::operator_count; ++i) {
+        const auto op = static_cast<core::operator_id>(i);
+        const auto bit = core::operator_bit(op);
+        if ((mutation.owners & bit) == 0u)
+            continue;
+
+        const auto carrier_mask =
+            (mutation.carrier_owners & bit) != 0u
+                ? core::draw_policy_carrier_write_mask(op)
+                : 0u;
+        if (plan.patch_count >= plan.patches.size())
+            return false;
+
+        plan.patches[plan.patch_count++] = {
+            op,
+            carrier_mask,
+            (mutation.shader_owners & bit) != 0u,
+            (mutation.resource_owners & bit) != 0u,
+            (mutation.constant_buffer_owners & bit) != 0u
+        };
+        plan.carrier_write_mask |= carrier_mask;
+    }
+
+    const auto command = command_key(cmd_list);
+    const auto serial =
+        draw_serial_.fetch_add(1u, std::memory_order_relaxed) + 1u;
+    if (!core_.transactions().begin(
+            command,
+            serial,
+            context_kind_of(ctx),
+            plan))
+        return false;
+
+    return core_.transactions().restore(command);
+}
+
 bool draw_state_transaction_runtime::raw_replay_draw(
     reshade::api::command_list *cmd_list,
     std::uint32_t vertex_count,
