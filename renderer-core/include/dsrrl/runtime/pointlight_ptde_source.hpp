@@ -1,5 +1,6 @@
 #pragma once
 #include "dsrrl/runtime/generated_pointlight_ptde_donors.hpp"
+#include "dsrrl/runtime/pointlight_bank_structure_authority_v1.hpp"
 #include <array>
 #include <cmath>
 #include <cstring>
@@ -24,6 +25,24 @@ inline bool mix(const signal &a,const signal &b,float t,signal &out) noexcept {
 // Cache only the candidate bank, never the verdict: every cache hit still
 // performs an exact 1024-byte comparison, so an edited/reused bank pointer
 // fails open instead of becoming pointer-derived authority.
+inline const pointlight_donors::bank *identify_structure(
+    std::uint64_t signature) noexcept {
+    static_assert(
+        pointlight_donors::banks.size() ==
+        pointlight_bank_structure_authority_v1::k_signatures.size(),
+        "PointLight donor/signature authority size mismatch");
+    for (std::size_t i = 0u;
+         i < pointlight_bank_structure_authority_v1::k_signatures.size();
+         ++i) {
+        if (pointlight_bank_structure_authority_v1::k_signatures[i] ==
+            signature)
+            return &pointlight_donors::banks[i];
+    }
+    return nullptr;
+}
+
+// Retained only as a static corpus-integrity helper. Runtime source routing uses
+// logical bank structure identity instead of numeric DSR payload equality.
 inline const pointlight_donors::bank *identify(const void *rows) noexcept {
     struct cache_entry {
         const void *rows=nullptr;

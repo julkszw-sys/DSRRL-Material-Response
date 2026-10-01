@@ -58,6 +58,77 @@ template<class T> inline bool read_cached(std::uintptr_t address,T &out,access_c
     if(!readable_cached(address,sizeof(T),cache)) return false;
     std::memcpy(&out,reinterpret_cast<void*>(address),sizeof(T)); return true;
 }
+
+inline void structure_hash_byte(
+    std::uint64_t &hash,
+    std::uint8_t value) noexcept {
+    hash ^= value;
+    hash *= 0x100000001b3ULL;
+}
+
+inline bool bank_structure_signature(
+    std::uintptr_t param,
+    std::uint16_t count,
+    std::uint32_t first,
+    access_cache &cache,
+    std::uint64_t &signature) noexcept {
+    if (count != 64u ||
+        first < 0x330u ||
+        first > 0x10000u ||
+        !readable_cached(
+            param,
+            0x30u + static_cast<std::size_t>(count) * 12u,
+            cache))
+        return false;
+
+    std::uint64_t hash = 0xcbf29ce484222325ULL;
+    structure_hash_byte(hash, static_cast<std::uint8_t>(count & 0xffu));
+    structure_hash_byte(hash, static_cast<std::uint8_t>((count >> 8u) & 0xffu));
+
+    const auto table_end =
+        0x30u + static_cast<std::uint32_t>(count) * 12u;
+
+    for (std::uint32_t i = 0u; i < count; ++i) {
+        const auto entry = param + 0x30u + static_cast<std::uintptr_t>(i) * 12u;
+        std::uint32_t id = 0u;
+        std::uint32_t row_offset = 0u;
+        std::uint32_t name_offset = 0u;
+        std::memcpy(&id, reinterpret_cast<const void *>(entry), 4u);
+        std::memcpy(&row_offset, reinterpret_cast<const void *>(entry + 4u), 4u);
+        std::memcpy(&name_offset, reinterpret_cast<const void *>(entry + 8u), 4u);
+
+        if (id != i ||
+            row_offset != first + 16u * i ||
+            name_offset < table_end ||
+            name_offset > 0x100000u)
+            return false;
+
+        for (unsigned shift = 0u; shift < 32u; shift += 8u)
+            structure_hash_byte(
+                hash,
+                static_cast<std::uint8_t>((id >> shift) & 0xffu));
+
+        bool terminated = false;
+        for (std::uint32_t j = 0u; j < 256u; ++j) {
+            std::uint8_t value = 0u;
+            if (!read_cached(
+                    param + name_offset + j,
+                    value,
+                    cache))
+                return false;
+            structure_hash_byte(hash, value);
+            if (value == 0u) {
+                terminated = true;
+                break;
+            }
+        }
+        if (!terminated)
+            return false;
+    }
+
+    signature = hash;
+    return true;
+}
 inline bool donor(std::uintptr_t source,std::int32_t selector,signal &out,access_cache &cache) noexcept {
     if(selector<0) return false;
     std::uintptr_t param=0;
@@ -65,16 +136,22 @@ inline bool donor(std::uintptr_t source,std::int32_t selector,signal &out,access
     const auto *p=reinterpret_cast<const std::uint8_t*>(param);
     std::uint16_t count=0; std::uint32_t first=0;
     std::memcpy(&count,p+0xau,2); std::memcpy(&first,p+0x34u,4);
-    if(count!=64u||first<0x330u||first>0x10000u) return false;
-    for(std::uint32_t i=0;i<64u;++i) {
-        std::uint32_t id=0,off=0;
-        std::memcpy(&id,p+0x30u+12u*i,4); std::memcpy(&off,p+0x34u+12u*i,4);
-        if(id!=i||off!=first+16u*i) return false;
-    }
+
+    std::uint64_t structure_signature=0u;
+    if(!bank_structure_signature(
+            param,
+            count,
+            first,
+            cache,
+            structure_signature))
+        return false;
+
     const auto index=static_cast<std::uint32_t>(selector)&255u;
     if(index>=64u||!readable_cached(param+first,1024u,cache)) return false;
-    const auto *bank=identify(p+first);
+
+    const auto *bank=identify_structure(structure_signature);
     if(!bank) return false;
+
     out=decode(bank->ptde[index]); return true;
 }
 inline bool selected_source(std::uintptr_t manager,std::int16_t selector,std::uintptr_t &source,access_cache &cache) noexcept {
