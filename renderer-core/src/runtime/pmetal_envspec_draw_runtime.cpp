@@ -47,6 +47,46 @@ constexpr std::uint32_t k_effect_fail_mutation = 1u << 14u;
 
 std::atomic_bool g_source_cut_logged{false};
 std::atomic_bool g_resource_mode_logged{false};
+std::atomic<std::uint32_t> g_prepare_stage_log_mask{0u};
+
+void log_prepare_stage_once(
+    std::uint32_t bit,
+    const char *stage,
+    const mr::material_identity &material,
+    const mr::decision &decision,
+    pmetal_envspec_receiver_family family) noexcept
+{
+    const auto observed =
+        g_prepare_stage_log_mask.load(
+            std::memory_order_relaxed);
+    if ((observed & bit) != 0u ||
+        (g_prepare_stage_log_mask.fetch_or(
+             bit,
+             std::memory_order_relaxed) & bit) != 0u)
+        return;
+
+    char line[640]{};
+    std::snprintf(
+        line,
+        sizeof(line),
+        "[DSRRL ENVSPEC APPLY] stage=%s family=%u rx=%u route=%u active=%u mat_valid=%u owner_exact=%u slot=%u slot_valid=%u sem=%016llx flver=%016llx",
+        stage,
+        static_cast<unsigned>(family),
+        static_cast<unsigned>(decision.receiver_id),
+        static_cast<unsigned>(decision.route_index),
+        decision.active ? 1u : 0u,
+        material.valid ? 1u : 0u,
+        material.owner_tuple_exact ? 1u : 0u,
+        static_cast<unsigned>(material.material_slot),
+        material.material_slot_valid ? 1u : 0u,
+        static_cast<unsigned long long>(
+            material.semantic_name_hash),
+        static_cast<unsigned long long>(
+            material.flver_identity_hash));
+    reshade::log::message(
+        reshade::log::level::info,
+        line);
+}
 
 #if defined(DSRRL_PMETAL_NATIVE_DSR_CUBEMAP_FEED)
 constexpr bool k_native_dsr_cubemap_feed = true;
@@ -490,6 +530,12 @@ bool pmetal_envspec_draw_runtime::prepare(
         effect_fail(
             effect_fail_mask_,
             k_effect_fail_feature);
+        log_prepare_stage_once(
+            1u << 1u,
+            "feature_reject",
+            material,
+            decision,
+            family);
         return false;
     }
 
@@ -511,6 +557,12 @@ bool pmetal_envspec_draw_runtime::prepare(
         effect_fail(
             effect_fail_mask_,
             k_effect_fail_material);
+        log_prepare_stage_once(
+            1u << 0u,
+            "material_or_decision_reject",
+            material,
+            decision,
+            family);
         return false;
     }
     effect_latch(effect_material_ready_);
@@ -539,6 +591,12 @@ bool pmetal_envspec_draw_runtime::prepare(
         effect_fail(
             effect_fail_mask_,
             k_effect_fail_lerp_feature);
+        log_prepare_stage_once(
+            1u << 2u,
+            "lerp_feature_reject",
+            material,
+            decision,
+            family);
         return false;
     }
 
@@ -564,6 +622,12 @@ bool pmetal_envspec_draw_runtime::prepare(
         effect_fail(
             effect_fail_mask_,
             k_effect_fail_semantic);
+        log_prepare_stage_once(
+            1u << 3u,
+            "semantic_reject",
+            material,
+            decision,
+            family);
         return false;
     }
     effect_latch(effect_semantic_ready_);
@@ -575,6 +639,12 @@ bool pmetal_envspec_draw_runtime::prepare(
         effect_fail(
             effect_fail_mask_,
             k_effect_fail_source);
+        log_prepare_stage_once(
+            1u << 4u,
+            "source_reject",
+            material,
+            decision,
+            family);
 
         if (telemetry::effect_enabled() &&
             !g_source_cut_logged.exchange(
@@ -637,6 +707,12 @@ bool pmetal_envspec_draw_runtime::prepare(
         effect_fail(
             effect_fail_mask_,
             k_effect_fail_blend);
+        log_prepare_stage_once(
+            1u << 5u,
+            "blend_hold",
+            material,
+            decision,
+            family);
         return false;
     }
     effect_latch(effect_receiver_source_ready_);
@@ -650,6 +726,12 @@ bool pmetal_envspec_draw_runtime::prepare(
         effect_fail(
             effect_fail_mask_,
             k_effect_fail_context);
+        log_prepare_stage_once(
+            1u << 6u,
+            "context_reject",
+            material,
+            decision,
+            family);
         return false;
     }
 
@@ -674,6 +756,12 @@ bool pmetal_envspec_draw_runtime::prepare(
                 effect_fail(
                     effect_fail_mask_,
                     k_effect_fail_replacement);
+                log_prepare_stage_once(
+                    1u << 7u,
+                    "replacement_reject",
+                    material,
+                    decision,
+                    family);
                 return false;
             }
 
@@ -691,6 +779,12 @@ bool pmetal_envspec_draw_runtime::prepare(
                 effect_fail(
                     effect_fail_mask_,
                     k_effect_fail_replacement);
+                log_prepare_stage_once(
+                    1u << 7u,
+                    "replacement_reject",
+                    material,
+                    decision,
+                    family);
                 return false;
             }
 
@@ -747,6 +841,12 @@ bool pmetal_envspec_draw_runtime::prepare(
         effect_fail(
             effect_fail_mask_,
             k_effect_fail_probe);
+        log_prepare_stage_once(
+            1u << 8u,
+            "probe_reject",
+            material,
+            decision,
+            family);
         return false;
     }
     effect_latch(effect_probe_ready_);
@@ -819,6 +919,12 @@ bool pmetal_envspec_draw_runtime::prepare(
         effect_fail(
             effect_fail_mask_,
             k_effect_fail_spec_rgb);
+        log_prepare_stage_once(
+            1u << 9u,
+            "spec_rgb_reject",
+            material,
+            decision,
+            family);
         return false;
     }
     effect_latch(effect_spec_rgb_ready_);
@@ -1129,12 +1235,24 @@ bool pmetal_envspec_draw_runtime::prepare(
         effect_fail(
             effect_fail_mask_,
             k_effect_fail_mutation);
+        log_prepare_stage_once(
+            1u << 10u,
+            "mutation_reject",
+            material,
+            decision,
+            family);
         return false;
     }
 
     prepared.ready = true;
     effect_latch(effect_request_ready_);
     telemetry::hot_count(requests_);
+    log_prepare_stage_once(
+        1u << 11u,
+        "request_ready",
+        material,
+        decision,
+        family);
     if (family ==
         pmetal_envspec_receiver_family::
             hemenvlerp)
