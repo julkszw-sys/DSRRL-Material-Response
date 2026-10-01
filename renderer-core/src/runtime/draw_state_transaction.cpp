@@ -16,6 +16,7 @@
 
 #include <array>
 #include <cstddef>
+#include <limits>
 
 namespace dsrrl::runtime {
 namespace {
@@ -481,7 +482,7 @@ bool draw_state_transaction_runtime::begin(
                 ctx1 != nullptr &&
                 first64 <=
                     static_cast<std::uint64_t>(
-                        UINT_MAX) &&
+                        std::numeric_limits<UINT>::max()) &&
                 count64 <=
                     static_cast<std::uint64_t>(
                         UINT_MAX);
