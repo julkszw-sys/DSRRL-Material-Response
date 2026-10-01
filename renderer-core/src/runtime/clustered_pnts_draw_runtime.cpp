@@ -21,7 +21,9 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <memory>
 #include <mutex>
+#include <unordered_map>
 
 namespace dsrrl::runtime {
 namespace {
@@ -50,16 +52,46 @@ thread_local draw_selection_tls g_draw_selection{};
 thread_local producer_input_snapshot g_producer_input_tls{};
 
 struct gpu_resources {
+    std::mutex mutex;
     ID3D11Device *device = nullptr;
     ID3D11Buffer *t18_buffer = nullptr;
     ID3D11ShaderResourceView *t18_srv = nullptr;
     ID3D11Buffer *t19_buffer = nullptr;
     ID3D11ShaderResourceView *t19_srv = nullptr;
     ID3D11Buffer *b12 = nullptr;
+
+    ~gpu_resources()
+    {
+        if (b12 != nullptr)
+            b12->Release();
+        if (t19_srv != nullptr)
+            t19_srv->Release();
+        if (t19_buffer != nullptr)
+            t19_buffer->Release();
+        if (t18_srv != nullptr)
+            t18_srv->Release();
+        if (t18_buffer != nullptr)
+            t18_buffer->Release();
+        if (device != nullptr)
+            device->Release();
+    }
 };
 
-std::mutex g_resource_mutex;
-gpu_resources g_gpu{};
+struct gpu_context_tls {
+    ID3D11DeviceContext *context = nullptr;
+    std::uint64_t epoch = 0u;
+    std::shared_ptr<gpu_resources> resources{};
+};
+
+std::mutex g_resource_registry_mutex;
+std::unordered_map<
+    ID3D11DeviceContext *,
+    std::shared_ptr<gpu_resources>>
+    g_gpu_by_context;
+std::atomic<std::uint64_t>
+    g_gpu_registry_epoch{1u};
+thread_local gpu_context_tls
+    g_gpu_context_tls{};
 
 clustered_pnts_draw_runtime *g_runtime = nullptr;
 std::atomic_bool g_enabled{false};
