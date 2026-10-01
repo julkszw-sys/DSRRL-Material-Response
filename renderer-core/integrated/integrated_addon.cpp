@@ -2009,6 +2009,129 @@ void log_pointlight_prep_once(
         line);
 }
 
+bool observe_pointlight_draw_identity(
+    std::uint8_t route_mask,
+    bool fixed_pointlight_receiver,
+    bool clustered_pointlight_receiver,
+    bool clustered_pointlight_spc,
+    dsrrl::operators::material_response::material_identity &out_material,
+    dsrrl::operators::material_response::decision &out_decision) noexcept
+{
+    out_material = {};
+    out_decision = {};
+
+    // Special-K-style fast dispatch: exact pipeline attestation selected the
+    // PointLight namespace at init/bind time, so a PointLight draw must not
+    // re-run the generic Stable/HemEnv/Lerp/Subsurface/HemDir3/U/L receiver
+    // census. Any competing visible receiver route is ambiguous and fails open
+    // instead of creating a hybrid operator.
+    const unsigned pointlight_classes =
+        (fixed_pointlight_receiver ? 1u : 0u) +
+        (clustered_pointlight_receiver ? 1u : 0u);
+    constexpr std::uint8_t k_conflicting_receiver_routes =
+        k_route_stable |
+        k_route_hemenvlerp |
+        k_route_subsurface |
+        k_route_hemdir3 |
+        k_route_upper_lower;
+
+    if (pointlight_classes != 1u ||
+        (route_mask & k_conflicting_receiver_routes) != 0u) {
+        hot_count(g_mr_fail_open);
+        log_pointlight_gate_once(
+            1u << 6,
+            "pointlight_route_ambiguous",
+            fixed_pointlight_receiver,
+            clustered_pointlight_receiver,
+            clustered_pointlight_spc,
+            false,
+            out_material,
+            out_decision);
+        return false;
+    }
+
+    hot_count(g_draw_receiver_hits);
+
+    const bool owner_ok =
+        dsrrl::runtime::material_owner_selection_consume(
+            out_material);
+    if (owner_ok)
+        hot_count(g_draw_owner_hits);
+
+    if (!owner_ok) {
+        hot_count(g_draw_receiver_only);
+        hot_count(g_mr_fail_open);
+        log_pointlight_gate_once(
+            1u << 1,
+            "owner_reject",
+            fixed_pointlight_receiver,
+            clustered_pointlight_receiver,
+            clustered_pointlight_spc,
+            false,
+            out_material,
+            out_decision);
+        return true;
+    }
+
+    hot_count(g_draw_joins);
+
+    if (!g_mr_ready.load()) {
+        hot_count(g_mr_fail_open);
+        log_pointlight_gate_once(
+            1u << 2,
+            "material_registry_not_ready",
+            fixed_pointlight_receiver,
+            clustered_pointlight_receiver,
+            clustered_pointlight_spc,
+            true,
+            out_material,
+            out_decision);
+        return true;
+    }
+
+    hot_count(g_mr_draw_eval);
+    const bool requires_specular =
+        fixed_pointlight_receiver ||
+        (clustered_pointlight_receiver &&
+         clustered_pointlight_spc);
+
+    out_decision =
+        g_material_response.
+            evaluate_direct_pointlight_material(
+                out_material,
+                requires_specular);
+
+    if (out_decision.active) {
+        hot_count(g_mr_would_activate);
+        if (!g_pointlight_active_logged.exchange(
+                true,
+                std::memory_order_relaxed)) {
+            log_pointlight_gate_once(
+                1u << 4,
+                "decision_active",
+                fixed_pointlight_receiver,
+                clustered_pointlight_receiver,
+                clustered_pointlight_spc,
+                true,
+                out_material,
+                out_decision);
+        }
+    } else {
+        hot_count(g_mr_fail_open);
+        log_pointlight_gate_once(
+            1u << 3,
+            "decision_reject",
+            fixed_pointlight_receiver,
+            clustered_pointlight_receiver,
+            clustered_pointlight_spc,
+            true,
+            out_material,
+            out_decision);
+    }
+
+    return true;
+}
+
 bool observe_draw_identity(
     reshade::api::command_list *cmd_list,
     std::uint8_t route_mask,
@@ -5734,22 +5857,36 @@ bool on_draw(
     dsrrl::operators::material_response::material_identity material{};
     dsrrl::operators::material_response::decision decision{};
 
-    if (!observe_draw_identity(
-            cmd_list,
-            route_mask,
-            fixed_pointlight_bound,
-            clustered_pointlight_bound,
-            clustered_pointlight_spc,
-            receiver_id,
-            hemenvlerp_bound,
-            hemenvlerp_identity,
-            subsurface_bound,
-            hemdir3_bound,
-            hemdir3_identity,
-            upper_lower_bound,
-            upper_lower_identity,
-            material,
-            decision)) {
+    const bool direct_pointlight_route =
+        fixed_pointlight_bound ||
+        clustered_pointlight_bound;
+    const bool draw_identity_ready =
+        direct_pointlight_route
+            ? observe_pointlight_draw_identity(
+                route_mask,
+                fixed_pointlight_bound,
+                clustered_pointlight_bound,
+                clustered_pointlight_spc,
+                material,
+                decision)
+            : observe_draw_identity(
+                cmd_list,
+                route_mask,
+                fixed_pointlight_bound,
+                clustered_pointlight_bound,
+                clustered_pointlight_spc,
+                receiver_id,
+                hemenvlerp_bound,
+                hemenvlerp_identity,
+                subsurface_bound,
+                hemdir3_bound,
+                hemdir3_identity,
+                upper_lower_bound,
+                upper_lower_identity,
+                material,
+                decision);
+
+    if (!draw_identity_ready) {
         mark_effect_probe_mask(
             route_candidates,
             effect_probe_stage::fail_open);
@@ -5970,22 +6107,36 @@ bool on_draw_indexed(
     dsrrl::operators::material_response::material_identity material{};
     dsrrl::operators::material_response::decision decision{};
 
-    if (!observe_draw_identity(
-            cmd_list,
-            route_mask,
-            fixed_pointlight_bound,
-            clustered_pointlight_bound,
-            clustered_pointlight_spc,
-            receiver_id,
-            hemenvlerp_bound,
-            hemenvlerp_identity,
-            subsurface_bound,
-            hemdir3_bound,
-            hemdir3_identity,
-            upper_lower_bound,
-            upper_lower_identity,
-            material,
-            decision)) {
+    const bool direct_pointlight_route =
+        fixed_pointlight_bound ||
+        clustered_pointlight_bound;
+    const bool draw_identity_ready =
+        direct_pointlight_route
+            ? observe_pointlight_draw_identity(
+                route_mask,
+                fixed_pointlight_bound,
+                clustered_pointlight_bound,
+                clustered_pointlight_spc,
+                material,
+                decision)
+            : observe_draw_identity(
+                cmd_list,
+                route_mask,
+                fixed_pointlight_bound,
+                clustered_pointlight_bound,
+                clustered_pointlight_spc,
+                receiver_id,
+                hemenvlerp_bound,
+                hemenvlerp_identity,
+                subsurface_bound,
+                hemdir3_bound,
+                hemdir3_identity,
+                upper_lower_bound,
+                upper_lower_identity,
+                material,
+                decision);
+
+    if (!draw_identity_ready) {
         mark_effect_probe_mask(
             route_candidates,
             effect_probe_stage::fail_open);
