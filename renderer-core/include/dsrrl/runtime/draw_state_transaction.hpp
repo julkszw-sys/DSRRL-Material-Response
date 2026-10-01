@@ -171,6 +171,9 @@ private:
     struct srv_capture {
         std::uint32_t slot = 0;
         ID3D11ShaderResourceView *srv = nullptr;
+        // True whenever this capture owns a COM reference. Runtime v2 shadow
+        // capture obtains that reference with AddRef instead of PSGet*.
+        bool owns_reference = false;
     };
 
     struct sampler_capture {
