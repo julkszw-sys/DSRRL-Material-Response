@@ -843,6 +843,11 @@ bool exe_ok(){
  if(h)BCryptDestroyHash(h);BCryptCloseAlgorithmProvider(a,0);if(!ok)return false;static constexpr char x[]="0123456789abcdef";std::string s(64,'0');for(std::size_t i=0;i<32;++i){s[2*i]=x[d[i]>>4];s[2*i+1]=x[d[i]&15];}return s==k_sha;
 }
 void __fastcall parse_entry(void*m,const void*r) noexcept {
+#ifdef DSRRL_FLVER_SELECTOR_PROFILE
+ g_selector_profile_parse_events.fetch_add(
+     1u,
+     std::memory_order_relaxed);
+#endif
  if(m)flver_identity_observe_destroy(m);
  if(m&&r&&range_ok(r,0x18)){
   std::uint32_t o=0,l=0;
@@ -856,13 +861,26 @@ void __fastcall parse_entry(void*m,const void*r) noexcept {
  }
  if(g_po)g_po(m,r);
 }
-void __fastcall destroy_entry(void*m) noexcept {flver_identity_observe_destroy(m);if(g_do)g_do(m);}
+void __fastcall destroy_entry(void*m) noexcept {
+#ifdef DSRRL_FLVER_SELECTOR_PROFILE
+ g_selector_profile_destroy_events.fetch_add(
+     1u,
+     std::memory_order_relaxed);
+#endif
+ flver_identity_observe_destroy(m);
+ if(g_do)g_do(m);
+}
 void __fastcall mtd_entry(
     void *material,
     const void *raw,
     std::uint32_t len,
     const wchar_t *semantic_key) noexcept
 {
+#ifdef DSRRL_FLVER_SELECTOR_PROFILE
+ g_selector_profile_mtd_events.fetch_add(
+     1u,
+     std::memory_order_relaxed);
+#endif
  observe_exact_runtime_mtd(material,raw,len,semantic_key);
  if(g_mo)g_mo(material,raw,len,semantic_key);
 }
@@ -1055,6 +1073,7 @@ bool install(
     bool enable_hemdir3_selector) noexcept {
  if(g_p.patched||g_s.patched||g_d.patched||g_m.patched||g_b.patched)return false;
  g_state={};
+ selector_profile_reset();
 #ifdef DSRRL_PHYSICAL_CUT_UL_H3_SUBSURFACE
  (void)enable_upper_lower_selector;
  (void)enable_hemdir3_selector;
