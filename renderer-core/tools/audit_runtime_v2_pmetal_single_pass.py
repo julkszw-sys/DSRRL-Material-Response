@@ -28,6 +28,7 @@ def main() -> None:
     flver_registry = (root / "src/runtime/flver_identity_registry.cpp").read_text(encoding="utf-8")
     owner_producer = (root / "src/runtime/material_owner_producer.cpp").read_text(encoding="utf-8")
     owner_selection = (root / "src/runtime/material_owner_selection.cpp").read_text(encoding="utf-8")
+    clustered = (root / "src/runtime/clustered_pnts_draw_runtime.cpp").read_text(encoding="utf-8")
 
     require(integrated, "g_pmetal_native_draw.arm_draw(", "non-indexed single-pass arm")
     require(integrated, "g_pmetal_native_draw.arm_draw_indexed(", "indexed single-pass arm")
@@ -78,6 +79,8 @@ def main() -> None:
     require(flver_registry, "g_mutex_fallbacks", "FLVER mutex fallback telemetry")
     require(owner_producer, "k_owner_material_cache_ways = 4u", "4-way owner-to-MTD cache")
     require(owner_selection, "k_owner_auth_cache_ways = 4u", "4-way owner-auth cache")
+    require(clustered, "thread_local std::uint64_t g_local_serial = 0u", "TLS clustered builder serial")
+    forbid(clustered, "g_serial.fetch_add", "global atomic serial on clustered builder hot path")
 
     print("DSRRL_RUNTIME_V2_PMETAL_SINGLE_PASS_AUDIT_PASS")
 
