@@ -1870,6 +1870,18 @@ pmetal_env_source_runtime::telemetry() const noexcept
     out.cache_generation =
         g_source_cache_generation.load(
             std::memory_order_relaxed);
+    out.hook_single_seen =
+        g_hook_single_seen.load(
+            std::memory_order_relaxed);
+    out.hook_blend_seen =
+        g_hook_blend_seen.load(
+            std::memory_order_relaxed);
+    out.hook_publish =
+        g_hook_publish.load(
+            std::memory_order_relaxed);
+    out.hook_consume =
+        g_hook_consume.load(
+            std::memory_order_relaxed);
 
     out.last_publish_tid =
         g_last_publish_tid.load(
@@ -1906,6 +1918,13 @@ pmetal_env_source_runtime::telemetry() const noexcept
     out.selector_carrier_active =
         g_selector_enabled.load(
             std::memory_order_relaxed);
+    out.hook_single_armed =
+        g_envspec_single_hook.patched;
+    out.hook_blend_armed =
+        g_envspec_blend_hook.patched;
+    out.restore_failed =
+        g_hook_restore_failed.load(
+            std::memory_order_relaxed);
 
     return out;
 }
@@ -1917,6 +1936,7 @@ void pmetal_env_source_runtime::reset() noexcept
         std::memory_order_relaxed);
     pmetal_env_source_cache_invalidate();
     pmetal_env_source_selector_clear();
+    clear_hook_source();
 
     g_publish.store(
         0u,
@@ -1950,6 +1970,24 @@ void pmetal_env_source_runtime::reset() noexcept
         std::memory_order_relaxed);
     g_region_cache_miss.store(
         0u,
+        std::memory_order_relaxed);
+    g_hook_single_seen.store(
+        0u,
+        std::memory_order_relaxed);
+    g_hook_blend_seen.store(
+        0u,
+        std::memory_order_relaxed);
+    g_hook_publish.store(
+        0u,
+        std::memory_order_relaxed);
+    g_hook_consume.store(
+        0u,
+        std::memory_order_relaxed);
+    g_hook_source_serial.store(
+        0u,
+        std::memory_order_relaxed);
+    g_hook_restore_failed.store(
+        false,
         std::memory_order_relaxed);
 
     g_last_publish_tid.store(
