@@ -93,6 +93,44 @@ std::atomic<std::uint32_t> g_hook_decode_count{0u};
 std::atomic<std::uint32_t> g_hook_decode_index{0u};
 std::atomic<std::uint32_t> g_hook_decode_row_id{0u};
 std::atomic<std::uint64_t> g_hook_decode_signature{0u};
+
+// Diagnostic-only structural bank-signature frontier. These atomics are
+// written by the existing scan itself; they never trigger an extra read or
+// authorize a donor. scan_count makes the bounded PR179 retry observable.
+std::atomic<std::uint64_t> g_bank_signature_scan_count{0u};
+std::atomic<std::uint32_t> g_bank_signature_attempt{0u};
+std::atomic<std::uint32_t> g_bank_signature_stage{0u};
+std::atomic<std::uint32_t> g_bank_signature_entry{0u};
+std::atomic<std::uint32_t> g_bank_signature_name_offset{0u};
+std::atomic<std::uint32_t> g_bank_signature_consumed{0u};
+
+enum bank_signature_stage : std::uint32_t {
+    bank_signature_none = 0u,
+    bank_signature_header_range = 1u,
+    bank_signature_header_semantic = 2u,
+    bank_signature_table_range = 3u,
+    bank_signature_name_offset = 4u,
+    bank_signature_name_window = 5u,
+    bank_signature_name_window_end = 6u,
+    bank_signature_name_chunk_zero = 7u,
+    bank_signature_name_unterminated = 8u,
+    bank_signature_ok = 9u
+};
+
+void record_bank_signature_stage(
+    std::uint32_t attempt,
+    std::uint32_t stage,
+    std::uint32_t entry,
+    std::uint32_t name_offset,
+    std::uint32_t consumed) noexcept
+{
+    g_bank_signature_attempt.store(attempt,std::memory_order_relaxed);
+    g_bank_signature_stage.store(stage,std::memory_order_relaxed);
+    g_bank_signature_entry.store(entry,std::memory_order_relaxed);
+    g_bank_signature_name_offset.store(name_offset,std::memory_order_relaxed);
+    g_bank_signature_consumed.store(consumed,std::memory_order_relaxed);
+}
+
 std::atomic_bool g_hook_restore_failed{false};
 
 enum hook_decode_stage : std::uint32_t {
@@ -510,14 +548,32 @@ std::uint64_t fnv_byte(
 
 bool bank_signature(
     const std::uint8_t *base,
-    std::uint64_t &signature) noexcept
+    std::uint64_t &signature,
+    std::uint32_t attempt) noexcept
 {
     signature = 0u;
+    g_bank_signature_scan_count.fetch_add(
+        1u,
+        std::memory_order_relaxed);
+    record_bank_signature_stage(
+        attempt,
+        bank_signature_none,
+        0u,
+        0u,
+        0u);
+
     if (base == nullptr ||
         !readable_range(
             base + 8u,
-            sizeof(std::uint16_t) * 2u))
+            sizeof(std::uint16_t) * 2u)) {
+        record_bank_signature_stage(
+            attempt,
+            bank_signature_header_range,
+            0u,
+            0u,
+            0u);
         return false;
+    }
 
     std::uint16_t version = 0u;
     std::uint16_t count = 0u;
@@ -532,8 +588,15 @@ bool bank_signature(
 
     if (version != 4u ||
         count == 0u ||
-        count > 256u)
+        count > 256u) {
+        record_bank_signature_stage(
+            attempt,
+            bank_signature_header_semantic,
+            0u,
+            0u,
+            0u);
         return false;
+    }
 
     const std::size_t table_bytes =
         0x30u +
@@ -543,8 +606,15 @@ bool bank_signature(
     if (table_bytes < 8u ||
         !readable_range(
             base + 8u,
-            table_bytes - 8u))
+            table_bytes - 8u)) {
+        record_bank_signature_stage(
+            attempt,
+            bank_signature_table_range,
+            0u,
+            0u,
+            0u);
         return false;
+    }
 
     std::uint64_t hash =
         0xcbf29ce484222325ULL;
@@ -587,8 +657,15 @@ bool bank_signature(
             sizeof(name_offset));
 
         if (name_offset < minimum_name ||
-            name_offset > 0x100000u)
+            name_offset > 0x100000u) {
+            record_bank_signature_stage(
+                attempt,
+                bank_signature_name_offset,
+                i,
+                name_offset,
+                0u);
             return false;
+        }
 
         for (std::uint32_t shift = 0u;
              shift < 32u;
@@ -612,14 +689,28 @@ bool bank_signature(
                 name + consumed;
             if (!ensure_readable_window(
                     cursor,
-                    window))
+                    window)) {
+                record_bank_signature_stage(
+                    attempt,
+                    bank_signature_name_window,
+                    i,
+                    name_offset,
+                    consumed);
                 return false;
+            }
 
             const auto address =
                 reinterpret_cast<std::uintptr_t>(
                     cursor);
-            if (window.end <= address)
+            if (window.end <= address) {
+                record_bank_signature_stage(
+                    attempt,
+                    bank_signature_name_window_end,
+                    i,
+                    name_offset,
+                    consumed);
                 return false;
+            }
 
             const auto room =
                 static_cast<std::size_t>(
@@ -628,8 +719,15 @@ bool bank_signature(
                 std::min<std::size_t>(
                     256u - consumed,
                     room);
-            if (chunk == 0u)
+            if (chunk == 0u) {
+                record_bank_signature_stage(
+                    attempt,
+                    bank_signature_name_chunk_zero,
+                    i,
+                    name_offset,
+                    consumed);
                 return false;
+            }
 
             for (std::size_t j = 0u;
                  j < chunk;
@@ -652,11 +750,24 @@ bool bank_signature(
                 break;
         }
 
-        if (!terminated)
+        if (!terminated) {
+            record_bank_signature_stage(
+                attempt,
+                bank_signature_name_unterminated,
+                i,
+                name_offset,
+                consumed);
             return false;
+        }
     }
 
     signature = hash;
+    record_bank_signature_stage(
+        attempt,
+        bank_signature_ok,
+        static_cast<std::uint32_t>(count),
+        0u,
+        0u);
     return true;
 }
 
@@ -689,7 +800,8 @@ resolve_bank(
     std::uint64_t decoded = 0u;
     if (!bank_signature(
             base,
-            decoded)) {
+            decoded,
+            1u)) {
         // PR177 runtime proved that the live LightBank header, selector and
         // selected row are valid while the structural signature can still
         // fail before producing a hash. Do not move a fresh VirtualQuery scan
@@ -705,7 +817,8 @@ resolve_bank(
 
         if (!bank_signature(
                 base,
-                decoded)) {
+                decoded,
+                2u)) {
             cached.base = base;
             cached.count = count;
             cached.generation = generation;
@@ -1916,6 +2029,18 @@ pmetal_env_source_runtime::telemetry() const noexcept
     out.hook_decode_index = g_hook_decode_index.load(std::memory_order_relaxed);
     out.hook_decode_row_id = g_hook_decode_row_id.load(std::memory_order_relaxed);
     out.hook_decode_signature = g_hook_decode_signature.load(std::memory_order_relaxed);
+    out.bank_signature_scan_count =
+        g_bank_signature_scan_count.load(std::memory_order_relaxed);
+    out.bank_signature_attempt =
+        g_bank_signature_attempt.load(std::memory_order_relaxed);
+    out.bank_signature_stage =
+        g_bank_signature_stage.load(std::memory_order_relaxed);
+    out.bank_signature_entry =
+        g_bank_signature_entry.load(std::memory_order_relaxed);
+    out.bank_signature_name_offset =
+        g_bank_signature_name_offset.load(std::memory_order_relaxed);
+    out.bank_signature_consumed =
+        g_bank_signature_consumed.load(std::memory_order_relaxed);
 
     out.last_publish_tid =
         g_last_publish_tid.load(
@@ -2026,6 +2151,12 @@ void pmetal_env_source_runtime::reset() noexcept
     g_hook_decode_index.store(0u,std::memory_order_relaxed);
     g_hook_decode_row_id.store(0u,std::memory_order_relaxed);
     g_hook_decode_signature.store(0u,std::memory_order_relaxed);
+    g_bank_signature_scan_count.store(0u,std::memory_order_relaxed);
+    g_bank_signature_attempt.store(0u,std::memory_order_relaxed);
+    g_bank_signature_stage.store(0u,std::memory_order_relaxed);
+    g_bank_signature_entry.store(0u,std::memory_order_relaxed);
+    g_bank_signature_name_offset.store(0u,std::memory_order_relaxed);
+    g_bank_signature_consumed.store(0u,std::memory_order_relaxed);
     g_hook_restore_failed.store(
         false,
         std::memory_order_relaxed);
