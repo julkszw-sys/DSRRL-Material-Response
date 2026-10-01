@@ -6953,10 +6953,11 @@ bool AddonInit(
     bool pmetal_envspec_enabled =
         g_core.features().enabled(
             dsrrl::core::operator_id::env_spec);
+    // Performance bisect: keep the rest of the dynamic runtime intact but
+    // deliberately withhold the dedicated P_Metal/LightBank source carrier.
+    // The existing fail-open below disables EnvSpec and preserves stock DSR.
     const bool pmetal_source_ready =
-        !pmetal_envspec_enabled ||
-        (flver_hooks &&
-         g_pmetal_source.install());
+        !pmetal_envspec_enabled;
 
     // EnvSpec uses embedded PTDE donors selected by an exact FLVER callback.
     // Only visible U/L may arm the global LightBank hook set.
