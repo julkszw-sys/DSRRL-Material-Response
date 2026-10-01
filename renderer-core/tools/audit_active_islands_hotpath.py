@@ -115,9 +115,8 @@ def main():
     require(flver_cpp,
         "fixed_pointlight_selector_event_bridge(owner);",
         "fixed selector bridge dispatches directly at the FLVER semantic cut")
-    forbid(flver_cpp,
-        "else if (g_state.builder_armed)\n  fixed_pointlight_selector_event_bridge(owner);",
-        "fixed PointLight must not remain coupled to the U/L branch")
+    if "else if (g_state.builder_armed)\n  fixed_pointlight_selector_event_bridge(owner);" in flver_cpp:
+        fail("fixed PointLight must not remain coupled to the U/L branch")
 
     # Disabled islands must not keep receiver/materialization work alive.
     require(integrated,
