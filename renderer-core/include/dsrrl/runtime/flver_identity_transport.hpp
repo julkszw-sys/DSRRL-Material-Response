@@ -17,6 +17,8 @@ struct hook_status {
     bool runtime_mtd_classified = false;
     bool runtime_mtd_cache_hit = false;
     bool runtime_mtd_selection_published = false;
+    bool upper_lower_selector_enabled = false;
+    bool hemdir3_selector_enabled = false;
 };
 
 // The clustered PointLight builder hook is independent from the FLVER
