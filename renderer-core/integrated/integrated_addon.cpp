@@ -2877,6 +2877,9 @@ void log_state(const char *tag) noexcept
     const auto t = g_a1_bridge.telemetry();
     const auto f = dsrrl::runtime::flver_identity_stats();
     const auto h = dsrrl::runtime::flver_identity_transport::status();
+    const auto selector =
+        dsrrl::runtime::flver_identity_transport::
+            selector_owner_stats();
     const auto m = dsrrl::runtime::material_owner_selection_stats();
     const auto mr_tx = g_mr_draw_runtime.telemetry();
     const auto tx = g_draw_transactions.telemetry();
@@ -3044,6 +3047,36 @@ void log_state(const char *tag) noexcept
         static_cast<unsigned long long>(g_draw_receiver_only.load()));
 
     reshade::log::message(reshade::log::level::info, line);
+
+    char selector_perf_line[512]{};
+    std::snprintf(
+        selector_perf_line,
+        sizeof(selector_perf_line),
+        "[DSRRL RUNTIME V2] %s SELECTOR_PERF events=%llu final_cache=%llu/%llu owner_sha=%llu owner_mtd=%llu exact_ready=%llu runtime_mtd=%llu/%llu flver_tls=%llu mutex_fb=%llu",
+        tag,
+        static_cast<unsigned long long>(
+            selector.selector_events),
+        static_cast<unsigned long long>(
+            selector.selector_identity_cache_hits),
+        static_cast<unsigned long long>(
+            selector.selector_identity_cache_misses),
+        static_cast<unsigned long long>(
+            selector.owner_sha_hits),
+        static_cast<unsigned long long>(
+            selector.owner_mtd_hits),
+        static_cast<unsigned long long>(
+            selector.exact_owner_ready),
+        static_cast<unsigned long long>(
+            selector.runtime_material_hits),
+        static_cast<unsigned long long>(
+            selector.runtime_material_ready),
+        static_cast<unsigned long long>(
+            f.tls_hits),
+        static_cast<unsigned long long>(
+            f.mutex_fallbacks));
+    reshade::log::message(
+        reshade::log::level::info,
+        selector_perf_line);
 
     char ul_direct_line[320]{};
     std::snprintf(
