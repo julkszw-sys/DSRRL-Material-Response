@@ -502,6 +502,8 @@ bool draw_state_transaction_runtime::begin(
                 capture.srv->AddRef();
                 capture.owns_reference = true;
             }
+            telemetry::hot_count(
+                srv_shadow_capture_);
         } else {
             ctx->PSGetShaderResources(
                 capture.slot,
@@ -509,6 +511,8 @@ bool draw_state_transaction_runtime::begin(
                 &capture.srv);
             capture.owns_reference =
                 capture.srv != nullptr;
+            telemetry::hot_count(
+                srv_native_capture_);
         }
     }
 
@@ -530,6 +534,8 @@ bool draw_state_transaction_runtime::begin(
                 capture.sampler->AddRef();
                 capture.owns_reference = true;
             }
+            telemetry::hot_count(
+                sampler_shadow_capture_);
         } else {
             ctx->PSGetSamplers(
                 capture.slot,
@@ -537,6 +543,8 @@ bool draw_state_transaction_runtime::begin(
                 &capture.sampler);
             capture.owns_reference =
                 capture.sampler != nullptr;
+            telemetry::hot_count(
+                sampler_native_capture_);
         }
     }
 
@@ -1354,6 +1362,10 @@ draw_state_transaction_runtime::telemetry() const noexcept
         restore_ok_.load(),
         restore_fail_.load(),
         native_readback_skipped_.load(),
+        srv_shadow_capture_.load(),
+        srv_native_capture_.load(),
+        sampler_shadow_capture_.load(),
+        sampler_native_capture_.load(),
         quarantined_.load()
     };
 }
@@ -1410,6 +1422,10 @@ void draw_state_transaction_runtime::reset() noexcept
     restore_ok_.store(0);
     restore_fail_.store(0);
     native_readback_skipped_.store(0);
+    srv_shadow_capture_.store(0);
+    srv_native_capture_.store(0);
+    sampler_shadow_capture_.store(0);
+    sampler_native_capture_.store(0);
     quarantined_.store(false);
 }
 
