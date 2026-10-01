@@ -89,6 +89,12 @@ constexpr bool k_draw_replay_runtime_enabled = false;
 constexpr bool k_draw_replay_runtime_enabled = true;
 #endif
 
+#ifdef DSRRL_EMPTY_DRAW_CALLBACK_BISECT
+constexpr bool k_empty_draw_callback_bisect = true;
+#else
+constexpr bool k_empty_draw_callback_bisect = false;
+#endif
+
 #if defined(DSRRL_POINTLIGHT_DRAWTIME_BYPASS) || defined(DSRRL_DRAWTIME_ISLANDS_BYPASS)
 constexpr bool k_pointlight_drawtime_runtime_enabled = false;
 #else
@@ -5807,6 +5813,9 @@ bool on_draw(
     std::uint32_t first_vertex,
     std::uint32_t first_instance)
 {
+    if (k_empty_draw_callback_bisect)
+        return false;
+
     if (g_hot_telemetry_enabled &&
         dsrrl::runtime::bloom_fx_draw_transport::
             active_draw_scope())
@@ -6078,6 +6087,9 @@ bool on_draw_indexed(
     std::int32_t vertex_offset,
     std::uint32_t first_instance)
 {
+    if (k_empty_draw_callback_bisect)
+        return false;
+
     if (g_hot_telemetry_enabled &&
         dsrrl::runtime::bloom_fx_draw_transport::
             active_draw_scope())
@@ -6556,6 +6568,13 @@ bool AddonInit(
     register_events();
 
     if (k_drawtime_islands_runtime_enabled &&
+        k_draw_callbacks_runtime_enabled &&
+        k_empty_draw_callback_bisect) {
+        reshade::log::message(
+            reshade::log::level::info,
+            "[DSRRL CORE+ISLANDS " DSRRL_CORE_ISLANDS_VERSION
+            "] EMPTY DRAW CALLBACK BISECT: dynamic transports and draw callbacks are installed, but draw/draw_indexed return immediately before all DSRRL draw work.");
+    } else if (k_drawtime_islands_runtime_enabled &&
         !k_draw_callbacks_runtime_enabled) {
         reshade::log::message(
             reshade::log::level::info,
