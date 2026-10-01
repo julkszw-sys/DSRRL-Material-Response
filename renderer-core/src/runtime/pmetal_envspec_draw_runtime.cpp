@@ -858,6 +858,25 @@ bool pmetal_envspec_draw_runtime::prepare(
                     material,
                     decision,
                     family);
+                char replacement_line[320]{};
+                std::snprintf(
+                    replacement_line,
+                    sizeof(replacement_line),
+                    "[DSRRL ENVSPEC REPL STATE] family=stable rx=%u reg_ok=%llu reg_fail=%llu q=%u",
+                    static_cast<unsigned>(
+                        decision.receiver_id),
+                    static_cast<unsigned long long>(
+                        replacement_register_ok_.load(
+                            std::memory_order_relaxed)),
+                    static_cast<unsigned long long>(
+                        replacement_register_fail_.load(
+                            std::memory_order_relaxed)),
+                    quarantined_.load(
+                        std::memory_order_relaxed)
+                        ? 1u : 0u);
+                reshade::log::message(
+                    reshade::log::level::info,
+                    replacement_line);
                 return false;
             }
 
