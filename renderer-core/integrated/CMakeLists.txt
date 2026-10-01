@@ -86,6 +86,11 @@ option(
     "Diagnostic: keep dynamic draw routing and preparation but release prepared islands before replay/restore"
     OFF)
 
+option(
+    DSRRL_EMPTY_DRAW_CALLBACK_BISECT
+    "Diagnostic: keep dynamic transports and register draw callbacks, but return immediately before any DSRRL draw work"
+    OFF)
+
 set(
     RESHADE_INCLUDE_DIR
     ""
@@ -498,6 +503,13 @@ if(DSRRL_DRAW_REPLAY_BYPASS)
         dsrrl_renderer_core_integrated
         PRIVATE
         $<$<COMPILE_LANGUAGE:CXX>:DSRRL_DRAW_REPLAY_BYPASS>)
+endif()
+
+if(DSRRL_EMPTY_DRAW_CALLBACK_BISECT)
+    target_compile_definitions(
+        dsrrl_renderer_core_integrated
+        PRIVATE
+        $<$<COMPILE_LANGUAGE:CXX>:DSRRL_EMPTY_DRAW_CALLBACK_BISECT>)
 endif()
 
 if(MSVC)
