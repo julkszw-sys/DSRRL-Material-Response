@@ -126,12 +126,15 @@ private:
         std::shared_ptr<const record> selected{};
         std::uint64_t epoch = 0u;
         bool present = false;
+        std::uint64_t pipeline = 0u;
+        std::uint64_t pipeline_epoch = 0u;
     };
 
     struct attestation_tls_entry {
         const clustered_pnts_pipeline_runtime *runtime = nullptr;
         std::uint64_t pipeline = 0u;
         std::uint64_t epoch = 0u;
+        std::shared_ptr<const record> selected{};
         bool present = false;
     };
 
@@ -145,6 +148,9 @@ private:
         std::uint32_t subobject_count,
         const reshade::api::pipeline_subobject *subobjects) noexcept;
 
+    std::shared_ptr<const record> pipeline_record_cached(
+        std::uint64_t pipeline_handle) const noexcept;
+
     mutable std::mutex mutex_;
     std::unordered_map<
         digest_key,
@@ -153,13 +159,8 @@ private:
     std::unordered_map<
         std::uint64_t,
         std::shared_ptr<const record>> pipelines_;
-    std::unordered_map<
-        std::uint64_t,
-        std::shared_ptr<const record>> bound_;
     reshade::api::device *device_ = nullptr;
-    std::atomic<std::uint64_t> bound_epoch_{1u};
     std::atomic<std::uint64_t> pipeline_epoch_{1u};
-    std::atomic_bool any_bound_{false};
 
     std::atomic<std::uint64_t> candidates_seen_{0};
     std::atomic<std::uint64_t> candidate_create_ok_{0};

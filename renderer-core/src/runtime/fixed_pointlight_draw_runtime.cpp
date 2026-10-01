@@ -222,7 +222,14 @@ void __fastcall capture_callback(
             current->valid_mask | (1u<<slot));
         current->captured_count=static_cast<std::uint8_t>(slot+1u);
 
-        {
+        // Only 2-light and 4-light payloads are legal Fixed PointLight
+        // consumer states. Publishing slot 0/2 partials only invalidates every
+        // selector TLS cache and takes the global map mutex for states that
+        // prepare_t19() must reject anyway.
+        const bool publishable_count =
+            current->captured_count==2u ||
+            current->captured_count==4u;
+        if(publishable_count){
             std::lock_guard<std::mutex> lock(g_mutex);
 
             if(!current->owner_consumed_serial){
@@ -516,19 +523,40 @@ void fixed_pointlight_draw_runtime::selector_event(void *owner) noexcept
     if(!g_enabled.load() || g_quarantined.load() || owner==nullptr)
         return;
 
+    const auto key=reinterpret_cast<std::uintptr_t>(owner);
+
+    // Producer and selector normally execute on the same renderer thread.
+    // Reuse the engine-live producer snapshot directly when it already
+    // represents a legal 2/4-light payload. The synchronized owner map remains
+    // the cross-thread fallback, not the normal path.
+    const auto producer=g_producer_snapshot;
+    if(producer &&
+       producer->owner==key &&
+       (producer->captured_count==2u ||
+        producer->captured_count==4u) &&
+       producer->owner_consumed_serial){
+        g_draw_snapshot=producer;
+        g_selector_cache={
+            key,
+            g_snapshot_epoch.load(
+                std::memory_order_relaxed),
+            producer,
+            true
+        };
+        telemetry::hot_count(g_selector_match);
+        return;
+    }
+
     // The FLVER selector semantic cut is shared infrastructure, so this
     // PointLight-local callback can still be invoked at very high frequency
-    // even when the fixed PointLight producer has never published a snapshot.
-    // Avoid a guaranteed mutex/map miss in that state. Publication sets this
-    // flag under the same map lock before unlock; clearing resets it under the
-    // lock after erasing the map.
+    // even when the fixed PointLight producer has never published a complete
+    // snapshot. Avoid a guaranteed mutex/map miss in that state.
     if(!g_have_snapshots.load(
             std::memory_order_acquire)){
         telemetry::hot_count(g_selector_stale);
         return;
     }
 
-    const auto key=reinterpret_cast<std::uintptr_t>(owner);
     const auto epoch=
         g_snapshot_epoch.load(
             std::memory_order_acquire);
