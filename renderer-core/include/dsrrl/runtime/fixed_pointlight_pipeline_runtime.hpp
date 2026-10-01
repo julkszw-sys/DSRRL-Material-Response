@@ -151,13 +151,8 @@ private:
     std::unordered_map<
         std::uint64_t,
         std::shared_ptr<const record>> pipelines_;
-    std::unordered_map<
-        std::uint64_t,
-        std::shared_ptr<const record>> bound_;
     reshade::api::device *device_ = nullptr;
-    std::atomic<std::uint64_t> bound_epoch_{1u};
     std::atomic<std::uint64_t> pipeline_epoch_{1u};
-    std::atomic_bool any_bound_{false};
 
     std::atomic<std::uint64_t> candidates_seen_{0};
     std::atomic<std::uint64_t> candidate_create_ok_{0};
