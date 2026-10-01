@@ -29,6 +29,10 @@ def main() -> None:
     require(integrated, "prepared.envspec_in_batch", "exact P_Metal batch gate")
     require(integrated, "Return false so ReShade continues into its single original", "stock wrapper continuation")
     require(integrated, "g_pmetal_native_draw.uninstall();", "explicit native hook teardown")
+    require(integrated, "active_integrated_draw_route(", "runtime-active route pruning")
+    require(integrated, "publish_active_dynamic_draw_routes();", "one-time active route publication")
+    require(integrated, "g_upper_lower_selection_transport_active.load(", "U/L route requires live transport")
+    require(integrated, "g_hemdir3_selection_transport_active.load(", "HemDir3 route requires live transport")
 
     for needle in (
         "k_vtbl_draw_indexed = 12u",
