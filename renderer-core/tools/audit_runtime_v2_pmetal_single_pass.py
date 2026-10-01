@@ -21,6 +21,8 @@ def main() -> None:
 
     integrated = (root / "integrated/integrated_addon.cpp").read_text(encoding="utf-8")
     native = (root / "src/runtime/pmetal_native_draw_bridge.cpp").read_text(encoding="utf-8")
+    source = (root / "src/runtime/pmetal_env_source_runtime.cpp").read_text(encoding="utf-8")
+    upper_lower = (root / "src/runtime/upper_lower_draw_runtime.cpp").read_text(encoding="utf-8")
     flver = (root / "src/runtime/flver_engine_hooks.cpp").read_text(encoding="utf-8")
     texture = (root / "src/runtime/texture_identity_transport.cpp").read_text(encoding="utf-8")
 
@@ -49,6 +51,14 @@ def main() -> None:
 
     forbid(native, "core_.transactions()", "native bridge must not re-enter generic transaction core")
     forbid(native, "raw_replay", "native bridge must not replay a second draw")
+
+    require(source, "pmetal_env_source_runtime::install()", "isolated P_Metal source lifecycle")
+    require(source, "pmetal_env_source_selector_event(", "isolated exact selector source event")
+    require(source, "pmetal_producer_state_publish(", "isolated producer publication")
+    require(source, "k_pmetal_material_route = 345u", "exact P_Metal route gate")
+    require(source, "P_Metal[DSB].mtd", "exact P_Metal semantic gate")
+    forbid(upper_lower, "pmetal_env_source_runtime::install()", "active P_Metal source must not live in U/L module")
+    forbid(upper_lower, "void pmetal_env_source_selector_event(", "active P_Metal selector source must not live in U/L module")
 
     require(flver, "g_selector_upper_lower_enabled", "U/L selector hot-path gate")
     require(flver, "g_selector_hemdir3_enabled", "HemDir3 selector hot-path gate")
