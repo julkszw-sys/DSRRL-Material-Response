@@ -129,6 +129,72 @@ def main() -> None:
         PHYSICAL_GLOBALS,
         "runtime global replacement")
 
+
+    text = replace_once(
+        text,
+        '''    char ul_direct_line[320]{};
+''',
+        '''#ifdef DSRRL_FLVER_SELECTOR_PROFILE
+    const auto flver_trace =
+        dsrrl::runtime::flver_identity_transport::
+            selector_profile_stats();
+    char flver_trace_line[1280]{};
+    std::snprintf(
+        flver_trace_line,
+        sizeof(flver_trace_line),
+        "[DSRRL FLVER TRACE] %s sample=1/%u samples=%llu qpc=%llu total=%llu max=%llu "
+        "prefix=%llu resolve=%llu cache_lookup=%llu cache_publish=%llu "
+        "owner_lookup=%llu owner_mtd=%llu selection_publish=%llu pmetal=%llu "
+        "runtime_mtd=%llu runtime_publish=%llu paths=%llu/%llu/%llu/%llu/%llu "
+        "support=%llu/%llu/%llu",
+        tag,
+        flver_trace.sample_period,
+        static_cast<unsigned long long>(flver_trace.samples),
+        static_cast<unsigned long long>(flver_trace.qpc_frequency),
+        static_cast<unsigned long long>(flver_trace.total_ticks),
+        static_cast<unsigned long long>(flver_trace.max_total_ticks),
+        static_cast<unsigned long long>(flver_trace.prefix_ticks),
+        static_cast<unsigned long long>(flver_trace.resolve_material_ticks),
+        static_cast<unsigned long long>(flver_trace.final_cache_lookup_ticks),
+        static_cast<unsigned long long>(flver_trace.final_cache_publish_ticks),
+        static_cast<unsigned long long>(flver_trace.owner_lookup_ticks),
+        static_cast<unsigned long long>(flver_trace.owner_mtd_enrich_ticks),
+        static_cast<unsigned long long>(flver_trace.selection_publish_ticks),
+        static_cast<unsigned long long>(flver_trace.pmetal_source_ticks),
+        static_cast<unsigned long long>(flver_trace.runtime_mtd_lookup_ticks),
+        static_cast<unsigned long long>(flver_trace.runtime_publish_ticks),
+        static_cast<unsigned long long>(flver_trace.sampled_cache_path),
+        static_cast<unsigned long long>(flver_trace.sampled_owner_path),
+        static_cast<unsigned long long>(flver_trace.sampled_runtime_mtd_path),
+        static_cast<unsigned long long>(flver_trace.sampled_fail_open_path),
+        static_cast<unsigned long long>(flver_trace.sampled_early_reject_path),
+        static_cast<unsigned long long>(flver_trace.parse_events),
+        static_cast<unsigned long long>(flver_trace.mtd_events),
+        static_cast<unsigned long long>(flver_trace.destroy_events));
+    reshade::log::message(
+        reshade::log::level::info,
+        flver_trace_line);
+#endif
+
+    char ul_direct_line[320]{};
+''',
+        "FLVER selector profile log insertion")
+
+    text = replace_once(
+        text,
+        '''    if (present == 1u ||
+        (g_hot_telemetry_enabled &&
+         (present % 300u) == 0u)) {
+''',
+        '''    if (present == 1u ||
+#ifdef DSRRL_FLVER_SELECTOR_PROFILE
+        (present % 300u) == 0u ||
+#endif
+        (g_hot_telemetry_enabled &&
+         (present % 300u) == 0u)) {
+''',
+        "FLVER selector profile periodic present log")
+
     for forbidden in (
         "dsrrl::runtime::upper_lower_draw_runtime\n    g_upper_lower",
         "dsrrl::runtime::subsurface_draw_runtime\n    g_subsurface",
