@@ -632,6 +632,19 @@ struct pmetal_native_draw_bridge::impl {
 pmetal_native_draw_bridge::~pmetal_native_draw_bridge()
 {
     uninstall();
+
+    if (impl_ != nullptr &&
+        impl_->hook_active.load(
+            std::memory_order_acquire)) {
+        // A failed vtable restore is a hard teardown fault. Do not free the
+        // state still referenced by the live hook. Detach dispatch so any
+        // residual call falls straight through the retained original target.
+        g_active.store(
+            nullptr,
+            std::memory_order_release);
+        return;
+    }
+
     delete impl_;
     impl_ = nullptr;
 }
