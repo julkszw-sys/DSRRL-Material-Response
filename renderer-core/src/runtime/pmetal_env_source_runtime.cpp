@@ -103,17 +103,14 @@ std::atomic<std::uint32_t> g_bank_signature_stage{0u};
 std::atomic<std::uint32_t> g_bank_signature_entry{0u};
 std::atomic<std::uint32_t> g_bank_signature_name_offset{0u};
 std::atomic<std::uint32_t> g_bank_signature_consumed{0u};
+std::atomic<std::uint64_t> g_bank_layout_signature{0u};
 
 enum bank_signature_stage : std::uint32_t {
     bank_signature_none = 0u,
     bank_signature_header_range = 1u,
     bank_signature_header_semantic = 2u,
     bank_signature_table_range = 3u,
-    bank_signature_name_offset = 4u,
-    bank_signature_name_window = 5u,
-    bank_signature_name_window_end = 6u,
-    bank_signature_name_chunk_zero = 7u,
-    bank_signature_name_unterminated = 8u,
+    bank_signature_layout_unknown = 4u,
     bank_signature_ok = 9u
 };
 
@@ -546,17 +543,19 @@ std::uint64_t fnv_byte(
         0x100000001b3ULL;
 }
 
-bool bank_signature(
+bool bank_layout_signature(
     const std::uint8_t *base,
-    std::uint64_t &signature,
-    std::uint32_t attempt) noexcept
+    std::uint64_t &layout_signature) noexcept
 {
-    signature = 0u;
+    layout_signature = 0u;
     g_bank_signature_scan_count.fetch_add(
         1u,
         std::memory_order_relaxed);
+    g_bank_layout_signature.store(
+        0u,
+        std::memory_order_relaxed);
     record_bank_signature_stage(
-        attempt,
+        1u,
         bank_signature_none,
         0u,
         0u,
@@ -567,7 +566,7 @@ bool bank_signature(
             base + 8u,
             sizeof(std::uint16_t) * 2u)) {
         record_bank_signature_stage(
-            attempt,
+            1u,
             bank_signature_header_range,
             0u,
             0u,
@@ -590,7 +589,7 @@ bool bank_signature(
         count == 0u ||
         count > 256u) {
         record_bank_signature_stage(
-            attempt,
+            1u,
             bank_signature_header_semantic,
             0u,
             0u,
@@ -608,7 +607,7 @@ bool bank_signature(
             base + 8u,
             table_bytes - 8u)) {
         record_bank_signature_stage(
-            attempt,
+            1u,
             bank_signature_table_range,
             0u,
             0u,
@@ -616,25 +615,41 @@ bool bank_signature(
         return false;
     }
 
+    // Exact bank identity must not depend on the authored LightBank values
+    // that this bridge intentionally replaces. PR180 runtime also proved that
+    // a legal vanilla DSR LightBank can contain name_offset == 0, invalidating
+    // the inherited V13 assumption that every row exposes a readable name.
+    //
+    // Hash only stable PARAM table structure: version, count and every
+    // (row_id,row_offset,name_offset) tuple. The 20 homologous V13 donor banks
+    // are joined to exact vanilla-DSR layout signatures by the generated
+    // authority. Unknown layouts (including a99) fail open.
     std::uint64_t hash =
         0xcbf29ce484222325ULL;
-    hash =
-        fnv_byte(
-            hash,
-            static_cast<std::uint8_t>(
-                count));
-    hash =
-        fnv_byte(
-            hash,
-            static_cast<std::uint8_t>(
-                count >> 8u));
 
-    const std::uint32_t minimum_name =
-        0x30u +
-        static_cast<std::uint32_t>(
-            count) * 12u;
+    auto hash_u16 =
+        [&](std::uint16_t value) noexcept {
+            hash = fnv_byte(
+                hash,
+                static_cast<std::uint8_t>(value));
+            hash = fnv_byte(
+                hash,
+                static_cast<std::uint8_t>(value >> 8u));
+        };
 
-    readable_window window{};
+    auto hash_u32 =
+        [&](std::uint32_t value) noexcept {
+            for (std::uint32_t shift = 0u;
+                 shift < 32u;
+                 shift += 8u)
+                hash = fnv_byte(
+                    hash,
+                    static_cast<std::uint8_t>(
+                        value >> shift));
+        };
+
+    hash_u16(version);
+    hash_u16(count);
 
     for (std::uint32_t i = 0u;
          i < count;
@@ -646,128 +661,30 @@ bool bank_signature(
                 12u;
 
         std::uint32_t row_id = 0u;
+        std::uint32_t row_offset = 0u;
         std::uint32_t name_offset = 0u;
         std::memcpy(
             &row_id,
             entry,
             sizeof(row_id));
         std::memcpy(
+            &row_offset,
+            entry + 4u,
+            sizeof(row_offset));
+        std::memcpy(
             &name_offset,
             entry + 8u,
             sizeof(name_offset));
 
-        if (name_offset < minimum_name ||
-            name_offset > 0x100000u) {
-            record_bank_signature_stage(
-                attempt,
-                bank_signature_name_offset,
-                i,
-                name_offset,
-                0u);
-            return false;
-        }
-
-        for (std::uint32_t shift = 0u;
-             shift < 32u;
-             shift += 8u)
-            hash =
-                fnv_byte(
-                    hash,
-                    static_cast<std::uint8_t>(
-                        row_id >> shift));
-
-        const auto *name =
-            base +
-            static_cast<std::size_t>(
-                name_offset);
-
-        std::uint32_t consumed = 0u;
-        bool terminated = false;
-
-        while (consumed < 256u) {
-            const auto *cursor =
-                name + consumed;
-            if (!ensure_readable_window(
-                    cursor,
-                    window)) {
-                record_bank_signature_stage(
-                    attempt,
-                    bank_signature_name_window,
-                    i,
-                    name_offset,
-                    consumed);
-                return false;
-            }
-
-            const auto address =
-                reinterpret_cast<std::uintptr_t>(
-                    cursor);
-            if (window.end <= address) {
-                record_bank_signature_stage(
-                    attempt,
-                    bank_signature_name_window_end,
-                    i,
-                    name_offset,
-                    consumed);
-                return false;
-            }
-
-            const auto room =
-                static_cast<std::size_t>(
-                    window.end - address);
-            const auto chunk =
-                std::min<std::size_t>(
-                    256u - consumed,
-                    room);
-            if (chunk == 0u) {
-                record_bank_signature_stage(
-                    attempt,
-                    bank_signature_name_chunk_zero,
-                    i,
-                    name_offset,
-                    consumed);
-                return false;
-            }
-
-            for (std::size_t j = 0u;
-                 j < chunk;
-                 ++j) {
-                const auto ch =
-                    cursor[j];
-                hash =
-                    fnv_byte(
-                        hash,
-                        ch);
-                ++consumed;
-
-                if (ch == 0u) {
-                    terminated = true;
-                    break;
-                }
-            }
-
-            if (terminated)
-                break;
-        }
-
-        if (!terminated) {
-            record_bank_signature_stage(
-                attempt,
-                bank_signature_name_unterminated,
-                i,
-                name_offset,
-                consumed);
-            return false;
-        }
+        hash_u32(row_id);
+        hash_u32(row_offset);
+        hash_u32(name_offset);
     }
 
-    signature = hash;
-    record_bank_signature_stage(
-        attempt,
-        bank_signature_ok,
-        static_cast<std::uint32_t>(count),
-        0u,
-        0u);
+    layout_signature = hash;
+    g_bank_layout_signature.store(
+        hash,
+        std::memory_order_relaxed);
     return true;
 }
 
@@ -797,50 +714,59 @@ resolve_bank(
         return cached.bank;
     }
 
-    std::uint64_t decoded = 0u;
-    if (!bank_signature(
+    std::uint64_t layout = 0u;
+    if (!bank_layout_signature(
             base,
-            decoded,
-            1u)) {
-        // PR177 runtime proved that the live LightBank header, selector and
-        // selected row are valid while the structural signature can still
-        // fail before producing a hash. Do not move a fresh VirtualQuery scan
-        // into the recurring hook hot path: first discard only this thread's
-        // readability cache, then retry the existing cached scanner once.
-        //
-        // If the retry still cannot produce a signature, cache that negative
-        // result for this exact (base,count,generation). This keeps the PR177
-        // performance envelope: the expensive recovery attempt is bounded to
-        // one per live bank identity instead of repeating on every packer call.
-        g_region_cache = {};
-        g_region_cache_victim = {};
-
-        if (!bank_signature(
-                base,
-                decoded,
-                2u)) {
-            cached.base = base;
-            cached.count = count;
-            cached.generation = generation;
-            cached.signature = 0u;
-            cached.bank = nullptr;
-            cached.valid = true;
-            return nullptr;
-        }
+            layout)) {
+        cached.base = base;
+        cached.count = count;
+        cached.generation = generation;
+        cached.signature = 0u;
+        cached.bank = nullptr;
+        cached.valid = true;
+        return nullptr;
     }
 
     const auto *bank =
         pmetal_env_source_authority::
-            find_bank(decoded);
+            find_bank_by_layout(
+                layout,
+                static_cast<std::uint32_t>(
+                    count));
+
+    if (bank == nullptr) {
+        record_bank_signature_stage(
+            1u,
+            bank_signature_layout_unknown,
+            static_cast<std::uint32_t>(count),
+            0u,
+            0u);
+        cached.base = base;
+        cached.count = count;
+        cached.generation = generation;
+        cached.signature = 0u;
+        cached.bank = nullptr;
+        cached.valid = true;
+        return nullptr;
+    }
+
+    // Preserve the canonical V13 donor signature in downstream state and
+    // telemetry. The new layout signature is identity machinery only.
+    signature = bank->signature;
 
     cached.base = base;
     cached.count = count;
     cached.generation = generation;
-    cached.signature = decoded;
+    cached.signature = signature;
     cached.bank = bank;
     cached.valid = true;
 
-    signature = decoded;
+    record_bank_signature_stage(
+        1u,
+        bank_signature_ok,
+        static_cast<std::uint32_t>(count),
+        0u,
+        0u);
     return bank;
 }
 
@@ -2041,6 +1967,8 @@ pmetal_env_source_runtime::telemetry() const noexcept
         g_bank_signature_name_offset.load(std::memory_order_relaxed);
     out.bank_signature_consumed =
         g_bank_signature_consumed.load(std::memory_order_relaxed);
+    out.bank_layout_signature =
+        g_bank_layout_signature.load(std::memory_order_relaxed);
 
     out.last_publish_tid =
         g_last_publish_tid.load(
@@ -2157,6 +2085,7 @@ void pmetal_env_source_runtime::reset() noexcept
     g_bank_signature_entry.store(0u,std::memory_order_relaxed);
     g_bank_signature_name_offset.store(0u,std::memory_order_relaxed);
     g_bank_signature_consumed.store(0u,std::memory_order_relaxed);
+    g_bank_layout_signature.store(0u,std::memory_order_relaxed);
     g_hook_restore_failed.store(
         false,
         std::memory_order_relaxed);
