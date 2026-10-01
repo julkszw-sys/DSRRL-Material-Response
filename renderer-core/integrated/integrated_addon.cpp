@@ -107,6 +107,30 @@ constexpr bool k_raw_draw_replay_bisect = true;
 constexpr bool k_raw_draw_replay_bisect = false;
 #endif
 
+#ifdef DSRRL_STATE_CAPTURE_ONLY_BISECT
+constexpr bool k_state_capture_only_bisect = true;
+#else
+constexpr bool k_state_capture_only_bisect = false;
+#endif
+
+#ifdef DSRRL_NATIVE_STATE_MUTATE_RESTORE_ONLY_BISECT
+constexpr bool k_native_state_mutate_restore_only_bisect = true;
+#else
+constexpr bool k_native_state_mutate_restore_only_bisect = false;
+#endif
+
+#ifdef DSRRL_CORE_TRANSACTION_ONLY_BISECT
+constexpr bool k_core_transaction_only_bisect = true;
+#else
+constexpr bool k_core_transaction_only_bisect = false;
+#endif
+
+#ifdef DSRRL_RAW_NATIVE_DRAW_REENTRY_MIN_BISECT
+constexpr bool k_raw_native_draw_reentry_min_bisect = true;
+#else
+constexpr bool k_raw_native_draw_reentry_min_bisect = false;
+#endif
+
 #if defined(DSRRL_POINTLIGHT_DRAWTIME_BYPASS) || defined(DSRRL_DRAWTIME_ISLANDS_BYPASS)
 constexpr bool k_pointlight_drawtime_runtime_enabled = false;
 #else
