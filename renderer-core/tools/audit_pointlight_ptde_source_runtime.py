@@ -21,7 +21,12 @@ require(identity,'pointlight_bank_structure_authority_v1::k_signatures')
 require(authority,'k_known_non_donor_signatures')
 fixed=read('src/runtime/fixed_pointlight_draw_runtime.cpp')
 clustered=read('src/runtime/clustered_pnts_draw_runtime.cpp')
-require(fixed,'pointlight_ptde_source::capture(source,g_base,donor_raw)')
+# Fixed PntSS/PntSSSS uses the separately attested raw-q capture site and its
+# own exact shader/range materializer. It no longer routes through the
+# clustered Bank/Lerp donor decoder.
+require(fixed,'void __fastcall capture_callback(')
+require(fixed,'current->raw_q[slot]=value;')
+require(fixed,'slot==0u')
 require(fixed,'current={};')
 require(fixed,'g_gpu_by_context.try_emplace(context)')
 require(fixed,'D3D11_MAP_WRITE_DISCARD')
