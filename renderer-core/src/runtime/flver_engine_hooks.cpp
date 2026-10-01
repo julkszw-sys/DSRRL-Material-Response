@@ -61,6 +61,8 @@ parser_fn g_po=nullptr; destructor_fn g_do=nullptr; mtd_fn g_mo=nullptr;
 std::atomic<std::uint64_t> g_selector_events{0};
 std::atomic<std::uint64_t> g_owner_sha_hits{0};
 std::atomic<std::uint64_t> g_owner_mtd_hits{0};
+std::atomic<std::uint64_t> g_selector_identity_cache_hits{0};
+std::atomic<std::uint64_t> g_selector_identity_cache_misses{0};
 std::atomic<std::uint64_t> g_exact_owner_ready{0};
 std::atomic<std::uint64_t> g_owner_fail_open{0};
 std::atomic<std::uint64_t> g_runtime_material_hits{0};
@@ -83,6 +85,156 @@ void latch_once(
             std::memory_order_relaxed);
 }
 std::atomic<std::uint64_t> g_owner_consume_misses{0};
+
+struct selector_identity_cache_entry {
+    const void *container = nullptr;
+    std::int32_t material_index = -1;
+    std::uint64_t epoch = 0u;
+    operators::material_response::material_identity identity{};
+    bool occupied = false;
+};
+
+constexpr std::size_t k_selector_identity_cache_sets = 128u;
+constexpr std::size_t k_selector_identity_cache_ways = 4u;
+constexpr std::size_t k_selector_identity_cache_slots =
+    k_selector_identity_cache_sets *
+    k_selector_identity_cache_ways;
+
+thread_local std::array<
+    selector_identity_cache_entry,
+    k_selector_identity_cache_slots>
+    g_selector_identity_cache{};
+thread_local std::array<
+    std::uint8_t,
+    k_selector_identity_cache_sets>
+    g_selector_identity_cache_victim{};
+
+std::size_t selector_identity_cache_set(
+    const void *container,
+    std::int32_t material_index) noexcept
+{
+    const auto key =
+        static_cast<std::uint64_t>(
+            reinterpret_cast<std::uintptr_t>(
+                container));
+    const auto mixed =
+        (key >> 4u) ^
+        (key >> 13u) ^
+        (key >> 23u) ^
+        (static_cast<std::uint64_t>(
+             static_cast<std::uint32_t>(
+                 material_index)) *
+         0x9E3779B185EBCA87ULL);
+
+    return static_cast<std::size_t>(
+        mixed &
+        (k_selector_identity_cache_sets - 1u));
+}
+
+bool selector_identity_cache_lookup(
+    const void *container,
+    std::int32_t material_index,
+    operators::material_response::material_identity &identity) noexcept
+{
+    identity = {};
+    if (container == nullptr ||
+        material_index < 0)
+        return false;
+
+    const auto epoch =
+        flver_identity_epoch();
+    const auto set =
+        selector_identity_cache_set(
+            container,
+            material_index);
+    const auto base =
+        set *
+        k_selector_identity_cache_ways;
+
+    for (std::size_t way = 0u;
+         way < k_selector_identity_cache_ways;
+         ++way) {
+        const auto &entry =
+            g_selector_identity_cache[
+                base + way];
+
+        if (!entry.occupied ||
+            entry.container != container ||
+            entry.material_index !=
+                material_index ||
+            entry.epoch != epoch)
+            continue;
+
+        identity = entry.identity;
+        return identity.valid &&
+            identity.owner_tuple_exact;
+    }
+
+    return false;
+}
+
+void selector_identity_cache_publish(
+    const void *container,
+    std::int32_t material_index,
+    const operators::material_response::material_identity &identity) noexcept
+{
+    if (container == nullptr ||
+        material_index < 0 ||
+        !identity.valid ||
+        !identity.owner_tuple_exact)
+        return;
+
+    const auto epoch =
+        flver_identity_epoch();
+    const auto set =
+        selector_identity_cache_set(
+            container,
+            material_index);
+    const auto base =
+        set *
+        k_selector_identity_cache_ways;
+
+    selector_identity_cache_entry *target = nullptr;
+
+    for (std::size_t way = 0u;
+         way < k_selector_identity_cache_ways;
+         ++way) {
+        auto &entry =
+            g_selector_identity_cache[
+                base + way];
+
+        if (entry.occupied &&
+            entry.container == container &&
+            entry.material_index ==
+                material_index) {
+            target = &entry;
+            break;
+        }
+
+        if (target == nullptr &&
+            !entry.occupied)
+            target = &entry;
+    }
+
+    if (target == nullptr) {
+        const auto victim =
+            static_cast<std::size_t>(
+                g_selector_identity_cache_victim[set]++ &
+                static_cast<std::uint8_t>(
+                    k_selector_identity_cache_ways - 1u));
+        target =
+            &g_selector_identity_cache[
+                base + victim];
+    }
+
+    *target = {
+        container,
+        material_index,
+        epoch,
+        identity,
+        true
+    };
+}
 
 constexpr std::size_t k_exact_material_cache_sets=1024u;
 constexpr std::size_t k_exact_material_cache_ways=4u;
