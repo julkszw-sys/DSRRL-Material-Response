@@ -15,9 +15,10 @@ if 'thread_local access_cache' in header:
 for forbidden in ['VirtualProtect','write_bytes','create_hook','install_hook','fetch_add']:
     if forbidden in header: raise SystemExit('Unexpected source mutation/global hook: '+forbidden)
 identity=read('include/dsrrl/runtime/pointlight_ptde_source.hpp')
+authority=read('include/dsrrl/runtime/pointlight_bank_structure_authority_v1.hpp')
 require(identity,'identify_structure(')
 require(identity,'pointlight_bank_structure_authority_v1::k_signatures')
-require(identity,'k_known_non_donor_signatures')
+require(authority,'k_known_non_donor_signatures')
 fixed=read('src/runtime/fixed_pointlight_draw_runtime.cpp')
 clustered=read('src/runtime/clustered_pnts_draw_runtime.cpp')
 require(fixed,'pointlight_ptde_source::capture(source,g_base,donor_raw)')
