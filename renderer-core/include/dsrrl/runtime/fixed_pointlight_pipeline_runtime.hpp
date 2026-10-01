@@ -118,6 +118,8 @@ private:
         std::shared_ptr<const record> selected{};
         std::uint64_t epoch = 0u;
         bool present = false;
+        std::uint64_t pipeline = 0u;
+        std::uint64_t pipeline_epoch = 0u;
     };
 
     struct attestation_tls_entry {
