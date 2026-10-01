@@ -77,6 +77,241 @@ std::atomic<std::uint64_t> g_owner_consumed{0};
 std::atomic_bool g_selector_upper_lower_enabled{true};
 std::atomic_bool g_selector_hemdir3_enabled{true};
 
+struct selector_profile_sample {
+    bool active = false;
+    std::uint64_t total_start = 0u;
+    std::uint64_t resolve_material_ticks = 0u;
+    std::uint64_t final_cache_lookup_ticks = 0u;
+    std::uint64_t owner_lookup_ticks = 0u;
+    std::uint64_t owner_mtd_enrich_ticks = 0u;
+    std::uint64_t selection_publish_ticks = 0u;
+    std::uint64_t pmetal_source_ticks = 0u;
+    std::uint64_t runtime_mtd_lookup_ticks = 0u;
+    std::uint64_t runtime_publish_ticks = 0u;
+};
+
+#ifdef DSRRL_FLVER_SELECTOR_PROFILE
+constexpr std::uint32_t k_selector_profile_sample_period = 1024u;
+static_assert(
+    (k_selector_profile_sample_period &
+     (k_selector_profile_sample_period - 1u)) == 0u);
+
+struct selector_profile_bucket {
+    std::atomic<std::uint64_t> ticks{0u};
+    std::atomic<std::uint64_t> max_ticks{0u};
+};
+
+thread_local std::uint32_t g_selector_profile_counter = 0u;
+std::atomic<std::uint64_t> g_selector_profile_samples{0u};
+selector_profile_bucket g_selector_profile_total{};
+selector_profile_bucket g_selector_profile_resolve_material{};
+selector_profile_bucket g_selector_profile_final_cache{};
+selector_profile_bucket g_selector_profile_owner_lookup{};
+selector_profile_bucket g_selector_profile_owner_mtd{};
+selector_profile_bucket g_selector_profile_selection_publish{};
+selector_profile_bucket g_selector_profile_pmetal{};
+selector_profile_bucket g_selector_profile_runtime_mtd{};
+selector_profile_bucket g_selector_profile_runtime_publish{};
+std::atomic<std::uint64_t> g_selector_profile_cache_path{0u};
+std::atomic<std::uint64_t> g_selector_profile_owner_path{0u};
+std::atomic<std::uint64_t> g_selector_profile_runtime_path{0u};
+std::atomic<std::uint64_t> g_selector_profile_fail_path{0u};
+std::atomic<std::uint64_t> g_selector_profile_early_path{0u};
+std::atomic<std::uint64_t> g_selector_profile_parse_events{0u};
+std::atomic<std::uint64_t> g_selector_profile_mtd_events{0u};
+std::atomic<std::uint64_t> g_selector_profile_destroy_events{0u};
+
+std::uint64_t selector_profile_qpc() noexcept
+{
+    LARGE_INTEGER value{};
+    QueryPerformanceCounter(&value);
+    return static_cast<std::uint64_t>(
+        value.QuadPart);
+}
+
+void selector_profile_add(
+    selector_profile_bucket &bucket,
+    std::uint64_t ticks) noexcept
+{
+    bucket.ticks.fetch_add(
+        ticks,
+        std::memory_order_relaxed);
+
+    auto observed =
+        bucket.max_ticks.load(
+            std::memory_order_relaxed);
+    while (observed < ticks &&
+           !bucket.max_ticks.compare_exchange_weak(
+               observed,
+               ticks,
+               std::memory_order_relaxed,
+               std::memory_order_relaxed)) {
+    }
+}
+
+enum class selector_profile_path : std::uint8_t {
+    cache,
+    owner,
+    runtime_mtd,
+    fail_open,
+    early_reject
+};
+
+std::uint64_t selector_profile_begin(
+    const selector_profile_sample &sample) noexcept
+{
+    return sample.active
+        ? selector_profile_qpc()
+        : 0u;
+}
+
+void selector_profile_end_stage(
+    const selector_profile_sample &sample,
+    std::uint64_t begin,
+    std::uint64_t &accumulator) noexcept
+{
+    if (!sample.active)
+        return;
+
+    accumulator +=
+        selector_profile_qpc() - begin;
+}
+
+void selector_profile_finish(
+    selector_profile_sample &sample,
+    selector_profile_path path) noexcept
+{
+    if (!sample.active)
+        return;
+
+    const auto total =
+        selector_profile_qpc() -
+        sample.total_start;
+
+    g_selector_profile_samples.fetch_add(
+        1u,
+        std::memory_order_relaxed);
+    selector_profile_add(
+        g_selector_profile_total,
+        total);
+    selector_profile_add(
+        g_selector_profile_resolve_material,
+        sample.resolve_material_ticks);
+    selector_profile_add(
+        g_selector_profile_final_cache,
+        sample.final_cache_lookup_ticks);
+    selector_profile_add(
+        g_selector_profile_owner_lookup,
+        sample.owner_lookup_ticks);
+    selector_profile_add(
+        g_selector_profile_owner_mtd,
+        sample.owner_mtd_enrich_ticks);
+    selector_profile_add(
+        g_selector_profile_selection_publish,
+        sample.selection_publish_ticks);
+    selector_profile_add(
+        g_selector_profile_pmetal,
+        sample.pmetal_source_ticks);
+    selector_profile_add(
+        g_selector_profile_runtime_mtd,
+        sample.runtime_mtd_lookup_ticks);
+    selector_profile_add(
+        g_selector_profile_runtime_publish,
+        sample.runtime_publish_ticks);
+
+    auto *counter =
+        path == selector_profile_path::cache
+            ? &g_selector_profile_cache_path
+        : path == selector_profile_path::owner
+            ? &g_selector_profile_owner_path
+        : path == selector_profile_path::runtime_mtd
+            ? &g_selector_profile_runtime_path
+        : path == selector_profile_path::early_reject
+            ? &g_selector_profile_early_path
+            : &g_selector_profile_fail_path;
+    counter->fetch_add(
+        1u,
+        std::memory_order_relaxed);
+}
+
+void selector_profile_reset() noexcept
+{
+    auto reset_bucket =
+        [](selector_profile_bucket &bucket) noexcept {
+            bucket.ticks.store(
+                0u,
+                std::memory_order_relaxed);
+            bucket.max_ticks.store(
+                0u,
+                std::memory_order_relaxed);
+        };
+
+    g_selector_profile_samples.store(
+        0u,
+        std::memory_order_relaxed);
+    reset_bucket(g_selector_profile_total);
+    reset_bucket(g_selector_profile_resolve_material);
+    reset_bucket(g_selector_profile_final_cache);
+    reset_bucket(g_selector_profile_owner_lookup);
+    reset_bucket(g_selector_profile_owner_mtd);
+    reset_bucket(g_selector_profile_selection_publish);
+    reset_bucket(g_selector_profile_pmetal);
+    reset_bucket(g_selector_profile_runtime_mtd);
+    reset_bucket(g_selector_profile_runtime_publish);
+    g_selector_profile_cache_path.store(
+        0u,
+        std::memory_order_relaxed);
+    g_selector_profile_owner_path.store(
+        0u,
+        std::memory_order_relaxed);
+    g_selector_profile_runtime_path.store(
+        0u,
+        std::memory_order_relaxed);
+    g_selector_profile_fail_path.store(
+        0u,
+        std::memory_order_relaxed);
+    g_selector_profile_early_path.store(
+        0u,
+        std::memory_order_relaxed);
+    g_selector_profile_parse_events.store(
+        0u,
+        std::memory_order_relaxed);
+    g_selector_profile_mtd_events.store(
+        0u,
+        std::memory_order_relaxed);
+    g_selector_profile_destroy_events.store(
+        0u,
+        std::memory_order_relaxed);
+}
+#else
+enum class selector_profile_path : std::uint8_t {
+    cache,
+    owner,
+    runtime_mtd,
+    fail_open,
+    early_reject
+};
+std::uint64_t selector_profile_begin(
+    const selector_profile_sample &) noexcept
+{
+    return 0u;
+}
+void selector_profile_end_stage(
+    const selector_profile_sample &,
+    std::uint64_t,
+    std::uint64_t &) noexcept
+{
+}
+void selector_profile_finish(
+    selector_profile_sample &,
+    selector_profile_path) noexcept
+{
+}
+void selector_profile_reset() noexcept
+{
+}
+#endif
+
 void latch_once(
     std::atomic_bool &flag) noexcept
 {
