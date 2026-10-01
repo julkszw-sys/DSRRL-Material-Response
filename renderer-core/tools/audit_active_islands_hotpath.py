@@ -270,12 +270,12 @@ def main():
         "integrated Context1 cache teardown")
     begin_start=draw_tx.find(
         "bool draw_state_transaction_runtime::begin(")
-    raw_start=draw_tx.find(
-        "bool draw_state_transaction_runtime::raw_replay_draw(",
+    capture_cut=draw_tx.find(
+        "bool draw_state_transaction_runtime::capture_only(",
         begin_start)
-    if begin_start<0 or raw_start<0:
-        fail("draw replay/native-context audit boundaries missing")
-    normal_tx=draw_tx[begin_start:raw_start]
+    if begin_start<0 or capture_cut<0:
+        fail("normal draw transaction/native-context audit boundaries missing")
+    normal_tx=draw_tx[begin_start:capture_cut]
     if normal_tx.count("cmd_list->get_native()") != 1:
         fail("normal draw transaction must resolve native D3D11 context once in begin and reuse it through replay/restore")
     require(normal_tx,
