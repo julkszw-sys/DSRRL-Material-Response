@@ -40,7 +40,8 @@ for forbidden in ['VirtualProtect','write_bytes','create_hook','install_hook','f
 require(fixed,'void __fastcall capture_callback(')
 require(fixed,'current->raw_q[slot]=value')
 require(fixed,'g_snapshots[owner_key]=current')
-require(fixed,'D3D11_MAP_WRITE_DISCARD')
+require(fixed,'desc.Usage=D3D11_USAGE_IMMUTABLE')
+require(fixed,'view_desc.Buffer.NumElements=4u')
 
 # Clustered path: exact retail source class is the authority. The host vfunc
 # supplies the homologous CPU-packed signal; exact PTDE donor may override it
