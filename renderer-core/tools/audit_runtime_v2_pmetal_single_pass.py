@@ -60,6 +60,7 @@ def main() -> None:
     require(source, "pmetal_producer_state_publish(", "isolated producer publication")
     require(source, "k_pmetal_material_route = 345u", "exact P_Metal route gate")
     require(source, "P_Metal[DSB].mtd", "exact P_Metal semantic gate")
+    require(flver, "if (identity.route_index == 345u)", "pre-decoder P_Metal route gate")
     forbid(upper_lower, "pmetal_env_source_runtime::install()", "active P_Metal source must not live in U/L module")
     forbid(upper_lower, "void pmetal_env_source_selector_event(", "active P_Metal selector source must not live in U/L module")
 
