@@ -987,6 +987,16 @@ void pmetal_env_source_selector_event(
         return_address == nullptr)
         return;
 
+    const auto epoch =
+        g_selector_epoch.load(
+            std::memory_order_relaxed);
+
+    // This exact material now owns the next synchronized source publication.
+    // Mark the previous fallback stale before any downstream source decode.
+    pmetal_producer_state_begin(
+        material,
+        epoch);
+
     if (telemetry::effect_enabled())
         g_selector_exact_seen.store(
             true,
@@ -1215,10 +1225,6 @@ void pmetal_env_source_selector_event(
     };
     next.beta =
         endpoints.beta;
-
-    const auto epoch =
-        g_selector_epoch.load(
-            std::memory_order_relaxed);
 
     next.serial = epoch;
 
