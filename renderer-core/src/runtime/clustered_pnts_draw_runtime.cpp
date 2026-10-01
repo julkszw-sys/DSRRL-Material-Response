@@ -462,7 +462,7 @@ bool create_structured(
 bool ensure_gpu(
     ID3D11DeviceContext *context) noexcept
 {
-    // DSR records ordinary draws on both immediate and deferred D3D11
+    // DSR records PointLight draws on both immediate and deferred D3D11
     // contexts. The clustered sidecar uses only device-side resource creation
     // plus D3D11_USAGE_DYNAMIC resources mapped with WRITE_DISCARD, which is
     // valid on a deferred context. Rejecting every non-immediate context here
