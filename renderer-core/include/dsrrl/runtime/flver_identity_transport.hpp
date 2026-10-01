@@ -51,4 +51,32 @@ bool consume_selector_owner_candidate(
 
 selector_owner_telemetry selector_owner_stats() noexcept;
 
+struct selector_profile_telemetry {
+    std::uint32_t sample_period = 1024u;
+    std::uint64_t qpc_frequency = 0u;
+    std::uint64_t samples = 0u;
+    std::uint64_t total_ticks = 0u;
+    std::uint64_t max_total_ticks = 0u;
+    std::uint64_t prefix_ticks = 0u;
+    std::uint64_t resolve_material_ticks = 0u;
+    std::uint64_t final_cache_lookup_ticks = 0u;
+    std::uint64_t final_cache_publish_ticks = 0u;
+    std::uint64_t owner_lookup_ticks = 0u;
+    std::uint64_t owner_mtd_enrich_ticks = 0u;
+    std::uint64_t selection_publish_ticks = 0u;
+    std::uint64_t pmetal_source_ticks = 0u;
+    std::uint64_t runtime_mtd_lookup_ticks = 0u;
+    std::uint64_t runtime_publish_ticks = 0u;
+    std::uint64_t sampled_cache_path = 0u;
+    std::uint64_t sampled_owner_path = 0u;
+    std::uint64_t sampled_runtime_mtd_path = 0u;
+    std::uint64_t sampled_fail_open_path = 0u;
+    std::uint64_t sampled_early_reject_path = 0u;
+    std::uint64_t parse_events = 0u;
+    std::uint64_t mtd_events = 0u;
+    std::uint64_t destroy_events = 0u;
+};
+
+selector_profile_telemetry selector_profile_stats() noexcept;
+
 } // namespace dsrrl::runtime::flver_identity_transport

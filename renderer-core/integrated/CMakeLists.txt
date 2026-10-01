@@ -141,6 +141,11 @@ option(
     "Diagnostic: physically exclude Upper/Lower, HemDir3 and Subsurface runtime implementation units while preserving P_Metal source runtime"
     ON)
 
+option(
+    DSRRL_FLVER_SELECTOR_PROFILE
+    "Diagnostic: low-overhead sampled FLVER selector/support interaction profiler"
+    ON)
+
 set(
     RESHADE_INCLUDE_DIR
     ""
@@ -670,6 +675,13 @@ if(DSRRL_PHYSICAL_CUT_UL_H3_SUBSURFACE)
         dsrrl_renderer_core_integrated
         PRIVATE
         DSRRL_PHYSICAL_CUT_UL_H3_SUBSURFACE)
+endif()
+
+if(DSRRL_FLVER_SELECTOR_PROFILE)
+    target_compile_definitions(
+        dsrrl_renderer_core_integrated
+        PRIVATE
+        DSRRL_FLVER_SELECTOR_PROFILE)
 endif()
 
 if(MSVC)
