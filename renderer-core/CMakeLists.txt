@@ -599,6 +599,14 @@ target_include_directories(dsrrl_pmetal_selector_policy_tests PRIVATE include)
 target_compile_features(dsrrl_pmetal_selector_policy_tests PRIVATE cxx_std_17)
 add_test(NAME dsrrl_pmetal_selector_policy_tests COMMAND dsrrl_pmetal_selector_policy_tests)
 
+add_executable(
+    dsrrl_pmetal_producer_state_tests
+    tests/pmetal_producer_state_tests.cpp
+    src/runtime/pmetal_producer_state.cpp)
+target_include_directories(dsrrl_pmetal_producer_state_tests PRIVATE include)
+target_compile_features(dsrrl_pmetal_producer_state_tests PRIVATE cxx_std_17)
+add_test(NAME dsrrl_pmetal_producer_state_tests COMMAND dsrrl_pmetal_producer_state_tests)
+
 add_executable(dsrrl_pointlight_ptde_source_tests tests/pointlight_ptde_source_tests.cpp)
 target_include_directories(dsrrl_pointlight_ptde_source_tests PRIVATE include)
 target_compile_features(dsrrl_pointlight_ptde_source_tests PRIVATE cxx_std_17)
