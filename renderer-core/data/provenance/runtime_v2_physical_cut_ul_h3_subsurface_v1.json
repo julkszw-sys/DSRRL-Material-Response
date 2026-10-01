@@ -34,5 +34,7 @@
     "performance": "OPEN",
     "bridge_activation": "OPEN",
     "pixel_behavior": "OPEN"
-  }
+  },
+  "ci_branch": "runtime-v2/physical-cut-ul-h3-subsurface-20261001",
+  "ci_trigger": "push"
 }
