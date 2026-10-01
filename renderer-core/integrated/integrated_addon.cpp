@@ -6470,8 +6470,6 @@ bool on_draw(
 
     reflect_draw_profile_scope reflect_profile(cmd_list);
 
-    reflect_draw_profile_scope reflect_profile(cmd_list);
-
     if (g_hot_telemetry_enabled &&
         dsrrl::runtime::bloom_fx_draw_transport::
             active_draw_scope())
@@ -6866,6 +6864,8 @@ bool on_draw_indexed(
         g_raw_draw_replay_recursing = false;
         return issued;
     }
+
+    reflect_draw_profile_scope reflect_profile(cmd_list);
 
     if (g_hot_telemetry_enabled &&
         dsrrl::runtime::bloom_fx_draw_transport::
