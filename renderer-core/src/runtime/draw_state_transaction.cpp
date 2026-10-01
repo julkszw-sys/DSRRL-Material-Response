@@ -1,6 +1,7 @@
 #include "dsrrl/runtime/draw_state_transaction.hpp"
 #include "dsrrl/runtime/d3d11_cb_window.hpp"
 #include "dsrrl/runtime/runtime_hot_telemetry.hpp"
+#include "dsrrl/runtime/pixel_srv_shadow.hpp"
 #include "dsrrl/core/draw_transaction_policy.hpp"
 
 #ifndef WIN32_LEAN_AND_MEAN
@@ -364,7 +365,8 @@ void draw_state_transaction_runtime::release_state(
     }
 
     for (std::uint32_t i = 0; i < state.srv_count; ++i)
-        if (state.srvs[i].srv != nullptr)
+        if (state.srvs[i].srv != nullptr &&
+            state.srvs[i].owns_reference)
             state.srvs[i].srv->Release();
 
     for (std::uint32_t i = 0;
@@ -487,10 +489,26 @@ bool draw_state_transaction_runtime::begin(
          ++i) {
         auto &capture = state.srvs[i];
         capture.slot = mutation.srvs[i].slot;
-        ctx->PSGetShaderResources(
-            capture.slot,
-            1u,
-            &capture.srv);
+
+        ID3D11ShaderResourceView *shadow = nullptr;
+        if (pixel_srv_shadow_snapshot(
+                cmd_list,
+                capture.slot,
+                1u,
+                &shadow)) {
+            capture.srv = shadow;
+            if (capture.srv != nullptr) {
+                capture.srv->AddRef();
+                capture.owns_reference = true;
+            }
+        } else {
+            ctx->PSGetShaderResources(
+                capture.slot,
+                1u,
+                &capture.srv);
+            capture.owns_reference =
+                capture.srv != nullptr;
+        }
     }
 
     state.sampler_count = mutation.sampler_count;
