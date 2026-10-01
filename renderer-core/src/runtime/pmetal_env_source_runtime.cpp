@@ -49,6 +49,181 @@ struct readable_window {
     std::uintptr_t end = 0u;
 };
 
+std::atomic<std::uint64_t> g_source_cache_generation{1u};
+std::atomic<std::uint64_t> g_endpoint_cache_hit{0u};
+std::atomic<std::uint64_t> g_endpoint_cache_miss{0u};
+std::atomic<std::uint64_t> g_endpoint_cache_fill{0u};
+std::atomic<std::uint64_t> g_region_cache_hit{0u};
+std::atomic<std::uint64_t> g_region_cache_miss{0u};
+
+struct readable_region_cache_entry {
+    std::uintptr_t begin = 0u;
+    std::uintptr_t end = 0u;
+    std::uint64_t generation = 0u;
+    bool readable = false;
+    bool valid = false;
+};
+
+constexpr std::size_t k_region_cache_sets = 64u;
+constexpr std::size_t k_region_cache_ways = 2u;
+constexpr std::size_t k_region_cache_entries =
+    k_region_cache_sets * k_region_cache_ways;
+
+thread_local std::array<
+    readable_region_cache_entry,
+    k_region_cache_entries>
+    g_region_cache{};
+thread_local std::array<
+    std::uint8_t,
+    k_region_cache_sets>
+    g_region_cache_victim{};
+
+std::size_t region_cache_set(
+    const void *ptr) noexcept
+{
+    const auto value =
+        reinterpret_cast<std::uintptr_t>(ptr);
+    const auto mixed =
+        (value >> 12u) ^
+        (value >> 21u) ^
+        (value >> 31u);
+
+    return static_cast<std::size_t>(
+        mixed & (k_region_cache_sets - 1u));
+}
+
+bool query_region(
+    const void *ptr,
+    readable_window &window,
+    bool &is_readable) noexcept
+{
+    window = {};
+    is_readable = false;
+    if (ptr == nullptr)
+        return false;
+
+    MEMORY_BASIC_INFORMATION mbi{};
+    if (VirtualQuery(
+            ptr,
+            &mbi,
+            sizeof(mbi)) != sizeof(mbi))
+        return false;
+
+    const auto begin =
+        reinterpret_cast<std::uintptr_t>(
+            mbi.BaseAddress);
+    const auto end =
+        begin + mbi.RegionSize;
+    const auto address =
+        reinterpret_cast<std::uintptr_t>(ptr);
+
+    if (end <= address ||
+        end < begin)
+        return false;
+
+    const DWORD access =
+        mbi.Protect & 0xffu;
+    is_readable =
+        mbi.State == MEM_COMMIT &&
+        (mbi.Protect & PAGE_GUARD) == 0u &&
+        (access == PAGE_READONLY ||
+         access == PAGE_READWRITE ||
+         access == PAGE_WRITECOPY ||
+         access == PAGE_EXECUTE_READ ||
+         access == PAGE_EXECUTE_READWRITE ||
+         access == PAGE_EXECUTE_WRITECOPY);
+
+    window.begin = begin;
+    window.end = end;
+    return true;
+}
+
+bool cached_readable_window(
+    const void *ptr,
+    readable_window &window) noexcept
+{
+    window = {};
+    if (ptr == nullptr)
+        return false;
+
+    const auto address =
+        reinterpret_cast<std::uintptr_t>(ptr);
+    const auto generation =
+        g_source_cache_generation.load(
+            std::memory_order_relaxed);
+    const auto set =
+        region_cache_set(ptr);
+    const auto base =
+        set * k_region_cache_ways;
+
+    for (std::size_t way = 0u;
+         way < k_region_cache_ways;
+         ++way) {
+        const auto &entry =
+            g_region_cache[base + way];
+        if (entry.valid &&
+            entry.generation == generation &&
+            entry.begin <= address &&
+            address < entry.end) {
+            g_region_cache_hit.fetch_add(
+                1u,
+                std::memory_order_relaxed);
+            if (!entry.readable)
+                return false;
+            window.begin = entry.begin;
+            window.end = entry.end;
+            return true;
+        }
+    }
+
+    g_region_cache_miss.fetch_add(
+        1u,
+        std::memory_order_relaxed);
+
+    readable_window queried{};
+    bool is_readable = false;
+    if (!query_region(
+            ptr,
+            queried,
+            is_readable))
+        return false;
+
+    std::size_t target = k_region_cache_ways;
+    for (std::size_t way = 0u;
+         way < k_region_cache_ways;
+         ++way) {
+        const auto &entry =
+            g_region_cache[base + way];
+        if (!entry.valid ||
+            entry.generation != generation) {
+            target = way;
+            break;
+        }
+    }
+
+    if (target == k_region_cache_ways) {
+        target =
+            static_cast<std::size_t>(
+                g_region_cache_victim[set]++ &
+                static_cast<std::uint8_t>(
+                    k_region_cache_ways - 1u));
+    }
+
+    auto &entry =
+        g_region_cache[base + target];
+    entry.begin = queried.begin;
+    entry.end = queried.end;
+    entry.generation = generation;
+    entry.readable = is_readable;
+    entry.valid = true;
+
+    if (!is_readable)
+        return false;
+
+    window = queried;
+    return true;
+}
+
 bool readable_range(
     const void *ptr,
     std::size_t size) noexcept
@@ -65,43 +240,18 @@ bool readable_range(
         return false;
 
     while (cursor < end) {
-        MEMORY_BASIC_INFORMATION mbi{};
-        if (VirtualQuery(
+        readable_window window{};
+        if (!cached_readable_window(
                 reinterpret_cast<const void *>(cursor),
-                &mbi,
-                sizeof(mbi)) != sizeof(mbi))
+                window))
             return false;
 
-        if (mbi.State != MEM_COMMIT ||
-            (mbi.Protect & PAGE_GUARD) != 0u)
-            return false;
-
-        const DWORD access =
-            mbi.Protect & 0xffu;
-        const bool readable =
-            access == PAGE_READONLY ||
-            access == PAGE_READWRITE ||
-            access == PAGE_WRITECOPY ||
-            access == PAGE_EXECUTE_READ ||
-            access == PAGE_EXECUTE_READWRITE ||
-            access == PAGE_EXECUTE_WRITECOPY;
-
-        if (!readable)
-            return false;
-
-        const auto region_begin =
-            reinterpret_cast<std::uintptr_t>(
-                mbi.BaseAddress);
-        const auto region_end =
-            region_begin + mbi.RegionSize;
-
-        if (region_end <= cursor ||
-            region_end < region_begin)
+        if (window.end <= cursor)
             return false;
 
         cursor =
             std::min(
-                region_end,
+                window.end,
                 end);
     }
 
@@ -129,53 +279,17 @@ bool ensure_readable_window(
     const void *ptr,
     readable_window &window) noexcept
 {
-    if (ptr == nullptr)
-        return false;
-
     const auto address =
         reinterpret_cast<std::uintptr_t>(ptr);
 
-    if (window.begin <= address &&
+    if (ptr != nullptr &&
+        window.begin <= address &&
         address < window.end)
         return true;
 
-    MEMORY_BASIC_INFORMATION mbi{};
-    if (VirtualQuery(
-            ptr,
-            &mbi,
-            sizeof(mbi)) != sizeof(mbi))
-        return false;
-
-    if (mbi.State != MEM_COMMIT ||
-        (mbi.Protect & PAGE_GUARD) != 0u)
-        return false;
-
-    const DWORD access =
-        mbi.Protect & 0xffu;
-    const bool readable =
-        access == PAGE_READONLY ||
-        access == PAGE_READWRITE ||
-        access == PAGE_WRITECOPY ||
-        access == PAGE_EXECUTE_READ ||
-        access == PAGE_EXECUTE_READWRITE ||
-        access == PAGE_EXECUTE_WRITECOPY;
-
-    if (!readable)
-        return false;
-
-    const auto begin =
-        reinterpret_cast<std::uintptr_t>(
-            mbi.BaseAddress);
-    const auto end =
-        begin + mbi.RegionSize;
-
-    if (end <= address ||
-        end < begin)
-        return false;
-
-    window.begin = begin;
-    window.end = end;
-    return true;
+    return cached_readable_window(
+        ptr,
+        window);
 }
 
 bool exact_pmetal_material_selection(
