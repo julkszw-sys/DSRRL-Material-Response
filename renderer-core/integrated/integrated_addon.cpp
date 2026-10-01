@@ -3548,6 +3548,17 @@ void on_init_device(reshade::api::device *device)
         g_bloom_scene_sidecar.on_init_device(device);
     g_mr_draw_runtime.on_init_device(device);
     g_pmetal_envspec.on_init_device(device);
+    if (k_pmetal_native_draw_runtime_enabled) {
+        if (!g_pmetal_native_draw.install(device)) {
+            reshade::log::message(
+                reshade::log::level::warning,
+                "[DSRRL RUNTIME V2] P_Metal native original-draw bridge unavailable; P_Metal falls back to the legacy replay path.");
+        } else {
+            reshade::log::message(
+                reshade::log::level::info,
+                "[DSRRL RUNTIME V2] P_Metal native original-draw bridge ACTIVE: addon callback prepares exact state, original D3D11 Draw executes once, state restores after draw.");
+        }
+    }
     g_upper_lower_hemenv.on_init_device(device);
     g_hemdir3.on_init_device(device);
 }
@@ -3557,6 +3568,7 @@ void on_destroy_device(reshade::api::device *device)
     dsrrl::runtime::pixel_srv_shadow_reset();
 
     if (k_drawtime_islands_runtime_enabled) {
+        g_pmetal_native_draw.uninstall();
         g_draw_transactions.on_destroy_device(device);
         g_bloom_scene_sidecar.on_destroy_device(device);
         g_upper_lower.on_destroy_device(device);
