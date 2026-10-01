@@ -11,6 +11,7 @@
 #include "dsrrl/runtime/material_owner_selection.hpp"
 #include "dsrrl/runtime/material_owner_producer.hpp"
 #include "dsrrl/runtime/upper_lower_draw_runtime.hpp"
+#include "dsrrl/runtime/fixed_pointlight_draw_runtime.hpp"
 #include "dsrrl/runtime/hemdir3_mode_transport.hpp"
 #include "dsrrl/runtime/clustered_pnts_draw_runtime.hpp"
 #include "dsrrl/operators/material_response/mtd_semantic_census.hpp"
@@ -496,6 +497,11 @@ extern "C" void dsrrl_flver_selector_observer(
 
  hemdir3_mode_transport::selector_begin(
      incoming_mode);
+
+ // PointLight owns its selector state directly from the FLVER semantic cut.
+ // Do not route it through the Upper/Lower runtime: PL remains live and cheap
+ // even when the visible U/L operator and all U/L producer hooks are disabled.
+ fixed_pointlight_selector_event_bridge(owner);
 
  upper_lower_selector_event_bridge(
      owner,
