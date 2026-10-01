@@ -33,11 +33,19 @@ struct owner_material_cache_entry {
     bool resolved = false;
 };
 
-constexpr std::size_t k_owner_material_cache_slots = 256u;
+constexpr std::size_t k_owner_material_cache_sets = 128u;
+constexpr std::size_t k_owner_material_cache_ways = 4u;
+constexpr std::size_t k_owner_material_cache_slots =
+    k_owner_material_cache_sets *
+    k_owner_material_cache_ways;
 thread_local std::array<
     owner_material_cache_entry,
     k_owner_material_cache_slots>
     g_owner_material_cache{};
+thread_local std::array<
+    std::uint8_t,
+    k_owner_material_cache_sets>
+    g_owner_material_cache_victim{};
 
 std::uint64_t owner_material_cache_entropy(
     const actual_material_owner_observation &observation) noexcept
@@ -56,7 +64,7 @@ std::uint64_t owner_material_cache_entropy(
     return folded;
 }
 
-std::size_t owner_material_cache_index(
+std::size_t owner_material_cache_set(
     const actual_material_owner_observation &observation) noexcept
 {
     // The optional legacy token is bucket entropy only. A missing token falls
@@ -68,7 +76,64 @@ std::size_t owner_material_cache_index(
              observation.material_slot) *
          0x9E3779B185EBCA87ULL);
     return static_cast<std::size_t>(
-        h & (k_owner_material_cache_slots - 1u));
+        h & (k_owner_material_cache_sets - 1u));
+}
+
+owner_material_cache_entry *owner_material_cache_hit(
+    const actual_material_owner_observation &observation) noexcept
+{
+    const auto set =
+        owner_material_cache_set(
+            observation);
+    const auto base =
+        set *
+        k_owner_material_cache_ways;
+
+    for (std::size_t way = 0u;
+         way < k_owner_material_cache_ways;
+         ++way) {
+        auto &entry =
+            g_owner_material_cache[
+                base + way];
+        if (entry.occupied &&
+            entry.material_slot ==
+                observation.material_slot &&
+            entry.flver_sha256 ==
+                observation.flver_sha256)
+            return &entry;
+    }
+
+    return nullptr;
+}
+
+owner_material_cache_entry &owner_material_cache_slot(
+    const actual_material_owner_observation &observation) noexcept
+{
+    const auto set =
+        owner_material_cache_set(
+            observation);
+    const auto base =
+        set *
+        k_owner_material_cache_ways;
+
+    for (std::size_t way = 0u;
+         way < k_owner_material_cache_ways;
+         ++way) {
+        auto &entry =
+            g_owner_material_cache[
+                base + way];
+        if (!entry.occupied)
+            return entry;
+    }
+
+    const auto victim =
+        static_cast<std::size_t>(
+            g_owner_material_cache_victim[set]++ &
+            static_cast<std::uint8_t>(
+                k_owner_material_cache_ways - 1u));
+
+    return g_owner_material_cache[
+        base + victim];
 }
 
 const operators::material_response::generated::
@@ -111,20 +176,18 @@ bool enrich_exact_owner_mtd_identity(
         !observation.material_slot_valid)
         return false;
 
-    auto &cached =
-        g_owner_material_cache[
-            owner_material_cache_index(
-                observation)];
-
-    if (cached.occupied &&
-        cached.material_slot ==
-            observation.material_slot &&
-        cached.flver_sha256 ==
-            observation.flver_sha256) {
+    if (auto *cached =
+            owner_material_cache_hit(
+                observation);
+        cached != nullptr) {
         observation.material =
-            cached.material;
-        return cached.resolved;
+            cached->material;
+        return cached->resolved;
     }
+
+    auto &cached =
+        owner_material_cache_slot(
+            observation);
 
     mr::material_identity resolved{};
     std::uint64_t semantic_hash = 0u;
