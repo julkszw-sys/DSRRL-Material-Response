@@ -131,6 +131,11 @@ option(
     "Diagnostic: register only empty draw/draw_indexed callbacks; install no DSRRL pipeline events or runtime transports"
     OFF)
 
+option(
+    DSRRL_PMETAL_SRV_SHADOW_EXPERIMENT
+    "Experimental Runtime v2 pixel-SRV bind shadow; disabled by default to avoid global descriptor-event overhead"
+    OFF)
+
 set(
     RESHADE_INCLUDE_DIR
     ""
@@ -609,6 +614,13 @@ if(DSRRL_DRAW_CALLBACK_ONLY_BISECT)
         dsrrl_renderer_core_integrated
         PRIVATE
         $<$<COMPILE_LANGUAGE:CXX>:DSRRL_DRAW_CALLBACK_ONLY_BISECT>)
+endif()
+
+if(DSRRL_PMETAL_SRV_SHADOW_EXPERIMENT)
+    target_compile_definitions(
+        dsrrl_renderer_core_integrated
+        PRIVATE
+        DSRRL_PMETAL_SRV_SHADOW_EXPERIMENT)
 endif()
 
 if(MSVC)
