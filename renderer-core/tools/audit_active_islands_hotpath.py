@@ -93,12 +93,12 @@ def main():
 
     # PointLight bypass must remove the actual clustered builder detour, not
     # merely make its observer a no-op.
-    require(flver_cpp,"bool install(bool enable_clustered_builder) noexcept","optional clustered builder ABI")
+    require(flver_cpp,"bool install(\n    bool enable_clustered_builder,\n    bool enable_upper_lower_selector,\n    bool enable_hemdir3_selector) noexcept","optional clustered builder ABI")
     require(flver_cpp,"if(enable_clustered_builder){","clustered builder preparation gate")
     require(flver_cpp,"g_state.builder_armed=enable_clustered_builder;","clustered builder attestation")
     require(integrated,
-        "flver_identity_transport::install(\n            k_pointlight_drawtime_runtime_enabled)",
-        "integrated clustered-builder policy")
+        "flver_identity_transport::install(\n            k_pointlight_drawtime_runtime_enabled,\n            upper_lower_enabled,\n            hemdir3_enabled)",
+        "integrated clustered-builder and selector policy")
     require(integrated,
         "if (k_pointlight_drawtime_runtime_enabled) {\n            clustered_pnts =",
         "PointLight create-time analysis bypass")
@@ -109,8 +109,8 @@ def main():
         "if(g_state.builder_armed)\n  clustered_pnts_selector_event_bridge(",
         "clustered selector bridge follows builder arm state")
     require(flver_cpp,
-        "r15,\n     g_state.builder_armed);",
-        "fixed selector bridge follows PointLight runtime policy")
+        "else if (g_state.builder_armed)\n  fixed_pointlight_selector_event_bridge(owner);",
+        "fixed selector bridge follows PointLight runtime policy when U/L is disabled")
 
     # Disabled islands must not keep receiver/materialization work alive.
     require(integrated,
