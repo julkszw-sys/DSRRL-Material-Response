@@ -7,6 +7,7 @@
 
 #include "dsrrl/runtime/upper_lower_draw_runtime.hpp"
 #include "dsrrl/runtime/pmetal_env_source_runtime.hpp"
+#include "dsrrl/runtime/pmetal_producer_state.hpp"
 #include "dsrrl/runtime/pmetal_selector_policy.hpp"
 #include "dsrrl/runtime/runtime_hot_telemetry.hpp"
 #include "dsrrl/runtime/flver_identity_transport.hpp"
@@ -829,9 +830,6 @@ std::atomic<std::uint64_t> g_pmetal_env_miss{0};
 std::atomic_bool g_pmetal_env_hook_armed{false};
 std::atomic_bool g_pmetal_selector_enabled{false};
 std::atomic<std::uint64_t> g_pmetal_selector_epoch{1u};
-thread_local pmetal_envspec_source g_pmetal_selected_source{};
-thread_local operators::material_response::material_identity g_pmetal_selected_material{};
-thread_local bool g_pmetal_selected_valid = false;
 std::atomic<std::uint64_t> g_pmetal_source_publish{0u};
 std::atomic<std::uint64_t> g_pmetal_source_consumer_ok{0u};
 std::atomic<std::uint64_t> g_pmetal_source_consumer_fail{0u};
@@ -4725,15 +4723,15 @@ void pmetal_env_source_runtime::uninstall() noexcept
 void pmetal_env_source_selector_clear() noexcept
 {
     // Same selector lifetime as material_owner_selection; never reuse a donor
-    // across a failed, foreign, or unrecognized selector. No atomic RMW.
-    g_pmetal_selected_valid = false;
+    // across a failed, foreign, or unrecognized selector.
+    pmetal_producer_state_clear();
 }
 
 void pmetal_env_source_selector_event(
     void *owner, void *return_address, void *r14, void *r15, const void *selector_stack,
     const operators::material_response::material_identity &material) noexcept
 {
-    g_pmetal_selected_valid = false;
+    pmetal_producer_state_clear();
     if (!g_pmetal_selector_enabled.load(std::memory_order_acquire) ||
         !exact_pmetal_material_selection(material) || !owner || !return_address)
         return;
@@ -4846,10 +4844,14 @@ void pmetal_env_source_selector_event(
             true,
             std::memory_order_relaxed);
     next.a = {a.x,a.y,a.z}; next.b = {b.x,b.y,b.z}; next.beta = endpoints.beta;
-    next.serial = g_pmetal_selector_epoch.load(std::memory_order_relaxed);
-    g_pmetal_selected_source = next;
-    g_pmetal_selected_material = material;
-    g_pmetal_selected_valid = true;
+    const auto epoch =
+        g_pmetal_selector_epoch.load(
+            std::memory_order_relaxed);
+    next.serial = epoch;
+    pmetal_producer_state_publish(
+        material,
+        next,
+        epoch);
     if (telemetry::effect_enabled())
         g_pmetal_source_last_publish_tid.store(
             static_cast<std::uint32_t>(GetCurrentThreadId()),
@@ -4864,7 +4866,7 @@ bool pmetal_env_source_runtime::latest(
 {
     out = {};
     const bool local_valid =
-        g_pmetal_selected_valid;
+        pmetal_producer_state_valid();
     if (telemetry::effect_enabled()) {
         g_pmetal_source_last_consumer_tid.store(
             static_cast<std::uint32_t>(GetCurrentThreadId()),
@@ -4873,16 +4875,24 @@ bool pmetal_env_source_runtime::latest(
             local_valid,
             std::memory_order_relaxed);
     }
+
+    const auto epoch =
+        g_pmetal_selector_epoch.load(
+            std::memory_order_relaxed);
+
     if (!g_pmetal_selector_enabled.load(std::memory_order_acquire) ||
-        !local_valid || !exact_pmetal_material_selection(material) ||
-        g_pmetal_selected_source.serial != g_pmetal_selector_epoch.load(std::memory_order_relaxed) ||
-        material.flver_sha256 != g_pmetal_selected_material.flver_sha256 ||
-        material.material_slot != g_pmetal_selected_material.material_slot ||
-        material.raw_mtd_sha256 != g_pmetal_selected_material.raw_mtd_sha256) {
-        telemetry::hot_count(g_pmetal_source_consumer_fail); return false;
+        !exact_pmetal_material_selection(material) ||
+        !pmetal_producer_state_latest(
+            material,
+            epoch,
+            out)) {
+        telemetry::hot_count(
+            g_pmetal_source_consumer_fail);
+        return false;
     }
-    out = g_pmetal_selected_source;
-    telemetry::hot_count(g_pmetal_source_consumer_ok);
+
+    telemetry::hot_count(
+        g_pmetal_source_consumer_ok);
     return true;
 }
 
