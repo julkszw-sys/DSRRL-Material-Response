@@ -140,6 +140,9 @@ private:
         std::uint32_t subobject_count,
         const reshade::api::pipeline_subobject *subobjects) noexcept;
 
+    std::shared_ptr<const record> pipeline_record_cached(
+        std::uint64_t pipeline_handle) const noexcept;
+
     mutable std::mutex mutex_;
     std::unordered_map<
         digest_key,
