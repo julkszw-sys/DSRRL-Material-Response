@@ -12,6 +12,16 @@ namespace dsrrl::runtime {
 
 namespace hashing = operators::legacy_plan::hashing;
 
+namespace {
+constexpr std::array<std::uint8_t,16>
+    k_clustered_pointlight_binding_guid{{
+        0x44u,0x53u,0x52u,0x52u,
+        0x4cu,0x43u,0x50u,0x4cu,
+        0x42u,0x49u,0x4eu,0x44u,
+        0x30u,0x30u,0x30u,0x31u
+    }};
+}
+
 struct clustered_pnts_pipeline_runtime::record {
     digest_key host{};
     std::array<std::uint8_t,32> replacement_sha{};
