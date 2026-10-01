@@ -7,6 +7,7 @@
 
 #include "dsrrl/runtime/pmetal_envspec_draw_runtime.hpp"
 #include "dsrrl/runtime/runtime_hot_telemetry.hpp"
+#include "dsrrl/runtime/pixel_srv_shadow.hpp"
 
 #include "dsrrl/operators/legacy_plan/sha256_bytes.hpp"
 
@@ -708,6 +709,15 @@ bool pmetal_envspec_draw_runtime::prepare(
                 hemenvlerp ||
         source.beta != 0.0f;
 
+    ID3D11ShaderResourceView *shadow_env[3]{};
+    const bool shadow_env_ready =
+        !k_native_dsr_cubemap_feed &&
+        pixel_srv_shadow_snapshot(
+            cmd_list,
+            12u,
+            probe_b_required ? 3u : 1u,
+            shadow_env);
+
     const bool env_resource_ready =
         k_native_dsr_cubemap_feed
             ? env_resources_.prepare_native_dsr(
@@ -715,11 +725,20 @@ bool pmetal_envspec_draw_runtime::prepare(
                   env_semantics.envspc_slot,
                   probe_b_required,
                   prepared.env_resources)
-            : env_resources_.prepare(
-                  context,
-                  env_semantics.envspc_slot,
-                  probe_b_required,
-                  prepared.env_resources);
+            : shadow_env_ready
+                ? env_resources_.prepare_bound(
+                      shadow_env[0],
+                      probe_b_required
+                          ? shadow_env[2]
+                          : nullptr,
+                      env_semantics.envspc_slot,
+                      probe_b_required,
+                      prepared.env_resources)
+                : env_resources_.prepare(
+                      context,
+                      env_semantics.envspc_slot,
+                      probe_b_required,
+                      prepared.env_resources);
 
     if (!env_resource_ready) {
         if (shader != nullptr)
@@ -752,14 +771,34 @@ bool pmetal_envspec_draw_runtime::prepare(
             line);
     }
 
-    if (!material_resources_.
-            prepare_draw_requests(
-                context,
-                decision.receiver_id,
-                query,
-                true,
-                true,
-                prepared.material_resources) ||
+    ID3D11ShaderResourceView *shadow_material[3]{};
+    const bool shadow_material_ready =
+        pixel_srv_shadow_snapshot(
+            cmd_list,
+            0u,
+            3u,
+            shadow_material);
+
+    const bool material_ready =
+        shadow_material_ready
+            ? material_resources_.
+                  prepare_draw_requests_bound(
+                      shadow_material,
+                      decision.receiver_id,
+                      query,
+                      true,
+                      true,
+                      prepared.material_resources)
+            : material_resources_.
+                  prepare_draw_requests(
+                      context,
+                      decision.receiver_id,
+                      query,
+                      true,
+                      true,
+                      prepared.material_resources);
+
+    if (!material_ready ||
         !prepared.material_resources.spec_rgb) {
         if (shader != nullptr)
             shader->Release();
