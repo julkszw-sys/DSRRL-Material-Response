@@ -143,6 +143,18 @@ constexpr bool k_draw_callback_only_bisect = true;
 constexpr bool k_draw_callback_only_bisect = false;
 #endif
 
+#ifdef DSRRL_RESOURCE_EVENTS_ONLY_BISECT
+constexpr bool k_resource_events_only_bisect = true;
+#else
+constexpr bool k_resource_events_only_bisect = false;
+#endif
+
+#ifdef DSRRL_IDENTITY_HOOKS_ONLY_BISECT
+constexpr bool k_identity_hooks_only_bisect = true;
+#else
+constexpr bool k_identity_hooks_only_bisect = false;
+#endif
+
 #if defined(DSRRL_POINTLIGHT_DRAWTIME_BYPASS) || defined(DSRRL_DRAWTIME_ISLANDS_BYPASS)
 constexpr bool k_pointlight_drawtime_runtime_enabled = false;
 #else
@@ -6754,6 +6766,42 @@ bool AddonInit(
         return false;
     }
 
+    if (k_resource_events_only_bisect) {
+        const bool material_ok = g_material_resources.register_events();
+        const bool envspec_ok = g_envspec_resources.register_events();
+        if (!material_ok || !envspec_ok) {
+            if (envspec_ok) g_envspec_resources.unregister_events();
+            if (material_ok) g_material_resources.unregister_events();
+            disable_integrated_islands();
+            reshade::unregister_addon(addon_module, reshade_module);
+            return false;
+        }
+        reshade::log::message(
+            reshade::log::level::info,
+            "[DSRRL DYNAMIC CUT] RESOURCE_EVENTS_ONLY: only material/envspec ReShade resource events installed; no pipeline/draw events and no native identity/source hooks.");
+        return true;
+    }
+
+    if (k_identity_hooks_only_bisect) {
+        const bool texture_ok =
+            dsrrl::runtime::texture_identity_transport::install();
+        const bool flver_ok =
+            dsrrl::runtime::flver_identity_transport::install(false);
+        if (!texture_ok || !flver_ok) {
+            if (flver_ok)
+                dsrrl::runtime::flver_identity_transport::uninstall();
+            if (texture_ok)
+                dsrrl::runtime::texture_identity_transport::uninstall();
+            disable_integrated_islands();
+            reshade::unregister_addon(addon_module, reshade_module);
+            return false;
+        }
+        reshade::log::message(
+            reshade::log::level::info,
+            "[DSRRL DYNAMIC CUT] IDENTITY_HOOKS_ONLY: only texture + FLVER identity native hooks installed; no ReShade pipeline/draw/resource events and no PointLight/P_Metal source hooks.");
+        return true;
+    }
+
     register_events();
 
     if (k_drawtime_islands_runtime_enabled &&
@@ -7058,6 +7106,22 @@ void AddonUninit(
     if (k_draw_callback_only_bisect) {
         reshade::unregister_event<reshade::addon_event::draw_indexed>(on_draw_indexed);
         reshade::unregister_event<reshade::addon_event::draw>(on_draw);
+        reshade::unregister_addon(addon_module, reshade_module);
+        return;
+    }
+
+    if (k_resource_events_only_bisect) {
+        g_envspec_resources.unregister_events();
+        g_material_resources.unregister_events();
+        disable_integrated_islands();
+        reshade::unregister_addon(addon_module, reshade_module);
+        return;
+    }
+
+    if (k_identity_hooks_only_bisect) {
+        dsrrl::runtime::flver_identity_transport::uninstall();
+        dsrrl::runtime::texture_identity_transport::uninstall();
+        disable_integrated_islands();
         reshade::unregister_addon(addon_module, reshade_module);
         return;
     }
