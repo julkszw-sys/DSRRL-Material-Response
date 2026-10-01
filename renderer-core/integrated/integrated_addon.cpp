@@ -10,6 +10,7 @@
 #include "dsrrl/runtime/bloom_scene_sidecar_runtime.hpp"
 #include "dsrrl/runtime/bloom_fx_draw_transport.hpp"
 #include "dsrrl/runtime/pmetal_envspec_draw_runtime.hpp"
+#include "dsrrl/runtime/pixel_srv_shadow.hpp"
 #include "dsrrl/runtime/texture_identity_transport.hpp"
 #include "dsrrl/operators/material_response/mtd_semantic_census.hpp"
 #include "dsrrl/runtime/stable_receiver_pipeline_registry.hpp"
@@ -6517,6 +6518,21 @@ void on_present(
         log_effect_matrix("LIVE");
 }
 
+void on_push_descriptors(
+    reshade::api::command_list *cmd_list,
+    reshade::api::shader_stage stages,
+    reshade::api::pipeline_layout layout,
+    std::uint32_t param_index,
+    const reshade::api::descriptor_table_update &update)
+{
+    dsrrl::runtime::pixel_srv_shadow_on_push_descriptors(
+        cmd_list,
+        stages,
+        layout,
+        param_index,
+        update);
+}
+
 void register_events()
 {
     reshade::register_event<reshade::addon_event::init_device>(on_init_device);
@@ -6525,6 +6541,8 @@ void register_events()
     reshade::register_event<reshade::addon_event::init_pipeline>(on_init_pipeline);
     reshade::register_event<reshade::addon_event::destroy_pipeline>(on_destroy_pipeline);
     reshade::register_event<reshade::addon_event::bind_pipeline>(on_bind_pipeline);
+    if (k_drawtime_islands_runtime_enabled)
+        reshade::register_event<reshade::addon_event::push_descriptors>(on_push_descriptors);
     if (k_drawtime_islands_runtime_enabled &&
         k_draw_callbacks_runtime_enabled) {
         reshade::register_event<reshade::addon_event::draw>(on_draw);
@@ -6541,6 +6559,8 @@ void unregister_events()
         reshade::unregister_event<reshade::addon_event::draw_indexed>(on_draw_indexed);
         reshade::unregister_event<reshade::addon_event::draw>(on_draw);
     }
+    if (k_drawtime_islands_runtime_enabled)
+        reshade::unregister_event<reshade::addon_event::push_descriptors>(on_push_descriptors);
     reshade::unregister_event<reshade::addon_event::bind_pipeline>(on_bind_pipeline);
     reshade::unregister_event<reshade::addon_event::destroy_pipeline>(on_destroy_pipeline);
     reshade::unregister_event<reshade::addon_event::init_pipeline>(on_init_pipeline);
@@ -6622,6 +6642,7 @@ bool AddonInit(
     g_mr_draw_runtime.reset();
     g_material_resources.reset();
     g_envspec_resources.reset_stats();
+    dsrrl::runtime::pixel_srv_shadow_reset();
     g_bloom_scene_sidecar.reset();
     dsrrl::runtime::bloom_fx_draw_transport::reset_stats();
     g_pmetal_envspec.reset();
