@@ -690,8 +690,30 @@ resolve_bank(
     if (!bank_signature(
             base,
             decoded)) {
-        cached = {};
-        return nullptr;
+        // PR177 runtime proved that the live LightBank header, selector and
+        // selected row are valid while the structural signature can still
+        // fail before producing a hash. Do not move a fresh VirtualQuery scan
+        // into the recurring hook hot path: first discard only this thread's
+        // readability cache, then retry the existing cached scanner once.
+        //
+        // If the retry still cannot produce a signature, cache that negative
+        // result for this exact (base,count,generation). This keeps the PR177
+        // performance envelope: the expensive recovery attempt is bounded to
+        // one per live bank identity instead of repeating on every packer call.
+        g_region_cache = {};
+        g_region_cache_victim = {};
+
+        if (!bank_signature(
+                base,
+                decoded)) {
+            cached.base = base;
+            cached.count = count;
+            cached.generation = generation;
+            cached.signature = 0u;
+            cached.bank = nullptr;
+            cached.valid = true;
+            return nullptr;
+        }
     }
 
     const auto *bank =
