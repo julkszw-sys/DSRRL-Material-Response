@@ -46,16 +46,18 @@ struct pmetal_env_source_runtime_telemetry {
     std::uint32_t hook_decode_index = 0u;
     std::uint32_t hook_decode_row_id = 0u;
     std::uint64_t hook_decode_signature = 0u;
-    // Structural LightBank bank-signature frontier. Codes are diagnostic only:
+    // Structural LightBank identity frontier. Codes are diagnostic only:
     // 0 none, 1 header-range, 2 header-semantic, 3 table-range,
-    // 4 name-offset, 5 name-window, 6 window-end, 7 zero-room,
-    // 8 name-unterminated, 9 success.
+    // 4 layout-unknown, 9 success.
     std::uint64_t bank_signature_scan_count = 0u;
     std::uint32_t bank_signature_attempt = 0u;
     std::uint32_t bank_signature_stage = 0u;
     std::uint32_t bank_signature_entry = 0u;
     std::uint32_t bank_signature_name_offset = 0u;
     std::uint32_t bank_signature_consumed = 0u;
+    // Exact vanilla-DSR table-layout identity. This is producer identity
+    // machinery only; downstream donor state keeps the canonical V13 signature.
+    std::uint64_t bank_layout_signature = 0u;
     // Diagnostic-only thread provenance. These fields never authorize source
     // reuse; they exist only to falsify the selector-thread TLS lifetime.
     std::uint32_t last_publish_tid = 0u;
