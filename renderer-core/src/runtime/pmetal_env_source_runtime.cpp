@@ -82,7 +82,6 @@ struct hook_source_record {
 thread_local hook_source_record g_hook_source_tls{};
 std::mutex g_hook_source_mutex;
 hook_source_record g_hook_source_global{};
-std::uint64_t g_hook_source_consumed_serial = 0u;
 std::atomic<std::uint64_t> g_hook_source_serial{0u};
 std::atomic<std::uint64_t> g_hook_single_seen{0u};
 std::atomic<std::uint64_t> g_hook_blend_seen{0u};
@@ -1176,7 +1175,7 @@ void publish_hook_source(
         std::memory_order_relaxed);
 }
 
-bool consume_hook_source(
+bool latest_hook_source(
     pmetal_envspec_source &out) noexcept
 {
     out = {};
@@ -1184,7 +1183,6 @@ bool consume_hook_source(
     if (g_hook_source_tls.valid) {
         out =
             g_hook_source_tls.source;
-        g_hook_source_tls.valid = false;
         g_hook_consume.fetch_add(
             1u,
             std::memory_order_relaxed);
@@ -1194,15 +1192,11 @@ bool consume_hook_source(
     std::lock_guard<std::mutex> lock(
         g_hook_source_mutex);
     if (!g_hook_source_global.valid ||
-        g_hook_source_global.serial == 0u ||
-        g_hook_source_global.serial ==
-            g_hook_source_consumed_serial)
+        g_hook_source_global.serial == 0u)
         return false;
 
     out =
         g_hook_source_global.source;
-    g_hook_source_consumed_serial =
-        g_hook_source_global.serial;
     g_hook_consume.fetch_add(
         1u,
         std::memory_order_relaxed);
@@ -1215,7 +1209,6 @@ void clear_hook_source() noexcept
     std::lock_guard<std::mutex> lock(
         g_hook_source_mutex);
     g_hook_source_global = {};
-    g_hook_source_consumed_serial = 0u;
 }
 
 void __fastcall envspec_single_hook_entry(
@@ -1815,10 +1808,10 @@ bool pmetal_env_source_runtime::latest(
 
     // Narrow fallback carrier recovered from the attested retail LightBank
     // single/blend packers (V13 semantic cut). It is consumed only by an
-    // already-authenticated exact P_Metal draw and is consume-once, so the
-    // bridge does not resurrect global U/L state or a process-wide latest
-    // LightBank value.
-    if (consume_hook_source(out)) {
+    // already-authenticated exact P_Metal draw. The retail packer is a state
+    // producer: retain its latest generation until the next exact source
+    // update, matching the validated V13 lifetime without exposing it to U/L.
+    if (latest_hook_source(out)) {
         telemetry::hot_count(
             g_consumer_ok);
         return true;
