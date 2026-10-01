@@ -144,7 +144,7 @@ option(
 option(
     DSRRL_FLVER_SELECTOR_PROFILE
     "Diagnostic: low-overhead sampled FLVER selector/support interaction profiler"
-    ON)
+    OFF)
 
 set(
     RESHADE_INCLUDE_DIR
