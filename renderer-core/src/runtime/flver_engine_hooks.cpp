@@ -558,7 +558,19 @@ extern "C" void dsrrl_flver_selector_observer(
      upper_lower_pmetal_material_event_bridge(
          owner,
          identity);
-    pmetal_env_source_selector_event(owner, ret, r14, r15, selector_stack, identity);
+
+    // Route 345 is only a necessary P_Metal condition; the isolated source
+    // runtime still verifies exact semantic/raw-MTD identity before decoding.
+    // Avoid entering that decoder for every other exact material selector.
+    if (identity.route_index == 345u)
+     pmetal_env_source_selector_event(
+         owner,
+         ret,
+         r14,
+         r15,
+         selector_stack,
+         identity);
+
     telemetry::hot_count(g_exact_owner_ready);
     return;
    }
