@@ -541,6 +541,50 @@ def main():
         "bool draw_state_transaction_runtime::raw_replay_draw_indexed(",
         "raw indexed draw helper")
 
+    # Final low-level split after owner runtime showed both state-only and
+    # raw-draw replay independently lose FPS.
+    for needle,label in (
+        ("constexpr bool k_state_capture_only_bisect = true;","state capture-only compile policy"),
+        ("constexpr bool k_native_state_mutate_restore_only_bisect = true;","native mutate/restore-only compile policy"),
+        ("constexpr bool k_core_transaction_only_bisect = true;","core transaction-only compile policy"),
+        ("constexpr bool k_raw_native_draw_reentry_min_bisect = true;","minimal raw native draw reentry compile policy"),
+        ("g_draw_transactions.capture_only(","state capture-only dispatch"),
+        ("g_draw_transactions.native_mutate_restore_only(","native mutate/restore-only dispatch"),
+        ("g_draw_transactions.core_transaction_only(","core transaction-only dispatch"),
+    ):
+        require(integrated,needle,label)
+    for needle,label in (
+        ("bool draw_state_transaction_runtime::capture_only(","state capture-only helper"),
+        ("bool draw_state_transaction_runtime::native_mutate_restore_only(","native mutate/restore-only helper"),
+        ("bool draw_state_transaction_runtime::core_transaction_only(","core transaction-only helper"),
+    ):
+        require(draw_tx,needle,label)
+
+    capture_start=draw_tx.find(
+        "bool draw_state_transaction_runtime::capture_only(")
+    native_start=draw_tx.find(
+        "bool draw_state_transaction_runtime::native_mutate_restore_only(",
+        capture_start)
+    core_start=draw_tx.find(
+        "bool draw_state_transaction_runtime::core_transaction_only(",
+        native_start)
+    raw_start=draw_tx.find(
+        "bool draw_state_transaction_runtime::raw_replay_draw(",
+        core_start)
+    if min(capture_start,native_start,core_start,raw_start)<0:
+        fail("low-level bisect helper boundaries missing")
+    capture_body=draw_tx[capture_start:native_start]
+    native_body=draw_tx[native_start:core_start]
+    core_body=draw_tx[core_start:raw_start]
+    if "PSSet" in capture_body or "core_.transactions().begin" in capture_body:
+        fail("capture-only bisect performs mutation/core transaction")
+    if "ctx->Draw" in native_body or "core_.transactions().begin" in native_body:
+        fail("native mutate/restore-only bisect performs replay/core transaction")
+    if "PSGet" in core_body or "PSSet" in core_body or "ctx->Draw" in core_body:
+        fail("core transaction-only bisect performs native state/replay work")
+    require(core_body,"core_.transactions().begin(","core-only begin")
+    require(core_body,"core_.transactions().restore(command)","core-only restore")
+
     print("Active-islands hot-path audit: PASS")
     print("  feature_reads=atomic")
     print("  flver_identity=256-entry TLS before global map lock")
