@@ -14,6 +14,7 @@
 #include "dsrrl/runtime/pmetal_env_source_runtime.hpp"
 #include "dsrrl/runtime/hemdir3_mode_transport.hpp"
 #include "dsrrl/runtime/clustered_pnts_draw_runtime.hpp"
+#include "dsrrl/runtime/fixed_pointlight_draw_runtime.hpp"
 #include "dsrrl/operators/material_response/mtd_semantic_census.hpp"
 #include "dsrrl/operators/material_response/generated_routes_v1.hpp"
 #include "dsrrl/operators/material_response/generated_exact_binding_mr_v1.hpp"
