@@ -6,10 +6,12 @@
 #include <reshade.hpp>
 
 struct ID3D11ShaderResourceView;
+struct ID3D11SamplerState;
 
 namespace dsrrl::runtime {
 
 constexpr std::uint32_t k_pixel_srv_shadow_slots = 16u;
+constexpr std::uint32_t k_pixel_sampler_shadow_slots = 16u;
 
 void pixel_srv_shadow_reset() noexcept;
 
@@ -25,5 +27,11 @@ bool pixel_srv_shadow_snapshot(
     std::uint32_t first,
     std::uint32_t count,
     ID3D11ShaderResourceView **out) noexcept;
+
+bool pixel_sampler_shadow_snapshot(
+    reshade::api::command_list *cmd_list,
+    std::uint32_t first,
+    std::uint32_t count,
+    ID3D11SamplerState **out) noexcept;
 
 } // namespace dsrrl::runtime
