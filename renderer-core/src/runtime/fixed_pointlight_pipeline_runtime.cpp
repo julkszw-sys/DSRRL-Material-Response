@@ -521,41 +521,37 @@ bool fixed_pointlight_pipeline_runtime::bound_light_count(
         static_cast<std::uint64_t>(
             reinterpret_cast<std::uintptr_t>(
                 cmd_list));
-
     const auto epoch =
-        bound_epoch_.load(
+        pipeline_epoch_.load(
             std::memory_order_acquire);
 
     std::shared_ptr<const record> selected{};
     if (bound_tls_.runtime == this &&
         bound_tls_.command == command &&
-        bound_tls_.epoch == epoch) {
-        if (!bound_tls_.present)
-            return false;
+        bound_tls_.pipeline_epoch == epoch &&
+        bound_tls_.present &&
+        bound_tls_.selected != nullptr) {
         selected = bound_tls_.selected;
     } else {
-        std::lock_guard<std::mutex> lock(mutex_);
-        const auto found = bound_.find(command);
-        if (found == bound_.end()) {
-            bound_tls_ = {
-                this,
-                command,
-                {},
-                bound_epoch_.load(
-                    std::memory_order_relaxed),
-                false
-            };
-            return false;
-        }
+        std::uint64_t pipeline_handle = 0u;
+        cmd_list->get_private_data(
+            k_fixed_pointlight_binding_guid.data(),
+            &pipeline_handle);
+        selected =
+            pipeline_record_cached(
+                pipeline_handle);
 
-        selected = found->second;
+        const auto stable_epoch =
+            pipeline_epoch_.load(
+                std::memory_order_acquire);
         bound_tls_ = {
             this,
             command,
             selected,
-            bound_epoch_.load(
-                std::memory_order_relaxed),
-            selected != nullptr
+            stable_epoch,
+            selected != nullptr,
+            pipeline_handle,
+            stable_epoch
         };
     }
 
