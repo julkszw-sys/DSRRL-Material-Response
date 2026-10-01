@@ -114,10 +114,10 @@ def main() -> int:
         )
         return 1
 
-    # Bind state-shadow invariant: once an exact PointLight pipeline is
-    # attested and bound on a command-list thread, a repeated bind of the same
-    # pipeline must return from TLS before touching the synchronized pipeline
-    # registry. The synchronized maps remain cross-thread/invalidation fallback.
+    # Bind state-shadow invariant: exact PointLight pipeline identity lives on
+    # the ReShade command-list object and is cached per thread. Global
+    # command->record maps are forbidden; the synchronized pipeline registry is
+    # consulted only when the epoch-invalidated attestation cache misses.
     fixed_pipe_h = (
         source_dir / "include" / "dsrrl" / "runtime" /
         "fixed_pointlight_pipeline_runtime.hpp"
@@ -163,6 +163,18 @@ def main() -> int:
                 )
                 return 1
 
+        for forbidden in (
+            "std::shared_ptr<const record>> bound_;",
+            "bound_epoch_",
+            "any_bound_",
+        ):
+            if forbidden in header:
+                print(
+                    f"PointLight runtime audit: {label} global command binding state survived: {forbidden}",
+                    file=sys.stderr,
+                )
+                return 1
+
     for label, source, signature, destroy_sig in (
         (
             "fixed",
@@ -195,6 +207,23 @@ def main() -> int:
         ):
             print(
                 f"PointLight runtime audit: {label} repeated bind does not reuse TLS before synchronized registry lookup",
+                file=sys.stderr,
+            )
+            return 1
+        if "set_private_data(" not in bind:
+            print(
+                f"PointLight runtime audit: {label} bind does not publish object-local command state",
+                file=sys.stderr,
+            )
+            return 1
+
+    for label, source, key in (
+        ("fixed", fixed_pipe_cpp, "k_fixed_pointlight_binding_guid"),
+        ("clustered", clustered_pipe_cpp, "k_clustered_pointlight_binding_guid"),
+    ):
+        if source.count("get_private_data(") < 2 or key not in source:
+            print(
+                f"PointLight runtime audit: {label} draw path is not command-local state backed",
                 file=sys.stderr,
             )
             return 1
@@ -260,7 +289,7 @@ def main() -> int:
 
     print(
         f"PointLight core source audit: PASS ({len(sources)} implementation units; "
-        "dedicated selector + exact-route draw fast path + TLS bind/snapshot state shadow)"
+        "dedicated selector + exact-route draw fast path + object-local/TLS state shadow)"
     )
     return 0
 
