@@ -85,7 +85,9 @@ bool same_material(
         a.flver_sha256 == b.flver_sha256 &&
         a.raw_mtd_sha256 == b.raw_mtd_sha256 &&
         a.material_slot == b.material_slot &&
-        a.flver_identity_hash == b.flver_identity_hash &&
+        // flver_identity_hash is an optional legacy/cache token, not
+        // authority. The complete FLVER SHA-256 + slot + semantic identity
+        // above remain the exact cross-thread producer key.
         a.route_index == b.route_index &&
         a.semantic_name_hash == b.semantic_name_hash &&
         a.material_family_hash == b.material_family_hash;
@@ -116,7 +118,9 @@ std::uint64_t material_key(
     hash = fnv_bytes(hash, material.flver_sha256);
     hash = fnv_bytes(hash, material.raw_mtd_sha256);
     hash = fnv_scalar(hash, material.material_slot);
-    hash = fnv_scalar(hash, material.flver_identity_hash);
+    // Do not hash flver_identity_hash here. It is optional and may be absent
+    // on a later draw thread even when the authoritative FLVER SHA/slot tuple
+    // is identical.
     hash = fnv_scalar(hash, material.route_index);
     hash = fnv_scalar(hash, material.semantic_name_hash);
     hash = fnv_scalar(hash, material.material_family_hash);
