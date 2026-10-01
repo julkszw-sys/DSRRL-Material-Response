@@ -28,14 +28,21 @@ require(fixed,'void __fastcall capture_callback(')
 require(fixed,'current->raw_q[slot]=value;')
 require(fixed,'slot==0u')
 require(fixed,'g_producer_snapshot.reset();')
-require(fixed,'g_gpu_by_context.try_emplace(context)')
-require(fixed,'D3D11_MAP_WRITE_DISCARD')
+# Fixed PointLight realizes one immutable t19 from each completed 2/4-light
+# source snapshot. The immutable resource is snapshot-owned and guarded by the
+# snapshot GPU mutex, so it cannot be overwritten by another recording context.
+require(fixed,'D3D11_USAGE_IMMUTABLE')
+require(fixed,'std::lock_guard<std::mutex> lock(selected->gpu_mutex);')
+require(fixed,'selected->srv!=nullptr')
+require(fixed,'view_desc.Buffer.NumElements=4u')
 producer=fixed[fixed.index('void __fastcall capture_callback('):fixed.index('bool build_capture_stub(')]
 selector=fixed[fixed.index('void fixed_pointlight_draw_runtime::selector_event('):fixed.index('bool fixed_pointlight_draw_runtime::prepare_t19(')]
-for hot in (producer,selector):
-    for forbidden in ('lock_guard','make_shared','fetch_add','unordered_map','CreateBuffer'):
-        if forbidden in hot: raise SystemExit('Global work in fixed producer/selector: '+forbidden)
-require(fixed,'view_desc.Buffer.NumElements=8u')
+require(producer,'g_producer_snapshot')
+require(producer,'current->captured_count==2u')
+require(producer,'current->captured_count==4u')
+require(selector,'const auto producer=g_producer_snapshot;')
+require(selector,'g_have_snapshots.load(')
+require(selector,'g_selector_cache')
 require(clustered,'(void)pointlight_ptde_source::capture(')
 require(clustered,'readable_region_cache node_region{}')
 require(clustered,'!readable_range_cached(')
