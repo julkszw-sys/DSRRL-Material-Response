@@ -449,32 +449,103 @@ bool draw_state_transaction_runtime::begin(
          i < mutation.constant_buffer_count;
          ++i) {
         auto &capture = state.cbs[i];
-        capture.slot = mutation.constant_buffers[i].slot;
+        capture.slot =
+            mutation.constant_buffers[i].slot;
 
-        ctx->PSGetConstantBuffers(
-            capture.slot,
-            1u,
-            &capture.base);
-
-        if (ctx1 != nullptr) {
-            UINT first = 0u;
-            UINT count = 0u;
-            ctx1->PSGetConstantBuffers1(
+        pixel_cb_shadow_binding shadow{};
+        bool shadow_ready =
+            pixel_cb_shadow_snapshot(
+                cmd_list,
                 capture.slot,
                 1u,
-                &capture.window,
-                &first,
-                &count);
+                &shadow);
 
-            capture.first = first;
-            capture.count = count;
-            capture.coherent =
-                capture.base == capture.window;
-            capture.explicit_window =
-                capture.window != nullptr &&
-                count >= 16u &&
-                (first % 16u) == 0u &&
-                (count % 16u) == 0u;
+        bool shadow_explicit_window = false;
+        UINT shadow_first = 0u;
+        UINT shadow_count = 0u;
+
+        if (shadow_ready &&
+            shadow.buffer != nullptr &&
+            shadow.size != UINT64_MAX) {
+            const bool aligned =
+                (shadow.offset % 256u) == 0u &&
+                (shadow.size % 256u) == 0u &&
+                shadow.size != 0u;
+            const auto first64 =
+                shadow.offset / 16u;
+            const auto count64 =
+                shadow.size / 16u;
+
+            shadow_ready =
+                aligned &&
+                ctx1 != nullptr &&
+                first64 <=
+                    static_cast<std::uint64_t>(
+                        UINT_MAX) &&
+                count64 <=
+                    static_cast<std::uint64_t>(
+                        UINT_MAX);
+
+            if (shadow_ready) {
+                shadow_first =
+                    static_cast<UINT>(first64);
+                shadow_count =
+                    static_cast<UINT>(count64);
+                shadow_explicit_window =
+                    shadow_count >= 16u &&
+                    (shadow_first % 16u) == 0u &&
+                    (shadow_count % 16u) == 0u;
+                shadow_ready =
+                    shadow_explicit_window;
+            }
+        }
+
+        if (shadow_ready) {
+            capture.base = shadow.buffer;
+            if (capture.base != nullptr)
+                capture.base->AddRef();
+
+            if (shadow_explicit_window) {
+                capture.window = shadow.buffer;
+                capture.window->AddRef();
+                capture.first = shadow_first;
+                capture.count = shadow_count;
+                capture.explicit_window = true;
+            }
+
+            capture.coherent = true;
+            telemetry::hot_count(
+                cb_shadow_capture_);
+        } else {
+            ctx->PSGetConstantBuffers(
+                capture.slot,
+                1u,
+                &capture.base);
+
+            if (ctx1 != nullptr) {
+                UINT first = 0u;
+                UINT count = 0u;
+                ctx1->PSGetConstantBuffers1(
+                    capture.slot,
+                    1u,
+                    &capture.window,
+                    &first,
+                    &count);
+
+                capture.first = first;
+                capture.count = count;
+                capture.coherent =
+                    capture.base ==
+                    capture.window;
+                capture.explicit_window =
+                    capture.window != nullptr &&
+                    count >= 16u &&
+                    (first % 16u) == 0u &&
+                    (count % 16u) == 0u;
+            }
+
+            telemetry::hot_count(
+                cb_native_capture_);
         }
 
         if (!capture.coherent) {
@@ -1362,6 +1433,8 @@ draw_state_transaction_runtime::telemetry() const noexcept
         restore_ok_.load(),
         restore_fail_.load(),
         native_readback_skipped_.load(),
+        cb_shadow_capture_.load(),
+        cb_native_capture_.load(),
         srv_shadow_capture_.load(),
         srv_native_capture_.load(),
         sampler_shadow_capture_.load(),
@@ -1422,6 +1495,8 @@ void draw_state_transaction_runtime::reset() noexcept
     restore_ok_.store(0);
     restore_fail_.store(0);
     native_readback_skipped_.store(0);
+    cb_shadow_capture_.store(0);
+    cb_native_capture_.store(0);
     srv_shadow_capture_.store(0);
     srv_native_capture_.store(0);
     sampler_shadow_capture_.store(0);
