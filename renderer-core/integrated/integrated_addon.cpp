@@ -2834,7 +2834,7 @@ void log_state(const char *tag) noexcept
         "mr_tx_eligible=%llu mr_tx_miss=%llu mr_replay=%llu mr_restore_fail=%llu mr_quarantine=%u "
         "tx_begin_ok=%llu tx_begin_fail=%llu tx_bind_fail=%llu tx_issued=%llu "
         "tx_restore_ok=%llu tx_restore_fail=%llu tx_readback_skip=%llu "
-        "tx_srv_shadow=%llu/%llu tx_sampler_shadow=%llu/%llu tx_quarantine=%u "
+        "tx_cb_shadow=%llu/%llu tx_srv_shadow=%llu/%llu tx_sampler_shadow=%llu/%llu tx_quarantine=%u "
         "tex_hook=%u/%u tex_restore_fail=%u res_named=%llu res_ready=%llu res_missing=%llu "
         "res_unsupported=%llu spec_req=%llu fixed_spec=%llu fixed_diff=%llu diff_req=%llu norm_req=%llu res_fo=%llu "
         "ul_hook=%u ul_q=%u ul_restore_fail=%u ul_pub=%llu ul_sel=%llu/%llu/%llu ul_tuple_miss=%llu "
@@ -2908,6 +2908,8 @@ void log_state(const char *tag) noexcept
         static_cast<unsigned long long>(tx.restore_ok),
         static_cast<unsigned long long>(tx.restore_fail),
         static_cast<unsigned long long>(tx.native_readback_skipped),
+        static_cast<unsigned long long>(tx.cb_shadow_capture),
+        static_cast<unsigned long long>(tx.cb_native_capture),
         static_cast<unsigned long long>(tx.srv_shadow_capture),
         static_cast<unsigned long long>(tx.srv_native_capture),
         static_cast<unsigned long long>(tx.sampler_shadow_capture),
