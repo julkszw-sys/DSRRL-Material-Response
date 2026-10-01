@@ -10,6 +10,7 @@
 #include "dsrrl/runtime/bloom_scene_sidecar_runtime.hpp"
 #include "dsrrl/runtime/bloom_fx_draw_transport.hpp"
 #include "dsrrl/runtime/pmetal_envspec_draw_runtime.hpp"
+#include "dsrrl/runtime/pmetal_native_draw_bridge.hpp"
 #include "dsrrl/runtime/pixel_srv_shadow.hpp"
 #include "dsrrl/runtime/texture_identity_transport.hpp"
 #include "dsrrl/operators/material_response/mtd_semantic_census.hpp"
@@ -150,6 +151,23 @@ constexpr bool k_pointlight_drawtime_runtime_enabled = false;
 constexpr bool k_pointlight_drawtime_runtime_enabled = true;
 #endif
 
+#if defined(DSRRL_DRAWTIME_ISLANDS_BYPASS) || \
+    defined(DSRRL_DRAW_CALLBACKS_BYPASS) || \
+    defined(DSRRL_DRAW_REPLAY_BYPASS) || \
+    defined(DSRRL_EMPTY_DRAW_CALLBACK_BISECT) || \
+    defined(DSRRL_STATE_TRANSACTION_ONLY_BISECT) || \
+    defined(DSRRL_RAW_DRAW_REPLAY_BISECT) || \
+    defined(DSRRL_STATE_CAPTURE_ONLY_BISECT) || \
+    defined(DSRRL_NATIVE_STATE_MUTATE_RESTORE_ONLY_BISECT) || \
+    defined(DSRRL_CORE_TRANSACTION_ONLY_BISECT) || \
+    defined(DSRRL_RAW_NATIVE_DRAW_REENTRY_MIN_BISECT) || \
+    defined(DSRRL_ADDON_LOADED_ONLY_BISECT) || \
+    defined(DSRRL_DRAW_CALLBACK_ONLY_BISECT)
+constexpr bool k_pmetal_native_draw_runtime_enabled = false;
+#else
+constexpr bool k_pmetal_native_draw_runtime_enabled = true;
+#endif
+
 #include <array>
 #include <atomic>
 #include <cstdint>
@@ -204,6 +222,8 @@ dsrrl::runtime::pmetal_envspec_draw_runtime
         g_pmetal_source,
         g_envspec_resources,
         g_material_resources);
+dsrrl::runtime::pmetal_native_draw_bridge
+    g_pmetal_native_draw;
 
 thread_local bool g_raw_draw_replay_recursing = false;
 
