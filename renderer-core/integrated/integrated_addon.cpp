@@ -7924,6 +7924,15 @@ void AddonUninit(
     }
 
     unregister_events();
+
+    reshade::log::message(
+        reshade::log::level::info,
+        "[DSRRL WATER REFLECT PROFILE] FINAL snapshot follows.");
+    g_reflect_rt_reported.store(
+        false,
+        std::memory_order_release);
+    log_reflect_rt_profile_once();
+
     log_state("PRE_UNLOAD");
     log_effect_matrix("PRE_UNLOAD");
     motion_blur_camera_fallback_disable::
