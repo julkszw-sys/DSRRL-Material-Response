@@ -129,6 +129,23 @@ def main() -> None:
         PHYSICAL_GLOBALS,
         "runtime global replacement")
 
+
+    # Runtime-v2 identity split C: bypass FLVER identity hooks only.
+    text = replace_once(
+        text,
+        '''    const bool flver_hooks =
+        dsrrl::runtime::flver_identity_transport::install(
+            k_pointlight_drawtime_runtime_enabled,
+            upper_lower_enabled,
+            hemdir3_enabled);
+''',
+        '''    const bool flver_hooks = false;
+''',
+        "FLVER identity transport bypass")
+
+    if "flver_identity_transport::install(" in text:
+        raise SystemExit("FLVER identity hook install survived FLVER-only bypass")
+
     for forbidden in (
         "dsrrl::runtime::upper_lower_draw_runtime\n    g_upper_lower",
         "dsrrl::runtime::subsurface_draw_runtime\n    g_subsurface",
