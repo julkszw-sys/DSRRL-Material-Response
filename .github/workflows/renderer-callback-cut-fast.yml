@@ -1,0 +1,90 @@
+name: Renderer Callback Cut Fast Build
+
+on:
+  pull_request:
+    paths:
+      - "renderer-core/integrated/**"
+      - ".github/workflows/renderer-callback-cut-fast.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  callback-cut:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve exact source lineage
+        shell: pwsh
+        run: |
+          $checkout = (git rev-parse HEAD).Trim()
+          "DSRRL_CHECKOUT_COMMIT=$checkout" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Checkout pinned ReShade API
+        uses: actions/checkout@v4
+        with:
+          repository: crosire/reshade
+          ref: 3645e3025d1d98a90e318278858931f034d5d1f6
+          path: _reshade
+
+      - name: Configure addon-loaded-only
+        shell: pwsh
+        run: >
+          cmake
+          -S renderer-core/integrated
+          -B build-addon-loaded-only
+          -A x64
+          -DRESHADE_INCLUDE_DIR="${{ github.workspace }}/_reshade/include"
+          -DDSRRL_SOURCE_COMMIT="$env:DSRRL_CHECKOUT_COMMIT"
+          -DDSRRL_BUILD_FLAVOR="addon_loaded_only_bisect"
+          -DDSRRL_ADDON_LOADED_ONLY_BISECT=ON
+
+      - name: Build addon-loaded-only
+        shell: pwsh
+        run: |
+          cmake --build build-addon-loaded-only --config Release --target dsrrl_renderer_core_integrated
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $addon = @(Get-ChildItem build-addon-loaded-only -Recurse -Filter *.addon64)
+          if ($addon.Count -ne 1) { throw "Expected one addon-loaded-only addon, found $($addon.Count)" }
+          $out = "DSRRL_Core_Islands_ADDON_LOADED_ONLY_BISECT.addon64"
+          Copy-Item $addon[0].FullName $out -Force
+          Write-Host "ADDON_LOADED_ONLY_BISECT_SHA256=$((Get-FileHash $out -Algorithm SHA256).Hash.ToLowerInvariant())"
+
+      - name: Upload addon-loaded-only
+        uses: actions/upload-artifact@v4
+        with:
+          name: DSRRL_Core_Islands_ADDON_LOADED_ONLY_BISECT
+          path: DSRRL_Core_Islands_ADDON_LOADED_ONLY_BISECT.addon64
+          if-no-files-found: error
+
+      - name: Configure draw-callback-only
+        shell: pwsh
+        run: >
+          cmake
+          -S renderer-core/integrated
+          -B build-draw-callback-only
+          -A x64
+          -DRESHADE_INCLUDE_DIR="${{ github.workspace }}/_reshade/include"
+          -DDSRRL_SOURCE_COMMIT="$env:DSRRL_CHECKOUT_COMMIT"
+          -DDSRRL_BUILD_FLAVOR="draw_callback_only_bisect"
+          -DDSRRL_DRAW_CALLBACK_ONLY_BISECT=ON
+
+      - name: Build draw-callback-only
+        shell: pwsh
+        run: |
+          cmake --build build-draw-callback-only --config Release --target dsrrl_renderer_core_integrated
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $addon = @(Get-ChildItem build-draw-callback-only -Recurse -Filter *.addon64)
+          if ($addon.Count -ne 1) { throw "Expected one draw-callback-only addon, found $($addon.Count)" }
+          $out = "DSRRL_Core_Islands_DRAW_CALLBACK_ONLY_BISECT.addon64"
+          Copy-Item $addon[0].FullName $out -Force
+          Write-Host "DRAW_CALLBACK_ONLY_BISECT_SHA256=$((Get-FileHash $out -Algorithm SHA256).Hash.ToLowerInvariant())"
+
+      - name: Upload draw-callback-only
+        uses: actions/upload-artifact@v4
+        with:
+          name: DSRRL_Core_Islands_DRAW_CALLBACK_ONLY_BISECT
+          path: DSRRL_Core_Islands_DRAW_CALLBACK_ONLY_BISECT.addon64
+          if-no-files-found: error
