@@ -69,7 +69,7 @@ option(
 option(
     DSRRL_POINTLIGHT_DRAWTIME_BYPASS
     "Diagnostic: disable PointLight producer hooks, runtime pipeline binding and draw-time carrier/replay while preserving all non-PointLight runtime paths"
-    ON)
+    OFF)
 
 option(
     DSRRL_DRAWTIME_ISLANDS_BYPASS
