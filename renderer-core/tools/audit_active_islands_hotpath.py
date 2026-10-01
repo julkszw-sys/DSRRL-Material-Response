@@ -488,6 +488,23 @@ def main():
     if "return true;" in integrated[init_log_start:init_log_end]:
         fail("transport-only profile incorrectly exits before dynamic transport installation")
 
+    require(integrated,
+        "constexpr bool k_empty_draw_callback_bisect = true;",
+        "empty draw callback bisect compile policy")
+    for sig,label in (
+        ("bool on_draw(\n    reshade::api::command_list *cmd_list","draw"),
+        ("bool on_draw_indexed(\n    reshade::api::command_list *cmd_list","draw_indexed"),
+    ):
+        start=integrated.find(sig)
+        if start<0:
+            fail(f"{label} boundary missing")
+        body=integrated[start:start+900]
+        require_before(
+            body,
+            "if (k_empty_draw_callback_bisect)\n        return false;",
+            "g_hot_telemetry_enabled",
+            f"{label} empty-callback bisect before all DSRRL draw work")
+
     print("Active-islands hot-path audit: PASS")
     print("  feature_reads=atomic")
     print("  flver_identity=256-entry TLS before global map lock")
@@ -505,6 +522,7 @@ def main():
     print("  drawtime_falsifier=no draw callbacks/no FLVER-texture-resource-PMetal-PointLight transports; A1+MotionBlur create-time retained")
     print("  transport_only=dynamic transports installed, draw/draw_indexed/present callbacks omitted")
     print("  no_replay=full draw routing/preparation active, release before dispatch/replay/restore")
+    print("  empty_draw_callback=ReShade draw event dispatch/function call only; immediate return before DSRRL draw logic")
     print("  bloom_q8=no production resource allocation without telemetry authority")
     print("  bloom_fx=no production per-draw scope check outside telemetry")
     print("  selection_guard=only installed producer transports drain draw-scoped TLS")
