@@ -89,6 +89,10 @@ struct draw_tx_telemetry {
     std::uint64_t restore_ok = 0;
     std::uint64_t restore_fail = 0;
     std::uint64_t native_readback_skipped = 0;
+    std::uint64_t srv_shadow_capture = 0;
+    std::uint64_t srv_native_capture = 0;
+    std::uint64_t sampler_shadow_capture = 0;
+    std::uint64_t sampler_native_capture = 0;
     bool quarantined = false;
 };
 
@@ -171,11 +175,15 @@ private:
     struct srv_capture {
         std::uint32_t slot = 0;
         ID3D11ShaderResourceView *srv = nullptr;
+        // True whenever this capture owns a COM reference. Runtime v2 shadow
+        // capture obtains that reference with AddRef instead of PSGet*.
+        bool owns_reference = false;
     };
 
     struct sampler_capture {
         std::uint32_t slot = 0;
         ID3D11SamplerState *sampler = nullptr;
+        bool owns_reference = false;
     };
 
     struct transaction_state {
@@ -239,6 +247,10 @@ private:
     std::atomic<std::uint64_t> restore_ok_{0};
     std::atomic<std::uint64_t> restore_fail_{0};
     std::atomic<std::uint64_t> native_readback_skipped_{0};
+    std::atomic<std::uint64_t> srv_shadow_capture_{0};
+    std::atomic<std::uint64_t> srv_native_capture_{0};
+    std::atomic<std::uint64_t> sampler_shadow_capture_{0};
+    std::atomic<std::uint64_t> sampler_native_capture_{0};
     std::atomic_bool quarantined_{false};
 };
 
