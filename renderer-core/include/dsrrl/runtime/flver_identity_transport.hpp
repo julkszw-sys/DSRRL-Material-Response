@@ -36,6 +36,8 @@ struct selector_owner_telemetry {
     std::uint64_t selector_events = 0;
     std::uint64_t owner_sha_hits = 0;
     std::uint64_t owner_mtd_hits = 0;
+    std::uint64_t selector_identity_cache_hits = 0;
+    std::uint64_t selector_identity_cache_misses = 0;
     std::uint64_t exact_owner_ready = 0;
     std::uint64_t owner_fail_open = 0;
     std::uint64_t runtime_material_hits = 0;
