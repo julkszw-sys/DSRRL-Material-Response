@@ -134,6 +134,7 @@ private:
         const clustered_pnts_pipeline_runtime *runtime = nullptr;
         std::uint64_t pipeline = 0u;
         std::uint64_t epoch = 0u;
+        std::shared_ptr<const record> selected{};
         bool present = false;
     };
 
