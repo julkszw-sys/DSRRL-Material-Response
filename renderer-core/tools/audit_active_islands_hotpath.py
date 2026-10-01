@@ -291,22 +291,28 @@ def main():
     # Owner/material caches use the already-computed 64-bit FLVER token only
     # as bucket entropy. Positive cache hits must still compare the full SHA-256.
     require(owner_selection,
-        "k_owner_auth_cache_slots = 256u",
-        "owner auth TLS working set")
+        "k_owner_auth_cache_sets = 128u",
+        "owner auth TLS cache sets")
+    require(owner_selection,
+        "k_owner_auth_cache_ways = 4u",
+        "owner auth 4-way TLS working set")
     require(owner_selection,
         "owner_cache_entropy(identity)",
         "owner auth cheap cache entropy")
     require(owner_selection,
-        "cached.flver_sha256 ==\n            identity.flver_sha256",
+        "entry.flver_sha256 ==\n                identity.flver_sha256",
         "owner auth full SHA hit gate")
     require(owner_producer,
-        "k_owner_material_cache_slots = 256u",
-        "owner material TLS working set")
+        "k_owner_material_cache_sets = 128u",
+        "owner material TLS cache sets")
+    require(owner_producer,
+        "k_owner_material_cache_ways = 4u",
+        "owner material 4-way TLS working set")
     require(owner_producer,
         "owner_material_cache_entropy(observation)",
         "owner material cheap cache entropy")
     require(owner_producer,
-        "cached.flver_sha256 ==\n            observation.flver_sha256",
+        "entry.flver_sha256 ==\n                observation.flver_sha256",
         "owner material full SHA hit gate")
 
     # MR replacement registration is append-only for an existing
