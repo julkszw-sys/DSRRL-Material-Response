@@ -22,6 +22,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <mutex>
 
 namespace dsrrl::runtime {
 namespace {
@@ -43,6 +44,51 @@ struct f4 {
     float z = 0.0f;
     float w = 0.0f;
 };
+
+constexpr std::uintptr_t k_envspec_single_rva = 0x563B80u;
+constexpr std::uintptr_t k_envspec_blend_rva = 0x563C30u;
+constexpr std::array<std::uint8_t,14> k_envspec_single_preimage{{
+    0x48,0x89,0x5c,0x24,0x08,0x57,0x48,0x83,0xec,0x40,0x48,0x8b,0x41,0x18
+}};
+constexpr std::array<std::uint8_t,14> k_envspec_blend_preimage{{
+    0x40,0x53,0x48,0x83,0xec,0x50,0x44,0x8b,0x94,0x24,0x80,0x00,0x00,0x00
+}};
+
+struct source_hook {
+    void *target = nullptr;
+    void *trampoline = nullptr;
+    void *detour = nullptr;
+    std::size_t stolen = 0u;
+    std::array<std::uint8_t,14> original{};
+    bool patched = false;
+};
+
+using envspec_single_fn =
+    void (__fastcall *)(void *, float *, int);
+using envspec_blend_fn =
+    void (__fastcall *)(float *, void *, int, void *, int, float);
+
+source_hook g_envspec_single_hook{};
+source_hook g_envspec_blend_hook{};
+envspec_single_fn g_envspec_single_original = nullptr;
+envspec_blend_fn g_envspec_blend_original = nullptr;
+
+struct hook_source_record {
+    pmetal_envspec_source source{};
+    std::uint64_t serial = 0u;
+    bool valid = false;
+};
+
+thread_local hook_source_record g_hook_source_tls{};
+std::mutex g_hook_source_mutex;
+hook_source_record g_hook_source_global{};
+std::uint64_t g_hook_source_consumed_serial = 0u;
+std::atomic<std::uint64_t> g_hook_source_serial{0u};
+std::atomic<std::uint64_t> g_hook_single_seen{0u};
+std::atomic<std::uint64_t> g_hook_blend_seen{0u};
+std::atomic<std::uint64_t> g_hook_publish{0u};
+std::atomic<std::uint64_t> g_hook_consume{0u};
+std::atomic_bool g_hook_restore_failed{false};
 
 struct readable_window {
     std::uintptr_t begin = 0u;
