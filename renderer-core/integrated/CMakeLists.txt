@@ -447,8 +447,7 @@ add_library(
     "${DSRRL_RENDERER_CORE_ROOT}/src/operators/resource_bridges/spec_rgb_consumer_materializer.cpp"
     "${DSRRL_RENDERER_CORE_ROOT}/src/operators/resource_bridges/fixed_pointlight_spec_rgb_bridge.cpp"
     "${DSRRL_RENDERER_CORE_ROOT}/src/operators/env_spec/pmetal_rgba_materializer.cpp"
-    "${DSRRL_RENDERER_CORE_ROOT}/src/operators/env_spec/pmetal_rgba_lerp_materializer.cpp"
-
+    "${DSRRL_RENDERER_CORE_ROOT}/src/operators/env_spec/pmetal_rgba_lerp_materializer.cpp")
 
 add_dependencies(
     dsrrl_renderer_core_integrated
