@@ -102,6 +102,16 @@ public:
         bool spec_rgb_consumer_ready,
         prepared_material_resource_draw &prepared) noexcept;
 
+    // Runtime v2 fast path. Uses already-shadowed stock t0/t1/t2 bindings
+    // and avoids D3D11 PSGetShaderResources on qualifying draws.
+    bool prepare_draw_requests_bound(
+        ID3D11ShaderResourceView *const (&views)[3],
+        std::uint32_t receiver_id,
+        const operators::material_response::mtd_semantic_query &query,
+        bool full_material_response_ready,
+        bool spec_rgb_consumer_ready,
+        prepared_material_resource_draw &prepared) noexcept;
+
     bool prepare_fixed_pointlight_material_requests(
         ID3D11DeviceContext *context,
         const operators::material_response::mtd_semantic_query &query,
