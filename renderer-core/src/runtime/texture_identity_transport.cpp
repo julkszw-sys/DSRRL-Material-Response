@@ -547,7 +547,8 @@ void uninstall() noexcept
 
     g_dsrrl_texture_name_resume = nullptr;
     g_dsrrl_texture_name_clear_resume = nullptr;
-    g_logical_name.clear();
+    g_logical_name_length = 0u;
+    g_logical_name[0] = L'\0';
     g_base = 0u;
     g_status = {};
 }
