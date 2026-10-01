@@ -695,16 +695,17 @@ extern "C" void dsrrl_flver_selector_observer(
   hemdir3_mode_transport::selector_begin(
       incoming_mode);
 
+ // PointLight owns this exact selector association directly. The bridge is
+ // inert unless Fixed PointLight is installed and no longer depends on U/L.
+ fixed_pointlight_selector_event_bridge(owner);
+
  if (g_selector_upper_lower_enabled.load(
          std::memory_order_relaxed))
   upper_lower_selector_event_bridge(
       owner,
       ret,
       r14,
-      r15,
-      g_state.builder_armed);
- else if (g_state.builder_armed)
-  fixed_pointlight_selector_event_bridge(owner);
+      r15);
 
  if(g_base==0u || ret==nullptr || material_index<0){telemetry::hot_count(g_owner_fail_open);return;}
  const auto ret_addr=reinterpret_cast<std::uintptr_t>(ret);
