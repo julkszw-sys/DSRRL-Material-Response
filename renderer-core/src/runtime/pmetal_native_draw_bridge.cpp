@@ -1,5 +1,6 @@
 #include "dsrrl/runtime/pmetal_native_draw_bridge.hpp"
 #include "dsrrl/runtime/d3d11_cb_window.hpp"
+#include "dsrrl/runtime/runtime_hot_telemetry.hpp"
 
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
@@ -402,8 +403,120 @@ bool restore_state(
             &sampler);
     }
 
+    bool verified = true;
+    if (telemetry::native_state_verification_enabled()) {
+        if (state.shader_captured) {
+            ID3D11PixelShader *shader = nullptr;
+            std::array<ID3D11ClassInstance *,
+                       draw_tx_max_class_instances> classes{};
+            UINT class_count =
+                static_cast<UINT>(
+                    classes.size());
+            context->PSGetShader(
+                &shader,
+                classes.data(),
+                &class_count);
+
+            verified =
+                shader == state.shader &&
+                class_count == state.class_count;
+
+            if (verified) {
+                for (UINT i = 0u;
+                     i < class_count;
+                     ++i) {
+                    if (classes[i] !=
+                        state.classes[i]) {
+                        verified = false;
+                        break;
+                    }
+                }
+            }
+
+            if (shader != nullptr)
+                shader->Release();
+            for (UINT i = 0u;
+                 i < class_count &&
+                 i < classes.size();
+                 ++i)
+                if (classes[i] != nullptr)
+                    classes[i]->Release();
+        }
+
+        for (std::uint32_t i = 0u;
+             verified &&
+             i < state.cb_count;
+             ++i) {
+            ID3D11Buffer *buffer = nullptr;
+            context->PSGetConstantBuffers(
+                state.cbs[i].slot,
+                1u,
+                &buffer);
+            verified =
+                buffer ==
+                state.cbs[i].base;
+            if (buffer != nullptr)
+                buffer->Release();
+
+            if (verified &&
+                context1 != nullptr &&
+                state.cbs[i].explicit_window) {
+                ID3D11Buffer *window = nullptr;
+                UINT first = 0u;
+                UINT count = 0u;
+                context1->PSGetConstantBuffers1(
+                    state.cbs[i].slot,
+                    1u,
+                    &window,
+                    &first,
+                    &count);
+                verified =
+                    window ==
+                        state.cbs[i].window &&
+                    first ==
+                        state.cbs[i].first &&
+                    count ==
+                        state.cbs[i].count;
+                if (window != nullptr)
+                    window->Release();
+            }
+        }
+
+        for (std::uint32_t i = 0u;
+             verified &&
+             i < state.srv_count;
+             ++i) {
+            ID3D11ShaderResourceView *srv = nullptr;
+            context->PSGetShaderResources(
+                state.srvs[i].slot,
+                1u,
+                &srv);
+            verified =
+                srv ==
+                    state.srvs[i].value;
+            if (srv != nullptr)
+                srv->Release();
+        }
+
+        for (std::uint32_t i = 0u;
+             verified &&
+             i < state.sampler_count;
+             ++i) {
+            ID3D11SamplerState *sampler = nullptr;
+            context->PSGetSamplers(
+                state.samplers[i].slot,
+                1u,
+                &sampler);
+            verified =
+                sampler ==
+                    state.samplers[i].value;
+            if (sampler != nullptr)
+                sampler->Release();
+        }
+    }
+
     release_native_state(state);
-    return true;
+    return verified;
 }
 
 bool write_vtable_slot(
