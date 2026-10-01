@@ -33,4 +33,9 @@ bool flver_identity_enrich_owner(
 void flver_identity_reset() noexcept;
 flver_identity_telemetry flver_identity_stats() noexcept;
 
+// Monotonic invalidation epoch for positive selector-owner identity caches.
+// New unrelated model insertion intentionally does not invalidate existing
+// identities; replacement/destruction of an existing model advances it.
+std::uint64_t flver_identity_epoch() noexcept;
+
 } // namespace dsrrl::runtime
