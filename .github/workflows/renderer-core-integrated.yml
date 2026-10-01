@@ -1684,6 +1684,98 @@ jobs:
           path: DSRRL_Core_Islands_EMPTY_DRAW_CALLBACK_BISECT.addon64
           if-no-files-found: error
 
+      - name: Configure state-transaction-only replay bisect
+        shell: pwsh
+        run: >
+          cmake
+          -S renderer-core/integrated
+          -B build-integrated-state-only
+          -A x64
+          -DRESHADE_INCLUDE_DIR="${{ github.workspace }}/_reshade/include"
+          -DDSRRL_SOURCE_COMMIT="$env:DSRRL_CHECKOUT_COMMIT"
+          -DDSRRL_BUILD_FLAVOR="state_transaction_only_bisect"
+          -DDSRRL_STATE_TRANSACTION_ONLY_BISECT=ON
+
+      - name: Verify state-transaction-only replay bisect profile
+        shell: pwsh
+        run: |
+          $cache = Get-Content build-integrated-state-only/CMakeCache.txt -Raw
+          if ($cache -notmatch "DSRRL_STATE_TRANSACTION_ONLY_BISECT:BOOL=ON") {
+            throw "State-only bisect did not enable DSRRL_STATE_TRANSACTION_ONLY_BISECT"
+          }
+          if ($cache -match "DSRRL_DRAWTIME_ISLANDS_BYPASS:BOOL=ON" -or
+              $cache -match "DSRRL_DRAW_CALLBACKS_BYPASS:BOOL=ON" -or
+              $cache -match "DSRRL_DRAW_REPLAY_BYPASS:BOOL=ON" -or
+              $cache -match "DSRRL_RAW_DRAW_REPLAY_BISECT:BOOL=ON") {
+            throw "State-only bisect unexpectedly changes the intended cut"
+          }
+
+      - name: Build state-transaction-only replay bisect
+        shell: pwsh
+        run: |
+          cmake --build build-integrated-state-only --config Release --target dsrrl_renderer_core_integrated
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $addons = @(Get-ChildItem build-integrated-state-only -Recurse -Filter *.addon64)
+          if ($addons.Count -ne 1) {
+            throw "Expected exactly one state-only addon, found $($addons.Count)"
+          }
+          $out = "DSRRL_Core_Islands_STATE_TRANSACTION_ONLY_BISECT.addon64"
+          Copy-Item $addons[0].FullName $out -Force
+          Write-Host "STATE_TRANSACTION_ONLY_BISECT_SHA256=$((Get-FileHash $out -Algorithm SHA256).Hash.ToLowerInvariant())"
+
+      - name: Upload state-transaction-only replay bisect
+        uses: actions/upload-artifact@v4
+        with:
+          name: DSRRL_Core_Islands_STATE_TRANSACTION_ONLY_BISECT
+          path: DSRRL_Core_Islands_STATE_TRANSACTION_ONLY_BISECT.addon64
+          if-no-files-found: error
+
+      - name: Configure raw-draw replay bisect
+        shell: pwsh
+        run: >
+          cmake
+          -S renderer-core/integrated
+          -B build-integrated-raw-draw
+          -A x64
+          -DRESHADE_INCLUDE_DIR="${{ github.workspace }}/_reshade/include"
+          -DDSRRL_SOURCE_COMMIT="$env:DSRRL_CHECKOUT_COMMIT"
+          -DDSRRL_BUILD_FLAVOR="raw_draw_replay_bisect"
+          -DDSRRL_RAW_DRAW_REPLAY_BISECT=ON
+
+      - name: Verify raw-draw replay bisect profile
+        shell: pwsh
+        run: |
+          $cache = Get-Content build-integrated-raw-draw/CMakeCache.txt -Raw
+          if ($cache -notmatch "DSRRL_RAW_DRAW_REPLAY_BISECT:BOOL=ON") {
+            throw "Raw-draw bisect did not enable DSRRL_RAW_DRAW_REPLAY_BISECT"
+          }
+          if ($cache -match "DSRRL_DRAWTIME_ISLANDS_BYPASS:BOOL=ON" -or
+              $cache -match "DSRRL_DRAW_CALLBACKS_BYPASS:BOOL=ON" -or
+              $cache -match "DSRRL_DRAW_REPLAY_BYPASS:BOOL=ON" -or
+              $cache -match "DSRRL_STATE_TRANSACTION_ONLY_BISECT:BOOL=ON") {
+            throw "Raw-draw bisect unexpectedly changes the intended cut"
+          }
+
+      - name: Build raw-draw replay bisect
+        shell: pwsh
+        run: |
+          cmake --build build-integrated-raw-draw --config Release --target dsrrl_renderer_core_integrated
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $addons = @(Get-ChildItem build-integrated-raw-draw -Recurse -Filter *.addon64)
+          if ($addons.Count -ne 1) {
+            throw "Expected exactly one raw-draw addon, found $($addons.Count)"
+          }
+          $out = "DSRRL_Core_Islands_RAW_DRAW_REPLAY_BISECT.addon64"
+          Copy-Item $addons[0].FullName $out -Force
+          Write-Host "RAW_DRAW_REPLAY_BISECT_SHA256=$((Get-FileHash $out -Algorithm SHA256).Hash.ToLowerInvariant())"
+
+      - name: Upload raw-draw replay bisect
+        uses: actions/upload-artifact@v4
+        with:
+          name: DSRRL_Core_Islands_RAW_DRAW_REPLAY_BISECT
+          path: DSRRL_Core_Islands_RAW_DRAW_REPLAY_BISECT.addon64
+          if-no-files-found: error
+
       - name: Configure full-runtime diagnostic addon
         shell: pwsh
         run: >
