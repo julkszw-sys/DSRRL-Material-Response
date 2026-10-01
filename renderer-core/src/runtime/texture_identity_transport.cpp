@@ -558,6 +558,23 @@ hook_status status() noexcept
     return g_status;
 }
 
+bool snapshot_raw(
+    const wchar_t *&logical_name,
+    std::size_t &length) noexcept
+{
+    logical_name = nullptr;
+    length = 0u;
+
+    if (!g_status.name_hook_armed ||
+        !g_status.clear_hook_armed ||
+        g_logical_name_length == 0u)
+        return false;
+
+    logical_name = g_logical_name.data();
+    length = g_logical_name_length;
+    return true;
+}
+
 bool snapshot(
     std::wstring &logical_name) noexcept
 {
