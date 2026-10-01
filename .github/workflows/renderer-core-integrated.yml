@@ -634,11 +634,17 @@ jobs:
             'b12_uploads_',
             'b12_reuses_',
             'payload_valid',
-            'std::memcmp',
+            'source_generation',
+            'material_bits',
             '12u',
             '14u'
           )) {
             if ($envspecRuntime -notmatch [regex]::Escape($required)) { throw "P_Metal EnvSpec shared-batch runtime invariant missing: $required" }
+          }
+
+          if ($envspecRuntime -match 'found->second\.payload\.data\(\)' -or
+              $envspecRuntime -match 'std::memcmp') {
+            throw "P_Metal EnvSpec b12 cache regressed to per-draw 64-byte payload comparison"
           }
 
           foreach ($forbidden in @(
