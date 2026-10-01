@@ -5866,6 +5866,12 @@ bool on_draw(
     if (g_raw_draw_replay_recursing)
         return false;
 
+    if (k_empty_draw_callback_bisect)
+        return false;
+
+    if (k_empty_draw_callback_bisect)
+        return false;
+
     if (k_draw_callback_only_bisect)
         return false;
 
@@ -5882,9 +5888,6 @@ bool on_draw(
         g_raw_draw_replay_recursing = false;
         return issued;
     }
-
-    if (k_empty_draw_callback_bisect)
-        return false;
 
     if (g_hot_telemetry_enabled &&
         dsrrl::runtime::bloom_fx_draw_transport::
@@ -6233,9 +6236,6 @@ bool on_draw_indexed(
         g_raw_draw_replay_recursing = false;
         return issued;
     }
-
-    if (k_empty_draw_callback_bisect)
-        return false;
 
     if (g_hot_telemetry_enabled &&
         dsrrl::runtime::bloom_fx_draw_transport::
