@@ -377,13 +377,13 @@ def main():
         "void register_events()",
         "void unregister_events()")
     require(register_body,
-        "if (k_drawtime_islands_runtime_enabled) {\n        reshade::register_event<reshade::addon_event::draw>(on_draw);",
-        "draw callback omitted in draw-time bypass")
+        "if (k_drawtime_islands_runtime_enabled &&\n        k_draw_callbacks_runtime_enabled) {\n        reshade::register_event<reshade::addon_event::draw>(on_draw);",
+        "draw callback omitted in full/transport-only bypass")
     require(register_body,
         "reshade::register_event<reshade::addon_event::draw_indexed>(on_draw_indexed);",
         "indexed draw callback conditional registration")
     draw_gate=register_body.find(
-        "if (k_drawtime_islands_runtime_enabled) {")
+        "if (k_drawtime_islands_runtime_enabled &&\n        k_draw_callbacks_runtime_enabled) {")
     draw_gate_end=register_body.find(
         "}\n}",
         draw_gate)
@@ -442,6 +442,49 @@ def main():
     if "g_upper_lower.consume_draw_selection();\n        g_fixed_pointlight.consume_draw_selection();" in guard_body:
         fail("selection guard regressed to unconditional disabled-island drains")
 
+    # Two runtime bisect profiles isolate transport outside draw from
+    # per-draw preparation and from the final replay/restore transaction.
+    require(integrated,
+        "constexpr bool k_draw_callbacks_runtime_enabled = false;",
+        "transport-only callback bypass policy")
+    require(integrated,
+        "constexpr bool k_draw_replay_runtime_enabled = false;",
+        "no-replay policy")
+
+    draw_start=integrated.find(
+        "bool on_draw(\n    reshade::api::command_list *cmd_list")
+    indexed_start=integrated.find(
+        "bool on_draw_indexed(\n    reshade::api::command_list *cmd_list",
+        draw_start)
+    present_start=integrated.find(
+        "void on_present(",
+        indexed_start)
+    if draw_start<0 or indexed_start<0 or present_start<0:
+        fail("draw bisect function boundaries missing")
+    draw_body=integrated[draw_start:indexed_start]
+    indexed_body=integrated[indexed_start:present_start]
+    for body,label,dispatch_token in (
+        (draw_body,"draw","dispatch_island_draw_batch("),
+        (indexed_body,"draw_indexed","dispatch_island_draw_indexed_batch("),
+    ):
+        gate=body.find("if (!k_draw_replay_runtime_enabled)")
+        release=body.find("release_prepared_island_batch(prepared);",gate)
+        dispatch=body.find(dispatch_token)
+        if gate<0 or release<0 or dispatch<0 or not gate<release<dispatch:
+            fail(f"{label} no-replay gate is not immediately before dispatch")
+        if "return false;" not in body[release:dispatch]:
+            fail(f"{label} no-replay gate does not stop before replay")
+
+    init_log_start=integrated.find(
+        "if (k_drawtime_islands_runtime_enabled &&\n        !k_draw_callbacks_runtime_enabled)")
+    dynamic_install=integrated.find(
+        "g_material_resources.register_events()",
+        init_log_start)
+    if init_log_start<0 or dynamic_install<0:
+        fail("transport-only startup marker missing")
+    if "return true;" in integrated[init_log_start:dynamic_install]:
+        fail("transport-only profile incorrectly exits before dynamic transport installation")
+
     print("Active-islands hot-path audit: PASS")
     print("  feature_reads=atomic")
     print("  flver_identity=256-entry TLS before global map lock")
@@ -457,6 +500,8 @@ def main():
     print("  envspec=unrelated SRV creation preserves snapshot TLS; destroy invalidates")
     print("  material_resources=256-entry TLS companion working set; negative-cache invalidation retained")
     print("  drawtime_falsifier=no draw callbacks/no FLVER-texture-resource-PMetal-PointLight transports; A1+MotionBlur create-time retained")
+    print("  transport_only=dynamic transports installed, draw/draw_indexed/present callbacks omitted")
+    print("  no_replay=full draw routing/preparation active, release before dispatch/replay/restore")
     print("  bloom_q8=no production resource allocation without telemetry authority")
     print("  bloom_fx=no production per-draw scope check outside telemetry")
     print("  selection_guard=only installed producer transports drain draw-scoped TLS")
