@@ -779,6 +779,14 @@ bool pmetal_envspec_draw_runtime::prepare(
             3u,
             shadow_material);
 
+    if (shadow_env_ready &&
+        shadow_material_ready)
+        telemetry::hot_count(
+            srv_shadow_hits_);
+    else
+        telemetry::hot_count(
+            srv_shadow_fallbacks_);
+
     const bool material_ready =
         shadow_material_ready
             ? material_resources_.
@@ -1174,6 +1182,8 @@ pmetal_envspec_draw_runtime::telemetry() const noexcept
         lerp_requests_.load(),
         b12_uploads_.load(),
         b12_reuses_.load(),
+        srv_shadow_hits_.load(),
+        srv_shadow_fallbacks_.load(),
         effect_entry_seen_.load(),
         effect_feature_ready_.load(),
         effect_material_ready_.load(),
@@ -1210,6 +1220,8 @@ void pmetal_envspec_draw_runtime::reset() noexcept
     lerp_requests_.store(0u);
     b12_uploads_.store(0u);
     b12_reuses_.store(0u);
+    srv_shadow_hits_.store(0u);
+    srv_shadow_fallbacks_.store(0u);
     effect_entry_seen_.store(false);
     effect_feature_ready_.store(false);
     effect_material_ready_.store(false);
