@@ -314,110 +314,73 @@ bool fixed_pointlight_pipeline_runtime::on_bind_pipeline(
         static_cast<std::uint64_t>(
             reinterpret_cast<std::uintptr_t>(
                 cmd_list));
-
-    // Common case: the same exact PointLight PS remains bound on the same
-    // command list. The init-time attested record already lives in TLS, so do
-    // not re-enter either registry/map mutex. Epochs invalidate this shadow on
-    // pipeline destruction/reset or command-binding invalidation.
-    const auto cached_bound_epoch =
-        bound_epoch_.load(
-            std::memory_order_acquire);
-    const auto cached_pipeline_epoch =
+    const auto epoch =
         pipeline_epoch_.load(
             std::memory_order_acquire);
+
+    // ReShade command-list private data is the object-local state shadow.
+    // Repeated binds of the same exact pipeline never touch a global map.
     if (bound_tls_.runtime == this &&
         bound_tls_.command == command &&
-        bound_tls_.epoch == cached_bound_epoch &&
         bound_tls_.pipeline == pipeline.handle &&
-        bound_tls_.pipeline_epoch ==
-            cached_pipeline_epoch &&
+        bound_tls_.pipeline_epoch == epoch &&
         bound_tls_.present &&
         bound_tls_.selected != nullptr) {
         telemetry::hot_count(bind_hits_);
         return true;
     }
 
-    // The exact PointLight pipeline registry is the bind-time authority.
-    // The integrated route cache is only an optimization and may not suppress
-    // this lookup. Negative lookups are epoch-cached per thread, so ordinary
-    // non-PointLight binds do not take this runtime's mutex repeatedly.
-    if (!pipeline_attested_cached(
-            pipeline.handle)) {
-        if (!any_bound_.load(
-                std::memory_order_acquire)) {
-            bound_tls_ = {
-                this,
-                command,
-                {},
-                bound_epoch_.load(
-                    std::memory_order_relaxed),
-                false
-            };
-            return false;
-        }
+    auto selected =
+        pipeline_record_cached(
+            pipeline.handle);
+    if (selected == nullptr ||
+        pipeline_epoch_.load(
+            std::memory_order_acquire) != epoch) {
+        // Re-resolve once if init/destroy raced this bind. The normal path is
+        // a TLS cache hit and does not take the registry mutex.
+        selected =
+            pipeline_record_cached(
+                pipeline.handle);
+    }
 
-        std::lock_guard<std::mutex> lock(mutex_);
-        bound_.erase(command);
-        any_bound_.store(
-            !bound_.empty(),
-            std::memory_order_release);
+    const auto stable_epoch =
+        pipeline_epoch_.load(
+            std::memory_order_acquire);
+    if (selected == nullptr ||
+        !pipeline_attested_cached(
+            pipeline.handle)) {
+        cmd_list->set_private_data(
+            k_fixed_pointlight_binding_guid.data(),
+            0u);
         bound_tls_ = {
             this,
             command,
             {},
-            bound_epoch_.load(
-                std::memory_order_relaxed),
-            false
+            stable_epoch,
+            false,
+            0u,
+            stable_epoch
         };
-        return false;
-    }
-
-    std::lock_guard<std::mutex> lock(mutex_);
-    const auto epoch =
-        bound_epoch_.load(
-            std::memory_order_relaxed);
-
-    if (quarantined_.load()) {
-        bound_.erase(command);
-        any_bound_.store(
-            !bound_.empty(),
-            std::memory_order_release);
-        bound_tls_ = {this,command,{},epoch,false};
-        return false;
-    }
-
-    const auto found =
-        pipelines_.find(pipeline.handle);
-    if (found == pipelines_.end()) {
-        // A destroy can race the cached positive verdict. Fail open and
-        // invalidate the current command-list binding rather than replaying
-        // a stale PointLight replacement.
-        bound_.erase(command);
-        any_bound_.store(
-            !bound_.empty(),
-            std::memory_order_release);
-        bound_tls_ = {this,command,{},epoch,false};
         telemetry::hot_count(bind_misses_);
         return false;
     }
 
-    bound_[command] = found->second;
-    any_bound_.store(
-        true,
-        std::memory_order_release);
+    cmd_list->set_private_data(
+        k_fixed_pointlight_binding_guid.data(),
+        pipeline.handle);
     bound_tls_ = {
         this,
         command,
-        found->second,
-        epoch,
+        selected,
+        stable_epoch,
         true,
         pipeline.handle,
-        pipeline_epoch_.load(
-            std::memory_order_relaxed)
+        stable_epoch
     };
     telemetry::hot_count(bind_hits_);
     return true;
 }
+
 void fixed_pointlight_pipeline_runtime::on_destroy_pipeline(
     reshade::api::pipeline pipeline) noexcept
 {
