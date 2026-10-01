@@ -326,6 +326,9 @@ bool fixed_pointlight_pipeline_runtime::on_bind_pipeline(
         bound_tls_.pipeline_epoch == epoch &&
         bound_tls_.present &&
         bound_tls_.selected != nullptr) {
+        cmd_list->set_private_data(
+            k_fixed_pointlight_binding_guid.data(),
+            pipeline.handle);
         telemetry::hot_count(bind_hits_);
         return true;
     }
