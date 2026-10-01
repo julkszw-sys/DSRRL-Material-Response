@@ -91,6 +91,16 @@ option(
     "Diagnostic: keep dynamic transports and register draw callbacks, but return immediately before any DSRRL draw work"
     OFF)
 
+option(
+    DSRRL_STATE_TRANSACTION_ONLY_BISECT
+    "Diagnostic: execute draw transaction begin+restore without issuing a replacement Draw/DrawIndexed"
+    OFF)
+
+option(
+    DSRRL_RAW_DRAW_REPLAY_BISECT
+    "Diagnostic: issue only a raw stock Draw/DrawIndexed from the callback and suppress the original, without DSRRL state mutation"
+    OFF)
+
 set(
     RESHADE_INCLUDE_DIR
     ""
@@ -510,6 +520,20 @@ if(DSRRL_EMPTY_DRAW_CALLBACK_BISECT)
         dsrrl_renderer_core_integrated
         PRIVATE
         $<$<COMPILE_LANGUAGE:CXX>:DSRRL_EMPTY_DRAW_CALLBACK_BISECT>)
+endif()
+
+if(DSRRL_STATE_TRANSACTION_ONLY_BISECT)
+    target_compile_definitions(
+        dsrrl_renderer_core_integrated
+        PRIVATE
+        $<$<COMPILE_LANGUAGE:CXX>:DSRRL_STATE_TRANSACTION_ONLY_BISECT>)
+endif()
+
+if(DSRRL_RAW_DRAW_REPLAY_BISECT)
+    target_compile_definitions(
+        dsrrl_renderer_core_integrated
+        PRIVATE
+        $<$<COMPILE_LANGUAGE:CXX>:DSRRL_RAW_DRAW_REPLAY_BISECT>)
 endif()
 
 if(MSVC)
