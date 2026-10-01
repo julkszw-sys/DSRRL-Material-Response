@@ -6,6 +6,7 @@
 #include <cstdint>
 #include <cstring>
 #include <mutex>
+#include <type_traits>
 
 namespace dsrrl::runtime {
 namespace {
