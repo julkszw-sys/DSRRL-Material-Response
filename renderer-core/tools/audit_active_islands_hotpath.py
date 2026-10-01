@@ -477,12 +477,15 @@ def main():
 
     init_log_start=integrated.find(
         "if (k_drawtime_islands_runtime_enabled &&\n        !k_draw_callbacks_runtime_enabled)")
+    init_log_end=integrated.find(
+        "} else if (k_drawtime_islands_runtime_enabled &&\n               !k_draw_replay_runtime_enabled)",
+        init_log_start)
     dynamic_install=integrated.find(
         "g_material_resources.register_events()",
-        init_log_start)
-    if init_log_start<0 or dynamic_install<0:
+        init_log_end)
+    if init_log_start<0 or init_log_end<0 or dynamic_install<0:
         fail("transport-only startup marker missing")
-    if "return true;" in integrated[init_log_start:dynamic_install]:
+    if "return true;" in integrated[init_log_start:init_log_end]:
         fail("transport-only profile incorrectly exits before dynamic transport installation")
 
     print("Active-islands hot-path audit: PASS")
