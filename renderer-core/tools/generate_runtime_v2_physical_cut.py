@@ -129,6 +129,20 @@ def main() -> None:
         PHYSICAL_GLOBALS,
         "runtime global replacement")
 
+
+    # Runtime-v2 identity split D: bypass texture identity hooks only.
+    text = replace_once(
+        text,
+        '''    const bool texture_hooks =
+        dsrrl::runtime::texture_identity_transport::install();
+''',
+        '''    const bool texture_hooks = false;
+''',
+        "texture identity transport bypass")
+
+    if "texture_identity_transport::install();" in text:
+        raise SystemExit("texture identity hook install survived texture-only bypass")
+
     for forbidden in (
         "dsrrl::runtime::upper_lower_draw_runtime\n    g_upper_lower",
         "dsrrl::runtime::subsurface_draw_runtime\n    g_subsurface",
