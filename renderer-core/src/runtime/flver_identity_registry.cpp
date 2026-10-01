@@ -93,17 +93,24 @@ struct lookup_tls_cache_entry {
 // alternate. Keep the same global mutation epoch (parse/destroy still
 // invalidates every cached verdict), but retain enough per-thread identities
 // to make steady interleaved selector traffic lock-free.
-constexpr std::size_t k_lookup_tls_cache_size = 256u;
+constexpr std::size_t k_lookup_tls_cache_sets = 128u;
+constexpr std::size_t k_lookup_tls_cache_ways = 4u;
+constexpr std::size_t k_lookup_tls_cache_size =
+    k_lookup_tls_cache_sets *
+    k_lookup_tls_cache_ways;
 static_assert(
-    (k_lookup_tls_cache_size &
-     (k_lookup_tls_cache_size - 1u)) == 0u,
-    "FLVER TLS lookup cache size must be a power of two");
+    (k_lookup_tls_cache_sets &
+     (k_lookup_tls_cache_sets - 1u)) == 0u,
+    "FLVER TLS lookup cache set count must be a power of two");
 
 thread_local std::array<
     lookup_tls_cache_entry,
     k_lookup_tls_cache_size> g_lookup_cache{};
+thread_local std::array<
+    std::uint8_t,
+    k_lookup_tls_cache_sets> g_lookup_victim{};
 
-std::size_t lookup_tls_cache_index(
+std::size_t lookup_tls_cache_set(
     const void *model) noexcept
 {
     const auto value =
@@ -112,9 +119,58 @@ std::size_t lookup_tls_cache_index(
     const auto mixed =
         (value >> 4u) ^
         (value >> 13u) ^
-        (value >> 23u);
+        (value >> 23u) ^
+        (value >> 33u);
     return static_cast<std::size_t>(
-        mixed & (k_lookup_tls_cache_size - 1u));
+        mixed & (k_lookup_tls_cache_sets - 1u));
+}
+
+lookup_tls_cache_entry *lookup_tls_cache_hit(
+    const void *model,
+    std::uint64_t epoch) noexcept
+{
+    const auto set =
+        lookup_tls_cache_set(model);
+    const auto base =
+        set * k_lookup_tls_cache_ways;
+
+    for (std::size_t way = 0u;
+         way < k_lookup_tls_cache_ways;
+         ++way) {
+        auto &entry =
+            g_lookup_cache[base + way];
+        if (entry.model == model &&
+            entry.epoch == epoch)
+            return &entry;
+    }
+
+    return nullptr;
+}
+
+lookup_tls_cache_entry &lookup_tls_cache_slot(
+    const void *model) noexcept
+{
+    const auto set =
+        lookup_tls_cache_set(model);
+    const auto base =
+        set * k_lookup_tls_cache_ways;
+
+    for (std::size_t way = 0u;
+         way < k_lookup_tls_cache_ways;
+         ++way) {
+        auto &entry =
+            g_lookup_cache[base + way];
+        if (entry.model == model ||
+            entry.model == nullptr)
+            return entry;
+    }
+
+    const auto victim =
+        static_cast<std::size_t>(
+            g_lookup_victim[set]++ &
+            static_cast<std::uint8_t>(
+                k_lookup_tls_cache_ways - 1u));
+    return g_lookup_cache[base + victim];
 }
 std::atomic<std::uint64_t> g_inserts{0},g_lookups{0},g_hits{0},g_misses{0},g_erases{0},g_invalid{0};
 
@@ -186,23 +242,24 @@ bool flver_identity_lookup(const void *selector_container,std::array<std::uint8_
         g_epoch.load(
             std::memory_order_acquire);
 
-    auto &cached =
-        g_lookup_cache[
-            lookup_tls_cache_index(model)];
-
-    if(cached.model==model &&
-       cached.epoch==epoch){
-        if(!cached.present){
+    if (auto *cached =
+            lookup_tls_cache_hit(
+                model,
+                epoch);
+        cached != nullptr) {
+        if (!cached->present) {
             telemetry::hot_count(g_misses);
             return false;
         }
 
-        sha256=cached.sha;
+        sha256 = cached->sha;
         telemetry::hot_count(g_hits);
         return true;
     }
 
     std::lock_guard<std::mutex> lock(g_mutex);
+    auto &cached =
+        lookup_tls_cache_slot(model);
     const auto it=g_by_model.find(model);
     if(it==g_by_model.end()){
         cached={
@@ -246,6 +303,7 @@ void flver_identity_reset() noexcept {
         1u,
         std::memory_order_release);
     g_lookup_cache = {};
+    g_lookup_victim = {};
 }
 flver_identity_telemetry flver_identity_stats() noexcept {return {g_inserts.load(),g_lookups.load(),g_hits.load(),g_misses.load(),g_erases.load(),g_invalid.load()};}
 
