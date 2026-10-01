@@ -89,6 +89,8 @@ struct draw_tx_telemetry {
     std::uint64_t restore_ok = 0;
     std::uint64_t restore_fail = 0;
     std::uint64_t native_readback_skipped = 0;
+    std::uint64_t cb_shadow_capture = 0;
+    std::uint64_t cb_native_capture = 0;
     std::uint64_t srv_shadow_capture = 0;
     std::uint64_t srv_native_capture = 0;
     std::uint64_t sampler_shadow_capture = 0;
@@ -247,6 +249,8 @@ private:
     std::atomic<std::uint64_t> restore_ok_{0};
     std::atomic<std::uint64_t> restore_fail_{0};
     std::atomic<std::uint64_t> native_readback_skipped_{0};
+    std::atomic<std::uint64_t> cb_shadow_capture_{0};
+    std::atomic<std::uint64_t> cb_native_capture_{0};
     std::atomic<std::uint64_t> srv_shadow_capture_{0};
     std::atomic<std::uint64_t> srv_native_capture_{0};
     std::atomic<std::uint64_t> sampler_shadow_capture_{0};
