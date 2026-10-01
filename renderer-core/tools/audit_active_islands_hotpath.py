@@ -506,7 +506,7 @@ def main():
         start=integrated.find(sig)
         if start<0:
             fail(f"{label} boundary missing")
-        body=integrated[start:start+900]
+        body=integrated[start:start+1400]
         require_before(
             body,
             "if (k_empty_draw_callback_bisect)\n        return false;",

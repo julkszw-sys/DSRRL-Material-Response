@@ -121,6 +121,16 @@ option(
     "Diagnostic: minimal native Draw/DrawIndexed re-entry from ReShade callback with recursion guard and no semantic preparation"
     OFF)
 
+option(
+    DSRRL_ADDON_LOADED_ONLY_BISECT
+    "Diagnostic: register the addon only; install no DSRRL events, pipeline callbacks, draw callbacks or runtime transports"
+    OFF)
+
+option(
+    DSRRL_DRAW_CALLBACK_ONLY_BISECT
+    "Diagnostic: register only empty draw/draw_indexed callbacks; install no DSRRL pipeline events or runtime transports"
+    OFF)
+
 set(
     RESHADE_INCLUDE_DIR
     ""
@@ -582,6 +592,20 @@ if(DSRRL_RAW_NATIVE_DRAW_REENTRY_MIN_BISECT)
         dsrrl_renderer_core_integrated
         PRIVATE
         $<$<COMPILE_LANGUAGE:CXX>:DSRRL_RAW_NATIVE_DRAW_REENTRY_MIN_BISECT>)
+endif()
+
+if(DSRRL_ADDON_LOADED_ONLY_BISECT)
+    target_compile_definitions(
+        dsrrl_renderer_core_integrated
+        PRIVATE
+        $<$<COMPILE_LANGUAGE:CXX>:DSRRL_ADDON_LOADED_ONLY_BISECT>)
+endif()
+
+if(DSRRL_DRAW_CALLBACK_ONLY_BISECT)
+    target_compile_definitions(
+        dsrrl_renderer_core_integrated
+        PRIVATE
+        $<$<COMPILE_LANGUAGE:CXX>:DSRRL_DRAW_CALLBACK_ONLY_BISECT>)
 endif()
 
 if(MSVC)

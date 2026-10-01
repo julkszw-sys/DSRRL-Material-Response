@@ -1896,6 +1896,92 @@ jobs:
           path: DSRRL_Core_Islands_RAW_NATIVE_DRAW_REENTRY_MIN_BISECT.addon64
           if-no-files-found: error
 
+      - name: Configure addon-loaded-only callback cut
+        shell: pwsh
+        run: >
+          cmake
+          -S renderer-core/integrated
+          -B build-integrated-addon-loaded-only
+          -A x64
+          -DRESHADE_INCLUDE_DIR="${{ github.workspace }}/_reshade/include"
+          -DDSRRL_SOURCE_COMMIT="$env:DSRRL_CHECKOUT_COMMIT"
+          -DDSRRL_BUILD_FLAVOR="addon_loaded_only_bisect"
+          -DDSRRL_ADDON_LOADED_ONLY_BISECT=ON
+
+      - name: Verify addon-loaded-only callback cut
+        shell: pwsh
+        run: |
+          $cache = Get-Content build-integrated-addon-loaded-only/CMakeCache.txt -Raw
+          if ($cache -notmatch "DSRRL_ADDON_LOADED_ONLY_BISECT:BOOL=ON") {
+            throw "Addon-loaded-only cut did not enable DSRRL_ADDON_LOADED_ONLY_BISECT"
+          }
+          if ($cache -match "DSRRL_DRAW_CALLBACK_ONLY_BISECT:BOOL=ON" -or
+              $cache -match "DSRRL_DRAW_CALLBACKS_BYPASS:BOOL=ON" -or
+              $cache -match "DSRRL_EMPTY_DRAW_CALLBACK_BISECT:BOOL=ON") {
+            throw "Addon-loaded-only cut unexpectedly enables another callback profile"
+          }
+
+      - name: Build addon-loaded-only callback cut
+        shell: pwsh
+        run: |
+          cmake --build build-integrated-addon-loaded-only --config Release --target dsrrl_renderer_core_integrated
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $addon = @(Get-ChildItem build-integrated-addon-loaded-only -Recurse -Filter *.addon64)
+          if ($addon.Count -ne 1) { throw "Expected exactly one addon-loaded-only binary, found $($addon.Count)" }
+          $out = "DSRRL_Core_Islands_ADDON_LOADED_ONLY_BISECT.addon64"
+          Copy-Item $addon[0].FullName $out -Force
+          Write-Host "ADDON_LOADED_ONLY_BISECT_SHA256=$((Get-FileHash $out -Algorithm SHA256).Hash.ToLowerInvariant())"
+
+      - name: Upload addon-loaded-only callback cut
+        uses: actions/upload-artifact@v4
+        with:
+          name: DSRRL_Core_Islands_ADDON_LOADED_ONLY_BISECT
+          path: DSRRL_Core_Islands_ADDON_LOADED_ONLY_BISECT.addon64
+          if-no-files-found: error
+
+      - name: Configure draw-callback-only callback cut
+        shell: pwsh
+        run: >
+          cmake
+          -S renderer-core/integrated
+          -B build-integrated-draw-callback-only
+          -A x64
+          -DRESHADE_INCLUDE_DIR="${{ github.workspace }}/_reshade/include"
+          -DDSRRL_SOURCE_COMMIT="$env:DSRRL_CHECKOUT_COMMIT"
+          -DDSRRL_BUILD_FLAVOR="draw_callback_only_bisect"
+          -DDSRRL_DRAW_CALLBACK_ONLY_BISECT=ON
+
+      - name: Verify draw-callback-only callback cut
+        shell: pwsh
+        run: |
+          $cache = Get-Content build-integrated-draw-callback-only/CMakeCache.txt -Raw
+          if ($cache -notmatch "DSRRL_DRAW_CALLBACK_ONLY_BISECT:BOOL=ON") {
+            throw "Draw-callback-only cut did not enable DSRRL_DRAW_CALLBACK_ONLY_BISECT"
+          }
+          if ($cache -match "DSRRL_ADDON_LOADED_ONLY_BISECT:BOOL=ON" -or
+              $cache -match "DSRRL_DRAW_CALLBACKS_BYPASS:BOOL=ON" -or
+              $cache -match "DSRRL_EMPTY_DRAW_CALLBACK_BISECT:BOOL=ON") {
+            throw "Draw-callback-only cut unexpectedly enables another callback profile"
+          }
+
+      - name: Build draw-callback-only callback cut
+        shell: pwsh
+        run: |
+          cmake --build build-integrated-draw-callback-only --config Release --target dsrrl_renderer_core_integrated
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $addon = @(Get-ChildItem build-integrated-draw-callback-only -Recurse -Filter *.addon64)
+          if ($addon.Count -ne 1) { throw "Expected exactly one draw-callback-only binary, found $($addon.Count)" }
+          $out = "DSRRL_Core_Islands_DRAW_CALLBACK_ONLY_BISECT.addon64"
+          Copy-Item $addon[0].FullName $out -Force
+          Write-Host "DRAW_CALLBACK_ONLY_BISECT_SHA256=$((Get-FileHash $out -Algorithm SHA256).Hash.ToLowerInvariant())"
+
+      - name: Upload draw-callback-only callback cut
+        uses: actions/upload-artifact@v4
+        with:
+          name: DSRRL_Core_Islands_DRAW_CALLBACK_ONLY_BISECT
+          path: DSRRL_Core_Islands_DRAW_CALLBACK_ONLY_BISECT.addon64
+          if-no-files-found: error
+
       - name: Configure full-runtime diagnostic addon
         shell: pwsh
         run: >
