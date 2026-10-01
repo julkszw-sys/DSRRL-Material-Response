@@ -118,6 +118,25 @@ public:
         std::int32_t vertex_offset,
         std::uint32_t first_instance) noexcept;
 
+    bool mutate_restore_only(
+        reshade::api::command_list *cmd_list,
+        const draw_tx_mutation &mutation) noexcept;
+
+    bool raw_replay_draw(
+        reshade::api::command_list *cmd_list,
+        std::uint32_t vertex_count,
+        std::uint32_t instance_count,
+        std::uint32_t first_vertex,
+        std::uint32_t first_instance) noexcept;
+
+    bool raw_replay_draw_indexed(
+        reshade::api::command_list *cmd_list,
+        std::uint32_t index_count,
+        std::uint32_t instance_count,
+        std::uint32_t first_index,
+        std::int32_t vertex_offset,
+        std::uint32_t first_instance) noexcept;
+
     draw_tx_telemetry telemetry() const noexcept;
     bool quarantined() const noexcept;
     void on_destroy_device(
