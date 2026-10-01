@@ -80,8 +80,10 @@ std::atomic_bool g_selector_hemdir3_enabled{true};
 struct selector_profile_sample {
     bool active = false;
     std::uint64_t total_start = 0u;
+    std::uint64_t prefix_ticks = 0u;
     std::uint64_t resolve_material_ticks = 0u;
     std::uint64_t final_cache_lookup_ticks = 0u;
+    std::uint64_t final_cache_publish_ticks = 0u;
     std::uint64_t owner_lookup_ticks = 0u;
     std::uint64_t owner_mtd_enrich_ticks = 0u;
     std::uint64_t selection_publish_ticks = 0u;
@@ -104,8 +106,10 @@ struct selector_profile_bucket {
 thread_local std::uint32_t g_selector_profile_counter = 0u;
 std::atomic<std::uint64_t> g_selector_profile_samples{0u};
 selector_profile_bucket g_selector_profile_total{};
+selector_profile_bucket g_selector_profile_prefix{};
 selector_profile_bucket g_selector_profile_resolve_material{};
 selector_profile_bucket g_selector_profile_final_cache{};
+selector_profile_bucket g_selector_profile_cache_publish{};
 selector_profile_bucket g_selector_profile_owner_lookup{};
 selector_profile_bucket g_selector_profile_owner_mtd{};
 selector_profile_bucket g_selector_profile_selection_publish{};
@@ -195,11 +199,17 @@ void selector_profile_finish(
         g_selector_profile_total,
         total);
     selector_profile_add(
+        g_selector_profile_prefix,
+        sample.prefix_ticks);
+    selector_profile_add(
         g_selector_profile_resolve_material,
         sample.resolve_material_ticks);
     selector_profile_add(
         g_selector_profile_final_cache,
         sample.final_cache_lookup_ticks);
+    selector_profile_add(
+        g_selector_profile_cache_publish,
+        sample.final_cache_publish_ticks);
     selector_profile_add(
         g_selector_profile_owner_lookup,
         sample.owner_lookup_ticks);
@@ -250,8 +260,10 @@ void selector_profile_reset() noexcept
         0u,
         std::memory_order_relaxed);
     reset_bucket(g_selector_profile_total);
+    reset_bucket(g_selector_profile_prefix);
     reset_bucket(g_selector_profile_resolve_material);
     reset_bucket(g_selector_profile_final_cache);
+    reset_bucket(g_selector_profile_cache_publish);
     reset_bucket(g_selector_profile_owner_lookup);
     reset_bucket(g_selector_profile_owner_mtd);
     reset_bucket(g_selector_profile_selection_publish);
