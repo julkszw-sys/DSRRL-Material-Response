@@ -1888,6 +1888,12 @@ pmetal_env_source_runtime::telemetry() const noexcept
     out.hook_consume =
         g_hook_consume.load(
             std::memory_order_relaxed);
+    out.hook_decode_stage = g_hook_decode_stage.load(std::memory_order_relaxed);
+    out.hook_decode_version = g_hook_decode_version.load(std::memory_order_relaxed);
+    out.hook_decode_count = g_hook_decode_count.load(std::memory_order_relaxed);
+    out.hook_decode_index = g_hook_decode_index.load(std::memory_order_relaxed);
+    out.hook_decode_row_id = g_hook_decode_row_id.load(std::memory_order_relaxed);
+    out.hook_decode_signature = g_hook_decode_signature.load(std::memory_order_relaxed);
 
     out.last_publish_tid =
         g_last_publish_tid.load(
@@ -1992,6 +1998,12 @@ void pmetal_env_source_runtime::reset() noexcept
     g_hook_source_serial.store(
         0u,
         std::memory_order_relaxed);
+    g_hook_decode_stage.store(0u,std::memory_order_relaxed);
+    g_hook_decode_version.store(0u,std::memory_order_relaxed);
+    g_hook_decode_count.store(0u,std::memory_order_relaxed);
+    g_hook_decode_index.store(0u,std::memory_order_relaxed);
+    g_hook_decode_row_id.store(0u,std::memory_order_relaxed);
+    g_hook_decode_signature.store(0u,std::memory_order_relaxed);
     g_hook_restore_failed.store(
         false,
         std::memory_order_relaxed);
