@@ -1,0 +1,120 @@
+name: Renderer Physical Cut Fast Build
+
+on:
+  push:
+    branches:
+      - "diag/physical-cut-ul-h3-sss-20261001"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  physical-cut:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve source identity
+        shell: pwsh
+        run: |
+          $checkout = (git rev-parse HEAD).Trim()
+          "DSRRL_CHECKOUT_COMMIT=$checkout" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Checkout pinned ReShade API
+        uses: actions/checkout@v4
+        with:
+          repository: crosire/reshade
+          ref: 3645e3025d1d98a90e318278858931f034d5d1f6
+          path: _reshade
+
+      - name: Configure physical-cut addon
+        shell: pwsh
+        run: >
+          cmake
+          -S renderer-core/integrated
+          -B build-physcut
+          -A x64
+          -DRESHADE_INCLUDE_DIR="${{ github.workspace }}/_reshade/include"
+          -DDSRRL_SOURCE_COMMIT="$env:DSRRL_CHECKOUT_COMMIT"
+          -DDSRRL_BUILD_FLAVOR="physical_cut_ul_h3_subsurface"
+          -DDSRRL_PHYSICAL_CUT_UL_H3_SUBSURFACE=ON
+
+      - name: Verify target source cut
+        shell: pwsh
+        run: |
+          $project = Get-Content "build-physcut/dsrrl_renderer_core_integrated.vcxproj" -Raw
+          $forbidden = @(
+            "hemdir3_mode_detour.asm",
+            "subsurface_pipeline_registry.cpp",
+            "subsurface_draw_runtime.cpp",
+            "upper_lower_draw_runtime.cpp",
+            "upper_lower_pipeline_registry.cpp",
+            "upper_lower_hemenv_draw_runtime.cpp",
+            "hemdir3_mode_transport.cpp",
+            "hemdir3_pipeline_registry.cpp",
+            "hemdir3_draw_runtime.cpp",
+            "hemdir3_b13_materializer.cpp",
+            "upper_lower_hemenv_materializer.cpp"
+          )
+          foreach ($name in $forbidden) {
+            if ($project.Contains($name)) {
+              throw "Physical-cut target still compiles forbidden source: $name"
+            }
+          }
+          if (-not $project.Contains("physical_cut_disabled_islands_stubs.cpp")) {
+            throw "Physical-cut fail-open stub source is missing from target"
+          }
+
+      - name: Build physical-cut addon
+        shell: pwsh
+        run: |
+          cmake --build build-physcut --config Release --target dsrrl_renderer_core_integrated
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Verify final linker map
+        shell: pwsh
+        run: |
+          $mapPath = "build-physcut/dsrrl_physical_cut.map"
+          if (-not (Test-Path $mapPath)) {
+            throw "Physical-cut linker map missing"
+          }
+          $map = Get-Content $mapPath -Raw
+          $forbiddenObjects = @(
+            "hemdir3_mode_detour.obj",
+            "subsurface_pipeline_registry.obj",
+            "subsurface_draw_runtime.obj",
+            "upper_lower_draw_runtime.obj",
+            "upper_lower_pipeline_registry.obj",
+            "upper_lower_hemenv_draw_runtime.obj",
+            "hemdir3_mode_transport.obj",
+            "hemdir3_pipeline_registry.obj",
+            "hemdir3_draw_runtime.obj",
+            "hemdir3_b13_materializer.obj",
+            "upper_lower_hemenv_materializer.obj"
+          )
+          foreach ($name in $forbiddenObjects) {
+            if ($map.Contains($name)) {
+              throw "Forbidden disabled-island object linked into final addon: $name"
+            }
+          }
+          if (-not $map.Contains("physical_cut_disabled_islands_stubs.obj")) {
+            throw "Expected physical-cut stub object not present in final link map"
+          }
+
+      - name: Package physical-cut addon
+        shell: pwsh
+        run: |
+          $addon = @(Get-ChildItem build-physcut -Recurse -Filter *.addon64)
+          if ($addon.Count -ne 1) { throw "Expected one physical-cut addon, found $($addon.Count)" }
+          $out = "DSRRL_Core_Islands_PHYSICAL_CUT_UL_H3_SUBSURFACE.addon64"
+          Copy-Item $addon[0].FullName $out -Force
+          $sha = (Get-FileHash $out -Algorithm SHA256).Hash.ToLowerInvariant()
+          Write-Host "PHYSICAL_CUT_ADDON_SHA256=$sha"
+
+      - name: Upload physical-cut addon
+        uses: actions/upload-artifact@v4
+        with:
+          name: DSRRL_Core_Islands_PHYSICAL_CUT_UL_H3_SUBSURFACE
+          path: DSRRL_Core_Islands_PHYSICAL_CUT_UL_H3_SUBSURFACE.addon64
+          if-no-files-found: error
