@@ -72,10 +72,6 @@ require(consumer,"pmetal_producer_state_latest(","selector source first")
 require(consumer,"latest_hook_source(out)","retail source fallback")
 if consumer.index("latest_hook_source(out)") < consumer.index("!exact_pmetal_material_selection("):
     fail("retail hook source can be consumed before exact P_Metal material gate")
-for needle in [
-]:
-    require(source_cpp,needle,"consume-once source lifetime")
-
 # EnvSpec source hooks are independent from visible Upper/Lower. U/L remains
 # disabled by runtime policy unless separately enabled.
 require(integrated,
@@ -116,5 +112,5 @@ if "install_provider_splice" in source_cpp or "DSRRL_Material_Response_1.0.addon
 
 print("DSRRL_PMETAL_ENVSPEC_REFERENCE_TRANSPORT_PASS")
 print("  source=exact selector first, V13-attested retail single/blend LightBank fallback second")
-print("  fallback=exact P_Metal scoped + consume-once; visible U/L remains stock/off")
+print("  fallback=exact P_Metal scoped + generation-stamped persistent V13 state; visible U/L remains stock/off")
 print("  runtime activation and pixel behavior remain OPEN")
