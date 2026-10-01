@@ -556,6 +556,13 @@ if(DSRRL_PHYSICAL_CUT_UL_H3_SUBSURFACE)
         $<$<COMPILE_LANGUAGE:CXX>:DSRRL_PHYSICAL_CUT_UL_H3_SUBSURFACE>)
 endif()
 
+if(DSRRL_PHYSICAL_CUT_UL_H3_SUBSURFACE AND MSVC)
+    target_link_options(
+        dsrrl_renderer_core_integrated
+        PRIVATE
+        "/MAP:${CMAKE_BINARY_DIR}/dsrrl_physical_cut.map")
+endif()
+
 if(DSRRL_DRAWTIME_ISLANDS_BYPASS)
     target_compile_definitions(
         dsrrl_renderer_core_integrated
