@@ -129,6 +129,40 @@ def main() -> None:
         PHYSICAL_GLOBALS,
         "runtime global replacement")
 
+
+    # Runtime-v2 shared-transport bisect B:
+    # keep FLVER/texture identity hooks, but omit MaterialResource and EnvSpec
+    # resource lifecycle callback registration. Existing draw paths then fail
+    # open against empty resource registries while identity transport remains.
+    text = replace_once(
+        text,
+        '''    if (!g_material_resources.register_events()) {
+        unregister_events();
+        disable_integrated_islands();
+        reshade::unregister_addon(addon_module, reshade_module);
+        return false;
+    }
+''',
+        '''    // RESOURCE TRANSPORT BYPASS: material-resource lifecycle events intentionally not registered.
+''',
+        "material resource event bypass")
+    text = replace_once(
+        text,
+        '''    const bool envspec_resource_events =
+        g_envspec_resources.register_events();
+''',
+        '''    // RESOURCE TRANSPORT BYPASS: EnvSpec lifecycle events intentionally not registered.
+    // Keep the feature bit unchanged so FLVER/P_Metal source transport remains
+    // present for this A/B; resource preparation will fail open on empty state.
+    const bool envspec_resource_events = true;
+''',
+        "EnvSpec resource event bypass")
+
+    if "g_material_resources.register_events()" in text:
+        raise SystemExit("material resource event registration survived resource bypass")
+    if "g_envspec_resources.register_events()" in text:
+        raise SystemExit("EnvSpec resource event registration survived resource bypass")
+
     for forbidden in (
         "dsrrl::runtime::upper_lower_draw_runtime\n    g_upper_lower",
         "dsrrl::runtime::subsurface_draw_runtime\n    g_subsurface",
