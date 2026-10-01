@@ -680,6 +680,12 @@ hook_status status() noexcept
  out.runtime_mtd_selection_published=
      g_runtime_mtd_selection_published.load(
          std::memory_order_relaxed);
+ out.upper_lower_selector_enabled=
+     g_selector_upper_lower_enabled.load(
+         std::memory_order_relaxed);
+ out.hemdir3_selector_enabled=
+     g_selector_hemdir3_enabled.load(
+         std::memory_order_relaxed);
  return out;
 }
 
