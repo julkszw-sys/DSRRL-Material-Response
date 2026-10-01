@@ -136,6 +136,11 @@ option(
     "Experimental Runtime v2 pixel-SRV bind shadow; disabled by default to avoid global descriptor-event overhead"
     OFF)
 
+option(
+    DSRRL_PHYSICAL_CUT_UL_H3_SUBSURFACE
+    "Diagnostic: physically exclude Upper/Lower, HemDir3 and Subsurface runtime implementation units while preserving P_Metal source runtime"
+    ON)
+
 set(
     RESHADE_INCLUDE_DIR
     ""
@@ -416,10 +421,40 @@ add_subdirectory(
     "${CMAKE_BINARY_DIR}/renderer-core-lib"
     EXCLUDE_FROM_ALL)
 
+set(
+    DSRRL_INTEGRATED_ADDON_SOURCE
+    "${CMAKE_CURRENT_LIST_DIR}/integrated_addon.cpp")
+
+if(DSRRL_PHYSICAL_CUT_UL_H3_SUBSURFACE)
+    set(
+        DSRRL_INTEGRATED_ADDON_SOURCE
+        "${DSRRL_CORE_GENERATED_RUNTIME}/integrated_addon_physical_cut.cpp")
+    execute_process(
+        COMMAND
+            "${Python3_EXECUTABLE}"
+            "${DSRRL_RENDERER_CORE_ROOT}/tools/generate_runtime_v2_physical_cut.py"
+            --input "${CMAKE_CURRENT_LIST_DIR}/integrated_addon.cpp"
+            --output "${DSRRL_INTEGRATED_ADDON_SOURCE}"
+        RESULT_VARIABLE DSRRL_PHYSICAL_CUT_GENERATE_RESULT)
+    if(NOT DSRRL_PHYSICAL_CUT_GENERATE_RESULT EQUAL 0)
+        message(FATAL_ERROR "Failed to generate Runtime v2 physical-cut integrated source")
+    endif()
+
+    execute_process(
+        COMMAND
+            "${Python3_EXECUTABLE}"
+            "${DSRRL_RENDERER_CORE_ROOT}/tools/audit_runtime_v2_physical_cut.py"
+            --source-dir "${DSRRL_RENDERER_CORE_ROOT}"
+        RESULT_VARIABLE DSRRL_PHYSICAL_CUT_SOURCE_AUDIT_RESULT)
+    if(NOT DSRRL_PHYSICAL_CUT_SOURCE_AUDIT_RESULT EQUAL 0)
+        message(FATAL_ERROR "Runtime v2 physical-cut source audit failed")
+    endif()
+endif()
+
 add_library(
     dsrrl_renderer_core_integrated
     SHARED
-    integrated_addon.cpp
+    "${DSRRL_INTEGRATED_ADDON_SOURCE}"
     flver_identity_detour.asm
     texture_identity_detour.asm
     hemdir3_mode_detour.asm
@@ -437,17 +472,13 @@ add_library(
     "${DSRRL_RENDERER_CORE_ROOT}/src/runtime/pixel_srv_shadow.cpp"
     "${DSRRL_RENDERER_CORE_ROOT}/src/runtime/hemenvlerp_pipeline_registry.cpp"
     "${DSRRL_RENDERER_CORE_ROOT}/src/runtime/subsurface_pipeline_registry.cpp"
-    "${DSRRL_RENDERER_CORE_ROOT}/src/runtime/subsurface_draw_runtime.cpp"
-    "${DSRRL_RENDERER_CORE_ROOT}/src/runtime/upper_lower_draw_runtime.cpp"
     "${DSRRL_RENDERER_CORE_ROOT}/src/runtime/fixed_pointlight_draw_runtime.cpp"
     "${DSRRL_RENDERER_CORE_ROOT}/src/runtime/clustered_pnts_draw_runtime.cpp"
     "${DSRRL_RENDERER_CORE_ROOT}/src/runtime/clustered_pnts_pipeline_runtime.cpp"
     "${DSRRL_RENDERER_CORE_ROOT}/src/runtime/fixed_pointlight_pipeline_runtime.cpp"
     "${DSRRL_RENDERER_CORE_ROOT}/src/runtime/upper_lower_pipeline_registry.cpp"
-    "${DSRRL_RENDERER_CORE_ROOT}/src/runtime/upper_lower_hemenv_draw_runtime.cpp"
     "${DSRRL_RENDERER_CORE_ROOT}/src/runtime/hemdir3_mode_transport.cpp"
     "${DSRRL_RENDERER_CORE_ROOT}/src/runtime/hemdir3_pipeline_registry.cpp"
-    "${DSRRL_RENDERER_CORE_ROOT}/src/runtime/hemdir3_draw_runtime.cpp"
     "${DSRRL_RENDERER_CORE_ROOT}/src/runtime/draw_state_transaction.cpp"
     "${DSRRL_RENDERER_CORE_ROOT}/src/runtime/island_draw_adapter.cpp"
     "${DSRRL_RENDERER_CORE_ROOT}/src/runtime/material_response_draw_transaction.cpp"
@@ -458,6 +489,16 @@ add_library(
     "${DSRRL_RENDERER_CORE_ROOT}/src/operators/env_spec/pmetal_rgba_lerp_materializer.cpp"
     "${DSRRL_RENDERER_CORE_ROOT}/src/operators/lightbank/hemdir3_b13_materializer.cpp"
     "${DSRRL_RENDERER_CORE_ROOT}/src/operators/lightbank/upper_lower_hemenv_materializer.cpp")
+
+if(NOT DSRRL_PHYSICAL_CUT_UL_H3_SUBSURFACE)
+    target_sources(
+        dsrrl_renderer_core_integrated
+        PRIVATE
+        "${DSRRL_RENDERER_CORE_ROOT}/src/runtime/upper_lower_draw_runtime.cpp"
+        "${DSRRL_RENDERER_CORE_ROOT}/src/runtime/hemdir3_draw_runtime.cpp"
+        "${DSRRL_RENDERER_CORE_ROOT}/src/runtime/subsurface_draw_runtime.cpp"
+        "${DSRRL_RENDERER_CORE_ROOT}/src/runtime/upper_lower_hemenv_draw_runtime.cpp")
+endif()
 
 add_dependencies(
     dsrrl_renderer_core_integrated
@@ -624,6 +665,13 @@ if(DSRRL_PMETAL_SRV_SHADOW_EXPERIMENT)
         DSRRL_PMETAL_SRV_SHADOW_EXPERIMENT)
 endif()
 
+if(DSRRL_PHYSICAL_CUT_UL_H3_SUBSURFACE)
+    target_compile_definitions(
+        dsrrl_renderer_core_integrated
+        PRIVATE
+        DSRRL_PHYSICAL_CUT_UL_H3_SUBSURFACE)
+endif()
+
 if(MSVC)
     target_compile_options(
         dsrrl_renderer_core_integrated
@@ -646,6 +694,19 @@ set_target_properties(
     PREFIX ""
     OUTPUT_NAME "${DSRRL_CORE_ISLANDS_ARTIFACT_STEM}"
     SUFFIX ".addon64")
+
+if(DSRRL_PHYSICAL_CUT_UL_H3_SUBSURFACE)
+    add_custom_command(
+        TARGET dsrrl_renderer_core_integrated
+        POST_BUILD
+        COMMAND
+            "${Python3_EXECUTABLE}"
+            "${DSRRL_RENDERER_CORE_ROOT}/tools/audit_runtime_v2_physical_cut.py"
+            --source-dir "${DSRRL_RENDERER_CORE_ROOT}"
+            --build-dir "${CMAKE_BINARY_DIR}"
+            --post-build
+        VERBATIM)
+endif()
 
 # Tests the real producer/selector/GPU cache without installing a game hook.
 add_executable(dsrrl_fixed_pointlight_transport_windows_tests

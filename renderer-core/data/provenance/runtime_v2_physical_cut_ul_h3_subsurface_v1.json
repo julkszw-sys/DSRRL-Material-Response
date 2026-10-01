@@ -1,0 +1,40 @@
+{
+  "schema": "dsrrl.runtime_v2_physical_cut.v1",
+  "diagnostic": "PHYSICAL_CUT_UL_H3_SUBSURFACE",
+  "exact_tested_parent": "900ce09a270f8e70477291c3691acff3507c2d31",
+  "purpose": "Falsify or implicate linked/static disabled-island runtime infrastructure in the Runtime v2 5-10 FPS regression.",
+  "physically_excluded": [
+    "renderer-core/src/runtime/upper_lower_draw_runtime.cpp",
+    "renderer-core/src/runtime/upper_lower_hemenv_draw_runtime.cpp",
+    "renderer-core/src/runtime/hemdir3_draw_runtime.cpp",
+    "renderer-core/src/runtime/subsurface_draw_runtime.cpp"
+  ],
+  "selector_callbacks_compile_gated": [
+    "Upper/Lower selector_event bridge",
+    "Upper/Lower P_Metal material bridge legacy path",
+    "HemDir3 selector_begin"
+  ],
+  "explicitly_preserved": [
+    "renderer-core/src/runtime/pmetal_env_source_runtime.cpp",
+    "Material Response",
+    "equipment SpecRGB/material resources",
+    "P_Metal EnvSpec",
+    "MotionBlur create-time camera-fallback patch",
+    "Fixed and Clustered PointLight"
+  ],
+  "pmetal_note": "Route 345 continues through independent pmetal_env_source_selector_event; physical cut must not borrow the removed U/L runtime.",
+  "interpretation": {
+    "near_60_fps": "Disabled-island linked/runtime infrastructure remains causally implicated.",
+    "still_5_10_fps": "Removed U/L/HemDir3/Subsurface runtimes are falsified as the dominant cause; continue into remaining active non-draw transports."
+  },
+  "status": {
+    "construction": "OPEN_UNTIL_CI",
+    "compatibility": "OPEN_UNTIL_CI",
+    "runtime_liveness": "OPEN",
+    "performance": "OPEN",
+    "bridge_activation": "OPEN",
+    "pixel_behavior": "OPEN"
+  },
+  "ci_branch": "runtime-v2/physical-cut-ul-h3-subsurface-20261001",
+  "ci_trigger": "push"
+}
