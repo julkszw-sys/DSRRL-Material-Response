@@ -3328,7 +3328,7 @@ void log_state(const char *tag) noexcept
         "ps_mat=%llu/%llu src_steady=%llu src_blend=%llu src_miss=%llu src_hook=%u/%u "
         "native=%llu/%llu hash_miss=%llu views=%llu pack=%llu/%llu pack_ready=%u sampler=%u "
         "cube=%llu/%llu prepare=%llu/%llu candidate=%llu material_reject=%llu semantic_reject=%llu "
-        "source_reject=%llu blend_hold=%llu probe_reject=%llu spec_reject=%llu req=%llu b12_map=%llu/%llu q=%u "
+        "source_reject=%llu blend_hold=%llu probe_reject=%llu spec_reject=%llu req=%llu b12_map=%llu/%llu srv_shadow=%llu/%llu q=%u "
         "lerp_reg=%llu/%llu lerp_candidate=%llu lerp_req=%llu lerp_pipe=%llu/%llu bind=%llu/%llu miss=%llu conflict=%llu",
         tag,
         static_cast<unsigned long long>(
@@ -3385,6 +3385,10 @@ void log_state(const char *tag) noexcept
             env_draw.b12_uploads),
         static_cast<unsigned long long>(
             env_draw.b12_reuses),
+        static_cast<unsigned long long>(
+            env_draw.srv_shadow_hits),
+        static_cast<unsigned long long>(
+            env_draw.srv_shadow_fallbacks),
         env_draw.quarantined ? 1u : 0u,
         static_cast<unsigned long long>(
             env_draw.lerp_replacement_register_ok),
