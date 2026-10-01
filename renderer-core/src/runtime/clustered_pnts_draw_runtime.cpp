@@ -417,8 +417,21 @@ bool capture_source(
 
     alignas(16) std::array<float,8> raw{};
     fn(node, raw.data());
-    if (!pointlight_ptde_source::capture(node, g_base, raw))
-        return false;
+
+    // PTDE donor data has priority, but exact Bank/Lerp source-class
+    // recognition must not make the entire clustered PointLight operator
+    // disappear when donor bank identity is unavailable. The retail source
+    // vfunc is already the attested producer used by the historical R1
+    // transport and yields the homologous position/invRange + raw-q/End
+    // payload. Keep that host-produced source signal as a local fail-open
+    // carrier while the replacement shader still owns the confirmed PTDE
+    // PntS attenuation x^3 -> x. This is deliberately narrower than accepting
+    // foreign source classes: only the two attested Bank/Lerp classes reach
+    // this point.
+    (void)pointlight_ptde_source::capture(
+        node,
+        g_base,
+        raw);
 
     for (const auto value : raw)
         if (!std::isfinite(value))
