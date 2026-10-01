@@ -310,4 +310,10 @@ void flver_identity_reset() noexcept {
 }
 flver_identity_telemetry flver_identity_stats() noexcept {return {g_inserts.load(),g_lookups.load(),g_hits.load(),g_misses.load(),g_tls_hits.load(),g_mutex_fallbacks.load(),g_erases.load(),g_invalid.load()};}
 
+std::uint64_t flver_identity_epoch() noexcept
+{
+    return g_epoch.load(
+        std::memory_order_acquire);
+}
+
 } // namespace dsrrl::runtime
