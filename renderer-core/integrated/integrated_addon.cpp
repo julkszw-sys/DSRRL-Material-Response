@@ -698,6 +698,22 @@ constexpr std::uint8_t k_dynamic_draw_route_mask =
     k_route_fixed_pointlight |
     k_route_clustered_pointlight;
 
+std::atomic<std::uint8_t> g_active_dynamic_draw_route_mask{
+    k_route_stable |
+    k_route_hemenvlerp};
+
+std::uint8_t active_integrated_draw_route(
+    std::uint8_t raw_mask) noexcept
+{
+    const auto dynamic =
+        g_active_dynamic_draw_route_mask.load(
+            std::memory_order_relaxed);
+    return static_cast<std::uint8_t>(
+        raw_mask &
+        static_cast<std::uint8_t>(
+            k_route_a1 | dynamic));
+}
+
 struct integrated_draw_route_tls {
     const void *command_list_key = nullptr;
     std::uint8_t mask = 0u;
@@ -5957,8 +5973,9 @@ bool on_draw(
     draw_semantic_selection_guard semantic_guard{};
 
     const auto route_mask =
-        integrated_draw_route_bound(
-            cmd_list);
+        active_integrated_draw_route(
+            integrated_draw_route_bound(
+                cmd_list));
 
     if (route_mask == 0u) {
         hot_count(g_draw_fast_skip);
@@ -6325,8 +6342,9 @@ bool on_draw_indexed(
     draw_semantic_selection_guard semantic_guard{};
 
     const auto route_mask =
-        integrated_draw_route_bound(
-            cmd_list);
+        active_integrated_draw_route(
+            integrated_draw_route_bound(
+                cmd_list));
 
     if (route_mask == 0u) {
         hot_count(g_draw_fast_skip);
