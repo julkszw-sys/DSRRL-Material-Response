@@ -8,17 +8,16 @@ def read(path): return (root/path).read_text(encoding='utf-8')
 def require(text,needle):
     if needle not in text: raise SystemExit('Missing source invariant: '+needle)
 header=read('include/dsrrl/runtime/pointlight_ptde_source_runtime.hpp')
-for token in ['0x55bc00u','0x55d0b0u','pair.beta','count!=64u','id!=i||off!=first+16u*i','identify(p+first)','else return false','raw[3]=1.0f/(result.end-result.begin)','access_cache cache{}','readable_cached(param+first,1024u,cache)']:
+for token in ['0x55bc00u','0x55d0b0u','pair.beta','count != 64u','row_offset != first + 16u * i','bank_structure_signature(','identify_structure(structure_signature)','else return false','raw[3]=1.0f/(result.end-result.begin)','access_cache cache{}','readable_cached(param+first,1024u,cache)']:
     require(header,token)
 if 'thread_local access_cache' in header:
     raise SystemExit('PointLight VM cache must not survive beyond one donor capture')
 for forbidden in ['VirtualProtect','write_bytes','create_hook','install_hook','fetch_add']:
     if forbidden in header: raise SystemExit('Unexpected source mutation/global hook: '+forbidden)
 identity=read('include/dsrrl/runtime/pointlight_ptde_source.hpp')
-require(identity,'thread_local std::array<cache_entry,8> cache{}')
-require(identity,'std::memcmp(rows,entry.bank->dsr.data(),sizeof(entry.bank->dsr))==0')
-if identity.index('return entry.bank;') < identity.index('std::memcmp(rows,entry.bank->dsr.data(),sizeof(entry.bank->dsr))==0'):
-    raise SystemExit('PointLight bank cache became pointer-only authority')
+require(identity,'identify_structure(')
+require(identity,'pointlight_bank_structure_authority_v1::k_signatures')
+require(identity,'k_known_non_donor_signatures')
 fixed=read('src/runtime/fixed_pointlight_draw_runtime.cpp')
 clustered=read('src/runtime/clustered_pnts_draw_runtime.cpp')
 require(fixed,'pointlight_ptde_source::capture(source,g_base,donor_raw)')
@@ -31,7 +30,7 @@ for hot in (producer,selector):
     for forbidden in ('lock_guard','make_shared','fetch_add','unordered_map','CreateBuffer'):
         if forbidden in hot: raise SystemExit('Global work in fixed producer/selector: '+forbidden)
 require(fixed,'view_desc.Buffer.NumElements=8u')
-require(clustered,'pointlight_ptde_source::capture(node, g_base, raw)')
+require(clustered,'(void)pointlight_ptde_source::capture(')
 require(clustered,'readable_region_cache node_region{}')
 require(clustered,'!readable_range_cached(')
 if '!readable_range(node, 0x50u)' in clustered:
@@ -64,5 +63,5 @@ for token in ['gpu->t18_buffer','gpu->t19_buffer','gpu->b12','gpu->t18_srv->AddR
 shader=read('src/operators/point_light/fixed_local_specular_single_materializer.cpp')
 for token in ['range_compare.erase_words=8u','range_load.words[6]=4u+light','SAT((PTDE End-distance)*PTDE invRange)','a.erase_words>b.erase_words']:
     require(shader,token)
-print('POINTLIGHT_PTDE_SOURCE_PASS: exact original banks, paired PTDE donors, operator-local range; no new hooks')
-print('SCOPE: host-selected sources only; host membership/culling remains a separate OPEN residual')
+print('POINTLIGHT_PTDE_SOURCE_PASS: exact Bank/Lerp classes, structural PTDE donor priority, attested raw-source fallback, operator-local PTDE attenuation; no new hooks')
+print('SCOPE: host-selected sources only; foreign source classes still fail open; host membership/culling remains a separate OPEN residual')
