@@ -23,7 +23,11 @@ env_cpp=(root/"src/runtime/pmetal_envspec_draw_runtime.cpp").read_text(encoding=
 flver_cpp=(root/"src/runtime/flver_engine_hooks.cpp").read_text(encoding="utf-8")
 lerp_cpp=(root/"src/operators/env_spec/pmetal_rgba_lerp_materializer.cpp").read_text(encoding="utf-8")
 
-# Exact P_Metal selector carrier remains the preferred path.
+# Exact P_Metal selector carrier remains the preferred path. Normalize
+# whitespace so the audit verifies semantic calls rather than C++ formatting.
+selector_begin=source_cpp.index("void pmetal_env_source_selector_event(")
+selector_end=source_cpp.index("bool pmetal_env_source_runtime::latest(",selector_begin)
+selector_compact="".join(source_cpp[selector_begin:selector_end].split())
 for needle in [
     "exact_pmetal_material_selection(",
     "pmetal_selector_policy::select(",
@@ -31,7 +35,7 @@ for needle in [
     "read_exact_source(",
     "pmetal_producer_state_publish(",
 ]:
-    require(source_cpp,needle,"exact selector carrier")
+    require(selector_compact,needle,"exact selector carrier")
 require(producer_cpp,"thread_local producer_record g_record","selector TLS source state")
 require(producer_cpp,"same_material(","selector source material identity")
 require(producer_cpp,"same_source_payload(","selector source generation semantics")
