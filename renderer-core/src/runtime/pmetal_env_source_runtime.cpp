@@ -87,7 +87,42 @@ std::atomic<std::uint64_t> g_hook_single_seen{0u};
 std::atomic<std::uint64_t> g_hook_blend_seen{0u};
 std::atomic<std::uint64_t> g_hook_publish{0u};
 std::atomic<std::uint64_t> g_hook_consume{0u};
+std::atomic<std::uint32_t> g_hook_decode_stage{0u};
+std::atomic<std::uint32_t> g_hook_decode_version{0u};
+std::atomic<std::uint32_t> g_hook_decode_count{0u};
+std::atomic<std::uint32_t> g_hook_decode_index{0u};
+std::atomic<std::uint32_t> g_hook_decode_row_id{0u};
+std::atomic<std::uint64_t> g_hook_decode_signature{0u};
 std::atomic_bool g_hook_restore_failed{false};
+
+enum hook_decode_stage : std::uint32_t {
+    hook_decode_none = 0u,
+    hook_decode_source_invalid = 1u,
+    hook_decode_base_invalid = 2u,
+    hook_decode_selector_invalid = 3u,
+    hook_decode_header_invalid = 4u,
+    hook_decode_row_read_invalid = 5u,
+    hook_decode_bank_unknown = 6u,
+    hook_decode_row_unknown = 7u,
+    hook_decode_nonfinite = 8u,
+    hook_decode_ok = 9u
+};
+
+void record_hook_decode(
+    std::uint32_t stage,
+    std::uint32_t version,
+    std::uint32_t count,
+    std::uint32_t index,
+    std::uint32_t row_id,
+    std::uint64_t signature) noexcept
+{
+    g_hook_decode_stage.store(stage,std::memory_order_relaxed);
+    g_hook_decode_version.store(version,std::memory_order_relaxed);
+    g_hook_decode_count.store(count,std::memory_order_relaxed);
+    g_hook_decode_index.store(index,std::memory_order_relaxed);
+    g_hook_decode_row_id.store(row_id,std::memory_order_relaxed);
+    g_hook_decode_signature.store(signature,std::memory_order_relaxed);
+}
 
 struct readable_window {
     std::uintptr_t begin = 0u;
