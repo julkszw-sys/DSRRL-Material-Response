@@ -7216,11 +7216,14 @@ void register_events()
         k_pmetal_srv_shadow_runtime_enabled)
         reshade::register_event<reshade::addon_event::push_descriptors>(on_push_descriptors);
     if (k_drawtime_islands_runtime_enabled &&
-        k_draw_callbacks_runtime_enabled) {
+        k_draw_callbacks_runtime_enabled)
         reshade::register_event<
             reshade::addon_event::
                 bind_render_targets_and_depth_stencil>(
                     on_bind_render_targets_and_depth_stencil_profile);
+
+    if (k_drawtime_islands_runtime_enabled &&
+        k_draw_callbacks_runtime_enabled) {
         reshade::register_event<reshade::addon_event::draw>(on_draw);
         reshade::register_event<reshade::addon_event::draw_indexed>(on_draw_indexed);
         reshade::register_event<reshade::addon_event::present>(on_present);
