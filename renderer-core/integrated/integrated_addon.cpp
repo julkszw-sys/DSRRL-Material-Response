@@ -6080,6 +6080,30 @@ bool on_draw(
         return false;
     }
 
+    if (k_state_capture_only_bisect) {
+        (void)g_draw_transactions.capture_only(
+            cmd_list,
+            prepared.batch.mutation);
+        release_prepared_island_batch(prepared);
+        return false;
+    }
+
+    if (k_native_state_mutate_restore_only_bisect) {
+        (void)g_draw_transactions.native_mutate_restore_only(
+            cmd_list,
+            prepared.batch.mutation);
+        release_prepared_island_batch(prepared);
+        return false;
+    }
+
+    if (k_core_transaction_only_bisect) {
+        (void)g_draw_transactions.core_transaction_only(
+            cmd_list,
+            prepared.batch.mutation);
+        release_prepared_island_batch(prepared);
+        return false;
+    }
+
     if (k_state_transaction_only_bisect) {
         (void)g_draw_transactions.mutate_restore_only(
             cmd_list,
