@@ -839,16 +839,16 @@ bool pmetal_native_draw_bridge::arm_draw(
     }
 
     if (g_pending.active) {
+        // Another addon may cancel a ReShade draw after this addon armed the
+        // original-context bridge. In that case no native Draw follows and
+        // the pending mutation is harmless but stale. Drop it before arming
+        // the next exact draw instead of poisoning the bridge globally.
         release_mutation(
             g_pending.mutation);
         g_pending = {};
-        impl_->quarantined.store(
-            true,
-            std::memory_order_release);
         impl_->arm_reject.fetch_add(
             1u,
             std::memory_order_relaxed);
-        return false;
     }
 
     g_pending.owner = this;
@@ -914,16 +914,16 @@ bool pmetal_native_draw_bridge::arm_draw_indexed(
     }
 
     if (g_pending.active) {
+        // Another addon may cancel a ReShade draw after this addon armed the
+        // original-context bridge. In that case no native Draw follows and
+        // the pending mutation is harmless but stale. Drop it before arming
+        // the next exact draw instead of poisoning the bridge globally.
         release_mutation(
             g_pending.mutation);
         g_pending = {};
-        impl_->quarantined.store(
-            true,
-            std::memory_order_release);
         impl_->arm_reject.fetch_add(
             1u,
             std::memory_order_relaxed);
-        return false;
     }
 
     g_pending.owner = this;
