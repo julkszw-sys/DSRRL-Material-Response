@@ -4,12 +4,23 @@
 using namespace dsrrl::runtime;
 void check(bool x) { if(!x) std::abort(); }
 int main() {
-    // Whole-bank recognition must not accept an edited or merely similar bank.
+    // Numeric-payload identity remains available as a static corpus helper,
+    // but runtime donor routing uses exact logical bank structure identity.
     for(const auto &b:pointlight_donors::banks) {
         check(pointlight_ptde_source::identify(b.dsr.data())!=nullptr);
         auto bad=b.dsr; bad[13].intensity^=1;
         check(pointlight_ptde_source::identify(bad.data())==nullptr);
     }
+    for(std::size_t i=0;i<pointlight_donors::banks.size();++i) {
+        const auto sig=
+            pointlight_bank_structure_authority_v1::k_signatures[i];
+        check(pointlight_ptde_source::identify_structure(sig)==
+              &pointlight_donors::banks[i]);
+    }
+    for(const auto sig:
+        pointlight_bank_structure_authority_v1::k_known_non_donor_signatures)
+        check(pointlight_ptde_source::identify_structure(sig)==nullptr);
+    check(pointlight_ptde_source::identify_structure(0u)==nullptr);
     pointlight_ptde_source::signal a{1,5,{1,2,3}},b{3,9,{3,6,9}},out;
     check(pointlight_ptde_source::mix(a,b,0.25f,out));
     check(out.begin==1.5f && out.end==6 && out.q[0]==1.5f && out.q[2]==4.5f);
