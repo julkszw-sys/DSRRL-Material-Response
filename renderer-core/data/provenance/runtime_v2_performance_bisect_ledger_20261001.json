@@ -120,5 +120,10 @@
       "After implementation, run one validation comparison against the known slow baseline and known fast FLVER-bypass reference."
     ]
   },
-  "supersedes": "Ad-hoc Runtime-v2 performance bisect planning before revision 10472."
+  "supersedes": "Ad-hoc Runtime-v2 performance bisect planning before revision 10472.",
+  "abandoned_unmodified_branches": [
+    "runtime-v2/bisect-flver-selector-plus-parser-20261001",
+    "runtime-v2/bisect-flver-selector-plus-mtd-20261001"
+  ],
+  "abandoned_note": "Branches were created immediately before the bisect freeze but contain no intended new runtime experiment and must not be treated as authorized next tests."
 }
