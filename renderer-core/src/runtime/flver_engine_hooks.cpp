@@ -922,6 +922,8 @@ selector_owner_telemetry selector_owner_stats() noexcept
         g_selector_events.load(),
         g_owner_sha_hits.load(),
         g_owner_mtd_hits.load(),
+        g_selector_identity_cache_hits.load(),
+        g_selector_identity_cache_misses.load(),
         g_exact_owner_ready.load(),
         g_owner_fail_open.load(),
         g_runtime_material_hits.load(),
