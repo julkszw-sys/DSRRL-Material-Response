@@ -25,6 +25,9 @@ def main() -> None:
     upper_lower = (root / "src/runtime/upper_lower_draw_runtime.cpp").read_text(encoding="utf-8")
     flver = (root / "src/runtime/flver_engine_hooks.cpp").read_text(encoding="utf-8")
     texture = (root / "src/runtime/texture_identity_transport.cpp").read_text(encoding="utf-8")
+    flver_registry = (root / "src/runtime/flver_identity_registry.cpp").read_text(encoding="utf-8")
+    owner_producer = (root / "src/runtime/material_owner_producer.cpp").read_text(encoding="utf-8")
+    owner_selection = (root / "src/runtime/material_owner_selection.cpp").read_text(encoding="utf-8")
 
     require(integrated, "g_pmetal_native_draw.arm_draw(", "non-indexed single-pass arm")
     require(integrated, "g_pmetal_native_draw.arm_draw_indexed(", "indexed single-pass arm")
@@ -64,6 +67,11 @@ def main() -> None:
     require(flver, "g_selector_hemdir3_enabled", "HemDir3 selector hot-path gate")
     require(texture, "k_logical_name_capacity", "fixed TLS texture-name buffer")
     forbid(texture, "g_logical_name.push_back", "texture hook heap-growth removal")
+
+    require(flver_registry, "k_lookup_tls_cache_ways = 4u", "4-way FLVER identity cache")
+    require(flver_registry, "g_mutex_fallbacks", "FLVER mutex fallback telemetry")
+    require(owner_producer, "k_owner_material_cache_ways = 4u", "4-way owner-to-MTD cache")
+    require(owner_selection, "k_owner_auth_cache_ways = 4u", "4-way owner-auth cache")
 
     print("DSRRL_RUNTIME_V2_PMETAL_SINGLE_PASS_AUDIT_PASS")
 
