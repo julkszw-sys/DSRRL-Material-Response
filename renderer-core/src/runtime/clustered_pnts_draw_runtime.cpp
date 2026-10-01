@@ -389,23 +389,6 @@ bool capture_source(
     return true;
 }
 
-void release_gpu_locked() noexcept
-{
-    if (g_gpu.b12 != nullptr)
-        g_gpu.b12->Release();
-    if (g_gpu.t19_srv != nullptr)
-        g_gpu.t19_srv->Release();
-    if (g_gpu.t19_buffer != nullptr)
-        g_gpu.t19_buffer->Release();
-    if (g_gpu.t18_srv != nullptr)
-        g_gpu.t18_srv->Release();
-    if (g_gpu.t18_buffer != nullptr)
-        g_gpu.t18_buffer->Release();
-    if (g_gpu.device != nullptr)
-        g_gpu.device->Release();
-    g_gpu = {};
-}
-
 bool create_structured(
     ID3D11Device *device,
     UINT byte_width,
