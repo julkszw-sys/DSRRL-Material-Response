@@ -1446,6 +1446,10 @@ void pmetal_env_source_cache_invalidate() noexcept
 bool pmetal_env_source_runtime::install() noexcept
 {
     pmetal_env_source_cache_invalidate();
+    clear_hook_source();
+    g_hook_restore_failed.store(
+        false,
+        std::memory_order_relaxed);
 
     g_source_base =
         reinterpret_cast<std::uintptr_t>(
@@ -1455,11 +1459,19 @@ bool pmetal_env_source_runtime::install() noexcept
         1u,
         std::memory_order_relaxed);
 
-    g_selector_enabled.store(
-        g_source_base != 0u,
-        std::memory_order_release);
+    if (g_source_base == 0u ||
+        !install_envspec_source_hooks(
+            g_source_base)) {
+        g_selector_enabled.store(
+            false,
+            std::memory_order_release);
+        return false;
+    }
 
-    return g_source_base != 0u;
+    g_selector_enabled.store(
+        true,
+        std::memory_order_release);
+    return true;
 }
 
 void pmetal_env_source_runtime::uninstall() noexcept
@@ -1470,8 +1482,15 @@ void pmetal_env_source_runtime::uninstall() noexcept
     g_selector_epoch.fetch_add(
         1u,
         std::memory_order_relaxed);
+
+    if (!uninstall_envspec_source_hooks())
+        g_hook_restore_failed.store(
+            true,
+            std::memory_order_relaxed);
+
     pmetal_env_source_cache_invalidate();
     pmetal_env_source_selector_clear();
+    clear_hook_source();
 }
 
 void pmetal_env_source_selector_clear() noexcept
@@ -1779,19 +1798,35 @@ bool pmetal_env_source_runtime::latest(
     if (!g_selector_enabled.load(
             std::memory_order_acquire) ||
         !exact_pmetal_material_selection(
-            material) ||
-        !pmetal_producer_state_latest(
-            material,
-            epoch,
-            out)) {
+            material)) {
         telemetry::hot_count(
             g_consumer_fail);
         return false;
     }
 
+    if (pmetal_producer_state_latest(
+            material,
+            epoch,
+            out)) {
+        telemetry::hot_count(
+            g_consumer_ok);
+        return true;
+    }
+
+    // Narrow fallback carrier recovered from the attested retail LightBank
+    // single/blend packers (V13 semantic cut). It is consumed only by an
+    // already-authenticated exact P_Metal draw and is consume-once, so the
+    // bridge does not resurrect global U/L state or a process-wide latest
+    // LightBank value.
+    if (consume_hook_source(out)) {
+        telemetry::hot_count(
+            g_consumer_ok);
+        return true;
+    }
+
     telemetry::hot_count(
-        g_consumer_ok);
-    return true;
+        g_consumer_fail);
+    return false;
 }
 
 pmetal_env_source_runtime_telemetry
