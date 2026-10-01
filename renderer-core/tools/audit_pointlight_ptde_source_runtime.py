@@ -27,7 +27,7 @@ clustered=read('src/runtime/clustered_pnts_draw_runtime.cpp')
 require(fixed,'void __fastcall capture_callback(')
 require(fixed,'current->raw_q[slot]=value;')
 require(fixed,'slot==0u')
-require(fixed,'current={};')
+require(fixed,'g_producer_snapshot.reset();')
 require(fixed,'g_gpu_by_context.try_emplace(context)')
 require(fixed,'D3D11_MAP_WRITE_DISCARD')
 producer=fixed[fixed.index('void __fastcall capture_callback('):fixed.index('bool build_capture_stub(')]
