@@ -3534,6 +3534,8 @@ void on_init_device(reshade::api::device *device)
 
 void on_destroy_device(reshade::api::device *device)
 {
+    dsrrl::runtime::pixel_srv_shadow_reset();
+
     if (k_drawtime_islands_runtime_enabled) {
         g_draw_transactions.on_destroy_device(device);
         g_bloom_scene_sidecar.on_destroy_device(device);
