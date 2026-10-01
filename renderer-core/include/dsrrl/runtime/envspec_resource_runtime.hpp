@@ -58,6 +58,15 @@ public:
         bool probe_b_required,
         prepared_envspec_resources &prepared) noexcept;
 
+    // Runtime v2 fast path. Consumes already-tracked stock SRV bindings and
+    // avoids D3D11 PSGetShaderResources on every qualifying draw.
+    bool prepare_bound(
+        ID3D11ShaderResourceView *stock_a,
+        ID3D11ShaderResourceView *stock_b,
+        std::uint8_t slot,
+        bool probe_b_required,
+        prepared_envspec_resources &prepared) noexcept;
+
     // Diagnostic resource falsifier: preserve the exact PTDE EnvSpec shader,
     // A/B LightBank feed and PTDE sampler while feeding the currently bound,
     // exact-identity DSR BC6H probe SRVs instead of materialized PackedGI.
