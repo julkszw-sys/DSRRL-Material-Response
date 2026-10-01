@@ -542,6 +542,8 @@ std::atomic_bool g_pointlight_once_shader_ready{false};
 std::atomic_bool g_pointlight_once_sidecar_ready{false};
 std::atomic_bool g_pointlight_once_batch_ready{false};
 std::atomic_bool g_pointlight_once_applied{false};
+std::array<std::atomic<std::uint64_t>,4>
+    g_pointlight_rt_signatures{};
 // Exact producer transports that may publish draw-scoped TLS. The selection
 // guard only drains transports that are actually installed; disabled islands
 // must not add function-call traffic to every host draw.
@@ -620,6 +622,129 @@ bool runtime_effect_telemetry_requested() noexcept
 {
     return dsrrl::runtime::telemetry::
         effect_enabled();
+}
+
+void observe_pointlight_render_target(
+    reshade::api::command_list *cmd_list) noexcept
+{
+    if (cmd_list == nullptr)
+        return;
+
+    auto *context =
+        reinterpret_cast<ID3D11DeviceContext *>(
+            cmd_list->get_native());
+    if (context == nullptr)
+        return;
+
+    ID3D11RenderTargetView *rtv = nullptr;
+    context->OMGetRenderTargets(
+        1u,
+        &rtv,
+        nullptr);
+
+    std::uint32_t width = 0u;
+    std::uint32_t height = 0u;
+    std::uint32_t format = 0u;
+
+    if (rtv != nullptr) {
+        ID3D11Resource *resource = nullptr;
+        rtv->GetResource(&resource);
+        if (resource != nullptr) {
+            ID3D11Texture2D *texture = nullptr;
+            if (SUCCEEDED(resource->QueryInterface(
+                    __uuidof(ID3D11Texture2D),
+                    reinterpret_cast<void **>(&texture))) &&
+                texture != nullptr) {
+                D3D11_TEXTURE2D_DESC desc{};
+                texture->GetDesc(&desc);
+                width = desc.Width;
+                height = desc.Height;
+                format =
+                    static_cast<std::uint32_t>(
+                        desc.Format);
+                texture->Release();
+            }
+            resource->Release();
+        }
+        rtv->Release();
+    }
+
+    D3D11_VIEWPORT viewport{};
+    UINT viewport_count = 1u;
+    context->RSGetViewports(
+        &viewport_count,
+        &viewport);
+
+    const auto vp_w =
+        viewport_count != 0u
+            ? static_cast<std::uint32_t>(
+                  viewport.Width + 0.5f)
+            : 0u;
+    const auto vp_h =
+        viewport_count != 0u
+            ? static_cast<std::uint32_t>(
+                  viewport.Height + 0.5f)
+            : 0u;
+
+    std::uint64_t signature =
+        0xcbf29ce484222325ULL;
+    const std::array<std::uint32_t,5> fields{{
+        width,
+        height,
+        format,
+        vp_w,
+        vp_h
+    }};
+    for (const auto field : fields) {
+        for (unsigned shift = 0u;
+             shift < 32u;
+             shift += 8u) {
+            signature ^=
+                static_cast<std::uint8_t>(
+                    (field >> shift) &
+                    0xffu);
+            signature *=
+                0x100000001b3ULL;
+        }
+    }
+    if (signature == 0u)
+        signature = 1u;
+
+    bool should_log = false;
+    for (auto &slot :
+         g_pointlight_rt_signatures) {
+        auto observed =
+            slot.load(
+                std::memory_order_relaxed);
+        if (observed == signature)
+            return;
+        if (observed == 0u &&
+            slot.compare_exchange_strong(
+                observed,
+                signature,
+                std::memory_order_relaxed,
+                std::memory_order_relaxed)) {
+            should_log = true;
+            break;
+        }
+    }
+
+    if (!should_log)
+        return;
+
+    char line[320]{};
+    std::snprintf(
+        line,
+        sizeof(line),
+        "[DSRRL POINTLIGHT RT] rtv=%ux%u fmt=%u viewport=%ux%u",
+        static_cast<unsigned>(width),
+        static_cast<unsigned>(height),
+        static_cast<unsigned>(format),
+        static_cast<unsigned>(vp_w),
+        static_cast<unsigned>(vp_h));
+    reshade::log::message(
+        reshade::log::level::info,
+        line);
 }
 
 void hot_count(
@@ -6789,6 +6914,10 @@ bool on_draw(
                     reshade::log::level::info,
                     "[DSRRL POINTLIGHT APPLY] stage=applied");
             }
+            observe_pointlight_render_target(
+                cmd_list);
+            observe_pointlight_render_target(
+                cmd_list);
         } else {
             hot_count(g_clustered_draw_fail_open);
         }
