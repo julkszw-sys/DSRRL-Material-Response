@@ -6737,6 +6737,7 @@ bool AddonInit(
     dsrrl::runtime::bloom_fx_draw_transport::reset_stats();
     g_pmetal_envspec.reset();
     g_pmetal_source.reset();
+    g_pmetal_native_draw.reset_telemetry();
     g_upper_lower.reset();
     g_upper_lower_hemenv.reset();
     g_hemdir3.reset();
@@ -7181,6 +7182,7 @@ void AddonUninit(
     log_effect_matrix("PRE_UNLOAD");
     motion_blur_camera_fallback_disable::
         log_state("PRE_UNLOAD");
+    g_pmetal_native_draw.uninstall();
     g_pmetal_source.uninstall();
     g_upper_lower.uninstall();
 
