@@ -1354,6 +1354,7 @@ void pmetal_envspec_draw_runtime::reset() noexcept
     effect_fail_mask_.store(0u);
     g_source_cut_logged.store(false);
     g_resource_mode_logged.store(false);
+    g_prepare_stage_log_mask.store(0u);
     quarantined_.store(false);
 }
 
