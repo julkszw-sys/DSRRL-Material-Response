@@ -114,9 +114,153 @@ def main() -> int:
         )
         return 1
 
+    # Bind state-shadow invariant: once an exact PointLight pipeline is
+    # attested and bound on a command-list thread, a repeated bind of the same
+    # pipeline must return from TLS before touching the synchronized pipeline
+    # registry. The synchronized maps remain cross-thread/invalidation fallback.
+    fixed_pipe_h = (
+        source_dir / "include" / "dsrrl" / "runtime" /
+        "fixed_pointlight_pipeline_runtime.hpp"
+    ).read_text(encoding="utf-8")
+    clustered_pipe_h = (
+        source_dir / "include" / "dsrrl" / "runtime" /
+        "clustered_pnts_pipeline_runtime.hpp"
+    ).read_text(encoding="utf-8")
+    fixed_pipe_cpp = (
+        source_dir / "src" / "runtime" /
+        "fixed_pointlight_pipeline_runtime.cpp"
+    ).read_text(encoding="utf-8")
+    clustered_pipe_cpp = (
+        source_dir / "src" / "runtime" /
+        "clustered_pnts_pipeline_runtime.cpp"
+    ).read_text(encoding="utf-8")
+    fixed_draw_cpp = (
+        source_dir / "src" / "runtime" /
+        "fixed_pointlight_draw_runtime.cpp"
+    ).read_text(encoding="utf-8")
+
+    for label, header in (
+        ("fixed", fixed_pipe_h),
+        ("clustered", clustered_pipe_h),
+    ):
+        state_begin = header.find("struct bound_tls_state")
+        state_end = header.find("struct attestation_tls_entry", state_begin)
+        if state_begin < 0 or state_end <= state_begin:
+            print(
+                f"PointLight runtime audit: cannot isolate {label} bound TLS state",
+                file=sys.stderr,
+            )
+            return 1
+        state = header[state_begin:state_end]
+        for token in (
+            "std::uint64_t pipeline = 0u;",
+            "std::uint64_t pipeline_epoch = 0u;",
+        ):
+            if token not in state:
+                print(
+                    f"PointLight runtime audit: {label} TLS state-shadow identity missing: {token}",
+                    file=sys.stderr,
+                )
+                return 1
+
+    for label, source, signature, destroy_sig in (
+        (
+            "fixed",
+            fixed_pipe_cpp,
+            "bool fixed_pointlight_pipeline_runtime::on_bind_pipeline(",
+            "\nvoid fixed_pointlight_pipeline_runtime::on_destroy_pipeline(",
+        ),
+        (
+            "clustered",
+            clustered_pipe_cpp,
+            "bool clustered_pnts_pipeline_runtime::on_bind_pipeline(",
+            "\nvoid clustered_pnts_pipeline_runtime::on_destroy_pipeline(",
+        ),
+    ):
+        bind_begin = source.find(signature)
+        bind_end = source.find(destroy_sig, bind_begin)
+        if bind_begin < 0 or bind_end <= bind_begin:
+            print(
+                f"PointLight runtime audit: cannot isolate {label} bind path",
+                file=sys.stderr,
+            )
+            return 1
+        bind = source[bind_begin:bind_end]
+        tls_reuse = bind.find("bound_tls_.pipeline == pipeline.handle")
+        registry_lookup = bind.find("pipeline_attested_cached(")
+        if (
+            tls_reuse < 0
+            or registry_lookup < 0
+            or tls_reuse >= registry_lookup
+        ):
+            print(
+                f"PointLight runtime audit: {label} repeated bind does not reuse TLS before synchronized registry lookup",
+                file=sys.stderr,
+            )
+            return 1
+
+    capture_begin = fixed_draw_cpp.find(
+        "void __fastcall capture_callback("
+    )
+    capture_end = fixed_draw_cpp.find(
+        "\nbool build_capture_stub(",
+        capture_begin,
+    )
+    if capture_begin < 0 or capture_end <= capture_begin:
+        print(
+            "PointLight runtime audit: cannot isolate fixed producer capture",
+            file=sys.stderr,
+        )
+        return 1
+    capture = fixed_draw_cpp[capture_begin:capture_end]
+    publish_gate = capture.find("const bool publishable_count =")
+    map_lock = capture.find("std::lock_guard<std::mutex> lock(g_mutex);")
+    if (
+        publish_gate < 0
+        or "current->captured_count==2u" not in capture
+        or "current->captured_count==4u" not in capture
+        or map_lock < 0
+        or publish_gate >= map_lock
+    ):
+        print(
+            "PointLight runtime audit: fixed producer publishes partial 1/3-light snapshots or locks before completion gate",
+            file=sys.stderr,
+        )
+        return 1
+
+    selector_begin = fixed_draw_cpp.find(
+        "void fixed_pointlight_draw_runtime::selector_event("
+    )
+    selector_end = fixed_draw_cpp.find(
+        "\nbool fixed_pointlight_draw_runtime::prepare_t19(",
+        selector_begin,
+    )
+    if selector_begin < 0 or selector_end <= selector_begin:
+        print(
+            "PointLight runtime audit: cannot isolate fixed selector path",
+            file=sys.stderr,
+        )
+        return 1
+    selector = fixed_draw_cpp[selector_begin:selector_end]
+    producer_tls = selector.find("const auto producer=g_producer_snapshot;")
+    sync_fallback = selector.find(
+        "std::lock_guard<std::mutex> lock(g_mutex);"
+    )
+    if (
+        producer_tls < 0
+        or "g_draw_snapshot=producer;" not in selector
+        or sync_fallback < 0
+        or producer_tls >= sync_fallback
+    ):
+        print(
+            "PointLight runtime audit: fixed selector does not use producer TLS before synchronized owner-map fallback",
+            file=sys.stderr,
+        )
+        return 1
+
     print(
         f"PointLight core source audit: PASS ({len(sources)} implementation units; "
-        "dedicated selector + exact-route draw fast path)"
+        "dedicated selector + exact-route draw fast path + TLS bind/snapshot state shadow)"
     )
     return 0
 
