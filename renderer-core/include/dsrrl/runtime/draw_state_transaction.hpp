@@ -179,6 +179,7 @@ private:
     struct sampler_capture {
         std::uint32_t slot = 0;
         ID3D11SamplerState *sampler = nullptr;
+        bool owns_reference = false;
     };
 
     struct transaction_state {
