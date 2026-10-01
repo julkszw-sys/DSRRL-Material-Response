@@ -262,10 +262,20 @@ add_custom_target(dsrrl_clustered_pnts_activation_source_audit
     VERBATIM
 )
 
+add_custom_target(dsrrl_active_islands_hotpath_audit
+    COMMAND "${Python3_EXECUTABLE}"
+            "${CMAKE_CURRENT_SOURCE_DIR}/tools/audit_active_islands_hotpath.py"
+            --source-dir "${CMAKE_CURRENT_SOURCE_DIR}"
+    DEPENDS
+        "${CMAKE_CURRENT_SOURCE_DIR}/tools/audit_active_islands_hotpath.py"
+    VERBATIM
+)
+
 add_dependencies(
     dsrrl_renderer_core
     dsrrl_pointlight_core_source_audit
     dsrrl_clustered_pnts_activation_source_audit
+    dsrrl_active_islands_hotpath_audit
     dsrrl_native_envspec_probe_header
     dsrrl_dsr_flver_owner_tuple_header
     dsrrl_dsr_mtd_identity_supplement_header
@@ -583,3 +593,13 @@ add_test(
             --donors "${CMAKE_CURRENT_SOURCE_DIR}/data/provenance/ptde_material_donor_registry.hpp"
             --generated "${CMAKE_CURRENT_SOURCE_DIR}/include/dsrrl/operators/material_response/generated_material_constants_v1.hpp"
 )
+
+add_executable(dsrrl_pmetal_selector_policy_tests tests/pmetal_selector_policy_tests.cpp)
+target_include_directories(dsrrl_pmetal_selector_policy_tests PRIVATE include)
+target_compile_features(dsrrl_pmetal_selector_policy_tests PRIVATE cxx_std_17)
+add_test(NAME dsrrl_pmetal_selector_policy_tests COMMAND dsrrl_pmetal_selector_policy_tests)
+
+add_executable(dsrrl_pointlight_ptde_source_tests tests/pointlight_ptde_source_tests.cpp)
+target_include_directories(dsrrl_pointlight_ptde_source_tests PRIVATE include)
+target_compile_features(dsrrl_pointlight_ptde_source_tests PRIVATE cxx_std_17)
+add_test(NAME dsrrl_pointlight_ptde_source_tests COMMAND dsrrl_pointlight_ptde_source_tests)

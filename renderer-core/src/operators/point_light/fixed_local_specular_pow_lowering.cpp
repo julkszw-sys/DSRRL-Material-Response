@@ -3,7 +3,7 @@
 namespace dsrrl::operators::point_light {
 namespace {
 
-constexpr std::uint32_t k_op_max = 0x08000034u;
+constexpr std::uint32_t k_op_max = 0x07000034u;
 constexpr std::uint32_t k_op_log = 0x0500002fu;
 constexpr std::uint32_t k_op_mul = 0x08000038u;
 constexpr std::uint32_t k_op_exp = 0x05000019u;

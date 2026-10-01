@@ -485,8 +485,36 @@ bool pmetal_envspec_draw_runtime::prepare(
     effect_latch(effect_entry_seen_);
 
     if (cmd_list == nullptr ||
-        quarantined_.load() ||
-        !core_.features().enabled(
+        quarantined_.load()) {
+        effect_fail(
+            effect_fail_mask_,
+            k_effect_fail_feature);
+        return false;
+    }
+
+    // P_Metal is a very narrow route. Reject ordinary MR draws before taking
+    // the feature-registry mutexes below; otherwise every active material draw
+    // pays EnvSpec feature checks even though only exact route 345 / P_Metal
+    // can ever reach this island.
+    telemetry::hot_count(candidates_);
+    if (family ==
+        pmetal_envspec_receiver_family::
+            hemenvlerp)
+        telemetry::hot_count(lerp_candidates_);
+
+    if (!exact_pmetal_material(
+            material) ||
+        !exact_pmetal_decision(
+            decision)) {
+        telemetry::hot_count(material_rejects_);
+        effect_fail(
+            effect_fail_mask_,
+            k_effect_fail_material);
+        return false;
+    }
+    effect_latch(effect_material_ready_);
+
+    if (!core_.features().enabled(
             core::operator_id::env_spec)) {
         effect_fail(
             effect_fail_mask_,
@@ -512,24 +540,6 @@ bool pmetal_envspec_draw_runtime::prepare(
             k_effect_fail_lerp_feature);
         return false;
     }
-
-    telemetry::hot_count(candidates_);
-    if (family ==
-        pmetal_envspec_receiver_family::
-            hemenvlerp)
-        telemetry::hot_count(lerp_candidates_);
-
-    if (!exact_pmetal_material(
-            material) ||
-        !exact_pmetal_decision(
-            decision)) {
-        telemetry::hot_count(material_rejects_);
-        effect_fail(
-            effect_fail_mask_,
-            k_effect_fail_material);
-        return false;
-    }
-    effect_latch(effect_material_ready_);
 
     const auto query =
         make_query(
@@ -558,7 +568,7 @@ bool pmetal_envspec_draw_runtime::prepare(
     effect_latch(effect_semantic_ready_);
 
     pmetal_envspec_source source{};
-    if (!source_.latest(source) ||
+    if (!source_.latest(material, source) ||
         !std::isfinite(source.beta)) {
         telemetry::hot_count(source_rejects_);
         effect_fail(
@@ -575,7 +585,7 @@ bool pmetal_envspec_draw_runtime::prepare(
             std::snprintf(
                 line,
                 sizeof(line),
-                "[DSRRL PMETAL SOURCE CUT] rx=%u route=%u owner=%016llx slot=%u steady=%llu blend=%llu publish=%llu busy_drop=%llu consume_ok=%llu consume_fail=%llu steady_active=%u blend_active=%u",
+                "[DSRRL PMETAL SOURCE CUT] rx=%u route=%u owner=%016llx slot=%u steady=%llu blend=%llu publish=%llu decode_fail=%llu consume_ok=%llu consume_fail=%llu publish_tid=%u consumer_tid=%u local_valid=%u frontier=%u/%u/%u/%u/%u/%u/%u selector_active=%u global_hooks=%u/%u",
                 static_cast<unsigned>(decision.receiver_id),
                 static_cast<unsigned>(decision.route_index),
                 static_cast<unsigned long long>(
@@ -589,11 +599,24 @@ bool pmetal_envspec_draw_runtime::prepare(
                 static_cast<unsigned long long>(
                     cut.exact_publish),
                 static_cast<unsigned long long>(
-                    cut.publish_busy_drop),
+                    cut.decode_fail),
                 static_cast<unsigned long long>(
                     cut.consumer_ok),
                 static_cast<unsigned long long>(
                     cut.consumer_fail),
+                static_cast<unsigned>(
+                    cut.last_publish_tid),
+                static_cast<unsigned>(
+                    cut.last_consumer_tid),
+                cut.last_consumer_local_valid ? 1u : 0u,
+                cut.selector_exact_seen ? 1u : 0u,
+                cut.parent_gate_ok ? 1u : 0u,
+                cut.descriptor_gate_ok ? 1u : 0u,
+                cut.endpoint_gate_ok ? 1u : 0u,
+                cut.manager_gate_ok ? 1u : 0u,
+                cut.source_a_decode_ok ? 1u : 0u,
+                cut.source_b_decode_ok ? 1u : 0u,
+                cut.selector_carrier_active ? 1u : 0u,
                 cut.steady_carrier_active ? 1u : 0u,
                 cut.blend_carrier_active ? 1u : 0u);
             reshade::log::message(

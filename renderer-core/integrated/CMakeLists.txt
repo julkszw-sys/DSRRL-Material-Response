@@ -66,6 +66,41 @@ option(
     "Diagnostic: feed exact native DSR BC6H cubemaps into the PTDE P_Metal EnvSpec operator"
     OFF)
 
+option(
+    DSRRL_POINTLIGHT_DRAWTIME_BYPASS
+    "Diagnostic: disable PointLight producer hooks, runtime pipeline binding and draw-time carrier/replay while preserving all non-PointLight runtime paths"
+    OFF)
+
+option(
+    DSRRL_DRAWTIME_ISLANDS_BYPASS
+    "Diagnostic: disable all draw-time island routing/hooks/replay while preserving create-time A1 and MotionBlur shader replacements"
+    OFF)
+
+option(
+    DSRRL_DRAW_CALLBACKS_BYPASS
+    "Diagnostic: keep dynamic transports/hooks installed but omit draw/draw_indexed/present callbacks"
+    OFF)
+
+option(
+    DSRRL_DRAW_REPLAY_BYPASS
+    "Diagnostic: keep dynamic draw routing and preparation but release prepared islands before replay/restore"
+    OFF)
+
+option(
+    DSRRL_EMPTY_DRAW_CALLBACK_BISECT
+    "Diagnostic: keep dynamic transports and register draw callbacks, but return immediately before any DSRRL draw work"
+    OFF)
+
+option(
+    DSRRL_STATE_TRANSACTION_ONLY_BISECT
+    "Diagnostic: execute draw transaction begin+restore without issuing a replacement Draw/DrawIndexed"
+    OFF)
+
+option(
+    DSRRL_RAW_DRAW_REPLAY_BISECT
+    "Diagnostic: issue only a raw stock Draw/DrawIndexed from the callback and suppress the original, without DSRRL state mutation"
+    OFF)
+
 set(
     RESHADE_INCLUDE_DIR
     ""
@@ -452,6 +487,55 @@ if(DSRRL_PMETAL_NATIVE_DSR_CUBEMAP_FEED)
         $<$<COMPILE_LANGUAGE:CXX>:DSRRL_PMETAL_NATIVE_DSR_CUBEMAP_FEED>)
 endif()
 
+if(DSRRL_POINTLIGHT_DRAWTIME_BYPASS)
+    target_compile_definitions(
+        dsrrl_renderer_core_integrated
+        PRIVATE
+        $<$<COMPILE_LANGUAGE:CXX>:DSRRL_POINTLIGHT_DRAWTIME_BYPASS>)
+endif()
+
+if(DSRRL_DRAWTIME_ISLANDS_BYPASS)
+    target_compile_definitions(
+        dsrrl_renderer_core_integrated
+        PRIVATE
+        $<$<COMPILE_LANGUAGE:CXX>:DSRRL_DRAWTIME_ISLANDS_BYPASS>)
+endif()
+
+if(DSRRL_DRAW_CALLBACKS_BYPASS)
+    target_compile_definitions(
+        dsrrl_renderer_core_integrated
+        PRIVATE
+        $<$<COMPILE_LANGUAGE:CXX>:DSRRL_DRAW_CALLBACKS_BYPASS>)
+endif()
+
+if(DSRRL_DRAW_REPLAY_BYPASS)
+    target_compile_definitions(
+        dsrrl_renderer_core_integrated
+        PRIVATE
+        $<$<COMPILE_LANGUAGE:CXX>:DSRRL_DRAW_REPLAY_BYPASS>)
+endif()
+
+if(DSRRL_EMPTY_DRAW_CALLBACK_BISECT)
+    target_compile_definitions(
+        dsrrl_renderer_core_integrated
+        PRIVATE
+        $<$<COMPILE_LANGUAGE:CXX>:DSRRL_EMPTY_DRAW_CALLBACK_BISECT>)
+endif()
+
+if(DSRRL_STATE_TRANSACTION_ONLY_BISECT)
+    target_compile_definitions(
+        dsrrl_renderer_core_integrated
+        PRIVATE
+        $<$<COMPILE_LANGUAGE:CXX>:DSRRL_STATE_TRANSACTION_ONLY_BISECT>)
+endif()
+
+if(DSRRL_RAW_DRAW_REPLAY_BISECT)
+    target_compile_definitions(
+        dsrrl_renderer_core_integrated
+        PRIVATE
+        $<$<COMPILE_LANGUAGE:CXX>:DSRRL_RAW_DRAW_REPLAY_BISECT>)
+endif()
+
 if(MSVC)
     target_compile_options(
         dsrrl_renderer_core_integrated
@@ -474,3 +558,18 @@ set_target_properties(
     PREFIX ""
     OUTPUT_NAME "${DSRRL_CORE_ISLANDS_ARTIFACT_STEM}"
     SUFFIX ".addon64")
+
+# Tests the real producer/selector/GPU cache without installing a game hook.
+add_executable(dsrrl_fixed_pointlight_transport_windows_tests
+    "${DSRRL_RENDERER_CORE_ROOT}/tests/fixed_pointlight_transport_windows_tests.cpp")
+target_include_directories(dsrrl_fixed_pointlight_transport_windows_tests PRIVATE
+    "${DSRRL_RENDERER_CORE_ROOT}/include" "${RESHADE_INCLUDE_DIR}")
+target_compile_features(dsrrl_fixed_pointlight_transport_windows_tests PRIVATE cxx_std_17)
+target_link_libraries(dsrrl_fixed_pointlight_transport_windows_tests PRIVATE d3d11)
+add_test(NAME dsrrl_fixed_pointlight_transport_windows_tests COMMAND dsrrl_fixed_pointlight_transport_windows_tests)
+
+add_executable(dsrrl_fixed_pointlight_corpus_native_check
+    "${DSRRL_RENDERER_CORE_ROOT}/tests/fixed_pointlight_corpus_native_check.cpp")
+target_include_directories(dsrrl_fixed_pointlight_corpus_native_check PRIVATE "${DSRRL_RENDERER_CORE_ROOT}/include")
+target_compile_features(dsrrl_fixed_pointlight_corpus_native_check PRIVATE cxx_std_17)
+target_link_libraries(dsrrl_fixed_pointlight_corpus_native_check PRIVATE dsrrl_renderer_core d3d11)

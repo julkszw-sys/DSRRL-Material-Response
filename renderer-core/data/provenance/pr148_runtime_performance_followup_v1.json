@@ -1,0 +1,44 @@
+{
+  "schema": "dsrrl.pr148.runtime_performance_followup.v1",
+  "source_head": "837d4c53ad701dcf1d9db7920663d9a85df8b4c9",
+  "runtime_build_merge": "6824cb0136417e14a1d9d730e64a72035cb0b0eb",
+  "installed_addon_sha256": "bc76da5dbb156fbc669bcc4663de07af15923dea68f1d7c2b35a5f351a967d18",
+  "log_sha256": "57258ef5718e69509d45640ea8784266618aa433639c3dd32920d9e731fca9ad",
+  "owner_report": "Performance problems persist",
+  "observations": {
+    "global_envspec_lightbank_hooks": "0/0",
+    "upper_lower_hemdir3_subsurface": "disabled",
+    "packedgi": "pack_ready=1 at startup",
+    "pmetal": "receiver33 route345 MR DIFFUSE draw_issued; EnvSpec draw activation not demonstrated",
+    "clustered_pointlight": "exact material decision_active followed by source_capture failure",
+    "timing": "No per-stage CPU/GPU duration measurements; startup LIVE counters precede gameplay and cannot establish gameplay rates"
+  },
+  "static_findings": [
+    {
+      "status": "CONFIRMED",
+      "path": "renderer-core/src/runtime/clustered_pnts_draw_runtime.cpp",
+      "finding": "prepare_sidecar selects first four by traversing collection on each authorized draw; readable_range invokes VirtualQuery per visited node, before source_capture rejection"
+    },
+    {
+      "status": "CONFIRMED",
+      "path": "renderer-core/include/dsrrl/runtime/pointlight_ptde_source_runtime.hpp",
+      "finding": "Per-source reads invoke VirtualQuery, validate 64 row entries and identify complete 1024-byte bank against embedded banks without identity caching"
+    },
+    {
+      "status": "CONFIRMED",
+      "path": "renderer-core/src/runtime/clustered_pnts_draw_runtime.cpp",
+      "finding": "capture_source calls the host source vfunc before checking whether the node has an accepted PTDE donor source"
+    },
+    {
+      "status": "HYPOTHESIS",
+      "finding": "Repeated clustered list traversal and source validation contribute materially to owner FPS regression; needs stage timing or controlled isolation"
+    },
+    {
+      "status": "OPEN",
+      "finding": "P_Metal selector source rejection stage is not exposed by this production log"
+    }
+  ],
+  "next_validation": "Measure clustered selection, source decode and P_Metal selector stages with bounded aggregate timings; preserve exact identity, source lifetime and fail-open; do not infer identity from pointer alone.",
+  "supabase": "bootstrap/control-plane blocked by automatic approval review usage limit; no database write performed",
+  "runtime_fix": "none in this audit commit"
+}

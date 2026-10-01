@@ -456,6 +456,17 @@ void uninstall() noexcept
 void selector_begin(
     std::uint32_t incoming_mode) noexcept
 {
+    // The shared FLVER selector callback exists for other active islands too.
+    // When HemDir3's own two hooks are not armed, do not touch TLS or account
+    // millions of irrelevant selector events.
+    if (!g_state.lt5_hook_armed ||
+        !g_state.selector_end_hook_armed ||
+        g_state.quarantined) {
+        g_tls.capture_active = false;
+        g_tls.ready = false;
+        return;
+    }
+
     dsrrl::runtime::telemetry::hot_count(g_selector_begin);
 
     ++g_tls.generation;

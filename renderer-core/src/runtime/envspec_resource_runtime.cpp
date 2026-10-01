@@ -656,9 +656,10 @@ void on_init_resource_view(
             native->second.probe_ordinal
         };
 
-    g_snapshot_epoch.fetch_add(
-        1u,
-        std::memory_order_release);
+    // View registration is append-only. Existing snapshot TLS entries retain
+    // their own PTDE SRV/sampler references and are keyed by the stock view,
+    // so an unrelated new view cannot invalidate them. Destruction still
+    // bumps the epoch before any stale stock-view key can be reused.
     ++g_view_matches;
 }
 

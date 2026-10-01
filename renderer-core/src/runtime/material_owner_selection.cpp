@@ -4,6 +4,7 @@
 #include <array>
 #include <atomic>
 #include <cstddef>
+#include <cstring>
 #include <optional>
 
 namespace dsrrl::runtime {
@@ -24,31 +25,48 @@ struct owner_auth_cache_entry {
     bool authenticated = false;
 };
 
-constexpr std::size_t k_owner_auth_cache_slots = 32u;
+constexpr std::size_t k_owner_auth_cache_slots = 256u;
 thread_local std::array<
     owner_auth_cache_entry,
     k_owner_auth_cache_slots>
     g_owner_auth_cache{};
 
-std::size_t owner_auth_cache_index(
-    const core::sha256_digest &digest,
-    std::uint32_t material_slot,
-    std::uint64_t semantic_name_hash) noexcept
+std::uint64_t owner_cache_entropy(
+    const operators::material_response::
+        material_identity &identity) noexcept
 {
-    std::uint64_t h =
-        0xcbf29ce484222325ULL;
-    for (const auto byte : digest) {
-        h ^= byte;
-        h *= 0x100000001b3ULL;
-    }
+    if (identity.flver_identity_hash != 0u)
+        return identity.flver_identity_hash;
 
-    h ^= material_slot;
-    h *= 0x100000001b3ULL;
-    h ^= semantic_name_hash;
-    h *= 0x100000001b3ULL;
+    std::uint64_t folded = 0u;
+    static_assert(
+        sizeof(folded) <=
+        core::sha256_digest{}.size());
+    std::memcpy(
+        &folded,
+        identity.flver_sha256.data(),
+        sizeof(folded));
+    return folded;
+}
+
+std::size_t owner_auth_cache_index(
+    const operators::material_response::
+        material_identity &identity) noexcept
+{
+    // The legacy 64-bit token is optional. When absent, a cheap 64-bit fold
+    // from the authoritative SHA is bucket entropy only; the complete SHA-256
+    // remains the cache-hit authority below.
+    std::uint64_t h =
+        owner_cache_entropy(identity) ^
+        (static_cast<std::uint64_t>(identity.material_slot) *
+         0x9E3779B185EBCA87ULL);
+    h ^= identity.semantic_name_hash +
+         0x9E3779B97F4A7C15ULL +
+         (h << 6u) +
+         (h >> 2u);
 
     return static_cast<std::size_t>(
-        h % k_owner_auth_cache_slots);
+        h & (k_owner_auth_cache_slots - 1u));
 }
 
 bool owner_tuple_authenticated_cached(
@@ -58,9 +76,7 @@ bool owner_tuple_authenticated_cached(
     auto &cached =
         g_owner_auth_cache[
             owner_auth_cache_index(
-                identity.flver_sha256,
-                identity.material_slot,
-                identity.semantic_name_hash)];
+                identity)];
 
     if (cached.occupied &&
         cached.material_slot ==

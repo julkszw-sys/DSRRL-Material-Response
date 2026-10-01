@@ -176,7 +176,7 @@ struct companion_tls_entry {
     }
 };
 
-constexpr std::size_t k_companion_tls_slots = 64u;
+constexpr std::size_t k_companion_tls_slots = 256u;
 thread_local std::array<
     companion_tls_entry,
     k_companion_tls_slots>
@@ -186,8 +186,8 @@ std::size_t companion_tls_index(
     std::uint64_t key) noexcept
 {
     return static_cast<std::size_t>(
-        ((key >> 4u) ^ (key >> 13u)) %
-        k_companion_tls_slots);
+        ((key >> 4u) ^ (key >> 13u) ^ (key >> 23u)) &
+        (k_companion_tls_slots - 1u));
 }
 
 std::atomic<std::uint64_t> g_named_views{0};
@@ -1298,6 +1298,25 @@ prepare_draw_requests(
         g_quarantined.load())
         return false;
 
+    const bool exact_material =
+        query.material.valid &&
+        query.material.owner_tuple_exact;
+
+    // Every surviving Diffuse/Normal/SpecRGB route requires exact material
+    // ownership. Do not force three PSGetShaderResources COM retains plus
+    // texture-identity lookups for receiver-only / runtime-MTD fallback draws
+    // that cannot authorize any resource replacement.
+    if (!exact_material)
+        return true;
+
+    // With no SpecRGB consumer, only BMP receivers 24..35 can use the
+    // Diffuse/Normal bridges. HemEnv receivers 36..47 therefore have no
+    // possible resource request and can stay entirely off the D3D state path.
+    if (!spec_rgb_consumer_ready &&
+        (receiver_id < 24u ||
+         receiver_id > 35u))
+        return true;
+
     ID3D11ShaderResourceView *views[3]{};
     context->PSGetShaderResources(
         0u,
@@ -1321,10 +1340,6 @@ prepare_draw_requests(
     const auto h0 = hashes[0];
     const auto h1 = hashes[1];
     const auto h2 = hashes[2];
-
-    const bool exact_material =
-        query.material.valid &&
-        query.material.owner_tuple_exact;
 
     if (full_material_response_ready &&
         spec_rgb_consumer_ready &&

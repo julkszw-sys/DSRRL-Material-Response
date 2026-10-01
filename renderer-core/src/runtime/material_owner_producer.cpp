@@ -10,6 +10,7 @@
 #include <algorithm>
 #include <array>
 #include <cstddef>
+#include <cstring>
 
 namespace dsrrl::runtime {
 namespace {
@@ -32,27 +33,42 @@ struct owner_material_cache_entry {
     bool resolved = false;
 };
 
-constexpr std::size_t k_owner_material_cache_slots = 32u;
+constexpr std::size_t k_owner_material_cache_slots = 256u;
 thread_local std::array<
     owner_material_cache_entry,
     k_owner_material_cache_slots>
     g_owner_material_cache{};
 
-std::size_t owner_material_cache_index(
-    const core::sha256_digest &digest,
-    std::uint32_t material_slot) noexcept
+std::uint64_t owner_material_cache_entropy(
+    const actual_material_owner_observation &observation) noexcept
 {
-    std::uint64_t h =
-        0xcbf29ce484222325ULL;
-    for (const auto byte : digest) {
-        h ^= byte;
-        h *= 0x100000001b3ULL;
-    }
+    if (observation.flver_identity_hash != 0u)
+        return observation.flver_identity_hash;
 
-    h ^= material_slot;
-    h *= 0x100000001b3ULL;
+    std::uint64_t folded = 0u;
+    static_assert(
+        sizeof(folded) <=
+        core::sha256_digest{}.size());
+    std::memcpy(
+        &folded,
+        observation.flver_sha256.data(),
+        sizeof(folded));
+    return folded;
+}
+
+std::size_t owner_material_cache_index(
+    const actual_material_owner_observation &observation) noexcept
+{
+    // The optional legacy token is bucket entropy only. A missing token falls
+    // back to a cheap SHA fold; the full SHA-256 equality check remains the
+    // positive cache authority.
+    const std::uint64_t h =
+        owner_material_cache_entropy(observation) ^
+        (static_cast<std::uint64_t>(
+             observation.material_slot) *
+         0x9E3779B185EBCA87ULL);
     return static_cast<std::size_t>(
-        h % k_owner_material_cache_slots);
+        h & (k_owner_material_cache_slots - 1u));
 }
 
 const operators::material_response::generated::
@@ -98,8 +114,7 @@ bool enrich_exact_owner_mtd_identity(
     auto &cached =
         g_owner_material_cache[
             owner_material_cache_index(
-                observation.flver_sha256,
-                observation.material_slot)];
+                observation)];
 
     if (cached.occupied &&
         cached.material_slot ==

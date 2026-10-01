@@ -11,6 +11,7 @@
 #include "dsrrl/runtime/material_owner_selection.hpp"
 #include "dsrrl/runtime/material_owner_producer.hpp"
 #include "dsrrl/runtime/upper_lower_draw_runtime.hpp"
+#include "dsrrl/runtime/pmetal_env_source_runtime.hpp"
 #include "dsrrl/runtime/hemdir3_mode_transport.hpp"
 #include "dsrrl/runtime/clustered_pnts_draw_runtime.hpp"
 #include "dsrrl/operators/material_response/mtd_semantic_census.hpp"
@@ -489,10 +490,12 @@ extern "C" void dsrrl_flver_selector_observer(
     void *r14,
     void *r15,
     std::int32_t material_index,
-    std::uint32_t incoming_mode) noexcept
+    std::uint32_t incoming_mode,
+    const void *selector_stack) noexcept
 {
  telemetry::hot_count(g_selector_events);
  material_owner_selection_clear();
+ pmetal_env_source_selector_clear();
 
  hemdir3_mode_transport::selector_begin(
      incoming_mode);
@@ -501,7 +504,8 @@ extern "C" void dsrrl_flver_selector_observer(
      owner,
      ret,
      r14,
-     r15);
+     r15,
+     g_state.builder_armed);
 
  if(g_base==0u || ret==nullptr || material_index<0){telemetry::hot_count(g_owner_fail_open);return;}
  const auto ret_addr=reinterpret_cast<std::uintptr_t>(ret);
@@ -517,9 +521,10 @@ extern "C" void dsrrl_flver_selector_observer(
          container,
          material_index);
 
- clustered_pnts_selector_event_bridge(
-     owner,
-     actual_material);
+ if(g_state.builder_armed)
+  clustered_pnts_selector_event_bridge(
+      owner,
+      actual_material);
 
  actual_material_owner_observation observation{};
  if(flver_identity_enrich_owner(
@@ -541,6 +546,7 @@ extern "C" void dsrrl_flver_selector_observer(
     upper_lower_pmetal_material_event_bridge(
         owner,
         identity);
+    pmetal_env_source_selector_event(owner, ret, r14, r15, selector_stack, identity);
     telemetry::hot_count(g_exact_owner_ready);
     return;
    }
@@ -571,14 +577,38 @@ extern "C" void dsrrl_flver_selector_observer(
 
  telemetry::hot_count(g_owner_fail_open);
 }
-bool install() noexcept {if(g_p.patched||g_s.patched||g_d.patched||g_m.patched||g_b.patched)return false;g_state={};g_runtime_mtd_classified.store(false);g_runtime_mtd_cache_hit.store(false);g_runtime_mtd_selection_published.store(false);if(!exe_ok())return false;g_base=reinterpret_cast<std::uintptr_t>(GetModuleHandleW(nullptr));if(!g_base)return false;g_state.provenance_ok=true;
- if(!prep(g_p,k_parse,k_parse_b,reinterpret_cast<void*>(&parse_entry)))goto fail;g_po=reinterpret_cast<parser_fn>(g_p.trampoline);
- if(!prep(g_d,k_destroy,k_destroy_b,reinterpret_cast<void*>(&destroy_entry)))goto fail;g_do=reinterpret_cast<destructor_fn>(g_d.trampoline);
- if(!prep(g_m,k_mtd,k_mtd_b,reinterpret_cast<void*>(&mtd_entry)))goto fail;g_mo=reinterpret_cast<mtd_fn>(g_m.trampoline);
- if(!prep(g_s,k_selector,k_selector_b,reinterpret_cast<void*>(&dsrrl_flver_selector_hook_entry)))goto fail;g_dsrrl_flver_selector_trampoline=g_s.trampoline;
- if(!prep(g_b,k_builder,k_builder_b,reinterpret_cast<void*>(&dsrrl_clustered_pnts_builder_hook_entry)))goto fail;g_dsrrl_flver_builder_trampoline=g_b.trampoline;
- if(!arm(g_p)||!arm(g_d)||!arm(g_m)||!arm(g_s)||!arm(g_b))goto fail;
- g_state.parser_armed=true;g_state.destructor_armed=true;g_state.mtd_armed=true;g_state.selector_armed=true;g_state.builder_armed=true;g_state.selector_owner_enrichment=true;g_state.exact_runtime_material_carrier=true;return true;
+bool install(bool enable_clustered_builder) noexcept {
+ if(g_p.patched||g_s.patched||g_d.patched||g_m.patched||g_b.patched)return false;
+ g_state={};
+ g_runtime_mtd_classified.store(false);
+ g_runtime_mtd_cache_hit.store(false);
+ g_runtime_mtd_selection_published.store(false);
+ if(!exe_ok())return false;
+ g_base=reinterpret_cast<std::uintptr_t>(GetModuleHandleW(nullptr));
+ if(!g_base)return false;
+ g_state.provenance_ok=true;
+ if(!prep(g_p,k_parse,k_parse_b,reinterpret_cast<void*>(&parse_entry)))goto fail;
+ g_po=reinterpret_cast<parser_fn>(g_p.trampoline);
+ if(!prep(g_d,k_destroy,k_destroy_b,reinterpret_cast<void*>(&destroy_entry)))goto fail;
+ g_do=reinterpret_cast<destructor_fn>(g_d.trampoline);
+ if(!prep(g_m,k_mtd,k_mtd_b,reinterpret_cast<void*>(&mtd_entry)))goto fail;
+ g_mo=reinterpret_cast<mtd_fn>(g_m.trampoline);
+ if(!prep(g_s,k_selector,k_selector_b,reinterpret_cast<void*>(&dsrrl_flver_selector_hook_entry)))goto fail;
+ g_dsrrl_flver_selector_trampoline=g_s.trampoline;
+ if(enable_clustered_builder){
+  if(!prep(g_b,k_builder,k_builder_b,reinterpret_cast<void*>(&dsrrl_clustered_pnts_builder_hook_entry)))goto fail;
+  g_dsrrl_flver_builder_trampoline=g_b.trampoline;
+ }
+ if(!arm(g_p)||!arm(g_d)||!arm(g_m)||!arm(g_s)||
+    (enable_clustered_builder&&!arm(g_b)))goto fail;
+ g_state.parser_armed=true;
+ g_state.destructor_armed=true;
+ g_state.mtd_armed=true;
+ g_state.selector_armed=true;
+ g_state.builder_armed=enable_clustered_builder;
+ g_state.selector_owner_enrichment=true;
+ g_state.exact_runtime_material_carrier=true;
+ return true;
 fail:
  uninstall();
  return false;
@@ -608,6 +638,7 @@ void uninstall() noexcept {
  g_mo=nullptr;
  clear_exact_material_cache();
  material_owner_selection_clear();
+ pmetal_env_source_selector_clear();
  flver_identity_reset();
  g_state={};
 }

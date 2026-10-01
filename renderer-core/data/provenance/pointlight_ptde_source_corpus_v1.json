@@ -1,0 +1,829 @@
+{
+  "schema": "dsrrl.pointlight.ptde_source_corpus.v1",
+  "counts": {
+    "rows": 640,
+    "identical": 531,
+    "range_diff": 95,
+    "ptde_end_larger": 8,
+    "rgbm_diff": 99
+  },
+  "input_sha256": {
+    "ptde": "aaa462dd374ad641a3f3b54ecc441e4bce1a408e5fca4611445a07dc72d06d38",
+    "dsr": "70a90b51e471e8330b55ef17a9b8b86e18f7c0a1cfdb7384f3f51cfe165b8372"
+  },
+  "bank_sha256": {
+    "m10_PointLightBank.param": {
+      "ptde": "8d51d7c7f768a28972be9a2cf48c580a3d071e46ff3be95314082b6a94edf2e3",
+      "dsr": "2a4ba2cd035e61f12fb3337c9490f020efb90e5e41a54e0af316afcead47ae08"
+    },
+    "m11_PointLightBank.param": {
+      "ptde": "fe5323d126908870e595c8380fed6cd452e9ba64bb0130eadc28144116067840",
+      "dsr": "6edc1410594da2cf80c2286a500f2eab146823fedb1e08dfe566a07bf594d772"
+    },
+    "m12_PointLightBank.param": {
+      "ptde": "348b723e45857eaac3d5a352f5ae2139ae106ef632860489bbbbcf8ebc49d2ba",
+      "dsr": "4262a79b37777a8ff4b77818c0ba7ac7ec534c4bf17249b28bfbaa3831d20f3e"
+    },
+    "m13_PointLightBank.param": {
+      "ptde": "78149a353c206986b43bc9a458b4bd8b938b158d60625b197261da2380ea05b4",
+      "dsr": "2a52e3d6485fc94d483f750cb4eca8bb66311f308a87d37d653610c6e7ed82a0"
+    },
+    "m14_PointLightBank.param": {
+      "ptde": "8713fcde8c0abc59df5c55654f009296982d6edde5b189395188c5eef30a69de",
+      "dsr": "0971d6fa1d694e71076d1243116728763bf14297dd94bae83e591043b9e54ff4"
+    },
+    "m15_1_PointLightBank.param": {
+      "ptde": "74102439cd5350993283768b0e9df819efa8e932adbfa1fc29f3502ed670a064",
+      "dsr": "ca85fd97a3f5071da223164ac5576a5e91d0f6ed627cb4c5915e0ea779a7ff11"
+    },
+    "m15_PointLightBank.param": {
+      "ptde": "733f31b61a0abf4b95f331dbc6b08f4e3ea288a6bfa8e7d5e5aeb13fb9fe0178",
+      "dsr": "00e3f0ef2a43260c2c90ce523a31d285ea45180e3375c36c49a12c2ce1fdc2ad"
+    },
+    "m16_PointLightBank.param": {
+      "ptde": "d73549daacfaa62e40b6ef896cdf9f07a23cd68f01d20264c77208722c88a8ba",
+      "dsr": "80c915cbda92eb92ecac903310d733df1b370ea33cf8374c6e4c1fa6cc4d9f12"
+    },
+    "m17_PointLightBank.param": {
+      "ptde": "3c963890f39968be97cbe53e4393ae6d11da6d3bf67fb9c38c6457c271f8dd8c",
+      "dsr": "19cba127f8becc015973000f6c9dcd90f6c20ec7cf7fa2f34871a0dcb39609ca"
+    },
+    "m18_PointLightBank.param": {
+      "ptde": "2cc84dd144adaf1474c24d2fb104106a165c1630ba69f605e6008798e8c784d8",
+      "dsr": "7875e54e958c21410dbe95d591abf7d796ee99054c2369b44520bda035fe9b47"
+    }
+  },
+  "changed_rows": [
+    {
+      "bank": "m10_PointLightBank.param",
+      "row": 1,
+      "range_diff": false,
+      "ptde_end_larger": false,
+      "rgbm_diff": true
+    },
+    {
+      "bank": "m10_PointLightBank.param",
+      "row": 2,
+      "range_diff": true,
+      "ptde_end_larger": false,
+      "rgbm_diff": true
+    },
+    {
+      "bank": "m10_PointLightBank.param",
+      "row": 3,
+      "range_diff": true,
+      "ptde_end_larger": false,
+      "rgbm_diff": true
+    },
+    {
+      "bank": "m10_PointLightBank.param",
+      "row": 4,
+      "range_diff": false,
+      "ptde_end_larger": false,
+      "rgbm_diff": true
+    },
+    {
+      "bank": "m10_PointLightBank.param",
+      "row": 8,
+      "range_diff": true,
+      "ptde_end_larger": true,
+      "rgbm_diff": false
+    },
+    {
+      "bank": "m10_PointLightBank.param",
+      "row": 11,
+      "range_diff": true,
+      "ptde_end_larger": false,
+      "rgbm_diff": true
+    },
+    {
+      "bank": "m10_PointLightBank.param",
+      "row": 13,
+      "range_diff": true,
+      "ptde_end_larger": true,
+      "rgbm_diff": true
+    },
+    {
+      "bank": "m10_PointLightBank.param",
+      "row": 15,
+      "range_diff": false,
+      "ptde_end_larger": false,
+      "rgbm_diff": true
+    },
+    {
+      "bank": "m10_PointLightBank.param",
+      "row": 16,
+      "range_diff": true,
+      "ptde_end_larger": false,
+      "rgbm_diff": true
+    },
+    {
+      "bank": "m10_PointLightBank.param",
+      "row": 17,
+      "range_diff": true,
+      "ptde_end_larger": false,
+      "rgbm_diff": true
+    },
+    {
+      "bank": "m10_PointLightBank.param",
+      "row": 20,
+      "range_diff": true,
+      "ptde_end_larger": false,
+      "rgbm_diff": true
+    },
+    {
+      "bank": "m10_PointLightBank.param",
+      "row": 24,
+      "range_diff": true,
+      "ptde_end_larger": false,
+      "rgbm_diff": true
+    },
+    {
+      "bank": "m10_PointLightBank.param",
+      "row": 33,
+      "range_diff": true,
+      "ptde_end_larger": false,
+      "rgbm_diff": true
+    },
+    {
+      "bank": "m11_PointLightBank.param",
+      "row": 0,
+      "range_diff": true,
+      "ptde_end_larger": true,
+      "rgbm_diff": true
+    },
+    {
+      "bank": "m11_PointLightBank.param",
+      "row": 2,
+      "range_diff": true,
+      "ptde_end_larger": true,
+      "rgbm_diff": true
+    },
+    {
+      "bank": "m11_PointLightBank.param",
+      "row": 10,
+      "range_diff": true,
+      "ptde_end_larger": false,
+      "rgbm_diff": true
+    },
+    {
+      "bank": "m11_PointLightBank.param",
+      "row": 11,
+      "range_diff": true,
+      "ptde_end_larger": false,
+      "rgbm_diff": true
+    },
+    {
+      "bank": "m11_PointLightBank.param",
+      "row": 12,
+      "range_diff": true,
+      "ptde_end_larger": false,
+      "rgbm_diff": true
+    },
+    {
+      "bank": "m12_PointLightBank.param",
+      "row": 0,
+      "range_diff": true,
+      "ptde_end_larger": false,
+      "rgbm_diff": true
+    },
+    {
+      "bank": "m12_PointLightBank.param",
+      "row": 1,
+      "range_diff": false,
+      "ptde_end_larger": false,
+      "rgbm_diff": true
+    },
+    {
+      "bank": "m12_PointLightBank.param",
+      "row": 4,
+      "range_diff": true,
+      "ptde_end_larger": false,
+      "rgbm_diff": true
+    },
+    {
+      "bank": "m12_PointLightBank.param",
+      "row": 12,
+      "range_diff": true,
+      "ptde_end_larger": false,
+      "rgbm_diff": true
+    },
+    {
+      "bank": "m12_PointLightBank.param",
+      "row": 15,
+      "range_diff": false,
+      "ptde_end_larger": false,
+      "rgbm_diff": true
+    },
+    {
+      "bank": "m12_PointLightBank.param",
+      "row": 17,
+      "range_diff": true,
+      "ptde_end_larger": false,
+      "rgbm_diff": true
+    },
+    {
+      "bank": "m12_PointLightBank.param",
+      "row": 18,
+      "range_diff": true,
+      "ptde_end_larger": false,
+      "rgbm_diff": true
+    },
+    {
+      "bank": "m12_PointLightBank.param",
+      "row": 21,
+      "range_diff": true,
+      "ptde_end_larger": false,
+      "rgbm_diff": true
+    },
+    {
+      "bank": "m12_PointLightBank.param",
+      "row": 23,
+      "range_diff": true,
+      "ptde_end_larger": false,
+      "rgbm_diff": true
+    },
+    {
+      "bank": "m12_PointLightBank.param",
+      "row": 24,
+      "range_diff": true,
+      "ptde_end_larger": false,
+      "rgbm_diff": true
+    },
+    {
+      "bank": "m12_PointLightBank.param",
+      "row": 28,
+      "range_diff": true,
+      "ptde_end_larger": false,
+      "rgbm_diff": true
+    },
+    {
+      "bank": "m12_PointLightBank.param",
+      "row": 47,
+      "range_diff": true,
+      "ptde_end_larger": false,
+      "rgbm_diff": true
+    },
+    {
+      "bank": "m12_PointLightBank.param",
+      "row": 48,
+      "range_diff": true,
+      "ptde_end_larger": false,
+      "rgbm_diff": true
+    },
+    {
+      "bank": "m12_PointLightBank.param",
+      "row": 58,
+      "range_diff": true,
+      "ptde_end_larger": false,
+      "rgbm_diff": true
+    },
+    {
+      "bank": "m12_PointLightBank.param",
+      "row": 61,
+      "range_diff": true,
+      "ptde_end_larger": false,
+      "rgbm_diff": false
+    },
+    {
+      "bank": "m12_PointLightBank.param",
+      "row": 63,
+      "range_diff": true,
+      "ptde_end_larger": false,
+      "rgbm_diff": true
+    },
+    {
+      "bank": "m13_PointLightBank.param",
+      "row": 0,
+      "range_diff": true,
+      "ptde_end_larger": false,
+      "rgbm_diff": true
+    },
+    {
+      "bank": "m13_PointLightBank.param",
+      "row": 3,
+      "range_diff": true,
+      "ptde_end_larger": false,
+      "rgbm_diff": true
+    },
+    {
+      "bank": "m13_PointLightBank.param",
+      "row": 5,
+      "range_diff": false,
+      "ptde_end_larger": false,
+      "rgbm_diff": true
+    },
+    {
+      "bank": "m13_PointLightBank.param",
+      "row": 13,
+      "range_diff": false,
+      "ptde_end_larger": false,
+      "rgbm_diff": true
+    },
+    {
+      "bank": "m13_PointLightBank.param",
+      "row": 14,
+      "range_diff": true,
+      "ptde_end_larger": false,
+      "rgbm_diff": true
+    },
+    {
+      "bank": "m13_PointLightBank.param",
+      "row": 18,
+      "range_diff": true,
+      "ptde_end_larger": false,
+      "rgbm_diff": true
+    },
+    {
+      "bank": "m13_PointLightBank.param",
+      "row": 19,
+      "range_diff": false,
+      "ptde_end_larger": false,
+      "rgbm_diff": true
+    },
+    {
+      "bank": "m13_PointLightBank.param",
+      "row": 27,
+      "range_diff": true,
+      "ptde_end_larger": false,
+      "rgbm_diff": true
+    },
+    {
+      "bank": "m13_PointLightBank.param",
+      "row": 28,
+      "range_diff": true,
+      "ptde_end_larger": false,
+      "rgbm_diff": true
+    },
+    {
+      "bank": "m13_PointLightBank.param",
+      "row": 50,
+      "range_diff": true,
+      "ptde_end_larger": false,
+      "rgbm_diff": true
+    },
+    {
+      "bank": "m13_PointLightBank.param",
+      "row": 53,
+      "range_diff": true,
+      "ptde_end_larger": false,
+      "rgbm_diff": true
+    },
+    {
+      "bank": "m13_PointLightBank.param",
+      "row": 54,
+      "range_diff": true,
+      "ptde_end_larger": false,
+      "rgbm_diff": true
+    },
+    {
+      "bank": "m13_PointLightBank.param",
+      "row": 55,
+      "range_diff": false,
+      "ptde_end_larger": false,
+      "rgbm_diff": true
+    },
+    {
+      "bank": "m13_PointLightBank.param",
+      "row": 56,
+      "range_diff": false,
+      "ptde_end_larger": false,
+      "rgbm_diff": true
+    },
+    {
+      "bank": "m13_PointLightBank.param",
+      "row": 58,
+      "range_diff": true,
+      "ptde_end_larger": false,
+      "rgbm_diff": true
+    },
+    {
+      "bank": "m13_PointLightBank.param",
+      "row": 60,
+      "range_diff": true,
+      "ptde_end_larger": true,
+      "rgbm_diff": true
+    },
+    {
+      "bank": "m13_PointLightBank.param",
+      "row": 61,
+      "range_diff": true,
+      "ptde_end_larger": false,
+      "rgbm_diff": true
+    },
+    {
+      "bank": "m14_PointLightBank.param",
+      "row": 1,
+      "range_diff": true,
+      "ptde_end_larger": false,
+      "rgbm_diff": true
+    },
+    {
+      "bank": "m14_PointLightBank.param",
+      "row": 2,
+      "range_diff": true,
+      "ptde_end_larger": false,
+      "rgbm_diff": true
+    },
+    {
+      "bank": "m14_PointLightBank.param",
+      "row": 3,
+      "range_diff": true,
+      "ptde_end_larger": false,
+      "rgbm_diff": true
+    },
+    {
+      "bank": "m14_PointLightBank.param",
+      "row": 6,
+      "range_diff": true,
+      "ptde_end_larger": false,
+      "rgbm_diff": true
+    },
+    {
+      "bank": "m14_PointLightBank.param",
+      "row": 7,
+      "range_diff": false,
+      "ptde_end_larger": false,
+      "rgbm_diff": true
+    },
+    {
+      "bank": "m14_PointLightBank.param",
+      "row": 8,
+      "range_diff": true,
+      "ptde_end_larger": false,
+      "rgbm_diff": true
+    },
+    {
+      "bank": "m14_PointLightBank.param",
+      "row": 9,
+      "range_diff": true,
+      "ptde_end_larger": false,
+      "rgbm_diff": true
+    },
+    {
+      "bank": "m14_PointLightBank.param",
+      "row": 12,
+      "range_diff": true,
+      "ptde_end_larger": false,
+      "rgbm_diff": true
+    },
+    {
+      "bank": "m14_PointLightBank.param",
+      "row": 15,
+      "range_diff": true,
+      "ptde_end_larger": false,
+      "rgbm_diff": true
+    },
+    {
+      "bank": "m14_PointLightBank.param",
+      "row": 62,
+      "range_diff": true,
+      "ptde_end_larger": false,
+      "rgbm_diff": false
+    },
+    {
+      "bank": "m15_1_PointLightBank.param",
+      "row": 15,
+      "range_diff": true,
+      "ptde_end_larger": false,
+      "rgbm_diff": true
+    },
+    {
+      "bank": "m15_1_PointLightBank.param",
+      "row": 16,
+      "range_diff": true,
+      "ptde_end_larger": false,
+      "rgbm_diff": true
+    },
+    {
+      "bank": "m15_1_PointLightBank.param",
+      "row": 18,
+      "range_diff": true,
+      "ptde_end_larger": false,
+      "rgbm_diff": true
+    },
+    {
+      "bank": "m15_1_PointLightBank.param",
+      "row": 19,
+      "range_diff": true,
+      "ptde_end_larger": false,
+      "rgbm_diff": true
+    },
+    {
+      "bank": "m15_PointLightBank.param",
+      "row": 5,
+      "range_diff": true,
+      "ptde_end_larger": true,
+      "rgbm_diff": true
+    },
+    {
+      "bank": "m15_PointLightBank.param",
+      "row": 10,
+      "range_diff": true,
+      "ptde_end_larger": false,
+      "rgbm_diff": true
+    },
+    {
+      "bank": "m15_PointLightBank.param",
+      "row": 11,
+      "range_diff": true,
+      "ptde_end_larger": false,
+      "rgbm_diff": true
+    },
+    {
+      "bank": "m15_PointLightBank.param",
+      "row": 12,
+      "range_diff": true,
+      "ptde_end_larger": false,
+      "rgbm_diff": true
+    },
+    {
+      "bank": "m15_PointLightBank.param",
+      "row": 15,
+      "range_diff": true,
+      "ptde_end_larger": false,
+      "rgbm_diff": true
+    },
+    {
+      "bank": "m15_PointLightBank.param",
+      "row": 16,
+      "range_diff": true,
+      "ptde_end_larger": false,
+      "rgbm_diff": true
+    },
+    {
+      "bank": "m15_PointLightBank.param",
+      "row": 17,
+      "range_diff": true,
+      "ptde_end_larger": false,
+      "rgbm_diff": true
+    },
+    {
+      "bank": "m15_PointLightBank.param",
+      "row": 18,
+      "range_diff": true,
+      "ptde_end_larger": false,
+      "rgbm_diff": true
+    },
+    {
+      "bank": "m15_PointLightBank.param",
+      "row": 19,
+      "range_diff": true,
+      "ptde_end_larger": false,
+      "rgbm_diff": true
+    },
+    {
+      "bank": "m15_PointLightBank.param",
+      "row": 63,
+      "range_diff": true,
+      "ptde_end_larger": false,
+      "rgbm_diff": true
+    },
+    {
+      "bank": "m16_PointLightBank.param",
+      "row": 10,
+      "range_diff": true,
+      "ptde_end_larger": false,
+      "rgbm_diff": true
+    },
+    {
+      "bank": "m16_PointLightBank.param",
+      "row": 11,
+      "range_diff": true,
+      "ptde_end_larger": false,
+      "rgbm_diff": true
+    },
+    {
+      "bank": "m16_PointLightBank.param",
+      "row": 12,
+      "range_diff": true,
+      "ptde_end_larger": false,
+      "rgbm_diff": true
+    },
+    {
+      "bank": "m17_PointLightBank.param",
+      "row": 0,
+      "range_diff": true,
+      "ptde_end_larger": false,
+      "rgbm_diff": true
+    },
+    {
+      "bank": "m17_PointLightBank.param",
+      "row": 1,
+      "range_diff": true,
+      "ptde_end_larger": false,
+      "rgbm_diff": true
+    },
+    {
+      "bank": "m17_PointLightBank.param",
+      "row": 2,
+      "range_diff": true,
+      "ptde_end_larger": false,
+      "rgbm_diff": true
+    },
+    {
+      "bank": "m17_PointLightBank.param",
+      "row": 3,
+      "range_diff": false,
+      "ptde_end_larger": false,
+      "rgbm_diff": true
+    },
+    {
+      "bank": "m17_PointLightBank.param",
+      "row": 6,
+      "range_diff": true,
+      "ptde_end_larger": false,
+      "rgbm_diff": false
+    },
+    {
+      "bank": "m17_PointLightBank.param",
+      "row": 7,
+      "range_diff": true,
+      "ptde_end_larger": false,
+      "rgbm_diff": false
+    },
+    {
+      "bank": "m17_PointLightBank.param",
+      "row": 8,
+      "range_diff": true,
+      "ptde_end_larger": false,
+      "rgbm_diff": true
+    },
+    {
+      "bank": "m17_PointLightBank.param",
+      "row": 29,
+      "range_diff": true,
+      "ptde_end_larger": true,
+      "rgbm_diff": true
+    },
+    {
+      "bank": "m17_PointLightBank.param",
+      "row": 30,
+      "range_diff": true,
+      "ptde_end_larger": false,
+      "rgbm_diff": false
+    },
+    {
+      "bank": "m17_PointLightBank.param",
+      "row": 36,
+      "range_diff": true,
+      "ptde_end_larger": false,
+      "rgbm_diff": false
+    },
+    {
+      "bank": "m17_PointLightBank.param",
+      "row": 37,
+      "range_diff": true,
+      "ptde_end_larger": false,
+      "rgbm_diff": false
+    },
+    {
+      "bank": "m18_PointLightBank.param",
+      "row": 0,
+      "range_diff": true,
+      "ptde_end_larger": false,
+      "rgbm_diff": false
+    },
+    {
+      "bank": "m18_PointLightBank.param",
+      "row": 1,
+      "range_diff": true,
+      "ptde_end_larger": false,
+      "rgbm_diff": true
+    },
+    {
+      "bank": "m18_PointLightBank.param",
+      "row": 2,
+      "range_diff": true,
+      "ptde_end_larger": false,
+      "rgbm_diff": true
+    },
+    {
+      "bank": "m18_PointLightBank.param",
+      "row": 5,
+      "range_diff": true,
+      "ptde_end_larger": false,
+      "rgbm_diff": false
+    },
+    {
+      "bank": "m18_PointLightBank.param",
+      "row": 7,
+      "range_diff": true,
+      "ptde_end_larger": false,
+      "rgbm_diff": true
+    },
+    {
+      "bank": "m18_PointLightBank.param",
+      "row": 8,
+      "range_diff": true,
+      "ptde_end_larger": false,
+      "rgbm_diff": true
+    },
+    {
+      "bank": "m18_PointLightBank.param",
+      "row": 15,
+      "range_diff": true,
+      "ptde_end_larger": false,
+      "rgbm_diff": true
+    },
+    {
+      "bank": "m18_PointLightBank.param",
+      "row": 16,
+      "range_diff": false,
+      "ptde_end_larger": false,
+      "rgbm_diff": true
+    },
+    {
+      "bank": "m18_PointLightBank.param",
+      "row": 17,
+      "range_diff": true,
+      "ptde_end_larger": true,
+      "rgbm_diff": true
+    },
+    {
+      "bank": "m18_PointLightBank.param",
+      "row": 18,
+      "range_diff": true,
+      "ptde_end_larger": false,
+      "rgbm_diff": true
+    },
+    {
+      "bank": "m18_PointLightBank.param",
+      "row": 20,
+      "range_diff": true,
+      "ptde_end_larger": false,
+      "rgbm_diff": true
+    },
+    {
+      "bank": "m18_PointLightBank.param",
+      "row": 22,
+      "range_diff": true,
+      "ptde_end_larger": false,
+      "rgbm_diff": true
+    },
+    {
+      "bank": "m18_PointLightBank.param",
+      "row": 23,
+      "range_diff": true,
+      "ptde_end_larger": false,
+      "rgbm_diff": true
+    },
+    {
+      "bank": "m18_PointLightBank.param",
+      "row": 25,
+      "range_diff": true,
+      "ptde_end_larger": false,
+      "rgbm_diff": true
+    },
+    {
+      "bank": "m18_PointLightBank.param",
+      "row": 27,
+      "range_diff": true,
+      "ptde_end_larger": false,
+      "rgbm_diff": true
+    },
+    {
+      "bank": "m18_PointLightBank.param",
+      "row": 39,
+      "range_diff": true,
+      "ptde_end_larger": false,
+      "rgbm_diff": true
+    },
+    {
+      "bank": "m18_PointLightBank.param",
+      "row": 43,
+      "range_diff": true,
+      "ptde_end_larger": false,
+      "rgbm_diff": true
+    },
+    {
+      "bank": "m18_PointLightBank.param",
+      "row": 56,
+      "range_diff": false,
+      "ptde_end_larger": false,
+      "rgbm_diff": true
+    },
+    {
+      "bank": "m18_PointLightBank.param",
+      "row": 62,
+      "range_diff": true,
+      "ptde_end_larger": false,
+      "rgbm_diff": true
+    },
+    {
+      "bank": "m18_PointLightBank.param",
+      "row": 63,
+      "range_diff": true,
+      "ptde_end_larger": false,
+      "rgbm_diff": true
+    }
+  ],
+  "required_transport": [
+    "exact bank and row identity",
+    "paired rows and beta for LerpBank",
+    "PTDE q plus Begin/End",
+    "selection/culling support before consumer"
+  ],
+  "runtime_activation": "OPEN",
+  "pixel_behavior": "OPEN"
+}

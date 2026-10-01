@@ -35,6 +35,33 @@ std::uint64_t command_key(reshade::api::command_list *cmd_list) noexcept
         reinterpret_cast<std::uintptr_t>(cmd_list));
 }
 
+struct context1_tls_entry {
+    const draw_state_transaction_runtime *owner = nullptr;
+    ID3D11DeviceContext *context = nullptr;
+    ID3D11DeviceContext1 *context1 = nullptr;
+    std::uint64_t epoch = 0u;
+};
+
+constexpr std::size_t k_context1_tls_cache_size = 8u;
+static_assert(
+    (k_context1_tls_cache_size &
+     (k_context1_tls_cache_size - 1u)) == 0u);
+
+thread_local std::array<
+    context1_tls_entry,
+    k_context1_tls_cache_size> g_context1_tls_cache{};
+
+std::size_t context1_tls_index(
+    ID3D11DeviceContext *context) noexcept
+{
+    const auto value =
+        static_cast<std::uint64_t>(
+            reinterpret_cast<std::uintptr_t>(context));
+    return static_cast<std::size_t>(
+        ((value >> 4u) ^ (value >> 12u)) &
+        (k_context1_tls_cache_size - 1u));
+}
+
 template <typename T, std::size_t N>
 bool unique_slots(
     const std::array<T, N> &bindings,
@@ -82,6 +109,100 @@ draw_state_transaction_runtime::draw_state_transaction_runtime(
     core::renderer_core &core) noexcept
     : core_(core)
 {
+}
+
+ID3D11DeviceContext1 *
+draw_state_transaction_runtime::context1_for(
+    ID3D11DeviceContext *context) noexcept
+{
+    if (context == nullptr)
+        return nullptr;
+
+    const auto epoch =
+        context1_cache_epoch_.load(
+            std::memory_order_acquire);
+    auto &tls =
+        g_context1_tls_cache[
+            context1_tls_index(context)];
+
+    if (tls.owner == this &&
+        tls.context == context &&
+        tls.epoch == epoch)
+        return tls.context1;
+
+    std::lock_guard<std::mutex> lock(
+        context1_cache_mutex_);
+
+    const auto found =
+        context1_cache_.find(context);
+    if (found != context1_cache_.end()) {
+        tls = {
+            this,
+            context,
+            found->second.context1,
+            context1_cache_epoch_.load(
+                std::memory_order_relaxed)
+        };
+        return found->second.context1;
+    }
+
+    ID3D11DeviceContext1 *context1 = nullptr;
+    (void)context->QueryInterface(
+        __uuidof(ID3D11DeviceContext1),
+        reinterpret_cast<void **>(&context1));
+
+    ID3D11Device *device = nullptr;
+    context->GetDevice(&device);
+
+    try {
+        const auto inserted =
+            context1_cache_.emplace(
+                context,
+                context1_cache_record{
+                    device,
+                    context1});
+        if (!inserted.second) {
+            if (context1 != nullptr)
+                context1->Release();
+            if (device != nullptr)
+                device->Release();
+            context1 =
+                inserted.first->second.context1;
+        }
+    } catch (...) {
+        if (context1 != nullptr)
+            context1->Release();
+        if (device != nullptr)
+            device->Release();
+        context1 = nullptr;
+    }
+
+    tls = {
+        this,
+        context,
+        context1,
+        context1_cache_epoch_.load(
+            std::memory_order_relaxed)
+    };
+    return context1;
+}
+
+void draw_state_transaction_runtime::
+release_context1_cache() noexcept
+{
+    context1_cache_epoch_.fetch_add(
+        1u,
+        std::memory_order_acq_rel);
+
+    std::lock_guard<std::mutex> lock(
+        context1_cache_mutex_);
+    for (auto &entry : context1_cache_) {
+        if (entry.second.context1 != nullptr)
+            entry.second.context1->Release();
+        if (entry.second.device != nullptr)
+            entry.second.device->Release();
+    }
+    context1_cache_.clear();
 }
 
 bool draw_state_transaction_runtime::validate_mutation(
@@ -252,8 +373,10 @@ void draw_state_transaction_runtime::release_state(
         if (state.samplers[i].sampler != nullptr)
             state.samplers[i].sampler->Release();
 
-    if (state.context1 != nullptr)
-        state.context1->Release();
+    // context1 is borrowed from the runtime cache. The cache owns the COM
+    // reference and releases it at device teardown/reset, so a replay never
+    // pays AddRef/Release for the same recording context.
+    state.context1 = nullptr;
 
     state = {};
 }
@@ -275,6 +398,7 @@ bool draw_state_transaction_runtime::begin(
     auto *ctx =
         reinterpret_cast<ID3D11DeviceContext *>(
             cmd_list->get_native());
+    state.context = ctx;
     if (ctx == nullptr) {
         telemetry::hot_count(begin_fail_);
         return false;
@@ -282,9 +406,7 @@ bool draw_state_transaction_runtime::begin(
 
     ID3D11DeviceContext1 *ctx1 = nullptr;
     if (mutation.constant_buffer_count != 0u) {
-        (void)ctx->QueryInterface(
-            __uuidof(ID3D11DeviceContext1),
-            reinterpret_cast<void **>(&ctx1));
+        ctx1 = context1_for(ctx);
         state.context1 = ctx1;
     }
 
@@ -579,9 +701,7 @@ bool draw_state_transaction_runtime::restore(
         return false;
     }
 
-    auto *ctx =
-        reinterpret_cast<ID3D11DeviceContext *>(
-            cmd_list->get_native());
+    auto *ctx = state.context;
     if (ctx == nullptr) {
         if (state.core_started && state.command != 0u)
             core_restored =
@@ -782,9 +902,7 @@ draw_tx_result draw_state_transaction_runtime::replay_draw(
     if (!begin(cmd_list, mutation, state))
         return draw_tx_result::not_issued;
 
-    auto *ctx =
-        reinterpret_cast<ID3D11DeviceContext *>(
-            cmd_list->get_native());
+    auto *ctx = state.context;
 
     if (instance_count == 1u &&
         first_instance == 0u) {
@@ -820,9 +938,7 @@ draw_state_transaction_runtime::replay_draw_indexed(
     if (!begin(cmd_list, mutation, state))
         return draw_tx_result::not_issued;
 
-    auto *ctx =
-        reinterpret_cast<ID3D11DeviceContext *>(
-            cmd_list->get_native());
+    auto *ctx = state.context;
 
     if (instance_count == 1u &&
         first_instance == 0u) {
@@ -846,6 +962,81 @@ draw_state_transaction_runtime::replay_draw_indexed(
         : draw_tx_result::issued_restore_failed;
 }
 
+bool draw_state_transaction_runtime::mutate_restore_only(
+    reshade::api::command_list *cmd_list,
+    const draw_tx_mutation &mutation) noexcept
+{
+    transaction_state state{};
+    if (!begin(cmd_list, mutation, state))
+        return false;
+    return restore(cmd_list, state);
+}
+
+bool draw_state_transaction_runtime::raw_replay_draw(
+    reshade::api::command_list *cmd_list,
+    std::uint32_t vertex_count,
+    std::uint32_t instance_count,
+    std::uint32_t first_vertex,
+    std::uint32_t first_instance) noexcept
+{
+    if (cmd_list == nullptr)
+        return false;
+
+    auto *ctx =
+        reinterpret_cast<ID3D11DeviceContext *>(
+            cmd_list->get_native());
+    if (ctx == nullptr)
+        return false;
+
+    if (instance_count == 1u &&
+        first_instance == 0u) {
+        ctx->Draw(
+            vertex_count,
+            first_vertex);
+    } else {
+        ctx->DrawInstanced(
+            vertex_count,
+            instance_count,
+            first_vertex,
+            first_instance);
+    }
+    return true;
+}
+
+bool draw_state_transaction_runtime::raw_replay_draw_indexed(
+    reshade::api::command_list *cmd_list,
+    std::uint32_t index_count,
+    std::uint32_t instance_count,
+    std::uint32_t first_index,
+    std::int32_t vertex_offset,
+    std::uint32_t first_instance) noexcept
+{
+    if (cmd_list == nullptr)
+        return false;
+
+    auto *ctx =
+        reinterpret_cast<ID3D11DeviceContext *>(
+            cmd_list->get_native());
+    if (ctx == nullptr)
+        return false;
+
+    if (instance_count == 1u &&
+        first_instance == 0u) {
+        ctx->DrawIndexed(
+            index_count,
+            first_index,
+            vertex_offset);
+    } else {
+        ctx->DrawIndexedInstanced(
+            index_count,
+            instance_count,
+            first_index,
+            vertex_offset,
+            first_instance);
+    }
+    return true;
+}
+
 draw_tx_telemetry
 draw_state_transaction_runtime::telemetry() const noexcept
 {
@@ -866,8 +1057,45 @@ bool draw_state_transaction_runtime::quarantined() const noexcept
     return quarantined_.load();
 }
 
+void draw_state_transaction_runtime::on_destroy_device(
+    reshade::api::device *device) noexcept
+{
+    if (device == nullptr)
+        return;
+
+    auto *native =
+        reinterpret_cast<ID3D11Device *>(
+            device->get_native());
+    if (native == nullptr)
+        return;
+
+    // Invalidate thread-local borrowed pointers before releasing cached COM
+    // references. ReShade device teardown is the lifetime boundary for all
+    // recording contexts owned by this device.
+    context1_cache_epoch_.fetch_add(
+        1u,
+        std::memory_order_acq_rel);
+
+    std::lock_guard<std::mutex> lock(
+        context1_cache_mutex_);
+    for (auto it = context1_cache_.begin();
+         it != context1_cache_.end();) {
+        if (it->second.device != native) {
+            ++it;
+            continue;
+        }
+
+        if (it->second.context1 != nullptr)
+            it->second.context1->Release();
+        if (it->second.device != nullptr)
+            it->second.device->Release();
+        it = context1_cache_.erase(it);
+    }
+}
+
 void draw_state_transaction_runtime::reset() noexcept
 {
+    release_context1_cache();
     draw_serial_.store(0);
     begin_ok_.store(0);
     begin_fail_.store(0);
