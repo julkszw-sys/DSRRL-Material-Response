@@ -240,13 +240,21 @@ void hot_count(
             std::memory_order_relaxed);
 }
 
-std::uint64_t fnv_name(const std::wstring &name) noexcept
+std::uint64_t fnv_name(
+    const wchar_t *name,
+    std::size_t length) noexcept
 {
     std::uint64_t h = 14695981039346656037ull;
 
-    for (wchar_t ch : name) {
+    if (name == nullptr)
+        return h;
+
+    for (std::size_t i = 0u;
+         i < length;
+         ++i) {
         std::uint32_t c =
-            static_cast<std::uint32_t>(ch);
+            static_cast<std::uint32_t>(
+                name[i]);
 
         if (c >= static_cast<std::uint32_t>(L'A') &&
             c <= static_cast<std::uint32_t>(L'Z'))
@@ -257,6 +265,14 @@ std::uint64_t fnv_name(const std::wstring &name) noexcept
     }
 
     return h;
+}
+
+std::uint64_t fnv_name(
+    const std::wstring &name) noexcept
+{
+    return fnv_name(
+        name.data(),
+        name.size());
 }
 
 void release_view(
@@ -946,13 +962,17 @@ void on_init_resource_view(
         view.handle == 0u)
         return;
 
-    std::wstring logical_name;
-    if (!texture_identity_transport::snapshot(
-            logical_name))
+    const wchar_t *logical_name_raw = nullptr;
+    std::size_t logical_name_length = 0u;
+    if (!texture_identity_transport::snapshot_raw(
+            logical_name_raw,
+            logical_name_length))
         return;
 
     const auto logical_hash =
-        fnv_name(logical_name);
+        fnv_name(
+            logical_name_raw,
+            logical_name_length);
 
     const bool subsurface_body_spec =
         exact_subsurface_body_spec_hash(
@@ -972,6 +992,15 @@ void on_init_resource_view(
         !diffuse_member &&
         !normal_member)
         return;
+
+    std::wstring logical_name;
+    try {
+        logical_name.assign(
+            logical_name_raw,
+            logical_name_length);
+    } catch (...) {
+        return;
+    }
 
     auto *native_device =
         reinterpret_cast<ID3D11Device *>(
