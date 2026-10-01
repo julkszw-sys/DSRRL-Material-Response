@@ -3339,8 +3339,10 @@ void log_state(const char *tag) noexcept
     const auto env_lerp =
         dsrrl::runtime::
             hemenvlerp_receiver_pipeline_stats();
+    const auto pmetal_native =
+        g_pmetal_native_draw.telemetry();
 
-    char env_line[1536]{};
+    char env_line[1792]{};
     std::snprintf(
         env_line,
         sizeof(env_line),
@@ -3349,6 +3351,7 @@ void log_state(const char *tag) noexcept
         "native=%llu/%llu hash_miss=%llu views=%llu pack=%llu/%llu pack_ready=%u sampler=%u "
         "cube=%llu/%llu prepare=%llu/%llu candidate=%llu material_reject=%llu semantic_reject=%llu "
         "source_reject=%llu blend_hold=%llu probe_reject=%llu spec_reject=%llu req=%llu b12_map=%llu/%llu srv_shadow=%llu/%llu q=%u "
+        "native_draw=%llu/%llu/%llu reject=%llu restore_fail=%llu hook=%u nq=%u "
         "lerp_reg=%llu/%llu lerp_candidate=%llu lerp_req=%llu lerp_pipe=%llu/%llu bind=%llu/%llu miss=%llu conflict=%llu",
         tag,
         static_cast<unsigned long long>(
@@ -3410,6 +3413,18 @@ void log_state(const char *tag) noexcept
         static_cast<unsigned long long>(
             env_draw.srv_shadow_fallbacks),
         env_draw.quarantined ? 1u : 0u,
+        static_cast<unsigned long long>(
+            pmetal_native.armed),
+        static_cast<unsigned long long>(
+            pmetal_native.draw_applied),
+        static_cast<unsigned long long>(
+            pmetal_native.draw_indexed_applied),
+        static_cast<unsigned long long>(
+            pmetal_native.arm_reject),
+        static_cast<unsigned long long>(
+            pmetal_native.restore_fail),
+        pmetal_native.hook_active ? 1u : 0u,
+        pmetal_native.quarantined ? 1u : 0u,
         static_cast<unsigned long long>(
             env_draw.lerp_replacement_register_ok),
         static_cast<unsigned long long>(
