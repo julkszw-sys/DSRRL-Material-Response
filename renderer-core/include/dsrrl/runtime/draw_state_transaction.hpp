@@ -122,6 +122,20 @@ public:
         reshade::api::command_list *cmd_list,
         const draw_tx_mutation &mutation) noexcept;
 
+    // Low-level performance bisectors. These intentionally isolate native
+    // state capture, native mutate+restore, and core bookkeeping from replay.
+    bool capture_only(
+        reshade::api::command_list *cmd_list,
+        const draw_tx_mutation &mutation) noexcept;
+
+    bool native_mutate_restore_only(
+        reshade::api::command_list *cmd_list,
+        const draw_tx_mutation &mutation) noexcept;
+
+    bool core_transaction_only(
+        reshade::api::command_list *cmd_list,
+        const draw_tx_mutation &mutation) noexcept;
+
     bool raw_replay_draw(
         reshade::api::command_list *cmd_list,
         std::uint32_t vertex_count,
