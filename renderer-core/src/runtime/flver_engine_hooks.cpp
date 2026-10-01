@@ -69,6 +69,9 @@ std::atomic_bool g_runtime_mtd_cache_hit{false};
 std::atomic_bool g_runtime_mtd_selection_published{false};
 std::atomic<std::uint64_t> g_owner_consumed{0};
 
+std::atomic_bool g_selector_upper_lower_enabled{true};
+std::atomic_bool g_selector_hemdir3_enabled{true};
+
 void latch_once(
     std::atomic_bool &flag) noexcept
 {
@@ -497,15 +500,21 @@ extern "C" void dsrrl_flver_selector_observer(
  material_owner_selection_clear();
  pmetal_env_source_selector_clear();
 
- hemdir3_mode_transport::selector_begin(
-     incoming_mode);
+ if (g_selector_hemdir3_enabled.load(
+         std::memory_order_relaxed))
+  hemdir3_mode_transport::selector_begin(
+      incoming_mode);
 
- upper_lower_selector_event_bridge(
-     owner,
-     ret,
-     r14,
-     r15,
-     g_state.builder_armed);
+ if (g_selector_upper_lower_enabled.load(
+         std::memory_order_relaxed))
+  upper_lower_selector_event_bridge(
+      owner,
+      ret,
+      r14,
+      r15,
+      g_state.builder_armed);
+ else if (g_state.builder_armed)
+  fixed_pointlight_selector_event_bridge(owner);
 
  if(g_base==0u || ret==nullptr || material_index<0){telemetry::hot_count(g_owner_fail_open);return;}
  const auto ret_addr=reinterpret_cast<std::uintptr_t>(ret);
@@ -543,9 +552,11 @@ extern "C" void dsrrl_flver_selector_observer(
     // selector event has proven the actual FLVER/material owner tuple. The
     // LightBank selector bridge above merely staged the matching source token;
     // non-P_Metal materials must never publish it into P_Metal draw state.
-    upper_lower_pmetal_material_event_bridge(
-        owner,
-        identity);
+    if (g_selector_upper_lower_enabled.load(
+            std::memory_order_relaxed))
+     upper_lower_pmetal_material_event_bridge(
+         owner,
+         identity);
     pmetal_env_source_selector_event(owner, ret, r14, r15, selector_stack, identity);
     telemetry::hot_count(g_exact_owner_ready);
     return;
@@ -577,9 +588,18 @@ extern "C" void dsrrl_flver_selector_observer(
 
  telemetry::hot_count(g_owner_fail_open);
 }
-bool install(bool enable_clustered_builder) noexcept {
+bool install(
+    bool enable_clustered_builder,
+    bool enable_upper_lower_selector,
+    bool enable_hemdir3_selector) noexcept {
  if(g_p.patched||g_s.patched||g_d.patched||g_m.patched||g_b.patched)return false;
  g_state={};
+ g_selector_upper_lower_enabled.store(
+     enable_upper_lower_selector,
+     std::memory_order_relaxed);
+ g_selector_hemdir3_enabled.store(
+     enable_hemdir3_selector,
+     std::memory_order_relaxed);
  g_runtime_mtd_classified.store(false);
  g_runtime_mtd_cache_hit.store(false);
  g_runtime_mtd_selection_published.store(false);
@@ -640,6 +660,12 @@ void uninstall() noexcept {
  material_owner_selection_clear();
  pmetal_env_source_selector_clear();
  flver_identity_reset();
+ g_selector_upper_lower_enabled.store(
+     true,
+     std::memory_order_relaxed);
+ g_selector_hemdir3_enabled.store(
+     true,
+     std::memory_order_relaxed);
  g_state={};
 }
 hook_status status() noexcept
