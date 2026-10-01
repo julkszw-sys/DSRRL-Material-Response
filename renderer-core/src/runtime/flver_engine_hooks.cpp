@@ -629,6 +629,43 @@ void __fastcall mtd_entry(
  observe_exact_runtime_mtd(material,raw,len,semantic_key);
  if(g_mo)g_mo(material,raw,len,semantic_key);
 }
+
+bool publish_exact_selector_identity(
+    void *owner,
+    void *ret,
+    void *r14,
+    void *r15,
+    const void *selector_stack,
+    const operators::material_response::
+        material_identity &identity) noexcept
+{
+    if (!identity.valid ||
+        !identity.owner_tuple_exact ||
+        !material_owner_selection_publish(
+            identity))
+        return false;
+
+    if (g_selector_upper_lower_enabled.load(
+            std::memory_order_relaxed))
+        upper_lower_pmetal_material_event_bridge(
+            owner,
+            identity);
+
+    // Route 345 is necessary but not sufficient. The isolated source runtime
+    // retains exact semantic/raw-MTD validation before donor decode.
+    if (identity.route_index == 345u)
+        pmetal_env_source_selector_event(
+            owner,
+            ret,
+            r14,
+            r15,
+            selector_stack,
+            identity);
+
+    telemetry::hot_count(
+        g_exact_owner_ready);
+    return true;
+}
 }
 extern "C" void dsrrl_clustered_pnts_builder_observer(
     void *draw,
@@ -688,42 +725,55 @@ extern "C" void dsrrl_flver_selector_observer(
       owner,
       actual_material);
 
+ operators::material_response::material_identity
+     cached_identity{};
+ if(selector_identity_cache_lookup(
+        container,
+        material_index,
+        cached_identity)){
+  telemetry::hot_count(
+      g_selector_identity_cache_hits);
+
+  if(publish_exact_selector_identity(
+        owner,
+        ret,
+        r14,
+        r15,
+        selector_stack,
+        cached_identity))
+   return;
+ } else {
+  telemetry::hot_count(
+      g_selector_identity_cache_misses);
+ }
+
  actual_material_owner_observation observation{};
  if(flver_identity_enrich_owner(
-        container,static_cast<std::uint32_t>(material_index),observation)){
+        container,
+        static_cast<std::uint32_t>(
+            material_index),
+        observation)){
   telemetry::hot_count(g_owner_sha_hits);
 
-  if(enrich_exact_owner_mtd_identity(observation)){
+  if(enrich_exact_owner_mtd_identity(
+        observation)){
    telemetry::hot_count(g_owner_mtd_hits);
 
    const auto identity=
        make_actual_material_identity(
            observation);
-   if(identity.owner_tuple_exact &&
-      material_owner_selection_publish(identity)){
-    // Complete the P_Metal LightBank semantic join only after this exact
-    // selector event has proven the actual FLVER/material owner tuple. The
-    // LightBank selector bridge above merely staged the matching source token;
-    // non-P_Metal materials must never publish it into P_Metal draw state.
-    if (g_selector_upper_lower_enabled.load(
-            std::memory_order_relaxed))
-     upper_lower_pmetal_material_event_bridge(
-         owner,
-         identity);
 
-    // Route 345 is only a necessary P_Metal condition; the isolated source
-    // runtime still verifies exact semantic/raw-MTD identity before decoding.
-    // Avoid entering that decoder for every other exact material selector.
-    if (identity.route_index == 345u)
-     pmetal_env_source_selector_event(
-         owner,
-         ret,
-         r14,
-         r15,
-         selector_stack,
-         identity);
-
-    telemetry::hot_count(g_exact_owner_ready);
+   if(publish_exact_selector_identity(
+          owner,
+          ret,
+          r14,
+          r15,
+          selector_stack,
+          identity)){
+    selector_identity_cache_publish(
+        container,
+        material_index,
+        identity);
     return;
    }
   }
