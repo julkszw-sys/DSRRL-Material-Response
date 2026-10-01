@@ -11,6 +11,8 @@ struct flver_identity_telemetry {
     std::uint64_t lookups = 0;
     std::uint64_t hits = 0;
     std::uint64_t misses = 0;
+    std::uint64_t tls_hits = 0;
+    std::uint64_t mutex_fallbacks = 0;
     std::uint64_t erases = 0;
     std::uint64_t invalid_raw = 0;
 };
