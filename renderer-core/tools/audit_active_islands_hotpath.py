@@ -59,10 +59,11 @@ def main():
     if "lock_guard" in enabled_body or "mutex_" in enabled_body:
         fail("feature_registry::enabled regressed to a mutex-backed hot read")
 
-    # One-entry FLVER identity caching is insufficient for interleaved model
-    # selectors. Global epoch still invalidates the whole TLS table on parse/
-    # destroy, preserving the old fail-open invalidation semantics.
-    require(flver_registry,"k_lookup_tls_cache_size = 256u","interleaved FLVER TLS cache")
+    # Interleaved model selectors must remain on a bounded, set-associative
+    # TLS fast path. Global epoch still invalidates cached verdicts on model
+    # replacement/destroy, preserving fail-open pointer-reuse semantics.
+    require(flver_registry,"k_lookup_tls_cache_sets = 128u","FLVER TLS cache sets")
+    require(flver_registry,"k_lookup_tls_cache_ways = 4u","4-way interleaved FLVER TLS cache")
     require(flver_registry,"thread_local std::array<","FLVER TLS cache storage")
     parse_body=function_body(
         flver_registry,
@@ -87,9 +88,12 @@ def main():
         "bool flver_identity_enrich_owner(")
     require_before(
         lookup_body,
-        "if(cached.model==model",
+        "lookup_tls_cache_hit(",
         "std::lock_guard<std::mutex> lock(g_mutex)",
         "FLVER TLS must precede global map lock")
+    require(lookup_body,
+        "g_mutex_fallbacks",
+        "FLVER global-lock fallback telemetry")
 
     # PointLight bypass must remove the actual clustered builder detour, not
     # merely make its observer a no-op.
