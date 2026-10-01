@@ -61,6 +61,11 @@ def main() -> None:
     require(source, "k_pmetal_material_route = 345u", "exact P_Metal route gate")
     require(source, "P_Metal[DSB].mtd", "exact P_Metal semantic gate")
     require(flver, "if (identity.route_index == 345u)", "pre-decoder P_Metal route gate")
+    require(flver, "k_selector_identity_cache_sets = 128u", "final selector identity cache sets")
+    require(flver, "k_selector_identity_cache_ways = 4u", "final selector identity cache associativity")
+    require(flver, "selector_identity_cache_lookup(", "final selector identity cache lookup")
+    require(flver, "selector_identity_cache_publish(", "final selector identity cache publication")
+    require(flver, "publish_exact_selector_identity(", "shared exact selector publication")
     forbid(upper_lower, "pmetal_env_source_runtime::install()", "active P_Metal source must not live in U/L module")
     forbid(upper_lower, "void pmetal_env_source_selector_event(", "active P_Metal selector source must not live in U/L module")
 
