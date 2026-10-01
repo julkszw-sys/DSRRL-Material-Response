@@ -47,6 +47,7 @@ constexpr std::uint32_t k_effect_fail_mutation = 1u << 14u;
 
 std::atomic_bool g_source_cut_logged{false};
 std::atomic_bool g_resource_mode_logged{false};
+std::atomic_bool g_source_frontier_logged{false};
 std::atomic<std::uint32_t> g_prepare_stage_log_mask{0u};
 
 void log_prepare_stage_once(
@@ -645,6 +646,52 @@ bool pmetal_envspec_draw_runtime::prepare(
             material,
             decision,
             family);
+
+        if (!g_source_frontier_logged.exchange(
+                true,
+                std::memory_order_relaxed)) {
+            const auto source_state =
+                source_.telemetry();
+            char source_line[1024]{};
+            std::snprintf(
+                source_line,
+                sizeof(source_line),
+                "[DSRRL ENVSPEC SOURCE] exact_seen=%u parent=%u descriptor=%u endpoint=%u manager=%u decode_a=%u decode_b=%u exact_publish=%llu decode_fail=%llu consumer_ok=%llu consumer_fail=%llu hook_single=%llu hook_blend=%llu hook_publish=%llu hook_consume=%llu pub_tid=%u con_tid=%u con_tls=%u selector_active=%u hook_single_armed=%u hook_blend_armed=%u",
+                source_state.selector_exact_seen ? 1u : 0u,
+                source_state.parent_gate_ok ? 1u : 0u,
+                source_state.descriptor_gate_ok ? 1u : 0u,
+                source_state.endpoint_gate_ok ? 1u : 0u,
+                source_state.manager_gate_ok ? 1u : 0u,
+                source_state.source_a_decode_ok ? 1u : 0u,
+                source_state.source_b_decode_ok ? 1u : 0u,
+                static_cast<unsigned long long>(
+                    source_state.exact_publish),
+                static_cast<unsigned long long>(
+                    source_state.decode_fail),
+                static_cast<unsigned long long>(
+                    source_state.consumer_ok),
+                static_cast<unsigned long long>(
+                    source_state.consumer_fail),
+                static_cast<unsigned long long>(
+                    source_state.hook_single_seen),
+                static_cast<unsigned long long>(
+                    source_state.hook_blend_seen),
+                static_cast<unsigned long long>(
+                    source_state.hook_publish),
+                static_cast<unsigned long long>(
+                    source_state.hook_consume),
+                static_cast<unsigned>(
+                    source_state.last_publish_tid),
+                static_cast<unsigned>(
+                    source_state.last_consumer_tid),
+                source_state.last_consumer_local_valid ? 1u : 0u,
+                source_state.selector_carrier_active ? 1u : 0u,
+                source_state.hook_single_armed ? 1u : 0u,
+                source_state.hook_blend_armed ? 1u : 0u);
+            reshade::log::message(
+                reshade::log::level::info,
+                source_line);
+        }
 
         if (telemetry::effect_enabled() &&
             !g_source_cut_logged.exchange(
@@ -1354,6 +1401,7 @@ void pmetal_envspec_draw_runtime::reset() noexcept
     effect_fail_mask_.store(0u);
     g_source_cut_logged.store(false);
     g_resource_mode_logged.store(false);
+    g_source_frontier_logged.store(false);
     g_prepare_stage_log_mask.store(0u);
     quarantined_.store(false);
 }
