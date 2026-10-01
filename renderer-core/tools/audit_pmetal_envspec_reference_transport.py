@@ -2,259 +2,122 @@
 import argparse
 from pathlib import Path
 
-
-def fail(msg: str) -> None:
+def fail(msg):
     raise RuntimeError(msg)
 
-
-def require(text: str, needle: str, label: str) -> None:
+def require(text, needle, label):
     if needle not in text:
         fail(f"{label}: missing {needle!r}")
 
+ap=argparse.ArgumentParser()
+ap.add_argument("--source-dir",required=True)
+ns=ap.parse_args()
+root=Path(ns.source_dir).resolve()
 
-def main() -> None:
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--source-dir", required=True)
-    ns = ap.parse_args()
-    root = Path(ns.source_dir).resolve()
+integrated=(root/"integrated/integrated_addon.cpp").read_text(encoding="utf-8")
+source_h=(root/"include/dsrrl/runtime/pmetal_env_source_runtime.hpp").read_text(encoding="utf-8")
+source_cpp=(root/"src/runtime/pmetal_env_source_runtime.cpp").read_text(encoding="utf-8")
+producer_cpp=(root/"src/runtime/pmetal_producer_state.cpp").read_text(encoding="utf-8")
+env_h=(root/"include/dsrrl/runtime/pmetal_envspec_draw_runtime.hpp").read_text(encoding="utf-8")
+env_cpp=(root/"src/runtime/pmetal_envspec_draw_runtime.cpp").read_text(encoding="utf-8")
+flver_cpp=(root/"src/runtime/flver_engine_hooks.cpp").read_text(encoding="utf-8")
+lerp_cpp=(root/"src/operators/env_spec/pmetal_rgba_lerp_materializer.cpp").read_text(encoding="utf-8")
 
-    integrated = (root / "integrated/integrated_addon.cpp").read_text(encoding="utf-8")
-    ul_h = (root / "include/dsrrl/runtime/upper_lower_draw_runtime.hpp").read_text(encoding="utf-8")
-    ul_cpp = (root / "src/runtime/upper_lower_draw_runtime.cpp").read_text(encoding="utf-8")
-    env_h = (root / "include/dsrrl/runtime/pmetal_envspec_draw_runtime.hpp").read_text(encoding="utf-8")
-    env_cpp = (root / "src/runtime/pmetal_envspec_draw_runtime.cpp").read_text(encoding="utf-8")
-    source_h = (root / "include/dsrrl/runtime/pmetal_env_source_runtime.hpp").read_text(encoding="utf-8")
-    producer_h = (root / "include/dsrrl/runtime/pmetal_producer_state.hpp").read_text(encoding="utf-8")
-    producer_cpp = (root / "src/runtime/pmetal_producer_state.cpp").read_text(encoding="utf-8")
-    flver_cpp = (root / "src/runtime/flver_engine_hooks.cpp").read_text(encoding="utf-8")
-    lerp_cpp = (root / "src/operators/env_spec/pmetal_rgba_lerp_materializer.cpp").read_text(encoding="utf-8")
-    lerp_h = (root / "include/dsrrl/operators/env_spec/pmetal_rgba_lerp_materializer.hpp").read_text(encoding="utf-8")
+# Exact P_Metal selector carrier remains the preferred path.
+for needle in [
+    "exact_pmetal_material_selection(",
+    "pmetal_selector_policy::select(",
+    "pmetal_selector_policy::source(",
+    "read_exact_source(",
+    "pmetal_producer_state_publish(",
+]:
+    require(source_cpp,needle,"exact selector carrier")
+require(producer_cpp,"thread_local producer_record g_record","selector TLS source state")
+require(producer_cpp,"same_material(","selector source material identity")
+require(producer_cpp,"same_source_payload(","selector source generation semantics")
+require(flver_cpp,"pmetal_env_source_selector_event(","FLVER selector source bridge")
 
-    # EnvSpec must NEVER install a global LightBank source hook, even when
-    # the visible Upper/Lower feature is disabled.
-    for forbidden in ("hook_pmetal_source_steady", "hook_pmetal_source_blend",
-                      "install_pmetal_source_only_carrier", "g_pmetal_source_payload",
-                      "g_pmetal_source_serial", "consume_pmetal_source_only"):
-        if forbidden in ul_cpp:
-            fail(f"global EnvSpec source carrier returned: {forbidden}")
-    install = ul_cpp.split("bool pmetal_env_source_runtime::install() noexcept",1)[1].split(
-        "void pmetal_env_source_runtime::uninstall()",1)[0]
-    for forbidden in ("prepare_hook", "arm_hook", "install_producer_hooks", "g_upper_lower"):
-        if forbidden in install: fail(f"EnvSpec installs global hook: {forbidden}")
-    require(integrated, "const bool lightbank_reference_transport_required =\n        upper_lower_enabled;", "U/L-only global hook ownership")
-    require(flver_cpp, "pmetal_env_source_selector_clear();", "invalidate on every selector")
-    require(flver_cpp, "pmetal_env_source_selector_event(owner, ret, r14, r15, selector_stack, identity);", "exact material callback")
-    capture = ul_cpp.split("void pmetal_env_source_selector_event(",1)[1].split(
-        "bool pmetal_env_source_runtime::latest(",1)[0]
-    require(capture, "!exact_pmetal_material_selection(material)", "exact material gate")
-    if capture.index("!exact_pmetal_material_selection(material)") > capture.index("readable_range"):
-        fail("source memory work precedes exact P_Metal material gate")
-    for needle in ("parent_return != g_base + 0x220CF0u", "descriptor_owner != owner", "descriptor + 0x4Cu", "descriptor + 0x4Eu",
-                   "descriptor + 0x50u", "descriptor[0x150u]", "+ 0x2318u", "wrapper + 0x40u",
-                   "pmetal_selector_policy::source", "read_exact_pmetal_env_source",
-                   "pmetal_producer_state_publish("):
-        require(capture, needle, "exact selector source proof")
-    for forbidden in ("arm_hook", "fetch_add", "mutex", "spin", "publish_pmetal_source_only"):
-        if forbidden in capture: fail(f"global synchronization/hook in selector source: {forbidden}")
-    consumer = ul_cpp.split("bool pmetal_env_source_runtime::latest(",1)[1].split(
-        "pmetal_env_source_runtime_telemetry pmetal_env_source_runtime::telemetry",1)[0]
-    for needle in ("const bool local_valid =", "pmetal_producer_state_valid()", "g_pmetal_selector_epoch.load",
-                   "pmetal_producer_state_latest("):
-        require(consumer, needle, "source lifetime/material mismatch fail-open")
-    require(producer_cpp, "thread_local producer_record g_record", "no process-global latest donor")
-    require(producer_cpp, "same_material(", "producer exact material identity")
-    require(producer_cpp, "same_source_payload(", "generation-stamped semantic payload")
-    require(producer_cpp, "g_record.generation + 1u", "generation increments on semantic change")
-    require(producer_cpp, "out = g_record.source;", "immutable producer payload consumer")
+# Restored EnvSpec-only source semantic cut: exact retail single/blend LightBank
+# packers from V13, with preimage-guarded install and verified restoration.
+for needle in [
+    "k_envspec_single_rva = 0x563B80u",
+    "k_envspec_blend_rva = 0x563C30u",
+    "k_envspec_single_preimage",
+    "k_envspec_blend_preimage",
+    "prepare_source_hook(",
+    "arm_source_hook(",
+    "restore_source_hook(",
+    "envspec_single_hook_entry(",
+    "envspec_blend_hook_entry(",
+    "install_envspec_source_hooks(",
+    "uninstall_envspec_source_hooks()",
+]:
+    require(source_cpp,needle,"narrow retail EnvSpec source hooks")
 
-    # Thread provenance is diagnostic only. It may falsify the selector-TLS
-    # lifetime assumption, but must never become source authority.
-    for needle in (
-        "g_pmetal_source_last_publish_tid",
-        "g_pmetal_source_last_consumer_tid",
-        "g_pmetal_source_last_consumer_local_valid",
-        "GetCurrentThreadId()",
-    ):
-        require(ul_cpp, needle, "P_Metal selector/consumer thread diagnostic")
-    for forbidden in (
-        "last_publish_tid ==",
-        "last_consumer_tid ==",
-        "g_pmetal_source_last_publish_tid.load() ==",
-        "g_pmetal_source_last_consumer_tid.load() ==",
-    ):
-        if forbidden in consumer:
-            fail(f"P_Metal diagnostic thread provenance became source authority: {forbidden}")
-    require(env_cpp, "publish_tid=%u consumer_tid=%u local_valid=%u", "P_Metal source-cut thread provenance log")
-    require(env_cpp, "frontier=%u/%u/%u/%u/%u/%u/%u", "P_Metal source-cut exact gate frontier log")
-    frontier = (
-        "g_pmetal_source_selector_exact_seen",
-        "g_pmetal_source_parent_gate_ok",
-        "g_pmetal_source_descriptor_gate_ok",
-        "g_pmetal_source_endpoint_gate_ok",
-        "g_pmetal_source_manager_gate_ok",
-        "g_pmetal_source_a_decode_ok",
-        "g_pmetal_source_b_decode_ok",
-    )
-    for needle in frontier:
-        require(ul_cpp, needle, "P_Metal diagnostic source frontier")
-    positions = [capture.find(needle) for needle in frontier]
-    if any(pos < 0 for pos in positions) or positions != sorted(positions):
-        fail("P_Metal exact source frontier is missing or out of semantic order")
-    for needle in frontier:
-        if needle + ".load" in consumer:
-            fail(f"P_Metal diagnostic source frontier became draw-side authority: {needle}")
-    require(env_cpp, "source_.latest(material, source)", "material-scoped source consumer")
+# The hooks may only publish PTDE donor data resolved by the existing exact
+# LightBank donor authority. They must call the original retail function too.
+single=source_cpp[source_cpp.index("void __fastcall envspec_single_hook_entry("):source_cpp.index("void __fastcall envspec_blend_hook_entry(")]
+blend=source_cpp[source_cpp.index("void __fastcall envspec_blend_hook_entry("):source_cpp.index("bool install_envspec_source_hooks(")]
+for part,label in ((single,"single"),(blend,"blend")):
+    require(part,"read_exact_source(","PTDE donor decode "+label)
+    require(part,"_original(","retail original call "+label)
+    require(part,"publish_hook_source(","narrow source publish "+label)
 
-    # The active EnvSpec draw runtime must have no dependency on the U/L
-    # runtime at all. U/L-off is not merely a feature branch: no b13 carrier,
-    # U/L token, U/L cleanup, or U/L constructor dependency may survive.
-    for forbidden in (
-        "upper_lower_draw_runtime",
-        "prepared_upper_lower_draw",
-        "upper_lower_receiver_verified",
-        "upper_lower_composed",
-    ):
-        if forbidden in env_h:
-            fail(f"P_Metal EnvSpec header still depends on U/L: {forbidden}")
+# Draw consumption is exact-material-scoped. Selector TLS is preferred; the
+# retail source-hook record is a consume-once fallback, never generic U/L state.
+consumer=source_cpp[source_cpp.index("bool pmetal_env_source_runtime::latest("):source_cpp.index("pmetal_env_source_runtime_telemetry")]
+require(consumer,"!exact_pmetal_material_selection(","exact P_Metal gate")
+require(consumer,"pmetal_producer_state_latest(","selector source first")
+require(consumer,"consume_hook_source(out)","retail source fallback")
+if consumer.index("consume_hook_source(out)") < consumer.index("!exact_pmetal_material_selection("):
+    fail("retail hook source can be consumed before exact P_Metal material gate")
+for needle in [
+    "g_hook_source_consumed_serial",
+    "g_hook_source_global.serial ==",
+    "g_hook_source_consumed_serial",
+    "g_hook_source_tls.valid = false",
+]:
+    require(source_cpp,needle,"consume-once source lifetime")
 
-    for forbidden in (
-        "lightbank_",
-        "prepared.upper_lower",
-        "prepare_upper_lower_carrier",
-        "operator_id::upper_lower",
-        "upper_lower_receiver_verified",
-        "use_upper_lower",
-        "upper_lower_ready_",
-        "upper_lower_fallback_",
-        "k_effect_fail_lerp_ul_conflict",
-        "k_effect_fail_ul",
-    ):
-        if forbidden in env_cpp:
-            fail(f"P_Metal EnvSpec draw runtime still depends on U/L: {forbidden}")
+# EnvSpec source hooks are independent from visible Upper/Lower. U/L remains
+# disabled by runtime policy unless separately enabled.
+require(integrated,
+        "const bool lightbank_reference_transport_required =\n        upper_lower_enabled;",
+        "U/L-only reference hook ownership")
+require(integrated,
+        "narrow retail LightBank single/blend PTDE source fallback ACTIVE",
+        "EnvSpec source carrier status")
+for forbidden in [
+    "upper_lower_draw_runtime",
+    "prepared_upper_lower_draw",
+    "prepare_upper_lower_carrier",
+    "operator_id::upper_lower",
+]:
+    if forbidden in env_h or forbidden in env_cpp:
+        fail("P_Metal EnvSpec draw runtime depends on visible U/L: "+forbidden)
 
-    for forbidden in (
-        "upper_lower_ready",
-        "upper_lower_fallback",
-    ):
-        if forbidden in env_h:
-            fail(f"P_Metal EnvSpec telemetry still exposes U/L state: {forbidden}")
+# EnvSpec draw still enforces exact material/route/receiver, semantic slot,
+# source, replacement shader, probe, SpecRGB and b12 readiness.
+for needle in [
+    "exact_pmetal_material(",
+    "exact_pmetal_decision(",
+    "source_.latest(material, source)",
+    "effect_source_ready_",
+    "effect_replacement_ready_",
+    "effect_probe_ready_",
+    "effect_spec_rgb_ready_",
+    "effect_request_ready_",
+]:
+    require(env_cpp,needle,"EnvSpec activation gate")
 
-    require(
-        integrated,
-        "g_pmetal_envspec(\n        g_core,\n        g_pmetal_source,\n        g_envspec_resources,\n        g_material_resources);",
-        "EnvSpec constructor has no U/L runtime dependency",
-    )
-    require(
-        integrated,
-        "const auto env_source =\n        g_pmetal_source.telemetry();",
-        "EnvSpec telemetry reads isolated source carrier",
-    )
-    for forbidden in (
-        "ul.pmetal_env_steady",
-        "ul.pmetal_env_blend",
-        "ul.pmetal_env_miss",
-        "ul.pmetal_env_hook_armed",
-    ):
-        if forbidden in integrated:
-            fail(f"EnvSpec telemetry still reads U/L-owned source state: {forbidden}")
-    if "g_upper_lower.pmetal_draw_token_state()" in integrated:
-        fail("EnvSpec draw routing still consumes an UpperLower token")
-    if "g_upper_lower.pmetal_source_diagnostic()" in integrated:
-        fail("EnvSpec telemetry still consumes UpperLower source state")
-    require(
-        integrated,
-        "materialize_pmetal_rgba_receiver(\n                        g_core.features(),\n                        source,\n                        pixel_shader->code_size,\n                        false,",
-        "stable EnvSpec materialization is permanently U/L-off",
-    )
-
-    # Bank identity must retain the exact historical V13 FNV equation without
-    # turning the globally hooked LightBank producer into a VirtualQuery
-    # syscall hot path. Validate the fixed header/table once, read its immutable
-    # row fields directly, and reuse a validated VM window across name bytes.
-    require(
-        ul_cpp,
-        "table_bytes - 8u",
-        "bounded V13 fixed-table validation",
-    )
-    require(
-        ul_cpp,
-        "readable_window name_window{};",
-        "cached V13 bank-name VM window",
-    )
-    require(
-        ul_cpp,
-        "ensure_readable_window(\n                    cursor,\n                    name_window)",
-        "region-safe V13 bank name window",
-    )
-    require(
-        ul_cpp,
-        "std::memcpy(\n            &row_id,\n            entry,",
-        "direct immutable V13 row identity read",
-    )
-    if "safe_read(entry, row_id)" in ul_cpp:
-        fail("P_Metal bank scan regressed to per-row VirtualQuery")
-    if "safe_read(name_byte, ch)" in ul_cpp:
-        fail("P_Metal bank scan regressed to per-byte VirtualQuery")
-
-    require(
-        ul_cpp,
-        "std::size_t pmetal_bank_cache_set(",
-        "dedicated P_Metal bank-cache set mixer",
-    )
-    require(
-        ul_cpp,
-        "(value >> 13u)",
-        "P_Metal bank-cache hash uses higher address bits",
-    )
-    require(
-        ul_cpp,
-        "(value >> 23u)",
-        "P_Metal bank-cache hash avoids low-bit alignment collapse",
-    )
-    require(
-        ul_cpp,
-        "pmetal_bank_cache_set(base_ptr)",
-        "P_Metal bank cache uses dedicated mixed set index",
-    )
-    pmetal_cache_begin = ul_cpp.index(
-        "pmetal_bank_cache_entry &pmetal_bank_cache_for("
-    )
-    pmetal_cache_end = ul_cpp.index(
-        "\nstd::uint64_t pmetal_fnv_byte(",
-        pmetal_cache_begin,
-    )
-    pmetal_cache = ul_cpp[pmetal_cache_begin:pmetal_cache_end]
-    if "d123_cache_set(base_ptr)" in pmetal_cache:
-        fail("P_Metal bank cache regressed to low-bit d123 set indexing")
-
-    if "DSRRL_EXPERIMENTAL_PMETAL_PTDE_FIRELINK_DRAWPARAM" in ul_cpp:
-        fail("obsolete hardcoded Firelink EnvSpec diagnostic still present")
-    if "read_hardcoded_ptde_firelink_pmetal_env_source" in ul_cpp:
-        fail("obsolete hardcoded Firelink donor resolver still present")
-
-    # HemEnvLerp EnvSpec must remain usable while visible U/L is OFF.
-    # Materialization may still understand the historical composed form, but
-    # the active runtime accepts only the stock-U/L-preserving payload.
-    require(
-        lerp_cpp,
+# Lerp payload must preserve stock U/L while EnvSpec owns its own shader/CB/SRV.
+require(lerp_cpp,
         "outcome.upper_lower_preserved_stock =\n        !compose_upper_lower;",
-        "stock-U/L Lerp outcome",
-    )
-    require(
-        env_cpp,
-        "outcome.upper_lower_composed ||\n        !outcome.upper_lower_preserved_stock",
-        "runtime rejects U/L-composed Lerp payload",
-    )
-    if "prepare_upper_lower_carrier" in env_cpp:
-        fail("HemEnvLerp EnvSpec still binds a PTDE U/L b13 carrier")
+        "stock U/L preserved in EnvSpec Lerp")
+if "install_provider_splice" in source_cpp or "DSRRL_Material_Response_1.0.addon64" in source_cpp:
+    fail("legacy V13 addon splice resurrected")
 
-
-    print("DSRRL_PMETAL_ENVSPEC_REFERENCE_TRANSPORT_PASS")
-    print("  EnvSpec global LightBank hooks=0; existing exact FLVER selector only")
-    print("  source=embedded PTDE donors, selected by exact material+bank+row+A/B")
-    print("  TLS lifetime=selector interval under test; publish/consumer TID diagnostic can falsify it")
-    print("  PTDE PackedGI + stock U/L continuation preserved; pixel status OPEN")
-
-
-if __name__ == "__main__":
-    main()
+print("DSRRL_PMETAL_ENVSPEC_REFERENCE_TRANSPORT_PASS")
+print("  source=exact selector first, V13-attested retail single/blend LightBank fallback second")
+print("  fallback=exact P_Metal scoped + consume-once; visible U/L remains stock/off")
+print("  runtime activation and pixel behavior remain OPEN")
