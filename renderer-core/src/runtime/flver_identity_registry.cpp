@@ -173,6 +173,7 @@ lookup_tls_cache_entry &lookup_tls_cache_slot(
     return g_lookup_cache[base + victim];
 }
 std::atomic<std::uint64_t> g_inserts{0},g_lookups{0},g_hits{0},g_misses{0},g_erases{0},g_invalid{0};
+std::atomic<std::uint64_t> g_tls_hits{0},g_mutex_fallbacks{0};
 
 } // namespace
 
@@ -254,9 +255,11 @@ bool flver_identity_lookup(const void *selector_container,std::array<std::uint8_
 
         sha256 = cached->sha;
         telemetry::hot_count(g_hits);
+        telemetry::hot_count(g_tls_hits);
         return true;
     }
 
+    telemetry::hot_count(g_mutex_fallbacks);
     std::lock_guard<std::mutex> lock(g_mutex);
     auto &cached =
         lookup_tls_cache_slot(model);
@@ -305,6 +308,6 @@ void flver_identity_reset() noexcept {
     g_lookup_cache = {};
     g_lookup_victim = {};
 }
-flver_identity_telemetry flver_identity_stats() noexcept {return {g_inserts.load(),g_lookups.load(),g_hits.load(),g_misses.load(),g_erases.load(),g_invalid.load()};}
+flver_identity_telemetry flver_identity_stats() noexcept {return {g_inserts.load(),g_lookups.load(),g_hits.load(),g_misses.load(),g_tls_hits.load(),g_mutex_fallbacks.load(),g_erases.load(),g_invalid.load()};}
 
 } // namespace dsrrl::runtime
