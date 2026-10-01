@@ -505,19 +505,20 @@ bool fixed_pointlight_pipeline_runtime::bound_light_count(
     const auto epoch =
         pipeline_epoch_.load(
             std::memory_order_acquire);
+    std::uint64_t pipeline_handle = 0u;
+    cmd_list->get_private_data(
+        k_fixed_pointlight_binding_guid.data(),
+        &pipeline_handle);
 
     std::shared_ptr<const record> selected{};
     if (bound_tls_.runtime == this &&
         bound_tls_.command == command &&
+        bound_tls_.pipeline == pipeline_handle &&
         bound_tls_.pipeline_epoch == epoch &&
         bound_tls_.present &&
         bound_tls_.selected != nullptr) {
         selected = bound_tls_.selected;
     } else {
-        std::uint64_t pipeline_handle = 0u;
-        cmd_list->get_private_data(
-            k_fixed_pointlight_binding_guid.data(),
-            &pipeline_handle);
         selected =
             pipeline_record_cached(
                 pipeline_handle);
@@ -562,19 +563,20 @@ bool fixed_pointlight_pipeline_runtime::prepare_bound_shader(
     const auto epoch =
         pipeline_epoch_.load(
             std::memory_order_acquire);
+    std::uint64_t pipeline_handle = 0u;
+    cmd_list->get_private_data(
+        k_fixed_pointlight_binding_guid.data(),
+        &pipeline_handle);
 
     std::shared_ptr<const record> selected{};
     if (bound_tls_.runtime == this &&
         bound_tls_.command == command &&
+        bound_tls_.pipeline == pipeline_handle &&
         bound_tls_.pipeline_epoch == epoch &&
         bound_tls_.present &&
         bound_tls_.selected != nullptr) {
         selected = bound_tls_.selected;
     } else {
-        std::uint64_t pipeline_handle = 0u;
-        cmd_list->get_private_data(
-            k_fixed_pointlight_binding_guid.data(),
-            &pipeline_handle);
         selected =
             pipeline_record_cached(
                 pipeline_handle);
