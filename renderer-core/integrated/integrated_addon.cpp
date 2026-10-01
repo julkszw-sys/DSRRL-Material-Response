@@ -714,6 +714,37 @@ std::uint8_t active_integrated_draw_route(
             k_route_a1 | dynamic));
 }
 
+void publish_active_dynamic_draw_routes() noexcept
+{
+    std::uint8_t mask =
+        k_route_stable |
+        k_route_hemenvlerp;
+
+    if (g_core.features().enabled(
+            dsrrl::core::operator_id::subsurface))
+        mask |= k_route_subsurface;
+
+    if (g_hemdir3_selection_transport_active.load(
+            std::memory_order_relaxed))
+        mask |= k_route_hemdir3;
+
+    if (g_upper_lower_selection_transport_active.load(
+            std::memory_order_relaxed))
+        mask |= k_route_upper_lower;
+
+    if (g_fixed_pointlight_selection_transport_active.load(
+            std::memory_order_relaxed))
+        mask |= k_route_fixed_pointlight;
+
+    if (g_clustered_pointlight_selection_transport_active.load(
+            std::memory_order_relaxed))
+        mask |= k_route_clustered_pointlight;
+
+    g_active_dynamic_draw_route_mask.store(
+        mask,
+        std::memory_order_release);
+}
+
 struct integrated_draw_route_tls {
     const void *command_list_key = nullptr;
     std::uint8_t mask = 0u;
@@ -7154,6 +7185,22 @@ bool AddonInit(
         reshade::log::message(
             reshade::log::level::info,
             "[DSRRL PMETAL ENVSPEC] exact P_Metal selector PTDE donor carrier ACTIVE; global LightBank source hooks=0/0; visible U/L remains stock/off.");
+    }
+
+    publish_active_dynamic_draw_routes();
+
+    {
+        char route_line[256]{};
+        std::snprintf(
+            route_line,
+            sizeof(route_line),
+            "[DSRRL RUNTIME V2] active_dynamic_route_mask=0x%02X (Subsurface/U-L/HemDir3 absent when disabled or unavailable)",
+            static_cast<unsigned>(
+                g_active_dynamic_draw_route_mask.load(
+                    std::memory_order_relaxed)));
+        reshade::log::message(
+            reshade::log::level::info,
+            route_line);
     }
 
     {
