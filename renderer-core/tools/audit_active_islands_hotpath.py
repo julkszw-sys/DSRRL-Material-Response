@@ -113,8 +113,11 @@ def main():
         "if(g_state.builder_armed)\n  clustered_pnts_selector_event_bridge(",
         "clustered selector bridge follows builder arm state")
     require(flver_cpp,
+        "fixed_pointlight_selector_event_bridge(owner);",
+        "fixed selector bridge dispatches directly at the FLVER semantic cut")
+    forbid(flver_cpp,
         "else if (g_state.builder_armed)\n  fixed_pointlight_selector_event_bridge(owner);",
-        "fixed selector bridge follows PointLight runtime policy when U/L is disabled")
+        "fixed PointLight must not remain coupled to the U/L branch")
 
     # Disabled islands must not keep receiver/materialization work alive.
     require(integrated,
