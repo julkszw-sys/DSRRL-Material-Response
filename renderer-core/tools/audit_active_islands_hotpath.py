@@ -505,6 +505,34 @@ def main():
             "g_hot_telemetry_enabled",
             f"{label} empty-callback bisect before all DSRRL draw work")
 
+    require(integrated,
+        "constexpr bool k_state_transaction_only_bisect = true;",
+        "state-only replay bisect compile policy")
+    require(integrated,
+        "constexpr bool k_raw_draw_replay_bisect = true;",
+        "raw-draw replay bisect compile policy")
+    require(integrated,
+        "g_draw_transactions.mutate_restore_only(",
+        "state-only begin/restore bisect")
+    require(integrated,
+        "g_draw_transactions.raw_replay_draw(",
+        "raw non-indexed draw bisect")
+    require(integrated,
+        "g_draw_transactions.raw_replay_draw_indexed(",
+        "raw indexed draw bisect")
+    require(integrated,
+        "thread_local bool g_raw_draw_replay_recursing = false;",
+        "raw replay recursion guard")
+    require(draw_tx,
+        "bool draw_state_transaction_runtime::mutate_restore_only(",
+        "state-only helper")
+    require(draw_tx,
+        "bool draw_state_transaction_runtime::raw_replay_draw(",
+        "raw draw helper")
+    require(draw_tx,
+        "bool draw_state_transaction_runtime::raw_replay_draw_indexed(",
+        "raw indexed draw helper")
+
     print("Active-islands hot-path audit: PASS")
     print("  feature_reads=atomic")
     print("  flver_identity=256-entry TLS before global map lock")
@@ -523,6 +551,8 @@ def main():
     print("  transport_only=dynamic transports installed, draw/draw_indexed/present callbacks omitted")
     print("  no_replay=full draw routing/preparation active, release before dispatch/replay/restore")
     print("  empty_draw_callback=ReShade draw event dispatch/function call only; immediate return before DSRRL draw logic")
+    print("  state_only=full prepare plus snapshot/mutate/restore; original stock draw proceeds")
+    print("  raw_draw_only=manual stock Draw/DrawIndexed replay with recursion guard; no DSRRL mutation")
     print("  bloom_q8=no production resource allocation without telemetry authority")
     print("  bloom_fx=no production per-draw scope check outside telemetry")
     print("  selection_guard=only installed producer transports drain draw-scoped TLS")
