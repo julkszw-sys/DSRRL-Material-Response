@@ -136,6 +136,11 @@ option(
     "Experimental Runtime v2 pixel-SRV bind shadow; disabled by default to avoid global descriptor-event overhead"
     OFF)
 
+option(
+    DSRRL_PHYSICAL_CUT_UL_H3_SUBSURFACE
+    "Diagnostic: physically exclude Upper/Lower, HemDir3 and Subsurface runtime implementation units while preserving P_Metal source runtime"
+    OFF)
+
 set(
     RESHADE_INCLUDE_DIR
     ""
@@ -437,8 +442,6 @@ add_library(
     "${DSRRL_RENDERER_CORE_ROOT}/src/runtime/pixel_srv_shadow.cpp"
     "${DSRRL_RENDERER_CORE_ROOT}/src/runtime/hemenvlerp_pipeline_registry.cpp"
     "${DSRRL_RENDERER_CORE_ROOT}/src/runtime/subsurface_pipeline_registry.cpp"
-    "${DSRRL_RENDERER_CORE_ROOT}/src/runtime/subsurface_draw_runtime.cpp"
-    "${DSRRL_RENDERER_CORE_ROOT}/src/runtime/upper_lower_draw_runtime.cpp"
     "${DSRRL_RENDERER_CORE_ROOT}/src/runtime/fixed_pointlight_draw_runtime.cpp"
     "${DSRRL_RENDERER_CORE_ROOT}/src/runtime/clustered_pnts_draw_runtime.cpp"
     "${DSRRL_RENDERER_CORE_ROOT}/src/runtime/clustered_pnts_pipeline_runtime.cpp"
@@ -447,7 +450,6 @@ add_library(
     "${DSRRL_RENDERER_CORE_ROOT}/src/runtime/upper_lower_hemenv_draw_runtime.cpp"
     "${DSRRL_RENDERER_CORE_ROOT}/src/runtime/hemdir3_mode_transport.cpp"
     "${DSRRL_RENDERER_CORE_ROOT}/src/runtime/hemdir3_pipeline_registry.cpp"
-    "${DSRRL_RENDERER_CORE_ROOT}/src/runtime/hemdir3_draw_runtime.cpp"
     "${DSRRL_RENDERER_CORE_ROOT}/src/runtime/draw_state_transaction.cpp"
     "${DSRRL_RENDERER_CORE_ROOT}/src/runtime/island_draw_adapter.cpp"
     "${DSRRL_RENDERER_CORE_ROOT}/src/runtime/material_response_draw_transaction.cpp"
@@ -458,6 +460,15 @@ add_library(
     "${DSRRL_RENDERER_CORE_ROOT}/src/operators/env_spec/pmetal_rgba_lerp_materializer.cpp"
     "${DSRRL_RENDERER_CORE_ROOT}/src/operators/lightbank/hemdir3_b13_materializer.cpp"
     "${DSRRL_RENDERER_CORE_ROOT}/src/operators/lightbank/upper_lower_hemenv_materializer.cpp")
+
+if(NOT DSRRL_PHYSICAL_CUT_UL_H3_SUBSURFACE)
+    target_sources(
+        dsrrl_renderer_core_integrated
+        PRIVATE
+        "${DSRRL_RENDERER_CORE_ROOT}/src/runtime/upper_lower_draw_runtime.cpp"
+        "${DSRRL_RENDERER_CORE_ROOT}/src/runtime/hemdir3_draw_runtime.cpp"
+        "${DSRRL_RENDERER_CORE_ROOT}/src/runtime/subsurface_draw_runtime.cpp")
+endif()
 
 add_dependencies(
     dsrrl_renderer_core_integrated
@@ -622,6 +633,13 @@ if(DSRRL_PMETAL_SRV_SHADOW_EXPERIMENT)
         dsrrl_renderer_core_integrated
         PRIVATE
         DSRRL_PMETAL_SRV_SHADOW_EXPERIMENT)
+endif()
+
+if(DSRRL_PHYSICAL_CUT_UL_H3_SUBSURFACE)
+    target_compile_definitions(
+        dsrrl_renderer_core_integrated
+        PRIVATE
+        DSRRL_PHYSICAL_CUT_UL_H3_SUBSURFACE)
 endif()
 
 if(MSVC)
