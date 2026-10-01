@@ -14,7 +14,6 @@
 #include "dsrrl/operators/material_response/mtd_semantic_census.hpp"
 #include "dsrrl/operators/legacy_plan/sha256_bytes.hpp"
 #include "dsrrl/runtime/generated_pmetal_env_source_authority.hpp"
-#include "dsrrl/runtime/fixed_pointlight_draw_runtime.hpp"
 
 #include <Windows.h>
 #include <d3d11.h>
@@ -5134,11 +5133,6 @@ void upper_lower_selector_event_bridge(
             return_address,
             r14,
             r15);
-
-    // Fixed PointLight uses the exact same owner_context association as the
-    // already-owned selector hook. Keep this bridge independent of U/L
-    // activation; the PointLight runtime is inert when not installed.
-    fixed_pointlight_selector_event_bridge(owner);
 }
 
 void upper_lower_pmetal_material_event_bridge(
