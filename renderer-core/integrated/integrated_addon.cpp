@@ -249,6 +249,10 @@ std::atomic_bool g_mr_once_draw_issued{false};
 std::atomic<std::uint32_t> g_pointlight_gate_log_mask{0u};
 std::atomic<std::uint32_t> g_pointlight_prep_log_mask{0u};
 std::atomic_bool g_pointlight_active_logged{false};
+std::atomic_bool g_pointlight_once_shader_ready{false};
+std::atomic_bool g_pointlight_once_sidecar_ready{false};
+std::atomic_bool g_pointlight_once_batch_ready{false};
+std::atomic_bool g_pointlight_once_applied{false};
 // Exact producer transports that may publish draw-scoped TLS. The selection
 // guard only drains transports that are actually installed; disabled islands
 // must not add function-call traffic to every host draw.
@@ -5338,6 +5342,11 @@ bool prepare_island_batch(
             cmd_list,
             prepared.clustered_shader)) {
         hot_count(g_clustered_draw_pipeline_ready);
+        if (!g_pointlight_once_shader_ready.exchange(true)) {
+            reshade::log::message(
+                reshade::log::level::info,
+                "[DSRRL POINTLIGHT APPLY] stage=shader_ready");
+        }
         auto *context =
             reinterpret_cast<ID3D11DeviceContext *>(
                 cmd_list->get_native());
@@ -5412,6 +5421,11 @@ bool prepare_island_batch(
 
         if (sidecar_ready) {
             hot_count(g_clustered_draw_sidecar_ready);
+            if (!g_pointlight_once_sidecar_ready.exchange(true)) {
+                reshade::log::message(
+                    reshade::log::level::info,
+                    "[DSRRL POINTLIGHT APPLY] stage=sidecar_ready");
+            }
             const auto point =
                 dsrrl::core::operator_bit(
                     dsrrl::core::operator_id::point_light);
@@ -5507,6 +5521,11 @@ bool prepare_island_batch(
                 dsrrl::runtime::island_draw_batch_result::ready) {
                 prepared.clustered_in_batch = true;
                 hot_count(g_clustered_draw_batch_ready);
+                if (!g_pointlight_once_batch_ready.exchange(true)) {
+                    reshade::log::message(
+                        reshade::log::level::info,
+                        "[DSRRL POINTLIGHT APPLY] stage=batch_ready");
+                }
                 return true;
             }
         }
@@ -6466,10 +6485,16 @@ bool on_draw(
 
     if (clustered_in_batch) {
         if (dsrrl::runtime::draw_tx_issued(
-                dispatch.transaction))
+                dispatch.transaction)) {
             hot_count(g_clustered_draw_applied);
-        else
+            if (!g_pointlight_once_applied.exchange(true)) {
+                reshade::log::message(
+                    reshade::log::level::info,
+                    "[DSRRL POINTLIGHT APPLY] stage=applied");
+            }
+        } else {
             hot_count(g_clustered_draw_fail_open);
+        }
 
         if (dispatch.transaction ==
             dsrrl::runtime::draw_tx_result::
@@ -6785,10 +6810,16 @@ bool on_draw_indexed(
 
     if (clustered_in_batch) {
         if (dsrrl::runtime::draw_tx_issued(
-                dispatch.transaction))
+                dispatch.transaction)) {
             hot_count(g_clustered_draw_applied);
-        else
+            if (!g_pointlight_once_applied.exchange(true)) {
+                reshade::log::message(
+                    reshade::log::level::info,
+                    "[DSRRL POINTLIGHT APPLY] stage=applied");
+            }
+        } else {
             hot_count(g_clustered_draw_fail_open);
+        }
 
         if (dispatch.transaction ==
             dsrrl::runtime::draw_tx_result::
@@ -7011,6 +7042,10 @@ bool AddonInit(
     g_pointlight_gate_log_mask.store(0u);
     g_pointlight_prep_log_mask.store(0u);
     g_pointlight_active_logged.store(false);
+    g_pointlight_once_shader_ready.store(false);
+    g_pointlight_once_sidecar_ready.store(false);
+    g_pointlight_once_batch_ready.store(false);
+    g_pointlight_once_applied.store(false);
     g_upper_lower_selection_transport_active.store(false);
     g_hemdir3_selection_transport_active.store(false);
     g_fixed_pointlight_selection_transport_active.store(false);
