@@ -72,6 +72,11 @@ option(
     OFF)
 
 option(
+    DSRRL_PHYSICAL_CUT_UL_H3_SUBSURFACE
+    "Diagnostic: physically omit Upper/Lower, HemDir3 and Subsurface runtime/operator implementations and link fail-open stubs instead"
+    OFF)
+
+option(
     DSRRL_DRAWTIME_ISLANDS_BYPASS
     "Diagnostic: disable all draw-time island routing/hooks/replay while preserving create-time A1 and MotionBlur shader replacements"
     OFF)
@@ -416,12 +421,23 @@ add_subdirectory(
     "${CMAKE_BINARY_DIR}/renderer-core-lib"
     EXCLUDE_FROM_ALL)
 
+if(DSRRL_PHYSICAL_CUT_UL_H3_SUBSURFACE)
+    set(
+        DSRRL_DISABLED_ISLAND_SOURCES
+        physical_cut_disabled_islands_stubs.cpp)
+else()
+    set(
+        DSRRL_DISABLED_ISLAND_SOURCES
+                                            )
+endif()
+
 add_library(
     dsrrl_renderer_core_integrated
     SHARED
     integrated_addon.cpp
     flver_identity_detour.asm
     texture_identity_detour.asm
+    ${DSRRL_DISABLED_ISLAND_SOURCES}
     hemdir3_mode_detour.asm
     "${DSRRL_RENDERER_CORE_ROOT}/src/runtime/a1_create_pipeline_bridge.cpp"
     "${DSRRL_RENDERER_CORE_ROOT}/src/runtime/flver_engine_hooks.cpp"
@@ -531,6 +547,13 @@ if(DSRRL_POINTLIGHT_DRAWTIME_BYPASS)
         dsrrl_renderer_core_integrated
         PRIVATE
         $<$<COMPILE_LANGUAGE:CXX>:DSRRL_POINTLIGHT_DRAWTIME_BYPASS>)
+endif()
+
+if(DSRRL_PHYSICAL_CUT_UL_H3_SUBSURFACE)
+    target_compile_definitions(
+        dsrrl_renderer_core_integrated
+        PRIVATE
+        $<$<COMPILE_LANGUAGE:CXX>:DSRRL_PHYSICAL_CUT_UL_H3_SUBSURFACE>)
 endif()
 
 if(DSRRL_DRAWTIME_ISLANDS_BYPASS)
