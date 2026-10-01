@@ -131,6 +131,18 @@ constexpr bool k_raw_native_draw_reentry_min_bisect = true;
 constexpr bool k_raw_native_draw_reentry_min_bisect = false;
 #endif
 
+#ifdef DSRRL_ADDON_LOADED_ONLY_BISECT
+constexpr bool k_addon_loaded_only_bisect = true;
+#else
+constexpr bool k_addon_loaded_only_bisect = false;
+#endif
+
+#ifdef DSRRL_DRAW_CALLBACK_ONLY_BISECT
+constexpr bool k_draw_callback_only_bisect = true;
+#else
+constexpr bool k_draw_callback_only_bisect = false;
+#endif
+
 #if defined(DSRRL_POINTLIGHT_DRAWTIME_BYPASS) || defined(DSRRL_DRAWTIME_ISLANDS_BYPASS)
 constexpr bool k_pointlight_drawtime_runtime_enabled = false;
 #else
@@ -5854,6 +5866,9 @@ bool on_draw(
     if (g_raw_draw_replay_recursing)
         return false;
 
+    if (k_draw_callback_only_bisect)
+        return false;
+
     if (k_raw_draw_replay_bisect ||
         k_raw_native_draw_reentry_min_bisect) {
         g_raw_draw_replay_recursing = true;
@@ -6199,6 +6214,9 @@ bool on_draw_indexed(
     std::uint32_t first_instance)
 {
     if (g_raw_draw_replay_recursing)
+        return false;
+
+    if (k_draw_callback_only_bisect)
         return false;
 
     if (k_raw_draw_replay_bisect ||
@@ -6553,6 +6571,40 @@ bool AddonInit(
 {
     if (!reshade::register_addon(addon_module, reshade_module))
         return false;
+
+    if (k_addon_loaded_only_bisect) {
+        reshade::log::message(
+            reshade::log::level::info,
+            "[DSRRL CALLBACK CUT] ADDON_LOADED_ONLY: addon registered; no DSRRL events, pipeline callbacks, draw callbacks or runtime transports installed.");
+        char build_identity[768]{};
+        std::snprintf(
+            build_identity,
+            sizeof(build_identity),
+            "[DSRRL BUILD_ID] version=%s source_commit=%s flavor=%s",
+            DSRRL_CORE_ISLANDS_VERSION,
+            DSRRL_SOURCE_COMMIT,
+            DSRRL_BUILD_FLAVOR);
+        reshade::log::message(reshade::log::level::info, build_identity);
+        return true;
+    }
+
+    if (k_draw_callback_only_bisect) {
+        reshade::register_event<reshade::addon_event::draw>(on_draw);
+        reshade::register_event<reshade::addon_event::draw_indexed>(on_draw_indexed);
+        reshade::log::message(
+            reshade::log::level::info,
+            "[DSRRL CALLBACK CUT] DRAW_CALLBACK_ONLY: only empty draw/draw_indexed callbacks registered; no DSRRL pipeline events or runtime transports installed.");
+        char build_identity[768]{};
+        std::snprintf(
+            build_identity,
+            sizeof(build_identity),
+            "[DSRRL BUILD_ID] version=%s source_commit=%s flavor=%s",
+            DSRRL_CORE_ISLANDS_VERSION,
+            DSRRL_SOURCE_COMMIT,
+            DSRRL_BUILD_FLAVOR);
+        reshade::log::message(reshade::log::level::info, build_identity);
+        return true;
+    }
 
     // Render-hot telemetry is opt-in. Production/default execution avoids
     // synchronized counter RMWs on every draw; set DSRRL_RUNTIME_TELEMETRY=1
@@ -6998,6 +7050,18 @@ void AddonUninit(
     HMODULE addon_module,
     HMODULE reshade_module)
 {
+    if (k_addon_loaded_only_bisect) {
+        reshade::unregister_addon(addon_module, reshade_module);
+        return;
+    }
+
+    if (k_draw_callback_only_bisect) {
+        reshade::unregister_event<reshade::addon_event::draw_indexed>(on_draw_indexed);
+        reshade::unregister_event<reshade::addon_event::draw>(on_draw);
+        reshade::unregister_addon(addon_module, reshade_module);
+        return;
+    }
+
     unregister_events();
     log_state("PRE_UNLOAD");
     log_effect_matrix("PRE_UNLOAD");
