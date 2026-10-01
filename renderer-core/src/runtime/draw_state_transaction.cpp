@@ -962,6 +962,81 @@ draw_state_transaction_runtime::replay_draw_indexed(
         : draw_tx_result::issued_restore_failed;
 }
 
+bool draw_state_transaction_runtime::mutate_restore_only(
+    reshade::api::command_list *cmd_list,
+    const draw_tx_mutation &mutation) noexcept
+{
+    transaction_state state{};
+    if (!begin(cmd_list, mutation, state))
+        return false;
+    return restore(cmd_list, state);
+}
+
+bool draw_state_transaction_runtime::raw_replay_draw(
+    reshade::api::command_list *cmd_list,
+    std::uint32_t vertex_count,
+    std::uint32_t instance_count,
+    std::uint32_t first_vertex,
+    std::uint32_t first_instance) noexcept
+{
+    if (cmd_list == nullptr)
+        return false;
+
+    auto *ctx =
+        reinterpret_cast<ID3D11DeviceContext *>(
+            cmd_list->get_native());
+    if (ctx == nullptr)
+        return false;
+
+    if (instance_count == 1u &&
+        first_instance == 0u) {
+        ctx->Draw(
+            vertex_count,
+            first_vertex);
+    } else {
+        ctx->DrawInstanced(
+            vertex_count,
+            instance_count,
+            first_vertex,
+            first_instance);
+    }
+    return true;
+}
+
+bool draw_state_transaction_runtime::raw_replay_draw_indexed(
+    reshade::api::command_list *cmd_list,
+    std::uint32_t index_count,
+    std::uint32_t instance_count,
+    std::uint32_t first_index,
+    std::int32_t vertex_offset,
+    std::uint32_t first_instance) noexcept
+{
+    if (cmd_list == nullptr)
+        return false;
+
+    auto *ctx =
+        reinterpret_cast<ID3D11DeviceContext *>(
+            cmd_list->get_native());
+    if (ctx == nullptr)
+        return false;
+
+    if (instance_count == 1u &&
+        first_instance == 0u) {
+        ctx->DrawIndexed(
+            index_count,
+            first_index,
+            vertex_offset);
+    } else {
+        ctx->DrawIndexedInstanced(
+            index_count,
+            instance_count,
+            first_index,
+            vertex_offset,
+            first_instance);
+    }
+    return true;
+}
+
 draw_tx_telemetry
 draw_state_transaction_runtime::telemetry() const noexcept
 {
