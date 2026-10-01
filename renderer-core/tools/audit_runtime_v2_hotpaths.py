@@ -9,6 +9,10 @@ flver = (root / "src/runtime/flver_engine_hooks.cpp").read_text(encoding="utf-8"
 pmetal_h = (root / "include/dsrrl/runtime/pmetal_envspec_draw_runtime.hpp").read_text(encoding="utf-8")
 pmetal_cpp = (root / "src/runtime/pmetal_envspec_draw_runtime.cpp").read_text(encoding="utf-8")
 producer = (root / "src/runtime/pmetal_producer_state.cpp").read_text(encoding="utf-8")
+draw_tx_h = (root / "include/dsrrl/runtime/draw_state_transaction.hpp").read_text(encoding="utf-8")
+draw_tx_cpp = (root / "src/runtime/draw_state_transaction.cpp").read_text(encoding="utf-8")
+pixel_shadow_h = (root / "include/dsrrl/runtime/pixel_srv_shadow.hpp").read_text(encoding="utf-8")
+pixel_shadow_cpp = (root / "src/runtime/pixel_srv_shadow.cpp").read_text(encoding="utf-8")
 
 def require(text: str, needle: str, label: str) -> None:
     if needle not in text:
@@ -39,5 +43,16 @@ forbid(pmetal_cpp, "found->second.payload.data()", "legacy 64-byte b12 memcmp ca
 require(pmetal_cpp, "pixel_srv_shadow_snapshot(", "SRV shadow fast path")
 require(pmetal_cpp, "prepare_draw_requests_bound(", "bound material resource path")
 require(pmetal_cpp, "prepare_bound(", "bound EnvSpec resource path")
+
+
+require(pixel_shadow_cpp, "descriptor_type::sampler", "sampler shadow tracking")
+require(pixel_shadow_h, "pixel_sampler_shadow_snapshot(", "sampler shadow snapshot API")
+require(draw_tx_h, "bool owns_reference = false;", "transaction shadow COM ownership")
+require(draw_tx_cpp, "pixel_srv_shadow_snapshot(", "transaction SRV shadow capture")
+require(draw_tx_cpp, "pixel_sampler_shadow_snapshot(", "transaction sampler shadow capture")
+require(draw_tx_cpp, "capture.srv->AddRef();", "transaction SRV shadow lifetime")
+require(draw_tx_cpp, "capture.sampler->AddRef();", "transaction sampler shadow lifetime")
+require(draw_tx_cpp, "srv_shadow_capture_", "SRV shadow activation telemetry")
+require(draw_tx_cpp, "sampler_shadow_capture_", "sampler shadow activation telemetry")
 
 print("DSRRL_RUNTIME_V2_HOTPATH_AUDIT_PASS")
