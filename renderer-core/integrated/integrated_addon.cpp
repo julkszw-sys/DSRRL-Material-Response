@@ -51,6 +51,7 @@
 #include "dsrrl/operators/postprocess/motion_blur_velocity_authority.hpp"
 
 #include <reshade.hpp>
+#include <Windows.h>
 #include <d3d11.h>
 
 #if RESHADE_API_VERSION != 20
@@ -232,6 +233,294 @@ dsrrl::runtime::pmetal_native_draw_bridge
     g_pmetal_native_draw;
 
 thread_local bool g_raw_draw_replay_recursing = false;
+
+struct reflect_rt_profile_slot {
+    std::atomic<std::uint64_t> key{0u};
+    std::atomic<std::uint64_t> sampled_draws{0u};
+    std::atomic<std::uint64_t> sampled_routed{0u};
+    std::atomic<std::uint64_t> total_ticks{0u};
+    std::atomic<std::uint64_t> max_ticks{0u};
+    std::atomic<std::uint32_t> width{0u};
+    std::atomic<std::uint32_t> height{0u};
+    std::atomic<std::uint32_t> format{0u};
+};
+
+constexpr std::size_t k_reflect_rt_profile_slots = 16u;
+std::array<reflect_rt_profile_slot, k_reflect_rt_profile_slots>
+    g_reflect_rt_profile{};
+std::atomic<std::uint64_t> g_reflect_rt_sample_seq{0u};
+std::atomic_bool g_reflect_rt_reported{false};
+
+struct reflect_rt_tls_state {
+    std::uint64_t command = 0u;
+    std::uint64_t rtv = 0u;
+    std::int32_t slot = -1;
+};
+
+thread_local reflect_rt_tls_state g_reflect_rt_tls{};
+
+std::int32_t reflect_rt_profile_slot_for(
+    std::uint64_t key,
+    std::uint32_t width,
+    std::uint32_t height,
+    std::uint32_t format) noexcept
+{
+    if (key == 0u)
+        return -1;
+
+    for (std::size_t i = 0u;
+         i < g_reflect_rt_profile.size();
+         ++i) {
+        auto observed =
+            g_reflect_rt_profile[i].key.load(
+                std::memory_order_acquire);
+        if (observed == key)
+            return static_cast<std::int32_t>(i);
+        if (observed != 0u)
+            continue;
+
+        std::uint64_t expected = 0u;
+        if (g_reflect_rt_profile[i].key.compare_exchange_strong(
+                expected,
+                key,
+                std::memory_order_acq_rel,
+                std::memory_order_acquire)) {
+            g_reflect_rt_profile[i].width.store(
+                width,
+                std::memory_order_relaxed);
+            g_reflect_rt_profile[i].height.store(
+                height,
+                std::memory_order_relaxed);
+            g_reflect_rt_profile[i].format.store(
+                format,
+                std::memory_order_relaxed);
+            return static_cast<std::int32_t>(i);
+        }
+        if (expected == key)
+            return static_cast<std::int32_t>(i);
+    }
+    return -1;
+}
+
+void on_bind_render_targets_and_depth_stencil_profile(
+    reshade::api::command_list *cmd_list,
+    std::uint32_t count,
+    const reshade::api::resource_view *rtvs,
+    reshade::api::resource_view) noexcept
+{
+    if (cmd_list == nullptr) {
+        g_reflect_rt_tls = {};
+        return;
+    }
+
+    const auto command =
+        static_cast<std::uint64_t>(
+            reinterpret_cast<std::uintptr_t>(
+                cmd_list));
+
+    if (count == 0u ||
+        rtvs == nullptr ||
+        rtvs[0].handle == 0u) {
+        g_reflect_rt_tls = {
+            command,
+            0u,
+            -1
+        };
+        return;
+    }
+
+    auto *device = cmd_list->get_device();
+    std::uint32_t width = 0u;
+    std::uint32_t height = 0u;
+    std::uint32_t format = 0u;
+    if (device != nullptr) {
+        const auto resource =
+            device->get_resource_from_view(
+                rtvs[0]);
+        if (resource.handle != 0u) {
+            const auto desc =
+                device->get_resource_desc(
+                    resource);
+            width = desc.texture.width;
+            height = desc.texture.height;
+            format =
+                static_cast<std::uint32_t>(
+                    desc.texture.format);
+        }
+    }
+
+    const auto key =
+        static_cast<std::uint64_t>(
+            rtvs[0].handle);
+    g_reflect_rt_tls = {
+        command,
+        key,
+        reflect_rt_profile_slot_for(
+            key,
+            width,
+            height,
+            format)
+    };
+}
+
+struct reflect_draw_profile_scope {
+    std::int32_t slot = -1;
+    bool sampled = false;
+    bool routed = false;
+    LARGE_INTEGER start{};
+
+    explicit reflect_draw_profile_scope(
+        reshade::api::command_list *cmd_list) noexcept
+    {
+        if (cmd_list == nullptr)
+            return;
+
+        const auto seq =
+            g_reflect_rt_sample_seq.fetch_add(
+                1u,
+                std::memory_order_relaxed);
+        if ((seq & 0xffu) != 0u)
+            return;
+
+        const auto command =
+            static_cast<std::uint64_t>(
+                reinterpret_cast<std::uintptr_t>(
+                    cmd_list));
+        if (g_reflect_rt_tls.command != command ||
+            g_reflect_rt_tls.slot < 0)
+            return;
+
+        slot = g_reflect_rt_tls.slot;
+        sampled =
+            QueryPerformanceCounter(
+                &start) != FALSE;
+    }
+
+    void mark_routed(
+        bool value) noexcept
+    {
+        routed = value;
+    }
+
+    ~reflect_draw_profile_scope()
+    {
+        if (!sampled ||
+            slot < 0 ||
+            static_cast<std::size_t>(slot) >=
+                g_reflect_rt_profile.size())
+            return;
+
+        LARGE_INTEGER stop{};
+        if (QueryPerformanceCounter(
+                &stop) == FALSE ||
+            stop.QuadPart < start.QuadPart)
+            return;
+
+        const auto ticks =
+            static_cast<std::uint64_t>(
+                stop.QuadPart -
+                start.QuadPart);
+        auto &entry =
+            g_reflect_rt_profile[
+                static_cast<std::size_t>(slot)];
+        entry.sampled_draws.fetch_add(
+            1u,
+            std::memory_order_relaxed);
+        if (routed)
+            entry.sampled_routed.fetch_add(
+                1u,
+                std::memory_order_relaxed);
+        entry.total_ticks.fetch_add(
+            ticks,
+            std::memory_order_relaxed);
+
+        auto maximum =
+            entry.max_ticks.load(
+                std::memory_order_relaxed);
+        while (maximum < ticks &&
+               !entry.max_ticks.compare_exchange_weak(
+                   maximum,
+                   ticks,
+                   std::memory_order_relaxed,
+                   std::memory_order_relaxed)) {
+        }
+    }
+};
+
+void log_reflect_rt_profile_once() noexcept
+{
+    if (g_reflect_rt_reported.exchange(
+            true,
+            std::memory_order_acq_rel))
+        return;
+
+    LARGE_INTEGER frequency{};
+    if (QueryPerformanceFrequency(
+            &frequency) == FALSE ||
+        frequency.QuadPart <= 0)
+        return;
+
+    reshade::log::message(
+        reshade::log::level::info,
+        "[DSRRL WATER REFLECT PROFILE] sampled=1/256 per active RTV; values measure DSRRL draw callback CPU time only.");
+
+    for (std::size_t i = 0u;
+         i < g_reflect_rt_profile.size();
+         ++i) {
+        const auto &entry =
+            g_reflect_rt_profile[i];
+        const auto key =
+            entry.key.load(
+                std::memory_order_acquire);
+        const auto draws =
+            entry.sampled_draws.load(
+                std::memory_order_relaxed);
+        if (key == 0u ||
+            draws == 0u)
+            continue;
+
+        const auto ticks =
+            entry.total_ticks.load(
+                std::memory_order_relaxed);
+        const auto maximum =
+            entry.max_ticks.load(
+                std::memory_order_relaxed);
+        const double mean_us =
+            (static_cast<double>(ticks) *
+             1000000.0) /
+            (static_cast<double>(
+                 frequency.QuadPart) *
+             static_cast<double>(draws));
+        const double max_us =
+            (static_cast<double>(maximum) *
+             1000000.0) /
+            static_cast<double>(
+                frequency.QuadPart);
+
+        char line[640]{};
+        std::snprintf(
+            line,
+            sizeof(line),
+            "[DSRRL WATER REFLECT PROFILE] slot=%u rtv=%016llx size=%ux%u fmt=%u sampled=%llu routed=%llu mean_us=%.3f max_us=%.3f",
+            static_cast<unsigned>(i),
+            static_cast<unsigned long long>(key),
+            entry.width.load(
+                std::memory_order_relaxed),
+            entry.height.load(
+                std::memory_order_relaxed),
+            entry.format.load(
+                std::memory_order_relaxed),
+            static_cast<unsigned long long>(draws),
+            static_cast<unsigned long long>(
+                entry.sampled_routed.load(
+                    std::memory_order_relaxed)),
+            mean_us,
+            max_us);
+        reshade::log::message(
+            reshade::log::level::info,
+            line);
+    }
+}
 
 std::atomic<std::uint64_t> g_present_count{0};
 std::atomic<std::uint64_t> g_mr_draw_eval{0};
@@ -6179,6 +6468,10 @@ bool on_draw(
         return issued;
     }
 
+    reflect_draw_profile_scope reflect_profile(cmd_list);
+
+    reflect_draw_profile_scope reflect_profile(cmd_list);
+
     if (g_hot_telemetry_enabled &&
         dsrrl::runtime::bloom_fx_draw_transport::
             active_draw_scope())
@@ -6191,6 +6484,12 @@ bool on_draw(
         active_integrated_draw_route(
             integrated_draw_route_bound(
                 cmd_list));
+
+    reflect_profile.mark_routed(
+        route_mask != 0u);
+
+    reflect_profile.mark_routed(
+        route_mask != 0u);
 
     if (route_mask == 0u) {
         hot_count(g_draw_fast_skip);
@@ -6873,6 +7172,9 @@ void on_present(
         g_present_count.fetch_add(
             1u,
             std::memory_order_relaxed) + 1u;
+    if (present == 300u)
+        log_reflect_rt_profile_once();
+
     if (present == 1u ||
         (g_hot_telemetry_enabled &&
          (present % 300u) == 0u)) {
@@ -6915,6 +7217,10 @@ void register_events()
         reshade::register_event<reshade::addon_event::push_descriptors>(on_push_descriptors);
     if (k_drawtime_islands_runtime_enabled &&
         k_draw_callbacks_runtime_enabled) {
+        reshade::register_event<
+            reshade::addon_event::
+                bind_render_targets_and_depth_stencil>(
+                    on_bind_render_targets_and_depth_stencil_profile);
         reshade::register_event<reshade::addon_event::draw>(on_draw);
         reshade::register_event<reshade::addon_event::draw_indexed>(on_draw_indexed);
         reshade::register_event<reshade::addon_event::present>(on_present);
@@ -6926,6 +7232,10 @@ void unregister_events()
     if (k_drawtime_islands_runtime_enabled &&
         k_draw_callbacks_runtime_enabled) {
         reshade::unregister_event<reshade::addon_event::present>(on_present);
+        reshade::unregister_event<
+            reshade::addon_event::
+                bind_render_targets_and_depth_stencil>(
+                    on_bind_render_targets_and_depth_stencil_profile);
         reshade::unregister_event<reshade::addon_event::draw_indexed>(on_draw_indexed);
         reshade::unregister_event<reshade::addon_event::draw>(on_draw);
     }
