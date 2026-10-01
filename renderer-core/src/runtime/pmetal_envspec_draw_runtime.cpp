@@ -7,6 +7,7 @@
 
 #include "dsrrl/runtime/pmetal_envspec_draw_runtime.hpp"
 #include "dsrrl/runtime/runtime_hot_telemetry.hpp"
+#include "dsrrl/runtime/pixel_srv_shadow.hpp"
 
 #include "dsrrl/operators/legacy_plan/sha256_bytes.hpp"
 
@@ -708,6 +709,15 @@ bool pmetal_envspec_draw_runtime::prepare(
                 hemenvlerp ||
         source.beta != 0.0f;
 
+    ID3D11ShaderResourceView *shadow_env[3]{};
+    const bool shadow_env_ready =
+        !k_native_dsr_cubemap_feed &&
+        pixel_srv_shadow_snapshot(
+            cmd_list,
+            12u,
+            probe_b_required ? 3u : 1u,
+            shadow_env);
+
     const bool env_resource_ready =
         k_native_dsr_cubemap_feed
             ? env_resources_.prepare_native_dsr(
@@ -715,11 +725,20 @@ bool pmetal_envspec_draw_runtime::prepare(
                   env_semantics.envspc_slot,
                   probe_b_required,
                   prepared.env_resources)
-            : env_resources_.prepare(
-                  context,
-                  env_semantics.envspc_slot,
-                  probe_b_required,
-                  prepared.env_resources);
+            : shadow_env_ready
+                ? env_resources_.prepare_bound(
+                      shadow_env[0],
+                      probe_b_required
+                          ? shadow_env[2]
+                          : nullptr,
+                      env_semantics.envspc_slot,
+                      probe_b_required,
+                      prepared.env_resources)
+                : env_resources_.prepare(
+                      context,
+                      env_semantics.envspc_slot,
+                      probe_b_required,
+                      prepared.env_resources);
 
     if (!env_resource_ready) {
         if (shader != nullptr)
@@ -752,14 +771,42 @@ bool pmetal_envspec_draw_runtime::prepare(
             line);
     }
 
-    if (!material_resources_.
-            prepare_draw_requests(
-                context,
-                decision.receiver_id,
-                query,
-                true,
-                true,
-                prepared.material_resources) ||
+    ID3D11ShaderResourceView *shadow_material[3]{};
+    const bool shadow_material_ready =
+        pixel_srv_shadow_snapshot(
+            cmd_list,
+            0u,
+            3u,
+            shadow_material);
+
+    if (shadow_env_ready &&
+        shadow_material_ready)
+        telemetry::hot_count(
+            srv_shadow_hits_);
+    else
+        telemetry::hot_count(
+            srv_shadow_fallbacks_);
+
+    const bool material_ready =
+        shadow_material_ready
+            ? material_resources_.
+                  prepare_draw_requests_bound(
+                      shadow_material,
+                      decision.receiver_id,
+                      query,
+                      true,
+                      true,
+                      prepared.material_resources)
+            : material_resources_.
+                  prepare_draw_requests(
+                      context,
+                      decision.receiver_id,
+                      query,
+                      true,
+                      true,
+                      prepared.material_resources);
+
+    if (!material_ready ||
         !prepared.material_resources.spec_rgb) {
         if (shader != nullptr)
             shader->Release();
@@ -822,6 +869,25 @@ bool pmetal_envspec_draw_runtime::prepare(
         return false;
     }
 
+    std::array<std::uint32_t,4> material_bits{};
+    static_assert(sizeof(float) == sizeof(std::uint32_t));
+    std::memcpy(
+        &material_bits[0],
+        &decision.c101,
+        sizeof(std::uint32_t));
+    std::memcpy(
+        &material_bits[1],
+        &decision.c100[0],
+        sizeof(std::uint32_t));
+    std::memcpy(
+        &material_bits[2],
+        &decision.c100[1],
+        sizeof(std::uint32_t));
+    std::memcpy(
+        &material_bits[3],
+        &decision.c100[2],
+        sizeof(std::uint32_t));
+
     ID3D11Buffer *b12 = nullptr;
     bool upload_required = true;
     const auto b12_key =
@@ -862,10 +928,14 @@ bool pmetal_envspec_draw_runtime::prepare(
             b12->AddRef();
             upload_required =
                 !found->second.payload_valid ||
-                std::memcmp(
-                    found->second.payload.data(),
-                    payload.data(),
-                    sizeof(payload)) != 0;
+                found->second.source_generation !=
+                    source.generation ||
+                found->second.receiver_id !=
+                    decision.receiver_id ||
+                found->second.route_index !=
+                    decision.route_index ||
+                found->second.material_bits !=
+                    material_bits;
         } else {
             D3D11_BUFFER_DESC desc{};
             desc.ByteWidth = 64u;
@@ -953,10 +1023,14 @@ bool pmetal_envspec_draw_runtime::prepare(
             if (found !=
                     b12_by_context_.end() &&
                 found->second.buffer == b12) {
-                std::memcpy(
-                    found->second.payload.data(),
-                    payload.data(),
-                    sizeof(payload));
+                found->second.source_generation =
+                    source.generation;
+                found->second.receiver_id =
+                    decision.receiver_id;
+                found->second.route_index =
+                    decision.route_index;
+                found->second.material_bits =
+                    material_bits;
                 found->second.payload_valid = true;
             }
         }
@@ -1108,6 +1182,8 @@ pmetal_envspec_draw_runtime::telemetry() const noexcept
         lerp_requests_.load(),
         b12_uploads_.load(),
         b12_reuses_.load(),
+        srv_shadow_hits_.load(),
+        srv_shadow_fallbacks_.load(),
         effect_entry_seen_.load(),
         effect_feature_ready_.load(),
         effect_material_ready_.load(),
@@ -1144,6 +1220,8 @@ void pmetal_envspec_draw_runtime::reset() noexcept
     lerp_requests_.store(0u);
     b12_uploads_.store(0u);
     b12_reuses_.store(0u);
+    srv_shadow_hits_.store(0u);
+    srv_shadow_fallbacks_.store(0u);
     effect_entry_seen_.store(false);
     effect_feature_ready_.store(false);
     effect_material_ready_.store(false);

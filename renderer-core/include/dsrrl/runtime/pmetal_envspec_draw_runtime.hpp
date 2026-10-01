@@ -57,6 +57,8 @@ struct pmetal_envspec_telemetry {
     std::uint64_t lerp_requests = 0;
     std::uint64_t b12_uploads = 0;
     std::uint64_t b12_reuses = 0;
+    std::uint64_t srv_shadow_hits = 0;
+    std::uint64_t srv_shadow_fallbacks = 0;
 
     // Low-overhead effect ladder. These are one-way session latches used by
     // DSRRL_EFFECT_TELEMETRY and do not imply pixel equivalence.
@@ -132,7 +134,10 @@ private:
 
     struct b12_context_cache {
         ID3D11Buffer *buffer = nullptr;
-        std::array<std::uint8_t,64> payload{};
+        std::uint64_t source_generation = 0u;
+        std::uint32_t receiver_id = 0u;
+        std::uint32_t route_index = 0u;
+        std::array<std::uint32_t,4> material_bits{};
         bool payload_valid = false;
     };
 
@@ -172,6 +177,8 @@ private:
     std::atomic<std::uint64_t> lerp_requests_{0};
     std::atomic<std::uint64_t> b12_uploads_{0};
     std::atomic<std::uint64_t> b12_reuses_{0};
+    std::atomic<std::uint64_t> srv_shadow_hits_{0};
+    std::atomic<std::uint64_t> srv_shadow_fallbacks_{0};
 
     std::atomic_bool effect_entry_seen_{false};
     std::atomic_bool effect_feature_ready_{false};

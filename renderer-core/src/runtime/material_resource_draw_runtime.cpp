@@ -240,13 +240,21 @@ void hot_count(
             std::memory_order_relaxed);
 }
 
-std::uint64_t fnv_name(const std::wstring &name) noexcept
+std::uint64_t fnv_name(
+    const wchar_t *name,
+    std::size_t length) noexcept
 {
     std::uint64_t h = 14695981039346656037ull;
 
-    for (wchar_t ch : name) {
+    if (name == nullptr)
+        return h;
+
+    for (std::size_t i = 0u;
+         i < length;
+         ++i) {
         std::uint32_t c =
-            static_cast<std::uint32_t>(ch);
+            static_cast<std::uint32_t>(
+                name[i]);
 
         if (c >= static_cast<std::uint32_t>(L'A') &&
             c <= static_cast<std::uint32_t>(L'Z'))
@@ -257,6 +265,14 @@ std::uint64_t fnv_name(const std::wstring &name) noexcept
     }
 
     return h;
+}
+
+std::uint64_t fnv_name(
+    const std::wstring &name) noexcept
+{
+    return fnv_name(
+        name.data(),
+        name.size());
 }
 
 void release_view(
@@ -946,13 +962,17 @@ void on_init_resource_view(
         view.handle == 0u)
         return;
 
-    std::wstring logical_name;
-    if (!texture_identity_transport::snapshot(
-            logical_name))
+    const wchar_t *logical_name_raw = nullptr;
+    std::size_t logical_name_length = 0u;
+    if (!texture_identity_transport::snapshot_raw(
+            logical_name_raw,
+            logical_name_length))
         return;
 
     const auto logical_hash =
-        fnv_name(logical_name);
+        fnv_name(
+            logical_name_raw,
+            logical_name_length);
 
     const bool subsurface_body_spec =
         exact_subsurface_body_spec_hash(
@@ -972,6 +992,15 @@ void on_init_resource_view(
         !diffuse_member &&
         !normal_member)
         return;
+
+    std::wstring logical_name;
+    try {
+        logical_name.assign(
+            logical_name_raw,
+            logical_name_length);
+    } catch (...) {
+        return;
+    }
 
     auto *native_device =
         reinterpret_cast<ID3D11Device *>(
@@ -1302,16 +1331,9 @@ prepare_draw_requests(
         query.material.valid &&
         query.material.owner_tuple_exact;
 
-    // Every surviving Diffuse/Normal/SpecRGB route requires exact material
-    // ownership. Do not force three PSGetShaderResources COM retains plus
-    // texture-identity lookups for receiver-only / runtime-MTD fallback draws
-    // that cannot authorize any resource replacement.
     if (!exact_material)
         return true;
 
-    // With no SpecRGB consumer, only BMP receivers 24..35 can use the
-    // Diffuse/Normal bridges. HemEnv receivers 36..47 therefore have no
-    // possible resource request and can stay entirely off the D3D state path.
     if (!spec_rgb_consumer_ready &&
         (receiver_id < 24u ||
          receiver_id > 35u))
@@ -1322,6 +1344,49 @@ prepare_draw_requests(
         0u,
         3u,
         views);
+
+    const bool ready =
+        prepare_draw_requests_bound(
+            views,
+            receiver_id,
+            query,
+            full_material_response_ready,
+            spec_rgb_consumer_ready,
+            prepared);
+
+    for (auto *&view : views)
+        release_view(view);
+
+    return ready;
+}
+
+bool material_resource_draw_runtime::
+prepare_draw_requests_bound(
+    ID3D11ShaderResourceView *const (&views)[3],
+    std::uint32_t receiver_id,
+    const operators::material_response::
+        mtd_semantic_query &query,
+    bool full_material_response_ready,
+    bool spec_rgb_consumer_ready,
+    prepared_material_resource_draw &prepared) noexcept
+{
+    prepared = {};
+
+    if (receiver_id == 0u ||
+        g_quarantined.load())
+        return false;
+
+    const bool exact_material =
+        query.material.valid &&
+        query.material.owner_tuple_exact;
+
+    if (!exact_material)
+        return true;
+
+    if (!spec_rgb_consumer_ready &&
+        (receiver_id < 24u ||
+         receiver_id > 35u))
+        return true;
 
     const companion_lookup_request
         companion_requests[3]{
@@ -1602,9 +1667,6 @@ prepare_draw_requests(
 
     for (auto *&companion : companions)
         release_view(companion);
-
-    for (auto *&view : views)
-        release_view(view);
 
     if (prepared.request_count == 0u)
         hot_count(g_fail_open);

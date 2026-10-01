@@ -24,6 +24,8 @@ def main() -> None:
     env_h = (root / "include/dsrrl/runtime/pmetal_envspec_draw_runtime.hpp").read_text(encoding="utf-8")
     env_cpp = (root / "src/runtime/pmetal_envspec_draw_runtime.cpp").read_text(encoding="utf-8")
     source_h = (root / "include/dsrrl/runtime/pmetal_env_source_runtime.hpp").read_text(encoding="utf-8")
+    producer_h = (root / "include/dsrrl/runtime/pmetal_producer_state.hpp").read_text(encoding="utf-8")
+    producer_cpp = (root / "src/runtime/pmetal_producer_state.cpp").read_text(encoding="utf-8")
     flver_cpp = (root / "src/runtime/flver_engine_hooks.cpp").read_text(encoding="utf-8")
     lerp_cpp = (root / "src/operators/env_spec/pmetal_rgba_lerp_materializer.cpp").read_text(encoding="utf-8")
     lerp_h = (root / "include/dsrrl/operators/env_spec/pmetal_rgba_lerp_materializer.hpp").read_text(encoding="utf-8")
@@ -50,16 +52,20 @@ def main() -> None:
     for needle in ("parent_return != g_base + 0x220CF0u", "descriptor_owner != owner", "descriptor + 0x4Cu", "descriptor + 0x4Eu",
                    "descriptor + 0x50u", "descriptor[0x150u]", "+ 0x2318u", "wrapper + 0x40u",
                    "pmetal_selector_policy::source", "read_exact_pmetal_env_source",
-                   "g_pmetal_selected_material = material"):
+                   "pmetal_producer_state_publish("):
         require(capture, needle, "exact selector source proof")
     for forbidden in ("arm_hook", "fetch_add", "mutex", "spin", "publish_pmetal_source_only"):
         if forbidden in capture: fail(f"global synchronization/hook in selector source: {forbidden}")
     consumer = ul_cpp.split("bool pmetal_env_source_runtime::latest(",1)[1].split(
         "pmetal_env_source_runtime_telemetry pmetal_env_source_runtime::telemetry",1)[0]
-    for needle in ("const bool local_valid =", "!local_valid", "material.flver_sha256 !=", "material.material_slot !=",
-                   "material.raw_mtd_sha256 !=", "g_pmetal_selector_epoch.load"):
+    for needle in ("const bool local_valid =", "pmetal_producer_state_valid()", "g_pmetal_selector_epoch.load",
+                   "pmetal_producer_state_latest("):
         require(consumer, needle, "source lifetime/material mismatch fail-open")
-    require(ul_cpp, "thread_local pmetal_envspec_source g_pmetal_selected_source", "no process-global latest donor")
+    require(producer_cpp, "thread_local producer_record g_record", "no process-global latest donor")
+    require(producer_cpp, "same_material(", "producer exact material identity")
+    require(producer_cpp, "same_source_payload(", "generation-stamped semantic payload")
+    require(producer_cpp, "g_record.generation + 1u", "generation increments on semantic change")
+    require(producer_cpp, "out = g_record.source;", "immutable producer payload consumer")
 
     # Thread provenance is diagnostic only. It may falsify the selector-TLS
     # lifetime assumption, but must never become source authority.

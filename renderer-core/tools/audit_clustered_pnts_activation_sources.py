@@ -211,11 +211,11 @@ def main():
     if "g_registry_mutex" in draw_cpp or "lookup_snapshot(" in draw_cpp or "publish_snapshot(" in draw_cpp:
         fail("legacy globally locked clustered producer registry is still present")
     require(flver_cpp,"k_builder=0x22084Fu","ordinary builder hook")
-    require(flver_cpp,"bool install(bool enable_clustered_builder) noexcept","builder hook policy ABI")
+    require(flver_cpp,"bool install(\n    bool enable_clustered_builder,\n    bool enable_upper_lower_selector,\n    bool enable_hemdir3_selector) noexcept","builder hook policy ABI")
     require(flver_cpp,"if(enable_clustered_builder){","builder preparation policy gate")
     require(flver_cpp,"(enable_clustered_builder&&!arm(g_b))","builder arm policy gate")
     require(flver_cpp,"g_state.builder_armed=enable_clustered_builder;","builder hook attestation")
-    require(integrated,"flver_identity_transport::install(\n            k_pointlight_drawtime_runtime_enabled)","integrated builder policy routing")
+    require(integrated,"flver_identity_transport::install(\n            k_pointlight_drawtime_runtime_enabled,\n            upper_lower_enabled,\n            hemdir3_enabled)","integrated builder policy routing")
 
     # Direct PointLight owns its dedicated 205-row exact material authority
     # (180 Spc + 25 NoSpc). Generic MR profile coverage must not decide whether

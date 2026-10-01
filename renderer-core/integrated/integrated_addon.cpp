@@ -10,6 +10,8 @@
 #include "dsrrl/runtime/bloom_scene_sidecar_runtime.hpp"
 #include "dsrrl/runtime/bloom_fx_draw_transport.hpp"
 #include "dsrrl/runtime/pmetal_envspec_draw_runtime.hpp"
+#include "dsrrl/runtime/pmetal_native_draw_bridge.hpp"
+#include "dsrrl/runtime/pixel_srv_shadow.hpp"
 #include "dsrrl/runtime/texture_identity_transport.hpp"
 #include "dsrrl/operators/material_response/mtd_semantic_census.hpp"
 #include "dsrrl/runtime/stable_receiver_pipeline_registry.hpp"
@@ -161,6 +163,23 @@ constexpr bool k_pointlight_drawtime_runtime_enabled = false;
 constexpr bool k_pointlight_drawtime_runtime_enabled = true;
 #endif
 
+#if defined(DSRRL_DRAWTIME_ISLANDS_BYPASS) || \
+    defined(DSRRL_DRAW_CALLBACKS_BYPASS) || \
+    defined(DSRRL_DRAW_REPLAY_BYPASS) || \
+    defined(DSRRL_EMPTY_DRAW_CALLBACK_BISECT) || \
+    defined(DSRRL_STATE_TRANSACTION_ONLY_BISECT) || \
+    defined(DSRRL_RAW_DRAW_REPLAY_BISECT) || \
+    defined(DSRRL_STATE_CAPTURE_ONLY_BISECT) || \
+    defined(DSRRL_NATIVE_STATE_MUTATE_RESTORE_ONLY_BISECT) || \
+    defined(DSRRL_CORE_TRANSACTION_ONLY_BISECT) || \
+    defined(DSRRL_RAW_NATIVE_DRAW_REENTRY_MIN_BISECT) || \
+    defined(DSRRL_ADDON_LOADED_ONLY_BISECT) || \
+    defined(DSRRL_DRAW_CALLBACK_ONLY_BISECT)
+constexpr bool k_pmetal_native_draw_runtime_enabled = false;
+#else
+constexpr bool k_pmetal_native_draw_runtime_enabled = true;
+#endif
+
 #include <array>
 #include <atomic>
 #include <cstdint>
@@ -215,6 +234,8 @@ dsrrl::runtime::pmetal_envspec_draw_runtime
         g_pmetal_source,
         g_envspec_resources,
         g_material_resources);
+dsrrl::runtime::pmetal_native_draw_bridge
+    g_pmetal_native_draw;
 
 thread_local bool g_raw_draw_replay_recursing = false;
 
@@ -2678,7 +2699,7 @@ void log_effect_matrix(
         detail,
         sizeof(detail),
         "[DSRRL EFFECT DETAIL] "
-        "MR mtd_classified=%u cache_hit=%u selection_published=%u "
+        "MR mtd_classified=%u cache_hit=%u selection_published=%u selector_gates_ul=%u h3=%u "
         "PMetal entry=%u feature=%u material=%u semantic=%u source=%u "
         "receiver_source=%u repl=%u probe=%u spec=%u b12=%u request=%u fail=0x%08X "
         "PMSRC steady=%llu blend=%llu publish=%llu bank_unknown=%llu decode_fail=%llu "
@@ -2690,6 +2711,8 @@ void log_effect_matrix(
         flver.runtime_mtd_classified ? 1u : 0u,
         flver.runtime_mtd_cache_hit ? 1u : 0u,
         flver.runtime_mtd_selection_published ? 1u : 0u,
+        flver.upper_lower_selector_enabled ? 1u : 0u,
+        flver.hemdir3_selector_enabled ? 1u : 0u,
         pmetal.effect_entry_seen ? 1u : 0u,
         pmetal.effect_feature_ready ? 1u : 0u,
         pmetal.effect_material_ready ? 1u : 0u,
@@ -3328,8 +3351,10 @@ void log_state(const char *tag) noexcept
     const auto env_lerp =
         dsrrl::runtime::
             hemenvlerp_receiver_pipeline_stats();
+    const auto pmetal_native =
+        g_pmetal_native_draw.telemetry();
 
-    char env_line[1536]{};
+    char env_line[1792]{};
     std::snprintf(
         env_line,
         sizeof(env_line),
@@ -3337,7 +3362,8 @@ void log_state(const char *tag) noexcept
         "ps_mat=%llu/%llu src_steady=%llu src_blend=%llu src_miss=%llu src_hook=%u/%u "
         "native=%llu/%llu hash_miss=%llu views=%llu pack=%llu/%llu pack_ready=%u sampler=%u "
         "cube=%llu/%llu prepare=%llu/%llu candidate=%llu material_reject=%llu semantic_reject=%llu "
-        "source_reject=%llu blend_hold=%llu probe_reject=%llu spec_reject=%llu req=%llu b12_map=%llu/%llu q=%u "
+        "source_reject=%llu blend_hold=%llu probe_reject=%llu spec_reject=%llu req=%llu b12_map=%llu/%llu srv_shadow=%llu/%llu q=%u "
+        "native_draw=%llu/%llu/%llu reject=%llu restore_fail=%llu hook=%u nq=%u "
         "lerp_reg=%llu/%llu lerp_candidate=%llu lerp_req=%llu lerp_pipe=%llu/%llu bind=%llu/%llu miss=%llu conflict=%llu",
         tag,
         static_cast<unsigned long long>(
@@ -3394,7 +3420,23 @@ void log_state(const char *tag) noexcept
             env_draw.b12_uploads),
         static_cast<unsigned long long>(
             env_draw.b12_reuses),
+        static_cast<unsigned long long>(
+            env_draw.srv_shadow_hits),
+        static_cast<unsigned long long>(
+            env_draw.srv_shadow_fallbacks),
         env_draw.quarantined ? 1u : 0u,
+        static_cast<unsigned long long>(
+            pmetal_native.armed),
+        static_cast<unsigned long long>(
+            pmetal_native.draw_applied),
+        static_cast<unsigned long long>(
+            pmetal_native.draw_indexed_applied),
+        static_cast<unsigned long long>(
+            pmetal_native.arm_reject),
+        static_cast<unsigned long long>(
+            pmetal_native.restore_fail),
+        pmetal_native.hook_active ? 1u : 0u,
+        pmetal_native.quarantined ? 1u : 0u,
         static_cast<unsigned long long>(
             env_draw.lerp_replacement_register_ok),
         static_cast<unsigned long long>(
@@ -3533,13 +3575,27 @@ void on_init_device(reshade::api::device *device)
         g_bloom_scene_sidecar.on_init_device(device);
     g_mr_draw_runtime.on_init_device(device);
     g_pmetal_envspec.on_init_device(device);
+    if (k_pmetal_native_draw_runtime_enabled) {
+        if (!g_pmetal_native_draw.install(device)) {
+            reshade::log::message(
+                reshade::log::level::warning,
+                "[DSRRL RUNTIME V2] P_Metal native original-draw bridge unavailable; P_Metal falls back to the legacy replay path.");
+        } else {
+            reshade::log::message(
+                reshade::log::level::info,
+                "[DSRRL RUNTIME V2] P_Metal native original-draw bridge ACTIVE: addon callback prepares exact state, original D3D11 Draw executes once, state restores after draw.");
+        }
+    }
     g_upper_lower_hemenv.on_init_device(device);
     g_hemdir3.on_init_device(device);
 }
 
 void on_destroy_device(reshade::api::device *device)
 {
+    dsrrl::runtime::pixel_srv_shadow_reset();
+
     if (k_drawtime_islands_runtime_enabled) {
+        g_pmetal_native_draw.uninstall();
         g_draw_transactions.on_destroy_device(device);
         g_bloom_scene_sidecar.on_destroy_device(device);
         g_upper_lower.on_destroy_device(device);
@@ -6083,6 +6139,23 @@ bool on_draw(
         receiver_id,
         decision.route_index);
 
+    if (k_pmetal_native_draw_runtime_enabled &&
+        prepared.envspec_in_batch &&
+        g_pmetal_native_draw.arm_draw(
+            cmd_list,
+            prepared.batch.mutation,
+            vertex_count,
+            instance_count,
+            first_vertex,
+            first_instance)) {
+        release_prepared_island_batch(
+            prepared);
+        // Return false so ReShade continues into its single original
+        // _orig->Draw/DrawInstanced call. The native bridge wraps that call
+        // with the exact prepared P_Metal mutation and restores afterwards.
+        return false;
+    }
+
     if (k_state_capture_only_bisect) {
         (void)g_draw_transactions.capture_only(
             cmd_list,
@@ -6416,6 +6489,24 @@ bool on_draw_indexed(
         receiver_id,
         decision.route_index);
 
+    if (k_pmetal_native_draw_runtime_enabled &&
+        prepared.envspec_in_batch &&
+        g_pmetal_native_draw.arm_draw_indexed(
+            cmd_list,
+            prepared.batch.mutation,
+            index_count,
+            instance_count,
+            first_index,
+            vertex_offset,
+            first_instance)) {
+        release_prepared_island_batch(
+            prepared);
+        // Return false so ReShade executes exactly one original
+        // _orig->DrawIndexed/DrawIndexedInstanced call under the native
+        // P_Metal state wrapper.
+        return false;
+    }
+
     if (k_state_transaction_only_bisect) {
         (void)g_draw_transactions.mutate_restore_only(
             cmd_list,
@@ -6529,6 +6620,21 @@ void on_present(
         log_effect_matrix("LIVE");
 }
 
+void on_push_descriptors(
+    reshade::api::command_list *cmd_list,
+    reshade::api::shader_stage stages,
+    reshade::api::pipeline_layout layout,
+    std::uint32_t param_index,
+    const reshade::api::descriptor_table_update &update)
+{
+    dsrrl::runtime::pixel_srv_shadow_on_push_descriptors(
+        cmd_list,
+        stages,
+        layout,
+        param_index,
+        update);
+}
+
 void register_events()
 {
     reshade::register_event<reshade::addon_event::init_device>(on_init_device);
@@ -6537,6 +6643,8 @@ void register_events()
     reshade::register_event<reshade::addon_event::init_pipeline>(on_init_pipeline);
     reshade::register_event<reshade::addon_event::destroy_pipeline>(on_destroy_pipeline);
     reshade::register_event<reshade::addon_event::bind_pipeline>(on_bind_pipeline);
+    if (k_drawtime_islands_runtime_enabled)
+        reshade::register_event<reshade::addon_event::push_descriptors>(on_push_descriptors);
     if (k_drawtime_islands_runtime_enabled &&
         k_draw_callbacks_runtime_enabled) {
         reshade::register_event<reshade::addon_event::draw>(on_draw);
@@ -6553,6 +6661,8 @@ void unregister_events()
         reshade::unregister_event<reshade::addon_event::draw_indexed>(on_draw_indexed);
         reshade::unregister_event<reshade::addon_event::draw>(on_draw);
     }
+    if (k_drawtime_islands_runtime_enabled)
+        reshade::unregister_event<reshade::addon_event::push_descriptors>(on_push_descriptors);
     reshade::unregister_event<reshade::addon_event::bind_pipeline>(on_bind_pipeline);
     reshade::unregister_event<reshade::addon_event::destroy_pipeline>(on_destroy_pipeline);
     reshade::unregister_event<reshade::addon_event::init_pipeline>(on_init_pipeline);
@@ -6634,10 +6744,12 @@ bool AddonInit(
     g_mr_draw_runtime.reset();
     g_material_resources.reset();
     g_envspec_resources.reset_stats();
+    dsrrl::runtime::pixel_srv_shadow_reset();
     g_bloom_scene_sidecar.reset();
     dsrrl::runtime::bloom_fx_draw_transport::reset_stats();
     g_pmetal_envspec.reset();
     g_pmetal_source.reset();
+    g_pmetal_native_draw.reset_telemetry();
     g_upper_lower.reset();
     g_upper_lower_hemenv.reset();
     g_hemdir3.reset();
@@ -6889,9 +7001,18 @@ bool AddonInit(
             "] texture identity hooks FAIL-OPEN: SpecRGB/Diffuse/Normal sidecars remain stock.");
     }
 
+    const bool upper_lower_enabled =
+        g_core.features().enabled(
+            dsrrl::core::operator_id::upper_lower);
+    const bool hemdir3_enabled =
+        g_core.features().enabled(
+            dsrrl::core::operator_id::hemdir3);
+
     const bool flver_hooks =
         dsrrl::runtime::flver_identity_transport::install(
-            k_pointlight_drawtime_runtime_enabled);
+            k_pointlight_drawtime_runtime_enabled,
+            upper_lower_enabled,
+            hemdir3_enabled);
 
     if (!flver_hooks) {
         reshade::log::message(
@@ -6963,9 +7084,6 @@ bool AddonInit(
             "] Bloom FX diagnostic hooks disabled for production runtime.");
     }
 
-    const bool hemdir3_enabled =
-        g_core.features().enabled(
-            dsrrl::core::operator_id::hemdir3);
     const bool hemdir3_mode_hooks =
         !hemdir3_enabled ||
         (flver_hooks &&
@@ -6995,9 +7113,6 @@ bool AddonInit(
             "] Subsurface visible bridge DISABLED by runtime policy; stock DSR body/Subsurface is preserved.");
     }
 
-    const bool upper_lower_enabled =
-        g_core.features().enabled(
-            dsrrl::core::operator_id::upper_lower);
     bool pmetal_envspec_enabled =
         g_core.features().enabled(
             dsrrl::core::operator_id::env_spec);
@@ -7131,6 +7246,7 @@ void AddonUninit(
     log_effect_matrix("PRE_UNLOAD");
     motion_blur_camera_fallback_disable::
         log_state("PRE_UNLOAD");
+    g_pmetal_native_draw.uninstall();
     g_pmetal_source.uninstall();
     g_upper_lower.uninstall();
 

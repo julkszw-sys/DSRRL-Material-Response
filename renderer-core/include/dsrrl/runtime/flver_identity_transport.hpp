@@ -17,13 +17,18 @@ struct hook_status {
     bool runtime_mtd_classified = false;
     bool runtime_mtd_cache_hit = false;
     bool runtime_mtd_selection_published = false;
+    bool upper_lower_selector_enabled = false;
+    bool hemdir3_selector_enabled = false;
 };
 
 // The clustered PointLight builder hook is independent from the FLVER
 // parser/selector/MTD identity transport used by MR/P_Metal. Keep it optional
 // so profiles without draw-time clustered PointLight do not detour the hot
 // renderer builder at all.
-bool install(bool enable_clustered_builder = true) noexcept;
+bool install(
+    bool enable_clustered_builder = true,
+    bool enable_upper_lower_selector = true,
+    bool enable_hemdir3_selector = true) noexcept;
 void uninstall() noexcept;
 hook_status status() noexcept;
 
