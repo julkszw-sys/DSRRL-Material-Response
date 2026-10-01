@@ -904,12 +904,26 @@ bool publish_exact_selector_identity(
     void *r15,
     const void *selector_stack,
     const operators::material_response::
-        material_identity &identity) noexcept
+        material_identity &identity,
+    selector_profile_sample *profile) noexcept
 {
     if (!identity.valid ||
-        !identity.owner_tuple_exact ||
-        !material_owner_selection_publish(
-            identity))
+        !identity.owner_tuple_exact)
+        return false;
+
+    const auto selection_begin =
+        profile != nullptr
+            ? selector_profile_begin(*profile)
+            : 0u;
+    const bool selection_ok =
+        material_owner_selection_publish(
+            identity);
+    if (profile != nullptr)
+        selector_profile_end_stage(
+            *profile,
+            selection_begin,
+            profile->selection_publish_ticks);
+    if (!selection_ok)
         return false;
 
 #ifndef DSRRL_PHYSICAL_CUT_UL_H3_SUBSURFACE
@@ -922,7 +936,11 @@ bool publish_exact_selector_identity(
 
     // Route 345 is necessary but not sufficient. The isolated source runtime
     // retains exact semantic/raw-MTD validation before donor decode.
-    if (identity.route_index == 345u)
+    if (identity.route_index == 345u) {
+        const auto pmetal_begin =
+            profile != nullptr
+                ? selector_profile_begin(*profile)
+                : 0u;
         pmetal_env_source_selector_event(
             owner,
             ret,
@@ -930,6 +948,12 @@ bool publish_exact_selector_identity(
             r15,
             selector_stack,
             identity);
+        if (profile != nullptr)
+            selector_profile_end_stage(
+                *profile,
+                pmetal_begin,
+                profile->pmetal_source_ticks);
+    }
 
     telemetry::hot_count(
         g_exact_owner_ready);
@@ -955,6 +979,21 @@ extern "C" void dsrrl_flver_selector_observer(
     std::uint32_t incoming_mode,
     const void *selector_stack) noexcept
 {
+ selector_profile_sample profile{};
+#ifdef DSRRL_FLVER_SELECTOR_PROFILE
+ const auto profile_sequence =
+     ++g_selector_profile_counter;
+ profile.active =
+     (profile_sequence &
+      (k_selector_profile_sample_period - 1u)) == 0u;
+ if (profile.active)
+  profile.total_start =
+      selector_profile_qpc();
+#endif
+
+ const auto prefix_begin =
+     selector_profile_begin(profile);
+
  telemetry::hot_count(g_selector_events);
  material_owner_selection_clear();
  pmetal_env_source_selector_clear();
@@ -982,19 +1021,57 @@ extern "C" void dsrrl_flver_selector_observer(
       r15);
 #endif
 
- if(g_base==0u || ret==nullptr || material_index<0){telemetry::hot_count(g_owner_fail_open);return;}
+ if(g_base==0u || ret==nullptr || material_index<0){
+  telemetry::hot_count(g_owner_fail_open);
+  selector_profile_end_stage(
+      profile,
+      prefix_begin,
+      profile.prefix_ticks);
+  selector_profile_finish(
+      profile,
+      selector_profile_path::early_reject);
+  return;
+ }
  const auto ret_addr=reinterpret_cast<std::uintptr_t>(ret);
- if(ret_addr<g_base){telemetry::hot_count(g_owner_fail_open);return;}
+ if(ret_addr<g_base){
+  telemetry::hot_count(g_owner_fail_open);
+  selector_profile_end_stage(
+      profile,
+      prefix_begin,
+      profile.prefix_ticks);
+  selector_profile_finish(
+      profile,
+      selector_profile_path::early_reject);
+  return;
+ }
  const auto rva=ret_addr-g_base;
  if(rva!=k_ret_sel_1 && rva!=k_ret_sel_2 && rva!=k_ret_sel_3){
   telemetry::hot_count(g_owner_fail_open);
+  selector_profile_end_stage(
+      profile,
+      prefix_begin,
+      profile.prefix_ticks);
+  selector_profile_finish(
+      profile,
+      selector_profile_path::early_reject);
   return;
  }
 
+ selector_profile_end_stage(
+     profile,
+     prefix_begin,
+     profile.prefix_ticks);
+
+ const auto resolve_begin =
+     selector_profile_begin(profile);
  const void *actual_material=
      resolve_actual_material(
          container,
          material_index);
+ selector_profile_end_stage(
+     profile,
+     resolve_begin,
+     profile.resolve_material_ticks);
 
  if(g_state.builder_armed)
   clustered_pnts_selector_event_bridge(
@@ -1003,10 +1080,19 @@ extern "C" void dsrrl_flver_selector_observer(
 
  operators::material_response::material_identity
      cached_identity{};
- if(selector_identity_cache_lookup(
+ const auto cache_begin =
+     selector_profile_begin(profile);
+ const bool cache_hit =
+     selector_identity_cache_lookup(
         container,
         material_index,
-        cached_identity)){
+        cached_identity);
+ selector_profile_end_stage(
+     profile,
+     cache_begin,
+     profile.final_cache_lookup_ticks);
+
+ if(cache_hit){
   telemetry::hot_count(
       g_selector_identity_cache_hits);
 
@@ -1016,23 +1102,46 @@ extern "C" void dsrrl_flver_selector_observer(
         r14,
         r15,
         selector_stack,
-        cached_identity))
+        cached_identity,
+        &profile)){
+   selector_profile_finish(
+       profile,
+       selector_profile_path::cache);
    return;
+  }
  } else {
   telemetry::hot_count(
       g_selector_identity_cache_misses);
  }
 
  actual_material_owner_observation observation{};
- if(flver_identity_enrich_owner(
+ const auto owner_lookup_begin =
+     selector_profile_begin(profile);
+ const bool owner_lookup_ok =
+     flver_identity_enrich_owner(
         container,
         static_cast<std::uint32_t>(
             material_index),
-        observation)){
+        observation);
+ selector_profile_end_stage(
+     profile,
+     owner_lookup_begin,
+     profile.owner_lookup_ticks);
+
+ if(owner_lookup_ok){
   telemetry::hot_count(g_owner_sha_hits);
 
-  if(enrich_exact_owner_mtd_identity(
-        observation)){
+  const auto owner_mtd_begin =
+      selector_profile_begin(profile);
+  const bool owner_mtd_ok =
+      enrich_exact_owner_mtd_identity(
+          observation);
+  selector_profile_end_stage(
+      profile,
+      owner_mtd_begin,
+      profile.owner_mtd_enrich_ticks);
+
+  if(owner_mtd_ok){
    telemetry::hot_count(g_owner_mtd_hits);
 
    const auto identity=
@@ -1045,11 +1154,21 @@ extern "C" void dsrrl_flver_selector_observer(
           r14,
           r15,
           selector_stack,
-          identity)){
+          identity,
+          &profile)){
+    const auto cache_publish_begin =
+        selector_profile_begin(profile);
     selector_identity_cache_publish(
         container,
         material_index,
         identity);
+    selector_profile_end_stage(
+        profile,
+        cache_publish_begin,
+        profile.final_cache_publish_ticks);
+    selector_profile_finish(
+        profile,
+        selector_profile_path::owner);
     return;
    }
   }
@@ -1061,23 +1180,47 @@ extern "C" void dsrrl_flver_selector_observer(
  // profiles; resource/asset operators still require their own owner gates.
  operators::material_response::material_identity
      runtime_material{};
- if(lookup_exact_runtime_material(
+ const auto runtime_lookup_begin =
+     selector_profile_begin(profile);
+ const bool runtime_material_hit =
+     lookup_exact_runtime_material(
         actual_material,
-        runtime_material)){
+        runtime_material);
+ selector_profile_end_stage(
+     profile,
+     runtime_lookup_begin,
+     profile.runtime_mtd_lookup_ticks);
+
+ if(runtime_material_hit){
   telemetry::hot_count(
       g_runtime_material_hits);
 
-  if(material_owner_selection_publish(
-        runtime_material)){
+  const auto runtime_publish_begin =
+      selector_profile_begin(profile);
+  const bool runtime_publish_ok =
+      material_owner_selection_publish(
+          runtime_material);
+  selector_profile_end_stage(
+      profile,
+      runtime_publish_begin,
+      profile.runtime_publish_ticks);
+
+  if(runtime_publish_ok){
    latch_once(
        g_runtime_mtd_selection_published);
    telemetry::hot_count(
        g_runtime_material_ready);
+   selector_profile_finish(
+       profile,
+       selector_profile_path::runtime_mtd);
    return;
   }
  }
 
  telemetry::hot_count(g_owner_fail_open);
+ selector_profile_finish(
+     profile,
+     selector_profile_path::fail_open);
 }
 bool install(
     bool enable_clustered_builder,
