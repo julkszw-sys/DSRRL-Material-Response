@@ -229,13 +229,19 @@ def main():
         "context->PSGetShaderResources(",
         "resource impossible-receiver prefilter")
 
-    # Current active operator set is owner-gated. Preserve an escape hatch only
+    # Current generic operator set is owner-gated. PointLight has a dedicated
+    # exact-route fast path with its own owner rejection, so inspect only the
+    # generic observe_draw_identity body here. Preserve an escape hatch only
     # for explicitly enabled U/L/HemDir3/Subsurface if policy changes later.
-    owner_reject=integrated.find("if (!owner_ok) {")
-    owner_join=integrated.find("hot_count(g_draw_joins);",owner_reject)
+    generic_observe=function_body(
+        integrated,
+        "bool observe_draw_identity(",
+        "bool prepare_island_batch(")
+    owner_reject=generic_observe.find("if (!owner_ok) {")
+    owner_join=generic_observe.find("hot_count(g_draw_joins);",owner_reject)
     if owner_reject<0 or owner_join<0:
-        fail("owner-reject draw boundary missing")
-    owner_body=integrated[owner_reject:owner_join]
+        fail("generic owner-reject draw boundary missing")
+    owner_body=generic_observe[owner_reject:owner_join]
     require(owner_body,"const bool ownerless_island_enabled =","ownerless route policy")
     require(owner_body,"return ownerless_island_enabled;","ownerless draw early exit")
 
