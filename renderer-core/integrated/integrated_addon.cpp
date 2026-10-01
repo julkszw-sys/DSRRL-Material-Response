@@ -5869,9 +5869,6 @@ bool on_draw(
     if (k_empty_draw_callback_bisect)
         return false;
 
-    if (k_empty_draw_callback_bisect)
-        return false;
-
     if (k_draw_callback_only_bisect)
         return false;
 
@@ -6217,6 +6214,9 @@ bool on_draw_indexed(
     std::uint32_t first_instance)
 {
     if (g_raw_draw_replay_recursing)
+        return false;
+
+    if (k_empty_draw_callback_bisect)
         return false;
 
     if (k_draw_callback_only_bisect)
