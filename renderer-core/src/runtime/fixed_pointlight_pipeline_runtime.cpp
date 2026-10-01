@@ -13,6 +13,16 @@ namespace dsrrl::runtime {
 
 namespace hashing = operators::legacy_plan::hashing;
 
+namespace {
+constexpr std::array<std::uint8_t,16>
+    k_fixed_pointlight_binding_guid{{
+        0x44u,0x53u,0x52u,0x52u,
+        0x4cu,0x46u,0x50u,0x4cu,
+        0x42u,0x49u,0x4eu,0x44u,
+        0x30u,0x30u,0x30u,0x31u
+    }};
+}
+
 struct fixed_pointlight_pipeline_runtime::record {
     digest_key host{};
     std::array<std::uint8_t,32> replacement_sha{};
@@ -304,85 +314,76 @@ bool fixed_pointlight_pipeline_runtime::on_bind_pipeline(
         static_cast<std::uint64_t>(
             reinterpret_cast<std::uintptr_t>(
                 cmd_list));
+    const auto epoch =
+        pipeline_epoch_.load(
+            std::memory_order_acquire);
 
-    // The exact PointLight pipeline registry is the bind-time authority.
-    // The integrated route cache is only an optimization and may not suppress
-    // this lookup. Negative lookups are epoch-cached per thread, so ordinary
-    // non-PointLight binds do not take this runtime's mutex repeatedly.
-    if (!pipeline_attested_cached(
+    // ReShade command-list private data is the object-local state shadow.
+    // Repeated binds of the same exact pipeline never touch a global map.
+    if (bound_tls_.runtime == this &&
+        bound_tls_.command == command &&
+        bound_tls_.pipeline == pipeline.handle &&
+        bound_tls_.pipeline_epoch == epoch &&
+        bound_tls_.present &&
+        bound_tls_.selected != nullptr) {
+        cmd_list->set_private_data(
+            k_fixed_pointlight_binding_guid.data(),
+            pipeline.handle);
+        telemetry::hot_count(bind_hits_);
+        return true;
+    }
+
+    auto selected =
+        pipeline_record_cached(
+            pipeline.handle);
+    if (selected == nullptr ||
+        pipeline_epoch_.load(
+            std::memory_order_acquire) != epoch) {
+        // Re-resolve once if init/destroy raced this bind. The normal path is
+        // a TLS cache hit and does not take the registry mutex.
+        selected =
+            pipeline_record_cached(
+                pipeline.handle);
+    }
+
+    const auto stable_epoch =
+        pipeline_epoch_.load(
+            std::memory_order_acquire);
+    if (selected == nullptr ||
+        !pipeline_attested_cached(
             pipeline.handle)) {
-        if (!any_bound_.load(
-                std::memory_order_acquire)) {
-            bound_tls_ = {
-                this,
-                command,
-                {},
-                bound_epoch_.load(
-                    std::memory_order_relaxed),
-                false
-            };
-            return false;
-        }
-
-        std::lock_guard<std::mutex> lock(mutex_);
-        bound_.erase(command);
-        any_bound_.store(
-            !bound_.empty(),
-            std::memory_order_release);
+        cmd_list->set_private_data(
+            k_fixed_pointlight_binding_guid.data(),
+            0u);
         bound_tls_ = {
             this,
             command,
             {},
-            bound_epoch_.load(
-                std::memory_order_relaxed),
-            false
+            stable_epoch,
+            false,
+            0u,
+            stable_epoch
         };
-        return false;
-    }
-
-    std::lock_guard<std::mutex> lock(mutex_);
-    const auto epoch =
-        bound_epoch_.load(
-            std::memory_order_relaxed);
-
-    if (quarantined_.load()) {
-        bound_.erase(command);
-        any_bound_.store(
-            !bound_.empty(),
-            std::memory_order_release);
-        bound_tls_ = {this,command,{},epoch,false};
-        return false;
-    }
-
-    const auto found =
-        pipelines_.find(pipeline.handle);
-    if (found == pipelines_.end()) {
-        // A destroy can race the cached positive verdict. Fail open and
-        // invalidate the current command-list binding rather than replaying
-        // a stale PointLight replacement.
-        bound_.erase(command);
-        any_bound_.store(
-            !bound_.empty(),
-            std::memory_order_release);
-        bound_tls_ = {this,command,{},epoch,false};
         telemetry::hot_count(bind_misses_);
         return false;
     }
 
-    bound_[command] = found->second;
-    any_bound_.store(
-        true,
-        std::memory_order_release);
+    cmd_list->set_private_data(
+        k_fixed_pointlight_binding_guid.data(),
+        pipeline.handle);
     bound_tls_ = {
         this,
         command,
-        found->second,
-        epoch,
-        true
+        selected,
+        stable_epoch,
+        true,
+        pipeline.handle,
+        stable_epoch
     };
     telemetry::hot_count(bind_hits_);
     return true;
 }
+
 void fixed_pointlight_pipeline_runtime::on_destroy_pipeline(
     reshade::api::pipeline pipeline) noexcept
 {
@@ -396,23 +397,8 @@ void fixed_pointlight_pipeline_runtime::on_destroy_pipeline(
     if (found == pipelines_.end())
         return;
 
-    const auto dead = found->second;
     pipelines_.erase(found);
     pipeline_epoch_.fetch_add(
-        1u,
-        std::memory_order_release);
-
-    for (auto it = bound_.begin();
-         it != bound_.end();) {
-        if (it->second == dead)
-            it = bound_.erase(it);
-        else
-            ++it;
-    }
-    any_bound_.store(
-        !bound_.empty(),
-        std::memory_order_release);
-    bound_epoch_.fetch_add(
         1u,
         std::memory_order_release);
     bound_tls_ = {};
@@ -427,29 +413,23 @@ void fixed_pointlight_pipeline_runtime::on_destroy_device(
     if (device_ != device)
         return;
 
-    bound_.clear();
-    any_bound_.store(
-        false,
-        std::memory_order_release);
     pipelines_.clear();
     pipeline_epoch_.fetch_add(
         1u,
         std::memory_order_release);
     candidates_.clear();
     device_ = nullptr;
-    bound_epoch_.fetch_add(
-        1u,
-        std::memory_order_release);
     bound_tls_ = {};
     attestation_tls_ = {};
 }
 
-bool fixed_pointlight_pipeline_runtime::pipeline_attested_cached(
+std::shared_ptr<const fixed_pointlight_pipeline_runtime::record>
+fixed_pointlight_pipeline_runtime::pipeline_record_cached(
     std::uint64_t pipeline_handle) const noexcept
 {
     if (pipeline_handle == 0u ||
         quarantined_.load())
-        return false;
+        return {};
 
     const auto epoch =
         pipeline_epoch_.load(
@@ -469,15 +449,18 @@ bool fixed_pointlight_pipeline_runtime::pipeline_attested_cached(
         cached.epoch == epoch &&
         pipeline_epoch_.load(
             std::memory_order_acquire) == epoch)
-        return cached.present;
+        return cached.present
+            ? cached.selected
+            : std::shared_ptr<const record>{};
 
-    bool present = false;
+    std::shared_ptr<const record> selected{};
     std::uint64_t stable_epoch = epoch;
     {
         std::lock_guard<std::mutex> lock(mutex_);
-        present =
-            pipelines_.find(pipeline_handle) !=
-            pipelines_.end();
+        const auto found =
+            pipelines_.find(pipeline_handle);
+        if (found != pipelines_.end())
+            selected = found->second;
         stable_epoch =
             pipeline_epoch_.load(
                 std::memory_order_relaxed);
@@ -487,9 +470,17 @@ bool fixed_pointlight_pipeline_runtime::pipeline_attested_cached(
         this,
         pipeline_handle,
         stable_epoch,
-        present
+        selected,
+        selected != nullptr
     };
-    return present;
+    return selected;
+}
+
+bool fixed_pointlight_pipeline_runtime::pipeline_attested_cached(
+    std::uint64_t pipeline_handle) const noexcept
+{
+    return pipeline_record_cached(
+        pipeline_handle) != nullptr;
 }
 
 bool fixed_pointlight_pipeline_runtime::pipeline_attested(
@@ -511,41 +502,38 @@ bool fixed_pointlight_pipeline_runtime::bound_light_count(
         static_cast<std::uint64_t>(
             reinterpret_cast<std::uintptr_t>(
                 cmd_list));
-
     const auto epoch =
-        bound_epoch_.load(
+        pipeline_epoch_.load(
             std::memory_order_acquire);
+    std::uint64_t pipeline_handle = 0u;
+    cmd_list->get_private_data(
+        k_fixed_pointlight_binding_guid.data(),
+        &pipeline_handle);
 
     std::shared_ptr<const record> selected{};
     if (bound_tls_.runtime == this &&
         bound_tls_.command == command &&
-        bound_tls_.epoch == epoch) {
-        if (!bound_tls_.present)
-            return false;
+        bound_tls_.pipeline == pipeline_handle &&
+        bound_tls_.pipeline_epoch == epoch &&
+        bound_tls_.present &&
+        bound_tls_.selected != nullptr) {
         selected = bound_tls_.selected;
     } else {
-        std::lock_guard<std::mutex> lock(mutex_);
-        const auto found = bound_.find(command);
-        if (found == bound_.end()) {
-            bound_tls_ = {
-                this,
-                command,
-                {},
-                bound_epoch_.load(
-                    std::memory_order_relaxed),
-                false
-            };
-            return false;
-        }
+        selected =
+            pipeline_record_cached(
+                pipeline_handle);
 
-        selected = found->second;
+        const auto stable_epoch =
+            pipeline_epoch_.load(
+                std::memory_order_acquire);
         bound_tls_ = {
             this,
             command,
             selected,
-            bound_epoch_.load(
-                std::memory_order_relaxed),
-            selected != nullptr
+            stable_epoch,
+            selected != nullptr,
+            pipeline_handle,
+            stable_epoch
         };
     }
 
@@ -572,40 +560,38 @@ bool fixed_pointlight_pipeline_runtime::prepare_bound_shader(
         static_cast<std::uint64_t>(
             reinterpret_cast<std::uintptr_t>(
                 cmd_list));
-
     const auto epoch =
-        bound_epoch_.load(
+        pipeline_epoch_.load(
             std::memory_order_acquire);
+    std::uint64_t pipeline_handle = 0u;
+    cmd_list->get_private_data(
+        k_fixed_pointlight_binding_guid.data(),
+        &pipeline_handle);
 
     std::shared_ptr<const record> selected{};
     if (bound_tls_.runtime == this &&
         bound_tls_.command == command &&
-        bound_tls_.epoch == epoch) {
-        if (!bound_tls_.present)
-            return false;
+        bound_tls_.pipeline == pipeline_handle &&
+        bound_tls_.pipeline_epoch == epoch &&
+        bound_tls_.present &&
+        bound_tls_.selected != nullptr) {
         selected = bound_tls_.selected;
     } else {
-        std::lock_guard<std::mutex> lock(mutex_);
-        const auto found = bound_.find(command);
-        if (found == bound_.end()) {
-            bound_tls_ = {
-                this,
-                command,
-                {},
-                bound_epoch_.load(
-                    std::memory_order_relaxed),
-                false
-            };
-            return false;
-        }
-        selected = found->second;
+        selected =
+            pipeline_record_cached(
+                pipeline_handle);
+
+        const auto stable_epoch =
+            pipeline_epoch_.load(
+                std::memory_order_acquire);
         bound_tls_ = {
             this,
             command,
             selected,
-            bound_epoch_.load(
-                std::memory_order_relaxed),
-            selected != nullptr
+            stable_epoch,
+            selected != nullptr,
+            pipeline_handle,
+            stable_epoch
         };
     }
 
@@ -651,19 +637,12 @@ fixed_pointlight_pipeline_runtime::telemetry() const noexcept
 void fixed_pointlight_pipeline_runtime::reset() noexcept
 {
     std::lock_guard<std::mutex> lock(mutex_);
-    bound_.clear();
-    any_bound_.store(
-        false,
-        std::memory_order_release);
     pipelines_.clear();
     pipeline_epoch_.fetch_add(
         1u,
         std::memory_order_release);
     candidates_.clear();
     device_ = nullptr;
-    bound_epoch_.fetch_add(
-        1u,
-        std::memory_order_release);
     bound_tls_ = {};
     attestation_tls_ = {};
 
