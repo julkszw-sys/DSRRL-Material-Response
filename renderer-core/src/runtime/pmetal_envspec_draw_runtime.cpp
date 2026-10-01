@@ -652,11 +652,11 @@ bool pmetal_envspec_draw_runtime::prepare(
                 std::memory_order_relaxed)) {
             const auto source_state =
                 source_.telemetry();
-            char source_line[1024]{};
+            char source_line[1280]{};
             std::snprintf(
                 source_line,
                 sizeof(source_line),
-                "[DSRRL ENVSPEC SOURCE] exact_seen=%u parent=%u descriptor=%u endpoint=%u manager=%u decode_a=%u decode_b=%u exact_publish=%llu decode_fail=%llu consumer_ok=%llu consumer_fail=%llu hook_single=%llu hook_blend=%llu hook_publish=%llu hook_consume=%llu pub_tid=%u con_tid=%u con_tls=%u selector_active=%u hook_single_armed=%u hook_blend_armed=%u",
+                "[DSRRL ENVSPEC SOURCE] exact_seen=%u parent=%u descriptor=%u endpoint=%u manager=%u decode_a=%u decode_b=%u exact_publish=%llu decode_fail=%llu consumer_ok=%llu consumer_fail=%llu hook_single=%llu hook_blend=%llu hook_publish=%llu hook_consume=%llu hook_decode=%u ver=%u count=%u index=%u row=%u sig=%016llx pub_tid=%u con_tid=%u con_tls=%u selector_active=%u hook_single_armed=%u hook_blend_armed=%u",
                 source_state.selector_exact_seen ? 1u : 0u,
                 source_state.parent_gate_ok ? 1u : 0u,
                 source_state.descriptor_gate_ok ? 1u : 0u,
@@ -680,6 +680,18 @@ bool pmetal_envspec_draw_runtime::prepare(
                     source_state.hook_publish),
                 static_cast<unsigned long long>(
                     source_state.hook_consume),
+                static_cast<unsigned>(
+                    source_state.hook_decode_stage),
+                static_cast<unsigned>(
+                    source_state.hook_decode_version),
+                static_cast<unsigned>(
+                    source_state.hook_decode_count),
+                static_cast<unsigned>(
+                    source_state.hook_decode_index),
+                static_cast<unsigned>(
+                    source_state.hook_decode_row_id),
+                static_cast<unsigned long long>(
+                    source_state.hook_decode_signature),
                 static_cast<unsigned>(
                     source_state.last_publish_tid),
                 static_cast<unsigned>(

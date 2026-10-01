@@ -6619,8 +6619,6 @@ bool on_draw(
             }
             observe_pointlight_render_target(
                 cmd_list);
-            observe_pointlight_render_target(
-                cmd_list);
         } else {
             hot_count(g_clustered_draw_fail_open);
         }
@@ -6946,6 +6944,8 @@ bool on_draw_indexed(
                     reshade::log::level::info,
                     "[DSRRL POINTLIGHT APPLY] stage=applied");
             }
+            observe_pointlight_render_target(
+                cmd_list);
         } else {
             hot_count(g_clustered_draw_fail_open);
         }

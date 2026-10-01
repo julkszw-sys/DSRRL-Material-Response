@@ -87,7 +87,42 @@ std::atomic<std::uint64_t> g_hook_single_seen{0u};
 std::atomic<std::uint64_t> g_hook_blend_seen{0u};
 std::atomic<std::uint64_t> g_hook_publish{0u};
 std::atomic<std::uint64_t> g_hook_consume{0u};
+std::atomic<std::uint32_t> g_hook_decode_stage{0u};
+std::atomic<std::uint32_t> g_hook_decode_version{0u};
+std::atomic<std::uint32_t> g_hook_decode_count{0u};
+std::atomic<std::uint32_t> g_hook_decode_index{0u};
+std::atomic<std::uint32_t> g_hook_decode_row_id{0u};
+std::atomic<std::uint64_t> g_hook_decode_signature{0u};
 std::atomic_bool g_hook_restore_failed{false};
+
+enum hook_decode_stage : std::uint32_t {
+    hook_decode_none = 0u,
+    hook_decode_source_invalid = 1u,
+    hook_decode_base_invalid = 2u,
+    hook_decode_selector_invalid = 3u,
+    hook_decode_header_invalid = 4u,
+    hook_decode_row_read_invalid = 5u,
+    hook_decode_bank_unknown = 6u,
+    hook_decode_row_unknown = 7u,
+    hook_decode_nonfinite = 8u,
+    hook_decode_ok = 9u
+};
+
+void record_hook_decode(
+    std::uint32_t stage,
+    std::uint32_t version,
+    std::uint32_t count,
+    std::uint32_t index,
+    std::uint32_t row_id,
+    std::uint64_t signature) noexcept
+{
+    g_hook_decode_stage.store(stage,std::memory_order_relaxed);
+    g_hook_decode_version.store(version,std::memory_order_relaxed);
+    g_hook_decode_count.store(count,std::memory_order_relaxed);
+    g_hook_decode_index.store(index,std::memory_order_relaxed);
+    g_hook_decode_row_id.store(row_id,std::memory_order_relaxed);
+    g_hook_decode_signature.store(signature,std::memory_order_relaxed);
+}
 
 struct readable_window {
     std::uintptr_t begin = 0u;
@@ -841,107 +876,79 @@ bool read_exact_source(
     signature = 0u;
     row_id = 0u;
 
-    if (source == nullptr ||
-        selector < 0)
+    std::uint32_t version_u32 = 0u;
+    std::uint32_t count_u32 = 0u;
+    std::uint32_t index = 0u;
+
+    if (source == nullptr || selector < 0) {
+        record_hook_decode(hook_decode_source_invalid,version_u32,count_u32,index,row_id,signature);
         return false;
+    }
 
     const std::uint8_t *base = nullptr;
-    if (!safe_read(
-            static_cast<const std::uint8_t *>(
-                source) +
-                0x18u,
-            base) ||
-        base == nullptr)
+    if (!safe_read(static_cast<const std::uint8_t *>(source) + 0x18u,base) || base == nullptr) {
+        record_hook_decode(hook_decode_base_invalid,version_u32,count_u32,index,row_id,signature);
         return false;
+    }
 
-    std::uint32_t index = 0u;
-    if (!retail_lightbank_record_index(
-            selector,
-            index))
+    if (!retail_lightbank_record_index(selector,index)) {
+        record_hook_decode(hook_decode_selector_invalid,version_u32,count_u32,index,row_id,signature);
         return false;
+    }
 
     std::uint16_t version = 0u;
     std::uint16_t count = 0u;
-    if (!safe_read(
-            base + 8u,
-            version) ||
-        !safe_read(
-            base + 10u,
-            count) ||
-        version != 4u ||
-        count == 0u ||
-        count > 256u ||
-        index >= count)
+    if (!safe_read(base + 8u,version) || !safe_read(base + 10u,count)) {
+        record_hook_decode(hook_decode_header_invalid,version_u32,count_u32,index,row_id,signature);
         return false;
+    }
 
-    const auto *entry =
-        base +
-        0x30u +
-        static_cast<std::size_t>(
-            index) * 12u;
+    version_u32 = version;
+    count_u32 = count;
 
-    if (!safe_read(
-            entry,
-            row_id))
+    if (version != 4u || count == 0u || count > 256u || index >= count) {
+        record_hook_decode(hook_decode_header_invalid,version_u32,count_u32,index,row_id,signature);
         return false;
+    }
 
-    if (endpoint_cache_lookup(
-            source,
-            base,
-            count,
-            index,
-            row_id,
-            out,
-            signature))
+    const auto *entry = base + 0x30u + static_cast<std::size_t>(index) * 12u;
+    if (!safe_read(entry,row_id)) {
+        record_hook_decode(hook_decode_row_read_invalid,version_u32,count_u32,index,row_id,signature);
+        return false;
+    }
+
+    if (endpoint_cache_lookup(source,base,count,index,row_id,out,signature)) {
+        record_hook_decode(hook_decode_ok,version_u32,count_u32,index,row_id,signature);
         return true;
+    }
 
-    const auto *bank =
-        resolve_bank(
-            base,
-            count,
-            signature);
-    if (bank == nullptr)
+    const auto *bank = resolve_bank(base,count,signature);
+    if (bank == nullptr) {
+        record_hook_decode(hook_decode_bank_unknown,version_u32,count_u32,index,row_id,signature);
         return false;
+    }
 
-    const auto *row =
-        pmetal_env_source_authority::
-            find_row(
-                *bank,
-                row_id);
-    if (row == nullptr)
+    const auto *row = pmetal_env_source_authority::find_row(*bank,row_id);
+    if (row == nullptr) {
+        record_hook_decode(hook_decode_row_unknown,version_u32,count_u32,index,row_id,signature);
         return false;
+    }
 
-    const float scale =
-        static_cast<float>(
-            row->m) *
-        0.01f;
-
+    const float scale = static_cast<float>(row->m) * 0.01f;
     out = {
-        static_cast<float>(
-            row->r) /
-            255.0f * scale,
-        static_cast<float>(
-            row->g) /
-            255.0f * scale,
-        static_cast<float>(
-            row->b) /
-            255.0f * scale,
+        static_cast<float>(row->r) / 255.0f * scale,
+        static_cast<float>(row->g) / 255.0f * scale,
+        static_cast<float>(row->b) / 255.0f * scale,
         0.0f
     };
 
-    if (!std::isfinite(out.x) ||
-        !std::isfinite(out.y) ||
-        !std::isfinite(out.z))
+    if (!std::isfinite(out.x) || !std::isfinite(out.y) || !std::isfinite(out.z)) {
+        record_hook_decode(hook_decode_nonfinite,version_u32,count_u32,index,row_id,signature);
         return false;
+    }
 
-    endpoint_cache_publish(
-        source,
-        base,
-        count,
-        index,
-        row_id,
-        out,
-        signature);
+    endpoint_cache_publish(source,base,count,index,row_id,out,signature);
+    record_hook_decode(hook_decode_ok,version_u32,count_u32,index,row_id,signature);
     return true;
 }
 
@@ -1881,6 +1888,12 @@ pmetal_env_source_runtime::telemetry() const noexcept
     out.hook_consume =
         g_hook_consume.load(
             std::memory_order_relaxed);
+    out.hook_decode_stage = g_hook_decode_stage.load(std::memory_order_relaxed);
+    out.hook_decode_version = g_hook_decode_version.load(std::memory_order_relaxed);
+    out.hook_decode_count = g_hook_decode_count.load(std::memory_order_relaxed);
+    out.hook_decode_index = g_hook_decode_index.load(std::memory_order_relaxed);
+    out.hook_decode_row_id = g_hook_decode_row_id.load(std::memory_order_relaxed);
+    out.hook_decode_signature = g_hook_decode_signature.load(std::memory_order_relaxed);
 
     out.last_publish_tid =
         g_last_publish_tid.load(
@@ -1985,6 +1998,12 @@ void pmetal_env_source_runtime::reset() noexcept
     g_hook_source_serial.store(
         0u,
         std::memory_order_relaxed);
+    g_hook_decode_stage.store(0u,std::memory_order_relaxed);
+    g_hook_decode_version.store(0u,std::memory_order_relaxed);
+    g_hook_decode_count.store(0u,std::memory_order_relaxed);
+    g_hook_decode_index.store(0u,std::memory_order_relaxed);
+    g_hook_decode_row_id.store(0u,std::memory_order_relaxed);
+    g_hook_decode_signature.store(0u,std::memory_order_relaxed);
     g_hook_restore_failed.store(
         false,
         std::memory_order_relaxed);
