@@ -34,10 +34,12 @@ for forbidden in ['VirtualProtect','write_bytes','create_hook','install_hook','f
     if forbidden in header:
         raise SystemExit('Unexpected source mutation/global hook: '+forbidden)
 
-# Fixed path still requires exact donor capture; current activation fix is
-# specifically for ordinary clustered Bank/Lerp sources.
-require(fixed,'pointlight_ptde_source::capture(source,g_base,donor_raw)')
-require(fixed,'g_gpu_by_context.try_emplace(context)')
+# Fixed PntSS/PntSSSS consumers are already linear in the confirmed census.
+# Their runtime captures the host-selected packed source directly and must not
+# be forced through the clustered donor/attenuation path.
+require(fixed,'void __fastcall capture_callback(')
+require(fixed,'current->raw_q[slot]=value')
+require(fixed,'g_snapshots[owner_key]=current')
 require(fixed,'D3D11_MAP_WRITE_DISCARD')
 
 # Clustered path: exact retail source class is the authority. The host vfunc
@@ -81,5 +83,5 @@ for token in [
 ]:
     require(shader,token)
 
-print('POINTLIGHT_PTDE_SOURCE_PASS: exact source classes; PTDE donor preferred; homologous clustered host source survives donor miss; PTDE attenuation island retained')
+print('POINTLIGHT_PTDE_SOURCE_PASS: fixed linear path preserved; clustered exact source classes use PTDE donor when available and homologous host packed source on donor miss; PTDE attenuation island retained')
 print('SCOPE: runtime activation candidate only; pixel equivalence remains OPEN where numeric host source differs from PTDE donor')
