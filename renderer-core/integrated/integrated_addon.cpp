@@ -6112,6 +6112,23 @@ bool on_draw(
         receiver_id,
         decision.route_index);
 
+    if (k_pmetal_native_draw_runtime_enabled &&
+        prepared.envspec_in_batch &&
+        g_pmetal_native_draw.arm_draw(
+            cmd_list,
+            prepared.batch.mutation,
+            vertex_count,
+            instance_count,
+            first_vertex,
+            first_instance)) {
+        release_prepared_island_batch(
+            prepared);
+        // Return false so ReShade continues into its single original
+        // _orig->Draw/DrawInstanced call. The native bridge wraps that call
+        // with the exact prepared P_Metal mutation and restores afterwards.
+        return false;
+    }
+
     if (k_state_capture_only_bisect) {
         (void)g_draw_transactions.capture_only(
             cmd_list,
@@ -6444,6 +6461,24 @@ bool on_draw_indexed(
         effect_probe_stage::prepared,
         receiver_id,
         decision.route_index);
+
+    if (k_pmetal_native_draw_runtime_enabled &&
+        prepared.envspec_in_batch &&
+        g_pmetal_native_draw.arm_draw_indexed(
+            cmd_list,
+            prepared.batch.mutation,
+            index_count,
+            instance_count,
+            first_index,
+            vertex_offset,
+            first_instance)) {
+        release_prepared_island_batch(
+            prepared);
+        // Return false so ReShade executes exactly one original
+        // _orig->DrawIndexed/DrawIndexedInstanced call under the native
+        // P_Metal state wrapper.
+        return false;
+    }
 
     if (k_state_transaction_only_bisect) {
         (void)g_draw_transactions.mutate_restore_only(
