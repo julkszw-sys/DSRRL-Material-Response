@@ -556,6 +556,34 @@ if(DSRRL_RAW_DRAW_REPLAY_BISECT)
         $<$<COMPILE_LANGUAGE:CXX>:DSRRL_RAW_DRAW_REPLAY_BISECT>)
 endif()
 
+if(DSRRL_STATE_CAPTURE_ONLY_BISECT)
+    target_compile_definitions(
+        dsrrl_renderer_core_integrated
+        PRIVATE
+        $<$<COMPILE_LANGUAGE:CXX>:DSRRL_STATE_CAPTURE_ONLY_BISECT>)
+endif()
+
+if(DSRRL_NATIVE_STATE_MUTATE_RESTORE_ONLY_BISECT)
+    target_compile_definitions(
+        dsrrl_renderer_core_integrated
+        PRIVATE
+        $<$<COMPILE_LANGUAGE:CXX>:DSRRL_NATIVE_STATE_MUTATE_RESTORE_ONLY_BISECT>)
+endif()
+
+if(DSRRL_CORE_TRANSACTION_ONLY_BISECT)
+    target_compile_definitions(
+        dsrrl_renderer_core_integrated
+        PRIVATE
+        $<$<COMPILE_LANGUAGE:CXX>:DSRRL_CORE_TRANSACTION_ONLY_BISECT>)
+endif()
+
+if(DSRRL_RAW_NATIVE_DRAW_REENTRY_MIN_BISECT)
+    target_compile_definitions(
+        dsrrl_renderer_core_integrated
+        PRIVATE
+        $<$<COMPILE_LANGUAGE:CXX>:DSRRL_RAW_NATIVE_DRAW_REENTRY_MIN_BISECT>)
+endif()
+
 if(MSVC)
     target_compile_options(
         dsrrl_renderer_core_integrated
