@@ -4718,8 +4718,7 @@ void upper_lower_selector_event_bridge(
     void *owner,
     void *return_address,
     void *r14,
-    void *r15,
-    bool pointlight_runtime_enabled) noexcept
+    void *r15) noexcept
 {
     if (g_runtime != nullptr)
         g_runtime->selector_event(
@@ -4727,12 +4726,6 @@ void upper_lower_selector_event_bridge(
             return_address,
             r14,
             r15);
-
-    // Fixed PointLight shares this exact selector owner association, but the
-    // PointLight-bypass profile must not pay even the inert bridge call on the
-    // multi-million selector path.
-    if (pointlight_runtime_enabled)
-        fixed_pointlight_selector_event_bridge(owner);
 }
 
 void upper_lower_pmetal_material_event_bridge(
