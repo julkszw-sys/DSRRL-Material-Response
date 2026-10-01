@@ -508,6 +508,185 @@ std::uint64_t fnv_byte(
         0x100000001b3ULL;
 }
 
+
+bool fresh_readable_window(
+    const void *ptr,
+    readable_window &window) noexcept
+{
+    window = {};
+    bool is_readable = false;
+    if (!query_region(ptr,window,is_readable) ||
+        !is_readable)
+        return false;
+    return true;
+}
+
+bool fresh_readable_range(
+    const void *ptr,
+    std::size_t size) noexcept
+{
+    if (ptr == nullptr)
+        return false;
+    if (size == 0u)
+        return true;
+
+    auto cursor =
+        reinterpret_cast<std::uintptr_t>(ptr);
+    const auto end = cursor + size;
+    if (end < cursor)
+        return false;
+
+    while (cursor < end) {
+        readable_window window{};
+        if (!fresh_readable_window(
+                reinterpret_cast<const void *>(cursor),
+                window) ||
+            window.end <= cursor)
+            return false;
+
+        cursor =
+            std::min(
+                window.end,
+                end);
+    }
+    return true;
+}
+
+bool bank_signature_fresh(
+    const std::uint8_t *base,
+    std::uint64_t &signature) noexcept
+{
+    signature = 0u;
+    if (base == nullptr ||
+        !fresh_readable_range(
+            base + 8u,
+            sizeof(std::uint16_t) * 2u))
+        return false;
+
+    std::uint16_t version = 0u;
+    std::uint16_t count = 0u;
+    std::memcpy(&version,base + 8u,sizeof(version));
+    std::memcpy(&count,base + 10u,sizeof(count));
+
+    if (version != 4u ||
+        count == 0u ||
+        count > 256u)
+        return false;
+
+    const std::size_t table_bytes =
+        0x30u +
+        static_cast<std::size_t>(count) * 12u;
+
+    if (table_bytes < 8u ||
+        !fresh_readable_range(
+            base + 8u,
+            table_bytes - 8u))
+        return false;
+
+    std::uint64_t hash =
+        0xcbf29ce484222325ULL;
+    hash = fnv_byte(
+        hash,
+        static_cast<std::uint8_t>(count));
+    hash = fnv_byte(
+        hash,
+        static_cast<std::uint8_t>(count >> 8u));
+
+    const std::uint32_t minimum_name =
+        0x30u +
+        static_cast<std::uint32_t>(count) * 12u;
+
+    readable_window window{};
+
+    for (std::uint32_t i = 0u;
+         i < count;
+         ++i) {
+        const auto *entry =
+            base +
+            0x30u +
+            static_cast<std::size_t>(i) * 12u;
+
+        std::uint32_t row_id = 0u;
+        std::uint32_t name_offset = 0u;
+        std::memcpy(&row_id,entry,sizeof(row_id));
+        std::memcpy(
+            &name_offset,
+            entry + 8u,
+            sizeof(name_offset));
+
+        if (name_offset < minimum_name ||
+            name_offset > 0x100000u)
+            return false;
+
+        for (std::uint32_t shift = 0u;
+             shift < 32u;
+             shift += 8u)
+            hash = fnv_byte(
+                hash,
+                static_cast<std::uint8_t>(
+                    row_id >> shift));
+
+        const auto *name =
+            base +
+            static_cast<std::size_t>(
+                name_offset);
+
+        std::uint32_t consumed = 0u;
+        bool terminated = false;
+
+        while (consumed < 256u) {
+            const auto *cursor =
+                name + consumed;
+            const auto address =
+                reinterpret_cast<std::uintptr_t>(
+                    cursor);
+
+            if (!(window.begin <= address &&
+                  address < window.end)) {
+                if (!fresh_readable_window(
+                        cursor,
+                        window))
+                    return false;
+            }
+
+            if (window.end <= address)
+                return false;
+
+            const auto room =
+                static_cast<std::size_t>(
+                    window.end - address);
+            const auto chunk =
+                std::min<std::size_t>(
+                    256u - consumed,
+                    room);
+            if (chunk == 0u)
+                return false;
+
+            for (std::size_t j = 0u;
+                 j < chunk;
+                 ++j) {
+                const auto ch =
+                    cursor[j];
+                hash = fnv_byte(hash,ch);
+                ++consumed;
+                if (ch == 0u) {
+                    terminated = true;
+                    break;
+                }
+            }
+
+            if (terminated)
+                break;
+        }
+
+        if (!terminated)
+            return false;
+    }
+
+    signature = hash;
+    return true;
+}
+
 bool bank_signature(
     const std::uint8_t *base,
     std::uint64_t &signature) noexcept
@@ -690,8 +869,18 @@ resolve_bank(
     if (!bank_signature(
             base,
             decoded)) {
-        cached = {};
-        return nullptr;
+        // PR177 owner runtime proved that the live LightBank header/selector
+        // are valid while the cached safe-signature path returns no hash.
+        // Retry once with fresh VirtualQuery-backed windows. This preserves
+        // the exact recovered V13 signature equation and PTDE authority:
+        // no donor is accepted unless the recomputed signature matches one
+        // of the canonical banks below.
+        if (!bank_signature_fresh(
+                base,
+                decoded)) {
+            cached = {};
+            return nullptr;
+        }
     }
 
     const auto *bank =
