@@ -15,6 +15,10 @@ struct pmetal_envspec_source {
     std::uint32_t row_id_a = 0u;
     std::uint32_t row_id_b = 0u;
     std::uint64_t serial = 0u;
+    // Runtime v2 semantic generation. This increments only when the exact
+    // producer payload/material identity changes, so upload consumers can
+    // skip redundant GPU writes without draw-time reclassification.
+    std::uint64_t generation = 0u;
 };
 
 struct pmetal_env_source_runtime_telemetry {
