@@ -421,10 +421,30 @@ add_subdirectory(
     "${CMAKE_BINARY_DIR}/renderer-core-lib"
     EXCLUDE_FROM_ALL)
 
+set(
+    DSRRL_INTEGRATED_ADDON_SOURCE
+    "${CMAKE_CURRENT_LIST_DIR}/integrated_addon.cpp")
+
+if(DSRRL_PHYSICAL_CUT_UL_H3_SUBSURFACE)
+    set(
+        DSRRL_INTEGRATED_ADDON_SOURCE
+        "${DSRRL_CORE_GENERATED_RUNTIME}/integrated_addon_physical_cut.cpp")
+    execute_process(
+        COMMAND
+            "${Python3_EXECUTABLE}"
+            "${DSRRL_RENDERER_CORE_ROOT}/tools/generate_runtime_v2_physical_cut.py"
+            --input "${CMAKE_CURRENT_LIST_DIR}/integrated_addon.cpp"
+            --output "${DSRRL_INTEGRATED_ADDON_SOURCE}"
+        RESULT_VARIABLE DSRRL_PHYSICAL_CUT_GENERATE_RESULT)
+    if(NOT DSRRL_PHYSICAL_CUT_GENERATE_RESULT EQUAL 0)
+        message(FATAL_ERROR "Failed to generate Runtime v2 physical-cut integrated source")
+    endif()
+endif()
+
 add_library(
     dsrrl_renderer_core_integrated
     SHARED
-    integrated_addon.cpp
+    "${DSRRL_INTEGRATED_ADDON_SOURCE}"
     flver_identity_detour.asm
     texture_identity_detour.asm
     hemdir3_mode_detour.asm
