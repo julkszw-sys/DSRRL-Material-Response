@@ -36,6 +36,10 @@ struct pmetal_env_source_runtime_telemetry {
     std::uint64_t region_cache_hit = 0u;
     std::uint64_t region_cache_miss = 0u;
     std::uint64_t cache_generation = 0u;
+    std::uint64_t hook_single_seen = 0u;
+    std::uint64_t hook_blend_seen = 0u;
+    std::uint64_t hook_publish = 0u;
+    std::uint64_t hook_consume = 0u;
     // Diagnostic-only thread provenance. These fields never authorize source
     // reuse; they exist only to falsify the selector-thread TLS lifetime.
     std::uint32_t last_publish_tid = 0u;
@@ -53,6 +57,8 @@ struct pmetal_env_source_runtime_telemetry {
     bool selector_carrier_active = false;
     bool steady_carrier_active = false;
     bool blend_carrier_active = false;
+    bool hook_single_armed = false;
+    bool hook_blend_armed = false;
     bool quarantined = false;
     bool restore_failed = false;
 };

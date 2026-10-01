@@ -417,8 +417,19 @@ bool capture_source(
 
     alignas(16) std::array<float,8> raw{};
     fn(node, raw.data());
-    if (!pointlight_ptde_source::capture(node, g_base, raw))
-        return false;
+
+    // The retail CPU packer is homologous PTDE<->DSR for ordinary
+    // BankPointLightEntity/LerpBankPointLightEntity: position, invRange,
+    // packed RGB*Intensity and End have the same representation. Prefer the
+    // exact PTDE donor when its bank authority resolves, but do not discard
+    // an otherwise attested ordinary light solely because donor-bank identity
+    // is unavailable. The clustered replacement shader still owns the proven
+    // PTDE attenuation correction (x^3 -> x); unresolved numeric row residuals
+    // remain source-local and are not compensated by arbitrary gains.
+    (void)pointlight_ptde_source::capture(
+        node,
+        g_base,
+        raw);
 
     for (const auto value : raw)
         if (!std::isfinite(value))

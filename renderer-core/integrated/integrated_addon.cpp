@@ -7377,7 +7377,7 @@ bool AddonInit(
         pmetal_source_ready) {
         reshade::log::message(
             reshade::log::level::info,
-            "[DSRRL PMETAL ENVSPEC] exact P_Metal selector PTDE donor carrier ACTIVE; global LightBank source hooks=0/0; visible U/L remains stock/off.");
+            "[DSRRL PMETAL ENVSPEC] exact selector carrier + narrow retail LightBank single/blend PTDE source fallback ACTIVE; visible U/L remains stock/off.");
     }
 
     publish_active_dynamic_draw_routes();
