@@ -21,6 +21,7 @@ namespace {
 struct shadow_record {
     void *command_list_key = nullptr;
     std::array<ID3D11ShaderResourceView *,k_pixel_srv_shadow_slots> srvs{};
+    std::array<ID3D11SamplerState *,k_pixel_sampler_shadow_slots> samplers{};
     std::uint64_t serial = 0u;
 };
 
@@ -63,11 +64,17 @@ void pixel_srv_shadow_on_push_descriptors(
     if (cmd_list == nullptr ||
         (stages & reshade::api::shader_stage::pixel) !=
             reshade::api::shader_stage::pixel ||
-        update.type !=
-            reshade::api::descriptor_type::shader_resource_view ||
         update.descriptors == nullptr ||
-        update.count == 0u ||
-        update.binding >= k_pixel_srv_shadow_slots)
+        update.count == 0u)
+        return;
+
+    const bool srv_update =
+        update.type ==
+            reshade::api::descriptor_type::shader_resource_view;
+    const bool sampler_update =
+        update.type ==
+            reshade::api::descriptor_type::sampler;
+    if (!srv_update && !sampler_update)
         return;
 
     auto *const key =
@@ -78,21 +85,54 @@ void pixel_srv_shadow_on_push_descriptors(
     auto &record =
         record_for(key);
 
-    const auto *views =
-        static_cast<const reshade::api::resource_view *>(
-            update.descriptors);
+    if (srv_update) {
+        if (update.binding >=
+            k_pixel_srv_shadow_slots)
+            return;
 
-    const auto count =
-        std::min<std::uint32_t>(
-            update.count,
-            k_pixel_srv_shadow_slots -
-                update.binding);
+        const auto *views =
+            static_cast<
+                const reshade::api::resource_view *>(
+                    update.descriptors);
+        const auto count =
+            std::min<std::uint32_t>(
+                update.count,
+                k_pixel_srv_shadow_slots -
+                    update.binding);
 
-    for (std::uint32_t i = 0u; i < count; ++i) {
-        record.srvs[update.binding + i] =
-            reinterpret_cast<ID3D11ShaderResourceView *>(
-                static_cast<std::uintptr_t>(
-                    views[i].handle));
+        for (std::uint32_t i = 0u;
+             i < count;
+             ++i) {
+            record.srvs[update.binding + i] =
+                reinterpret_cast<
+                    ID3D11ShaderResourceView *>(
+                        static_cast<std::uintptr_t>(
+                            views[i].handle));
+        }
+    } else {
+        if (update.binding >=
+            k_pixel_sampler_shadow_slots)
+            return;
+
+        const auto *samplers =
+            static_cast<
+                const reshade::api::sampler *>(
+                    update.descriptors);
+        const auto count =
+            std::min<std::uint32_t>(
+                update.count,
+                k_pixel_sampler_shadow_slots -
+                    update.binding);
+
+        for (std::uint32_t i = 0u;
+             i < count;
+             ++i) {
+            record.samplers[update.binding + i] =
+                reinterpret_cast<
+                    ID3D11SamplerState *>(
+                        static_cast<std::uintptr_t>(
+                            samplers[i].handle));
+        }
     }
 
     record.serial = ++g_serial;
@@ -131,6 +171,46 @@ bool pixel_srv_shadow_snapshot(
 
     for (std::uint32_t i = 0u; i < count; ++i)
         out[i] = record.srvs[first + i];
+
+    return true;
+}
+
+bool pixel_sampler_shadow_snapshot(
+    reshade::api::command_list *cmd_list,
+    std::uint32_t first,
+    std::uint32_t count,
+    ID3D11SamplerState **out) noexcept
+{
+    if (cmd_list == nullptr ||
+        out == nullptr ||
+        count == 0u ||
+        first >= k_pixel_sampler_shadow_slots ||
+        first + count > k_pixel_sampler_shadow_slots)
+        return false;
+
+    auto *const key =
+        cmd_list->get_native();
+    if (key == nullptr)
+        return false;
+
+    const auto raw =
+        reinterpret_cast<std::uintptr_t>(key);
+    const auto index =
+        static_cast<std::size_t>(
+            ((raw >> 4u) ^ (raw >> 13u)) &
+            (k_shadow_records - 1u));
+    const auto &record =
+        g_records[index];
+
+    if (record.command_list_key != key ||
+        record.serial == 0u)
+        return false;
+
+    for (std::uint32_t i = 0u;
+         i < count;
+         ++i)
+        out[i] =
+            record.samplers[first + i];
 
     return true;
 }
