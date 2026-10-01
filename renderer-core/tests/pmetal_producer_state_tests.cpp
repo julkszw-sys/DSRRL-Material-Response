@@ -107,5 +107,27 @@ int main()
         republished));
     assert(republished.beta == 0.75f);
 
+    // flver_identity_hash is an optional legacy/cache token. A selector may
+    // publish it while the authenticated draw material carries zero. The full
+    // FLVER SHA-256 + slot + semantic/raw-MTD tuple must remain sufficient.
+    auto draw_material = material;
+    draw_material.flver_identity_hash = 0u;
+
+    runtime::pmetal_producer_state_begin(
+        material,
+        100u);
+    runtime::pmetal_producer_state_publish(
+        material,
+        source,
+        100u);
+    runtime::pmetal_producer_state_clear();
+
+    runtime::pmetal_envspec_source optional_hash_bridge{};
+    assert(runtime::pmetal_producer_state_latest(
+        draw_material,
+        100u,
+        optional_hash_bridge));
+    assert(optional_hash_bridge.beta == 0.75f);
+
     return 0;
 }
