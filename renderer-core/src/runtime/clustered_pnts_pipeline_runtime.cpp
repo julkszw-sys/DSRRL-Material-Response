@@ -397,19 +397,12 @@ void clustered_pnts_pipeline_runtime::on_destroy_device(
     if (device_ != device)
         return;
 
-    bound_.clear();
-    any_bound_.store(
-        false,
-        std::memory_order_release);
     pipelines_.clear();
     pipeline_epoch_.fetch_add(
         1u,
         std::memory_order_release);
     candidates_.clear();
     device_ = nullptr;
-    bound_epoch_.fetch_add(
-        1u,
-        std::memory_order_release);
     bound_tls_ = {};
     attestation_tls_ = {};
 }
