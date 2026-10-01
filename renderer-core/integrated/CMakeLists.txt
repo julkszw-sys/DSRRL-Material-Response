@@ -371,10 +371,12 @@ add_custom_command(
     COMMAND "${Python3_EXECUTABLE}"
             "${DSRRL_RENDERER_CORE_ROOT}/tools/generate_pmetal_env_source_authority.py"
             --input "${DSRRL_RENDERER_CORE_ROOT}/provenance/mr145/SOURCE_V13_PTDE_DONOR.cpp"
+            --layout-input "${DSRRL_RENDERER_CORE_ROOT}/data/provenance/pmetal_env_source_layout_v1.tsv"
             --output "${DSRRL_CORE_GENERATED_RUNTIME}/generated_pmetal_env_source_authority.hpp"
     DEPENDS
         "${DSRRL_RENDERER_CORE_ROOT}/tools/generate_pmetal_env_source_authority.py"
         "${DSRRL_RENDERER_CORE_ROOT}/provenance/mr145/SOURCE_V13_PTDE_DONOR.cpp"
+        "${DSRRL_RENDERER_CORE_ROOT}/data/provenance/pmetal_env_source_layout_v1.tsv"
     VERBATIM)
 
 add_custom_target(

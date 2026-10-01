@@ -656,7 +656,7 @@ bool pmetal_envspec_draw_runtime::prepare(
             std::snprintf(
                 source_line,
                 sizeof(source_line),
-                "[DSRRL ENVSPEC SOURCE] exact_seen=%u parent=%u descriptor=%u endpoint=%u manager=%u decode_a=%u decode_b=%u exact_publish=%llu decode_fail=%llu consumer_ok=%llu consumer_fail=%llu hook_single=%llu hook_blend=%llu hook_publish=%llu hook_consume=%llu hook_decode=%u ver=%u count=%u index=%u row=%u sig=%016llx bankscan=%llu/%u bankstage=%u entry=%u name_off=%08x consumed=%u pub_tid=%u con_tid=%u con_tls=%u selector_active=%u hook_single_armed=%u hook_blend_armed=%u",
+                "[DSRRL ENVSPEC SOURCE] exact_seen=%u parent=%u descriptor=%u endpoint=%u manager=%u decode_a=%u decode_b=%u exact_publish=%llu decode_fail=%llu consumer_ok=%llu consumer_fail=%llu hook_single=%llu hook_blend=%llu hook_publish=%llu hook_consume=%llu hook_decode=%u ver=%u count=%u index=%u row=%u sig=%016llx layout=%016llx bankscan=%llu/%u bankstage=%u entry=%u name_off=%08x consumed=%u pub_tid=%u con_tid=%u con_tls=%u selector_active=%u hook_single_armed=%u hook_blend_armed=%u",
                 source_state.selector_exact_seen ? 1u : 0u,
                 source_state.parent_gate_ok ? 1u : 0u,
                 source_state.descriptor_gate_ok ? 1u : 0u,
@@ -692,6 +692,8 @@ bool pmetal_envspec_draw_runtime::prepare(
                     source_state.hook_decode_row_id),
                 static_cast<unsigned long long>(
                     source_state.hook_decode_signature),
+                static_cast<unsigned long long>(
+                    source_state.bank_layout_signature),
                 static_cast<unsigned long long>(
                     source_state.bank_signature_scan_count),
                 static_cast<unsigned>(
