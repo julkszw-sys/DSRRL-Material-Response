@@ -77,8 +77,10 @@ void pixel_srv_shadow_on_push_descriptors(
     if (!srv_update && !sampler_update)
         return;
 
-    auto *const key =
-        cmd_list->get_native();
+    void *const key =
+        reinterpret_cast<void *>(
+            static_cast<std::uintptr_t>(
+                cmd_list->get_native()));
     if (key == nullptr)
         return;
 
@@ -151,8 +153,10 @@ bool pixel_srv_shadow_snapshot(
         first + count > k_pixel_srv_shadow_slots)
         return false;
 
-    auto *const key =
-        cmd_list->get_native();
+    void *const key =
+        reinterpret_cast<void *>(
+            static_cast<std::uintptr_t>(
+                cmd_list->get_native()));
     if (key == nullptr)
         return false;
 
@@ -188,8 +192,10 @@ bool pixel_sampler_shadow_snapshot(
         first + count > k_pixel_sampler_shadow_slots)
         return false;
 
-    auto *const key =
-        cmd_list->get_native();
+    void *const key =
+        reinterpret_cast<void *>(
+            static_cast<std::uintptr_t>(
+                cmd_list->get_native()));
     if (key == nullptr)
         return false;
 
