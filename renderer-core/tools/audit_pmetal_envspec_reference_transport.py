@@ -64,18 +64,15 @@ for part,label in ((single,"single"),(blend,"blend")):
     require(part,"publish_hook_source(","narrow source publish "+label)
 
 # Draw consumption is exact-material-scoped. Selector TLS is preferred; the
-# retail source-hook record is a consume-once fallback, never generic U/L state.
+# retail source-hook record is a persistent generation-stamped fallback,
+# matching the validated V13 producer-state lifetime and never generic U/L state.
 consumer=source_cpp[source_cpp.index("bool pmetal_env_source_runtime::latest("):source_cpp.index("pmetal_env_source_runtime_telemetry")]
 require(consumer,"!exact_pmetal_material_selection(","exact P_Metal gate")
 require(consumer,"pmetal_producer_state_latest(","selector source first")
-require(consumer,"consume_hook_source(out)","retail source fallback")
-if consumer.index("consume_hook_source(out)") < consumer.index("!exact_pmetal_material_selection("):
+require(consumer,"latest_hook_source(out)","retail source fallback")
+if consumer.index("latest_hook_source(out)") < consumer.index("!exact_pmetal_material_selection("):
     fail("retail hook source can be consumed before exact P_Metal material gate")
 for needle in [
-    "g_hook_source_consumed_serial",
-    "g_hook_source_global.serial ==",
-    "g_hook_source_consumed_serial",
-    "g_hook_source_tls.valid = false",
 ]:
     require(source_cpp,needle,"consume-once source lifetime")
 
