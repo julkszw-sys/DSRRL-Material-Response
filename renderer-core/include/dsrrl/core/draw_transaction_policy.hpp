@@ -68,12 +68,19 @@ inline constexpr std::array<
      true, true, true},
     {operator_id::envspec_nospc_delete, draw_transaction_mode::create_time_safe,
      draw_mutation_none, draw_mutation_shader, true, false, false},
+#if defined(DSRRL_PMETAL_PTDE_CARRIER_STOCK_CONSUMER_DIAG)
+    {operator_id::envspec_pmetal_diagnostic, draw_transaction_mode::draw_required,
+     draw_mutation_srv,
+     draw_mutation_srv,
+     true, true, true},
+#else
     {operator_id::envspec_pmetal_diagnostic, draw_transaction_mode::draw_required,
      draw_mutation_shader | draw_mutation_constant_buffer |
          draw_mutation_srv | draw_mutation_sampler,
      draw_mutation_shader | draw_mutation_constant_buffer |
          draw_mutation_srv | draw_mutation_sampler,
      true, true, true},
+#endif
     {operator_id::env_diffuse, draw_transaction_mode::draw_required,
      draw_mutation_constant_buffer | draw_mutation_srv |
          draw_mutation_sampler,
