@@ -1056,14 +1056,19 @@ bool pmetal_envspec_draw_runtime::prepare(
             0.0f
         },
         {
+            // High-visibility operator-local falsifier: on stable HemEnv the
+            // PR197 shader reads b12[3].xyz as the EnvDiffuse endpoint before
+            // the native t11/s11 sample. Feeding exact zero here makes the
+            // complete local t11 EnvDiffuse contribution zero without
+            // changing t11, sampler state, EnvSpec, SpecRGB or MR.
             stable_envdiffuse_consumer_diag
-                ? source.envdiffuse_a[0]
+                ? 0.0f
                 : source.b[0],
             stable_envdiffuse_consumer_diag
-                ? source.envdiffuse_a[1]
+                ? 0.0f
                 : source.b[1],
             stable_envdiffuse_consumer_diag
-                ? source.envdiffuse_a[2]
+                ? 0.0f
                 : source.b[2],
             source.beta
         }
@@ -1357,10 +1362,10 @@ bool pmetal_envspec_draw_runtime::prepare(
         prepared.request.additional_owners |=
             sat_owner;
 
-    // This diagnostic now owns the narrow stable EnvDiffuse consumer cut:
-    // native DSR t11 remains the directional field, while b12[3].xyz carries
-    // the exact pre-draw-gain endpoint inverse and the replacement shader
-    // consumes it in place of cb0[3]*cb0[79].x. EnvDiffuse therefore owns
+    // This diagnostic owns the same narrow stable EnvDiffuse consumer cut as
+    // PR197, but feeds b12[3].xyz = 0 on stable HemEnv. Because the replacement
+    // shader consumes b12[3].xyz immediately before native t11/s11, this
+    // removes only the local t11 EnvDiffuse term. EnvDiffuse therefore owns
     // shader + b12 + the explicit native t11/t13 resource rebind.
     prepared.request.additional_shader_owners =
         prepared.request.additional_owners;
@@ -1451,7 +1456,7 @@ bool pmetal_envspec_draw_runtime::prepare(
         std::snprintf(
             line,
             sizeof(line),
-            "[DSRRL PMETAL ENVDIFFUSE CONSUMER DIAG] mode=dsr_field_ptde_linear_endpoint family=%u rx=%u route=%u pA=%.9g,%.9g,%.9g beta=%.9g t11=%016llx",
+            "[DSRRL PMETAL ENVDIFFUSE CONSUMER DIAG] mode=zero_t11_contribution family=%u rx=%u route=%u captured_pA=%.9g,%.9g,%.9g beta=%.9g t11=%016llx",
             static_cast<unsigned>(family),
             static_cast<unsigned>(decision.receiver_id),
             static_cast<unsigned>(decision.route_index),
