@@ -67,6 +67,16 @@ option(
     OFF)
 
 option(
+    DSRRL_PMETAL_STOCK_CONSUMER_BASELINE_DIAG
+    "Diagnostic A: exact stable P_Metal bypasses the dedicated EnvSpec island and retains generic MR plus stock DSR EnvSpec"
+    OFF)
+
+option(
+    DSRRL_PMETAL_PTDE_CARRIER_STOCK_CONSUMER_DIAG
+    "Diagnostic B: same as A but replace only t12/t14 with exact mapped PTDE PackedGI"
+    OFF)
+
+option(
     DSRRL_POINTLIGHT_DRAWTIME_BYPASS
     "Diagnostic: disable PointLight producer hooks, runtime pipeline binding and draw-time carrier/replay while preserving all non-PointLight runtime paths"
     OFF)
@@ -572,6 +582,20 @@ if(DSRRL_PMETAL_NATIVE_DSR_CUBEMAP_FEED)
         dsrrl_renderer_core_integrated
         PRIVATE
         $<$<COMPILE_LANGUAGE:CXX>:DSRRL_PMETAL_NATIVE_DSR_CUBEMAP_FEED>)
+endif()
+
+if(DSRRL_PMETAL_STOCK_CONSUMER_BASELINE_DIAG)
+    target_compile_definitions(
+        dsrrl_renderer_core_integrated
+        PRIVATE
+        $<$<COMPILE_LANGUAGE:CXX>:DSRRL_PMETAL_STOCK_CONSUMER_BASELINE_DIAG>)
+endif()
+
+if(DSRRL_PMETAL_PTDE_CARRIER_STOCK_CONSUMER_DIAG)
+    target_compile_definitions(
+        dsrrl_renderer_core_integrated
+        PRIVATE
+        $<$<COMPILE_LANGUAGE:CXX>:DSRRL_PMETAL_PTDE_CARRIER_STOCK_CONSUMER_DIAG>)
 endif()
 
 if(DSRRL_POINTLIGHT_DRAWTIME_BYPASS)
