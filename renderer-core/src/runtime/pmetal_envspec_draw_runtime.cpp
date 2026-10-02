@@ -180,6 +180,15 @@ struct f4 {
 
 } // namespace
 
+bool exact_pmetal_envspec_candidate(
+    const mr::material_identity &material,
+    const mr::decision &decision) noexcept
+{
+    return
+        exact_pmetal_material(material) &&
+        exact_pmetal_decision(decision);
+}
+
 pmetal_envspec_draw_runtime::
 pmetal_envspec_draw_runtime(
     core::renderer_core &core,
@@ -551,9 +560,8 @@ bool pmetal_envspec_draw_runtime::prepare(
             hemenvlerp)
         telemetry::hot_count(lerp_candidates_);
 
-    if (!exact_pmetal_material(
-            material) ||
-        !exact_pmetal_decision(
+    if (!exact_pmetal_envspec_candidate(
+            material,
             decision)) {
         telemetry::hot_count(material_rejects_);
         effect_fail(
