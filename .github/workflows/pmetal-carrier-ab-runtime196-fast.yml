@@ -1,0 +1,102 @@
+name: P_Metal Carrier A-B Runtime196 Fast Build
+
+on:
+  pull_request:
+    paths:
+      - "renderer-core/integrated/**"
+      - "renderer-core/include/dsrrl/core/draw_transaction_policy.hpp"
+      - "renderer-core/src/runtime/envspec_resource_runtime.cpp"
+      - "renderer-core/include/dsrrl/runtime/envspec_resource_runtime.hpp"
+      - "renderer-core/tools/audit_pmetal_runtime196_carrier_ab.py"
+      - ".github/workflows/pmetal-carrier-ab-runtime196-fast.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  windows-addon:
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - flavor: pmetal_stock_consumer_baseline_runtime196_diag
+            option: DSRRL_PMETAL_STOCK_CONSUMER_BASELINE_DIAG
+            output: DSRRL_PMETAL_AB_A_RUNTIME196_BASELINE.addon64
+            artifact: DSRRL_PMETAL_AB_A_RUNTIME196_BASELINE
+          - flavor: pmetal_ptde_carrier_stock_consumer_runtime196_diag
+            option: DSRRL_PMETAL_PTDE_CARRIER_STOCK_CONSUMER_DIAG
+            output: DSRRL_PMETAL_AB_B_RUNTIME196_PTDE_CARRIER.addon64
+            artifact: DSRRL_PMETAL_AB_B_RUNTIME196_PTDE_CARRIER
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - name: Resolve exact source commit
+        shell: pwsh
+        run: |
+          $commit = (git rev-parse HEAD).Trim()
+          "DSRRL_CHECKOUT_COMMIT=$commit" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Checkout pinned ReShade API
+        uses: actions/checkout@v4
+        with:
+          repository: crosire/reshade
+          ref: 3645e3025d1d98a90e318278858931f034d5d1f6
+          path: _reshade
+
+      - name: Audit runtime196 carrier isolation
+        shell: bash
+        run: |
+          python3 renderer-core/tools/audit_pmetal_runtime196_carrier_ab.py renderer-core
+
+      - name: Configure diagnostic
+        shell: pwsh
+        run: >
+          cmake
+          -S renderer-core/integrated
+          -B build-fast
+          -A x64
+          -DRESHADE_INCLUDE_DIR="${{ github.workspace }}/_reshade/include"
+          -DDSRRL_SOURCE_COMMIT="$env:DSRRL_CHECKOUT_COMMIT"
+          -DDSRRL_BUILD_FLAVOR="${{ matrix.flavor }}"
+          -DDSRRL_EFFECT_TELEMETRY_DEFAULT_ON_ONLY=ON
+          -D${{ matrix.option }}=ON
+
+      - name: Verify physical-cut owner constraints
+        shell: pwsh
+        run: |
+          $cache = Get-Content build-fast/CMakeCache.txt -Raw
+          if ($cache -notmatch "DSRRL_PHYSICAL_CUT_UL_H3_SUBSURFACE:BOOL=ON") {
+            throw "Runtime196 owner-required U/L/HemDir3/Subsurface physical cut is not ON"
+          }
+          if ($cache -notmatch ("${{ matrix.option }}:BOOL=ON")) {
+            throw "Requested A/B diagnostic option is not ON"
+          }
+
+      - name: Build diagnostic
+        shell: pwsh
+        run: |
+          cmake --build build-fast --config Release --target dsrrl_renderer_core_integrated
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $addons = @(Get-ChildItem build-fast -Recurse -Filter *.addon64)
+          if ($addons.Count -ne 1) { throw "Expected one addon, found $($addons.Count)" }
+          Copy-Item $addons[0].FullName "${{ matrix.output }}" -Force
+
+      - name: Verify binary identity
+        shell: pwsh
+        run: |
+          $path = "${{ matrix.output }}"
+          $ascii = [System.Text.Encoding]::ASCII.GetString([System.IO.File]::ReadAllBytes($path))
+          if (-not $ascii.Contains($env:DSRRL_CHECKOUT_COMMIT)) { throw "Missing source commit identity" }
+          if (-not $ascii.Contains("${{ matrix.flavor }}")) { throw "Missing diagnostic flavor identity" }
+          $hash = (Get-FileHash $path -Algorithm SHA256).Hash.ToLowerInvariant()
+          Write-Host "ADDON_SHA256=$hash"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: ${{ matrix.output }}
+          if-no-files-found: error
