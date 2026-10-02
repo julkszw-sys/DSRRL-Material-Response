@@ -1139,7 +1139,11 @@ bool apply_build131(
             0x08000038u,
             0x00100072u,
             0x00000002u,
-            0x00100246u,
+            // Stock t1 is sampled through the legacy wxyz resource swizzle.
+            // The true SpecRGB lanes therefore live in the sampled temporary's
+            // yzw components. Read those exact lanes into the normalized xyz
+            // material accumulator before applying raw PTDE c101.
+            0x00100796u,
             0x00000002u,
             0x00208246u,
             0x0000000cu,
@@ -1195,8 +1199,15 @@ bool apply_build131(
                 t1_sample->offset),
         11u,
         fresh_spec.begin());
+    // The stock SpecTex sample uses t1.wxyz. Historical exact receiver RE
+    // proves that logical SpecRGB is carried in destination yzw, not xyz.
+    // Keep the stock resource swizzle, write the fresh PTDE t10 sample into
+    // r2.yzw, then let c101_mul above normalize r2.yzw -> r2.xyz.
+    if (fresh_spec[7] !=
+            0x00107936u)
+        return false;
     fresh_spec[3] =
-        0x00100072u;
+        0x001000e2u;
     fresh_spec[4] = 2u;
     fresh_spec[8] = 10u;
 
