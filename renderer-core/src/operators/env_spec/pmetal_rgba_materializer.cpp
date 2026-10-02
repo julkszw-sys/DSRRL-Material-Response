@@ -444,13 +444,16 @@ bool compose_a1(
         if (word >= 11u)
             word += 4u;
 
-        // Build131 owns this whole semantic island. Never silently overwrite
-        // an enabled create-time operator that lands inside the 100-word cut.
-        if (word >=
-                authority.t12_word &&
-            word <
-                authority.t12_word +
-                100u)
+        // Build131 owns the recovered 100-DWORD semantic cut beginning
+        // 38 DWORDs before the stock t12 sample. Never compose an A1 owner
+        // into a region that the dedicated P_Metal island will subsequently
+        // replace.
+        if (authority.t12_word < 38u)
+            return false;
+        const auto build_start =
+            authority.t12_word - 38u;
+        if (word >= build_start &&
+            word < build_start + 100u)
             return false;
 
         const auto target =
@@ -847,7 +850,9 @@ bool apply_build131(
     std::optional<instruction_view> t1_decl;
     std::optional<instruction_view> t1_sample;
     std::optional<instruction_view> t12_sample;
-    std::optional<instruction_view> t9_sample;
+    std::optional<instruction_view> split_sample;
+    std::optional<instruction_view> split_helper;
+    std::optional<instruction_view> split_mad;
     std::size_t slot10_decls = 0u;
     std::size_t slot10_samples = 0u;
     std::size_t slot14_decls = 0u;
@@ -921,11 +926,47 @@ bool apply_build131(
                     t12_sample = ins;
                 }
 
-                if (resource == 9u ||
+                // Recovered V2.28C PRE topology: the DSR t9 SAMPLE_L is
+                // followed immediately by a helper MUL and split-sum MAD.
+                if (resource == 9u &&
                     sampler == 9u) {
-                    if (t9_sample)
+                    const auto helper_offset =
+                        ins.offset + ins.length;
+                    const auto helper =
+                        std::find_if(
+                            instructions.begin(),
+                            instructions.end(),
+                            [&](const instruction_view &i) {
+                                return i.offset ==
+                                    helper_offset;
+                            });
+                    if (helper ==
+                            instructions.end() ||
+                        helper->opcode != 0x38u ||
+                        helper->length != 7u)
                         return false;
-                    t9_sample = ins;
+
+                    const auto mad_offset =
+                        helper->offset +
+                        helper->length;
+                    const auto mad =
+                        std::find_if(
+                            instructions.begin(),
+                            instructions.end(),
+                            [&](const instruction_view &i) {
+                                return i.offset ==
+                                    mad_offset;
+                            });
+                    if (mad ==
+                            instructions.end() ||
+                        mad->opcode != 0x32u ||
+                        mad->length != 9u ||
+                        split_sample)
+                        return false;
+
+                    split_sample = ins;
+                    split_helper = *helper;
+                    split_mad = *mad;
                 }
             }
         }
@@ -944,7 +985,9 @@ bool apply_build131(
         !t1_decl ||
         !t1_sample ||
         !t12_sample ||
-        !t9_sample ||
+        !split_sample ||
+        !split_helper ||
+        !split_mad ||
         slot10_decls != 0u ||
         slot10_samples != 0u ||
         slot14_decls != 0u ||
@@ -965,23 +1008,29 @@ bool apply_build131(
                     t12_sample->offset)))
         return false;
 
-    // The recovered source-complete Build131 builder anchors its 100-DWORD
-    // legacy EnvSpec island 38 DWORDs BEFORE the original t12 sample. That
-    // 38-DWORD prefix is the DSR dynamic-LOD/pre-sample operator being
-    // replaced. Anchoring at t12 (the old Runtime-v2 behavior) shifts the
-    // island by +38, overwrites the final material cut, and forced PR183 to
-    // NOP a synthetic 15-DWORD residual.
     const auto build_start =
         authority.t12_word - 38u;
     const auto build_end =
         build_start +
         k_build131_window.size();
 
-    if (build_end !=
-            authority.t12_word + 62u ||
-        build_end >= words.size() ||
-        t9_sample->offset < build_start ||
-        t9_sample->offset >= build_end)
+    // On the actual generic-MR base, the historical V2.28C/D/F material
+    // cut is recovered structurally from the t9 SAMPLE_L -> MUL -> MAD chain.
+    // Removing the split-sum yields eight final padding DWORDs immediately
+    // before the material stage; Build131 ends at exactly that cut for all
+    // three exact P_Metal receivers.
+    if (split_mad->offset < 8u ||
+        split_sample->offset < build_start ||
+        split_sample->offset >= build_end ||
+        split_helper->offset !=
+            split_sample->offset +
+                split_sample->length ||
+        split_mad->offset !=
+            split_helper->offset +
+                split_helper->length ||
+        split_mad->offset - 8u !=
+            build_end ||
+        build_end >= words.size())
         return false;
 
     const auto merge =
@@ -993,28 +1042,13 @@ bool apply_build131(
                     authority.merge_word;
             });
 
-    const auto final_mul =
-        std::find_if(
-            instructions.begin(),
-            instructions.end(),
-            [&](const instruction_view &i) {
-                return i.offset ==
-                    build_end;
-            });
-
     if (merge == instructions.end() ||
         merge->opcode != 0x32u ||
         merge->length != 9u ||
-        final_mul == instructions.end() ||
-        final_mul->opcode != 0x38u ||
-        final_mul->length != 8u ||
-        words[final_mul->offset + 1u] !=
+        words[split_mad->offset + 1u] !=
             0x00100072u ||
-        words[final_mul->offset + 2u] !=
+        words[split_mad->offset + 2u] !=
             2u ||
-        (words[final_mul->offset + 4u] != 9u &&
-         words[final_mul->offset + 4u] != 10u &&
-         words[final_mul->offset + 4u] != 11u) ||
         words[sampler9->offset] !=
             0x0300005au ||
         words[sampler9->offset + 1u] !=
@@ -1031,40 +1065,118 @@ bool apply_build131(
             0x00005555u)
         return false;
 
-    // Csd/Sdw carried a DSR-only visibility-response exponent that the
-    // source-complete dedicated P_Metal receiver explicitly removed while
-    // retaining the pre-exponent visibility core. Plain HemEnv has no such
-    // island.
-    if (authority.visibility_start_word != 0u ||
-        authority.visibility_end_word != 0u) {
-        if (authority.visibility_end_word <=
-                authority.visibility_start_word ||
-            authority.visibility_end_word -
-                authority.visibility_start_word != 19u ||
-            authority.visibility_end_word >
-                words.size() ||
-            (words[authority.visibility_start_word] &
-                0x7ffu) != 0x2fu ||
-            (words[authority.visibility_start_word + 6u] &
-                0x7ffu) != 0x38u ||
-            (words[authority.visibility_start_word + 14u] &
-                0x7ffu) != 0x19u)
-            return false;
+    // Csd/Sdw: find the exact DSR-only visibility exponent island by
+    // instruction topology on the MR base rather than by stale stock word
+    // coordinates. Plain HemEnv has no such island.
+    std::optional<std::size_t>
+        visibility_start;
+    for (const auto &ins : instructions) {
+        if (ins.opcode != 0x2fu ||
+            ins.length != 6u)
+            continue;
 
+        const auto mul =
+            std::find_if(
+                instructions.begin(),
+                instructions.end(),
+                [&](const instruction_view &i) {
+                    return i.offset ==
+                        ins.offset + 6u;
+                });
+        if (mul == instructions.end() ||
+            mul->opcode != 0x38u ||
+            mul->length != 8u)
+            continue;
+
+        const auto exp =
+            std::find_if(
+                instructions.begin(),
+                instructions.end(),
+                [&](const instruction_view &i) {
+                    return i.offset ==
+                        mul->offset + 8u;
+                });
+        if (exp == instructions.end() ||
+            exp->opcode != 0x19u ||
+            exp->length != 5u)
+            continue;
+
+        if (visibility_start)
+            return false;
+        visibility_start =
+            ins.offset;
+    }
+
+    if (authority.remove_visibility_exponent !=
+            visibility_start.has_value())
+        return false;
+
+    if (visibility_start) {
         std::fill(
             words.begin() +
                 static_cast<std::ptrdiff_t>(
-                    authority.visibility_start_word),
+                    *visibility_start),
             words.begin() +
                 static_cast<std::ptrdiff_t>(
-                    authority.visibility_end_word),
+                    *visibility_start + 19u),
             0x0100003au);
     }
 
-    // Clone only the stock t1 resource declaration into t10. Do NOT inject a
-    // second SpecRGB sample beside t1: the PTDE resource is re-acquired fresh
-    // at the final material cut after Build131, so it never traverses the
-    // surviving DSR PBL body.
+    // V2.28C/D/F final material normalization on the generic MR base:
+    // remove the t9 sample/helper split-sum, place raw PTDE c101 at the
+    // recovered Build131 end cut, then multiply by semantic COLOR0.
+    std::fill(
+        words.begin() +
+            static_cast<std::ptrdiff_t>(
+                split_sample->offset),
+        words.begin() +
+            static_cast<std::ptrdiff_t>(
+                split_mad->offset),
+        0x0100003au);
+
+    const std::array<std::uint32_t,8>
+        c101_mul{{
+            0x08000038u,
+            0x00100072u,
+            0x00000002u,
+            0x00100246u,
+            0x00000002u,
+            0x00208246u,
+            0x0000000cu,
+            0x00000000u
+        }};
+
+    const std::array<std::uint32_t,7>
+        color_mul{{
+            0x07000038u,
+            0x00100072u,
+            0x00000002u,
+            0x00100246u,
+            0x00000002u,
+            0x00101246u,
+            authority.color0_register
+        }};
+
+    std::copy(
+        c101_mul.begin(),
+        c101_mul.end(),
+        words.begin() +
+            static_cast<std::ptrdiff_t>(
+                build_end));
+
+    std::copy(
+        color_mul.begin(),
+        color_mul.end(),
+        words.begin() +
+            static_cast<std::ptrdiff_t>(
+                split_mad->offset));
+    words[split_mad->offset + 7u] =
+        0x0100003au;
+    words[split_mad->offset + 8u] =
+        0x0100003au;
+
+    // Dedicated t10 declaration/sample. Fresh PTDE SpecRGB is reacquired
+    // only at the final material cut, never beside the stock t1 sample.
     std::array<std::uint32_t,4>
         t10_decl{};
     std::copy_n(
@@ -1088,9 +1200,7 @@ bool apply_build131(
     fresh_spec[4] = 2u;
     fresh_spec[8] = 10u;
 
-    // Relocate the old t9 declaration pair to the dedicated PTDE B cube at
-    // t14 before inserting any new words, while the original declaration
-    // offsets are still valid.
+    // Re-home the obsolete t9 declaration pair as the dedicated PTDE B cube.
     words[sampler9->offset + 2u] =
         14u;
     words[texture9->offset] =
@@ -1107,7 +1217,7 @@ bool apply_build131(
         t10_decl.begin(),
         t10_decl.end());
 
-    // Every semantic cut below the declaration block shifts by four DWORDs.
+    // All semantic cuts are below the declaration insertion.
     const auto shifted_build_start =
         build_start + 4u;
     const auto shifted_build_end =
@@ -1127,11 +1237,9 @@ bool apply_build131(
             static_cast<std::ptrdiff_t>(
                 shifted_build_start));
 
-    // The recovered dedicated receiver starts its final material tail exactly
-    // where Build131 ends. Re-acquire t10 there into r2.xyz and feed that
-    // fresh value into the already-attested final material MUL. The other
-    // source of the MUL is preserved byte-for-byte (the existing
-    // c101/COLOR0 material carrier).
+    // Build131 ends exactly at the dedicated final material cut. Insert the
+    // fresh t10 sample there; the c101 and COLOR0 operations already prepared
+    // immediately downstream shift intact by 11 DWORDs.
     words.insert(
         words.begin() +
             static_cast<std::ptrdiff_t>(
@@ -1139,23 +1247,6 @@ bool apply_build131(
         fresh_spec.begin(),
         fresh_spec.end());
 
-    const auto shifted_mul =
-        shifted_build_end +
-        fresh_spec.size();
-
-    if (shifted_mul + 8u >
-            words.size() ||
-        words[shifted_mul] !=
-            0x08000038u ||
-        words[shifted_mul + 1u] !=
-            0x00100072u ||
-        words[shifted_mul + 2u] != 2u ||
-        (words[shifted_mul + 4u] != 9u &&
-         words[shifted_mul + 4u] != 10u &&
-         words[shifted_mul + 4u] != 11u))
-        return false;
-
-    words[shifted_mul + 4u] = 2u;
     words[1] =
         static_cast<std::uint32_t>(
             words.size());
@@ -1165,6 +1256,34 @@ bool apply_build131(
     if (!decode(
             words,
             patched_instructions))
+        return false;
+
+    // Exact final-tail postcondition before rebuilding/RDEF mutation.
+    const auto c101_at =
+        shifted_build_end +
+        fresh_spec.size();
+    const auto color_at =
+        c101_at +
+        c101_mul.size();
+
+    if (c101_at +
+            c101_mul.size() >
+            words.size() ||
+        color_at +
+            color_mul.size() >
+            words.size() ||
+        !std::equal(
+            c101_mul.begin(),
+            c101_mul.end(),
+            words.begin() +
+                static_cast<std::ptrdiff_t>(
+                    c101_at)) ||
+        !std::equal(
+            color_mul.begin(),
+            color_mul.end(),
+            words.begin() +
+                static_cast<std::ptrdiff_t>(
+                    color_at)))
         return false;
 
     if (!patch_build131_rdef(chunks))
