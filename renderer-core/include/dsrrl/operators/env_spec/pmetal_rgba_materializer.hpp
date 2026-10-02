@@ -32,6 +32,9 @@ struct pmetal_rgba_materialize_outcome {
     core::operator_mask composed_owners = 0;
     bool upper_lower_composed = false;
     bool spec_rgb_consumer = false;
+    // Diagnostic-only: stable HemEnv t11 consumes the exact pre-draw-gain
+    // EnvDiffuse endpoint carried in b12[3].xyz instead of DSR cb0[3]*cb0[79].x.
+    bool envdiffuse_linear_consumer_diag = false;
 };
 
 pmetal_rgba_materialize_outcome
