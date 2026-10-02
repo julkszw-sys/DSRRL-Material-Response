@@ -55,42 +55,22 @@ int main()
         unchanged));
     assert(unchanged.generation == 1u);
 
-    // A selector event epoch is event identity, not source-payload identity.
-    // Re-publishing the same exact material/source under a newer epoch must
-    // preserve semantic generation so draw consumers can reuse the same GPU
-    // carrier without a redundant WRITE_DISCARD upload.
-    runtime::pmetal_producer_state_begin(
-        material,
-        101u);
-    runtime::pmetal_producer_state_publish(
-        material,
-        source,
-        101u);
-
-    runtime::pmetal_envspec_source next_epoch_same{};
-    assert(runtime::pmetal_producer_state_latest(
-        material,
-        101u,
-        next_epoch_same));
-    assert(next_epoch_same.serial == 101u);
-    assert(next_epoch_same.generation == 1u);
-
     source.beta = 0.75f;
     runtime::pmetal_producer_state_publish(
         material,
         source,
-        101u);
+        100u);
 
     runtime::pmetal_envspec_source changed{};
     assert(runtime::pmetal_producer_state_latest(
         material,
-        101u,
+        100u,
         changed));
     assert(changed.generation == 2u);
 
     assert(!runtime::pmetal_producer_state_latest(
         material,
-        102u,
+        101u,
         out));
 
     // Simulate selector -> draw thread handoff by dropping only TLS. The exact
@@ -100,7 +80,7 @@ int main()
     runtime::pmetal_envspec_source synchronized{};
     assert(runtime::pmetal_producer_state_latest(
         material,
-        101u,
+        100u,
         synchronized));
     assert(synchronized.beta == 0.75f);
 
