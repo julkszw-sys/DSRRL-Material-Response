@@ -208,7 +208,7 @@ def main():
         "pmetal_envspec_draw_runtime::release(")
     require_before(
         pmetal_prepare,
-        "if (!exact_pmetal_material(",
+        "if (!exact_pmetal_envspec_candidate(",
         "core_.features().enabled(",
         "PMetal exact-route prefilter")
 
