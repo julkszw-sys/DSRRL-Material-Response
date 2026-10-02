@@ -1461,7 +1461,7 @@ bool pmetal_envspec_draw_runtime::prepare(
             std::snprintf(
                 line,
                 sizeof(line),
-                "[DSRRL PMETAL VALUE CUT] family=%u rx=%u route=%u env_slot=%u probe_a=%u probe_b=%u bank_a=%016llx row_a=%u bank_b=%016llx row_b=%u serial=%llu gen=%llu beta=%.9g pA=%.9g,%.9g,%.9g pB=%.9g,%.9g,%.9g c101=%.9g c100=%.9g,%.9g,%.9g spec_hash=%016llx spec_allowed=%u spec_ready=%u spec_req=%u t10_count=%u t10=%016llx t12=%016llx t14=%016llx",
+                "[DSRRL PMETAL VALUE CUT] family=%u rx=%u route=%u env_slot=%u probe_a=%u probe_b=%u bank_a=%016llx row_a=%u bank_b=%016llx row_b=%u serial=%llu gen=%llu beta=%.9g pA=%.9g,%.9g,%.9g pB=%.9g,%.9g,%.9g c101=%.9g c100=%.9g,%.9g,%.9g spec_hash=%016llx spec_allowed=%u spec_ready=%u spec_req=%u t10_count=%u t10=%016llx t11=%016llx t12=%016llx t13=%016llx t14=%016llx",
                 static_cast<unsigned>(family),
                 static_cast<unsigned>(decision.receiver_id),
                 static_cast<unsigned>(decision.route_index),
@@ -1493,7 +1493,13 @@ bool pmetal_envspec_draw_runtime::prepare(
                 static_cast<unsigned long long>(t10),
                 static_cast<unsigned long long>(
                     reinterpret_cast<std::uintptr_t>(
+                        prepared.native_dsr_envdiffuse_a)),
+                static_cast<unsigned long long>(
+                    reinterpret_cast<std::uintptr_t>(
                         prepared.env_resources.ptde_a)),
+                static_cast<unsigned long long>(
+                    reinterpret_cast<std::uintptr_t>(
+                        prepared.native_dsr_envdiffuse_b)),
                 static_cast<unsigned long long>(
                     reinterpret_cast<std::uintptr_t>(
                         prepared.env_resources.ptde_b)));
