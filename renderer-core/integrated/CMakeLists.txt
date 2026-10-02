@@ -66,6 +66,11 @@ option(
     "Diagnostic: feed exact native DSR BC6H cubemaps into the PTDE P_Metal EnvSpec operator"
     OFF)
 
+option(
+    DSRRL_PMETAL_PTDE_CARRIER_STOCK_CONSUMER_DIAG
+    "Diagnostic: feed exact PTDE PackedGI t12/t14 into the generic-MR + stock DSR EnvSpec consumer for exact stable P_Metal"
+    OFF)
+
 set(
     RESHADE_INCLUDE_DIR
     ""
@@ -450,6 +455,13 @@ if(DSRRL_PMETAL_NATIVE_DSR_CUBEMAP_FEED)
         dsrrl_renderer_core_integrated
         PRIVATE
         $<$<COMPILE_LANGUAGE:CXX>:DSRRL_PMETAL_NATIVE_DSR_CUBEMAP_FEED>)
+endif()
+
+if(DSRRL_PMETAL_PTDE_CARRIER_STOCK_CONSUMER_DIAG)
+    target_compile_definitions(
+        dsrrl_renderer_core_integrated
+        PRIVATE
+        $<$<COMPILE_LANGUAGE:CXX>:DSRRL_PMETAL_PTDE_CARRIER_STOCK_CONSUMER_DIAG>)
 endif()
 
 if(MSVC)
