@@ -67,8 +67,13 @@ option(
     OFF)
 
 option(
+    DSRRL_PMETAL_STOCK_CONSUMER_BASELINE_DIAG
+    "Diagnostic control: exact stable P_Metal uses generic MR + stock DSR EnvSpec consumer/resources; dedicated P_Metal EnvSpec island bypassed"
+    OFF)
+
+option(
     DSRRL_PMETAL_PTDE_CARRIER_STOCK_CONSUMER_DIAG
-    "Diagnostic: feed exact PTDE PackedGI t12/t14 into the generic-MR + stock DSR EnvSpec consumer for exact stable P_Metal"
+    "Diagnostic B: same stock-consumer baseline but feed exact PTDE PackedGI t12/t14 for exact stable P_Metal"
     OFF)
 
 set(
@@ -455,6 +460,13 @@ if(DSRRL_PMETAL_NATIVE_DSR_CUBEMAP_FEED)
         dsrrl_renderer_core_integrated
         PRIVATE
         $<$<COMPILE_LANGUAGE:CXX>:DSRRL_PMETAL_NATIVE_DSR_CUBEMAP_FEED>)
+endif()
+
+if(DSRRL_PMETAL_STOCK_CONSUMER_BASELINE_DIAG)
+    target_compile_definitions(
+        dsrrl_renderer_core_integrated
+        PRIVATE
+        $<$<COMPILE_LANGUAGE:CXX>:DSRRL_PMETAL_STOCK_CONSUMER_BASELINE_DIAG>)
 endif()
 
 if(DSRRL_PMETAL_PTDE_CARRIER_STOCK_CONSUMER_DIAG)
