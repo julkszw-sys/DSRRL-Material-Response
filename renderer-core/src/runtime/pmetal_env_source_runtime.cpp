@@ -83,6 +83,7 @@ thread_local hook_source_record g_hook_source_tls{};
 std::mutex g_hook_source_mutex;
 hook_source_record g_hook_source_global{};
 std::atomic<std::uint64_t> g_hook_source_serial{0u};
+std::atomic<std::uint64_t> g_hook_source_generation{0u};
 std::atomic<std::uint64_t> g_hook_single_seen{0u};
 std::atomic<std::uint64_t> g_hook_blend_seen{0u};
 std::atomic<std::uint64_t> g_hook_publish{0u};
@@ -1189,6 +1190,20 @@ bool restore_source_hook(
     return true;
 }
 
+bool same_hook_source_payload(
+    const pmetal_envspec_source &a,
+    const pmetal_envspec_source &b) noexcept
+{
+    return
+        a.a == b.a &&
+        a.b == b.b &&
+        a.beta == b.beta &&
+        a.bank_signature_a == b.bank_signature_a &&
+        a.bank_signature_b == b.bank_signature_b &&
+        a.row_id_a == b.row_id_a &&
+        a.row_id_b == b.row_id_b;
+}
+
 void publish_hook_source(
     const f4 &a,
     const f4 &b,
@@ -1220,23 +1235,40 @@ void publish_hook_source(
             std::memory_order_relaxed) +
         1u;
     next.serial = serial;
-    next.generation = serial;
-
-    g_hook_source_tls = {
-        next,
-        serial,
-        true
-    };
 
     {
         std::lock_guard<std::mutex> lock(
             g_hook_source_mutex);
+
+        const bool unchanged =
+            g_hook_source_global.valid &&
+            same_hook_source_payload(
+                g_hook_source_global.source,
+                next);
+
+        next.generation =
+            unchanged
+                ? g_hook_source_global.source.generation
+                : g_hook_source_generation.fetch_add(
+                      1u,
+                      std::memory_order_relaxed) +
+                      1u;
+
         g_hook_source_global = {
             next,
             serial,
             true
         };
     }
+
+    // TLS gets the same semantic generation decided under the global source
+    // lock. serial still records every hook event, while generation now means
+    // what the draw-side b12 cache contract says it means: payload identity.
+    g_hook_source_tls = {
+        next,
+        serial,
+        true
+    };
 
     g_hook_publish.fetch_add(
         1u,
@@ -2071,6 +2103,9 @@ void pmetal_env_source_runtime::reset() noexcept
         0u,
         std::memory_order_relaxed);
     g_hook_source_serial.store(
+        0u,
+        std::memory_order_relaxed);
+    g_hook_source_generation.store(
         0u,
         std::memory_order_relaxed);
     g_hook_decode_stage.store(0u,std::memory_order_relaxed);
