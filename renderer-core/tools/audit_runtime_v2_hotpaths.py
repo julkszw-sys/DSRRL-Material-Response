@@ -9,6 +9,7 @@ flver = (root / "src/runtime/flver_engine_hooks.cpp").read_text(encoding="utf-8"
 pmetal_h = (root / "include/dsrrl/runtime/pmetal_envspec_draw_runtime.hpp").read_text(encoding="utf-8")
 pmetal_cpp = (root / "src/runtime/pmetal_envspec_draw_runtime.cpp").read_text(encoding="utf-8")
 producer = (root / "src/runtime/pmetal_producer_state.cpp").read_text(encoding="utf-8")
+pmetal_source = (root / "src/runtime/pmetal_env_source_runtime.cpp").read_text(encoding="utf-8")
 
 def require(text: str, needle: str, label: str) -> None:
     if needle not in text:
@@ -33,6 +34,11 @@ if selector.index("g_selector_upper_lower_enabled.load") > selector.index("upper
 
 require(producer, "g_record.generation + 1u", "semantic generation increment")
 require(producer, "same_source_payload", "semantic payload equality")
+require(pmetal_source, "same_hook_source_payload(", "fallback semantic payload equality")
+require(pmetal_source, "g_hook_source_generation", "fallback semantic generation")
+require(pmetal_source, "g_hook_source_semantic_version", "fallback semantic version")
+require(pmetal_source, "g_hook_source_tls.semantic_version ==", "fallback unchanged-payload lock-free gate")
+forbid(pmetal_source, "next.generation = serial", "event serial must not drive semantic generation")
 require(pmetal_h, "source_generation", "b12 generation cache")
 require(pmetal_cpp, "source.generation", "generation-gated b12 upload")
 forbid(pmetal_cpp, "found->second.payload.data()", "legacy 64-byte b12 memcmp cache")
