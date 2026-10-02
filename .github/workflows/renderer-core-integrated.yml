@@ -1741,3 +1741,56 @@ jobs:
           path: DSRRL_Core_Islands_PMETAL_PTDE_CARRIER_STOCK_CONSUMER_DIAG.addon64
           if-no-files-found: error
 
+      - name: Configure P_Metal stock-consumer baseline diagnostic addon
+        shell: pwsh
+        run: >
+          cmake
+          -S renderer-core/integrated
+          -B build-integrated-pmetal-stock-consumer-baseline
+          -A x64
+          -DRESHADE_INCLUDE_DIR="${{ github.workspace }}/_reshade/include"
+          -DDSRRL_SOURCE_COMMIT="$env:DSRRL_CHECKOUT_COMMIT"
+          -DDSRRL_BUILD_FLAVOR="pmetal_stock_consumer_baseline_diag"
+          -DDSRRL_EFFECT_TELEMETRY_DEFAULT_ON_ONLY=ON
+          -DDSRRL_PMETAL_STOCK_CONSUMER_BASELINE_DIAG=ON
+
+      - name: Verify P_Metal stock-consumer baseline profile
+        shell: pwsh
+        run: |
+          $cache = Get-Content build-integrated-pmetal-stock-consumer-baseline/CMakeCache.txt -Raw
+          if ($cache -notmatch "DSRRL_PMETAL_STOCK_CONSUMER_BASELINE_DIAG:BOOL=ON") {
+            throw "Stock-consumer baseline diagnostic profile is not enabled"
+          }
+
+      - name: Build P_Metal stock-consumer baseline diagnostic addon
+        shell: pwsh
+        run: |
+          cmake --build build-integrated-pmetal-stock-consumer-baseline --config Release --target dsrrl_renderer_core_integrated
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $addons = @(Get-ChildItem build-integrated-pmetal-stock-consumer-baseline -Recurse -Filter *.addon64)
+          if ($addons.Count -ne 1) {
+            throw "Expected exactly one stock-consumer baseline diagnostic addon, found $($addons.Count)"
+          }
+          $diag = "DSRRL_Core_Islands_PMETAL_STOCK_CONSUMER_BASELINE_DIAG.addon64"
+          Copy-Item $addons[0].FullName $diag -Force
+          Write-Host "PMETAL_STOCK_CONSUMER_BASELINE_DIAG=$diag"
+
+      - name: Verify P_Metal stock-consumer baseline binary identity
+        shell: pwsh
+        run: |
+          $path = "DSRRL_Core_Islands_PMETAL_STOCK_CONSUMER_BASELINE_DIAG.addon64"
+          $ascii = [System.Text.Encoding]::ASCII.GetString([System.IO.File]::ReadAllBytes($path))
+          if (-not $ascii.Contains($env:DSRRL_CHECKOUT_COMMIT)) {
+            throw "Stock-consumer baseline diagnostic does not embed checkout commit"
+          }
+          if (-not $ascii.Contains("pmetal_stock_consumer_baseline_diag")) {
+            throw "Stock-consumer baseline diagnostic does not embed diagnostic flavor"
+          }
+
+      - name: Upload P_Metal stock-consumer baseline diagnostic addon
+        uses: actions/upload-artifact@v4
+        with:
+          name: DSRRL_Core_Islands_PMETAL_STOCK_CONSUMER_BASELINE_DIAG
+          path: DSRRL_Core_Islands_PMETAL_STOCK_CONSUMER_BASELINE_DIAG.addon64
+          if-no-files-found: error
+
