@@ -803,11 +803,17 @@ bool add_b12_rdef(
     return true;
 }
 
+// Retail P_Metal keeps r1.x live across the EnvSpec sample: stock t12 writes
+// only r1.yzw, and r1.x is consumed again by preserved downstream code.
+// Historical Build131 used r1.xyzw as the raw PTDE RGB/A scratch, leaking
+// cubemap alpha into that unrelated live lane. Use r12 for endpoint-A raw
+// RGBA/decode, then write only decoded RGB to r1.yzw. Endpoint B already
+// reuses r12 after A has been fully consumed, so the operator math is unchanged.
 constexpr std::array<std::uint32_t,100>
     k_build131_window = {{
-        0x8d000048u,0x80000182u,0x00155543u,0x001000f2u,0x00000001u,0x00100796u,0x00000000u,0x00107936u,
+        0x8d000048u,0x80000182u,0x00155543u,0x001000f2u,0x0000000cu,0x00100796u,0x00000000u,0x00107936u,
         0x0000000cu,0x00106000u,0x0000000cu,0x00004001u,0x00000000u,0x0700000eu,0x001000e2u,0x00000001u,
-        0x00100e56u,0x00000001u,0x00100006u,0x00000001u,0x08000038u,0x001000e2u,0x00000001u,0x00100e56u,
+        0x00100e56u,0x0000000cu,0x00100006u,0x0000000cu,0x08000038u,0x001000e2u,0x00000001u,0x00100e56u,
         0x00000001u,0x00208246u,0x0000000cu,0x00000002u,0x0404001fu,0x0020803au,0x0000000cu,0x00000003u,
         0x8d000048u,0x80000182u,0x00155543u,0x001000f2u,0x0000000cu,0x00100796u,0x00000000u,0x00107936u,
         0x0000000eu,0x00106000u,0x0000000eu,0x00004001u,0x00000000u,0x0700000eu,0x001000e2u,0x0000000cu,
@@ -819,6 +825,20 @@ constexpr std::array<std::uint32_t,100>
         0x0100003au,0x0100003au,0x0100003au,0x0100003au,0x0100003au,0x0100003au,0x0100003au,0x0100003au,
         0x0100003au,0x0100003au,0x0100003au,0x0100003au
     }};
+
+// Hard live-register contract for the recovered PTDE EnvSpec island.
+// Retail P_Metal preserves r1.x across the t12 sample; raw PTDE RGBA must
+// therefore live in scratch r12 and only decoded RGB may be written to r1.yzw.
+static_assert(
+    k_build131_window[3] == 0x001000f2u &&
+    k_build131_window[4] == 12u &&
+    k_build131_window[14] == 0x001000e2u &&
+    k_build131_window[15] == 1u &&
+    k_build131_window[16] == 0x00100e56u &&
+    k_build131_window[17] == 12u &&
+    k_build131_window[18] == 0x00100006u &&
+    k_build131_window[19] == 12u,
+    "P_Metal Build131 must preserve live host r1.x");
 
 bool apply_build131(
     std::vector<std::uint8_t> &bytes,

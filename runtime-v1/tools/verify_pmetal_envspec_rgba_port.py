@@ -75,9 +75,35 @@ def main() -> None:
     expected = base[:]
     expected[6] = 0
     expected[38] = 0
+
+    # Historical Build131 sampled endpoint-A PTDE RGBA into r1.xyzw and used
+    # r1.x as the RGB/A denominator. Retail P_Metal intentionally samples t12
+    # only into r1.yzw because r1.x is live across this semantic cut and is
+    # consumed again by preserved downstream code. Keep the recovered Build131
+    # math, but move only endpoint-A raw RGBA/decode scratch to r12.
+    expected[4] = 12
+    expected[17] = 12
+    expected[19] = 12
+
     if current != expected:
         diffs = [i for i, (a, b) in enumerate(zip(current, expected)) if a != b]
         raise SystemExit(f"current C++ Build131 window drift at words {diffs}")
+
+    # Exact live-register postcondition:
+    #   sample_l r12.xyzw, ... t12 ...
+    #   div      r1.yzw, r12.yzw, r12.x
+    # Thus the island cannot overwrite the preserved host r1.x lane.
+    if not (
+        current[3] == 0x001000F2
+        and current[4] == 12
+        and current[14] == 0x001000E2
+        and current[15] == 1
+        and current[16] == 0x00100E56
+        and current[17] == 12
+        and current[18] == 0x00100006
+        and current[19] == 12
+    ):
+        raise SystemExit("Build131 endpoint-A live r1.x preservation contract failed")
 
     authority = args.authority.read_text(encoding="utf-8")
     for current_sha, t12, merge, reg, shader_id in CURRENT:
