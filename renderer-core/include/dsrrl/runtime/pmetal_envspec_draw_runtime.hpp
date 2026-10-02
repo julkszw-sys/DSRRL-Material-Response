@@ -45,6 +45,7 @@ struct prepared_pmetal_envspec_draw {
     prepared_material_resource_draw material_resources{};
     ID3D11PixelShader *shader = nullptr;
     ID3D11Buffer *b12 = nullptr;
+    ID3D11Buffer *envdiffuse_b13 = nullptr;
 
     // Diagnostic-only native DSR EnvDiffuse ownership. PSGetShaderResources
     // AddRefs these stock host SRVs; keep them alive until replay completes.
@@ -171,6 +172,11 @@ private:
         lerp_replacement_size_;
     std::unordered_map<std::uintptr_t,b12_context_cache>
         b12_by_context_;
+
+    // Immutable diagnostic carrier: b13[0]=PTDE Firelink m10 row25
+    // EnvDiffuse endpoint, b13[1]=unity. Exact row/bank gating happens before
+    // the replacement draw is prepared.
+    ID3D11Buffer *envdiffuse_diag_b13_ = nullptr;
 
     std::atomic<std::uint64_t> replacement_register_ok_{0};
     std::atomic<std::uint64_t> replacement_register_fail_{0};
