@@ -181,8 +181,8 @@ struct f4 {
 } // namespace
 
 bool exact_pmetal_envspec_candidate(
-    const mr::material_identity &material,
-    const mr::decision &decision) noexcept
+    const operators::material_response::material_identity &material,
+    const operators::material_response::decision &decision) noexcept
 {
     return
         exact_pmetal_material(material) &&
