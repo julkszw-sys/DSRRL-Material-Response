@@ -1520,27 +1520,13 @@ materialize_pmetal_rgba_receiver(
             true;
     }
 
-    std::vector<std::uint8_t>
-        spec_rgb_base;
-
-    if (resource_bridges::
-            materialize_spec_rgb_consumer(
-                base.data(),
-                base.size(),
-                spec_rgb_base,
-                true) !=
-        resource_bridges::
-            spec_rgb_consumer_result::applied) {
-        outcome.result =
-            pmetal_rgba_materialize_result::
-                fail_spec_rgb_consumer;
-        return outcome;
-    }
-
-    base =
-        std::move(spec_rgb_base);
-    outcome.spec_rgb_consumer =
-        true;
+    // Build131 now owns the dedicated P_Metal SpecRGB consumer itself:
+    // fresh t10 is sampled only at the final material cut and feeds the
+    // attested material MUL there. Do not run the generic early SpecRGB
+    // materializer here; that would reintroduce PTDE SpecRGB ahead of the
+    // surviving DSR PBL body and recreate the hybrid that produced the
+    // owner-visible white P_Metal failure.
+    outcome.spec_rgb_consumer = true;
 
     // PTDE Phn HemEnv terminates its surface contribution with an RGB-only
     // saturate. These exact P_Metal receivers are not members of the generic
