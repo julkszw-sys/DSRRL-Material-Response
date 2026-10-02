@@ -800,6 +800,351 @@ bool add_b12_rdef(
     return true;
 }
 
+bool apply_pmetal_pre_receiver(
+    std::vector<std::uint32_t> &words,
+    const pmetal_rgba_authority::entry
+        &authority) noexcept
+{
+    constexpr std::uint32_t k_nop =
+        0x0100003au;
+    constexpr std::uint32_t k_f22 =
+        0x400ccccdu;
+    constexpr std::uint32_t k_f13 =
+        0x3fa66666u;
+    constexpr std::uint32_t k_f1 =
+        0x3f800000u;
+
+    const auto lw =
+        authority.spec_log_word;
+    const auto mw =
+        authority.spec_gamma_mul_word;
+    const auto ew =
+        authority.spec_exp_word;
+
+    if (lw == 0u ||
+        mw <= lw ||
+        ew <= mw ||
+        ew + 5u > words.size() ||
+        (words[lw] & 0x7ffu) != 0x2fu ||
+        ((words[lw] >> 24u) & 0x7fu) != 5u ||
+        (words[mw] & 0x7ffu) != 0x38u ||
+        ((words[mw] >> 24u) & 0x7fu) != 10u ||
+        words[mw + 6u] != k_f22 ||
+        words[mw + 7u] != k_f22 ||
+        words[mw + 8u] != k_f22 ||
+        (words[ew] & 0x7ffu) != 0x19u ||
+        ((words[ew] >> 24u) & 0x7fu) != 5u)
+        return false;
+
+    std::array<std::uint32_t,5> exp{};
+    std::copy_n(
+        words.begin() +
+            static_cast<std::ptrdiff_t>(ew),
+        exp.size(),
+        exp.begin());
+
+    std::fill(
+        words.begin() +
+            static_cast<std::ptrdiff_t>(lw),
+        words.begin() +
+            static_cast<std::ptrdiff_t>(ew),
+        k_nop);
+    exp[0] =
+        (exp[0] & ~0x7ffu) | 0x36u;
+    std::copy(
+        exp.begin(),
+        exp.end(),
+        words.begin() +
+            static_cast<std::ptrdiff_t>(ew));
+
+    // V2.28B: replace the DSR-only angular/horizon square with scalar 1.
+    std::vector<instruction_view> instructions;
+    if (!decode(
+            words,
+            instructions))
+        return false;
+
+    std::size_t angular_matches = 0u;
+    std::size_t angular_square = 0u;
+
+    for (const auto &ins : instructions) {
+        if (ins.opcode != 0x32u ||
+            ins.length != 9u)
+            continue;
+
+        const auto first =
+            words.begin() +
+            static_cast<std::ptrdiff_t>(
+                ins.offset);
+        const auto last =
+            first +
+            static_cast<std::ptrdiff_t>(
+                ins.length);
+
+        if (std::find(
+                first,
+                last,
+                k_f13) == last ||
+            std::find(
+                first,
+                last,
+                k_f1) == last)
+            continue;
+
+        const auto square_offset =
+            ins.offset + ins.length;
+        const auto square =
+            std::find_if(
+                instructions.begin(),
+                instructions.end(),
+                [&](const instruction_view &i) {
+                    return
+                        i.offset ==
+                            square_offset &&
+                        i.opcode == 0x38u &&
+                        i.length == 7u;
+                });
+
+        if (square == instructions.end())
+            continue;
+
+        const auto apply_offset =
+            square_offset + 7u;
+        const auto apply =
+            std::find_if(
+                instructions.begin(),
+                instructions.end(),
+                [&](const instruction_view &i) {
+                    return
+                        i.offset ==
+                            apply_offset &&
+                        i.opcode == 0x38u &&
+                        i.length == 7u;
+                });
+
+        if (apply == instructions.end())
+            continue;
+
+        if (words[square_offset + 4u] !=
+                words[square_offset + 6u] ||
+            words[square_offset + 2u] !=
+                words[square_offset + 4u] ||
+            words[apply_offset + 6u] !=
+                words[square_offset + 2u])
+            continue;
+
+        ++angular_matches;
+        angular_square =
+            square_offset;
+    }
+
+    if (angular_matches != 1u)
+        return false;
+
+    const std::array<std::uint32_t,5>
+        angular_mov = {{
+            0x05000036u,
+            words[angular_square + 1u],
+            words[angular_square + 2u],
+            0x00004001u,
+            k_f1
+        }};
+
+    std::copy(
+        angular_mov.begin(),
+        angular_mov.end(),
+        words.begin() +
+            static_cast<std::ptrdiff_t>(
+                angular_square));
+    words[angular_square + 5u] =
+        k_nop;
+    words[angular_square + 6u] =
+        k_nop;
+
+    // V2.28C: remove the DSR t9 BRDF split-sum and preserve the current
+    // linear F0-like carrier directly at the original MAD assignment point.
+    if (!decode(
+            words,
+            instructions))
+        return false;
+
+    std::size_t split_matches = 0u;
+    std::size_t split_sample = 0u;
+    std::size_t split_mad = 0u;
+
+    for (const auto &ins : instructions) {
+        if (ins.opcode != 0x48u ||
+            ins.length != 13u ||
+            words[ins.offset + 7u] !=
+                0x00107e46u ||
+            words[ins.offset + 8u] != 9u ||
+            words[ins.offset + 9u] !=
+                0x00106000u ||
+            words[ins.offset + 10u] != 9u)
+            continue;
+
+        const auto mul_offset =
+            ins.offset + ins.length;
+        const auto mul =
+            std::find_if(
+                instructions.begin(),
+                instructions.end(),
+                [&](const instruction_view &i) {
+                    return
+                        i.offset == mul_offset &&
+                        i.opcode == 0x38u &&
+                        i.length == 7u;
+                });
+
+        if (mul == instructions.end())
+            continue;
+
+        const auto mad_offset =
+            mul_offset + 7u;
+        const auto mad =
+            std::find_if(
+                instructions.begin(),
+                instructions.end(),
+                [&](const instruction_view &i) {
+                    return
+                        i.offset == mad_offset &&
+                        i.opcode == 0x32u &&
+                        i.length == 9u;
+                });
+
+        if (mad == instructions.end() ||
+            (words[mad_offset + 1u] &
+                0xfff00000u) !=
+                0x00100000u ||
+            (words[mad_offset + 3u] &
+                0xfff00000u) !=
+                0x00100000u)
+            continue;
+
+        ++split_matches;
+        split_sample =
+            ins.offset;
+        split_mad =
+            mad_offset;
+    }
+
+    if (split_matches != 1u)
+        return false;
+
+    const std::array<std::uint32_t,5>
+        split_mov = {{
+            0x05000036u,
+            words[split_mad + 1u],
+            words[split_mad + 2u],
+            words[split_mad + 3u],
+            words[split_mad + 4u]
+        }};
+
+    std::fill(
+        words.begin() +
+            static_cast<std::ptrdiff_t>(
+                split_sample),
+        words.begin() +
+            static_cast<std::ptrdiff_t>(
+                split_mad),
+        k_nop);
+    std::copy(
+        split_mov.begin(),
+        split_mov.end(),
+        words.begin() +
+            static_cast<std::ptrdiff_t>(
+                split_mad));
+    std::fill(
+        words.begin() +
+            static_cast<std::ptrdiff_t>(
+                split_mad + split_mov.size()),
+        words.begin() +
+            static_cast<std::ptrdiff_t>(
+                split_mad + 9u),
+        k_nop);
+
+    // V2.28D/F final PRE tail: exact raw c101 on the linear carrier, then
+    // semantic COLOR0. V2.28C guarantees the eight-DWORD NOP reservation
+    // immediately before this cut.
+    const auto material =
+        authority.material_tail_word;
+    if (material < 8u ||
+        material + 9u > words.size())
+        return false;
+
+    const std::array<std::uint32_t,9>
+        expected_material = {{
+            0x05000036u,
+            0x00100072u,
+            2u,
+            0x00100246u,
+            authority.linear_spec_register,
+            k_nop,k_nop,k_nop,k_nop
+        }};
+
+    if (!std::equal(
+            expected_material.begin(),
+            expected_material.end(),
+            words.begin() +
+                static_cast<std::ptrdiff_t>(
+                    material)) ||
+        !std::all_of(
+            words.begin() +
+                static_cast<std::ptrdiff_t>(
+                    material - 8u),
+            words.begin() +
+                static_cast<std::ptrdiff_t>(
+                    material),
+            [&](std::uint32_t word) {
+                return word == k_nop;
+            }))
+        return false;
+
+    const std::array<std::uint32_t,8>
+        c101_mul = {{
+            0x08000038u,
+            0x00100072u,
+            2u,
+            0x00100246u,
+            authority.linear_spec_register,
+            0x00208246u,
+            12u,
+            0u
+        }};
+
+    const std::array<std::uint32_t,7>
+        color_mul = {{
+            0x07000038u,
+            0x00100072u,
+            2u,
+            0x00100246u,
+            2u,
+            0x00101246u,
+            authority.color0_register
+        }};
+
+    std::copy(
+        c101_mul.begin(),
+        c101_mul.end(),
+        words.begin() +
+            static_cast<std::ptrdiff_t>(
+                material - 8u));
+    std::copy(
+        color_mul.begin(),
+        color_mul.end(),
+        words.begin() +
+            static_cast<std::ptrdiff_t>(
+                material));
+    words[material + 7u] =
+        k_nop;
+    words[material + 8u] =
+        k_nop;
+
+    return decode(
+        words,
+        instructions);
+}
+
 constexpr std::array<std::uint32_t,100>
     k_build131_window = {{
         0x8d000048u,0x80000182u,0x00155543u,0x001000f2u,0x00000001u,0x00100796u,0x00000000u,0x00107936u,
@@ -837,6 +1182,14 @@ bool apply_build131(
             chunks,
             code_index,
             words) ||
+        !decode(
+            words,
+            instructions))
+        return false;
+
+    if (!apply_pmetal_pre_receiver(
+            words,
+            authority) ||
         !decode(
             words,
             instructions))
@@ -944,7 +1297,6 @@ bool apply_build131(
         !t1_decl ||
         !t1_sample ||
         !t12_sample ||
-        !t9_sample ||
         slot10_decls != 0u ||
         slot10_samples != 0u ||
         slot14_decls != 0u ||
@@ -979,9 +1331,7 @@ bool apply_build131(
 
     if (build_end !=
             authority.t12_word + 62u ||
-        build_end >= words.size() ||
-        t9_sample->offset < build_start ||
-        t9_sample->offset >= build_end)
+        build_end >= words.size())
         return false;
 
     const auto merge =
