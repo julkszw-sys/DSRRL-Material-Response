@@ -134,10 +134,7 @@ private:
 
     struct b12_context_cache {
         ID3D11Buffer *buffer = nullptr;
-        std::uint64_t source_generation = 0u;
-        std::uint32_t receiver_id = 0u;
-        std::uint32_t route_index = 0u;
-        std::array<std::uint32_t,4> material_bits{};
+        std::array<std::uint32_t,16> payload_bits{};
         bool payload_valid = false;
     };
 
