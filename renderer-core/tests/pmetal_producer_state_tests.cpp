@@ -55,16 +55,36 @@ int main()
         unchanged));
     assert(unchanged.generation == 1u);
 
+    // A selector event epoch is event identity, not source-payload identity.
+    // Re-publishing the same exact material/source under a newer epoch must
+    // preserve semantic generation so draw consumers can reuse the same GPU
+    // carrier without a redundant WRITE_DISCARD upload.
+    runtime::pmetal_producer_state_begin(
+        material,
+        101u);
+    runtime::pmetal_producer_state_publish(
+        material,
+        source,
+        101u);
+
+    runtime::pmetal_envspec_source next_epoch_same{};
+    assert(runtime::pmetal_producer_state_latest(
+        material,
+        101u,
+        next_epoch_same));
+    assert(next_epoch_same.serial == 101u);
+    assert(next_epoch_same.generation == 1u);
+
     source.beta = 0.75f;
     runtime::pmetal_producer_state_publish(
         material,
         source,
-        100u);
+        101u);
 
     runtime::pmetal_envspec_source changed{};
     assert(runtime::pmetal_producer_state_latest(
         material,
-        100u,
+        101u,
         changed));
     assert(changed.generation == 2u);
 
