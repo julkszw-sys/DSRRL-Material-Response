@@ -18,13 +18,6 @@ struct entry {
     std::string_view historical_pre_sha256{};
     std::string_view historical_post_sha256{};
 };
-    std::size_t t12_word = 0;
-    std::size_t merge_word = 0;
-    std::uint32_t reflection_coord_register = 0;
-    std::string_view historical_pre_sha256{};
-    std::string_view historical_post_sha256{};
-};
-
 inline constexpr std::array<entry,3> k_entries = {{
     {33u,
      "35880c0b2f2330208dfc21af6dd3d944218fcc4540cd8e59404a0aefc13c0b24",
