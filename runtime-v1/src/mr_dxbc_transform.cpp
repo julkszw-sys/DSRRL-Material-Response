@@ -1069,10 +1069,16 @@ transform_result transform_pmetal_envspec_rgba(
 
     // Build131 source-complete 100-word operator window. The only receiver-
     // specific values are the two reflection-coordinate register indices.
+    //
+    // Live-register correction: retail t12 writes only r1.yzw because r1.x
+    // survives this cut and is consumed again downstream. Historical Build131
+    // used r1.xyzw as raw PTDE RGB/A scratch and leaked cubemap alpha into that
+    // host lane. Decode endpoint A through r12 instead, then write only RGB/A
+    // output to r1.yzw. Endpoint B already reuses r12 after A is consumed.
     constexpr std::array<std::uint32_t,100> k_build131_window = {{
-        0x8d000048u, 0x80000182u, 0x00155543u, 0x001000f2u, 0x00000001u, 0x00100796u, 0x00000000u, 0x00107936u,
+        0x8d000048u, 0x80000182u, 0x00155543u, 0x001000f2u, 0x0000000cu, 0x00100796u, 0x00000000u, 0x00107936u,
         0x0000000cu, 0x00106000u, 0x0000000cu, 0x00004001u, 0x00000000u, 0x0700000eu, 0x001000e2u, 0x00000001u,
-        0x00100e56u, 0x00000001u, 0x00100006u, 0x00000001u, 0x08000038u, 0x001000e2u, 0x00000001u, 0x00100e56u,
+        0x00100e56u, 0x0000000cu, 0x00100006u, 0x0000000cu, 0x08000038u, 0x001000e2u, 0x00000001u, 0x00100e56u,
         0x00000001u, 0x00208246u, 0x0000000cu, 0x00000002u, 0x0404001fu, 0x0020803au, 0x0000000cu, 0x00000003u,
         0x8d000048u, 0x80000182u, 0x00155543u, 0x001000f2u, 0x0000000cu, 0x00100796u, 0x00000000u, 0x00107936u,
         0x0000000eu, 0x00106000u, 0x0000000eu, 0x00004001u, 0x00000000u, 0x0700000eu, 0x001000e2u, 0x0000000cu,
