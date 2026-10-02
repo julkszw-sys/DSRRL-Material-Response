@@ -5470,6 +5470,35 @@ bool prepare_island_batch(
             cmd_list,
             prepared.clustered_shader)) {
         hot_count(g_clustered_draw_pipeline_ready);
+
+        // The current clustered PntS journal owns PTDE attenuation, diffuse
+        // material-domain and terminal SAT only. Its Spc host still contains
+        // the stock DSR microfacet/GGX local-specular window. The create-time
+        // census above explicitly leaves local_specular_legacy unarmed until
+        // that full window has an exact PTDE legacy rewrite recipe.
+        //
+        // Never claim/local-replay local_specular_legacy from this partial
+        // shader. Spc must fail open to the original DSR draw until the
+        // complete legacy kernel is actually materialized. NoSpc remains a
+        // valid PointLight attenuation/diffuse island.
+        if (prepared.clustered_shader.spc) {
+            static std::atomic_bool
+                clustered_spc_incomplete_logged{false};
+            if (!clustered_spc_incomplete_logged.exchange(
+                    true,
+                    std::memory_order_relaxed)) {
+                reshade::log::message(
+                    reshade::log::level::warning,
+                    "[DSRRL POINTLIGHT APPLY] stage=clustered_spc_failopen_unmaterialized_legacy_specular");
+            }
+
+            g_clustered_pnts_pipeline.release_prepared_shader(
+                prepared.clustered_shader);
+            prepared.batch = {};
+            hot_count(g_clustered_draw_fail_open);
+            return false;
+        }
+
         if (!g_pointlight_once_shader_ready.exchange(true)) {
             reshade::log::message(
                 reshade::log::level::info,

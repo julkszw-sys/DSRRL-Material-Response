@@ -1,6 +1,6 @@
 {
   "schema": "dsrrl.clustered_pnts_composed_shader_ownership.v1",
-  "status": "CONFIRMED_STATIC_COMPOSITION_RUNTIME_GATE_ADDED",
+  "status": "CONFIRMED_STATIC_COMPOSITION_SPC_FAIL_OPEN_UNTIL_LEGACY_KERNEL",
   "source_journal": "renderer-core/data/provenance/clustered_pnts_direct_stock_journal_v1.json",
   "scope": {
     "plans": 36,
@@ -18,19 +18,19 @@
     ]
   },
   "runtime_ownership": {
-    "dynamic_primary": "Spc=local_specular_legacy; NoSpc=point_light",
+    "dynamic_primary": "Spc=FAIL_OPEN until local_specular_legacy microfacet window is exactly materialized; NoSpc=point_light",
     "dynamic_existing": [
-      "point_light",
-      "material_response",
-      "local_specular_legacy for Spc"
+      "NoSpc point_light",
+      "NoSpc material_response",
+      "Spc local_specular_legacy census/readiness only; not replay-authorized"
     ],
     "static_composed_mask_transport": "materializer -> candidate record -> prepared bound shader -> island_draw_adapter_request.additional_shader_owners",
     "static_owners_are_shader_only": true,
     "dynamic_cb_resource_ownership_unchanged": true,
-    "mismatch_behavior": "FAIL_OPEN"
+    "mismatch_behavior": "FAIL_OPEN; clustered Spc always fails open while legacy local-specular rewrite is unmaterialized"
   },
-  "conclusion": "The direct clustered PntS replacement is a composed shader payload, not a PointLight-only shader. Exact journal transforms prove three create-time operators in all 36 plans and NoSpc EnvSpec deletion in 12/12 NoSpc plans. Runtime ownership must declare these shader owners whenever the replacement PS is replayed.",
-  "runtime_liveness": "OPEN_CURRENT_SOURCE",
-  "bridge_activation": "OPEN_CURRENT_SOURCE",
+  "conclusion": "The direct clustered PntS replacement is only production-complete for NoSpc under the current journal. All 36 plans contain diffuse-domain, attenuation and terminal-SAT edits (plus NoSpc EnvSpec deletion), but Spc still contains the stock DSR microfacet local-specular window. Runtime must not claim local_specular_legacy ownership for Spc until a complete PTDE legacy-kernel rewrite is materialized; current Spc behavior is fail-open to stock DSR.",
+  "runtime_liveness": "OPEN_AFTER_SPC_FAIL_OPEN",
+  "bridge_activation": "OPEN_AFTER_SPC_FAIL_OPEN",
   "pixel_behavior": "OPEN"
 }
