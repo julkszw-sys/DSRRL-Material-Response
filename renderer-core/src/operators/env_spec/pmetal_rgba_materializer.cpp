@@ -842,17 +842,17 @@ bool apply_build131(
             instructions))
         return false;
 
-    std::optional<instruction_view>
-        sampler9;
-    std::optional<instruction_view>
-        texture9;
-    std::optional<instruction_view>
-        t12_sample;
-    std::size_t t9_samples = 0u;
+    std::optional<instruction_view> sampler9;
+    std::optional<instruction_view> texture9;
+    std::optional<instruction_view> t1_decl;
+    std::optional<instruction_view> t1_sample;
+    std::optional<instruction_view> t12_sample;
+    std::optional<instruction_view> t9_sample;
+    std::size_t slot10_decls = 0u;
+    std::size_t slot10_samples = 0u;
     std::size_t slot14_decls = 0u;
 
-    for (const auto &ins :
-         instructions) {
+    for (const auto &ins : instructions) {
         if (ins.opcode == 0x5au &&
             ins.length == 3u) {
             const auto slot =
@@ -873,34 +873,61 @@ bool apply_build131(
             const auto slot =
                 words[ins.offset + 2u];
 
+            if (slot == 1u) {
+                if (t1_decl)
+                    return false;
+                t1_decl = ins;
+            }
+
             if (slot == 9u) {
                 if (texture9)
                     return false;
                 texture9 = ins;
             }
 
+            if (slot == 10u)
+                ++slot10_decls;
+
             if (slot == 14u)
                 ++slot14_decls;
         }
 
         if (ins.opcode >= 0x45u &&
-            ins.opcode <= 0x4au &&
-            ins.length == 13u) {
-            const auto resource =
-                words[ins.offset + 8u];
-            const auto sampler =
-                words[ins.offset + 10u];
+            ins.opcode <= 0x4au) {
+            if (ins.length == 11u) {
+                const auto resource =
+                    words[ins.offset + 8u];
 
-            if (resource == 12u &&
-                sampler == 12u) {
-                if (t12_sample)
-                    return false;
-                t12_sample = ins;
+                if (resource == 1u) {
+                    if (t1_sample)
+                        return false;
+                    t1_sample = ins;
+                }
+
+                if (resource == 10u)
+                    ++slot10_samples;
             }
 
-            if (resource == 9u ||
-                sampler == 9u)
-                ++t9_samples;
+            if (ins.length == 13u) {
+                const auto resource =
+                    words[ins.offset + 8u];
+                const auto sampler =
+                    words[ins.offset + 10u];
+
+                if (resource == 12u &&
+                    sampler == 12u) {
+                    if (t12_sample)
+                        return false;
+                    t12_sample = ins;
+                }
+
+                if (resource == 9u ||
+                    sampler == 9u) {
+                    if (t9_sample)
+                        return false;
+                    t9_sample = ins;
+                }
+            }
         }
     }
 
@@ -914,25 +941,47 @@ bool apply_build131(
 
     if (!sampler9 ||
         !texture9 ||
+        !t1_decl ||
+        !t1_sample ||
         !t12_sample ||
+        !t9_sample ||
+        slot10_decls != 0u ||
+        slot10_samples != 0u ||
         slot14_decls != 0u ||
-        t9_samples != 1u ||
         t12_sample->offset !=
             authority.t12_word ||
+        authority.t12_word < 38u ||
         authority.merge_word <=
             authority.t12_word ||
         authority.merge_word -
-            authority.t12_word !=
-            115u ||
-        authority.t12_word +
-            k_build131_window.size() >
-            words.size() ||
+            authority.t12_word != 115u ||
+        t1_decl->offset >=
+            authority.t12_word ||
         !std::equal(
             k_t12_sample.begin(),
             k_t12_sample.end(),
             words.begin() +
                 static_cast<std::ptrdiff_t>(
                     t12_sample->offset)))
+        return false;
+
+    // The recovered source-complete Build131 builder anchors its 100-DWORD
+    // legacy EnvSpec island 38 DWORDs BEFORE the original t12 sample. That
+    // 38-DWORD prefix is the DSR dynamic-LOD/pre-sample operator being
+    // replaced. Anchoring at t12 (the old Runtime-v2 behavior) shifts the
+    // island by +38, overwrites the final material cut, and forced PR183 to
+    // NOP a synthetic 15-DWORD residual.
+    const auto build_start =
+        authority.t12_word - 38u;
+    const auto build_end =
+        build_start +
+        k_build131_window.size();
+
+    if (build_end !=
+            authority.t12_word + 62u ||
+        build_end >= words.size() ||
+        t9_sample->offset < build_start ||
+        t9_sample->offset >= build_end)
         return false;
 
     const auto merge =
@@ -944,10 +993,28 @@ bool apply_build131(
                     authority.merge_word;
             });
 
-    if (merge ==
-            instructions.end() ||
+    const auto final_mul =
+        std::find_if(
+            instructions.begin(),
+            instructions.end(),
+            [&](const instruction_view &i) {
+                return i.offset ==
+                    build_end;
+            });
+
+    if (merge == instructions.end() ||
         merge->opcode != 0x32u ||
         merge->length != 9u ||
+        final_mul == instructions.end() ||
+        final_mul->opcode != 0x38u ||
+        final_mul->length != 8u ||
+        words[final_mul->offset + 1u] !=
+            0x00100072u ||
+        words[final_mul->offset + 2u] !=
+            2u ||
+        (words[final_mul->offset + 4u] != 9u &&
+         words[final_mul->offset + 4u] != 10u &&
+         words[final_mul->offset + 4u] != 11u) ||
         words[sampler9->offset] !=
             0x0300005au ||
         words[sampler9->offset + 1u] !=
@@ -964,36 +1031,66 @@ bool apply_build131(
             0x00005555u)
         return false;
 
-    for (const auto &ins :
-         instructions) {
-        if (ins.opcode < 0x45u ||
-            ins.opcode > 0x4au ||
-            ins.length != 13u)
-            continue;
-
-        const auto resource =
-            words[ins.offset + 8u];
-        const auto sampler =
-            words[ins.offset + 10u];
-
-        if ((resource == 9u ||
-             sampler == 9u) &&
-            (ins.offset <
-                 authority.t12_word ||
-             ins.offset >=
-                 authority.t12_word +
-                 100u))
+    // Csd/Sdw carried a DSR-only visibility-response exponent that the
+    // source-complete dedicated P_Metal receiver explicitly removed while
+    // retaining the pre-exponent visibility core. Plain HemEnv has no such
+    // island.
+    if (authority.visibility_start_word != 0u ||
+        authority.visibility_end_word != 0u) {
+        if (authority.visibility_end_word <=
+                authority.visibility_start_word ||
+            authority.visibility_end_word -
+                authority.visibility_start_word != 19u ||
+            authority.visibility_end_word >
+                words.size() ||
+            (words[authority.visibility_start_word] &
+                0x7ffu) != 0x2fu ||
+            (words[authority.visibility_start_word + 6u] &
+                0x7ffu) != 0x38u ||
+            (words[authority.visibility_start_word + 14u] &
+                0x7ffu) != 0x19u)
             return false;
+
+        std::fill(
+            words.begin() +
+                static_cast<std::ptrdiff_t>(
+                    authority.visibility_start_word),
+            words.begin() +
+                static_cast<std::ptrdiff_t>(
+                    authority.visibility_end_word),
+            0x0100003au);
     }
 
-    auto window =
-        k_build131_window;
+    // Clone only the stock t1 resource declaration into t10. Do NOT inject a
+    // second SpecRGB sample beside t1: the PTDE resource is re-acquired fresh
+    // at the final material cut after Build131, so it never traverses the
+    // surviving DSR PBL body.
+    std::array<std::uint32_t,4>
+        t10_decl{};
+    std::copy_n(
+        words.begin() +
+            static_cast<std::ptrdiff_t>(
+                t1_decl->offset),
+        4u,
+        t10_decl.begin());
+    t10_decl[2] = 10u;
 
-    window[6] =
-        authority.reflection_coord_register;
-    window[38] =
-        authority.reflection_coord_register;
+    std::array<std::uint32_t,11>
+        fresh_spec{};
+    std::copy_n(
+        words.begin() +
+            static_cast<std::ptrdiff_t>(
+                t1_sample->offset),
+        11u,
+        fresh_spec.begin());
+    fresh_spec[3] =
+        0x00100072u;
+    fresh_spec[4] = 2u;
+    fresh_spec[8] = 10u;
 
+    // Relocate the old t9 declaration pair to the dedicated PTDE B cube at
+    // t14 before inserting any new words, while the original declaration
+    // offsets are still valid.
     words[sampler9->offset + 2u] =
         14u;
     words[texture9->offset] =
@@ -1001,38 +1098,67 @@ bool apply_build131(
     words[texture9->offset + 2u] =
         14u;
 
-    const auto replacement_end =
-        authority.t12_word +
-        window.size();
+    const auto decl_insert =
+        t1_decl->offset + 4u;
+    words.insert(
+        words.begin() +
+            static_cast<std::ptrdiff_t>(
+                decl_insert),
+        t10_decl.begin(),
+        t10_decl.end());
 
-    // Build131 owns the complete EnvSpec/PBL cut through (but not including)
-    // the verified merge instruction. The historical payload is 100 words,
-    // while the clean diffuse-v1 base exposes a 115-word t12->merge cut.
-    // Leaving the final 15 stock words intact bisects the 13-word instruction
-    // beginning at t12+95 and produces checksum-valid but undecodable DXBC.
-    // Neutralize the residual cut with DXBC NOPs so the next preserved token
-    // is exactly the attested merge instruction.
-    if (replacement_end >
-            authority.merge_word ||
-        authority.merge_word >
-            words.size())
-        return false;
+    // Every semantic cut below the declaration block shifts by four DWORDs.
+    const auto shifted_build_start =
+        build_start + 4u;
+    const auto shifted_build_end =
+        build_end + 4u;
+
+    auto window =
+        k_build131_window;
+    window[6] =
+        authority.reflection_coord_register;
+    window[38] =
+        authority.reflection_coord_register;
 
     std::copy(
         window.begin(),
         window.end(),
         words.begin() +
             static_cast<std::ptrdiff_t>(
-                authority.t12_word));
+                shifted_build_start));
 
-    std::fill(
+    // The recovered dedicated receiver starts its final material tail exactly
+    // where Build131 ends. Re-acquire t10 there into r2.xyz and feed that
+    // fresh value into the already-attested final material MUL. The other
+    // source of the MUL is preserved byte-for-byte (the existing
+    // c101/COLOR0 material carrier).
+    words.insert(
         words.begin() +
             static_cast<std::ptrdiff_t>(
-                replacement_end),
-        words.begin() +
-            static_cast<std::ptrdiff_t>(
-                authority.merge_word),
-        0x0100003au);
+                shifted_build_end),
+        fresh_spec.begin(),
+        fresh_spec.end());
+
+    const auto shifted_mul =
+        shifted_build_end +
+        fresh_spec.size();
+
+    if (shifted_mul + 8u >
+            words.size() ||
+        words[shifted_mul] !=
+            0x08000038u ||
+        words[shifted_mul + 1u] !=
+            0x00100072u ||
+        words[shifted_mul + 2u] != 2u ||
+        (words[shifted_mul + 4u] != 9u &&
+         words[shifted_mul + 4u] != 10u &&
+         words[shifted_mul + 4u] != 11u))
+        return false;
+
+    words[shifted_mul + 4u] = 2u;
+    words[1] =
+        static_cast<std::uint32_t>(
+            words.size());
 
     std::vector<instruction_view>
         patched_instructions;
@@ -1041,13 +1167,10 @@ bool apply_build131(
             patched_instructions))
         return false;
 
-    if (!patch_build131_rdef(
-            chunks))
+    if (!patch_build131_rdef(chunks))
         return false;
 
-    std::vector<std::uint8_t>
-        rebuilt;
-
+    std::vector<std::uint8_t> rebuilt;
     if (!rebuild(
             bytes.data(),
             bytes.size(),
