@@ -192,7 +192,6 @@ void pmetal_producer_state_publish(
     // Preserve the previous TLS payload across clear(). That lets the selector
     // identify the overwhelmingly common unchanged case without a mutex.
     const bool unchanged =
-        g_record.epoch == epoch &&
         same_material(g_record.material, material) &&
         same_source_payload(g_record.source, source);
 
