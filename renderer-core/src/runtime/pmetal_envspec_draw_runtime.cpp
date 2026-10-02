@@ -49,6 +49,7 @@ std::atomic_bool g_source_cut_logged{false};
 std::atomic_bool g_resource_mode_logged{false};
 std::atomic_bool g_source_frontier_logged{false};
 std::atomic<std::uint32_t> g_prepare_stage_log_mask{0u};
+std::atomic<std::uint32_t> g_value_cut_log_mask{0u};
 
 void log_prepare_stage_once(
     std::uint32_t bit,
@@ -1326,6 +1327,93 @@ bool pmetal_envspec_draw_runtime::prepare(
         material,
         decision,
         family);
+
+    // Pixel-fail diagnostic for the owner-reported white P_Metal phenotype.
+    // Log exactly once per stable receiver and only after the entire island is
+    // request-ready, so every value below belongs to an actually executable
+    // replacement draw. No GPU readback and no renderer-state mutation.
+    if (decision.receiver_id >= 33u &&
+        decision.receiver_id <= 35u) {
+        const auto bit =
+            1u << (decision.receiver_id - 33u);
+        const auto observed =
+            g_value_cut_log_mask.load(
+                std::memory_order_relaxed);
+        if ((observed & bit) == 0u &&
+            (g_value_cut_log_mask.fetch_or(
+                 bit,
+                 std::memory_order_relaxed) & bit) == 0u) {
+            const auto spec_probe =
+                material_resources_.
+                    probe_exact_specular_companion(
+                        context);
+
+            std::uintptr_t t10 = 0u;
+            std::uint32_t t10_count = 0u;
+            for (std::uint32_t i = 0u;
+                 i < prepared.material_resources.request_count;
+                 ++i) {
+                const auto &resource_request =
+                    prepared.material_resources.requests[i];
+                for (std::uint32_t j = 0u;
+                     j < resource_request.srv_count;
+                     ++j) {
+                    if (resource_request.srvs[j].slot != 10u ||
+                        resource_request.srvs[j].srv == nullptr)
+                        continue;
+                    t10 =
+                        reinterpret_cast<std::uintptr_t>(
+                            resource_request.srvs[j].srv);
+                    ++t10_count;
+                }
+            }
+
+            char line[1536]{};
+            std::snprintf(
+                line,
+                sizeof(line),
+                "[DSRRL PMETAL VALUE CUT] family=%u rx=%u route=%u env_slot=%u probe_a=%u probe_b=%u bank_a=%016llx row_a=%u bank_b=%016llx row_b=%u serial=%llu gen=%llu beta=%.9g pA=%.9g,%.9g,%.9g pB=%.9g,%.9g,%.9g c101=%.9g c100=%.9g,%.9g,%.9g spec_hash=%016llx spec_allowed=%u spec_ready=%u spec_req=%u t10_count=%u t10=%016llx t12=%016llx t14=%016llx",
+                static_cast<unsigned>(family),
+                static_cast<unsigned>(decision.receiver_id),
+                static_cast<unsigned>(decision.route_index),
+                static_cast<unsigned>(env_semantics.envspc_slot),
+                static_cast<unsigned>(prepared.env_resources.probe_a),
+                static_cast<unsigned>(prepared.env_resources.probe_b),
+                static_cast<unsigned long long>(source.bank_signature_a),
+                static_cast<unsigned>(source.row_id_a),
+                static_cast<unsigned long long>(source.bank_signature_b),
+                static_cast<unsigned>(source.row_id_b),
+                static_cast<unsigned long long>(source.serial),
+                static_cast<unsigned long long>(source.generation),
+                static_cast<double>(source.beta),
+                static_cast<double>(source.a[0]),
+                static_cast<double>(source.a[1]),
+                static_cast<double>(source.a[2]),
+                static_cast<double>(source.b[0]),
+                static_cast<double>(source.b[1]),
+                static_cast<double>(source.b[2]),
+                static_cast<double>(decision.c101),
+                static_cast<double>(decision.c100[0]),
+                static_cast<double>(decision.c100[1]),
+                static_cast<double>(decision.c100[2]),
+                static_cast<unsigned long long>(spec_probe.logical_hash),
+                spec_probe.logical_hash_allowed ? 1u : 0u,
+                spec_probe.companion_ready ? 1u : 0u,
+                prepared.material_resources.spec_rgb ? 1u : 0u,
+                static_cast<unsigned>(t10_count),
+                static_cast<unsigned long long>(t10),
+                static_cast<unsigned long long>(
+                    reinterpret_cast<std::uintptr_t>(
+                        prepared.env_resources.ptde_a)),
+                static_cast<unsigned long long>(
+                    reinterpret_cast<std::uintptr_t>(
+                        prepared.env_resources.ptde_b)));
+            reshade::log::message(
+                reshade::log::level::info,
+                line);
+        }
+    }
+
     if (family ==
         pmetal_envspec_receiver_family::
             hemenvlerp)
@@ -1429,6 +1517,7 @@ void pmetal_envspec_draw_runtime::reset() noexcept
     g_resource_mode_logged.store(false);
     g_source_frontier_logged.store(false);
     g_prepare_stage_log_mask.store(0u);
+    g_value_cut_log_mask.store(0u);
     quarantined_.store(false);
 }
 

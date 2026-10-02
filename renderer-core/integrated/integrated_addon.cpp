@@ -253,6 +253,9 @@ std::atomic_bool g_pointlight_once_shader_ready{false};
 std::atomic_bool g_pointlight_once_sidecar_ready{false};
 std::atomic_bool g_pointlight_once_batch_ready{false};
 std::atomic_bool g_pointlight_once_applied{false};
+// PR175/176 RT identity probing is diagnostic-only. Runtime proof already
+// established the reflective-water 480x270 offscreen PointLight pass. Keep
+// the small signature store for the one first-hit observation only.
 std::array<std::atomic<std::uint64_t>,4>
     g_pointlight_rt_signatures{};
 // Exact producer transports that may publish draw-scoped TLS. The selection
@@ -6616,9 +6619,12 @@ bool on_draw(
                 reshade::log::message(
                     reshade::log::level::info,
                     "[DSRRL POINTLIGHT APPLY] stage=applied");
+                // Diagnostic only: capture RT identity on the same first-hit
+                // latch. No native RT/viewport queries remain on subsequent
+                // PointLight draws, including the 480x270 water reflection pass.
+                observe_pointlight_render_target(
+                    cmd_list);
             }
-            observe_pointlight_render_target(
-                cmd_list);
         } else {
             hot_count(g_clustered_draw_fail_open);
         }
@@ -6943,9 +6949,12 @@ bool on_draw_indexed(
                 reshade::log::message(
                     reshade::log::level::info,
                     "[DSRRL POINTLIGHT APPLY] stage=applied");
+                // Diagnostic only: capture RT identity on the same first-hit
+                // latch. No native RT/viewport queries remain on subsequent
+                // PointLight draws, including the 480x270 water reflection pass.
+                observe_pointlight_render_target(
+                    cmd_list);
             }
-            observe_pointlight_render_target(
-                cmd_list);
         } else {
             hot_count(g_clustered_draw_fail_open);
         }
@@ -7175,6 +7184,8 @@ bool AddonInit(
     g_pointlight_once_sidecar_ready.store(false);
     g_pointlight_once_batch_ready.store(false);
     g_pointlight_once_applied.store(false);
+    for (auto &slot : g_pointlight_rt_signatures)
+        slot.store(0u, std::memory_order_relaxed);
     g_upper_lower_selection_transport_active.store(false);
     g_hemdir3_selection_transport_active.store(false);
     g_fixed_pointlight_selection_transport_active.store(false);
