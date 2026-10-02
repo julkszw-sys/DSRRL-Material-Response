@@ -1391,6 +1391,8 @@ bool final_postcondition(
 
     std::size_t t10_decl = 0u;
     std::size_t t10_sample = 0u;
+    std::size_t t10_yzw_sample = 0u;
+    std::size_t c101_yzw_mul = 0u;
     std::size_t t14_decl = 0u;
     std::size_t s14_decl = 0u;
     std::size_t t14_sample = 0u;
@@ -1431,8 +1433,16 @@ bool final_postcondition(
             ins.opcode <= 0x4au) {
             if (ins.length == 11u &&
                 words[ins.offset + 8u] ==
-                    10u)
+                    10u) {
                 ++t10_sample;
+                if (words[ins.offset + 3u] ==
+                        0x001000e2u &&
+                    words[ins.offset + 4u] ==
+                        2u &&
+                    words[ins.offset + 7u] ==
+                        0x00107936u)
+                    ++t10_yzw_sample;
+            }
 
             if (ins.length == 13u) {
                 const auto resource =
@@ -1449,6 +1459,25 @@ bool final_postcondition(
                     ++t9_sample;
             }
         }
+
+        if (ins.opcode == 0x38u &&
+            ins.length == 8u &&
+            ins.offset + 7u < words.size() &&
+            words[ins.offset + 1u] ==
+                0x00100072u &&
+            words[ins.offset + 2u] ==
+                2u &&
+            words[ins.offset + 3u] ==
+                0x00100796u &&
+            words[ins.offset + 4u] ==
+                2u &&
+            words[ins.offset + 5u] ==
+                0x00208246u &&
+            words[ins.offset + 6u] ==
+                12u &&
+            words[ins.offset + 7u] ==
+                0u)
+            ++c101_yzw_mul;
     }
 
     auto *rdef =
@@ -1487,6 +1516,8 @@ bool final_postcondition(
     return
         t10_decl == 1u &&
         t10_sample == 1u &&
+        t10_yzw_sample == 1u &&
+        c101_yzw_mul == 1u &&
         t14_decl == 1u &&
         s14_decl == 1u &&
         t14_sample == 1u &&
