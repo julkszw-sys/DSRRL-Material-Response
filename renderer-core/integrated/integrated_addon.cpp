@@ -5934,26 +5934,31 @@ bool prepare_island_batch(
                 direct_ul_draw_applied,
                 upper_lower_identity);
 
-    // P_Metal EnvSpec owns the complete PS+b12+t12/t14+s12/s14 semantic
-    // island. Its source carrier and shader/CB/resource transaction are
-    // independent of visible U/L. Failure falls through to ordinary MR/U-L
-    // routing without borrowing any U/L state for EnvSpec.
+    // P_Metal EnvSpec owns the complete PS+b12+t10+t12/t14+s12/s14
+    // semantic island. Exact P_Metal must be atomic at draw time: once the
+    // exact material/owner/route/receiver gate matches, a failure anywhere in
+    // the dedicated island fails open to the original stock DSR draw. Never
+    // continue into generic diffuse-only MR, because that creates a partial
+    // P_Metal hybrid (PTDE c100/diffuse with stock DSR EnvSpec).
     const auto envspec_family =
         hemenvlerp_bound
             ? dsrrl::runtime::pmetal_envspec_receiver_family::hemenvlerp
             : dsrrl::runtime::pmetal_envspec_receiver_family::stable_hemenv;
 
-    // Route 345 is a necessary (not sufficient) P_Metal condition. Keep the
-    // exact semantic/raw-MTD/owner authority inside pmetal_envspec::prepare,
-    // but do not enter that island at all for ordinary active MR routes.
-    if (decision.active &&
-        decision.route_index == 345u &&
-        g_pmetal_envspec.prepare(
-            cmd_list,
+    const bool exact_pmetal_envspec =
+        dsrrl::runtime::exact_pmetal_envspec_candidate(
             material,
-            decision,
-            envspec_family,
-            prepared.envspec)) {
+            decision);
+
+    if (exact_pmetal_envspec) {
+        if (!g_pmetal_envspec.prepare(
+                cmd_list,
+                material,
+                decision,
+                envspec_family,
+                prepared.envspec))
+            return false;
+
         prepared.envspec_in_batch = true;
 
         if (dsrrl::runtime::append_island_draw_request(
