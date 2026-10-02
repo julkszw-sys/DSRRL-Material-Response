@@ -30,6 +30,14 @@ enum class pmetal_envspec_receiver_family : std::uint8_t {
     hemenvlerp
 };
 
+// Exact draw-local gate shared by the dedicated P_Metal EnvSpec runtime and
+// the integrated dispatcher. This is intentionally stricter than route 345:
+// a route hit alone must never allow a failed dedicated P_Metal island to
+// fall through into generic diffuse-only Material Response.
+bool exact_pmetal_envspec_candidate(
+    const operators::material_response::material_identity &material,
+    const operators::material_response::decision &decision) noexcept;
+
 struct prepared_pmetal_envspec_draw {
     island_draw_adapter_request request{};
     prepared_envspec_resources env_resources{};
