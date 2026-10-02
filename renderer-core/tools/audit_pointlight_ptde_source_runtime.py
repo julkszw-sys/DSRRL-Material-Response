@@ -17,6 +17,8 @@ identity=read('include/dsrrl/runtime/pointlight_ptde_source.hpp')
 authority=read('include/dsrrl/runtime/pointlight_bank_structure_authority_v1.hpp')
 fixed=read('src/runtime/fixed_pointlight_draw_runtime.cpp')
 clustered=read('src/runtime/clustered_pnts_draw_runtime.cpp')
+integrated=read('integrated/integrated_addon.cpp')
+ownership=read('data/provenance/clustered_pnts_composed_shader_ownership_v1.json')
 
 # Exact donor path remains available and fail-open.
 for token in [
@@ -103,6 +105,19 @@ device_release_pos=prepare.index('device->Release();',lock_pos)
 if not (lock_pos < device_release_pos < upload_pos):
     raise SystemExit('Clustered PointLight upload must occur after lookup/create lock scope and retained-resource handoff')
 
+# Clustered Spc is not production-complete until its DSR microfacet window is
+# actually rewritten to the PTDE legacy local-specular kernel. The current
+# journal does not own that rewrite. Runtime must fail open rather than claim
+# local_specular_legacy ownership over a DSR-only GGX tail.
+for token in [
+    'clustered_spc_failopen_unmaterialized_legacy_specular',
+    'if (prepared.clustered_shader.spc)',
+    'g_clustered_pnts_pipeline.release_prepared_shader('
+]:
+    require(integrated,token)
+require(ownership,'Spc=FAIL_OPEN until local_specular_legacy microfacet window is exactly materialized')
+require(ownership,'Spc still contains the stock DSR microfacet local-specular window')
+
 shader=read('src/operators/point_light/fixed_local_specular_single_materializer.cpp')
 for token in [
     'range_compare.erase_words=8u',
@@ -112,5 +127,5 @@ for token in [
 ]:
     require(shader,token)
 
-print('POINTLIGHT_PTDE_SOURCE_PASS: fixed linear path preserved; clustered exact source classes use PTDE donor when available and homologous host packed source on donor miss; PTDE attenuation island retained')
+print('POINTLIGHT_PTDE_SOURCE_PASS: fixed linear path preserved; clustered NoSpc exact source classes retain PTDE attenuation; incomplete clustered Spc legacy-specular island fails open to stock DSR')
 print('SCOPE: runtime activation candidate only; pixel equivalence remains OPEN where numeric host source differs from PTDE donor')
