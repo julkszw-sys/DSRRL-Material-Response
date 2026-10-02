@@ -1022,53 +1022,92 @@ bool clustered_pnts_draw_runtime::prepare_sidecar(
         return false;
     }
 
-    // One synchronization point owns lookup/create, DISCARD upload and retain
-    // for this recording context. No second context can alias this carrier,
-    // and the device-destroy path cannot release it mid-transaction.
-    std::lock_guard<std::mutex> lock(
-        g_resource_mutex);
+    // Resource lookup/creation is process-global, but the dynamic payloads
+    // themselves are recording-context local. Hold the mutex only long enough
+    // to resolve/create that context's carrier and retain the COM objects.
+    // Map(WRITE_DISCARD)/Unmap must execute outside the global lock: otherwise
+    // independent deferred contexts (notably reflective-water work) serialize
+    // all three PointLight uploads through one mutex for no semantic reason.
+    ID3D11Buffer *t18_buffer = nullptr;
+    ID3D11ShaderResourceView *t18_srv = nullptr;
+    ID3D11Buffer *t19_buffer = nullptr;
+    ID3D11ShaderResourceView *t19_srv = nullptr;
+    ID3D11Buffer *b12 = nullptr;
 
-    gpu_resources *gpu = nullptr;
-    if (!ensure_gpu_locked(
-            context,
-            device,
-            gpu)) {
-        device->Release();
-        prepared.failure =
-            clustered_pnts_prepare_failure::gpu_prepare;
-        telemetry::hot_count(g_gpu_prepare_fail);
-        telemetry::hot_count(g_prepare_fail);
-        return false;
+    {
+        std::lock_guard<std::mutex> lock(
+            g_resource_mutex);
+
+        gpu_resources *gpu = nullptr;
+        if (!ensure_gpu_locked(
+                context,
+                device,
+                gpu)) {
+            device->Release();
+            prepared.failure =
+                clustered_pnts_prepare_failure::gpu_prepare;
+            telemetry::hot_count(g_gpu_prepare_fail);
+            telemetry::hot_count(g_prepare_fail);
+            return false;
+        }
+
+        if (gpu == nullptr ||
+            gpu->t18_buffer == nullptr ||
+            gpu->t18_srv == nullptr ||
+            gpu->t19_buffer == nullptr ||
+            gpu->t19_srv == nullptr ||
+            gpu->b12 == nullptr) {
+            device->Release();
+            prepared.failure =
+                clustered_pnts_prepare_failure::gpu_resources;
+            telemetry::hot_count(g_prepare_fail);
+            return false;
+        }
+
+        t18_buffer = gpu->t18_buffer;
+        t18_srv = gpu->t18_srv;
+        t19_buffer = gpu->t19_buffer;
+        t19_srv = gpu->t19_srv;
+        b12 = gpu->b12;
+
+        // Keep the exact carrier alive after releasing g_resource_mutex. The
+        // destroy-device path may remove the cache entry concurrently, but it
+        // cannot destroy resources retained here until this prepare completes.
+        t18_buffer->AddRef();
+        t19_buffer->AddRef();
+        t18_srv->AddRef();
+        t19_srv->AddRef();
+        b12->AddRef();
     }
+
     device->Release();
 
-    if (gpu == nullptr ||
-        gpu->t18_buffer == nullptr ||
-        gpu->t18_srv == nullptr ||
-        gpu->t19_buffer == nullptr ||
-        gpu->t19_srv == nullptr ||
-        gpu->b12 == nullptr) {
-        prepared.failure =
-            clustered_pnts_prepare_failure::gpu_resources;
-        telemetry::hot_count(g_prepare_fail);
-        return false;
-    }
-
-    if (!update_buffer(
+    const bool uploaded =
+        update_buffer(
             context,
-            gpu->t18_buffer,
+            t18_buffer,
             built.payload.t18.data(),
-            sizeof(built.payload.t18)) ||
-        !update_buffer(
+            sizeof(built.payload.t18)) &&
+        update_buffer(
             context,
-            gpu->t19_buffer,
+            t19_buffer,
             built.payload.t19.data(),
-            sizeof(built.payload.t19)) ||
-        !update_buffer(
+            sizeof(built.payload.t19)) &&
+        update_buffer(
             context,
-            gpu->b12,
+            b12,
             built.payload.b12.data(),
-            sizeof(built.payload.b12))) {
+            sizeof(built.payload.b12));
+
+    // Buffer refs are temporary upload-lifetime guards. SRV/b12 refs transfer
+    // to prepared and are released by release_prepared_draw().
+    t18_buffer->Release();
+    t19_buffer->Release();
+
+    if (!uploaded) {
+        t18_srv->Release();
+        t19_srv->Release();
+        b12->Release();
         prepared.failure =
             clustered_pnts_prepare_failure::upload;
         telemetry::hot_count(g_upload_fail);
@@ -1076,13 +1115,9 @@ bool clustered_pnts_draw_runtime::prepare_sidecar(
         return false;
     }
 
-    gpu->t18_srv->AddRef();
-    gpu->t19_srv->AddRef();
-    gpu->b12->AddRef();
-
-    prepared.t18 = gpu->t18_srv;
-    prepared.t19 = gpu->t19_srv;
-    prepared.b12 = gpu->b12;
+    prepared.t18 = t18_srv;
+    prepared.t19 = t19_srv;
+    prepared.b12 = b12;
     prepared.producer_serial =
         input.serial;
     prepared.raw_selected_count =

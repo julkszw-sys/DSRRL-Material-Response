@@ -59,13 +59,14 @@ if 'if (!pointlight_ptde_source::capture(' in capture:
 for token in ['raw[3] > 0.0f','raw[7] > 0.0f','out.position_inv_range[i] = raw[i]','out.raw_q_end[i] = raw[4u + i]']:
     require(capture,token)
 
-# Dynamic t18/t19/b12 remains recording-context local.
+# Dynamic t18/t19/b12 remains recording-context local. The global carrier
+# mutex may protect lookup/create only; actual DISCARD uploads must not stay
+# serialized across independent recording contexts.
 for token in [
     'std::unordered_map<ID3D11DeviceContext *,gpu_resources>',
     'g_gpu_by_context.try_emplace(',
     'ensure_gpu_locked(',
-    'gpu->t18_buffer','gpu->t19_buffer','gpu->b12',
-    'gpu->t18_srv->AddRef()','gpu->t19_srv->AddRef()','gpu->b12->AddRef()'
+    'gpu->t18_buffer','gpu->t19_buffer','gpu->b12'
 ]:
     require(clustered,token)
 if 'gpu_resources g_gpu{}' in clustered:
@@ -73,7 +74,34 @@ if 'gpu_resources g_gpu{}' in clustered:
 
 prepare=clustered[clustered.index('bool clustered_pnts_draw_runtime::prepare_sidecar('):clustered.index('void clustered_pnts_draw_runtime::release_prepared_draw(')]
 if prepare.count('std::lock_guard<std::mutex> lock(') != 1:
-    raise SystemExit('Clustered PointLight prepare must use one carrier synchronization point')
+    raise SystemExit('Clustered PointLight prepare must use one lookup/create synchronization point')
+
+for token in [
+    'ID3D11Buffer *t18_buffer = nullptr;',
+    'ID3D11ShaderResourceView *t18_srv = nullptr;',
+    'ID3D11Buffer *t19_buffer = nullptr;',
+    'ID3D11ShaderResourceView *t19_srv = nullptr;',
+    'ID3D11Buffer *b12 = nullptr;',
+    't18_buffer->AddRef();',
+    't19_buffer->AddRef();',
+    't18_srv->AddRef();',
+    't19_srv->AddRef();',
+    'b12->AddRef();',
+    'const bool uploaded =',
+    'prepared.t18 = t18_srv;',
+    'prepared.t19 = t19_srv;',
+    'prepared.b12 = b12;'
+]:
+    require(prepare,token)
+
+if 'update_buffer(\n            context,\n            gpu->' in prepare:
+    raise SystemExit('Clustered PointLight DISCARD upload is still performed through mutex-owned gpu pointer')
+
+lock_pos=prepare.index('std::lock_guard<std::mutex> lock(')
+upload_pos=prepare.index('const bool uploaded =')
+device_release_pos=prepare.index('device->Release();',lock_pos)
+if not (lock_pos < device_release_pos < upload_pos):
+    raise SystemExit('Clustered PointLight upload must occur after lookup/create lock scope and retained-resource handoff')
 
 shader=read('src/operators/point_light/fixed_local_specular_single_materializer.cpp')
 for token in [
