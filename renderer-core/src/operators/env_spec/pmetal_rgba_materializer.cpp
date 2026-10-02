@@ -1320,6 +1320,97 @@ bool apply_build131(
     return true;
 }
 
+// High-visibility diagnostic only. Exact stock rx33/rx34 pack the environment
+// visibility/shadow scalar in the x lane of the same temp whose yzw lanes
+// carry the reflection vector. Immediately after the preserved first
+// EnvSpec+EnvDiffuse merge the host multiplies the whole environment
+// accumulator by that scalar:
+//
+//   rx33: r1.yzw = r1.yzw * r7.x
+//   rx34: r1.yzw = r1.yzw * r6.x
+//
+// PTDE RE proves EnvSpec and EnvDiffuse are visibility-modulated while local
+// PointLight additions are a separate branch. The owner now reports strong
+// PointLight can recover energy from the otherwise black armor. For one
+// falsifier, preserve the exact join and replace only its scalar operand with
+// immediate 1.0. rx35/plain has no homologous join at this position and is
+// left unchanged.
+bool bypass_host_environment_visibility_join_diag(
+    std::vector<std::uint8_t> &bytes,
+    const pmetal_rgba_authority::entry &authority) noexcept
+{
+    if (!authority.remove_visibility_exponent)
+        return true;
+
+    std::vector<chunk> chunks;
+    std::vector<std::uint32_t> words;
+    std::vector<instruction_view> instructions;
+    std::size_t code_index = 0u;
+
+    if (!parse_dxbc(
+            bytes.data(),
+            bytes.size(),
+            chunks,
+            code_index) ||
+        !extract_words(
+            chunks,
+            code_index,
+            words) ||
+        !decode(
+            words,
+            instructions))
+        return false;
+
+    // apply_build131 inserts one four-DWORD t10 declaration and one
+    // eleven-DWORD fresh t10 sample before the preserved merge.
+    constexpr std::size_t k_build131_inserted_words = 15u;
+    const auto merge_word =
+        authority.merge_word +
+        k_build131_inserted_words;
+    const auto visibility_word =
+        merge_word + 9u;
+
+    if (visibility_word + 6u >= words.size())
+        return false;
+
+    // Preserved first EnvSpec+EnvDiffuse merge.
+    if (words[merge_word] != 0x09000032u ||
+        words[merge_word + 1u] != 0x001000e2u ||
+        words[merge_word + 2u] != 1u ||
+        words[merge_word + 7u] != 0x00100e56u ||
+        words[merge_word + 8u] != 1u)
+        return false;
+
+    // Exact post-merge host environment visibility join.
+    if (words[visibility_word] != 0x07000038u ||
+        words[visibility_word + 1u] != 0x001000e2u ||
+        words[visibility_word + 2u] != 1u ||
+        words[visibility_word + 3u] != 0x00100e56u ||
+        words[visibility_word + 4u] != 1u ||
+        words[visibility_word + 5u] != 0x00100006u ||
+        words[visibility_word + 6u] !=
+            authority.reflection_coord_register)
+        return false;
+
+    // Length-preserving single-operand substitution:
+    // TEMP rN.x -> immediate 1.0f.
+    words[visibility_word + 5u] = 0x00004001u;
+    words[visibility_word + 6u] = 0x3f800000u;
+
+    std::vector<std::uint8_t> rebuilt;
+    if (!rebuild(
+            bytes.data(),
+            bytes.size(),
+            std::move(chunks),
+            code_index,
+            words,
+            rebuilt))
+        return false;
+
+    bytes = std::move(rebuilt);
+    return true;
+}
+
 bool binding_exists(
     const std::vector<std::uint8_t> &payload,
     std::uint32_t type,
@@ -1686,6 +1777,18 @@ materialize_pmetal_rgba_receiver(
         outcome.result =
             pmetal_rgba_materialize_result::
                 fail_build131_precondition;
+        return outcome;
+    }
+
+    // Owner-directed diagnostic: bypass only the preserved post-merge host
+    // environment visibility/shadow scalar on exact Csd/Sdw stable P_Metal.
+    // This is a causal falsifier, not a PTDE production solution.
+    if (!bypass_host_environment_visibility_join_diag(
+            base,
+            *authority)) {
+        outcome.result =
+            pmetal_rgba_materialize_result::
+                fail_postcondition;
         return outcome;
     }
 
