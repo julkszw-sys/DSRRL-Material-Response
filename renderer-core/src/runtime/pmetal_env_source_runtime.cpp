@@ -45,6 +45,58 @@ struct f4 {
     float w = 0.0f;
 };
 
+bool inverse_envdiffuse_endpoint(
+    const float *src,
+    f4 &out) noexcept
+{
+    out = {};
+    if (src == nullptr)
+        return false;
+
+    constexpr float k_inv_gamma =
+        1.0f / 2.2f;
+
+    const float q[3] = {
+        src[0],
+        src[1],
+        src[2]
+    };
+
+    for (float value : q) {
+        if (!std::isfinite(value) ||
+            value < 0.0f)
+            return false;
+    }
+
+    out.x = std::pow(q[0], k_inv_gamma);
+    out.y = std::pow(q[1], k_inv_gamma);
+    out.z = std::pow(q[2], k_inv_gamma);
+    out.w = src[3];
+
+    return
+        std::isfinite(out.x) &&
+        std::isfinite(out.y) &&
+        std::isfinite(out.z);
+}
+
+bool capture_linear_envdiffuse(
+    const float *host_out,
+    f4 &a,
+    f4 &b) noexcept
+{
+    // DSR profile packer layout at the exact pre-draw-gain cut:
+    // +0x00 EnvDiffuse A, +0x10 EnvSpec A,
+    // +0x20 EnvDiffuse B, +0x30 EnvSpec B.
+    return
+        host_out != nullptr &&
+        inverse_envdiffuse_endpoint(
+            host_out + 0,
+            a) &&
+        inverse_envdiffuse_endpoint(
+            host_out + 8,
+            b);
+}
+
 constexpr std::uintptr_t k_envspec_single_rva = 0x563B80u;
 constexpr std::uintptr_t k_envspec_blend_rva = 0x563C30u;
 constexpr std::array<std::uint8_t,14> k_envspec_single_preimage{{
@@ -1199,6 +1251,10 @@ bool same_hook_source_payload(
     return
         a.a == b.a &&
         a.b == b.b &&
+        a.envdiffuse_a == b.envdiffuse_a &&
+        a.envdiffuse_b == b.envdiffuse_b &&
+        a.envdiffuse_linear_valid ==
+            b.envdiffuse_linear_valid &&
         a.beta == b.beta &&
         a.bank_signature_a == b.bank_signature_a &&
         a.bank_signature_b == b.bank_signature_b &&
@@ -1209,6 +1265,8 @@ bool same_hook_source_payload(
 void publish_hook_source(
     const f4 &a,
     const f4 &b,
+    const f4 &envdiffuse_a,
+    const f4 &envdiffuse_b,
     float beta,
     std::uint64_t bank_a,
     std::uint64_t bank_b,
@@ -1221,6 +1279,17 @@ void publish_hook_source(
     pmetal_envspec_source next{};
     next.a = {a.x,a.y,a.z};
     next.b = {b.x,b.y,b.z};
+    next.envdiffuse_a = {
+        envdiffuse_a.x,
+        envdiffuse_a.y,
+        envdiffuse_a.z
+    };
+    next.envdiffuse_b = {
+        envdiffuse_b.x,
+        envdiffuse_b.y,
+        envdiffuse_b.z
+    };
+    next.envdiffuse_linear_valid = true;
     next.beta =
         std::clamp(
             beta,
@@ -1379,10 +1448,20 @@ void __fastcall envspec_single_hook_entry(
             host_out,
             selector);
 
-    if (donor_ok)
+    f4 envdiffuse_a{};
+    f4 envdiffuse_b{};
+    const bool envdiffuse_ok =
+        capture_linear_envdiffuse(
+            host_out,
+            envdiffuse_a,
+            envdiffuse_b);
+
+    if (donor_ok && envdiffuse_ok)
         publish_hook_source(
             donor,
             donor,
+            envdiffuse_a,
+            envdiffuse_b,
             0.0f,
             bank,
             bank,
@@ -1454,10 +1533,20 @@ void __fastcall envspec_blend_hook_entry(
             selector_b,
             beta);
 
-    if (donor_ok)
+    f4 envdiffuse_a{};
+    f4 envdiffuse_b{};
+    const bool envdiffuse_ok =
+        capture_linear_envdiffuse(
+            host_out,
+            envdiffuse_a,
+            envdiffuse_b);
+
+    if (donor_ok && envdiffuse_ok)
         publish_hook_source(
             a,
             b,
+            envdiffuse_a,
+            envdiffuse_b,
             endpoints.beta,
             bank_a,
             bank_b,

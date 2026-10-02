@@ -49,6 +49,7 @@ constexpr std::uint32_t k_effect_fail_native_envdiffuse = 1u << 15u;
 std::atomic_bool g_source_cut_logged{false};
 std::atomic_bool g_resource_mode_logged{false};
 std::atomic_bool g_native_envdiffuse_logged{false};
+std::atomic_bool g_envdiffuse_consumer_logged{false};
 std::atomic_bool g_source_frontier_logged{false};
 std::atomic<std::uint32_t> g_prepare_stage_log_mask{0u};
 std::atomic<std::uint32_t> g_value_cut_log_mask{0u};
@@ -341,6 +342,7 @@ register_replacement(
         outcome.receiver_id > 35u ||
         outcome.upper_lower_composed ||
         !outcome.spec_rgb_consumer ||
+        !outcome.envdiffuse_linear_consumer_diag ||
         dxbc == nullptr ||
         dxbc_size == 0u ||
         quarantined_.load()) {
@@ -799,6 +801,22 @@ bool pmetal_envspec_draw_runtime::prepare(
             family);
         return false;
     }
+    if (family ==
+            pmetal_envspec_receiver_family::
+                stable_hemenv &&
+        !source.envdiffuse_linear_valid) {
+        telemetry::hot_count(source_rejects_);
+        effect_fail(
+            effect_fail_mask_,
+            k_effect_fail_source);
+        log_prepare_stage_once(
+            1u << 12u,
+            "envdiffuse_linear_source_reject",
+            material,
+            decision,
+            family);
+        return false;
+    }
     effect_latch(effect_receiver_source_ready_);
 
     auto *context =
@@ -1013,6 +1031,11 @@ bool pmetal_envspec_draw_runtime::prepare(
     }
     effect_latch(effect_spec_rgb_ready_);
 
+    const bool stable_envdiffuse_consumer_diag =
+        family ==
+            pmetal_envspec_receiver_family::
+                stable_hemenv;
+
     const std::array<f4,4> payload{{
         {
             decision.c101,
@@ -1033,9 +1056,15 @@ bool pmetal_envspec_draw_runtime::prepare(
             0.0f
         },
         {
-            source.b[0],
-            source.b[1],
-            source.b[2],
+            stable_envdiffuse_consumer_diag
+                ? source.envdiffuse_a[0]
+                : source.b[0],
+            stable_envdiffuse_consumer_diag
+                ? source.envdiffuse_a[1]
+                : source.b[1],
+            stable_envdiffuse_consumer_diag
+                ? source.envdiffuse_a[2]
+                : source.b[2],
             source.beta
         }
     }};
@@ -1328,13 +1357,16 @@ bool pmetal_envspec_draw_runtime::prepare(
         prepared.request.additional_owners |=
             sat_owner;
 
-    // EnvDiffuse owns only the explicit native t11/t13 resource rebind in
-    // this diagnostic. It does not own the replacement shader or b12.
+    // This diagnostic now owns the narrow stable EnvDiffuse consumer cut:
+    // native DSR t11 remains the directional field, while b12[3].xyz carries
+    // the exact pre-draw-gain endpoint inverse and the replacement shader
+    // consumes it in place of cb0[3]*cb0[79].x. EnvDiffuse therefore owns
+    // shader + b12 + the explicit native t11/t13 resource rebind.
     prepared.request.additional_shader_owners =
-        prepared.request.additional_owners &
-        ~envdiff_owner;
+        prepared.request.additional_owners;
     prepared.request.additional_constant_buffer_owners =
-        mr_owner;
+        mr_owner |
+        envdiff_owner;
     prepared.request.additional_resource_owners =
         envdiff_owner;
 
@@ -1348,7 +1380,7 @@ bool pmetal_envspec_draw_runtime::prepare(
     prepared.request.constant_buffers[0] = {
         12u,
         b12,
-        env_owner | mr_owner
+        env_owner | mr_owner | envdiff_owner
     };
     prepared.request.constant_buffer_count =
         1u;
@@ -1410,6 +1442,30 @@ bool pmetal_envspec_draw_runtime::prepare(
     prepared.ready = true;
     effect_latch(effect_request_ready_);
     telemetry::hot_count(requests_);
+
+    if (stable_envdiffuse_consumer_diag &&
+        !g_envdiffuse_consumer_logged.exchange(
+            true,
+            std::memory_order_relaxed)) {
+        char line[512]{};
+        std::snprintf(
+            line,
+            sizeof(line),
+            "[DSRRL PMETAL ENVDIFFUSE CONSUMER DIAG] mode=dsr_field_ptde_linear_endpoint family=%u rx=%u route=%u pA=%.9g,%.9g,%.9g beta=%.9g t11=%016llx",
+            static_cast<unsigned>(family),
+            static_cast<unsigned>(decision.receiver_id),
+            static_cast<unsigned>(decision.route_index),
+            static_cast<double>(source.envdiffuse_a[0]),
+            static_cast<double>(source.envdiffuse_a[1]),
+            static_cast<double>(source.envdiffuse_a[2]),
+            static_cast<double>(source.beta),
+            static_cast<unsigned long long>(
+                reinterpret_cast<std::uintptr_t>(
+                    prepared.native_dsr_envdiffuse_a)));
+        reshade::log::message(
+            reshade::log::level::info,
+            line);
+    }
     log_prepare_stage_once(
         1u << 11u,
         "request_ready",
@@ -1616,6 +1672,7 @@ void pmetal_envspec_draw_runtime::reset() noexcept
     g_source_cut_logged.store(false);
     g_resource_mode_logged.store(false);
     g_native_envdiffuse_logged.store(false);
+    g_envdiffuse_consumer_logged.store(false);
     g_source_frontier_logged.store(false);
     g_prepare_stage_log_mask.store(0u);
     g_value_cut_log_mask.store(0u);

@@ -803,6 +803,129 @@ bool add_b12_rdef(
     return true;
 }
 
+
+bool apply_linear_envdiffuse_consumer_diag(
+    std::vector<std::uint8_t> &bytes) noexcept
+{
+    std::vector<chunk> chunks;
+    std::vector<std::uint32_t> words;
+    std::vector<instruction_view> instructions;
+    std::size_t code_index = 0u;
+
+    if (!parse_dxbc(
+            bytes.data(),
+            bytes.size(),
+            chunks,
+            code_index) ||
+        !extract_words(
+            chunks,
+            code_index,
+            words) ||
+        !decode(
+            words,
+            instructions))
+        return false;
+
+    // Exact DSR stable Phn HemEnv EnvDiffuse source island on rx33/34/35:
+    //   mul r2.xyz, cb0[3].xyz, cb0[79].x
+    //   sample_l ..., t11, s11
+    //   mul r2.xyz, r2.xyz, sampled_envdiffuse.xyz
+    //
+    // Diagnostic replacement keeps the native DSR t11 field and downstream
+    // composition but feeds the endpoint recovered at the exact profile
+    // packer pre-draw-gain cut through b12[3].xyz:
+    //   mov r2.xyz, b12[3].xyz
+    //
+    // The 9-DWORD window is length-preserving; any topology mismatch fails
+    // open instead of guessing another EnvDiffuse producer.
+    constexpr std::array<std::uint32_t,9>
+        k_stock_source{{
+            0x09000038u,
+            0x00100072u,0x00000002u,
+            0x00208246u,0x00000000u,0x00000003u,
+            0x00208006u,0x00000000u,0x0000004fu
+        }};
+
+    constexpr std::array<std::uint32_t,9>
+        k_linear_source{{
+            0x06000036u,
+            0x00100072u,0x00000002u,
+            0x00208246u,0x0000000cu,0x00000003u,
+            0x0100003au,0x0100003au,0x0100003au
+        }};
+
+    std::size_t t11_hits = 0u;
+    std::size_t source_word =
+        static_cast<std::size_t>(-1);
+
+    for (std::size_t i = 0u;
+         i < instructions.size();
+         ++i) {
+        const auto &ins =
+            instructions[i];
+
+        if (ins.opcode < 0x45u ||
+            ins.opcode > 0x4au ||
+            ins.length != 13u ||
+            ins.offset + 12u >= words.size() ||
+            words[ins.offset + 8u] != 11u ||
+            words[ins.offset + 10u] != 11u)
+            continue;
+
+        ++t11_hits;
+
+        if (i == 0u)
+            return false;
+
+        const auto &previous =
+            instructions[i - 1u];
+
+        if (previous.offset +
+                previous.length !=
+            ins.offset ||
+            previous.length !=
+                k_stock_source.size() ||
+            previous.offset +
+                k_stock_source.size() >
+                    words.size() ||
+            !std::equal(
+                k_stock_source.begin(),
+                k_stock_source.end(),
+                words.begin() +
+                    static_cast<std::ptrdiff_t>(
+                        previous.offset)))
+            return false;
+
+        source_word =
+            previous.offset;
+    }
+
+    if (t11_hits != 1u ||
+        source_word ==
+            static_cast<std::size_t>(-1))
+        return false;
+
+    std::copy(
+        k_linear_source.begin(),
+        k_linear_source.end(),
+        words.begin() +
+            static_cast<std::ptrdiff_t>(
+                source_word));
+
+    std::vector<std::uint8_t> rebuilt;
+    if (!rebuild(
+            bytes.data(),
+            bytes.size(),
+            std::move(chunks),
+            code_index,
+            words,
+            rebuilt))
+        return false;
+
+    bytes = std::move(rebuilt);
+    return true;
+}
+
 // Preserve the stock r1.x live-out across the dedicated EnvSpec cut.
 // Retail t12 writes only r1.yzw; r1.x is consumed downstream before its
 // next write on rx33/rx34/rx35. Decode PTDE RGBA in dead scratch r12, then
@@ -1688,6 +1811,19 @@ materialize_pmetal_rgba_receiver(
                 fail_build131_precondition;
         return outcome;
     }
+
+    // Diagnostic-only EnvDiffuse consumer translation. Keep the native DSR
+    // t11 directional field but replace the DSR nonlinear/draw-gain endpoint
+    // source with the exact pre-draw-gain endpoint recovered to PTDE-linear
+    // domain and carried in b12[3].xyz.
+    if (!apply_linear_envdiffuse_consumer_diag(
+            base)) {
+        outcome.result =
+            pmetal_rgba_materialize_result::
+                fail_postcondition;
+        return outcome;
+    }
+    outcome.envdiffuse_linear_consumer_diag = true;
 
     if (compose_upper_lower) {
         std::vector<std::uint8_t> ul;
