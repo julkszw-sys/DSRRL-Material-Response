@@ -749,6 +749,22 @@ bool patch_build131_rdef(
         return false;
     }
 
+    // Diagnostic child: stable P_Metal additionally owns one tiny constant
+    // carrier for the PTDE EnvDiffuse endpoint while keeping the host DSR
+    // t11 directional probe. b13 is unused because Upper/Lower is physically
+    // cut from this lineage. Exact draw-time routing still fails open.
+    if (legacy_plan::dxbc::rdef::
+            has_constant_buffer_binding(
+                payload,
+                13u) ||
+        !legacy_plan::dxbc::rdef::
+            append_constant_buffer_binding(
+                payload,
+                "DSRRL_EnvDiffuseDiag",
+                13u,
+                32u))
+        return false;
+
     return true;
 }
 
@@ -1047,9 +1063,68 @@ bool apply_build131(
                     authority.merge_word;
             });
 
+    // Exact stable HemEnv EnvDiffuse producer topology on the clean MR base:
+    // MUL(cb0[3],cb0[79]) -> SAMPLE_L(t11,s11) -> MUL -> common merge MAD.
+    // For this diagnostic only, replace the producer endpoints with b13[0]
+    // and an explicit b13[1].x unity lane. The t11 resource, sampler, sample
+    // coordinate, material continuation and merge instruction remain host DSR.
+    if (authority.merge_word < 29u)
+        return false;
+    const auto envdiffuse_source_word =
+        authority.merge_word - 29u;
+    const auto envdiffuse_sample_word =
+        authority.merge_word - 20u;
+    const auto envdiffuse_mul_word =
+        authority.merge_word - 7u;
+
+    const auto envdiffuse_source =
+        std::find_if(
+            instructions.begin(),
+            instructions.end(),
+            [&](const instruction_view &i) {
+                return i.offset ==
+                    envdiffuse_source_word;
+            });
+    const auto envdiffuse_sample =
+        std::find_if(
+            instructions.begin(),
+            instructions.end(),
+            [&](const instruction_view &i) {
+                return i.offset ==
+                    envdiffuse_sample_word;
+            });
+    const auto envdiffuse_mul =
+        std::find_if(
+            instructions.begin(),
+            instructions.end(),
+            [&](const instruction_view &i) {
+                return i.offset ==
+                    envdiffuse_mul_word;
+            });
+
     if (merge == instructions.end() ||
         merge->opcode != 0x32u ||
         merge->length != 9u ||
+        envdiffuse_source == instructions.end() ||
+        envdiffuse_source->opcode != 0x38u ||
+        envdiffuse_source->length != 9u ||
+        envdiffuse_sample == instructions.end() ||
+        envdiffuse_sample->opcode < 0x45u ||
+        envdiffuse_sample->opcode > 0x4au ||
+        envdiffuse_sample->length != 13u ||
+        words[envdiffuse_sample_word + 8u] != 11u ||
+        words[envdiffuse_sample_word + 10u] != 11u ||
+        envdiffuse_mul == instructions.end() ||
+        envdiffuse_mul->opcode != 0x38u ||
+        envdiffuse_mul->length != 7u ||
+        words[envdiffuse_source_word + 3u] !=
+            0x00208246u ||
+        words[envdiffuse_source_word + 4u] != 0u ||
+        words[envdiffuse_source_word + 5u] != 3u ||
+        words[envdiffuse_source_word + 6u] !=
+            0x00208006u ||
+        words[envdiffuse_source_word + 7u] != 0u ||
+        words[envdiffuse_source_word + 8u] != 79u ||
         words[split_mad->offset + 1u] !=
             0x00100072u ||
         words[split_mad->offset + 2u] !=
@@ -1069,6 +1144,14 @@ bool apply_build131(
         words[texture9->offset + 3u] !=
             0x00005555u)
         return false;
+
+    // Re-source only the EnvDiffuse endpoint. Preserve the exact existing
+    // operand encodings/swizzles and switch their cbuffer indices from
+    // cb0[3] * cb0[79].x to cb13[0] * cb13[1].x.
+    words[envdiffuse_source_word + 4u] = 13u;
+    words[envdiffuse_source_word + 5u] = 0u;
+    words[envdiffuse_source_word + 7u] = 13u;
+    words[envdiffuse_source_word + 8u] = 1u;
 
     // Csd/Sdw: find the exact DSR-only visibility exponent island by
     // instruction topology on the MR base rather than by stale stock word
@@ -1224,6 +1307,14 @@ bool apply_build131(
     words[texture9->offset + 2u] =
         14u;
 
+    const std::array<std::uint32_t,4>
+        envdiffuse_b13_decl{{
+            0x04000059u,
+            0x00208e46u,
+            0x0000000du,
+            0x00000002u
+        }};
+
     const auto decl_insert =
         t1_decl->offset + 4u;
     words.insert(
@@ -1232,12 +1323,18 @@ bool apply_build131(
                 decl_insert),
         t10_decl.begin(),
         t10_decl.end());
+    words.insert(
+        words.begin() +
+            static_cast<std::ptrdiff_t>(
+                decl_insert + 4u),
+        envdiffuse_b13_decl.begin(),
+        envdiffuse_b13_decl.end());
 
-    // All semantic cuts are below the declaration insertion.
+    // All semantic cuts are below both declaration insertions.
     const auto shifted_build_start =
-        build_start + 4u;
+        build_start + 8u;
     const auto shifted_build_end =
-        build_end + 4u;
+        build_end + 8u;
 
     auto window =
         k_build131_window;
@@ -1405,7 +1502,8 @@ bool final_postcondition(
     std::size_t s14_decl = 0u;
     std::size_t t14_sample = 0u;
     std::size_t t9_sample = 0u;
-    std::size_t b13_decl = 0u;
+    std::size_t envdiffuse_b13_decl = 0u;
+    std::size_t envdiffuse_endpoint_mul = 0u;
 
     for (const auto &ins :
          instructions) {
@@ -1434,8 +1532,8 @@ bool final_postcondition(
             words[ins.offset + 2u] ==
                 13u &&
             words[ins.offset + 3u] ==
-                8u)
-            ++b13_decl;
+                2u)
+            ++envdiffuse_b13_decl;
 
         if (ins.opcode >= 0x45u &&
             ins.opcode <= 0x4au) {
@@ -1500,6 +1598,23 @@ bool final_postcondition(
             ++t12_decode_preserve_r1x;
 
         if (ins.opcode == 0x38u &&
+            ins.length == 9u &&
+            ins.offset + 8u < words.size() &&
+            words[ins.offset + 3u] ==
+                0x00208246u &&
+            words[ins.offset + 4u] ==
+                13u &&
+            words[ins.offset + 5u] ==
+                0u &&
+            words[ins.offset + 6u] ==
+                0x00208006u &&
+            words[ins.offset + 7u] ==
+                13u &&
+            words[ins.offset + 8u] ==
+                1u)
+            ++envdiffuse_endpoint_mul;
+
+        if (ins.opcode == 0x38u &&
             ins.length == 8u &&
             ins.offset + 7u < words.size() &&
             words[ins.offset + 1u] ==
@@ -1527,6 +1642,10 @@ bool final_postcondition(
             has_constant_buffer_binding(
                 rdef->payload,
                 12u) ||
+        !legacy_plan::dxbc::rdef::
+            has_constant_buffer_binding(
+                rdef->payload,
+                13u) ||
         !binding_exists(
             rdef->payload,
             2u,
@@ -1541,16 +1660,13 @@ bool final_postcondition(
             14u))
         return false;
 
-    if (with_upper_lower) {
-        if (!legacy_plan::dxbc::rdef::
-                has_constant_buffer_binding(
-                    rdef->payload,
-                    13u) ||
-            b13_decl != 1u)
-            return false;
-    } else if (b13_decl != 0u) {
+    // This diagnostic intentionally occupies b13 with a 2-vector EnvDiffuse
+    // endpoint carrier. It is not composable with the legacy b13 U/L carrier;
+    // the owner-selected U/L physical cut is therefore an explicit invariant.
+    if (with_upper_lower ||
+        envdiffuse_b13_decl != 1u ||
+        envdiffuse_endpoint_mul != 1u)
         return false;
-    }
 
     return
         t10_decl == 1u &&
