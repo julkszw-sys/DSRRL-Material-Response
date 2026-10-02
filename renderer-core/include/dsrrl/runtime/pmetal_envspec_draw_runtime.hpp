@@ -22,6 +22,7 @@
 struct ID3D11Buffer;
 struct ID3D11Device;
 struct ID3D11PixelShader;
+struct ID3D11ShaderResourceView;
 
 namespace dsrrl::runtime {
 
@@ -44,6 +45,11 @@ struct prepared_pmetal_envspec_draw {
     prepared_material_resource_draw material_resources{};
     ID3D11PixelShader *shader = nullptr;
     ID3D11Buffer *b12 = nullptr;
+
+    // Diagnostic-only native DSR EnvDiffuse ownership. PSGetShaderResources
+    // AddRefs these stock host SRVs; keep them alive until replay completes.
+    ID3D11ShaderResourceView *native_dsr_envdiffuse_a = nullptr;
+    ID3D11ShaderResourceView *native_dsr_envdiffuse_b = nullptr;
 
     bool ready = false;
 };

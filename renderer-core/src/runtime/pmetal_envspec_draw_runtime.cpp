@@ -44,9 +44,11 @@ constexpr std::uint32_t k_effect_fail_spec_rgb = 1u << 11u;
 constexpr std::uint32_t k_effect_fail_device = 1u << 12u;
 constexpr std::uint32_t k_effect_fail_b12 = 1u << 13u;
 constexpr std::uint32_t k_effect_fail_mutation = 1u << 14u;
+constexpr std::uint32_t k_effect_fail_native_envdiffuse = 1u << 15u;
 
 std::atomic_bool g_source_cut_logged{false};
 std::atomic_bool g_resource_mode_logged{false};
+std::atomic_bool g_native_envdiffuse_logged{false};
 std::atomic_bool g_source_frontier_logged{false};
 std::atomic<std::uint32_t> g_prepare_stage_log_mask{0u};
 std::atomic<std::uint32_t> g_value_cut_log_mask{0u};
@@ -1209,6 +1211,83 @@ bool pmetal_envspec_draw_runtime::prepare(
 
     effect_latch(effect_b12_ready_);
 
+    // Diagnostic ownership test requested by the owner: explicitly snapshot
+    // and rebind the host's native DSR EnvDiffuse SRV(s) for the exact P_Metal
+    // replay. Stable HemEnv consumes t11; HemEnvLerp additionally consumes
+    // t13. This is intentionally not a PTDE EnvDiffuse port.
+    ID3D11ShaderResourceView *native_envdiffuse_a = nullptr;
+    ID3D11ShaderResourceView *native_envdiffuse_b = nullptr;
+    context->PSGetShaderResources(
+        11u,
+        1u,
+        &native_envdiffuse_a);
+
+    const bool native_envdiffuse_b_required =
+        family ==
+            pmetal_envspec_receiver_family::
+                hemenvlerp;
+    if (native_envdiffuse_b_required) {
+        context->PSGetShaderResources(
+            13u,
+            1u,
+            &native_envdiffuse_b);
+    }
+
+    if (native_envdiffuse_a == nullptr ||
+        (native_envdiffuse_b_required &&
+         native_envdiffuse_b == nullptr)) {
+        if (native_envdiffuse_a != nullptr)
+            native_envdiffuse_a->Release();
+        if (native_envdiffuse_b != nullptr)
+            native_envdiffuse_b->Release();
+
+        b12->Release();
+        if (shader != nullptr)
+            shader->Release();
+        env_resources_.release(
+            prepared.env_resources);
+        material_resources_.
+            release_prepared_draw(
+                prepared.material_resources);
+
+        effect_fail(
+            effect_fail_mask_,
+            k_effect_fail_native_envdiffuse);
+        log_prepare_stage_once(
+            1u << 12u,
+            "native_envdiffuse_reject",
+            material,
+            decision,
+            family);
+        return false;
+    }
+
+    prepared.native_dsr_envdiffuse_a =
+        native_envdiffuse_a;
+    prepared.native_dsr_envdiffuse_b =
+        native_envdiffuse_b;
+
+    if (!g_native_envdiffuse_logged.exchange(
+            true,
+            std::memory_order_relaxed)) {
+        char line[512]{};
+        std::snprintf(
+            line,
+            sizeof(line),
+            "[DSRRL PMETAL ENVDIFFUSE DIAG] mode=force_native_dsr_srv family=%u rx=%u t11=%016llx t13=%016llx",
+            static_cast<unsigned>(family),
+            static_cast<unsigned>(decision.receiver_id),
+            static_cast<unsigned long long>(
+                reinterpret_cast<std::uintptr_t>(
+                    native_envdiffuse_a)),
+            static_cast<unsigned long long>(
+                reinterpret_cast<std::uintptr_t>(
+                    native_envdiffuse_b)));
+        reshade::log::message(
+            reshade::log::level::info,
+            line);
+    }
+
     const auto env_owner =
         core::operator_bit(
             core::operator_id::
@@ -1224,6 +1303,9 @@ bool pmetal_envspec_draw_runtime::prepare(
     const auto spec_owner =
         core::operator_bit(
             core::operator_id::spec_rgb);
+    const auto envdiff_owner =
+        core::operator_bit(
+            core::operator_id::env_diffuse);
     const auto sat_owner =
         core::operator_bit(
             core::operator_id::
@@ -1237,6 +1319,7 @@ bool pmetal_envspec_draw_runtime::prepare(
         mr_owner |
         domain_owner |
         spec_owner |
+        envdiff_owner |
         composed_owners;
 
     if (family ==
@@ -1245,10 +1328,15 @@ bool pmetal_envspec_draw_runtime::prepare(
         prepared.request.additional_owners |=
             sat_owner;
 
+    // EnvDiffuse owns only the explicit native t11/t13 resource rebind in
+    // this diagnostic. It does not own the replacement shader or b12.
     prepared.request.additional_shader_owners =
-        prepared.request.additional_owners;
+        prepared.request.additional_owners &
+        ~envdiff_owner;
     prepared.request.additional_constant_buffer_owners =
         mr_owner;
+    prepared.request.additional_resource_owners =
+        envdiff_owner;
 
     prepared.request.receiver_verified = true;
     prepared.request.material_verified = true;
@@ -1265,15 +1353,31 @@ bool pmetal_envspec_draw_runtime::prepare(
     prepared.request.constant_buffer_count =
         1u;
 
-    prepared.request.srvs[0] = {
-        12u,
-        prepared.env_resources.ptde_a
-    };
-    prepared.request.srvs[1] = {
-        14u,
-        prepared.env_resources.ptde_b
-    };
-    prepared.request.srv_count = 2u;
+    std::uint32_t request_srv_count = 0u;
+    prepared.request.srvs[
+        request_srv_count++] = {
+            11u,
+            prepared.native_dsr_envdiffuse_a
+        };
+    prepared.request.srvs[
+        request_srv_count++] = {
+            12u,
+            prepared.env_resources.ptde_a
+        };
+    if (native_envdiffuse_b_required) {
+        prepared.request.srvs[
+            request_srv_count++] = {
+                13u,
+                prepared.native_dsr_envdiffuse_b
+            };
+    }
+    prepared.request.srvs[
+        request_srv_count++] = {
+            14u,
+            prepared.env_resources.ptde_b
+        };
+    prepared.request.srv_count =
+        request_srv_count;
 
     prepared.request.samplers[0] = {
         12u,
@@ -1357,7 +1461,7 @@ bool pmetal_envspec_draw_runtime::prepare(
             std::snprintf(
                 line,
                 sizeof(line),
-                "[DSRRL PMETAL VALUE CUT] family=%u rx=%u route=%u env_slot=%u probe_a=%u probe_b=%u bank_a=%016llx row_a=%u bank_b=%016llx row_b=%u serial=%llu gen=%llu beta=%.9g pA=%.9g,%.9g,%.9g pB=%.9g,%.9g,%.9g c101=%.9g c100=%.9g,%.9g,%.9g spec_hash=%016llx spec_allowed=%u spec_ready=%u spec_req=%u t10_count=%u t10=%016llx t12=%016llx t14=%016llx",
+                "[DSRRL PMETAL VALUE CUT] family=%u rx=%u route=%u env_slot=%u probe_a=%u probe_b=%u bank_a=%016llx row_a=%u bank_b=%016llx row_b=%u serial=%llu gen=%llu beta=%.9g pA=%.9g,%.9g,%.9g pB=%.9g,%.9g,%.9g c101=%.9g c100=%.9g,%.9g,%.9g spec_hash=%016llx spec_allowed=%u spec_ready=%u spec_req=%u t10_count=%u t10=%016llx t11=%016llx t12=%016llx t13=%016llx t14=%016llx",
                 static_cast<unsigned>(family),
                 static_cast<unsigned>(decision.receiver_id),
                 static_cast<unsigned>(decision.route_index),
@@ -1389,7 +1493,13 @@ bool pmetal_envspec_draw_runtime::prepare(
                 static_cast<unsigned long long>(t10),
                 static_cast<unsigned long long>(
                     reinterpret_cast<std::uintptr_t>(
+                        prepared.native_dsr_envdiffuse_a)),
+                static_cast<unsigned long long>(
+                    reinterpret_cast<std::uintptr_t>(
                         prepared.env_resources.ptde_a)),
+                static_cast<unsigned long long>(
+                    reinterpret_cast<std::uintptr_t>(
+                        prepared.native_dsr_envdiffuse_b)),
                 static_cast<unsigned long long>(
                     reinterpret_cast<std::uintptr_t>(
                         prepared.env_resources.ptde_b)));
@@ -1422,6 +1532,11 @@ void pmetal_envspec_draw_runtime::release(
 
     if (prepared.shader != nullptr)
         prepared.shader->Release();
+
+    if (prepared.native_dsr_envdiffuse_a != nullptr)
+        prepared.native_dsr_envdiffuse_a->Release();
+    if (prepared.native_dsr_envdiffuse_b != nullptr)
+        prepared.native_dsr_envdiffuse_b->Release();
 
     prepared = {};
 }
@@ -1500,6 +1615,7 @@ void pmetal_envspec_draw_runtime::reset() noexcept
     effect_fail_mask_.store(0u);
     g_source_cut_logged.store(false);
     g_resource_mode_logged.store(false);
+    g_native_envdiffuse_logged.store(false);
     g_source_frontier_logged.store(false);
     g_prepare_stage_log_mask.store(0u);
     g_value_cut_log_mask.store(0u);
