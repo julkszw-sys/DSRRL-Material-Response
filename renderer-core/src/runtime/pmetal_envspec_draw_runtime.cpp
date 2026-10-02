@@ -321,6 +321,30 @@ register_replacement(
         operators::env_spec::
             pmetal_rgba_materialize_result;
 
+    if (outcome.receiver_id >= 33u &&
+        outcome.receiver_id <= 35u) {
+        char line[384]{};
+        std::snprintf(
+            line,
+            sizeof(line),
+            "[DSRRL ENVSPEC REPL REG] call result=%u rx=%u ul=%u spec=%u size=%llu q=%u device=%u",
+            static_cast<unsigned>(
+                outcome.result),
+            static_cast<unsigned>(
+                outcome.receiver_id),
+            outcome.upper_lower_composed ? 1u : 0u,
+            outcome.spec_rgb_consumer ? 1u : 0u,
+            static_cast<unsigned long long>(
+                dxbc_size),
+            quarantined_.load(
+                std::memory_order_relaxed)
+                ? 1u : 0u,
+            device_ != nullptr ? 1u : 0u);
+        reshade::log::message(
+            reshade::log::level::info,
+            line);
+    }
+
     // Final Renderer Edition policy keeps visible U/L disabled. P_Metal
     // EnvSpec therefore accepts only the U/L-independent payload that
     // preserves the stock DSR b0[7]/b0[8] continuation.
@@ -393,6 +417,22 @@ register_replacement(
         payload_sha256;
     record.payload_size =
         dxbc_size;
+
+    if (outcome.receiver_id >= 33u &&
+        outcome.receiver_id <= 35u) {
+        char line[256]{};
+        std::snprintf(
+            line,
+            sizeof(line),
+            "[DSRRL ENVSPEC REPL REG] success rx=%u size=%llu",
+            static_cast<unsigned>(
+                outcome.receiver_id),
+            static_cast<unsigned long long>(
+                dxbc_size));
+        reshade::log::message(
+            reshade::log::level::info,
+            line);
+    }
 
     ++replacement_register_ok_;
     return true;
@@ -858,6 +898,25 @@ bool pmetal_envspec_draw_runtime::prepare(
                     material,
                     decision,
                     family);
+                char replacement_line[320]{};
+                std::snprintf(
+                    replacement_line,
+                    sizeof(replacement_line),
+                    "[DSRRL ENVSPEC REPL STATE] family=stable rx=%u reg_ok=%llu reg_fail=%llu q=%u",
+                    static_cast<unsigned>(
+                        decision.receiver_id),
+                    static_cast<unsigned long long>(
+                        replacement_register_ok_.load(
+                            std::memory_order_relaxed)),
+                    static_cast<unsigned long long>(
+                        replacement_register_fail_.load(
+                            std::memory_order_relaxed)),
+                    quarantined_.load(
+                        std::memory_order_relaxed)
+                        ? 1u : 0u);
+                reshade::log::message(
+                    reshade::log::level::info,
+                    replacement_line);
                 return false;
             }
 
