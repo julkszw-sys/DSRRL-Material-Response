@@ -596,19 +596,16 @@ bool patch_build131_rdef(
         unique_rdef(chunks);
 
     if (rdef == nullptr ||
-        rdef->payload.size() <
-            16u)
+        rdef->payload.size() < 16u)
         return false;
 
     auto &payload =
         rdef->payload;
 
     const auto count =
-        read_u32(
-            payload.data() + 8u);
+        read_u32(payload.data() + 8u);
     const auto offset =
-        read_u32(
-            payload.data() + 12u);
+        read_u32(payload.data() + 12u);
 
     constexpr std::uint32_t
         k_binding_size = 32u;
@@ -616,14 +613,15 @@ bool patch_build131_rdef(
     if (count == 0u ||
         count > 256u ||
         offset > payload.size() ||
-        static_cast<std::uint64_t>(
-            count) *
-            k_binding_size >
-        payload.size() - offset)
+        static_cast<std::uint64_t>(count) *
+                k_binding_size >
+            payload.size() - offset)
         return false;
 
     std::uint32_t sampler9 = 0u;
     std::uint32_t texture9 = 0u;
+    std::uint32_t texture1 = 0u;
+    std::size_t texture1_at = 0u;
 
     for (std::uint32_t i = 0u;
          i < count;
@@ -633,24 +631,27 @@ bool patch_build131_rdef(
             i * k_binding_size;
 
         const auto type =
-            read_u32(
-                payload.data() +
-                at + 4u);
+            read_u32(payload.data() + at + 4u);
         const auto dimension =
-            read_u32(
-                payload.data() +
-                at + 12u);
+            read_u32(payload.data() + at + 12u);
         const auto bind =
-            read_u32(
-                payload.data() +
-                at + 20u);
+            read_u32(payload.data() + at + 20u);
         const auto bind_count =
-            read_u32(
-                payload.data() +
-                at + 24u);
+            read_u32(payload.data() + at + 24u);
 
-        if (bind == 14u)
+        // Build131 owns t14 and the dedicated P_Metal final material tail owns
+        // t10. Both must be absent on the clean base so we never compose over
+        // an already-mutated receiver.
+        if (bind == 14u ||
+            (type == 2u && bind == 10u))
             return false;
+
+        if (type == 2u &&
+            bind == 1u &&
+            bind_count == 1u) {
+            texture1_at = at;
+            ++texture1;
+        }
 
         if (bind != 9u ||
             bind_count != 1u)
@@ -658,28 +659,94 @@ bool patch_build131_rdef(
 
         if (type == 3u) {
             write_u32(
-                payload.data() +
-                    at + 20u,
+                payload.data() + at + 20u,
                 14u);
             ++sampler9;
         } else if (
             type == 2u &&
             dimension == 4u) {
             write_u32(
-                payload.data() +
-                    at + 12u,
+                payload.data() + at + 12u,
                 9u);
             write_u32(
-                payload.data() +
-                    at + 20u,
+                payload.data() + at + 20u,
                 14u);
             ++texture9;
         }
     }
 
-    return
-        sampler9 == 1u &&
-        texture9 == 1u;
+    if (sampler9 != 1u ||
+        texture9 != 1u ||
+        texture1 != 1u)
+        return false;
+
+    try {
+        // Preserve the already-patched table (t9/s9 -> t14/s14) and append one
+        // exact clone of the stock SpecTex t1 binding at t10. The dedicated
+        // final material tail samples t10 only after the Build131 EnvSpec cut.
+        std::vector<std::uint8_t> table(
+            payload.data() + offset,
+            payload.data() + offset +
+                static_cast<std::size_t>(count) *
+                    k_binding_size);
+
+        std::array<std::uint8_t,k_binding_size>
+            t10{};
+        std::memcpy(
+            t10.data(),
+            payload.data() + texture1_at,
+            k_binding_size);
+
+        static constexpr char
+            k_name[] =
+                "DSRRL_PTDE_SpecRGB";
+
+        const auto name_offset =
+            static_cast<std::uint32_t>(
+                payload.size());
+
+        payload.insert(
+            payload.end(),
+            reinterpret_cast<const std::uint8_t *>(
+                k_name),
+            reinterpret_cast<const std::uint8_t *>(
+                k_name) + sizeof(k_name));
+
+        while ((payload.size() & 3u) != 0u)
+            payload.push_back(0u);
+
+        const auto new_table =
+            static_cast<std::uint32_t>(
+                payload.size());
+
+        write_u32(
+            t10.data(),
+            name_offset);
+        write_u32(
+            t10.data() + 20u,
+            10u);
+
+        table.insert(
+            table.end(),
+            t10.begin(),
+            t10.end());
+
+        payload.insert(
+            payload.end(),
+            table.begin(),
+            table.end());
+
+        write_u32(
+            payload.data() + 8u,
+            count + 1u);
+        write_u32(
+            payload.data() + 12u,
+            new_table);
+    } catch (...) {
+        return false;
+    }
+
+    return true;
 }
 
 bool add_b12_rdef(
