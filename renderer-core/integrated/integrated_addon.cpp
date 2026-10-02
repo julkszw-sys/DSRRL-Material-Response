@@ -142,6 +142,7 @@ std::atomic_bool g_mr_once_draw_issued{false};
 std::atomic<std::uint32_t> g_pointlight_gate_log_mask{0u};
 std::atomic<std::uint32_t> g_pointlight_prep_log_mask{0u};
 std::atomic_bool g_pointlight_active_logged{false};
+std::atomic_bool g_pmetal_carrier_cut_logged{false};
 std::atomic<std::uint64_t> g_mr_ul_payload_materialize_ok{0};
 std::atomic<std::uint64_t> g_mr_ul_payload_materialize_fail{0};
 std::atomic<std::uint64_t> g_subsurface_spec_payload_materialize_ok{0};
@@ -4480,6 +4481,7 @@ struct prepared_island_batch {
     dsrrl::runtime::prepared_hemdir3_draw hemdir3{};
     dsrrl::runtime::prepared_upper_lower_hemenv_draw upper_lower{};
     dsrrl::runtime::prepared_pmetal_envspec_draw envspec{};
+    dsrrl::runtime::prepared_envspec_resources pmetal_carrier_diag{};
     dsrrl::runtime::prepared_fixed_pointlight_shader fixed_shader{};
     dsrrl::runtime::prepared_fixed_pointlight_draw fixed_carrier{};
     ID3D11Buffer *fixed_b12 = nullptr;
@@ -4494,6 +4496,7 @@ struct prepared_island_batch {
     bool subsurface_in_batch = false;
     bool hemdir3_in_batch = false;
     bool envspec_in_batch = false;
+    bool pmetal_carrier_diag_in_batch = false;
 };
 
 effect_probe_mask resource_effect_mask(
@@ -4562,6 +4565,10 @@ effect_probe_mask prepared_effect_mask(
         // P_Metal EnvSpec is U/L-independent by construction. Never promote
         // UpperLower telemetry from an EnvSpec batch.
     }
+
+    if (prepared.pmetal_carrier_diag_in_batch)
+        mask |= effect_probe_bit(
+            effect_probe_id::pmetal_envspec);
 
     if (prepared.clustered_in_batch) {
         mask |= static_shader_owner_effect_mask(
@@ -4842,6 +4849,9 @@ void release_prepared_island_batch(
         g_pmetal_envspec.release(
             prepared.envspec);
     } else {
+        if (prepared.pmetal_carrier_diag.ready)
+            g_envspec_resources.release(
+                prepared.pmetal_carrier_diag);
         g_upper_lower_hemenv.release_prepared_draw(
             prepared.upper_lower);
         g_material_resources.release_prepared_draw(
@@ -5418,7 +5428,17 @@ bool prepare_island_batch(
             ? dsrrl::runtime::pmetal_envspec_receiver_family::hemenvlerp
             : dsrrl::runtime::pmetal_envspec_receiver_family::stable_hemenv;
 
-    if (decision.active &&
+#if defined(DSRRL_PMETAL_PTDE_CARRIER_STOCK_CONSUMER_DIAG)
+    const bool pmetal_carrier_cut_candidate =
+        decision.active && !hemenvlerp_bound &&
+        decision.route_index == 345u &&
+        decision.receiver_id >= 33u && decision.receiver_id <= 35u;
+#else
+    constexpr bool pmetal_carrier_cut_candidate = false;
+#endif
+
+    if (!pmetal_carrier_cut_candidate &&
+        decision.active &&
         g_pmetal_envspec.prepare(
             cmd_list,
             material,
@@ -5686,6 +5706,29 @@ bool prepare_island_batch(
                     prepared.resources);
         }
     }
+
+#if defined(DSRRL_PMETAL_PTDE_CARRIER_STOCK_CONSUMER_DIAG)
+    if (pmetal_carrier_cut_candidate && prepared.mr_in_batch && context != nullptr &&
+        g_envspec_resources.prepare(context, 2u, false, prepared.pmetal_carrier_diag)) {
+        dsrrl::runtime::island_draw_adapter_request carrier{};
+        carrier.primary = dsrrl::core::operator_id::env_spec;
+        carrier.receiver_verified = true;
+        carrier.material_verified = true;
+        carrier.replace_pixel_shader = false;
+        carrier.srvs[0] = {12u, prepared.pmetal_carrier_diag.ptde_a};
+        carrier.srvs[1] = {14u, prepared.pmetal_carrier_diag.ptde_b};
+        carrier.srv_count = 2u;
+        if (dsrrl::runtime::append_island_draw_request(prepared.batch, carrier) ==
+            dsrrl::runtime::island_draw_batch_result::ready) {
+            prepared.pmetal_carrier_diag_in_batch = true;
+            if (!g_pmetal_carrier_cut_logged.exchange(true))
+                reshade::log::message(reshade::log::level::info,
+                    "[DSRRL PMETAL CARRIER CUT DIAG] mode=ptde_rgba_t12_t14_stock_dsr_envspec_consumer generic_mr=diffuse_v1 sampler=stock slot=2");
+        } else {
+            g_envspec_resources.release(prepared.pmetal_carrier_diag);
+        }
+    }
+#endif
 
     if (!direct_ul_producer &&
         upper_lower_bound &&
@@ -6401,6 +6444,7 @@ bool AddonInit(
     g_mr_once_receiver_hit.store(false);
     g_mr_once_owner_join.store(false);
     g_mr_once_decision_active.store(false);
+    g_pmetal_carrier_cut_logged.store(false);
     g_mr_once_identity.store(false);
     g_mr_once_batch_ready.store(false);
     g_mr_once_draw_issued.store(false);
