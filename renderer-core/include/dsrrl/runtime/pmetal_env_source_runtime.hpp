@@ -9,6 +9,12 @@ namespace dsrrl::runtime {
 struct pmetal_envspec_source {
     std::array<float,3> a{};
     std::array<float,3> b{};
+    // Diagnostic EnvDiffuse carrier captured at the exact DSR profile-packer
+    // output before the independent per-draw gain. XYZ is inverse-translated
+    // from the DSR q=p^2.2 producer back to the linear PTDE source domain.
+    std::array<float,3> envdiffuse_a{};
+    std::array<float,3> envdiffuse_b{};
+    bool envdiffuse_linear_valid = false;
     float beta = 0.0f;
     std::uint64_t bank_signature_a = 0u;
     std::uint64_t bank_signature_b = 0u;
