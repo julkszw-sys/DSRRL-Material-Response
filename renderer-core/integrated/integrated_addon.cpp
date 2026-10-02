@@ -5428,7 +5428,7 @@ bool prepare_island_batch(
             ? dsrrl::runtime::pmetal_envspec_receiver_family::hemenvlerp
             : dsrrl::runtime::pmetal_envspec_receiver_family::stable_hemenv;
 
-#if defined(DSRRL_PMETAL_PTDE_CARRIER_STOCK_CONSUMER_DIAG)
+#if defined(DSRRL_PMETAL_STOCK_CONSUMER_BASELINE_DIAG) || defined(DSRRL_PMETAL_PTDE_CARRIER_STOCK_CONSUMER_DIAG)
     const bool pmetal_carrier_cut_candidate =
         decision.active && !hemenvlerp_bound &&
         decision.route_index == 345u &&
