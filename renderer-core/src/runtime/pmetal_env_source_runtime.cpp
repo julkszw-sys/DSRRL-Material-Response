@@ -76,6 +76,7 @@ envspec_blend_fn g_envspec_blend_original = nullptr;
 struct hook_source_record {
     pmetal_envspec_source source{};
     std::uint64_t serial = 0u;
+    std::uint64_t semantic_version = 0u;
     bool valid = false;
 };
 
@@ -84,6 +85,7 @@ std::mutex g_hook_source_mutex;
 hook_source_record g_hook_source_global{};
 std::atomic<std::uint64_t> g_hook_source_serial{0u};
 std::atomic<std::uint64_t> g_hook_source_generation{0u};
+std::atomic<std::uint64_t> g_hook_source_semantic_version{0u};
 std::atomic<std::uint64_t> g_hook_single_seen{0u};
 std::atomic<std::uint64_t> g_hook_blend_seen{0u};
 std::atomic<std::uint64_t> g_hook_publish{0u};
@@ -1236,6 +1238,35 @@ void publish_hook_source(
         1u;
     next.serial = serial;
 
+    // Dominant steady-state path: the retail packer can call this hook
+    // thousands of times while the exact LightBank payload is unchanged.
+    // If this thread still owns the same payload and no other thread has
+    // published a semantic change since that observation, preserve the
+    // semantic generation and avoid the global publication mutex entirely.
+    const auto semantic_version =
+        g_hook_source_semantic_version.load(
+            std::memory_order_acquire);
+    if (g_hook_source_tls.valid &&
+        g_hook_source_tls.semantic_version ==
+            semantic_version &&
+        same_hook_source_payload(
+            g_hook_source_tls.source,
+            next)) {
+        next.generation =
+            g_hook_source_tls.source.generation;
+        g_hook_source_tls = {
+            next,
+            serial,
+            semantic_version,
+            true
+        };
+        g_hook_publish.fetch_add(
+            1u,
+            std::memory_order_relaxed);
+        return;
+    }
+
+    std::uint64_t resolved_version = 0u;
     {
         std::lock_guard<std::mutex> lock(
             g_hook_source_mutex);
@@ -1246,27 +1277,38 @@ void publish_hook_source(
                 g_hook_source_global.source,
                 next);
 
-        next.generation =
-            unchanged
-                ? g_hook_source_global.source.generation
-                : g_hook_source_generation.fetch_add(
-                      1u,
-                      std::memory_order_relaxed) +
-                      1u;
+        if (unchanged) {
+            next.generation =
+                g_hook_source_global.source.generation;
+            resolved_version =
+                g_hook_source_global.semantic_version;
+        } else {
+            next.generation =
+                g_hook_source_generation.fetch_add(
+                    1u,
+                    std::memory_order_relaxed) +
+                1u;
+            resolved_version =
+                g_hook_source_semantic_version.fetch_add(
+                    1u,
+                    std::memory_order_acq_rel) +
+                1u;
+        }
 
         g_hook_source_global = {
             next,
             serial,
+            resolved_version,
             true
         };
     }
 
-    // TLS gets the same semantic generation decided under the global source
-    // lock. serial still records every hook event, while generation now means
-    // what the draw-side b12 cache contract says it means: payload identity.
+    // TLS gets the same semantic generation/version decided against the
+    // authoritative global record. serial remains event identity only.
     g_hook_source_tls = {
         next,
         serial,
+        resolved_version,
         true
     };
 
@@ -2106,6 +2148,9 @@ void pmetal_env_source_runtime::reset() noexcept
         0u,
         std::memory_order_relaxed);
     g_hook_source_generation.store(
+        0u,
+        std::memory_order_relaxed);
+    g_hook_source_semantic_version.store(
         0u,
         std::memory_order_relaxed);
     g_hook_decode_stage.store(0u,std::memory_order_relaxed);
