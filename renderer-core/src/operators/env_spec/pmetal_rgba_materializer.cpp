@@ -826,6 +826,20 @@ constexpr std::array<std::uint32_t,100>
         0x0100003au,0x0100003au,0x0100003au,0x0100003au
     }};
 
+// Hard live-register contract for the recovered PTDE EnvSpec island.
+// Retail P_Metal preserves r1.x across the t12 sample; raw PTDE RGBA must
+// therefore live in scratch r12 and only decoded RGB may be written to r1.yzw.
+static_assert(
+    k_build131_window[3] == 0x001000f2u &&
+    k_build131_window[4] == 12u &&
+    k_build131_window[14] == 0x001000e2u &&
+    k_build131_window[15] == 1u &&
+    k_build131_window[16] == 0x00100e56u &&
+    k_build131_window[17] == 12u &&
+    k_build131_window[18] == 0x00100006u &&
+    k_build131_window[19] == 12u,
+    "P_Metal Build131 must preserve live host r1.x");
+
 bool apply_build131(
     std::vector<std::uint8_t> &bytes,
     const pmetal_rgba_authority::entry
