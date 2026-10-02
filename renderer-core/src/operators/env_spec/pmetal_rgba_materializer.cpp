@@ -941,6 +941,45 @@ bool apply_build131(
             static_cast<std::ptrdiff_t>(
                 authority.t12_word));
 
+    // Build131 owns the complete semantic cut from the original t12 sample
+    // through, but not including, the merge instruction. The historical
+    // 100-word PTDE window is shorter than this 115-word cut. Leaving the
+    // remaining 15 stock words in place splits the original 13-word sample
+    // that begins at word 1700, producing a malformed token stream before
+    // the SpecRGB consumer can be composed. Neutralize the unused tail with
+    // one-word NOP instructions so the next preserved instruction still
+    // begins exactly at merge_word.
+    std::fill(
+        words.begin() +
+            static_cast<std::ptrdiff_t>(
+                authority.t12_word +
+                k_build131_window.size()),
+        words.begin() +
+            static_cast<std::ptrdiff_t>(
+                authority.merge_word),
+        0x0100003au);
+
+    std::vector<instruction_view>
+        patched_instructions;
+    if (!decode(
+            words,
+            patched_instructions))
+        return false;
+
+    const auto patched_merge =
+        std::find_if(
+            patched_instructions.begin(),
+            patched_instructions.end(),
+            [&](const instruction_view &i) {
+                return i.offset ==
+                    authority.merge_word;
+            });
+    if (patched_merge ==
+            patched_instructions.end() ||
+        patched_merge->opcode != 0x32u ||
+        patched_merge->length != 9u)
+        return false;
+
     if (!patch_build131_rdef(
             chunks))
         return false;
