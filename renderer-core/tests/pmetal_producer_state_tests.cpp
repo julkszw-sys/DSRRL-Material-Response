@@ -90,7 +90,7 @@ int main()
 
     assert(!runtime::pmetal_producer_state_latest(
         material,
-        101u,
+        102u,
         out));
 
     // Simulate selector -> draw thread handoff by dropping only TLS. The exact
@@ -100,7 +100,7 @@ int main()
     runtime::pmetal_envspec_source synchronized{};
     assert(runtime::pmetal_producer_state_latest(
         material,
-        100u,
+        101u,
         synchronized));
     assert(synchronized.beta == 0.75f);
 
