@@ -934,12 +934,45 @@ bool apply_build131(
     words[texture9->offset + 2u] =
         14u;
 
+    const auto replacement_end =
+        authority.t12_word +
+        window.size();
+
+    // Build131 owns the complete EnvSpec/PBL cut through (but not including)
+    // the verified merge instruction. The historical payload is 100 words,
+    // while the clean diffuse-v1 base exposes a 115-word t12->merge cut.
+    // Leaving the final 15 stock words intact bisects the 13-word instruction
+    // beginning at t12+95 and produces checksum-valid but undecodable DXBC.
+    // Neutralize the residual cut with DXBC NOPs so the next preserved token
+    // is exactly the attested merge instruction.
+    if (replacement_end >
+            authority.merge_word ||
+        authority.merge_word >
+            words.size())
+        return false;
+
     std::copy(
         window.begin(),
         window.end(),
         words.begin() +
             static_cast<std::ptrdiff_t>(
                 authority.t12_word));
+
+    std::fill(
+        words.begin() +
+            static_cast<std::ptrdiff_t>(
+                replacement_end),
+        words.begin() +
+            static_cast<std::ptrdiff_t>(
+                authority.merge_word),
+        0x0100003au);
+
+    std::vector<instruction_view>
+        patched_instructions;
+    if (!decode(
+            words,
+            patched_instructions))
+        return false;
 
     if (!patch_build131_rdef(
             chunks))
