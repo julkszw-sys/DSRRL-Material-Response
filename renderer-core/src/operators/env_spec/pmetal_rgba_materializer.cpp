@@ -803,6 +803,195 @@ bool add_b12_rdef(
     return true;
 }
 
+bool apply_pmetal_pre_ab(
+    std::vector<std::uint32_t> &words,
+    const pmetal_rgba_authority::entry
+        &authority) noexcept
+{
+    constexpr std::uint32_t k_nop =
+        0x0100003au;
+    constexpr std::uint32_t k_f22 =
+        0x400ccccdu;
+    constexpr std::uint32_t k_f13 =
+        0x3fa66666u;
+    constexpr std::uint32_t k_f1 =
+        0x3f800000u;
+
+    // V2.28A: exact P_Metal SPEC-domain pow(2.2) -> identity.
+    // Preserve the pre-PBL SpecTex*cb10 carrier and replace only
+    // LOG -> MUL(2.2) -> EXP with MOV at the original EXP cut.
+    const auto log_word =
+        authority.spec_log_word;
+    const auto gamma_word =
+        authority.spec_gamma_mul_word;
+    const auto exp_word =
+        authority.spec_exp_word;
+
+    if (log_word == 0u ||
+        gamma_word <= log_word ||
+        exp_word <= gamma_word ||
+        exp_word + 5u > words.size() ||
+        (words[log_word] & 0x7ffu) != 0x2fu ||
+        ((words[log_word] >> 24u) & 0x7fu) != 5u ||
+        (words[gamma_word] & 0x7ffu) != 0x38u ||
+        ((words[gamma_word] >> 24u) & 0x7fu) != 10u ||
+        words[gamma_word + 6u] != k_f22 ||
+        words[gamma_word + 7u] != k_f22 ||
+        words[gamma_word + 8u] != k_f22 ||
+        (words[exp_word] & 0x7ffu) != 0x19u ||
+        ((words[exp_word] >> 24u) & 0x7fu) != 5u)
+        return false;
+
+    std::array<std::uint32_t,5>
+        exp_to_mov{};
+    std::copy_n(
+        words.begin() +
+            static_cast<std::ptrdiff_t>(
+                exp_word),
+        exp_to_mov.size(),
+        exp_to_mov.begin());
+
+    std::fill(
+        words.begin() +
+            static_cast<std::ptrdiff_t>(
+                log_word),
+        words.begin() +
+            static_cast<std::ptrdiff_t>(
+                exp_word),
+        k_nop);
+
+    exp_to_mov[0] =
+        (exp_to_mov[0] & ~0x7ffu) |
+        0x36u;
+
+    std::copy(
+        exp_to_mov.begin(),
+        exp_to_mov.end(),
+        words.begin() +
+            static_cast<std::ptrdiff_t>(
+                exp_word));
+
+    // V2.28B: remove only the DSR angular/horizon response.
+    // Recover the exact MAD_SAT(1 + 1.3*d) -> square -> apply topology
+    // and replace the square result with scalar 1. The downstream apply
+    // instruction is preserved byte-for-byte.
+    std::vector<instruction_view>
+        instructions;
+
+    if (!decode(
+            words,
+            instructions))
+        return false;
+
+    std::size_t angular_matches = 0u;
+    std::size_t angular_square = 0u;
+
+    for (const auto &ins : instructions) {
+        if (ins.opcode != 0x32u ||
+            ins.length != 9u)
+            continue;
+
+        const auto begin =
+            words.begin() +
+            static_cast<std::ptrdiff_t>(
+                ins.offset);
+        const auto end =
+            begin +
+            static_cast<std::ptrdiff_t>(
+                ins.length);
+
+        if (std::find(
+                begin,
+                end,
+                k_f13) == end ||
+            std::find(
+                begin,
+                end,
+                k_f1) == end)
+            continue;
+
+        const auto square_offset =
+            ins.offset +
+            ins.length;
+
+        const auto square =
+            std::find_if(
+                instructions.begin(),
+                instructions.end(),
+                [&](const instruction_view &i) {
+                    return
+                        i.offset ==
+                            square_offset &&
+                        i.opcode == 0x38u &&
+                        i.length == 7u;
+                });
+
+        if (square ==
+            instructions.end())
+            continue;
+
+        const auto apply_offset =
+            square_offset +
+            square->length;
+
+        const auto apply =
+            std::find_if(
+                instructions.begin(),
+                instructions.end(),
+                [&](const instruction_view &i) {
+                    return
+                        i.offset ==
+                            apply_offset &&
+                        i.opcode == 0x38u &&
+                        i.length == 7u;
+                });
+
+        if (apply ==
+            instructions.end())
+            continue;
+
+        if (words[square_offset + 4u] !=
+                words[square_offset + 6u] ||
+            words[square_offset + 2u] !=
+                words[square_offset + 4u] ||
+            words[apply_offset + 6u] !=
+                words[square_offset + 2u])
+            continue;
+
+        ++angular_matches;
+        angular_square =
+            square_offset;
+    }
+
+    if (angular_matches != 1u)
+        return false;
+
+    const std::array<std::uint32_t,5>
+        angular_mov = {{
+            0x05000036u,
+            words[angular_square + 1u],
+            words[angular_square + 2u],
+            0x00004001u,
+            k_f1
+        }};
+
+    std::copy(
+        angular_mov.begin(),
+        angular_mov.end(),
+        words.begin() +
+            static_cast<std::ptrdiff_t>(
+                angular_square));
+
+    words[angular_square + 5u] =
+        k_nop;
+    words[angular_square + 6u] =
+        k_nop;
+
+    return decode(
+        words,
+        instructions);
+}
+
 constexpr std::array<std::uint32_t,100>
     k_build131_window = {{
         0x8d000048u,0x80000182u,0x00155543u,0x001000f2u,0x00000001u,0x00100796u,0x00000000u,0x00107936u,
@@ -840,6 +1029,14 @@ bool apply_build131(
             chunks,
             code_index,
             words) ||
+        !decode(
+            words,
+            instructions))
+        return false;
+
+    if (!apply_pmetal_pre_ab(
+            words,
+            authority) ||
         !decode(
             words,
             instructions))
