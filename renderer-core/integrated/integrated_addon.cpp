@@ -5711,7 +5711,7 @@ bool prepare_island_batch(
     if (pmetal_carrier_cut_candidate && prepared.mr_in_batch && context != nullptr &&
         g_envspec_resources.prepare(context, 2u, false, prepared.pmetal_carrier_diag)) {
         dsrrl::runtime::island_draw_adapter_request carrier{};
-        carrier.primary = dsrrl::core::operator_id::env_spec;
+        carrier.primary = dsrrl::core::operator_id::envspec_pmetal_diagnostic;
         carrier.receiver_verified = true;
         carrier.material_verified = true;
         carrier.replace_pixel_shader = false;
