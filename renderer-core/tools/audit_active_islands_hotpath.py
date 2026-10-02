@@ -208,7 +208,7 @@ def main():
         "pmetal_envspec_draw_runtime::release(")
     require_before(
         pmetal_prepare,
-        "if (!exact_pmetal_material(",
+        "if (!exact_pmetal_envspec_candidate(",
         "core_.features().enabled(",
         "PMetal exact-route prefilter")
 
@@ -366,8 +366,11 @@ def main():
         "k_companion_tls_slots = 256u",
         "material resource TLS working set")
     require(integrated,
-        "decision.route_index == 345u &&\n        g_pmetal_envspec.prepare(",
-        "P_Metal route prefilter before island prepare")
+        "exact_pmetal_envspec_candidate(",
+        "P_Metal exact prefilter before island prepare")
+    require(integrated,
+        "if (!g_pmetal_envspec.prepare(",
+        "P_Metal atomic stock fail-open before generic MR")
     require(material_resource,
         "(k_companion_tls_slots - 1u)",
         "material resource power-of-two TLS index")

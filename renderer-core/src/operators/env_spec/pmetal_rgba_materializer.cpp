@@ -803,11 +803,16 @@ bool add_b12_rdef(
     return true;
 }
 
+// Preserve the stock r1.x live-out across the dedicated EnvSpec cut.
+// Retail t12 writes only r1.yzw; r1.x is consumed downstream before its
+// next write on rx33/rx34/rx35. Decode PTDE RGBA in dead scratch r12, then
+// write only RGB/A into r1.yzw so activating EnvSpec cannot clobber that
+// independent downstream carrier.
 constexpr std::array<std::uint32_t,100>
     k_build131_window = {{
-        0x8d000048u,0x80000182u,0x00155543u,0x001000f2u,0x00000001u,0x00100796u,0x00000000u,0x00107936u,
+        0x8d000048u,0x80000182u,0x00155543u,0x001000f2u,0x0000000cu,0x00100796u,0x00000000u,0x00107936u,
         0x0000000cu,0x00106000u,0x0000000cu,0x00004001u,0x00000000u,0x0700000eu,0x001000e2u,0x00000001u,
-        0x00100e56u,0x00000001u,0x00100006u,0x00000001u,0x08000038u,0x001000e2u,0x00000001u,0x00100e56u,
+        0x00100e56u,0x0000000cu,0x00100006u,0x0000000cu,0x08000038u,0x001000e2u,0x00000001u,0x00100e56u,
         0x00000001u,0x00208246u,0x0000000cu,0x00000002u,0x0404001fu,0x0020803au,0x0000000cu,0x00000003u,
         0x8d000048u,0x80000182u,0x00155543u,0x001000f2u,0x0000000cu,0x00100796u,0x00000000u,0x00107936u,
         0x0000000eu,0x00106000u,0x0000000eu,0x00004001u,0x00000000u,0x0700000eu,0x001000e2u,0x0000000cu,
@@ -1139,7 +1144,11 @@ bool apply_build131(
             0x08000038u,
             0x00100072u,
             0x00000002u,
-            0x00100246u,
+            // Stock t1 is sampled through the legacy wxyz resource swizzle.
+            // The true SpecRGB lanes therefore live in the sampled temporary's
+            // yzw components. Read those exact lanes into the normalized xyz
+            // material accumulator before applying raw PTDE c101.
+            0x00100796u,
             0x00000002u,
             0x00208246u,
             0x0000000cu,
@@ -1195,8 +1204,15 @@ bool apply_build131(
                 t1_sample->offset),
         11u,
         fresh_spec.begin());
+    // The stock SpecTex sample uses t1.wxyz. Historical exact receiver RE
+    // proves that logical SpecRGB is carried in destination yzw, not xyz.
+    // Keep the stock resource swizzle, write the fresh PTDE t10 sample into
+    // r2.yzw, then let c101_mul above normalize r2.yzw -> r2.xyz.
+    if (fresh_spec[7] !=
+            0x00107936u)
+        return false;
     fresh_spec[3] =
-        0x00100072u;
+        0x001000e2u;
     fresh_spec[4] = 2u;
     fresh_spec[8] = 10u;
 
@@ -1380,6 +1396,11 @@ bool final_postcondition(
 
     std::size_t t10_decl = 0u;
     std::size_t t10_sample = 0u;
+    std::size_t t10_yzw_sample = 0u;
+    std::size_t t12_sample = 0u;
+    std::size_t t12_scratch_rgba_sample = 0u;
+    std::size_t t12_decode_preserve_r1x = 0u;
+    std::size_t c101_yzw_mul = 0u;
     std::size_t t14_decl = 0u;
     std::size_t s14_decl = 0u;
     std::size_t t14_sample = 0u;
@@ -1420,14 +1441,34 @@ bool final_postcondition(
             ins.opcode <= 0x4au) {
             if (ins.length == 11u &&
                 words[ins.offset + 8u] ==
-                    10u)
+                    10u) {
                 ++t10_sample;
+                if (words[ins.offset + 3u] ==
+                        0x001000e2u &&
+                    words[ins.offset + 4u] ==
+                        2u &&
+                    words[ins.offset + 7u] ==
+                        0x00107936u)
+                    ++t10_yzw_sample;
+            }
 
             if (ins.length == 13u) {
                 const auto resource =
                     words[ins.offset + 8u];
                 const auto sampler =
                     words[ins.offset + 10u];
+
+                if (resource == 12u &&
+                    sampler == 12u) {
+                    ++t12_sample;
+                    if (words[ins.offset + 3u] ==
+                            0x001000f2u &&
+                        words[ins.offset + 4u] ==
+                            12u &&
+                        words[ins.offset + 7u] ==
+                            0x00107936u)
+                        ++t12_scratch_rgba_sample;
+                }
 
                 if (resource == 14u &&
                     sampler == 14u)
@@ -1438,6 +1479,44 @@ bool final_postcondition(
                     ++t9_sample;
             }
         }
+
+        // Build131 must preserve retail r1.x. The first PTDE cube sample is
+        // decoded in r12 and only its RGB/A result is written to r1.yzw.
+        if (ins.opcode == 0x0eu &&
+            ins.length == 7u &&
+            ins.offset + 6u < words.size() &&
+            words[ins.offset + 1u] ==
+                0x001000e2u &&
+            words[ins.offset + 2u] ==
+                1u &&
+            words[ins.offset + 3u] ==
+                0x00100e56u &&
+            words[ins.offset + 4u] ==
+                12u &&
+            words[ins.offset + 5u] ==
+                0x00100006u &&
+            words[ins.offset + 6u] ==
+                12u)
+            ++t12_decode_preserve_r1x;
+
+        if (ins.opcode == 0x38u &&
+            ins.length == 8u &&
+            ins.offset + 7u < words.size() &&
+            words[ins.offset + 1u] ==
+                0x00100072u &&
+            words[ins.offset + 2u] ==
+                2u &&
+            words[ins.offset + 3u] ==
+                0x00100796u &&
+            words[ins.offset + 4u] ==
+                2u &&
+            words[ins.offset + 5u] ==
+                0x00208246u &&
+            words[ins.offset + 6u] ==
+                12u &&
+            words[ins.offset + 7u] ==
+                0u)
+            ++c101_yzw_mul;
     }
 
     auto *rdef =
@@ -1476,6 +1555,11 @@ bool final_postcondition(
     return
         t10_decl == 1u &&
         t10_sample == 1u &&
+        t10_yzw_sample == 1u &&
+        t12_sample == 1u &&
+        t12_scratch_rgba_sample == 1u &&
+        t12_decode_preserve_r1x == 1u &&
+        c101_yzw_mul == 1u &&
         t14_decl == 1u &&
         s14_decl == 1u &&
         t14_sample == 1u &&
