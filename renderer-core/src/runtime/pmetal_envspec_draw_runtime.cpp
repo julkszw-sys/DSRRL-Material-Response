@@ -31,6 +31,15 @@ constexpr const char *k_pmetal_name =
 constexpr const char *k_pmetal_sha256 =
     "ece70f36bd2517d28c8495e276cea537f8b519d6bed981788e79a409ffbf763b";
 
+// Narrow owner-requested diagnostic. Current authenticated Firelink runtime
+// selects PTDE LightBank donor m10 row25 through the existing EnvSpec source
+// carrier: bank signature 4c594553d201d80c, row 25. PTDE EnvDiffuse raw
+// RGB/M is 255/255/255 x100, so the legacy linear endpoint is exactly 1,1,1.
+// The directional field itself remains the native DSR t11 resource.
+constexpr std::uint64_t k_envdiffuse_diag_bank =
+    0x4c594553d201d80cULL;
+constexpr std::uint32_t k_envdiffuse_diag_row = 25u;
+
 constexpr std::uint32_t k_effect_fail_feature = 1u << 0u;
 constexpr std::uint32_t k_effect_fail_lerp_feature = 1u << 1u;
 constexpr std::uint32_t k_effect_fail_material = 1u << 2u;
@@ -45,10 +54,12 @@ constexpr std::uint32_t k_effect_fail_device = 1u << 12u;
 constexpr std::uint32_t k_effect_fail_b12 = 1u << 13u;
 constexpr std::uint32_t k_effect_fail_mutation = 1u << 14u;
 constexpr std::uint32_t k_effect_fail_native_envdiffuse = 1u << 15u;
+constexpr std::uint32_t k_effect_fail_envdiffuse_endpoint = 1u << 16u;
 
 std::atomic_bool g_source_cut_logged{false};
 std::atomic_bool g_resource_mode_logged{false};
 std::atomic_bool g_native_envdiffuse_logged{false};
+std::atomic_bool g_envdiffuse_endpoint_logged{false};
 std::atomic_bool g_source_frontier_logged{false};
 std::atomic<std::uint32_t> g_prepare_stage_log_mask{0u};
 std::atomic<std::uint32_t> g_value_cut_log_mask{0u};
@@ -180,6 +191,14 @@ struct f4 {
     float w;
 };
 
+constexpr std::array<f4,2>
+    k_envdiffuse_diag_b13_payload{{
+        {1.0f,1.0f,1.0f,0.0f},
+        {1.0f,1.0f,1.0f,1.0f}
+    }};
+static_assert(
+    sizeof(k_envdiffuse_diag_b13_payload) == 32u);
+
 } // namespace
 
 bool exact_pmetal_envspec_candidate(
@@ -239,6 +258,11 @@ release_resources() noexcept
     }
     b12_by_context_.clear();
 
+    if (envdiffuse_diag_b13_ != nullptr) {
+        envdiffuse_diag_b13_->Release();
+        envdiffuse_diag_b13_ = nullptr;
+    }
+
     if (device_ != nullptr) {
         device_->Release();
         device_ = nullptr;
@@ -267,6 +291,33 @@ on_init_device(
     if (device_ == nullptr) {
         native->AddRef();
         device_ = native;
+
+        D3D11_BUFFER_DESC desc{};
+        desc.ByteWidth =
+            static_cast<UINT>(
+                sizeof(
+                    k_envdiffuse_diag_b13_payload));
+        desc.Usage =
+            D3D11_USAGE_IMMUTABLE;
+        desc.BindFlags =
+            D3D11_BIND_CONSTANT_BUFFER;
+
+        D3D11_SUBRESOURCE_DATA initial{};
+        initial.pSysMem =
+            k_envdiffuse_diag_b13_payload.data();
+
+        if (FAILED(
+                native->CreateBuffer(
+                    &desc,
+                    &initial,
+                    &envdiffuse_diag_b13_)) ||
+            envdiffuse_diag_b13_ == nullptr) {
+            device_->Release();
+            device_ = nullptr;
+            quarantined_.store(
+                true,
+                std::memory_order_release);
+        }
         return;
     }
 
@@ -315,6 +366,11 @@ on_destroy_device(
             entry.buffer->Release();
     }
     b12_by_context_.clear();
+
+    if (envdiffuse_diag_b13_ != nullptr) {
+        envdiffuse_diag_b13_->Release();
+        envdiffuse_diag_b13_ = nullptr;
+    }
 
     if (device_ != nullptr) {
         device_->Release();
@@ -799,6 +855,51 @@ bool pmetal_envspec_draw_runtime::prepare(
             family);
         return false;
     }
+
+    // Diagnostic is intentionally Firelink m10 row25 stable-only. Every
+    // other source row/family fails open to stock DSR via the dispatcher's
+    // exact-P_Metal atomic fail-open path.
+    if (family !=
+            pmetal_envspec_receiver_family::
+                stable_hemenv ||
+        source.beta != 0.0f ||
+        source.bank_signature_a !=
+            k_envdiffuse_diag_bank ||
+        source.bank_signature_b !=
+            k_envdiffuse_diag_bank ||
+        source.row_id_a !=
+            k_envdiffuse_diag_row ||
+        source.row_id_b !=
+            k_envdiffuse_diag_row) {
+        effect_fail(
+            effect_fail_mask_,
+            k_effect_fail_envdiffuse_endpoint);
+        log_prepare_stage_once(
+            1u << 13u,
+            "envdiffuse_endpoint_scope_reject",
+            material,
+            decision,
+            family);
+        return false;
+    }
+
+    if (!g_envdiffuse_endpoint_logged.exchange(
+            true,
+            std::memory_order_relaxed)) {
+        char line[512]{};
+        std::snprintf(
+            line,
+            sizeof(line),
+            "[DSRRL PMETAL ENVDIFFUSE ENDPOINT DIAG] mode=ptde_m10_r25_native_dsr_t11 bank=%016llx row=%u endpoint=1,1,1",
+            static_cast<unsigned long long>(
+                source.bank_signature_a),
+            static_cast<unsigned>(
+                source.row_id_a));
+        reshade::log::message(
+            reshade::log::level::info,
+            line);
+    }
+
     effect_latch(effect_receiver_source_ready_);
 
     auto *context =
@@ -821,6 +922,7 @@ bool pmetal_envspec_draw_runtime::prepare(
 
     ID3D11PixelShader *shader = nullptr;
     core::operator_mask composed_owners = 0u;
+    ID3D11Buffer *envdiffuse_b13 = nullptr;
 
     {
         std::lock_guard<std::mutex> lock(
@@ -876,6 +978,16 @@ bool pmetal_envspec_draw_runtime::prepare(
             composed_owners =
                 found->second.composed_owners;
             shader->AddRef();
+
+            if (envdiffuse_diag_b13_ == nullptr) {
+                shader->Release();
+                effect_fail(
+                    effect_fail_mask_,
+                    k_effect_fail_envdiffuse_endpoint);
+                return false;
+            }
+            envdiffuse_b13 =
+                envdiffuse_diag_b13_;
         }
     }
 
@@ -1312,6 +1424,8 @@ bool pmetal_envspec_draw_runtime::prepare(
                 terminal_sat_rgb);
     prepared.shader = shader;
     prepared.b12 = b12;
+    prepared.envdiffuse_b13 =
+        envdiffuse_b13;
     prepared.request.primary =
         core::operator_id::env_spec;
 
@@ -1328,13 +1442,14 @@ bool pmetal_envspec_draw_runtime::prepare(
         prepared.request.additional_owners |=
             sat_owner;
 
-    // EnvDiffuse owns only the explicit native t11/t13 resource rebind in
-    // this diagnostic. It does not own the replacement shader or b12.
+    // EnvDiffuse now owns both the explicit native t11 resource rebind and
+    // the exact stable shader producer cut that replaces cb0[3]*cb0[79].x
+    // with the PTDE Firelink endpoint carried on b13.
     prepared.request.additional_shader_owners =
-        prepared.request.additional_owners &
-        ~envdiff_owner;
+        prepared.request.additional_owners;
     prepared.request.additional_constant_buffer_owners =
-        mr_owner;
+        mr_owner |
+        envdiff_owner;
     prepared.request.additional_resource_owners =
         envdiff_owner;
 
@@ -1350,8 +1465,13 @@ bool pmetal_envspec_draw_runtime::prepare(
         b12,
         env_owner | mr_owner
     };
+    prepared.request.constant_buffers[1] = {
+        13u,
+        envdiffuse_b13,
+        envdiff_owner
+    };
     prepared.request.constant_buffer_count =
-        1u;
+        2u;
 
     std::uint32_t request_srv_count = 0u;
     prepared.request.srvs[
@@ -1616,6 +1736,7 @@ void pmetal_envspec_draw_runtime::reset() noexcept
     g_source_cut_logged.store(false);
     g_resource_mode_logged.store(false);
     g_native_envdiffuse_logged.store(false);
+    g_envdiffuse_endpoint_logged.store(false);
     g_source_frontier_logged.store(false);
     g_prepare_stage_log_mask.store(0u);
     g_value_cut_log_mask.store(0u);
