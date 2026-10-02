@@ -47,6 +47,7 @@ constexpr std::uint32_t k_effect_fail_mutation = 1u << 14u;
 
 std::atomic_bool g_source_cut_logged{false};
 std::atomic_bool g_resource_mode_logged{false};
+std::atomic_bool g_visibility_diag_logged{false};
 std::atomic_bool g_source_frontier_logged{false};
 std::atomic<std::uint32_t> g_prepare_stage_log_mask{0u};
 std::atomic<std::uint32_t> g_value_cut_log_mask{0u};
@@ -1306,6 +1307,28 @@ bool pmetal_envspec_draw_runtime::prepare(
     prepared.ready = true;
     effect_latch(effect_request_ready_);
     telemetry::hot_count(requests_);
+
+    if (family ==
+            pmetal_envspec_receiver_family::
+                stable_hemenv &&
+        (decision.receiver_id == 33u ||
+         decision.receiver_id == 34u) &&
+        !g_visibility_diag_logged.exchange(
+            true,
+            std::memory_order_relaxed)) {
+        char line[384]{};
+        std::snprintf(
+            line,
+            sizeof(line),
+            "[DSRRL PMETAL VISIBILITY DIAG] mode=bypass_post_env_merge_host_visibility family=%u rx=%u route=%u",
+            static_cast<unsigned>(family),
+            static_cast<unsigned>(decision.receiver_id),
+            static_cast<unsigned>(decision.route_index));
+        reshade::log::message(
+            reshade::log::level::info,
+            line);
+    }
+
     log_prepare_stage_once(
         1u << 11u,
         "request_ready",
@@ -1500,6 +1523,7 @@ void pmetal_envspec_draw_runtime::reset() noexcept
     effect_fail_mask_.store(0u);
     g_source_cut_logged.store(false);
     g_resource_mode_logged.store(false);
+    g_visibility_diag_logged.store(false);
     g_source_frontier_logged.store(false);
     g_prepare_stage_log_mask.store(0u);
     g_value_cut_log_mask.store(0u);
