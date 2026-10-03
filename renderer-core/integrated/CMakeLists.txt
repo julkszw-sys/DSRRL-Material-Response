@@ -82,6 +82,11 @@ option(
     OFF)
 
 option(
+    DSRRL_PMETAL_V13_PTDE_RGBA_DECODE_MATERIAL_MOD_DIAG
+    "Diagnostic: PR208 exact PTDE PackedGI carrier plus PTDE post-filter RGB/alpha decode on stable HemEnv; paired HemEnvLerp already uses the same decode; PR204 material modulation and stock EnvDiffuse/common merge preserved"
+    OFF)
+
+option(
     DSRRL_POINTLIGHT_DRAWTIME_BYPASS
     "Diagnostic: disable PointLight producer hooks, runtime pipeline binding and draw-time carrier/replay while preserving all non-PointLight runtime paths"
     OFF)
@@ -609,6 +614,15 @@ if(DSRRL_PMETAL_V13_PTDE_PACKEDGI_MATERIAL_MOD_DIAG)
         PRIVATE
         $<$<COMPILE_LANGUAGE:CXX>:DSRRL_PMETAL_V13_NATIVE_DSR_MATERIAL_MOD_DIAG>
         $<$<COMPILE_LANGUAGE:CXX>:DSRRL_PMETAL_FORCE_PTDE_PACKEDGI>)
+endif()
+
+if(DSRRL_PMETAL_V13_PTDE_RGBA_DECODE_MATERIAL_MOD_DIAG)
+    target_compile_definitions(
+        dsrrl_renderer_core_integrated
+        PRIVATE
+        $<$<COMPILE_LANGUAGE:CXX>:DSRRL_PMETAL_V13_NATIVE_DSR_MATERIAL_MOD_DIAG>
+        $<$<COMPILE_LANGUAGE:CXX>:DSRRL_PMETAL_FORCE_PTDE_PACKEDGI>
+        $<$<COMPILE_LANGUAGE:CXX>:DSRRL_PMETAL_V13_PTDE_RGBA_DECODE_DIAG>)
 endif()
 
 if(DSRRL_POINTLIGHT_DRAWTIME_BYPASS)
