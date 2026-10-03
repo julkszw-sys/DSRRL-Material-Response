@@ -1674,10 +1674,11 @@ bool pmetal_envspec_draw_runtime::prepare(
             static_cast<unsigned long long>(
                 reinterpret_cast<std::uintptr_t>(
 #if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG)
-                    prepared.envdiffuse_resources.ptde_a)))
+                    prepared.envdiffuse_resources.ptde_a
 #else
-                    prepared.native_dsr_envdiffuse_a)))
-#endif;
+                    prepared.native_dsr_envdiffuse_a
+#endif
+                    )));
         reshade::log::message(
             reshade::log::level::info,
             line);
