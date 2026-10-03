@@ -1114,7 +1114,7 @@ bool pmetal_envspec_draw_runtime::prepare(
             decision.c101,
             decision.c101,
             decision.c101,
-            1.0f
+            0.5f
         },
         {
             decision.c100[0],
