@@ -14,6 +14,7 @@
 #include "dsrrl/runtime/generated_pmetal_env_source_authority.hpp"
 
 #include <Windows.h>
+#include <reshade.hpp>
 
 #include <algorithm>
 #include <array>
