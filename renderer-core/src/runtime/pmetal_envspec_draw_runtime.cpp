@@ -1373,6 +1373,11 @@ bool pmetal_envspec_draw_runtime::prepare(
         core::operator_bit(
             core::operator_id::
                 terminal_sat_rgb);
+#if defined(DSRRL_PMETAL_V13_NATIVE_DSR_NO_TAIL_DIAG)
+    (void)spec_owner;
+    (void)envdiff_owner;
+    (void)sat_owner;
+#endif
     prepared.shader = shader;
     prepared.b12 = b12;
     prepared.request.primary =
