@@ -2317,6 +2317,55 @@ drop_spec_rgb_request(
     return true;
 }
 
+
+bool material_resource_draw_runtime::
+keep_only_spec_rgb_request(
+    prepared_material_resource_draw &prepared) noexcept
+{
+    if (!prepared.spec_rgb ||
+        prepared.request_count == 0u ||
+        prepared.request_count != prepared.retained_count)
+        return false;
+
+    std::uint32_t spec_index = prepared.request_count;
+    for (std::uint32_t i = 0u;
+         i < prepared.request_count;
+         ++i) {
+        if (prepared.requests[i].primary ==
+            core::operator_id::spec_rgb) {
+            if (spec_index != prepared.request_count)
+                return false;
+            spec_index = i;
+        }
+    }
+
+    if (spec_index >= prepared.request_count)
+        return false;
+
+    auto spec_request = prepared.requests[spec_index];
+    auto *spec_view = prepared.retained_views[spec_index];
+
+    for (std::uint32_t i = 0u;
+         i < prepared.retained_count;
+         ++i) {
+        if (i == spec_index)
+            continue;
+        if (prepared.retained_views[i] != nullptr)
+            prepared.retained_views[i]->Release();
+    }
+
+    prepared.requests = {};
+    prepared.retained_views = {};
+    prepared.requests[0] = spec_request;
+    prepared.retained_views[0] = spec_view;
+    prepared.request_count = 1u;
+    prepared.retained_count = 1u;
+    prepared.spec_rgb = true;
+    prepared.diffuse = false;
+    prepared.normal = false;
+    return true;
+}
+
 void material_resource_draw_runtime::
 release_prepared_draw(
     prepared_material_resource_draw &prepared) noexcept
