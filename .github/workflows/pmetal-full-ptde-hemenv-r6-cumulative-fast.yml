@@ -1,4 +1,4 @@
-name: P_Metal Full PTDE HemEnv R5 PTDE Normal Basis Runtime Build
+name: P_Metal Full PTDE HemEnv R6 Cumulative Operator Recovery
 
 on:
   workflow_dispatch:
@@ -37,7 +37,7 @@ jobs:
           ref: 3645e3025d1d98a90e318278858931f034d5d1f6
           path: _reshade
 
-      - name: Configure R5
+      - name: Configure R6
         shell: pwsh
         run: >
           cmake
@@ -51,8 +51,8 @@ jobs:
           -DDSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG=ON
           -DDSRRL_PMETAL_FULL_PTDE_HEMENV_R3=ON
           -DDSRRL_PMETAL_FULL_PTDE_HEMENV_R4=ON
-          -DDSRRL_PMETAL_FULL_PTDE_HEMENV_R6=ON `
-            -DDSRRL_PMETAL_CUMULATIVE_OPERATOR_RECOVERY_R6=ON
+          -DDSRRL_PMETAL_FULL_PTDE_HEMENV_R5=ON
+          -DDSRRL_PMETAL_CUMULATIVE_OPERATOR_RECOVERY_R6=ON
           -DDSRRL_PHYSICAL_CUT_UL_H3_SUBSURFACE=ON
 
       - name: Build runtime
@@ -70,7 +70,7 @@ jobs:
           $path = "DSRRL_PMETAL_FULL_PTDE_HEMENV_R6.addon64"
           $ascii = [System.Text.Encoding]::ASCII.GetString([System.IO.File]::ReadAllBytes($path))
           if (-not $ascii.Contains($env:DSRRL_CHECKOUT_COMMIT)) { throw "Missing source commit identity" }
-          if (-not $ascii.Contains("pmetal_full_ptde_hemenv_r6_cumulative_operator_recovery")) { throw "Missing R5 build flavor identity" }
+          if (-not $ascii.Contains("pmetal_full_ptde_hemenv_r6_cumulative_operator_recovery")) { throw "Missing R6 build flavor identity" }
           if (-not $ascii.Contains("[DSRRL PMETAL R3 SPEC ATTEST]")) { throw "Missing exact SpecRGB SHA attestation marker" }
           $hash = (Get-FileHash $path -Algorithm SHA256).Hash.ToLowerInvariant()
           Write-Host "ADDON_SHA256=$hash"
