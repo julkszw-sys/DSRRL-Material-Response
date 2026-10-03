@@ -67,7 +67,7 @@ jobs:
           $path = "DSRRL_PMETAL_PTDE_PACKEDGI_POSTMERGE_VISIBILITY_RUNTIME.addon64"
           $ascii = [System.Text.Encoding]::ASCII.GetString([System.IO.File]::ReadAllBytes($path))
           if (-not $ascii.Contains($env:DSRRL_CHECKOUT_COMMIT)) { throw "Missing source commit identity" }
-          if (-not $ascii.Contains("pmetal_v13_ptde_packedgi_material_mod_runtime")) { throw "Missing build flavor identity" }
+          if (-not $ascii.Contains("pmetal_ptde_packedgi_postmerge_visibility_runtime")) { throw "Missing build flavor identity" }
           if (-not $ascii.Contains("[DSRRL PMETAL V13 MATERIAL MOD]")) { throw "Missing runtime marker identity" }
           if (-not $ascii.Contains("mode=bypass_post_env_merge_host_visibility")) { throw "Missing visibility diagnostic runtime identity" }
           $hash = (Get-FileHash $path -Algorithm SHA256).Hash.ToLowerInvariant()
