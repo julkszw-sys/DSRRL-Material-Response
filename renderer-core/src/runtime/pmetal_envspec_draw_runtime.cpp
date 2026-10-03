@@ -361,6 +361,13 @@ register_replacement(
         outcome.receiver_id < 33u ||
         outcome.receiver_id > 35u ||
         outcome.upper_lower_composed ||
+#if defined(DSRRL_PMETAL_CUMULATIVE_OPERATOR_RECOVERY_R6)
+        !outcome.phn_scene_encoding_composed ||
+        !outcome.atmosphere_domain_composed ||
+#else
+        outcome.phn_scene_encoding_composed ||
+        outcome.atmosphere_domain_composed ||
+#endif
 #if defined(DSRRL_PMETAL_V13_NATIVE_DSR_NO_TAIL_DIAG)
         outcome.spec_rgb_consumer ||
         outcome.envdiffuse_linear_consumer_diag ||
