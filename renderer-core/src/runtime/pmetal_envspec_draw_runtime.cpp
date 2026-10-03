@@ -362,12 +362,15 @@ register_replacement(
         outcome.receiver_id > 35u ||
         outcome.upper_lower_composed ||
 #if defined(DSRRL_PMETAL_V13_NATIVE_DSR_NO_TAIL_DIAG)
+        outcome.phn_scene_encoding_composed ||
         outcome.spec_rgb_consumer ||
         outcome.envdiffuse_linear_consumer_diag ||
 #elif defined(DSRRL_PMETAL_V13_NATIVE_DSR_MATERIAL_MOD_DIAG)
+        outcome.phn_scene_encoding_composed ||
         !outcome.spec_rgb_consumer ||
         outcome.envdiffuse_linear_consumer_diag ||
 #else
+        !outcome.phn_scene_encoding_composed ||
         !outcome.spec_rgb_consumer ||
         !outcome.envdiffuse_linear_consumer_diag ||
 #endif
