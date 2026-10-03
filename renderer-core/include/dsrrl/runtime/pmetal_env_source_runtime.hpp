@@ -16,6 +16,11 @@ struct pmetal_envspec_source {
     std::array<float,3> envdiffuse_b{};
     bool envdiffuse_linear_valid = false;
     float beta = 0.0f;
+    // PTDE PHN terminal scene encoding k135=c135.x/c135.y. The carrier is
+    // explicit even before producer RE is complete so consumers do not regress
+    // to a hidden hardcoded gain. Invalid means publish unity/fail-open.
+    float phn_k135 = 1.0f;
+    bool phn_k135_valid = false;
     std::uint64_t bank_signature_a = 0u;
     std::uint64_t bank_signature_b = 0u;
     std::uint32_t row_id_a = 0u;
