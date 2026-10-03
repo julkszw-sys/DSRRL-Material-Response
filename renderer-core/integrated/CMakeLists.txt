@@ -82,6 +82,11 @@ option(
     OFF)
 
 option(
+    DSRRL_PMETAL_PTDE_PACKEDGI_POSTMERGE_VISIBILITY_DIAG
+    "Diagnostic: corrected PR208 PTDE PackedGI/Build131 baseline plus PR200 post-merge host environment visibility scalar bypass on exact stable rx33/rx34 only"
+    OFF)
+
+option(
     DSRRL_POINTLIGHT_DRAWTIME_BYPASS
     "Diagnostic: disable PointLight producer hooks, runtime pipeline binding and draw-time carrier/replay while preserving all non-PointLight runtime paths"
     OFF)
@@ -609,6 +614,15 @@ if(DSRRL_PMETAL_V13_PTDE_PACKEDGI_MATERIAL_MOD_DIAG)
         PRIVATE
         $<$<COMPILE_LANGUAGE:CXX>:DSRRL_PMETAL_V13_NATIVE_DSR_MATERIAL_MOD_DIAG>
         $<$<COMPILE_LANGUAGE:CXX>:DSRRL_PMETAL_FORCE_PTDE_PACKEDGI>)
+endif()
+
+if(DSRRL_PMETAL_PTDE_PACKEDGI_POSTMERGE_VISIBILITY_DIAG)
+    target_compile_definitions(
+        dsrrl_renderer_core_integrated
+        PRIVATE
+        $<$<COMPILE_LANGUAGE:CXX>:DSRRL_PMETAL_V13_NATIVE_DSR_MATERIAL_MOD_DIAG>
+        $<$<COMPILE_LANGUAGE:CXX>:DSRRL_PMETAL_FORCE_PTDE_PACKEDGI>
+        $<$<COMPILE_LANGUAGE:CXX>:DSRRL_PMETAL_POSTMERGE_VISIBILITY_BYPASS_DIAG>)
 endif()
 
 if(DSRRL_POINTLIGHT_DRAWTIME_BYPASS)
