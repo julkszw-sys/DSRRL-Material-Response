@@ -493,7 +493,11 @@ register_lerp_replacement(
         outcome.terminal_sat_rgb_composed ||
         outcome.spec_rgb_consumer ||
 #elif defined(DSRRL_PMETAL_V13_NATIVE_DSR_MATERIAL_MOD_DIAG)
+#if defined(DSRRL_EQUIPMENT_WIDE_PTDE_SURFACE_RUNTIME)
+        !outcome.terminal_sat_rgb_composed ||
+#else
         outcome.terminal_sat_rgb_composed ||
+#endif
         !outcome.spec_rgb_consumer ||
 #else
         !outcome.terminal_sat_rgb_composed ||
@@ -1034,7 +1038,11 @@ bool pmetal_envspec_draw_runtime::prepare(
             line,
             sizeof(line),
             k_v13_native_dsr_material_mod_diag
+#if defined(DSRRL_EQUIPMENT_WIDE_PTDE_SURFACE_RUNTIME)
+                ? "[DSRRL EQUIPMENT PTDE SURFACE] mode=native_dsr_bc6h_ptde_ab_beta specrgb_c101_color0=envspec_only terminal_sat=1 envdiffuse=stock stable_lerp=paired slot=%u probe_a=%u probe_b=%u"
+#else
                 ? "[DSRRL PMETAL V13 MATERIAL MOD] mode=native_dsr_bc6h_ptde_ab_beta specrgb_c101_color0=envspec_only envdiffuse=stock lerp=paired slot=%u probe_a=%u probe_b=%u"
+#endif
                 : k_v13_native_dsr_no_tail_diag
                     ? "[DSRRL PMETAL V13 NO TAIL] mode=native_dsr_bc6h_ptde_ab_beta no_specrgb_tail=1 envdiffuse=stock lerp=paired slot=%u probe_a=%u probe_b=%u"
                     : "[DSRRL PMETAL ENVSPEC RESOURCE] mode=native_dsr_bc6h_ptde_operator sampler=ptde_lod0 slot=%u probe_a=%u probe_b=%u",
