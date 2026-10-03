@@ -1533,8 +1533,13 @@ bool apply_exact_ptde_envdiffuse_consumer(
                         before.offset)))
             return false;
 
-        // Guard the stock multiply shape:
-        // mul r2.xyz, r2.xyz, sample.xyz.
+        // The unique exact t11/s11 sample plus the exact 9-DWORD source
+        // immediately before it already authenticate this EnvDiffuse island.
+        // Do not overconstrain the following MUL's source swizzle token:
+        // retail rx33/rx34/rx35 encode that sampled operand differently even
+        // though the semantic dataflow is the same. We replace the complete
+        // following 7-DWORD MUL, so only require its opcode/length and the
+        // owned r2.xyz destination + first-source accumulator.
         if (words[after.offset] !=
                 0x07000038u ||
             words[after.offset + 1u] !=
@@ -1542,9 +1547,7 @@ bool apply_exact_ptde_envdiffuse_consumer(
             words[after.offset + 2u] != 2u ||
             words[after.offset + 3u] !=
                 0x00100e56u ||
-            words[after.offset + 4u] != 2u ||
-            words[after.offset + 5u] !=
-                0x00100e56u)
+            words[after.offset + 4u] != 2u)
             return false;
 
         original_sample_register =
