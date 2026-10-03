@@ -612,7 +612,8 @@ load_result load_dds(
                     reshade::log::level::info,
                     "[DSRRL PMETAL R5 NORMAL ATTEST] HD_A_9550_n exact PTDE SHA PASS.");
         }
-#endif#else
+#endif
+#else
         (void)cls;
         (void)logical_hash;
 #endif
