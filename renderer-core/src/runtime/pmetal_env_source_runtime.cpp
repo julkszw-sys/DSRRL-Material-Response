@@ -471,6 +471,47 @@ bool exact_pmetal_material_selection(
     namespace hashing =
         operators::legacy_plan::hashing;
 
+#if defined(DSRRL_PMETAL_V13_NATIVE_DSR_MATERIAL_MOD_DIAG)
+    // Equipment-wide diagnostic gate. Keep this source producer exact:
+    // actual parsed MTD + authenticated FLVER owner/slot + DifSpcBmp family
+    // + exact PTDE EnvSpec presence/slot from the router. Resource/SpecRGB
+    // identity is proven later by the draw-local resource bridge.
+    if (!material.valid ||
+        !material.owner_tuple_exact ||
+        !material.material_slot_valid ||
+        !material.actual_material_exact ||
+        !mr::exact_runtime_material_response_identity(
+            material) ||
+        material.material_family_hash !=
+            mr::mtd_semantic_hash("DifSpcBmp"))
+        return false;
+
+    mr::mtd_semantic_query query{};
+    query.material = material;
+    query.receiver_id = 33u;
+    query.ownership.flver_sha256 =
+        material.flver_sha256;
+    query.ownership.flver_identity_hash =
+        material.flver_identity_hash;
+    query.ownership.material_slot =
+        material.material_slot;
+    query.ownership.material_slot_valid =
+        material.material_slot_valid;
+    query.ownership.exact =
+        material.owner_tuple_exact;
+
+    const auto env =
+        mr::classify_mtd_envspec_semantics(
+            query);
+
+    return
+        env.exact_identity_match &&
+        env.presence ==
+            mr::ptde_envspec_presence::present &&
+        env.router_state ==
+            mr::mtd_envspec_router_state::present &&
+        env.envspc_slot_valid;
+#else
     return
         material.valid &&
         material.owner_tuple_exact &&
@@ -483,6 +524,7 @@ bool exact_pmetal_material_selection(
         hashing::matches_hex(
             material.raw_mtd_sha256,
             k_pmetal_material_sha256);
+#endif
 }
 
 bool retail_lightbank_record_index(
