@@ -4307,7 +4307,9 @@ bool on_create_pipeline(
                 ++g_mr_payload_materialize_fail;
 
 #if defined(DSRRL_EQUIPMENT_LEGACY_MATERIAL_MOD_RUNTIME)
-            if (g_core.features().enabled(
+            if (mr.receiver_id >= 33u &&
+                mr.receiver_id <= 35u &&
+                g_core.features().enabled(
                     dsrrl::core::operator_id::spec_rgb)) {
                 std::vector<std::uint8_t>
                     equipment_spec_payload;
@@ -4479,7 +4481,9 @@ bool on_create_pipeline(
                 ++g_mr_payload_materialize_fail;
 
 #if defined(DSRRL_EQUIPMENT_LEGACY_MATERIAL_MOD_RUNTIME)
-            if (g_core.features().enabled(
+            if (lerp_receiver_id >= 33u &&
+                lerp_receiver_id <= 35u &&
+                g_core.features().enabled(
                     dsrrl::core::operator_id::spec_rgb)) {
                 std::vector<std::uint8_t>
                     equipment_lerp_spec_payload;
