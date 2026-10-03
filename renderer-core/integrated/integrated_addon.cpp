@@ -34,6 +34,7 @@
 #include "dsrrl/operators/lightbank/hemdir3_b13_materializer.hpp"
 #include "dsrrl/operators/lightbank/upper_lower_hemenv_materializer.hpp"
 #include "dsrrl/operators/resource_bridges/spec_rgb_consumer_materializer.hpp"
+#include "dsrrl/operators/resource_bridges/equipment_legacy_spec_materializer.hpp"
 #include "dsrrl/operators/resource_bridges/subsurface_plain_target_materializer.hpp"
 #include "dsrrl/operators/resource_bridges/subsurface_route.hpp"
 #include "dsrrl/operators/env_spec/pmetal_rgba_materializer.hpp"
@@ -270,6 +271,12 @@ std::atomic<std::uint64_t> g_mr_ul_payload_materialize_ok{0};
 std::atomic<std::uint64_t> g_mr_ul_payload_materialize_fail{0};
 std::atomic<std::uint64_t> g_subsurface_spec_payload_materialize_ok{0};
 std::atomic<std::uint64_t> g_subsurface_spec_payload_materialize_fail{0};
+std::atomic<std::uint64_t> g_equipment_spec_payload_materialize_ok{0};
+std::atomic<std::uint64_t> g_equipment_spec_payload_materialize_fail{0};
+std::atomic<std::uint64_t> g_equipment_spec_promote_ok{0};
+std::atomic<std::uint64_t> g_equipment_spec_promote_fail{0};
+std::atomic_bool g_equipment_spec_once_stable{false};
+std::atomic_bool g_equipment_spec_once_lerp{false};
 std::atomic<std::uint64_t> g_lerp_full_draw_ready{0};
 std::atomic<std::uint64_t> g_lerp_full_draw_fallback{0};
 std::atomic_bool g_lerp_once_receiver_hit{false};
@@ -4299,6 +4306,45 @@ bool on_create_pipeline(
             else
                 ++g_mr_payload_materialize_fail;
 
+#if defined(DSRRL_EQUIPMENT_LEGACY_MATERIAL_MOD_RUNTIME)
+            if (g_core.features().enabled(
+                    dsrrl::core::operator_id::spec_rgb)) {
+                std::vector<std::uint8_t>
+                    equipment_spec_payload;
+                const auto equipment_spec =
+                    dsrrl::operators::resource_bridges::
+                        materialize_equipment_legacy_spec_response(
+                            mr_payload.data(),
+                            mr_payload.size(),
+                            equipment_spec_payload);
+
+                using equipment_spec_result =
+                    dsrrl::operators::resource_bridges::
+                        equipment_legacy_spec_result;
+
+                if (equipment_spec ==
+                        equipment_spec_result::applied) {
+                    const auto spec_owner =
+                        dsrrl::core::operator_bit(
+                            dsrrl::core::operator_id::spec_rgb);
+                    if (g_mr_draw_runtime.
+                            register_equipment_spec_replacement(
+                                mr.receiver_id,
+                                equipment_spec_payload.data(),
+                                equipment_spec_payload.size(),
+                                mr.composed_owners |
+                                    spec_owner))
+                        ++g_equipment_spec_payload_materialize_ok;
+                    else
+                        ++g_equipment_spec_payload_materialize_fail;
+                } else if (
+                    equipment_spec !=
+                        equipment_spec_result::pass_not_candidate) {
+                    ++g_equipment_spec_payload_materialize_fail;
+                }
+            }
+#endif
+
             // Subsurface is the only post-reset stable-HemEnv route allowed
             // to pair generic diffuse-v1 with a t10 SpecRGB consumer. Keep it
             // operator-local: derive from the stable MR target so stock DSR
@@ -4431,6 +4477,45 @@ bool on_create_pipeline(
                 ++g_mr_payload_materialize_ok;
             else
                 ++g_mr_payload_materialize_fail;
+
+#if defined(DSRRL_EQUIPMENT_LEGACY_MATERIAL_MOD_RUNTIME)
+            if (g_core.features().enabled(
+                    dsrrl::core::operator_id::spec_rgb)) {
+                std::vector<std::uint8_t>
+                    equipment_lerp_spec_payload;
+                const auto equipment_lerp_spec =
+                    dsrrl::operators::resource_bridges::
+                        materialize_equipment_legacy_spec_response(
+                            lerp_mr_payload.data(),
+                            lerp_mr_payload.size(),
+                            equipment_lerp_spec_payload);
+
+                using equipment_spec_result =
+                    dsrrl::operators::resource_bridges::
+                        equipment_legacy_spec_result;
+
+                if (equipment_lerp_spec ==
+                        equipment_spec_result::applied) {
+                    const auto spec_owner =
+                        dsrrl::core::operator_bit(
+                            dsrrl::core::operator_id::spec_rgb);
+                    if (g_mr_draw_runtime.
+                            register_equipment_lerp_spec_replacement(
+                                lerp_receiver_id,
+                                equipment_lerp_spec_payload.data(),
+                                equipment_lerp_spec_payload.size(),
+                                lerp_mr.composed_owners |
+                                    spec_owner))
+                        ++g_equipment_spec_payload_materialize_ok;
+                    else
+                        ++g_equipment_spec_payload_materialize_fail;
+                } else if (
+                    equipment_lerp_spec !=
+                        equipment_spec_result::pass_not_candidate) {
+                    ++g_equipment_spec_payload_materialize_fail;
+                }
+            }
+#endif
 
             // MR reset: do not pair PTDE SpecRGB with the stock DSR
             // HemEnvLerp PBL tail. SpecRGB is operator-local elsewhere.
@@ -6061,27 +6146,50 @@ bool prepare_island_batch(
             lerp_query.ownership.exact =
                 material.owner_tuple_exact;
 
-            // MR reset invariant: generic diffuse MR must never advertise
-            // a SpecRGB consumer. PTDE SpecRGB is owned by explicit EnvSpec/
-            // local-specular islands, not by the surviving DSR PBL tail.
             (void)g_material_resources.prepare_draw_requests(
                 context,
                 receiver_id,
                 lerp_query,
                 true,
+#if defined(DSRRL_EQUIPMENT_LEGACY_MATERIAL_MOD_RUNTIME)
+                true,
+#else
                 false,
+#endif
                 prepared.resources);
 
             bool lerp_resource_fallback = false;
+#if defined(DSRRL_EQUIPMENT_LEGACY_MATERIAL_MOD_RUNTIME)
             if (prepared.resources.spec_rgb) {
-                // Defensive anti-hybrid fail-open: a future resource-router
-                // regression must not silently resurrect generic MR+SpecRGB.
+                if (!g_mr_draw_runtime.
+                        promote_prevalidated_equipment_to_spec_rgb(
+                            prepared.mr)) {
+                    ++g_equipment_spec_promote_fail;
+                    release_prepared_island_batch(prepared);
+                    return false;
+                }
+
+                ++g_equipment_spec_promote_ok;
+                if (!g_equipment_spec_once_lerp.exchange(true)) {
+                    char line[256]{};
+                    std::snprintf(
+                        line,sizeof(line),
+                        "[DSRRL EQUIPMENT LEGACY SPEC] ACTIVE family=HemEnvLerp rx=%u route=%u split_t10=1 raw_c101=1 color0=1 no_spec_pow=1 no_angular=1 no_t9=1",
+                        static_cast<unsigned>(receiver_id),
+                        static_cast<unsigned>(decision.route_index));
+                    reshade::log::message(
+                        reshade::log::level::info,line);
+                }
+            }
+#else
+            if (prepared.resources.spec_rgb) {
                 if (!g_material_resources.drop_spec_rgb_request(
                         prepared.resources))
                     g_material_resources.release_prepared_draw(
                         prepared.resources);
                 lerp_resource_fallback = true;
             }
+#endif
 
             if (dsrrl::runtime::append_island_draw_request(
                     prepared.batch,
@@ -6200,25 +6308,49 @@ bool prepare_island_batch(
         material.owner_tuple_exact;
 
     if (context != nullptr) {
-        // MR reset invariant: generic stable MR is diffuse-v1 only.
-        // It must never request/promote a t10 SpecRGB consumer.
         (void)g_material_resources.prepare_draw_requests(
             context,
             receiver_id,
             query,
             prepared.mr_in_batch,
+#if defined(DSRRL_EQUIPMENT_LEGACY_MATERIAL_MOD_RUNTIME)
+            prepared.mr_in_batch,
+#else
             false,
+#endif
             prepared.resources);
 
+#if defined(DSRRL_EQUIPMENT_LEGACY_MATERIAL_MOD_RUNTIME)
         if (prepared.resources.spec_rgb) {
-            // Defensive anti-hybrid fail-open. Keep independently valid
-            // diffuse/normal resource requests when the SpecRGB request can
-            // be removed cleanly; otherwise discard the whole resource batch.
+            if (!prepared.mr_in_batch ||
+                !g_mr_draw_runtime.
+                    promote_prevalidated_equipment_to_spec_rgb(
+                        prepared.mr)) {
+                ++g_equipment_spec_promote_fail;
+                release_prepared_island_batch(prepared);
+                return false;
+            }
+
+            ++g_equipment_spec_promote_ok;
+            if (!g_equipment_spec_once_stable.exchange(true)) {
+                char line[256]{};
+                std::snprintf(
+                    line,sizeof(line),
+                    "[DSRRL EQUIPMENT LEGACY SPEC] ACTIVE family=HemEnv rx=%u route=%u split_t10=1 raw_c101=1 color0=1 no_spec_pow=1 no_angular=1 no_t9=1",
+                    static_cast<unsigned>(receiver_id),
+                    static_cast<unsigned>(decision.route_index));
+                reshade::log::message(
+                    reshade::log::level::info,line);
+            }
+        }
+#else
+        if (prepared.resources.spec_rgb) {
             if (!g_material_resources.drop_spec_rgb_request(
                     prepared.resources))
                 g_material_resources.release_prepared_draw(
                     prepared.resources);
         }
+#endif
     }
 
     if (!direct_ul_producer &&
