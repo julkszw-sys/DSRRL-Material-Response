@@ -1,0 +1,67 @@
+{
+  "schema": "dsrrl.pmetal.cumulative_operator_recovery.r6.v1",
+  "base": "diag/pr216-pmetal-ptde-normal-basis-r5-20261003",
+  "policy": "confirmed operator gaps are retained even when individually pixel-insufficient; diagnostics/rejected compensations are not promoted to canonical bridge behavior",
+  "stable_receivers": [
+    33,
+    34,
+    35
+  ],
+  "operators": [
+    {
+      "operator": "diffuse_material_domain",
+      "state": "INHERITED_ACTIVE",
+      "source": "material_response_diffuse_v1",
+      "note": "DSR abs(x)^2.2 diffuse-material dependency removed on PTDE bridge"
+    },
+    {
+      "operator": "ptde_envspec_rgba",
+      "state": "INHERITED_ACTIVE",
+      "source": "Build131/full PTDE HemEnv lineage"
+    },
+    {
+      "operator": "ptde_envdiffuse_rgba_c86",
+      "state": "INHERITED_ACTIVE",
+      "source": "PR213 full PTDE HemEnv lineage"
+    },
+    {
+      "operator": "dsr_postmerge_scalar_removal",
+      "state": "INHERITED_ACTIVE",
+      "source": "PR214 R3"
+    },
+    {
+      "operator": "ptde_specrgb_direct_rgb",
+      "state": "INHERITED_ACTIVE",
+      "source": "PR215 R4"
+    },
+    {
+      "operator": "ptde_normal_basis",
+      "state": "INHERITED_ACTIVE",
+      "source": "R5 / PR217"
+    },
+    {
+      "operator": "pmetal_atmosphere_domain",
+      "state": "RECOVERED_ACTIVE_R6",
+      "source": "pmetal-v4b-domain-bridge-2026-09-21",
+      "note": "linear FogRGB decode; legacy-linear Fog+LightScattering; remove DSR-only post-LS 2.2"
+    },
+    {
+      "operator": "phn_scene_encoding_c135_consumer",
+      "state": "RECOVERED_GATED",
+      "source": "diag/phn-c135-terminal-20261003 / PR212",
+      "note": "consumer exact; dynamic semantic k135 producer unresolved; fixed 0.5 diagnostic is not production authority"
+    },
+    {
+      "operator": "ptde_visibility_p",
+      "state": "OPEN_NOT_IMPLEMENTED",
+      "source": "exact PTDE shader RE",
+      "note": "ordering known; existing repo branches are bypass diagnostics only"
+    },
+    {
+      "operator": "hemenvlerp_full_ptde",
+      "state": "OPEN_FAIL_OPEN",
+      "source": "current pmetal_rgba_lerp_materializer",
+      "note": "EnvSpec Lerp machinery exists; full two-endpoint PTDE EnvDiffuse parity still missing"
+    }
+  ]
+}
