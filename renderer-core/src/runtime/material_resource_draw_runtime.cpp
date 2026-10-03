@@ -210,6 +210,12 @@ std::atomic_bool g_subsurface_body_unknown_diag_logged{false};
 std::atomic_bool g_pmetal_r3_spec_attest_ok_logged{false};
 std::atomic_bool g_pmetal_r3_spec_attest_fail_logged{false};
 #endif
+#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_R5)
+std::atomic_bool g_pmetal_r5_diffuse_attest_ok_logged{false};
+std::atomic_bool g_pmetal_r5_diffuse_attest_fail_logged{false};
+std::atomic_bool g_pmetal_r5_normal_attest_ok_logged{false};
+std::atomic_bool g_pmetal_r5_normal_attest_fail_logged{false};
+#endif
 bool g_hot_telemetry_enabled = false;
 
 // Exact DSR body SpecMap identities used only by the Ps_Body[DSBT]
@@ -534,7 +540,79 @@ load_result load_dds(
                     reshade::log::level::info,
                     "[DSRRL PMETAL R3 SPEC ATTEST] HD_A_9550_s exact PTDE SHA PASS.");
         }
-#else
+
+
+#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_R5)
+        // PR216 exact-content authority: for the active HD_A_9550 P_Metal
+        // equipment draw, t0 diffuse and t2 normal must be exact retail PTDE
+        // bytes. Same-name stale/wrong sidecars fail open.
+        constexpr std::uint64_t k_hd_a_9550_diffuse_hash =
+            0x00b515c367a88e31ull;
+        constexpr std::uint64_t k_hd_a_9550_normal_hash =
+            0xaedcfe872d25ac4cull;
+        constexpr char k_hd_a_9550_diffuse_sha256[] =
+            "ed4e1d104b5db59d51ace7fdaafbeeb2a8c36eea830233edf29b01907ed46803";
+        constexpr char k_hd_a_9550_normal_sha256[] =
+            "3c83caa2a95a85e1fc2d0397edfd48a271a3829330d7a0d5aa74b0cd599de78c";
+
+        if (cls == asset_class::diffuse &&
+            logical_hash == k_hd_a_9550_diffuse_hash) {
+            const auto digest =
+                operators::legacy_plan::hashing::sha256(
+                    bytes.data(),
+                    bytes.size());
+            if (!operators::legacy_plan::hashing::matches_hex(
+                    digest,
+                    k_hd_a_9550_diffuse_sha256)) {
+                if (!g_pmetal_r5_diffuse_attest_fail_logged.exchange(
+                        true,
+                        std::memory_order_relaxed))
+                    reshade::log::message(
+                        reshade::log::level::warning,
+                        "[DSRRL PMETAL R5 DIFFUSE ATTEST] HD_A_9550 exact PTDE SHA mismatch; fail-open, stale/wrong diffuse sidecar rejected.");
+                return {
+                    nullptr,
+                    load_status::hash_mismatch
+                };
+            }
+
+            if (!g_pmetal_r5_diffuse_attest_ok_logged.exchange(
+                    true,
+                    std::memory_order_relaxed))
+                reshade::log::message(
+                    reshade::log::level::info,
+                    "[DSRRL PMETAL R5 DIFFUSE ATTEST] HD_A_9550 exact PTDE SHA PASS.");
+        }
+
+        if (cls == asset_class::normal &&
+            logical_hash == k_hd_a_9550_normal_hash) {
+            const auto digest =
+                operators::legacy_plan::hashing::sha256(
+                    bytes.data(),
+                    bytes.size());
+            if (!operators::legacy_plan::hashing::matches_hex(
+                    digest,
+                    k_hd_a_9550_normal_sha256)) {
+                if (!g_pmetal_r5_normal_attest_fail_logged.exchange(
+                        true,
+                        std::memory_order_relaxed))
+                    reshade::log::message(
+                        reshade::log::level::warning,
+                        "[DSRRL PMETAL R5 NORMAL ATTEST] HD_A_9550_n exact PTDE SHA mismatch; fail-open, stale/wrong normal sidecar rejected.");
+                return {
+                    nullptr,
+                    load_status::hash_mismatch
+                };
+            }
+
+            if (!g_pmetal_r5_normal_attest_ok_logged.exchange(
+                    true,
+                    std::memory_order_relaxed))
+                reshade::log::message(
+                    reshade::log::level::info,
+                    "[DSRRL PMETAL R5 NORMAL ATTEST] HD_A_9550_n exact PTDE SHA PASS.");
+        }
+#endif#else
         (void)cls;
         (void)logical_hash;
 #endif
