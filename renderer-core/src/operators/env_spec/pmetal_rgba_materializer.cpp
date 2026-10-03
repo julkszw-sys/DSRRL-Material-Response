@@ -1383,6 +1383,7 @@ bool v13_native_dsr_material_mod_postcondition(
             words.begin() + static_cast<std::ptrdiff_t>(envspec_at));
 }
 #endif
+#endif
 
 bool add_b12_rdef(
     std::vector<std::uint8_t> &bytes) noexcept
