@@ -129,6 +129,12 @@ public:
     bool drop_spec_rgb_request(
         prepared_material_resource_draw &prepared) noexcept;
 
+    // Retain only the exact equipment SpecRGB sidecar request. Used by
+    // consumer-local diagnostics that must not also activate diffuse/normal
+    // sidecars from the broader material-response resource bundle.
+    bool keep_only_spec_rgb_request(
+        prepared_material_resource_draw &prepared) noexcept;
+
     void release_prepared_draw(
         prepared_material_resource_draw &prepared) noexcept;
 
