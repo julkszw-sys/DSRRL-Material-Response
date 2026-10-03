@@ -422,12 +422,15 @@ bool postcondition(
     std::size_t t10_samples = 0u;
     std::size_t t9_samples = 0u;
     std::size_t color_mul = 0u;
+    std::optional<std::uint32_t> t10_dst;
 
     for (const auto &ins : instructions) {
         if (ins.opcode >= 0x45u && ins.opcode <= 0x4au) {
             if (ins.length == 11u &&
-                words[ins.offset + 8u] == 10u)
+                words[ins.offset + 8u] == 10u) {
                 ++t10_samples;
+                t10_dst = words[ins.offset + 4u];
+            }
             if (ins.length == 13u &&
                 (words[ins.offset + 8u] == 9u ||
                  words[ins.offset + 10u] == 9u))
@@ -437,6 +440,9 @@ bool postcondition(
         if (ins.opcode == 0x38u &&
             ins.length == 7u &&
             ins.offset + 7u <= words.size() &&
+            t10_dst &&
+            words[ins.offset + 3u] == 0x00100246u &&
+            words[ins.offset + 4u] == *t10_dst &&
             words[ins.offset + 5u] == 0x00101246u &&
             words[ins.offset + 6u] == color0_register)
             ++color_mul;
@@ -565,12 +571,20 @@ materialize_equipment_legacy_spec_response(
         if (mad.offset + 9u > words.size())
             return equipment_legacy_spec_result::fail_t9_split_sum;
 
+        // Fresh t10 is the authoritative PTDE SpecRGB carrier. The c101
+        // multiply inserted by materialize_spec_rgb_consumer writes back to
+        // that same destination register. Never reuse the first source of the
+        // old DSR split-sum MAD here, since that source belongs to the stock
+        // t1/F0 chain and would make the exact t10 sidecar semantically dead.
+        const auto t10_dst =
+            words[instructions[*t10_index].offset + 4u];
+
         const std::array<std::uint32_t,7> color_mul{{
             0x07000038u,
             words[mad.offset + 1u],
             words[mad.offset + 2u],
-            words[mad.offset + 3u],
-            words[mad.offset + 4u],
+            0x00100246u,
+            t10_dst,
             0x00101246u,
             color0_register
         }};
