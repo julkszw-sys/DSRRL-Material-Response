@@ -54,6 +54,11 @@ std::atomic_bool g_source_frontier_logged{false};
 std::atomic<std::uint32_t> g_prepare_stage_log_mask{0u};
 std::atomic<std::uint32_t> g_value_cut_log_mask{0u};
 
+#if defined(DSRRL_EQUIPMENT_WIDE_PTDE_SURFACE_RUNTIME)
+std::array<std::atomic<std::uint64_t>,32>
+    g_equipment_surface_logged{};
+#endif
+
 void log_prepare_stage_once(
     std::uint32_t bit,
     const char *stage,
@@ -92,6 +97,68 @@ void log_prepare_stage_once(
         reshade::log::level::info,
         line);
 }
+
+#if defined(DSRRL_EQUIPMENT_WIDE_PTDE_SURFACE_RUNTIME)
+void log_equipment_surface_active_once(
+    const mr::material_identity &material,
+    const mr::decision &decision,
+    pmetal_envspec_receiver_family family,
+    std::uint8_t envspc_slot,
+    bool spec_rgb_ready) noexcept
+{
+    std::uint64_t key =
+        material.semantic_name_hash ^
+        (static_cast<std::uint64_t>(
+             decision.route_index) << 32u) ^
+        (static_cast<std::uint64_t>(
+             material.material_slot) << 48u) ^
+        static_cast<std::uint64_t>(
+            decision.receiver_id);
+    if (key == 0u)
+        key = 1u;
+
+    bool inserted = false;
+    for (auto &cell : g_equipment_surface_logged) {
+        auto value =
+            cell.load(
+                std::memory_order_relaxed);
+        if (value == key)
+            return;
+        if (value != 0u)
+            continue;
+        if (cell.compare_exchange_strong(
+                value,
+                key,
+                std::memory_order_relaxed,
+                std::memory_order_relaxed)) {
+            inserted = true;
+            break;
+        }
+    }
+    if (!inserted)
+        return;
+
+    char line[768]{};
+    std::snprintf(
+        line,
+        sizeof(line),
+        "[DSRRL EQUIPMENT SURFACE ACTIVE] family=%u rx=%u route=%u material_slot=%u mtd_hash=%016llx flver=%016llx envspc_slot=%u spec_rgb=%u owner_exact=%u",
+        static_cast<unsigned>(family),
+        static_cast<unsigned>(decision.receiver_id),
+        static_cast<unsigned>(decision.route_index),
+        static_cast<unsigned>(material.material_slot),
+        static_cast<unsigned long long>(
+            material.semantic_name_hash),
+        static_cast<unsigned long long>(
+            material.flver_identity_hash),
+        static_cast<unsigned>(envspc_slot),
+        spec_rgb_ready ? 1u : 0u,
+        material.owner_tuple_exact ? 1u : 0u);
+    reshade::log::message(
+        reshade::log::level::info,
+        line);
+}
+#endif
 
 #if defined(DSRRL_PMETAL_NATIVE_DSR_CUBEMAP_FEED) || \
     defined(DSRRL_PMETAL_V13_NATIVE_DSR_NO_TAIL_DIAG) || \
@@ -1604,6 +1671,14 @@ bool pmetal_envspec_draw_runtime::prepare(
     prepared.ready = true;
     effect_latch(effect_request_ready_);
     telemetry::hot_count(requests_);
+#if defined(DSRRL_EQUIPMENT_WIDE_PTDE_SURFACE_RUNTIME)
+    log_equipment_surface_active_once(
+        material,
+        decision,
+        family,
+        env_semantics.envspc_slot,
+        prepared.material_resources.spec_rgb);
+#endif
 
     if (stable_envdiffuse_consumer_diag &&
         !g_envdiffuse_consumer_logged.exchange(
@@ -1838,6 +1913,10 @@ void pmetal_envspec_draw_runtime::reset() noexcept
     g_source_frontier_logged.store(false);
     g_prepare_stage_log_mask.store(0u);
     g_value_cut_log_mask.store(0u);
+#if defined(DSRRL_EQUIPMENT_WIDE_PTDE_SURFACE_RUNTIME)
+    for (auto &cell : g_equipment_surface_logged)
+        cell.store(0u, std::memory_order_relaxed);
+#endif
     quarantined_.store(false);
 }
 
