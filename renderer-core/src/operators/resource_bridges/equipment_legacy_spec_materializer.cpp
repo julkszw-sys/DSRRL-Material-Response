@@ -421,8 +421,10 @@ bool postcondition(
 
     std::size_t t10_samples = 0u;
     std::size_t t9_samples = 0u;
+    std::size_t c101_material_mul = 0u;
     std::size_t color_mul = 0u;
     std::optional<std::uint32_t> t10_dst;
+    std::optional<std::uint32_t> material_reg;
 
     for (const auto &ins : instructions) {
         if (ins.opcode >= 0x45u && ins.opcode <= 0x4au) {
@@ -438,11 +440,24 @@ bool postcondition(
         }
 
         if (ins.opcode == 0x38u &&
-            ins.length == 7u &&
-            ins.offset + 7u <= words.size() &&
+            ins.length == 8u &&
+            ins.offset + 8u <= words.size() &&
             t10_dst &&
             words[ins.offset + 3u] == 0x00100246u &&
             words[ins.offset + 4u] == *t10_dst &&
+            words[ins.offset + 5u] == 0x00208246u &&
+            words[ins.offset + 6u] == 12u &&
+            words[ins.offset + 7u] == 2u) {
+            ++c101_material_mul;
+            material_reg = words[ins.offset + 2u];
+        }
+
+        if (ins.opcode == 0x38u &&
+            ins.length == 7u &&
+            ins.offset + 7u <= words.size() &&
+            material_reg &&
+            words[ins.offset + 3u] == 0x00100246u &&
+            words[ins.offset + 4u] == *material_reg &&
             words[ins.offset + 5u] == 0x00101246u &&
             words[ins.offset + 6u] == color0_register)
             ++color_mul;
@@ -450,6 +465,7 @@ bool postcondition(
 
     return t10_samples == 1u &&
         t9_samples == 0u &&
+        c101_material_mul == 1u &&
         color_mul == 1u;
 }
 
@@ -467,12 +483,14 @@ materialize_equipment_legacy_spec_response(
         return equipment_legacy_spec_result::pass_not_candidate;
 
     // First build the exact split-resource consumer: native t1 remains
-    // available for alpha/roughness, while fresh t10 supplies PTDE SpecRGB
-    // and is multiplied once by raw PTDE c101 from b12[2].xyz.
+    // available for alpha/roughness, while fresh t10 supplies PTDE SpecRGB.
+    // Do NOT use the helper's legacy raw-c101 path here: current MR ABI keeps
+    // raw c101 in b12[2].xyz, while that historical helper consumes b12[0].
+    // This materializer applies b12[2] explicitly at the t9 semantic cut.
     std::vector<std::uint8_t> spec_base;
     const auto spec =
         materialize_spec_rgb_consumer(
-            source,size,spec_base,true);
+            source,size,spec_base,false);
 
     if (spec != spec_rgb_consumer_result::applied)
         return equipment_legacy_spec_result::fail_spec_rgb_base;
@@ -571,34 +589,53 @@ materialize_equipment_legacy_spec_response(
         if (mad.offset + 9u > words.size())
             return equipment_legacy_spec_result::fail_t9_split_sum;
 
-        // Fresh t10 is the authoritative PTDE SpecRGB carrier. The c101
-        // multiply inserted by materialize_spec_rgb_consumer writes back to
-        // that same destination register. Never reuse the first source of the
-        // old DSR split-sum MAD here, since that source belongs to the stock
-        // t1/F0 chain and would make the exact t10 sidecar semantically dead.
+        // Fresh t10 is the authoritative PTDE SpecRGB carrier. Replace the
+        // complete DSR t9 split-sum window with the exact material product:
+        //   M = SpecRGB_PTDE(t10) * c101_PTDE(b12[2]) * COLOR0
+        // The old DSR F0/t1 source is not consumed by this replacement.
         const auto t10_dst =
             words[instructions[*t10_index].offset + 4u];
+        const auto material_dst_token =
+            words[mad.offset + 1u];
+        const auto material_dst_reg =
+            words[mad.offset + 2u];
 
-        const std::array<std::uint32_t,7> color_mul{{
-            0x07000038u,
-            words[mad.offset + 1u],
-            words[mad.offset + 2u],
+        const std::array<std::uint32_t,8> c101_mul{{
+            0x08000038u,
+            material_dst_token,
+            material_dst_reg,
             0x00100246u,
             t10_dst,
+            0x00208246u,
+            12u,
+            2u
+        }};
+        const std::array<std::uint32_t,7> color_mul{{
+            0x07000038u,
+            material_dst_token,
+            material_dst_reg,
+            0x00100246u,
+            material_dst_reg,
             0x00101246u,
             color0_register
         }};
 
+        const auto window_begin = sample.offset;
+        const auto window_end = mad.offset + mad.length;
+        if (window_end <= window_begin ||
+            window_end - window_begin <
+                c101_mul.size() + color_mul.size())
+            return equipment_legacy_spec_result::fail_t9_split_sum;
+
         std::fill(
-            words.begin() + static_cast<std::ptrdiff_t>(sample.offset),
-            words.begin() + static_cast<std::ptrdiff_t>(mad.offset),
+            words.begin() + static_cast<std::ptrdiff_t>(window_begin),
+            words.begin() + static_cast<std::ptrdiff_t>(window_end),
             k_nop);
 
-        std::copy(
-            color_mul.begin(),color_mul.end(),
-            words.begin() + static_cast<std::ptrdiff_t>(mad.offset));
-        words[mad.offset + 7u] = k_nop;
-        words[mad.offset + 8u] = k_nop;
+        auto out =
+            words.begin() + static_cast<std::ptrdiff_t>(window_begin);
+        out = std::copy(c101_mul.begin(),c101_mul.end(),out);
+        std::copy(color_mul.begin(),color_mul.end(),out);
 
         if (mul.offset != sample.offset + sample.length ||
             mad.offset != mul.offset + mul.length)
