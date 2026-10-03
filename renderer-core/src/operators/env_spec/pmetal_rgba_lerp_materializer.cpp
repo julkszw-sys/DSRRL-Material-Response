@@ -8,6 +8,7 @@
 #include "dsrrl/operators/material_response/material_response_diffuse_v1.hpp"
 #include "dsrrl/operators/resource_bridges/spec_rgb_consumer_materializer.hpp"
 #include "dsrrl/operators/surface/terminal_sat_rgb_patch.hpp"
+#include "dsrrl/operators/surface/phn_scene_encoding.hpp"
 
 #include <algorithm>
 #include <array>
@@ -322,7 +323,14 @@ bool terminal_rgb_output_instruction(
     return word != static_cast<std::size_t>(-1);
 }
 
-bool apply_exact_terminal_rgb_sat(
+constexpr surface::phn_scene_encoding_carrier
+    k_pmetal_phn_scene_carrier{
+        12u,
+        0u,
+        3u
+    };
+
+bool apply_exact_phn_scene_encoding(
     std::vector<std::uint32_t> &words,
     const generated_lerp::pmetal_hemenvlerp_site &site) noexcept
 {
@@ -330,27 +338,36 @@ bool apply_exact_terminal_rgb_sat(
         static_cast<std::size_t>(
             site.terminal_rgb_word);
 
+    // Preserve the exact generated site precondition before handing ownership
+    // to the shared PHN terminal transform.
     if (word + 4u >= words.size() ||
-        words[word] != 0x05000036u ||
+        (words[word] != 0x05000036u &&
+         words[word] != 0x05002036u) ||
         words[word + 1u] != 0x00102072u ||
         words[word + 2u] != 0u)
         return false;
 
-    words[word] |=
-        surface::dxbc_saturate_modifier_bit;
+    const auto encoded =
+        surface::apply_unique_phn_scene_encoding_words(
+            words,
+            k_pmetal_phn_scene_carrier);
 
-    return words[word] == 0x05002036u;
+    return
+        (encoded ==
+             surface::phn_scene_encoding_result::applied ||
+         encoded ==
+             surface::phn_scene_encoding_result::already_encoded) &&
+        surface::unique_phn_scene_encoding_exact(
+            words,
+            k_pmetal_phn_scene_carrier);
 }
 
-bool terminal_rgb_sat_exact(
+bool phn_scene_encoding_exact(
     const std::vector<std::uint32_t> &words) noexcept
 {
-    std::size_t word = 0u;
-    return
-        terminal_rgb_output_instruction(
-            words,
-            word) &&
-        words[word] == 0x05002036u;
+    return surface::unique_phn_scene_encoding_exact(
+        words,
+        k_pmetal_phn_scene_carrier);
 }
 
 constexpr std::array<std::uint32_t,4> k_cb13_decl = {{
@@ -510,7 +527,7 @@ bool final_postcondition(
                adjacent_pair_count(words, 13u, 7u) == 0u);
 
     return
-        terminal_rgb_sat_exact(words) &&
+        phn_scene_encoding_exact(words) &&
         upper_lower_shape_ok &&
         sample_count(words, 9u) == 0u &&
         sample_count(words, 10u) == 1u &&
@@ -1142,10 +1159,10 @@ materialize_pmetal_rgba_lerp_receiver(
     }
 
 #if !defined(DSRRL_PMETAL_V13_NATIVE_DSR_NO_TAIL_DIAG) && !defined(DSRRL_PMETAL_V13_NATIVE_DSR_MATERIAL_MOD_DIAG)
-    // Production/full island composes PTDE terminal RGB SAT. The no-tail
-    // diagnostic deliberately leaves this independent surface operator stock
-    // so the only changed shader island is EnvSpec.
-    if (!apply_exact_terminal_rgb_sat(
+    // Production/full island composes the complete PTDE PHN terminal:
+    // k135 scene encoding followed by RGB SAT. The no-tail diagnostics leave
+    // this independent surface operator stock.
+    if (!apply_exact_phn_scene_encoding(
             words,
             *site)) {
         outcome.result =
@@ -1271,6 +1288,7 @@ materialize_pmetal_rgba_lerp_receiver(
         compose_upper_lower;
     outcome.upper_lower_preserved_stock =
         !compose_upper_lower;
+    outcome.phn_scene_encoding_composed = true;
     outcome.terminal_sat_rgb_composed = true;
     outcome.spec_rgb_consumer = true;
     output = std::move(spec_rgb_base);
