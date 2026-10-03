@@ -5,6 +5,7 @@
 #include "dsrrl/operators/material_response/material_response_diffuse_v1.hpp"
 #include "dsrrl/operators/resource_bridges/spec_rgb_consumer_materializer.hpp"
 #include "dsrrl/operators/surface/terminal_sat_rgb_patch.hpp"
+#include "dsrrl/operators/surface/phn_scene_encoding.hpp"
 #include "dsrrl/operators/legacy_plan/a1_create_time_materializer.hpp"
 #include "dsrrl/operators/legacy_plan/dxbc_checksum.hpp"
 #include "dsrrl/operators/legacy_plan/dxbc_rdef_patch.hpp"
@@ -569,6 +570,69 @@ bool compose_exact_terminal_rgb_sat(
     bytes = std::move(rebuilt);
     return true;
 }
+
+#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_R6)
+constexpr surface::phn_scene_encoding_carrier
+    k_pmetal_phn_scene_carrier{
+        12u,
+        0u,
+        3u
+    };
+
+bool phn_scene_encoding_exact(
+    const std::vector<std::uint32_t> &words) noexcept
+{
+    return surface::unique_phn_scene_encoding_exact(
+        words,
+        k_pmetal_phn_scene_carrier);
+}
+
+bool compose_exact_phn_scene_encoding(
+    std::vector<std::uint8_t> &bytes) noexcept
+{
+    std::vector<chunk> chunks;
+    std::vector<std::uint32_t> words;
+    std::size_t code_index = 0u;
+
+    if (!parse_dxbc(
+            bytes.data(),
+            bytes.size(),
+            chunks,
+            code_index) ||
+        !extract_words(
+            chunks,
+            code_index,
+            words))
+        return false;
+
+    const auto result =
+        surface::apply_unique_phn_scene_encoding_words(
+            words,
+            k_pmetal_phn_scene_carrier);
+
+    if (result !=
+            surface::phn_scene_encoding_result::applied &&
+        result !=
+            surface::phn_scene_encoding_result::already_encoded)
+        return false;
+
+    if (!phn_scene_encoding_exact(words))
+        return false;
+
+    std::vector<std::uint8_t> rebuilt;
+    if (!rebuild(
+            bytes.data(),
+            bytes.size(),
+            std::move(chunks),
+            code_index,
+            words,
+            rebuilt))
+        return false;
+
+    bytes = std::move(rebuilt);
+    return true;
+}
+#endif
 
 chunk *unique_rdef(
     std::vector<chunk> &chunks) noexcept
@@ -2102,6 +2166,179 @@ bool apply_exact_ptde_normal_basis_r5(
 }
 #endif
 
+#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_R6)
+// R6 restores the confirmed PTDE atmosphere-domain continuation lost from the
+// later full-PTDE lineage. Exact rx33/rx34/rx35 share the same local topology;
+// absolute offsets can move after R3/R4/R5, so resolve the semantic pattern.
+bool apply_exact_ptde_atmosphere_domain_r6(
+    std::vector<std::uint8_t> &bytes) noexcept
+{
+    std::vector<chunk> chunks;
+    std::vector<std::uint32_t> words;
+    std::vector<instruction_view> instructions;
+    std::size_t code_index = 0u;
+
+    if (!parse_dxbc(
+            bytes.data(),
+            bytes.size(),
+            chunks,
+            code_index) ||
+        !extract_words(
+            chunks,
+            code_index,
+            words) ||
+        !decode(
+            words,
+            instructions))
+        return false;
+
+    constexpr std::array<std::uint32_t,21>
+        k_ptde_prefog{{
+            0x0600002fu,
+            0x00100072u,0x00000002u,
+            0x00208246u,0x00000000u,0x0000000cu,
+            0x0a000038u,
+            0x00100072u,0x00000002u,
+            0x00100246u,0x00000002u,
+            0x00004002u,
+            0x3ee8ba2fu,0x3ee8ba2fu,0x3ee8ba2fu,0x00000000u,
+            0x05000019u,
+            0x00100072u,0x00000002u,
+            0x00100246u,0x00000002u
+        }};
+
+    constexpr std::array<std::uint32_t,9>
+        k_ptde_fog_add{{
+            0x09000000u,
+            0x00100072u,0x00000002u,
+            0x80100246u,0x00000041u,0x00000001u,
+            0x80100246u,0x00000081u,0x00000002u
+        }};
+
+    constexpr std::size_t k_fog_add_delta = 34u;
+    constexpr std::size_t k_post_ls_pow_delta = 238u;
+    constexpr std::size_t k_terminal_delta = 374u;
+
+    std::size_t prefog =
+        static_cast<std::size_t>(-1);
+    std::size_t candidates = 0u;
+
+    for (const auto &ins : instructions) {
+        if (ins.opcode != 0x2fu ||
+            ins.length != 6u)
+            continue;
+
+        const auto at = ins.offset;
+        const auto fog_add =
+            at + k_fog_add_delta;
+        const auto post_pow =
+            at + k_post_ls_pow_delta;
+        const auto terminal =
+            at + k_terminal_delta;
+
+        if (terminal + 4u >= words.size() ||
+            at + 20u >= words.size() ||
+            fog_add + 8u >= words.size() ||
+            post_pow + 20u >= words.size())
+            continue;
+
+        const bool first_gamma =
+            words[at] == 0x0600002fu &&
+            words[at + 6u] == 0x0a000038u &&
+            words[at + 16u] == 0x05000019u;
+        const bool fog_shape =
+            words[fog_add] == 0x09000000u;
+        const bool second_gamma =
+            words[post_pow] == 0x0600002fu &&
+            words[post_pow + 6u] == 0x0a000038u &&
+            words[post_pow + 16u] == 0x05000019u;
+        const bool terminal_shape =
+            words[terminal] == 0x05000036u &&
+            words[terminal + 1u] == 0x00102072u &&
+            words[terminal + 2u] == 0u;
+
+        if (!first_gamma ||
+            !fog_shape ||
+            !second_gamma ||
+            !terminal_shape)
+            continue;
+
+        ++candidates;
+        prefog = at;
+    }
+
+    if (candidates != 1u ||
+        prefog ==
+            static_cast<std::size_t>(-1))
+        return false;
+
+    const auto fog_add =
+        prefog + k_fog_add_delta;
+    const auto post_pow =
+        prefog + k_post_ls_pow_delta;
+
+    std::copy(
+        k_ptde_prefog.begin(),
+        k_ptde_prefog.end(),
+        words.begin() +
+            static_cast<std::ptrdiff_t>(
+                prefog));
+
+    std::copy(
+        k_ptde_fog_add.begin(),
+        k_ptde_fog_add.end(),
+        words.begin() +
+            static_cast<std::ptrdiff_t>(
+                fog_add));
+
+    std::fill(
+        words.begin() +
+            static_cast<std::ptrdiff_t>(
+                post_pow),
+        words.begin() +
+            static_cast<std::ptrdiff_t>(
+                post_pow + 21u),
+        0x0100003au);
+
+    if (!std::equal(
+            k_ptde_prefog.begin(),
+            k_ptde_prefog.end(),
+            words.begin() +
+                static_cast<std::ptrdiff_t>(
+                    prefog)) ||
+        !std::equal(
+            k_ptde_fog_add.begin(),
+            k_ptde_fog_add.end(),
+            words.begin() +
+                static_cast<std::ptrdiff_t>(
+                    fog_add)) ||
+        !std::all_of(
+            words.begin() +
+                static_cast<std::ptrdiff_t>(
+                    post_pow),
+            words.begin() +
+                static_cast<std::ptrdiff_t>(
+                    post_pow + 21u),
+            [](std::uint32_t word) noexcept {
+                return word == 0x0100003au;
+            }))
+        return false;
+
+    std::vector<std::uint8_t> rebuilt;
+    if (!rebuild(
+            bytes.data(),
+            bytes.size(),
+            std::move(chunks),
+            code_index,
+            words,
+            rebuilt))
+        return false;
+
+    bytes = std::move(rebuilt);
+    return true;
+}
+#endif
+
 
 bool apply_linear_envdiffuse_consumer_diag(
     std::vector<std::uint8_t> &bytes) noexcept
@@ -3017,7 +3254,12 @@ bool final_postcondition(
         t14_sample == 1u &&
         t9_sample == 0u &&
         (!require_terminal_sat ||
-         terminal_rgb_sat_exact(words));
+#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_R6)
+         phn_scene_encoding_exact(words)
+#else
+         terminal_rgb_sat_exact(words)
+#endif
+        );
 }
 
 } // namespace
@@ -3272,6 +3514,16 @@ materialize_pmetal_rgba_receiver(
     }
 #endif
 
+#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_R6)
+    if (!apply_exact_ptde_atmosphere_domain_r6(
+            base)) {
+        outcome.result =
+            pmetal_rgba_materialize_result::
+                fail_postcondition;
+        return outcome;
+    }
+#endif
+
     if (compose_upper_lower) {
         std::vector<std::uint8_t> ul;
         const auto ul_result =
@@ -3314,20 +3566,27 @@ materialize_pmetal_rgba_receiver(
     // owner-visible white P_Metal failure.
     outcome.spec_rgb_consumer = true;
 
-    // PTDE Phn HemEnv terminates its surface contribution with an RGB-only
-    // saturate. These exact P_Metal receivers are not members of the generic
-    // A1 terminal-SAT plan index, so relying on A1 composition here leaves a
-    // DSR-only unclamped HDR tail in an otherwise PTDE EnvSpec island. Compose
-    // the independent surface operator explicitly and record its ownership.
+    // PTDE PHN terminal is scene encoding k135=c135.x/c135.y followed by
+    // RGB SAT. R6 installs the exact consumer at b12[0].w. Until its dynamic
+    // DrawEnv producer is independently routed, the runtime carrier is unity,
+    // preserving R5 output rather than guessing a global 0.5.
     if (!features.enabled(
             core::operator_id::terminal_sat_rgb) ||
-        !compose_exact_terminal_rgb_sat(base)) {
+#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_R6)
+        !compose_exact_phn_scene_encoding(base)
+#else
+        !compose_exact_terminal_rgb_sat(base)
+#endif
+        ) {
         outcome.result =
             pmetal_rgba_materialize_result::
                 fail_postcondition;
         return outcome;
     }
 
+#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_R6)
+    outcome.phn_scene_encoding_composed = true;
+#endif
     outcome.composed_owners |=
         core::operator_bit(
             core::operator_id::terminal_sat_rgb);

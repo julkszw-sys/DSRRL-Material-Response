@@ -31,6 +31,9 @@ struct pmetal_rgba_materialize_outcome {
     std::uint32_t receiver_id = 0;
     core::operator_mask composed_owners = 0;
     bool upper_lower_composed = false;
+    // R6: exact PHN k135->SAT consumer is present. This flag says nothing
+    // about producer validity; an unresolved producer uses unity fail-open.
+    bool phn_scene_encoding_composed = false;
     bool spec_rgb_consumer = false;
     // Diagnostic-only: stable HemEnv t11 consumes the exact pre-draw-gain
     // EnvDiffuse endpoint carried in b12[3].xyz instead of DSR cb0[3]*cb0[79].x.

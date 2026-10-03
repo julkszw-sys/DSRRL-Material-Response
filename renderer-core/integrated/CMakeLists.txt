@@ -102,6 +102,11 @@ option(
     OFF)
 
 option(
+    DSRRL_PMETAL_FULL_PTDE_HEMENV_R6
+    "Cumulative stable P_Metal PTDE HemEnv successor: R3+R4+R5 plus exact PTDE Fog/LightScattering domain and source-gated PHN k135 terminal consumer"
+    OFF)
+
+option(
     DSRRL_POINTLIGHT_DRAWTIME_BYPASS
     "Diagnostic: disable PointLight producer hooks, runtime pipeline binding and draw-time carrier/replay while preserving all non-PointLight runtime paths"
     OFF)
@@ -665,6 +670,18 @@ if(DSRRL_PMETAL_FULL_PTDE_HEMENV_R5)
         dsrrl_renderer_core_integrated
         PRIVATE
         $<$<COMPILE_LANGUAGE:CXX>:DSRRL_PMETAL_FULL_PTDE_HEMENV_R5>)
+endif()
+
+if(DSRRL_PMETAL_FULL_PTDE_HEMENV_R6)
+    if(NOT DSRRL_PMETAL_FULL_PTDE_HEMENV_R5)
+        message(FATAL_ERROR
+            "P_Metal R6 requires the complete R5 lineage")
+    endif()
+
+    target_compile_definitions(
+        dsrrl_renderer_core_integrated
+        PRIVATE
+        $<$<COMPILE_LANGUAGE:CXX>:DSRRL_PMETAL_FULL_PTDE_HEMENV_R6>)
 endif()
 
 if(DSRRL_POINTLIGHT_DRAWTIME_BYPASS)
