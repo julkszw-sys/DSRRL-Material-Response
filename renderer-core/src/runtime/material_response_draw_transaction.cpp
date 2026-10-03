@@ -674,8 +674,8 @@ bool material_response_draw_runtime::register_lerp_receiver_replacement(
         core::operator_bit(core::operator_id::upper_lower) |
         core::operator_bit(core::operator_id::spec_rgb);
 
-    if (receiver_id < 24u ||
-        receiver_id > 47u ||
+    if (receiver_id < 33u ||
+        receiver_id > 35u ||
         dxbc == nullptr ||
         dxbc_size == 0u ||
         (composed_owners & ~core::all_operator_bits) != 0u ||
