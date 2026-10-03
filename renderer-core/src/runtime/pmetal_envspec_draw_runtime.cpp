@@ -1148,7 +1148,15 @@ bool pmetal_envspec_draw_runtime::prepare(
             decision.c101,
             decision.c101,
             decision.c101,
+#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_R6)
+            source.phn_k135_valid &&
+                    std::isfinite(source.phn_k135) &&
+                    source.phn_k135 > 0.0f
+                ? source.phn_k135
+                : 1.0f
+#else
             1.0f
+#endif
         },
         {
             decision.c100[0],
