@@ -1,4 +1,4 @@
-name: P_Metal Full PTDE EnvSpec Native DSR Cubes Runtime
+name: P_Metal Full PTDE EnvSpec Native DSR Mip3 Runtime
 
 on:
   pull_request:
@@ -8,6 +8,7 @@ on:
       - "renderer-core/src/operators/env_spec/pmetal_rgba_lerp_materializer.cpp"
       - "renderer-core/src/runtime/pmetal_envspec_draw_runtime.cpp"
       - "renderer-core/src/runtime/envspec_resource_runtime.cpp"
+      - "renderer-core/include/dsrrl/runtime/envspec_resource_runtime.hpp"
       - "renderer-core/tools/audit_pmetal_full_ptde_native_dsr_cubes_tail.py"
       - ".github/workflows/pmetal-full-ptde-native-dsr-cubes-runtime.yml"
 
@@ -44,36 +45,36 @@ jobs:
         run: >
           cmake
           -S renderer-core/integrated
-          -B build-full-ptde-native-cubes
+          -B build-full-ptde-native-mip3
           -A x64
           -DRESHADE_INCLUDE_DIR="${{ github.workspace }}/_reshade/include"
           -DDSRRL_SOURCE_COMMIT="$env:DSRRL_CHECKOUT_COMMIT"
-          -DDSRRL_BUILD_FLAVOR="pmetal_full_ptde_envspec_native_dsr_cubes_tail_runtime"
+          -DDSRRL_BUILD_FLAVOR="pmetal_full_ptde_envspec_native_dsr_mip3_tail_runtime"
           -DDSRRL_FULL_TELEMETRY_DEFAULT_ON=ON
           -DDSRRL_PMETAL_NATIVE_DSR_CUBEMAP_FEED=ON
 
       - name: Build runtime
         shell: pwsh
         run: |
-          cmake --build build-full-ptde-native-cubes --config Release --target dsrrl_renderer_core_integrated
+          cmake --build build-full-ptde-native-mip3 --config Release --target dsrrl_renderer_core_integrated
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          $addons = @(Get-ChildItem build-full-ptde-native-cubes -Recurse -Filter *.addon64)
+          $addons = @(Get-ChildItem build-full-ptde-native-mip3 -Recurse -Filter *.addon64)
           if ($addons.Count -ne 1) { throw "Expected exactly one addon, found $($addons.Count)" }
-          Copy-Item $addons[0].FullName "DSRRL_PMETAL_FULL_PTDE_ENVSPEC_NATIVE_DSR_CUBES_TAIL.addon64" -Force
+          Copy-Item $addons[0].FullName "DSRRL_PMETAL_FULL_PTDE_ENVSPEC_NATIVE_DSR_MIP3_TAIL.addon64" -Force
 
       - name: Verify binary identity
         shell: pwsh
         run: |
-          $path = "DSRRL_PMETAL_FULL_PTDE_ENVSPEC_NATIVE_DSR_CUBES_TAIL.addon64"
+          $path = "DSRRL_PMETAL_FULL_PTDE_ENVSPEC_NATIVE_DSR_MIP3_TAIL.addon64"
           $ascii = [System.Text.Encoding]::ASCII.GetString([System.IO.File]::ReadAllBytes($path))
           if (-not $ascii.Contains($env:DSRRL_CHECKOUT_COMMIT)) { throw "Missing source commit identity" }
-          if (-not $ascii.Contains("pmetal_full_ptde_envspec_native_dsr_cubes_tail_runtime")) { throw "Missing build flavor identity" }
-          if (-not $ascii.Contains("mode=native_dsr_bc6h_ptde_operator")) { throw "Missing native DSR cubemap / PTDE operator marker" }
+          if (-not $ascii.Contains("pmetal_full_ptde_envspec_native_dsr_mip3_tail_runtime")) { throw "Missing build flavor identity" }
+          if (-not $ascii.Contains("mode=native_dsr_bc6h_mip3_as_lod0_ptde_operator")) { throw "Missing native DSR mip3 / PTDE operator marker" }
           $hash = (Get-FileHash $path -Algorithm SHA256).Hash.ToLowerInvariant()
           Write-Host "ADDON_SHA256=$hash"
 
       - uses: actions/upload-artifact@v4
         with:
-          name: DSRRL_PMETAL_FULL_PTDE_ENVSPEC_NATIVE_DSR_CUBES_TAIL
-          path: DSRRL_PMETAL_FULL_PTDE_ENVSPEC_NATIVE_DSR_CUBES_TAIL.addon64
+          name: DSRRL_PMETAL_FULL_PTDE_ENVSPEC_NATIVE_DSR_MIP3_TAIL
+          path: DSRRL_PMETAL_FULL_PTDE_ENVSPEC_NATIVE_DSR_MIP3_TAIL.addon64
           if-no-files-found: error
