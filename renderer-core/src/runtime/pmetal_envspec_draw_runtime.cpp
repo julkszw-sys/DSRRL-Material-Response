@@ -1466,7 +1466,9 @@ bool pmetal_envspec_draw_runtime::prepare(
     (void)sat_owner;
 #elif defined(DSRRL_PMETAL_V13_NATIVE_DSR_MATERIAL_MOD_DIAG)
     (void)envdiff_owner;
+#if !defined(DSRRL_EQUIPMENT_WIDE_PTDE_SURFACE_RUNTIME)
     (void)sat_owner;
+#endif
 #endif
     prepared.shader = shader;
     prepared.b12 = b12;
@@ -1483,7 +1485,11 @@ bool pmetal_envspec_draw_runtime::prepare(
         mr_owner |
         domain_owner |
         spec_owner |
-        composed_owners;
+        composed_owners
+#if defined(DSRRL_EQUIPMENT_WIDE_PTDE_SURFACE_RUNTIME)
+        | sat_owner
+#endif
+        ;
 #else
     prepared.request.additional_owners =
         mr_owner |
