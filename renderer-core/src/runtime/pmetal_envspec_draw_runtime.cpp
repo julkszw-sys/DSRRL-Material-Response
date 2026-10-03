@@ -1010,7 +1010,7 @@ bool pmetal_envspec_draw_runtime::prepare(
                 : k_v13_native_dsr_no_tail_diag
                     ? "[DSRRL PMETAL V13 NO TAIL] mode=native_dsr_bc6h_ptde_ab_beta no_specrgb_tail=1 envdiffuse=stock lerp=paired slot=%u probe_a=%u probe_b=%u"
                     : k_native_dsr_cubemap_feed
-                        ? "[DSRRL PMETAL ENVSPEC RESOURCE] mode=native_dsr_bc6h_mip3_as_lod0_ptde_operator sampler=ptde_lod0 slot=%u probe_a=%u probe_b=%u"
+                        ? "[DSRRL PMETAL ENVSPEC RESOURCE] mode=native_dsr_bc6h_mip3_as_lod0_ptde_operator phn_k135=0.5 terminal=k135_then_sat sampler=ptde_lod0 slot=%u probe_a=%u probe_b=%u"
                         : "[DSRRL PMETAL ENVSPEC RESOURCE] mode=ptde_packedgi_rgba sampler=ptde_lod0 slot=%u probe_a=%u probe_b=%u",
             static_cast<unsigned>(
                 env_semantics.envspc_slot),
