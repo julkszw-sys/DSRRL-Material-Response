@@ -13,6 +13,7 @@
 #include <array>
 #include <cstring>
 #include <limits>
+#include <optional>
 #include <utility>
 #include <vector>
 
@@ -904,6 +905,7 @@ bool v13_lerp_material_mod_postcondition(
             preserved_envdiffuse.begin(),preserved_envdiffuse.end(),
             words.begin() + static_cast<std::ptrdiff_t>(site.t11_word + 4u));
 }
+#endif
 #endif
 
 } // namespace
