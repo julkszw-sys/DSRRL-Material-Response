@@ -44,14 +44,14 @@ for group, needles in required.items():
             raise SystemExit(f"MISSING {group}: {needle}")
 
 # Exact diagnostic runtime must not require the PR199 EnvDiffuse source.
-if "if (!k_v13_native_dsr_no_tail_diag &&" not in runtime:
-    raise SystemExit("EnvDiffuse linear-source gate is not bypassed only for diagnostic")
+if "if (!k_v13_preserve_stock_envdiffuse &&" not in runtime:
+    raise SystemExit("EnvDiffuse linear-source gate is not bypassed for the V13 stock-EnvDiffuse diagnostics")
 
 # In the diagnostic branch, SpecRGB material-resource preparation and explicit
 # t11/t13 rebinding must be compile-excluded.
 if "#if !defined(DSRRL_PMETAL_V13_NATIVE_DSR_NO_TAIL_DIAG)\n    ID3D11ShaderResourceView *shadow_material" not in runtime:
     raise SystemExit("SpecRGB resource block is not isolated")
-if "#if !defined(DSRRL_PMETAL_V13_NATIVE_DSR_NO_TAIL_DIAG)\n    // Diagnostic ownership test" not in runtime:
+if "#if !defined(DSRRL_PMETAL_V13_NATIVE_DSR_NO_TAIL_DIAG) && !defined(DSRRL_PMETAL_V13_NATIVE_DSR_MATERIAL_MOD_DIAG)\n    // Diagnostic ownership test" not in runtime:
     raise SystemExit("PR199 EnvDiffuse resource rebind is not isolated")
 
 print("PMETAL_V13_NATIVE_DSR_NO_TAIL_AUDIT_PASS")
