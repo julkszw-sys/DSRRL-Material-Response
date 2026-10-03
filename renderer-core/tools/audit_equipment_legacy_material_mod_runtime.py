@@ -18,7 +18,10 @@ required = {
         "find_t9_split_sum_instruction",
         "no",
         "0x00101246u",
+        "12u,\n            2u",
+        "c101_material_mul == 1u",
         "t9_samples == 0u",
+        "t10_dst",
     ],
     "header": [
         "register_equipment_spec_replacement",
@@ -53,6 +56,9 @@ for group, needles in required.items():
 # The equipment path must not consume the P_Metal source runtime.
 if "pmetal_env_source_runtime" in mat or "latest_hook_source" in mat:
     raise SystemExit("equipment materializer illegally depends on P_Metal source")
+
+if "materialize_spec_rgb_consumer(\n            source,size,spec_base,true)" in mat:
+    raise SystemExit("equipment materializer resurrected legacy b12[0] c101 helper ABI")
 
 # Exact SpecRGB draw resource is authorized only in the compile-scoped path.
 if "#if defined(DSRRL_EQUIPMENT_LEGACY_MATERIAL_MOD_RUNTIME)" not in addon:
