@@ -1465,6 +1465,10 @@ prepare_draw_requests_bound(
     const auto h1 = hashes[1];
     const auto h2 = hashes[2];
 
+    prepared.stock_diffuse_hash = h0;
+    prepared.stock_specular_hash = h1;
+    prepared.stock_normal_hash = h2;
+
     if (full_material_response_ready &&
         spec_rgb_consumer_ready &&
         core_.features().enabled(
