@@ -93,10 +93,17 @@ void log_prepare_stage_once(
         line);
 }
 
-#if defined(DSRRL_PMETAL_NATIVE_DSR_CUBEMAP_FEED)
+#if defined(DSRRL_PMETAL_NATIVE_DSR_CUBEMAP_FEED) || \
+    defined(DSRRL_PMETAL_V13_NATIVE_DSR_NO_TAIL_DIAG)
 constexpr bool k_native_dsr_cubemap_feed = true;
 #else
 constexpr bool k_native_dsr_cubemap_feed = false;
+#endif
+
+#if defined(DSRRL_PMETAL_V13_NATIVE_DSR_NO_TAIL_DIAG)
+constexpr bool k_v13_native_dsr_no_tail_diag = true;
+#else
+constexpr bool k_v13_native_dsr_no_tail_diag = false;
 #endif
 
 void effect_latch(std::atomic_bool &flag) noexcept
@@ -341,8 +348,13 @@ register_replacement(
         outcome.receiver_id < 33u ||
         outcome.receiver_id > 35u ||
         outcome.upper_lower_composed ||
+#if defined(DSRRL_PMETAL_V13_NATIVE_DSR_NO_TAIL_DIAG)
+        outcome.spec_rgb_consumer ||
+        outcome.envdiffuse_linear_consumer_diag ||
+#else
         !outcome.spec_rgb_consumer ||
         !outcome.envdiffuse_linear_consumer_diag ||
+#endif
         dxbc == nullptr ||
         dxbc_size == 0u ||
         quarantined_.load()) {
@@ -431,8 +443,13 @@ register_lerp_replacement(
         !outcome.envdiffuse_preserved ||
         outcome.upper_lower_composed ||
         !outcome.upper_lower_preserved_stock ||
+#if defined(DSRRL_PMETAL_V13_NATIVE_DSR_NO_TAIL_DIAG)
+        outcome.terminal_sat_rgb_composed ||
+        outcome.spec_rgb_consumer ||
+#else
         !outcome.terminal_sat_rgb_composed ||
         !outcome.spec_rgb_consumer ||
+#endif
         dxbc == nullptr ||
         dxbc_size == 0u ||
         quarantined_.load()) {
@@ -801,7 +818,8 @@ bool pmetal_envspec_draw_runtime::prepare(
             family);
         return false;
     }
-    if (family ==
+    if (!k_v13_native_dsr_no_tail_diag &&
+        family ==
             pmetal_envspec_receiver_family::
                 stable_hemenv &&
         !source.envdiffuse_linear_valid) {
@@ -961,7 +979,9 @@ bool pmetal_envspec_draw_runtime::prepare(
         std::snprintf(
             line,
             sizeof(line),
-            "[DSRRL PMETAL ENVSPEC RESOURCE] mode=native_dsr_bc6h_ptde_operator sampler=ptde_lod0 slot=%u probe_a=%u probe_b=%u",
+            k_v13_native_dsr_no_tail_diag
+                ? "[DSRRL PMETAL V13 NO TAIL] mode=native_dsr_bc6h_ptde_ab_beta no_specrgb_tail=1 envdiffuse=stock lerp=paired slot=%u probe_a=%u probe_b=%u"
+                : "[DSRRL PMETAL ENVSPEC RESOURCE] mode=native_dsr_bc6h_ptde_operator sampler=ptde_lod0 slot=%u probe_a=%u probe_b=%u",
             static_cast<unsigned>(
                 env_semantics.envspc_slot),
             static_cast<unsigned>(
@@ -973,6 +993,7 @@ bool pmetal_envspec_draw_runtime::prepare(
             line);
     }
 
+#if !defined(DSRRL_PMETAL_V13_NATIVE_DSR_NO_TAIL_DIAG)
     ID3D11ShaderResourceView *shadow_material[3]{};
     const bool shadow_material_ready =
         pixel_srv_shadow_snapshot(
@@ -1030,11 +1051,16 @@ bool pmetal_envspec_draw_runtime::prepare(
         return false;
     }
     effect_latch(effect_spec_rgb_ready_);
+#endif
 
     const bool stable_envdiffuse_consumer_diag =
+#if defined(DSRRL_PMETAL_V13_NATIVE_DSR_NO_TAIL_DIAG)
+        false;
+#else
         family ==
             pmetal_envspec_receiver_family::
                 stable_hemenv;
+#endif
 
     const std::array<f4,4> payload{{
         {
@@ -1245,6 +1271,7 @@ bool pmetal_envspec_draw_runtime::prepare(
 
     effect_latch(effect_b12_ready_);
 
+#if !defined(DSRRL_PMETAL_V13_NATIVE_DSR_NO_TAIL_DIAG)
     // Diagnostic ownership test requested by the owner: explicitly snapshot
     // and rebind the host's native DSR EnvDiffuse SRV(s) for the exact P_Metal
     // replay. Stable HemEnv consumes t11; HemEnvLerp additionally consumes
@@ -1322,6 +1349,8 @@ bool pmetal_envspec_draw_runtime::prepare(
             line);
     }
 
+#endif
+
     const auto env_owner =
         core::operator_bit(
             core::operator_id::
@@ -1349,6 +1378,12 @@ bool pmetal_envspec_draw_runtime::prepare(
     prepared.request.primary =
         core::operator_id::env_spec;
 
+#if defined(DSRRL_PMETAL_V13_NATIVE_DSR_NO_TAIL_DIAG)
+    prepared.request.additional_owners =
+        mr_owner |
+        domain_owner |
+        composed_owners;
+#else
     prepared.request.additional_owners =
         mr_owner |
         domain_owner |
@@ -1361,6 +1396,7 @@ bool pmetal_envspec_draw_runtime::prepare(
             hemenvlerp)
         prepared.request.additional_owners |=
             sat_owner;
+#endif
 
     // This diagnostic owns the same narrow stable EnvDiffuse consumer cut as
     // PR197, but feeds b12[3].xyz = 0 on stable HemEnv. Because the replacement
@@ -1369,11 +1405,17 @@ bool pmetal_envspec_draw_runtime::prepare(
     // shader + b12 + the explicit native t11/t13 resource rebind.
     prepared.request.additional_shader_owners =
         prepared.request.additional_owners;
+#if defined(DSRRL_PMETAL_V13_NATIVE_DSR_NO_TAIL_DIAG)
+    prepared.request.additional_constant_buffer_owners =
+        mr_owner;
+    prepared.request.additional_resource_owners = 0u;
+#else
     prepared.request.additional_constant_buffer_owners =
         mr_owner |
         envdiff_owner;
     prepared.request.additional_resource_owners =
         envdiff_owner;
+#endif
 
     prepared.request.receiver_verified = true;
     prepared.request.material_verified = true;
@@ -1385,22 +1427,29 @@ bool pmetal_envspec_draw_runtime::prepare(
     prepared.request.constant_buffers[0] = {
         12u,
         b12,
+#if defined(DSRRL_PMETAL_V13_NATIVE_DSR_NO_TAIL_DIAG)
+        env_owner | mr_owner
+#else
         env_owner | mr_owner | envdiff_owner
+#endif
     };
     prepared.request.constant_buffer_count =
         1u;
 
     std::uint32_t request_srv_count = 0u;
+#if !defined(DSRRL_PMETAL_V13_NATIVE_DSR_NO_TAIL_DIAG)
     prepared.request.srvs[
         request_srv_count++] = {
             11u,
             prepared.native_dsr_envdiffuse_a
         };
+#endif
     prepared.request.srvs[
         request_srv_count++] = {
             12u,
             prepared.env_resources.ptde_a
         };
+#if !defined(DSRRL_PMETAL_V13_NATIVE_DSR_NO_TAIL_DIAG)
     if (native_envdiffuse_b_required) {
         prepared.request.srvs[
             request_srv_count++] = {
@@ -1408,6 +1457,7 @@ bool pmetal_envspec_draw_runtime::prepare(
                 prepared.native_dsr_envdiffuse_b
             };
     }
+#endif
     prepared.request.srvs[
         request_srv_count++] = {
             14u,
