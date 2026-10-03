@@ -87,6 +87,11 @@ option(
     OFF)
 
 option(
+    DSRRL_PMETAL_FULL_PTDE_HEMENV_R3
+    "Diagnostic: PR214 R3 exact SpecRGB attestation plus removal of DSR-only post-merge environment scalar on the full PTDE stable HemEnv path"
+    OFF)
+
+option(
     DSRRL_POINTLIGHT_DRAWTIME_BYPASS
     "Diagnostic: disable PointLight producer hooks, runtime pipeline binding and draw-time carrier/replay while preserving all non-PointLight runtime paths"
     OFF)
@@ -622,6 +627,13 @@ if(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG)
         PRIVATE
         $<$<COMPILE_LANGUAGE:CXX>:DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG>
         $<$<COMPILE_LANGUAGE:CXX>:DSRRL_PMETAL_FORCE_PTDE_PACKEDGI>)
+endif()
+
+if(DSRRL_PMETAL_FULL_PTDE_HEMENV_R3)
+    target_compile_definitions(
+        dsrrl_renderer_core_integrated
+        PRIVATE
+        $<$<COMPILE_LANGUAGE:CXX>:DSRRL_PMETAL_FULL_PTDE_HEMENV_R3>)
 endif()
 
 if(DSRRL_POINTLIGHT_DRAWTIME_BYPASS)
