@@ -463,12 +463,15 @@ register_lerp_replacement(
         outcome.upper_lower_composed ||
         !outcome.upper_lower_preserved_stock ||
 #if defined(DSRRL_PMETAL_V13_NATIVE_DSR_NO_TAIL_DIAG)
+        outcome.phn_scene_encoding_composed ||
         outcome.terminal_sat_rgb_composed ||
         outcome.spec_rgb_consumer ||
 #elif defined(DSRRL_PMETAL_V13_NATIVE_DSR_MATERIAL_MOD_DIAG)
+        outcome.phn_scene_encoding_composed ||
         outcome.terminal_sat_rgb_composed ||
         !outcome.spec_rgb_consumer ||
 #else
+        !outcome.phn_scene_encoding_composed ||
         !outcome.terminal_sat_rgb_composed ||
         !outcome.spec_rgb_consumer ||
 #endif
