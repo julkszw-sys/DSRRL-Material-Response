@@ -97,6 +97,11 @@ option(
     OFF)
 
 option(
+    DSRRL_PMETAL_FULL_PTDE_HEMENV_R5
+    "Diagnostic: PR216 R5 exact-content attestation for HD_A_9550 diffuse and normal equipment sidecars; no shader-math change"
+    OFF)
+
+option(
     DSRRL_POINTLIGHT_DRAWTIME_BYPASS
     "Diagnostic: disable PointLight producer hooks, runtime pipeline binding and draw-time carrier/replay while preserving all non-PointLight runtime paths"
     OFF)
@@ -646,6 +651,13 @@ if(DSRRL_PMETAL_FULL_PTDE_HEMENV_R4)
         dsrrl_renderer_core_integrated
         PRIVATE
         $<$<COMPILE_LANGUAGE:CXX>:DSRRL_PMETAL_FULL_PTDE_HEMENV_R4>)
+endif()
+
+if(DSRRL_PMETAL_FULL_PTDE_HEMENV_R5)
+    target_compile_definitions(
+        dsrrl_renderer_core_integrated
+        PRIVATE
+        $<$<COMPILE_LANGUAGE:CXX>:DSRRL_PMETAL_FULL_PTDE_HEMENV_R5>)
 endif()
 
 if(DSRRL_POINTLIGHT_DRAWTIME_BYPASS)
