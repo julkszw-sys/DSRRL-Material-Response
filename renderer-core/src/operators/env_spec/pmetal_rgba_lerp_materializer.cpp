@@ -519,6 +519,74 @@ bool final_postcondition(
         sample_count(words, 14u) == 1u;
 }
 
+
+#if defined(DSRRL_PMETAL_V13_NATIVE_DSR_NO_TAIL_DIAG)
+bool v13_native_dsr_no_tail_lerp_postcondition(
+    const std::vector<std::uint8_t> &bytes,
+    const generated_lerp::pmetal_hemenvlerp_site &site,
+    const std::vector<std::uint32_t> &preserved_envdiffuse) noexcept
+{
+    std::vector<chunk> chunks;
+    std::vector<std::uint32_t> words;
+    std::size_t code_index = 0u;
+
+    if (!parse_dxbc(
+            bytes.data(),
+            bytes.size(),
+            chunks,
+            code_index,
+            words))
+        return false;
+
+    auto *rdef = unique_rdef(chunks);
+    if (rdef == nullptr ||
+        !legacy_plan::dxbc::rdef::has_constant_buffer_binding(
+            rdef->payload,
+            12u) ||
+        legacy_plan::dxbc::rdef::has_constant_buffer_binding(
+            rdef->payload,
+            13u))
+        return false;
+
+    auto expected_envspec_cut =
+        std::vector<std::uint32_t>(
+            k_ptde_rgba_envspec_chain.begin(),
+            k_ptde_rgba_envspec_chain.end());
+    expected_envspec_cut[6] =
+        site.reflection_coord_register;
+    expected_envspec_cut[38] =
+        site.reflection_coord_register;
+
+    try {
+        expected_envspec_cut.resize(
+            site.t11_word - site.t12_word,
+            0x0100003au);
+    } catch (...) {
+        return false;
+    }
+
+    // No modern material tail is allowed in this diagnostic. The EnvSpec
+    // semantic cut ends before the stock EnvDiffuse block and common merge.
+    return
+        contains_exact_subsequence(
+            words,
+            expected_envspec_cut) &&
+        contains_exact_subsequence(
+            words,
+            preserved_envdiffuse) &&
+        adjacent_pair_count(words, 0u, 7u) == 1u &&
+        adjacent_pair_count(words, 0u, 8u) == 2u &&
+        adjacent_pair_count(words, 13u, 6u) == 0u &&
+        adjacent_pair_count(words, 13u, 7u) == 0u &&
+        sample_count(words, 9u) == 0u &&
+        sample_count(words, 10u) == 0u &&
+        sample_count(words, 11u) == 1u &&
+        sample_count(words, 12u) == 1u &&
+        sample_count(words, 13u) == 1u &&
+        sample_count(words, 14u) == 1u;
+}
+#endif
+
 } // namespace
 
 pmetal_rgba_lerp_materialize_outcome
@@ -752,9 +820,10 @@ materialize_pmetal_rgba_lerp_receiver(
         }
     }
 
-    // PTDE Phn HemEnv/HemEnvLerp terminates with RGB-only SAT. This is a
-    // separate surface operator composed into the exact P_Metal replacement;
-    // alpha is untouched and any non-unique/future output shape fails open.
+#if !defined(DSRRL_PMETAL_V13_NATIVE_DSR_NO_TAIL_DIAG)
+    // Production/full island composes PTDE terminal RGB SAT. The no-tail
+    // diagnostic deliberately leaves this independent surface operator stock
+    // so the only changed shader island is EnvSpec.
     if (!apply_exact_terminal_rgb_sat(
             words,
             *site)) {
@@ -763,6 +832,7 @@ materialize_pmetal_rgba_lerp_receiver(
                 fail_terminal_sat;
         return outcome;
     }
+#endif
 
     // The clean diffuse-v1 operator base inserted b12 at words 11..14.
     // Add b13 only for the explicitly enabled U/L-composed variant. The
@@ -809,6 +879,23 @@ materialize_pmetal_rgba_lerp_receiver(
         return outcome;
     }
 
+#if defined(DSRRL_PMETAL_V13_NATIVE_DSR_NO_TAIL_DIAG)
+    if (!v13_native_dsr_no_tail_lerp_postcondition(
+            envspec_base,
+            *site,
+            preserved_envdiffuse)) {
+        outcome.result =
+            pmetal_rgba_lerp_materialize_result::fail_postcondition;
+        return outcome;
+    }
+
+    outcome.envdiffuse_preserved = true;
+    outcome.upper_lower_composed = false;
+    outcome.upper_lower_preserved_stock = true;
+    outcome.terminal_sat_rgb_composed = false;
+    outcome.spec_rgb_consumer = false;
+    output = std::move(envspec_base);
+#else
     std::vector<std::uint8_t> spec_rgb_base;
     if (resource_bridges::materialize_spec_rgb_consumer(
             envspec_base.data(),
@@ -840,6 +927,7 @@ materialize_pmetal_rgba_lerp_receiver(
     outcome.terminal_sat_rgb_composed = true;
     outcome.spec_rgb_consumer = true;
     output = std::move(spec_rgb_base);
+#endif
     outcome.result =
         pmetal_rgba_lerp_materialize_result::applied;
     return outcome;

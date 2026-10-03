@@ -67,6 +67,11 @@ option(
     OFF)
 
 option(
+    DSRRL_PMETAL_V13_NATIVE_DSR_NO_TAIL_DIAG
+    "Diagnostic: exact V13-style P_Metal EnvSpec over native DSR cubemaps without the modern SpecRGB/c101/COLOR0 final tail; includes stable HemEnv and exact paired HemEnvLerp"
+    OFF)
+
+option(
     DSRRL_POINTLIGHT_DRAWTIME_BYPASS
     "Diagnostic: disable PointLight producer hooks, runtime pipeline binding and draw-time carrier/replay while preserving all non-PointLight runtime paths"
     OFF)
@@ -572,6 +577,13 @@ if(DSRRL_PMETAL_NATIVE_DSR_CUBEMAP_FEED)
         dsrrl_renderer_core_integrated
         PRIVATE
         $<$<COMPILE_LANGUAGE:CXX>:DSRRL_PMETAL_NATIVE_DSR_CUBEMAP_FEED>)
+endif()
+
+if(DSRRL_PMETAL_V13_NATIVE_DSR_NO_TAIL_DIAG)
+    target_compile_definitions(
+        dsrrl_renderer_core_integrated
+        PRIVATE
+        $<$<COMPILE_LANGUAGE:CXX>:DSRRL_PMETAL_V13_NATIVE_DSR_NO_TAIL_DIAG>)
 endif()
 
 if(DSRRL_POINTLIGHT_DRAWTIME_BYPASS)
