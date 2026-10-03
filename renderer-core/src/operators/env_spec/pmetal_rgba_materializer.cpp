@@ -5,6 +5,7 @@
 #include "dsrrl/operators/material_response/material_response_diffuse_v1.hpp"
 #include "dsrrl/operators/resource_bridges/spec_rgb_consumer_materializer.hpp"
 #include "dsrrl/operators/surface/terminal_sat_rgb_patch.hpp"
+#include "dsrrl/operators/surface/phn_scene_encoding.hpp"
 #include "dsrrl/operators/legacy_plan/a1_create_time_materializer.hpp"
 #include "dsrrl/operators/legacy_plan/dxbc_checksum.hpp"
 #include "dsrrl/operators/legacy_plan/dxbc_rdef_patch.hpp"
@@ -569,6 +570,272 @@ bool compose_exact_terminal_rgb_sat(
     bytes = std::move(rebuilt);
     return true;
 }
+
+#if defined(DSRRL_PMETAL_CUMULATIVE_OPERATOR_RECOVERY_R6)
+constexpr surface::phn_scene_encoding_carrier
+    k_pmetal_phn_scene_carrier{
+        12u,
+        0u,
+        3u
+    };
+
+bool phn_scene_encoding_exact_r6(
+    const std::vector<std::uint32_t> &words) noexcept
+{
+    return surface::unique_phn_scene_encoding_exact(
+        words,
+        k_pmetal_phn_scene_carrier);
+}
+
+bool compose_exact_phn_scene_encoding_r6(
+    std::vector<std::uint8_t> &bytes) noexcept
+{
+    std::vector<chunk> chunks;
+    std::vector<std::uint32_t> words;
+    std::size_t code_index = 0u;
+
+    if (!parse_dxbc(
+            bytes.data(),
+            bytes.size(),
+            chunks,
+            code_index) ||
+        !extract_words(
+            chunks,
+            code_index,
+            words))
+        return false;
+
+    const auto encoded =
+        surface::apply_unique_phn_scene_encoding_words(
+            words,
+            k_pmetal_phn_scene_carrier);
+
+    if (encoded !=
+            surface::phn_scene_encoding_result::applied &&
+        encoded !=
+            surface::phn_scene_encoding_result::already_encoded)
+        return false;
+
+    if (!phn_scene_encoding_exact_r6(words))
+        return false;
+
+    std::vector<std::uint8_t> rebuilt;
+    if (!rebuild(
+            bytes.data(),
+            bytes.size(),
+            std::move(chunks),
+            code_index,
+            words,
+            rebuilt))
+        return false;
+
+    bytes = std::move(rebuilt);
+    return true;
+}
+
+// Recovered exact P_Metal atmosphere-domain bridge from the archived V4B
+// lineage. DSR PBL roots the surface before Fog, mixes against encoded
+// cb0[12].rgb, runs the homologous LightScattering kernel, then raises the
+// result to 2.2. PTDE keeps the surface/Fog/LightScattering chain in the
+// legacy-linear domain. R6 therefore:
+//   1) reuses the stock pre-Fog LOG/MUL/EXP instruction budget to decode
+//      cb0[12].rgb with 1/2.2 into r2,
+//   2) mixes linear surface against that decoded FogRGB,
+//   3) NOPs only the DSR-only post-LightScattering 2.2 continuation.
+// Exact token subsequences are required once each; otherwise fail open.
+bool apply_exact_ptde_atmosphere_domain_r6(
+    std::vector<std::uint8_t> &bytes) noexcept
+{
+    std::vector<chunk> chunks;
+    std::vector<std::uint32_t> words;
+    std::size_t code_index = 0u;
+
+    if (!parse_dxbc(
+            bytes.data(),
+            bytes.size(),
+            chunks,
+            code_index) ||
+        !extract_words(
+            chunks,
+            code_index,
+            words))
+        return false;
+
+    constexpr std::array<std::uint32_t,21>
+        k_stock_prefog_root{{
+            0x0600002fu,0x00100072u,0x00000001u,
+            0x80100246u,0x00000081u,0x00000001u,
+            0x0a000038u,0x00100072u,0x00000001u,
+            0x00100246u,0x00000001u,0x00004002u,
+            0x3ee8ba2fu,0x3ee8ba2fu,0x3ee8ba2fu,0x00000000u,
+            0x05000019u,0x00100072u,0x00000001u,
+            0x00100246u,0x00000001u
+        }};
+
+    constexpr std::array<std::uint32_t,21>
+        k_ptde_prefog_decode{{
+            0x0600002fu,0x00100072u,0x00000002u,
+            0x00208246u,0x00000000u,0x0000000cu,
+            0x0a000038u,0x00100072u,0x00000002u,
+            0x00100246u,0x00000002u,0x00004002u,
+            0x3ee8ba2fu,0x3ee8ba2fu,0x3ee8ba2fu,0x00000000u,
+            0x05000019u,0x00100072u,0x00000002u,
+            0x00100246u,0x00000002u
+        }};
+
+    constexpr std::array<std::uint32_t,9>
+        k_stock_fog_delta{{
+            0x09000000u,0x00100072u,0x00000002u,
+            0x80100246u,0x00000041u,0x00000001u,
+            0x00208246u,0x00000000u,0x0000000cu
+        }};
+
+    constexpr std::array<std::uint32_t,9>
+        k_ptde_fog_delta{{
+            0x09000000u,0x00100072u,0x00000002u,
+            0x80100246u,0x00000041u,0x00000001u,
+            0x00100246u,0x00000002u
+        }};
+
+    constexpr std::array<std::uint32_t,21>
+        k_stock_post_ls_pow{{
+            0x0600002fu,0x00100072u,0x00000000u,
+            0x80100246u,0x00000081u,0x00000000u,
+            0x0a000038u,0x00100072u,0x00000000u,
+            0x00100246u,0x00000000u,0x00004002u,
+            0x400ccccdu,0x400ccccdu,0x400ccccdu,0x00000000u,
+            0x05000019u,0x00100072u,0x00000000u,
+            0x00100246u,0x00000000u
+        }};
+
+    const auto find_unique =
+        [&](const auto &needle,
+            std::size_t &at) noexcept -> bool {
+            at = static_cast<std::size_t>(-1);
+            std::size_t hits = 0u;
+            for (std::size_t i = 0u;
+                 i + needle.size() <= words.size();
+                 ++i) {
+                if (!std::equal(
+                        needle.begin(),
+                        needle.end(),
+                        words.begin() +
+                            static_cast<std::ptrdiff_t>(i)))
+                    continue;
+                ++hits;
+                at = i;
+            }
+            return hits == 1u;
+        };
+
+    std::size_t prefog_at = 0u;
+    std::size_t fog_delta_at = 0u;
+    std::size_t post_ls_at = 0u;
+
+    if (!find_unique(
+            k_stock_prefog_root,
+            prefog_at) ||
+        !find_unique(
+            k_stock_fog_delta,
+            fog_delta_at) ||
+        !find_unique(
+            k_stock_post_ls_pow,
+            post_ls_at) ||
+        !(prefog_at < fog_delta_at &&
+          fog_delta_at < post_ls_at))
+        return false;
+
+    std::copy(
+        k_ptde_prefog_decode.begin(),
+        k_ptde_prefog_decode.end(),
+        words.begin() +
+            static_cast<std::ptrdiff_t>(
+                prefog_at));
+    std::copy(
+        k_ptde_fog_delta.begin(),
+        k_ptde_fog_delta.end(),
+        words.begin() +
+            static_cast<std::ptrdiff_t>(
+                fog_delta_at));
+    std::fill(
+        words.begin() +
+            static_cast<std::ptrdiff_t>(
+                post_ls_at),
+        words.begin() +
+            static_cast<std::ptrdiff_t>(
+                post_ls_at +
+                k_stock_post_ls_pow.size()),
+        0x0100003au);
+
+    std::vector<std::uint8_t> rebuilt;
+    if (!rebuild(
+            bytes.data(),
+            bytes.size(),
+            std::move(chunks),
+            code_index,
+            words,
+            rebuilt))
+        return false;
+
+    bytes = std::move(rebuilt);
+    return true;
+}
+
+bool atmosphere_domain_exact_r6(
+    const std::vector<std::uint8_t> &bytes) noexcept
+{
+    std::vector<chunk> chunks;
+    std::vector<std::uint32_t> words;
+    std::size_t code_index = 0u;
+
+    if (!parse_dxbc(
+            bytes.data(),
+            bytes.size(),
+            chunks,
+            code_index) ||
+        !extract_words(
+            chunks,
+            code_index,
+            words))
+        return false;
+
+    constexpr std::array<std::uint32_t,21>
+        k_ptde_prefog_decode{{
+            0x0600002fu,0x00100072u,0x00000002u,
+            0x00208246u,0x00000000u,0x0000000cu,
+            0x0a000038u,0x00100072u,0x00000002u,
+            0x00100246u,0x00000002u,0x00004002u,
+            0x3ee8ba2fu,0x3ee8ba2fu,0x3ee8ba2fu,0x00000000u,
+            0x05000019u,0x00100072u,0x00000002u,
+            0x00100246u,0x00000002u
+        }};
+    constexpr std::array<std::uint32_t,9>
+        k_ptde_fog_delta{{
+            0x09000000u,0x00100072u,0x00000002u,
+            0x80100246u,0x00000041u,0x00000001u,
+            0x00100246u,0x00000002u
+        }};
+
+    auto count_exact =
+        [&](const auto &needle) noexcept {
+            std::size_t hits = 0u;
+            for (std::size_t i = 0u;
+                 i + needle.size() <= words.size();
+                 ++i)
+                if (std::equal(
+                        needle.begin(),
+                        needle.end(),
+                        words.begin() +
+                            static_cast<std::ptrdiff_t>(i)))
+                    ++hits;
+            return hits;
+        };
+
+    return
+        count_exact(k_ptde_prefog_decode) == 1u &&
+        count_exact(k_ptde_fog_delta) == 1u;
+}
+#endif
 
 chunk *unique_rdef(
     std::vector<chunk> &chunks) noexcept
@@ -3017,7 +3284,12 @@ bool final_postcondition(
         t14_sample == 1u &&
         t9_sample == 0u &&
         (!require_terminal_sat ||
-         terminal_rgb_sat_exact(words));
+#if defined(DSRRL_PMETAL_CUMULATIVE_OPERATOR_RECOVERY_R6)
+         phn_scene_encoding_exact_r6(words)
+#else
+         terminal_rgb_sat_exact(words)
+#endif
+        );
 }
 
 } // namespace
@@ -3272,6 +3544,23 @@ materialize_pmetal_rgba_receiver(
     }
 #endif
 
+#if defined(DSRRL_PMETAL_CUMULATIVE_OPERATOR_RECOVERY_R6)
+    // Recover the previously proven V4B atmosphere-domain operator that was
+    // lost from the later R3->R5 diagnostic lineage. This is structurally
+    // independent of the black-metal causal verdict: it restores the PTDE
+    // Fog/LightScattering domain even though V4B alone did not solve the
+    // historical cyan/black phenotype.
+    if (!apply_exact_ptde_atmosphere_domain_r6(
+            base) ||
+        !atmosphere_domain_exact_r6(
+            base)) {
+        outcome.result =
+            pmetal_rgba_materialize_result::
+                fail_postcondition;
+        return outcome;
+    }
+#endif
+
     if (compose_upper_lower) {
         std::vector<std::uint8_t> ul;
         const auto ul_result =
@@ -3314,14 +3603,18 @@ materialize_pmetal_rgba_receiver(
     // owner-visible white P_Metal failure.
     outcome.spec_rgb_consumer = true;
 
-    // PTDE Phn HemEnv terminates its surface contribution with an RGB-only
-    // saturate. These exact P_Metal receivers are not members of the generic
-    // A1 terminal-SAT plan index, so relying on A1 composition here leaves a
-    // DSR-only unclamped HDR tail in an otherwise PTDE EnvSpec island. Compose
-    // the independent surface operator explicitly and record its ownership.
+    // PTDE Phn HemEnv terminal is scene encoding k135=c135.x/c135.y
+    // followed by RGB SAT. R6 recovers the exact consumer transform from
+    // PR212. The producer value is carried in b12[0].w and remains a separate
+    // semantic transport: runtime must fail open rather than invent a k135.
     if (!features.enabled(
             core::operator_id::terminal_sat_rgb) ||
-        !compose_exact_terminal_rgb_sat(base)) {
+#if defined(DSRRL_PMETAL_CUMULATIVE_OPERATOR_RECOVERY_R6)
+        !compose_exact_phn_scene_encoding_r6(base)
+#else
+        !compose_exact_terminal_rgb_sat(base)
+#endif
+        ) {
         outcome.result =
             pmetal_rgba_materialize_result::
                 fail_postcondition;
