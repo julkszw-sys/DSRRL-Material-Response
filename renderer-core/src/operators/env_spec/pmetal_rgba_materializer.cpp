@@ -2456,6 +2456,19 @@ materialize_pmetal_rgba_receiver(
 
     outcome.spec_rgb_consumer = true;
     outcome.envdiffuse_linear_consumer_diag = false;
+#if defined(DSRRL_EQUIPMENT_WIDE_PTDE_SURFACE_RUNTIME)
+    if (!features.enabled(
+            core::operator_id::terminal_sat_rgb) ||
+        !compose_exact_terminal_rgb_sat(base)) {
+        outcome.result =
+            pmetal_rgba_materialize_result::
+                fail_postcondition;
+        return outcome;
+    }
+    outcome.composed_owners |=
+        core::operator_bit(
+            core::operator_id::terminal_sat_rgb);
+#endif
     output = std::move(base);
     outcome.result =
         pmetal_rgba_materialize_result::applied;

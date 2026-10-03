@@ -1141,7 +1141,9 @@ materialize_pmetal_rgba_lerp_receiver(
         }
     }
 
-#if !defined(DSRRL_PMETAL_V13_NATIVE_DSR_NO_TAIL_DIAG) && !defined(DSRRL_PMETAL_V13_NATIVE_DSR_MATERIAL_MOD_DIAG)
+#if !defined(DSRRL_PMETAL_V13_NATIVE_DSR_NO_TAIL_DIAG) && \
+    (!defined(DSRRL_PMETAL_V13_NATIVE_DSR_MATERIAL_MOD_DIAG) || \
+     defined(DSRRL_EQUIPMENT_WIDE_PTDE_SURFACE_RUNTIME))
     // Production/full island composes PTDE terminal RGB SAT. The no-tail
     // diagnostic deliberately leaves this independent surface operator stock
     // so the only changed shader island is EnvSpec.
@@ -1223,7 +1225,11 @@ materialize_pmetal_rgba_lerp_receiver(
     outcome.envdiffuse_preserved = true;
     outcome.upper_lower_composed = false;
     outcome.upper_lower_preserved_stock = true;
+#if defined(DSRRL_EQUIPMENT_WIDE_PTDE_SURFACE_RUNTIME)
+    outcome.terminal_sat_rgb_composed = true;
+#else
     outcome.terminal_sat_rgb_composed = false;
+#endif
     outcome.spec_rgb_consumer = true;
     output = std::move(material_mod_base);
 #elif defined(DSRRL_PMETAL_V13_NATIVE_DSR_NO_TAIL_DIAG)

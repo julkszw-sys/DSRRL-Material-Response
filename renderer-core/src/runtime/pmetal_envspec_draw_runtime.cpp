@@ -54,6 +54,11 @@ std::atomic_bool g_source_frontier_logged{false};
 std::atomic<std::uint32_t> g_prepare_stage_log_mask{0u};
 std::atomic<std::uint32_t> g_value_cut_log_mask{0u};
 
+#if defined(DSRRL_EQUIPMENT_WIDE_PTDE_SURFACE_RUNTIME)
+std::array<std::atomic<std::uint64_t>,32>
+    g_equipment_surface_logged{};
+#endif
+
 void log_prepare_stage_once(
     std::uint32_t bit,
     const char *stage,
@@ -92,6 +97,68 @@ void log_prepare_stage_once(
         reshade::log::level::info,
         line);
 }
+
+#if defined(DSRRL_EQUIPMENT_WIDE_PTDE_SURFACE_RUNTIME)
+void log_equipment_surface_active_once(
+    const mr::material_identity &material,
+    const mr::decision &decision,
+    pmetal_envspec_receiver_family family,
+    std::uint8_t envspc_slot,
+    bool spec_rgb_ready) noexcept
+{
+    std::uint64_t key =
+        material.semantic_name_hash ^
+        (static_cast<std::uint64_t>(
+             decision.route_index) << 32u) ^
+        (static_cast<std::uint64_t>(
+             material.material_slot) << 48u) ^
+        static_cast<std::uint64_t>(
+            decision.receiver_id);
+    if (key == 0u)
+        key = 1u;
+
+    bool inserted = false;
+    for (auto &cell : g_equipment_surface_logged) {
+        auto value =
+            cell.load(
+                std::memory_order_relaxed);
+        if (value == key)
+            return;
+        if (value != 0u)
+            continue;
+        if (cell.compare_exchange_strong(
+                value,
+                key,
+                std::memory_order_relaxed,
+                std::memory_order_relaxed)) {
+            inserted = true;
+            break;
+        }
+    }
+    if (!inserted)
+        return;
+
+    char line[768]{};
+    std::snprintf(
+        line,
+        sizeof(line),
+        "[DSRRL EQUIPMENT SURFACE ACTIVE] family=%u rx=%u route=%u material_slot=%u mtd_hash=%016llx flver=%016llx envspc_slot=%u spec_rgb=%u owner_exact=%u",
+        static_cast<unsigned>(family),
+        static_cast<unsigned>(decision.receiver_id),
+        static_cast<unsigned>(decision.route_index),
+        static_cast<unsigned>(material.material_slot),
+        static_cast<unsigned long long>(
+            material.semantic_name_hash),
+        static_cast<unsigned long long>(
+            material.flver_identity_hash),
+        static_cast<unsigned>(envspc_slot),
+        spec_rgb_ready ? 1u : 0u,
+        material.owner_tuple_exact ? 1u : 0u);
+    reshade::log::message(
+        reshade::log::level::info,
+        line);
+}
+#endif
 
 #if defined(DSRRL_PMETAL_NATIVE_DSR_CUBEMAP_FEED) || \
     defined(DSRRL_PMETAL_V13_NATIVE_DSR_NO_TAIL_DIAG) || \
@@ -205,9 +272,41 @@ bool exact_pmetal_envspec_candidate(
     const operators::material_response::material_identity &material,
     const operators::material_response::decision &decision) noexcept
 {
+#if defined(DSRRL_EQUIPMENT_WIDE_PTDE_SURFACE_RUNTIME)
+    if (!material.valid ||
+        !material.owner_tuple_exact ||
+        !material.material_slot_valid ||
+        !material.actual_material_exact ||
+        material.material_family_hash !=
+            mr::mtd_semantic_hash("DifSpcBmp") ||
+        !decision.active ||
+        decision.receiver_id < 33u ||
+        decision.receiver_id > 35u ||
+        !std::isfinite(decision.c101) ||
+        decision.c101 < 0.0f)
+        return false;
+
+    const auto query =
+        make_query(
+            material,
+            decision.receiver_id);
+    const auto env =
+        mr::classify_mtd_envspec_semantics(
+            query);
+
+    return
+        env.exact_identity_match &&
+        env.presence ==
+            mr::ptde_envspec_presence::present &&
+        env.router_state ==
+            mr::mtd_envspec_router_state::present &&
+        env.envspc_slot_valid &&
+        env.envspc_slot < 4u;
+#else
     return
         exact_pmetal_material(material) &&
         exact_pmetal_decision(decision);
+#endif
 }
 
 pmetal_envspec_draw_runtime::
@@ -461,7 +560,11 @@ register_lerp_replacement(
         outcome.terminal_sat_rgb_composed ||
         outcome.spec_rgb_consumer ||
 #elif defined(DSRRL_PMETAL_V13_NATIVE_DSR_MATERIAL_MOD_DIAG)
+#if defined(DSRRL_EQUIPMENT_WIDE_PTDE_SURFACE_RUNTIME)
+        !outcome.terminal_sat_rgb_composed ||
+#else
         outcome.terminal_sat_rgb_composed ||
+#endif
         !outcome.spec_rgb_consumer ||
 #else
         !outcome.terminal_sat_rgb_composed ||
@@ -588,10 +691,10 @@ bool pmetal_envspec_draw_runtime::prepare(
         return false;
     }
 
-    // P_Metal is a very narrow route. Reject ordinary MR draws before taking
-    // the feature-registry mutexes below; otherwise every active material draw
-    // pays EnvSpec feature checks even though only exact route 345 / P_Metal
-    // can ever reach this island.
+    // Narrow exact equipment route. In the equipment-wide diagnostic this
+    // remains restricted to owned DifSpcBmp equipment whose exact MTD says
+    // EnvSpec PRESENT and whose receiver is the certified 33/34/35 family.
+    // Unknown/nonhomologous materials fail open before any draw-state work.
     telemetry::hot_count(candidates_);
     if (family ==
         pmetal_envspec_receiver_family::
@@ -665,7 +768,12 @@ bool pmetal_envspec_draw_runtime::prepare(
             mr::mtd_envspec_router_state::
                 present ||
         !env_semantics.envspc_slot_valid ||
-        env_semantics.envspc_slot != 2u) {
+#if defined(DSRRL_EQUIPMENT_WIDE_PTDE_SURFACE_RUNTIME)
+        env_semantics.envspc_slot >= 4u
+#else
+        env_semantics.envspc_slot != 2u
+#endif
+        ) {
         telemetry::hot_count(semantic_rejects_);
         effect_fail(
             effect_fail_mask_,
@@ -997,7 +1105,11 @@ bool pmetal_envspec_draw_runtime::prepare(
             line,
             sizeof(line),
             k_v13_native_dsr_material_mod_diag
+#if defined(DSRRL_EQUIPMENT_WIDE_PTDE_SURFACE_RUNTIME)
+                ? "[DSRRL EQUIPMENT PTDE SURFACE] mode=native_dsr_bc6h_ptde_ab_beta specrgb_c101_color0=envspec_only terminal_sat=1 envdiffuse=stock stable_lerp=paired slot=%u probe_a=%u probe_b=%u"
+#else
                 ? "[DSRRL PMETAL V13 MATERIAL MOD] mode=native_dsr_bc6h_ptde_ab_beta specrgb_c101_color0=envspec_only envdiffuse=stock lerp=paired slot=%u probe_a=%u probe_b=%u"
+#endif
                 : k_v13_native_dsr_no_tail_diag
                     ? "[DSRRL PMETAL V13 NO TAIL] mode=native_dsr_bc6h_ptde_ab_beta no_specrgb_tail=1 envdiffuse=stock lerp=paired slot=%u probe_a=%u probe_b=%u"
                     : "[DSRRL PMETAL ENVSPEC RESOURCE] mode=native_dsr_bc6h_ptde_operator sampler=ptde_lod0 slot=%u probe_a=%u probe_b=%u",
@@ -1421,7 +1533,9 @@ bool pmetal_envspec_draw_runtime::prepare(
     (void)sat_owner;
 #elif defined(DSRRL_PMETAL_V13_NATIVE_DSR_MATERIAL_MOD_DIAG)
     (void)envdiff_owner;
+#if !defined(DSRRL_EQUIPMENT_WIDE_PTDE_SURFACE_RUNTIME)
     (void)sat_owner;
+#endif
 #endif
     prepared.shader = shader;
     prepared.b12 = b12;
@@ -1438,7 +1552,11 @@ bool pmetal_envspec_draw_runtime::prepare(
         mr_owner |
         domain_owner |
         spec_owner |
-        composed_owners;
+        composed_owners
+#if defined(DSRRL_EQUIPMENT_WIDE_PTDE_SURFACE_RUNTIME)
+        | sat_owner
+#endif
+        ;
 #else
     prepared.request.additional_owners =
         mr_owner |
@@ -1553,6 +1671,14 @@ bool pmetal_envspec_draw_runtime::prepare(
     prepared.ready = true;
     effect_latch(effect_request_ready_);
     telemetry::hot_count(requests_);
+#if defined(DSRRL_EQUIPMENT_WIDE_PTDE_SURFACE_RUNTIME)
+    log_equipment_surface_active_once(
+        material,
+        decision,
+        family,
+        env_semantics.envspc_slot,
+        prepared.material_resources.spec_rgb);
+#endif
 
     if (stable_envdiffuse_consumer_diag &&
         !g_envdiffuse_consumer_logged.exchange(
@@ -1787,6 +1913,10 @@ void pmetal_envspec_draw_runtime::reset() noexcept
     g_source_frontier_logged.store(false);
     g_prepare_stage_log_mask.store(0u);
     g_value_cut_log_mask.store(0u);
+#if defined(DSRRL_EQUIPMENT_WIDE_PTDE_SURFACE_RUNTIME)
+    for (auto &cell : g_equipment_surface_logged)
+        cell.store(0u, std::memory_order_relaxed);
+#endif
     quarantined_.store(false);
 }
 
