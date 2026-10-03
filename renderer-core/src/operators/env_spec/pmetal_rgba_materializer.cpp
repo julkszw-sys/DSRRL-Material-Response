@@ -2217,11 +2217,17 @@ bool apply_build131(
             0x08000038u,
             0x00100072u,
             0x00000002u,
-            // Stock t1 is sampled through the legacy wxyz resource swizzle.
-            // The true SpecRGB lanes therefore live in the sampled temporary's
-            // yzw components. Read those exact lanes into the normalized xyz
-            // material accumulator before applying raw PTDE c101.
+#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_R4)
+            // PTDE 728/741/754 sample the exact SpecMap directly as RGB:
+            //   texld s1 -> mul xyz,c101 -> mul xyz,COLOR0.
+            // Once t10 is an exact PTDE SpecRGB sidecar, the stock DSR
+            // SpecTex wxyz remap is no longer part of this consumer.
+            0x00100246u,
+#else
+            // Historical Build131 compatibility for stock-encoded t1:
+            // recover logical SpecRGB from sampled yzw.
             0x00100796u,
+#endif
             0x00000002u,
             0x00208246u,
             0x0000000cu,
@@ -2277,15 +2283,23 @@ bool apply_build131(
                 t1_sample->offset),
         11u,
         fresh_spec.begin());
-    // The stock SpecTex sample uses t1.wxyz. Historical exact receiver RE
-    // proves that logical SpecRGB is carried in destination yzw, not xyz.
-    // Keep the stock resource swizzle, write the fresh PTDE t10 sample into
-    // r2.yzw, then let c101_mul above normalize r2.yzw -> r2.xyz.
+    // The stock DSR t1 SAMPLE operand is wxyz (swizzle byte 0x93).
+    // That remap belongs to the stock DSR SpecTex encoding, not to the exact
+    // PTDE SpecRGB sidecar bound at t10. PTDE stable HemEnv 728/741/754 uses
+    // direct texld s1 RGB. R4 therefore changes only the dedicated t10
+    // consumer to identity xyzw (swizzle byte 0xE4) and writes RGB to r2.xyz.
     if (fresh_spec[7] !=
             0x00107936u)
         return false;
+#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_R4)
+    fresh_spec[3] =
+        0x00100072u;
+    fresh_spec[7] =
+        0x00107e46u;
+#else
     fresh_spec[3] =
         0x001000e2u;
+#endif
     fresh_spec[4] = 2u;
     fresh_spec[8] = 10u;
 
@@ -2470,11 +2484,11 @@ bool final_postcondition(
 
     std::size_t t10_decl = 0u;
     std::size_t t10_sample = 0u;
-    std::size_t t10_yzw_sample = 0u;
+    std::size_t t10_material_sample = 0u;
     std::size_t t12_sample = 0u;
     std::size_t t12_scratch_rgba_sample = 0u;
     std::size_t t12_decode_preserve_r1x = 0u;
-    std::size_t c101_yzw_mul = 0u;
+    std::size_t c101_material_mul = 0u;
     std::size_t t14_decl = 0u;
     std::size_t s14_decl = 0u;
     std::size_t t14_sample = 0u;
@@ -2517,13 +2531,23 @@ bool final_postcondition(
                 words[ins.offset + 8u] ==
                     10u) {
                 ++t10_sample;
+#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_R4)
+                if (words[ins.offset + 3u] ==
+                        0x00100072u &&
+                    words[ins.offset + 4u] ==
+                        2u &&
+                    words[ins.offset + 7u] ==
+                        0x00107e46u)
+                    ++t10_material_sample;
+#else
                 if (words[ins.offset + 3u] ==
                         0x001000e2u &&
                     words[ins.offset + 4u] ==
                         2u &&
                     words[ins.offset + 7u] ==
                         0x00107936u)
-                    ++t10_yzw_sample;
+                    ++t10_material_sample;
+#endif
             }
 
             if (ins.length == 13u) {
@@ -2580,8 +2604,13 @@ bool final_postcondition(
                 0x00100072u &&
             words[ins.offset + 2u] ==
                 2u &&
+#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_R4)
+            words[ins.offset + 3u] ==
+                0x00100246u &&
+#else
             words[ins.offset + 3u] ==
                 0x00100796u &&
+#endif
             words[ins.offset + 4u] ==
                 2u &&
             words[ins.offset + 5u] ==
@@ -2590,7 +2619,7 @@ bool final_postcondition(
                 12u &&
             words[ins.offset + 7u] ==
                 0u)
-            ++c101_yzw_mul;
+            ++c101_material_mul;
     }
 
     auto *rdef =
@@ -2629,11 +2658,11 @@ bool final_postcondition(
     return
         t10_decl == 1u &&
         t10_sample == 1u &&
-        t10_yzw_sample == 1u &&
+        t10_material_sample == 1u &&
         t12_sample == 1u &&
         t12_scratch_rgba_sample == 1u &&
         t12_decode_preserve_r1x == 1u &&
-        c101_yzw_mul == 1u &&
+        c101_material_mul == 1u &&
         t14_decl == 1u &&
         s14_decl == 1u &&
         t14_sample == 1u &&
