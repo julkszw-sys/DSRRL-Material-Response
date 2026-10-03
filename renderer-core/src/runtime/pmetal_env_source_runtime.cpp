@@ -22,7 +22,10 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <filesystem>
+#include <fstream>
 #include <mutex>
+#include <vector>
 
 namespace dsrrl::runtime {
 namespace {
@@ -45,6 +48,7 @@ struct f4 {
     float w = 0.0f;
 };
 
+#if !defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG)
 bool inverse_envdiffuse_endpoint(
     const float *src,
     f4 &out) noexcept
@@ -84,9 +88,8 @@ bool capture_linear_envdiffuse(
     f4 &a,
     f4 &b) noexcept
 {
-    // DSR profile packer layout at the exact pre-draw-gain cut:
-    // +0x00 EnvDiffuse A, +0x10 EnvSpec A,
-    // +0x20 EnvDiffuse B, +0x30 EnvSpec B.
+    // Legacy diagnostic only: recover the host q-domain endpoints. The full
+    // PTDE HemEnv diagnostic never enters this path.
     return
         host_out != nullptr &&
         inverse_envdiffuse_endpoint(
@@ -96,6 +99,273 @@ bool capture_linear_envdiffuse(
             host_out + 8,
             b);
 }
+#else
+constexpr char k_ptde_envdiffuse_donor_relative_path[] =
+    "DSRRL\\EnvSpec\\PackedGI\\PMETAL_PTDE_ENVDIFFUSE_DONOR_V1.bin";
+constexpr std::uint64_t k_ptde_envdiffuse_donor_size = 15296ull;
+constexpr std::array<std::uint8_t,32>
+k_ptde_envdiffuse_donor_sha256 = {{
+    0x29u,0xd3u,0x71u,0x5au,0xaeu,0x54u,0xe7u,0xaeu,
+    0x2fu,0xe6u,0x6du,0xcdu,0x0cu,0x01u,0x6fu,0x5eu,
+    0x34u,0x5cu,0xccu,0x6fu,0xd5u,0xafu,0x94u,0x77u,
+    0x98u,0x5du,0x4du,0x72u,0x0fu,0x6fu,0xafu,0x92u
+}};
+
+struct exact_envdiffuse_bank {
+    std::uint64_t signature = 0u;
+    std::uint32_t first = 0u;
+    std::uint32_t count = 0u;
+};
+struct exact_envdiffuse_row {
+    std::uint32_t id = 0u;
+    std::uint16_t r = 0u;
+    std::uint16_t g = 0u;
+    std::uint16_t b = 0u;
+    std::uint16_t m = 0u;
+};
+
+std::array<exact_envdiffuse_bank,20>
+    g_exact_envdiffuse_banks{};
+std::array<exact_envdiffuse_row,1246>
+    g_exact_envdiffuse_rows{};
+bool g_exact_envdiffuse_ready = false;
+
+std::filesystem::path pmetal_process_dir()
+{
+    std::wstring buffer(32768, L'\0');
+    const DWORD size =
+        GetModuleFileNameW(
+            nullptr,
+            buffer.data(),
+            static_cast<DWORD>(
+                buffer.size()));
+    if (size == 0u ||
+        size >= buffer.size())
+        return {};
+    buffer.resize(size);
+    return std::filesystem::path(
+        buffer).parent_path();
+}
+
+template <typename T>
+bool donor_read(
+    const std::vector<std::uint8_t> &bytes,
+    std::size_t &offset,
+    T &value) noexcept
+{
+    if (offset > bytes.size() ||
+        sizeof(T) > bytes.size() - offset)
+        return false;
+    std::memcpy(
+        &value,
+        bytes.data() + offset,
+        sizeof(T));
+    offset += sizeof(T);
+    return true;
+}
+
+bool load_exact_envdiffuse_donor() noexcept
+{
+    g_exact_envdiffuse_ready = false;
+    g_exact_envdiffuse_banks = {};
+    g_exact_envdiffuse_rows = {};
+
+    try {
+        const auto root =
+            pmetal_process_dir();
+        if (root.empty())
+            return false;
+
+        const auto path =
+            root /
+            std::filesystem::path(
+                k_ptde_envdiffuse_donor_relative_path);
+
+        std::error_code ec;
+        const auto size =
+            std::filesystem::file_size(
+                path,
+                ec);
+        if (ec ||
+            size !=
+                k_ptde_envdiffuse_donor_size)
+            return false;
+
+        std::ifstream stream(
+            path,
+            std::ios::binary);
+        if (!stream)
+            return false;
+
+        std::vector<std::uint8_t> bytes(
+            static_cast<std::size_t>(size));
+        if (!stream.read(
+                reinterpret_cast<char *>(
+                    bytes.data()),
+                static_cast<std::streamsize>(
+                    bytes.size())))
+            return false;
+
+        if (operators::legacy_plan::hashing::sha256(
+                bytes.data(),
+                bytes.size()) !=
+            k_ptde_envdiffuse_donor_sha256)
+            return false;
+
+        std::size_t offset = 0u;
+        std::array<char,8> magic{};
+        if (offset + magic.size() >
+            bytes.size())
+            return false;
+        std::memcpy(
+            magic.data(),
+            bytes.data(),
+            magic.size());
+        offset += magic.size();
+
+        constexpr std::array<char,8>
+            expected_magic{{
+                'D','S','R','E','D','V','0','1'
+            }};
+        if (magic != expected_magic)
+            return false;
+
+        std::uint32_t version = 0u;
+        std::uint32_t row_count = 0u;
+        std::uint32_t bank_count = 0u;
+        std::uint32_t row_stride = 0u;
+        if (!donor_read(bytes,offset,version) ||
+            !donor_read(bytes,offset,row_count) ||
+            !donor_read(bytes,offset,bank_count) ||
+            !donor_read(bytes,offset,row_stride) ||
+            version != 1u ||
+            row_count !=
+                g_exact_envdiffuse_rows.size() ||
+            bank_count !=
+                g_exact_envdiffuse_banks.size() ||
+            row_stride != 12u)
+            return false;
+
+        for (std::size_t i = 0u;
+             i <
+                g_exact_envdiffuse_banks.size();
+             ++i) {
+            auto &bank =
+                g_exact_envdiffuse_banks[i];
+            if (!donor_read(
+                    bytes,
+                    offset,
+                    bank.signature) ||
+                !donor_read(
+                    bytes,
+                    offset,
+                    bank.first) ||
+                !donor_read(
+                    bytes,
+                    offset,
+                    bank.count))
+                return false;
+
+            const auto &authority =
+                pmetal_env_source_authority::
+                    k_banks[i];
+            if (bank.signature !=
+                    authority.signature ||
+                bank.first !=
+                    authority.first ||
+                bank.count !=
+                    authority.count ||
+                bank.first >
+                    g_exact_envdiffuse_rows.size() ||
+                bank.count >
+                    g_exact_envdiffuse_rows.size() -
+                        bank.first)
+                return false;
+        }
+
+        for (auto &row :
+             g_exact_envdiffuse_rows) {
+            if (!donor_read(
+                    bytes,offset,row.id) ||
+                !donor_read(
+                    bytes,offset,row.r) ||
+                !donor_read(
+                    bytes,offset,row.g) ||
+                !donor_read(
+                    bytes,offset,row.b) ||
+                !donor_read(
+                    bytes,offset,row.m))
+                return false;
+        }
+
+        if (offset != bytes.size())
+            return false;
+
+        for (const auto &bank :
+             g_exact_envdiffuse_banks) {
+            for (std::uint32_t j = 0u;
+                 j < bank.count;
+                 ++j) {
+                const auto &row =
+                    g_exact_envdiffuse_rows[
+                        bank.first + j];
+                if (row.id != j)
+                    return false;
+            }
+        }
+
+        g_exact_envdiffuse_ready = true;
+        return true;
+    } catch (...) {
+        g_exact_envdiffuse_banks = {};
+        g_exact_envdiffuse_rows = {};
+        return false;
+    }
+}
+
+bool exact_envdiffuse_endpoint(
+    std::uint64_t signature,
+    std::uint32_t row_id,
+    f4 &out) noexcept
+{
+    out = {};
+    if (!g_exact_envdiffuse_ready)
+        return false;
+
+    for (const auto &bank :
+         g_exact_envdiffuse_banks) {
+        if (bank.signature != signature)
+            continue;
+        if (row_id >= bank.count)
+            return false;
+
+        const auto &row =
+            g_exact_envdiffuse_rows[
+                bank.first + row_id];
+        if (row.id != row_id)
+            return false;
+
+        const float scale =
+            static_cast<float>(
+                row.m) *
+            0.01f;
+        out = {
+            static_cast<float>(row.r) /
+                255.0f * scale,
+            static_cast<float>(row.g) /
+                255.0f * scale,
+            static_cast<float>(row.b) /
+                255.0f * scale,
+            0.0f
+        };
+        return
+            std::isfinite(out.x) &&
+            std::isfinite(out.y) &&
+            std::isfinite(out.z);
+    }
+    return false;
+}
+#endif
 
 constexpr std::uintptr_t k_envspec_single_rva = 0x563B80u;
 constexpr std::uintptr_t k_envspec_blend_rva = 0x563C30u;
@@ -1450,11 +1720,21 @@ void __fastcall envspec_single_hook_entry(
 
     f4 envdiffuse_a{};
     f4 envdiffuse_b{};
+#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG)
+    const bool envdiffuse_ok =
+        donor_ok &&
+        exact_envdiffuse_endpoint(
+            bank,
+            row,
+            envdiffuse_a);
+    envdiffuse_b = envdiffuse_a;
+#else
     const bool envdiffuse_ok =
         capture_linear_envdiffuse(
             host_out,
             envdiffuse_a,
             envdiffuse_b);
+#endif
 
     if (donor_ok && envdiffuse_ok)
         publish_hook_source(
@@ -1535,11 +1815,24 @@ void __fastcall envspec_blend_hook_entry(
 
     f4 envdiffuse_a{};
     f4 envdiffuse_b{};
+#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG)
+    const bool envdiffuse_ok =
+        donor_ok &&
+        exact_envdiffuse_endpoint(
+            bank_a,
+            row_a,
+            envdiffuse_a) &&
+        exact_envdiffuse_endpoint(
+            bank_b,
+            row_b,
+            envdiffuse_b);
+#else
     const bool envdiffuse_ok =
         capture_linear_envdiffuse(
             host_out,
             envdiffuse_a,
             envdiffuse_b);
+#endif
 
     if (donor_ok && envdiffuse_ok)
         publish_hook_source(
@@ -1669,6 +1962,17 @@ void pmetal_env_source_cache_invalidate() noexcept
 
 bool pmetal_env_source_runtime::install() noexcept
 {
+#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG)
+    if (!load_exact_envdiffuse_donor()) {
+        reshade::log::message(
+            reshade::log::level::warning,
+            "DSRRL Full PTDE HemEnv: exact PTDE EnvDiffuse LightBank donor sidecar unavailable or invalid; source carrier fails open.");
+        return false;
+    }
+    reshade::log::message(
+        reshade::log::level::info,
+        "[DSRRL PMETAL FULL PTDE HEMENV] exact PTDE EnvDiffuse LightBank donor admitted.");
+#endif
     pmetal_env_source_cache_invalidate();
     clear_hook_source();
     g_hook_restore_failed.store(
@@ -1979,6 +2283,34 @@ void pmetal_env_source_selector_event(
     };
     next.beta =
         endpoints.beta;
+
+#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG)
+    f4 envdiffuse_a{};
+    f4 envdiffuse_b{};
+    if (!exact_envdiffuse_endpoint(
+            next.bank_signature_a,
+            next.row_id_a,
+            envdiffuse_a) ||
+        !exact_envdiffuse_endpoint(
+            next.bank_signature_b,
+            next.row_id_b,
+            envdiffuse_b)) {
+        telemetry::hot_count(
+            g_decode_fail);
+        return;
+    }
+    next.envdiffuse_a = {
+        envdiffuse_a.x,
+        envdiffuse_a.y,
+        envdiffuse_a.z
+    };
+    next.envdiffuse_b = {
+        envdiffuse_b.x,
+        envdiffuse_b.y,
+        envdiffuse_b.z
+    };
+    next.envdiffuse_linear_valid = true;
+#endif
 
     next.serial = epoch;
 
