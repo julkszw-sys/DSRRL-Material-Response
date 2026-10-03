@@ -69,7 +69,7 @@ jobs:
           if (-not $ascii.Contains($env:DSRRL_CHECKOUT_COMMIT)) { throw "Missing source commit identity" }
           if (-not $ascii.Contains("pmetal_v13_ptde_packedgi_material_mod_runtime")) { throw "Missing build flavor identity" }
           if (-not $ascii.Contains("[DSRRL PMETAL V13 MATERIAL MOD]")) { throw "Missing runtime marker identity" }
-          if (-not $ascii.Contains("mode=ptde_packedgi_rgba_ptde_ab_beta")) { throw "Missing PTDE PackedGI runtime mode identity" }
+          if (-not $ascii.Contains("mode=ptde_packedgi_rgba_decode_ptde_ab_beta")) { throw "Missing PTDE PackedGI runtime mode identity" }
           $hash = (Get-FileHash $path -Algorithm SHA256).Hash.ToLowerInvariant()
           Write-Host "ADDON_SHA256=$hash"
 
