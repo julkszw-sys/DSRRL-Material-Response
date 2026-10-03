@@ -6146,6 +6146,9 @@ bool prepare_island_batch(
             lerp_query.ownership.exact =
                 material.owner_tuple_exact;
 
+            // Generic Lerp MR remains diffuse-v1. SpecRGB is requested only
+            // as the carrier proof for the separate exact equipment consumer;
+            // failure to promote atomically fails the draw open to stock DSR.
             (void)g_material_resources.prepare_draw_requests(
                 context,
                 receiver_id,
@@ -6308,6 +6311,10 @@ bool prepare_island_batch(
         material.owner_tuple_exact;
 
     if (context != nullptr) {
+        // Generic stable MR is diffuse-v1 only. The equipment diagnostic does
+        // not turn generic MR into a SpecRGB consumer: it first proves an
+        // exact equipment t10 companion, then atomically promotes this draw
+        // to the separate equipment_legacy_spec replacement bank.
         (void)g_material_resources.prepare_draw_requests(
             context,
             receiver_id,
