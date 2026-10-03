@@ -1647,6 +1647,113 @@ bool apply_exact_ptde_envdiffuse_consumer(
 }
 #endif
 
+#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_R3)
+// R3 closes a DSR-only composition term that survived the R2 full-PTDE
+// source replacement. rx33/rx34 carry one additional scalar multiply
+// immediately after the first EnvSpec+EnvDiffuse merge; PTDE applies its
+// chromatic visibility before material modulation instead. Once the exact
+// PTDE EnvSpec and EnvDiffuse terms are active, retaining this host scalar
+// double-attenuates the environment surface. Plain rx35 has no such join.
+bool remove_dsr_postmerge_visibility_scalar_r3(
+    std::vector<std::uint8_t> &bytes,
+    const pmetal_rgba_authority::entry &authority) noexcept
+{
+    if (!authority.remove_visibility_exponent)
+        return true;
+
+    std::vector<chunk> chunks;
+    std::vector<std::uint32_t> words;
+    std::size_t code_index = 0u;
+
+    if (!parse_dxbc(
+            bytes.data(), bytes.size(),
+            chunks, code_index) ||
+        !extract_words(
+            chunks, code_index, words))
+        return false;
+
+    constexpr std::size_t k_build131_inserted_words = 15u;
+    const auto merge_word =
+        authority.merge_word +
+        k_build131_inserted_words;
+    const auto join_word = merge_word + 9u;
+
+    if (join_word + 6u >= words.size())
+        return false;
+
+    // First common environment merge remains structurally exact.
+    if (words[merge_word] != 0x09000032u ||
+        words[merge_word + 1u] != 0x001000e2u ||
+        words[merge_word + 2u] != 1u ||
+        words[merge_word + 7u] != 0x00100e56u ||
+        words[merge_word + 8u] != 1u)
+        return false;
+
+    // Exact DSR-only post-merge scalar:
+    // mul r1.xyz, r1.xyz, r(reflection_coord_register).x
+    if (words[join_word] != 0x07000038u ||
+        words[join_word + 1u] != 0x001000e2u ||
+        words[join_word + 2u] != 1u ||
+        words[join_word + 3u] != 0x00100e56u ||
+        words[join_word + 4u] != 1u ||
+        words[join_word + 5u] != 0x00100006u ||
+        words[join_word + 6u] !=
+            authority.reflection_coord_register)
+        return false;
+
+    // Preserve instruction length and the merge topology while removing only
+    // the host-only second attenuation. This does not alter cubemap content,
+    // probe routing, PTDE RGB/A decode, c87/c86, SpecRGB, c101 or COLOR0.
+    words[join_word + 5u] = 0x00004001u;
+    words[join_word + 6u] = 0x3f800000u;
+
+    std::vector<std::uint8_t> rebuilt;
+    if (!rebuild(
+            bytes.data(), bytes.size(),
+            std::move(chunks),
+            code_index, words, rebuilt))
+        return false;
+
+    bytes = std::move(rebuilt);
+    return true;
+}
+
+bool r3_postmerge_visibility_postcondition(
+    const std::vector<std::uint8_t> &bytes,
+    const pmetal_rgba_authority::entry &authority) noexcept
+{
+    if (!authority.remove_visibility_exponent)
+        return true;
+
+    std::vector<chunk> chunks;
+    std::vector<std::uint32_t> words;
+    std::size_t code_index = 0u;
+
+    if (!parse_dxbc(
+            bytes.data(), bytes.size(),
+            chunks, code_index) ||
+        !extract_words(
+            chunks, code_index, words))
+        return false;
+
+    constexpr std::size_t k_build131_inserted_words = 15u;
+    const auto merge_word =
+        authority.merge_word +
+        k_build131_inserted_words;
+    const auto join_word = merge_word + 9u;
+
+    return
+        join_word + 6u < words.size() &&
+        words[join_word] == 0x07000038u &&
+        words[join_word + 1u] == 0x001000e2u &&
+        words[join_word + 2u] == 1u &&
+        words[join_word + 3u] == 0x00100e56u &&
+        words[join_word + 4u] == 1u &&
+        words[join_word + 5u] == 0x00004001u &&
+        words[join_word + 6u] == 0x3f800000u;
+}
+#endif
+
 bool apply_linear_envdiffuse_consumer_diag(
     std::vector<std::uint8_t> &bytes) noexcept
 {
@@ -2758,6 +2865,20 @@ materialize_pmetal_rgba_receiver(
     }
 #endif
     outcome.envdiffuse_linear_consumer_diag = true;
+
+#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_R3)
+    if (!remove_dsr_postmerge_visibility_scalar_r3(
+            base,
+            *authority) ||
+        !r3_postmerge_visibility_postcondition(
+            base,
+            *authority)) {
+        outcome.result =
+            pmetal_rgba_materialize_result::
+                fail_postcondition;
+        return outcome;
+    }
+#endif
 
     if (compose_upper_lower) {
         std::vector<std::uint8_t> ul;
