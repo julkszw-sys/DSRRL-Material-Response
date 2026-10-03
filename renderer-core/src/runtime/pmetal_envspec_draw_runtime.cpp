@@ -93,9 +93,11 @@ void log_prepare_stage_once(
         line);
 }
 
-#if defined(DSRRL_PMETAL_NATIVE_DSR_CUBEMAP_FEED) || \
-    defined(DSRRL_PMETAL_V13_NATIVE_DSR_NO_TAIL_DIAG) || \
-    defined(DSRRL_PMETAL_V13_NATIVE_DSR_MATERIAL_MOD_DIAG)
+#if defined(DSRRL_PMETAL_FORCE_PTDE_PACKEDGI)
+constexpr bool k_native_dsr_cubemap_feed = false;
+#elif defined(DSRRL_PMETAL_NATIVE_DSR_CUBEMAP_FEED) || \
+      defined(DSRRL_PMETAL_V13_NATIVE_DSR_NO_TAIL_DIAG) || \
+      defined(DSRRL_PMETAL_V13_NATIVE_DSR_MATERIAL_MOD_DIAG)
 constexpr bool k_native_dsr_cubemap_feed = true;
 #else
 constexpr bool k_native_dsr_cubemap_feed = false;
@@ -988,16 +990,17 @@ bool pmetal_envspec_draw_runtime::prepare(
     }
     effect_latch(effect_probe_ready_);
 
-    if (k_native_dsr_cubemap_feed &&
-        !g_resource_mode_logged.exchange(
+    if (!g_resource_mode_logged.exchange(
             true,
             std::memory_order_relaxed)) {
         char line[384]{};
         std::snprintf(
             line,
             sizeof(line),
-            k_v13_native_dsr_material_mod_diag
-                ? "[DSRRL PMETAL V13 MATERIAL MOD] mode=native_dsr_bc6h_ptde_ab_beta specrgb_c101_color0=envspec_only envdiffuse=stock lerp=paired slot=%u probe_a=%u probe_b=%u"
+            k_v13_native_dsr_material_mod_diag && !k_native_dsr_cubemap_feed
+                ? "[DSRRL PMETAL V13 MATERIAL MOD] mode=ptde_packedgi_rgba_ptde_ab_beta specrgb_c101_color0=envspec_only envdiffuse=stock lerp=paired slot=%u probe_a=%u probe_b=%u"
+                : k_v13_native_dsr_material_mod_diag
+                    ? "[DSRRL PMETAL V13 MATERIAL MOD] mode=native_dsr_bc6h_ptde_ab_beta specrgb_c101_color0=envspec_only envdiffuse=stock lerp=paired slot=%u probe_a=%u probe_b=%u"
                 : k_v13_native_dsr_no_tail_diag
                     ? "[DSRRL PMETAL V13 NO TAIL] mode=native_dsr_bc6h_ptde_ab_beta no_specrgb_tail=1 envdiffuse=stock lerp=paired slot=%u probe_a=%u probe_b=%u"
                     : "[DSRRL PMETAL ENVSPEC RESOURCE] mode=native_dsr_bc6h_ptde_operator sampler=ptde_lod0 slot=%u probe_a=%u probe_b=%u",
