@@ -1,0 +1,82 @@
+name: P_Metal Full PTDE HemEnv R6 Cumulative Operators Runtime Build
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - "renderer-core/integrated/**"
+      - "renderer-core/include/dsrrl/operators/env_spec/**"
+      - "renderer-core/src/operators/env_spec/pmetal_rgba_materializer.cpp"
+      - "renderer-core/src/runtime/material_resource_draw_runtime.cpp"
+      - "renderer-core/src/runtime/pmetal_env_source_runtime.cpp"
+      - "renderer-core/src/runtime/pmetal_envspec_draw_runtime.cpp"
+      - "renderer-core/src/runtime/envspec_resource_runtime.cpp"
+      - ".github/workflows/pmetal-full-ptde-hemenv-r6-cumulative-fast.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  windows-addon:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - name: Resolve exact source commit
+        shell: pwsh
+        run: |
+          $commit = (git rev-parse HEAD).Trim()
+          "DSRRL_CHECKOUT_COMMIT=$commit" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Checkout pinned ReShade API
+        uses: actions/checkout@v4
+        with:
+          repository: crosire/reshade
+          ref: 3645e3025d1d98a90e318278858931f034d5d1f6
+          path: _reshade
+
+      - name: Configure R6
+        shell: pwsh
+        run: >
+          cmake
+          -S renderer-core/integrated
+          -B build-fast
+          -A x64
+          -DRESHADE_INCLUDE_DIR="${{ github.workspace }}/_reshade/include"
+          -DDSRRL_SOURCE_COMMIT="$env:DSRRL_CHECKOUT_COMMIT"
+          -DDSRRL_BUILD_FLAVOR="pmetal_full_ptde_hemenv_r6_cumulative"
+          -DDSRRL_FULL_TELEMETRY_DEFAULT_ON=ON
+          -DDSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG=ON
+          -DDSRRL_PMETAL_FULL_PTDE_HEMENV_R3=ON
+          -DDSRRL_PMETAL_FULL_PTDE_HEMENV_R4=ON
+          -DDSRRL_PMETAL_FULL_PTDE_HEMENV_R5=ON
+          -DDSRRL_PMETAL_FULL_PTDE_HEMENV_R6=ON
+          -DDSRRL_PHYSICAL_CUT_UL_H3_SUBSURFACE=ON
+
+      - name: Build runtime
+        shell: pwsh
+        run: |
+          cmake --build build-fast --config Release --target dsrrl_renderer_core_integrated
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $addons = @(Get-ChildItem build-fast -Recurse -Filter *.addon64)
+          if ($addons.Count -ne 1) { throw "Expected exactly one addon, found $($addons.Count)" }
+          Copy-Item $addons[0].FullName "DSRRL_PMETAL_FULL_PTDE_HEMENV_R6.addon64" -Force
+
+      - name: Verify binary identity
+        shell: pwsh
+        run: |
+          $path = "DSRRL_PMETAL_FULL_PTDE_HEMENV_R6.addon64"
+          $ascii = [System.Text.Encoding]::ASCII.GetString([System.IO.File]::ReadAllBytes($path))
+          if (-not $ascii.Contains($env:DSRRL_CHECKOUT_COMMIT)) { throw "Missing source commit identity" }
+          if (-not $ascii.Contains("pmetal_full_ptde_hemenv_r6_cumulative")) { throw "Missing R6 build flavor identity" }
+          if (-not $ascii.Contains("[DSRRL PMETAL R3 SPEC ATTEST]")) { throw "Missing exact SpecRGB SHA attestation marker" }
+          $hash = (Get-FileHash $path -Algorithm SHA256).Hash.ToLowerInvariant()
+          Write-Host "ADDON_SHA256=$hash"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: DSRRL_PMETAL_FULL_PTDE_HEMENV_R6
+          path: DSRRL_PMETAL_FULL_PTDE_HEMENV_R6.addon64
+          if-no-files-found: error
