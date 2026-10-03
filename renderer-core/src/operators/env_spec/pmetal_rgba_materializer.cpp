@@ -2076,6 +2076,118 @@ bool apply_build131(
     return true;
 }
 
+#if defined(DSRRL_PMETAL_POSTMERGE_VISIBILITY_BYPASS_DIAG)
+// Reuse the already-constructed PR200 falsifier verbatim in operator intent:
+// on exact Csd/Sdw stable P_Metal only, replace the post-merge host
+// environment visibility scalar with immediate 1.0. This is diagnostic only.
+// rx35/plain has no homologous join at this position and remains unchanged.
+bool bypass_host_environment_visibility_join_diag(
+    std::vector<std::uint8_t> &bytes,
+    const pmetal_rgba_authority::entry &authority) noexcept
+{
+    if (!authority.remove_visibility_exponent)
+        return true;
+
+    std::vector<chunk> chunks;
+    std::vector<std::uint32_t> words;
+    std::vector<instruction_view> instructions;
+    std::size_t code_index = 0u;
+
+    if (!parse_dxbc(
+            bytes.data(),
+            bytes.size(),
+            chunks,
+            code_index) ||
+        !extract_words(
+            chunks,
+            code_index,
+            words) ||
+        !decode(
+            words,
+            instructions))
+        return false;
+
+    // apply_build131 inserts one four-DWORD t10 declaration and one
+    // eleven-DWORD fresh t10 sample before the preserved merge.
+    constexpr std::size_t k_build131_inserted_words = 15u;
+    const auto merge_word =
+        authority.merge_word +
+        k_build131_inserted_words;
+    const auto visibility_word =
+        merge_word + 9u;
+
+    if (visibility_word + 6u >= words.size())
+        return false;
+
+    // Preserved first EnvSpec+EnvDiffuse merge.
+    if (words[merge_word] != 0x09000032u ||
+        words[merge_word + 1u] != 0x001000e2u ||
+        words[merge_word + 2u] != 1u ||
+        words[merge_word + 7u] != 0x00100e56u ||
+        words[merge_word + 8u] != 1u)
+        return false;
+
+    // Exact post-merge host environment visibility join.
+    if (words[visibility_word] != 0x07000038u ||
+        words[visibility_word + 1u] != 0x001000e2u ||
+        words[visibility_word + 2u] != 1u ||
+        words[visibility_word + 3u] != 0x00100e56u ||
+        words[visibility_word + 4u] != 1u ||
+        words[visibility_word + 5u] != 0x00100006u ||
+        words[visibility_word + 6u] !=
+            authority.reflection_coord_register)
+        return false;
+
+    // Length-preserving single-operand substitution:
+    // TEMP rN.x -> immediate 1.0f.
+    words[visibility_word + 5u] = 0x00004001u;
+    words[visibility_word + 6u] = 0x3f800000u;
+
+    std::vector<std::uint8_t> rebuilt;
+    if (!rebuild(
+            bytes.data(),
+            bytes.size(),
+            std::move(chunks),
+            code_index,
+            words,
+            rebuilt))
+        return false;
+
+    bytes = std::move(rebuilt);
+    return true;
+}
+
+bool postmerge_visibility_bypass_postcondition(
+    const std::vector<std::uint8_t> &bytes,
+    const pmetal_rgba_authority::entry &authority) noexcept
+{
+    if (!authority.remove_visibility_exponent)
+        return true;
+
+    std::vector<chunk> chunks;
+    std::vector<std::uint32_t> words;
+    std::size_t code_index = 0u;
+    if (!parse_dxbc(bytes.data(), bytes.size(), chunks, code_index) ||
+        !extract_words(chunks, code_index, words))
+        return false;
+
+    constexpr std::size_t k_build131_inserted_words = 15u;
+    const auto merge_word =
+        authority.merge_word + k_build131_inserted_words;
+    const auto visibility_word = merge_word + 9u;
+
+    return
+        visibility_word + 6u < words.size() &&
+        words[visibility_word] == 0x07000038u &&
+        words[visibility_word + 1u] == 0x001000e2u &&
+        words[visibility_word + 2u] == 1u &&
+        words[visibility_word + 3u] == 0x00100e56u &&
+        words[visibility_word + 4u] == 1u &&
+        words[visibility_word + 5u] == 0x00004001u &&
+        words[visibility_word + 6u] == 0x3f800000u;
+}
+#endif
+
 bool binding_exists(
     const std::vector<std::uint8_t> &payload,
     std::uint32_t type,
@@ -2456,6 +2568,22 @@ materialize_pmetal_rgba_receiver(
                 fail_build131_precondition;
         return outcome;
     }
+
+#if defined(DSRRL_PMETAL_POSTMERGE_VISIBILITY_BYPASS_DIAG)
+    // PR200 successor on the corrected PR208/Build131 baseline: change only
+    // the exact post-merge host environment visibility scalar on rx33/rx34.
+    if (!bypass_host_environment_visibility_join_diag(
+            base,
+            *authority) ||
+        !postmerge_visibility_bypass_postcondition(
+            base,
+            *authority)) {
+        outcome.result =
+            pmetal_rgba_materialize_result::
+                fail_postcondition;
+        return outcome;
+    }
+#endif
 
     outcome.spec_rgb_consumer = true;
     outcome.envdiffuse_linear_consumer_diag = false;
