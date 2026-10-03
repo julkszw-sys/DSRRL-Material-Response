@@ -1410,8 +1410,8 @@ promote_prevalidated_equipment_to_spec_rgb(
 {
     if (!prepared.ready ||
         prepared.shader == nullptr ||
-        prepared.receiver_id < 24u ||
-        prepared.receiver_id > 47u ||
+        prepared.receiver_id < 33u ||
+        prepared.receiver_id > 35u ||
         local_quarantine_.load() ||
         transactions_.quarantined())
         return false;
