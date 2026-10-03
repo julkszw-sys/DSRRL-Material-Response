@@ -826,6 +826,219 @@ constexpr std::array<std::uint32_t,47>
         0x01000015u
     }};
 
+
+#if defined(DSRRL_PMETAL_V13_PTDE_RGBA_DECODE_DIAG)
+// Exact PTDE EnvSpec sampling law for raw PackedGI RGBA:
+// filter raw RGBA first, then decode sampled RGB by sampled alpha.
+// This is deliberately isolated from U/L, EnvDiffuse and terminal SAT.
+constexpr std::array<std::uint32_t,74>
+    k_v13_ptde_rgba_decode_chain = {{
+        0x8d000048u,0x80000182u,0x00155543u,0x001000f2u,0x00000001u,0x00100796u,0x00000000u,0x00107936u,
+        0x0000000cu,0x00106000u,0x0000000cu,0x00004001u,0x00000000u,0x0700000eu,0x001000e2u,0x00000001u,
+        0x00100e56u,0x00000001u,0x00100006u,0x00000001u,0x08000038u,0x001000e2u,0x00000001u,0x00100e56u,
+        0x00000001u,0x00208246u,0x0000000cu,0x00000002u,0x0404001fu,0x0020803au,0x0000000cu,0x00000003u,
+        0x8d000048u,0x80000182u,0x00155543u,0x001000f2u,0x0000000cu,0x00100796u,0x00000000u,0x00107936u,
+        0x0000000eu,0x00106000u,0x0000000eu,0x00004001u,0x00000000u,0x0700000eu,0x001000e2u,0x0000000cu,
+        0x00100e56u,0x0000000cu,0x00100006u,0x0000000cu,0x0b000032u,0x001000e2u,0x0000000cu,0x00100e56u,
+        0x0000000cu,0x00208246u,0x0000000cu,0x00000003u,0x80100e56u,0x00000041u,0x00000001u,0x0a000032u,
+        0x001000e2u,0x00000001u,0x00100e56u,0x0000000cu,0x0020803au,0x0000000cu,0x00000003u,0x00100e56u,
+        0x00000001u,0x01000015u
+    }};
+
+bool apply_v13_ptde_rgba_decode_no_tail(
+    std::vector<std::uint8_t> &bytes,
+    const pmetal_rgba_authority::entry &authority) noexcept
+{
+    std::vector<chunk> chunks;
+    std::vector<std::uint32_t> words;
+    std::vector<instruction_view> instructions;
+    std::size_t code_index = 0u;
+
+    if (!parse_dxbc(bytes.data(), bytes.size(), chunks, code_index) ||
+        !extract_words(chunks, code_index, words) ||
+        !decode(words, instructions))
+        return false;
+
+    std::optional<instruction_view> sampler9;
+    std::optional<instruction_view> texture9;
+    std::optional<instruction_view> t12_sample;
+    std::size_t t9_sample_count = 0u;
+    std::size_t t14_decl_count = 0u;
+
+    for (const auto &ins : instructions) {
+        if (ins.opcode == 0x5au && ins.length == 3u) {
+            const auto slot = words[ins.offset + 2u];
+            if (slot == 9u) {
+                if (sampler9)
+                    return false;
+                sampler9 = ins;
+            }
+            if (slot == 14u)
+                ++t14_decl_count;
+        }
+
+        if (ins.opcode == 0x58u && ins.length == 4u) {
+            const auto slot = words[ins.offset + 2u];
+            if (slot == 9u) {
+                if (texture9)
+                    return false;
+                texture9 = ins;
+            }
+            if (slot == 14u)
+                ++t14_decl_count;
+        }
+
+        if (ins.opcode >= 0x45u && ins.opcode <= 0x4au &&
+            ins.length == 13u) {
+            const auto resource = words[ins.offset + 8u];
+            const auto sampler = words[ins.offset + 10u];
+
+            if (resource == 12u && sampler == 12u) {
+                if (t12_sample)
+                    return false;
+                t12_sample = ins;
+            }
+
+            if (resource == 9u || sampler == 9u)
+                ++t9_sample_count;
+        }
+    }
+
+    constexpr std::array<std::uint32_t,13> k_stock_t12_sample = {{
+        0x8d000048u,0x80000182u,0x00155543u,0x001000e2u,
+        0x00000001u,0x00100796u,0x00000001u,0x00107936u,
+        0x0000000cu,0x00106000u,0x0000000cu,0x0010003au,
+        0x00000002u
+    }};
+
+    if (!sampler9 || !texture9 || !t12_sample ||
+        t14_decl_count != 0u ||
+        t12_sample->offset != authority.t12_word ||
+        authority.merge_word <= authority.t12_word ||
+        authority.merge_word - authority.t12_word != 115u ||
+        t9_sample_count != 1u ||
+        !std::equal(
+            k_stock_t12_sample.begin(), k_stock_t12_sample.end(),
+            words.begin() + static_cast<std::ptrdiff_t>(t12_sample->offset)))
+        return false;
+
+    const auto merge = std::find_if(
+        instructions.begin(), instructions.end(),
+        [&](const instruction_view &ins) {
+            return ins.offset == authority.merge_word;
+        });
+    if (merge == instructions.end() ||
+        merge->opcode != 0x32u ||
+        merge->length != 9u ||
+        authority.t12_word + k_v13_ptde_rgba_decode_chain.size() >
+            authority.merge_word)
+        return false;
+
+    // Re-home obsolete split-sum t9/s9 as the exact PTDE B cubemap t14/s14.
+    words[sampler9->offset + 2u] = 14u;
+    words[texture9->offset] = 0x04003058u;
+    words[texture9->offset + 2u] = 14u;
+
+    auto chain = k_v13_ptde_rgba_decode_chain;
+    chain[6] = authority.reflection_coord_register;
+    chain[38] = authority.reflection_coord_register;
+
+    std::copy(
+        chain.begin(),
+        chain.end(),
+        words.begin() + static_cast<std::ptrdiff_t>(authority.t12_word));
+
+    std::fill(
+        words.begin() + static_cast<std::ptrdiff_t>(
+            authority.t12_word + chain.size()),
+        words.begin() + static_cast<std::ptrdiff_t>(authority.merge_word),
+        0x0100003au);
+
+    if (!patch_v13_native_dsr_no_tail_rdef(chunks))
+        return false;
+
+    std::vector<std::uint8_t> rebuilt;
+    if (!rebuild(
+            bytes.data(), bytes.size(), std::move(chunks),
+            code_index, words, rebuilt))
+        return false;
+
+    bytes = std::move(rebuilt);
+    return true;
+}
+
+bool v13_ptde_rgba_decode_no_tail_postcondition(
+    const std::vector<std::uint8_t> &bytes,
+    const pmetal_rgba_authority::entry &authority,
+    std::size_t declaration_shift = 0u) noexcept
+{
+    std::vector<chunk> chunks;
+    std::vector<std::uint32_t> words;
+    std::vector<instruction_view> instructions;
+    std::size_t code_index = 0u;
+
+    if (!parse_dxbc(bytes.data(), bytes.size(), chunks, code_index) ||
+        !extract_words(chunks, code_index, words) ||
+        !decode(words, instructions))
+        return false;
+
+    auto expected = k_v13_ptde_rgba_decode_chain;
+    expected[6] = authority.reflection_coord_register;
+    expected[38] = authority.reflection_coord_register;
+
+    const auto chain_at = authority.t12_word + declaration_shift;
+    const auto merge_at = authority.merge_word + declaration_shift;
+    if (chain_at + expected.size() > words.size() ||
+        merge_at >= words.size() ||
+        !std::equal(
+            expected.begin(), expected.end(),
+            words.begin() + static_cast<std::ptrdiff_t>(chain_at)))
+        return false;
+
+    std::size_t t12_sample = 0u;
+    std::size_t t14_sample = 0u;
+    std::size_t t9_sample = 0u;
+    std::size_t rgb_over_alpha_div = 0u;
+
+    for (const auto &ins : instructions) {
+        if (ins.opcode >= 0x45u && ins.opcode <= 0x4au &&
+            ins.length == 13u) {
+            const auto resource = words[ins.offset + 8u];
+            const auto sampler = words[ins.offset + 10u];
+            if (resource == 12u && sampler == 12u)
+                ++t12_sample;
+            if (resource == 14u && sampler == 14u)
+                ++t14_sample;
+            if (resource == 9u || sampler == 9u)
+                ++t9_sample;
+        }
+        if (ins.opcode == 0x0eu && ins.length == 7u &&
+            ins.offset >= chain_at &&
+            ins.offset < chain_at + expected.size())
+            ++rgb_over_alpha_div;
+    }
+
+    const auto merge = std::find_if(
+        instructions.begin(), instructions.end(),
+        [&](const instruction_view &ins) {
+            return ins.offset == merge_at;
+        });
+    auto *rdef = unique_rdef(chunks);
+
+    return
+        rdef != nullptr &&
+        legacy_plan::dxbc::rdef::has_constant_buffer_binding(
+            rdef->payload, 12u) &&
+        merge != instructions.end() &&
+        merge->opcode == 0x32u &&
+        merge->length == 9u &&
+        t12_sample == 1u &&
+        t14_sample == 1u &&
+        t9_sample == 0u &&
+        rgb_over_alpha_div == 2u;
+}
+#endif
+
 bool apply_v13_native_dsr_no_tail(
     std::vector<std::uint8_t> &bytes,
     const pmetal_rgba_authority::entry &authority) noexcept
@@ -1191,8 +1404,13 @@ bool apply_v13_native_dsr_material_mod_only(
         return false;
 
     const auto material_at =
+#if defined(DSRRL_PMETAL_V13_PTDE_RGBA_DECODE_DIAG)
+        authority.t12_word +
+        k_v13_ptde_rgba_decode_chain.size();
+#else
         authority.t12_word + 13u +
         k_v13_native_dsr_no_tail_chain.size();
+#endif
     constexpr std::size_t k_material_words = 33u;
 
     if (material_at + k_material_words > authority.merge_word ||
@@ -1326,8 +1544,13 @@ bool v13_native_dsr_material_mod_postcondition(
         });
 
     const auto expected_t10_word =
+#if defined(DSRRL_PMETAL_V13_PTDE_RGBA_DECODE_DIAG)
+        authority.t12_word +
+        k_v13_ptde_rgba_decode_chain.size() + 4u;
+#else
         authority.t12_word + 13u +
         k_v13_native_dsr_no_tail_chain.size() + 4u;
+#endif
 
     auto *rdef = unique_rdef(chunks);
 
@@ -1370,6 +1593,14 @@ bool v13_native_dsr_material_mod_postcondition(
         0x00100e56u,1u,
         0x00100246u,12u
     }};
+
+#if defined(DSRRL_PMETAL_V13_PTDE_RGBA_DECODE_DIAG)
+    if (!v13_ptde_rgba_decode_no_tail_postcondition(
+            bytes,
+            authority,
+            4u))
+        return false;
+#endif
 
     return
         std::equal(
@@ -2435,13 +2666,22 @@ materialize_pmetal_rgba_receiver(
     }
 
 #if defined(DSRRL_PMETAL_V13_NATIVE_DSR_MATERIAL_MOD_DIAG)
-    // PR203 successor: retain the exact V13/native-DSR EnvSpec cut and the
-    // byte-identical common merge, but restore only the missing PTDE material
-    // modulation on the EnvSpec accumulator itself.
+    // Keep PR204 material modulation and common merge. The PTDE-decode
+    // successor changes only the stable EnvSpec sample/decode law so raw
+    // PackedGI is filtered before RGB/alpha reconstruction.
     if (compose_upper_lower ||
+#if defined(DSRRL_PMETAL_V13_PTDE_RGBA_DECODE_DIAG)
+        !apply_v13_ptde_rgba_decode_no_tail(
+            base,
+            *authority) ||
+        !v13_ptde_rgba_decode_no_tail_postcondition(
+            base,
+            *authority) ||
+#else
         !apply_v13_native_dsr_no_tail(
             base,
             *authority) ||
+#endif
         !apply_v13_native_dsr_material_mod_only(
             base,
             *authority) ||
