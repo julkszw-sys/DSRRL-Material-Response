@@ -1,0 +1,80 @@
+name: P_Metal PTDE PackedGI Post-Merge Visibility Runtime Build
+
+on:
+  pull_request:
+    paths:
+      - "renderer-core/integrated/**"
+      - "renderer-core/src/operators/env_spec/pmetal_rgba_materializer.cpp"
+      - "renderer-core/src/operators/env_spec/pmetal_rgba_lerp_materializer.cpp"
+      - "renderer-core/src/runtime/pmetal_envspec_draw_runtime.cpp"
+      - "renderer-core/src/runtime/envspec_resource_runtime.cpp"
+      - "renderer-core/tools/audit_pmetal_ptde_packedgi_postmerge_visibility_diag.py"
+      - ".github/workflows/pmetal-ptde-packedgi-postmerge-visibility-fast.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  windows-addon:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - name: Resolve exact source commit
+        shell: pwsh
+        run: |
+          $commit = (git rev-parse HEAD).Trim()
+          "DSRRL_CHECKOUT_COMMIT=$commit" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Checkout pinned ReShade API
+        uses: actions/checkout@v4
+        with:
+          repository: crosire/reshade
+          ref: 3645e3025d1d98a90e318278858931f034d5d1f6
+          path: _reshade
+
+      - name: Audit decoded PackedGI post-merge visibility source
+        shell: bash
+        run: python3 renderer-core/tools/audit_pmetal_ptde_packedgi_postmerge_visibility_diag.py renderer-core
+
+      - name: Configure diagnostic
+        shell: pwsh
+        run: >
+          cmake
+          -S renderer-core/integrated
+          -B build-fast
+          -A x64
+          -DRESHADE_INCLUDE_DIR="${{ github.workspace }}/_reshade/include"
+          -DDSRRL_SOURCE_COMMIT="$env:DSRRL_CHECKOUT_COMMIT"
+          -DDSRRL_BUILD_FLAVOR="pmetal_ptde_packedgi_postmerge_visibility_runtime"
+          -DDSRRL_FULL_TELEMETRY_DEFAULT_ON=ON
+          -DDSRRL_PMETAL_PTDE_PACKEDGI_POSTMERGE_VISIBILITY_DIAG=ON
+
+      - name: Build diagnostic
+        shell: pwsh
+        run: |
+          cmake --build build-fast --config Release --target dsrrl_renderer_core_integrated
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $addons = @(Get-ChildItem build-fast -Recurse -Filter *.addon64)
+          if ($addons.Count -ne 1) { throw "Expected exactly one addon, found $($addons.Count)" }
+          Copy-Item $addons[0].FullName "DSRRL_PMETAL_PTDE_PACKEDGI_POSTMERGE_VISIBILITY_RUNTIME.addon64" -Force
+
+      - name: Verify binary identity
+        shell: pwsh
+        run: |
+          $path = "DSRRL_PMETAL_PTDE_PACKEDGI_POSTMERGE_VISIBILITY_RUNTIME.addon64"
+          $ascii = [System.Text.Encoding]::ASCII.GetString([System.IO.File]::ReadAllBytes($path))
+          if (-not $ascii.Contains($env:DSRRL_CHECKOUT_COMMIT)) { throw "Missing source commit identity" }
+          if (-not $ascii.Contains("pmetal_ptde_packedgi_postmerge_visibility_runtime")) { throw "Missing build flavor identity" }
+          if (-not $ascii.Contains("[DSRRL PMETAL V13 MATERIAL MOD]")) { throw "Missing runtime marker identity" }
+          if (-not $ascii.Contains("mode=bypass_post_env_merge_host_visibility")) { throw "Missing visibility diagnostic runtime identity" }
+          $hash = (Get-FileHash $path -Algorithm SHA256).Hash.ToLowerInvariant()
+          Write-Host "ADDON_SHA256=$hash"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: DSRRL_PMETAL_PTDE_PACKEDGI_POSTMERGE_VISIBILITY_RUNTIME
+          path: DSRRL_PMETAL_PTDE_PACKEDGI_POSTMERGE_VISIBILITY_RUNTIME.addon64
+          if-no-files-found: error

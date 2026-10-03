@@ -48,6 +48,9 @@ constexpr std::uint32_t k_effect_fail_native_envdiffuse = 1u << 15u;
 
 std::atomic_bool g_source_cut_logged{false};
 std::atomic_bool g_resource_mode_logged{false};
+#if defined(DSRRL_PMETAL_POSTMERGE_VISIBILITY_BYPASS_DIAG)
+std::atomic_bool g_visibility_diag_logged{false};
+#endif
 std::atomic_bool g_native_envdiffuse_logged{false};
 std::atomic_bool g_envdiffuse_consumer_logged{false};
 std::atomic_bool g_source_frontier_logged{false};
@@ -1559,6 +1562,29 @@ bool pmetal_envspec_draw_runtime::prepare(
     effect_latch(effect_request_ready_);
     telemetry::hot_count(requests_);
 
+#if defined(DSRRL_PMETAL_POSTMERGE_VISIBILITY_BYPASS_DIAG)
+    if (family ==
+            pmetal_envspec_receiver_family::
+                stable_hemenv &&
+        (decision.receiver_id == 33u ||
+         decision.receiver_id == 34u) &&
+        !g_visibility_diag_logged.exchange(
+            true,
+            std::memory_order_relaxed)) {
+        char line[384]{};
+        std::snprintf(
+            line,
+            sizeof(line),
+            "[DSRRL PMETAL VISIBILITY DIAG] mode=bypass_post_env_merge_host_visibility baseline=ptde_packedgi_build131 family=%u rx=%u route=%u",
+            static_cast<unsigned>(family),
+            static_cast<unsigned>(decision.receiver_id),
+            static_cast<unsigned>(decision.route_index));
+        reshade::log::message(
+            reshade::log::level::info,
+            line);
+    }
+#endif
+
     if (stable_envdiffuse_consumer_diag &&
         !g_envdiffuse_consumer_logged.exchange(
             true,
@@ -1787,6 +1813,9 @@ void pmetal_envspec_draw_runtime::reset() noexcept
     effect_fail_mask_.store(0u);
     g_source_cut_logged.store(false);
     g_resource_mode_logged.store(false);
+#if defined(DSRRL_PMETAL_POSTMERGE_VISIBILITY_BYPASS_DIAG)
+    g_visibility_diag_logged.store(false);
+#endif
     g_native_envdiffuse_logged.store(false);
     g_envdiffuse_consumer_logged.store(false);
     g_source_frontier_logged.store(false);
