@@ -34,6 +34,9 @@ struct pmetal_rgba_materialize_outcome {
     // R6 structural ownership: the PTDE PHN terminal consumer is
     // mul_sat(k135 * C), with k135 transported separately in b12[0].w.
     bool phn_scene_encoding_composed = false;
+    // R6 recovered V4B PBL atmosphere-domain operator:
+    // linear FogRGB + legacy-linear Fog/LightScattering, no DSR post-LS ^2.2.
+    bool atmosphere_domain_composed = false;
     bool spec_rgb_consumer = false;
     // Diagnostic-only: stable HemEnv t11 consumes the exact pre-draw-gain
     // EnvDiffuse endpoint carried in b12[3].xyz instead of DSR cb0[3]*cb0[79].x.
