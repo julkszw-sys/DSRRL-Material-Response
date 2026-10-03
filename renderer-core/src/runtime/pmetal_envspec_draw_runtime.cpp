@@ -143,6 +143,17 @@ void effect_fail(
 bool exact_pmetal_material(
     const mr::material_identity &material) noexcept
 {
+#if defined(DSRRL_PMETAL_V13_NATIVE_DSR_MATERIAL_MOD_DIAG)
+    return
+        material.valid &&
+        material.owner_tuple_exact &&
+        material.material_slot_valid &&
+        material.actual_material_exact &&
+        mr::exact_runtime_material_response_identity(
+            material) &&
+        material.material_family_hash ==
+            mr::mtd_semantic_hash("DifSpcBmp");
+#else
     return
         material.valid &&
         material.owner_tuple_exact &&
@@ -153,6 +164,7 @@ bool exact_pmetal_material(
         hashing::matches_hex(
             material.raw_mtd_sha256,
             k_pmetal_sha256);
+#endif
 }
 
 bool exact_pmetal_decision(
@@ -160,8 +172,17 @@ bool exact_pmetal_decision(
 {
     // EnvSpec owns its own PTDE material consumer. Do not borrow the generic
     // Material Response specular-operation bit: generic MR is diffuse-only.
-    // Exact P_Metal identity + route/receiver select the verified profile, and
-    // raw c101 is consumed explicitly by the EnvSpec SpecRGB material tail.
+#if defined(DSRRL_PMETAL_V13_NATIVE_DSR_MATERIAL_MOD_DIAG)
+    // Equipment-wide diagnostic: the stable/Lerp shader cut is receiver-generic
+    // for exact DifSpcBmp equipment. Material/EnvSpec/SpecRGB identity is
+    // proven independently before activation.
+    return
+        decision.active &&
+        decision.receiver_id >= 33u &&
+        decision.receiver_id <= 35u &&
+        std::isfinite(decision.c101) &&
+        decision.c101 >= 0.0f;
+#else
     return
         decision.active &&
         decision.route_index ==
@@ -170,6 +191,7 @@ bool exact_pmetal_decision(
         decision.receiver_id <= 35u &&
         std::isfinite(decision.c101) &&
         decision.c101 >= 0.0f;
+#endif
 }
 
 mr::mtd_semantic_query make_query(
@@ -664,8 +686,11 @@ bool pmetal_envspec_draw_runtime::prepare(
         env_semantics.router_state !=
             mr::mtd_envspec_router_state::
                 present ||
-        !env_semantics.envspc_slot_valid ||
-        env_semantics.envspc_slot != 2u) {
+        !env_semantics.envspc_slot_valid
+#if !defined(DSRRL_PMETAL_V13_NATIVE_DSR_MATERIAL_MOD_DIAG)
+        || env_semantics.envspc_slot != 2u
+#endif
+        ) {
         telemetry::hot_count(semantic_rejects_);
         effect_fail(
             effect_fail_mask_,
@@ -997,7 +1022,7 @@ bool pmetal_envspec_draw_runtime::prepare(
             line,
             sizeof(line),
             k_v13_native_dsr_material_mod_diag
-                ? "[DSRRL PMETAL V13 MATERIAL MOD] mode=native_dsr_bc6h_ptde_ab_beta specrgb_c101_color0=envspec_only envdiffuse=stock lerp=paired slot=%u probe_a=%u probe_b=%u"
+                ? "[DSRRL EQUIPMENT V13 MATERIAL MOD] mode=native_dsr_bc6h_ptde_ab_beta specrgb_c101_color0=envspec_only envdiffuse=stock lerp=paired slot=%u probe_a=%u probe_b=%u"
                 : k_v13_native_dsr_no_tail_diag
                     ? "[DSRRL PMETAL V13 NO TAIL] mode=native_dsr_bc6h_ptde_ab_beta no_specrgb_tail=1 envdiffuse=stock lerp=paired slot=%u probe_a=%u probe_b=%u"
                     : "[DSRRL PMETAL ENVSPEC RESOURCE] mode=native_dsr_bc6h_ptde_operator sampler=ptde_lod0 slot=%u probe_a=%u probe_b=%u",
