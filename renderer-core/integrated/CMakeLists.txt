@@ -82,6 +82,11 @@ option(
     OFF)
 
 option(
+    DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG
+    "Diagnostic: stable P_Metal full PTDE HemEnv with exact PTDE EnvSpec + EnvDiffuse PackedGI carriers and exact PTDE LightBank endpoints"
+    OFF)
+
+option(
     DSRRL_POINTLIGHT_DRAWTIME_BYPASS
     "Diagnostic: disable PointLight producer hooks, runtime pipeline binding and draw-time carrier/replay while preserving all non-PointLight runtime paths"
     OFF)
@@ -608,6 +613,14 @@ if(DSRRL_PMETAL_V13_PTDE_PACKEDGI_MATERIAL_MOD_DIAG)
         dsrrl_renderer_core_integrated
         PRIVATE
         $<$<COMPILE_LANGUAGE:CXX>:DSRRL_PMETAL_V13_NATIVE_DSR_MATERIAL_MOD_DIAG>
+        $<$<COMPILE_LANGUAGE:CXX>:DSRRL_PMETAL_FORCE_PTDE_PACKEDGI>)
+endif()
+
+if(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG)
+    target_compile_definitions(
+        dsrrl_renderer_core_integrated
+        PRIVATE
+        $<$<COMPILE_LANGUAGE:CXX>:DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG>
         $<$<COMPILE_LANGUAGE:CXX>:DSRRL_PMETAL_FORCE_PTDE_PACKEDGI>)
 endif()
 
