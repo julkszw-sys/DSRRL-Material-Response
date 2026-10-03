@@ -205,9 +205,41 @@ bool exact_pmetal_envspec_candidate(
     const operators::material_response::material_identity &material,
     const operators::material_response::decision &decision) noexcept
 {
+#if defined(DSRRL_EQUIPMENT_WIDE_PTDE_SURFACE_RUNTIME)
+    if (!material.valid ||
+        !material.owner_tuple_exact ||
+        !material.material_slot_valid ||
+        !material.actual_material_exact ||
+        material.material_family_hash !=
+            mr::mtd_semantic_hash("DifSpcBmp") ||
+        !decision.active ||
+        decision.receiver_id < 33u ||
+        decision.receiver_id > 35u ||
+        !std::isfinite(decision.c101) ||
+        decision.c101 < 0.0f)
+        return false;
+
+    const auto query =
+        make_query(
+            material,
+            decision.receiver_id);
+    const auto env =
+        mr::classify_mtd_envspec_semantics(
+            query);
+
+    return
+        env.exact_identity_match &&
+        env.presence ==
+            mr::ptde_envspec_presence::present &&
+        env.router_state ==
+            mr::mtd_envspec_router_state::present &&
+        env.envspc_slot_valid &&
+        env.envspc_slot < 4u;
+#else
     return
         exact_pmetal_material(material) &&
         exact_pmetal_decision(decision);
+#endif
 }
 
 pmetal_envspec_draw_runtime::
@@ -588,10 +620,10 @@ bool pmetal_envspec_draw_runtime::prepare(
         return false;
     }
 
-    // P_Metal is a very narrow route. Reject ordinary MR draws before taking
-    // the feature-registry mutexes below; otherwise every active material draw
-    // pays EnvSpec feature checks even though only exact route 345 / P_Metal
-    // can ever reach this island.
+    // Narrow exact equipment route. In the equipment-wide diagnostic this
+    // remains restricted to owned DifSpcBmp equipment whose exact MTD says
+    // EnvSpec PRESENT and whose receiver is the certified 33/34/35 family.
+    // Unknown/nonhomologous materials fail open before any draw-state work.
     telemetry::hot_count(candidates_);
     if (family ==
         pmetal_envspec_receiver_family::
@@ -665,7 +697,12 @@ bool pmetal_envspec_draw_runtime::prepare(
             mr::mtd_envspec_router_state::
                 present ||
         !env_semantics.envspc_slot_valid ||
-        env_semantics.envspc_slot != 2u) {
+#if defined(DSRRL_EQUIPMENT_WIDE_PTDE_SURFACE_RUNTIME)
+        env_semantics.envspc_slot >= 4u
+#else
+        env_semantics.envspc_slot != 2u
+#endif
+        ) {
         telemetry::hot_count(semantic_rejects_);
         effect_fail(
             effect_fail_mask_,
