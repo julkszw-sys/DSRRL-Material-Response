@@ -33,6 +33,7 @@ struct pmetal_rgba_lerp_materialize_outcome {
     bool envdiffuse_preserved = false;
     bool upper_lower_composed = false;
     bool upper_lower_preserved_stock = false;
+    bool phn_scene_encoding_composed = false;
     bool terminal_sat_rgb_composed = false;
     bool spec_rgb_consumer = false;
 };
