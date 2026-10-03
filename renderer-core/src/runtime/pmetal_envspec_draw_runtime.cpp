@@ -115,6 +115,12 @@ constexpr bool k_v13_native_dsr_material_mod_diag = true;
 constexpr bool k_v13_native_dsr_material_mod_diag = false;
 #endif
 
+#if defined(DSRRL_PMETAL_V13_PTDE_RGBA_DECODE_DIAG)
+constexpr bool k_v13_ptde_rgba_decode_diag = true;
+#else
+constexpr bool k_v13_ptde_rgba_decode_diag = false;
+#endif
+
 constexpr bool k_v13_preserve_stock_envdiffuse =
     k_v13_native_dsr_no_tail_diag ||
     k_v13_native_dsr_material_mod_diag;
@@ -997,8 +1003,10 @@ bool pmetal_envspec_draw_runtime::prepare(
         std::snprintf(
             line,
             sizeof(line),
-            k_v13_native_dsr_material_mod_diag && !k_native_dsr_cubemap_feed
-                ? "[DSRRL PMETAL V13 MATERIAL MOD] mode=ptde_packedgi_rgba_ptde_ab_beta specrgb_c101_color0=envspec_only envdiffuse=stock lerp=paired slot=%u probe_a=%u probe_b=%u"
+            k_v13_native_dsr_material_mod_diag && !k_native_dsr_cubemap_feed && k_v13_ptde_rgba_decode_diag
+                ? "[DSRRL PMETAL V13 MATERIAL MOD] mode=ptde_packedgi_rgba_ptde_ab_beta postfilter_rgb_over_alpha=1 specrgb_c101_color0=envspec_only envdiffuse=stock lerp=paired slot=%u probe_a=%u probe_b=%u"
+                : k_v13_native_dsr_material_mod_diag && !k_native_dsr_cubemap_feed
+                ? "[DSRRL PMETAL V13 MATERIAL MOD] mode=ptde_packedgi_rgba_ptde_ab_beta postfilter_rgb_over_alpha=0 specrgb_c101_color0=envspec_only envdiffuse=stock lerp=paired slot=%u probe_a=%u probe_b=%u"
                 : k_v13_native_dsr_material_mod_diag
                     ? "[DSRRL PMETAL V13 MATERIAL MOD] mode=native_dsr_bc6h_ptde_ab_beta specrgb_c101_color0=envspec_only envdiffuse=stock lerp=paired slot=%u probe_a=%u probe_b=%u"
                 : k_v13_native_dsr_no_tail_diag
