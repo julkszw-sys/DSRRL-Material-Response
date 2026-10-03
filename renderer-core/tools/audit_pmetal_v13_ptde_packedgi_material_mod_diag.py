@@ -14,7 +14,7 @@ required = [
     "DSRRL_PMETAL_V13_NATIVE_DSR_MATERIAL_MOD_DIAG",
     "apply_v13_native_dsr_material_mod_only",
     "apply_v13_lerp_material_mod_only",
-    "mode=ptde_packedgi_rgba_ptde_ab_beta",
+    "mode=ptde_packedgi_rgba_decode_ptde_ab_beta",
     "specrgb_c101_color0=envspec_only",
     "PR208 corrected stable path",
     "!apply_build131(",
