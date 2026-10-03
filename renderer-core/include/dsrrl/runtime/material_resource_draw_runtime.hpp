@@ -66,6 +66,12 @@ struct prepared_material_resource_draw {
         6> retained_views{};
     std::uint32_t retained_count = 0;
 
+    // Stock logical identities observed before any sidecar substitution.
+    // Diagnostic provenance only; these do not relax any resource gate.
+    std::uint64_t stock_diffuse_hash = 0;
+    std::uint64_t stock_specular_hash = 0;
+    std::uint64_t stock_normal_hash = 0;
+
     bool spec_rgb = false;
     bool diffuse = false;
     bool normal = false;
