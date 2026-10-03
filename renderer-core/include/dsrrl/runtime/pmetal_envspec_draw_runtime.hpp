@@ -42,6 +42,7 @@ bool exact_pmetal_envspec_candidate(
 struct prepared_pmetal_envspec_draw {
     island_draw_adapter_request request{};
     prepared_envspec_resources env_resources{};
+    prepared_envdiffuse_resources envdiffuse_resources{};
     prepared_material_resource_draw material_resources{};
     ID3D11PixelShader *shader = nullptr;
     ID3D11Buffer *b12 = nullptr;

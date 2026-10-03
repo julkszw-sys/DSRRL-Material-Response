@@ -279,6 +279,10 @@ std::atomic_bool g_lerp_once_batch_ready{false};
 std::atomic_bool g_lerp_once_draw_issued{false};
 std::atomic<std::uint64_t> g_envspec_payload_materialize_ok{0};
 std::atomic<std::uint64_t> g_envspec_payload_materialize_fail{0};
+#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG)
+std::atomic_bool g_pmetal_full_ptde_create_ok_logged{false};
+std::atomic_bool g_pmetal_full_ptde_create_fail_logged{false};
+#endif
 std::atomic<std::uint64_t> g_draw_events{0};
 std::atomic<std::uint64_t> g_draw_receiver_hits{0};
 std::atomic<std::uint64_t> g_draw_owner_hits{0};
@@ -4517,20 +4521,66 @@ bool on_create_pipeline(
 
             if (envspec.result ==
                 envspec_result::applied) {
-                if (g_pmetal_envspec.
+                const bool registered =
+                    g_pmetal_envspec.
                         register_replacement(
                             envspec,
                             envspec_payload.data(),
-                            envspec_payload.size()))
+                            envspec_payload.size());
+                if (registered) {
                     ++g_envspec_payload_materialize_ok;
-                else
+#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG)
+                    if (!g_pmetal_full_ptde_create_ok_logged.exchange(
+                            true,
+                            std::memory_order_relaxed)) {
+                        char line[256]{};
+                        std::snprintf(
+                            line,
+                            sizeof(line),
+                            "[DSRRL PMETAL FULL PTDE HEMENV] create_materialized rx=%u bytes=%zu",
+                            static_cast<unsigned>(
+                                envspec.receiver_id),
+                            envspec_payload.size());
+                        reshade::log::message(
+                            reshade::log::level::info,
+                            line);
+                    }
+#endif
+                } else {
                     ++g_envspec_payload_materialize_fail;
+#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG)
+                    if (!g_pmetal_full_ptde_create_fail_logged.exchange(
+                            true,
+                            std::memory_order_relaxed))
+                        reshade::log::message(
+                            reshade::log::level::warning,
+                            "[DSRRL PMETAL FULL PTDE HEMENV] create_register_reject");
+#endif
+                }
             } else if (
                 envspec.result !=
                     envspec_result::pass_not_candidate &&
                 envspec.result !=
                     envspec_result::pass_unknown_exact_sha) {
                 ++g_envspec_payload_materialize_fail;
+#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG)
+                if (!g_pmetal_full_ptde_create_fail_logged.exchange(
+                        true,
+                        std::memory_order_relaxed)) {
+                    char line[256]{};
+                    std::snprintf(
+                        line,
+                        sizeof(line),
+                        "[DSRRL PMETAL FULL PTDE HEMENV] create_materialize_fail result=%u rx=%u",
+                        static_cast<unsigned>(
+                            envspec.result),
+                        static_cast<unsigned>(
+                            envspec.receiver_id));
+                    reshade::log::message(
+                        reshade::log::level::warning,
+                        line);
+                }
+#endif
             }
 
             std::vector<std::uint8_t>
