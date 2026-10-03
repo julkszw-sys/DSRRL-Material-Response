@@ -98,7 +98,7 @@ option(
 
 option(
     DSRRL_PMETAL_FULL_PTDE_HEMENV_R5
-    "Diagnostic: exact PTDE stable-HemEnv normal basis for P_Metal (no SV_IsFrontFace normal flip, per-pixel bitangent cross, no DSR LightProbeParam.z normal bias)"
+    "Diagnostic: exact PTDE stable-HemEnv active normal-basis differences for P_Metal (no SV_IsFrontFace normal flip, per-pixel bitangent cross; preserve identity LightProbeParam.z path)"
     OFF)
 
 option(
