@@ -3559,6 +3559,7 @@ materialize_pmetal_rgba_receiver(
                 fail_postcondition;
         return outcome;
     }
+    outcome.atmosphere_domain_composed = true;
 #endif
 
     if (compose_upper_lower) {
