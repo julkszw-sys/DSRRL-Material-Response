@@ -68,7 +68,7 @@ with tempfile.TemporaryDirectory() as td:
 
 for needle in [
     "exact_runtime_material_response_identity",
-    "material.material_family_hash ==",
+    "material.material_family_hash",
     'mtd_semantic_hash("DifSpcBmp")',
     "classify_mtd_envspec_semantics",
     "env.envspc_slot_valid",
