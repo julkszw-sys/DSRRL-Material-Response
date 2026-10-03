@@ -92,6 +92,11 @@ option(
     OFF)
 
 option(
+    DSRRL_PMETAL_FULL_PTDE_HEMENV_R4
+    "Diagnostic: PR215 R4 samples exact PTDE equipment SpecRGB directly as RGB instead of inheriting the stock DSR t1 wxyz channel remap"
+    OFF)
+
+option(
     DSRRL_POINTLIGHT_DRAWTIME_BYPASS
     "Diagnostic: disable PointLight producer hooks, runtime pipeline binding and draw-time carrier/replay while preserving all non-PointLight runtime paths"
     OFF)
@@ -634,6 +639,13 @@ if(DSRRL_PMETAL_FULL_PTDE_HEMENV_R3)
         dsrrl_renderer_core_integrated
         PRIVATE
         $<$<COMPILE_LANGUAGE:CXX>:DSRRL_PMETAL_FULL_PTDE_HEMENV_R3>)
+endif()
+
+if(DSRRL_PMETAL_FULL_PTDE_HEMENV_R4)
+    target_compile_definitions(
+        dsrrl_renderer_core_integrated
+        PRIVATE
+        $<$<COMPILE_LANGUAGE:CXX>:DSRRL_PMETAL_FULL_PTDE_HEMENV_R4>)
 endif()
 
 if(DSRRL_POINTLIGHT_DRAWTIME_BYPASS)
