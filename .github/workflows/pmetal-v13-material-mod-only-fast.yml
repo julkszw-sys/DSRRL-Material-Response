@@ -68,7 +68,7 @@ jobs:
       - name: Verify binary identity
         shell: pwsh
         run: |
-          $path = "DSRRL_PMETAL_V13_MATERIAL_MOD_ONLY_PR203.addon64"
+          $path = "DSRRL_EQUIPMENT_V13_MATERIAL_MOD_RUNTIME.addon64"
           $ascii = [System.Text.Encoding]::ASCII.GetString([System.IO.File]::ReadAllBytes($path))
           if (-not $ascii.Contains($env:DSRRL_CHECKOUT_COMMIT)) { throw "Missing source commit identity" }
           if (-not $ascii.Contains("equipment_v13_native_dsr_material_mod_runtime")) { throw "Missing build flavor identity" }
@@ -79,5 +79,5 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: DSRRL_EQUIPMENT_V13_MATERIAL_MOD_RUNTIME
-          path: DSRRL_PMETAL_V13_MATERIAL_MOD_ONLY_PR203.addon64
+          path: DSRRL_EQUIPMENT_V13_MATERIAL_MOD_RUNTIME.addon64
           if-no-files-found: error
