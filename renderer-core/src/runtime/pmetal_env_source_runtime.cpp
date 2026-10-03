@@ -2085,16 +2085,18 @@ bool pmetal_env_source_runtime::latest(
         return true;
     }
 
-    // Narrow fallback carrier recovered from the attested retail LightBank
-    // single/blend packers (V13 semantic cut). It is consumed only by an
-    // already-authenticated exact P_Metal draw. The retail packer is a state
-    // producer: retain its latest generation until the next exact source
-    // update, matching the validated V13 lifetime without exposing it to U/L.
+#if !defined(DSRRL_PMETAL_V13_NATIVE_DSR_MATERIAL_MOD_DIAG)
+    // Narrow P_Metal fallback carrier recovered from the attested retail
+    // LightBank single/blend packers. It is intentionally disabled in the
+    // equipment-wide diagnostic because this global hook cache has no material
+    // key; broad consumers must use only exact producer_state keyed by
+    // FLVER+slot+MTD identity to prevent cross-material A/B inheritance.
     if (latest_hook_source(out)) {
         telemetry::hot_count(
             g_consumer_ok);
         return true;
     }
+#endif
 
     telemetry::hot_count(
         g_consumer_fail);
