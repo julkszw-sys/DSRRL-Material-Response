@@ -1,7 +1,6 @@
 #include "dsrrl/operators/env_spec/pmetal_rgba_lerp_materializer.hpp"
 
 #include "dsrrl/operators/env_spec/generated_pmetal_envspec_hemenvlerp_v1.hpp"
-#include "dsrrl/operators/env_spec/pmetal_rgba_authority.hpp"
 #include "dsrrl/operators/legacy_plan/a1_create_time_materializer.hpp"
 #include "dsrrl/operators/legacy_plan/dxbc_checksum.hpp"
 #include "dsrrl/operators/legacy_plan/dxbc_rdef_patch.hpp"
@@ -670,26 +669,6 @@ bool append_t10_rdef_from_t1_lerp(
     return true;
 }
 
-bool lerp_color0_register(
-    std::uint32_t receiver_id,
-    std::uint32_t &reg) noexcept
-{
-    const pmetal_rgba_authority::entry *match = nullptr;
-    for (const auto &entry : pmetal_rgba_authority::k_entries) {
-        if (entry.receiver_id != receiver_id)
-            continue;
-        if (match != nullptr)
-            return false;
-        match = &entry;
-    }
-
-    if (match == nullptr)
-        return false;
-
-    reg = match->color0_register;
-    return true;
-}
-
 bool apply_v13_lerp_material_mod_only(
     const std::uint8_t *source,
     std::size_t source_size,
@@ -765,9 +744,7 @@ bool apply_v13_lerp_material_mod_only(
         if (words[i] != 0x0100003au)
             return false;
 
-    std::uint32_t color0 = 0u;
-    if (!lerp_color0_register(site.semantic_receiver_id,color0))
-        return false;
+    const auto color0 = site.color0_register;
 
     std::array<std::uint32_t,4> t10_decl{};
     std::copy_n(
@@ -871,9 +848,7 @@ bool v13_lerp_material_mod_postcondition(
         static_cast<std::size_t>(site.t12_word) +
         k_ptde_rgba_envspec_chain.size() + 4u;
 
-    std::uint32_t color0 = 0u;
-    if (!lerp_color0_register(site.semantic_receiver_id,color0))
-        return false;
+    const auto color0 = site.color0_register;
 
     const auto c101_at = expected_t10_word + 11u;
     const auto color_at = c101_at + 8u;
