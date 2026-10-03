@@ -72,6 +72,11 @@ option(
     OFF)
 
 option(
+    DSRRL_PMETAL_V13_NATIVE_DSR_MATERIAL_MOD_DIAG
+    "Diagnostic: PR203 V13/native-DSR EnvSpec plus only PTDE SpecRGB*c101*COLOR0 modulation on the EnvSpec accumulator before the preserved common merge; stable HemEnv + paired HemEnvLerp"
+    OFF)
+
+option(
     DSRRL_POINTLIGHT_DRAWTIME_BYPASS
     "Diagnostic: disable PointLight producer hooks, runtime pipeline binding and draw-time carrier/replay while preserving all non-PointLight runtime paths"
     OFF)
@@ -584,6 +589,13 @@ if(DSRRL_PMETAL_V13_NATIVE_DSR_NO_TAIL_DIAG)
         dsrrl_renderer_core_integrated
         PRIVATE
         $<$<COMPILE_LANGUAGE:CXX>:DSRRL_PMETAL_V13_NATIVE_DSR_NO_TAIL_DIAG>)
+endif()
+
+if(DSRRL_PMETAL_V13_NATIVE_DSR_MATERIAL_MOD_DIAG)
+    target_compile_definitions(
+        dsrrl_renderer_core_integrated
+        PRIVATE
+        $<$<COMPILE_LANGUAGE:CXX>:DSRRL_PMETAL_V13_NATIVE_DSR_MATERIAL_MOD_DIAG>)
 endif()
 
 if(DSRRL_POINTLIGHT_DRAWTIME_BYPASS)
