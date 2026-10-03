@@ -2128,7 +2128,8 @@ bool binding_exists(
 
 bool final_postcondition(
     const std::vector<std::uint8_t> &bytes,
-    bool with_upper_lower) noexcept
+    bool with_upper_lower,
+    bool require_terminal_sat = true) noexcept
 {
     std::vector<chunk> chunks;
     std::vector<std::uint32_t> words;
@@ -2320,7 +2321,8 @@ bool final_postcondition(
         s14_decl == 1u &&
         t14_sample == 1u &&
         t9_sample == 0u &&
-        terminal_rgb_sat_exact(words);
+        (!require_terminal_sat ||
+         terminal_rgb_sat_exact(words));
 }
 
 } // namespace
@@ -2435,9 +2437,36 @@ materialize_pmetal_rgba_receiver(
     }
 
 #if defined(DSRRL_PMETAL_V13_NATIVE_DSR_MATERIAL_MOD_DIAG)
-    // PR203 successor: retain the exact V13/native-DSR EnvSpec cut and the
-    // byte-identical common merge, but restore only the missing PTDE material
-    // modulation on the EnvSpec accumulator itself.
+#if defined(DSRRL_PMETAL_FORCE_PTDE_PACKEDGI)
+    // PR208 corrected stable path: PTDE PackedGI is raw RGBA and therefore
+    // must use the already-recovered Build131 post-filter RGB/A decode.
+    // Reuse that exact EnvSpec+material operator, but stop here before the
+    // later full-island EnvDiffuse translation, U/L composition and terminal
+    // SAT so this remains an operator-local carrier/consumer diagnostic.
+    if (compose_upper_lower ||
+        !apply_build131(
+            base,
+            *authority) ||
+        !final_postcondition(
+            base,
+            false,
+            false)) {
+        outcome.result =
+            pmetal_rgba_materialize_result::
+                fail_build131_precondition;
+        return outcome;
+    }
+
+    outcome.spec_rgb_consumer = true;
+    outcome.envdiffuse_linear_consumer_diag = false;
+    output = std::move(base);
+    outcome.result =
+        pmetal_rgba_materialize_result::applied;
+    return outcome;
+#else
+    // PR203/PR204 native-DSR successor: native BC6H does not use PTDE
+    // RGBA decode. Retain the historical V13 cut and restore only material
+    // modulation on the EnvSpec accumulator.
     if (compose_upper_lower ||
         !apply_v13_native_dsr_no_tail(
             base,
@@ -2460,6 +2489,7 @@ materialize_pmetal_rgba_receiver(
     outcome.result =
         pmetal_rgba_materialize_result::applied;
     return outcome;
+#endif
 #elif defined(DSRRL_PMETAL_V13_NATIVE_DSR_NO_TAIL_DIAG)
     // Exact historical V13-style diagnostic: native DSR cubemap carrier,
     // PTDE A/B+beta source law, no modern SpecRGB*c101*COLOR0 final tail.
