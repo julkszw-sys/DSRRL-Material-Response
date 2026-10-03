@@ -2166,7 +2166,13 @@ bool apply_exact_ptde_normal_basis_r5(
 }
 #endif
 
-#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_R6)
+#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_R6) && defined(DSRRL_PMETAL_V4B_ATMOSPHERE_CB12_ABI)
+// Legacy V4B atmosphere-domain materialization. IMPORTANT ABI GUARD:
+// V4B's pre-Fog transform reads cb12[0].xyz as encoded FogRGB. The current
+// cumulative P_Metal carrier publishes c101 in b12[0].xyz, so enabling this
+// transform without a separately verified FogRGB carrier is invalid and
+// produces a bright/white Fog input. Keep fail-open until that carrier exists.
+//
 // R6 restores the confirmed PTDE atmosphere-domain continuation lost from the
 // later full-PTDE lineage. Exact rx33/rx34/rx35 share the same local topology;
 // absolute offsets can move after R3/R4/R5, so resolve the semantic pattern.
@@ -3514,7 +3520,8 @@ materialize_pmetal_rgba_receiver(
     }
 #endif
 
-#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_R6)
+#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_R6) && defined(DSRRL_PMETAL_V4B_ATMOSPHERE_CB12_ABI)
+    // Only legal when the legacy V4B cb12 FogRGB ABI is explicitly proven.
     if (!apply_exact_ptde_atmosphere_domain_r6(
             base)) {
         outcome.result =
