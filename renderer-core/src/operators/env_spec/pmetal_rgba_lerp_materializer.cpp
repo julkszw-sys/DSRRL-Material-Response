@@ -13,6 +13,7 @@
 #include <array>
 #include <cstring>
 #include <limits>
+#include <optional>
 #include <utility>
 #include <vector>
 
@@ -520,7 +521,7 @@ bool final_postcondition(
 }
 
 
-#if defined(DSRRL_PMETAL_V13_NATIVE_DSR_NO_TAIL_DIAG)
+#if defined(DSRRL_PMETAL_V13_NATIVE_DSR_NO_TAIL_DIAG) || defined(DSRRL_PMETAL_V13_NATIVE_DSR_MATERIAL_MOD_DIAG)
 bool v13_native_dsr_no_tail_lerp_postcondition(
     const std::vector<std::uint8_t> &bytes,
     const generated_lerp::pmetal_hemenvlerp_site &site,
@@ -584,7 +585,327 @@ bool v13_native_dsr_no_tail_lerp_postcondition(
         sample_count(words, 12u) == 1u &&
         sample_count(words, 13u) == 1u &&
         sample_count(words, 14u) == 1u;
+
 }
+
+#if defined(DSRRL_PMETAL_V13_NATIVE_DSR_MATERIAL_MOD_DIAG)
+bool append_t10_rdef_from_t1_lerp(
+    std::vector<chunk> &chunks) noexcept
+{
+    auto *rdef = unique_rdef(chunks);
+    if (rdef == nullptr || rdef->payload.size() < 16u)
+        return false;
+
+    auto &payload = rdef->payload;
+    const auto count = read_u32(payload.data() + 8u);
+    const auto offset = read_u32(payload.data() + 12u);
+    constexpr std::uint32_t k_binding_size = 32u;
+
+    if (count == 0u || count > 256u ||
+        offset > payload.size() ||
+        static_cast<std::uint64_t>(count) * k_binding_size >
+            payload.size() - offset)
+        return false;
+
+    std::size_t t1_at = 0u;
+    std::uint32_t t1_count = 0u;
+
+    for (std::uint32_t i = 0u; i < count; ++i) {
+        const auto at =
+            static_cast<std::size_t>(offset) +
+            static_cast<std::size_t>(i) * k_binding_size;
+        const auto type = read_u32(payload.data() + at + 4u);
+        const auto bind = read_u32(payload.data() + at + 20u);
+        const auto bind_count = read_u32(payload.data() + at + 24u);
+
+        if (type == 2u && bind == 10u)
+            return false;
+
+        if (type == 2u && bind == 1u && bind_count == 1u) {
+            t1_at = at;
+            ++t1_count;
+        }
+    }
+
+    if (t1_count != 1u)
+        return false;
+
+    try {
+        static constexpr char k_name[] = "DSRRL_PTDE_SpecRGB";
+        const auto name_offset =
+            static_cast<std::uint32_t>(payload.size());
+
+        payload.insert(
+            payload.end(),
+            reinterpret_cast<const std::uint8_t *>(k_name),
+            reinterpret_cast<const std::uint8_t *>(k_name) + sizeof(k_name));
+
+        while ((payload.size() & 3u) != 0u)
+            payload.push_back(0u);
+
+        const auto new_table =
+            static_cast<std::uint32_t>(payload.size());
+
+        std::vector<std::uint8_t> table(
+            payload.data() + offset,
+            payload.data() + offset +
+                static_cast<std::size_t>(count) * k_binding_size);
+
+        std::array<std::uint8_t,k_binding_size> t10{};
+        std::memcpy(
+            t10.data(),
+            payload.data() + t1_at,
+            k_binding_size);
+        write_u32(t10.data(), name_offset);
+        write_u32(t10.data() + 20u, 10u);
+
+        table.insert(table.end(), t10.begin(), t10.end());
+        payload.insert(payload.end(), table.begin(), table.end());
+        write_u32(payload.data() + 8u, count + 1u);
+        write_u32(payload.data() + 12u, new_table);
+    } catch (...) {
+        return false;
+    }
+
+    return true;
+}
+
+bool apply_v13_lerp_material_mod_only(
+    const std::uint8_t *source,
+    std::size_t source_size,
+    const generated_lerp::pmetal_hemenvlerp_site &site,
+    std::vector<std::uint8_t> &output) noexcept
+{
+    std::vector<chunk> chunks;
+    std::vector<std::uint32_t> words;
+    std::size_t code_index = 0u;
+
+    if (!parse_dxbc(
+            source,
+            source_size,
+            chunks,
+            code_index,
+            words))
+        return false;
+
+    std::vector<instruction_view> instructions;
+    if (!decode(words,instructions))
+        return false;
+
+    std::optional<instruction_view> t1_decl;
+    std::optional<instruction_view> t1_sample;
+    std::size_t t10_decl_count = 0u;
+    std::size_t t10_sample_count = 0u;
+
+    for (const auto &ins : instructions) {
+        if (ins.opcode == 0x58u && ins.length == 4u) {
+            const auto slot = words[ins.offset + 2u];
+            if (slot == 1u) {
+                if (t1_decl)
+                    return false;
+                t1_decl = ins;
+            }
+            if (slot == 10u)
+                ++t10_decl_count;
+        }
+
+        if (ins.opcode >= 0x45u && ins.opcode <= 0x4au &&
+            ins.length == 11u) {
+            const auto resource = words[ins.offset + 8u];
+            if (resource == 1u) {
+                if (t1_sample)
+                    return false;
+                t1_sample = ins;
+            }
+            if (resource == 10u)
+                ++t10_sample_count;
+        }
+    }
+
+    if (!t1_decl || !t1_sample ||
+        t10_decl_count != 0u ||
+        t10_sample_count != 0u ||
+        t1_decl->offset >= site.t12_word ||
+        t1_sample->offset >= site.t12_word)
+        return false;
+
+    const auto material_at =
+        static_cast<std::size_t>(site.t12_word) +
+        k_ptde_rgba_envspec_chain.size();
+    constexpr std::size_t k_material_words = 33u;
+
+    if (material_at + k_material_words >
+            static_cast<std::size_t>(site.t11_word) ||
+        site.t11_word >= words.size())
+        return false;
+
+    for (std::size_t i = material_at;
+         i < material_at + k_material_words;
+         ++i)
+        if (words[i] != 0x0100003au)
+            return false;
+
+    const auto color0 = site.color0_register;
+
+    std::array<std::uint32_t,4> t10_decl{};
+    std::copy_n(
+        words.begin() + static_cast<std::ptrdiff_t>(t1_decl->offset),
+        4u,
+        t10_decl.begin());
+    t10_decl[2] = 10u;
+
+    std::array<std::uint32_t,11> fresh_spec{};
+    std::copy_n(
+        words.begin() + static_cast<std::ptrdiff_t>(t1_sample->offset),
+        11u,
+        fresh_spec.begin());
+    if (fresh_spec[7] != 0x00107936u)
+        return false;
+    fresh_spec[3] = 0x001000e2u;
+    fresh_spec[4] = 12u;
+    fresh_spec[8] = 10u;
+
+    const std::array<std::uint32_t,8> c101_mul{{
+        0x08000038u,
+        0x00100072u,12u,
+        0x00100796u,12u,
+        0x00208246u,12u,0u
+    }};
+    const std::array<std::uint32_t,7> color_mul{{
+        0x07000038u,
+        0x00100072u,12u,
+        0x00100246u,12u,
+        0x00101246u,color0
+    }};
+    const std::array<std::uint32_t,7> envspec_mul{{
+        0x07000038u,
+        0x001000e2u,1u,
+        0x00100e56u,1u,
+        0x00100246u,12u
+    }};
+
+    auto out = words.begin() + static_cast<std::ptrdiff_t>(material_at);
+    out = std::copy(fresh_spec.begin(),fresh_spec.end(),out);
+    out = std::copy(c101_mul.begin(),c101_mul.end(),out);
+    out = std::copy(color_mul.begin(),color_mul.end(),out);
+    std::copy(envspec_mul.begin(),envspec_mul.end(),out);
+
+    words.insert(
+        words.begin() + static_cast<std::ptrdiff_t>(t1_decl->offset + 4u),
+        t10_decl.begin(),
+        t10_decl.end());
+    words[1] = static_cast<std::uint32_t>(words.size());
+
+    if (!append_t10_rdef_from_t1_lerp(chunks))
+        return false;
+
+    return rebuild(
+        source,
+        source_size,
+        std::move(chunks),
+        code_index,
+        words,
+        output);
+}
+
+bool v13_lerp_material_mod_postcondition(
+    const std::vector<std::uint8_t> &bytes,
+    const generated_lerp::pmetal_hemenvlerp_site &site,
+    const std::vector<std::uint32_t> &preserved_envdiffuse) noexcept
+{
+    std::vector<chunk> chunks;
+    std::vector<std::uint32_t> words;
+    std::size_t code_index = 0u;
+
+    if (!parse_dxbc(
+            bytes.data(),
+            bytes.size(),
+            chunks,
+            code_index,
+            words))
+        return false;
+
+    std::vector<instruction_view> instructions;
+    if (!decode(words,instructions))
+        return false;
+
+    std::size_t t10_decl = 0u;
+    std::size_t t10_sample = 0u;
+    std::size_t t10_word = static_cast<std::size_t>(-1);
+
+    for (const auto &ins : instructions) {
+        if (ins.opcode == 0x58u && ins.length == 4u &&
+            words[ins.offset + 2u] == 10u)
+            ++t10_decl;
+        if (ins.opcode >= 0x45u && ins.opcode <= 0x4au &&
+            ins.length == 11u &&
+            words[ins.offset + 8u] == 10u) {
+            ++t10_sample;
+            t10_word = ins.offset;
+        }
+    }
+
+    const auto expected_t10_word =
+        static_cast<std::size_t>(site.t12_word) +
+        k_ptde_rgba_envspec_chain.size() + 4u;
+
+    const auto color0 = site.color0_register;
+
+    const auto c101_at = expected_t10_word + 11u;
+    const auto color_at = c101_at + 8u;
+    const auto envspec_at = color_at + 7u;
+    if (envspec_at + 7u > words.size())
+        return false;
+
+    const std::array<std::uint32_t,8> c101_mul{{
+        0x08000038u,
+        0x00100072u,12u,
+        0x00100796u,12u,
+        0x00208246u,12u,0u
+    }};
+    const std::array<std::uint32_t,7> color_mul{{
+        0x07000038u,
+        0x00100072u,12u,
+        0x00100246u,12u,
+        0x00101246u,color0
+    }};
+    const std::array<std::uint32_t,7> envspec_mul{{
+        0x07000038u,
+        0x001000e2u,1u,
+        0x00100e56u,1u,
+        0x00100246u,12u
+    }};
+
+    // Declaration insertion is above the semantic cuts, so stock EnvDiffuse
+    // and its common merge shift by four DWORDs but remain byte-identical.
+    if (static_cast<std::size_t>(site.t11_word) + 4u +
+            preserved_envdiffuse.size() > words.size())
+        return false;
+
+    return
+        t10_decl == 1u &&
+        t10_sample == 1u &&
+        t10_word == expected_t10_word &&
+        sample_count(words,9u) == 0u &&
+        sample_count(words,10u) == 1u &&
+        sample_count(words,11u) == 1u &&
+        sample_count(words,12u) == 1u &&
+        sample_count(words,13u) == 1u &&
+        sample_count(words,14u) == 1u &&
+        std::equal(
+            c101_mul.begin(),c101_mul.end(),
+            words.begin() + static_cast<std::ptrdiff_t>(c101_at)) &&
+        std::equal(
+            color_mul.begin(),color_mul.end(),
+            words.begin() + static_cast<std::ptrdiff_t>(color_at)) &&
+        std::equal(
+            envspec_mul.begin(),envspec_mul.end(),
+            words.begin() + static_cast<std::ptrdiff_t>(envspec_at)) &&
+        std::equal(
+            preserved_envdiffuse.begin(),preserved_envdiffuse.end(),
+            words.begin() + static_cast<std::ptrdiff_t>(site.t11_word + 4u));
+}
+#endif
 #endif
 
 } // namespace
@@ -820,7 +1141,7 @@ materialize_pmetal_rgba_lerp_receiver(
         }
     }
 
-#if !defined(DSRRL_PMETAL_V13_NATIVE_DSR_NO_TAIL_DIAG)
+#if !defined(DSRRL_PMETAL_V13_NATIVE_DSR_NO_TAIL_DIAG) && !defined(DSRRL_PMETAL_V13_NATIVE_DSR_MATERIAL_MOD_DIAG)
     // Production/full island composes PTDE terminal RGB SAT. The no-tail
     // diagnostic deliberately leaves this independent surface operator stock
     // so the only changed shader island is EnvSpec.
@@ -879,7 +1200,33 @@ materialize_pmetal_rgba_lerp_receiver(
         return outcome;
     }
 
-#if defined(DSRRL_PMETAL_V13_NATIVE_DSR_NO_TAIL_DIAG)
+#if defined(DSRRL_PMETAL_V13_NATIVE_DSR_MATERIAL_MOD_DIAG)
+    std::vector<std::uint8_t> material_mod_base;
+    if (!v13_native_dsr_no_tail_lerp_postcondition(
+            envspec_base,
+            *site,
+            preserved_envdiffuse) ||
+        !apply_v13_lerp_material_mod_only(
+            envspec_base.data(),
+            envspec_base.size(),
+            *site,
+            material_mod_base) ||
+        !v13_lerp_material_mod_postcondition(
+            material_mod_base,
+            *site,
+            preserved_envdiffuse)) {
+        outcome.result =
+            pmetal_rgba_lerp_materialize_result::fail_postcondition;
+        return outcome;
+    }
+
+    outcome.envdiffuse_preserved = true;
+    outcome.upper_lower_composed = false;
+    outcome.upper_lower_preserved_stock = true;
+    outcome.terminal_sat_rgb_composed = false;
+    outcome.spec_rgb_consumer = true;
+    output = std::move(material_mod_base);
+#elif defined(DSRRL_PMETAL_V13_NATIVE_DSR_NO_TAIL_DIAG)
     if (!v13_native_dsr_no_tail_lerp_postcondition(
             envspec_base,
             *site,
