@@ -1429,6 +1429,22 @@ prepare_draw_requests_bound(
             receiver_id;
         context_spec.actual_material_verified =
             exact_material;
+#if defined(DSRRL_EQUIPMENT_WIDE_PTDE_SURFACE_RUNTIME)
+        // Equipment-wide EnvSpec explicitly owns the PTDE SpecRGB consumer.
+        // Do not require the old generic-MR spec_rgb semantic bit (which is
+        // intentionally absent on some exact leather bindings to prevent
+        // PTDE SpecRGB from leaking into the DSR PBL/F0 path). Exact owner,
+        // exact companion and explicit EnvSpec PRESENT semantics are required.
+        context_spec.material_specular_consumer_verified =
+            operators::material_response::
+                classify_mtd_semantic(
+                    query,
+                    operators::material_response::
+                        mtd_semantic_operator::env_spec)
+                .state ==
+            operators::material_response::
+                mtd_semantic_state::use;
+#else
         context_spec.material_specular_consumer_verified =
             operators::material_response::
                 classify_mtd_semantic(
@@ -1438,6 +1454,7 @@ prepare_draw_requests_bound(
                 .state ==
             operators::material_response::
                 mtd_semantic_state::use;
+#endif
         context_spec.exact_name_ptde_companion_verified =
             exact_companion;
         context_spec.ptde_sidecar_ready =
