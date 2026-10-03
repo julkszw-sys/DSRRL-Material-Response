@@ -571,7 +571,7 @@ bool compose_exact_terminal_rgb_sat(
     return true;
 }
 
-#if defined(DSRRL_PMETAL_CUMULATIVE_OPERATOR_RECOVERY_R6)
+#if defined(DSRRL_PMETAL_PHN_SCENE_ENCODING_R6)
 constexpr surface::phn_scene_encoding_carrier
     k_pmetal_phn_scene_carrier{
         12u,
@@ -3284,7 +3284,7 @@ bool final_postcondition(
         t14_sample == 1u &&
         t9_sample == 0u &&
         (!require_terminal_sat ||
-#if defined(DSRRL_PMETAL_CUMULATIVE_OPERATOR_RECOVERY_R6)
+#if defined(DSRRL_PMETAL_PHN_SCENE_ENCODING_R6)
          phn_scene_encoding_exact_r6(words)
 #else
          terminal_rgb_sat_exact(words)
@@ -3610,7 +3610,7 @@ materialize_pmetal_rgba_receiver(
     // semantic transport: runtime must fail open rather than invent a k135.
     if (!features.enabled(
             core::operator_id::terminal_sat_rgb) ||
-#if defined(DSRRL_PMETAL_CUMULATIVE_OPERATOR_RECOVERY_R6)
+#if defined(DSRRL_PMETAL_PHN_SCENE_ENCODING_R6)
         !compose_exact_phn_scene_encoding_r6(base)
 #else
         !compose_exact_terminal_rgb_sat(base)
@@ -3622,7 +3622,7 @@ materialize_pmetal_rgba_receiver(
         return outcome;
     }
 
-#if defined(DSRRL_PMETAL_CUMULATIVE_OPERATOR_RECOVERY_R6)
+#if defined(DSRRL_PMETAL_PHN_SCENE_ENCODING_R6)
     outcome.phn_scene_encoding_composed = true;
 #endif
     outcome.composed_owners |=
