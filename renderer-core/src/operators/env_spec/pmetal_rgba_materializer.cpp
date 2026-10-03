@@ -2571,6 +2571,7 @@ materialize_pmetal_rgba_receiver(
         return outcome;
     }
 
+    outcome.phn_scene_encoding_composed = true;
     outcome.composed_owners |=
         core::operator_bit(
             core::operator_id::terminal_sat_rgb);
