@@ -5,6 +5,7 @@
 #include "dsrrl/operators/material_response/material_response_diffuse_v1.hpp"
 #include "dsrrl/operators/resource_bridges/spec_rgb_consumer_materializer.hpp"
 #include "dsrrl/operators/surface/terminal_sat_rgb_patch.hpp"
+#include "dsrrl/operators/surface/phn_scene_encoding.hpp"
 #include "dsrrl/operators/legacy_plan/a1_create_time_materializer.hpp"
 #include "dsrrl/operators/legacy_plan/dxbc_checksum.hpp"
 #include "dsrrl/operators/legacy_plan/dxbc_rdef_patch.hpp"
@@ -486,43 +487,22 @@ bool compose_a1(
                 base.size());
 }
 
-bool terminal_rgb_output_word(
-    const std::vector<std::uint32_t> &words,
-    std::size_t &word) noexcept
-{
-    word = static_cast<std::size_t>(-1);
+constexpr surface::phn_scene_encoding_carrier
+    k_pmetal_phn_scene_carrier{
+        12u,
+        0u,
+        3u
+    };
 
-    std::vector<instruction_view> instructions;
-    if (!decode(words, instructions))
-        return false;
-
-    for (const auto &ins : instructions) {
-        if (ins.opcode != 0x36u ||
-            ins.length != 5u ||
-            ins.offset + 4u >= words.size() ||
-            words[ins.offset + 1u] != 0x00102072u ||
-            words[ins.offset + 2u] != 0u)
-            continue;
-
-        if (word != static_cast<std::size_t>(-1))
-            return false;
-
-        word = ins.offset;
-    }
-
-    return word != static_cast<std::size_t>(-1);
-}
-
-bool terminal_rgb_sat_exact(
+bool phn_scene_encoding_exact(
     const std::vector<std::uint32_t> &words) noexcept
 {
-    std::size_t word = 0u;
-    return
-        terminal_rgb_output_word(words, word) &&
-        words[word] == 0x05002036u;
+    return surface::unique_phn_scene_encoding_exact(
+        words,
+        k_pmetal_phn_scene_carrier);
 }
 
-bool compose_exact_terminal_rgb_sat(
+bool compose_exact_phn_scene_encoding(
     std::vector<std::uint8_t> &bytes) noexcept
 {
     std::vector<chunk> chunks;
@@ -540,20 +520,18 @@ bool compose_exact_terminal_rgb_sat(
             words))
         return false;
 
-    std::size_t word = 0u;
-    if (!terminal_rgb_output_word(words, word))
+    const auto encoded =
+        surface::apply_unique_phn_scene_encoding_words(
+            words,
+            k_pmetal_phn_scene_carrier);
+
+    if (encoded !=
+            surface::phn_scene_encoding_result::applied &&
+        encoded !=
+            surface::phn_scene_encoding_result::already_encoded)
         return false;
 
-    if (words[word] == 0x05002036u)
-        return true;
-
-    if (words[word] != 0x05000036u)
-        return false;
-
-    words[word] |=
-        surface::dxbc_saturate_modifier_bit;
-
-    if (words[word] != 0x05002036u)
+    if (!phn_scene_encoding_exact(words))
         return false;
 
     std::vector<std::uint8_t> rebuilt;
@@ -2129,7 +2107,7 @@ bool binding_exists(
 bool final_postcondition(
     const std::vector<std::uint8_t> &bytes,
     bool with_upper_lower,
-    bool require_terminal_sat = true) noexcept
+    bool require_phn_terminal = true) noexcept
 {
     std::vector<chunk> chunks;
     std::vector<std::uint32_t> words;
@@ -2321,8 +2299,8 @@ bool final_postcondition(
         s14_decl == 1u &&
         t14_sample == 1u &&
         t9_sample == 0u &&
-        (!require_terminal_sat ||
-         terminal_rgb_sat_exact(words));
+        (!require_phn_terminal ||
+         phn_scene_encoding_exact(words));
 }
 
 } // namespace
@@ -2580,14 +2558,13 @@ materialize_pmetal_rgba_receiver(
     // owner-visible white P_Metal failure.
     outcome.spec_rgb_consumer = true;
 
-    // PTDE Phn HemEnv terminates its surface contribution with an RGB-only
-    // saturate. These exact P_Metal receivers are not members of the generic
-    // A1 terminal-SAT plan index, so relying on A1 composition here leaves a
-    // DSR-only unclamped HDR tail in an otherwise PTDE EnvSpec island. Compose
-    // the independent surface operator explicitly and record its ownership.
+    // PTDE Phn HemEnv does not terminate with SAT alone. Its exact terminal
+    // operator is scene encoding k135=c135.x/c135.y followed by RGB SAT.
+    // P_Metal carries k135 in b12[0].w; the shared surface transform owns the
+    // shader cut while the draw runtime owns the producer value.
     if (!features.enabled(
             core::operator_id::terminal_sat_rgb) ||
-        !compose_exact_terminal_rgb_sat(base)) {
+        !compose_exact_phn_scene_encoding(base)) {
         outcome.result =
             pmetal_rgba_materialize_result::
                 fail_postcondition;
