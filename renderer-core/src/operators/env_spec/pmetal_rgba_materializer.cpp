@@ -752,6 +752,283 @@ bool patch_build131_rdef(
     return true;
 }
 
+
+#if defined(DSRRL_PMETAL_V13_NATIVE_DSR_NO_TAIL_DIAG)
+bool patch_v13_native_dsr_no_tail_rdef(
+    std::vector<chunk> &chunks) noexcept
+{
+    auto *rdef = unique_rdef(chunks);
+    if (rdef == nullptr || rdef->payload.size() < 16u)
+        return false;
+
+    auto &payload = rdef->payload;
+    const auto count = read_u32(payload.data() + 8u);
+    const auto offset = read_u32(payload.data() + 12u);
+    constexpr std::uint32_t k_binding_size = 32u;
+
+    if (count == 0u || count > 256u ||
+        offset > payload.size() ||
+        static_cast<std::uint64_t>(count) * k_binding_size >
+            payload.size() - offset)
+        return false;
+
+    std::uint32_t sampler9 = 0u;
+    std::uint32_t texture9 = 0u;
+
+    for (std::uint32_t i = 0u; i < count; ++i) {
+        const auto at = offset + i * k_binding_size;
+        const auto type = read_u32(payload.data() + at + 4u);
+        const auto dimension = read_u32(payload.data() + at + 12u);
+        const auto bind = read_u32(payload.data() + at + 20u);
+        const auto bind_count = read_u32(payload.data() + at + 24u);
+
+        if (bind == 14u)
+            return false;
+
+        if (bind != 9u || bind_count != 1u)
+            continue;
+
+        if (type == 3u) {
+            write_u32(payload.data() + at + 20u, 14u);
+            ++sampler9;
+        } else if (type == 2u && dimension == 4u) {
+            // Historical V13: recycle the dead t9 BRDF-LUT binding as
+            // the second native DSR EnvSpec cube endpoint.
+            write_u32(payload.data() + at + 12u, 9u);
+            write_u32(payload.data() + at + 20u, 14u);
+            ++texture9;
+        }
+    }
+
+    return sampler9 == 1u && texture9 == 1u;
+}
+
+constexpr std::array<std::uint32_t,47>
+    k_v13_native_dsr_no_tail_chain = {{
+        // A = already-sampled native DSR t12 * PTDE source A (b12[2]).
+        0x08000038u,0x001000e2u,0x00000001u,0x00100e56u,
+        0x00000001u,0x00208246u,0x0000000cu,0x00000002u,
+        // if (beta)
+        0x0404001fu,0x0020803au,0x0000000cu,0x00000003u,
+        // Braw = native DSR t14
+        0x8d000048u,0x80000182u,0x00155543u,0x001000e2u,
+        0x0000000cu,0x00100796u,0x00000001u,0x00107936u,
+        0x0000000eu,0x00106000u,0x0000000eu,0x0010003au,
+        0x00000002u,
+        // delta = Braw * PTDE source B (b12[3]) - A
+        0x0b000032u,0x001000e2u,0x0000000cu,0x00100e56u,
+        0x0000000cu,0x00208246u,0x0000000cu,0x00000003u,
+        0x80100e56u,0x00000041u,0x00000001u,
+        // A = delta * beta + A
+        0x0a000032u,0x001000e2u,0x00000001u,0x00100e56u,
+        0x0000000cu,0x0020803au,0x0000000cu,0x00000003u,
+        0x00100e56u,0x00000001u,
+        0x01000015u
+    }};
+
+bool apply_v13_native_dsr_no_tail(
+    std::vector<std::uint8_t> &bytes,
+    const pmetal_rgba_authority::entry &authority) noexcept
+{
+    std::vector<chunk> chunks;
+    std::vector<std::uint32_t> words;
+    std::vector<instruction_view> instructions;
+    std::size_t code_index = 0u;
+
+    if (!parse_dxbc(bytes.data(), bytes.size(), chunks, code_index) ||
+        !extract_words(chunks, code_index, words) ||
+        !decode(words, instructions))
+        return false;
+
+    std::optional<instruction_view> sampler9;
+    std::optional<instruction_view> texture9;
+    std::optional<instruction_view> t12_sample;
+    std::size_t t9_sample_count = 0u;
+    std::size_t t14_decl_count = 0u;
+
+    for (const auto &ins : instructions) {
+        if (ins.opcode == 0x5au && ins.length == 3u) {
+            const auto slot = words[ins.offset + 2u];
+            if (slot == 9u) {
+                if (sampler9)
+                    return false;
+                sampler9 = ins;
+            }
+            if (slot == 14u)
+                ++t14_decl_count;
+        }
+
+        if (ins.opcode == 0x58u && ins.length == 4u) {
+            const auto slot = words[ins.offset + 2u];
+            if (slot == 9u) {
+                if (texture9)
+                    return false;
+                texture9 = ins;
+            }
+            if (slot == 14u)
+                ++t14_decl_count;
+        }
+
+        if (ins.opcode >= 0x45u && ins.opcode <= 0x4au &&
+            ins.length == 13u) {
+            const auto resource = words[ins.offset + 8u];
+            const auto sampler = words[ins.offset + 10u];
+
+            if (resource == 12u && sampler == 12u) {
+                if (t12_sample)
+                    return false;
+                t12_sample = ins;
+            }
+
+            if (resource == 9u || sampler == 9u)
+                ++t9_sample_count;
+        }
+    }
+
+    constexpr std::array<std::uint32_t,13> k_t12_sample = {{
+        0x8d000048u,0x80000182u,0x00155543u,0x001000e2u,
+        0x00000001u,0x00100796u,0x00000001u,0x00107936u,
+        0x0000000cu,0x00106000u,0x0000000cu,0x0010003au,
+        0x00000002u
+    }};
+
+    if (!sampler9 || !texture9 || !t12_sample ||
+        t14_decl_count != 0u ||
+        t12_sample->offset != authority.t12_word ||
+        !std::equal(
+            k_t12_sample.begin(), k_t12_sample.end(),
+            words.begin() + static_cast<std::ptrdiff_t>(t12_sample->offset)))
+        return false;
+
+    const auto replace_begin = t12_sample->offset + t12_sample->length;
+    const auto merge_word = authority.merge_word;
+
+    if (merge_word <= replace_begin ||
+        merge_word - replace_begin != 102u ||
+        merge_word >= words.size() ||
+        t9_sample_count != 1u)
+        return false;
+
+    const auto merge = std::find_if(
+        instructions.begin(), instructions.end(),
+        [&](const instruction_view &ins) {
+            return ins.offset == merge_word;
+        });
+
+    if (merge == instructions.end() ||
+        merge->opcode != 0x32u ||
+        merge->length != 9u)
+        return false;
+
+    for (const auto &ins : instructions) {
+        if (ins.opcode < 0x45u || ins.opcode > 0x4au ||
+            ins.length != 13u)
+            continue;
+
+        const auto resource = words[ins.offset + 8u];
+        const auto sampler = words[ins.offset + 10u];
+        if ((resource == 9u || sampler == 9u) &&
+            (ins.offset < replace_begin || ins.offset >= merge_word))
+            return false;
+    }
+
+    // Historical V13 declaration reuse: t9/s9 -> native cube t14/s14.
+    words[sampler9->offset + 2u] = 14u;
+    words[texture9->offset] = 0x04003058u;
+    words[texture9->offset + 2u] = 14u;
+
+    std::copy(
+        k_v13_native_dsr_no_tail_chain.begin(),
+        k_v13_native_dsr_no_tail_chain.end(),
+        words.begin() + static_cast<std::ptrdiff_t>(replace_begin));
+
+    std::fill(
+        words.begin() + static_cast<std::ptrdiff_t>(
+            replace_begin + k_v13_native_dsr_no_tail_chain.size()),
+        words.begin() + static_cast<std::ptrdiff_t>(merge_word),
+        0x0100003au);
+
+    if (!patch_v13_native_dsr_no_tail_rdef(chunks))
+        return false;
+
+    std::vector<std::uint8_t> rebuilt;
+    if (!rebuild(
+            bytes.data(), bytes.size(), std::move(chunks),
+            code_index, words, rebuilt))
+        return false;
+
+    bytes = std::move(rebuilt);
+    return true;
+}
+
+bool v13_native_dsr_no_tail_postcondition(
+    const std::vector<std::uint8_t> &bytes,
+    const pmetal_rgba_authority::entry &authority) noexcept
+{
+    std::vector<chunk> chunks;
+    std::vector<std::uint32_t> words;
+    std::vector<instruction_view> instructions;
+    std::size_t code_index = 0u;
+
+    if (!parse_dxbc(bytes.data(), bytes.size(), chunks, code_index) ||
+        !extract_words(chunks, code_index, words) ||
+        !decode(words, instructions))
+        return false;
+
+    std::size_t t14_decl = 0u;
+    std::size_t s14_decl = 0u;
+    std::size_t t14_sample = 0u;
+    std::size_t t9_sample = 0u;
+    std::size_t t10_sample = 0u;
+
+    for (const auto &ins : instructions) {
+        if (ins.opcode == 0x58u && ins.length == 4u &&
+            words[ins.offset + 2u] == 14u &&
+            words[ins.offset] == 0x04003058u)
+            ++t14_decl;
+
+        if (ins.opcode == 0x5au && ins.length == 3u &&
+            words[ins.offset + 2u] == 14u)
+            ++s14_decl;
+
+        if (ins.opcode >= 0x45u && ins.opcode <= 0x4au) {
+            if (ins.length == 13u) {
+                const auto resource = words[ins.offset + 8u];
+                const auto sampler = words[ins.offset + 10u];
+                if (resource == 14u && sampler == 14u)
+                    ++t14_sample;
+                if (resource == 9u || sampler == 9u)
+                    ++t9_sample;
+            }
+            if (ins.length == 11u &&
+                words[ins.offset + 8u] == 10u)
+                ++t10_sample;
+        }
+    }
+
+    const auto merge = std::find_if(
+        instructions.begin(), instructions.end(),
+        [&](const instruction_view &ins) {
+            return ins.offset == authority.merge_word;
+        });
+
+    auto *rdef = unique_rdef(chunks);
+
+    return
+        rdef != nullptr &&
+        legacy_plan::dxbc::rdef::has_constant_buffer_binding(
+            rdef->payload, 12u) &&
+        merge != instructions.end() &&
+        merge->opcode == 0x32u &&
+        merge->length == 9u &&
+        t14_decl == 1u &&
+        s14_decl == 1u &&
+        t14_sample == 1u &&
+        t9_sample == 0u &&
+        t10_sample == 0u;
+}
+#endif
+
 bool add_b12_rdef(
     std::vector<std::uint8_t> &bytes) noexcept
 {
@@ -1801,6 +2078,30 @@ materialize_pmetal_rgba_receiver(
         return outcome;
     }
 
+#if defined(DSRRL_PMETAL_V13_NATIVE_DSR_NO_TAIL_DIAG)
+    // Exact historical V13-style diagnostic: native DSR cubemap carrier,
+    // PTDE A/B+beta source law, no modern SpecRGB*c101*COLOR0 final tail.
+    // The first common EnvSpec+EnvDiffuse merge remains byte-identical.
+    if (compose_upper_lower ||
+        !apply_v13_native_dsr_no_tail(
+            base,
+            *authority) ||
+        !v13_native_dsr_no_tail_postcondition(
+            base,
+            *authority)) {
+        outcome.result =
+            pmetal_rgba_materialize_result::
+                fail_build131_precondition;
+        return outcome;
+    }
+
+    outcome.spec_rgb_consumer = false;
+    outcome.envdiffuse_linear_consumer_diag = false;
+    output = std::move(base);
+    outcome.result =
+        pmetal_rgba_materialize_result::applied;
+    return outcome;
+#else
     // Replace the complete DSR EnvSpec/PBL window with the PTDE legacy
     // RGB/A + direct-R + raw-c101 material operator.
     if (!apply_build131(
@@ -1900,6 +2201,7 @@ materialize_pmetal_rgba_receiver(
         pmetal_rgba_materialize_result::
             applied;
     return outcome;
+#endif
 }
 
 } // namespace dsrrl::operators::env_spec
