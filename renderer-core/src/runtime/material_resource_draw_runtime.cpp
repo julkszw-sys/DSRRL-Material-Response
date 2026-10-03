@@ -8,6 +8,7 @@
 #include "dsrrl/runtime/generated_spec_routes_v12.hpp"
 #include "dsrrl/runtime/generated_diffuse_routes_v12.hpp"
 #include "dsrrl/runtime/generated_normal_routes_v12.hpp"
+#include "dsrrl/operators/legacy_plan/sha256_bytes.hpp"
 
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
@@ -47,7 +48,8 @@ enum class load_status : std::uint8_t {
     missing = 0,
     ready,
     unsupported,
-    create_failed
+    create_failed,
+    hash_mismatch
 };
 
 struct companion_set {
@@ -204,6 +206,10 @@ std::atomic_bool g_quarantined{false};
 std::atomic_bool g_subsurface_body_f_diag_logged{false};
 std::atomic_bool g_subsurface_body_m_diag_logged{false};
 std::atomic_bool g_subsurface_body_unknown_diag_logged{false};
+#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_R3)
+std::atomic_bool g_pmetal_r3_spec_attest_ok_logged{false};
+std::atomic_bool g_pmetal_r3_spec_attest_fail_logged{false};
+#endif
 bool g_hot_telemetry_enabled = false;
 
 // Exact DSR body SpecMap identities used only by the Ps_Body[DSBT]
@@ -441,7 +447,9 @@ bool read_struct(
 
 load_result load_dds(
     ID3D11Device *device,
-    const std::filesystem::path &path) noexcept
+    const std::filesystem::path &path,
+    asset_class cls,
+    std::uint64_t logical_hash) noexcept
 {
     if (device == nullptr ||
         path.empty())
@@ -485,6 +493,51 @@ load_result load_dds(
                 nullptr,
                 load_status::unsupported
             };
+
+#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_R3)
+        // R3 closes the remaining content-authority hole on the exact
+        // material seen in the owner's active black/red R2 draw. R2 only
+        // authenticated logical identity + a non-null companion SRV, so a
+        // stale same-name DDS could silently enter t10. For HD_A_9550_s we
+        // now require the exact retail PTDE DDS bytes recovered by the PTDE
+        // equipment extractor.
+        constexpr std::uint64_t k_hd_a_9550_s_hash =
+            0xaedd13872d25cffbull;
+        constexpr char k_hd_a_9550_s_sha256[] =
+            "988d288dc65c7cb0856b65243ed33cbcc16862ea8c233d48ca0a377f0e8b1f77";
+
+        if (cls == asset_class::specular &&
+            logical_hash == k_hd_a_9550_s_hash) {
+            const auto digest =
+                operators::legacy_plan::hashing::sha256(
+                    bytes.data(),
+                    bytes.size());
+            if (!operators::legacy_plan::hashing::matches_hex(
+                    digest,
+                    k_hd_a_9550_s_sha256)) {
+                if (!g_pmetal_r3_spec_attest_fail_logged.exchange(
+                        true,
+                        std::memory_order_relaxed))
+                    reshade::log::message(
+                        reshade::log::level::warning,
+                        "[DSRRL PMETAL R3 SPEC ATTEST] HD_A_9550_s exact PTDE SHA mismatch; fail-open, stale/wrong sidecar rejected.");
+                return {
+                    nullptr,
+                    load_status::hash_mismatch
+                };
+            }
+
+            if (!g_pmetal_r3_spec_attest_ok_logged.exchange(
+                    true,
+                    std::memory_order_relaxed))
+                reshade::log::message(
+                    reshade::log::level::info,
+                    "[DSRRL PMETAL R3 SPEC ATTEST] HD_A_9550_s exact PTDE SHA PASS.");
+        }
+#else
+        (void)cls;
+        (void)logical_hash;
+#endif
 
         std::uint32_t magic = 0u;
         dds_header header{};
@@ -1020,7 +1073,9 @@ void on_init_resource_view(
                 native_device,
                 sidecar_path(
                     asset_class::specular,
-                    logical_name));
+                    logical_name),
+                asset_class::specular,
+                logical_hash);
         account_load(loaded.status);
         set.specular = loaded.view;
     }
@@ -1033,7 +1088,9 @@ void on_init_resource_view(
                 native_device,
                 sidecar_path(
                     asset_class::diffuse,
-                    logical_name));
+                    logical_name),
+                asset_class::diffuse,
+                logical_hash);
         account_load(loaded.status);
         set.diffuse = loaded.view;
     }
@@ -1046,7 +1103,9 @@ void on_init_resource_view(
                 native_device,
                 sidecar_path(
                     asset_class::normal,
-                    logical_name));
+                    logical_name),
+                asset_class::normal,
+                logical_hash);
         account_load(loaded.status);
         set.normal = loaded.view;
     }
