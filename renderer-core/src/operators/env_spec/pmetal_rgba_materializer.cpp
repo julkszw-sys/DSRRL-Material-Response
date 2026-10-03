@@ -1756,11 +1756,14 @@ bool r3_postmerge_visibility_postcondition(
 
 #if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_R5)
 // PTDE stable Phn HemEnv reconstructs the tangent frame per pixel. DSR HemEnv
-// changed that spatial operator in three coupled ways before both environment
-// consumers: SV_IsFrontFace can flip the geometric normal, TEXCOORD5 carries a
-// separately interpolated bitangent, and gFC_LightProbeParam.z biases the
-// tangent-space normal toward +Z. R5 restores only this common N/T/B producer.
-// The resulting N continues into the already-owned PTDE t11 EnvDiffuse path and
+// changed that spatial operator in two non-equivalent ways before both
+// environment consumers: SV_IsFrontFace can flip the geometric normal and
+// TEXCOORD5 carries a separately interpolated bitangent instead of PTDE's
+// per-pixel cross. The DSR gFC_LightProbeParam.z normal MAD is deliberately
+// preserved: the recovered ordinary GI/legacy providers upload z=1 exactly, so
+// that operation is algebraically identity. R5 restores only the active N/T/B
+// producer differences. The resulting N continues into the already-owned PTDE
+// t11 EnvDiffuse path and
 // the homologous R = 2*dot(N,V)*N - V path used by the PTDE t12 EnvSpec island.
 bool apply_exact_ptde_normal_basis_r5(
     std::vector<std::uint8_t> &bytes) noexcept
@@ -2020,29 +2023,9 @@ bool apply_exact_ptde_normal_basis_r5(
     words[frontface_word + 8u] =
         0x00000001u;
 
-    // PTDE raw tangent-space normal is (2*x-1, 2*y-1, sqrt(...)).
-    // DSR first forms (2*x-1, 2*y-1, sqrt(...)-1), then applies
-    // LightProbeParam.z and adds +Z. Replace only that 13-DWORD MAD with an
-    // ADD(+Z) plus three NOPs, preserving the exact window length.
-    const std::array<std::uint32_t,13>
-        ptde_normal_restore{{
-            0x0a000000u,
-            0x00100072u,0x00000004u,
-            0x00100246u,0x00000004u,
-            0x00004002u,
-            0x00000000u,0x00000000u,
-            0x3f800000u,0x00000000u,
-            0x0100003au,
-            0x0100003au,
-            0x0100003au
-        }};
-
-    std::copy(
-        ptde_normal_restore.begin(),
-        ptde_normal_restore.end(),
-        words.begin() +
-            static_cast<std::ptrdiff_t>(
-                lightprobe_word));
+    // Preserve the DSR LightProbeParam.z MAD byte-for-byte. The recovered
+    // ordinary HemEnv providers set z=1 exactly, so the sequence reduces to
+    // the same decoded tangent normal as PTDE and is not an active mismatch.
 
     // Replace the 19-DWORD interpolated-B normalization with the 43-DWORD
     // PTDE per-pixel cross. This is the only size-changing R5 edit.
@@ -2068,8 +2051,8 @@ bool apply_exact_ptde_normal_basis_r5(
         static_cast<std::uint32_t>(
             words.size());
 
-    // Exact postconditions. The size-changing edit lies between the front-face
-    // cut and LightProbeParam cut, so the latter shifts by +24 DWORDs.
+    // Exact postconditions. The size-changing edit lies before the unchanged
+    // LightProbeParam identity sequence, so its verified anchor shifts +24.
     constexpr std::size_t
         k_bitangent_growth = 43u - 19u;
     const auto shifted_lightprobe =
@@ -2087,11 +2070,11 @@ bool apply_exact_ptde_normal_basis_r5(
                 static_cast<std::ptrdiff_t>(
                     bitangent_word)) ||
         shifted_lightprobe +
-                ptde_normal_restore.size() >
+                k_dsr_lightprobe_normal_mad.size() >
             words.size() ||
         !std::equal(
-            ptde_normal_restore.begin(),
-            ptde_normal_restore.end(),
+            k_dsr_lightprobe_normal_mad.begin(),
+            k_dsr_lightprobe_normal_mad.end(),
             words.begin() +
                 static_cast<std::ptrdiff_t>(
                     shifted_lightprobe)))
