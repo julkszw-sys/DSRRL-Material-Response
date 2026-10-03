@@ -97,6 +97,11 @@ option(
     OFF)
 
 option(
+    DSRRL_PMETAL_R5_OWNER_RESOURCE_TRACE
+    "Diagnostic: pixel-inert P_Metal owner/material/resource/s2 sampler trace over the R4 full-PTDE path"
+    OFF)
+
+option(
     DSRRL_POINTLIGHT_DRAWTIME_BYPASS
     "Diagnostic: disable PointLight producer hooks, runtime pipeline binding and draw-time carrier/replay while preserving all non-PointLight runtime paths"
     OFF)
@@ -646,6 +651,13 @@ if(DSRRL_PMETAL_FULL_PTDE_HEMENV_R4)
         dsrrl_renderer_core_integrated
         PRIVATE
         $<$<COMPILE_LANGUAGE:CXX>:DSRRL_PMETAL_FULL_PTDE_HEMENV_R4>)
+endif()
+
+if(DSRRL_PMETAL_R5_OWNER_RESOURCE_TRACE)
+    target_compile_definitions(
+        dsrrl_renderer_core_integrated
+        PRIVATE
+        $<$<COMPILE_LANGUAGE:CXX>:DSRRL_PMETAL_R5_OWNER_RESOURCE_TRACE>)
 endif()
 
 if(DSRRL_POINTLIGHT_DRAWTIME_BYPASS)
