@@ -1437,6 +1437,212 @@ bool add_b12_rdef(
 }
 
 
+#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG)
+bool apply_exact_ptde_envdiffuse_consumer(
+    std::vector<std::uint8_t> &bytes) noexcept
+{
+    std::vector<chunk> chunks;
+    std::vector<std::uint32_t> words;
+    std::vector<instruction_view> instructions;
+    std::size_t code_index = 0u;
+
+    if (!parse_dxbc(
+            bytes.data(),
+            bytes.size(),
+            chunks,
+            code_index) ||
+        !extract_words(
+            chunks,
+            code_index,
+            words) ||
+        !decode(
+            words,
+            instructions))
+        return false;
+
+    // Exact stable P_Metal host island:
+    //   mul r2.xyz, cb0[3].xyz, cb0[79].x        (9 dwords)
+    //   sample_l sample.xyz, coord, t11, s11     (13 dwords)
+    //   mul r2.xyz, r2.xyz, sample.xyz           (7 dwords)
+    //
+    // Replace the complete 29-dword producer window, preserving length:
+    //   sample_l r12.xyzw, coord, t11, s11       (13)
+    //   div      r12.xyz, r12.xyz, r12.www       (7)
+    //   mul      r2.xyz, r12.xyz, cb12[3].xyz    (8)
+    //   nop                                         (1)
+    //
+    // This is the PTDE local operator: filter raw RGBA first, then RGB/A,
+    // then multiply by the exact PTDE EnvDiffuse LightBank endpoint. r12 is
+    // already a certified scratch temp in the immediately preceding Build131
+    // EnvSpec island and is dead at this source boundary.
+
+    constexpr std::array<std::uint32_t,9>
+        k_stock_source{{
+            0x09000038u,
+            0x00100072u,0x00000002u,
+            0x00208246u,0x00000000u,0x00000003u,
+            0x00208006u,0x00000000u,0x0000004fu
+        }};
+
+    std::size_t hits = 0u;
+    std::size_t source_word =
+        static_cast<std::size_t>(-1);
+    std::size_t sample_word =
+        static_cast<std::size_t>(-1);
+    std::uint32_t original_sample_register = 0u;
+
+    for (std::size_t i = 1u;
+         i + 1u < instructions.size();
+         ++i) {
+        const auto &sample =
+            instructions[i];
+
+        if (sample.opcode < 0x45u ||
+            sample.opcode > 0x4au ||
+            sample.length != 13u ||
+            sample.offset + 12u >= words.size() ||
+            words[sample.offset + 8u] != 11u ||
+            words[sample.offset + 10u] != 11u)
+            continue;
+
+        const auto &before =
+            instructions[i - 1u];
+        const auto &after =
+            instructions[i + 1u];
+
+        if (before.length !=
+                k_stock_source.size() ||
+            before.offset +
+                before.length !=
+                    sample.offset ||
+            sample.offset +
+                sample.length !=
+                    after.offset ||
+            after.opcode != 0x38u ||
+            after.length != 7u ||
+            before.offset +
+                k_stock_source.size() >
+                    words.size() ||
+            after.offset + after.length >
+                words.size() ||
+            !std::equal(
+                k_stock_source.begin(),
+                k_stock_source.end(),
+                words.begin() +
+                    static_cast<std::ptrdiff_t>(
+                        before.offset)))
+            return false;
+
+        // Guard the stock multiply shape:
+        // mul r2.xyz, r2.xyz, sample.xyz.
+        if (words[after.offset] !=
+                0x07000038u ||
+            words[after.offset + 1u] !=
+                0x00100072u ||
+            words[after.offset + 2u] != 2u ||
+            words[after.offset + 3u] !=
+                0x00100e56u ||
+            words[after.offset + 4u] != 2u ||
+            words[after.offset + 5u] !=
+                0x00100e56u)
+            return false;
+
+        original_sample_register =
+            words[after.offset + 6u];
+
+        ++hits;
+        source_word = before.offset;
+        sample_word = sample.offset;
+    }
+
+    if (hits != 1u ||
+        source_word ==
+            static_cast<std::size_t>(-1) ||
+        sample_word ==
+            static_cast<std::size_t>(-1))
+        return false;
+
+    std::array<std::uint32_t,13>
+        ptde_sample{};
+    std::copy_n(
+        words.begin() +
+            static_cast<std::ptrdiff_t>(
+                sample_word),
+        ptde_sample.size(),
+        ptde_sample.begin());
+
+    // Keep the exact coordinate/resource/sampler operands but capture all four
+    // filtered channels in r12 so alpha survives until the post-filter divide.
+    ptde_sample[3] = 0x001000f2u;
+    ptde_sample[4] = 12u;
+
+    const std::array<std::uint32_t,7>
+        decode_rgb_over_alpha{{
+            0x0700000eu,
+            0x001000e2u,12u,
+            0x00100e56u,12u,
+            0x00100006u,12u
+        }};
+
+    const std::array<std::uint32_t,8>
+        apply_ptde_endpoint{{
+            0x08000038u,
+            0x00100072u,2u,
+            0x00100e56u,12u,
+            0x00208246u,12u,3u
+        }};
+
+    std::size_t out = source_word;
+    std::copy(
+        ptde_sample.begin(),
+        ptde_sample.end(),
+        words.begin() +
+            static_cast<std::ptrdiff_t>(
+                out));
+    out += ptde_sample.size();
+
+    std::copy(
+        decode_rgb_over_alpha.begin(),
+        decode_rgb_over_alpha.end(),
+        words.begin() +
+            static_cast<std::ptrdiff_t>(
+                out));
+    out += decode_rgb_over_alpha.size();
+
+    std::copy(
+        apply_ptde_endpoint.begin(),
+        apply_ptde_endpoint.end(),
+        words.begin() +
+            static_cast<std::ptrdiff_t>(
+                out));
+    out += apply_ptde_endpoint.size();
+
+    words[out++] = 0x0100003au;
+
+    if (out != source_word + 29u)
+        return false;
+
+    // The original sampled temp may now be unused, which is legal. Retain
+    // this read as an exact-shape sanity check and avoid accepting an
+    // impossible register encoding silently.
+    if (original_sample_register >= 0x1000u)
+        return false;
+
+    std::vector<std::uint8_t> rebuilt;
+    if (!rebuild(
+            bytes.data(),
+            bytes.size(),
+            std::move(chunks),
+            code_index,
+            words,
+            rebuilt))
+        return false;
+
+    bytes = std::move(rebuilt);
+    return true;
+}
+#endif
+
 bool apply_linear_envdiffuse_consumer_diag(
     std::vector<std::uint8_t> &bytes) noexcept
 {
@@ -2525,10 +2731,20 @@ materialize_pmetal_rgba_receiver(
         return outcome;
     }
 
-    // Diagnostic-only EnvDiffuse consumer translation. Keep the native DSR
-    // t11 directional field but replace the DSR nonlinear/draw-gain endpoint
-    // source with the exact pre-draw-gain endpoint recovered to PTDE-linear
-    // domain and carried in b12[3].xyz.
+#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG)
+    // Complete stable-HemEnv PTDE EnvDiffuse island: exact raw PTDE t11
+    // resource, filter RGBA, post-filter RGB/A decode and exact PTDE c86
+    // endpoint carried in b12[3].xyz.
+    if (!apply_exact_ptde_envdiffuse_consumer(
+            base)) {
+        outcome.result =
+            pmetal_rgba_materialize_result::
+                fail_postcondition;
+        return outcome;
+    }
+#else
+    // Legacy diagnostic-only translation: native DSR t11 field with a
+    // recovered linear endpoint.
     if (!apply_linear_envdiffuse_consumer_diag(
             base)) {
         outcome.result =
@@ -2536,6 +2752,7 @@ materialize_pmetal_rgba_receiver(
                 fail_postcondition;
         return outcome;
     }
+#endif
     outcome.envdiffuse_linear_consumer_diag = true;
 
     if (compose_upper_lower) {
