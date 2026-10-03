@@ -9,6 +9,7 @@ root = Path(sys.argv[1] if len(sys.argv) > 1 else "renderer-core")
 stable = (root/"src"/"operators"/"env_spec"/"pmetal_rgba_materializer.cpp").read_text(encoding="utf-8")
 lerp = (root/"src"/"operators"/"env_spec"/"pmetal_rgba_lerp_materializer.cpp").read_text(encoding="utf-8")
 runtime = (root/"src"/"runtime"/"pmetal_envspec_draw_runtime.cpp").read_text(encoding="utf-8")
+source_runtime = (root/"src"/"runtime"/"pmetal_env_source_runtime.cpp").read_text(encoding="utf-8")
 resources_h = (root/"include"/"dsrrl"/"runtime"/"material_resource_draw_runtime.hpp").read_text(encoding="utf-8")
 resources_cpp = (root/"src"/"runtime"/"material_resource_draw_runtime.cpp").read_text(encoding="utf-8")
 cmake = (root/"integrated"/"CMakeLists.txt").read_text(encoding="utf-8")
@@ -22,7 +23,7 @@ for needle in [
     "specrgb_c101_color0=envspec_only",
     "keep_only_spec_rgb_request",
 ]:
-    if needle not in stable + lerp + runtime + resources_h + resources_cpp + cmake:
+    if needle not in stable + lerp + runtime + source_runtime + resources_h + resources_cpp + cmake:
         raise SystemExit(f"MISSING: {needle}")
 
 # Stable invariant: the new material factor multiplies only r1.yzw immediately
@@ -65,4 +66,25 @@ with tempfile.TemporaryDirectory() as td:
         if token not in generated.replace(" ",""):
             raise SystemExit(f"generated Lerp row missing: {token}")
 
-print("PMETAL_V13_MATERIAL_MOD_ONLY_AUDIT_PASS")
+for needle in [
+    "exact_runtime_material_response_identity",
+    "material.material_family_hash ==",
+    'mtd_semantic_hash("DifSpcBmp")',
+    "classify_mtd_envspec_semantics",
+    "env.envspc_slot_valid",
+]:
+    if needle not in source_runtime:
+        raise SystemExit(f"equipment source gate missing: {needle}")
+
+for needle in [
+    "exact_runtime_material_response_identity",
+    "decision.receiver_id >= 33u",
+    "decision.receiver_id <= 35u",
+    "#if !defined(DSRRL_PMETAL_V13_NATIVE_DSR_MATERIAL_MOD_DIAG)",
+    "env_semantics.envspc_slot != 2u",
+    "[DSRRL EQUIPMENT V13 MATERIAL MOD]",
+]:
+    if needle not in runtime:
+        raise SystemExit(f"equipment draw gate missing: {needle}")
+
+print("EQUIPMENT_V13_MATERIAL_MOD_RUNTIME_AUDIT_PASS")
