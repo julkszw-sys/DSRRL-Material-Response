@@ -102,6 +102,11 @@ option(
     OFF)
 
 option(
+    DSRRL_PMETAL_CUMULATIVE_OPERATOR_RECOVERY_R6
+    "P_Metal R6: recover previously proven PTDE PHN scene-encoding consumer and P_Metal Fog/LightScattering atmosphere-domain bridge on top of R5; dynamic k135 producer remains separately gated"
+    OFF)
+
+option(
     DSRRL_POINTLIGHT_DRAWTIME_BYPASS
     "Diagnostic: disable PointLight producer hooks, runtime pipeline binding and draw-time carrier/replay while preserving all non-PointLight runtime paths"
     OFF)
@@ -665,6 +670,21 @@ if(DSRRL_PMETAL_FULL_PTDE_HEMENV_R5)
         dsrrl_renderer_core_integrated
         PRIVATE
         $<$<COMPILE_LANGUAGE:CXX>:DSRRL_PMETAL_FULL_PTDE_HEMENV_R5>)
+endif()
+
+if(DSRRL_PMETAL_CUMULATIVE_OPERATOR_RECOVERY_R6)
+    if(NOT DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG OR
+       NOT DSRRL_PMETAL_FULL_PTDE_HEMENV_R3 OR
+       NOT DSRRL_PMETAL_FULL_PTDE_HEMENV_R4 OR
+       NOT DSRRL_PMETAL_FULL_PTDE_HEMENV_R5)
+        message(FATAL_ERROR
+            "P_Metal R6 requires FULL_PTDE_HEMENV_DIAG + R3 + R4 + R5 lineage")
+    endif()
+
+    target_compile_definitions(
+        dsrrl_renderer_core_integrated
+        PRIVATE
+        $<$<COMPILE_LANGUAGE:CXX>:DSRRL_PMETAL_CUMULATIVE_OPERATOR_RECOVERY_R6>)
 endif()
 
 if(DSRRL_POINTLIGHT_DRAWTIME_BYPASS)
