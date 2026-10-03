@@ -694,7 +694,7 @@ bool apply_exact_ptde_atmosphere_domain_r6(
         k_ptde_fog_delta{{
             0x09000000u,0x00100072u,0x00000002u,
             0x80100246u,0x00000041u,0x00000001u,
-            0x00100246u,0x00000002u
+            0x80100246u,0x00000081u,0x00000002u
         }};
 
     constexpr std::array<std::uint32_t,21>
@@ -813,7 +813,7 @@ bool atmosphere_domain_exact_r6(
         k_ptde_fog_delta{{
             0x09000000u,0x00100072u,0x00000002u,
             0x80100246u,0x00000041u,0x00000001u,
-            0x00100246u,0x00000002u
+            0x80100246u,0x00000081u,0x00000002u
         }};
 
     auto count_exact =
