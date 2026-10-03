@@ -1754,6 +1754,355 @@ bool r3_postmerge_visibility_postcondition(
 }
 #endif
 
+#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_R5)
+// PTDE stable Phn HemEnv reconstructs the tangent frame per pixel. DSR HemEnv
+// changed that spatial operator in two non-equivalent ways before both
+// environment consumers: SV_IsFrontFace can flip the geometric normal and
+// TEXCOORD5 carries a separately interpolated bitangent instead of PTDE's
+// per-pixel cross. The DSR gFC_LightProbeParam.z normal MAD is deliberately
+// preserved: the recovered ordinary GI/legacy providers upload z=1 exactly, so
+// that operation is algebraically identity. R5 restores only the active N/T/B
+// producer differences. The resulting N continues into the already-owned PTDE
+// t11 EnvDiffuse path and
+// the homologous R = 2*dot(N,V)*N - V path used by the PTDE t12 EnvSpec island.
+bool apply_exact_ptde_normal_basis_r5(
+    std::vector<std::uint8_t> &bytes) noexcept
+{
+    std::vector<chunk> chunks;
+    std::vector<std::uint32_t> words;
+    std::vector<instruction_view> instructions;
+    std::size_t code_index = 0u;
+
+    if (!parse_dxbc(
+            bytes.data(),
+            bytes.size(),
+            chunks,
+            code_index) ||
+        !extract_words(
+            chunks,
+            code_index,
+            words) ||
+        !decode(
+            words,
+            instructions))
+        return false;
+
+    std::size_t frontface_word =
+        static_cast<std::size_t>(-1);
+    std::size_t lightprobe_word =
+        static_cast<std::size_t>(-1);
+    std::size_t frontface_hits = 0u;
+    std::size_t lightprobe_hits = 0u;
+
+    constexpr std::array<std::uint32_t,13>
+        k_dsr_lightprobe_normal_mad{{
+            0x0d000032u,
+            0x00100072u,0x00000004u,
+            0x00208aa6u,0x00000000u,0x0000004fu,
+            0x00100246u,0x00000004u,
+            0x00004002u,
+            0x00000000u,0x00000000u,
+            0x3f800000u,0x00000000u
+        }};
+
+    for (const auto &ins : instructions) {
+        if (ins.offset + ins.length >
+                words.size())
+            return false;
+
+        // Exact DSR HemEnv front-face branch:
+        //   movc r2.xyz, SV_IsFrontFace, TEXCOORD2, -TEXCOORD2
+        // PTDE has no face-sign branch in the homologous Phn HemEnv path.
+        if (ins.opcode == 0x37u &&
+            ins.length == 10u &&
+            words[ins.offset + 1u] ==
+                0x00100072u &&
+            words[ins.offset + 2u] == 2u &&
+            words[ins.offset + 3u] ==
+                0x00101006u &&
+            words[ins.offset + 5u] ==
+                0x00101246u &&
+            words[ins.offset + 7u] ==
+                0x80101246u &&
+            words[ins.offset + 8u] ==
+                0x00000041u &&
+            words[ins.offset + 6u] ==
+                words[ins.offset + 9u]) {
+            ++frontface_hits;
+            frontface_word = ins.offset;
+        }
+
+        if (ins.length ==
+                k_dsr_lightprobe_normal_mad.size() &&
+            std::equal(
+                k_dsr_lightprobe_normal_mad.begin(),
+                k_dsr_lightprobe_normal_mad.end(),
+                words.begin() +
+                    static_cast<std::ptrdiff_t>(
+                        ins.offset))) {
+            ++lightprobe_hits;
+            lightprobe_word = ins.offset;
+        }
+    }
+
+    if (frontface_hits != 1u ||
+        lightprobe_hits != 1u ||
+        frontface_word ==
+            static_cast<std::size_t>(-1) ||
+        lightprobe_word <
+            48u)
+        return false;
+
+    const auto normal_input =
+        words[frontface_word + 6u];
+
+    // Immediately before the DSR-only LightProbeParam MAD are the exact
+    // normal-map "-1" ADD and the independently interpolated bitangent
+    // normalization. One tangent normalization block precedes that.
+    const auto minus_one_word =
+        lightprobe_word - 10u;
+    const auto bitangent_word =
+        minus_one_word - 19u;
+    const auto tangent_word =
+        bitangent_word - 19u;
+
+    constexpr std::array<std::uint32_t,10>
+        k_minus_one{{
+            0x0a000000u,
+            0x00100072u,0x00000004u,
+            0x00100246u,0x00000004u,
+            0x00004002u,
+            0xbf800000u,0xbf800000u,
+            0xbf800000u,0x00000000u
+        }};
+
+    if (minus_one_word +
+            k_minus_one.size() >
+                words.size() ||
+        !std::equal(
+            k_minus_one.begin(),
+            k_minus_one.end(),
+            words.begin() +
+                static_cast<std::ptrdiff_t>(
+                    minus_one_word)))
+        return false;
+
+    // DSR tangent normalization:
+    //   dp3 r1.w, vT.xyz, vT.xyz
+    //   rsq r1.w, r1.w
+    //   mul r5.xyz, r1.w, vT.yzx
+    if (tangent_word + 19u >
+            words.size() ||
+        words[tangent_word] !=
+            0x07000010u ||
+        words[tangent_word + 1u] !=
+            0x00100082u ||
+        words[tangent_word + 2u] != 1u ||
+        words[tangent_word + 3u] !=
+            0x00101246u ||
+        words[tangent_word + 5u] !=
+            0x00101246u ||
+        words[tangent_word + 4u] !=
+            words[tangent_word + 6u] ||
+        words[tangent_word + 7u] !=
+            0x05000044u ||
+        words[tangent_word + 8u] !=
+            0x00100082u ||
+        words[tangent_word + 9u] != 1u ||
+        words[tangent_word + 10u] !=
+            0x0010003au ||
+        words[tangent_word + 11u] != 1u ||
+        words[tangent_word + 12u] !=
+            0x07000038u ||
+        words[tangent_word + 13u] !=
+            0x00100072u ||
+        words[tangent_word + 14u] != 5u ||
+        words[tangent_word + 15u] !=
+            0x00100ff6u ||
+        words[tangent_word + 16u] != 1u ||
+        words[tangent_word + 17u] !=
+            0x00101496u ||
+        words[tangent_word + 18u] !=
+            words[tangent_word + 4u])
+        return false;
+
+    const auto tangent_input =
+        words[tangent_word + 4u];
+
+    // DSR HemEnv-only interpolated bitangent:
+    //   dp3 r1.w, vB.xyz, vB.xyz
+    //   rsq r1.w, r1.w
+    //   mul r6.xyz, r1.w, vB.xyz
+    if (bitangent_word + 19u >
+            words.size() ||
+        words[bitangent_word] !=
+            0x07000010u ||
+        words[bitangent_word + 1u] !=
+            0x00100082u ||
+        words[bitangent_word + 2u] != 1u ||
+        words[bitangent_word + 3u] !=
+            0x00101246u ||
+        words[bitangent_word + 5u] !=
+            0x00101246u ||
+        words[bitangent_word + 4u] !=
+            words[bitangent_word + 6u] ||
+        words[bitangent_word + 7u] !=
+            0x05000044u ||
+        words[bitangent_word + 8u] !=
+            0x00100082u ||
+        words[bitangent_word + 9u] != 1u ||
+        words[bitangent_word + 10u] !=
+            0x0010003au ||
+        words[bitangent_word + 11u] != 1u ||
+        words[bitangent_word + 12u] !=
+            0x07000038u ||
+        words[bitangent_word + 13u] !=
+            0x00100072u ||
+        words[bitangent_word + 14u] != 6u ||
+        words[bitangent_word + 15u] !=
+            0x00100ff6u ||
+        words[bitangent_word + 16u] != 1u ||
+        words[bitangent_word + 17u] !=
+            0x00101246u ||
+        words[bitangent_word + 18u] !=
+            words[bitangent_word + 4u])
+        return false;
+
+    const auto bitangent_input =
+        words[bitangent_word + 4u];
+
+    if (normal_input == tangent_input ||
+        normal_input == bitangent_input ||
+        tangent_input == bitangent_input)
+        return false;
+
+    // Exact legacy/PTDE bitangent construction, using the raw interpolated
+    // geometric normal and tangent plus tangent.w handedness:
+    //   B = cross(N0, T) * handedness
+    //   B = normalize(B)
+    //
+    // Use r6 and r1.w, which are exactly the scratch locations already owned
+    // by the DSR bitangent-normalization window being replaced.
+    const std::array<std::uint32_t,43>
+        ptde_bitangent{{
+            0x07000038u,
+            0x00100072u,0x00000006u,
+            0x00101926u,normal_input,
+            0x00101496u,tangent_input,
+
+            0x0a000032u,
+            0x00100072u,0x00000006u,
+            0x00101496u,normal_input,
+            0x00101926u,tangent_input,
+            0x80100246u,0x00000041u,
+            0x00000006u,
+
+            0x07000038u,
+            0x00100072u,0x00000006u,
+            0x00100246u,0x00000006u,
+            0x00101ff6u,tangent_input,
+
+            0x07000010u,
+            0x00100082u,0x00000001u,
+            0x00100246u,0x00000006u,
+            0x00100246u,0x00000006u,
+
+            0x05000044u,
+            0x00100082u,0x00000001u,
+            0x0010003au,0x00000001u,
+
+            0x07000038u,
+            0x00100072u,0x00000006u,
+            0x00100ff6u,0x00000001u,
+            0x00100246u,0x00000006u
+        }};
+
+    // Neutralize only the DSR-only face sign while retaining the exact
+    // instruction footprint: the false source keeps its extended operand but
+    // changes NEG -> NONE, so both branches are raw TEXCOORD2.
+    words[frontface_word + 8u] =
+        0x00000001u;
+
+    // Preserve the DSR LightProbeParam.z MAD byte-for-byte. The recovered
+    // ordinary HemEnv providers set z=1 exactly, so the sequence reduces to
+    // the same decoded tangent normal as PTDE and is not an active mismatch.
+
+    // Replace the 19-DWORD interpolated-B normalization with the 43-DWORD
+    // PTDE per-pixel cross. This is the only size-changing R5 edit.
+    try {
+        words.erase(
+            words.begin() +
+                static_cast<std::ptrdiff_t>(
+                    bitangent_word),
+            words.begin() +
+                static_cast<std::ptrdiff_t>(
+                    bitangent_word + 19u));
+        words.insert(
+            words.begin() +
+                static_cast<std::ptrdiff_t>(
+                    bitangent_word),
+            ptde_bitangent.begin(),
+            ptde_bitangent.end());
+    } catch (...) {
+        return false;
+    }
+
+    words[1] =
+        static_cast<std::uint32_t>(
+            words.size());
+
+    // Exact postconditions. The size-changing edit lies before the unchanged
+    // LightProbeParam identity sequence, so its verified anchor shifts +24.
+    constexpr std::size_t
+        k_bitangent_growth = 43u - 19u;
+    const auto shifted_lightprobe =
+        lightprobe_word + k_bitangent_growth;
+
+    if (words[frontface_word + 8u] !=
+            0x00000001u ||
+        bitangent_word +
+                ptde_bitangent.size() >
+            words.size() ||
+        !std::equal(
+            ptde_bitangent.begin(),
+            ptde_bitangent.end(),
+            words.begin() +
+                static_cast<std::ptrdiff_t>(
+                    bitangent_word)) ||
+        shifted_lightprobe +
+                k_dsr_lightprobe_normal_mad.size() >
+            words.size() ||
+        !std::equal(
+            k_dsr_lightprobe_normal_mad.begin(),
+            k_dsr_lightprobe_normal_mad.end(),
+            words.begin() +
+                static_cast<std::ptrdiff_t>(
+                    shifted_lightprobe)))
+        return false;
+
+    std::vector<instruction_view>
+        patched_instructions;
+    if (!decode(
+            words,
+            patched_instructions))
+        return false;
+
+    std::vector<std::uint8_t> rebuilt;
+    if (!rebuild(
+            bytes.data(),
+            bytes.size(),
+            std::move(chunks),
+            code_index,
+            words,
+            rebuilt))
+        return false;
+
+    bytes = std::move(rebuilt);
+    return true;
+}
+#endif
+
+
 bool apply_linear_envdiffuse_consumer_diag(
     std::vector<std::uint8_t> &bytes) noexcept
 {
@@ -2902,6 +3251,20 @@ materialize_pmetal_rgba_receiver(
         !r3_postmerge_visibility_postcondition(
             base,
             *authority)) {
+        outcome.result =
+            pmetal_rgba_materialize_result::
+                fail_postcondition;
+        return outcome;
+    }
+#endif
+
+#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_R5)
+    // R5 restores the PTDE/legacy HemEnv spatial normal basis before either
+    // environment consumer. It intentionally leaves V, reflection algebra,
+    // PTDE cubemap resources, EnvDiffuse/EnvSpec endpoints and material tail
+    // unchanged, so this is one operator-local semantic cut.
+    if (!apply_exact_ptde_normal_basis_r5(
+            base)) {
         outcome.result =
             pmetal_rgba_materialize_result::
                 fail_postcondition;
