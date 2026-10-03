@@ -368,6 +368,9 @@ register_replacement(
         !outcome.spec_rgb_consumer ||
         outcome.envdiffuse_linear_consumer_diag ||
 #else
+#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_R6)
+        !outcome.phn_scene_encoding_composed ||
+#endif
         !outcome.spec_rgb_consumer ||
         !outcome.envdiffuse_linear_consumer_diag ||
 #endif
@@ -466,6 +469,9 @@ register_lerp_replacement(
         outcome.terminal_sat_rgb_composed ||
         !outcome.spec_rgb_consumer ||
 #else
+#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_R6)
+        !outcome.phn_scene_encoding_composed ||
+#endif
         !outcome.terminal_sat_rgb_composed ||
         !outcome.spec_rgb_consumer ||
 #endif
