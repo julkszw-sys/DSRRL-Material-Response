@@ -1,0 +1,110 @@
+name: P_Metal R12 PTDE Legacy Material Workflow Build
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - pmetal-r12-legacy-material-workflow
+  pull_request:
+    paths:
+      - "renderer-core/CMakeLists.txt"
+      - "renderer-core/integrated/**"
+      - "renderer-core/tests/pmetal_r12_materializer_test.cpp"
+      - "renderer-core/src/operators/env_spec/pmetal_rgba_materializer.cpp"
+      - ".github/workflows/pmetal-r12-legacy-material-workflow-fast.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  linux-materializer-harness:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - name: Build R12 exact-stock harness
+        shell: bash
+        run: |
+          cmake \
+            -S renderer-core \
+            -B build-offline \
+            -DDSRRL_BUILD_PMETAL_R12_OFFLINE_TEST=ON
+          cmake --build build-offline --target dsrrl_pmetal_r12_offline_test -j 2
+          cp build-offline/dsrrl_pmetal_r12_offline_test DSRRL_PMETAL_R12_OFFLINE_TEST
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: DSRRL_PMETAL_R12_OFFLINE_TEST
+          path: DSRRL_PMETAL_R12_OFFLINE_TEST
+          if-no-files-found: error
+
+  windows-addon:
+    needs: linux-materializer-harness
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - name: Resolve exact source commit
+        shell: pwsh
+        run: |
+          $commit = (git rev-parse HEAD).Trim()
+          "DSRRL_CHECKOUT_COMMIT=$commit" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Checkout pinned ReShade API
+        uses: actions/checkout@v4
+        with:
+          repository: crosire/reshade
+          ref: 3645e3025d1d98a90e318278858931f034d5d1f6
+          path: _reshade
+
+      - name: Configure R12 legacy material workflow
+        shell: pwsh
+        run: >
+          cmake
+          -S renderer-core/integrated
+          -B build-fast
+          -A x64
+          -DRESHADE_INCLUDE_DIR="${{ github.workspace }}/_reshade/include"
+          -DDSRRL_SOURCE_COMMIT="$env:DSRRL_CHECKOUT_COMMIT"
+          -DDSRRL_BUILD_FLAVOR="pmetal_r12_legacy_material_workflow"
+          -DDSRRL_FULL_TELEMETRY_DEFAULT_ON=ON
+          -DDSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG=ON
+          -DDSRRL_PMETAL_FULL_PTDE_HEMENV_R3=ON
+          -DDSRRL_PMETAL_FULL_PTDE_HEMENV_R4=ON
+          -DDSRRL_PMETAL_FULL_PTDE_HEMENV_R5=ON
+          -DDSRRL_PMETAL_FULL_PTDE_HEMENV_R6=ON
+          -DDSRRL_PMETAL_FULL_PTDE_HEMENV_R7_SHADOW=ON
+          -DDSRRL_PMETAL_FULL_PTDE_HEMENV_R8_PRE_AB=ON
+          -DDSRRL_PMETAL_FULL_PTDE_HEMENV_R12_COMMON_MERGE=ON
+          -DDSRRL_PHYSICAL_CUT_UL_H3_SUBSURFACE=ON
+
+      - name: Build runtime
+        shell: pwsh
+        run: |
+          cmake --build build-fast --config Release --target dsrrl_renderer_core_integrated
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $addons = @(Get-ChildItem build-fast -Recurse -Filter *.addon64)
+          if ($addons.Count -ne 1) { throw "Expected exactly one addon, found $($addons.Count)" }
+          Copy-Item $addons[0].FullName "DSRRL_PMETAL_R12_LEGACY_MATERIAL_WORKFLOW.addon64" -Force
+
+      - name: Verify binary identity
+        shell: pwsh
+        run: |
+          $path = "DSRRL_PMETAL_R12_LEGACY_MATERIAL_WORKFLOW.addon64"
+          $ascii = [System.Text.Encoding]::ASCII.GetString([System.IO.File]::ReadAllBytes($path))
+          if (-not $ascii.Contains($env:DSRRL_CHECKOUT_COMMIT)) { throw "Missing source commit identity" }
+          if (-not $ascii.Contains("pmetal_r12_legacy_material_workflow")) { throw "Missing R12 build flavor identity" }
+          if (-not $ascii.Contains("[DSRRL PMETAL R7 SHADOW]")) { throw "Missing cumulative R7 shadow marker" }
+          if (-not $ascii.Contains("[DSRRL PMETAL R3 SPEC ATTEST]")) { throw "Missing exact SpecRGB SHA attestation marker" }
+          $hash = (Get-FileHash $path -Algorithm SHA256).Hash.ToLowerInvariant()
+          Write-Host "ADDON_SHA256=$hash"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: DSRRL_PMETAL_R12_PTDE_COMMON_MERGE
+          path: DSRRL_PMETAL_R12_PTDE_COMMON_MERGE.addon64
+          if-no-files-found: error
