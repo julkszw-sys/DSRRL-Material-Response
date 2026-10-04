@@ -127,6 +127,11 @@ option(
     OFF)
 
 option(
+    DSRRL_PMETAL_FULL_PTDE_HEMENV_R14_METALNESS_DIFFUSE_SUPPRESSION
+    "P_Metal R14 diagnostic: neutralize the DSR-only (1-SpecTex.x)*MaterialWorkflow.w*10 suppression on the true diffuse/common live-out"
+    OFF)
+
+option(
     DSRRL_POINTLIGHT_DRAWTIME_BYPASS
     "Diagnostic: disable PointLight producer hooks, runtime pipeline binding and draw-time carrier/replay while preserving all non-PointLight runtime paths"
     OFF)
@@ -749,6 +754,21 @@ if(DSRRL_PMETAL_FULL_PTDE_HEMENV_R13_DIFFUSE_ALPHA_GATE)
         dsrrl_renderer_core_integrated
         PRIVATE
         $<$<COMPILE_LANGUAGE:CXX>:DSRRL_PMETAL_FULL_PTDE_HEMENV_R13_DIFFUSE_ALPHA_GATE>)
+endif()
+
+if(DSRRL_PMETAL_FULL_PTDE_HEMENV_R14_METALNESS_DIFFUSE_SUPPRESSION)
+    if(NOT DSRRL_PMETAL_FULL_PTDE_HEMENV_R11_COMMON_MERGE)
+        message(FATAL_ERROR
+            "P_Metal R14 live-out suppression requires the complete R11 lineage")
+    endif()
+    if(DSRRL_PMETAL_FULL_PTDE_HEMENV_R13_DIFFUSE_ALPHA_GATE)
+        message(FATAL_ERROR
+            "P_Metal R14 is an isolated clean-R11 diagnostic; do not compose the falsified R13 dead-temp patch")
+    endif()
+    target_compile_definitions(
+        dsrrl_renderer_core_integrated
+        PRIVATE
+        $<$<COMPILE_LANGUAGE:CXX>:DSRRL_PMETAL_FULL_PTDE_HEMENV_R14_METALNESS_DIFFUSE_SUPPRESSION>)
 endif()
 
 if(DSRRL_POINTLIGHT_DRAWTIME_BYPASS)
