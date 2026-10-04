@@ -3814,6 +3814,7 @@ bool binding_exists(
     return false;
 }
 
+#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_R10C_LOCAL_UL_B12)
 bool constant_buffer_binding_exact_size(
     const std::vector<std::uint8_t> &payload,
     std::uint32_t bind_point,
@@ -3951,6 +3952,8 @@ bool pmetal_local_ul_b12_final_exact(
         upper_lower_delta == 1u &&
         lower_mad == 1u;
 }
+
+#endif
 
 bool final_postcondition(
     const std::vector<std::uint8_t> &bytes,
