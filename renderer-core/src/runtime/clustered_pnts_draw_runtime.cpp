@@ -30,6 +30,8 @@ namespace {
 
 using source_raw =
     operators::point_light::clustered_source_raw_v1;
+using sidecar_payload =
+    operators::point_light::clustered_sidecar_payload_v1;
 
 struct producer_input_snapshot {
     std::uintptr_t owner = 0u;
@@ -43,12 +45,34 @@ struct producer_input_snapshot {
 struct draw_selection_tls {
     producer_input_snapshot input{};
     std::uint32_t material_max = 0u;
+    operators::material_response::material_identity material{};
+    operators::material_response::decision material_decision{};
+    sidecar_payload payload{};
+    clustered_pnts_prepare_failure cached_failure =
+        clustered_pnts_prepare_failure::none;
+    std::uint8_t sidecar_result_code = 0u;
     bool owner_verified = false;
     bool material_limit_ready = false;
+    bool material_spc = false;
+    bool authority_ready = false;
+    bool payload_ready = false;
+    bool neutral_no_pointlights = false;
     bool ready = false;
 };
 
+struct source_selection_cache_tls {
+    std::uint64_t producer_serial = 0u;
+    std::array<source_raw,4> sources{};
+    std::uint8_t selected_count = 0u;
+    clustered_pnts_prepare_failure failure =
+        clustered_pnts_prepare_failure::none;
+    bool attempted = false;
+    bool ready = false;
+    bool neutral = false;
+};
+
 thread_local draw_selection_tls g_draw_selection{};
+thread_local source_selection_cache_tls g_source_selection_cache{};
 thread_local producer_input_snapshot g_producer_input_tls{};
 thread_local std::uint64_t g_local_serial = 0u;
 
@@ -59,6 +83,14 @@ struct gpu_resources {
     ID3D11Buffer *t19_buffer = nullptr;
     ID3D11ShaderResourceView *t19_srv = nullptr;
     ID3D11Buffer *b12 = nullptr;
+    std::array<operators::point_light::clustered_t18_record_v1,4>
+        last_t18{};
+    std::array<std::array<float,4>,4> last_t19{};
+    operators::material_response::material_response_b12_payload
+        last_b12{};
+    bool last_t18_valid = false;
+    bool last_t19_valid = false;
+    bool last_b12_valid = false;
 };
 
 std::mutex g_resource_mutex;
