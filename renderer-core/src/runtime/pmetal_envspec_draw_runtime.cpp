@@ -1511,16 +1511,21 @@ bool pmetal_envspec_draw_runtime::prepare(
             true,
             std::memory_order_relaxed)) {
         char line[512]{};
+#if defined(DSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE)
+        const char *envdiffuse_mode =
+            family ==
+                pmetal_envspec_receiver_family::
+                    hemenvlerp
+                ? "[DSRRL PMETAL R19 LERP] mode=exact_ptde_envdiffuse_ab_beta probe_a=%u t11=%016llx endpoint_a=%.9g,%.9g,%.9g"
+                : "[DSRRL PMETAL FULL PTDE HEMENV] mode=stable_exact_envdiffuse_rgba_div probe=%u t11=%016llx endpoint=%.9g,%.9g,%.9g";
+#else
+        constexpr const char *envdiffuse_mode =
+            "[DSRRL PMETAL FULL PTDE HEMENV] mode=stable_exact_envdiffuse_rgba_div probe=%u t11=%016llx endpoint=%.9g,%.9g,%.9g";
+#endif
         std::snprintf(
             line,
             sizeof(line),
-            #if defined(DSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE)
-                family == pmetal_envspec_receiver_family::hemenvlerp
-                    ? "[DSRRL PMETAL R19 LERP] mode=exact_ptde_envdiffuse_ab_beta probe_a=%u t11=%016llx endpoint_a=%.9g,%.9g,%.9g"
-                    : "[DSRRL PMETAL FULL PTDE HEMENV] mode=stable_exact_envdiffuse_rgba_div probe=%u t11=%016llx endpoint=%.9g,%.9g,%.9g"
-#else
-                "[DSRRL PMETAL FULL PTDE HEMENV] mode=stable_exact_envdiffuse_rgba_div probe=%u t11=%016llx endpoint=%.9g,%.9g,%.9g"
-#endif,
+            envdiffuse_mode,
             static_cast<unsigned>(
                 prepared.envdiffuse_resources.probe_a),
             static_cast<unsigned long long>(
