@@ -498,7 +498,7 @@ bool apply_exact_ptde_envdiffuse_lerp_r19(
         words[b_minus_a + 10u] != a_reg ||
         words[lerp + 1u] != 0x00100072u ||
         words[lerp + 2u] != a_reg ||
-        words[lerp + 3u] != 0x0020803au ||
+        words[lerp + 3u] != 0x00208ff6u ||
         words[lerp + 4u] != 0u ||
         words[lerp + 5u] != 1u ||
         words[lerp + 6u] != 0x00100246u ||
