@@ -282,6 +282,8 @@ std::atomic<std::uint64_t> g_envspec_payload_materialize_fail{0};
 #if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG)
 std::atomic_bool g_pmetal_full_ptde_create_ok_logged{false};
 std::atomic_bool g_pmetal_full_ptde_create_fail_logged{false};
+std::atomic<std::uint32_t> g_pmetal_r10_local_ul_create_mask{0u};
+std::atomic_bool g_pmetal_r10_local_ul_carrier_logged{false};
 #endif
 std::atomic<std::uint64_t> g_draw_events{0};
 std::atomic<std::uint64_t> g_draw_receiver_hits{0};
@@ -4533,6 +4535,30 @@ bool on_create_pipeline(
                             envspec_payload.size());
                 if (registered) {
                     ++g_envspec_payload_materialize_ok;
+#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_R10_LOCAL_UL)
+                    if (envspec.upper_lower_composed &&
+                        envspec.receiver_id >= 33u &&
+                        envspec.receiver_id <= 35u) {
+                        const auto bit =
+                            1u << (envspec.receiver_id - 33u);
+                        const auto prior =
+                            g_pmetal_r10_local_ul_create_mask.fetch_or(
+                                bit,
+                                std::memory_order_relaxed);
+                        if ((prior & bit) == 0u) {
+                            char r10_line[256]{};
+                            std::snprintf(
+                                r10_line,
+                                sizeof(r10_line),
+                                "[DSRRL PMETAL R10 LOCAL UL] create_registered rx=%u owners=0x%08x",
+                                static_cast<unsigned>(envspec.receiver_id),
+                                static_cast<unsigned>(envspec.composed_owners));
+                            reshade::log::message(
+                                reshade::log::level::info,
+                                r10_line);
+                        }
+                    }
+#endif
 #if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG)
                     if (!g_pmetal_full_ptde_create_ok_logged.exchange(
                             true,
@@ -6032,6 +6058,14 @@ bool prepare_island_batch(
                 prepared.upper_lower.carrier)) {
             release_prepared_island_batch(prepared);
             return false;
+        }
+
+        if (!g_pmetal_r10_local_ul_carrier_logged.exchange(
+                true,
+                std::memory_order_relaxed)) {
+            reshade::log::message(
+                reshade::log::level::info,
+                "[DSRRL PMETAL R10 LOCAL UL] carrier_ready b13 exact-authenticated reference-only");
         }
 
         const auto ul_owner =
