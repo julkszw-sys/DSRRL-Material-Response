@@ -53,7 +53,6 @@ std::atomic_bool g_envdiffuse_consumer_logged{false};
 std::atomic_bool g_source_frontier_logged{false};
 std::atomic_bool g_shadow_r7_logged{false};
 std::atomic<std::uint32_t> g_prepare_stage_log_mask{0u};
-std::atomic<std::uint32_t> g_value_cut_log_mask{0u};
 std::array<std::atomic<std::uint64_t>,3> g_r9_value_cut_generation{};
 std::array<std::atomic<std::uint64_t>,3> g_r9_value_cut_probe_pair{};
 std::atomic<std::uint32_t> g_r9_value_cut_seen_mask{0u};
@@ -2075,7 +2074,6 @@ void pmetal_envspec_draw_runtime::reset() noexcept
     g_source_frontier_logged.store(false);
     g_shadow_r7_logged.store(false);
     g_prepare_stage_log_mask.store(0u);
-    g_value_cut_log_mask.store(0u);
     for (auto &generation : g_r9_value_cut_generation)
         generation.store(0u, std::memory_order_relaxed);
     for (auto &probe_pair : g_r9_value_cut_probe_pair)
