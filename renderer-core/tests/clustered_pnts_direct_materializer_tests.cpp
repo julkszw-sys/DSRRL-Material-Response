@@ -55,6 +55,85 @@ int main()
                 generated::k_clustered_pnts_journal_ops_v1.size() -
                     plan.first_op)
             return 6;
+
+        std::uint32_t legacy_c100 = 0u;
+        std::uint32_t legacy_c101 = 0u;
+        std::uint32_t legacy_c102 = 0u;
+        for (std::uint32_t i=0u;
+             i<plan.op_count;
+             ++i) {
+            const auto &op =
+                generated::k_clustered_pnts_journal_ops_v1[
+                    plan.first_op+i];
+            for (std::uint32_t n=0u;
+                 n+2u<op.new_count;
+                 ++n) {
+                const auto at = op.new_offset+n;
+                const auto token =
+                    generated::k_clustered_pnts_journal_tokens_v1[at];
+                const auto slot =
+                    generated::k_clustered_pnts_journal_tokens_v1[at+1u];
+                const auto row =
+                    generated::k_clustered_pnts_journal_tokens_v1[at+2u];
+                if (slot != 12u)
+                    continue;
+                if (token == 0x00208396u && row == 1u)
+                    ++legacy_c100;
+                else if (token == 0x00208246u && row == 0u)
+                    ++legacy_c101;
+                else if (token == 0x0020803au && row == 0u)
+                    ++legacy_c102;
+            }
+        }
+
+        if (legacy_c100 != 1u ||
+            legacy_c101 != (plan.spc ? 1u : 0u) ||
+            legacy_c102 != (plan.spc ? 1u : 0u))
+            return 8;
+    }
+
+    {
+        std::vector<std::uint32_t> words{
+            0u,0u,
+            0x00208246u,12u,0u,
+            0xdeadbeefu,
+            0x0020803au,12u,0u,
+            0xcafebabeu,
+            0x00208396u,12u,1u
+        };
+        if (!migrate_clustered_pnts_legacy_b12_words(
+                words,
+                true))
+            return 9;
+        if (words[4] != 2u ||
+            words[6] != 0x0020803au ||
+            words[10] != 0x00208246u)
+            return 10;
+    }
+
+    {
+        std::vector<std::uint32_t> words{
+            0u,0u,
+            0x00208396u,12u,1u
+        };
+        if (!migrate_clustered_pnts_legacy_b12_words(
+                words,
+                false) ||
+            words[2] != 0x00208246u)
+            return 11;
+    }
+
+    {
+        std::vector<std::uint32_t> words{
+            0u,0u,
+            0x00208396u,12u,1u,
+            0xffffffffu,
+            0x00208396u,12u,1u
+        };
+        if (migrate_clustered_pnts_legacy_b12_words(
+                words,
+                false))
+            return 12;
     }
 
     std::vector<std::uint8_t> output;
@@ -87,6 +166,6 @@ int main()
 
     std::cout <<
         "clustered_pnts_direct_materializer_tests: PASS 36 plans, "
-        "exact composed shader ownership 24 Spc + 12 NoSpc\n";
+        "exact composed shader ownership + current b12 migration 24 Spc + 12 NoSpc\n";
     return 0;
 }
