@@ -263,6 +263,15 @@ release_resources() noexcept
     }
     b12_by_context_.clear();
 
+#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_R10_LOCAL_UL)
+    for (auto &[_,entry] :
+         b13_by_context_) {
+        if (entry.buffer != nullptr)
+            entry.buffer->Release();
+    }
+    b13_by_context_.clear();
+#endif
+
 #if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_R7_SHADOW)
     if (shadow_sampler_ != nullptr) {
         shadow_sampler_->Release();
