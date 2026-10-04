@@ -54,6 +54,9 @@ std::atomic_bool g_source_frontier_logged{false};
 std::atomic_bool g_shadow_r7_logged{false};
 std::atomic<std::uint32_t> g_prepare_stage_log_mask{0u};
 std::atomic<std::uint32_t> g_value_cut_log_mask{0u};
+std::array<std::atomic<std::uint64_t>,3> g_r9_value_cut_generation{};
+std::array<std::atomic<std::uint64_t>,3> g_r9_value_cut_probe_pair{};
+std::atomic<std::uint32_t> g_r9_value_cut_seen_mask{0u};
 
 void log_prepare_stage_once(
     std::uint32_t bit,
@@ -1829,21 +1832,48 @@ bool pmetal_envspec_draw_runtime::prepare(
         decision,
         family);
 
-    // Pixel-fail diagnostic for the owner-reported white P_Metal phenotype.
-    // Log exactly once per stable receiver and only after the entire island is
-    // request-ready, so every value below belongs to an actually executable
-    // replacement draw. No GPU readback and no renderer-state mutation.
+    // R9 passive source-state profiler. Rendering is unchanged: this only
+    // emits a new record when the exact producer generation or authenticated
+    // probe pair changes for stable P_Metal receivers 33..35. This lets one
+    // ordinary playthrough compare Firelink/Catacombs/Darkroot without
+    // per-frame spam or GPU readback.
     if (decision.receiver_id >= 33u &&
         decision.receiver_id <= 35u) {
+        const auto idx =
+            static_cast<std::size_t>(
+                decision.receiver_id - 33u);
         const auto bit =
             1u << (decision.receiver_id - 33u);
-        const auto observed =
-            g_value_cut_log_mask.load(
+        const auto probe_pair =
+            (static_cast<std::uint64_t>(
+                 prepared.env_resources.probe_a) << 32u) |
+            static_cast<std::uint64_t>(
+                prepared.env_resources.probe_b);
+        const auto seen =
+            g_r9_value_cut_seen_mask.load(
                 std::memory_order_relaxed);
-        if ((observed & bit) == 0u &&
-            (g_value_cut_log_mask.fetch_or(
-                 bit,
-                 std::memory_order_relaxed) & bit) == 0u) {
+        const auto prior_generation =
+            g_r9_value_cut_generation[idx].load(
+                std::memory_order_relaxed);
+        const auto prior_probe_pair =
+            g_r9_value_cut_probe_pair[idx].load(
+                std::memory_order_relaxed);
+        const bool changed =
+            (seen & bit) == 0u ||
+            prior_generation != source.generation ||
+            prior_probe_pair != probe_pair;
+
+        if (changed) {
+            g_r9_value_cut_generation[idx].store(
+                source.generation,
+                std::memory_order_relaxed);
+            g_r9_value_cut_probe_pair[idx].store(
+                probe_pair,
+                std::memory_order_relaxed);
+            g_r9_value_cut_seen_mask.fetch_or(
+                bit,
+                std::memory_order_relaxed);
+
             const auto spec_probe =
                 material_resources_.
                     probe_exact_specular_companion(
@@ -1869,11 +1899,11 @@ bool pmetal_envspec_draw_runtime::prepare(
                 }
             }
 
-            char line[1536]{};
+            char line[2048]{};
             std::snprintf(
                 line,
                 sizeof(line),
-                "[DSRRL PMETAL VALUE CUT] family=%u rx=%u route=%u env_slot=%u probe_a=%u probe_b=%u bank_a=%016llx row_a=%u bank_b=%016llx row_b=%u serial=%llu gen=%llu beta=%.9g pA=%.9g,%.9g,%.9g pB=%.9g,%.9g,%.9g c101=%.9g c100=%.9g,%.9g,%.9g spec_hash=%016llx spec_allowed=%u spec_ready=%u spec_req=%u t10_count=%u t10=%016llx t11=%016llx t12=%016llx t13=%016llx t14=%016llx",
+                "[DSRRL PMETAL R9 SOURCE STATE] family=%u rx=%u route=%u env_slot=%u probe_a=%u probe_b=%u bank_a=%016llx row_a=%u bank_b=%016llx row_b=%u serial=%llu gen=%llu beta=%.9g specA=%.9g,%.9g,%.9g specB=%.9g,%.9g,%.9g diffA=%.9g,%.9g,%.9g diffB=%.9g,%.9g,%.9g diff_valid=%u c101=%.9g c100=%.9g,%.9g,%.9g k135=%.9g k135_valid=%u spec_hash=%016llx spec_allowed=%u spec_ready=%u spec_req=%u t10_count=%u t10=%016llx t11=%016llx t12=%016llx t13=%016llx t14=%016llx",
                 static_cast<unsigned>(family),
                 static_cast<unsigned>(decision.receiver_id),
                 static_cast<unsigned>(decision.route_index),
@@ -1893,10 +1923,19 @@ bool pmetal_envspec_draw_runtime::prepare(
                 static_cast<double>(source.b[0]),
                 static_cast<double>(source.b[1]),
                 static_cast<double>(source.b[2]),
+                static_cast<double>(source.envdiffuse_a[0]),
+                static_cast<double>(source.envdiffuse_a[1]),
+                static_cast<double>(source.envdiffuse_a[2]),
+                static_cast<double>(source.envdiffuse_b[0]),
+                static_cast<double>(source.envdiffuse_b[1]),
+                static_cast<double>(source.envdiffuse_b[2]),
+                source.envdiffuse_linear_valid ? 1u : 0u,
                 static_cast<double>(decision.c101),
                 static_cast<double>(decision.c100[0]),
                 static_cast<double>(decision.c100[1]),
                 static_cast<double>(decision.c100[2]),
+                static_cast<double>(source.phn_k135),
+                source.phn_k135_valid ? 1u : 0u,
                 static_cast<unsigned long long>(spec_probe.logical_hash),
                 spec_probe.logical_hash_allowed ? 1u : 0u,
                 spec_probe.companion_ready ? 1u : 0u,
@@ -1905,13 +1944,13 @@ bool pmetal_envspec_draw_runtime::prepare(
                 static_cast<unsigned long long>(t10),
                 static_cast<unsigned long long>(
                     reinterpret_cast<std::uintptr_t>(
-                        prepared.native_dsr_envdiffuse_a)),
+                        prepared.envdiffuse_resources.ptde_a)),
                 static_cast<unsigned long long>(
                     reinterpret_cast<std::uintptr_t>(
                         prepared.env_resources.ptde_a)),
                 static_cast<unsigned long long>(
                     reinterpret_cast<std::uintptr_t>(
-                        prepared.native_dsr_envdiffuse_b)),
+                        prepared.envdiffuse_resources.ptde_b)),
                 static_cast<unsigned long long>(
                     reinterpret_cast<std::uintptr_t>(
                         prepared.env_resources.ptde_b)));
@@ -2037,6 +2076,13 @@ void pmetal_envspec_draw_runtime::reset() noexcept
     g_shadow_r7_logged.store(false);
     g_prepare_stage_log_mask.store(0u);
     g_value_cut_log_mask.store(0u);
+    for (auto &generation : g_r9_value_cut_generation)
+        generation.store(0u, std::memory_order_relaxed);
+    for (auto &probe_pair : g_r9_value_cut_probe_pair)
+        probe_pair.store(0u, std::memory_order_relaxed);
+    g_r9_value_cut_seen_mask.store(
+        0u,
+        std::memory_order_relaxed);
     quarantined_.store(false);
 }
 
