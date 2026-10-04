@@ -49,6 +49,46 @@ struct f4 {
     float w = 0.0f;
 };
 
+#pragma pack(push,1)
+struct raw_rgbm {
+    std::int16_t r = 0;
+    std::int16_t g = 0;
+    std::int16_t b = 0;
+    std::int16_t m = 0;
+};
+#pragma pack(pop)
+
+f4 decode_authored_rgbm(
+    const raw_rgbm &value) noexcept
+{
+    const float scale =
+        static_cast<float>(value.m) /
+        100.0f;
+
+    return {
+        static_cast<float>(value.r) /
+            255.0f * scale,
+        static_cast<float>(value.g) /
+            255.0f * scale,
+        static_cast<float>(value.b) /
+            255.0f * scale,
+        0.0f
+    };
+}
+
+f4 lerp_f4(
+    const f4 &a,
+    const f4 &b,
+    float t) noexcept
+{
+    return {
+        a.x + (b.x - a.x) * t,
+        a.y + (b.y - a.y) * t,
+        a.z + (b.z - a.z) * t,
+        0.0f
+    };
+}
+
 #if !defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG)
 bool inverse_envdiffuse_endpoint(
     const float *src,
@@ -769,6 +809,91 @@ bool retail_lightbank_record_index(
             static_cast<std::uint8_t>(
                 selector));
     return true;
+}
+
+bool read_authored_upper_lower(
+    void *source,
+    std::int32_t selector,
+    f4 &upper,
+    f4 &lower) noexcept
+{
+    upper = {};
+    lower = {};
+
+    if (source == nullptr ||
+        selector < 0)
+        return false;
+
+    std::uint32_t index = 0u;
+    if (!retail_lightbank_record_index(
+            selector,
+            index))
+        return false;
+
+    const std::uint8_t *header = nullptr;
+    if (!safe_read(
+            static_cast<const std::uint8_t *>(
+                source) + 0x18u,
+            header) ||
+        header == nullptr)
+        return false;
+
+    std::uint16_t type = 0u;
+    std::uint16_t count = 0u;
+    if (!safe_read(
+            header + 0x08u,
+            type) ||
+        !safe_read(
+            header + 0x0Au,
+            count) ||
+        type != 4u ||
+        count == 0u ||
+        count > 256u ||
+        index >= count)
+        return false;
+
+    std::uint32_t row_offset = 0u;
+    if (!safe_read(
+            header +
+                0x34u +
+                static_cast<std::size_t>(
+                    index) * 12u,
+            row_offset))
+        return false;
+
+    const auto *record =
+        header + row_offset;
+
+    if (!readable_range(
+            record,
+            0x34u))
+        return false;
+
+    raw_rgbm raw_upper{};
+    raw_rgbm raw_lower{};
+    std::memcpy(
+        &raw_upper,
+        record + 0x24u,
+        sizeof(raw_upper));
+    std::memcpy(
+        &raw_lower,
+        record + 0x2Cu,
+        sizeof(raw_lower));
+
+    upper =
+        decode_authored_rgbm(
+            raw_upper);
+    lower =
+        decode_authored_rgbm(
+            raw_lower);
+
+    return
+        std::isfinite(upper.x) &&
+        std::isfinite(upper.y) &&
+        std::isfinite(upper.z) &&
+        std::isfinite(lower.x) &&
+        std::isfinite(lower.y) &&
+        std::isfinite(lower.z);
 }
 
 struct bank_cache_entry {
