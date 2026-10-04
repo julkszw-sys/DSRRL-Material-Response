@@ -116,6 +116,10 @@ struct decision {
     bool ptde_specular_power_verified = false;
 };
 
+decision evaluate_direct_pointlight_material_identity(
+    const material_identity &material,
+    bool require_legacy_specular = true) noexcept;
+
 class material_response_island {
 public:
     bool register_receiver_recipe(const receiver_recipe &recipe);
