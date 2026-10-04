@@ -116,6 +116,10 @@ struct decision {
     bool ptde_specular_power_verified = false;
 };
 
+bool direct_pointlight_material_candidate(
+    const material_identity &material,
+    bool &is_spc) noexcept;
+
 decision evaluate_direct_pointlight_material_identity(
     const material_identity &material,
     bool require_legacy_specular = true) noexcept;
