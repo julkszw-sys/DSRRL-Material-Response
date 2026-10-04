@@ -616,63 +616,113 @@ bool apply_exact_ptde_envdiffuse_lerp_r19(
 
 bool exact_ptde_envdiffuse_lerp_r19(
     const std::vector<std::uint32_t> &words,
-    const generated_lerp::pmetal_hemenvlerp_site &site) noexcept
+    const generated_lerp::pmetal_hemenvlerp_site &) noexcept
 {
-    constexpr std::size_t k_decl_shift = 4u;
-    const auto t11 =
-        static_cast<std::size_t>(site.t11_word) +
-        k_decl_shift;
-    const auto merge =
-        static_cast<std::size_t>(site.merge_word) +
-        k_decl_shift;
-
-    if (merge != t11 + 63u ||
-        merge + 9u > words.size() ||
-        !sample_at(words, t11, 11u))
+    std::vector<instruction_view> instructions;
+    if (!decode(words, instructions))
         return false;
 
-    const auto a_reg = words[t11 + 4u];
-    const auto div_a = t11 + 13u;
-    const auto mul_a = div_a + 7u;
-    const auto t13 = mul_a + 8u;
-    const auto div_b = t13 + 13u;
-    const auto mad = div_b + 7u;
+    std::size_t hits = 0u;
 
-    if (!sample_at(words, t13, 13u) ||
-        words[t11 + 3u] != 0x001000f2u ||
-        words[t13 + 3u] != 0x001000f2u ||
-        !opcode_at(words, div_a, 0x0eu, 7u) ||
-        !opcode_at(words, mul_a, 0x38u, 8u) ||
-        !opcode_at(words, div_b, 0x0eu, 7u) ||
-        !opcode_at(words, mad, 0x32u, 10u))
-        return false;
+    for (std::size_t i = 0u;
+         i + 5u < instructions.size();
+         ++i) {
+        const auto &sample_a = instructions[i];
 
-    const auto b_reg = words[t13 + 4u];
+        if (sample_a.opcode < 0x45u ||
+            sample_a.opcode > 0x4au ||
+            sample_a.length != 13u ||
+            sample_a.offset + 12u >= words.size() ||
+            words[sample_a.offset + 8u] != 11u ||
+            words[sample_a.offset + 10u] != 11u ||
+            words[sample_a.offset + 3u] != 0x001000f2u)
+            continue;
 
-    if (words[div_a + 2u] != a_reg ||
-        words[div_a + 4u] != a_reg ||
-        words[div_a + 6u] != a_reg ||
-        words[mul_a + 2u] != a_reg ||
-        words[mul_a + 4u] != a_reg ||
-        words[mul_a + 5u] != 0x00208246u ||
-        words[mul_a + 6u] != 13u ||
-        words[mul_a + 7u] != 0u ||
-        words[div_b + 2u] != b_reg ||
-        words[div_b + 4u] != b_reg ||
-        words[div_b + 6u] != b_reg ||
-        words[mad + 2u] != a_reg ||
-        words[mad + 4u] != b_reg ||
-        words[mad + 5u] != 0x00208246u ||
-        words[mad + 6u] != 13u ||
-        words[mad + 7u] != 1u ||
-        words[mad + 9u] != a_reg)
-        return false;
+        const auto &div_a = instructions[i + 1u];
+        const auto &mul_a = instructions[i + 2u];
+        const auto &sample_b = instructions[i + 3u];
+        const auto &div_b = instructions[i + 4u];
+        const auto &mad = instructions[i + 5u];
 
-    for (std::size_t i = mad + 10u; i < merge; ++i)
-        if (words[i] != 0x0100003au)
+        if (div_a.offset !=
+                sample_a.offset + sample_a.length ||
+            div_a.opcode != 0x0eu ||
+            div_a.length != 7u ||
+            mul_a.offset !=
+                div_a.offset + div_a.length ||
+            mul_a.opcode != 0x38u ||
+            mul_a.length != 8u ||
+            sample_b.offset !=
+                mul_a.offset + mul_a.length ||
+            sample_b.opcode < 0x45u ||
+            sample_b.opcode > 0x4au ||
+            sample_b.length != 13u ||
+            sample_b.offset + 12u >= words.size() ||
+            words[sample_b.offset + 8u] != 13u ||
+            words[sample_b.offset + 10u] != 13u ||
+            words[sample_b.offset + 3u] != 0x001000f2u ||
+            div_b.offset !=
+                sample_b.offset + sample_b.length ||
+            div_b.opcode != 0x0eu ||
+            div_b.length != 7u ||
+            mad.offset !=
+                div_b.offset + div_b.length ||
+            mad.opcode != 0x32u ||
+            mad.length != 10u)
+            continue;
+
+        const auto a_reg =
+            words[sample_a.offset + 4u];
+        const auto b_reg =
+            words[sample_b.offset + 4u];
+
+        if (a_reg == b_reg ||
+            words[div_a.offset + 2u] != a_reg ||
+            words[div_a.offset + 4u] != a_reg ||
+            words[div_a.offset + 6u] != a_reg ||
+            words[mul_a.offset + 2u] != a_reg ||
+            words[mul_a.offset + 4u] != a_reg ||
+            words[mul_a.offset + 5u] != 0x00208246u ||
+            words[mul_a.offset + 6u] != 13u ||
+            words[mul_a.offset + 7u] != 0u ||
+            words[div_b.offset + 2u] != b_reg ||
+            words[div_b.offset + 4u] != b_reg ||
+            words[div_b.offset + 6u] != b_reg ||
+            words[mad.offset + 2u] != a_reg ||
+            words[mad.offset + 4u] != b_reg ||
+            words[mad.offset + 5u] != 0x00208246u ||
+            words[mad.offset + 6u] != 13u ||
+            words[mad.offset + 7u] != 1u ||
+            words[mad.offset + 9u] != a_reg)
+            continue;
+
+        // Five NOP DWORDs complete the original fixed-size DSR EnvDiffuse
+        // window, followed by the untouched common merge.
+        const auto after = mad.offset + mad.length;
+        if (after + 5u >= words.size())
             return false;
 
-    return true;
+        bool padding_ok = true;
+        for (std::size_t at = after;
+             at < after + 5u;
+             ++at)
+            padding_ok =
+                padding_ok &&
+                words[at] == 0x0100003au;
+
+        const auto merge = after + 5u;
+        if (!padding_ok ||
+            !opcode_at(
+                words,
+                merge,
+                0x32u,
+                9u))
+            continue;
+
+        ++hits;
+    }
+
+    return hits == 1u;
 }
 #endif
 
