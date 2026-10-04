@@ -2370,6 +2370,170 @@ bool remove_dsr_materialworkflow_legacy_diffuse_split_r16(
 }
 #endif
 
+#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_R17_PTDE_DIFFUSE_MATERIAL)
+// R17 ports the inner PTDE DiffuseMaterial producer instead of tuning the
+// Remaster workflow weight.
+//
+// Exact PTDE stable P_Metal forms the diffuse material directly:
+//   DiffuseMaterial = (DiffuseMap + c156) * c100 * COLOR0
+// and feeds that material into the common EnvDiffuse/hemisphere term.
+//
+// In stock DSR's MaterialWorkflow true branch the corresponding material
+// factor is instead:
+//   delta            = cb0[10] - cb0[9]
+//   workflowMaterial = workflowWeight * delta + cb0[9]
+//
+// The generic MR bridge already remaps only the MAD base cb0[9] operand to
+// b12[1] (exact PTDE c100) and removes the diffuse ^2.2 transfer. Therefore,
+// before R17, the active true branch is a nonhomologous hybrid:
+//   workflowMaterial = b12[1] + W * (cb0[10] - stock_cb0[9])
+//
+// R16 proved that exposing this hybrid after removing the outer alpha/weight
+// gates is overbright. R17 does not fit a gain: it selects the exact PTDE
+// producer by forcing the MAD interpolation coefficient to zero, yielding:
+//   workflowMaterial = b12[1]
+// The existing diffuse texture/COLOR0 carrier and downstream PTDE common
+// composition remain untouched.
+bool select_ptde_diffuse_material_factor_r17(
+    std::vector<std::uint32_t> &words) noexcept
+{
+    std::vector<instruction_view> instructions;
+    if (!decode(words, instructions))
+        return false;
+
+    std::size_t material_if = static_cast<std::size_t>(-1);
+    std::size_t sample_hits = 0u;
+
+    for (std::size_t i = 0u; i + 1u < instructions.size(); ++i) {
+        const auto &sample = instructions[i];
+        const auto &branch = instructions[i + 1u];
+
+        if (sample.opcode < 0x45u || sample.opcode > 0x4au ||
+            sample.length != 11u ||
+            sample.offset + 10u >= words.size() ||
+            words[sample.offset + 7u] != 0x00107936u ||
+            words[sample.offset + 8u] != 1u ||
+            words[sample.offset + 10u] != 1u ||
+            branch.opcode != 0x1fu ||
+            branch.length != 4u ||
+            branch.offset != sample.offset + sample.length ||
+            branch.offset + 3u >= words.size() ||
+            words[branch.offset + 1u] != 0x0020800au ||
+            words[branch.offset + 2u] != 0u ||
+            words[branch.offset + 3u] != 85u)
+            continue;
+
+        ++sample_hits;
+        material_if = i + 1u;
+    }
+
+    if (sample_hits != 1u ||
+        material_if == static_cast<std::size_t>(-1))
+        return false;
+
+    std::size_t depth = 0u;
+    std::size_t mad_word = static_cast<std::size_t>(-1);
+    std::uint32_t material_register = 0u;
+    std::uint32_t diffuse_carrier_register = 0u;
+    std::size_t hits = 0u;
+
+    for (std::size_t i = material_if + 1u; i < instructions.size(); ++i) {
+        const auto &add = instructions[i];
+
+        if (add.opcode == 0x1fu) {
+            ++depth;
+            continue;
+        }
+        if (add.opcode == 0x12u && depth == 0u)
+            break;
+        if (add.opcode == 0x15u) {
+            if (depth == 0u)
+                break;
+            --depth;
+            continue;
+        }
+
+        if (depth != 0u ||
+            add.opcode != 0x00u ||
+            add.length != 10u ||
+            add.offset + 9u >= words.size() ||
+            words[add.offset + 1u] != 0x00100072u ||
+            // -cb0[9].xyz
+            words[add.offset + 3u] != 0x80208246u ||
+            words[add.offset + 4u] != 0x00000041u ||
+            words[add.offset + 5u] != 0u ||
+            words[add.offset + 6u] != 9u ||
+            // +cb0[10].xyz
+            words[add.offset + 7u] != 0x00208246u ||
+            words[add.offset + 8u] != 0u ||
+            words[add.offset + 9u] != 10u)
+            continue;
+
+        if (i + 2u >= instructions.size())
+            return false;
+
+        const auto &mad = instructions[i + 1u];
+        const auto &mul = instructions[i + 2u];
+        const auto dst = words[add.offset + 2u];
+
+        if (mad.opcode != 0x32u ||
+            mad.length != 10u ||
+            mad.offset + 9u >= words.size() ||
+            words[mad.offset + 1u] != 0x00100072u ||
+            words[mad.offset + 2u] != dst ||
+            // workflowWeight scalar register (yyyy); register id varies
+            // across rx33/rx34/rx35 but the operand encoding is identical.
+            words[mad.offset + 3u] != 0x00100556u ||
+            // delta/material register
+            words[mad.offset + 5u] != 0x00100246u ||
+            words[mad.offset + 6u] != dst ||
+            // Generic MR's exact PTDE c100 carrier: b12[1].xyz
+            words[mad.offset + 7u] != 0x00208246u ||
+            words[mad.offset + 8u] != 12u ||
+            words[mad.offset + 9u] != 1u ||
+            mul.opcode != 0x38u ||
+            mul.length != 7u ||
+            mul.offset + 6u >= words.size() ||
+            words[mul.offset + 1u] != 0x00100072u ||
+            words[mul.offset + 2u] != dst ||
+            words[mul.offset + 3u] != 0x00100246u ||
+            words[mul.offset + 5u] != 0x00100246u ||
+            words[mul.offset + 6u] != dst)
+            continue;
+
+        ++hits;
+        mad_word = mad.offset;
+        material_register = dst;
+        diffuse_carrier_register = words[mul.offset + 4u];
+    }
+
+    if (hits != 1u ||
+        mad_word == static_cast<std::size_t>(-1))
+        return false;
+
+    // mad rMat.xyz, W, rMat.xyz, b12[1].xyz
+    // -> mad rMat.xyz, 0.0, rMat.xyz, b12[1].xyz
+    // -> rMat.xyz = b12[1].xyz
+    //
+    // Scalar register and scalar immediate are both two-DWORD operands, so
+    // the DXBC layout and every downstream instruction offset stay unchanged.
+    words[mad_word + 3u] = 0x00004001u;
+    words[mad_word + 4u] = 0x00000000u;
+
+    return
+        words[mad_word + 1u] == 0x00100072u &&
+        words[mad_word + 2u] == material_register &&
+        words[mad_word + 3u] == 0x00004001u &&
+        words[mad_word + 4u] == 0x00000000u &&
+        words[mad_word + 5u] == 0x00100246u &&
+        words[mad_word + 6u] == material_register &&
+        words[mad_word + 7u] == 0x00208246u &&
+        words[mad_word + 8u] == 12u &&
+        words[mad_word + 9u] == 1u &&
+        diffuse_carrier_register != material_register;
+}
+#endif
+
 #if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_R5)
 // PTDE stable Phn HemEnv reconstructs the tangent frame per pixel. DSR HemEnv
 // changed that spatial operator in two non-equivalent ways before both
@@ -3661,6 +3825,12 @@ bool apply_build131(
 
 #if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_R16_LEGACY_DIFFUSE_SPLIT)
     if (!remove_dsr_materialworkflow_legacy_diffuse_split_r16(words) ||
+        !decode(words, instructions))
+        return false;
+#endif
+
+#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_R17_PTDE_DIFFUSE_MATERIAL)
+    if (!select_ptde_diffuse_material_factor_r17(words) ||
         !decode(words, instructions))
         return false;
 #endif
