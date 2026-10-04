@@ -1991,6 +1991,184 @@ bool r11_common_merge_postcondition(
 }
 #endif
 
+#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_R12_LEGACY_MATERIAL_WORKFLOW)
+// R12 removes the DSR-only HemEnv MaterialWorkflow/PBL branch that consumes
+// stock SpecTex alpha as an independent material/roughness signal. Exact PTDE
+// stable P_Metal samples SpecMap RGB only; retained DSR HemDir3 does the same.
+// The stock HemEnv shader already contains a legacy ELSE path which does not
+// feed SpecTex alpha into the diffuse/common material carrier. Flatten only
+// the gFC_MaterialWorkflow.x IF/THEN/ELSE control flow so that this existing
+// legacy path executes unconditionally. Instruction count and all downstream
+// register/ABI layout remain unchanged.
+bool apply_ptde_legacy_material_workflow_r12(
+    std::vector<std::uint32_t> &words) noexcept
+{
+    constexpr std::uint32_t k_nop = 0x0100003au;
+
+    std::vector<instruction_view> instructions;
+    if (!decode(words, instructions))
+        return false;
+
+    std::size_t material_if =
+        static_cast<std::size_t>(-1);
+    std::size_t material_else =
+        static_cast<std::size_t>(-1);
+    std::size_t material_endif =
+        static_cast<std::size_t>(-1);
+    std::uint32_t spec_sample_register = 0u;
+    std::size_t hits = 0u;
+
+    for (std::size_t i = 0u;
+         i + 1u < instructions.size();
+         ++i) {
+        const auto &sample = instructions[i];
+        const auto &branch = instructions[i + 1u];
+
+        if (sample.opcode < 0x45u ||
+            sample.opcode > 0x4au ||
+            sample.length != 11u ||
+            sample.offset + 10u >= words.size() ||
+            words[sample.offset + 7u] != 0x00107936u ||
+            words[sample.offset + 8u] != 1u ||
+            words[sample.offset + 10u] != 1u ||
+            branch.opcode != 0x1fu ||
+            branch.length != 4u ||
+            branch.offset != sample.offset + sample.length ||
+            branch.offset + 3u >= words.size() ||
+            words[branch.offset + 1u] != 0x0020800au ||
+            words[branch.offset + 2u] != 0u ||
+            words[branch.offset + 3u] != 85u)
+            continue;
+
+        ++hits;
+        material_if = i + 1u;
+        spec_sample_register =
+            words[sample.offset + 4u];
+    }
+
+    if (hits != 1u ||
+        material_if ==
+            static_cast<std::size_t>(-1))
+        return false;
+
+    std::size_t depth = 0u;
+    for (std::size_t i = material_if;
+         i < instructions.size();
+         ++i) {
+        const auto opcode =
+            instructions[i].opcode;
+
+        if (opcode == 0x1fu) {
+            ++depth;
+            continue;
+        }
+
+        if (opcode == 0x12u &&
+            depth == 1u) {
+            if (material_else !=
+                    static_cast<std::size_t>(-1))
+                return false;
+            material_else = i;
+            continue;
+        }
+
+        if (opcode != 0x15u)
+            continue;
+
+        if (depth == 0u)
+            return false;
+
+        if (depth == 1u) {
+            material_endif = i;
+            break;
+        }
+
+        --depth;
+    }
+
+    if (material_else ==
+            static_cast<std::size_t>(-1) ||
+        material_endif ==
+            static_cast<std::size_t>(-1) ||
+        material_else <= material_if ||
+        material_endif <= material_else)
+        return false;
+
+    std::size_t alpha_neutralize = 0u;
+    for (std::size_t i = material_else + 1u;
+         i < material_endif;
+         ++i) {
+        const auto &ins = instructions[i];
+        if (ins.opcode != 0x36u ||
+            ins.length != 5u ||
+            ins.offset + 4u >= words.size())
+            continue;
+
+        if (words[ins.offset + 1u] ==
+                0x00100012u &&
+            words[ins.offset + 2u] ==
+                spec_sample_register &&
+            words[ins.offset + 3u] ==
+                0x00004001u &&
+            words[ins.offset + 4u] ==
+                0x3f800000u)
+            ++alpha_neutralize;
+    }
+
+    if (alpha_neutralize != 1u)
+        return false;
+
+    const auto if_word =
+        instructions[material_if].offset;
+    const auto else_end =
+        instructions[material_else].offset +
+        instructions[material_else].length;
+    const auto endif_word =
+        instructions[material_endif].offset;
+    const auto endif_end =
+        endif_word +
+        instructions[material_endif].length;
+
+    if (if_word >= else_end ||
+        else_end > words.size() ||
+        endif_word >= endif_end ||
+        endif_end > words.size())
+        return false;
+
+    std::fill(
+        words.begin() +
+            static_cast<std::ptrdiff_t>(if_word),
+        words.begin() +
+            static_cast<std::ptrdiff_t>(else_end),
+        k_nop);
+
+    std::fill(
+        words.begin() +
+            static_cast<std::ptrdiff_t>(endif_word),
+        words.begin() +
+            static_cast<std::ptrdiff_t>(endif_end),
+        k_nop);
+
+    std::vector<instruction_view> patched;
+    if (!decode(words, patched))
+        return false;
+
+    std::size_t stale_material_if = 0u;
+    for (const auto &ins : patched) {
+        if (ins.opcode == 0x1fu &&
+            ins.length == 4u &&
+            ins.offset + 3u < words.size() &&
+            words[ins.offset + 1u] ==
+                0x0020800au &&
+            words[ins.offset + 2u] == 0u &&
+            words[ins.offset + 3u] == 85u)
+            ++stale_material_if;
+    }
+
+    return stale_material_if == 0u;
+}
+#endif
+
 #if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_R5)
 // PTDE stable Phn HemEnv reconstructs the tangent frame per pixel. DSR HemEnv
 // changed that spatial operator in two non-equivalent ways before both
@@ -3268,6 +3446,15 @@ bool apply_build131(
     if (!apply_pmetal_pre_ab(
             words,
             authority) ||
+        !decode(
+            words,
+            instructions))
+        return false;
+#endif
+
+#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_R12_LEGACY_MATERIAL_WORKFLOW)
+    if (!apply_ptde_legacy_material_workflow_r12(
+            words) ||
         !decode(
             words,
             instructions))
