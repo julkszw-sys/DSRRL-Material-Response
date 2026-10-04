@@ -152,7 +152,11 @@ private:
 
     struct b12_context_cache {
         ID3D11Buffer *buffer = nullptr;
+#if defined(DSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE)
+        std::array<std::uint32_t,24> payload_bits{};
+#else
         std::array<std::uint32_t,16> payload_bits{};
+#endif
         bool payload_valid = false;
     };
 
