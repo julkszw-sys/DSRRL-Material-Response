@@ -8,6 +8,7 @@ on:
       - dev/renderer-core-v1-islands
       - agent/integrated-single-addon-a1-20260924
     paths:
+      - ".github/workflows/renderer-core-integrated.yml"
       - "renderer-core/integrated/**"
       - "renderer-core/include/dsrrl/runtime/**"
       - "renderer-core/include/dsrrl/operators/legacy_plan/**"
