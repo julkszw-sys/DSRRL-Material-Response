@@ -656,6 +656,290 @@ chunk *unique_rdef(
     return rdef;
 }
 
+#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_R10C_INLINE_UL_B12)
+bool patch_local_ul_b12_r10c(
+    std::vector<std::uint8_t> &bytes,
+    const pmetal_rgba_authority::entry &authority) noexcept
+{
+    std::vector<chunk> chunks;
+    std::vector<std::uint32_t> words;
+    std::size_t code_index = 0u;
+
+    if (!parse_dxbc(
+            bytes.data(),
+            bytes.size(),
+            chunks,
+            code_index) ||
+        !extract_words(
+            chunks,
+            code_index,
+            words) ||
+        words.size() < 15u)
+        return false;
+
+    // Clean diffuse-v1 base inserts exactly dcl_constantbuffer b12[4]
+    // at stock SHEX word 11. R10C expands only the declared row count;
+    // no new instruction words or additional CB declarations are inserted.
+    if (words[11] != 0x04000059u ||
+        words[12] != 0x00208e46u ||
+        words[13] != 12u ||
+        words[14] != 4u)
+        return false;
+
+    words[14] = 6u;
+
+    struct operand_patch {
+        std::size_t stock_slot_word = 0u;
+        std::uint32_t expected_register = 0u;
+        std::uint32_t target_register = 0u;
+    };
+
+    const std::array<operand_patch,3> patches{{
+        {authority.ul_upper_slot_word, 7u, 4u},
+        {authority.ul_lower_slot_word_0, 8u, 5u},
+        {authority.ul_lower_slot_word_1, 8u, 5u}
+    }};
+
+    for (const auto &patch : patches) {
+        // diffuse-v1 inserted four declaration DWORDs at SHEX word 11.
+        const auto slot_word =
+            patch.stock_slot_word + 4u;
+
+        if (slot_word + 1u >= words.size() ||
+            words[slot_word] != 0u ||
+            words[slot_word + 1u] !=
+                patch.expected_register)
+            return false;
+
+        words[slot_word] = 12u;
+        words[slot_word + 1u] =
+            patch.target_register;
+    }
+
+    auto *rdef = unique_rdef(chunks);
+    if (rdef == nullptr ||
+        rdef->payload.size() < 32u)
+        return false;
+
+    auto &payload = rdef->payload;
+    constexpr std::size_t k_cb_desc_size = 24u;
+    constexpr std::size_t k_resource_desc_size = 32u;
+
+    const auto cb_count =
+        read_u32(payload.data());
+    const auto cb_offset =
+        read_u32(payload.data() + 4u);
+    const auto resource_count =
+        read_u32(payload.data() + 8u);
+    const auto resource_offset =
+        read_u32(payload.data() + 12u);
+
+    if (cb_count == 0u ||
+        cb_count > 64u ||
+        resource_count == 0u ||
+        resource_count > 256u ||
+        cb_offset > payload.size() ||
+        static_cast<std::uint64_t>(cb_count) *
+                k_cb_desc_size >
+            payload.size() - cb_offset ||
+        resource_offset > payload.size() ||
+        static_cast<std::uint64_t>(
+            resource_count) *
+                k_resource_desc_size >
+            payload.size() - resource_offset)
+        return false;
+
+    std::uint32_t b12_name_offset = 0u;
+    std::uint32_t b12_resource_hits = 0u;
+
+    for (std::uint32_t i = 0u;
+         i < resource_count;
+         ++i) {
+        const auto at =
+            static_cast<std::size_t>(
+                resource_offset) +
+            static_cast<std::size_t>(i) *
+                k_resource_desc_size;
+
+        const auto type =
+            read_u32(payload.data() + at + 4u);
+        const auto bind =
+            read_u32(payload.data() + at + 20u);
+        const auto bind_count =
+            read_u32(payload.data() + at + 24u);
+
+        if (type == 0u &&
+            bind == 12u &&
+            bind_count == 1u) {
+            b12_name_offset =
+                read_u32(payload.data() + at);
+            ++b12_resource_hits;
+        }
+    }
+
+    if (b12_resource_hits != 1u)
+        return false;
+
+    std::uint32_t b12_cb_hits = 0u;
+    for (std::uint32_t i = 0u;
+         i < cb_count;
+         ++i) {
+        const auto at =
+            static_cast<std::size_t>(
+                cb_offset) +
+            static_cast<std::size_t>(i) *
+                k_cb_desc_size;
+
+        if (read_u32(payload.data() + at) !=
+                b12_name_offset)
+            continue;
+
+        if (read_u32(payload.data() + at + 12u) !=
+                64u)
+            return false;
+
+        write_u32(
+            payload.data() + at + 12u,
+            96u);
+        ++b12_cb_hits;
+    }
+
+    if (b12_cb_hits != 1u)
+        return false;
+
+    std::vector<std::uint8_t> rebuilt;
+    if (!rebuild(
+            bytes.data(),
+            bytes.size(),
+            std::move(chunks),
+            code_index,
+            words,
+            rebuilt))
+        return false;
+
+    bytes = std::move(rebuilt);
+    return true;
+}
+
+bool local_ul_b12_r10c_postcondition(
+    const std::vector<std::uint8_t> &bytes,
+    const pmetal_rgba_authority::entry &authority) noexcept
+{
+    std::vector<chunk> chunks;
+    std::vector<std::uint32_t> words;
+    std::size_t code_index = 0u;
+
+    if (!parse_dxbc(
+            bytes.data(),
+            bytes.size(),
+            chunks,
+            code_index) ||
+        !extract_words(
+            chunks,
+            code_index,
+            words) ||
+        words.size() < 15u ||
+        words[11] != 0x04000059u ||
+        words[12] != 0x00208e46u ||
+        words[13] != 12u ||
+        words[14] != 6u)
+        return false;
+
+    const std::array<
+        std::pair<std::size_t,std::uint32_t>,
+        3> expected{{
+            {authority.ul_upper_slot_word + 4u, 4u},
+            {authority.ul_lower_slot_word_0 + 4u, 5u},
+            {authority.ul_lower_slot_word_1 + 4u, 5u}
+        }};
+
+    for (const auto &[slot_word, reg] :
+         expected) {
+        if (slot_word + 1u >= words.size() ||
+            words[slot_word] != 12u ||
+            words[slot_word + 1u] != reg)
+            return false;
+    }
+
+    auto *rdef =
+        unique_rdef(chunks);
+    if (rdef == nullptr ||
+        rdef->payload.size() < 32u)
+        return false;
+
+    const auto &payload =
+        rdef->payload;
+    constexpr std::size_t k_cb_desc_size = 24u;
+    constexpr std::size_t k_resource_desc_size = 32u;
+
+    const auto cb_count =
+        read_u32(payload.data());
+    const auto cb_offset =
+        read_u32(payload.data() + 4u);
+    const auto resource_count =
+        read_u32(payload.data() + 8u);
+    const auto resource_offset =
+        read_u32(payload.data() + 12u);
+
+    if (cb_count == 0u ||
+        resource_count == 0u ||
+        cb_offset > payload.size() ||
+        resource_offset > payload.size())
+        return false;
+
+    std::uint32_t name_offset = 0u;
+    std::uint32_t resource_hits = 0u;
+    for (std::uint32_t i = 0u;
+         i < resource_count;
+         ++i) {
+        const auto at =
+            static_cast<std::size_t>(
+                resource_offset) +
+            static_cast<std::size_t>(i) *
+                k_resource_desc_size;
+        if (at + k_resource_desc_size >
+            payload.size())
+            return false;
+
+        if (read_u32(payload.data() + at + 4u) ==
+                0u &&
+            read_u32(payload.data() + at + 20u) ==
+                12u &&
+            read_u32(payload.data() + at + 24u) ==
+                1u) {
+            name_offset =
+                read_u32(payload.data() + at);
+            ++resource_hits;
+        }
+    }
+
+    if (resource_hits != 1u)
+        return false;
+
+    std::uint32_t cb_hits = 0u;
+    for (std::uint32_t i = 0u;
+         i < cb_count;
+         ++i) {
+        const auto at =
+            static_cast<std::size_t>(
+                cb_offset) +
+            static_cast<std::size_t>(i) *
+                k_cb_desc_size;
+        if (at + k_cb_desc_size >
+            payload.size())
+            return false;
+
+        if (read_u32(payload.data() + at) ==
+                name_offset &&
+            read_u32(payload.data() + at + 12u) ==
+                96u)
+            ++cb_hits;
+    }
+
+    return cb_hits == 1u;
+}
+#endif
+
 bool patch_build131_rdef(
     std::vector<chunk> &chunks) noexcept
 {
@@ -3950,6 +4234,17 @@ materialize_pmetal_rgba_receiver(
     outcome.receiver_id =
         mr.receiver_id;
 
+#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_R10C_INLINE_UL_B12)
+    if (!patch_local_ul_b12_r10c(
+            base,
+            *authority)) {
+        outcome.result =
+            pmetal_rgba_materialize_result::
+                fail_upper_lower_composition;
+        return outcome;
+    }
+#endif
+
     // Compose only independent A1 owners that do not overlap the EnvSpec
     // semantic cut. The clean diffuse base intentionally deferred them.
     if (!compose_a1(
@@ -4190,6 +4485,17 @@ materialize_pmetal_rgba_receiver(
     outcome.composed_owners |=
         core::operator_bit(
             core::operator_id::terminal_sat_rgb);
+
+#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_R10C_INLINE_UL_B12)
+    if (!local_ul_b12_r10c_postcondition(
+            base,
+            *authority)) {
+        outcome.result =
+            pmetal_rgba_materialize_result::
+                fail_upper_lower_composition;
+        return outcome;
+    }
+#endif
 
     if (!final_postcondition(
             base,

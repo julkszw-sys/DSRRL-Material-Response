@@ -52,6 +52,9 @@ std::atomic_bool g_native_envdiffuse_logged{false};
 std::atomic_bool g_envdiffuse_consumer_logged{false};
 std::atomic_bool g_source_frontier_logged{false};
 std::atomic_bool g_shadow_r7_logged{false};
+#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_R10C_INLINE_UL_B12)
+std::atomic_bool g_r10c_inline_ul_logged{false};
+#endif
 std::atomic<std::uint32_t> g_prepare_stage_log_mask{0u};
 std::array<std::atomic<std::uint64_t>,3> g_r9_value_cut_generation{};
 std::array<std::atomic<std::uint64_t>,3> g_r9_value_cut_probe_pair{};
@@ -748,7 +751,11 @@ bool pmetal_envspec_draw_runtime::prepare(
 
     pmetal_envspec_source source{};
     if (!source_.latest(material, source) ||
-        !std::isfinite(source.beta)) {
+        !std::isfinite(source.beta)
+#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_R10C_INLINE_UL_B12)
+        || !source.upper_lower_valid
+#endif
+        ) {
         telemetry::hot_count(source_rejects_);
         effect_fail(
             effect_fail_mask_,
@@ -884,6 +891,29 @@ bool pmetal_envspec_draw_runtime::prepare(
         return false;
     }
     effect_latch(effect_source_ready_);
+
+#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_R10C_INLINE_UL_B12)
+    if (!g_r10c_inline_ul_logged.exchange(
+            true,
+            std::memory_order_relaxed)) {
+        char line[768]{};
+        std::snprintf(
+            line,
+            sizeof(line),
+            "[DSRRL PMETAL R10C INLINE UL] rx=%u route=%u upper=%.9g,%.9g,%.9g lower=%.9g,%.9g,%.9g b12_bytes=96 transport=existing_cached_payload global_ul=off b13=off",
+            static_cast<unsigned>(decision.receiver_id),
+            static_cast<unsigned>(decision.route_index),
+            static_cast<double>(source.upper_ptde[0]),
+            static_cast<double>(source.upper_ptde[1]),
+            static_cast<double>(source.upper_ptde[2]),
+            static_cast<double>(source.lower_ptde[0]),
+            static_cast<double>(source.lower_ptde[1]),
+            static_cast<double>(source.lower_ptde[2]));
+        reshade::log::message(
+            reshade::log::level::info,
+            line);
+    }
+#endif
 
 #if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG)
     // First runtime is intentionally stable HemEnv only. HemEnvLerp remains
@@ -1207,7 +1237,11 @@ bool pmetal_envspec_draw_runtime::prepare(
         carrier3 = {{0.0f,0.0f,0.0f}};
 #endif
 
+#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_R10C_INLINE_UL_B12)
+    const std::array<f4,6> payload{{
+#else
     const std::array<f4,4> payload{{
+#endif
         {
             decision.c101,
             decision.c101,
@@ -1240,8 +1274,27 @@ bool pmetal_envspec_draw_runtime::prepare(
             carrier3[2],
             source.beta
         }
+#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_R10C_INLINE_UL_B12)
+        ,
+        {
+            source.upper_ptde[0],
+            source.upper_ptde[1],
+            source.upper_ptde[2],
+            0.0f
+        },
+        {
+            source.lower_ptde[0],
+            source.lower_ptde[1],
+            source.lower_ptde[2],
+            0.0f
+        }
+#endif
     }};
+#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_R10C_INLINE_UL_B12)
+    static_assert(sizeof(payload) == 96u);
+#else
     static_assert(sizeof(payload) == 64u);
+#endif
 
     ID3D11Device *device = nullptr;
     context->GetDevice(&device);
@@ -1261,7 +1314,11 @@ bool pmetal_envspec_draw_runtime::prepare(
         return false;
     }
 
+#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_R10C_INLINE_UL_B12)
+    std::array<std::uint32_t,24> payload_bits{};
+#else
     std::array<std::uint32_t,16> payload_bits{};
+#endif
     static_assert(
         sizeof(payload_bits) == sizeof(payload));
     std::memcpy(
@@ -1313,7 +1370,11 @@ bool pmetal_envspec_draw_runtime::prepare(
                     payload_bits;
         } else {
             D3D11_BUFFER_DESC desc{};
+#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_R10C_INLINE_UL_B12)
+            desc.ByteWidth = 96u;
+#else
             desc.ByteWidth = 64u;
+#endif
             desc.Usage =
                 D3D11_USAGE_DYNAMIC;
             desc.BindFlags =
@@ -2073,6 +2134,9 @@ void pmetal_envspec_draw_runtime::reset() noexcept
     g_envdiffuse_consumer_logged.store(false);
     g_source_frontier_logged.store(false);
     g_shadow_r7_logged.store(false);
+#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_R10C_INLINE_UL_B12)
+    g_r10c_inline_ul_logged.store(false);
+#endif
     g_prepare_stage_log_mask.store(0u);
     for (auto &generation : g_r9_value_cut_generation)
         generation.store(0u, std::memory_order_relaxed);

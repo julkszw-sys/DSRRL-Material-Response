@@ -771,6 +771,116 @@ bool retail_lightbank_record_index(
     return true;
 }
 
+#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_R10C_INLINE_UL_B12)
+struct raw_ul_rgbm {
+    std::uint8_t r = 0u;
+    std::uint8_t g = 0u;
+    std::uint8_t b = 0u;
+    std::uint8_t m = 0u;
+};
+
+f4 decode_raw_ul_rgbm(
+    const raw_ul_rgbm &value) noexcept
+{
+    const float scale =
+        static_cast<float>(value.m) *
+        (1.0f / 100.0f);
+
+    return {
+        static_cast<float>(value.r) *
+            (1.0f / 255.0f) * scale,
+        static_cast<float>(value.g) *
+            (1.0f / 255.0f) * scale,
+        static_cast<float>(value.b) *
+            (1.0f / 255.0f) * scale,
+        0.0f
+    };
+}
+
+bool read_exact_ptde_upper_lower(
+    void *source,
+    std::int32_t selector,
+    f4 &upper,
+    f4 &lower) noexcept
+{
+    upper = {};
+    lower = {};
+
+    if (source == nullptr ||
+        selector < 0)
+        return false;
+
+    std::uint32_t index = 0u;
+    if (!retail_lightbank_record_index(
+            selector,
+            index))
+        return false;
+
+    const std::uint8_t *header = nullptr;
+    if (!safe_read(
+            static_cast<const std::uint8_t *>(
+                source) + 0x18u,
+            header) ||
+        header == nullptr)
+        return false;
+
+    std::uint16_t type = 0u;
+    std::uint16_t count = 0u;
+    if (!safe_read(
+            header + 0x08u,
+            type) ||
+        !safe_read(
+            header + 0x0Au,
+            count) ||
+        type != 4u ||
+        index >= count)
+        return false;
+
+    std::uint32_t row_offset = 0u;
+    if (!safe_read(
+            header +
+                0x34u +
+                static_cast<std::size_t>(index) *
+                    12u,
+            row_offset))
+        return false;
+
+    const auto *record =
+        header + row_offset;
+
+    if (!readable_range(
+            record,
+            0x30u))
+        return false;
+
+    raw_ul_rgbm raw_upper{};
+    raw_ul_rgbm raw_lower{};
+    std::memcpy(
+        &raw_upper,
+        record + 0x24u,
+        sizeof(raw_upper));
+    std::memcpy(
+        &raw_lower,
+        record + 0x2Cu,
+        sizeof(raw_lower));
+
+    upper =
+        decode_raw_ul_rgbm(
+            raw_upper);
+    lower =
+        decode_raw_ul_rgbm(
+            raw_lower);
+
+    return
+        std::isfinite(upper.x) &&
+        std::isfinite(upper.y) &&
+        std::isfinite(upper.z) &&
+        std::isfinite(lower.x) &&
+        std::isfinite(lower.y) &&
+        std::isfinite(lower.z);
+}
+#endif
+
 struct bank_cache_entry {
     const std::uint8_t *base = nullptr;
     std::uint16_t count = 0u;
@@ -2284,6 +2394,93 @@ void pmetal_env_source_selector_event(
     };
     next.beta =
         endpoints.beta;
+
+#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_R10C_INLINE_UL_B12)
+    // Reuse the same exact P_Metal selector A/B+beta and bank routing, but
+    // recover the authored Upper/Lower directly from the raw LightBank row
+    // before DSR's common pow2.2 and U/L x1.5 transforms. This is source
+    // observation only: no global U/L producer/cache mutation is performed.
+    auto decode_ul =
+        [&](std::int16_t selector,
+            f4 &upper,
+            f4 &lower) noexcept {
+            void *source =
+                pmetal_selector_policy::
+                    source(
+                        selector,
+                        character != 0u,
+                        lookup);
+
+            if (!lookup_valid ||
+                source == nullptr)
+                return false;
+
+            return
+                read_exact_ptde_upper_lower(
+                    source,
+                    selector,
+                    upper,
+                    lower);
+        };
+
+    f4 upper_a{};
+    f4 lower_a{};
+    f4 upper_b{};
+    f4 lower_b{};
+
+    if (!decode_ul(
+            endpoints.a,
+            upper_a,
+            lower_a)) {
+        telemetry::hot_count(
+            g_decode_fail);
+        return;
+    }
+
+    if (endpoints.a == endpoints.b) {
+        upper_b = upper_a;
+        lower_b = lower_a;
+    } else if (!decode_ul(
+                   endpoints.b,
+                   upper_b,
+                   lower_b)) {
+        telemetry::hot_count(
+            g_decode_fail);
+        return;
+    }
+
+    const auto t =
+        endpoints.beta;
+    next.upper_ptde = {
+        upper_a.x +
+            (upper_b.x - upper_a.x) * t,
+        upper_a.y +
+            (upper_b.y - upper_a.y) * t,
+        upper_a.z +
+            (upper_b.z - upper_a.z) * t
+    };
+    next.lower_ptde = {
+        lower_a.x +
+            (lower_b.x - lower_a.x) * t,
+        lower_a.y +
+            (lower_b.y - lower_a.y) * t,
+        lower_a.z +
+            (lower_b.z - lower_a.z) * t
+    };
+    next.upper_lower_valid =
+        std::isfinite(next.upper_ptde[0]) &&
+        std::isfinite(next.upper_ptde[1]) &&
+        std::isfinite(next.upper_ptde[2]) &&
+        std::isfinite(next.lower_ptde[0]) &&
+        std::isfinite(next.lower_ptde[1]) &&
+        std::isfinite(next.lower_ptde[2]);
+
+    if (!next.upper_lower_valid) {
+        telemetry::hot_count(
+            g_decode_fail);
+        return;
+    }
+#endif
 
 #if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG)
     f4 envdiffuse_a{};

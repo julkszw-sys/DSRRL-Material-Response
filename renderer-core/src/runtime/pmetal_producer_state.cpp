@@ -104,7 +104,14 @@ bool same_source_payload(
         a.bank_signature_a == b.bank_signature_a &&
         a.bank_signature_b == b.bank_signature_b &&
         a.row_id_a == b.row_id_a &&
-        a.row_id_b == b.row_id_b;
+        a.row_id_b == b.row_id_b
+#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_R10C_INLINE_UL_B12)
+        && a.upper_ptde == b.upper_ptde
+        && a.lower_ptde == b.lower_ptde
+        && a.upper_lower_valid ==
+            b.upper_lower_valid
+#endif
+        ;
 }
 
 std::uint64_t material_key(
@@ -140,6 +147,15 @@ std::uint64_t source_key(
     hash = fnv_scalar(hash, source.bank_signature_b);
     hash = fnv_scalar(hash, source.row_id_a);
     hash = fnv_scalar(hash, source.row_id_b);
+#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_R10C_INLINE_UL_B12)
+    for (const auto value : source.upper_ptde)
+        hash = fnv_scalar(hash, value);
+    for (const auto value : source.lower_ptde)
+        hash = fnv_scalar(hash, value);
+    hash = fnv_scalar(
+        hash,
+        source.upper_lower_valid);
+#endif
     return hash;
 }
 
