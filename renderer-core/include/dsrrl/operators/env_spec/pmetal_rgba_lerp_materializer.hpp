@@ -31,6 +31,11 @@ struct pmetal_rgba_lerp_materialize_outcome {
     std::uint8_t pair_index = 0xffu;
     std::uint32_t semantic_receiver_id = 0u;
     bool envdiffuse_preserved = false;
+    // R19: exact HemEnvLerp EnvDiffuse A/B consumer is composed. This means
+    // t11/t13 sample raw PTDE RGBA, decode RGB/A after filtering, multiply
+    // independent PTDE endpoints, lerp by the exact shared beta and omit the
+    // DSR-only LightProbeParam.x post-blend gain.
+    bool envdiffuse_ptde_consumer = false;
     bool upper_lower_composed = false;
     bool upper_lower_preserved_stock = false;
     bool phn_scene_encoding_composed = false;

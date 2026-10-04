@@ -421,6 +421,12 @@ constexpr std::array<std::uint32_t,74> k_ptde_rgba_envspec_chain = {{
     0x00000001u,0x01000015u
 }};
 
+#if defined(DSRRL_PMETAL_R19_LERP_PTDE_ENVDIFFUSE)
+constexpr std::uint32_t k_material_carrier_bytes = 96u;
+#else
+constexpr std::uint32_t k_material_carrier_bytes = 64u;
+#endif
+
 bool add_bridge_rdef(
     const std::uint8_t *source,
     std::size_t source_size,
@@ -443,7 +449,7 @@ bool add_bridge_rdef(
             rdef->payload,
             "DSRRL_MaterialCarrier",
             12u,
-            64u))
+            k_material_carrier_bytes))
         return false;
 
     if (compose_upper_lower &&
@@ -462,6 +468,238 @@ bool add_bridge_rdef(
         words,
         output);
 }
+
+#if defined(DSRRL_PMETAL_R19_LERP_PTDE_ENVDIFFUSE)
+bool apply_exact_ptde_envdiffuse_lerp_consumer(
+    std::vector<std::uint8_t> &bytes) noexcept
+{
+    std::vector<chunk> chunks;
+    std::vector<std::uint32_t> words;
+    std::vector<instruction_view> instructions;
+    std::size_t code_index = 0u;
+
+    if (!parse_dxbc(
+            bytes.data(),
+            bytes.size(),
+            chunks,
+            code_index,
+            words) ||
+        !decode(words, instructions))
+        return false;
+
+    // Exact DSR HemEnvLerp local EnvDiffuse producer:
+    //   sample_l A.rgb, coord, t11, s11
+    //   mul      A.rgb, A.rgb, cb0[3].rgb
+    //   sample_l B.rgb, coord, t13, s13
+    //   mad      D.rgb, cb0[1].rgb, B.rgb, -A.rgb
+    //   mad      A.rgb, cb0[1].w, D.rgb, A.rgb
+    //   mul      A.rgb, A.rgb, cb0[79].x
+    //
+    // Exact PTDE homolog:
+    //   A = (filter(t11).rgb / filter(t11).a) * endpointA
+    //   B = (filter(t13).rgb / filter(t13).a) * endpointB
+    //   out = A + beta * (B - A)
+    //
+    // b12[4].xyz = exact PTDE EnvDiffuse endpoint A
+    // b12[5].xyz = exact PTDE EnvDiffuse endpoint B
+    // b12[3].w   = exact shared A/B beta
+    //
+    // The DSR-only cb0[79].x post-blend gain has no PTDE homolog and is
+    // deliberately not emitted. This function owns only the EnvDiffuse
+    // A/B+beta semantic cut; Upper/Lower and the common merge stay outside it.
+
+    std::size_t hit = static_cast<std::size_t>(-1);
+    std::array<instruction_view,6> stock{};
+    std::size_t hits = 0u;
+
+    for (std::size_t i = 0u; i + 5u < instructions.size(); ++i) {
+        const auto &sa = instructions[i + 0u];
+        const auto &ma = instructions[i + 1u];
+        const auto &sb = instructions[i + 2u];
+        const auto &bd = instructions[i + 3u];
+        const auto &lr = instructions[i + 4u];
+        const auto &gn = instructions[i + 5u];
+
+        if (sa.length != 13u ||
+            sa.opcode < 0x45u || sa.opcode > 0x4au ||
+            sb.length != 13u ||
+            sb.opcode < 0x45u || sb.opcode > 0x4au ||
+            ma.opcode != 0x38u || ma.length != 8u ||
+            bd.opcode != 0x32u || bd.length != 11u ||
+            lr.opcode != 0x32u || lr.length != 10u ||
+            gn.opcode != 0x38u || gn.length != 8u ||
+            sa.offset + sa.length != ma.offset ||
+            ma.offset + ma.length != sb.offset ||
+            sb.offset + sb.length != bd.offset ||
+            bd.offset + bd.length != lr.offset ||
+            lr.offset + lr.length != gn.offset ||
+            sa.offset + 12u >= words.size() ||
+            sb.offset + 12u >= words.size() ||
+            words[sa.offset + 8u] != 11u ||
+            words[sa.offset + 10u] != 11u ||
+            words[sb.offset + 8u] != 13u ||
+            words[sb.offset + 10u] != 13u)
+            continue;
+
+        // Require the exact retail DSR constants at the semantic cut:
+        // A endpoint cb0[3], B endpoint/beta cb0[1], final gain cb0[79].x.
+        if (words[ma.offset + 5u] != 0x00208246u ||
+            words[ma.offset + 6u] != 0u ||
+            words[ma.offset + 7u] != 3u ||
+            words[bd.offset + 3u] != 0x00208246u ||
+            words[bd.offset + 4u] != 0u ||
+            words[bd.offset + 5u] != 1u ||
+            words[lr.offset + 4u] != 0u ||
+            words[lr.offset + 5u] != 1u ||
+            words[gn.offset + 5u] != 0x00208006u ||
+            words[gn.offset + 6u] != 0u ||
+            words[gn.offset + 7u] != 79u)
+            continue;
+
+        stock = {{sa,ma,sb,bd,lr,gn}};
+        hit = i;
+        ++hits;
+    }
+
+    if (hits != 1u ||
+        hit == static_cast<std::size_t>(-1))
+        return false;
+
+    const auto &sa = stock[0];
+    const auto &ma = stock[1];
+    const auto &sb = stock[2];
+    const auto &bd = stock[3];
+    const auto &lr = stock[4];
+    const auto &gn = stock[5];
+
+    std::array<std::uint32_t,13> sample_a{};
+    std::array<std::uint32_t,13> sample_b{};
+    std::array<std::uint32_t,8> apply_a{};
+    std::array<std::uint32_t,11> b_minus_a{};
+    std::array<std::uint32_t,10> lerp{};
+    std::copy_n(words.begin() + static_cast<std::ptrdiff_t>(sa.offset),
+                sample_a.size(), sample_a.begin());
+    std::copy_n(words.begin() + static_cast<std::ptrdiff_t>(sb.offset),
+                sample_b.size(), sample_b.begin());
+    std::copy_n(words.begin() + static_cast<std::ptrdiff_t>(ma.offset),
+                apply_a.size(), apply_a.begin());
+    std::copy_n(words.begin() + static_cast<std::ptrdiff_t>(bd.offset),
+                b_minus_a.size(), b_minus_a.begin());
+    std::copy_n(words.begin() + static_cast<std::ptrdiff_t>(lr.offset),
+                lerp.size(), lerp.begin());
+
+    // Preserve the exact DSR coordinate/resource/sampler operands, but capture
+    // all four filtered channels in certified scratch r12 so alpha survives.
+    sample_a[3] = 0x001000f2u;
+    sample_a[4] = 12u;
+    sample_b[3] = 0x001000f2u;
+    sample_b[4] = 12u;
+
+    const std::array<std::uint32_t,7> decode_rgb_over_alpha{{
+        0x0700000eu,
+        0x001000e2u,12u,
+        0x00100e56u,12u,
+        0x00100006u,12u
+    }};
+
+    // Keep the stock accumulator destination, replace only the decoded source
+    // and endpoint carrier.
+    apply_a[3] = 0x00100e56u;
+    apply_a[4] = 12u;
+    apply_a[5] = 0x00208246u;
+    apply_a[6] = 12u;
+    apply_a[7] = 4u;
+
+    // Preserve the stock B-A destination and exact negative-A operand tail.
+    b_minus_a[3] = 0x00208246u;
+    b_minus_a[4] = 12u;
+    b_minus_a[5] = 5u;
+    b_minus_a[6] = 0x00100e56u;
+    b_minus_a[7] = 12u;
+
+    // Preserve stock accumulator/difference register routing. Only the beta
+    // source becomes the exact shared source carrier b12[3].w.
+    lerp[4] = 12u;
+    lerp[5] = 3u;
+
+    std::vector<std::uint32_t> replacement;
+    try {
+        replacement.reserve(69u);
+        replacement.insert(replacement.end(), sample_a.begin(), sample_a.end());
+        replacement.insert(replacement.end(),
+                           decode_rgb_over_alpha.begin(),
+                           decode_rgb_over_alpha.end());
+        replacement.insert(replacement.end(), apply_a.begin(), apply_a.end());
+        replacement.insert(replacement.end(), sample_b.begin(), sample_b.end());
+        replacement.insert(replacement.end(),
+                           decode_rgb_over_alpha.begin(),
+                           decode_rgb_over_alpha.end());
+        replacement.insert(replacement.end(),
+                           b_minus_a.begin(), b_minus_a.end());
+        replacement.insert(replacement.end(), lerp.begin(), lerp.end());
+    } catch (...) {
+        return false;
+    }
+
+    if (replacement.size() != 69u)
+        return false;
+
+    const auto begin = sa.offset;
+    const auto end = gn.offset + gn.length;
+    if (end <= begin ||
+        end - begin != 63u ||
+        end > words.size())
+        return false;
+
+    try {
+        words.erase(
+            words.begin() + static_cast<std::ptrdiff_t>(begin),
+            words.begin() + static_cast<std::ptrdiff_t>(end));
+        words.insert(
+            words.begin() + static_cast<std::ptrdiff_t>(begin),
+            replacement.begin(),
+            replacement.end());
+    } catch (...) {
+        return false;
+    }
+
+    words[1] = static_cast<std::uint32_t>(words.size());
+
+    // Construction postcondition: exact replacement occurs once and the
+    // DSR-only cb0[79].x gain instruction is absent from this semantic cut.
+    if (!contains_exact_subsequence(words, replacement))
+        return false;
+
+    std::vector<std::uint8_t> rebuilt;
+    if (!rebuild(
+            bytes.data(),
+            bytes.size(),
+            std::move(chunks),
+            code_index,
+            words,
+            rebuilt))
+        return false;
+
+    std::vector<chunk> verify_chunks;
+    std::vector<std::uint32_t> verify_words;
+    std::size_t verify_code = 0u;
+    if (!parse_dxbc(
+            rebuilt.data(),
+            rebuilt.size(),
+            verify_chunks,
+            verify_code,
+            verify_words) ||
+        !contains_exact_subsequence(
+            verify_words,
+            replacement) ||
+        sample_count(verify_words, 11u) != 1u ||
+        sample_count(verify_words, 13u) != 1u)
+        return false;
+
+    bytes = std::move(rebuilt);
+    return true;
+}
+#endif
 
 std::size_t adjacent_pair_count(
     const std::vector<std::uint32_t> &words,
@@ -1324,7 +1562,19 @@ materialize_pmetal_rgba_lerp_receiver(
         return outcome;
     }
 
+#if defined(DSRRL_PMETAL_R19_LERP_PTDE_ENVDIFFUSE)
+    if (!apply_exact_ptde_envdiffuse_lerp_consumer(
+            spec_rgb_base)) {
+        outcome.result =
+            pmetal_rgba_lerp_materialize_result::fail_postcondition;
+        return outcome;
+    }
+    outcome.envdiffuse_preserved = false;
+    outcome.envdiffuse_ptde_consumer = true;
+#else
     outcome.envdiffuse_preserved = true;
+    outcome.envdiffuse_ptde_consumer = false;
+#endif
     outcome.upper_lower_composed =
         compose_upper_lower;
     outcome.upper_lower_preserved_stock =
