@@ -3089,6 +3089,7 @@ bool apply_build131(
             instructions))
         return false;
 
+#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_R8_PRE_AB)
     // R8: recover the complete legacy PRE receiver before applying the
     // existing Build131 C/D/F material/resource island.
     if (!apply_pmetal_pre_ab(
@@ -3098,6 +3099,7 @@ bool apply_build131(
             words,
             instructions))
         return false;
+#endif
 
     std::optional<instruction_view> sampler9;
     std::optional<instruction_view> texture9;
