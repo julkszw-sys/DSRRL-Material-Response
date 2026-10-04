@@ -711,6 +711,14 @@ void clustered_pnts_selector_event_bridge(
             actual_material);
 }
 
+void clustered_pnts_selector_identity_event_bridge(
+    const operators::material_response::material_identity &identity) noexcept
+{
+    if (g_runtime != nullptr)
+        g_runtime->selector_identity_event(
+            identity);
+}
+
 bool clustered_pnts_draw_runtime::install() noexcept
 {
     if (g_enabled.load())
