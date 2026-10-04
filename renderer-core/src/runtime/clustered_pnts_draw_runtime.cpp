@@ -83,6 +83,12 @@ struct gpu_resources {
     ID3D11Buffer *t19_buffer = nullptr;
     ID3D11ShaderResourceView *t19_srv = nullptr;
     ID3D11Buffer *b12 = nullptr;
+    std::uint64_t generation = 0u;
+};
+
+struct upload_identity_tls {
+    ID3D11DeviceContext *context = nullptr;
+    std::uint64_t generation = 0u;
     std::array<operators::point_light::clustered_t18_record_v1,4>
         last_t18{};
     std::array<std::array<float,4>,4> last_t19{};
@@ -92,6 +98,32 @@ struct gpu_resources {
     bool last_t19_valid = false;
     bool last_b12_valid = false;
 };
+
+thread_local std::array<upload_identity_tls,8>
+    g_upload_identity_cache{};
+thread_local std::uint8_t g_upload_identity_victim = 0u;
+std::atomic<std::uint64_t> g_gpu_generation{1u};
+
+upload_identity_tls &upload_identity_for(
+    ID3D11DeviceContext *context,
+    std::uint64_t generation) noexcept
+{
+    for (auto &entry : g_upload_identity_cache) {
+        if (entry.context == context &&
+            entry.generation == generation)
+            return entry;
+    }
+
+    auto &entry =
+        g_upload_identity_cache[
+            static_cast<std::size_t>(
+                g_upload_identity_victim++) %
+            g_upload_identity_cache.size()];
+    entry = {};
+    entry.context = context;
+    entry.generation = generation;
+    return entry;
+}
 
 std::mutex g_resource_mutex;
 // Dynamic DISCARD payloads are recording-context local. A shared resource
@@ -657,6 +689,15 @@ bool ensure_gpu_locked(
 
     gpu.device = device;
     gpu.device->AddRef();
+    gpu.generation =
+        g_gpu_generation.fetch_add(
+            1u,
+            std::memory_order_relaxed);
+    if (gpu.generation == 0u)
+        gpu.generation =
+            g_gpu_generation.fetch_add(
+                1u,
+                std::memory_order_relaxed);
     out = &gpu;
     return true;
 }
@@ -757,6 +798,8 @@ void clustered_pnts_draw_runtime::uninstall() noexcept
     g_enabled.store(false);
     consume_draw_selection();
     g_source_selection_cache = {};
+    g_upload_identity_cache = {};
+    g_upload_identity_victim = 0u;
     g_producer_input_tls = {};
     g_local_serial = 0u;
 
@@ -1168,6 +1211,7 @@ bool clustered_pnts_draw_runtime::prepare_sidecar(
     bool upload_t18 = true;
     bool upload_t19 = true;
     bool upload_b12 = true;
+    std::uint64_t gpu_generation = 0u;
 
     {
         std::lock_guard<std::mutex> lock(
@@ -1205,24 +1249,7 @@ bool clustered_pnts_draw_runtime::prepare_sidecar(
         t19_srv = gpu->t19_srv;
         b12 = gpu->b12;
 
-        upload_t18 =
-            !gpu->last_t18_valid ||
-            std::memcmp(
-                gpu->last_t18.data(),
-                payload.t18.data(),
-                sizeof(payload.t18)) != 0;
-        upload_t19 =
-            !gpu->last_t19_valid ||
-            std::memcmp(
-                gpu->last_t19.data(),
-                payload.t19.data(),
-                sizeof(payload.t19)) != 0;
-        upload_b12 =
-            !gpu->last_b12_valid ||
-            std::memcmp(
-                gpu->last_b12.data(),
-                payload.b12.data(),
-                sizeof(payload.b12)) != 0;
+        gpu_generation = gpu->generation;
 
         // Keep the exact carrier alive after releasing g_resource_mutex. The
         // destroy-device path may remove the cache entry concurrently, but it
@@ -1235,6 +1262,29 @@ bool clustered_pnts_draw_runtime::prepare_sidecar(
     }
 
     device->Release();
+
+    auto &upload_identity =
+        upload_identity_for(
+            context,
+            gpu_generation);
+    upload_t18 =
+        !upload_identity.last_t18_valid ||
+        std::memcmp(
+            upload_identity.last_t18.data(),
+            payload.t18.data(),
+            sizeof(payload.t18)) != 0;
+    upload_t19 =
+        !upload_identity.last_t19_valid ||
+        std::memcmp(
+            upload_identity.last_t19.data(),
+            payload.t19.data(),
+            sizeof(payload.t19)) != 0;
+    upload_b12 =
+        !upload_identity.last_b12_valid ||
+        std::memcmp(
+            upload_identity.last_b12.data(),
+            payload.b12.data(),
+            sizeof(payload.b12)) != 0;
 
     const bool uploaded =
         (!upload_t18 ||
@@ -1256,29 +1306,18 @@ bool clustered_pnts_draw_runtime::prepare_sidecar(
              payload.b12.data(),
              sizeof(payload.b12)));
 
-    if (uploaded &&
-        (upload_t18 || upload_t19 || upload_b12)) {
-        std::lock_guard<std::mutex> lock(
-            g_resource_mutex);
-        const auto found =
-            g_gpu_by_context.find(context);
-        if (found != g_gpu_by_context.end() &&
-            found->second.t18_buffer == t18_buffer &&
-            found->second.t19_buffer == t19_buffer &&
-            found->second.b12 == b12) {
-            auto &gpu = found->second;
-            if (upload_t18) {
-                gpu.last_t18 = payload.t18;
-                gpu.last_t18_valid = true;
-            }
-            if (upload_t19) {
-                gpu.last_t19 = payload.t19;
-                gpu.last_t19_valid = true;
-            }
-            if (upload_b12) {
-                gpu.last_b12 = payload.b12;
-                gpu.last_b12_valid = true;
-            }
+    if (uploaded) {
+        if (upload_t18) {
+            upload_identity.last_t18 = payload.t18;
+            upload_identity.last_t18_valid = true;
+        }
+        if (upload_t19) {
+            upload_identity.last_t19 = payload.t19;
+            upload_identity.last_t19_valid = true;
+        }
+        if (upload_b12) {
+            upload_identity.last_b12 = payload.b12;
+            upload_identity.last_b12_valid = true;
         }
     }
 
