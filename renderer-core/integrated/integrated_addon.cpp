@@ -7613,7 +7613,7 @@ bool AddonInit(
             reshade::log::level::info,
 #if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_R10_LOCAL_UL)
             "[DSRRL CORE+ISLANDS " DSRRL_CORE_ISLANDS_VERSION
-            "] Upper/Lower visible bridge DISABLED by runtime policy: stock DSR U/L preserved; reference-only LightBank transport is permitted solely for P_Metal R10 local hemisphere."
+            "] Upper/Lower visible bridge DISABLED by runtime policy: stock DSR U/L preserved; shared U/L LightBank hooks are not installed. P_Metal R10C local hemisphere is carried independently by EnvSource -> draw-local b13."
 #else
             "[DSRRL CORE+ISLANDS " DSRRL_CORE_ISLANDS_VERSION
             "] Upper/Lower visible bridge DISABLED by runtime policy: stock DSR U/L preserved; LightBank U/L/reference hooks are not installed."
