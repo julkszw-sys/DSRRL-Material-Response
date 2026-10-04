@@ -1170,6 +1170,9 @@ bool clustered_pnts_draw_runtime::prepare_sidecar(
     ID3D11Buffer *t19_buffer = nullptr;
     ID3D11ShaderResourceView *t19_srv = nullptr;
     ID3D11Buffer *b12 = nullptr;
+    bool upload_t18 = true;
+    bool upload_t19 = true;
+    bool upload_b12 = true;
 
     {
         std::lock_guard<std::mutex> lock(
@@ -1207,6 +1210,25 @@ bool clustered_pnts_draw_runtime::prepare_sidecar(
         t19_srv = gpu->t19_srv;
         b12 = gpu->b12;
 
+        upload_t18 =
+            !gpu->last_t18_valid ||
+            std::memcmp(
+                gpu->last_t18.data(),
+                payload.t18.data(),
+                sizeof(payload.t18)) != 0;
+        upload_t19 =
+            !gpu->last_t19_valid ||
+            std::memcmp(
+                gpu->last_t19.data(),
+                payload.t19.data(),
+                sizeof(payload.t19)) != 0;
+        upload_b12 =
+            !gpu->last_b12_valid ||
+            std::memcmp(
+                gpu->last_b12.data(),
+                payload.b12.data(),
+                sizeof(payload.b12)) != 0;
+
         // Keep the exact carrier alive after releasing g_resource_mutex. The
         // destroy-device path may remove the cache entry concurrently, but it
         // cannot destroy resources retained here until this prepare completes.
@@ -1220,21 +1242,50 @@ bool clustered_pnts_draw_runtime::prepare_sidecar(
     device->Release();
 
     const bool uploaded =
-        update_buffer(
-            context,
-            t18_buffer,
-            payload.t18.data(),
-            sizeof(payload.t18)) &&
-        update_buffer(
-            context,
-            t19_buffer,
-            payload.t19.data(),
-            sizeof(payload.t19)) &&
-        update_buffer(
-            context,
-            b12,
-            payload.b12.data(),
-            sizeof(payload.b12));
+        (!upload_t18 ||
+         update_buffer(
+             context,
+             t18_buffer,
+             payload.t18.data(),
+             sizeof(payload.t18))) &&
+        (!upload_t19 ||
+         update_buffer(
+             context,
+             t19_buffer,
+             payload.t19.data(),
+             sizeof(payload.t19))) &&
+        (!upload_b12 ||
+         update_buffer(
+             context,
+             b12,
+             payload.b12.data(),
+             sizeof(payload.b12)));
+
+    if (uploaded &&
+        (upload_t18 || upload_t19 || upload_b12)) {
+        std::lock_guard<std::mutex> lock(
+            g_resource_mutex);
+        const auto found =
+            g_gpu_by_context.find(context);
+        if (found != g_gpu_by_context.end() &&
+            found->second.t18_buffer == t18_buffer &&
+            found->second.t19_buffer == t19_buffer &&
+            found->second.b12 == b12) {
+            auto &gpu = found->second;
+            if (upload_t18) {
+                gpu.last_t18 = payload.t18;
+                gpu.last_t18_valid = true;
+            }
+            if (upload_t19) {
+                gpu.last_t19 = payload.t19;
+                gpu.last_t19_valid = true;
+            }
+            if (upload_b12) {
+                gpu.last_b12 = payload.b12;
+                gpu.last_b12_valid = true;
+            }
+        }
+    }
 
     // Buffer refs are temporary upload-lifetime guards. SRV/b12 refs transfer
     // to prepared and are released by release_prepared_draw().
