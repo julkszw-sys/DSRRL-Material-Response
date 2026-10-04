@@ -1651,6 +1651,10 @@ bool same_hook_source_payload(
         a.envdiffuse_b == b.envdiffuse_b &&
         a.envdiffuse_linear_valid ==
             b.envdiffuse_linear_valid &&
+        a.upper == b.upper &&
+        a.lower == b.lower &&
+        a.upper_lower_linear_valid ==
+            b.upper_lower_linear_valid &&
         a.beta == b.beta &&
         a.bank_signature_a == b.bank_signature_a &&
         a.bank_signature_b == b.bank_signature_b &&
@@ -1663,6 +1667,8 @@ void publish_hook_source(
     const f4 &b,
     const f4 &envdiffuse_a,
     const f4 &envdiffuse_b,
+    const f4 &upper,
+    const f4 &lower,
     float beta,
     std::uint64_t bank_a,
     std::uint64_t bank_b,
@@ -1686,6 +1692,17 @@ void publish_hook_source(
         envdiffuse_b.z
     };
     next.envdiffuse_linear_valid = true;
+    next.upper = {
+        upper.x,
+        upper.y,
+        upper.z
+    };
+    next.lower = {
+        lower.x,
+        lower.y,
+        lower.z
+    };
+    next.upper_lower_linear_valid = true;
     next.beta =
         std::clamp(
             beta,
