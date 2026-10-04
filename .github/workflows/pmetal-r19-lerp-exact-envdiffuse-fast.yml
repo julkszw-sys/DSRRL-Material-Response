@@ -46,7 +46,7 @@ jobs:
           -A x64
           -DRESHADE_INCLUDE_DIR="${{ github.workspace }}/_reshade/include"
           -DDSRRL_SOURCE_COMMIT="$env:DSRRL_CHECKOUT_COMMIT"
-          -DDSRRL_BUILD_FLAVOR="pmetal_r19_lerp_exact_envdiffuse_ab_beta"
+          -DDSRRL_BUILD_FLAVOR="pmetal_r19_lerp_ptde_materialworkflow_envdiffuse_ab_beta"
           -DDSRRL_FULL_TELEMETRY_DEFAULT_ON=ON
           -DDSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG=ON
           -DDSRRL_PMETAL_FULL_PTDE_HEMENV_R3=ON
@@ -59,6 +59,7 @@ jobs:
           -DDSRRL_PMETAL_FULL_PTDE_HEMENV_R15_PTDE_LIVEOUT_PAIR=ON
           -DDSRRL_PMETAL_FULL_PTDE_HEMENV_R16_LEGACY_DIFFUSE_SPLIT=ON
           -DDSRRL_PMETAL_FULL_PTDE_HEMENV_R17_PTDE_DIFFUSE_MATERIAL=ON
+          -DDSRRL_PMETAL_R19_LERP_MATERIALWORKFLOW=ON
           -DDSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE=ON
           -DDSRRL_PHYSICAL_CUT_UL_H3_SUBSURFACE=ON
 
@@ -77,7 +78,7 @@ jobs:
           $path = "DSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE.addon64"
           $ascii = [System.Text.Encoding]::ASCII.GetString([System.IO.File]::ReadAllBytes($path))
           if (-not $ascii.Contains($env:DSRRL_CHECKOUT_COMMIT)) { throw "Missing source commit identity" }
-          if (-not $ascii.Contains("pmetal_r19_lerp_exact_envdiffuse_ab_beta")) { throw "Missing R19 build flavor identity" }
+          if (-not $ascii.Contains("pmetal_r19_lerp_ptde_materialworkflow_envdiffuse_ab_beta")) { throw "Missing R19 build flavor identity" }
           if (-not $ascii.Contains("[DSRRL PMETAL R19 LERP]")) { throw "Missing exact R19 Lerp EnvDiffuse runtime marker" }
           if (-not $ascii.Contains("[DSRRL PMETAL R7 SHADOW]")) { throw "Missing cumulative R7 shadow marker" }
           if (-not $ascii.Contains("[DSRRL PMETAL R3 SPEC ATTEST]")) { throw "Missing exact SpecRGB SHA attestation marker" }
