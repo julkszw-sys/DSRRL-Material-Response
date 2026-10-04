@@ -15,6 +15,13 @@ struct pmetal_envspec_source {
     std::array<float,3> envdiffuse_a{};
     std::array<float,3> envdiffuse_b{};
     bool envdiffuse_linear_valid = false;
+    // R10C: exact PTDE-authored Upper/Lower endpoints recovered in the
+    // material-specific P_Metal source cut before DSR's pow2.2/x1.5
+    // producer transforms. These ride the existing P_Metal source token;
+    // no global U/L runtime or additional draw request is involved.
+    std::array<float,3> upper_ptde{};
+    std::array<float,3> lower_ptde{};
+    bool upper_lower_valid = false;
     float beta = 0.0f;
     // PTDE PHN terminal scene encoding k135=c135.x/c135.y. The carrier is
     // explicit even before producer RE is complete so consumers do not regress
