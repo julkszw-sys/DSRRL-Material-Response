@@ -2906,6 +2906,185 @@ bool apply_exact_ptde_shadow_visibility_r7(
 // operator stays stock DSR until explicitly reopened; no latent compile-time
 // switch or alternate FogRGB carrier is retained in this lineage.
 
+#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_R6) && defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_R10E_ATMOSPHERE)
+// R10E restores the confirmed PTDE atmosphere-domain continuation after the
+// cumulative R10D P_Metal surface island. Critical ABI correction: the V4B
+// pre-Fog transform reads stock DSR cb0[12].xyz (FogRGB in the primary host
+// constant buffer). It does NOT read the custom DSRRL constant-buffer binding
+// b12 used by the P_Metal carrier, so there is no b12[0]/c101 collision.
+// Exact rx33/rx34/rx35 share the same local topology; absolute offsets move
+// across cumulative edits, so resolve the semantic pattern rather than using
+// historical fixed word offsets.
+bool apply_exact_ptde_atmosphere_domain_r10e(
+    std::vector<std::uint8_t> &bytes) noexcept
+{
+    std::vector<chunk> chunks;
+    std::vector<std::uint32_t> words;
+    std::vector<instruction_view> instructions;
+    std::size_t code_index = 0u;
+
+    if (!parse_dxbc(
+            bytes.data(),
+            bytes.size(),
+            chunks,
+            code_index) ||
+        !extract_words(
+            chunks,
+            code_index,
+            words) ||
+        !decode(
+            words,
+            instructions))
+        return false;
+
+    constexpr std::array<std::uint32_t,21>
+        k_ptde_prefog{{
+            0x0600002fu,
+            0x00100072u,0x00000002u,
+            0x00208246u,0x00000000u,0x0000000cu,
+            0x0a000038u,
+            0x00100072u,0x00000002u,
+            0x00100246u,0x00000002u,
+            0x00004002u,
+            0x3ee8ba2fu,0x3ee8ba2fu,0x3ee8ba2fu,0x00000000u,
+            0x05000019u,
+            0x00100072u,0x00000002u,
+            0x00100246u,0x00000002u
+        }};
+
+    constexpr std::array<std::uint32_t,9>
+        k_ptde_fog_add{{
+            0x09000000u,
+            0x00100072u,0x00000002u,
+            0x80100246u,0x00000041u,0x00000001u,
+            0x80100246u,0x00000081u,0x00000002u
+        }};
+
+    constexpr std::size_t k_fog_add_delta = 34u;
+    constexpr std::size_t k_post_ls_pow_delta = 238u;
+    constexpr std::size_t k_terminal_delta = 374u;
+
+    std::size_t prefog =
+        static_cast<std::size_t>(-1);
+    std::size_t candidates = 0u;
+
+    for (const auto &ins : instructions) {
+        if (ins.opcode != 0x2fu ||
+            ins.length != 6u)
+            continue;
+
+        const auto at = ins.offset;
+        const auto fog_add =
+            at + k_fog_add_delta;
+        const auto post_pow =
+            at + k_post_ls_pow_delta;
+        const auto terminal =
+            at + k_terminal_delta;
+
+        if (terminal + 4u >= words.size() ||
+            at + 20u >= words.size() ||
+            fog_add + 8u >= words.size() ||
+            post_pow + 20u >= words.size())
+            continue;
+
+        const bool first_gamma =
+            words[at] == 0x0600002fu &&
+            words[at + 6u] == 0x0a000038u &&
+            words[at + 16u] == 0x05000019u;
+        const bool fog_shape =
+            words[fog_add] == 0x09000000u;
+        const bool second_gamma =
+            words[post_pow] == 0x0600002fu &&
+            words[post_pow + 6u] == 0x0a000038u &&
+            words[post_pow + 16u] == 0x05000019u;
+        const bool terminal_shape =
+            words[terminal] == 0x05000036u &&
+            words[terminal + 1u] == 0x00102072u &&
+            words[terminal + 2u] == 0u;
+
+        if (!first_gamma ||
+            !fog_shape ||
+            !second_gamma ||
+            !terminal_shape)
+            continue;
+
+        ++candidates;
+        prefog = at;
+    }
+
+    if (candidates != 1u ||
+        prefog ==
+            static_cast<std::size_t>(-1))
+        return false;
+
+    const auto fog_add =
+        prefog + k_fog_add_delta;
+    const auto post_pow =
+        prefog + k_post_ls_pow_delta;
+
+    std::copy(
+        k_ptde_prefog.begin(),
+        k_ptde_prefog.end(),
+        words.begin() +
+            static_cast<std::ptrdiff_t>(
+                prefog));
+
+    std::copy(
+        k_ptde_fog_add.begin(),
+        k_ptde_fog_add.end(),
+        words.begin() +
+            static_cast<std::ptrdiff_t>(
+                fog_add));
+
+    std::fill(
+        words.begin() +
+            static_cast<std::ptrdiff_t>(
+                post_pow),
+        words.begin() +
+            static_cast<std::ptrdiff_t>(
+                post_pow + 21u),
+        0x0100003au);
+
+    if (!std::equal(
+            k_ptde_prefog.begin(),
+            k_ptde_prefog.end(),
+            words.begin() +
+                static_cast<std::ptrdiff_t>(
+                    prefog)) ||
+        !std::equal(
+            k_ptde_fog_add.begin(),
+            k_ptde_fog_add.end(),
+            words.begin() +
+                static_cast<std::ptrdiff_t>(
+                    fog_add)) ||
+        !std::all_of(
+            words.begin() +
+                static_cast<std::ptrdiff_t>(
+                    post_pow),
+            words.begin() +
+                static_cast<std::ptrdiff_t>(
+                    post_pow + 21u),
+            [](std::uint32_t word) noexcept {
+                return word == 0x0100003au;
+            }))
+        return false;
+
+    std::vector<std::uint8_t> rebuilt;
+    if (!rebuild(
+            bytes.data(),
+            bytes.size(),
+            std::move(chunks),
+            code_index,
+            words,
+            rebuilt))
+        return false;
+
+    bytes = std::move(rebuilt);
+    return true;
+}
+#endif
+
+
 bool apply_linear_envdiffuse_consumer_diag(
     std::vector<std::uint8_t> &bytes) noexcept
 {
@@ -4509,6 +4688,21 @@ materialize_pmetal_rgba_receiver(
             std::move(ul);
         outcome.upper_lower_composed =
             true;
+    }
+#endif
+
+#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_R10E_ATMOSPHERE)
+    // R10E keeps the cumulative PTDE surface operators intact and changes
+    // only the downstream atmosphere-domain continuation. The recovered
+    // transform consumes stock cb0[12] FogRGB, preserves the existing
+    // LightScattering kernel, removes the DSR-only post-scattering x^2.2
+    // continuation, and leaves the later source-gated c135/SAT step intact.
+    if (!apply_exact_ptde_atmosphere_domain_r10e(
+            base)) {
+        outcome.result =
+            pmetal_rgba_materialize_result::
+                fail_postcondition;
+        return outcome;
     }
 #endif
 
