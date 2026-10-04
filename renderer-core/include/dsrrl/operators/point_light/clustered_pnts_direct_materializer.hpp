@@ -33,6 +33,17 @@ struct clustered_pnts_direct_materialize_outcome {
     // bytecode. These are shader ownership only: their stock inputs remain
     // host-owned unless another draw-local bridge explicitly replaces them.
     core::operator_mask composed_shader_owners = 0u;
+
+    // The historical direct-PTDE journal was authored against the original
+    // PointLight-specific b12 ABI. Runtime-v2 shares the post-reset MR carrier,
+    // so materialization must migrate the exact inserted operands before the
+    // replacement can be registered.
+    bool current_b12_abi = false;
+
+    // Spc only: true iff the exact direct-PTDE legacy local-specular body and
+    // its current b12 c101/c102 material operands are both attested. Runtime
+    // must fail open on Spc unless this bit survives candidate registration.
+    bool legacy_specular_complete = false;
 };
 
 constexpr core::operator_mask
