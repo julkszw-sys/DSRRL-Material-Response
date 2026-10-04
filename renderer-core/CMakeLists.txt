@@ -620,8 +620,7 @@ if(DSRRL_BUILD_PMETAL_R11_OFFLINE_TEST)
         dsrrl_pmetal_r11_offline_test
         tests/pmetal_r11_materializer_test.cpp
         src/operators/material_response/material_response_diffuse_v1.cpp
-        src/operators/env_spec/pmetal_rgba_materializer.cpp
-        src/operators/lightbank/upper_lower_hemenv_materializer.cpp)
+        src/operators/env_spec/pmetal_rgba_materializer.cpp)
 
     target_link_libraries(
         dsrrl_pmetal_r11_offline_test
