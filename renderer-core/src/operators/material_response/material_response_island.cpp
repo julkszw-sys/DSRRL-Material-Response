@@ -641,18 +641,9 @@ evaluate_direct_pointlight_material_identity(
     if (!material.valid)
         return {false, decision_reason::material_required, 0u};
 
-    const auto authority =
-        resolve_direct_pointlight_authority(
-            material);
-    if (!authority.has_value())
-        return {
-            false,
-            decision_reason::unknown_material,
-            0u
-        };
-
     if (!material.owner_tuple_exact ||
         !material.material_slot_valid ||
+        material.semantic_name_hash == 0u ||
         !generated::dsr_flver_owner_tuple_authenticated(
             material.flver_sha256,
             material.material_slot,
@@ -660,6 +651,16 @@ evaluate_direct_pointlight_material_identity(
         return {
             false,
             decision_reason::owner_tuple_not_authenticated,
+            0u
+        };
+
+    const auto authority =
+        resolve_direct_pointlight_authority(
+            material);
+    if (!authority.has_value())
+        return {
+            false,
+            decision_reason::unknown_material,
             0u
         };
 
