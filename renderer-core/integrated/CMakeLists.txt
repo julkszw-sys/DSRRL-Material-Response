@@ -1,4 +1,9 @@
-cmake_minimum_required(VERSION 3.20)
+c
+
+option(
+    DSRRL_PMETAL_HEMENVLERP_R18_R17_PARITY
+    "P_Metal R18: extend validated R17 operator parity to exact HemEnvLerp"
+    OFF)make_minimum_required(VERSION 3.20)
 
 project(DSRRLCoreIslands LANGUAGES CXX ASM_MASM)
 
