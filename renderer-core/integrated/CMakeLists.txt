@@ -147,6 +147,11 @@ option(
     OFF)
 
 option(
+    DSRRL_R20_CLUSTERED_SPC_LEGACY_SPECULAR
+    "R20: complete clustered Spc PntS PTDE legacy local-specular branch with exact SpecRGB t10/t16 and anti-hybrid output cut"
+    OFF)
+
+option(
     DSRRL_POINTLIGHT_DRAWTIME_BYPASS
     "Diagnostic: disable PointLight producer hooks, runtime pipeline binding and draw-time carrier/replay while preserving all non-PointLight runtime paths"
     OFF)
@@ -818,6 +823,18 @@ if(DSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE)
         dsrrl_renderer_core_integrated
         PRIVATE
         $<$<COMPILE_LANGUAGE:CXX>:DSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE>)
+endif()
+
+if(DSRRL_R20_CLUSTERED_SPC_LEGACY_SPECULAR)
+    if(NOT DSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE)
+        message(FATAL_ERROR
+            "R20 clustered Spc legacy-specular requires the cumulative R19 Lerp/EnvDiffuse lineage")
+    endif()
+
+    target_compile_definitions(
+        dsrrl_renderer_core_integrated
+        PRIVATE
+        $<$<COMPILE_LANGUAGE:CXX>:DSRRL_R20_CLUSTERED_SPC_LEGACY_SPECULAR>)
 endif()
 
 if(DSRRL_POINTLIGHT_DRAWTIME_BYPASS)
