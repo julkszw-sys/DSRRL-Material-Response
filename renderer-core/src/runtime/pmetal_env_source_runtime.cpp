@@ -413,6 +413,9 @@ std::atomic<std::uint64_t> g_hook_single_seen{0u};
 std::atomic<std::uint64_t> g_hook_blend_seen{0u};
 std::atomic<std::uint64_t> g_hook_publish{0u};
 std::atomic<std::uint64_t> g_hook_consume{0u};
+#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_R10C_LOCAL_UL_B12)
+std::atomic_bool g_hook_ul_active_logged{false};
+#endif
 std::atomic<std::uint32_t> g_hook_decode_stage{0u};
 std::atomic<std::uint32_t> g_hook_decode_version{0u};
 std::atomic<std::uint32_t> g_hook_decode_count{0u};
@@ -1669,6 +1672,10 @@ bool same_hook_source_payload(
         a.envdiffuse_b == b.envdiffuse_b &&
         a.envdiffuse_linear_valid ==
             b.envdiffuse_linear_valid &&
+        a.upper == b.upper &&
+        a.lower == b.lower &&
+        a.upper_lower_valid ==
+            b.upper_lower_valid &&
         a.beta == b.beta &&
         a.bank_signature_a == b.bank_signature_a &&
         a.bank_signature_b == b.bank_signature_b &&
@@ -1681,6 +1688,9 @@ void publish_hook_source(
     const f4 &b,
     const f4 &envdiffuse_a,
     const f4 &envdiffuse_b,
+    const std::array<float,3> &upper,
+    const std::array<float,3> &lower,
+    bool upper_lower_valid,
     float beta,
     std::uint64_t bank_a,
     std::uint64_t bank_b,
@@ -1704,6 +1714,19 @@ void publish_hook_source(
         envdiffuse_b.z
     };
     next.envdiffuse_linear_valid = true;
+    next.upper = upper;
+    next.lower = lower;
+    next.upper_lower_valid =
+        upper_lower_valid;
+#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_R10C_LOCAL_UL_B12)
+    if (upper_lower_valid &&
+        !g_hook_ul_active_logged.exchange(
+            true,
+            std::memory_order_relaxed))
+        reshade::log::message(
+            reshade::log::level::info,
+            "[DSRRL PMETAL R10D SOURCE] exact hook-source PTDE Upper/Lower carrier ACTIVE.");
+#endif
     next.beta =
         std::clamp(
             beta,
@@ -1880,12 +1903,37 @@ void __fastcall envspec_single_hook_entry(
             envdiffuse_b);
 #endif
 
-    if (donor_ok && envdiffuse_ok)
+    std::array<float,3> upper{};
+    std::array<float,3> lower{};
+    bool upper_lower_ok = true;
+#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_R10C_LOCAL_UL_B12)
+    upper_lower_ok =
+        donor_ok &&
+        decode_pmetal_upper_lower(
+            source,
+            selector,
+            source,
+            selector,
+            0.0f,
+            upper,
+            lower);
+#endif
+
+    if (donor_ok &&
+        envdiffuse_ok &&
+        upper_lower_ok)
         publish_hook_source(
             donor,
             donor,
             envdiffuse_a,
             envdiffuse_b,
+            upper,
+            lower,
+#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_R10C_LOCAL_UL_B12)
+            true,
+#else
+            false,
+#endif
             0.0f,
             bank,
             bank,
@@ -1978,12 +2026,37 @@ void __fastcall envspec_blend_hook_entry(
             envdiffuse_b);
 #endif
 
-    if (donor_ok && envdiffuse_ok)
+    std::array<float,3> upper{};
+    std::array<float,3> lower{};
+    bool upper_lower_ok = true;
+#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_R10C_LOCAL_UL_B12)
+    upper_lower_ok =
+        donor_ok &&
+        decode_pmetal_upper_lower(
+            source_a,
+            endpoints.a,
+            source_b,
+            endpoints.b,
+            endpoints.beta,
+            upper,
+            lower);
+#endif
+
+    if (donor_ok &&
+        envdiffuse_ok &&
+        upper_lower_ok)
         publish_hook_source(
             a,
             b,
             envdiffuse_a,
             envdiffuse_b,
+            upper,
+            lower,
+#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_R10C_LOCAL_UL_B12)
+            true,
+#else
+            false,
+#endif
             endpoints.beta,
             bank_a,
             bank_b,
