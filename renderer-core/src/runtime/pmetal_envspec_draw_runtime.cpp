@@ -420,6 +420,11 @@ register_replacement(
 #else
         outcome.local_upper_lower_b12_composed ||
 #endif
+#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_R10E_ATMOS_DOMAIN)
+        !outcome.atmosphere_domain_composed ||
+#else
+        outcome.atmosphere_domain_composed ||
+#endif
 #if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_R7_SHADOW)
         (((outcome.receiver_id == 33u ||
            outcome.receiver_id == 34u) &&
@@ -504,6 +509,21 @@ register_replacement(
         payload_sha256;
     record.payload_size =
         dxbc_size;
+
+#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_R10E_ATMOS_DOMAIN)
+    {
+        char line[256]{};
+        std::snprintf(
+            line,
+            sizeof(line),
+            "[DSRRL PMETAL R10E ATMOS] rx=%u PTDE legacy surface->Fog->LightScattering domain continuation registered; stock post-LS pow2.2 removed.",
+            static_cast<unsigned>(
+                outcome.receiver_id));
+        reshade::log::message(
+            reshade::log::level::info,
+            line);
+    }
+#endif
 
     ++replacement_register_ok_;
     return true;
