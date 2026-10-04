@@ -517,11 +517,21 @@ void fixed_pointlight_draw_runtime::uninstall() noexcept
 
 void fixed_pointlight_draw_runtime::selector_event(void *owner) noexcept
 {
-    telemetry::hot_count(g_selector_seen);
-    g_draw_snapshot.reset();
-
     if(!g_enabled.load() || g_quarantined.load() || owner==nullptr)
         return;
+
+    // The FLVER selector is shared renderer infrastructure and may fire tens
+    // of thousands of times per second in scenes that contain only clustered
+    // PointLights. Until the fixed producer has published at least one legal
+    // 2/4-light snapshot, every fixed lookup is guaranteed to miss. Keep that
+    // state as a single cheap acquire-load instead of doing per-event shared
+    // pointer resets and telemetry atomics.
+    if(!g_have_snapshots.load(
+            std::memory_order_acquire))
+        return;
+
+    telemetry::hot_count(g_selector_seen);
+    g_draw_snapshot.reset();
 
     const auto key=reinterpret_cast<std::uintptr_t>(owner);
 
@@ -544,16 +554,6 @@ void fixed_pointlight_draw_runtime::selector_event(void *owner) noexcept
             true
         };
         telemetry::hot_count(g_selector_match);
-        return;
-    }
-
-    // The FLVER selector semantic cut is shared infrastructure, so this
-    // PointLight-local callback can still be invoked at very high frequency
-    // even when the fixed PointLight producer has never published a complete
-    // snapshot. Avoid a guaranteed mutex/map miss in that state.
-    if(!g_have_snapshots.load(
-            std::memory_order_acquire)){
-        telemetry::hot_count(g_selector_stale);
         return;
     }
 
