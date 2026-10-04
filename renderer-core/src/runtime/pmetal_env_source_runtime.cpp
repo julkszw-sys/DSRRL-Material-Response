@@ -2355,8 +2355,9 @@ void pmetal_env_source_selector_event(
         [&](std::int16_t selector,
             f4 &value,
             std::uint64_t &bank,
-            std::uint32_t &row) noexcept {
-            void *source =
+            std::uint32_t &row,
+            void *&source_out) noexcept {
+            source_out =
                 pmetal_selector_policy::
                     source(
                         selector,
@@ -2364,11 +2365,11 @@ void pmetal_env_source_selector_event(
                         lookup);
 
             if (!lookup_valid ||
-                source == nullptr)
+                source_out == nullptr)
                 return false;
 
             return read_exact_source(
-                source,
+                source_out,
                 selector,
                 value,
                 bank,
@@ -2377,13 +2378,16 @@ void pmetal_env_source_selector_event(
 
     f4 a{};
     f4 b{};
+    void *source_a = nullptr;
+    void *source_b = nullptr;
     pmetal_envspec_source next{};
 
     if (!decode(
             endpoints.a,
             a,
             next.bank_signature_a,
-            next.row_id_a)) {
+            next.row_id_a,
+            source_a)) {
         telemetry::hot_count(
             g_decode_fail);
         return;
@@ -2396,6 +2400,7 @@ void pmetal_env_source_selector_event(
 
     if (endpoints.a == endpoints.b) {
         b = a;
+        source_b = source_a;
         next.bank_signature_b =
             next.bank_signature_a;
         next.row_id_b =
@@ -2404,7 +2409,8 @@ void pmetal_env_source_selector_event(
                    endpoints.b,
                    b,
                    next.bank_signature_b,
-                   next.row_id_b)) {
+                   next.row_id_b,
+                   source_b)) {
         telemetry::hot_count(
             g_decode_fail);
         return;
@@ -2427,6 +2433,22 @@ void pmetal_env_source_selector_event(
     };
     next.beta =
         endpoints.beta;
+
+#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_R10C_LOCAL_UL_B12)
+    if (!decode_pmetal_upper_lower(
+            source_a,
+            endpoints.a,
+            source_b,
+            endpoints.b,
+            endpoints.beta,
+            next.upper,
+            next.lower)) {
+        telemetry::hot_count(
+            g_decode_fail);
+        return;
+    }
+    next.upper_lower_valid = true;
+#endif
 
 #if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG)
     f4 envdiffuse_a{};
