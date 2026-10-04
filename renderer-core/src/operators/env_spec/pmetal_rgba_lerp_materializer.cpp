@@ -408,6 +408,15 @@ constexpr std::array<std::uint32_t,4> k_cb13_decl = {{
     0x00000008u
 }};
 
+#if defined(DSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE)
+constexpr std::array<std::uint32_t,4> k_cb13_envdiffuse_decl = {{
+    0x04000059u,
+    0x00208e46u,
+    0x0000000du,
+    0x00000002u
+}};
+#endif
+
 constexpr std::array<std::uint32_t,74> k_ptde_rgba_envspec_chain = {{
     0x8d000048u,0x80000182u,0x00155543u,0x001000f2u,0x00000001u,0x00100796u,0x00000000u,0x00107936u,
     0x0000000cu,0x00106000u,0x0000000cu,0x00004001u,0x00000000u,0x0700000eu,0x001000e2u,0x00000001u,
@@ -420,6 +429,252 @@ constexpr std::array<std::uint32_t,74> k_ptde_rgba_envspec_chain = {{
     0x001000e2u,0x00000001u,0x00100e56u,0x0000000cu,0x0020803au,0x0000000cu,0x00000003u,0x00100e56u,
     0x00000001u,0x01000015u
 }};
+
+#if defined(DSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE)
+bool apply_exact_ptde_envdiffuse_lerp_r19(
+    std::vector<std::uint32_t> &words,
+    const generated_lerp::pmetal_hemenvlerp_site &site) noexcept
+{
+    const auto t11 = static_cast<std::size_t>(site.t11_word);
+    const auto t13 = static_cast<std::size_t>(site.t13_word);
+    const auto b_minus_a =
+        static_cast<std::size_t>(site.envdiff_b_minus_a_word);
+    const auto lerp =
+        static_cast<std::size_t>(site.envdiff_lerp_word);
+    const auto gain =
+        static_cast<std::size_t>(site.envdiff_gain_word);
+    const auto merge =
+        static_cast<std::size_t>(site.merge_word);
+
+    if (t13 != t11 + 21u ||
+        b_minus_a != t11 + 34u ||
+        lerp != t11 + 45u ||
+        gain != t11 + 55u ||
+        merge != t11 + 63u ||
+        merge + 9u > words.size() ||
+        !sample_at(words, t11, 11u) ||
+        !sample_at(words, t13, 13u) ||
+        !opcode_at(words, t11 + 13u, 0x38u, 8u) ||
+        !opcode_at(words, b_minus_a, 0x32u, 11u) ||
+        !opcode_at(words, lerp, 0x32u, 10u) ||
+        !opcode_at(words, gain, 0x38u, 8u) ||
+        !opcode_at(words, merge, 0x32u, 9u))
+        return false;
+
+    const auto a_reg = words[t11 + 4u];
+    const auto b_reg = words[t13 + 4u];
+
+    if (a_reg == b_reg ||
+        a_reg >= 0x1000u ||
+        b_reg >= 0x1000u)
+        return false;
+
+    // Stock DSR A endpoint:
+    //   sample_l rA.xyz, ..., t11, s11
+    //   mul      rA.xyz, rA.xyz, cb0[3].xyz
+    const auto a_mul = t11 + 13u;
+    if (words[a_mul + 1u] != 0x00100072u ||
+        words[a_mul + 2u] != a_reg ||
+        words[a_mul + 3u] != 0x00100246u ||
+        words[a_mul + 4u] != a_reg ||
+        words[a_mul + 5u] != 0x00208246u ||
+        words[a_mul + 6u] != 0u ||
+        words[a_mul + 7u] != 3u)
+        return false;
+
+    // Stock DSR B-A + beta lerp + host-only final gain:
+    //   mad rB.xyz, cb0[1].xyz, rB.xyz, -rA.xyz
+    //   mad rA.xyz, cb0[1].wwww, rB.xyz, rA.xyz
+    //   mul rA.xyz, rA.xyz, cb0[79].x
+    if (words[b_minus_a + 1u] != 0x00100072u ||
+        words[b_minus_a + 2u] != b_reg ||
+        words[b_minus_a + 3u] != 0x00208246u ||
+        words[b_minus_a + 4u] != 0u ||
+        words[b_minus_a + 5u] != 1u ||
+        words[b_minus_a + 6u] != 0x00100246u ||
+        words[b_minus_a + 7u] != b_reg ||
+        words[b_minus_a + 8u] != 0x80100246u ||
+        words[b_minus_a + 9u] != 0x00000041u ||
+        words[b_minus_a + 10u] != a_reg ||
+        words[lerp + 1u] != 0x00100072u ||
+        words[lerp + 2u] != a_reg ||
+        words[lerp + 3u] != 0x0020803au ||
+        words[lerp + 4u] != 0u ||
+        words[lerp + 5u] != 1u ||
+        words[lerp + 6u] != 0x00100246u ||
+        words[lerp + 7u] != b_reg ||
+        words[lerp + 8u] != 0x00100246u ||
+        words[lerp + 9u] != a_reg ||
+        words[gain + 1u] != 0x00100072u ||
+        words[gain + 2u] != a_reg ||
+        words[gain + 3u] != 0x00100246u ||
+        words[gain + 4u] != a_reg ||
+        words[gain + 5u] != 0x00208006u ||
+        words[gain + 6u] != 0u ||
+        words[gain + 7u] != 79u)
+        return false;
+
+    std::array<std::uint32_t,13> sample_a{};
+    std::array<std::uint32_t,13> sample_b{};
+    std::copy_n(
+        words.begin() + static_cast<std::ptrdiff_t>(t11),
+        sample_a.size(),
+        sample_a.begin());
+    std::copy_n(
+        words.begin() + static_cast<std::ptrdiff_t>(t13),
+        sample_b.size(),
+        sample_b.begin());
+
+    // PTDE filters RGBA first, then divides RGB by filtered alpha.
+    sample_a[3] = 0x001000f2u;
+    sample_b[3] = 0x001000f2u;
+
+    const std::array<std::uint32_t,7> div_a{{
+        0x0700000eu,
+        0x001000e2u,a_reg,
+        0x00100e56u,a_reg,
+        0x00100006u,a_reg
+    }};
+    const std::array<std::uint32_t,8> weighted_a{{
+        0x08000038u,
+        0x00100072u,a_reg,
+        0x00100e56u,a_reg,
+        0x00208246u,13u,0u
+    }};
+    const std::array<std::uint32_t,7> div_b{{
+        0x0700000eu,
+        0x001000e2u,b_reg,
+        0x00100e56u,b_reg,
+        0x00100006u,b_reg
+    }};
+    const std::array<std::uint32_t,10> accumulate_b{{
+        0x0a000032u,
+        0x00100072u,a_reg,
+        0x00100246u,b_reg,
+        0x00208246u,13u,1u,
+        0x00100246u,a_reg
+    }};
+
+    // b13[0].xyz = (1-beta)*c86
+    // b13[1].xyz = beta*c84.xyz
+    //
+    // This is exactly:
+    //   A = RGB(t11)/A(t11) * c86
+    //   B = RGB(t13)/A(t13) * c84.xyz
+    //   EnvDiffuse = lerp(A,B,beta)
+    // but preweights the two endpoint coefficients in the CB so the exact
+    // PTDE algebra fits inside DSR's original 63-DWORD EnvDiffuse window.
+    std::size_t out = t11;
+
+    std::copy(
+        sample_a.begin(),
+        sample_a.end(),
+        words.begin() + static_cast<std::ptrdiff_t>(out));
+    out += sample_a.size();
+
+    std::copy(
+        div_a.begin(),
+        div_a.end(),
+        words.begin() + static_cast<std::ptrdiff_t>(out));
+    out += div_a.size();
+
+    std::copy(
+        weighted_a.begin(),
+        weighted_a.end(),
+        words.begin() + static_cast<std::ptrdiff_t>(out));
+    out += weighted_a.size();
+
+    std::copy(
+        sample_b.begin(),
+        sample_b.end(),
+        words.begin() + static_cast<std::ptrdiff_t>(out));
+    out += sample_b.size();
+
+    std::copy(
+        div_b.begin(),
+        div_b.end(),
+        words.begin() + static_cast<std::ptrdiff_t>(out));
+    out += div_b.size();
+
+    std::copy(
+        accumulate_b.begin(),
+        accumulate_b.end(),
+        words.begin() + static_cast<std::ptrdiff_t>(out));
+    out += accumulate_b.size();
+
+    if (out > merge)
+        return false;
+
+    std::fill(
+        words.begin() + static_cast<std::ptrdiff_t>(out),
+        words.begin() + static_cast<std::ptrdiff_t>(merge),
+        0x0100003au);
+
+    return out == t11 + 58u &&
+        merge - out == 5u;
+}
+
+bool exact_ptde_envdiffuse_lerp_r19(
+    const std::vector<std::uint32_t> &words,
+    const generated_lerp::pmetal_hemenvlerp_site &site) noexcept
+{
+    constexpr std::size_t k_decl_shift = 4u;
+    const auto t11 =
+        static_cast<std::size_t>(site.t11_word) +
+        k_decl_shift;
+    const auto merge =
+        static_cast<std::size_t>(site.merge_word) +
+        k_decl_shift;
+
+    if (merge != t11 + 63u ||
+        merge + 9u > words.size() ||
+        !sample_at(words, t11, 11u))
+        return false;
+
+    const auto a_reg = words[t11 + 4u];
+    const auto div_a = t11 + 13u;
+    const auto mul_a = div_a + 7u;
+    const auto t13 = mul_a + 8u;
+    const auto div_b = t13 + 13u;
+    const auto mad = div_b + 7u;
+
+    if (!sample_at(words, t13, 13u) ||
+        words[t11 + 3u] != 0x001000f2u ||
+        words[t13 + 3u] != 0x001000f2u ||
+        !opcode_at(words, div_a, 0x0eu, 7u) ||
+        !opcode_at(words, mul_a, 0x38u, 8u) ||
+        !opcode_at(words, div_b, 0x0eu, 7u) ||
+        !opcode_at(words, mad, 0x32u, 10u))
+        return false;
+
+    const auto b_reg = words[t13 + 4u];
+
+    if (words[div_a + 2u] != a_reg ||
+        words[div_a + 4u] != a_reg ||
+        words[div_a + 6u] != a_reg ||
+        words[mul_a + 2u] != a_reg ||
+        words[mul_a + 4u] != a_reg ||
+        words[mul_a + 5u] != 0x00208246u ||
+        words[mul_a + 6u] != 13u ||
+        words[mul_a + 7u] != 0u ||
+        words[div_b + 2u] != b_reg ||
+        words[div_b + 4u] != b_reg ||
+        words[div_b + 6u] != b_reg ||
+        words[mad + 2u] != a_reg ||
+        words[mad + 4u] != b_reg ||
+        words[mad + 5u] != 0x00208246u ||
+        words[mad + 6u] != 13u ||
+        words[mad + 7u] != 1u ||
+        words[mad + 9u] != a_reg)
+        return false;
+
+    for (std::size_t i = mad + 10u; i < merge; ++i)
+        if (words[i] != 0x0100003au)
+            return false;
+
+    return true;
+}
+#endif
 
 bool add_bridge_rdef(
     const std::uint8_t *source,
@@ -446,6 +701,15 @@ bool add_bridge_rdef(
             64u))
         return false;
 
+#if defined(DSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE)
+    if (compose_upper_lower ||
+        !legacy_plan::dxbc::rdef::append_constant_buffer_binding(
+            rdef->payload,
+            "DSRRL_EnvDiffuseLerpCarrier",
+            13u,
+            32u))
+        return false;
+#else
     if (compose_upper_lower &&
         !legacy_plan::dxbc::rdef::append_constant_buffer_binding(
             rdef->payload,
@@ -453,6 +717,7 @@ bool add_bridge_rdef(
             13u,
             128u))
         return false;
+#endif
 
     return rebuild(
         source,
@@ -504,8 +769,13 @@ bool final_postcondition(
         legacy_plan::dxbc::rdef::has_constant_buffer_binding(
             rdef->payload,
             13u);
+#if defined(DSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE)
+    if (!has_cb13 || upper_lower_composed)
+        return false;
+#else
     if (has_cb13 != upper_lower_composed)
         return false;
+#endif
 
     if (site.t11_word <= site.t12_word ||
         site.postblend_word < site.t12_word ||
@@ -540,11 +810,20 @@ bool final_postcondition(
     // logic from being reintroduced inside the EnvSpec semantic cut.
     if (!contains_exact_subsequence(
             words,
-            expected_envspec_cut) ||
-        !contains_exact_subsequence(
+            expected_envspec_cut))
+        return false;
+
+#if defined(DSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE)
+    if (!exact_ptde_envdiffuse_lerp_r19(
+            words,
+            site))
+        return false;
+#else
+    if (!contains_exact_subsequence(
             words,
             preserved_envdiffuse))
         return false;
+#endif
 
     const bool upper_lower_shape_ok =
         upper_lower_composed
@@ -1165,8 +1444,18 @@ materialize_pmetal_rgba_lerp_receiver(
         words.begin() + static_cast<std::ptrdiff_t>(site->t11_word),
         0x0100003au);
 
-    // The independent EnvDiffuse A/B+beta block and its common merge are
-    // outside the responsible EnvSpec cut and must remain byte-identical.
+#if defined(DSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE)
+    if (!apply_exact_ptde_envdiffuse_lerp_r19(
+            words,
+            *site)) {
+        outcome.result =
+            pmetal_rgba_lerp_materialize_result::
+                fail_operator_precondition;
+        return outcome;
+    }
+#else
+    // Until the exact Lerp EnvDiffuse port is enabled, preserve the stock DSR
+    // A/B+beta block byte-for-byte.
     if (!std::equal(
             preserved_envdiffuse.begin(),
             preserved_envdiffuse.end(),
@@ -1177,6 +1466,7 @@ materialize_pmetal_rgba_lerp_receiver(
                 fail_operator_precondition;
         return outcome;
     }
+#endif
 
     // Upper/Lower is independent from EnvSpec. Compose PTDE b13 only when the
     // U/L feature is explicitly enabled. With U/L OFF, preserve the exact
@@ -1227,6 +1517,28 @@ materialize_pmetal_rgba_lerp_receiver(
         return outcome;
     }
 
+#if defined(DSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE)
+    if (compose_upper_lower) {
+        outcome.result =
+            pmetal_rgba_lerp_materialize_result::
+                fail_upper_lower_consumer;
+        return outcome;
+    }
+    try {
+        words.insert(
+            words.begin() + 15,
+            k_cb13_envdiffuse_decl.begin(),
+            k_cb13_envdiffuse_decl.end());
+    } catch (...) {
+        outcome.result =
+            pmetal_rgba_lerp_materialize_result::
+                fail_rebuild;
+        return outcome;
+    }
+    words[1] +=
+        static_cast<std::uint32_t>(
+            k_cb13_envdiffuse_decl.size());
+#else
     if (compose_upper_lower) {
         try {
             words.insert(
@@ -1243,6 +1555,7 @@ materialize_pmetal_rgba_lerp_receiver(
             static_cast<std::uint32_t>(
                 k_cb13_decl.size());
     }
+#endif
 
     std::vector<std::uint8_t> envspec_base;
     if (!add_bridge_rdef(
@@ -1324,7 +1637,12 @@ materialize_pmetal_rgba_lerp_receiver(
         return outcome;
     }
 
+#if defined(DSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE)
+    outcome.envdiffuse_preserved = false;
+    outcome.envdiffuse_ptde_lerp_composed = true;
+#else
     outcome.envdiffuse_preserved = true;
+#endif
     outcome.upper_lower_composed =
         compose_upper_lower;
     outcome.upper_lower_preserved_stock =
