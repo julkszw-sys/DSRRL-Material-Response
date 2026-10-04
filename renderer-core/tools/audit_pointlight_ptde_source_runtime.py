@@ -105,17 +105,19 @@ device_release_pos=prepare.index('device->Release();',lock_pos)
 if not (lock_pos < device_release_pos < upload_pos):
     raise SystemExit('Clustered PointLight upload must occur after lookup/create lock scope and retained-resource handoff')
 
-# Clustered Spc is not production-complete until its stock DSR
-# microfacet/GGX local-specular window is replaced by the exact PTDE legacy
-# kernel. NoSpc remains a valid attenuation/diffuse island.
+# Clustered Spc is production-authorized only after the exact historical
+# direct-PTDE replacement and its current Runtime-v2 b12 migration both
+# attest successfully. Never accept a partial hybrid with stale material
+# operands or incomplete legacy-specular ownership.
 for token in [
-    'clustered_spc_failopen_unmaterialized_legacy_specular',
-    'if (prepared.clustered_shader.spc)',
+    'clustered_spc_failopen_legacy_specular_attestation',
+    '!prepared.clustered_shader.current_b12_abi',
+    '!prepared.clustered_shader.legacy_specular_complete',
     'g_clustered_pnts_pipeline.release_prepared_shader('
 ]:
     require(integrated,token)
-require(ownership,'Spc=FAIL_OPEN until local_specular_legacy microfacet window is exactly materialized')
-require(ownership,'Spc still contains the stock DSR microfacet local-specular window')
+require(ownership,'Spc=local_specular_legacy only after current_b12_abi + legacy_specular_complete attestation')
+require(ownership,'Spc replay is permitted only when both current_b12_abi and legacy_specular_complete survive candidate registration')
 
 shader=read('src/operators/point_light/fixed_local_specular_single_materializer.cpp')
 for token in [
