@@ -205,6 +205,7 @@ add_library(dsrrl_renderer_core STATIC
     src/operators/env_spec/no_spc_envspec_delete.cpp
     src/operators/surface/terminal_sat_rgb_patch.cpp
     src/operators/surface/faceeye_shadow.cpp
+    src/operators/surface/pmetal_shadow_visibility.cpp
     src/operators/point_light/pnts_attenuation.cpp
     src/operators/point_light/clustered_sidecar.cpp
     src/operators/point_light/clustered_pnts_direct_materializer.cpp
@@ -356,6 +357,11 @@ target_compile_features(dsrrl_renderer_future_runtime_tests PRIVATE cxx_std_17)
 add_executable(dsrrl_renderer_faceeye_pointlight_tests
     tests/faceeye_pointlight_readiness_tests.cpp)
 
+add_executable(dsrrl_renderer_pmetal_shadow_visibility_tests
+    tests/pmetal_shadow_visibility_tests.cpp)
+target_link_libraries(dsrrl_renderer_pmetal_shadow_visibility_tests PRIVATE dsrrl_renderer_core)
+target_compile_features(dsrrl_renderer_pmetal_shadow_visibility_tests PRIVATE cxx_std_17)
+
 add_executable(dsrrl_renderer_clustered_sidecar_tests
     tests/clustered_sidecar_tests.cpp)
 target_link_libraries(dsrrl_renderer_clustered_sidecar_tests PRIVATE dsrrl_renderer_core)
@@ -469,6 +475,7 @@ if(MSVC)
     target_compile_options(dsrrl_renderer_island_tests PRIVATE /W4 /WX)
     target_compile_options(dsrrl_renderer_future_runtime_tests PRIVATE /W4 /WX)
     target_compile_options(dsrrl_renderer_faceeye_pointlight_tests PRIVATE /W4 /WX)
+    target_compile_options(dsrrl_renderer_pmetal_shadow_visibility_tests PRIVATE /W4 /WX)
     target_compile_options(dsrrl_renderer_clustered_sidecar_tests PRIVATE /W4 /WX)
     target_compile_options(dsrrl_renderer_clustered_pnts_materializer_tests PRIVATE /W4 /WX)
     target_compile_options(dsrrl_renderer_clustered_pnts_draw_adapter_tests PRIVATE /W4 /WX)
@@ -499,6 +506,7 @@ else()
     target_compile_options(dsrrl_renderer_island_tests PRIVATE -Wall -Wextra -Wpedantic -Werror)
     target_compile_options(dsrrl_renderer_future_runtime_tests PRIVATE -Wall -Wextra -Wpedantic -Werror)
     target_compile_options(dsrrl_renderer_faceeye_pointlight_tests PRIVATE -Wall -Wextra -Wpedantic -Werror)
+    target_compile_options(dsrrl_renderer_pmetal_shadow_visibility_tests PRIVATE -Wall -Wextra -Wpedantic -Werror)
     target_compile_options(dsrrl_renderer_clustered_sidecar_tests PRIVATE -Wall -Wextra -Wpedantic -Werror)
     target_compile_options(dsrrl_renderer_clustered_pnts_materializer_tests PRIVATE -Wall -Wextra -Wpedantic -Werror)
     target_compile_options(dsrrl_renderer_clustered_pnts_draw_adapter_tests PRIVATE -Wall -Wextra -Wpedantic -Werror)
@@ -565,6 +573,7 @@ add_test(NAME dsrrl_renderer_core_tests COMMAND dsrrl_renderer_core_tests)
 add_test(NAME dsrrl_renderer_island_tests COMMAND dsrrl_renderer_island_tests)
 add_test(NAME dsrrl_renderer_future_runtime_tests COMMAND dsrrl_renderer_future_runtime_tests)
 add_test(NAME dsrrl_renderer_faceeye_pointlight_tests COMMAND dsrrl_renderer_faceeye_pointlight_tests)
+add_test(NAME dsrrl_renderer_pmetal_shadow_visibility_tests COMMAND dsrrl_renderer_pmetal_shadow_visibility_tests)
 add_test(NAME dsrrl_renderer_clustered_sidecar_tests COMMAND dsrrl_renderer_clustered_sidecar_tests)
 add_test(NAME dsrrl_renderer_clustered_pnts_materializer_tests COMMAND dsrrl_renderer_clustered_pnts_materializer_tests)
 add_test(NAME dsrrl_renderer_clustered_pnts_draw_adapter_tests COMMAND dsrrl_renderer_clustered_pnts_draw_adapter_tests)
