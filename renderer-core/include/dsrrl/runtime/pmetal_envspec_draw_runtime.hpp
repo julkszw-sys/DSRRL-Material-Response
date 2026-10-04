@@ -9,7 +9,6 @@
 #include "dsrrl/runtime/island_draw_adapter.hpp"
 #include "dsrrl/runtime/material_resource_draw_runtime.hpp"
 #include "dsrrl/runtime/pmetal_env_source_runtime.hpp"
-#include "dsrrl/runtime/upper_lower_draw_runtime.hpp"
 
 #include <reshade.hpp>
 
@@ -49,7 +48,7 @@ struct prepared_pmetal_envspec_draw {
     ID3D11PixelShader *shader = nullptr;
     ID3D11Buffer *b12 = nullptr;
 #if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_R10_LOCAL_UL)
-    prepared_upper_lower_draw local_ul{};
+    ID3D11Buffer *b13 = nullptr;
 #endif
     // R7 exact PTDE shadow sampler is AddRef-held for the replay lifetime.
     ID3D11SamplerState *shadow_sampler = nullptr;
@@ -160,6 +159,14 @@ private:
         bool payload_valid = false;
     };
 
+#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_R10_LOCAL_UL)
+    struct b13_context_cache {
+        ID3D11Buffer *buffer = nullptr;
+        std::array<std::uint32_t,32> payload_bits{};
+        bool payload_valid = false;
+    };
+#endif
+
     void release_resources() noexcept;
 
     core::renderer_core &core_;
@@ -182,6 +189,10 @@ private:
         lerp_replacement_size_;
     std::unordered_map<std::uintptr_t,b12_context_cache>
         b12_by_context_;
+#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_R10_LOCAL_UL)
+    std::unordered_map<std::uintptr_t,b13_context_cache>
+        b13_by_context_;
+#endif
 
     std::atomic<std::uint64_t> replacement_register_ok_{0};
     std::atomic<std::uint64_t> replacement_register_fail_{0};
