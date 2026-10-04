@@ -7591,6 +7591,10 @@ bool AddonInit(
             reshade::log::level::warning,
             "[DSRRL CORE+ISLANDS " DSRRL_CORE_ISLANDS_VERSION
             "] Clustered PntS transport FAIL-OPEN: first-four sidecar remains unavailable; stock DSR clustered PointLight preserved.");
+    } else if (clustered_pointlight_hooks) {
+        reshade::log::message(
+            reshade::log::level::info,
+            "[DSRRL POINTLIGHT R20] selector_authority_cache=ACTIVE source_selection_cache=PER_PRODUCER_SERIAL gpu_payload_dedupe=PER_CONTEXT draw_cpu_traversal=OFF");
     }
 
     // Bloom FX transport is diagnostic-only: it does not authorize Q8,
