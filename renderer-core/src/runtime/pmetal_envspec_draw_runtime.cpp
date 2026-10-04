@@ -510,6 +510,21 @@ register_replacement(
     record.payload_size =
         dxbc_size;
 
+#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_R10E_ATMOS_DOMAIN)
+    {
+        char line[256]{};
+        std::snprintf(
+            line,
+            sizeof(line),
+            "[DSRRL PMETAL R10E ATMOS] rx=%u PTDE legacy surface->Fog->LightScattering domain continuation registered; stock post-LS pow2.2 removed.",
+            static_cast<unsigned>(
+                outcome.receiver_id));
+        reshade::log::message(
+            reshade::log::level::info,
+            line);
+    }
+#endif
+
     ++replacement_register_ok_;
     return true;
 }
