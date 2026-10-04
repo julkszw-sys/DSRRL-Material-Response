@@ -23,6 +23,7 @@ struct ID3D11Buffer;
 struct ID3D11Device;
 struct ID3D11PixelShader;
 struct ID3D11ShaderResourceView;
+struct ID3D11SamplerState;
 
 namespace dsrrl::runtime {
 
@@ -46,6 +47,8 @@ struct prepared_pmetal_envspec_draw {
     prepared_material_resource_draw material_resources{};
     ID3D11PixelShader *shader = nullptr;
     ID3D11Buffer *b12 = nullptr;
+    // R7 exact PTDE shadow sampler is AddRef-held for the replay lifetime.
+    ID3D11SamplerState *shadow_sampler = nullptr;
 
     // Diagnostic-only native DSR EnvDiffuse ownership. PSGetShaderResources
     // AddRefs these stock host SRVs; keep them alive until replay completes.
@@ -162,6 +165,9 @@ private:
 
     mutable std::mutex mutex_;
     ID3D11Device *device_ = nullptr;
+    // Device-owned exact D3D11 equivalent of the PTDE stage-7 point/border
+    // shadow sampler. Only receiver 33/34 R7 draws may borrow it.
+    ID3D11SamplerState *shadow_sampler_ = nullptr;
     std::unordered_map<std::uint32_t,replacement_record>
         replacements_;
     std::unordered_map<std::uint32_t,ID3D11PixelShader *>
