@@ -1565,6 +1565,31 @@ bool pmetal_envspec_draw_runtime::prepare(
 #endif
     prepared.shader = shader;
     prepared.b12 = b12;
+
+#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_R10_LOCAL_UL)
+    if (family !=
+            pmetal_envspec_receiver_family::
+                stable_hemenv ||
+        !source.upper_lower_linear_valid ||
+        !prepare_pmetal_local_upper_lower_carrier(
+            context,
+            source.upper,
+            source.lower,
+            prepared.local_ul)) {
+        release(prepared);
+        effect_fail(
+            effect_fail_mask_,
+            k_effect_fail_source);
+        log_prepare_stage_once(
+            1u << 14u,
+            "local_ul_b13_reject",
+            material,
+            decision,
+            family);
+        return false;
+    }
+#endif
+
     prepared.request.primary =
         core::operator_id::env_spec;
 
@@ -1631,6 +1656,24 @@ bool pmetal_envspec_draw_runtime::prepare(
     };
     prepared.request.constant_buffer_count =
         1u;
+
+#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_R10_LOCAL_UL)
+    const auto ul_owner =
+        core::operator_bit(
+            core::operator_id::upper_lower);
+    prepared.request.additional_owners |=
+        ul_owner;
+    prepared.request.additional_shader_owners |=
+        ul_owner;
+    prepared.request.additional_constant_buffer_owners |=
+        ul_owner;
+    prepared.request.constant_buffers[
+        prepared.request.constant_buffer_count++] = {
+            13u,
+            prepared.local_ul.b13,
+            ul_owner
+        };
+#endif
 
     std::uint32_t request_srv_count = 0u;
 #if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG)
