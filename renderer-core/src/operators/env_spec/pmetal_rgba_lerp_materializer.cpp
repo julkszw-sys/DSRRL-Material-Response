@@ -421,6 +421,143 @@ constexpr std::array<std::uint32_t,74> k_ptde_rgba_envspec_chain = {{
     0x00000001u,0x01000015u
 }};
 
+
+#if defined(DSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE)
+constexpr std::size_t k_ptde_envdiffuse_lerp_prefix_words = 6u;
+
+bool apply_exact_ptde_envdiffuse_lerp_consumer(
+    std::vector<std::uint32_t> &words,
+    const generated_lerp::pmetal_hemenvlerp_site &site,
+    std::vector<std::uint32_t> &expected_chain) noexcept
+{
+    expected_chain.clear();
+
+    if (site.t11_word < k_ptde_envdiffuse_lerp_prefix_words ||
+        site.t13_word != site.t11_word + 21u ||
+        site.envdiff_b_minus_a_word != site.t13_word + 13u ||
+        site.envdiff_lerp_word != site.envdiff_b_minus_a_word + 11u ||
+        site.envdiff_gain_word != site.envdiff_lerp_word + 10u ||
+        site.merge_word != site.envdiff_gain_word + 8u ||
+        site.merge_word > words.size())
+        return false;
+
+    const auto start =
+        static_cast<std::size_t>(site.t11_word) -
+        k_ptde_envdiffuse_lerp_prefix_words;
+
+    if (start <
+            static_cast<std::size_t>(site.t12_word) +
+                k_ptde_rgba_envspec_chain.size() ||
+        !std::all_of(
+            words.begin() + static_cast<std::ptrdiff_t>(start),
+            words.begin() + static_cast<std::ptrdiff_t>(site.t11_word),
+            [](std::uint32_t word) noexcept {
+                return word == 0x0100003au;
+            }) ||
+        !sample_at(words, site.t11_word, 11u) ||
+        !opcode_at(words, site.t11_word + 13u, 0x38u, 8u) ||
+        !sample_at(words, site.t13_word, 13u) ||
+        !opcode_at(words, site.envdiff_b_minus_a_word, 0x32u, 11u) ||
+        !opcode_at(words, site.envdiff_lerp_word, 0x32u, 10u) ||
+        !opcode_at(words, site.envdiff_gain_word, 0x38u, 8u))
+        return false;
+
+    std::array<std::uint32_t,13> sample_a{};
+    std::array<std::uint32_t,13> sample_b{};
+    std::copy_n(
+        words.begin() + static_cast<std::ptrdiff_t>(site.t11_word),
+        sample_a.size(),
+        sample_a.begin());
+    std::copy_n(
+        words.begin() + static_cast<std::ptrdiff_t>(site.t13_word),
+        sample_b.size(),
+        sample_b.begin());
+
+    // Preserve exact coordinate/resource/sampler identity but keep alpha
+    // through filtering. PTDE decodes filtered RGBA as RGB/A.
+    sample_a[3] = 0x001000f2u;
+    sample_a[4] = 12u;
+    sample_b[3] = 0x001000f2u;
+    sample_b[4] = 12u;
+
+    constexpr std::array<std::uint32_t,7> decode_rgb_over_alpha{{
+        0x0700000eu,
+        0x001000e2u,12u,
+        0x00100e56u,12u,
+        0x00100006u,12u
+    }};
+
+    constexpr std::array<std::uint32_t,8> apply_endpoint_a{{
+        0x08000038u,
+        0x00100072u,2u,
+        0x00100e56u,12u,
+        0x00208246u,12u,4u
+    }};
+
+    constexpr std::array<std::uint32_t,11> endpoint_b_minus_a{{
+        0x0b000032u,
+        0x00100072u,3u,
+        0x00100e56u,12u,
+        0x00208246u,12u,5u,
+        0x80100246u,0x00000041u,2u
+    }};
+
+    constexpr std::array<std::uint32_t,10> lerp_ab{{
+        0x0a000032u,
+        0x00100072u,2u,
+        0x00208ff6u,12u,5u,
+        0x00100246u,3u,
+        0x00100246u,2u
+    }};
+
+    try {
+        expected_chain.reserve(69u);
+        expected_chain.insert(
+            expected_chain.end(),
+            sample_a.begin(),
+            sample_a.end());
+        expected_chain.insert(
+            expected_chain.end(),
+            decode_rgb_over_alpha.begin(),
+            decode_rgb_over_alpha.end());
+        expected_chain.insert(
+            expected_chain.end(),
+            apply_endpoint_a.begin(),
+            apply_endpoint_a.end());
+        expected_chain.insert(
+            expected_chain.end(),
+            sample_b.begin(),
+            sample_b.end());
+        expected_chain.insert(
+            expected_chain.end(),
+            decode_rgb_over_alpha.begin(),
+            decode_rgb_over_alpha.end());
+        expected_chain.insert(
+            expected_chain.end(),
+            endpoint_b_minus_a.begin(),
+            endpoint_b_minus_a.end());
+        expected_chain.insert(
+            expected_chain.end(),
+            lerp_ab.begin(),
+            lerp_ab.end());
+    } catch (...) {
+        expected_chain.clear();
+        return false;
+    }
+
+    if (expected_chain.size() != 69u ||
+        start + expected_chain.size() != site.merge_word)
+        return false;
+
+    std::copy(
+        expected_chain.begin(),
+        expected_chain.end(),
+        words.begin() + static_cast<std::ptrdiff_t>(start));
+
+    return true;
+}
+#endif
+
 bool add_bridge_rdef(
     const std::uint8_t *source,
     std::size_t source_size,
@@ -431,6 +568,12 @@ bool add_bridge_rdef(
     std::vector<std::uint8_t> &output) noexcept
 {
     auto *rdef = unique_rdef(chunks);
+
+#if defined(DSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE)
+    constexpr std::uint32_t k_material_carrier_bytes = 96u;
+#else
+    constexpr std::uint32_t k_material_carrier_bytes = 64u;
+#endif
 
     if (rdef == nullptr ||
         legacy_plan::dxbc::rdef::has_constant_buffer_binding(
@@ -443,7 +586,7 @@ bool add_bridge_rdef(
             rdef->payload,
             "DSRRL_MaterialCarrier",
             12u,
-            64u))
+            k_material_carrier_bytes))
         return false;
 
     if (compose_upper_lower &&
@@ -526,9 +669,23 @@ bool final_postcondition(
     expected_envspec_cut[38] =
         site.reflection_coord_register;
 
+    std::size_t envdiffuse_start =
+        static_cast<std::size_t>(site.t11_word);
+#if defined(DSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE)
+    if (envdiffuse_start < k_ptde_envdiffuse_lerp_prefix_words)
+        return false;
+    envdiffuse_start -=
+        k_ptde_envdiffuse_lerp_prefix_words;
+#endif
+
+    if (envdiffuse_start <
+        static_cast<std::size_t>(site.t12_word) +
+            k_ptde_rgba_envspec_chain.size())
+        return false;
+
     try {
         expected_envspec_cut.resize(
-            site.t11_word - site.t12_word,
+            envdiffuse_start - site.t12_word,
             0x0100003au);
     } catch (...) {
         return false;
@@ -1165,6 +1322,20 @@ materialize_pmetal_rgba_lerp_receiver(
         words.begin() + static_cast<std::ptrdiff_t>(site->t11_word),
         0x0100003au);
 
+#if defined(DSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE)
+    // R19 owns the Lerp EnvDiffuse semantic cut. Six NOP dwords from the
+    // already-isolated EnvSpec tail provide the exact space needed for the
+    // second post-filter RGB/A decode without moving any downstream offset.
+    if (!apply_exact_ptde_envdiffuse_lerp_consumer(
+            words,
+            *site,
+            preserved_envdiffuse)) {
+        outcome.result =
+            pmetal_rgba_lerp_materialize_result::
+                fail_operator_precondition;
+        return outcome;
+    }
+#else
     // The independent EnvDiffuse A/B+beta block and its common merge are
     // outside the responsible EnvSpec cut and must remain byte-identical.
     if (!std::equal(
@@ -1177,6 +1348,7 @@ materialize_pmetal_rgba_lerp_receiver(
                 fail_operator_precondition;
         return outcome;
     }
+#endif
 
     // Upper/Lower is independent from EnvSpec. Compose PTDE b13 only when the
     // U/L feature is explicitly enabled. With U/L OFF, preserve the exact
@@ -1226,6 +1398,13 @@ materialize_pmetal_rgba_lerp_receiver(
                 fail_upper_lower_consumer;
         return outcome;
     }
+
+#if defined(DSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE)
+    // b12[0..3] retain the existing stable/EnvSpec ABI. Lerp needs two
+    // additional PTDE EnvDiffuse endpoints, so extend only this exact
+    // receiver shader's declaration to b12[0..5].
+    words[14] = 6u;
+#endif
 
     if (compose_upper_lower) {
         try {
@@ -1324,7 +1503,11 @@ materialize_pmetal_rgba_lerp_receiver(
         return outcome;
     }
 
+#if defined(DSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE)
+    outcome.envdiffuse_preserved = false;
+#else
     outcome.envdiffuse_preserved = true;
+#endif
     outcome.upper_lower_composed =
         compose_upper_lower;
     outcome.upper_lower_preserved_stock =
