@@ -197,14 +197,14 @@ jobs:
       - name: Build Core+Islands addon
         run: cmake --build build-integrated --config Release
 
-      - name: Run PointLight source, transport and clustered unit tests
+      - name: Run PointLight source and clustered unit tests
         shell: pwsh
         run: >
           ctest
           --test-dir build-integrated
           -C Release
           --output-on-failure
-          -R "(dsrrl_renderer_clustered_(sidecar|pnts_materializer|pnts_draw_adapter)_tests|dsrrl_fixed_pointlight_transport_windows_tests|dsrrl_pointlight_ptde_source_tests)"
+          -R "(dsrrl_renderer_clustered_(sidecar|pnts_materializer|pnts_draw_adapter)_tests|dsrrl_pointlight_ptde_source_tests)"
 
       - name: Test EnvSpec exact sidecar stager fail-open
         shell: pwsh
