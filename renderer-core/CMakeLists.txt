@@ -656,6 +656,6 @@ if(DSRRL_BUILD_PMETAL_R10C_OFFLINE_TEST)
     else()
         target_compile_options(
             dsrrl_pmetal_r10c_offline_test
-            PRIVATE -Wall -Wextra -Wpedantic -Werror)
+            PRIVATE -Wall -Wextra -Wpedantic -Werror -Wno-unused-function)
     endif()
 endif()
