@@ -5521,11 +5521,13 @@ bool prepare_island_batch(
             prepared.clustered_shader)) {
         hot_count(g_clustered_draw_pipeline_ready);
 
-        // The current clustered PntS journal owns PTDE attenuation, diffuse
-        // material-domain and terminal SAT only. Its Spc host still contains
-        // the stock DSR microfacet/GGX local-specular window. Do not replay
-        // that partial hybrid as a PTDE local-specular island.
-        if (prepared.clustered_shader.spc) {
+        // Clustered Spc may replay only when the direct-PTDE journal has
+        // passed its historical byte-exact replacement SHA and the generated
+        // shader has then been migrated to the current Runtime-v2 b12 ABI.
+        // Any future journal/carrier drift remains fail-open.
+        if (prepared.clustered_shader.spc &&
+            (!prepared.clustered_shader.current_b12_abi ||
+             !prepared.clustered_shader.legacy_specular_complete)) {
             static std::atomic_bool
                 clustered_spc_incomplete_logged{false};
             if (!clustered_spc_incomplete_logged.exchange(
@@ -5533,7 +5535,7 @@ bool prepare_island_batch(
                     std::memory_order_relaxed)) {
                 reshade::log::message(
                     reshade::log::level::warning,
-                    "[DSRRL POINTLIGHT APPLY] stage=clustered_spc_failopen_unmaterialized_legacy_specular");
+                    "[DSRRL POINTLIGHT APPLY] stage=clustered_spc_failopen_legacy_specular_attestation");
             }
 
             g_clustered_pnts_pipeline.release_prepared_shader(
@@ -5541,6 +5543,18 @@ bool prepare_island_batch(
             prepared.batch = {};
             hot_count(g_clustered_draw_fail_open);
             return false;
+        }
+
+        if (prepared.clustered_shader.spc) {
+            static std::atomic_bool
+                clustered_spc_complete_logged{false};
+            if (!clustered_spc_complete_logged.exchange(
+                    true,
+                    std::memory_order_relaxed)) {
+                reshade::log::message(
+                    reshade::log::level::info,
+                    "[DSRRL POINTLIGHT APPLY] stage=clustered_spc_legacy_specular_current_b12_ready");
+            }
         }
 
         if (!g_pointlight_once_shader_ready.exchange(true)) {
