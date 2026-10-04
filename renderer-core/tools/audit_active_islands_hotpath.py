@@ -110,8 +110,16 @@ def main():
         "if (k_pointlight_drawtime_runtime_enabled &&\n        clustered_pnts_candidate)",
         "PointLight post-A1 registration bypass")
     require(flver_cpp,
-        "if(g_state.builder_armed)\n  clustered_pnts_selector_event_bridge(",
-        "clustered selector bridge follows builder arm state")
+        "if (g_state.builder_armed &&\n        operators::material_response::\n            direct_pointlight_material_candidate(",
+        "clustered selector bridge is gated by exact PointLight material authority")
+    require(flver_cpp,
+        "clustered_pnts_selector_event_bridge(\n            owner,\n            actual_material);",
+        "clustered selector bridge receives exact material only after PointLight prefilter")
+    require(flver_cpp,
+        "clustered_pnts_selector_identity_event_bridge(\n            identity,\n            pointlight_spc);",
+        "clustered selector publishes exact material mode into producer cache")
+    if "if(g_state.builder_armed)\n  clustered_pnts_selector_event_bridge(" in flver_cpp:
+        fail("clustered selector regressed to unconditional builder-armed dispatch")
     require(flver_cpp,
         "fixed_pointlight_selector_event_bridge(owner);",
         "fixed selector bridge dispatches directly at the FLVER semantic cut")
