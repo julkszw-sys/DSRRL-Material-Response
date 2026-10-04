@@ -754,6 +754,7 @@ void clustered_pnts_draw_runtime::uninstall() noexcept
 {
     g_enabled.store(false);
     consume_draw_selection();
+    g_source_selection_cache = {};
     g_producer_input_tls = {};
     g_local_serial = 0u;
 
@@ -1411,6 +1412,7 @@ clustered_pnts_draw_runtime::telemetry() const noexcept
 void clustered_pnts_draw_runtime::reset() noexcept
 {
     consume_draw_selection();
+    g_source_selection_cache = {};
     g_producer_input_tls = {};
 
     {
