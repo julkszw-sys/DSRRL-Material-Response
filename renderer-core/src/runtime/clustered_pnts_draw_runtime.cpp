@@ -712,11 +712,13 @@ void clustered_pnts_selector_event_bridge(
 }
 
 void clustered_pnts_selector_identity_event_bridge(
-    const operators::material_response::material_identity &identity) noexcept
+    const operators::material_response::material_identity &identity,
+    bool expected_spc) noexcept
 {
     if (g_runtime != nullptr)
         g_runtime->selector_identity_event(
-            identity);
+            identity,
+            expected_spc);
 }
 
 bool clustered_pnts_draw_runtime::install() noexcept
@@ -885,7 +887,8 @@ void clustered_pnts_draw_runtime::selector_event(
     g_draw_selection.ready = true;
 }
 void clustered_pnts_draw_runtime::selector_identity_event(
-    const operators::material_response::material_identity &identity) noexcept
+    const operators::material_response::material_identity &identity,
+    bool expected_spc) noexcept
 {
     if (!g_enabled.load() ||
         g_quarantined.load() ||
@@ -894,27 +897,18 @@ void clustered_pnts_draw_runtime::selector_identity_event(
         !g_draw_selection.material_limit_ready)
         return;
 
-    auto decision =
+    const auto decision =
         operators::material_response::
             evaluate_direct_pointlight_material_identity(
                 identity,
-                true);
-    bool material_spc = decision.active;
-    if (!decision.active) {
-        decision =
-            operators::material_response::
-                evaluate_direct_pointlight_material_identity(
-                    identity,
-                    false);
-        material_spc = false;
-    }
+                expected_spc);
 
     if (!decision.active)
         return;
 
     g_draw_selection.material = identity;
     g_draw_selection.material_decision = decision;
-    g_draw_selection.material_spc = material_spc;
+    g_draw_selection.material_spc = expected_spc;
     g_draw_selection.authority_ready = true;
 
     const auto &input = g_draw_selection.input;
