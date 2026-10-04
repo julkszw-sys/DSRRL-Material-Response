@@ -75,6 +75,7 @@ struct pending_draw {
 
 thread_local pending_draw g_pending{};
 std::atomic<pmetal_native_draw_bridge *> g_active{nullptr};
+std::atomic_bool g_pointlight_native_applied_logged{false};
 
 draw_fn g_original_draw = nullptr;
 draw_indexed_fn g_original_draw_indexed = nullptr;
@@ -1159,6 +1160,16 @@ pmetal_native_draw_bridge::draw_hook(
         bridge->impl_->draw_applied.fetch_add(
             1u,
             std::memory_order_relaxed);
+        if ((pending.mutation.owners &
+             core::operator_bit(
+                 core::operator_id::point_light)) != 0u &&
+            !g_pointlight_native_applied_logged.exchange(
+                true,
+                std::memory_order_relaxed)) {
+            reshade::log::message(
+                reshade::log::level::info,
+                "[DSRRL POINTLIGHT APPLY] stage=native_applied");
+        }
     }
 
     release_mutation(
@@ -1248,6 +1259,16 @@ pmetal_native_draw_bridge::draw_indexed_hook(
             draw_indexed_applied.fetch_add(
                 1u,
                 std::memory_order_relaxed);
+        if ((pending.mutation.owners &
+             core::operator_bit(
+                 core::operator_id::point_light)) != 0u &&
+            !g_pointlight_native_applied_logged.exchange(
+                true,
+                std::memory_order_relaxed)) {
+            reshade::log::message(
+                reshade::log::level::info,
+                "[DSRRL POINTLIGHT APPLY] stage=native_applied");
+        }
     }
 
     release_mutation(
@@ -1469,6 +1490,10 @@ pmetal_native_draw_bridge::telemetry() const noexcept
 
 void pmetal_native_draw_bridge::reset_telemetry() noexcept
 {
+    g_pointlight_native_applied_logged.store(
+        false,
+        std::memory_order_relaxed);
+
     if (impl_ == nullptr)
         return;
 
