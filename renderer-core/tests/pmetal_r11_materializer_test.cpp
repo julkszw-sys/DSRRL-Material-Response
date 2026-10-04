@@ -2,12 +2,32 @@
 #include "dsrrl/core/types.hpp"
 #include "dsrrl/operators/env_spec/pmetal_rgba_materializer.hpp"
 #include "dsrrl/operators/legacy_plan/dxbc_checksum.hpp"
+#include "dsrrl/operators/lightbank/upper_lower_hemenv_materializer.hpp"
 
 #include <array>
 #include <cstdint>
 #include <fstream>
 #include <iostream>
 #include <vector>
+
+
+// The R11 lineage physically keeps Upper/Lower disabled and the test always
+// calls the P_Metal materializer with compose_upper_lower=false. Provide the
+// dormant symbol locally so this portable harness does not need to build the
+// unrelated U/L generator/materializer stack.
+namespace dsrrl::operators::lightbank {
+upper_lower_hemenv_materialize_outcome
+augment_upper_lower_hemenv_verified_base(
+    const std::uint8_t *,
+    std::size_t,
+    const std::uint8_t *,
+    std::size_t,
+    std::uint32_t,
+    std::vector<std::uint8_t> &) noexcept
+{
+    return {};
+}
+} // namespace dsrrl::operators::lightbank
 
 namespace {
 std::vector<std::uint8_t> read_file(const char *path)
