@@ -103,7 +103,12 @@ option(
 
 option(
     DSRRL_PMETAL_FULL_PTDE_HEMENV_R6
-    "Cumulative stable P_Metal PTDE HemEnv successor: R3+R4+R5 plus exact PTDE Fog/LightScattering domain and source-gated PHN k135 terminal consumer"
+    "Cumulative stable P_Metal PTDE HemEnv successor: R3+R4+R5 plus source-gated PHN k135 terminal consumer; atmosphere continuation follows the selected lineage"
+    OFF)
+
+option(
+    DSRRL_PMETAL_FULL_PTDE_HEMENV_R7_SHADOW
+    "Stable P_Metal Csd/Sdw: replace DSR 3x3 comparison shadow visibility producer with exact PTDE 4x4 packed-depth PCF16 and exact regular stage-7 sampler"
     OFF)
 
 option(
@@ -682,6 +687,18 @@ if(DSRRL_PMETAL_FULL_PTDE_HEMENV_R6)
         dsrrl_renderer_core_integrated
         PRIVATE
         $<$<COMPILE_LANGUAGE:CXX>:DSRRL_PMETAL_FULL_PTDE_HEMENV_R6>)
+endif()
+
+if(DSRRL_PMETAL_FULL_PTDE_HEMENV_R7_SHADOW)
+    if(NOT DSRRL_PMETAL_FULL_PTDE_HEMENV_R6)
+        message(FATAL_ERROR
+            "P_Metal R7 shadow requires the complete R6 lineage")
+    endif()
+
+    target_compile_definitions(
+        dsrrl_renderer_core_integrated
+        PRIVATE
+        $<$<COMPILE_LANGUAGE:CXX>:DSRRL_PMETAL_FULL_PTDE_HEMENV_R7_SHADOW>)
 endif()
 
 if(DSRRL_POINTLIGHT_DRAWTIME_BYPASS)
