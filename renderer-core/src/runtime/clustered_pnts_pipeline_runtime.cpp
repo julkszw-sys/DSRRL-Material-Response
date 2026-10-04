@@ -30,6 +30,8 @@ struct clustered_pnts_pipeline_runtime::record {
     bool blended_material = false;
     std::uint32_t representative_shader_index = 0u;
     core::operator_mask composed_shader_owners = 0u;
+    bool current_b12_abi = false;
+    bool legacy_specular_complete = false;
 
     ~record()
     {
@@ -113,6 +115,9 @@ bool clustered_pnts_pipeline_runtime::register_candidate(
         replacement == nullptr ||
         replacement_size == 0u ||
         replacement_size != outcome.replacement_size ||
+        !outcome.current_b12_abi ||
+        (outcome.spc &&
+         !outcome.legacy_specular_complete) ||
         hashing::sha256(
             replacement,
             replacement_size) !=
@@ -153,7 +158,11 @@ bool clustered_pnts_pipeline_runtime::register_candidate(
                 existing->representative_shader_index !=
                     outcome.representative_shader_index ||
                 existing->composed_shader_owners !=
-                    outcome.composed_shader_owners) {
+                    outcome.composed_shader_owners ||
+                existing->current_b12_abi !=
+                    outcome.current_b12_abi ||
+                existing->legacy_specular_complete !=
+                    outcome.legacy_specular_complete) {
                 quarantined_.store(true);
                 telemetry::hot_count(candidate_create_fail_);
                 return false;
@@ -195,6 +204,10 @@ bool clustered_pnts_pipeline_runtime::register_candidate(
             outcome.representative_shader_index;
         mutable_record->composed_shader_owners =
             outcome.composed_shader_owners;
+        mutable_record->current_b12_abi =
+            outcome.current_b12_abi;
+        mutable_record->legacy_specular_complete =
+            outcome.legacy_specular_complete;
 
         std::shared_ptr<const record> value =
             mutable_record;
@@ -221,7 +234,11 @@ bool clustered_pnts_pipeline_runtime::register_candidate(
                 existing->blended_material !=
                     outcome.blended_material ||
                 existing->representative_shader_index !=
-                    outcome.representative_shader_index) {
+                    outcome.representative_shader_index ||
+                existing->current_b12_abi !=
+                    outcome.current_b12_abi ||
+                existing->legacy_specular_complete !=
+                    outcome.legacy_specular_complete) {
                 quarantined_.store(true);
                 telemetry::hot_count(candidate_create_fail_);
                 return false;
@@ -596,6 +613,10 @@ bool clustered_pnts_pipeline_runtime::prepare_bound_shader(
         selected->representative_shader_index;
     prepared.composed_shader_owners =
         selected->composed_shader_owners;
+    prepared.current_b12_abi =
+        selected->current_b12_abi;
+    prepared.legacy_specular_complete =
+        selected->legacy_specular_complete;
     prepared.ready = true;
     return true;
 }
