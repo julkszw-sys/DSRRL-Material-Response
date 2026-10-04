@@ -1104,85 +1104,17 @@ bool clustered_pnts_draw_runtime::prepare_sidecar(
     const auto &input =
         g_draw_selection.input;
 
-    // The integrated caller reaches prepare_sidecar only after exact receiver
-    // and direct PointLight material authority. Equipment texture companions
-    // are deliberately not an activation gate for this scene-light operator.
-    // Heavy PTDE membership/source work is therefore paid only by a draw that
-    // can actually activate the PointLight island.
-    std::array<std::uint32_t,4> selected_ids{};
-    std::array<void *,4> nodes{};
-    std::uint8_t selected_count = 0u;
-
-    if (!input.valid ||
-        !select_first_four_exact(
-            input.collection,
-            input.query.data(),
-            input.mask,
-            selected_ids,
-            nodes,
-            selected_count)) {
+    if (!g_draw_selection.authority_ready ||
+        g_draw_selection.material_decision.route_index !=
+            material.route_index) {
         prepared.failure =
-            clustered_pnts_prepare_failure::selection;
-        telemetry::hot_count(g_mirror_diff);
-        telemetry::hot_count(g_selection_fail);
-        telemetry::hot_count(g_sidecar_fail);
-        telemetry::hot_count(g_prepare_fail);
-        return false;
-    }
-    telemetry::hot_count(g_selector_calls);
-
-#if defined(DSRRL_CLUSTERED_SELECTOR_RUNTIME_CROSSCHECK)
-    if (g_retained_selector == nullptr) {
-        prepared.failure =
-            clustered_pnts_prepare_failure::selection;
-        telemetry::hot_count(g_mirror_diff);
-        telemetry::hot_count(g_selection_fail);
-        telemetry::hot_count(g_sidecar_fail);
+            clustered_pnts_prepare_failure::precondition;
+        telemetry::hot_count(g_prepare_precondition_fail);
         telemetry::hot_count(g_prepare_fail);
         return false;
     }
 
-    std::array<std::uint32_t,4> host_ids{
-        0xffffffffu,0xffffffffu,
-        0xffffffffu,0xffffffffu};
-    const int host_count =
-        g_retained_selector(
-            input.collection,
-            host_ids.data(),
-            4,
-            input.query.data(),
-            input.mask);
-
-    if (host_count < 0 ||
-        host_count > 4 ||
-        static_cast<int>(selected_count) !=
-            host_count) {
-        prepared.failure =
-            clustered_pnts_prepare_failure::selection;
-        telemetry::hot_count(g_mirror_diff);
-        telemetry::hot_count(g_selection_fail);
-        telemetry::hot_count(g_sidecar_fail);
-        telemetry::hot_count(g_prepare_fail);
-        return false;
-    }
-
-    for (std::uint8_t i = 0u;
-         i < selected_count;
-         ++i) {
-        if (host_ids[i] != selected_ids[i]) {
-            prepared.failure =
-                clustered_pnts_prepare_failure::selection;
-            telemetry::hot_count(g_mirror_diff);
-            telemetry::hot_count(g_selection_fail);
-            telemetry::hot_count(g_sidecar_fail);
-            telemetry::hot_count(g_prepare_fail);
-            return false;
-        }
-    }
-    telemetry::hot_count(g_mirror_equal);
-#endif
-
-    if (selected_count == 0u) {
+    if (g_draw_selection.neutral_no_pointlights) {
         prepared.producer_serial = input.serial;
         prepared.raw_selected_count = 0u;
         prepared.material_max_pnt_lit_num =
@@ -1191,55 +1123,23 @@ bool clustered_pnts_draw_runtime::prepare_sidecar(
         prepared.owner_verified = true;
         prepared.selector_mirror_verified = true;
         prepared.neutral_no_pointlights = true;
-        telemetry::hot_count(g_selection_empty);
-        telemetry::hot_count(g_prepare_neutral_empty);
         return false;
     }
 
-    std::array<source_raw,4> sources{};
-    for (std::uint8_t i = 0u;
-         i < selected_count;
-         ++i) {
-        if (!capture_source(
-                nodes[i],
-                sources[i]) ||
-            sources[i].source_id !=
-                selected_ids[i]) {
-            prepared.failure =
-                clustered_pnts_prepare_failure::source_capture;
-            telemetry::hot_count(
-                g_source_capture_fail);
-            telemetry::hot_count(g_sidecar_fail);
-            telemetry::hot_count(g_prepare_fail);
-            return false;
-        }
-        telemetry::hot_count(
-            g_source_capture_ok);
-    }
-
-    const auto built =
-        operators::point_light::
-            build_clustered_sidecar_v1(
-                sources,
-                selected_count,
-                g_draw_selection.material_max,
-                material);
-
-    prepared.sidecar_result_code =
-        static_cast<std::uint8_t>(built.result);
-
-    if (built.result !=
-            operators::point_light::
-                clustered_sidecar_result_v1::ready ||
-        !built.payload.ready) {
+    if (!g_draw_selection.payload_ready) {
         prepared.failure =
-            clustered_pnts_prepare_failure::sidecar_build;
-        telemetry::hot_count(g_sidecar_build_fail);
-        telemetry::hot_count(g_sidecar_fail);
+            g_draw_selection.cached_failure !=
+                    clustered_pnts_prepare_failure::none
+                ? g_draw_selection.cached_failure
+                : clustered_pnts_prepare_failure::sidecar_build;
+        prepared.sidecar_result_code =
+            g_draw_selection.sidecar_result_code;
         telemetry::hot_count(g_prepare_fail);
         return false;
     }
-    telemetry::hot_count(g_sidecar_ready);
+
+    const auto &payload =
+        g_draw_selection.payload;
 
     const auto context_type = context->GetType();
     if (context_type == D3D11_DEVICE_CONTEXT_IMMEDIATE)
@@ -1323,18 +1223,18 @@ bool clustered_pnts_draw_runtime::prepare_sidecar(
         update_buffer(
             context,
             t18_buffer,
-            built.payload.t18.data(),
-            sizeof(built.payload.t18)) &&
+            payload.t18.data(),
+            sizeof(payload.t18)) &&
         update_buffer(
             context,
             t19_buffer,
-            built.payload.t19.data(),
-            sizeof(built.payload.t19)) &&
+            payload.t19.data(),
+            sizeof(payload.t19)) &&
         update_buffer(
             context,
             b12,
-            built.payload.b12.data(),
-            sizeof(built.payload.b12));
+            payload.b12.data(),
+            sizeof(payload.b12));
 
     // Buffer refs are temporary upload-lifetime guards. SRV/b12 refs transfer
     // to prepared and are released by release_prepared_draw().
@@ -1358,11 +1258,11 @@ bool clustered_pnts_draw_runtime::prepare_sidecar(
     prepared.producer_serial =
         input.serial;
     prepared.raw_selected_count =
-        built.payload.raw_selected_count;
+        payload.raw_selected_count;
     prepared.material_max_pnt_lit_num =
-        built.payload.material_max_pnt_lit_num;
+        payload.material_max_pnt_lit_num;
     prepared.effective_count =
-        built.payload.effective_count;
+        payload.effective_count;
     prepared.owner_verified = true;
     prepared.selector_mirror_verified = true;
     prepared.ready = true;
