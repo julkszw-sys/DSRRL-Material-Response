@@ -62,6 +62,77 @@ struct upper_lower_plan_view {
     std::string_view replacement_sha256{};
 };
 
+struct upper_lower_slot_positions {
+    std::size_t upper_slot_word = 0u;
+    std::size_t lower_slot_word_0 = 0u;
+    std::size_t lower_slot_word_1 = 0u;
+};
+
+bool locate_pmetal_local_upper_lower_slots(
+    const std::vector<std::uint32_t> &words,
+    upper_lower_slot_positions &out) noexcept
+{
+    // Exact stable P_Metal HemEnv rx33/rx34/rx35 share the same
+    // hemispherical instruction pair:
+    //
+    //   add r?.yzw, cb0[7].xxyz, cb0[8].xxyz
+    //   mad r?.xyz, r?.xxxx, r?.yzwy, cb0[8].xyzx
+    //
+    // R3/R4/R5/R7/Build131 can change SHEX length before this pair, so the
+    // historical absolute stock word offsets are no longer a safe locator
+    // for a composed P_Metal base. Match the semantic operand signature
+    // instead and require exactly one hit.
+    std::size_t hits = 0u;
+    upper_lower_slot_positions candidate{};
+
+    for (std::size_t i = 2u; i < words.size();) {
+        const auto token = words[i];
+        const auto length =
+            static_cast<std::size_t>(
+                (token >> 24u) & 0x7Fu);
+        if (length == 0u ||
+            i + length > words.size())
+            return false;
+
+        if (length == 10u &&
+            (token & 0x7FFu) == 0x000u &&
+            i + 20u <= words.size()) {
+            const auto next = words[i + 10u];
+            const auto next_length =
+                static_cast<std::size_t>(
+                    (next >> 24u) & 0x7Fu);
+
+            if (next_length == 10u &&
+                (next & 0x7FFu) == 0x032u &&
+                words[i + 3u] == 0x00208906u &&
+                words[i + 4u] == 0u &&
+                words[i + 5u] == 7u &&
+                words[i + 6u] == 0x80208906u &&
+                words[i + 7u] == 0x00000041u &&
+                words[i + 8u] == 0u &&
+                words[i + 9u] == 8u &&
+                words[i + 17u] == 0x00208246u &&
+                words[i + 18u] == 0u &&
+                words[i + 19u] == 8u) {
+                candidate = {
+                    i + 4u,
+                    i + 8u,
+                    i + 18u
+                };
+                ++hits;
+            }
+        }
+
+        i += length;
+    }
+
+    if (hits != 1u)
+        return false;
+
+    out = candidate;
+    return true;
+}
+
 bool candidate_size(std::size_t size) noexcept
 {
     for (const auto &plan :
@@ -1120,31 +1191,59 @@ augment_upper_lower_hemenv_verified_base(
         return outcome;
     }
 
-    const std::array<
-        std::pair<std::uint32_t,std::uint32_t>,
-        3> patches{{
-            {plan->u_slot_word, 7u},
-            {plan->d_slot_word_0, 8u},
-            {plan->d_slot_word_1, 8u}
-        }};
+    upper_lower_slot_positions slots{
+        static_cast<std::size_t>(
+            plan->u_slot_word) +
+            words_inserted_at_11,
+        static_cast<std::size_t>(
+            plan->d_slot_word_0) +
+            words_inserted_at_11,
+        static_cast<std::size_t>(
+            plan->d_slot_word_1) +
+            words_inserted_at_11
+    };
 
-    for (const auto &[stock_slot_word, source_register] :
-         patches) {
-        const std::size_t slot_word =
-            static_cast<std::size_t>(
-                stock_slot_word) +
-            words_inserted_at_11;
+    const auto slots_match =
+        [&]() noexcept {
+            return
+                slots.upper_slot_word + 1u < words.size() &&
+                slots.lower_slot_word_0 + 1u < words.size() &&
+                slots.lower_slot_word_1 + 1u < words.size() &&
+                words[slots.upper_slot_word] == 0u &&
+                words[slots.upper_slot_word + 1u] == 7u &&
+                words[slots.lower_slot_word_0] == 0u &&
+                words[slots.lower_slot_word_0 + 1u] == 8u &&
+                words[slots.lower_slot_word_1] == 0u &&
+                words[slots.lower_slot_word_1 + 1u] == 8u;
+        };
 
-        if (slot_word + 1u >= words.size() ||
-            words[slot_word] != 0u ||
-            words[slot_word + 1u] !=
-                source_register) {
+    if (!slots_match()) {
+        // Only the exact P_Metal receivers are authorized to use the
+        // structural fallback. Other U/L families retain their historical
+        // exact-offset contract.
+        if (plan->stable_receiver_id < 33u ||
+            plan->stable_receiver_id > 35u ||
+            !locate_pmetal_local_upper_lower_slots(
+                words,
+                slots) ||
+            !slots_match()) {
             outcome.result =
                 upper_lower_hemenv_materialize_result::
                     fail_operand_precondition;
             return outcome;
         }
+    }
 
+    const std::array<
+        std::pair<std::size_t,std::uint32_t>,
+        3> patches{{
+            {slots.upper_slot_word, 7u},
+            {slots.lower_slot_word_0, 8u},
+            {slots.lower_slot_word_1, 8u}
+        }};
+
+    for (const auto &[slot_word, source_register] :
+         patches) {
         words[slot_word] = 13u;
         words[slot_word + 1u] =
             source_register == 7u

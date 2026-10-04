@@ -405,13 +405,25 @@ register_replacement(
         operators::env_spec::
             pmetal_rgba_materialize_result;
 
-    // Final Renderer Edition policy keeps visible U/L disabled. P_Metal
-    // EnvSpec therefore accepts only the U/L-independent payload that
-    // preserves the stock DSR b0[7]/b0[8] continuation.
+    // Global visible U/L remains disabled. R10 is the one explicit
+    // exception at the P_Metal consumer cut: it may carry exact authored
+    // PTDE Upper/Lower through draw-local b13 without mutating shared
+    // LightBank output. Outside R10, preserve the historical prohibition.
+#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_R10_LOCAL_UL)
+    const bool local_ul_contract_ok =
+        outcome.upper_lower_composed &&
+        (outcome.composed_owners &
+         core::operator_bit(
+             core::operator_id::upper_lower)) != 0u;
+#else
+    const bool local_ul_contract_ok =
+        !outcome.upper_lower_composed;
+#endif
+
     if (outcome.result != result::applied ||
         outcome.receiver_id < 33u ||
         outcome.receiver_id > 35u ||
-        outcome.upper_lower_composed ||
+        !local_ul_contract_ok ||
 #if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_R7_SHADOW)
         (((outcome.receiver_id == 33u ||
            outcome.receiver_id == 34u) &&

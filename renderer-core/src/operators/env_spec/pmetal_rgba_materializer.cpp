@@ -4156,6 +4156,9 @@ materialize_pmetal_rgba_receiver(
             std::move(ul);
         outcome.upper_lower_composed =
             true;
+        outcome.composed_owners |=
+            core::operator_bit(
+                core::operator_id::upper_lower);
     }
 
     // Build131 now owns the dedicated P_Metal SpecRGB consumer itself:

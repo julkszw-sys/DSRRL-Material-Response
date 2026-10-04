@@ -3900,10 +3900,13 @@ void __fastcall hook_steady_packer(
                 g_producer)) {
             if (g_reference_only_transport.load(
                     std::memory_order_acquire)) {
-                // V13 source semantics are materialized at this retail
-                // LightBank producer cut while the source is engine-live.
-                // Keep visible U/L and D123 disabled; only the immutable
-                // P_Metal EnvSpec donor is captured.
+                // Reference-only mode never mutates visible global U/L.
+                // It materializes immutable source state only for exact
+                // downstream consumers. P_Metal R10 additionally needs the
+                // authored PTDE Upper/Lower pair that feeds its local
+                // hemispherical term; decode it here while the exact retail
+                // LightBank row is engine-live, but do not write it back into
+                // the shared DSR LightBank cache/output.
                 f4 env{};
                 std::uint64_t bank = 0u;
                 std::uint32_t row = 0u;
@@ -3928,6 +3931,27 @@ void __fastcall hook_steady_packer(
                     telemetry::hot_count(
                         g_pmetal_env_miss);
                 }
+
+#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_R10_LOCAL_UL)
+                g_producer.have_upper = false;
+                g_producer.have_lower = false;
+                f4 exact_upper{};
+                f4 exact_lower{};
+                if (decode_reference_upper_lower(
+                        source,
+                        selector,
+                        source,
+                        selector,
+                        0.0f,
+                        exact_upper,
+                        exact_lower)) {
+                    g_producer.upper = exact_upper;
+                    g_producer.lower = exact_lower;
+                    g_producer.have_upper = true;
+                    g_producer.have_lower = true;
+                }
+#endif
+
                 telemetry::hot_count(
                     g_steady_pass);
                 return;
@@ -4230,6 +4254,26 @@ void *__fastcall hook_blend_packer(
                     telemetry::hot_count(
                         g_pmetal_env_miss);
                 }
+
+#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_R10_LOCAL_UL)
+                g_producer.have_upper = false;
+                g_producer.have_lower = false;
+                f4 exact_upper{};
+                f4 exact_lower{};
+                if (decode_reference_upper_lower(
+                        source_a,
+                        selector_a,
+                        source_b,
+                        selector_b,
+                        beta,
+                        exact_upper,
+                        exact_lower)) {
+                    g_producer.upper = exact_upper;
+                    g_producer.lower = exact_lower;
+                    g_producer.have_upper = true;
+                    g_producer.have_lower = true;
+                }
+#endif
                 return result;
             }
 
