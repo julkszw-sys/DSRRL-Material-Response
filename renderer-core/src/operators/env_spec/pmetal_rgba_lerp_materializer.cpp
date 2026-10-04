@@ -796,6 +796,9 @@ bool final_postcondition(
     const std::vector<std::uint32_t> &preserved_envdiffuse,
     bool upper_lower_composed) noexcept
 {
+#if defined(DSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE)
+    (void)preserved_envdiffuse;
+#endif
     std::vector<chunk> chunks;
     std::vector<std::uint32_t> words;
     std::size_t code_index = 0u;
