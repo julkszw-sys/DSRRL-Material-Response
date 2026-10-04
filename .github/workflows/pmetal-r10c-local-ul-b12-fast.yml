@@ -73,6 +73,7 @@ jobs:
           if (-not $ascii.Contains($env:DSRRL_CHECKOUT_COMMIT)) { throw "Missing source commit identity" }
           if (-not $ascii.Contains("pmetal_r10c_local_ul_b12")) { throw "Missing R10C build flavor identity" }
           if (-not $ascii.Contains("[DSRRL PMETAL R9 SOURCE STATE]")) { throw "Missing inherited source-state marker" }
+          if (-not $ascii.Contains("[DSRRL PMETAL R10C LOCAL UL]")) { throw "Missing R10C local U/L activation marker" }
           if (-not $ascii.Contains("[DSRRL PMETAL R7 SHADOW]")) { throw "Missing cumulative R7 shadow marker" }
           if (-not $ascii.Contains("[DSRRL PMETAL R3 SPEC ATTEST]")) { throw "Missing exact SpecRGB SHA attestation marker" }
           $hash = (Get-FileHash $path -Algorithm SHA256).Hash.ToLowerInvariant()
