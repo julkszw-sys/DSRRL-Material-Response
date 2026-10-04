@@ -17,7 +17,7 @@ on:
       - "renderer-core/include/dsrrl/runtime/material_resource_draw_runtime.hpp"
       - "renderer-core/src/runtime/clustered_pnts_pipeline_runtime.cpp"
       - "renderer-core/include/dsrrl/runtime/clustered_pnts_pipeline_runtime.hpp"
-      - ".github/workflows/pmetal-r19-lerp-exact-envdiffuse-fast.yml"
+      - ".github/workflows/r20-clustered-spc-legacy-specular.yml"
 
 permissions:
   contents: read
@@ -66,6 +66,7 @@ jobs:
           -DDSRRL_PMETAL_FULL_PTDE_HEMENV_R16_LEGACY_DIFFUSE_SPLIT=ON
           -DDSRRL_PMETAL_FULL_PTDE_HEMENV_R17_PTDE_DIFFUSE_MATERIAL=ON
           -DDSRRL_PMETAL_R19_LERP_MATERIALWORKFLOW=ON
+          -DDSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE=ON
           -DDSRRL_R20_CLUSTERED_SPC_LEGACY_SPECULAR=ON
           -DDSRRL_PHYSICAL_CUT_UL_H3_SUBSURFACE=ON
 
