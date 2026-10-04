@@ -1110,7 +1110,12 @@ bool clustered_pnts_draw_runtime::current_draw_authority(
         g_quarantined.load() ||
         !g_draw_selection.ready ||
         !g_draw_selection.authority_ready ||
-        g_draw_selection.material_spc != expected_spc)
+        g_draw_selection.material_spc != expected_spc ||
+        !g_producer_input_tls.valid ||
+        g_draw_selection.input.serial !=
+            g_producer_input_tls.serial ||
+        g_draw_selection.input.owner !=
+            g_producer_input_tls.owner)
         return false;
 
     material = g_draw_selection.material;
