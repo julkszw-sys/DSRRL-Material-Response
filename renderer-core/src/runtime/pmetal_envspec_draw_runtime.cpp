@@ -379,6 +379,13 @@ on_destroy_device(
     }
     b12_by_context_.clear();
 
+#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_R7_SHADOW)
+    if (shadow_sampler_ != nullptr) {
+        shadow_sampler_->Release();
+        shadow_sampler_ = nullptr;
+    }
+#endif
+
     if (device_ != nullptr) {
         device_->Release();
         device_ = nullptr;
