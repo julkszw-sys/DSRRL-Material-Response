@@ -71,7 +71,8 @@ jobs:
           $ascii = [System.Text.Encoding]::ASCII.GetString([System.IO.File]::ReadAllBytes($path))
           if (-not $ascii.Contains($env:DSRRL_CHECKOUT_COMMIT)) { throw "Missing source commit identity" }
           if (-not $ascii.Contains("pmetal_r9_source_state_profiler")) { throw "Missing R9 build flavor identity" }
-          if (-not $ascii.Contains("[DSRRL PMETAL R9 SOURCE STATE]")) { throw "Missing R9 source-state marker" }\n          if (-not $ascii.Contains("[DSRRL PMETAL R7 SHADOW]")) { throw "Missing cumulative R7 shadow marker" }
+          if (-not $ascii.Contains("[DSRRL PMETAL R9 SOURCE STATE]")) { throw "Missing R9 source-state marker" }
+          if (-not $ascii.Contains("[DSRRL PMETAL R7 SHADOW]")) { throw "Missing cumulative R7 shadow marker" }
           if (-not $ascii.Contains("[DSRRL PMETAL R3 SPEC ATTEST]")) { throw "Missing exact SpecRGB SHA attestation marker" }
           $hash = (Get-FileHash $path -Algorithm SHA256).Hash.ToLowerInvariant()
           Write-Host "ADDON_SHA256=$hash"
