@@ -1579,23 +1579,148 @@ bool pmetal_envspec_draw_runtime::prepare(
     if (family !=
             pmetal_envspec_receiver_family::
                 stable_hemenv ||
-        !source.upper_lower_linear_valid ||
-        !prepare_pmetal_local_upper_lower_carrier(
-            context,
-            source.upper,
-            source.lower,
-            prepared.local_ul)) {
+        !source.upper_lower_linear_valid) {
         release(prepared);
         effect_fail(
             effect_fail_mask_,
             k_effect_fail_source);
         log_prepare_stage_once(
             1u << 14u,
-            "local_ul_b13_reject",
+            "local_ul_source_reject",
             material,
             decision,
             family);
         return false;
+    }
+
+    std::array<std::array<float,4>,8> ul_payload{};
+    ul_payload[6] = {
+        source.upper[0],
+        source.upper[1],
+        source.upper[2],
+        0.0f
+    };
+    ul_payload[7] = {
+        source.lower[0],
+        source.lower[1],
+        source.lower[2],
+        0.0f
+    };
+    static_assert(sizeof(ul_payload) == 128u);
+
+    std::array<std::uint32_t,32> ul_payload_bits{};
+    std::memcpy(
+        ul_payload_bits.data(),
+        ul_payload.data(),
+        sizeof(ul_payload));
+
+    ID3D11Buffer *b13 = nullptr;
+    bool ul_upload_required = true;
+    const auto b13_key =
+        reinterpret_cast<std::uintptr_t>(
+            context);
+
+    {
+        std::lock_guard<std::mutex> lock(
+            mutex_);
+
+        const auto found =
+            b13_by_context_.find(
+                b13_key);
+
+        if (found !=
+                b13_by_context_.end() &&
+            found->second.buffer != nullptr) {
+            b13 = found->second.buffer;
+            b13->AddRef();
+            ul_upload_required =
+                !found->second.payload_valid ||
+                found->second.payload_bits !=
+                    ul_payload_bits;
+        } else {
+            D3D11_BUFFER_DESC desc{};
+            desc.ByteWidth = 128u;
+            desc.Usage =
+                D3D11_USAGE_DYNAMIC;
+            desc.BindFlags =
+                D3D11_BIND_CONSTANT_BUFFER;
+            desc.CPUAccessFlags =
+                D3D11_CPU_ACCESS_WRITE;
+
+            if (device_ == nullptr ||
+                FAILED(
+                    device_->CreateBuffer(
+                        &desc,
+                        nullptr,
+                        &b13)) ||
+                b13 == nullptr) {
+                release(prepared);
+                effect_fail(
+                    effect_fail_mask_,
+                    k_effect_fail_b12);
+                log_prepare_stage_once(
+                    1u << 14u,
+                    "local_ul_b13_create_reject",
+                    material,
+                    decision,
+                    family);
+                return false;
+            }
+
+            b13_context_cache entry{};
+            entry.buffer = b13;
+            b13_by_context_.emplace(
+                b13_key,
+                entry);
+            b13->AddRef();
+        }
+    }
+
+    prepared.b13 = b13;
+
+    if (ul_upload_required) {
+        D3D11_MAPPED_SUBRESOURCE mapped{};
+        if (FAILED(
+                context->Map(
+                    b13,
+                    0u,
+                    D3D11_MAP_WRITE_DISCARD,
+                    0u,
+                    &mapped)) ||
+            mapped.pData == nullptr) {
+            release(prepared);
+            effect_fail(
+                effect_fail_mask_,
+                k_effect_fail_b12);
+            log_prepare_stage_once(
+                1u << 14u,
+                "local_ul_b13_map_reject",
+                material,
+                decision,
+                family);
+            return false;
+        }
+
+        std::memcpy(
+            mapped.pData,
+            ul_payload.data(),
+            sizeof(ul_payload));
+        context->Unmap(
+            b13,
+            0u);
+
+        std::lock_guard<std::mutex> lock(
+            mutex_);
+        const auto found =
+            b13_by_context_.find(
+                b13_key);
+        if (found !=
+                b13_by_context_.end() &&
+            found->second.buffer == b13) {
+            found->second.payload_bits =
+                ul_payload_bits;
+            found->second.payload_valid = true;
+        }
     }
 #endif
 
@@ -1679,7 +1804,7 @@ bool pmetal_envspec_draw_runtime::prepare(
     prepared.request.constant_buffers[
         prepared.request.constant_buffer_count++] = {
             13u,
-            prepared.local_ul.b13,
+            prepared.b13,
             ul_owner
         };
 #endif
