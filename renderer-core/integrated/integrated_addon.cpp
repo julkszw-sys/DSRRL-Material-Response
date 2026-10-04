@@ -46,6 +46,7 @@
 #include "dsrrl/operators/point_light/fixed_local_specular_island_plan.hpp"
 #include "dsrrl/operators/point_light/fixed_local_specular_single_materializer.hpp"
 #include "dsrrl/operators/point_light/clustered_pnts_direct_materializer.hpp"
+#include "dsrrl/operators/point_light/clustered_spc_legacy_materializer.hpp"
 #include "dsrrl/operators/legacy_plan/dxbc_checksum.hpp"
 #include "dsrrl/operators/legacy_plan/sha256_bytes.hpp"
 #include "dsrrl/operators/postprocess/motion_blur_velocity_authority.hpp"
@@ -307,6 +308,8 @@ std::atomic<std::uint64_t> g_local_specular_output_cut_fail{0};
 std::atomic<std::uint64_t> g_local_specular_island_plan_ready{0};
 std::atomic<std::uint64_t> g_local_specular_island_plan_fail{0};
 std::atomic<std::uint64_t> g_local_specular_single_materialize_ok{0};
+std::atomic<std::uint64_t> g_local_specular_clustered_materialize_ok{0};
+std::atomic<std::uint64_t> g_local_specular_clustered_materialize_fail{0};
 std::atomic<std::uint64_t> g_local_specular_blended_defer{0};
 std::atomic<std::uint64_t> g_local_specular_materialize_fail{0};
 std::atomic<std::uint64_t> g_fixed_draw_candidates{0};
@@ -4134,10 +4137,60 @@ bool on_create_pipeline(
                     source,
                     pixel_shader->code_size,
                     clustered_pnts_payload);
+
+            using clustered_result =
+                dsrrl::operators::point_light::
+                    clustered_pnts_direct_materialize_result;
+
+            if (clustered_pnts.result ==
+                    clustered_result::applied &&
+                clustered_pnts.spc) {
+                std::vector<std::uint8_t>
+                    clustered_legacy_payload;
+                const auto legacy =
+                    dsrrl::operators::point_light::
+                        materialize_clustered_spc_legacy_specular(
+                            clustered_pnts_payload.data(),
+                            clustered_pnts_payload.size(),
+                            true,
+                            clustered_pnts.blended_material,
+                            clustered_pnts.
+                                representative_shader_index,
+                            clustered_legacy_payload);
+
+                using legacy_result =
+                    dsrrl::operators::point_light::
+                        clustered_spc_legacy_materialize_result;
+
+                if (legacy.result ==
+                        legacy_result::applied) {
+                    clustered_pnts_payload =
+                        std::move(
+                            clustered_legacy_payload);
+                    clustered_pnts.replacement_sha256 =
+                        legacy.replacement_sha256;
+                    clustered_pnts.replacement_size =
+                        legacy.replacement_size;
+                    clustered_pnts.
+                        legacy_specular_materialized =
+                            true;
+                    clustered_pnts.composed_shader_owners |=
+                        dsrrl::core::operator_bit(
+                            dsrrl::core::operator_id::
+                                local_specular_legacy);
+                    ++g_local_specular_clustered_materialize_ok;
+                } else {
+                    ++g_local_specular_clustered_materialize_fail;
+                }
+            }
+
         clustered_pnts_candidate =
             clustered_pnts.result ==
                 dsrrl::operators::point_light::
-                    clustered_pnts_direct_materialize_result::applied;
+                    clustered_pnts_direct_materialize_result::applied &&
+            (!clustered_pnts.spc ||
+             clustered_pnts.
+                legacy_specular_materialized);
 
         // Observe the exact original DSR local-specular host before any
         // create-time island is allowed to replace the shader bytes. This is
