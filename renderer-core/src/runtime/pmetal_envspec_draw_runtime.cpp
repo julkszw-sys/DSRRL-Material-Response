@@ -2169,6 +2169,10 @@ void pmetal_envspec_draw_runtime::release(
 
     if (prepared.b12 != nullptr)
         prepared.b12->Release();
+#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_R10_LOCAL_UL)
+    if (prepared.b13 != nullptr)
+        prepared.b13->Release();
+#endif
 
     if (prepared.shader != nullptr)
         prepared.shader->Release();
