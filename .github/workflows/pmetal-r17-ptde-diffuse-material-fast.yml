@@ -1,14 +1,15 @@
-name: P_Metal R17 PTDE Diffuse Material Build
+name: P_Metal R18 Lerp MaterialWorkflow Build
 
 on:
   workflow_dispatch:
   push:
     branches:
-      - pmetal-r17-ptde-diffuse-material-factor
+      - r18-lerp-equipment-materialworkflow
   pull_request:
     paths:
       - "renderer-core/integrated/**"
-      - "renderer-core/src/operators/env_spec/pmetal_rgba_materializer.cpp"
+      - "renderer-core/src/operators/material_response/material_response_diffuse_v1.cpp"
+      - "renderer-core/src/runtime/pmetal_envspec_draw_runtime.cpp"
       - ".github/workflows/pmetal-r17-ptde-diffuse-material-fast.yml"
 
 permissions:
@@ -35,7 +36,7 @@ jobs:
           ref: 3645e3025d1d98a90e318278858931f034d5d1f6
           path: _reshade
 
-      - name: Configure R17 PTDE diffuse material producer
+      - name: Configure R18 Lerp MaterialWorkflow diagnostic
         shell: pwsh
         run: >
           cmake
@@ -44,7 +45,7 @@ jobs:
           -A x64
           -DRESHADE_INCLUDE_DIR="${{ github.workspace }}/_reshade/include"
           -DDSRRL_SOURCE_COMMIT="$env:DSRRL_CHECKOUT_COMMIT"
-          -DDSRRL_BUILD_FLAVOR="pmetal_r17_ptde_diffuse_material_factor"
+          -DDSRRL_BUILD_FLAVOR="pmetal_r18_lerp_materialworkflow_diag"
           -DDSRRL_FULL_TELEMETRY_DEFAULT_ON=ON
           -DDSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG=ON
           -DDSRRL_PMETAL_FULL_PTDE_HEMENV_R3=ON
@@ -57,6 +58,8 @@ jobs:
           -DDSRRL_PMETAL_FULL_PTDE_HEMENV_R15_PTDE_LIVEOUT_PAIR=ON
           -DDSRRL_PMETAL_FULL_PTDE_HEMENV_R16_LEGACY_DIFFUSE_SPLIT=ON
           -DDSRRL_PMETAL_FULL_PTDE_HEMENV_R17_PTDE_DIFFUSE_MATERIAL=ON
+          -DDSRRL_EQUIPMENT_MATERIALWORKFLOW_R18=ON
+          -DDSRRL_PMETAL_R18_LERP_MATERIALWORKFLOW_DIAG=ON
           -DDSRRL_PHYSICAL_CUT_UL_H3_SUBSURFACE=ON
 
       - name: Build runtime
@@ -66,15 +69,15 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           $addons = @(Get-ChildItem build-fast -Recurse -Filter *.addon64)
           if ($addons.Count -ne 1) { throw "Expected exactly one addon, found $($addons.Count)" }
-          Copy-Item $addons[0].FullName "DSRRL_PMETAL_R17_PTDE_DIFFUSE_MATERIAL.addon64" -Force
+          Copy-Item $addons[0].FullName "DSRRL_PMETAL_R18_LERP_MATERIALWORKFLOW.addon64" -Force
 
       - name: Verify binary identity
         shell: pwsh
         run: |
-          $path = "DSRRL_PMETAL_R17_PTDE_DIFFUSE_MATERIAL.addon64"
+          $path = "DSRRL_PMETAL_R18_LERP_MATERIALWORKFLOW.addon64"
           $ascii = [System.Text.Encoding]::ASCII.GetString([System.IO.File]::ReadAllBytes($path))
           if (-not $ascii.Contains($env:DSRRL_CHECKOUT_COMMIT)) { throw "Missing source commit identity" }
-          if (-not $ascii.Contains("pmetal_r17_ptde_diffuse_material_factor")) { throw "Missing R17 build flavor identity" }
+          if (-not $ascii.Contains("pmetal_r17_ptde_diffuse_material_factor")) { throw "Missing R18 build flavor identity" }
           if (-not $ascii.Contains("[DSRRL PMETAL R7 SHADOW]")) { throw "Missing cumulative R7 shadow marker" }
           if (-not $ascii.Contains("[DSRRL PMETAL R3 SPEC ATTEST]")) { throw "Missing exact SpecRGB SHA attestation marker" }
           $hash = (Get-FileHash $path -Algorithm SHA256).Hash.ToLowerInvariant()
@@ -82,6 +85,6 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: DSRRL_PMETAL_R17_PTDE_DIFFUSE_MATERIAL
-          path: DSRRL_PMETAL_R17_PTDE_DIFFUSE_MATERIAL.addon64
+          name: DSRRL_PMETAL_R18_LERP_MATERIALWORKFLOW
+          path: DSRRL_PMETAL_R18_LERP_MATERIALWORKFLOW.addon64
           if-no-files-found: error
