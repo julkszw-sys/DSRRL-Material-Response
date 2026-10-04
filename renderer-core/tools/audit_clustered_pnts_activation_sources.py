@@ -82,6 +82,7 @@ def main():
     policy=(root/"include/dsrrl/core/draw_transaction_policy.hpp").read_text(encoding="utf-8")
     adapter=(root/"src/runtime/island_draw_adapter.cpp").read_text(encoding="utf-8")
     transaction=(root/"src/runtime/draw_state_transaction.cpp").read_text(encoding="utf-8")
+    native_draw=(root/"src/runtime/pmetal_native_draw_bridge.cpp").read_text(encoding="utf-8")
 
     material_router=json.loads((root/"data/census/ptde_mtd_envspec_router_v1.json").read_text(encoding="utf-8"))
     material_records=material_router.get("records",[])
@@ -136,15 +137,19 @@ def main():
 
     builder_start=draw_cpp.find("void clustered_pnts_draw_runtime::builder_event(")
     selector_start=draw_cpp.find("void clustered_pnts_draw_runtime::selector_event(")
+    selector_identity_start=draw_cpp.find("void clustered_pnts_draw_runtime::selector_identity_event(")
+    authority_start=draw_cpp.find("bool clustered_pnts_draw_runtime::current_draw_authority(")
     prepare_start=draw_cpp.find("bool clustered_pnts_draw_runtime::prepare_sidecar(")
     release_start=draw_cpp.find("void clustered_pnts_draw_runtime::release_prepared_draw(")
-    if min(builder_start,selector_start,prepare_start,release_start)<0:
+    if min(builder_start,selector_start,selector_identity_start,authority_start,prepare_start,release_start)<0:
         fail("clustered runtime stage boundaries are missing")
-    if not (builder_start < selector_start < prepare_start < release_start):
+    if not (builder_start < selector_start < selector_identity_start < authority_start < prepare_start < release_start):
         fail("clustered runtime stage ordering is invalid")
 
     builder_body=draw_cpp[builder_start:selector_start]
-    selector_body=draw_cpp[selector_start:prepare_start]
+    selector_body=draw_cpp[selector_start:selector_identity_start]
+    selector_identity_body=draw_cpp[selector_identity_start:authority_start]
+    authority_body=draw_cpp[authority_start:prepare_start]
     prepare_body=draw_cpp[prepare_start:release_start]
 
     require(builder_body,"g_producer_input_tls","capture-only producer TLS")
@@ -163,24 +168,41 @@ def main():
     require(selector_body,"g_producer_input_tls","same-thread producer join")
     require(selector_body,"actual_material) + 0x384u","direct attested material-limit read")
     if "readable_range(" in selector_body or "VirtualQuery(" in selector_body:
-        fail("selector hot path still performs OS page validation")
+        fail("selector join still performs OS page validation")
     if "lookup_snapshot(" in selector_body or "g_registry_mutex" in selector_body:
-        fail("selector hot path still uses legacy synchronized producer registry")
+        fail("selector join still uses legacy synchronized producer registry")
 
-    require(prepare_body,"material.active","authorized material gate before heavy work")
-    require(prepare_body,"select_first_four_exact(","authorized-draw exact first-four selector")
-    require(prepare_body,"capture_source(","authorized-draw raw source capture")
+    # R20 architecture: expensive PTDE membership/source reconstruction is
+    # producer/selector-local and cached by producer serial. The draw prepare
+    # stage may only consume the already materialized payload.
+    require(selector_identity_body,"evaluate_direct_pointlight_material_identity(","selector-local exact PointLight material authority")
+    require(selector_identity_body,"source_cache.producer_serial != input.serial","producer-serial source cache")
+    require(selector_identity_body,"select_first_four_exact(","selector-local exact first-four reconstruction")
+    require(selector_identity_body,"capture_source(","selector-local PTDE source capture")
+    require(selector_identity_body,"build_clustered_sidecar_v1(","selector-local sidecar materialization")
+    if "std::lock_guard" in selector_identity_body:
+        fail("selector-local PointLight source/material cache must not take the GPU resource mutex")
+
+    require(authority_body,"g_draw_selection.authority_ready","draw consumes cached PointLight authority")
+    require(authority_body,"g_draw_selection.material_decision","draw reuses selector-resolved material decision")
+
+    require(prepare_body,"material.active","authorized material gate")
+    require(prepare_body,"g_draw_selection.payload_ready","draw consumes cached sidecar payload")
+    require(prepare_body,"const auto &payload =","cached sidecar payload reuse")
+    for forbidden,label in [
+        ("select_first_four_exact(","first-four traversal"),
+        ("capture_source(","source vfunc/donor capture"),
+        ("build_clustered_sidecar_v1(","CPU sidecar rebuild")
+    ]:
+        if forbidden in prepare_body:
+            fail(f"draw prepare regressed to {label}")
+
     require(draw_h,"neutral_no_pointlights","zero-light neutral ABI")
     require(draw_h,"prepare_neutral_empty","zero-light neutral telemetry ABI")
-    require(prepare_body,"prepared.neutral_no_pointlights = true;","zero-light neutral classification")
-    require(prepare_body,"g_prepare_neutral_empty","zero-light neutral preparation telemetry")
-    empty_start=prepare_body.find("if (selected_count == 0u)")
-    source_start=prepare_body.find("std::array<source_raw,4> sources",empty_start)
-    if empty_start<0 or source_start<0 or not empty_start<source_start:
-        fail("zero-light selector branch is missing")
-    empty_body=prepare_body[empty_start:source_start]
-    if "g_sidecar_fail" in empty_body or "g_prepare_fail" in empty_body:
-        fail("zero-light exact membership is still classified as a prepare/sidecar failure")
+    require(selector_identity_body,"source_cache.neutral = true;","zero-light producer-cache classification")
+    require(selector_identity_body,"g_draw_selection.neutral_no_pointlights = true;","zero-light draw classification")
+    require(selector_identity_body,"g_prepare_neutral_empty","zero-light preparation telemetry")
+    require(prepare_body,"prepared.neutral_no_pointlights = true;","zero-light neutral draw handoff")
     require(integrated,"clustered_no_pointlights_neutral","zero-light neutral runtime stage")
     require(integrated,"g_clustered_draw_neutral_noop","zero-light neutral draw telemetry")
     require(integrated,"!prepared.clustered_neutral_noop","zero-light fail-open exclusion")
@@ -200,7 +222,12 @@ def main():
     if "gpu_resources g_gpu{}" in draw_cpp:
         fail("clustered sidecar regressed to a process-global dynamic GPU carrier")
     if prepare_body.count("std::lock_guard<std::mutex> lock(")!=1:
-        fail("clustered sidecar must use one GPU carrier synchronization point per prepared draw")
+        fail("clustered sidecar must use exactly one GPU carrier synchronization point per prepared draw")
+    require(draw_cpp,"upload_identity_for(","TLS upload identity cache")
+    require(draw_cpp,"gpu_generation","GPU carrier generation key")
+    require(prepare_body,"!upload_t18 ||","t18 upload dedupe")
+    require(prepare_body,"!upload_t19 ||","t19 upload dedupe")
+    require(prepare_body,"!upload_b12 ||","b12 upload dedupe")
     require(draw_cpp,"DSRRL_CLUSTERED_SELECTOR_RUNTIME_CROSSCHECK","optional retained-selector cross-check gate")
     require(draw_cpp,"g_retained_selector","retained selector available only for optional cross-check")
     require(draw_cpp,"spatial_overlap_xyz_unchecked","single node-range validation overlap path")
@@ -233,8 +260,11 @@ def main():
     require(mr_cpp,"record.c101_scalar","RGB c101 fail-open guard")
     require(mr_cpp,"f32_from_bits","bit-exact PTDE PointLight constants decode")
     require(mr_cpp,"record_spc != require_legacy_specular","receiver-derived Spc/NoSpc exclusion")
-    require(integrated,"evaluate_direct_pointlight_material","direct PointLight material resolver call")
-    require(integrated,"direct_pointlight_requires_specular","receiver-derived specular requirement")
+    require(mr_cpp,"direct_pointlight_material_candidate","cheap PointLight material prefilter")
+    require(flver_cpp,"direct_pointlight_material_candidate(","PointLight prefilter before clustered selector runtime")
+    require(flver_cpp,"clustered_pnts_selector_identity_event_bridge(","selector-cached PointLight identity publication")
+    require(integrated,"g_clustered_pnts.current_draw_authority(","clustered draw cached authority lookup")
+    require(integrated,"clustered_pointlight_spc","receiver-derived clustered Spc requirement")
     require(integrated,"[DSRRL POINTLIGHT GATE]","one-shot direct PointLight rejection trace")
     require(integrated,"clustered_metadata_unbound","pipeline-route versus bound-metadata rejection trace")
     clustered_marker=integrated.find("// Clustered PntS owns PTDE first-four membership")
@@ -328,29 +358,37 @@ def main():
     require(policy,"{operator_id::point_light, draw_transaction_mode::draw_required","PointLight draw transaction")
     require(policy,"{operator_id::local_specular_legacy, draw_transaction_mode::draw_required","legacy spec draw transaction")
 
-    # Final transaction closure: shader+b12+t18+t19 mutation is replayed only
-    # through the shared draw transaction and all captured D3D11 state is
-    # restored (and optionally read back) before the host draw path resumes.
-    require(adapter,"transactions.replay_draw(","non-indexed shared draw transaction")
-    require(adapter,"transactions.replay_draw_indexed(","indexed shared draw transaction")
-    require(transaction,"PSSetShader(","pixel-shader mutation/restore")
-    require(transaction,"restore_ps_constant_buffer_window","constant-buffer restore")
-    require(transaction,"PSSetShaderResources(","SRV mutation/restore")
-    require(transaction,"return restore(cmd_list, state)","post-draw restore gate")
-    require(transaction,"issued_restore_failed","restore failure quarantine path")
+    # Final draw closure: immediate-context clustered PointLight prefers the
+    # native original-draw bridge (one host Draw, no ReShade replay). Deferred
+    # or unavailable native paths retain the shared replay transaction as an
+    # exact fail-safe. Both paths restore the captured shader/CB/SRV state.
+    require(integrated,"prepared.clustered_in_batch","clustered native original-draw eligibility")
+    require(integrated,"g_pmetal_native_draw.arm_draw(","native original non-indexed draw bridge")
+    require(integrated,"g_pmetal_native_draw.arm_draw_indexed(","native original indexed draw bridge")
+    require(native_draw,"core::operator_id::point_light","native bridge PointLight ownership gate")
+    require(native_draw,"capture_state(","native original-draw state capture")
+    require(native_draw,"apply_mutation(","native original-draw mutation")
+    require(native_draw,"restore_state(","native original-draw restore")
+    require(adapter,"transactions.replay_draw(","non-indexed replay fallback")
+    require(adapter,"transactions.replay_draw_indexed(","indexed replay fallback")
+    require(transaction,"PSSetShader(","fallback pixel-shader mutation/restore")
+    require(transaction,"restore_ps_constant_buffer_window","fallback constant-buffer restore")
+    require(transaction,"PSSetShaderResources(","fallback SRV mutation/restore")
+    require(transaction,"return restore(cmd_list, state)","fallback post-draw restore gate")
+    require(transaction,"issued_restore_failed","fallback restore failure quarantine path")
 
     print("Clustered PntS pre-runtime activation source audit: PASS")
     print("  receivers=36 spc=24 nospc=12 stock_membership=t16/t17_bypassed")
-    print("  producer=builder-input-snapshot>same-thread-material-join>authorized-draw-first4+raw-source")
+    print("  producer=builder-input-snapshot>exact-PointLight-material-prefilter>producer-serial-first4+PTDE-source-cache")
     print("  carrier=b12[3].x+t18+t19 material_max=uint32 min_after_first4")
     print("  material=25 exact HOMOLOGOUS_NOSPC pairs; identity=certified supplement; c100=bit-exact router authority")
-    print("  chain=candidate>receiver>material>operator-gate>selector>sources>b12+t18+t19>shader>draw-mutation>restore")
+    print("  chain=create-time-shader>producer/selector source+material cache>draw cached payload>native-original-draw or replay-fallback>restore")
     print("  equipment_textures=independent; no clustered Diffuse/Normal/SpecRGB prerequisite")
     print("  zero_light=exact first-four empty membership is neutral stock-equivalent no-op, not fail-open")
     print("  d3d11_context=immediate_or_deferred; dynamic WRITE_DISCARD carrier; stage telemetry enforced")
     print("  shader_owners=dynamic PointLight/MR/local-spec + exact static diffuse-domain/attenuation/SAT (+NoSpc EnvSpec-delete)")
     print("  cb_resources=dynamic owners only; static create-time owners remain shader-only")
-    print("  draw=adapter-valid ownership + exact pipeline route + shared transaction")
+    print("  draw=exact pipeline route + cached authority; immediate=native original draw, fallback=shared replay transaction")
     return 0
 
 if __name__=="__main__":
