@@ -1,6 +1,6 @@
 {
   "schema": "dsrrl.clustered_pnts_composed_shader_ownership.v1",
-  "status": "CONFIRMED_STATIC_COMPOSITION_SPC_FAIL_OPEN_UNTIL_LEGACY_KERNEL",
+  "status": "CURRENT_B12_ABI_MIGRATION_CONSTRUCTION_CANDIDATE",
   "source_journal": "renderer-core/data/provenance/clustered_pnts_direct_stock_journal_v1.json",
   "scope": {
     "plans": 36,
@@ -18,19 +18,28 @@
     ]
   },
   "runtime_ownership": {
-    "dynamic_primary": "Spc=FAIL_OPEN until local_specular_legacy microfacet window is exactly materialized; NoSpc=point_light",
+    "dynamic_primary": "Spc=local_specular_legacy only after current_b12_abi + legacy_specular_complete attestation; NoSpc=point_light only after current_b12_abi attestation",
     "dynamic_existing": [
-      "NoSpc point_light",
+      "NoSpc point_light with current-b12 ABI attestation",
       "NoSpc material_response",
-      "Spc local_specular_legacy census/readiness only; not replay-authorized"
+      "Spc local_specular_legacy direct-PTDE journal with historical replacement-SHA attestation followed by exact current-b12 operand migration"
     ],
     "static_composed_mask_transport": "materializer -> candidate record -> prepared bound shader -> island_draw_adapter_request.additional_shader_owners",
     "static_owners_are_shader_only": true,
     "dynamic_cb_resource_ownership_unchanged": true,
-    "mismatch_behavior": "FAIL_OPEN; clustered Spc always fails open while legacy local-specular rewrite is unmaterialized"
+    "mismatch_behavior": "FAIL_OPEN on original host SHA/journal SHA/legacy material-operand cardinality/current-b12 postcondition/pipeline attestation mismatch"
   },
-  "conclusion": "The direct clustered PntS replacement is only production-complete for NoSpc under the current journal. All 36 plans contain diffuse-domain, attenuation and terminal-SAT edits (plus NoSpc EnvSpec deletion), but Spc still contains the stock DSR microfacet local-specular window. Runtime must not claim local_specular_legacy ownership for Spc until a complete PTDE legacy-kernel rewrite is materialized; current Spc behavior is fail-open to stock DSR.",
-  "runtime_liveness": "OPEN_AFTER_SPC_FAIL_OPEN",
-  "bridge_activation": "OPEN_AFTER_SPC_FAIL_OPEN",
-  "pixel_behavior": "OPEN"
+  "conclusion": "The 36-plan direct clustered PntS journal is a complete direct-PTDE local-light receiver construction, but its historical PointLight-specific b12 material operands predate the MR reset. Runtime-v2 now preserves the historical byte-exact replacement SHA as an intermediate attestation and performs a same-length exact ABI migration: all 36 c100 reads b12[1].yzw -> b12[1].xyz; all 24 Spc c101 reads b12[0].xyz -> b12[2].xyz; Spc c102 b12[0].w remains unchanged. Spc replay is permitted only when both current_b12_abi and legacy_specular_complete survive candidate registration; otherwise stock DSR fail-open. Runtime liveness and pixel behavior remain OPEN.",
+  "runtime_liveness": "OPEN_AFTER_CURRENT_B12_BUILD",
+  "bridge_activation": "OPEN_AFTER_CURRENT_B12_BUILD",
+  "pixel_behavior": "OPEN",
+  "current_b12_migration": {
+    "source_head": "b9d74317ce63a4e86c09689d24d44933959ae424",
+    "all36_c100": "b12[1].yzw -> b12[1].xyz",
+    "spc24_c101": "b12[0].xyz -> b12[2].xyz",
+    "spc24_c102": "b12[0].w unchanged",
+    "historical_replacement_sha_attested_before_migration": true,
+    "exact_cardinality_fail_open": true,
+    "ci": "QUEUED"
+  }
 }
