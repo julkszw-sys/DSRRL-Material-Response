@@ -270,6 +270,15 @@ release_resources() noexcept
     b13_envdiffuse_by_context_.clear();
 #endif
 
+#if defined(DSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE)
+    for (auto &[_,entry] :
+         b13_envdiffuse_by_context_) {
+        if (entry.buffer != nullptr)
+            entry.buffer->Release();
+    }
+    b13_envdiffuse_by_context_.clear();
+#endif
+
 #if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_R7_SHADOW)
     if (shadow_sampler_ != nullptr) {
         shadow_sampler_->Release();
@@ -387,6 +396,15 @@ on_destroy_device(
             entry.buffer->Release();
     }
     b12_by_context_.clear();
+
+#if defined(DSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE)
+    for (auto &[_,entry] :
+         b13_envdiffuse_by_context_) {
+        if (entry.buffer != nullptr)
+            entry.buffer->Release();
+    }
+    b13_envdiffuse_by_context_.clear();
+#endif
 
 #if defined(DSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE)
     for (auto &[_,entry] :
@@ -1886,6 +1904,235 @@ bool pmetal_envspec_draw_runtime::prepare(
 #endif
     prepared.request.sampler_count =
         request_sampler_count;
+
+#if defined(DSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE)
+    if (family ==
+            pmetal_envspec_receiver_family::
+                hemenvlerp) {
+        if (!source.envdiffuse_linear_valid ||
+            !std::isfinite(source.beta) ||
+            source.beta < 0.0f ||
+            source.beta > 1.0f) {
+            release(prepared);
+            effect_fail(
+                effect_fail_mask_,
+                k_effect_fail_source);
+            log_prepare_stage_once(
+                1u << 14u,
+                "lerp_envdiffuse_source_reject",
+                material,
+                decision,
+                family);
+            return false;
+        }
+
+        const auto beta = source.beta;
+        const auto one_minus_beta = 1.0f - beta;
+        const std::array<f4,2> envdiffuse_payload{{
+            {
+                one_minus_beta * source.envdiffuse_a[0],
+                one_minus_beta * source.envdiffuse_a[1],
+                one_minus_beta * source.envdiffuse_a[2],
+                0.0f
+            },
+            {
+                beta * source.envdiffuse_b[0],
+                beta * source.envdiffuse_b[1],
+                beta * source.envdiffuse_b[2],
+                0.0f
+            }
+        }};
+        static_assert(
+            sizeof(envdiffuse_payload) == 32u);
+
+        std::array<std::uint32_t,8>
+            envdiffuse_payload_bits{};
+        std::memcpy(
+            envdiffuse_payload_bits.data(),
+            envdiffuse_payload.data(),
+            sizeof(envdiffuse_payload));
+
+        ID3D11Device *carrier_device = nullptr;
+        context->GetDevice(&carrier_device);
+        if (carrier_device == nullptr) {
+            release(prepared);
+            effect_fail(
+                effect_fail_mask_,
+                k_effect_fail_device);
+            return false;
+        }
+
+        ID3D11Buffer *b13 = nullptr;
+        bool b13_upload_required = true;
+        const auto b13_key =
+            reinterpret_cast<std::uintptr_t>(
+                context);
+
+        {
+            std::lock_guard<std::mutex> lock(
+                mutex_);
+
+            if (device_ != carrier_device) {
+                carrier_device->Release();
+                release(prepared);
+                quarantined_.store(true);
+                effect_fail(
+                    effect_fail_mask_,
+                    k_effect_fail_device);
+                return false;
+            }
+
+            const auto found =
+                b13_envdiffuse_by_context_.find(
+                    b13_key);
+
+            if (found !=
+                    b13_envdiffuse_by_context_.end() &&
+                found->second.buffer != nullptr) {
+                b13 = found->second.buffer;
+                b13->AddRef();
+                b13_upload_required =
+                    !found->second.payload_valid ||
+                    found->second.payload_bits !=
+                        envdiffuse_payload_bits;
+            } else {
+                D3D11_BUFFER_DESC desc{};
+                desc.ByteWidth = 32u;
+                desc.Usage =
+                    D3D11_USAGE_DYNAMIC;
+                desc.BindFlags =
+                    D3D11_BIND_CONSTANT_BUFFER;
+                desc.CPUAccessFlags =
+                    D3D11_CPU_ACCESS_WRITE;
+
+                if (FAILED(
+                        carrier_device->CreateBuffer(
+                            &desc,
+                            nullptr,
+                            &b13)) ||
+                    b13 == nullptr) {
+                    carrier_device->Release();
+                    release(prepared);
+                    effect_fail(
+                        effect_fail_mask_,
+                        k_effect_fail_b12);
+                    log_prepare_stage_once(
+                        1u << 14u,
+                        "b13_envdiffuse_create_reject",
+                        material,
+                        decision,
+                        family);
+                    return false;
+                }
+
+                b13_envdiffuse_context_cache entry{};
+                entry.buffer = b13;
+                b13_envdiffuse_by_context_.emplace(
+                    b13_key,
+                    entry);
+                b13->AddRef();
+            }
+        }
+
+        carrier_device->Release();
+
+        if (b13_upload_required) {
+            D3D11_MAPPED_SUBRESOURCE mapped{};
+            if (FAILED(
+                    context->Map(
+                        b13,
+                        0u,
+                        D3D11_MAP_WRITE_DISCARD,
+                        0u,
+                        &mapped)) ||
+                mapped.pData == nullptr) {
+                b13->Release();
+                release(prepared);
+                effect_fail(
+                    effect_fail_mask_,
+                    k_effect_fail_b12);
+                log_prepare_stage_once(
+                    1u << 14u,
+                    "b13_envdiffuse_map_reject",
+                    material,
+                    decision,
+                    family);
+                return false;
+            }
+
+            std::memcpy(
+                mapped.pData,
+                envdiffuse_payload.data(),
+                sizeof(envdiffuse_payload));
+            context->Unmap(
+                b13,
+                0u);
+
+            {
+                std::lock_guard<std::mutex> lock(
+                    mutex_);
+                const auto found =
+                    b13_envdiffuse_by_context_.find(
+                        b13_key);
+                if (found !=
+                        b13_envdiffuse_by_context_.end() &&
+                    found->second.buffer == b13) {
+                    found->second.payload_bits =
+                        envdiffuse_payload_bits;
+                    found->second.payload_valid = true;
+                }
+            }
+        }
+
+        prepared.b13_envdiffuse = b13;
+        prepared.request.constant_buffers[1] = {
+            13u,
+            b13,
+            envdiff_owner
+        };
+        prepared.request.constant_buffer_count =
+            2u;
+
+        if (!g_envdiffuse_consumer_logged.exchange(
+                true,
+                std::memory_order_relaxed)) {
+            char line[640]{};
+            std::snprintf(
+                line,
+                sizeof(line),
+                "[DSRRL PMETAL R19 LERP] mode=exact_ptde_envdiffuse_ab_rgba_div rx=%u route=%u beta=%.9g c86=%.9g,%.9g,%.9g c84=%.9g,%.9g,%.9g t11=%016llx t13=%016llx b13=%016llx",
+                static_cast<unsigned>(
+                    decision.receiver_id),
+                static_cast<unsigned>(
+                    decision.route_index),
+                static_cast<double>(beta),
+                static_cast<double>(
+                    source.envdiffuse_a[0]),
+                static_cast<double>(
+                    source.envdiffuse_a[1]),
+                static_cast<double>(
+                    source.envdiffuse_a[2]),
+                static_cast<double>(
+                    source.envdiffuse_b[0]),
+                static_cast<double>(
+                    source.envdiffuse_b[1]),
+                static_cast<double>(
+                    source.envdiffuse_b[2]),
+                static_cast<unsigned long long>(
+                    reinterpret_cast<std::uintptr_t>(
+                        prepared.envdiffuse_resources.ptde_a)),
+                static_cast<unsigned long long>(
+                    reinterpret_cast<std::uintptr_t>(
+                        prepared.envdiffuse_resources.ptde_b)),
+                static_cast<unsigned long long>(
+                    reinterpret_cast<std::uintptr_t>(
+                        b13)));
+            reshade::log::message(
+                reshade::log::level::info,
+                line);
+        }
+    }
+#endif
 
     draw_tx_mutation verify{};
     if (build_island_draw_mutation(
