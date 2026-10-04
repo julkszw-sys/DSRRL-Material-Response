@@ -65,6 +65,13 @@ clustered_pnts_required_composed_shader_owners(
     return owners;
 }
 
+// Deterministic same-length migration used after byte-exact historical
+// journal attestation. Exposed for regression tests so future b12 layout
+// changes cannot silently strand clustered PointLight again.
+bool migrate_clustered_pnts_legacy_b12_words(
+    std::vector<std::uint32_t> &words,
+    bool spc) noexcept;
+
 clustered_pnts_direct_materialize_outcome
 materialize_clustered_pnts_direct_ptde(
     const std::uint8_t *source,
