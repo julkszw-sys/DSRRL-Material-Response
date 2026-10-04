@@ -137,6 +137,11 @@ option(
     OFF)
 
 option(
+    DSRRL_PMETAL_R19_LERP_MATERIALWORKFLOW
+    "P_Metal R19: exact HemEnvLerp MaterialWorkflow topology port (R15 additive/postmerge gates, R16 diffuse split, R17 direct PTDE c100 producer)"
+    OFF)
+
+option(
     DSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE
     "P_Metal R19: exact PTDE HemEnvLerp EnvDiffuse A/B+beta consumer over paired PTDE RGBA probe resources; extends b12 only for the Lerp endpoint carrier"
     OFF)
@@ -789,6 +794,18 @@ if(DSRRL_PMETAL_FULL_PTDE_HEMENV_R17_PTDE_DIFFUSE_MATERIAL)
         dsrrl_renderer_core_integrated
         PRIVATE
         $<$<COMPILE_LANGUAGE:CXX>:DSRRL_PMETAL_FULL_PTDE_HEMENV_R17_PTDE_DIFFUSE_MATERIAL>)
+endif()
+
+if(DSRRL_PMETAL_R19_LERP_MATERIALWORKFLOW)
+    if(NOT DSRRL_PMETAL_FULL_PTDE_HEMENV_R17_PTDE_DIFFUSE_MATERIAL)
+        message(FATAL_ERROR
+            "P_Metal R19 Lerp MaterialWorkflow requires the canonical cumulative R17 stable lineage as source authority")
+    endif()
+
+    target_compile_definitions(
+        dsrrl_renderer_core_integrated
+        PRIVATE
+        $<$<COMPILE_LANGUAGE:CXX>:DSRRL_PMETAL_R19_LERP_MATERIALWORKFLOW>)
 endif()
 
 if(DSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE)
