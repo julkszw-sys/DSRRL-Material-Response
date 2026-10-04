@@ -1056,7 +1056,7 @@ jobs:
       - name: Verify P_Metal EnvSpec source authority
         shell: pwsh
         run: |
-          python renderer-core/tools/generate_pmetal_env_source_authority.py --input renderer-core/provenance/mr145/SOURCE_V13_PTDE_DONOR.cpp --output "$env:RUNNER_TEMP/generated_pmetal_env_source_authority.hpp"
+          python renderer-core/tools/generate_pmetal_env_source_authority.py --input renderer-core/provenance/mr145/SOURCE_V13_PTDE_DONOR.cpp --layout-input renderer-core/data/provenance/pmetal_env_source_layout_v1.tsv --output "$env:RUNNER_TEMP/generated_pmetal_env_source_authority.hpp"
           $built = "build-integrated/generated/dsrrl/runtime/generated_pmetal_env_source_authority.hpp"
           if (!(Test-Path $built)) { throw "Generated P_Metal EnvSpec source authority missing from build" }
           if ((Get-FileHash $built -Algorithm SHA256).Hash -ne (Get-FileHash "$env:RUNNER_TEMP/generated_pmetal_env_source_authority.hpp" -Algorithm SHA256).Hash) {
