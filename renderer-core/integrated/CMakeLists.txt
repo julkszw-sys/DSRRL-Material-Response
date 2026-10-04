@@ -122,6 +122,11 @@ option(
     OFF)
 
 option(
+    DSRRL_PMETAL_FULL_PTDE_HEMENV_R10E_ATMOS_DOMAIN
+    "Stable P_Metal R10E: keep the PTDE legacy surface domain through Fog/LightScattering by replacing the stock DSR pre-Fog/post-LS gamma sandwich on exact rx33/rx34/rx35"
+    OFF)
+
+option(
     DSRRL_POINTLIGHT_DRAWTIME_BYPASS
     "Diagnostic: disable PointLight producer hooks, runtime pipeline binding and draw-time carrier/replay while preserving all non-PointLight runtime paths"
     OFF)
@@ -733,6 +738,18 @@ if(DSRRL_PMETAL_FULL_PTDE_HEMENV_R10C_LOCAL_UL_B12)
         dsrrl_renderer_core_integrated
         PRIVATE
         $<$<COMPILE_LANGUAGE:CXX>:DSRRL_PMETAL_FULL_PTDE_HEMENV_R10C_LOCAL_UL_B12>)
+endif()
+
+if(DSRRL_PMETAL_FULL_PTDE_HEMENV_R10E_ATMOS_DOMAIN)
+    if(NOT DSRRL_PMETAL_FULL_PTDE_HEMENV_R10C_LOCAL_UL_B12)
+        message(FATAL_ERROR
+            "P_Metal R10E atmosphere domain requires the complete R10C local U/L lineage")
+    endif()
+
+    target_compile_definitions(
+        dsrrl_renderer_core_integrated
+        PRIVATE
+        $<$<COMPILE_LANGUAGE:CXX>:DSRRL_PMETAL_FULL_PTDE_HEMENV_R10E_ATMOS_DOMAIN>)
 endif()
 
 if(DSRRL_POINTLIGHT_DRAWTIME_BYPASS)
