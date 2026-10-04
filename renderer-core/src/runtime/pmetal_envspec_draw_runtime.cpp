@@ -1293,7 +1293,10 @@ bool pmetal_envspec_draw_runtime::prepare(
         return false;
     }
 
-    std::array<std::uint32_t,16> payload_bits{};
+    std::array<
+        std::uint32_t,
+        sizeof(payload) / sizeof(std::uint32_t)>
+        payload_bits{};
     static_assert(
         sizeof(payload_bits) == sizeof(payload));
     std::memcpy(
