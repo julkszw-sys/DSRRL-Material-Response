@@ -1027,11 +1027,11 @@ bool pmetal_envspec_draw_runtime::prepare(
     DSRRL_PMETAL_PROBE_SWAP_MODE != 0
     static_assert(
         DSRRL_PMETAL_PROBE_SWAP_SOURCE_ORDINAL <
-            env::k_legacy_envspec_probe_count,
+            operators::env_spec::k_legacy_envspec_probe_count,
         "P_Metal probe-swap source ordinal must be canonical.");
     static_assert(
         DSRRL_PMETAL_PROBE_SWAP_TARGET_ORDINAL <
-            env::k_legacy_envspec_probe_count,
+            operators::env_spec::k_legacy_envspec_probe_count,
         "P_Metal probe-swap target ordinal must be canonical.");
 
     probe_swap_match =
