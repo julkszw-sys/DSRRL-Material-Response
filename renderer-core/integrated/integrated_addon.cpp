@@ -3968,7 +3968,7 @@ void on_init_device(reshade::api::device *device)
         } else {
             reshade::log::message(
                 reshade::log::level::info,
-                "[DSRRL RUNTIME V2] P_Metal native original-draw bridge ACTIVE: addon callback prepares exact state, original D3D11 Draw executes once, state restores after draw.");
+                "[DSRRL RUNTIME V2] Native original-draw bridge ACTIVE: exact P_Metal/clustered PointLight state is prepared before the original D3D11 Draw and restored afterwards.");
         }
     }
     g_upper_lower_hemenv.on_init_device(device);
@@ -6654,7 +6654,8 @@ bool on_draw(
         decision.route_index);
 
     if (k_pmetal_native_draw_runtime_enabled &&
-        prepared.envspec_in_batch &&
+        (prepared.envspec_in_batch ||
+         prepared.clustered_in_batch) &&
         g_pmetal_native_draw.arm_draw(
             cmd_list,
             prepared.batch.mutation,
@@ -7041,7 +7042,8 @@ bool on_draw_indexed(
         decision.route_index);
 
     if (k_pmetal_native_draw_runtime_enabled &&
-        prepared.envspec_in_batch &&
+        (prepared.envspec_in_batch ||
+         prepared.clustered_in_batch) &&
         g_pmetal_native_draw.arm_draw_indexed(
             cmd_list,
             prepared.batch.mutation,
