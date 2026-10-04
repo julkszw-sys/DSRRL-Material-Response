@@ -1879,12 +1879,26 @@ void __fastcall envspec_single_hook_entry(
             envdiffuse_b);
 #endif
 
-    if (donor_ok && envdiffuse_ok)
+    f4 upper{};
+    f4 lower{};
+    const bool upper_lower_ok =
+        donor_ok &&
+        read_authored_upper_lower(
+            source,
+            selector,
+            upper,
+            lower);
+
+    if (donor_ok &&
+        envdiffuse_ok &&
+        upper_lower_ok)
         publish_hook_source(
             donor,
             donor,
             envdiffuse_a,
             envdiffuse_b,
+            upper,
+            lower,
             0.0f,
             bank,
             bank,
@@ -1977,12 +1991,59 @@ void __fastcall envspec_blend_hook_entry(
             envdiffuse_b);
 #endif
 
-    if (donor_ok && envdiffuse_ok)
+    f4 upper_a{};
+    f4 lower_a{};
+    f4 upper_b{};
+    f4 lower_b{};
+    bool upper_lower_ok =
+        donor_ok &&
+        endpoints.valid &&
+        read_authored_upper_lower(
+            source_a,
+            endpoints.a,
+            upper_a,
+            lower_a);
+
+    if (upper_lower_ok) {
+        if (endpoints.beta == 0.0f ||
+            endpoints.a == endpoints.b) {
+            upper_b = upper_a;
+            lower_b = lower_a;
+        } else {
+            upper_lower_ok =
+                read_authored_upper_lower(
+                    source_b,
+                    endpoints.b,
+                    upper_b,
+                    lower_b);
+        }
+    }
+
+    const auto upper =
+        upper_lower_ok
+            ? lerp_f4(
+                upper_a,
+                upper_b,
+                endpoints.beta)
+            : f4{};
+    const auto lower =
+        upper_lower_ok
+            ? lerp_f4(
+                lower_a,
+                lower_b,
+                endpoints.beta)
+            : f4{};
+
+    if (donor_ok &&
+        envdiffuse_ok &&
+        upper_lower_ok)
         publish_hook_source(
             a,
             b,
             envdiffuse_a,
             envdiffuse_b,
+            upper,
+            lower,
             endpoints.beta,
             bank_a,
             bank_b,
