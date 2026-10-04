@@ -616,9 +616,9 @@ decision material_response_island::evaluate(
 }
 
 decision
-material_response_island::evaluate_direct_pointlight_material(
+evaluate_direct_pointlight_material_identity(
     const material_identity &material,
-    bool require_legacy_specular) const
+    bool require_legacy_specular) noexcept
 {
     std::unique_lock<std::mutex> lock;
     if (!registration_finalized_.load(
@@ -737,6 +737,24 @@ material_response_island::evaluate_direct_pointlight_material(
         c102,
         true
     };
+}
+
+decision
+material_response_island::evaluate_direct_pointlight_material(
+    const material_identity &material,
+    bool require_legacy_specular) const
+{
+    if (!registration_finalized_.load(
+            std::memory_order_acquire)) {
+        std::lock_guard lock(mutex_);
+        return evaluate_direct_pointlight_material_identity(
+            material,
+            require_legacy_specular);
+    }
+
+    return evaluate_direct_pointlight_material_identity(
+        material,
+        require_legacy_specular);
 }
 
 std::size_t material_response_island::receiver_recipe_count() const noexcept
