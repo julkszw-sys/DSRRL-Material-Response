@@ -4463,6 +4463,17 @@ materialize_pmetal_rgba_receiver(
 // Atmosphere/Fog/LightScattering remains stock DSR in R6B. Do not compose
     // the historical V4B pre-Fog/post-LightScattering transform here.
 
+#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_R10C_LOCAL_UL_B12)
+    // R10C explicitly supersedes the legacy draw-time b13 U/L composition.
+    // Any caller asking for that old path is a provenance error: fail open
+    // rather than producing a hybrid shader with both b12-local and b13 U/L.
+    if (compose_upper_lower) {
+        outcome.result =
+            pmetal_rgba_materialize_result::
+                fail_upper_lower_composition;
+        return outcome;
+    }
+#else
     if (compose_upper_lower) {
         std::vector<std::uint8_t> ul;
         const auto ul_result =
@@ -4496,6 +4507,7 @@ materialize_pmetal_rgba_receiver(
         outcome.upper_lower_composed =
             true;
     }
+#endif
 
     // Build131 now owns the dedicated P_Metal SpecRGB consumer itself:
     // fresh t10 is sampled only at the final material cut and feeds the
