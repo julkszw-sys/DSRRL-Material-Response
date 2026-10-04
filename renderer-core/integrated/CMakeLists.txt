@@ -791,6 +791,18 @@ if(DSRRL_PMETAL_FULL_PTDE_HEMENV_R17_PTDE_DIFFUSE_MATERIAL)
         $<$<COMPILE_LANGUAGE:CXX>:DSRRL_PMETAL_FULL_PTDE_HEMENV_R17_PTDE_DIFFUSE_MATERIAL>)
 endif()
 
+if(DSRRL_PMETAL_HEMENVLERP_R18_R17_PARITY)
+    if(NOT DSRRL_PMETAL_FULL_PTDE_HEMENV_R17_PTDE_DIFFUSE_MATERIAL)
+        message(FATAL_ERROR
+            "P_Metal R18 HemEnvLerp parity requires cumulative stable R17 lineage")
+    endif()
+
+    target_compile_definitions(
+        dsrrl_renderer_core_integrated
+        PRIVATE
+        $<$<COMPILE_LANGUAGE:CXX>:DSRRL_PMETAL_HEMENVLERP_R18_R17_PARITY>)
+endif()
+
 if(DSRRL_POINTLIGHT_DRAWTIME_BYPASS)
     target_compile_definitions(
         dsrrl_renderer_core_integrated
