@@ -20,6 +20,23 @@ using legacy_plan::dxbc::read_u32;
 using legacy_plan::dxbc::write_u32;
 namespace hashing = legacy_plan::hashing;
 
+// Historical direct-PTDE clustered journals were authored for the original
+// PointLight-specific b12 carrier:
+//   b12[0].xyz = raw PTDE c101
+//   b12[0].w   = PTDE c102
+//   b12[1].yzw = PTDE c100
+// Runtime-v2 shares the post-reset MR carrier instead:
+//   b12[0].xyz = neutral
+//   b12[0].w   = PTDE c102
+//   b12[1].xyz = PTDE c100
+//   b12[2].xyz = raw PTDE c101
+// Keep the immutable historical journal as the first attestation stage, then
+// migrate only these exact inserted operands to the current ABI.
+constexpr std::uint32_t k_cb_src_xyz = 0x00208246u;
+constexpr std::uint32_t k_cb_src_yzw = 0x00208396u;
+constexpr std::uint32_t k_cb_src_w = 0x0020803au;
+constexpr std::uint32_t k_dsrrl_b12_slot = 12u;
+
 struct chunk {
     std::array<char,4> tag{};
     std::vector<std::uint8_t> payload;
@@ -172,6 +189,9 @@ bool attest_composed_shader_owners(
     std::uint32_t attenuation_b = 0u;
     std::uint32_t envspec_delete = 0u;
     std::uint32_t terminal_sat = 0u;
+    std::uint32_t legacy_c100 = 0u;
+    std::uint32_t legacy_c101 = 0u;
+    std::uint32_t legacy_c102 = 0u;
 
     if (plan.first_op >
             generated::k_clustered_pnts_journal_ops_v1.size() ||
@@ -202,6 +222,30 @@ bool attest_composed_shader_owners(
                 generated::k_clustered_pnts_journal_tokens_v1.size() -
                     op.new_offset)
             return false;
+
+        for (std::uint32_t n=0u;
+             n+2u<op.new_count;
+             ++n) {
+            const auto token =
+                token_at(op.new_offset+n);
+            const auto slot =
+                token_at(op.new_offset+n+1u);
+            const auto row =
+                token_at(op.new_offset+n+2u);
+
+            if (slot != k_dsrrl_b12_slot)
+                continue;
+
+            if (token == k_cb_src_yzw &&
+                row == 1u)
+                ++legacy_c100;
+            else if (token == k_cb_src_xyz &&
+                     row == 0u)
+                ++legacy_c101;
+            else if (token == k_cb_src_w &&
+                     row == 0u)
+                ++legacy_c102;
+        }
 
         if (op.old_count==3u && op.new_count==3u &&
             token_at(op.old_offset+0u)==0x400ccccdu &&
@@ -247,7 +291,10 @@ bool attest_composed_shader_owners(
         attenuation_a==1u &&
         attenuation_b==1u &&
         terminal_sat==1u &&
-        envspec_delete==(plan.spc ? 0u : 1u);
+        envspec_delete==(plan.spc ? 0u : 1u) &&
+        legacy_c100==1u &&
+        legacy_c101==(plan.spc ? 1u : 0u) &&
+        legacy_c102==(plan.spc ? 1u : 0u);
     if (!exact)
         return false;
 
@@ -299,6 +346,81 @@ bool apply_plan(
 
     words[1] = static_cast<std::uint32_t>(words.size());
     return true;
+}
+
+bool migrate_legacy_pointlight_b12_to_current(
+    std::vector<std::uint32_t> &words,
+    bool spc) noexcept
+{
+    std::uint32_t c100_old = 0u;
+    std::uint32_t c101_old = 0u;
+    std::uint32_t c102_current = 0u;
+
+    for (std::size_t i=2u;
+         i+2u<words.size();
+         ++i) {
+        if (words[i+1u] != k_dsrrl_b12_slot)
+            continue;
+
+        if (words[i] == k_cb_src_yzw &&
+            words[i+2u] == 1u) {
+            ++c100_old;
+            words[i] = k_cb_src_xyz;
+            continue;
+        }
+
+        if (words[i] == k_cb_src_xyz &&
+            words[i+2u] == 0u) {
+            ++c101_old;
+            words[i+2u] = 2u;
+            continue;
+        }
+
+        if (words[i] == k_cb_src_w &&
+            words[i+2u] == 0u)
+            ++c102_current;
+    }
+
+    if (c100_old != 1u ||
+        c101_old != (spc ? 1u : 0u) ||
+        c102_current != (spc ? 1u : 0u))
+        return false;
+
+    std::uint32_t c100_current = 0u;
+    std::uint32_t c101_current = 0u;
+    std::uint32_t c100_stale = 0u;
+    std::uint32_t c101_stale = 0u;
+    std::uint32_t c102_post = 0u;
+
+    for (std::size_t i=2u;
+         i+2u<words.size();
+         ++i) {
+        if (words[i+1u] != k_dsrrl_b12_slot)
+            continue;
+
+        if (words[i] == k_cb_src_xyz &&
+            words[i+2u] == 1u)
+            ++c100_current;
+        else if (words[i] == k_cb_src_xyz &&
+                 words[i+2u] == 2u)
+            ++c101_current;
+        else if (words[i] == k_cb_src_yzw &&
+                 words[i+2u] == 1u)
+            ++c100_stale;
+        else if (words[i] == k_cb_src_xyz &&
+                 words[i+2u] == 0u)
+            ++c101_stale;
+        else if (words[i] == k_cb_src_w &&
+                 words[i+2u] == 0u)
+            ++c102_post;
+    }
+
+    return
+        c100_current==1u &&
+        c101_current==(spc ? 1u : 0u) &&
+        c100_stale==0u &&
+        c101_stale==0u &&
+        c102_post==(spc ? 1u : 0u);
 }
 
 bool strip_rdef(std::vector<chunk> &chunks) noexcept
@@ -505,6 +627,53 @@ materialize_clustered_pnts_direct_ptde(
         return outcome;
     }
 
+    // First prove that the immutable historical direct-PTDE journal still
+    // reconstructs its byte-exact certified replacement. Only after that
+    // attestation do we migrate the journal's old PointLight b12 operands to
+    // the current Runtime-v2 carrier ABI.
+    auto legacy_chunks = chunks;
+    std::vector<std::uint8_t> legacy_output;
+    if (!strip_rdef(legacy_chunks) ||
+        !rebuild(
+            source,
+            size,
+            std::move(legacy_chunks),
+            words,
+            legacy_output)) {
+        outcome.result =
+            clustered_pnts_direct_materialize_result::
+                fail_rebuild;
+        return outcome;
+    }
+
+    const auto legacy_digest =
+        hashing::sha256(
+            legacy_output.data(),
+            legacy_output.size());
+    if (legacy_output.size() !=
+            plan->replacement_size ||
+        !hashing::matches_hex(
+            legacy_digest,
+            plan->replacement_sha256)) {
+        outcome.result =
+            clustered_pnts_direct_materialize_result::
+                fail_final_sha;
+        return outcome;
+    }
+
+    if (!migrate_legacy_pointlight_b12_to_current(
+            words,
+            plan->spc)) {
+        outcome.result =
+            clustered_pnts_direct_materialize_result::
+                fail_patch_precondition;
+        return outcome;
+    }
+
+    outcome.current_b12_abi = true;
+    outcome.legacy_specular_complete =
+        plan->spc;
+
     if (!strip_rdef(chunks) ||
         !rebuild(
             source,
@@ -524,11 +693,14 @@ materialize_clustered_pnts_direct_ptde(
             output.data(),
             output.size());
 
+    // The ABI migration is a same-length operand rewrite. Exact original host
+    // SHA + byte-exact legacy journal SHA + exact migration cardinality above
+    // are the attestation chain for the deterministic current-ABI output.
     if (output.size() !=
             plan->replacement_size ||
-        !hashing::matches_hex(
-            replacement_digest,
-            plan->replacement_sha256)) {
+        !legacy_plan::dxbc::checksum_container_valid(
+            output.data(),
+            output.size())) {
         output.clear();
         outcome.result =
             clustered_pnts_direct_materialize_result::
