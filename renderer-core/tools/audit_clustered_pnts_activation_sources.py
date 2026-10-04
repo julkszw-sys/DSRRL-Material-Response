@@ -186,6 +186,9 @@ def main():
     require(authority_body,"g_draw_selection.authority_ready","draw consumes cached PointLight authority")
     require(authority_body,"g_draw_selection.material_decision","draw reuses selector-resolved material decision")
 
+    require(authority_body,"g_draw_selection.input.serial !=","cached authority producer-serial freshness")
+    require(authority_body,"g_draw_selection.input.owner !=","cached authority producer-owner freshness")
+
     require(prepare_body,"material.active","authorized material gate")
     require(prepare_body,"g_draw_selection.payload_ready","draw consumes cached sidecar payload")
     require(prepare_body,"const auto &payload =","cached sidecar payload reuse")
