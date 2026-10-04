@@ -1,4 +1,4 @@
-name: P_Metal R10D Hook U/L Source Build
+name: P_Metal R10E PTDE Atmosphere Domain Build
 
 on:
   workflow_dispatch:
@@ -34,12 +34,12 @@ jobs:
             -B build-offline \
             -DDSRRL_BUILD_PMETAL_R10C_OFFLINE_TEST=ON
           cmake --build build-offline --target dsrrl_pmetal_r10c_offline_test -j 2
-          cp build-offline/dsrrl_pmetal_r10c_offline_test DSRRL_PMETAL_R10C_OFFLINE_TEST
+          cp build-offline/dsrrl_pmetal_r10c_offline_test DSRRL_PMETAL_R10E_OFFLINE_TEST
 
       - uses: actions/upload-artifact@v4
         with:
-          name: DSRRL_PMETAL_R10C_OFFLINE_TEST
-          path: DSRRL_PMETAL_R10C_OFFLINE_TEST
+          name: DSRRL_PMETAL_R10E_OFFLINE_TEST
+          path: DSRRL_PMETAL_R10E_OFFLINE_TEST
           if-no-files-found: error
 
   windows-addon:
@@ -63,7 +63,7 @@ jobs:
           ref: 3645e3025d1d98a90e318278858931f034d5d1f6
           path: _reshade
 
-      - name: Configure R10D hook-source local U/L
+      - name: Configure R10E PTDE atmosphere domain
         shell: pwsh
         run: >
           cmake
@@ -72,7 +72,7 @@ jobs:
           -A x64
           -DRESHADE_INCLUDE_DIR="${{ github.workspace }}/_reshade/include"
           -DDSRRL_SOURCE_COMMIT="$env:DSRRL_CHECKOUT_COMMIT"
-          -DDSRRL_BUILD_FLAVOR="pmetal_r10d_hook_ul_carrier"
+          -DDSRRL_BUILD_FLAVOR="pmetal_r10e_atmos_domain"
           -DDSRRL_FULL_TELEMETRY_DEFAULT_ON=ON
           -DDSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG=ON
           -DDSRRL_PMETAL_FULL_PTDE_HEMENV_R3=ON
@@ -82,6 +82,7 @@ jobs:
           -DDSRRL_PMETAL_FULL_PTDE_HEMENV_R7_SHADOW=ON
           -DDSRRL_PMETAL_FULL_PTDE_HEMENV_R8_PRE_AB=ON
           -DDSRRL_PMETAL_FULL_PTDE_HEMENV_R10C_LOCAL_UL_B12=ON
+          -DDSRRL_PMETAL_FULL_PTDE_HEMENV_R10E_ATMOS_DOMAIN=ON
           -DDSRRL_PHYSICAL_CUT_UL_H3_SUBSURFACE=ON
 
       - name: Build runtime
@@ -91,17 +92,18 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           $addons = @(Get-ChildItem build-fast -Recurse -Filter *.addon64)
           if ($addons.Count -ne 1) { throw "Expected exactly one addon, found $($addons.Count)" }
-          Copy-Item $addons[0].FullName "DSRRL_PMETAL_R10D_HOOK_UL_CARRIER.addon64" -Force
+          Copy-Item $addons[0].FullName "DSRRL_PMETAL_R10E_ATMOS_DOMAIN.addon64" -Force
 
       - name: Verify binary identity
         shell: pwsh
         run: |
-          $path = "DSRRL_PMETAL_R10D_HOOK_UL_CARRIER.addon64"
+          $path = "DSRRL_PMETAL_R10E_ATMOS_DOMAIN.addon64"
           $ascii = [System.Text.Encoding]::ASCII.GetString([System.IO.File]::ReadAllBytes($path))
           if (-not $ascii.Contains($env:DSRRL_CHECKOUT_COMMIT)) { throw "Missing source commit identity" }
-          if (-not $ascii.Contains("pmetal_r10d_hook_ul_carrier")) { throw "Missing R10D build flavor identity" }
+          if (-not $ascii.Contains("pmetal_r10e_atmos_domain")) { throw "Missing R10E build flavor identity" }
           if (-not $ascii.Contains("[DSRRL PMETAL R9 SOURCE STATE]")) { throw "Missing inherited source-state marker" }
           if (-not $ascii.Contains("[DSRRL PMETAL R10C LOCAL UL]")) { throw "Missing R10C local U/L activation marker" }
+          if (-not $ascii.Contains("[DSRRL PMETAL R10E ATMOS]")) { throw "Missing R10E atmosphere-domain marker" }
           if (-not $ascii.Contains("[DSRRL PMETAL R7 SHADOW]")) { throw "Missing cumulative R7 shadow marker" }
           if (-not $ascii.Contains("[DSRRL PMETAL R3 SPEC ATTEST]")) { throw "Missing exact SpecRGB SHA attestation marker" }
           $hash = (Get-FileHash $path -Algorithm SHA256).Hash.ToLowerInvariant()
@@ -109,6 +111,6 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: DSRRL_PMETAL_R10D_HOOK_UL_CARRIER
-          path: DSRRL_PMETAL_R10D_HOOK_UL_CARRIER.addon64
+          name: DSRRL_PMETAL_R10E_ATMOS_DOMAIN
+          path: DSRRL_PMETAL_R10E_ATMOS_DOMAIN.addon64
           if-no-files-found: error
