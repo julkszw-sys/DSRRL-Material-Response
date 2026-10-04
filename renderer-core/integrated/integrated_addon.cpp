@@ -6527,6 +6527,17 @@ bool on_draw(
         return false;
     }
 
+    // Direct PointLight routing is exclusive at this point. A material
+    // decision that is not active can only fail open to stock DSR, so do not
+    // enter the draw-time shader/resource preparation path. In PointLight
+    // heavy scenes the attested clustered PS may be bound on many host draws
+    // whose material tuple is outside the exact PTDE authority; preparing and
+    // AddRef/Release'ing the replacement for all of those draws created a
+    // large reject-only hot path.
+    if (direct_pointlight_route &&
+        !decision.active)
+        return false;
+
     const auto effect_candidates =
         candidate_effect_mask(
             route_mask,
@@ -6902,6 +6913,17 @@ bool on_draw_indexed(
             effect_probe_stage::fail_open);
         return false;
     }
+
+    // Direct PointLight routing is exclusive at this point. A material
+    // decision that is not active can only fail open to stock DSR, so do not
+    // enter the draw-time shader/resource preparation path. In PointLight
+    // heavy scenes the attested clustered PS may be bound on many host draws
+    // whose material tuple is outside the exact PTDE authority; preparing and
+    // AddRef/Release'ing the replacement for all of those draws created a
+    // large reject-only hot path.
+    if (direct_pointlight_route &&
+        !decision.active)
+        return false;
 
     const auto effect_candidates =
         candidate_effect_mask(
