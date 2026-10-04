@@ -4143,6 +4143,7 @@ bool on_create_pipeline(
                 dsrrl::operators::point_light::
                     clustered_pnts_direct_materialize_result;
 
+#if defined(DSRRL_R20_CLUSTERED_SPC_LEGACY_SPECULAR)
             if (clustered_pnts.result ==
                     clustered_result::applied &&
                 clustered_pnts.spc) {
@@ -4184,6 +4185,7 @@ bool on_create_pipeline(
                     ++g_local_specular_clustered_materialize_fail;
                 }
             }
+#endif
 
         clustered_pnts_candidate =
             clustered_pnts.result ==
