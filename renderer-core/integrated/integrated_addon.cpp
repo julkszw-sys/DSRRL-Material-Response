@@ -2392,6 +2392,49 @@ bool observe_pointlight_draw_identity(
 
     hot_count(g_draw_receiver_hits);
 
+    if (clustered_pointlight_receiver) {
+        const bool cached_ready =
+            g_clustered_pnts.current_draw_authority(
+                clustered_pointlight_spc,
+                out_material,
+                out_decision);
+
+        if (!cached_ready) {
+            hot_count(g_draw_receiver_only);
+            hot_count(g_mr_fail_open);
+            log_pointlight_gate_once(
+                1u << 1,
+                "cached_authority_reject",
+                fixed_pointlight_receiver,
+                clustered_pointlight_receiver,
+                clustered_pointlight_spc,
+                false,
+                out_material,
+                out_decision);
+            return true;
+        }
+
+        hot_count(g_draw_owner_hits);
+        hot_count(g_draw_joins);
+        hot_count(g_mr_draw_eval);
+        hot_count(g_mr_would_activate);
+
+        if (!g_pointlight_active_logged.exchange(
+                true,
+                std::memory_order_relaxed)) {
+            log_pointlight_gate_once(
+                1u << 4,
+                "decision_active_cached",
+                fixed_pointlight_receiver,
+                clustered_pointlight_receiver,
+                clustered_pointlight_spc,
+                true,
+                out_material,
+                out_decision);
+        }
+        return true;
+    }
+
     const bool owner_ok =
         dsrrl::runtime::material_owner_selection_consume(
             out_material);
