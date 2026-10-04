@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+      - integrate-r17-stable-main
       - dev/renderer-core-v1-islands
       - agent/integrated-single-addon-a1-20260924
     paths:
