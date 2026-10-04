@@ -137,6 +137,11 @@ option(
     OFF)
 
 option(
+    DSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE
+    "P_Metal R19: exact PTDE HemEnvLerp EnvDiffuse A/B+beta consumer over paired PTDE RGBA probe resources; extends b12 only for the Lerp endpoint carrier"
+    OFF)
+
+option(
     DSRRL_POINTLIGHT_DRAWTIME_BYPASS
     "Diagnostic: disable PointLight producer hooks, runtime pipeline binding and draw-time carrier/replay while preserving all non-PointLight runtime paths"
     OFF)
@@ -784,6 +789,18 @@ if(DSRRL_PMETAL_FULL_PTDE_HEMENV_R17_PTDE_DIFFUSE_MATERIAL)
         dsrrl_renderer_core_integrated
         PRIVATE
         $<$<COMPILE_LANGUAGE:CXX>:DSRRL_PMETAL_FULL_PTDE_HEMENV_R17_PTDE_DIFFUSE_MATERIAL>)
+endif()
+
+if(DSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE)
+    if(NOT DSRRL_PMETAL_FULL_PTDE_HEMENV_R17_PTDE_DIFFUSE_MATERIAL)
+        message(FATAL_ERROR
+            "P_Metal R19 exact Lerp EnvDiffuse requires the canonical cumulative R17 lineage")
+    endif()
+
+    target_compile_definitions(
+        dsrrl_renderer_core_integrated
+        PRIVATE
+        $<$<COMPILE_LANGUAGE:CXX>:DSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE>)
 endif()
 
 if(DSRRL_POINTLIGHT_DRAWTIME_BYPASS)
