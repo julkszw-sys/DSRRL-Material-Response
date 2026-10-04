@@ -122,6 +122,11 @@ option(
     OFF)
 
 option(
+    DSRRL_PMETAL_FULL_PTDE_HEMENV_R10E_ATMOSPHERE
+    "Stable P_Metal R10E: restore PTDE atmosphere-domain continuation over cumulative R10D using stock cb0[12] FogRGB"
+    OFF)
+
+option(
     DSRRL_POINTLIGHT_DRAWTIME_BYPASS
     "Diagnostic: disable PointLight producer hooks, runtime pipeline binding and draw-time carrier/replay while preserving all non-PointLight runtime paths"
     OFF)
@@ -733,6 +738,18 @@ if(DSRRL_PMETAL_FULL_PTDE_HEMENV_R10C_LOCAL_UL_B12)
         dsrrl_renderer_core_integrated
         PRIVATE
         $<$<COMPILE_LANGUAGE:CXX>:DSRRL_PMETAL_FULL_PTDE_HEMENV_R10C_LOCAL_UL_B12>)
+endif()
+
+if(DSRRL_PMETAL_FULL_PTDE_HEMENV_R10E_ATMOSPHERE)
+    if(NOT DSRRL_PMETAL_FULL_PTDE_HEMENV_R10C_LOCAL_UL_B12)
+        message(FATAL_ERROR
+            "P_Metal R10E atmosphere continuation requires the complete R10C local U/L lineage")
+    endif()
+
+    target_compile_definitions(
+        dsrrl_renderer_core_integrated
+        PRIVATE
+        $<$<COMPILE_LANGUAGE:CXX>:DSRRL_PMETAL_FULL_PTDE_HEMENV_R10E_ATMOSPHERE>)
 endif()
 
 if(DSRRL_POINTLIGHT_DRAWTIME_BYPASS)
