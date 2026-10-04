@@ -100,6 +100,12 @@ bool same_source_payload(
     return
         a.a == b.a &&
         a.b == b.b &&
+        a.envdiffuse_a == b.envdiffuse_a &&
+        a.envdiffuse_b == b.envdiffuse_b &&
+        a.envdiffuse_linear_valid == b.envdiffuse_linear_valid &&
+        a.upper == b.upper &&
+        a.lower == b.lower &&
+        a.upper_lower_linear_valid == b.upper_lower_linear_valid &&
         a.beta == b.beta &&
         a.bank_signature_a == b.bank_signature_a &&
         a.bank_signature_b == b.bank_signature_b &&
@@ -135,6 +141,16 @@ std::uint64_t source_key(
         hash = fnv_scalar(hash, value);
     for (const auto value : source.b)
         hash = fnv_scalar(hash, value);
+    for (const auto value : source.envdiffuse_a)
+        hash = fnv_scalar(hash, value);
+    for (const auto value : source.envdiffuse_b)
+        hash = fnv_scalar(hash, value);
+    hash = fnv_scalar(hash, source.envdiffuse_linear_valid);
+    for (const auto value : source.upper)
+        hash = fnv_scalar(hash, value);
+    for (const auto value : source.lower)
+        hash = fnv_scalar(hash, value);
+    hash = fnv_scalar(hash, source.upper_lower_linear_valid);
     hash = fnv_scalar(hash, source.beta);
     hash = fnv_scalar(hash, source.bank_signature_a);
     hash = fnv_scalar(hash, source.bank_signature_b);

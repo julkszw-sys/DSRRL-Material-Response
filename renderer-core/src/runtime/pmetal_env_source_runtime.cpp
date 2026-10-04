@@ -49,6 +49,46 @@ struct f4 {
     float w = 0.0f;
 };
 
+#pragma pack(push,1)
+struct raw_rgbm {
+    std::int16_t r = 0;
+    std::int16_t g = 0;
+    std::int16_t b = 0;
+    std::int16_t m = 0;
+};
+#pragma pack(pop)
+
+f4 decode_authored_rgbm(
+    const raw_rgbm &value) noexcept
+{
+    const float scale =
+        static_cast<float>(value.m) /
+        100.0f;
+
+    return {
+        static_cast<float>(value.r) /
+            255.0f * scale,
+        static_cast<float>(value.g) /
+            255.0f * scale,
+        static_cast<float>(value.b) /
+            255.0f * scale,
+        0.0f
+    };
+}
+
+f4 lerp_f4(
+    const f4 &a,
+    const f4 &b,
+    float t) noexcept
+{
+    return {
+        a.x + (b.x - a.x) * t,
+        a.y + (b.y - a.y) * t,
+        a.z + (b.z - a.z) * t,
+        0.0f
+    };
+}
+
 #if !defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG)
 bool inverse_envdiffuse_endpoint(
     const float *src,
@@ -769,6 +809,91 @@ bool retail_lightbank_record_index(
             static_cast<std::uint8_t>(
                 selector));
     return true;
+}
+
+bool read_authored_upper_lower(
+    void *source,
+    std::int32_t selector,
+    f4 &upper,
+    f4 &lower) noexcept
+{
+    upper = {};
+    lower = {};
+
+    if (source == nullptr ||
+        selector < 0)
+        return false;
+
+    std::uint32_t index = 0u;
+    if (!retail_lightbank_record_index(
+            selector,
+            index))
+        return false;
+
+    const std::uint8_t *header = nullptr;
+    if (!safe_read(
+            static_cast<const std::uint8_t *>(
+                source) + 0x18u,
+            header) ||
+        header == nullptr)
+        return false;
+
+    std::uint16_t type = 0u;
+    std::uint16_t count = 0u;
+    if (!safe_read(
+            header + 0x08u,
+            type) ||
+        !safe_read(
+            header + 0x0Au,
+            count) ||
+        type != 4u ||
+        count == 0u ||
+        count > 256u ||
+        index >= count)
+        return false;
+
+    std::uint32_t row_offset = 0u;
+    if (!safe_read(
+            header +
+                0x34u +
+                static_cast<std::size_t>(
+                    index) * 12u,
+            row_offset))
+        return false;
+
+    const auto *record =
+        header + row_offset;
+
+    if (!readable_range(
+            record,
+            0x34u))
+        return false;
+
+    raw_rgbm raw_upper{};
+    raw_rgbm raw_lower{};
+    std::memcpy(
+        &raw_upper,
+        record + 0x24u,
+        sizeof(raw_upper));
+    std::memcpy(
+        &raw_lower,
+        record + 0x2Cu,
+        sizeof(raw_lower));
+
+    upper =
+        decode_authored_rgbm(
+            raw_upper);
+    lower =
+        decode_authored_rgbm(
+            raw_lower);
+
+    return
+        std::isfinite(upper.x) &&
+        std::isfinite(upper.y) &&
+        std::isfinite(upper.z) &&
+        std::isfinite(lower.x) &&
+        std::isfinite(lower.y) &&
+        std::isfinite(lower.z);
 }
 
 struct bank_cache_entry {
@@ -1526,6 +1651,10 @@ bool same_hook_source_payload(
         a.envdiffuse_b == b.envdiffuse_b &&
         a.envdiffuse_linear_valid ==
             b.envdiffuse_linear_valid &&
+        a.upper == b.upper &&
+        a.lower == b.lower &&
+        a.upper_lower_linear_valid ==
+            b.upper_lower_linear_valid &&
         a.beta == b.beta &&
         a.bank_signature_a == b.bank_signature_a &&
         a.bank_signature_b == b.bank_signature_b &&
@@ -1538,6 +1667,8 @@ void publish_hook_source(
     const f4 &b,
     const f4 &envdiffuse_a,
     const f4 &envdiffuse_b,
+    const f4 &upper,
+    const f4 &lower,
     float beta,
     std::uint64_t bank_a,
     std::uint64_t bank_b,
@@ -1561,6 +1692,17 @@ void publish_hook_source(
         envdiffuse_b.z
     };
     next.envdiffuse_linear_valid = true;
+    next.upper = {
+        upper.x,
+        upper.y,
+        upper.z
+    };
+    next.lower = {
+        lower.x,
+        lower.y,
+        lower.z
+    };
+    next.upper_lower_linear_valid = true;
     next.beta =
         std::clamp(
             beta,
@@ -1737,12 +1879,26 @@ void __fastcall envspec_single_hook_entry(
             envdiffuse_b);
 #endif
 
-    if (donor_ok && envdiffuse_ok)
+    f4 upper{};
+    f4 lower{};
+    const bool upper_lower_ok =
+        donor_ok &&
+        read_authored_upper_lower(
+            source,
+            selector,
+            upper,
+            lower);
+
+    if (donor_ok &&
+        envdiffuse_ok &&
+        upper_lower_ok)
         publish_hook_source(
             donor,
             donor,
             envdiffuse_a,
             envdiffuse_b,
+            upper,
+            lower,
             0.0f,
             bank,
             bank,
@@ -1835,12 +1991,59 @@ void __fastcall envspec_blend_hook_entry(
             envdiffuse_b);
 #endif
 
-    if (donor_ok && envdiffuse_ok)
+    f4 upper_a{};
+    f4 lower_a{};
+    f4 upper_b{};
+    f4 lower_b{};
+    bool upper_lower_ok =
+        donor_ok &&
+        endpoints.valid &&
+        read_authored_upper_lower(
+            source_a,
+            endpoints.a,
+            upper_a,
+            lower_a);
+
+    if (upper_lower_ok) {
+        if (endpoints.beta == 0.0f ||
+            endpoints.a == endpoints.b) {
+            upper_b = upper_a;
+            lower_b = lower_a;
+        } else {
+            upper_lower_ok =
+                read_authored_upper_lower(
+                    source_b,
+                    endpoints.b,
+                    upper_b,
+                    lower_b);
+        }
+    }
+
+    const auto upper =
+        upper_lower_ok
+            ? lerp_f4(
+                upper_a,
+                upper_b,
+                endpoints.beta)
+            : f4{};
+    const auto lower =
+        upper_lower_ok
+            ? lerp_f4(
+                lower_a,
+                lower_b,
+                endpoints.beta)
+            : f4{};
+
+    if (donor_ok &&
+        envdiffuse_ok &&
+        upper_lower_ok)
         publish_hook_source(
             a,
             b,
             envdiffuse_a,
             envdiffuse_b,
+            upper,
+            lower,
             endpoints.beta,
             bank_a,
             bank_b,
@@ -2212,8 +2415,9 @@ void pmetal_env_source_selector_event(
         [&](std::int16_t selector,
             f4 &value,
             std::uint64_t &bank,
-            std::uint32_t &row) noexcept {
-            void *source =
+            std::uint32_t &row,
+            void *&source_out) noexcept {
+            source_out =
                 pmetal_selector_policy::
                     source(
                         selector,
@@ -2221,11 +2425,11 @@ void pmetal_env_source_selector_event(
                         lookup);
 
             if (!lookup_valid ||
-                source == nullptr)
+                source_out == nullptr)
                 return false;
 
             return read_exact_source(
-                source,
+                source_out,
                 selector,
                 value,
                 bank,
@@ -2234,13 +2438,16 @@ void pmetal_env_source_selector_event(
 
     f4 a{};
     f4 b{};
+    void *source_a = nullptr;
+    void *source_b = nullptr;
     pmetal_envspec_source next{};
 
     if (!decode(
             endpoints.a,
             a,
             next.bank_signature_a,
-            next.row_id_a)) {
+            next.row_id_a,
+            source_a)) {
         telemetry::hot_count(
             g_decode_fail);
         return;
@@ -2253,6 +2460,7 @@ void pmetal_env_source_selector_event(
 
     if (endpoints.a == endpoints.b) {
         b = a;
+        source_b = source_a;
         next.bank_signature_b =
             next.bank_signature_a;
         next.row_id_b =
@@ -2261,7 +2469,8 @@ void pmetal_env_source_selector_event(
                    endpoints.b,
                    b,
                    next.bank_signature_b,
-                   next.row_id_b)) {
+                   next.row_id_b,
+                   source_b)) {
         telemetry::hot_count(
             g_decode_fail);
         return;
@@ -2311,6 +2520,59 @@ void pmetal_env_source_selector_event(
         envdiffuse_b.z
     };
     next.envdiffuse_linear_valid = true;
+#endif
+
+#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_R10_LOCAL_UL)
+    f4 upper_a{};
+    f4 lower_a{};
+    f4 upper_b{};
+    f4 lower_b{};
+    if (!read_authored_upper_lower(
+            source_a,
+            endpoints.a,
+            upper_a,
+            lower_a)) {
+        telemetry::hot_count(
+            g_decode_fail);
+        return;
+    }
+
+    if (endpoints.a == endpoints.b ||
+        endpoints.beta == 0.0f) {
+        upper_b = upper_a;
+        lower_b = lower_a;
+    } else if (!read_authored_upper_lower(
+                   source_b,
+                   endpoints.b,
+                   upper_b,
+                   lower_b)) {
+        telemetry::hot_count(
+            g_decode_fail);
+        return;
+    }
+
+    const auto upper =
+        lerp_f4(
+            upper_a,
+            upper_b,
+            endpoints.beta);
+    const auto lower =
+        lerp_f4(
+            lower_a,
+            lower_b,
+            endpoints.beta);
+
+    next.upper = {
+        upper.x,
+        upper.y,
+        upper.z
+    };
+    next.lower = {
+        lower.x,
+        lower.y,
+        lower.z
+    };
+    next.upper_lower_linear_valid = true;
 #endif
 
     next.serial = epoch;

@@ -4106,24 +4106,12 @@ materialize_pmetal_rgba_receiver(
     }
 #endif
 
-#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_R7_SHADOW)
-    if (!apply_exact_ptde_shadow_visibility_r7(
-            base,
-            *authority)) {
-        outcome.result =
-            pmetal_rgba_materialize_result::
-                fail_postcondition;
-        return outcome;
-    }
-
-    outcome.shadow_visibility_kernel_composed =
-        outcome.receiver_id == 33u ||
-        outcome.receiver_id == 34u;
-#endif
-
-// Atmosphere/Fog/LightScattering remains stock DSR in R6B. Do not compose
-    // the historical V4B pre-Fog/post-LightScattering transform here.
-
+#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_R10_LOCAL_UL)
+    // Compose the verified P_Metal-local U/L operand rewrite while the DXBC
+    // still has the stock instruction topology plus only the 4-word b12
+    // declaration inserted by the clean diffuse base. R7 later expands the
+    // shadow kernel and shifts downstream word offsets, so composing U/L after
+    // R7 can no longer satisfy the exact stock-word precondition.
     if (compose_upper_lower) {
         std::vector<std::uint8_t> ul;
         const auto ul_result =
@@ -4152,14 +4140,38 @@ materialize_pmetal_rgba_receiver(
             return outcome;
         }
 
-        base =
-            std::move(ul);
-        outcome.upper_lower_composed =
-            true;
+        base = std::move(ul);
+        outcome.upper_lower_composed = true;
         outcome.composed_owners |=
             core::operator_bit(
                 core::operator_id::upper_lower);
     }
+#else
+    if (compose_upper_lower) {
+        outcome.result =
+            pmetal_rgba_materialize_result::
+                fail_upper_lower_composition;
+        return outcome;
+    }
+#endif
+
+#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_R7_SHADOW)
+    if (!apply_exact_ptde_shadow_visibility_r7(
+            base,
+            *authority)) {
+        outcome.result =
+            pmetal_rgba_materialize_result::
+                fail_postcondition;
+        return outcome;
+    }
+
+    outcome.shadow_visibility_kernel_composed =
+        outcome.receiver_id == 33u ||
+        outcome.receiver_id == 34u;
+#endif
+
+// Atmosphere/Fog/LightScattering remains stock DSR in R6B. Do not compose
+    // the historical V4B pre-Fog/post-LightScattering transform here.
 
     // Build131 now owns the dedicated P_Metal SpecRGB consumer itself:
     // fresh t10 is sampled only at the final material cut and feeds the
