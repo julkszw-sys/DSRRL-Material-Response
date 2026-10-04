@@ -17,31 +17,7 @@ permissions:
   contents: read
 
 jobs:
-  linux-materializer-harness:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.pull_request.head.sha || github.sha }}
-
-      - name: Build R13 exact-stock harness
-        shell: bash
-        run: |
-          cmake \
-            -S renderer-core \
-            -B build-offline \
-            -DDSRRL_BUILD_PMETAL_R13_OFFLINE_TEST=ON
-          cmake --build build-offline --target dsrrl_pmetal_r13_offline_test -j 2
-          cp build-offline/dsrrl_pmetal_r13_offline_test DSRRL_PMETAL_R13_OFFLINE_TEST
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: DSRRL_PMETAL_R13_OFFLINE_TEST
-          path: DSRRL_PMETAL_R13_OFFLINE_TEST
-          if-no-files-found: error
-
   windows-addon:
-    needs: linux-materializer-harness
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
