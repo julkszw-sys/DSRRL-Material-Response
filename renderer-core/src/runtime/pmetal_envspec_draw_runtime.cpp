@@ -261,6 +261,15 @@ release_resources() noexcept
     }
     b12_by_context_.clear();
 
+#if defined(DSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE)
+    for (auto &[_,entry] :
+         b13_envdiffuse_by_context_) {
+        if (entry.buffer != nullptr)
+            entry.buffer->Release();
+    }
+    b13_envdiffuse_by_context_.clear();
+#endif
+
 #if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_R7_SHADOW)
     if (shadow_sampler_ != nullptr) {
         shadow_sampler_->Release();
@@ -378,6 +387,15 @@ on_destroy_device(
             entry.buffer->Release();
     }
     b12_by_context_.clear();
+
+#if defined(DSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE)
+    for (auto &[_,entry] :
+         b13_envdiffuse_by_context_) {
+        if (entry.buffer != nullptr)
+            entry.buffer->Release();
+    }
+    b13_envdiffuse_by_context_.clear();
+#endif
 
 #if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_R7_SHADOW)
     if (shadow_sampler_ != nullptr) {
@@ -515,7 +533,12 @@ register_lerp_replacement(
         outcome.semantic_receiver_id > 35u ||
         outcome.pair_index + 24u !=
             outcome.semantic_receiver_id ||
+#if defined(DSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE)
+        outcome.envdiffuse_preserved ||
+        !outcome.envdiffuse_ptde_lerp_composed ||
+#else
         !outcome.envdiffuse_preserved ||
+#endif
         outcome.upper_lower_composed ||
         !outcome.upper_lower_preserved_stock ||
 #if defined(DSRRL_PMETAL_V13_NATIVE_DSR_NO_TAIL_DIAG)
@@ -921,9 +944,15 @@ bool pmetal_envspec_draw_runtime::prepare(
         return false;
     }
     if (!k_v13_preserve_stock_envdiffuse &&
-        family ==
-            pmetal_envspec_receiver_family::
-                stable_hemenv &&
+        (family ==
+             pmetal_envspec_receiver_family::
+                 stable_hemenv
+#if defined(DSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE)
+         || family ==
+             pmetal_envspec_receiver_family::
+                 hemenvlerp
+#endif
+        ) &&
         !source.envdiffuse_linear_valid) {
         telemetry::hot_count(source_rejects_);
         effect_fail(
@@ -1412,16 +1441,29 @@ bool pmetal_envspec_draw_runtime::prepare(
     effect_latch(effect_b12_ready_);
 
 #if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG)
-    // Stable HemEnv owns the exact PTDE EnvDiffuse resource/decode island.
-    // R18 HemEnvLerp deliberately keeps stock DSR EnvDiffuse A/B so the
-    // diagnostic isolates paired PTDE EnvSpec + R17 MaterialWorkflow.
+    // Stable HemEnv uses one PTDE EnvDiffuse endpoint. R19 HemEnvLerp uses
+    // both exact PTDE endpoints and the dedicated b13 weighted endpoint CB.
     if (family ==
             pmetal_envspec_receiver_family::
-                stable_hemenv) {
+                stable_hemenv
+#if defined(DSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE)
+        || family ==
+            pmetal_envspec_receiver_family::
+                hemenvlerp
+#endif
+        ) {
+        const bool envdiffuse_b_required =
+#if defined(DSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE)
+            family ==
+                pmetal_envspec_receiver_family::
+                    hemenvlerp;
+#else
+            false;
+#endif
         if (!env_resources_.prepare_envdiffuse(
                 prepared.env_resources.probe_a,
                 prepared.env_resources.probe_b,
-                false,
+                envdiffuse_b_required,
                 prepared.envdiffuse_resources)) {
             b12->Release();
             if (shader != nullptr)
@@ -1450,6 +1492,13 @@ bool pmetal_envspec_draw_runtime::prepare(
             std::snprintf(
                 line,
                 sizeof(line),
+#if defined(DSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE)
+                family ==
+                    pmetal_envspec_receiver_family::
+                        hemenvlerp
+                    ? "[DSRRL PMETAL R19 LERP] mode=exact_ptde_envdiffuse_ab_rgba_div probe=%u t11=%016llx endpointA=%.9g,%.9g,%.9g"
+                    :
+#endif
                 "[DSRRL PMETAL FULL PTDE HEMENV] mode=stable_exact_envdiffuse_rgba_div probe=%u t11=%016llx endpoint=%.9g,%.9g,%.9g",
                 static_cast<unsigned>(
                     prepared.envdiffuse_resources.probe_a),
@@ -1467,7 +1516,7 @@ bool pmetal_envspec_draw_runtime::prepare(
                 line);
         }
     }
-#if defined(DSRRL_PMETAL_R18_LERP_MATERIALWORKFLOW_DIAG)
+#if defined(DSRRL_PMETAL_R18_LERP_MATERIALWORKFLOW_DIAG) && !defined(DSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE)
     else if (!g_native_envdiffuse_logged.exchange(
                  true,
                  std::memory_order_relaxed)) {
@@ -1587,7 +1636,13 @@ bool pmetal_envspec_draw_runtime::prepare(
 
     if (family ==
             pmetal_envspec_receiver_family::
-                stable_hemenv)
+                stable_hemenv
+#if defined(DSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE)
+        || family ==
+            pmetal_envspec_receiver_family::
+                hemenvlerp
+#endif
+        )
         prepared.request.additional_owners |=
             envdiff_owner;
 
@@ -1610,17 +1665,23 @@ bool pmetal_envspec_draw_runtime::prepare(
         mr_owner;
     prepared.request.additional_resource_owners = 0u;
 #else
-    prepared.request.additional_constant_buffer_owners =
-        mr_owner |
-        (family ==
-             pmetal_envspec_receiver_family::
-                 stable_hemenv
-             ? envdiff_owner
-             : 0u);
-    prepared.request.additional_resource_owners =
+    const bool owns_envdiffuse =
         family ==
             pmetal_envspec_receiver_family::
                 stable_hemenv
+#if defined(DSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE)
+        || family ==
+            pmetal_envspec_receiver_family::
+                hemenvlerp
+#endif
+        ;
+    prepared.request.additional_constant_buffer_owners =
+        mr_owner |
+        (owns_envdiffuse
+             ? envdiff_owner
+             : 0u);
+    prepared.request.additional_resource_owners =
+        owns_envdiffuse
             ? envdiff_owner
             : 0u;
 #endif
@@ -1648,12 +1709,29 @@ bool pmetal_envspec_draw_runtime::prepare(
 #if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG)
     if (family ==
             pmetal_envspec_receiver_family::
-                stable_hemenv) {
+                stable_hemenv
+#if defined(DSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE)
+        || family ==
+            pmetal_envspec_receiver_family::
+                hemenvlerp
+#endif
+        ) {
         prepared.request.srvs[
             request_srv_count++] = {
                 11u,
                 prepared.envdiffuse_resources.ptde_a
             };
+#if defined(DSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE)
+        if (family ==
+                pmetal_envspec_receiver_family::
+                    hemenvlerp) {
+            prepared.request.srvs[
+                request_srv_count++] = {
+                    13u,
+                    prepared.envdiffuse_resources.ptde_b
+                };
+        }
+#endif
     }
     prepared.request.srvs[
         request_srv_count++] = {
@@ -1773,6 +1851,17 @@ bool pmetal_envspec_draw_runtime::prepare(
             11u,
             prepared.envdiffuse_resources.sampler
         };
+#if defined(DSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE)
+    if (family ==
+            pmetal_envspec_receiver_family::
+                hemenvlerp) {
+        prepared.request.samplers[
+            request_sampler_count++] = {
+                13u,
+                prepared.envdiffuse_resources.sampler
+            };
+    }
+#endif
     prepared.request.samplers[
         request_sampler_count++] = {
             12u,
@@ -1972,6 +2061,10 @@ void pmetal_envspec_draw_runtime::release(
 
     if (prepared.b12 != nullptr)
         prepared.b12->Release();
+#if defined(DSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE)
+    if (prepared.b13_envdiffuse != nullptr)
+        prepared.b13_envdiffuse->Release();
+#endif
 
     if (prepared.shader != nullptr)
         prepared.shader->Release();
