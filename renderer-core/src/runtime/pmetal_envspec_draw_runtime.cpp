@@ -515,7 +515,11 @@ register_lerp_replacement(
         outcome.semantic_receiver_id > 35u ||
         outcome.pair_index + 24u !=
             outcome.semantic_receiver_id ||
+#if defined(DSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE)
+        outcome.envdiffuse_preserved ||
+#else
         !outcome.envdiffuse_preserved ||
+#endif
         outcome.upper_lower_composed ||
         !outcome.upper_lower_preserved_stock ||
 #if defined(DSRRL_PMETAL_V13_NATIVE_DSR_NO_TAIL_DIAG)
