@@ -2415,8 +2415,9 @@ void pmetal_env_source_selector_event(
         [&](std::int16_t selector,
             f4 &value,
             std::uint64_t &bank,
-            std::uint32_t &row) noexcept {
-            void *source =
+            std::uint32_t &row,
+            void *&source_out) noexcept {
+            source_out =
                 pmetal_selector_policy::
                     source(
                         selector,
@@ -2424,11 +2425,11 @@ void pmetal_env_source_selector_event(
                         lookup);
 
             if (!lookup_valid ||
-                source == nullptr)
+                source_out == nullptr)
                 return false;
 
             return read_exact_source(
-                source,
+                source_out,
                 selector,
                 value,
                 bank,
@@ -2437,13 +2438,16 @@ void pmetal_env_source_selector_event(
 
     f4 a{};
     f4 b{};
+    void *source_a = nullptr;
+    void *source_b = nullptr;
     pmetal_envspec_source next{};
 
     if (!decode(
             endpoints.a,
             a,
             next.bank_signature_a,
-            next.row_id_a)) {
+            next.row_id_a,
+            source_a)) {
         telemetry::hot_count(
             g_decode_fail);
         return;
@@ -2456,6 +2460,7 @@ void pmetal_env_source_selector_event(
 
     if (endpoints.a == endpoints.b) {
         b = a;
+        source_b = source_a;
         next.bank_signature_b =
             next.bank_signature_a;
         next.row_id_b =
@@ -2464,7 +2469,8 @@ void pmetal_env_source_selector_event(
                    endpoints.b,
                    b,
                    next.bank_signature_b,
-                   next.row_id_b)) {
+                   next.row_id_b,
+                   source_b)) {
         telemetry::hot_count(
             g_decode_fail);
         return;
@@ -2514,6 +2520,59 @@ void pmetal_env_source_selector_event(
         envdiffuse_b.z
     };
     next.envdiffuse_linear_valid = true;
+#endif
+
+#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_R10_LOCAL_UL)
+    f4 upper_a{};
+    f4 lower_a{};
+    f4 upper_b{};
+    f4 lower_b{};
+    if (!read_authored_upper_lower(
+            source_a,
+            endpoints.a,
+            upper_a,
+            lower_a)) {
+        telemetry::hot_count(
+            g_decode_fail);
+        return;
+    }
+
+    if (endpoints.a == endpoints.b ||
+        endpoints.beta == 0.0f) {
+        upper_b = upper_a;
+        lower_b = lower_a;
+    } else if (!read_authored_upper_lower(
+                   source_b,
+                   endpoints.b,
+                   upper_b,
+                   lower_b)) {
+        telemetry::hot_count(
+            g_decode_fail);
+        return;
+    }
+
+    const auto upper =
+        lerp_f4(
+            upper_a,
+            upper_b,
+            endpoints.beta);
+    const auto lower =
+        lerp_f4(
+            lower_a,
+            lower_b,
+            endpoints.beta);
+
+    next.upper = {
+        upper.x,
+        upper.y,
+        upper.z
+    };
+    next.lower = {
+        lower.x,
+        lower.y,
+        lower.z
+    };
+    next.upper_lower_linear_valid = true;
 #endif
 
     next.serial = epoch;
