@@ -254,6 +254,7 @@ std::atomic_bool g_pointlight_once_shader_ready{false};
 std::atomic_bool g_pointlight_once_sidecar_ready{false};
 std::atomic_bool g_pointlight_once_batch_ready{false};
 std::atomic_bool g_pointlight_once_applied{false};
+std::atomic_bool g_pointlight_r20_spc_ready_logged{false};
 // PR175/176 RT identity probing is diagnostic-only. Runtime proof already
 // established the reflective-water 480x270 offscreen PointLight pass. Keep
 // the small signature store for the one first-hit observation only.
@@ -5844,6 +5845,20 @@ bool prepare_island_batch(
                             reshade::log::level::info,
                             "[DSRRL POINTLIGHT APPLY] stage=batch_ready");
                     }
+                    if (prepared.clustered_shader.spc &&
+                        !g_pointlight_r20_spc_ready_logged.exchange(
+                            true,
+                            std::memory_order_relaxed)) {
+                        char line[256]{};
+                        std::snprintf(
+                            line,
+                            sizeof(line),
+                            "[DSRRL POINTLIGHT R20 CLUSTERED SPC] stage=batch_ready legacy_specular=1 spec_rgb=1 blended=%u",
+                            prepared.clustered_shader.blended_material ? 1u : 0u);
+                        reshade::log::message(
+                            reshade::log::level::info,
+                            line);
+                    }
                     return true;
                 }
             }
@@ -7380,6 +7395,7 @@ bool AddonInit(
     g_pointlight_once_sidecar_ready.store(false);
     g_pointlight_once_batch_ready.store(false);
     g_pointlight_once_applied.store(false);
+    g_pointlight_r20_spc_ready_logged.store(false);
     for (auto &slot : g_pointlight_rt_signatures)
         slot.store(0u, std::memory_order_relaxed);
     g_upper_lower_selection_transport_active.store(false);
