@@ -59,6 +59,55 @@ template<class T> inline bool read_cached(std::uintptr_t address,T &out,access_c
     std::memcpy(&out,reinterpret_cast<void*>(address),sizeof(T)); return true;
 }
 
+inline std::size_t readable_cached_prefix(
+    std::uintptr_t address,
+    std::size_t max_size,
+    access_cache &cache) noexcept {
+    if(!address || max_size==0u) return 0u;
+
+    for(const auto &r:cache.regions) {
+        if(r.begin<=address && address<r.end)
+            return std::min<std::size_t>(
+                max_size,
+                static_cast<std::size_t>(
+                    r.end-address));
+    }
+
+    MEMORY_BASIC_INFORMATION m{};
+    if(VirtualQuery(
+           reinterpret_cast<void*>(address),
+           &m,
+           sizeof(m))!=sizeof(m) ||
+       m.State!=MEM_COMMIT ||
+       (m.Protect&PAGE_GUARD))
+        return 0u;
+
+    const auto p=m.Protect&255u;
+    if(p!=PAGE_READONLY&&p!=PAGE_READWRITE&&p!=PAGE_WRITECOPY&&
+       p!=PAGE_EXECUTE_READ&&p!=PAGE_EXECUTE_READWRITE&&p!=PAGE_EXECUTE_WRITECOPY)
+        return 0u;
+
+    const auto begin=
+        reinterpret_cast<std::uintptr_t>(
+            m.BaseAddress);
+    const auto region_end=
+        begin+m.RegionSize;
+    if(region_end<=address || region_end<begin)
+        return 0u;
+
+    auto &slot=
+        cache.regions[
+            static_cast<std::size_t>(
+                cache.victim++)%
+            cache.regions.size()];
+    slot={begin,region_end};
+
+    return std::min<std::size_t>(
+        max_size,
+        static_cast<std::size_t>(
+            region_end-address));
+}
+
 inline void structure_hash_byte(
     std::uint64_t &hash,
     std::uint8_t value) noexcept {
@@ -109,17 +158,47 @@ inline bool bank_structure_signature(
                 static_cast<std::uint8_t>((id >> shift) & 0xffu));
 
         bool terminated = false;
-        for (std::uint32_t j = 0u; j < 256u; ++j) {
-            std::uint8_t value = 0u;
-            if (!read_cached(
-                    param + name_offset + j,
-                    value,
-                    cache))
-                return false;
+        const auto name_address =
+            param + name_offset;
+        const auto direct_bytes =
+            readable_cached_prefix(
+                name_address,
+                256u,
+                cache);
+        if (direct_bytes == 0u)
+            return false;
+
+        const auto *name =
+            reinterpret_cast<const std::uint8_t *>(
+                name_address);
+        std::uint32_t consumed = 0u;
+        for (; consumed < direct_bytes; ++consumed) {
+            const auto value = name[consumed];
             structure_hash_byte(hash, value);
             if (value == 0u) {
                 terminated = true;
                 break;
+            }
+        }
+
+        // A valid name almost always terminates inside the same committed
+        // region. Preserve the exact old fail-open semantics across a region
+        // boundary rather than assuming contiguous readability.
+        if (!terminated) {
+            for (std::uint32_t j = consumed;
+                 j < 256u;
+                 ++j) {
+                std::uint8_t value = 0u;
+                if (!read_cached(
+                        name_address + j,
+                        value,
+                        cache))
+                    return false;
+                structure_hash_byte(hash, value);
+                if (value == 0u) {
+                    terminated = true;
+                    break;
+                }
             }
         }
         if (!terminated)
