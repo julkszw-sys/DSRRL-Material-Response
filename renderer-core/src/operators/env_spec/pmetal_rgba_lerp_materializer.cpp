@@ -937,6 +937,117 @@ bool apply_exact_ptde_envdiffuse_lerp_consumer(
 }
 #endif
 
+
+bool resize_existing_material_carrier_rdef(
+    std::vector<std::uint8_t> &payload,
+    std::uint32_t byte_size) noexcept
+{
+    constexpr std::size_t k_cb_desc_size = 24u;
+    constexpr std::size_t k_resource_desc_size = 32u;
+
+    if (payload.size() < 32u ||
+        byte_size == 0u ||
+        (byte_size & 15u) != 0u)
+        return false;
+
+    const auto cb_count =
+        read_u32(payload.data());
+    const auto cb_offset =
+        read_u32(payload.data() + 4u);
+    const auto resource_count =
+        read_u32(payload.data() + 8u);
+    const auto resource_offset =
+        read_u32(payload.data() + 12u);
+
+    if (cb_count == 0u ||
+        cb_count > 64u ||
+        resource_count == 0u ||
+        resource_count > 256u ||
+        cb_offset > payload.size() ||
+        static_cast<std::size_t>(cb_count) *
+            k_cb_desc_size >
+            payload.size() - cb_offset ||
+        resource_offset > payload.size() ||
+        static_cast<std::size_t>(resource_count) *
+            k_resource_desc_size >
+            payload.size() - resource_offset)
+        return false;
+
+    std::optional<std::uint32_t> material_name_offset;
+    std::size_t binding_hits = 0u;
+
+    for (std::uint32_t i = 0u; i < resource_count; ++i) {
+        const auto at =
+            static_cast<std::size_t>(resource_offset) +
+            static_cast<std::size_t>(i) *
+                k_resource_desc_size;
+
+        if (read_u32(payload.data() + at + 4u) != 0u ||
+            read_u32(payload.data() + at + 20u) != 12u ||
+            read_u32(payload.data() + at + 24u) != 1u)
+            continue;
+
+        ++binding_hits;
+        material_name_offset =
+            read_u32(payload.data() + at);
+    }
+
+    if (binding_hits != 1u ||
+        !material_name_offset.has_value() ||
+        *material_name_offset >= payload.size())
+        return false;
+
+    static constexpr char k_expected_name[] =
+        "DSRRL_MaterialCarrier";
+    const auto name_at =
+        static_cast<std::size_t>(
+            *material_name_offset);
+    if (payload.size() - name_at <
+            sizeof(k_expected_name) ||
+        std::memcmp(
+            payload.data() + name_at,
+            k_expected_name,
+            sizeof(k_expected_name)) != 0)
+        return false;
+
+    std::size_t cb_hits = 0u;
+    std::size_t cb_size_word =
+        static_cast<std::size_t>(-1);
+
+    for (std::uint32_t i = 0u; i < cb_count; ++i) {
+        const auto at =
+            static_cast<std::size_t>(cb_offset) +
+            static_cast<std::size_t>(i) *
+                k_cb_desc_size;
+
+        if (read_u32(payload.data() + at) !=
+            *material_name_offset)
+            continue;
+
+        ++cb_hits;
+        cb_size_word = at + 12u;
+    }
+
+    if (cb_hits != 1u ||
+        cb_size_word >
+            payload.size() - sizeof(std::uint32_t))
+        return false;
+
+    const auto existing_size =
+        read_u32(payload.data() + cb_size_word);
+    if (existing_size != 64u &&
+        existing_size != byte_size)
+        return false;
+
+    write_u32(
+        payload.data() + cb_size_word,
+        byte_size);
+
+    return
+        read_u32(payload.data() + cb_size_word) ==
+            byte_size;
+}
+
 bool add_bridge_rdef(
     const std::uint8_t *source,
     std::size_t source_size,
@@ -957,16 +1068,31 @@ bool add_bridge_rdef(
     if (rdef == nullptr ||
         legacy_plan::dxbc::rdef::has_constant_buffer_binding(
             rdef->payload,
-            12u) ||
-        legacy_plan::dxbc::rdef::has_constant_buffer_binding(
-            rdef->payload,
-            13u) ||
-        !legacy_plan::dxbc::rdef::append_constant_buffer_binding(
-            rdef->payload,
-            "DSRRL_MaterialCarrier",
-            12u,
-            k_material_carrier_bytes))
+            13u))
         return false;
+
+    const bool has_material_carrier =
+        legacy_plan::dxbc::rdef::
+            has_constant_buffer_binding(
+                rdef->payload,
+                12u);
+
+    if (has_material_carrier) {
+        // Generic MR already owns b12. Reuse that exact binding instead of
+        // trying to append a duplicate. R19 only widens its declared byte
+        // size from 64 to 96 for b12[4]/b12[5].
+        if (!resize_existing_material_carrier_rdef(
+                rdef->payload,
+                k_material_carrier_bytes))
+            return false;
+    } else if (!legacy_plan::dxbc::rdef::
+                   append_constant_buffer_binding(
+                       rdef->payload,
+                       "DSRRL_MaterialCarrier",
+                       12u,
+                       k_material_carrier_bytes)) {
+        return false;
+    }
 
     if (compose_upper_lower &&
         !legacy_plan::dxbc::rdef::append_constant_buffer_binding(
