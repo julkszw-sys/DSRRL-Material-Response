@@ -1539,6 +1539,106 @@ bool envspec_resource_runtime::prepare_bound(
     return true;
 }
 
+bool envspec_resource_runtime::prepare_forced(
+    std::uint16_t probe_a,
+    std::uint16_t probe_b,
+    std::uint8_t slot,
+    bool probe_b_required,
+    prepared_envspec_resources &prepared) noexcept
+{
+    prepared = {};
+
+    if (probe_a >=
+            env::k_legacy_envspec_probe_count ||
+        probe_b >=
+            env::k_legacy_envspec_probe_count ||
+        slot >= k_ptde_slots) {
+        telemetry::hot_count(g_prepare_fail);
+        return false;
+    }
+
+    resource_view a_view{};
+    resource_view b_view{};
+
+    if (!get_ptde_cube(
+            probe_a,
+            slot,
+            a_view)) {
+        telemetry::hot_count(g_prepare_fail);
+        return false;
+    }
+
+    if (probe_b_required &&
+        probe_b != probe_a) {
+        if (!get_ptde_cube(
+                probe_b,
+                slot,
+                b_view)) {
+            telemetry::hot_count(g_prepare_fail);
+            return false;
+        }
+    } else {
+        b_view = a_view;
+        probe_b = probe_a;
+    }
+
+    ID3D11ShaderResourceView *a_native =
+        reinterpret_cast<
+            ID3D11ShaderResourceView *>(
+                static_cast<std::uintptr_t>(
+                    a_view.handle));
+    ID3D11ShaderResourceView *b_native =
+        reinterpret_cast<
+            ID3D11ShaderResourceView *>(
+                static_cast<std::uintptr_t>(
+                    b_view.handle));
+    ID3D11SamplerState *sampler_native =
+        nullptr;
+
+    {
+        std::lock_guard<std::mutex> lock(
+            g_mutex);
+
+        if (!g_sampler_ready ||
+            g_sampler.handle == 0u ||
+            !g_pack_ready) {
+            telemetry::hot_count(g_prepare_fail);
+            return false;
+        }
+
+        sampler_native =
+            reinterpret_cast<
+                ID3D11SamplerState *>(
+                    static_cast<std::uintptr_t>(
+                        g_sampler.handle));
+    }
+
+    if (a_native == nullptr ||
+        b_native == nullptr ||
+        sampler_native == nullptr) {
+        telemetry::hot_count(g_prepare_fail);
+        return false;
+    }
+
+    a_native->AddRef();
+    b_native->AddRef();
+    sampler_native->AddRef();
+
+    prepared.ptde_a = a_native;
+    prepared.ptde_b = b_native;
+    prepared.sampler = sampler_native;
+    prepared.probe_a = probe_a;
+    prepared.probe_b = probe_b;
+    prepared.slot = slot;
+    prepared.probe_b_required =
+        probe_b_required;
+    prepared.ready = true;
+
+    telemetry::hot_count(g_prepare_ok);
+    return true;
+}
+
+
 bool envspec_resource_runtime::prepare_native_dsr(
     ID3D11DeviceContext *context,
     std::uint8_t slot,
