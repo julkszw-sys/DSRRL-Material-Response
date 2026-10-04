@@ -1,10 +1,10 @@
-name: P_Metal R18 Lerp MaterialWorkflow Build
+name: P_Metal R19 Exact Lerp EnvDiffuse Build
 
 on:
   workflow_dispatch:
   push:
     branches:
-      - r18-lerp-equipment-materialworkflow
+      - r19-lerp-exact-envdiffuse
   pull_request:
     paths:
       - "renderer-core/integrated/**"
@@ -36,7 +36,7 @@ jobs:
           ref: 3645e3025d1d98a90e318278858931f034d5d1f6
           path: _reshade
 
-      - name: Configure R18
+      - name: Configure R19
         shell: pwsh
         run: >
           cmake
@@ -45,7 +45,7 @@ jobs:
           -A x64
           -DRESHADE_INCLUDE_DIR="${{ github.workspace }}/_reshade/include"
           -DDSRRL_SOURCE_COMMIT="$env:DSRRL_CHECKOUT_COMMIT"
-          -DDSRRL_BUILD_FLAVOR="pmetal_r18_lerp_materialworkflow_diag"
+          -DDSRRL_BUILD_FLAVOR="pmetal_r19_lerp_exact_envdiffuse"
           -DDSRRL_FULL_TELEMETRY_DEFAULT_ON=ON
           -DDSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG=ON
           -DDSRRL_PMETAL_FULL_PTDE_HEMENV_R3=ON
@@ -59,7 +59,8 @@ jobs:
           -DDSRRL_PMETAL_FULL_PTDE_HEMENV_R16_LEGACY_DIFFUSE_SPLIT=ON
           -DDSRRL_PMETAL_FULL_PTDE_HEMENV_R17_PTDE_DIFFUSE_MATERIAL=ON
           -DDSRRL_EQUIPMENT_MATERIALWORKFLOW_R18=ON
-          -DDSRRL_PMETAL_R18_LERP_MATERIALWORKFLOW_DIAG=ON
+          -DDSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE_DIAG=ON
+          -DDSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE=ON
           -DDSRRL_PHYSICAL_CUT_UL_H3_SUBSURFACE=ON
 
       - name: Build runtime
@@ -69,20 +70,20 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           $addons = @(Get-ChildItem build-fast -Recurse -Filter *.addon64)
           if ($addons.Count -ne 1) { throw "Expected exactly one addon, found $($addons.Count)" }
-          Copy-Item $addons[0].FullName "DSRRL_PMETAL_R18_LERP_MATERIALWORKFLOW.addon64" -Force
+          Copy-Item $addons[0].FullName "DSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE.addon64" -Force
 
       - name: Verify binary identity
         shell: pwsh
         run: |
-          $path = "DSRRL_PMETAL_R18_LERP_MATERIALWORKFLOW.addon64"
+          $path = "DSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE.addon64"
           $ascii = [System.Text.Encoding]::ASCII.GetString([System.IO.File]::ReadAllBytes($path))
           if (-not $ascii.Contains($env:DSRRL_CHECKOUT_COMMIT)) { throw "Missing source commit identity" }
-          if (-not $ascii.Contains("pmetal_r18_lerp_materialworkflow_diag")) { throw "Missing R18 flavor identity" }
+          if (-not $ascii.Contains("pmetal_r18_lerp_materialworkflow_diag")) { throw "Missing R19 flavor identity" }
           $hash = (Get-FileHash $path -Algorithm SHA256).Hash.ToLowerInvariant()
           Write-Host "ADDON_SHA256=$hash"
 
       - uses: actions/upload-artifact@v4
         with:
-          name: DSRRL_PMETAL_R18_LERP_MATERIALWORKFLOW
-          path: DSRRL_PMETAL_R18_LERP_MATERIALWORKFLOW.addon64
+          name: DSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE
+          path: DSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE.addon64
           if-no-files-found: error
