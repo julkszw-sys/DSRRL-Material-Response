@@ -4,7 +4,8 @@ Date: 2026-10-05
 Repo: `julkszw-sys/DSRRL-Material-Response`
 Active PR: `#245`
 Branch: `r19-lerp-exact-envdiffuse-ab-beta`
-Authoritative source head at handoff: `327764c5b3f868cfe905c09642ec9c700efefb36`
+Authoritative functional source head at handoff: `327764c5b3f868cfe905c09642ec9c700efefb36`
+Handoff documentation commit: `cc8460f9a0a9086628f48ab4a7552cf1dd37e4f9` (documentation only; no functional renderer code changes)
 Supabase current revision at runtime-falsifier stage: `11220`
 
 ## 1. Goal / scope
