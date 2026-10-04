@@ -147,6 +147,11 @@ option(
     OFF)
 
 option(
+    DSRRL_PMETAL_R19_LERP_PTDE_ENVDIFFUSE
+    "R19: exact P_Metal HemEnvLerp PTDE EnvDiffuse A/B raw-RGBA RGB/A decode + endpoint beta consumer; removes DSR LightProbeParam.x post-blend gain"
+    OFF)
+
+option(
     DSRRL_POINTLIGHT_DRAWTIME_BYPASS
     "Diagnostic: disable PointLight producer hooks, runtime pipeline binding and draw-time carrier/replay while preserving all non-PointLight runtime paths"
     OFF)
@@ -817,6 +822,22 @@ if(DSRRL_PMETAL_FULL_PTDE_HEMENV_R17_PTDE_DIFFUSE_MATERIAL)
         dsrrl_renderer_core_integrated
         PRIVATE
         $<$<COMPILE_LANGUAGE:CXX>:DSRRL_PMETAL_FULL_PTDE_HEMENV_R17_PTDE_DIFFUSE_MATERIAL>)
+endif()
+
+if(DSRRL_PMETAL_R19_LERP_PTDE_ENVDIFFUSE)
+    if(NOT DSRRL_PMETAL_R18_LERP_MATERIALWORKFLOW_DIAG)
+        message(FATAL_ERROR
+            "P_Metal R19 Lerp EnvDiffuse requires the exact R18 HemEnvLerp MaterialWorkflow lineage")
+    endif()
+    if(NOT DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG)
+        message(FATAL_ERROR
+            "P_Metal R19 Lerp EnvDiffuse requires the exact PTDE EnvDiffuse PackedGI carrier")
+    endif()
+
+    target_compile_definitions(
+        dsrrl_renderer_core_integrated
+        PRIVATE
+        $<$<COMPILE_LANGUAGE:CXX>:DSRRL_PMETAL_R19_LERP_PTDE_ENVDIFFUSE>)
 endif()
 
 if(DSRRL_POINTLIGHT_DRAWTIME_BYPASS)

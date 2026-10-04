@@ -1,0 +1,53 @@
+{
+  "schema": "dsrrl.renderer_core.pmetal_envdiffuse_hemenvlerp_consumer.v1",
+  "status": "CONFIRMED_CONSUMER_ALGEBRA_RUNTIME_OPEN",
+  "scope": "exact P_Metal HemEnvLerp receiver triple rx33/rx34/rx35",
+  "dsr_exact_receivers": [
+    {
+      "receiver_id": 33,
+      "pair_index": 9,
+      "sha256": "7f113b3614f401de8f03cbc03f004fd71152f606cf58c86232c423479257fd85"
+    },
+    {
+      "receiver_id": 34,
+      "pair_index": 10,
+      "sha256": "857aa73d1d2f7ab839d4e9feae29be5b9462e18a34305ade219e5ee2a85af9db"
+    },
+    {
+      "receiver_id": 35,
+      "pair_index": 11,
+      "sha256": "9075b0806f0a8560977f096780aa68f44ef02be25d71be05bd51d802dca6d7e8"
+    }
+  ],
+  "ptde_operator": {
+    "a": "(filter(t11).rgb / filter(t11).a) * c86.rgb",
+    "b": "(filter(t13).rgb / filter(t13).a) * c84.rgb",
+    "beta": "c84.w",
+    "compose": "A + beta * (B - A)",
+    "upper_lower": "independent downstream operator"
+  },
+  "dsr_operator": {
+    "a": "filter(t11).rgb * gFC_EnvDifMapMulCol.rgb",
+    "b": "filter(t13).rgb * gFC_EnvDifMapMulCol2.rgb",
+    "beta": "gFC_EnvDifMapMulCol2.w",
+    "compose": "(A + beta * (B - A)) * gFC_LightProbeParam.x",
+    "resource_domain": "DSR HDR BC6H RGB"
+  },
+  "r19_bridge": {
+    "carrier": "existing pmetal_env_source envdiffuse_a/envdiffuse_b/beta + exact PTDE EnvDiffuse PackedGI t11/t13",
+    "shader": "post-filter RGB/A for each endpoint; b12[4].xyz A, b12[5].xyz B, b12[3].w beta",
+    "removed_dsr_only_term": "gFC_LightProbeParam.x post-blend gain",
+    "resource_slots": {
+      "A": "t11/s11",
+      "B": "t13/s13"
+    },
+    "fail_open": true
+  },
+  "non_claims": [
+    "does not prove runtime activation",
+    "does not prove pixel equivalence",
+    "does not authorize receiver-wide equipment routing",
+    "does not authorize generic SpecRGB",
+    "does not yet prove all stable R17 spatial/post-merge operators transfer to HemEnvLerp"
+  ]
+}

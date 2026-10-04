@@ -152,7 +152,9 @@ private:
 
     struct b12_context_cache {
         ID3D11Buffer *buffer = nullptr;
-        std::array<std::uint32_t,16> payload_bits{};
+        // Max carrier footprint: R19 adds EnvDiffuse A/B after the canonical
+        // 64-byte R17/R18 prefix. Non-R19 builds keep the tail zeroed.
+        std::array<std::uint32_t,24> payload_bits{};
         bool payload_valid = false;
     };
 
