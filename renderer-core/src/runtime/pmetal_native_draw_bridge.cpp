@@ -941,8 +941,10 @@ bool pmetal_native_draw_bridge::arm_draw(
             std::memory_order_acquire) ||
         cmd_list == nullptr ||
         (mutation.owners &
-         core::operator_bit(
-             core::operator_id::env_spec)) == 0u) {
+         (core::operator_bit(
+              core::operator_id::env_spec) |
+          core::operator_bit(
+              core::operator_id::point_light))) == 0u) {
         if (impl_ != nullptr)
             impl_->arm_reject.fetch_add(
                 1u,
@@ -1016,8 +1018,10 @@ bool pmetal_native_draw_bridge::arm_draw_indexed(
             std::memory_order_acquire) ||
         cmd_list == nullptr ||
         (mutation.owners &
-         core::operator_bit(
-             core::operator_id::env_spec)) == 0u) {
+         (core::operator_bit(
+              core::operator_id::env_spec) |
+          core::operator_bit(
+              core::operator_id::point_light))) == 0u) {
         if (impl_ != nullptr)
             impl_->arm_reject.fetch_add(
                 1u,
