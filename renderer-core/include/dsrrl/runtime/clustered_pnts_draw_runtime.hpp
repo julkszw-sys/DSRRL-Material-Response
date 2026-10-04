@@ -92,6 +92,9 @@ void clustered_pnts_selector_event_bridge(
     void *owner,
     const void *actual_material) noexcept;
 
+void clustered_pnts_selector_identity_event_bridge(
+    const operators::material_response::material_identity &identity) noexcept;
+
 class clustered_pnts_draw_runtime {
 public:
     clustered_pnts_draw_runtime() noexcept = default;
@@ -106,6 +109,14 @@ public:
     void selector_event(
         void *owner,
         const void *actual_material) noexcept;
+
+    void selector_identity_event(
+        const operators::material_response::material_identity &identity) noexcept;
+
+    bool current_draw_authority(
+        bool expected_spc,
+        operators::material_response::material_identity &material,
+        operators::material_response::decision &decision) const noexcept;
 
     bool prepare_sidecar(
         ID3D11DeviceContext *context,
