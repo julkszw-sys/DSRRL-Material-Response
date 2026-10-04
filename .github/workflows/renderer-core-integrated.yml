@@ -645,8 +645,8 @@ jobs:
             'b12_uploads_',
             'b12_reuses_',
             'payload_valid',
-            'source_generation',
-            'material_bits',
+            'source.generation',
+            'payload_bits',
             '12u',
             '14u'
           )) {
