@@ -884,8 +884,9 @@ bool pmetal_envspec_draw_runtime::prepare(
     effect_latch(effect_source_ready_);
 
 #if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG)
-    // First runtime is intentionally stable HemEnv only. HemEnvLerp remains
-    // stock until its complete two-endpoint PTDE EnvDiffuse island is ported.
+#if !defined(DSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE)
+    // Stable-only lineage: HemEnvLerp must fail open until the complete
+    // two-endpoint PTDE EnvDiffuse island is compiled in.
     if (family !=
             pmetal_envspec_receiver_family::
                 stable_hemenv) {
@@ -902,6 +903,23 @@ bool pmetal_envspec_draw_runtime::prepare(
             family);
         return false;
     }
+#else
+    // R19 admits only the two exact P_Metal receiver families. Unknown
+    // families still fail open rather than inheriting the Lerp bridge.
+    if (family !=
+            pmetal_envspec_receiver_family::
+                stable_hemenv &&
+        family !=
+            pmetal_envspec_receiver_family::
+                hemenvlerp) {
+        telemetry::hot_count(
+            blended_receiver_hold_);
+        effect_fail(
+            effect_fail_mask_,
+            k_effect_fail_blend);
+        return false;
+    }
+#endif
 #endif
 
     if (family ==
@@ -920,10 +938,19 @@ bool pmetal_envspec_draw_runtime::prepare(
             family);
         return false;
     }
-    if (!k_v13_preserve_stock_envdiffuse &&
+    const bool exact_envdiffuse_source_required =
         family ==
             pmetal_envspec_receiver_family::
-                stable_hemenv &&
+                stable_hemenv
+#if defined(DSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE)
+        || family ==
+            pmetal_envspec_receiver_family::
+                hemenvlerp
+#endif
+        ;
+
+    if (!k_v13_preserve_stock_envdiffuse &&
+        exact_envdiffuse_source_required &&
         !source.envdiffuse_linear_valid) {
         telemetry::hot_count(source_rejects_);
         effect_fail(
@@ -1205,7 +1232,11 @@ bool pmetal_envspec_draw_runtime::prepare(
         carrier3 = {{0.0f,0.0f,0.0f}};
 #endif
 
+#if defined(DSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE)
+    const std::array<f4,6> payload{{
+#else
     const std::array<f4,4> payload{{
+#endif
         {
             decision.c101,
             decision.c101,
@@ -1238,8 +1269,27 @@ bool pmetal_envspec_draw_runtime::prepare(
             carrier3[2],
             source.beta
         }
+#if defined(DSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE)
+        ,
+        {
+            source.envdiffuse_a[0],
+            source.envdiffuse_a[1],
+            source.envdiffuse_a[2],
+            0.0f
+        },
+        {
+            source.envdiffuse_b[0],
+            source.envdiffuse_b[1],
+            source.envdiffuse_b[2],
+            source.beta
+        }
+#endif
     }};
+#if defined(DSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE)
+    static_assert(sizeof(payload) == 96u);
+#else
     static_assert(sizeof(payload) == 64u);
+#endif
 
     ID3D11Device *device = nullptr;
     context->GetDevice(&device);
@@ -1259,7 +1309,11 @@ bool pmetal_envspec_draw_runtime::prepare(
         return false;
     }
 
+#if defined(DSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE)
+    std::array<std::uint32_t,24> payload_bits{};
+#else
     std::array<std::uint32_t,16> payload_bits{};
+#endif
     static_assert(
         sizeof(payload_bits) == sizeof(payload));
     std::memcpy(
@@ -1311,7 +1365,11 @@ bool pmetal_envspec_draw_runtime::prepare(
                     payload_bits;
         } else {
             D3D11_BUFFER_DESC desc{};
+#if defined(DSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE)
+            desc.ByteWidth = 96u;
+#else
             desc.ByteWidth = 64u;
+#endif
             desc.Usage =
                 D3D11_USAGE_DYNAMIC;
             desc.BindFlags =
@@ -1415,10 +1473,19 @@ bool pmetal_envspec_draw_runtime::prepare(
     // Probe identity is inherited from the already-authenticated EnvSpec
     // t12/t14 pair. The exact PTDE EnvDiffuse pack uses the same canonical
     // probe ordinal and never derives assignment from DSR t11 content.
+    const bool ptde_envdiffuse_b_required =
+#if defined(DSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE)
+        family ==
+            pmetal_envspec_receiver_family::
+                hemenvlerp;
+#else
+        false;
+#endif
+
     if (!env_resources_.prepare_envdiffuse(
             prepared.env_resources.probe_a,
             prepared.env_resources.probe_b,
-            false,
+            ptde_envdiffuse_b_required,
             prepared.envdiffuse_resources)) {
         b12->Release();
         if (shader != nullptr)
@@ -1447,7 +1514,13 @@ bool pmetal_envspec_draw_runtime::prepare(
         std::snprintf(
             line,
             sizeof(line),
-            "[DSRRL PMETAL FULL PTDE HEMENV] mode=stable_exact_envdiffuse_rgba_div probe=%u t11=%016llx endpoint=%.9g,%.9g,%.9g",
+            #if defined(DSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE)
+                family == pmetal_envspec_receiver_family::hemenvlerp
+                    ? "[DSRRL PMETAL R19 LERP] mode=exact_ptde_envdiffuse_ab_beta probe_a=%u t11=%016llx endpoint_a=%.9g,%.9g,%.9g"
+                    : "[DSRRL PMETAL FULL PTDE HEMENV] mode=stable_exact_envdiffuse_rgba_div probe=%u t11=%016llx endpoint=%.9g,%.9g,%.9g"
+#else
+                "[DSRRL PMETAL FULL PTDE HEMENV] mode=stable_exact_envdiffuse_rgba_div probe=%u t11=%016llx endpoint=%.9g,%.9g,%.9g"
+#endif,
             static_cast<unsigned>(
                 prepared.envdiffuse_resources.probe_a),
             static_cast<unsigned long long>(
@@ -1625,6 +1698,17 @@ bool pmetal_envspec_draw_runtime::prepare(
             11u,
             prepared.envdiffuse_resources.ptde_a
         };
+#if defined(DSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE)
+    if (family ==
+            pmetal_envspec_receiver_family::
+                hemenvlerp) {
+        prepared.request.srvs[
+            request_srv_count++] = {
+                13u,
+                prepared.envdiffuse_resources.ptde_b
+            };
+    }
+#endif
     prepared.request.srvs[
         request_srv_count++] = {
             12u,
@@ -1743,6 +1827,17 @@ bool pmetal_envspec_draw_runtime::prepare(
             11u,
             prepared.envdiffuse_resources.sampler
         };
+#if defined(DSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE)
+    if (family ==
+            pmetal_envspec_receiver_family::
+                hemenvlerp) {
+        prepared.request.samplers[
+            request_sampler_count++] = {
+                13u,
+                prepared.envdiffuse_resources.sampler
+            };
+    }
+#endif
     prepared.request.samplers[
         request_sampler_count++] = {
             12u,
