@@ -2222,6 +2222,154 @@ bool apply_ptde_materialworkflow_liveout_pair_r15(
 }
 #endif
 
+#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_R16_LEGACY_DIFFUSE_SPLIT)
+// R16 restores the PTDE legacy diffuse/common carrier inside the DSR
+// MaterialWorkflow true branch.
+//
+// Exact DSR stable HemEnv computes, before EnvDiffuse/common composition:
+//   rDiffuse = SpecTex.a * workflowDiffuse;
+//   rDiffuse *= (1 - workflowWeight);
+//
+// R13 proved that removing SpecTex.a alone is insufficient: the owner pixel
+// remains black except rust. R15B then proved that downstream live-outs are
+// not the root either. Exact PTDE stable HemEnv has no homologous SpecTex.a
+// gate and no homologous metalness/workflow-weight split on its legacy
+// DiffuseMaterial carrier. R16 therefore neutralizes BOTH DSR-only factors,
+// leaving workflowDiffuse itself as the common diffuse material input.
+//
+// This is length-preserving and does not touch the separate R15 additive
+// live-out or the R3-owned rx33/rx34 post-merge scalar.
+bool remove_dsr_materialworkflow_legacy_diffuse_split_r16(
+    std::vector<std::uint32_t> &words) noexcept
+{
+    std::vector<instruction_view> instructions;
+    if (!decode(words, instructions))
+        return false;
+
+    std::optional<std::uint32_t> spec_sample_register;
+    std::size_t material_if = static_cast<std::size_t>(-1);
+
+    for (std::size_t i = 0u; i + 1u < instructions.size(); ++i) {
+        const auto &sample = instructions[i];
+        const auto &branch = instructions[i + 1u];
+
+        if (sample.opcode < 0x45u || sample.opcode > 0x4au ||
+            sample.length != 11u ||
+            sample.offset + 10u >= words.size() ||
+            words[sample.offset + 7u] != 0x00107936u ||
+            words[sample.offset + 8u] != 1u ||
+            words[sample.offset + 10u] != 1u ||
+            branch.opcode != 0x1fu ||
+            branch.length != 4u ||
+            branch.offset != sample.offset + sample.length ||
+            branch.offset + 3u >= words.size() ||
+            words[branch.offset + 1u] != 0x0020800au ||
+            words[branch.offset + 2u] != 0u ||
+            words[branch.offset + 3u] != 85u)
+            continue;
+
+        if (spec_sample_register.has_value())
+            return false;
+
+        spec_sample_register = words[sample.offset + 4u];
+        material_if = i + 1u;
+    }
+
+    if (!spec_sample_register.has_value() ||
+        material_if == static_cast<std::size_t>(-1))
+        return false;
+
+    std::size_t depth = 0u;
+    std::size_t alpha_mul_word = static_cast<std::size_t>(-1);
+    std::size_t weight_mul_word = static_cast<std::size_t>(-1);
+    std::uint32_t diffuse_register = 0u;
+    std::size_t hits = 0u;
+
+    for (std::size_t i = material_if + 1u; i < instructions.size(); ++i) {
+        const auto &ins = instructions[i];
+
+        if (ins.opcode == 0x1fu) {
+            ++depth;
+            continue;
+        }
+        if (ins.opcode == 0x12u && depth == 0u)
+            break;
+        if (ins.opcode == 0x15u) {
+            if (depth == 0u)
+                break;
+            --depth;
+            continue;
+        }
+
+        if (depth != 0u ||
+            ins.opcode != 0x38u ||
+            ins.length != 7u ||
+            ins.offset + 6u >= words.size() ||
+            (words[ins.offset] & 0x00002000u) != 0u ||
+            words[ins.offset + 1u] != 0x00100072u ||
+            words[ins.offset + 3u] != 0x00100006u ||
+            words[ins.offset + 4u] != *spec_sample_register ||
+            words[ins.offset + 5u] != 0x00100246u)
+            continue;
+
+        if (i + 2u >= instructions.size())
+            return false;
+
+        const auto &add = instructions[i + 1u];
+        const auto &mul2 = instructions[i + 2u];
+        const auto dst = words[ins.offset + 2u];
+
+        // Exact continuation:
+        //   add rW.w, -workflowWeight, 1
+        //   mul rDiffuse.xyz, rW.wwww, rDiffuse.xyz
+        if (add.opcode != 0x00u ||
+            add.length != 8u ||
+            add.offset + 7u >= words.size() ||
+            words[add.offset + 1u] != 0x00100082u ||
+            words[add.offset + 6u] != 0x00004001u ||
+            words[add.offset + 7u] != 0x3f800000u ||
+            mul2.opcode != 0x38u ||
+            mul2.length != 7u ||
+            mul2.offset + 6u >= words.size() ||
+            words[mul2.offset + 1u] != 0x00100072u ||
+            words[mul2.offset + 2u] != dst ||
+            words[mul2.offset + 5u] != 0x00100246u ||
+            words[mul2.offset + 6u] != dst)
+            continue;
+
+        ++hits;
+        alpha_mul_word = ins.offset;
+        weight_mul_word = mul2.offset;
+        diffuse_register = dst;
+    }
+
+    if (hits != 1u ||
+        alpha_mul_word == static_cast<std::size_t>(-1) ||
+        weight_mul_word == static_cast<std::size_t>(-1))
+        return false;
+
+    // 1) rDiffuse = SpecTex.a * workflowDiffuse
+    //    -> rDiffuse = 1 * workflowDiffuse
+    words[alpha_mul_word + 3u] = 0x00004001u;
+    words[alpha_mul_word + 4u] = 0x3f800000u;
+
+    // 2) rDiffuse *= (1 - workflowWeight)
+    //    -> rDiffuse *= 1
+    words[weight_mul_word + 3u] = 0x00004001u;
+    words[weight_mul_word + 4u] = 0x3f800000u;
+
+    return
+        words[alpha_mul_word + 1u] == 0x00100072u &&
+        words[alpha_mul_word + 2u] == diffuse_register &&
+        words[alpha_mul_word + 3u] == 0x00004001u &&
+        words[alpha_mul_word + 4u] == 0x3f800000u &&
+        words[weight_mul_word + 1u] == 0x00100072u &&
+        words[weight_mul_word + 2u] == diffuse_register &&
+        words[weight_mul_word + 3u] == 0x00004001u &&
+        words[weight_mul_word + 4u] == 0x3f800000u;
+}
+#endif
+
 #if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_R5)
 // PTDE stable Phn HemEnv reconstructs the tangent frame per pixel. DSR HemEnv
 // changed that spatial operator in two non-equivalent ways before both
@@ -3507,6 +3655,12 @@ bool apply_build131(
 
 #if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_R15_PTDE_LIVEOUT_PAIR)
     if (!apply_ptde_materialworkflow_liveout_pair_r15(words) ||
+        !decode(words, instructions))
+        return false;
+#endif
+
+#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_R16_LEGACY_DIFFUSE_SPLIT)
+    if (!remove_dsr_materialworkflow_legacy_diffuse_split_r16(words) ||
         !decode(words, instructions))
         return false;
 #endif
