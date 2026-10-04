@@ -942,7 +942,8 @@ bool publish_exact_selector_identity(
             owner,
             actual_material);
         clustered_pnts_selector_identity_event_bridge(
-            identity);
+            identity,
+            pointlight_spc);
     }
 
 #ifndef DSRRL_PHYSICAL_CUT_UL_H3_SUBSURFACE
