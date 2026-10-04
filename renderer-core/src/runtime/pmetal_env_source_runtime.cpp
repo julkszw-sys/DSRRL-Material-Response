@@ -771,6 +771,149 @@ bool retail_lightbank_record_index(
     return true;
 }
 
+#pragma pack(push,1)
+struct pmetal_raw_rgbm {
+    std::int16_t r;
+    std::int16_t g;
+    std::int16_t b;
+    std::int16_t m;
+};
+#pragma pack(pop)
+
+const std::uint8_t *resolve_pmetal_raw_lightbank_record(
+    void *source,
+    std::int32_t selector) noexcept
+{
+    if (source == nullptr)
+        return nullptr;
+
+    std::uint32_t retail_index = 0u;
+    if (!retail_lightbank_record_index(
+            selector,
+            retail_index))
+        return nullptr;
+
+    const std::uint8_t *header = nullptr;
+    if (!safe_read(
+            static_cast<const std::uint8_t *>(
+                source) + 0x18u,
+            header) ||
+        header == nullptr)
+        return nullptr;
+
+    std::uint16_t type = 0u;
+    std::uint16_t count = 0u;
+    if (!safe_read(header + 0x08u, type) ||
+        !safe_read(header + 0x0Au, count) ||
+        type != 4u ||
+        retail_index >= count)
+        return nullptr;
+
+    std::uint32_t offset = 0u;
+    if (!safe_read(
+            header + 0x34u +
+                static_cast<std::size_t>(
+                    retail_index) * 12u,
+            offset))
+        return nullptr;
+
+    const auto *record =
+        header + offset;
+    if (!readable_range(record, 0x34u))
+        return nullptr;
+
+    return record;
+}
+
+std::array<float,3> decode_pmetal_raw_rgbm(
+    const pmetal_raw_rgbm &value) noexcept
+{
+    const float scale =
+        static_cast<float>(value.m) /
+        100.0f;
+    return {
+        static_cast<float>(value.r) /
+            255.0f * scale,
+        static_cast<float>(value.g) /
+            255.0f * scale,
+        static_cast<float>(value.b) /
+            255.0f * scale
+    };
+}
+
+bool decode_pmetal_upper_lower(
+    void *source_a,
+    std::int32_t selector_a,
+    void *source_b,
+    std::int32_t selector_b,
+    float beta,
+    std::array<float,3> &upper,
+    std::array<float,3> &lower) noexcept
+{
+    upper = {};
+    lower = {};
+
+    if (!std::isfinite(beta))
+        return false;
+
+    const auto *record_a =
+        resolve_pmetal_raw_lightbank_record(
+            source_a,
+            selector_a);
+    const auto *record_b =
+        resolve_pmetal_raw_lightbank_record(
+            source_b,
+            selector_b);
+
+    if (record_a == nullptr)
+        return false;
+
+    if (record_b == nullptr ||
+        selector_a == selector_b ||
+        beta <= 0.0f) {
+        record_b = record_a;
+        beta = 0.0f;
+    } else if (beta >= 1.0f) {
+        record_a = record_b;
+        beta = 0.0f;
+    }
+
+    pmetal_raw_rgbm upper_a{};
+    pmetal_raw_rgbm lower_a{};
+    pmetal_raw_rgbm upper_b{};
+    pmetal_raw_rgbm lower_b{};
+
+    if (!safe_read(record_a + 0x24u, upper_a) ||
+        !safe_read(record_a + 0x2Cu, lower_a) ||
+        !safe_read(record_b + 0x24u, upper_b) ||
+        !safe_read(record_b + 0x2Cu, lower_b))
+        return false;
+
+    const auto ua =
+        decode_pmetal_raw_rgbm(upper_a);
+    const auto la =
+        decode_pmetal_raw_rgbm(lower_a);
+    const auto ub =
+        decode_pmetal_raw_rgbm(upper_b);
+    const auto lb =
+        decode_pmetal_raw_rgbm(lower_b);
+
+    const float t =
+        std::clamp(beta, 0.0f, 1.0f);
+
+    for (std::size_t i = 0u; i < 3u; ++i) {
+        upper[i] =
+            ua[i] + (ub[i] - ua[i]) * t;
+        lower[i] =
+            la[i] + (lb[i] - la[i]) * t;
+        if (!std::isfinite(upper[i]) ||
+            !std::isfinite(lower[i]))
+            return false;
+    }
+
+    return true;
+}
+
 struct bank_cache_entry {
     const std::uint8_t *base = nullptr;
     std::uint16_t count = 0u;
