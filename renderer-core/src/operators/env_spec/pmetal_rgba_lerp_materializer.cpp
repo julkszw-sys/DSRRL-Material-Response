@@ -1797,29 +1797,25 @@ bool apply_ptde_materialworkflow_liveout_pair_r15(
         postmerge_gate_word == static_cast<std::size_t>(-1))
         return false;
 
-    // rx33/rx34: do not rewrite this MUL here. R3 already owns exactly
-    // this merge+9 scalar and neutralizes it after Build131. Rewriting it
-    // here destroys R3's exact-stock precondition and makes the replacement
-    // fail open.
-    //
-    // rx35: there is no R3 owner. Its homologous SpecTex.a gate is fused into
-    // a MAD, so R15 owns and neutralizes only that plain-HemEnv coefficient.
+    // R18 Lerp has no separate R3 owner. The exact Lerp MaterialWorkflow
+    // branch is byte-identical to stable at this cut, so R18 owns the same
+    // post-merge correction directly: Csd/Sdw MUL and plain fused MAD.
     if (postmerge_is_mad) {
-        const auto coeff_word =
-            postmerge_gate_word + 3u;
-        words[coeff_word] = 0x00004001u;
-        words[coeff_word + 1u] = 0x3f800000u;
-
-        if (words[coeff_word] != 0x00004001u ||
-            words[coeff_word + 1u] != 0x3f800000u)
-            return false;
+        words[postmerge_gate_word + 3u] = 0x00004001u;
+        words[postmerge_gate_word + 4u] = 0x3f800000u;
+    } else {
+        words[postmerge_gate_word + 5u] = 0x00004001u;
+        words[postmerge_gate_word + 6u] = 0x3f800000u;
     }
 
-    // Suppress the DSR-only additive/PBL live-out on all three stable
-    // receivers. Csd/Sdw post-merge gating remains stock until R3 executes.
     return
         words[additive_gate_word + 3u] == 0x00004001u &&
-        words[additive_gate_word + 4u] == 0x00000000u;
+        words[additive_gate_word + 4u] == 0x00000000u &&
+        (postmerge_is_mad
+            ? (words[postmerge_gate_word + 3u] == 0x00004001u &&
+               words[postmerge_gate_word + 4u] == 0x3f800000u)
+            : (words[postmerge_gate_word + 5u] == 0x00004001u &&
+               words[postmerge_gate_word + 6u] == 0x3f800000u));
 }
 #endif
 
