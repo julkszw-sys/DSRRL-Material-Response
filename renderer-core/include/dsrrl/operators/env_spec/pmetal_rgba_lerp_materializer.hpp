@@ -31,6 +31,7 @@ struct pmetal_rgba_lerp_materialize_outcome {
     std::uint8_t pair_index = 0xffu;
     std::uint32_t semantic_receiver_id = 0u;
     bool envdiffuse_preserved = false;
+    bool envdiffuse_ptde_lerp_composed = false;
     bool upper_lower_composed = false;
     bool upper_lower_preserved_stock = false;
     bool phn_scene_encoding_composed = false;
