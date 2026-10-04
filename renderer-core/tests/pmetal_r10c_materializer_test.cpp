@@ -59,7 +59,7 @@ bool enable_r10c_policy(dsrrl::core::feature_registry &features)
         if (!features.set(op, true))
             return false;
 
-    // Project-wide R10C physical cut: these visible bridges stay OFF.
+    // Project-wide R10E physical cut: these visible bridges stay OFF.
     return
         features.set(operator_id::upper_lower, false) &&
         features.set(operator_id::hemdir3, false) &&
@@ -125,7 +125,7 @@ int main(int argc, char **argv)
                     output.data(),
                     output.size())) {
             std::cerr
-                << "R10C_OFFLINE_FAIL rx=" << receivers[i]
+                << "R10E_OFFLINE_FAIL rx=" << receivers[i]
                 << " shader=" << shader_indices[i]
                 << " result=" << static_cast<unsigned>(result.result)
                 << " materialized_rx=" << result.receiver_id
@@ -141,13 +141,13 @@ int main(int argc, char **argv)
         }
 
         std::cout
-            << "R10C_OFFLINE_APPLIED rx=" << receivers[i]
+            << "R10E_OFFLINE_APPLIED rx=" << receivers[i]
             << " shader=" << shader_indices[i]
             << " input_bytes=" << input.size()
             << " output_bytes=" << output.size()
             << "\n";
     }
 
-    std::cout << "R10C_OFFLINE_ALL_APPLIED\n";
+    std::cout << "R10E_OFFLINE_ALL_APPLIED\n";
     return 0;
 }
