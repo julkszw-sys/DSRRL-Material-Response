@@ -56,6 +56,9 @@ std::atomic<std::uint32_t> g_prepare_stage_log_mask{0u};
 std::array<std::atomic<std::uint64_t>,3> g_r9_value_cut_generation{};
 std::array<std::atomic<std::uint64_t>,3> g_r9_value_cut_probe_pair{};
 std::atomic<std::uint32_t> g_r9_value_cut_seen_mask{0u};
+#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_R10C_LOCAL_UL_B12)
+std::atomic_bool g_r10c_local_ul_logged{false};
+#endif
 
 void log_prepare_stage_once(
     std::uint32_t bit,
@@ -412,6 +415,11 @@ register_replacement(
         outcome.receiver_id < 33u ||
         outcome.receiver_id > 35u ||
         outcome.upper_lower_composed ||
+#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_R10C_LOCAL_UL_B12)
+        !outcome.local_upper_lower_b12_composed ||
+#else
+        outcome.local_upper_lower_b12_composed ||
+#endif
 #if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_R7_SHADOW)
         (((outcome.receiver_id == 33u ||
            outcome.receiver_id == 34u) &&
@@ -748,7 +756,11 @@ bool pmetal_envspec_draw_runtime::prepare(
 
     pmetal_envspec_source source{};
     if (!source_.latest(material, source) ||
-        !std::isfinite(source.beta)) {
+        !std::isfinite(source.beta)
+#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_R10C_LOCAL_UL_B12)
+        || !source.upper_lower_valid
+#endif
+        ) {
         telemetry::hot_count(source_rejects_);
         effect_fail(
             effect_fail_mask_,
@@ -1207,7 +1219,11 @@ bool pmetal_envspec_draw_runtime::prepare(
         carrier3 = {{0.0f,0.0f,0.0f}};
 #endif
 
+#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_R10C_LOCAL_UL_B12)
+    const std::array<f4,6> payload{{
+#else
     const std::array<f4,4> payload{{
+#endif
         {
             decision.c101,
             decision.c101,
@@ -1240,8 +1256,27 @@ bool pmetal_envspec_draw_runtime::prepare(
             carrier3[2],
             source.beta
         }
+#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_R10C_LOCAL_UL_B12)
+        ,
+        {
+            source.upper[0],
+            source.upper[1],
+            source.upper[2],
+            0.0f
+        },
+        {
+            source.lower[0],
+            source.lower[1],
+            source.lower[2],
+            0.0f
+        }
+#endif
     }};
+#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_R10C_LOCAL_UL_B12)
+    static_assert(sizeof(payload) == 96u);
+#else
     static_assert(sizeof(payload) == 64u);
+#endif
 
     ID3D11Device *device = nullptr;
     context->GetDevice(&device);
@@ -1261,7 +1296,10 @@ bool pmetal_envspec_draw_runtime::prepare(
         return false;
     }
 
-    std::array<std::uint32_t,16> payload_bits{};
+    std::array<
+        std::uint32_t,
+        sizeof(payload) / sizeof(std::uint32_t)>
+        payload_bits{};
     static_assert(
         sizeof(payload_bits) == sizeof(payload));
     std::memcpy(
@@ -1313,7 +1351,11 @@ bool pmetal_envspec_draw_runtime::prepare(
                     payload_bits;
         } else {
             D3D11_BUFFER_DESC desc{};
+#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_R10C_LOCAL_UL_B12)
+            desc.ByteWidth = 96u;
+#else
             desc.ByteWidth = 64u;
+#endif
             desc.Usage =
                 D3D11_USAGE_DYNAMIC;
             desc.BindFlags =
@@ -1412,6 +1454,29 @@ bool pmetal_envspec_draw_runtime::prepare(
     }
 
     effect_latch(effect_b12_ready_);
+
+#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_R10C_LOCAL_UL_B12)
+    if (!g_r10c_local_ul_logged.exchange(
+            true,
+            std::memory_order_relaxed)) {
+        char line[512]{};
+        std::snprintf(
+            line,
+            sizeof(line),
+            "[DSRRL PMETAL R10C LOCAL UL] rx=%u b12_bytes=96 upper=%.9g,%.9g,%.9g lower=%.9g,%.9g,%.9g",
+            static_cast<unsigned>(
+                decision.receiver_id),
+            static_cast<double>(source.upper[0]),
+            static_cast<double>(source.upper[1]),
+            static_cast<double>(source.upper[2]),
+            static_cast<double>(source.lower[0]),
+            static_cast<double>(source.lower[1]),
+            static_cast<double>(source.lower[2]));
+        reshade::log::message(
+            reshade::log::level::info,
+            line);
+    }
+#endif
 
 #if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG)
     // Probe identity is inherited from the already-authenticated EnvSpec
@@ -2065,6 +2130,11 @@ void pmetal_envspec_draw_runtime::reset() noexcept
     effect_probe_ready_.store(false);
     effect_spec_rgb_ready_.store(false);
     effect_b12_ready_.store(false);
+#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_R10C_LOCAL_UL_B12)
+    g_r10c_local_ul_logged.store(
+        false,
+        std::memory_order_relaxed);
+#endif
     effect_request_ready_.store(false);
     effect_fail_mask_.store(0u);
     g_source_cut_logged.store(false);

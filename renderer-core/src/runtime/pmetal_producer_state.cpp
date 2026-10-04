@@ -100,6 +100,9 @@ bool same_source_payload(
     return
         a.a == b.a &&
         a.b == b.b &&
+        a.upper == b.upper &&
+        a.lower == b.lower &&
+        a.upper_lower_valid == b.upper_lower_valid &&
         a.beta == b.beta &&
         a.bank_signature_a == b.bank_signature_a &&
         a.bank_signature_b == b.bank_signature_b &&

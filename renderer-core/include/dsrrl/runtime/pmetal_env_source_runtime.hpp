@@ -15,6 +15,12 @@ struct pmetal_envspec_source {
     std::array<float,3> envdiffuse_a{};
     std::array<float,3> envdiffuse_b{};
     bool envdiffuse_linear_valid = false;
+    // R10C: exact authored PTDE hemispherical endpoints selected by the same
+    // authenticated P_Metal LightBank tuple. These are carried only inside
+    // the existing P_Metal source token; no global U/L runtime is armed.
+    std::array<float,3> upper{};
+    std::array<float,3> lower{};
+    bool upper_lower_valid = false;
     float beta = 0.0f;
     // PTDE PHN terminal scene encoding k135=c135.x/c135.y. The carrier is
     // explicit even before producer RE is complete so consumers do not regress

@@ -320,6 +320,185 @@ bool rebuild(
     }
 }
 
+bool resize_existing_b12_rdef(
+    std::vector<chunk> &chunks,
+    std::uint32_t old_size,
+    std::uint32_t new_size) noexcept
+{
+    chunk *rdef = nullptr;
+    for (auto &current : chunks) {
+        if (std::memcmp(
+                current.tag.data(),
+                "RDEF",
+                4u) != 0)
+            continue;
+        if (rdef != nullptr)
+            return false;
+        rdef = &current;
+    }
+
+    if (rdef == nullptr ||
+        rdef->payload.size() < 32u)
+        return false;
+
+    auto &payload = rdef->payload;
+    const auto cb_count =
+        read_u32(payload.data() + 0u);
+    const auto cb_offset =
+        read_u32(payload.data() + 4u);
+    const auto resource_count =
+        read_u32(payload.data() + 8u);
+    const auto resource_offset =
+        read_u32(payload.data() + 12u);
+
+    constexpr std::size_t k_cb_desc_size = 24u;
+    constexpr std::size_t k_res_desc_size = 32u;
+
+    if (cb_count == 0u ||
+        resource_count == 0u ||
+        cb_offset > payload.size() ||
+        resource_offset > payload.size() ||
+        static_cast<std::uint64_t>(cb_count) *
+            k_cb_desc_size >
+            payload.size() - cb_offset ||
+        static_cast<std::uint64_t>(resource_count) *
+            k_res_desc_size >
+            payload.size() - resource_offset)
+        return false;
+
+    std::uint32_t name_offset = 0u;
+    bool binding_found = false;
+
+    for (std::uint32_t i = 0u;
+         i < resource_count;
+         ++i) {
+        const auto at =
+            static_cast<std::size_t>(
+                resource_offset) +
+            static_cast<std::size_t>(i) *
+                k_res_desc_size;
+
+        if (read_u32(payload.data() + at + 4u) != 0u ||
+            read_u32(payload.data() + at + 20u) != 12u ||
+            read_u32(payload.data() + at + 24u) != 1u)
+            continue;
+
+        if (binding_found)
+            return false;
+
+        name_offset =
+            read_u32(payload.data() + at + 0u);
+        binding_found = true;
+    }
+
+    if (!binding_found)
+        return false;
+
+    bool cb_found = false;
+    for (std::uint32_t i = 0u;
+         i < cb_count;
+         ++i) {
+        const auto at =
+            static_cast<std::size_t>(
+                cb_offset) +
+            static_cast<std::size_t>(i) *
+                k_cb_desc_size;
+
+        if (read_u32(payload.data() + at + 0u) !=
+                name_offset)
+            continue;
+
+        if (cb_found ||
+            read_u32(payload.data() + at + 12u) !=
+                old_size)
+            return false;
+
+        write_u32(
+            payload.data() + at + 12u,
+            new_size);
+        cb_found = true;
+    }
+
+    return cb_found;
+}
+
+bool apply_pmetal_local_ul_b12(
+    std::vector<std::uint8_t> &base,
+    const pmetal_rgba_authority::entry &authority) noexcept
+{
+    std::vector<chunk> chunks;
+    std::vector<std::uint32_t> words;
+    std::size_t code_index = 0u;
+
+    if (!parse_dxbc(
+            base.data(),
+            base.size(),
+            chunks,
+            code_index) ||
+        !extract_words(
+            chunks,
+            code_index,
+            words) ||
+        words.size() < 15u ||
+        words[11] != 0x04000059u ||
+        words[12] != 0x00208e46u ||
+        words[13] != 12u ||
+        words[14] != 4u)
+        return false;
+
+    const std::array<
+        std::array<std::size_t,3>,
+        3> patches{{
+            {{authority.ul_u_slot_word, 7u, 4u}},
+            {{authority.ul_d_slot_word_0, 8u, 5u}},
+            {{authority.ul_d_slot_word_1, 8u, 5u}}
+        }};
+
+    for (const auto &patch : patches) {
+        const auto slot_word =
+            patch[0] + 4u;
+        const auto source_register =
+            static_cast<std::uint32_t>(
+                patch[1]);
+        const auto carrier_row =
+            static_cast<std::uint32_t>(
+                patch[2]);
+
+        if (slot_word + 1u >= words.size() ||
+            words[slot_word] != 0u ||
+            words[slot_word + 1u] !=
+                source_register)
+            return false;
+
+        words[slot_word] = 12u;
+        words[slot_word + 1u] =
+            carrier_row;
+    }
+
+    // Extend the already-existing cached P_Metal carrier instead of adding
+    // another CB/draw request. Rows 0..3 retain their existing ABI.
+    words[14] = 6u;
+
+    if (!resize_existing_b12_rdef(
+            chunks,
+            64u,
+            96u))
+        return false;
+
+    std::vector<std::uint8_t> updated;
+    if (!rebuild(
+            base.data(),
+            base.size(),
+            std::move(chunks),
+            code_index,
+            words,
+            updated))
+        return false;
+
+    base = std::move(updated);
+    return true;
+}
+
 std::size_t code_payload_offset(
     const std::uint8_t *source,
     std::size_t size) noexcept
@@ -3635,6 +3814,147 @@ bool binding_exists(
     return false;
 }
 
+#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_R10C_LOCAL_UL_B12)
+bool constant_buffer_binding_exact_size(
+    const std::vector<std::uint8_t> &payload,
+    std::uint32_t bind_point,
+    std::uint32_t byte_size) noexcept
+{
+    constexpr std::size_t k_cb_desc_size = 24u;
+    constexpr std::size_t k_res_desc_size = 32u;
+
+    if (payload.size() < 32u)
+        return false;
+
+    const auto cb_count =
+        read_u32(payload.data() + 0u);
+    const auto cb_offset =
+        read_u32(payload.data() + 4u);
+    const auto resource_count =
+        read_u32(payload.data() + 8u);
+    const auto resource_offset =
+        read_u32(payload.data() + 12u);
+
+    if (cb_count == 0u ||
+        resource_count == 0u ||
+        cb_offset > payload.size() ||
+        resource_offset > payload.size() ||
+        static_cast<std::uint64_t>(cb_count) *
+            k_cb_desc_size >
+            payload.size() - cb_offset ||
+        static_cast<std::uint64_t>(resource_count) *
+            k_res_desc_size >
+            payload.size() - resource_offset)
+        return false;
+
+    std::uint32_t name_offset = 0u;
+    std::size_t binding_count = 0u;
+
+    for (std::uint32_t i = 0u;
+         i < resource_count;
+         ++i) {
+        const auto at =
+            static_cast<std::size_t>(
+                resource_offset) +
+            static_cast<std::size_t>(i) *
+                k_res_desc_size;
+
+        if (read_u32(payload.data() + at + 4u) != 0u ||
+            read_u32(payload.data() + at + 20u) != bind_point ||
+            read_u32(payload.data() + at + 24u) != 1u)
+            continue;
+
+        name_offset =
+            read_u32(payload.data() + at + 0u);
+        ++binding_count;
+    }
+
+    if (binding_count != 1u)
+        return false;
+
+    std::size_t cb_matches = 0u;
+    for (std::uint32_t i = 0u;
+         i < cb_count;
+         ++i) {
+        const auto at =
+            static_cast<std::size_t>(
+                cb_offset) +
+            static_cast<std::size_t>(i) *
+                k_cb_desc_size;
+
+        if (read_u32(payload.data() + at + 0u) !=
+                name_offset)
+            continue;
+
+        if (read_u32(payload.data() + at + 12u) !=
+                byte_size)
+            return false;
+
+        ++cb_matches;
+    }
+
+    return cb_matches == 1u;
+}
+
+bool pmetal_local_ul_b12_final_exact(
+    const std::vector<std::uint32_t> &words,
+    const std::vector<instruction_view> &instructions) noexcept
+{
+    std::size_t b12_decl_6 = 0u;
+    std::size_t upper_lower_delta = 0u;
+    std::size_t lower_mad = 0u;
+
+    for (const auto &ins : instructions) {
+        if (ins.offset + ins.length >
+                words.size())
+            return false;
+
+        if (ins.length == 4u &&
+            words[ins.offset] == 0x04000059u &&
+            words[ins.offset + 1u] == 0x00208e46u &&
+            words[ins.offset + 2u] == 12u &&
+            words[ins.offset + 3u] == 6u)
+            ++b12_decl_6;
+
+        // Exact stable-P_Metal hemisphere delta:
+        // r2.xyz = Upper - Lower.
+        if (ins.length == 10u &&
+            words[ins.offset + 0u] == 0x0a000000u &&
+            words[ins.offset + 1u] == 0x001000e2u &&
+            words[ins.offset + 2u] == 2u &&
+            words[ins.offset + 3u] == 0x00208906u &&
+            words[ins.offset + 4u] == 12u &&
+            words[ins.offset + 5u] == 4u &&
+            words[ins.offset + 6u] == 0x80208906u &&
+            words[ins.offset + 7u] == 0x41u &&
+            words[ins.offset + 8u] == 12u &&
+            words[ins.offset + 9u] == 5u)
+            ++upper_lower_delta;
+
+        // Exact stable-P_Metal hemisphere merge:
+        // Lower + h * (Upper - Lower).
+        if (ins.length == 10u &&
+            words[ins.offset + 0u] == 0x0a000032u &&
+            words[ins.offset + 1u] == 0x00100072u &&
+            words[ins.offset + 2u] == 2u &&
+            words[ins.offset + 3u] == 0x00100006u &&
+            words[ins.offset + 4u] == 2u &&
+            words[ins.offset + 5u] == 0x00100796u &&
+            words[ins.offset + 6u] == 2u &&
+            words[ins.offset + 7u] == 0x00208246u &&
+            words[ins.offset + 8u] == 12u &&
+            words[ins.offset + 9u] == 5u)
+            ++lower_mad;
+    }
+
+    return
+        b12_decl_6 == 1u &&
+        upper_lower_delta == 1u &&
+        lower_mad == 1u;
+}
+
+#endif
+
 bool final_postcondition(
     const std::vector<std::uint8_t> &bytes,
     bool with_upper_lower,
@@ -3808,6 +4128,15 @@ bool final_postcondition(
             has_constant_buffer_binding(
                 rdef->payload,
                 12u) ||
+#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_R10C_LOCAL_UL_B12)
+        !constant_buffer_binding_exact_size(
+                rdef->payload,
+                12u,
+                96u) ||
+        !pmetal_local_ul_b12_final_exact(
+                words,
+                instructions) ||
+#endif
         !binding_exists(
             rdef->payload,
             2u,
@@ -3949,6 +4278,19 @@ materialize_pmetal_rgba_receiver(
 
     outcome.receiver_id =
         mr.receiver_id;
+
+#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_R10C_LOCAL_UL_B12)
+    if (!apply_pmetal_local_ul_b12(
+            base,
+            *authority)) {
+        outcome.result =
+            pmetal_rgba_materialize_result::
+                fail_upper_lower_composition;
+        return outcome;
+    }
+    outcome.local_upper_lower_b12_composed =
+        true;
+#endif
 
     // Compose only independent A1 owners that do not overlap the EnvSpec
     // semantic cut. The clean diffuse base intentionally deferred them.
@@ -4124,6 +4466,17 @@ materialize_pmetal_rgba_receiver(
 // Atmosphere/Fog/LightScattering remains stock DSR in R6B. Do not compose
     // the historical V4B pre-Fog/post-LightScattering transform here.
 
+#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_R10C_LOCAL_UL_B12)
+    // R10C explicitly supersedes the legacy draw-time b13 U/L composition.
+    // Any caller asking for that old path is a provenance error: fail open
+    // rather than producing a hybrid shader with both b12-local and b13 U/L.
+    if (compose_upper_lower) {
+        outcome.result =
+            pmetal_rgba_materialize_result::
+                fail_upper_lower_composition;
+        return outcome;
+    }
+#else
     if (compose_upper_lower) {
         std::vector<std::uint8_t> ul;
         const auto ul_result =
@@ -4157,6 +4510,7 @@ materialize_pmetal_rgba_receiver(
         outcome.upper_lower_composed =
             true;
     }
+#endif
 
     // Build131 now owns the dedicated P_Metal SpecRGB consumer itself:
     // fresh t10 is sampled only at the final material cut and feeds the

@@ -179,6 +179,9 @@ add_custom_command(
 add_custom_target(dsrrl_subsurface_plain_patch_header
     DEPENDS "${DSRRL_SUBSURFACE_PLAIN_PATCH_HEADER}")
 
+option(DSRRL_BUILD_PMETAL_R10C_OFFLINE_TEST
+    "Build the stock-DXBC R10C materializer harness (fixtures supplied externally)"
+    OFF)
 option(DSRRL_BUILD_PHASE0_PROBE "Build the pixel-inert ReShade API20 Phase 0 probe addon" OFF)
 set(RESHade_INCLUDE_DIR "" CACHE PATH "Path to pinned ReShade include directory")
 
@@ -611,3 +614,48 @@ add_executable(dsrrl_pointlight_ptde_source_tests tests/pointlight_ptde_source_t
 target_include_directories(dsrrl_pointlight_ptde_source_tests PRIVATE include)
 target_compile_features(dsrrl_pointlight_ptde_source_tests PRIVATE cxx_std_17)
 add_test(NAME dsrrl_pointlight_ptde_source_tests COMMAND dsrrl_pointlight_ptde_source_tests)
+
+if(DSRRL_BUILD_PMETAL_R10C_OFFLINE_TEST)
+    add_executable(
+        dsrrl_pmetal_r10c_offline_test
+        tests/pmetal_r10c_materializer_test.cpp
+        src/operators/material_response/material_response_diffuse_v1.cpp
+        src/operators/env_spec/pmetal_rgba_materializer.cpp)
+
+    target_link_libraries(
+        dsrrl_pmetal_r10c_offline_test
+        PRIVATE
+        dsrrl_renderer_core)
+
+    target_compile_features(
+        dsrrl_pmetal_r10c_offline_test
+        PRIVATE
+        cxx_std_17)
+
+    target_compile_definitions(
+        dsrrl_pmetal_r10c_offline_test
+        PRIVATE
+        DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG
+        DSRRL_PMETAL_FORCE_PTDE_PACKEDGI
+        DSRRL_PMETAL_FULL_PTDE_HEMENV_R3
+        DSRRL_PMETAL_FULL_PTDE_HEMENV_R4
+        DSRRL_PMETAL_FULL_PTDE_HEMENV_R5
+        DSRRL_PMETAL_FULL_PTDE_HEMENV_R6
+        DSRRL_PMETAL_FULL_PTDE_HEMENV_R7_SHADOW
+        DSRRL_PMETAL_FULL_PTDE_HEMENV_R8_PRE_AB
+        DSRRL_PMETAL_FULL_PTDE_HEMENV_R10C_LOCAL_UL_B12)
+
+    add_dependencies(
+        dsrrl_pmetal_r10c_offline_test
+        dsrrl_mr_diffuse_v1_header)
+
+    if(MSVC)
+        target_compile_options(
+            dsrrl_pmetal_r10c_offline_test
+            PRIVATE /W4 /WX)
+    else()
+        target_compile_options(
+            dsrrl_pmetal_r10c_offline_test
+            PRIVATE -Wall -Wextra -Wpedantic -Werror -Wno-unused-function)
+    endif()
+endif()
