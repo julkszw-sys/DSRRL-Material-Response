@@ -527,16 +527,27 @@ jobs:
           )) {
             if ($entry -notmatch [regex]::Escape($required)) { throw "Clean P_Metal EnvSpec call missing from active entrypoint: $required" }
           }
+          foreach ($required in @(
+            'materialize_ptde_diffuse_response_v1',
+            'stock_source',
+            'stock_size',
+            'patch_build131_rdef',
+            'DSRRL_PTDE_SpecRGB',
+            '10u',
+            'true'
+          )) {
+            if ($envspecMaterializer -notmatch [regex]::Escape($required)) { throw "Stable stock-rooted EnvSpec invariant missing: $required" }
+          }
+          foreach ($required in @(
+            'materialize_ptde_diffuse_response_v1',
+            'stock_source',
+            'stock_size',
+            'spec_rgb_base',
+            'true'
+          )) {
+            if ($envspecLerpMaterializer -notmatch [regex]::Escape($required)) { throw "Lerp stock-rooted EnvSpec invariant missing: $required" }
+          }
           foreach ($materializer in @($envspecMaterializer,$envspecLerpMaterializer)) {
-            foreach ($required in @(
-              'materialize_ptde_diffuse_response_v1',
-              'stock_source',
-              'stock_size',
-              'spec_rgb_base',
-              'true'
-            )) {
-              if ($materializer -notmatch [regex]::Escape($required)) { throw "Stock-rooted EnvSpec invariant missing: $required" }
-            }
             foreach ($forbidden in @(
               'materialize_v211',
               'hemenvlerp_v211',
