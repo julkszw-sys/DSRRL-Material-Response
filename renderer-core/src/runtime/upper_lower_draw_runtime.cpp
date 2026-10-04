@@ -5145,52 +5145,6 @@ direct_producer_ready_for_draw() const noexcept
     return ready;
 }
 
-bool prepare_pmetal_local_upper_lower_carrier(
-    ID3D11DeviceContext *context,
-    const std::array<float,3> &upper,
-    const std::array<float,3> &lower,
-    prepared_upper_lower_draw &prepared) noexcept
-{
-    prepared = {};
-
-    if (context == nullptr)
-        return false;
-
-    for (const auto value : upper)
-        if (!std::isfinite(value))
-            return false;
-    for (const auto value : lower)
-        if (!std::isfinite(value))
-            return false;
-
-    std::array<f4,8> payload{};
-    payload[6] = {
-        upper[0],
-        upper[1],
-        upper[2],
-        0.0f
-    };
-    payload[7] = {
-        lower[0],
-        lower[1],
-        lower[2],
-        0.0f
-    };
-
-    auto *b13 =
-        realize_b13_payload(
-            payload,
-            context,
-            false);
-    if (b13 == nullptr)
-        return false;
-
-    prepared.b13 = b13;
-    prepared.ready = true;
-    telemetry::hot_count(g_requests);
-    return true;
-}
-
 bool upper_lower_draw_runtime::prepare_upper_lower_carrier(
     ID3D11DeviceContext *context,
     prepared_upper_lower_draw &prepared) noexcept
