@@ -52,6 +52,9 @@ std::atomic_bool g_native_envdiffuse_logged{false};
 std::atomic_bool g_envdiffuse_consumer_logged{false};
 std::atomic_bool g_source_frontier_logged{false};
 std::atomic_bool g_shadow_r7_logged{false};
+#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_R10C_INLINE_UL_B12)
+std::atomic_bool g_r10c_inline_ul_logged{false};
+#endif
 std::atomic<std::uint32_t> g_prepare_stage_log_mask{0u};
 std::array<std::atomic<std::uint64_t>,3> g_r9_value_cut_generation{};
 std::array<std::atomic<std::uint64_t>,3> g_r9_value_cut_probe_pair{};
@@ -888,6 +891,29 @@ bool pmetal_envspec_draw_runtime::prepare(
         return false;
     }
     effect_latch(effect_source_ready_);
+
+#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_R10C_INLINE_UL_B12)
+    if (!g_r10c_inline_ul_logged.exchange(
+            true,
+            std::memory_order_relaxed)) {
+        char line[768]{};
+        std::snprintf(
+            line,
+            sizeof(line),
+            "[DSRRL PMETAL R10C INLINE UL] rx=%u route=%u upper=%.9g,%.9g,%.9g lower=%.9g,%.9g,%.9g b12_bytes=96 transport=existing_cached_payload global_ul=off b13=off",
+            static_cast<unsigned>(decision.receiver_id),
+            static_cast<unsigned>(decision.route_index),
+            static_cast<double>(source.upper_ptde[0]),
+            static_cast<double>(source.upper_ptde[1]),
+            static_cast<double>(source.upper_ptde[2]),
+            static_cast<double>(source.lower_ptde[0]),
+            static_cast<double>(source.lower_ptde[1]),
+            static_cast<double>(source.lower_ptde[2]));
+        reshade::log::message(
+            reshade::log::level::info,
+            line);
+    }
+#endif
 
 #if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG)
     // First runtime is intentionally stable HemEnv only. HemEnvLerp remains
@@ -2108,6 +2134,9 @@ void pmetal_envspec_draw_runtime::reset() noexcept
     g_envdiffuse_consumer_logged.store(false);
     g_source_frontier_logged.store(false);
     g_shadow_r7_logged.store(false);
+#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_R10C_INLINE_UL_B12)
+    g_r10c_inline_ul_logged.store(false);
+#endif
     g_prepare_stage_log_mask.store(0u);
     for (auto &generation : g_r9_value_cut_generation)
         generation.store(0u, std::memory_order_relaxed);
