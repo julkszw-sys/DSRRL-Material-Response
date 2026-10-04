@@ -426,9 +426,9 @@ bool material_response_draw_runtime::register_replacement_record(
             dxbc_size
         });
 
-    resource_epoch_.fetch_add(
-        1u,
-        std::memory_order_release);
+    // Registration is append-only for a (bank, receiver) key. Existing TLS
+    // entries own strong shader references and remain valid when an unrelated
+    // replacement is added, so do not globally invalidate the draw cache.
     ++ok_counter;
     return true;
 }

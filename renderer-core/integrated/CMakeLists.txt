@@ -66,6 +66,156 @@ option(
     "Diagnostic: feed exact native DSR BC6H cubemaps into the PTDE P_Metal EnvSpec operator"
     OFF)
 
+option(
+    DSRRL_PMETAL_V13_NATIVE_DSR_NO_TAIL_DIAG
+    "Diagnostic: exact V13-style P_Metal EnvSpec over native DSR cubemaps without the modern SpecRGB/c101/COLOR0 final tail; includes stable HemEnv and exact paired HemEnvLerp"
+    OFF)
+
+option(
+    DSRRL_PMETAL_V13_NATIVE_DSR_MATERIAL_MOD_DIAG
+    "Diagnostic: PR203 V13/native-DSR EnvSpec plus only PTDE SpecRGB*c101*COLOR0 modulation on the EnvSpec accumulator before the preserved common merge; stable HemEnv + paired HemEnvLerp"
+    OFF)
+
+option(
+    DSRRL_PMETAL_V13_PTDE_PACKEDGI_MATERIAL_MOD_DIAG
+    "Diagnostic: PR204 material-modulation shader/operator with exact PTDE PackedGI cubemap carrier instead of native DSR BC6H; stock EnvDiffuse/common merge; stable HemEnv + paired HemEnvLerp"
+    OFF)
+
+option(
+    DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG
+    "Diagnostic: stable P_Metal full PTDE HemEnv with exact PTDE EnvSpec + EnvDiffuse PackedGI carriers and exact PTDE LightBank endpoints"
+    OFF)
+
+option(
+    DSRRL_PMETAL_FULL_PTDE_HEMENV_R3
+    "Diagnostic: PR214 R3 exact SpecRGB attestation plus removal of DSR-only post-merge environment scalar on the full PTDE stable HemEnv path"
+    OFF)
+
+option(
+    DSRRL_PMETAL_FULL_PTDE_HEMENV_R4
+    "Diagnostic: PR215 R4 samples exact PTDE equipment SpecRGB directly as RGB instead of inheriting the stock DSR t1 wxyz channel remap"
+    OFF)
+
+option(
+    DSRRL_PMETAL_FULL_PTDE_HEMENV_R5
+    "Diagnostic: exact PTDE stable-HemEnv active normal-basis differences for P_Metal (no SV_IsFrontFace normal flip, per-pixel bitangent cross; preserve identity LightProbeParam.z path)"
+    OFF)
+
+option(
+    DSRRL_PMETAL_FULL_PTDE_HEMENV_R6
+    "Cumulative stable P_Metal PTDE HemEnv successor: R3+R4+R5 plus source-gated PHN k135 terminal consumer; atmosphere continuation follows the selected lineage"
+    OFF)
+
+option(
+    DSRRL_PMETAL_FULL_PTDE_HEMENV_R7_SHADOW
+    "Stable P_Metal Csd/Sdw: replace DSR 3x3 comparison shadow visibility producer with exact PTDE 4x4 packed-depth PCF16 and exact regular stage-7 sampler"
+    OFF)
+
+option(
+    DSRRL_PMETAL_FULL_PTDE_HEMENV_R8_PRE_AB
+    "Stable P_Metal cumulative successor: restore recovered PTDE PRE V2.28A SPEC-domain linear carrier and V2.28B angular/horizon bypass before Build131"
+    OFF)
+
+option(
+    DSRRL_PMETAL_FULL_PTDE_HEMENV_R11_COMMON_MERGE
+    "Stable P_Metal cumulative successor: remove the DSR-only t8 SAO whole-surface multiplier after the PTDE-equivalent common environment/material merge"
+    OFF)
+
+option(
+    DSRRL_PMETAL_FULL_PTDE_HEMENV_R15_PTDE_LIVEOUT_PAIR
+    "P_Metal R15 diagnostic: zero the DSR-only MaterialWorkflow additive live-out and neutralize the downstream SpecTex-alpha common-surface gate"
+    OFF)
+
+option(
+    DSRRL_PMETAL_FULL_PTDE_HEMENV_R16_LEGACY_DIFFUSE_SPLIT
+    "P_Metal R16 diagnostic: remove DSR-only SpecTex-alpha and metalness/workflow-weight suppression from the common diffuse carrier"
+    OFF)
+
+option(
+    DSRRL_PMETAL_FULL_PTDE_HEMENV_R17_PTDE_DIFFUSE_MATERIAL
+    "P_Metal R17 diagnostic: replace the inner DSR MaterialWorkflow cb9->cb10 blend with direct PTDE c100 material selection"
+    OFF)
+
+option(
+    DSRRL_POINTLIGHT_DRAWTIME_BYPASS
+    "Diagnostic: disable PointLight producer hooks, runtime pipeline binding and draw-time carrier/replay while preserving all non-PointLight runtime paths"
+    OFF)
+
+option(
+    DSRRL_DRAWTIME_ISLANDS_BYPASS
+    "Diagnostic: disable all draw-time island routing/hooks/replay while preserving create-time A1 and MotionBlur shader replacements"
+    OFF)
+
+option(
+    DSRRL_DRAW_CALLBACKS_BYPASS
+    "Diagnostic: keep dynamic transports/hooks installed but omit draw/draw_indexed/present callbacks"
+    OFF)
+
+option(
+    DSRRL_DRAW_REPLAY_BYPASS
+    "Diagnostic: keep dynamic draw routing and preparation but release prepared islands before replay/restore"
+    OFF)
+
+option(
+    DSRRL_EMPTY_DRAW_CALLBACK_BISECT
+    "Diagnostic: keep dynamic transports and register draw callbacks, but return immediately before any DSRRL draw work"
+    OFF)
+
+option(
+    DSRRL_STATE_TRANSACTION_ONLY_BISECT
+    "Diagnostic: execute draw transaction begin+restore without issuing a replacement Draw/DrawIndexed"
+    OFF)
+
+option(
+    DSRRL_RAW_DRAW_REPLAY_BISECT
+    "Diagnostic: issue only a raw stock Draw/DrawIndexed from the callback and suppress the original, without DSRRL state mutation"
+    OFF)
+
+option(
+    DSRRL_STATE_CAPTURE_ONLY_BISECT
+    "Diagnostic: run native PS state capture only for prepared island mutations; no Set, core transaction, replay or restore"
+    OFF)
+
+option(
+    DSRRL_NATIVE_STATE_MUTATE_RESTORE_ONLY_BISECT
+    "Diagnostic: run native D3D11 state capture+mutation+restore without core transaction bookkeeping or replay"
+    OFF)
+
+option(
+    DSRRL_CORE_TRANSACTION_ONLY_BISECT
+    "Diagnostic: run renderer-core transaction begin+restore bookkeeping only, without native PS Get/Set or replay"
+    OFF)
+
+option(
+    DSRRL_RAW_NATIVE_DRAW_REENTRY_MIN_BISECT
+    "Diagnostic: minimal native Draw/DrawIndexed re-entry from ReShade callback with recursion guard and no semantic preparation"
+    OFF)
+
+option(
+    DSRRL_ADDON_LOADED_ONLY_BISECT
+    "Diagnostic: register the addon only; install no DSRRL events, pipeline callbacks, draw callbacks or runtime transports"
+    OFF)
+
+option(
+    DSRRL_DRAW_CALLBACK_ONLY_BISECT
+    "Diagnostic: register only empty draw/draw_indexed callbacks; install no DSRRL pipeline events or runtime transports"
+    OFF)
+
+option(
+    DSRRL_PMETAL_SRV_SHADOW_EXPERIMENT
+    "Experimental Runtime v2 pixel-SRV bind shadow; disabled by default to avoid global descriptor-event overhead"
+    OFF)
+
+option(
+    DSRRL_PHYSICAL_CUT_UL_H3_SUBSURFACE
+    "Diagnostic: physically exclude Upper/Lower, HemDir3 and Subsurface runtime implementation units while preserving P_Metal source runtime"
+    ON)
+
+option(
+    DSRRL_FLVER_SELECTOR_PROFILE
+    "Diagnostic: low-overhead sampled FLVER selector/support interaction profiler"
+    OFF)
+
 set(
     RESHADE_INCLUDE_DIR
     ""
@@ -291,10 +441,12 @@ add_custom_command(
     COMMAND "${Python3_EXECUTABLE}"
             "${DSRRL_RENDERER_CORE_ROOT}/tools/generate_pmetal_env_source_authority.py"
             --input "${DSRRL_RENDERER_CORE_ROOT}/provenance/mr145/SOURCE_V13_PTDE_DONOR.cpp"
+            --layout-input "${DSRRL_RENDERER_CORE_ROOT}/data/provenance/pmetal_env_source_layout_v1.tsv"
             --output "${DSRRL_CORE_GENERATED_RUNTIME}/generated_pmetal_env_source_authority.hpp"
     DEPENDS
         "${DSRRL_RENDERER_CORE_ROOT}/tools/generate_pmetal_env_source_authority.py"
         "${DSRRL_RENDERER_CORE_ROOT}/provenance/mr145/SOURCE_V13_PTDE_DONOR.cpp"
+        "${DSRRL_RENDERER_CORE_ROOT}/data/provenance/pmetal_env_source_layout_v1.tsv"
     VERBATIM)
 
 add_custom_target(
@@ -346,10 +498,40 @@ add_subdirectory(
     "${CMAKE_BINARY_DIR}/renderer-core-lib"
     EXCLUDE_FROM_ALL)
 
+set(
+    DSRRL_INTEGRATED_ADDON_SOURCE
+    "${CMAKE_CURRENT_LIST_DIR}/integrated_addon.cpp")
+
+if(DSRRL_PHYSICAL_CUT_UL_H3_SUBSURFACE)
+    set(
+        DSRRL_INTEGRATED_ADDON_SOURCE
+        "${DSRRL_CORE_GENERATED_RUNTIME}/integrated_addon_physical_cut.cpp")
+    execute_process(
+        COMMAND
+            "${Python3_EXECUTABLE}"
+            "${DSRRL_RENDERER_CORE_ROOT}/tools/generate_runtime_v2_physical_cut.py"
+            --input "${CMAKE_CURRENT_LIST_DIR}/integrated_addon.cpp"
+            --output "${DSRRL_INTEGRATED_ADDON_SOURCE}"
+        RESULT_VARIABLE DSRRL_PHYSICAL_CUT_GENERATE_RESULT)
+    if(NOT DSRRL_PHYSICAL_CUT_GENERATE_RESULT EQUAL 0)
+        message(FATAL_ERROR "Failed to generate Runtime v2 physical-cut integrated source")
+    endif()
+
+    execute_process(
+        COMMAND
+            "${Python3_EXECUTABLE}"
+            "${DSRRL_RENDERER_CORE_ROOT}/tools/audit_runtime_v2_physical_cut.py"
+            --source-dir "${DSRRL_RENDERER_CORE_ROOT}"
+        RESULT_VARIABLE DSRRL_PHYSICAL_CUT_SOURCE_AUDIT_RESULT)
+    if(NOT DSRRL_PHYSICAL_CUT_SOURCE_AUDIT_RESULT EQUAL 0)
+        message(FATAL_ERROR "Runtime v2 physical-cut source audit failed")
+    endif()
+endif()
+
 add_library(
     dsrrl_renderer_core_integrated
     SHARED
-    integrated_addon.cpp
+    "${DSRRL_INTEGRATED_ADDON_SOURCE}"
     flver_identity_detour.asm
     texture_identity_detour.asm
     hemdir3_mode_detour.asm
@@ -361,19 +543,19 @@ add_library(
     "${DSRRL_RENDERER_CORE_ROOT}/src/runtime/bloom_scene_sidecar_runtime.cpp"
     "${DSRRL_RENDERER_CORE_ROOT}/src/runtime/bloom_fx_draw_transport.cpp"
     "${DSRRL_RENDERER_CORE_ROOT}/src/runtime/pmetal_envspec_draw_runtime.cpp"
+    "${DSRRL_RENDERER_CORE_ROOT}/src/runtime/pmetal_env_source_runtime.cpp"
+    "${DSRRL_RENDERER_CORE_ROOT}/src/runtime/pmetal_producer_state.cpp"
+    "${DSRRL_RENDERER_CORE_ROOT}/src/runtime/pmetal_native_draw_bridge.cpp"
+    "${DSRRL_RENDERER_CORE_ROOT}/src/runtime/pixel_srv_shadow.cpp"
     "${DSRRL_RENDERER_CORE_ROOT}/src/runtime/hemenvlerp_pipeline_registry.cpp"
     "${DSRRL_RENDERER_CORE_ROOT}/src/runtime/subsurface_pipeline_registry.cpp"
-    "${DSRRL_RENDERER_CORE_ROOT}/src/runtime/subsurface_draw_runtime.cpp"
-    "${DSRRL_RENDERER_CORE_ROOT}/src/runtime/upper_lower_draw_runtime.cpp"
     "${DSRRL_RENDERER_CORE_ROOT}/src/runtime/fixed_pointlight_draw_runtime.cpp"
     "${DSRRL_RENDERER_CORE_ROOT}/src/runtime/clustered_pnts_draw_runtime.cpp"
     "${DSRRL_RENDERER_CORE_ROOT}/src/runtime/clustered_pnts_pipeline_runtime.cpp"
     "${DSRRL_RENDERER_CORE_ROOT}/src/runtime/fixed_pointlight_pipeline_runtime.cpp"
     "${DSRRL_RENDERER_CORE_ROOT}/src/runtime/upper_lower_pipeline_registry.cpp"
-    "${DSRRL_RENDERER_CORE_ROOT}/src/runtime/upper_lower_hemenv_draw_runtime.cpp"
     "${DSRRL_RENDERER_CORE_ROOT}/src/runtime/hemdir3_mode_transport.cpp"
     "${DSRRL_RENDERER_CORE_ROOT}/src/runtime/hemdir3_pipeline_registry.cpp"
-    "${DSRRL_RENDERER_CORE_ROOT}/src/runtime/hemdir3_draw_runtime.cpp"
     "${DSRRL_RENDERER_CORE_ROOT}/src/runtime/draw_state_transaction.cpp"
     "${DSRRL_RENDERER_CORE_ROOT}/src/runtime/island_draw_adapter.cpp"
     "${DSRRL_RENDERER_CORE_ROOT}/src/runtime/material_response_draw_transaction.cpp"
@@ -384,6 +566,16 @@ add_library(
     "${DSRRL_RENDERER_CORE_ROOT}/src/operators/env_spec/pmetal_rgba_lerp_materializer.cpp"
     "${DSRRL_RENDERER_CORE_ROOT}/src/operators/lightbank/hemdir3_b13_materializer.cpp"
     "${DSRRL_RENDERER_CORE_ROOT}/src/operators/lightbank/upper_lower_hemenv_materializer.cpp")
+
+if(NOT DSRRL_PHYSICAL_CUT_UL_H3_SUBSURFACE)
+    target_sources(
+        dsrrl_renderer_core_integrated
+        PRIVATE
+        "${DSRRL_RENDERER_CORE_ROOT}/src/runtime/upper_lower_draw_runtime.cpp"
+        "${DSRRL_RENDERER_CORE_ROOT}/src/runtime/hemdir3_draw_runtime.cpp"
+        "${DSRRL_RENDERER_CORE_ROOT}/src/runtime/subsurface_draw_runtime.cpp"
+        "${DSRRL_RENDERER_CORE_ROOT}/src/runtime/upper_lower_hemenv_draw_runtime.cpp")
+endif()
 
 add_dependencies(
     dsrrl_renderer_core_integrated
@@ -452,6 +644,260 @@ if(DSRRL_PMETAL_NATIVE_DSR_CUBEMAP_FEED)
         $<$<COMPILE_LANGUAGE:CXX>:DSRRL_PMETAL_NATIVE_DSR_CUBEMAP_FEED>)
 endif()
 
+if(DSRRL_PMETAL_V13_NATIVE_DSR_NO_TAIL_DIAG)
+    target_compile_definitions(
+        dsrrl_renderer_core_integrated
+        PRIVATE
+        $<$<COMPILE_LANGUAGE:CXX>:DSRRL_PMETAL_V13_NATIVE_DSR_NO_TAIL_DIAG>)
+endif()
+
+if(DSRRL_PMETAL_V13_NATIVE_DSR_MATERIAL_MOD_DIAG)
+    target_compile_definitions(
+        dsrrl_renderer_core_integrated
+        PRIVATE
+        $<$<COMPILE_LANGUAGE:CXX>:DSRRL_PMETAL_V13_NATIVE_DSR_MATERIAL_MOD_DIAG>)
+endif()
+
+if(DSRRL_PMETAL_V13_PTDE_PACKEDGI_MATERIAL_MOD_DIAG)
+    target_compile_definitions(
+        dsrrl_renderer_core_integrated
+        PRIVATE
+        $<$<COMPILE_LANGUAGE:CXX>:DSRRL_PMETAL_V13_NATIVE_DSR_MATERIAL_MOD_DIAG>
+        $<$<COMPILE_LANGUAGE:CXX>:DSRRL_PMETAL_FORCE_PTDE_PACKEDGI>)
+endif()
+
+if(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG)
+    target_compile_definitions(
+        dsrrl_renderer_core_integrated
+        PRIVATE
+        $<$<COMPILE_LANGUAGE:CXX>:DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG>
+        $<$<COMPILE_LANGUAGE:CXX>:DSRRL_PMETAL_FORCE_PTDE_PACKEDGI>)
+endif()
+
+if(DSRRL_PMETAL_FULL_PTDE_HEMENV_R3)
+    target_compile_definitions(
+        dsrrl_renderer_core_integrated
+        PRIVATE
+        $<$<COMPILE_LANGUAGE:CXX>:DSRRL_PMETAL_FULL_PTDE_HEMENV_R3>)
+endif()
+
+if(DSRRL_PMETAL_FULL_PTDE_HEMENV_R4)
+    target_compile_definitions(
+        dsrrl_renderer_core_integrated
+        PRIVATE
+        $<$<COMPILE_LANGUAGE:CXX>:DSRRL_PMETAL_FULL_PTDE_HEMENV_R4>)
+endif()
+
+if(DSRRL_PMETAL_FULL_PTDE_HEMENV_R5)
+    if(NOT DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG OR
+       NOT DSRRL_PMETAL_FULL_PTDE_HEMENV_R3 OR
+       NOT DSRRL_PMETAL_FULL_PTDE_HEMENV_R4)
+        message(FATAL_ERROR
+            "P_Metal R5 requires FULL_PTDE_HEMENV_DIAG + R3 + R4 lineage")
+    endif()
+
+    target_compile_definitions(
+        dsrrl_renderer_core_integrated
+        PRIVATE
+        $<$<COMPILE_LANGUAGE:CXX>:DSRRL_PMETAL_FULL_PTDE_HEMENV_R5>)
+endif()
+
+if(DSRRL_PMETAL_FULL_PTDE_HEMENV_R6)
+    if(NOT DSRRL_PMETAL_FULL_PTDE_HEMENV_R5)
+        message(FATAL_ERROR
+            "P_Metal R6 requires the complete R5 lineage")
+    endif()
+
+    target_compile_definitions(
+        dsrrl_renderer_core_integrated
+        PRIVATE
+        $<$<COMPILE_LANGUAGE:CXX>:DSRRL_PMETAL_FULL_PTDE_HEMENV_R6>)
+endif()
+
+if(DSRRL_PMETAL_FULL_PTDE_HEMENV_R7_SHADOW)
+    if(NOT DSRRL_PMETAL_FULL_PTDE_HEMENV_R6)
+        message(FATAL_ERROR
+            "P_Metal R7 shadow requires the complete R6 lineage")
+    endif()
+
+    target_compile_definitions(
+        dsrrl_renderer_core_integrated
+        PRIVATE
+        $<$<COMPILE_LANGUAGE:CXX>:DSRRL_PMETAL_FULL_PTDE_HEMENV_R7_SHADOW>)
+endif()
+
+if(DSRRL_PMETAL_FULL_PTDE_HEMENV_R8_PRE_AB)
+    if(NOT DSRRL_PMETAL_FULL_PTDE_HEMENV_R7_SHADOW)
+        message(FATAL_ERROR
+            "P_Metal R8 PRE A/B requires the complete R7 lineage")
+    endif()
+
+    target_compile_definitions(
+        dsrrl_renderer_core_integrated
+        PRIVATE
+        $<$<COMPILE_LANGUAGE:CXX>:DSRRL_PMETAL_FULL_PTDE_HEMENV_R8_PRE_AB>)
+endif()
+
+if(DSRRL_PMETAL_FULL_PTDE_HEMENV_R11_COMMON_MERGE)
+    if(NOT DSRRL_PMETAL_FULL_PTDE_HEMENV_R8_PRE_AB)
+        message(FATAL_ERROR
+            "P_Metal R11 common merge requires the clean cumulative R8 lineage")
+    endif()
+
+    target_compile_definitions(
+        dsrrl_renderer_core_integrated
+        PRIVATE
+        $<$<COMPILE_LANGUAGE:CXX>:DSRRL_PMETAL_FULL_PTDE_HEMENV_R11_COMMON_MERGE>)
+endif()
+
+if(DSRRL_PMETAL_FULL_PTDE_HEMENV_R15_PTDE_LIVEOUT_PAIR)
+    if(NOT DSRRL_PMETAL_FULL_PTDE_HEMENV_R11_COMMON_MERGE)
+        message(FATAL_ERROR
+            "P_Metal R15 PTDE live-out pair requires the complete R11 lineage")
+    endif()
+
+    target_compile_definitions(
+        dsrrl_renderer_core_integrated
+        PRIVATE
+        $<$<COMPILE_LANGUAGE:CXX>:DSRRL_PMETAL_FULL_PTDE_HEMENV_R15_PTDE_LIVEOUT_PAIR>)
+endif()
+
+if(DSRRL_PMETAL_FULL_PTDE_HEMENV_R16_LEGACY_DIFFUSE_SPLIT)
+    if(NOT DSRRL_PMETAL_FULL_PTDE_HEMENV_R15_PTDE_LIVEOUT_PAIR)
+        message(FATAL_ERROR
+            "P_Metal R16 legacy diffuse split requires the cumulative R15B live-out lineage")
+    endif()
+
+    target_compile_definitions(
+        dsrrl_renderer_core_integrated
+        PRIVATE
+        $<$<COMPILE_LANGUAGE:CXX>:DSRRL_PMETAL_FULL_PTDE_HEMENV_R16_LEGACY_DIFFUSE_SPLIT>)
+endif()
+
+if(DSRRL_PMETAL_FULL_PTDE_HEMENV_R17_PTDE_DIFFUSE_MATERIAL)
+    if(NOT DSRRL_PMETAL_FULL_PTDE_HEMENV_R16_LEGACY_DIFFUSE_SPLIT)
+        message(FATAL_ERROR
+            "P_Metal R17 PTDE diffuse material producer requires the cumulative R16 lineage")
+    endif()
+
+    target_compile_definitions(
+        dsrrl_renderer_core_integrated
+        PRIVATE
+        $<$<COMPILE_LANGUAGE:CXX>:DSRRL_PMETAL_FULL_PTDE_HEMENV_R17_PTDE_DIFFUSE_MATERIAL>)
+endif()
+
+if(DSRRL_POINTLIGHT_DRAWTIME_BYPASS)
+    target_compile_definitions(
+        dsrrl_renderer_core_integrated
+        PRIVATE
+        $<$<COMPILE_LANGUAGE:CXX>:DSRRL_POINTLIGHT_DRAWTIME_BYPASS>)
+endif()
+
+if(DSRRL_DRAWTIME_ISLANDS_BYPASS)
+    target_compile_definitions(
+        dsrrl_renderer_core_integrated
+        PRIVATE
+        $<$<COMPILE_LANGUAGE:CXX>:DSRRL_DRAWTIME_ISLANDS_BYPASS>)
+endif()
+
+if(DSRRL_DRAW_CALLBACKS_BYPASS)
+    target_compile_definitions(
+        dsrrl_renderer_core_integrated
+        PRIVATE
+        $<$<COMPILE_LANGUAGE:CXX>:DSRRL_DRAW_CALLBACKS_BYPASS>)
+endif()
+
+if(DSRRL_DRAW_REPLAY_BYPASS)
+    target_compile_definitions(
+        dsrrl_renderer_core_integrated
+        PRIVATE
+        $<$<COMPILE_LANGUAGE:CXX>:DSRRL_DRAW_REPLAY_BYPASS>)
+endif()
+
+if(DSRRL_EMPTY_DRAW_CALLBACK_BISECT)
+    target_compile_definitions(
+        dsrrl_renderer_core_integrated
+        PRIVATE
+        $<$<COMPILE_LANGUAGE:CXX>:DSRRL_EMPTY_DRAW_CALLBACK_BISECT>)
+endif()
+
+if(DSRRL_STATE_TRANSACTION_ONLY_BISECT)
+    target_compile_definitions(
+        dsrrl_renderer_core_integrated
+        PRIVATE
+        $<$<COMPILE_LANGUAGE:CXX>:DSRRL_STATE_TRANSACTION_ONLY_BISECT>)
+endif()
+
+if(DSRRL_RAW_DRAW_REPLAY_BISECT)
+    target_compile_definitions(
+        dsrrl_renderer_core_integrated
+        PRIVATE
+        $<$<COMPILE_LANGUAGE:CXX>:DSRRL_RAW_DRAW_REPLAY_BISECT>)
+endif()
+
+if(DSRRL_STATE_CAPTURE_ONLY_BISECT)
+    target_compile_definitions(
+        dsrrl_renderer_core_integrated
+        PRIVATE
+        $<$<COMPILE_LANGUAGE:CXX>:DSRRL_STATE_CAPTURE_ONLY_BISECT>)
+endif()
+
+if(DSRRL_NATIVE_STATE_MUTATE_RESTORE_ONLY_BISECT)
+    target_compile_definitions(
+        dsrrl_renderer_core_integrated
+        PRIVATE
+        $<$<COMPILE_LANGUAGE:CXX>:DSRRL_NATIVE_STATE_MUTATE_RESTORE_ONLY_BISECT>)
+endif()
+
+if(DSRRL_CORE_TRANSACTION_ONLY_BISECT)
+    target_compile_definitions(
+        dsrrl_renderer_core_integrated
+        PRIVATE
+        $<$<COMPILE_LANGUAGE:CXX>:DSRRL_CORE_TRANSACTION_ONLY_BISECT>)
+endif()
+
+if(DSRRL_RAW_NATIVE_DRAW_REENTRY_MIN_BISECT)
+    target_compile_definitions(
+        dsrrl_renderer_core_integrated
+        PRIVATE
+        $<$<COMPILE_LANGUAGE:CXX>:DSRRL_RAW_NATIVE_DRAW_REENTRY_MIN_BISECT>)
+endif()
+
+if(DSRRL_ADDON_LOADED_ONLY_BISECT)
+    target_compile_definitions(
+        dsrrl_renderer_core_integrated
+        PRIVATE
+        $<$<COMPILE_LANGUAGE:CXX>:DSRRL_ADDON_LOADED_ONLY_BISECT>)
+endif()
+
+if(DSRRL_DRAW_CALLBACK_ONLY_BISECT)
+    target_compile_definitions(
+        dsrrl_renderer_core_integrated
+        PRIVATE
+        $<$<COMPILE_LANGUAGE:CXX>:DSRRL_DRAW_CALLBACK_ONLY_BISECT>)
+endif()
+
+if(DSRRL_PMETAL_SRV_SHADOW_EXPERIMENT)
+    target_compile_definitions(
+        dsrrl_renderer_core_integrated
+        PRIVATE
+        DSRRL_PMETAL_SRV_SHADOW_EXPERIMENT)
+endif()
+
+if(DSRRL_PHYSICAL_CUT_UL_H3_SUBSURFACE)
+    target_compile_definitions(
+        dsrrl_renderer_core_integrated
+        PRIVATE
+        DSRRL_PHYSICAL_CUT_UL_H3_SUBSURFACE)
+endif()
+
+if(DSRRL_FLVER_SELECTOR_PROFILE)
+    target_compile_definitions(
+        dsrrl_renderer_core_integrated
+        PRIVATE
+        DSRRL_FLVER_SELECTOR_PROFILE)
+endif()
+
 if(MSVC)
     target_compile_options(
         dsrrl_renderer_core_integrated
@@ -474,3 +920,31 @@ set_target_properties(
     PREFIX ""
     OUTPUT_NAME "${DSRRL_CORE_ISLANDS_ARTIFACT_STEM}"
     SUFFIX ".addon64")
+
+if(DSRRL_PHYSICAL_CUT_UL_H3_SUBSURFACE)
+    add_custom_command(
+        TARGET dsrrl_renderer_core_integrated
+        POST_BUILD
+        COMMAND
+            "${Python3_EXECUTABLE}"
+            "${DSRRL_RENDERER_CORE_ROOT}/tools/audit_runtime_v2_physical_cut.py"
+            --source-dir "${DSRRL_RENDERER_CORE_ROOT}"
+            --build-dir "${CMAKE_BINARY_DIR}"
+            --post-build
+        VERBATIM)
+endif()
+
+# Tests the real producer/selector/GPU cache without installing a game hook.
+add_executable(dsrrl_fixed_pointlight_transport_windows_tests
+    "${DSRRL_RENDERER_CORE_ROOT}/tests/fixed_pointlight_transport_windows_tests.cpp")
+target_include_directories(dsrrl_fixed_pointlight_transport_windows_tests PRIVATE
+    "${DSRRL_RENDERER_CORE_ROOT}/include" "${RESHADE_INCLUDE_DIR}")
+target_compile_features(dsrrl_fixed_pointlight_transport_windows_tests PRIVATE cxx_std_17)
+target_link_libraries(dsrrl_fixed_pointlight_transport_windows_tests PRIVATE d3d11)
+add_test(NAME dsrrl_fixed_pointlight_transport_windows_tests COMMAND dsrrl_fixed_pointlight_transport_windows_tests)
+
+add_executable(dsrrl_fixed_pointlight_corpus_native_check
+    "${DSRRL_RENDERER_CORE_ROOT}/tests/fixed_pointlight_corpus_native_check.cpp")
+target_include_directories(dsrrl_fixed_pointlight_corpus_native_check PRIVATE "${DSRRL_RENDERER_CORE_ROOT}/include")
+target_compile_features(dsrrl_fixed_pointlight_corpus_native_check PRIVATE cxx_std_17)
+target_link_libraries(dsrrl_fixed_pointlight_corpus_native_check PRIVATE dsrrl_renderer_core d3d11)

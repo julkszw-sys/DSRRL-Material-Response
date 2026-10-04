@@ -16,6 +16,8 @@ on:
       - "renderer-core/tools/audit_clustered_pnts_activation_sources.py"
       - "renderer-core/tools/audit_specrgb_equipment_scope.py"
       - "renderer-core/tools/audit_pmetal_envspec_reference_transport.py"
+      - "renderer-core/tests/pmetal_selector_policy_tests.cpp"
+      - "renderer-core/data/provenance/pmetal_selector_source_transport_v1.json"
       - "renderer-core/data/provenance/spec_rgb_equipment_scope_v2.json"
       - "renderer-core/CMakeLists.txt"
       - "renderer-core/tests/dsr_mtd_identity_supplement_tests.cpp"
@@ -59,6 +61,8 @@ on:
       - "renderer-core/tools/audit_clustered_pnts_activation_sources.py"
       - "renderer-core/tools/audit_specrgb_equipment_scope.py"
       - "renderer-core/tools/audit_pmetal_envspec_reference_transport.py"
+      - "renderer-core/tests/pmetal_selector_policy_tests.cpp"
+      - "renderer-core/data/provenance/pmetal_selector_source_transport_v1.json"
       - "renderer-core/data/provenance/spec_rgb_equipment_scope_v2.json"
       - "renderer-core/data/census/dsr_mtd_identity_certified_supplement_v1.json"
       - "renderer-core/include/dsrrl/operators/**"
@@ -170,6 +174,9 @@ jobs:
           python3 renderer-core/tools/audit_specrgb_equipment_scope.py \
             --source-dir renderer-core
 
+      - name: Audit PointLight PTDE authored source transport
+        run: python renderer-core/tools/audit_pointlight_ptde_source_runtime.py --source-dir renderer-core
+
       - name: Audit P_Metal EnvSpec reference transport
         shell: bash
         run: |
@@ -190,14 +197,14 @@ jobs:
       - name: Build Core+Islands addon
         run: cmake --build build-integrated --config Release
 
-      - name: Run clustered PntS pre-runtime unit tests
+      - name: Run PointLight source, transport and clustered unit tests
         shell: pwsh
         run: >
           ctest
           --test-dir build-integrated
           -C Release
           --output-on-failure
-          -R "dsrrl_renderer_clustered_(sidecar|pnts_materializer|pnts_draw_adapter)_tests"
+          -R "(dsrrl_renderer_clustered_(sidecar|pnts_materializer|pnts_draw_adapter)_tests|dsrrl_fixed_pointlight_transport_windows_tests|dsrrl_pointlight_ptde_source_tests)"
 
       - name: Test EnvSpec exact sidecar stager fail-open
         shell: pwsh
@@ -614,7 +621,7 @@ jobs:
             'k_pmetal_route_index = 345u',
             'ece70f36bd2517d28c8495e276cea537f8b519d6bed981788e79a409ffbf763b',
             'envspc_slot != 2u',
-            'source_.latest(source)',
+            'source_.latest(material, source)',
             'source.beta != 0.0f',
             'blended_receiver_hold_',
             'prepare_draw_requests',
@@ -627,11 +634,17 @@ jobs:
             'b12_uploads_',
             'b12_reuses_',
             'payload_valid',
-            'std::memcmp',
+            'source_generation',
+            'material_bits',
             '12u',
             '14u'
           )) {
             if ($envspecRuntime -notmatch [regex]::Escape($required)) { throw "P_Metal EnvSpec shared-batch runtime invariant missing: $required" }
+          }
+
+          if ($envspecRuntime -match 'found->second\.payload\.data\(\)' -or
+              $envspecRuntime -match 'std::memcmp') {
+            throw "P_Metal EnvSpec b12 cache regressed to per-draw 64-byte payload comparison"
           }
 
           foreach ($forbidden in @(
@@ -1421,6 +1434,559 @@ jobs:
           path: ${{ env.DSRRL_CORE_ISLANDS_ZIP }}
           if-no-files-found: error
 
+
+      - name: Configure PointLight draw-time bypass performance falsifier
+        shell: pwsh
+        run: >
+          cmake
+          -S renderer-core/integrated
+          -B build-integrated-pointlight-bypass
+          -A x64
+          -DRESHADE_INCLUDE_DIR="${{ github.workspace }}/_reshade/include"
+          -DDSRRL_SOURCE_COMMIT="$env:DSRRL_CHECKOUT_COMMIT"
+          -DDSRRL_BUILD_FLAVOR="pointlight_drawtime_bypass"
+          -DDSRRL_POINTLIGHT_DRAWTIME_BYPASS=ON
+
+      - name: Verify PointLight bypass build profile
+        shell: pwsh
+        run: |
+          $cache = Get-Content build-integrated-pointlight-bypass/CMakeCache.txt -Raw
+          if ($cache -notmatch "DSRRL_POINTLIGHT_DRAWTIME_BYPASS:BOOL=ON") {
+            throw "PointLight bypass profile did not enable DSRRL_POINTLIGHT_DRAWTIME_BYPASS"
+          }
+          if ($cache -match "DSRRL_FULL_TELEMETRY_DEFAULT_ON:BOOL=ON" -or
+              $cache -match "DSRRL_DIAGNOSTIC_TELEMETRY_DEFAULT_ON:BOOL=ON") {
+            throw "PointLight bypass performance falsifier unexpectedly enables heavy telemetry"
+          }
+
+      - name: Build PointLight draw-time bypass performance falsifier
+        shell: pwsh
+        run: |
+          cmake --build build-integrated-pointlight-bypass --config Release --target dsrrl_renderer_core_integrated
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $addons = @(Get-ChildItem build-integrated-pointlight-bypass -Recurse -Filter *.addon64)
+          if ($addons.Count -ne 1) {
+            throw "Expected exactly one PointLight bypass addon, found $($addons.Count)"
+          }
+          $out = "DSRRL_Core_Islands_POINTLIGHT_DRAWTIME_BYPASS.addon64"
+          Copy-Item $addons[0].FullName $out -Force
+          $hash = (Get-FileHash $out -Algorithm SHA256).Hash.ToLowerInvariant()
+          Write-Host "POINTLIGHT_DRAWTIME_BYPASS=$out"
+          Write-Host "POINTLIGHT_DRAWTIME_BYPASS_SHA256=$hash"
+
+      - name: Verify PointLight bypass binary self-identity
+        shell: pwsh
+        run: |
+          $path = "DSRRL_Core_Islands_POINTLIGHT_DRAWTIME_BYPASS.addon64"
+          $ascii = [System.Text.Encoding]::ASCII.GetString(
+            [System.IO.File]::ReadAllBytes($path))
+          $expectedCommit = $env:DSRRL_CHECKOUT_COMMIT
+          $expectedFlavor = "pointlight_drawtime_bypass"
+          if (-not $ascii.Contains($expectedCommit)) {
+            throw "PointLight bypass binary does not embed checkout commit $expectedCommit"
+          }
+          if (-not $ascii.Contains($expectedFlavor)) {
+            throw "PointLight bypass binary does not embed flavor $expectedFlavor"
+          }
+
+      - name: Upload PointLight draw-time bypass performance falsifier
+        uses: actions/upload-artifact@v4
+        with:
+          name: DSRRL_Core_Islands_POINTLIGHT_DRAWTIME_BYPASS
+          path: DSRRL_Core_Islands_POINTLIGHT_DRAWTIME_BYPASS.addon64
+          if-no-files-found: error
+
+      - name: Configure full draw-time islands bypass falsifier
+        shell: pwsh
+        run: >
+          cmake
+          -S renderer-core/integrated
+          -B build-integrated-drawtime-bypass
+          -A x64
+          -DRESHADE_INCLUDE_DIR="${{ github.workspace }}/_reshade/include"
+          -DDSRRL_SOURCE_COMMIT="$env:DSRRL_CHECKOUT_COMMIT"
+          -DDSRRL_BUILD_FLAVOR="drawtime_islands_bypass"
+          -DDSRRL_DRAWTIME_ISLANDS_BYPASS=ON
+
+      - name: Verify full draw-time bypass build profile
+        shell: pwsh
+        run: |
+          $cache = Get-Content build-integrated-drawtime-bypass/CMakeCache.txt -Raw
+          if ($cache -notmatch "DSRRL_DRAWTIME_ISLANDS_BYPASS:BOOL=ON") {
+            throw "Draw-time bypass profile did not enable DSRRL_DRAWTIME_ISLANDS_BYPASS"
+          }
+          if ($cache -match "DSRRL_FULL_TELEMETRY_DEFAULT_ON:BOOL=ON" -or
+              $cache -match "DSRRL_DIAGNOSTIC_TELEMETRY_DEFAULT_ON:BOOL=ON") {
+            throw "Draw-time bypass performance falsifier unexpectedly enables heavy telemetry"
+          }
+
+      - name: Build full draw-time islands bypass falsifier
+        shell: pwsh
+        run: |
+          cmake --build build-integrated-drawtime-bypass --config Release --target dsrrl_renderer_core_integrated
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $addons = @(Get-ChildItem build-integrated-drawtime-bypass -Recurse -Filter *.addon64)
+          if ($addons.Count -ne 1) {
+            throw "Expected exactly one draw-time bypass addon, found $($addons.Count)"
+          }
+          $out = "DSRRL_Core_Islands_DRAWTIME_ISLANDS_BYPASS.addon64"
+          Copy-Item $addons[0].FullName $out -Force
+          $hash = (Get-FileHash $out -Algorithm SHA256).Hash.ToLowerInvariant()
+          Write-Host "DRAWTIME_ISLANDS_BYPASS=$out"
+          Write-Host "DRAWTIME_ISLANDS_BYPASS_SHA256=$hash"
+
+      - name: Verify full draw-time bypass binary self-identity
+        shell: pwsh
+        run: |
+          $path = "DSRRL_Core_Islands_DRAWTIME_ISLANDS_BYPASS.addon64"
+          $ascii = [System.Text.Encoding]::ASCII.GetString(
+            [System.IO.File]::ReadAllBytes($path))
+          $expectedCommit = $env:DSRRL_CHECKOUT_COMMIT
+          $expectedFlavor = "drawtime_islands_bypass"
+          if (-not $ascii.Contains($expectedCommit)) {
+            throw "Draw-time bypass binary does not embed checkout commit $expectedCommit"
+          }
+          if (-not $ascii.Contains($expectedFlavor)) {
+            throw "Draw-time bypass binary does not embed flavor $expectedFlavor"
+          }
+
+      - name: Upload full draw-time islands bypass falsifier
+        uses: actions/upload-artifact@v4
+        with:
+          name: DSRRL_Core_Islands_DRAWTIME_ISLANDS_BYPASS
+          path: DSRRL_Core_Islands_DRAWTIME_ISLANDS_BYPASS.addon64
+          if-no-files-found: error
+
+      - name: Configure transport-only runtime bisect
+        shell: pwsh
+        run: >
+          cmake
+          -S renderer-core/integrated
+          -B build-integrated-transport-only
+          -A x64
+          -DRESHADE_INCLUDE_DIR="${{ github.workspace }}/_reshade/include"
+          -DDSRRL_SOURCE_COMMIT="$env:DSRRL_CHECKOUT_COMMIT"
+          -DDSRRL_BUILD_FLAVOR="transport_only_bisect"
+          -DDSRRL_DRAW_CALLBACKS_BYPASS=ON
+
+      - name: Verify transport-only runtime bisect profile
+        shell: pwsh
+        run: |
+          $cache = Get-Content build-integrated-transport-only/CMakeCache.txt -Raw
+          if ($cache -notmatch "DSRRL_DRAW_CALLBACKS_BYPASS:BOOL=ON") {
+            throw "Transport-only bisect did not enable DSRRL_DRAW_CALLBACKS_BYPASS"
+          }
+          if ($cache -match "DSRRL_DRAWTIME_ISLANDS_BYPASS:BOOL=ON" -or
+              $cache -match "DSRRL_POINTLIGHT_DRAWTIME_BYPASS:BOOL=ON") {
+            throw "Transport-only bisect unexpectedly disables dynamic transport scope"
+          }
+
+      - name: Build transport-only runtime bisect
+        shell: pwsh
+        run: |
+          cmake --build build-integrated-transport-only --config Release --target dsrrl_renderer_core_integrated
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $addons = @(Get-ChildItem build-integrated-transport-only -Recurse -Filter *.addon64)
+          if ($addons.Count -ne 1) {
+            throw "Expected exactly one transport-only addon, found $($addons.Count)"
+          }
+          $out = "DSRRL_Core_Islands_TRANSPORT_ONLY_BISECT.addon64"
+          Copy-Item $addons[0].FullName $out -Force
+          Write-Host "TRANSPORT_ONLY_BISECT_SHA256=$((Get-FileHash $out -Algorithm SHA256).Hash.ToLowerInvariant())"
+
+      - name: Upload transport-only runtime bisect
+        uses: actions/upload-artifact@v4
+        with:
+          name: DSRRL_Core_Islands_TRANSPORT_ONLY_BISECT
+          path: DSRRL_Core_Islands_TRANSPORT_ONLY_BISECT.addon64
+          if-no-files-found: error
+
+      - name: Configure no-replay runtime bisect
+        shell: pwsh
+        run: >
+          cmake
+          -S renderer-core/integrated
+          -B build-integrated-no-replay
+          -A x64
+          -DRESHADE_INCLUDE_DIR="${{ github.workspace }}/_reshade/include"
+          -DDSRRL_SOURCE_COMMIT="$env:DSRRL_CHECKOUT_COMMIT"
+          -DDSRRL_BUILD_FLAVOR="no_replay_bisect"
+          -DDSRRL_DRAW_REPLAY_BYPASS=ON
+
+      - name: Verify no-replay runtime bisect profile
+        shell: pwsh
+        run: |
+          $cache = Get-Content build-integrated-no-replay/CMakeCache.txt -Raw
+          if ($cache -notmatch "DSRRL_DRAW_REPLAY_BYPASS:BOOL=ON") {
+            throw "No-replay bisect did not enable DSRRL_DRAW_REPLAY_BYPASS"
+          }
+          if ($cache -match "DSRRL_DRAWTIME_ISLANDS_BYPASS:BOOL=ON" -or
+              $cache -match "DSRRL_DRAW_CALLBACKS_BYPASS:BOOL=ON") {
+            throw "No-replay bisect unexpectedly disables draw preparation or callbacks"
+          }
+
+      - name: Build no-replay runtime bisect
+        shell: pwsh
+        run: |
+          cmake --build build-integrated-no-replay --config Release --target dsrrl_renderer_core_integrated
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $addons = @(Get-ChildItem build-integrated-no-replay -Recurse -Filter *.addon64)
+          if ($addons.Count -ne 1) {
+            throw "Expected exactly one no-replay addon, found $($addons.Count)"
+          }
+          $out = "DSRRL_Core_Islands_NO_REPLAY_BISECT.addon64"
+          Copy-Item $addons[0].FullName $out -Force
+          Write-Host "NO_REPLAY_BISECT_SHA256=$((Get-FileHash $out -Algorithm SHA256).Hash.ToLowerInvariant())"
+
+      - name: Upload no-replay runtime bisect
+        uses: actions/upload-artifact@v4
+        with:
+          name: DSRRL_Core_Islands_NO_REPLAY_BISECT
+          path: DSRRL_Core_Islands_NO_REPLAY_BISECT.addon64
+          if-no-files-found: error
+
+      - name: Configure empty draw callback runtime bisect
+        shell: pwsh
+        run: >
+          cmake
+          -S renderer-core/integrated
+          -B build-integrated-empty-draw
+          -A x64
+          -DRESHADE_INCLUDE_DIR="${{ github.workspace }}/_reshade/include"
+          -DDSRRL_SOURCE_COMMIT="$env:DSRRL_CHECKOUT_COMMIT"
+          -DDSRRL_BUILD_FLAVOR="empty_draw_callback_bisect"
+          -DDSRRL_EMPTY_DRAW_CALLBACK_BISECT=ON
+
+      - name: Verify empty draw callback runtime bisect profile
+        shell: pwsh
+        run: |
+          $cache = Get-Content build-integrated-empty-draw/CMakeCache.txt -Raw
+          if ($cache -notmatch "DSRRL_EMPTY_DRAW_CALLBACK_BISECT:BOOL=ON") {
+            throw "Empty draw callback bisect did not enable DSRRL_EMPTY_DRAW_CALLBACK_BISECT"
+          }
+          if ($cache -match "DSRRL_DRAWTIME_ISLANDS_BYPASS:BOOL=ON" -or
+              $cache -match "DSRRL_DRAW_CALLBACKS_BYPASS:BOOL=ON" -or
+              $cache -match "DSRRL_DRAW_REPLAY_BYPASS:BOOL=ON") {
+            throw "Empty draw callback bisect unexpectedly disables event registration/transport or preparation policy"
+          }
+
+      - name: Build empty draw callback runtime bisect
+        shell: pwsh
+        run: |
+          cmake --build build-integrated-empty-draw --config Release --target dsrrl_renderer_core_integrated
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $addons = @(Get-ChildItem build-integrated-empty-draw -Recurse -Filter *.addon64)
+          if ($addons.Count -ne 1) {
+            throw "Expected exactly one empty-draw addon, found $($addons.Count)"
+          }
+          $out = "DSRRL_Core_Islands_EMPTY_DRAW_CALLBACK_BISECT.addon64"
+          Copy-Item $addons[0].FullName $out -Force
+          Write-Host "EMPTY_DRAW_CALLBACK_BISECT_SHA256=$((Get-FileHash $out -Algorithm SHA256).Hash.ToLowerInvariant())"
+
+      - name: Upload empty draw callback runtime bisect
+        uses: actions/upload-artifact@v4
+        with:
+          name: DSRRL_Core_Islands_EMPTY_DRAW_CALLBACK_BISECT
+          path: DSRRL_Core_Islands_EMPTY_DRAW_CALLBACK_BISECT.addon64
+          if-no-files-found: error
+
+      - name: Configure state-transaction-only replay bisect
+        shell: pwsh
+        run: >
+          cmake
+          -S renderer-core/integrated
+          -B build-integrated-state-only
+          -A x64
+          -DRESHADE_INCLUDE_DIR="${{ github.workspace }}/_reshade/include"
+          -DDSRRL_SOURCE_COMMIT="$env:DSRRL_CHECKOUT_COMMIT"
+          -DDSRRL_BUILD_FLAVOR="state_transaction_only_bisect"
+          -DDSRRL_STATE_TRANSACTION_ONLY_BISECT=ON
+
+      - name: Verify state-transaction-only replay bisect profile
+        shell: pwsh
+        run: |
+          $cache = Get-Content build-integrated-state-only/CMakeCache.txt -Raw
+          if ($cache -notmatch "DSRRL_STATE_TRANSACTION_ONLY_BISECT:BOOL=ON") {
+            throw "State-only bisect did not enable DSRRL_STATE_TRANSACTION_ONLY_BISECT"
+          }
+          if ($cache -match "DSRRL_DRAWTIME_ISLANDS_BYPASS:BOOL=ON" -or
+              $cache -match "DSRRL_DRAW_CALLBACKS_BYPASS:BOOL=ON" -or
+              $cache -match "DSRRL_DRAW_REPLAY_BYPASS:BOOL=ON" -or
+              $cache -match "DSRRL_RAW_DRAW_REPLAY_BISECT:BOOL=ON") {
+            throw "State-only bisect unexpectedly changes the intended cut"
+          }
+
+      - name: Build state-transaction-only replay bisect
+        shell: pwsh
+        run: |
+          cmake --build build-integrated-state-only --config Release --target dsrrl_renderer_core_integrated
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $addons = @(Get-ChildItem build-integrated-state-only -Recurse -Filter *.addon64)
+          if ($addons.Count -ne 1) {
+            throw "Expected exactly one state-only addon, found $($addons.Count)"
+          }
+          $out = "DSRRL_Core_Islands_STATE_TRANSACTION_ONLY_BISECT.addon64"
+          Copy-Item $addons[0].FullName $out -Force
+          Write-Host "STATE_TRANSACTION_ONLY_BISECT_SHA256=$((Get-FileHash $out -Algorithm SHA256).Hash.ToLowerInvariant())"
+
+      - name: Upload state-transaction-only replay bisect
+        uses: actions/upload-artifact@v4
+        with:
+          name: DSRRL_Core_Islands_STATE_TRANSACTION_ONLY_BISECT
+          path: DSRRL_Core_Islands_STATE_TRANSACTION_ONLY_BISECT.addon64
+          if-no-files-found: error
+
+      - name: Configure raw-draw replay bisect
+        shell: pwsh
+        run: >
+          cmake
+          -S renderer-core/integrated
+          -B build-integrated-raw-draw
+          -A x64
+          -DRESHADE_INCLUDE_DIR="${{ github.workspace }}/_reshade/include"
+          -DDSRRL_SOURCE_COMMIT="$env:DSRRL_CHECKOUT_COMMIT"
+          -DDSRRL_BUILD_FLAVOR="raw_draw_replay_bisect"
+          -DDSRRL_RAW_DRAW_REPLAY_BISECT=ON
+
+      - name: Verify raw-draw replay bisect profile
+        shell: pwsh
+        run: |
+          $cache = Get-Content build-integrated-raw-draw/CMakeCache.txt -Raw
+          if ($cache -notmatch "DSRRL_RAW_DRAW_REPLAY_BISECT:BOOL=ON") {
+            throw "Raw-draw bisect did not enable DSRRL_RAW_DRAW_REPLAY_BISECT"
+          }
+          if ($cache -match "DSRRL_DRAWTIME_ISLANDS_BYPASS:BOOL=ON" -or
+              $cache -match "DSRRL_DRAW_CALLBACKS_BYPASS:BOOL=ON" -or
+              $cache -match "DSRRL_DRAW_REPLAY_BYPASS:BOOL=ON" -or
+              $cache -match "DSRRL_STATE_TRANSACTION_ONLY_BISECT:BOOL=ON") {
+            throw "Raw-draw bisect unexpectedly changes the intended cut"
+          }
+
+      - name: Build raw-draw replay bisect
+        shell: pwsh
+        run: |
+          cmake --build build-integrated-raw-draw --config Release --target dsrrl_renderer_core_integrated
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $addons = @(Get-ChildItem build-integrated-raw-draw -Recurse -Filter *.addon64)
+          if ($addons.Count -ne 1) {
+            throw "Expected exactly one raw-draw addon, found $($addons.Count)"
+          }
+          $out = "DSRRL_Core_Islands_RAW_DRAW_REPLAY_BISECT.addon64"
+          Copy-Item $addons[0].FullName $out -Force
+          Write-Host "RAW_DRAW_REPLAY_BISECT_SHA256=$((Get-FileHash $out -Algorithm SHA256).Hash.ToLowerInvariant())"
+
+      - name: Upload raw-draw replay bisect
+        uses: actions/upload-artifact@v4
+        with:
+          name: DSRRL_Core_Islands_RAW_DRAW_REPLAY_BISECT
+          path: DSRRL_Core_Islands_RAW_DRAW_REPLAY_BISECT.addon64
+          if-no-files-found: error
+
+      - name: Configure state-capture-only bisect
+        shell: pwsh
+        run: >
+          cmake
+          -S renderer-core/integrated
+          -B build-integrated-state-capture-only
+          -A x64
+          -DRESHADE_INCLUDE_DIR="${{ github.workspace }}/_reshade/include"
+          -DDSRRL_SOURCE_COMMIT="$env:DSRRL_CHECKOUT_COMMIT"
+          -DDSRRL_BUILD_FLAVOR="state_capture_only_bisect"
+          -DDSRRL_STATE_CAPTURE_ONLY_BISECT=ON
+
+      - name: Build state-capture-only bisect
+        shell: pwsh
+        run: |
+          cmake --build build-integrated-state-capture-only --config Release --target dsrrl_renderer_core_integrated
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $addon = @(Get-ChildItem build-integrated-state-capture-only -Recurse -Filter *.addon64)
+          if ($addon.Count -ne 1) { throw "Expected exactly one state-capture addon, found $($addon.Count)" }
+          $out = "DSRRL_Core_Islands_STATE_CAPTURE_ONLY_BISECT.addon64"
+          Copy-Item $addon[0].FullName $out -Force
+          Write-Host "STATE_CAPTURE_ONLY_BISECT_SHA256=$((Get-FileHash $out -Algorithm SHA256).Hash.ToLowerInvariant())"
+
+      - name: Upload state-capture-only bisect
+        uses: actions/upload-artifact@v4
+        with:
+          name: DSRRL_Core_Islands_STATE_CAPTURE_ONLY_BISECT
+          path: DSRRL_Core_Islands_STATE_CAPTURE_ONLY_BISECT.addon64
+          if-no-files-found: error
+
+      - name: Configure native-state mutate-restore-only bisect
+        shell: pwsh
+        run: >
+          cmake
+          -S renderer-core/integrated
+          -B build-integrated-native-state-only
+          -A x64
+          -DRESHADE_INCLUDE_DIR="${{ github.workspace }}/_reshade/include"
+          -DDSRRL_SOURCE_COMMIT="$env:DSRRL_CHECKOUT_COMMIT"
+          -DDSRRL_BUILD_FLAVOR="native_state_mutate_restore_only_bisect"
+          -DDSRRL_NATIVE_STATE_MUTATE_RESTORE_ONLY_BISECT=ON
+
+      - name: Build native-state mutate-restore-only bisect
+        shell: pwsh
+        run: |
+          cmake --build build-integrated-native-state-only --config Release --target dsrrl_renderer_core_integrated
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $addon = @(Get-ChildItem build-integrated-native-state-only -Recurse -Filter *.addon64)
+          if ($addon.Count -ne 1) { throw "Expected exactly one native-state addon, found $($addon.Count)" }
+          $out = "DSRRL_Core_Islands_NATIVE_STATE_MUTATE_RESTORE_ONLY_BISECT.addon64"
+          Copy-Item $addon[0].FullName $out -Force
+          Write-Host "NATIVE_STATE_MUTATE_RESTORE_ONLY_BISECT_SHA256=$((Get-FileHash $out -Algorithm SHA256).Hash.ToLowerInvariant())"
+
+      - name: Upload native-state mutate-restore-only bisect
+        uses: actions/upload-artifact@v4
+        with:
+          name: DSRRL_Core_Islands_NATIVE_STATE_MUTATE_RESTORE_ONLY_BISECT
+          path: DSRRL_Core_Islands_NATIVE_STATE_MUTATE_RESTORE_ONLY_BISECT.addon64
+          if-no-files-found: error
+
+      - name: Configure core-transaction-only bisect
+        shell: pwsh
+        run: >
+          cmake
+          -S renderer-core/integrated
+          -B build-integrated-core-transaction-only
+          -A x64
+          -DRESHADE_INCLUDE_DIR="${{ github.workspace }}/_reshade/include"
+          -DDSRRL_SOURCE_COMMIT="$env:DSRRL_CHECKOUT_COMMIT"
+          -DDSRRL_BUILD_FLAVOR="core_transaction_only_bisect"
+          -DDSRRL_CORE_TRANSACTION_ONLY_BISECT=ON
+
+      - name: Build core-transaction-only bisect
+        shell: pwsh
+        run: |
+          cmake --build build-integrated-core-transaction-only --config Release --target dsrrl_renderer_core_integrated
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $addon = @(Get-ChildItem build-integrated-core-transaction-only -Recurse -Filter *.addon64)
+          if ($addon.Count -ne 1) { throw "Expected exactly one core-transaction addon, found $($addon.Count)" }
+          $out = "DSRRL_Core_Islands_CORE_TRANSACTION_ONLY_BISECT.addon64"
+          Copy-Item $addon[0].FullName $out -Force
+          Write-Host "CORE_TRANSACTION_ONLY_BISECT_SHA256=$((Get-FileHash $out -Algorithm SHA256).Hash.ToLowerInvariant())"
+
+      - name: Upload core-transaction-only bisect
+        uses: actions/upload-artifact@v4
+        with:
+          name: DSRRL_Core_Islands_CORE_TRANSACTION_ONLY_BISECT
+          path: DSRRL_Core_Islands_CORE_TRANSACTION_ONLY_BISECT.addon64
+          if-no-files-found: error
+
+      - name: Configure raw-native-draw reentry-min bisect
+        shell: pwsh
+        run: >
+          cmake
+          -S renderer-core/integrated
+          -B build-integrated-raw-native-reentry-min
+          -A x64
+          -DRESHADE_INCLUDE_DIR="${{ github.workspace }}/_reshade/include"
+          -DDSRRL_SOURCE_COMMIT="$env:DSRRL_CHECKOUT_COMMIT"
+          -DDSRRL_BUILD_FLAVOR="raw_native_draw_reentry_min_bisect"
+          -DDSRRL_RAW_NATIVE_DRAW_REENTRY_MIN_BISECT=ON
+
+      - name: Build raw-native-draw reentry-min bisect
+        shell: pwsh
+        run: |
+          cmake --build build-integrated-raw-native-reentry-min --config Release --target dsrrl_renderer_core_integrated
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $addon = @(Get-ChildItem build-integrated-raw-native-reentry-min -Recurse -Filter *.addon64)
+          if ($addon.Count -ne 1) { throw "Expected exactly one raw-native-reentry addon, found $($addon.Count)" }
+          $out = "DSRRL_Core_Islands_RAW_NATIVE_DRAW_REENTRY_MIN_BISECT.addon64"
+          Copy-Item $addon[0].FullName $out -Force
+          Write-Host "RAW_NATIVE_DRAW_REENTRY_MIN_BISECT_SHA256=$((Get-FileHash $out -Algorithm SHA256).Hash.ToLowerInvariant())"
+
+      - name: Upload raw-native-draw reentry-min bisect
+        uses: actions/upload-artifact@v4
+        with:
+          name: DSRRL_Core_Islands_RAW_NATIVE_DRAW_REENTRY_MIN_BISECT
+          path: DSRRL_Core_Islands_RAW_NATIVE_DRAW_REENTRY_MIN_BISECT.addon64
+          if-no-files-found: error
+
+      - name: Configure addon-loaded-only callback cut
+        shell: pwsh
+        run: >
+          cmake
+          -S renderer-core/integrated
+          -B build-integrated-addon-loaded-only
+          -A x64
+          -DRESHADE_INCLUDE_DIR="${{ github.workspace }}/_reshade/include"
+          -DDSRRL_SOURCE_COMMIT="$env:DSRRL_CHECKOUT_COMMIT"
+          -DDSRRL_BUILD_FLAVOR="addon_loaded_only_bisect"
+          -DDSRRL_ADDON_LOADED_ONLY_BISECT=ON
+
+      - name: Verify addon-loaded-only callback cut
+        shell: pwsh
+        run: |
+          $cache = Get-Content build-integrated-addon-loaded-only/CMakeCache.txt -Raw
+          if ($cache -notmatch "DSRRL_ADDON_LOADED_ONLY_BISECT:BOOL=ON") {
+            throw "Addon-loaded-only cut did not enable DSRRL_ADDON_LOADED_ONLY_BISECT"
+          }
+          if ($cache -match "DSRRL_DRAW_CALLBACK_ONLY_BISECT:BOOL=ON" -or
+              $cache -match "DSRRL_DRAW_CALLBACKS_BYPASS:BOOL=ON" -or
+              $cache -match "DSRRL_EMPTY_DRAW_CALLBACK_BISECT:BOOL=ON") {
+            throw "Addon-loaded-only cut unexpectedly enables another callback profile"
+          }
+
+      - name: Build addon-loaded-only callback cut
+        shell: pwsh
+        run: |
+          cmake --build build-integrated-addon-loaded-only --config Release --target dsrrl_renderer_core_integrated
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $addon = @(Get-ChildItem build-integrated-addon-loaded-only -Recurse -Filter *.addon64)
+          if ($addon.Count -ne 1) { throw "Expected exactly one addon-loaded-only binary, found $($addon.Count)" }
+          $out = "DSRRL_Core_Islands_ADDON_LOADED_ONLY_BISECT.addon64"
+          Copy-Item $addon[0].FullName $out -Force
+          Write-Host "ADDON_LOADED_ONLY_BISECT_SHA256=$((Get-FileHash $out -Algorithm SHA256).Hash.ToLowerInvariant())"
+
+      - name: Upload addon-loaded-only callback cut
+        uses: actions/upload-artifact@v4
+        with:
+          name: DSRRL_Core_Islands_ADDON_LOADED_ONLY_BISECT
+          path: DSRRL_Core_Islands_ADDON_LOADED_ONLY_BISECT.addon64
+          if-no-files-found: error
+
+      - name: Configure draw-callback-only callback cut
+        shell: pwsh
+        run: >
+          cmake
+          -S renderer-core/integrated
+          -B build-integrated-draw-callback-only
+          -A x64
+          -DRESHADE_INCLUDE_DIR="${{ github.workspace }}/_reshade/include"
+          -DDSRRL_SOURCE_COMMIT="$env:DSRRL_CHECKOUT_COMMIT"
+          -DDSRRL_BUILD_FLAVOR="draw_callback_only_bisect"
+          -DDSRRL_DRAW_CALLBACK_ONLY_BISECT=ON
+
+      - name: Verify draw-callback-only callback cut
+        shell: pwsh
+        run: |
+          $cache = Get-Content build-integrated-draw-callback-only/CMakeCache.txt -Raw
+          if ($cache -notmatch "DSRRL_DRAW_CALLBACK_ONLY_BISECT:BOOL=ON") {
+            throw "Draw-callback-only cut did not enable DSRRL_DRAW_CALLBACK_ONLY_BISECT"
+          }
+          if ($cache -match "DSRRL_ADDON_LOADED_ONLY_BISECT:BOOL=ON" -or
+              $cache -match "DSRRL_DRAW_CALLBACKS_BYPASS:BOOL=ON" -or
+              $cache -match "DSRRL_EMPTY_DRAW_CALLBACK_BISECT:BOOL=ON") {
+            throw "Draw-callback-only cut unexpectedly enables another callback profile"
+          }
+
+      - name: Build draw-callback-only callback cut
+        shell: pwsh
+        run: |
+          cmake --build build-integrated-draw-callback-only --config Release --target dsrrl_renderer_core_integrated
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $addon = @(Get-ChildItem build-integrated-draw-callback-only -Recurse -Filter *.addon64)
+          if ($addon.Count -ne 1) { throw "Expected exactly one draw-callback-only binary, found $($addon.Count)" }
+          $out = "DSRRL_Core_Islands_DRAW_CALLBACK_ONLY_BISECT.addon64"
+          Copy-Item $addon[0].FullName $out -Force
+          Write-Host "DRAW_CALLBACK_ONLY_BISECT_SHA256=$((Get-FileHash $out -Algorithm SHA256).Hash.ToLowerInvariant())"
+
+      - name: Upload draw-callback-only callback cut
+        uses: actions/upload-artifact@v4
+        with:
+          name: DSRRL_Core_Islands_DRAW_CALLBACK_ONLY_BISECT
+          path: DSRRL_Core_Islands_DRAW_CALLBACK_ONLY_BISECT.addon64
+          if-no-files-found: error
 
       - name: Configure full-runtime diagnostic addon
         shell: pwsh

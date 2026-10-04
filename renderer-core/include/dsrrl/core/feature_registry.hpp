@@ -3,6 +3,7 @@
 #include "types.hpp"
 
 #include <array>
+#include <atomic>
 #include <mutex>
 
 namespace dsrrl::core {
@@ -24,6 +25,9 @@ private:
 
     mutable std::mutex mutex_;
     std::array<bool, operator_count> enabled_{};
+    // Hot-path readers need only the enabled bit. Writers remain serialized
+    // with the canonical bool array so snapshot() retains its coherent view.
+    std::atomic<operator_mask> enabled_mask_{0u};
 };
 
 } // namespace dsrrl::core

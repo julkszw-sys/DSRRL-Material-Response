@@ -188,13 +188,19 @@ def main():
     require(prepare_body,"context_type == D3D11_DEVICE_CONTEXT_DEFERRED","deferred-context activation telemetry")
     require(draw_cpp,"D3D11_USAGE_DYNAMIC","dynamic clustered sidecar resources")
     require(draw_cpp,"D3D11_MAP_WRITE_DISCARD","deferred-compatible sidecar upload")
-    ensure_start=draw_cpp.find("bool ensure_gpu(")
+    ensure_start=draw_cpp.find("bool ensure_gpu_locked(")
     update_start=draw_cpp.find("bool update_buffer(",ensure_start)
     if ensure_start<0 or update_start<0:
         fail("clustered GPU preparation boundaries are missing")
     ensure_body=draw_cpp[ensure_start:update_start]
-    if "context->GetType() !=" in ensure_body or        "D3D11_DEVICE_CONTEXT_IMMEDIATE)" in ensure_body:
+    if "context->GetType() !=" in ensure_body or "D3D11_DEVICE_CONTEXT_IMMEDIATE)" in ensure_body:
         fail("clustered sidecar still has an immediate-context-only activation gate")
+    require(draw_cpp,"std::unordered_map<ID3D11DeviceContext *,gpu_resources>","per-recording-context clustered GPU carrier")
+    require(draw_cpp,"g_gpu_by_context.try_emplace(","context-keyed clustered GPU realization")
+    if "gpu_resources g_gpu{}" in draw_cpp:
+        fail("clustered sidecar regressed to a process-global dynamic GPU carrier")
+    if prepare_body.count("std::lock_guard<std::mutex> lock(")!=1:
+        fail("clustered sidecar must use one GPU carrier synchronization point per prepared draw")
     require(draw_cpp,"DSRRL_CLUSTERED_SELECTOR_RUNTIME_CROSSCHECK","optional retained-selector cross-check gate")
     require(draw_cpp,"g_retained_selector","retained selector available only for optional cross-check")
     require(draw_cpp,"spatial_overlap_xyz_unchecked","single node-range validation overlap path")
@@ -205,7 +211,11 @@ def main():
     if "g_registry_mutex" in draw_cpp or "lookup_snapshot(" in draw_cpp or "publish_snapshot(" in draw_cpp:
         fail("legacy globally locked clustered producer registry is still present")
     require(flver_cpp,"k_builder=0x22084Fu","ordinary builder hook")
-    require(flver_cpp,"builder_armed=true","builder hook attestation")
+    require(flver_cpp,"bool install(\n    bool enable_clustered_builder,\n    bool enable_upper_lower_selector,\n    bool enable_hemdir3_selector) noexcept","builder hook policy ABI")
+    require(flver_cpp,"if(enable_clustered_builder){","builder preparation policy gate")
+    require(flver_cpp,"(enable_clustered_builder&&!arm(g_b))","builder arm policy gate")
+    require(flver_cpp,"g_state.builder_armed=enable_clustered_builder;","builder hook attestation")
+    require(integrated,"flver_identity_transport::install(\n            k_pointlight_drawtime_runtime_enabled,\n            upper_lower_enabled,\n            hemdir3_enabled)","integrated builder policy routing")
 
     # Direct PointLight owns its dedicated 205-row exact material authority
     # (180 Spc + 25 NoSpc). Generic MR profile coverage must not decide whether

@@ -10,10 +10,13 @@
 #include "dsrrl/runtime/runtime_hot_telemetry.hpp"
 #include "dsrrl/runtime/material_owner_selection.hpp"
 #include "dsrrl/runtime/material_owner_producer.hpp"
+#ifndef DSRRL_PHYSICAL_CUT_UL_H3_SUBSURFACE
 #include "dsrrl/runtime/upper_lower_draw_runtime.hpp"
-#include "dsrrl/runtime/fixed_pointlight_draw_runtime.hpp"
 #include "dsrrl/runtime/hemdir3_mode_transport.hpp"
+#endif
+#include "dsrrl/runtime/pmetal_env_source_runtime.hpp"
 #include "dsrrl/runtime/clustered_pnts_draw_runtime.hpp"
+#include "dsrrl/runtime/fixed_pointlight_draw_runtime.hpp"
 #include "dsrrl/operators/material_response/mtd_semantic_census.hpp"
 #include "dsrrl/operators/material_response/generated_routes_v1.hpp"
 #include "dsrrl/operators/material_response/generated_exact_binding_mr_v1.hpp"
@@ -60,6 +63,8 @@ parser_fn g_po=nullptr; destructor_fn g_do=nullptr; mtd_fn g_mo=nullptr;
 std::atomic<std::uint64_t> g_selector_events{0};
 std::atomic<std::uint64_t> g_owner_sha_hits{0};
 std::atomic<std::uint64_t> g_owner_mtd_hits{0};
+std::atomic<std::uint64_t> g_selector_identity_cache_hits{0};
+std::atomic<std::uint64_t> g_selector_identity_cache_misses{0};
 std::atomic<std::uint64_t> g_exact_owner_ready{0};
 std::atomic<std::uint64_t> g_owner_fail_open{0};
 std::atomic<std::uint64_t> g_runtime_material_hits{0};
@@ -68,6 +73,256 @@ std::atomic_bool g_runtime_mtd_classified{false};
 std::atomic_bool g_runtime_mtd_cache_hit{false};
 std::atomic_bool g_runtime_mtd_selection_published{false};
 std::atomic<std::uint64_t> g_owner_consumed{0};
+
+std::atomic_bool g_selector_upper_lower_enabled{true};
+std::atomic_bool g_selector_hemdir3_enabled{true};
+
+struct selector_profile_sample {
+    bool active = false;
+    std::uint64_t total_start = 0u;
+    std::uint64_t prefix_ticks = 0u;
+    std::uint64_t resolve_material_ticks = 0u;
+    std::uint64_t final_cache_lookup_ticks = 0u;
+    std::uint64_t final_cache_publish_ticks = 0u;
+    std::uint64_t owner_lookup_ticks = 0u;
+    std::uint64_t owner_mtd_enrich_ticks = 0u;
+    std::uint64_t selection_publish_ticks = 0u;
+    std::uint64_t pmetal_source_ticks = 0u;
+    std::uint64_t runtime_mtd_lookup_ticks = 0u;
+    std::uint64_t runtime_publish_ticks = 0u;
+};
+
+#ifdef DSRRL_FLVER_SELECTOR_PROFILE
+constexpr std::uint32_t k_selector_profile_sample_period = 1024u;
+static_assert(
+    (k_selector_profile_sample_period &
+     (k_selector_profile_sample_period - 1u)) == 0u);
+
+struct selector_profile_bucket {
+    std::atomic<std::uint64_t> ticks{0u};
+    std::atomic<std::uint64_t> max_ticks{0u};
+};
+
+thread_local std::uint32_t g_selector_profile_counter = 0u;
+std::atomic<std::uint64_t> g_selector_profile_samples{0u};
+selector_profile_bucket g_selector_profile_total{};
+selector_profile_bucket g_selector_profile_prefix{};
+selector_profile_bucket g_selector_profile_resolve_material{};
+selector_profile_bucket g_selector_profile_final_cache{};
+selector_profile_bucket g_selector_profile_cache_publish{};
+selector_profile_bucket g_selector_profile_owner_lookup{};
+selector_profile_bucket g_selector_profile_owner_mtd{};
+selector_profile_bucket g_selector_profile_selection_publish{};
+selector_profile_bucket g_selector_profile_pmetal{};
+selector_profile_bucket g_selector_profile_runtime_mtd{};
+selector_profile_bucket g_selector_profile_runtime_publish{};
+std::atomic<std::uint64_t> g_selector_profile_cache_path{0u};
+std::atomic<std::uint64_t> g_selector_profile_owner_path{0u};
+std::atomic<std::uint64_t> g_selector_profile_runtime_path{0u};
+std::atomic<std::uint64_t> g_selector_profile_fail_path{0u};
+std::atomic<std::uint64_t> g_selector_profile_early_path{0u};
+std::atomic<std::uint64_t> g_selector_profile_parse_events{0u};
+std::atomic<std::uint64_t> g_selector_profile_mtd_events{0u};
+std::atomic<std::uint64_t> g_selector_profile_destroy_events{0u};
+
+std::uint64_t selector_profile_qpc() noexcept
+{
+    LARGE_INTEGER value{};
+    QueryPerformanceCounter(&value);
+    return static_cast<std::uint64_t>(
+        value.QuadPart);
+}
+
+void selector_profile_add(
+    selector_profile_bucket &bucket,
+    std::uint64_t ticks) noexcept
+{
+    bucket.ticks.fetch_add(
+        ticks,
+        std::memory_order_relaxed);
+
+    auto observed =
+        bucket.max_ticks.load(
+            std::memory_order_relaxed);
+    while (observed < ticks &&
+           !bucket.max_ticks.compare_exchange_weak(
+               observed,
+               ticks,
+               std::memory_order_relaxed,
+               std::memory_order_relaxed)) {
+    }
+}
+
+enum class selector_profile_path : std::uint8_t {
+    cache,
+    owner,
+    runtime_mtd,
+    fail_open,
+    early_reject
+};
+
+std::uint64_t selector_profile_begin(
+    const selector_profile_sample &sample) noexcept
+{
+    return sample.active
+        ? selector_profile_qpc()
+        : 0u;
+}
+
+void selector_profile_end_stage(
+    const selector_profile_sample &sample,
+    std::uint64_t begin,
+    std::uint64_t &accumulator) noexcept
+{
+    if (!sample.active)
+        return;
+
+    accumulator +=
+        selector_profile_qpc() - begin;
+}
+
+void selector_profile_finish(
+    selector_profile_sample &sample,
+    selector_profile_path path) noexcept
+{
+    if (!sample.active)
+        return;
+
+    const auto total =
+        selector_profile_qpc() -
+        sample.total_start;
+
+    g_selector_profile_samples.fetch_add(
+        1u,
+        std::memory_order_relaxed);
+    selector_profile_add(
+        g_selector_profile_total,
+        total);
+    selector_profile_add(
+        g_selector_profile_prefix,
+        sample.prefix_ticks);
+    selector_profile_add(
+        g_selector_profile_resolve_material,
+        sample.resolve_material_ticks);
+    selector_profile_add(
+        g_selector_profile_final_cache,
+        sample.final_cache_lookup_ticks);
+    selector_profile_add(
+        g_selector_profile_cache_publish,
+        sample.final_cache_publish_ticks);
+    selector_profile_add(
+        g_selector_profile_owner_lookup,
+        sample.owner_lookup_ticks);
+    selector_profile_add(
+        g_selector_profile_owner_mtd,
+        sample.owner_mtd_enrich_ticks);
+    selector_profile_add(
+        g_selector_profile_selection_publish,
+        sample.selection_publish_ticks);
+    selector_profile_add(
+        g_selector_profile_pmetal,
+        sample.pmetal_source_ticks);
+    selector_profile_add(
+        g_selector_profile_runtime_mtd,
+        sample.runtime_mtd_lookup_ticks);
+    selector_profile_add(
+        g_selector_profile_runtime_publish,
+        sample.runtime_publish_ticks);
+
+    auto *counter =
+        path == selector_profile_path::cache
+            ? &g_selector_profile_cache_path
+        : path == selector_profile_path::owner
+            ? &g_selector_profile_owner_path
+        : path == selector_profile_path::runtime_mtd
+            ? &g_selector_profile_runtime_path
+        : path == selector_profile_path::early_reject
+            ? &g_selector_profile_early_path
+            : &g_selector_profile_fail_path;
+    counter->fetch_add(
+        1u,
+        std::memory_order_relaxed);
+}
+
+void selector_profile_reset() noexcept
+{
+    auto reset_bucket =
+        [](selector_profile_bucket &bucket) noexcept {
+            bucket.ticks.store(
+                0u,
+                std::memory_order_relaxed);
+            bucket.max_ticks.store(
+                0u,
+                std::memory_order_relaxed);
+        };
+
+    g_selector_profile_samples.store(
+        0u,
+        std::memory_order_relaxed);
+    reset_bucket(g_selector_profile_total);
+    reset_bucket(g_selector_profile_prefix);
+    reset_bucket(g_selector_profile_resolve_material);
+    reset_bucket(g_selector_profile_final_cache);
+    reset_bucket(g_selector_profile_cache_publish);
+    reset_bucket(g_selector_profile_owner_lookup);
+    reset_bucket(g_selector_profile_owner_mtd);
+    reset_bucket(g_selector_profile_selection_publish);
+    reset_bucket(g_selector_profile_pmetal);
+    reset_bucket(g_selector_profile_runtime_mtd);
+    reset_bucket(g_selector_profile_runtime_publish);
+    g_selector_profile_cache_path.store(
+        0u,
+        std::memory_order_relaxed);
+    g_selector_profile_owner_path.store(
+        0u,
+        std::memory_order_relaxed);
+    g_selector_profile_runtime_path.store(
+        0u,
+        std::memory_order_relaxed);
+    g_selector_profile_fail_path.store(
+        0u,
+        std::memory_order_relaxed);
+    g_selector_profile_early_path.store(
+        0u,
+        std::memory_order_relaxed);
+    g_selector_profile_parse_events.store(
+        0u,
+        std::memory_order_relaxed);
+    g_selector_profile_mtd_events.store(
+        0u,
+        std::memory_order_relaxed);
+    g_selector_profile_destroy_events.store(
+        0u,
+        std::memory_order_relaxed);
+}
+#else
+enum class selector_profile_path : std::uint8_t {
+    cache,
+    owner,
+    runtime_mtd,
+    fail_open,
+    early_reject
+};
+std::uint64_t selector_profile_begin(
+    const selector_profile_sample &) noexcept
+{
+    return 0u;
+}
+void selector_profile_end_stage(
+    const selector_profile_sample &,
+    std::uint64_t,
+    std::uint64_t &) noexcept
+{
+}
+void selector_profile_finish(
+    selector_profile_sample &,
+    selector_profile_path) noexcept
+{
+}
+void selector_profile_reset() noexcept
+{
+}
+#endif
 
 void latch_once(
     std::atomic_bool &flag) noexcept
@@ -79,6 +334,156 @@ void latch_once(
             std::memory_order_relaxed);
 }
 std::atomic<std::uint64_t> g_owner_consume_misses{0};
+
+struct selector_identity_cache_entry {
+    const void *container = nullptr;
+    std::int32_t material_index = -1;
+    std::uint64_t epoch = 0u;
+    operators::material_response::material_identity identity{};
+    bool occupied = false;
+};
+
+constexpr std::size_t k_selector_identity_cache_sets = 128u;
+constexpr std::size_t k_selector_identity_cache_ways = 4u;
+constexpr std::size_t k_selector_identity_cache_slots =
+    k_selector_identity_cache_sets *
+    k_selector_identity_cache_ways;
+
+thread_local std::array<
+    selector_identity_cache_entry,
+    k_selector_identity_cache_slots>
+    g_selector_identity_cache{};
+thread_local std::array<
+    std::uint8_t,
+    k_selector_identity_cache_sets>
+    g_selector_identity_cache_victim{};
+
+std::size_t selector_identity_cache_set(
+    const void *container,
+    std::int32_t material_index) noexcept
+{
+    const auto key =
+        static_cast<std::uint64_t>(
+            reinterpret_cast<std::uintptr_t>(
+                container));
+    const auto mixed =
+        (key >> 4u) ^
+        (key >> 13u) ^
+        (key >> 23u) ^
+        (static_cast<std::uint64_t>(
+             static_cast<std::uint32_t>(
+                 material_index)) *
+         0x9E3779B185EBCA87ULL);
+
+    return static_cast<std::size_t>(
+        mixed &
+        (k_selector_identity_cache_sets - 1u));
+}
+
+bool selector_identity_cache_lookup(
+    const void *container,
+    std::int32_t material_index,
+    operators::material_response::material_identity &identity) noexcept
+{
+    identity = {};
+    if (container == nullptr ||
+        material_index < 0)
+        return false;
+
+    const auto epoch =
+        flver_identity_epoch();
+    const auto set =
+        selector_identity_cache_set(
+            container,
+            material_index);
+    const auto base =
+        set *
+        k_selector_identity_cache_ways;
+
+    for (std::size_t way = 0u;
+         way < k_selector_identity_cache_ways;
+         ++way) {
+        const auto &entry =
+            g_selector_identity_cache[
+                base + way];
+
+        if (!entry.occupied ||
+            entry.container != container ||
+            entry.material_index !=
+                material_index ||
+            entry.epoch != epoch)
+            continue;
+
+        identity = entry.identity;
+        return identity.valid &&
+            identity.owner_tuple_exact;
+    }
+
+    return false;
+}
+
+void selector_identity_cache_publish(
+    const void *container,
+    std::int32_t material_index,
+    const operators::material_response::material_identity &identity) noexcept
+{
+    if (container == nullptr ||
+        material_index < 0 ||
+        !identity.valid ||
+        !identity.owner_tuple_exact)
+        return;
+
+    const auto epoch =
+        flver_identity_epoch();
+    const auto set =
+        selector_identity_cache_set(
+            container,
+            material_index);
+    const auto base =
+        set *
+        k_selector_identity_cache_ways;
+
+    selector_identity_cache_entry *target = nullptr;
+
+    for (std::size_t way = 0u;
+         way < k_selector_identity_cache_ways;
+         ++way) {
+        auto &entry =
+            g_selector_identity_cache[
+                base + way];
+
+        if (entry.occupied &&
+            entry.container == container &&
+            entry.material_index ==
+                material_index) {
+            target = &entry;
+            break;
+        }
+
+        if (target == nullptr &&
+            !entry.occupied)
+            target = &entry;
+    }
+
+    if (target == nullptr) {
+        const auto victim =
+            static_cast<std::size_t>(
+                g_selector_identity_cache_victim[set]++ &
+                static_cast<std::uint8_t>(
+                    k_selector_identity_cache_ways - 1u));
+        target =
+            &g_selector_identity_cache[
+                base + victim];
+    }
+
+    *target = {
+        container,
+        material_index,
+        epoch,
+        identity,
+        true
+    };
+}
 
 constexpr std::size_t k_exact_material_cache_sets=1024u;
 constexpr std::size_t k_exact_material_cache_ways=4u;
@@ -450,6 +855,13 @@ bool exe_ok(){
  if(h)BCryptDestroyHash(h);BCryptCloseAlgorithmProvider(a,0);if(!ok)return false;static constexpr char x[]="0123456789abcdef";std::string s(64,'0');for(std::size_t i=0;i<32;++i){s[2*i]=x[d[i]>>4];s[2*i+1]=x[d[i]&15];}return s==k_sha;
 }
 void __fastcall parse_entry(void*m,const void*r) noexcept {
+#ifdef DSRRL_FLVER_SELECTOR_PROFILE
+ g_selector_profile_parse_events.fetch_add(
+     1u,
+     std::memory_order_relaxed);
+#endif
+ if(m)
+  pmetal_env_source_cache_invalidate();
  if(m)flver_identity_observe_destroy(m);
  if(m&&r&&range_ok(r,0x18)){
   std::uint32_t o=0,l=0;
@@ -463,15 +875,93 @@ void __fastcall parse_entry(void*m,const void*r) noexcept {
  }
  if(g_po)g_po(m,r);
 }
-void __fastcall destroy_entry(void*m) noexcept {flver_identity_observe_destroy(m);if(g_do)g_do(m);}
+void __fastcall destroy_entry(void*m) noexcept {
+#ifdef DSRRL_FLVER_SELECTOR_PROFILE
+ g_selector_profile_destroy_events.fetch_add(
+     1u,
+     std::memory_order_relaxed);
+#endif
+ if(m)
+  pmetal_env_source_cache_invalidate();
+ flver_identity_observe_destroy(m);
+ if(g_do)g_do(m);
+}
 void __fastcall mtd_entry(
     void *material,
     const void *raw,
     std::uint32_t len,
     const wchar_t *semantic_key) noexcept
 {
+#ifdef DSRRL_FLVER_SELECTOR_PROFILE
+ g_selector_profile_mtd_events.fetch_add(
+     1u,
+     std::memory_order_relaxed);
+#endif
  observe_exact_runtime_mtd(material,raw,len,semantic_key);
  if(g_mo)g_mo(material,raw,len,semantic_key);
+}
+
+bool publish_exact_selector_identity(
+    void *owner,
+    void *ret,
+    void *r14,
+    void *r15,
+    const void *selector_stack,
+    const operators::material_response::
+        material_identity &identity,
+    selector_profile_sample *profile) noexcept
+{
+    if (!identity.valid ||
+        !identity.owner_tuple_exact)
+        return false;
+
+    const auto selection_begin =
+        profile != nullptr
+            ? selector_profile_begin(*profile)
+            : 0u;
+    const bool selection_ok =
+        material_owner_selection_publish(
+            identity);
+    if (profile != nullptr)
+        selector_profile_end_stage(
+            *profile,
+            selection_begin,
+            profile->selection_publish_ticks);
+    if (!selection_ok)
+        return false;
+
+#ifndef DSRRL_PHYSICAL_CUT_UL_H3_SUBSURFACE
+    if (g_selector_upper_lower_enabled.load(
+            std::memory_order_relaxed))
+        upper_lower_pmetal_material_event_bridge(
+            owner,
+            identity);
+#endif
+
+    // Route 345 is necessary but not sufficient. The isolated source runtime
+    // retains exact semantic/raw-MTD validation before donor decode.
+    if (identity.route_index == 345u) {
+        const auto pmetal_begin =
+            profile != nullptr
+                ? selector_profile_begin(*profile)
+                : 0u;
+        pmetal_env_source_selector_event(
+            owner,
+            ret,
+            r14,
+            r15,
+            selector_stack,
+            identity);
+        if (profile != nullptr)
+            selector_profile_end_stage(
+                *profile,
+                pmetal_begin,
+                profile->pmetal_source_ticks);
+    }
+
+    telemetry::hot_count(
+        g_exact_owner_ready);
+    return true;
 }
 }
 extern "C" void dsrrl_clustered_pnts_builder_observer(
@@ -490,64 +980,199 @@ extern "C" void dsrrl_flver_selector_observer(
     void *r14,
     void *r15,
     std::int32_t material_index,
-    std::uint32_t incoming_mode) noexcept
+    std::uint32_t incoming_mode,
+    const void *selector_stack) noexcept
 {
+ selector_profile_sample profile{};
+#ifdef DSRRL_FLVER_SELECTOR_PROFILE
+ const auto profile_sequence =
+     ++g_selector_profile_counter;
+ profile.active =
+     (profile_sequence &
+      (k_selector_profile_sample_period - 1u)) == 0u;
+ if (profile.active)
+  profile.total_start =
+      selector_profile_qpc();
+#endif
+
+ const auto prefix_begin =
+     selector_profile_begin(profile);
+
  telemetry::hot_count(g_selector_events);
  material_owner_selection_clear();
+ pmetal_env_source_selector_clear();
 
- hemdir3_mode_transport::selector_begin(
-     incoming_mode);
+#ifndef DSRRL_PHYSICAL_CUT_UL_H3_SUBSURFACE
+ if (g_selector_hemdir3_enabled.load(
+         std::memory_order_relaxed))
+  hemdir3_mode_transport::selector_begin(
+      incoming_mode);
+#else
+ (void)incoming_mode;
+#endif
 
- // PointLight owns its selector state directly from the FLVER semantic cut.
- // Do not route it through the Upper/Lower runtime: PL remains live and cheap
- // even when the visible U/L operator and all U/L producer hooks are disabled.
+ // PointLight owns this exact selector association directly. The bridge is
+ // inert unless Fixed PointLight is installed and no longer depends on U/L.
  fixed_pointlight_selector_event_bridge(owner);
 
- upper_lower_selector_event_bridge(
-     owner,
-     ret,
-     r14,
-     r15);
+#ifndef DSRRL_PHYSICAL_CUT_UL_H3_SUBSURFACE
+ if (g_selector_upper_lower_enabled.load(
+         std::memory_order_relaxed))
+  upper_lower_selector_event_bridge(
+      owner,
+      ret,
+      r14,
+      r15);
+#endif
 
- if(g_base==0u || ret==nullptr || material_index<0){telemetry::hot_count(g_owner_fail_open);return;}
+ if(g_base==0u || ret==nullptr || material_index<0){
+  telemetry::hot_count(g_owner_fail_open);
+  selector_profile_end_stage(
+      profile,
+      prefix_begin,
+      profile.prefix_ticks);
+  selector_profile_finish(
+      profile,
+      selector_profile_path::early_reject);
+  return;
+ }
  const auto ret_addr=reinterpret_cast<std::uintptr_t>(ret);
- if(ret_addr<g_base){telemetry::hot_count(g_owner_fail_open);return;}
+ if(ret_addr<g_base){
+  telemetry::hot_count(g_owner_fail_open);
+  selector_profile_end_stage(
+      profile,
+      prefix_begin,
+      profile.prefix_ticks);
+  selector_profile_finish(
+      profile,
+      selector_profile_path::early_reject);
+  return;
+ }
  const auto rva=ret_addr-g_base;
  if(rva!=k_ret_sel_1 && rva!=k_ret_sel_2 && rva!=k_ret_sel_3){
   telemetry::hot_count(g_owner_fail_open);
+  selector_profile_end_stage(
+      profile,
+      prefix_begin,
+      profile.prefix_ticks);
+  selector_profile_finish(
+      profile,
+      selector_profile_path::early_reject);
   return;
  }
 
+ selector_profile_end_stage(
+     profile,
+     prefix_begin,
+     profile.prefix_ticks);
+
+ const auto resolve_begin =
+     selector_profile_begin(profile);
  const void *actual_material=
      resolve_actual_material(
          container,
          material_index);
+ selector_profile_end_stage(
+     profile,
+     resolve_begin,
+     profile.resolve_material_ticks);
 
- clustered_pnts_selector_event_bridge(
-     owner,
-     actual_material);
+ if(g_state.builder_armed)
+  clustered_pnts_selector_event_bridge(
+      owner,
+      actual_material);
+
+ operators::material_response::material_identity
+     cached_identity{};
+ const auto cache_begin =
+     selector_profile_begin(profile);
+ const bool cache_hit =
+     selector_identity_cache_lookup(
+        container,
+        material_index,
+        cached_identity);
+ selector_profile_end_stage(
+     profile,
+     cache_begin,
+     profile.final_cache_lookup_ticks);
+
+ if(cache_hit){
+  telemetry::hot_count(
+      g_selector_identity_cache_hits);
+
+  if(publish_exact_selector_identity(
+        owner,
+        ret,
+        r14,
+        r15,
+        selector_stack,
+        cached_identity,
+        &profile)){
+   selector_profile_finish(
+       profile,
+       selector_profile_path::cache);
+   return;
+  }
+ } else {
+  telemetry::hot_count(
+      g_selector_identity_cache_misses);
+ }
 
  actual_material_owner_observation observation{};
- if(flver_identity_enrich_owner(
-        container,static_cast<std::uint32_t>(material_index),observation)){
+ const auto owner_lookup_begin =
+     selector_profile_begin(profile);
+ const bool owner_lookup_ok =
+     flver_identity_enrich_owner(
+        container,
+        static_cast<std::uint32_t>(
+            material_index),
+        observation);
+ selector_profile_end_stage(
+     profile,
+     owner_lookup_begin,
+     profile.owner_lookup_ticks);
+
+ if(owner_lookup_ok){
   telemetry::hot_count(g_owner_sha_hits);
 
-  if(enrich_exact_owner_mtd_identity(observation)){
+  const auto owner_mtd_begin =
+      selector_profile_begin(profile);
+  const bool owner_mtd_ok =
+      enrich_exact_owner_mtd_identity(
+          observation);
+  selector_profile_end_stage(
+      profile,
+      owner_mtd_begin,
+      profile.owner_mtd_enrich_ticks);
+
+  if(owner_mtd_ok){
    telemetry::hot_count(g_owner_mtd_hits);
 
    const auto identity=
        make_actual_material_identity(
            observation);
-   if(identity.owner_tuple_exact &&
-      material_owner_selection_publish(identity)){
-    // Complete the P_Metal LightBank semantic join only after this exact
-    // selector event has proven the actual FLVER/material owner tuple. The
-    // LightBank selector bridge above merely staged the matching source token;
-    // non-P_Metal materials must never publish it into P_Metal draw state.
-    upper_lower_pmetal_material_event_bridge(
-        owner,
+
+   if(publish_exact_selector_identity(
+          owner,
+          ret,
+          r14,
+          r15,
+          selector_stack,
+          identity,
+          &profile)){
+    const auto cache_publish_begin =
+        selector_profile_begin(profile);
+    selector_identity_cache_publish(
+        container,
+        material_index,
         identity);
-    telemetry::hot_count(g_exact_owner_ready);
+    selector_profile_end_stage(
+        profile,
+        cache_publish_begin,
+        profile.final_cache_publish_ticks);
+    selector_profile_finish(
+        profile,
+        selector_profile_path::owner);
     return;
    }
   }
@@ -559,32 +1184,97 @@ extern "C" void dsrrl_flver_selector_observer(
  // profiles; resource/asset operators still require their own owner gates.
  operators::material_response::material_identity
      runtime_material{};
- if(lookup_exact_runtime_material(
+ const auto runtime_lookup_begin =
+     selector_profile_begin(profile);
+ const bool runtime_material_hit =
+     lookup_exact_runtime_material(
         actual_material,
-        runtime_material)){
+        runtime_material);
+ selector_profile_end_stage(
+     profile,
+     runtime_lookup_begin,
+     profile.runtime_mtd_lookup_ticks);
+
+ if(runtime_material_hit){
   telemetry::hot_count(
       g_runtime_material_hits);
 
-  if(material_owner_selection_publish(
-        runtime_material)){
+  const auto runtime_publish_begin =
+      selector_profile_begin(profile);
+  const bool runtime_publish_ok =
+      material_owner_selection_publish(
+          runtime_material);
+  selector_profile_end_stage(
+      profile,
+      runtime_publish_begin,
+      profile.runtime_publish_ticks);
+
+  if(runtime_publish_ok){
    latch_once(
        g_runtime_mtd_selection_published);
    telemetry::hot_count(
        g_runtime_material_ready);
+   selector_profile_finish(
+       profile,
+       selector_profile_path::runtime_mtd);
    return;
   }
  }
 
  telemetry::hot_count(g_owner_fail_open);
+ selector_profile_finish(
+     profile,
+     selector_profile_path::fail_open);
 }
-bool install() noexcept {if(g_p.patched||g_s.patched||g_d.patched||g_m.patched||g_b.patched)return false;g_state={};g_runtime_mtd_classified.store(false);g_runtime_mtd_cache_hit.store(false);g_runtime_mtd_selection_published.store(false);if(!exe_ok())return false;g_base=reinterpret_cast<std::uintptr_t>(GetModuleHandleW(nullptr));if(!g_base)return false;g_state.provenance_ok=true;
- if(!prep(g_p,k_parse,k_parse_b,reinterpret_cast<void*>(&parse_entry)))goto fail;g_po=reinterpret_cast<parser_fn>(g_p.trampoline);
- if(!prep(g_d,k_destroy,k_destroy_b,reinterpret_cast<void*>(&destroy_entry)))goto fail;g_do=reinterpret_cast<destructor_fn>(g_d.trampoline);
- if(!prep(g_m,k_mtd,k_mtd_b,reinterpret_cast<void*>(&mtd_entry)))goto fail;g_mo=reinterpret_cast<mtd_fn>(g_m.trampoline);
- if(!prep(g_s,k_selector,k_selector_b,reinterpret_cast<void*>(&dsrrl_flver_selector_hook_entry)))goto fail;g_dsrrl_flver_selector_trampoline=g_s.trampoline;
- if(!prep(g_b,k_builder,k_builder_b,reinterpret_cast<void*>(&dsrrl_clustered_pnts_builder_hook_entry)))goto fail;g_dsrrl_flver_builder_trampoline=g_b.trampoline;
- if(!arm(g_p)||!arm(g_d)||!arm(g_m)||!arm(g_s)||!arm(g_b))goto fail;
- g_state.parser_armed=true;g_state.destructor_armed=true;g_state.mtd_armed=true;g_state.selector_armed=true;g_state.builder_armed=true;g_state.selector_owner_enrichment=true;g_state.exact_runtime_material_carrier=true;return true;
+bool install(
+    bool enable_clustered_builder,
+    bool enable_upper_lower_selector,
+    bool enable_hemdir3_selector) noexcept {
+ if(g_p.patched||g_s.patched||g_d.patched||g_m.patched||g_b.patched)return false;
+ g_state={};
+ selector_profile_reset();
+#ifdef DSRRL_PHYSICAL_CUT_UL_H3_SUBSURFACE
+ (void)enable_upper_lower_selector;
+ (void)enable_hemdir3_selector;
+ g_selector_upper_lower_enabled.store(false,std::memory_order_relaxed);
+ g_selector_hemdir3_enabled.store(false,std::memory_order_relaxed);
+#else
+ g_selector_upper_lower_enabled.store(
+     enable_upper_lower_selector,
+     std::memory_order_relaxed);
+ g_selector_hemdir3_enabled.store(
+     enable_hemdir3_selector,
+     std::memory_order_relaxed);
+#endif
+ g_runtime_mtd_classified.store(false);
+ g_runtime_mtd_cache_hit.store(false);
+ g_runtime_mtd_selection_published.store(false);
+ if(!exe_ok())return false;
+ g_base=reinterpret_cast<std::uintptr_t>(GetModuleHandleW(nullptr));
+ if(!g_base)return false;
+ g_state.provenance_ok=true;
+ if(!prep(g_p,k_parse,k_parse_b,reinterpret_cast<void*>(&parse_entry)))goto fail;
+ g_po=reinterpret_cast<parser_fn>(g_p.trampoline);
+ if(!prep(g_d,k_destroy,k_destroy_b,reinterpret_cast<void*>(&destroy_entry)))goto fail;
+ g_do=reinterpret_cast<destructor_fn>(g_d.trampoline);
+ if(!prep(g_m,k_mtd,k_mtd_b,reinterpret_cast<void*>(&mtd_entry)))goto fail;
+ g_mo=reinterpret_cast<mtd_fn>(g_m.trampoline);
+ if(!prep(g_s,k_selector,k_selector_b,reinterpret_cast<void*>(&dsrrl_flver_selector_hook_entry)))goto fail;
+ g_dsrrl_flver_selector_trampoline=g_s.trampoline;
+ if(enable_clustered_builder){
+  if(!prep(g_b,k_builder,k_builder_b,reinterpret_cast<void*>(&dsrrl_clustered_pnts_builder_hook_entry)))goto fail;
+  g_dsrrl_flver_builder_trampoline=g_b.trampoline;
+ }
+ if(!arm(g_p)||!arm(g_d)||!arm(g_m)||!arm(g_s)||
+    (enable_clustered_builder&&!arm(g_b)))goto fail;
+ g_state.parser_armed=true;
+ g_state.destructor_armed=true;
+ g_state.mtd_armed=true;
+ g_state.selector_armed=true;
+ g_state.builder_armed=enable_clustered_builder;
+ g_state.selector_owner_enrichment=true;
+ g_state.exact_runtime_material_carrier=true;
+ return true;
 fail:
  uninstall();
  return false;
@@ -614,7 +1304,14 @@ void uninstall() noexcept {
  g_mo=nullptr;
  clear_exact_material_cache();
  material_owner_selection_clear();
+ pmetal_env_source_selector_clear();
  flver_identity_reset();
+ g_selector_upper_lower_enabled.store(
+     true,
+     std::memory_order_relaxed);
+ g_selector_hemdir3_enabled.store(
+     true,
+     std::memory_order_relaxed);
  g_state={};
 }
 hook_status status() noexcept
@@ -628,6 +1325,12 @@ hook_status status() noexcept
          std::memory_order_relaxed);
  out.runtime_mtd_selection_published=
      g_runtime_mtd_selection_published.load(
+         std::memory_order_relaxed);
+ out.upper_lower_selector_enabled=
+     g_selector_upper_lower_enabled.load(
+         std::memory_order_relaxed);
+ out.hemdir3_selector_enabled=
+     g_selector_hemdir3_enabled.load(
          std::memory_order_relaxed);
  return out;
 }
@@ -650,6 +1353,8 @@ selector_owner_telemetry selector_owner_stats() noexcept
         g_selector_events.load(),
         g_owner_sha_hits.load(),
         g_owner_mtd_hits.load(),
+        g_selector_identity_cache_hits.load(),
+        g_selector_identity_cache_misses.load(),
         g_exact_owner_ready.load(),
         g_owner_fail_open.load(),
         g_runtime_material_hits.load(),
@@ -657,5 +1362,85 @@ selector_owner_telemetry selector_owner_stats() noexcept
         g_owner_consumed.load(),
         g_owner_consume_misses.load()
     };
+}
+
+selector_profile_telemetry selector_profile_stats() noexcept
+{
+    selector_profile_telemetry out{};
+#ifdef DSRRL_FLVER_SELECTOR_PROFILE
+    LARGE_INTEGER frequency{};
+    if (QueryPerformanceFrequency(
+            &frequency))
+        out.qpc_frequency =
+            static_cast<std::uint64_t>(
+                frequency.QuadPart);
+
+    out.sample_period =
+        k_selector_profile_sample_period;
+    out.samples =
+        g_selector_profile_samples.load(
+            std::memory_order_relaxed);
+    out.total_ticks =
+        g_selector_profile_total.ticks.load(
+            std::memory_order_relaxed);
+    out.max_total_ticks =
+        g_selector_profile_total.max_ticks.load(
+            std::memory_order_relaxed);
+    out.prefix_ticks =
+        g_selector_profile_prefix.ticks.load(
+            std::memory_order_relaxed);
+    out.resolve_material_ticks =
+        g_selector_profile_resolve_material.ticks.load(
+            std::memory_order_relaxed);
+    out.final_cache_lookup_ticks =
+        g_selector_profile_final_cache.ticks.load(
+            std::memory_order_relaxed);
+    out.final_cache_publish_ticks =
+        g_selector_profile_cache_publish.ticks.load(
+            std::memory_order_relaxed);
+    out.owner_lookup_ticks =
+        g_selector_profile_owner_lookup.ticks.load(
+            std::memory_order_relaxed);
+    out.owner_mtd_enrich_ticks =
+        g_selector_profile_owner_mtd.ticks.load(
+            std::memory_order_relaxed);
+    out.selection_publish_ticks =
+        g_selector_profile_selection_publish.ticks.load(
+            std::memory_order_relaxed);
+    out.pmetal_source_ticks =
+        g_selector_profile_pmetal.ticks.load(
+            std::memory_order_relaxed);
+    out.runtime_mtd_lookup_ticks =
+        g_selector_profile_runtime_mtd.ticks.load(
+            std::memory_order_relaxed);
+    out.runtime_publish_ticks =
+        g_selector_profile_runtime_publish.ticks.load(
+            std::memory_order_relaxed);
+    out.sampled_cache_path =
+        g_selector_profile_cache_path.load(
+            std::memory_order_relaxed);
+    out.sampled_owner_path =
+        g_selector_profile_owner_path.load(
+            std::memory_order_relaxed);
+    out.sampled_runtime_mtd_path =
+        g_selector_profile_runtime_path.load(
+            std::memory_order_relaxed);
+    out.sampled_fail_open_path =
+        g_selector_profile_fail_path.load(
+            std::memory_order_relaxed);
+    out.sampled_early_reject_path =
+        g_selector_profile_early_path.load(
+            std::memory_order_relaxed);
+    out.parse_events =
+        g_selector_profile_parse_events.load(
+            std::memory_order_relaxed);
+    out.mtd_events =
+        g_selector_profile_mtd_events.load(
+            std::memory_order_relaxed);
+    out.destroy_events =
+        g_selector_profile_destroy_events.load(
+            std::memory_order_relaxed);
+#endif
+    return out;
 }
 }

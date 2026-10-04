@@ -1,0 +1,36 @@
+{
+  "schema": "dsrrl.pointlight.performance_audit.v1",
+  "baseline_commit": "98ef166b989aaacc6d5472f7474fa130eda55dd1",
+  "findings": [
+    {
+      "status": "CONFIRMED",
+      "issue": "Fixed POW MAX instruction encoded 8 words but emitted 7; native Direct3D parser stalled for both old and donor-enabled materializers.",
+      "fix": "Encode 7 words; independently walk lowering lengths and validate final emitted instruction stream before rebuilding DXBC."
+    },
+    {
+      "status": "CONFIRMED",
+      "issue": "Fixed source callback allocated shared snapshots, acquired a global map mutex and published a shared atomic epoch per selected light.",
+      "fix": "Same-thread value snapshots with lifecycle epoch; no producer/selector allocation, global map, mutex or atomic RMW; cross-thread joins fail open."
+    },
+    {
+      "status": "CONFIRMED",
+      "issue": "Each fresh fixed source snapshot realized a new immutable GPU buffer and SRV.",
+      "fix": "Reuse a dynamic WRITE_DISCARD carrier per D3D recording context; device teardown releases caches."
+    }
+  ],
+  "validation": {
+    "native_corpus_member": "DSR/shader/FRPG_FlverPBL_fpo_DX11.shaderbnd.dcx",
+    "native_corpus_member_sha256": "ad180732ac79d5d98783aa504c789c2bab15e515c3b0f66b237d8b8c69113394",
+    "corpus_members": 288,
+    "native_gpu_created": 96,
+    "untouched": 192,
+    "native_gpu_errors": 0,
+    "same_thread_transport_test": "PASS",
+    "stale_serial_epoch_unknown_bank_rejection": "PASS",
+    "separate_immediate_deferred_buffer_reuse": "PASS",
+    "source_mix_tests": "PASS",
+    "in_game_fps": "OPEN",
+    "pixel_equivalence": "OPEN"
+  },
+  "reproduce": "Extract Spc PntSS/PntSSSS members from the exact binder without changing source files, build dsrrl_fixed_pointlight_corpus_native_check from integrated CMake and run it with CORPUS_DIR. Use a process watchdog when testing intentionally malformed negative cases."
+}

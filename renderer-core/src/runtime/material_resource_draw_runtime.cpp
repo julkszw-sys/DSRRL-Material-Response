@@ -8,6 +8,7 @@
 #include "dsrrl/runtime/generated_spec_routes_v12.hpp"
 #include "dsrrl/runtime/generated_diffuse_routes_v12.hpp"
 #include "dsrrl/runtime/generated_normal_routes_v12.hpp"
+#include "dsrrl/operators/legacy_plan/sha256_bytes.hpp"
 
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
@@ -47,7 +48,8 @@ enum class load_status : std::uint8_t {
     missing = 0,
     ready,
     unsupported,
-    create_failed
+    create_failed,
+    hash_mismatch
 };
 
 struct companion_set {
@@ -176,7 +178,7 @@ struct companion_tls_entry {
     }
 };
 
-constexpr std::size_t k_companion_tls_slots = 64u;
+constexpr std::size_t k_companion_tls_slots = 256u;
 thread_local std::array<
     companion_tls_entry,
     k_companion_tls_slots>
@@ -186,8 +188,8 @@ std::size_t companion_tls_index(
     std::uint64_t key) noexcept
 {
     return static_cast<std::size_t>(
-        ((key >> 4u) ^ (key >> 13u)) %
-        k_companion_tls_slots);
+        ((key >> 4u) ^ (key >> 13u) ^ (key >> 23u)) &
+        (k_companion_tls_slots - 1u));
 }
 
 std::atomic<std::uint64_t> g_named_views{0};
@@ -204,6 +206,16 @@ std::atomic_bool g_quarantined{false};
 std::atomic_bool g_subsurface_body_f_diag_logged{false};
 std::atomic_bool g_subsurface_body_m_diag_logged{false};
 std::atomic_bool g_subsurface_body_unknown_diag_logged{false};
+#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_R3)
+std::atomic_bool g_pmetal_r3_spec_attest_ok_logged{false};
+std::atomic_bool g_pmetal_r3_spec_attest_fail_logged{false};
+#endif
+#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_R5)
+std::atomic_bool g_pmetal_r5_diffuse_attest_ok_logged{false};
+std::atomic_bool g_pmetal_r5_diffuse_attest_fail_logged{false};
+std::atomic_bool g_pmetal_r5_normal_attest_ok_logged{false};
+std::atomic_bool g_pmetal_r5_normal_attest_fail_logged{false};
+#endif
 bool g_hot_telemetry_enabled = false;
 
 // Exact DSR body SpecMap identities used only by the Ps_Body[DSBT]
@@ -240,13 +252,21 @@ void hot_count(
             std::memory_order_relaxed);
 }
 
-std::uint64_t fnv_name(const std::wstring &name) noexcept
+std::uint64_t fnv_name(
+    const wchar_t *name,
+    std::size_t length) noexcept
 {
     std::uint64_t h = 14695981039346656037ull;
 
-    for (wchar_t ch : name) {
+    if (name == nullptr)
+        return h;
+
+    for (std::size_t i = 0u;
+         i < length;
+         ++i) {
         std::uint32_t c =
-            static_cast<std::uint32_t>(ch);
+            static_cast<std::uint32_t>(
+                name[i]);
 
         if (c >= static_cast<std::uint32_t>(L'A') &&
             c <= static_cast<std::uint32_t>(L'Z'))
@@ -257,6 +277,14 @@ std::uint64_t fnv_name(const std::wstring &name) noexcept
     }
 
     return h;
+}
+
+std::uint64_t fnv_name(
+    const std::wstring &name) noexcept
+{
+    return fnv_name(
+        name.data(),
+        name.size());
 }
 
 void release_view(
@@ -425,7 +453,9 @@ bool read_struct(
 
 load_result load_dds(
     ID3D11Device *device,
-    const std::filesystem::path &path) noexcept
+    const std::filesystem::path &path,
+    asset_class cls,
+    std::uint64_t logical_hash) noexcept
 {
     if (device == nullptr ||
         path.empty())
@@ -469,6 +499,124 @@ load_result load_dds(
                 nullptr,
                 load_status::unsupported
             };
+
+#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_R3)
+        // R3 closes the remaining content-authority hole on the exact
+        // material seen in the owner's active black/red R2 draw. R2 only
+        // authenticated logical identity + a non-null companion SRV, so a
+        // stale same-name DDS could silently enter t10. For HD_A_9550_s we
+        // now require the exact retail PTDE DDS bytes recovered by the PTDE
+        // equipment extractor.
+        constexpr std::uint64_t k_hd_a_9550_s_hash =
+            0xaedd13872d25cffbull;
+        constexpr char k_hd_a_9550_s_sha256[] =
+            "988d288dc65c7cb0856b65243ed33cbcc16862ea8c233d48ca0a377f0e8b1f77";
+
+        if (cls == asset_class::specular &&
+            logical_hash == k_hd_a_9550_s_hash) {
+            const auto digest =
+                operators::legacy_plan::hashing::sha256(
+                    bytes.data(),
+                    bytes.size());
+            if (!operators::legacy_plan::hashing::matches_hex(
+                    digest,
+                    k_hd_a_9550_s_sha256)) {
+                if (!g_pmetal_r3_spec_attest_fail_logged.exchange(
+                        true,
+                        std::memory_order_relaxed))
+                    reshade::log::message(
+                        reshade::log::level::warning,
+                        "[DSRRL PMETAL R3 SPEC ATTEST] HD_A_9550_s exact PTDE SHA mismatch; fail-open, stale/wrong sidecar rejected.");
+                return {
+                    nullptr,
+                    load_status::hash_mismatch
+                };
+            }
+
+            if (!g_pmetal_r3_spec_attest_ok_logged.exchange(
+                    true,
+                    std::memory_order_relaxed))
+                reshade::log::message(
+                    reshade::log::level::info,
+                    "[DSRRL PMETAL R3 SPEC ATTEST] HD_A_9550_s exact PTDE SHA PASS.");
+        }
+
+
+#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_R5)
+        // PR216 exact-content authority: for the active HD_A_9550 P_Metal
+        // equipment draw, t0 diffuse and t2 normal must be exact retail PTDE
+        // bytes. Same-name stale/wrong sidecars fail open.
+        constexpr std::uint64_t k_hd_a_9550_diffuse_hash =
+            0x00b515c367a88e31ull;
+        constexpr std::uint64_t k_hd_a_9550_normal_hash =
+            0xaedcfe872d25ac4cull;
+        constexpr char k_hd_a_9550_diffuse_sha256[] =
+            "ed4e1d104b5db59d51ace7fdaafbeeb2a8c36eea830233edf29b01907ed46803";
+        constexpr char k_hd_a_9550_normal_sha256[] =
+            "3c83caa2a95a85e1fc2d0397edfd48a271a3829330d7a0d5aa74b0cd599de78c";
+
+        if (cls == asset_class::diffuse &&
+            logical_hash == k_hd_a_9550_diffuse_hash) {
+            const auto digest =
+                operators::legacy_plan::hashing::sha256(
+                    bytes.data(),
+                    bytes.size());
+            if (!operators::legacy_plan::hashing::matches_hex(
+                    digest,
+                    k_hd_a_9550_diffuse_sha256)) {
+                if (!g_pmetal_r5_diffuse_attest_fail_logged.exchange(
+                        true,
+                        std::memory_order_relaxed))
+                    reshade::log::message(
+                        reshade::log::level::warning,
+                        "[DSRRL PMETAL R5 DIFFUSE ATTEST] HD_A_9550 exact PTDE SHA mismatch; fail-open, stale/wrong diffuse sidecar rejected.");
+                return {
+                    nullptr,
+                    load_status::hash_mismatch
+                };
+            }
+
+            if (!g_pmetal_r5_diffuse_attest_ok_logged.exchange(
+                    true,
+                    std::memory_order_relaxed))
+                reshade::log::message(
+                    reshade::log::level::info,
+                    "[DSRRL PMETAL R5 DIFFUSE ATTEST] HD_A_9550 exact PTDE SHA PASS.");
+        }
+
+        if (cls == asset_class::normal &&
+            logical_hash == k_hd_a_9550_normal_hash) {
+            const auto digest =
+                operators::legacy_plan::hashing::sha256(
+                    bytes.data(),
+                    bytes.size());
+            if (!operators::legacy_plan::hashing::matches_hex(
+                    digest,
+                    k_hd_a_9550_normal_sha256)) {
+                if (!g_pmetal_r5_normal_attest_fail_logged.exchange(
+                        true,
+                        std::memory_order_relaxed))
+                    reshade::log::message(
+                        reshade::log::level::warning,
+                        "[DSRRL PMETAL R5 NORMAL ATTEST] HD_A_9550_n exact PTDE SHA mismatch; fail-open, stale/wrong normal sidecar rejected.");
+                return {
+                    nullptr,
+                    load_status::hash_mismatch
+                };
+            }
+
+            if (!g_pmetal_r5_normal_attest_ok_logged.exchange(
+                    true,
+                    std::memory_order_relaxed))
+                reshade::log::message(
+                    reshade::log::level::info,
+                    "[DSRRL PMETAL R5 NORMAL ATTEST] HD_A_9550_n exact PTDE SHA PASS.");
+        }
+#endif
+#else
+        (void)cls;
+        (void)logical_hash;
+#endif
 
         std::uint32_t magic = 0u;
         dds_header header{};
@@ -946,13 +1094,17 @@ void on_init_resource_view(
         view.handle == 0u)
         return;
 
-    std::wstring logical_name;
-    if (!texture_identity_transport::snapshot(
-            logical_name))
+    const wchar_t *logical_name_raw = nullptr;
+    std::size_t logical_name_length = 0u;
+    if (!texture_identity_transport::snapshot_raw(
+            logical_name_raw,
+            logical_name_length))
         return;
 
     const auto logical_hash =
-        fnv_name(logical_name);
+        fnv_name(
+            logical_name_raw,
+            logical_name_length);
 
     const bool subsurface_body_spec =
         exact_subsurface_body_spec_hash(
@@ -973,6 +1125,15 @@ void on_init_resource_view(
         !normal_member)
         return;
 
+    std::wstring logical_name;
+    try {
+        logical_name.assign(
+            logical_name_raw,
+            logical_name_length);
+    } catch (...) {
+        return;
+    }
+
     auto *native_device =
         reinterpret_cast<ID3D11Device *>(
             device->get_native());
@@ -991,7 +1152,9 @@ void on_init_resource_view(
                 native_device,
                 sidecar_path(
                     asset_class::specular,
-                    logical_name));
+                    logical_name),
+                asset_class::specular,
+                logical_hash);
         account_load(loaded.status);
         set.specular = loaded.view;
     }
@@ -1004,7 +1167,9 @@ void on_init_resource_view(
                 native_device,
                 sidecar_path(
                     asset_class::diffuse,
-                    logical_name));
+                    logical_name),
+                asset_class::diffuse,
+                logical_hash);
         account_load(loaded.status);
         set.diffuse = loaded.view;
     }
@@ -1017,7 +1182,9 @@ void on_init_resource_view(
                 native_device,
                 sidecar_path(
                     asset_class::normal,
-                    logical_name));
+                    logical_name),
+                asset_class::normal,
+                logical_hash);
         account_load(loaded.status);
         set.normal = loaded.view;
     }
@@ -1298,11 +1465,66 @@ prepare_draw_requests(
         g_quarantined.load())
         return false;
 
+    const bool exact_material =
+        query.material.valid &&
+        query.material.owner_tuple_exact;
+
+    if (!exact_material)
+        return true;
+
+    if (!spec_rgb_consumer_ready &&
+        (receiver_id < 24u ||
+         receiver_id > 35u))
+        return true;
+
     ID3D11ShaderResourceView *views[3]{};
     context->PSGetShaderResources(
         0u,
         3u,
         views);
+
+    const bool ready =
+        prepare_draw_requests_bound(
+            views,
+            receiver_id,
+            query,
+            full_material_response_ready,
+            spec_rgb_consumer_ready,
+            prepared);
+
+    for (auto *&view : views)
+        release_view(view);
+
+    return ready;
+}
+
+bool material_resource_draw_runtime::
+prepare_draw_requests_bound(
+    ID3D11ShaderResourceView *const (&views)[3],
+    std::uint32_t receiver_id,
+    const operators::material_response::
+        mtd_semantic_query &query,
+    bool full_material_response_ready,
+    bool spec_rgb_consumer_ready,
+    prepared_material_resource_draw &prepared) noexcept
+{
+    prepared = {};
+
+    if (receiver_id == 0u ||
+        g_quarantined.load())
+        return false;
+
+    const bool exact_material =
+        query.material.valid &&
+        query.material.owner_tuple_exact;
+
+    if (!exact_material)
+        return true;
+
+    if (!spec_rgb_consumer_ready &&
+        (receiver_id < 24u ||
+         receiver_id > 35u))
+        return true;
 
     const companion_lookup_request
         companion_requests[3]{
@@ -1321,10 +1543,6 @@ prepare_draw_requests(
     const auto h0 = hashes[0];
     const auto h1 = hashes[1];
     const auto h2 = hashes[2];
-
-    const bool exact_material =
-        query.material.valid &&
-        query.material.owner_tuple_exact;
 
     if (full_material_response_ready &&
         spec_rgb_consumer_ready &&
@@ -1587,9 +1805,6 @@ prepare_draw_requests(
 
     for (auto *&companion : companions)
         release_view(companion);
-
-    for (auto *&view : views)
-        release_view(view);
 
     if (prepared.request_count == 0u)
         hot_count(g_fail_open);
@@ -2237,6 +2452,55 @@ drop_spec_rgb_request(
     prepared.requests[prepared.request_count] = {};
     prepared.retained_views[prepared.retained_count] = nullptr;
     prepared.spec_rgb = false;
+    return true;
+}
+
+
+bool material_resource_draw_runtime::
+keep_only_spec_rgb_request(
+    prepared_material_resource_draw &prepared) noexcept
+{
+    if (!prepared.spec_rgb ||
+        prepared.request_count == 0u ||
+        prepared.request_count != prepared.retained_count)
+        return false;
+
+    std::uint32_t spec_index = prepared.request_count;
+    for (std::uint32_t i = 0u;
+         i < prepared.request_count;
+         ++i) {
+        if (prepared.requests[i].primary ==
+            core::operator_id::spec_rgb) {
+            if (spec_index != prepared.request_count)
+                return false;
+            spec_index = i;
+        }
+    }
+
+    if (spec_index >= prepared.request_count)
+        return false;
+
+    auto spec_request = prepared.requests[spec_index];
+    auto *spec_view = prepared.retained_views[spec_index];
+
+    for (std::uint32_t i = 0u;
+         i < prepared.retained_count;
+         ++i) {
+        if (i == spec_index)
+            continue;
+        if (prepared.retained_views[i] != nullptr)
+            prepared.retained_views[i]->Release();
+    }
+
+    prepared.requests = {};
+    prepared.retained_views = {};
+    prepared.requests[0] = spec_request;
+    prepared.retained_views[0] = spec_view;
+    prepared.request_count = 1u;
+    prepared.retained_count = 1u;
+    prepared.spec_rgb = true;
+    prepared.diffuse = false;
+    prepared.normal = false;
     return true;
 }
 

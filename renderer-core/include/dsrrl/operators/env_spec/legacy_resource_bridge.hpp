@@ -84,6 +84,21 @@ inline constexpr std::array<std::uint8_t,32> k_legacy_packed_gi_sha256 = {{
     0x7fu,0x74u,0xd0u,0x7au,0x2cu,0xe4u,0xeau,0xc3u
 }};
 
+// Exact PTDE EnvDiffuse PackedGI carrier reconstructed from retail PTDE.
+// The 342 records use the same canonical probe ordinal as EnvSpec but have
+// one raw RGBA cube per probe rather than four EnvSpc slots. Alpha must remain
+// present through texture filtering; the consumer performs RGB/A afterwards.
+inline constexpr char k_ptde_envdiffuse_packed_gi_relative_path[] =
+    "DSRRL\\EnvSpec\\PackedGI\\PTDE_GI_ENVDIFFUSE_PACK_RGBA.bin";
+inline constexpr std::uint64_t k_ptde_envdiffuse_packed_gi_size = 8404992ull;
+inline constexpr std::array<std::uint8_t,32>
+k_ptde_envdiffuse_packed_gi_sha256 = {{
+    0x5au,0xb4u,0xa4u,0x71u,0xfeu,0xdbu,0xbcu,0x95u,
+    0xd8u,0xdcu,0xebu,0x55u,0xedu,0x0fu,0x46u,0x48u,
+    0x58u,0x2au,0x82u,0x4bu,0x42u,0x90u,0xbeu,0xc0u,
+    0x3eu,0x61u,0x34u,0xd7u,0xcbu,0x81u,0xcdu,0x8cu
+}};
+
 enum class legacy_envspec_identity_observe_result : std::uint8_t {
     invalid = 0,
     learning,

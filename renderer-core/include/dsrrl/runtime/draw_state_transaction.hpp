@@ -11,8 +11,12 @@
 #include <array>
 #include <atomic>
 #include <cstdint>
+#include <mutex>
+#include <unordered_map>
 
 struct ID3D11Buffer;
+struct ID3D11Device;
+struct ID3D11DeviceContext;
 struct ID3D11DeviceContext1;
 struct ID3D11PixelShader;
 struct ID3D11SamplerState;
@@ -114,8 +118,43 @@ public:
         std::int32_t vertex_offset,
         std::uint32_t first_instance) noexcept;
 
+    bool mutate_restore_only(
+        reshade::api::command_list *cmd_list,
+        const draw_tx_mutation &mutation) noexcept;
+
+    // Low-level performance bisectors. These intentionally isolate native
+    // state capture, native mutate+restore, and core bookkeeping from replay.
+    bool capture_only(
+        reshade::api::command_list *cmd_list,
+        const draw_tx_mutation &mutation) noexcept;
+
+    bool native_mutate_restore_only(
+        reshade::api::command_list *cmd_list,
+        const draw_tx_mutation &mutation) noexcept;
+
+    bool core_transaction_only(
+        reshade::api::command_list *cmd_list,
+        const draw_tx_mutation &mutation) noexcept;
+
+    bool raw_replay_draw(
+        reshade::api::command_list *cmd_list,
+        std::uint32_t vertex_count,
+        std::uint32_t instance_count,
+        std::uint32_t first_vertex,
+        std::uint32_t first_instance) noexcept;
+
+    bool raw_replay_draw_indexed(
+        reshade::api::command_list *cmd_list,
+        std::uint32_t index_count,
+        std::uint32_t instance_count,
+        std::uint32_t first_index,
+        std::int32_t vertex_offset,
+        std::uint32_t first_instance) noexcept;
+
     draw_tx_telemetry telemetry() const noexcept;
     bool quarantined() const noexcept;
+    void on_destroy_device(
+        reshade::api::device *device) noexcept;
     void reset() noexcept;
 
 private:
@@ -140,6 +179,9 @@ private:
     };
 
     struct transaction_state {
+        // Borrowed for the synchronous replay lifetime. This avoids repeated
+        // command_list->get_native() virtual calls between begin/draw/restore.
+        ID3D11DeviceContext *context = nullptr;
         ID3D11PixelShader *old_shader = nullptr;
         std::array<void *, draw_tx_max_class_instances> old_classes{};
         std::uint32_t old_class_count = 0;
@@ -174,7 +216,21 @@ private:
 
     void release_state(transaction_state &state) noexcept;
 
+    struct context1_cache_record {
+        ID3D11Device *device = nullptr;
+        ID3D11DeviceContext1 *context1 = nullptr;
+    };
+
+    ID3D11DeviceContext1 *context1_for(
+        ID3D11DeviceContext *context) noexcept;
+    void release_context1_cache() noexcept;
+
     core::renderer_core &core_;
+    std::mutex context1_cache_mutex_;
+    std::unordered_map<
+        ID3D11DeviceContext *,
+        context1_cache_record> context1_cache_;
+    std::atomic<std::uint64_t> context1_cache_epoch_{1u};
     std::atomic<std::uint64_t> draw_serial_{0};
     std::atomic<std::uint64_t> begin_ok_{0};
     std::atomic<std::uint64_t> begin_fail_{0};

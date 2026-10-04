@@ -81,15 +81,99 @@ std::mutex g_mutex;
 std::unordered_map<const void*,std::array<std::uint8_t,32>> g_by_model;
 std::atomic<std::uint64_t> g_epoch{1u};
 
-struct lookup_tls_cache {
+struct lookup_tls_cache_entry {
     const void *model = nullptr;
     std::uint64_t epoch = 0u;
     std::array<std::uint8_t,32> sha{};
     bool present = false;
 };
 
-thread_local lookup_tls_cache g_lookup_cache{};
+// Selector order interleaves many FLVER owners in one frame. A single-entry
+// TLS cache degenerates to the global mutex/map path whenever A/B/C owners
+// alternate. Keep the same global mutation epoch (parse/destroy still
+// invalidates every cached verdict), but retain enough per-thread identities
+// to make steady interleaved selector traffic lock-free.
+constexpr std::size_t k_lookup_tls_cache_sets = 128u;
+constexpr std::size_t k_lookup_tls_cache_ways = 4u;
+constexpr std::size_t k_lookup_tls_cache_size =
+    k_lookup_tls_cache_sets *
+    k_lookup_tls_cache_ways;
+static_assert(
+    (k_lookup_tls_cache_sets &
+     (k_lookup_tls_cache_sets - 1u)) == 0u,
+    "FLVER TLS lookup cache set count must be a power of two");
+
+thread_local std::array<
+    lookup_tls_cache_entry,
+    k_lookup_tls_cache_size> g_lookup_cache{};
+thread_local std::array<
+    std::uint8_t,
+    k_lookup_tls_cache_sets> g_lookup_victim{};
+
+std::size_t lookup_tls_cache_set(
+    const void *model) noexcept
+{
+    const auto value =
+        static_cast<std::uint64_t>(
+            reinterpret_cast<std::uintptr_t>(model));
+    const auto mixed =
+        (value >> 4u) ^
+        (value >> 13u) ^
+        (value >> 23u) ^
+        (value >> 33u);
+    return static_cast<std::size_t>(
+        mixed & (k_lookup_tls_cache_sets - 1u));
+}
+
+lookup_tls_cache_entry *lookup_tls_cache_hit(
+    const void *model,
+    std::uint64_t epoch) noexcept
+{
+    const auto set =
+        lookup_tls_cache_set(model);
+    const auto base =
+        set * k_lookup_tls_cache_ways;
+
+    for (std::size_t way = 0u;
+         way < k_lookup_tls_cache_ways;
+         ++way) {
+        auto &entry =
+            g_lookup_cache[base + way];
+        if (entry.model == model &&
+            entry.epoch == epoch)
+            return &entry;
+    }
+
+    return nullptr;
+}
+
+lookup_tls_cache_entry &lookup_tls_cache_slot(
+    const void *model) noexcept
+{
+    const auto set =
+        lookup_tls_cache_set(model);
+    const auto base =
+        set * k_lookup_tls_cache_ways;
+
+    for (std::size_t way = 0u;
+         way < k_lookup_tls_cache_ways;
+         ++way) {
+        auto &entry =
+            g_lookup_cache[base + way];
+        if (entry.model == model ||
+            entry.model == nullptr)
+            return entry;
+    }
+
+    const auto victim =
+        static_cast<std::size_t>(
+            g_lookup_victim[set]++ &
+            static_cast<std::uint8_t>(
+                k_lookup_tls_cache_ways - 1u));
+    return g_lookup_cache[base + victim];
+}
 std::atomic<std::uint64_t> g_inserts{0},g_lookups{0},g_hits{0},g_misses{0},g_erases{0},g_invalid{0};
+std::atomic<std::uint64_t> g_tls_hits{0},g_mutex_fallbacks{0};
 
 } // namespace
 
@@ -104,10 +188,20 @@ bool flver_identity_observe_parse(const void *model,const void *raw,std::size_t 
     const auto sha=digest(raw,static_cast<std::size_t>(total));
     try {
         std::lock_guard<std::mutex> lock(g_mutex);
-        g_by_model[model]=sha;
-        g_epoch.fetch_add(
-            1u,
-            std::memory_order_release);
+        const auto found =
+            g_by_model.find(model);
+        if (found == g_by_model.end()) {
+            // Loading an unrelated FLVER cannot invalidate cached identities
+            // for already-live models. Pointer reuse is covered by the
+            // destructor path, which advances the global epoch before a new
+            // object at that address can become authoritative.
+            g_by_model.emplace(model, sha);
+        } else if (found->second != sha) {
+            found->second = sha;
+            g_epoch.fetch_add(
+                1u,
+                std::memory_order_release);
+        }
     } catch (...) {
         ++g_invalid;
         return false;
@@ -149,22 +243,29 @@ bool flver_identity_lookup(const void *selector_container,std::array<std::uint8_
         g_epoch.load(
             std::memory_order_acquire);
 
-    if(g_lookup_cache.model==model &&
-       g_lookup_cache.epoch==epoch){
-        if(!g_lookup_cache.present){
+    if (auto *cached =
+            lookup_tls_cache_hit(
+                model,
+                epoch);
+        cached != nullptr) {
+        if (!cached->present) {
             telemetry::hot_count(g_misses);
             return false;
         }
 
-        sha256=g_lookup_cache.sha;
+        sha256 = cached->sha;
         telemetry::hot_count(g_hits);
+        telemetry::hot_count(g_tls_hits);
         return true;
     }
 
+    telemetry::hot_count(g_mutex_fallbacks);
     std::lock_guard<std::mutex> lock(g_mutex);
+    auto &cached =
+        lookup_tls_cache_slot(model);
     const auto it=g_by_model.find(model);
     if(it==g_by_model.end()){
-        g_lookup_cache={
+        cached={
             model,
             g_epoch.load(
                 std::memory_order_relaxed),
@@ -176,7 +277,7 @@ bool flver_identity_lookup(const void *selector_container,std::array<std::uint8_
     }
 
     sha256=it->second;
-    g_lookup_cache={
+    cached={
         model,
         g_epoch.load(
             std::memory_order_relaxed),
@@ -204,8 +305,15 @@ void flver_identity_reset() noexcept {
     g_epoch.fetch_add(
         1u,
         std::memory_order_release);
-    g_lookup_cache={};
+    g_lookup_cache = {};
+    g_lookup_victim = {};
 }
-flver_identity_telemetry flver_identity_stats() noexcept {return {g_inserts.load(),g_lookups.load(),g_hits.load(),g_misses.load(),g_erases.load(),g_invalid.load()};}
+flver_identity_telemetry flver_identity_stats() noexcept {return {g_inserts.load(),g_lookups.load(),g_hits.load(),g_misses.load(),g_tls_hits.load(),g_mutex_fallbacks.load(),g_erases.load(),g_invalid.load()};}
+
+std::uint64_t flver_identity_epoch() noexcept
+{
+    return g_epoch.load(
+        std::memory_order_acquire);
+}
 
 } // namespace dsrrl::runtime

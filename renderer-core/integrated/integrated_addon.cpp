@@ -10,6 +10,8 @@
 #include "dsrrl/runtime/bloom_scene_sidecar_runtime.hpp"
 #include "dsrrl/runtime/bloom_fx_draw_transport.hpp"
 #include "dsrrl/runtime/pmetal_envspec_draw_runtime.hpp"
+#include "dsrrl/runtime/pmetal_native_draw_bridge.hpp"
+#include "dsrrl/runtime/pixel_srv_shadow.hpp"
 #include "dsrrl/runtime/texture_identity_transport.hpp"
 #include "dsrrl/operators/material_response/mtd_semantic_census.hpp"
 #include "dsrrl/runtime/stable_receiver_pipeline_registry.hpp"
@@ -71,6 +73,107 @@
 #define DSRRL_BUILD_FLAVOR "default"
 #endif
 
+#ifdef DSRRL_DRAWTIME_ISLANDS_BYPASS
+constexpr bool k_drawtime_islands_runtime_enabled = false;
+#else
+constexpr bool k_drawtime_islands_runtime_enabled = true;
+#endif
+
+#ifdef DSRRL_DRAW_CALLBACKS_BYPASS
+constexpr bool k_draw_callbacks_runtime_enabled = false;
+#else
+constexpr bool k_draw_callbacks_runtime_enabled = true;
+#endif
+
+#ifdef DSRRL_DRAW_REPLAY_BYPASS
+constexpr bool k_draw_replay_runtime_enabled = false;
+#else
+constexpr bool k_draw_replay_runtime_enabled = true;
+#endif
+
+#ifdef DSRRL_EMPTY_DRAW_CALLBACK_BISECT
+constexpr bool k_empty_draw_callback_bisect = true;
+#else
+constexpr bool k_empty_draw_callback_bisect = false;
+#endif
+
+#ifdef DSRRL_STATE_TRANSACTION_ONLY_BISECT
+constexpr bool k_state_transaction_only_bisect = true;
+#else
+constexpr bool k_state_transaction_only_bisect = false;
+#endif
+
+#ifdef DSRRL_RAW_DRAW_REPLAY_BISECT
+constexpr bool k_raw_draw_replay_bisect = true;
+#else
+constexpr bool k_raw_draw_replay_bisect = false;
+#endif
+
+#ifdef DSRRL_STATE_CAPTURE_ONLY_BISECT
+constexpr bool k_state_capture_only_bisect = true;
+#else
+constexpr bool k_state_capture_only_bisect = false;
+#endif
+
+#ifdef DSRRL_NATIVE_STATE_MUTATE_RESTORE_ONLY_BISECT
+constexpr bool k_native_state_mutate_restore_only_bisect = true;
+#else
+constexpr bool k_native_state_mutate_restore_only_bisect = false;
+#endif
+
+#ifdef DSRRL_CORE_TRANSACTION_ONLY_BISECT
+constexpr bool k_core_transaction_only_bisect = true;
+#else
+constexpr bool k_core_transaction_only_bisect = false;
+#endif
+
+#ifdef DSRRL_RAW_NATIVE_DRAW_REENTRY_MIN_BISECT
+constexpr bool k_raw_native_draw_reentry_min_bisect = true;
+#else
+constexpr bool k_raw_native_draw_reentry_min_bisect = false;
+#endif
+
+#ifdef DSRRL_ADDON_LOADED_ONLY_BISECT
+constexpr bool k_addon_loaded_only_bisect = true;
+#else
+constexpr bool k_addon_loaded_only_bisect = false;
+#endif
+
+#ifdef DSRRL_DRAW_CALLBACK_ONLY_BISECT
+constexpr bool k_draw_callback_only_bisect = true;
+#else
+constexpr bool k_draw_callback_only_bisect = false;
+#endif
+
+#ifdef DSRRL_PMETAL_SRV_SHADOW_EXPERIMENT
+constexpr bool k_pmetal_srv_shadow_runtime_enabled = true;
+#else
+constexpr bool k_pmetal_srv_shadow_runtime_enabled = false;
+#endif
+
+#if defined(DSRRL_POINTLIGHT_DRAWTIME_BYPASS) || defined(DSRRL_DRAWTIME_ISLANDS_BYPASS)
+constexpr bool k_pointlight_drawtime_runtime_enabled = false;
+#else
+constexpr bool k_pointlight_drawtime_runtime_enabled = true;
+#endif
+
+#if defined(DSRRL_DRAWTIME_ISLANDS_BYPASS) || \
+    defined(DSRRL_DRAW_CALLBACKS_BYPASS) || \
+    defined(DSRRL_DRAW_REPLAY_BYPASS) || \
+    defined(DSRRL_EMPTY_DRAW_CALLBACK_BISECT) || \
+    defined(DSRRL_STATE_TRANSACTION_ONLY_BISECT) || \
+    defined(DSRRL_RAW_DRAW_REPLAY_BISECT) || \
+    defined(DSRRL_STATE_CAPTURE_ONLY_BISECT) || \
+    defined(DSRRL_NATIVE_STATE_MUTATE_RESTORE_ONLY_BISECT) || \
+    defined(DSRRL_CORE_TRANSACTION_ONLY_BISECT) || \
+    defined(DSRRL_RAW_NATIVE_DRAW_REENTRY_MIN_BISECT) || \
+    defined(DSRRL_ADDON_LOADED_ONLY_BISECT) || \
+    defined(DSRRL_DRAW_CALLBACK_ONLY_BISECT)
+constexpr bool k_pmetal_native_draw_runtime_enabled = false;
+#else
+constexpr bool k_pmetal_native_draw_runtime_enabled = true;
+#endif
+
 #include <array>
 #include <atomic>
 #include <cstdint>
@@ -125,6 +228,10 @@ dsrrl::runtime::pmetal_envspec_draw_runtime
         g_pmetal_source,
         g_envspec_resources,
         g_material_resources);
+dsrrl::runtime::pmetal_native_draw_bridge
+    g_pmetal_native_draw;
+
+thread_local bool g_raw_draw_replay_recursing = false;
 
 std::atomic<std::uint64_t> g_present_count{0};
 std::atomic<std::uint64_t> g_mr_draw_eval{0};
@@ -142,6 +249,23 @@ std::atomic_bool g_mr_once_draw_issued{false};
 std::atomic<std::uint32_t> g_pointlight_gate_log_mask{0u};
 std::atomic<std::uint32_t> g_pointlight_prep_log_mask{0u};
 std::atomic_bool g_pointlight_active_logged{false};
+std::atomic_bool g_pointlight_once_shader_ready{false};
+std::atomic_bool g_pointlight_once_sidecar_ready{false};
+std::atomic_bool g_pointlight_once_batch_ready{false};
+std::atomic_bool g_pointlight_once_applied{false};
+// PR175/176 RT identity probing is diagnostic-only. Runtime proof already
+// established the reflective-water 480x270 offscreen PointLight pass. Keep
+// the small signature store for the one first-hit observation only.
+std::array<std::atomic<std::uint64_t>,4>
+    g_pointlight_rt_signatures{};
+// Exact producer transports that may publish draw-scoped TLS. The selection
+// guard only drains transports that are actually installed; disabled islands
+// must not add function-call traffic to every host draw.
+std::atomic_bool g_upper_lower_selection_transport_active{false};
+std::atomic_bool g_hemdir3_selection_transport_active{false};
+std::atomic_bool g_fixed_pointlight_selection_transport_active{false};
+std::atomic_bool g_clustered_pointlight_selection_transport_active{false};
+std::atomic_bool g_any_draw_selection_transport_active{false};
 std::atomic<std::uint64_t> g_mr_ul_payload_materialize_ok{0};
 std::atomic<std::uint64_t> g_mr_ul_payload_materialize_fail{0};
 std::atomic<std::uint64_t> g_subsurface_spec_payload_materialize_ok{0};
@@ -155,6 +279,10 @@ std::atomic_bool g_lerp_once_batch_ready{false};
 std::atomic_bool g_lerp_once_draw_issued{false};
 std::atomic<std::uint64_t> g_envspec_payload_materialize_ok{0};
 std::atomic<std::uint64_t> g_envspec_payload_materialize_fail{0};
+#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG)
+std::atomic_bool g_pmetal_full_ptde_create_ok_logged{false};
+std::atomic_bool g_pmetal_full_ptde_create_fail_logged{false};
+#endif
 std::atomic<std::uint64_t> g_draw_events{0};
 std::atomic<std::uint64_t> g_draw_receiver_hits{0};
 std::atomic<std::uint64_t> g_draw_owner_hits{0};
@@ -212,6 +340,129 @@ bool runtime_effect_telemetry_requested() noexcept
 {
     return dsrrl::runtime::telemetry::
         effect_enabled();
+}
+
+void observe_pointlight_render_target(
+    reshade::api::command_list *cmd_list) noexcept
+{
+    if (cmd_list == nullptr)
+        return;
+
+    auto *context =
+        reinterpret_cast<ID3D11DeviceContext *>(
+            cmd_list->get_native());
+    if (context == nullptr)
+        return;
+
+    ID3D11RenderTargetView *rtv = nullptr;
+    context->OMGetRenderTargets(
+        1u,
+        &rtv,
+        nullptr);
+
+    std::uint32_t width = 0u;
+    std::uint32_t height = 0u;
+    std::uint32_t format = 0u;
+
+    if (rtv != nullptr) {
+        ID3D11Resource *resource = nullptr;
+        rtv->GetResource(&resource);
+        if (resource != nullptr) {
+            ID3D11Texture2D *texture = nullptr;
+            if (SUCCEEDED(resource->QueryInterface(
+                    __uuidof(ID3D11Texture2D),
+                    reinterpret_cast<void **>(&texture))) &&
+                texture != nullptr) {
+                D3D11_TEXTURE2D_DESC desc{};
+                texture->GetDesc(&desc);
+                width = desc.Width;
+                height = desc.Height;
+                format =
+                    static_cast<std::uint32_t>(
+                        desc.Format);
+                texture->Release();
+            }
+            resource->Release();
+        }
+        rtv->Release();
+    }
+
+    D3D11_VIEWPORT viewport{};
+    UINT viewport_count = 1u;
+    context->RSGetViewports(
+        &viewport_count,
+        &viewport);
+
+    const auto vp_w =
+        viewport_count != 0u
+            ? static_cast<std::uint32_t>(
+                  viewport.Width + 0.5f)
+            : 0u;
+    const auto vp_h =
+        viewport_count != 0u
+            ? static_cast<std::uint32_t>(
+                  viewport.Height + 0.5f)
+            : 0u;
+
+    std::uint64_t signature =
+        0xcbf29ce484222325ULL;
+    const std::array<std::uint32_t,5> fields{{
+        width,
+        height,
+        format,
+        vp_w,
+        vp_h
+    }};
+    for (const auto field : fields) {
+        for (unsigned shift = 0u;
+             shift < 32u;
+             shift += 8u) {
+            signature ^=
+                static_cast<std::uint8_t>(
+                    (field >> shift) &
+                    0xffu);
+            signature *=
+                0x100000001b3ULL;
+        }
+    }
+    if (signature == 0u)
+        signature = 1u;
+
+    bool should_log = false;
+    for (auto &slot :
+         g_pointlight_rt_signatures) {
+        auto observed =
+            slot.load(
+                std::memory_order_relaxed);
+        if (observed == signature)
+            return;
+        if (observed == 0u &&
+            slot.compare_exchange_strong(
+                observed,
+                signature,
+                std::memory_order_relaxed,
+                std::memory_order_relaxed)) {
+            should_log = true;
+            break;
+        }
+    }
+
+    if (!should_log)
+        return;
+
+    char line[320]{};
+    std::snprintf(
+        line,
+        sizeof(line),
+        "[DSRRL POINTLIGHT RT] rtv=%ux%u fmt=%u viewport=%ux%u",
+        static_cast<unsigned>(width),
+        static_cast<unsigned>(height),
+        static_cast<unsigned>(format),
+        static_cast<unsigned>(vp_w),
+        static_cast<unsigned>(vp_h));
+    reshade::log::message(
+        reshade::log::level::info,
+        line);
 }
 
 void hot_count(
@@ -574,6 +825,62 @@ enum integrated_draw_route_bit : std::uint8_t {
     k_route_clustered_pointlight = 1u << 7
 };
 
+constexpr std::uint8_t k_dynamic_draw_route_mask =
+    k_route_stable |
+    k_route_hemenvlerp |
+    k_route_subsurface |
+    k_route_hemdir3 |
+    k_route_upper_lower |
+    k_route_fixed_pointlight |
+    k_route_clustered_pointlight;
+
+std::atomic<std::uint8_t> g_active_dynamic_draw_route_mask{
+    k_route_stable |
+    k_route_hemenvlerp};
+
+std::uint8_t active_integrated_draw_route(
+    std::uint8_t raw_mask) noexcept
+{
+    const auto dynamic =
+        g_active_dynamic_draw_route_mask.load(
+            std::memory_order_relaxed);
+    return static_cast<std::uint8_t>(
+        raw_mask &
+        static_cast<std::uint8_t>(
+            k_route_a1 | dynamic));
+}
+
+void publish_active_dynamic_draw_routes() noexcept
+{
+    std::uint8_t mask =
+        k_route_stable |
+        k_route_hemenvlerp;
+
+    if (g_core.features().enabled(
+            dsrrl::core::operator_id::subsurface))
+        mask |= k_route_subsurface;
+
+    if (g_hemdir3_selection_transport_active.load(
+            std::memory_order_relaxed))
+        mask |= k_route_hemdir3;
+
+    if (g_upper_lower_selection_transport_active.load(
+            std::memory_order_relaxed))
+        mask |= k_route_upper_lower;
+
+    if (g_fixed_pointlight_selection_transport_active.load(
+            std::memory_order_relaxed))
+        mask |= k_route_fixed_pointlight;
+
+    if (g_clustered_pointlight_selection_transport_active.load(
+            std::memory_order_relaxed))
+        mask |= k_route_clustered_pointlight;
+
+    g_active_dynamic_draw_route_mask.store(
+        mask,
+        std::memory_order_release);
+}
+
 struct integrated_draw_route_tls {
     const void *command_list_key = nullptr;
     std::uint8_t mask = 0u;
@@ -592,7 +899,10 @@ struct integrated_pipeline_route_cache_entry {
     std::uint8_t mask = 0u;
 };
 
-constexpr std::size_t k_integrated_route_cache_size = 16u;
+// Complex areas bind far more than sixteen pixel pipelines in a frame.
+// Keep a modest per-thread route working set so ordinary interleaving does
+// not fall back to the shared route map on cache collisions.
+constexpr std::size_t k_integrated_route_cache_size = 256u;
 thread_local std::array<
     integrated_pipeline_route_cache_entry,
     k_integrated_route_cache_size>
@@ -622,15 +932,37 @@ void remember_integrated_draw_route(
     try {
         std::unique_lock<std::shared_mutex> lock(
             g_integrated_draw_route_mutex);
-        g_integrated_draw_route_epoch.fetch_add(
-            1u,
-            std::memory_order_acq_rel);
-        if (mask == 0u)
-            g_integrated_draw_routes.erase(
+
+        const auto found =
+            g_integrated_draw_routes.find(
                 pipeline_handle);
-        else
-            g_integrated_draw_routes[
-                pipeline_handle] = mask;
+
+        if (mask == 0u) {
+            // A zero route is normally a first observation and therefore has
+            // no cached positive state to invalidate. If this handle already
+            // had a route, however, invalidate all TLS verdicts before erase.
+            if (found !=
+                g_integrated_draw_routes.end()) {
+                g_integrated_draw_route_epoch.fetch_add(
+                    1u,
+                    std::memory_order_acq_rel);
+                g_integrated_draw_routes.erase(found);
+            }
+        } else if (
+            found ==
+                g_integrated_draw_routes.end()) {
+            // Init of an unrelated new pipeline cannot invalidate cached
+            // routes for existing handles. Destroy/reuse still advances the
+            // epoch in forget_integrated_draw_route().
+            g_integrated_draw_routes.emplace(
+                pipeline_handle,
+                mask);
+        } else if (found->second != mask) {
+            g_integrated_draw_route_epoch.fetch_add(
+                1u,
+                std::memory_order_acq_rel);
+            found->second = mask;
+        }
     } catch (...) {
         try {
             std::unique_lock<std::shared_mutex> lock(
@@ -1746,6 +2078,14 @@ void on_bind_pipeline(
              reshade::api::pipeline_stage::
                 vertex_shader)) != 0u;
 
+    // The consumer-local MotionBlur patch is compute-only in the active
+    // policy (the shared velocity writer is disabled). Do not serialize every
+    // unrelated PS/VS pipeline bind through the MotionBlur registry mutex.
+    if (!compute_bound &&
+        !(k_velocity_writer_patch_enabled &&
+          vertex_bound))
+        return;
+
     bool compute_target = false;
     bool velocity_target = false;
 
@@ -2382,7 +2722,24 @@ bool observe_draw_identity(
             clustered_pointlight_receiver,
             clustered_pointlight_spc,
             false, out_material, out_decision);
-        return true;
+
+        // Generic MR, resource bridges, P_Metal and direct PointLight all
+        // require a material owner. Preserve the previous ownerless
+        // continuation only for explicitly enabled standalone islands that
+        // may carry their own authority. Under the current policy U/L,
+        // HemDir3 and Subsurface are disabled, so receiver-only draws stop
+        // here instead of entering batch/resource preparation.
+        const bool ownerless_island_enabled =
+            (upper_lower_bound &&
+             g_core.features().enabled(
+                 dsrrl::core::operator_id::upper_lower)) ||
+            (hemdir3_bound &&
+             g_core.features().enabled(
+                 dsrrl::core::operator_id::hemdir3)) ||
+            (subsurface_bound &&
+             g_core.features().enabled(
+                 dsrrl::core::operator_id::subsurface));
+        return ownerless_island_enabled;
     }
 
     hot_count(g_draw_joins);
@@ -2530,7 +2887,7 @@ bool integrated_operator_enabled_by_policy(
     //   * HemDir3 stays stock DSR; no visible bridge is shipped.
     //   * Upper/Lower stays stock DSR after the world/FaceEye pixel falsifiers.
     //
-    // P_Metal EnvSpec owns an isolated source carrier (0x563B80/0x563C30)
+    // P_Metal EnvSpec reads PTDE donors at the exact material selector cut
     // and must not depend on the visible U/L runtime or its reference transport.
     switch (op) {
     case dsrrl::core::operator_id::subsurface:
@@ -2642,11 +2999,12 @@ void log_effect_matrix(
         detail,
         sizeof(detail),
         "[DSRRL EFFECT DETAIL] "
-        "MR mtd_classified=%u cache_hit=%u selection_published=%u "
+        "MR mtd_classified=%u cache_hit=%u selection_published=%u selector_gates_ul=%u h3=%u "
         "PMetal entry=%u feature=%u material=%u semantic=%u source=%u "
         "receiver_source=%u repl=%u probe=%u spec=%u b12=%u request=%u fail=0x%08X "
         "PMSRC steady=%llu blend=%llu publish=%llu bank_unknown=%llu decode_fail=%llu "
-        "busy_drop=%llu consume=%llu/%llu carrier=%u/%u q=%u restore_fail=%u "
+        "busy_drop=%llu consume=%llu/%llu ep_cache=%llu/%llu/%llu region=%llu/%llu gen=%llu "
+        "carrier=%u/%u selector=%u q=%u restore_fail=%u "
         "SUB cand=%llu matrej=%llu piperej=%llu surfrej=%llu prep=%llu "
         "UL producer=%u changed=%u quarantine=%u restore_fail=%u "
         "Bloom diag_hooks=%u/%u model_hook=%u proof=%u contents=%u "
@@ -2654,6 +3012,8 @@ void log_effect_matrix(
         flver.runtime_mtd_classified ? 1u : 0u,
         flver.runtime_mtd_cache_hit ? 1u : 0u,
         flver.runtime_mtd_selection_published ? 1u : 0u,
+        flver.upper_lower_selector_enabled ? 1u : 0u,
+        flver.hemdir3_selector_enabled ? 1u : 0u,
         pmetal.effect_entry_seen ? 1u : 0u,
         pmetal.effect_feature_ready ? 1u : 0u,
         pmetal.effect_material_ready ? 1u : 0u,
@@ -2674,8 +3034,15 @@ void log_effect_matrix(
         static_cast<unsigned long long>(pmetal_source.publish_busy_drop),
         static_cast<unsigned long long>(pmetal_source.consumer_ok),
         static_cast<unsigned long long>(pmetal_source.consumer_fail),
+        static_cast<unsigned long long>(pmetal_source.endpoint_cache_hit),
+        static_cast<unsigned long long>(pmetal_source.endpoint_cache_miss),
+        static_cast<unsigned long long>(pmetal_source.endpoint_cache_fill),
+        static_cast<unsigned long long>(pmetal_source.region_cache_hit),
+        static_cast<unsigned long long>(pmetal_source.region_cache_miss),
+        static_cast<unsigned long long>(pmetal_source.cache_generation),
         pmetal_source.steady_carrier_active ? 1u : 0u,
         pmetal_source.blend_carrier_active ? 1u : 0u,
+        pmetal_source.selector_carrier_active ? 1u : 0u,
         pmetal_source.quarantined ? 1u : 0u,
         pmetal_source.restore_failed ? 1u : 0u,
         static_cast<unsigned long long>(subsurface.candidates),
@@ -2776,6 +3143,9 @@ void log_state(const char *tag) noexcept
     const auto t = g_a1_bridge.telemetry();
     const auto f = dsrrl::runtime::flver_identity_stats();
     const auto h = dsrrl::runtime::flver_identity_transport::status();
+    const auto selector =
+        dsrrl::runtime::flver_identity_transport::
+            selector_owner_stats();
     const auto m = dsrrl::runtime::material_owner_selection_stats();
     const auto mr_tx = g_mr_draw_runtime.telemetry();
     const auto tx = g_draw_transactions.telemetry();
@@ -2795,7 +3165,7 @@ void log_state(const char *tag) noexcept
         "unknown=%llu no_owner=%llu failopen=%llu init_ok=%llu "
         "init_bad=%llu binds=%llu quarantine=%u "
         "flver_hook=%u/%u/%u mtd_hook=%u prov=%u owner_enrich=%u actual_carrier=%u restore_fail=%u "
-        "inserts=%llu lookups=%llu hits=%llu misses=%llu erases=%llu invalid=%llu "
+        "inserts=%llu lookups=%llu hits=%llu misses=%llu tls_hit=%llu mutex_fb=%llu erases=%llu invalid=%llu "
         "owner_sel=%llu owner_enriched=%llu owner_auth=%llu owner_actual=%llu owner_fo=%llu "
         "mr_ready=%u mr_eval=%llu mr_would_activate=%llu mr_fo=%llu "
         "mr_payload_ok=%llu mr_payload_fail=%llu "
@@ -2838,6 +3208,8 @@ void log_state(const char *tag) noexcept
         static_cast<unsigned long long>(f.lookups),
         static_cast<unsigned long long>(f.hits),
         static_cast<unsigned long long>(f.misses),
+        static_cast<unsigned long long>(f.tls_hits),
+        static_cast<unsigned long long>(f.mutex_fallbacks),
         static_cast<unsigned long long>(f.erases),
         static_cast<unsigned long long>(f.invalid_raw),
         static_cast<unsigned long long>(m.selector_events),
@@ -2941,6 +3313,36 @@ void log_state(const char *tag) noexcept
         static_cast<unsigned long long>(g_draw_receiver_only.load()));
 
     reshade::log::message(reshade::log::level::info, line);
+
+    char selector_perf_line[512]{};
+    std::snprintf(
+        selector_perf_line,
+        sizeof(selector_perf_line),
+        "[DSRRL RUNTIME V2] %s SELECTOR_PERF events=%llu final_cache=%llu/%llu owner_sha=%llu owner_mtd=%llu exact_ready=%llu runtime_mtd=%llu/%llu flver_tls=%llu mutex_fb=%llu",
+        tag,
+        static_cast<unsigned long long>(
+            selector.selector_events),
+        static_cast<unsigned long long>(
+            selector.selector_identity_cache_hits),
+        static_cast<unsigned long long>(
+            selector.selector_identity_cache_misses),
+        static_cast<unsigned long long>(
+            selector.owner_sha_hits),
+        static_cast<unsigned long long>(
+            selector.owner_mtd_hits),
+        static_cast<unsigned long long>(
+            selector.exact_owner_ready),
+        static_cast<unsigned long long>(
+            selector.runtime_material_hits),
+        static_cast<unsigned long long>(
+            selector.runtime_material_ready),
+        static_cast<unsigned long long>(
+            f.tls_hits),
+        static_cast<unsigned long long>(
+            f.mutex_fallbacks));
+    reshade::log::message(
+        reshade::log::level::info,
+        selector_perf_line);
 
     char ul_direct_line[320]{};
     std::snprintf(
@@ -3291,8 +3693,10 @@ void log_state(const char *tag) noexcept
     const auto env_lerp =
         dsrrl::runtime::
             hemenvlerp_receiver_pipeline_stats();
+    const auto pmetal_native =
+        g_pmetal_native_draw.telemetry();
 
-    char env_line[1536]{};
+    char env_line[1792]{};
     std::snprintf(
         env_line,
         sizeof(env_line),
@@ -3300,7 +3704,8 @@ void log_state(const char *tag) noexcept
         "ps_mat=%llu/%llu src_steady=%llu src_blend=%llu src_miss=%llu src_hook=%u/%u "
         "native=%llu/%llu hash_miss=%llu views=%llu pack=%llu/%llu pack_ready=%u sampler=%u "
         "cube=%llu/%llu prepare=%llu/%llu candidate=%llu material_reject=%llu semantic_reject=%llu "
-        "source_reject=%llu blend_hold=%llu probe_reject=%llu spec_reject=%llu req=%llu b12_map=%llu/%llu q=%u "
+        "source_reject=%llu blend_hold=%llu probe_reject=%llu spec_reject=%llu req=%llu b12_map=%llu/%llu srv_shadow=%llu/%llu q=%u "
+        "native_draw=%llu/%llu/%llu reject=%llu restore_fail=%llu hook=%u nq=%u "
         "lerp_reg=%llu/%llu lerp_candidate=%llu lerp_req=%llu lerp_pipe=%llu/%llu bind=%llu/%llu miss=%llu conflict=%llu",
         tag,
         static_cast<unsigned long long>(
@@ -3357,7 +3762,23 @@ void log_state(const char *tag) noexcept
             env_draw.b12_uploads),
         static_cast<unsigned long long>(
             env_draw.b12_reuses),
+        static_cast<unsigned long long>(
+            env_draw.srv_shadow_hits),
+        static_cast<unsigned long long>(
+            env_draw.srv_shadow_fallbacks),
         env_draw.quarantined ? 1u : 0u,
+        static_cast<unsigned long long>(
+            pmetal_native.armed),
+        static_cast<unsigned long long>(
+            pmetal_native.draw_applied),
+        static_cast<unsigned long long>(
+            pmetal_native.draw_indexed_applied),
+        static_cast<unsigned long long>(
+            pmetal_native.arm_reject),
+        static_cast<unsigned long long>(
+            pmetal_native.restore_fail),
+        pmetal_native.hook_active ? 1u : 0u,
+        pmetal_native.quarantined ? 1u : 0u,
         static_cast<unsigned long long>(
             env_draw.lerp_replacement_register_ok),
         static_cast<unsigned long long>(
@@ -3486,26 +3907,49 @@ void log_state(const char *tag) noexcept
 
 void on_init_device(reshade::api::device *device)
 {
-    g_bloom_scene_sidecar.on_init_device(device);
     g_a1_bridge.on_init_device(device);
+    if (!k_drawtime_islands_runtime_enabled)
+        return;
+
+    // Q8 Bloom scene sidecar has no authorized production writer/consumer.
+    // Keep its resource allocation diagnostic-only until that graph closes.
+    if (g_hot_telemetry_enabled)
+        g_bloom_scene_sidecar.on_init_device(device);
     g_mr_draw_runtime.on_init_device(device);
     g_pmetal_envspec.on_init_device(device);
+    if (k_pmetal_native_draw_runtime_enabled) {
+        if (!g_pmetal_native_draw.install(device)) {
+            reshade::log::message(
+                reshade::log::level::warning,
+                "[DSRRL RUNTIME V2] P_Metal native original-draw bridge unavailable; P_Metal falls back to the legacy replay path.");
+        } else {
+            reshade::log::message(
+                reshade::log::level::info,
+                "[DSRRL RUNTIME V2] P_Metal native original-draw bridge ACTIVE: addon callback prepares exact state, original D3D11 Draw executes once, state restores after draw.");
+        }
+    }
     g_upper_lower_hemenv.on_init_device(device);
     g_hemdir3.on_init_device(device);
 }
 
 void on_destroy_device(reshade::api::device *device)
 {
-    g_bloom_scene_sidecar.on_destroy_device(device);
-    g_upper_lower.on_destroy_device(device);
-    g_upper_lower_hemenv.on_destroy_device(device);
-    g_hemdir3.on_destroy_device(device);
-    g_pmetal_envspec.on_destroy_device(device);
-    g_fixed_pointlight.on_destroy_device(device);
-    g_fixed_pointlight_pipeline.on_destroy_device(device);
-    g_clustered_pnts.on_destroy_device(device);
-    g_clustered_pnts_pipeline.on_destroy_device(device);
-    g_mr_draw_runtime.on_destroy_device(device);
+    dsrrl::runtime::pixel_srv_shadow_reset();
+
+    if (k_drawtime_islands_runtime_enabled) {
+        g_pmetal_native_draw.uninstall();
+        g_draw_transactions.on_destroy_device(device);
+        g_bloom_scene_sidecar.on_destroy_device(device);
+        g_upper_lower.on_destroy_device(device);
+        g_upper_lower_hemenv.on_destroy_device(device);
+        g_hemdir3.on_destroy_device(device);
+        g_pmetal_envspec.on_destroy_device(device);
+        g_fixed_pointlight.on_destroy_device(device);
+        g_fixed_pointlight_pipeline.on_destroy_device(device);
+        g_clustered_pnts.on_destroy_device(device);
+        g_clustered_pnts_pipeline.on_destroy_device(device);
+        g_mr_draw_runtime.on_destroy_device(device);
+    }
     g_a1_bridge.on_destroy_device(device);
 }
 
@@ -3593,6 +4037,21 @@ bool on_create_pipeline(
     std::uint32_t subobject_count,
     const reshade::api::pipeline_subobject *subobjects)
 {
+    if (!k_drawtime_islands_runtime_enabled) {
+        const bool a1_changed =
+            g_a1_bridge.on_create_pipeline(
+                device,
+                layout,
+                subobject_count,
+                subobjects);
+        const bool motion_blur_changed =
+            motion_blur_camera_fallback_disable::
+                on_create_pipeline(
+                    subobject_count,
+                    subobjects);
+        return a1_changed || motion_blur_changed;
+    }
+
     const auto *pixel_shader =
         find_pixel_shader(
             subobject_count,
@@ -3668,9 +4127,10 @@ bool on_create_pipeline(
             }
         }
 
-        clustered_pnts =
-            dsrrl::operators::point_light::
-                materialize_clustered_pnts_direct_ptde(
+        if (k_pointlight_drawtime_runtime_enabled) {
+            clustered_pnts =
+                dsrrl::operators::point_light::
+                    materialize_clustered_pnts_direct_ptde(
                     source,
                     pixel_shader->code_size,
                     clustered_pnts_payload);
@@ -3813,6 +4273,7 @@ bool on_create_pipeline(
                 ++g_local_specular_fixed_plan_fail;
             }
         }
+        }
 
         std::vector<std::uint8_t> mr_payload;
         const auto mr =
@@ -3894,9 +4355,12 @@ bool on_create_pipeline(
                 }
             }
 
-            // Upper/Lower is independently materialized for its own exact
-            // consumer path. Subsurface never depends on this replacement.
-            std::vector<std::uint8_t> mr_ul_payload;
+            // Upper/Lower composition is construction work for an optional
+            // island. When U/L is disabled, do not build/register dead shader
+            // variants while an area is streaming.
+            if (g_core.features().enabled(
+                    dsrrl::core::operator_id::upper_lower)) {
+                std::vector<std::uint8_t> mr_ul_payload;
             const auto mr_ul =
                 dsrrl::operators::lightbank::
                     augment_upper_lower_hemenv_verified_base(
@@ -3935,6 +4399,7 @@ bool on_create_pipeline(
                             pass_unknown_exact_sha) {
                 ++g_mr_ul_payload_materialize_fail;
             }
+            }
         } else if (
             mr.result != mr_result::pass_not_candidate &&
             mr.result != mr_result::pass_unknown_exact_sha &&
@@ -3945,22 +4410,12 @@ bool on_create_pipeline(
             ++g_mr_payload_materialize_fail;
         }
 
-        // Exact HemEnvLerp is a distinct executable family that shares the
-        // semantic receiver namespace 24..47. Build the clean stock->PTDE
-        // diffuse response under a separate replacement object. c101/F0 and
-        // generic SpecRGB/PBL mutation are intentionally absent.
-        std::vector<std::uint8_t> lerp_mr_payload;
-        const auto lerp_mr =
-            dsrrl::operators::material_response::
-                materialize_ptde_diffuse_response_v1(
-                    g_core.features(),
-                    source,
-                    pixel_shader->code_size,
-                    lerp_mr_payload);
-
-        using lerp_mr_result =
-            dsrrl::operators::material_response::
-                diffuse_v1_result;
+        // The single diffuse-v1 materialization above already classifies
+        // stable HemEnv versus HemEnvLerp. Reuse its exact output instead of
+        // reparsing/rehashing the same DXBC a second time during streaming.
+        const auto &lerp_mr = mr;
+        const auto &lerp_mr_payload = mr_payload;
+        using lerp_mr_result = mr_result;
 
         if (lerp_mr.result == lerp_mr_result::applied &&
             lerp_mr.family ==
@@ -3984,9 +4439,11 @@ bool on_create_pipeline(
             // MR reset: do not pair PTDE SpecRGB with the stock DSR
             // HemEnvLerp PBL tail. SpecRGB is operator-local elsewhere.
 
-            // U/L is an optional composed operator. Its failure must never
-            // remove the independently certified Lerp Material Response path.
-            std::vector<std::uint8_t> lerp_mr_ul_payload;
+            // U/L is optional and currently disabled by policy. Build its
+            // composed Lerp variant only when that island is explicitly on.
+            if (g_core.features().enabled(
+                    dsrrl::core::operator_id::upper_lower)) {
+                std::vector<std::uint8_t> lerp_mr_ul_payload;
             const auto lerp_mr_ul =
                 dsrrl::operators::lightbank::
                     augment_upper_lower_hemenv_verified_base(
@@ -4030,6 +4487,7 @@ bool on_create_pipeline(
                             pass_unknown_exact_sha) {
                 ++g_mr_ul_payload_materialize_fail;
             }
+            }
         } else if (
             lerp_mr.result != lerp_mr_result::pass_not_candidate &&
             lerp_mr.result != lerp_mr_result::pass_unknown_exact_sha &&
@@ -4063,20 +4521,66 @@ bool on_create_pipeline(
 
             if (envspec.result ==
                 envspec_result::applied) {
-                if (g_pmetal_envspec.
+                const bool registered =
+                    g_pmetal_envspec.
                         register_replacement(
                             envspec,
                             envspec_payload.data(),
-                            envspec_payload.size()))
+                            envspec_payload.size());
+                if (registered) {
                     ++g_envspec_payload_materialize_ok;
-                else
+#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG)
+                    if (!g_pmetal_full_ptde_create_ok_logged.exchange(
+                            true,
+                            std::memory_order_relaxed)) {
+                        char line[256]{};
+                        std::snprintf(
+                            line,
+                            sizeof(line),
+                            "[DSRRL PMETAL FULL PTDE HEMENV] create_materialized rx=%u bytes=%zu",
+                            static_cast<unsigned>(
+                                envspec.receiver_id),
+                            envspec_payload.size());
+                        reshade::log::message(
+                            reshade::log::level::info,
+                            line);
+                    }
+#endif
+                } else {
                     ++g_envspec_payload_materialize_fail;
+#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG)
+                    if (!g_pmetal_full_ptde_create_fail_logged.exchange(
+                            true,
+                            std::memory_order_relaxed))
+                        reshade::log::message(
+                            reshade::log::level::warning,
+                            "[DSRRL PMETAL FULL PTDE HEMENV] create_register_reject");
+#endif
+                }
             } else if (
                 envspec.result !=
                     envspec_result::pass_not_candidate &&
                 envspec.result !=
                     envspec_result::pass_unknown_exact_sha) {
                 ++g_envspec_payload_materialize_fail;
+#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG)
+                if (!g_pmetal_full_ptde_create_fail_logged.exchange(
+                        true,
+                        std::memory_order_relaxed)) {
+                    char line[256]{};
+                    std::snprintf(
+                        line,
+                        sizeof(line),
+                        "[DSRRL PMETAL FULL PTDE HEMENV] create_materialize_fail result=%u rx=%u",
+                        static_cast<unsigned>(
+                            envspec.result),
+                        static_cast<unsigned>(
+                            envspec.receiver_id));
+                    reshade::log::message(
+                        reshade::log::level::warning,
+                        line);
+                }
+#endif
             }
 
             std::vector<std::uint8_t>
@@ -4112,44 +4616,50 @@ bool on_create_pipeline(
             }
         }
 
-        std::vector<std::uint8_t> ul_payload;
-        ul =
-            dsrrl::operators::lightbank::
-                materialize_upper_lower_hemenv_receiver(
-                    g_core.features(),
-                    source,
-                    pixel_shader->code_size,
-                    ul_payload);
+        if (g_core.features().enabled(
+                dsrrl::core::operator_id::upper_lower)) {
+            std::vector<std::uint8_t> ul_payload;
+            ul =
+                dsrrl::operators::lightbank::
+                    materialize_upper_lower_hemenv_receiver(
+                        g_core.features(),
+                        source,
+                        pixel_shader->code_size,
+                        ul_payload);
 
-        if (ul.result ==
-            dsrrl::operators::lightbank::
-                upper_lower_hemenv_materialize_result::applied) {
-            ul_identity_ready = true;
-            ul_replacement_ready =
-                g_upper_lower_hemenv.register_replacement(
-                    ul,
-                    ul_payload.data(),
-                    ul_payload.size());
+            if (ul.result ==
+                dsrrl::operators::lightbank::
+                    upper_lower_hemenv_materialize_result::applied) {
+                ul_identity_ready = true;
+                ul_replacement_ready =
+                    g_upper_lower_hemenv.register_replacement(
+                        ul,
+                        ul_payload.data(),
+                        ul_payload.size());
+            }
         }
 
-        std::vector<std::uint8_t> h3_payload;
-        h3 =
-            dsrrl::operators::lightbank::
-                materialize_hemdir3_b13_receiver(
-                    g_core.features(),
-                    source,
-                    pixel_shader->code_size,
-                    h3_payload);
+        if (g_core.features().enabled(
+                dsrrl::core::operator_id::hemdir3)) {
+            std::vector<std::uint8_t> h3_payload;
+            h3 =
+                dsrrl::operators::lightbank::
+                    materialize_hemdir3_b13_receiver(
+                        g_core.features(),
+                        source,
+                        pixel_shader->code_size,
+                        h3_payload);
 
-        if (h3.result ==
-            dsrrl::operators::lightbank::
-                hemdir3_b13_materialize_result::applied) {
-            h3_identity_ready = true;
-            h3_replacement_ready =
-                g_hemdir3.register_replacement(
-                    h3,
-                    h3_payload.data(),
-                    h3_payload.size());
+            if (h3.result ==
+                dsrrl::operators::lightbank::
+                    hemdir3_b13_materialize_result::applied) {
+                h3_identity_ready = true;
+                h3_replacement_ready =
+                    g_hemdir3.register_replacement(
+                        h3,
+                        h3_payload.data(),
+                        h3_payload.size());
+            }
         }
     }
 
@@ -4160,7 +4670,8 @@ bool on_create_pipeline(
             subobject_count,
             subobjects);
 
-    if (clustered_pnts_candidate) {
+    if (k_pointlight_drawtime_runtime_enabled &&
+        clustered_pnts_candidate) {
         const auto *attested_host =
             find_pixel_shader(
                 subobject_count,
@@ -4257,9 +4768,11 @@ void on_init_pipeline(
     g_a1_bridge.on_init_pipeline(
         device, layout, subobject_count, subobjects, pipeline);
     const bool fixed_pointlight_init_exact =
+        k_pointlight_drawtime_runtime_enabled &&
         g_fixed_pointlight_pipeline.on_init_pipeline(
             device, subobject_count, subobjects, pipeline);
     const bool clustered_pointlight_init_exact =
+        k_pointlight_drawtime_runtime_enabled &&
         g_clustered_pnts_pipeline.on_init_pipeline(
             device, subobject_count, subobjects, pipeline);
     motion_blur_camera_fallback_disable::
@@ -4267,6 +4780,9 @@ void on_init_pipeline(
             subobject_count,
             subobjects,
             pipeline);
+
+    if (!k_drawtime_islands_runtime_enabled)
+        return;
 
     const auto *pixel_shader =
         find_pixel_shader(
@@ -4307,14 +4823,18 @@ void on_init_pipeline(
                     pixel_shader->code_size))
             draw_route_mask |= k_route_hemenvlerp;
 
-        if (dsrrl::runtime::
+        if (g_core.features().enabled(
+                dsrrl::core::operator_id::subsurface) &&
+            dsrrl::runtime::
                 subsurface_receiver_observe_pipeline(
                     pipeline.handle,
                     pixel_shader->code,
                     pixel_shader->code_size))
             draw_route_mask |= k_route_subsurface;
 
-        if (dsrrl::runtime::
+        if (g_core.features().enabled(
+                dsrrl::core::operator_id::hemdir3) &&
+            dsrrl::runtime::
                 hemdir3_receiver_observe_pipeline(
                     pipeline.handle,
                     pixel_shader->code,
@@ -4340,20 +4860,22 @@ void on_destroy_pipeline(
     reshade::api::device *device,
     reshade::api::pipeline pipeline)
 {
-    forget_integrated_draw_route(
-        pipeline.handle);
-    dsrrl::runtime::stable_receiver_forget_pipeline(
-        pipeline.handle);
-    dsrrl::runtime::hemenvlerp_receiver_forget_pipeline(
-        pipeline.handle);
-    dsrrl::runtime::subsurface_receiver_forget_pipeline(
-        pipeline.handle);
-    dsrrl::runtime::hemdir3_receiver_forget_pipeline(
-        pipeline.handle);
-    dsrrl::runtime::upper_lower_receiver_forget_pipeline(
-        pipeline.handle);
-    g_fixed_pointlight_pipeline.on_destroy_pipeline(pipeline);
-    g_clustered_pnts_pipeline.on_destroy_pipeline(pipeline);
+    if (k_drawtime_islands_runtime_enabled) {
+        forget_integrated_draw_route(
+            pipeline.handle);
+        dsrrl::runtime::stable_receiver_forget_pipeline(
+            pipeline.handle);
+        dsrrl::runtime::hemenvlerp_receiver_forget_pipeline(
+            pipeline.handle);
+        dsrrl::runtime::subsurface_receiver_forget_pipeline(
+            pipeline.handle);
+        dsrrl::runtime::hemdir3_receiver_forget_pipeline(
+            pipeline.handle);
+        dsrrl::runtime::upper_lower_receiver_forget_pipeline(
+            pipeline.handle);
+        g_fixed_pointlight_pipeline.on_destroy_pipeline(pipeline);
+        g_clustered_pnts_pipeline.on_destroy_pipeline(pipeline);
+    }
     motion_blur_camera_fallback_disable::
         on_destroy_pipeline(
             pipeline);
@@ -4374,6 +4896,9 @@ void on_bind_pipeline(
         on_bind_pipeline(
             stages,
             pipeline);
+
+    if (!k_drawtime_islands_runtime_enabled)
+        return;
 
     auto route_mask =
         observe_integrated_draw_route_bind(
@@ -4856,11 +5381,23 @@ void release_prepared_island_batch(
 struct draw_semantic_selection_guard {
     ~draw_semantic_selection_guard()
     {
-        g_upper_lower.consume_draw_selection();
-        g_fixed_pointlight.consume_draw_selection();
-        g_clustered_pnts.consume_draw_selection();
-        dsrrl::runtime::hemdir3_mode_transport::
-            consume_draw_selection();
+        if (!g_any_draw_selection_transport_active.load(
+                std::memory_order_relaxed))
+            return;
+
+        if (g_upper_lower_selection_transport_active.load(
+                std::memory_order_relaxed))
+            g_upper_lower.consume_draw_selection();
+        if (g_fixed_pointlight_selection_transport_active.load(
+                std::memory_order_relaxed))
+            g_fixed_pointlight.consume_draw_selection();
+        if (g_clustered_pointlight_selection_transport_active.load(
+                std::memory_order_relaxed))
+            g_clustered_pnts.consume_draw_selection();
+        if (g_hemdir3_selection_transport_active.load(
+                std::memory_order_relaxed))
+            dsrrl::runtime::hemdir3_mode_transport::
+                consume_draw_selection();
     }
 };
 
@@ -4983,6 +5520,34 @@ bool prepare_island_batch(
             cmd_list,
             prepared.clustered_shader)) {
         hot_count(g_clustered_draw_pipeline_ready);
+
+        // The current clustered PntS journal owns PTDE attenuation, diffuse
+        // material-domain and terminal SAT only. Its Spc host still contains
+        // the stock DSR microfacet/GGX local-specular window. Do not replay
+        // that partial hybrid as a PTDE local-specular island.
+        if (prepared.clustered_shader.spc) {
+            static std::atomic_bool
+                clustered_spc_incomplete_logged{false};
+            if (!clustered_spc_incomplete_logged.exchange(
+                    true,
+                    std::memory_order_relaxed)) {
+                reshade::log::message(
+                    reshade::log::level::warning,
+                    "[DSRRL POINTLIGHT APPLY] stage=clustered_spc_failopen_unmaterialized_legacy_specular");
+            }
+
+            g_clustered_pnts_pipeline.release_prepared_shader(
+                prepared.clustered_shader);
+            prepared.batch = {};
+            hot_count(g_clustered_draw_fail_open);
+            return false;
+        }
+
+        if (!g_pointlight_once_shader_ready.exchange(true)) {
+            reshade::log::message(
+                reshade::log::level::info,
+                "[DSRRL POINTLIGHT APPLY] stage=shader_ready");
+        }
         auto *context =
             reinterpret_cast<ID3D11DeviceContext *>(
                 cmd_list->get_native());
@@ -5057,6 +5622,11 @@ bool prepare_island_batch(
 
         if (sidecar_ready) {
             hot_count(g_clustered_draw_sidecar_ready);
+            if (!g_pointlight_once_sidecar_ready.exchange(true)) {
+                reshade::log::message(
+                    reshade::log::level::info,
+                    "[DSRRL POINTLIGHT APPLY] stage=sidecar_ready");
+            }
             const auto point =
                 dsrrl::core::operator_bit(
                     dsrrl::core::operator_id::point_light);
@@ -5152,6 +5722,11 @@ bool prepare_island_batch(
                 dsrrl::runtime::island_draw_batch_result::ready) {
                 prepared.clustered_in_batch = true;
                 hot_count(g_clustered_draw_batch_ready);
+                if (!g_pointlight_once_batch_ready.exchange(true)) {
+                    reshade::log::message(
+                        reshade::log::level::info,
+                        "[DSRRL POINTLIGHT APPLY] stage=batch_ready");
+                }
                 return true;
             }
         }
@@ -5409,22 +5984,31 @@ bool prepare_island_batch(
                 direct_ul_draw_applied,
                 upper_lower_identity);
 
-    // P_Metal EnvSpec owns the complete PS+b12+t12/t14+s12/s14 semantic
-    // island. Its source carrier and shader/CB/resource transaction are
-    // independent of visible U/L. Failure falls through to ordinary MR/U-L
-    // routing without borrowing any U/L state for EnvSpec.
+    // P_Metal EnvSpec owns the complete PS+b12+t10+t12/t14+s12/s14
+    // semantic island. Exact P_Metal must be atomic at draw time: once the
+    // exact material/owner/route/receiver gate matches, a failure anywhere in
+    // the dedicated island fails open to the original stock DSR draw. Never
+    // continue into generic diffuse-only MR, because that creates a partial
+    // P_Metal hybrid (PTDE c100/diffuse with stock DSR EnvSpec).
     const auto envspec_family =
         hemenvlerp_bound
             ? dsrrl::runtime::pmetal_envspec_receiver_family::hemenvlerp
             : dsrrl::runtime::pmetal_envspec_receiver_family::stable_hemenv;
 
-    if (decision.active &&
-        g_pmetal_envspec.prepare(
-            cmd_list,
+    const bool exact_pmetal_envspec =
+        dsrrl::runtime::exact_pmetal_envspec_candidate(
             material,
-            decision,
-            envspec_family,
-            prepared.envspec)) {
+            decision);
+
+    if (exact_pmetal_envspec) {
+        if (!g_pmetal_envspec.prepare(
+                cmd_list,
+                material,
+                decision,
+                envspec_family,
+                prepared.envspec))
+            return false;
+
         prepared.envspec_in_batch = true;
 
         if (dsrrl::runtime::append_island_draw_request(
@@ -5778,7 +6362,31 @@ bool on_draw(
     std::uint32_t first_vertex,
     std::uint32_t first_instance)
 {
-    if (dsrrl::runtime::bloom_fx_draw_transport::
+    if (g_raw_draw_replay_recursing)
+        return false;
+
+    if (k_empty_draw_callback_bisect)
+        return false;
+
+    if (k_draw_callback_only_bisect)
+        return false;
+
+    if (k_raw_draw_replay_bisect ||
+        k_raw_native_draw_reentry_min_bisect) {
+        g_raw_draw_replay_recursing = true;
+        const bool issued =
+            g_draw_transactions.raw_replay_draw(
+                cmd_list,
+                vertex_count,
+                instance_count,
+                first_vertex,
+                first_instance);
+        g_raw_draw_replay_recursing = false;
+        return issued;
+    }
+
+    if (g_hot_telemetry_enabled &&
+        dsrrl::runtime::bloom_fx_draw_transport::
             active_draw_scope())
         observe_bloom_fx_draw_authority();
 
@@ -5786,8 +6394,9 @@ bool on_draw(
     draw_semantic_selection_guard semantic_guard{};
 
     const auto route_mask =
-        integrated_draw_route_bound(
-            cmd_list);
+        active_integrated_draw_route(
+            integrated_draw_route_bound(
+                cmd_list));
 
     if (route_mask == 0u) {
         hot_count(g_draw_fast_skip);
@@ -5805,6 +6414,17 @@ bool on_draw(
         mark_effect_probe_mask(
             a1_effects,
             effect_probe_stage::applied);
+
+    // A1 owners are fully materialized at CreatePipeline. If no island on
+    // this bound pipeline needs a draw-specific carrier, the stock draw
+    // already executes the replacement shader and there is nothing to join,
+    // snapshot, replay or restore here.
+    if ((route_mask & k_dynamic_draw_route_mask) == 0u) {
+        hot_count(g_draw_fast_skip);
+        dsrrl::runtime::
+            material_owner_selection_clear();
+        return false;
+    }
 
     const auto route_candidates =
         route_candidate_effect_mask(
@@ -5965,6 +6585,84 @@ bool on_draw(
         receiver_id,
         decision.route_index);
 
+    if (k_pmetal_native_draw_runtime_enabled &&
+        prepared.envspec_in_batch &&
+        g_pmetal_native_draw.arm_draw(
+            cmd_list,
+            prepared.batch.mutation,
+            vertex_count,
+            instance_count,
+            first_vertex,
+            first_instance)) {
+        release_prepared_island_batch(
+            prepared);
+        // Return false so ReShade continues into its single original
+        // _orig->Draw/DrawInstanced call. The native bridge wraps that call
+        // with the exact prepared P_Metal mutation and restores afterwards.
+        return false;
+    }
+
+    if (k_state_capture_only_bisect) {
+        (void)g_draw_transactions.capture_only(
+            cmd_list,
+            prepared.batch.mutation);
+        release_prepared_island_batch(prepared);
+        return false;
+    }
+
+    if (k_native_state_mutate_restore_only_bisect) {
+        (void)g_draw_transactions.native_mutate_restore_only(
+            cmd_list,
+            prepared.batch.mutation);
+        release_prepared_island_batch(prepared);
+        return false;
+    }
+
+    if (k_core_transaction_only_bisect) {
+        (void)g_draw_transactions.core_transaction_only(
+            cmd_list,
+            prepared.batch.mutation);
+        release_prepared_island_batch(prepared);
+        return false;
+    }
+
+    if (k_state_capture_only_bisect) {
+        (void)g_draw_transactions.capture_only(
+            cmd_list,
+            prepared.batch.mutation);
+        release_prepared_island_batch(prepared);
+        return false;
+    }
+
+    if (k_native_state_mutate_restore_only_bisect) {
+        (void)g_draw_transactions.native_mutate_restore_only(
+            cmd_list,
+            prepared.batch.mutation);
+        release_prepared_island_batch(prepared);
+        return false;
+    }
+
+    if (k_core_transaction_only_bisect) {
+        (void)g_draw_transactions.core_transaction_only(
+            cmd_list,
+            prepared.batch.mutation);
+        release_prepared_island_batch(prepared);
+        return false;
+    }
+
+    if (k_state_transaction_only_bisect) {
+        (void)g_draw_transactions.mutate_restore_only(
+            cmd_list,
+            prepared.batch.mutation);
+        release_prepared_island_batch(prepared);
+        return false;
+    }
+
+    if (!k_draw_replay_runtime_enabled) {
+        release_prepared_island_batch(prepared);
+        return false;
+    }
+
     const auto dispatch =
         dsrrl::runtime::dispatch_island_draw_batch(
             g_draw_transactions,
@@ -5993,10 +6691,21 @@ bool on_draw(
 
     if (clustered_in_batch) {
         if (dsrrl::runtime::draw_tx_issued(
-                dispatch.transaction))
+                dispatch.transaction)) {
             hot_count(g_clustered_draw_applied);
-        else
+            if (!g_pointlight_once_applied.exchange(true)) {
+                reshade::log::message(
+                    reshade::log::level::info,
+                    "[DSRRL POINTLIGHT APPLY] stage=applied");
+                // Diagnostic only: capture RT identity on the same first-hit
+                // latch. No native RT/viewport queries remain on subsequent
+                // PointLight draws, including the 480x270 water reflection pass.
+                observe_pointlight_render_target(
+                    cmd_list);
+            }
+        } else {
             hot_count(g_clustered_draw_fail_open);
+        }
 
         if (dispatch.transaction ==
             dsrrl::runtime::draw_tx_result::
@@ -6046,7 +6755,32 @@ bool on_draw_indexed(
     std::int32_t vertex_offset,
     std::uint32_t first_instance)
 {
-    if (dsrrl::runtime::bloom_fx_draw_transport::
+    if (g_raw_draw_replay_recursing)
+        return false;
+
+    if (k_empty_draw_callback_bisect)
+        return false;
+
+    if (k_draw_callback_only_bisect)
+        return false;
+
+    if (k_raw_draw_replay_bisect ||
+        k_raw_native_draw_reentry_min_bisect) {
+        g_raw_draw_replay_recursing = true;
+        const bool issued =
+            g_draw_transactions.raw_replay_draw_indexed(
+                cmd_list,
+                index_count,
+                instance_count,
+                first_index,
+                vertex_offset,
+                first_instance);
+        g_raw_draw_replay_recursing = false;
+        return issued;
+    }
+
+    if (g_hot_telemetry_enabled &&
+        dsrrl::runtime::bloom_fx_draw_transport::
             active_draw_scope())
         observe_bloom_fx_draw_authority();
 
@@ -6054,8 +6788,9 @@ bool on_draw_indexed(
     draw_semantic_selection_guard semantic_guard{};
 
     const auto route_mask =
-        integrated_draw_route_bound(
-            cmd_list);
+        active_integrated_draw_route(
+            integrated_draw_route_bound(
+                cmd_list));
 
     if (route_mask == 0u) {
         hot_count(g_draw_fast_skip);
@@ -6073,6 +6808,17 @@ bool on_draw_indexed(
         mark_effect_probe_mask(
             a1_effects,
             effect_probe_stage::applied);
+
+    // A1 owners are fully materialized at CreatePipeline. If no island on
+    // this bound pipeline needs a draw-specific carrier, the stock draw
+    // already executes the replacement shader and there is nothing to join,
+    // snapshot, replay or restore here.
+    if ((route_mask & k_dynamic_draw_route_mask) == 0u) {
+        hot_count(g_draw_fast_skip);
+        dsrrl::runtime::
+            material_owner_selection_clear();
+        return false;
+    }
 
     const auto route_candidates =
         route_candidate_effect_mask(
@@ -6215,6 +6961,37 @@ bool on_draw_indexed(
         receiver_id,
         decision.route_index);
 
+    if (k_pmetal_native_draw_runtime_enabled &&
+        prepared.envspec_in_batch &&
+        g_pmetal_native_draw.arm_draw_indexed(
+            cmd_list,
+            prepared.batch.mutation,
+            index_count,
+            instance_count,
+            first_index,
+            vertex_offset,
+            first_instance)) {
+        release_prepared_island_batch(
+            prepared);
+        // Return false so ReShade executes exactly one original
+        // _orig->DrawIndexed/DrawIndexedInstanced call under the native
+        // P_Metal state wrapper.
+        return false;
+    }
+
+    if (k_state_transaction_only_bisect) {
+        (void)g_draw_transactions.mutate_restore_only(
+            cmd_list,
+            prepared.batch.mutation);
+        release_prepared_island_batch(prepared);
+        return false;
+    }
+
+    if (!k_draw_replay_runtime_enabled) {
+        release_prepared_island_batch(prepared);
+        return false;
+    }
+
     const auto dispatch =
         dsrrl::runtime::dispatch_island_draw_indexed_batch(
             g_draw_transactions,
@@ -6244,10 +7021,21 @@ bool on_draw_indexed(
 
     if (clustered_in_batch) {
         if (dsrrl::runtime::draw_tx_issued(
-                dispatch.transaction))
+                dispatch.transaction)) {
             hot_count(g_clustered_draw_applied);
-        else
+            if (!g_pointlight_once_applied.exchange(true)) {
+                reshade::log::message(
+                    reshade::log::level::info,
+                    "[DSRRL POINTLIGHT APPLY] stage=applied");
+                // Diagnostic only: capture RT identity on the same first-hit
+                // latch. No native RT/viewport queries remain on subsequent
+                // PointLight draws, including the 480x270 water reflection pass.
+                observe_pointlight_render_target(
+                    cmd_list);
+            }
+        } else {
             hot_count(g_clustered_draw_fail_open);
+        }
 
         if (dispatch.transaction ==
             dsrrl::runtime::draw_tx_result::
@@ -6315,6 +7103,21 @@ void on_present(
         log_effect_matrix("LIVE");
 }
 
+void on_push_descriptors(
+    reshade::api::command_list *cmd_list,
+    reshade::api::shader_stage stages,
+    reshade::api::pipeline_layout layout,
+    std::uint32_t param_index,
+    const reshade::api::descriptor_table_update &update)
+{
+    dsrrl::runtime::pixel_srv_shadow_on_push_descriptors(
+        cmd_list,
+        stages,
+        layout,
+        param_index,
+        update);
+}
+
 void register_events()
 {
     reshade::register_event<reshade::addon_event::init_device>(on_init_device);
@@ -6323,16 +7126,28 @@ void register_events()
     reshade::register_event<reshade::addon_event::init_pipeline>(on_init_pipeline);
     reshade::register_event<reshade::addon_event::destroy_pipeline>(on_destroy_pipeline);
     reshade::register_event<reshade::addon_event::bind_pipeline>(on_bind_pipeline);
-    reshade::register_event<reshade::addon_event::draw>(on_draw);
-    reshade::register_event<reshade::addon_event::draw_indexed>(on_draw_indexed);
-    reshade::register_event<reshade::addon_event::present>(on_present);
+    if (k_drawtime_islands_runtime_enabled &&
+        k_pmetal_srv_shadow_runtime_enabled)
+        reshade::register_event<reshade::addon_event::push_descriptors>(on_push_descriptors);
+    if (k_drawtime_islands_runtime_enabled &&
+        k_draw_callbacks_runtime_enabled) {
+        reshade::register_event<reshade::addon_event::draw>(on_draw);
+        reshade::register_event<reshade::addon_event::draw_indexed>(on_draw_indexed);
+        reshade::register_event<reshade::addon_event::present>(on_present);
+    }
 }
 
 void unregister_events()
 {
-    reshade::unregister_event<reshade::addon_event::present>(on_present);
-    reshade::unregister_event<reshade::addon_event::draw_indexed>(on_draw_indexed);
-    reshade::unregister_event<reshade::addon_event::draw>(on_draw);
+    if (k_drawtime_islands_runtime_enabled &&
+        k_draw_callbacks_runtime_enabled) {
+        reshade::unregister_event<reshade::addon_event::present>(on_present);
+        reshade::unregister_event<reshade::addon_event::draw_indexed>(on_draw_indexed);
+        reshade::unregister_event<reshade::addon_event::draw>(on_draw);
+    }
+    if (k_drawtime_islands_runtime_enabled &&
+        k_pmetal_srv_shadow_runtime_enabled)
+        reshade::unregister_event<reshade::addon_event::push_descriptors>(on_push_descriptors);
     reshade::unregister_event<reshade::addon_event::bind_pipeline>(on_bind_pipeline);
     reshade::unregister_event<reshade::addon_event::destroy_pipeline>(on_destroy_pipeline);
     reshade::unregister_event<reshade::addon_event::init_pipeline>(on_init_pipeline);
@@ -6364,6 +7179,40 @@ bool AddonInit(
     if (!reshade::register_addon(addon_module, reshade_module))
         return false;
 
+    if (k_addon_loaded_only_bisect) {
+        reshade::log::message(
+            reshade::log::level::info,
+            "[DSRRL CALLBACK CUT] ADDON_LOADED_ONLY: addon registered; no DSRRL events, pipeline callbacks, draw callbacks or runtime transports installed.");
+        char build_identity[768]{};
+        std::snprintf(
+            build_identity,
+            sizeof(build_identity),
+            "[DSRRL BUILD_ID] version=%s source_commit=%s flavor=%s",
+            DSRRL_CORE_ISLANDS_VERSION,
+            DSRRL_SOURCE_COMMIT,
+            DSRRL_BUILD_FLAVOR);
+        reshade::log::message(reshade::log::level::info, build_identity);
+        return true;
+    }
+
+    if (k_draw_callback_only_bisect) {
+        reshade::register_event<reshade::addon_event::draw>(on_draw);
+        reshade::register_event<reshade::addon_event::draw_indexed>(on_draw_indexed);
+        reshade::log::message(
+            reshade::log::level::info,
+            "[DSRRL CALLBACK CUT] DRAW_CALLBACK_ONLY: only empty draw/draw_indexed callbacks registered; no DSRRL pipeline events or runtime transports installed.");
+        char build_identity[768]{};
+        std::snprintf(
+            build_identity,
+            sizeof(build_identity),
+            "[DSRRL BUILD_ID] version=%s source_commit=%s flavor=%s",
+            DSRRL_CORE_ISLANDS_VERSION,
+            DSRRL_SOURCE_COMMIT,
+            DSRRL_BUILD_FLAVOR);
+        reshade::log::message(reshade::log::level::info, build_identity);
+        return true;
+    }
+
     // Render-hot telemetry is opt-in. Production/default execution avoids
     // synchronized counter RMWs on every draw; set DSRRL_RUNTIME_TELEMETRY=1
     // for receiver/island census sessions.
@@ -6380,10 +7229,12 @@ bool AddonInit(
     g_mr_draw_runtime.reset();
     g_material_resources.reset();
     g_envspec_resources.reset_stats();
+    dsrrl::runtime::pixel_srv_shadow_reset();
     g_bloom_scene_sidecar.reset();
     dsrrl::runtime::bloom_fx_draw_transport::reset_stats();
     g_pmetal_envspec.reset();
     g_pmetal_source.reset();
+    g_pmetal_native_draw.reset_telemetry();
     g_upper_lower.reset();
     g_upper_lower_hemenv.reset();
     g_hemdir3.reset();
@@ -6407,6 +7258,17 @@ bool AddonInit(
     g_pointlight_gate_log_mask.store(0u);
     g_pointlight_prep_log_mask.store(0u);
     g_pointlight_active_logged.store(false);
+    g_pointlight_once_shader_ready.store(false);
+    g_pointlight_once_sidecar_ready.store(false);
+    g_pointlight_once_batch_ready.store(false);
+    g_pointlight_once_applied.store(false);
+    for (auto &slot : g_pointlight_rt_signatures)
+        slot.store(0u, std::memory_order_relaxed);
+    g_upper_lower_selection_transport_active.store(false);
+    g_hemdir3_selection_transport_active.store(false);
+    g_fixed_pointlight_selection_transport_active.store(false);
+    g_clustered_pointlight_selection_transport_active.store(false);
+    g_any_draw_selection_transport_active.store(false);
     g_mr_ul_payload_materialize_ok.store(0);
     g_mr_ul_payload_materialize_fail.store(0);
     g_subsurface_spec_payload_materialize_ok.store(0);
@@ -6509,6 +7371,61 @@ bool AddonInit(
 
     register_events();
 
+    if (k_drawtime_islands_runtime_enabled &&
+        k_draw_callbacks_runtime_enabled &&
+        k_raw_draw_replay_bisect) {
+        reshade::log::message(
+            reshade::log::level::info,
+            "[DSRRL CORE+ISLANDS " DSRRL_CORE_ISLANDS_VERSION
+            "] RAW DRAW REPLAY BISECT: draw callbacks issue one stock native Draw/DrawIndexed and suppress the original; DSRRL semantic preparation and state mutation are skipped.");
+    } else if (k_drawtime_islands_runtime_enabled &&
+               k_draw_callbacks_runtime_enabled &&
+               k_state_transaction_only_bisect) {
+        reshade::log::message(
+            reshade::log::level::info,
+            "[DSRRL CORE+ISLANDS " DSRRL_CORE_ISLANDS_VERSION
+            "] STATE TRANSACTION ONLY BISECT: full routing/preparation plus begin(snapshot+mutation) and restore are active, but no replacement Draw/DrawIndexed is issued.");
+    } else if (k_drawtime_islands_runtime_enabled &&
+        k_draw_callbacks_runtime_enabled &&
+        k_empty_draw_callback_bisect) {
+        reshade::log::message(
+            reshade::log::level::info,
+            "[DSRRL CORE+ISLANDS " DSRRL_CORE_ISLANDS_VERSION
+            "] EMPTY DRAW CALLBACK BISECT: dynamic transports and draw callbacks are installed, but draw/draw_indexed return immediately before all DSRRL draw work.");
+    } else if (k_drawtime_islands_runtime_enabled &&
+        !k_draw_callbacks_runtime_enabled) {
+        reshade::log::message(
+            reshade::log::level::info,
+            "[DSRRL CORE+ISLANDS " DSRRL_CORE_ISLANDS_VERSION
+            "] DRAW CALLBACKS BYPASSED: all dynamic FLVER/MTD/resource transports remain installed; draw/draw_indexed/present callbacks are omitted.");
+    } else if (k_drawtime_islands_runtime_enabled &&
+               !k_draw_replay_runtime_enabled) {
+        reshade::log::message(
+            reshade::log::level::info,
+            "[DSRRL CORE+ISLANDS " DSRRL_CORE_ISLANDS_VERSION
+            "] DRAW REPLAY BYPASSED: dynamic transports, draw routing, semantic joins and island preparation remain active; prepared islands are released before snapshot/mutate/replay/restore.");
+    }
+
+    if (!k_drawtime_islands_runtime_enabled) {
+        reshade::log::message(
+            reshade::log::level::info,
+            "[DSRRL CORE+ISLANDS " DSRRL_CORE_ISLANDS_VERSION
+            "] DRAW-TIME ISLANDS BYPASSED: A1 and MotionBlur create-time replacements remain active; FLVER/MTD selector transport, texture/resource bridges, P_Metal, PointLight and draw replay are not installed.");
+
+        char build_identity[768]{};
+        std::snprintf(
+            build_identity,
+            sizeof(build_identity),
+            "[DSRRL BUILD_ID] version=%s source_commit=%s flavor=%s",
+            DSRRL_CORE_ISLANDS_VERSION,
+            DSRRL_SOURCE_COMMIT,
+            DSRRL_BUILD_FLAVOR);
+        reshade::log::message(
+            reshade::log::level::info,
+            build_identity);
+        return true;
+    }
+
     if (!g_material_resources.register_events()) {
         unregister_events();
         disable_integrated_islands();
@@ -6539,8 +7456,18 @@ bool AddonInit(
             "] texture identity hooks FAIL-OPEN: SpecRGB/Diffuse/Normal sidecars remain stock.");
     }
 
+    const bool upper_lower_enabled =
+        g_core.features().enabled(
+            dsrrl::core::operator_id::upper_lower);
+    const bool hemdir3_enabled =
+        g_core.features().enabled(
+            dsrrl::core::operator_id::hemdir3);
+
     const bool flver_hooks =
-        dsrrl::runtime::flver_identity_transport::install();
+        dsrrl::runtime::flver_identity_transport::install(
+            k_pointlight_drawtime_runtime_enabled,
+            upper_lower_enabled,
+            hemdir3_enabled);
 
     if (!flver_hooks) {
         reshade::log::message(
@@ -6550,10 +7477,20 @@ bool AddonInit(
     }
 
     const bool fixed_pointlight_hooks =
+        k_pointlight_drawtime_runtime_enabled &&
         flver_hooks &&
         g_fixed_pointlight.install();
 
-    if (!fixed_pointlight_hooks) {
+    g_fixed_pointlight_selection_transport_active.store(
+        fixed_pointlight_hooks,
+        std::memory_order_release);
+
+    if (!k_pointlight_drawtime_runtime_enabled) {
+        reshade::log::message(
+            reshade::log::level::info,
+            "[DSRRL CORE+ISLANDS " DSRRL_CORE_ISLANDS_VERSION
+            "] PointLight draw-time runtime BYPASSED by diagnostic policy: fixed producer hook, clustered producer hook, PointLight pipeline routing and draw-time carrier/replay are inactive; stock DSR PointLight is preserved.");
+    } else if (!fixed_pointlight_hooks) {
         reshade::log::message(
             reshade::log::level::warning,
             "[DSRRL CORE+ISLANDS " DSRRL_CORE_ISLANDS_VERSION
@@ -6561,10 +7498,16 @@ bool AddonInit(
     }
 
     const bool clustered_pointlight_hooks =
+        k_pointlight_drawtime_runtime_enabled &&
         flver_hooks &&
         g_clustered_pnts.install();
 
-    if (!clustered_pointlight_hooks) {
+    g_clustered_pointlight_selection_transport_active.store(
+        clustered_pointlight_hooks,
+        std::memory_order_release);
+
+    if (k_pointlight_drawtime_runtime_enabled &&
+        !clustered_pointlight_hooks) {
         reshade::log::message(
             reshade::log::level::warning,
             "[DSRRL CORE+ISLANDS " DSRRL_CORE_ISLANDS_VERSION
@@ -6596,13 +7539,14 @@ bool AddonInit(
             "] Bloom FX diagnostic hooks disabled for production runtime.");
     }
 
-    const bool hemdir3_enabled =
-        g_core.features().enabled(
-            dsrrl::core::operator_id::hemdir3);
     const bool hemdir3_mode_hooks =
         !hemdir3_enabled ||
         (flver_hooks &&
          dsrrl::runtime::hemdir3_mode_transport::install());
+
+    g_hemdir3_selection_transport_active.store(
+        hemdir3_enabled && hemdir3_mode_hooks,
+        std::memory_order_release);
 
     if (hemdir3_enabled && !hemdir3_mode_hooks) {
         reshade::log::message(
@@ -6624,30 +7568,37 @@ bool AddonInit(
             "] Subsurface visible bridge DISABLED by runtime policy; stock DSR body/Subsurface is preserved.");
     }
 
-    const bool upper_lower_enabled =
-        g_core.features().enabled(
-            dsrrl::core::operator_id::upper_lower);
     bool pmetal_envspec_enabled =
         g_core.features().enabled(
             dsrrl::core::operator_id::env_spec);
     const bool pmetal_source_ready =
         !pmetal_envspec_enabled ||
-        upper_lower_enabled ||
         (flver_hooks &&
          g_pmetal_source.install());
 
-    // Runtime-liveness guard: do not arm the Upper/Lower LightBank hook set
-    // solely as a carrier for P_Metal EnvSpec. Two consecutive owner runtime
-    // failures occurred while EnvSpec source capture was coupled to the broad
-    // shared U/L reference runtime, so they do not isolate the recovered V13
-    // source carrier by itself. The EnvSpec carrier is now independent; shared
-    // visible U/L state remains disabled unless U/L is explicitly enabled.
+    // EnvSpec uses embedded PTDE donors selected by an exact FLVER callback.
+    // Only visible U/L may arm the global LightBank hook set.
     const bool lightbank_reference_transport_required =
         upper_lower_enabled;
     const bool lightbank_reference_hooks =
         !lightbank_reference_transport_required ||
         (flver_hooks &&
          g_upper_lower.install(false));
+
+    g_upper_lower_selection_transport_active.store(
+        upper_lower_enabled && lightbank_reference_hooks,
+        std::memory_order_release);
+
+    g_any_draw_selection_transport_active.store(
+        g_upper_lower_selection_transport_active.load(
+            std::memory_order_relaxed) ||
+        g_hemdir3_selection_transport_active.load(
+            std::memory_order_relaxed) ||
+        g_fixed_pointlight_selection_transport_active.load(
+            std::memory_order_relaxed) ||
+        g_clustered_pointlight_selection_transport_active.load(
+            std::memory_order_relaxed),
+        std::memory_order_release);
 
     if (!upper_lower_enabled) {
         reshade::log::message(
@@ -6664,16 +7615,7 @@ bool AddonInit(
             "] LightBank transport FAIL-OPEN: U/L stays stock.");
     }
 
-    if (pmetal_envspec_enabled &&
-        upper_lower_enabled) {
-        (void)g_core.features().set(
-            dsrrl::core::operator_id::env_spec,
-            false);
-        pmetal_envspec_enabled = false;
-        reshade::log::message(
-            reshade::log::level::warning,
-            "[DSRRL PMETAL ENVSPEC] SOURCE FAIL-OPEN: EnvSpec source carrier is exclusive with visible U/L.");
-    } else if (
+    if (
         pmetal_envspec_enabled &&
         !pmetal_source_ready) {
         (void)g_core.features().set(
@@ -6682,13 +7624,29 @@ bool AddonInit(
         pmetal_envspec_enabled = false;
         reshade::log::message(
             reshade::log::level::warning,
-            "[DSRRL PMETAL ENVSPEC] SOURCE FAIL-OPEN: isolated V13 carrier unavailable; stock DSR EnvSpec preserved.");
+            "[DSRRL PMETAL ENVSPEC] SOURCE FAIL-OPEN: exact selector PTDE donor carrier unavailable; stock DSR EnvSpec preserved.");
     } else if (
         pmetal_envspec_enabled &&
         pmetal_source_ready) {
         reshade::log::message(
             reshade::log::level::info,
-            "[DSRRL PMETAL ENVSPEC] isolated V13 source carrier ACTIVE; visible U/L remains stock/off.");
+            "[DSRRL PMETAL ENVSPEC] exact selector carrier + narrow retail LightBank single/blend PTDE source fallback ACTIVE; visible U/L remains stock/off.");
+    }
+
+    publish_active_dynamic_draw_routes();
+
+    {
+        char route_line[256]{};
+        std::snprintf(
+            route_line,
+            sizeof(route_line),
+            "[DSRRL RUNTIME V2] active_dynamic_route_mask=0x%02X (Subsurface/U-L/HemDir3 absent when disabled or unavailable)",
+            static_cast<unsigned>(
+                g_active_dynamic_draw_route_mask.load(
+                    std::memory_order_relaxed)));
+        reshade::log::message(
+            reshade::log::level::info,
+            route_line);
     }
 
     {
@@ -6726,11 +7684,24 @@ void AddonUninit(
     HMODULE addon_module,
     HMODULE reshade_module)
 {
+    if (k_addon_loaded_only_bisect) {
+        reshade::unregister_addon(addon_module, reshade_module);
+        return;
+    }
+
+    if (k_draw_callback_only_bisect) {
+        reshade::unregister_event<reshade::addon_event::draw_indexed>(on_draw_indexed);
+        reshade::unregister_event<reshade::addon_event::draw>(on_draw);
+        reshade::unregister_addon(addon_module, reshade_module);
+        return;
+    }
+
     unregister_events();
     log_state("PRE_UNLOAD");
     log_effect_matrix("PRE_UNLOAD");
     motion_blur_camera_fallback_disable::
         log_state("PRE_UNLOAD");
+    g_pmetal_native_draw.uninstall();
     g_pmetal_source.uninstall();
     g_upper_lower.uninstall();
 

@@ -14,6 +14,7 @@ if len(rows)!=3:
 
 expected=[9,10,11]
 expected_terminal_rgb_word={9:2904,10:2823,11:2476}
+expected_color0_register={9:6,10:7,11:6}
 expected_ul_sites={
     9:(1831,1835,1845),
     10:(1740,1744,1754),
@@ -45,6 +46,8 @@ for i,r in enumerate(rows):
         raise SystemExit("bad stock sha")
     if int(r["reflection_coord_register"]) not in (5,6,7):
         raise SystemExit("unexpected reflection coordinate register")
+    if int(r["color0_register"]) != expected_color0_register[pair]:
+        raise SystemExit(f"unexpected COLOR0 register for pair {pair}")
     for key,delta in required_offsets.items():
         if int(r[key]) != t12 + delta:
             raise SystemExit(f"{key} is not t12+{delta} for pair {pair}")
@@ -60,7 +63,7 @@ for i,r in enumerate(rows):
 
 fields=[
     "pair_index","semantic_receiver_id","label","stock_sha256",
-    "reflection_coord_register","t12_word","mul_a_word","t14_word",
+    "reflection_coord_register","color0_register","t12_word","mul_a_word","t14_word",
     "mad_b_minus_a_word","mad_lerp_word","postblend_word","t9_word",
     "t11_word","t13_word","envdiff_b_minus_a_word","envdiff_lerp_word",
     "envdiff_gain_word","merge_word","terminal_rgb_word",
@@ -80,6 +83,7 @@ lines=[
 "    std::string_view label;",
 "    std::string_view stock_sha256;",
 "    std::uint32_t reflection_coord_register;",
+"    std::uint32_t color0_register;",
 "    std::uint32_t t12_word;",
 "    std::uint32_t mul_a_word;",
 "    std::uint32_t t14_word;",

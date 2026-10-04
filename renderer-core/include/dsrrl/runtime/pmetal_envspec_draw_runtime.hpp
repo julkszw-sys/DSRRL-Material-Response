@@ -22,6 +22,8 @@
 struct ID3D11Buffer;
 struct ID3D11Device;
 struct ID3D11PixelShader;
+struct ID3D11ShaderResourceView;
+struct ID3D11SamplerState;
 
 namespace dsrrl::runtime {
 
@@ -30,12 +32,28 @@ enum class pmetal_envspec_receiver_family : std::uint8_t {
     hemenvlerp
 };
 
+// Exact draw-local gate shared by the dedicated P_Metal EnvSpec runtime and
+// the integrated dispatcher. This is intentionally stricter than route 345:
+// a route hit alone must never allow a failed dedicated P_Metal island to
+// fall through into generic diffuse-only Material Response.
+bool exact_pmetal_envspec_candidate(
+    const operators::material_response::material_identity &material,
+    const operators::material_response::decision &decision) noexcept;
+
 struct prepared_pmetal_envspec_draw {
     island_draw_adapter_request request{};
     prepared_envspec_resources env_resources{};
+    prepared_envdiffuse_resources envdiffuse_resources{};
     prepared_material_resource_draw material_resources{};
     ID3D11PixelShader *shader = nullptr;
     ID3D11Buffer *b12 = nullptr;
+    // R7 exact PTDE shadow sampler is AddRef-held for the replay lifetime.
+    ID3D11SamplerState *shadow_sampler = nullptr;
+
+    // Diagnostic-only native DSR EnvDiffuse ownership. PSGetShaderResources
+    // AddRefs these stock host SRVs; keep them alive until replay completes.
+    ID3D11ShaderResourceView *native_dsr_envdiffuse_a = nullptr;
+    ID3D11ShaderResourceView *native_dsr_envdiffuse_b = nullptr;
 
     bool ready = false;
 };
@@ -57,6 +75,8 @@ struct pmetal_envspec_telemetry {
     std::uint64_t lerp_requests = 0;
     std::uint64_t b12_uploads = 0;
     std::uint64_t b12_reuses = 0;
+    std::uint64_t srv_shadow_hits = 0;
+    std::uint64_t srv_shadow_fallbacks = 0;
 
     // Low-overhead effect ladder. These are one-way session latches used by
     // DSRRL_EFFECT_TELEMETRY and do not imply pixel equivalence.
@@ -132,7 +152,7 @@ private:
 
     struct b12_context_cache {
         ID3D11Buffer *buffer = nullptr;
-        std::array<std::uint8_t,64> payload{};
+        std::array<std::uint32_t,16> payload_bits{};
         bool payload_valid = false;
     };
 
@@ -145,6 +165,9 @@ private:
 
     mutable std::mutex mutex_;
     ID3D11Device *device_ = nullptr;
+    // Device-owned exact D3D11 equivalent of the PTDE stage-7 point/border
+    // shadow sampler. Only receiver 33/34 R7 draws may borrow it.
+    ID3D11SamplerState *shadow_sampler_ = nullptr;
     std::unordered_map<std::uint32_t,replacement_record>
         replacements_;
     std::unordered_map<std::uint32_t,ID3D11PixelShader *>
@@ -172,6 +195,8 @@ private:
     std::atomic<std::uint64_t> lerp_requests_{0};
     std::atomic<std::uint64_t> b12_uploads_{0};
     std::atomic<std::uint64_t> b12_reuses_{0};
+    std::atomic<std::uint64_t> srv_shadow_hits_{0};
+    std::atomic<std::uint64_t> srv_shadow_fallbacks_{0};
 
     std::atomic_bool effect_entry_seen_{false};
     std::atomic_bool effect_feature_ready_{false};

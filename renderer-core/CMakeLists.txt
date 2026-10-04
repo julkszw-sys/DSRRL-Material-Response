@@ -179,6 +179,9 @@ add_custom_command(
 add_custom_target(dsrrl_subsurface_plain_patch_header
     DEPENDS "${DSRRL_SUBSURFACE_PLAIN_PATCH_HEADER}")
 
+option(DSRRL_BUILD_PMETAL_R11_OFFLINE_TEST
+    "Build the stock-DXBC R11 common-merge materializer harness (fixtures supplied externally)"
+    OFF)
 option(DSRRL_BUILD_PHASE0_PROBE "Build the pixel-inert ReShade API20 Phase 0 probe addon" OFF)
 set(RESHade_INCLUDE_DIR "" CACHE PATH "Path to pinned ReShade include directory")
 
@@ -262,10 +265,20 @@ add_custom_target(dsrrl_clustered_pnts_activation_source_audit
     VERBATIM
 )
 
+add_custom_target(dsrrl_active_islands_hotpath_audit
+    COMMAND "${Python3_EXECUTABLE}"
+            "${CMAKE_CURRENT_SOURCE_DIR}/tools/audit_active_islands_hotpath.py"
+            --source-dir "${CMAKE_CURRENT_SOURCE_DIR}"
+    DEPENDS
+        "${CMAKE_CURRENT_SOURCE_DIR}/tools/audit_active_islands_hotpath.py"
+    VERBATIM
+)
+
 add_dependencies(
     dsrrl_renderer_core
     dsrrl_pointlight_core_source_audit
     dsrrl_clustered_pnts_activation_source_audit
+    dsrrl_active_islands_hotpath_audit
     dsrrl_native_envspec_probe_header
     dsrrl_dsr_flver_owner_tuple_header
     dsrrl_dsr_mtd_identity_supplement_header
@@ -583,3 +596,66 @@ add_test(
             --donors "${CMAKE_CURRENT_SOURCE_DIR}/data/provenance/ptde_material_donor_registry.hpp"
             --generated "${CMAKE_CURRENT_SOURCE_DIR}/include/dsrrl/operators/material_response/generated_material_constants_v1.hpp"
 )
+
+add_executable(dsrrl_pmetal_selector_policy_tests tests/pmetal_selector_policy_tests.cpp)
+target_include_directories(dsrrl_pmetal_selector_policy_tests PRIVATE include)
+target_compile_features(dsrrl_pmetal_selector_policy_tests PRIVATE cxx_std_17)
+add_test(NAME dsrrl_pmetal_selector_policy_tests COMMAND dsrrl_pmetal_selector_policy_tests)
+
+add_executable(
+    dsrrl_pmetal_producer_state_tests
+    tests/pmetal_producer_state_tests.cpp
+    src/runtime/pmetal_producer_state.cpp)
+target_include_directories(dsrrl_pmetal_producer_state_tests PRIVATE include)
+target_compile_features(dsrrl_pmetal_producer_state_tests PRIVATE cxx_std_17)
+add_test(NAME dsrrl_pmetal_producer_state_tests COMMAND dsrrl_pmetal_producer_state_tests)
+
+add_executable(dsrrl_pointlight_ptde_source_tests tests/pointlight_ptde_source_tests.cpp)
+target_include_directories(dsrrl_pointlight_ptde_source_tests PRIVATE include)
+target_compile_features(dsrrl_pointlight_ptde_source_tests PRIVATE cxx_std_17)
+add_test(NAME dsrrl_pointlight_ptde_source_tests COMMAND dsrrl_pointlight_ptde_source_tests)
+
+if(DSRRL_BUILD_PMETAL_R11_OFFLINE_TEST)
+    add_executable(
+        dsrrl_pmetal_r11_offline_test
+        tests/pmetal_r11_materializer_test.cpp
+        src/operators/material_response/material_response_diffuse_v1.cpp
+        src/operators/env_spec/pmetal_rgba_materializer.cpp)
+
+    target_link_libraries(
+        dsrrl_pmetal_r11_offline_test
+        PRIVATE
+        dsrrl_renderer_core)
+
+    target_compile_features(
+        dsrrl_pmetal_r11_offline_test
+        PRIVATE
+        cxx_std_17)
+
+    target_compile_definitions(
+        dsrrl_pmetal_r11_offline_test
+        PRIVATE
+        DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG
+        DSRRL_PMETAL_FORCE_PTDE_PACKEDGI
+        DSRRL_PMETAL_FULL_PTDE_HEMENV_R3
+        DSRRL_PMETAL_FULL_PTDE_HEMENV_R4
+        DSRRL_PMETAL_FULL_PTDE_HEMENV_R5
+        DSRRL_PMETAL_FULL_PTDE_HEMENV_R6
+        DSRRL_PMETAL_FULL_PTDE_HEMENV_R7_SHADOW
+        DSRRL_PMETAL_FULL_PTDE_HEMENV_R8_PRE_AB
+        DSRRL_PMETAL_FULL_PTDE_HEMENV_R11_COMMON_MERGE)
+
+    add_dependencies(
+        dsrrl_pmetal_r11_offline_test
+        dsrrl_mr_diffuse_v1_header)
+
+    if(MSVC)
+        target_compile_options(
+            dsrrl_pmetal_r11_offline_test
+            PRIVATE /W4 /WX)
+    else()
+        target_compile_options(
+            dsrrl_pmetal_r11_offline_test
+            PRIVATE -Wall -Wextra -Wpedantic -Werror -Wno-unused-function)
+    endif()
+endif()

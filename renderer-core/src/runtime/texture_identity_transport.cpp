@@ -57,7 +57,10 @@ struct hook {
 std::uintptr_t g_base = 0;
 hook g_name{}, g_clear{};
 hook_status g_status{};
-thread_local std::wstring g_logical_name;
+constexpr std::size_t k_logical_name_capacity = 512u;
+thread_local std::array<wchar_t,k_logical_name_capacity + 1u>
+    g_logical_name{};
+thread_local std::size_t g_logical_name_length = 0u;
 
 bool readable_range(
     const void *ptr,
@@ -367,43 +370,91 @@ bool exe_matches() noexcept
 void capture_name(
     const wchar_t *logical_name) noexcept
 {
-    g_logical_name.clear();
+    g_logical_name_length = 0u;
+    g_logical_name[0] = L'\0';
 
     if (logical_name == nullptr)
         return;
 
-    try {
-        constexpr std::size_t k_max = 512u;
-        bool terminated = false;
+    const auto begin =
+        reinterpret_cast<std::uintptr_t>(
+            logical_name);
+    auto cursor = begin;
+    std::size_t copied = 0u;
 
-        for (std::size_t i = 0;
-             i < k_max;
+    while (copied < k_logical_name_capacity) {
+        MEMORY_BASIC_INFORMATION mbi{};
+        if (VirtualQuery(
+                reinterpret_cast<const void *>(cursor),
+                &mbi,
+                sizeof(mbi)) != sizeof(mbi))
+            return;
+
+        if (mbi.State != MEM_COMMIT ||
+            (mbi.Protect & PAGE_GUARD) != 0u)
+            return;
+
+        const DWORD access =
+            mbi.Protect & 0xffu;
+        const bool readable =
+            access == PAGE_READONLY ||
+            access == PAGE_READWRITE ||
+            access == PAGE_WRITECOPY ||
+            access == PAGE_EXECUTE_READ ||
+            access == PAGE_EXECUTE_READWRITE ||
+            access == PAGE_EXECUTE_WRITECOPY;
+        if (!readable)
+            return;
+
+        const auto region_end =
+            reinterpret_cast<std::uintptr_t>(
+                mbi.BaseAddress) +
+            mbi.RegionSize;
+        if (region_end <= cursor)
+            return;
+
+        const auto available_bytes =
+            region_end - cursor;
+        const auto available_chars =
+            static_cast<std::size_t>(
+                available_bytes /
+                sizeof(wchar_t));
+        const auto remaining =
+            k_logical_name_capacity -
+            copied;
+        const auto scan =
+            std::min(
+                available_chars,
+                remaining);
+        if (scan == 0u)
+            return;
+
+        const auto *src =
+            reinterpret_cast<const wchar_t *>(
+                cursor);
+
+        for (std::size_t i = 0u;
+             i < scan;
              ++i) {
-            wchar_t ch = L'\0';
-
-            if (!readable_range(
-                    logical_name + i,
-                    sizeof(ch)))
-                return;
-
-            std::memcpy(
-                &ch,
-                logical_name + i,
-                sizeof(ch));
-
+            const wchar_t ch = src[i];
             if (ch == L'\0') {
-                terminated = true;
-                break;
+                g_logical_name[copied] =
+                    L'\0';
+                g_logical_name_length =
+                    copied;
+                return;
             }
 
-            g_logical_name.push_back(ch);
+            g_logical_name[copied++] = ch;
         }
 
-        if (!terminated)
-            g_logical_name.clear();
-    } catch (...) {
-        g_logical_name.clear();
+        cursor +=
+            scan * sizeof(wchar_t);
     }
+
+    // No terminator within the bounded identity window: fail open.
+    g_logical_name_length = 0u;
+    g_logical_name[0] = L'\0';
 }
 
 } // namespace
@@ -418,7 +469,8 @@ dsrrl_texture_name_observer(
 extern "C" void
 dsrrl_texture_name_clear_observer() noexcept
 {
-    g_logical_name.clear();
+    g_logical_name_length = 0u;
+    g_logical_name[0] = L'\0';
 }
 
 bool install() noexcept
@@ -495,7 +547,8 @@ void uninstall() noexcept
 
     g_dsrrl_texture_name_resume = nullptr;
     g_dsrrl_texture_name_clear_resume = nullptr;
-    g_logical_name.clear();
+    g_logical_name_length = 0u;
+    g_logical_name[0] = L'\0';
     g_base = 0u;
     g_status = {};
 }
@@ -505,6 +558,23 @@ hook_status status() noexcept
     return g_status;
 }
 
+bool snapshot_raw(
+    const wchar_t *&logical_name,
+    std::size_t &length) noexcept
+{
+    logical_name = nullptr;
+    length = 0u;
+
+    if (!g_status.name_hook_armed ||
+        !g_status.clear_hook_armed ||
+        g_logical_name_length == 0u)
+        return false;
+
+    logical_name = g_logical_name.data();
+    length = g_logical_name_length;
+    return true;
+}
+
 bool snapshot(
     std::wstring &logical_name) noexcept
 {
@@ -512,11 +582,13 @@ bool snapshot(
 
     if (!g_status.name_hook_armed ||
         !g_status.clear_hook_armed ||
-        g_logical_name.empty())
+        g_logical_name_length == 0u)
         return false;
 
     try {
-        logical_name = g_logical_name;
+        logical_name.assign(
+            g_logical_name.data(),
+            g_logical_name_length);
         return !logical_name.empty();
     } catch (...) {
         logical_name.clear();

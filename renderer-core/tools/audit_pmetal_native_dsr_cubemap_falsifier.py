@@ -48,8 +48,8 @@ def main() -> None:
     )
     require(
         pmetal_cpp,
-        "source_.latest(source)",
-        "PTDE LightBank source feed retained through isolated V13 carrier",
+        "source_.latest(material, source)",
+        "PTDE donor feed retained through exact material selector",
     )
     require(
         pmetal_cpp,
@@ -106,7 +106,7 @@ def main() -> None:
 
     print("DSRRL_PMETAL_NATIVE_DSR_CUBEMAP_FALSIFIER_PASS")
     print("  consumer=exact current PTDE P_Metal EnvSpec island")
-    print("  source=A/B LightBank feed unchanged")
+    print("  source=exact material selector A/B PTDE donor feed")
     print("  material=PTDE SpecRGB/c101 path unchanged")
     print("  resource=native bound DSR BC6H t12/t14")
     print("  sampler=PTDE max_lod=0")

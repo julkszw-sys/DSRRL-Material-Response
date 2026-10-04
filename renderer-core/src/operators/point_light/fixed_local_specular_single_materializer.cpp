@@ -59,6 +59,7 @@ struct instruction {
 struct insertion {
     std::uint32_t word=0u;
     std::vector<std::uint32_t> payload;
+    std::uint32_t erase_words=0u;
 };
 
 bool parse(
@@ -637,10 +638,12 @@ bool apply_insertions(
         std::stable_sort(
             insertions.begin(),insertions.end(),
             [](const insertion &a,const insertion &b){
-                return a.word>b.word;
+                return a.word!=b.word ? a.word>b.word : a.erase_words>b.erase_words;
             });
         for(const auto &ins:insertions) {
             if(ins.word>words.size()) return false;
+            if(ins.erase_words>words.size()-ins.word) return false;
+            words.erase(words.begin()+ins.word,words.begin()+ins.word+ins.erase_words);
             words.insert(
                 words.begin()+static_cast<std::ptrdiff_t>(ins.word),
                 ins.payload.begin(),ins.payload.end());
@@ -985,7 +988,24 @@ materialize_fixed_local_specular_single(
             distance,
             temp_src_scalar(sqrt_component),
             words[sqrt_ins->start+2u]);
+        // Load authored End before the range branch. The position-derived
+        // distance remains host geometry; source range is exclusively PTDE.
+        fixed_local_specular_t19_load early_q{};
+        if(emit_fixed_local_specular_t19_load(q,light,early_q)!=fixed_local_specular_t19_emit_result::exact) return out;
+        append(distance_capture.payload,early_q.words);
         insertions.push_back(std::move(distance_capture));
+        const auto *compare=find_instruction(instructions,geo.end_compare_word);
+        if(!compare || compare->end-compare->start!=8u ||
+           words[compare->start+5u]!=0x0020803au ||
+           words[compare->start+6u]!=0u || words[compare->start+7u]!=116u+light) {
+            out.result=fixed_local_single_materialize_result::fail_geometry_capture;
+            return out;
+        }
+        insertion range_compare{};
+        range_compare.word=compare->start; range_compare.erase_words=8u;
+        range_compare.payload={0x07000031u,words[compare->start+1u],words[compare->start+2u],
+            k_temp_src_x,distance,temp_src_scalar(3u),q};
+        insertions.push_back(std::move(range_compare));
 
         const auto &window=
             samples.island.output_cut.operands.plan.lights[light].
@@ -1024,7 +1044,17 @@ materialize_fixed_local_specular_single(
         // are still the attested geometry operands here. The stock tail is
         // allowed to run afterwards but is dead at the redirected output cut.
         island.word=island_insert_word;
-        append(island.payload,linear_words.data(),linear_words.size());
+        // Authored linear attenuation: SAT((PTDE End-distance)*PTDE invRange).
+        // Preserve the original template only as an identity/ABI attestation.
+        fixed_local_specular_t19_load range_load{};
+        if(emit_fixed_local_specular_t19_load(work,light,range_load)!=fixed_local_specular_t19_emit_result::exact) return out;
+        range_load.words[6]=4u+light;
+        append(island.payload,range_load.words);
+        const std::uint32_t attenuation[]={
+            0x08000000u,k_temp_dst_x,work,temp_src_scalar(3u),q,
+            0x8010000au,0x00000041u,distance,
+            0x07002038u,k_temp_dst_x,work,k_temp_src_x,work,temp_src_scalar(3u),work};
+        append(island.payload,attenuation,15u);
 
         fixed_local_specular_t19_load q_load{};
         if(emit_fixed_local_specular_t19_load(
@@ -1079,6 +1109,13 @@ materialize_fixed_local_specular_single(
 
     if(!apply_insertions(words,std::move(insertions))) {
         out.result=fixed_local_single_materialize_result::fail_rebuild;
+        return out;
+    }
+
+    // Check the emitted stream, not just the outer DXBC checksum. A malformed
+    // instruction length can stall the native parser despite a valid checksum.
+    if(!decode(words,instructions)) {
+        out.result=fixed_local_single_materialize_result::fail_postcondition;
         return out;
     }
 

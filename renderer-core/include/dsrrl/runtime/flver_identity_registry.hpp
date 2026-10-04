@@ -11,6 +11,8 @@ struct flver_identity_telemetry {
     std::uint64_t lookups = 0;
     std::uint64_t hits = 0;
     std::uint64_t misses = 0;
+    std::uint64_t tls_hits = 0;
+    std::uint64_t mutex_fallbacks = 0;
     std::uint64_t erases = 0;
     std::uint64_t invalid_raw = 0;
 };
@@ -30,5 +32,10 @@ bool flver_identity_enrich_owner(
     actual_material_owner_observation &observation) noexcept;
 void flver_identity_reset() noexcept;
 flver_identity_telemetry flver_identity_stats() noexcept;
+
+// Monotonic invalidation epoch for positive selector-owner identity caches.
+// New unrelated model insertion intentionally does not invalidate existing
+// identities; replacement/destruction of an existing model advances it.
+std::uint64_t flver_identity_epoch() noexcept;
 
 } // namespace dsrrl::runtime

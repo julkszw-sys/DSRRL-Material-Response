@@ -66,12 +66,16 @@ std::unordered_map<std::uint64_t,native_view_record>
     g_resource_by_view;
 std::unordered_map<std::uint32_t,rgba_cube>
     g_ptde_cubes;
+std::unordered_map<std::uint16_t,rgba_cube>
+    g_ptde_envdiffuse_cubes;
 
 device *g_device = nullptr;
 std::vector<std::uint8_t> g_pack;
+std::vector<std::uint8_t> g_envdiffuse_pack;
 sampler g_sampler{};
 bool g_registered = false;
 bool g_pack_ready = false;
+bool g_envdiffuse_pack_ready = false;
 bool g_sampler_ready = false;
 
 std::atomic<std::uint64_t> g_native_candidates{0};
@@ -259,6 +263,70 @@ bool load_pack(
     }
 }
 
+
+bool load_envdiffuse_pack(
+    std::vector<std::uint8_t> &out)
+{
+    out.clear();
+
+#if !defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG)
+    return false;
+#else
+    try {
+        const auto root =
+            process_dir();
+        if (root.empty())
+            return false;
+
+        const auto path =
+            root /
+            std::filesystem::path(
+                env::k_ptde_envdiffuse_packed_gi_relative_path);
+
+        std::error_code ec;
+        const auto size =
+            std::filesystem::file_size(
+                path,
+                ec);
+
+        if (ec ||
+            size != env::k_ptde_envdiffuse_packed_gi_size)
+            return false;
+
+        std::ifstream stream(
+            path,
+            std::ios::binary);
+        if (!stream)
+            return false;
+
+        std::vector<std::uint8_t> bytes(
+            static_cast<std::size_t>(size));
+
+        if (!stream.read(
+                reinterpret_cast<char *>(
+                    bytes.data()),
+                static_cast<std::streamsize>(
+                    bytes.size())))
+            return false;
+
+        const auto digest =
+            hashing::sha256(
+                bytes.data(),
+                bytes.size());
+
+        if (digest !=
+            env::k_ptde_envdiffuse_packed_gi_sha256)
+            return false;
+
+        out = std::move(bytes);
+        return true;
+    } catch (...) {
+        out.clear();
+        return false;
+    }
+#endif
+}
+
 bool is_native_envspec_desc(
     const resource_desc &desc) noexcept
 {
@@ -374,6 +442,9 @@ void release_carrier(
     std::unordered_map<
         std::uint32_t,
         rgba_cube> cubes;
+    std::unordered_map<
+        std::uint16_t,
+        rgba_cube> envdiffuse_cubes;
     sampler sampler_to_destroy{};
 
     {
@@ -388,12 +459,16 @@ void release_carrier(
             std::memory_order_release);
 
         cubes.swap(g_ptde_cubes);
+        envdiffuse_cubes.swap(
+            g_ptde_envdiffuse_cubes);
         sampler_to_destroy =
             g_sampler;
         g_sampler = {};
         g_sampler_ready = false;
         g_pack_ready = false;
+        g_envdiffuse_pack_ready = false;
         g_pack.clear();
+        g_envdiffuse_pack.clear();
 
         g_native_resources.clear();
         g_resource_by_view.clear();
@@ -401,6 +476,15 @@ void release_carrier(
     }
 
     for (const auto &[_,cube] : cubes) {
+        if (cube.view.handle != 0u)
+            device_ptr->destroy_resource_view(
+                cube.view);
+        if (cube.texture.handle != 0u)
+            device_ptr->destroy_resource(
+                cube.texture);
+    }
+
+    for (const auto &[_,cube] : envdiffuse_cubes) {
         if (cube.view.handle != 0u)
             device_ptr->destroy_resource_view(
                 cube.view);
@@ -442,11 +526,18 @@ void on_init_device(
         g_ptde_cubes.reserve(
             env::k_legacy_envspec_probe_count *
             k_ptde_slots);
+        g_ptde_envdiffuse_cubes.reserve(
+            env::k_legacy_envspec_probe_count);
     }
 
     std::vector<std::uint8_t> pack;
     const bool pack_ready =
         load_pack(pack);
+    std::vector<std::uint8_t>
+        envdiffuse_pack;
+    const bool envdiffuse_pack_ready =
+        load_envdiffuse_pack(
+            envdiffuse_pack);
 
     sampler_desc desc{};
     desc.filter =
@@ -484,6 +575,10 @@ void on_init_device(
             replaced_sampler = g_sampler;
             g_pack = std::move(pack);
             g_pack_ready = pack_ready;
+            g_envdiffuse_pack =
+                std::move(envdiffuse_pack);
+            g_envdiffuse_pack_ready =
+                envdiffuse_pack_ready;
             g_sampler = created_sampler;
             g_sampler_ready = sampler_ready;
             adopted = true;
@@ -523,6 +618,18 @@ void on_init_device(
             reshade::log::level::warning,
             "DSRRL EnvSpec: PTDE sampler creation failed; EnvSpec fails open to stock DSR.");
     }
+
+#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG)
+    if (!envdiffuse_pack_ready) {
+        reshade::log::message(
+            reshade::log::level::warning,
+            "DSRRL Full PTDE HemEnv: exact PTDE EnvDiffuse PackedGI sidecar unavailable or invalid; P_Metal full-PTDE island fails open.");
+    } else {
+        reshade::log::message(
+            reshade::log::level::info,
+            "[DSRRL PMETAL FULL PTDE HEMENV] exact PTDE EnvDiffuse PackedGI admitted.");
+    }
+#endif
 }
 
 void on_destroy_device(
@@ -656,9 +763,10 @@ void on_init_resource_view(
             native->second.probe_ordinal
         };
 
-    g_snapshot_epoch.fetch_add(
-        1u,
-        std::memory_order_release);
+    // View registration is append-only. Existing snapshot TLS entries retain
+    // their own PTDE SRV/sampler references and are keyed by the stock view,
+    // so an unrelated new view cannot invalidate them. Destruction still
+    // bumps the epoch before any stale stock-view key can be reused.
     ++g_view_matches;
 }
 
@@ -1069,6 +1177,149 @@ bool get_ptde_cube(
         view.handle != 0u;
 }
 
+
+bool get_ptde_envdiffuse_cube(
+    std::uint16_t probe,
+    resource_view &view) noexcept
+{
+    view = {};
+
+#if !defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG)
+    (void)probe;
+    return false;
+#else
+    if (probe >=
+            env::k_legacy_envspec_probe_count)
+        return false;
+
+    device *device_ptr = nullptr;
+    std::array<std::uint8_t,k_ptde_cube_bytes>
+        cube_bytes{};
+
+    {
+        std::lock_guard<std::mutex> lock(
+            g_mutex);
+
+        if (g_device == nullptr ||
+            !g_envdiffuse_pack_ready)
+            return false;
+
+        device_ptr = g_device;
+
+        const auto found =
+            g_ptde_envdiffuse_cubes.find(
+                probe);
+
+        if (found !=
+                g_ptde_envdiffuse_cubes.end()) {
+            view = found->second.view;
+            return view.handle != 0u;
+        }
+
+        const std::size_t offset =
+            static_cast<std::size_t>(
+                probe) *
+            k_ptde_cube_bytes;
+
+        if (offset >
+                g_envdiffuse_pack.size() ||
+            k_ptde_cube_bytes >
+                g_envdiffuse_pack.size() -
+                    offset)
+            return false;
+
+        std::memcpy(
+            cube_bytes.data(),
+            g_envdiffuse_pack.data() +
+                offset,
+            cube_bytes.size());
+    }
+
+    std::array<subresource_data,k_faces>
+        subresources{};
+    for (std::uint32_t face = 0u;
+         face < k_faces;
+         ++face) {
+        subresources[face].data =
+            cube_bytes.data() +
+            static_cast<std::size_t>(face) *
+                k_ptde_face_bytes;
+        subresources[face].row_pitch =
+            k_ptde_size * 4u;
+        subresources[face].slice_pitch =
+            static_cast<std::uint32_t>(
+                k_ptde_face_bytes);
+    }
+
+    const resource_desc desc(
+        resource_type::texture_2d,
+        k_ptde_size,
+        k_ptde_size,
+        k_faces,
+        1u,
+        format::r8g8b8a8_unorm,
+        1u,
+        memory_heap::default_,
+        resource_usage::shader_resource,
+        resource_flags::cube_compatible);
+
+    rgba_cube cube{};
+    if (!device_ptr->create_resource(
+            desc,
+            subresources.data(),
+            resource_usage::shader_resource,
+            &cube.texture))
+        return false;
+
+    const resource_view_desc view_desc(
+        resource_view_type::texture_cube,
+        format::r8g8b8a8_unorm,
+        0u,
+        1u,
+        0u,
+        k_faces);
+
+    if (!device_ptr->create_resource_view(
+            cube.texture,
+            resource_usage::shader_resource,
+            view_desc,
+            &cube.view)) {
+        device_ptr->destroy_resource(
+            cube.texture);
+        return false;
+    }
+
+    bool inserted = false;
+    bool carrier_alive = false;
+    {
+        std::lock_guard<std::mutex> lock(
+            g_mutex);
+        carrier_alive =
+            g_device == device_ptr &&
+            g_envdiffuse_pack_ready;
+        if (carrier_alive) {
+            const auto result =
+                g_ptde_envdiffuse_cubes.emplace(
+                    probe,
+                    cube);
+            inserted = result.second;
+            view = result.first->second.view;
+        }
+    }
+
+    if (!carrier_alive || !inserted) {
+        device_ptr->destroy_resource_view(
+            cube.view);
+        device_ptr->destroy_resource(
+            cube.texture);
+    } else {
+        ++g_cube_created;
+    }
+
+    return view.handle != 0u;
+#endif
+}
+
 } // namespace
 
 envspec_resource_runtime::~envspec_resource_runtime()
@@ -1163,25 +1414,41 @@ bool envspec_resource_runtime::prepare(
     }
 
     ID3D11ShaderResourceView *stock_views[3]{};
-    if (probe_b_required) {
-        // HemEnvLerp needs both stock endpoints. One contiguous fetch is
-        // cheaper than two calls even though t13 is intentionally ignored.
-        context->PSGetShaderResources(
-            12u,
-            3u,
-            stock_views);
-    } else {
-        // Stable HemEnv resolves its logical probe from t12 only. The PTDE
-        // replacement still binds its required t14/s14 carrier, but reading
-        // stock t13/t14 here would only add two COM retains/releases per draw.
-        context->PSGetShaderResources(
-            12u,
-            1u,
-            stock_views);
-    }
+    context->PSGetShaderResources(
+        12u,
+        probe_b_required ? 3u : 1u,
+        stock_views);
 
-    auto *stock_a = stock_views[0];
-    auto *stock_b = stock_views[2];
+    const bool ready =
+        prepare_bound(
+            stock_views[0],
+            probe_b_required ? stock_views[2] : nullptr,
+            slot,
+            probe_b_required,
+            prepared);
+
+    for (auto *view : stock_views)
+        if (view != nullptr)
+            view->Release();
+
+    return ready;
+}
+
+bool envspec_resource_runtime::prepare_bound(
+    ID3D11ShaderResourceView *stock_a,
+    ID3D11ShaderResourceView *stock_b,
+    std::uint8_t slot,
+    bool probe_b_required,
+    prepared_envspec_resources &prepared) noexcept
+{
+    prepared = {};
+
+    if (stock_a == nullptr ||
+        (probe_b_required && stock_b == nullptr) ||
+        slot >= k_ptde_slots) {
+        telemetry::hot_count(g_prepare_fail);
+        return false;
+    }
 
     std::uint16_t probe_a = 0u;
     std::uint16_t probe_b = 0u;
@@ -1222,9 +1489,6 @@ bool envspec_resource_runtime::prepare(
         }
 
         if (materialized) {
-            // Materialization is a cold miss. Re-enter the single-lock
-            // snapshot path so normal draws keep resource identity + cube +
-            // sampler lookup atomic and do not repeat independent map locks.
             needs_cube = false;
             ready =
                 snapshot_ready_envspec(
@@ -1240,10 +1504,6 @@ bool envspec_resource_runtime::prepare(
                     needs_cube);
         }
     }
-
-    for (auto *view : stock_views)
-        if (view != nullptr)
-            view->Release();
 
     if (!ready ||
         a_native == nullptr ||
@@ -1415,8 +1675,110 @@ bool envspec_resource_runtime::prepare_native_dsr(
     return true;
 }
 
+
+bool envspec_resource_runtime::prepare_envdiffuse(
+    std::uint16_t probe_a,
+    std::uint16_t probe_b,
+    bool probe_b_required,
+    prepared_envdiffuse_resources &prepared) noexcept
+{
+    prepared = {};
+
+#if !defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG)
+    (void)probe_a;
+    (void)probe_b;
+    (void)probe_b_required;
+    return false;
+#else
+    if (probe_a >=
+            env::k_legacy_envspec_probe_count ||
+        probe_b >=
+            env::k_legacy_envspec_probe_count)
+        return false;
+
+    resource_view a_view{};
+    resource_view b_view{};
+
+    if (!get_ptde_envdiffuse_cube(
+            probe_a,
+            a_view))
+        return false;
+
+    if (probe_b_required &&
+        probe_b != probe_a) {
+        if (!get_ptde_envdiffuse_cube(
+                probe_b,
+                b_view))
+            return false;
+    } else {
+        b_view = a_view;
+    }
+
+    ID3D11ShaderResourceView *a_native =
+        reinterpret_cast<
+            ID3D11ShaderResourceView *>(
+                static_cast<std::uintptr_t>(
+                    a_view.handle));
+    ID3D11ShaderResourceView *b_native =
+        reinterpret_cast<
+            ID3D11ShaderResourceView *>(
+                static_cast<std::uintptr_t>(
+                    b_view.handle));
+    ID3D11SamplerState *sampler_native =
+        nullptr;
+
+    {
+        std::lock_guard<std::mutex> lock(
+            g_mutex);
+        if (!g_sampler_ready ||
+            g_sampler.handle == 0u ||
+            !g_envdiffuse_pack_ready)
+            return false;
+
+        sampler_native =
+            reinterpret_cast<
+                ID3D11SamplerState *>(
+                    static_cast<std::uintptr_t>(
+                        g_sampler.handle));
+    }
+
+    if (a_native == nullptr ||
+        b_native == nullptr ||
+        sampler_native == nullptr)
+        return false;
+
+    a_native->AddRef();
+    b_native->AddRef();
+    sampler_native->AddRef();
+
+    prepared.ptde_a = a_native;
+    prepared.ptde_b = b_native;
+    prepared.sampler = sampler_native;
+    prepared.probe_a = probe_a;
+    prepared.probe_b = probe_b;
+    prepared.probe_b_required =
+        probe_b_required;
+    prepared.ready = true;
+    return true;
+#endif
+}
+
 void envspec_resource_runtime::release(
     prepared_envspec_resources &prepared) noexcept
+{
+    if (prepared.ptde_a != nullptr)
+        prepared.ptde_a->Release();
+    if (prepared.ptde_b != nullptr)
+        prepared.ptde_b->Release();
+    if (prepared.sampler != nullptr)
+        prepared.sampler->Release();
+
+    prepared = {};
+}
+
+
+void envspec_resource_runtime::release(
+    prepared_envdiffuse_resources &prepared) noexcept
 {
     if (prepared.ptde_a != nullptr)
         prepared.ptde_a->Release();

@@ -7,6 +7,7 @@
 
 #include "dsrrl/runtime/pmetal_envspec_draw_runtime.hpp"
 #include "dsrrl/runtime/runtime_hot_telemetry.hpp"
+#include "dsrrl/runtime/pixel_srv_shadow.hpp"
 
 #include "dsrrl/operators/legacy_plan/sha256_bytes.hpp"
 
@@ -43,15 +44,81 @@ constexpr std::uint32_t k_effect_fail_spec_rgb = 1u << 11u;
 constexpr std::uint32_t k_effect_fail_device = 1u << 12u;
 constexpr std::uint32_t k_effect_fail_b12 = 1u << 13u;
 constexpr std::uint32_t k_effect_fail_mutation = 1u << 14u;
+constexpr std::uint32_t k_effect_fail_native_envdiffuse = 1u << 15u;
 
 std::atomic_bool g_source_cut_logged{false};
 std::atomic_bool g_resource_mode_logged{false};
+std::atomic_bool g_native_envdiffuse_logged{false};
+std::atomic_bool g_envdiffuse_consumer_logged{false};
+std::atomic_bool g_source_frontier_logged{false};
+std::atomic_bool g_shadow_r7_logged{false};
+std::atomic<std::uint32_t> g_prepare_stage_log_mask{0u};
+std::atomic<std::uint32_t> g_value_cut_log_mask{0u};
 
-#if defined(DSRRL_PMETAL_NATIVE_DSR_CUBEMAP_FEED)
+void log_prepare_stage_once(
+    std::uint32_t bit,
+    const char *stage,
+    const mr::material_identity &material,
+    const mr::decision &decision,
+    pmetal_envspec_receiver_family family) noexcept
+{
+    const auto observed =
+        g_prepare_stage_log_mask.load(
+            std::memory_order_relaxed);
+    if ((observed & bit) != 0u ||
+        (g_prepare_stage_log_mask.fetch_or(
+             bit,
+             std::memory_order_relaxed) & bit) != 0u)
+        return;
+
+    char line[640]{};
+    std::snprintf(
+        line,
+        sizeof(line),
+        "[DSRRL ENVSPEC APPLY] stage=%s family=%u rx=%u route=%u active=%u mat_valid=%u owner_exact=%u slot=%u slot_valid=%u sem=%016llx flver=%016llx",
+        stage,
+        static_cast<unsigned>(family),
+        static_cast<unsigned>(decision.receiver_id),
+        static_cast<unsigned>(decision.route_index),
+        decision.active ? 1u : 0u,
+        material.valid ? 1u : 0u,
+        material.owner_tuple_exact ? 1u : 0u,
+        static_cast<unsigned>(material.material_slot),
+        material.material_slot_valid ? 1u : 0u,
+        static_cast<unsigned long long>(
+            material.semantic_name_hash),
+        static_cast<unsigned long long>(
+            material.flver_identity_hash));
+    reshade::log::message(
+        reshade::log::level::info,
+        line);
+}
+
+#if defined(DSRRL_PMETAL_FORCE_PTDE_PACKEDGI)
+constexpr bool k_native_dsr_cubemap_feed = false;
+#elif defined(DSRRL_PMETAL_NATIVE_DSR_CUBEMAP_FEED) || \
+      defined(DSRRL_PMETAL_V13_NATIVE_DSR_NO_TAIL_DIAG) || \
+      defined(DSRRL_PMETAL_V13_NATIVE_DSR_MATERIAL_MOD_DIAG)
 constexpr bool k_native_dsr_cubemap_feed = true;
 #else
 constexpr bool k_native_dsr_cubemap_feed = false;
 #endif
+
+#if defined(DSRRL_PMETAL_V13_NATIVE_DSR_NO_TAIL_DIAG)
+constexpr bool k_v13_native_dsr_no_tail_diag = true;
+#else
+constexpr bool k_v13_native_dsr_no_tail_diag = false;
+#endif
+
+#if defined(DSRRL_PMETAL_V13_NATIVE_DSR_MATERIAL_MOD_DIAG)
+constexpr bool k_v13_native_dsr_material_mod_diag = true;
+#else
+constexpr bool k_v13_native_dsr_material_mod_diag = false;
+#endif
+
+constexpr bool k_v13_preserve_stock_envdiffuse =
+    k_v13_native_dsr_no_tail_diag ||
+    k_v13_native_dsr_material_mod_diag;
 
 void effect_latch(std::atomic_bool &flag) noexcept
 {
@@ -137,6 +204,15 @@ struct f4 {
 
 } // namespace
 
+bool exact_pmetal_envspec_candidate(
+    const operators::material_response::material_identity &material,
+    const operators::material_response::decision &decision) noexcept
+{
+    return
+        exact_pmetal_material(material) &&
+        exact_pmetal_decision(decision);
+}
+
 pmetal_envspec_draw_runtime::
 pmetal_envspec_draw_runtime(
     core::renderer_core &core,
@@ -185,6 +261,13 @@ release_resources() noexcept
     }
     b12_by_context_.clear();
 
+#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_R7_SHADOW)
+    if (shadow_sampler_ != nullptr) {
+        shadow_sampler_->Release();
+        shadow_sampler_ = nullptr;
+    }
+#endif
+
     if (device_ != nullptr) {
         device_->Release();
         device_ = nullptr;
@@ -213,6 +296,40 @@ on_init_device(
     if (device_ == nullptr) {
         native->AddRef();
         device_ = native;
+
+#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_R7_SHADOW)
+        // Exact D3D11 semantic equivalent of PTDE DATA.exe stage-7 shadow
+        // sampler: D3DTEXF_POINT for MIN/MAG/MIP, BORDER on U/V/W, white
+        // border, MaxMipLevel=0. D3D11 MaxAnisotropy must be >=1 even though
+        // it is ignored by point filtering; ComparisonFunc is likewise
+        // ignored for the non-comparison SAMPLE path.
+        D3D11_SAMPLER_DESC shadow_desc{};
+        shadow_desc.Filter =
+            D3D11_FILTER_MIN_MAG_MIP_POINT;
+        shadow_desc.AddressU =
+            D3D11_TEXTURE_ADDRESS_BORDER;
+        shadow_desc.AddressV =
+            D3D11_TEXTURE_ADDRESS_BORDER;
+        shadow_desc.AddressW =
+            D3D11_TEXTURE_ADDRESS_BORDER;
+        shadow_desc.MipLODBias = 0.0f;
+        shadow_desc.MaxAnisotropy = 1u;
+        shadow_desc.ComparisonFunc =
+            D3D11_COMPARISON_NEVER;
+        shadow_desc.BorderColor[0] = 1.0f;
+        shadow_desc.BorderColor[1] = 1.0f;
+        shadow_desc.BorderColor[2] = 1.0f;
+        shadow_desc.BorderColor[3] = 1.0f;
+        shadow_desc.MinLOD = 0.0f;
+        shadow_desc.MaxLOD =
+            D3D11_FLOAT32_MAX;
+
+        if (FAILED(
+                native->CreateSamplerState(
+                    &shadow_desc,
+                    &shadow_sampler_)))
+            shadow_sampler_ = nullptr;
+#endif
         return;
     }
 
@@ -262,6 +379,13 @@ on_destroy_device(
     }
     b12_by_context_.clear();
 
+#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_R7_SHADOW)
+    if (shadow_sampler_ != nullptr) {
+        shadow_sampler_->Release();
+        shadow_sampler_ = nullptr;
+    }
+#endif
+
     if (device_ != nullptr) {
         device_->Release();
         device_ = nullptr;
@@ -286,7 +410,26 @@ register_replacement(
         outcome.receiver_id < 33u ||
         outcome.receiver_id > 35u ||
         outcome.upper_lower_composed ||
+#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_R7_SHADOW)
+        (((outcome.receiver_id == 33u ||
+           outcome.receiver_id == 34u) &&
+          !outcome.shadow_visibility_kernel_composed) ||
+         (outcome.receiver_id == 35u &&
+          outcome.shadow_visibility_kernel_composed)) ||
+#endif
+#if defined(DSRRL_PMETAL_V13_NATIVE_DSR_NO_TAIL_DIAG)
+        outcome.spec_rgb_consumer ||
+        outcome.envdiffuse_linear_consumer_diag ||
+#elif defined(DSRRL_PMETAL_V13_NATIVE_DSR_MATERIAL_MOD_DIAG)
         !outcome.spec_rgb_consumer ||
+        outcome.envdiffuse_linear_consumer_diag ||
+#else
+#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_R6)
+        !outcome.phn_scene_encoding_composed ||
+#endif
+        !outcome.spec_rgb_consumer ||
+        !outcome.envdiffuse_linear_consumer_diag ||
+#endif
         dxbc == nullptr ||
         dxbc_size == 0u ||
         quarantined_.load()) {
@@ -375,8 +518,19 @@ register_lerp_replacement(
         !outcome.envdiffuse_preserved ||
         outcome.upper_lower_composed ||
         !outcome.upper_lower_preserved_stock ||
+#if defined(DSRRL_PMETAL_V13_NATIVE_DSR_NO_TAIL_DIAG)
+        outcome.terminal_sat_rgb_composed ||
+        outcome.spec_rgb_consumer ||
+#elif defined(DSRRL_PMETAL_V13_NATIVE_DSR_MATERIAL_MOD_DIAG)
+        outcome.terminal_sat_rgb_composed ||
+        !outcome.spec_rgb_consumer ||
+#else
+#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_R6)
+        !outcome.phn_scene_encoding_composed ||
+#endif
         !outcome.terminal_sat_rgb_composed ||
         !outcome.spec_rgb_consumer ||
+#endif
         dxbc == nullptr ||
         dxbc_size == 0u ||
         quarantined_.load()) {
@@ -485,8 +639,47 @@ bool pmetal_envspec_draw_runtime::prepare(
     effect_latch(effect_entry_seen_);
 
     if (cmd_list == nullptr ||
-        quarantined_.load() ||
-        !core_.features().enabled(
+        quarantined_.load()) {
+        effect_fail(
+            effect_fail_mask_,
+            k_effect_fail_feature);
+        log_prepare_stage_once(
+            1u << 1u,
+            "feature_reject",
+            material,
+            decision,
+            family);
+        return false;
+    }
+
+    // P_Metal is a very narrow route. Reject ordinary MR draws before taking
+    // the feature-registry mutexes below; otherwise every active material draw
+    // pays EnvSpec feature checks even though only exact route 345 / P_Metal
+    // can ever reach this island.
+    telemetry::hot_count(candidates_);
+    if (family ==
+        pmetal_envspec_receiver_family::
+            hemenvlerp)
+        telemetry::hot_count(lerp_candidates_);
+
+    if (!exact_pmetal_envspec_candidate(
+            material,
+            decision)) {
+        telemetry::hot_count(material_rejects_);
+        effect_fail(
+            effect_fail_mask_,
+            k_effect_fail_material);
+        log_prepare_stage_once(
+            1u << 0u,
+            "material_or_decision_reject",
+            material,
+            decision,
+            family);
+        return false;
+    }
+    effect_latch(effect_material_ready_);
+
+    if (!core_.features().enabled(
             core::operator_id::env_spec)) {
         effect_fail(
             effect_fail_mask_,
@@ -510,26 +703,14 @@ bool pmetal_envspec_draw_runtime::prepare(
         effect_fail(
             effect_fail_mask_,
             k_effect_fail_lerp_feature);
+        log_prepare_stage_once(
+            1u << 2u,
+            "lerp_feature_reject",
+            material,
+            decision,
+            family);
         return false;
     }
-
-    telemetry::hot_count(candidates_);
-    if (family ==
-        pmetal_envspec_receiver_family::
-            hemenvlerp)
-        telemetry::hot_count(lerp_candidates_);
-
-    if (!exact_pmetal_material(
-            material) ||
-        !exact_pmetal_decision(
-            decision)) {
-        telemetry::hot_count(material_rejects_);
-        effect_fail(
-            effect_fail_mask_,
-            k_effect_fail_material);
-        return false;
-    }
-    effect_latch(effect_material_ready_);
 
     const auto query =
         make_query(
@@ -553,17 +734,101 @@ bool pmetal_envspec_draw_runtime::prepare(
         effect_fail(
             effect_fail_mask_,
             k_effect_fail_semantic);
+        log_prepare_stage_once(
+            1u << 3u,
+            "semantic_reject",
+            material,
+            decision,
+            family);
         return false;
     }
     effect_latch(effect_semantic_ready_);
 
     pmetal_envspec_source source{};
-    if (!source_.latest(source) ||
+    if (!source_.latest(material, source) ||
         !std::isfinite(source.beta)) {
         telemetry::hot_count(source_rejects_);
         effect_fail(
             effect_fail_mask_,
             k_effect_fail_source);
+        log_prepare_stage_once(
+            1u << 4u,
+            "source_reject",
+            material,
+            decision,
+            family);
+
+        if (!g_source_frontier_logged.exchange(
+                true,
+                std::memory_order_relaxed)) {
+            const auto source_state =
+                source_.telemetry();
+            char source_line[1280]{};
+            std::snprintf(
+                source_line,
+                sizeof(source_line),
+                "[DSRRL ENVSPEC SOURCE] exact_seen=%u parent=%u descriptor=%u endpoint=%u manager=%u decode_a=%u decode_b=%u exact_publish=%llu decode_fail=%llu consumer_ok=%llu consumer_fail=%llu hook_single=%llu hook_blend=%llu hook_publish=%llu hook_consume=%llu hook_decode=%u ver=%u count=%u index=%u row=%u sig=%016llx layout=%016llx bankscan=%llu/%u bankstage=%u entry=%u name_off=%08x consumed=%u pub_tid=%u con_tid=%u con_tls=%u selector_active=%u hook_single_armed=%u hook_blend_armed=%u",
+                source_state.selector_exact_seen ? 1u : 0u,
+                source_state.parent_gate_ok ? 1u : 0u,
+                source_state.descriptor_gate_ok ? 1u : 0u,
+                source_state.endpoint_gate_ok ? 1u : 0u,
+                source_state.manager_gate_ok ? 1u : 0u,
+                source_state.source_a_decode_ok ? 1u : 0u,
+                source_state.source_b_decode_ok ? 1u : 0u,
+                static_cast<unsigned long long>(
+                    source_state.exact_publish),
+                static_cast<unsigned long long>(
+                    source_state.decode_fail),
+                static_cast<unsigned long long>(
+                    source_state.consumer_ok),
+                static_cast<unsigned long long>(
+                    source_state.consumer_fail),
+                static_cast<unsigned long long>(
+                    source_state.hook_single_seen),
+                static_cast<unsigned long long>(
+                    source_state.hook_blend_seen),
+                static_cast<unsigned long long>(
+                    source_state.hook_publish),
+                static_cast<unsigned long long>(
+                    source_state.hook_consume),
+                static_cast<unsigned>(
+                    source_state.hook_decode_stage),
+                static_cast<unsigned>(
+                    source_state.hook_decode_version),
+                static_cast<unsigned>(
+                    source_state.hook_decode_count),
+                static_cast<unsigned>(
+                    source_state.hook_decode_index),
+                static_cast<unsigned>(
+                    source_state.hook_decode_row_id),
+                static_cast<unsigned long long>(
+                    source_state.hook_decode_signature),
+                static_cast<unsigned long long>(
+                    source_state.bank_layout_signature),
+                static_cast<unsigned long long>(
+                    source_state.bank_signature_scan_count),
+                static_cast<unsigned>(
+                    source_state.bank_signature_attempt),
+                static_cast<unsigned>(
+                    source_state.bank_signature_stage),
+                static_cast<unsigned>(
+                    source_state.bank_signature_entry),
+                static_cast<unsigned>(
+                    source_state.bank_signature_name_offset),
+                static_cast<unsigned>(
+                    source_state.bank_signature_consumed),
+                static_cast<unsigned>(
+                    source_state.last_publish_tid),
+                static_cast<unsigned>(
+                    source_state.last_consumer_tid),
+                source_state.last_consumer_local_valid ? 1u : 0u,
+                source_state.selector_carrier_active ? 1u : 0u,
+                source_state.hook_single_armed ? 1u : 0u,
+                source_state.hook_blend_armed ? 1u : 0u);
+            reshade::log::message(
+                reshade::log::level::info,
+                source_line);
+        }
 
         if (telemetry::effect_enabled() &&
             !g_source_cut_logged.exchange(
@@ -575,7 +840,7 @@ bool pmetal_envspec_draw_runtime::prepare(
             std::snprintf(
                 line,
                 sizeof(line),
-                "[DSRRL PMETAL SOURCE CUT] rx=%u route=%u owner=%016llx slot=%u steady=%llu blend=%llu publish=%llu busy_drop=%llu consume_ok=%llu consume_fail=%llu steady_active=%u blend_active=%u",
+                "[DSRRL PMETAL SOURCE CUT] rx=%u route=%u owner=%016llx slot=%u steady=%llu blend=%llu publish=%llu decode_fail=%llu consume_ok=%llu consume_fail=%llu publish_tid=%u consumer_tid=%u local_valid=%u frontier=%u/%u/%u/%u/%u/%u/%u selector_active=%u global_hooks=%u/%u",
                 static_cast<unsigned>(decision.receiver_id),
                 static_cast<unsigned>(decision.route_index),
                 static_cast<unsigned long long>(
@@ -589,11 +854,24 @@ bool pmetal_envspec_draw_runtime::prepare(
                 static_cast<unsigned long long>(
                     cut.exact_publish),
                 static_cast<unsigned long long>(
-                    cut.publish_busy_drop),
+                    cut.decode_fail),
                 static_cast<unsigned long long>(
                     cut.consumer_ok),
                 static_cast<unsigned long long>(
                     cut.consumer_fail),
+                static_cast<unsigned>(
+                    cut.last_publish_tid),
+                static_cast<unsigned>(
+                    cut.last_consumer_tid),
+                cut.last_consumer_local_valid ? 1u : 0u,
+                cut.selector_exact_seen ? 1u : 0u,
+                cut.parent_gate_ok ? 1u : 0u,
+                cut.descriptor_gate_ok ? 1u : 0u,
+                cut.endpoint_gate_ok ? 1u : 0u,
+                cut.manager_gate_ok ? 1u : 0u,
+                cut.source_a_decode_ok ? 1u : 0u,
+                cut.source_b_decode_ok ? 1u : 0u,
+                cut.selector_carrier_active ? 1u : 0u,
                 cut.steady_carrier_active ? 1u : 0u,
                 cut.blend_carrier_active ? 1u : 0u);
             reshade::log::message(
@@ -605,6 +883,27 @@ bool pmetal_envspec_draw_runtime::prepare(
     }
     effect_latch(effect_source_ready_);
 
+#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG)
+    // First runtime is intentionally stable HemEnv only. HemEnvLerp remains
+    // stock until its complete two-endpoint PTDE EnvDiffuse island is ported.
+    if (family !=
+            pmetal_envspec_receiver_family::
+                stable_hemenv) {
+        telemetry::hot_count(
+            blended_receiver_hold_);
+        effect_fail(
+            effect_fail_mask_,
+            k_effect_fail_blend);
+        log_prepare_stage_once(
+            1u << 5u,
+            "full_ptde_stable_only_hold",
+            material,
+            decision,
+            family);
+        return false;
+    }
+#endif
+
     if (family ==
             pmetal_envspec_receiver_family::
                 stable_hemenv &&
@@ -613,6 +912,29 @@ bool pmetal_envspec_draw_runtime::prepare(
         effect_fail(
             effect_fail_mask_,
             k_effect_fail_blend);
+        log_prepare_stage_once(
+            1u << 5u,
+            "blend_hold",
+            material,
+            decision,
+            family);
+        return false;
+    }
+    if (!k_v13_preserve_stock_envdiffuse &&
+        family ==
+            pmetal_envspec_receiver_family::
+                stable_hemenv &&
+        !source.envdiffuse_linear_valid) {
+        telemetry::hot_count(source_rejects_);
+        effect_fail(
+            effect_fail_mask_,
+            k_effect_fail_source);
+        log_prepare_stage_once(
+            1u << 12u,
+            "envdiffuse_linear_source_reject",
+            material,
+            decision,
+            family);
         return false;
     }
     effect_latch(effect_receiver_source_ready_);
@@ -626,6 +948,12 @@ bool pmetal_envspec_draw_runtime::prepare(
         effect_fail(
             effect_fail_mask_,
             k_effect_fail_context);
+        log_prepare_stage_once(
+            1u << 6u,
+            "context_reject",
+            material,
+            decision,
+            family);
         return false;
     }
 
@@ -650,6 +978,12 @@ bool pmetal_envspec_draw_runtime::prepare(
                 effect_fail(
                     effect_fail_mask_,
                     k_effect_fail_replacement);
+                log_prepare_stage_once(
+                    1u << 7u,
+                    "replacement_reject",
+                    material,
+                    decision,
+                    family);
                 return false;
             }
 
@@ -667,6 +1001,12 @@ bool pmetal_envspec_draw_runtime::prepare(
                 effect_fail(
                     effect_fail_mask_,
                     k_effect_fail_replacement);
+                log_prepare_stage_once(
+                    1u << 7u,
+                    "replacement_reject",
+                    material,
+                    decision,
+                    family);
                 return false;
             }
 
@@ -685,6 +1025,15 @@ bool pmetal_envspec_draw_runtime::prepare(
                 hemenvlerp ||
         source.beta != 0.0f;
 
+    ID3D11ShaderResourceView *shadow_env[3]{};
+    const bool shadow_env_ready =
+        !k_native_dsr_cubemap_feed &&
+        pixel_srv_shadow_snapshot(
+            cmd_list,
+            12u,
+            probe_b_required ? 3u : 1u,
+            shadow_env);
+
     const bool env_resource_ready =
         k_native_dsr_cubemap_feed
             ? env_resources_.prepare_native_dsr(
@@ -692,11 +1041,20 @@ bool pmetal_envspec_draw_runtime::prepare(
                   env_semantics.envspc_slot,
                   probe_b_required,
                   prepared.env_resources)
-            : env_resources_.prepare(
-                  context,
-                  env_semantics.envspc_slot,
-                  probe_b_required,
-                  prepared.env_resources);
+            : shadow_env_ready
+                ? env_resources_.prepare_bound(
+                      shadow_env[0],
+                      probe_b_required
+                          ? shadow_env[2]
+                          : nullptr,
+                      env_semantics.envspc_slot,
+                      probe_b_required,
+                      prepared.env_resources)
+                : env_resources_.prepare(
+                      context,
+                      env_semantics.envspc_slot,
+                      probe_b_required,
+                      prepared.env_resources);
 
     if (!env_resource_ready) {
         if (shader != nullptr)
@@ -705,19 +1063,32 @@ bool pmetal_envspec_draw_runtime::prepare(
         effect_fail(
             effect_fail_mask_,
             k_effect_fail_probe);
+        log_prepare_stage_once(
+            1u << 8u,
+            "probe_reject",
+            material,
+            decision,
+            family);
         return false;
     }
     effect_latch(effect_probe_ready_);
 
-    if (k_native_dsr_cubemap_feed &&
-        !g_resource_mode_logged.exchange(
+    if (!g_resource_mode_logged.exchange(
             true,
             std::memory_order_relaxed)) {
         char line[384]{};
         std::snprintf(
             line,
             sizeof(line),
-            "[DSRRL PMETAL ENVSPEC RESOURCE] mode=native_dsr_bc6h_ptde_operator sampler=ptde_lod0 slot=%u probe_a=%u probe_b=%u",
+            k_v13_native_dsr_material_mod_diag && !k_native_dsr_cubemap_feed
+                ? "[DSRRL PMETAL V13 MATERIAL MOD] mode=ptde_packedgi_rgba_decode_ptde_ab_beta specrgb_c101_color0=envspec_only envdiffuse=stock lerp=paired slot=%u probe_a=%u probe_b=%u"
+                : k_v13_native_dsr_material_mod_diag
+                    ? "[DSRRL PMETAL V13 MATERIAL MOD] mode=native_dsr_bc6h_ptde_ab_beta specrgb_c101_color0=envspec_only envdiffuse=stock lerp=paired slot=%u probe_a=%u probe_b=%u"
+                : k_v13_native_dsr_no_tail_diag
+                    ? "[DSRRL PMETAL V13 NO TAIL] mode=native_dsr_bc6h_ptde_ab_beta no_specrgb_tail=1 envdiffuse=stock lerp=paired slot=%u probe_a=%u probe_b=%u"
+                    : k_native_dsr_cubemap_feed
+                        ? "[DSRRL PMETAL ENVSPEC RESOURCE] mode=native_dsr_bc6h_ptde_operator sampler=ptde_lod0 slot=%u probe_a=%u probe_b=%u"
+                        : "[DSRRL PMETAL ENVSPEC RESOURCE] mode=ptde_packedgi_rgba sampler=ptde_lod0 slot=%u probe_a=%u probe_b=%u",
             static_cast<unsigned>(
                 env_semantics.envspc_slot),
             static_cast<unsigned>(
@@ -729,14 +1100,43 @@ bool pmetal_envspec_draw_runtime::prepare(
             line);
     }
 
-    if (!material_resources_.
-            prepare_draw_requests(
-                context,
-                decision.receiver_id,
-                query,
-                true,
-                true,
-                prepared.material_resources) ||
+#if !defined(DSRRL_PMETAL_V13_NATIVE_DSR_NO_TAIL_DIAG)
+    ID3D11ShaderResourceView *shadow_material[3]{};
+    const bool shadow_material_ready =
+        pixel_srv_shadow_snapshot(
+            cmd_list,
+            0u,
+            3u,
+            shadow_material);
+
+    if (shadow_env_ready &&
+        shadow_material_ready)
+        telemetry::hot_count(
+            srv_shadow_hits_);
+    else
+        telemetry::hot_count(
+            srv_shadow_fallbacks_);
+
+    const bool material_ready =
+        shadow_material_ready
+            ? material_resources_.
+                  prepare_draw_requests_bound(
+                      shadow_material,
+                      decision.receiver_id,
+                      query,
+                      true,
+                      true,
+                      prepared.material_resources)
+            : material_resources_.
+                  prepare_draw_requests(
+                      context,
+                      decision.receiver_id,
+                      query,
+                      true,
+                      true,
+                      prepared.material_resources);
+
+    if (!material_ready ||
         !prepared.material_resources.spec_rgb) {
         if (shader != nullptr)
             shader->Release();
@@ -749,16 +1149,76 @@ bool pmetal_envspec_draw_runtime::prepare(
         effect_fail(
             effect_fail_mask_,
             k_effect_fail_spec_rgb);
+        log_prepare_stage_once(
+            1u << 9u,
+            "spec_rgb_reject",
+            material,
+            decision,
+            family);
         return false;
     }
+#if defined(DSRRL_PMETAL_V13_NATIVE_DSR_MATERIAL_MOD_DIAG)
+    if (!material_resources_.keep_only_spec_rgb_request(
+            prepared.material_resources)) {
+        if (shader != nullptr)
+            shader->Release();
+        env_resources_.release(
+            prepared.env_resources);
+        material_resources_.
+            release_prepared_draw(
+                prepared.material_resources);
+        telemetry::hot_count(spec_rgb_rejects_);
+        effect_fail(
+            effect_fail_mask_,
+            k_effect_fail_spec_rgb);
+        log_prepare_stage_once(
+            1u << 9u,
+            "spec_rgb_filter_reject",
+            material,
+            decision,
+            family);
+        return false;
+    }
+#endif
     effect_latch(effect_spec_rgb_ready_);
+#endif
+
+    const bool stable_envdiffuse_consumer_diag =
+#if defined(DSRRL_PMETAL_V13_NATIVE_DSR_NO_TAIL_DIAG) || defined(DSRRL_PMETAL_V13_NATIVE_DSR_MATERIAL_MOD_DIAG)
+        false;
+#else
+        family ==
+            pmetal_envspec_receiver_family::
+                stable_hemenv;
+#endif
+
+    std::array<float,3> carrier3{{
+        source.b[0],
+        source.b[1],
+        source.b[2]
+    }};
+#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG)
+    if (stable_envdiffuse_consumer_diag)
+        carrier3 = source.envdiffuse_a;
+#else
+    if (stable_envdiffuse_consumer_diag)
+        carrier3 = {{0.0f,0.0f,0.0f}};
+#endif
 
     const std::array<f4,4> payload{{
         {
             decision.c101,
             decision.c101,
             decision.c101,
+#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_R6)
+            source.phn_k135_valid &&
+                    std::isfinite(source.phn_k135) &&
+                    source.phn_k135 > 0.0f
+                ? source.phn_k135
+                : 1.0f
+#else
             1.0f
+#endif
         },
         {
             decision.c100[0],
@@ -773,9 +1233,9 @@ bool pmetal_envspec_draw_runtime::prepare(
             0.0f
         },
         {
-            source.b[0],
-            source.b[1],
-            source.b[2],
+            carrier3[0],
+            carrier3[1],
+            carrier3[2],
             source.beta
         }
     }};
@@ -798,6 +1258,14 @@ bool pmetal_envspec_draw_runtime::prepare(
             k_effect_fail_device);
         return false;
     }
+
+    std::array<std::uint32_t,16> payload_bits{};
+    static_assert(
+        sizeof(payload_bits) == sizeof(payload));
+    std::memcpy(
+        payload_bits.data(),
+        payload.data(),
+        sizeof(payload));
 
     ID3D11Buffer *b12 = nullptr;
     bool upload_required = true;
@@ -839,10 +1307,8 @@ bool pmetal_envspec_draw_runtime::prepare(
             b12->AddRef();
             upload_required =
                 !found->second.payload_valid ||
-                std::memcmp(
-                    found->second.payload.data(),
-                    payload.data(),
-                    sizeof(payload)) != 0;
+                found->second.payload_bits !=
+                    payload_bits;
         } else {
             D3D11_BUFFER_DESC desc{};
             desc.ByteWidth = 64u;
@@ -930,10 +1396,8 @@ bool pmetal_envspec_draw_runtime::prepare(
             if (found !=
                     b12_by_context_.end() &&
                 found->second.buffer == b12) {
-                std::memcpy(
-                    found->second.payload.data(),
-                    payload.data(),
-                    sizeof(payload));
+                found->second.payload_bits =
+                    payload_bits;
                 found->second.payload_valid = true;
             }
         }
@@ -946,6 +1410,114 @@ bool pmetal_envspec_draw_runtime::prepare(
     }
 
     effect_latch(effect_b12_ready_);
+
+#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG)
+    // Probe identity is inherited from the already-authenticated EnvSpec
+    // t12/t14 pair. The exact PTDE EnvDiffuse pack uses the same canonical
+    // probe ordinal and never derives assignment from DSR t11 content.
+    if (!env_resources_.prepare_envdiffuse(
+            prepared.env_resources.probe_a,
+            prepared.env_resources.probe_b,
+            false,
+            prepared.envdiffuse_resources)) {
+        b12->Release();
+        if (shader != nullptr)
+            shader->Release();
+        env_resources_.release(
+            prepared.env_resources);
+        material_resources_.
+            release_prepared_draw(
+                prepared.material_resources);
+        effect_fail(
+            effect_fail_mask_,
+            k_effect_fail_native_envdiffuse);
+        log_prepare_stage_once(
+            1u << 12u,
+            "ptde_envdiffuse_resource_reject",
+            material,
+            decision,
+            family);
+        return false;
+    }
+
+    if (!g_native_envdiffuse_logged.exchange(
+            true,
+            std::memory_order_relaxed)) {
+        char line[512]{};
+        std::snprintf(
+            line,
+            sizeof(line),
+            "[DSRRL PMETAL FULL PTDE HEMENV] mode=stable_exact_envdiffuse_rgba_div probe=%u t11=%016llx endpoint=%.9g,%.9g,%.9g",
+            static_cast<unsigned>(
+                prepared.envdiffuse_resources.probe_a),
+            static_cast<unsigned long long>(
+                reinterpret_cast<std::uintptr_t>(
+                    prepared.envdiffuse_resources.ptde_a)),
+            static_cast<double>(
+                source.envdiffuse_a[0]),
+            static_cast<double>(
+                source.envdiffuse_a[1]),
+            static_cast<double>(
+                source.envdiffuse_a[2]));
+        reshade::log::message(
+            reshade::log::level::info,
+            line);
+    }
+#elif !defined(DSRRL_PMETAL_V13_NATIVE_DSR_NO_TAIL_DIAG) && !defined(DSRRL_PMETAL_V13_NATIVE_DSR_MATERIAL_MOD_DIAG)
+    // Legacy diagnostic ownership: explicitly rebind native DSR EnvDiffuse.
+    ID3D11ShaderResourceView *native_envdiffuse_a = nullptr;
+    ID3D11ShaderResourceView *native_envdiffuse_b = nullptr;
+    context->PSGetShaderResources(
+        11u,
+        1u,
+        &native_envdiffuse_a);
+
+    const bool native_envdiffuse_b_required =
+        family ==
+            pmetal_envspec_receiver_family::
+                hemenvlerp;
+    if (native_envdiffuse_b_required) {
+        context->PSGetShaderResources(
+            13u,
+            1u,
+            &native_envdiffuse_b);
+    }
+
+    if (native_envdiffuse_a == nullptr ||
+        (native_envdiffuse_b_required &&
+         native_envdiffuse_b == nullptr)) {
+        if (native_envdiffuse_a != nullptr)
+            native_envdiffuse_a->Release();
+        if (native_envdiffuse_b != nullptr)
+            native_envdiffuse_b->Release();
+
+        b12->Release();
+        if (shader != nullptr)
+            shader->Release();
+        env_resources_.release(
+            prepared.env_resources);
+        material_resources_.
+            release_prepared_draw(
+                prepared.material_resources);
+
+        effect_fail(
+            effect_fail_mask_,
+            k_effect_fail_native_envdiffuse);
+        log_prepare_stage_once(
+            1u << 12u,
+            "native_envdiffuse_reject",
+            material,
+            decision,
+            family);
+        return false;
+    }
+
+    prepared.native_dsr_envdiffuse_a =
+        native_envdiffuse_a;
+    prepared.native_dsr_envdiffuse_b =
+        native_envdiffuse_b;
+#endif
+
 
     const auto env_owner =
         core::operator_bit(
@@ -962,19 +1534,43 @@ bool pmetal_envspec_draw_runtime::prepare(
     const auto spec_owner =
         core::operator_bit(
             core::operator_id::spec_rgb);
+    const auto envdiff_owner =
+        core::operator_bit(
+            core::operator_id::env_diffuse);
     const auto sat_owner =
         core::operator_bit(
             core::operator_id::
                 terminal_sat_rgb);
+#if defined(DSRRL_PMETAL_V13_NATIVE_DSR_NO_TAIL_DIAG)
+    (void)spec_owner;
+    (void)envdiff_owner;
+    (void)sat_owner;
+#elif defined(DSRRL_PMETAL_V13_NATIVE_DSR_MATERIAL_MOD_DIAG)
+    (void)envdiff_owner;
+    (void)sat_owner;
+#endif
     prepared.shader = shader;
     prepared.b12 = b12;
     prepared.request.primary =
         core::operator_id::env_spec;
 
+#if defined(DSRRL_PMETAL_V13_NATIVE_DSR_NO_TAIL_DIAG)
+    prepared.request.additional_owners =
+        mr_owner |
+        domain_owner |
+        composed_owners;
+#elif defined(DSRRL_PMETAL_V13_NATIVE_DSR_MATERIAL_MOD_DIAG)
     prepared.request.additional_owners =
         mr_owner |
         domain_owner |
         spec_owner |
+        composed_owners;
+#else
+    prepared.request.additional_owners =
+        mr_owner |
+        domain_owner |
+        spec_owner |
+        envdiff_owner |
         composed_owners;
 
     if (family ==
@@ -982,11 +1578,26 @@ bool pmetal_envspec_draw_runtime::prepare(
             hemenvlerp)
         prepared.request.additional_owners |=
             sat_owner;
+#endif
 
+    // This diagnostic owns the same narrow stable EnvDiffuse consumer cut as
+    // PR197, but feeds b12[3].xyz = 0 on stable HemEnv. Because the replacement
+    // shader consumes b12[3].xyz immediately before native t11/s11, this
+    // removes only the local t11 EnvDiffuse term. EnvDiffuse therefore owns
+    // shader + b12 + the explicit native t11/t13 resource rebind.
     prepared.request.additional_shader_owners =
         prepared.request.additional_owners;
+#if defined(DSRRL_PMETAL_V13_NATIVE_DSR_NO_TAIL_DIAG) || defined(DSRRL_PMETAL_V13_NATIVE_DSR_MATERIAL_MOD_DIAG)
     prepared.request.additional_constant_buffer_owners =
         mr_owner;
+    prepared.request.additional_resource_owners = 0u;
+#else
+    prepared.request.additional_constant_buffer_owners =
+        mr_owner |
+        envdiff_owner;
+    prepared.request.additional_resource_owners =
+        envdiff_owner;
+#endif
 
     prepared.request.receiver_verified = true;
     prepared.request.material_verified = true;
@@ -998,30 +1609,164 @@ bool pmetal_envspec_draw_runtime::prepare(
     prepared.request.constant_buffers[0] = {
         12u,
         b12,
+#if defined(DSRRL_PMETAL_V13_NATIVE_DSR_NO_TAIL_DIAG) || defined(DSRRL_PMETAL_V13_NATIVE_DSR_MATERIAL_MOD_DIAG)
         env_owner | mr_owner
+#else
+        env_owner | mr_owner | envdiff_owner
+#endif
     };
     prepared.request.constant_buffer_count =
         1u;
 
-    prepared.request.srvs[0] = {
-        12u,
-        prepared.env_resources.ptde_a
-    };
-    prepared.request.srvs[1] = {
-        14u,
-        prepared.env_resources.ptde_b
-    };
-    prepared.request.srv_count = 2u;
+    std::uint32_t request_srv_count = 0u;
+#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG)
+    prepared.request.srvs[
+        request_srv_count++] = {
+            11u,
+            prepared.envdiffuse_resources.ptde_a
+        };
+    prepared.request.srvs[
+        request_srv_count++] = {
+            12u,
+            prepared.env_resources.ptde_a
+        };
+    prepared.request.srvs[
+        request_srv_count++] = {
+            14u,
+            prepared.env_resources.ptde_b
+        };
+#elif !defined(DSRRL_PMETAL_V13_NATIVE_DSR_NO_TAIL_DIAG) && !defined(DSRRL_PMETAL_V13_NATIVE_DSR_MATERIAL_MOD_DIAG)
+    prepared.request.srvs[
+        request_srv_count++] = {
+            11u,
+            prepared.native_dsr_envdiffuse_a
+        };
+    prepared.request.srvs[
+        request_srv_count++] = {
+            12u,
+            prepared.env_resources.ptde_a
+        };
+    if (native_envdiffuse_b_required) {
+        prepared.request.srvs[
+            request_srv_count++] = {
+                13u,
+                prepared.native_dsr_envdiffuse_b
+            };
+    }
+    prepared.request.srvs[
+        request_srv_count++] = {
+            14u,
+            prepared.env_resources.ptde_b
+        };
+#else
+    prepared.request.srvs[
+        request_srv_count++] = {
+            12u,
+            prepared.env_resources.ptde_a
+        };
+    prepared.request.srvs[
+        request_srv_count++] = {
+            14u,
+            prepared.env_resources.ptde_b
+        };
+#endif
+    prepared.request.srv_count =
+        request_srv_count;
 
-    prepared.request.samplers[0] = {
-        12u,
-        prepared.env_resources.sampler
-    };
-    prepared.request.samplers[1] = {
-        14u,
-        prepared.env_resources.sampler
-    };
-    prepared.request.sampler_count = 2u;
+    std::uint32_t request_sampler_count = 0u;
+
+#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_R7_SHADOW)
+    const bool shadow_r7_draw =
+        family ==
+            pmetal_envspec_receiver_family::
+                stable_hemenv &&
+        (decision.receiver_id == 33u ||
+         decision.receiver_id == 34u);
+
+    if (shadow_r7_draw) {
+        {
+            std::lock_guard<std::mutex> lock(
+                mutex_);
+            if (shadow_sampler_ != nullptr) {
+                shadow_sampler_->AddRef();
+                prepared.shadow_sampler =
+                    shadow_sampler_;
+            }
+        }
+
+        if (prepared.shadow_sampler == nullptr) {
+            release(prepared);
+            effect_fail(
+                effect_fail_mask_,
+                k_effect_fail_device);
+            log_prepare_stage_once(
+                1u << 13u,
+                "shadow_s7_reject",
+                material,
+                decision,
+                family);
+            return false;
+        }
+
+        prepared.request.samplers[
+            request_sampler_count++] = {
+                7u,
+                prepared.shadow_sampler
+            };
+
+        if (!g_shadow_r7_logged.exchange(
+                true,
+                std::memory_order_relaxed)) {
+            char line[384]{};
+            std::snprintf(
+                line,
+                sizeof(line),
+                "[DSRRL PMETAL R7 SHADOW] rx=%u route=%u s7=%016llx kernel=pcf16_packed24 point_border_white",
+                static_cast<unsigned>(
+                    decision.receiver_id),
+                static_cast<unsigned>(
+                    decision.route_index),
+                static_cast<unsigned long long>(
+                    reinterpret_cast<
+                        std::uintptr_t>(
+                            prepared.shadow_sampler)));
+            reshade::log::message(
+                reshade::log::level::info,
+                line);
+        }
+    }
+#endif
+
+#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG)
+    prepared.request.samplers[
+        request_sampler_count++] = {
+            11u,
+            prepared.envdiffuse_resources.sampler
+        };
+    prepared.request.samplers[
+        request_sampler_count++] = {
+            12u,
+            prepared.env_resources.sampler
+        };
+    prepared.request.samplers[
+        request_sampler_count++] = {
+            14u,
+            prepared.env_resources.sampler
+        };
+#else
+    prepared.request.samplers[
+        request_sampler_count++] = {
+            12u,
+            prepared.env_resources.sampler
+        };
+    prepared.request.samplers[
+        request_sampler_count++] = {
+            14u,
+            prepared.env_resources.sampler
+        };
+#endif
+    prepared.request.sampler_count =
+        request_sampler_count;
 
     draw_tx_mutation verify{};
     if (build_island_draw_mutation(
@@ -1032,12 +1777,150 @@ bool pmetal_envspec_draw_runtime::prepare(
         effect_fail(
             effect_fail_mask_,
             k_effect_fail_mutation);
+        log_prepare_stage_once(
+            1u << 10u,
+            "mutation_reject",
+            material,
+            decision,
+            family);
         return false;
     }
 
     prepared.ready = true;
     effect_latch(effect_request_ready_);
     telemetry::hot_count(requests_);
+
+    if (stable_envdiffuse_consumer_diag &&
+        !g_envdiffuse_consumer_logged.exchange(
+            true,
+            std::memory_order_relaxed)) {
+        char line[512]{};
+        std::snprintf(
+            line,
+            sizeof(line),
+#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG)
+            "[DSRRL PMETAL FULL PTDE HEMENV] mode=ptde_t11_rgba_div_c86 family=%u rx=%u route=%u captured_pA=%.9g,%.9g,%.9g beta=%.9g t11=%016llx",
+#else
+            "[DSRRL PMETAL ENVDIFFUSE CONSUMER DIAG] mode=zero_t11_contribution family=%u rx=%u route=%u captured_pA=%.9g,%.9g,%.9g beta=%.9g t11=%016llx",
+#endif
+            static_cast<unsigned>(family),
+            static_cast<unsigned>(decision.receiver_id),
+            static_cast<unsigned>(decision.route_index),
+            static_cast<double>(source.envdiffuse_a[0]),
+            static_cast<double>(source.envdiffuse_a[1]),
+            static_cast<double>(source.envdiffuse_a[2]),
+            static_cast<double>(source.beta),
+            static_cast<unsigned long long>(
+                reinterpret_cast<std::uintptr_t>(
+#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG)
+                    prepared.envdiffuse_resources.ptde_a
+#else
+                    prepared.native_dsr_envdiffuse_a
+#endif
+                    )));
+        reshade::log::message(
+            reshade::log::level::info,
+            line);
+    }
+    log_prepare_stage_once(
+        1u << 11u,
+        "request_ready",
+        material,
+        decision,
+        family);
+
+    // Pixel-fail diagnostic for the owner-reported white P_Metal phenotype.
+    // Log exactly once per stable receiver and only after the entire island is
+    // request-ready, so every value below belongs to an actually executable
+    // replacement draw. No GPU readback and no renderer-state mutation.
+    if (decision.receiver_id >= 33u &&
+        decision.receiver_id <= 35u) {
+        const auto bit =
+            1u << (decision.receiver_id - 33u);
+        const auto observed =
+            g_value_cut_log_mask.load(
+                std::memory_order_relaxed);
+        if ((observed & bit) == 0u &&
+            (g_value_cut_log_mask.fetch_or(
+                 bit,
+                 std::memory_order_relaxed) & bit) == 0u) {
+            const auto spec_probe =
+                material_resources_.
+                    probe_exact_specular_companion(
+                        context);
+
+            std::uintptr_t t10 = 0u;
+            std::uint32_t t10_count = 0u;
+            for (std::uint32_t i = 0u;
+                 i < prepared.material_resources.request_count;
+                 ++i) {
+                const auto &resource_request =
+                    prepared.material_resources.requests[i];
+                for (std::uint32_t j = 0u;
+                     j < resource_request.srv_count;
+                     ++j) {
+                    if (resource_request.srvs[j].slot != 10u ||
+                        resource_request.srvs[j].srv == nullptr)
+                        continue;
+                    t10 =
+                        reinterpret_cast<std::uintptr_t>(
+                            resource_request.srvs[j].srv);
+                    ++t10_count;
+                }
+            }
+
+            char line[1536]{};
+            std::snprintf(
+                line,
+                sizeof(line),
+                "[DSRRL PMETAL VALUE CUT] family=%u rx=%u route=%u env_slot=%u probe_a=%u probe_b=%u bank_a=%016llx row_a=%u bank_b=%016llx row_b=%u serial=%llu gen=%llu beta=%.9g pA=%.9g,%.9g,%.9g pB=%.9g,%.9g,%.9g c101=%.9g c100=%.9g,%.9g,%.9g spec_hash=%016llx spec_allowed=%u spec_ready=%u spec_req=%u t10_count=%u t10=%016llx t11=%016llx t12=%016llx t13=%016llx t14=%016llx",
+                static_cast<unsigned>(family),
+                static_cast<unsigned>(decision.receiver_id),
+                static_cast<unsigned>(decision.route_index),
+                static_cast<unsigned>(env_semantics.envspc_slot),
+                static_cast<unsigned>(prepared.env_resources.probe_a),
+                static_cast<unsigned>(prepared.env_resources.probe_b),
+                static_cast<unsigned long long>(source.bank_signature_a),
+                static_cast<unsigned>(source.row_id_a),
+                static_cast<unsigned long long>(source.bank_signature_b),
+                static_cast<unsigned>(source.row_id_b),
+                static_cast<unsigned long long>(source.serial),
+                static_cast<unsigned long long>(source.generation),
+                static_cast<double>(source.beta),
+                static_cast<double>(source.a[0]),
+                static_cast<double>(source.a[1]),
+                static_cast<double>(source.a[2]),
+                static_cast<double>(source.b[0]),
+                static_cast<double>(source.b[1]),
+                static_cast<double>(source.b[2]),
+                static_cast<double>(decision.c101),
+                static_cast<double>(decision.c100[0]),
+                static_cast<double>(decision.c100[1]),
+                static_cast<double>(decision.c100[2]),
+                static_cast<unsigned long long>(spec_probe.logical_hash),
+                spec_probe.logical_hash_allowed ? 1u : 0u,
+                spec_probe.companion_ready ? 1u : 0u,
+                prepared.material_resources.spec_rgb ? 1u : 0u,
+                static_cast<unsigned>(t10_count),
+                static_cast<unsigned long long>(t10),
+                static_cast<unsigned long long>(
+                    reinterpret_cast<std::uintptr_t>(
+                        prepared.native_dsr_envdiffuse_a)),
+                static_cast<unsigned long long>(
+                    reinterpret_cast<std::uintptr_t>(
+                        prepared.env_resources.ptde_a)),
+                static_cast<unsigned long long>(
+                    reinterpret_cast<std::uintptr_t>(
+                        prepared.native_dsr_envdiffuse_b)),
+                static_cast<unsigned long long>(
+                    reinterpret_cast<std::uintptr_t>(
+                        prepared.env_resources.ptde_b)));
+            reshade::log::message(
+                reshade::log::level::info,
+                line);
+        }
+    }
+
     if (family ==
         pmetal_envspec_receiver_family::
             hemenvlerp)
@@ -1054,13 +1937,22 @@ void pmetal_envspec_draw_runtime::release(
 
     env_resources_.release(
         prepared.env_resources);
-
+    env_resources_.release(
+        prepared.envdiffuse_resources);
 
     if (prepared.b12 != nullptr)
         prepared.b12->Release();
 
     if (prepared.shader != nullptr)
         prepared.shader->Release();
+
+    if (prepared.shadow_sampler != nullptr)
+        prepared.shadow_sampler->Release();
+
+    if (prepared.native_dsr_envdiffuse_a != nullptr)
+        prepared.native_dsr_envdiffuse_a->Release();
+    if (prepared.native_dsr_envdiffuse_b != nullptr)
+        prepared.native_dsr_envdiffuse_b->Release();
 
     prepared = {};
 }
@@ -1085,6 +1977,8 @@ pmetal_envspec_draw_runtime::telemetry() const noexcept
         lerp_requests_.load(),
         b12_uploads_.load(),
         b12_reuses_.load(),
+        srv_shadow_hits_.load(),
+        srv_shadow_fallbacks_.load(),
         effect_entry_seen_.load(),
         effect_feature_ready_.load(),
         effect_material_ready_.load(),
@@ -1121,6 +2015,8 @@ void pmetal_envspec_draw_runtime::reset() noexcept
     lerp_requests_.store(0u);
     b12_uploads_.store(0u);
     b12_reuses_.store(0u);
+    srv_shadow_hits_.store(0u);
+    srv_shadow_fallbacks_.store(0u);
     effect_entry_seen_.store(false);
     effect_feature_ready_.store(false);
     effect_material_ready_.store(false);
@@ -1135,6 +2031,12 @@ void pmetal_envspec_draw_runtime::reset() noexcept
     effect_fail_mask_.store(0u);
     g_source_cut_logged.store(false);
     g_resource_mode_logged.store(false);
+    g_native_envdiffuse_logged.store(false);
+    g_envdiffuse_consumer_logged.store(false);
+    g_source_frontier_logged.store(false);
+    g_shadow_r7_logged.store(false);
+    g_prepare_stage_log_mask.store(0u);
+    g_value_cut_log_mask.store(0u);
     quarantined_.store(false);
 }
 
