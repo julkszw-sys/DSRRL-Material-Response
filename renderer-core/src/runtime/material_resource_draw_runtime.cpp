@@ -198,6 +198,7 @@ std::atomic<std::uint64_t> g_sidecar_missing{0};
 std::atomic<std::uint64_t> g_sidecar_unsupported{0};
 std::atomic<std::uint64_t> g_spec_requests{0};
 std::atomic<std::uint64_t> g_fixed_pointlight_spec_requests{0};
+std::atomic<std::uint64_t> g_clustered_pointlight_spec_requests{0};
 std::atomic<std::uint64_t> g_fixed_pointlight_diffuse_requests{0};
 std::atomic<std::uint64_t> g_diffuse_requests{0};
 std::atomic<std::uint64_t> g_normal_requests{0};
@@ -1813,6 +1814,158 @@ prepare_draw_requests_bound(
 }
 
 bool material_resource_draw_runtime::
+prepare_clustered_pointlight_specular_requests(
+    ID3D11DeviceContext *context,
+    const operators::material_response::
+        mtd_semantic_query &query,
+    bool exact_clustered_receiver_verified,
+    bool direct_pointlight_material_authorized,
+    bool blended_material,
+    prepared_material_resource_draw &prepared) noexcept
+{
+    prepared = {};
+
+    if (context == nullptr ||
+        g_quarantined.load() ||
+        !exact_clustered_receiver_verified ||
+        !direct_pointlight_material_authorized ||
+        !core_.features().enabled(
+            core::operator_id::spec_rgb))
+        return false;
+
+    ID3D11ShaderResourceView *views[5]{};
+    context->PSGetShaderResources(
+        0u,
+        blended_material ? 5u : 2u,
+        views);
+
+    auto release_all = [&]() noexcept {
+        for (auto *&view : views)
+            release_view(view);
+    };
+
+    std::uint64_t hashes[5]{};
+    logical_hashes_for(
+        views,
+        blended_material ? 5u : 2u,
+        hashes);
+
+    const auto h1 = hashes[1];
+    const auto h4 =
+        blended_material ? hashes[4] : 0u;
+
+    const bool exact_material =
+        query.material.valid &&
+        query.material.owner_tuple_exact;
+
+    const bool endpoint_a_exact =
+        h1 != 0u &&
+        generated::
+            spec_equipment_name_hash_allowed_v12(
+                h1);
+
+    const bool endpoint_b_exact =
+        !blended_material ||
+        (h4 != 0u &&
+         generated::
+            spec_equipment_name_hash_allowed_v12(
+                h4));
+
+    if (!exact_material ||
+        !endpoint_a_exact ||
+        !endpoint_b_exact) {
+        release_all();
+        hot_count(g_fail_open);
+        return true;
+    }
+
+    const companion_lookup_request
+        companion_requests[2]{
+            {views[1], asset_class::specular},
+            {blended_material ? views[4] : nullptr,
+             asset_class::specular}
+        };
+
+    ID3D11ShaderResourceView *companions[2]{};
+    lookup_many(
+        companion_requests,
+        2u,
+        companions);
+
+    auto *spec_a = companions[0];
+    auto *spec_b = companions[1];
+
+    if (spec_a == nullptr ||
+        (blended_material &&
+         spec_b == nullptr)) {
+        release_view(spec_a);
+        release_view(spec_b);
+        release_all();
+        hot_count(g_fail_open);
+        return true;
+    }
+
+    island_draw_adapter_request spec_request{};
+    spec_request.primary =
+        core::operator_id::spec_rgb;
+    spec_request.receiver_verified = true;
+    spec_request.material_verified = true;
+    spec_request.srvs[0] = {
+        10u,
+        spec_a
+    };
+    spec_request.srv_count = 1u;
+
+    if (blended_material) {
+        spec_request.srvs[1] = {
+            16u,
+            spec_b
+        };
+        spec_request.srv_count = 2u;
+    }
+
+    draw_tx_mutation verify{};
+    if (build_island_draw_mutation(
+            spec_request,
+            verify) !=
+            island_draw_adapter_result::ready ||
+        prepared.request_count + 1u >
+            prepared.requests.size() ||
+        prepared.retained_count +
+            spec_request.srv_count >
+            prepared.retained_views.size()) {
+        release_view(spec_a);
+        release_view(spec_b);
+        release_all();
+        hot_count(g_fail_open);
+        return true;
+    }
+
+    prepared.requests[
+        prepared.request_count++] =
+        spec_request;
+
+    prepared.retained_views[
+        prepared.retained_count++] =
+        spec_a;
+    spec_a = nullptr;
+
+    if (blended_material) {
+        prepared.retained_views[
+            prepared.retained_count++] =
+            spec_b;
+        spec_b = nullptr;
+    }
+
+    prepared.spec_rgb = true;
+    hot_count(
+        g_clustered_pointlight_spec_requests);
+
+    release_all();
+    return true;
+}
+
+bool material_resource_draw_runtime::
 prepare_fixed_pointlight_material_requests(
     ID3D11DeviceContext *context,
     const operators::material_response::
@@ -2529,6 +2682,7 @@ telemetry() const noexcept
         g_sidecar_unsupported.load(),
         g_spec_requests.load(),
         g_fixed_pointlight_spec_requests.load(),
+        g_clustered_pointlight_spec_requests.load(),
         g_fixed_pointlight_diffuse_requests.load(),
         g_diffuse_requests.load(),
         g_normal_requests.load(),
@@ -2548,6 +2702,7 @@ reset() noexcept
     g_sidecar_unsupported.store(0u);
     g_spec_requests.store(0u);
     g_fixed_pointlight_spec_requests.store(0u);
+    g_clustered_pointlight_spec_requests.store(0u);
     g_fixed_pointlight_diffuse_requests.store(0u);
     g_diffuse_requests.store(0u);
     g_normal_requests.store(0u);
