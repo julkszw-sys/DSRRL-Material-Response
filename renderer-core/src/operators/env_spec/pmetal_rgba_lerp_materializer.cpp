@@ -422,6 +422,372 @@ constexpr std::array<std::uint32_t,74> k_ptde_rgba_envspec_chain = {{
 }};
 
 
+
+#if defined(DSRRL_PMETAL_R19_LERP_MATERIALWORKFLOW)
+struct pmetal_lerp_materialworkflow_assertions {
+    std::array<std::pair<std::size_t,std::uint32_t>,10> words{};
+    std::size_t count = 0u;
+};
+
+bool record_materialworkflow_assertion(
+    pmetal_lerp_materialworkflow_assertions &state,
+    std::size_t word,
+    std::uint32_t value) noexcept
+{
+    if (state.count >= state.words.size())
+        return false;
+    state.words[state.count++] = {word,value};
+    return true;
+}
+
+bool apply_exact_ptde_lerp_materialworkflow_r15_r16_r17(
+    std::vector<std::uint32_t> &words,
+    pmetal_lerp_materialworkflow_assertions &state) noexcept
+{
+    state = {};
+
+    std::vector<instruction_view> instructions;
+    if (!decode(words, instructions))
+        return false;
+
+    std::optional<std::uint32_t> spec_sample_register;
+    std::size_t material_if = static_cast<std::size_t>(-1);
+
+    for (std::size_t i = 0u; i + 1u < instructions.size(); ++i) {
+        const auto &sample = instructions[i];
+        const auto &branch = instructions[i + 1u];
+
+        if (sample.opcode < 0x45u ||
+            sample.opcode > 0x4au ||
+            sample.length != 11u ||
+            sample.offset + 10u >= words.size() ||
+            words[sample.offset + 7u] != 0x00107936u ||
+            words[sample.offset + 8u] != 1u ||
+            words[sample.offset + 10u] != 1u ||
+            branch.opcode != 0x1fu ||
+            branch.length != 4u ||
+            branch.offset != sample.offset + sample.length ||
+            branch.offset + 3u >= words.size() ||
+            words[branch.offset + 1u] != 0x0020800au ||
+            words[branch.offset + 2u] != 0u ||
+            words[branch.offset + 3u] != 85u)
+            continue;
+
+        if (spec_sample_register.has_value())
+            return false;
+
+        spec_sample_register =
+            words[sample.offset + 4u];
+        material_if = i + 1u;
+    }
+
+    if (!spec_sample_register.has_value() ||
+        material_if == static_cast<std::size_t>(-1))
+        return false;
+
+    std::size_t depth = 0u;
+    bool in_else = false;
+    std::size_t material_endif =
+        static_cast<std::size_t>(-1);
+
+    std::optional<std::uint32_t> additive_weight_register;
+    std::size_t additive_weight_hits = 0u;
+    std::size_t additive_gate_word =
+        static_cast<std::size_t>(-1);
+    std::size_t additive_gate_hits = 0u;
+
+    std::size_t alpha_mul_word =
+        static_cast<std::size_t>(-1);
+    std::size_t diffuse_weight_mul_word =
+        static_cast<std::size_t>(-1);
+    std::size_t diffuse_split_hits = 0u;
+
+    std::size_t workflow_mad_word =
+        static_cast<std::size_t>(-1);
+    std::size_t workflow_material_hits = 0u;
+
+    for (std::size_t i = material_if + 1u;
+         i < instructions.size();
+         ++i) {
+        const auto &ins = instructions[i];
+
+        if (ins.opcode == 0x1fu) {
+            ++depth;
+            continue;
+        }
+        if (ins.opcode == 0x12u && depth == 0u) {
+            in_else = true;
+            continue;
+        }
+        if (ins.opcode == 0x15u) {
+            if (depth == 0u) {
+                material_endif = i;
+                break;
+            }
+            --depth;
+            continue;
+        }
+        if (depth != 0u || in_else)
+            continue;
+
+        // R15: DSR-only additive/PBL live-out producer
+        //   Wextra=(1-SpecTex.a)*cb0[100].w*10
+        if (ins.opcode == 0x00u &&
+            ins.length == 8u &&
+            ins.offset + 7u < words.size() &&
+            words[ins.offset + 1u] == 0x00100082u &&
+            words[ins.offset + 3u] == 0x8010000au &&
+            words[ins.offset + 4u] == 0x00000041u &&
+            words[ins.offset + 5u] == *spec_sample_register &&
+            words[ins.offset + 6u] == 0x00004001u &&
+            words[ins.offset + 7u] == 0x3f800000u) {
+            if (i + 2u >= instructions.size())
+                return false;
+
+            const auto reg = words[ins.offset + 2u];
+            const auto &mul_cb = instructions[i + 1u];
+            const auto &mul_10 = instructions[i + 2u];
+
+            if (mul_cb.opcode != 0x38u ||
+                mul_cb.length != 8u ||
+                mul_cb.offset + 7u >= words.size() ||
+                words[mul_cb.offset + 1u] != 0x00100082u ||
+                words[mul_cb.offset + 2u] != reg ||
+                words[mul_cb.offset + 3u] != 0x0010003au ||
+                words[mul_cb.offset + 4u] != reg ||
+                words[mul_cb.offset + 5u] != 0x0020803au ||
+                words[mul_cb.offset + 6u] != 0u ||
+                words[mul_cb.offset + 7u] != 100u ||
+                mul_10.opcode != 0x38u ||
+                mul_10.length != 7u ||
+                mul_10.offset + 6u >= words.size() ||
+                words[mul_10.offset + 1u] != 0x00100082u ||
+                words[mul_10.offset + 2u] != reg ||
+                words[mul_10.offset + 3u] != 0x0010003au ||
+                words[mul_10.offset + 4u] != reg ||
+                words[mul_10.offset + 5u] != 0x00004001u ||
+                words[mul_10.offset + 6u] != 0x41200000u)
+                return false;
+
+            ++additive_weight_hits;
+            additive_weight_register = reg;
+            continue;
+        }
+
+        if (additive_weight_register.has_value() &&
+            ins.opcode == 0x38u &&
+            ins.length == 7u &&
+            ins.offset + 6u < words.size() &&
+            words[ins.offset + 1u] == 0x00100072u &&
+            words[ins.offset + 3u] == 0x00100ff6u &&
+            words[ins.offset + 4u] == *additive_weight_register &&
+            words[ins.offset + 5u] == 0x00100246u &&
+            words[ins.offset + 6u] == words[ins.offset + 2u]) {
+            ++additive_gate_hits;
+            additive_gate_word = ins.offset;
+            continue;
+        }
+
+        // R16: rDiffuse=SpecTex.a*workflowDiffuse followed by
+        // rDiffuse*=(1-workflowWeight).
+        if (ins.opcode == 0x38u &&
+            ins.length == 7u &&
+            ins.offset + 6u < words.size() &&
+            (words[ins.offset] & 0x00002000u) == 0u &&
+            words[ins.offset + 1u] == 0x00100072u &&
+            words[ins.offset + 3u] == 0x00100006u &&
+            words[ins.offset + 4u] == *spec_sample_register &&
+            words[ins.offset + 5u] == 0x00100246u) {
+            if (i + 2u >= instructions.size())
+                return false;
+
+            const auto dst = words[ins.offset + 2u];
+            const auto &add = instructions[i + 1u];
+            const auto &mul2 = instructions[i + 2u];
+
+            if (add.opcode == 0x00u &&
+                add.length == 8u &&
+                add.offset + 7u < words.size() &&
+                words[add.offset + 1u] == 0x00100082u &&
+                words[add.offset + 6u] == 0x00004001u &&
+                words[add.offset + 7u] == 0x3f800000u &&
+                mul2.opcode == 0x38u &&
+                mul2.length == 7u &&
+                mul2.offset + 6u < words.size() &&
+                words[mul2.offset + 1u] == 0x00100072u &&
+                words[mul2.offset + 2u] == dst &&
+                words[mul2.offset + 5u] == 0x00100246u &&
+                words[mul2.offset + 6u] == dst) {
+                ++diffuse_split_hits;
+                alpha_mul_word = ins.offset;
+                diffuse_weight_mul_word = mul2.offset;
+            }
+        }
+
+        // R17: exact inner DSR cb9->cb10 workflow interpolation.
+        if (ins.opcode == 0x00u &&
+            ins.length == 10u &&
+            ins.offset + 9u < words.size() &&
+            words[ins.offset + 1u] == 0x00100072u &&
+            words[ins.offset + 3u] == 0x80208246u &&
+            words[ins.offset + 4u] == 0x00000041u &&
+            words[ins.offset + 5u] == 0u &&
+            words[ins.offset + 6u] == 9u &&
+            words[ins.offset + 7u] == 0x00208246u &&
+            words[ins.offset + 8u] == 0u &&
+            words[ins.offset + 9u] == 10u) {
+            if (i + 2u >= instructions.size())
+                return false;
+
+            const auto dst = words[ins.offset + 2u];
+            const auto &mad = instructions[i + 1u];
+            const auto &mul = instructions[i + 2u];
+
+            if (mad.opcode == 0x32u &&
+                mad.length == 10u &&
+                mad.offset + 9u < words.size() &&
+                words[mad.offset + 1u] == 0x00100072u &&
+                words[mad.offset + 2u] == dst &&
+                words[mad.offset + 3u] == 0x00100556u &&
+                words[mad.offset + 5u] == 0x00100246u &&
+                words[mad.offset + 6u] == dst &&
+                words[mad.offset + 7u] == 0x00208246u &&
+                words[mad.offset + 8u] == 12u &&
+                words[mad.offset + 9u] == 1u &&
+                mul.opcode == 0x38u &&
+                mul.length == 7u &&
+                mul.offset + 6u < words.size() &&
+                words[mul.offset + 1u] == 0x00100072u &&
+                words[mul.offset + 2u] == dst &&
+                words[mul.offset + 3u] == 0x00100246u &&
+                words[mul.offset + 5u] == 0x00100246u &&
+                words[mul.offset + 6u] == dst) {
+                ++workflow_material_hits;
+                workflow_mad_word = mad.offset;
+            }
+        }
+    }
+
+    if (material_endif == static_cast<std::size_t>(-1) ||
+        additive_weight_hits != 1u ||
+        additive_gate_hits != 1u ||
+        diffuse_split_hits != 1u ||
+        workflow_material_hits != 1u ||
+        additive_gate_word == static_cast<std::size_t>(-1) ||
+        alpha_mul_word == static_cast<std::size_t>(-1) ||
+        diffuse_weight_mul_word == static_cast<std::size_t>(-1) ||
+        workflow_mad_word == static_cast<std::size_t>(-1))
+        return false;
+
+    // PTDE material topology:
+    // - no DSR additive/PBL live-out;
+    // - no SpecTex.a/workflowWeight suppression of legacy diffuse;
+    // - no cb9->cb10 workflow interpolation: select exact PTDE c100=b12[1].
+    words[additive_gate_word + 3u] = 0x00004001u;
+    words[additive_gate_word + 4u] = 0x00000000u;
+
+    words[alpha_mul_word + 3u] = 0x00004001u;
+    words[alpha_mul_word + 4u] = 0x3f800000u;
+
+    words[diffuse_weight_mul_word + 3u] = 0x00004001u;
+    words[diffuse_weight_mul_word + 4u] = 0x3f800000u;
+
+    words[workflow_mad_word + 3u] = 0x00004001u;
+    words[workflow_mad_word + 4u] = 0x00000000u;
+
+    std::size_t postmerge_gate_word =
+        static_cast<std::size_t>(-1);
+    bool postmerge_is_mad = false;
+    std::size_t postmerge_gate_hits = 0u;
+
+    for (std::size_t i = material_endif + 1u;
+         i < instructions.size();
+         ++i) {
+        const auto &ins = instructions[i];
+
+        if (ins.opcode == 0x38u &&
+            ins.length == 7u &&
+            ins.offset + 6u < words.size() &&
+            words[ins.offset + 1u] == 0x001000e2u &&
+            words[ins.offset + 3u] == 0x00100e56u &&
+            words[ins.offset + 4u] == words[ins.offset + 2u] &&
+            words[ins.offset + 5u] == 0x00100006u &&
+            words[ins.offset + 6u] == *spec_sample_register) {
+            ++postmerge_gate_hits;
+            postmerge_gate_word = ins.offset;
+            postmerge_is_mad = false;
+            continue;
+        }
+
+        if (ins.opcode == 0x32u &&
+            ins.length == 9u &&
+            ins.offset + 8u < words.size() &&
+            words[ins.offset + 1u] == 0x001000e2u &&
+            words[ins.offset + 3u] == 0x00100006u &&
+            words[ins.offset + 4u] == *spec_sample_register &&
+            words[ins.offset + 5u] == 0x00100e56u &&
+            words[ins.offset + 6u] == words[ins.offset + 2u] &&
+            words[ins.offset + 7u] == 0x00100906u) {
+            ++postmerge_gate_hits;
+            postmerge_gate_word = ins.offset;
+            postmerge_is_mad = true;
+        }
+    }
+
+    if (postmerge_gate_hits != 1u ||
+        postmerge_gate_word == static_cast<std::size_t>(-1))
+        return false;
+
+    // Stable rx33/rx34 delegated this MUL to R3. HemEnvLerp has no R3
+    // composition, so the Lerp MaterialWorkflow island owns the homologous
+    // late SpecTex.a gate directly.
+    const auto post_coeff_word =
+        postmerge_gate_word +
+        (postmerge_is_mad ? 3u : 5u);
+    words[post_coeff_word] = 0x00004001u;
+    words[post_coeff_word + 1u] = 0x3f800000u;
+
+    return
+        record_materialworkflow_assertion(
+            state, additive_gate_word + 3u, 0x00004001u) &&
+        record_materialworkflow_assertion(
+            state, additive_gate_word + 4u, 0x00000000u) &&
+        record_materialworkflow_assertion(
+            state, alpha_mul_word + 3u, 0x00004001u) &&
+        record_materialworkflow_assertion(
+            state, alpha_mul_word + 4u, 0x3f800000u) &&
+        record_materialworkflow_assertion(
+            state, diffuse_weight_mul_word + 3u, 0x00004001u) &&
+        record_materialworkflow_assertion(
+            state, diffuse_weight_mul_word + 4u, 0x3f800000u) &&
+        record_materialworkflow_assertion(
+            state, workflow_mad_word + 3u, 0x00004001u) &&
+        record_materialworkflow_assertion(
+            state, workflow_mad_word + 4u, 0x00000000u) &&
+        record_materialworkflow_assertion(
+            state, post_coeff_word, 0x00004001u) &&
+        record_materialworkflow_assertion(
+            state, post_coeff_word + 1u, 0x3f800000u);
+}
+
+bool pmetal_lerp_materialworkflow_postcondition(
+    const std::vector<std::uint32_t> &words,
+    const pmetal_lerp_materialworkflow_assertions &state) noexcept
+{
+    if (state.count != state.words.size())
+        return false;
+
+    for (std::size_t i = 0u; i < state.count; ++i) {
+        const auto [word,value] = state.words[i];
+        if (word >= words.size() ||
+            words[word] != value)
+            return false;
+    }
+
+    return true;
+}
+#endif
+
 #if defined(DSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE)
 constexpr std::size_t k_ptde_envdiffuse_lerp_prefix_words = 6u;
 
@@ -622,6 +988,9 @@ bool final_postcondition(
     const std::vector<std::uint8_t> &bytes,
     const generated_lerp::pmetal_hemenvlerp_site &site,
     const std::vector<std::uint32_t> &preserved_envdiffuse,
+#if defined(DSRRL_PMETAL_R19_LERP_MATERIALWORKFLOW)
+    const pmetal_lerp_materialworkflow_assertions &materialworkflow_assertions,
+#endif
     bool upper_lower_composed) noexcept
 {
     std::vector<chunk> chunks;
@@ -719,6 +1088,11 @@ bool final_postcondition(
         phn_scene_encoding_exact(words) &&
 #else
         terminal_rgb_sat_exact(words) &&
+#endif
+#if defined(DSRRL_PMETAL_R19_LERP_MATERIALWORKFLOW)
+        pmetal_lerp_materialworkflow_postcondition(
+            words,
+            materialworkflow_assertions) &&
 #endif
         upper_lower_shape_ok &&
         sample_count(words, 9u) == 0u &&
@@ -1296,6 +1670,10 @@ materialize_pmetal_rgba_lerp_receiver(
     }
 
     std::vector<std::uint32_t> preserved_envdiffuse;
+#if defined(DSRRL_PMETAL_R19_LERP_MATERIALWORKFLOW)
+    pmetal_lerp_materialworkflow_assertions
+        materialworkflow_assertions{};
+#endif
     try {
         preserved_envdiffuse.assign(
             words.begin() + static_cast<std::ptrdiff_t>(site->t11_word),
@@ -1343,6 +1721,17 @@ materialize_pmetal_rgba_lerp_receiver(
             preserved_envdiffuse.end(),
             words.begin() + static_cast<std::ptrdiff_t>(
                 site->t11_word))) {
+        outcome.result =
+            pmetal_rgba_lerp_materialize_result::
+                fail_operator_precondition;
+        return outcome;
+    }
+#endif
+
+#if defined(DSRRL_PMETAL_R19_LERP_MATERIALWORKFLOW)
+    if (!apply_exact_ptde_lerp_materialworkflow_r15_r16_r17(
+            words,
+            materialworkflow_assertions)) {
         outcome.result =
             pmetal_rgba_lerp_materialize_result::
                 fail_operator_precondition;
@@ -1497,6 +1886,9 @@ materialize_pmetal_rgba_lerp_receiver(
             spec_rgb_base,
             *site,
             preserved_envdiffuse,
+#if defined(DSRRL_PMETAL_R19_LERP_MATERIALWORKFLOW)
+            materialworkflow_assertions,
+#endif
             compose_upper_lower)) {
         outcome.result =
             pmetal_rgba_lerp_materialize_result::fail_postcondition;
