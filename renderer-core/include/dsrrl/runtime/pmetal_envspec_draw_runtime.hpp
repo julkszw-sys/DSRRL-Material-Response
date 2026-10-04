@@ -9,6 +9,7 @@
 #include "dsrrl/runtime/island_draw_adapter.hpp"
 #include "dsrrl/runtime/material_resource_draw_runtime.hpp"
 #include "dsrrl/runtime/pmetal_env_source_runtime.hpp"
+#include "dsrrl/runtime/upper_lower_draw_runtime.hpp"
 
 #include <reshade.hpp>
 
@@ -47,6 +48,9 @@ struct prepared_pmetal_envspec_draw {
     prepared_material_resource_draw material_resources{};
     ID3D11PixelShader *shader = nullptr;
     ID3D11Buffer *b12 = nullptr;
+#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_R10_LOCAL_UL)
+    prepared_upper_lower_draw local_ul{};
+#endif
     // R7 exact PTDE shadow sampler is AddRef-held for the replay lifetime.
     ID3D11SamplerState *shadow_sampler = nullptr;
 
