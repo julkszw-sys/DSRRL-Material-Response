@@ -122,6 +122,11 @@ option(
     OFF)
 
 option(
+    DSRRL_PMETAL_FULL_PTDE_HEMENV_R15_PTDE_LIVEOUT_PAIR
+    "P_Metal R15 diagnostic: zero the DSR-only MaterialWorkflow additive live-out and neutralize the downstream SpecTex-alpha common-surface gate"
+    OFF)
+
+option(
     DSRRL_POINTLIGHT_DRAWTIME_BYPASS
     "Diagnostic: disable PointLight producer hooks, runtime pipeline binding and draw-time carrier/replay while preserving all non-PointLight runtime paths"
     OFF)
@@ -733,6 +738,18 @@ if(DSRRL_PMETAL_FULL_PTDE_HEMENV_R11_COMMON_MERGE)
         dsrrl_renderer_core_integrated
         PRIVATE
         $<$<COMPILE_LANGUAGE:CXX>:DSRRL_PMETAL_FULL_PTDE_HEMENV_R11_COMMON_MERGE>)
+endif()
+
+if(DSRRL_PMETAL_FULL_PTDE_HEMENV_R15_PTDE_LIVEOUT_PAIR)
+    if(NOT DSRRL_PMETAL_FULL_PTDE_HEMENV_R11_COMMON_MERGE)
+        message(FATAL_ERROR
+            "P_Metal R15 PTDE live-out pair requires the complete R11 lineage")
+    endif()
+
+    target_compile_definitions(
+        dsrrl_renderer_core_integrated
+        PRIVATE
+        $<$<COMPILE_LANGUAGE:CXX>:DSRRL_PMETAL_FULL_PTDE_HEMENV_R15_PTDE_LIVEOUT_PAIR>)
 endif()
 
 if(DSRRL_POINTLIGHT_DRAWTIME_BYPASS)
