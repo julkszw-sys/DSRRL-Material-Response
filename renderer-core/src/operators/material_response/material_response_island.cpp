@@ -620,12 +620,6 @@ evaluate_direct_pointlight_material_identity(
     const material_identity &material,
     bool require_legacy_specular) noexcept
 {
-    std::unique_lock<std::mutex> lock;
-    if (!registration_finalized_.load(
-            std::memory_order_acquire))
-        lock = std::unique_lock<std::mutex>(
-            mutex_);
-
     if (!material.valid)
         return {false, decision_reason::material_required, 0u};
 
