@@ -93,7 +93,8 @@ void clustered_pnts_selector_event_bridge(
     const void *actual_material) noexcept;
 
 void clustered_pnts_selector_identity_event_bridge(
-    const operators::material_response::material_identity &identity) noexcept;
+    const operators::material_response::material_identity &identity,
+    bool expected_spc) noexcept;
 
 class clustered_pnts_draw_runtime {
 public:
@@ -111,7 +112,8 @@ public:
         const void *actual_material) noexcept;
 
     void selector_identity_event(
-        const operators::material_response::material_identity &identity) noexcept;
+        const operators::material_response::material_identity &identity,
+        bool expected_spc) noexcept;
 
     bool current_draw_authority(
         bool expected_spc,
