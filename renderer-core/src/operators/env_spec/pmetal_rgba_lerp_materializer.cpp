@@ -1048,6 +1048,83 @@ bool resize_existing_material_carrier_rdef(
             byte_size;
 }
 
+
+std::optional<std::uint32_t>
+material_carrier_rdef_byte_size(
+    const std::vector<std::uint8_t> &payload) noexcept
+{
+    constexpr std::size_t k_cb_desc_size = 24u;
+    constexpr std::size_t k_resource_desc_size = 32u;
+
+    if (payload.size() < 32u)
+        return std::nullopt;
+
+    const auto cb_count =
+        read_u32(payload.data());
+    const auto cb_offset =
+        read_u32(payload.data() + 4u);
+    const auto resource_count =
+        read_u32(payload.data() + 8u);
+    const auto resource_offset =
+        read_u32(payload.data() + 12u);
+
+    if (cb_count == 0u ||
+        cb_count > 64u ||
+        resource_count == 0u ||
+        resource_count > 256u ||
+        cb_offset > payload.size() ||
+        static_cast<std::size_t>(cb_count) *
+            k_cb_desc_size >
+            payload.size() - cb_offset ||
+        resource_offset > payload.size() ||
+        static_cast<std::size_t>(resource_count) *
+            k_resource_desc_size >
+            payload.size() - resource_offset)
+        return std::nullopt;
+
+    std::optional<std::uint32_t> name_offset;
+    std::size_t binding_hits = 0u;
+
+    for (std::uint32_t i = 0u; i < resource_count; ++i) {
+        const auto at =
+            static_cast<std::size_t>(resource_offset) +
+            static_cast<std::size_t>(i) *
+                k_resource_desc_size;
+        if (read_u32(payload.data() + at + 4u) != 0u ||
+            read_u32(payload.data() + at + 20u) != 12u ||
+            read_u32(payload.data() + at + 24u) != 1u)
+            continue;
+        ++binding_hits;
+        name_offset =
+            read_u32(payload.data() + at);
+    }
+
+    if (binding_hits != 1u ||
+        !name_offset.has_value())
+        return std::nullopt;
+
+    std::optional<std::uint32_t> byte_size;
+    std::size_t cb_hits = 0u;
+
+    for (std::uint32_t i = 0u; i < cb_count; ++i) {
+        const auto at =
+            static_cast<std::size_t>(cb_offset) +
+            static_cast<std::size_t>(i) *
+                k_cb_desc_size;
+        if (read_u32(payload.data() + at) !=
+            *name_offset)
+            continue;
+        ++cb_hits;
+        byte_size =
+            read_u32(payload.data() + at + 12u);
+    }
+
+    if (cb_hits != 1u)
+        return std::nullopt;
+
+    return byte_size;
+}
+
 bool add_bridge_rdef(
     const std::uint8_t *source,
     std::size_t source_size,
@@ -1150,6 +1227,19 @@ bool final_postcondition(
             rdef->payload,
             12u))
         return false;
+
+    const auto material_carrier_bytes =
+        material_carrier_rdef_byte_size(
+            rdef->payload);
+#if defined(DSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE)
+    if (!material_carrier_bytes.has_value() ||
+        *material_carrier_bytes != 96u)
+        return false;
+#else
+    if (!material_carrier_bytes.has_value() ||
+        *material_carrier_bytes != 64u)
+        return false;
+#endif
 
     const bool has_cb13 =
         legacy_plan::dxbc::rdef::has_constant_buffer_binding(
