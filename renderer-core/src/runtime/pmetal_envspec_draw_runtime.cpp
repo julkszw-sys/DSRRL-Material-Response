@@ -1017,6 +1017,97 @@ bool pmetal_envspec_draw_runtime::prepare(
     }
     effect_latch(effect_probe_ready_);
 
+    const auto source_probe_a =
+        prepared.env_resources.probe_a;
+    const auto source_probe_b =
+        prepared.env_resources.probe_b;
+    bool probe_swap_match = false;
+
+#if defined(DSRRL_PMETAL_PROBE_SWAP_MODE) && \
+    DSRRL_PMETAL_PROBE_SWAP_MODE != 0
+    static_assert(
+        DSRRL_PMETAL_PROBE_SWAP_SOURCE_ORDINAL <
+            env::k_legacy_envspec_probe_count,
+        "P_Metal probe-swap source ordinal must be canonical.");
+    static_assert(
+        DSRRL_PMETAL_PROBE_SWAP_TARGET_ORDINAL <
+            env::k_legacy_envspec_probe_count,
+        "P_Metal probe-swap target ordinal must be canonical.");
+
+    probe_swap_match =
+        !probe_b_required &&
+        source_probe_a ==
+            static_cast<std::uint16_t>(
+                DSRRL_PMETAL_PROBE_SWAP_SOURCE_ORDINAL) &&
+        source_probe_b ==
+            static_cast<std::uint16_t>(
+                DSRRL_PMETAL_PROBE_SWAP_SOURCE_ORDINAL);
+
+#if DSRRL_PMETAL_PROBE_SWAP_MODE == 1 || \
+    DSRRL_PMETAL_PROBE_SWAP_MODE == 3
+    if (probe_swap_match) {
+        prepared_envspec_resources forced{};
+
+        if (!env_resources_.prepare_forced(
+                static_cast<std::uint16_t>(
+                    DSRRL_PMETAL_PROBE_SWAP_TARGET_ORDINAL),
+                static_cast<std::uint16_t>(
+                    DSRRL_PMETAL_PROBE_SWAP_TARGET_ORDINAL),
+                env_semantics.envspc_slot,
+                false,
+                forced)) {
+            if (shader != nullptr)
+                shader->Release();
+            env_resources_.release(
+                prepared.env_resources);
+            telemetry::hot_count(
+                probe_rejects_);
+            effect_fail(
+                effect_fail_mask_,
+                k_effect_fail_probe);
+            log_prepare_stage_once(
+                1u << 8u,
+                "probe_swap_target_reject",
+                material,
+                decision,
+                family);
+            return false;
+        }
+
+        env_resources_.release(
+            prepared.env_resources);
+        prepared.env_resources =
+            forced;
+    }
+#endif
+
+    if (probe_swap_match) {
+        static std::atomic<bool>
+            g_probe_swap_logged{false};
+
+        if (!g_probe_swap_logged.exchange(
+                true,
+                std::memory_order_relaxed)) {
+            char swap_line[384]{};
+            std::snprintf(
+                swap_line,
+                sizeof(swap_line),
+                "[DSRRL PMETAL PROBE SWAP] mode=%d source=%u target=%u envspec=%u envdiffuse_mode=%d",
+                DSRRL_PMETAL_PROBE_SWAP_MODE,
+                static_cast<unsigned>(
+                    source_probe_a),
+                static_cast<unsigned>(
+                    DSRRL_PMETAL_PROBE_SWAP_TARGET_ORDINAL),
+                static_cast<unsigned>(
+                    prepared.env_resources.probe_a),
+                DSRRL_PMETAL_PROBE_SWAP_MODE);
+            reshade::log::message(
+                reshade::log::level::info,
+                swap_line);
+        }
+    }
+#endif
+
     if (!g_resource_mode_logged.exchange(
             true,
             std::memory_order_relaxed)) {
@@ -1359,9 +1450,34 @@ bool pmetal_envspec_draw_runtime::prepare(
     // Probe identity is inherited from the already-authenticated EnvSpec
     // t12/t14 pair. The exact PTDE EnvDiffuse pack uses the same canonical
     // probe ordinal and never derives assignment from DSR t11 content.
+    auto envdiffuse_probe_a =
+        prepared.env_resources.probe_a;
+    auto envdiffuse_probe_b =
+        prepared.env_resources.probe_b;
+
+#if defined(DSRRL_PMETAL_PROBE_SWAP_MODE) && \
+    DSRRL_PMETAL_PROBE_SWAP_MODE != 0
+    if (probe_swap_match) {
+#if DSRRL_PMETAL_PROBE_SWAP_MODE == 1
+        // EnvSpec-only diagnostic: preserve the source EnvDiffuse probe.
+        envdiffuse_probe_a = source_probe_a;
+        envdiffuse_probe_b = source_probe_b;
+#elif DSRRL_PMETAL_PROBE_SWAP_MODE == 2 || \
+      DSRRL_PMETAL_PROBE_SWAP_MODE == 3
+        // EnvDiffuse-only or paired diagnostic: substitute only the exact
+        // canonical PTDE probe resource, not LightBank/material state.
+        envdiffuse_probe_a =
+            static_cast<std::uint16_t>(
+                DSRRL_PMETAL_PROBE_SWAP_TARGET_ORDINAL);
+        envdiffuse_probe_b =
+            envdiffuse_probe_a;
+#endif
+    }
+#endif
+
     if (!env_resources_.prepare_envdiffuse(
-            prepared.env_resources.probe_a,
-            prepared.env_resources.probe_b,
+            envdiffuse_probe_a,
+            envdiffuse_probe_b,
             false,
             prepared.envdiffuse_resources)) {
         b12->Release();
