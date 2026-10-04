@@ -883,6 +883,203 @@ void clustered_pnts_draw_runtime::selector_event(
         true;
     g_draw_selection.ready = true;
 }
+void clustered_pnts_draw_runtime::selector_identity_event(
+    const operators::material_response::material_identity &identity) noexcept
+{
+    if (!g_enabled.load() ||
+        g_quarantined.load() ||
+        !g_draw_selection.ready ||
+        !g_draw_selection.owner_verified ||
+        !g_draw_selection.material_limit_ready)
+        return;
+
+    auto decision =
+        operators::material_response::
+            evaluate_direct_pointlight_material_identity(
+                identity,
+                true);
+    bool material_spc = decision.active;
+    if (!decision.active) {
+        decision =
+            operators::material_response::
+                evaluate_direct_pointlight_material_identity(
+                    identity,
+                    false);
+        material_spc = false;
+    }
+
+    if (!decision.active)
+        return;
+
+    g_draw_selection.material = identity;
+    g_draw_selection.material_decision = decision;
+    g_draw_selection.material_spc = material_spc;
+    g_draw_selection.authority_ready = true;
+
+    const auto &input = g_draw_selection.input;
+    auto &source_cache = g_source_selection_cache;
+
+    if (source_cache.producer_serial != input.serial) {
+        source_cache = {};
+        source_cache.producer_serial = input.serial;
+        source_cache.attempted = true;
+
+        std::array<std::uint32_t,4> selected_ids{};
+        std::array<void *,4> nodes{};
+        std::uint8_t selected_count = 0u;
+
+        if (!input.valid ||
+            !select_first_four_exact(
+                input.collection,
+                input.query.data(),
+                input.mask,
+                selected_ids,
+                nodes,
+                selected_count)) {
+            source_cache.failure =
+                clustered_pnts_prepare_failure::selection;
+            telemetry::hot_count(g_mirror_diff);
+            telemetry::hot_count(g_selection_fail);
+            telemetry::hot_count(g_sidecar_fail);
+            return;
+        }
+        telemetry::hot_count(g_selector_calls);
+
+#if defined(DSRRL_CLUSTERED_SELECTOR_RUNTIME_CROSSCHECK)
+        if (g_retained_selector == nullptr) {
+            source_cache.failure =
+                clustered_pnts_prepare_failure::selection;
+            telemetry::hot_count(g_mirror_diff);
+            telemetry::hot_count(g_selection_fail);
+            telemetry::hot_count(g_sidecar_fail);
+            return;
+        }
+
+        std::array<std::uint32_t,4> host_ids{
+            0xffffffffu,0xffffffffu,
+            0xffffffffu,0xffffffffu};
+        const int host_count =
+            g_retained_selector(
+                input.collection,
+                host_ids.data(),
+                4,
+                input.query.data(),
+                input.mask);
+
+        if (host_count < 0 ||
+            host_count > 4 ||
+            static_cast<int>(selected_count) !=
+                host_count) {
+            source_cache.failure =
+                clustered_pnts_prepare_failure::selection;
+            telemetry::hot_count(g_mirror_diff);
+            telemetry::hot_count(g_selection_fail);
+            telemetry::hot_count(g_sidecar_fail);
+            return;
+        }
+
+        for (std::uint8_t i = 0u;
+             i < selected_count;
+             ++i) {
+            if (host_ids[i] != selected_ids[i]) {
+                source_cache.failure =
+                    clustered_pnts_prepare_failure::selection;
+                telemetry::hot_count(g_mirror_diff);
+                telemetry::hot_count(g_selection_fail);
+                telemetry::hot_count(g_sidecar_fail);
+                return;
+            }
+        }
+        telemetry::hot_count(g_mirror_equal);
+#endif
+
+        source_cache.selected_count = selected_count;
+        if (selected_count == 0u) {
+            source_cache.ready = true;
+            source_cache.neutral = true;
+            telemetry::hot_count(g_selection_empty);
+        } else {
+            for (std::uint8_t i = 0u;
+                 i < selected_count;
+                 ++i) {
+                if (!capture_source(
+                        nodes[i],
+                        source_cache.sources[i]) ||
+                    source_cache.sources[i].source_id !=
+                        selected_ids[i]) {
+                    source_cache.failure =
+                        clustered_pnts_prepare_failure::source_capture;
+                    telemetry::hot_count(g_source_capture_fail);
+                    telemetry::hot_count(g_sidecar_fail);
+                    return;
+                }
+                telemetry::hot_count(g_source_capture_ok);
+            }
+            source_cache.ready = true;
+        }
+    }
+
+    if (!source_cache.ready) {
+        g_draw_selection.cached_failure =
+            source_cache.failure;
+        return;
+    }
+
+    if (source_cache.neutral) {
+        g_draw_selection.neutral_no_pointlights = true;
+        g_draw_selection.cached_failure =
+            clustered_pnts_prepare_failure::empty_selection;
+        telemetry::hot_count(g_prepare_neutral_empty);
+        return;
+    }
+
+    const auto built =
+        operators::point_light::
+            build_clustered_sidecar_v1(
+                source_cache.sources,
+                source_cache.selected_count,
+                g_draw_selection.material_max,
+                decision);
+
+    g_draw_selection.sidecar_result_code =
+        static_cast<std::uint8_t>(built.result);
+
+    if (built.result !=
+            operators::point_light::
+                clustered_sidecar_result_v1::ready ||
+        !built.payload.ready) {
+        g_draw_selection.cached_failure =
+            clustered_pnts_prepare_failure::sidecar_build;
+        telemetry::hot_count(g_sidecar_build_fail);
+        telemetry::hot_count(g_sidecar_fail);
+        return;
+    }
+
+    g_draw_selection.payload = built.payload;
+    g_draw_selection.payload_ready = true;
+    telemetry::hot_count(g_sidecar_ready);
+}
+
+bool clustered_pnts_draw_runtime::current_draw_authority(
+    bool expected_spc,
+    operators::material_response::material_identity &material,
+    operators::material_response::decision &decision) const noexcept
+{
+    material = {};
+    decision = {};
+
+    if (!g_enabled.load() ||
+        g_quarantined.load() ||
+        !g_draw_selection.ready ||
+        !g_draw_selection.authority_ready ||
+        g_draw_selection.material_spc != expected_spc)
+        return false;
+
+    material = g_draw_selection.material;
+    decision = g_draw_selection.material_decision;
+    return decision.active;
+}
+
 bool clustered_pnts_draw_runtime::prepare_sidecar(
     ID3D11DeviceContext *context,
     const operators::material_response::decision &material,
