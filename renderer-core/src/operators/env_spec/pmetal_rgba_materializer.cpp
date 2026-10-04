@@ -2900,11 +2900,10 @@ bool apply_exact_ptde_shadow_visibility_r7(
 }
 #endif
 
-// P_Metal atmosphere/Fog/LightScattering override is intentionally absent.
-// The historical V4B transform depended on a legacy cb12 FogRGB carrier that
-// is incompatible with the cumulative P_Metal ABI. Per project policy this
-// operator stays stock DSR until explicitly reopened; no latent compile-time
-// switch or alternate FogRGB carrier is retained in this lineage.
+// R10D intentionally left Atmosphere/Fog/LightScattering stock. R10E reopens
+// only the already-recovered atmosphere-domain continuation after correcting
+// the historical ABI interpretation: the operand is stock cb0[12], not the
+// custom DSRRL b12 carrier used for P_Metal state.
 
 #if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_R6) && defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_R10E_ATMOSPHERE)
 // R10E restores the confirmed PTDE atmosphere-domain continuation after the
