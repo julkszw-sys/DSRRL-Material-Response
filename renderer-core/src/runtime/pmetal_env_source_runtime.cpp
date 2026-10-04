@@ -413,6 +413,9 @@ std::atomic<std::uint64_t> g_hook_single_seen{0u};
 std::atomic<std::uint64_t> g_hook_blend_seen{0u};
 std::atomic<std::uint64_t> g_hook_publish{0u};
 std::atomic<std::uint64_t> g_hook_consume{0u};
+#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_R10C_LOCAL_UL_B12)
+std::atomic_bool g_hook_ul_active_logged{false};
+#endif
 std::atomic<std::uint32_t> g_hook_decode_stage{0u};
 std::atomic<std::uint32_t> g_hook_decode_version{0u};
 std::atomic<std::uint32_t> g_hook_decode_count{0u};
@@ -1715,6 +1718,15 @@ void publish_hook_source(
     next.lower = lower;
     next.upper_lower_valid =
         upper_lower_valid;
+#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_R10C_LOCAL_UL_B12)
+    if (upper_lower_valid &&
+        !g_hook_ul_active_logged.exchange(
+            true,
+            std::memory_order_relaxed))
+        reshade::log::message(
+            reshade::log::level::info,
+            "[DSRRL PMETAL R10D SOURCE] exact hook-source PTDE Upper/Lower carrier ACTIVE.");
+#endif
     next.beta =
         std::clamp(
             beta,
