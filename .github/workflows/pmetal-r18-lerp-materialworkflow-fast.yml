@@ -59,7 +59,7 @@ jobs:
           -DDSRRL_PMETAL_FULL_PTDE_HEMENV_R16_LEGACY_DIFFUSE_SPLIT=ON
           -DDSRRL_PMETAL_FULL_PTDE_HEMENV_R17_PTDE_DIFFUSE_MATERIAL=ON
           -DDSRRL_EQUIPMENT_MATERIALWORKFLOW_R18=ON
-          -DDSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE_DIAG=ON
+          -DDSRRL_PMETAL_R18_LERP_MATERIALWORKFLOW_DIAG=ON
           -DDSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE=ON
           -DDSRRL_PHYSICAL_CUT_UL_H3_SUBSURFACE=ON
 
@@ -78,7 +78,7 @@ jobs:
           $path = "DSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE.addon64"
           $ascii = [System.Text.Encoding]::ASCII.GetString([System.IO.File]::ReadAllBytes($path))
           if (-not $ascii.Contains($env:DSRRL_CHECKOUT_COMMIT)) { throw "Missing source commit identity" }
-          if (-not $ascii.Contains("pmetal_r18_lerp_materialworkflow_diag")) { throw "Missing R19 flavor identity" }
+          if (-not $ascii.Contains("pmetal_r19_lerp_exact_envdiffuse")) { throw "Missing R19 flavor identity" }
           $hash = (Get-FileHash $path -Algorithm SHA256).Hash.ToLowerInvariant()
           Write-Host "ADDON_SHA256=$hash"
 
