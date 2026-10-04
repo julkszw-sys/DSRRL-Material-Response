@@ -1818,6 +1818,179 @@ bool r3_postmerge_visibility_postcondition(
 }
 #endif
 
+#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_R11_COMMON_MERGE)
+// PTDE stable Phn HemEnv has no DSR screen-space SAO multiplier after the
+// first common environment/material merge. Retail DSR samples t8/s8 and then
+// multiplies the already-composed EnvSpec + diffuse*(EnvDiffuse + hemisphere)
+// surface by the sampled scalar. R11 removes only that DSR-only whole-surface
+// gate. The t8 sample itself is left byte-for-byte intact so this patch adds no
+// resource/state routing requirement and changes no callback/runtime gate.
+bool remove_dsr_sao_surface_multiplier_r11(
+    std::vector<std::uint8_t> &bytes) noexcept
+{
+    std::vector<chunk> chunks;
+    std::vector<std::uint32_t> words;
+    std::vector<instruction_view> instructions;
+    std::size_t code_index = 0u;
+
+    if (!parse_dxbc(
+            bytes.data(),
+            bytes.size(),
+            chunks,
+            code_index) ||
+        !extract_words(
+            chunks,
+            code_index,
+            words) ||
+        !decode(
+            words,
+            instructions))
+        return false;
+
+    std::size_t hits = 0u;
+    std::size_t multiply_word =
+        static_cast<std::size_t>(-1);
+
+    for (std::size_t i = 0u;
+         i + 1u < instructions.size();
+         ++i) {
+        const auto &sample =
+            instructions[i];
+
+        if (sample.opcode != 0x48u ||
+            sample.length != 13u ||
+            sample.offset + 12u >= words.size() ||
+            words[sample.offset + 8u] != 8u ||
+            words[sample.offset + 10u] != 8u)
+            continue;
+
+        const auto &mul =
+            instructions[i + 1u];
+
+        if (mul.offset !=
+                sample.offset +
+                    sample.length ||
+            mul.opcode != 0x38u ||
+            mul.length != 7u ||
+            mul.offset + 6u >=
+                words.size())
+            return false;
+
+        // Exact stable rx33/rx34/rx35 host continuation:
+        //   sample_l r2.x, ..., t8, s8
+        //   mul      r1.xyz, r1.xyz, r2.x
+        //
+        // The sample destination register may vary if the compiler layout ever
+        // changes, so tie the consumer to the exact sampled scalar instead of
+        // hard-coding register 2. Destination/source r1 is invariant across
+        // the certified retail stable triple.
+        if (words[mul.offset + 1u] !=
+                0x001000e2u ||
+            words[mul.offset + 2u] != 1u ||
+            words[mul.offset + 3u] !=
+                0x00100e56u ||
+            words[mul.offset + 4u] != 1u ||
+            words[mul.offset + 5u] !=
+                0x00100006u ||
+            words[mul.offset + 6u] !=
+                words[sample.offset + 4u])
+            return false;
+
+        ++hits;
+        multiply_word = mul.offset;
+    }
+
+    if (hits != 1u ||
+        multiply_word ==
+            static_cast<std::size_t>(-1))
+        return false;
+
+    // Length-preserving neutralization:
+    //   mul r1.xyz, r1.xyz, SAO  ->  mul r1.xyz, r1.xyz, 1.0
+    // No instruction is added and the t8 sample remains present/inert.
+    words[multiply_word + 5u] =
+        0x00004001u;
+    words[multiply_word + 6u] =
+        0x3f800000u;
+
+    std::vector<std::uint8_t> rebuilt;
+    if (!rebuild(
+            bytes.data(),
+            bytes.size(),
+            std::move(chunks),
+            code_index,
+            words,
+            rebuilt))
+        return false;
+
+    bytes = std::move(rebuilt);
+    return true;
+}
+
+bool r11_common_merge_postcondition(
+    const std::vector<std::uint8_t> &bytes) noexcept
+{
+    std::vector<chunk> chunks;
+    std::vector<std::uint32_t> words;
+    std::vector<instruction_view> instructions;
+    std::size_t code_index = 0u;
+
+    if (!parse_dxbc(
+            bytes.data(),
+            bytes.size(),
+            chunks,
+            code_index) ||
+        !extract_words(
+            chunks,
+            code_index,
+            words) ||
+        !decode(
+            words,
+            instructions))
+        return false;
+
+    std::size_t neutralized = 0u;
+
+    for (std::size_t i = 0u;
+         i + 1u < instructions.size();
+         ++i) {
+        const auto &sample =
+            instructions[i];
+
+        if (sample.opcode != 0x48u ||
+            sample.length != 13u ||
+            sample.offset + 12u >= words.size() ||
+            words[sample.offset + 8u] != 8u ||
+            words[sample.offset + 10u] != 8u)
+            continue;
+
+        const auto &mul =
+            instructions[i + 1u];
+
+        if (mul.offset ==
+                sample.offset +
+                    sample.length &&
+            mul.opcode == 0x38u &&
+            mul.length == 7u &&
+            mul.offset + 6u <
+                words.size() &&
+            words[mul.offset + 1u] ==
+                0x001000e2u &&
+            words[mul.offset + 2u] == 1u &&
+            words[mul.offset + 3u] ==
+                0x00100e56u &&
+            words[mul.offset + 4u] == 1u &&
+            words[mul.offset + 5u] ==
+                0x00004001u &&
+            words[mul.offset + 6u] ==
+                0x3f800000u)
+            ++neutralized;
+    }
+
+    return neutralized == 1u;
+}
+#endif
+
 #if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_R5)
 // PTDE stable Phn HemEnv reconstructs the tangent frame per pixel. DSR HemEnv
 // changed that spatial operator in two non-equivalent ways before both
@@ -4119,6 +4292,18 @@ materialize_pmetal_rgba_receiver(
     outcome.shadow_visibility_kernel_composed =
         outcome.receiver_id == 33u ||
         outcome.receiver_id == 34u;
+#endif
+
+#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_R11_COMMON_MERGE)
+    if (!remove_dsr_sao_surface_multiplier_r11(
+            base) ||
+        !r11_common_merge_postcondition(
+            base)) {
+        outcome.result =
+            pmetal_rgba_materialize_result::
+                fail_postcondition;
+        return outcome;
+    }
 #endif
 
 // Atmosphere/Fog/LightScattering remains stock DSR in R6B. Do not compose
