@@ -47,6 +47,11 @@ struct prepared_pmetal_envspec_draw {
     prepared_material_resource_draw material_resources{};
     ID3D11PixelShader *shader = nullptr;
     ID3D11Buffer *b12 = nullptr;
+#if defined(DSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE)
+    // Exact HemEnvLerp EnvDiffuse endpoint carrier:
+    // b13[0]=(1-beta)*c86, b13[1]=beta*c84.xyz.
+    ID3D11Buffer *b13_envdiffuse = nullptr;
+#endif
     // R7 exact PTDE shadow sampler is AddRef-held for the replay lifetime.
     ID3D11SamplerState *shadow_sampler = nullptr;
 
@@ -155,6 +160,13 @@ private:
         std::array<std::uint32_t,16> payload_bits{};
         bool payload_valid = false;
     };
+#if defined(DSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE)
+    struct b13_envdiffuse_context_cache {
+        ID3D11Buffer *buffer = nullptr;
+        std::array<std::uint32_t,8> payload_bits{};
+        bool payload_valid = false;
+    };
+#endif
 
     void release_resources() noexcept;
 
@@ -178,6 +190,10 @@ private:
         lerp_replacement_size_;
     std::unordered_map<std::uintptr_t,b12_context_cache>
         b12_by_context_;
+#if defined(DSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE)
+    std::unordered_map<std::uintptr_t,b13_envdiffuse_context_cache>
+        b13_envdiffuse_by_context_;
+#endif
 
     std::atomic<std::uint64_t> replacement_register_ok_{0};
     std::atomic<std::uint64_t> replacement_register_fail_{0};
