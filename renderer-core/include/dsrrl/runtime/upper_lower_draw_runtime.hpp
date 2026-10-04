@@ -62,12 +62,6 @@ struct prepared_upper_lower_draw {
     bool ready = false;
 };
 
-bool prepare_pmetal_local_upper_lower_carrier(
-    ID3D11DeviceContext *context,
-    const std::array<float,3> &upper,
-    const std::array<float,3> &lower,
-    prepared_upper_lower_draw &prepared) noexcept;
-
 struct pmetal_env_source {
     std::array<float,3> a{};
     std::array<float,3> b{};
