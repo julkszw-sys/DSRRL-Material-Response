@@ -51,6 +51,7 @@ std::atomic_bool g_resource_mode_logged{false};
 std::atomic_bool g_native_envdiffuse_logged{false};
 std::atomic_bool g_envdiffuse_consumer_logged{false};
 std::atomic_bool g_source_frontier_logged{false};
+std::atomic_bool g_shadow_r7_logged{false};
 std::atomic<std::uint32_t> g_prepare_stage_log_mask{0u};
 std::atomic<std::uint32_t> g_value_cut_log_mask{0u};
 
@@ -260,6 +261,13 @@ release_resources() noexcept
     }
     b12_by_context_.clear();
 
+#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_R7_SHADOW)
+    if (shadow_sampler_ != nullptr) {
+        shadow_sampler_->Release();
+        shadow_sampler_ = nullptr;
+    }
+#endif
+
     if (device_ != nullptr) {
         device_->Release();
         device_ = nullptr;
@@ -288,6 +296,40 @@ on_init_device(
     if (device_ == nullptr) {
         native->AddRef();
         device_ = native;
+
+#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_R7_SHADOW)
+        // Exact D3D11 semantic equivalent of PTDE DATA.exe stage-7 shadow
+        // sampler: D3DTEXF_POINT for MIN/MAG/MIP, BORDER on U/V/W, white
+        // border, MaxMipLevel=0. D3D11 MaxAnisotropy must be >=1 even though
+        // it is ignored by point filtering; ComparisonFunc is likewise
+        // ignored for the non-comparison SAMPLE path.
+        D3D11_SAMPLER_DESC shadow_desc{};
+        shadow_desc.Filter =
+            D3D11_FILTER_MIN_MAG_MIP_POINT;
+        shadow_desc.AddressU =
+            D3D11_TEXTURE_ADDRESS_BORDER;
+        shadow_desc.AddressV =
+            D3D11_TEXTURE_ADDRESS_BORDER;
+        shadow_desc.AddressW =
+            D3D11_TEXTURE_ADDRESS_BORDER;
+        shadow_desc.MipLODBias = 0.0f;
+        shadow_desc.MaxAnisotropy = 1u;
+        shadow_desc.ComparisonFunc =
+            D3D11_COMPARISON_NEVER;
+        shadow_desc.BorderColor[0] = 1.0f;
+        shadow_desc.BorderColor[1] = 1.0f;
+        shadow_desc.BorderColor[2] = 1.0f;
+        shadow_desc.BorderColor[3] = 1.0f;
+        shadow_desc.MinLOD = 0.0f;
+        shadow_desc.MaxLOD =
+            D3D11_FLOAT32_MAX;
+
+        if (FAILED(
+                native->CreateSamplerState(
+                    &shadow_desc,
+                    &shadow_sampler_)))
+            shadow_sampler_ = nullptr;
+#endif
         return;
     }
 
@@ -361,6 +403,13 @@ register_replacement(
         outcome.receiver_id < 33u ||
         outcome.receiver_id > 35u ||
         outcome.upper_lower_composed ||
+#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_R7_SHADOW)
+        (((outcome.receiver_id == 33u ||
+           outcome.receiver_id == 34u) &&
+          !outcome.shadow_visibility_kernel_composed) ||
+         (outcome.receiver_id == 35u &&
+          outcome.shadow_visibility_kernel_composed)) ||
+#endif
 #if defined(DSRRL_PMETAL_V13_NATIVE_DSR_NO_TAIL_DIAG)
         outcome.spec_rgb_consumer ||
         outcome.envdiffuse_linear_consumer_diag ||
@@ -1617,31 +1666,100 @@ bool pmetal_envspec_draw_runtime::prepare(
     prepared.request.srv_count =
         request_srv_count;
 
-#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG)
-    prepared.request.samplers[0] = {
-        11u,
-        prepared.envdiffuse_resources.sampler
-    };
-    prepared.request.samplers[1] = {
-        12u,
-        prepared.env_resources.sampler
-    };
-    prepared.request.samplers[2] = {
-        14u,
-        prepared.env_resources.sampler
-    };
-    prepared.request.sampler_count = 3u;
-#else
-    prepared.request.samplers[0] = {
-        12u,
-        prepared.env_resources.sampler
-    };
-    prepared.request.samplers[1] = {
-        14u,
-        prepared.env_resources.sampler
-    };
-    prepared.request.sampler_count = 2u;
+    std::uint32_t request_sampler_count = 0u;
+
+#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_R7_SHADOW)
+    const bool shadow_r7_draw =
+        family ==
+            pmetal_envspec_receiver_family::
+                stable_hemenv &&
+        (decision.receiver_id == 33u ||
+         decision.receiver_id == 34u);
+
+    if (shadow_r7_draw) {
+        {
+            std::lock_guard<std::mutex> lock(
+                mutex_);
+            if (shadow_sampler_ != nullptr) {
+                shadow_sampler_->AddRef();
+                prepared.shadow_sampler =
+                    shadow_sampler_;
+            }
+        }
+
+        if (prepared.shadow_sampler == nullptr) {
+            release(prepared);
+            effect_fail(
+                effect_fail_mask_,
+                k_effect_fail_device);
+            log_prepare_stage_once(
+                1u << 13u,
+                "shadow_s7_reject",
+                material,
+                decision,
+                family);
+            return false;
+        }
+
+        prepared.request.samplers[
+            request_sampler_count++] = {
+                7u,
+                prepared.shadow_sampler
+            };
+
+        if (!g_shadow_r7_logged.exchange(
+                true,
+                std::memory_order_relaxed)) {
+            char line[384]{};
+            std::snprintf(
+                line,
+                sizeof(line),
+                "[DSRRL PMETAL R7 SHADOW] rx=%u route=%u s7=%016llx kernel=pcf16_packed24 point_border_white",
+                static_cast<unsigned>(
+                    decision.receiver_id),
+                static_cast<unsigned>(
+                    decision.route_index),
+                static_cast<unsigned long long>(
+                    reinterpret_cast<
+                        std::uintptr_t>(
+                            prepared.shadow_sampler)));
+            reshade::log::message(
+                reshade::log::level::info,
+                line);
+        }
+    }
 #endif
+
+#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG)
+    prepared.request.samplers[
+        request_sampler_count++] = {
+            11u,
+            prepared.envdiffuse_resources.sampler
+        };
+    prepared.request.samplers[
+        request_sampler_count++] = {
+            12u,
+            prepared.env_resources.sampler
+        };
+    prepared.request.samplers[
+        request_sampler_count++] = {
+            14u,
+            prepared.env_resources.sampler
+        };
+#else
+    prepared.request.samplers[
+        request_sampler_count++] = {
+            12u,
+            prepared.env_resources.sampler
+        };
+    prepared.request.samplers[
+        request_sampler_count++] = {
+            14u,
+            prepared.env_resources.sampler
+        };
+#endif
+    prepared.request.sampler_count =
+        request_sampler_count;
 
     draw_tx_mutation verify{};
     if (build_island_draw_mutation(
@@ -1821,6 +1939,9 @@ void pmetal_envspec_draw_runtime::release(
     if (prepared.shader != nullptr)
         prepared.shader->Release();
 
+    if (prepared.shadow_sampler != nullptr)
+        prepared.shadow_sampler->Release();
+
     if (prepared.native_dsr_envdiffuse_a != nullptr)
         prepared.native_dsr_envdiffuse_a->Release();
     if (prepared.native_dsr_envdiffuse_b != nullptr)
@@ -1906,6 +2027,7 @@ void pmetal_envspec_draw_runtime::reset() noexcept
     g_native_envdiffuse_logged.store(false);
     g_envdiffuse_consumer_logged.store(false);
     g_source_frontier_logged.store(false);
+    g_shadow_r7_logged.store(false);
     g_prepare_stage_log_mask.store(0u);
     g_value_cut_log_mask.store(0u);
     quarantined_.store(false);
