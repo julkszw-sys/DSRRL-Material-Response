@@ -44,6 +44,15 @@ std::vector<std::uint8_t> read_file(const char *path)
     return file ? bytes : std::vector<std::uint8_t>{};
 }
 
+bool write_file(const char *path, const std::vector<std::uint8_t> &bytes)
+{
+    std::ofstream file(path, std::ios::binary | std::ios::trunc);
+    if (!file) return false;
+    file.write(reinterpret_cast<const char *>(bytes.data()),
+               static_cast<std::streamsize>(bytes.size()));
+    return static_cast<bool>(file);
+}
+
 bool enable_policy(dsrrl::core::feature_registry &features)
 {
     using dsrrl::core::operator_id;
@@ -125,6 +134,14 @@ int main(int argc, char **argv)
                 << " envdiff=" << result.envdiffuse_linear_consumer_diag
                 << " output_bytes=" << output.size() << "\n";
             return 20 + static_cast<int>(i);
+        }
+
+        const std::string dump_name =
+            std::string("r11_rx") + std::to_string(receivers[i]) +
+            "_shader" + std::to_string(shader_indices[i]) + ".dxbc";
+        if (!write_file(dump_name.c_str(), output)) {
+            std::cerr << "R11_OFFLINE_DUMP_FAIL " << dump_name << "\n";
+            return 30 + static_cast<int>(i);
         }
 
         std::cout
