@@ -2,6 +2,9 @@ name: P_Metal R10E Atmosphere Domain Build
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - fix-pmetal-r10e-atmosphere-domain-continuation
   pull_request:
     paths:
       - "renderer-core/integrated/**"
