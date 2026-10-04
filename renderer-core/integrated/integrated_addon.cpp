@@ -5397,6 +5397,10 @@ void release_prepared_island_batch(
     prepared_island_batch &prepared) noexcept
 {
     if (prepared.clustered_in_batch) {
+        g_material_resources.release_prepared_draw(
+            prepared.resources);
+        g_material_resources.release_prepared_draw(
+            prepared.resources);
         g_clustered_pnts.release_prepared_draw(
             prepared.clustered_carrier);
         g_clustered_pnts_pipeline.release_prepared_shader(
@@ -5574,11 +5578,13 @@ bool prepare_island_batch(
             prepared.clustered_shader)) {
         hot_count(g_clustered_draw_pipeline_ready);
 
-        // The current clustered PntS journal owns PTDE attenuation, diffuse
-        // material-domain and terminal SAT only. Its Spc host still contains
-        // the stock DSR microfacet/GGX local-specular window. Do not replay
-        // that partial hybrid as a PTDE local-specular island.
-        if (prepared.clustered_shader.spc) {
+        // Clustered Spc is replay-authorized only when the create-time R20
+        // stage has killed the stock DSR GGX/Schlick value at the local-light
+        // output cut and added the separate PTDE legacy reflect/pow branch.
+        // Never reopen the historical partial hybrid.
+        if (prepared.clustered_shader.spc &&
+            !prepared.clustered_shader.
+                legacy_specular_materialized) {
             static std::atomic_bool
                 clustered_spc_incomplete_logged{false};
             if (!clustered_spc_incomplete_logged.exchange(
@@ -5613,27 +5619,63 @@ bool prepare_island_batch(
         if (direct_material_ready)
             hot_count(g_clustered_draw_material_ready);
 
-        // Clustered PointLight material constants and source carriers are
-        // independent of the equipment PTDE texture bridge. The exact
-        // replacement journals add only the PointLight-local t19 carrier;
-        // stock material texture reads remain on the host path unless a
-        // separate equipment draw route authorizes replacement.
-        // The native command list may wrap either an immediate or a deferred
-        // D3D11 context; prepare_sidecar owns the API-valid context handling.
+        // NoSpc remains independent of equipment companions. Spc has an exact
+        // additional material dependency: the new PTDE legacy branch samples
+        // PTDE SpecRGB from t10 (and t16 for blended materials). Bind only
+        // those sidecars and fail open if exact logical material/resource
+        // authority is unavailable.
+        bool clustered_spec_ready =
+            !prepared.clustered_shader.spc;
+
+        if (prepared.clustered_shader.spc &&
+            context != nullptr &&
+            direct_material_ready) {
+            dsrrl::operators::material_response::
+                mtd_semantic_query clustered_query{};
+            clustered_query.material = material;
+            clustered_query.receiver_id = 0u;
+            clustered_query.ownership.flver_sha256 =
+                material.flver_sha256;
+            clustered_query.ownership.flver_identity_hash =
+                material.flver_identity_hash;
+            clustered_query.ownership.material_slot =
+                material.material_slot;
+            clustered_query.ownership.material_slot_valid =
+                material.material_slot_valid;
+            clustered_query.ownership.exact =
+                material.owner_tuple_exact;
+
+            clustered_spec_ready =
+                g_material_resources.
+                    prepare_clustered_pointlight_specular_requests(
+                        context,
+                        clustered_query,
+                        true,
+                        true,
+                        prepared.clustered_shader.
+                            blended_material,
+                        prepared.resources) &&
+                prepared.resources.spec_rgb;
+        }
+
         const bool operator_gate_ready =
             context != nullptr &&
-            direct_material_ready;
+            direct_material_ready &&
+            clustered_spec_ready;
 
         if (operator_gate_ready) {
             hot_count(g_clustered_draw_operator_gate_ready);
         } else {
             log_pointlight_prep_once(
                 1u << 0,
-                "clustered_operator_gate_not_ready",
+                prepared.clustered_shader.spc &&
+                        !clustered_spec_ready
+                    ? "clustered_spec_rgb_not_ready"
+                    : "clustered_operator_gate_not_ready",
                 prepared.clustered_shader.spc,
                 prepared.clustered_shader.blended_material,
                 direct_material_ready,
-                false,
+                clustered_spec_ready,
                 false);
         }
 
@@ -5700,7 +5742,10 @@ bool prepare_island_batch(
             const auto expected_static_shader_owners =
                 dsrrl::operators::point_light::
                     clustered_pnts_required_composed_shader_owners(
-                        prepared.clustered_shader.spc);
+                        prepared.clustered_shader.spc) |
+                (prepared.clustered_shader.spc
+                    ? local
+                    : dsrrl::core::operator_mask{0u});
 
             if (static_shader_owners !=
                     expected_static_shader_owners ||
@@ -5737,9 +5782,13 @@ bool prepare_island_batch(
                     ? (point | mr)
                     : mr;
 
+            const auto static_additional_owners =
+                static_shader_owners &
+                ~local_if_spc;
+
             clustered.additional_owners =
                 dynamic_additional_owners |
-                static_shader_owners;
+                static_additional_owners;
             clustered.additional_shader_owners =
                 clustered.additional_owners;
             clustered.additional_constant_buffer_owners =
@@ -5773,14 +5822,30 @@ bool prepare_island_batch(
                     prepared.batch,
                     clustered) ==
                 dsrrl::runtime::island_draw_batch_result::ready) {
-                prepared.clustered_in_batch = true;
-                hot_count(g_clustered_draw_batch_ready);
-                if (!g_pointlight_once_batch_ready.exchange(true)) {
-                    reshade::log::message(
-                        reshade::log::level::info,
-                        "[DSRRL POINTLIGHT APPLY] stage=batch_ready");
+                bool resources_appended = true;
+
+                for (std::uint32_t i = 0u;
+                     i < prepared.resources.request_count;
+                     ++i) {
+                    if (dsrrl::runtime::append_island_draw_request(
+                            prepared.batch,
+                            prepared.resources.requests[i]) !=
+                        dsrrl::runtime::island_draw_batch_result::ready) {
+                        resources_appended = false;
+                        break;
+                    }
                 }
-                return true;
+
+                if (resources_appended) {
+                    prepared.clustered_in_batch = true;
+                    hot_count(g_clustered_draw_batch_ready);
+                    if (!g_pointlight_once_batch_ready.exchange(true)) {
+                        reshade::log::message(
+                            reshade::log::level::info,
+                            "[DSRRL POINTLIGHT APPLY] stage=batch_ready");
+                    }
+                    return true;
+                }
             }
         }
 
