@@ -180,6 +180,7 @@ bool parse_dxbc(
         words[1] == words.size();
 }
 
+#if defined(DSRRL_EQUIPMENT_MATERIALWORKFLOW_R18)
 bool patch_shared_equipment_materialworkflow_diffuse_v18(
     std::vector<std::uint32_t> &words,
     std::uint32_t receiver_id) noexcept
@@ -348,6 +349,7 @@ bool patch_shared_equipment_materialworkflow_diffuse_v18(
 
     return true;
 }
+#endif
 
 bool rebuild_dxbc(
     const std::uint8_t *source,
@@ -937,7 +939,8 @@ materialize_ptde_diffuse_response_v1(
         plan->diffuse_pow_site + 2u] =
         0x3f800000u;
 
-    if (!defer_surface_operators &&
+#if defined(DSRRL_EQUIPMENT_MATERIALWORKFLOW_R18)
+    if ((!defer_surface_operators || lerp) &&
         !patch_shared_equipment_materialworkflow_diffuse_v18(
             words,
             plan->receiver_id)) {
@@ -947,6 +950,7 @@ materialize_ptde_diffuse_response_v1(
                 fail_patch_precondition;
         return outcome;
     }
+#endif
 
     try {
         words.insert(
