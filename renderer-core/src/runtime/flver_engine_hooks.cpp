@@ -903,6 +903,7 @@ void __fastcall mtd_entry(
 
 bool publish_exact_selector_identity(
     void *owner,
+    const void *actual_material,
     void *ret,
     void *r14,
     void *r15,
@@ -930,9 +931,19 @@ bool publish_exact_selector_identity(
     if (!selection_ok)
         return false;
 
-    if (g_state.builder_armed)
+    bool pointlight_spc = false;
+    if (g_state.builder_armed &&
+        operators::material_response::
+            direct_pointlight_material_candidate(
+                identity,
+                pointlight_spc)) {
+        (void)pointlight_spc;
+        clustered_pnts_selector_event_bridge(
+            owner,
+            actual_material);
         clustered_pnts_selector_identity_event_bridge(
             identity);
+    }
 
 #ifndef DSRRL_PHYSICAL_CUT_UL_H3_SUBSURFACE
     if (g_selector_upper_lower_enabled.load(
@@ -1081,11 +1092,6 @@ extern "C" void dsrrl_flver_selector_observer(
      resolve_begin,
      profile.resolve_material_ticks);
 
- if(g_state.builder_armed)
-  clustered_pnts_selector_event_bridge(
-      owner,
-      actual_material);
-
  operators::material_response::material_identity
      cached_identity{};
  const auto cache_begin =
@@ -1106,6 +1112,7 @@ extern "C" void dsrrl_flver_selector_observer(
 
   if(publish_exact_selector_identity(
         owner,
+        actual_material,
         ret,
         r14,
         r15,
@@ -1158,6 +1165,7 @@ extern "C" void dsrrl_flver_selector_observer(
 
    if(publish_exact_selector_identity(
           owner,
+          actual_material,
           ret,
           r14,
           r15,
