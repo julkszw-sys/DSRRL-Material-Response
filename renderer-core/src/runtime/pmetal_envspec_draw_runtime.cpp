@@ -59,6 +59,9 @@ std::atomic<std::uint32_t> g_r9_value_cut_seen_mask{0u};
 #if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_R10C_LOCAL_UL_B12)
 std::atomic_bool g_r10c_local_ul_logged{false};
 #endif
+#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_R10E_ATMOSPHERE)
+std::atomic_bool g_r10e_atmosphere_logged{false};
+#endif
 
 void log_prepare_stage_once(
     std::uint32_t bit,
@@ -1475,6 +1478,16 @@ bool pmetal_envspec_draw_runtime::prepare(
         reshade::log::message(
             reshade::log::level::info,
             line);
+    }
+#endif
+
+#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_R10E_ATMOSPHERE)
+    if (!g_r10e_atmosphere_logged.exchange(
+            true,
+            std::memory_order_relaxed)) {
+        reshade::log::message(
+            reshade::log::level::info,
+            "[DSRRL PMETAL R10E ATMOSPHERE] mode=ptde_linear_prefog_stock_cb0_12 preserve_lightscattering remove_post_ls_pow");
     }
 #endif
 
