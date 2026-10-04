@@ -117,6 +117,11 @@ option(
     OFF)
 
 option(
+    DSRRL_PMETAL_FULL_PTDE_HEMENV_R10C_LOCAL_UL_B12
+    "Stable P_Metal R10C: carry exact PTDE local Upper/Lower through the existing cached P_Metal b12 without global U/L or b13 replay"
+    OFF)
+
+option(
     DSRRL_POINTLIGHT_DRAWTIME_BYPASS
     "Diagnostic: disable PointLight producer hooks, runtime pipeline binding and draw-time carrier/replay while preserving all non-PointLight runtime paths"
     OFF)
@@ -716,6 +721,18 @@ if(DSRRL_PMETAL_FULL_PTDE_HEMENV_R8_PRE_AB)
         dsrrl_renderer_core_integrated
         PRIVATE
         $<$<COMPILE_LANGUAGE:CXX>:DSRRL_PMETAL_FULL_PTDE_HEMENV_R8_PRE_AB>)
+endif()
+
+if(DSRRL_PMETAL_FULL_PTDE_HEMENV_R10C_LOCAL_UL_B12)
+    if(NOT DSRRL_PMETAL_FULL_PTDE_HEMENV_R8_PRE_AB)
+        message(FATAL_ERROR
+            "P_Metal R10C local U/L b12 requires the complete R8 PRE A/B lineage")
+    endif()
+
+    target_compile_definitions(
+        dsrrl_renderer_core_integrated
+        PRIVATE
+        $<$<COMPILE_LANGUAGE:CXX>:DSRRL_PMETAL_FULL_PTDE_HEMENV_R10C_LOCAL_UL_B12>)
 endif()
 
 if(DSRRL_POINTLIGHT_DRAWTIME_BYPASS)
