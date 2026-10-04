@@ -2166,6 +2166,561 @@ bool apply_exact_ptde_normal_basis_r5(
 }
 #endif
 
+#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_R7_SHADOW)
+// R7 restores the remaining upstream PTDE Visibility_P shadow producer on the
+// exact stable Csd/Sdw P_Metal receivers. DSR rx33/rx34 replaced the legacy
+// packed-RGB 4x4/16-tap kernel with a comparison-sampler 3x3/9-SAMPLE_C
+// kernel. Fixed-light shaders in the same FRPG_Phn_DifSpcBmp family retain
+// the PTDE-style producer and provide the exact DXBC semantics used here.
+//
+// This patch owns only the shadow sampling/comparison island. Projection,
+// normal-bias, distance fade, ShadowColor and the already-recovered downstream
+// visibility/common-merge remain unchanged. Plain rx35 has no Csd/Sdw shadow
+// branch and is deliberately left byte-identical at this operator cut.
+bool patch_ptde_shadow_r7_rdef(
+    std::vector<chunk> &chunks) noexcept
+{
+    auto *rdef = unique_rdef(chunks);
+    if (rdef == nullptr ||
+        rdef->payload.size() < 16u)
+        return false;
+
+    auto &payload = rdef->payload;
+    const auto count =
+        read_u32(payload.data() + 8u);
+    const auto offset =
+        read_u32(payload.data() + 12u);
+    constexpr std::uint32_t
+        k_binding_size = 32u;
+
+    if (count == 0u ||
+        count > 256u ||
+        offset > payload.size() ||
+        static_cast<std::uint64_t>(count) *
+                k_binding_size >
+            payload.size() - offset)
+        return false;
+
+    std::size_t sampler7_hits = 0u;
+    std::size_t texture7_hits = 0u;
+
+    for (std::uint32_t i = 0u;
+         i < count;
+         ++i) {
+        const auto at =
+            offset +
+            static_cast<std::size_t>(i) *
+                k_binding_size;
+        const auto type =
+            read_u32(payload.data() + at + 4u);
+        const auto dimension =
+            read_u32(payload.data() + at + 12u);
+        const auto bind =
+            read_u32(payload.data() + at + 20u);
+        const auto bind_count =
+            read_u32(payload.data() + at + 24u);
+        const auto flags =
+            read_u32(payload.data() + at + 28u);
+
+        if (bind != 7u ||
+            bind_count != 1u)
+            continue;
+
+        if (type == 3u) {
+            // Retail no-point/PntS stable Csd/Sdw declares s7 as
+            // USERPACKED|COMPARISON_SAMPLER (flags=3). R7's manual SAMPLE
+            // kernel requires the legacy regular sampler declaration (flags=1).
+            if (flags != 3u)
+                return false;
+            write_u32(
+                payload.data() + at + 28u,
+                1u);
+            ++sampler7_hits;
+        } else if (
+            type == 2u &&
+            dimension == 4u &&
+            flags == 13u) {
+            // The logical t7 2D resource ABI is invariant across DSR's
+            // comparison and legacy/manual branches; do not rewrite it.
+            ++texture7_hits;
+        }
+    }
+
+    return
+        sampler7_hits == 1u &&
+        texture7_hits == 1u;
+}
+
+void append_ptde_shadow_r7_row(
+    std::vector<std::uint32_t> &out,
+    std::uint32_t base_register,
+    std::uint32_t y,
+    std::uint32_t row_index)
+{
+    constexpr std::uint32_t k_coord = 13u;
+    constexpr std::uint32_t k_depth = 14u;
+    constexpr std::uint32_t k_sample = 15u;
+    constexpr std::uint32_t k_accum = 16u;
+    constexpr std::uint32_t k_row = 17u;
+
+    constexpr std::uint32_t k_neg_1_5_over_2048 = 0xba400000u;
+    constexpr std::uint32_t k_neg_0_5_over_2048 = 0xb9800000u;
+    constexpr std::uint32_t k_pos_0_5_over_2048 = 0x39800000u;
+    constexpr std::uint32_t k_pos_1_5_over_2048 = 0x3a400000u;
+
+    const auto add_coords =
+        [&](std::uint32_t x0,
+            std::uint32_t x1) {
+            const std::array<std::uint32_t,10> words{{
+                0x0a000000u,
+                0x001000f2u,k_coord,
+                0x00100446u,base_register,
+                0x00004002u,
+                x0,y,x1,y
+            }};
+            out.insert(
+                out.end(),
+                words.begin(),
+                words.end());
+        };
+
+    const auto sample =
+        [&](std::uint32_t coord_token) {
+            const std::array<std::uint32_t,11> words{{
+                0x8b000045u,
+                0x800000c2u,0x00155543u,
+                0x00100072u,k_sample,
+                coord_token,k_coord,
+                0x00107e46u,7u,
+                0x00106000u,7u
+            }};
+            out.insert(
+                out.end(),
+                words.begin(),
+                words.end());
+        };
+
+    const auto decode_depth =
+        [&](std::uint32_t destination_token) {
+            const std::array<std::uint32_t,10> words{{
+                0x0a000010u,
+                destination_token,k_depth,
+                0x00100246u,k_sample,
+                0x00004002u,
+                0x3f7f0000u,
+                0x3b7f0000u,
+                0x377f0000u,
+                0x00000000u
+            }};
+            out.insert(
+                out.end(),
+                words.begin(),
+                words.end());
+        };
+
+    add_coords(
+        k_neg_1_5_over_2048,
+        k_neg_0_5_over_2048);
+    sample(0x00100046u);
+    decode_depth(0x00100012u);
+    sample(0x00100ae6u);
+    decode_depth(0x00100022u);
+
+    add_coords(
+        k_pos_0_5_over_2048,
+        k_pos_1_5_over_2048);
+    sample(0x00100046u);
+    decode_depth(0x00100042u);
+    sample(0x00100ae6u);
+    decode_depth(0x00100082u);
+
+    const std::array<std::uint32_t,7> lt{{
+        0x07000031u,
+        0x001000f2u,k_coord,
+        0x00100e46u,k_depth,
+        0x00100aa6u,base_register
+    }};
+    out.insert(
+        out.end(),
+        lt.begin(),
+        lt.end());
+
+    const std::array<std::uint32_t,10> and_one{{
+        0x0a000001u,
+        0x001000f2u,k_coord,
+        0x00100e46u,k_coord,
+        0x00004002u,
+        0x3f800000u,0x3f800000u,
+        0x3f800000u,0x3f800000u
+    }};
+    out.insert(
+        out.end(),
+        and_one.begin(),
+        and_one.end());
+
+    const auto row_destination =
+        row_index == 0u
+            ? k_accum
+            : k_row;
+    const std::array<std::uint32_t,10> dp4{{
+        0x0a000011u,
+        0x00100082u,row_destination,
+        0x00100e46u,k_coord,
+        0x00004002u,
+        0x3d800000u,0x3d800000u,
+        0x3d800000u,0x3d800000u
+    }};
+    out.insert(
+        out.end(),
+        dp4.begin(),
+        dp4.end());
+
+    if (row_index != 0u) {
+        const std::array<std::uint32_t,7> add_row{{
+            0x07000000u,
+            0x00100082u,k_accum,
+            0x0010003au,k_accum,
+            0x0010003au,k_row
+        }};
+        out.insert(
+            out.end(),
+            add_row.begin(),
+            add_row.end());
+    }
+}
+
+bool apply_exact_ptde_shadow_visibility_r7(
+    std::vector<std::uint8_t> &bytes,
+    const pmetal_rgba_authority::entry
+        &authority) noexcept
+{
+    if (authority.receiver_id == 35u)
+        return true;
+
+    if (authority.receiver_id != 33u &&
+        authority.receiver_id != 34u)
+        return false;
+
+    std::vector<chunk> chunks;
+    std::vector<std::uint32_t> words;
+    std::vector<instruction_view> instructions;
+    std::size_t code_index = 0u;
+
+    if (!parse_dxbc(
+            bytes.data(),
+            bytes.size(),
+            chunks,
+            code_index) ||
+        !extract_words(
+            chunks,
+            code_index,
+            words) ||
+        !decode(
+            words,
+            instructions))
+        return false;
+
+    std::size_t sampler_decl =
+        static_cast<std::size_t>(-1);
+    std::size_t sampler_decl_hits = 0u;
+    std::size_t temps_decl =
+        static_cast<std::size_t>(-1);
+    std::size_t temps_decl_hits = 0u;
+    std::vector<std::size_t>
+        sample_c_words;
+    std::uint32_t base_register =
+        std::numeric_limits<std::uint32_t>::
+            max();
+
+    for (const auto &ins : instructions) {
+        if (ins.opcode == 0x5au &&
+            ins.length == 3u &&
+            ins.offset + 2u < words.size() &&
+            words[ins.offset + 2u] == 7u) {
+            if (words[ins.offset] !=
+                    0x0300085au ||
+                words[ins.offset + 1u] !=
+                    0x00106000u)
+                return false;
+            ++sampler_decl_hits;
+            sampler_decl = ins.offset;
+        }
+
+        if (ins.opcode == 0x68u &&
+            ins.length == 2u) {
+            ++temps_decl_hits;
+            temps_decl = ins.offset;
+        }
+
+        if (ins.opcode != 0x46u ||
+            ins.length != 14u ||
+            ins.offset + 13u >=
+                words.size())
+            continue;
+
+        if (words[ins.offset + 8u] !=
+                0x00107006u ||
+            words[ins.offset + 9u] != 7u ||
+            words[ins.offset + 10u] !=
+                0x00106000u ||
+            words[ins.offset + 11u] != 7u)
+            continue;
+
+        if (words[ins.offset + 6u] !=
+                0x00100046u ||
+            words[ins.offset + 12u] !=
+                0x0010002au ||
+            words[ins.offset + 7u] !=
+                words[ins.offset + 13u])
+            return false;
+
+        const auto this_base =
+            words[ins.offset + 7u];
+
+        if (base_register ==
+                std::numeric_limits<
+                    std::uint32_t>::max())
+            base_register = this_base;
+        else if (base_register !=
+                    this_base)
+            return false;
+
+        sample_c_words.push_back(
+            ins.offset);
+    }
+
+    if (sampler_decl_hits != 1u ||
+        temps_decl_hits != 1u ||
+        sampler_decl ==
+            static_cast<std::size_t>(-1) ||
+        temps_decl ==
+            static_cast<std::size_t>(-1) ||
+        sample_c_words.size() != 9u ||
+        base_register ==
+            std::numeric_limits<
+                std::uint32_t>::max() ||
+        (authority.receiver_id == 33u &&
+         base_register != 6u) ||
+        (authority.receiver_id == 34u &&
+         base_register != 5u) ||
+        words[temps_decl + 1u] != 13u)
+        return false;
+
+    const auto first_sample =
+        sample_c_words.front();
+    const auto last_sample =
+        sample_c_words.back();
+
+    std::size_t terminal_min =
+        static_cast<std::size_t>(-1);
+    std::size_t terminal_min_hits = 0u;
+
+    for (const auto &ins : instructions) {
+        if (ins.offset <= last_sample ||
+            ins.offset >
+                last_sample + 64u ||
+            ins.opcode != 0x33u ||
+            ins.length != 7u ||
+            ins.offset + 6u >= words.size())
+            continue;
+
+        if (words[ins.offset] ==
+                0x07000033u &&
+            words[ins.offset + 1u] ==
+                0x00100082u &&
+            words[ins.offset + 2u] == 2u &&
+            words[ins.offset + 3u] ==
+                0x0010003au &&
+            words[ins.offset + 4u] == 2u &&
+            words[ins.offset + 5u] ==
+                0x00004001u &&
+            words[ins.offset + 6u] ==
+                0x3f800000u) {
+            ++terminal_min_hits;
+            terminal_min = ins.offset;
+        }
+    }
+
+    if (terminal_min_hits != 1u ||
+        terminal_min <
+            first_sample)
+        return false;
+
+    std::vector<std::uint32_t>
+        replacement;
+
+    try {
+        replacement.reserve(559u);
+
+        constexpr std::array<std::uint32_t,4>
+            k_y{{
+                0xba400000u,
+                0xb9800000u,
+                0x39800000u,
+                0x3a400000u
+            }};
+
+        for (std::uint32_t row = 0u;
+             row < k_y.size();
+             ++row)
+            append_ptde_shadow_r7_row(
+                replacement,
+                base_register,
+                k_y[row],
+                row);
+
+        const std::array<std::uint32_t,7>
+            add_visibility{{
+                0x07000000u,
+                0x00100082u,2u,
+                0x0010003au,2u,
+                0x0010003au,16u
+            }};
+        replacement.insert(
+            replacement.end(),
+            add_visibility.begin(),
+            add_visibility.end());
+
+        const std::array<std::uint32_t,7>
+            sat_visibility{{
+                0x07000033u,
+                0x00100082u,2u,
+                0x0010003au,2u,
+                0x00004001u,0x3f800000u
+            }};
+        replacement.insert(
+            replacement.end(),
+            sat_visibility.begin(),
+            sat_visibility.end());
+    } catch (...) {
+        return false;
+    }
+
+    if (replacement.size() != 559u)
+        return false;
+
+    // Switch the shader declaration itself from comparison to regular s7 and
+    // expose five fresh scratch registers r13..r17. These registers are above
+    // the stock/R6B dcl_temps=13 range and therefore cannot alias live values.
+    words[sampler_decl] =
+        0x0300005au;
+    words[temps_decl + 1u] =
+        18u;
+
+    try {
+        words.erase(
+            words.begin() +
+                static_cast<std::ptrdiff_t>(
+                    first_sample),
+            words.begin() +
+                static_cast<std::ptrdiff_t>(
+                    terminal_min + 7u));
+        words.insert(
+            words.begin() +
+                static_cast<std::ptrdiff_t>(
+                    first_sample),
+            replacement.begin(),
+            replacement.end());
+    } catch (...) {
+        return false;
+    }
+
+    if (words.size() >
+            std::numeric_limits<
+                std::uint32_t>::max())
+        return false;
+
+    words[1] =
+        static_cast<std::uint32_t>(
+            words.size());
+
+    if (!patch_ptde_shadow_r7_rdef(
+            chunks))
+        return false;
+
+    std::vector<instruction_view>
+        patched;
+    if (!decode(
+            words,
+            patched))
+        return false;
+
+    std::size_t regular_s7_decl = 0u;
+    std::size_t t7_sample = 0u;
+    std::size_t t7_sample_c = 0u;
+    std::size_t temps18 = 0u;
+
+    for (const auto &ins : patched) {
+        if (ins.opcode == 0x5au &&
+            ins.length == 3u &&
+            ins.offset + 2u < words.size() &&
+            words[ins.offset + 2u] == 7u &&
+            words[ins.offset] ==
+                0x0300005au)
+            ++regular_s7_decl;
+
+        if (ins.opcode == 0x68u &&
+            ins.length == 2u &&
+            words[ins.offset + 1u] >= 18u)
+            ++temps18;
+
+        if (ins.opcode == 0x45u &&
+            ins.length == 11u &&
+            ins.offset + 10u < words.size() &&
+            words[ins.offset + 7u] ==
+                0x00107e46u &&
+            words[ins.offset + 8u] == 7u &&
+            words[ins.offset + 9u] ==
+                0x00106000u &&
+            words[ins.offset + 10u] == 7u)
+            ++t7_sample;
+
+        if (ins.opcode == 0x46u &&
+            ins.length == 14u &&
+            ins.offset + 11u < words.size() &&
+            words[ins.offset + 8u] ==
+                0x00107006u &&
+            words[ins.offset + 9u] == 7u &&
+            words[ins.offset + 10u] ==
+                0x00106000u &&
+            words[ins.offset + 11u] == 7u)
+            ++t7_sample_c;
+    }
+
+    if (regular_s7_decl != 1u ||
+        temps18 != 1u ||
+        t7_sample != 16u ||
+        t7_sample_c != 0u ||
+        std::count(
+            words.begin(),
+            words.end(),
+            0x3f7f0000u) < 16 ||
+        std::count(
+            words.begin(),
+            words.end(),
+            0x3b7f0000u) < 16 ||
+        std::count(
+            words.begin(),
+            words.end(),
+            0x377f0000u) < 16)
+        return false;
+
+    std::vector<std::uint8_t> rebuilt;
+    if (!rebuild(
+            bytes.data(),
+            bytes.size(),
+            std::move(chunks),
+            code_index,
+            words,
+            rebuilt))
+        return false;
+
+    bytes =
+        std::move(rebuilt);
+    return true;
+}
+#endif
+
 // P_Metal atmosphere/Fog/LightScattering override is intentionally absent.
 // The historical V4B transform depended on a legacy cb12 FogRGB carrier that
 // is incompatible with the cumulative P_Metal ABI. Per project policy this
@@ -3344,6 +3899,21 @@ materialize_pmetal_rgba_receiver(
                 fail_postcondition;
         return outcome;
     }
+#endif
+
+#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_R7_SHADOW)
+    if (!apply_exact_ptde_shadow_visibility_r7(
+            base,
+            *authority)) {
+        outcome.result =
+            pmetal_rgba_materialize_result::
+                fail_postcondition;
+        return outcome;
+    }
+
+    outcome.shadow_visibility_kernel_composed =
+        outcome.receiver_id == 33u ||
+        outcome.receiver_id == 34u;
 #endif
 
 // Atmosphere/Fog/LightScattering remains stock DSR in R6B. Do not compose
