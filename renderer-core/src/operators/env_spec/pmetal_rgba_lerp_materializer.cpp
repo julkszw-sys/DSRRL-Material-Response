@@ -128,6 +128,46 @@ bool decode(
     return cursor == words.size();
 }
 
+bool parse_dxbc(
+    const std::uint8_t *source,
+    std::size_t size,
+    std::vector<chunk> &chunks,
+    std::size_t &code_index) noexcept
+{
+    std::vector<std::uint32_t> ignored;
+    return parse_dxbc(
+        source,
+        size,
+        chunks,
+        code_index,
+        ignored);
+}
+
+bool extract_words(
+    const std::vector<chunk> &chunks,
+    std::size_t code_index,
+    std::vector<std::uint32_t> &words) noexcept
+{
+    if (code_index >= chunks.size() ||
+        (chunks[code_index].payload.size() & 3u) != 0u)
+        return false;
+
+    const auto &payload = chunks[code_index].payload;
+    try {
+        words.resize(payload.size() / 4u);
+    } catch (...) {
+        return false;
+    }
+
+    for (std::size_t i = 0u; i < words.size(); ++i)
+        words[i] = read_u32(payload.data() + i * 4u);
+
+    return
+        words.size() >= 12u &&
+        words[1] == words.size();
+}
+
+
 bool rebuild(
     const std::uint8_t *source,
     std::size_t source_size,
