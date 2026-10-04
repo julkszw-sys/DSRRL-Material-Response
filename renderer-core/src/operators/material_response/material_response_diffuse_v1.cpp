@@ -11,6 +11,7 @@
 #include <array>
 #include <cstring>
 #include <limits>
+#include <optional>
 #include <utility>
 #include <vector>
 
@@ -29,6 +30,40 @@ struct chunk {
     std::array<char,4> tag{};
     std::vector<std::uint8_t> payload;
 };
+
+struct instruction_view {
+    std::size_t offset = 0u;
+    std::uint32_t opcode = 0u;
+    std::size_t length = 0u;
+};
+
+bool decode_words(
+    const std::vector<std::uint32_t> &words,
+    std::vector<instruction_view> &out) noexcept
+{
+    out.clear();
+    if (words.size() < 2u)
+        return false;
+
+    std::size_t cursor = 2u;
+    while (cursor < words.size()) {
+        const auto length =
+            static_cast<std::size_t>(
+                (words[cursor] >> 24u) & 0x7fu);
+        if (length == 0u ||
+            cursor + length > words.size())
+            return false;
+
+        out.push_back({
+            cursor,
+            words[cursor] & 0x7ffu,
+            length
+        });
+        cursor += length;
+    }
+
+    return cursor == words.size();
+}
 
 bool parse_dxbc(
     const std::uint8_t *source,
