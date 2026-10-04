@@ -1991,6 +1991,227 @@ bool r11_common_merge_postcondition(
 }
 #endif
 
+#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_R15_PTDE_LIVEOUT_PAIR)
+// R15 corrects the R14 overbright falsifier by restoring the PTDE downstream
+// topology instead of opening the DSR MaterialWorkflow additive path.
+//
+// DSR stable HemEnv exposes two independent MaterialWorkflow live-outs:
+//   (A) a DSR-only additive/PBL carrier:
+//         extra *= (1 - SpecTex.a) * cb0[100].w * 10
+//       which is added to the common surface later;
+//   (B) a later post-merge gate:
+//         common *= SpecTex.a
+//       (fused as SpecTex.a * common + hemisphere in the plain receiver).
+//
+// Exact PTDE stable HemEnv has neither downstream operator: the visible result
+// is the PTDE common diffuse/environment composition plus the PTDE specular
+// term. Therefore R15 zeros only (A) and neutralizes only (B). It preserves
+// the rest of gFC_MaterialWorkflow, Build131, PTDE EnvDiffuse/EnvSpec,
+// SpecRGB*c101*COLOR0, shadow, SAO removal and terminal scene encoding.
+bool apply_ptde_materialworkflow_liveout_pair_r15(
+    std::vector<std::uint32_t> &words) noexcept
+{
+    std::vector<instruction_view> instructions;
+    if (!decode(words, instructions))
+        return false;
+
+    std::optional<std::uint32_t> spec_sample_register;
+    std::size_t material_if = static_cast<std::size_t>(-1);
+
+    for (std::size_t i = 0u; i + 1u < instructions.size(); ++i) {
+        const auto &sample = instructions[i];
+        const auto &branch = instructions[i + 1u];
+
+        if (sample.opcode < 0x45u || sample.opcode > 0x4au ||
+            sample.length != 11u ||
+            sample.offset + 10u >= words.size() ||
+            words[sample.offset + 7u] != 0x00107936u ||
+            words[sample.offset + 8u] != 1u ||
+            words[sample.offset + 10u] != 1u ||
+            branch.opcode != 0x1fu ||
+            branch.length != 4u ||
+            branch.offset != sample.offset + sample.length ||
+            branch.offset + 3u >= words.size() ||
+            words[branch.offset + 1u] != 0x0020800au ||
+            words[branch.offset + 2u] != 0u ||
+            words[branch.offset + 3u] != 85u)
+            continue;
+
+        if (spec_sample_register.has_value())
+            return false;
+
+        spec_sample_register = words[sample.offset + 4u];
+        material_if = i + 1u;
+    }
+
+    if (!spec_sample_register.has_value() ||
+        material_if == static_cast<std::size_t>(-1))
+        return false;
+
+    std::size_t depth = 0u;
+    bool in_else = false;
+    std::size_t material_endif = static_cast<std::size_t>(-1);
+    std::optional<std::uint32_t> weight_register;
+    std::size_t weight_chain_hits = 0u;
+    std::size_t additive_gate_word = static_cast<std::size_t>(-1);
+    std::size_t additive_gate_hits = 0u;
+
+    for (std::size_t i = material_if + 1u; i < instructions.size(); ++i) {
+        const auto &ins = instructions[i];
+
+        if (ins.opcode == 0x1fu) {
+            ++depth;
+            continue;
+        }
+
+        if (ins.opcode == 0x12u && depth == 0u) {
+            in_else = true;
+            continue;
+        }
+
+        if (ins.opcode == 0x15u) {
+            if (depth == 0u) {
+                material_endif = i;
+                break;
+            }
+            --depth;
+            continue;
+        }
+
+        if (depth != 0u || in_else)
+            continue;
+
+        // Exact DSR scalar producer:
+        //   add rW.w, -SpecTex.a, 1
+        //   mul rW.w, rW.w, cb0[100].w
+        //   mul rW.w, rW.w, 10
+        if (ins.opcode == 0x00u &&
+            ins.length == 8u &&
+            ins.offset + 7u < words.size() &&
+            words[ins.offset + 1u] == 0x00100082u &&
+            words[ins.offset + 3u] == 0x8010000au &&
+            words[ins.offset + 4u] == 0x00000041u &&
+            words[ins.offset + 5u] == *spec_sample_register &&
+            words[ins.offset + 6u] == 0x00004001u &&
+            words[ins.offset + 7u] == 0x3f800000u) {
+            if (i + 2u >= instructions.size())
+                return false;
+
+            const auto reg = words[ins.offset + 2u];
+            const auto &mul_cb = instructions[i + 1u];
+            const auto &mul_10 = instructions[i + 2u];
+
+            if (mul_cb.opcode != 0x38u ||
+                mul_cb.length != 8u ||
+                mul_cb.offset + 7u >= words.size() ||
+                words[mul_cb.offset + 1u] != 0x00100082u ||
+                words[mul_cb.offset + 2u] != reg ||
+                words[mul_cb.offset + 3u] != 0x0010003au ||
+                words[mul_cb.offset + 4u] != reg ||
+                words[mul_cb.offset + 5u] != 0x0020803au ||
+                words[mul_cb.offset + 6u] != 0u ||
+                words[mul_cb.offset + 7u] != 100u ||
+                mul_10.opcode != 0x38u ||
+                mul_10.length != 7u ||
+                mul_10.offset + 6u >= words.size() ||
+                words[mul_10.offset + 1u] != 0x00100082u ||
+                words[mul_10.offset + 2u] != reg ||
+                words[mul_10.offset + 3u] != 0x0010003au ||
+                words[mul_10.offset + 4u] != reg ||
+                words[mul_10.offset + 5u] != 0x00004001u ||
+                words[mul_10.offset + 6u] != 0x41200000u)
+                return false;
+
+            ++weight_chain_hits;
+            weight_register = reg;
+            continue;
+        }
+
+        if (!weight_register.has_value() ||
+            ins.opcode != 0x38u ||
+            ins.length != 7u ||
+            ins.offset + 6u >= words.size() ||
+            words[ins.offset + 1u] != 0x00100072u ||
+            words[ins.offset + 3u] != 0x00100ff6u ||
+            words[ins.offset + 4u] != *weight_register ||
+            words[ins.offset + 5u] != 0x00100246u ||
+            words[ins.offset + 6u] != words[ins.offset + 2u])
+            continue;
+
+        ++additive_gate_hits;
+        additive_gate_word = ins.offset;
+    }
+
+    if (material_endif == static_cast<std::size_t>(-1) ||
+        weight_chain_hits != 1u ||
+        additive_gate_hits != 1u ||
+        additive_gate_word == static_cast<std::size_t>(-1))
+        return false;
+
+    // DSR-only additive/PBL live-out -> zero.
+    words[additive_gate_word + 3u] = 0x00004001u;
+    words[additive_gate_word + 4u] = 0x00000000u;
+
+    std::size_t postmerge_gate_word = static_cast<std::size_t>(-1);
+    bool postmerge_is_mad = false;
+    std::size_t postmerge_gate_hits = 0u;
+
+    for (std::size_t i = material_endif + 1u; i < instructions.size(); ++i) {
+        const auto &ins = instructions[i];
+
+        // Csd/Sdw:
+        //   mul r1.yzw, r1.yyzw, SpecTex.a
+        if (ins.opcode == 0x38u &&
+            ins.length == 7u &&
+            ins.offset + 6u < words.size() &&
+            words[ins.offset + 1u] == 0x001000e2u &&
+            words[ins.offset + 3u] == 0x00100e56u &&
+            words[ins.offset + 4u] == words[ins.offset + 2u] &&
+            words[ins.offset + 5u] == 0x00100006u &&
+            words[ins.offset + 6u] == *spec_sample_register) {
+            ++postmerge_gate_hits;
+            postmerge_gate_word = ins.offset;
+            postmerge_is_mad = false;
+            continue;
+        }
+
+        // Plain:
+        //   mad r1.yzw, SpecTex.a, r1.yyzw, r2.xxyz
+        if (ins.opcode == 0x32u &&
+            ins.length == 9u &&
+            ins.offset + 8u < words.size() &&
+            words[ins.offset + 1u] == 0x001000e2u &&
+            words[ins.offset + 3u] == 0x00100006u &&
+            words[ins.offset + 4u] == *spec_sample_register &&
+            words[ins.offset + 5u] == 0x00100e56u &&
+            words[ins.offset + 6u] == words[ins.offset + 2u] &&
+            words[ins.offset + 7u] == 0x00100906u) {
+            ++postmerge_gate_hits;
+            postmerge_gate_word = ins.offset;
+            postmerge_is_mad = true;
+        }
+    }
+
+    if (postmerge_gate_hits != 1u ||
+        postmerge_gate_word == static_cast<std::size_t>(-1))
+        return false;
+
+    // Restore the PTDE common surface: remove only the post-merge SpecTex.a
+    // coefficient while preserving the merge/addend topology.
+    const auto coeff_word =
+        postmerge_gate_word + (postmerge_is_mad ? 3u : 5u);
+    words[coeff_word] = 0x00004001u;
+    words[coeff_word + 1u] = 0x3f800000u;
+
+    // Length-preserving postconditions: no offsets/ABI/resource layout move.
+    return
+        words[additive_gate_word + 3u] == 0x00004001u &&
+        words[additive_gate_word + 4u] == 0x00000000u &&
+        words[coeff_word] == 0x00004001u &&
+        words[coeff_word + 1u] == 0x3f800000u;
+}
+#endif
+
 #if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_R5)
 // PTDE stable Phn HemEnv reconstructs the tangent frame per pixel. DSR HemEnv
 // changed that spatial operator in two non-equivalent ways before both
@@ -3271,6 +3492,12 @@ bool apply_build131(
         !decode(
             words,
             instructions))
+        return false;
+#endif
+
+#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_R15_PTDE_LIVEOUT_PAIR)
+    if (!apply_ptde_materialworkflow_liveout_pair_r15(words) ||
+        !decode(words, instructions))
         return false;
 #endif
 
