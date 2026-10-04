@@ -748,7 +748,11 @@ bool pmetal_envspec_draw_runtime::prepare(
 
     pmetal_envspec_source source{};
     if (!source_.latest(material, source) ||
-        !std::isfinite(source.beta)) {
+        !std::isfinite(source.beta)
+#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_R10C_INLINE_UL_B12)
+        || !source.upper_lower_valid
+#endif
+        ) {
         telemetry::hot_count(source_rejects_);
         effect_fail(
             effect_fail_mask_,
@@ -1207,7 +1211,11 @@ bool pmetal_envspec_draw_runtime::prepare(
         carrier3 = {{0.0f,0.0f,0.0f}};
 #endif
 
+#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_R10C_INLINE_UL_B12)
+    const std::array<f4,6> payload{{
+#else
     const std::array<f4,4> payload{{
+#endif
         {
             decision.c101,
             decision.c101,
@@ -1240,8 +1248,27 @@ bool pmetal_envspec_draw_runtime::prepare(
             carrier3[2],
             source.beta
         }
+#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_R10C_INLINE_UL_B12)
+        ,
+        {
+            source.upper_ptde[0],
+            source.upper_ptde[1],
+            source.upper_ptde[2],
+            0.0f
+        },
+        {
+            source.lower_ptde[0],
+            source.lower_ptde[1],
+            source.lower_ptde[2],
+            0.0f
+        }
+#endif
     }};
+#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_R10C_INLINE_UL_B12)
+    static_assert(sizeof(payload) == 96u);
+#else
     static_assert(sizeof(payload) == 64u);
+#endif
 
     ID3D11Device *device = nullptr;
     context->GetDevice(&device);
@@ -1261,7 +1288,11 @@ bool pmetal_envspec_draw_runtime::prepare(
         return false;
     }
 
+#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_R10C_INLINE_UL_B12)
+    std::array<std::uint32_t,24> payload_bits{};
+#else
     std::array<std::uint32_t,16> payload_bits{};
+#endif
     static_assert(
         sizeof(payload_bits) == sizeof(payload));
     std::memcpy(
@@ -1313,7 +1344,11 @@ bool pmetal_envspec_draw_runtime::prepare(
                     payload_bits;
         } else {
             D3D11_BUFFER_DESC desc{};
+#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_R10C_INLINE_UL_B12)
+            desc.ByteWidth = 96u;
+#else
             desc.ByteWidth = 64u;
+#endif
             desc.Usage =
                 D3D11_USAGE_DYNAMIC;
             desc.BindFlags =
