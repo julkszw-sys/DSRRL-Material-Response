@@ -211,6 +211,7 @@ add_library(dsrrl_renderer_core STATIC
     src/operators/point_light/pnts_attenuation.cpp
     src/operators/point_light/clustered_sidecar.cpp
     src/operators/point_light/clustered_pnts_direct_materializer.cpp
+    src/operators/point_light/clustered_spc_legacy_materializer.cpp
     src/operators/point_light/legacy_specular.cpp
     src/operators/point_light/local_specular_receiver_registry.cpp
     src/operators/point_light/local_specular_microfacet_windows.cpp
