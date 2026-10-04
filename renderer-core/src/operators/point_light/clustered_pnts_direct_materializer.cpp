@@ -540,6 +540,15 @@ bool rebuild(
 
 } // namespace
 
+bool migrate_clustered_pnts_legacy_b12_words(
+    std::vector<std::uint32_t> &words,
+    bool spc) noexcept
+{
+    return migrate_legacy_pointlight_b12_to_current(
+        words,
+        spc);
+}
+
 clustered_pnts_direct_materialize_outcome
 materialize_clustered_pnts_direct_ptde(
     const std::uint8_t *source,
