@@ -883,9 +883,9 @@ bool pmetal_envspec_draw_runtime::prepare(
     }
     effect_latch(effect_source_ready_);
 
-#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG)
-    // First runtime is intentionally stable HemEnv only. HemEnvLerp remains
-    // stock until its complete two-endpoint PTDE EnvDiffuse island is ported.
+#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG) && !defined(DSRRL_PMETAL_R18_LERP_MATERIALWORKFLOW_DIAG)
+    // Stable-only production guard. R18 explicitly opens HemEnvLerp as an
+    // isolated diagnostic with stock EnvDiffuse A/B preserved.
     if (family !=
             pmetal_envspec_receiver_family::
                 stable_hemenv) {
@@ -1412,57 +1412,70 @@ bool pmetal_envspec_draw_runtime::prepare(
     effect_latch(effect_b12_ready_);
 
 #if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG)
-    // Probe identity is inherited from the already-authenticated EnvSpec
-    // t12/t14 pair. The exact PTDE EnvDiffuse pack uses the same canonical
-    // probe ordinal and never derives assignment from DSR t11 content.
-    if (!env_resources_.prepare_envdiffuse(
-            prepared.env_resources.probe_a,
-            prepared.env_resources.probe_b,
-            false,
-            prepared.envdiffuse_resources)) {
-        b12->Release();
-        if (shader != nullptr)
-            shader->Release();
-        env_resources_.release(
-            prepared.env_resources);
-        material_resources_.
-            release_prepared_draw(
-                prepared.material_resources);
-        effect_fail(
-            effect_fail_mask_,
-            k_effect_fail_native_envdiffuse);
-        log_prepare_stage_once(
-            1u << 12u,
-            "ptde_envdiffuse_resource_reject",
-            material,
-            decision,
-            family);
-        return false;
-    }
+    // Stable HemEnv owns the exact PTDE EnvDiffuse resource/decode island.
+    // R18 HemEnvLerp deliberately keeps stock DSR EnvDiffuse A/B so the
+    // diagnostic isolates paired PTDE EnvSpec + R17 MaterialWorkflow.
+    if (family ==
+            pmetal_envspec_receiver_family::
+                stable_hemenv) {
+        if (!env_resources_.prepare_envdiffuse(
+                prepared.env_resources.probe_a,
+                prepared.env_resources.probe_b,
+                false,
+                prepared.envdiffuse_resources)) {
+            b12->Release();
+            if (shader != nullptr)
+                shader->Release();
+            env_resources_.release(
+                prepared.env_resources);
+            material_resources_.
+                release_prepared_draw(
+                    prepared.material_resources);
+            effect_fail(
+                effect_fail_mask_,
+                k_effect_fail_native_envdiffuse);
+            log_prepare_stage_once(
+                1u << 12u,
+                "ptde_envdiffuse_resource_reject",
+                material,
+                decision,
+                family);
+            return false;
+        }
 
-    if (!g_native_envdiffuse_logged.exchange(
-            true,
-            std::memory_order_relaxed)) {
-        char line[512]{};
-        std::snprintf(
-            line,
-            sizeof(line),
-            "[DSRRL PMETAL FULL PTDE HEMENV] mode=stable_exact_envdiffuse_rgba_div probe=%u t11=%016llx endpoint=%.9g,%.9g,%.9g",
-            static_cast<unsigned>(
-                prepared.envdiffuse_resources.probe_a),
-            static_cast<unsigned long long>(
-                reinterpret_cast<std::uintptr_t>(
-                    prepared.envdiffuse_resources.ptde_a)),
-            static_cast<double>(
-                source.envdiffuse_a[0]),
-            static_cast<double>(
-                source.envdiffuse_a[1]),
-            static_cast<double>(
-                source.envdiffuse_a[2]));
+        if (!g_native_envdiffuse_logged.exchange(
+                true,
+                std::memory_order_relaxed)) {
+            char line[512]{};
+            std::snprintf(
+                line,
+                sizeof(line),
+                "[DSRRL PMETAL FULL PTDE HEMENV] mode=stable_exact_envdiffuse_rgba_div probe=%u t11=%016llx endpoint=%.9g,%.9g,%.9g",
+                static_cast<unsigned>(
+                    prepared.envdiffuse_resources.probe_a),
+                static_cast<unsigned long long>(
+                    reinterpret_cast<std::uintptr_t>(
+                        prepared.envdiffuse_resources.ptde_a)),
+                static_cast<double>(
+                    source.envdiffuse_a[0]),
+                static_cast<double>(
+                    source.envdiffuse_a[1]),
+                static_cast<double>(
+                    source.envdiffuse_a[2]));
+            reshade::log::message(
+                reshade::log::level::info,
+                line);
+        }
+    }
+#if defined(DSRRL_PMETAL_R18_LERP_MATERIALWORKFLOW_DIAG)
+    else if (!g_native_envdiffuse_logged.exchange(
+                 true,
+                 std::memory_order_relaxed)) {
         reshade::log::message(
             reshade::log::level::info,
-            line);
+            "[DSRRL PMETAL R18 LERP] mode=paired_ptde_envspec_r17_materialworkflow envdiffuse=stock_dsr_ab");
     }
+#endif
 #elif !defined(DSRRL_PMETAL_V13_NATIVE_DSR_NO_TAIL_DIAG) && !defined(DSRRL_PMETAL_V13_NATIVE_DSR_MATERIAL_MOD_DIAG)
     // Legacy diagnostic ownership: explicitly rebind native DSR EnvDiffuse.
     ID3D11ShaderResourceView *native_envdiffuse_a = nullptr;
@@ -1570,8 +1583,13 @@ bool pmetal_envspec_draw_runtime::prepare(
         mr_owner |
         domain_owner |
         spec_owner |
-        envdiff_owner |
         composed_owners;
+
+    if (family ==
+            pmetal_envspec_receiver_family::
+                stable_hemenv)
+        prepared.request.additional_owners |=
+            envdiff_owner;
 
     if (family ==
         pmetal_envspec_receiver_family::
@@ -1594,9 +1612,17 @@ bool pmetal_envspec_draw_runtime::prepare(
 #else
     prepared.request.additional_constant_buffer_owners =
         mr_owner |
-        envdiff_owner;
+        (family ==
+             pmetal_envspec_receiver_family::
+                 stable_hemenv
+             ? envdiff_owner
+             : 0u);
     prepared.request.additional_resource_owners =
-        envdiff_owner;
+        family ==
+            pmetal_envspec_receiver_family::
+                stable_hemenv
+            ? envdiff_owner
+            : 0u;
 #endif
 
     prepared.request.receiver_verified = true;
@@ -1620,11 +1646,15 @@ bool pmetal_envspec_draw_runtime::prepare(
 
     std::uint32_t request_srv_count = 0u;
 #if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG)
-    prepared.request.srvs[
-        request_srv_count++] = {
-            11u,
-            prepared.envdiffuse_resources.ptde_a
-        };
+    if (family ==
+            pmetal_envspec_receiver_family::
+                stable_hemenv) {
+        prepared.request.srvs[
+            request_srv_count++] = {
+                11u,
+                prepared.envdiffuse_resources.ptde_a
+            };
+    }
     prepared.request.srvs[
         request_srv_count++] = {
             12u,

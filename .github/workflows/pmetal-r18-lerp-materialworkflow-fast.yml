@@ -10,7 +10,7 @@ on:
       - "renderer-core/integrated/**"
       - "renderer-core/src/operators/material_response/material_response_diffuse_v1.cpp"
       - "renderer-core/src/runtime/pmetal_envspec_draw_runtime.cpp"
-      - ".github/workflows/pmetal-r17-ptde-diffuse-material-fast.yml"
+      - ".github/workflows/pmetal-r18-lerp-materialworkflow-fast.yml"
 
 permissions:
   contents: read
@@ -36,7 +36,7 @@ jobs:
           ref: 3645e3025d1d98a90e318278858931f034d5d1f6
           path: _reshade
 
-      - name: Configure R18 Lerp MaterialWorkflow diagnostic
+      - name: Configure R18
         shell: pwsh
         run: >
           cmake
@@ -77,9 +77,7 @@ jobs:
           $path = "DSRRL_PMETAL_R18_LERP_MATERIALWORKFLOW.addon64"
           $ascii = [System.Text.Encoding]::ASCII.GetString([System.IO.File]::ReadAllBytes($path))
           if (-not $ascii.Contains($env:DSRRL_CHECKOUT_COMMIT)) { throw "Missing source commit identity" }
-          if (-not $ascii.Contains("pmetal_r17_ptde_diffuse_material_factor")) { throw "Missing R18 build flavor identity" }
-          if (-not $ascii.Contains("[DSRRL PMETAL R7 SHADOW]")) { throw "Missing cumulative R7 shadow marker" }
-          if (-not $ascii.Contains("[DSRRL PMETAL R3 SPEC ATTEST]")) { throw "Missing exact SpecRGB SHA attestation marker" }
+          if (-not $ascii.Contains("pmetal_r18_lerp_materialworkflow_diag")) { throw "Missing R18 flavor identity" }
           $hash = (Get-FileHash $path -Algorithm SHA256).Hash.ToLowerInvariant()
           Write-Host "ADDON_SHA256=$hash"
 

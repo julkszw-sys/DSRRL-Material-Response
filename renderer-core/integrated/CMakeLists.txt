@@ -132,6 +132,16 @@ option(
     OFF)
 
 option(
+    DSRRL_EQUIPMENT_MATERIALWORKFLOW_R18
+    "R18: share PTDE MaterialWorkflow diffuse producer correction across exact rx33/rx34/rx35 generic equipment MR"
+    OFF)
+
+option(
+    DSRRL_PMETAL_R18_LERP_MATERIALWORKFLOW_DIAG
+    "R18: open P_Metal HemEnvLerp with paired PTDE EnvSpec + R17 MaterialWorkflow while preserving stock DSR EnvDiffuse A/B"
+    OFF)
+
+option(
     DSRRL_PMETAL_FULL_PTDE_HEMENV_R17_PTDE_DIFFUSE_MATERIAL
     "P_Metal R17 diagnostic: replace the inner DSR MaterialWorkflow cb9->cb10 blend with direct PTDE c100 material selection"
     OFF)
@@ -772,6 +782,29 @@ if(DSRRL_PMETAL_FULL_PTDE_HEMENV_R16_LEGACY_DIFFUSE_SPLIT)
         dsrrl_renderer_core_integrated
         PRIVATE
         $<$<COMPILE_LANGUAGE:CXX>:DSRRL_PMETAL_FULL_PTDE_HEMENV_R16_LEGACY_DIFFUSE_SPLIT>)
+endif()
+
+if(DSRRL_EQUIPMENT_MATERIALWORKFLOW_R18)
+    target_compile_definitions(
+        dsrrl_renderer_core_integrated
+        PRIVATE
+        $<$<COMPILE_LANGUAGE:CXX>:DSRRL_EQUIPMENT_MATERIALWORKFLOW_R18>)
+endif()
+
+if(DSRRL_PMETAL_R18_LERP_MATERIALWORKFLOW_DIAG)
+    if(NOT DSRRL_PMETAL_FULL_PTDE_HEMENV_R17_PTDE_DIFFUSE_MATERIAL)
+        message(FATAL_ERROR
+            "P_Metal R18 Lerp diagnostic requires the cumulative R17 stable lineage")
+    endif()
+    if(NOT DSRRL_EQUIPMENT_MATERIALWORKFLOW_R18)
+        message(FATAL_ERROR
+            "P_Metal R18 Lerp diagnostic requires shared equipment MaterialWorkflow R18")
+    endif()
+
+    target_compile_definitions(
+        dsrrl_renderer_core_integrated
+        PRIVATE
+        $<$<COMPILE_LANGUAGE:CXX>:DSRRL_PMETAL_R18_LERP_MATERIALWORKFLOW_DIAG>)
 endif()
 
 if(DSRRL_PMETAL_FULL_PTDE_HEMENV_R17_PTDE_DIFFUSE_MATERIAL)
