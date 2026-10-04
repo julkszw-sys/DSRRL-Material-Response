@@ -930,6 +930,10 @@ bool publish_exact_selector_identity(
     if (!selection_ok)
         return false;
 
+    if (g_state.builder_armed)
+        clustered_pnts_selector_identity_event_bridge(
+            identity);
+
 #ifndef DSRRL_PHYSICAL_CUT_UL_H3_SUBSURFACE
     if (g_selector_upper_lower_enabled.load(
             std::memory_order_relaxed))
