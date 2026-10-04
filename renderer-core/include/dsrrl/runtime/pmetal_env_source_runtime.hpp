@@ -15,6 +15,12 @@ struct pmetal_envspec_source {
     std::array<float,3> envdiffuse_a{};
     std::array<float,3> envdiffuse_b{};
     bool envdiffuse_linear_valid = false;
+    // R10C P_Metal-local authored PTDE hemisphere. These are decoded
+    // linearly from the same exact LightBank row selected for EnvSpec; they
+    // are never written back to the shared DSR LightBank producer.
+    std::array<float,3> upper{};
+    std::array<float,3> lower{};
+    bool upper_lower_linear_valid = false;
     float beta = 0.0f;
     // PTDE PHN terminal scene encoding k135=c135.x/c135.y. The carrier is
     // explicit even before producer RE is complete so consumers do not regress
