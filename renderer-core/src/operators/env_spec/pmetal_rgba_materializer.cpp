@@ -3814,6 +3814,144 @@ bool binding_exists(
     return false;
 }
 
+bool constant_buffer_binding_exact_size(
+    const std::vector<std::uint8_t> &payload,
+    std::uint32_t bind_point,
+    std::uint32_t byte_size) noexcept
+{
+    constexpr std::size_t k_cb_desc_size = 24u;
+    constexpr std::size_t k_res_desc_size = 32u;
+
+    if (payload.size() < 32u)
+        return false;
+
+    const auto cb_count =
+        read_u32(payload.data() + 0u);
+    const auto cb_offset =
+        read_u32(payload.data() + 4u);
+    const auto resource_count =
+        read_u32(payload.data() + 8u);
+    const auto resource_offset =
+        read_u32(payload.data() + 12u);
+
+    if (cb_count == 0u ||
+        resource_count == 0u ||
+        cb_offset > payload.size() ||
+        resource_offset > payload.size() ||
+        static_cast<std::uint64_t>(cb_count) *
+            k_cb_desc_size >
+            payload.size() - cb_offset ||
+        static_cast<std::uint64_t>(resource_count) *
+            k_res_desc_size >
+            payload.size() - resource_offset)
+        return false;
+
+    std::uint32_t name_offset = 0u;
+    std::size_t binding_count = 0u;
+
+    for (std::uint32_t i = 0u;
+         i < resource_count;
+         ++i) {
+        const auto at =
+            static_cast<std::size_t>(
+                resource_offset) +
+            static_cast<std::size_t>(i) *
+                k_res_desc_size;
+
+        if (read_u32(payload.data() + at + 4u) != 0u ||
+            read_u32(payload.data() + at + 20u) != bind_point ||
+            read_u32(payload.data() + at + 24u) != 1u)
+            continue;
+
+        name_offset =
+            read_u32(payload.data() + at + 0u);
+        ++binding_count;
+    }
+
+    if (binding_count != 1u)
+        return false;
+
+    std::size_t cb_matches = 0u;
+    for (std::uint32_t i = 0u;
+         i < cb_count;
+         ++i) {
+        const auto at =
+            static_cast<std::size_t>(
+                cb_offset) +
+            static_cast<std::size_t>(i) *
+                k_cb_desc_size;
+
+        if (read_u32(payload.data() + at + 0u) !=
+                name_offset)
+            continue;
+
+        if (read_u32(payload.data() + at + 12u) !=
+                byte_size)
+            return false;
+
+        ++cb_matches;
+    }
+
+    return cb_matches == 1u;
+}
+
+bool pmetal_local_ul_b12_final_exact(
+    const std::vector<std::uint32_t> &words,
+    const std::vector<instruction_view> &instructions) noexcept
+{
+    std::size_t b12_decl_6 = 0u;
+    std::size_t upper_lower_delta = 0u;
+    std::size_t lower_mad = 0u;
+
+    for (const auto &ins : instructions) {
+        if (ins.offset + ins.length >
+                words.size())
+            return false;
+
+        if (ins.length == 4u &&
+            words[ins.offset] == 0x04000059u &&
+            words[ins.offset + 1u] == 0x00208e46u &&
+            words[ins.offset + 2u] == 12u &&
+            words[ins.offset + 3u] == 6u)
+            ++b12_decl_6;
+
+        // Exact stable-P_Metal hemisphere delta:
+        // r2.xyz = Upper - Lower.
+        if (ins.length == 10u &&
+            words[ins.offset + 0u] == 0x0a000000u &&
+            words[ins.offset + 1u] == 0x001000e2u &&
+            words[ins.offset + 2u] == 2u &&
+            words[ins.offset + 3u] == 0x00208906u &&
+            words[ins.offset + 4u] == 12u &&
+            words[ins.offset + 5u] == 4u &&
+            words[ins.offset + 6u] == 0x80208906u &&
+            words[ins.offset + 7u] == 0x41u &&
+            words[ins.offset + 8u] == 12u &&
+            words[ins.offset + 9u] == 5u)
+            ++upper_lower_delta;
+
+        // Exact stable-P_Metal hemisphere merge:
+        // Lower + h * (Upper - Lower).
+        if (ins.length == 10u &&
+            words[ins.offset + 0u] == 0x0a000032u &&
+            words[ins.offset + 1u] == 0x00100072u &&
+            words[ins.offset + 2u] == 2u &&
+            words[ins.offset + 3u] == 0x00100006u &&
+            words[ins.offset + 4u] == 2u &&
+            words[ins.offset + 5u] == 0x00100796u &&
+            words[ins.offset + 6u] == 2u &&
+            words[ins.offset + 7u] == 0x00208246u &&
+            words[ins.offset + 8u] == 12u &&
+            words[ins.offset + 9u] == 5u)
+            ++lower_mad;
+    }
+
+    return
+        b12_decl_6 == 1u &&
+        upper_lower_delta == 1u &&
+        lower_mad == 1u;
+}
+
 bool final_postcondition(
     const std::vector<std::uint8_t> &bytes,
     bool with_upper_lower,
@@ -3987,6 +4125,15 @@ bool final_postcondition(
             has_constant_buffer_binding(
                 rdef->payload,
                 12u) ||
+#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_R10C_LOCAL_UL_B12)
+        !constant_buffer_binding_exact_size(
+                rdef->payload,
+                12u,
+                96u) ||
+        !pmetal_local_ul_b12_final_exact(
+                words,
+                instructions) ||
+#endif
         !binding_exists(
             rdef->payload,
             2u,
