@@ -6015,55 +6015,7 @@ bool prepare_island_batch(
 
         prepared.envspec_in_batch = true;
 
-#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_R10_LOCAL_UL)
-        // R10 owns only the P_Metal-local PTDE hemisphere. Global U/L remains
-        // disabled. The already-authenticated LightBank reference transport
-        // provides exact authored Upper/Lower endpoints and the existing
-        // P_Metal replacement shader consumes them through b13[6]/b13[7].
-        // Any missing/ambiguous carrier fails the complete P_Metal island open
-        // to stock DSR rather than creating a PTDE/DSR hybrid.
-        if (envspec_family !=
-                dsrrl::runtime::
-                    pmetal_envspec_receiver_family::
-                        stable_hemenv ||
-            context == nullptr ||
-            !g_upper_lower.prepare_upper_lower_carrier(
-                context,
-                prepared.upper_lower.carrier)) {
-            release_prepared_island_batch(prepared);
-            return false;
-        }
 
-        const auto ul_owner =
-            dsrrl::core::operator_bit(
-                dsrrl::core::operator_id::
-                    upper_lower);
-
-        if (prepared.envspec.request.
-                constant_buffer_count >=
-            prepared.envspec.request.
-                constant_buffers.size()) {
-            release_prepared_island_batch(prepared);
-            return false;
-        }
-
-        prepared.envspec.request.additional_owners |=
-            ul_owner;
-        prepared.envspec.request.
-            additional_shader_owners |=
-                ul_owner;
-        prepared.envspec.request.
-            additional_constant_buffer_owners |=
-                ul_owner;
-        prepared.envspec.request.constant_buffers[
-            prepared.envspec.request.
-                constant_buffer_count++] = {
-                    13u,
-                    prepared.upper_lower.carrier.b13,
-                    ul_owner
-                };
-        prepared.upper_lower_combined = true;
-#endif
 
         if (dsrrl::runtime::append_island_draw_request(
                 prepared.batch,
@@ -7630,29 +7582,18 @@ bool AddonInit(
         (flver_hooks &&
          g_pmetal_source.install());
 
-    // Global/visible U/L remains controlled solely by upper_lower_enabled.
-    // R10 may additionally arm the same LightBank hooks in reference-only mode
-    // for one narrow purpose: carry exact authored PTDE Upper/Lower into the
-    // P_Metal-local hemisphere consumer. Reference-only mode never mutates the
-    // shared DSR LightBank cache/output.
-#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_R10_LOCAL_UL)
-    const bool pmetal_local_ul_reference_required =
-        pmetal_envspec_enabled;
-#else
-    const bool pmetal_local_ul_reference_required =
-        false;
-#endif
-    const bool lightbank_reference_transport_required =
-        upper_lower_enabled ||
-        pmetal_local_ul_reference_required;
+    // Visible/global U/L is the only reason to install the shared
+    // Upper/Lower runtime. R10C obtains its P_Metal-local authored U/L from
+    // the already-installed P_Metal EnvSource hook and realizes only a
+    // draw-local b13 carrier, avoiding both the duplicate 0x563B80 hook and
+    // the prior U/L transport/performance path.
     const bool lightbank_reference_hooks =
-        !lightbank_reference_transport_required ||
+        !upper_lower_enabled ||
         (flver_hooks &&
-         g_upper_lower.install(
-             !upper_lower_enabled));
+         g_upper_lower.install(false));
 
     g_upper_lower_selection_transport_active.store(
-        lightbank_reference_transport_required &&
+        upper_lower_enabled &&
             lightbank_reference_hooks,
         std::memory_order_release);
 
