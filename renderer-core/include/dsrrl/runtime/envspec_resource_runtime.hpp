@@ -78,6 +78,18 @@ public:
         bool probe_b_required,
         prepared_envspec_resources &prepared) noexcept;
 
+    // Narrow diagnostic resource substitution. The caller must first
+    // authenticate the live stock probe through prepare/prepare_bound.
+    // This method only materializes an exact PTDE cube by canonical ordinal;
+    // it performs no stock-resource inference and therefore must never be
+    // used as a production routing shortcut.
+    bool prepare_forced(
+        std::uint16_t probe_a,
+        std::uint16_t probe_b,
+        std::uint8_t slot,
+        bool probe_b_required,
+        prepared_envspec_resources &prepared) noexcept;
+
     // Diagnostic resource falsifier: preserve the exact PTDE EnvSpec shader,
     // A/B LightBank feed and PTDE sampler while feeding the currently bound,
     // exact-identity DSR BC6H probe SRVs instead of materialized PackedGI.
