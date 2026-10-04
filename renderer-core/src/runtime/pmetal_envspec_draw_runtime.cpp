@@ -56,6 +56,9 @@ std::atomic<std::uint32_t> g_prepare_stage_log_mask{0u};
 std::array<std::atomic<std::uint64_t>,3> g_r9_value_cut_generation{};
 std::array<std::atomic<std::uint64_t>,3> g_r9_value_cut_probe_pair{};
 std::atomic<std::uint32_t> g_r9_value_cut_seen_mask{0u};
+#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_R10C_LOCAL_UL_B12)
+std::atomic_bool g_r10c_local_ul_logged{false};
+#endif
 
 void log_prepare_stage_once(
     std::uint32_t bit,
@@ -1452,6 +1455,29 @@ bool pmetal_envspec_draw_runtime::prepare(
 
     effect_latch(effect_b12_ready_);
 
+#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_R10C_LOCAL_UL_B12)
+    if (!g_r10c_local_ul_logged.exchange(
+            true,
+            std::memory_order_relaxed)) {
+        char line[512]{};
+        std::snprintf(
+            line,
+            sizeof(line),
+            "[DSRRL PMETAL R10C LOCAL UL] rx=%u b12_bytes=96 upper=%.9g,%.9g,%.9g lower=%.9g,%.9g,%.9g",
+            static_cast<unsigned>(
+                decision.receiver_id),
+            static_cast<double>(source.upper[0]),
+            static_cast<double>(source.upper[1]),
+            static_cast<double>(source.upper[2]),
+            static_cast<double>(source.lower[0]),
+            static_cast<double>(source.lower[1]),
+            static_cast<double>(source.lower[2]));
+        reshade::log::message(
+            reshade::log::level::info,
+            line);
+    }
+#endif
+
 #if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG)
     // Probe identity is inherited from the already-authenticated EnvSpec
     // t12/t14 pair. The exact PTDE EnvDiffuse pack uses the same canonical
@@ -2104,6 +2130,11 @@ void pmetal_envspec_draw_runtime::reset() noexcept
     effect_probe_ready_.store(false);
     effect_spec_rgb_ready_.store(false);
     effect_b12_ready_.store(false);
+#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_R10C_LOCAL_UL_B12)
+    g_r10c_local_ul_logged.store(
+        false,
+        std::memory_order_relaxed);
+#endif
     effect_request_ready_.store(false);
     effect_fail_mask_.store(0u);
     g_source_cut_logged.store(false);
