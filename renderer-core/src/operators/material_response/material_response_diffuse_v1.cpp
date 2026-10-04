@@ -11,7 +11,6 @@
 #include <array>
 #include <cstring>
 #include <limits>
-#include <optional>
 #include <utility>
 #include <vector>
 
@@ -30,40 +29,6 @@ struct chunk {
     std::array<char,4> tag{};
     std::vector<std::uint8_t> payload;
 };
-
-struct instruction_view {
-    std::size_t offset = 0u;
-    std::uint32_t opcode = 0u;
-    std::size_t length = 0u;
-};
-
-bool decode_words(
-    const std::vector<std::uint32_t> &words,
-    std::vector<instruction_view> &out) noexcept
-{
-    out.clear();
-    if (words.size() < 2u)
-        return false;
-
-    std::size_t cursor = 2u;
-    while (cursor < words.size()) {
-        const auto length =
-            static_cast<std::size_t>(
-                (words[cursor] >> 24u) & 0x7fu);
-        if (length == 0u ||
-            cursor + length > words.size())
-            return false;
-
-        out.push_back({
-            cursor,
-            words[cursor] & 0x7ffu,
-            length
-        });
-        cursor += length;
-    }
-
-    return cursor == words.size();
-}
 
 bool parse_dxbc(
     const std::uint8_t *source,
@@ -179,177 +144,6 @@ bool parse_dxbc(
         words.size() >= 12u &&
         words[1] == words.size();
 }
-
-#if defined(DSRRL_EQUIPMENT_MATERIALWORKFLOW_R18)
-bool patch_shared_equipment_materialworkflow_diffuse_v18(
-    std::vector<std::uint32_t> &words,
-    std::uint32_t receiver_id) noexcept
-{
-    if (receiver_id != 33u &&
-        receiver_id != 34u &&
-        receiver_id != 35u)
-        return true;
-
-    std::vector<instruction_view> instructions;
-    if (!decode_words(words, instructions))
-        return false;
-
-    std::optional<std::uint32_t> spec_sample_register;
-    std::size_t material_if = static_cast<std::size_t>(-1);
-
-    for (std::size_t i = 0u; i + 1u < instructions.size(); ++i) {
-        const auto &sample = instructions[i];
-        const auto &branch = instructions[i + 1u];
-
-        if (sample.opcode < 0x45u || sample.opcode > 0x4au ||
-            sample.length != 11u ||
-            sample.offset + 10u >= words.size() ||
-            words[sample.offset + 7u] != 0x00107936u ||
-            words[sample.offset + 8u] != 1u ||
-            words[sample.offset + 10u] != 1u ||
-            branch.opcode != 0x1fu ||
-            branch.length != 4u ||
-            branch.offset != sample.offset + sample.length ||
-            branch.offset + 3u >= words.size() ||
-            words[branch.offset + 1u] != 0x0020800au ||
-            words[branch.offset + 2u] != 0u ||
-            words[branch.offset + 3u] != 85u)
-            continue;
-
-        if (spec_sample_register.has_value())
-            return false;
-
-        spec_sample_register = words[sample.offset + 4u];
-        material_if = i + 1u;
-    }
-
-    if (!spec_sample_register.has_value() ||
-        material_if == static_cast<std::size_t>(-1))
-        return false;
-
-    std::size_t depth = 0u;
-    bool in_else = false;
-    std::size_t alpha_mul = static_cast<std::size_t>(-1);
-    std::size_t weight_mul = static_cast<std::size_t>(-1);
-    std::size_t inner_mad = static_cast<std::size_t>(-1);
-    std::size_t alpha_hits = 0u;
-    std::size_t inner_hits = 0u;
-
-    for (std::size_t i = material_if + 1u; i < instructions.size(); ++i) {
-        const auto &ins = instructions[i];
-
-        if (ins.opcode == 0x1fu) {
-            ++depth;
-            continue;
-        }
-        if (ins.opcode == 0x12u && depth == 0u) {
-            in_else = true;
-            continue;
-        }
-        if (ins.opcode == 0x15u) {
-            if (depth == 0u)
-                break;
-            --depth;
-            continue;
-        }
-        if (depth != 0u || in_else)
-            continue;
-
-        // DSR true-branch material producer:
-        // add delta = cb0[10]-cb0[9]
-        // mad material = W*delta + b12[1] (generic MR already remapped c100)
-        if (ins.opcode == 0x00u &&
-            ins.length == 10u &&
-            ins.offset + 9u < words.size() &&
-            words[ins.offset + 1u] == 0x00100072u &&
-            words[ins.offset + 3u] == 0x80208246u &&
-            words[ins.offset + 4u] == 0x00000041u &&
-            words[ins.offset + 5u] == 0u &&
-            words[ins.offset + 6u] == 9u &&
-            words[ins.offset + 7u] == 0x00208246u &&
-            words[ins.offset + 8u] == 0u &&
-            words[ins.offset + 9u] == 10u) {
-            if (i + 1u >= instructions.size())
-                return false;
-            const auto &mad = instructions[i + 1u];
-            const auto dst = words[ins.offset + 2u];
-
-            if (mad.opcode == 0x32u &&
-                mad.length == 10u &&
-                mad.offset + 9u < words.size() &&
-                words[mad.offset + 1u] == 0x00100072u &&
-                words[mad.offset + 2u] == dst &&
-                words[mad.offset + 3u] == 0x00100556u &&
-                words[mad.offset + 5u] == 0x00100246u &&
-                words[mad.offset + 6u] == dst &&
-                words[mad.offset + 7u] == 0x00208246u &&
-                words[mad.offset + 8u] == 12u &&
-                words[mad.offset + 9u] == 1u) {
-                ++inner_hits;
-                inner_mad = mad.offset;
-            }
-        }
-
-        // DSR outer common-diffuse suppression:
-        // rDiffuse = SpecTex.a * material;
-        // add rW.w, -workflowWeight, 1;
-        // rDiffuse *= rW.w;
-        if (ins.opcode == 0x38u &&
-            ins.length == 7u &&
-            ins.offset + 6u < words.size() &&
-            words[ins.offset + 1u] == 0x00100072u &&
-            words[ins.offset + 3u] == 0x00100006u &&
-            words[ins.offset + 4u] == *spec_sample_register &&
-            words[ins.offset + 5u] == 0x00100246u) {
-            if (i + 2u >= instructions.size())
-                return false;
-            const auto &add = instructions[i + 1u];
-            const auto &mul = instructions[i + 2u];
-            const auto dst = words[ins.offset + 2u];
-
-            if (add.opcode == 0x00u &&
-                add.length == 8u &&
-                add.offset + 7u < words.size() &&
-                words[add.offset + 1u] == 0x00100082u &&
-                words[add.offset + 6u] == 0x00004001u &&
-                words[add.offset + 7u] == 0x3f800000u &&
-                mul.opcode == 0x38u &&
-                mul.length == 7u &&
-                mul.offset + 6u < words.size() &&
-                words[mul.offset + 1u] == 0x00100072u &&
-                words[mul.offset + 2u] == dst &&
-                words[mul.offset + 5u] == 0x00100246u &&
-                words[mul.offset + 6u] == dst) {
-                ++alpha_hits;
-                alpha_mul = ins.offset;
-                weight_mul = mul.offset;
-            }
-        }
-    }
-
-    if (inner_hits != 1u ||
-        alpha_hits != 1u ||
-        inner_mad == static_cast<std::size_t>(-1) ||
-        alpha_mul == static_cast<std::size_t>(-1) ||
-        weight_mul == static_cast<std::size_t>(-1))
-        return false;
-
-    // Shared PTDE MaterialWorkflow correction for generic equipment MR:
-    // select exact PTDE c100 material factor and remove the two DSR-only
-    // outer diffuse suppressors. This deliberately does NOT touch EnvSpec,
-    // SpecRGB resources or the P_Metal downstream surface island.
-    words[inner_mad + 3u] = 0x00004001u;
-    words[inner_mad + 4u] = 0x00000000u;
-
-    words[alpha_mul + 3u] = 0x00004001u;
-    words[alpha_mul + 4u] = 0x3f800000u;
-
-    words[weight_mul + 3u] = 0x00004001u;
-    words[weight_mul + 4u] = 0x3f800000u;
-
-    return true;
-}
-#endif
 
 bool rebuild_dxbc(
     const std::uint8_t *source,
@@ -938,19 +732,6 @@ materialize_ptde_diffuse_response_v1(
     words[
         plan->diffuse_pow_site + 2u] =
         0x3f800000u;
-
-#if defined(DSRRL_EQUIPMENT_MATERIALWORKFLOW_R18)
-    if ((!defer_surface_operators || lerp) &&
-        !patch_shared_equipment_materialworkflow_diffuse_v18(
-            words,
-            plan->receiver_id)) {
-        output.clear();
-        outcome.result =
-            diffuse_v1_result::
-                fail_patch_precondition;
-        return outcome;
-    }
-#endif
 
     try {
         words.insert(
