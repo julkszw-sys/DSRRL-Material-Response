@@ -1,0 +1,101 @@
+name: R20 Clustered Spc Legacy Specular Build
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - r20-clustered-spc-legacy-specular
+  pull_request:
+    paths:
+      - "renderer-core/integrated/**"
+      - "renderer-core/include/dsrrl/runtime/pmetal_envspec_draw_runtime.hpp"
+      - "renderer-core/src/runtime/pmetal_envspec_draw_runtime.cpp"
+      - "renderer-core/src/operators/env_spec/pmetal_rgba_lerp_materializer.cpp"
+      - "renderer-core/src/operators/point_light/clustered_spc_legacy_materializer.cpp"
+      - "renderer-core/include/dsrrl/operators/point_light/clustered_spc_legacy_materializer.hpp"
+      - "renderer-core/src/runtime/material_resource_draw_runtime.cpp"
+      - "renderer-core/include/dsrrl/runtime/material_resource_draw_runtime.hpp"
+      - "renderer-core/src/runtime/clustered_pnts_pipeline_runtime.cpp"
+      - "renderer-core/include/dsrrl/runtime/clustered_pnts_pipeline_runtime.hpp"
+      - ".github/workflows/pmetal-r19-lerp-exact-envdiffuse-fast.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  windows-addon:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - name: Resolve exact source commit
+        shell: pwsh
+        run: |
+          $commit = (git rev-parse HEAD).Trim()
+          "DSRRL_CHECKOUT_COMMIT=$commit" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Checkout pinned ReShade API
+        uses: actions/checkout@v4
+        with:
+          repository: crosire/reshade
+          ref: 3645e3025d1d98a90e318278858931f034d5d1f6
+          path: _reshade
+
+      - name: Configure R20 clustered Spc legacy specular
+        shell: pwsh
+        run: >
+          cmake
+          -S renderer-core/integrated
+          -B build-fast
+          -A x64
+          -DRESHADE_INCLUDE_DIR="${{ github.workspace }}/_reshade/include"
+          -DDSRRL_SOURCE_COMMIT="$env:DSRRL_CHECKOUT_COMMIT"
+          -DDSRRL_BUILD_FLAVOR="r20_clustered_spc_ptde_legacy_specular"
+          -DDSRRL_FULL_TELEMETRY_DEFAULT_ON=ON
+          -DDSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG=ON
+          -DDSRRL_PMETAL_FULL_PTDE_HEMENV_R3=ON
+          -DDSRRL_PMETAL_FULL_PTDE_HEMENV_R4=ON
+          -DDSRRL_PMETAL_FULL_PTDE_HEMENV_R5=ON
+          -DDSRRL_PMETAL_FULL_PTDE_HEMENV_R6=ON
+          -DDSRRL_PMETAL_FULL_PTDE_HEMENV_R7_SHADOW=ON
+          -DDSRRL_PMETAL_FULL_PTDE_HEMENV_R8_PRE_AB=ON
+          -DDSRRL_PMETAL_FULL_PTDE_HEMENV_R11_COMMON_MERGE=ON
+          -DDSRRL_PMETAL_FULL_PTDE_HEMENV_R15_PTDE_LIVEOUT_PAIR=ON
+          -DDSRRL_PMETAL_FULL_PTDE_HEMENV_R16_LEGACY_DIFFUSE_SPLIT=ON
+          -DDSRRL_PMETAL_FULL_PTDE_HEMENV_R17_PTDE_DIFFUSE_MATERIAL=ON
+          -DDSRRL_PMETAL_R19_LERP_MATERIALWORKFLOW=ON
+          -DDSRRL_R20_CLUSTERED_SPC_LEGACY_SPECULAR=ON
+          -DDSRRL_PHYSICAL_CUT_UL_H3_SUBSURFACE=ON
+
+      - name: Build runtime and PointLight core tests
+        shell: pwsh
+        run: |
+          cmake --build build-fast --config Release --target dsrrl_renderer_core_integrated
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          cmake --build build-fast --config Release --target dsrrl_renderer_clustered_pnts_materializer_tests dsrrl_renderer_fixed_local_specular_kernel_tests
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $addons = @(Get-ChildItem build-fast -Recurse -Filter *.addon64)
+          if ($addons.Count -ne 1) { throw "Expected exactly one addon, found $($addons.Count)" }
+          Copy-Item $addons[0].FullName "DSRRL_R20_CLUSTERED_SPC_LEGACY_SPECULAR.addon64" -Force
+
+      - name: Verify binary identity
+        shell: pwsh
+        run: |
+          $path = "DSRRL_R20_CLUSTERED_SPC_LEGACY_SPECULAR.addon64"
+          $ascii = [System.Text.Encoding]::ASCII.GetString([System.IO.File]::ReadAllBytes($path))
+          if (-not $ascii.Contains($env:DSRRL_CHECKOUT_COMMIT)) { throw "Missing source commit identity" }
+          if (-not $ascii.Contains("r20_clustered_spc_ptde_legacy_specular")) { throw "Missing R20 build flavor identity" }
+          if (-not $ascii.Contains("[DSRRL PMETAL R19 LERP]")) { throw "Missing exact R19 Lerp EnvDiffuse runtime marker" }
+          if (-not $ascii.Contains("[DSRRL POINTLIGHT R20 CLUSTERED SPC]")) { throw "Missing R20 clustered Spc runtime marker" }
+          if (-not $ascii.Contains("[DSRRL PMETAL R7 SHADOW]")) { throw "Missing cumulative R7 shadow marker" }
+          if (-not $ascii.Contains("[DSRRL PMETAL R3 SPEC ATTEST]")) { throw "Missing exact SpecRGB SHA attestation marker" }
+          $hash = (Get-FileHash $path -Algorithm SHA256).Hash.ToLowerInvariant()
+          Write-Host "ADDON_SHA256=$hash"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: DSRRL_R20_CLUSTERED_SPC_LEGACY_SPECULAR
+          path: DSRRL_R20_CLUSTERED_SPC_LEGACY_SPECULAR.addon64
+          if-no-files-found: error
