@@ -777,10 +777,23 @@ bool pmetal_lerp_materialworkflow_postcondition(
     if (state.count != state.words.size())
         return false;
 
+    // materialize_spec_rgb_consumer(..., true) runs after the R19
+    // MaterialWorkflow rewrite. It inserts one 4-DWORD t10 declaration and,
+    // immediately after the original t1 SpecTex sample, an 11-DWORD duplicate
+    // sample plus the 8-DWORD raw-c101 multiply. Every R15/R16/R17 and late
+    // MaterialWorkflow site is downstream of that unique t1 sample, so their
+    // final SHEX locations advance by exactly 23 DWORDs. Keep this explicit
+    // rather than accepting a pre-SpecRGB offset as a final postcondition.
+    constexpr std::size_t
+        k_spec_rgb_downstream_shift = 23u;
+
     for (std::size_t i = 0u; i < state.count; ++i) {
         const auto [word,value] = state.words[i];
-        if (word >= words.size() ||
-            words[word] != value)
+        const auto final_word =
+            word +
+            k_spec_rgb_downstream_shift;
+        if (final_word >= words.size() ||
+            words[final_word] != value)
             return false;
     }
 
