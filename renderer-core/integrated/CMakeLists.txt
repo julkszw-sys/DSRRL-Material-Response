@@ -142,6 +142,11 @@ option(
     OFF)
 
 option(
+    DSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE
+    "R19: replace HemEnvLerp stock EnvDiffuse A/B+gain with exact PTDE RGBA-div A/B+beta operator using dedicated b13 carrier"
+    OFF)
+
+option(
     DSRRL_PMETAL_FULL_PTDE_HEMENV_R17_PTDE_DIFFUSE_MATERIAL
     "P_Metal R17 diagnostic: replace the inner DSR MaterialWorkflow cb9->cb10 blend with direct PTDE c100 material selection"
     OFF)
@@ -805,6 +810,18 @@ if(DSRRL_PMETAL_R18_LERP_MATERIALWORKFLOW_DIAG)
         dsrrl_renderer_core_integrated
         PRIVATE
         $<$<COMPILE_LANGUAGE:CXX>:DSRRL_PMETAL_R18_LERP_MATERIALWORKFLOW_DIAG>)
+endif()
+
+if(DSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE)
+    if(NOT DSRRL_PMETAL_R18_LERP_MATERIALWORKFLOW_DIAG)
+        message(FATAL_ERROR
+            "P_Metal R19 exact Lerp EnvDiffuse requires cumulative R18 Lerp routing")
+    endif()
+
+    target_compile_definitions(
+        dsrrl_renderer_core_integrated
+        PRIVATE
+        $<$<COMPILE_LANGUAGE:CXX>:DSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE>)
 endif()
 
 if(DSRRL_PMETAL_FULL_PTDE_HEMENV_R17_PTDE_DIFFUSE_MATERIAL)
