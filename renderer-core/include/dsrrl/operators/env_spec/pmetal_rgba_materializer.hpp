@@ -31,6 +31,9 @@ struct pmetal_rgba_materialize_outcome {
     std::uint32_t receiver_id = 0;
     core::operator_mask composed_owners = 0;
     bool upper_lower_composed = false;
+    // R10C: exact P_Metal-local PTDE hemisphere is carried through the
+    // existing cached b12 as rows 4/5. This is not the legacy b13 U/L replay.
+    bool local_upper_lower_b12_composed = false;
     // R6: exact PHN k135->SAT consumer is present. This flag says nothing
     // about producer validity; an unresolved producer uses unity fail-open.
     bool phn_scene_encoding_composed = false;
