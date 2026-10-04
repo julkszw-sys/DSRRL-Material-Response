@@ -1,4 +1,4 @@
-name: P_Metal R19 Exact Lerp EnvDiffuse Build
+name: P_Metal R20 PointLight Producer Cache Build
 
 on:
   workflow_dispatch:
@@ -46,7 +46,7 @@ jobs:
           -A x64
           -DRESHADE_INCLUDE_DIR="${{ github.workspace }}/_reshade/include"
           -DDSRRL_SOURCE_COMMIT="$env:DSRRL_CHECKOUT_COMMIT"
-          -DDSRRL_BUILD_FLAVOR="pmetal_r19_lerp_ptde_materialworkflow_envdiffuse_ab_beta_pointlight_perf"
+          -DDSRRL_BUILD_FLAVOR="pmetal_r20_pointlight_producer_cache_ptde_source_cached"
           -DDSRRL_FULL_TELEMETRY_DEFAULT_ON=OFF
           -DDSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG=ON
           -DDSRRL_PMETAL_FULL_PTDE_HEMENV_R3=ON
@@ -70,15 +70,15 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           $addons = @(Get-ChildItem build-fast -Recurse -Filter *.addon64)
           if ($addons.Count -ne 1) { throw "Expected exactly one addon, found $($addons.Count)" }
-          Copy-Item $addons[0].FullName "DSRRL_PMETAL_R19_POINTLIGHT_PERF.addon64" -Force
+          Copy-Item $addons[0].FullName "DSRRL_PMETAL_R20_POINTLIGHT_PRODUCER_CACHE.addon64" -Force
 
       - name: Verify binary identity
         shell: pwsh
         run: |
-          $path = "DSRRL_PMETAL_R19_POINTLIGHT_PERF.addon64"
+          $path = "DSRRL_PMETAL_R20_POINTLIGHT_PRODUCER_CACHE.addon64"
           $ascii = [System.Text.Encoding]::ASCII.GetString([System.IO.File]::ReadAllBytes($path))
           if (-not $ascii.Contains($env:DSRRL_CHECKOUT_COMMIT)) { throw "Missing source commit identity" }
-          if (-not $ascii.Contains("pmetal_r19_lerp_ptde_materialworkflow_envdiffuse_ab_beta_pointlight_perf")) { throw "Missing R19 build flavor identity" }
+          if (-not $ascii.Contains("pmetal_r20_pointlight_producer_cache_ptde_source_cached")) { throw "Missing R20 build flavor identity" }
           if (-not $ascii.Contains("[DSRRL PMETAL R19 LERP]")) { throw "Missing exact R19 Lerp EnvDiffuse runtime marker" }
           if (-not $ascii.Contains("[DSRRL PMETAL R7 SHADOW]")) { throw "Missing cumulative R7 shadow marker" }
           if (-not $ascii.Contains("[DSRRL PMETAL R3 SPEC ATTEST]")) { throw "Missing exact SpecRGB SHA attestation marker" }
@@ -87,6 +87,6 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: DSRRL_PMETAL_R19_POINTLIGHT_PERF
-          path: DSRRL_PMETAL_R19_POINTLIGHT_PERF.addon64
+          name: DSRRL_PMETAL_R20_POINTLIGHT_PRODUCER_CACHE
+          path: DSRRL_PMETAL_R20_POINTLIGHT_PRODUCER_CACHE.addon64
           if-no-files-found: error
