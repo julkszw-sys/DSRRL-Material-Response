@@ -37,6 +37,8 @@ struct prepared_clustered_pnts_shader {
     bool blended_material = false;
     std::uint32_t representative_shader_index = 0u;
     core::operator_mask composed_shader_owners = 0u;
+    bool current_b12_abi = false;
+    bool legacy_specular_complete = false;
     bool ready = false;
 };
 
