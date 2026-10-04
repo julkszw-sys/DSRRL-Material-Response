@@ -106,6 +106,22 @@ option(
     "Cumulative stable P_Metal PTDE HemEnv successor: R3+R4+R5 plus exact PTDE Fog/LightScattering domain and source-gated PHN k135 terminal consumer"
     OFF)
 
+set(
+    DSRRL_PMETAL_PROBE_SWAP_MODE
+    "0"
+    CACHE STRING
+    "P_Metal diagnostic probe substitution: 0=off, 1=EnvSpec-only, 2=EnvDiffuse-only, 3=both")
+set(
+    DSRRL_PMETAL_PROBE_SWAP_SOURCE_ORDINAL
+    "0"
+    CACHE STRING
+    "Authenticated canonical source probe ordinal eligible for P_Metal diagnostic substitution")
+set(
+    DSRRL_PMETAL_PROBE_SWAP_TARGET_ORDINAL
+    "0"
+    CACHE STRING
+    "Canonical PTDE target probe ordinal used by P_Metal diagnostic substitution")
+
 option(
     DSRRL_POINTLIGHT_DRAWTIME_BYPASS
     "Diagnostic: disable PointLight producer hooks, runtime pipeline binding and draw-time carrier/replay while preserving all non-PointLight runtime paths"
@@ -682,6 +698,25 @@ if(DSRRL_PMETAL_FULL_PTDE_HEMENV_R6)
         dsrrl_renderer_core_integrated
         PRIVATE
         $<$<COMPILE_LANGUAGE:CXX>:DSRRL_PMETAL_FULL_PTDE_HEMENV_R6>)
+endif()
+
+if(NOT DSRRL_PMETAL_PROBE_SWAP_MODE STREQUAL "0")
+    if(NOT DSRRL_PMETAL_FULL_PTDE_HEMENV_R6)
+        message(FATAL_ERROR
+            "P_Metal probe-swap diagnostic requires the cumulative R6 lineage")
+    endif()
+
+    if(NOT DSRRL_PMETAL_PROBE_SWAP_MODE MATCHES "^[123]$")
+        message(FATAL_ERROR
+            "P_Metal probe-swap mode must be 0, 1, 2 or 3")
+    endif()
+
+    target_compile_definitions(
+        dsrrl_renderer_core_integrated
+        PRIVATE
+        $<$<COMPILE_LANGUAGE:CXX>:DSRRL_PMETAL_PROBE_SWAP_MODE=${DSRRL_PMETAL_PROBE_SWAP_MODE}>
+        $<$<COMPILE_LANGUAGE:CXX>:DSRRL_PMETAL_PROBE_SWAP_SOURCE_ORDINAL=${DSRRL_PMETAL_PROBE_SWAP_SOURCE_ORDINAL}>
+        $<$<COMPILE_LANGUAGE:CXX>:DSRRL_PMETAL_PROBE_SWAP_TARGET_ORDINAL=${DSRRL_PMETAL_PROBE_SWAP_TARGET_ORDINAL}>)
 endif()
 
 if(DSRRL_POINTLIGHT_DRAWTIME_BYPASS)
