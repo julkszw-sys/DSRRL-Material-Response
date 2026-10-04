@@ -37,6 +37,10 @@ struct pmetal_rgba_materialize_outcome {
     // R6: exact PHN k135->SAT consumer is present. This flag says nothing
     // about producer validity; an unresolved producer uses unity fail-open.
     bool phn_scene_encoding_composed = false;
+    // R10E: the stable P_Metal surface remains in the PTDE legacy domain
+    // through Fog/LightScattering. Stock DSR pre-Fog 1/2.2 and post-LS 2.2
+    // domain sandwich is removed/re-targeted without borrowing b12 as Fog.
+    bool atmosphere_domain_composed = false;
     // R7: exact PTDE Csd/Sdw shadow visibility producer is present on
     // stable receivers 33/34. Plain receiver 35 has no such branch.
     bool shadow_visibility_kernel_composed = false;
