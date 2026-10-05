@@ -5,6 +5,7 @@ on:
     branches:
       - "runtime-v2/**"
       - "r46-r43-visibility-safe-hotpath"
+      - "r47-r43-safe-dof-on"
   pull_request:
     paths:
       - "renderer-core/**"
@@ -43,9 +44,9 @@ jobs:
           ref: 3645e3025d1d98a90e318278858931f034d5d1f6
           path: _reshade
 
-      - name: Audit R46 visibility-safe + DoF 302089dd contract
+      - name: Audit R47 performance + DoF contract
         shell: pwsh
-        run: python renderer-core/tools/audit_r46_visibility_safe_dof.py renderer-core
+        run: python renderer-core/tools/audit_r47_perf_dof.py renderer-core
 
       - name: Configure Runtime v2 addon
         shell: pwsh
