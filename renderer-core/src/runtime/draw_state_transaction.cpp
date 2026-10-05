@@ -72,14 +72,74 @@ bool restore_local_tx(
     return true;
 }
 
+bool synchronous_clustered_transaction_shape(
+    const draw_tx_mutation &mutation) noexcept
+{
+    if (!mutation.synchronous_core_transaction ||
+        !mutation.replace_pixel_shader ||
+        mutation.pixel_shader == nullptr ||
+        mutation.constant_buffer_count != 1u ||
+        mutation.constant_buffers[0].slot != 12u ||
+        mutation.srv_count != 2u ||
+        mutation.srvs[0].slot != 18u ||
+        mutation.srvs[1].slot != 19u ||
+        mutation.sampler_count != 0u)
+        return false;
+
+    const auto point =
+        core::operator_bit(
+            core::operator_id::point_light);
+    const auto attenuation =
+        core::operator_bit(
+            core::operator_id::pointlight_pnts_attenuation);
+    const auto material =
+        core::operator_bit(
+            core::operator_id::material_response);
+    const auto local =
+        core::operator_bit(
+            core::operator_id::local_specular_legacy);
+    const auto diffuse_domain =
+        core::operator_bit(
+            core::operator_id::diffuse_material_domain);
+    const auto sat =
+        core::operator_bit(
+            core::operator_id::terminal_sat_rgb);
+    const auto env_delete =
+        core::operator_bit(
+            core::operator_id::envspec_nospc_delete);
+
+    const auto allowed =
+        point |
+        attenuation |
+        material |
+        local |
+        diffuse_domain |
+        sat |
+        env_delete;
+
+    if ((mutation.owners & point) == 0u ||
+        (mutation.owners & attenuation) == 0u ||
+        (mutation.owners & material) == 0u ||
+        (mutation.owners & diffuse_domain) == 0u ||
+        (mutation.owners & sat) == 0u ||
+        (mutation.owners & ~allowed) != 0u)
+        return false;
+
+    const bool spc =
+        (mutation.owners & local) != 0u;
+    const bool nospc_delete =
+        (mutation.owners & env_delete) != 0u;
+
+    // Certified families are mutually exclusive:
+    // Spc carries legacy local specular; NoSpc carries EnvSpec deletion.
+    return spc != nospc_delete;
+}
+
 bool synchronous_clustered_srv_pair(
     const draw_tx_mutation &mutation) noexcept
 {
-    return
-        mutation.synchronous_core_transaction &&
-        mutation.srv_count == 2u &&
-        mutation.srvs[0].slot == 18u &&
-        mutation.srvs[1].slot == 19u;
+    return synchronous_clustered_transaction_shape(
+        mutation);
 }
 
 std::size_t context1_tls_index(
@@ -239,6 +299,11 @@ release_context1_cache() noexcept
 bool draw_state_transaction_runtime::validate_mutation(
     const draw_tx_mutation &mutation) const noexcept
 {
+    if (mutation.synchronous_core_transaction &&
+        !synchronous_clustered_transaction_shape(
+            mutation))
+        return false;
+
     if (mutation.owners == 0u ||
         (mutation.owners & ~core::all_operator_bits) != 0u ||
         (mutation.shader_owners & ~mutation.owners) != 0u ||
