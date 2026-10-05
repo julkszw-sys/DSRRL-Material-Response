@@ -54,6 +54,9 @@ def main() -> None:
         "register_command_list(",
         "unregister_command_list(",
         "D3D11_DEVICE_CONTEXT_DEFERRED",
+        "IUnknown *identity",
+        "command_list_native_identity_rebound",
+        "context_rebinds",
         "hook_record_for(",
         "const bool hook_live",
         "pending.context == context",
@@ -70,8 +73,10 @@ def main() -> None:
     require(integrated, "g_pmetal_native_draw.register_command_list(", "exact command-list registry")
     require(integrated, "g_pmetal_native_draw.unregister_command_list(", "exact command-list unregister")
 
-    forbid(native, "g_original_draw", "R21 must keep originals per exact vtable")
-    forbid(native, "context != impl_->context", "R21 must not reject deferred contexts by single immediate identity")
+    forbid(native, "g_original_draw", "R22 must keep originals per exact vtable")
+    forbid(native, "context != impl_->context", "R22 must not reject deferred contexts by single immediate identity")
+    require(native, "register_context(context)", "R22 lazy exact native-interface rebind")
+    require(native, "it->identity == identity", "R22 COM identity teardown")
     forbid(native, "core_.transactions()", "native bridge must not re-enter generic transaction core")
     forbid(native, "raw_replay", "native bridge must not replay a second draw")
 
