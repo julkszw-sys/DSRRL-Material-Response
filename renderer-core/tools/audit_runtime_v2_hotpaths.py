@@ -12,6 +12,7 @@ pmetal_cpp = (root / "src/runtime/pmetal_envspec_draw_runtime.cpp").read_text(en
 producer = (root / "src/runtime/pmetal_producer_state.cpp").read_text(encoding="utf-8")
 pmetal_source = (root / "src/runtime/pmetal_env_source_runtime.cpp").read_text(encoding="utf-8")
 clustered = (root / "src/runtime/clustered_pnts_draw_runtime.cpp").read_text(encoding="utf-8")
+native_bridge = (root / "src/runtime/pmetal_native_draw_bridge.cpp").read_text(encoding="utf-8")
 
 def require(text: str, needle: str, label: str) -> None:
     if needle not in text:
@@ -237,6 +238,39 @@ require(
     clustered,
     "[DSRRL POINTLIGHT R45] bank_authority_cache=TLS_SEMANTIC_GENERATION vm_validation_cache=TLS_PER_PRESENT exact_frame_state_reuse=ON duplicate_vtable_owner_selector_manager_decode=OFF spc=ON nospc=ON",
     "R45 PointLight decode-cache attestation")
+
+for counter in (
+    "vtable_hooks_installed",
+    "context_registers",
+    "deferred_context_registers",
+    "arm_reject",
+    "context_rebinds",
+    "armed",
+    "draw_applied",
+    "draw_indexed_applied",
+):
+    forbid_fetch_add(
+        native_bridge,
+        counter,
+        "R45 native bridge steady-state telemetry must be gated")
+
+for latch in (
+    "g_vtable_conflict_logged",
+    "g_vtable_rearm_logged",
+    "g_context_rebind_logged",
+    "g_deferred_context_registered_logged",
+    "g_native_arm_reject_logged",
+    "g_pointlight_native_applied_logged",
+):
+    require(
+        native_bridge,
+        f"!{latch}.load(",
+        f"R45 native bridge one-shot latch {latch} must load-gate atomic exchange")
+
+require(
+    native_bridge,
+    "[DSRRL NATIVE R45] steady_state_diagnostic_counters=GATED one_shot_latches=LOAD_GATED renderer_semantics=UNCHANGED",
+    "R45 native bridge production hot-path attestation")
 
 forbid(pmetal_source, "next.generation = serial", "event serial must not drive semantic generation")
 require(pmetal_h, "payload_bits", "exact b12 payload cache")
