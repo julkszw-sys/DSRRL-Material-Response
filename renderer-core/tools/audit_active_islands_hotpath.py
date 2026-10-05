@@ -117,13 +117,10 @@ def main():
         "clustered_pnts_selector_event_bridge(\n            owner,\n            actual_material);",
         "clustered selector bridge receives exact material only after PointLight prefilter")
     require(flver_cpp,
-        "if (!pointlight_spc) {\n            // R34: source/carrier production is a distinct stage from\n            // material-response authorization.",
-        "clustered NoSpc enters the explicit source/material split")
-    require(flver_cpp,
-        "clustered_pnts_selector_source_event_bridge();\n            clustered_pnts_selector_identity_event_bridge(\n                identity,\n                false);",
-        "clustered NoSpc produces PTDE source before material-response authorization")
-    if "clustered_pnts_selector_source_event_bridge();\n        clustered_pnts_selector_identity_event_bridge(\n            identity,\n            pointlight_spc);" in flver_cpp:
-        fail("clustered Spc regressed to PTDE source production before protected fail-open")
+        "clustered_pnts_selector_source_event_bridge();\n        clustered_pnts_selector_identity_event_bridge(\n            identity,\n            pointlight_spc);",
+        "clustered PointLight source stage feeds both NoSpc and owner-authorized Spc hybrid")
+    if "if (!pointlight_spc)" in flver_cpp:
+        fail("clustered Spc still has the superseded pre-source fail-open gate")
 
     source_body=function_body(
         clustered,
