@@ -201,14 +201,17 @@ def main():
         "[DSRRL PMETAL R41] selector_source_shadow_hit=1 exact_source_ptr=ON exact_selector_beta=ON donor_redecode=OFF fail_open_fallback=ON",
         "R41 selector shadow runtime hit attestation")
     require(pmetal_source,
-        "[DSRRL PMETAL R42] producer_cache=SET64_WAY2 cross_thread=ON exact_key=SOURCE_PTR_SELECTOR_BETA semantic_version_gate=CURRENT selector_try_lock=ON producer_payload_reuse=ON donor_redecode_fallback=ON islands_preserved=ON",
-        "R42 cross-thread producer cache startup attestation")
+        "[DSRRL PMETAL R43] producer_cache=SET256_WAY2 freshness=SOURCE_BASE_COUNT_ROW_SELECTOR_BETA global_semantic_version_gate=OFF selector_try_lock=ON producer_payload_exact=ON fallback_full_decode=ON islands_preserved=ON",
+        "R43 per-key producer cache startup attestation")
     require(pmetal_source,
-        "[DSRRL PMETAL R42] selector_cross_thread_cache_hit=1 exact_key=SOURCE_PTR_SELECTOR_BETA semantic_version=CURRENT donor_redecode=OFF lock_wait=OFF",
-        "R42 selector cross-thread hit attestation")
+        "[DSRRL PMETAL R43] selector_per_key_cache_hit=1 exact_key=SOURCE_BASE_COUNT_ROW_SELECTOR_BETA global_semantic_version=IGNORED donor_redecode=OFF lock_wait=OFF",
+        "R43 selector per-key cache hit attestation")
     require(pmetal_source,
         "[DSRRL PMETAL R42] producer_cross_thread_cache_hit=1 exact_key=SOURCE_PTR_SELECTOR_BETA exact_payload=ON global_publish_mutex=SKIPPED",
-        "R42 producer cross-thread hit attestation")
+        "inherited producer cross-thread hit attestation")
+    require(pmetal_source,
+        "capture_hook_selector_identity(",
+        "R43 exact live LightBank freshness capture")
     if "pmetal_env_source_cache_invalidate();" in flver_cpp:
         fail("R41 regression: FLVER lifecycle globally invalidates P_Metal LightBank source cache")
 
