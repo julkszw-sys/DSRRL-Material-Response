@@ -302,7 +302,6 @@ std::atomic<std::uint64_t> g_gpu_prepare_fail{0u};
 std::atomic<std::uint64_t> g_upload_fail{0u};
 std::atomic<std::uint64_t> g_gpu_fast_hit{0u};
 std::atomic<std::uint64_t> g_gpu_fast_miss{0u};
-std::atomic<std::uint64_t> g_lazy_sidecar_rebuild{0u};
 
 std::uintptr_t g_base = 0u;
 
@@ -939,7 +938,7 @@ bool clustered_pnts_draw_runtime::install() noexcept
             std::memory_order_relaxed))
         reshade::log::message(
             reshade::log::level::info,
-            "[DSRRL POINTLIGHT R29] exact_structure_snapshot_cache=ACTIVE cross_draw=ON revalidate=VM+MEMCMP pointer_only_authority=OFF gpu_tls_fast_cache=ON per_draw_resource_mutex=OFF per_draw_com_ref_churn=OFF pipeline_tls_fast_path=ON per_draw_private_data=OFF per_draw_shader_ref_churn=OFF lazy_sidecar_rebuild=ON");
+            "[DSRRL POINTLIGHT R29] exact_structure_snapshot_cache=ACTIVE cross_draw=ON revalidate=VM+MEMCMP pointer_only_authority=OFF gpu_tls_fast_cache=ON per_draw_resource_mutex=OFF per_draw_com_ref_churn=OFF pipeline_tls_fast_path=ON per_draw_private_data=OFF per_draw_shader_ref_churn=OFF");
     return true;
 }
 
@@ -1328,57 +1327,6 @@ bool clustered_pnts_draw_runtime::prepare_sidecar(
         return false;
     }
 
-    if (!g_draw_selection.payload_ready &&
-        g_draw_selection.cached_failure ==
-            clustered_pnts_prepare_failure::none &&
-        g_source_selection_cache.ready &&
-        !g_source_selection_cache.neutral &&
-        g_source_selection_cache.producer_serial ==
-            input.serial &&
-        g_draw_selection.authority_ready) {
-        const auto rebuilt =
-            operators::point_light::
-                build_clustered_sidecar_v1(
-                    g_source_selection_cache.sources,
-                    g_source_selection_cache.selected_count,
-                    g_draw_selection.material_max,
-                    g_draw_selection.material_decision);
-
-        g_draw_selection.sidecar_result_code =
-            static_cast<std::uint8_t>(
-                rebuilt.result);
-
-        if (rebuilt.result ==
-                operators::point_light::
-                    clustered_sidecar_result_v1::ready &&
-            rebuilt.payload.ready) {
-            g_draw_selection.payload =
-                rebuilt.payload;
-            g_draw_selection.payload_ready = true;
-            telemetry::hot_count(
-                g_lazy_sidecar_rebuild);
-            telemetry::hot_count(
-                g_sidecar_ready);
-
-            static std::atomic_bool
-                lazy_rebuild_logged{false};
-            if (!lazy_rebuild_logged.exchange(
-                    true,
-                    std::memory_order_relaxed))
-                reshade::log::message(
-                    reshade::log::level::info,
-                    "[DSRRL POINTLIGHT R29] lazy_sidecar_rebuild=APPLIED source_cache=READY exact_material_authority=READY");
-        } else {
-            g_draw_selection.cached_failure =
-                clustered_pnts_prepare_failure::
-                    sidecar_build;
-            telemetry::hot_count(
-                g_sidecar_build_fail);
-            telemetry::hot_count(
-                g_sidecar_fail);
-        }
-    }
-
     if (!g_draw_selection.payload_ready) {
         prepared.failure =
             g_draw_selection.cached_failure !=
@@ -1725,7 +1673,6 @@ void clustered_pnts_draw_runtime::reset() noexcept
     g_upload_fail.store(0u);
     g_gpu_fast_hit.store(0u);
     g_gpu_fast_miss.store(0u);
-    g_lazy_sidecar_rebuild.store(0u);
     g_quarantined.store(false);
 }
 
