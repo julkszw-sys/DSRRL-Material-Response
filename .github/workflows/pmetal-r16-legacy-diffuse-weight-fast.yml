@@ -5,12 +5,6 @@ on:
   push:
     branches:
       - pmetal-r16-legacy-diffuse-weight
-  pull_request:
-    paths:
-      - "renderer-core/integrated/**"
-      - "renderer-core/src/operators/env_spec/pmetal_rgba_materializer.cpp"
-      - ".github/workflows/pmetal-r16-legacy-diffuse-weight-fast.yml"
-
 permissions:
   contents: read
 
