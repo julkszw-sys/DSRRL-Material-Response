@@ -2,6 +2,7 @@
 
 #include "dsrrl/operators/dof/dof_island.hpp"
 
+#include <cstddef>
 #include <cstdint>
 
 struct ID3D11ShaderResourceView;
@@ -65,6 +66,13 @@ void unregister_ptde_scheduler_runtime() noexcept;
 
 bool ptde_scheduler_execution_set_ready(
     const scheduler_external_inputs &inputs) noexcept;
+
+scheduler_result execute_ptde_pass(
+    reshade::api::command_list *cmd_list,
+    const operators::dof::activation_context &activation,
+    const scheduler_external_inputs &inputs,
+    const scheduler_draw_shape &shape,
+    std::size_t pass_index) noexcept;
 
 scheduler_result execute_ptde_graph(
     reshade::api::command_list *cmd_list,
