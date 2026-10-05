@@ -859,14 +859,14 @@ bool capture_source(
                 g_base,
                 raw,
                 bank_cache)) {
-            log_source_capture_failure_once(
-                1u << 8,
-                bank_source
-                    ? "bank_ptde_donor_unavailable"
-                    : "lerp_ptde_donor_unavailable",
-                node,
-                target);
-            return false;
+            // Preserve the pre-R36 donor-miss behavior exactly: unresolved
+            // donor authority falls back to the attested stock source packer
+            // rather than suppressing an otherwise valid PointLight.
+            using source_fn =
+                void (__fastcall *)(void *, float *);
+            const auto fn =
+                reinterpret_cast<source_fn>(target);
+            fn(node, raw.data());
         }
     } else {
         using source_fn =
