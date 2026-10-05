@@ -1,6 +1,6 @@
 {
   "schema": "dsrrl.dof.consumer_local_temporal_preservation_contract.v1",
-  "status": "CONSTRUCTION_READY_RUNTIME_INERT_UNTIL_ALL_GATES",
+  "status": "CONSTRUCTION_READY_PASSIVE_PIPELINE_PREFLIGHT_RUNTIME_VISIBLE_BRIDGE_BLOCKED",
   "source": {
     "dsr_exe_sha256": "a45aaa36dd2f6cc151670a639ea5547043cf38ea79ff4178b963c6ed71f98d7b",
     "ptde_data_exe_sha256": "88d1eec18eba2542c9c7e5e6903e89f9c075b20be5cd045ce6e568e7b22bea9d",
@@ -10,20 +10,145 @@
     "dsr_imagefilter_ctor": "0x140450D30",
     "dsr_dof_flat_ctor": "0x140460660",
     "dsr_dof_flat_instances": [
-      {"imagefilter_offset": "0x20", "mode_flag": 0, "callsite": "0x1404510B5"},
-      {"imagefilter_offset": "0x28", "mode_flag": 1, "callsite": "0x1404510F1"}
+      {
+        "imagefilter_offset": "0x20",
+        "mode_flag": 0,
+        "callsite": "0x1404510B5"
+      },
+      {
+        "imagefilter_offset": "0x28",
+        "mode_flag": 1,
+        "callsite": "0x1404510F1"
+      }
     ],
     "dsr_resolve_taa_ctor": "0x1400C4020",
     "dsr_resolve_taa_imagefilter_offset": "0xC8",
     "dsr_resolve_taa_callsite": "0x1404515D1",
-    "ptde_flat_passes": ["0x00","0x02","0x0D","0x01","0x0D","0x0F","0x03","0x0E","0x10"],
-    "dsr_flat_passes": ["0x01","0x0D","0x01","0x0D","0x0F","0x03","0x0E","0x10"],
+    "ptde_flat_passes": [
+      "0x00",
+      "0x02",
+      "0x0D",
+      "0x01",
+      "0x0D",
+      "0x0F",
+      "0x03",
+      "0x0E",
+      "0x10"
+    ],
+    "dsr_flat_passes": [
+      "0x01",
+      "0x0D",
+      "0x01",
+      "0x0D",
+      "0x0F",
+      "0x03",
+      "0x0E",
+      "0x10"
+    ],
     "dsr_dofrate_cb_runtime_shader_id": "0xDF0",
     "ptde_fixed_rasters": [
-      {"width":1024,"height":720,"format":"A8R8G8B8"},
-      {"width":512,"height":360,"format":"A8R8G8B8"},
-      {"width":256,"height":180,"format":"A8R8G8B8"}
-    ]
+      {
+        "width": 1024,
+        "height": 720,
+        "format": "A8R8G8B8"
+      },
+      {
+        "width": 512,
+        "height": 360,
+        "format": "A8R8G8B8"
+      },
+      {
+        "width": 256,
+        "height": 180,
+        "format": "A8R8G8B8"
+      }
+    ],
+    "retained_dx11_runtime_id_base": "0xDB4",
+    "retained_flat_pass_shader_map": [
+      {
+        "pass": "0x00",
+        "runtime_shader_ids": [
+          "0xDE7",
+          "0xDE8"
+        ],
+        "shaders": [
+          "FRPG_Fil_DepthCopy",
+          "FRPG_Fil_DepthCopy_Fragment0"
+        ]
+      },
+      {
+        "pass": "0x01",
+        "runtime_shader_ids": [
+          "0xDEA"
+        ],
+        "shaders": [
+          "FRPG_Fil_DepthCopy_MSAA"
+        ]
+      },
+      {
+        "pass": "0x02",
+        "runtime_shader_ids": [
+          "0xDEA"
+        ],
+        "shaders": [
+          "FRPG_Fil_DepthCopy_MSAA"
+        ]
+      },
+      {
+        "pass": "0x03",
+        "runtime_shader_ids": [
+          "0xDEB"
+        ],
+        "shaders": [
+          "FRPG_Fil_DepthCopy_SingleFragment"
+        ]
+      },
+      {
+        "pass": "0x0D",
+        "runtime_shader_ids": [
+          "0xDF0"
+        ],
+        "shaders": [
+          "FRPG_Fil_Dof_DofRate_CB"
+        ]
+      },
+      {
+        "pass": "0x0E",
+        "runtime_shader_ids": [
+          "0xDF1"
+        ],
+        "shaders": [
+          "FRPG_Fil_Dof_DownSample"
+        ]
+      },
+      {
+        "pass": "0x0F",
+        "runtime_shader_ids": [
+          "0xDF2"
+        ],
+        "shaders": [
+          "FRPG_Fil_Dof_GaussX"
+        ]
+      },
+      {
+        "pass": "0x10",
+        "runtime_shader_ids": [
+          "0xDF5",
+          "0xDF6"
+        ],
+        "shaders": [
+          "FRPG_Fil_Dof_GaussY_Adv",
+          "FRPG_Fil_Dof_NearRate"
+        ]
+      }
+    ],
+    "retained_plain_dofrate": {
+      "runtime_shader_id": "0xDEF",
+      "shader": "FRPG_Fil_Dof_DofRate",
+      "binder_index": 59
+    },
+    "pipeline_identity_rule": "Exact VPO+FPO pair. Pixel bytecode alone is insufficient: GaussX/GaussY and GaussX_Adv/GaussY_Adv share FPO bytecode but have distinct VPOs.",
+    "pass_0x10_semantic_correction": "0x10 is not proven/final composite; executor selects retained GaussY_Adv or NearRate. The true DoF output/composite cut remains open."
   },
   "temporal_policy": {
     "preserve_stock_resolve_taa_node": true,
@@ -37,15 +162,17 @@
     "exact ImageProcessDof_Flat receiver",
     "known primary/alternate Flat mode",
     "complete DoF resource graph",
+    "exact retained VPO+FPO pipeline identity set",
     "private single-sample depth sidecar",
     "retained plain Dof_DofRate identity",
     "PTDE fixed raster chain",
-    "verified final DoF composite output cut"
+    "verified true DoF output/composite cut"
   ],
   "open_before_runtime_visible_bridge": [
-    "exact ResolveTAA output -> Dof_Flat input resource edge for each Flat mode",
-    "exact PTDE pass 0x00 and 0x02 shader/resource semantics",
-    "exact pass 0x10 final composite source/target handoff",
+    "exact ResolveTAA/output-scene -> Dof_Flat input resource edge for each Flat mode",
+    "exact PTDE pass 0x00 and 0x02 resource source/target semantics",
+    "exact true DoF output/composite handoff after Flat preparation chain",
+    "resource sidecar allocation/redirect transaction",
     "runtime activation",
     "pixel behavior"
   ]
