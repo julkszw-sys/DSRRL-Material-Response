@@ -26,13 +26,13 @@ enum class operator_id : std::uint8_t {
     terminal_sat_rgba,
     fixed_postfog_identity,
     faceeye_shadow_legacy,
-    post_dof_ptde,
     post_bloom,
     post_hdr,
     dsr_native_sfx,
     dsr_sfx_inverse_tonemap,
     pmetal_black_safe_source,
     pmetal_black_safe_v10,
+    post_dof_ptde,
     count
 };
 
