@@ -26,7 +26,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: pmetal-r30-${{ github.event.pull_request.head.sha || github.sha }}
+  group: pmetal-r30-${{ github.head_ref || github.ref_name }}
   cancel-in-progress: true
 
 jobs:
