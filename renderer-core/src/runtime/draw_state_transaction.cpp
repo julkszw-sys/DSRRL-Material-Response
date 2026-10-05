@@ -51,6 +51,14 @@ thread_local std::array<
     context1_tls_entry,
     k_context1_tls_cache_size> g_context1_tls_cache{};
 
+struct local_tx_state {
+    const draw_state_transaction_runtime *owner = nullptr;
+    std::uint64_t command = 0u;
+    bool active = false;
+};
+
+thread_local local_tx_state g_local_tx{};
+
 std::size_t context1_tls_index(
     ID3D11DeviceContext *context) noexcept
 {
