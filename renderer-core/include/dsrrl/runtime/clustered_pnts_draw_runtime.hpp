@@ -78,6 +78,10 @@ struct prepared_clustered_pnts_draw {
     bool owner_verified = false;
     bool selector_mirror_verified = false;
     bool neutral_no_pointlights = false;
+    // R29 fast path: t18/t19/b12 are borrowed from a TLS cache that owns
+    // stable COM references across draws. release_prepared_draw() must not
+    // churn AddRef/Release for borrowed carriers.
+    bool carrier_borrowed_tls = false;
     bool ready = false;
     clustered_pnts_prepare_failure failure =
         clustered_pnts_prepare_failure::none;
