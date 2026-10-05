@@ -94,17 +94,35 @@ for token in [
     'ID3D11Buffer *t19_buffer = nullptr;',
     'ID3D11ShaderResourceView *t19_srv = nullptr;',
     'ID3D11Buffer *b12 = nullptr;',
-    't18_buffer->AddRef();',
-    't19_buffer->AddRef();',
-    't18_srv->AddRef();',
-    't19_srv->AddRef();',
-    'b12->AddRef();',
+    'lookup_gpu_fast_cache(',
+    'store_gpu_fast_cache(',
+    't18_buffer = fast->t18_buffer;',
+    't18_srv = fast->t18_srv;',
+    't19_buffer = fast->t19_buffer;',
+    't19_srv = fast->t19_srv;',
+    'b12 = fast->b12;',
     'const bool uploaded =',
     'prepared.t18 = t18_srv;',
     'prepared.t19 = t19_srv;',
-    'prepared.b12 = b12;'
+    'prepared.b12 = b12;',
+    'prepared.carrier_borrowed_tls = true;'
 ]:
     require(prepare,token)
+
+# R29 moved stable resource ownership into the TLS fast-cache fill path. No
+# per-draw COM churn is allowed after a cache hit; the fast-cache entry retains
+# resources until epoch invalidation/teardown.
+if '->AddRef();' in prepare:
+    raise SystemExit('Clustered PointLight prepare regressed to per-draw COM AddRef churn')
+for token in [
+    'entry.t18_buffer->AddRef();',
+    'entry.t18_srv->AddRef();',
+    'entry.t19_buffer->AddRef();',
+    'entry.t19_srv->AddRef();',
+    'entry.b12->AddRef();',
+    'g_resource_epoch'
+]:
+    require(clustered,token)
 
 if 'update_buffer(\n            context,\n            gpu->' in prepare:
     raise SystemExit('Clustered PointLight DISCARD upload is still performed through mutex-owned gpu pointer')
