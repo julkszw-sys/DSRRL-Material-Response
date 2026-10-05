@@ -135,6 +135,7 @@ if(WIN32 AND RESHade_INCLUDE_DIR)
     src/dof_authored_state_runtime.cpp
     src/dof_plain_rate_runtime.cpp
     src/dof_private_resource_runtime.cpp
+    src/dof_ptde_scheduler_runtime.cpp
     "${CMAKE_CURRENT_SOURCE_DIR}/../renderer-core/src/runtime/a1_create_pipeline_bridge.cpp"
     src/selector_hook.asm
     src/texture_name_hook.asm
