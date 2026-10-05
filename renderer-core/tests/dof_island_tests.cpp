@@ -51,6 +51,15 @@ int main()
     CHECK(dsr_flat_retained_routes.back().alternate ==
           retained_shader_role::near_rate);
     CHECK(!flat_pass_0x10_is_output_composite());
+    CHECK(active_output_cut_is_exact());
+    CHECK(dsr_active_output_cut.dof_flat_pass_0x10_executor ==
+          0x1404569A0ull);
+    CHECK(dsr_active_output_cut.hdr_pbl_executor ==
+          0x140458080ull);
+    CHECK(dsr_active_output_cut.image_state_target_view_offset == 0x94u);
+    CHECK(dsr_active_output_cut.image_state_underlying_resource_offset == 0x98u);
+    CHECK(dsr_active_output_cut.render_state_dof_route_flag_offset == 0x351u);
+    CHECK(dsr_active_output_cut.hdr_pbl_texture_slot == 0u);
 
     activation_context ready{};
     ready.enabled = true;
