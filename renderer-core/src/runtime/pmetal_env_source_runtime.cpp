@@ -2321,13 +2321,16 @@ void __fastcall envspec_single_hook_entry(
     f4 donor{};
     std::uint64_t bank = 0u;
     std::uint32_t row = 0u;
+    hook_endpoint_identity_v1
+        decoded_endpoint{};
     const bool donor_ok =
         read_exact_source(
             source,
             selector,
             donor,
             bank,
-            row);
+            row,
+            &decoded_endpoint);
 
     if (g_envspec_single_original != nullptr)
         g_envspec_single_original(
@@ -2369,7 +2372,9 @@ void __fastcall envspec_single_hook_entry(
                 selector),
             source,
             static_cast<std::int16_t>(
-                selector));
+                selector),
+            &decoded_endpoint,
+            &decoded_endpoint);
 }
 
 void __fastcall envspec_blend_hook_entry(
@@ -2397,6 +2402,10 @@ void __fastcall envspec_blend_hook_entry(
     std::uint64_t bank_b = 0u;
     std::uint32_t row_a = 0u;
     std::uint32_t row_b = 0u;
+    hook_endpoint_identity_v1
+        decoded_a{};
+    hook_endpoint_identity_v1
+        decoded_b{};
 
     bool donor_ok = false;
     if (endpoints.valid) {
@@ -2406,7 +2415,8 @@ void __fastcall envspec_blend_hook_entry(
                 endpoints.a,
                 a,
                 bank_a,
-                row_a);
+                row_a,
+                &decoded_a);
 
         if (donor_ok) {
             if (endpoints.beta == 0.0f ||
@@ -2414,6 +2424,9 @@ void __fastcall envspec_blend_hook_entry(
                 b = a;
                 bank_b = bank_a;
                 row_b = row_a;
+                decoded_b = decoded_a;
+                decoded_b.source = source_b;
+                decoded_b.selector = endpoints.b;
             } else {
                 donor_ok =
                     read_exact_source(
@@ -2421,7 +2434,8 @@ void __fastcall envspec_blend_hook_entry(
                         endpoints.b,
                         b,
                         bank_b,
-                        row_b);
+                        row_b,
+                        &decoded_b);
             }
         }
     }
@@ -2470,7 +2484,9 @@ void __fastcall envspec_blend_hook_entry(
             source_a,
             endpoints.a,
             source_b,
-            endpoints.b);
+            endpoints.b,
+            &decoded_a,
+            &decoded_b);
 }
 
 bool install_envspec_source_hooks(
