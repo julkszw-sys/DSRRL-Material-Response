@@ -59,6 +59,19 @@ struct local_tx_state {
 
 thread_local local_tx_state g_local_tx{};
 
+bool restore_local_tx(
+    const draw_state_transaction_runtime *owner,
+    std::uint64_t command) noexcept
+{
+    if (!g_local_tx.active ||
+        g_local_tx.owner != owner ||
+        g_local_tx.command != command)
+        return false;
+
+    g_local_tx = {};
+    return true;
+}
+
 std::size_t context1_tls_index(
     ID3D11DeviceContext *context) noexcept
 {
@@ -726,7 +739,14 @@ bool draw_state_transaction_runtime::restore(
     if (cmd_list == nullptr ||
         (state.shader_captured &&
          state.old_shader == nullptr)) {
-        if (state.core_started && state.command != 0u)
+        if (state.local_started &&
+            state.command != 0u)
+            core_restored =
+                restore_local_tx(
+                    this,
+                    state.command);
+        else if (state.core_started &&
+                 state.command != 0u)
             core_restored =
                 core_.transactions().restore(
                     state.command);
@@ -738,7 +758,14 @@ bool draw_state_transaction_runtime::restore(
 
     auto *ctx = state.context;
     if (ctx == nullptr) {
-        if (state.core_started && state.command != 0u)
+        if (state.local_started &&
+            state.command != 0u)
+            core_restored =
+                restore_local_tx(
+                    this,
+                    state.command);
+        else if (state.core_started &&
+                 state.command != 0u)
             core_restored =
                 core_.transactions().restore(
                     state.command);
@@ -908,7 +935,14 @@ bool draw_state_transaction_runtime::restore(
     
     }
 
-    if (state.core_started && state.command != 0u)
+    if (state.local_started &&
+        state.command != 0u)
+        core_restored =
+            restore_local_tx(
+                this,
+                state.command);
+    else if (state.core_started &&
+             state.command != 0u)
         core_restored =
             core_.transactions().restore(
                 state.command);
