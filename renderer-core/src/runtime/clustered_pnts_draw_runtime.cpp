@@ -789,6 +789,9 @@ bool clustered_pnts_draw_runtime::install() noexcept
         reinterpret_cast<retained_selector_fn>(
             g_base + 0x55FC70u);
 
+    pointlight_ptde_source::
+        clear_persistent_structure_cache();
+
     g_runtime = this;
     g_quarantined.store(false);
     g_enabled.store(true);
@@ -798,7 +801,7 @@ bool clustered_pnts_draw_runtime::install() noexcept
             std::memory_order_relaxed))
         reshade::log::message(
             reshade::log::level::info,
-            "[DSRRL POINTLIGHT R27] draw_local_bank_authority_cache=ACTIVE scope=ONE_DRAW persistent_pointer_authority=OFF");
+            "[DSRRL POINTLIGHT R28] exact_structure_snapshot_cache=ACTIVE cross_draw=ON revalidate=VM+MEMCMP pointer_only_authority=OFF draw_local_bank_cache=ON");
     return true;
 }
 
@@ -807,6 +810,8 @@ void clustered_pnts_draw_runtime::uninstall() noexcept
     g_enabled.store(false);
     consume_draw_selection();
     g_source_selection_cache = {};
+    pointlight_ptde_source::
+        clear_persistent_structure_cache();
     g_upload_identity_cache = {};
     g_upload_identity_victim = 0u;
     g_producer_input_tls = {};
@@ -1463,6 +1468,8 @@ void clustered_pnts_draw_runtime::reset() noexcept
 {
     consume_draw_selection();
     g_source_selection_cache = {};
+    pointlight_ptde_source::
+        clear_persistent_structure_cache();
     g_producer_input_tls = {};
 
     {
