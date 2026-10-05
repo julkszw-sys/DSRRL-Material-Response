@@ -720,12 +720,6 @@ bool pmetal_native_draw_bridge::register_context(
             D3D11_DEVICE_CONTEXT_DEFERRED)
         return false;
 
-    auto **vtable =
-        *reinterpret_cast<void ***>(
-            context);
-    if (vtable == nullptr)
-        return false;
-
     IUnknown *identity = nullptr;
     if (FAILED(context->QueryInterface(
             __uuidof(IUnknown),
@@ -739,6 +733,20 @@ bool pmetal_native_draw_bridge::register_context(
         __uuidof(ID3D11DeviceContext1),
         reinterpret_cast<void **>(
             &context1));
+
+    // QueryInterface can expose/upgrade the driver's current context ABI.
+    // Sample the draw dispatch only after the interface queries, otherwise
+    // we can hook and record a vtable that is already stale by the time this
+    // function returns.
+    auto **vtable =
+        *reinterpret_cast<void ***>(
+            context);
+    if (vtable == nullptr) {
+        if (context1 != nullptr)
+            context1->Release();
+        identity->Release();
+        return false;
+    }
 
     std::lock_guard<std::shared_mutex> lock(
         impl_->registry_mutex);
