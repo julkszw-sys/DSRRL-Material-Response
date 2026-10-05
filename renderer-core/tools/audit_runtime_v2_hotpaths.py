@@ -123,7 +123,7 @@ require(
 
 producer_hit_marker = "if (hook_producer_cache_lookup(\n            selector_identity,\n            cached_record,\n            &next))"
 producer_hit_start = pmetal_source.find(producer_hit_marker)
-producer_hit_end = pmetal_source.find("std::uint64_t resolved_version", producer_hit_start)
+producer_hit_end = pmetal_source.find("// R44 removed the unkeyed visible consumer", producer_hit_start)
 if min(producer_hit_start, producer_hit_end) < 0:
     raise RuntimeError("R45 producer exact-hit branch missing")
 forbid(
