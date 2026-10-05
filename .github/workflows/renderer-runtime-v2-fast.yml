@@ -13,16 +13,26 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: renderer-runtime-v2-${{ github.event.pull_request.number || github.ref_name }}
+  cancel-in-progress: true
+
 jobs:
   runtime-v2-fast:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
       - name: Resolve source identity
         shell: pwsh
         run: |
           $checkout = (git rev-parse HEAD).Trim()
+          $expected = "${{ github.event.pull_request.head.sha || github.sha }}".Trim()
+          if ($checkout -ne $expected) {
+            throw "Source checkout mismatch: checkout=$checkout expected=$expected"
+          }
           "DSRRL_CHECKOUT_COMMIT=$checkout" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
       - name: Checkout pinned ReShade API
@@ -60,6 +70,13 @@ jobs:
           if ($addon.Count -ne 1) { throw "Expected one Runtime v2 addon, found $($addon.Count)" }
           $out = "DSRRL_Core_Islands_RUNTIME_V2_FAST.addon64"
           Copy-Item $addon[0].FullName $out -Force
+          $ascii = [System.Text.Encoding]::ASCII.GetString([System.IO.File]::ReadAllBytes($out))
+          if (-not $ascii.Contains($env:DSRRL_CHECKOUT_COMMIT)) {
+            throw "Built addon does not embed exact checkout commit $env:DSRRL_CHECKOUT_COMMIT"
+          }
+          if (-not $ascii.Contains("runtime_v2_fast")) {
+            throw "Built addon does not embed runtime_v2_fast flavor"
+          }
           $sha = (Get-FileHash $out -Algorithm SHA256).Hash.ToLowerInvariant()
           Write-Host "RUNTIME_V2_FAST_SHA256=$sha"
 
