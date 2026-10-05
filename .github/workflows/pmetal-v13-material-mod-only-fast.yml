@@ -1,18 +1,7 @@
 name: P_Metal V13 Material Mod Only Runtime Build
 
 on:
-  pull_request:
-    paths:
-      - "renderer-core/integrated/**"
-      - "renderer-core/data/provenance/pmetal_envspec_hemenvlerp_v1.tsv"
-      - "renderer-core/tools/generate_pmetal_envspec_hemenvlerp_v1.py"
-      - "renderer-core/src/operators/env_spec/pmetal_rgba_materializer.cpp"
-      - "renderer-core/src/operators/env_spec/pmetal_rgba_lerp_materializer.cpp"
-      - "renderer-core/src/runtime/pmetal_envspec_draw_runtime.cpp"
-      - "renderer-core/include/dsrrl/runtime/material_resource_draw_runtime.hpp"
-      - "renderer-core/src/runtime/material_resource_draw_runtime.cpp"
-      - "renderer-core/tools/audit_pmetal_v13_material_mod_only_diag.py"
-      - ".github/workflows/pmetal-v13-material-mod-only-fast.yml"
+  workflow_dispatch:
 
 permissions:
   contents: read
