@@ -423,11 +423,7 @@ struct hook_selector_identity_v1 {
 thread_local hook_selector_identity_v1
     g_hook_selector_identity_tls{};
 
-std::mutex g_hook_source_mutex;
-hook_source_record g_hook_source_global{};
-std::atomic<std::uint64_t> g_hook_source_serial{0u};
-std::atomic<std::uint64_t> g_hook_source_generation{0u};
-std::atomic<std::uint64_t> g_hook_source_semantic_version{0u};
+thread_local std::uint64_t g_hook_source_serial_tls = 0u;
 
 struct hook_producer_cache_entry_v2 {
     hook_selector_identity_v1 key{};
@@ -2071,11 +2067,11 @@ void publish_hook_source(
     next.row_id_a = row_a;
     next.row_id_b = row_b;
 
-    const auto serial =
-        g_hook_source_serial.fetch_add(
-            1u,
-            std::memory_order_relaxed) +
-        1u;
+    auto serial =
+        ++g_hook_source_serial_tls;
+    if (serial == 0u)
+        serial =
+            ++g_hook_source_serial_tls;
     next.serial = serial;
 
     hook_selector_identity_v1
@@ -2155,49 +2151,16 @@ void publish_hook_source(
         return;
     }
 
-    std::uint64_t resolved_version = 0u;
-    {
-        std::lock_guard<std::mutex> lock(
-            g_hook_source_mutex);
-
-        const bool unchanged =
-            g_hook_source_global.valid &&
-            same_hook_source_payload(
-                g_hook_source_global.source,
-                next);
-
-        if (unchanged) {
-            next.generation =
-                g_hook_source_global.source.generation;
-            resolved_version =
-                g_hook_source_global.semantic_version;
-        } else {
-            next.generation =
-                g_hook_source_generation.fetch_add(
-                    1u,
-                    std::memory_order_relaxed) +
-                1u;
-            resolved_version =
-                g_hook_source_semantic_version.fetch_add(
-                    1u,
-                    std::memory_order_acq_rel) +
-                1u;
-        }
-
-        g_hook_source_global = {
-            next,
-            serial,
-            resolved_version,
-            true
-        };
-    }
-
-    // TLS gets the same semantic generation/version decided against the
-    // authoritative global record. serial remains event identity only.
+    // R44 removed the unkeyed visible consumer. At this point a miss in the
+    // exact per-key cache no longer needs to serialize through a process-wide
+    // "latest source" record. The exact key+payload cache is the cross-thread
+    // transport, while the later material-bound producer state owns visible
+    // authority and its own semantic generation.
+    next.generation = 1u;
     g_hook_source_tls = {
         next,
         serial,
-        resolved_version,
+        1u,
         true
     };
     g_hook_selector_identity_tls =
@@ -2272,42 +2235,15 @@ bool latest_hook_source_exact_selector(
     return true;
 }
 
-bool latest_hook_source(
-    pmetal_envspec_source &out) noexcept
-{
-    out = {};
-
-    if (g_hook_source_tls.valid) {
-        out =
-            g_hook_source_tls.source;
-        telemetry::hot_count(
-            g_hook_consume);
-        return true;
-    }
-
-    std::lock_guard<std::mutex> lock(
-        g_hook_source_mutex);
-    if (!g_hook_source_global.valid ||
-        g_hook_source_global.serial == 0u)
-        return false;
-
-    out =
-        g_hook_source_global.source;
-    telemetry::hot_count(
-            g_hook_consume);
-    return true;
-}
-
 void clear_hook_source() noexcept
 {
     g_hook_source_tls = {};
     g_hook_selector_identity_tls = {};
+    g_hook_source_serial_tls = 0u;
+    g_hook_producer_cache_residency = {};
     g_hook_producer_cache_generation.fetch_add(
         1u,
         std::memory_order_relaxed);
-    std::lock_guard<std::mutex> lock(
-        g_hook_source_mutex);
-    g_hook_source_global = {};
 }
 
 void __fastcall envspec_single_hook_entry(
@@ -2669,7 +2605,7 @@ bool pmetal_env_source_runtime::install() noexcept
             std::memory_order_relaxed))
         reshade::log::message(
             reshade::log::level::info,
-            "[DSRRL PMETAL R45] production_hot_counters=GATED redundant_cross_thread_republish=OFF renderer_semantics=UNCHANGED");
+            "[DSRRL PMETAL R45] production_hot_counters=GATED redundant_cross_thread_republish=OFF legacy_global_latest=REMOVED renderer_semantics=UNCHANGED");
 
     return true;
 }
@@ -3300,15 +3236,7 @@ void pmetal_env_source_runtime::reset() noexcept
     g_hook_consume.store(
         0u,
         std::memory_order_relaxed);
-    g_hook_source_serial.store(
-        0u,
-        std::memory_order_relaxed);
-    g_hook_source_generation.store(
-        0u,
-        std::memory_order_relaxed);
-    g_hook_source_semantic_version.store(
-        0u,
-        std::memory_order_relaxed);
+    g_hook_source_serial_tls = 0u;
     g_hook_decode_stage.store(0u,std::memory_order_relaxed);
     g_hook_decode_version.store(0u,std::memory_order_relaxed);
     g_hook_decode_count.store(0u,std::memory_order_relaxed);
