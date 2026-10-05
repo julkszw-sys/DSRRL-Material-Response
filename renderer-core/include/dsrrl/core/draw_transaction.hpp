@@ -42,18 +42,6 @@ public:
         const render_patch_plan &plan);
     bool restore(std::uint64_t command);
 
-    // R30 PointLight fast path. The caller guarantees a synchronous
-    // begin -> native draw -> restore lifetime on the same thread. This
-    // preserves all plan validation but avoids the process-global mutex
-    // used by the general transaction registry. Nested/re-entrant use
-    // fails open instead of falling back silently.
-    bool begin_synchronous_local(
-        std::uint64_t command,
-        std::uint64_t draw_serial,
-        context_kind context,
-        const render_patch_plan &plan) noexcept;
-    bool restore_synchronous_local(
-        std::uint64_t command) noexcept;
     std::optional<transaction_state> active(std::uint64_t command) const;
     bool empty() const noexcept;
 
