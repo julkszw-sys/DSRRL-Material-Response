@@ -74,6 +74,7 @@ int main()
     ready.private_depth_sidecar_ready = true;
     ready.retained_plain_dofrate_ready = true;
     ready.fixed_raster_chain_ready = true;
+    ready.tonemap_dof_continuation_verified = true;
     ready.output_cut_verified = true;
 
     const auto active = evaluate_activation(ready);
