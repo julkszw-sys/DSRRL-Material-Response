@@ -87,7 +87,7 @@ jobs:
           $ascii = [System.Text.Encoding]::ASCII.GetString([System.IO.File]::ReadAllBytes($path))
           if (-not $ascii.Contains($env:DSRRL_CHECKOUT_COMMIT)) { throw "Missing source commit identity" }
           if (-not $ascii.Contains("pmetal_r27_pointlight_draw_bank_cache")) { throw "Missing R27 build flavor identity" }
-          if (-not $ascii.Contains("[DSRRL POINTLIGHT R27] direct_current_native_dispatch=ACTIVE persistent_vtable_hook=OFF recursion_guard=ON")) { throw "Missing R27 direct current-native startup marker" }
+          if (-not $ascii.Contains("[DSRRL POINTLIGHT R26] direct_current_native_dispatch=ACTIVE persistent_vtable_hook=OFF recursion_guard=ON")) { throw "Missing inherited R26 direct current-native startup marker" }
           if (-not $ascii.Contains("[DSRRL POINTLIGHT R27] draw_local_bank_authority_cache=ACTIVE scope=ONE_DRAW persistent_pointer_authority=OFF")) { throw "Missing R27 draw-local bank authority cache marker" }
           if (-not $ascii.Contains("[DSRRL POINTLIGHT APPLY] stage=direct_current_native_applied")) { throw "Missing R27 direct current-native apply marker" }
           if (-not $ascii.Contains("[DSRRL PMETAL R19 LERP]")) { throw "Missing exact R19 Lerp EnvDiffuse runtime marker" }
