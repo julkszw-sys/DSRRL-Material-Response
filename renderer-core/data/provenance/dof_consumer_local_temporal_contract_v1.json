@@ -163,17 +163,44 @@
     "known primary/alternate Flat mode",
     "complete DoF resource graph",
     "exact retained VPO+FPO pipeline identity set",
+    "exact PTDE DofBank bank_key + row_id route verified for active DoF authored state",
+    "addon-embedded canonical PTDE DofBank payload available",
     "private single-sample depth sidecar",
     "retained plain Dof_DofRate identity",
     "PTDE fixed raster chain",
     "verified true DoF output/composite cut"
   ],
   "open_before_runtime_visible_bridge": [
+    "verify active DSR DoF authored-state bank_key + row_id routing and select matching PTDE row",
+    "materialize canonical PTDE DofBank payload into unified addon",
     "exact ResolveTAA/output-scene -> Dof_Flat input resource edge for each Flat mode",
     "exact PTDE pass 0x00 and 0x02 resource source/target semantics",
     "exact true DoF output/composite handoff after Flat preparation chain",
     "resource sidecar allocation/redirect transaction",
     "runtime activation",
     "pixel behavior"
-  ]
+  ],
+  "ptde_dofbank_direct_addon": {
+    "policy": "REQUIRED_BEFORE_RUNTIME_VISIBLE_DOF",
+    "carrier": "addon-embedded PTDE DrawParam DofBank payload",
+    "selection_key": "exact bank_key + row_id from verified DSR DoF authored-state routing",
+    "source_archive_sha256": "aaa462dd374ad641a3f3b54ecc441e4bce1a408e5fca4611445a07dc72d06d38",
+    "banks": [
+      "m10",
+      "m11",
+      "m12",
+      "m13",
+      "m14",
+      "m15_1",
+      "m15",
+      "m16",
+      "m17",
+      "m18"
+    ],
+    "rows_per_bank": 64,
+    "row_size_bytes": 28,
+    "source_semantics": "DOF_BANK",
+    "no_global_lightbank_mutation": true,
+    "fail_open_if_route_unknown": true
+  }
 }
