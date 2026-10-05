@@ -122,6 +122,12 @@ public:
 
     void selector_source_event() noexcept;
 
+    // Advances the source-carrier cache epoch once per presented frame.
+    // Cached entries remain thread-local and are reused only while their
+    // exact source-object state snapshot is unchanged.
+    void frame_event(
+        std::uint64_t frame_serial) noexcept;
+
     void selector_identity_event(
         const operators::material_response::material_identity &identity,
         bool expected_spc) noexcept;
