@@ -3968,7 +3968,7 @@ void on_init_device(reshade::api::device *device)
         } else {
             reshade::log::message(
                 reshade::log::level::info,
-                "[DSRRL RUNTIME V2] Native original-draw bridge ACTIVE: exact P_Metal/clustered PointLight state is prepared before the original D3D11 Draw and restored afterwards.");
+                "[DSRRL RUNTIME V2] Native original-draw bridge ACTIVE: exact immediate/deferred command-list contexts are registered; P_Metal/clustered PointLight state wraps the single original D3D11 Draw on that same context.");
         }
     }
     g_upper_lower_hemenv.on_init_device(device);
@@ -3994,6 +3994,30 @@ void on_destroy_device(reshade::api::device *device)
         g_mr_draw_runtime.on_destroy_device(device);
     }
     g_a1_bridge.on_destroy_device(device);
+}
+
+void on_init_command_list(
+    reshade::api::command_list *cmd_list)
+{
+    if (!k_drawtime_islands_runtime_enabled ||
+        !k_pmetal_native_draw_runtime_enabled)
+        return;
+
+    (void)g_pmetal_native_draw.
+        register_command_list(
+            cmd_list);
+}
+
+void on_destroy_command_list(
+    reshade::api::command_list *cmd_list)
+{
+    if (!k_drawtime_islands_runtime_enabled ||
+        !k_pmetal_native_draw_runtime_enabled)
+        return;
+
+    g_pmetal_native_draw.
+        unregister_command_list(
+            cmd_list);
 }
 
 bool register_subsurface_plain_target_chain(
@@ -7203,6 +7227,11 @@ void register_events()
 {
     reshade::register_event<reshade::addon_event::init_device>(on_init_device);
     reshade::register_event<reshade::addon_event::destroy_device>(on_destroy_device);
+    if (k_drawtime_islands_runtime_enabled &&
+        k_pmetal_native_draw_runtime_enabled) {
+        reshade::register_event<reshade::addon_event::init_command_list>(on_init_command_list);
+        reshade::register_event<reshade::addon_event::destroy_command_list>(on_destroy_command_list);
+    }
     reshade::register_event<reshade::addon_event::create_pipeline>(on_create_pipeline);
     reshade::register_event<reshade::addon_event::init_pipeline>(on_init_pipeline);
     reshade::register_event<reshade::addon_event::destroy_pipeline>(on_destroy_pipeline);
@@ -7233,6 +7262,11 @@ void unregister_events()
     reshade::unregister_event<reshade::addon_event::destroy_pipeline>(on_destroy_pipeline);
     reshade::unregister_event<reshade::addon_event::init_pipeline>(on_init_pipeline);
     reshade::unregister_event<reshade::addon_event::create_pipeline>(on_create_pipeline);
+    if (k_drawtime_islands_runtime_enabled &&
+        k_pmetal_native_draw_runtime_enabled) {
+        reshade::unregister_event<reshade::addon_event::destroy_command_list>(on_destroy_command_list);
+        reshade::unregister_event<reshade::addon_event::init_command_list>(on_init_command_list);
+    }
     reshade::unregister_event<reshade::addon_event::destroy_device>(on_destroy_device);
     reshade::unregister_event<reshade::addon_event::init_device>(on_init_device);
 }
