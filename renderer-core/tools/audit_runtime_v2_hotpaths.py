@@ -129,6 +129,35 @@ forbid(
     pmetal_source[producer_hit_start:producer_hit_end],
     "hook_producer_cache_publish_exact(",
     "R45 exact cross-thread hit must not republish identical cache entry")
+
+require(
+    pmetal_source,
+    "std::atomic<std::uint64_t> residency_version{0u};",
+    "R45 producer cache slot residency version")
+require(
+    pmetal_source,
+    "hook_producer_cache_residency_live(",
+    "R45 TLS exact producer residency fast path")
+
+publish_start = pmetal_source.find("void hook_producer_cache_publish_exact(")
+publish_end = pmetal_source.find("std::atomic_bool g_hook_restore_failed", publish_start)
+if min(publish_start, publish_end) < 0:
+    raise RuntimeError("R45 producer publish boundary missing")
+publish_body = pmetal_source[publish_start:publish_end]
+residency_gate = publish_body.find("hook_producer_cache_residency_live(")
+publish_lock = publish_body.find("std::lock_guard<std::mutex> lock(")
+if min(residency_gate, publish_lock) < 0 or residency_gate > publish_lock:
+    raise RuntimeError("R45 residency fast path must occur before producer cache mutex")
+
+for latch in (
+    "producer_cross_thread_hit_logged",
+    "selector_cross_thread_hit_logged",
+    "selector_shadow_hit_logged",
+):
+    require(
+        pmetal_source,
+        f"!{latch}.load(",
+        f"R45 hot one-shot latch {latch} must load-gate atomic exchange")
 forbid(pmetal_source, "next.generation = serial", "event serial must not drive semantic generation")
 require(pmetal_h, "payload_bits", "exact b12 payload cache")
 require(pmetal_cpp, "payload_bits.data()", "exact 64-byte b12 payload identity")
