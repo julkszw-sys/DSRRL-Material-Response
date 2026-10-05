@@ -137,17 +137,19 @@ def main():
 
     builder_start=draw_cpp.find("void clustered_pnts_draw_runtime::builder_event(")
     selector_start=draw_cpp.find("void clustered_pnts_draw_runtime::selector_event(")
+    selector_source_start=draw_cpp.find("void clustered_pnts_draw_runtime::selector_source_event()")
     selector_identity_start=draw_cpp.find("void clustered_pnts_draw_runtime::selector_identity_event(")
     authority_start=draw_cpp.find("bool clustered_pnts_draw_runtime::current_draw_authority(")
     prepare_start=draw_cpp.find("bool clustered_pnts_draw_runtime::prepare_sidecar(")
     release_start=draw_cpp.find("void clustered_pnts_draw_runtime::release_prepared_draw(")
-    if min(builder_start,selector_start,selector_identity_start,authority_start,prepare_start,release_start)<0:
+    if min(builder_start,selector_start,selector_source_start,selector_identity_start,authority_start,prepare_start,release_start)<0:
         fail("clustered runtime stage boundaries are missing")
-    if not (builder_start < selector_start < selector_identity_start < authority_start < prepare_start < release_start):
+    if not (builder_start < selector_start < selector_source_start < selector_identity_start < authority_start < prepare_start < release_start):
         fail("clustered runtime stage ordering is invalid")
 
     builder_body=draw_cpp[builder_start:selector_start]
-    selector_body=draw_cpp[selector_start:selector_identity_start]
+    selector_body=draw_cpp[selector_start:selector_source_start]
+    selector_source_body=draw_cpp[selector_source_start:selector_identity_start]
     selector_identity_body=draw_cpp[selector_identity_start:authority_start]
     authority_body=draw_cpp[authority_start:prepare_start]
     prepare_body=draw_cpp[prepare_start:release_start]
@@ -172,16 +174,23 @@ def main():
     if "lookup_snapshot(" in selector_body or "g_registry_mutex" in selector_body:
         fail("selector join still uses legacy synchronized producer registry")
 
-    # R20 architecture: expensive PTDE membership/source reconstruction is
-    # producer/selector-local and cached by producer serial. The draw prepare
-    # stage may only consume the already materialized payload.
-    require(selector_identity_body,"evaluate_direct_pointlight_material_identity(","selector-local exact PointLight material authority")
-    require(selector_identity_body,"source_cache.producer_serial != input.serial","producer-serial source cache")
-    require(selector_identity_body,"select_first_four_exact(","selector-local exact first-four reconstruction")
-    require(selector_identity_body,"capture_source(","selector-local PTDE source capture")
-    require(selector_identity_body,"build_clustered_sidecar_v1(","selector-local sidecar materialization")
-    if "std::lock_guard" in selector_identity_body:
-        fail("selector-local PointLight source/material cache must not take the GPU resource mutex")
+    # R34 architecture: PTDE PointLight source production and material-response
+    # authorization are separate stages. Source selection/capture is cached by
+    # producer serial; the material stage may only join that exact source state
+    # and materialize the receiver-specific sidecar. The draw prepare stage may
+    # only consume the already materialized payload.
+    require(selector_source_body,"source_cache.producer_serial != input.serial","producer-serial source cache")
+    require(selector_source_body,"select_first_four_exact(","source-stage exact first-four reconstruction")
+    require(selector_source_body,"capture_source(","source-stage PTDE source capture")
+    if "evaluate_direct_pointlight_material_identity(" in selector_source_body or "build_clustered_sidecar_v1(" in selector_source_body:
+        fail("PointLight source stage regressed to material-response work")
+    require(selector_identity_body,"evaluate_direct_pointlight_material_identity(","material-stage exact PointLight authority")
+    require(selector_identity_body,"source_cache.producer_serial != input.serial","material-stage exact source join")
+    require(selector_identity_body,"build_clustered_sidecar_v1(","material-stage sidecar materialization")
+    if "select_first_four_exact(" in selector_identity_body or "capture_source(" in selector_identity_body:
+        fail("PointLight material stage regressed to source reconstruction")
+    if "std::lock_guard" in selector_source_body or "std::lock_guard" in selector_identity_body:
+        fail("selector-local PointLight source/material stages must not take the GPU resource mutex")
 
     require(authority_body,"g_draw_selection.authority_ready","draw consumes cached PointLight authority")
     require(authority_body,"g_draw_selection.material_decision","draw reuses selector-resolved material decision")
@@ -202,9 +211,9 @@ def main():
 
     require(draw_h,"neutral_no_pointlights","zero-light neutral ABI")
     require(draw_h,"prepare_neutral_empty","zero-light neutral telemetry ABI")
-    require(selector_identity_body,"source_cache.neutral = true;","zero-light producer-cache classification")
-    require(selector_identity_body,"g_draw_selection.neutral_no_pointlights = true;","zero-light draw classification")
-    require(selector_identity_body,"g_prepare_neutral_empty","zero-light preparation telemetry")
+    require(selector_source_body,"source_cache.neutral = true;","zero-light producer-cache classification")
+    require(selector_source_body,"g_draw_selection.neutral_no_pointlights = true;","zero-light draw classification")
+    require(selector_source_body,"g_prepare_neutral_empty","zero-light preparation telemetry")
     require(prepare_body,"prepared.neutral_no_pointlights = true;","zero-light neutral draw handoff")
     require(integrated,"clustered_no_pointlights_neutral","zero-light neutral runtime stage")
     require(integrated,"g_clustered_draw_neutral_noop","zero-light neutral draw telemetry")
@@ -265,6 +274,7 @@ def main():
     require(mr_cpp,"record_spc != require_legacy_specular","receiver-derived Spc/NoSpc exclusion")
     require(mr_cpp,"direct_pointlight_material_candidate","cheap PointLight material prefilter")
     require(flver_cpp,"direct_pointlight_material_candidate(","PointLight prefilter before clustered selector runtime")
+    require(flver_cpp,"clustered_pnts_selector_source_event_bridge();","separate PointLight source-stage dispatch")
     require(flver_cpp,"clustered_pnts_selector_identity_event_bridge(","selector-cached PointLight identity publication")
     require(integrated,"g_clustered_pnts.current_draw_authority(","clustered draw cached authority lookup")
     require(integrated,"clustered_pointlight_spc","receiver-derived clustered Spc requirement")
@@ -382,10 +392,10 @@ def main():
 
     print("Clustered PntS pre-runtime activation source audit: PASS")
     print("  receivers=36 spc=24 nospc=12 stock_membership=t16/t17_bypassed")
-    print("  producer=builder-input-snapshot>exact-PointLight-material-prefilter>producer-serial-first4+PTDE-source-cache")
+    print("  producer=builder-input-snapshot>exact-PointLight-material-prefilter>source-stage(first4+PTDE-cache)>material-stage(sidecar)")
     print("  carrier=b12[3].x+t18+t19 material_max=uint32 min_after_first4")
     print("  material=25 exact HOMOLOGOUS_NOSPC pairs; identity=certified supplement; c100=bit-exact router authority")
-    print("  chain=create-time-shader>producer/selector source+material cache>draw cached payload>native-original-draw or replay-fallback>restore")
+    print("  chain=create-time-shader>source-stage>material-stage>draw cached payload>native-original-draw or replay-fallback>restore")
     print("  equipment_textures=independent; no clustered Diffuse/Normal/SpecRGB prerequisite")
     print("  zero_light=exact first-four empty membership is neutral stock-equivalent no-op, not fail-open")
     print("  d3d11_context=immediate_or_deferred; dynamic WRITE_DISCARD carrier; stage telemetry enforced")
