@@ -491,6 +491,172 @@ void record_bank_signature_stage(
     g_bank_signature_consumed.store(consumed,std::memory_order_relaxed);
 }
 
+bool same_hook_selector_identity(
+    const hook_selector_identity_v1 &a,
+    const hook_selector_identity_v1 &b) noexcept
+{
+    if (!a.valid || !b.valid ||
+        a.source_a != b.source_a ||
+        a.selector_a != b.selector_a ||
+        a.beta_bits != b.beta_bits)
+        return false;
+
+    if (a.beta_bits == 0u)
+        return true;
+
+    return
+        a.source_b == b.source_b &&
+        a.selector_b == b.selector_b;
+}
+
+std::size_t hook_producer_cache_set(
+    const hook_selector_identity_v1 &key) noexcept
+{
+    auto h =
+        reinterpret_cast<std::uintptr_t>(
+            key.source_a);
+    h ^= reinterpret_cast<std::uintptr_t>(
+             key.source_b) +
+         0x9e3779b97f4a7c15ULL +
+         (h << 6u) +
+         (h >> 2u);
+    h ^= static_cast<std::uintptr_t>(
+             static_cast<std::uint16_t>(
+                 key.selector_a)) << 17u;
+    h ^= static_cast<std::uintptr_t>(
+             static_cast<std::uint16_t>(
+                 key.selector_b)) << 33u;
+    h ^= static_cast<std::uintptr_t>(
+             key.beta_bits) *
+         0x9e3779b1u;
+    h ^= h >> 23u;
+    h *= 0x2127599bf4325c37ULL;
+    h ^= h >> 47u;
+
+    return static_cast<std::size_t>(
+        h &
+        (k_hook_producer_cache_sets - 1u));
+}
+
+bool hook_producer_cache_lookup(
+    const hook_selector_identity_v1 &key,
+    hook_source_record &out,
+    const pmetal_envspec_source *payload = nullptr) noexcept
+{
+    out = {};
+    if (!key.valid)
+        return false;
+
+    const auto set =
+        hook_producer_cache_set(key);
+    std::unique_lock<std::mutex> lock(
+        g_hook_producer_cache_mutex[set],
+        std::try_to_lock);
+    if (!lock.owns_lock()) {
+        g_hook_producer_cache_busy.fetch_add(
+            1u,
+            std::memory_order_relaxed);
+        return false;
+    }
+
+    const auto generation =
+        g_hook_producer_cache_generation.load(
+            std::memory_order_relaxed);
+    const auto semantic_version =
+        g_hook_source_semantic_version.load(
+            std::memory_order_acquire);
+    const auto base =
+        set * k_hook_producer_cache_ways;
+
+    for (std::size_t way = 0u;
+         way < k_hook_producer_cache_ways;
+         ++way) {
+        const auto &entry =
+            g_hook_producer_cache[base + way];
+        if (!entry.valid ||
+            entry.cache_generation != generation ||
+            entry.record.semantic_version !=
+                semantic_version ||
+            !same_hook_selector_identity(
+                entry.key,
+                key))
+            continue;
+
+        if (payload != nullptr &&
+            !same_hook_source_payload(
+                entry.record.source,
+                *payload))
+            continue;
+
+        out = entry.record;
+        g_hook_producer_cache_hit.fetch_add(
+            1u,
+            std::memory_order_relaxed);
+        return true;
+    }
+
+    g_hook_producer_cache_miss.fetch_add(
+        1u,
+        std::memory_order_relaxed);
+    return false;
+}
+
+void hook_producer_cache_publish_exact(
+    const hook_selector_identity_v1 &key,
+    const hook_source_record &record) noexcept
+{
+    if (!key.valid || !record.valid)
+        return;
+
+    const auto set =
+        hook_producer_cache_set(key);
+    std::lock_guard<std::mutex> lock(
+        g_hook_producer_cache_mutex[set]);
+
+    const auto generation =
+        g_hook_producer_cache_generation.load(
+            std::memory_order_relaxed);
+    const auto base =
+        set * k_hook_producer_cache_ways;
+
+    std::size_t target =
+        k_hook_producer_cache_ways;
+    for (std::size_t way = 0u;
+         way < k_hook_producer_cache_ways;
+         ++way) {
+        const auto &entry =
+            g_hook_producer_cache[base + way];
+        if (!entry.valid ||
+            entry.cache_generation != generation ||
+            same_hook_selector_identity(
+                entry.key,
+                key)) {
+            target = way;
+            break;
+        }
+    }
+
+    if (target ==
+        k_hook_producer_cache_ways) {
+        target =
+            static_cast<std::size_t>(
+                g_hook_producer_cache_victim[set]++ &
+                static_cast<std::uint8_t>(
+                    k_hook_producer_cache_ways - 1u));
+    }
+
+    auto &entry =
+        g_hook_producer_cache[base + target];
+    entry.key = key;
+    entry.record = record;
+    entry.cache_generation = generation;
+    entry.valid = true;
+
+    g_hook_producer_cache_publish.fetch_add(
+        1u,
+        std::memory_order_relaxed);
+}
+
 std::atomic_bool g_hook_restore_failed{false};
 
 enum hook_decode_stage : std::uint32_t {
