@@ -129,6 +129,29 @@ thread_local std::array<
     frame_source_cache_entry_v1,
     k_frame_source_cache_entries> g_source_frame_cache{};
 
+struct pointlight_frame_decode_cache_tls {
+    std::uint64_t epoch = 0u;
+    pointlight_ptde_source::draw_bank_authority_cache
+        bank_authority{};
+    pointlight_ptde_source::access_cache access{};
+};
+
+thread_local pointlight_frame_decode_cache_tls
+    g_pointlight_frame_decode_cache{};
+
+pointlight_frame_decode_cache_tls &
+pointlight_frame_decode_cache_current() noexcept
+{
+    const auto epoch =
+        g_source_frame_epoch.load(
+            std::memory_order_relaxed);
+    if (g_pointlight_frame_decode_cache.epoch != epoch) {
+        g_pointlight_frame_decode_cache = {};
+        g_pointlight_frame_decode_cache.epoch = epoch;
+    }
+    return g_pointlight_frame_decode_cache;
+}
+
 void reset_frame_source_cache_tls(
     std::uint64_t generation) noexcept
 {
@@ -1427,9 +1450,107 @@ bool select_first_four_exact(
     return true;
 }
 
+bool capture_ptde_source_from_frame_state(
+    const frame_source_state_v1 &state,
+    bool bank_source,
+    bool lerp_bank_source,
+    std::array<float,8> &raw,
+    pointlight_ptde_source::access_cache &access,
+    pointlight_ptde_source::draw_bank_authority_cache &bank_cache) noexcept
+{
+    using pointlight_ptde_source::signal;
+
+    if (!bank_source && !lerp_bank_source)
+        return false;
+
+    signal a{};
+    signal b{};
+    signal result{};
+
+    if (bank_source) {
+        std::int32_t selector = -1;
+        std::memcpy(
+            &selector,
+            &state.selector_word0,
+            sizeof(selector));
+
+        if (!pointlight_ptde_source::donor(
+                state.endpoint_source_a,
+                selector,
+                a,
+                access,
+                bank_cache) ||
+            !pointlight_ptde_source::mix(
+                a,
+                a,
+                0.0f,
+                result))
+            return false;
+    } else {
+        std::int16_t selector_a = -1;
+        std::int16_t selector_b = -1;
+        float beta = 0.0f;
+        std::memcpy(
+            &selector_a,
+            &state.selector_word0,
+            sizeof(selector_a));
+        std::memcpy(
+            &selector_b,
+            reinterpret_cast<const std::uint8_t *>(
+                &state.selector_word0) +
+                sizeof(selector_a),
+            sizeof(selector_b));
+        std::memcpy(
+            &beta,
+            &state.selector_word1,
+            sizeof(beta));
+
+        const auto pair =
+            pmetal_selector_policy::select(
+                selector_a,
+                selector_b,
+                beta);
+        if (!pair.valid ||
+            !pointlight_ptde_source::donor(
+                state.endpoint_source_a,
+                pair.a,
+                a,
+                access,
+                bank_cache))
+            return false;
+
+        b = a;
+        if (pair.beta != 0.0f &&
+            !pointlight_ptde_source::donor(
+                state.endpoint_source_b,
+                pair.b,
+                b,
+                access,
+                bank_cache))
+            return false;
+
+        if (!pointlight_ptde_source::mix(
+                a,
+                b,
+                pair.beta,
+                result))
+            return false;
+    }
+
+    raw[3] =
+        1.0f /
+        (result.end - result.begin);
+    raw[4] = result.q[0];
+    raw[5] = result.q[1];
+    raw[6] = result.q[2];
+    raw[7] = result.end;
+    return std::isfinite(raw[3]);
+}
+
 bool capture_source(
     void *node,
     source_raw &out,
+    pointlight_ptde_source::access_cache &decode_access,
     pointlight_ptde_source::draw_bank_authority_cache &bank_cache) noexcept
 {
     out = {};
@@ -1637,10 +1758,13 @@ bool capture_source(
                 position_offset,
             3u * sizeof(float));
 
-        if (!pointlight_ptde_source::capture(
-                node,
-                g_base,
+        if (!semantic_endpoints_ready ||
+            !capture_ptde_source_from_frame_state(
+                frame_state,
+                bank_source,
+                lerp_bank_source,
                 raw,
+                decode_access,
                 bank_cache)) {
             // Preserve the pre-R36 donor-miss behavior exactly: unresolved
             // donor authority falls back to the attested stock source packer
@@ -2437,8 +2561,12 @@ void clustered_pnts_draw_runtime::selector_source_event() noexcept
 #endif
 
         source_cache.selected_count = selected_count;
-        pointlight_ptde_source::draw_bank_authority_cache
-            bank_cache{};
+        auto &decode_cache =
+            pointlight_frame_decode_cache_current();
+        auto &bank_cache =
+            decode_cache.bank_authority;
+        auto &decode_access =
+            decode_cache.access;
         if (selected_count == 0u) {
             source_cache.ready = true;
             source_cache.neutral = true;
@@ -2454,6 +2582,7 @@ void clustered_pnts_draw_runtime::selector_source_event() noexcept
                 if (!capture_source(
                         nodes[i],
                         source_cache.sources[i],
+                        decode_access,
                         bank_cache) ||
                     source_cache.sources[i].source_id !=
                         selected_ids[i]) {
