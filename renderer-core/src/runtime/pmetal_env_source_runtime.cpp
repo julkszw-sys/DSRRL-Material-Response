@@ -1830,9 +1830,47 @@ void publish_hook_source(
         };
         g_hook_selector_identity_tls =
             selector_identity;
+        hook_producer_cache_publish_exact(
+            selector_identity,
+            g_hook_source_tls);
         g_hook_publish.fetch_add(
             1u,
             std::memory_order_relaxed);
+        return;
+    }
+
+    hook_source_record cached_record{};
+    if (hook_producer_cache_lookup(
+            selector_identity,
+            cached_record,
+            &next)) {
+        next.generation =
+            cached_record.source.generation;
+        g_hook_source_tls = {
+            next,
+            serial,
+            cached_record.semantic_version,
+            true
+        };
+        g_hook_selector_identity_tls =
+            selector_identity;
+        hook_producer_cache_publish_exact(
+            selector_identity,
+            g_hook_source_tls);
+        g_hook_publish.fetch_add(
+            1u,
+            std::memory_order_relaxed);
+
+        static std::atomic_bool
+            producer_cross_thread_hit_logged{
+                false};
+        if (!producer_cross_thread_hit_logged.exchange(
+                true,
+                std::memory_order_relaxed))
+            reshade::log::message(
+                reshade::log::level::info,
+                "[DSRRL PMETAL R42] producer_cross_thread_cache_hit=1 exact_key=SOURCE_PTR_SELECTOR_BETA exact_payload=ON global_publish_mutex=SKIPPED");
+
         return;
     }
 
@@ -1883,6 +1921,9 @@ void publish_hook_source(
     };
     g_hook_selector_identity_tls =
         selector_identity;
+    hook_producer_cache_publish_exact(
+        selector_identity,
+        g_hook_source_tls);
 
     g_hook_publish.fetch_add(
         1u,
