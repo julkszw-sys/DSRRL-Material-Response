@@ -5,12 +5,6 @@ on:
   push:
     branches:
       - pmetal-r15b-r3-ownership-fix
-  pull_request:
-    paths:
-      - "renderer-core/integrated/**"
-      - "renderer-core/src/operators/env_spec/pmetal_rgba_materializer.cpp"
-      - ".github/workflows/pmetal-r15-ptde-liveout-pair-fast.yml"
-
 permissions:
   contents: read
 
