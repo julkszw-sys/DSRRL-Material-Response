@@ -5,7 +5,7 @@
 #include <cstdint>
 
 namespace reshade::api {
-class command_list;
+struct command_list;
 }
 
 namespace dsrrl::runtime::dof {
