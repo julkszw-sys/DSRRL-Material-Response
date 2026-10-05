@@ -3969,6 +3969,9 @@ void on_init_device(reshade::api::device *device)
         reshade::log::message(
             reshade::log::level::info,
             "[DSRRL POINTLIGHT R35] owner_authorized_spc_hybrid=ACTIVE clustered_nospc_consumes_ptde_source=ON clustered_spc_consumes_ptde_source=ON spc_material_tail=STOCK_DSR_GGX_SCHLICK local_specular_equivalence=OPEN");
+        reshade::log::message(
+            reshade::log::level::info,
+            "[DSRRL POINTLIGHT R36] bank_lerp_native_double_pack=OFF frame_source_cache=TLS_EXACT_STATE_PER_PRESENT donor_miss_stock_fallback=ON");
     } else if (k_pmetal_native_draw_runtime_enabled) {
         if (!g_pmetal_native_draw.install(device)) {
             reshade::log::message(
@@ -7247,6 +7250,7 @@ void on_present(
         g_present_count.fetch_add(
             1u,
             std::memory_order_relaxed) + 1u;
+    g_clustered_pnts.frame_event(present);
     if (present == 1u ||
         (g_hot_telemetry_enabled &&
          (present % 300u) == 0u)) {
