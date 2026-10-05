@@ -52,7 +52,7 @@ jobs:
           -A x64
           -DRESHADE_INCLUDE_DIR="${{ github.workspace }}/_reshade/include"
           -DDSRRL_SOURCE_COMMIT="$env:DSRRL_CHECKOUT_COMMIT"
-          -DDSRRL_BUILD_FLAVOR="pmetal_r25_pointlight_vtable_rearm"
+          -DDSRRL_BUILD_FLAVOR="pmetal_r26_pointlight_direct_current_native"
           -DDSRRL_FULL_TELEMETRY_DEFAULT_ON=OFF
           -DDSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG=ON
           -DDSRRL_PMETAL_FULL_PTDE_HEMENV_R3=ON
@@ -84,7 +84,7 @@ jobs:
           $path = "DSRRL_PMETAL_R26_POINTLIGHT_VTABLE_REARM.addon64"
           $ascii = [System.Text.Encoding]::ASCII.GetString([System.IO.File]::ReadAllBytes($path))
           if (-not $ascii.Contains($env:DSRRL_CHECKOUT_COMMIT)) { throw "Missing source commit identity" }
-          if (-not $ascii.Contains("pmetal_r25_pointlight_vtable_rearm")) { throw "Missing R26 build flavor identity" }
+          if (-not $ascii.Contains("pmetal_r26_pointlight_direct_current_native")) { throw "Missing R26 build flavor identity" }
           if (-not $ascii.Contains("[DSRRL POINTLIGHT R26] deferred_context_registered")) { throw "Missing R26 deferred-context native bridge marker" }
           if (-not $ascii.Contains("[DSRRL POINTLIGHT R26] command_list_native_identity_rebound")) { throw "Missing R26 native identity rebind marker" }
           if (-not $ascii.Contains("hook_slots=")) { throw "Missing R26 native arm gate detail marker" }
