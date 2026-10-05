@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - "runtime-v2/**"
+      - "r46-r43-visibility-safe-hotpath"
   pull_request:
     paths:
       - "renderer-core/**"
