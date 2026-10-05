@@ -287,41 +287,39 @@ constexpr bool flat_pass_0x10_is_output_composite() noexcept
     return false;
 }
 
-// Active DSR output cut recovered from DarkSoulsRemastered.exe
-// (SHA-256 a45aaa36...). Dof_Flat pass 0x10 writes through the
-// ImageState target-view at +0x94. ImageState construction creates that
-// view from the underlying texture/resource stored at +0x98. The stock
-// HDR_PBL executor (pass family 0x1E/0x1F) selects +0x98 as texture slot
-// t0 when the DoF route flag at render-state +0x351 is active. This is the
-// narrow semantic handoff: preserve HDR_PBL and replace only the upstream
-// DoF-produced resource graph.
+// Active DSR DoF handoff: Flat output target +0xF8 is sampled through
+// SRV alias +0x104 by ImageProcessToneMap pass 0x13. Downstream ToneMap,
+// HDR, TAA and other postprocess remain stock.
 struct active_output_cut {
-    std::uintptr_t dof_flat_pass_0x10_executor = 0u;
-    std::uintptr_t hdr_pbl_executor = 0u;
-    std::uint16_t image_state_target_view_offset = 0u;
-    std::uint16_t image_state_underlying_resource_offset = 0u;
-    std::uint16_t render_state_dof_route_flag_offset = 0u;
-    std::uint8_t hdr_pbl_texture_slot = 0u;
+    std::uintptr_t image_filter_ctor = 0u;
+    std::uintptr_t tonemap_ctor = 0u;
+    std::uintptr_t scene_pass_builder = 0u;
+    std::uint16_t image_state_target_offset = 0u;
+    std::uint16_t image_state_srv_alias_offset = 0u;
+    std::uint8_t tonemap_pass = 0u;
+    std::uint8_t builder_primary_srv_argument = 0u;
 };
 
 inline constexpr active_output_cut dsr_active_output_cut = {
-    0x1404569A0ull,
-    0x140458080ull,
-    0x0094u,
-    0x0098u,
-    0x0351u,
-    0u
+    0x140450D30ull,
+    0x140461A70ull,
+    0x140452ED0ull,
+    0x00F8u,
+    0x0104u,
+    0x13u,
+    6u
 };
 
 constexpr bool active_output_cut_is_exact() noexcept
 {
     return
-        dsr_active_output_cut.dof_flat_pass_0x10_executor == 0x1404569A0ull &&
-        dsr_active_output_cut.hdr_pbl_executor == 0x140458080ull &&
-        dsr_active_output_cut.image_state_target_view_offset == 0x0094u &&
-        dsr_active_output_cut.image_state_underlying_resource_offset == 0x0098u &&
-        dsr_active_output_cut.render_state_dof_route_flag_offset == 0x0351u &&
-        dsr_active_output_cut.hdr_pbl_texture_slot == 0u;
+        dsr_active_output_cut.image_filter_ctor == 0x140450D30ull &&
+        dsr_active_output_cut.tonemap_ctor == 0x140461A70ull &&
+        dsr_active_output_cut.scene_pass_builder == 0x140452ED0ull &&
+        dsr_active_output_cut.image_state_target_offset == 0x00F8u &&
+        dsr_active_output_cut.image_state_srv_alias_offset == 0x0104u &&
+        dsr_active_output_cut.tonemap_pass == 0x13u &&
+        dsr_active_output_cut.builder_primary_srv_argument == 6u;
 }
 
 activation_decision evaluate_activation(const activation_context &context) noexcept;
