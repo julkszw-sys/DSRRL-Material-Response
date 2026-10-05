@@ -22,6 +22,9 @@ activation_decision evaluate_activation(const activation_context &context) noexc
     if (!context.graph_complete)
         return {false, bridge_reason::incomplete_graph};
 
+    if (!context.retained_flat_pipeline_set_ready)
+        return {false, bridge_reason::missing_retained_pipeline_set};
+
     if (!context.private_depth_sidecar_ready)
         return {false, bridge_reason::missing_private_depth_sidecar};
 
@@ -31,8 +34,8 @@ activation_decision evaluate_activation(const activation_context &context) noexc
     if (!context.fixed_raster_chain_ready)
         return {false, bridge_reason::missing_fixed_raster_chain};
 
-    if (!context.final_composite_cut_verified)
-        return {false, bridge_reason::missing_final_composite_cut};
+    if (!context.output_cut_verified)
+        return {false, bridge_reason::missing_output_cut};
 
     return {true, bridge_reason::ready};
 }
