@@ -207,8 +207,8 @@ def main():
         "[DSRRL PMETAL R43] selector_per_key_cache_hit=1 exact_key=SOURCE_BASE_COUNT_ROW_SELECTOR_BETA global_semantic_version=IGNORED donor_redecode=OFF lock_wait=OFF",
         "R43 selector per-key cache hit attestation")
     require(pmetal_source,
-        "[DSRRL PMETAL R42] producer_cross_thread_cache_hit=1 exact_key=SOURCE_PTR_SELECTOR_BETA exact_payload=ON global_publish_mutex=SKIPPED",
-        "inherited producer cross-thread hit attestation")
+        "[DSRRL PMETAL R43] producer_per_key_cache_hit=1 exact_key=SOURCE_BASE_COUNT_ROW_SELECTOR_BETA exact_payload=ON global_publish_mutex=SKIPPED",
+        "R43 producer per-key hit attestation")
     require(pmetal_source,
         "capture_hook_selector_identity(",
         "R43 exact live LightBank freshness capture")
