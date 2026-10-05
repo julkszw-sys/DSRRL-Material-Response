@@ -30,6 +30,20 @@ struct draw_bank_authority_cache {
 
 inline constexpr std::size_t
     k_bank_structure_snapshot_max = 0x10000u;
+inline constexpr std::size_t
+    k_bank_structure_entry_count = 64u;
+inline constexpr std::size_t
+    k_bank_structure_table_bytes =
+        k_bank_structure_entry_count * 12u;
+inline constexpr std::size_t
+    k_bank_structure_name_max = 256u;
+
+struct persistent_bank_name_guard {
+    std::uint32_t offset = 0u;
+    std::uint16_t length = 0u;
+    std::array<std::uint8_t,
+               k_bank_structure_name_max> bytes{};
+};
 
 struct persistent_bank_structure_cache_entry {
     std::uintptr_t param = 0u;
@@ -39,7 +53,9 @@ struct persistent_bank_structure_cache_entry {
     std::uint32_t span = 0u;
     const pointlight_donors::bank *bank = nullptr;
     std::array<std::uint8_t,
-               k_bank_structure_snapshot_max> snapshot{};
+               k_bank_structure_table_bytes> table_snapshot{};
+    std::array<persistent_bank_name_guard,
+               k_bank_structure_entry_count> name_guards{};
 };
 
 struct persistent_bank_structure_cache {
@@ -128,11 +144,46 @@ lookup_persistent_structure_cache(
             continue;
         }
 
-        if (std::memcmp(
+        const auto table_bytes =
+            static_cast<std::size_t>(count) * 12u;
+        if (table_bytes !=
+                k_bank_structure_table_bytes ||
+            std::memcmp(
                 reinterpret_cast<const void *>(
                     param + 0x30u),
-                entry.snapshot.data(),
-                entry.span) != 0) {
+                entry.table_snapshot.data(),
+                table_bytes) != 0) {
+            entry = {};
+            continue;
+        }
+
+        bool names_match = true;
+        for (std::size_t i = 0u;
+             i < k_bank_structure_entry_count;
+             ++i) {
+            const auto &guard =
+                entry.name_guards[i];
+            if (guard.length == 0u ||
+                guard.length >
+                    k_bank_structure_name_max ||
+                guard.offset < 0x30u ||
+                static_cast<std::uint64_t>(
+                    guard.offset) +
+                    static_cast<std::uint64_t>(
+                        guard.length) >
+                    static_cast<std::uint64_t>(
+                        0x30u + entry.span) ||
+                std::memcmp(
+                    reinterpret_cast<const void *>(
+                        param + guard.offset),
+                    guard.bytes.data(),
+                    guard.length) != 0) {
+                names_match = false;
+                break;
+            }
+        }
+
+        if (!names_match) {
             entry = {};
             continue;
         }
@@ -182,11 +233,76 @@ inline void store_persistent_structure_cache(
     entry.span =
         static_cast<std::uint32_t>(span);
     entry.bank = bank;
+
+    const auto table_bytes =
+        static_cast<std::size_t>(count) * 12u;
+    if (count !=
+            k_bank_structure_entry_count ||
+        table_bytes !=
+            k_bank_structure_table_bytes) {
+        entry = {};
+        return;
+    }
+
     std::memcpy(
-        entry.snapshot.data(),
+        entry.table_snapshot.data(),
         reinterpret_cast<const void *>(
             param + 0x30u),
-        span);
+        table_bytes);
+
+    const auto structure_limit =
+        static_cast<std::uint64_t>(0x30u) +
+        static_cast<std::uint64_t>(span);
+
+    for (std::size_t i = 0u;
+         i < k_bank_structure_entry_count;
+         ++i) {
+        std::uint32_t name_offset = 0u;
+        std::memcpy(
+            &name_offset,
+            entry.table_snapshot.data() +
+                i * 12u + 8u,
+            sizeof(name_offset));
+
+        if (name_offset < 0x30u ||
+            static_cast<std::uint64_t>(
+                name_offset) >=
+                structure_limit) {
+            entry = {};
+            return;
+        }
+
+        const auto max_available =
+            std::min<std::size_t>(
+                k_bank_structure_name_max,
+                static_cast<std::size_t>(
+                    structure_limit -
+                    static_cast<std::uint64_t>(
+                        name_offset)));
+        const auto *name =
+            reinterpret_cast<const std::uint8_t *>(
+                param + name_offset);
+
+        std::size_t length = 0u;
+        while (length < max_available &&
+               name[length] != 0u)
+            ++length;
+        if (length >= max_available) {
+            entry = {};
+            return;
+        }
+        ++length; // include the NUL terminator in exact revalidation
+
+        auto &guard =
+            entry.name_guards[i];
+        guard.offset = name_offset;
+        guard.length =
+            static_cast<std::uint16_t>(length);
+        std::memcpy(
+            guard.bytes.data(),
+            name,
+            length);
+    }
 }
 
 inline bool readable(std::uintptr_t address,std::size_t size) noexcept {
