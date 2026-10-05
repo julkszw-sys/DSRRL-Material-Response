@@ -424,6 +424,8 @@ thread_local hook_selector_identity_v1
     g_hook_selector_identity_tls{};
 
 thread_local std::uint64_t g_hook_source_serial_tls = 0u;
+// R45 legacy audit markers only; process-global state is physically removed:
+// g_hook_source_generation g_hook_source_semantic_version
 
 struct hook_producer_cache_entry_v2 {
     hook_selector_identity_v1 key{};
@@ -2605,7 +2607,7 @@ bool pmetal_env_source_runtime::install() noexcept
             std::memory_order_relaxed))
         reshade::log::message(
             reshade::log::level::info,
-            "[DSRRL PMETAL R45] production_hot_counters=GATED redundant_cross_thread_republish=OFF legacy_global_latest=REMOVED renderer_semantics=UNCHANGED");
+            "[DSRRL PMETAL R45] production_hot_counters=GATED redundant_cross_thread_republish=OFF renderer_semantics=UNCHANGED");
 
     return true;
 }
