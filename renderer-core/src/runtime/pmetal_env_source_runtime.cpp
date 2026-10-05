@@ -404,6 +404,19 @@ struct hook_source_record {
 };
 
 thread_local hook_source_record g_hook_source_tls{};
+
+struct hook_selector_identity_v1 {
+    void *source_a = nullptr;
+    void *source_b = nullptr;
+    std::int16_t selector_a = -1;
+    std::int16_t selector_b = -1;
+    std::uint32_t beta_bits = 0u;
+    bool valid = false;
+};
+
+thread_local hook_selector_identity_v1
+    g_hook_selector_identity_tls{};
+
 std::mutex g_hook_source_mutex;
 hook_source_record g_hook_source_global{};
 std::atomic<std::uint64_t> g_hook_source_serial{0u};
@@ -1542,7 +1555,11 @@ void publish_hook_source(
     std::uint64_t bank_a,
     std::uint64_t bank_b,
     std::uint32_t row_a,
-    std::uint32_t row_b) noexcept
+    std::uint32_t row_b,
+    void *source_a,
+    std::int16_t selector_a,
+    void *source_b,
+    std::int16_t selector_b) noexcept
 {
     if (!std::isfinite(beta))
         return;
@@ -1578,6 +1595,21 @@ void publish_hook_source(
         1u;
     next.serial = serial;
 
+    std::uint32_t beta_bits = 0u;
+    std::memcpy(
+        &beta_bits,
+        &next.beta,
+        sizeof(beta_bits));
+    const hook_selector_identity_v1
+        selector_identity{
+            source_a,
+            source_b,
+            selector_a,
+            selector_b,
+            beta_bits,
+            source_a != nullptr &&
+                selector_a >= 0};
+
     // Dominant steady-state path: the retail packer can call this hook
     // thousands of times while the exact LightBank payload is unchanged.
     // If this thread still owns the same payload and no other thread has
@@ -1600,6 +1632,8 @@ void publish_hook_source(
             semantic_version,
             true
         };
+        g_hook_selector_identity_tls =
+            selector_identity;
         g_hook_publish.fetch_add(
             1u,
             std::memory_order_relaxed);
@@ -1651,10 +1685,56 @@ void publish_hook_source(
         resolved_version,
         true
     };
+    g_hook_selector_identity_tls =
+        selector_identity;
 
     g_hook_publish.fetch_add(
         1u,
         std::memory_order_relaxed);
+}
+
+bool latest_hook_source_exact_selector(
+    void *source_a,
+    std::int16_t selector_a,
+    void *source_b,
+    std::int16_t selector_b,
+    float beta,
+    pmetal_envspec_source &out) noexcept
+{
+    out = {};
+    if (!g_hook_source_tls.valid ||
+        !g_hook_selector_identity_tls.valid ||
+        source_a == nullptr ||
+        selector_a < 0 ||
+        !std::isfinite(beta))
+        return false;
+
+    std::uint32_t beta_bits = 0u;
+    std::memcpy(
+        &beta_bits,
+        &beta,
+        sizeof(beta_bits));
+
+    const auto &key =
+        g_hook_selector_identity_tls;
+    if (key.source_a != source_a ||
+        key.selector_a != selector_a ||
+        key.beta_bits != beta_bits)
+        return false;
+
+    // Endpoint B is semantically inactive for a steady endpoint. Do not make
+    // an irrelevant B pointer a freshness requirement in that case.
+    if (beta != 0.0f &&
+        selector_b != selector_a &&
+        (key.source_b != source_b ||
+         key.selector_b != selector_b))
+        return false;
+
+    out = g_hook_source_tls.source;
+    g_hook_consume.fetch_add(
+        1u,
+        std::memory_order_relaxed);
+    return true;
 }
 
 bool latest_hook_source(
@@ -1688,6 +1768,7 @@ bool latest_hook_source(
 void clear_hook_source() noexcept
 {
     g_hook_source_tls = {};
+    g_hook_selector_identity_tls = {};
     std::lock_guard<std::mutex> lock(
         g_hook_source_mutex);
     g_hook_source_global = {};
@@ -1747,7 +1828,13 @@ void __fastcall envspec_single_hook_entry(
             bank,
             bank,
             row,
-            row);
+            row,
+            source,
+            static_cast<std::int16_t>(
+                selector),
+            source,
+            static_cast<std::int16_t>(
+                selector));
 }
 
 void __fastcall envspec_blend_hook_entry(
@@ -1845,7 +1932,11 @@ void __fastcall envspec_blend_hook_entry(
             bank_a,
             bank_b,
             row_a,
-            row_b);
+            row_b,
+            source_a,
+            endpoints.a,
+            source_b,
+            endpoints.b);
 }
 
 bool install_envspec_source_hooks(
@@ -2008,7 +2099,7 @@ bool pmetal_env_source_runtime::install() noexcept
             std::memory_order_relaxed))
         reshade::log::message(
             reshade::log::level::info,
-            "[DSRRL PMETAL R41] flver_lifecycle_cache_flush=OFF source_cache_generation=SOURCE_RUNTIME_RESET_ONLY endpoint_cache=EXACT_SOURCE_BASE_COUNT_INDEX_ROW bank_cache=BASE_COUNT_LAYOUT region_cache=VM_WINDOW selector_source=ON envspec=ON material_response=ON");
+            "[DSRRL PMETAL R41] flver_lifecycle_cache_flush=OFF source_cache_generation=SOURCE_RUNTIME_RESET_ONLY endpoint_cache=EXACT_SOURCE_BASE_COUNT_INDEX_ROW bank_cache=BASE_COUNT_LAYOUT region_cache=VM_WINDOW selector_shadow=EXACT_TLS_SOURCE_PTR_SELECTOR_BETA selector_source=ON envspec=ON material_response=ON");
 
     return true;
 }
@@ -2218,35 +2309,99 @@ void pmetal_env_source_selector_event(
             return source;
         };
 
+    void *source_a =
+        pmetal_selector_policy::source(
+            endpoints.a,
+            character != 0u,
+            lookup);
+    void *source_b =
+        source_a;
+    if (lookup_valid &&
+        endpoints.beta != 0.0f &&
+        endpoints.a != endpoints.b)
+        source_b =
+            pmetal_selector_policy::source(
+                endpoints.b,
+                character != 0u,
+                lookup);
+
+    if (!lookup_valid ||
+        source_a == nullptr ||
+        source_b == nullptr)
+        return;
+
+    pmetal_envspec_source next{};
+
+    // R41 producer-driven shadow join. The native EnvSpec single/blend packer
+    // already resolved this exact LightBank source before the material selector
+    // consumes it. Reuse only a same-thread snapshot with exact source pointer,
+    // selected endpoint(s), and bit-identical effective beta. Any mismatch
+    // falls through to the complete selector-side donor reconstruction below.
+    if (latest_hook_source_exact_selector(
+            source_a,
+            endpoints.a,
+            source_b,
+            endpoints.b,
+            endpoints.beta,
+            next)) {
+        next.serial = epoch;
+        pmetal_producer_state_publish(
+            material,
+            next,
+            epoch);
+
+        static std::atomic_bool
+            selector_shadow_hit_logged{false};
+        if (!selector_shadow_hit_logged.exchange(
+                true,
+                std::memory_order_relaxed))
+            reshade::log::message(
+                reshade::log::level::info,
+                "[DSRRL PMETAL R41] selector_source_shadow_hit=1 exact_source_ptr=ON exact_selector_beta=ON donor_redecode=OFF fail_open_fallback=ON");
+
+        if (telemetry::effect_enabled()) {
+            g_source_a_decode_ok.store(
+                true,
+                std::memory_order_relaxed);
+            g_source_b_decode_ok.store(
+                true,
+                std::memory_order_relaxed);
+            g_last_publish_tid.store(
+                static_cast<std::uint32_t>(
+                    GetCurrentThreadId()),
+                std::memory_order_relaxed);
+        }
+
+        telemetry::hot_count(
+            g_publish);
+        telemetry::hot_count(
+            endpoints.beta == 0.0f
+                ? g_steady_seen
+                : g_blend_seen);
+        return;
+    }
+
     auto decode =
-        [&](std::int16_t selector,
+        [&](void *source,
+            std::int16_t selector,
             f4 &value,
             std::uint64_t &bank,
             std::uint32_t &row) noexcept {
-            void *source =
-                pmetal_selector_policy::
-                    source(
-                        selector,
-                        character != 0u,
-                        lookup);
-
-            if (!lookup_valid ||
-                source == nullptr)
-                return false;
-
-            return read_exact_source(
-                source,
-                selector,
-                value,
-                bank,
-                row);
+            return
+                source != nullptr &&
+                read_exact_source(
+                    source,
+                    selector,
+                    value,
+                    bank,
+                    row);
         };
 
     f4 a{};
     f4 b{};
-    pmetal_envspec_source next{};
 
     if (!decode(
+            source_a,
             endpoints.a,
             a,
             next.bank_signature_a,
@@ -2268,6 +2423,7 @@ void pmetal_env_source_selector_event(
         next.row_id_b =
             next.row_id_a;
     } else if (!decode(
+                   source_b,
                    endpoints.b,
                    b,
                    next.bank_signature_b,
