@@ -2778,7 +2778,7 @@ bool pmetal_env_source_runtime::install() noexcept
             std::memory_order_relaxed))
         reshade::log::message(
             reshade::log::level::info,
-            "[DSRRL PMETAL R45] production_hot_counters=GATED redundant_cross_thread_republish=OFF decoded_endpoint_identity_reuse=ON selector_miss_identity_reuse=ON renderer_semantics=UNCHANGED");
+            "[DSRRL PMETAL R45] production_hot_counters=GATED redundant_cross_thread_republish=OFF decoded_endpoint_identity_reuse=ON selector_miss_identity_reuse=ON material_sha_byte_compare=ON producer_key_handoff=ON renderer_semantics=UNCHANGED");
 
     return true;
 }
