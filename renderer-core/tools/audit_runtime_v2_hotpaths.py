@@ -40,7 +40,7 @@ require(pmetal_source, "hook_producer_cache_lookup(", "R43 cross-thread producer
 require(pmetal_source, "std::try_to_lock", "R43 selector cache lookup must not wait")
 require(pmetal_source, "[DSRRL PMETAL R43] producer_cache=SET256_WAY2", "R43 startup attestation")
 require(pmetal_source, "[DSRRL PMETAL R43] selector_per_key_cache_hit=1", "R43 selector per-key hit attestation")
-require(pmetal_source, "[DSRRL PMETAL R42] producer_cross_thread_cache_hit=1", "R43 producer per-key hit attestation")
+require(pmetal_source, "[DSRRL PMETAL R43] producer_per_key_cache_hit=1 exact_key=SOURCE_BASE_COUNT_ROW_SELECTOR_BETA exact_payload=ON global_publish_mutex=SKIPPED", "R43 producer per-key hit attestation")
 
 selector = flver.split('extern "C" void dsrrl_flver_selector_observer', 1)[1].split('bool install(', 1)[0]
 require(selector, "g_selector_hemdir3_enabled.load", "HemDir3 selector gate")
