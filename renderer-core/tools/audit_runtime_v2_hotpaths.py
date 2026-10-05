@@ -170,8 +170,12 @@ for latch in (
 
 require(
     clustered,
-    "pointlight_frame_decode_cache_current()",
-    "R45 PointLight per-present donor validation cache")
+    "pointlight_bank_authority_cache_current()",
+    "R45 PointLight semantic-generation donor authority cache")
+require(
+    clustered,
+    "pointlight_decode_access_current()",
+    "R45 PointLight per-present VM validation cache")
 require(
     clustered,
     "capture_ptde_source_from_frame_state(",
@@ -182,7 +186,7 @@ forbid(
     "R45 clustered source capture must not redo node/vtable/manager decode")
 require(
     clustered,
-    "[DSRRL POINTLIGHT R45] donor_validation_cache=TLS_PER_PRESENT exact_frame_state_reuse=ON duplicate_vtable_owner_selector_manager_decode=OFF spc=ON nospc=ON",
+    "[DSRRL POINTLIGHT R45] bank_authority_cache=TLS_SEMANTIC_GENERATION vm_validation_cache=TLS_PER_PRESENT exact_frame_state_reuse=ON duplicate_vtable_owner_selector_manager_decode=OFF spc=ON nospc=ON",
     "R45 PointLight decode-cache attestation")
 
 forbid(pmetal_source, "next.generation = serial", "event serial must not drive semantic generation")
