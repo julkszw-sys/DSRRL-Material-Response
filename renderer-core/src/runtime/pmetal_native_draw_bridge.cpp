@@ -1363,6 +1363,15 @@ bool pmetal_native_draw_bridge::install(
         return false;
     }
 
+    static std::atomic_bool
+        r45_native_hotpath_logged{false};
+    if (!r45_native_hotpath_logged.exchange(
+            true,
+            std::memory_order_relaxed))
+        reshade::log::message(
+            reshade::log::level::info,
+            "[DSRRL NATIVE R45] steady_state_diagnostic_counters=GATED one_shot_latches=LOAD_GATED renderer_semantics=UNCHANGED");
+
     return true;
 }
 
