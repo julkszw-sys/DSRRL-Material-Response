@@ -788,7 +788,9 @@ bool pmetal_native_draw_bridge::ensure_vtable_hook_live(
     }
 
     if (conflict_mask != 0u) {
-        if (!g_vtable_conflict_logged.exchange(
+        if (!g_vtable_conflict_logged.load(
+                std::memory_order_relaxed) &&
+            !g_vtable_conflict_logged.exchange(
                 true,
                 std::memory_order_relaxed)) {
             char line[256]{};
@@ -877,9 +879,11 @@ bool pmetal_native_draw_bridge::ensure_vtable_hook_live(
         return false;
     }
 
-    if (!g_vtable_rearm_logged.exchange(
-            true,
-            std::memory_order_relaxed)) {
+    if (!g_vtable_rearm_logged.load(
+                std::memory_order_relaxed) &&
+            !g_vtable_rearm_logged.exchange(
+                true,
+                std::memory_order_relaxed)) {
         char line[256]{};
         std::snprintf(
             line,
@@ -1146,9 +1150,7 @@ bool pmetal_native_draw_bridge::register_context(
         }
 
         new_hook = true;
-        impl_->vtable_hooks_installed.fetch_add(
-            1u,
-            std::memory_order_relaxed);
+        telemetry::hot_count(impl_->vtable_hooks_installed);
     } else {
         if (!ensure_vtable_hook_live(
                 context)) {
@@ -1170,7 +1172,9 @@ bool pmetal_native_draw_bridge::register_context(
         exact_record->vtable = vtable;
         exact_record->type = type;
 
-        if (!g_context_rebind_logged.exchange(
+        if (!g_context_rebind_logged.load(
+                std::memory_order_relaxed) &&
+            !g_context_rebind_logged.exchange(
                 true,
                 std::memory_order_relaxed))
             reshade::log::message(
@@ -1196,17 +1200,15 @@ bool pmetal_native_draw_bridge::register_context(
         return false;
     }
 
-    impl_->context_registers.fetch_add(
-        1u,
-        std::memory_order_relaxed);
+    telemetry::hot_count(impl_->context_registers);
 
     if (type ==
         D3D11_DEVICE_CONTEXT_DEFERRED) {
-        impl_->deferred_context_registers.fetch_add(
-            1u,
-            std::memory_order_relaxed);
+        telemetry::hot_count(impl_->deferred_context_registers);
 
-        if (!g_deferred_context_registered_logged.exchange(
+        if (!g_deferred_context_registered_logged.load(
+                std::memory_order_relaxed) &&
+            !g_deferred_context_registered_logged.exchange(
                 true,
                 std::memory_order_relaxed)) {
             reshade::log::message(
@@ -1495,9 +1497,7 @@ bool pmetal_native_draw_bridge::arm_draw(
           core::operator_bit(
               core::operator_id::point_light))) == 0u) {
         if (impl_ != nullptr)
-            impl_->arm_reject.fetch_add(
-                1u,
-                std::memory_order_relaxed);
+            telemetry::hot_count(impl_->arm_reject);
         return false;
     }
 
@@ -1506,9 +1506,7 @@ bool pmetal_native_draw_bridge::arm_draw(
             static_cast<std::uintptr_t>(
                 cmd_list->get_native()));
     if (context == nullptr) {
-        impl_->arm_reject.fetch_add(
-            1u,
-            std::memory_order_relaxed);
+        telemetry::hot_count(impl_->arm_reject);
         return false;
     }
 
@@ -1516,9 +1514,7 @@ bool pmetal_native_draw_bridge::arm_draw(
         *reinterpret_cast<void ***>(
             context);
     if (vtable == nullptr) {
-        impl_->arm_reject.fetch_add(
-            1u,
-            std::memory_order_relaxed);
+        telemetry::hot_count(impl_->arm_reject);
         return false;
     }
 
@@ -1551,13 +1547,13 @@ bool pmetal_native_draw_bridge::arm_draw(
         // carrying the same IUnknown identity, so this cannot retain stale
         // deferred contexts across command-list destruction.
         if (register_context(context)) {
-            impl_->context_rebinds.fetch_add(
-                1u,
-                std::memory_order_relaxed);
+            telemetry::hot_count(impl_->context_rebinds);
 
-            if (!g_context_rebind_logged.exchange(
-                    true,
-                    std::memory_order_relaxed))
+            if (!g_context_rebind_logged.load(
+                std::memory_order_relaxed) &&
+            !g_context_rebind_logged.exchange(
+                true,
+                std::memory_order_relaxed))
                 reshade::log::message(
                     reshade::log::level::info,
                     "[DSRRL POINTLIGHT R26] command_list_native_identity_rebound native_original_draw=ARMABLE");
@@ -1588,6 +1584,8 @@ bool pmetal_native_draw_bridge::arm_draw(
         if ((mutation.owners &
              core::operator_bit(
                  core::operator_id::point_light)) != 0u &&
+            !g_native_arm_reject_logged.load(
+                std::memory_order_relaxed) &&
             !g_native_arm_reject_logged.exchange(
                 true,
                 std::memory_order_relaxed)) {
@@ -1614,18 +1612,14 @@ bool pmetal_native_draw_bridge::arm_draw(
         }
         if (context1 != nullptr)
             context1->Release();
-        impl_->arm_reject.fetch_add(
-            1u,
-            std::memory_order_relaxed);
+        telemetry::hot_count(impl_->arm_reject);
         return false;
     }
 
     if (g_pending.active) {
         release_pending_draw(
             g_pending);
-        impl_->arm_reject.fetch_add(
-            1u,
-            std::memory_order_relaxed);
+        telemetry::hot_count(impl_->arm_reject);
     }
 
     g_pending.owner = this;
@@ -1646,9 +1640,7 @@ bool pmetal_native_draw_bridge::arm_draw(
         first_instance;
     g_pending.active = true;
 
-    impl_->armed.fetch_add(
-        1u,
-        std::memory_order_relaxed);
+    telemetry::hot_count(impl_->armed);
     return true;
 }
 
@@ -1673,9 +1665,7 @@ bool pmetal_native_draw_bridge::arm_draw_indexed(
           core::operator_bit(
               core::operator_id::point_light))) == 0u) {
         if (impl_ != nullptr)
-            impl_->arm_reject.fetch_add(
-                1u,
-                std::memory_order_relaxed);
+            telemetry::hot_count(impl_->arm_reject);
         return false;
     }
 
@@ -1684,9 +1674,7 @@ bool pmetal_native_draw_bridge::arm_draw_indexed(
             static_cast<std::uintptr_t>(
                 cmd_list->get_native()));
     if (context == nullptr) {
-        impl_->arm_reject.fetch_add(
-            1u,
-            std::memory_order_relaxed);
+        telemetry::hot_count(impl_->arm_reject);
         return false;
     }
 
@@ -1694,9 +1682,7 @@ bool pmetal_native_draw_bridge::arm_draw_indexed(
         *reinterpret_cast<void ***>(
             context);
     if (vtable == nullptr) {
-        impl_->arm_reject.fetch_add(
-            1u,
-            std::memory_order_relaxed);
+        telemetry::hot_count(impl_->arm_reject);
         return false;
     }
 
@@ -1729,13 +1715,13 @@ bool pmetal_native_draw_bridge::arm_draw_indexed(
         // carrying the same IUnknown identity, so this cannot retain stale
         // deferred contexts across command-list destruction.
         if (register_context(context)) {
-            impl_->context_rebinds.fetch_add(
-                1u,
-                std::memory_order_relaxed);
+            telemetry::hot_count(impl_->context_rebinds);
 
-            if (!g_context_rebind_logged.exchange(
-                    true,
-                    std::memory_order_relaxed))
+            if (!g_context_rebind_logged.load(
+                std::memory_order_relaxed) &&
+            !g_context_rebind_logged.exchange(
+                true,
+                std::memory_order_relaxed))
                 reshade::log::message(
                     reshade::log::level::info,
                     "[DSRRL POINTLIGHT R26] command_list_native_identity_rebound native_original_draw=ARMABLE");
@@ -1766,6 +1752,8 @@ bool pmetal_native_draw_bridge::arm_draw_indexed(
         if ((mutation.owners &
              core::operator_bit(
                  core::operator_id::point_light)) != 0u &&
+            !g_native_arm_reject_logged.load(
+                std::memory_order_relaxed) &&
             !g_native_arm_reject_logged.exchange(
                 true,
                 std::memory_order_relaxed)) {
@@ -1792,18 +1780,14 @@ bool pmetal_native_draw_bridge::arm_draw_indexed(
         }
         if (context1 != nullptr)
             context1->Release();
-        impl_->arm_reject.fetch_add(
-            1u,
-            std::memory_order_relaxed);
+        telemetry::hot_count(impl_->arm_reject);
         return false;
     }
 
     if (g_pending.active) {
         release_pending_draw(
             g_pending);
-        impl_->arm_reject.fetch_add(
-            1u,
-            std::memory_order_relaxed);
+        telemetry::hot_count(impl_->arm_reject);
     }
 
     g_pending.owner = this;
@@ -1826,9 +1810,7 @@ bool pmetal_native_draw_bridge::arm_draw_indexed(
         first_instance;
     g_pending.active = true;
 
-    impl_->armed.fetch_add(
-        1u,
-        std::memory_order_relaxed);
+    telemetry::hot_count(impl_->armed);
     return true;
 }
 
@@ -1881,9 +1863,7 @@ pmetal_native_draw_bridge::draw_hook(
             state);
 
     if (!captured) {
-        bridge->impl_->arm_reject.fetch_add(
-            1u,
-            std::memory_order_relaxed);
+        telemetry::hot_count(bridge->impl_->arm_reject);
         original(
             context,
             vertex_count,
@@ -1912,12 +1892,12 @@ pmetal_native_draw_bridge::draw_hook(
             true,
             std::memory_order_release);
     } else {
-        bridge->impl_->draw_applied.fetch_add(
-            1u,
-            std::memory_order_relaxed);
+        telemetry::hot_count(bridge->impl_->draw_applied);
         if ((pending.mutation.owners &
              core::operator_bit(
                  core::operator_id::point_light)) != 0u &&
+            !g_pointlight_native_applied_logged.load(
+                std::memory_order_relaxed) &&
             !g_pointlight_native_applied_logged.exchange(
                 true,
                 std::memory_order_relaxed)) {
@@ -1982,9 +1962,7 @@ pmetal_native_draw_bridge::draw_indexed_hook(
             state);
 
     if (!captured) {
-        bridge->impl_->arm_reject.fetch_add(
-            1u,
-            std::memory_order_relaxed);
+        telemetry::hot_count(bridge->impl_->arm_reject);
         original(
             context,
             index_count,
@@ -2015,13 +1993,12 @@ pmetal_native_draw_bridge::draw_indexed_hook(
             true,
             std::memory_order_release);
     } else {
-        bridge->impl_->
-            draw_indexed_applied.fetch_add(
-                1u,
-                std::memory_order_relaxed);
+        telemetry::hot_count(bridge->impl_->draw_indexed_applied);
         if ((pending.mutation.owners &
              core::operator_bit(
                  core::operator_id::point_light)) != 0u &&
+            !g_pointlight_native_applied_logged.load(
+                std::memory_order_relaxed) &&
             !g_pointlight_native_applied_logged.exchange(
                 true,
                 std::memory_order_relaxed)) {
@@ -2088,9 +2065,7 @@ pmetal_native_draw_bridge::draw_instanced_hook(
             state);
 
     if (!captured) {
-        bridge->impl_->arm_reject.fetch_add(
-            1u,
-            std::memory_order_relaxed);
+        telemetry::hot_count(bridge->impl_->arm_reject);
         original(
             context,
             vertex_count_per_instance,
@@ -2123,12 +2098,12 @@ pmetal_native_draw_bridge::draw_instanced_hook(
             true,
             std::memory_order_release);
     } else {
-        bridge->impl_->draw_applied.fetch_add(
-            1u,
-            std::memory_order_relaxed);
+        telemetry::hot_count(bridge->impl_->draw_applied);
         if ((pending.mutation.owners &
              core::operator_bit(
                  core::operator_id::point_light)) != 0u &&
+            !g_pointlight_native_applied_logged.load(
+                std::memory_order_relaxed) &&
             !g_pointlight_native_applied_logged.exchange(
                 true,
                 std::memory_order_relaxed)) {
@@ -2197,9 +2172,7 @@ pmetal_native_draw_bridge::draw_indexed_instanced_hook(
             state);
 
     if (!captured) {
-        bridge->impl_->arm_reject.fetch_add(
-            1u,
-            std::memory_order_relaxed);
+        telemetry::hot_count(bridge->impl_->arm_reject);
         original(
             context,
             index_count_per_instance,
@@ -2234,13 +2207,12 @@ pmetal_native_draw_bridge::draw_indexed_instanced_hook(
             true,
             std::memory_order_release);
     } else {
-        bridge->impl_->
-            draw_indexed_applied.fetch_add(
-                1u,
-                std::memory_order_relaxed);
+        telemetry::hot_count(bridge->impl_->draw_indexed_applied);
         if ((pending.mutation.owners &
              core::operator_bit(
                  core::operator_id::point_light)) != 0u &&
+            !g_pointlight_native_applied_logged.load(
+                std::memory_order_relaxed) &&
             !g_pointlight_native_applied_logged.exchange(
                 true,
                 std::memory_order_relaxed)) {
