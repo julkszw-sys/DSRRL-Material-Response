@@ -2000,6 +2000,16 @@ bool pmetal_env_source_runtime::install() noexcept
     g_selector_enabled.store(
         true,
         std::memory_order_release);
+
+    static std::atomic_bool
+        r41_cache_scope_logged{false};
+    if (!r41_cache_scope_logged.exchange(
+            true,
+            std::memory_order_relaxed))
+        reshade::log::message(
+            reshade::log::level::info,
+            "[DSRRL PMETAL R41] flver_lifecycle_cache_flush=OFF source_cache_generation=SOURCE_RUNTIME_RESET_ONLY endpoint_cache=EXACT_SOURCE_BASE_COUNT_INDEX_ROW bank_cache=BASE_COUNT_LAYOUT region_cache=VM_WINDOW selector_source=ON envspec=ON material_response=ON");
+
     return true;
 }
 
