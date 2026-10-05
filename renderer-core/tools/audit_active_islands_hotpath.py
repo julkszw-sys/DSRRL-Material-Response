@@ -190,6 +190,12 @@ def main():
         "g_clustered_pnts.frame_event(present);",
         "present-driven R38 selection-cache epoch retained")
 
+    require(pmetal_source,
+        "[DSRRL PMETAL R41] flver_lifecycle_cache_flush=OFF source_cache_generation=SOURCE_RUNTIME_RESET_ONLY",
+        "R41 P_Metal LightBank cache lifetime is decoupled from FLVER streaming")
+    if "pmetal_env_source_cache_invalidate();" in flver_cpp:
+        fail("R41 regression: FLVER lifecycle globally invalidates P_Metal LightBank source cache")
+
     material_body=function_body(
         clustered,
         "void clustered_pnts_draw_runtime::selector_identity_event(",
