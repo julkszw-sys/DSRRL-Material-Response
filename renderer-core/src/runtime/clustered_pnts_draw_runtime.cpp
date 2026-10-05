@@ -86,6 +86,118 @@ struct gpu_resources {
     std::uint64_t generation = 0u;
 };
 
+struct gpu_fast_cache_entry {
+    ID3D11DeviceContext *context = nullptr;
+    ID3D11Device *device = nullptr;
+    ID3D11Buffer *t18_buffer = nullptr;
+    ID3D11ShaderResourceView *t18_srv = nullptr;
+    ID3D11Buffer *t19_buffer = nullptr;
+    ID3D11ShaderResourceView *t19_srv = nullptr;
+    ID3D11Buffer *b12 = nullptr;
+    std::uint64_t generation = 0u;
+    std::uint64_t epoch = 0u;
+};
+
+thread_local std::array<gpu_fast_cache_entry,8>
+    g_gpu_fast_cache{};
+thread_local std::uint8_t g_gpu_fast_cache_victim = 0u;
+std::atomic<std::uint64_t> g_resource_epoch{1u};
+
+void release_gpu_fast_entry(
+    gpu_fast_cache_entry &entry) noexcept
+{
+    if (entry.b12 != nullptr)
+        entry.b12->Release();
+    if (entry.t19_srv != nullptr)
+        entry.t19_srv->Release();
+    if (entry.t19_buffer != nullptr)
+        entry.t19_buffer->Release();
+    if (entry.t18_srv != nullptr)
+        entry.t18_srv->Release();
+    if (entry.t18_buffer != nullptr)
+        entry.t18_buffer->Release();
+    if (entry.device != nullptr)
+        entry.device->Release();
+    entry = {};
+}
+
+void clear_gpu_fast_cache() noexcept
+{
+    for (auto &entry : g_gpu_fast_cache)
+        release_gpu_fast_entry(entry);
+    g_gpu_fast_cache_victim = 0u;
+}
+
+gpu_fast_cache_entry *lookup_gpu_fast_cache(
+    ID3D11DeviceContext *context,
+    ID3D11Device *device) noexcept
+{
+    const auto epoch =
+        g_resource_epoch.load(
+            std::memory_order_acquire);
+
+    for (auto &entry : g_gpu_fast_cache) {
+        if (entry.epoch != 0u &&
+            entry.epoch != epoch)
+            release_gpu_fast_entry(entry);
+
+        if (entry.context == context &&
+            entry.device == device &&
+            entry.epoch == epoch &&
+            entry.t18_buffer != nullptr &&
+            entry.t18_srv != nullptr &&
+            entry.t19_buffer != nullptr &&
+            entry.t19_srv != nullptr &&
+            entry.b12 != nullptr)
+            return &entry;
+    }
+
+    return nullptr;
+}
+
+gpu_fast_cache_entry *store_gpu_fast_cache(
+    ID3D11DeviceContext *context,
+    const gpu_resources &gpu) noexcept
+{
+    if (context == nullptr ||
+        gpu.device == nullptr ||
+        gpu.t18_buffer == nullptr ||
+        gpu.t18_srv == nullptr ||
+        gpu.t19_buffer == nullptr ||
+        gpu.t19_srv == nullptr ||
+        gpu.b12 == nullptr)
+        return nullptr;
+
+    auto &entry =
+        g_gpu_fast_cache[
+            static_cast<std::size_t>(
+                g_gpu_fast_cache_victim++) %
+            g_gpu_fast_cache.size()];
+
+    release_gpu_fast_entry(entry);
+
+    entry.context = context;
+    entry.device = gpu.device;
+    entry.t18_buffer = gpu.t18_buffer;
+    entry.t18_srv = gpu.t18_srv;
+    entry.t19_buffer = gpu.t19_buffer;
+    entry.t19_srv = gpu.t19_srv;
+    entry.b12 = gpu.b12;
+    entry.generation = gpu.generation;
+    entry.epoch =
+        g_resource_epoch.load(
+            std::memory_order_acquire);
+
+    entry.device->AddRef();
+    entry.t18_buffer->AddRef();
+    entry.t18_srv->AddRef();
+    entry.t19_buffer->AddRef();
+    entry.t19_srv->AddRef();
+    entry.b12->AddRef();
+
+    return &entry;
+}
+
 struct upload_identity_tls {
     ID3D11DeviceContext *context = nullptr;
     std::uint64_t generation = 0u;
@@ -169,6 +281,9 @@ std::atomic<std::uint64_t> g_context_deferred{0u};
 std::atomic<std::uint64_t> g_context_other{0u};
 std::atomic<std::uint64_t> g_gpu_prepare_fail{0u};
 std::atomic<std::uint64_t> g_upload_fail{0u};
+std::atomic<std::uint64_t> g_gpu_fast_hit{0u};
+std::atomic<std::uint64_t> g_gpu_fast_miss{0u};
+std::atomic<std::uint64_t> g_lazy_sidecar_rebuild{0u};
 
 std::uintptr_t g_base = 0u;
 
@@ -621,8 +736,12 @@ bool ensure_gpu_locked(
 
     auto &gpu = entry->second;
     if (gpu.device != nullptr &&
-        gpu.device != device)
+        gpu.device != device) {
+        g_resource_epoch.fetch_add(
+            1u,
+            std::memory_order_acq_rel);
         release_gpu(gpu);
+    }
 
     const bool complete =
         gpu.device == device &&
@@ -801,7 +920,7 @@ bool clustered_pnts_draw_runtime::install() noexcept
             std::memory_order_relaxed))
         reshade::log::message(
             reshade::log::level::info,
-            "[DSRRL POINTLIGHT R28] exact_structure_snapshot_cache=ACTIVE cross_draw=ON revalidate=VM+MEMCMP pointer_only_authority=OFF draw_local_bank_cache=ON");
+            "[DSRRL POINTLIGHT R29] exact_structure_snapshot_cache=ACTIVE cross_draw=ON revalidate=VM+MEMCMP pointer_only_authority=OFF gpu_tls_fast_cache=ON per_draw_resource_mutex=OFF per_draw_com_ref_churn=OFF lazy_sidecar_rebuild=ON");
     return true;
 }
 
@@ -817,6 +936,10 @@ void clustered_pnts_draw_runtime::uninstall() noexcept
     g_producer_input_tls = {};
     g_local_serial = 0u;
 
+    g_resource_epoch.fetch_add(
+        1u,
+        std::memory_order_acq_rel);
+    clear_gpu_fast_cache();
     {
         std::lock_guard<std::mutex> lock(
             g_resource_mutex);
@@ -1186,6 +1309,57 @@ bool clustered_pnts_draw_runtime::prepare_sidecar(
         return false;
     }
 
+    if (!g_draw_selection.payload_ready &&
+        g_draw_selection.cached_failure ==
+            clustered_pnts_prepare_failure::none &&
+        g_source_selection_cache.ready &&
+        !g_source_selection_cache.neutral &&
+        g_source_selection_cache.producer_serial ==
+            input.serial &&
+        g_draw_selection.authority_ready) {
+        const auto rebuilt =
+            operators::point_light::
+                build_clustered_sidecar_v1(
+                    g_source_selection_cache.sources,
+                    g_source_selection_cache.selected_count,
+                    g_draw_selection.material_max,
+                    g_draw_selection.material_decision);
+
+        g_draw_selection.sidecar_result_code =
+            static_cast<std::uint8_t>(
+                rebuilt.result);
+
+        if (rebuilt.result ==
+                operators::point_light::
+                    clustered_sidecar_result_v1::ready &&
+            rebuilt.payload.ready) {
+            g_draw_selection.payload =
+                rebuilt.payload;
+            g_draw_selection.payload_ready = true;
+            telemetry::hot_count(
+                g_lazy_sidecar_rebuild);
+            telemetry::hot_count(
+                g_sidecar_ready);
+
+            static std::atomic_bool
+                lazy_rebuild_logged{false};
+            if (!lazy_rebuild_logged.exchange(
+                    true,
+                    std::memory_order_relaxed))
+                reshade::log::message(
+                    reshade::log::level::info,
+                    "[DSRRL POINTLIGHT R29] lazy_sidecar_rebuild=APPLIED source_cache=READY exact_material_authority=READY");
+        } else {
+            g_draw_selection.cached_failure =
+                clustered_pnts_prepare_failure::
+                    sidecar_build;
+            telemetry::hot_count(
+                g_sidecar_build_fail);
+            telemetry::hot_count(
+                g_sidecar_fail);
+        }
+    }
+
     if (!g_draw_selection.payload_ready) {
         prepared.failure =
             g_draw_selection.cached_failure !=
@@ -1219,12 +1393,12 @@ bool clustered_pnts_draw_runtime::prepare_sidecar(
         return false;
     }
 
-    // Resource lookup/creation is process-global, but the dynamic payloads
-    // themselves are recording-context local. Hold the mutex only long enough
-    // to resolve/create that context's carrier and retain the COM objects.
-    // Map(WRITE_DISCARD)/Unmap must execute outside the global lock: otherwise
-    // independent deferred contexts (notably reflective-water work) serialize
-    // all three PointLight uploads through one mutex for no semantic reason.
+    // R29: after one synchronized lookup/create per recording context, keep
+    // stable COM references in a TLS cache. Steady-state PointLight draws no
+    // longer take the process-global resource mutex and no longer perform
+    // five AddRef + three Release operations merely to protect one draw.
+    // A global epoch invalidates every TLS entry when device/resource
+    // ownership changes; pointer identity alone never authorizes reuse.
     ID3D11Buffer *t18_buffer = nullptr;
     ID3D11ShaderResourceView *t18_srv = nullptr;
     ID3D11Buffer *t19_buffer = nullptr;
@@ -1235,7 +1409,18 @@ bool clustered_pnts_draw_runtime::prepare_sidecar(
     bool upload_b12 = true;
     std::uint64_t gpu_generation = 0u;
 
-    {
+    gpu_fast_cache_entry *fast =
+        lookup_gpu_fast_cache(
+            context,
+            device);
+
+    if (fast != nullptr) {
+        telemetry::hot_count(
+            g_gpu_fast_hit);
+    } else {
+        telemetry::hot_count(
+            g_gpu_fast_miss);
+
         std::lock_guard<std::mutex> lock(
             g_resource_mutex);
 
@@ -1265,23 +1450,25 @@ bool clustered_pnts_draw_runtime::prepare_sidecar(
             return false;
         }
 
-        t18_buffer = gpu->t18_buffer;
-        t18_srv = gpu->t18_srv;
-        t19_buffer = gpu->t19_buffer;
-        t19_srv = gpu->t19_srv;
-        b12 = gpu->b12;
-
-        gpu_generation = gpu->generation;
-
-        // Keep the exact carrier alive after releasing g_resource_mutex. The
-        // destroy-device path may remove the cache entry concurrently, but it
-        // cannot destroy resources retained here until this prepare completes.
-        t18_buffer->AddRef();
-        t19_buffer->AddRef();
-        t18_srv->AddRef();
-        t19_srv->AddRef();
-        b12->AddRef();
+        fast =
+            store_gpu_fast_cache(
+                context,
+                *gpu);
+        if (fast == nullptr) {
+            device->Release();
+            prepared.failure =
+                clustered_pnts_prepare_failure::gpu_resources;
+            telemetry::hot_count(g_prepare_fail);
+            return false;
+        }
     }
+
+    t18_buffer = fast->t18_buffer;
+    t18_srv = fast->t18_srv;
+    t19_buffer = fast->t19_buffer;
+    t19_srv = fast->t19_srv;
+    b12 = fast->b12;
+    gpu_generation = fast->generation;
 
     device->Release();
 
@@ -1343,15 +1530,7 @@ bool clustered_pnts_draw_runtime::prepare_sidecar(
         }
     }
 
-    // Buffer refs are temporary upload-lifetime guards. SRV/b12 refs transfer
-    // to prepared and are released by release_prepared_draw().
-    t18_buffer->Release();
-    t19_buffer->Release();
-
     if (!uploaded) {
-        t18_srv->Release();
-        t19_srv->Release();
-        b12->Release();
         prepared.failure =
             clustered_pnts_prepare_failure::upload;
         telemetry::hot_count(g_upload_fail);
@@ -1372,6 +1551,7 @@ bool clustered_pnts_draw_runtime::prepare_sidecar(
         payload.effective_count;
     prepared.owner_verified = true;
     prepared.selector_mirror_verified = true;
+    prepared.carrier_borrowed_tls = true;
     prepared.ready = true;
 
     telemetry::hot_count(g_prepare_ok);
@@ -1381,12 +1561,14 @@ bool clustered_pnts_draw_runtime::prepare_sidecar(
 void clustered_pnts_draw_runtime::release_prepared_draw(
     prepared_clustered_pnts_draw &prepared) noexcept
 {
-    if (prepared.b12 != nullptr)
-        prepared.b12->Release();
-    if (prepared.t19 != nullptr)
-        prepared.t19->Release();
-    if (prepared.t18 != nullptr)
-        prepared.t18->Release();
+    if (!prepared.carrier_borrowed_tls) {
+        if (prepared.b12 != nullptr)
+            prepared.b12->Release();
+        if (prepared.t19 != nullptr)
+            prepared.t19->Release();
+        if (prepared.t18 != nullptr)
+            prepared.t18->Release();
+    }
     prepared = {};
 }
 
@@ -1404,6 +1586,11 @@ void clustered_pnts_draw_runtime::on_destroy_device(
     auto *native =
         reinterpret_cast<ID3D11Device *>(
             device->get_native());
+
+    g_resource_epoch.fetch_add(
+        1u,
+        std::memory_order_acq_rel);
+    clear_gpu_fast_cache();
 
     std::lock_guard<std::mutex> lock(
         g_resource_mutex);
@@ -1472,6 +1659,10 @@ void clustered_pnts_draw_runtime::reset() noexcept
         clear_persistent_structure_cache();
     g_producer_input_tls = {};
 
+    g_resource_epoch.fetch_add(
+        1u,
+        std::memory_order_acq_rel);
+    clear_gpu_fast_cache();
     {
         std::lock_guard<std::mutex> lock(
             g_resource_mutex);
@@ -1513,6 +1704,9 @@ void clustered_pnts_draw_runtime::reset() noexcept
     g_context_other.store(0u);
     g_gpu_prepare_fail.store(0u);
     g_upload_fail.store(0u);
+    g_gpu_fast_hit.store(0u);
+    g_gpu_fast_miss.store(0u);
+    g_lazy_sidecar_rebuild.store(0u);
     g_quarantined.store(false);
 }
 
