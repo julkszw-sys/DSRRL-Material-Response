@@ -655,14 +655,23 @@ bool capture_source(
         vtable + 12u,
         sizeof(target));
 
-    // The PTDE donor bridge accepts exactly these two attested retail source
-    // classes. Reject every other source before calling its host vfunc: the
-    // previous ordering paid a virtual call (and then exact donor validation)
-    // for nodes that were guaranteed to fail open immediately afterwards.
+    // Accept only statically attested retail source classes. Bank and LerpBank
+    // were already proven by the PointLight donor RE. R31 adds exactly one
+    // DirectPointLightEntity source vfunc: DSR base+0x55C570 is the structural
+    // homologue of PTDE 0x00D34D50 and emits the same 8-float carrier
+    // { position.xyz, 1/(End-Begin), RGB/source signal, End }. No other source
+    // class is implied by this authorization.
     const auto target_address =
         reinterpret_cast<std::uintptr_t>(target);
-    if (target_address != g_base + 0x55BC00u &&
-        target_address != g_base + 0x55D0B0u) {
+    const bool bank_source =
+        target_address == g_base + 0x55BC00u;
+    const bool direct_source =
+        target_address == g_base + 0x55C570u;
+    const bool lerp_bank_source =
+        target_address == g_base + 0x55D0B0u;
+    if (!bank_source &&
+        !direct_source &&
+        !lerp_bank_source) {
         log_source_capture_failure_once(
             1u << 2,
             "source_class_unattested",
@@ -695,11 +704,16 @@ bool capture_source(
     // is unavailable. The clustered replacement shader still owns the proven
     // PTDE attenuation correction (x^3 -> x); unresolved numeric row residuals
     // remain source-local and are not compensated by arbitrary gains.
-    (void)pointlight_ptde_source::capture(
-        node,
-        g_base,
-        raw,
-        bank_cache);
+    // DirectPointLightEntity has no PointLightBank donor. Its retail host
+    // packer is already the exact PTDE-homologous carrier, so do not perform
+    // the Bank/LerpBank donor lookup for that class.
+    if (!direct_source) {
+        (void)pointlight_ptde_source::capture(
+            node,
+            g_base,
+            raw,
+            bank_cache);
+    }
 
     for (const auto value : raw)
         if (!std::isfinite(value)) {
