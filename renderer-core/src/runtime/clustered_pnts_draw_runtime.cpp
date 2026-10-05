@@ -100,20 +100,26 @@ struct frame_source_cache_entry_v1 {
     bool valid = false;
 };
 
-constexpr std::size_t k_frame_source_cache_entries = 32u;
+// R38: source hits are exact-state keyed, so a linear 32-entry scan on every
+// repeated material draw is unnecessary overhead. Use a power-of-two direct
+// map: collisions are misses, never authority. Exact state comparison remains
+// mandatory before reuse.
+constexpr std::size_t k_frame_source_cache_entries = 128u;
+static_assert(
+    (k_frame_source_cache_entries &
+     (k_frame_source_cache_entries - 1u)) == 0u);
+
 std::atomic<std::uint64_t> g_source_frame_epoch{1u};
 std::atomic_bool g_source_exec_attested{false};
 thread_local std::uint64_t g_source_frame_seen_epoch = 0u;
 thread_local std::array<
     frame_source_cache_entry_v1,
     k_frame_source_cache_entries> g_source_frame_cache{};
-thread_local std::uint8_t g_source_frame_cache_victim = 0u;
 
 void reset_frame_source_cache_tls(
     std::uint64_t epoch) noexcept
 {
     g_source_frame_cache = {};
-    g_source_frame_cache_victim = 0u;
     g_source_frame_seen_epoch = epoch;
 }
 
@@ -131,6 +137,92 @@ bool same_frame_source_state(
         a.position_bits == b.position_bits &&
         a.source_category == b.source_category &&
         a.source_class == b.source_class;
+}
+
+std::size_t frame_source_cache_index(
+    const frame_source_state_v1 &state) noexcept
+{
+    std::uint64_t h =
+        static_cast<std::uint64_t>(
+            reinterpret_cast<std::uintptr_t>(
+                state.node)) >> 4u;
+    const auto mix = [&h](std::uint64_t v) noexcept {
+        h ^= v +
+             0x9e3779b97f4a7c15ull +
+             (h << 6u) +
+             (h >> 2u);
+    };
+    mix(static_cast<std::uint64_t>(state.target));
+    mix(static_cast<std::uint64_t>(state.owner));
+    mix(static_cast<std::uint64_t>(state.source_id));
+    mix(static_cast<std::uint64_t>(state.selector_word0));
+    mix(static_cast<std::uint64_t>(state.selector_word1));
+    for (const auto word : state.position_bits)
+        mix(static_cast<std::uint64_t>(word));
+    mix(static_cast<std::uint64_t>(state.source_category));
+    mix(static_cast<std::uint64_t>(state.source_class));
+    return static_cast<std::size_t>(
+        h & (k_frame_source_cache_entries - 1u));
+}
+
+struct frame_selection_key_v1 {
+    std::uintptr_t owner = 0u;
+    void *collection = nullptr;
+    std::array<std::uint32_t,8> query_bits{};
+    std::array<void *,4> bucket_heads{};
+    std::uint8_t mask = 0u;
+};
+
+struct frame_selection_cache_entry_v1 {
+    std::uint64_t epoch = 0u;
+    std::uint64_t hash = 0u;
+    frame_selection_key_v1 key{};
+    std::array<std::uint32_t,4> ids{};
+    std::array<void *,4> nodes{};
+    std::uint8_t count = 0u;
+};
+
+constexpr std::size_t k_frame_selection_cache_entries = 128u;
+static_assert(
+    (k_frame_selection_cache_entries &
+     (k_frame_selection_cache_entries - 1u)) == 0u);
+thread_local std::array<
+    frame_selection_cache_entry_v1,
+    k_frame_selection_cache_entries> g_frame_selection_cache{};
+
+std::uint64_t frame_selection_hash(
+    const frame_selection_key_v1 &key) noexcept
+{
+    std::uint64_t h =
+        1469598103934665603ull;
+    const auto mix = [&h](std::uint64_t v) noexcept {
+        h ^= v;
+        h *= 1099511628211ull;
+    };
+    mix(static_cast<std::uint64_t>(key.owner));
+    mix(static_cast<std::uint64_t>(
+        reinterpret_cast<std::uintptr_t>(
+            key.collection)));
+    mix(static_cast<std::uint64_t>(key.mask));
+    for (const auto word : key.query_bits)
+        mix(static_cast<std::uint64_t>(word));
+    for (const auto head : key.bucket_heads)
+        mix(static_cast<std::uint64_t>(
+            reinterpret_cast<std::uintptr_t>(
+                head)));
+    return h;
+}
+
+bool same_frame_selection_key(
+    const frame_selection_key_v1 &a,
+    const frame_selection_key_v1 &b) noexcept
+{
+    return
+        a.owner == b.owner &&
+        a.collection == b.collection &&
+        a.mask == b.mask &&
+        a.query_bits == b.query_bits &&
+        a.bucket_heads == b.bucket_heads;
 }
 
 #ifdef DSRRL_POINTLIGHT_PROFILE
@@ -638,6 +730,45 @@ bool readable_range_cached(
     return true;
 }
 
+bool make_frame_selection_key(
+    const producer_input_snapshot &input,
+    frame_selection_key_v1 &key) noexcept
+{
+    key = {};
+    if (!input.valid ||
+        input.collection == nullptr)
+        return false;
+
+    auto &source_vm =
+        source_vm_cache_current();
+    if (!readable_range_cached(
+            input.collection,
+            0x90u,
+            source_vm.collection))
+        return false;
+
+    key.owner = input.owner;
+    key.collection = input.collection;
+    key.mask = input.mask;
+    std::memcpy(
+        key.query_bits.data(),
+        input.query.data(),
+        sizeof(key.query_bits));
+
+    const auto *base =
+        static_cast<const std::uint8_t *>(
+            input.collection);
+    for (std::uint32_t bucket = 0u;
+         bucket < 4u;
+         ++bucket) {
+        std::memcpy(
+            &key.bucket_heads[bucket],
+            base + 0x18u + bucket * 0x20u,
+            sizeof(key.bucket_heads[bucket]));
+    }
+    return true;
+}
+
 std::atomic<std::uint32_t> g_source_capture_reason_mask{0u};
 
 void log_source_capture_failure_once(
@@ -981,14 +1112,15 @@ bool capture_source(
             reset_frame_source_cache_tls(
                 frame_epoch);
 
-        for (const auto &entry :
-             g_source_frame_cache) {
-            if (!entry.valid ||
-                !same_frame_source_state(
-                    entry.state,
-                    frame_state))
-                continue;
-
+        const auto cache_index =
+            frame_source_cache_index(
+                frame_state);
+        const auto &entry =
+            g_source_frame_cache[cache_index];
+        if (entry.valid &&
+            same_frame_source_state(
+                entry.state,
+                frame_state)) {
             out = entry.source;
             static std::atomic_bool
                 cache_hit_logged{false};
@@ -1096,9 +1228,8 @@ bool capture_source(
     if (frame_cacheable) {
         auto &entry =
             g_source_frame_cache[
-                static_cast<std::size_t>(
-                    g_source_frame_cache_victim++) %
-                g_source_frame_cache.size()];
+                frame_source_cache_index(
+                    frame_state)];
         entry.state = frame_state;
         entry.source = out;
         entry.valid = true;
@@ -1422,6 +1553,14 @@ bool clustered_pnts_draw_runtime::install() noexcept
         reshade::log::message(
             reshade::log::level::info,
             "[DSRRL POINTLIGHT R37] bank_structure_revalidate=TABLE_PLUS_NAMES_ONLY dynamic_row_payload_excluded=ON allocation_guard=ON exact_structure_identity=ON vm_region_cache=TLS_PER_PRESENT selector_capture_reuse=ON source_exec_attest=INSTALL_ONCE frame_source_cache=R36_UNCHANGED");
+    static std::atomic_bool
+        frame_selection_cache_logged{false};
+    if (!frame_selection_cache_logged.exchange(
+            true,
+            std::memory_order_relaxed))
+        reshade::log::message(
+            reshade::log::level::info,
+            "[DSRRL POINTLIGHT R38] frame_selection_cache=DIRECT128_EXACT_INPUT_PLUS_BUCKET_HEADS source_cache=DIRECT128_EXACT_STATE cache_scope=TLS_PER_PRESENT source_revalidation=ON");
     return true;
 }
 
@@ -1434,6 +1573,7 @@ void clustered_pnts_draw_runtime::uninstall() noexcept
     consume_draw_selection();
     g_source_selection_cache = {};
     g_source_vm_cache = {};
+    g_frame_selection_cache = {};
     pointlight_ptde_source::
         clear_persistent_structure_cache();
     g_upload_identity_cache = {};
@@ -1614,15 +1754,87 @@ void clustered_pnts_draw_runtime::selector_source_event() noexcept
         const auto prof_select_start =
             prof_active ? prof_qpc() : 0u;
 #endif
-        const bool selection_ready =
-            input.valid &&
-            select_first_four_exact(
-                input.collection,
-                input.query.data(),
-                input.mask,
-                selected_ids,
-                nodes,
-                selected_count);
+        // R38: many material draws in one presented frame repeat the exact
+        // same PointLight selection query. Producer serial is intentionally
+        // unique per builder event, so the R20 per-serial cache cannot reuse
+        // that result. Cache only the exact selector output keyed by owner,
+        // collection, mask, all eight query words and the four current bucket
+        // heads. Scope is one presented-frame epoch. A collision is a miss.
+        // Source capture is still executed below on every producer serial, so
+        // R36 exact source-state validation remains authoritative.
+        frame_selection_key_v1 selection_key{};
+        const bool selection_key_ready =
+            make_frame_selection_key(
+                input,
+                selection_key);
+        const auto selection_epoch =
+            g_source_frame_epoch.load(
+                std::memory_order_relaxed);
+        const auto selection_hash =
+            selection_key_ready
+                ? frame_selection_hash(
+                      selection_key)
+                : 0u;
+        const auto selection_index =
+            static_cast<std::size_t>(
+                selection_hash &
+                (k_frame_selection_cache_entries - 1u));
+
+        bool selection_ready = false;
+        bool selection_cached = false;
+        if (selection_key_ready) {
+            const auto &entry =
+                g_frame_selection_cache[
+                    selection_index];
+            if (entry.epoch ==
+                    selection_epoch &&
+                entry.hash ==
+                    selection_hash &&
+                same_frame_selection_key(
+                    entry.key,
+                    selection_key)) {
+                selected_ids = entry.ids;
+                nodes = entry.nodes;
+                selected_count = entry.count;
+                selection_ready = true;
+                selection_cached = true;
+
+                static std::atomic_bool
+                    selection_cache_hit_logged{false};
+                if (!selection_cache_hit_logged.exchange(
+                        true,
+                        std::memory_order_relaxed)) {
+                    reshade::log::message(
+                        reshade::log::level::info,
+                        "[DSRRL POINTLIGHT R38] frame_selection_cache_hit=1 exact_input=ON bucket_heads=ON source_revalidation=ON");
+                }
+            }
+        }
+
+        if (!selection_cached) {
+            selection_ready =
+                input.valid &&
+                select_first_four_exact(
+                    input.collection,
+                    input.query.data(),
+                    input.mask,
+                    selected_ids,
+                    nodes,
+                    selected_count);
+
+            if (selection_ready &&
+                selection_key_ready) {
+                auto &entry =
+                    g_frame_selection_cache[
+                        selection_index];
+                entry.epoch = selection_epoch;
+                entry.hash = selection_hash;
+                entry.key = selection_key;
+                entry.ids = selected_ids;
+                entry.nodes = nodes;
+                entry.count = selected_count;
+            }
+        }
 #ifdef DSRRL_POINTLIGHT_PROFILE
         if (prof_active)
             prof_add(
@@ -2304,6 +2516,7 @@ void clustered_pnts_draw_runtime::reset() noexcept
 {
     consume_draw_selection();
     g_source_selection_cache = {};
+    g_frame_selection_cache = {};
     reset_frame_source_cache_tls(
         g_source_frame_epoch.fetch_add(
             1u,
