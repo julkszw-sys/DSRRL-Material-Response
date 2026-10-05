@@ -3957,6 +3957,9 @@ void on_init_device(reshade::api::device *device)
         reshade::log::message(
             reshade::log::level::info,
             "[DSRRL POINTLIGHT R30] synchronous_core_transaction=ACTIVE exact_clustered_shape_guard=ON global_core_tx_mutex=OFF_FOR_CLUSTERED_DIRECT_NATIVE tls_reentry_guard=ON t18_t19_batch=ON sync_draw_serial_atomic=OFF fallback_general_tx=UNCHANGED");
+        reshade::log::message(
+            reshade::log::level::info,
+            "[DSRRL POINTLIGHT R31] direct_source_class=DirectPointLightEntity dsr_vfunc_rva=0x55C570 ptde_homologue=0x00D34D50 carrier=position_invRange_RGB_End authorization=EXACT_ONLY");
     } else if (k_pmetal_native_draw_runtime_enabled) {
         if (!g_pmetal_native_draw.install(device)) {
             reshade::log::message(
