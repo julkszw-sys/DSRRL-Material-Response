@@ -873,6 +873,91 @@ bool capture_source(
         return false;
     }
 
+    frame_source_state_v1 frame_state{};
+    const bool frame_cacheable =
+        bank_source || lerp_bank_source;
+    if (frame_cacheable) {
+        const std::size_t position_offset =
+            bank_source ? 0x60u : 0x70u;
+        const std::size_t required_size =
+            position_offset + 4u * sizeof(float);
+        if (!readable_range(node, required_size)) {
+            log_source_capture_failure_once(
+                1u << 7,
+                bank_source
+                    ? "bank_state_unreadable"
+                    : "lerp_state_unreadable",
+                node,
+                target);
+            return false;
+        }
+
+        frame_state.node = node;
+        frame_state.target = target_address;
+        frame_state.source_class =
+            bank_source ? 1u : 2u;
+        std::memcpy(
+            &frame_state.source_id,
+            static_cast<const std::uint8_t *>(node) +
+                0x10u,
+            sizeof(frame_state.source_id));
+        std::memcpy(
+            &frame_state.source_category,
+            static_cast<const std::uint8_t *>(node) +
+                0x18u,
+            sizeof(frame_state.source_category));
+        std::memcpy(
+            &frame_state.owner,
+            static_cast<const std::uint8_t *>(node) +
+                0x50u,
+            sizeof(frame_state.owner));
+        std::memcpy(
+            &frame_state.selector_word0,
+            static_cast<const std::uint8_t *>(node) +
+                0x58u,
+            sizeof(frame_state.selector_word0));
+        std::memcpy(
+            &frame_state.selector_word1,
+            static_cast<const std::uint8_t *>(node) +
+                0x5cu,
+            sizeof(frame_state.selector_word1));
+        std::memcpy(
+            frame_state.position_bits.data(),
+            static_cast<const std::uint8_t *>(node) +
+                position_offset,
+            frame_state.position_bits.size() *
+                sizeof(frame_state.position_bits[0]));
+
+        const auto frame_epoch =
+            g_source_frame_epoch.load(
+                std::memory_order_relaxed);
+        if (g_source_frame_seen_epoch !=
+            frame_epoch)
+            reset_frame_source_cache_tls(
+                frame_epoch);
+
+        for (const auto &entry :
+             g_source_frame_cache) {
+            if (!entry.valid ||
+                !same_frame_source_state(
+                    entry.state,
+                    frame_state))
+                continue;
+
+            out = entry.source;
+            static std::atomic_bool
+                cache_hit_logged{false};
+            if (!cache_hit_logged.exchange(
+                    true,
+                    std::memory_order_relaxed)) {
+                reshade::log::message(
+                    reshade::log::level::info,
+                    "[DSRRL POINTLIGHT R36] frame_source_cache_hit=1 exact_state_snapshot=ON");
+            }
+            return true;
+        }
+    }
+
     alignas(16) std::array<float,8> raw{};
 
     // R36 performance cut: do not execute the stock Bank/LerpBank source
@@ -890,19 +975,6 @@ bool capture_source(
     if (bank_source || lerp_bank_source) {
         const std::size_t position_offset =
             bank_source ? 0x60u : 0x70u;
-        if (!readable_range(
-                static_cast<const std::uint8_t *>(node) +
-                    position_offset,
-                3u * sizeof(float))) {
-            log_source_capture_failure_once(
-                1u << 7,
-                bank_source
-                    ? "bank_position_unreadable"
-                    : "lerp_position_unreadable",
-                node,
-                target);
-            return false;
-        }
 
         std::memcpy(
             raw.data(),
@@ -975,6 +1047,18 @@ bool capture_source(
         out.position_inv_range[i] = raw[i];
         out.raw_q_end[i] = raw[4u + i];
     }
+
+    if (frame_cacheable) {
+        auto &entry =
+            g_source_frame_cache[
+                static_cast<std::size_t>(
+                    g_source_frame_cache_victim++) %
+                g_source_frame_cache.size()];
+        entry.state = frame_state;
+        entry.source = out;
+        entry.valid = true;
+    }
+
     return true;
 }
 
