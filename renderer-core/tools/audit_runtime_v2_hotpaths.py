@@ -62,6 +62,15 @@ if min(lookup_start,lookup_end)<0:
 lookup_body=pmetal_source[lookup_start:lookup_end]
 forbid(lookup_body, "g_hook_source_semantic_version", "R43 per-key cache must not use process-global semantic-version freshness")
 require(pmetal_source, "same_hook_selector_identity(", "R43 exact per-key live identity gate")
+latest_start=pmetal_source.find("bool pmetal_env_source_runtime::latest(")
+latest_end=pmetal_source.find("pmetal_env_source_runtime_telemetry",latest_start)
+if min(latest_start,latest_end)<0:
+    fail("R44 visible latest() boundary missing")
+latest_body=pmetal_source[latest_start:latest_end]
+forbid(latest_body, "latest_hook_source(out)", "R44 visible EnvSpec path must not consume unkeyed latest hook source")
+require(pmetal_source,
+        "[DSRRL PMETAL R44] visible_source_authority=MATERIAL_BOUND_PRODUCER_STATE_ONLY unkeyed_latest_hook_fallback=OFF exact_selector_shadow=ON missing_join=FAIL_OPEN_STOCK_DSR islands_preserved=ON",
+        "R44 material-bound source authority attestation")
 forbid(pmetal_source, "next.generation = serial", "event serial must not drive semantic generation")
 require(pmetal_h, "payload_bits", "exact b12 payload cache")
 require(pmetal_cpp, "payload_bits.data()", "exact 64-byte b12 payload identity")
