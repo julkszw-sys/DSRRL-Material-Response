@@ -129,27 +129,43 @@ thread_local std::array<
     frame_source_cache_entry_v1,
     k_frame_source_cache_entries> g_source_frame_cache{};
 
-struct pointlight_frame_decode_cache_tls {
-    std::uint64_t epoch = 0u;
+struct pointlight_decode_cache_tls {
+    std::uint64_t bank_generation = 0u;
+    std::uint64_t access_epoch = 0u;
     pointlight_ptde_source::draw_bank_authority_cache
         bank_authority{};
     pointlight_ptde_source::access_cache access{};
 };
 
-thread_local pointlight_frame_decode_cache_tls
-    g_pointlight_frame_decode_cache{};
+thread_local pointlight_decode_cache_tls
+    g_pointlight_decode_cache{};
 
-pointlight_frame_decode_cache_tls &
-pointlight_frame_decode_cache_current() noexcept
+pointlight_ptde_source::draw_bank_authority_cache &
+pointlight_bank_authority_cache_current() noexcept
+{
+    const auto generation =
+        g_source_semantic_generation.load(
+            std::memory_order_acquire);
+    if (g_pointlight_decode_cache.bank_generation !=
+        generation) {
+        g_pointlight_decode_cache.bank_authority = {};
+        g_pointlight_decode_cache.bank_generation =
+            generation;
+    }
+    return g_pointlight_decode_cache.bank_authority;
+}
+
+pointlight_ptde_source::access_cache &
+pointlight_decode_access_current() noexcept
 {
     const auto epoch =
         g_source_frame_epoch.load(
             std::memory_order_relaxed);
-    if (g_pointlight_frame_decode_cache.epoch != epoch) {
-        g_pointlight_frame_decode_cache = {};
-        g_pointlight_frame_decode_cache.epoch = epoch;
+    if (g_pointlight_decode_cache.access_epoch != epoch) {
+        g_pointlight_decode_cache.access = {};
+        g_pointlight_decode_cache.access_epoch = epoch;
     }
-    return g_pointlight_frame_decode_cache;
+    return g_pointlight_decode_cache.access;
 }
 
 void reset_frame_source_cache_tls(
@@ -2131,7 +2147,7 @@ bool clustered_pnts_draw_runtime::install() noexcept
         true,
         std::memory_order_relaxed);
     g_source_vm_cache = {};
-    g_pointlight_frame_decode_cache = {};
+    g_pointlight_decode_cache = {};
 
     g_retained_selector =
         reinterpret_cast<retained_selector_fn>(
@@ -2191,7 +2207,7 @@ bool clustered_pnts_draw_runtime::install() noexcept
             std::memory_order_relaxed))
         reshade::log::message(
             reshade::log::level::info,
-            "[DSRRL POINTLIGHT R45] donor_validation_cache=TLS_PER_PRESENT exact_frame_state_reuse=ON duplicate_vtable_owner_selector_manager_decode=OFF spc=ON nospc=ON");
+            "[DSRRL POINTLIGHT R45] bank_authority_cache=TLS_SEMANTIC_GENERATION vm_validation_cache=TLS_PER_PRESENT exact_frame_state_reuse=ON duplicate_vtable_owner_selector_manager_decode=OFF spc=ON nospc=ON");
     return true;
 }
 
@@ -2208,7 +2224,7 @@ void clustered_pnts_draw_runtime::uninstall() noexcept
     consume_draw_selection();
     g_source_selection_cache = {};
     g_source_vm_cache = {};
-    g_pointlight_frame_decode_cache = {};
+    g_pointlight_decode_cache = {};
     g_frame_selection_cache = {};
     g_source_frame_cache = {};
     g_source_cache_seen_generation = 0u;
@@ -2573,12 +2589,10 @@ void clustered_pnts_draw_runtime::selector_source_event() noexcept
 #endif
 
         source_cache.selected_count = selected_count;
-        auto &decode_cache =
-            pointlight_frame_decode_cache_current();
         auto &bank_cache =
-            decode_cache.bank_authority;
+            pointlight_bank_authority_cache_current();
         auto &decode_access =
-            decode_cache.access;
+            pointlight_decode_access_current();
         if (selected_count == 0u) {
             source_cache.ready = true;
             source_cache.neutral = true;
@@ -3168,7 +3182,7 @@ void clustered_pnts_draw_runtime::reset() noexcept
             1u,
             std::memory_order_relaxed) + 1u);
     g_source_vm_cache = {};
-    g_pointlight_frame_decode_cache = {};
+    g_pointlight_decode_cache = {};
     pointlight_ptde_source::
         clear_persistent_structure_cache();
     g_producer_input_tls = {};
