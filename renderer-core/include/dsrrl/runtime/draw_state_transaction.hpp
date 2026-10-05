@@ -73,6 +73,10 @@ struct draw_tx_mutation {
 
     std::array<draw_tx_sampler_binding, draw_tx_max_sampler> samplers{};
     std::uint32_t sampler_count = 0;
+
+    // R30: exact clustered PointLight transactions are synchronous inside
+    // one add-on draw callback and may use the lock-free local core path.
+    bool synchronous_core_transaction = false;
 };
 
 enum class draw_tx_result : std::uint8_t {
