@@ -18,6 +18,12 @@
 #include "dsrrl/runtime/feature_manifest.hpp"
 #include "dsrrl/runtime/dof_preflight.hpp"
 #include "dsrrl/runtime/dof_authored_state_runtime.hpp"
+#include "dsrrl/runtime/dof_plain_rate_runtime.hpp"
+#include "dsrrl/runtime/dof_private_resource_runtime.hpp"
+#include "dsrrl/runtime/dof_ptde_scheduler_runtime.hpp"
+#include "dsrrl/runtime/dof_host_depth_route_runtime.hpp"
+#include "dsrrl/runtime/dof_tonemap_handoff_runtime.hpp"
+#include "dsrrl/runtime/dof_ptde_draw_bridge_runtime.hpp"
 
 #include <atomic>
 #include <cstdio>
@@ -128,6 +134,61 @@ void unregister_a1_events()
     reshade::unregister_event<reshade::addon_event::init_device>(a1_init_device);
 }
 
+void unregister_dof_construction_runtime() noexcept
+{
+    dsrrl::runtime::dof::revoke_private_resources();
+    dsrrl::runtime::dof::unregister_tonemap_handoff_scope_runtime();
+    dsrrl::runtime::dof::unregister_host_depth_route_runtime();
+    dsrrl::runtime::dof::unregister_ptde_scheduler_runtime();
+    dsrrl::runtime::dof::unregister_private_resource_runtime();
+    dsrrl::runtime::dof::deactivate_plain_rate_runtime();
+    dsrrl::runtime::dof::unregister_plain_rate_runtime();
+}
+
+void register_dof_construction_runtime() noexcept
+{
+    const bool plain_ready =
+        dsrrl::runtime::dof::register_plain_rate_runtime();
+    const bool resource_events_ready =
+        dsrrl::runtime::dof::register_private_resource_runtime();
+    const bool scheduler_ready =
+        dsrrl::runtime::dof::register_ptde_scheduler_runtime();
+    const bool host_depth_ready =
+        dsrrl::runtime::dof::register_host_depth_route_runtime();
+    const bool tonemap_handoff_ready =
+        dsrrl::runtime::dof::register_tonemap_handoff_scope_runtime();
+
+    reshade::log::message(
+        plain_ready ? reshade::log::level::info : reshade::log::level::warning,
+        plain_ready ?
+            "DSRRL DoF: exact 0xDF0->0xDEF plain-rate switch preimage READY; activation remains blocked." :
+            "DSRRL DoF: plain-rate switch preimage mismatch; DoF bridge remains fail-open OFF.");
+
+    reshade::log::message(
+        resource_events_ready ? reshade::log::level::info : reshade::log::level::warning,
+        resource_events_ready ?
+            "DSRRL DoF: exact PTDE DoF 7-resource lifecycle registered; resources remain unauthorized." :
+            "DSRRL DoF: fixed PTDE resource lifecycle registration failed; DoF bridge remains fail-open OFF.");
+
+    reshade::log::message(
+        scheduler_ready ? reshade::log::level::info : reshade::log::level::warning,
+        scheduler_ready ?
+            "DSRRL DoF: exact PTDE 9-pass scheduler registered; external source/support/output routing still gates activation." :
+            "DSRRL DoF: PTDE scheduler registration failed; DoF bridge remains fail-open OFF.");
+
+    reshade::log::message(
+        host_depth_ready ? reshade::log::level::info : reshade::log::level::warning,
+        host_depth_ready ?
+            "DSRRL DoF: exact active Dof_Flat pass01 source/support capture READY (+78/+88 or +250/+230, TAA source resolved at draw)." :
+            "DSRRL DoF: host Dof_Flat source/support capture hook failed; DoF bridge remains fail-open OFF.");
+
+    reshade::log::message(
+        tonemap_handoff_ready ? reshade::log::level::info : reshade::log::level::warning,
+        tonemap_handoff_ready ?
+            "DSRRL DoF: exact +104 -> ToneMap/HDR t0 handoff scope READY; visible bridge still requires explicit opt-in and dry-run." :
+            "DSRRL DoF: ToneMap handoff scope hook failed; DoF bridge remains fail-open OFF.");
+}
+
 void flver_parse_dispatch(void *model,const void *raw) noexcept
 {
     dsrrl::runtime::mr::flver_parse_event(model,raw);
@@ -189,6 +250,8 @@ extern "C" __declspec(dllexport) bool AddonInit(HMODULE addon,HMODULE reshade_mo
         return false;
     }
 
+    register_dof_construction_runtime();
+
     const bool dof_authored_state_ready =
         dsrrl::runtime::dof::register_authored_state_runtime(g_core);
     reshade::log::message(
@@ -197,13 +260,23 @@ extern "C" __declspec(dllexport) bool AddonInit(HMODULE addon,HMODULE reshade_mo
             "DSRRL DoF: embedded PTDE DofBank producer hook READY; visible mutation remains manifest-blocked." :
             "DSRRL DoF: embedded PTDE DofBank producer hook FAIL-OPEN-OFF.");
 
+    const bool dof_draw_bridge_ready =
+        dsrrl::runtime::dof::register_ptde_draw_bridge_runtime(g_core);
+    reshade::log::message(
+        dof_draw_bridge_ready ? reshade::log::level::info : reshade::log::level::warning,
+        dof_draw_bridge_ready ?
+            "DSRRL DoF: guarded per-draw PTDE bridge registered; default OFF unless DSRRL_EXPERIMENTAL_PTDE_DOF=1." :
+            "DSRRL DoF: per-draw PTDE bridge registration failed; stock DSR DoF preserved.");
+
     if(!dsrrl::runtime::assets::register_runtime(g_core) ||
        !dsrrl::runtime::mr::register_runtime(g_core) ||
        !dsrrl::runtime::envspec::register_runtime()){
         dsrrl::runtime::envspec::unregister_runtime();
         dsrrl::runtime::assets::unregister_runtime();
         dsrrl::runtime::mr::unregister_runtime();
+        dsrrl::runtime::dof::unregister_ptde_draw_bridge_runtime();
         dsrrl::runtime::dof::unregister_authored_state_runtime();
+        unregister_dof_construction_runtime();
         dsrrl::runtime::dof::unregister_preflight_runtime();
         unregister_a1_events();
         g_a1_bridge.reset();
@@ -239,7 +312,9 @@ extern "C" __declspec(dllexport) bool AddonInit(HMODULE addon,HMODULE reshade_mo
         dsrrl::runtime::envspec::unregister_runtime();
         dsrrl::runtime::mr::unregister_runtime();
         dsrrl::runtime::assets::unregister_runtime();
+        dsrrl::runtime::dof::unregister_ptde_draw_bridge_runtime();
         dsrrl::runtime::dof::unregister_authored_state_runtime();
+        unregister_dof_construction_runtime();
         dsrrl::runtime::dof::unregister_preflight_runtime();
         unregister_a1_events();
         g_a1_bridge.reset();
@@ -264,7 +339,9 @@ extern "C" __declspec(dllexport) void AddonUninit(HMODULE addon,HMODULE reshade_
     dsrrl::runtime::envspec::unregister_runtime();
     dsrrl::runtime::mr::unregister_runtime();
     dsrrl::runtime::assets::unregister_runtime();
+    dsrrl::runtime::dof::unregister_ptde_draw_bridge_runtime();
     dsrrl::runtime::dof::unregister_authored_state_runtime();
+    unregister_dof_construction_runtime();
     dsrrl::runtime::dof::unregister_preflight_runtime();
     unregister_a1_events();
     log_a1_state("UNLOAD");
