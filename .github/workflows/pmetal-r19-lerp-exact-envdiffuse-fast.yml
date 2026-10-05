@@ -1,4 +1,4 @@
-name: P_Metal R24 PointLight Vtable Capacity Build
+name: P_Metal R25 PointLight Safe Vtable Rearm Build
 
 on:
   workflow_dispatch:
@@ -17,6 +17,10 @@ on:
 
 permissions:
   contents: read
+
+concurrency:
+  group: pmetal-r25-${{ github.event.pull_request.head.sha || github.sha }}
+  cancel-in-progress: true
 
 jobs:
   windows-addon:
@@ -39,7 +43,7 @@ jobs:
           ref: 3645e3025d1d98a90e318278858931f034d5d1f6
           path: _reshade
 
-      - name: Configure R24 native vtable capacity PointLight
+      - name: Configure R25 safe native vtable rearm PointLight
         shell: pwsh
         run: >
           cmake
@@ -48,7 +52,7 @@ jobs:
           -A x64
           -DRESHADE_INCLUDE_DIR="${{ github.workspace }}/_reshade/include"
           -DDSRRL_SOURCE_COMMIT="$env:DSRRL_CHECKOUT_COMMIT"
-          -DDSRRL_BUILD_FLAVOR="pmetal_r24_pointlight_vtable_capacity"
+          -DDSRRL_BUILD_FLAVOR="pmetal_r25_pointlight_vtable_rearm"
           -DDSRRL_FULL_TELEMETRY_DEFAULT_ON=OFF
           -DDSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG=ON
           -DDSRRL_PMETAL_FULL_PTDE_HEMENV_R3=ON
@@ -72,18 +76,20 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           $addons = @(Get-ChildItem build-fast -Recurse -Filter *.addon64)
           if ($addons.Count -ne 1) { throw "Expected exactly one addon, found $($addons.Count)" }
-          Copy-Item $addons[0].FullName "DSRRL_PMETAL_R24_POINTLIGHT_NATIVE_IDENTITY_REBIND.addon64" -Force
+          Copy-Item $addons[0].FullName "DSRRL_PMETAL_R25_POINTLIGHT_VTABLE_REARM.addon64" -Force
 
       - name: Verify binary identity
         shell: pwsh
         run: |
-          $path = "DSRRL_PMETAL_R24_POINTLIGHT_NATIVE_IDENTITY_REBIND.addon64"
+          $path = "DSRRL_PMETAL_R25_POINTLIGHT_VTABLE_REARM.addon64"
           $ascii = [System.Text.Encoding]::ASCII.GetString([System.IO.File]::ReadAllBytes($path))
           if (-not $ascii.Contains($env:DSRRL_CHECKOUT_COMMIT)) { throw "Missing source commit identity" }
-          if (-not $ascii.Contains("pmetal_r24_pointlight_vtable_capacity")) { throw "Missing R24 build flavor identity" }
-          if (-not $ascii.Contains("[DSRRL POINTLIGHT R24] deferred_context_registered")) { throw "Missing R24 deferred-context native bridge marker" }
-          if (-not $ascii.Contains("[DSRRL POINTLIGHT R24] command_list_native_identity_rebound")) { throw "Missing R24 native identity rebind marker" }
-          if (-not $ascii.Contains("hook_slots=")) { throw "Missing R24 native arm gate detail marker" }
+          if (-not $ascii.Contains("pmetal_r25_pointlight_vtable_rearm")) { throw "Missing R25 build flavor identity" }
+          if (-not $ascii.Contains("[DSRRL POINTLIGHT R25] deferred_context_registered")) { throw "Missing R25 deferred-context native bridge marker" }
+          if (-not $ascii.Contains("[DSRRL POINTLIGHT R25] command_list_native_identity_rebound")) { throw "Missing R25 native identity rebind marker" }
+          if (-not $ascii.Contains("hook_slots=")) { throw "Missing R25 native arm gate detail marker" }
+          if (-not $ascii.Contains("[DSRRL POINTLIGHT R25] vtable_hook_rearmed")) { throw "Missing R25 safe vtable rearm marker" }
+          if (-not $ascii.Contains("[DSRRL POINTLIGHT R25] vtable_hook_conflict")) { throw "Missing R25 external hook conflict marker" }
           if (-not $ascii.Contains("[DSRRL PMETAL R19 LERP]")) { throw "Missing exact R19 Lerp EnvDiffuse runtime marker" }
           if (-not $ascii.Contains("[DSRRL PMETAL R7 SHADOW]")) { throw "Missing cumulative R7 shadow marker" }
           if (-not $ascii.Contains("[DSRRL PMETAL R3 SPEC ATTEST]")) { throw "Missing exact SpecRGB SHA attestation marker" }
@@ -92,6 +98,6 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: DSRRL_PMETAL_R24_POINTLIGHT_NATIVE_IDENTITY_REBIND
-          path: DSRRL_PMETAL_R24_POINTLIGHT_NATIVE_IDENTITY_REBIND.addon64
+          name: DSRRL_PMETAL_R25_POINTLIGHT_VTABLE_REARM
+          path: DSRRL_PMETAL_R25_POINTLIGHT_VTABLE_REARM.addon64
           if-no-files-found: error
