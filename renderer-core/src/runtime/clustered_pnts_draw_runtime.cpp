@@ -1496,6 +1496,17 @@ void clustered_pnts_draw_runtime::selector_event(
         true;
     g_draw_selection.ready = true;
 }
+void clustered_pnts_draw_runtime::frame_event(
+    std::uint64_t frame_serial) noexcept
+{
+    auto epoch = frame_serial + 1u;
+    if (epoch == 0u)
+        epoch = 1u;
+    g_source_frame_epoch.store(
+        epoch,
+        std::memory_order_relaxed);
+}
+
 void clustered_pnts_draw_runtime::selector_source_event() noexcept
 {
     if (!g_enabled.load() ||
@@ -2218,6 +2229,10 @@ void clustered_pnts_draw_runtime::reset() noexcept
 {
     consume_draw_selection();
     g_source_selection_cache = {};
+    reset_frame_source_cache_tls(
+        g_source_frame_epoch.fetch_add(
+            1u,
+            std::memory_order_relaxed) + 1u);
     pointlight_ptde_source::
         clear_persistent_structure_cache();
     g_producer_input_tls = {};
