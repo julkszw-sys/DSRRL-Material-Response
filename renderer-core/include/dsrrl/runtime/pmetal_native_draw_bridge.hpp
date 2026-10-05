@@ -69,6 +69,9 @@ public:
     void reset_telemetry() noexcept;
 
 private:
+    bool ensure_vtable_hook_live(
+        ID3D11DeviceContext *context) noexcept;
+
     bool register_context(
         ID3D11DeviceContext *context) noexcept;
     void unregister_context(
