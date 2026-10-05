@@ -39,6 +39,7 @@ def main():
     flver_cpp=(root/"src/runtime/flver_engine_hooks.cpp").read_text(encoding="utf-8")
     flver_registry=(root/"src/runtime/flver_identity_registry.cpp").read_text(encoding="utf-8")
     pmetal=(root/"src/runtime/pmetal_envspec_draw_runtime.cpp").read_text(encoding="utf-8")
+    pmetal_source=(root/"src/runtime/pmetal_env_source_runtime.cpp").read_text(encoding="utf-8")
     clustered=(root/"src/runtime/clustered_pnts_draw_runtime.cpp").read_text(encoding="utf-8")
     resources=(root/"src/runtime/material_resource_draw_runtime.cpp").read_text(encoding="utf-8")
     hemdir3_mode=(root/"src/runtime/hemdir3_mode_transport.cpp").read_text(encoding="utf-8")
