@@ -556,6 +556,27 @@ struct readable_region_cache {
     std::uintptr_t end = 0u;
 };
 
+struct source_vm_cache_tls {
+    std::uint64_t epoch = 0u;
+    readable_region_cache collection{};
+    readable_region_cache node{};
+    readable_region_cache vtable{};
+};
+
+thread_local source_vm_cache_tls g_source_vm_cache{};
+
+source_vm_cache_tls &source_vm_cache_current() noexcept
+{
+    const auto epoch =
+        g_source_frame_epoch.load(
+            std::memory_order_relaxed);
+    if (g_source_vm_cache.epoch != epoch) {
+        g_source_vm_cache = {};
+        g_source_vm_cache.epoch = epoch;
+    }
+    return g_source_vm_cache;
+}
+
 bool readable_range_cached(
     const void *ptr,
     std::size_t size,
@@ -728,8 +749,15 @@ bool select_first_four_exact(
     nodes = {};
     count = 0u;
 
-    if (!readable_range(collection, 0x90u) ||
-        query == nullptr)
+    if (query == nullptr)
+        return false;
+
+    auto &source_vm =
+        source_vm_cache_current();
+    if (!readable_range_cached(
+            collection,
+            0x90u,
+            source_vm.collection))
         return false;
 
     std::array<float,4> query_min{};
@@ -745,10 +773,11 @@ bool select_first_four_exact(
 
     auto *base =
         static_cast<std::uint8_t *>(collection);
-    // Valid only for this selector pass. Nodes allocated in the same committed
-    // VM region reuse one VirtualQuery result, but no region verdict survives
-    // into the next draw.
-    readable_region_cache node_region{};
+    // R37: the source selector and the later source-cache preflight share
+    // the same TLS VM-region verdict inside one presented-frame epoch. This
+    // removes duplicate VirtualQuery calls for the exact nodes just validated
+    // by selection while retaining per-present invalidation.
+    auto &node_region = source_vm.node;
 
     for (std::uint32_t bucket = 0u;
          bucket < 4u && count < 4u;
@@ -812,7 +841,12 @@ bool capture_source(
     pointlight_ptde_source::draw_bank_authority_cache &bank_cache) noexcept
 {
     out = {};
-    if (!readable_range(node, 0x20u)) {
+    auto &source_vm =
+        source_vm_cache_current();
+    if (!readable_range_cached(
+            node,
+            0x20u,
+            source_vm.node)) {
         log_source_capture_failure_once(
             1u << 0,
             "node_unreadable",
@@ -823,9 +857,10 @@ bool capture_source(
 
     void **vtable = nullptr;
     std::memcpy(&vtable, node, sizeof(vtable));
-    if (!readable_range(
+    if (!readable_range_cached(
             vtable,
-            13u * sizeof(void *))) {
+            13u * sizeof(void *),
+            source_vm.vtable)) {
         log_source_capture_failure_once(
             1u << 1,
             "vtable_unreadable",
@@ -864,15 +899,10 @@ bool capture_source(
             target);
         return false;
     }
-    if (!executable_address(target)) {
-        log_source_capture_failure_once(
-            1u << 3,
-            "source_vfunc_nonexec",
-            node,
-            target);
-        return false;
-    }
-
+    // R37: executable protection for all three exact retail source-vfunc
+    // addresses is attested once during install(). Per-source calls already
+    // require target equality with one of those addresses, so repeating
+    // VirtualQuery here adds no source identity.
     frame_source_state_v1 frame_state{};
     const bool frame_cacheable =
         bank_source || lerp_bank_source;
@@ -881,7 +911,10 @@ bool capture_source(
             bank_source ? 0x60u : 0x70u;
         const std::size_t required_size =
             position_offset + 4u * sizeof(float);
-        if (!readable_range(node, required_size)) {
+        if (!readable_range_cached(
+                node,
+                required_size,
+                source_vm.node)) {
             log_source_capture_failure_once(
                 1u << 7,
                 bank_source
@@ -1334,6 +1367,21 @@ bool clustered_pnts_draw_runtime::install() noexcept
     if (g_base == 0u)
         return false;
 
+    // R37: exact retail source-vfunc executable protection is invariant for
+    // the loaded module. Validate it once instead of once per captured source.
+    if (!executable_address(
+            reinterpret_cast<const void *>(
+                g_base + 0x55BC00u)) ||
+        !executable_address(
+            reinterpret_cast<const void *>(
+                g_base + 0x55C570u)) ||
+        !executable_address(
+            reinterpret_cast<const void *>(
+                g_base + 0x55D0B0u)))
+        return false;
+
+    g_source_vm_cache = {};
+
     g_retained_selector =
         reinterpret_cast<retained_selector_fn>(
             g_base + 0x55FC70u);
@@ -1358,7 +1406,7 @@ bool clustered_pnts_draw_runtime::install() noexcept
             std::memory_order_relaxed))
         reshade::log::message(
             reshade::log::level::info,
-            "[DSRRL POINTLIGHT R37] bank_structure_revalidate=TABLE_PLUS_NAMES_ONLY dynamic_row_payload_excluded=ON allocation_guard=ON exact_structure_identity=ON frame_source_cache=R36_UNCHANGED");
+            "[DSRRL POINTLIGHT R37] bank_structure_revalidate=TABLE_PLUS_NAMES_ONLY dynamic_row_payload_excluded=ON allocation_guard=ON exact_structure_identity=ON vm_region_cache=TLS_PER_PRESENT selector_capture_reuse=ON source_exec_attest=INSTALL_ONCE frame_source_cache=R36_UNCHANGED");
     return true;
 }
 
@@ -1367,6 +1415,7 @@ void clustered_pnts_draw_runtime::uninstall() noexcept
     g_enabled.store(false);
     consume_draw_selection();
     g_source_selection_cache = {};
+    g_source_vm_cache = {};
     pointlight_ptde_source::
         clear_persistent_structure_cache();
     g_upload_identity_cache = {};
@@ -2241,6 +2290,7 @@ void clustered_pnts_draw_runtime::reset() noexcept
         g_source_frame_epoch.fetch_add(
             1u,
             std::memory_order_relaxed) + 1u);
+    g_source_vm_cache = {};
     pointlight_ptde_source::
         clear_persistent_structure_cache();
     g_producer_input_tls = {};
