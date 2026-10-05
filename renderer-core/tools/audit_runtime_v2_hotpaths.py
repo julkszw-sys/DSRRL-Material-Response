@@ -79,6 +79,14 @@ require(
     pmetal_source,
     "material.raw_mtd_sha256 ==",
     "R45 P_Metal exact material gate direct SHA byte compare")
+forbid(
+    pmetal_source,
+    "mtd_semantic_hash(",
+    "R45 P_Metal exact material gate must not recompute semantic-name hash")
+require(
+    pmetal_source,
+    "k_pmetal_material_semantic_hash",
+    "R45 P_Metal compile-time semantic-name hash")
 require(pmetal_source, "same_hook_source_payload(", "fallback semantic payload equality")
 require(pmetal_source, "g_hook_source_generation", "fallback semantic generation")
 require(pmetal_source, "g_hook_source_semantic_version", "legacy latest-source fallback semantic version")
@@ -100,7 +108,7 @@ require(pmetal_source,
         "R44 material-bound source authority attestation")
 
 require(pmetal_source,
-        "[DSRRL PMETAL R45] production_hot_counters=GATED redundant_cross_thread_republish=OFF decoded_endpoint_identity_reuse=ON selector_miss_identity_reuse=ON material_sha_byte_compare=ON producer_key_handoff=ON renderer_semantics=UNCHANGED",
+        "[DSRRL PMETAL R45] production_hot_counters=GATED redundant_cross_thread_republish=OFF decoded_endpoint_identity_reuse=ON selector_miss_identity_reuse=ON material_sha_byte_compare=ON semantic_hash_const=ON producer_key_handoff=ON renderer_semantics=UNCHANGED",
         "R45 production hot-path cleanup attestation")
 
 for counter in (
