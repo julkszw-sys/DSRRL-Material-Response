@@ -1,0 +1,52 @@
+{
+  "schema": "dsrrl.dof.consumer_local_temporal_preservation_contract.v1",
+  "status": "CONSTRUCTION_READY_RUNTIME_INERT_UNTIL_ALL_GATES",
+  "source": {
+    "dsr_exe_sha256": "a45aaa36dd2f6cc151670a639ea5547043cf38ea79ff4178b963c6ed71f98d7b",
+    "ptde_data_exe_sha256": "88d1eec18eba2542c9c7e5e6903e89f9c075b20be5cd045ce6e568e7b22bea9d",
+    "dsr_filter_binder_sha256": "4cdc36209f6e1ebff5132a3e9226eff10470121e858dc197d7daef02702d4650"
+  },
+  "static_re": {
+    "dsr_imagefilter_ctor": "0x140450D30",
+    "dsr_dof_flat_ctor": "0x140460660",
+    "dsr_dof_flat_instances": [
+      {"imagefilter_offset": "0x20", "mode_flag": 0, "callsite": "0x1404510B5"},
+      {"imagefilter_offset": "0x28", "mode_flag": 1, "callsite": "0x1404510F1"}
+    ],
+    "dsr_resolve_taa_ctor": "0x1400C4020",
+    "dsr_resolve_taa_imagefilter_offset": "0xC8",
+    "dsr_resolve_taa_callsite": "0x1404515D1",
+    "ptde_flat_passes": ["0x00","0x02","0x0D","0x01","0x0D","0x0F","0x03","0x0E","0x10"],
+    "dsr_flat_passes": ["0x01","0x0D","0x01","0x0D","0x0F","0x03","0x0E","0x10"],
+    "dsr_dofrate_cb_runtime_shader_id": "0xDF0",
+    "ptde_fixed_rasters": [
+      {"width":1024,"height":720,"format":"A8R8G8B8"},
+      {"width":512,"height":360,"format":"A8R8G8B8"},
+      {"width":256,"height":180,"format":"A8R8G8B8"}
+    ]
+  },
+  "temporal_policy": {
+    "preserve_stock_resolve_taa_node": true,
+    "write_taa_history": false,
+    "write_velocity": false,
+    "write_stock_native_depth": false,
+    "depth_policy": "read/copy into DoF-private single-sample sidecar only",
+    "fail_open_on_any_temporal_write": true
+  },
+  "activation_gates": [
+    "exact ImageProcessDof_Flat receiver",
+    "known primary/alternate Flat mode",
+    "complete DoF resource graph",
+    "private single-sample depth sidecar",
+    "retained plain Dof_DofRate identity",
+    "PTDE fixed raster chain",
+    "verified final DoF composite output cut"
+  ],
+  "open_before_runtime_visible_bridge": [
+    "exact ResolveTAA output -> Dof_Flat input resource edge for each Flat mode",
+    "exact PTDE pass 0x00 and 0x02 shader/resource semantics",
+    "exact pass 0x10 final composite source/target handoff",
+    "runtime activation",
+    "pixel behavior"
+  ]
+}
