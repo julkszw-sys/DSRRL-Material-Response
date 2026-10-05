@@ -2078,7 +2078,9 @@ bool latest_hook_source_exact_selector(
     static std::atomic_bool
         selector_cross_thread_hit_logged{
             false};
-    if (!selector_cross_thread_hit_logged.exchange(
+    if (!selector_cross_thread_hit_logged.load(
+            std::memory_order_relaxed) &&
+        !selector_cross_thread_hit_logged.exchange(
             true,
             std::memory_order_relaxed))
         reshade::log::message(
