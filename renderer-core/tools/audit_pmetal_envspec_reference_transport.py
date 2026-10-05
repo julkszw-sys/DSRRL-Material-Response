@@ -67,15 +67,18 @@ for part,label in ((single,"single"),(blend,"blend")):
     require(part,"_original(","retail original call "+label)
     require(part,"publish_hook_source(","narrow source publish "+label)
 
-# Draw consumption is exact-material-scoped. Selector TLS is preferred; the
-# retail source-hook record is a persistent generation-stamped fallback,
-# matching the validated V13 producer-state lifetime and never generic U/L state.
+# Draw consumption is exact-material-scoped. Retail source hooks may populate
+# the exact selector shadow, but the visible consumer may only read source
+# state already joined to the current material/selector epoch. Missing join
+# fails open to stock DSR; an unkeyed latest-hook fallback is forbidden.
 consumer=source_cpp[source_cpp.index("bool pmetal_env_source_runtime::latest("):source_cpp.index("pmetal_env_source_runtime_telemetry")]
 require(consumer,"!exact_pmetal_material_selection(","exact P_Metal gate")
-require(consumer,"pmetal_producer_state_latest(","selector source first")
-require(consumer,"latest_hook_source(out)","retail source fallback")
-if consumer.index("latest_hook_source(out)") < consumer.index("!exact_pmetal_material_selection("):
-    fail("retail hook source can be consumed before exact P_Metal material gate")
+require(consumer,"pmetal_producer_state_latest(","material-bound selector source")
+if "latest_hook_source(out)" in consumer:
+    fail("unkeyed retail hook source re-entered visible P_Metal EnvSpec consumer")
+require(source_cpp,
+        "[DSRRL PMETAL R44] visible_source_authority=MATERIAL_BOUND_PRODUCER_STATE_ONLY unkeyed_latest_hook_fallback=OFF exact_selector_shadow=ON missing_join=FAIL_OPEN_STOCK_DSR islands_preserved=ON",
+        "R44 material-bound source authority")
 # EnvSpec source hooks are independent from visible Upper/Lower. U/L remains
 # disabled by runtime policy unless separately enabled.
 require(integrated,
@@ -115,6 +118,6 @@ if "install_provider_splice" in source_cpp or "DSRRL_Material_Response_1.0.addon
     fail("legacy V13 addon splice resurrected")
 
 print("DSRRL_PMETAL_ENVSPEC_REFERENCE_TRANSPORT_PASS")
-print("  source=exact selector first, V13-attested retail single/blend LightBank fallback second")
-print("  fallback=exact P_Metal scoped + generation-stamped persistent V13 state; visible U/L remains stock/off")
+print("  source=exact selector/material-bound state only; V13 retail hooks feed keyed selector shadow upstream")
+print("  fallback=missing material-bound join fails open to stock DSR; unkeyed latest-hook consumption forbidden")
 print("  runtime activation and pixel behavior remain OPEN")
