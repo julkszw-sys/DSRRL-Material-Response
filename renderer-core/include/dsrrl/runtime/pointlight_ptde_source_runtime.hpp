@@ -12,6 +12,19 @@
 #include <cstdint>
 
 namespace dsrrl::runtime::pointlight_ptde_source {
+
+struct draw_bank_authority_cache_entry {
+    std::uintptr_t param = 0u;
+    std::uint16_t count = 0u;
+    std::uint32_t first = 0u;
+    const pointlight_donors::bank *bank = nullptr;
+};
+
+struct draw_bank_authority_cache {
+    std::array<draw_bank_authority_cache_entry,4> entries{};
+    std::uint8_t victim = 0u;
+};
+
 inline bool readable(std::uintptr_t address,std::size_t size) noexcept {
     if(!address || address+size<address) return false;
     const auto end=address+size;
@@ -208,7 +221,12 @@ inline bool bank_structure_signature(
     signature = hash;
     return true;
 }
-inline bool donor(std::uintptr_t source,std::int32_t selector,signal &out,access_cache &cache) noexcept {
+inline bool donor(
+    std::uintptr_t source,
+    std::int32_t selector,
+    signal &out,
+    access_cache &cache,
+    draw_bank_authority_cache &authority_cache) noexcept {
     if(selector<0) return false;
     std::uintptr_t param=0;
     if(!read_cached(source+0x18u,param,cache)||!readable_cached(param,0x330u,cache)) return false;
@@ -216,22 +234,56 @@ inline bool donor(std::uintptr_t source,std::int32_t selector,signal &out,access
     std::uint16_t count=0; std::uint32_t first=0;
     std::memcpy(&count,p+0xau,2); std::memcpy(&first,p+0x34u,4);
 
-    std::uint64_t structure_signature=0u;
-    if(!bank_structure_signature(
-            param,
-            count,
-            first,
-            cache,
-            structure_signature))
-        return false;
+    const pointlight_donors::bank *bank=nullptr;
+    for(const auto &entry:authority_cache.entries) {
+        if(entry.param==param &&
+           entry.count==count &&
+           entry.first==first &&
+           entry.bank!=nullptr) {
+            bank=entry.bank;
+            break;
+        }
+    }
+
+    if(bank==nullptr) {
+        std::uint64_t structure_signature=0u;
+        if(!bank_structure_signature(
+                param,
+                count,
+                first,
+                cache,
+                structure_signature))
+            return false;
+
+        bank=identify_structure(structure_signature);
+        if(!bank) return false;
+
+        auto &entry=
+            authority_cache.entries[
+                static_cast<std::size_t>(
+                    authority_cache.victim++)%
+                authority_cache.entries.size()];
+        entry={param,count,first,bank};
+    }
 
     const auto index=static_cast<std::uint32_t>(selector)&255u;
     if(index>=64u||!readable_cached(param+first,1024u,cache)) return false;
 
-    const auto *bank=identify_structure(structure_signature);
-    if(!bank) return false;
-
     out=decode(bank->ptde[index]); return true;
+}
+
+inline bool donor(
+    std::uintptr_t source,
+    std::int32_t selector,
+    signal &out,
+    access_cache &cache) noexcept {
+    draw_bank_authority_cache authority_cache{};
+    return donor(
+        source,
+        selector,
+        out,
+        cache,
+        authority_cache);
 }
 inline bool selected_source(std::uintptr_t manager,std::int16_t selector,std::uintptr_t &source,access_cache &cache) noexcept {
     const auto area=selector<0?0xffffffffu:(static_cast<unsigned>(selector)>>8u)&127u;
@@ -247,7 +299,11 @@ inline bool selected_source(std::uintptr_t manager,std::int16_t selector,std::ui
 }
 // Caller must have attested the retail EXE. No hook, host write, retained pointer,
 // source-category guess, or global latest-source publication is used here.
-inline bool capture(void *node,std::uintptr_t base,std::array<float,8> &raw) noexcept {
+inline bool capture(
+    void *node,
+    std::uintptr_t base,
+    std::array<float,8> &raw,
+    draw_bank_authority_cache &authority_cache) noexcept {
     const auto n=reinterpret_cast<std::uintptr_t>(node);
     access_cache cache{};
     std::uintptr_t vt=0,fn=0,owner=0;
@@ -256,7 +312,7 @@ inline bool capture(void *node,std::uintptr_t base,std::array<float,8> &raw) noe
     signal a,b,result;
     if(fn==base+0x55bc00u) {
         std::int32_t selector=-1;
-        if(!read_cached(n+0x58u,selector,cache)||!donor(owner,selector,a,cache)||!mix(a,a,0,result)) return false;
+        if(!read_cached(n+0x58u,selector,cache)||!donor(owner,selector,a,cache,authority_cache)||!mix(a,a,0,result)) return false;
     } else if(fn==base+0x55d0b0u) {
         std::int16_t sa=-1,sb=-1; float beta=0;
         if(!read_cached(n+0x58u,sa,cache)||!read_cached(n+0x5au,sb,cache)||
@@ -264,14 +320,26 @@ inline bool capture(void *node,std::uintptr_t base,std::array<float,8> &raw) noe
         const auto pair=pmetal_selector_policy::select(sa,sb,beta);
         if(!pair.valid) return false;
         std::uintptr_t source_a=0,source_b=0;
-        if(!selected_source(owner,pair.a,source_a,cache)||!donor(source_a,pair.a,a,cache)) return false;
+        if(!selected_source(owner,pair.a,source_a,cache)||!donor(source_a,pair.a,a,cache,authority_cache)) return false;
         b=a;
-        if(pair.beta!=0&&(!selected_source(owner,pair.b,source_b,cache)||!donor(source_b,pair.b,b,cache))) return false;
+        if(pair.beta!=0&&(!selected_source(owner,pair.b,source_b,cache)||!donor(source_b,pair.b,b,cache,authority_cache))) return false;
         if(!mix(a,b,pair.beta,result)) return false;
     } else return false;
     // Preserve host world position. Only the operator-local payload changes.
     raw[3]=1.0f/(result.end-result.begin);
     raw[4]=result.q[0];raw[5]=result.q[1];raw[6]=result.q[2];raw[7]=result.end;
     return std::isfinite(raw[3]);
+}
+
+inline bool capture(
+    void *node,
+    std::uintptr_t base,
+    std::array<float,8> &raw) noexcept {
+    draw_bank_authority_cache authority_cache{};
+    return capture(
+        node,
+        base,
+        raw,
+        authority_cache);
 }
 } // namespace dsrrl::runtime::pointlight_ptde_source
