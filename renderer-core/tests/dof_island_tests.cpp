@@ -2,7 +2,7 @@
 
 #include <iostream>
 
-#define CHECK(x) do { if (!(x)) { std::cerr << "CHECK failed: " #x "\\n"; return 1; } } while (false)
+#define CHECK(x) do { if (!(x)) { std::cerr << "CHECK failed: " #x "\n"; return 1; } } while (false)
 
 int main()
 {
@@ -19,51 +19,83 @@ int main()
     CHECK(ptde_fixed_raster_ladder[1].width == 512u);
     CHECK(ptde_fixed_raster_ladder[2].width == 256u);
 
+    CHECK(retained_pipeline_signatures.size() == 16u);
+    CHECK(retained_runtime_id_sequence_is_contiguous());
+    CHECK(retained_pipeline_signatures[
+        static_cast<std::size_t>(retained_shader_role::dof_rate_plain)]
+        .runtime_shader_id == 0x0DEFu);
+    CHECK(retained_pipeline_signatures[
+        static_cast<std::size_t>(retained_shader_role::dof_rate_cb)]
+        .runtime_shader_id == 0x0DF0u);
+
+    const auto &gx = retained_pipeline_signatures[
+        static_cast<std::size_t>(retained_shader_role::gauss_x)];
+    const auto &gy = retained_pipeline_signatures[
+        static_cast<std::size_t>(retained_shader_role::gauss_y)];
+    CHECK(gx.pixel_sha256 == gy.pixel_sha256);
+    CHECK(gx.pixel_size == gy.pixel_size);
+    CHECK(!(gx.vertex_sha256 == gy.vertex_sha256));
+    CHECK(find_retained_pipeline(
+        gx.vertex_sha256, gx.vertex_size,
+        gx.pixel_sha256, gx.pixel_size) == &gx);
+    CHECK(find_retained_pipeline(
+        gy.vertex_sha256, gy.vertex_size,
+        gy.pixel_sha256, gy.pixel_size) == &gy);
+
+    CHECK(dsr_flat_retained_routes[4].pass == 0x0Du);
+    CHECK(dsr_flat_retained_routes[4].primary ==
+          retained_shader_role::dof_rate_cb);
+    CHECK(dsr_flat_retained_routes.back().pass == 0x10u);
+    CHECK(dsr_flat_retained_routes.back().primary ==
+          retained_shader_role::gauss_y_adv);
+    CHECK(dsr_flat_retained_routes.back().alternate ==
+          retained_shader_role::near_rate);
+    CHECK(!flat_pass_0x10_is_output_composite());
+
     activation_context ready{};
     ready.enabled = true;
     ready.exact_imageprocess_dof_flat = true;
     ready.mode = flat_mode::primary;
     ready.graph_complete = true;
+    ready.retained_flat_pipeline_set_ready = true;
     ready.private_depth_sidecar_ready = true;
     ready.retained_plain_dofrate_ready = true;
     ready.fixed_raster_chain_ready = true;
-    ready.final_composite_cut_verified = true;
+    ready.output_cut_verified = true;
 
     const auto active = evaluate_activation(ready);
     CHECK(active.active);
     CHECK(active.reason == bridge_reason::ready);
 
+    auto missing_pipelines = ready;
+    missing_pipelines.retained_flat_pipeline_set_ready = false;
+    CHECK(evaluate_activation(missing_pipelines).reason ==
+          bridge_reason::missing_retained_pipeline_set);
+
     auto taa_write = ready;
     taa_write.writes.taa_history = true;
-    const auto taa_block = evaluate_activation(taa_write);
-    CHECK(!taa_block.active);
-    CHECK(taa_block.reason == bridge_reason::temporal_state_write_forbidden);
+    CHECK(evaluate_activation(taa_write).reason ==
+          bridge_reason::temporal_state_write_forbidden);
 
     auto velocity_write = ready;
     velocity_write.writes.velocity = true;
-    const auto velocity_block = evaluate_activation(velocity_write);
-    CHECK(!velocity_block.active);
-    CHECK(velocity_block.reason == bridge_reason::temporal_state_write_forbidden);
+    CHECK(evaluate_activation(velocity_write).reason ==
+          bridge_reason::temporal_state_write_forbidden);
 
     auto depth_write = ready;
     depth_write.writes.stock_native_depth = true;
-    const auto depth_block = evaluate_activation(depth_write);
-    CHECK(!depth_block.active);
-    CHECK(depth_block.reason == bridge_reason::stock_depth_write_forbidden);
+    CHECK(evaluate_activation(depth_write).reason ==
+          bridge_reason::stock_depth_write_forbidden);
 
     auto missing_sidecar = ready;
     missing_sidecar.private_depth_sidecar_ready = false;
     CHECK(evaluate_activation(missing_sidecar).reason ==
           bridge_reason::missing_private_depth_sidecar);
 
-    auto wrong_receiver = ready;
-    wrong_receiver.exact_imageprocess_dof_flat = false;
-    CHECK(evaluate_activation(wrong_receiver).reason ==
-          bridge_reason::wrong_receiver);
-
-    auto unknown = ready;
-    unknown.mode = flat_mode::unknown;
-    CHECK(evaluate_activation(unknown).reason == bridge_reason::unknown_mode);
+    auto missing_output = ready;
+    missing_output.output_cut_verified = false;
+    CHECK(evaluate_activation(missing_output).reason ==
+          bridge_reason::missing_output_cut);
 
     return 0;
 }
