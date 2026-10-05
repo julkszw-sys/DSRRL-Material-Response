@@ -422,6 +422,30 @@ hook_source_record g_hook_source_global{};
 std::atomic<std::uint64_t> g_hook_source_serial{0u};
 std::atomic<std::uint64_t> g_hook_source_generation{0u};
 std::atomic<std::uint64_t> g_hook_source_semantic_version{0u};
+
+struct hook_producer_cache_entry_v2 {
+    hook_selector_identity_v1 key{};
+    hook_source_record record{};
+    std::uint64_t cache_generation = 0u;
+    bool valid = false;
+};
+
+constexpr std::size_t k_hook_producer_cache_sets = 64u;
+constexpr std::size_t k_hook_producer_cache_ways = 2u;
+constexpr std::size_t k_hook_producer_cache_entries =
+    k_hook_producer_cache_sets * k_hook_producer_cache_ways;
+
+std::array<hook_producer_cache_entry_v2,k_hook_producer_cache_entries>
+    g_hook_producer_cache{};
+std::array<std::mutex,k_hook_producer_cache_sets>
+    g_hook_producer_cache_mutex{};
+std::array<std::uint8_t,k_hook_producer_cache_sets>
+    g_hook_producer_cache_victim{};
+std::atomic<std::uint64_t> g_hook_producer_cache_generation{1u};
+std::atomic<std::uint64_t> g_hook_producer_cache_hit{0u};
+std::atomic<std::uint64_t> g_hook_producer_cache_miss{0u};
+std::atomic<std::uint64_t> g_hook_producer_cache_busy{0u};
+std::atomic<std::uint64_t> g_hook_producer_cache_publish{0u};
 std::atomic<std::uint64_t> g_hook_single_seen{0u};
 std::atomic<std::uint64_t> g_hook_blend_seen{0u};
 std::atomic<std::uint64_t> g_hook_publish{0u};
