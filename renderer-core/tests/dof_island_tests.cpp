@@ -52,14 +52,16 @@ int main()
           retained_shader_role::near_rate);
     CHECK(!flat_pass_0x10_is_output_composite());
     CHECK(active_output_cut_is_exact());
-    CHECK(dsr_active_output_cut.dof_flat_pass_0x10_executor ==
-          0x1404569A0ull);
-    CHECK(dsr_active_output_cut.hdr_pbl_executor ==
-          0x140458080ull);
-    CHECK(dsr_active_output_cut.image_state_target_view_offset == 0x94u);
-    CHECK(dsr_active_output_cut.image_state_underlying_resource_offset == 0x98u);
-    CHECK(dsr_active_output_cut.render_state_dof_route_flag_offset == 0x351u);
-    CHECK(dsr_active_output_cut.hdr_pbl_texture_slot == 0u);
+    CHECK(dsr_active_output_cut.image_filter_ctor ==
+          0x140450D30ull);
+    CHECK(dsr_active_output_cut.tonemap_ctor ==
+          0x140461A70ull);
+    CHECK(dsr_active_output_cut.scene_pass_builder ==
+          0x140452ED0ull);
+    CHECK(dsr_active_output_cut.image_state_target_offset == 0xF8u);
+    CHECK(dsr_active_output_cut.image_state_srv_alias_offset == 0x104u);
+    CHECK(dsr_active_output_cut.tonemap_pass == 0x13u);
+    CHECK(dsr_active_output_cut.builder_primary_srv_argument == 6u);
 
     activation_context ready{};
     ready.enabled = true;
