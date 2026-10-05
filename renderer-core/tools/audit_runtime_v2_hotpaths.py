@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 from pathlib import Path
 import sys
+import re
 
 root = Path(sys.argv[1]).resolve() if len(sys.argv) > 1 else Path("renderer-core").resolve()
 
@@ -18,6 +19,10 @@ def require(text: str, needle: str, label: str) -> None:
 def forbid(text: str, needle: str, label: str) -> None:
     if needle in text:
         raise RuntimeError(f"{label}: forbidden {needle!r}")
+
+def forbid_fetch_add(text: str, counter: str, label: str) -> None:
+    if re.search(rf"{re.escape(counter)}\s*\.\s*fetch_add\s*\(", text):
+        raise RuntimeError(f"{label}: production hot counter still performs atomic fetch_add: {counter}")
 
 require(tex, "k_logical_name_capacity = 512u", "fixed texture identity buffer")
 require(tex, "VirtualQuery(", "page-bounded texture validation")
@@ -71,6 +76,59 @@ forbid(latest_body, "latest_hook_source(out)", "R44 visible EnvSpec path must no
 require(pmetal_source,
         "[DSRRL PMETAL R44] visible_source_authority=MATERIAL_BOUND_PRODUCER_STATE_ONLY unkeyed_latest_hook_fallback=OFF exact_selector_shadow=ON missing_join=FAIL_OPEN_STOCK_DSR islands_preserved=ON",
         "R44 material-bound source authority attestation")
+
+require(pmetal_source,
+        "[DSRRL PMETAL R45] production_hot_counters=GATED redundant_cross_thread_republish=OFF renderer_semantics=UNCHANGED",
+        "R45 production hot-path cleanup attestation")
+
+for counter in (
+    "g_hook_producer_cache_busy",
+    "g_hook_producer_cache_hit",
+    "g_hook_producer_cache_miss",
+    "g_hook_producer_cache_publish",
+    "g_region_cache_hit",
+    "g_region_cache_miss",
+    "g_endpoint_cache_hit",
+    "g_endpoint_cache_miss",
+    "g_endpoint_cache_fill",
+    "g_bank_signature_scan_count",
+    "g_hook_single_seen",
+    "g_hook_blend_seen",
+    "g_hook_publish",
+    "g_hook_consume",
+):
+    forbid_fetch_add(
+        pmetal_source,
+        counter,
+        "R45 behavior-independent telemetry must be gated")
+
+decode_start = pmetal_source.find("void record_hook_decode(")
+decode_end = pmetal_source.find("struct readable_window", decode_start)
+if min(decode_start, decode_end) < 0:
+    raise RuntimeError("R45 hook decode diagnostic boundary missing")
+require(
+    pmetal_source[decode_start:decode_end],
+    "if (!telemetry::effect_enabled())",
+    "R45 hook decode stores must be effect-telemetry gated")
+
+bank_stage_start = pmetal_source.find("void record_bank_signature_stage(")
+bank_stage_end = pmetal_source.find("bool same_hook_source_payload(", bank_stage_start)
+if min(bank_stage_start, bank_stage_end) < 0:
+    raise RuntimeError("R45 bank signature diagnostic boundary missing")
+require(
+    pmetal_source[bank_stage_start:bank_stage_end],
+    "if (!telemetry::effect_enabled())",
+    "R45 bank signature stores must be effect-telemetry gated")
+
+producer_hit_marker = "if (hook_producer_cache_lookup(\n            selector_identity,\n            cached_record,\n            &next))"
+producer_hit_start = pmetal_source.find(producer_hit_marker)
+producer_hit_end = pmetal_source.find("std::uint64_t resolved_version", producer_hit_start)
+if min(producer_hit_start, producer_hit_end) < 0:
+    raise RuntimeError("R45 producer exact-hit branch missing")
+forbid(
+    pmetal_source[producer_hit_start:producer_hit_end],
+    "hook_producer_cache_publish_exact(",
+    "R45 exact cross-thread hit must not republish identical cache entry")
 forbid(pmetal_source, "next.generation = serial", "event serial must not drive semantic generation")
 require(pmetal_h, "payload_bits", "exact b12 payload cache")
 require(pmetal_cpp, "payload_bits.data()", "exact 64-byte b12 payload identity")
