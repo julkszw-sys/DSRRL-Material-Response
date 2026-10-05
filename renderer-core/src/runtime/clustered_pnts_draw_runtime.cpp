@@ -1600,7 +1600,9 @@ bool capture_source(
             out = entry.source;
             static std::atomic_bool
                 cache_hit_logged{false};
-            if (!cache_hit_logged.exchange(
+            if (!cache_hit_logged.load(
+                    std::memory_order_relaxed) &&
+                !cache_hit_logged.exchange(
                     true,
                     std::memory_order_relaxed)) {
                 reshade::log::message(
@@ -2302,7 +2304,9 @@ void clustered_pnts_draw_runtime::selector_source_event() noexcept
 
                 static std::atomic_bool
                     selection_cache_hit_logged{false};
-                if (!selection_cache_hit_logged.exchange(
+                if (!selection_cache_hit_logged.load(
+                        std::memory_order_relaxed) &&
+                    !selection_cache_hit_logged.exchange(
                         true,
                         std::memory_order_relaxed)) {
                     reshade::log::message(
