@@ -76,12 +76,12 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           $addons = @(Get-ChildItem build-fast -Recurse -Filter *.addon64)
           if ($addons.Count -ne 1) { throw "Expected exactly one addon, found $($addons.Count)" }
-          Copy-Item $addons[0].FullName "DSRRL_PMETAL_R26_POINTLIGHT_VTABLE_REARM.addon64" -Force
+          Copy-Item $addons[0].FullName "DSRRL_PMETAL_R26_POINTLIGHT_DIRECT_CURRENT_NATIVE.addon64" -Force
 
       - name: Verify binary identity
         shell: pwsh
         run: |
-          $path = "DSRRL_PMETAL_R26_POINTLIGHT_VTABLE_REARM.addon64"
+          $path = "DSRRL_PMETAL_R26_POINTLIGHT_DIRECT_CURRENT_NATIVE.addon64"
           $ascii = [System.Text.Encoding]::ASCII.GetString([System.IO.File]::ReadAllBytes($path))
           if (-not $ascii.Contains($env:DSRRL_CHECKOUT_COMMIT)) { throw "Missing source commit identity" }
           if (-not $ascii.Contains("pmetal_r26_pointlight_direct_current_native")) { throw "Missing R26 build flavor identity" }
@@ -99,5 +99,5 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: DSRRL_PMETAL_R26_POINTLIGHT_VTABLE_REARM
-          path: DSRRL_PMETAL_R26_POINTLIGHT_VTABLE_REARM.addon64
+          path: DSRRL_PMETAL_R26_POINTLIGHT_DIRECT_CURRENT_NATIVE.addon64
           if-no-files-found: error
