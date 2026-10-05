@@ -96,6 +96,11 @@ void clustered_pnts_selector_event_bridge(
     void *owner,
     const void *actual_material) noexcept;
 
+// Source/carrier production is a separate stage from material-response
+// authorization. This keeps PointLight source semantics independently reusable
+// without implicitly authorizing any Spc local-specular implementation.
+void clustered_pnts_selector_source_event_bridge() noexcept;
+
 void clustered_pnts_selector_identity_event_bridge(
     const operators::material_response::material_identity &identity,
     bool expected_spc) noexcept;
@@ -114,6 +119,8 @@ public:
     void selector_event(
         void *owner,
         const void *actual_material) noexcept;
+
+    void selector_source_event() noexcept;
 
     void selector_identity_event(
         const operators::material_response::material_identity &identity,
