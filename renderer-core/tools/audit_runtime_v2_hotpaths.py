@@ -168,6 +168,23 @@ for latch in (
         f"!{latch}.load(",
         f"R45 PointLight hot one-shot latch {latch} must load-gate atomic exchange")
 
+require(
+    clustered,
+    "pointlight_frame_decode_cache_current()",
+    "R45 PointLight per-present donor validation cache")
+require(
+    clustered,
+    "capture_ptde_source_from_frame_state(",
+    "R45 PointLight exact frame-state source decode")
+forbid(
+    clustered,
+    "pointlight_ptde_source::capture(",
+    "R45 clustered source capture must not redo node/vtable/manager decode")
+require(
+    clustered,
+    "[DSRRL POINTLIGHT R45] donor_validation_cache=TLS_PER_PRESENT exact_frame_state_reuse=ON duplicate_vtable_owner_selector_manager_decode=OFF spc=ON nospc=ON",
+    "R45 PointLight decode-cache attestation")
+
 forbid(pmetal_source, "next.generation = serial", "event serial must not drive semantic generation")
 require(pmetal_h, "payload_bits", "exact b12 payload cache")
 require(pmetal_cpp, "payload_bits.data()", "exact 64-byte b12 payload identity")
