@@ -96,6 +96,37 @@ struct gpu_fast_cache_entry {
     ID3D11Buffer *b12 = nullptr;
     std::uint64_t generation = 0u;
     std::uint64_t epoch = 0u;
+
+    void clear() noexcept
+    {
+        if (b12 != nullptr)
+            b12->Release();
+        if (t19_srv != nullptr)
+            t19_srv->Release();
+        if (t19_buffer != nullptr)
+            t19_buffer->Release();
+        if (t18_srv != nullptr)
+            t18_srv->Release();
+        if (t18_buffer != nullptr)
+            t18_buffer->Release();
+        if (device != nullptr)
+            device->Release();
+
+        context = nullptr;
+        device = nullptr;
+        t18_buffer = nullptr;
+        t18_srv = nullptr;
+        t19_buffer = nullptr;
+        t19_srv = nullptr;
+        b12 = nullptr;
+        generation = 0u;
+        epoch = 0u;
+    }
+
+    ~gpu_fast_cache_entry() noexcept
+    {
+        clear();
+    }
 };
 
 thread_local std::array<gpu_fast_cache_entry,8>
@@ -106,19 +137,7 @@ std::atomic<std::uint64_t> g_resource_epoch{1u};
 void release_gpu_fast_entry(
     gpu_fast_cache_entry &entry) noexcept
 {
-    if (entry.b12 != nullptr)
-        entry.b12->Release();
-    if (entry.t19_srv != nullptr)
-        entry.t19_srv->Release();
-    if (entry.t19_buffer != nullptr)
-        entry.t19_buffer->Release();
-    if (entry.t18_srv != nullptr)
-        entry.t18_srv->Release();
-    if (entry.t18_buffer != nullptr)
-        entry.t18_buffer->Release();
-    if (entry.device != nullptr)
-        entry.device->Release();
-    entry = {};
+    entry.clear();
 }
 
 void clear_gpu_fast_cache() noexcept
