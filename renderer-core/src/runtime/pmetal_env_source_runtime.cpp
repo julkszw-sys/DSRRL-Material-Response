@@ -532,10 +532,21 @@ std::size_t hook_producer_cache_set(
         reinterpret_cast<std::uintptr_t>(
             key.source_a);
     h ^= reinterpret_cast<std::uintptr_t>(
+             key.base_a) >> 4u;
+    h ^= static_cast<std::uintptr_t>(
+             key.row_id_a) *
+         0x9e3779b1u;
+    h ^= static_cast<std::uintptr_t>(
+             key.count_a) << 11u;
+    h ^= reinterpret_cast<std::uintptr_t>(
              key.source_b) +
          0x9e3779b97f4a7c15ULL +
          (h << 6u) +
          (h >> 2u);
+    h ^= reinterpret_cast<std::uintptr_t>(
+             key.base_b) >> 7u;
+    h ^= static_cast<std::uintptr_t>(
+             key.row_id_b) << 29u;
     h ^= static_cast<std::uintptr_t>(
              static_cast<std::uint16_t>(
                  key.selector_a)) << 17u;
@@ -578,9 +589,6 @@ bool hook_producer_cache_lookup(
     const auto generation =
         g_hook_producer_cache_generation.load(
             std::memory_order_relaxed);
-    const auto semantic_version =
-        g_hook_source_semantic_version.load(
-            std::memory_order_acquire);
     const auto base =
         set * k_hook_producer_cache_ways;
 
@@ -591,8 +599,6 @@ bool hook_producer_cache_lookup(
             g_hook_producer_cache[base + way];
         if (!entry.valid ||
             entry.cache_generation != generation ||
-            entry.record.semantic_version !=
-                semantic_version ||
             !same_hook_selector_identity(
                 entry.key,
                 key))
@@ -987,6 +993,116 @@ bool retail_lightbank_record_index(
         static_cast<std::uint32_t>(
             static_cast<std::uint8_t>(
                 selector));
+    return true;
+}
+
+bool capture_hook_endpoint_identity(
+    void *source,
+    std::int16_t selector,
+    const std::uint8_t *&base,
+    std::uint16_t &count,
+    std::uint32_t &row_id) noexcept
+{
+    base = nullptr;
+    count = 0u;
+    row_id = 0u;
+
+    if (source == nullptr ||
+        selector < 0 ||
+        !safe_read(
+            static_cast<const std::uint8_t *>(
+                source) + 0x18u,
+            base) ||
+        base == nullptr)
+        return false;
+
+    std::uint16_t version = 0u;
+    if (!safe_read(base + 8u,version) ||
+        !safe_read(base + 10u,count) ||
+        version != 4u ||
+        count == 0u ||
+        count > 256u)
+        return false;
+
+    std::uint32_t index = 0u;
+    if (!retail_lightbank_record_index(
+            selector,
+            index) ||
+        index >= count)
+        return false;
+
+    const auto *entry =
+        base +
+        0x30u +
+        static_cast<std::size_t>(
+            index) * 12u;
+    return safe_read(
+        entry,
+        row_id);
+}
+
+bool capture_hook_selector_identity(
+    void *source_a,
+    std::int16_t selector_a,
+    void *source_b,
+    std::int16_t selector_b,
+    float beta,
+    hook_selector_identity_v1 &out) noexcept
+{
+    out = {};
+    if (source_a == nullptr ||
+        selector_a < 0 ||
+        !std::isfinite(beta))
+        return false;
+
+    const float effective_beta =
+        std::clamp(
+            beta,
+            0.0f,
+            1.0f);
+    std::uint32_t beta_bits = 0u;
+    std::memcpy(
+        &beta_bits,
+        &effective_beta,
+        sizeof(beta_bits));
+    if (effective_beta == 0.0f)
+        beta_bits = 0u;
+
+    out.source_a = source_a;
+    out.source_b = source_b;
+    out.selector_a = selector_a;
+    out.selector_b = selector_b;
+    out.beta_bits = beta_bits;
+
+    if (!capture_hook_endpoint_identity(
+            source_a,
+            selector_a,
+            out.base_a,
+            out.count_a,
+            out.row_id_a))
+        return false;
+
+    if (beta_bits == 0u) {
+        out.source_b = source_a;
+        out.base_b = out.base_a;
+        out.selector_b = selector_a;
+        out.count_b = out.count_a;
+        out.row_id_b = out.row_id_a;
+        out.valid = true;
+        return true;
+    }
+
+    if (source_b == nullptr ||
+        selector_b < 0 ||
+        !capture_hook_endpoint_identity(
+            source_b,
+            selector_b,
+            out.base_b,
+            out.count_b,
+            out.row_id_b))
+        return false;
+
+    out.valid = true;
     return true;
 }
 
