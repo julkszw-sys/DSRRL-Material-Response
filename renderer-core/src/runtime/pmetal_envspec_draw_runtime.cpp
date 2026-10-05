@@ -1215,12 +1215,12 @@ bool pmetal_envspec_draw_runtime::prepare(
 #endif
 
     const bool stable_envdiffuse_consumer_diag =
-#if defined(DSRRL_PMETAL_V13_NATIVE_DSR_NO_TAIL_DIAG) || defined(DSRRL_PMETAL_V13_NATIVE_DSR_MATERIAL_MOD_DIAG)
-        false;
-#else
+#if defined(DSRRL_PMETAL_ZERO_T11_CONTRIBUTION_DIAG)
         family ==
             pmetal_envspec_receiver_family::
                 stable_hemenv;
+#else
+        false;
 #endif
 
     std::array<float,3> carrier3{{
