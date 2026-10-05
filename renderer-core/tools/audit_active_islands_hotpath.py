@@ -172,10 +172,19 @@ def main():
         "frame_state.collection =",
         "R40 source-cache collection identity")
     require(clustered,
+        "endpoint_source_a",
+        "R40 Bank/Lerp endpoint source identity")
+    require(clustered,
+        "endpoint_param_a",
+        "R40 Bank/Lerp endpoint param identity")
+    require(clustered,
+        "populate_source_semantic_endpoints(",
+        "R40 selector/beta endpoint routing guard")
+    require(clustered,
         "[DSRRL POINTLIGHT R40] generational_source_cache_hit=1 exact_state_snapshot=ON invalidation=ACTIVE_COLLECTION_INSERT",
         "R40 generational source-cache runtime hit attestation")
     require(clustered,
-        "[DSRRL POINTLIGHT R40] source_cache=PERSISTENT_GENERATIONAL_EXACT_STATE invalidation=ACTIVE_COLLECTION_INSERT collection_identity=IN_KEY present_reset=OFF spc=ON nospc=ON",
+        "[DSRRL POINTLIGHT R40] source_cache=PERSISTENT_GENERATIONAL_EXACT_STATE invalidation=ACTIVE_COLLECTION_INSERT collection_identity=IN_KEY endpoint_identity=SOURCE_PLUS_PARAM selector_beta=IN_KEY present_reset=OFF spc=ON nospc=ON",
         "R40 persistent generational source-cache startup attestation")
     require(integrated,
         "g_clustered_pnts.frame_event(present);",
