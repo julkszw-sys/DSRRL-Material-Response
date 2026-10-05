@@ -3960,6 +3960,9 @@ void on_init_device(reshade::api::device *device)
         reshade::log::message(
             reshade::log::level::info,
             "[DSRRL POINTLIGHT R31] direct_source_class=DirectPointLightEntity dsr_vfunc_rva=0x55C570 ptde_homologue=0x00D34D50 carrier=position_invRange_RGB_End authorization=EXACT_ONLY");
+        reshade::log::message(
+            reshade::log::level::info,
+            "[DSRRL POINTLIGHT R33] clustered_spc_protected_failopen=ACTIVE source_reconstruction_before_spc=OFF clustered_nospc=UNCHANGED stock_dsr_spc=ON");
     } else if (k_pmetal_native_draw_runtime_enabled) {
         if (!g_pmetal_native_draw.install(device)) {
             reshade::log::message(
