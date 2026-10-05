@@ -180,13 +180,12 @@ activation_context() noexcept
         authored.route_matches != 0u;
 
     activation.retained_flat_pipeline_set_ready =
-        preflight.active_flat_set_seen &&
-        preflight.plain_dofrate_seen;
+        preflight.active_flat_set_seen;
 
     activation.private_depth_sidecar_ready =
         g_sequence.host.dofrate_support_t1 != nullptr;
     activation.retained_plain_dofrate_ready =
-        preflight.plain_dofrate_seen;
+        ptde_scheduler_plain_rate_ready();
     activation.fixed_raster_chain_ready =
         private_resources_ready();
 
