@@ -20,6 +20,7 @@
 #include "dsrrl/runtime/dof_authored_state_runtime.hpp"
 #include "dsrrl/runtime/dof_plain_rate_runtime.hpp"
 #include "dsrrl/runtime/dof_private_resource_runtime.hpp"
+#include "dsrrl/runtime/dof_ptde_scheduler_runtime.hpp"
 
 #include <atomic>
 #include <cstdio>
@@ -133,6 +134,7 @@ void unregister_a1_events()
 void unregister_dof_construction_runtime() noexcept
 {
     dsrrl::runtime::dof::revoke_private_resources();
+    dsrrl::runtime::dof::unregister_ptde_scheduler_runtime();
     dsrrl::runtime::dof::unregister_private_resource_runtime();
     dsrrl::runtime::dof::deactivate_plain_rate_runtime();
     dsrrl::runtime::dof::unregister_plain_rate_runtime();
@@ -144,6 +146,8 @@ void register_dof_construction_runtime() noexcept
         dsrrl::runtime::dof::register_plain_rate_runtime();
     const bool resource_events_ready =
         dsrrl::runtime::dof::register_private_resource_runtime();
+    const bool scheduler_ready =
+        dsrrl::runtime::dof::register_ptde_scheduler_runtime();
 
     reshade::log::message(
         plain_ready ? reshade::log::level::info : reshade::log::level::warning,
@@ -156,6 +160,12 @@ void register_dof_construction_runtime() noexcept
         resource_events_ready ?
             "DSRRL DoF: exact PTDE DoF 7-resource lifecycle registered; resources remain unauthorized." :
             "DSRRL DoF: fixed PTDE resource lifecycle registration failed; DoF bridge remains fail-open OFF.");
+
+    reshade::log::message(
+        scheduler_ready ? reshade::log::level::info : reshade::log::level::warning,
+        scheduler_ready ?
+            "DSRRL DoF: exact PTDE 9-pass scheduler registered; external source/support/output routing still gates activation." :
+            "DSRRL DoF: PTDE scheduler registration failed; DoF bridge remains fail-open OFF.");
 }
 
 void flver_parse_dispatch(void *model,const void *raw) noexcept
