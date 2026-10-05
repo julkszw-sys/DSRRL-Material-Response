@@ -76,14 +76,15 @@ thread_local source_selection_cache_tls g_source_selection_cache{};
 thread_local producer_input_snapshot g_producer_input_tls{};
 thread_local std::uint64_t g_local_serial = 0u;
 
-// R36: source capture is materially more expensive than first-four selection,
-// especially for Bank/LerpBank where donor authority and source-manager
-// resolution were previously repeated for every authorized material draw.
-// Cache the exact resolved carrier only inside a presented-frame epoch and only
-// while the relevant source-object bytes are unchanged. The cache is TLS: no
-// locks, no cross-thread authority and no retained COM/object ownership.
+// R40: mirror the mutation-driven shadow-state pattern used by mature D3D
+// wrappers instead of expiring an otherwise exact source result at Present.
+// The PTDE Bank/Lerp donor payload is a function of immutable bank identity plus
+// the live source selector/beta/position state captured below. Active-light
+// insertion advances a semantic generation; exact state changes are still
+// compared on every lookup. The cache remains TLS and owns no host object.
 struct frame_source_state_v1 {
     void *node = nullptr;
+    void *collection = nullptr;
     std::uintptr_t target = 0u;
     std::uintptr_t owner = 0u;
     std::uint32_t source_id = 0u;
@@ -109,18 +110,34 @@ static_assert(
     (k_frame_source_cache_entries &
      (k_frame_source_cache_entries - 1u)) == 0u);
 
+// Selection remains frame-scoped because its query describes one draw. Source
+// donor results are instead invalidated by semantic mutation. This follows the
+// generation/dirty-state model used by DXVK/RenderDoc-style state trackers.
 std::atomic<std::uint64_t> g_source_frame_epoch{1u};
+std::atomic<std::uint64_t> g_source_semantic_generation{1u};
 std::atomic_bool g_source_exec_attested{false};
-thread_local std::uint64_t g_source_frame_seen_epoch = 0u;
+thread_local std::uint64_t g_source_cache_seen_generation = 0u;
 thread_local std::array<
     frame_source_cache_entry_v1,
     k_frame_source_cache_entries> g_source_frame_cache{};
 
 void reset_frame_source_cache_tls(
-    std::uint64_t epoch) noexcept
+    std::uint64_t generation) noexcept
 {
     g_source_frame_cache = {};
-    g_source_frame_seen_epoch = epoch;
+    g_source_cache_seen_generation = generation;
+}
+
+void invalidate_source_semantic_generation() noexcept
+{
+    auto next =
+        g_source_semantic_generation.fetch_add(
+            1u,
+            std::memory_order_acq_rel) + 1u;
+    if (next == 0u)
+        g_source_semantic_generation.fetch_add(
+            1u,
+            std::memory_order_acq_rel);
 }
 
 bool same_frame_source_state(
@@ -129,6 +146,7 @@ bool same_frame_source_state(
 {
     return
         a.node == b.node &&
+        a.collection == b.collection &&
         a.target == b.target &&
         a.owner == b.owner &&
         a.source_id == b.source_id &&
@@ -152,6 +170,9 @@ std::size_t frame_source_cache_index(
              (h << 6u) +
              (h >> 2u);
     };
+    mix(static_cast<std::uint64_t>(
+        reinterpret_cast<std::uintptr_t>(
+            state.collection)));
     mix(static_cast<std::uint64_t>(state.target));
     mix(static_cast<std::uint64_t>(state.owner));
     mix(static_cast<std::uint64_t>(state.source_id));
@@ -839,6 +860,220 @@ bool executable_address(
         access == PAGE_EXECUTE_WRITECOPY;
 }
 
+struct pointlight_collection_insert_hook_v1 {
+    void *target = nullptr;
+    void *trampoline = nullptr;
+    std::array<std::uint8_t,16> original{};
+    bool patched = false;
+};
+
+constexpr std::uintptr_t
+    k_pointlight_collection_insert_rva = 0x55F750u;
+constexpr std::array<std::uint8_t,16>
+    k_pointlight_collection_insert_preimage = {
+        0x48,0x89,0x5C,0x24,0x08,
+        0x57,
+        0x48,0x83,0xEC,0x20,
+        0x48,0x63,0xDA,
+        0x48,0x8B,0xF9
+    };
+
+pointlight_collection_insert_hook_v1
+    g_pointlight_collection_insert_hook{};
+
+using pointlight_collection_insert_fn =
+    void (__fastcall *)(void *,std::int32_t,std::uint32_t);
+
+bool write_pointlight_code(
+    void *target,
+    const void *bytes,
+    std::size_t size) noexcept
+{
+    if (target == nullptr ||
+        bytes == nullptr ||
+        size == 0u)
+        return false;
+
+    DWORD old_protect = 0u;
+    if (!VirtualProtect(
+            target,
+            size,
+            PAGE_EXECUTE_READWRITE,
+            &old_protect))
+        return false;
+
+    std::memcpy(target, bytes, size);
+    const bool flushed =
+        FlushInstructionCache(
+            GetCurrentProcess(),
+            target,
+            size) != FALSE;
+
+    DWORD ignored = 0u;
+    const bool restored =
+        VirtualProtect(
+            target,
+            size,
+            old_protect,
+            &ignored) != FALSE;
+    return flushed && restored;
+}
+
+void __fastcall pointlight_collection_insert_detour(
+    void *collection,
+    std::int32_t category,
+    std::uint32_t source_id) noexcept
+{
+    // Insertion is the lifetime/membership mutation that can make a recycled
+    // source pointer authoritative again. Invalidate before calling retail;
+    // a rejected insertion only causes a harmless extra generation change.
+    invalidate_source_semantic_generation();
+
+    const auto original =
+        reinterpret_cast<pointlight_collection_insert_fn>(
+            g_pointlight_collection_insert_hook.trampoline);
+    if (original != nullptr)
+        original(
+            collection,
+            category,
+            source_id);
+}
+
+bool install_pointlight_collection_insert_hook() noexcept
+{
+    auto &hook =
+        g_pointlight_collection_insert_hook;
+    if (hook.patched)
+        return true;
+    if (g_base == 0u)
+        return false;
+
+    auto *target =
+        reinterpret_cast<std::uint8_t *>(
+            g_base +
+            k_pointlight_collection_insert_rva);
+    if (!readable_range(
+            target,
+            k_pointlight_collection_insert_preimage.size()) ||
+        std::memcmp(
+            target,
+            k_pointlight_collection_insert_preimage.data(),
+            k_pointlight_collection_insert_preimage.size()) != 0)
+        return false;
+
+    constexpr std::size_t stolen =
+        k_pointlight_collection_insert_preimage.size();
+    auto *trampoline =
+        static_cast<std::uint8_t *>(
+            VirtualAlloc(
+                nullptr,
+                stolen + 14u,
+                MEM_COMMIT | MEM_RESERVE,
+                PAGE_EXECUTE_READWRITE));
+    if (trampoline == nullptr)
+        return false;
+
+    std::memcpy(
+        trampoline,
+        target,
+        stolen);
+    auto *tail =
+        trampoline + stolen;
+    tail[0] = 0xffu;
+    tail[1] = 0x25u;
+    std::uint32_t zero = 0u;
+    std::memcpy(tail + 2u, &zero, sizeof(zero));
+    const auto continuation =
+        reinterpret_cast<std::uint64_t>(
+            target + stolen);
+    std::memcpy(
+        tail + 6u,
+        &continuation,
+        sizeof(continuation));
+
+    if (FlushInstructionCache(
+            GetCurrentProcess(),
+            trampoline,
+            stolen + 14u) == FALSE) {
+        VirtualFree(
+            trampoline,
+            0u,
+            MEM_RELEASE);
+        return false;
+    }
+
+    std::array<std::uint8_t,stolen> patch{};
+    patch.fill(0x90u);
+    patch[0] = 0xffu;
+    patch[1] = 0x25u;
+    std::memcpy(
+        patch.data() + 2u,
+        &zero,
+        sizeof(zero));
+    const auto detour =
+        reinterpret_cast<std::uint64_t>(
+            &pointlight_collection_insert_detour);
+    std::memcpy(
+        patch.data() + 6u,
+        &detour,
+        sizeof(detour));
+
+    if (!write_pointlight_code(
+            target,
+            patch.data(),
+            patch.size())) {
+        VirtualFree(
+            trampoline,
+            0u,
+            MEM_RELEASE);
+        return false;
+    }
+
+    hook.target = target;
+    hook.trampoline = trampoline;
+    hook.original =
+        k_pointlight_collection_insert_preimage;
+    hook.patched = true;
+    return true;
+}
+
+bool restore_pointlight_collection_insert_hook() noexcept
+{
+    auto &hook =
+        g_pointlight_collection_insert_hook;
+    bool ok = true;
+
+    if (hook.patched) {
+        ok =
+            hook.target != nullptr &&
+            write_pointlight_code(
+                hook.target,
+                hook.original.data(),
+                hook.original.size()) &&
+            std::memcmp(
+                hook.target,
+                hook.original.data(),
+                hook.original.size()) == 0;
+        if (ok)
+            hook.patched = false;
+    }
+
+    if (ok &&
+        hook.trampoline != nullptr) {
+        ok =
+            VirtualFree(
+                hook.trampoline,
+                0u,
+                MEM_RELEASE) != FALSE;
+        if (ok)
+            hook.trampoline = nullptr;
+    }
+
+    if (ok)
+        hook = {};
+    return ok;
+}
+
 bool spatial_overlap_xyz_unchecked(
     const void *node,
     const std::array<float,4> &query_min,
@@ -1069,6 +1304,8 @@ bool capture_source(
         }
 
         frame_state.node = node;
+        frame_state.collection =
+            g_draw_selection.input.collection;
         frame_state.target = target_address;
         frame_state.source_class =
             bank_source ? 1u : 2u;
@@ -1104,13 +1341,13 @@ bool capture_source(
             frame_state.position_bits.size() *
                 sizeof(frame_state.position_bits[0]));
 
-        const auto frame_epoch =
-            g_source_frame_epoch.load(
-                std::memory_order_relaxed);
-        if (g_source_frame_seen_epoch !=
-            frame_epoch)
+        const auto semantic_generation =
+            g_source_semantic_generation.load(
+                std::memory_order_acquire);
+        if (g_source_cache_seen_generation !=
+            semantic_generation)
             reset_frame_source_cache_tls(
-                frame_epoch);
+                semantic_generation);
 
         const auto cache_index =
             frame_source_cache_index(
@@ -1129,7 +1366,7 @@ bool capture_source(
                     std::memory_order_relaxed)) {
                 reshade::log::message(
                     reshade::log::level::info,
-                    "[DSRRL POINTLIGHT R36] frame_source_cache_hit=1 exact_state_snapshot=ON");
+                    "[DSRRL POINTLIGHT R40] generational_source_cache_hit=1 exact_state_snapshot=ON invalidation=ACTIVE_COLLECTION_INSERT");
             }
             return true;
         }
@@ -1535,6 +1772,15 @@ bool clustered_pnts_draw_runtime::install() noexcept
     pointlight_ptde_source::
         clear_persistent_structure_cache();
 
+    // R40: exact-byte-guarded mutation hook. It is intentionally installed
+    // only on active-light insertion, which is enough to close pointer-reuse
+    // lifetime hazards: removed nodes cannot be selected, and any reactivation
+    // necessarily passes through this insertion path before reuse.
+    if (!install_pointlight_collection_insert_hook())
+        return false;
+    invalidate_source_semantic_generation();
+    g_source_cache_seen_generation = 0u;
+
     g_runtime = this;
     g_quarantined.store(false);
     g_enabled.store(true);
@@ -1561,12 +1807,24 @@ bool clustered_pnts_draw_runtime::install() noexcept
         reshade::log::message(
             reshade::log::level::info,
             "[DSRRL POINTLIGHT R38] frame_selection_cache=DIRECT128_EXACT_INPUT_PLUS_BUCKET_HEADS source_cache=DIRECT128_EXACT_STATE cache_scope=TLS_PER_PRESENT source_revalidation=ON");
+    static std::atomic_bool
+        generational_source_cache_logged{false};
+    if (!generational_source_cache_logged.exchange(
+            true,
+            std::memory_order_relaxed))
+        reshade::log::message(
+            reshade::log::level::info,
+            "[DSRRL POINTLIGHT R40] source_cache=PERSISTENT_GENERATIONAL_EXACT_STATE invalidation=ACTIVE_COLLECTION_INSERT collection_identity=IN_KEY present_reset=OFF spc=ON nospc=ON");
     return true;
 }
 
 void clustered_pnts_draw_runtime::uninstall() noexcept
 {
     g_enabled.store(false);
+    if (!restore_pointlight_collection_insert_hook())
+        reshade::log::message(
+            reshade::log::level::error,
+            "[DSRRL POINTLIGHT R40] collection_insert_hook_restore_fail=1");
     g_source_exec_attested.store(
         false,
         std::memory_order_relaxed);
@@ -1574,6 +1832,9 @@ void clustered_pnts_draw_runtime::uninstall() noexcept
     g_source_selection_cache = {};
     g_source_vm_cache = {};
     g_frame_selection_cache = {};
+    g_source_frame_cache = {};
+    g_source_cache_seen_generation = 0u;
+    invalidate_source_semantic_generation();
     pointlight_ptde_source::
         clear_persistent_structure_cache();
     g_upload_identity_cache = {};
