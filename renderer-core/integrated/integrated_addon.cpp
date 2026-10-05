@@ -167,11 +167,18 @@ constexpr bool k_pointlight_drawtime_runtime_enabled = true;
     defined(DSRRL_NATIVE_STATE_MUTATE_RESTORE_ONLY_BISECT) || \
     defined(DSRRL_CORE_TRANSACTION_ONLY_BISECT) || \
     defined(DSRRL_RAW_NATIVE_DRAW_REENTRY_MIN_BISECT) || \
+    defined(DSRRL_PMETAL_DIRECT_CURRENT_NATIVE_DISPATCH) || \
     defined(DSRRL_ADDON_LOADED_ONLY_BISECT) || \
     defined(DSRRL_DRAW_CALLBACK_ONLY_BISECT)
 constexpr bool k_pmetal_native_draw_runtime_enabled = false;
 #else
 constexpr bool k_pmetal_native_draw_runtime_enabled = true;
+#endif
+
+#ifdef DSRRL_PMETAL_DIRECT_CURRENT_NATIVE_DISPATCH
+constexpr bool k_pmetal_direct_current_native_dispatch = true;
+#else
+constexpr bool k_pmetal_direct_current_native_dispatch = false;
 #endif
 
 #include <array>
@@ -253,6 +260,7 @@ std::atomic_bool g_pointlight_once_shader_ready{false};
 std::atomic_bool g_pointlight_once_sidecar_ready{false};
 std::atomic_bool g_pointlight_once_batch_ready{false};
 std::atomic_bool g_pointlight_once_applied{false};
+std::atomic_bool g_pointlight_once_direct_native_applied{false};
 // PR175/176 RT identity probing is diagnostic-only. Runtime proof already
 // established the reflective-water 480x270 offscreen PointLight pass. Keep
 // the small signature store for the one first-hit observation only.
@@ -3960,7 +3968,11 @@ void on_init_device(reshade::api::device *device)
         g_bloom_scene_sidecar.on_init_device(device);
     g_mr_draw_runtime.on_init_device(device);
     g_pmetal_envspec.on_init_device(device);
-    if (k_pmetal_native_draw_runtime_enabled) {
+    if (k_pmetal_direct_current_native_dispatch) {
+        reshade::log::message(
+            reshade::log::level::info,
+            "[DSRRL POINTLIGHT R26] direct_current_native_dispatch=ACTIVE persistent_vtable_hook=OFF recursion_guard=ON");
+    } else if (k_pmetal_native_draw_runtime_enabled) {
         if (!g_pmetal_native_draw.install(device)) {
             reshade::log::message(
                 reshade::log::level::warning,
@@ -6754,6 +6766,14 @@ bool on_draw(
         return false;
     }
 
+    const bool direct_current_native =
+        k_pmetal_direct_current_native_dispatch &&
+        (prepared.envspec_in_batch ||
+         prepared.clustered_in_batch);
+
+    if (direct_current_native)
+        g_raw_draw_replay_recursing = true;
+
     const auto dispatch =
         dsrrl::runtime::dispatch_island_draw_batch(
             g_draw_transactions,
@@ -6763,6 +6783,9 @@ bool on_draw(
             instance_count,
             first_vertex,
             first_instance);
+
+    if (direct_current_native)
+        g_raw_draw_replay_recursing = false;
 
     const bool mr_in_batch =
         prepared.mr_in_batch;
@@ -6784,6 +6807,13 @@ bool on_draw(
         if (dsrrl::runtime::draw_tx_issued(
                 dispatch.transaction)) {
             hot_count(g_clustered_draw_applied);
+            if (direct_current_native &&
+                !g_pointlight_once_direct_native_applied.exchange(
+                    true,
+                    std::memory_order_relaxed))
+                reshade::log::message(
+                    reshade::log::level::info,
+                    "[DSRRL POINTLIGHT APPLY] stage=direct_current_native_applied");
             if (!g_pointlight_once_applied.exchange(true)) {
                 reshade::log::message(
                     reshade::log::level::info,
@@ -7095,6 +7125,14 @@ bool on_draw_indexed(
         return false;
     }
 
+    const bool direct_current_native =
+        k_pmetal_direct_current_native_dispatch &&
+        (prepared.envspec_in_batch ||
+         prepared.clustered_in_batch);
+
+    if (direct_current_native)
+        g_raw_draw_replay_recursing = true;
+
     const auto dispatch =
         dsrrl::runtime::dispatch_island_draw_indexed_batch(
             g_draw_transactions,
@@ -7105,6 +7143,9 @@ bool on_draw_indexed(
             first_index,
             vertex_offset,
             first_instance);
+
+    if (direct_current_native)
+        g_raw_draw_replay_recursing = false;
 
     const bool mr_in_batch =
         prepared.mr_in_batch;
@@ -7126,6 +7167,13 @@ bool on_draw_indexed(
         if (dsrrl::runtime::draw_tx_issued(
                 dispatch.transaction)) {
             hot_count(g_clustered_draw_applied);
+            if (direct_current_native &&
+                !g_pointlight_once_direct_native_applied.exchange(
+                    true,
+                    std::memory_order_relaxed))
+                reshade::log::message(
+                    reshade::log::level::info,
+                    "[DSRRL POINTLIGHT APPLY] stage=direct_current_native_applied");
             if (!g_pointlight_once_applied.exchange(true)) {
                 reshade::log::message(
                     reshade::log::level::info,
