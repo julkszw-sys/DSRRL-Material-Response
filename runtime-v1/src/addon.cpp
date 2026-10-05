@@ -154,7 +154,7 @@ void register_dof_construction_runtime() noexcept
     reshade::log::message(
         resource_events_ready ? reshade::log::level::info : reshade::log::level::warning,
         resource_events_ready ?
-            "DSRRL DoF: fixed PTDE 9-resource lifecycle registered; resources remain unauthorized." :
+            "DSRRL DoF: exact PTDE DoF 7-resource lifecycle registered; resources remain unauthorized." :
             "DSRRL DoF: fixed PTDE resource lifecycle registration failed; DoF bridge remains fail-open OFF.");
 }
 
