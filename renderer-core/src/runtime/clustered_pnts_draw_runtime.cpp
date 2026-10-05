@@ -1507,6 +1507,7 @@ bool capture_source(
     }
 
     frame_source_state_v1 frame_state{};
+    bool semantic_endpoints_ready = false;
     const bool frame_cacheable =
         bank_source || lerp_bank_source;
     if (frame_cacheable) {
@@ -1570,7 +1571,7 @@ bool capture_source(
         // beta and endpoint routing are live semantic inputs. Include the
         // actual Bank endpoint objects and param table identities so a Lerp
         // manager remap cannot produce a false persistent hit.
-        const bool semantic_endpoints_ready =
+        semantic_endpoints_ready =
             populate_source_semantic_endpoints(
                 bank_source,
                 lerp_bank_source,
@@ -1701,10 +1702,7 @@ bool capture_source(
     }
 
     if (frame_cacheable &&
-        populate_source_semantic_endpoints(
-            bank_source,
-            lerp_bank_source,
-            frame_state)) {
+        semantic_endpoints_ready) {
         auto &entry =
             g_source_frame_cache[
                 frame_source_cache_index(
