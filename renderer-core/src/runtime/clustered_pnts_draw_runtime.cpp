@@ -443,7 +443,8 @@ bool select_first_four_exact(
 
 bool capture_source(
     void *node,
-    source_raw &out) noexcept
+    source_raw &out,
+    pointlight_ptde_source::draw_bank_authority_cache &bank_cache) noexcept
 {
     out = {};
     if (!readable_range(node, 0x20u))
@@ -493,7 +494,8 @@ bool capture_source(
     (void)pointlight_ptde_source::capture(
         node,
         g_base,
-        raw);
+        raw,
+        bank_cache);
 
     for (const auto value : raw)
         if (!std::isfinite(value))
@@ -790,6 +792,13 @@ bool clustered_pnts_draw_runtime::install() noexcept
     g_runtime = this;
     g_quarantined.store(false);
     g_enabled.store(true);
+    static std::atomic_bool bank_cache_logged{false};
+    if (!bank_cache_logged.exchange(
+            true,
+            std::memory_order_relaxed))
+        reshade::log::message(
+            reshade::log::level::info,
+            "[DSRRL POINTLIGHT R27] draw_local_bank_authority_cache=ACTIVE scope=ONE_DRAW persistent_pointer_authority=OFF");
     return true;
 }
 
@@ -1032,6 +1041,8 @@ void clustered_pnts_draw_runtime::selector_identity_event(
 #endif
 
         source_cache.selected_count = selected_count;
+        pointlight_ptde_source::draw_bank_authority_cache
+            bank_cache{};
         if (selected_count == 0u) {
             source_cache.ready = true;
             source_cache.neutral = true;
@@ -1042,7 +1053,8 @@ void clustered_pnts_draw_runtime::selector_identity_event(
                  ++i) {
                 if (!capture_source(
                         nodes[i],
-                        source_cache.sources[i]) ||
+                        source_cache.sources[i],
+                        bank_cache) ||
                     source_cache.sources[i].source_id !=
                         selected_ids[i]) {
                     source_cache.failure =
