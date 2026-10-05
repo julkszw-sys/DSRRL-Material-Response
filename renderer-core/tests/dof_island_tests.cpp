@@ -116,6 +116,11 @@ int main()
     CHECK(evaluate_activation(missing_sidecar).reason ==
           bridge_reason::missing_private_depth_sidecar);
 
+    auto incomplete_continuation = ready;
+    incomplete_continuation.tonemap_dof_continuation_verified = false;
+    CHECK(evaluate_activation(incomplete_continuation).reason ==
+          bridge_reason::incomplete_tonemap_dof_continuation);
+
     auto missing_output = ready;
     missing_output.output_cut_verified = false;
     CHECK(evaluate_activation(missing_output).reason ==
