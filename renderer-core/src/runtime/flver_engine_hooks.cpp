@@ -1017,6 +1017,12 @@ bool publish_exact_selector_identity(
             owner,
             actual_material);
         if (!pointlight_spc) {
+            // R34: source/carrier production is a distinct stage from
+            // material-response authorization. NoSpc consumes the exact PTDE
+            // source immediately. Spc intentionally does not request that
+            // source yet: feeding it into the surviving stock DSR
+            // GGX/Schlick tail would recreate the prohibited hybrid.
+            clustered_pnts_selector_source_event_bridge();
             clustered_pnts_selector_identity_event_bridge(
                 identity,
                 false);
