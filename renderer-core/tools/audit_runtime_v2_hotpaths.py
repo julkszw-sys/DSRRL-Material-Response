@@ -58,6 +58,26 @@ if selector.index("g_selector_upper_lower_enabled.load") > selector.index("upper
 
 require(producer, "g_record.generation + 1u", "semantic generation increment")
 require(producer, "same_source_payload", "semantic payload equality")
+require(
+    producer,
+    "g_begin_material_key",
+    "R45 producer begin material-key TLS handoff")
+require(
+    producer,
+    "begin_key_ready",
+    "R45 producer publish must reuse begin material key")
+require(
+    producer,
+    "previous_payload_key",
+    "R45 steady producer payload-key reuse")
+forbid(
+    pmetal_source,
+    "hashing::matches_hex(",
+    "R45 P_Metal exact material gate must not parse SHA hex in hot path")
+require(
+    pmetal_source,
+    "material.raw_mtd_sha256 ==",
+    "R45 P_Metal exact material gate direct SHA byte compare")
 require(pmetal_source, "same_hook_source_payload(", "fallback semantic payload equality")
 require(pmetal_source, "g_hook_source_generation", "fallback semantic generation")
 require(pmetal_source, "g_hook_source_semantic_version", "legacy latest-source fallback semantic version")
@@ -79,7 +99,7 @@ require(pmetal_source,
         "R44 material-bound source authority attestation")
 
 require(pmetal_source,
-        "[DSRRL PMETAL R45] production_hot_counters=GATED redundant_cross_thread_republish=OFF decoded_endpoint_identity_reuse=ON selector_miss_identity_reuse=ON renderer_semantics=UNCHANGED",
+        "[DSRRL PMETAL R45] production_hot_counters=GATED redundant_cross_thread_republish=OFF decoded_endpoint_identity_reuse=ON selector_miss_identity_reuse=ON material_sha_byte_compare=ON producer_key_handoff=ON renderer_semantics=UNCHANGED",
         "R45 production hot-path cleanup attestation")
 
 for counter in (
