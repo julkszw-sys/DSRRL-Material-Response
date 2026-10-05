@@ -827,6 +827,105 @@ bool ptde_scheduler_execution_set_ready(
     return execution_set_ready_locked(inputs);
 }
 
+scheduler_result execute_ptde_pass(
+    reshade::api::command_list *cmd_list,
+    const operators::dof::activation_context &activation,
+    const scheduler_external_inputs &inputs,
+    const scheduler_draw_shape &shape,
+    std::size_t pass_index) noexcept
+{
+    ++g_execute_requests;
+
+    if (g_quarantined.load() ||
+        cmd_list == nullptr ||
+        pass_index >= operators::dof::ptde_exact_pass_resources.size() ||
+        !operators::dof::evaluate_activation(activation).active) {
+        ++g_execute_fail;
+        return scheduler_result::not_ready;
+    }
+
+    const auto &pass =
+        operators::dof::ptde_exact_pass_resources[pass_index];
+    const role selected =
+        role_for_pass(pass.pass, inputs);
+
+    if (selected == role::count ||
+        (pass.pass == 0x00u &&
+         (!inputs.pass_role_routing_verified ||
+          !allowed_pass00_role(inputs.pass00_role))) ||
+        (pass.pass == 0x10u &&
+         (!inputs.pass_role_routing_verified ||
+          !allowed_pass10_role(inputs.pass10_role))) ||
+        ((pass.pass == 0x00u || pass.pass == 0x03u) &&
+         (!inputs.source_68_verified ||
+          inputs.source_68 == nullptr)) ||
+        (pass.pass == 0x0Du &&
+         (!inputs.dofrate_support_verified ||
+          inputs.dofrate_support_t1 == nullptr))) {
+        ++g_execute_fail;
+        return scheduler_result::input_rejected;
+    }
+
+    {
+        std::lock_guard<std::mutex> lock(g_mutex);
+        if (!pair_ready_locked(selected)) {
+            ++g_execute_fail;
+            return scheduler_result::not_ready;
+        }
+    }
+
+    if (!private_resources_ready() ||
+        !authorize_private_resources(activation)) {
+        ++g_execute_fail;
+        return scheduler_result::not_ready;
+    }
+
+    auto *context =
+        reinterpret_cast<ID3D11DeviceContext *>(
+            cmd_list->get_native());
+    if (context == nullptr) {
+        revoke_private_resources();
+        ++g_execute_fail;
+        return scheduler_result::input_rejected;
+    }
+
+    saved_state state{};
+    if (!capture_state(context, state)) {
+        revoke_private_resources();
+        release_state(state);
+        ++g_execute_fail;
+        return scheduler_result::state_capture_failed;
+    }
+
+    const bool pass_ok =
+        run_pass(
+            context,
+            pass,
+            inputs,
+            shape);
+
+    restore_state(context, state);
+    const bool restored =
+        verify_state(context, state);
+    release_state(state);
+    revoke_private_resources();
+
+    if (!restored) {
+        ++g_restore_fail;
+        ++g_execute_fail;
+        g_quarantined.store(true);
+        return scheduler_result::restore_failed;
+    }
+
+    if (!pass_ok) {
+        ++g_execute_fail;
+        return scheduler_result::pass_failed;
+    }
+
+    ++g_execute_ok;
+    return scheduler_result::executed;
+}
+
 scheduler_result execute_ptde_graph(
     reshade::api::command_list *cmd_list,
     const operators::dof::activation_context &activation,
