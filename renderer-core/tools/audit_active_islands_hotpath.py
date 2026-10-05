@@ -39,6 +39,7 @@ def main():
     flver_cpp=(root/"src/runtime/flver_engine_hooks.cpp").read_text(encoding="utf-8")
     flver_registry=(root/"src/runtime/flver_identity_registry.cpp").read_text(encoding="utf-8")
     pmetal=(root/"src/runtime/pmetal_envspec_draw_runtime.cpp").read_text(encoding="utf-8")
+    pmetal_source=(root/"src/runtime/pmetal_env_source_runtime.cpp").read_text(encoding="utf-8")
     clustered=(root/"src/runtime/clustered_pnts_draw_runtime.cpp").read_text(encoding="utf-8")
     resources=(root/"src/runtime/material_resource_draw_runtime.cpp").read_text(encoding="utf-8")
     hemdir3_mode=(root/"src/runtime/hemdir3_mode_transport.cpp").read_text(encoding="utf-8")
@@ -133,8 +134,26 @@ def main():
         "capture_source(",
         "PointLight source stage owns PTDE source capture")
     require(clustered,
-        "k_frame_source_cache_entries = 32u",
-        "frame-scoped PointLight source-carrier cache")
+        "k_frame_source_cache_entries = 128u",
+        "R40 inherited direct-mapped persistent source-carrier cache capacity")
+    require(clustered,
+        "frame_source_cache_index(",
+        "R40 persistent source cache direct-map indexing")
+    require(clustered,
+        "same_frame_source_state(",
+        "R40 persistent source cache exact-state validation")
+    require(clustered,
+        "k_frame_selection_cache_entries = 128u",
+        "R38 per-frame exact selector-result cache capacity")
+    require(clustered,
+        "same_frame_selection_key(",
+        "R38 exact selector-input reuse gate")
+    require(clustered,
+        "bucket_heads",
+        "R38 selector cache tracks current collection heads")
+    require(clustered,
+        "[DSRRL POINTLIGHT R38] frame_selection_cache=DIRECT128_EXACT_INPUT_PLUS_BUCKET_HEADS source_cache=DIRECT128_EXACT_STATE cache_scope=TLS_PER_PRESENT source_revalidation=ON",
+        "R38 frame-selection/source-direct-cache runtime attestation")
     require(clustered,
         "bank_source ? 0x60u : 0x70u",
         "attested Bank/Lerp position-only native lane")
@@ -142,11 +161,56 @@ def main():
         "pointlight_ptde_source::capture(",
         "PTDE donor replaces Bank/Lerp source without duplicate native pack")
     require(clustered,
-        "[DSRRL POINTLIGHT R36] frame_source_cache_hit=1 exact_state_snapshot=ON",
-        "R36 frame-source cache runtime attestation")
+        "g_source_semantic_generation",
+        "R40 mutation-driven source-cache generation")
+    require(clustered,
+        "k_pointlight_collection_insert_rva = 0x55F750u",
+        "R40 exact active-light insertion mutation cut")
+    require(clustered,
+        "k_pointlight_collection_insert_preimage",
+        "R40 exact insertion hook preimage")
+    require(clustered,
+        "frame_state.collection =",
+        "R40 source-cache collection identity")
+    require(clustered,
+        "endpoint_source_a",
+        "R40 Bank/Lerp endpoint source identity")
+    require(clustered,
+        "endpoint_param_a",
+        "R40 Bank/Lerp endpoint param identity")
+    require(clustered,
+        "populate_source_semantic_endpoints(",
+        "R40 selector/beta endpoint routing guard")
+    require(clustered,
+        "[DSRRL POINTLIGHT R40] generational_source_cache_hit=1 exact_state_snapshot=ON invalidation=ACTIVE_COLLECTION_INSERT",
+        "R40 generational source-cache runtime hit attestation")
+    require(clustered,
+        "[DSRRL POINTLIGHT R40] source_cache=PERSISTENT_GENERATIONAL_EXACT_STATE invalidation=ACTIVE_COLLECTION_INSERT collection_identity=IN_KEY endpoint_identity=SOURCE_PLUS_PARAM selector_beta=IN_KEY present_reset=OFF spc=ON nospc=ON",
+        "R40 persistent generational source-cache startup attestation")
     require(integrated,
         "g_clustered_pnts.frame_event(present);",
-        "present-driven PointLight source cache epoch")
+        "present-driven R38 selection-cache epoch retained")
+
+    require(pmetal_source,
+        "[DSRRL PMETAL R41] flver_lifecycle_cache_flush=OFF source_cache_generation=SOURCE_RUNTIME_RESET_ONLY endpoint_cache=EXACT_SOURCE_BASE_COUNT_INDEX_ROW bank_cache=BASE_COUNT_LAYOUT region_cache=VM_WINDOW selector_shadow=EXACT_TLS_SOURCE_PTR_SELECTOR_BETA selector_source=ON envspec=ON material_response=ON",
+        "R41 P_Metal LightBank cache lifetime is decoupled from FLVER streaming")
+    require(pmetal_source,
+        "latest_hook_source_exact_selector(",
+        "R41 exact native EnvSpec producer shadow join")
+    require(pmetal_source,
+        "[DSRRL PMETAL R41] selector_source_shadow_hit=1 exact_source_ptr=ON exact_selector_beta=ON donor_redecode=OFF fail_open_fallback=ON",
+        "R41 selector shadow runtime hit attestation")
+    require(pmetal_source,
+        "[DSRRL PMETAL R42] producer_cache=SET64_WAY2 cross_thread=ON exact_key=SOURCE_PTR_SELECTOR_BETA semantic_version_gate=CURRENT selector_try_lock=ON producer_payload_reuse=ON donor_redecode_fallback=ON islands_preserved=ON",
+        "R42 cross-thread producer cache startup attestation")
+    require(pmetal_source,
+        "[DSRRL PMETAL R42] selector_cross_thread_cache_hit=1 exact_key=SOURCE_PTR_SELECTOR_BETA semantic_version=CURRENT donor_redecode=OFF lock_wait=OFF",
+        "R42 selector cross-thread hit attestation")
+    require(pmetal_source,
+        "[DSRRL PMETAL R42] producer_cross_thread_cache_hit=1 exact_key=SOURCE_PTR_SELECTOR_BETA exact_payload=ON global_publish_mutex=SKIPPED",
+        "R42 producer cross-thread hit attestation")
+    if "pmetal_env_source_cache_invalidate();" in flver_cpp:
+        fail("R41 regression: FLVER lifecycle globally invalidates P_Metal LightBank source cache")
 
     material_body=function_body(
         clustered,

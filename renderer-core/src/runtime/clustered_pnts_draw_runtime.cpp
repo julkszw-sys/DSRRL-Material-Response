@@ -76,16 +76,25 @@ thread_local source_selection_cache_tls g_source_selection_cache{};
 thread_local producer_input_snapshot g_producer_input_tls{};
 thread_local std::uint64_t g_local_serial = 0u;
 
-// R36: source capture is materially more expensive than first-four selection,
-// especially for Bank/LerpBank where donor authority and source-manager
-// resolution were previously repeated for every authorized material draw.
-// Cache the exact resolved carrier only inside a presented-frame epoch and only
-// while the relevant source-object bytes are unchanged. The cache is TLS: no
-// locks, no cross-thread authority and no retained COM/object ownership.
+// R40: mirror the mutation-driven shadow-state pattern used by mature D3D
+// wrappers instead of expiring an otherwise exact source result at Present.
+// The PTDE Bank/Lerp donor payload is a function of immutable bank identity plus
+// the live source selector/beta/position state captured below. Active-light
+// insertion advances a semantic generation; exact state changes are still
+// compared on every lookup. The cache remains TLS and owns no host object.
 struct frame_source_state_v1 {
     void *node = nullptr;
+    void *collection = nullptr;
     std::uintptr_t target = 0u;
     std::uintptr_t owner = 0u;
+    std::uintptr_t endpoint_source_a = 0u;
+    std::uintptr_t endpoint_source_b = 0u;
+    std::uintptr_t endpoint_param_a = 0u;
+    std::uintptr_t endpoint_param_b = 0u;
+    std::uint32_t endpoint_first_a = 0u;
+    std::uint32_t endpoint_first_b = 0u;
+    std::uint16_t endpoint_count_a = 0u;
+    std::uint16_t endpoint_count_b = 0u;
     std::uint32_t source_id = 0u;
     std::uint32_t selector_word0 = 0u;
     std::uint32_t selector_word1 = 0u;
@@ -100,21 +109,43 @@ struct frame_source_cache_entry_v1 {
     bool valid = false;
 };
 
-constexpr std::size_t k_frame_source_cache_entries = 32u;
+// R38: source hits are exact-state keyed, so a linear 32-entry scan on every
+// repeated material draw is unnecessary overhead. Use a power-of-two direct
+// map: collisions are misses, never authority. Exact state comparison remains
+// mandatory before reuse.
+constexpr std::size_t k_frame_source_cache_entries = 128u;
+static_assert(
+    (k_frame_source_cache_entries &
+     (k_frame_source_cache_entries - 1u)) == 0u);
+
+// Selection remains frame-scoped because its query describes one draw. Source
+// donor results are instead invalidated by semantic mutation. This follows the
+// generation/dirty-state model used by DXVK/RenderDoc-style state trackers.
 std::atomic<std::uint64_t> g_source_frame_epoch{1u};
+std::atomic<std::uint64_t> g_source_semantic_generation{1u};
 std::atomic_bool g_source_exec_attested{false};
-thread_local std::uint64_t g_source_frame_seen_epoch = 0u;
+thread_local std::uint64_t g_source_cache_seen_generation = 0u;
 thread_local std::array<
     frame_source_cache_entry_v1,
     k_frame_source_cache_entries> g_source_frame_cache{};
-thread_local std::uint8_t g_source_frame_cache_victim = 0u;
 
 void reset_frame_source_cache_tls(
-    std::uint64_t epoch) noexcept
+    std::uint64_t generation) noexcept
 {
     g_source_frame_cache = {};
-    g_source_frame_cache_victim = 0u;
-    g_source_frame_seen_epoch = epoch;
+    g_source_cache_seen_generation = generation;
+}
+
+void invalidate_source_semantic_generation() noexcept
+{
+    auto next =
+        g_source_semantic_generation.fetch_add(
+            1u,
+            std::memory_order_acq_rel) + 1u;
+    if (next == 0u)
+        g_source_semantic_generation.fetch_add(
+            1u,
+            std::memory_order_acq_rel);
 }
 
 bool same_frame_source_state(
@@ -123,14 +154,120 @@ bool same_frame_source_state(
 {
     return
         a.node == b.node &&
+        a.collection == b.collection &&
         a.target == b.target &&
         a.owner == b.owner &&
+        a.endpoint_source_a == b.endpoint_source_a &&
+        a.endpoint_source_b == b.endpoint_source_b &&
+        a.endpoint_param_a == b.endpoint_param_a &&
+        a.endpoint_param_b == b.endpoint_param_b &&
+        a.endpoint_first_a == b.endpoint_first_a &&
+        a.endpoint_first_b == b.endpoint_first_b &&
+        a.endpoint_count_a == b.endpoint_count_a &&
+        a.endpoint_count_b == b.endpoint_count_b &&
         a.source_id == b.source_id &&
         a.selector_word0 == b.selector_word0 &&
         a.selector_word1 == b.selector_word1 &&
         a.position_bits == b.position_bits &&
         a.source_category == b.source_category &&
         a.source_class == b.source_class;
+}
+
+std::size_t frame_source_cache_index(
+    const frame_source_state_v1 &state) noexcept
+{
+    std::uint64_t h =
+        static_cast<std::uint64_t>(
+            reinterpret_cast<std::uintptr_t>(
+                state.node)) >> 4u;
+    const auto mix = [&h](std::uint64_t v) noexcept {
+        h ^= v +
+             0x9e3779b97f4a7c15ull +
+             (h << 6u) +
+             (h >> 2u);
+    };
+    mix(static_cast<std::uint64_t>(
+        reinterpret_cast<std::uintptr_t>(
+            state.collection)));
+    mix(static_cast<std::uint64_t>(state.target));
+    mix(static_cast<std::uint64_t>(state.owner));
+    mix(static_cast<std::uint64_t>(state.endpoint_source_a));
+    mix(static_cast<std::uint64_t>(state.endpoint_source_b));
+    mix(static_cast<std::uint64_t>(state.endpoint_param_a));
+    mix(static_cast<std::uint64_t>(state.endpoint_param_b));
+    mix(static_cast<std::uint64_t>(state.endpoint_first_a));
+    mix(static_cast<std::uint64_t>(state.endpoint_first_b));
+    mix(static_cast<std::uint64_t>(state.endpoint_count_a));
+    mix(static_cast<std::uint64_t>(state.endpoint_count_b));
+    mix(static_cast<std::uint64_t>(state.source_id));
+    mix(static_cast<std::uint64_t>(state.selector_word0));
+    mix(static_cast<std::uint64_t>(state.selector_word1));
+    for (const auto word : state.position_bits)
+        mix(static_cast<std::uint64_t>(word));
+    mix(static_cast<std::uint64_t>(state.source_category));
+    mix(static_cast<std::uint64_t>(state.source_class));
+    return static_cast<std::size_t>(
+        h & (k_frame_source_cache_entries - 1u));
+}
+
+struct frame_selection_key_v1 {
+    std::uintptr_t owner = 0u;
+    void *collection = nullptr;
+    std::array<std::uint32_t,8> query_bits{};
+    std::array<void *,4> bucket_heads{};
+    std::uint8_t mask = 0u;
+};
+
+struct frame_selection_cache_entry_v1 {
+    std::uint64_t epoch = 0u;
+    std::uint64_t hash = 0u;
+    frame_selection_key_v1 key{};
+    std::array<std::uint32_t,4> ids{};
+    std::array<void *,4> nodes{};
+    std::uint8_t count = 0u;
+};
+
+constexpr std::size_t k_frame_selection_cache_entries = 128u;
+static_assert(
+    (k_frame_selection_cache_entries &
+     (k_frame_selection_cache_entries - 1u)) == 0u);
+thread_local std::array<
+    frame_selection_cache_entry_v1,
+    k_frame_selection_cache_entries> g_frame_selection_cache{};
+
+std::uint64_t frame_selection_hash(
+    const frame_selection_key_v1 &key) noexcept
+{
+    std::uint64_t h =
+        1469598103934665603ull;
+    const auto mix = [&h](std::uint64_t v) noexcept {
+        h ^= v;
+        h *= 1099511628211ull;
+    };
+    mix(static_cast<std::uint64_t>(key.owner));
+    mix(static_cast<std::uint64_t>(
+        reinterpret_cast<std::uintptr_t>(
+            key.collection)));
+    mix(static_cast<std::uint64_t>(key.mask));
+    for (const auto word : key.query_bits)
+        mix(static_cast<std::uint64_t>(word));
+    for (const auto head : key.bucket_heads)
+        mix(static_cast<std::uint64_t>(
+            reinterpret_cast<std::uintptr_t>(
+                head)));
+    return h;
+}
+
+bool same_frame_selection_key(
+    const frame_selection_key_v1 &a,
+    const frame_selection_key_v1 &b) noexcept
+{
+    return
+        a.owner == b.owner &&
+        a.collection == b.collection &&
+        a.mask == b.mask &&
+        a.query_bits == b.query_bits &&
+        a.bucket_heads == b.bucket_heads;
 }
 
 #ifdef DSRRL_POINTLIGHT_PROFILE
@@ -562,6 +699,10 @@ struct source_vm_cache_tls {
     readable_region_cache collection{};
     readable_region_cache node{};
     readable_region_cache vtable{};
+    readable_region_cache manager{};
+    readable_region_cache table{};
+    readable_region_cache endpoint{};
+    readable_region_cache param{};
 };
 
 thread_local source_vm_cache_tls g_source_vm_cache{};
@@ -638,6 +779,45 @@ bool readable_range_cached(
     return true;
 }
 
+bool make_frame_selection_key(
+    const producer_input_snapshot &input,
+    frame_selection_key_v1 &key) noexcept
+{
+    key = {};
+    if (!input.valid ||
+        input.collection == nullptr)
+        return false;
+
+    auto &source_vm =
+        source_vm_cache_current();
+    if (!readable_range_cached(
+            input.collection,
+            0x90u,
+            source_vm.collection))
+        return false;
+
+    key.owner = input.owner;
+    key.collection = input.collection;
+    key.mask = input.mask;
+    std::memcpy(
+        key.query_bits.data(),
+        input.query.data(),
+        sizeof(key.query_bits));
+
+    const auto *base =
+        static_cast<const std::uint8_t *>(
+            input.collection);
+    for (std::uint32_t bucket = 0u;
+         bucket < 4u;
+         ++bucket) {
+        std::memcpy(
+            &key.bucket_heads[bucket],
+            base + 0x18u + bucket * 0x20u,
+            sizeof(key.bucket_heads[bucket]));
+    }
+    return true;
+}
+
 std::atomic<std::uint32_t> g_source_capture_reason_mask{0u};
 
 void log_source_capture_failure_once(
@@ -706,6 +886,417 @@ bool executable_address(
         access == PAGE_EXECUTE_READ ||
         access == PAGE_EXECUTE_READWRITE ||
         access == PAGE_EXECUTE_WRITECOPY;
+}
+
+struct pointlight_collection_insert_hook_v1 {
+    void *target = nullptr;
+    void *trampoline = nullptr;
+    std::array<std::uint8_t,16> original{};
+    bool patched = false;
+};
+
+constexpr std::uintptr_t
+    k_pointlight_collection_insert_rva = 0x55F750u;
+constexpr std::array<std::uint8_t,16>
+    k_pointlight_collection_insert_preimage = {
+        0x48,0x89,0x5C,0x24,0x08,
+        0x57,
+        0x48,0x83,0xEC,0x20,
+        0x48,0x63,0xDA,
+        0x48,0x8B,0xF9
+    };
+
+pointlight_collection_insert_hook_v1
+    g_pointlight_collection_insert_hook{};
+
+using pointlight_collection_insert_fn =
+    void (__fastcall *)(void *,std::int32_t,std::uint32_t);
+
+bool write_pointlight_code(
+    void *target,
+    const void *bytes,
+    std::size_t size) noexcept
+{
+    if (target == nullptr ||
+        bytes == nullptr ||
+        size == 0u)
+        return false;
+
+    DWORD old_protect = 0u;
+    if (!VirtualProtect(
+            target,
+            size,
+            PAGE_EXECUTE_READWRITE,
+            &old_protect))
+        return false;
+
+    std::memcpy(target, bytes, size);
+    const bool flushed =
+        FlushInstructionCache(
+            GetCurrentProcess(),
+            target,
+            size) != FALSE;
+
+    DWORD ignored = 0u;
+    const bool restored =
+        VirtualProtect(
+            target,
+            size,
+            old_protect,
+            &ignored) != FALSE;
+    return flushed && restored;
+}
+
+void __fastcall pointlight_collection_insert_detour(
+    void *collection,
+    std::int32_t category,
+    std::uint32_t source_id) noexcept
+{
+    // Insertion is the lifetime/membership mutation that can make a recycled
+    // source pointer authoritative again. Invalidate before calling retail;
+    // a rejected insertion only causes a harmless extra generation change.
+    invalidate_source_semantic_generation();
+
+    const auto original =
+        reinterpret_cast<pointlight_collection_insert_fn>(
+            g_pointlight_collection_insert_hook.trampoline);
+    if (original != nullptr)
+        original(
+            collection,
+            category,
+            source_id);
+}
+
+bool install_pointlight_collection_insert_hook() noexcept
+{
+    auto &hook =
+        g_pointlight_collection_insert_hook;
+    if (hook.patched)
+        return true;
+    if (g_base == 0u)
+        return false;
+
+    auto *target =
+        reinterpret_cast<std::uint8_t *>(
+            g_base +
+            k_pointlight_collection_insert_rva);
+    if (!readable_range(
+            target,
+            k_pointlight_collection_insert_preimage.size()) ||
+        std::memcmp(
+            target,
+            k_pointlight_collection_insert_preimage.data(),
+            k_pointlight_collection_insert_preimage.size()) != 0)
+        return false;
+
+    constexpr std::size_t stolen =
+        k_pointlight_collection_insert_preimage.size();
+    auto *trampoline =
+        static_cast<std::uint8_t *>(
+            VirtualAlloc(
+                nullptr,
+                stolen + 14u,
+                MEM_COMMIT | MEM_RESERVE,
+                PAGE_EXECUTE_READWRITE));
+    if (trampoline == nullptr)
+        return false;
+
+    std::memcpy(
+        trampoline,
+        target,
+        stolen);
+    auto *tail =
+        trampoline + stolen;
+    tail[0] = 0xffu;
+    tail[1] = 0x25u;
+    std::uint32_t zero = 0u;
+    std::memcpy(tail + 2u, &zero, sizeof(zero));
+    const auto continuation =
+        reinterpret_cast<std::uint64_t>(
+            target + stolen);
+    std::memcpy(
+        tail + 6u,
+        &continuation,
+        sizeof(continuation));
+
+    if (FlushInstructionCache(
+            GetCurrentProcess(),
+            trampoline,
+            stolen + 14u) == FALSE) {
+        VirtualFree(
+            trampoline,
+            0u,
+            MEM_RELEASE);
+        return false;
+    }
+
+    std::array<std::uint8_t,stolen> patch{};
+    patch.fill(0x90u);
+    patch[0] = 0xffu;
+    patch[1] = 0x25u;
+    std::memcpy(
+        patch.data() + 2u,
+        &zero,
+        sizeof(zero));
+    const auto detour =
+        reinterpret_cast<std::uint64_t>(
+            &pointlight_collection_insert_detour);
+    std::memcpy(
+        patch.data() + 6u,
+        &detour,
+        sizeof(detour));
+
+    if (!write_pointlight_code(
+            target,
+            patch.data(),
+            patch.size())) {
+        VirtualFree(
+            trampoline,
+            0u,
+            MEM_RELEASE);
+        return false;
+    }
+
+    hook.target = target;
+    hook.trampoline = trampoline;
+    hook.original =
+        k_pointlight_collection_insert_preimage;
+    hook.patched = true;
+    return true;
+}
+
+bool restore_pointlight_collection_insert_hook() noexcept
+{
+    auto &hook =
+        g_pointlight_collection_insert_hook;
+    bool ok = true;
+
+    if (hook.patched) {
+        ok =
+            hook.target != nullptr &&
+            write_pointlight_code(
+                hook.target,
+                hook.original.data(),
+                hook.original.size()) &&
+            std::memcmp(
+                hook.target,
+                hook.original.data(),
+                hook.original.size()) == 0;
+        if (ok)
+            hook.patched = false;
+    }
+
+    if (ok &&
+        hook.trampoline != nullptr) {
+        ok =
+            VirtualFree(
+                hook.trampoline,
+                0u,
+                MEM_RELEASE) != FALSE;
+        if (ok)
+            hook.trampoline = nullptr;
+    }
+
+    if (ok)
+        hook = {};
+    return ok;
+}
+
+bool selected_lerp_endpoint_cached(
+    std::uintptr_t manager,
+    std::int16_t selector,
+    std::uintptr_t &source) noexcept
+{
+    source = 0u;
+    if (manager == 0u)
+        return false;
+
+    auto &vm = source_vm_cache_current();
+    const auto area =
+        selector < 0
+            ? 0xffffffffu
+            : (static_cast<unsigned>(
+                   static_cast<std::uint16_t>(
+                       selector)) >> 8u) & 127u;
+
+    const auto lookup =
+        [&](unsigned index) noexcept -> bool {
+            const auto slot =
+                manager + 0x20u +
+                static_cast<std::uintptr_t>(
+                    index) * 0x1b0u;
+            if (!readable_range_cached(
+                    reinterpret_cast<const void *>(slot),
+                    sizeof(std::uintptr_t),
+                    vm.manager))
+                return false;
+
+            std::uintptr_t table = 0u;
+            std::memcpy(
+                &table,
+                reinterpret_cast<const void *>(slot),
+                sizeof(table));
+            if (table == 0u)
+                return true;
+
+            const auto endpoint_slot =
+                table + 9u * 0x10u + 8u;
+            if (!readable_range_cached(
+                    reinterpret_cast<const void *>(
+                        endpoint_slot),
+                    sizeof(std::uintptr_t),
+                    vm.table))
+                return false;
+
+            std::memcpy(
+                &source,
+                reinterpret_cast<const void *>(
+                    endpoint_slot),
+                sizeof(source));
+            return true;
+        };
+
+    if (area <= 11u &&
+        !lookup(area))
+        return false;
+    if (source == 0u &&
+        !lookup(11u))
+        return false;
+    return source != 0u;
+}
+
+bool capture_endpoint_param_identity(
+    std::uintptr_t endpoint_source,
+    std::uintptr_t &param,
+    std::uint16_t &count,
+    std::uint32_t &first) noexcept
+{
+    param = 0u;
+    count = 0u;
+    first = 0u;
+    if (endpoint_source == 0u)
+        return false;
+
+    auto &vm = source_vm_cache_current();
+    const auto param_slot =
+        endpoint_source + 0x18u;
+    if (!readable_range_cached(
+            reinterpret_cast<const void *>(
+                param_slot),
+            sizeof(std::uintptr_t),
+            vm.endpoint))
+        return false;
+
+    std::memcpy(
+        &param,
+        reinterpret_cast<const void *>(
+            param_slot),
+        sizeof(param));
+    if (param == 0u ||
+        !readable_range_cached(
+            reinterpret_cast<const void *>(
+                param),
+            0x38u,
+            vm.param))
+        return false;
+
+    std::memcpy(
+        &count,
+        reinterpret_cast<const void *>(
+            param + 0x0au),
+        sizeof(count));
+    std::memcpy(
+        &first,
+        reinterpret_cast<const void *>(
+            param + 0x34u),
+        sizeof(first));
+    return true;
+}
+
+bool populate_source_semantic_endpoints(
+    bool bank_source,
+    bool lerp_bank_source,
+    frame_source_state_v1 &state) noexcept
+{
+    if (bank_source) {
+        state.endpoint_source_a = state.owner;
+        if (!capture_endpoint_param_identity(
+                state.endpoint_source_a,
+                state.endpoint_param_a,
+                state.endpoint_count_a,
+                state.endpoint_first_a))
+            return false;
+        state.endpoint_source_b =
+            state.endpoint_source_a;
+        state.endpoint_param_b =
+            state.endpoint_param_a;
+        state.endpoint_count_b =
+            state.endpoint_count_a;
+        state.endpoint_first_b =
+            state.endpoint_first_a;
+        return true;
+    }
+
+    if (!lerp_bank_source)
+        return false;
+
+    std::int16_t selector_a = -1;
+    std::int16_t selector_b = -1;
+    float beta = 0.0f;
+    std::memcpy(
+        &selector_a,
+        &state.selector_word0,
+        sizeof(selector_a));
+    std::memcpy(
+        &selector_b,
+        reinterpret_cast<const std::uint8_t *>(
+            &state.selector_word0) +
+            sizeof(selector_a),
+        sizeof(selector_b));
+    std::memcpy(
+        &beta,
+        &state.selector_word1,
+        sizeof(beta));
+
+    const auto pair =
+        pmetal_selector_policy::select(
+            selector_a,
+            selector_b,
+            beta);
+    if (!pair.valid ||
+        !selected_lerp_endpoint_cached(
+            state.owner,
+            pair.a,
+            state.endpoint_source_a) ||
+        !capture_endpoint_param_identity(
+            state.endpoint_source_a,
+            state.endpoint_param_a,
+            state.endpoint_count_a,
+            state.endpoint_first_a))
+        return false;
+
+    if (pair.beta == 0.0f) {
+        state.endpoint_source_b =
+            state.endpoint_source_a;
+        state.endpoint_param_b =
+            state.endpoint_param_a;
+        state.endpoint_count_b =
+            state.endpoint_count_a;
+        state.endpoint_first_b =
+            state.endpoint_first_a;
+        return true;
+    }
+
+    return
+        selected_lerp_endpoint_cached(
+            state.owner,
+            pair.b,
+            state.endpoint_source_b) &&
+        capture_endpoint_param_identity(
+            state.endpoint_source_b,
+            state.endpoint_param_b,
+            state.endpoint_count_b,
+            state.endpoint_first_b);
 }
 
 bool spatial_overlap_xyz_unchecked(
@@ -916,6 +1507,7 @@ bool capture_source(
     }
 
     frame_source_state_v1 frame_state{};
+    bool semantic_endpoints_ready = false;
     const bool frame_cacheable =
         bank_source || lerp_bank_source;
     if (frame_cacheable) {
@@ -938,6 +1530,8 @@ bool capture_source(
         }
 
         frame_state.node = node;
+        frame_state.collection =
+            g_draw_selection.input.collection;
         frame_state.target = target_address;
         frame_state.source_class =
             bank_source ? 1u : 2u;
@@ -973,22 +1567,36 @@ bool capture_source(
             frame_state.position_bits.size() *
                 sizeof(frame_state.position_bits[0]));
 
-        const auto frame_epoch =
-            g_source_frame_epoch.load(
-                std::memory_order_relaxed);
-        if (g_source_frame_seen_epoch !=
-            frame_epoch)
+        // Bank structure data itself is immutable asset identity; selectors,
+        // beta and endpoint routing are live semantic inputs. Include the
+        // actual Bank endpoint objects and param table identities so a Lerp
+        // manager remap cannot produce a false persistent hit.
+        semantic_endpoints_ready =
+            populate_source_semantic_endpoints(
+                bank_source,
+                lerp_bank_source,
+                frame_state);
+
+        const auto semantic_generation =
+            g_source_semantic_generation.load(
+                std::memory_order_acquire);
+        if (g_source_cache_seen_generation !=
+            semantic_generation)
             reset_frame_source_cache_tls(
-                frame_epoch);
+                semantic_generation);
 
-        for (const auto &entry :
-             g_source_frame_cache) {
-            if (!entry.valid ||
-                !same_frame_source_state(
-                    entry.state,
-                    frame_state))
-                continue;
-
+        const auto cache_index =
+            semantic_endpoints_ready
+                ? frame_source_cache_index(
+                      frame_state)
+                : 0u;
+        const auto &entry =
+            g_source_frame_cache[cache_index];
+        if (semantic_endpoints_ready &&
+            entry.valid &&
+            same_frame_source_state(
+                entry.state,
+                frame_state)) {
             out = entry.source;
             static std::atomic_bool
                 cache_hit_logged{false};
@@ -997,7 +1605,7 @@ bool capture_source(
                     std::memory_order_relaxed)) {
                 reshade::log::message(
                     reshade::log::level::info,
-                    "[DSRRL POINTLIGHT R36] frame_source_cache_hit=1 exact_state_snapshot=ON");
+                    "[DSRRL POINTLIGHT R40] generational_source_cache_hit=1 exact_state_snapshot=ON invalidation=ACTIVE_COLLECTION_INSERT");
             }
             return true;
         }
@@ -1093,12 +1701,12 @@ bool capture_source(
         out.raw_q_end[i] = raw[4u + i];
     }
 
-    if (frame_cacheable) {
+    if (frame_cacheable &&
+        semantic_endpoints_ready) {
         auto &entry =
             g_source_frame_cache[
-                static_cast<std::size_t>(
-                    g_source_frame_cache_victim++) %
-                g_source_frame_cache.size()];
+                frame_source_cache_index(
+                    frame_state)];
         entry.state = frame_state;
         entry.source = out;
         entry.valid = true;
@@ -1404,6 +2012,15 @@ bool clustered_pnts_draw_runtime::install() noexcept
     pointlight_ptde_source::
         clear_persistent_structure_cache();
 
+    // R40: exact-byte-guarded mutation hook. It is intentionally installed
+    // only on active-light insertion, which is enough to close pointer-reuse
+    // lifetime hazards: removed nodes cannot be selected, and any reactivation
+    // necessarily passes through this insertion path before reuse.
+    if (!install_pointlight_collection_insert_hook())
+        return false;
+    invalidate_source_semantic_generation();
+    g_source_cache_seen_generation = 0u;
+
     g_runtime = this;
     g_quarantined.store(false);
     g_enabled.store(true);
@@ -1422,18 +2039,42 @@ bool clustered_pnts_draw_runtime::install() noexcept
         reshade::log::message(
             reshade::log::level::info,
             "[DSRRL POINTLIGHT R37] bank_structure_revalidate=TABLE_PLUS_NAMES_ONLY dynamic_row_payload_excluded=ON allocation_guard=ON exact_structure_identity=ON vm_region_cache=TLS_PER_PRESENT selector_capture_reuse=ON source_exec_attest=INSTALL_ONCE frame_source_cache=R36_UNCHANGED");
+    static std::atomic_bool
+        frame_selection_cache_logged{false};
+    if (!frame_selection_cache_logged.exchange(
+            true,
+            std::memory_order_relaxed))
+        reshade::log::message(
+            reshade::log::level::info,
+            "[DSRRL POINTLIGHT R38] frame_selection_cache=DIRECT128_EXACT_INPUT_PLUS_BUCKET_HEADS source_cache=DIRECT128_EXACT_STATE cache_scope=TLS_PER_PRESENT source_revalidation=ON");
+    static std::atomic_bool
+        generational_source_cache_logged{false};
+    if (!generational_source_cache_logged.exchange(
+            true,
+            std::memory_order_relaxed))
+        reshade::log::message(
+            reshade::log::level::info,
+            "[DSRRL POINTLIGHT R40] source_cache=PERSISTENT_GENERATIONAL_EXACT_STATE invalidation=ACTIVE_COLLECTION_INSERT collection_identity=IN_KEY endpoint_identity=SOURCE_PLUS_PARAM selector_beta=IN_KEY present_reset=OFF spc=ON nospc=ON");
     return true;
 }
 
 void clustered_pnts_draw_runtime::uninstall() noexcept
 {
     g_enabled.store(false);
+    if (!restore_pointlight_collection_insert_hook())
+        reshade::log::message(
+            reshade::log::level::error,
+            "[DSRRL POINTLIGHT R40] collection_insert_hook_restore_fail=1");
     g_source_exec_attested.store(
         false,
         std::memory_order_relaxed);
     consume_draw_selection();
     g_source_selection_cache = {};
     g_source_vm_cache = {};
+    g_frame_selection_cache = {};
+    g_source_frame_cache = {};
+    g_source_cache_seen_generation = 0u;
+    invalidate_source_semantic_generation();
     pointlight_ptde_source::
         clear_persistent_structure_cache();
     g_upload_identity_cache = {};
@@ -1614,15 +2255,87 @@ void clustered_pnts_draw_runtime::selector_source_event() noexcept
         const auto prof_select_start =
             prof_active ? prof_qpc() : 0u;
 #endif
-        const bool selection_ready =
-            input.valid &&
-            select_first_four_exact(
-                input.collection,
-                input.query.data(),
-                input.mask,
-                selected_ids,
-                nodes,
-                selected_count);
+        // R38: many material draws in one presented frame repeat the exact
+        // same PointLight selection query. Producer serial is intentionally
+        // unique per builder event, so the R20 per-serial cache cannot reuse
+        // that result. Cache only the exact selector output keyed by owner,
+        // collection, mask, all eight query words and the four current bucket
+        // heads. Scope is one presented-frame epoch. A collision is a miss.
+        // Source capture is still executed below on every producer serial, so
+        // R36 exact source-state validation remains authoritative.
+        frame_selection_key_v1 selection_key{};
+        const bool selection_key_ready =
+            make_frame_selection_key(
+                input,
+                selection_key);
+        const auto selection_epoch =
+            g_source_frame_epoch.load(
+                std::memory_order_relaxed);
+        const auto selection_hash =
+            selection_key_ready
+                ? frame_selection_hash(
+                      selection_key)
+                : 0u;
+        const auto selection_index =
+            static_cast<std::size_t>(
+                selection_hash &
+                (k_frame_selection_cache_entries - 1u));
+
+        bool selection_ready = false;
+        bool selection_cached = false;
+        if (selection_key_ready) {
+            const auto &entry =
+                g_frame_selection_cache[
+                    selection_index];
+            if (entry.epoch ==
+                    selection_epoch &&
+                entry.hash ==
+                    selection_hash &&
+                same_frame_selection_key(
+                    entry.key,
+                    selection_key)) {
+                selected_ids = entry.ids;
+                nodes = entry.nodes;
+                selected_count = entry.count;
+                selection_ready = true;
+                selection_cached = true;
+
+                static std::atomic_bool
+                    selection_cache_hit_logged{false};
+                if (!selection_cache_hit_logged.exchange(
+                        true,
+                        std::memory_order_relaxed)) {
+                    reshade::log::message(
+                        reshade::log::level::info,
+                        "[DSRRL POINTLIGHT R38] frame_selection_cache_hit=1 exact_input=ON bucket_heads=ON source_revalidation=ON");
+                }
+            }
+        }
+
+        if (!selection_cached) {
+            selection_ready =
+                input.valid &&
+                select_first_four_exact(
+                    input.collection,
+                    input.query.data(),
+                    input.mask,
+                    selected_ids,
+                    nodes,
+                    selected_count);
+
+            if (selection_ready &&
+                selection_key_ready) {
+                auto &entry =
+                    g_frame_selection_cache[
+                        selection_index];
+                entry.epoch = selection_epoch;
+                entry.hash = selection_hash;
+                entry.key = selection_key;
+                entry.ids = selected_ids;
+                entry.nodes = nodes;
+                entry.count = selected_count;
+            }
+        }
 #ifdef DSRRL_POINTLIGHT_PROFILE
         if (prof_active)
             prof_add(
@@ -2304,6 +3017,7 @@ void clustered_pnts_draw_runtime::reset() noexcept
 {
     consume_draw_selection();
     g_source_selection_cache = {};
+    g_frame_selection_cache = {};
     reset_frame_source_cache_tls(
         g_source_frame_epoch.fetch_add(
             1u,
