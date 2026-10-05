@@ -48,14 +48,30 @@ def main() -> None:
         "k_vtbl_draw = 13u",
         "k_vtbl_draw_indexed_instanced = 20u",
         "k_vtbl_draw_instanced = 21u",
+        "hook_vtable_record",
+        "original_draw",
+        "original_draw_indexed",
+        "register_command_list(",
+        "unregister_command_list(",
+        "D3D11_DEVICE_CONTEXT_DEFERRED",
+        "hook_record_for(",
+        "const bool hook_live",
+        "pending.context == context",
+        "pending.context1",
         "capture_state(",
         "apply_mutation(",
         "restore_state(",
-        "g_original_draw",
-        "g_original_draw_indexed",
+        "release_pending_draw(",
     ):
         require(native, needle, "native original-draw bridge")
 
+    require(integrated, "addon_event::init_command_list", "deferred-context lifecycle registration")
+    require(integrated, "addon_event::destroy_command_list", "deferred-context lifecycle teardown")
+    require(integrated, "g_pmetal_native_draw.register_command_list(", "exact command-list registry")
+    require(integrated, "g_pmetal_native_draw.unregister_command_list(", "exact command-list unregister")
+
+    forbid(native, "g_original_draw", "R21 must keep originals per exact vtable")
+    forbid(native, "context != impl_->context", "R21 must not reject deferred contexts by single immediate identity")
     forbid(native, "core_.transactions()", "native bridge must not re-enter generic transaction core")
     forbid(native, "raw_replay", "native bridge must not replay a second draw")
 
