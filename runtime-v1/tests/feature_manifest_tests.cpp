@@ -52,7 +52,7 @@ int main()
     CHECK(current==13u);
     CHECK(future_candidate==0u);
     CHECK(future_partial==6u);
-    CHECK(blocked==2u);
+    CHECK(blocked==3u);
     CHECK(diagnostic==1u);
     CHECK(host==2u);
     CHECK(rejected==1u);
@@ -84,6 +84,8 @@ int main()
 
     CHECK(runtime_feature_is_hard_blocked(core::operator_id::post_bloom));
     CHECK(runtime_feature_is_hard_blocked(core::operator_id::post_hdr));
+    CHECK(runtime_feature_is_hard_blocked(core::operator_id::post_dof_ptde));
+    CHECK(!runtime_feature_boot_enabled(core::operator_id::post_dof_ptde));
     CHECK(runtime_feature_is_hard_blocked(core::operator_id::envspec_pmetal_diagnostic));
     CHECK(runtime_feature_is_hard_blocked(core::operator_id::terminal_sat_rgba));
     CHECK(runtime_feature_is_hard_blocked(core::operator_id::dsr_native_sfx));
