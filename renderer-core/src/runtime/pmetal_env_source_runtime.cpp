@@ -2127,16 +2127,29 @@ void publish_hook_source(
             beta_bits = 0u;
 
         selector_identity.source_a = source_a;
-        selector_identity.source_b = source_b;
         selector_identity.base_a = decoded_a->base;
-        selector_identity.base_b = decoded_b->base;
         selector_identity.selector_a = selector_a;
-        selector_identity.selector_b = selector_b;
         selector_identity.count_a = decoded_a->count;
-        selector_identity.count_b = decoded_b->count;
         selector_identity.row_id_a = decoded_a->row_id;
-        selector_identity.row_id_b = decoded_b->row_id;
         selector_identity.beta_bits = beta_bits;
+
+        if (beta_bits == 0u) {
+            // Canonical zero-beta identity must match
+            // capture_hook_selector_identity(): B is exactly A. This is also
+            // required because the cache hash includes B even though equality
+            // intentionally ignores it when beta_bits == 0.
+            selector_identity.source_b = source_a;
+            selector_identity.base_b = decoded_a->base;
+            selector_identity.selector_b = selector_a;
+            selector_identity.count_b = decoded_a->count;
+            selector_identity.row_id_b = decoded_a->row_id;
+        } else {
+            selector_identity.source_b = source_b;
+            selector_identity.base_b = decoded_b->base;
+            selector_identity.selector_b = selector_b;
+            selector_identity.count_b = decoded_b->count;
+            selector_identity.row_id_b = decoded_b->row_id;
+        }
         selector_identity.valid = true;
     } else {
         (void)capture_hook_selector_identity(
