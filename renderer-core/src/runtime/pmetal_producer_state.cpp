@@ -204,6 +204,8 @@ void pmetal_producer_state_publish(
         g_record.epoch == epoch &&
         same_material(g_record.material, material) &&
         same_source_payload(g_record.source, source);
+    const auto previous_payload_key =
+        g_record.payload_key;
 
     const std::uint64_t next_generation =
         unchanged
@@ -218,8 +220,21 @@ void pmetal_producer_state_publish(
     g_record.generation = next_generation;
     g_record.valid = true;
 
-    const auto key = material_key(material);
-    const auto payload = source_key(g_record.source);
+    const bool begin_key_ready =
+        g_begin_key_valid &&
+        g_begin_epoch == epoch;
+    const auto key =
+        begin_key_ready
+            ? g_begin_material_key
+            : material_key(material);
+    g_begin_key_valid = false;
+
+    const auto payload =
+        unchanged
+            ? previous_payload_key
+            : source_key(g_record.source);
+    g_record.payload_key = payload;
+
     auto &slot = sync_slot_for(key);
 
     // Same exact material/source/epoch: begin() only flipped valid=false.
