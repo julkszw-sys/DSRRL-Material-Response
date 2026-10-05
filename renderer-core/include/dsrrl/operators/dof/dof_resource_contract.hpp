@@ -11,13 +11,11 @@ namespace dsrrl::operators::dof {
 enum class ptde_surface_role : std::uint8_t {
     full_prefix = 0,
     full_terminal,
-    half_a,
-    half_b,
-    half_c,
-    half_d,
-    quarter_a,
-    quarter_b,
-    quarter_c,
+    half_rate,
+    half_rate_result,
+    half_blur,
+    quarter_ping,
+    quarter_pong,
     count
 };
 
@@ -28,31 +26,27 @@ struct ptde_surface_pair_desc {
     legacy_raster_desc raster{};
 };
 
-// Exact PTDE ImageProcessGlobals fixed resources used by the DoF family.
-// target_offset is the TextureSurface/RT side; srv_offset is the paired
-// RenderTexture/sample side. One D3D11 texture can supply both RTV and SRV
-// in the bridge, but the two legacy identities remain explicit here.
-inline constexpr std::array<ptde_surface_pair_desc, 9>
+// Exact resource subset referenced by PTDE ImageProcessDof_Flat ctor
+// 0x00FFF170. ImageProcessGlobals owns additional half/quarter pairs, but
+// +B4/+C4 and +E0/+EC are not referenced by this DoF graph and therefore
+// are intentionally excluded from the private island (narrowest carrier).
+inline constexpr std::array<ptde_surface_pair_desc, 7>
 ptde_fixed_surface_pairs = {{
     {ptde_surface_role::full_prefix,   0x005Cu, 0x0060u,
         {1024u, 720u, legacy_format::a8r8g8b8}},
     {ptde_surface_role::full_terminal, 0x0080u, 0x0084u,
         {1024u, 720u, legacy_format::a8r8g8b8}},
 
-    {ptde_surface_role::half_a, 0x00A8u, 0x00B8u,
+    {ptde_surface_role::half_rate,        0x00A8u, 0x00B8u,
         {512u, 360u, legacy_format::a8r8g8b8}},
-    {ptde_surface_role::half_b, 0x00ACu, 0x00BCu,
+    {ptde_surface_role::half_rate_result, 0x00ACu, 0x00BCu,
         {512u, 360u, legacy_format::a8r8g8b8}},
-    {ptde_surface_role::half_c, 0x00B0u, 0x00C0u,
-        {512u, 360u, legacy_format::a8r8g8b8}},
-    {ptde_surface_role::half_d, 0x00B4u, 0x00C4u,
+    {ptde_surface_role::half_blur,        0x00B0u, 0x00C0u,
         {512u, 360u, legacy_format::a8r8g8b8}},
 
-    {ptde_surface_role::quarter_a, 0x00D8u, 0x00E4u,
+    {ptde_surface_role::quarter_ping, 0x00D8u, 0x00E4u,
         {256u, 180u, legacy_format::a8r8g8b8}},
-    {ptde_surface_role::quarter_b, 0x00DCu, 0x00E8u,
-        {256u, 180u, legacy_format::a8r8g8b8}},
-    {ptde_surface_role::quarter_c, 0x00E0u, 0x00ECu,
+    {ptde_surface_role::quarter_pong, 0x00DCu, 0x00E8u,
         {256u, 180u, legacy_format::a8r8g8b8}}
 }};
 
@@ -84,8 +78,8 @@ constexpr bool ptde_fixed_surface_set_is_exact() noexcept
         return false;
 
     if (ptde_surface_count(1024u, 720u) != 2u ||
-        ptde_surface_count(512u, 360u) != 4u ||
-        ptde_surface_count(256u, 180u) != 3u)
+        ptde_surface_count(512u, 360u) != 3u ||
+        ptde_surface_count(256u, 180u) != 2u)
         return false;
 
     for (const auto &entry : ptde_fixed_surface_pairs) {
@@ -104,20 +98,54 @@ constexpr bool ptde_fixed_surface_set_is_exact() noexcept
         terminal->raster.height == 720u;
 }
 
-struct verified_ptde_pass_edge {
+// Raw builder resource arguments recovered from PTDE ctor 0x00FFF170.
+// These preserve the constructor ABI instead of guessing semantic slots:
+// target = builder arg3, pass = arg5, primary = arg6, additional inputs
+// are args7..10. nonzero arg11 is retained as a pass flag.
+struct ptde_pass_resource_contract {
     std::uint8_t pass = 0u;
-    std::uint16_t source_offset = 0u;
     std::uint16_t target_offset = 0u;
-    std::uint16_t stored_srv_offset = 0u;
+    std::uint16_t arg6_source = 0u;
+    std::uint16_t arg7_source = 0u;
+    std::uint16_t arg8_source = 0u;
+    std::uint16_t arg9_source = 0u;
+    std::uint16_t arg10_source = 0u;
+    std::uint8_t arg11_flag = 0u;
 };
 
-// Only edges already closed directly by PTDE constructor/builder RE are
-// represented here. The full nine-pass scheduler remains a separate gate.
-inline constexpr std::array<verified_ptde_pass_edge, 2>
-ptde_verified_prefix_edges = {{
-    {0x00u, 0x0068u, 0x005Cu, 0x0060u},
-    {0x02u, 0x0060u, 0x00A8u, 0x00B8u}
+inline constexpr std::array<ptde_pass_resource_contract, 9>
+ptde_exact_pass_resources = {{
+    {0x00u, 0x005Cu, 0x0068u, 0u,      0u,      0u,      0u,      1u},
+    {0x02u, 0x00A8u, 0x0060u, 0u,      0u,      0u,      0u,      1u},
+    {0x0Du, 0x00ACu, 0x00B8u, 0u,      0u,      0u,      0u,      1u},
+    {0x01u, 0x00DCu, 0x00B8u, 0u,      0u,      0u,      0u,      1u},
+    {0x0Du, 0x00D8u, 0x00E8u, 0u,      0u,      0u,      0u,      1u},
+    {0x0Fu, 0x00B0u, 0x00E4u, 0u,      0u,      0u,      0u,      1u},
+    {0x03u, 0x00DCu, 0u,      0x0068u, 0u,      0u,      0u,      1u},
+    {0x0Eu, 0x00D8u, 0x00E8u, 0u,      0u,      0u,      0u,      1u},
+    {0x10u, 0x0080u, 0x0060u, 0x00B8u, 0x00BCu, 0x00C0u, 0x00E4u, 1u}
 }};
+
+constexpr bool ptde_exact_pass_resource_graph_is_structurally_closed() noexcept
+{
+    if (ptde_exact_pass_resources.size() != ptde_flat_passes.size())
+        return false;
+
+    for (std::size_t i = 0u; i < ptde_flat_passes.size(); ++i)
+        if (ptde_exact_pass_resources[i].pass != ptde_flat_passes[i])
+            return false;
+
+    const auto &terminal = ptde_exact_pass_resources.back();
+    return
+        terminal.pass == 0x10u &&
+        terminal.target_offset == 0x0080u &&
+        terminal.arg6_source == 0x0060u &&
+        terminal.arg7_source == 0x00B8u &&
+        terminal.arg8_source == 0x00BCu &&
+        terminal.arg9_source == 0x00C0u &&
+        terminal.arg10_source == 0x00E4u &&
+        terminal.arg11_flag == 1u;
+}
 
 struct plain_dofrate_switch_contract {
     std::uintptr_t instruction_rva = 0u;
@@ -155,7 +183,9 @@ constexpr bool plain_dofrate_switch_is_exact() noexcept
 }
 
 static_assert(ptde_fixed_surface_set_is_exact(),
-    "PTDE DoF fixed resource set must remain 2x full + 4x half + 3x quarter BGRA8.");
+    "PTDE DoF private set must remain 2x full + 3x half + 2x quarter BGRA8.");
+static_assert(ptde_exact_pass_resource_graph_is_structurally_closed(),
+    "PTDE DoF ctor resource graph drifted.");
 static_assert(plain_dofrate_switch_is_exact(),
     "DSR DoF plain-rate switch contract drifted.");
 
