@@ -1987,7 +1987,7 @@ void publish_hook_source(
                 std::memory_order_relaxed))
             reshade::log::message(
                 reshade::log::level::info,
-                "[DSRRL PMETAL R42] producer_cross_thread_cache_hit=1 exact_key=SOURCE_PTR_SELECTOR_BETA exact_payload=ON global_publish_mutex=SKIPPED");
+                "[DSRRL PMETAL R43] producer_per_key_cache_hit=1 exact_key=SOURCE_BASE_COUNT_ROW_SELECTOR_BETA exact_payload=ON global_publish_mutex=SKIPPED");
 
         return;
     }
