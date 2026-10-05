@@ -100,7 +100,10 @@ struct digest32 {
 
     constexpr bool operator==(const digest32 &other) const noexcept
     {
-        return bytes == other.bytes;
+        for (std::size_t i = 0; i < bytes.size(); ++i)
+            if (bytes[i] != other.bytes[i])
+                return false;
+        return true;
     }
 };
 
