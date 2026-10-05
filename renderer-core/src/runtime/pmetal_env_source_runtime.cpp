@@ -3069,14 +3069,56 @@ void pmetal_env_source_selector_event(
             f4 &value,
             std::uint64_t &bank,
             std::uint32_t &row) noexcept {
-            return
-                source != nullptr &&
-                read_exact_source(
-                    source,
-                    selector,
-                    value,
-                    bank,
-                    row);
+            if (source == nullptr)
+                return false;
+
+            const bool exact_a =
+                selector_identity.valid &&
+                source ==
+                    selector_identity.source_a &&
+                selector ==
+                    selector_identity.selector_a;
+            const bool exact_b =
+                selector_identity.valid &&
+                source ==
+                    selector_identity.source_b &&
+                selector ==
+                    selector_identity.selector_b;
+
+            if (exact_a) {
+                row =
+                    selector_identity.row_id_a;
+                if (read_exact_source_prevalidated(
+                        source,
+                        selector_identity.base_a,
+                        selector_identity.count_a,
+                        selector,
+                        row,
+                        value,
+                        bank))
+                    return true;
+            } else if (exact_b) {
+                row =
+                    selector_identity.row_id_b;
+                if (read_exact_source_prevalidated(
+                        source,
+                        selector_identity.base_b,
+                        selector_identity.count_b,
+                        selector,
+                        row,
+                        value,
+                        bank))
+                    return true;
+            }
+
+            // Preserve the complete fail-open decoder whenever the retained
+            // identity is absent or its prevalidated donor resolution fails.
+            return read_exact_source(
+                source,
+                selector,
+                value,
+                bank,
+                row);
         };
 
     f4 a{};
