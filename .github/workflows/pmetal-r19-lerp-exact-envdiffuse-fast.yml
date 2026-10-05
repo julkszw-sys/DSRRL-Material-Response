@@ -1,4 +1,4 @@
-name: P_Metal R33 Clustered Spc Pre-Source Fail-Open Build
+name: P_Metal R34 PointLight Source Material Split Build
 
 on:
   workflow_dispatch:
@@ -26,7 +26,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: pmetal-r33-spc-failopen-${{ github.head_ref || github.ref_name }}
+  group: pmetal-r34-source-material-split-${{ github.head_ref || github.ref_name }}
   cancel-in-progress: true
 
 jobs:
@@ -50,7 +50,7 @@ jobs:
           ref: 3645e3025d1d98a90e318278858931f034d5d1f6
           path: _reshade
 
-      - name: Configure R33 clustered Spc protected fail-open
+      - name: Configure R34 PointLight source material split
         shell: pwsh
         run: >
           cmake
@@ -59,7 +59,7 @@ jobs:
           -A x64
           -DRESHADE_INCLUDE_DIR="${{ github.workspace }}/_reshade/include"
           -DDSRRL_SOURCE_COMMIT="$env:DSRRL_CHECKOUT_COMMIT"
-          -DDSRRL_BUILD_FLAVOR="pmetal_r33_clustered_spc_pre_source_failopen"
+          -DDSRRL_BUILD_FLAVOR="pmetal_r34_pointlight_source_material_split"
           -DDSRRL_FULL_TELEMETRY_DEFAULT_ON=OFF
           -DDSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG=ON
           -DDSRRL_PMETAL_FULL_PTDE_HEMENV_R3=ON
@@ -83,22 +83,23 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           $addons = @(Get-ChildItem build-fast -Recurse -Filter *.addon64)
           if ($addons.Count -ne 1) { throw "Expected exactly one addon, found $($addons.Count)" }
-          Copy-Item $addons[0].FullName "DSRRL_PMETAL_R33_CLUSTERED_SPC_PRE_SOURCE_FAILOPEN.addon64" -Force
+          Copy-Item $addons[0].FullName "DSRRL_PMETAL_R34_POINTLIGHT_SOURCE_MATERIAL_SPLIT.addon64" -Force
 
       - name: Verify binary identity
         shell: pwsh
         run: |
-          $path = "DSRRL_PMETAL_R33_CLUSTERED_SPC_PRE_SOURCE_FAILOPEN.addon64"
+          $path = "DSRRL_PMETAL_R34_POINTLIGHT_SOURCE_MATERIAL_SPLIT.addon64"
           $ascii = [System.Text.Encoding]::ASCII.GetString([System.IO.File]::ReadAllBytes($path))
           if (-not $ascii.Contains($env:DSRRL_CHECKOUT_COMMIT)) { throw "Missing source commit identity" }
-          if (-not $ascii.Contains("pmetal_r33_clustered_spc_pre_source_failopen")) { throw "Missing R33 build flavor identity" }
+          if (-not $ascii.Contains("pmetal_r33_clustered_spc_pre_source_failopen")) { throw "Missing R34 build flavor identity" }
           if (-not $ascii.Contains("[DSRRL POINTLIGHT R26] direct_current_native_dispatch=ACTIVE persistent_vtable_hook=OFF recursion_guard=ON")) { throw "Missing inherited R26 direct current-native startup marker" }
           if (-not $ascii.Contains("[DSRRL POINTLIGHT R29] exact_structure_snapshot_cache=ACTIVE cross_draw=ON revalidate=VM+MEMCMP pointer_only_authority=OFF gpu_tls_fast_cache=ON per_draw_resource_mutex=OFF per_draw_com_ref_churn=OFF pipeline_tls_fast_path=ON per_draw_private_data=OFF per_draw_shader_ref_churn=OFF failure_propagation=EXACT")) { throw "Missing inherited R29 fast resource/cache/failure-propagation startup marker" }
           if (-not $ascii.Contains("[DSRRL POINTLIGHT R30] synchronous_core_transaction=ACTIVE exact_clustered_shape_guard=ON global_core_tx_mutex=OFF_FOR_CLUSTERED_DIRECT_NATIVE tls_reentry_guard=ON t18_t19_batch=ON sync_draw_serial_atomic=OFF fallback_general_tx=UNCHANGED")) { throw "Missing inherited R30 lock-free synchronous core transaction marker" }
           if (-not $ascii.Contains("[DSRRL POINTLIGHT R31] direct_source_class=DirectPointLightEntity dsr_vfunc_rva=0x55C570 ptde_homologue=0x00D34D50 carrier=position_invRange_RGB_End authorization=EXACT_ONLY")) { throw "Missing R31 exact DirectPointLightEntity attestation marker" }
           if (-not $ascii.Contains("[DSRRL POINTLIGHT R33] clustered_spc_protected_failopen=ACTIVE source_reconstruction_before_spc=OFF clustered_nospc=UNCHANGED stock_dsr_spc=ON")) { throw "Missing R33 clustered Spc protected fail-open marker" }
-          if ($ascii.Contains("[DSRRL PERF R32] POINTLIGHT_PREP")) { throw "R33 production candidate unexpectedly contains PointLight profiler marker" }
-          if ($ascii.Contains("[DSRRL PERF R32] SELECTOR")) { throw "R33 production candidate unexpectedly contains FLVER selector profiler marker" }
+          if (-not $ascii.Contains("[DSRRL POINTLIGHT R34] source_material_split=ACTIVE source_stage=selector_source_event material_stage=selector_identity_event clustered_nospc_consumes_ptde_source=ON clustered_spc_consumes_ptde_source=OFF stock_dsr_spc=ON")) { throw "Missing R34 PointLight source/material split marker" }
+          if ($ascii.Contains("[DSRRL PERF R32] POINTLIGHT_PREP")) { throw "R34 production candidate unexpectedly contains PointLight profiler marker" }
+          if ($ascii.Contains("[DSRRL PERF R32] SELECTOR")) { throw "R34 production candidate unexpectedly contains FLVER selector profiler marker" }
           if (-not $ascii.Contains("[DSRRL POINTLIGHT R29] source_capture_fail reason=")) { throw "Missing inherited R29 exact source-capture failure diagnostic marker" }
           if (-not $ascii.Contains("[DSRRL POINTLIGHT APPLY] stage=direct_current_native_applied")) { throw "Missing R30 direct current-native apply marker" }
           if (-not $ascii.Contains("[DSRRL PMETAL R19 LERP]")) { throw "Missing exact R19 Lerp EnvDiffuse runtime marker" }
@@ -109,6 +110,6 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: DSRRL_PMETAL_R33_CLUSTERED_SPC_PRE_SOURCE_FAILOPEN
-          path: DSRRL_PMETAL_R33_CLUSTERED_SPC_PRE_SOURCE_FAILOPEN.addon64
+          name: DSRRL_PMETAL_R34_POINTLIGHT_SOURCE_MATERIAL_SPLIT
+          path: DSRRL_PMETAL_R34_POINTLIGHT_SOURCE_MATERIAL_SPLIT.addon64
           if-no-files-found: error
