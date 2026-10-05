@@ -129,6 +129,45 @@ thread_local std::array<
     frame_source_cache_entry_v1,
     k_frame_source_cache_entries> g_source_frame_cache{};
 
+struct pointlight_decode_cache_tls {
+    std::uint64_t bank_generation = 0u;
+    std::uint64_t access_epoch = 0u;
+    pointlight_ptde_source::draw_bank_authority_cache
+        bank_authority{};
+    pointlight_ptde_source::access_cache access{};
+};
+
+thread_local pointlight_decode_cache_tls
+    g_pointlight_decode_cache{};
+
+pointlight_ptde_source::draw_bank_authority_cache &
+pointlight_bank_authority_cache_current() noexcept
+{
+    const auto generation =
+        g_source_semantic_generation.load(
+            std::memory_order_acquire);
+    if (g_pointlight_decode_cache.bank_generation !=
+        generation) {
+        g_pointlight_decode_cache.bank_authority = {};
+        g_pointlight_decode_cache.bank_generation =
+            generation;
+    }
+    return g_pointlight_decode_cache.bank_authority;
+}
+
+pointlight_ptde_source::access_cache &
+pointlight_decode_access_current() noexcept
+{
+    const auto epoch =
+        g_source_frame_epoch.load(
+            std::memory_order_relaxed);
+    if (g_pointlight_decode_cache.access_epoch != epoch) {
+        g_pointlight_decode_cache.access = {};
+        g_pointlight_decode_cache.access_epoch = epoch;
+    }
+    return g_pointlight_decode_cache.access;
+}
+
 void reset_frame_source_cache_tls(
     std::uint64_t generation) noexcept
 {
@@ -1427,9 +1466,107 @@ bool select_first_four_exact(
     return true;
 }
 
+bool capture_ptde_source_from_frame_state(
+    const frame_source_state_v1 &state,
+    bool bank_source,
+    bool lerp_bank_source,
+    std::array<float,8> &raw,
+    pointlight_ptde_source::access_cache &access,
+    pointlight_ptde_source::draw_bank_authority_cache &bank_cache) noexcept
+{
+    using pointlight_ptde_source::signal;
+
+    if (!bank_source && !lerp_bank_source)
+        return false;
+
+    signal a{};
+    signal b{};
+    signal result{};
+
+    if (bank_source) {
+        std::int32_t selector = -1;
+        std::memcpy(
+            &selector,
+            &state.selector_word0,
+            sizeof(selector));
+
+        if (!pointlight_ptde_source::donor(
+                state.endpoint_source_a,
+                selector,
+                a,
+                access,
+                bank_cache) ||
+            !pointlight_ptde_source::mix(
+                a,
+                a,
+                0.0f,
+                result))
+            return false;
+    } else {
+        std::int16_t selector_a = -1;
+        std::int16_t selector_b = -1;
+        float beta = 0.0f;
+        std::memcpy(
+            &selector_a,
+            &state.selector_word0,
+            sizeof(selector_a));
+        std::memcpy(
+            &selector_b,
+            reinterpret_cast<const std::uint8_t *>(
+                &state.selector_word0) +
+                sizeof(selector_a),
+            sizeof(selector_b));
+        std::memcpy(
+            &beta,
+            &state.selector_word1,
+            sizeof(beta));
+
+        const auto pair =
+            pmetal_selector_policy::select(
+                selector_a,
+                selector_b,
+                beta);
+        if (!pair.valid ||
+            !pointlight_ptde_source::donor(
+                state.endpoint_source_a,
+                pair.a,
+                a,
+                access,
+                bank_cache))
+            return false;
+
+        b = a;
+        if (pair.beta != 0.0f &&
+            !pointlight_ptde_source::donor(
+                state.endpoint_source_b,
+                pair.b,
+                b,
+                access,
+                bank_cache))
+            return false;
+
+        if (!pointlight_ptde_source::mix(
+                a,
+                b,
+                pair.beta,
+                result))
+            return false;
+    }
+
+    raw[3] =
+        1.0f /
+        (result.end - result.begin);
+    raw[4] = result.q[0];
+    raw[5] = result.q[1];
+    raw[6] = result.q[2];
+    raw[7] = result.end;
+    return std::isfinite(raw[3]);
+}
+
 bool capture_source(
     void *node,
     source_raw &out,
+    pointlight_ptde_source::access_cache &decode_access,
     pointlight_ptde_source::draw_bank_authority_cache &bank_cache) noexcept
 {
     out = {};
@@ -1600,7 +1737,9 @@ bool capture_source(
             out = entry.source;
             static std::atomic_bool
                 cache_hit_logged{false};
-            if (!cache_hit_logged.exchange(
+            if (!cache_hit_logged.load(
+                    std::memory_order_relaxed) &&
+                !cache_hit_logged.exchange(
                     true,
                     std::memory_order_relaxed)) {
                 reshade::log::message(
@@ -1619,8 +1758,9 @@ bool capture_source(
     // must be preserved before donor substitution:
     //   BankPointLightEntity     base+0x55BC00 -> position.xyz at node+0x60
     //   LerpBankPointLightEntity base+0x55D0B0 -> position.xyz at node+0x70
-    // pointlight_ptde_source::capture() then writes the exact PTDE
-    // invRange/RGB/End lanes while preserving raw[0..2].
+    // R45 reuses the already-authenticated frame_state to decode the exact
+    // PTDE invRange/RGB/End lanes, avoiding a second vtable/owner/selector and
+    // Lerp-manager traversal while preserving raw[0..2].
     //
     // DirectPointLightEntity has no donor and its retail packer is itself the
     // exact PTDE-homologous carrier, so keep the direct native call only for
@@ -1635,10 +1775,13 @@ bool capture_source(
                 position_offset,
             3u * sizeof(float));
 
-        if (!pointlight_ptde_source::capture(
-                node,
-                g_base,
+        if (!semantic_endpoints_ready ||
+            !capture_ptde_source_from_frame_state(
+                frame_state,
+                bank_source,
+                lerp_bank_source,
                 raw,
+                decode_access,
                 bank_cache)) {
             // Preserve the pre-R36 donor-miss behavior exactly: unresolved
             // donor authority falls back to the attested stock source packer
@@ -2004,6 +2147,7 @@ bool clustered_pnts_draw_runtime::install() noexcept
         true,
         std::memory_order_relaxed);
     g_source_vm_cache = {};
+    g_pointlight_decode_cache = {};
 
     g_retained_selector =
         reinterpret_cast<retained_selector_fn>(
@@ -2055,6 +2199,15 @@ bool clustered_pnts_draw_runtime::install() noexcept
         reshade::log::message(
             reshade::log::level::info,
             "[DSRRL POINTLIGHT R40] source_cache=PERSISTENT_GENERATIONAL_EXACT_STATE invalidation=ACTIVE_COLLECTION_INSERT collection_identity=IN_KEY endpoint_identity=SOURCE_PLUS_PARAM selector_beta=IN_KEY present_reset=OFF spc=ON nospc=ON");
+
+    static std::atomic_bool
+        r45_source_decode_cache_logged{false};
+    if (!r45_source_decode_cache_logged.exchange(
+            true,
+            std::memory_order_relaxed))
+        reshade::log::message(
+            reshade::log::level::info,
+            "[DSRRL POINTLIGHT R45] bank_authority_cache=TLS_SEMANTIC_GENERATION vm_validation_cache=TLS_PER_PRESENT exact_frame_state_reuse=ON duplicate_vtable_owner_selector_manager_decode=OFF spc=ON nospc=ON");
     return true;
 }
 
@@ -2071,6 +2224,7 @@ void clustered_pnts_draw_runtime::uninstall() noexcept
     consume_draw_selection();
     g_source_selection_cache = {};
     g_source_vm_cache = {};
+    g_pointlight_decode_cache = {};
     g_frame_selection_cache = {};
     g_source_frame_cache = {};
     g_source_cache_seen_generation = 0u;
@@ -2302,7 +2456,9 @@ void clustered_pnts_draw_runtime::selector_source_event() noexcept
 
                 static std::atomic_bool
                     selection_cache_hit_logged{false};
-                if (!selection_cache_hit_logged.exchange(
+                if (!selection_cache_hit_logged.load(
+                        std::memory_order_relaxed) &&
+                    !selection_cache_hit_logged.exchange(
                         true,
                         std::memory_order_relaxed)) {
                     reshade::log::message(
@@ -2433,8 +2589,10 @@ void clustered_pnts_draw_runtime::selector_source_event() noexcept
 #endif
 
         source_cache.selected_count = selected_count;
-        pointlight_ptde_source::draw_bank_authority_cache
-            bank_cache{};
+        auto &bank_cache =
+            pointlight_bank_authority_cache_current();
+        auto &decode_access =
+            pointlight_decode_access_current();
         if (selected_count == 0u) {
             source_cache.ready = true;
             source_cache.neutral = true;
@@ -2450,6 +2608,7 @@ void clustered_pnts_draw_runtime::selector_source_event() noexcept
                 if (!capture_source(
                         nodes[i],
                         source_cache.sources[i],
+                        decode_access,
                         bank_cache) ||
                     source_cache.sources[i].source_id !=
                         selected_ids[i]) {
@@ -3023,6 +3182,7 @@ void clustered_pnts_draw_runtime::reset() noexcept
             1u,
             std::memory_order_relaxed) + 1u);
     g_source_vm_cache = {};
+    g_pointlight_decode_cache = {};
     pointlight_ptde_source::
         clear_persistent_structure_cache();
     g_producer_input_tls = {};

@@ -2,17 +2,6 @@ name: P_Metal Full PTDE HemEnv R5 PTDE Normal Basis Runtime Build
 
 on:
   workflow_dispatch:
-  pull_request:
-    paths:
-      - "renderer-core/integrated/**"
-      - "renderer-core/include/dsrrl/operators/env_spec/**"
-      - "renderer-core/src/operators/env_spec/pmetal_rgba_materializer.cpp"
-      - "renderer-core/src/runtime/material_resource_draw_runtime.cpp"
-      - "renderer-core/src/runtime/pmetal_env_source_runtime.cpp"
-      - "renderer-core/src/runtime/pmetal_envspec_draw_runtime.cpp"
-      - "renderer-core/src/runtime/envspec_resource_runtime.cpp"
-      - ".github/workflows/pmetal-full-ptde-hemenv-r5-normal-basis-fast.yml"
-
 permissions:
   contents: read
 

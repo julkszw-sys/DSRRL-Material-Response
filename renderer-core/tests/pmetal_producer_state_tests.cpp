@@ -68,10 +68,14 @@ int main()
         changed));
     assert(changed.generation == 2u);
 
-    assert(!runtime::pmetal_producer_state_latest(
+    // An unrelated selector may advance the process-wide epoch without
+    // touching this exact material. The synchronized exact-material record
+    // remains current until begin() invalidates this material specifically.
+    assert(runtime::pmetal_producer_state_latest(
         material,
         101u,
         out));
+    assert(out.beta == 0.75f);
 
     // Simulate selector -> draw thread handoff by dropping only TLS. The exact
     // immutable synchronized value must remain available.
@@ -88,11 +92,11 @@ int main()
     // before decode. No stale source may survive a failed selector.
     runtime::pmetal_producer_state_begin(
         material,
-        100u);
+        102u);
     runtime::pmetal_envspec_source stale{};
     assert(!runtime::pmetal_producer_state_latest(
         material,
-        100u,
+        102u,
         stale));
 
     runtime::pmetal_producer_state_publish(

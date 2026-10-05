@@ -158,8 +158,13 @@ def main():
         "bank_source ? 0x60u : 0x70u",
         "attested Bank/Lerp position-only native lane")
     require(clustered,
-        "pointlight_ptde_source::capture(",
-        "PTDE donor replaces Bank/Lerp source without duplicate native pack")
+        "capture_ptde_source_from_frame_state(",
+        "R45 PTDE donor reuses already-decoded exact frame state")
+    if "pointlight_ptde_source::capture(" in clustered:
+        fail("R45 regression: clustered source path re-entered duplicate PointLight capture/decode")
+    require(clustered,
+        "[DSRRL POINTLIGHT R45] bank_authority_cache=TLS_SEMANTIC_GENERATION vm_validation_cache=TLS_PER_PRESENT exact_frame_state_reuse=ON duplicate_vtable_owner_selector_manager_decode=OFF spc=ON nospc=ON",
+        "R45 exact-frame-state reuse runtime attestation")
     require(clustered,
         "g_source_semantic_generation",
         "R40 mutation-driven source-cache generation")

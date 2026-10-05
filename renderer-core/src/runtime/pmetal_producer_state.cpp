@@ -16,10 +16,14 @@ struct producer_record {
     pmetal_envspec_source source{};
     std::uint64_t epoch = 0u;
     std::uint64_t generation = 0u;
+    std::uint64_t payload_key = 0u;
     bool valid = false;
 };
 
 thread_local producer_record g_record{};
+thread_local std::uint64_t g_begin_material_key = 0u;
+thread_local std::uint64_t g_begin_epoch = 0u;
+thread_local bool g_begin_key_valid = false;
 
 constexpr std::size_t k_sync_slot_count = 256u;
 static_assert(
@@ -162,6 +166,7 @@ void pmetal_producer_state_clear() noexcept
     // a new selector attempt, so unrelated FLVER selectors cannot destroy a
     // producer value needed by another command-list thread.
     g_record.valid = false;
+    g_begin_key_valid = false;
 }
 
 void pmetal_producer_state_begin(
@@ -169,6 +174,10 @@ void pmetal_producer_state_begin(
     std::uint64_t epoch) noexcept
 {
     const auto key = material_key(material);
+    g_begin_material_key = key;
+    g_begin_epoch = epoch;
+    g_begin_key_valid = true;
+
     auto &slot = sync_slot_for(key);
 
     // Invalidate before source resolution. If this exact selector fails later,
@@ -195,6 +204,8 @@ void pmetal_producer_state_publish(
         g_record.epoch == epoch &&
         same_material(g_record.material, material) &&
         same_source_payload(g_record.source, source);
+    const auto previous_payload_key =
+        g_record.payload_key;
 
     const std::uint64_t next_generation =
         unchanged
@@ -209,8 +220,21 @@ void pmetal_producer_state_publish(
     g_record.generation = next_generation;
     g_record.valid = true;
 
-    const auto key = material_key(material);
-    const auto payload = source_key(g_record.source);
+    const bool begin_key_ready =
+        g_begin_key_valid &&
+        g_begin_epoch == epoch;
+    const auto key =
+        begin_key_ready
+            ? g_begin_material_key
+            : material_key(material);
+    g_begin_key_valid = false;
+
+    const auto payload =
+        unchanged
+            ? previous_payload_key
+            : source_key(g_record.source);
+    g_record.payload_key = payload;
+
     auto &slot = sync_slot_for(key);
 
     // Same exact material/source/epoch: begin() only flipped valid=false.
@@ -267,12 +291,16 @@ bool pmetal_producer_state_latest(
     const auto key = material_key(material);
     auto &slot = sync_slot_for(key);
 
+    // The synchronized record is material-scoped, not globally
+    // selector-epoch-scoped. begin() invalidates this exact material slot
+    // before every new selector attempt, so a still-valid exact-material
+    // record is authoritative until that material is selected again. Requiring
+    // equality with the process-wide current selector epoch incorrectly
+    // invalidates it whenever an unrelated material advances the epoch.
     if (!slot.valid.load(
             std::memory_order_acquire) ||
         slot.material_key.load(
-            std::memory_order_relaxed) != key ||
-        slot.epoch.load(
-            std::memory_order_relaxed) != epoch)
+            std::memory_order_relaxed) != key)
         return false;
 
     std::lock_guard<std::mutex> lock(slot.mutex);
@@ -281,10 +309,7 @@ bool pmetal_producer_state_latest(
             std::memory_order_relaxed) ||
         slot.material_key.load(
             std::memory_order_relaxed) != key ||
-        slot.epoch.load(
-            std::memory_order_relaxed) != epoch ||
         !slot.record.valid ||
-        slot.record.epoch != epoch ||
         !same_material(
             slot.record.material,
             material))

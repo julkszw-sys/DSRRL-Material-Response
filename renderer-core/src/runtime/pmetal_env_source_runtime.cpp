@@ -32,10 +32,16 @@ namespace dsrrl::runtime {
 namespace {
 
 constexpr std::uint32_t k_pmetal_material_route = 345u;
-constexpr const char *k_pmetal_material_name =
-    "P_Metal[DSB].mtd";
-constexpr const char *k_pmetal_material_sha256 =
-    "ece70f36bd2517d28c8495e276cea537f8b519d6bed981788e79a409ffbf763b";
+constexpr std::uint64_t
+    k_pmetal_material_semantic_hash =
+        0xfd72a0409ae13e45ULL;
+constexpr std::array<std::uint8_t,32>
+    k_pmetal_material_sha256 = {{
+        0xecu,0xe7u,0x0fu,0x36u,0xbdu,0x25u,0x17u,0xd2u,
+        0x8cu,0x84u,0x95u,0xe2u,0x76u,0xceu,0xa5u,0x37u,
+        0xf8u,0xb5u,0x19u,0xd6u,0xbeu,0xd9u,0x81u,0x78u,
+        0x8eu,0x79u,0xa4u,0x09u,0xffu,0xbfu,0x76u,0x3bu
+    }};
 
 constexpr std::uintptr_t k_ret_sel_1 = 0x20E019u;
 constexpr std::uintptr_t k_ret_sel_2 = 0x20EB7Fu;
@@ -405,6 +411,15 @@ struct hook_source_record {
 
 thread_local hook_source_record g_hook_source_tls{};
 
+struct hook_endpoint_identity_v1 {
+    void *source = nullptr;
+    const std::uint8_t *base = nullptr;
+    std::int16_t selector = -1;
+    std::uint16_t count = 0u;
+    std::uint32_t row_id = 0u;
+    bool valid = false;
+};
+
 struct hook_selector_identity_v1 {
     void *source_a = nullptr;
     void *source_b = nullptr;
@@ -423,16 +438,20 @@ struct hook_selector_identity_v1 {
 thread_local hook_selector_identity_v1
     g_hook_selector_identity_tls{};
 
-std::mutex g_hook_source_mutex;
-hook_source_record g_hook_source_global{};
-std::atomic<std::uint64_t> g_hook_source_serial{0u};
-std::atomic<std::uint64_t> g_hook_source_generation{0u};
-std::atomic<std::uint64_t> g_hook_source_semantic_version{0u};
+thread_local std::uint64_t g_hook_source_serial_tls = 0u;
+// R45 legacy audit markers only; process-global state is physically removed:
+// g_hook_source_generation g_hook_source_semantic_version
 
 struct hook_producer_cache_entry_v2 {
     hook_selector_identity_v1 key{};
     hook_source_record record{};
     std::uint64_t cache_generation = 0u;
+
+    // Even values denote a committed residency. Writers publish odd while
+    // replacing the slot and the next even value after commit. Hot producer
+    // calls can therefore prove their last exact cache entry is still resident
+    // with one acquire load and no cache-set mutex.
+    std::atomic<std::uint64_t> residency_version{0u};
     bool valid = false;
 };
 
@@ -447,6 +466,19 @@ std::array<std::mutex,k_hook_producer_cache_sets>
     g_hook_producer_cache_mutex{};
 std::array<std::uint8_t,k_hook_producer_cache_sets>
     g_hook_producer_cache_victim{};
+
+struct hook_producer_cache_residency_token {
+    hook_selector_identity_v1 key{};
+    pmetal_envspec_source payload{};
+    std::size_t slot = k_hook_producer_cache_entries;
+    std::uint64_t cache_generation = 0u;
+    std::uint64_t residency_version = 0u;
+    bool valid = false;
+};
+
+thread_local hook_producer_cache_residency_token
+    g_hook_producer_cache_residency{};
+
 std::atomic<std::uint64_t> g_hook_producer_cache_generation{1u};
 std::atomic<std::uint64_t> g_hook_producer_cache_hit{0u};
 std::atomic<std::uint64_t> g_hook_producer_cache_miss{0u};
@@ -490,6 +522,9 @@ void record_bank_signature_stage(
     std::uint32_t name_offset,
     std::uint32_t consumed) noexcept
 {
+    if (!telemetry::effect_enabled())
+        return;
+
     g_bank_signature_attempt.store(attempt,std::memory_order_relaxed);
     g_bank_signature_stage.store(stage,std::memory_order_relaxed);
     g_bank_signature_entry.store(entry,std::memory_order_relaxed);
@@ -565,6 +600,74 @@ std::size_t hook_producer_cache_set(
         (k_hook_producer_cache_sets - 1u));
 }
 
+void remember_hook_producer_cache_residency(
+    const hook_selector_identity_v1 &key,
+    const hook_source_record &record,
+    std::size_t slot,
+    std::uint64_t cache_generation,
+    std::uint64_t residency_version) noexcept
+{
+    if (!key.valid ||
+        !record.valid ||
+        slot >= k_hook_producer_cache_entries ||
+        residency_version == 0u ||
+        (residency_version & 1u) != 0u) {
+        g_hook_producer_cache_residency = {};
+        return;
+    }
+
+    g_hook_producer_cache_residency.key = key;
+    g_hook_producer_cache_residency.payload =
+        record.source;
+    g_hook_producer_cache_residency.slot = slot;
+    g_hook_producer_cache_residency.cache_generation =
+        cache_generation;
+    g_hook_producer_cache_residency.residency_version =
+        residency_version;
+    g_hook_producer_cache_residency.valid = true;
+}
+
+bool hook_producer_cache_residency_live(
+    const hook_selector_identity_v1 &key,
+    const hook_source_record &record) noexcept
+{
+    const auto &token =
+        g_hook_producer_cache_residency;
+
+    if (!token.valid ||
+        !key.valid ||
+        !record.valid ||
+        token.slot >= k_hook_producer_cache_entries ||
+        token.cache_generation !=
+            g_hook_producer_cache_generation.load(
+                std::memory_order_relaxed) ||
+        !same_hook_selector_identity(
+            token.key,
+            key) ||
+        !same_hook_source_payload(
+            token.payload,
+            record.source))
+        return false;
+
+    const auto set =
+        hook_producer_cache_set(key);
+    const auto first =
+        set * k_hook_producer_cache_ways;
+    if (token.slot < first ||
+        token.slot >= first + k_hook_producer_cache_ways)
+        return false;
+
+    const auto live_version =
+        g_hook_producer_cache[token.slot].
+            residency_version.load(
+                std::memory_order_acquire);
+
+    return
+        live_version ==
+            token.residency_version &&
+        (live_version & 1u) == 0u;
+}
+
 bool hook_producer_cache_lookup(
     const hook_selector_identity_v1 &key,
     hook_source_record &out,
@@ -580,9 +683,8 @@ bool hook_producer_cache_lookup(
         g_hook_producer_cache_mutex[set],
         std::try_to_lock);
     if (!lock.owns_lock()) {
-        g_hook_producer_cache_busy.fetch_add(
-            1u,
-            std::memory_order_relaxed);
+        telemetry::hot_count(
+            g_hook_producer_cache_busy);
         return false;
     }
 
@@ -611,15 +713,25 @@ bool hook_producer_cache_lookup(
             continue;
 
         out = entry.record;
-        g_hook_producer_cache_hit.fetch_add(
-            1u,
-            std::memory_order_relaxed);
+
+        const auto residency_version =
+            entry.residency_version.load(
+                std::memory_order_relaxed);
+        if ((residency_version & 1u) == 0u)
+            remember_hook_producer_cache_residency(
+                key,
+                entry.record,
+                base + way,
+                generation,
+                residency_version);
+
+        telemetry::hot_count(
+            g_hook_producer_cache_hit);
         return true;
     }
 
-    g_hook_producer_cache_miss.fetch_add(
-        1u,
-        std::memory_order_relaxed);
+    telemetry::hot_count(
+            g_hook_producer_cache_miss);
     return false;
 }
 
@@ -628,6 +740,13 @@ void hook_producer_cache_publish_exact(
     const hook_source_record &record) noexcept
 {
     if (!key.valid || !record.valid)
+        return;
+
+    // Dominant unchanged producer case: prove that the exact slot committed
+    // by this thread is still resident. No mutex, no rewrite, no global RMW.
+    if (hook_producer_cache_residency_live(
+            key,
+            record))
         return;
 
     const auto set =
@@ -640,6 +759,37 @@ void hook_producer_cache_publish_exact(
             std::memory_order_relaxed);
     const auto base =
         set * k_hook_producer_cache_ways;
+
+    // Another thread may have published the same exact key/payload while this
+    // caller waited for the set mutex. Adopt that committed residency instead
+    // of rewriting it.
+    for (std::size_t way = 0u;
+         way < k_hook_producer_cache_ways;
+         ++way) {
+        const auto &entry =
+            g_hook_producer_cache[base + way];
+        if (!entry.valid ||
+            entry.cache_generation != generation ||
+            !same_hook_selector_identity(
+                entry.key,
+                key) ||
+            !same_hook_source_payload(
+                entry.record.source,
+                record.source))
+            continue;
+
+        const auto residency_version =
+            entry.residency_version.load(
+                std::memory_order_relaxed);
+        if ((residency_version & 1u) == 0u)
+            remember_hook_producer_cache_residency(
+                key,
+                entry.record,
+                base + way,
+                generation,
+                residency_version);
+        return;
+    }
 
     std::size_t target =
         k_hook_producer_cache_ways;
@@ -669,14 +819,39 @@ void hook_producer_cache_publish_exact(
 
     auto &entry =
         g_hook_producer_cache[base + target];
+
+    auto residency_version =
+        entry.residency_version.load(
+            std::memory_order_relaxed);
+    if ((residency_version & 1u) != 0u)
+        ++residency_version;
+
+    // Mark replacement in progress before touching non-atomic payload fields.
+    entry.residency_version.store(
+        residency_version + 1u,
+        std::memory_order_release);
+
+    entry.valid = false;
     entry.key = key;
     entry.record = record;
     entry.cache_generation = generation;
     entry.valid = true;
 
-    g_hook_producer_cache_publish.fetch_add(
-        1u,
-        std::memory_order_relaxed);
+    const auto committed_version =
+        residency_version + 2u;
+    entry.residency_version.store(
+        committed_version,
+        std::memory_order_release);
+
+    remember_hook_producer_cache_residency(
+        key,
+        entry.record,
+        base + target,
+        generation,
+        committed_version);
+
+    telemetry::hot_count(
+            g_hook_producer_cache_publish);
 }
 
 std::atomic_bool g_hook_restore_failed{false};
@@ -702,6 +877,9 @@ void record_hook_decode(
     std::uint32_t row_id,
     std::uint64_t signature) noexcept
 {
+    if (!telemetry::effect_enabled())
+        return;
+
     g_hook_decode_stage.store(stage,std::memory_order_relaxed);
     g_hook_decode_version.store(version,std::memory_order_relaxed);
     g_hook_decode_count.store(count,std::memory_order_relaxed);
@@ -831,9 +1009,8 @@ bool cached_readable_window(
             entry.generation == generation &&
             entry.begin <= address &&
             address < entry.end) {
-            g_region_cache_hit.fetch_add(
-                1u,
-                std::memory_order_relaxed);
+            telemetry::hot_count(
+            g_region_cache_hit);
             if (!entry.readable)
                 return false;
             window.begin = entry.begin;
@@ -842,9 +1019,8 @@ bool cached_readable_window(
         }
     }
 
-    g_region_cache_miss.fetch_add(
-        1u,
-        std::memory_order_relaxed);
+    telemetry::hot_count(
+            g_region_cache_miss);
 
     readable_window queried{};
     bool is_readable = false;
@@ -962,11 +1138,6 @@ bool exact_pmetal_material_selection(
     const operators::material_response::
         material_identity &material) noexcept
 {
-    namespace mr =
-        operators::material_response;
-    namespace hashing =
-        operators::legacy_plan::hashing;
-
     return
         material.valid &&
         material.owner_tuple_exact &&
@@ -974,11 +1145,9 @@ bool exact_pmetal_material_selection(
         material.route_index ==
             k_pmetal_material_route &&
         material.semantic_name_hash ==
-            mr::mtd_semantic_hash(
-                k_pmetal_material_name) &&
-        hashing::matches_hex(
-            material.raw_mtd_sha256,
-            k_pmetal_material_sha256);
+            k_pmetal_material_semantic_hash &&
+        material.raw_mtd_sha256 ==
+            k_pmetal_material_sha256;
 }
 
 bool retail_lightbank_record_index(
@@ -1209,12 +1378,12 @@ bool bank_layout_signature(
     std::uint64_t &layout_signature) noexcept
 {
     layout_signature = 0u;
-    g_bank_signature_scan_count.fetch_add(
-        1u,
-        std::memory_order_relaxed);
-    g_bank_layout_signature.store(
-        0u,
-        std::memory_order_relaxed);
+    telemetry::hot_count(
+            g_bank_signature_scan_count);
+    if (telemetry::effect_enabled())
+        g_bank_layout_signature.store(
+            0u,
+            std::memory_order_relaxed);
     record_bank_signature_stage(
         1u,
         bank_signature_none,
@@ -1343,9 +1512,10 @@ bool bank_layout_signature(
     }
 
     layout_signature = hash;
-    g_bank_layout_signature.store(
-        hash,
-        std::memory_order_relaxed);
+    if (telemetry::effect_enabled())
+        g_bank_layout_signature.store(
+            hash,
+            std::memory_order_relaxed);
     return true;
 }
 
@@ -1513,16 +1683,14 @@ bool endpoint_cache_lookup(
             entry.row_id == row_id) {
             value = entry.value;
             signature = entry.signature;
-            g_endpoint_cache_hit.fetch_add(
-                1u,
-                std::memory_order_relaxed);
+            telemetry::hot_count(
+            g_endpoint_cache_hit);
             return true;
         }
     }
 
-    g_endpoint_cache_miss.fetch_add(
-        1u,
-        std::memory_order_relaxed);
+    telemetry::hot_count(
+            g_endpoint_cache_miss);
     return false;
 }
 
@@ -1582,9 +1750,8 @@ void endpoint_cache_publish(
     entry.value = value;
     entry.valid = true;
 
-    g_endpoint_cache_fill.fetch_add(
-        1u,
-        std::memory_order_relaxed);
+    telemetry::hot_count(
+            g_endpoint_cache_fill);
 }
 
 bool read_exact_source(
@@ -1592,11 +1759,14 @@ bool read_exact_source(
     std::int32_t selector,
     f4 &out,
     std::uint64_t &signature,
-    std::uint32_t &row_id) noexcept
+    std::uint32_t &row_id,
+    hook_endpoint_identity_v1 *endpoint_identity = nullptr) noexcept
 {
     out = {};
     signature = 0u;
     row_id = 0u;
+    if (endpoint_identity != nullptr)
+        *endpoint_identity = {};
 
     std::uint32_t version_u32 = 0u;
     std::uint32_t count_u32 = 0u;
@@ -1639,6 +1809,16 @@ bool read_exact_source(
         return false;
     }
 
+    if (endpoint_identity != nullptr) {
+        endpoint_identity->source = source;
+        endpoint_identity->base = base;
+        endpoint_identity->selector =
+            static_cast<std::int16_t>(selector);
+        endpoint_identity->count = count;
+        endpoint_identity->row_id = row_id;
+        endpoint_identity->valid = true;
+    }
+
     if (endpoint_cache_lookup(source,base,count,index,row_id,out,signature)) {
         record_hook_decode(hook_decode_ok,version_u32,count_u32,index,row_id,signature);
         return true;
@@ -1671,6 +1851,80 @@ bool read_exact_source(
 
     endpoint_cache_publish(source,base,count,index,row_id,out,signature);
     record_hook_decode(hook_decode_ok,version_u32,count_u32,index,row_id,signature);
+    return true;
+}
+
+bool read_exact_source_prevalidated(
+    void *source,
+    const std::uint8_t *base,
+    std::uint16_t count,
+    std::int16_t selector,
+    std::uint32_t row_id,
+    f4 &out,
+    std::uint64_t &signature) noexcept
+{
+    out = {};
+    signature = 0u;
+
+    std::uint32_t index = 0u;
+    if (source == nullptr ||
+        base == nullptr ||
+        count == 0u ||
+        count > 256u ||
+        selector < 0 ||
+        !retail_lightbank_record_index(
+            selector,
+            index) ||
+        index >= count)
+        return false;
+
+    if (endpoint_cache_lookup(
+            source,
+            base,
+            count,
+            index,
+            row_id,
+            out,
+            signature))
+        return true;
+
+    const auto *bank =
+        resolve_bank(
+            base,
+            count,
+            signature);
+    if (bank == nullptr)
+        return false;
+
+    const auto *row =
+        pmetal_env_source_authority::find_row(
+            *bank,
+            row_id);
+    if (row == nullptr)
+        return false;
+
+    const float scale =
+        static_cast<float>(row->m) * 0.01f;
+    out = {
+        static_cast<float>(row->r) / 255.0f * scale,
+        static_cast<float>(row->g) / 255.0f * scale,
+        static_cast<float>(row->b) / 255.0f * scale,
+        0.0f
+    };
+
+    if (!std::isfinite(out.x) ||
+        !std::isfinite(out.y) ||
+        !std::isfinite(out.z))
+        return false;
+
+    endpoint_cache_publish(
+        source,
+        base,
+        count,
+        index,
+        row_id,
+        out,
+        signature);
     return true;
 }
 
@@ -1881,7 +2135,9 @@ void publish_hook_source(
     void *source_a,
     std::int16_t selector_a,
     void *source_b,
-    std::int16_t selector_b) noexcept
+    std::int16_t selector_b,
+    const hook_endpoint_identity_v1 *decoded_a,
+    const hook_endpoint_identity_v1 *decoded_b) noexcept
 {
     if (!std::isfinite(beta))
         return;
@@ -1910,22 +2166,73 @@ void publish_hook_source(
     next.row_id_a = row_a;
     next.row_id_b = row_b;
 
-    const auto serial =
-        g_hook_source_serial.fetch_add(
-            1u,
-            std::memory_order_relaxed) +
-        1u;
+    auto serial =
+        ++g_hook_source_serial_tls;
+    if (serial == 0u)
+        serial =
+            ++g_hook_source_serial_tls;
     next.serial = serial;
 
     hook_selector_identity_v1
         selector_identity{};
-    (void)capture_hook_selector_identity(
-        source_a,
-        selector_a,
-        source_b,
-        selector_b,
-        next.beta,
-        selector_identity);
+
+    const bool decoded_identity_ready =
+        decoded_a != nullptr &&
+        decoded_a->valid &&
+        decoded_a->source == source_a &&
+        decoded_a->selector == selector_a &&
+        decoded_a->base != nullptr &&
+        decoded_a->count != 0u &&
+        decoded_b != nullptr &&
+        decoded_b->valid &&
+        decoded_b->source == source_b &&
+        decoded_b->selector == selector_b &&
+        decoded_b->base != nullptr &&
+        decoded_b->count != 0u;
+
+    if (decoded_identity_ready) {
+        std::uint32_t beta_bits = 0u;
+        std::memcpy(
+            &beta_bits,
+            &next.beta,
+            sizeof(beta_bits));
+        if (next.beta == 0.0f)
+            beta_bits = 0u;
+
+        selector_identity.source_a = source_a;
+        selector_identity.base_a = decoded_a->base;
+        selector_identity.selector_a = selector_a;
+        selector_identity.count_a = decoded_a->count;
+        selector_identity.row_id_a = decoded_a->row_id;
+        selector_identity.beta_bits = beta_bits;
+
+        if (beta_bits == 0u) {
+            // Canonical zero-beta identity must match
+            // capture_hook_selector_identity(): B is exactly A. This is also
+            // required because the cache hash includes B even though equality
+            // intentionally ignores it when beta_bits == 0.
+            selector_identity.source_b = source_a;
+            selector_identity.base_b = decoded_a->base;
+            selector_identity.selector_b = selector_a;
+            selector_identity.count_b = decoded_a->count;
+            selector_identity.row_id_b = decoded_a->row_id;
+        } else {
+            selector_identity.source_b = source_b;
+            selector_identity.base_b = decoded_b->base;
+            selector_identity.selector_b = selector_b;
+            selector_identity.count_b = decoded_b->count;
+            selector_identity.row_id_b = decoded_b->row_id;
+        }
+        selector_identity.valid = true;
+    } else {
+        (void)capture_hook_selector_identity(
+            source_a,
+            selector_a,
+            source_b,
+            selector_b,
+            next.beta,
+            selector_identity);
+    }
 
     // R43: producer-local reuse is keyed by the exact live LightBank
     // identity, not by a process-global "latest source" version. Independent
@@ -1951,9 +2258,8 @@ void publish_hook_source(
         hook_producer_cache_publish_exact(
             selector_identity,
             g_hook_source_tls);
-        g_hook_publish.fetch_add(
-            1u,
-            std::memory_order_relaxed);
+        telemetry::hot_count(
+            g_hook_publish);
         return;
     }
 
@@ -1972,17 +2278,20 @@ void publish_hook_source(
         };
         g_hook_selector_identity_tls =
             selector_identity;
-        hook_producer_cache_publish_exact(
-            selector_identity,
-            g_hook_source_tls);
-        g_hook_publish.fetch_add(
-            1u,
-            std::memory_order_relaxed);
+
+        // A positive exact cache hit already proves this exact key/payload
+        // is resident. Re-publishing it immediately only serializes the same
+        // set and rewrites an identical record. A later eviction still falls
+        // through the existing exact lookup/decode path.
+        telemetry::hot_count(
+            g_hook_publish);
 
         static std::atomic_bool
             producer_cross_thread_hit_logged{
                 false};
-        if (!producer_cross_thread_hit_logged.exchange(
+        if (!producer_cross_thread_hit_logged.load(
+                std::memory_order_relaxed) &&
+            !producer_cross_thread_hit_logged.exchange(
                 true,
                 std::memory_order_relaxed))
             reshade::log::message(
@@ -1992,49 +2301,16 @@ void publish_hook_source(
         return;
     }
 
-    std::uint64_t resolved_version = 0u;
-    {
-        std::lock_guard<std::mutex> lock(
-            g_hook_source_mutex);
-
-        const bool unchanged =
-            g_hook_source_global.valid &&
-            same_hook_source_payload(
-                g_hook_source_global.source,
-                next);
-
-        if (unchanged) {
-            next.generation =
-                g_hook_source_global.source.generation;
-            resolved_version =
-                g_hook_source_global.semantic_version;
-        } else {
-            next.generation =
-                g_hook_source_generation.fetch_add(
-                    1u,
-                    std::memory_order_relaxed) +
-                1u;
-            resolved_version =
-                g_hook_source_semantic_version.fetch_add(
-                    1u,
-                    std::memory_order_acq_rel) +
-                1u;
-        }
-
-        g_hook_source_global = {
-            next,
-            serial,
-            resolved_version,
-            true
-        };
-    }
-
-    // TLS gets the same semantic generation/version decided against the
-    // authoritative global record. serial remains event identity only.
+    // R44 removed the unkeyed visible consumer. At this point a miss in the
+    // exact per-key cache no longer needs to serialize through a process-wide
+    // "latest source" record. The exact key+payload cache is the cross-thread
+    // transport, while the later material-bound producer state owns visible
+    // authority and its own semantic generation.
+    next.generation = 1u;
     g_hook_source_tls = {
         next,
         serial,
-        resolved_version,
+        1u,
         true
     };
     g_hook_selector_identity_tls =
@@ -2043,9 +2319,8 @@ void publish_hook_source(
         selector_identity,
         g_hook_source_tls);
 
-    g_hook_publish.fetch_add(
-        1u,
-        std::memory_order_relaxed);
+    telemetry::hot_count(
+            g_hook_publish);
 }
 
 bool latest_hook_source_exact_selector(
@@ -2054,7 +2329,8 @@ bool latest_hook_source_exact_selector(
     void *source_b,
     std::int16_t selector_b,
     float beta,
-    pmetal_envspec_source &out) noexcept
+    pmetal_envspec_source &out,
+    hook_selector_identity_v1 *identity_out = nullptr) noexcept
 {
     out = {};
     if (source_a == nullptr ||
@@ -2072,15 +2348,17 @@ bool latest_hook_source_exact_selector(
             query))
         return false;
 
+    if (identity_out != nullptr)
+        *identity_out = query;
+
     if (g_hook_source_tls.valid &&
         g_hook_selector_identity_tls.valid &&
         same_hook_selector_identity(
             g_hook_selector_identity_tls,
             query)) {
         out = g_hook_source_tls.source;
-        g_hook_consume.fetch_add(
-            1u,
-            std::memory_order_relaxed);
+        telemetry::hot_count(
+            g_hook_consume);
         return true;
     }
 
@@ -2093,16 +2371,17 @@ bool latest_hook_source_exact_selector(
     out = cached.source;
     g_hook_source_tls = cached;
     g_hook_selector_identity_tls = query;
-    g_hook_consume.fetch_add(
-        1u,
-        std::memory_order_relaxed);
+    telemetry::hot_count(
+            g_hook_consume);
 
     static std::atomic_bool
         selector_cross_thread_hit_logged{
             false};
-    if (!selector_cross_thread_hit_logged.exchange(
-            true,
-            std::memory_order_relaxed))
+    if (!selector_cross_thread_hit_logged.load(
+                std::memory_order_relaxed) &&
+            !selector_cross_thread_hit_logged.exchange(
+                true,
+                std::memory_order_relaxed))
         reshade::log::message(
             reshade::log::level::info,
             "[DSRRL PMETAL R43] selector_per_key_cache_hit=1 exact_key=SOURCE_BASE_COUNT_ROW_SELECTOR_BETA global_semantic_version=IGNORED donor_redecode=OFF lock_wait=OFF");
@@ -2110,44 +2389,15 @@ bool latest_hook_source_exact_selector(
     return true;
 }
 
-bool latest_hook_source(
-    pmetal_envspec_source &out) noexcept
-{
-    out = {};
-
-    if (g_hook_source_tls.valid) {
-        out =
-            g_hook_source_tls.source;
-        g_hook_consume.fetch_add(
-            1u,
-            std::memory_order_relaxed);
-        return true;
-    }
-
-    std::lock_guard<std::mutex> lock(
-        g_hook_source_mutex);
-    if (!g_hook_source_global.valid ||
-        g_hook_source_global.serial == 0u)
-        return false;
-
-    out =
-        g_hook_source_global.source;
-    g_hook_consume.fetch_add(
-        1u,
-        std::memory_order_relaxed);
-    return true;
-}
-
 void clear_hook_source() noexcept
 {
     g_hook_source_tls = {};
     g_hook_selector_identity_tls = {};
+    g_hook_source_serial_tls = 0u;
+    g_hook_producer_cache_residency = {};
     g_hook_producer_cache_generation.fetch_add(
         1u,
         std::memory_order_relaxed);
-    std::lock_guard<std::mutex> lock(
-        g_hook_source_mutex);
-    g_hook_source_global = {};
 }
 
 void __fastcall envspec_single_hook_entry(
@@ -2155,20 +2405,22 @@ void __fastcall envspec_single_hook_entry(
     float *host_out,
     int selector) noexcept
 {
-    g_hook_single_seen.fetch_add(
-        1u,
-        std::memory_order_relaxed);
+    telemetry::hot_count(
+            g_hook_single_seen);
 
     f4 donor{};
     std::uint64_t bank = 0u;
     std::uint32_t row = 0u;
+    hook_endpoint_identity_v1
+        decoded_endpoint{};
     const bool donor_ok =
         read_exact_source(
             source,
             selector,
             donor,
             bank,
-            row);
+            row,
+            &decoded_endpoint);
 
     if (g_envspec_single_original != nullptr)
         g_envspec_single_original(
@@ -2210,7 +2462,9 @@ void __fastcall envspec_single_hook_entry(
                 selector),
             source,
             static_cast<std::int16_t>(
-                selector));
+                selector),
+            &decoded_endpoint,
+            &decoded_endpoint);
 }
 
 void __fastcall envspec_blend_hook_entry(
@@ -2221,9 +2475,8 @@ void __fastcall envspec_blend_hook_entry(
     int selector_b,
     float beta) noexcept
 {
-    g_hook_blend_seen.fetch_add(
-        1u,
-        std::memory_order_relaxed);
+    telemetry::hot_count(
+            g_hook_blend_seen);
 
     const auto endpoints =
         pmetal_selector_policy::select(
@@ -2239,6 +2492,10 @@ void __fastcall envspec_blend_hook_entry(
     std::uint64_t bank_b = 0u;
     std::uint32_t row_a = 0u;
     std::uint32_t row_b = 0u;
+    hook_endpoint_identity_v1
+        decoded_a{};
+    hook_endpoint_identity_v1
+        decoded_b{};
 
     bool donor_ok = false;
     if (endpoints.valid) {
@@ -2248,7 +2505,8 @@ void __fastcall envspec_blend_hook_entry(
                 endpoints.a,
                 a,
                 bank_a,
-                row_a);
+                row_a,
+                &decoded_a);
 
         if (donor_ok) {
             if (endpoints.beta == 0.0f ||
@@ -2256,6 +2514,9 @@ void __fastcall envspec_blend_hook_entry(
                 b = a;
                 bank_b = bank_a;
                 row_b = row_a;
+                decoded_b = decoded_a;
+                decoded_b.source = source_b;
+                decoded_b.selector = endpoints.b;
             } else {
                 donor_ok =
                     read_exact_source(
@@ -2263,7 +2524,8 @@ void __fastcall envspec_blend_hook_entry(
                         endpoints.b,
                         b,
                         bank_b,
-                        row_b);
+                        row_b,
+                        &decoded_b);
             }
         }
     }
@@ -2312,7 +2574,9 @@ void __fastcall envspec_blend_hook_entry(
             source_a,
             endpoints.a,
             source_b,
-            endpoints.b);
+            endpoints.b,
+            &decoded_a,
+            &decoded_b);
 }
 
 bool install_envspec_source_hooks(
@@ -2503,6 +2767,15 @@ bool pmetal_env_source_runtime::install() noexcept
         reshade::log::message(
             reshade::log::level::info,
             "[DSRRL PMETAL R44] visible_source_authority=MATERIAL_BOUND_PRODUCER_STATE_ONLY unkeyed_latest_hook_fallback=OFF exact_selector_shadow=ON missing_join=FAIL_OPEN_STOCK_DSR islands_preserved=ON");
+
+    static std::atomic_bool
+        r45_hotpath_cleanup_logged{false};
+    if (!r45_hotpath_cleanup_logged.exchange(
+            true,
+            std::memory_order_relaxed))
+        reshade::log::message(
+            reshade::log::level::info,
+            "[DSRRL PMETAL R45] production_hot_counters=GATED redundant_cross_thread_republish=OFF decoded_endpoint_identity_reuse=ON selector_miss_identity_reuse=ON material_sha_byte_compare=ON semantic_hash_const=ON producer_key_handoff=ON renderer_semantics=UNCHANGED");
 
     return true;
 }
@@ -2734,6 +3007,8 @@ void pmetal_env_source_selector_event(
         return;
 
     pmetal_envspec_source next{};
+    hook_selector_identity_v1
+        selector_identity{};
 
     // R41 producer-driven shadow join. The native EnvSpec single/blend packer
     // already resolved this exact LightBank source before the material selector
@@ -2746,7 +3021,8 @@ void pmetal_env_source_selector_event(
             source_b,
             endpoints.b,
             endpoints.beta,
-            next)) {
+            next,
+            &selector_identity)) {
         next.serial = epoch;
         pmetal_producer_state_publish(
             material,
@@ -2755,7 +3031,9 @@ void pmetal_env_source_selector_event(
 
         static std::atomic_bool
             selector_shadow_hit_logged{false};
-        if (!selector_shadow_hit_logged.exchange(
+        if (!selector_shadow_hit_logged.load(
+                std::memory_order_relaxed) &&
+            !selector_shadow_hit_logged.exchange(
                 true,
                 std::memory_order_relaxed))
             reshade::log::message(
@@ -2790,14 +3068,56 @@ void pmetal_env_source_selector_event(
             f4 &value,
             std::uint64_t &bank,
             std::uint32_t &row) noexcept {
-            return
-                source != nullptr &&
-                read_exact_source(
-                    source,
-                    selector,
-                    value,
-                    bank,
-                    row);
+            if (source == nullptr)
+                return false;
+
+            const bool exact_a =
+                selector_identity.valid &&
+                source ==
+                    selector_identity.source_a &&
+                selector ==
+                    selector_identity.selector_a;
+            const bool exact_b =
+                selector_identity.valid &&
+                source ==
+                    selector_identity.source_b &&
+                selector ==
+                    selector_identity.selector_b;
+
+            if (exact_a) {
+                row =
+                    selector_identity.row_id_a;
+                if (read_exact_source_prevalidated(
+                        source,
+                        selector_identity.base_a,
+                        selector_identity.count_a,
+                        selector,
+                        row,
+                        value,
+                        bank))
+                    return true;
+            } else if (exact_b) {
+                row =
+                    selector_identity.row_id_b;
+                if (read_exact_source_prevalidated(
+                        source,
+                        selector_identity.base_b,
+                        selector_identity.count_b,
+                        selector,
+                        row,
+                        value,
+                        bank))
+                    return true;
+            }
+
+            // Preserve the complete fail-open decoder whenever the retained
+            // identity is absent or its prevalidated donor resolution fails.
+            return read_exact_source(
+                source,
+                selector,
+                value,
+                bank,
+                row);
         };
 
     f4 a{};
@@ -3131,15 +3451,7 @@ void pmetal_env_source_runtime::reset() noexcept
     g_hook_consume.store(
         0u,
         std::memory_order_relaxed);
-    g_hook_source_serial.store(
-        0u,
-        std::memory_order_relaxed);
-    g_hook_source_generation.store(
-        0u,
-        std::memory_order_relaxed);
-    g_hook_source_semantic_version.store(
-        0u,
-        std::memory_order_relaxed);
+    g_hook_source_serial_tls = 0u;
     g_hook_decode_stage.store(0u,std::memory_order_relaxed);
     g_hook_decode_version.store(0u,std::memory_order_relaxed);
     g_hook_decode_count.store(0u,std::memory_order_relaxed);

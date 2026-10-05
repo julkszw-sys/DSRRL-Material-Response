@@ -2,15 +2,6 @@ name: P_Metal R11 PTDE Common Merge Runtime Build
 
 on:
   workflow_dispatch:
-  pull_request:
-    paths:
-      - "renderer-core/integrated/**"
-      - "renderer-core/include/dsrrl/operators/env_spec/**"
-      - "renderer-core/src/operators/env_spec/pmetal_rgba_materializer.cpp"
-      - "renderer-core/include/dsrrl/runtime/pmetal_envspec_draw_runtime.hpp"
-      - "renderer-core/src/runtime/pmetal_envspec_draw_runtime.cpp"
-      - "renderer-core/CMakeLists.txt"\n      - "renderer-core/tests/pmetal_r11_materializer_test.cpp"\n      - ".github/workflows/pmetal-full-ptde-hemenv-r8-pre-ab-fast.yml"
-
 permissions:
   contents: read
 

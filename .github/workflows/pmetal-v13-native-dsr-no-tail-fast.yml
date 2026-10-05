@@ -1,14 +1,7 @@
 name: P_Metal V13 Native DSR No Tail Fast Build
 
 on:
-  pull_request:
-    paths:
-      - "renderer-core/integrated/**"
-      - "renderer-core/src/operators/env_spec/pmetal_rgba_materializer.cpp"
-      - "renderer-core/src/operators/env_spec/pmetal_rgba_lerp_materializer.cpp"
-      - "renderer-core/src/runtime/pmetal_envspec_draw_runtime.cpp"
-      - "renderer-core/tools/audit_pmetal_v13_native_dsr_no_tail_diag.py"
-      - ".github/workflows/pmetal-v13-native-dsr-no-tail-fast.yml"
+  workflow_dispatch:
 
 permissions:
   contents: read

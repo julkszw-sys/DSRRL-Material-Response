@@ -1,10 +1,6 @@
 name: Renderer Callback Cut Fast Build
 
 on:
-  pull_request:
-    paths:
-      - "renderer-core/integrated/**"
-      - ".github/workflows/renderer-callback-cut-fast.yml"
   workflow_dispatch:
 
 permissions:

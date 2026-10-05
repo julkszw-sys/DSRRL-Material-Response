@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 from pathlib import Path
 import sys
+import re
 
 root = Path(sys.argv[1]).resolve() if len(sys.argv) > 1 else Path("renderer-core").resolve()
 
@@ -10,6 +11,8 @@ pmetal_h = (root / "include/dsrrl/runtime/pmetal_envspec_draw_runtime.hpp").read
 pmetal_cpp = (root / "src/runtime/pmetal_envspec_draw_runtime.cpp").read_text(encoding="utf-8")
 producer = (root / "src/runtime/pmetal_producer_state.cpp").read_text(encoding="utf-8")
 pmetal_source = (root / "src/runtime/pmetal_env_source_runtime.cpp").read_text(encoding="utf-8")
+clustered = (root / "src/runtime/clustered_pnts_draw_runtime.cpp").read_text(encoding="utf-8")
+native_bridge = (root / "src/runtime/pmetal_native_draw_bridge.cpp").read_text(encoding="utf-8")
 
 def require(text: str, needle: str, label: str) -> None:
     if needle not in text:
@@ -18,6 +21,10 @@ def require(text: str, needle: str, label: str) -> None:
 def forbid(text: str, needle: str, label: str) -> None:
     if needle in text:
         raise RuntimeError(f"{label}: forbidden {needle!r}")
+
+def forbid_fetch_add(text: str, counter: str, label: str) -> None:
+    if re.search(rf"{re.escape(counter)}\s*\.\s*fetch_add\s*\(", text):
+        raise RuntimeError(f"{label}: production hot counter still performs atomic fetch_add: {counter}")
 
 require(tex, "k_logical_name_capacity = 512u", "fixed texture identity buffer")
 require(tex, "VirtualQuery(", "page-bounded texture validation")
@@ -52,6 +59,34 @@ if selector.index("g_selector_upper_lower_enabled.load") > selector.index("upper
 
 require(producer, "g_record.generation + 1u", "semantic generation increment")
 require(producer, "same_source_payload", "semantic payload equality")
+require(
+    producer,
+    "g_begin_material_key",
+    "R45 producer begin material-key TLS handoff")
+require(
+    producer,
+    "begin_key_ready",
+    "R45 producer publish must reuse begin material key")
+require(
+    producer,
+    "previous_payload_key",
+    "R45 steady producer payload-key reuse")
+forbid(
+    pmetal_source,
+    "hashing::matches_hex(",
+    "R45 P_Metal exact material gate must not parse SHA hex in hot path")
+require(
+    pmetal_source,
+    "material.raw_mtd_sha256 ==",
+    "R45 P_Metal exact material gate direct SHA byte compare")
+forbid(
+    pmetal_source,
+    "mtd_semantic_hash(",
+    "R45 P_Metal exact material gate must not recompute semantic-name hash")
+require(
+    pmetal_source,
+    "k_pmetal_material_semantic_hash",
+    "R45 P_Metal compile-time semantic-name hash")
 require(pmetal_source, "same_hook_source_payload(", "fallback semantic payload equality")
 require(pmetal_source, "g_hook_source_generation", "fallback semantic generation")
 require(pmetal_source, "g_hook_source_semantic_version", "legacy latest-source fallback semantic version")
@@ -71,6 +106,180 @@ forbid(latest_body, "latest_hook_source(out)", "R44 visible EnvSpec path must no
 require(pmetal_source,
         "[DSRRL PMETAL R44] visible_source_authority=MATERIAL_BOUND_PRODUCER_STATE_ONLY unkeyed_latest_hook_fallback=OFF exact_selector_shadow=ON missing_join=FAIL_OPEN_STOCK_DSR islands_preserved=ON",
         "R44 material-bound source authority attestation")
+
+require(pmetal_source,
+        "[DSRRL PMETAL R45] production_hot_counters=GATED redundant_cross_thread_republish=OFF decoded_endpoint_identity_reuse=ON selector_miss_identity_reuse=ON material_sha_byte_compare=ON semantic_hash_const=ON producer_key_handoff=ON renderer_semantics=UNCHANGED",
+        "R45 production hot-path cleanup attestation")
+
+for counter in (
+    "g_hook_producer_cache_busy",
+    "g_hook_producer_cache_hit",
+    "g_hook_producer_cache_miss",
+    "g_hook_producer_cache_publish",
+    "g_region_cache_hit",
+    "g_region_cache_miss",
+    "g_endpoint_cache_hit",
+    "g_endpoint_cache_miss",
+    "g_endpoint_cache_fill",
+    "g_bank_signature_scan_count",
+    "g_hook_single_seen",
+    "g_hook_blend_seen",
+    "g_hook_publish",
+    "g_hook_consume",
+):
+    forbid_fetch_add(
+        pmetal_source,
+        counter,
+        "R45 behavior-independent telemetry must be gated")
+
+decode_start = pmetal_source.find("void record_hook_decode(")
+decode_end = pmetal_source.find("struct readable_window", decode_start)
+if min(decode_start, decode_end) < 0:
+    raise RuntimeError("R45 hook decode diagnostic boundary missing")
+require(
+    pmetal_source[decode_start:decode_end],
+    "if (!telemetry::effect_enabled())",
+    "R45 hook decode stores must be effect-telemetry gated")
+
+bank_stage_start = pmetal_source.find("void record_bank_signature_stage(")
+bank_stage_end = pmetal_source.find("bool same_hook_source_payload(", bank_stage_start)
+if min(bank_stage_start, bank_stage_end) < 0:
+    raise RuntimeError("R45 bank signature diagnostic boundary missing")
+require(
+    pmetal_source[bank_stage_start:bank_stage_end],
+    "if (!telemetry::effect_enabled())",
+    "R45 bank signature stores must be effect-telemetry gated")
+
+producer_hit_marker = "if (hook_producer_cache_lookup(\n            selector_identity,\n            cached_record,\n            &next))"
+producer_hit_start = pmetal_source.find(producer_hit_marker)
+producer_hit_end = pmetal_source.find("// R44 removed the unkeyed visible consumer", producer_hit_start)
+if min(producer_hit_start, producer_hit_end) < 0:
+    raise RuntimeError("R45 producer exact-hit branch missing")
+forbid(
+    pmetal_source[producer_hit_start:producer_hit_end],
+    "hook_producer_cache_publish_exact(",
+    "R45 exact cross-thread hit must not republish identical cache entry")
+
+require(
+    pmetal_source,
+    "std::atomic<std::uint64_t> residency_version{0u};",
+    "R45 producer cache slot residency version")
+require(
+    pmetal_source,
+    "hook_producer_cache_residency_live(",
+    "R45 TLS exact producer residency fast path")
+
+publish_start = pmetal_source.find("void hook_producer_cache_publish_exact(")
+publish_end = pmetal_source.find("std::atomic_bool g_hook_restore_failed", publish_start)
+if min(publish_start, publish_end) < 0:
+    raise RuntimeError("R45 producer publish boundary missing")
+publish_body = pmetal_source[publish_start:publish_end]
+residency_gate = publish_body.find("hook_producer_cache_residency_live(")
+publish_lock = publish_body.find("std::lock_guard<std::mutex> lock(")
+if min(residency_gate, publish_lock) < 0 or residency_gate > publish_lock:
+    raise RuntimeError("R45 residency fast path must occur before producer cache mutex")
+
+for latch in (
+    "producer_cross_thread_hit_logged",
+    "selector_cross_thread_hit_logged",
+    "selector_shadow_hit_logged",
+):
+    require(
+        pmetal_source,
+        f"!{latch}.load(",
+        f"R45 hot one-shot latch {latch} must load-gate atomic exchange")
+
+require(
+    pmetal_source,
+    "struct hook_endpoint_identity_v1",
+    "R45 decoded hook endpoint identity carrier")
+require(
+    pmetal_source,
+    "&decoded_endpoint",
+    "R45 single hook endpoint identity reuse")
+require(
+    pmetal_source,
+    "&decoded_a",
+    "R45 blend hook endpoint identity reuse")
+require(
+    pmetal_source,
+    "Canonical zero-beta identity must match",
+    "R45 zero-beta selector identity canonicalization")
+require(
+    pmetal_source,
+    "read_exact_source_prevalidated(",
+    "R45 prevalidated selector-miss endpoint decoder")
+require(
+    pmetal_source,
+    "&selector_identity))",
+    "R45 selector shadow lookup must retain exact identity on miss")
+require(
+    pmetal_source,
+    "Preserve the complete fail-open decoder whenever the retained",
+    "R45 selector-miss prevalidated decode must retain full fallback")
+for latch in (
+    "cache_hit_logged",
+    "selection_cache_hit_logged",
+):
+    require(
+        clustered,
+        f"!{latch}.load(",
+        f"R45 PointLight hot one-shot latch {latch} must load-gate atomic exchange")
+
+require(
+    clustered,
+    "pointlight_bank_authority_cache_current()",
+    "R45 PointLight semantic-generation donor authority cache")
+require(
+    clustered,
+    "pointlight_decode_access_current()",
+    "R45 PointLight per-present VM validation cache")
+require(
+    clustered,
+    "capture_ptde_source_from_frame_state(",
+    "R45 PointLight exact frame-state source decode")
+forbid(
+    clustered,
+    "pointlight_ptde_source::capture(",
+    "R45 clustered source capture must not redo node/vtable/manager decode")
+require(
+    clustered,
+    "[DSRRL POINTLIGHT R45] bank_authority_cache=TLS_SEMANTIC_GENERATION vm_validation_cache=TLS_PER_PRESENT exact_frame_state_reuse=ON duplicate_vtable_owner_selector_manager_decode=OFF spc=ON nospc=ON",
+    "R45 PointLight decode-cache attestation")
+
+for counter in (
+    "vtable_hooks_installed",
+    "context_registers",
+    "deferred_context_registers",
+    "arm_reject",
+    "context_rebinds",
+    "armed",
+    "draw_applied",
+    "draw_indexed_applied",
+):
+    forbid_fetch_add(
+        native_bridge,
+        counter,
+        "R45 native bridge steady-state telemetry must be gated")
+
+for latch in (
+    "g_vtable_conflict_logged",
+    "g_vtable_rearm_logged",
+    "g_context_rebind_logged",
+    "g_deferred_context_registered_logged",
+    "g_native_arm_reject_logged",
+    "g_pointlight_native_applied_logged",
+):
+    require(
+        native_bridge,
+        f"!{latch}.load(",
+        f"R45 native bridge one-shot latch {latch} must load-gate atomic exchange")
+
+require(
+    native_bridge,
+    "[DSRRL NATIVE R45] steady_state_diagnostic_counters=GATED one_shot_latches=LOAD_GATED renderer_semantics=UNCHANGED",
+    "R45 native bridge production hot-path attestation")
+
 forbid(pmetal_source, "next.generation = serial", "event serial must not drive semantic generation")
 require(pmetal_h, "payload_bits", "exact b12 payload cache")
 require(pmetal_cpp, "payload_bits.data()", "exact 64-byte b12 payload identity")

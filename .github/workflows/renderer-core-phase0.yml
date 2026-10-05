@@ -7,10 +7,7 @@ on:
     paths:
       - "renderer-core/**"
       - ".github/workflows/renderer-core-phase0.yml"
-  pull_request:
-    paths:
-      - "renderer-core/**"
-      - ".github/workflows/renderer-core-phase0.yml"
+  workflow_dispatch:
 
 jobs:
   core-tests:
