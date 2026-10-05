@@ -1556,6 +1556,13 @@ bool clustered_pnts_draw_runtime::current_draw_authority(
     material = {};
     decision = {};
 
+#ifdef DSRRL_POINTLIGHT_PROFILE
+    const bool prof_active =
+        prof_sample(g_prof_authority_seq);
+    const auto prof_start =
+        prof_active ? prof_qpc() : 0u;
+#endif
+
     if (!g_enabled.load() ||
         g_quarantined.load() ||
         !g_draw_selection.ready ||
@@ -1565,11 +1572,24 @@ bool clustered_pnts_draw_runtime::current_draw_authority(
         g_draw_selection.input.serial !=
             g_producer_input_tls.serial ||
         g_draw_selection.input.owner !=
-            g_producer_input_tls.owner)
+            g_producer_input_tls.owner) {
+#ifdef DSRRL_POINTLIGHT_PROFILE
+        if (prof_active)
+            prof_add(
+                g_prof_authority,
+                prof_qpc() - prof_start);
+#endif
         return false;
+    }
 
     material = g_draw_selection.material;
     decision = g_draw_selection.material_decision;
+#ifdef DSRRL_POINTLIGHT_PROFILE
+    if (prof_active)
+        prof_add(
+            g_prof_authority,
+            prof_qpc() - prof_start);
+#endif
     return decision.active;
 }
 
@@ -1579,6 +1599,13 @@ bool clustered_pnts_draw_runtime::prepare_sidecar(
     prepared_clustered_pnts_draw &prepared) noexcept
 {
     prepared = {};
+
+#ifdef DSRRL_POINTLIGHT_PROFILE
+    const bool prof_active =
+        prof_sample(g_prof_prepare_seq);
+    const auto prof_start =
+        prof_active ? prof_qpc() : 0u;
+#endif
 
     if (!g_enabled.load() ||
         g_quarantined.load() ||
@@ -1668,6 +1695,10 @@ bool clustered_pnts_draw_runtime::prepare_sidecar(
     bool upload_b12 = true;
     std::uint64_t gpu_generation = 0u;
 
+#ifdef DSRRL_POINTLIGHT_PROFILE
+    const auto prof_gpu_start =
+        prof_active ? prof_qpc() : 0u;
+#endif
     gpu_fast_cache_entry *fast =
         lookup_gpu_fast_cache(
             context,
@@ -1722,6 +1753,13 @@ bool clustered_pnts_draw_runtime::prepare_sidecar(
         }
     }
 
+#ifdef DSRRL_POINTLIGHT_PROFILE
+    if (prof_active)
+        prof_add(
+            g_prof_gpu_cache,
+            prof_qpc() - prof_gpu_start);
+#endif
+
     t18_buffer = fast->t18_buffer;
     t18_srv = fast->t18_srv;
     t19_buffer = fast->t19_buffer;
@@ -1754,6 +1792,10 @@ bool clustered_pnts_draw_runtime::prepare_sidecar(
             payload.b12.data(),
             sizeof(payload.b12)) != 0;
 
+#ifdef DSRRL_POINTLIGHT_PROFILE
+    const auto prof_upload_start =
+        prof_active ? prof_qpc() : 0u;
+#endif
     const bool uploaded =
         (!upload_t18 ||
          update_buffer(
@@ -1773,6 +1815,12 @@ bool clustered_pnts_draw_runtime::prepare_sidecar(
              b12,
              payload.b12.data(),
              sizeof(payload.b12)));
+#ifdef DSRRL_POINTLIGHT_PROFILE
+    if (prof_active)
+        prof_add(
+            g_prof_upload,
+            prof_qpc() - prof_upload_start);
+#endif
 
     if (uploaded) {
         if (upload_t18) {
@@ -1814,6 +1862,14 @@ bool clustered_pnts_draw_runtime::prepare_sidecar(
     prepared.ready = true;
 
     telemetry::hot_count(g_prepare_ok);
+#ifdef DSRRL_POINTLIGHT_PROFILE
+    if (prof_active) {
+        prof_add(
+            g_prof_prepare,
+            prof_qpc() - prof_start);
+        maybe_log_pointlight_prepare_profile();
+    }
+#endif
     return true;
 }
 
