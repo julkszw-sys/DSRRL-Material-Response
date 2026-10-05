@@ -511,20 +511,23 @@ bool clustered_pnts_pipeline_runtime::bound_metadata(
     const auto epoch =
         pipeline_epoch_.load(
             std::memory_order_acquire);
-    std::uint64_t pipeline_handle = 0u;
-    cmd_list->get_private_data(
-        k_clustered_pointlight_binding_guid.data(),
-        &pipeline_handle);
 
     std::shared_ptr<const record> selected{};
     if (bound_tls_.runtime == this &&
         bound_tls_.command == command &&
-        bound_tls_.pipeline == pipeline_handle &&
         bound_tls_.pipeline_epoch == epoch &&
         bound_tls_.present &&
         bound_tls_.selected != nullptr) {
+        // R29 steady-state: bind callback already authenticated this exact
+        // command-list/pipeline epoch, so avoid a private-data lookup on every
+        // draw. The shared_ptr in bound_tls_ is the lifetime authority.
         selected = bound_tls_.selected;
     } else {
+        std::uint64_t pipeline_handle = 0u;
+        cmd_list->get_private_data(
+            k_clustered_pointlight_binding_guid.data(),
+            &pipeline_handle);
+
         selected =
             pipeline_record_cached(
                 pipeline_handle);
@@ -568,20 +571,23 @@ bool clustered_pnts_pipeline_runtime::prepare_bound_shader(
     const auto epoch =
         pipeline_epoch_.load(
             std::memory_order_acquire);
-    std::uint64_t pipeline_handle = 0u;
-    cmd_list->get_private_data(
-        k_clustered_pointlight_binding_guid.data(),
-        &pipeline_handle);
 
     std::shared_ptr<const record> selected{};
     if (bound_tls_.runtime == this &&
         bound_tls_.command == command &&
-        bound_tls_.pipeline == pipeline_handle &&
         bound_tls_.pipeline_epoch == epoch &&
         bound_tls_.present &&
         bound_tls_.selected != nullptr) {
+        // R29 steady-state: bind callback already authenticated this exact
+        // command-list/pipeline epoch, so avoid a private-data lookup on every
+        // draw. The shared_ptr in bound_tls_ is the lifetime authority.
         selected = bound_tls_.selected;
     } else {
+        std::uint64_t pipeline_handle = 0u;
+        cmd_list->get_private_data(
+            k_clustered_pointlight_binding_guid.data(),
+            &pipeline_handle);
+
         selected =
             pipeline_record_cached(
                 pipeline_handle);
@@ -604,7 +610,6 @@ bool clustered_pnts_pipeline_runtime::prepare_bound_shader(
         selected->shader == nullptr)
         return false;
 
-    selected->shader->AddRef();
     prepared.shader = selected->shader;
     prepared.spc = selected->spc;
     prepared.blended_material =
@@ -617,6 +622,7 @@ bool clustered_pnts_pipeline_runtime::prepare_bound_shader(
         selected->current_b12_abi;
     prepared.legacy_specular_complete =
         selected->legacy_specular_complete;
+    prepared.borrowed_tls_record = true;
     prepared.ready = true;
     return true;
 }
@@ -624,7 +630,8 @@ bool clustered_pnts_pipeline_runtime::prepare_bound_shader(
 void clustered_pnts_pipeline_runtime::release_prepared_shader(
     prepared_clustered_pnts_shader &prepared) noexcept
 {
-    if (prepared.shader != nullptr)
+    if (prepared.shader != nullptr &&
+        !prepared.borrowed_tls_record)
         prepared.shader->Release();
     prepared = {};
 }
