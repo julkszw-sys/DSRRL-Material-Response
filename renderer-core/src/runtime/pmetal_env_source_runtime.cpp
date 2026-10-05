@@ -433,6 +433,12 @@ struct hook_producer_cache_entry_v2 {
     hook_selector_identity_v1 key{};
     hook_source_record record{};
     std::uint64_t cache_generation = 0u;
+
+    // Even values denote a committed residency. Writers publish odd while
+    // replacing the slot and the next even value after commit. Hot producer
+    // calls can therefore prove their last exact cache entry is still resident
+    // with one acquire load and no cache-set mutex.
+    std::atomic<std::uint64_t> residency_version{0u};
     bool valid = false;
 };
 
@@ -447,6 +453,19 @@ std::array<std::mutex,k_hook_producer_cache_sets>
     g_hook_producer_cache_mutex{};
 std::array<std::uint8_t,k_hook_producer_cache_sets>
     g_hook_producer_cache_victim{};
+
+struct hook_producer_cache_residency_token {
+    hook_selector_identity_v1 key{};
+    pmetal_envspec_source payload{};
+    std::size_t slot = k_hook_producer_cache_entries;
+    std::uint64_t cache_generation = 0u;
+    std::uint64_t residency_version = 0u;
+    bool valid = false;
+};
+
+thread_local hook_producer_cache_residency_token
+    g_hook_producer_cache_residency{};
+
 std::atomic<std::uint64_t> g_hook_producer_cache_generation{1u};
 std::atomic<std::uint64_t> g_hook_producer_cache_hit{0u};
 std::atomic<std::uint64_t> g_hook_producer_cache_miss{0u};
@@ -568,6 +587,74 @@ std::size_t hook_producer_cache_set(
         (k_hook_producer_cache_sets - 1u));
 }
 
+void remember_hook_producer_cache_residency(
+    const hook_selector_identity_v1 &key,
+    const hook_source_record &record,
+    std::size_t slot,
+    std::uint64_t cache_generation,
+    std::uint64_t residency_version) noexcept
+{
+    if (!key.valid ||
+        !record.valid ||
+        slot >= k_hook_producer_cache_entries ||
+        residency_version == 0u ||
+        (residency_version & 1u) != 0u) {
+        g_hook_producer_cache_residency = {};
+        return;
+    }
+
+    g_hook_producer_cache_residency.key = key;
+    g_hook_producer_cache_residency.payload =
+        record.source;
+    g_hook_producer_cache_residency.slot = slot;
+    g_hook_producer_cache_residency.cache_generation =
+        cache_generation;
+    g_hook_producer_cache_residency.residency_version =
+        residency_version;
+    g_hook_producer_cache_residency.valid = true;
+}
+
+bool hook_producer_cache_residency_live(
+    const hook_selector_identity_v1 &key,
+    const hook_source_record &record) noexcept
+{
+    const auto &token =
+        g_hook_producer_cache_residency;
+
+    if (!token.valid ||
+        !key.valid ||
+        !record.valid ||
+        token.slot >= k_hook_producer_cache_entries ||
+        token.cache_generation !=
+            g_hook_producer_cache_generation.load(
+                std::memory_order_relaxed) ||
+        !same_hook_selector_identity(
+            token.key,
+            key) ||
+        !same_hook_source_payload(
+            token.payload,
+            record.source))
+        return false;
+
+    const auto set =
+        hook_producer_cache_set(key);
+    const auto first =
+        set * k_hook_producer_cache_ways;
+    if (token.slot < first ||
+        token.slot >= first + k_hook_producer_cache_ways)
+        return false;
+
+    const auto live_version =
+        g_hook_producer_cache[token.slot].
+            residency_version.load(
+                std::memory_order_acquire);
+
+    return
+        live_version ==
+            token.residency_version &&
+        (live_version & 1u) == 0u;
+}
+
 bool hook_producer_cache_lookup(
     const hook_selector_identity_v1 &key,
     hook_source_record &out,
@@ -613,6 +700,18 @@ bool hook_producer_cache_lookup(
             continue;
 
         out = entry.record;
+
+        const auto residency_version =
+            entry.residency_version.load(
+                std::memory_order_relaxed);
+        if ((residency_version & 1u) == 0u)
+            remember_hook_producer_cache_residency(
+                key,
+                entry.record,
+                base + way,
+                generation,
+                residency_version);
+
         telemetry::hot_count(
             g_hook_producer_cache_hit);
         return true;
@@ -630,6 +729,13 @@ void hook_producer_cache_publish_exact(
     if (!key.valid || !record.valid)
         return;
 
+    // Dominant unchanged producer case: prove that the exact slot committed
+    // by this thread is still resident. No mutex, no rewrite, no global RMW.
+    if (hook_producer_cache_residency_live(
+            key,
+            record))
+        return;
+
     const auto set =
         hook_producer_cache_set(key);
     std::lock_guard<std::mutex> lock(
@@ -640,6 +746,37 @@ void hook_producer_cache_publish_exact(
             std::memory_order_relaxed);
     const auto base =
         set * k_hook_producer_cache_ways;
+
+    // Another thread may have published the same exact key/payload while this
+    // caller waited for the set mutex. Adopt that committed residency instead
+    // of rewriting it.
+    for (std::size_t way = 0u;
+         way < k_hook_producer_cache_ways;
+         ++way) {
+        const auto &entry =
+            g_hook_producer_cache[base + way];
+        if (!entry.valid ||
+            entry.cache_generation != generation ||
+            !same_hook_selector_identity(
+                entry.key,
+                key) ||
+            !same_hook_source_payload(
+                entry.record.source,
+                record.source))
+            continue;
+
+        const auto residency_version =
+            entry.residency_version.load(
+                std::memory_order_relaxed);
+        if ((residency_version & 1u) == 0u)
+            remember_hook_producer_cache_residency(
+                key,
+                entry.record,
+                base + way,
+                generation,
+                residency_version);
+        return;
+    }
 
     std::size_t target =
         k_hook_producer_cache_ways;
@@ -669,10 +806,36 @@ void hook_producer_cache_publish_exact(
 
     auto &entry =
         g_hook_producer_cache[base + target];
+
+    auto residency_version =
+        entry.residency_version.load(
+            std::memory_order_relaxed);
+    if ((residency_version & 1u) != 0u)
+        ++residency_version;
+
+    // Mark replacement in progress before touching non-atomic payload fields.
+    entry.residency_version.store(
+        residency_version + 1u,
+        std::memory_order_release);
+
+    entry.valid = false;
     entry.key = key;
     entry.record = record;
     entry.cache_generation = generation;
     entry.valid = true;
+
+    const auto committed_version =
+        residency_version + 2u;
+    entry.residency_version.store(
+        committed_version,
+        std::memory_order_release);
+
+    remember_hook_producer_cache_residency(
+        key,
+        entry.record,
+        base + target,
+        generation,
+        committed_version);
 
     telemetry::hot_count(
             g_hook_producer_cache_publish);
@@ -1980,9 +2143,7 @@ void publish_hook_source(
         static std::atomic_bool
             producer_cross_thread_hit_logged{
                 false};
-        if (!producer_cross_thread_hit_logged.exchange(
-                true,
-                std::memory_order_relaxed))
+        if (!producer_cross_thread_hit_logged.load(\n                std::memory_order_relaxed) &&\n            !producer_cross_thread_hit_logged.exchange(\n                true,\n                std::memory_order_relaxed))
             reshade::log::message(
                 reshade::log::level::info,
                 "[DSRRL PMETAL R43] producer_per_key_cache_hit=1 exact_key=SOURCE_BASE_COUNT_ROW_SELECTOR_BETA exact_payload=ON global_publish_mutex=SKIPPED");
@@ -2095,9 +2256,7 @@ bool latest_hook_source_exact_selector(
     static std::atomic_bool
         selector_cross_thread_hit_logged{
             false};
-    if (!selector_cross_thread_hit_logged.exchange(
-            true,
-            std::memory_order_relaxed))
+    if (!selector_cross_thread_hit_logged.load(\n                std::memory_order_relaxed) &&\n            !selector_cross_thread_hit_logged.exchange(\n                true,\n                std::memory_order_relaxed))
         reshade::log::message(
             reshade::log::level::info,
             "[DSRRL PMETAL R43] selector_per_key_cache_hit=1 exact_key=SOURCE_BASE_COUNT_ROW_SELECTOR_BETA global_semantic_version=IGNORED donor_redecode=OFF lock_wait=OFF");
@@ -2755,9 +2914,7 @@ void pmetal_env_source_selector_event(
 
         static std::atomic_bool
             selector_shadow_hit_logged{false};
-        if (!selector_shadow_hit_logged.exchange(
-                true,
-                std::memory_order_relaxed))
+        if (!selector_shadow_hit_logged.load(\n                std::memory_order_relaxed) &&\n            !selector_shadow_hit_logged.exchange(\n                true,\n                std::memory_order_relaxed))
             reshade::log::message(
                 reshade::log::level::info,
                 "[DSRRL PMETAL R41] selector_source_shadow_hit=1 exact_source_ptr=ON exact_selector_beta=ON donor_redecode=OFF fail_open_fallback=ON");
