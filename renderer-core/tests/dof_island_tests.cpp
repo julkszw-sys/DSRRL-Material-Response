@@ -57,6 +57,8 @@ int main()
     ready.exact_imageprocess_dof_flat = true;
     ready.mode = flat_mode::primary;
     ready.graph_complete = true;
+    ready.ptde_dofbank_payload_ready = true;
+    ready.ptde_dofbank_route_verified = true;
     ready.retained_flat_pipeline_set_ready = true;
     ready.private_depth_sidecar_ready = true;
     ready.retained_plain_dofrate_ready = true;
@@ -66,6 +68,16 @@ int main()
     const auto active = evaluate_activation(ready);
     CHECK(active.active);
     CHECK(active.reason == bridge_reason::ready);
+
+    auto missing_bank_payload = ready;
+    missing_bank_payload.ptde_dofbank_payload_ready = false;
+    CHECK(evaluate_activation(missing_bank_payload).reason ==
+          bridge_reason::missing_ptde_dofbank_payload);
+
+    auto unresolved_bank_route = ready;
+    unresolved_bank_route.ptde_dofbank_route_verified = false;
+    CHECK(evaluate_activation(unresolved_bank_route).reason ==
+          bridge_reason::unresolved_ptde_dofbank_route);
 
     auto missing_pipelines = ready;
     missing_pipelines.retained_flat_pipeline_set_ready = false;
