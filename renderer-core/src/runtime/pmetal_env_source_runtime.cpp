@@ -405,6 +405,15 @@ struct hook_source_record {
 
 thread_local hook_source_record g_hook_source_tls{};
 
+struct hook_endpoint_identity_v1 {
+    void *source = nullptr;
+    const std::uint8_t *base = nullptr;
+    std::int16_t selector = -1;
+    std::uint16_t count = 0u;
+    std::uint32_t row_id = 0u;
+    bool valid = false;
+};
+
 struct hook_selector_identity_v1 {
     void *source_a = nullptr;
     void *source_b = nullptr;
@@ -1751,11 +1760,14 @@ bool read_exact_source(
     std::int32_t selector,
     f4 &out,
     std::uint64_t &signature,
-    std::uint32_t &row_id) noexcept
+    std::uint32_t &row_id,
+    hook_endpoint_identity_v1 *endpoint_identity = nullptr) noexcept
 {
     out = {};
     signature = 0u;
     row_id = 0u;
+    if (endpoint_identity != nullptr)
+        *endpoint_identity = {};
 
     std::uint32_t version_u32 = 0u;
     std::uint32_t count_u32 = 0u;
@@ -1796,6 +1808,16 @@ bool read_exact_source(
     if (!safe_read(entry,row_id)) {
         record_hook_decode(hook_decode_row_read_invalid,version_u32,count_u32,index,row_id,signature);
         return false;
+    }
+
+    if (endpoint_identity != nullptr) {
+        endpoint_identity->source = source;
+        endpoint_identity->base = base;
+        endpoint_identity->selector =
+            static_cast<std::int16_t>(selector);
+        endpoint_identity->count = count;
+        endpoint_identity->row_id = row_id;
+        endpoint_identity->valid = true;
     }
 
     if (endpoint_cache_lookup(source,base,count,index,row_id,out,signature)) {
@@ -2040,7 +2062,9 @@ void publish_hook_source(
     void *source_a,
     std::int16_t selector_a,
     void *source_b,
-    std::int16_t selector_b) noexcept
+    std::int16_t selector_b,
+    const hook_endpoint_identity_v1 *decoded_a,
+    const hook_endpoint_identity_v1 *decoded_b) noexcept
 {
     if (!std::isfinite(beta))
         return;
@@ -2078,13 +2102,51 @@ void publish_hook_source(
 
     hook_selector_identity_v1
         selector_identity{};
-    (void)capture_hook_selector_identity(
-        source_a,
-        selector_a,
-        source_b,
-        selector_b,
-        next.beta,
-        selector_identity);
+
+    const bool decoded_identity_ready =
+        decoded_a != nullptr &&
+        decoded_a->valid &&
+        decoded_a->source == source_a &&
+        decoded_a->selector == selector_a &&
+        decoded_a->base != nullptr &&
+        decoded_a->count != 0u &&
+        decoded_b != nullptr &&
+        decoded_b->valid &&
+        decoded_b->source == source_b &&
+        decoded_b->selector == selector_b &&
+        decoded_b->base != nullptr &&
+        decoded_b->count != 0u;
+
+    if (decoded_identity_ready) {
+        std::uint32_t beta_bits = 0u;
+        std::memcpy(
+            &beta_bits,
+            &next.beta,
+            sizeof(beta_bits));
+        if (next.beta == 0.0f)
+            beta_bits = 0u;
+
+        selector_identity.source_a = source_a;
+        selector_identity.source_b = source_b;
+        selector_identity.base_a = decoded_a->base;
+        selector_identity.base_b = decoded_b->base;
+        selector_identity.selector_a = selector_a;
+        selector_identity.selector_b = selector_b;
+        selector_identity.count_a = decoded_a->count;
+        selector_identity.count_b = decoded_b->count;
+        selector_identity.row_id_a = decoded_a->row_id;
+        selector_identity.row_id_b = decoded_b->row_id;
+        selector_identity.beta_bits = beta_bits;
+        selector_identity.valid = true;
+    } else {
+        (void)capture_hook_selector_identity(
+            source_a,
+            selector_a,
+            source_b,
+            selector_b,
+            next.beta,
+            selector_identity);
+    }
 
     // R43: producer-local reuse is keyed by the exact live LightBank
     // identity, not by a process-global "latest source" version. Independent
