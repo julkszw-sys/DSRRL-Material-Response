@@ -404,11 +404,54 @@ struct hook_source_record {
 };
 
 thread_local hook_source_record g_hook_source_tls{};
+
+struct hook_selector_identity_v1 {
+    void *source_a = nullptr;
+    void *source_b = nullptr;
+    const std::uint8_t *base_a = nullptr;
+    const std::uint8_t *base_b = nullptr;
+    std::int16_t selector_a = -1;
+    std::int16_t selector_b = -1;
+    std::uint16_t count_a = 0u;
+    std::uint16_t count_b = 0u;
+    std::uint32_t row_id_a = 0u;
+    std::uint32_t row_id_b = 0u;
+    std::uint32_t beta_bits = 0u;
+    bool valid = false;
+};
+
+thread_local hook_selector_identity_v1
+    g_hook_selector_identity_tls{};
+
 std::mutex g_hook_source_mutex;
 hook_source_record g_hook_source_global{};
 std::atomic<std::uint64_t> g_hook_source_serial{0u};
 std::atomic<std::uint64_t> g_hook_source_generation{0u};
 std::atomic<std::uint64_t> g_hook_source_semantic_version{0u};
+
+struct hook_producer_cache_entry_v2 {
+    hook_selector_identity_v1 key{};
+    hook_source_record record{};
+    std::uint64_t cache_generation = 0u;
+    bool valid = false;
+};
+
+constexpr std::size_t k_hook_producer_cache_sets = 256u;
+constexpr std::size_t k_hook_producer_cache_ways = 2u;
+constexpr std::size_t k_hook_producer_cache_entries =
+    k_hook_producer_cache_sets * k_hook_producer_cache_ways;
+
+std::array<hook_producer_cache_entry_v2,k_hook_producer_cache_entries>
+    g_hook_producer_cache{};
+std::array<std::mutex,k_hook_producer_cache_sets>
+    g_hook_producer_cache_mutex{};
+std::array<std::uint8_t,k_hook_producer_cache_sets>
+    g_hook_producer_cache_victim{};
+std::atomic<std::uint64_t> g_hook_producer_cache_generation{1u};
+std::atomic<std::uint64_t> g_hook_producer_cache_hit{0u};
+std::atomic<std::uint64_t> g_hook_producer_cache_miss{0u};
+std::atomic<std::uint64_t> g_hook_producer_cache_busy{0u};
+std::atomic<std::uint64_t> g_hook_producer_cache_publish{0u};
 std::atomic<std::uint64_t> g_hook_single_seen{0u};
 std::atomic<std::uint64_t> g_hook_blend_seen{0u};
 std::atomic<std::uint64_t> g_hook_publish{0u};
@@ -452,6 +495,188 @@ void record_bank_signature_stage(
     g_bank_signature_entry.store(entry,std::memory_order_relaxed);
     g_bank_signature_name_offset.store(name_offset,std::memory_order_relaxed);
     g_bank_signature_consumed.store(consumed,std::memory_order_relaxed);
+}
+
+bool same_hook_source_payload(
+    const pmetal_envspec_source &a,
+    const pmetal_envspec_source &b) noexcept;
+
+bool same_hook_selector_identity(
+    const hook_selector_identity_v1 &a,
+    const hook_selector_identity_v1 &b) noexcept
+{
+    if (!a.valid || !b.valid ||
+        a.source_a != b.source_a ||
+        a.base_a != b.base_a ||
+        a.selector_a != b.selector_a ||
+        a.count_a != b.count_a ||
+        a.row_id_a != b.row_id_a ||
+        a.beta_bits != b.beta_bits)
+        return false;
+
+    if (a.beta_bits == 0u)
+        return true;
+
+    return
+        a.source_b == b.source_b &&
+        a.base_b == b.base_b &&
+        a.selector_b == b.selector_b &&
+        a.count_b == b.count_b &&
+        a.row_id_b == b.row_id_b;
+}
+
+std::size_t hook_producer_cache_set(
+    const hook_selector_identity_v1 &key) noexcept
+{
+    auto h =
+        reinterpret_cast<std::uintptr_t>(
+            key.source_a);
+    h ^= reinterpret_cast<std::uintptr_t>(
+             key.base_a) >> 4u;
+    h ^= static_cast<std::uintptr_t>(
+             key.row_id_a) *
+         0x9e3779b1u;
+    h ^= static_cast<std::uintptr_t>(
+             key.count_a) << 11u;
+    h ^= reinterpret_cast<std::uintptr_t>(
+             key.source_b) +
+         0x9e3779b97f4a7c15ULL +
+         (h << 6u) +
+         (h >> 2u);
+    h ^= reinterpret_cast<std::uintptr_t>(
+             key.base_b) >> 7u;
+    h ^= static_cast<std::uintptr_t>(
+             key.row_id_b) << 29u;
+    h ^= static_cast<std::uintptr_t>(
+             static_cast<std::uint16_t>(
+                 key.selector_a)) << 17u;
+    h ^= static_cast<std::uintptr_t>(
+             static_cast<std::uint16_t>(
+                 key.selector_b)) << 33u;
+    h ^= static_cast<std::uintptr_t>(
+             key.beta_bits) *
+         0x9e3779b1u;
+    h ^= h >> 23u;
+    h *= 0x2127599bf4325c37ULL;
+    h ^= h >> 47u;
+
+    return static_cast<std::size_t>(
+        h &
+        (k_hook_producer_cache_sets - 1u));
+}
+
+bool hook_producer_cache_lookup(
+    const hook_selector_identity_v1 &key,
+    hook_source_record &out,
+    const pmetal_envspec_source *payload = nullptr) noexcept
+{
+    out = {};
+    if (!key.valid)
+        return false;
+
+    const auto set =
+        hook_producer_cache_set(key);
+    std::unique_lock<std::mutex> lock(
+        g_hook_producer_cache_mutex[set],
+        std::try_to_lock);
+    if (!lock.owns_lock()) {
+        g_hook_producer_cache_busy.fetch_add(
+            1u,
+            std::memory_order_relaxed);
+        return false;
+    }
+
+    const auto generation =
+        g_hook_producer_cache_generation.load(
+            std::memory_order_relaxed);
+    const auto base =
+        set * k_hook_producer_cache_ways;
+
+    for (std::size_t way = 0u;
+         way < k_hook_producer_cache_ways;
+         ++way) {
+        const auto &entry =
+            g_hook_producer_cache[base + way];
+        if (!entry.valid ||
+            entry.cache_generation != generation ||
+            !same_hook_selector_identity(
+                entry.key,
+                key))
+            continue;
+
+        if (payload != nullptr &&
+            !same_hook_source_payload(
+                entry.record.source,
+                *payload))
+            continue;
+
+        out = entry.record;
+        g_hook_producer_cache_hit.fetch_add(
+            1u,
+            std::memory_order_relaxed);
+        return true;
+    }
+
+    g_hook_producer_cache_miss.fetch_add(
+        1u,
+        std::memory_order_relaxed);
+    return false;
+}
+
+void hook_producer_cache_publish_exact(
+    const hook_selector_identity_v1 &key,
+    const hook_source_record &record) noexcept
+{
+    if (!key.valid || !record.valid)
+        return;
+
+    const auto set =
+        hook_producer_cache_set(key);
+    std::lock_guard<std::mutex> lock(
+        g_hook_producer_cache_mutex[set]);
+
+    const auto generation =
+        g_hook_producer_cache_generation.load(
+            std::memory_order_relaxed);
+    const auto base =
+        set * k_hook_producer_cache_ways;
+
+    std::size_t target =
+        k_hook_producer_cache_ways;
+    for (std::size_t way = 0u;
+         way < k_hook_producer_cache_ways;
+         ++way) {
+        const auto &entry =
+            g_hook_producer_cache[base + way];
+        if (!entry.valid ||
+            entry.cache_generation != generation ||
+            same_hook_selector_identity(
+                entry.key,
+                key)) {
+            target = way;
+            break;
+        }
+    }
+
+    if (target ==
+        k_hook_producer_cache_ways) {
+        target =
+            static_cast<std::size_t>(
+                g_hook_producer_cache_victim[set]++ &
+                static_cast<std::uint8_t>(
+                    k_hook_producer_cache_ways - 1u));
+    }
+
+    auto &entry =
+        g_hook_producer_cache[base + target];
+    entry.key = key;
+    entry.record = record;
+    entry.cache_generation = generation;
+    entry.valid = true;
+
+    g_hook_producer_cache_publish.fetch_add(
+        1u,
+        std::memory_order_relaxed);
 }
 
 std::atomic_bool g_hook_restore_failed{false};
@@ -768,6 +993,116 @@ bool retail_lightbank_record_index(
         static_cast<std::uint32_t>(
             static_cast<std::uint8_t>(
                 selector));
+    return true;
+}
+
+bool capture_hook_endpoint_identity(
+    void *source,
+    std::int16_t selector,
+    const std::uint8_t *&base,
+    std::uint16_t &count,
+    std::uint32_t &row_id) noexcept
+{
+    base = nullptr;
+    count = 0u;
+    row_id = 0u;
+
+    if (source == nullptr ||
+        selector < 0 ||
+        !safe_read(
+            static_cast<const std::uint8_t *>(
+                source) + 0x18u,
+            base) ||
+        base == nullptr)
+        return false;
+
+    std::uint16_t version = 0u;
+    if (!safe_read(base + 8u,version) ||
+        !safe_read(base + 10u,count) ||
+        version != 4u ||
+        count == 0u ||
+        count > 256u)
+        return false;
+
+    std::uint32_t index = 0u;
+    if (!retail_lightbank_record_index(
+            selector,
+            index) ||
+        index >= count)
+        return false;
+
+    const auto *entry =
+        base +
+        0x30u +
+        static_cast<std::size_t>(
+            index) * 12u;
+    return safe_read(
+        entry,
+        row_id);
+}
+
+bool capture_hook_selector_identity(
+    void *source_a,
+    std::int16_t selector_a,
+    void *source_b,
+    std::int16_t selector_b,
+    float beta,
+    hook_selector_identity_v1 &out) noexcept
+{
+    out = {};
+    if (source_a == nullptr ||
+        selector_a < 0 ||
+        !std::isfinite(beta))
+        return false;
+
+    const float effective_beta =
+        std::clamp(
+            beta,
+            0.0f,
+            1.0f);
+    std::uint32_t beta_bits = 0u;
+    std::memcpy(
+        &beta_bits,
+        &effective_beta,
+        sizeof(beta_bits));
+    if (effective_beta == 0.0f)
+        beta_bits = 0u;
+
+    out.source_a = source_a;
+    out.source_b = source_b;
+    out.selector_a = selector_a;
+    out.selector_b = selector_b;
+    out.beta_bits = beta_bits;
+
+    if (!capture_hook_endpoint_identity(
+            source_a,
+            selector_a,
+            out.base_a,
+            out.count_a,
+            out.row_id_a))
+        return false;
+
+    if (beta_bits == 0u) {
+        out.source_b = source_a;
+        out.base_b = out.base_a;
+        out.selector_b = selector_a;
+        out.count_b = out.count_a;
+        out.row_id_b = out.row_id_a;
+        out.valid = true;
+        return true;
+    }
+
+    if (source_b == nullptr ||
+        selector_b < 0 ||
+        !capture_hook_endpoint_identity(
+            source_b,
+            selector_b,
+            out.base_b,
+            out.count_b,
+            out.row_id_b))
+        return false;
+
+    out.valid = true;
     return true;
 }
 
@@ -1542,7 +1877,11 @@ void publish_hook_source(
     std::uint64_t bank_a,
     std::uint64_t bank_b,
     std::uint32_t row_a,
-    std::uint32_t row_b) noexcept
+    std::uint32_t row_b,
+    void *source_a,
+    std::int16_t selector_a,
+    void *source_b,
+    std::int16_t selector_b) noexcept
 {
     if (!std::isfinite(beta))
         return;
@@ -1578,17 +1917,24 @@ void publish_hook_source(
         1u;
     next.serial = serial;
 
-    // Dominant steady-state path: the retail packer can call this hook
-    // thousands of times while the exact LightBank payload is unchanged.
-    // If this thread still owns the same payload and no other thread has
-    // published a semantic change since that observation, preserve the
-    // semantic generation and avoid the global publication mutex entirely.
-    const auto semantic_version =
-        g_hook_source_semantic_version.load(
-            std::memory_order_acquire);
+    hook_selector_identity_v1
+        selector_identity{};
+    (void)capture_hook_selector_identity(
+        source_a,
+        selector_a,
+        source_b,
+        selector_b,
+        next.beta,
+        selector_identity);
+
+    // R43: producer-local reuse is keyed by the exact live LightBank
+    // identity, not by a process-global "latest source" version. Independent
+    // sources may interleave without invalidating each other.
     if (g_hook_source_tls.valid &&
-        g_hook_source_tls.semantic_version ==
-            semantic_version &&
+        g_hook_selector_identity_tls.valid &&
+        same_hook_selector_identity(
+            g_hook_selector_identity_tls,
+            selector_identity) &&
         same_hook_source_payload(
             g_hook_source_tls.source,
             next)) {
@@ -1597,12 +1943,52 @@ void publish_hook_source(
         g_hook_source_tls = {
             next,
             serial,
-            semantic_version,
+            g_hook_source_tls.semantic_version,
             true
         };
+        g_hook_selector_identity_tls =
+            selector_identity;
+        hook_producer_cache_publish_exact(
+            selector_identity,
+            g_hook_source_tls);
         g_hook_publish.fetch_add(
             1u,
             std::memory_order_relaxed);
+        return;
+    }
+
+    hook_source_record cached_record{};
+    if (hook_producer_cache_lookup(
+            selector_identity,
+            cached_record,
+            &next)) {
+        next.generation =
+            cached_record.source.generation;
+        g_hook_source_tls = {
+            next,
+            serial,
+            cached_record.semantic_version,
+            true
+        };
+        g_hook_selector_identity_tls =
+            selector_identity;
+        hook_producer_cache_publish_exact(
+            selector_identity,
+            g_hook_source_tls);
+        g_hook_publish.fetch_add(
+            1u,
+            std::memory_order_relaxed);
+
+        static std::atomic_bool
+            producer_cross_thread_hit_logged{
+                false};
+        if (!producer_cross_thread_hit_logged.exchange(
+                true,
+                std::memory_order_relaxed))
+            reshade::log::message(
+                reshade::log::level::info,
+                "[DSRRL PMETAL R43] producer_per_key_cache_hit=1 exact_key=SOURCE_BASE_COUNT_ROW_SELECTOR_BETA exact_payload=ON global_publish_mutex=SKIPPED");
+
         return;
     }
 
@@ -1651,10 +2037,77 @@ void publish_hook_source(
         resolved_version,
         true
     };
+    g_hook_selector_identity_tls =
+        selector_identity;
+    hook_producer_cache_publish_exact(
+        selector_identity,
+        g_hook_source_tls);
 
     g_hook_publish.fetch_add(
         1u,
         std::memory_order_relaxed);
+}
+
+bool latest_hook_source_exact_selector(
+    void *source_a,
+    std::int16_t selector_a,
+    void *source_b,
+    std::int16_t selector_b,
+    float beta,
+    pmetal_envspec_source &out) noexcept
+{
+    out = {};
+    if (source_a == nullptr ||
+        selector_a < 0 ||
+        !std::isfinite(beta))
+        return false;
+
+    hook_selector_identity_v1 query{};
+    if (!capture_hook_selector_identity(
+            source_a,
+            selector_a,
+            source_b,
+            selector_b,
+            beta,
+            query))
+        return false;
+
+    if (g_hook_source_tls.valid &&
+        g_hook_selector_identity_tls.valid &&
+        same_hook_selector_identity(
+            g_hook_selector_identity_tls,
+            query)) {
+        out = g_hook_source_tls.source;
+        g_hook_consume.fetch_add(
+            1u,
+            std::memory_order_relaxed);
+        return true;
+    }
+
+    hook_source_record cached{};
+    if (!hook_producer_cache_lookup(
+            query,
+            cached))
+        return false;
+
+    out = cached.source;
+    g_hook_source_tls = cached;
+    g_hook_selector_identity_tls = query;
+    g_hook_consume.fetch_add(
+        1u,
+        std::memory_order_relaxed);
+
+    static std::atomic_bool
+        selector_cross_thread_hit_logged{
+            false};
+    if (!selector_cross_thread_hit_logged.exchange(
+            true,
+            std::memory_order_relaxed))
+        reshade::log::message(
+            reshade::log::level::info,
+            "[DSRRL PMETAL R43] selector_per_key_cache_hit=1 exact_key=SOURCE_BASE_COUNT_ROW_SELECTOR_BETA global_semantic_version=IGNORED donor_redecode=OFF lock_wait=OFF");
+
+    return true;
 }
 
 bool latest_hook_source(
@@ -1688,6 +2141,10 @@ bool latest_hook_source(
 void clear_hook_source() noexcept
 {
     g_hook_source_tls = {};
+    g_hook_selector_identity_tls = {};
+    g_hook_producer_cache_generation.fetch_add(
+        1u,
+        std::memory_order_relaxed);
     std::lock_guard<std::mutex> lock(
         g_hook_source_mutex);
     g_hook_source_global = {};
@@ -1747,7 +2204,13 @@ void __fastcall envspec_single_hook_entry(
             bank,
             bank,
             row,
-            row);
+            row,
+            source,
+            static_cast<std::int16_t>(
+                selector),
+            source,
+            static_cast<std::int16_t>(
+                selector));
 }
 
 void __fastcall envspec_blend_hook_entry(
@@ -1845,7 +2308,11 @@ void __fastcall envspec_blend_hook_entry(
             bank_a,
             bank_b,
             row_a,
-            row_b);
+            row_b,
+            source_a,
+            endpoints.a,
+            source_b,
+            endpoints.b);
 }
 
 bool install_envspec_source_hooks(
@@ -2000,6 +2467,34 @@ bool pmetal_env_source_runtime::install() noexcept
     g_selector_enabled.store(
         true,
         std::memory_order_release);
+
+    static std::atomic_bool
+        r41_cache_scope_logged{false};
+    if (!r41_cache_scope_logged.exchange(
+            true,
+            std::memory_order_relaxed))
+        reshade::log::message(
+            reshade::log::level::info,
+            "[DSRRL PMETAL R41] flver_lifecycle_cache_flush=OFF source_cache_generation=SOURCE_RUNTIME_RESET_ONLY endpoint_cache=EXACT_SOURCE_BASE_COUNT_INDEX_ROW bank_cache=BASE_COUNT_LAYOUT region_cache=VM_WINDOW selector_shadow=EXACT_TLS_SOURCE_PTR_SELECTOR_BETA selector_source=ON envspec=ON material_response=ON");
+
+    static std::atomic_bool
+        r42_cross_thread_cache_logged{false};
+    if (!r42_cross_thread_cache_logged.exchange(
+            true,
+            std::memory_order_relaxed))
+        reshade::log::message(
+            reshade::log::level::info,
+            "[DSRRL PMETAL R42] producer_cache=SET64_WAY2 cross_thread=ON exact_key=SOURCE_PTR_SELECTOR_BETA semantic_version_gate=CURRENT selector_try_lock=ON producer_payload_reuse=ON donor_redecode_fallback=ON islands_preserved=ON");
+
+    static std::atomic_bool
+        r43_per_key_freshness_logged{false};
+    if (!r43_per_key_freshness_logged.exchange(
+            true,
+            std::memory_order_relaxed))
+        reshade::log::message(
+            reshade::log::level::info,
+            "[DSRRL PMETAL R43] producer_cache=SET256_WAY2 freshness=SOURCE_BASE_COUNT_ROW_SELECTOR_BETA global_semantic_version_gate=OFF selector_try_lock=ON producer_payload_exact=ON fallback_full_decode=ON islands_preserved=ON");
+
     return true;
 }
 
@@ -2208,35 +2703,99 @@ void pmetal_env_source_selector_event(
             return source;
         };
 
+    void *source_a =
+        pmetal_selector_policy::source(
+            endpoints.a,
+            character != 0u,
+            lookup);
+    void *source_b =
+        source_a;
+    if (lookup_valid &&
+        endpoints.beta != 0.0f &&
+        endpoints.a != endpoints.b)
+        source_b =
+            pmetal_selector_policy::source(
+                endpoints.b,
+                character != 0u,
+                lookup);
+
+    if (!lookup_valid ||
+        source_a == nullptr ||
+        source_b == nullptr)
+        return;
+
+    pmetal_envspec_source next{};
+
+    // R41 producer-driven shadow join. The native EnvSpec single/blend packer
+    // already resolved this exact LightBank source before the material selector
+    // consumes it. Reuse only a same-thread snapshot with exact source pointer,
+    // selected endpoint(s), and bit-identical effective beta. Any mismatch
+    // falls through to the complete selector-side donor reconstruction below.
+    if (latest_hook_source_exact_selector(
+            source_a,
+            endpoints.a,
+            source_b,
+            endpoints.b,
+            endpoints.beta,
+            next)) {
+        next.serial = epoch;
+        pmetal_producer_state_publish(
+            material,
+            next,
+            epoch);
+
+        static std::atomic_bool
+            selector_shadow_hit_logged{false};
+        if (!selector_shadow_hit_logged.exchange(
+                true,
+                std::memory_order_relaxed))
+            reshade::log::message(
+                reshade::log::level::info,
+                "[DSRRL PMETAL R41] selector_source_shadow_hit=1 exact_source_ptr=ON exact_selector_beta=ON donor_redecode=OFF fail_open_fallback=ON");
+
+        if (telemetry::effect_enabled()) {
+            g_source_a_decode_ok.store(
+                true,
+                std::memory_order_relaxed);
+            g_source_b_decode_ok.store(
+                true,
+                std::memory_order_relaxed);
+            g_last_publish_tid.store(
+                static_cast<std::uint32_t>(
+                    GetCurrentThreadId()),
+                std::memory_order_relaxed);
+        }
+
+        telemetry::hot_count(
+            g_publish);
+        telemetry::hot_count(
+            endpoints.beta == 0.0f
+                ? g_steady_seen
+                : g_blend_seen);
+        return;
+    }
+
     auto decode =
-        [&](std::int16_t selector,
+        [&](void *source,
+            std::int16_t selector,
             f4 &value,
             std::uint64_t &bank,
             std::uint32_t &row) noexcept {
-            void *source =
-                pmetal_selector_policy::
-                    source(
-                        selector,
-                        character != 0u,
-                        lookup);
-
-            if (!lookup_valid ||
-                source == nullptr)
-                return false;
-
-            return read_exact_source(
-                source,
-                selector,
-                value,
-                bank,
-                row);
+            return
+                source != nullptr &&
+                read_exact_source(
+                    source,
+                    selector,
+                    value,
+                    bank,
+                    row);
         };
 
     f4 a{};
     f4 b{};
-    pmetal_envspec_source next{};
 
     if (!decode(
+            source_a,
             endpoints.a,
             a,
             next.bank_signature_a,
@@ -2258,6 +2817,7 @@ void pmetal_env_source_selector_event(
         next.row_id_b =
             next.row_id_a;
     } else if (!decode(
+                   source_b,
                    endpoints.b,
                    b,
                    next.bank_signature_b,

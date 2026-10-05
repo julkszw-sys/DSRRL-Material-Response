@@ -930,8 +930,11 @@ void __fastcall parse_entry(void*m,const void*r) noexcept {
      1u,
      std::memory_order_relaxed);
 #endif
- if(m)
-  pmetal_env_source_cache_invalidate();
+ // R41: FLVER object streaming is not a LightBank source mutation. Keep
+ // FLVER identity invalidation local to the FLVER registry and preserve the
+ // independent P_Metal EnvSpec bank/endpoint/VM caches across unrelated model
+ // parse events. Exact P_Metal material identity and source keys remain the
+ // positive authority at selector time.
  if(m)flver_identity_observe_destroy(m);
  if(m&&r&&range_ok(r,0x18)){
   std::uint32_t o=0,l=0;
@@ -951,8 +954,10 @@ void __fastcall destroy_entry(void*m) noexcept {
      1u,
      std::memory_order_relaxed);
 #endif
- if(m)
-  pmetal_env_source_cache_invalidate();
+ // R41: model destruction invalidates FLVER ownership only. It must not flush
+ // process-wide/TLS LightBank source caches for unrelated surviving models.
+ // Any later FLVER handle reuse is still fail-open in the FLVER identity
+ // registry; P_Metal source reuse requires its own exact source/base/row key.
  flver_identity_observe_destroy(m);
  if(g_do)g_do(m);
 }
