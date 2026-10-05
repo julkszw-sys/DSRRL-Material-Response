@@ -4003,9 +4003,8 @@ void on_init_command_list(
         !k_pmetal_native_draw_runtime_enabled)
         return;
 
-    (void)g_pmetal_native_draw.
-        register_command_list(
-            cmd_list);
+    (void)g_pmetal_native_draw.register_command_list(
+        cmd_list);
 }
 
 void on_destroy_command_list(
@@ -4015,9 +4014,8 @@ void on_destroy_command_list(
         !k_pmetal_native_draw_runtime_enabled)
         return;
 
-    g_pmetal_native_draw.
-        unregister_command_list(
-            cmd_list);
+    g_pmetal_native_draw.unregister_command_list(
+        cmd_list);
 }
 
 bool register_subsurface_plain_target_chain(
