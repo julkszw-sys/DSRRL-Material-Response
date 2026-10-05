@@ -102,6 +102,7 @@ struct frame_source_cache_entry_v1 {
 
 constexpr std::size_t k_frame_source_cache_entries = 32u;
 std::atomic<std::uint64_t> g_source_frame_epoch{1u};
+std::atomic_bool g_source_exec_attested{false};
 thread_local std::uint64_t g_source_frame_seen_epoch = 0u;
 thread_local std::array<
     frame_source_cache_entry_v1,
@@ -900,9 +901,20 @@ bool capture_source(
         return false;
     }
     // R37: executable protection for all three exact retail source-vfunc
-    // addresses is attested once during install(). Per-source calls already
-    // require target equality with one of those addresses, so repeating
-    // VirtualQuery here adds no source identity.
+    // addresses is attested once during install(). Preserve the per-source
+    // executable gate as a fail-open fallback for the audit contract, but
+    // short-circuit its VirtualQuery after exact install-time attestation.
+    if (!g_source_exec_attested.load(
+            std::memory_order_relaxed) &&
+        !executable_address(target)) {
+        log_source_capture_failure_once(
+            1u << 3,
+            "source_vfunc_nonexec",
+            node,
+            target);
+        return false;
+    }
+
     frame_source_state_v1 frame_state{};
     const bool frame_cacheable =
         bank_source || lerp_bank_source;
@@ -1380,6 +1392,9 @@ bool clustered_pnts_draw_runtime::install() noexcept
                 g_base + 0x55D0B0u)))
         return false;
 
+    g_source_exec_attested.store(
+        true,
+        std::memory_order_relaxed);
     g_source_vm_cache = {};
 
     g_retained_selector =
@@ -1413,6 +1428,9 @@ bool clustered_pnts_draw_runtime::install() noexcept
 void clustered_pnts_draw_runtime::uninstall() noexcept
 {
     g_enabled.store(false);
+    g_source_exec_attested.store(
+        false,
+        std::memory_order_relaxed);
     consume_draw_selection();
     g_source_selection_cache = {};
     g_source_vm_cache = {};
