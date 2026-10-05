@@ -4,9 +4,6 @@
 
 #include <cstdint>
 
-struct ID3D11VertexShader;
-struct ID3D11PixelShader;
-
 namespace reshade::api {
 struct command_list;
 }
@@ -29,23 +26,6 @@ void unregister_preflight_runtime() noexcept;
 bool bound_retained_role(
     reshade::api::command_list *cmd_list,
     operators::dof::retained_shader_role &role) noexcept;
-
-struct retained_native_shader_pair {
-    ID3D11VertexShader *vertex = nullptr;
-    ID3D11PixelShader *pixel = nullptr;
-    operators::dof::retained_shader_role role =
-        operators::dof::retained_shader_role::count;
-    bool ready = false;
-};
-
-bool acquire_retained_native_shader_pair(
-    operators::dof::retained_shader_role role,
-    retained_native_shader_pair &out) noexcept;
-
-void release_retained_native_shader_pair(
-    retained_native_shader_pair &pair) noexcept;
-
-bool retained_execution_set_ready() noexcept;
 
 preflight_telemetry telemetry() noexcept;
 
