@@ -32,8 +32,6 @@ namespace dsrrl::runtime {
 namespace {
 
 constexpr std::uint32_t k_pmetal_material_route = 345u;
-constexpr const char *k_pmetal_material_name =
-    "P_Metal[DSB].mtd";
 constexpr std::uint64_t
     k_pmetal_material_semantic_hash =
         0xfd72a0409ae13e45ULL;
