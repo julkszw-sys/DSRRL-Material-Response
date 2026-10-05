@@ -544,6 +544,13 @@ bool draw_state_transaction_runtime::begin(
             return false;
         }
 
+        if ((plan.carrier_write_mask &
+             carrier_mask) != 0u) {
+            release_state(state);
+            telemetry::hot_count(begin_fail_);
+            return false;
+        }
+
         plan.patches[plan.patch_count++] = {
             op,
             carrier_mask,
@@ -555,18 +562,38 @@ bool draw_state_transaction_runtime::begin(
     }
 
     state.command = command_key(cmd_list);
-    if (!core_.transactions().begin(
+    const auto serial =
+        draw_serial_.fetch_add(
+            1u,
+            std::memory_order_relaxed) + 1u;
+
+    if (mutation.synchronous_core_transaction) {
+        if (state.command == 0u ||
+            plan.empty() ||
+            g_local_tx.active) {
+            release_state(state);
+            telemetry::hot_count(begin_fail_);
+            return false;
+        }
+
+        g_local_tx = {
+            this,
             state.command,
-            draw_serial_.fetch_add(
-                1u,
-                std::memory_order_relaxed) + 1u,
-            context_kind_of(ctx),
-            plan)) {
-        release_state(state);
-        telemetry::hot_count(begin_fail_);
-        return false;
+            true
+        };
+        state.local_started = true;
+    } else {
+        if (!core_.transactions().begin(
+                state.command,
+                serial,
+                context_kind_of(ctx),
+                plan)) {
+            release_state(state);
+            telemetry::hot_count(begin_fail_);
+            return false;
+        }
+        state.core_started = true;
     }
-    state.core_started = true;
 
     if (mutation.replace_pixel_shader) {
         ctx->PSSetShader(
