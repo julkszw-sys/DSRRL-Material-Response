@@ -490,6 +490,9 @@ void record_bank_signature_stage(
     std::uint32_t name_offset,
     std::uint32_t consumed) noexcept
 {
+    if (!telemetry::effect_enabled())
+        return;
+
     g_bank_signature_attempt.store(attempt,std::memory_order_relaxed);
     g_bank_signature_stage.store(stage,std::memory_order_relaxed);
     g_bank_signature_entry.store(entry,std::memory_order_relaxed);
@@ -580,9 +583,7 @@ bool hook_producer_cache_lookup(
         g_hook_producer_cache_mutex[set],
         std::try_to_lock);
     if (!lock.owns_lock()) {
-        g_hook_producer_cache_busy.fetch_add(
-            1u,
-            std::memory_order_relaxed);
+        telemetry::hot_count(g_hook_producer_cache_busy);
         return false;
     }
 
@@ -611,15 +612,11 @@ bool hook_producer_cache_lookup(
             continue;
 
         out = entry.record;
-        g_hook_producer_cache_hit.fetch_add(
-            1u,
-            std::memory_order_relaxed);
+        telemetry::hot_count(g_hook_producer_cache_hit);
         return true;
     }
 
-    g_hook_producer_cache_miss.fetch_add(
-        1u,
-        std::memory_order_relaxed);
+    telemetry::hot_count(g_hook_producer_cache_miss);
     return false;
 }
 
@@ -674,9 +671,7 @@ void hook_producer_cache_publish_exact(
     entry.cache_generation = generation;
     entry.valid = true;
 
-    g_hook_producer_cache_publish.fetch_add(
-        1u,
-        std::memory_order_relaxed);
+    telemetry::hot_count(g_hook_producer_cache_publish);
 }
 
 std::atomic_bool g_hook_restore_failed{false};
@@ -702,6 +697,9 @@ void record_hook_decode(
     std::uint32_t row_id,
     std::uint64_t signature) noexcept
 {
+    if (!telemetry::effect_enabled())
+        return;
+
     g_hook_decode_stage.store(stage,std::memory_order_relaxed);
     g_hook_decode_version.store(version,std::memory_order_relaxed);
     g_hook_decode_count.store(count,std::memory_order_relaxed);
@@ -831,9 +829,7 @@ bool cached_readable_window(
             entry.generation == generation &&
             entry.begin <= address &&
             address < entry.end) {
-            g_region_cache_hit.fetch_add(
-                1u,
-                std::memory_order_relaxed);
+            telemetry::hot_count(g_region_cache_hit);
             if (!entry.readable)
                 return false;
             window.begin = entry.begin;
@@ -842,9 +838,7 @@ bool cached_readable_window(
         }
     }
 
-    g_region_cache_miss.fetch_add(
-        1u,
-        std::memory_order_relaxed);
+    telemetry::hot_count(g_region_cache_miss);
 
     readable_window queried{};
     bool is_readable = false;
@@ -1209,9 +1203,7 @@ bool bank_layout_signature(
     std::uint64_t &layout_signature) noexcept
 {
     layout_signature = 0u;
-    g_bank_signature_scan_count.fetch_add(
-        1u,
-        std::memory_order_relaxed);
+    telemetry::hot_count(g_bank_signature_scan_count);
     g_bank_layout_signature.store(
         0u,
         std::memory_order_relaxed);
@@ -1513,16 +1505,12 @@ bool endpoint_cache_lookup(
             entry.row_id == row_id) {
             value = entry.value;
             signature = entry.signature;
-            g_endpoint_cache_hit.fetch_add(
-                1u,
-                std::memory_order_relaxed);
+            telemetry::hot_count(g_endpoint_cache_hit);
             return true;
         }
     }
 
-    g_endpoint_cache_miss.fetch_add(
-        1u,
-        std::memory_order_relaxed);
+    telemetry::hot_count(g_endpoint_cache_miss);
     return false;
 }
 
@@ -1582,9 +1570,7 @@ void endpoint_cache_publish(
     entry.value = value;
     entry.valid = true;
 
-    g_endpoint_cache_fill.fetch_add(
-        1u,
-        std::memory_order_relaxed);
+    telemetry::hot_count(g_endpoint_cache_fill);
 }
 
 bool read_exact_source(
@@ -1951,9 +1937,7 @@ void publish_hook_source(
         hook_producer_cache_publish_exact(
             selector_identity,
             g_hook_source_tls);
-        g_hook_publish.fetch_add(
-            1u,
-            std::memory_order_relaxed);
+        telemetry::hot_count(g_hook_publish);
         return;
     }
 
@@ -1975,14 +1959,14 @@ void publish_hook_source(
         hook_producer_cache_publish_exact(
             selector_identity,
             g_hook_source_tls);
-        g_hook_publish.fetch_add(
-            1u,
-            std::memory_order_relaxed);
+        telemetry::hot_count(g_hook_publish);
 
         static std::atomic_bool
             producer_cross_thread_hit_logged{
                 false};
-        if (!producer_cross_thread_hit_logged.exchange(
+        if (!producer_cross_thread_hit_logged.load(
+                std::memory_order_relaxed) &&
+            !producer_cross_thread_hit_logged.exchange(
                 true,
                 std::memory_order_relaxed))
             reshade::log::message(
@@ -2043,9 +2027,7 @@ void publish_hook_source(
         selector_identity,
         g_hook_source_tls);
 
-    g_hook_publish.fetch_add(
-        1u,
-        std::memory_order_relaxed);
+    telemetry::hot_count(g_hook_publish);
 }
 
 bool latest_hook_source_exact_selector(
@@ -2078,9 +2060,7 @@ bool latest_hook_source_exact_selector(
             g_hook_selector_identity_tls,
             query)) {
         out = g_hook_source_tls.source;
-        g_hook_consume.fetch_add(
-            1u,
-            std::memory_order_relaxed);
+        telemetry::hot_count(g_hook_consume);
         return true;
     }
 
@@ -2093,9 +2073,7 @@ bool latest_hook_source_exact_selector(
     out = cached.source;
     g_hook_source_tls = cached;
     g_hook_selector_identity_tls = query;
-    g_hook_consume.fetch_add(
-        1u,
-        std::memory_order_relaxed);
+    telemetry::hot_count(g_hook_consume);
 
     static std::atomic_bool
         selector_cross_thread_hit_logged{
@@ -2118,9 +2096,7 @@ bool latest_hook_source(
     if (g_hook_source_tls.valid) {
         out =
             g_hook_source_tls.source;
-        g_hook_consume.fetch_add(
-            1u,
-            std::memory_order_relaxed);
+        telemetry::hot_count(g_hook_consume);
         return true;
     }
 
@@ -2132,9 +2108,7 @@ bool latest_hook_source(
 
     out =
         g_hook_source_global.source;
-    g_hook_consume.fetch_add(
-        1u,
-        std::memory_order_relaxed);
+    telemetry::hot_count(g_hook_consume);
     return true;
 }
 
@@ -2155,9 +2129,7 @@ void __fastcall envspec_single_hook_entry(
     float *host_out,
     int selector) noexcept
 {
-    g_hook_single_seen.fetch_add(
-        1u,
-        std::memory_order_relaxed);
+    telemetry::hot_count(g_hook_single_seen);
 
     f4 donor{};
     std::uint64_t bank = 0u;
@@ -2221,9 +2193,7 @@ void __fastcall envspec_blend_hook_entry(
     int selector_b,
     float beta) noexcept
 {
-    g_hook_blend_seen.fetch_add(
-        1u,
-        std::memory_order_relaxed);
+    telemetry::hot_count(g_hook_blend_seen);
 
     const auto endpoints =
         pmetal_selector_policy::select(
@@ -2494,6 +2464,14 @@ bool pmetal_env_source_runtime::install() noexcept
         reshade::log::message(
             reshade::log::level::info,
             "[DSRRL PMETAL R43] producer_cache=SET256_WAY2 freshness=SOURCE_BASE_COUNT_ROW_SELECTOR_BETA global_semantic_version_gate=OFF selector_try_lock=ON producer_payload_exact=ON fallback_full_decode=ON islands_preserved=ON");
+    static std::atomic_bool r46_safe_hotpath_logged{false};
+    if (!r46_safe_hotpath_logged.exchange(
+            true,
+            std::memory_order_relaxed))
+        reshade::log::message(
+            reshade::log::level::info,
+            "[DSRRL PMETAL R46] visibility_baseline=R43 transport=UNCHANGED diagnostic_hot_counters=GATED one_shot_latches=LOAD_GATED");
+
 
     return true;
 }
