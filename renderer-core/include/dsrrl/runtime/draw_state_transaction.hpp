@@ -89,6 +89,7 @@ struct draw_tx_telemetry {
     std::uint64_t restore_ok = 0;
     std::uint64_t restore_fail = 0;
     std::uint64_t native_readback_skipped = 0;
+    std::uint64_t synchronous_core_fast_path = 0;
     bool quarantined = false;
 };
 
@@ -198,6 +199,7 @@ private:
         ID3D11DeviceContext1 *context1 = nullptr;
         std::uint64_t command = 0;
         bool core_started = false;
+        bool synchronous_core_fast_path = false;
         bool shader_captured = false;
         bool verify_native_readback = true;
     };
@@ -239,6 +241,7 @@ private:
     std::atomic<std::uint64_t> restore_ok_{0};
     std::atomic<std::uint64_t> restore_fail_{0};
     std::atomic<std::uint64_t> native_readback_skipped_{0};
+    std::atomic<std::uint64_t> synchronous_core_fast_path_{0};
     std::atomic_bool quarantined_{false};
 };
 
