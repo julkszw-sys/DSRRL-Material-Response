@@ -7,9 +7,7 @@
 #include <atomic>
 #include <cstddef>
 #include <cstdint>
-#include <mutex>
 #include <sstream>
-#include <unordered_map>
 
 namespace dsrrl::runtime::dof {
 namespace {
@@ -38,7 +36,8 @@ std::atomic<std::uint64_t> g_present_count{0};
 
 thread_local reshade::api::command_list *g_bound_command = nullptr;
 thread_local role g_bound_role = role::count;
-thread_local bool g_bound_exact = false;\nthread_local std::uint32_t g_bind_miss_sample_counter = 0u;
+thread_local bool g_bound_exact = false;
+thread_local std::uint32_t g_bind_miss_sample_counter = 0u;
 
 constexpr std::uint32_t role_bit(role value) noexcept
 {
