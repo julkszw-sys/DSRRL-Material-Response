@@ -17,6 +17,7 @@
 #include "dsrrl/runtime/upper_lower_runtime.hpp"
 #include "dsrrl/runtime/feature_manifest.hpp"
 #include "dsrrl/runtime/dof_preflight.hpp"
+#include "dsrrl/runtime/dof_authored_state_runtime.hpp"
 
 #include <atomic>
 #include <cstdio>
@@ -188,12 +189,21 @@ extern "C" __declspec(dllexport) bool AddonInit(HMODULE addon,HMODULE reshade_mo
         return false;
     }
 
+    const bool dof_authored_state_ready =
+        dsrrl::runtime::dof::register_authored_state_runtime(g_core);
+    reshade::log::message(
+        dof_authored_state_ready ? reshade::log::level::info : reshade::log::level::warning,
+        dof_authored_state_ready ?
+            "DSRRL DoF: embedded PTDE DofBank producer hook READY; visible mutation remains manifest-blocked." :
+            "DSRRL DoF: embedded PTDE DofBank producer hook FAIL-OPEN-OFF.");
+
     if(!dsrrl::runtime::assets::register_runtime(g_core) ||
        !dsrrl::runtime::mr::register_runtime(g_core) ||
        !dsrrl::runtime::envspec::register_runtime()){
         dsrrl::runtime::envspec::unregister_runtime();
         dsrrl::runtime::assets::unregister_runtime();
         dsrrl::runtime::mr::unregister_runtime();
+        dsrrl::runtime::dof::unregister_authored_state_runtime();
         dsrrl::runtime::dof::unregister_preflight_runtime();
         unregister_a1_events();
         g_a1_bridge.reset();
@@ -253,6 +263,7 @@ extern "C" __declspec(dllexport) void AddonUninit(HMODULE addon,HMODULE reshade_
     dsrrl::runtime::envspec::unregister_runtime();
     dsrrl::runtime::mr::unregister_runtime();
     dsrrl::runtime::assets::unregister_runtime();
+    dsrrl::runtime::dof::unregister_authored_state_runtime();
     dsrrl::runtime::dof::unregister_preflight_runtime();
     unregister_a1_events();
     log_a1_state("UNLOAD");
