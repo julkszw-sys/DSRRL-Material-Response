@@ -408,8 +408,14 @@ thread_local hook_source_record g_hook_source_tls{};
 struct hook_selector_identity_v1 {
     void *source_a = nullptr;
     void *source_b = nullptr;
+    const std::uint8_t *base_a = nullptr;
+    const std::uint8_t *base_b = nullptr;
     std::int16_t selector_a = -1;
     std::int16_t selector_b = -1;
+    std::uint16_t count_a = 0u;
+    std::uint16_t count_b = 0u;
+    std::uint32_t row_id_a = 0u;
+    std::uint32_t row_id_b = 0u;
     std::uint32_t beta_bits = 0u;
     bool valid = false;
 };
@@ -430,7 +436,7 @@ struct hook_producer_cache_entry_v2 {
     bool valid = false;
 };
 
-constexpr std::size_t k_hook_producer_cache_sets = 64u;
+constexpr std::size_t k_hook_producer_cache_sets = 256u;
 constexpr std::size_t k_hook_producer_cache_ways = 2u;
 constexpr std::size_t k_hook_producer_cache_entries =
     k_hook_producer_cache_sets * k_hook_producer_cache_ways;
@@ -501,7 +507,10 @@ bool same_hook_selector_identity(
 {
     if (!a.valid || !b.valid ||
         a.source_a != b.source_a ||
+        a.base_a != b.base_a ||
         a.selector_a != b.selector_a ||
+        a.count_a != b.count_a ||
+        a.row_id_a != b.row_id_a ||
         a.beta_bits != b.beta_bits)
         return false;
 
@@ -510,7 +519,10 @@ bool same_hook_selector_identity(
 
     return
         a.source_b == b.source_b &&
-        a.selector_b == b.selector_b;
+        a.base_b == b.base_b &&
+        a.selector_b == b.selector_b &&
+        a.count_b == b.count_b &&
+        a.row_id_b == b.row_id_b;
 }
 
 std::size_t hook_producer_cache_set(
