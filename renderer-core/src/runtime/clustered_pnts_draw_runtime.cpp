@@ -1600,7 +1600,9 @@ bool capture_source(
             out = entry.source;
             static std::atomic_bool
                 cache_hit_logged{false};
-            if (!cache_hit_logged.exchange(
+            if (!cache_hit_logged.load(
+                    std::memory_order_relaxed) &&
+                !cache_hit_logged.exchange(
                     true,
                     std::memory_order_relaxed)) {
                 reshade::log::message(
@@ -2055,6 +2057,14 @@ bool clustered_pnts_draw_runtime::install() noexcept
         reshade::log::message(
             reshade::log::level::info,
             "[DSRRL POINTLIGHT R40] source_cache=PERSISTENT_GENERATIONAL_EXACT_STATE invalidation=ACTIVE_COLLECTION_INSERT collection_identity=IN_KEY endpoint_identity=SOURCE_PLUS_PARAM selector_beta=IN_KEY present_reset=OFF spc=ON nospc=ON");
+    static std::atomic_bool r46_safe_latches_logged{false};
+    if (!r46_safe_latches_logged.exchange(
+            true,
+            std::memory_order_relaxed))
+        reshade::log::message(
+            reshade::log::level::info,
+            "[DSRRL POINTLIGHT R46] visibility_baseline=R43 source_decode=R43_UNCHANGED cache_hit_latches=LOAD_GATED spc=ON nospc=ON");
+
     return true;
 }
 
@@ -2302,7 +2312,9 @@ void clustered_pnts_draw_runtime::selector_source_event() noexcept
 
                 static std::atomic_bool
                     selection_cache_hit_logged{false};
-                if (!selection_cache_hit_logged.exchange(
+                if (!selection_cache_hit_logged.load(
+                        std::memory_order_relaxed) &&
+                    !selection_cache_hit_logged.exchange(
                         true,
                         std::memory_order_relaxed)) {
                     reshade::log::message(
