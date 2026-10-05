@@ -134,13 +134,13 @@ def main():
         "PointLight source stage owns PTDE source capture")
     require(clustered,
         "k_frame_source_cache_entries = 128u",
-        "R38 direct-mapped frame source-carrier cache capacity")
+        "R40 inherited direct-mapped persistent source-carrier cache capacity")
     require(clustered,
         "frame_source_cache_index(",
-        "R38 source cache direct-map indexing")
+        "R40 persistent source cache direct-map indexing")
     require(clustered,
         "same_frame_source_state(",
-        "R38 source cache exact-state validation")
+        "R40 persistent source cache exact-state validation")
     require(clustered,
         "k_frame_selection_cache_entries = 128u",
         "R38 per-frame exact selector-result cache capacity")
@@ -160,11 +160,26 @@ def main():
         "pointlight_ptde_source::capture(",
         "PTDE donor replaces Bank/Lerp source without duplicate native pack")
     require(clustered,
-        "[DSRRL POINTLIGHT R36] frame_source_cache_hit=1 exact_state_snapshot=ON",
-        "R36 frame-source cache runtime attestation")
+        "g_source_semantic_generation",
+        "R40 mutation-driven source-cache generation")
+    require(clustered,
+        "k_pointlight_collection_insert_rva = 0x55F750u",
+        "R40 exact active-light insertion mutation cut")
+    require(clustered,
+        "k_pointlight_collection_insert_preimage",
+        "R40 exact insertion hook preimage")
+    require(clustered,
+        "frame_state.collection =",
+        "R40 source-cache collection identity")
+    require(clustered,
+        "[DSRRL POINTLIGHT R40] generational_source_cache_hit=1 exact_state_snapshot=ON invalidation=ACTIVE_COLLECTION_INSERT",
+        "R40 generational source-cache runtime hit attestation")
+    require(clustered,
+        "[DSRRL POINTLIGHT R40] source_cache=PERSISTENT_GENERATIONAL_EXACT_STATE invalidation=ACTIVE_COLLECTION_INSERT collection_identity=IN_KEY present_reset=OFF spc=ON nospc=ON",
+        "R40 persistent generational source-cache startup attestation")
     require(integrated,
         "g_clustered_pnts.frame_event(present);",
-        "present-driven PointLight source cache epoch")
+        "present-driven R38 selection-cache epoch retained")
 
     material_body=function_body(
         clustered,
