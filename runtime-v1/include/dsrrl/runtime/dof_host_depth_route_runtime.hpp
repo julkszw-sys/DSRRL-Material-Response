@@ -29,6 +29,7 @@ bool acquire_host_depth_support_t1(
     ID3D11DeviceContext *context,
     ID3D11ShaderResourceView **out) noexcept;
 
+bool inside_exact_dof_pass01() noexcept;
 bool inside_exact_dof_pass0d() noexcept;
 host_depth_route_telemetry host_depth_route_status() noexcept;
 
