@@ -250,7 +250,7 @@ inline void store_persistent_structure_cache(
             param + 0x30u),
         table_bytes);
 
-    const auto structure_end =
+    const auto structure_limit =
         static_cast<std::uint64_t>(0x30u) +
         static_cast<std::uint64_t>(span);
 
@@ -267,7 +267,7 @@ inline void store_persistent_structure_cache(
         if (name_offset < 0x30u ||
             static_cast<std::uint64_t>(
                 name_offset) >=
-                structure_end) {
+                structure_limit) {
             entry = {};
             return;
         }
@@ -276,7 +276,7 @@ inline void store_persistent_structure_cache(
             std::min<std::size_t>(
                 k_bank_structure_name_max,
                 static_cast<std::size_t>(
-                    structure_end -
+                    structure_limit -
                     static_cast<std::uint64_t>(
                         name_offset)));
         const auto *name =
