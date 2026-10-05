@@ -94,6 +94,8 @@ thread_local pending_draw g_pending{};
 std::atomic<pmetal_native_draw_bridge *> g_active{nullptr};
 std::atomic_bool g_pointlight_native_applied_logged{false};
 std::atomic_bool g_deferred_context_registered_logged{false};
+std::atomic_bool g_context_rebind_logged{false};
+std::atomic_bool g_native_arm_reject_logged{false};
 
 void retain_mutation(
     draw_tx_mutation &mutation) noexcept
@@ -659,6 +661,7 @@ struct pmetal_native_draw_bridge::impl {
     struct context_record {
         ID3D11DeviceContext *context = nullptr;
         ID3D11DeviceContext1 *context1 = nullptr;
+        IUnknown *identity = nullptr;
         void **vtable = nullptr;
         D3D11_DEVICE_CONTEXT_TYPE type =
             D3D11_DEVICE_CONTEXT_IMMEDIATE;
@@ -674,6 +677,7 @@ struct pmetal_native_draw_bridge::impl {
     std::atomic<std::uint64_t> restore_fail{0};
     std::atomic<std::uint64_t> context_registers{0};
     std::atomic<std::uint64_t> deferred_context_registers{0};
+    std::atomic<std::uint64_t> context_rebinds{0};
     std::atomic<std::uint64_t> vtable_hooks_installed{0};
     std::atomic_bool hook_active{false};
     std::atomic_bool quarantined{false};
@@ -722,6 +726,14 @@ bool pmetal_native_draw_bridge::register_context(
     if (vtable == nullptr)
         return false;
 
+    IUnknown *identity = nullptr;
+    if (FAILED(context->QueryInterface(
+            __uuidof(IUnknown),
+            reinterpret_cast<void **>(
+                &identity))) ||
+        identity == nullptr)
+        return false;
+
     ID3D11DeviceContext1 *context1 = nullptr;
     (void)context->QueryInterface(
         __uuidof(ID3D11DeviceContext1),
@@ -740,6 +752,7 @@ bool pmetal_native_draw_bridge::register_context(
             registered.vtable == vtable;
         if (context1 != nullptr)
             context1->Release();
+        identity->Release();
         return same_vtable;
     }
 
@@ -770,6 +783,7 @@ bool pmetal_native_draw_bridge::register_context(
         if (hook == nullptr) {
             if (context1 != nullptr)
                 context1->Release();
+            identity->Release();
             return false;
         }
 
@@ -806,6 +820,7 @@ bool pmetal_native_draw_bridge::register_context(
                     draw_indexed_instanced_hook) {
             if (context1 != nullptr)
                 context1->Release();
+            identity->Release();
             return false;
         }
 
@@ -911,6 +926,7 @@ bool pmetal_native_draw_bridge::register_context(
 
             if (context1 != nullptr)
                 context1->Release();
+            identity->Release();
             return false;
         }
 
@@ -940,6 +956,7 @@ bool pmetal_native_draw_bridge::register_context(
         if (!hook_live) {
             if (context1 != nullptr)
                 context1->Release();
+            identity->Release();
             return false;
         }
     }
@@ -949,12 +966,14 @@ bool pmetal_native_draw_bridge::register_context(
         impl_->contexts.push_back(
             {context,
              context1,
+             identity,
              vtable,
              type});
     } catch (...) {
         context->Release();
         if (context1 != nullptr)
             context1->Release();
+        identity->Release();
         return false;
     }
 
@@ -974,8 +993,8 @@ bool pmetal_native_draw_bridge::register_context(
             reshade::log::message(
                 reshade::log::level::info,
                 new_hook
-                    ? "[DSRRL POINTLIGHT R21] deferred_context_registered vtable=distinct native_original_draw=ARMABLE"
-                    : "[DSRRL POINTLIGHT R21] deferred_context_registered vtable=shared native_original_draw=ARMABLE");
+                    ? "[DSRRL POINTLIGHT R22] deferred_context_registered vtable=distinct native_original_draw=ARMABLE"
+                    : "[DSRRL POINTLIGHT R22] deferred_context_registered vtable=shared native_original_draw=ARMABLE");
         }
     }
 
@@ -989,23 +1008,40 @@ void pmetal_native_draw_bridge::unregister_context(
         context == nullptr)
         return;
 
+    IUnknown *identity = nullptr;
+    (void)context->QueryInterface(
+        __uuidof(IUnknown),
+        reinterpret_cast<void **>(
+            &identity));
+
     std::lock_guard<std::shared_mutex> lock(
         impl_->registry_mutex);
 
     for (auto it =
              impl_->contexts.begin();
-         it != impl_->contexts.end();
-         ++it) {
-        if (it->context != context)
+         it != impl_->contexts.end();) {
+        const bool same_context =
+            it->context == context;
+        const bool same_identity =
+            identity != nullptr &&
+            it->identity == identity;
+        if (!same_context &&
+            !same_identity) {
+            ++it;
             continue;
+        }
 
         if (it->context1 != nullptr)
             it->context1->Release();
         if (it->context != nullptr)
             it->context->Release();
-        impl_->contexts.erase(it);
-        return;
+        if (it->identity != nullptr)
+            it->identity->Release();
+        it = impl_->contexts.erase(it);
     }
+
+    if (identity != nullptr)
+        identity->Release();
 }
 
 bool pmetal_native_draw_bridge::register_command_list(
@@ -1209,6 +1245,8 @@ void pmetal_native_draw_bridge::uninstall() noexcept
                 registered.context1->Release();
             if (registered.context != nullptr)
                 registered.context->Release();
+            if (registered.identity != nullptr)
+                registered.identity->Release();
         }
         impl_->contexts.clear();
     }
@@ -1285,6 +1323,43 @@ bool pmetal_native_draw_bridge::arm_draw(
         }
     }
 
+    if (!registered) {
+        // ReShade may upgrade its native D3D11 context interface after the
+        // init_command_list event. get_native() then exposes a different COM
+        // interface pointer for the same command list. Register that exact
+        // current pointer lazily so the pending draw matches the actual
+        // _orig->Draw this pointer. unregister_context removes every pointer
+        // carrying the same IUnknown identity, so this cannot retain stale
+        // deferred contexts across command-list destruction.
+        if (register_context(context)) {
+            impl_->context_rebinds.fetch_add(
+                1u,
+                std::memory_order_relaxed);
+
+            if (!g_context_rebind_logged.exchange(
+                    true,
+                    std::memory_order_relaxed))
+                reshade::log::message(
+                    reshade::log::level::info,
+                    "[DSRRL POINTLIGHT R22] command_list_native_identity_rebound native_original_draw=ARMABLE");
+
+            std::shared_lock<std::shared_mutex> lock(
+                impl_->registry_mutex);
+            for (const auto &candidate :
+                 impl_->contexts) {
+                if (candidate.context != context ||
+                    candidate.vtable != vtable)
+                    continue;
+
+                registered = true;
+                context1 = candidate.context1;
+                if (context1 != nullptr)
+                    context1->AddRef();
+                break;
+            }
+        }
+    }
+
     auto *hook =
         hook_record_for(
             context);
@@ -1310,6 +1385,15 @@ bool pmetal_native_draw_bridge::arm_draw(
 
     if (!registered ||
         !hook_live) {
+        if (!g_native_arm_reject_logged.exchange(
+                true,
+                std::memory_order_relaxed)) {
+            reshade::log::message(
+                reshade::log::level::warning,
+                !registered
+                    ? "[DSRRL POINTLIGHT R22] native_arm_reject reason=context_identity_unregistered"
+                    : "[DSRRL POINTLIGHT R22] native_arm_reject reason=vtable_hook_not_live");
+        }
         if (context1 != nullptr)
             context1->Release();
         impl_->arm_reject.fetch_add(
@@ -1418,6 +1502,43 @@ bool pmetal_native_draw_bridge::arm_draw_indexed(
         }
     }
 
+    if (!registered) {
+        // ReShade may upgrade its native D3D11 context interface after the
+        // init_command_list event. get_native() then exposes a different COM
+        // interface pointer for the same command list. Register that exact
+        // current pointer lazily so the pending draw matches the actual
+        // _orig->Draw this pointer. unregister_context removes every pointer
+        // carrying the same IUnknown identity, so this cannot retain stale
+        // deferred contexts across command-list destruction.
+        if (register_context(context)) {
+            impl_->context_rebinds.fetch_add(
+                1u,
+                std::memory_order_relaxed);
+
+            if (!g_context_rebind_logged.exchange(
+                    true,
+                    std::memory_order_relaxed))
+                reshade::log::message(
+                    reshade::log::level::info,
+                    "[DSRRL POINTLIGHT R22] command_list_native_identity_rebound native_original_draw=ARMABLE");
+
+            std::shared_lock<std::shared_mutex> lock(
+                impl_->registry_mutex);
+            for (const auto &candidate :
+                 impl_->contexts) {
+                if (candidate.context != context ||
+                    candidate.vtable != vtable)
+                    continue;
+
+                registered = true;
+                context1 = candidate.context1;
+                if (context1 != nullptr)
+                    context1->AddRef();
+                break;
+            }
+        }
+    }
+
     auto *hook =
         hook_record_for(
             context);
@@ -1443,6 +1564,15 @@ bool pmetal_native_draw_bridge::arm_draw_indexed(
 
     if (!registered ||
         !hook_live) {
+        if (!g_native_arm_reject_logged.exchange(
+                true,
+                std::memory_order_relaxed)) {
+            reshade::log::message(
+                reshade::log::level::warning,
+                !registered
+                    ? "[DSRRL POINTLIGHT R22] native_arm_reject reason=context_identity_unregistered"
+                    : "[DSRRL POINTLIGHT R22] native_arm_reject reason=vtable_hook_not_live");
+        }
         if (context1 != nullptr)
             context1->Release();
         impl_->arm_reject.fetch_add(
@@ -1908,6 +2038,8 @@ pmetal_native_draw_bridge::telemetry() const noexcept
             std::memory_order_relaxed),
         impl_->deferred_context_registers.load(
             std::memory_order_relaxed),
+        impl_->context_rebinds.load(
+            std::memory_order_relaxed),
         impl_->vtable_hooks_installed.load(
             std::memory_order_relaxed),
         impl_->hook_active.load(
@@ -1923,6 +2055,12 @@ void pmetal_native_draw_bridge::reset_telemetry() noexcept
         false,
         std::memory_order_relaxed);
     g_deferred_context_registered_logged.store(
+        false,
+        std::memory_order_relaxed);
+    g_context_rebind_logged.store(
+        false,
+        std::memory_order_relaxed);
+    g_native_arm_reject_logged.store(
         false,
         std::memory_order_relaxed);
 
@@ -1948,6 +2086,9 @@ void pmetal_native_draw_bridge::reset_telemetry() noexcept
         0u,
         std::memory_order_relaxed);
     impl_->deferred_context_registers.store(
+        0u,
+        std::memory_order_relaxed);
+    impl_->context_rebinds.store(
         0u,
         std::memory_order_relaxed);
     impl_->vtable_hooks_installed.store(
