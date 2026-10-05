@@ -291,12 +291,16 @@ bool pmetal_producer_state_latest(
     const auto key = material_key(material);
     auto &slot = sync_slot_for(key);
 
+    // The synchronized record is material-scoped, not globally
+    // selector-epoch-scoped. begin() invalidates this exact material slot
+    // before every new selector attempt, so a still-valid exact-material
+    // record is authoritative until that material is selected again. Requiring
+    // equality with the process-wide current selector epoch incorrectly
+    // invalidates it whenever an unrelated material advances the epoch.
     if (!slot.valid.load(
             std::memory_order_acquire) ||
         slot.material_key.load(
-            std::memory_order_relaxed) != key ||
-        slot.epoch.load(
-            std::memory_order_relaxed) != epoch)
+            std::memory_order_relaxed) != key)
         return false;
 
     std::lock_guard<std::mutex> lock(slot.mutex);
@@ -305,10 +309,7 @@ bool pmetal_producer_state_latest(
             std::memory_order_relaxed) ||
         slot.material_key.load(
             std::memory_order_relaxed) != key ||
-        slot.epoch.load(
-            std::memory_order_relaxed) != epoch ||
         !slot.record.valid ||
-        slot.record.epoch != epoch ||
         !same_material(
             slot.record.material,
             material))
