@@ -168,18 +168,31 @@ dsr_plain_dofrate_switch = {
     dsr_dofrate_plain_runtime_shader_id
 };
 
+template<std::size_t N>
+constexpr bool byte_array_equal(
+    const std::array<std::uint8_t, N> &a,
+    const std::array<std::uint8_t, N> &b) noexcept
+{
+    for (std::size_t i = 0u; i < N; ++i)
+        if (a[i] != b[i])
+            return false;
+    return true;
+}
+
 constexpr bool plain_dofrate_switch_is_exact() noexcept
 {
     return
         dsr_plain_dofrate_switch.instruction_rva == 0x00456489u &&
         dsr_plain_dofrate_switch.stock_runtime_shader_id == 0x0DF0u &&
         dsr_plain_dofrate_switch.ptde_bridge_runtime_shader_id == 0x0DEFu &&
-        dsr_plain_dofrate_switch.expected_cb_selector ==
+        byte_array_equal(
+            dsr_plain_dofrate_switch.expected_cb_selector,
             std::array<std::uint8_t, 5>{
-                0xBAu, 0xF0u, 0x0Du, 0x00u, 0x00u} &&
-        dsr_plain_dofrate_switch.replacement_plain_selector ==
+                0xBAu, 0xF0u, 0x0Du, 0x00u, 0x00u}) &&
+        byte_array_equal(
+            dsr_plain_dofrate_switch.replacement_plain_selector,
             std::array<std::uint8_t, 5>{
-                0xBAu, 0xEFu, 0x0Du, 0x00u, 0x00u};
+                0xBAu, 0xEFu, 0x0Du, 0x00u, 0x00u});
 }
 
 static_assert(ptde_fixed_surface_set_is_exact(),
