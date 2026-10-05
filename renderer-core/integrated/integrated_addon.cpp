@@ -3962,10 +3962,13 @@ void on_init_device(reshade::api::device *device)
             "[DSRRL POINTLIGHT R31] direct_source_class=DirectPointLightEntity dsr_vfunc_rva=0x55C570 ptde_homologue=0x00D34D50 carrier=position_invRange_RGB_End authorization=EXACT_ONLY");
         reshade::log::message(
             reshade::log::level::info,
-            "[DSRRL POINTLIGHT R33] clustered_spc_protected_failopen=ACTIVE source_reconstruction_before_spc=OFF clustered_nospc=UNCHANGED stock_dsr_spc=ON");
+            "[DSRRL POINTLIGHT R33] clustered_spc_protected_failopen=SUPERSEDED_BY_R35_OWNER_AUTH");
         reshade::log::message(
             reshade::log::level::info,
-            "[DSRRL POINTLIGHT R34] source_material_split=ACTIVE source_stage=selector_source_event material_stage=selector_identity_event clustered_nospc_consumes_ptde_source=ON clustered_spc_consumes_ptde_source=OFF stock_dsr_spc=ON");
+            "[DSRRL POINTLIGHT R34] source_material_split=ACTIVE source_stage=selector_source_event material_stage=selector_identity_event");
+        reshade::log::message(
+            reshade::log::level::info,
+            "[DSRRL POINTLIGHT R35] owner_authorized_spc_hybrid=ACTIVE clustered_nospc_consumes_ptde_source=ON clustered_spc_consumes_ptde_source=ON spc_material_tail=STOCK_DSR_GGX_SCHLICK local_specular_equivalence=OPEN");
     } else if (k_pmetal_native_draw_runtime_enabled) {
         if (!g_pmetal_native_draw.install(device)) {
             reshade::log::message(
