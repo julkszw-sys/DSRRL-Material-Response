@@ -185,6 +185,9 @@ def main():
     require(draw_cpp,"k_frame_source_cache_entries = 128u","frame-scoped source cache capacity")
     require(draw_cpp,"g_source_frame_epoch","present-frame source cache epoch")
     require(draw_cpp,"same_frame_source_state(","exact source-object state cache gate")
+    require(draw_cpp,"frame_source_cache_index(","R38 source cache direct-map index")
+    require(draw_cpp,"k_frame_selection_cache_entries = 128u","R38 frame selection cache capacity")
+    require(draw_cpp,"same_frame_selection_key(","R38 exact frame selection cache gate")
     require(draw_cpp,"bank_source ? 0x60u : 0x70u","attested Bank/Lerp position lane direct read")
     require(integrated,"g_clustered_pnts.frame_event(present);","present-driven source cache epoch")
     if "evaluate_direct_pointlight_material_identity(" in selector_source_body or "build_clustered_sidecar_v1(" in selector_source_body:
