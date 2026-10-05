@@ -21,10 +21,10 @@ int main()
     CHECK(ptde_fixed_raster_ladder[2].width == 256u);
 
     CHECK(ptde_fixed_surface_set_is_exact());
-    CHECK(ptde_fixed_surface_pairs.size() == 9u);
+    CHECK(ptde_fixed_surface_pairs.size() == 7u);
     CHECK(ptde_surface_count(1024u, 720u) == 2u);
-    CHECK(ptde_surface_count(512u, 360u) == 4u);
-    CHECK(ptde_surface_count(256u, 180u) == 3u);
+    CHECK(ptde_surface_count(512u, 360u) == 3u);
+    CHECK(ptde_surface_count(256u, 180u) == 2u);
 
     const auto *prefix =
         find_ptde_surface(ptde_surface_role::full_prefix);
@@ -39,15 +39,30 @@ int main()
     CHECK(terminal->raster.width == 1024u);
     CHECK(terminal->raster.height == 720u);
 
-    CHECK(ptde_verified_prefix_edges.size() == 2u);
-    CHECK(ptde_verified_prefix_edges[0].pass == 0x00u);
-    CHECK(ptde_verified_prefix_edges[0].source_offset == 0x68u);
-    CHECK(ptde_verified_prefix_edges[0].target_offset == 0x5Cu);
-    CHECK(ptde_verified_prefix_edges[0].stored_srv_offset == 0x60u);
-    CHECK(ptde_verified_prefix_edges[1].pass == 0x02u);
-    CHECK(ptde_verified_prefix_edges[1].source_offset == 0x60u);
-    CHECK(ptde_verified_prefix_edges[1].target_offset == 0xA8u);
-    CHECK(ptde_verified_prefix_edges[1].stored_srv_offset == 0xB8u);
+    CHECK(ptde_exact_pass_resource_graph_is_structurally_closed());
+    CHECK(ptde_exact_pass_resources.size() == 9u);
+    CHECK(ptde_exact_pass_resources[0].pass == 0x00u);
+    CHECK(ptde_exact_pass_resources[0].target_offset == 0x5Cu);
+    CHECK(ptde_exact_pass_resources[0].arg6_source == 0x68u);
+    CHECK(ptde_exact_pass_resources[1].pass == 0x02u);
+    CHECK(ptde_exact_pass_resources[1].target_offset == 0xA8u);
+    CHECK(ptde_exact_pass_resources[1].arg6_source == 0x60u);
+    CHECK(ptde_exact_pass_resources[2].pass == 0x0Du);
+    CHECK(ptde_exact_pass_resources[2].target_offset == 0xACu);
+    CHECK(ptde_exact_pass_resources[2].arg6_source == 0xB8u);
+    CHECK(ptde_exact_pass_resources[6].pass == 0x03u);
+    CHECK(ptde_exact_pass_resources[6].target_offset == 0xDCu);
+    CHECK(ptde_exact_pass_resources[6].arg6_source == 0u);
+    CHECK(ptde_exact_pass_resources[6].arg7_source == 0x68u);
+
+    const auto &ptde_terminal_pass = ptde_exact_pass_resources.back();
+    CHECK(ptde_terminal_pass.pass == 0x10u);
+    CHECK(ptde_terminal_pass.target_offset == 0x80u);
+    CHECK(ptde_terminal_pass.arg6_source == 0x60u);
+    CHECK(ptde_terminal_pass.arg7_source == 0xB8u);
+    CHECK(ptde_terminal_pass.arg8_source == 0xBCu);
+    CHECK(ptde_terminal_pass.arg9_source == 0xC0u);
+    CHECK(ptde_terminal_pass.arg10_source == 0xE4u);
 
     CHECK(plain_dofrate_switch_is_exact());
     CHECK(dsr_plain_dofrate_switch.instruction_rva == 0x456489u);
