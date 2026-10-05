@@ -1007,13 +1007,20 @@ bool publish_exact_selector_identity(
             direct_pointlight_material_candidate(
                 identity,
                 pointlight_spc)) {
-        (void)pointlight_spc;
+        // R33: keep the cheap selector association so stale authority is
+        // cleared deterministically, but honor the clustered-Spc anti-hybrid
+        // PROTECT before any expensive source reconstruction. Until the full
+        // PTDE legacy local-specular microfacet island owns the complete Spc
+        // window, clustered Spc must fail open to stock DSR. NoSpc keeps the
+        // existing exact first-four/source carrier path unchanged.
         clustered_pnts_selector_event_bridge(
             owner,
             actual_material);
-        clustered_pnts_selector_identity_event_bridge(
-            identity,
-            pointlight_spc);
+        if (!pointlight_spc) {
+            clustered_pnts_selector_identity_event_bridge(
+                identity,
+                false);
+        }
     }
 
 #ifndef DSRRL_PHYSICAL_CUT_UL_H3_SUBSURFACE
