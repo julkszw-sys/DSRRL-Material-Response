@@ -11,6 +11,7 @@ pmetal_h = (root / "include/dsrrl/runtime/pmetal_envspec_draw_runtime.hpp").read
 pmetal_cpp = (root / "src/runtime/pmetal_envspec_draw_runtime.cpp").read_text(encoding="utf-8")
 producer = (root / "src/runtime/pmetal_producer_state.cpp").read_text(encoding="utf-8")
 pmetal_source = (root / "src/runtime/pmetal_env_source_runtime.cpp").read_text(encoding="utf-8")
+clustered = (root / "src/runtime/clustered_pnts_draw_runtime.cpp").read_text(encoding="utf-8")
 
 def require(text: str, needle: str, label: str) -> None:
     if needle not in text:
@@ -158,6 +159,15 @@ for latch in (
         pmetal_source,
         f"!{latch}.load(",
         f"R45 hot one-shot latch {latch} must load-gate atomic exchange")
+for latch in (
+    "cache_hit_logged",
+    "selection_cache_hit_logged",
+):
+    require(
+        clustered,
+        f"!{latch}.load(",
+        f"R45 PointLight hot one-shot latch {latch} must load-gate atomic exchange")
+
 forbid(pmetal_source, "next.generation = serial", "event serial must not drive semantic generation")
 require(pmetal_h, "payload_bits", "exact b12 payload cache")
 require(pmetal_cpp, "payload_bits.data()", "exact 64-byte b12 payload identity")
