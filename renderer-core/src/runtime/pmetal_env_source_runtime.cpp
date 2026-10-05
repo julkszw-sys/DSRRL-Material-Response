@@ -491,6 +491,10 @@ void record_bank_signature_stage(
     g_bank_signature_consumed.store(consumed,std::memory_order_relaxed);
 }
 
+bool same_hook_source_payload(
+    const pmetal_envspec_source &a,
+    const pmetal_envspec_source &b) noexcept;
+
 bool same_hook_selector_identity(
     const hook_selector_identity_v1 &a,
     const hook_selector_identity_v1 &b) noexcept
@@ -1790,6 +1794,8 @@ void publish_hook_source(
         &beta_bits,
         &next.beta,
         sizeof(beta_bits));
+    if (next.beta == 0.0f)
+        beta_bits = 0u;
     const hook_selector_identity_v1
         selector_identity{
             source_a,
