@@ -2,6 +2,7 @@
 #include "dsrrl/runtime/d3d11_cb_window.hpp"
 #include "dsrrl/runtime/runtime_hot_telemetry.hpp"
 #include "dsrrl/core/draw_transaction_policy.hpp"
+#include "dsrrl/core/carrier_abi.hpp"
 
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
@@ -73,6 +74,116 @@ bool unique_slots(
                 return false;
 
     return true;
+}
+
+
+bool clustered_pointlight_sync_fast_shape(
+    const draw_tx_mutation &mutation) noexcept
+{
+    const auto point =
+        core::operator_bit(
+            core::operator_id::point_light);
+    const auto attenuation =
+        core::operator_bit(
+            core::operator_id::pointlight_pnts_attenuation);
+    const auto material =
+        core::operator_bit(
+            core::operator_id::material_response);
+    const auto local =
+        core::operator_bit(
+            core::operator_id::local_specular_legacy);
+    const auto diffuse_domain =
+        core::operator_bit(
+            core::operator_id::diffuse_material_domain);
+    const auto sat =
+        core::operator_bit(
+            core::operator_id::terminal_sat_rgb);
+    const auto env_delete =
+        core::operator_bit(
+            core::operator_id::envspec_nospc_delete);
+
+    const auto allowed =
+        point |
+        attenuation |
+        material |
+        local |
+        diffuse_domain |
+        sat |
+        env_delete;
+
+    if (!mutation.replace_pixel_shader ||
+        mutation.pixel_shader == nullptr ||
+        mutation.constant_buffer_count != 1u ||
+        mutation.constant_buffers[0].slot != 12u ||
+        mutation.srv_count != 2u ||
+        mutation.srvs[0].slot != 18u ||
+        mutation.srvs[1].slot != 19u ||
+        mutation.sampler_count != 0u)
+        return false;
+
+    if ((mutation.owners & point) == 0u ||
+        (mutation.owners & attenuation) == 0u ||
+        (mutation.owners & material) == 0u ||
+        (mutation.owners & diffuse_domain) == 0u ||
+        (mutation.owners & sat) == 0u ||
+        (mutation.owners & ~allowed) != 0u)
+        return false;
+
+    const bool spc =
+        (mutation.owners & local) != 0u;
+    const bool nospc_delete =
+        (mutation.owners & env_delete) != 0u;
+
+    // Exact known families only:
+    //   Spc   -> local legacy present, NoSpc env-delete absent.
+    //   NoSpc -> local legacy absent, NoSpc env-delete present.
+    if (spc == nospc_delete)
+        return false;
+
+    return true;
+}
+
+bool validate_synchronous_plan(
+    const core::render_patch_plan &plan) noexcept
+{
+    if (plan.empty() ||
+        plan.patch_count > plan.patches.size())
+        return false;
+
+    constexpr std::uint32_t valid_carrier_mask =
+        (1u << core::carrier_v1_lane_count) - 1u;
+
+    if ((plan.carrier_write_mask &
+         ~valid_carrier_mask) != 0u)
+        return false;
+
+    std::uint32_t seen_mask = 0u;
+    std::uint32_t seen_operators = 0u;
+
+    for (std::uint32_t i = 0u;
+         i < plan.patch_count;
+         ++i) {
+        const auto op = plan.patches[i].op;
+        const auto op_index =
+            static_cast<std::size_t>(op);
+        if (op_index >= core::operator_count)
+            return false;
+
+        const auto op_mask =
+            core::operator_bit(op);
+        if ((seen_operators & op_mask) != 0u)
+            return false;
+        seen_operators |= op_mask;
+
+        const auto mask =
+            plan.patches[i].carrier_write_mask;
+        if ((mask & ~valid_carrier_mask) != 0u ||
+            (seen_mask & mask) != 0u)
+            return false;
+        seen_mask |= mask;
+    }
+
+    return seen_mask == plan.carrier_write_mask;
 }
 
 bool verify_native_readback_for(
@@ -404,11 +515,18 @@ bool draw_state_transaction_runtime::begin(
         return false;
     }
 
+    const bool clustered_sync_fast =
+        clustered_pointlight_sync_fast_shape(
+            mutation);
+
     ID3D11DeviceContext1 *ctx1 = nullptr;
     if (mutation.constant_buffer_count != 0u) {
         ctx1 = context1_for(ctx);
         state.context1 = ctx1;
     }
+
+    state.synchronous_core_fast_path =
+        clustered_sync_fast;
 
     state.verify_native_readback =
         telemetry::native_state_verification_enabled() &&
@@ -482,15 +600,27 @@ bool draw_state_transaction_runtime::begin(
     }
 
     state.srv_count = mutation.srv_count;
-    for (std::uint32_t i = 0;
-         i < mutation.srv_count;
-         ++i) {
-        auto &capture = state.srvs[i];
-        capture.slot = mutation.srvs[i].slot;
+    if (clustered_sync_fast) {
+        state.srvs[0].slot = 18u;
+        state.srvs[1].slot = 19u;
+        ID3D11ShaderResourceView *captured[2]{};
         ctx->PSGetShaderResources(
-            capture.slot,
-            1u,
-            &capture.srv);
+            18u,
+            2u,
+            captured);
+        state.srvs[0].srv = captured[0];
+        state.srvs[1].srv = captured[1];
+    } else {
+        for (std::uint32_t i = 0;
+             i < mutation.srv_count;
+             ++i) {
+            auto &capture = state.srvs[i];
+            capture.slot = mutation.srvs[i].slot;
+            ctx->PSGetShaderResources(
+                capture.slot,
+                1u,
+                &capture.srv);
+        }
     }
 
     state.sampler_count = mutation.sampler_count;
@@ -547,18 +677,37 @@ bool draw_state_transaction_runtime::begin(
     }
 
     state.command = command_key(cmd_list);
-    if (!core_.transactions().begin(
-            state.command,
-            draw_serial_.fetch_add(
-                1u,
-                std::memory_order_relaxed) + 1u,
-            context_kind_of(ctx),
-            plan)) {
-        release_state(state);
-        telemetry::hot_count(begin_fail_);
-        return false;
+
+    if (clustered_sync_fast) {
+        // The clustered PointLight direct-current-native path is strictly
+        // synchronous: exact mutation validation -> native capture/mutate ->
+        // one Draw/DrawIndexed -> restore, all on this stack under the
+        // recursion guard. The global draw_transaction_manager adds no
+        // semantic state to that sequence, but its mutex is contended by
+        // independent main/reflection deferred contexts. Preserve every plan
+        // invariant locally, then avoid publishing this transient transaction
+        // globally.
+        if (!validate_synchronous_plan(plan)) {
+            release_state(state);
+            telemetry::hot_count(begin_fail_);
+            return false;
+        }
+        telemetry::hot_count(
+            synchronous_core_fast_path_);
+    } else {
+        if (!core_.transactions().begin(
+                state.command,
+                draw_serial_.fetch_add(
+                    1u,
+                    std::memory_order_relaxed) + 1u,
+                context_kind_of(ctx),
+                plan)) {
+            release_state(state);
+            telemetry::hot_count(begin_fail_);
+            return false;
+        }
+        state.core_started = true;
     }
-    state.core_started = true;
 
     if (mutation.replace_pixel_shader) {
         ctx->PSSetShader(
@@ -578,14 +727,25 @@ bool draw_state_transaction_runtime::begin(
             &buffer);
     }
 
-    for (std::uint32_t i = 0;
-         i < mutation.srv_count;
-         ++i) {
-        auto *srv = mutation.srvs[i].srv;
+    if (clustered_sync_fast) {
+        ID3D11ShaderResourceView *srvs[2]{
+            mutation.srvs[0].srv,
+            mutation.srvs[1].srv
+        };
         ctx->PSSetShaderResources(
-            mutation.srvs[i].slot,
-            1u,
-            &srv);
+            18u,
+            2u,
+            srvs);
+    } else {
+        for (std::uint32_t i = 0;
+             i < mutation.srv_count;
+             ++i) {
+            auto *srv = mutation.srvs[i].srv;
+            ctx->PSSetShaderResources(
+                mutation.srvs[i].slot,
+                1u,
+                &srv);
+        }
     }
 
     for (std::uint32_t i = 0;
@@ -637,17 +797,33 @@ bool draw_state_transaction_runtime::begin(
                 buffer->Release();
         }
     
-        for (std::uint32_t i = 0;
-             bound && i < mutation.srv_count;
-             ++i) {
-            ID3D11ShaderResourceView *srv = nullptr;
+        if (bound &&
+            clustered_sync_fast) {
+            ID3D11ShaderResourceView *srvs[2]{};
             ctx->PSGetShaderResources(
-                mutation.srvs[i].slot,
-                1u,
-                &srv);
-            bound = srv == mutation.srvs[i].srv;
-            if (srv != nullptr)
-                srv->Release();
+                18u,
+                2u,
+                srvs);
+            bound =
+                srvs[0] == mutation.srvs[0].srv &&
+                srvs[1] == mutation.srvs[1].srv;
+            if (srvs[0] != nullptr)
+                srvs[0]->Release();
+            if (srvs[1] != nullptr)
+                srvs[1]->Release();
+        } else {
+            for (std::uint32_t i = 0;
+                 bound && i < mutation.srv_count;
+                 ++i) {
+                ID3D11ShaderResourceView *srv = nullptr;
+                ctx->PSGetShaderResources(
+                    mutation.srvs[i].slot,
+                    1u,
+                    &srv);
+                bound = srv == mutation.srvs[i].srv;
+                if (srv != nullptr)
+                    srv->Release();
+            }
         }
     
         for (std::uint32_t i = 0;
@@ -748,14 +924,28 @@ bool draw_state_transaction_runtime::restore(
             static_cast<UINT>(capture.count));
     }
 
-    for (std::uint32_t i = 0;
-         i < state.srv_count;
-         ++i) {
-        auto *srv = state.srvs[i].srv;
+    if (state.synchronous_core_fast_path &&
+        state.srv_count == 2u &&
+        state.srvs[0].slot == 18u &&
+        state.srvs[1].slot == 19u) {
+        ID3D11ShaderResourceView *srvs[2]{
+            state.srvs[0].srv,
+            state.srvs[1].srv
+        };
         ctx->PSSetShaderResources(
-            state.srvs[i].slot,
-            1u,
-            &srv);
+            18u,
+            2u,
+            srvs);
+    } else {
+        for (std::uint32_t i = 0;
+             i < state.srv_count;
+             ++i) {
+            auto *srv = state.srvs[i].srv;
+            ctx->PSSetShaderResources(
+                state.srvs[i].slot,
+                1u,
+                &srv);
+        }
     }
 
     for (std::uint32_t i = 0;
@@ -1319,6 +1509,7 @@ draw_state_transaction_runtime::telemetry() const noexcept
         restore_ok_.load(),
         restore_fail_.load(),
         native_readback_skipped_.load(),
+        synchronous_core_fast_path_.load(),
         quarantined_.load()
     };
 }
@@ -1375,6 +1566,7 @@ void draw_state_transaction_runtime::reset() noexcept
     restore_ok_.store(0);
     restore_fail_.store(0);
     native_readback_skipped_.store(0);
+    synchronous_core_fast_path_.store(0);
     quarantined_.store(false);
 }
 
