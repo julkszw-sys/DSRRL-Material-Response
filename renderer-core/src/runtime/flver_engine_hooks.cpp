@@ -1007,26 +1007,19 @@ bool publish_exact_selector_identity(
             direct_pointlight_material_candidate(
                 identity,
                 pointlight_spc)) {
-        // R33: keep the cheap selector association so stale authority is
-        // cleared deterministically, but honor the clustered-Spc anti-hybrid
-        // PROTECT before any expensive source reconstruction. Until the full
-        // PTDE legacy local-specular microfacet island owns the complete Spc
-        // window, clustered Spc must fail open to stock DSR. NoSpc keeps the
-        // existing exact first-four/source carrier path unchanged.
+        // R35 owner-authorized hybrid: source/carrier production stays
+        // independent from material response, but both NoSpc and Spc now
+        // consume the exact PTDE PointLight source. For Spc this intentionally
+        // feeds the PTDE source/attenuation carrier into the surviving DSR
+        // local-specular tail. That path is explicitly HYBRID and must not be
+        // described as PTDE-equivalent local-specular behavior.
         clustered_pnts_selector_event_bridge(
             owner,
             actual_material);
-        if (!pointlight_spc) {
-            // R34: source/carrier production is a distinct stage from
-            // material-response authorization. NoSpc consumes the exact PTDE
-            // source immediately. Spc intentionally does not request that
-            // source yet: feeding it into the surviving stock DSR
-            // GGX/Schlick tail would recreate the prohibited hybrid.
-            clustered_pnts_selector_source_event_bridge();
-            clustered_pnts_selector_identity_event_bridge(
-                identity,
-                false);
-        }
+        clustered_pnts_selector_source_event_bridge();
+        clustered_pnts_selector_identity_event_bridge(
+            identity,
+            pointlight_spc);
     }
 
 #ifndef DSRRL_PHYSICAL_CUT_UL_H3_SUBSURFACE
