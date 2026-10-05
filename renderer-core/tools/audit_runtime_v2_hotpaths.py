@@ -24,6 +24,14 @@ require(tex, "VirtualQuery(", "page-bounded texture validation")
 forbid(tex, "for (std::size_t i = 0;\n             i < k_max;", "legacy per-character texture validation")
 require(tex, "snapshot_raw(", "zero-allocation texture snapshot")
 
+parse_body = flver.split("void __fastcall parse_entry", 1)[1].split("void __fastcall destroy_entry", 1)[0]
+destroy_body = flver.split("void __fastcall destroy_entry", 1)[1].split("void __fastcall mtd_entry", 1)[0]
+forbid(parse_body, "pmetal_env_source_cache_invalidate", "R41 FLVER parse must not flush P_Metal LightBank cache")
+forbid(destroy_body, "pmetal_env_source_cache_invalidate", "R41 FLVER destroy must not flush P_Metal LightBank cache")
+require(pmetal_source,
+        "[DSRRL PMETAL R41] flver_lifecycle_cache_flush=OFF source_cache_generation=SOURCE_RUNTIME_RESET_ONLY",
+        "R41 P_Metal cache-lifetime runtime attestation")
+
 selector = flver.split('extern "C" void dsrrl_flver_selector_observer', 1)[1].split('bool install(', 1)[0]
 require(selector, "g_selector_hemdir3_enabled.load", "HemDir3 selector gate")
 require(selector, "g_selector_upper_lower_enabled.load", "UpperLower selector gate")
