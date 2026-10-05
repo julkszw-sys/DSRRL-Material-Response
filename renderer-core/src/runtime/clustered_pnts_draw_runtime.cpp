@@ -2130,6 +2130,7 @@ bool clustered_pnts_draw_runtime::install() noexcept
         true,
         std::memory_order_relaxed);
     g_source_vm_cache = {};
+    g_pointlight_frame_decode_cache = {};
 
     g_retained_selector =
         reinterpret_cast<retained_selector_fn>(
@@ -2181,6 +2182,15 @@ bool clustered_pnts_draw_runtime::install() noexcept
         reshade::log::message(
             reshade::log::level::info,
             "[DSRRL POINTLIGHT R40] source_cache=PERSISTENT_GENERATIONAL_EXACT_STATE invalidation=ACTIVE_COLLECTION_INSERT collection_identity=IN_KEY endpoint_identity=SOURCE_PLUS_PARAM selector_beta=IN_KEY present_reset=OFF spc=ON nospc=ON");
+
+    static std::atomic_bool
+        r45_source_decode_cache_logged{false};
+    if (!r45_source_decode_cache_logged.exchange(
+            true,
+            std::memory_order_relaxed))
+        reshade::log::message(
+            reshade::log::level::info,
+            "[DSRRL POINTLIGHT R45] donor_validation_cache=TLS_PER_PRESENT exact_frame_state_reuse=ON duplicate_vtable_owner_selector_manager_decode=OFF spc=ON nospc=ON");
     return true;
 }
 
@@ -2197,6 +2207,7 @@ void clustered_pnts_draw_runtime::uninstall() noexcept
     consume_draw_selection();
     g_source_selection_cache = {};
     g_source_vm_cache = {};
+    g_pointlight_frame_decode_cache = {};
     g_frame_selection_cache = {};
     g_source_frame_cache = {};
     g_source_cache_seen_generation = 0u;
@@ -3156,6 +3167,7 @@ void clustered_pnts_draw_runtime::reset() noexcept
             1u,
             std::memory_order_relaxed) + 1u);
     g_source_vm_cache = {};
+    g_pointlight_frame_decode_cache = {};
     pointlight_ptde_source::
         clear_persistent_structure_cache();
     g_producer_input_tls = {};
