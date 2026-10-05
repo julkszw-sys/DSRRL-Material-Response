@@ -212,6 +212,15 @@ def main():
     require(pmetal_source,
         "capture_hook_selector_identity(",
         "R43 exact live LightBank freshness capture")
+    require(pmetal_source,
+        "[DSRRL PMETAL R44] visible_source_authority=MATERIAL_BOUND_PRODUCER_STATE_ONLY unkeyed_latest_hook_fallback=OFF exact_selector_shadow=ON missing_join=FAIL_OPEN_STOCK_DSR islands_preserved=ON",
+        "R44 visible source authority is material-bound only")
+    latest_start=pmetal_source.find("bool pmetal_env_source_runtime::latest(")
+    latest_end=pmetal_source.find("pmetal_env_source_runtime_telemetry",latest_start)
+    if min(latest_start,latest_end)<0:
+        fail("R44 visible latest() boundary missing")
+    if "latest_hook_source(out)" in pmetal_source[latest_start:latest_end]:
+        fail("R44 regression: unkeyed hook-source fallback re-entered visible P_Metal path")
     if "pmetal_env_source_cache_invalidate();" in flver_cpp:
         fail("R41 regression: FLVER lifecycle globally invalidates P_Metal LightBank source cache")
 
