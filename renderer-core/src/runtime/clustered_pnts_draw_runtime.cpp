@@ -76,6 +76,62 @@ thread_local source_selection_cache_tls g_source_selection_cache{};
 thread_local producer_input_snapshot g_producer_input_tls{};
 thread_local std::uint64_t g_local_serial = 0u;
 
+// R36: source capture is materially more expensive than first-four selection,
+// especially for Bank/LerpBank where donor authority and source-manager
+// resolution were previously repeated for every authorized material draw.
+// Cache the exact resolved carrier only inside a presented-frame epoch and only
+// while the relevant source-object bytes are unchanged. The cache is TLS: no
+// locks, no cross-thread authority and no retained COM/object ownership.
+struct frame_source_state_v1 {
+    void *node = nullptr;
+    std::uintptr_t target = 0u;
+    std::uintptr_t owner = 0u;
+    std::uint32_t source_id = 0u;
+    std::uint32_t selector_word0 = 0u;
+    std::uint32_t selector_word1 = 0u;
+    std::array<std::uint32_t,4> position_bits{};
+    std::uint8_t source_category = 0u;
+    std::uint8_t source_class = 0u;
+};
+
+struct frame_source_cache_entry_v1 {
+    frame_source_state_v1 state{};
+    source_raw source{};
+    bool valid = false;
+};
+
+constexpr std::size_t k_frame_source_cache_entries = 32u;
+std::atomic<std::uint64_t> g_source_frame_epoch{1u};
+thread_local std::uint64_t g_source_frame_seen_epoch = 0u;
+thread_local std::array<
+    frame_source_cache_entry_v1,
+    k_frame_source_cache_entries> g_source_frame_cache{};
+thread_local std::uint8_t g_source_frame_cache_victim = 0u;
+
+void reset_frame_source_cache_tls(
+    std::uint64_t epoch) noexcept
+{
+    g_source_frame_cache = {};
+    g_source_frame_cache_victim = 0u;
+    g_source_frame_seen_epoch = epoch;
+}
+
+bool same_frame_source_state(
+    const frame_source_state_v1 &a,
+    const frame_source_state_v1 &b) noexcept
+{
+    return
+        a.node == b.node &&
+        a.target == b.target &&
+        a.owner == b.owner &&
+        a.source_id == b.source_id &&
+        a.selector_word0 == b.selector_word0 &&
+        a.selector_word1 == b.selector_word1 &&
+        a.position_bits == b.position_bits &&
+        a.source_category == b.source_category &&
+        a.source_class == b.source_class;
+}
+
 #ifdef DSRRL_POINTLIGHT_PROFILE
 constexpr std::uint32_t k_pointlight_profile_sample_period = 128u;
 
