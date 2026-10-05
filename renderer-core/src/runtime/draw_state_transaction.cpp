@@ -1409,6 +1409,9 @@ void draw_state_transaction_runtime::on_destroy_device(
     if (native == nullptr)
         return;
 
+    if (g_local_tx.owner == this)
+        g_local_tx = {};
+
     // Invalidate thread-local borrowed pointers before releasing cached COM
     // references. ReShade device teardown is the lifetime boundary for all
     // recording contexts owned by this device.
@@ -1435,6 +1438,8 @@ void draw_state_transaction_runtime::on_destroy_device(
 
 void draw_state_transaction_runtime::reset() noexcept
 {
+    if (g_local_tx.owner == this)
+        g_local_tx = {};
     release_context1_cache();
     draw_serial_.store(0);
     begin_ok_.store(0);
