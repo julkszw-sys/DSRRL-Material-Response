@@ -3008,6 +3008,8 @@ void pmetal_env_source_selector_event(
         return;
 
     pmetal_envspec_source next{};
+    hook_selector_identity_v1
+        selector_identity{};
 
     // R41 producer-driven shadow join. The native EnvSpec single/blend packer
     // already resolved this exact LightBank source before the material selector
@@ -3020,7 +3022,8 @@ void pmetal_env_source_selector_event(
             source_b,
             endpoints.b,
             endpoints.beta,
-            next)) {
+            next,
+            &selector_identity)) {
         next.serial = epoch;
         pmetal_producer_state_publish(
             material,
