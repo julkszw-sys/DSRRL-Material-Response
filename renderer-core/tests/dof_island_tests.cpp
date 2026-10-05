@@ -1,4 +1,5 @@
 #include "dsrrl/operators/dof/dof_island.hpp"
+#include "dsrrl/operators/dof/dof_resource_contract.hpp"
 
 #include <iostream>
 
@@ -18,6 +19,40 @@ int main()
     CHECK(ptde_fixed_raster_ladder[0].height == 720u);
     CHECK(ptde_fixed_raster_ladder[1].width == 512u);
     CHECK(ptde_fixed_raster_ladder[2].width == 256u);
+
+    CHECK(ptde_fixed_surface_set_is_exact());
+    CHECK(ptde_fixed_surface_pairs.size() == 9u);
+    CHECK(ptde_surface_count(1024u, 720u) == 2u);
+    CHECK(ptde_surface_count(512u, 360u) == 4u);
+    CHECK(ptde_surface_count(256u, 180u) == 3u);
+
+    const auto *prefix =
+        find_ptde_surface(ptde_surface_role::full_prefix);
+    const auto *terminal =
+        find_ptde_surface(ptde_surface_role::full_terminal);
+    CHECK(prefix != nullptr);
+    CHECK(prefix->target_offset == 0x5Cu);
+    CHECK(prefix->srv_offset == 0x60u);
+    CHECK(terminal != nullptr);
+    CHECK(terminal->target_offset == 0x80u);
+    CHECK(terminal->srv_offset == 0x84u);
+    CHECK(terminal->raster.width == 1024u);
+    CHECK(terminal->raster.height == 720u);
+
+    CHECK(ptde_verified_prefix_edges.size() == 2u);
+    CHECK(ptde_verified_prefix_edges[0].pass == 0x00u);
+    CHECK(ptde_verified_prefix_edges[0].source_offset == 0x68u);
+    CHECK(ptde_verified_prefix_edges[0].target_offset == 0x5Cu);
+    CHECK(ptde_verified_prefix_edges[0].stored_srv_offset == 0x60u);
+    CHECK(ptde_verified_prefix_edges[1].pass == 0x02u);
+    CHECK(ptde_verified_prefix_edges[1].source_offset == 0x60u);
+    CHECK(ptde_verified_prefix_edges[1].target_offset == 0xA8u);
+    CHECK(ptde_verified_prefix_edges[1].stored_srv_offset == 0xB8u);
+
+    CHECK(plain_dofrate_switch_is_exact());
+    CHECK(dsr_plain_dofrate_switch.instruction_rva == 0x456489u);
+    CHECK(dsr_plain_dofrate_switch.stock_runtime_shader_id == 0x0DF0u);
+    CHECK(dsr_plain_dofrate_switch.ptde_bridge_runtime_shader_id == 0x0DEFu);
 
     CHECK(retained_pipeline_signatures.size() == 16u);
     CHECK(retained_runtime_id_sequence_is_contiguous());
@@ -42,6 +77,8 @@ int main()
         gy.vertex_sha256, gy.vertex_size,
         gy.pixel_sha256, gy.pixel_size) == &gy);
 
+    // Stock DSR keeps its retained _CB route. The PTDE island contract above
+    // selects plain DofRate only when the dedicated bridge is activated.
     CHECK(dsr_flat_retained_routes[4].pass == 0x0Du);
     CHECK(dsr_flat_retained_routes[4].primary ==
           retained_shader_role::dof_rate_cb);
