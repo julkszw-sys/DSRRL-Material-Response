@@ -233,6 +233,8 @@ private:
         transaction_state &state) noexcept;
 
     void release_state(transaction_state &state) noexcept;
+    void maybe_log_pointlight_profile(
+        std::uint64_t sample_index) const noexcept;
 
     struct context1_cache_record {
         ID3D11Device *device = nullptr;
