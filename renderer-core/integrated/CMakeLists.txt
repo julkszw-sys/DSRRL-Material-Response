@@ -225,6 +225,10 @@ option(
     DSRRL_FLVER_SELECTOR_PROFILE
     "Diagnostic: low-overhead sampled FLVER selector/support interaction profiler"
     OFF)
+option(
+    DSRRL_POINTLIGHT_PROFILE
+    "Diagnostic: low-overhead sampled clustered PointLight producer/transaction profiler"
+    OFF)
 
 set(
     RESHADE_INCLUDE_DIR
@@ -930,6 +934,13 @@ if(DSRRL_FLVER_SELECTOR_PROFILE)
         dsrrl_renderer_core_integrated
         PRIVATE
         DSRRL_FLVER_SELECTOR_PROFILE)
+endif()
+
+if(DSRRL_POINTLIGHT_PROFILE)
+    target_compile_definitions(
+        dsrrl_renderer_core_integrated
+        PRIVATE
+        DSRRL_POINTLIGHT_PROFILE)
 endif()
 
 if(MSVC)
