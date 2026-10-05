@@ -67,6 +67,8 @@ void unregister_ptde_scheduler_runtime() noexcept;
 bool ptde_scheduler_execution_set_ready(
     const scheduler_external_inputs &inputs) noexcept;
 
+bool ptde_scheduler_plain_rate_ready() noexcept;
+
 scheduler_result execute_ptde_pass(
     reshade::api::command_list *cmd_list,
     const operators::dof::activation_context &activation,
