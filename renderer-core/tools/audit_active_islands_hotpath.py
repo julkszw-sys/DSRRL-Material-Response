@@ -132,6 +132,21 @@ def main():
     require(source_body,
         "capture_source(",
         "PointLight source stage owns PTDE source capture")
+    require(clustered,
+        "k_frame_source_cache_entries = 32u",
+        "frame-scoped PointLight source-carrier cache")
+    require(clustered,
+        "bank_source ? 0x60u : 0x70u",
+        "attested Bank/Lerp position-only native lane")
+    require(clustered,
+        "pointlight_ptde_source::capture(",
+        "PTDE donor replaces Bank/Lerp source without duplicate native pack")
+    require(clustered,
+        "[DSRRL POINTLIGHT R36] frame_source_cache_hit=1 exact_state_snapshot=ON",
+        "R36 frame-source cache runtime attestation")
+    require(integrated,
+        "g_clustered_pnts.frame_event(present);",
+        "present-driven PointLight source cache epoch")
 
     material_body=function_body(
         clustered,
