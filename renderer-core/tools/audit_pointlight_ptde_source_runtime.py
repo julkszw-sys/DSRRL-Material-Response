@@ -45,19 +45,29 @@ require(fixed,'g_snapshots[owner_key]=current')
 require(fixed,'desc.Usage=D3D11_USAGE_IMMUTABLE')
 require(fixed,'view_desc.Buffer.NumElements=4u')
 
-# Clustered path: exact retail source class is the authority. The host vfunc
-# supplies the homologous CPU-packed signal; exact PTDE donor may override it
-# when logical-bank authority resolves, but donor miss must not discard the
-# entire ordinary PointLight draw.
+# Clustered path: exact retail source class is the authority. R36 removed the
+# duplicate Bank/Lerp host pack on donor success: Bank/Lerp read only the
+# attested host-owned position lane, reconstruct PTDE source first, and invoke
+# the exact stock source vfunc only when donor authority misses. Direct keeps
+# its exact homologous stock packer. Donor miss must never discard the draw.
 capture=clustered[clustered.index('bool capture_source('):clustered.index('void release_gpu(')]
-require(capture,'target_address != g_base + 0x55BC00u')
-require(capture,'target_address != g_base + 0x55D0B0u')
-require(capture,'fn(node, raw.data());')
-require(capture,'(void)pointlight_ptde_source::capture(')
-if capture.index('fn(node, raw.data());') < capture.index('target_address != g_base + 0x55BC00u'):
-    raise SystemExit('Clustered PointLight calls host source vfunc before exact source-class prefilter')
-if 'if (!pointlight_ptde_source::capture(' in capture:
-    raise SystemExit('Clustered ordinary PointLight donor miss still rejects the whole draw')
+for token in [
+    'target_address == g_base + 0x55BC00u',
+    'target_address == g_base + 0x55C570u',
+    'target_address == g_base + 0x55D0B0u',
+    'if (!bank_source &&',
+    'bank_source ? 0x60u : 0x70u',
+    'if (bank_source || lerp_bank_source) {',
+    'if (!pointlight_ptde_source::capture(',
+    'fn(node, raw.data());'
+]:
+    require(capture,token)
+if capture.index('fn(node, raw.data());') < capture.index('if (!pointlight_ptde_source::capture('):
+    raise SystemExit('Clustered Bank/Lerp PointLight regressed to stock pack before PTDE donor attempt')
+fallback_start=capture.index('if (!pointlight_ptde_source::capture(')
+fallback_end=capture.index('    } else {',fallback_start)
+if 'fn(node, raw.data());' not in capture[fallback_start:fallback_end]:
+    raise SystemExit('Clustered Bank/Lerp donor miss no longer preserves exact stock source fallback')
 for token in ['raw[3] > 0.0f','raw[7] > 0.0f','out.position_inv_range[i] = raw[i]','out.raw_q_end[i] = raw[4u + i]']:
     require(capture,token)
 
