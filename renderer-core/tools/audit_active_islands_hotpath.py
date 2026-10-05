@@ -192,8 +192,14 @@ def main():
         "present-driven R38 selection-cache epoch retained")
 
     require(pmetal_source,
-        "[DSRRL PMETAL R41] flver_lifecycle_cache_flush=OFF source_cache_generation=SOURCE_RUNTIME_RESET_ONLY",
+        "[DSRRL PMETAL R41] flver_lifecycle_cache_flush=OFF source_cache_generation=SOURCE_RUNTIME_RESET_ONLY endpoint_cache=EXACT_SOURCE_BASE_COUNT_INDEX_ROW bank_cache=BASE_COUNT_LAYOUT region_cache=VM_WINDOW selector_shadow=EXACT_TLS_SOURCE_PTR_SELECTOR_BETA selector_source=ON envspec=ON material_response=ON",
         "R41 P_Metal LightBank cache lifetime is decoupled from FLVER streaming")
+    require(pmetal_source,
+        "latest_hook_source_exact_selector(",
+        "R41 exact native EnvSpec producer shadow join")
+    require(pmetal_source,
+        "[DSRRL PMETAL R41] selector_source_shadow_hit=1 exact_source_ptr=ON exact_selector_beta=ON donor_redecode=OFF fail_open_fallback=ON",
+        "R41 selector shadow runtime hit attestation")
     if "pmetal_env_source_cache_invalidate();" in flver_cpp:
         fail("R41 regression: FLVER lifecycle globally invalidates P_Metal LightBank source cache")
 
