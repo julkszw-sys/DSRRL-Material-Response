@@ -208,6 +208,7 @@ add_library(dsrrl_renderer_core STATIC
     src/operators/env_spec/no_spc_envspec_delete.cpp
     src/operators/surface/terminal_sat_rgb_patch.cpp
     src/operators/surface/faceeye_shadow.cpp
+    src/operators/dof/dof_island.cpp
     src/operators/point_light/pnts_attenuation.cpp
     src/operators/point_light/clustered_sidecar.cpp
     src/operators/point_light/clustered_pnts_direct_materializer.cpp
@@ -350,6 +351,11 @@ target_compile_features(dsrrl_renderer_island_tests PRIVATE cxx_std_17)
 add_dependencies(
     dsrrl_renderer_island_tests
     dsrrl_pointlight_material_authority_header)
+
+add_executable(dsrrl_renderer_dof_island_tests
+    tests/dof_island_tests.cpp)
+target_link_libraries(dsrrl_renderer_dof_island_tests PRIVATE dsrrl_renderer_core)
+target_compile_features(dsrrl_renderer_dof_island_tests PRIVATE cxx_std_17)
 
 add_executable(dsrrl_renderer_future_runtime_tests
     tests/future_runtime_readiness_tests.cpp)
@@ -500,6 +506,7 @@ else()
     target_compile_options(dsrrl_renderer_exact_material_cache_tests PRIVATE -Wall -Wextra -Wpedantic -Werror)
     target_compile_options(dsrrl_renderer_dsr_mtd_identity_supplement_tests PRIVATE -Wall -Wextra -Wpedantic -Werror)
     target_compile_options(dsrrl_renderer_island_tests PRIVATE -Wall -Wextra -Wpedantic -Werror)
+    target_compile_options(dsrrl_renderer_dof_island_tests PRIVATE -Wall -Wextra -Wpedantic -Werror)
     target_compile_options(dsrrl_renderer_future_runtime_tests PRIVATE -Wall -Wextra -Wpedantic -Werror)
     target_compile_options(dsrrl_renderer_faceeye_pointlight_tests PRIVATE -Wall -Wextra -Wpedantic -Werror)
     target_compile_options(dsrrl_renderer_clustered_sidecar_tests PRIVATE -Wall -Wextra -Wpedantic -Werror)
@@ -566,6 +573,7 @@ set_tests_properties(
     PROPERTIES ENVIRONMENT "DSRRL_RUNTIME_TELEMETRY=1")
 add_test(NAME dsrrl_renderer_core_tests COMMAND dsrrl_renderer_core_tests)
 add_test(NAME dsrrl_renderer_island_tests COMMAND dsrrl_renderer_island_tests)
+add_test(NAME dsrrl_renderer_dof_island_tests COMMAND dsrrl_renderer_dof_island_tests)
 add_test(NAME dsrrl_renderer_future_runtime_tests COMMAND dsrrl_renderer_future_runtime_tests)
 add_test(NAME dsrrl_renderer_faceeye_pointlight_tests COMMAND dsrrl_renderer_faceeye_pointlight_tests)
 add_test(NAME dsrrl_renderer_clustered_sidecar_tests COMMAND dsrrl_renderer_clustered_sidecar_tests)
