@@ -19,6 +19,7 @@ struct pmetal_native_draw_telemetry {
     std::uint64_t restore_fail = 0;
     std::uint64_t context_registers = 0;
     std::uint64_t deferred_context_registers = 0;
+    std::uint64_t context_rebinds = 0;
     std::uint64_t vtable_hooks_installed = 0;
     bool hook_active = false;
     bool quarantined = false;
