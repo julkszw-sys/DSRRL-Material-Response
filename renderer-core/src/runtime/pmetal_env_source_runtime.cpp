@@ -2370,6 +2370,15 @@ bool pmetal_env_source_runtime::install() noexcept
             reshade::log::level::info,
             "[DSRRL PMETAL R41] flver_lifecycle_cache_flush=OFF source_cache_generation=SOURCE_RUNTIME_RESET_ONLY endpoint_cache=EXACT_SOURCE_BASE_COUNT_INDEX_ROW bank_cache=BASE_COUNT_LAYOUT region_cache=VM_WINDOW selector_shadow=EXACT_TLS_SOURCE_PTR_SELECTOR_BETA selector_source=ON envspec=ON material_response=ON");
 
+    static std::atomic_bool
+        r42_cross_thread_cache_logged{false};
+    if (!r42_cross_thread_cache_logged.exchange(
+            true,
+            std::memory_order_relaxed))
+        reshade::log::message(
+            reshade::log::level::info,
+            "[DSRRL PMETAL R42] producer_cache=SET64_WAY2 cross_thread=ON exact_key=SOURCE_PTR_SELECTOR_BETA semantic_version_gate=CURRENT selector_try_lock=ON producer_payload_reuse=ON donor_redecode_fallback=ON islands_preserved=ON");
+
     return true;
 }
 
