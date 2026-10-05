@@ -1161,10 +1161,14 @@ draw_tx_result draw_state_transaction_runtime::replay_draw(
             const auto end = pointlight_profile_qpc();
             const auto begin_ticks = end - profile_begin_start;
             const auto total_ticks = end - profile_total_start;
-            profile_samples_.fetch_add(1u, std::memory_order_relaxed);
+            const auto profile_sample_index =
+                profile_samples_.fetch_add(
+                    1u,
+                    std::memory_order_relaxed) + 1u;
             profile_begin_ticks_.fetch_add(begin_ticks, std::memory_order_relaxed);
             profile_total_ticks_.fetch_add(total_ticks, std::memory_order_relaxed);
             pointlight_profile_max(profile_max_total_ticks_, total_ticks);
+            maybe_log_pointlight_profile(profile_sample_index);
         }
 #endif
         return draw_tx_result::not_issued;
@@ -1216,7 +1220,10 @@ draw_tx_result draw_state_transaction_runtime::replay_draw(
         const auto end = pointlight_profile_qpc();
         const auto restore_ticks = end - profile_restore_start;
         const auto total_ticks = end - profile_total_start;
-        profile_samples_.fetch_add(1u, std::memory_order_relaxed);
+        const auto profile_sample_index =
+                profile_samples_.fetch_add(
+                    1u,
+                    std::memory_order_relaxed) + 1u;
         profile_restore_ticks_.fetch_add(
             restore_ticks,
             std::memory_order_relaxed);
@@ -1226,6 +1233,7 @@ draw_tx_result draw_state_transaction_runtime::replay_draw(
         pointlight_profile_max(
             profile_max_total_ticks_,
             total_ticks);
+        maybe_log_pointlight_profile(profile_sample_index);
     }
 #endif
 
@@ -1261,10 +1269,14 @@ draw_state_transaction_runtime::replay_draw_indexed(
             const auto end = pointlight_profile_qpc();
             const auto begin_ticks = end - profile_begin_start;
             const auto total_ticks = end - profile_total_start;
-            profile_samples_.fetch_add(1u, std::memory_order_relaxed);
+            const auto profile_sample_index =
+                profile_samples_.fetch_add(
+                    1u,
+                    std::memory_order_relaxed) + 1u;
             profile_begin_ticks_.fetch_add(begin_ticks, std::memory_order_relaxed);
             profile_total_ticks_.fetch_add(total_ticks, std::memory_order_relaxed);
             pointlight_profile_max(profile_max_total_ticks_, total_ticks);
+            maybe_log_pointlight_profile(profile_sample_index);
         }
 #endif
         return draw_tx_result::not_issued;
@@ -1318,7 +1330,10 @@ draw_state_transaction_runtime::replay_draw_indexed(
         const auto end = pointlight_profile_qpc();
         const auto restore_ticks = end - profile_restore_start;
         const auto total_ticks = end - profile_total_start;
-        profile_samples_.fetch_add(1u, std::memory_order_relaxed);
+        const auto profile_sample_index =
+                profile_samples_.fetch_add(
+                    1u,
+                    std::memory_order_relaxed) + 1u;
         profile_restore_ticks_.fetch_add(
             restore_ticks,
             std::memory_order_relaxed);
@@ -1328,6 +1343,7 @@ draw_state_transaction_runtime::replay_draw_indexed(
         pointlight_profile_max(
             profile_max_total_ticks_,
             total_ticks);
+        maybe_log_pointlight_profile(profile_sample_index);
     }
 #endif
 
@@ -1680,6 +1696,55 @@ bool draw_state_transaction_runtime::raw_replay_draw_indexed(
             first_instance);
     }
     return true;
+}
+
+void draw_state_transaction_runtime::maybe_log_pointlight_profile(
+    std::uint64_t sample_index) const noexcept
+{
+#ifdef DSRRL_POINTLIGHT_PROFILE
+    if (sample_index != 1u &&
+        (sample_index % 16u) != 0u)
+        return;
+
+    const auto profile = telemetry();
+    if (profile.profile_samples == 0u ||
+        profile.profile_qpc_frequency == 0u)
+        return;
+
+    const auto avg_us =
+        [frequency = profile.profile_qpc_frequency,
+         samples = profile.profile_samples](
+            std::uint64_t ticks) noexcept {
+            return (static_cast<double>(ticks) * 1000000.0) /
+                   (static_cast<double>(frequency) *
+                    static_cast<double>(samples));
+        };
+    const auto ticks_us =
+        [frequency = profile.profile_qpc_frequency](
+            std::uint64_t ticks) noexcept {
+            return (static_cast<double>(ticks) * 1000000.0) /
+                   static_cast<double>(frequency);
+        };
+
+    char line[768]{};
+    std::snprintf(
+        line,
+        sizeof(line),
+        "[DSRRL PERF R32] POINTLIGHT_TX sample=1/%u n=%llu total_us=%.3f max_total_us=%.3f begin_capture_mutate_us=%.3f native_draw_us=%.3f restore_us=%.3f",
+        profile.profile_sample_period,
+        static_cast<unsigned long long>(
+            profile.profile_samples),
+        avg_us(profile.profile_total_ticks),
+        ticks_us(profile.profile_max_total_ticks),
+        avg_us(profile.profile_begin_ticks),
+        avg_us(profile.profile_draw_ticks),
+        avg_us(profile.profile_restore_ticks));
+    reshade::log::message(
+        reshade::log::level::info,
+        line);
+#else
+    (void)sample_index;
+#endif
 }
 
 draw_tx_telemetry
