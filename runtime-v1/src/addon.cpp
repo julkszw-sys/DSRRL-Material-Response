@@ -18,6 +18,8 @@
 #include "dsrrl/runtime/feature_manifest.hpp"
 #include "dsrrl/runtime/dof_preflight.hpp"
 #include "dsrrl/runtime/dof_authored_state_runtime.hpp"
+#include "dsrrl/runtime/dof_plain_rate_runtime.hpp"
+#include "dsrrl/runtime/dof_private_resource_runtime.hpp"
 
 #include <atomic>
 #include <cstdio>
@@ -128,6 +130,34 @@ void unregister_a1_events()
     reshade::unregister_event<reshade::addon_event::init_device>(a1_init_device);
 }
 
+void unregister_dof_construction_runtime() noexcept
+{
+    dsrrl::runtime::dof::revoke_private_resources();
+    dsrrl::runtime::dof::unregister_private_resource_runtime();
+    dsrrl::runtime::dof::deactivate_plain_rate_runtime();
+    dsrrl::runtime::dof::unregister_plain_rate_runtime();
+}
+
+void register_dof_construction_runtime() noexcept
+{
+    const bool plain_ready =
+        dsrrl::runtime::dof::register_plain_rate_runtime();
+    const bool resource_events_ready =
+        dsrrl::runtime::dof::register_private_resource_runtime();
+
+    reshade::log::message(
+        plain_ready ? reshade::log::level::info : reshade::log::level::warning,
+        plain_ready ?
+            "DSRRL DoF: exact 0xDF0->0xDEF plain-rate switch preimage READY; activation remains blocked." :
+            "DSRRL DoF: plain-rate switch preimage mismatch; DoF bridge remains fail-open OFF.");
+
+    reshade::log::message(
+        resource_events_ready ? reshade::log::level::info : reshade::log::level::warning,
+        resource_events_ready ?
+            "DSRRL DoF: fixed PTDE 9-resource lifecycle registered; resources remain unauthorized." :
+            "DSRRL DoF: fixed PTDE resource lifecycle registration failed; DoF bridge remains fail-open OFF.");
+}
+
 void flver_parse_dispatch(void *model,const void *raw) noexcept
 {
     dsrrl::runtime::mr::flver_parse_event(model,raw);
@@ -189,6 +219,8 @@ extern "C" __declspec(dllexport) bool AddonInit(HMODULE addon,HMODULE reshade_mo
         return false;
     }
 
+    register_dof_construction_runtime();
+
     const bool dof_authored_state_ready =
         dsrrl::runtime::dof::register_authored_state_runtime(g_core);
     reshade::log::message(
@@ -204,6 +236,7 @@ extern "C" __declspec(dllexport) bool AddonInit(HMODULE addon,HMODULE reshade_mo
         dsrrl::runtime::assets::unregister_runtime();
         dsrrl::runtime::mr::unregister_runtime();
         dsrrl::runtime::dof::unregister_authored_state_runtime();
+        unregister_dof_construction_runtime();
         dsrrl::runtime::dof::unregister_preflight_runtime();
         unregister_a1_events();
         g_a1_bridge.reset();
@@ -265,6 +298,7 @@ extern "C" __declspec(dllexport) void AddonUninit(HMODULE addon,HMODULE reshade_
     dsrrl::runtime::mr::unregister_runtime();
     dsrrl::runtime::assets::unregister_runtime();
     dsrrl::runtime::dof::unregister_authored_state_runtime();
+    unregister_dof_construction_runtime();
     dsrrl::runtime::dof::unregister_preflight_runtime();
     unregister_a1_events();
     log_a1_state("UNLOAD");
