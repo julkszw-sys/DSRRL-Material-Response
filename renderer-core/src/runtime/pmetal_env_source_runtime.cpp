@@ -2256,7 +2256,8 @@ bool latest_hook_source_exact_selector(
     void *source_b,
     std::int16_t selector_b,
     float beta,
-    pmetal_envspec_source &out) noexcept
+    pmetal_envspec_source &out,
+    hook_selector_identity_v1 *identity_out = nullptr) noexcept
 {
     out = {};
     if (source_a == nullptr ||
@@ -2273,6 +2274,9 @@ bool latest_hook_source_exact_selector(
             beta,
             query))
         return false;
+
+    if (identity_out != nullptr)
+        *identity_out = query;
 
     if (g_hook_source_tls.valid &&
         g_hook_selector_identity_tls.valid &&
