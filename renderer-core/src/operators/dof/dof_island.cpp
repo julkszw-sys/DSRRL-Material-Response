@@ -40,6 +40,9 @@ activation_decision evaluate_activation(const activation_context &context) noexc
     if (!context.fixed_raster_chain_ready)
         return {false, bridge_reason::missing_fixed_raster_chain};
 
+    if (!context.tonemap_dof_continuation_verified)
+        return {false, bridge_reason::incomplete_tonemap_dof_continuation};
+
     if (!context.output_cut_verified)
         return {false, bridge_reason::missing_output_cut};
 
