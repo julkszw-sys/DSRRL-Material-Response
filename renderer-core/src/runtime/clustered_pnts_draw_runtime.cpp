@@ -817,31 +817,63 @@ bool capture_source(
         return false;
     }
 
-    using source_fn =
-        void (__fastcall *)(void *, float *);
-    const auto fn =
-        reinterpret_cast<source_fn>(target);
-
     alignas(16) std::array<float,8> raw{};
-    fn(node, raw.data());
 
-    // The retail CPU packer is homologous PTDE<->DSR for ordinary
-    // BankPointLightEntity/LerpBankPointLightEntity: position, invRange,
-    // packed RGB*Intensity and End have the same representation. Prefer the
-    // exact PTDE donor when its bank authority resolves, but do not discard
-    // an otherwise attested ordinary light solely because donor-bank identity
-    // is unavailable. The clustered replacement shader still owns the proven
-    // PTDE attenuation correction (x^3 -> x); unresolved numeric row residuals
-    // remain source-local and are not compensated by arbitrary gains.
-    // DirectPointLightEntity has no PointLightBank donor. Its retail host
-    // packer is already the exact PTDE-homologous carrier, so do not perform
-    // the Bank/LerpBank donor lookup for that class.
-    if (!direct_source) {
-        (void)pointlight_ptde_source::capture(
-            node,
-            g_base,
-            raw,
-            bank_cache);
+    // R36 performance cut: do not execute the stock Bank/LerpBank source
+    // packer and then immediately reconstruct the same source again from the
+    // PTDE donor. Retail DSR disassembly attests the only host-owned lane that
+    // must be preserved before donor substitution:
+    //   BankPointLightEntity     base+0x55BC00 -> position.xyz at node+0x60
+    //   LerpBankPointLightEntity base+0x55D0B0 -> position.xyz at node+0x70
+    // pointlight_ptde_source::capture() then writes the exact PTDE
+    // invRange/RGB/End lanes while preserving raw[0..2].
+    //
+    // DirectPointLightEntity has no donor and its retail packer is itself the
+    // exact PTDE-homologous carrier, so keep the direct native call only for
+    // that class.
+    if (bank_source || lerp_bank_source) {
+        const std::size_t position_offset =
+            bank_source ? 0x60u : 0x70u;
+        if (!readable_range(
+                static_cast<const std::uint8_t *>(node) +
+                    position_offset,
+                3u * sizeof(float))) {
+            log_source_capture_failure_once(
+                1u << 7,
+                bank_source
+                    ? "bank_position_unreadable"
+                    : "lerp_position_unreadable",
+                node,
+                target);
+            return false;
+        }
+
+        std::memcpy(
+            raw.data(),
+            static_cast<const std::uint8_t *>(node) +
+                position_offset,
+            3u * sizeof(float));
+
+        if (!pointlight_ptde_source::capture(
+                node,
+                g_base,
+                raw,
+                bank_cache)) {
+            log_source_capture_failure_once(
+                1u << 8,
+                bank_source
+                    ? "bank_ptde_donor_unavailable"
+                    : "lerp_ptde_donor_unavailable",
+                node,
+                target);
+            return false;
+        }
+    } else {
+        using source_fn =
+            void (__fastcall *)(void *, float *);
+        const auto fn =
+            reinterpret_cast<source_fn>(target);
+        fn(node, raw.data());
     }
 
     for (const auto value : raw)
