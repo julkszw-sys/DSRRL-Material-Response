@@ -97,6 +97,8 @@ std::atomic_bool g_pointlight_native_applied_logged{false};
 std::atomic_bool g_deferred_context_registered_logged{false};
 std::atomic_bool g_context_rebind_logged{false};
 std::atomic_bool g_native_arm_reject_logged{false};
+std::atomic_bool g_vtable_rearm_logged{false};
+std::atomic_bool g_vtable_conflict_logged{false};
 
 void retain_mutation(
     draw_tx_mutation &mutation) noexcept
@@ -562,9 +564,11 @@ bool write_vtable_slot(
             &old))
         return false;
 
-    InterlockedExchangePointer(
-        reinterpret_cast<PVOID volatile *>(slot),
-        replacement);
+    void *previous =
+        InterlockedCompareExchangePointer(
+            reinterpret_cast<PVOID volatile *>(slot),
+            replacement,
+            expected);
 
     DWORD ignored = 0u;
     (void)VirtualProtect(
@@ -573,7 +577,8 @@ bool write_vtable_slot(
         old,
         &ignored);
 
-    return *slot == replacement;
+    return previous == expected &&
+           *slot == replacement;
 }
 
 bool restore_vtable_slot(
@@ -598,9 +603,11 @@ bool restore_vtable_slot(
             &old))
         return false;
 
-    InterlockedExchangePointer(
-        reinterpret_cast<PVOID volatile *>(slot),
-        original);
+    void *previous =
+        InterlockedCompareExchangePointer(
+            reinterpret_cast<PVOID volatile *>(slot),
+            original,
+            replacement);
 
     DWORD ignored = 0u;
     (void)VirtualProtect(
@@ -609,7 +616,8 @@ bool restore_vtable_slot(
         old,
         &ignored);
 
-    return *slot == original;
+    return previous == replacement &&
+           *slot == original;
 }
 
 hook_vtable_record *hook_record_for(
@@ -702,6 +710,194 @@ pmetal_native_draw_bridge::~pmetal_native_draw_bridge()
 
     delete impl_;
     impl_ = nullptr;
+}
+
+bool pmetal_native_draw_bridge::ensure_vtable_hook_live(
+    ID3D11DeviceContext *context) noexcept
+{
+    if (impl_ == nullptr ||
+        context == nullptr ||
+        impl_->quarantined.load(
+            std::memory_order_acquire))
+        return false;
+
+    auto **vtable =
+        *reinterpret_cast<void ***>(
+            context);
+    if (vtable == nullptr)
+        return false;
+
+    auto *hook =
+        hook_record_for(
+            context);
+    if (hook == nullptr)
+        return false;
+
+    struct slot_plan {
+        void **slot = nullptr;
+        void *original = nullptr;
+        void *replacement = nullptr;
+    };
+
+    const std::array<slot_plan,4> slots{{
+        {&vtable[k_vtbl_draw_indexed],
+         reinterpret_cast<void *>(
+             hook->original_draw_indexed),
+         reinterpret_cast<void *>(
+             &pmetal_native_draw_bridge::
+                 draw_indexed_hook)},
+        {&vtable[k_vtbl_draw],
+         reinterpret_cast<void *>(
+             hook->original_draw),
+         reinterpret_cast<void *>(
+             &pmetal_native_draw_bridge::
+                 draw_hook)},
+        {&vtable[k_vtbl_draw_indexed_instanced],
+         reinterpret_cast<void *>(
+             hook->original_draw_indexed_instanced),
+         reinterpret_cast<void *>(
+             &pmetal_native_draw_bridge::
+                 draw_indexed_instanced_hook)},
+        {&vtable[k_vtbl_draw_instanced],
+         reinterpret_cast<void *>(
+             hook->original_draw_instanced),
+         reinterpret_cast<void *>(
+             &pmetal_native_draw_bridge::
+                 draw_instanced_hook)}
+    }};
+
+    std::uint32_t repair_mask = 0u;
+    std::uint32_t conflict_mask = 0u;
+
+    for (std::uint32_t i = 0u;
+         i < slots.size();
+         ++i) {
+        void *current =
+            *slots[i].slot;
+        if (current ==
+            slots[i].replacement)
+            continue;
+
+        if (current ==
+            slots[i].original)
+            repair_mask |=
+                (1u << i);
+        else
+            conflict_mask |=
+                (1u << i);
+    }
+
+    if (conflict_mask != 0u) {
+        if (!g_vtable_conflict_logged.exchange(
+                true,
+                std::memory_order_relaxed)) {
+            char line[256]{};
+            std::snprintf(
+                line,
+                sizeof(line),
+                "[DSRRL POINTLIGHT R25] vtable_hook_conflict external_owner=1 slot_mask=0x%X fail_open=1",
+                static_cast<unsigned>(
+                    conflict_mask));
+            reshade::log::message(
+                reshade::log::level::warning,
+                line);
+        }
+        return false;
+    }
+
+    if (repair_mask == 0u)
+        return true;
+
+    std::uint32_t repaired_mask = 0u;
+    bool repair_ok = true;
+
+    for (std::uint32_t i = 0u;
+         i < slots.size();
+         ++i) {
+        if ((repair_mask &
+             (1u << i)) == 0u)
+            continue;
+
+        if (!write_vtable_slot(
+                slots[i].slot,
+                slots[i].original,
+                slots[i].replacement)) {
+            repair_ok = false;
+            break;
+        }
+
+        repaired_mask |=
+            (1u << i);
+    }
+
+    const bool hook_live =
+        repair_ok &&
+        vtable[k_vtbl_draw_indexed] ==
+            reinterpret_cast<void *>(
+                &pmetal_native_draw_bridge::
+                    draw_indexed_hook) &&
+        vtable[k_vtbl_draw] ==
+            reinterpret_cast<void *>(
+                &pmetal_native_draw_bridge::
+                    draw_hook) &&
+        vtable[
+            k_vtbl_draw_indexed_instanced] ==
+            reinterpret_cast<void *>(
+                &pmetal_native_draw_bridge::
+                    draw_indexed_instanced_hook) &&
+        vtable[k_vtbl_draw_instanced] ==
+            reinterpret_cast<void *>(
+                &pmetal_native_draw_bridge::
+                    draw_instanced_hook);
+
+    if (!hook_live) {
+        bool restored = true;
+        for (std::uint32_t i = 0u;
+             i < slots.size();
+             ++i) {
+            if ((repaired_mask &
+                 (1u << i)) == 0u)
+                continue;
+
+            restored &=
+                restore_vtable_slot(
+                    slots[i].slot,
+                    slots[i].replacement,
+                    slots[i].original);
+        }
+
+        if (!restored) {
+            impl_->restore_fail.fetch_add(
+                1u,
+                std::memory_order_relaxed);
+            impl_->quarantined.store(
+                true,
+                std::memory_order_release);
+        }
+        return false;
+    }
+
+    if (!g_vtable_rearm_logged.exchange(
+            true,
+            std::memory_order_relaxed)) {
+        char line[256]{};
+        std::snprintf(
+            line,
+            sizeof(line),
+            "[DSRRL POINTLIGHT R25] vtable_hook_rearmed reverted_original_slots=%u slot_mask=0x%X native_original_draw=ARMABLE",
+            static_cast<unsigned>(
+                (repair_mask & 1u ? 1u : 0u) +
+                (repair_mask & 2u ? 1u : 0u) +
+                (repair_mask & 4u ? 1u : 0u) +
+                (repair_mask & 8u ? 1u : 0u)),
+            static_cast<unsigned>(
+                repair_mask));
+        reshade::log::message(
+            reshade::log::level::info,
+            line);
+    }
+
+    return true;
 }
 
 bool pmetal_native_draw_bridge::register_context(
@@ -954,25 +1150,8 @@ bool pmetal_native_draw_bridge::register_context(
             1u,
             std::memory_order_relaxed);
     } else {
-        const bool hook_live =
-            vtable[k_vtbl_draw_indexed] ==
-                reinterpret_cast<void *>(
-                    &pmetal_native_draw_bridge::
-                        draw_indexed_hook) &&
-            vtable[k_vtbl_draw] ==
-                reinterpret_cast<void *>(
-                    &pmetal_native_draw_bridge::
-                        draw_hook) &&
-            vtable[
-                k_vtbl_draw_indexed_instanced] ==
-                reinterpret_cast<void *>(
-                    &pmetal_native_draw_bridge::
-                        draw_indexed_instanced_hook) &&
-            vtable[k_vtbl_draw_instanced] ==
-                reinterpret_cast<void *>(
-                    &pmetal_native_draw_bridge::
-                        draw_instanced_hook);
-        if (!hook_live) {
+        if (!ensure_vtable_hook_live(
+                context)) {
             if (context1 != nullptr)
                 context1->Release();
             identity->Release();
@@ -996,7 +1175,7 @@ bool pmetal_native_draw_bridge::register_context(
                 std::memory_order_relaxed))
             reshade::log::message(
                 reshade::log::level::info,
-                "[DSRRL POINTLIGHT R24] same_native_pointer_vtable_rebound native_original_draw=ARMABLE");
+                "[DSRRL POINTLIGHT R25] same_native_pointer_vtable_rebound native_original_draw=ARMABLE");
 
         return true;
     }
@@ -1033,8 +1212,8 @@ bool pmetal_native_draw_bridge::register_context(
             reshade::log::message(
                 reshade::log::level::info,
                 new_hook
-                    ? "[DSRRL POINTLIGHT R24] deferred_context_registered vtable=distinct native_original_draw=ARMABLE"
-                    : "[DSRRL POINTLIGHT R24] deferred_context_registered vtable=shared native_original_draw=ARMABLE");
+                    ? "[DSRRL POINTLIGHT R25] deferred_context_registered vtable=distinct native_original_draw=ARMABLE"
+                    : "[DSRRL POINTLIGHT R25] deferred_context_registered vtable=shared native_original_draw=ARMABLE");
         }
     }
 
@@ -1381,7 +1560,7 @@ bool pmetal_native_draw_bridge::arm_draw(
                     std::memory_order_relaxed))
                 reshade::log::message(
                     reshade::log::level::info,
-                    "[DSRRL POINTLIGHT R24] command_list_native_identity_rebound native_original_draw=ARMABLE");
+                    "[DSRRL POINTLIGHT R25] command_list_native_identity_rebound native_original_draw=ARMABLE");
 
             std::shared_lock<std::shared_mutex> lock(
                 impl_->registry_mutex);
@@ -1400,28 +1579,9 @@ bool pmetal_native_draw_bridge::arm_draw(
         }
     }
 
-    auto *hook =
-        hook_record_for(
-            context);
     const bool hook_live =
-        hook != nullptr &&
-        vtable[k_vtbl_draw_indexed] ==
-            reinterpret_cast<void *>(
-                &pmetal_native_draw_bridge::
-                    draw_indexed_hook) &&
-        vtable[k_vtbl_draw] ==
-            reinterpret_cast<void *>(
-                &pmetal_native_draw_bridge::
-                    draw_hook) &&
-        vtable[
-            k_vtbl_draw_indexed_instanced] ==
-            reinterpret_cast<void *>(
-                &pmetal_native_draw_bridge::
-                    draw_indexed_instanced_hook) &&
-        vtable[k_vtbl_draw_instanced] ==
-            reinterpret_cast<void *>(
-                &pmetal_native_draw_bridge::
-                    draw_instanced_hook);
+        ensure_vtable_hook_live(
+            context);
 
     if (!registered ||
         !hook_live) {
@@ -1442,8 +1602,8 @@ bool pmetal_native_draw_bridge::arm_draw(
                 line,
                 sizeof(line),
                 !registered
-                    ? "[DSRRL POINTLIGHT R24] native_arm_reject reason=context_registration_failed type=%u hook_record=%u hook_slots=%zu/%zu"
-                    : "[DSRRL POINTLIGHT R24] native_arm_reject reason=vtable_hook_not_live type=%u hook_record=%u hook_slots=%zu/%zu",
+                    ? "[DSRRL POINTLIGHT R25] native_arm_reject reason=context_registration_failed type=%u hook_record=%u hook_slots=%zu/%zu"
+                    : "[DSRRL POINTLIGHT R25] native_arm_reject reason=vtable_hook_not_live type=%u hook_record=%u hook_slots=%zu/%zu",
                 static_cast<unsigned>(context->GetType()),
                 hook_record_for(context) != nullptr ? 1u : 0u,
                 used_hook_slots,
@@ -1578,7 +1738,7 @@ bool pmetal_native_draw_bridge::arm_draw_indexed(
                     std::memory_order_relaxed))
                 reshade::log::message(
                     reshade::log::level::info,
-                    "[DSRRL POINTLIGHT R24] command_list_native_identity_rebound native_original_draw=ARMABLE");
+                    "[DSRRL POINTLIGHT R25] command_list_native_identity_rebound native_original_draw=ARMABLE");
 
             std::shared_lock<std::shared_mutex> lock(
                 impl_->registry_mutex);
@@ -1597,28 +1757,9 @@ bool pmetal_native_draw_bridge::arm_draw_indexed(
         }
     }
 
-    auto *hook =
-        hook_record_for(
-            context);
     const bool hook_live =
-        hook != nullptr &&
-        vtable[k_vtbl_draw_indexed] ==
-            reinterpret_cast<void *>(
-                &pmetal_native_draw_bridge::
-                    draw_indexed_hook) &&
-        vtable[k_vtbl_draw] ==
-            reinterpret_cast<void *>(
-                &pmetal_native_draw_bridge::
-                    draw_hook) &&
-        vtable[
-            k_vtbl_draw_indexed_instanced] ==
-            reinterpret_cast<void *>(
-                &pmetal_native_draw_bridge::
-                    draw_indexed_instanced_hook) &&
-        vtable[k_vtbl_draw_instanced] ==
-            reinterpret_cast<void *>(
-                &pmetal_native_draw_bridge::
-                    draw_instanced_hook);
+        ensure_vtable_hook_live(
+            context);
 
     if (!registered ||
         !hook_live) {
@@ -1639,8 +1780,8 @@ bool pmetal_native_draw_bridge::arm_draw_indexed(
                 line,
                 sizeof(line),
                 !registered
-                    ? "[DSRRL POINTLIGHT R24] native_arm_reject reason=context_registration_failed type=%u hook_record=%u hook_slots=%zu/%zu"
-                    : "[DSRRL POINTLIGHT R24] native_arm_reject reason=vtable_hook_not_live type=%u hook_record=%u hook_slots=%zu/%zu",
+                    ? "[DSRRL POINTLIGHT R25] native_arm_reject reason=context_registration_failed type=%u hook_record=%u hook_slots=%zu/%zu"
+                    : "[DSRRL POINTLIGHT R25] native_arm_reject reason=vtable_hook_not_live type=%u hook_record=%u hook_slots=%zu/%zu",
                 static_cast<unsigned>(context->GetType()),
                 hook_record_for(context) != nullptr ? 1u : 0u,
                 used_hook_slots,
@@ -2157,6 +2298,12 @@ void pmetal_native_draw_bridge::reset_telemetry() noexcept
         false,
         std::memory_order_relaxed);
     g_native_arm_reject_logged.store(
+        false,
+        std::memory_order_relaxed);
+    g_vtable_rearm_logged.store(
+        false,
+        std::memory_order_relaxed);
+    g_vtable_conflict_logged.store(
         false,
         std::memory_order_relaxed);
 
