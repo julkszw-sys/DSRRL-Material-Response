@@ -11,11 +11,7 @@ on:
       - "runtime-v1/**"
       - "renderer-core/**"
       - ".github/workflows/renderer-core-runtime-v1-a2.yml"
-  pull_request:
-    paths:
-      - "runtime-v1/**"
-      - "renderer-core/**"
-      - ".github/workflows/renderer-core-runtime-v1-a2.yml"
+  workflow_dispatch:
 
 jobs:
   provenance-and-tests:
