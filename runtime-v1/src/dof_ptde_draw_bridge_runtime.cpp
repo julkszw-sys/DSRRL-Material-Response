@@ -1,0 +1,870 @@
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+
+#include "dsrrl/runtime/dof_ptde_draw_bridge_runtime.hpp"
+
+#include "dsrrl/core/renderer_core.hpp"
+#include "dsrrl/operators/dof/dof_resource_contract.hpp"
+#include "dsrrl/runtime/dof_authored_state_runtime.hpp"
+#include "dsrrl/runtime/dof_host_depth_route_runtime.hpp"
+#include "dsrrl/runtime/dof_preflight.hpp"
+#include "dsrrl/runtime/dof_private_resource_runtime.hpp"
+#include "dsrrl/runtime/dof_ptde_scheduler_runtime.hpp"
+#include "dsrrl/runtime/dof_tonemap_handoff_runtime.hpp"
+
+#include <reshade.hpp>
+
+#include <Windows.h>
+#include <d3d11.h>
+
+#include <atomic>
+#include <cstddef>
+#include <cstdint>
+#include <cstdio>
+
+namespace dsrrl::runtime::dof {
+namespace {
+
+using role = operators::dof::retained_shader_role;
+using result = scheduler_result;
+
+struct sequence_state {
+    host_dof_inputs host{};
+    role pass10_role = role::count;
+    std::size_t next_pass = 0u;
+    ID3D11ShaderResourceView *terminal = nullptr;
+    bool active = false;
+    bool complete = false;
+};
+
+core::renderer_core *g_core = nullptr;
+std::atomic_bool g_opt_in{false};
+std::atomic_bool g_armed{false};
+std::atomic_bool g_quarantined{false};
+std::atomic_bool g_registered{false};
+
+std::atomic<std::uint64_t> g_first_pass_hits{0u};
+std::atomic<std::uint64_t> g_sequences_started{0u};
+std::atomic<std::uint64_t> g_sequences_completed{0u};
+std::atomic<std::uint64_t> g_sequence_failures{0u};
+std::atomic<std::uint64_t> g_dry_run_pass{0u};
+std::atomic<std::uint64_t> g_visible_handoffs{0u};
+std::atomic<std::uint64_t> g_tonemap_fallbacks{0u};
+std::atomic<std::uint64_t> g_missing_host_pass10{0u};
+std::atomic<std::uint64_t> g_restore_failures{0u};
+std::atomic<std::uint64_t> g_present_count{0u};
+
+thread_local sequence_state g_sequence{};
+thread_local bool g_internal_replay = false;
+
+bool environment_opt_in() noexcept
+{
+    char value[8]{};
+    const DWORD size =
+        GetEnvironmentVariableA(
+            "DSRRL_EXPERIMENTAL_PTDE_DOF",
+            value,
+            static_cast<DWORD>(sizeof(value)));
+
+    return
+        size == 1u &&
+        value[0] == '1';
+}
+
+void set_authored_feature(bool enabled) noexcept
+{
+    if (g_core != nullptr)
+        (void)g_core->features().set(
+            core::operator_id::post_dof_ptde,
+            enabled);
+}
+
+void release_sequence() noexcept
+{
+    if (g_sequence.terminal != nullptr) {
+        g_sequence.terminal->Release();
+        g_sequence.terminal = nullptr;
+    }
+
+    release_host_dof_inputs(
+        g_sequence.host);
+
+    g_sequence = {};
+}
+
+void disable_visible_bridge() noexcept
+{
+    set_authored_feature(false);
+    g_armed.store(
+        false,
+        std::memory_order_release);
+}
+
+void fail_sequence(
+    bool quarantine) noexcept
+{
+    ++g_sequence_failures;
+
+    if (g_armed.load(
+            std::memory_order_acquire))
+        disable_visible_bridge();
+
+    release_sequence();
+
+    if (quarantine)
+        g_quarantined.store(
+            true,
+            std::memory_order_release);
+}
+
+scheduler_external_inputs
+scheduler_inputs() noexcept
+{
+    scheduler_external_inputs inputs{};
+    inputs.source_68 =
+        g_sequence.host.source_68;
+    inputs.dofrate_support_t1 =
+        g_sequence.host.dofrate_support_t1;
+    inputs.pass00_role =
+        g_sequence.host.pass00_fragment0
+            ? role::depth_copy_fragment0
+            : role::depth_copy;
+    inputs.pass10_role =
+        g_sequence.pass10_role;
+    inputs.source_68_verified =
+        g_sequence.host.ready &&
+        inputs.source_68 != nullptr;
+    inputs.dofrate_support_verified =
+        g_sequence.host.ready &&
+        inputs.dofrate_support_t1 != nullptr;
+    inputs.pass_role_routing_verified =
+        g_sequence.host.ready;
+    return inputs;
+}
+
+operators::dof::activation_context
+activation_context() noexcept
+{
+    operators::dof::activation_context activation{};
+
+    const auto authored =
+        authored_state_status();
+    const auto preflight =
+        telemetry();
+    const auto tone =
+        tonemap_handoff_status();
+
+    activation.enabled =
+        g_opt_in.load(
+            std::memory_order_acquire) &&
+        !g_quarantined.load(
+            std::memory_order_acquire);
+
+    activation.exact_imageprocess_dof_flat =
+        g_sequence.host.ready;
+    activation.mode =
+        g_sequence.host.mode;
+
+    activation.graph_complete =
+        operators::dof::
+            ptde_exact_pass_resource_graph_is_structurally_closed();
+
+    activation.ptde_dofbank_payload_ready =
+        true;
+    activation.ptde_dofbank_route_verified =
+        authored.hook_ready &&
+        authored.route_matches != 0u;
+
+    activation.retained_flat_pipeline_set_ready =
+        preflight.active_flat_set_seen &&
+        preflight.plain_dofrate_seen;
+
+    activation.private_depth_sidecar_ready =
+        g_sequence.host.dofrate_support_t1 != nullptr;
+    activation.retained_plain_dofrate_ready =
+        preflight.plain_dofrate_seen;
+    activation.fixed_raster_chain_ready =
+        private_resources_ready();
+
+    activation.tonemap_dof_continuation_verified =
+        tone.hook_ready;
+    activation.output_cut_verified =
+        tone.hook_ready;
+
+    activation.writes = {};
+    return activation;
+}
+
+bool expected_role(
+    std::size_t pass_index,
+    role selected) noexcept
+{
+    switch (pass_index) {
+    case 2u:
+    case 4u:
+        return selected == role::dof_rate_cb;
+    case 3u:
+        return selected == role::depth_copy_msaa;
+    case 5u:
+        return selected == role::gauss_x;
+    case 6u:
+        return selected ==
+            role::depth_copy_single_fragment;
+    case 7u:
+        return selected == role::downsample;
+    case 8u:
+        return
+            selected == role::gauss_y_adv ||
+            selected == role::near_rate;
+    default:
+        return false;
+    }
+}
+
+bool exact_scope_for_expected(
+    std::size_t pass_index) noexcept
+{
+    switch (pass_index) {
+    case 2u:
+    case 4u:
+        return inside_exact_dof_pass0d();
+    case 3u:
+        return inside_exact_dof_pass01();
+    case 5u:
+    case 6u:
+    case 7u:
+    case 8u:
+        // These suffix shaders are accepted only after the exact first
+        // Dof_Flat pass01 and the two exact pass0D scopes have advanced the
+        // same thread-local sequence to the corresponding next slot.
+        return g_sequence.active;
+    default:
+        return false;
+    }
+}
+
+bool is_dof_family_role(role selected) noexcept
+{
+    switch (selected) {
+    case role::depth_copy:
+    case role::depth_copy_fragment0:
+    case role::depth_copy_fragment1:
+    case role::depth_copy_msaa:
+    case role::depth_copy_single_fragment:
+    case role::dof_composite:
+    case role::blur_upsample:
+    case role::dof_composite_cb:
+    case role::dof_rate_plain:
+    case role::dof_rate_cb:
+    case role::downsample:
+    case role::gauss_x:
+    case role::gauss_x_adv:
+    case role::gauss_y:
+    case role::gauss_y_adv:
+    case role::near_rate:
+        return true;
+    default:
+        return false;
+    }
+}
+
+bool issue_native_draw(
+    ID3D11DeviceContext *context,
+    const scheduler_draw_shape &shape) noexcept
+{
+    if (context == nullptr ||
+        shape.instance_count == 0u)
+        return false;
+
+    if (shape.indexed) {
+        if (shape.index_count == 0u)
+            return false;
+
+        if (shape.instance_count == 1u &&
+            shape.first_instance == 0u)
+            context->DrawIndexed(
+                shape.index_count,
+                shape.first_index,
+                shape.vertex_offset);
+        else
+            context->DrawIndexedInstanced(
+                shape.index_count,
+                shape.instance_count,
+                shape.first_index,
+                shape.vertex_offset,
+                shape.first_instance);
+
+        return true;
+    }
+
+    if (shape.vertex_count == 0u)
+        return false;
+
+    if (shape.instance_count == 1u &&
+        shape.first_instance == 0u)
+        context->Draw(
+            shape.vertex_count,
+            shape.first_vertex);
+    else
+        context->DrawInstanced(
+            shape.vertex_count,
+            shape.instance_count,
+            shape.first_vertex,
+            shape.first_instance);
+
+    return true;
+}
+
+bool acquire_terminal(
+    const operators::dof::activation_context &activation) noexcept
+{
+    if (!authorize_private_resources(
+            activation))
+        return false;
+
+    ID3D11ShaderResourceView *terminal = nullptr;
+    const bool ok =
+        acquire_private_shader_resource(
+            operators::dof::ptde_surface_role::full_terminal,
+            &terminal) &&
+        terminal != nullptr;
+
+    revoke_private_resources();
+
+    if (!ok) {
+        if (terminal != nullptr)
+            terminal->Release();
+        return false;
+    }
+
+    if (g_sequence.terminal != nullptr)
+        g_sequence.terminal->Release();
+
+    g_sequence.terminal = terminal;
+    return true;
+}
+
+bool begin_sequence(
+    reshade::api::command_list *cmd_list,
+    const scheduler_draw_shape &shape) noexcept
+{
+    if (cmd_list == nullptr ||
+        !inside_exact_dof_pass01())
+        return false;
+
+    auto *context =
+        reinterpret_cast<ID3D11DeviceContext *>(
+            cmd_list->get_native());
+    if (context == nullptr)
+        return false;
+
+    host_dof_inputs captured{};
+    if (!capture_host_dof_inputs(
+            context,
+            captured))
+        return false;
+
+    release_sequence();
+    g_sequence.host = captured;
+    captured = {};
+    g_sequence.active = true;
+    g_sequence.next_pass = 0u;
+    ++g_first_pass_hits;
+    ++g_sequences_started;
+
+    const auto inputs =
+        scheduler_inputs();
+    const auto activation =
+        activation_context();
+
+    if (!push_host_pass00_state()) {
+        fail_sequence(true);
+        return false;
+    }
+
+    const auto pass00 =
+        execute_ptde_pass(
+            cmd_list,
+            activation,
+            inputs,
+            shape,
+            0u);
+
+    const bool state_restored =
+        pop_host_pass00_state();
+
+    if (!state_restored ||
+        pass00 != result::executed) {
+        fail_sequence(!state_restored);
+        return false;
+    }
+
+    g_sequence.next_pass = 1u;
+
+    const auto pass02 =
+        execute_ptde_pass(
+            cmd_list,
+            activation,
+            inputs,
+            shape,
+            1u);
+
+    if (pass02 != result::executed) {
+        fail_sequence(false);
+        return false;
+    }
+
+    g_sequence.next_pass = 2u;
+    return true;
+}
+
+void advance_sequence(
+    reshade::api::command_list *cmd_list,
+    const scheduler_draw_shape &shape,
+    role selected) noexcept
+{
+    if (!g_sequence.active ||
+        g_sequence.complete ||
+        g_sequence.next_pass < 2u ||
+        g_sequence.next_pass > 8u)
+        return;
+
+    const auto pass_index =
+        g_sequence.next_pass;
+
+    if (!expected_role(
+            pass_index,
+            selected)) {
+        if (is_dof_family_role(selected))
+            fail_sequence(false);
+        return;
+    }
+
+    if (!exact_scope_for_expected(
+            pass_index)) {
+        fail_sequence(false);
+        return;
+    }
+
+    if (pass_index == 8u)
+        g_sequence.pass10_role = selected;
+
+    const auto inputs =
+        scheduler_inputs();
+    const auto activation =
+        activation_context();
+
+    const auto executed =
+        execute_ptde_pass(
+            cmd_list,
+            activation,
+            inputs,
+            shape,
+            pass_index);
+
+    if (executed != result::executed) {
+        fail_sequence(false);
+        return;
+    }
+
+    ++g_sequence.next_pass;
+
+    if (g_sequence.next_pass !=
+        operators::dof::ptde_exact_pass_resources.size())
+        return;
+
+    if (!acquire_terminal(
+            activation)) {
+        fail_sequence(false);
+        return;
+    }
+
+    g_sequence.complete = true;
+    ++g_sequences_completed;
+}
+
+bool visible_tonemap_handoff(
+    reshade::api::command_list *cmd_list,
+    const scheduler_draw_shape &shape) noexcept
+{
+    if (cmd_list == nullptr ||
+        g_sequence.terminal == nullptr)
+        return false;
+
+    auto *context =
+        reinterpret_cast<ID3D11DeviceContext *>(
+            cmd_list->get_native());
+    if (context == nullptr)
+        return false;
+
+    ID3D11ShaderResourceView *old_t0 = nullptr;
+    context->PSGetShaderResources(
+        0u,
+        1u,
+        &old_t0);
+
+    ID3D11ShaderResourceView *terminal =
+        g_sequence.terminal;
+    context->PSSetShaderResources(
+        0u,
+        1u,
+        &terminal);
+
+    g_internal_replay = true;
+    const bool drawn =
+        issue_native_draw(
+            context,
+            shape);
+    g_internal_replay = false;
+
+    context->PSSetShaderResources(
+        0u,
+        1u,
+        &old_t0);
+
+    ID3D11ShaderResourceView *verify = nullptr;
+    context->PSGetShaderResources(
+        0u,
+        1u,
+        &verify);
+
+    const bool restored =
+        verify == old_t0;
+
+    if (verify != nullptr)
+        verify->Release();
+    if (old_t0 != nullptr)
+        old_t0->Release();
+
+    if (!restored) {
+        ++g_restore_failures;
+        disable_visible_bridge();
+        g_quarantined.store(
+            true,
+            std::memory_order_release);
+    }
+
+    return drawn;
+}
+
+bool handle_tonemap(
+    reshade::api::command_list *cmd_list,
+    const scheduler_draw_shape &shape) noexcept
+{
+    if (!inside_exact_tonemap_dof_handoff())
+        return false;
+
+    if (!g_sequence.active ||
+        !g_sequence.complete ||
+        g_sequence.terminal == nullptr) {
+        if (g_sequence.active &&
+            g_sequence.next_pass == 8u)
+            ++g_missing_host_pass10;
+
+        ++g_tonemap_fallbacks;
+
+        if (g_sequence.active)
+            fail_sequence(false);
+
+        return false;
+    }
+
+    if (!g_armed.load(
+            std::memory_order_acquire)) {
+        if (g_core == nullptr ||
+            !g_core->features().set(
+                core::operator_id::post_dof_ptde,
+                true)) {
+            fail_sequence(true);
+            return false;
+        }
+
+        g_armed.store(
+            true,
+            std::memory_order_release);
+        ++g_dry_run_pass;
+        release_sequence();
+
+        reshade::log::message(
+            reshade::log::level::info,
+            "DSRRL DoF: full private PTDE graph dry-run PASS; PTDE authored state armed for subsequent frames.");
+        return false;
+    }
+
+    const bool replayed =
+        visible_tonemap_handoff(
+            cmd_list,
+            shape);
+
+    if (!replayed) {
+        ++g_tonemap_fallbacks;
+        fail_sequence(false);
+        return false;
+    }
+
+    ++g_visible_handoffs;
+    release_sequence();
+
+    // The native ToneMap draw above used private PTDE +0x84 as t0.
+    // Suppress only this exact original draw; all downstream stock DSR
+    // processing remains untouched.
+    return true;
+}
+
+bool handle_draw(
+    reshade::api::command_list *cmd_list,
+    const scheduler_draw_shape &shape) noexcept
+{
+    if (g_internal_replay ||
+        !g_opt_in.load(
+            std::memory_order_acquire) ||
+        g_quarantined.load(
+            std::memory_order_acquire) ||
+        cmd_list == nullptr)
+        return false;
+
+    if (inside_exact_tonemap_dof_handoff())
+        return handle_tonemap(
+            cmd_list,
+            shape);
+
+    role selected = role::count;
+    const bool exact_role =
+        bound_retained_role(
+            cmd_list,
+            selected);
+
+    if (!g_sequence.active) {
+        if (exact_role &&
+            selected == role::depth_copy_msaa &&
+            inside_exact_dof_pass01())
+            (void)begin_sequence(
+                cmd_list,
+                shape);
+
+        return false;
+    }
+
+    if (!exact_role)
+        return false;
+
+    advance_sequence(
+        cmd_list,
+        shape,
+        selected);
+
+    return false;
+}
+
+bool on_draw(
+    reshade::api::command_list *cmd_list,
+    std::uint32_t vertex_count,
+    std::uint32_t instance_count,
+    std::uint32_t first_vertex,
+    std::uint32_t first_instance)
+{
+    scheduler_draw_shape shape{};
+    shape.indexed = false;
+    shape.vertex_count = vertex_count;
+    shape.instance_count = instance_count;
+    shape.first_vertex = first_vertex;
+    shape.first_instance = first_instance;
+
+    return handle_draw(
+        cmd_list,
+        shape);
+}
+
+bool on_draw_indexed(
+    reshade::api::command_list *cmd_list,
+    std::uint32_t index_count,
+    std::uint32_t instance_count,
+    std::uint32_t first_index,
+    std::int32_t vertex_offset,
+    std::uint32_t first_instance)
+{
+    scheduler_draw_shape shape{};
+    shape.indexed = true;
+    shape.index_count = index_count;
+    shape.instance_count = instance_count;
+    shape.first_index = first_index;
+    shape.vertex_offset = vertex_offset;
+    shape.first_instance = first_instance;
+
+    return handle_draw(
+        cmd_list,
+        shape);
+}
+
+void log_status(
+    const char *tag) noexcept
+{
+    const auto status =
+        ptde_draw_bridge_status();
+
+    char line[640]{};
+    std::snprintf(
+        line,
+        sizeof(line),
+        "[DSRRL DoF bridge] %s optin=%u armed=%u quarantine=%u first=%llu start=%llu complete=%llu fail=%llu dry=%llu visible=%llu fallback=%llu no_pass10=%llu restore_fail=%llu",
+        tag,
+        status.opt_in ? 1u : 0u,
+        status.armed ? 1u : 0u,
+        status.quarantined ? 1u : 0u,
+        static_cast<unsigned long long>(
+            status.first_pass_hits),
+        static_cast<unsigned long long>(
+            status.sequences_started),
+        static_cast<unsigned long long>(
+            status.sequences_completed),
+        static_cast<unsigned long long>(
+            status.sequence_failures),
+        static_cast<unsigned long long>(
+            status.dry_run_pass),
+        static_cast<unsigned long long>(
+            status.visible_handoffs),
+        static_cast<unsigned long long>(
+            status.tonemap_fallbacks),
+        static_cast<unsigned long long>(
+            status.missing_host_pass10),
+        static_cast<unsigned long long>(
+            status.restore_failures));
+
+    reshade::log::message(
+        reshade::log::level::info,
+        line);
+}
+
+void on_present(
+    reshade::api::command_queue *,
+    reshade::api::swapchain *,
+    const reshade::api::rect *,
+    const reshade::api::rect *,
+    std::uint32_t,
+    const reshade::api::rect *)
+{
+    if (g_sequence.active) {
+        ++g_sequence_failures;
+        if (g_armed.load(
+                std::memory_order_acquire))
+            disable_visible_bridge();
+        release_sequence();
+    }
+
+    const auto present =
+        ++g_present_count;
+
+    if (g_opt_in.load(
+            std::memory_order_acquire) &&
+        (present == 1u ||
+         (present % 300u) == 0u))
+        log_status("LIVE");
+}
+
+} // namespace
+
+bool register_ptde_draw_bridge_runtime(
+    core::renderer_core &core) noexcept
+{
+    if (g_registered.load(
+            std::memory_order_acquire))
+        return true;
+
+    g_core = &core;
+    g_opt_in.store(
+        environment_opt_in(),
+        std::memory_order_release);
+    g_armed.store(
+        false,
+        std::memory_order_release);
+    g_quarantined.store(
+        false,
+        std::memory_order_release);
+    g_present_count.store(0u);
+
+    set_authored_feature(false);
+    release_sequence();
+
+    if (!g_opt_in.load(
+            std::memory_order_acquire)) {
+        reshade::log::message(
+            reshade::log::level::info,
+            "DSRRL DoF: experimental PTDE bridge OFF. Set DSRRL_EXPERIMENTAL_PTDE_DOF=1 before launch to run the guarded private island.");
+    }
+
+    try {
+        reshade::register_event<
+            reshade::addon_event::draw>(
+                on_draw);
+        reshade::register_event<
+            reshade::addon_event::draw_indexed>(
+                on_draw_indexed);
+        reshade::register_event<
+            reshade::addon_event::present>(
+                on_present);
+
+        g_registered.store(
+            true,
+            std::memory_order_release);
+        return true;
+    } catch (...) {
+        g_core = nullptr;
+        g_opt_in.store(false);
+        return false;
+    }
+}
+
+void unregister_ptde_draw_bridge_runtime() noexcept
+{
+    if (g_registered.exchange(
+            false,
+            std::memory_order_acq_rel)) {
+        reshade::unregister_event<
+            reshade::addon_event::present>(
+                on_present);
+        reshade::unregister_event<
+            reshade::addon_event::draw_indexed>(
+                on_draw_indexed);
+        reshade::unregister_event<
+            reshade::addon_event::draw>(
+                on_draw);
+    }
+
+    disable_visible_bridge();
+    release_sequence();
+
+    if (g_opt_in.load(
+            std::memory_order_acquire))
+        log_status("UNLOAD");
+
+    g_core = nullptr;
+    g_opt_in.store(false);
+}
+
+draw_bridge_telemetry
+ptde_draw_bridge_status() noexcept
+{
+    return {
+        g_first_pass_hits.load(),
+        g_sequences_started.load(),
+        g_sequences_completed.load(),
+        g_sequence_failures.load(),
+        g_dry_run_pass.load(),
+        g_visible_handoffs.load(),
+        g_tonemap_fallbacks.load(),
+        g_missing_host_pass10.load(),
+        g_restore_failures.load(),
+        g_opt_in.load(
+            std::memory_order_acquire),
+        g_armed.load(
+            std::memory_order_acquire),
+        g_quarantined.load(
+            std::memory_order_acquire)
+    };
+}
+
+} // namespace dsrrl::runtime::dof
