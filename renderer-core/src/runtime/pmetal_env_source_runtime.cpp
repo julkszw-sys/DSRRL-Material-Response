@@ -1917,34 +1917,24 @@ void publish_hook_source(
         1u;
     next.serial = serial;
 
-    std::uint32_t beta_bits = 0u;
-    std::memcpy(
-        &beta_bits,
-        &next.beta,
-        sizeof(beta_bits));
-    if (next.beta == 0.0f)
-        beta_bits = 0u;
-    const hook_selector_identity_v1
-        selector_identity{
-            source_a,
-            source_b,
-            selector_a,
-            selector_b,
-            beta_bits,
-            source_a != nullptr &&
-                selector_a >= 0};
+    hook_selector_identity_v1
+        selector_identity{};
+    (void)capture_hook_selector_identity(
+        source_a,
+        selector_a,
+        source_b,
+        selector_b,
+        next.beta,
+        selector_identity);
 
-    // Dominant steady-state path: the retail packer can call this hook
-    // thousands of times while the exact LightBank payload is unchanged.
-    // If this thread still owns the same payload and no other thread has
-    // published a semantic change since that observation, preserve the
-    // semantic generation and avoid the global publication mutex entirely.
-    const auto semantic_version =
-        g_hook_source_semantic_version.load(
-            std::memory_order_acquire);
+    // R43: producer-local reuse is keyed by the exact live LightBank
+    // identity, not by a process-global "latest source" version. Independent
+    // sources may interleave without invalidating each other.
     if (g_hook_source_tls.valid &&
-        g_hook_source_tls.semantic_version ==
-            semantic_version &&
+        g_hook_selector_identity_tls.valid &&
+        same_hook_selector_identity(
+            g_hook_selector_identity_tls,
+            selector_identity) &&
         same_hook_source_payload(
             g_hook_source_tls.source,
             next)) {
@@ -1953,7 +1943,7 @@ void publish_hook_source(
         g_hook_source_tls = {
             next,
             serial,
-            semantic_version,
+            g_hook_source_tls.semantic_version,
             true
         };
         g_hook_selector_identity_tls =
@@ -2072,26 +2062,15 @@ bool latest_hook_source_exact_selector(
         !std::isfinite(beta))
         return false;
 
-    std::uint32_t beta_bits = 0u;
-    std::memcpy(
-        &beta_bits,
-        &beta,
-        sizeof(beta_bits));
-    if (beta == 0.0f)
-        beta_bits = 0u;
-
-    hook_selector_identity_v1 query{
-        source_a,
-        source_b,
-        selector_a,
-        selector_b,
-        beta_bits,
-        true
-    };
-    if (beta_bits == 0u) {
-        query.source_b = source_a;
-        query.selector_b = selector_a;
-    }
+    hook_selector_identity_v1 query{};
+    if (!capture_hook_selector_identity(
+            source_a,
+            selector_a,
+            source_b,
+            selector_b,
+            beta,
+            query))
+        return false;
 
     if (g_hook_source_tls.valid &&
         g_hook_selector_identity_tls.valid &&
@@ -2126,7 +2105,7 @@ bool latest_hook_source_exact_selector(
             std::memory_order_relaxed))
         reshade::log::message(
             reshade::log::level::info,
-            "[DSRRL PMETAL R42] selector_cross_thread_cache_hit=1 exact_key=SOURCE_PTR_SELECTOR_BETA semantic_version=CURRENT donor_redecode=OFF lock_wait=OFF");
+            "[DSRRL PMETAL R43] selector_per_key_cache_hit=1 exact_key=SOURCE_BASE_COUNT_ROW_SELECTOR_BETA global_semantic_version=IGNORED donor_redecode=OFF lock_wait=OFF");
 
     return true;
 }
@@ -2506,6 +2485,15 @@ bool pmetal_env_source_runtime::install() noexcept
         reshade::log::message(
             reshade::log::level::info,
             "[DSRRL PMETAL R42] producer_cache=SET64_WAY2 cross_thread=ON exact_key=SOURCE_PTR_SELECTOR_BETA semantic_version_gate=CURRENT selector_try_lock=ON producer_payload_reuse=ON donor_redecode_fallback=ON islands_preserved=ON");
+
+    static std::atomic_bool
+        r43_per_key_freshness_logged{false};
+    if (!r43_per_key_freshness_logged.exchange(
+            true,
+            std::memory_order_relaxed))
+        reshade::log::message(
+            reshade::log::level::info,
+            "[DSRRL PMETAL R43] producer_cache=SET256_WAY2 freshness=SOURCE_BASE_COUNT_ROW_SELECTOR_BETA global_semantic_version_gate=OFF selector_try_lock=ON producer_payload_exact=ON fallback_full_decode=ON islands_preserved=ON");
 
     return true;
 }
