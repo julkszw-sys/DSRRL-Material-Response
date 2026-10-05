@@ -39,6 +39,7 @@ def main():
     flver_cpp=(root/"src/runtime/flver_engine_hooks.cpp").read_text(encoding="utf-8")
     flver_registry=(root/"src/runtime/flver_identity_registry.cpp").read_text(encoding="utf-8")
     pmetal=(root/"src/runtime/pmetal_envspec_draw_runtime.cpp").read_text(encoding="utf-8")
+    clustered=(root/"src/runtime/clustered_pnts_draw_runtime.cpp").read_text(encoding="utf-8")
     resources=(root/"src/runtime/material_resource_draw_runtime.cpp").read_text(encoding="utf-8")
     hemdir3_mode=(root/"src/runtime/hemdir3_mode_transport.cpp").read_text(encoding="utf-8")
     draw_tx=(root/"src/runtime/draw_state_transaction.cpp").read_text(encoding="utf-8")
@@ -116,10 +117,37 @@ def main():
         "clustered_pnts_selector_event_bridge(\n            owner,\n            actual_material);",
         "clustered selector bridge receives exact material only after PointLight prefilter")
     require(flver_cpp,
-        "if (!pointlight_spc) {\n            clustered_pnts_selector_identity_event_bridge(\n                identity,\n                false);",
-        "clustered NoSpc publishes exact material mode into producer cache")
-    if "clustered_pnts_selector_identity_event_bridge(\n            identity,\n            pointlight_spc);" in flver_cpp:
-        fail("clustered Spc regressed to source reconstruction before protected fail-open")
+        "if (!pointlight_spc) {\n            // R34: source/carrier production is a distinct stage from\n            // material-response authorization.",
+        "clustered NoSpc enters the explicit source/material split")
+    require(flver_cpp,
+        "clustered_pnts_selector_source_event_bridge();\n            clustered_pnts_selector_identity_event_bridge(\n                identity,\n                false);",
+        "clustered NoSpc produces PTDE source before material-response authorization")
+    if "clustered_pnts_selector_source_event_bridge();\n        clustered_pnts_selector_identity_event_bridge(\n            identity,\n            pointlight_spc);" in flver_cpp:
+        fail("clustered Spc regressed to PTDE source production before protected fail-open")
+
+    source_body=function_body(
+        clustered,
+        "void clustered_pnts_draw_runtime::selector_source_event()",
+        "void clustered_pnts_draw_runtime::selector_identity_event(")
+    require(source_body,
+        "select_first_four_exact(",
+        "PointLight source stage owns exact first-four selection")
+    require(source_body,
+        "capture_source(",
+        "PointLight source stage owns PTDE source capture")
+
+    material_body=function_body(
+        clustered,
+        "void clustered_pnts_draw_runtime::selector_identity_event(",
+        "bool clustered_pnts_draw_runtime::current_draw_authority(")
+    require(material_body,
+        "build_clustered_sidecar_v1(",
+        "PointLight material stage owns carrier materialization")
+    require(material_body,
+        "source_cache.producer_serial != input.serial",
+        "PointLight material stage joins an already-produced source carrier")
+    if "select_first_four_exact(" in material_body or "capture_source(" in material_body:
+        fail("PointLight material-response stage regressed to source reconstruction")
     require(flver_cpp,
         "clustered_pnts_selector_event_bridge(\n            owner,\n            actual_material);",
         "clustered Spc keeps cheap selector association for deterministic stale-authority clearing")
