@@ -24,6 +24,25 @@ add_custom_command(
 
 add_custom_target(dsrrl_mr_manifest DEPENDS "${GEN_DIR}/mr_runtime_manifest.hpp")
 
+set(DOF_PLAIN_VERTEX "${CMAKE_CURRENT_SOURCE_DIR}/provenance/dof/013_FRPG_Fil_Dof_DofRate.vpo")
+set(DOF_PLAIN_PIXEL "${CMAKE_CURRENT_SOURCE_DIR}/provenance/dof/059_FRPG_Fil_Dof_DofRate.fpo")
+set(DOF_PLAIN_EMBEDDED_HEADER "${GEN_DIR}/dof_plain_rate_embedded.hpp")
+add_custom_command(
+  OUTPUT "${DOF_PLAIN_EMBEDDED_HEADER}"
+  COMMAND "${Python3_EXECUTABLE}"
+          "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_dof_plain_rate_embedded.py"
+          --vertex "${DOF_PLAIN_VERTEX}"
+          --pixel "${DOF_PLAIN_PIXEL}"
+          --out "${DOF_PLAIN_EMBEDDED_HEADER}"
+  DEPENDS
+    "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_dof_plain_rate_embedded.py"
+    "${DOF_PLAIN_VERTEX}"
+    "${DOF_PLAIN_PIXEL}"
+  VERBATIM
+)
+add_custom_target(dsrrl_dof_plain_rate_embedded
+  DEPENDS "${DOF_PLAIN_EMBEDDED_HEADER}")
+
 set(SEMANTIC_SPEC_DONOR_TSV "${PROV}/semantic_spec_donor_overrides_v1.tsv")
 set(SEMANTIC_SPEC_DONOR_HEADER "${GEN_DIR}/semantic_spec_donor_overrides_generated.hpp")
 add_custom_command(
@@ -139,11 +158,12 @@ if(WIN32 AND RESHade_INCLUDE_DIR)
     src/dof_host_depth_route_runtime.cpp
     src/dof_tonemap_handoff_runtime.cpp
     src/dof_ptde_draw_bridge_runtime.cpp
+    "${DOF_PLAIN_EMBEDDED_HEADER}"
     "${CMAKE_CURRENT_SOURCE_DIR}/../renderer-core/src/runtime/a1_create_pipeline_bridge.cpp"
     src/selector_hook.asm
     src/texture_name_hook.asm
   )
-  add_dependencies(dsrrl_renderer_runtime_v1_addon dsrrl_mr_manifest dsrrl_semantic_spec_donor_header dsrrl_a3_route_headers)
+  add_dependencies(dsrrl_renderer_runtime_v1_addon dsrrl_mr_manifest dsrrl_semantic_spec_donor_header dsrrl_a3_route_headers dsrrl_dof_plain_rate_embedded)
   target_include_directories(dsrrl_renderer_runtime_v1_addon PRIVATE
     include
     "${GEN_DIR}"
