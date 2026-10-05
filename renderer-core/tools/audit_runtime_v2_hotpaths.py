@@ -79,7 +79,7 @@ require(pmetal_source,
         "R44 material-bound source authority attestation")
 
 require(pmetal_source,
-        "[DSRRL PMETAL R45] production_hot_counters=GATED redundant_cross_thread_republish=OFF decoded_endpoint_identity_reuse=ON renderer_semantics=UNCHANGED",
+        "[DSRRL PMETAL R45] production_hot_counters=GATED redundant_cross_thread_republish=OFF decoded_endpoint_identity_reuse=ON selector_miss_identity_reuse=ON renderer_semantics=UNCHANGED",
         "R45 production hot-path cleanup attestation")
 
 for counter in (
@@ -176,6 +176,18 @@ require(
     pmetal_source,
     "Canonical zero-beta identity must match",
     "R45 zero-beta selector identity canonicalization")
+require(
+    pmetal_source,
+    "read_exact_source_prevalidated(",
+    "R45 prevalidated selector-miss endpoint decoder")
+require(
+    pmetal_source,
+    "&selector_identity))",
+    "R45 selector shadow lookup must retain exact identity on miss")
+require(
+    pmetal_source,
+    "Preserve the complete fail-open decoder whenever the retained",
+    "R45 selector-miss prevalidated decode must retain full fallback")
 for latch in (
     "cache_hit_logged",
     "selection_cache_hit_logged",
