@@ -3954,6 +3954,9 @@ void on_init_device(reshade::api::device *device)
         reshade::log::message(
             reshade::log::level::info,
             "[DSRRL POINTLIGHT R26] direct_current_native_dispatch=ACTIVE persistent_vtable_hook=OFF recursion_guard=ON");
+        reshade::log::message(
+            reshade::log::level::info,
+            "[DSRRL POINTLIGHT R30] synchronous_tx_fastpath=ACTIVE exact_clustered_shape_only=ON global_tx_manager_mutex=OFF t18_t19_batch=ON fallback=R29_GENERIC_TX");
     } else if (k_pmetal_native_draw_runtime_enabled) {
         if (!g_pmetal_native_draw.install(device)) {
             reshade::log::message(
