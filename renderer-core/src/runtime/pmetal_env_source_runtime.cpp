@@ -1939,9 +1939,7 @@ bool latest_hook_source_exact_selector(
     pmetal_envspec_source &out) noexcept
 {
     out = {};
-    if (!g_hook_source_tls.valid ||
-        !g_hook_selector_identity_tls.valid ||
-        source_a == nullptr ||
+    if (source_a == nullptr ||
         selector_a < 0 ||
         !std::isfinite(beta))
         return false;
@@ -1951,26 +1949,57 @@ bool latest_hook_source_exact_selector(
         &beta_bits,
         &beta,
         sizeof(beta_bits));
+    if (beta == 0.0f)
+        beta_bits = 0u;
 
-    const auto &key =
-        g_hook_selector_identity_tls;
-    if (key.source_a != source_a ||
-        key.selector_a != selector_a ||
-        key.beta_bits != beta_bits)
+    hook_selector_identity_v1 query{
+        source_a,
+        source_b,
+        selector_a,
+        selector_b,
+        beta_bits,
+        true
+    };
+    if (beta_bits == 0u) {
+        query.source_b = source_a;
+        query.selector_b = selector_a;
+    }
+
+    if (g_hook_source_tls.valid &&
+        g_hook_selector_identity_tls.valid &&
+        same_hook_selector_identity(
+            g_hook_selector_identity_tls,
+            query)) {
+        out = g_hook_source_tls.source;
+        g_hook_consume.fetch_add(
+            1u,
+            std::memory_order_relaxed);
+        return true;
+    }
+
+    hook_source_record cached{};
+    if (!hook_producer_cache_lookup(
+            query,
+            cached))
         return false;
 
-    // Endpoint B is semantically inactive for a steady endpoint. Do not make
-    // an irrelevant B pointer a freshness requirement in that case.
-    if (beta != 0.0f &&
-        selector_b != selector_a &&
-        (key.source_b != source_b ||
-         key.selector_b != selector_b))
-        return false;
-
-    out = g_hook_source_tls.source;
+    out = cached.source;
+    g_hook_source_tls = cached;
+    g_hook_selector_identity_tls = query;
     g_hook_consume.fetch_add(
         1u,
         std::memory_order_relaxed);
+
+    static std::atomic_bool
+        selector_cross_thread_hit_logged{
+            false};
+    if (!selector_cross_thread_hit_logged.exchange(
+            true,
+            std::memory_order_relaxed))
+        reshade::log::message(
+            reshade::log::level::info,
+            "[DSRRL PMETAL R42] selector_cross_thread_cache_hit=1 exact_key=SOURCE_PTR_SELECTOR_BETA semantic_version=CURRENT donor_redecode=OFF lock_wait=OFF");
+
     return true;
 }
 
@@ -2006,6 +2035,9 @@ void clear_hook_source() noexcept
 {
     g_hook_source_tls = {};
     g_hook_selector_identity_tls = {};
+    g_hook_producer_cache_generation.fetch_add(
+        1u,
+        std::memory_order_relaxed);
     std::lock_guard<std::mutex> lock(
         g_hook_source_mutex);
     g_hook_source_global = {};
