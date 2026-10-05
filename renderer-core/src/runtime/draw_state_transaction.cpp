@@ -59,6 +59,46 @@ struct local_tx_state {
 
 thread_local local_tx_state g_local_tx{};
 
+#ifdef DSRRL_POINTLIGHT_PROFILE
+constexpr std::uint32_t k_pointlight_tx_profile_sample_period = 128u;
+static_assert(
+    (k_pointlight_tx_profile_sample_period &
+     (k_pointlight_tx_profile_sample_period - 1u)) == 0u);
+
+thread_local std::uint32_t g_pointlight_tx_profile_counter = 0u;
+
+std::uint64_t pointlight_profile_qpc() noexcept
+{
+    LARGE_INTEGER value{};
+    QueryPerformanceCounter(&value);
+    return static_cast<std::uint64_t>(value.QuadPart);
+}
+
+std::uint64_t pointlight_profile_qpc_frequency() noexcept
+{
+    static const std::uint64_t frequency = []() noexcept {
+        LARGE_INTEGER value{};
+        QueryPerformanceFrequency(&value);
+        return static_cast<std::uint64_t>(value.QuadPart);
+    }();
+    return frequency;
+}
+
+void pointlight_profile_max(
+    std::atomic<std::uint64_t> &target,
+    std::uint64_t value) noexcept
+{
+    auto observed = target.load(std::memory_order_relaxed);
+    while (observed < value &&
+           !target.compare_exchange_weak(
+               observed,
+               value,
+               std::memory_order_relaxed,
+               std::memory_order_relaxed)) {
+    }
+}
+#endif
+
 bool restore_local_tx(
     const draw_state_transaction_runtime *owner,
     std::uint64_t command) noexcept
@@ -1104,9 +1144,42 @@ draw_tx_result draw_state_transaction_runtime::replay_draw(
     std::uint32_t first_vertex,
     std::uint32_t first_instance) noexcept
 {
+#ifdef DSRRL_POINTLIGHT_PROFILE
+    const bool profile_sample =
+        mutation.synchronous_core_transaction &&
+        ((++g_pointlight_tx_profile_counter &
+          (k_pointlight_tx_profile_sample_period - 1u)) == 0u);
+    const auto profile_total_start =
+        profile_sample ? pointlight_profile_qpc() : 0u;
+    const auto profile_begin_start = profile_total_start;
+#endif
+
     transaction_state state{};
-    if (!begin(cmd_list, mutation, state))
+    if (!begin(cmd_list, mutation, state)) {
+#ifdef DSRRL_POINTLIGHT_PROFILE
+        if (profile_sample) {
+            const auto end = pointlight_profile_qpc();
+            const auto begin_ticks = end - profile_begin_start;
+            const auto total_ticks = end - profile_total_start;
+            profile_samples_.fetch_add(1u, std::memory_order_relaxed);
+            profile_begin_ticks_.fetch_add(begin_ticks, std::memory_order_relaxed);
+            profile_total_ticks_.fetch_add(total_ticks, std::memory_order_relaxed);
+            pointlight_profile_max(profile_max_total_ticks_, total_ticks);
+        }
+#endif
         return draw_tx_result::not_issued;
+    }
+
+#ifdef DSRRL_POINTLIGHT_PROFILE
+    if (profile_sample) {
+        const auto after_begin = pointlight_profile_qpc();
+        profile_begin_ticks_.fetch_add(
+            after_begin - profile_begin_start,
+            std::memory_order_relaxed);
+    }
+    const auto profile_draw_start =
+        profile_sample ? pointlight_profile_qpc() : 0u;
+#endif
 
     auto *ctx = state.context;
 
@@ -1125,7 +1198,38 @@ draw_tx_result draw_state_transaction_runtime::replay_draw(
 
     telemetry::hot_count(draws_issued_);
 
-    return restore(cmd_list, state)
+#ifdef DSRRL_POINTLIGHT_PROFILE
+    if (profile_sample) {
+        const auto after_draw = pointlight_profile_qpc();
+        profile_draw_ticks_.fetch_add(
+            after_draw - profile_draw_start,
+            std::memory_order_relaxed);
+    }
+    const auto profile_restore_start =
+        profile_sample ? pointlight_profile_qpc() : 0u;
+#endif
+
+    const bool restored = restore(cmd_list, state);
+
+#ifdef DSRRL_POINTLIGHT_PROFILE
+    if (profile_sample) {
+        const auto end = pointlight_profile_qpc();
+        const auto restore_ticks = end - profile_restore_start;
+        const auto total_ticks = end - profile_total_start;
+        profile_samples_.fetch_add(1u, std::memory_order_relaxed);
+        profile_restore_ticks_.fetch_add(
+            restore_ticks,
+            std::memory_order_relaxed);
+        profile_total_ticks_.fetch_add(
+            total_ticks,
+            std::memory_order_relaxed);
+        pointlight_profile_max(
+            profile_max_total_ticks_,
+            total_ticks);
+    }
+#endif
+
+    return restored
         ? draw_tx_result::issued_restored
         : draw_tx_result::issued_restore_failed;
 }
@@ -1140,9 +1244,42 @@ draw_state_transaction_runtime::replay_draw_indexed(
     std::int32_t vertex_offset,
     std::uint32_t first_instance) noexcept
 {
+#ifdef DSRRL_POINTLIGHT_PROFILE
+    const bool profile_sample =
+        mutation.synchronous_core_transaction &&
+        ((++g_pointlight_tx_profile_counter &
+          (k_pointlight_tx_profile_sample_period - 1u)) == 0u);
+    const auto profile_total_start =
+        profile_sample ? pointlight_profile_qpc() : 0u;
+    const auto profile_begin_start = profile_total_start;
+#endif
+
     transaction_state state{};
-    if (!begin(cmd_list, mutation, state))
+    if (!begin(cmd_list, mutation, state)) {
+#ifdef DSRRL_POINTLIGHT_PROFILE
+        if (profile_sample) {
+            const auto end = pointlight_profile_qpc();
+            const auto begin_ticks = end - profile_begin_start;
+            const auto total_ticks = end - profile_total_start;
+            profile_samples_.fetch_add(1u, std::memory_order_relaxed);
+            profile_begin_ticks_.fetch_add(begin_ticks, std::memory_order_relaxed);
+            profile_total_ticks_.fetch_add(total_ticks, std::memory_order_relaxed);
+            pointlight_profile_max(profile_max_total_ticks_, total_ticks);
+        }
+#endif
         return draw_tx_result::not_issued;
+    }
+
+#ifdef DSRRL_POINTLIGHT_PROFILE
+    if (profile_sample) {
+        const auto after_begin = pointlight_profile_qpc();
+        profile_begin_ticks_.fetch_add(
+            after_begin - profile_begin_start,
+            std::memory_order_relaxed);
+    }
+    const auto profile_draw_start =
+        profile_sample ? pointlight_profile_qpc() : 0u;
+#endif
 
     auto *ctx = state.context;
 
@@ -1163,7 +1300,38 @@ draw_state_transaction_runtime::replay_draw_indexed(
 
     telemetry::hot_count(draws_issued_);
 
-    return restore(cmd_list, state)
+#ifdef DSRRL_POINTLIGHT_PROFILE
+    if (profile_sample) {
+        const auto after_draw = pointlight_profile_qpc();
+        profile_draw_ticks_.fetch_add(
+            after_draw - profile_draw_start,
+            std::memory_order_relaxed);
+    }
+    const auto profile_restore_start =
+        profile_sample ? pointlight_profile_qpc() : 0u;
+#endif
+
+    const bool restored = restore(cmd_list, state);
+
+#ifdef DSRRL_POINTLIGHT_PROFILE
+    if (profile_sample) {
+        const auto end = pointlight_profile_qpc();
+        const auto restore_ticks = end - profile_restore_start;
+        const auto total_ticks = end - profile_total_start;
+        profile_samples_.fetch_add(1u, std::memory_order_relaxed);
+        profile_restore_ticks_.fetch_add(
+            restore_ticks,
+            std::memory_order_relaxed);
+        profile_total_ticks_.fetch_add(
+            total_ticks,
+            std::memory_order_relaxed);
+        pointlight_profile_max(
+            profile_max_total_ticks_,
+            total_ticks);
+    }
+#endif
+
+    return restored
         ? draw_tx_result::issued_restored
         : draw_tx_result::issued_restore_failed;
 }
@@ -1525,6 +1693,19 @@ draw_state_transaction_runtime::telemetry() const noexcept
         restore_ok_.load(),
         restore_fail_.load(),
         native_readback_skipped_.load(),
+#ifdef DSRRL_POINTLIGHT_PROFILE
+        k_pointlight_tx_profile_sample_period,
+        pointlight_profile_qpc_frequency(),
+#else
+        0u,
+        0u,
+#endif
+        profile_samples_.load(),
+        profile_begin_ticks_.load(),
+        profile_draw_ticks_.load(),
+        profile_restore_ticks_.load(),
+        profile_total_ticks_.load(),
+        profile_max_total_ticks_.load(),
         quarantined_.load()
     };
 }
@@ -1586,6 +1767,12 @@ void draw_state_transaction_runtime::reset() noexcept
     restore_ok_.store(0);
     restore_fail_.store(0);
     native_readback_skipped_.store(0);
+    profile_samples_.store(0);
+    profile_begin_ticks_.store(0);
+    profile_draw_ticks_.store(0);
+    profile_restore_ticks_.store(0);
+    profile_total_ticks_.store(0);
+    profile_max_total_ticks_.store(0);
     quarantined_.store(false);
 }
 
