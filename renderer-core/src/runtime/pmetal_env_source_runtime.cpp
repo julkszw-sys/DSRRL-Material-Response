@@ -34,6 +34,9 @@ namespace {
 constexpr std::uint32_t k_pmetal_material_route = 345u;
 constexpr const char *k_pmetal_material_name =
     "P_Metal[DSB].mtd";
+constexpr std::uint64_t
+    k_pmetal_material_semantic_hash =
+        0xfd72a0409ae13e45ULL;
 constexpr std::array<std::uint8_t,32>
     k_pmetal_material_sha256 = {{
         0xecu,0xe7u,0x0fu,0x36u,0xbdu,0x25u,0x17u,0xd2u,
@@ -1137,9 +1140,6 @@ bool exact_pmetal_material_selection(
     const operators::material_response::
         material_identity &material) noexcept
 {
-    namespace mr =
-        operators::material_response;
-
     return
         material.valid &&
         material.owner_tuple_exact &&
@@ -1147,8 +1147,7 @@ bool exact_pmetal_material_selection(
         material.route_index ==
             k_pmetal_material_route &&
         material.semantic_name_hash ==
-            mr::mtd_semantic_hash(
-                k_pmetal_material_name) &&
+            k_pmetal_material_semantic_hash &&
         material.raw_mtd_sha256 ==
             k_pmetal_material_sha256;
 }
