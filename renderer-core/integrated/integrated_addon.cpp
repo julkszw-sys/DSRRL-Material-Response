@@ -157,29 +157,11 @@ constexpr bool k_pointlight_drawtime_runtime_enabled = false;
 constexpr bool k_pointlight_drawtime_runtime_enabled = true;
 #endif
 
-#if defined(DSRRL_DRAWTIME_ISLANDS_BYPASS) || \
-    defined(DSRRL_DRAW_CALLBACKS_BYPASS) || \
-    defined(DSRRL_DRAW_REPLAY_BYPASS) || \
-    defined(DSRRL_EMPTY_DRAW_CALLBACK_BISECT) || \
-    defined(DSRRL_STATE_TRANSACTION_ONLY_BISECT) || \
-    defined(DSRRL_RAW_DRAW_REPLAY_BISECT) || \
-    defined(DSRRL_STATE_CAPTURE_ONLY_BISECT) || \
-    defined(DSRRL_NATIVE_STATE_MUTATE_RESTORE_ONLY_BISECT) || \
-    defined(DSRRL_CORE_TRANSACTION_ONLY_BISECT) || \
-    defined(DSRRL_RAW_NATIVE_DRAW_REENTRY_MIN_BISECT) || \
-    defined(DSRRL_PMETAL_DIRECT_CURRENT_NATIVE_DISPATCH) || \
-    defined(DSRRL_ADDON_LOADED_ONLY_BISECT) || \
-    defined(DSRRL_DRAW_CALLBACK_ONLY_BISECT)
+// R26: persistent Draw-family vtable ownership is runtime-falsified on the
+// DSR/ReShade host. Use one current-native dispatch under the existing
+// transaction + TLS recursion guard instead.
 constexpr bool k_pmetal_native_draw_runtime_enabled = false;
-#else
-constexpr bool k_pmetal_native_draw_runtime_enabled = true;
-#endif
-
-#ifdef DSRRL_PMETAL_DIRECT_CURRENT_NATIVE_DISPATCH
 constexpr bool k_pmetal_direct_current_native_dispatch = true;
-#else
-constexpr bool k_pmetal_direct_current_native_dispatch = false;
-#endif
 
 #include <array>
 #include <atomic>
