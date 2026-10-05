@@ -528,7 +528,7 @@ int main()
 
     const auto &catalog = core::known_operator_catalog();
     CHECK(catalog.size() == core::operator_count);
-    CHECK(core::operator_count == 25);
+    CHECK(core::operator_count == 26);
 
     std::size_t draw_required_count = 0;
     std::size_t create_time_safe_count = 0;
@@ -572,7 +572,7 @@ int main()
 
     CHECK(draw_required_count == 15u);
     CHECK(create_time_safe_count == 5u);
-    CHECK(blocked_count == 3u);
+    CHECK(blocked_count == 4u);
     CHECK(host_preserve_count == 2u);
 
     CHECK(core::requires_draw_transaction(
