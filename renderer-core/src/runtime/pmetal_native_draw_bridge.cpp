@@ -795,7 +795,7 @@ bool pmetal_native_draw_bridge::ensure_vtable_hook_live(
             std::snprintf(
                 line,
                 sizeof(line),
-                "[DSRRL POINTLIGHT R25] vtable_hook_conflict external_owner=1 slot_mask=0x%X fail_open=1",
+                "[DSRRL POINTLIGHT R26] vtable_hook_conflict external_owner=1 slot_mask=0x%X fail_open=1",
                 static_cast<unsigned>(
                     conflict_mask));
             reshade::log::message(
@@ -884,7 +884,7 @@ bool pmetal_native_draw_bridge::ensure_vtable_hook_live(
         std::snprintf(
             line,
             sizeof(line),
-            "[DSRRL POINTLIGHT R25] vtable_hook_rearmed reverted_original_slots=%u slot_mask=0x%X native_original_draw=ARMABLE",
+            "[DSRRL POINTLIGHT R26] vtable_hook_rearmed reverted_original_slots=%u slot_mask=0x%X native_original_draw=ARMABLE",
             static_cast<unsigned>(
                 (repair_mask & 1u ? 1u : 0u) +
                 (repair_mask & 2u ? 1u : 0u) +
@@ -1175,7 +1175,7 @@ bool pmetal_native_draw_bridge::register_context(
                 std::memory_order_relaxed))
             reshade::log::message(
                 reshade::log::level::info,
-                "[DSRRL POINTLIGHT R25] same_native_pointer_vtable_rebound native_original_draw=ARMABLE");
+                "[DSRRL POINTLIGHT R26] same_native_pointer_vtable_rebound native_original_draw=ARMABLE");
 
         return true;
     }
@@ -1212,8 +1212,8 @@ bool pmetal_native_draw_bridge::register_context(
             reshade::log::message(
                 reshade::log::level::info,
                 new_hook
-                    ? "[DSRRL POINTLIGHT R25] deferred_context_registered vtable=distinct native_original_draw=ARMABLE"
-                    : "[DSRRL POINTLIGHT R25] deferred_context_registered vtable=shared native_original_draw=ARMABLE");
+                    ? "[DSRRL POINTLIGHT R26] deferred_context_registered vtable=distinct native_original_draw=ARMABLE"
+                    : "[DSRRL POINTLIGHT R26] deferred_context_registered vtable=shared native_original_draw=ARMABLE");
         }
     }
 
@@ -1560,7 +1560,7 @@ bool pmetal_native_draw_bridge::arm_draw(
                     std::memory_order_relaxed))
                 reshade::log::message(
                     reshade::log::level::info,
-                    "[DSRRL POINTLIGHT R25] command_list_native_identity_rebound native_original_draw=ARMABLE");
+                    "[DSRRL POINTLIGHT R26] command_list_native_identity_rebound native_original_draw=ARMABLE");
 
             std::shared_lock<std::shared_mutex> lock(
                 impl_->registry_mutex);
@@ -1602,8 +1602,8 @@ bool pmetal_native_draw_bridge::arm_draw(
                 line,
                 sizeof(line),
                 !registered
-                    ? "[DSRRL POINTLIGHT R25] native_arm_reject reason=context_registration_failed type=%u hook_record=%u hook_slots=%zu/%zu"
-                    : "[DSRRL POINTLIGHT R25] native_arm_reject reason=vtable_hook_not_live type=%u hook_record=%u hook_slots=%zu/%zu",
+                    ? "[DSRRL POINTLIGHT R26] native_arm_reject reason=context_registration_failed type=%u hook_record=%u hook_slots=%zu/%zu"
+                    : "[DSRRL POINTLIGHT R26] native_arm_reject reason=vtable_hook_not_live type=%u hook_record=%u hook_slots=%zu/%zu",
                 static_cast<unsigned>(context->GetType()),
                 hook_record_for(context) != nullptr ? 1u : 0u,
                 used_hook_slots,
@@ -1738,7 +1738,7 @@ bool pmetal_native_draw_bridge::arm_draw_indexed(
                     std::memory_order_relaxed))
                 reshade::log::message(
                     reshade::log::level::info,
-                    "[DSRRL POINTLIGHT R25] command_list_native_identity_rebound native_original_draw=ARMABLE");
+                    "[DSRRL POINTLIGHT R26] command_list_native_identity_rebound native_original_draw=ARMABLE");
 
             std::shared_lock<std::shared_mutex> lock(
                 impl_->registry_mutex);
@@ -1780,8 +1780,8 @@ bool pmetal_native_draw_bridge::arm_draw_indexed(
                 line,
                 sizeof(line),
                 !registered
-                    ? "[DSRRL POINTLIGHT R25] native_arm_reject reason=context_registration_failed type=%u hook_record=%u hook_slots=%zu/%zu"
-                    : "[DSRRL POINTLIGHT R25] native_arm_reject reason=vtable_hook_not_live type=%u hook_record=%u hook_slots=%zu/%zu",
+                    ? "[DSRRL POINTLIGHT R26] native_arm_reject reason=context_registration_failed type=%u hook_record=%u hook_slots=%zu/%zu"
+                    : "[DSRRL POINTLIGHT R26] native_arm_reject reason=vtable_hook_not_live type=%u hook_record=%u hook_slots=%zu/%zu",
                 static_cast<unsigned>(context->GetType()),
                 hook_record_for(context) != nullptr ? 1u : 0u,
                 used_hook_slots,
