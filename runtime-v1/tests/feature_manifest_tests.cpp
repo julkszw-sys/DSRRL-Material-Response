@@ -95,6 +95,10 @@ int main()
           runtime_feature_stage::blocked_preflight);
     CHECK(runtime_feature_entry_for(core::operator_id::post_hdr).stage==
           runtime_feature_stage::blocked_preflight);
+    CHECK(runtime_feature_entry_for(core::operator_id::post_dof_ptde).stage==
+          runtime_feature_stage::blocked_preflight);
+    CHECK(runtime_feature_entry_for(core::operator_id::post_dof_ptde).boot_policy==
+          runtime_boot_policy::hold_off);
     CHECK(runtime_feature_entry_for(core::operator_id::dsr_native_sfx).stage==
           runtime_feature_stage::host_preserve);
     CHECK(runtime_feature_entry_for(core::operator_id::terminal_sat_rgba).stage==
