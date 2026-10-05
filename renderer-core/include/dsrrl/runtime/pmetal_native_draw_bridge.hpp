@@ -7,7 +7,6 @@
 #include <atomic>
 #include <cstdint>
 
-struct ID3D11Device;
 struct ID3D11DeviceContext;
 
 namespace dsrrl::runtime {
@@ -18,6 +17,9 @@ struct pmetal_native_draw_telemetry {
     std::uint64_t draw_indexed_applied = 0;
     std::uint64_t arm_reject = 0;
     std::uint64_t restore_fail = 0;
+    std::uint64_t context_registers = 0;
+    std::uint64_t deferred_context_registers = 0;
+    std::uint64_t vtable_hooks_installed = 0;
     bool hook_active = false;
     bool quarantined = false;
 };
@@ -36,9 +38,15 @@ public:
         reshade::api::device *device) noexcept;
     void uninstall() noexcept;
 
-    // Arms a one-shot mutation for the immediately following native Draw or
-    // DrawIndexed issued by ReShade's D3D11 wrapper. Only immediate contexts
-    // are accepted. The mutation is retained independently from caller state.
+    // ReShade exposes the exact D3D11 immediate/deferred command-list
+    // lifetime. Register every supported native context so an armed mutation
+    // can wrap the single original Draw on that same context. Unknown context
+    // identities or vtables fail open to the stock/replay path.
+    bool register_command_list(
+        reshade::api::command_list *cmd_list) noexcept;
+    void unregister_command_list(
+        reshade::api::command_list *cmd_list) noexcept;
+
     bool arm_draw(
         reshade::api::command_list *cmd_list,
         const draw_tx_mutation &mutation,
@@ -60,6 +68,11 @@ public:
     void reset_telemetry() noexcept;
 
 private:
+    bool register_context(
+        ID3D11DeviceContext *context) noexcept;
+    void unregister_context(
+        ID3D11DeviceContext *context) noexcept;
+
     static void STDMETHODCALLTYPE draw_hook(
         ID3D11DeviceContext *context,
         unsigned int vertex_count,
