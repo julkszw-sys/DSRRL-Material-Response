@@ -79,7 +79,7 @@ require(pmetal_source,
         "R44 material-bound source authority attestation")
 
 require(pmetal_source,
-        "[DSRRL PMETAL R45] production_hot_counters=GATED redundant_cross_thread_republish=OFF renderer_semantics=UNCHANGED",
+        "[DSRRL PMETAL R45] production_hot_counters=GATED redundant_cross_thread_republish=OFF decoded_endpoint_identity_reuse=ON renderer_semantics=UNCHANGED",
         "R45 production hot-path cleanup attestation")
 
 for counter in (
@@ -159,6 +159,23 @@ for latch in (
         pmetal_source,
         f"!{latch}.load(",
         f"R45 hot one-shot latch {latch} must load-gate atomic exchange")
+
+require(
+    pmetal_source,
+    "struct hook_endpoint_identity_v1",
+    "R45 decoded hook endpoint identity carrier")
+require(
+    pmetal_source,
+    "&decoded_endpoint",
+    "R45 single hook endpoint identity reuse")
+require(
+    pmetal_source,
+    "&decoded_a",
+    "R45 blend hook endpoint identity reuse")
+require(
+    pmetal_source,
+    "Canonical zero-beta identity must match",
+    "R45 zero-beta selector identity canonicalization")
 for latch in (
     "cache_hit_logged",
     "selection_cache_hit_logged",
