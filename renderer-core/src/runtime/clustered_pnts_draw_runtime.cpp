@@ -1337,6 +1337,13 @@ void clustered_pnts_draw_runtime::selector_identity_event(
     if (!decision.active)
         return;
 
+#ifdef DSRRL_POINTLIGHT_PROFILE
+    const bool prof_active =
+        prof_sample(g_prof_producer_seq);
+    const auto prof_producer_start =
+        prof_active ? prof_qpc() : 0u;
+#endif
+
     g_draw_selection.material = identity;
     g_draw_selection.material_decision = decision;
     g_draw_selection.material_spc = expected_spc;
@@ -1354,14 +1361,26 @@ void clustered_pnts_draw_runtime::selector_identity_event(
         std::array<void *,4> nodes{};
         std::uint8_t selected_count = 0u;
 
-        if (!input.valid ||
-            !select_first_four_exact(
+#ifdef DSRRL_POINTLIGHT_PROFILE
+        const auto prof_select_start =
+            prof_active ? prof_qpc() : 0u;
+#endif
+        const bool selection_ready =
+            input.valid &&
+            select_first_four_exact(
                 input.collection,
                 input.query.data(),
                 input.mask,
                 selected_ids,
                 nodes,
-                selected_count)) {
+                selected_count);
+#ifdef DSRRL_POINTLIGHT_PROFILE
+        if (prof_active)
+            prof_add(
+                g_prof_select,
+                prof_qpc() - prof_select_start);
+#endif
+        if (!selection_ready) {
             source_cache.failure =
                 clustered_pnts_prepare_failure::selection;
             g_draw_selection.cached_failure =
@@ -1433,6 +1452,10 @@ void clustered_pnts_draw_runtime::selector_identity_event(
             source_cache.neutral = true;
             telemetry::hot_count(g_selection_empty);
         } else {
+#ifdef DSRRL_POINTLIGHT_PROFILE
+            const auto prof_capture_start =
+                prof_active ? prof_qpc() : 0u;
+#endif
             for (std::uint8_t i = 0u;
                  i < selected_count;
                  ++i) {
@@ -1453,10 +1476,22 @@ void clustered_pnts_draw_runtime::selector_identity_event(
                 telemetry::hot_count(g_source_capture_ok);
             }
             source_cache.ready = true;
+#ifdef DSRRL_POINTLIGHT_PROFILE
+            if (prof_active)
+                prof_add(
+                    g_prof_capture,
+                    prof_qpc() - prof_capture_start);
+#endif
         }
     }
 
     if (!source_cache.ready) {
+#ifdef DSRRL_POINTLIGHT_PROFILE
+        if (prof_active)
+            prof_add(
+                g_prof_producer,
+                prof_qpc() - prof_producer_start);
+#endif
         g_draw_selection.cached_failure =
             source_cache.failure;
         return;
@@ -1470,6 +1505,10 @@ void clustered_pnts_draw_runtime::selector_identity_event(
         return;
     }
 
+#ifdef DSRRL_POINTLIGHT_PROFILE
+    const auto prof_build_start =
+        prof_active ? prof_qpc() : 0u;
+#endif
     const auto built =
         operators::point_light::
             build_clustered_sidecar_v1(
@@ -1477,6 +1516,12 @@ void clustered_pnts_draw_runtime::selector_identity_event(
                 source_cache.selected_count,
                 g_draw_selection.material_max,
                 decision);
+#ifdef DSRRL_POINTLIGHT_PROFILE
+    if (prof_active)
+        prof_add(
+            g_prof_sidecar_build,
+            prof_qpc() - prof_build_start);
+#endif
 
     g_draw_selection.sidecar_result_code =
         static_cast<std::uint8_t>(built.result);
@@ -1495,6 +1540,12 @@ void clustered_pnts_draw_runtime::selector_identity_event(
     g_draw_selection.payload = built.payload;
     g_draw_selection.payload_ready = true;
     telemetry::hot_count(g_sidecar_ready);
+#ifdef DSRRL_POINTLIGHT_PROFILE
+    if (prof_active)
+        prof_add(
+            g_prof_producer,
+            prof_qpc() - prof_producer_start);
+#endif
 }
 
 bool clustered_pnts_draw_runtime::current_draw_authority(
