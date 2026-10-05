@@ -23,6 +23,8 @@
 #include "dsrrl/operators/legacy_plan/sha256_bytes.hpp"
 #include <Windows.h>
 #include <bcrypt.h>
+#include <reshade.hpp>
+#include <cstdio>
 #include <array>
 #include <algorithm>
 #include <cstddef>
@@ -181,6 +183,72 @@ void selector_profile_end_stage(
         selector_profile_qpc() - begin;
 }
 
+void selector_profile_log(
+    std::uint64_t sample_index) noexcept
+{
+    if (sample_index != 1u &&
+        (sample_index % 16u) != 0u)
+        return;
+
+    LARGE_INTEGER frequency{};
+    if (!QueryPerformanceFrequency(&frequency) ||
+        frequency.QuadPart <= 0)
+        return;
+
+    const auto samples =
+        g_selector_profile_samples.load(
+            std::memory_order_relaxed);
+    if (samples == 0u)
+        return;
+
+    const auto avg_us =
+        [samples, frequency](
+            std::uint64_t ticks) noexcept {
+            return
+                (static_cast<double>(ticks) * 1000000.0) /
+                (static_cast<double>(frequency.QuadPart) *
+                 static_cast<double>(samples));
+        };
+    const auto ticks_us =
+        [frequency](
+            std::uint64_t ticks) noexcept {
+            return
+                (static_cast<double>(ticks) * 1000000.0) /
+                static_cast<double>(frequency.QuadPart);
+        };
+
+    char line[1536]{};
+    std::snprintf(
+        line,
+        sizeof(line),
+        "[DSRRL PERF R32] SELECTOR sample=1/%u n=%llu total_us=%.3f max_total_us=%.3f prefix_us=%.3f resolve_us=%.3f cache_lookup_us=%.3f cache_publish_us=%.3f owner_lookup_us=%.3f owner_mtd_us=%.3f selection_publish_us=%.3f pmetal_source_us=%.3f runtime_mtd_us=%.3f runtime_publish_us=%.3f paths=cache:%llu owner:%llu runtime:%llu fail:%llu early:%llu support=parse:%llu mtd:%llu destroy:%llu",
+        k_selector_profile_sample_period,
+        static_cast<unsigned long long>(samples),
+        avg_us(g_selector_profile_total.ticks.load(std::memory_order_relaxed)),
+        ticks_us(g_selector_profile_total.max_ticks.load(std::memory_order_relaxed)),
+        avg_us(g_selector_profile_prefix.ticks.load(std::memory_order_relaxed)),
+        avg_us(g_selector_profile_resolve_material.ticks.load(std::memory_order_relaxed)),
+        avg_us(g_selector_profile_final_cache.ticks.load(std::memory_order_relaxed)),
+        avg_us(g_selector_profile_cache_publish.ticks.load(std::memory_order_relaxed)),
+        avg_us(g_selector_profile_owner_lookup.ticks.load(std::memory_order_relaxed)),
+        avg_us(g_selector_profile_owner_mtd.ticks.load(std::memory_order_relaxed)),
+        avg_us(g_selector_profile_selection_publish.ticks.load(std::memory_order_relaxed)),
+        avg_us(g_selector_profile_pmetal.ticks.load(std::memory_order_relaxed)),
+        avg_us(g_selector_profile_runtime_mtd.ticks.load(std::memory_order_relaxed)),
+        avg_us(g_selector_profile_runtime_publish.ticks.load(std::memory_order_relaxed)),
+        static_cast<unsigned long long>(g_selector_profile_cache_path.load(std::memory_order_relaxed)),
+        static_cast<unsigned long long>(g_selector_profile_owner_path.load(std::memory_order_relaxed)),
+        static_cast<unsigned long long>(g_selector_profile_runtime_path.load(std::memory_order_relaxed)),
+        static_cast<unsigned long long>(g_selector_profile_fail_path.load(std::memory_order_relaxed)),
+        static_cast<unsigned long long>(g_selector_profile_early_path.load(std::memory_order_relaxed)),
+        static_cast<unsigned long long>(g_selector_profile_parse_events.load(std::memory_order_relaxed)),
+        static_cast<unsigned long long>(g_selector_profile_mtd_events.load(std::memory_order_relaxed)),
+        static_cast<unsigned long long>(g_selector_profile_destroy_events.load(std::memory_order_relaxed)));
+    reshade::log::message(
+        reshade::log::level::info,
+        line);
+}
+
 void selector_profile_finish(
     selector_profile_sample &sample,
     selector_profile_path path) noexcept
@@ -192,9 +260,10 @@ void selector_profile_finish(
         selector_profile_qpc() -
         sample.total_start;
 
-    g_selector_profile_samples.fetch_add(
-        1u,
-        std::memory_order_relaxed);
+    const auto sample_index =
+        g_selector_profile_samples.fetch_add(
+            1u,
+            std::memory_order_relaxed) + 1u;
     selector_profile_add(
         g_selector_profile_total,
         total);
@@ -242,6 +311,7 @@ void selector_profile_finish(
     counter->fetch_add(
         1u,
         std::memory_order_relaxed);
+    selector_profile_log(sample_index);
 }
 
 void selector_profile_reset() noexcept
