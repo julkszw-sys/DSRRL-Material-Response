@@ -1,4 +1,4 @@
-name: P_Metal R29 PointLight Fast Resource Cache Build
+name: P_Metal R30 PointLight Sync Transaction Fastpath Build
 
 on:
   workflow_dispatch:
@@ -24,7 +24,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: pmetal-r29-${{ github.event.pull_request.head.sha || github.sha }}
+  group: pmetal-r30-${{ github.event.pull_request.head.sha || github.sha }}
   cancel-in-progress: true
 
 jobs:
@@ -48,7 +48,7 @@ jobs:
           ref: 3645e3025d1d98a90e318278858931f034d5d1f6
           path: _reshade
 
-      - name: Configure R29 PointLight fast resource cache
+      - name: Configure R30 PointLight synchronous transaction fast path
         shell: pwsh
         run: >
           cmake
@@ -57,7 +57,7 @@ jobs:
           -A x64
           -DRESHADE_INCLUDE_DIR="${{ github.workspace }}/_reshade/include"
           -DDSRRL_SOURCE_COMMIT="$env:DSRRL_CHECKOUT_COMMIT"
-          -DDSRRL_BUILD_FLAVOR="pmetal_r29_pointlight_fast_resource_cache"
+          -DDSRRL_BUILD_FLAVOR="pmetal_r30_pointlight_sync_tx_fastpath"
           -DDSRRL_FULL_TELEMETRY_DEFAULT_ON=OFF
           -DDSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG=ON
           -DDSRRL_PMETAL_FULL_PTDE_HEMENV_R3=ON
@@ -81,19 +81,20 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           $addons = @(Get-ChildItem build-fast -Recurse -Filter *.addon64)
           if ($addons.Count -ne 1) { throw "Expected exactly one addon, found $($addons.Count)" }
-          Copy-Item $addons[0].FullName "DSRRL_PMETAL_R29_POINTLIGHT_FAST_RESOURCE_CACHE.addon64" -Force
+          Copy-Item $addons[0].FullName "DSRRL_PMETAL_R30_POINTLIGHT_SYNC_TX_FASTPATH.addon64" -Force
 
       - name: Verify binary identity
         shell: pwsh
         run: |
-          $path = "DSRRL_PMETAL_R29_POINTLIGHT_FAST_RESOURCE_CACHE.addon64"
+          $path = "DSRRL_PMETAL_R30_POINTLIGHT_SYNC_TX_FASTPATH.addon64"
           $ascii = [System.Text.Encoding]::ASCII.GetString([System.IO.File]::ReadAllBytes($path))
           if (-not $ascii.Contains($env:DSRRL_CHECKOUT_COMMIT)) { throw "Missing source commit identity" }
-          if (-not $ascii.Contains("pmetal_r29_pointlight_fast_resource_cache")) { throw "Missing R29 build flavor identity" }
+          if (-not $ascii.Contains("pmetal_r30_pointlight_sync_tx_fastpath")) { throw "Missing R30 build flavor identity" }
           if (-not $ascii.Contains("[DSRRL POINTLIGHT R26] direct_current_native_dispatch=ACTIVE persistent_vtable_hook=OFF recursion_guard=ON")) { throw "Missing inherited R26 direct current-native startup marker" }
-          if (-not $ascii.Contains("[DSRRL POINTLIGHT R29] exact_structure_snapshot_cache=ACTIVE cross_draw=ON revalidate=VM+MEMCMP pointer_only_authority=OFF gpu_tls_fast_cache=ON per_draw_resource_mutex=OFF per_draw_com_ref_churn=OFF pipeline_tls_fast_path=ON per_draw_private_data=OFF per_draw_shader_ref_churn=OFF failure_propagation=EXACT")) { throw "Missing R29 fast resource/cache/failure-propagation startup marker" }
-          if (-not $ascii.Contains("[DSRRL POINTLIGHT R29] source_capture_fail reason=")) { throw "Missing R29 exact source-capture failure diagnostic marker" }
-          if (-not $ascii.Contains("[DSRRL POINTLIGHT APPLY] stage=direct_current_native_applied")) { throw "Missing R29 direct current-native apply marker" }
+          if (-not $ascii.Contains("[DSRRL POINTLIGHT R29] exact_structure_snapshot_cache=ACTIVE cross_draw=ON revalidate=VM+MEMCMP pointer_only_authority=OFF gpu_tls_fast_cache=ON per_draw_resource_mutex=OFF per_draw_com_ref_churn=OFF pipeline_tls_fast_path=ON per_draw_private_data=OFF per_draw_shader_ref_churn=OFF failure_propagation=EXACT")) { throw "Missing inherited R29 fast resource/cache/failure-propagation startup marker" }
+          if (-not $ascii.Contains("[DSRRL POINTLIGHT R30] synchronous_tx_fastpath=ACTIVE exact_clustered_shape_only=ON global_tx_manager_mutex=OFF t18_t19_batch=ON fallback=R29_GENERIC_TX")) { throw "Missing R30 synchronous transaction fast-path marker" }
+          if (-not $ascii.Contains("[DSRRL POINTLIGHT R30] source_capture_fail reason=")) { throw "Missing R30 exact source-capture failure diagnostic marker" }
+          if (-not $ascii.Contains("[DSRRL POINTLIGHT APPLY] stage=direct_current_native_applied")) { throw "Missing R30 direct current-native apply marker" }
           if (-not $ascii.Contains("[DSRRL PMETAL R19 LERP]")) { throw "Missing exact R19 Lerp EnvDiffuse runtime marker" }
           if (-not $ascii.Contains("[DSRRL PMETAL R7 SHADOW]")) { throw "Missing cumulative R7 shadow marker" }
           if (-not $ascii.Contains("[DSRRL PMETAL R3 SPEC ATTEST]")) { throw "Missing exact SpecRGB SHA attestation marker" }
@@ -102,6 +103,6 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: DSRRL_PMETAL_R29_POINTLIGHT_FAST_RESOURCE_CACHE
-          path: DSRRL_PMETAL_R29_POINTLIGHT_FAST_RESOURCE_CACHE.addon64
+          name: DSRRL_PMETAL_R30_POINTLIGHT_SYNC_TX_FASTPATH
+          path: DSRRL_PMETAL_R30_POINTLIGHT_SYNC_TX_FASTPATH.addon64
           if-no-files-found: error
