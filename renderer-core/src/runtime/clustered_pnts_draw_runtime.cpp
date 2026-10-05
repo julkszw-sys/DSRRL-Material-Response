@@ -431,6 +431,53 @@ bool readable_range_cached(
     return true;
 }
 
+std::atomic<std::uint32_t> g_source_capture_reason_mask{0u};
+
+void log_source_capture_failure_once(
+    std::uint32_t bit,
+    const char *reason,
+    void *node,
+    const void *target) noexcept
+{
+    const auto previous =
+        g_source_capture_reason_mask.fetch_or(
+            bit,
+            std::memory_order_relaxed);
+    if ((previous & bit) != 0u)
+        return;
+
+    std::uint32_t source_id = 0u;
+    std::uint8_t source_category = 0u;
+    if (node != nullptr &&
+        readable_range(node, 0x19u)) {
+        const auto *bytes =
+            static_cast<const std::uint8_t *>(node);
+        std::memcpy(
+            &source_id,
+            bytes + 0x10u,
+            sizeof(source_id));
+        std::memcpy(
+            &source_category,
+            bytes + 0x18u,
+            sizeof(source_category));
+    }
+
+    char line[384]{};
+    std::snprintf(
+        line,
+        sizeof(line),
+        "[DSRRL POINTLIGHT R29] source_capture_fail reason=%s source_id=%u category=%u target=%016llx",
+        reason != nullptr ? reason : "unknown",
+        static_cast<unsigned>(source_id),
+        static_cast<unsigned>(source_category),
+        static_cast<unsigned long long>(
+            reinterpret_cast<std::uintptr_t>(
+                target)));
+    reshade::log::message(
+        reshade::log::level::warning,
+        line);
+}
+
 bool executable_address(
     const void *ptr) noexcept
 {
@@ -580,15 +627,27 @@ bool capture_source(
     pointlight_ptde_source::draw_bank_authority_cache &bank_cache) noexcept
 {
     out = {};
-    if (!readable_range(node, 0x20u))
+    if (!readable_range(node, 0x20u)) {
+        log_source_capture_failure_once(
+            1u << 0,
+            "node_unreadable",
+            node,
+            nullptr);
         return false;
+    }
 
     void **vtable = nullptr;
     std::memcpy(&vtable, node, sizeof(vtable));
     if (!readable_range(
             vtable,
-            13u * sizeof(void *)))
+            13u * sizeof(void *))) {
+        log_source_capture_failure_once(
+            1u << 1,
+            "vtable_unreadable",
+            node,
+            vtable);
         return false;
+    }
 
     void *target = nullptr;
     std::memcpy(
@@ -603,10 +662,22 @@ bool capture_source(
     const auto target_address =
         reinterpret_cast<std::uintptr_t>(target);
     if (target_address != g_base + 0x55BC00u &&
-        target_address != g_base + 0x55D0B0u)
+        target_address != g_base + 0x55D0B0u) {
+        log_source_capture_failure_once(
+            1u << 2,
+            "source_class_unattested",
+            node,
+            target);
         return false;
-    if (!executable_address(target))
+    }
+    if (!executable_address(target)) {
+        log_source_capture_failure_once(
+            1u << 3,
+            "source_vfunc_nonexec",
+            node,
+            target);
         return false;
+    }
 
     using source_fn =
         void (__fastcall *)(void *, float *);
@@ -631,12 +702,32 @@ bool capture_source(
         bank_cache);
 
     for (const auto value : raw)
-        if (!std::isfinite(value))
+        if (!std::isfinite(value)) {
+            log_source_capture_failure_once(
+                1u << 4,
+                "source_nonfinite",
+                node,
+                target);
             return false;
+        }
 
-    if (!(raw[3] > 0.0f) ||
-        !(raw[7] > 0.0f))
+    if (!(raw[3] > 0.0f)) {
+        log_source_capture_failure_once(
+            1u << 5,
+            "invalid_inv_range",
+            node,
+            target);
         return false;
+    }
+
+    if (!(raw[7] > 0.0f)) {
+        log_source_capture_failure_once(
+            1u << 6,
+            "invalid_end",
+            node,
+            target);
+        return false;
+    }
 
     std::memcpy(
         &out.source_id,
@@ -938,7 +1029,7 @@ bool clustered_pnts_draw_runtime::install() noexcept
             std::memory_order_relaxed))
         reshade::log::message(
             reshade::log::level::info,
-            "[DSRRL POINTLIGHT R29] exact_structure_snapshot_cache=ACTIVE cross_draw=ON revalidate=VM+MEMCMP pointer_only_authority=OFF gpu_tls_fast_cache=ON per_draw_resource_mutex=OFF per_draw_com_ref_churn=OFF pipeline_tls_fast_path=ON per_draw_private_data=OFF per_draw_shader_ref_churn=OFF");
+            "[DSRRL POINTLIGHT R29] exact_structure_snapshot_cache=ACTIVE cross_draw=ON revalidate=VM+MEMCMP pointer_only_authority=OFF gpu_tls_fast_cache=ON per_draw_resource_mutex=OFF per_draw_com_ref_churn=OFF pipeline_tls_fast_path=ON per_draw_private_data=OFF per_draw_shader_ref_churn=OFF failure_propagation=EXACT");
     return true;
 }
 
@@ -1131,6 +1222,8 @@ void clustered_pnts_draw_runtime::selector_identity_event(
                 selected_count)) {
             source_cache.failure =
                 clustered_pnts_prepare_failure::selection;
+            g_draw_selection.cached_failure =
+                source_cache.failure;
             telemetry::hot_count(g_mirror_diff);
             telemetry::hot_count(g_selection_fail);
             telemetry::hot_count(g_sidecar_fail);
@@ -1142,6 +1235,8 @@ void clustered_pnts_draw_runtime::selector_identity_event(
         if (g_retained_selector == nullptr) {
             source_cache.failure =
                 clustered_pnts_prepare_failure::selection;
+            g_draw_selection.cached_failure =
+                source_cache.failure;
             telemetry::hot_count(g_mirror_diff);
             telemetry::hot_count(g_selection_fail);
             telemetry::hot_count(g_sidecar_fail);
@@ -1165,6 +1260,8 @@ void clustered_pnts_draw_runtime::selector_identity_event(
                 host_count) {
             source_cache.failure =
                 clustered_pnts_prepare_failure::selection;
+            g_draw_selection.cached_failure =
+                source_cache.failure;
             telemetry::hot_count(g_mirror_diff);
             telemetry::hot_count(g_selection_fail);
             telemetry::hot_count(g_sidecar_fail);
@@ -1205,6 +1302,8 @@ void clustered_pnts_draw_runtime::selector_identity_event(
                         selected_ids[i]) {
                     source_cache.failure =
                         clustered_pnts_prepare_failure::source_capture;
+                    g_draw_selection.cached_failure =
+                        source_cache.failure;
                     telemetry::hot_count(g_source_capture_fail);
                     telemetry::hot_count(g_sidecar_fail);
                     return;
@@ -1673,6 +1772,9 @@ void clustered_pnts_draw_runtime::reset() noexcept
     g_upload_fail.store(0u);
     g_gpu_fast_hit.store(0u);
     g_gpu_fast_miss.store(0u);
+    g_source_capture_reason_mask.store(
+        0u,
+        std::memory_order_relaxed);
     g_quarantined.store(false);
 }
 
