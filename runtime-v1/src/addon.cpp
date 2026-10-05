@@ -239,6 +239,7 @@ extern "C" __declspec(dllexport) bool AddonInit(HMODULE addon,HMODULE reshade_mo
         dsrrl::runtime::envspec::unregister_runtime();
         dsrrl::runtime::mr::unregister_runtime();
         dsrrl::runtime::assets::unregister_runtime();
+        dsrrl::runtime::dof::unregister_authored_state_runtime();
         dsrrl::runtime::dof::unregister_preflight_runtime();
         unregister_a1_events();
         g_a1_bridge.reset();
