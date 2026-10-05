@@ -1256,6 +1256,18 @@ jobs:
           $normalRoutesHash = (Get-FileHash "renderer-core/data/provenance/normal_routes_v12.tsv" -Algorithm SHA256).Hash.ToLowerInvariant()
           # Historical V2.10/V2.11 source is deliberately excluded from active build provenance.
           $materialConstantsHash = (Get-FileHash "renderer-core/include/dsrrl/operators/material_response/generated_material_constants_v1.hpp" -Algorithm SHA256).Hash.ToLowerInvariant()
+          $dofPreflightHash = (Get-FileHash "renderer-core/src/runtime/dof_preflight.cpp" -Algorithm SHA256).Hash.ToLowerInvariant()
+          $dofAuthoredHash = (Get-FileHash "renderer-core/src/runtime/dof_authored_state_runtime.cpp" -Algorithm SHA256).Hash.ToLowerInvariant()
+          $dofPrivateResourceHash = (Get-FileHash "renderer-core/src/runtime/dof_private_resource_runtime.cpp" -Algorithm SHA256).Hash.ToLowerInvariant()
+          $dofSchedulerHash = (Get-FileHash "renderer-core/src/runtime/dof_ptde_scheduler_runtime.cpp" -Algorithm SHA256).Hash.ToLowerInvariant()
+          $dofHostRouteHash = (Get-FileHash "renderer-core/src/runtime/dof_host_depth_route_runtime.cpp" -Algorithm SHA256).Hash.ToLowerInvariant()
+          $dofToneMapHash = (Get-FileHash "renderer-core/src/runtime/dof_tonemap_handoff_runtime.cpp" -Algorithm SHA256).Hash.ToLowerInvariant()
+          $dofDrawBridgeHash = (Get-FileHash "renderer-core/src/runtime/dof_ptde_draw_bridge_runtime.cpp" -Algorithm SHA256).Hash.ToLowerInvariant()
+          $dofContractHash = (Get-FileHash "renderer-core/include/dsrrl/operators/dof/dof_resource_contract.hpp" -Algorithm SHA256).Hash.ToLowerInvariant()
+          $dofIslandHash = (Get-FileHash "renderer-core/include/dsrrl/operators/dof/dof_island.hpp" -Algorithm SHA256).Hash.ToLowerInvariant()
+          $dofBankHash = (Get-FileHash "renderer-core/include/dsrrl/operators/dof/ptde_dofbank_embedded.hpp" -Algorithm SHA256).Hash.ToLowerInvariant()
+          $dofPlainAuthorityHash = (Get-FileHash "renderer-core/data/provenance/dof_plain_rate_exact_payload_v1.json" -Algorithm SHA256).Hash.ToLowerInvariant()
+          $dofPlainGeneratorHash = (Get-FileHash "renderer-core/tools/generate_dof_plain_rate_embedded.py" -Algorithm SHA256).Hash.ToLowerInvariant()
           $sourceRef = $env:DSRRL_SOURCE_REF
           $sourceRefKind = $env:DSRRL_SOURCE_REF_KIND
           $checkoutCommit = $env:DSRRL_CHECKOUT_COMMIT
@@ -1418,6 +1430,22 @@ jobs:
             material_response_draw_probe = "VISIBLE_EXACT_OWNER_RECEIVER_PS_B12_BATCH_TRANSACTION"
             material_response_feature_armed = $true
             material_response_runtime_activation = "NOT_TESTED"
+            dof_construction = "NATIVE_CORE_7_RESOURCE_9_PASS_PRIVATE_ISLAND_OPT_IN"
+            dof_opt_in_env = "DSRRL_EXPERIMENTAL_PTDE_DOF=1"
+            dof_preflight_sha256 = $dofPreflightHash
+            dof_authored_state_sha256 = $dofAuthoredHash
+            dof_private_resource_sha256 = $dofPrivateResourceHash
+            dof_scheduler_sha256 = $dofSchedulerHash
+            dof_host_route_sha256 = $dofHostRouteHash
+            dof_tonemap_handoff_sha256 = $dofToneMapHash
+            dof_draw_bridge_sha256 = $dofDrawBridgeHash
+            dof_resource_contract_sha256 = $dofContractHash
+            dof_island_contract_sha256 = $dofIslandHash
+            dof_embedded_bank_sha256 = $dofBankHash
+            dof_plain_rate_authority_sha256 = $dofPlainAuthorityHash
+            dof_plain_rate_generator_sha256 = $dofPlainGeneratorHash
+            dof_runtime_activation = "NOT_TESTED"
+            dof_pixel_behavior = "OPEN"
             boot_armed_operator_count = 15
             single_addon_entrypoint = $true
             draw_replay = $true
