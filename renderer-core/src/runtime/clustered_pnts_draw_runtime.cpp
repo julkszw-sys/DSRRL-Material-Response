@@ -87,6 +87,14 @@ struct frame_source_state_v1 {
     void *collection = nullptr;
     std::uintptr_t target = 0u;
     std::uintptr_t owner = 0u;
+    std::uintptr_t endpoint_source_a = 0u;
+    std::uintptr_t endpoint_source_b = 0u;
+    std::uintptr_t endpoint_param_a = 0u;
+    std::uintptr_t endpoint_param_b = 0u;
+    std::uint32_t endpoint_first_a = 0u;
+    std::uint32_t endpoint_first_b = 0u;
+    std::uint16_t endpoint_count_a = 0u;
+    std::uint16_t endpoint_count_b = 0u;
     std::uint32_t source_id = 0u;
     std::uint32_t selector_word0 = 0u;
     std::uint32_t selector_word1 = 0u;
@@ -149,6 +157,14 @@ bool same_frame_source_state(
         a.collection == b.collection &&
         a.target == b.target &&
         a.owner == b.owner &&
+        a.endpoint_source_a == b.endpoint_source_a &&
+        a.endpoint_source_b == b.endpoint_source_b &&
+        a.endpoint_param_a == b.endpoint_param_a &&
+        a.endpoint_param_b == b.endpoint_param_b &&
+        a.endpoint_first_a == b.endpoint_first_a &&
+        a.endpoint_first_b == b.endpoint_first_b &&
+        a.endpoint_count_a == b.endpoint_count_a &&
+        a.endpoint_count_b == b.endpoint_count_b &&
         a.source_id == b.source_id &&
         a.selector_word0 == b.selector_word0 &&
         a.selector_word1 == b.selector_word1 &&
@@ -175,6 +191,14 @@ std::size_t frame_source_cache_index(
             state.collection)));
     mix(static_cast<std::uint64_t>(state.target));
     mix(static_cast<std::uint64_t>(state.owner));
+    mix(static_cast<std::uint64_t>(state.endpoint_source_a));
+    mix(static_cast<std::uint64_t>(state.endpoint_source_b));
+    mix(static_cast<std::uint64_t>(state.endpoint_param_a));
+    mix(static_cast<std::uint64_t>(state.endpoint_param_b));
+    mix(static_cast<std::uint64_t>(state.endpoint_first_a));
+    mix(static_cast<std::uint64_t>(state.endpoint_first_b));
+    mix(static_cast<std::uint64_t>(state.endpoint_count_a));
+    mix(static_cast<std::uint64_t>(state.endpoint_count_b));
     mix(static_cast<std::uint64_t>(state.source_id));
     mix(static_cast<std::uint64_t>(state.selector_word0));
     mix(static_cast<std::uint64_t>(state.selector_word1));
@@ -675,6 +699,10 @@ struct source_vm_cache_tls {
     readable_region_cache collection{};
     readable_region_cache node{};
     readable_region_cache vtable{};
+    readable_region_cache manager{};
+    readable_region_cache table{};
+    readable_region_cache endpoint{};
+    readable_region_cache param{};
 };
 
 thread_local source_vm_cache_tls g_source_vm_cache{};
@@ -1074,6 +1102,203 @@ bool restore_pointlight_collection_insert_hook() noexcept
     return ok;
 }
 
+bool selected_lerp_endpoint_cached(
+    std::uintptr_t manager,
+    std::int16_t selector,
+    std::uintptr_t &source) noexcept
+{
+    source = 0u;
+    if (manager == 0u)
+        return false;
+
+    auto &vm = source_vm_cache_current();
+    const auto area =
+        selector < 0
+            ? 0xffffffffu
+            : (static_cast<unsigned>(
+                   static_cast<std::uint16_t>(
+                       selector)) >> 8u) & 127u;
+
+    const auto lookup =
+        [&](unsigned index) noexcept -> bool {
+            const auto slot =
+                manager + 0x20u +
+                static_cast<std::uintptr_t>(
+                    index) * 0x1b0u;
+            if (!readable_range_cached(
+                    reinterpret_cast<const void *>(slot),
+                    sizeof(std::uintptr_t),
+                    vm.manager))
+                return false;
+
+            std::uintptr_t table = 0u;
+            std::memcpy(
+                &table,
+                reinterpret_cast<const void *>(slot),
+                sizeof(table));
+            if (table == 0u)
+                return true;
+
+            const auto endpoint_slot =
+                table + 9u * 0x10u + 8u;
+            if (!readable_range_cached(
+                    reinterpret_cast<const void *>(
+                        endpoint_slot),
+                    sizeof(std::uintptr_t),
+                    vm.table))
+                return false;
+
+            std::memcpy(
+                &source,
+                reinterpret_cast<const void *>(
+                    endpoint_slot),
+                sizeof(source));
+            return true;
+        };
+
+    if (area <= 11u &&
+        !lookup(area))
+        return false;
+    if (source == 0u &&
+        !lookup(11u))
+        return false;
+    return source != 0u;
+}
+
+bool capture_endpoint_param_identity(
+    std::uintptr_t endpoint_source,
+    std::uintptr_t &param,
+    std::uint16_t &count,
+    std::uint32_t &first) noexcept
+{
+    param = 0u;
+    count = 0u;
+    first = 0u;
+    if (endpoint_source == 0u)
+        return false;
+
+    auto &vm = source_vm_cache_current();
+    const auto param_slot =
+        endpoint_source + 0x18u;
+    if (!readable_range_cached(
+            reinterpret_cast<const void *>(
+                param_slot),
+            sizeof(std::uintptr_t),
+            vm.endpoint))
+        return false;
+
+    std::memcpy(
+        &param,
+        reinterpret_cast<const void *>(
+            param_slot),
+        sizeof(param));
+    if (param == 0u ||
+        !readable_range_cached(
+            reinterpret_cast<const void *>(
+                param),
+            0x38u,
+            vm.param))
+        return false;
+
+    std::memcpy(
+        &count,
+        reinterpret_cast<const void *>(
+            param + 0x0au),
+        sizeof(count));
+    std::memcpy(
+        &first,
+        reinterpret_cast<const void *>(
+            param + 0x34u),
+        sizeof(first));
+    return true;
+}
+
+bool populate_source_semantic_endpoints(
+    bool bank_source,
+    bool lerp_bank_source,
+    frame_source_state_v1 &state) noexcept
+{
+    if (bank_source) {
+        state.endpoint_source_a = state.owner;
+        if (!capture_endpoint_param_identity(
+                state.endpoint_source_a,
+                state.endpoint_param_a,
+                state.endpoint_count_a,
+                state.endpoint_first_a))
+            return false;
+        state.endpoint_source_b =
+            state.endpoint_source_a;
+        state.endpoint_param_b =
+            state.endpoint_param_a;
+        state.endpoint_count_b =
+            state.endpoint_count_a;
+        state.endpoint_first_b =
+            state.endpoint_first_a;
+        return true;
+    }
+
+    if (!lerp_bank_source)
+        return false;
+
+    std::int16_t selector_a = -1;
+    std::int16_t selector_b = -1;
+    float beta = 0.0f;
+    std::memcpy(
+        &selector_a,
+        &state.selector_word0,
+        sizeof(selector_a));
+    std::memcpy(
+        &selector_b,
+        reinterpret_cast<const std::uint8_t *>(
+            &state.selector_word0) +
+            sizeof(selector_a),
+        sizeof(selector_b));
+    std::memcpy(
+        &beta,
+        &state.selector_word1,
+        sizeof(beta));
+
+    const auto pair =
+        pmetal_selector_policy::select(
+            selector_a,
+            selector_b,
+            beta);
+    if (!pair.valid ||
+        !selected_lerp_endpoint_cached(
+            state.owner,
+            pair.a,
+            state.endpoint_source_a) ||
+        !capture_endpoint_param_identity(
+            state.endpoint_source_a,
+            state.endpoint_param_a,
+            state.endpoint_count_a,
+            state.endpoint_first_a))
+        return false;
+
+    if (pair.beta == 0.0f) {
+        state.endpoint_source_b =
+            state.endpoint_source_a;
+        state.endpoint_param_b =
+            state.endpoint_param_a;
+        state.endpoint_count_b =
+            state.endpoint_count_a;
+        state.endpoint_first_b =
+            state.endpoint_first_a;
+        return true;
+    }
+
+    return
+        selected_lerp_endpoint_cached(
+            state.owner,
+            pair.b,
+            state.endpoint_source_b) &&
+        capture_endpoint_param_identity(
+            state.endpoint_source_b,
+            state.endpoint_param_b,
+            state.endpoint_count_b,
+            state.endpoint_first_b);
+}
+
 bool spatial_overlap_xyz_unchecked(
     const void *node,
     const std::array<float,4> &query_min,
@@ -1341,6 +1566,16 @@ bool capture_source(
             frame_state.position_bits.size() *
                 sizeof(frame_state.position_bits[0]));
 
+        // Bank structure data itself is immutable asset identity; selectors,
+        // beta and endpoint routing are live semantic inputs. Include the
+        // actual Bank endpoint objects and param table identities so a Lerp
+        // manager remap cannot produce a false persistent hit.
+        const bool semantic_endpoints_ready =
+            populate_source_semantic_endpoints(
+                bank_source,
+                lerp_bank_source,
+                frame_state);
+
         const auto semantic_generation =
             g_source_semantic_generation.load(
                 std::memory_order_acquire);
@@ -1350,11 +1585,14 @@ bool capture_source(
                 semantic_generation);
 
         const auto cache_index =
-            frame_source_cache_index(
-                frame_state);
+            semantic_endpoints_ready
+                ? frame_source_cache_index(
+                      frame_state)
+                : 0u;
         const auto &entry =
             g_source_frame_cache[cache_index];
-        if (entry.valid &&
+        if (semantic_endpoints_ready &&
+            entry.valid &&
             same_frame_source_state(
                 entry.state,
                 frame_state)) {
@@ -1462,7 +1700,11 @@ bool capture_source(
         out.raw_q_end[i] = raw[4u + i];
     }
 
-    if (frame_cacheable) {
+    if (frame_cacheable &&
+        populate_source_semantic_endpoints(
+            bank_source,
+            lerp_bank_source,
+            frame_state)) {
         auto &entry =
             g_source_frame_cache[
                 frame_source_cache_index(
@@ -1814,7 +2056,7 @@ bool clustered_pnts_draw_runtime::install() noexcept
             std::memory_order_relaxed))
         reshade::log::message(
             reshade::log::level::info,
-            "[DSRRL POINTLIGHT R40] source_cache=PERSISTENT_GENERATIONAL_EXACT_STATE invalidation=ACTIVE_COLLECTION_INSERT collection_identity=IN_KEY present_reset=OFF spc=ON nospc=ON");
+            "[DSRRL POINTLIGHT R40] source_cache=PERSISTENT_GENERATIONAL_EXACT_STATE invalidation=ACTIVE_COLLECTION_INSERT collection_identity=IN_KEY endpoint_identity=SOURCE_PLUS_PARAM selector_beta=IN_KEY present_reset=OFF spc=ON nospc=ON");
     return true;
 }
 
