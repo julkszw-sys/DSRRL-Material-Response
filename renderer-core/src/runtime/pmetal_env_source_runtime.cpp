@@ -2143,7 +2143,11 @@ void publish_hook_source(
         static std::atomic_bool
             producer_cross_thread_hit_logged{
                 false};
-        if (!producer_cross_thread_hit_logged.load(\n                std::memory_order_relaxed) &&\n            !producer_cross_thread_hit_logged.exchange(\n                true,\n                std::memory_order_relaxed))
+        if (!producer_cross_thread_hit_logged.load(
+                std::memory_order_relaxed) &&
+            !producer_cross_thread_hit_logged.exchange(
+                true,
+                std::memory_order_relaxed))
             reshade::log::message(
                 reshade::log::level::info,
                 "[DSRRL PMETAL R43] producer_per_key_cache_hit=1 exact_key=SOURCE_BASE_COUNT_ROW_SELECTOR_BETA exact_payload=ON global_publish_mutex=SKIPPED");
@@ -2256,7 +2260,11 @@ bool latest_hook_source_exact_selector(
     static std::atomic_bool
         selector_cross_thread_hit_logged{
             false};
-    if (!selector_cross_thread_hit_logged.load(\n                std::memory_order_relaxed) &&\n            !selector_cross_thread_hit_logged.exchange(\n                true,\n                std::memory_order_relaxed))
+    if (!selector_cross_thread_hit_logged.load(
+                std::memory_order_relaxed) &&
+            !selector_cross_thread_hit_logged.exchange(
+                true,
+                std::memory_order_relaxed))
         reshade::log::message(
             reshade::log::level::info,
             "[DSRRL PMETAL R43] selector_per_key_cache_hit=1 exact_key=SOURCE_BASE_COUNT_ROW_SELECTOR_BETA global_semantic_version=IGNORED donor_redecode=OFF lock_wait=OFF");
@@ -2914,7 +2922,11 @@ void pmetal_env_source_selector_event(
 
         static std::atomic_bool
             selector_shadow_hit_logged{false};
-        if (!selector_shadow_hit_logged.load(\n                std::memory_order_relaxed) &&\n            !selector_shadow_hit_logged.exchange(\n                true,\n                std::memory_order_relaxed))
+        if (!selector_shadow_hit_logged.load(
+                std::memory_order_relaxed) &&
+            !selector_shadow_hit_logged.exchange(
+                true,
+                std::memory_order_relaxed))
             reshade::log::message(
                 reshade::log::level::info,
                 "[DSRRL PMETAL R41] selector_source_shadow_hit=1 exact_source_ptr=ON exact_selector_beta=ON donor_redecode=OFF fail_open_fallback=ON");
