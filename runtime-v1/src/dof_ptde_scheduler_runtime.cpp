@@ -3,6 +3,7 @@
 #include "dsrrl/operators/dof/dof_resource_contract.hpp"
 #include "dsrrl/operators/legacy_plan/sha256_bytes.hpp"
 #include "dsrrl/runtime/dof_private_resource_runtime.hpp"
+#include "dof_plain_rate_embedded.hpp"
 
 #include <reshade.hpp>
 
@@ -188,6 +189,44 @@ bool materialize_pair(
     return coherent;
 }
 
+bool materialize_embedded_plain_rate(
+    reshade::api::device *device) noexcept
+{
+    if (device == nullptr ||
+        device->get_api() !=
+            reshade::api::device_api::d3d11)
+        return false;
+
+    reshade::api::shader_desc vs{};
+    vs.code =
+        embedded_plain_rate::vertex.data();
+    vs.code_size =
+        embedded_plain_rate::vertex.size();
+
+    reshade::api::shader_desc ps{};
+    ps.code =
+        embedded_plain_rate::pixel.data();
+    ps.code_size =
+        embedded_plain_rate::pixel.size();
+
+    return materialize_pair(
+        device,
+        role::dof_rate_plain,
+        vs,
+        ps);
+}
+
+void on_init_device(
+    reshade::api::device *device)
+{
+    if (g_quarantined.load())
+        return;
+
+    if (!materialize_embedded_plain_rate(
+            device))
+        g_quarantined.store(true);
+}
+
 void on_init_pipeline(
     reshade::api::device *device,
     reshade::api::pipeline_layout,
@@ -202,6 +241,12 @@ void on_init_pipeline(
             reshade::api::device_api::d3d11 ||
         g_quarantined.load())
         return;
+
+    if (!materialize_embedded_plain_rate(
+            device)) {
+        g_quarantined.store(true);
+        return;
+    }
 
     const auto *vs = find_shader(
         reshade::api::pipeline_subobject_type::vertex_shader,
@@ -781,6 +826,11 @@ bool register_ptde_scheduler_runtime() noexcept
         return true;
 
     try {
+        g_quarantined.store(false);
+
+        reshade::register_event<
+            reshade::addon_event::init_device>(
+                on_init_device);
         reshade::register_event<
             reshade::addon_event::init_pipeline>(
                 on_init_pipeline);
@@ -811,9 +861,22 @@ void unregister_ptde_scheduler_runtime() noexcept
     reshade::unregister_event<
         reshade::addon_event::init_pipeline>(
             on_init_pipeline);
+    reshade::unregister_event<
+        reshade::addon_event::init_device>(
+            on_init_device);
 
     std::lock_guard<std::mutex> lock(g_mutex);
     release_pairs_locked();
+}
+
+bool ptde_scheduler_plain_rate_ready() noexcept
+{
+    if (g_quarantined.load())
+        return false;
+
+    std::lock_guard<std::mutex> lock(g_mutex);
+    return pair_ready_locked(
+        role::dof_rate_plain);
 }
 
 bool ptde_scheduler_execution_set_ready(
