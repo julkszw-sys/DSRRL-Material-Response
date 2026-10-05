@@ -12,23 +12,6 @@ on:
       - r42-pmetal-cross-thread-producer-cache
       - r43-pmetal-per-key-freshness-cache
       - r44-pmetal-keyed-source-only
-  pull_request:
-    paths:
-      - "renderer-core/integrated/**"
-      - "renderer-core/include/dsrrl/runtime/pmetal_native_draw_bridge.hpp"
-      - "renderer-core/src/runtime/pmetal_native_draw_bridge.cpp"
-      - "renderer-core/include/dsrrl/runtime/pmetal_envspec_draw_runtime.hpp"
-      - "renderer-core/src/runtime/pmetal_envspec_draw_runtime.cpp"
-      - "renderer-core/src/runtime/clustered_pnts_draw_runtime.cpp"
-      - "renderer-core/include/dsrrl/runtime/clustered_pnts_draw_runtime.hpp"
-      - "renderer-core/include/dsrrl/runtime/draw_state_transaction.hpp"
-      - "renderer-core/src/runtime/draw_state_transaction.cpp"
-      - "renderer-core/src/runtime/clustered_pnts_pipeline_runtime.cpp"
-      - "renderer-core/include/dsrrl/runtime/clustered_pnts_pipeline_runtime.hpp"
-      - "renderer-core/include/dsrrl/runtime/pointlight_ptde_source_runtime.hpp"
-      - "renderer-core/src/operators/env_spec/pmetal_rgba_lerp_materializer.cpp"
-      - ".github/workflows/pmetal-r19-lerp-exact-envdiffuse-fast.yml"
-
 permissions:
   contents: read
 
