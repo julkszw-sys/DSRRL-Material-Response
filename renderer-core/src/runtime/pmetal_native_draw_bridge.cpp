@@ -19,6 +19,7 @@
 #include <cstdint>
 #include <cstring>
 #include <mutex>
+#include <shared_mutex>
 #include <vector>
 
 namespace dsrrl::runtime {
@@ -663,7 +664,7 @@ struct pmetal_native_draw_bridge::impl {
             D3D11_DEVICE_CONTEXT_IMMEDIATE;
     };
 
-    std::mutex registry_mutex;
+    std::shared_mutex registry_mutex;
     std::vector<context_record> contexts;
 
     std::atomic<std::uint64_t> armed{0};
@@ -727,7 +728,7 @@ bool pmetal_native_draw_bridge::register_context(
         reinterpret_cast<void **>(
             &context1));
 
-    std::lock_guard<std::mutex> lock(
+    std::lock_guard<std::shared_mutex> lock(
         impl_->registry_mutex);
 
     for (const auto &registered :
@@ -988,7 +989,7 @@ void pmetal_native_draw_bridge::unregister_context(
         context == nullptr)
         return;
 
-    std::lock_guard<std::mutex> lock(
+    std::lock_guard<std::shared_mutex> lock(
         impl_->registry_mutex);
 
     for (auto it =
@@ -1200,7 +1201,7 @@ void pmetal_native_draw_bridge::uninstall() noexcept
     }
 
     {
-        std::lock_guard<std::mutex> lock(
+        std::lock_guard<std::shared_mutex> lock(
             impl_->registry_mutex);
         for (auto &registered :
              impl_->contexts) {
@@ -1268,7 +1269,7 @@ bool pmetal_native_draw_bridge::arm_draw(
     bool registered = false;
 
     {
-        std::lock_guard<std::mutex> lock(
+        std::shared_lock<std::shared_mutex> lock(
             impl_->registry_mutex);
         for (const auto &candidate :
              impl_->contexts) {
@@ -1401,7 +1402,7 @@ bool pmetal_native_draw_bridge::arm_draw_indexed(
     bool registered = false;
 
     {
-        std::lock_guard<std::mutex> lock(
+        std::shared_lock<std::shared_mutex> lock(
             impl_->registry_mutex);
         for (const auto &candidate :
              impl_->contexts) {
