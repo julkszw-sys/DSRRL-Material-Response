@@ -1,4 +1,4 @@
-name: P_Metal R22 PointLight Native Identity Rebind Build
+name: P_Metal R23 PointLight Vtable Rebind Build
 
 on:
   workflow_dispatch:
@@ -39,7 +39,7 @@ jobs:
           ref: 3645e3025d1d98a90e318278858931f034d5d1f6
           path: _reshade
 
-      - name: Configure R22 native identity rebind PointLight
+      - name: Configure R23 native identity rebind PointLight
         shell: pwsh
         run: >
           cmake
@@ -48,7 +48,7 @@ jobs:
           -A x64
           -DRESHADE_INCLUDE_DIR="${{ github.workspace }}/_reshade/include"
           -DDSRRL_SOURCE_COMMIT="$env:DSRRL_CHECKOUT_COMMIT"
-          -DDSRRL_BUILD_FLAVOR="pmetal_r22_pointlight_native_identity_rebind"
+          -DDSRRL_BUILD_FLAVOR="pmetal_r23_pointlight_vtable_rebind"
           -DDSRRL_FULL_TELEMETRY_DEFAULT_ON=OFF
           -DDSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG=ON
           -DDSRRL_PMETAL_FULL_PTDE_HEMENV_R3=ON
@@ -72,17 +72,17 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           $addons = @(Get-ChildItem build-fast -Recurse -Filter *.addon64)
           if ($addons.Count -ne 1) { throw "Expected exactly one addon, found $($addons.Count)" }
-          Copy-Item $addons[0].FullName "DSRRL_PMETAL_R22_POINTLIGHT_NATIVE_IDENTITY_REBIND.addon64" -Force
+          Copy-Item $addons[0].FullName "DSRRL_PMETAL_R23_POINTLIGHT_NATIVE_IDENTITY_REBIND.addon64" -Force
 
       - name: Verify binary identity
         shell: pwsh
         run: |
-          $path = "DSRRL_PMETAL_R22_POINTLIGHT_NATIVE_IDENTITY_REBIND.addon64"
+          $path = "DSRRL_PMETAL_R23_POINTLIGHT_NATIVE_IDENTITY_REBIND.addon64"
           $ascii = [System.Text.Encoding]::ASCII.GetString([System.IO.File]::ReadAllBytes($path))
           if (-not $ascii.Contains($env:DSRRL_CHECKOUT_COMMIT)) { throw "Missing source commit identity" }
-          if (-not $ascii.Contains("pmetal_r22_pointlight_native_identity_rebind")) { throw "Missing R22 build flavor identity" }
-          if (-not $ascii.Contains("[DSRRL POINTLIGHT R22] deferred_context_registered")) { throw "Missing R22 deferred-context native bridge marker" }
-          if (-not $ascii.Contains("[DSRRL POINTLIGHT R22] command_list_native_identity_rebound")) { throw "Missing R22 native identity rebind marker" }
+          if (-not $ascii.Contains("pmetal_r23_pointlight_vtable_rebind")) { throw "Missing R23 build flavor identity" }
+          if (-not $ascii.Contains("[DSRRL POINTLIGHT R23] deferred_context_registered")) { throw "Missing R23 deferred-context native bridge marker" }
+          if (-not $ascii.Contains("[DSRRL POINTLIGHT R23] command_list_native_identity_rebound")) { throw "Missing R23 native identity rebind marker" }
           if (-not $ascii.Contains("[DSRRL PMETAL R19 LERP]")) { throw "Missing exact R19 Lerp EnvDiffuse runtime marker" }
           if (-not $ascii.Contains("[DSRRL PMETAL R7 SHADOW]")) { throw "Missing cumulative R7 shadow marker" }
           if (-not $ascii.Contains("[DSRRL PMETAL R3 SPEC ATTEST]")) { throw "Missing exact SpecRGB SHA attestation marker" }
@@ -91,6 +91,6 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: DSRRL_PMETAL_R22_POINTLIGHT_NATIVE_IDENTITY_REBIND
-          path: DSRRL_PMETAL_R22_POINTLIGHT_NATIVE_IDENTITY_REBIND.addon64
+          name: DSRRL_PMETAL_R23_POINTLIGHT_NATIVE_IDENTITY_REBIND
+          path: DSRRL_PMETAL_R23_POINTLIGHT_NATIVE_IDENTITY_REBIND.addon64
           if-no-files-found: error
