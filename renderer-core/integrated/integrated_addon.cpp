@@ -229,7 +229,7 @@ dsrrl::runtime::pmetal_native_draw_bridge
 
 thread_local bool g_raw_draw_replay_recursing = false;
 
-bool dof_opt_in_requested() noexcept
+bool dof_runtime_enabled() noexcept
 {
     char value[8]{};
     const DWORD size =
@@ -237,7 +237,11 @@ bool dof_opt_in_requested() noexcept
             "DSRRL_EXPERIMENTAL_PTDE_DOF",
             value,
             static_cast<DWORD>(sizeof(value)));
-    return size == 1u && value[0] == '1';
+
+    // R47 test policy: PTDE DoF is enabled by default. Explicit "0" is the
+    // emergency operator-local kill switch; preflight failure still fails
+    // open to exact stock DSR DoF.
+    return !(size == 1u && value[0] == '0');
 }
 
 void unregister_dof_runtime() noexcept
@@ -260,10 +264,10 @@ bool register_dof_runtime() noexcept
         dsrrl::core::operator_id::post_dof_ptde,
         false);
 
-    if (!dof_opt_in_requested()) {
+    if (!dof_runtime_enabled()) {
         reshade::log::message(
             reshade::log::level::info,
-            "[DSRRL DoF] PTDE island OFF; set DSRRL_EXPERIMENTAL_PTDE_DOF=1 before launch to opt in.");
+            "[DSRRL DoF] PTDE island disabled by DSRRL_EXPERIMENTAL_PTDE_DOF=0; stock DSR DoF preserved.");
         return true;
     }
 
@@ -307,7 +311,7 @@ bool register_dof_runtime() noexcept
 
     reshade::log::message(
         reshade::log::level::info,
-        "[DSRRL DoF] PTDE private island opt-in READY: first complete sequence is dry-run/arm; visible handoff begins only on a later complete verified sequence.");
+        "[DSRRL DoF] PTDE private island DEFAULT_ON READY: first complete sequence is dry-run/arm; visible handoff begins only on a later complete verified sequence; set DSRRL_EXPERIMENTAL_PTDE_DOF=0 to disable.");
     return true;
 }
 
@@ -7901,7 +7905,7 @@ bool AddonInit(
     const bool dof_runtime_ready =
         register_dof_runtime();
     if (!dof_runtime_ready &&
-        dof_opt_in_requested()) {
+        dof_runtime_enabled()) {
         reshade::log::message(
             reshade::log::level::warning,
             "[DSRRL DoF] opt-in unavailable in this launch; stock DSR DoF remains active.");
