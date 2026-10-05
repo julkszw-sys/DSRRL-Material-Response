@@ -73,11 +73,13 @@ def main() -> None:
     require(integrated, "g_pmetal_native_draw.register_command_list(", "exact command-list registry")
     require(integrated, "g_pmetal_native_draw.unregister_command_list(", "exact command-list unregister")
 
-    forbid(native, "g_original_draw", "R23 must keep originals per exact vtable")
-    forbid(native, "context != impl_->context", "R23 must not reject deferred contexts by single immediate identity")
-    require(native, "register_context(context)", "R23 lazy exact native-interface rebind")
-    require(native, "same_native_pointer_vtable_rebound", "R23 exact native-pointer vtable drift rebind")
-    require(native, "it->identity == identity", "R23 COM identity teardown")
+    forbid(native, "g_original_draw", "R24 must keep originals per exact vtable")
+    forbid(native, "context != impl_->context", "R24 must not reject deferred contexts by single immediate identity")
+    require(native, "register_context(context)", "R24 lazy exact native-interface rebind")
+    require(native, "same_native_pointer_vtable_rebound", "R24 exact native-pointer vtable drift rebind")
+    require(native, "k_max_hook_vtables = 64u", "R24 expanded native vtable capacity")
+    require(native, "hook_slots=%zu/%zu", "R24 detailed native arm gate telemetry")
+    require(native, "it->identity == identity", "R24 COM identity teardown")
     forbid(native, "core_.transactions()", "native bridge must not re-enter generic transaction core")
     forbid(native, "raw_replay", "native bridge must not replay a second draw")
 
