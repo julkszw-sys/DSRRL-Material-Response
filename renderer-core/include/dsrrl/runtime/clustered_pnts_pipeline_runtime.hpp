@@ -39,6 +39,9 @@ struct prepared_clustered_pnts_shader {
     core::operator_mask composed_shader_owners = 0u;
     bool current_b12_abi = false;
     bool legacy_specular_complete = false;
+    // R29 steady-state shader pointer is borrowed from bound_tls_.selected,
+    // whose shared_ptr keeps the immutable pipeline record alive.
+    bool borrowed_tls_record = false;
     bool ready = false;
 };
 
