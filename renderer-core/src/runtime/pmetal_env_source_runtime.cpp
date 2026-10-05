@@ -34,8 +34,13 @@ namespace {
 constexpr std::uint32_t k_pmetal_material_route = 345u;
 constexpr const char *k_pmetal_material_name =
     "P_Metal[DSB].mtd";
-constexpr const char *k_pmetal_material_sha256 =
-    "ece70f36bd2517d28c8495e276cea537f8b519d6bed981788e79a409ffbf763b";
+constexpr std::array<std::uint8_t,32>
+    k_pmetal_material_sha256 = {{
+        0xecu,0xe7u,0x0fu,0x36u,0xbdu,0x25u,0x17u,0xd2u,
+        0x8cu,0x84u,0x95u,0xe2u,0x76u,0xceu,0xa5u,0x37u,
+        0xf8u,0xb5u,0x19u,0xd6u,0xbeu,0xd9u,0x81u,0x78u,
+        0x8eu,0x79u,0xa4u,0x09u,0xffu,0xbfu,0x76u,0x3bu
+    }};
 
 constexpr std::uintptr_t k_ret_sel_1 = 0x20E019u;
 constexpr std::uintptr_t k_ret_sel_2 = 0x20EB7Fu;
@@ -1134,8 +1139,6 @@ bool exact_pmetal_material_selection(
 {
     namespace mr =
         operators::material_response;
-    namespace hashing =
-        operators::legacy_plan::hashing;
 
     return
         material.valid &&
@@ -1146,9 +1149,8 @@ bool exact_pmetal_material_selection(
         material.semantic_name_hash ==
             mr::mtd_semantic_hash(
                 k_pmetal_material_name) &&
-        hashing::matches_hex(
-            material.raw_mtd_sha256,
-            k_pmetal_material_sha256);
+        material.raw_mtd_sha256 ==
+            k_pmetal_material_sha256;
 }
 
 bool retail_lightbank_record_index(
