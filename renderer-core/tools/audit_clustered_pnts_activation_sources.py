@@ -182,7 +182,7 @@ def main():
     require(selector_source_body,"source_cache.producer_serial != input.serial","producer-serial source cache")
     require(selector_source_body,"select_first_four_exact(","source-stage exact first-four reconstruction")
     require(selector_source_body,"capture_source(","source-stage PTDE source capture")
-    require(draw_cpp,"k_frame_source_cache_entries = 32u","frame-scoped source cache capacity")
+    require(draw_cpp,"k_frame_source_cache_entries = 128u","frame-scoped source cache capacity")
     require(draw_cpp,"g_source_frame_epoch","present-frame source cache epoch")
     require(draw_cpp,"same_frame_source_state(","exact source-object state cache gate")
     require(draw_cpp,"bank_source ? 0x60u : 0x70u","attested Bank/Lerp position lane direct read")
