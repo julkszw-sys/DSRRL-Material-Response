@@ -3954,6 +3954,9 @@ void on_init_device(reshade::api::device *device)
         reshade::log::message(
             reshade::log::level::info,
             "[DSRRL POINTLIGHT R26] direct_current_native_dispatch=ACTIVE persistent_vtable_hook=OFF recursion_guard=ON");
+        reshade::log::message(
+            reshade::log::level::info,
+            "[DSRRL POINTLIGHT R30] synchronous_core_transaction=ACTIVE global_core_tx_mutex=OFF_FOR_CLUSTERED_DIRECT_NATIVE tls_reentry_guard=ON fallback_general_tx=UNCHANGED");
     } else if (k_pmetal_native_draw_runtime_enabled) {
         if (!g_pmetal_native_draw.install(device)) {
             reshade::log::message(
@@ -6753,6 +6756,11 @@ bool on_draw(
         (prepared.envspec_in_batch ||
          prepared.clustered_in_batch);
 
+    if (direct_current_native &&
+        prepared.clustered_in_batch)
+        prepared.batch.mutation.
+            synchronous_core_transaction = true;
+
     if (direct_current_native)
         g_raw_draw_replay_recursing = true;
 
@@ -7111,6 +7119,11 @@ bool on_draw_indexed(
         k_pmetal_direct_current_native_dispatch &&
         (prepared.envspec_in_batch ||
          prepared.clustered_in_batch);
+
+    if (direct_current_native &&
+        prepared.clustered_in_batch)
+        prepared.batch.mutation.
+            synchronous_core_transaction = true;
 
     if (direct_current_native)
         g_raw_draw_replay_recursing = true;
