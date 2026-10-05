@@ -1855,6 +1855,80 @@ bool read_exact_source(
     return true;
 }
 
+bool read_exact_source_prevalidated(
+    void *source,
+    const std::uint8_t *base,
+    std::uint16_t count,
+    std::int16_t selector,
+    std::uint32_t row_id,
+    f4 &out,
+    std::uint64_t &signature) noexcept
+{
+    out = {};
+    signature = 0u;
+
+    std::uint32_t index = 0u;
+    if (source == nullptr ||
+        base == nullptr ||
+        count == 0u ||
+        count > 256u ||
+        selector < 0 ||
+        !retail_lightbank_record_index(
+            selector,
+            index) ||
+        index >= count)
+        return false;
+
+    if (endpoint_cache_lookup(
+            source,
+            base,
+            count,
+            index,
+            row_id,
+            out,
+            signature))
+        return true;
+
+    const auto *bank =
+        resolve_bank(
+            base,
+            count,
+            signature);
+    if (bank == nullptr)
+        return false;
+
+    const auto *row =
+        pmetal_env_source_authority::find_row(
+            *bank,
+            row_id);
+    if (row == nullptr)
+        return false;
+
+    const float scale =
+        static_cast<float>(row->m) * 0.01f;
+    out = {
+        static_cast<float>(row->r) / 255.0f * scale,
+        static_cast<float>(row->g) / 255.0f * scale,
+        static_cast<float>(row->b) / 255.0f * scale,
+        0.0f
+    };
+
+    if (!std::isfinite(out.x) ||
+        !std::isfinite(out.y) ||
+        !std::isfinite(out.z))
+        return false;
+
+    endpoint_cache_publish(
+        source,
+        base,
+        count,
+        index,
+        row_id,
+        out,
+        signature);
+    return true;
+}
+
 
 bool write_source_hook_code(
     void *target,
