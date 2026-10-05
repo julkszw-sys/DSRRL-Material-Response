@@ -15,6 +15,7 @@
 
 #include <array>
 #include <cstddef>
+#include <cstdio>
 
 namespace dsrrl::runtime {
 namespace {
