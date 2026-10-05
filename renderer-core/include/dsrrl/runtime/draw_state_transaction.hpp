@@ -93,6 +93,19 @@ struct draw_tx_telemetry {
     std::uint64_t restore_ok = 0;
     std::uint64_t restore_fail = 0;
     std::uint64_t native_readback_skipped = 0;
+
+    // R32 diagnostic-only sampled CPU timing for the exact synchronous
+    // clustered PointLight transaction. Zero when DSRRL_POINTLIGHT_PROFILE
+    // is not compiled in.
+    std::uint32_t profile_sample_period = 0;
+    std::uint64_t profile_qpc_frequency = 0;
+    std::uint64_t profile_samples = 0;
+    std::uint64_t profile_begin_ticks = 0;
+    std::uint64_t profile_draw_ticks = 0;
+    std::uint64_t profile_restore_ticks = 0;
+    std::uint64_t profile_total_ticks = 0;
+    std::uint64_t profile_max_total_ticks = 0;
+
     bool quarantined = false;
 };
 
@@ -244,6 +257,12 @@ private:
     std::atomic<std::uint64_t> restore_ok_{0};
     std::atomic<std::uint64_t> restore_fail_{0};
     std::atomic<std::uint64_t> native_readback_skipped_{0};
+    std::atomic<std::uint64_t> profile_samples_{0};
+    std::atomic<std::uint64_t> profile_begin_ticks_{0};
+    std::atomic<std::uint64_t> profile_draw_ticks_{0};
+    std::atomic<std::uint64_t> profile_restore_ticks_{0};
+    std::atomic<std::uint64_t> profile_total_ticks_{0};
+    std::atomic<std::uint64_t> profile_max_total_ticks_{0};
     std::atomic_bool quarantined_{false};
 };
 
