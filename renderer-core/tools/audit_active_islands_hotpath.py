@@ -116,8 +116,13 @@ def main():
         "clustered_pnts_selector_event_bridge(\n            owner,\n            actual_material);",
         "clustered selector bridge receives exact material only after PointLight prefilter")
     require(flver_cpp,
-        "clustered_pnts_selector_identity_event_bridge(\n            identity,\n            pointlight_spc);",
-        "clustered selector publishes exact material mode into producer cache")
+        "if (!pointlight_spc) {\n            clustered_pnts_selector_identity_event_bridge(\n                identity,\n                false);",
+        "clustered NoSpc publishes exact material mode into producer cache")
+    if "clustered_pnts_selector_identity_event_bridge(\n            identity,\n            pointlight_spc);" in flver_cpp:
+        fail("clustered Spc regressed to source reconstruction before protected fail-open")
+    require(flver_cpp,
+        "clustered_pnts_selector_event_bridge(\n            owner,\n            actual_material);",
+        "clustered Spc keeps cheap selector association for deterministic stale-authority clearing")
     if "if(g_state.builder_armed)\n  clustered_pnts_selector_event_bridge(" in flver_cpp:
         fail("clustered selector regressed to unconditional builder-armed dispatch")
     require(flver_cpp,
