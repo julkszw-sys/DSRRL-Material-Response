@@ -18,6 +18,8 @@ enum class bridge_reason : std::uint8_t {
     wrong_receiver,
     unknown_mode,
     incomplete_graph,
+    missing_ptde_dofbank_payload,
+    unresolved_ptde_dofbank_route,
     missing_retained_pipeline_set,
     missing_private_depth_sidecar,
     missing_plain_dofrate,
@@ -48,6 +50,8 @@ struct activation_context {
     bool exact_imageprocess_dof_flat = false;
     flat_mode mode = flat_mode::unknown;
     bool graph_complete = false;
+    bool ptde_dofbank_payload_ready = false;
+    bool ptde_dofbank_route_verified = false;
     bool retained_flat_pipeline_set_ready = false;
     bool private_depth_sidecar_ready = false;
     bool retained_plain_dofrate_ready = false;
