@@ -22,6 +22,12 @@ activation_decision evaluate_activation(const activation_context &context) noexc
     if (!context.graph_complete)
         return {false, bridge_reason::incomplete_graph};
 
+    if (!context.ptde_dofbank_payload_ready)
+        return {false, bridge_reason::missing_ptde_dofbank_payload};
+
+    if (!context.ptde_dofbank_route_verified)
+        return {false, bridge_reason::unresolved_ptde_dofbank_route};
+
     if (!context.retained_flat_pipeline_set_ready)
         return {false, bridge_reason::missing_retained_pipeline_set};
 
