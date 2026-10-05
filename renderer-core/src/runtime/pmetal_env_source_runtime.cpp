@@ -490,6 +490,9 @@ void record_bank_signature_stage(
     std::uint32_t name_offset,
     std::uint32_t consumed) noexcept
 {
+    if (!telemetry::effect_enabled())
+        return;
+
     g_bank_signature_attempt.store(attempt,std::memory_order_relaxed);
     g_bank_signature_stage.store(stage,std::memory_order_relaxed);
     g_bank_signature_entry.store(entry,std::memory_order_relaxed);
@@ -580,9 +583,8 @@ bool hook_producer_cache_lookup(
         g_hook_producer_cache_mutex[set],
         std::try_to_lock);
     if (!lock.owns_lock()) {
-        g_hook_producer_cache_busy.fetch_add(
-            1u,
-            std::memory_order_relaxed);
+        telemetry::hot_count(
+            g_hook_producer_cache_busy);
         return false;
     }
 
@@ -611,15 +613,13 @@ bool hook_producer_cache_lookup(
             continue;
 
         out = entry.record;
-        g_hook_producer_cache_hit.fetch_add(
-            1u,
-            std::memory_order_relaxed);
+        telemetry::hot_count(
+            g_hook_producer_cache_hit);
         return true;
     }
 
-    g_hook_producer_cache_miss.fetch_add(
-        1u,
-        std::memory_order_relaxed);
+    telemetry::hot_count(
+            g_hook_producer_cache_miss);
     return false;
 }
 
@@ -674,9 +674,8 @@ void hook_producer_cache_publish_exact(
     entry.cache_generation = generation;
     entry.valid = true;
 
-    g_hook_producer_cache_publish.fetch_add(
-        1u,
-        std::memory_order_relaxed);
+    telemetry::hot_count(
+            g_hook_producer_cache_publish);
 }
 
 std::atomic_bool g_hook_restore_failed{false};
@@ -702,6 +701,9 @@ void record_hook_decode(
     std::uint32_t row_id,
     std::uint64_t signature) noexcept
 {
+    if (!telemetry::effect_enabled())
+        return;
+
     g_hook_decode_stage.store(stage,std::memory_order_relaxed);
     g_hook_decode_version.store(version,std::memory_order_relaxed);
     g_hook_decode_count.store(count,std::memory_order_relaxed);
@@ -831,9 +833,8 @@ bool cached_readable_window(
             entry.generation == generation &&
             entry.begin <= address &&
             address < entry.end) {
-            g_region_cache_hit.fetch_add(
-                1u,
-                std::memory_order_relaxed);
+            telemetry::hot_count(
+            g_region_cache_hit);
             if (!entry.readable)
                 return false;
             window.begin = entry.begin;
@@ -842,9 +843,8 @@ bool cached_readable_window(
         }
     }
 
-    g_region_cache_miss.fetch_add(
-        1u,
-        std::memory_order_relaxed);
+    telemetry::hot_count(
+            g_region_cache_miss);
 
     readable_window queried{};
     bool is_readable = false;
@@ -1209,12 +1209,12 @@ bool bank_layout_signature(
     std::uint64_t &layout_signature) noexcept
 {
     layout_signature = 0u;
-    g_bank_signature_scan_count.fetch_add(
-        1u,
-        std::memory_order_relaxed);
-    g_bank_layout_signature.store(
-        0u,
-        std::memory_order_relaxed);
+    telemetry::hot_count(
+            g_bank_signature_scan_count);
+    if (telemetry::effect_enabled())
+        g_bank_layout_signature.store(
+            0u,
+            std::memory_order_relaxed);
     record_bank_signature_stage(
         1u,
         bank_signature_none,
@@ -1343,9 +1343,10 @@ bool bank_layout_signature(
     }
 
     layout_signature = hash;
-    g_bank_layout_signature.store(
-        hash,
-        std::memory_order_relaxed);
+    if (telemetry::effect_enabled())
+        g_bank_layout_signature.store(
+            hash,
+            std::memory_order_relaxed);
     return true;
 }
 
@@ -1513,16 +1514,14 @@ bool endpoint_cache_lookup(
             entry.row_id == row_id) {
             value = entry.value;
             signature = entry.signature;
-            g_endpoint_cache_hit.fetch_add(
-                1u,
-                std::memory_order_relaxed);
+            telemetry::hot_count(
+            g_endpoint_cache_hit);
             return true;
         }
     }
 
-    g_endpoint_cache_miss.fetch_add(
-        1u,
-        std::memory_order_relaxed);
+    telemetry::hot_count(
+            g_endpoint_cache_miss);
     return false;
 }
 
@@ -1582,9 +1581,8 @@ void endpoint_cache_publish(
     entry.value = value;
     entry.valid = true;
 
-    g_endpoint_cache_fill.fetch_add(
-        1u,
-        std::memory_order_relaxed);
+    telemetry::hot_count(
+            g_endpoint_cache_fill);
 }
 
 bool read_exact_source(
@@ -1951,9 +1949,8 @@ void publish_hook_source(
         hook_producer_cache_publish_exact(
             selector_identity,
             g_hook_source_tls);
-        g_hook_publish.fetch_add(
-            1u,
-            std::memory_order_relaxed);
+        telemetry::hot_count(
+            g_hook_publish);
         return;
     }
 
@@ -1972,12 +1969,13 @@ void publish_hook_source(
         };
         g_hook_selector_identity_tls =
             selector_identity;
-        hook_producer_cache_publish_exact(
-            selector_identity,
-            g_hook_source_tls);
-        g_hook_publish.fetch_add(
-            1u,
-            std::memory_order_relaxed);
+
+        // A positive exact cache hit already proves this exact key/payload
+        // is resident. Re-publishing it immediately only serializes the same
+        // set and rewrites an identical record. A later eviction still falls
+        // through the existing exact lookup/decode path.
+        telemetry::hot_count(
+            g_hook_publish);
 
         static std::atomic_bool
             producer_cross_thread_hit_logged{
@@ -2043,9 +2041,8 @@ void publish_hook_source(
         selector_identity,
         g_hook_source_tls);
 
-    g_hook_publish.fetch_add(
-        1u,
-        std::memory_order_relaxed);
+    telemetry::hot_count(
+            g_hook_publish);
 }
 
 bool latest_hook_source_exact_selector(
@@ -2078,9 +2075,8 @@ bool latest_hook_source_exact_selector(
             g_hook_selector_identity_tls,
             query)) {
         out = g_hook_source_tls.source;
-        g_hook_consume.fetch_add(
-            1u,
-            std::memory_order_relaxed);
+        telemetry::hot_count(
+            g_hook_consume);
         return true;
     }
 
@@ -2093,9 +2089,8 @@ bool latest_hook_source_exact_selector(
     out = cached.source;
     g_hook_source_tls = cached;
     g_hook_selector_identity_tls = query;
-    g_hook_consume.fetch_add(
-        1u,
-        std::memory_order_relaxed);
+    telemetry::hot_count(
+            g_hook_consume);
 
     static std::atomic_bool
         selector_cross_thread_hit_logged{
@@ -2118,9 +2113,8 @@ bool latest_hook_source(
     if (g_hook_source_tls.valid) {
         out =
             g_hook_source_tls.source;
-        g_hook_consume.fetch_add(
-            1u,
-            std::memory_order_relaxed);
+        telemetry::hot_count(
+            g_hook_consume);
         return true;
     }
 
@@ -2132,9 +2126,8 @@ bool latest_hook_source(
 
     out =
         g_hook_source_global.source;
-    g_hook_consume.fetch_add(
-        1u,
-        std::memory_order_relaxed);
+    telemetry::hot_count(
+            g_hook_consume);
     return true;
 }
 
@@ -2155,9 +2148,8 @@ void __fastcall envspec_single_hook_entry(
     float *host_out,
     int selector) noexcept
 {
-    g_hook_single_seen.fetch_add(
-        1u,
-        std::memory_order_relaxed);
+    telemetry::hot_count(
+            g_hook_single_seen);
 
     f4 donor{};
     std::uint64_t bank = 0u;
@@ -2221,9 +2213,8 @@ void __fastcall envspec_blend_hook_entry(
     int selector_b,
     float beta) noexcept
 {
-    g_hook_blend_seen.fetch_add(
-        1u,
-        std::memory_order_relaxed);
+    telemetry::hot_count(
+            g_hook_blend_seen);
 
     const auto endpoints =
         pmetal_selector_policy::select(
@@ -2503,6 +2494,15 @@ bool pmetal_env_source_runtime::install() noexcept
         reshade::log::message(
             reshade::log::level::info,
             "[DSRRL PMETAL R44] visible_source_authority=MATERIAL_BOUND_PRODUCER_STATE_ONLY unkeyed_latest_hook_fallback=OFF exact_selector_shadow=ON missing_join=FAIL_OPEN_STOCK_DSR islands_preserved=ON");
+
+    static std::atomic_bool
+        r45_hotpath_cleanup_logged{false};
+    if (!r45_hotpath_cleanup_logged.exchange(
+            true,
+            std::memory_order_relaxed))
+        reshade::log::message(
+            reshade::log::level::info,
+            "[DSRRL PMETAL R45] production_hot_counters=GATED redundant_cross_thread_republish=OFF renderer_semantics=UNCHANGED");
 
     return true;
 }
