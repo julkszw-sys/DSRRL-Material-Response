@@ -1,15 +1,7 @@
 name: P_Metal V13 PTDE PackedGI Material Mod Runtime Build
 
 on:
-  pull_request:
-    paths:
-      - "renderer-core/integrated/**"
-      - "renderer-core/src/operators/env_spec/pmetal_rgba_materializer.cpp"
-      - "renderer-core/src/operators/env_spec/pmetal_rgba_lerp_materializer.cpp"
-      - "renderer-core/src/runtime/pmetal_envspec_draw_runtime.cpp"
-      - "renderer-core/src/runtime/envspec_resource_runtime.cpp"
-      - "renderer-core/tools/audit_pmetal_v13_ptde_packedgi_material_mod_diag.py"
-      - ".github/workflows/pmetal-v13-ptde-packedgi-material-mod-fast.yml"
+  workflow_dispatch:
 
 permissions:
   contents: read
