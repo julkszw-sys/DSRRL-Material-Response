@@ -18,6 +18,8 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <mutex>
+#include <vector>
 
 namespace dsrrl::runtime {
 namespace {
@@ -54,6 +56,19 @@ using draw_indexed_instanced_fn =
         INT,
         UINT);
 
+constexpr std::size_t k_max_hook_vtables = 8u;
+
+struct hook_vtable_record {
+    std::atomic<void **> vtable{nullptr};
+    draw_fn original_draw = nullptr;
+    draw_indexed_fn original_draw_indexed = nullptr;
+    draw_instanced_fn original_draw_instanced = nullptr;
+    draw_indexed_instanced_fn original_draw_indexed_instanced = nullptr;
+};
+
+std::array<hook_vtable_record,k_max_hook_vtables>
+    g_hook_vtables{};
+
 enum class pending_kind : std::uint8_t {
     none = 0,
     draw,
@@ -63,6 +78,7 @@ enum class pending_kind : std::uint8_t {
 struct pending_draw {
     pmetal_native_draw_bridge *owner = nullptr;
     ID3D11DeviceContext *context = nullptr;
+    ID3D11DeviceContext1 *context1 = nullptr;
     draw_tx_mutation mutation{};
     pending_kind kind = pending_kind::none;
     std::uint32_t count = 0u;
@@ -76,11 +92,7 @@ struct pending_draw {
 thread_local pending_draw g_pending{};
 std::atomic<pmetal_native_draw_bridge *> g_active{nullptr};
 std::atomic_bool g_pointlight_native_applied_logged{false};
-
-draw_fn g_original_draw = nullptr;
-draw_indexed_fn g_original_draw_indexed = nullptr;
-draw_instanced_fn g_original_draw_instanced = nullptr;
-draw_indexed_instanced_fn g_original_draw_indexed_instanced = nullptr;
+std::atomic_bool g_deferred_context_registered_logged{false};
 
 void retain_mutation(
     draw_tx_mutation &mutation) noexcept
@@ -134,6 +146,15 @@ void release_mutation(
             mutation.samplers[i].sampler->Release();
 
     mutation = {};
+}
+
+void release_pending_draw(
+    pending_draw &pending) noexcept
+{
+    release_mutation(pending.mutation);
+    if (pending.context1 != nullptr)
+        pending.context1->Release();
+    pending = {};
 }
 
 struct cb_capture {
@@ -587,6 +608,29 @@ bool restore_vtable_slot(
     return *slot == original;
 }
 
+hook_vtable_record *hook_record_for(
+    ID3D11DeviceContext *context) noexcept
+{
+    if (context == nullptr)
+        return nullptr;
+
+    auto **vtable =
+        *reinterpret_cast<void ***>(
+            context);
+    if (vtable == nullptr)
+        return nullptr;
+
+    for (auto &record :
+         g_hook_vtables) {
+        if (record.vtable.load(
+                std::memory_order_acquire) ==
+            vtable)
+            return &record;
+    }
+
+    return nullptr;
+}
+
 bool pending_matches(
     const pending_draw &pending,
     ID3D11DeviceContext *context,
@@ -611,21 +655,25 @@ bool pending_matches(
 } // namespace
 
 struct pmetal_native_draw_bridge::impl {
-    ID3D11DeviceContext *context = nullptr;
-    ID3D11DeviceContext1 *context1 = nullptr;
-    void **vtable = nullptr;
+    struct context_record {
+        ID3D11DeviceContext *context = nullptr;
+        ID3D11DeviceContext1 *context1 = nullptr;
+        void **vtable = nullptr;
+        D3D11_DEVICE_CONTEXT_TYPE type =
+            D3D11_DEVICE_CONTEXT_IMMEDIATE;
+    };
 
-    draw_fn original_draw = nullptr;
-    draw_indexed_fn original_draw_indexed = nullptr;
-    draw_instanced_fn original_draw_instanced = nullptr;
-    draw_indexed_instanced_fn
-        original_draw_indexed_instanced = nullptr;
+    std::mutex registry_mutex;
+    std::vector<context_record> contexts;
 
     std::atomic<std::uint64_t> armed{0};
     std::atomic<std::uint64_t> draw_applied{0};
     std::atomic<std::uint64_t> draw_indexed_applied{0};
     std::atomic<std::uint64_t> arm_reject{0};
     std::atomic<std::uint64_t> restore_fail{0};
+    std::atomic<std::uint64_t> context_registers{0};
+    std::atomic<std::uint64_t> deferred_context_registers{0};
+    std::atomic<std::uint64_t> vtable_hooks_installed{0};
     std::atomic_bool hook_active{false};
     std::atomic_bool quarantined{false};
 };
@@ -648,6 +696,357 @@ pmetal_native_draw_bridge::~pmetal_native_draw_bridge()
 
     delete impl_;
     impl_ = nullptr;
+}
+
+bool pmetal_native_draw_bridge::register_context(
+    ID3D11DeviceContext *context) noexcept
+{
+    if (impl_ == nullptr ||
+        context == nullptr ||
+        impl_->quarantined.load(
+            std::memory_order_acquire))
+        return false;
+
+    const auto type =
+        context->GetType();
+    if (type !=
+            D3D11_DEVICE_CONTEXT_IMMEDIATE &&
+        type !=
+            D3D11_DEVICE_CONTEXT_DEFERRED)
+        return false;
+
+    auto **vtable =
+        *reinterpret_cast<void ***>(
+            context);
+    if (vtable == nullptr)
+        return false;
+
+    ID3D11DeviceContext1 *context1 = nullptr;
+    (void)context->QueryInterface(
+        __uuidof(ID3D11DeviceContext1),
+        reinterpret_cast<void **>(
+            &context1));
+
+    std::lock_guard<std::mutex> lock(
+        impl_->registry_mutex);
+
+    for (const auto &registered :
+         impl_->contexts) {
+        if (registered.context != context)
+            continue;
+
+        const bool same_vtable =
+            registered.vtable == vtable;
+        if (context1 != nullptr)
+            context1->Release();
+        return same_vtable;
+    }
+
+    hook_vtable_record *hook = nullptr;
+    bool new_hook = false;
+
+    for (auto &record :
+         g_hook_vtables) {
+        if (record.vtable.load(
+                std::memory_order_acquire) ==
+            vtable) {
+            hook = &record;
+            break;
+        }
+    }
+
+    if (hook == nullptr) {
+        for (auto &record :
+             g_hook_vtables) {
+            if (record.vtable.load(
+                    std::memory_order_acquire) ==
+                nullptr) {
+                hook = &record;
+                break;
+            }
+        }
+
+        if (hook == nullptr) {
+            if (context1 != nullptr)
+                context1->Release();
+            return false;
+        }
+
+        const auto original_draw_indexed =
+            reinterpret_cast<draw_indexed_fn>(
+                vtable[k_vtbl_draw_indexed]);
+        const auto original_draw =
+            reinterpret_cast<draw_fn>(
+                vtable[k_vtbl_draw]);
+        const auto original_draw_indexed_instanced =
+            reinterpret_cast<
+                draw_indexed_instanced_fn>(
+                    vtable[
+                        k_vtbl_draw_indexed_instanced]);
+        const auto original_draw_instanced =
+            reinterpret_cast<draw_instanced_fn>(
+                vtable[k_vtbl_draw_instanced]);
+
+        if (original_draw == nullptr ||
+            original_draw_indexed == nullptr ||
+            original_draw_instanced == nullptr ||
+            original_draw_indexed_instanced == nullptr ||
+            original_draw ==
+                &pmetal_native_draw_bridge::
+                    draw_hook ||
+            original_draw_indexed ==
+                &pmetal_native_draw_bridge::
+                    draw_indexed_hook ||
+            original_draw_instanced ==
+                &pmetal_native_draw_bridge::
+                    draw_instanced_hook ||
+            original_draw_indexed_instanced ==
+                &pmetal_native_draw_bridge::
+                    draw_indexed_instanced_hook) {
+            if (context1 != nullptr)
+                context1->Release();
+            return false;
+        }
+
+        hook->original_draw =
+            original_draw;
+        hook->original_draw_indexed =
+            original_draw_indexed;
+        hook->original_draw_instanced =
+            original_draw_instanced;
+        hook->original_draw_indexed_instanced =
+            original_draw_indexed_instanced;
+
+        // Publish exact originals before touching the shared vtable. A draw
+        // that enters during installation can already pass through safely.
+        hook->vtable.store(
+            vtable,
+            std::memory_order_release);
+
+        const bool hooked =
+            write_vtable_slot(
+                &vtable[k_vtbl_draw_indexed],
+                reinterpret_cast<void *>(
+                    original_draw_indexed),
+                reinterpret_cast<void *>(
+                    &pmetal_native_draw_bridge::
+                        draw_indexed_hook)) &&
+            write_vtable_slot(
+                &vtable[k_vtbl_draw],
+                reinterpret_cast<void *>(
+                    original_draw),
+                reinterpret_cast<void *>(
+                    &pmetal_native_draw_bridge::
+                        draw_hook)) &&
+            write_vtable_slot(
+                &vtable[
+                    k_vtbl_draw_indexed_instanced],
+                reinterpret_cast<void *>(
+                    original_draw_indexed_instanced),
+                reinterpret_cast<void *>(
+                    &pmetal_native_draw_bridge::
+                        draw_indexed_instanced_hook)) &&
+            write_vtable_slot(
+                &vtable[k_vtbl_draw_instanced],
+                reinterpret_cast<void *>(
+                    original_draw_instanced),
+                reinterpret_cast<void *>(
+                    &pmetal_native_draw_bridge::
+                        draw_instanced_hook));
+
+        if (!hooked) {
+            bool restored = true;
+            restored &=
+                restore_vtable_slot(
+                    &vtable[k_vtbl_draw_indexed],
+                    reinterpret_cast<void *>(
+                        &pmetal_native_draw_bridge::
+                            draw_indexed_hook),
+                    reinterpret_cast<void *>(
+                        original_draw_indexed));
+            restored &=
+                restore_vtable_slot(
+                    &vtable[k_vtbl_draw],
+                    reinterpret_cast<void *>(
+                        &pmetal_native_draw_bridge::
+                            draw_hook),
+                    reinterpret_cast<void *>(
+                        original_draw));
+            restored &=
+                restore_vtable_slot(
+                    &vtable[
+                        k_vtbl_draw_indexed_instanced],
+                    reinterpret_cast<void *>(
+                        &pmetal_native_draw_bridge::
+                            draw_indexed_instanced_hook),
+                    reinterpret_cast<void *>(
+                        original_draw_indexed_instanced));
+            restored &=
+                restore_vtable_slot(
+                    &vtable[k_vtbl_draw_instanced],
+                    reinterpret_cast<void *>(
+                        &pmetal_native_draw_bridge::
+                            draw_instanced_hook),
+                    reinterpret_cast<void *>(
+                        original_draw_instanced));
+
+            if (restored) {
+                hook->vtable.store(
+                    nullptr,
+                    std::memory_order_release);
+                hook->original_draw = nullptr;
+                hook->original_draw_indexed = nullptr;
+                hook->original_draw_instanced = nullptr;
+                hook->original_draw_indexed_instanced =
+                    nullptr;
+            } else {
+                impl_->restore_fail.fetch_add(
+                    1u,
+                    std::memory_order_relaxed);
+                impl_->quarantined.store(
+                    true,
+                    std::memory_order_release);
+            }
+
+            if (context1 != nullptr)
+                context1->Release();
+            return false;
+        }
+
+        new_hook = true;
+        impl_->vtable_hooks_installed.fetch_add(
+            1u,
+            std::memory_order_relaxed);
+    } else {
+        const bool hook_live =
+            vtable[k_vtbl_draw_indexed] ==
+                reinterpret_cast<void *>(
+                    &pmetal_native_draw_bridge::
+                        draw_indexed_hook) &&
+            vtable[k_vtbl_draw] ==
+                reinterpret_cast<void *>(
+                    &pmetal_native_draw_bridge::
+                        draw_hook) &&
+            vtable[
+                k_vtbl_draw_indexed_instanced] ==
+                reinterpret_cast<void *>(
+                    &pmetal_native_draw_bridge::
+                        draw_indexed_instanced_hook) &&
+            vtable[k_vtbl_draw_instanced] ==
+                reinterpret_cast<void *>(
+                    &pmetal_native_draw_bridge::
+                        draw_instanced_hook);
+        if (!hook_live) {
+            if (context1 != nullptr)
+                context1->Release();
+            return false;
+        }
+    }
+
+    context->AddRef();
+    try {
+        impl_->contexts.push_back(
+            {context,
+             context1,
+             vtable,
+             type});
+    } catch (...) {
+        context->Release();
+        if (context1 != nullptr)
+            context1->Release();
+        return false;
+    }
+
+    impl_->context_registers.fetch_add(
+        1u,
+        std::memory_order_relaxed);
+
+    if (type ==
+        D3D11_DEVICE_CONTEXT_DEFERRED) {
+        impl_->deferred_context_registers.fetch_add(
+            1u,
+            std::memory_order_relaxed);
+
+        if (!g_deferred_context_registered_logged.exchange(
+                true,
+                std::memory_order_relaxed)) {
+            reshade::log::message(
+                reshade::log::level::info,
+                new_hook
+                    ? "[DSRRL POINTLIGHT R21] deferred_context_registered vtable=distinct native_original_draw=ARMABLE"
+                    : "[DSRRL POINTLIGHT R21] deferred_context_registered vtable=shared native_original_draw=ARMABLE");
+        }
+    }
+
+    return true;
+}
+
+void pmetal_native_draw_bridge::unregister_context(
+    ID3D11DeviceContext *context) noexcept
+{
+    if (impl_ == nullptr ||
+        context == nullptr)
+        return;
+
+    std::lock_guard<std::mutex> lock(
+        impl_->registry_mutex);
+
+    for (auto it =
+             impl_->contexts.begin();
+         it != impl_->contexts.end();
+         ++it) {
+        if (it->context != context)
+            continue;
+
+        if (it->context1 != nullptr)
+            it->context1->Release();
+        if (it->context != nullptr)
+            it->context->Release();
+        impl_->contexts.erase(it);
+        return;
+    }
+}
+
+bool pmetal_native_draw_bridge::register_command_list(
+    reshade::api::command_list *cmd_list) noexcept
+{
+    if (impl_ == nullptr ||
+        !impl_->hook_active.load(
+            std::memory_order_acquire) ||
+        impl_->quarantined.load(
+            std::memory_order_acquire) ||
+        cmd_list == nullptr)
+        return false;
+
+    auto *context =
+        reinterpret_cast<ID3D11DeviceContext *>(
+            static_cast<std::uintptr_t>(
+                cmd_list->get_native()));
+    return register_context(
+        context);
+}
+
+void pmetal_native_draw_bridge::unregister_command_list(
+    reshade::api::command_list *cmd_list) noexcept
+{
+    if (impl_ == nullptr ||
+        cmd_list == nullptr)
+        return;
+
+    auto *context =
+        reinterpret_cast<ID3D11DeviceContext *>(
+            static_cast<std::uintptr_t>(
+                cmd_list->get_native()));
+    if (context == nullptr)
+        return;
+
+    if (g_pending.owner == this &&
+        g_pending.context == context)
+        release_pending_draw(
+            g_pending);
+
+    unregister_context(
+        context);
 }
 
 bool pmetal_native_draw_bridge::install(
@@ -681,157 +1080,31 @@ bool pmetal_native_draw_bridge::install(
     if (context == nullptr)
         return false;
 
-    if (context->GetType() !=
-        D3D11_DEVICE_CONTEXT_IMMEDIATE) {
-        context->Release();
-        return false;
-    }
-
-    auto **vtable =
-        *reinterpret_cast<void ***>(
-            context);
-    if (vtable == nullptr) {
-        context->Release();
-        return false;
-    }
-
-    auto *original_draw_indexed =
-        reinterpret_cast<draw_indexed_fn>(
-            vtable[k_vtbl_draw_indexed]);
-    auto *original_draw =
-        reinterpret_cast<draw_fn>(
-            vtable[k_vtbl_draw]);
-    auto *original_draw_indexed_instanced =
-        reinterpret_cast<draw_indexed_instanced_fn>(
-            vtable[
-                k_vtbl_draw_indexed_instanced]);
-    auto *original_draw_instanced =
-        reinterpret_cast<draw_instanced_fn>(
-            vtable[k_vtbl_draw_instanced]);
-
-    if (original_draw == nullptr ||
-        original_draw_indexed == nullptr ||
-        original_draw_instanced == nullptr ||
-        original_draw_indexed_instanced == nullptr) {
-        context->Release();
-        return false;
-    }
-
-    ID3D11DeviceContext1 *context1 = nullptr;
-    (void)context->QueryInterface(
-        __uuidof(ID3D11DeviceContext1),
-        reinterpret_cast<void **>(
-            &context1));
-
     pmetal_native_draw_bridge *expected = nullptr;
     if (!g_active.compare_exchange_strong(
             expected,
             this,
             std::memory_order_acq_rel)) {
-        if (context1 != nullptr)
-            context1->Release();
         context->Release();
-        return expected == this;
-    }
-
-    impl_->context = context;
-    impl_->context1 = context1;
-    impl_->vtable = vtable;
-    impl_->original_draw = original_draw;
-    impl_->original_draw_indexed =
-        original_draw_indexed;
-    impl_->original_draw_instanced =
-        original_draw_instanced;
-    impl_->original_draw_indexed_instanced =
-        original_draw_indexed_instanced;
-
-    g_original_draw = original_draw;
-    g_original_draw_indexed =
-        original_draw_indexed;
-    g_original_draw_instanced =
-        original_draw_instanced;
-    g_original_draw_indexed_instanced =
-        original_draw_indexed_instanced;
-
-    bool ok =
-        write_vtable_slot(
-            &vtable[k_vtbl_draw_indexed],
-            reinterpret_cast<void *>(
-                original_draw_indexed),
-            reinterpret_cast<void *>(
-                &pmetal_native_draw_bridge::
-                    draw_indexed_hook)) &&
-        write_vtable_slot(
-            &vtable[k_vtbl_draw],
-            reinterpret_cast<void *>(
-                original_draw),
-            reinterpret_cast<void *>(
-                &pmetal_native_draw_bridge::
-                    draw_hook)) &&
-        write_vtable_slot(
-            &vtable[
-                k_vtbl_draw_indexed_instanced],
-            reinterpret_cast<void *>(
-                original_draw_indexed_instanced),
-            reinterpret_cast<void *>(
-                &pmetal_native_draw_bridge::
-                    draw_indexed_instanced_hook)) &&
-        write_vtable_slot(
-            &vtable[k_vtbl_draw_instanced],
-            reinterpret_cast<void *>(
-                original_draw_instanced),
-            reinterpret_cast<void *>(
-                &pmetal_native_draw_bridge::
-                    draw_instanced_hook));
-
-    if (!ok) {
-        (void)restore_vtable_slot(
-            &vtable[k_vtbl_draw_indexed],
-            reinterpret_cast<void *>(
-                &pmetal_native_draw_bridge::
-                    draw_indexed_hook),
-            reinterpret_cast<void *>(
-                original_draw_indexed));
-        (void)restore_vtable_slot(
-            &vtable[k_vtbl_draw],
-            reinterpret_cast<void *>(
-                &pmetal_native_draw_bridge::
-                    draw_hook),
-            reinterpret_cast<void *>(
-                original_draw));
-        (void)restore_vtable_slot(
-            &vtable[
-                k_vtbl_draw_indexed_instanced],
-            reinterpret_cast<void *>(
-                &pmetal_native_draw_bridge::
-                    draw_indexed_instanced_hook),
-            reinterpret_cast<void *>(
-                original_draw_indexed_instanced));
-        (void)restore_vtable_slot(
-            &vtable[k_vtbl_draw_instanced],
-            reinterpret_cast<void *>(
-                &pmetal_native_draw_bridge::
-                    draw_instanced_hook),
-            reinterpret_cast<void *>(
-                original_draw_instanced));
-
-        g_active.store(
-            nullptr,
-            std::memory_order_release);
-
-        if (impl_->context1 != nullptr) {
-            impl_->context1->Release();
-            impl_->context1 = nullptr;
-        }
-        impl_->context->Release();
-        impl_->context = nullptr;
-        impl_->vtable = nullptr;
-        return false;
+        return expected == this &&
+               impl_->hook_active.load(
+                   std::memory_order_acquire);
     }
 
     impl_->hook_active.store(
         true,
         std::memory_order_release);
+
+    const bool registered =
+        register_context(
+            context);
+    context->Release();
+
+    if (!registered) {
+        uninstall();
+        return false;
+    }
+
     return true;
 }
 
@@ -842,51 +1115,67 @@ void pmetal_native_draw_bridge::uninstall() noexcept
 
     if (!impl_->hook_active.load(
             std::memory_order_acquire)) {
-        if (g_pending.owner == this) {
-            release_mutation(
-                g_pending.mutation);
-            g_pending = {};
-        }
+        if (g_pending.owner == this)
+            release_pending_draw(
+                g_pending);
         return;
     }
 
-    bool restored = true;
-    auto **vtable = impl_->vtable;
+    // Detach mutation dispatch before restoring any shared vtable. A thread
+    // already inside one of our hooks can still resolve the published exact
+    // original target and pass through without applying DSRRL state.
+    g_active.store(
+        nullptr,
+        std::memory_order_release);
 
-    restored &=
-        restore_vtable_slot(
-            &vtable[k_vtbl_draw_indexed],
-            reinterpret_cast<void *>(
-                &pmetal_native_draw_bridge::
-                    draw_indexed_hook),
-            reinterpret_cast<void *>(
-                impl_->original_draw_indexed));
-    restored &=
-        restore_vtable_slot(
-            &vtable[k_vtbl_draw],
-            reinterpret_cast<void *>(
-                &pmetal_native_draw_bridge::
-                    draw_hook),
-            reinterpret_cast<void *>(
-                impl_->original_draw));
-    restored &=
-        restore_vtable_slot(
-            &vtable[
-                k_vtbl_draw_indexed_instanced],
-            reinterpret_cast<void *>(
-                &pmetal_native_draw_bridge::
-                    draw_indexed_instanced_hook),
-            reinterpret_cast<void *>(
-                impl_->
-                    original_draw_indexed_instanced));
-    restored &=
-        restore_vtable_slot(
-            &vtable[k_vtbl_draw_instanced],
-            reinterpret_cast<void *>(
-                &pmetal_native_draw_bridge::
-                    draw_instanced_hook),
-            reinterpret_cast<void *>(
-                impl_->original_draw_instanced));
+    if (g_pending.owner == this)
+        release_pending_draw(
+            g_pending);
+
+    bool restored = true;
+
+    for (auto &hook :
+         g_hook_vtables) {
+        auto **vtable =
+            hook.vtable.load(
+                std::memory_order_acquire);
+        if (vtable == nullptr)
+            continue;
+
+        restored &=
+            restore_vtable_slot(
+                &vtable[k_vtbl_draw_indexed],
+                reinterpret_cast<void *>(
+                    &pmetal_native_draw_bridge::
+                        draw_indexed_hook),
+                reinterpret_cast<void *>(
+                    hook.original_draw_indexed));
+        restored &=
+            restore_vtable_slot(
+                &vtable[k_vtbl_draw],
+                reinterpret_cast<void *>(
+                    &pmetal_native_draw_bridge::
+                        draw_hook),
+                reinterpret_cast<void *>(
+                    hook.original_draw));
+        restored &=
+            restore_vtable_slot(
+                &vtable[
+                    k_vtbl_draw_indexed_instanced],
+                reinterpret_cast<void *>(
+                    &pmetal_native_draw_bridge::
+                        draw_indexed_instanced_hook),
+                reinterpret_cast<void *>(
+                    hook.original_draw_indexed_instanced));
+        restored &=
+            restore_vtable_slot(
+                &vtable[k_vtbl_draw_instanced],
+                reinterpret_cast<void *>(
+                    &pmetal_native_draw_bridge::
+                        draw_instanced_hook),
+                reinterpret_cast<void *>(
+                    hook.original_draw_instanced));
+    }
 
     if (!restored) {
         impl_->restore_fail.fetch_add(
@@ -898,33 +1187,34 @@ void pmetal_native_draw_bridge::uninstall() noexcept
         return;
     }
 
+    for (auto &hook :
+         g_hook_vtables) {
+        hook.vtable.store(
+            nullptr,
+            std::memory_order_release);
+        hook.original_draw = nullptr;
+        hook.original_draw_indexed = nullptr;
+        hook.original_draw_instanced = nullptr;
+        hook.original_draw_indexed_instanced =
+            nullptr;
+    }
+
+    {
+        std::lock_guard<std::mutex> lock(
+            impl_->registry_mutex);
+        for (auto &registered :
+             impl_->contexts) {
+            if (registered.context1 != nullptr)
+                registered.context1->Release();
+            if (registered.context != nullptr)
+                registered.context->Release();
+        }
+        impl_->contexts.clear();
+    }
+
     impl_->hook_active.store(
         false,
         std::memory_order_release);
-    g_active.store(
-        nullptr,
-        std::memory_order_release);
-
-    if (g_pending.owner == this) {
-        release_mutation(
-            g_pending.mutation);
-        g_pending = {};
-    }
-
-    if (impl_->context1 != nullptr) {
-        impl_->context1->Release();
-        impl_->context1 = nullptr;
-    }
-    if (impl_->context != nullptr) {
-        impl_->context->Release();
-        impl_->context = nullptr;
-    }
-    impl_->vtable = nullptr;
-
-    g_original_draw = nullptr;
-    g_original_draw_indexed = nullptr;
-    g_original_draw_instanced = nullptr;
-    g_original_draw_indexed_instanced = nullptr;
 }
 
 bool pmetal_native_draw_bridge::arm_draw(
@@ -957,10 +1247,70 @@ bool pmetal_native_draw_bridge::arm_draw(
         reinterpret_cast<ID3D11DeviceContext *>(
             static_cast<std::uintptr_t>(
                 cmd_list->get_native()));
-    if (context == nullptr ||
-        context != impl_->context ||
-        context->GetType() !=
-            D3D11_DEVICE_CONTEXT_IMMEDIATE) {
+    if (context == nullptr) {
+        impl_->arm_reject.fetch_add(
+            1u,
+            std::memory_order_relaxed);
+        return false;
+    }
+
+    auto **vtable =
+        *reinterpret_cast<void ***>(
+            context);
+    if (vtable == nullptr) {
+        impl_->arm_reject.fetch_add(
+            1u,
+            std::memory_order_relaxed);
+        return false;
+    }
+
+    ID3D11DeviceContext1 *context1 = nullptr;
+    bool registered = false;
+
+    {
+        std::lock_guard<std::mutex> lock(
+            impl_->registry_mutex);
+        for (const auto &candidate :
+             impl_->contexts) {
+            if (candidate.context != context ||
+                candidate.vtable != vtable)
+                continue;
+
+            registered = true;
+            context1 = candidate.context1;
+            if (context1 != nullptr)
+                context1->AddRef();
+            break;
+        }
+    }
+
+    auto *hook =
+        hook_record_for(
+            context);
+    const bool hook_live =
+        hook != nullptr &&
+        vtable[k_vtbl_draw_indexed] ==
+            reinterpret_cast<void *>(
+                &pmetal_native_draw_bridge::
+                    draw_indexed_hook) &&
+        vtable[k_vtbl_draw] ==
+            reinterpret_cast<void *>(
+                &pmetal_native_draw_bridge::
+                    draw_hook) &&
+        vtable[
+            k_vtbl_draw_indexed_instanced] ==
+            reinterpret_cast<void *>(
+                &pmetal_native_draw_bridge::
+                    draw_indexed_instanced_hook) &&
+        vtable[k_vtbl_draw_instanced] ==
+            reinterpret_cast<void *>(
+                &pmetal_native_draw_bridge::
+                    draw_instanced_hook);
+
+    if (!registered ||
+        !hook_live) {
+        if (context1 != nullptr)
+            context1->Release();
         impl_->arm_reject.fetch_add(
             1u,
             std::memory_order_relaxed);
@@ -968,13 +1318,8 @@ bool pmetal_native_draw_bridge::arm_draw(
     }
 
     if (g_pending.active) {
-        // Another addon may cancel a ReShade draw after this addon armed the
-        // original-context bridge. In that case no native Draw follows and
-        // the pending mutation is harmless but stale. Drop it before arming
-        // the next exact draw instead of poisoning the bridge globally.
-        release_mutation(
-            g_pending.mutation);
-        g_pending = {};
+        release_pending_draw(
+            g_pending);
         impl_->arm_reject.fetch_add(
             1u,
             std::memory_order_relaxed);
@@ -982,6 +1327,7 @@ bool pmetal_native_draw_bridge::arm_draw(
 
     g_pending.owner = this;
     g_pending.context = context;
+    g_pending.context1 = context1;
     g_pending.mutation = mutation;
     retain_mutation(
         g_pending.mutation);
@@ -1034,10 +1380,70 @@ bool pmetal_native_draw_bridge::arm_draw_indexed(
         reinterpret_cast<ID3D11DeviceContext *>(
             static_cast<std::uintptr_t>(
                 cmd_list->get_native()));
-    if (context == nullptr ||
-        context != impl_->context ||
-        context->GetType() !=
-            D3D11_DEVICE_CONTEXT_IMMEDIATE) {
+    if (context == nullptr) {
+        impl_->arm_reject.fetch_add(
+            1u,
+            std::memory_order_relaxed);
+        return false;
+    }
+
+    auto **vtable =
+        *reinterpret_cast<void ***>(
+            context);
+    if (vtable == nullptr) {
+        impl_->arm_reject.fetch_add(
+            1u,
+            std::memory_order_relaxed);
+        return false;
+    }
+
+    ID3D11DeviceContext1 *context1 = nullptr;
+    bool registered = false;
+
+    {
+        std::lock_guard<std::mutex> lock(
+            impl_->registry_mutex);
+        for (const auto &candidate :
+             impl_->contexts) {
+            if (candidate.context != context ||
+                candidate.vtable != vtable)
+                continue;
+
+            registered = true;
+            context1 = candidate.context1;
+            if (context1 != nullptr)
+                context1->AddRef();
+            break;
+        }
+    }
+
+    auto *hook =
+        hook_record_for(
+            context);
+    const bool hook_live =
+        hook != nullptr &&
+        vtable[k_vtbl_draw_indexed] ==
+            reinterpret_cast<void *>(
+                &pmetal_native_draw_bridge::
+                    draw_indexed_hook) &&
+        vtable[k_vtbl_draw] ==
+            reinterpret_cast<void *>(
+                &pmetal_native_draw_bridge::
+                    draw_hook) &&
+        vtable[
+            k_vtbl_draw_indexed_instanced] ==
+            reinterpret_cast<void *>(
+                &pmetal_native_draw_bridge::
+                    draw_indexed_instanced_hook) &&
+        vtable[k_vtbl_draw_instanced] ==
+            reinterpret_cast<void *>(
+                &pmetal_native_draw_bridge::
+                    draw_instanced_hook);
+
+    if (!registered ||
+        !hook_live) {
+        if (context1 != nullptr)
+            context1->Release();
         impl_->arm_reject.fetch_add(
             1u,
             std::memory_order_relaxed);
@@ -1045,13 +1451,8 @@ bool pmetal_native_draw_bridge::arm_draw_indexed(
     }
 
     if (g_pending.active) {
-        // Another addon may cancel a ReShade draw after this addon armed the
-        // original-context bridge. In that case no native Draw follows and
-        // the pending mutation is harmless but stale. Drop it before arming
-        // the next exact draw instead of poisoning the bridge globally.
-        release_mutation(
-            g_pending.mutation);
-        g_pending = {};
+        release_pending_draw(
+            g_pending);
         impl_->arm_reject.fetch_add(
             1u,
             std::memory_order_relaxed);
@@ -1059,6 +1460,7 @@ bool pmetal_native_draw_bridge::arm_draw_indexed(
 
     g_pending.owner = this;
     g_pending.context = context;
+    g_pending.context1 = context1;
     g_pending.mutation = mutation;
     retain_mutation(
         g_pending.mutation);
@@ -1091,8 +1493,13 @@ pmetal_native_draw_bridge::draw_hook(
     auto *bridge =
         g_active.load(
             std::memory_order_acquire);
+    auto *hook =
+        hook_record_for(
+            context);
     auto original =
-        g_original_draw;
+        hook != nullptr
+            ? hook->original_draw
+            : nullptr;
 
     if (bridge == nullptr ||
         bridge->impl_ == nullptr ||
@@ -1121,7 +1528,7 @@ pmetal_native_draw_bridge::draw_hook(
     const bool captured =
         capture_state(
             context,
-            bridge->impl_->context1,
+            pending.context1,
             pending.mutation,
             state);
 
@@ -1133,8 +1540,8 @@ pmetal_native_draw_bridge::draw_hook(
             context,
             vertex_count,
             start_vertex);
-        release_mutation(
-            pending.mutation);
+        release_pending_draw(
+            pending);
         return;
     }
 
@@ -1148,7 +1555,7 @@ pmetal_native_draw_bridge::draw_hook(
 
     if (!restore_state(
             context,
-            bridge->impl_->context1,
+            pending.context1,
             state)) {
         bridge->impl_->restore_fail.fetch_add(
             1u,
@@ -1172,8 +1579,8 @@ pmetal_native_draw_bridge::draw_hook(
         }
     }
 
-    release_mutation(
-        pending.mutation);
+    release_pending_draw(
+        pending);
 }
 
 void STDMETHODCALLTYPE
@@ -1186,8 +1593,13 @@ pmetal_native_draw_bridge::draw_indexed_hook(
     auto *bridge =
         g_active.load(
             std::memory_order_acquire);
+    auto *hook =
+        hook_record_for(
+            context);
     auto original =
-        g_original_draw_indexed;
+        hook != nullptr
+            ? hook->original_draw_indexed
+            : nullptr;
 
     if (bridge == nullptr ||
         bridge->impl_ == nullptr ||
@@ -1217,7 +1629,7 @@ pmetal_native_draw_bridge::draw_indexed_hook(
     const bool captured =
         capture_state(
             context,
-            bridge->impl_->context1,
+            pending.context1,
             pending.mutation,
             state);
 
@@ -1230,8 +1642,8 @@ pmetal_native_draw_bridge::draw_indexed_hook(
             index_count,
             start_index,
             base_vertex);
-        release_mutation(
-            pending.mutation);
+        release_pending_draw(
+            pending);
         return;
     }
 
@@ -1246,7 +1658,7 @@ pmetal_native_draw_bridge::draw_indexed_hook(
 
     if (!restore_state(
             context,
-            bridge->impl_->context1,
+            pending.context1,
             state)) {
         bridge->impl_->restore_fail.fetch_add(
             1u,
@@ -1271,8 +1683,8 @@ pmetal_native_draw_bridge::draw_indexed_hook(
         }
     }
 
-    release_mutation(
-        pending.mutation);
+    release_pending_draw(
+        pending);
 }
 
 void STDMETHODCALLTYPE
@@ -1286,8 +1698,13 @@ pmetal_native_draw_bridge::draw_instanced_hook(
     auto *bridge =
         g_active.load(
             std::memory_order_acquire);
+    auto *hook =
+        hook_record_for(
+            context);
     auto original =
-        g_original_draw_instanced;
+        hook != nullptr
+            ? hook->original_draw_instanced
+            : nullptr;
 
     if (bridge == nullptr ||
         bridge->impl_ == nullptr ||
@@ -1318,7 +1735,7 @@ pmetal_native_draw_bridge::draw_instanced_hook(
     const bool captured =
         capture_state(
             context,
-            bridge->impl_->context1,
+            pending.context1,
             pending.mutation,
             state);
 
@@ -1332,8 +1749,8 @@ pmetal_native_draw_bridge::draw_instanced_hook(
             instance_count,
             start_vertex,
             start_instance);
-        release_mutation(
-            pending.mutation);
+        release_pending_draw(
+            pending);
         return;
     }
 
@@ -1349,7 +1766,7 @@ pmetal_native_draw_bridge::draw_instanced_hook(
 
     if (!restore_state(
             context,
-            bridge->impl_->context1,
+            pending.context1,
             state)) {
         bridge->impl_->restore_fail.fetch_add(
             1u,
@@ -1363,8 +1780,8 @@ pmetal_native_draw_bridge::draw_instanced_hook(
             std::memory_order_relaxed);
     }
 
-    release_mutation(
-        pending.mutation);
+    release_pending_draw(
+        pending);
 }
 
 void STDMETHODCALLTYPE
@@ -1379,8 +1796,13 @@ pmetal_native_draw_bridge::draw_indexed_instanced_hook(
     auto *bridge =
         g_active.load(
             std::memory_order_acquire);
+    auto *hook =
+        hook_record_for(
+            context);
     auto original =
-        g_original_draw_indexed_instanced;
+        hook != nullptr
+            ? hook->original_draw_indexed_instanced
+            : nullptr;
 
     if (bridge == nullptr ||
         bridge->impl_ == nullptr ||
@@ -1412,7 +1834,7 @@ pmetal_native_draw_bridge::draw_indexed_instanced_hook(
     const bool captured =
         capture_state(
             context,
-            bridge->impl_->context1,
+            pending.context1,
             pending.mutation,
             state);
 
@@ -1427,8 +1849,8 @@ pmetal_native_draw_bridge::draw_indexed_instanced_hook(
             start_index,
             base_vertex,
             start_instance);
-        release_mutation(
-            pending.mutation);
+        release_pending_draw(
+            pending);
         return;
     }
 
@@ -1445,7 +1867,7 @@ pmetal_native_draw_bridge::draw_indexed_instanced_hook(
 
     if (!restore_state(
             context,
-            bridge->impl_->context1,
+            pending.context1,
             state)) {
         bridge->impl_->restore_fail.fetch_add(
             1u,
@@ -1460,8 +1882,8 @@ pmetal_native_draw_bridge::draw_indexed_instanced_hook(
                 std::memory_order_relaxed);
     }
 
-    release_mutation(
-        pending.mutation);
+    release_pending_draw(
+        pending);
 }
 
 pmetal_native_draw_telemetry
@@ -1481,6 +1903,12 @@ pmetal_native_draw_bridge::telemetry() const noexcept
             std::memory_order_relaxed),
         impl_->restore_fail.load(
             std::memory_order_relaxed),
+        impl_->context_registers.load(
+            std::memory_order_relaxed),
+        impl_->deferred_context_registers.load(
+            std::memory_order_relaxed),
+        impl_->vtable_hooks_installed.load(
+            std::memory_order_relaxed),
         impl_->hook_active.load(
             std::memory_order_relaxed),
         impl_->quarantined.load(
@@ -1491,6 +1919,9 @@ pmetal_native_draw_bridge::telemetry() const noexcept
 void pmetal_native_draw_bridge::reset_telemetry() noexcept
 {
     g_pointlight_native_applied_logged.store(
+        false,
+        std::memory_order_relaxed);
+    g_deferred_context_registered_logged.store(
         false,
         std::memory_order_relaxed);
 
@@ -1510,6 +1941,15 @@ void pmetal_native_draw_bridge::reset_telemetry() noexcept
         0u,
         std::memory_order_relaxed);
     impl_->restore_fail.store(
+        0u,
+        std::memory_order_relaxed);
+    impl_->context_registers.store(
+        0u,
+        std::memory_order_relaxed);
+    impl_->deferred_context_registers.store(
+        0u,
+        std::memory_order_relaxed);
+    impl_->vtable_hooks_installed.store(
         0u,
         std::memory_order_relaxed);
 }
