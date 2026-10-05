@@ -24,6 +24,7 @@ enum class bridge_reason : std::uint8_t {
     missing_private_depth_sidecar,
     missing_plain_dofrate,
     missing_fixed_raster_chain,
+    incomplete_tonemap_dof_continuation,
     missing_output_cut,
     temporal_state_write_forbidden,
     stock_depth_write_forbidden
@@ -56,6 +57,7 @@ struct activation_context {
     bool private_depth_sidecar_ready = false;
     bool retained_plain_dofrate_ready = false;
     bool fixed_raster_chain_ready = false;
+    bool tonemap_dof_continuation_verified = false;
     bool output_cut_verified = false;
     temporal_write_set writes{};
 };
