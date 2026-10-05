@@ -16,10 +16,14 @@ struct producer_record {
     pmetal_envspec_source source{};
     std::uint64_t epoch = 0u;
     std::uint64_t generation = 0u;
+    std::uint64_t payload_key = 0u;
     bool valid = false;
 };
 
 thread_local producer_record g_record{};
+thread_local std::uint64_t g_begin_material_key = 0u;
+thread_local std::uint64_t g_begin_epoch = 0u;
+thread_local bool g_begin_key_valid = false;
 
 constexpr std::size_t k_sync_slot_count = 256u;
 static_assert(
@@ -162,6 +166,7 @@ void pmetal_producer_state_clear() noexcept
     // a new selector attempt, so unrelated FLVER selectors cannot destroy a
     // producer value needed by another command-list thread.
     g_record.valid = false;
+    g_begin_key_valid = false;
 }
 
 void pmetal_producer_state_begin(
@@ -169,6 +174,10 @@ void pmetal_producer_state_begin(
     std::uint64_t epoch) noexcept
 {
     const auto key = material_key(material);
+    g_begin_material_key = key;
+    g_begin_epoch = epoch;
+    g_begin_key_valid = true;
+
     auto &slot = sync_slot_for(key);
 
     // Invalidate before source resolution. If this exact selector fails later,
