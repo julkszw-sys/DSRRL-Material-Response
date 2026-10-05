@@ -76,6 +76,134 @@ thread_local source_selection_cache_tls g_source_selection_cache{};
 thread_local producer_input_snapshot g_producer_input_tls{};
 thread_local std::uint64_t g_local_serial = 0u;
 
+#ifdef DSRRL_POINTLIGHT_PROFILE
+constexpr std::uint32_t k_pointlight_profile_sample_period = 128u;
+
+struct pointlight_profile_bucket {
+    std::atomic<std::uint64_t> samples{0u};
+    std::atomic<std::uint64_t> ticks{0u};
+    std::atomic<std::uint64_t> max_ticks{0u};
+};
+
+pointlight_profile_bucket g_prof_producer{};
+pointlight_profile_bucket g_prof_select{};
+pointlight_profile_bucket g_prof_capture{};
+pointlight_profile_bucket g_prof_sidecar_build{};
+pointlight_profile_bucket g_prof_authority{};
+pointlight_profile_bucket g_prof_prepare{};
+pointlight_profile_bucket g_prof_gpu_cache{};
+pointlight_profile_bucket g_prof_upload{};
+
+thread_local std::uint32_t g_prof_producer_seq = 0u;
+thread_local std::uint32_t g_prof_authority_seq = 0u;
+thread_local std::uint32_t g_prof_prepare_seq = 0u;
+
+std::uint64_t prof_qpc() noexcept
+{
+    LARGE_INTEGER v{};
+    QueryPerformanceCounter(&v);
+    return static_cast<std::uint64_t>(v.QuadPart);
+}
+
+std::uint64_t prof_freq() noexcept
+{
+    static const std::uint64_t f = []() noexcept {
+        LARGE_INTEGER v{};
+        QueryPerformanceFrequency(&v);
+        return static_cast<std::uint64_t>(v.QuadPart);
+    }();
+    return f;
+}
+
+void prof_add(
+    pointlight_profile_bucket &bucket,
+    std::uint64_t ticks) noexcept
+{
+    bucket.samples.fetch_add(1u, std::memory_order_relaxed);
+    bucket.ticks.fetch_add(ticks, std::memory_order_relaxed);
+    auto observed =
+        bucket.max_ticks.load(std::memory_order_relaxed);
+    while (observed < ticks &&
+           !bucket.max_ticks.compare_exchange_weak(
+               observed,
+               ticks,
+               std::memory_order_relaxed,
+               std::memory_order_relaxed)) {
+    }
+}
+
+bool prof_sample(std::uint32_t &seq) noexcept
+{
+    return ((++seq &
+             (k_pointlight_profile_sample_period - 1u)) == 0u);
+}
+
+double prof_avg_us(
+    const pointlight_profile_bucket &bucket) noexcept
+{
+    const auto samples =
+        bucket.samples.load(std::memory_order_relaxed);
+    const auto frequency = prof_freq();
+    if (samples == 0u || frequency == 0u)
+        return 0.0;
+    return
+        (static_cast<double>(
+             bucket.ticks.load(std::memory_order_relaxed)) *
+         1000000.0) /
+        (static_cast<double>(frequency) *
+         static_cast<double>(samples));
+}
+
+double prof_max_us(
+    const pointlight_profile_bucket &bucket) noexcept
+{
+    const auto frequency = prof_freq();
+    if (frequency == 0u)
+        return 0.0;
+    return
+        (static_cast<double>(
+             bucket.max_ticks.load(std::memory_order_relaxed)) *
+         1000000.0) /
+        static_cast<double>(frequency);
+}
+
+void maybe_log_pointlight_prepare_profile() noexcept
+{
+    const auto samples =
+        g_prof_prepare.samples.load(std::memory_order_relaxed);
+    if (samples == 0u ||
+        (samples != 1u && (samples % 16u) != 0u))
+        return;
+
+    char line[1024]{};
+    std::snprintf(
+        line,
+        sizeof(line),
+        "[DSRRL PERF R32] POINTLIGHT_PREP sample=1/%u producer_us=%.3f producer_max_us=%.3f select_us=%.3f capture_sources_us=%.3f sidecar_build_us=%.3f authority_us=%.3f prepare_us=%.3f prepare_max_us=%.3f gpu_cache_us=%.3f upload_us=%.3f n=prod:%llu auth:%llu prep:%llu",
+        k_pointlight_profile_sample_period,
+        prof_avg_us(g_prof_producer),
+        prof_max_us(g_prof_producer),
+        prof_avg_us(g_prof_select),
+        prof_avg_us(g_prof_capture),
+        prof_avg_us(g_prof_sidecar_build),
+        prof_avg_us(g_prof_authority),
+        prof_avg_us(g_prof_prepare),
+        prof_max_us(g_prof_prepare),
+        prof_avg_us(g_prof_gpu_cache),
+        prof_avg_us(g_prof_upload),
+        static_cast<unsigned long long>(
+            g_prof_producer.samples.load(
+                std::memory_order_relaxed)),
+        static_cast<unsigned long long>(
+            g_prof_authority.samples.load(
+                std::memory_order_relaxed)),
+        static_cast<unsigned long long>(samples));
+    reshade::log::message(
+        reshade::log::level::info,
+        line);
+}
+#endif
+
 struct gpu_resources {
     ID3D11Device *device = nullptr;
     ID3D11Buffer *t18_buffer = nullptr;
