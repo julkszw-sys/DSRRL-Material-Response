@@ -1007,19 +1007,34 @@ bool publish_exact_selector_identity(
             direct_pointlight_material_candidate(
                 identity,
                 pointlight_spc)) {
-        // R35 owner-authorized hybrid: source/carrier production stays
-        // independent from material response, but both NoSpc and Spc now
-        // consume the exact PTDE PointLight source. For Spc this intentionally
-        // feeds the PTDE source/attenuation carrier into the surviving DSR
-        // local-specular tail. That path is explicitly HYBRID and must not be
-        // described as PTDE-equivalent local-specular behavior.
+        // R39 performance cut: keep the cheap exact selector association for
+        // deterministic stale-authority clearing, but do not reconstruct the
+        // PTDE clustered source for Spc materials. R32 localized the severe
+        // CPU regression to synchronous source capture, and authenticated R38
+        // proves both selector/source caches are live yet insufficient for the
+        // 60-FPS target. The existing R35 Spc route is explicitly hybrid
+        // (PTDE source/attenuation feeding the surviving DSR GGX/Schlick tail),
+        // not PTDE local-specular equivalence. Until the complete PTDE Spc
+        // operator island replaces that tail, Spc fails open to stock DSR
+        // before source reconstruction. NoSpc keeps the exact PTDE source path.
         clustered_pnts_selector_event_bridge(
             owner,
             actual_material);
-        clustered_pnts_selector_source_event_bridge();
-        clustered_pnts_selector_identity_event_bridge(
-            identity,
-            pointlight_spc);
+        if (!pointlight_spc) {
+            clustered_pnts_selector_source_event_bridge();
+            clustered_pnts_selector_identity_event_bridge(
+                identity,
+                false);
+        } else {
+            static std::atomic_bool
+                spc_source_failopen_logged{false};
+            if (!spc_source_failopen_logged.exchange(
+                    true,
+                    std::memory_order_relaxed))
+                reshade::log::message(
+                    reshade::log::level::info,
+                    "[DSRRL POINTLIGHT R39] clustered_spc_source_capture=FAIL_OPEN_STOCK_DSR nospc_ptde_source=ON reason=R38_PERF_TARGET_MISS hybrid_spc_equivalence=OPEN");
+        }
     }
 
 #ifndef DSRRL_PHYSICAL_CUT_UL_H3_SUBSURFACE
