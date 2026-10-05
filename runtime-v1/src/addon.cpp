@@ -16,6 +16,7 @@
 #include "dsrrl/runtime/asset_bridges.hpp"
 #include "dsrrl/runtime/upper_lower_runtime.hpp"
 #include "dsrrl/runtime/feature_manifest.hpp"
+#include "dsrrl/runtime/dof_preflight.hpp"
 
 #include <atomic>
 #include <cstdio>
@@ -177,12 +178,23 @@ extern "C" __declspec(dllexport) bool AddonInit(HMODULE addon,HMODULE reshade_mo
 
     register_a1_events();
 
+    if(!dsrrl::runtime::dof::register_preflight_runtime()){
+        unregister_a1_events();
+        g_a1_bridge.reset();
+        disable_manifest_features();
+        reshade::log::message(reshade::log::level::error,
+            "DSRRL DoF preflight registration failed; fail-open/unload.");
+        reshade::unregister_addon(addon,reshade_module);
+        return false;
+    }
+
     if(!dsrrl::runtime::assets::register_runtime(g_core) ||
        !dsrrl::runtime::mr::register_runtime(g_core) ||
        !dsrrl::runtime::envspec::register_runtime()){
         dsrrl::runtime::envspec::unregister_runtime();
         dsrrl::runtime::assets::unregister_runtime();
         dsrrl::runtime::mr::unregister_runtime();
+        dsrrl::runtime::dof::unregister_preflight_runtime();
         unregister_a1_events();
         g_a1_bridge.reset();
         disable_manifest_features();
@@ -217,6 +229,7 @@ extern "C" __declspec(dllexport) bool AddonInit(HMODULE addon,HMODULE reshade_mo
         dsrrl::runtime::envspec::unregister_runtime();
         dsrrl::runtime::mr::unregister_runtime();
         dsrrl::runtime::assets::unregister_runtime();
+        dsrrl::runtime::dof::unregister_preflight_runtime();
         unregister_a1_events();
         g_a1_bridge.reset();
         disable_manifest_features();
@@ -240,6 +253,7 @@ extern "C" __declspec(dllexport) void AddonUninit(HMODULE addon,HMODULE reshade_
     dsrrl::runtime::envspec::unregister_runtime();
     dsrrl::runtime::mr::unregister_runtime();
     dsrrl::runtime::assets::unregister_runtime();
+    dsrrl::runtime::dof::unregister_preflight_runtime();
     unregister_a1_events();
     log_a1_state("UNLOAD");
     g_a1_bridge.reset();
