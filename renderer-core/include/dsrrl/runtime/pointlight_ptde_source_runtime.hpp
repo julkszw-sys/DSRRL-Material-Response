@@ -9,7 +9,10 @@
 #endif
 #include <Windows.h>
 #include <algorithm>
+#include <array>
+#include <cstddef>
 #include <cstdint>
+#include <cstring>
 
 namespace dsrrl::runtime::pointlight_ptde_source {
 
@@ -24,6 +27,167 @@ struct draw_bank_authority_cache {
     std::array<draw_bank_authority_cache_entry,4> entries{};
     std::uint8_t victim = 0u;
 };
+
+inline constexpr std::size_t
+    k_bank_structure_snapshot_max = 0x10000u;
+
+struct persistent_bank_structure_cache_entry {
+    std::uintptr_t param = 0u;
+    std::uintptr_t allocation_base = 0u;
+    std::uint16_t count = 0u;
+    std::uint32_t first = 0u;
+    std::uint32_t span = 0u;
+    const pointlight_donors::bank *bank = nullptr;
+    std::array<std::uint8_t,
+               k_bank_structure_snapshot_max> snapshot{};
+};
+
+struct persistent_bank_structure_cache {
+    std::array<persistent_bank_structure_cache_entry,4>
+        entries{};
+    std::uint8_t victim = 0u;
+};
+
+inline persistent_bank_structure_cache &
+persistent_structure_cache() noexcept {
+    thread_local persistent_bank_structure_cache cache{};
+    return cache;
+}
+
+inline void clear_persistent_structure_cache() noexcept {
+    persistent_structure_cache() = {};
+}
+
+inline bool readable_single_region(
+    std::uintptr_t address,
+    std::size_t size,
+    std::uintptr_t &allocation_base) noexcept {
+    allocation_base = 0u;
+    if (!address ||
+        size == 0u ||
+        address + size < address)
+        return false;
+
+    MEMORY_BASIC_INFORMATION m{};
+    if (VirtualQuery(
+            reinterpret_cast<void *>(address),
+            &m,
+            sizeof(m)) != sizeof(m) ||
+        m.State != MEM_COMMIT ||
+        (m.Protect & PAGE_GUARD))
+        return false;
+
+    const auto p = m.Protect & 255u;
+    if (p != PAGE_READONLY &&
+        p != PAGE_READWRITE &&
+        p != PAGE_WRITECOPY &&
+        p != PAGE_EXECUTE_READ &&
+        p != PAGE_EXECUTE_READWRITE &&
+        p != PAGE_EXECUTE_WRITECOPY)
+        return false;
+
+    const auto begin =
+        reinterpret_cast<std::uintptr_t>(
+            m.BaseAddress);
+    const auto end = begin + m.RegionSize;
+    if (end <= address ||
+        end < begin ||
+        address + size > end)
+        return false;
+
+    allocation_base =
+        reinterpret_cast<std::uintptr_t>(
+            m.AllocationBase);
+    return allocation_base != 0u;
+}
+
+inline const pointlight_donors::bank *
+lookup_persistent_structure_cache(
+    std::uintptr_t param,
+    std::uint16_t count,
+    std::uint32_t first) noexcept {
+    auto &cache = persistent_structure_cache();
+
+    for (auto &entry : cache.entries) {
+        if (entry.param != param ||
+            entry.count != count ||
+            entry.first != first ||
+            entry.bank == nullptr ||
+            entry.span == 0u ||
+            entry.span >
+                k_bank_structure_snapshot_max)
+            continue;
+
+        std::uintptr_t allocation_base = 0u;
+        if (!readable_single_region(
+                param + 0x30u,
+                entry.span,
+                allocation_base) ||
+            allocation_base != entry.allocation_base) {
+            entry = {};
+            continue;
+        }
+
+        if (std::memcmp(
+                reinterpret_cast<const void *>(
+                    param + 0x30u),
+                entry.snapshot.data(),
+                entry.span) != 0) {
+            entry = {};
+            continue;
+        }
+
+        return entry.bank;
+    }
+
+    return nullptr;
+}
+
+inline void store_persistent_structure_cache(
+    std::uintptr_t param,
+    std::uint16_t count,
+    std::uint32_t first,
+    std::uint32_t structure_end,
+    const pointlight_donors::bank *bank) noexcept {
+    if (bank == nullptr ||
+        structure_end <= 0x30u)
+        return;
+
+    const auto span =
+        static_cast<std::size_t>(
+            structure_end - 0x30u);
+    if (span == 0u ||
+        span > k_bank_structure_snapshot_max)
+        return;
+
+    std::uintptr_t allocation_base = 0u;
+    if (!readable_single_region(
+            param + 0x30u,
+            span,
+            allocation_base))
+        return;
+
+    auto &cache = persistent_structure_cache();
+    auto &entry =
+        cache.entries[
+            static_cast<std::size_t>(
+                cache.victim++) %
+            cache.entries.size()];
+
+    entry = {};
+    entry.param = param;
+    entry.allocation_base = allocation_base;
+    entry.count = count;
+    entry.first = first;
+    entry.span =
+        static_cast<std::uint32_t>(span);
+    entry.bank = bank;
+    std::memcpy(
+        entry.snapshot.data(),
+        reinterpret_cast<const void *>(
+            param + 0x30u),
+        span);
+}
 
 inline bool readable(std::uintptr_t address,std::size_t size) noexcept {
     if(!address || address+size<address) return false;
@@ -133,7 +297,8 @@ inline bool bank_structure_signature(
     std::uint16_t count,
     std::uint32_t first,
     access_cache &cache,
-    std::uint64_t &signature) noexcept {
+    std::uint64_t &signature,
+    std::uint32_t *structure_end_out = nullptr) noexcept {
     if (count != 64u ||
         first < 0x330u ||
         first > 0x10000u ||
@@ -149,6 +314,7 @@ inline bool bank_structure_signature(
 
     const auto table_end =
         0x30u + static_cast<std::uint32_t>(count) * 12u;
+    std::uint32_t structure_end = table_end;
 
     for (std::uint32_t i = 0u; i < count; ++i) {
         const auto entry = param + 0x30u + static_cast<std::uintptr_t>(i) * 12u;
@@ -209,6 +375,7 @@ inline bool bank_structure_signature(
                     return false;
                 structure_hash_byte(hash, value);
                 if (value == 0u) {
+                    consumed = j;
                     terminated = true;
                     break;
                 }
@@ -216,9 +383,27 @@ inline bool bank_structure_signature(
         }
         if (!terminated)
             return false;
+
+        const auto name_end64 =
+            static_cast<std::uint64_t>(
+                name_offset) +
+            static_cast<std::uint64_t>(
+                consumed) +
+            1u;
+        if (name_end64 >
+            static_cast<std::uint64_t>(
+                0xffffffffu))
+            return false;
+        structure_end =
+            std::max(
+                structure_end,
+                static_cast<std::uint32_t>(
+                    name_end64));
     }
 
     signature = hash;
+    if (structure_end_out != nullptr)
+        *structure_end_out = structure_end;
     return true;
 }
 inline bool donor(
@@ -245,26 +430,42 @@ inline bool donor(
         }
     }
 
+    if(bank==nullptr)
+        bank =
+            lookup_persistent_structure_cache(
+                param,
+                count,
+                first);
+
     if(bank==nullptr) {
         std::uint64_t structure_signature=0u;
+        std::uint32_t structure_end=0u;
         if(!bank_structure_signature(
                 param,
                 count,
                 first,
                 cache,
-                structure_signature))
+                structure_signature,
+                &structure_end))
             return false;
 
         bank=identify_structure(structure_signature);
         if(!bank) return false;
 
-        auto &entry=
-            authority_cache.entries[
-                static_cast<std::size_t>(
-                    authority_cache.victim++)%
-                authority_cache.entries.size()];
-        entry={param,count,first,bank};
+        store_persistent_structure_cache(
+            param,
+            count,
+            first,
+            structure_end,
+            bank);
     }
+
+    auto &entry=
+        authority_cache.entries[
+            static_cast<std::size_t>(
+                authority_cache.victim++)%
+            authority_cache.entries.size()];
+    entry={param,count,first,bank};
 
     const auto index=static_cast<std::uint32_t>(selector)&255u;
     if(index>=64u||!readable_cached(param+first,1024u,cache)) return false;
