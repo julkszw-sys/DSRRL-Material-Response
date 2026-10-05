@@ -1742,8 +1742,9 @@ bool capture_source(
     // must be preserved before donor substitution:
     //   BankPointLightEntity     base+0x55BC00 -> position.xyz at node+0x60
     //   LerpBankPointLightEntity base+0x55D0B0 -> position.xyz at node+0x70
-    // pointlight_ptde_source::capture() then writes the exact PTDE
-    // invRange/RGB/End lanes while preserving raw[0..2].
+    // R45 reuses the already-authenticated frame_state to decode the exact
+    // PTDE invRange/RGB/End lanes, avoiding a second vtable/owner/selector and
+    // Lerp-manager traversal while preserving raw[0..2].
     //
     // DirectPointLightEntity has no donor and its retail packer is itself the
     // exact PTDE-homologous carrier, so keep the direct native call only for
