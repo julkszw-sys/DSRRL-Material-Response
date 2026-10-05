@@ -15,6 +15,10 @@ on:
       - "runtime-v1/**"
       - ".github/workflows/renderer-core-islands.yml"
 
+concurrency:
+  group: renderer-core-islands-${{ github.event.pull_request.number || github.ref_name }}
+  cancel-in-progress: true
+
 jobs:
   islands-tests:
     runs-on: ubuntu-latest
