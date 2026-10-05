@@ -72,6 +72,16 @@ bool restore_local_tx(
     return true;
 }
 
+bool synchronous_clustered_srv_pair(
+    const draw_tx_mutation &mutation) noexcept
+{
+    return
+        mutation.synchronous_core_transaction &&
+        mutation.srv_count == 2u &&
+        mutation.srvs[0].slot == 18u &&
+        mutation.srvs[1].slot == 19u;
+}
+
 std::size_t context1_tls_index(
     ID3D11DeviceContext *context) noexcept
 {
@@ -503,15 +513,33 @@ bool draw_state_transaction_runtime::begin(
     }
 
     state.srv_count = mutation.srv_count;
-    for (std::uint32_t i = 0;
-         i < mutation.srv_count;
-         ++i) {
-        auto &capture = state.srvs[i];
-        capture.slot = mutation.srvs[i].slot;
+    const bool batch_clustered_srvs =
+        synchronous_clustered_srv_pair(
+            mutation);
+
+    if (batch_clustered_srvs) {
+        state.srvs[0].slot = 18u;
+        state.srvs[1].slot = 19u;
+
+        ID3D11ShaderResourceView *captured[2]{};
         ctx->PSGetShaderResources(
-            capture.slot,
-            1u,
-            &capture.srv);
+            18u,
+            2u,
+            captured);
+
+        state.srvs[0].srv = captured[0];
+        state.srvs[1].srv = captured[1];
+    } else {
+        for (std::uint32_t i = 0;
+             i < mutation.srv_count;
+             ++i) {
+            auto &capture = state.srvs[i];
+            capture.slot = mutation.srvs[i].slot;
+            ctx->PSGetShaderResources(
+                capture.slot,
+                1u,
+                &capture.srv);
+        }
     }
 
     state.sampler_count = mutation.sampler_count;
@@ -575,10 +603,6 @@ bool draw_state_transaction_runtime::begin(
     }
 
     state.command = command_key(cmd_list);
-    const auto serial =
-        draw_serial_.fetch_add(
-            1u,
-            std::memory_order_relaxed) + 1u;
 
     if (mutation.synchronous_core_transaction) {
         if (state.command == 0u ||
@@ -596,6 +620,11 @@ bool draw_state_transaction_runtime::begin(
         };
         state.local_started = true;
     } else {
+        const auto serial =
+            draw_serial_.fetch_add(
+                1u,
+                std::memory_order_relaxed) + 1u;
+
         if (!core_.transactions().begin(
                 state.command,
                 serial,
@@ -626,14 +655,25 @@ bool draw_state_transaction_runtime::begin(
             &buffer);
     }
 
-    for (std::uint32_t i = 0;
-         i < mutation.srv_count;
-         ++i) {
-        auto *srv = mutation.srvs[i].srv;
+    if (batch_clustered_srvs) {
+        ID3D11ShaderResourceView *srvs[2]{
+            mutation.srvs[0].srv,
+            mutation.srvs[1].srv
+        };
         ctx->PSSetShaderResources(
-            mutation.srvs[i].slot,
-            1u,
-            &srv);
+            18u,
+            2u,
+            srvs);
+    } else {
+        for (std::uint32_t i = 0;
+             i < mutation.srv_count;
+             ++i) {
+            auto *srv = mutation.srvs[i].srv;
+            ctx->PSSetShaderResources(
+                mutation.srvs[i].slot,
+                1u,
+                &srv);
+        }
     }
 
     for (std::uint32_t i = 0;
@@ -685,17 +725,35 @@ bool draw_state_transaction_runtime::begin(
                 buffer->Release();
         }
     
-        for (std::uint32_t i = 0;
-             bound && i < mutation.srv_count;
-             ++i) {
-            ID3D11ShaderResourceView *srv = nullptr;
+        if (bound &&
+            batch_clustered_srvs) {
+            ID3D11ShaderResourceView *srvs[2]{};
             ctx->PSGetShaderResources(
-                mutation.srvs[i].slot,
-                1u,
-                &srv);
-            bound = srv == mutation.srvs[i].srv;
-            if (srv != nullptr)
-                srv->Release();
+                18u,
+                2u,
+                srvs);
+
+            bound =
+                srvs[0] == mutation.srvs[0].srv &&
+                srvs[1] == mutation.srvs[1].srv;
+
+            if (srvs[0] != nullptr)
+                srvs[0]->Release();
+            if (srvs[1] != nullptr)
+                srvs[1]->Release();
+        } else {
+            for (std::uint32_t i = 0;
+                 bound && i < mutation.srv_count;
+                 ++i) {
+                ID3D11ShaderResourceView *srv = nullptr;
+                ctx->PSGetShaderResources(
+                    mutation.srvs[i].slot,
+                    1u,
+                    &srv);
+                bound = srv == mutation.srvs[i].srv;
+                if (srv != nullptr)
+                    srv->Release();
+            }
         }
     
         for (std::uint32_t i = 0;
@@ -810,14 +868,28 @@ bool draw_state_transaction_runtime::restore(
             static_cast<UINT>(capture.count));
     }
 
-    for (std::uint32_t i = 0;
-         i < state.srv_count;
-         ++i) {
-        auto *srv = state.srvs[i].srv;
+    if (state.local_started &&
+        state.srv_count == 2u &&
+        state.srvs[0].slot == 18u &&
+        state.srvs[1].slot == 19u) {
+        ID3D11ShaderResourceView *srvs[2]{
+            state.srvs[0].srv,
+            state.srvs[1].srv
+        };
         ctx->PSSetShaderResources(
-            state.srvs[i].slot,
-            1u,
-            &srv);
+            18u,
+            2u,
+            srvs);
+    } else {
+        for (std::uint32_t i = 0;
+             i < state.srv_count;
+             ++i) {
+            auto *srv = state.srvs[i].srv;
+            ctx->PSSetShaderResources(
+                state.srvs[i].slot,
+                1u,
+                &srv);
+        }
     }
 
     for (std::uint32_t i = 0;
