@@ -1008,7 +1008,6 @@ void __fastcall mtd_entry(
 
 bool publish_exact_selector_identity(
     void *owner,
-    const void *actual_material,
     void *ret,
     void *r14,
     void *r15,
@@ -1209,7 +1208,6 @@ extern "C" void dsrrl_flver_selector_observer(
 
   if(publish_exact_selector_identity(
         owner,
-        actual_material,
         ret,
         r14,
         r15,
@@ -1262,7 +1260,6 @@ extern "C" void dsrrl_flver_selector_observer(
 
    if(publish_exact_selector_identity(
           owner,
-          actual_material,
           ret,
           r14,
           r15,
