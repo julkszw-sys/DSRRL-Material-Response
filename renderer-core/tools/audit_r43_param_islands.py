@@ -19,6 +19,8 @@ def main():
     cluster=(root/"src/runtime/clustered_pnts_draw_runtime.cpp").read_text(encoding="utf-8")
     dof=(root/"src/runtime/dof_authored_state_runtime.cpp").read_text(encoding="utf-8")
     dof_host=(root/"src/runtime/dof_host_depth_route_runtime.cpp").read_text(encoding="utf-8")
+    dof_handoff=(root/"src/runtime/dof_tonemap_handoff_runtime.cpp").read_text(encoding="utf-8")
+    dof_contract=(root/"include/dsrrl/operators/dof/dof_island.hpp").read_text(encoding="utf-8")
     cmake=(root/"integrated/CMakeLists.txt").read_text(encoding="utf-8")
 
     require(integrated,
@@ -72,6 +74,16 @@ def main():
         "DoF live far multiplier byte")
     require(dof,"std::uint8_t near_mul = 0u;",
         "DoF live near multiplier byte")
+    require(dof_contract,"tonemap_pass13_executor_rva = 0u;",
+        "DoF pass13 executor contract field")
+    require(dof_contract,"0x004572A0u",
+        "DoF exact retail pass13 executor")
+    require(dof_handoff,"dsr_active_output_cut.tonemap_pass13_executor_rva",
+        "DoF handoff uses canonical pass13 executor")
+    require(dof_handoff,"constexpr std::size_t k_stolen = 14u;",
+        "DoF pass13 instruction-boundary hook size")
+    if "0x00457E50u" in dof_handoff:
+        fail("DoF handoff regressed to pass 0x1C/0x1D executor 0x457E50")
     for needle in (
         "bank_guard_name_offset_read_fail",
         "bank_guard_name_offset_range_fail",
