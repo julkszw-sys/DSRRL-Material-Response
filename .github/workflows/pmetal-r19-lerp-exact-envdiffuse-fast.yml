@@ -129,7 +129,10 @@ jobs:
           if (-not $ascii.Contains("p01_role_mask=0x")) { throw "Missing DoF pass01 role-mask diagnostic marker" }
           if (-not $ascii.Contains("[DSRRL DoF roles]")) { throw "Missing DoF global role census marker" }
           if (-not $ascii.Contains("[DSRRL DoF timeline]")) { throw "Missing DoF ordered timeline marker" }
-          if (-not $ascii.Contains("[DSRRL DoF resource]")) { throw "Missing DoF resource-edge census marker" }
+          # R54 intentionally unregisters draw/draw_indexed, so the draw-only
+          # resource-edge logger may be linker-dead-stripped. Do not require it
+          # in this A/B artifact; preflight/host/present markers remain required.
+          if ($ascii.Contains("[DSRRL DoF resource]")) { Write-Host "R54 retains optional DoF resource logger" }
           if (-not $ascii.Contains("[DSRRL PERF R49] POINTLIGHT_CAPTURE")) { throw "Missing PointLight stall subpath profiler marker" }
           # operator_catalog string may be dead-stripped from the final DLL; validate the
           # active runtime and profiler markers instead of requiring catalog text retention.
