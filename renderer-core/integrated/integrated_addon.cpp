@@ -305,6 +305,9 @@ bool register_dof_runtime() noexcept
     reshade::log::message(
         reshade::log::level::info,
         "[DSRRL DoF R43-DRAWPARAM] carrier=LIVE_SELECTED_DOF_ROWS selector=STOCK_DSR donor_table=ABSENT bank_gate=PTDE_HOMOLOGOUS_10 m15_dual=ON default_m99=STOCK_DSR producer_rva=0x5627E0");
+    reshade::log::message(
+        reshade::log::level::info,
+        "[DSRRL R43 PARAM SOURCE FIX V2] dof_pass01=RETAIL_SOURCE_0x78 support=CTX24B8_0x88_0xC0 dof_mul=U8 clustered_failstage=ONE_SHOT full_hot_telemetry=BUILD_PROFILE");
     return true;
 }
 
