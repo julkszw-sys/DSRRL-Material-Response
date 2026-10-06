@@ -59,10 +59,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw "HEAD is not descended from EXACT R43 410e4591" }
           $global:LASTEXITCODE = 0
           $allowed = @(
-            '^renderer-core/CMakeLists\.txt$',
-            '^renderer-core/include/dsrrl/core/types\.hpp$',
-            '^renderer-core/integrated/CMakeLists\.txt$',
-            '^renderer-core/integrated/integrated_addon\.cpp$',
+            '^renderer-core/CMakeLists\.txt            '^renderer-core/integrated/integrated_addon\.cpp$',
             '^renderer-core/include/dsrrl/runtime/clustered_pnts_draw_runtime\.hpp$',
             '^renderer-core/include/dsrrl/runtime/clustered_pointlight_source_gate\.hpp$',
             '^renderer-core/src/runtime/clustered_pnts_draw_runtime\.cpp$',
