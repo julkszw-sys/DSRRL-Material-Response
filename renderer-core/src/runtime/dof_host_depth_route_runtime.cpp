@@ -90,6 +90,8 @@ std::atomic<std::uint64_t> g_source_capture_fail{0u};
 std::atomic<std::uint64_t> g_support_capture_ok{0u};
 std::atomic<std::uint64_t> g_support_capture_fail{0u};
 std::atomic<std::uint64_t> g_abi_reject{0u};
+std::atomic<std::uint32_t> g_pass01_last_thread{0u};
+std::atomic<std::uint32_t> g_pass0d_last_thread{0u};
 
 bool write_bytes(
     void *address,
@@ -131,6 +133,9 @@ void __fastcall hook_pass01(
     void *pass_desc) noexcept
 {
     ++g_pass01_calls;
+    g_pass01_last_thread.store(
+        static_cast<std::uint32_t>(GetCurrentThreadId()),
+        std::memory_order_relaxed);
 
     void *const previous_node = g_pass01_node;
     void *const previous_context = g_pass01_render_context;
@@ -157,6 +162,9 @@ void __fastcall hook_pass0d(
     void *pass_desc) noexcept
 {
     ++g_pass0d_calls;
+    g_pass0d_last_thread.store(
+        static_cast<std::uint32_t>(GetCurrentThreadId()),
+        std::memory_order_relaxed);
 
     void *const previous_context = g_pass0d_render_context;
     const unsigned previous_depth = g_pass0d_depth;
@@ -552,6 +560,8 @@ bool register_host_depth_route_runtime() noexcept
     g_support_capture_ok.store(0u);
     g_support_capture_fail.store(0u);
     g_abi_reject.store(0u);
+    g_pass01_last_thread.store(0u);
+    g_pass0d_last_thread.store(0u);
 
     return true;
 }
@@ -780,6 +790,8 @@ host_depth_route_telemetry host_depth_route_status() noexcept
         g_support_capture_ok.load(),
         g_support_capture_fail.load(),
         g_abi_reject.load(),
+        g_pass01_last_thread.load(),
+        g_pass0d_last_thread.load(),
         g_pass01_site.patched &&
             g_pass01_site.original != nullptr,
         g_pass0d_site.patched &&
