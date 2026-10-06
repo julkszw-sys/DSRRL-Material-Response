@@ -1006,26 +1006,9 @@ bool publish_exact_selector_identity(
     if (!selection_ok)
         return false;
 
-    bool pointlight_spc = false;
-    if (g_state.builder_armed &&
-        operators::material_response::
-            direct_pointlight_material_candidate(
-                identity,
-                pointlight_spc)) {
-        // R35 owner-authorized hybrid: source/carrier production stays
-        // independent from material response, but both NoSpc and Spc now
-        // consume the exact PTDE PointLight source. For Spc this intentionally
-        // feeds the PTDE source/attenuation carrier into the surviving DSR
-        // local-specular tail. That path is explicitly HYBRID and must not be
-        // described as PTDE-equivalent local-specular behavior.
-        clustered_pnts_selector_event_bridge(
-            owner,
-            actual_material);
-        clustered_pnts_selector_source_event_bridge();
-        clustered_pnts_selector_identity_event_bridge(
-            identity,
-            pointlight_spc);
-    }
+    // Clustered PntS is source-only on the R43 DrawParam line. Do not
+    // perform material candidate lookup or dispatch any clustered receiver
+    // bridge from the FLVER selector. Stock DSR owns the consumer stage.
 
 #ifndef DSRRL_PHYSICAL_CUT_UL_H3_SUBSURFACE
     if (g_selector_upper_lower_enabled.load(
