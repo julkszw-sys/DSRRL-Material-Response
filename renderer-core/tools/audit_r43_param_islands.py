@@ -101,6 +101,8 @@ def main():
             "Clustered split bank-structure failure stage")
     require(integrated,"[DSRRL DoF R43-DRAWPARAM]",
         "DoF live DrawParam marker")
+    require(integrated,"[DSRRL DoF R43-HANDOFF] pass=0x13 executor_rva=0x4572A0 source=pass_desc+0x0C alias=image_state+0x104",
+        "DoF exact pass13 handoff marker")
     require(integrated,"[DSRRL R43 PARAM SOURCE FIX V2]",
         "R43 PARAM source fix marker")
     require(integrated,"[DSRRL TELEMETRY R43-PARAM]",
