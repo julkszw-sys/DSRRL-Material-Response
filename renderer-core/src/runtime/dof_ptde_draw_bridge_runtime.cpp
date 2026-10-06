@@ -459,7 +459,7 @@ activation_context() noexcept
             ptde_exact_pass_resource_graph_is_structurally_closed();
 
     activation.ptde_dofbank_payload_ready =
-        true;
+        authored.hook_ready;
     activation.ptde_dofbank_route_verified =
         authored.hook_ready &&
         authored.route_matches != 0u;
