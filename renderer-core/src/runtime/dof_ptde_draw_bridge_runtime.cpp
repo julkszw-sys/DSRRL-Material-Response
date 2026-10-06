@@ -61,6 +61,93 @@ std::atomic<std::uint64_t> g_present_count{0u};
 thread_local sequence_state g_sequence{};
 thread_local bool g_internal_replay = false;
 
+#ifdef DSRRL_DOF_PROFILE
+constexpr std::uint32_t k_dof_profile_sample_period = 256u;
+std::atomic<std::uint64_t> g_dof_profile_samples{0u};
+std::atomic<std::uint64_t> g_dof_profile_ticks{0u};
+std::atomic<std::uint64_t> g_dof_profile_max_ticks{0u};
+thread_local std::uint32_t g_dof_profile_seq = 0u;
+
+std::uint64_t dof_profile_qpc() noexcept
+{
+    LARGE_INTEGER value{};
+    QueryPerformanceCounter(&value);
+    return static_cast<std::uint64_t>(value.QuadPart);
+}
+
+std::uint64_t dof_profile_frequency() noexcept
+{
+    static const std::uint64_t frequency = []() noexcept {
+        LARGE_INTEGER value{};
+        QueryPerformanceFrequency(&value);
+        return static_cast<std::uint64_t>(value.QuadPart);
+    }();
+    return frequency;
+}
+
+void dof_profile_add(std::uint64_t ticks) noexcept
+{
+    g_dof_profile_samples.fetch_add(1u, std::memory_order_relaxed);
+    g_dof_profile_ticks.fetch_add(ticks, std::memory_order_relaxed);
+    auto observed = g_dof_profile_max_ticks.load(std::memory_order_relaxed);
+    while (observed < ticks &&
+           !g_dof_profile_max_ticks.compare_exchange_weak(
+               observed,
+               ticks,
+               std::memory_order_relaxed,
+               std::memory_order_relaxed)) {
+    }
+}
+
+struct dof_profile_scope {
+    bool active = false;
+    std::uint64_t start = 0u;
+
+    explicit dof_profile_scope(bool enabled) noexcept
+        : active(enabled),
+          start(enabled ? dof_profile_qpc() : 0u)
+    {
+    }
+
+    ~dof_profile_scope()
+    {
+        if (active)
+            dof_profile_add(
+                dof_profile_qpc() - start);
+    }
+};
+
+void log_dof_profile() noexcept
+{
+    const auto n = g_dof_profile_samples.load(std::memory_order_relaxed);
+    const auto f = dof_profile_frequency();
+    if (n == 0u || f == 0u)
+        return;
+
+    const auto total = g_dof_profile_ticks.load(std::memory_order_relaxed);
+    const auto max_ticks = g_dof_profile_max_ticks.load(std::memory_order_relaxed);
+    const double avg_us =
+        (static_cast<double>(total) * 1000000.0) /
+        (static_cast<double>(f) * static_cast<double>(n));
+    const double max_us =
+        (static_cast<double>(max_ticks) * 1000000.0) /
+        static_cast<double>(f);
+
+    char line[384]{};
+    std::snprintf(
+        line,
+        sizeof(line),
+        "[DSRRL PERF R48] DOF sample=1/%u callback_us=%.3f max_us=%.3f n=%llu",
+        k_dof_profile_sample_period,
+        avg_us,
+        max_us,
+        static_cast<unsigned long long>(n));
+    reshade::log::message(
+        reshade::log::level::info,
+        line);
+}
+#endif
+
 bool environment_opt_in() noexcept
 {
     char value[8]{};
@@ -619,6 +706,11 @@ bool handle_draw(
     reshade::api::command_list *cmd_list,
     const scheduler_draw_shape &shape) noexcept
 {
+#ifdef DSRRL_DOF_PROFILE
+    dof_profile_scope dof_scope(
+        ((++g_dof_profile_seq &
+          (k_dof_profile_sample_period - 1u)) == 0u));
+#endif
     if (g_internal_replay ||
         !g_opt_in.load(
             std::memory_order_acquire) ||
@@ -757,6 +849,12 @@ void on_present(
 
     const auto present =
         ++g_present_count;
+
+#ifdef DSRRL_DOF_PROFILE
+    if (present == 300u ||
+        (present > 300u && (present % 300u) == 0u))
+        log_dof_profile();
+#endif
 
     if (g_opt_in.load(
             std::memory_order_acquire) &&
