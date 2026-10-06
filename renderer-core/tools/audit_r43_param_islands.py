@@ -72,8 +72,21 @@ def main():
         "DoF live far multiplier byte")
     require(dof,"std::uint8_t near_mul = 0u;",
         "DoF live near multiplier byte")
-    require(cluster,"live_bank_structure",
-        "Clustered one-shot source failure stage")
+    for needle in (
+        "bank_guard_name_offset_read_fail",
+        "bank_guard_name_offset_range_fail",
+        "bank_guard_name_word_read_fail",
+        "signature_header_range_fail",
+        "signature_table_read_fail",
+        "signature_row_id_fail",
+        "signature_row_offset_fail",
+        "signature_name_offset_fail",
+        "signature_name_read_fail",
+        "signature_name_unterminated",
+        "signature_complete_but_unknown",
+    ):
+        require(cluster,needle,
+            "Clustered split bank-structure failure stage")
     require(integrated,"[DSRRL DoF R43-DRAWPARAM]",
         "DoF live DrawParam marker")
     require(integrated,"[DSRRL R43 PARAM SOURCE FIX V2]",
