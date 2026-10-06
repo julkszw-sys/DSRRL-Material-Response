@@ -296,6 +296,7 @@ struct active_output_cut {
     std::uintptr_t image_filter_ctor = 0u;
     std::uintptr_t tonemap_ctor = 0u;
     std::uintptr_t scene_pass_builder = 0u;
+    std::uintptr_t tonemap_pass13_executor_rva = 0u;
     std::uint16_t image_state_target_offset = 0u;
     std::uint16_t image_state_srv_alias_offset = 0u;
     std::uint8_t tonemap_pass = 0u;
@@ -306,6 +307,7 @@ inline constexpr active_output_cut dsr_active_output_cut = {
     0x140450D30ull,
     0x140461A70ull,
     0x140452ED0ull,
+    0x004572A0u,
     0x00F8u,
     0x0104u,
     0x13u,
@@ -318,6 +320,7 @@ constexpr bool active_output_cut_is_exact() noexcept
         dsr_active_output_cut.image_filter_ctor == 0x140450D30ull &&
         dsr_active_output_cut.tonemap_ctor == 0x140461A70ull &&
         dsr_active_output_cut.scene_pass_builder == 0x140452ED0ull &&
+        dsr_active_output_cut.tonemap_pass13_executor_rva == 0x004572A0u &&
         dsr_active_output_cut.image_state_target_offset == 0x00F8u &&
         dsr_active_output_cut.image_state_srv_alias_offset == 0x0104u &&
         dsr_active_output_cut.tonemap_pass == 0x13u &&
