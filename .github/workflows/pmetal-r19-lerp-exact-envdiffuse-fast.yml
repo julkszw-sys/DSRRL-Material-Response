@@ -11,6 +11,8 @@ on:
       - r41-active-islands-pmetal-cache-scope
       - r42-pmetal-cross-thread-producer-cache
       - r43-pmetal-per-key-freshness-cache
+      - r43-live-drawparam-pointlight-dof
+      - main
   pull_request:
     paths:
       - "renderer-core/integrated/**"
@@ -42,12 +44,44 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
 
       - name: Resolve exact source commit
         shell: pwsh
         run: |
           $commit = (git rev-parse HEAD).Trim()
           "DSRRL_CHECKOUT_COMMIT=$commit" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Verify exact R43 ancestry and narrow transplant
+        shell: pwsh
+        run: |
+          git merge-base --is-ancestor 410e4591da9172ffb15e766754b4345286f04691 HEAD
+          if ($LASTEXITCODE -ne 0) { throw "HEAD is not descended from EXACT R43 410e4591" }
+          $global:LASTEXITCODE = 0
+          $allowed = @(
+            '^renderer-core/CMakeLists\.txt$',
+            '^renderer-core/integrated/CMakeLists\.txt$',
+            '^renderer-core/integrated/integrated_addon\.cpp$',
+            '^renderer-core/include/dsrrl/runtime/clustered_pnts_draw_runtime\.hpp$',
+            '^renderer-core/include/dsrrl/runtime/clustered_pointlight_source_gate\.hpp$',
+            '^renderer-core/src/runtime/clustered_pnts_draw_runtime\.cpp$',
+            '^renderer-core/include/dsrrl/operators/dof/',
+            '^renderer-core/src/operators/dof/',
+            '^renderer-core/include/dsrrl/runtime/dof_',
+            '^renderer-core/src/runtime/dof_',
+            '^renderer-core/data/provenance/dof_',
+            '^renderer-core/tools/(audit_dof_|audit_r43_param_islands|generate_dof_)',
+            '^\.github/workflows/pmetal-r19-lerp-exact-envdiffuse-fast\.yml$'
+          )
+          $changed = @(git diff --name-only 410e4591da9172ffb15e766754b4345286f04691..HEAD)
+          foreach ($file in $changed) {
+            $ok = $false
+            foreach ($pattern in $allowed) {
+              if ($file -match $pattern) { $ok = $true; break }
+            }
+            if (-not $ok) { throw "Non-local R43 transplant file changed: $file" }
+          }
+          Write-Host "R43_EXACT_BASE_NARROW_TRANSPLANT_PASS changed=$($changed.Count)"
 
       - name: Checkout pinned ReShade API
         uses: actions/checkout@v4
@@ -66,7 +100,8 @@ jobs:
           -DRESHADE_INCLUDE_DIR="${{ github.workspace }}/_reshade/include"
           -DDSRRL_SOURCE_COMMIT="$env:DSRRL_CHECKOUT_COMMIT"
           -DDSRRL_BUILD_FLAVOR="pmetal_r43_per_key_freshness_cache"
-          -DDSRRL_FULL_TELEMETRY_DEFAULT_ON=OFF
+          -DDSRRL_FULL_TELEMETRY_DEFAULT_ON=ON
+          -DDSRRL_DOF_DEFAULT_ON=ON
           -DDSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG=ON
           -DDSRRL_PMETAL_FULL_PTDE_HEMENV_R3=ON
           -DDSRRL_PMETAL_FULL_PTDE_HEMENV_R4=ON
@@ -81,6 +116,21 @@ jobs:
           -DDSRRL_PMETAL_R19_LERP_MATERIALWORKFLOW=ON
           -DDSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE=ON
           -DDSRRL_PHYSICAL_CUT_UL_H3_SUBSURFACE=ON
+
+      - name: Audit R43 live-DrawParam islands
+        shell: pwsh
+        run: |
+          python renderer-core/tools/audit_r43_param_islands.py --source-dir renderer-core
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Verify R43 physical-cut + telemetry profile
+        shell: pwsh
+        run: |
+          $cache = Get-Content build-fast/CMakeCache.txt -Raw
+          if ($cache -notmatch "DSRRL_PHYSICAL_CUT_UL_H3_SUBSURFACE:BOOL=ON") { throw "R43 physical cut is not ON" }
+          if ($cache -notmatch "DSRRL_FULL_TELEMETRY_DEFAULT_ON:BOOL=ON") { throw "Full telemetry is not ON" }
+          if ($cache -notmatch "DSRRL_DOF_DEFAULT_ON:BOOL=ON") { throw "DoF default-on is not ON" }
+          if ($cache -match "DSRRL_DIAGNOSTIC_TELEMETRY_DEFAULT_ON:BOOL=ON") { throw "Native-state diagnostic telemetry must remain OFF" }
 
       - name: Build runtime
         shell: pwsh
@@ -98,6 +148,9 @@ jobs:
           $ascii = [System.Text.Encoding]::ASCII.GetString([System.IO.File]::ReadAllBytes($path))
           if (-not $ascii.Contains($env:DSRRL_CHECKOUT_COMMIT)) { throw "Missing source commit identity" }
           if (-not $ascii.Contains("pmetal_r43_per_key_freshness_cache")) { throw "Missing R43 build flavor identity" }
+          if (-not $ascii.Contains("[DSRRL POINTLIGHT R43-DRAWPARAM] clustered=SOURCE_ONLY carrier=LIVE_DRAWPARAM_SELECTED_ROW source_cut=0xB7E02 receiver=STOCK_DSR donor_lookup=OFF material_lookup=OFF replacement_shader=OFF dsr_only_gate=10 default_m99=STOCK_DSR")) { throw "Missing R43 Clustered live-DrawParam marker" }
+          if (-not $ascii.Contains("[DSRRL DoF R43-DRAWPARAM] carrier=LIVE_SELECTED_DOF_ROWS selector=STOCK_DSR donor_table=ABSENT bank_gate=PTDE_HOMOLOGOUS_10 m15_dual=ON default_m99=STOCK_DSR producer_rva=0x5627E0")) { throw "Missing R43 DoF live-DrawParam marker" }
+          if (-not $ascii.Contains("[DSRRL TELEMETRY R43-PARAM] full=ON runtime=ON effect=ON native_state_verify=OFF")) { throw "Missing R43 full telemetry marker" }
           if (-not $ascii.Contains("[DSRRL POINTLIGHT R26] direct_current_native_dispatch=ACTIVE persistent_vtable_hook=OFF recursion_guard=ON")) { throw "Missing inherited R26 direct current-native startup marker" }
           if (-not $ascii.Contains("[DSRRL POINTLIGHT R29] exact_structure_snapshot_cache=ACTIVE cross_draw=ON revalidate=VM+MEMCMP pointer_only_authority=OFF gpu_tls_fast_cache=ON per_draw_resource_mutex=OFF per_draw_com_ref_churn=OFF pipeline_tls_fast_path=ON per_draw_private_data=OFF per_draw_shader_ref_churn=OFF failure_propagation=EXACT")) { throw "Missing inherited R29 fast resource/cache/failure-propagation startup marker" }
           if (-not $ascii.Contains("[DSRRL POINTLIGHT R30] synchronous_core_transaction=ACTIVE exact_clustered_shape_guard=ON global_core_tx_mutex=OFF_FOR_CLUSTERED_DIRECT_NATIVE tls_reentry_guard=ON t18_t19_batch=ON sync_draw_serial_atomic=OFF fallback_general_tx=UNCHANGED")) { throw "Missing inherited R30 lock-free synchronous core transaction marker" }
@@ -128,6 +181,6 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: DSRRL_PMETAL_R43_PER_KEY_FRESHNESS_CACHE
+          name: DSRRL_R43_PARAM_POINTLIGHT_DOF_FULL_TELEMETRY
           path: DSRRL_PMETAL_R43_PER_KEY_FRESHNESS_CACHE.addon64
           if-no-files-found: error
