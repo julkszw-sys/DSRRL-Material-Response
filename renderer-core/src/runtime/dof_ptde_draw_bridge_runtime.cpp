@@ -66,6 +66,10 @@ std::atomic<std::uint64_t> g_depth_msaa_pass01_overlap{0u};
 std::atomic<std::uint32_t> g_depth_msaa_last_thread{0u};
 std::atomic<std::uint32_t> g_pass01_role_mask{0u};
 std::atomic<std::uint32_t> g_pass0d_role_mask{0u};
+std::array<std::atomic<std::uint64_t>,
+           static_cast<std::size_t>(role::count)> g_role_draw_counts{};
+std::array<std::atomic<std::uint32_t>,
+           static_cast<std::size_t>(role::count)> g_role_last_thread{};
 
 thread_local sequence_state g_sequence{};
 thread_local bool g_internal_replay = false;
@@ -816,6 +820,17 @@ bool handle_draw(
         g_exact_role_draws.fetch_add(
             1u,
             std::memory_order_relaxed);
+        const auto role_index =
+            static_cast<std::size_t>(selected);
+        if (role_index < g_role_draw_counts.size()) {
+            g_role_draw_counts[role_index].fetch_add(
+                1u,
+                std::memory_order_relaxed);
+            g_role_last_thread[role_index].store(
+                static_cast<std::uint32_t>(
+                    GetCurrentThreadId()),
+                std::memory_order_relaxed);
+        }
         if (selected == role::depth_copy_msaa) {
             g_depth_msaa_draws.fetch_add(
                 1u,
@@ -1000,6 +1015,39 @@ void log_status(
     reshade::log::message(
         reshade::log::level::info,
         line);
+
+    char roles_line[1024]{};
+    int used = std::snprintf(
+        roles_line,
+        sizeof(roles_line),
+        "[DSRRL DoF roles] %s",
+        tag);
+    for (std::size_t i = 0u;
+         i < g_role_draw_counts.size() &&
+         used > 0 &&
+         static_cast<std::size_t>(used) < sizeof(roles_line);
+         ++i) {
+        const auto count =
+            g_role_draw_counts[i].load(
+                std::memory_order_relaxed);
+        if (count == 0u)
+            continue;
+        const int wrote = std::snprintf(
+            roles_line + used,
+            sizeof(roles_line) -
+                static_cast<std::size_t>(used),
+            " r%zu=%llu@t%u",
+            i,
+            static_cast<unsigned long long>(count),
+            g_role_last_thread[i].load(
+                std::memory_order_relaxed));
+        if (wrote <= 0)
+            break;
+        used += wrote;
+    }
+    reshade::log::message(
+        reshade::log::level::info,
+        roles_line);
 }
 
 void on_present(
@@ -1059,6 +1107,10 @@ bool register_ptde_draw_bridge_runtime(
     g_depth_msaa_last_thread.store(0u);
     g_pass01_role_mask.store(0u);
     g_pass0d_role_mask.store(0u);
+    for (auto &v : g_role_draw_counts)
+        v.store(0u, std::memory_order_relaxed);
+    for (auto &v : g_role_last_thread)
+        v.store(0u, std::memory_order_relaxed);
 
     set_authored_feature(false);
     release_sequence();
