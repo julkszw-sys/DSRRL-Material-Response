@@ -96,6 +96,9 @@ void clustered_pnts_selector_event_bridge(
     void *owner,
     const void *actual_material) noexcept;
 
+bool clustered_pnts_selector_handoff_ready_bridge(
+    void *owner) noexcept;
+
 // Source/carrier production is a separate stage from material-response
 // authorization. This keeps PointLight source semantics independently reusable
 // without implicitly authorizing any Spc local-specular implementation.
