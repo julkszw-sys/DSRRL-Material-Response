@@ -35,10 +35,12 @@ struct decoded_state {
 struct live_dof_row_v1 {
     float far_begin = 0.0f;
     float far_end = 0.0f;
-    std::int32_t far_mul = 0;
+    std::uint8_t far_mul = 0u;
+    std::array<std::uint8_t,3> far_mul_pad{};
     float near_begin = 0.0f;
     float near_end = 0.0f;
-    std::int32_t near_mul = 0;
+    std::uint8_t near_mul = 0u;
+    std::array<std::uint8_t,3> near_mul_pad{};
     float dispersion_sq = 0.0f;
 };
 static_assert(sizeof(live_dof_row_v1) == 28u);
