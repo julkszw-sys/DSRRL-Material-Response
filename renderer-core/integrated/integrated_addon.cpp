@@ -23,6 +23,13 @@
 #include "dsrrl/runtime/upper_lower_hemenv_draw_runtime.hpp"
 #include "dsrrl/runtime/hemdir3_mode_transport.hpp"
 #include "dsrrl/runtime/hemdir3_pipeline_registry.hpp"
+#include "dsrrl/runtime/dof_preflight.hpp"
+#include "dsrrl/runtime/dof_authored_state_runtime.hpp"
+#include "dsrrl/runtime/dof_private_resource_runtime.hpp"
+#include "dsrrl/runtime/dof_ptde_scheduler_runtime.hpp"
+#include "dsrrl/runtime/dof_host_depth_route_runtime.hpp"
+#include "dsrrl/runtime/dof_tonemap_handoff_runtime.hpp"
+#include "dsrrl/runtime/dof_ptde_draw_bridge_runtime.hpp"
 #include "dsrrl/runtime/hemdir3_draw_runtime.hpp"
 #include "dsrrl/runtime/fixed_pointlight_draw_runtime.hpp"
 #include "dsrrl/runtime/fixed_pointlight_pipeline_runtime.hpp"
@@ -221,6 +228,84 @@ dsrrl::runtime::pmetal_native_draw_bridge
     g_pmetal_native_draw;
 
 thread_local bool g_raw_draw_replay_recursing = false;
+
+bool dof_runtime_enabled() noexcept
+{
+    char value[8]{};
+    const DWORD size =
+        GetEnvironmentVariableA(
+            "DSRRL_EXPERIMENTAL_PTDE_DOF",
+            value,
+            static_cast<DWORD>(sizeof(value)));
+    return !(size == 1u && value[0] == '0');
+}
+
+void unregister_dof_runtime() noexcept
+{
+    dsrrl::runtime::dof::unregister_ptde_draw_bridge_runtime();
+    dsrrl::runtime::dof::unregister_authored_state_runtime();
+    dsrrl::runtime::dof::unregister_tonemap_handoff_scope_runtime();
+    dsrrl::runtime::dof::unregister_host_depth_route_runtime();
+    dsrrl::runtime::dof::unregister_ptde_scheduler_runtime();
+    dsrrl::runtime::dof::unregister_private_resource_runtime();
+    dsrrl::runtime::dof::unregister_preflight_runtime();
+    (void)g_core.features().set(
+        dsrrl::core::operator_id::post_dof_ptde,
+        false);
+}
+
+bool register_dof_runtime() noexcept
+{
+    (void)g_core.features().set(
+        dsrrl::core::operator_id::post_dof_ptde,
+        false);
+
+    if (!dof_runtime_enabled()) {
+        reshade::log::message(
+            reshade::log::level::info,
+            "[DSRRL DoF] disabled by DSRRL_EXPERIMENTAL_PTDE_DOF=0; stock DSR DoF preserved.");
+        return true;
+    }
+
+    if (!k_drawtime_islands_runtime_enabled ||
+        !k_draw_callbacks_runtime_enabled ||
+        !k_draw_replay_runtime_enabled)
+        return false;
+
+    const bool preflight =
+        dsrrl::runtime::dof::register_preflight_runtime();
+    const bool resources =
+        preflight &&
+        dsrrl::runtime::dof::register_private_resource_runtime();
+    const bool scheduler =
+        resources &&
+        dsrrl::runtime::dof::register_ptde_scheduler_runtime();
+    const bool host =
+        scheduler &&
+        dsrrl::runtime::dof::register_host_depth_route_runtime();
+    const bool tone =
+        host &&
+        dsrrl::runtime::dof::register_tonemap_handoff_scope_runtime();
+    const bool authored =
+        tone &&
+        dsrrl::runtime::dof::register_authored_state_runtime(g_core);
+    const bool bridge =
+        authored &&
+        dsrrl::runtime::dof::register_ptde_draw_bridge_runtime(g_core);
+
+    if (!bridge) {
+        unregister_dof_runtime();
+        reshade::log::message(
+            reshade::log::level::warning,
+            "[DSRRL DoF] preflight failed; exact stock DSR DoF preserved.");
+        return false;
+    }
+
+    reshade::log::message(
+        reshade::log::level::info,
+        "[DSRRL DoF] R48 DEFAULT_ON runtime registered; image entry requires completed sequence + visible handoff + ToneMap consume.");
+    return true;
+}
 
 std::atomic<std::uint64_t> g_present_count{0};
 std::atomic<std::uint64_t> g_mr_draw_eval{0};
