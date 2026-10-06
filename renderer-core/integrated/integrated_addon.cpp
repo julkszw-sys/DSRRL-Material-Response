@@ -157,6 +157,10 @@ constexpr bool k_pointlight_drawtime_runtime_enabled = false;
 constexpr bool k_pointlight_drawtime_runtime_enabled = true;
 #endif
 
+// Clustered PntS is source-only on the R43-derived line. Stock DSR owns
+// receiver/material/shader routing; the addon only rewrites the source carrier.
+constexpr bool k_clustered_pointlight_receiver_runtime_enabled = false;
+
 // R26: persistent Draw-family vtable ownership is runtime-falsified on the
 // DSR/ReShade host. Use one current-native dispatch under the existing
 // transaction + TLS recursion guard instead.
