@@ -45,7 +45,7 @@ require(fixed,'g_snapshots[owner_key]=current')
 require(fixed,'desc.Usage=D3D11_USAGE_IMMUTABLE')
 require(fixed,'view_desc.Buffer.NumElements=4u')
 require(fixed,'bool fixed_pointlight_draw_runtime::source_ready() const noexcept')
-require(fixed,'const auto selected=g_producer_snapshot;')
+require(fixed,'const auto selected=g_draw_snapshot;')
 
 # R52 source-first clustered mode retires the old draw-side sidecar/replacement
 # path. Keep the historical implementation source for provenance, but require
