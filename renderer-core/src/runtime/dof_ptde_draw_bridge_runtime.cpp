@@ -64,6 +64,8 @@ std::atomic<std::uint64_t> g_depth_msaa_draws{0u};
 std::atomic<std::uint64_t> g_pass01_scope_draws{0u};
 std::atomic<std::uint64_t> g_depth_msaa_pass01_overlap{0u};
 std::atomic<std::uint32_t> g_depth_msaa_last_thread{0u};
+std::atomic<std::uint32_t> g_pass01_role_mask{0u};
+std::atomic<std::uint32_t> g_pass0d_role_mask{0u};
 
 thread_local sequence_state g_sequence{};
 thread_local bool g_internal_replay = false;
@@ -824,10 +826,27 @@ bool handle_draw(
                 std::memory_order_relaxed);
         }
     }
-    if (pass01_scope)
+    if (pass01_scope) {
         g_pass01_scope_draws.fetch_add(
             1u,
             std::memory_order_relaxed);
+        if (exact_role) {
+            const auto role_index =
+                static_cast<std::uint32_t>(selected);
+            if (role_index < 32u)
+                g_pass01_role_mask.fetch_or(
+                    1u << role_index,
+                    std::memory_order_relaxed);
+        }
+    }
+    if (inside_exact_dof_pass0d() && exact_role) {
+        const auto role_index =
+            static_cast<std::uint32_t>(selected);
+        if (role_index < 32u)
+            g_pass0d_role_mask.fetch_or(
+                1u << role_index,
+                std::memory_order_relaxed);
+    }
     if (pass01_scope &&
         exact_role &&
         selected == role::depth_copy_msaa)
@@ -923,7 +942,7 @@ void log_status(
     std::snprintf(
         line,
         sizeof(line),
-        "[DSRRL DoF bridge] %s optin=%u armed=%u quarantine=%u first=%llu start=%llu complete=%llu fail=%llu dry=%llu visible=%llu fallback=%llu no_pass10=%llu restore_fail=%llu exact_draw=%llu msaa_draw=%llu pass01_scope_draw=%llu msaa_pass01_overlap=%llu msaa_tid=%u host01_calls=%llu host0d_calls=%llu host01_tid=%u host0d_tid=%u host_first=%llu src=%llu/%llu support=%llu/%llu abi_reject=%llu hook=%u/%u",
+        "[DSRRL DoF bridge] %s optin=%u armed=%u quarantine=%u first=%llu start=%llu complete=%llu fail=%llu dry=%llu visible=%llu fallback=%llu no_pass10=%llu restore_fail=%llu exact_draw=%llu msaa_draw=%llu pass01_scope_draw=%llu msaa_pass01_overlap=%llu msaa_tid=%u host01_calls=%llu host0d_calls=%llu host01_tid=%u host0d_tid=%u host_first=%llu src=%llu/%llu support=%llu/%llu abi_reject=%llu p01_role_mask=0x%x p0d_role_mask=0x%x hook=%u/%u",
         tag,
         status.opt_in ? 1u : 0u,
         status.armed ? 1u : 0u,
@@ -973,6 +992,8 @@ void log_status(
             host.support_capture_fail),
         static_cast<unsigned long long>(
             host.abi_reject),
+        g_pass01_role_mask.load(std::memory_order_relaxed),
+        g_pass0d_role_mask.load(std::memory_order_relaxed),
         host.pass01_hook_ready ? 1u : 0u,
         host.pass0d_hook_ready ? 1u : 0u);
 
@@ -1036,6 +1057,8 @@ bool register_ptde_draw_bridge_runtime(
     g_pass01_scope_draws.store(0u);
     g_depth_msaa_pass01_overlap.store(0u);
     g_depth_msaa_last_thread.store(0u);
+    g_pass01_role_mask.store(0u);
+    g_pass0d_role_mask.store(0u);
 
     set_authored_feature(false);
     release_sequence();
