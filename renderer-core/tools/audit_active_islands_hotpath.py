@@ -41,6 +41,7 @@ def main():
     pmetal=(root/"src/runtime/pmetal_envspec_draw_runtime.cpp").read_text(encoding="utf-8")
     pmetal_source=(root/"src/runtime/pmetal_env_source_runtime.cpp").read_text(encoding="utf-8")
     clustered=(root/"src/runtime/clustered_pnts_draw_runtime.cpp").read_text(encoding="utf-8")
+    dof_draw=(root/"src/runtime/dof_ptde_draw_bridge_runtime.cpp").read_text(encoding="utf-8")
     resources=(root/"src/runtime/material_resource_draw_runtime.cpp").read_text(encoding="utf-8")
     hemdir3_mode=(root/"src/runtime/hemdir3_mode_transport.cpp").read_text(encoding="utf-8")
     draw_tx=(root/"src/runtime/draw_state_transaction.cpp").read_text(encoding="utf-8")
@@ -149,6 +150,43 @@ def main():
             "!g_fixed_pointlight.source_ready()",
             "observe_pointlight_draw_identity(",
             "fixed source authority must precede receiver/material identity")
+
+    # R52 DoF semantic-cut repair. The PTDE private island starts from the
+    # exact host pass01 source/depth cut, not from a retained DSR shader role.
+    # Passes 1..7 execute privately; stock DSR contributes only the verified
+    # pass0x10 branch identity (GaussY_Adv/NearRate) before ToneMap handoff.
+    dof_handle=function_body(
+        dof_draw,
+        "bool handle_draw(",
+        "bool on_draw(")
+    require(dof_handle,
+        "if (pass01_scope) {",
+        "DoF host pass01 source/depth start cut")
+    if "selected == role::depth_copy_msaa &&\n            pass01_scope" in dof_handle:
+        fail("DoF regressed to unreachable DepthCopy_MSAA x pass01 start gate")
+
+    dof_begin=function_body(
+        dof_draw,
+        "bool begin_sequence(",
+        "void advance_sequence(")
+    require(dof_begin,
+        "pass_index < 8u;",
+        "DoF private PTDE prefix executes without stock retained pacing")
+    if "inside_exact_dof_pass0d()" in dof_begin:
+        fail("DoF private prefix regressed to stock pass0D pacing")
+
+    dof_advance=function_body(
+        dof_draw,
+        "void advance_sequence(",
+        "bool visible_tonemap_handoff(")
+    require(dof_advance,
+        "g_sequence.next_pass != 8u",
+        "DoF final-only stock branch gate")
+    require(dof_advance,
+        "selected != role::gauss_y_adv &&\n        selected != role::near_rate",
+        "DoF pass0x10 branch identity")
+    if "expected_role(" in dof_advance or "exact_scope_for_expected(" in dof_advance:
+        fail("DoF regressed to stock retained-role pacing after private prefix")
 
     require(pmetal_source,
         "[DSRRL PMETAL R41] flver_lifecycle_cache_flush=OFF source_cache_generation=SOURCE_RUNTIME_RESET_ONLY endpoint_cache=EXACT_SOURCE_BASE_COUNT_INDEX_ROW bank_cache=BASE_COUNT_LAYOUT region_cache=VM_WINDOW selector_shadow=EXACT_TLS_SOURCE_PTR_SELECTOR_BETA selector_source=ON envspec=ON material_response=ON",
@@ -688,6 +726,7 @@ def main():
     print("  feature_reads=atomic")
     print("  flver_identity=256-entry TLS before global map lock")
     print("  pointlight_bypass=no producer hooks/no clustered builder detour/no create-time PL census")
+    print("  dof=pass01 source/depth cut; PTDE passes1..7 private; stock pass10 branch-only")
     print("  disabled_islands=no HemDir3/Subsurface routes; no U/L/HemDir3 create materializers")
     print("  motion_blur=compute-stage prefilter before mutex")
     print("  pmetal=exact material/route prefilter before feature reads")
