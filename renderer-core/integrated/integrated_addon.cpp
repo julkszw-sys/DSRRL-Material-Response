@@ -248,7 +248,7 @@ void unregister_dof_runtime() noexcept
 {
     dsrrl::runtime::dof::unregister_ptde_draw_bridge_runtime();
     dsrrl::runtime::dof::unregister_authored_state_runtime();
-    dsrrl::runtime::dof::unregister_tonemap_handoff_runtime();
+    dsrrl::runtime::dof::unregister_tonemap_handoff_scope_runtime();
     dsrrl::runtime::dof::unregister_host_depth_route_runtime();
     dsrrl::runtime::dof::unregister_ptde_scheduler_runtime();
     dsrrl::runtime::dof::unregister_private_resource_runtime();
@@ -293,7 +293,7 @@ bool register_dof_runtime() noexcept
         dsrrl::runtime::dof::register_host_depth_route_runtime();
     const bool tone =
         host &&
-        dsrrl::runtime::dof::register_tonemap_handoff_runtime();
+        dsrrl::runtime::dof::register_tonemap_handoff_scope_runtime();
     const bool authored =
         tone &&
         dsrrl::runtime::dof::register_authored_state_runtime(g_core);
