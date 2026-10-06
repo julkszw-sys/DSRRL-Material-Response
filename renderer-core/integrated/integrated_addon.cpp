@@ -6563,6 +6563,17 @@ bool on_draw(
         return issued;
     }
 
+    // DoF shares the integrated global draw callback. The DoF bridge itself
+    // is fast-idle gated by the exact host pass01 scope and only suppresses
+    // the stock draw for the exact visible ToneMap terminal handoff.
+    if (dsrrl::runtime::dof::handle_draw_event(
+            cmd_list,
+            vertex_count,
+            instance_count,
+            first_vertex,
+            first_instance))
+        return true;
+
     if (g_hot_telemetry_enabled &&
         dsrrl::runtime::bloom_fx_draw_transport::
             active_draw_scope())
@@ -7001,6 +7012,15 @@ bool on_draw_indexed(
         g_raw_draw_replay_recursing = false;
         return issued;
     }
+
+    if (dsrrl::runtime::dof::handle_draw_indexed_event(
+            cmd_list,
+            index_count,
+            instance_count,
+            first_index,
+            vertex_offset,
+            first_instance))
+        return true;
 
     if (g_hot_telemetry_enabled &&
         dsrrl::runtime::bloom_fx_draw_transport::
