@@ -3650,6 +3650,42 @@ void log_state(const char *tag) noexcept
         reshade::log::level::info,
         clustered_pl_line);
 
+    char pointlight_source_line[1024]{};
+    std::snprintf(
+        pointlight_source_line,
+        sizeof(pointlight_source_line),
+        "[DSRRL PL SOURCE] tag=%s "
+        "clustered_hit=%llu apply=%llu donor=%llu/%llu class_reject=%llu cache=%llu/%llu "
+        "clustered_cat=%llu/%llu/%llu/%llu "
+        "fixed_hit=%llu captures=%llu snap2=%llu snap4=%llu fixed_cat=%llu/%llu/%llu/%llu "
+        "fixed_selector=%llu/%llu fixed_requests=%llu",
+        tag,
+        static_cast<unsigned long long>(clustered_pl.source_producer_hits),
+        static_cast<unsigned long long>(clustered_pl.source_capture_ok),
+        static_cast<unsigned long long>(clustered_pl.source_donor_accept),
+        static_cast<unsigned long long>(clustered_pl.source_donor_reject),
+        static_cast<unsigned long long>(clustered_pl.source_class_reject),
+        static_cast<unsigned long long>(clustered_pl.source_payload_cache_hit),
+        static_cast<unsigned long long>(clustered_pl.source_payload_cache_miss),
+        static_cast<unsigned long long>(clustered_pl.source_category0),
+        static_cast<unsigned long long>(clustered_pl.source_category1),
+        static_cast<unsigned long long>(clustered_pl.source_category2),
+        static_cast<unsigned long long>(clustered_pl.source_category3),
+        static_cast<unsigned long long>(fixed_pl.producer_hits),
+        static_cast<unsigned long long>(fixed_pl.producer_captures),
+        static_cast<unsigned long long>(fixed_pl.snapshot2_publish),
+        static_cast<unsigned long long>(fixed_pl.snapshot4_publish),
+        static_cast<unsigned long long>(fixed_pl.source_category0),
+        static_cast<unsigned long long>(fixed_pl.source_category1),
+        static_cast<unsigned long long>(fixed_pl.source_category2),
+        static_cast<unsigned long long>(fixed_pl.source_category3),
+        static_cast<unsigned long long>(fixed_pl.selector_seen),
+        static_cast<unsigned long long>(fixed_pl.selector_match),
+        static_cast<unsigned long long>(fixed_pl.requests));
+    reshade::log::message(
+        reshade::log::level::info,
+        pointlight_source_line);
+
     // Compact machine-parseable receiver census. Emit one line rather than
     // 24 lines per checkpoint so long runtime captures remain practical.
     char rx_line[4096]{};
