@@ -1046,7 +1046,18 @@ enum class clustered_live_source_result : std::uint8_t {
     applied = 0,
     stock_dsr_dsr_only_row,
     stock_dsr_unclassified_bank,
-    invalid
+    invalid_node_or_base,
+    invalid_vtable,
+    invalid_owner,
+    invalid_selector,
+    invalid_selector_policy,
+    invalid_selected_source,
+    invalid_param,
+    invalid_count_or_row,
+    invalid_bank_structure,
+    invalid_row_read,
+    invalid_row_numeric,
+    invalid_mix
 };
 
 struct clustered_source_bank_identity_cache_entry_v1 {
@@ -1166,7 +1177,7 @@ clustered_live_source_result read_clustered_live_drawparam_row(
     using namespace clustered_pointlight_source_gate;
 
     if (selector < 0 || source == 0u)
-        return clustered_live_source_result::invalid;
+        return clustered_live_source_result::invalid_selector;
 
     std::uintptr_t param = 0u;
     if (!pointlight_ptde_source::read_cached(
@@ -1178,7 +1189,7 @@ clustered_live_source_result read_clustered_live_drawparam_row(
             param,
             0x330u,
             cache))
-        return clustered_live_source_result::invalid;
+        return clustered_live_source_result::invalid_param;
 
     std::uint16_t count = 0u;
     std::uint32_t first = 0u;
@@ -1190,12 +1201,12 @@ clustered_live_source_result read_clustered_live_drawparam_row(
             param + 0x34u,
             first,
             cache))
-        return clustered_live_source_result::invalid;
+        return clustered_live_source_result::invalid_count_or_row;
 
     const auto row_id =
         static_cast<std::uint32_t>(selector) & 0xFFu;
     if (count != 64u || row_id >= count)
-        return clustered_live_source_result::invalid;
+        return clustered_live_source_result::invalid_count_or_row;
 
     gameplay_bank bank = gameplay_bank::unknown;
     bool known_non_ptde = false;
@@ -1206,7 +1217,7 @@ clustered_live_source_result read_clustered_live_drawparam_row(
             cache,
             bank,
             known_non_ptde))
-        return clustered_live_source_result::invalid;
+        return clustered_live_source_result::invalid_bank_structure;
 
     if (known_non_ptde ||
         bank == gameplay_bank::unknown)
@@ -1237,7 +1248,7 @@ clustered_live_source_result read_clustered_live_drawparam_row(
             row_address,
             row,
             cache))
-        return clustered_live_source_result::invalid;
+        return clustered_live_source_result::invalid_row_read;
 
     std::memcpy(
         &out.begin,
@@ -1266,7 +1277,7 @@ clustered_live_source_result read_clustered_live_drawparam_row(
         !std::isfinite(out.q[2]) ||
         !(out.end > out.begin) ||
         !(out.end > 0.0f))
-        return clustered_live_source_result::invalid;
+        return clustered_live_source_result::invalid_row_numeric;
 
     return clustered_live_source_result::applied;
 }
@@ -1277,7 +1288,7 @@ clustered_live_source_result capture_clustered_live_drawparam_source(
     std::array<float,8> &raw) noexcept
 {
     if (node == nullptr || base == 0u)
-        return clustered_live_source_result::invalid;
+        return clustered_live_source_result::invalid_node_or_base;
 
     const auto n =
         reinterpret_cast<std::uintptr_t>(node);
@@ -1290,16 +1301,18 @@ clustered_live_source_result capture_clustered_live_drawparam_source(
             n,
             vtable,
             cache) ||
+        vtable == 0u ||
         !pointlight_ptde_source::read_cached(
             vtable + 0x60u,
             fn,
-            cache) ||
-        !pointlight_ptde_source::read_cached(
+            cache))
+        return clustered_live_source_result::invalid_vtable;
+    if (!pointlight_ptde_source::read_cached(
             n + 0x50u,
             owner,
             cache) ||
         owner == 0u)
-        return clustered_live_source_result::invalid;
+        return clustered_live_source_result::invalid_owner;
 
     pointlight_ptde_source::signal a{}, b{}, result{};
 
@@ -1309,7 +1322,7 @@ clustered_live_source_result capture_clustered_live_drawparam_source(
                 n + 0x58u,
                 selector,
                 cache))
-            return clustered_live_source_result::invalid;
+            return clustered_live_source_result::invalid_selector;
 
         const auto row_result =
             read_clustered_live_drawparam_row(
@@ -1326,7 +1339,7 @@ clustered_live_source_result capture_clustered_live_drawparam_source(
                 a,
                 0.0f,
                 result))
-            return clustered_live_source_result::invalid;
+            return clustered_live_source_result::invalid_mix;
     } else if (fn == base + 0x55D0B0u) {
         std::int16_t selector_a = -1;
         std::int16_t selector_b = -1;
@@ -1343,7 +1356,7 @@ clustered_live_source_result capture_clustered_live_drawparam_source(
                 n + 0x5Cu,
                 beta,
                 cache))
-            return clustered_live_source_result::invalid;
+            return clustered_live_source_result::invalid_selector;
 
         const auto pair =
             pmetal_selector_policy::select(
@@ -1351,7 +1364,7 @@ clustered_live_source_result capture_clustered_live_drawparam_source(
                 selector_b,
                 beta);
         if (!pair.valid)
-            return clustered_live_source_result::invalid;
+            return clustered_live_source_result::invalid_selector_policy;
 
         std::uintptr_t source_a = 0u;
         if (!pointlight_ptde_source::selected_source(
@@ -1359,7 +1372,7 @@ clustered_live_source_result capture_clustered_live_drawparam_source(
                 pair.a,
                 source_a,
                 cache))
-            return clustered_live_source_result::invalid;
+            return clustered_live_source_result::invalid_selected_source;
 
         const auto row_a =
             read_clustered_live_drawparam_row(
@@ -1379,7 +1392,7 @@ clustered_live_source_result capture_clustered_live_drawparam_source(
                     pair.b,
                     source_b,
                     cache))
-                return clustered_live_source_result::invalid;
+                return clustered_live_source_result::invalid_selected_source;
 
             const auto row_b =
                 read_clustered_live_drawparam_row(
@@ -1397,9 +1410,9 @@ clustered_live_source_result capture_clustered_live_drawparam_source(
                 b,
                 pair.beta,
                 result))
-            return clustered_live_source_result::invalid;
+            return clustered_live_source_result::invalid_mix;
     } else {
-        return clustered_live_source_result::invalid;
+        return clustered_live_source_result::invalid_vtable;
     }
 
     raw[3] = 1.0f / (result.end - result.begin);
@@ -1411,7 +1424,7 @@ clustered_live_source_result capture_clustered_live_drawparam_source(
     return std::isfinite(raw[3]) &&
            raw[3] > 0.0f
         ? clustered_live_source_result::applied
-        : clustered_live_source_result::invalid;
+        : clustered_live_source_result::invalid_row_numeric;
 }
 
 void source_hook_emit_u64(
