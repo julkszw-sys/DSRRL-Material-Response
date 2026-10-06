@@ -295,8 +295,17 @@ pointlight_profile_bucket g_prof_gpu_cache{};
 pointlight_profile_bucket g_prof_upload{};
 pointlight_cycle_bucket g_prof_select_cycles{};
 pointlight_cycle_bucket g_prof_capture_cycles{};
+pointlight_cycle_bucket g_prof_capture_preamble_cycles{};
+pointlight_cycle_bucket g_prof_capture_semantic_cycles{};
+pointlight_cycle_bucket g_prof_capture_cache_cycles{};
+pointlight_cycle_bucket g_prof_capture_donor_cycles{};
+std::atomic<std::uint64_t> g_prof_capture_cache_hits{0u};
+std::atomic<std::uint64_t> g_prof_capture_cache_misses{0u};
+std::atomic<std::uint64_t> g_prof_capture_bank_calls{0u};
+std::atomic<std::uint64_t> g_prof_capture_direct_calls{0u};
 
 thread_local std::uint32_t g_prof_producer_seq = 0u;
+thread_local std::uint32_t g_prof_capture_detail_seq = 0u;
 thread_local std::uint32_t g_prof_sidecar_seq = 0u;
 thread_local std::uint32_t g_prof_authority_seq = 0u;
 thread_local std::uint32_t g_prof_prepare_seq = 0u;
@@ -468,6 +477,43 @@ void maybe_log_pointlight_prepare_profile() noexcept
     reshade::log::message(
         reshade::log::level::info,
         line);
+
+    char detail[768]{};
+    std::snprintf(
+        detail,
+        sizeof(detail),
+        "[DSRRL PERF R48] POINTLIGHT_CAPTURE preamble_cycles=%.1f semantic_cycles=%.1f cache_cycles=%.1f donor_cycles=%.1f hit=%llu miss=%llu bank=%llu direct=%llu n=pre:%llu sem:%llu cache:%llu donor:%llu",
+        prof_avg_cycles(g_prof_capture_preamble_cycles),
+        prof_avg_cycles(g_prof_capture_semantic_cycles),
+        prof_avg_cycles(g_prof_capture_cache_cycles),
+        prof_avg_cycles(g_prof_capture_donor_cycles),
+        static_cast<unsigned long long>(
+            g_prof_capture_cache_hits.load(
+                std::memory_order_relaxed)),
+        static_cast<unsigned long long>(
+            g_prof_capture_cache_misses.load(
+                std::memory_order_relaxed)),
+        static_cast<unsigned long long>(
+            g_prof_capture_bank_calls.load(
+                std::memory_order_relaxed)),
+        static_cast<unsigned long long>(
+            g_prof_capture_direct_calls.load(
+                std::memory_order_relaxed)),
+        static_cast<unsigned long long>(
+            g_prof_capture_preamble_cycles.samples.load(
+                std::memory_order_relaxed)),
+        static_cast<unsigned long long>(
+            g_prof_capture_semantic_cycles.samples.load(
+                std::memory_order_relaxed)),
+        static_cast<unsigned long long>(
+            g_prof_capture_cache_cycles.samples.load(
+                std::memory_order_relaxed)),
+        static_cast<unsigned long long>(
+            g_prof_capture_donor_cycles.samples.load(
+                std::memory_order_relaxed)));
+    reshade::log::message(
+        reshade::log::level::info,
+        detail);
 }
 #endif
 
@@ -1505,6 +1551,12 @@ bool capture_source(
     pointlight_ptde_source::draw_bank_authority_cache &bank_cache) noexcept
 {
     out = {};
+#ifdef DSRRL_POINTLIGHT_PROFILE
+    const bool prof_detail =
+        prof_sample(g_prof_capture_detail_seq);
+    auto prof_stage_cycles =
+        prof_detail ? prof_thread_cycles() : 0u;
+#endif
     auto &source_vm =
         source_vm_cache_current();
     if (!readable_range_cached(
@@ -1578,6 +1630,23 @@ bool capture_source(
         return false;
     }
 
+#ifdef DSRRL_POINTLIGHT_PROFILE
+    if (prof_detail) {
+        const auto now = prof_thread_cycles();
+        if (now >= prof_stage_cycles)
+            prof_cycle_add(
+                g_prof_capture_preamble_cycles,
+                now - prof_stage_cycles);
+        prof_stage_cycles = now;
+        if (bank_source || lerp_bank_source)
+            g_prof_capture_bank_calls.fetch_add(
+                1u, std::memory_order_relaxed);
+        else if (direct_source)
+            g_prof_capture_direct_calls.fetch_add(
+                1u, std::memory_order_relaxed);
+    }
+#endif
+
     frame_source_state_v1 frame_state{};
     bool semantic_endpoints_ready = false;
     const bool frame_cacheable =
@@ -1648,6 +1717,16 @@ bool capture_source(
                 bank_source,
                 lerp_bank_source,
                 frame_state);
+#ifdef DSRRL_POINTLIGHT_PROFILE
+        if (prof_detail) {
+            const auto now = prof_thread_cycles();
+            if (now >= prof_stage_cycles)
+                prof_cycle_add(
+                    g_prof_capture_semantic_cycles,
+                    now - prof_stage_cycles);
+            prof_stage_cycles = now;
+        }
+#endif
 
         const auto semantic_generation =
             g_source_semantic_generation.load(
@@ -1669,6 +1748,17 @@ bool capture_source(
             same_frame_source_state(
                 entry.state,
                 frame_state)) {
+#ifdef DSRRL_POINTLIGHT_PROFILE
+            if (prof_detail) {
+                const auto now = prof_thread_cycles();
+                if (now >= prof_stage_cycles)
+                    prof_cycle_add(
+                        g_prof_capture_cache_cycles,
+                        now - prof_stage_cycles);
+                g_prof_capture_cache_hits.fetch_add(
+                    1u, std::memory_order_relaxed);
+            }
+#endif
             out = entry.source;
             static std::atomic_bool
                 cache_hit_logged{false};
@@ -1681,6 +1771,19 @@ bool capture_source(
             }
             return true;
         }
+#ifdef DSRRL_POINTLIGHT_PROFILE
+        if (prof_detail) {
+            const auto now = prof_thread_cycles();
+            if (now >= prof_stage_cycles)
+                prof_cycle_add(
+                    g_prof_capture_cache_cycles,
+                    now - prof_stage_cycles);
+            prof_stage_cycles = now;
+            if (semantic_endpoints_ready)
+                g_prof_capture_cache_misses.fetch_add(
+                    1u, std::memory_order_relaxed);
+        }
+#endif
     }
 
     alignas(16) std::array<float,8> raw{};
@@ -1728,6 +1831,16 @@ bool capture_source(
             reinterpret_cast<source_fn>(target);
         fn(node, raw.data());
     }
+
+#ifdef DSRRL_POINTLIGHT_PROFILE
+    if (prof_detail) {
+        const auto now = prof_thread_cycles();
+        if (now >= prof_stage_cycles)
+            prof_cycle_add(
+                g_prof_capture_donor_cycles,
+                now - prof_stage_cycles);
+    }
+#endif
 
     for (const auto value : raw)
         if (!std::isfinite(value)) {
