@@ -48,6 +48,7 @@ struct persistent_bank_name_guard {
 struct persistent_bank_structure_cache_entry {
     std::uintptr_t param = 0u;
     std::uintptr_t allocation_base = 0u;
+    std::uint64_t validated_epoch = 0u;
     std::uint16_t count = 0u;
     std::uint32_t first = 0u;
     std::uint32_t span = 0u;
@@ -70,8 +71,21 @@ persistent_structure_cache() noexcept {
     return cache;
 }
 
+inline std::uint64_t &
+persistent_structure_validation_epoch() noexcept {
+    thread_local std::uint64_t epoch = 1u;
+    return epoch;
+}
+
+inline void set_persistent_structure_validation_epoch(
+    std::uint64_t epoch) noexcept {
+    persistent_structure_validation_epoch() =
+        epoch != 0u ? epoch : 1u;
+}
+
 inline void clear_persistent_structure_cache() noexcept {
     persistent_structure_cache() = {};
+    persistent_structure_validation_epoch() = 1u;
 }
 
 inline bool readable_single_region(
@@ -144,6 +158,16 @@ lookup_persistent_structure_cache(
             continue;
         }
 
+        // Bank layout/name data is immutable asset identity. Revalidate
+        // the full exact table+name snapshot once per presented-frame epoch;
+        // subsequent donor uses in the same epoch still verify allocation
+        // identity, but avoid 64 repeated name memcmp operations on the draw
+        // hot path.
+        const auto validation_epoch =
+            persistent_structure_validation_epoch();
+        if (entry.validated_epoch == validation_epoch)
+            return entry.bank;
+
         const auto table_bytes =
             static_cast<std::size_t>(count) * 12u;
         if (table_bytes !=
@@ -188,6 +212,8 @@ lookup_persistent_structure_cache(
             continue;
         }
 
+        entry.validated_epoch =
+            persistent_structure_validation_epoch();
         return entry.bank;
     }
 
@@ -228,6 +254,8 @@ inline void store_persistent_structure_cache(
     entry = {};
     entry.param = param;
     entry.allocation_base = allocation_base;
+    entry.validated_epoch =
+        persistent_structure_validation_epoch();
     entry.count = count;
     entry.first = first;
     entry.span =
@@ -602,6 +630,175 @@ inline bool donor(
         cache,
         authority_cache);
 }
+
+// R51: consume endpoint identity already resolved by the caller. This keeps
+// the exact donor-bank identification/revalidation contract while avoiding a
+// second source->param and Lerp manager/table traversal for the same capture.
+inline bool donor_resolved(
+    std::uintptr_t param,
+    std::uint16_t count,
+    std::uint32_t first,
+    std::int32_t selector,
+    signal &out,
+    access_cache &cache,
+    draw_bank_authority_cache &authority_cache) noexcept {
+    if (selector < 0 ||
+        param == 0u ||
+        !readable_cached(param, 0x330u, cache))
+        return false;
+
+    const pointlight_donors::bank *bank = nullptr;
+    for (const auto &entry : authority_cache.entries) {
+        if (entry.param == param &&
+            entry.count == count &&
+            entry.first == first &&
+            entry.bank != nullptr) {
+            bank = entry.bank;
+            break;
+        }
+    }
+
+    if (bank == nullptr)
+        bank =
+            lookup_persistent_structure_cache(
+                param,
+                count,
+                first);
+
+    if (bank == nullptr) {
+        std::uint64_t structure_signature = 0u;
+        std::uint32_t structure_end = 0u;
+        if (!bank_structure_signature(
+                param,
+                count,
+                first,
+                cache,
+                structure_signature,
+                &structure_end))
+            return false;
+
+        bank = identify_structure(structure_signature);
+        if (bank == nullptr)
+            return false;
+
+        store_persistent_structure_cache(
+            param,
+            count,
+            first,
+            structure_end,
+            bank);
+    }
+
+    auto &entry =
+        authority_cache.entries[
+            static_cast<std::size_t>(
+                authority_cache.victim++) %
+            authority_cache.entries.size()];
+    entry = {param, count, first, bank};
+
+    const auto index =
+        static_cast<std::uint32_t>(selector) & 255u;
+    if (index >= 64u ||
+        !readable_cached(
+            param + first,
+            1024u,
+            cache))
+        return false;
+
+    out = decode(bank->ptde[index]);
+    return true;
+}
+
+inline bool capture_resolved(
+    bool bank_source,
+    std::uint32_t selector_word0,
+    std::uint32_t selector_word1,
+    std::uintptr_t param_a,
+    std::uint16_t count_a,
+    std::uint32_t first_a,
+    std::uintptr_t param_b,
+    std::uint16_t count_b,
+    std::uint32_t first_b,
+    std::array<float,8> &raw,
+    draw_bank_authority_cache &authority_cache) noexcept {
+    access_cache cache{};
+    signal a{}, b{}, result{};
+
+    if (bank_source) {
+        std::int32_t selector = -1;
+        std::memcpy(
+            &selector,
+            &selector_word0,
+            sizeof(selector));
+        if (!donor_resolved(
+                param_a,
+                count_a,
+                first_a,
+                selector,
+                a,
+                cache,
+                authority_cache) ||
+            !mix(a, a, 0.0f, result))
+            return false;
+    } else {
+        std::int16_t selector_a = -1;
+        std::int16_t selector_b = -1;
+        float beta = 0.0f;
+        std::memcpy(
+            &selector_a,
+            &selector_word0,
+            sizeof(selector_a));
+        std::memcpy(
+            &selector_b,
+            reinterpret_cast<const std::uint8_t *>(
+                &selector_word0) +
+                sizeof(selector_a),
+            sizeof(selector_b));
+        std::memcpy(
+            &beta,
+            &selector_word1,
+            sizeof(beta));
+
+        const auto pair =
+            pmetal_selector_policy::select(
+                selector_a,
+                selector_b,
+                beta);
+        if (!pair.valid ||
+            !donor_resolved(
+                param_a,
+                count_a,
+                first_a,
+                pair.a,
+                a,
+                cache,
+                authority_cache))
+            return false;
+
+        b = a;
+        if (pair.beta != 0.0f &&
+            !donor_resolved(
+                param_b,
+                count_b,
+                first_b,
+                pair.b,
+                b,
+                cache,
+                authority_cache))
+            return false;
+
+        if (!mix(a, b, pair.beta, result))
+            return false;
+    }
+
+    raw[3] = 1.0f / (result.end - result.begin);
+    raw[4] = result.q[0];
+    raw[5] = result.q[1];
+    raw[6] = result.q[2];
+    raw[7] = result.end;
+    return std::isfinite(raw[3]);
+}
+
 inline bool selected_source(std::uintptr_t manager,std::int16_t selector,std::uintptr_t &source,access_cache &cache) noexcept {
     const auto area=selector<0?0xffffffffu:(static_cast<unsigned>(selector)>>8u)&127u;
     auto lookup=[&](unsigned a) noexcept {
