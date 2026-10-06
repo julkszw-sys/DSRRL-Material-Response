@@ -4208,7 +4208,8 @@ bool on_create_pipeline(
             }
         }
 
-        if (k_pointlight_drawtime_runtime_enabled) {
+        if (k_pointlight_drawtime_runtime_enabled &&
+            k_clustered_pointlight_receiver_runtime_enabled) {
             clustered_pnts =
                 dsrrl::operators::point_light::
                     materialize_clustered_pnts_direct_ptde(
@@ -4752,6 +4753,7 @@ bool on_create_pipeline(
             subobjects);
 
     if (k_pointlight_drawtime_runtime_enabled &&
+        k_clustered_pointlight_receiver_runtime_enabled &&
         clustered_pnts_candidate) {
         const auto *attested_host =
             find_pixel_shader(
@@ -4854,6 +4856,7 @@ void on_init_pipeline(
             device, subobject_count, subobjects, pipeline);
     const bool clustered_pointlight_init_exact =
         k_pointlight_drawtime_runtime_enabled &&
+        k_clustered_pointlight_receiver_runtime_enabled &&
         g_clustered_pnts_pipeline.on_init_pipeline(
             device, subobject_count, subobjects, pipeline);
     motion_blur_camera_fallback_disable::
