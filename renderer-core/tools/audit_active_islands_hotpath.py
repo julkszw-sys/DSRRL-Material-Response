@@ -158,12 +158,31 @@ def main():
     dof_handle=function_body(
         dof_draw,
         "bool handle_draw(",
-        "bool on_draw(")
+        "bool handle_draw_event(")
     require(dof_handle,
         "if (pass01_scope) {",
         "DoF host pass01 source/depth start cut")
     if "selected == role::depth_copy_msaa &&\n            pass01_scope" in dof_handle:
         fail("DoF regressed to unreachable DepthCopy_MSAA x pass01 start gate")
+
+    if "register_event<\n            reshade::addon_event::draw>" in dof_draw or \
+       "register_event<\n            reshade::addon_event::draw_indexed>" in dof_draw:
+        fail("DoF must use the integrated draw dispatcher, not register duplicate global draw callbacks")
+    require(integrated,
+        "dsrrl::runtime::dof::handle_draw_event(",
+        "DoF non-indexed path uses integrated draw dispatcher")
+    require(integrated,
+        "dsrrl::runtime::dof::handle_draw_indexed_event(",
+        "DoF indexed path uses integrated draw dispatcher")
+    require(clustered,
+        "Dynamic source movement no longer invalidates it.",
+        "clustered source payload cache excludes position from semantic invalidation")
+    require(dof_depth,
+        "g_pass01_render_context) + 0xD4u",
+        "DoF exact host scene slot0 resource restore")
+    require(dof_depth,
+        "source_resource",
+        "DoF exact pass-desc scene source resource capture")
 
     dof_begin=function_body(
         dof_draw,
