@@ -14,8 +14,11 @@ def read(rel: str) -> str:
     return read_bytes(rel).decode("utf-8", errors="strict")
 
 def git_blob_sha1(data: bytes) -> str:
-    header = f"blob {len(data)}\0".encode("ascii")
-    return hashlib.sha1(header + data).hexdigest()
+    # Windows runners may materialize text files with CRLF while the Git blob
+    # is LF-normalized. Compare canonical Git text bytes, not checkout EOLs.
+    canonical = data.replace(b"\r\n", b"\n")
+    header = f"blob {len(canonical)}\0".encode("ascii")
+    return hashlib.sha1(header + canonical).hexdigest()
 
 def require(text: str, needle: str, label: str) -> None:
     if needle not in text:
