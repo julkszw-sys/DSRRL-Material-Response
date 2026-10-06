@@ -7,8 +7,10 @@ import re
 from pathlib import Path
 
 MARKERS = {
+    "selector_r50": "[DSRRL PERF R50] SELECTOR",
     "selector_r45": "[DSRRL PERF R45] SELECTOR",
     "selector_r32": "[DSRRL PERF R32] SELECTOR",
+    "pointlight_capture_r49": "[DSRRL PERF R49] POINTLIGHT_CAPTURE",
     "pointlight_prep_r47": "[DSRRL PERF R47] POINTLIGHT_PREP",
     "pointlight_prep_r46": "[DSRRL PERF R46] POINTLIGHT_PREP",
     "pointlight_prep_r32": "[DSRRL PERF R32] POINTLIGHT_PREP",
@@ -69,7 +71,7 @@ def main() -> int:
 
     rows: list[dict] = []
 
-    selector_line = latest.get("selector_r45") or latest.get("selector_r32")
+    selector_line = latest.get("selector_r50") or latest.get("selector_r45") or latest.get("selector_r32")
     line = selector_line
     if selector_line:
         p = sample_period(selector_line)
@@ -82,6 +84,7 @@ def main() -> int:
             ("FLVER_OWNER_LOOKUP", "owner_lookup_us"),
             ("FLVER_OWNER_MTD", "owner_mtd_us"),
             ("FLVER_SELECTION_PUBLISH", "selection_publish_us"),
+            ("FLVER_POINTLIGHT_BRIDGE", "pointlight_bridge_us"),
             ("FLVER_PMETAL_SOURCE", "pmetal_source_us"),
             ("FLVER_RUNTIME_MTD", "runtime_mtd_us"),
             ("FLVER_RUNTIME_PUBLISH", "runtime_publish_us"),
@@ -131,6 +134,25 @@ def main() -> int:
             add(rows, "POINTLIGHT_PREPARE", number(line, "prepare_us"),
                 tagged_n(line, "prep"), p)
 
+    capture_detail = latest.get("pointlight_capture_r49")
+    if capture_detail and pointlight_wall_envelope is not None:
+        pointlight_wall_envelope["capture_subpaths"] = {
+            "preamble_avg_cycles": number(capture_detail, "preamble_cycles"),
+            "preamble_max_cycles": number(capture_detail, "preamble_max"),
+            "semantic_avg_cycles": number(capture_detail, "semantic_cycles"),
+            "semantic_max_cycles": number(capture_detail, "semantic_max"),
+            "semantic_bank_avg_cycles": number(capture_detail, "semantic_bank_cycles"),
+            "semantic_bank_max_cycles": number(capture_detail, "semantic_bank_max"),
+            "semantic_lerp_avg_cycles": number(capture_detail, "semantic_lerp_cycles"),
+            "semantic_lerp_max_cycles": number(capture_detail, "semantic_lerp_max"),
+            "donor_avg_cycles": number(capture_detail, "donor_cycles"),
+            "donor_max_cycles": number(capture_detail, "donor_max"),
+            "donor_bank_avg_cycles": number(capture_detail, "donor_bank_cycles"),
+            "donor_bank_max_cycles": number(capture_detail, "donor_bank_max"),
+            "donor_direct_avg_cycles": number(capture_detail, "donor_direct_cycles"),
+            "donor_direct_max_cycles": number(capture_detail, "donor_direct_max"),
+        }
+
     line = latest.get("pointlight_tx")
     if line:
         add(rows, "POINTLIGHT_TRANSACTION", number(line, "total_us"),
@@ -157,7 +179,7 @@ def main() -> int:
                     "avg_wall_us": number(selector_line, "total_wall_us") or number(selector_line, "total_us"),
                     "max_wall_us": number(selector_line, "max_total_wall_us") or number(selector_line, "max_total_us"),
                     "unaccounted_wall_us": number(selector_line, "unaccounted_wall_us"),
-                    "note": "Wall envelope is scheduler/preemption-sensitive and is excluded from CPU ranking.",
+                    "note": "Outer selector wall envelope includes any unbucketed addon work. R50 explicitly accounts the PointLight bridge; residual only is excluded from CPU ranking.",
                 }
                 if selector_line else None
             ),
