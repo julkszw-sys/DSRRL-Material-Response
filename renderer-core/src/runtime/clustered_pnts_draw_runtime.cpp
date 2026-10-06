@@ -1120,6 +1120,163 @@ clustered_live_source_result clustered_source_bank_guard(
     return clustered_live_source_result::applied;
 }
 
+enum class clustered_bank_signature_failure : std::uint8_t {
+    none = 0u,
+    header_range,
+    table_read,
+    row_id,
+    row_offset,
+    name_offset,
+    name_read,
+    name_unterminated
+};
+
+bool clustered_bank_structure_signature(
+    std::uintptr_t param,
+    std::uint16_t count,
+    std::uint32_t first,
+    pointlight_ptde_source::access_cache &cache,
+    std::uint64_t &signature,
+    clustered_bank_signature_failure &failure) noexcept
+{
+    failure = clustered_bank_signature_failure::none;
+    if (count != 64u ||
+        first < 0x30u ||
+        first > 0x100000u) {
+        failure = clustered_bank_signature_failure::header_range;
+        return false;
+    }
+
+    constexpr std::uint32_t table_end =
+        0x30u + 64u * 12u;
+    if (!pointlight_ptde_source::readable_cached(
+            param,
+            table_end,
+            cache)) {
+        failure = clustered_bank_signature_failure::table_read;
+        return false;
+    }
+
+    std::uint64_t hash = 0xcbf29ce484222325ULL;
+    pointlight_ptde_source::structure_hash_byte(
+        hash,
+        static_cast<std::uint8_t>(count & 0xffu));
+    pointlight_ptde_source::structure_hash_byte(
+        hash,
+        static_cast<std::uint8_t>((count >> 8u) & 0xffu));
+
+    for (std::uint32_t i = 0u; i < count; ++i) {
+        const auto entry =
+            param + 0x30u +
+            static_cast<std::uintptr_t>(i) * 12u;
+        std::uint32_t id = 0u;
+        std::uint32_t row_offset = 0u;
+        std::uint32_t name_offset = 0u;
+        std::memcpy(
+            &id,
+            reinterpret_cast<const void *>(entry),
+            sizeof(id));
+        std::memcpy(
+            &row_offset,
+            reinterpret_cast<const void *>(entry + 4u),
+            sizeof(row_offset));
+        std::memcpy(
+            &name_offset,
+            reinterpret_cast<const void *>(entry + 8u),
+            sizeof(name_offset));
+
+        if (id != i) {
+            failure = clustered_bank_signature_failure::row_id;
+            return false;
+        }
+
+        // Retail 0x14055DB79..84 resolves a selected row by loading the
+        // per-entry offset at param+0x34+12*i, then adding param. Runtime
+        // identity must validate that representation instead of imposing the
+        // offline serialized invariant row_offset == first + 16*i.
+        if (row_offset < 0x30u ||
+            row_offset > 0x100000u ||
+            !pointlight_ptde_source::readable_cached(
+                param + row_offset,
+                16u,
+                cache)) {
+            failure = clustered_bank_signature_failure::row_offset;
+            return false;
+        }
+
+        if (name_offset < table_end ||
+            name_offset > 0x100000u) {
+            failure = clustered_bank_signature_failure::name_offset;
+            return false;
+        }
+
+        for (unsigned shift = 0u; shift < 32u; shift += 8u)
+            pointlight_ptde_source::structure_hash_byte(
+                hash,
+                static_cast<std::uint8_t>(
+                    (id >> shift) & 0xffu));
+
+        const auto name_address = param + name_offset;
+        const auto direct_bytes =
+            pointlight_ptde_source::readable_cached_prefix(
+                name_address,
+                256u,
+                cache);
+        if (direct_bytes == 0u) {
+            failure = clustered_bank_signature_failure::name_read;
+            return false;
+        }
+
+        bool terminated = false;
+        const auto *name =
+            reinterpret_cast<const std::uint8_t *>(
+                name_address);
+        std::uint32_t consumed = 0u;
+        for (; consumed < direct_bytes; ++consumed) {
+            const auto value = name[consumed];
+            pointlight_ptde_source::structure_hash_byte(
+                hash,
+                value);
+            if (value == 0u) {
+                terminated = true;
+                break;
+            }
+        }
+
+        if (!terminated) {
+            for (std::uint32_t j = consumed;
+                 j < 256u;
+                 ++j) {
+                std::uint8_t value = 0u;
+                if (!pointlight_ptde_source::read_cached(
+                        name_address + j,
+                        value,
+                        cache)) {
+                    failure =
+                        clustered_bank_signature_failure::name_read;
+                    return false;
+                }
+                pointlight_ptde_source::structure_hash_byte(
+                    hash,
+                    value);
+                if (value == 0u) {
+                    terminated = true;
+                    break;
+                }
+            }
+        }
+
+        if (!terminated) {
+            failure =
+                clustered_bank_signature_failure::name_unterminated;
+            return false;
+        }
+    }
+
+    signature = hash;
+    return true;
+}
+
 clustered_live_source_result classify_clustered_source_bank(
     std::uintptr_t param,
     std::uint16_t count,
@@ -1159,42 +1316,35 @@ clustered_live_source_result classify_clustered_source_bank(
     }
 
     std::uint64_t signature = 0u;
-    pointlight_ptde_source::bank_structure_signature_failure
-        signature_failure =
-            pointlight_ptde_source::
-                bank_structure_signature_failure::none;
-    if (!pointlight_ptde_source::bank_structure_signature(
+    clustered_bank_signature_failure signature_failure =
+        clustered_bank_signature_failure::none;
+    if (!clustered_bank_structure_signature(
             param,
             count,
             first,
             cache,
             signature,
-            nullptr,
-            &signature_failure,
-            false)) {
-        using failure =
-            pointlight_ptde_source::
-                bank_structure_signature_failure;
+            signature_failure)) {
         switch (signature_failure) {
-        case failure::header_range:
+        case clustered_bank_signature_failure::header_range:
             return clustered_live_source_result::
                 bank_signature_header_range_fail;
-        case failure::table_read:
+        case clustered_bank_signature_failure::table_read:
             return clustered_live_source_result::
                 bank_signature_table_read_fail;
-        case failure::row_id:
+        case clustered_bank_signature_failure::row_id:
             return clustered_live_source_result::
                 bank_signature_row_id_fail;
-        case failure::row_offset:
+        case clustered_bank_signature_failure::row_offset:
             return clustered_live_source_result::
                 bank_signature_row_offset_fail;
-        case failure::name_offset:
+        case clustered_bank_signature_failure::name_offset:
             return clustered_live_source_result::
                 bank_signature_name_offset_fail;
-        case failure::name_read:
+        case clustered_bank_signature_failure::name_read:
             return clustered_live_source_result::
                 bank_signature_name_read_fail;
-        case failure::name_unterminated:
+        case clustered_bank_signature_failure::name_unterminated:
             return clustered_live_source_result::
                 bank_signature_name_unterminated;
         default:
