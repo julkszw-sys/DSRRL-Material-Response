@@ -234,6 +234,10 @@ option(
     DSRRL_DOF_DEFAULT_ON
     "Diagnostic: activate the verified PTDE DoF island without requiring an environment opt-in"
     OFF)
+option(
+    DSRRL_DOF_PROFILE
+    "Diagnostic: low-overhead sampled PTDE DoF draw-path CPU profiler"
+    OFF)
 
 set(
     RESHADE_INCLUDE_DIR
@@ -981,6 +985,13 @@ if(DSRRL_DOF_DEFAULT_ON)
         dsrrl_renderer_core_integrated
         PRIVATE
         DSRRL_DOF_DEFAULT_ON)
+endif()
+
+if(DSRRL_DOF_PROFILE)
+    target_compile_definitions(
+        dsrrl_renderer_core_integrated
+        PRIVATE
+        DSRRL_DOF_PROFILE)
 endif()
 
 if(MSVC)
