@@ -121,8 +121,17 @@ def main():
         "k_clustered_source_override_preimage",
         "clustered source hook exact-byte preimage")
     require(clustered,
-        "pointlight_ptde_source::capture(",
-        "clustered PTDE donor source substitution")
+        "k_ptde_drawparam_homolog_row_masks",
+        "clustered exact PTDE DrawParam row coverage")
+    require(clustered,
+        "clustered_source_has_ptde_param(",
+        "clustered PARAM-backed source authority gate")
+    callback=function_body(
+        clustered,
+        "void __fastcall clustered_source_override_callback(",
+        "bool build_clustered_source_override_stub(")
+    if "pointlight_ptde_source::capture(" in callback:
+        fail("clustered live source callback regressed to PTDE donor reconstruction")
     require(clustered,
         "Clustered PntS never performs receiver/material authorization.",
         "clustered receiver/material bridge retired")
