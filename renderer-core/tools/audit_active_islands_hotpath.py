@@ -160,7 +160,13 @@ def main():
         "bool handle_draw(",
         "bool handle_draw_event(")
     require(dof_handle,
-        "if (pass01_scope) {",
+        "const bool pass01_scope =",
+        "DoF host pass01 source/depth scope query")
+    require(dof_handle,
+        "if (!pass01_scope)\n            return false;",
+        "DoF idle draws fail fast outside host pass01")
+    require(dof_handle,
+        "(void)begin_sequence(",
         "DoF host pass01 source/depth start cut")
     if "selected == role::depth_copy_msaa &&\n            pass01_scope" in dof_handle:
         fail("DoF regressed to unreachable DepthCopy_MSAA x pass01 start gate")
