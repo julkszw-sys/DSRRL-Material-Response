@@ -1286,6 +1286,49 @@ clustered_live_source_result read_clustered_live_drawparam_row(
     return clustered_live_source_result::applied;
 }
 
+bool selected_clustered_source_retail(
+    std::uintptr_t manager,
+    std::int16_t selector,
+    std::uintptr_t &source,
+    pointlight_ptde_source::access_cache &cache) noexcept
+{
+    source = 0u;
+    if (manager == 0u)
+        return false;
+
+    const auto lookup =
+        [&](unsigned area) noexcept {
+            std::uintptr_t table = 0u;
+            std::uintptr_t candidate = 0u;
+            if (!pointlight_ptde_source::read_cached(
+                    manager + 0x20u +
+                        static_cast<std::uintptr_t>(area) * 0x1B0u,
+                    table,
+                    cache) ||
+                table == 0u ||
+                !pointlight_ptde_source::read_cached(
+                    table + 9u * 0x10u + 8u,
+                    candidate,
+                    cache))
+                return;
+            source = candidate;
+        };
+
+    const auto area =
+        selector < 0
+            ? 0xffffffffu
+            : (static_cast<unsigned>(
+                   static_cast<std::uint16_t>(selector)) >> 8u) & 0x7fu;
+
+    // Exact 0x14055D0B0 / 0x140569B40 behavior: try the selected area first,
+    // then common area 11 whenever the first resolver returns nullptr.
+    if (area <= 11u)
+        lookup(area);
+    if (source == 0u)
+        lookup(11u);
+    return source != 0u;
+}
+
 clustered_live_source_result capture_clustered_live_drawparam_source(
     void *node,
     std::uintptr_t base,
@@ -1371,7 +1414,7 @@ clustered_live_source_result capture_clustered_live_drawparam_source(
             return clustered_live_source_result::invalid_selector_policy;
 
         std::uintptr_t source_a = 0u;
-        if (!pointlight_ptde_source::selected_source(
+        if (!selected_clustered_source_retail(
                 owner,
                 pair.a,
                 source_a,
@@ -1391,7 +1434,7 @@ clustered_live_source_result capture_clustered_live_drawparam_source(
         b = a;
         if (pair.beta != 0.0f) {
             std::uintptr_t source_b = 0u;
-            if (!pointlight_ptde_source::selected_source(
+            if (!selected_clustered_source_retail(
                     owner,
                     pair.b,
                     source_b,
