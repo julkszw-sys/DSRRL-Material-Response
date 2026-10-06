@@ -59,6 +59,12 @@ std::atomic<std::uint64_t> g_missing_host_pass10{0u};
 std::atomic<std::uint64_t> g_restore_failures{0u};
 std::atomic<std::uint64_t> g_present_count{0u};
 
+std::atomic<std::uint64_t> g_exact_role_draws{0u};
+std::atomic<std::uint64_t> g_depth_msaa_draws{0u};
+std::atomic<std::uint64_t> g_pass01_scope_draws{0u};
+std::atomic<std::uint64_t> g_depth_msaa_pass01_overlap{0u};
+std::atomic<std::uint32_t> g_depth_msaa_last_thread{0u};
+
 thread_local sequence_state g_sequence{};
 thread_local bool g_internal_replay = false;
 
@@ -801,6 +807,33 @@ bool handle_draw(
         bound_retained_role(
             cmd_list,
             selected);
+    const bool pass01_scope =
+        inside_exact_dof_pass01();
+
+    if (exact_role) {
+        g_exact_role_draws.fetch_add(
+            1u,
+            std::memory_order_relaxed);
+        if (selected == role::depth_copy_msaa) {
+            g_depth_msaa_draws.fetch_add(
+                1u,
+                std::memory_order_relaxed);
+            g_depth_msaa_last_thread.store(
+                static_cast<std::uint32_t>(
+                    GetCurrentThreadId()),
+                std::memory_order_relaxed);
+        }
+    }
+    if (pass01_scope)
+        g_pass01_scope_draws.fetch_add(
+            1u,
+            std::memory_order_relaxed);
+    if (pass01_scope &&
+        exact_role &&
+        selected == role::depth_copy_msaa)
+        g_depth_msaa_pass01_overlap.fetch_add(
+            1u,
+            std::memory_order_relaxed);
 
     if (!g_sequence.active) {
 #ifdef DSRRL_DOF_PROFILE
@@ -809,7 +842,7 @@ bool handle_draw(
 #endif
         if (exact_role &&
             selected == role::depth_copy_msaa &&
-            inside_exact_dof_pass01()) {
+            pass01_scope) {
 #ifdef DSRRL_DOF_PROFILE
             profile_scope.set_path(
                 dof_profile_path::begin_sequence);
@@ -883,11 +916,14 @@ void log_status(
     const auto status =
         ptde_draw_bridge_status();
 
-    char line[640]{};
+    const auto host =
+        host_depth_route_status();
+
+    char line[1024]{};
     std::snprintf(
         line,
         sizeof(line),
-        "[DSRRL DoF bridge] %s optin=%u armed=%u quarantine=%u first=%llu start=%llu complete=%llu fail=%llu dry=%llu visible=%llu fallback=%llu no_pass10=%llu restore_fail=%llu",
+        "[DSRRL DoF bridge] %s optin=%u armed=%u quarantine=%u first=%llu start=%llu complete=%llu fail=%llu dry=%llu visible=%llu fallback=%llu no_pass10=%llu restore_fail=%llu exact_draw=%llu msaa_draw=%llu pass01_scope_draw=%llu msaa_pass01_overlap=%llu msaa_tid=%u host01_calls=%llu host0d_calls=%llu host01_tid=%u host0d_tid=%u host_first=%llu src=%llu/%llu support=%llu/%llu abi_reject=%llu hook=%u/%u",
         tag,
         status.opt_in ? 1u : 0u,
         status.armed ? 1u : 0u,
@@ -909,7 +945,36 @@ void log_status(
         static_cast<unsigned long long>(
             status.missing_host_pass10),
         static_cast<unsigned long long>(
-            status.restore_failures));
+            status.restore_failures),
+        static_cast<unsigned long long>(
+            g_exact_role_draws.load()),
+        static_cast<unsigned long long>(
+            g_depth_msaa_draws.load()),
+        static_cast<unsigned long long>(
+            g_pass01_scope_draws.load()),
+        static_cast<unsigned long long>(
+            g_depth_msaa_pass01_overlap.load()),
+        g_depth_msaa_last_thread.load(),
+        static_cast<unsigned long long>(
+            host.pass01_calls),
+        static_cast<unsigned long long>(
+            host.pass0d_calls),
+        host.pass01_last_thread,
+        host.pass0d_last_thread,
+        static_cast<unsigned long long>(
+            host.first_pass01_hits),
+        static_cast<unsigned long long>(
+            host.source_capture_ok),
+        static_cast<unsigned long long>(
+            host.source_capture_fail),
+        static_cast<unsigned long long>(
+            host.support_capture_ok),
+        static_cast<unsigned long long>(
+            host.support_capture_fail),
+        static_cast<unsigned long long>(
+            host.abi_reject),
+        host.pass01_hook_ready ? 1u : 0u,
+        host.pass0d_hook_ready ? 1u : 0u);
 
     reshade::log::message(
         reshade::log::level::info,
@@ -966,6 +1031,11 @@ bool register_ptde_draw_bridge_runtime(
         false,
         std::memory_order_release);
     g_present_count.store(0u);
+    g_exact_role_draws.store(0u);
+    g_depth_msaa_draws.store(0u);
+    g_pass01_scope_draws.store(0u);
+    g_depth_msaa_pass01_overlap.store(0u);
+    g_depth_msaa_last_thread.store(0u);
 
     set_authored_feature(false);
     release_sequence();
