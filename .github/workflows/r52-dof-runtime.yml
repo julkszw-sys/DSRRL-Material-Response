@@ -33,7 +33,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: r43-dof-cpu-profile-${{ github.head_ref || github.ref_name }}
+  group: r52-dof-runtime-${{ github.head_ref || github.ref_name }}
   cancel-in-progress: true
 
 jobs:
