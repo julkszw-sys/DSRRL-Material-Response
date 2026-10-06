@@ -471,6 +471,14 @@ void fixed_pointlight_selector_event_bridge(void *owner) noexcept
         g_runtime->selector_event(owner);
 }
 
+bool fixed_pointlight_source_ready_bridge(
+    std::uint8_t expected_count) noexcept
+{
+    return
+        g_runtime != nullptr &&
+        g_runtime->source_ready(expected_count);
+}
+
 bool fixed_pointlight_draw_runtime::install() noexcept
 {
     if(g_enabled.load())
@@ -591,6 +599,35 @@ void fixed_pointlight_draw_runtime::selector_event(void *owner) noexcept
 
     g_draw_snapshot=std::move(selected);
     telemetry::hot_count(g_selector_match);
+}
+
+bool fixed_pointlight_draw_runtime::source_ready(
+    std::uint8_t expected_count) const noexcept
+{
+    if(!g_enabled.load(std::memory_order_acquire) ||
+       g_quarantined.load(std::memory_order_acquire) ||
+       !g_draw_snapshot ||
+       (expected_count!=2u && expected_count!=4u))
+        return false;
+
+    const auto selected=g_draw_snapshot;
+    const auto expected_mask=
+        static_cast<std::uint8_t>(
+            (1u<<expected_count)-1u);
+
+    if(selected->captured_count!=expected_count ||
+       selected->valid_mask!=expected_mask ||
+       !selected->owner_consumed_serial)
+        return false;
+
+    if(selected->consumed.load(
+            std::memory_order_acquire))
+        return false;
+
+    return
+        selected->owner_consumed_serial->load(
+            std::memory_order_acquire) <
+        selected->serial;
 }
 
 bool fixed_pointlight_draw_runtime::prepare_t19(
