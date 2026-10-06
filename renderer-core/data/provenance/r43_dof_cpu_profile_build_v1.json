@@ -28,10 +28,22 @@
       "compile_flag": "DSRRL_POINTLIGHT_PROFILE",
       "sample_period": 128,
       "log_prefix": "[DSRRL PERF R32] POINTLIGHT_TX"
-    }
+    },
+    "dof_draw_callback": {
+      "compile_flag": "DSRRL_DOF_PROFILE",
+      "sample_period": 1024,
+      "log_prefix": "[DSRRL PERF R44] DOF",
+      "scope": "all DoF draw callbacks including idle routing and active sequence paths"
+    },
+    "parser": "renderer-core/tools/parse_cpu_profile_log.py"
   },
   "preserved_r43_constraints": {
     "physical_cut_ul_h3_subsurface": true,
     "full_hot_telemetry_default_on": false
+  },
+  "known_source_correction": {
+    "source_commit": "302089ddd05cf4a489d75d71362d8cbd21ee4abb",
+    "issue": "integrated_addon caller used register/unregister_tonemap_handoff_runtime while the same source commit header/implementation export register/unregister_tonemap_handoff_scope_runtime",
+    "correction": "caller renamed to exported *_scope_runtime symbols only; operator behavior unchanged"
   }
 }
