@@ -1042,6 +1042,8 @@ bool publish_exact_selector_identity(
             : 0u;
     bool pointlight_spc = false;
     if (g_state.builder_armed &&
+        clustered_pnts_selector_handoff_ready_bridge(
+            owner) &&
         operators::material_response::
             direct_pointlight_material_candidate(
                 identity,
