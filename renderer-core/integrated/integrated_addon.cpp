@@ -7550,13 +7550,20 @@ bool AddonInit(
         return true;
     }
 
-    // Render-hot telemetry is opt-in. Production/default execution avoids
-    // synchronized counter RMWs on every draw; set DSRRL_RUNTIME_TELEMETRY=1
-    // for receiver/island census sessions.
+    // R52 runtime profile compiles hot + effect telemetry ON by default.
+    // Native-state verification remains diagnostic-only and is not forced.
     g_hot_telemetry_enabled =
         runtime_hot_telemetry_requested();
     g_effect_telemetry_enabled =
         runtime_effect_telemetry_requested();
+
+#if defined(DSRRL_RUNTIME_TELEMETRY_DEFAULT_ON) && \
+    defined(DSRRL_EFFECT_TELEMETRY_DEFAULT_ON) && \
+    !defined(DSRRL_RUNTIME_VERIFY_STATE_DEFAULT_ON)
+    reshade::log::message(
+        reshade::log::level::info,
+        "[DSRRL TELEMETRY R53] full=ON runtime=ON effect=ON native_state_verify=OFF profile=R52_CORRECT_BASE");
+#endif
     reset_effect_probe();
     motion_blur_camera_fallback_disable::
         reset();
@@ -7973,6 +7980,10 @@ bool AddonInit(
             reshade::log::level::info,
             "[DSRRL PMETAL ENVSPEC] exact selector carrier + narrow retail LightBank single/blend PTDE source fallback ACTIVE; visible U/L remains stock/off.");
     }
+
+    reshade::log::message(
+        reshade::log::level::info,
+        "[DSRRL DoF R53-DRAWPARAM] carrier=LIVE_SELECTED_DOF_ROWS selector=STOCK_DSR donor_table=ABSENT bank_gate=PTDE_HOMOLOGOUS_10 m15_dual=ON default_m99=STOCK_DSR producer_rva=0x5627E0");
 
     const bool dof_runtime_ready =
         register_dof_runtime();
