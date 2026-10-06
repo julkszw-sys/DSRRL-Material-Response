@@ -238,35 +238,34 @@ struct r48_perf_bucket {
     std::atomic<std::uint64_t> max_ticks{0u};
 };
 
-r48_perf_bucket g_r48_draw{};
-r48_perf_bucket g_r48_draw_indexed{};
-r48_perf_bucket g_r48_prepare_batch{};
-r48_perf_bucket g_r48_dispatch{};
-thread_local std::uint32_t g_r48_draw_seq = 0u;
-thread_local std::uint32_t g_r48_draw_indexed_seq = 0u;
-thread_local std::uint32_t g_r48_prepare_seq = 0u;
-thread_local std::uint32_t g_r48_dispatch_seq = 0u;
+thread_local std::uint32_t g_r48_draw_prof_seq = 0u;
+thread_local std::uint32_t g_r48_prepare_prof_seq = 0u;
+thread_local std::uint32_t g_r48_dispatch_prof_seq = 0u;
+r48_perf_bucket g_r48_draw_callback_prof{};
+r48_perf_bucket g_r48_prepare_batch_prof{};
+r48_perf_bucket g_r48_dispatch_prof{};
 
-std::uint64_t r48_perf_qpc() noexcept
+std::uint64_t r48_qpc() noexcept
 {
     LARGE_INTEGER value{};
     QueryPerformanceCounter(&value);
     return static_cast<std::uint64_t>(value.QuadPart);
 }
 
-std::uint64_t r48_perf_frequency() noexcept
+std::uint64_t r48_qpc_frequency() noexcept
 {
     static const std::uint64_t frequency = []() noexcept {
         LARGE_INTEGER value{};
-        QueryPerformanceFrequency(&value);
-        return static_cast<std::uint64_t>(value.QuadPart);
+        return QueryPerformanceFrequency(&value)
+            ? static_cast<std::uint64_t>(value.QuadPart)
+            : 0u;
     }();
     return frequency;
 }
 
-bool r48_perf_sample(std::uint32_t &sequence) noexcept
+bool r48_perf_sample(std::uint32_t &seq) noexcept
 {
-    return ((++sequence & (k_r48_perf_sample_period - 1u)) == 0u);
+    return ((++seq & (k_r48_perf_sample_period - 1u)) == 0u);
 }
 
 void r48_perf_add(
@@ -275,7 +274,8 @@ void r48_perf_add(
 {
     bucket.samples.fetch_add(1u, std::memory_order_relaxed);
     bucket.ticks.fetch_add(ticks, std::memory_order_relaxed);
-    auto observed = bucket.max_ticks.load(std::memory_order_relaxed);
+    auto observed =
+        bucket.max_ticks.load(std::memory_order_relaxed);
     while (observed < ticks &&
            !bucket.max_ticks.compare_exchange_weak(
                observed,
@@ -285,120 +285,134 @@ void r48_perf_add(
     }
 }
 
-struct r48_perf_scope {
-    r48_perf_bucket *bucket = nullptr;
-    std::uint64_t start = 0u;
-
+class r48_perf_scope {
+public:
     r48_perf_scope(
-        bool active,
-        r48_perf_bucket &target) noexcept
-        : bucket(active ? &target : nullptr),
-          start(active ? r48_perf_qpc() : 0u)
+        r48_perf_bucket &bucket,
+        std::uint32_t &seq) noexcept
+        : bucket_(
+            r48_perf_sample(seq)
+                ? &bucket
+                : nullptr),
+          start_(
+            bucket_ != nullptr
+                ? r48_qpc()
+                : 0u)
     {
     }
 
     ~r48_perf_scope()
     {
-        if (bucket != nullptr)
+        if (bucket_ != nullptr)
             r48_perf_add(
-                *bucket,
-                r48_perf_qpc() - start);
+                *bucket_,
+                r48_qpc() - start_);
     }
+
+private:
+    r48_perf_bucket *bucket_ = nullptr;
+    std::uint64_t start_ = 0u;
 };
 
 double r48_perf_avg_us(
     const r48_perf_bucket &bucket) noexcept
 {
-    const auto n = bucket.samples.load(std::memory_order_relaxed);
-    const auto f = r48_perf_frequency();
-    if (n == 0u || f == 0u)
+    const auto samples =
+        bucket.samples.load(std::memory_order_relaxed);
+    const auto freq = r48_qpc_frequency();
+    if (samples == 0u || freq == 0u)
         return 0.0;
     return
-        (static_cast<double>(bucket.ticks.load(std::memory_order_relaxed)) *
-         1000000.0) /
-        (static_cast<double>(f) * static_cast<double>(n));
+        static_cast<double>(
+            bucket.ticks.load(std::memory_order_relaxed)) *
+        1000000.0 /
+        (static_cast<double>(freq) *
+         static_cast<double>(samples));
 }
 
 double r48_perf_max_us(
     const r48_perf_bucket &bucket) noexcept
 {
-    const auto f = r48_perf_frequency();
-    if (f == 0u)
+    const auto freq = r48_qpc_frequency();
+    if (freq == 0u)
         return 0.0;
     return
-        (static_cast<double>(bucket.max_ticks.load(std::memory_order_relaxed)) *
-         1000000.0) /
-        static_cast<double>(f);
+        static_cast<double>(
+            bucket.max_ticks.load(std::memory_order_relaxed)) *
+        1000000.0 /
+        static_cast<double>(freq);
 }
 
-void log_r48_perf_summary() noexcept
+double r48_selector_avg_us(
+    std::uint64_t ticks,
+    const dsrrl::runtime::flver_identity_transport::
+        selector_profile_telemetry &profile) noexcept
+{
+    if (ticks == 0u ||
+        profile.samples == 0u ||
+        profile.qpc_frequency == 0u)
+        return 0.0;
+
+    return
+        static_cast<double>(ticks) *
+        1000000.0 /
+        (static_cast<double>(profile.qpc_frequency) *
+         static_cast<double>(profile.samples));
+}
+
+void log_r48_perf_summary(
+    std::uint64_t present) noexcept
 {
     const auto selector =
         dsrrl::runtime::flver_identity_transport::
             selector_profile_stats();
-
-    const auto selector_us =
-        [](std::uint64_t ticks,
-           std::uint64_t samples,
-           std::uint64_t frequency) noexcept {
-            if (ticks == 0u ||
-                samples == 0u ||
-                frequency == 0u)
-                return 0.0;
-            return
-                (static_cast<double>(ticks) * 1000000.0) /
-                (static_cast<double>(frequency) *
-                 static_cast<double>(samples));
-        };
-    const auto ticks_us =
-        [](std::uint64_t ticks,
-           std::uint64_t frequency) noexcept {
-            if (ticks == 0u || frequency == 0u)
-                return 0.0;
-            return
-                (static_cast<double>(ticks) * 1000000.0) /
-                static_cast<double>(frequency);
-        };
+    const auto selector_max =
+        selector.qpc_frequency != 0u
+            ? static_cast<double>(
+                  selector.max_total_ticks) *
+              1000000.0 /
+              static_cast<double>(
+                  selector.qpc_frequency)
+            : 0.0;
 
     char line[1536]{};
     std::snprintf(
         line,
         sizeof(line),
-        "[DSRRL PERF R48] CORE sample=1/%u selector_sample=1/%u selector_us=%.3f selector_max_us=%.3f selector_pmetal_source_us=%.3f selector_owner_lookup_us=%.3f selector_owner_mtd_us=%.3f draw_us=%.3f draw_max_us=%.3f draw_indexed_us=%.3f draw_indexed_max_us=%.3f prepare_batch_us=%.3f prepare_max_us=%.3f dispatch_us=%.3f dispatch_max_us=%.3f n=selector:%llu draw:%llu indexed:%llu prep:%llu dispatch:%llu",
+        "[DSRRL PERF R48] present=%llu sample=1/%u selector_sample=1/%u selector_us=%.3f selector_max_us=%.3f selector_pmetal_source_us=%.3f selector_owner_lookup_us=%.3f selector_owner_mtd_us=%.3f draw_callback_us=%.3f draw_callback_max_us=%.3f prepare_batch_us=%.3f prepare_max_us=%.3f dispatch_us=%.3f dispatch_max_us=%.3f n=selector:%llu draw:%llu prep:%llu dispatch:%llu pointlight_detail=PERF_R32_POINTLIGHT_PREP",
+        static_cast<unsigned long long>(present),
         k_r48_perf_sample_period,
         selector.sample_period,
-        selector_us(
+        r48_selector_avg_us(
             selector.total_ticks,
-            selector.samples,
-            selector.qpc_frequency),
-        ticks_us(
-            selector.max_total_ticks,
-            selector.qpc_frequency),
-        selector_us(
+            selector),
+        selector_max,
+        r48_selector_avg_us(
             selector.pmetal_source_ticks,
-            selector.samples,
-            selector.qpc_frequency),
-        selector_us(
+            selector),
+        r48_selector_avg_us(
             selector.owner_lookup_ticks,
-            selector.samples,
-            selector.qpc_frequency),
-        selector_us(
+            selector),
+        r48_selector_avg_us(
             selector.owner_mtd_enrich_ticks,
-            selector.samples,
-            selector.qpc_frequency),
-        r48_perf_avg_us(g_r48_draw),
-        r48_perf_max_us(g_r48_draw),
-        r48_perf_avg_us(g_r48_draw_indexed),
-        r48_perf_max_us(g_r48_draw_indexed),
-        r48_perf_avg_us(g_r48_prepare_batch),
-        r48_perf_max_us(g_r48_prepare_batch),
-        r48_perf_avg_us(g_r48_dispatch),
-        r48_perf_max_us(g_r48_dispatch),
-        static_cast<unsigned long long>(selector.samples),
-        static_cast<unsigned long long>(g_r48_draw.samples.load(std::memory_order_relaxed)),
-        static_cast<unsigned long long>(g_r48_draw_indexed.samples.load(std::memory_order_relaxed)),
-        static_cast<unsigned long long>(g_r48_prepare_batch.samples.load(std::memory_order_relaxed)),
-        static_cast<unsigned long long>(g_r48_dispatch.samples.load(std::memory_order_relaxed)));
+            selector),
+        r48_perf_avg_us(g_r48_draw_callback_prof),
+        r48_perf_max_us(g_r48_draw_callback_prof),
+        r48_perf_avg_us(g_r48_prepare_batch_prof),
+        r48_perf_max_us(g_r48_prepare_batch_prof),
+        r48_perf_avg_us(g_r48_dispatch_prof),
+        r48_perf_max_us(g_r48_dispatch_prof),
+        static_cast<unsigned long long>(
+            selector.samples),
+        static_cast<unsigned long long>(
+            g_r48_draw_callback_prof.samples.load(
+                std::memory_order_relaxed)),
+        static_cast<unsigned long long>(
+            g_r48_prepare_batch_prof.samples.load(
+                std::memory_order_relaxed)),
+        static_cast<unsigned long long>(
+            g_r48_dispatch_prof.samples.load(
+                std::memory_order_relaxed)));
     reshade::log::message(
         reshade::log::level::info,
         line);
@@ -413,6 +427,10 @@ bool dof_runtime_enabled() noexcept
             "DSRRL_EXPERIMENTAL_PTDE_DOF",
             value,
             static_cast<DWORD>(sizeof(value)));
+
+    // R48: default ON. Explicit zero is the operator-local emergency kill
+    // switch. Every internal preflight/receiver/resource gate still fails
+    // open to stock DSR DoF.
     return !(size == 1u && value[0] == '0');
 }
 
@@ -461,25 +479,28 @@ bool register_dof_runtime() noexcept
         dsrrl::runtime::dof::register_host_depth_route_runtime();
     const bool tone =
         host &&
-        dsrrl::runtime::dof::register_tonemap_handoff_scope_runtime();
+        dsrrl::runtime::dof::
+            register_tonemap_handoff_scope_runtime();
     const bool authored =
         tone &&
-        dsrrl::runtime::dof::register_authored_state_runtime(g_core);
+        dsrrl::runtime::dof::
+            register_authored_state_runtime(g_core);
     const bool bridge =
         authored &&
-        dsrrl::runtime::dof::register_ptde_draw_bridge_runtime(g_core);
+        dsrrl::runtime::dof::
+            register_ptde_draw_bridge_runtime(g_core);
 
     if (!bridge) {
         unregister_dof_runtime();
         reshade::log::message(
             reshade::log::level::warning,
-            "[DSRRL DoF] preflight failed; exact stock DSR DoF preserved.");
+            "[DSRRL DoF] preflight failed; stock DSR DoF preserved.");
         return false;
     }
 
     reshade::log::message(
         reshade::log::level::info,
-        "[DSRRL DoF] R48 DEFAULT_ON runtime registered; image entry requires completed sequence + visible handoff + ToneMap consume.");
+        "[DSRRL DoF] R48 DEFAULT_ON runtime registered.");
     return true;
 }
 
@@ -723,133 +744,6 @@ void hot_count(
         counter.fetch_add(
             1u,
             std::memory_order_relaxed);
-}
-
-struct r48_perf_bucket {
-    std::atomic<std::uint64_t> samples{0u};
-    std::atomic<std::uint64_t> ticks{0u};
-    std::atomic<std::uint64_t> max_ticks{0u};
-};
-
-constexpr std::uint32_t k_r48_perf_sample_period = 256u;
-thread_local std::uint32_t g_r48_draw_prof_seq = 0u;
-thread_local std::uint32_t g_r48_prepare_prof_seq = 0u;
-thread_local std::uint32_t g_r48_dispatch_prof_seq = 0u;
-r48_perf_bucket g_r48_draw_callback_prof{};
-r48_perf_bucket g_r48_prepare_batch_prof{};
-r48_perf_bucket g_r48_dispatch_prof{};
-
-std::uint64_t r48_qpc() noexcept
-{
-    LARGE_INTEGER value{};
-    QueryPerformanceCounter(&value);
-    return static_cast<std::uint64_t>(value.QuadPart);
-}
-
-std::uint64_t r48_qpc_frequency() noexcept
-{
-    static const std::uint64_t frequency = []() noexcept {
-        LARGE_INTEGER value{};
-        return QueryPerformanceFrequency(&value)
-            ? static_cast<std::uint64_t>(value.QuadPart)
-            : 0u;
-    }();
-    return frequency;
-}
-
-bool r48_perf_sample(std::uint32_t &seq) noexcept
-{
-    return ((++seq & (k_r48_perf_sample_period - 1u)) == 0u);
-}
-
-void r48_perf_add(
-    r48_perf_bucket &bucket,
-    std::uint64_t ticks) noexcept
-{
-    bucket.samples.fetch_add(1u, std::memory_order_relaxed);
-    bucket.ticks.fetch_add(ticks, std::memory_order_relaxed);
-    auto observed =
-        bucket.max_ticks.load(std::memory_order_relaxed);
-    while (observed < ticks &&
-           !bucket.max_ticks.compare_exchange_weak(
-               observed,
-               ticks,
-               std::memory_order_relaxed,
-               std::memory_order_relaxed)) {
-    }
-}
-
-class r48_perf_scope {
-public:
-    r48_perf_scope(
-        r48_perf_bucket &bucket,
-        std::uint32_t &seq) noexcept
-        : bucket_(
-            r48_perf_sample(seq)
-                ? &bucket
-                : nullptr),
-          start_(
-            bucket_ != nullptr
-                ? r48_qpc()
-                : 0u)
-    {
-    }
-
-    ~r48_perf_scope()
-    {
-        if (bucket_ != nullptr)
-            r48_perf_add(
-                *bucket_,
-                r48_qpc() - start_);
-    }
-
-private:
-    r48_perf_bucket *bucket_ = nullptr;
-    std::uint64_t start_ = 0u;
-};
-
-double r48_perf_avg_us(
-    const r48_perf_bucket &bucket) noexcept
-{
-    const auto samples =
-        bucket.samples.load(std::memory_order_relaxed);
-    const auto freq = r48_qpc_frequency();
-    if (samples == 0u || freq == 0u)
-        return 0.0;
-    return
-        static_cast<double>(
-            bucket.ticks.load(std::memory_order_relaxed)) *
-        1000000.0 /
-        (static_cast<double>(freq) *
-         static_cast<double>(samples));
-}
-
-double r48_perf_max_us(
-    const r48_perf_bucket &bucket) noexcept
-{
-    const auto freq = r48_qpc_frequency();
-    if (freq == 0u)
-        return 0.0;
-    return
-        static_cast<double>(
-            bucket.max_ticks.load(std::memory_order_relaxed)) *
-        1000000.0 /
-        static_cast<double>(freq);
-}
-
-void r48_perf_reset() noexcept
-{
-    const auto reset = [](r48_perf_bucket &bucket) noexcept {
-        bucket.samples.store(0u, std::memory_order_relaxed);
-        bucket.ticks.store(0u, std::memory_order_relaxed);
-        bucket.max_ticks.store(0u, std::memory_order_relaxed);
-    };
-    reset(g_r48_draw_callback_prof);
-    reset(g_r48_prepare_batch_prof);
-    reset(g_r48_dispatch_prof);
-    g_r48_draw_prof_seq = 0u;
-    g_r48_prepare_prof_seq = 0u;
-    g_r48_dispatch_prof_seq = 0u;
 }
 
 enum class effect_probe_id : std::uint8_t {
@@ -5962,9 +5856,9 @@ bool prepare_island_batch(
     prepared_island_batch &prepared) noexcept
 {
 #ifdef DSRRL_R48_PERF_PROFILE
-    r48_perf_scope r48_prepare_scope(
-        r48_perf_sample(g_r48_prepare_seq),
-        g_r48_prepare_batch);
+    r48_perf_scope r48_prepare_profile(
+        g_r48_prepare_batch_prof,
+        g_r48_prepare_prof_seq);
 #endif
     prepared = {};
 
@@ -6847,9 +6741,9 @@ bool on_draw(
     std::uint32_t first_instance)
 {
 #ifdef DSRRL_R48_PERF_PROFILE
-    r48_perf_scope r48_draw_scope(
-        r48_perf_sample(g_r48_draw_seq),
-        g_r48_draw);
+    r48_perf_scope r48_draw_profile(
+        g_r48_draw_callback_prof,
+        g_r48_draw_prof_seq);
 #endif
     if (g_raw_draw_replay_recursing)
         return false;
@@ -6873,14 +6767,6 @@ bool on_draw(
         g_raw_draw_replay_recursing = false;
         return issued;
     }
-
-    r48_perf_scope r48_draw_profile(
-        g_r48_draw_callback_prof,
-        g_r48_draw_prof_seq);
-
-    r48_perf_scope r48_draw_profile(
-        g_r48_draw_callback_prof,
-        g_r48_draw_prof_seq);
 
     if (g_hot_telemetry_enabled &&
         dsrrl::runtime::bloom_fx_draw_transport::
@@ -7052,11 +6938,7 @@ bool on_draw(
         decision.route_index);
 
     prepared_island_batch prepared{};
-    const bool r48_prepare_ok = [&]() noexcept {
-        r48_perf_scope r48_prepare_profile(
-            g_r48_prepare_batch_prof,
-            g_r48_prepare_prof_seq);
-        return prepare_island_batch(
+    if (!prepare_island_batch(
             cmd_list,
             fixed_pointlight_bound,
             clustered_pointlight_bound,
@@ -7069,9 +6951,7 @@ bool on_draw(
             upper_lower_identity,
             material,
             decision,
-            prepared);
-    }();
-    if (!r48_prepare_ok) {
+            prepared)) {
         mark_effect_probe_mask(
             effect_candidates,
             effect_probe_stage::fail_open,
@@ -7191,10 +7071,12 @@ bool on_draw(
     if (direct_current_native)
         g_raw_draw_replay_recursing = true;
 
-    const auto dispatch = [&]() noexcept {
+    const auto dispatch = [&]() {
+#ifdef DSRRL_R48_PERF_PROFILE
         r48_perf_scope r48_dispatch_profile(
             g_r48_dispatch_prof,
             g_r48_dispatch_prof_seq);
+#endif
         return dsrrl::runtime::dispatch_island_draw_batch(
             g_draw_transactions,
             cmd_list,
@@ -7298,9 +7180,9 @@ bool on_draw_indexed(
     std::uint32_t first_instance)
 {
 #ifdef DSRRL_R48_PERF_PROFILE
-    r48_perf_scope r48_draw_indexed_scope(
-        r48_perf_sample(g_r48_draw_indexed_seq),
-        g_r48_draw_indexed);
+    r48_perf_scope r48_draw_profile(
+        g_r48_draw_callback_prof,
+        g_r48_draw_prof_seq);
 #endif
     if (g_raw_draw_replay_recursing)
         return false;
@@ -7478,11 +7360,7 @@ bool on_draw_indexed(
         decision.route_index);
 
     prepared_island_batch prepared{};
-    const bool r48_prepare_ok = [&]() noexcept {
-        r48_perf_scope r48_prepare_profile(
-            g_r48_prepare_batch_prof,
-            g_r48_prepare_prof_seq);
-        return prepare_island_batch(
+    if (!prepare_island_batch(
             cmd_list,
             fixed_pointlight_bound,
             clustered_pointlight_bound,
@@ -7495,9 +7373,7 @@ bool on_draw_indexed(
             upper_lower_identity,
             material,
             decision,
-            prepared);
-    }();
-    if (!r48_prepare_ok) {
+            prepared)) {
         mark_effect_probe_mask(
             effect_candidates,
             effect_probe_stage::fail_open,
@@ -7570,10 +7446,12 @@ bool on_draw_indexed(
     if (direct_current_native)
         g_raw_draw_replay_recursing = true;
 
-    const auto dispatch = [&]() noexcept {
+    const auto dispatch = [&]() {
+#ifdef DSRRL_R48_PERF_PROFILE
         r48_perf_scope r48_dispatch_profile(
             g_r48_dispatch_prof,
             g_r48_dispatch_prof_seq);
+#endif
         return dsrrl::runtime::dispatch_island_draw_indexed_batch(
             g_draw_transactions,
             cmd_list,
@@ -7669,136 +7547,6 @@ bool on_draw_indexed(
         dispatch.transaction);
 }
 
-void log_r48_perf_and_image_entry(
-    std::uint64_t present) noexcept
-{
-    const auto selector =
-        dsrrl::runtime::flver_identity_transport::
-            selector_profile_stats();
-    const auto selector_avg_us =
-        selector.samples != 0u &&
-        selector.qpc_frequency != 0u
-            ? static_cast<double>(
-                  selector.total_ticks) *
-              1000000.0 /
-              (static_cast<double>(
-                   selector.qpc_frequency) *
-               static_cast<double>(
-                   selector.samples))
-            : 0.0;
-    const auto selector_max_us =
-        selector.qpc_frequency != 0u
-            ? static_cast<double>(
-                  selector.max_total_ticks) *
-              1000000.0 /
-              static_cast<double>(
-                  selector.qpc_frequency)
-            : 0.0;
-
-    char perf[1024]{};
-    std::snprintf(
-        perf,
-        sizeof(perf),
-        "[DSRRL PERF R48] present=%llu sample=1/%u draw_callback_us=%.3f max=%.3f prepare_batch_us=%.3f max=%.3f dispatch_us=%.3f max=%.3f selector_us=%.3f selector_max=%.3f selector_samples=%llu pointlight_detail=DSRRL_PERF_R32_POINTLIGHT_PREP cpu_only=1",
-        static_cast<unsigned long long>(present),
-        k_r48_perf_sample_period,
-        r48_perf_avg_us(g_r48_draw_callback_prof),
-        r48_perf_max_us(g_r48_draw_callback_prof),
-        r48_perf_avg_us(g_r48_prepare_batch_prof),
-        r48_perf_max_us(g_r48_prepare_batch_prof),
-        r48_perf_avg_us(g_r48_dispatch_prof),
-        r48_perf_max_us(g_r48_dispatch_prof),
-        selector_avg_us,
-        selector_max_us,
-        static_cast<unsigned long long>(
-            selector.samples));
-    reshade::log::message(
-        reshade::log::level::info,
-        perf);
-
-    const auto native =
-        g_pmetal_native_draw.telemetry();
-    const auto dof_bridge =
-        dsrrl::runtime::dof::
-            ptde_draw_bridge_status();
-    const auto dof_scheduler =
-        dsrrl::runtime::dof::
-            ptde_scheduler_status();
-    const auto dof_tonemap =
-        dsrrl::runtime::dof::
-            tonemap_handoff_status();
-    const auto dof_preflight =
-        dsrrl::runtime::dof::
-            telemetry();
-    const auto dof_resources =
-        dsrrl::runtime::dof::
-            private_resource_status();
-
-    const bool mr_entry =
-        g_mr_once_draw_issued.load(
-            std::memory_order_relaxed) ||
-        native.material_response_draw_entered;
-    const bool lerp_entry =
-        g_lerp_once_draw_issued.load(
-            std::memory_order_relaxed);
-    const bool envspec_entry =
-        native.envspec_draw_entered;
-    const bool pointlight_entry =
-        g_pointlight_once_applied.load(
-            std::memory_order_relaxed) ||
-        native.pointlight_draw_entered;
-    const bool local_specular_entry =
-        native.local_specular_draw_entered;
-    const bool dof_entry =
-        dof_bridge.visible_handoffs != 0u &&
-        dof_bridge.sequences_completed != 0u &&
-        dof_scheduler.execute_ok != 0u &&
-        dof_tonemap.dof_source_hits != 0u &&
-        dof_bridge.restore_failures == 0u &&
-        !dof_bridge.quarantined;
-
-    char entry[1536]{};
-    std::snprintf(
-        entry,
-        sizeof(entry),
-        "[DSRRL IMAGE_ENTRY R48] present=%llu MR=%s LERP_MR=%s PMETAL_ENVSPEC=%s POINTLIGHT=%s LOCAL_SPECULAR=%s DOF=%s pixel=UNVERIFIED native_draws=%llu native_restore_fail=%llu dof={opt:%u armed:%u preflight_hits:%llu resources:%u scheduler_ok:%llu pass_draws:%llu complete:%llu visible:%llu tonemap_hits:%llu fallback:%llu restore_fail:%llu quarantine:%u}",
-        static_cast<unsigned long long>(present),
-        mr_entry ? "YES" : "NO",
-        lerp_entry ? "YES" : "NO",
-        envspec_entry ? "YES" : "NO",
-        pointlight_entry ? "YES" : "NO",
-        local_specular_entry ? "YES" : "NO",
-        dof_entry ? "YES" : "NO",
-        static_cast<unsigned long long>(
-            native.draw_applied +
-            native.draw_indexed_applied),
-        static_cast<unsigned long long>(
-            native.restore_fail),
-        dof_bridge.opt_in ? 1u : 0u,
-        dof_bridge.armed ? 1u : 0u,
-        static_cast<unsigned long long>(
-            dof_preflight.exact_pipeline_hits),
-        dof_resources.resources_ready ? 1u : 0u,
-        static_cast<unsigned long long>(
-            dof_scheduler.execute_ok),
-        static_cast<unsigned long long>(
-            dof_scheduler.pass_draws),
-        static_cast<unsigned long long>(
-            dof_bridge.sequences_completed),
-        static_cast<unsigned long long>(
-            dof_bridge.visible_handoffs),
-        static_cast<unsigned long long>(
-            dof_tonemap.dof_source_hits),
-        static_cast<unsigned long long>(
-            dof_bridge.tonemap_fallbacks),
-        static_cast<unsigned long long>(
-            dof_bridge.restore_failures),
-        dof_bridge.quarantined ? 1u : 0u);
-    reshade::log::message(
-        reshade::log::level::info,
-        entry);
-}
-
 void on_present(
     reshade::api::command_queue *,
     reshade::api::swapchain *,
@@ -7814,16 +7562,10 @@ void on_present(
     g_clustered_pnts.frame_event(present);
 #ifdef DSRRL_R48_PERF_PROFILE
     if (present == 300u ||
-        (present > 300u && (present % 300u) == 0u))
-        log_r48_perf_summary();
-#endif
-
-    if (present == 300u ||
         (present > 300u &&
          (present % 300u) == 0u))
-        log_r48_perf_and_image_entry(
-            present);
-
+        log_r48_perf_summary(present);
+#endif
     if (present == 1u ||
         (g_hot_telemetry_enabled &&
          (present % 300u) == 0u)) {
@@ -7989,7 +7731,6 @@ bool AddonInit(
     g_clustered_pnts_pipeline.reset();
     dsrrl::runtime::hemdir3_mode_transport::reset_stats();
     g_present_count.store(0);
-    r48_perf_reset();
     g_mr_draw_eval.store(0);
     g_mr_would_activate.store(0);
     g_mr_fail_open.store(0);
@@ -8389,7 +8130,7 @@ bool AddonInit(
         dof_runtime_enabled()) {
         reshade::log::message(
             reshade::log::level::warning,
-            "[DSRRL DoF] R48 runtime unavailable in this launch; stock DSR DoF remains active.");
+            "[DSRRL DoF] R48 registration failed; stock DSR DoF preserved.");
     }
 
     publish_active_dynamic_draw_routes();
