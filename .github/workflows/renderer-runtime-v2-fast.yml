@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - "runtime-v2/**"
+      - "r48-r43-exact-plus-dof"
   pull_request:
     paths:
       - "renderer-core/**"
@@ -18,11 +19,17 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
       - name: Resolve source identity
         shell: pwsh
         run: |
           $checkout = (git rev-parse HEAD).Trim()
+          $expected = "${{ github.event.pull_request.head.sha || github.sha }}".Trim()
+          if ($checkout -ne $expected) {
+            throw "Source checkout mismatch: checkout=$checkout expected=$expected"
+          }
           "DSRRL_CHECKOUT_COMMIT=$checkout" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
       - name: Checkout pinned ReShade API
@@ -32,13 +39,9 @@ jobs:
           ref: 3645e3025d1d98a90e318278858931f034d5d1f6
           path: _reshade
 
-      - name: Audit Runtime v2 hot paths
+      - name: Audit R48 exact-R43 + DoF + telemetry contract
         shell: pwsh
-        run: python renderer-core/tools/audit_runtime_v2_hotpaths.py renderer-core
-
-      - name: Audit Runtime v2 P_Metal single-pass contract
-        shell: pwsh
-        run: python renderer-core/tools/audit_runtime_v2_pmetal_single_pass.py --source-dir renderer-core
+        run: python renderer-core/tools/audit_r48_exact_r43_dof_telemetry.py renderer-core
 
       - name: Configure Runtime v2 addon
         shell: pwsh
@@ -60,6 +63,13 @@ jobs:
           if ($addon.Count -ne 1) { throw "Expected one Runtime v2 addon, found $($addon.Count)" }
           $out = "DSRRL_Core_Islands_RUNTIME_V2_FAST.addon64"
           Copy-Item $addon[0].FullName $out -Force
+          $ascii = [System.Text.Encoding]::ASCII.GetString([System.IO.File]::ReadAllBytes($out))
+          if (-not $ascii.Contains($env:DSRRL_CHECKOUT_COMMIT)) {
+            throw "Built addon does not embed exact checkout commit $env:DSRRL_CHECKOUT_COMMIT"
+          }
+          if (-not $ascii.Contains("runtime_v2_fast")) {
+            throw "Built addon does not embed runtime_v2_fast flavor"
+          }
           $sha = (Get-FileHash $out -Algorithm SHA256).Hash.ToLowerInvariant()
           Write-Host "RUNTIME_V2_FAST_SHA256=$sha"
 
