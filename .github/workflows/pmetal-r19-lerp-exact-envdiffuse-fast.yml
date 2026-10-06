@@ -71,7 +71,7 @@ jobs:
             '^renderer-core/include/dsrrl/runtime/dof_',
             '^renderer-core/src/runtime/dof_',
             '^renderer-core/data/provenance/dof_',
-            '^renderer-core/tools/(audit_dof_|audit_r43_param_islands|audit_active_islands_hotpath|audit_clustered_pnts_activation_sources|generate_dof_)',
+            '^renderer-core/tools/(audit_dof_|audit_r43_param_islands|audit_active_islands_hotpath|audit_clustered_pnts_activation_sources|audit_pointlight_core_sources|generate_dof_)',
             '^\.github/workflows/pmetal-r19-lerp-exact-envdiffuse-fast\.yml$'
           )
           $changed = @(git diff --name-only 410e4591da9172ffb15e766754b4345286f04691..HEAD)
