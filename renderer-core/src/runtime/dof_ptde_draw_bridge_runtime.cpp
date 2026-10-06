@@ -636,6 +636,9 @@ bool begin_sequence(
     reshade::api::command_list *cmd_list,
     const scheduler_draw_shape &shape) noexcept
 {
+    // Runtime evidence proved that the exact host pass01 scope and retained
+    // DSR DoF role draws are disjoint. Treat pass01 only as the authoritative
+    // source/depth semantic cut and run the PTDE-private prefix independently.
     if (cmd_list == nullptr ||
         !inside_exact_dof_pass01())
         return false;
@@ -660,8 +663,6 @@ bool begin_sequence(
     ++g_first_pass_hits;
     ++g_sequences_started;
 
-    const auto inputs =
-        scheduler_inputs();
     const auto activation =
         activation_context();
 
@@ -674,7 +675,7 @@ bool begin_sequence(
         execute_ptde_pass(
             cmd_list,
             activation,
-            inputs,
+            scheduler_inputs(),
             shape,
             0u);
 
@@ -687,22 +688,27 @@ bool begin_sequence(
         return false;
     }
 
-    g_sequence.next_pass = 1u;
-
-    const auto pass02 =
-        execute_ptde_pass(
-            cmd_list,
-            activation,
-            inputs,
-            shape,
-            1u);
-
-    if (pass02 != result::executed) {
-        fail_sequence(false);
-        return false;
+    // Passes 1..7 are intrinsic to the PTDE private graph. They must not wait
+    // for stock DSR shaders with similar names to execute. The last pass is
+    // deferred only because pass 0x10 has two verified retained variants.
+    for (std::size_t pass_index = 1u;
+         pass_index < 8u;
+         ++pass_index) {
+        g_sequence.next_pass = pass_index;
+        const auto executed =
+            execute_ptde_pass(
+                cmd_list,
+                activation,
+                scheduler_inputs(),
+                shape,
+                pass_index);
+        if (executed != result::executed) {
+            fail_sequence(false);
+            return false;
+        }
     }
 
-    g_sequence.next_pass = 2u;
+    g_sequence.next_pass = 8u;
     return true;
 }
 
@@ -713,53 +719,31 @@ void advance_sequence(
 {
     if (!g_sequence.active ||
         g_sequence.complete ||
-        g_sequence.next_pass < 2u ||
-        g_sequence.next_pass > 8u)
+        g_sequence.next_pass != 8u)
         return;
 
-    const auto pass_index =
-        g_sequence.next_pass;
-
-    if (!expected_role(
-            pass_index,
-            selected)) {
-        if (is_dof_family_role(selected))
-            fail_sequence(false);
+    // Stock DSR is used only to resolve the verified final pass-0x10 branch.
+    if (selected != role::gauss_y_adv &&
+        selected != role::near_rate)
         return;
-    }
 
-    if (!exact_scope_for_expected(
-            pass_index)) {
-        fail_sequence(false);
-        return;
-    }
+    g_sequence.pass10_role = selected;
 
-    if (pass_index == 8u)
-        g_sequence.pass10_role = selected;
-
-    const auto inputs =
-        scheduler_inputs();
     const auto activation =
         activation_context();
 
-    const auto executed =
-        execute_ptde_pass(
+    if (execute_ptde_pass(
             cmd_list,
             activation,
-            inputs,
+            scheduler_inputs(),
             shape,
-            pass_index);
-
-    if (executed != result::executed) {
+            8u) != result::executed) {
         fail_sequence(false);
         return;
     }
 
-    ++g_sequence.next_pass;
-
-    if (g_sequence.next_pass !=
-        operators::dof::ptde_exact_pass_resources.size())
-        return;
+    g_sequence.next_pass =
+        operators::dof::ptde_exact_pass_resources.size();
 
     if (!acquire_terminal(
             activation)) {
