@@ -7491,13 +7491,18 @@ bool AddonInit(
         return true;
     }
 
-    // Render-hot telemetry is opt-in. Production/default execution avoids
-    // synchronized counter RMWs on every draw; set DSRRL_RUNTIME_TELEMETRY=1
-    // for receiver/island census sessions.
     g_hot_telemetry_enabled =
         runtime_hot_telemetry_requested();
     g_effect_telemetry_enabled =
         runtime_effect_telemetry_requested();
+
+#if defined(DSRRL_RUNTIME_TELEMETRY_DEFAULT_ON) && \
+    defined(DSRRL_EFFECT_TELEMETRY_DEFAULT_ON) && \
+    !defined(DSRRL_RUNTIME_VERIFY_STATE_DEFAULT_ON)
+    reshade::log::message(
+        reshade::log::level::info,
+        "[DSRRL TELEMETRY R43-PARAM] full=ON runtime=ON effect=ON native_state_verify=OFF");
+#endif
     reset_effect_probe();
     motion_blur_camera_fallback_disable::
         reset();
@@ -7788,11 +7793,11 @@ bool AddonInit(
         reshade::log::message(
             reshade::log::level::warning,
             "[DSRRL CORE+ISLANDS " DSRRL_CORE_ISLANDS_VERSION
-            "] Clustered PntS transport FAIL-OPEN: first-four sidecar remains unavailable; stock DSR clustered PointLight preserved.");
+            "] Clustered source bridge FAIL-OPEN: stock DSR clustered PointLight preserved.");
     } else if (clustered_pointlight_hooks) {
         reshade::log::message(
             reshade::log::level::info,
-            "[DSRRL POINTLIGHT R20] selector_authority_cache=ACTIVE source_selection_cache=PER_PRODUCER_SERIAL gpu_payload_dedupe=PER_CONTEXT draw_cpu_traversal=OFF");
+            "[DSRRL R43 DRAWPARAM] clustered_source=ACTIVE receiver=STOCK_DSR donor_lookup=OFF material_lookup=OFF replacement_shader=OFF");
     }
 
     // Bloom FX transport is diagnostic-only: it does not authorize Q8,
