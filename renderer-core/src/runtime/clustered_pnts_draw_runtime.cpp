@@ -829,10 +829,10 @@ bool make_frame_selection_key(
     return true;
 }
 
-std::atomic<std::uint32_t> g_source_capture_reason_mask{0u};
+std::atomic<std::uint64_t> g_source_capture_reason_mask{0u};
 
 void log_source_capture_failure_once(
-    std::uint32_t bit,
+    std::uint64_t bit,
     const char *reason,
     void *node,
     const void *target) noexcept
@@ -1050,6 +1050,7 @@ enum class clustered_live_source_result : std::uint8_t {
     applied = 0,
     stock_dsr_dsr_only_row,
     stock_dsr_unclassified_bank,
+    stock_dsr_signature_complete_unknown,
     invalid_node_or_base,
     invalid_vtable,
     invalid_owner,
@@ -1058,7 +1059,16 @@ enum class clustered_live_source_result : std::uint8_t {
     invalid_selected_source,
     invalid_param,
     invalid_count_or_row,
-    invalid_bank_structure,
+    bank_guard_name_offset_read_fail,
+    bank_guard_name_offset_range_fail,
+    bank_guard_name_word_read_fail,
+    bank_signature_header_range_fail,
+    bank_signature_table_read_fail,
+    bank_signature_row_id_fail,
+    bank_signature_row_offset_fail,
+    bank_signature_name_offset_fail,
+    bank_signature_name_read_fail,
+    bank_signature_name_unterminated,
     invalid_row_read,
     invalid_row_numeric,
     invalid_mix
@@ -1084,7 +1094,7 @@ thread_local std::array<
 thread_local std::uint8_t
     g_clustered_source_bank_identity_cache_victim = 0u;
 
-bool clustered_source_bank_guard(
+clustered_live_source_result clustered_source_bank_guard(
     std::uintptr_t param,
     pointlight_ptde_source::access_cache &cache,
     std::uint32_t &name_offset,
@@ -1095,17 +1105,22 @@ bool clustered_source_bank_guard(
     if (!pointlight_ptde_source::read_cached(
             param + 0x38u,
             name_offset,
-            cache) ||
-        name_offset < 0x330u)
-        return false;
-
-    return pointlight_ptde_source::read_cached(
-        param + name_offset,
-        name_word,
-        cache);
+            cache))
+        return clustered_live_source_result::
+            bank_guard_name_offset_read_fail;
+    if (name_offset < 0x330u)
+        return clustered_live_source_result::
+            bank_guard_name_offset_range_fail;
+    if (!pointlight_ptde_source::read_cached(
+            param + name_offset,
+            name_word,
+            cache))
+        return clustered_live_source_result::
+            bank_guard_name_word_read_fail;
+    return clustered_live_source_result::applied;
 }
 
-bool classify_clustered_source_bank(
+clustered_live_source_result classify_clustered_source_bank(
     std::uintptr_t param,
     std::uint16_t count,
     std::uint32_t first,
@@ -1119,12 +1134,15 @@ bool classify_clustered_source_bank(
 
     std::uint32_t guard_name_offset = 0u;
     std::uint64_t guard_name_word = 0u;
-    if (!clustered_source_bank_guard(
+    const auto guard_result =
+        clustered_source_bank_guard(
             param,
             cache,
             guard_name_offset,
-            guard_name_word))
-        return false;
+            guard_name_word);
+    if (guard_result !=
+        clustered_live_source_result::applied)
+        return guard_result;
 
     for (const auto &entry :
          g_clustered_source_bank_identity_cache) {
@@ -1136,19 +1154,53 @@ bool classify_clustered_source_bank(
             entry.guard_name_word == guard_name_word) {
             bank = entry.bank;
             known_non_ptde = entry.known_non_ptde;
-            return true;
+            return clustered_live_source_result::applied;
         }
     }
 
     std::uint64_t signature = 0u;
+    pointlight_ptde_source::bank_structure_signature_failure
+        signature_failure =
+            pointlight_ptde_source::
+                bank_structure_signature_failure::none;
     if (!pointlight_ptde_source::bank_structure_signature(
             param,
             count,
             first,
             cache,
             signature,
-            nullptr))
-        return false;
+            nullptr,
+            &signature_failure)) {
+        using failure =
+            pointlight_ptde_source::
+                bank_structure_signature_failure;
+        switch (signature_failure) {
+        case failure::header_range:
+            return clustered_live_source_result::
+                bank_signature_header_range_fail;
+        case failure::table_read:
+            return clustered_live_source_result::
+                bank_signature_table_read_fail;
+        case failure::row_id:
+            return clustered_live_source_result::
+                bank_signature_row_id_fail;
+        case failure::row_offset:
+            return clustered_live_source_result::
+                bank_signature_row_offset_fail;
+        case failure::name_offset:
+            return clustered_live_source_result::
+                bank_signature_name_offset_fail;
+        case failure::name_read:
+            return clustered_live_source_result::
+                bank_signature_name_read_fail;
+        case failure::name_unterminated:
+            return clustered_live_source_result::
+                bank_signature_name_unterminated;
+        default:
+            return clustered_live_source_result::
+                bank_signature_header_range_fail;
+        }
+    }
 
     bank = gameplay_bank_from_structure_signature(
         signature);
@@ -1169,7 +1221,7 @@ bool classify_clustered_source_bank(
     slot.bank = bank;
     slot.known_non_ptde = known_non_ptde;
     slot.valid = true;
-    return true;
+    return clustered_live_source_result::applied;
 }
 
 clustered_live_source_result read_clustered_live_drawparam_row(
@@ -1214,19 +1266,24 @@ clustered_live_source_result read_clustered_live_drawparam_row(
 
     gameplay_bank bank = gameplay_bank::unknown;
     bool known_non_ptde = false;
-    if (!classify_clustered_source_bank(
+    const auto structure_result =
+        classify_clustered_source_bank(
             param,
             count,
             first,
             cache,
             bank,
-            known_non_ptde))
-        return clustered_live_source_result::invalid_bank_structure;
+            known_non_ptde);
+    if (structure_result !=
+        clustered_live_source_result::applied)
+        return structure_result;
 
-    if (known_non_ptde ||
-        bank == gameplay_bank::unknown)
+    if (known_non_ptde)
         return clustered_live_source_result::
             stock_dsr_unclassified_bank;
+    if (bank == gameplay_bank::unknown)
+        return clustered_live_source_result::
+            stock_dsr_signature_complete_unknown;
 
     if (dsr_only_semantic_row(bank, row_id))
         return clustered_live_source_result::
@@ -1666,10 +1723,22 @@ void __fastcall clustered_source_override_callback(
                 telemetry::hot_count(
                     g_source_dsr_only_fail_open);
             } else if (live_result ==
-                clustered_live_source_result::
-                    stock_dsr_unclassified_bank) {
+                       clustered_live_source_result::
+                           stock_dsr_unclassified_bank ||
+                       live_result ==
+                       clustered_live_source_result::
+                           stock_dsr_signature_complete_unknown) {
                 telemetry::hot_count(
                     g_source_unclassified_bank_fail_open);
+                if (live_result ==
+                    clustered_live_source_result::
+                        stock_dsr_signature_complete_unknown) {
+                    log_source_capture_failure_once(
+                        1ull << 24,
+                        "signature_complete_but_unknown",
+                        source,
+                        target);
+                }
             } else {
                 telemetry::hot_count(
                     g_source_capture_fail);
@@ -1691,15 +1760,33 @@ void __fastcall clustered_source_override_callback(
                 case clustered_live_source_result::invalid_param:
                     bit = 1u << 16; reason = "live_param"; break;
                 case clustered_live_source_result::invalid_count_or_row:
-                    bit = 1u << 17; reason = "live_count_or_row"; break;
-                case clustered_live_source_result::invalid_bank_structure:
-                    bit = 1u << 18; reason = "live_bank_structure"; break;
+                    bit = 1ull << 17; reason = "live_count_or_row"; break;
+                case clustered_live_source_result::bank_guard_name_offset_read_fail:
+                    bit = 1ull << 25; reason = "bank_guard_name_offset_read_fail"; break;
+                case clustered_live_source_result::bank_guard_name_offset_range_fail:
+                    bit = 1ull << 26; reason = "bank_guard_name_offset_range_fail"; break;
+                case clustered_live_source_result::bank_guard_name_word_read_fail:
+                    bit = 1ull << 27; reason = "bank_guard_name_word_read_fail"; break;
+                case clustered_live_source_result::bank_signature_header_range_fail:
+                    bit = 1ull << 28; reason = "signature_header_range_fail"; break;
+                case clustered_live_source_result::bank_signature_table_read_fail:
+                    bit = 1ull << 29; reason = "signature_table_read_fail"; break;
+                case clustered_live_source_result::bank_signature_row_id_fail:
+                    bit = 1ull << 30; reason = "signature_row_id_fail"; break;
+                case clustered_live_source_result::bank_signature_row_offset_fail:
+                    bit = 1ull << 31; reason = "signature_row_offset_fail"; break;
+                case clustered_live_source_result::bank_signature_name_offset_fail:
+                    bit = 1ull << 32; reason = "signature_name_offset_fail"; break;
+                case clustered_live_source_result::bank_signature_name_read_fail:
+                    bit = 1ull << 33; reason = "signature_name_read_fail"; break;
+                case clustered_live_source_result::bank_signature_name_unterminated:
+                    bit = 1ull << 34; reason = "signature_name_unterminated"; break;
                 case clustered_live_source_result::invalid_row_read:
-                    bit = 1u << 19; reason = "live_row_read"; break;
+                    bit = 1ull << 19; reason = "live_row_read"; break;
                 case clustered_live_source_result::invalid_row_numeric:
-                    bit = 1u << 20; reason = "live_row_numeric"; break;
+                    bit = 1ull << 20; reason = "live_row_numeric"; break;
                 case clustered_live_source_result::invalid_mix:
-                    bit = 1u << 21; reason = "live_mix"; break;
+                    bit = 1ull << 21; reason = "live_mix"; break;
                 default:
                     break;
                 }
