@@ -97,102 +97,58 @@ def main():
         "g_mutex_fallbacks",
         "FLVER global-lock fallback telemetry")
 
-    # PointLight bypass must remove the actual clustered builder detour, not
-    # merely make its observer a no-op.
-    require(flver_cpp,"bool install(\n    bool enable_clustered_builder,\n    bool enable_upper_lower_selector,\n    bool enable_hemdir3_selector) noexcept","optional clustered builder ABI")
-    require(flver_cpp,"if(enable_clustered_builder){","clustered builder preparation gate")
-    require(flver_cpp,"g_state.builder_armed=enable_clustered_builder;","clustered builder attestation")
+    # R52 source-first PointLight architecture.
+    # Clustered PntS is source-only: no FLVER builder detour, no material
+    # candidate query, no clustered receiver route and no replacement PS.
+    require(flver_cpp,
+        "bool install(\n    bool enable_clustered_builder,\n    bool enable_upper_lower_selector,\n    bool enable_hemdir3_selector) noexcept",
+        "optional clustered builder ABI retained for other lineages")
     require(integrated,
-        "flver_identity_transport::install(\n            k_pointlight_drawtime_runtime_enabled,\n            upper_lower_enabled,\n            hemdir3_enabled)",
-        "integrated clustered-builder and selector policy")
+        "flver_identity_transport::install(\n            false, // clustered PntS is source-only; no builder/receiver bridge",
+        "clustered FLVER builder detour disabled")
     require(integrated,
-        "if (k_pointlight_drawtime_runtime_enabled) {\n            clustered_pnts =",
-        "PointLight create-time analysis bypass")
+        "constexpr bool k_clustered_pointlight_receiver_runtime_enabled = false;",
+        "clustered receiver runtime hard-disabled")
     require(integrated,
-        "if (k_pointlight_drawtime_runtime_enabled &&\n        clustered_pnts_candidate)",
-        "PointLight post-A1 registration bypass")
-    require(flver_cpp,
-        "clustered_pnts_selector_handoff_ready_bridge(\n            owner)",
-        "clustered selector bridge is pre-gated by exact same-thread producer handoff")
-    require(flver_cpp,
-        "direct_pointlight_material_candidate(\n                identity,\n                pointlight_spc)",
-        "clustered selector bridge remains gated by exact PointLight material authority")
-    require(flver_cpp,
-        "clustered_pnts_selector_event_bridge(\n            owner,\n            actual_material);",
-        "clustered selector bridge receives exact material only after PointLight prefilter")
-    require(flver_cpp,
-        "clustered_pnts_selector_source_event_bridge();\n        clustered_pnts_selector_identity_event_bridge(\n            identity,\n            pointlight_spc);",
-        "clustered PointLight source stage feeds both NoSpc and owner-authorized Spc hybrid")
-    if "if (!pointlight_spc)" in flver_cpp:
-        fail("clustered Spc still has the superseded pre-source fail-open gate")
-
-    source_body=function_body(
-        clustered,
-        "void clustered_pnts_draw_runtime::selector_source_event()",
-        "void clustered_pnts_draw_runtime::selector_identity_event(")
-    require(source_body,
-        "select_first_four_exact(",
-        "PointLight source stage owns exact first-four selection")
-    require(source_body,
-        "capture_source(",
-        "PointLight source stage owns PTDE source capture")
+        "g_clustered_pointlight_selection_transport_active.store(\n        false,",
+        "clustered draw-selection transport disabled")
     require(clustered,
-        "k_frame_source_cache_entries = 128u",
-        "R40 inherited direct-mapped persistent source-carrier cache capacity")
+        "k_clustered_source_override_rva = 0xB7D25u;",
+        "clustered source-only retail producer cut")
     require(clustered,
-        "frame_source_cache_index(",
-        "R40 persistent source cache direct-map indexing")
-    require(clustered,
-        "same_frame_source_state(",
-        "R40 persistent source cache exact-state validation")
-    require(clustered,
-        "k_frame_selection_cache_entries = 128u",
-        "R38 per-frame exact selector-result cache capacity")
-    require(clustered,
-        "same_frame_selection_key(",
-        "R38 exact selector-input reuse gate")
-    require(clustered,
-        "bucket_heads",
-        "R38 selector cache tracks current collection heads")
-    require(clustered,
-        "[DSRRL POINTLIGHT R38] frame_selection_cache=DIRECT128_EXACT_INPUT_PLUS_BUCKET_HEADS source_cache=DIRECT128_EXACT_STATE cache_scope=TLS_PER_PRESENT source_revalidation=ON",
-        "R38 frame-selection/source-direct-cache runtime attestation")
-    require(clustered,
-        "bank_source ? 0x60u : 0x70u",
-        "attested Bank/Lerp position-only native lane")
+        "k_clustered_source_override_preimage",
+        "clustered source hook exact-byte preimage")
     require(clustered,
         "pointlight_ptde_source::capture(",
-        "PTDE donor replaces Bank/Lerp source without duplicate native pack")
+        "clustered PTDE donor source substitution")
     require(clustered,
-        "g_source_semantic_generation",
-        "R40 mutation-driven source-cache generation")
-    require(clustered,
-        "k_pointlight_collection_insert_rva = 0x55F750u",
-        "R40 exact active-light insertion mutation cut")
-    require(clustered,
-        "k_pointlight_collection_insert_preimage",
-        "R40 exact insertion hook preimage")
-    require(clustered,
-        "frame_state.collection =",
-        "R40 source-cache collection identity")
-    require(clustered,
-        "endpoint_source_a",
-        "R40 Bank/Lerp endpoint source identity")
-    require(clustered,
-        "endpoint_param_a",
-        "R40 Bank/Lerp endpoint param identity")
-    require(clustered,
-        "populate_source_semantic_endpoints(",
-        "R40 selector/beta endpoint routing guard")
-    require(clustered,
-        "[DSRRL POINTLIGHT R40] generational_source_cache_hit=1 exact_state_snapshot=ON invalidation=ACTIVE_COLLECTION_INSERT",
-        "R40 generational source-cache runtime hit attestation")
-    require(clustered,
-        "[DSRRL POINTLIGHT R40] source_cache=PERSISTENT_GENERATIONAL_EXACT_STATE invalidation=ACTIVE_COLLECTION_INSERT collection_identity=IN_KEY endpoint_identity=SOURCE_PLUS_PARAM selector_beta=IN_KEY present_reset=OFF spc=ON nospc=ON",
-        "R40 persistent generational source-cache startup attestation")
-    require(integrated,
-        "g_clustered_pnts.frame_event(present);",
-        "present-driven R38 selection-cache epoch retained")
+        "Clustered PntS never performs receiver/material authorization.",
+        "clustered receiver/material bridge retired")
+    require(flver_cpp,
+        "fixed_pointlight_selector_event_bridge(owner);",
+        "fixed selector source association retained")
+
+    publish_body=function_body(
+        flver_cpp,
+        "bool publish_exact_selector_identity(",
+        "}\nextern \"C\" void dsrrl_clustered_pnts_builder_observer(")
+    if "direct_pointlight_material_candidate(" in publish_body:
+        fail("clustered PointLight material candidate lookup is still present in FLVER selector")
+    if "clustered_pnts_selector_event_bridge(" in publish_body:
+        fail("clustered receiver/material bridge is still dispatched from FLVER selector")
+
+    if integrated.count("!g_fixed_pointlight.source_ready()") != 2:
+        fail("both draw and draw_indexed must source-gate fixed PointLight before receiver/material work")
+    for signature in ["bool on_draw(", "bool on_draw_indexed("]:
+        body=function_body(
+            integrated,
+            signature,
+            "return dsrrl::runtime::draw_tx_issued(")
+        require_before(
+            body,
+            "!g_fixed_pointlight.source_ready()",
+            "observe_pointlight_draw_identity(",
+            "fixed source authority must precede receiver/material identity")
 
     require(pmetal_source,
         "[DSRRL PMETAL R41] flver_lifecycle_cache_flush=OFF source_cache_generation=SOURCE_RUNTIME_RESET_ONLY endpoint_cache=EXACT_SOURCE_BASE_COUNT_INDEX_ROW bank_cache=BASE_COUNT_LAYOUT region_cache=VM_WINDOW selector_shadow=EXACT_TLS_SOURCE_PTR_SELECTOR_BETA selector_source=ON envspec=ON material_response=ON",
