@@ -408,21 +408,46 @@ inline void structure_hash_byte(
     hash *= 0x100000001b3ULL;
 }
 
+enum class bank_structure_signature_failure : std::uint8_t {
+    none = 0u,
+    header_range,
+    table_read,
+    row_id,
+    row_offset,
+    name_offset,
+    name_read,
+    name_unterminated
+};
+
 inline bool bank_structure_signature(
     std::uintptr_t param,
     std::uint16_t count,
     std::uint32_t first,
     access_cache &cache,
     std::uint64_t &signature,
-    std::uint32_t *structure_end_out = nullptr) noexcept {
+    std::uint32_t *structure_end_out = nullptr,
+    bank_structure_signature_failure *failure_out = nullptr) noexcept {
+    if (failure_out != nullptr)
+        *failure_out = bank_structure_signature_failure::none;
+
     if (count != 64u ||
         first < 0x330u ||
-        first > 0x10000u ||
-        !readable_cached(
+        first > 0x10000u) {
+        if (failure_out != nullptr)
+            *failure_out =
+                bank_structure_signature_failure::header_range;
+        return false;
+    }
+
+    if (!readable_cached(
             param,
             0x30u + static_cast<std::size_t>(count) * 12u,
-            cache))
+            cache)) {
+        if (failure_out != nullptr)
+            *failure_out =
+                bank_structure_signature_failure::table_read;
         return false;
+    }
 
     std::uint64_t hash = 0xcbf29ce484222325ULL;
     structure_hash_byte(hash, static_cast<std::uint8_t>(count & 0xffu));
@@ -441,11 +466,25 @@ inline bool bank_structure_signature(
         std::memcpy(&row_offset, reinterpret_cast<const void *>(entry + 4u), 4u);
         std::memcpy(&name_offset, reinterpret_cast<const void *>(entry + 8u), 4u);
 
-        if (id != i ||
-            row_offset != first + 16u * i ||
-            name_offset < table_end ||
-            name_offset > 0x100000u)
+        if (id != i) {
+            if (failure_out != nullptr)
+                *failure_out =
+                    bank_structure_signature_failure::row_id;
             return false;
+        }
+        if (row_offset != first + 16u * i) {
+            if (failure_out != nullptr)
+                *failure_out =
+                    bank_structure_signature_failure::row_offset;
+            return false;
+        }
+        if (name_offset < table_end ||
+            name_offset > 0x100000u) {
+            if (failure_out != nullptr)
+                *failure_out =
+                    bank_structure_signature_failure::name_offset;
+            return false;
+        }
 
         for (unsigned shift = 0u; shift < 32u; shift += 8u)
             structure_hash_byte(
@@ -460,8 +499,12 @@ inline bool bank_structure_signature(
                 name_address,
                 256u,
                 cache);
-        if (direct_bytes == 0u)
+        if (direct_bytes == 0u) {
+            if (failure_out != nullptr)
+                *failure_out =
+                    bank_structure_signature_failure::name_read;
             return false;
+        }
 
         const auto *name =
             reinterpret_cast<const std::uint8_t *>(
@@ -487,8 +530,12 @@ inline bool bank_structure_signature(
                 if (!read_cached(
                         name_address + j,
                         value,
-                        cache))
+                        cache)) {
+                    if (failure_out != nullptr)
+                        *failure_out =
+                            bank_structure_signature_failure::name_read;
                     return false;
+                }
                 structure_hash_byte(hash, value);
                 if (value == 0u) {
                     consumed = j;
@@ -497,8 +544,12 @@ inline bool bank_structure_signature(
                 }
             }
         }
-        if (!terminated)
+        if (!terminated) {
+            if (failure_out != nullptr)
+                *failure_out =
+                    bank_structure_signature_failure::name_unterminated;
             return false;
+        }
 
         const auto name_end64 =
             static_cast<std::uint64_t>(
@@ -508,8 +559,12 @@ inline bool bank_structure_signature(
             1u;
         if (name_end64 >
             static_cast<std::uint64_t>(
-                0xffffffffu))
+                0xffffffffu)) {
+            if (failure_out != nullptr)
+                *failure_out =
+                    bank_structure_signature_failure::name_offset;
             return false;
+        }
         structure_end =
             std::max(
                 structure_end,
