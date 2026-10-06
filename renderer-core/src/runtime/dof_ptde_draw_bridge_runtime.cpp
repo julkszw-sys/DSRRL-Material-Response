@@ -70,6 +70,12 @@ std::array<std::atomic<std::uint64_t>,
            static_cast<std::size_t>(role::count)> g_role_draw_counts{};
 std::array<std::atomic<std::uint32_t>,
            static_cast<std::size_t>(role::count)> g_role_last_thread{};
+constexpr std::size_t k_role_timeline_capacity = 32u;
+std::array<std::atomic<std::uint8_t>, k_role_timeline_capacity>
+    g_frame_role_timeline{};
+std::atomic<std::uint32_t> g_frame_role_timeline_count{0u};
+std::atomic_bool g_role_timeline_logged{false};
+std::atomic<std::uint32_t> g_role_resource_logged_mask{0u};
 
 thread_local sequence_state g_sequence{};
 thread_local bool g_internal_replay = false;
@@ -270,6 +276,116 @@ void disable_visible_bridge() noexcept
     g_armed.store(
         false,
         std::memory_order_release);
+}
+
+
+struct view_resource_desc {
+    void *resource = nullptr;
+    std::uint32_t width = 0u;
+    std::uint32_t height = 0u;
+    std::uint32_t format = 0u;
+    std::uint32_t samples = 0u;
+};
+
+view_resource_desc describe_view(ID3D11View *view) noexcept
+{
+    view_resource_desc out{};
+    if (view == nullptr)
+        return out;
+
+    ID3D11Resource *resource = nullptr;
+    view->GetResource(&resource);
+    if (resource == nullptr)
+        return out;
+
+    out.resource = resource;
+
+    ID3D11Texture2D *texture = nullptr;
+    if (SUCCEEDED(resource->QueryInterface(
+            __uuidof(ID3D11Texture2D),
+            reinterpret_cast<void **>(&texture))) &&
+        texture != nullptr) {
+        D3D11_TEXTURE2D_DESC desc{};
+        texture->GetDesc(&desc);
+        out.width = desc.Width;
+        out.height = desc.Height;
+        out.format = static_cast<std::uint32_t>(desc.Format);
+        out.samples = desc.SampleDesc.Count;
+        texture->Release();
+    }
+
+    resource->Release();
+    return out;
+}
+
+void log_role_resources_once(
+    reshade::api::command_list *cmd_list,
+    role selected) noexcept
+{
+    if (cmd_list == nullptr ||
+        selected == role::count)
+        return;
+
+    const auto role_index =
+        static_cast<std::uint32_t>(selected);
+    if (role_index >= 32u)
+        return;
+
+    const auto bit = 1u << role_index;
+    const auto previous =
+        g_role_resource_logged_mask.fetch_or(
+            bit,
+            std::memory_order_acq_rel);
+    if ((previous & bit) != 0u)
+        return;
+
+    auto *context =
+        reinterpret_cast<ID3D11DeviceContext *>(
+            cmd_list->get_native());
+    if (context == nullptr)
+        return;
+
+    ID3D11RenderTargetView *rtv = nullptr;
+    ID3D11DepthStencilView *dsv = nullptr;
+    context->OMGetRenderTargets(1u, &rtv, &dsv);
+
+    std::array<ID3D11ShaderResourceView *, 5> srvs{};
+    context->PSGetShaderResources(
+        0u,
+        static_cast<UINT>(srvs.size()),
+        srvs.data());
+
+    const auto rt =
+        describe_view(rtv);
+    std::array<view_resource_desc, 5> src{};
+    for (std::size_t i = 0u; i < srvs.size(); ++i)
+        src[i] = describe_view(srvs[i]);
+
+    char line[2048]{};
+    std::snprintf(
+        line,
+        sizeof(line),
+        "[DSRRL DoF resource] role=r%u tid=%u rt=%p:%ux%u:f%u:s%u t0=%p:%ux%u:f%u:s%u t1=%p:%ux%u:f%u:s%u t2=%p:%ux%u:f%u:s%u t3=%p:%ux%u:f%u:s%u t4=%p:%ux%u:f%u:s%u",
+        role_index,
+        static_cast<std::uint32_t>(GetCurrentThreadId()),
+        rt.resource, rt.width, rt.height, rt.format, rt.samples,
+        src[0].resource, src[0].width, src[0].height, src[0].format, src[0].samples,
+        src[1].resource, src[1].width, src[1].height, src[1].format, src[1].samples,
+        src[2].resource, src[2].width, src[2].height, src[2].format, src[2].samples,
+        src[3].resource, src[3].width, src[3].height, src[3].format, src[3].samples,
+        src[4].resource, src[4].width, src[4].height, src[4].format, src[4].samples);
+
+    reshade::log::message(
+        reshade::log::level::info,
+        line);
+
+    for (auto *srv : srvs)
+        if (srv != nullptr)
+            srv->Release();
+    if (dsv != nullptr)
+        dsv->Release();
+    if (rtv != nullptr)
+        rtv->Release();
 }
 
 void fail_sequence(
@@ -831,6 +947,21 @@ bool handle_draw(
                     GetCurrentThreadId()),
                 std::memory_order_relaxed);
         }
+        if (!g_role_timeline_logged.load(
+                std::memory_order_acquire)) {
+            const auto timeline_index =
+                g_frame_role_timeline_count.fetch_add(
+                    1u,
+                    std::memory_order_relaxed);
+            if (timeline_index <
+                g_frame_role_timeline.size())
+                g_frame_role_timeline[timeline_index].store(
+                    static_cast<std::uint8_t>(selected),
+                    std::memory_order_relaxed);
+        }
+        log_role_resources_once(
+            cmd_list,
+            selected);
         if (selected == role::depth_copy_msaa) {
             g_depth_msaa_draws.fetch_add(
                 1u,
@@ -1069,6 +1200,52 @@ void on_present(
     const auto present =
         ++g_present_count;
 
+    if (!g_role_timeline_logged.load(
+            std::memory_order_acquire)) {
+        const auto count =
+            g_frame_role_timeline_count.exchange(
+                0u,
+                std::memory_order_acq_rel);
+        if (count != 0u) {
+            char timeline[512]{};
+            int used = std::snprintf(
+                timeline,
+                sizeof(timeline),
+                "[DSRRL DoF timeline] first_nonempty_present roles=");
+            const auto limit =
+                std::min<std::uint32_t>(
+                    count,
+                    static_cast<std::uint32_t>(
+                        g_frame_role_timeline.size()));
+            for (std::uint32_t i = 0u;
+                 i < limit &&
+                 used > 0 &&
+                 static_cast<std::size_t>(used) <
+                     sizeof(timeline);
+                 ++i) {
+                const auto role_id =
+                    g_frame_role_timeline[i].load(
+                        std::memory_order_relaxed);
+                const int wrote = std::snprintf(
+                    timeline + used,
+                    sizeof(timeline) -
+                        static_cast<std::size_t>(used),
+                    "%sr%u",
+                    i == 0u ? "" : ">",
+                    static_cast<unsigned>(role_id));
+                if (wrote <= 0)
+                    break;
+                used += wrote;
+            }
+            reshade::log::message(
+                reshade::log::level::info,
+                timeline);
+            g_role_timeline_logged.store(
+                true,
+                std::memory_order_release);
+        }
+    }
+
     if (g_opt_in.load(
             std::memory_order_acquire) &&
         (present == 1u ||
@@ -1111,6 +1288,11 @@ bool register_ptde_draw_bridge_runtime(
         v.store(0u, std::memory_order_relaxed);
     for (auto &v : g_role_last_thread)
         v.store(0u, std::memory_order_relaxed);
+    for (auto &v : g_frame_role_timeline)
+        v.store(0u, std::memory_order_relaxed);
+    g_frame_role_timeline_count.store(0u);
+    g_role_timeline_logged.store(false);
+    g_role_resource_logged_mask.store(0u);
 
     set_authored_feature(false);
     release_sequence();
