@@ -5,6 +5,7 @@ on:
   push:
     branches:
       - r52-pointlight-source-first-stock-clustered
+      - r53-r52-correct-base-drawparam-source-telemetry
   pull_request:
     paths:
       - "renderer-core/integrated/**"
@@ -29,6 +30,8 @@ on:
       - "renderer-core/include/dsrrl/runtime/pointlight_ptde_source_runtime.hpp"
       - "renderer-core/src/operators/env_spec/pmetal_rgba_lerp_materializer.cpp"
       - ".github/workflows/pmetal-r19-lerp-exact-envdiffuse-fast.yml"
+      - "renderer-core/src/runtime/dof_authored_state_runtime.cpp"
+      - "renderer-core/tools/audit_dof_live_drawparam_source.py"
       - "renderer-core/src/runtime/dof_ptde_draw_bridge_runtime.cpp"
       - "renderer-core/src/runtime/dof_ptde_scheduler_runtime.cpp"
       - "renderer-core/src/runtime/dof_host_depth_route_runtime.cpp"
@@ -55,6 +58,17 @@ jobs:
         run: |
           $commit = (git rev-parse HEAD).Trim()
           "DSRRL_CHECKOUT_COMMIT=$commit" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Verify exact R52 source lineage
+        shell: pwsh
+        run: |
+          git merge-base --is-ancestor 275cc1ddca446f951e6ff3cc08587c3393842d02 HEAD
+          if ($LASTEXITCODE -ne 0) { throw "HEAD is not descended from required R52 base 275cc1dd" }
+          git merge-base --is-ancestor 25893b0763b0b7dfc8081442a42b4cc28bb9a74a HEAD
+          if ($LASTEXITCODE -ne 0) { throw "HEAD is not descended from corrected source-only PointLight head 25893b07" }
+          git merge-base --is-ancestor 091c63518d9099270e5d7cd8feb7c4c84666dbbb HEAD
+          if ($LASTEXITCODE -eq 0) { throw "Forbidden generic-main lineage 091c635 detected" }
+          Write-Host "R52_CORRECT_BASE_LINEAGE_PASS"
 
       - name: Checkout pinned ReShade API
         uses: actions/checkout@v4
@@ -93,10 +107,23 @@ jobs:
           -DDSRRL_FLVER_SELECTOR_PROFILE=OFF
           -DDSRRL_POINTLIGHT_PROFILE=OFF
 
+      - name: Verify full telemetry build profile
+        shell: pwsh
+        run: |
+          $cache = Get-Content build-fast/CMakeCache.txt -Raw
+          if ($cache -notmatch "DSRRL_FULL_TELEMETRY_DEFAULT_ON:BOOL=ON") {
+            throw "R52 runtime must enable full telemetry"
+          }
+          if ($cache -notmatch "DSRRL_DIAGNOSTIC_TELEMETRY_DEFAULT_ON:BOOL=OFF") {
+            throw "R52 runtime unexpectedly enables native-state diagnostic telemetry"
+          }
+
       - name: Audit integrated runtime architecture
         shell: pwsh
         run: |
           python renderer-core/tools/audit_active_islands_hotpath.py --source-dir renderer-core
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python renderer-core/tools/audit_dof_live_drawparam_source.py --source-dir renderer-core
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Build runtime
@@ -122,6 +149,8 @@ jobs:
           if ($ascii.Contains("[DSRRL POINTLIGHT R34] source_material_split=ACTIVE")) { throw "Retired clustered source/material selector path survived" }
           if ($ascii.Contains("[DSRRL POINTLIGHT R35] owner_authorized_spc_hybrid=ACTIVE")) { throw "Retired clustered receiver hybrid survived" }
           if (-not $ascii.Contains("[DSRRL PMETAL R43] producer_cache=SET256_WAY2 freshness=SOURCE_BASE_COUNT_ROW_SELECTOR_BETA global_semantic_version_gate=OFF selector_try_lock=ON producer_payload_exact=ON fallback_full_decode=ON islands_preserved=ON")) { throw "Missing inherited R43 P_Metal marker" }
+          if (-not $ascii.Contains("[DSRRL TELEMETRY R53] full=ON runtime=ON effect=ON native_state_verify=OFF profile=R52_CORRECT_BASE")) { throw "Missing full telemetry marker for corrected R52 lineage" }
+          if (-not $ascii.Contains("[DSRRL DoF R53-DRAWPARAM] carrier=LIVE_SELECTED_DOF_ROWS selector=STOCK_DSR donor_table=ABSENT bank_gate=PTDE_HOMOLOGOUS_10 m15_dual=ON default_m99=STOCK_DSR producer_rva=0x5627E0")) { throw "Missing donor-free live DrawParam DoF marker" }
           if (-not $ascii.Contains("[DSRRL DoF] PTDE private island READY")) { throw "Missing active PTDE DoF island marker" }
           if (-not $ascii.Contains("[DSRRL DoF R52] activation_cut=PASS01_SOURCE_DEPTH private_prefix=PASSES_0_7 stock_branch=PASS10_ONLY tonemap=PTDE_TERMINAL_HANDOFF")) { throw "Missing R52 DoF semantic-cut identity marker" }
           if ($ascii.Contains("[DSRRL PERF R44] DOF")) { throw "DoF CPU profiler must be absent from runtime build" }
