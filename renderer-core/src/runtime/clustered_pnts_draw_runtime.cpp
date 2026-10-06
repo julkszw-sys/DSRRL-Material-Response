@@ -24,6 +24,7 @@
 #include <cstring>
 #include <mutex>
 #include <unordered_map>
+#include <vector>
 
 namespace dsrrl::runtime {
 namespace {
@@ -1102,6 +1103,354 @@ bool write_pointlight_code(
             old_protect,
             &ignored) != FALSE;
     return flushed && restored;
+}
+
+
+struct clustered_source_override_hook_v1 {
+    void *target = nullptr;
+    void *stub = nullptr;
+    std::array<std::uint8_t,16> original{};
+    bool patched = false;
+};
+
+// Exact retail DSR source-producer cut. The raw 8-float source state has
+// already been produced on the stack, but DSR has not yet read q.rgb or
+// applied category gain / q^2.2 / attenuation metadata. This is therefore
+// source-side only: stock DSR continues all producer transforms and every
+// clustered receiver remains untouched.
+constexpr std::uintptr_t
+    k_clustered_source_override_rva = 0xB7D25u;
+constexpr std::array<std::uint8_t,16>
+    k_clustered_source_override_preimage = {
+        0xF3,0x0F,0x10,0x44,0x24,0x38,
+        0x48,0x0F,0xBE,0xC0,
+        0xF3,0x44,0x0F,0x10,0x0C,0x81
+    };
+
+clustered_source_override_hook_v1
+    g_clustered_source_override_hook{};
+thread_local pointlight_ptde_source::
+    draw_bank_authority_cache
+    g_clustered_source_bank_cache{};
+
+void source_hook_emit_u64(
+    std::vector<std::uint8_t> &out,
+    std::uint64_t value)
+{
+    for (unsigned i = 0u; i < 8u; ++i)
+        out.push_back(
+            static_cast<std::uint8_t>(
+                value >> (i * 8u)));
+}
+
+void source_hook_emit(
+    std::vector<std::uint8_t> &out,
+    std::initializer_list<std::uint8_t> bytes)
+{
+    out.insert(
+        out.end(),
+        bytes.begin(),
+        bytes.end());
+}
+
+void source_hook_store_xmm(
+    std::vector<std::uint8_t> &out,
+    std::uint8_t xmm,
+    std::uint32_t disp)
+{
+    source_hook_emit(
+        out,
+        {0xF3,0x0F,0x7F,
+         static_cast<std::uint8_t>(
+             0x84u | ((xmm & 7u) << 3u)),
+         0x24});
+    for (unsigned i = 0u; i < 4u; ++i)
+        out.push_back(
+            static_cast<std::uint8_t>(
+                disp >> (i * 8u)));
+}
+
+void source_hook_load_xmm(
+    std::vector<std::uint8_t> &out,
+    std::uint8_t xmm,
+    std::uint32_t disp)
+{
+    source_hook_emit(
+        out,
+        {0xF3,0x0F,0x6F,
+         static_cast<std::uint8_t>(
+             0x84u | ((xmm & 7u) << 3u)),
+         0x24});
+    for (unsigned i = 0u; i < 4u; ++i)
+        out.push_back(
+            static_cast<std::uint8_t>(
+                disp >> (i * 8u)));
+}
+
+void __fastcall clustered_source_override_callback(
+    void *source,
+    float *raw,
+    std::uint32_t) noexcept
+{
+    if (!g_enabled.load(std::memory_order_relaxed) ||
+        g_quarantined.load(std::memory_order_relaxed) ||
+        source == nullptr ||
+        raw == nullptr ||
+        g_base == 0u)
+        return;
+
+    std::array<float,8> candidate{};
+    std::memcpy(
+        candidate.data(),
+        raw,
+        sizeof(candidate));
+
+    // Only exact Bank/LerpBank donor authority may replace the raw source.
+    // Direct/SFX/unknown classes fail open byte-for-byte to the stock raw
+    // payload already present on the retail stack.
+    if (!pointlight_ptde_source::capture(
+            source,
+            g_base,
+            candidate,
+            g_clustered_source_bank_cache))
+        return;
+
+    for (std::size_t i = 3u; i < candidate.size(); ++i)
+        if (!std::isfinite(candidate[i]))
+            return;
+    if (!(candidate[3] > 0.0f) ||
+        !(candidate[7] > 0.0f))
+        return;
+
+    // Preserve DSR world position xyz. Replace only invRange/raw-q/End before
+    // stock DSR applies category gain, q^2.2 and its native receiver contract.
+    std::memcpy(
+        raw + 3u,
+        candidate.data() + 3u,
+        5u * sizeof(float));
+    telemetry::hot_count(
+        g_source_capture_ok);
+}
+
+bool build_clustered_source_override_stub(
+    void *target,
+    void *&stub_out) noexcept
+{
+    stub_out = nullptr;
+    try {
+        std::vector<std::uint8_t> code;
+        code.reserve(320u);
+
+        // Site RSP is 16-byte aligned. Preserve flags, all volatile GPRs and
+        // volatile XMM0..5 because xmm1 already carries the retail pow exponent
+        // constant at this cut.
+        source_hook_emit(code,{0x9C}); // pushfq
+        source_hook_emit(
+            code,
+            {0x48,0x81,0xEC,0x08,0x01,0x00,0x00}); // sub rsp,108h
+
+        source_hook_emit(code,{0x48,0x89,0x44,0x24,0x20}); // rax
+        source_hook_emit(code,{0x9C});
+        source_hook_emit(code,{0x58});
+        source_hook_emit(
+            code,
+            {0x48,0x89,0x84,0x24,0x58,0x00,0x00,0x00});
+        source_hook_emit(code,{0x48,0x89,0x4C,0x24,0x28}); // rcx
+        source_hook_emit(code,{0x48,0x89,0x54,0x24,0x30}); // rdx
+        source_hook_emit(code,{0x4C,0x89,0x44,0x24,0x38}); // r8
+        source_hook_emit(code,{0x4C,0x89,0x4C,0x24,0x40}); // r9
+        source_hook_emit(code,{0x4C,0x89,0x54,0x24,0x48}); // r10
+        source_hook_emit(code,{0x4C,0x89,0x5C,0x24,0x50}); // r11
+
+        for (std::uint8_t i = 0u; i < 6u; ++i)
+            source_hook_store_xmm(
+                code,
+                i,
+                0x60u + 0x10u * i);
+
+        // callback(source=RDI, raw=original_rsp+0x20, dense_index=ESI)
+        source_hook_emit(code,{0x48,0x8B,0xCF}); // mov rcx,rdi
+        source_hook_emit(
+            code,
+            {0x48,0x8D,0x94,0x24,0x30,0x01,0x00,0x00}); // lea rdx,[rsp+130h]
+        source_hook_emit(code,{0x44,0x8B,0xC6}); // mov r8d,esi
+        source_hook_emit(code,{0x48,0xB8});
+        source_hook_emit_u64(
+            code,
+            reinterpret_cast<std::uint64_t>(
+                &clustered_source_override_callback));
+        source_hook_emit(code,{0xFF,0xD0}); // call rax
+
+        for (std::uint8_t i = 0u; i < 6u; ++i)
+            source_hook_load_xmm(
+                code,
+                i,
+                0x60u + 0x10u * i);
+
+        source_hook_emit(code,{0x4C,0x8B,0x5C,0x24,0x50});
+        source_hook_emit(code,{0x4C,0x8B,0x54,0x24,0x48});
+        source_hook_emit(code,{0x4C,0x8B,0x4C,0x24,0x40});
+        source_hook_emit(code,{0x4C,0x8B,0x44,0x24,0x38});
+        source_hook_emit(code,{0x48,0x8B,0x54,0x24,0x30});
+        source_hook_emit(code,{0x48,0x8B,0x4C,0x24,0x28});
+        source_hook_emit(
+            code,
+            {0x48,0x8B,0x84,0x24,0x58,0x00,0x00,0x00});
+        source_hook_emit(code,{0x50});
+        source_hook_emit(code,{0x9D});
+        source_hook_emit(code,{0x48,0x8B,0x44,0x24,0x20});
+        source_hook_emit(
+            code,
+            {0x48,0x81,0xC4,0x08,0x01,0x00,0x00});
+        source_hook_emit(code,{0x9D});
+
+        // Replay the exact 16 stolen retail bytes.
+        code.insert(
+            code.end(),
+            k_clustered_source_override_preimage.begin(),
+            k_clustered_source_override_preimage.end());
+
+        // Absolute indirect jump to target+16.
+        source_hook_emit(
+            code,
+            {0xFF,0x25,0x00,0x00,0x00,0x00});
+        source_hook_emit_u64(
+            code,
+            reinterpret_cast<std::uint64_t>(
+                static_cast<std::uint8_t *>(target) +
+                k_clustered_source_override_preimage.size()));
+
+        void *stub =
+            VirtualAlloc(
+                nullptr,
+                code.size(),
+                MEM_COMMIT | MEM_RESERVE,
+                PAGE_EXECUTE_READWRITE);
+        if (stub == nullptr)
+            return false;
+
+        std::memcpy(
+            stub,
+            code.data(),
+            code.size());
+        if (FlushInstructionCache(
+                GetCurrentProcess(),
+                stub,
+                code.size()) == FALSE) {
+            VirtualFree(
+                stub,
+                0u,
+                MEM_RELEASE);
+            return false;
+        }
+
+        stub_out = stub;
+        return true;
+    } catch (...) {
+        return false;
+    }
+}
+
+bool install_clustered_source_override_hook() noexcept
+{
+    auto &hook =
+        g_clustered_source_override_hook;
+    if (hook.patched)
+        return true;
+    if (g_base == 0u)
+        return false;
+
+    auto *target =
+        reinterpret_cast<std::uint8_t *>(
+            g_base +
+            k_clustered_source_override_rva);
+    if (!readable_range(
+            target,
+            k_clustered_source_override_preimage.size()) ||
+        std::memcmp(
+            target,
+            k_clustered_source_override_preimage.data(),
+            k_clustered_source_override_preimage.size()) != 0)
+        return false;
+
+    void *stub = nullptr;
+    if (!build_clustered_source_override_stub(
+            target,
+            stub))
+        return false;
+
+    std::array<
+        std::uint8_t,
+        k_clustered_source_override_preimage.size()> patch{};
+    patch.fill(0x90u);
+    patch[0] = 0xFFu;
+    patch[1] = 0x25u;
+    const std::uint32_t zero = 0u;
+    std::memcpy(
+        patch.data() + 2u,
+        &zero,
+        sizeof(zero));
+    const auto address =
+        reinterpret_cast<std::uint64_t>(
+            stub);
+    std::memcpy(
+        patch.data() + 6u,
+        &address,
+        sizeof(address));
+
+    if (!write_pointlight_code(
+            target,
+            patch.data(),
+            patch.size())) {
+        VirtualFree(
+            stub,
+            0u,
+            MEM_RELEASE);
+        return false;
+    }
+
+    hook.target = target;
+    hook.stub = stub;
+    hook.original =
+        k_clustered_source_override_preimage;
+    hook.patched = true;
+    return true;
+}
+
+bool restore_clustered_source_override_hook() noexcept
+{
+    auto &hook =
+        g_clustered_source_override_hook;
+    bool ok = true;
+
+    if (hook.patched) {
+        ok =
+            hook.target != nullptr &&
+            write_pointlight_code(
+                hook.target,
+                hook.original.data(),
+                hook.original.size()) &&
+            std::memcmp(
+                hook.target,
+                hook.original.data(),
+                hook.original.size()) == 0;
+        if (ok)
+            hook.patched = false;
+    }
+
+    if (ok && hook.stub != nullptr) {
+        ok =
+            VirtualFree(
+                hook.stub,
+                0u,
+                MEM_RELEASE) != FALSE;
+        if (ok)
+            hook.stub = nullptr;
+    }
+
+    if (ok)
+        hook = {};
+    return ok;
 }
 
 void __fastcall pointlight_collection_insert_detour(
@@ -2262,9 +2611,9 @@ bool clustered_pnts_draw_runtime::install() noexcept
 
     const auto flver =
         flver_identity_transport::status();
-    if (!flver.provenance_ok ||
-        !flver.selector_armed ||
-        !flver.builder_armed)
+    // Clustered is source-only in this lineage. It deliberately does not
+    // depend on the FLVER/material selector or the old per-draw builder hook.
+    if (!flver.provenance_ok)
         return false;
 
     g_base =
@@ -2298,14 +2647,13 @@ bool clustered_pnts_draw_runtime::install() noexcept
     pointlight_ptde_source::
         clear_persistent_structure_cache();
 
-    // R40: exact-byte-guarded mutation hook. It is intentionally installed
-    // only on active-light insertion, which is enough to close pointer-reuse
-    // lifetime hazards: removed nodes cannot be selected, and any reactivation
-    // necessarily passes through this insertion path before reuse.
-    if (!install_pointlight_collection_insert_hook())
+    // Source-only clustered bridge: patch the retail raw-source producer
+    // before DSR category/gamma/falloff transforms. No receiver/material
+    // lookup, first-four reconstruction, sidecar or replacement shader is
+    // involved in clustered PntS anymore.
+    if (!install_clustered_source_override_hook())
         return false;
-    invalidate_source_semantic_generation();
-    g_source_cache_seen_generation = 0u;
+    g_clustered_source_bank_cache = {};
 
     g_runtime = this;
     g_quarantined.store(false);
@@ -2350,23 +2698,28 @@ bool clustered_pnts_draw_runtime::install() noexcept
             reshade::log::level::info,
             "[DSRRL POINTLIGHT R51] resolved_donor_fast_path=ON duplicate_lerp_resolution=OFF bank_structure_full_revalidate=ONCE_PER_PRESENT allocation_guard=EACH_LOOKUP vm_region_windows=4xPER_CATEGORY failopen_original_donor=ON");
     static std::atomic_bool
-        r52_gate_logged{false};
-    if (!r52_gate_logged.exchange(
+        r52_source_first_logged{false};
+    if (!r52_source_first_logged.exchange(
             true,
             std::memory_order_relaxed))
         reshade::log::message(
             reshade::log::level::info,
-            "[DSRRL POINTLIGHT R52] selector_handoff_pre_gate=ON candidate_lookup_skipped_without_exact_producer=ON failopen_equivalence=SELECTOR_EVENT_GATE");
+            "[DSRRL POINTLIGHT R52-SOURCE-FIRST] clustered=SOURCE_ONLY raw_cut=0xB7D25 receiver=STOCK_DSR material_lookup=OFF replacement_shader=OFF fixed=SOURCE_BEFORE_RECEIVER");
     return true;
 }
 
 void clustered_pnts_draw_runtime::uninstall() noexcept
 {
     g_enabled.store(false);
-    if (!restore_pointlight_collection_insert_hook())
+    if (!restore_clustered_source_override_hook()) {
         reshade::log::message(
             reshade::log::level::error,
-            "[DSRRL POINTLIGHT R40] collection_insert_hook_restore_fail=1");
+            "[DSRRL POINTLIGHT R52-SOURCE-FIRST] clustered_source_hook_restore_fail=1");
+        g_quarantined.store(
+            true,
+            std::memory_order_relaxed);
+    }
+    g_clustered_source_bank_cache = {};
     g_source_exec_attested.store(
         false,
         std::memory_order_relaxed);
