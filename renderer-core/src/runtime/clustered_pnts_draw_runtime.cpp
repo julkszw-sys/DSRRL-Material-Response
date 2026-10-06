@@ -2545,60 +2545,37 @@ bool update_buffer(
 } // namespace
 
 void clustered_pnts_builder_event_bridge(
-    void *draw,
-    void *renderer_context) noexcept
+    void *,
+    void *) noexcept
 {
-    if (g_runtime != nullptr)
-        g_runtime->builder_event(
-            draw,
-            renderer_context);
+    // Source-only clustered lineage: the old draw-builder snapshot path is
+    // intentionally dead. PTDE source substitution happens at the retail
+    // source producer cut before DSR transforms.
 }
 
 void clustered_pnts_selector_event_bridge(
-    void *owner,
-    const void *actual_material) noexcept
+    void *,
+    const void *) noexcept
 {
-    if (g_runtime != nullptr)
-        g_runtime->selector_event(
-            owner,
-            actual_material);
+    // Clustered PntS never performs receiver/material authorization.
 }
 
 bool clustered_pnts_selector_handoff_ready_bridge(
-    void *owner) noexcept
+    void *) noexcept
 {
-    if (g_runtime == nullptr ||
-        !g_enabled.load(std::memory_order_relaxed) ||
-        g_quarantined.load(std::memory_order_relaxed) ||
-        owner == nullptr)
-        return false;
-
-    const auto owner_key =
-        reinterpret_cast<std::uintptr_t>(owner);
-
-    // Exact same-thread producer handoff. This is the same authority gate
-    // selector_event() enforces before any PointLight work can become visible.
-    // Expose it so callers can skip material-candidate lookup and bridge calls
-    // that are guaranteed to fail open.
-    return
-        g_producer_input_tls.valid &&
-        g_producer_input_tls.owner == owner_key;
+    return false;
 }
 
 void clustered_pnts_selector_source_event_bridge() noexcept
 {
-    if (g_runtime != nullptr)
-        g_runtime->selector_source_event();
+    // Dead by construction in source-only clustered mode.
 }
 
 void clustered_pnts_selector_identity_event_bridge(
-    const operators::material_response::material_identity &identity,
-    bool expected_spc) noexcept
+    const operators::material_response::material_identity &,
+    bool) noexcept
 {
-    if (g_runtime != nullptr)
-        g_runtime->selector_identity_event(
-            identity,
-            expected_spc);
+    // Clustered receiver remains stock DSR.
 }
 
 bool clustered_pnts_draw_runtime::install() noexcept
@@ -2607,13 +2584,6 @@ bool clustered_pnts_draw_runtime::install() noexcept
         return g_runtime == this;
     if (g_runtime != nullptr &&
         g_runtime != this)
-        return false;
-
-    const auto flver =
-        flver_identity_transport::status();
-    // Clustered is source-only in this lineage. It deliberately does not
-    // depend on the FLVER/material selector or the old per-draw builder hook.
-    if (!flver.provenance_ok)
         return false;
 
     g_base =
