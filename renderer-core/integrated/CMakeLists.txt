@@ -239,6 +239,11 @@ option(
     "Diagnostic: low-overhead sampled PTDE DoF draw-path CPU profiler"
     OFF)
 
+option(
+    DSRRL_DOF_DRAW_EVENT_AB_DISABLE
+    "Diagnostic A/B: keep DoF preflight/host hooks but do not register global draw/draw_indexed events"
+    OFF)
+
 set(
     RESHADE_INCLUDE_DIR
     ""
@@ -992,6 +997,13 @@ if(DSRRL_DOF_PROFILE)
         dsrrl_renderer_core_integrated
         PRIVATE
         DSRRL_DOF_PROFILE)
+endif()
+
+if(DSRRL_DOF_DRAW_EVENT_AB_DISABLE)
+    target_compile_definitions(
+        dsrrl_renderer_core_integrated
+        PRIVATE
+        DSRRL_DOF_DRAW_EVENT_AB_DISABLE)
 endif()
 
 if(MSVC)
