@@ -835,9 +835,14 @@ bool readable_range(
     return true;
 }
 
-struct readable_region_cache {
+struct readable_region_window {
     std::uintptr_t begin = 0u;
     std::uintptr_t end = 0u;
+};
+
+struct readable_region_cache {
+    std::array<readable_region_window,4> windows{};
+    std::uint8_t victim = 0u;
 };
 
 struct source_vm_cache_tls {
@@ -881,9 +886,10 @@ bool readable_range_cached(
     if (end < begin)
         return false;
 
-    if (cache.begin <= begin &&
-        end <= cache.end)
-        return true;
+    for (const auto &window : cache.windows)
+        if (window.begin <= begin &&
+            end <= window.end)
+            return true;
 
     MEMORY_BASIC_INFORMATION mbi{};
     if (VirtualQuery(
@@ -920,8 +926,13 @@ bool readable_range_cached(
     if (end > region_end)
         return readable_range(ptr, size);
 
-    cache.begin = region_begin;
-    cache.end = region_end;
+    auto &window =
+        cache.windows[
+            static_cast<std::size_t>(
+                cache.victim++) %
+            cache.windows.size()];
+    window.begin = region_begin;
+    window.end = region_end;
     return true;
 }
 
@@ -1846,11 +1857,36 @@ bool capture_source(
                 position_offset,
             3u * sizeof(float));
 
-        if (!pointlight_ptde_source::capture(
-                node,
-                g_base,
-                raw,
-                bank_cache)) {
+        bool donor_ready = false;
+        if (semantic_endpoints_ready) {
+            donor_ready =
+                pointlight_ptde_source::
+                    capture_resolved(
+                        bank_source,
+                        frame_state.selector_word0,
+                        frame_state.selector_word1,
+                        frame_state.endpoint_param_a,
+                        frame_state.endpoint_count_a,
+                        frame_state.endpoint_first_a,
+                        frame_state.endpoint_param_b,
+                        frame_state.endpoint_count_b,
+                        frame_state.endpoint_first_b,
+                        raw,
+                        bank_cache);
+        }
+
+        // Exact fail-open layering: if the resolved fast path rejects, retain
+        // the original independently resolving donor path before finally
+        // falling back to the stock source packer.
+        if (!donor_ready)
+            donor_ready =
+                pointlight_ptde_source::capture(
+                    node,
+                    g_base,
+                    raw,
+                    bank_cache);
+
+        if (!donor_ready) {
             // Preserve the pre-R36 donor-miss behavior exactly: unresolved
             // donor authority falls back to the attested stock source packer
             // rather than suppressing an otherwise valid PointLight.
@@ -2284,6 +2320,14 @@ bool clustered_pnts_draw_runtime::install() noexcept
         reshade::log::message(
             reshade::log::level::info,
             "[DSRRL POINTLIGHT R40] source_cache=PERSISTENT_GENERATIONAL_EXACT_STATE invalidation=ACTIVE_COLLECTION_INSERT collection_identity=IN_KEY endpoint_identity=SOURCE_PLUS_PARAM selector_beta=IN_KEY present_reset=OFF spc=ON nospc=ON");
+    static std::atomic_bool
+        r51_hotpath_logged{false};
+    if (!r51_hotpath_logged.exchange(
+            true,
+            std::memory_order_relaxed))
+        reshade::log::message(
+            reshade::log::level::info,
+            "[DSRRL POINTLIGHT R51] resolved_donor_fast_path=ON duplicate_lerp_resolution=OFF bank_structure_full_revalidate=ONCE_PER_PRESENT allocation_guard=EACH_LOOKUP vm_region_windows=4xPER_CATEGORY failopen_original_donor=ON");
     return true;
 }
 
@@ -2450,6 +2494,9 @@ void clustered_pnts_draw_runtime::frame_event(
     g_source_frame_epoch.store(
         epoch,
         std::memory_order_relaxed);
+    pointlight_ptde_source::
+        set_persistent_structure_validation_epoch(
+            epoch);
 }
 
 void clustered_pnts_draw_runtime::selector_source_event() noexcept
