@@ -208,6 +208,7 @@ add_library(dsrrl_renderer_core STATIC
     src/operators/env_spec/no_spc_envspec_delete.cpp
     src/operators/surface/terminal_sat_rgb_patch.cpp
     src/operators/surface/faceeye_shadow.cpp
+    src/operators/dof/dof_island.cpp
     src/operators/point_light/pnts_attenuation.cpp
     src/operators/point_light/clustered_sidecar.cpp
     src/operators/point_light/clustered_pnts_direct_materializer.cpp
@@ -347,6 +348,11 @@ target_compile_features(dsrrl_renderer_core_tests PRIVATE cxx_std_17)
 add_executable(dsrrl_renderer_island_tests tests/islands_phase1_tests.cpp)
 target_link_libraries(dsrrl_renderer_island_tests PRIVATE dsrrl_renderer_core)
 target_compile_features(dsrrl_renderer_island_tests PRIVATE cxx_std_17)
+
+add_executable(dsrrl_renderer_dof_island_tests
+    tests/dof_island_tests.cpp)
+target_link_libraries(dsrrl_renderer_dof_island_tests PRIVATE dsrrl_renderer_core)
+target_compile_features(dsrrl_renderer_dof_island_tests PRIVATE cxx_std_17)
 add_dependencies(
     dsrrl_renderer_island_tests
     dsrrl_pointlight_material_authority_header)
