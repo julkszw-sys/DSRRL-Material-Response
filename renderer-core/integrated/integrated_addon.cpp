@@ -4049,27 +4049,13 @@ void on_init_device(reshade::api::device *device)
     g_mr_draw_runtime.on_init_device(device);
     g_pmetal_envspec.on_init_device(device);
     if (k_pmetal_direct_current_native_dispatch) {
+        // R52 source-first: do not advertise the retired clustered
+        // replacement/sidecar transaction (R26/R30/R33-R36). Clustered PntS
+        // is source-only and stock DSR owns the receiver. P_Metal may still
+        // use the direct-current-native dispatch independently.
         reshade::log::message(
             reshade::log::level::info,
-            "[DSRRL POINTLIGHT R26] direct_current_native_dispatch=ACTIVE persistent_vtable_hook=OFF recursion_guard=ON");
-        reshade::log::message(
-            reshade::log::level::info,
-            "[DSRRL POINTLIGHT R30] synchronous_core_transaction=ACTIVE exact_clustered_shape_guard=ON global_core_tx_mutex=OFF_FOR_CLUSTERED_DIRECT_NATIVE tls_reentry_guard=ON t18_t19_batch=ON sync_draw_serial_atomic=OFF fallback_general_tx=UNCHANGED");
-        reshade::log::message(
-            reshade::log::level::info,
-            "[DSRRL POINTLIGHT R31] direct_source_class=DirectPointLightEntity dsr_vfunc_rva=0x55C570 ptde_homologue=0x00D34D50 carrier=position_invRange_RGB_End authorization=EXACT_ONLY");
-        reshade::log::message(
-            reshade::log::level::info,
-            "[DSRRL POINTLIGHT R33] clustered_spc_protected_failopen=SUPERSEDED_BY_R35_OWNER_AUTH");
-        reshade::log::message(
-            reshade::log::level::info,
-            "[DSRRL POINTLIGHT R34] source_material_split=ACTIVE source_stage=selector_source_event material_stage=selector_identity_event");
-        reshade::log::message(
-            reshade::log::level::info,
-            "[DSRRL POINTLIGHT R35] owner_authorized_spc_hybrid=ACTIVE clustered_nospc_consumes_ptde_source=ON clustered_spc_consumes_ptde_source=ON spc_material_tail=STOCK_DSR_GGX_SCHLICK local_specular_equivalence=OPEN");
-        reshade::log::message(
-            reshade::log::level::info,
-            "[DSRRL POINTLIGHT R36] bank_lerp_native_double_pack=OFF frame_source_cache=TLS_EXACT_STATE_PER_PRESENT donor_miss_stock_fallback=ON");
+            "[DSRRL R52 SOURCE-FIRST] clustered_receiver_transaction=ABSENT clustered_sidecar=ABSENT fixed_receiver=SOURCE_GATED pmetal_direct_dispatch=UNCHANGED");
     } else if (k_pmetal_native_draw_runtime_enabled) {
         if (!g_pmetal_native_draw.install(device)) {
             reshade::log::message(
