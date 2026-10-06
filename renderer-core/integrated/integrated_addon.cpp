@@ -549,6 +549,133 @@ void hot_count(
             std::memory_order_relaxed);
 }
 
+struct r48_perf_bucket {
+    std::atomic<std::uint64_t> samples{0u};
+    std::atomic<std::uint64_t> ticks{0u};
+    std::atomic<std::uint64_t> max_ticks{0u};
+};
+
+constexpr std::uint32_t k_r48_perf_sample_period = 256u;
+thread_local std::uint32_t g_r48_draw_prof_seq = 0u;
+thread_local std::uint32_t g_r48_prepare_prof_seq = 0u;
+thread_local std::uint32_t g_r48_dispatch_prof_seq = 0u;
+r48_perf_bucket g_r48_draw_callback_prof{};
+r48_perf_bucket g_r48_prepare_batch_prof{};
+r48_perf_bucket g_r48_dispatch_prof{};
+
+std::uint64_t r48_qpc() noexcept
+{
+    LARGE_INTEGER value{};
+    QueryPerformanceCounter(&value);
+    return static_cast<std::uint64_t>(value.QuadPart);
+}
+
+std::uint64_t r48_qpc_frequency() noexcept
+{
+    static const std::uint64_t frequency = []() noexcept {
+        LARGE_INTEGER value{};
+        return QueryPerformanceFrequency(&value)
+            ? static_cast<std::uint64_t>(value.QuadPart)
+            : 0u;
+    }();
+    return frequency;
+}
+
+bool r48_perf_sample(std::uint32_t &seq) noexcept
+{
+    return ((++seq & (k_r48_perf_sample_period - 1u)) == 0u);
+}
+
+void r48_perf_add(
+    r48_perf_bucket &bucket,
+    std::uint64_t ticks) noexcept
+{
+    bucket.samples.fetch_add(1u, std::memory_order_relaxed);
+    bucket.ticks.fetch_add(ticks, std::memory_order_relaxed);
+    auto observed =
+        bucket.max_ticks.load(std::memory_order_relaxed);
+    while (observed < ticks &&
+           !bucket.max_ticks.compare_exchange_weak(
+               observed,
+               ticks,
+               std::memory_order_relaxed,
+               std::memory_order_relaxed)) {
+    }
+}
+
+class r48_perf_scope {
+public:
+    r48_perf_scope(
+        r48_perf_bucket &bucket,
+        std::uint32_t &seq) noexcept
+        : bucket_(
+            r48_perf_sample(seq)
+                ? &bucket
+                : nullptr),
+          start_(
+            bucket_ != nullptr
+                ? r48_qpc()
+                : 0u)
+    {
+    }
+
+    ~r48_perf_scope()
+    {
+        if (bucket_ != nullptr)
+            r48_perf_add(
+                *bucket_,
+                r48_qpc() - start_);
+    }
+
+private:
+    r48_perf_bucket *bucket_ = nullptr;
+    std::uint64_t start_ = 0u;
+};
+
+double r48_perf_avg_us(
+    const r48_perf_bucket &bucket) noexcept
+{
+    const auto samples =
+        bucket.samples.load(std::memory_order_relaxed);
+    const auto freq = r48_qpc_frequency();
+    if (samples == 0u || freq == 0u)
+        return 0.0;
+    return
+        static_cast<double>(
+            bucket.ticks.load(std::memory_order_relaxed)) *
+        1000000.0 /
+        (static_cast<double>(freq) *
+         static_cast<double>(samples));
+}
+
+double r48_perf_max_us(
+    const r48_perf_bucket &bucket) noexcept
+{
+    const auto freq = r48_qpc_frequency();
+    if (freq == 0u)
+        return 0.0;
+    return
+        static_cast<double>(
+            bucket.max_ticks.load(std::memory_order_relaxed)) *
+        1000000.0 /
+        static_cast<double>(freq);
+}
+
+void r48_perf_reset() noexcept
+{
+    const auto reset = [](r48_perf_bucket &bucket) noexcept {
+        bucket.samples.store(0u, std::memory_order_relaxed);
+        bucket.ticks.store(0u, std::memory_order_relaxed);
+        bucket.max_ticks.store(0u, std::memory_order_relaxed);
+    };
+    reset(g_r48_draw_callback_prof);
+    reset(g_r48_prepare_batch_prof);
+    reset(g_r48_dispatch_prof);
+    g_r48_draw_prof_seq = 0u;
+    g_r48_prepare_prof_seq = 0u;
+    g_r48_dispatch_prof_seq = 0u;
+}
+
 enum class effect_probe_id : std::uint8_t {
     material_response = 0,
     material_response_lerp,
@@ -6561,6 +6688,14 @@ bool on_draw(
         return issued;
     }
 
+    r48_perf_scope r48_draw_profile(
+        g_r48_draw_callback_prof,
+        g_r48_draw_prof_seq);
+
+    r48_perf_scope r48_draw_profile(
+        g_r48_draw_callback_prof,
+        g_r48_draw_prof_seq);
+
     if (g_hot_telemetry_enabled &&
         dsrrl::runtime::bloom_fx_draw_transport::
             active_draw_scope())
@@ -6731,7 +6866,11 @@ bool on_draw(
         decision.route_index);
 
     prepared_island_batch prepared{};
-    if (!prepare_island_batch(
+    const bool r48_prepare_ok = [&]() noexcept {
+        r48_perf_scope r48_prepare_profile(
+            g_r48_prepare_batch_prof,
+            g_r48_prepare_prof_seq);
+        return prepare_island_batch(
             cmd_list,
             fixed_pointlight_bound,
             clustered_pointlight_bound,
@@ -6744,7 +6883,9 @@ bool on_draw(
             upper_lower_identity,
             material,
             decision,
-            prepared)) {
+            prepared);
+    }();
+    if (!r48_prepare_ok) {
         mark_effect_probe_mask(
             effect_candidates,
             effect_probe_stage::fail_open,
@@ -6864,8 +7005,11 @@ bool on_draw(
     if (direct_current_native)
         g_raw_draw_replay_recursing = true;
 
-    const auto dispatch =
-        dsrrl::runtime::dispatch_island_draw_batch(
+    const auto dispatch = [&]() noexcept {
+        r48_perf_scope r48_dispatch_profile(
+            g_r48_dispatch_prof,
+            g_r48_dispatch_prof_seq);
+        return dsrrl::runtime::dispatch_island_draw_batch(
             g_draw_transactions,
             cmd_list,
             prepared.batch,
@@ -6873,6 +7017,7 @@ bool on_draw(
             instance_count,
             first_vertex,
             first_instance);
+    }();
 
     if (direct_current_native)
         g_raw_draw_replay_recursing = false;
@@ -7142,7 +7287,11 @@ bool on_draw_indexed(
         decision.route_index);
 
     prepared_island_batch prepared{};
-    if (!prepare_island_batch(
+    const bool r48_prepare_ok = [&]() noexcept {
+        r48_perf_scope r48_prepare_profile(
+            g_r48_prepare_batch_prof,
+            g_r48_prepare_prof_seq);
+        return prepare_island_batch(
             cmd_list,
             fixed_pointlight_bound,
             clustered_pointlight_bound,
@@ -7155,7 +7304,9 @@ bool on_draw_indexed(
             upper_lower_identity,
             material,
             decision,
-            prepared)) {
+            prepared);
+    }();
+    if (!r48_prepare_ok) {
         mark_effect_probe_mask(
             effect_candidates,
             effect_probe_stage::fail_open,
@@ -7228,8 +7379,11 @@ bool on_draw_indexed(
     if (direct_current_native)
         g_raw_draw_replay_recursing = true;
 
-    const auto dispatch =
-        dsrrl::runtime::dispatch_island_draw_indexed_batch(
+    const auto dispatch = [&]() noexcept {
+        r48_perf_scope r48_dispatch_profile(
+            g_r48_dispatch_prof,
+            g_r48_dispatch_prof_seq);
+        return dsrrl::runtime::dispatch_island_draw_indexed_batch(
             g_draw_transactions,
             cmd_list,
             prepared.batch,
@@ -7238,6 +7392,7 @@ bool on_draw_indexed(
             first_index,
             vertex_offset,
             first_instance);
+    }();
 
     if (direct_current_native)
         g_raw_draw_replay_recursing = false;
@@ -7501,6 +7656,7 @@ bool AddonInit(
     g_clustered_pnts_pipeline.reset();
     dsrrl::runtime::hemdir3_mode_transport::reset_stats();
     g_present_count.store(0);
+    r48_perf_reset();
     g_mr_draw_eval.store(0);
     g_mr_would_activate.store(0);
     g_mr_fail_open.store(0);
