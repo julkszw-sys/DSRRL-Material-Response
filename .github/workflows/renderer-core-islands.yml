@@ -156,3 +156,87 @@ jobs:
         run: cmake --build build/runtime-v1 --config Release --parallel
       - name: Test runtime regressions
         run: ctest --test-dir build/runtime-v1 --output-on-failure
+
+  r43-dof-cpu-profile:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout exact R43 DoF/profile source branch
+        uses: actions/checkout@v4
+        with:
+          ref: r43-dof-cpu-profile
+
+      - name: Resolve exact source commit
+        shell: pwsh
+        run: |
+          $commit = (git rev-parse HEAD).Trim()
+          "DSRRL_CHECKOUT_COMMIT=$commit" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          Write-Host "R43_DOF_PROFILE_SOURCE=$commit"
+
+      - name: Checkout pinned ReShade API
+        uses: actions/checkout@v4
+        with:
+          repository: crosire/reshade
+          ref: 3645e3025d1d98a90e318278858931f034d5d1f6
+          path: _reshade
+
+      - name: Configure exact R43 DoF CPU-profile build
+        shell: pwsh
+        run: >
+          cmake
+          -S renderer-core/integrated
+          -B build-r43-dof-profile
+          -A x64
+          -DRESHADE_INCLUDE_DIR="${{ github.workspace }}/_reshade/include"
+          -DDSRRL_SOURCE_COMMIT="$env:DSRRL_CHECKOUT_COMMIT"
+          -DDSRRL_BUILD_FLAVOR="pmetal_r43_dof_cpu_profile"
+          -DDSRRL_FULL_TELEMETRY_DEFAULT_ON=OFF
+          -DDSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG=ON
+          -DDSRRL_PMETAL_FULL_PTDE_HEMENV_R3=ON
+          -DDSRRL_PMETAL_FULL_PTDE_HEMENV_R4=ON
+          -DDSRRL_PMETAL_FULL_PTDE_HEMENV_R5=ON
+          -DDSRRL_PMETAL_FULL_PTDE_HEMENV_R6=ON
+          -DDSRRL_PMETAL_FULL_PTDE_HEMENV_R7_SHADOW=ON
+          -DDSRRL_PMETAL_FULL_PTDE_HEMENV_R8_PRE_AB=ON
+          -DDSRRL_PMETAL_FULL_PTDE_HEMENV_R11_COMMON_MERGE=ON
+          -DDSRRL_PMETAL_FULL_PTDE_HEMENV_R15_PTDE_LIVEOUT_PAIR=ON
+          -DDSRRL_PMETAL_FULL_PTDE_HEMENV_R16_LEGACY_DIFFUSE_SPLIT=ON
+          -DDSRRL_PMETAL_FULL_PTDE_HEMENV_R17_PTDE_DIFFUSE_MATERIAL=ON
+          -DDSRRL_PMETAL_R19_LERP_MATERIALWORKFLOW=ON
+          -DDSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE=ON
+          -DDSRRL_PHYSICAL_CUT_UL_H3_SUBSURFACE=ON
+          -DDSRRL_DOF_DEFAULT_ON=ON
+          -DDSRRL_FLVER_SELECTOR_PROFILE=ON
+          -DDSRRL_POINTLIGHT_PROFILE=ON
+
+      - name: Build exact R43 DoF CPU-profile addon
+        shell: pwsh
+        run: |
+          cmake --build build-r43-dof-profile --config Release --target dsrrl_renderer_core_integrated
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $addons = @(Get-ChildItem build-r43-dof-profile -Recurse -Filter *.addon64)
+          if ($addons.Count -ne 1) { throw "Expected exactly one addon, found $($addons.Count)" }
+          Copy-Item $addons[0].FullName "DSRRL_PMETAL_R43_DOF_CPU_PROFILE.addon64" -Force
+
+      - name: Verify DoF activation and CPU profiler identity
+        shell: pwsh
+        run: |
+          $path = "DSRRL_PMETAL_R43_DOF_CPU_PROFILE.addon64"
+          $ascii = [System.Text.Encoding]::ASCII.GetString([System.IO.File]::ReadAllBytes($path))
+          if (-not $ascii.Contains($env:DSRRL_CHECKOUT_COMMIT)) { throw "Missing exact source commit identity" }
+          if (-not $ascii.Contains("pmetal_r43_dof_cpu_profile")) { throw "Missing diagnostic build flavor" }
+          if (-not $ascii.Contains("[DSRRL PMETAL R43] producer_cache=SET256_WAY2")) { throw "Missing R43 base marker" }
+          if (-not $ascii.Contains("[DSRRL DoF] PTDE private island READY")) { throw "Missing PTDE DoF READY marker" }
+          if (-not $ascii.Contains("post.dof_ptde")) { throw "Missing DoF operator identity" }
+          if (-not $ascii.Contains("[DSRRL PERF R32] SELECTOR")) { throw "Missing FLVER selector CPU profiler" }
+          if (-not $ascii.Contains("[DSRRL PERF R32] POINTLIGHT_PREP")) { throw "Missing PointLight prep CPU profiler" }
+          if (-not $ascii.Contains("[DSRRL PERF R32] POINTLIGHT_TX")) { throw "Missing PointLight transaction CPU profiler" }
+          $hash = (Get-FileHash $path -Algorithm SHA256).Hash.ToLowerInvariant()
+          "R43_DOF_PROFILE_ADDON_SHA256=$hash" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          Write-Host "ADDON_SHA256=$hash"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: DSRRL_PMETAL_R43_DOF_CPU_PROFILE
+          path: DSRRL_PMETAL_R43_DOF_CPU_PROFILE.addon64
+          if-no-files-found: error
+
