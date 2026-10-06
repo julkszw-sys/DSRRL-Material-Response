@@ -7478,6 +7478,136 @@ bool on_draw_indexed(
         dispatch.transaction);
 }
 
+void log_r48_perf_and_image_entry(
+    std::uint64_t present) noexcept
+{
+    const auto selector =
+        dsrrl::runtime::flver_identity_transport::
+            selector_profile_stats();
+    const auto selector_avg_us =
+        selector.samples != 0u &&
+        selector.qpc_frequency != 0u
+            ? static_cast<double>(
+                  selector.total_ticks) *
+              1000000.0 /
+              (static_cast<double>(
+                   selector.qpc_frequency) *
+               static_cast<double>(
+                   selector.samples))
+            : 0.0;
+    const auto selector_max_us =
+        selector.qpc_frequency != 0u
+            ? static_cast<double>(
+                  selector.max_total_ticks) *
+              1000000.0 /
+              static_cast<double>(
+                  selector.qpc_frequency)
+            : 0.0;
+
+    char perf[1024]{};
+    std::snprintf(
+        perf,
+        sizeof(perf),
+        "[DSRRL PERF R48] present=%llu sample=1/%u draw_callback_us=%.3f max=%.3f prepare_batch_us=%.3f max=%.3f dispatch_us=%.3f max=%.3f selector_us=%.3f selector_max=%.3f selector_samples=%llu pointlight_detail=DSRRL_PERF_R32_POINTLIGHT_PREP cpu_only=1",
+        static_cast<unsigned long long>(present),
+        k_r48_perf_sample_period,
+        r48_perf_avg_us(g_r48_draw_callback_prof),
+        r48_perf_max_us(g_r48_draw_callback_prof),
+        r48_perf_avg_us(g_r48_prepare_batch_prof),
+        r48_perf_max_us(g_r48_prepare_batch_prof),
+        r48_perf_avg_us(g_r48_dispatch_prof),
+        r48_perf_max_us(g_r48_dispatch_prof),
+        selector_avg_us,
+        selector_max_us,
+        static_cast<unsigned long long>(
+            selector.samples));
+    reshade::log::message(
+        reshade::log::level::info,
+        perf);
+
+    const auto native =
+        g_pmetal_native_draw.telemetry();
+    const auto dof_bridge =
+        dsrrl::runtime::dof::
+            ptde_draw_bridge_status();
+    const auto dof_scheduler =
+        dsrrl::runtime::dof::
+            ptde_scheduler_status();
+    const auto dof_tonemap =
+        dsrrl::runtime::dof::
+            tonemap_handoff_status();
+    const auto dof_preflight =
+        dsrrl::runtime::dof::
+            telemetry();
+    const auto dof_resources =
+        dsrrl::runtime::dof::
+            private_resource_status();
+
+    const bool mr_entry =
+        g_mr_once_draw_issued.load(
+            std::memory_order_relaxed) ||
+        native.material_response_draw_entered;
+    const bool lerp_entry =
+        g_lerp_once_draw_issued.load(
+            std::memory_order_relaxed);
+    const bool envspec_entry =
+        native.envspec_draw_entered;
+    const bool pointlight_entry =
+        g_pointlight_once_applied.load(
+            std::memory_order_relaxed) ||
+        native.pointlight_draw_entered;
+    const bool local_specular_entry =
+        native.local_specular_draw_entered;
+    const bool dof_entry =
+        dof_bridge.visible_handoffs != 0u &&
+        dof_bridge.sequences_completed != 0u &&
+        dof_scheduler.execute_ok != 0u &&
+        dof_tonemap.hits != 0u &&
+        dof_bridge.restore_failures == 0u &&
+        !dof_bridge.quarantined;
+
+    char entry[1536]{};
+    std::snprintf(
+        entry,
+        sizeof(entry),
+        "[DSRRL IMAGE_ENTRY R48] present=%llu MR=%s LERP_MR=%s PMETAL_ENVSPEC=%s POINTLIGHT=%s LOCAL_SPECULAR=%s DOF=%s pixel=UNVERIFIED native_draws=%llu native_restore_fail=%llu dof={opt:%u armed:%u preflight_hits:%llu resources:%u scheduler_ok:%llu pass_draws:%llu complete:%llu visible:%llu tonemap_hits:%llu fallback:%llu restore_fail:%llu quarantine:%u}",
+        static_cast<unsigned long long>(present),
+        mr_entry ? "YES" : "NO",
+        lerp_entry ? "YES" : "NO",
+        envspec_entry ? "YES" : "NO",
+        pointlight_entry ? "YES" : "NO",
+        local_specular_entry ? "YES" : "NO",
+        dof_entry ? "YES" : "NO",
+        static_cast<unsigned long long>(
+            native.draw_applied +
+            native.draw_indexed_applied),
+        static_cast<unsigned long long>(
+            native.restore_fail),
+        dof_bridge.opt_in ? 1u : 0u,
+        dof_bridge.armed ? 1u : 0u,
+        static_cast<unsigned long long>(
+            dof_preflight.exact_pipeline_hits),
+        dof_resources.resources_ready ? 1u : 0u,
+        static_cast<unsigned long long>(
+            dof_scheduler.execute_ok),
+        static_cast<unsigned long long>(
+            dof_scheduler.pass_draws),
+        static_cast<unsigned long long>(
+            dof_bridge.sequences_completed),
+        static_cast<unsigned long long>(
+            dof_bridge.visible_handoffs),
+        static_cast<unsigned long long>(
+            dof_tonemap.hits),
+        static_cast<unsigned long long>(
+            dof_bridge.tonemap_fallbacks),
+        static_cast<unsigned long long>(
+            dof_bridge.restore_failures),
+        dof_bridge.quarantined ? 1u : 0u);
+    reshade::log::message(
+        reshade::log::level::info,
+        entry);
+}
+
 void on_present(
     reshade::api::command_queue *,
     reshade::api::swapchain *,
@@ -7491,6 +7621,13 @@ void on_present(
             1u,
             std::memory_order_relaxed) + 1u;
     g_clustered_pnts.frame_event(present);
+
+    if (present == 300u ||
+        (present > 300u &&
+         (present % 300u) == 0u))
+        log_r48_perf_and_image_entry(
+            present);
+
     if (present == 1u ||
         (g_hot_telemetry_enabled &&
          (present % 300u) == 0u)) {
