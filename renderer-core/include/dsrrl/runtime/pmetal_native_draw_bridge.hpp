@@ -23,14 +23,6 @@ struct pmetal_native_draw_telemetry {
     std::uint64_t vtable_hooks_installed = 0;
     bool hook_active = false;
     bool quarantined = false;
-
-    // R48 diagnostic-only latches: true only after the original native draw
-    // executed while the corresponding owner bit was present in the applied
-    // mutation. This is pipeline/image-entry evidence, not pixel equivalence.
-    bool envspec_draw_entered = false;
-    bool material_response_draw_entered = false;
-    bool pointlight_draw_entered = false;
-    bool local_specular_draw_entered = false;
 };
 
 class pmetal_native_draw_bridge {
