@@ -101,6 +101,10 @@ std::atomic<std::uint64_t> g_serial{0u};
 std::atomic<std::uint64_t> g_captures{0u};
 std::atomic<std::uint64_t> g_restarts{0u};
 std::atomic<std::uint64_t> g_rejects{0u};
+std::atomic<std::uint64_t> g_producer_hits{0u};
+std::atomic<std::uint64_t> g_snapshot2_publish{0u};
+std::atomic<std::uint64_t> g_snapshot4_publish{0u};
+std::array<std::atomic<std::uint64_t>,4> g_source_category_hits{};
 std::atomic<std::uint64_t> g_selector_seen{0u};
 std::atomic<std::uint64_t> g_selector_match{0u};
 std::atomic<std::uint64_t> g_selector_stale{0u};
@@ -182,13 +186,25 @@ void __fastcall capture_callback(
     void *owner,
     std::uint32_t slot,
     const float *raw,
-    void *) noexcept
+    void *source) noexcept
 {
     try {
         if(!g_enabled.load() || g_quarantined.load() ||
            owner==nullptr || raw==nullptr || slot>=4u){
             telemetry::hot_count(g_rejects);
             return;
+        }
+
+        telemetry::hot_count(g_producer_hits);
+        if(source!=nullptr){
+            std::uint8_t category=0xffu;
+            std::memcpy(
+                &category,
+                static_cast<const std::uint8_t *>(source)+0x18u,
+                sizeof(category));
+            if(category<g_source_category_hits.size())
+                telemetry::hot_count(
+                    g_source_category_hits[category]);
         }
 
         f4 value{};
@@ -230,6 +246,12 @@ void __fastcall capture_callback(
             current->captured_count==2u ||
             current->captured_count==4u;
         if(publishable_count){
+            if(current->captured_count==2u)
+                telemetry::hot_count(
+                    g_snapshot2_publish);
+            else
+                telemetry::hot_count(
+                    g_snapshot4_publish);
             std::lock_guard<std::mutex> lock(g_mutex);
 
             if(!current->owner_consumed_serial){
@@ -757,6 +779,13 @@ fixed_pointlight_telemetry fixed_pointlight_draw_runtime::telemetry() const noex
         g_captures.load(),
         g_restarts.load(),
         g_rejects.load(),
+        g_producer_hits.load(),
+        g_snapshot2_publish.load(),
+        g_snapshot4_publish.load(),
+        g_source_category_hits[0].load(),
+        g_source_category_hits[1].load(),
+        g_source_category_hits[2].load(),
+        g_source_category_hits[3].load(),
         g_selector_seen.load(),
         g_selector_match.load(),
         g_selector_stale.load(),
@@ -777,6 +806,11 @@ void fixed_pointlight_draw_runtime::reset() noexcept
     g_captures.store(0u);
     g_restarts.store(0u);
     g_rejects.store(0u);
+    g_producer_hits.store(0u);
+    g_snapshot2_publish.store(0u);
+    g_snapshot4_publish.store(0u);
+    for(auto &counter:g_source_category_hits)
+        counter.store(0u);
     g_selector_seen.store(0u);
     g_selector_match.store(0u);
     g_selector_stale.store(0u);
