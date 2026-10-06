@@ -333,12 +333,59 @@ double r48_perf_max_us(
 
 void log_r48_perf_summary() noexcept
 {
-    char line[1024]{};
+    const auto selector =
+        dsrrl::runtime::flver_identity_transport::
+            selector_profile_stats();
+
+    const auto selector_us =
+        [](std::uint64_t ticks,
+           std::uint64_t samples,
+           std::uint64_t frequency) noexcept {
+            if (ticks == 0u ||
+                samples == 0u ||
+                frequency == 0u)
+                return 0.0;
+            return
+                (static_cast<double>(ticks) * 1000000.0) /
+                (static_cast<double>(frequency) *
+                 static_cast<double>(samples));
+        };
+    const auto ticks_us =
+        [](std::uint64_t ticks,
+           std::uint64_t frequency) noexcept {
+            if (ticks == 0u || frequency == 0u)
+                return 0.0;
+            return
+                (static_cast<double>(ticks) * 1000000.0) /
+                static_cast<double>(frequency);
+        };
+
+    char line[1536]{};
     std::snprintf(
         line,
         sizeof(line),
-        "[DSRRL PERF R48] CORE sample=1/%u draw_us=%.3f max=%.3f draw_indexed_us=%.3f max=%.3f prepare_batch_us=%.3f max=%.3f dispatch_us=%.3f max=%.3f n=draw:%llu indexed:%llu prep:%llu dispatch:%llu",
+        "[DSRRL PERF R48] CORE sample=1/%u selector_sample=1/%u selector_us=%.3f selector_max_us=%.3f selector_pmetal_source_us=%.3f selector_owner_lookup_us=%.3f selector_owner_mtd_us=%.3f draw_us=%.3f draw_max_us=%.3f draw_indexed_us=%.3f draw_indexed_max_us=%.3f prepare_batch_us=%.3f prepare_max_us=%.3f dispatch_us=%.3f dispatch_max_us=%.3f n=selector:%llu draw:%llu indexed:%llu prep:%llu dispatch:%llu",
         k_r48_perf_sample_period,
+        selector.sample_period,
+        selector_us(
+            selector.total_ticks,
+            selector.samples,
+            selector.qpc_frequency),
+        ticks_us(
+            selector.max_total_ticks,
+            selector.qpc_frequency),
+        selector_us(
+            selector.pmetal_source_ticks,
+            selector.samples,
+            selector.qpc_frequency),
+        selector_us(
+            selector.owner_lookup_ticks,
+            selector.samples,
+            selector.qpc_frequency),
+        selector_us(
+            selector.owner_mtd_enrich_ticks,
+            selector.samples,
+            selector.qpc_frequency),
         r48_perf_avg_us(g_r48_draw),
         r48_perf_max_us(g_r48_draw),
         r48_perf_avg_us(g_r48_draw_indexed),
@@ -347,6 +394,7 @@ void log_r48_perf_summary() noexcept
         r48_perf_max_us(g_r48_prepare_batch),
         r48_perf_avg_us(g_r48_dispatch),
         r48_perf_max_us(g_r48_dispatch),
+        static_cast<unsigned long long>(selector.samples),
         static_cast<unsigned long long>(g_r48_draw.samples.load(std::memory_order_relaxed)),
         static_cast<unsigned long long>(g_r48_draw_indexed.samples.load(std::memory_order_relaxed)),
         static_cast<unsigned long long>(g_r48_prepare_batch.samples.load(std::memory_order_relaxed)),
