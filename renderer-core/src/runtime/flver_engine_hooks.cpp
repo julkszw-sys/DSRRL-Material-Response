@@ -90,6 +90,9 @@ struct selector_profile_sample {
     std::uint64_t owner_mtd_enrich_ticks = 0u;
     std::uint64_t selection_publish_ticks = 0u;
     std::uint64_t pointlight_bridge_ticks = 0u;
+    std::uint64_t pointlight_bridge_cycles = 0u;
+    bool pointlight_handoff_sampled = false;
+    bool pointlight_handoff_ready = false;
     std::uint64_t pmetal_source_ticks = 0u;
     std::uint64_t runtime_mtd_lookup_ticks = 0u;
     std::uint64_t runtime_publish_ticks = 0u;
@@ -117,6 +120,9 @@ selector_profile_bucket g_selector_profile_owner_lookup{};
 selector_profile_bucket g_selector_profile_owner_mtd{};
 selector_profile_bucket g_selector_profile_selection_publish{};
 selector_profile_bucket g_selector_profile_pointlight_bridge{};
+selector_profile_bucket g_selector_profile_pointlight_bridge_cycles{};
+std::atomic<std::uint64_t> g_selector_profile_pointlight_handoff_hit{0u};
+std::atomic<std::uint64_t> g_selector_profile_pointlight_handoff_miss{0u};
 selector_profile_bucket g_selector_profile_pmetal{};
 selector_profile_bucket g_selector_profile_runtime_mtd{};
 selector_profile_bucket g_selector_profile_runtime_publish{};
@@ -135,6 +141,16 @@ std::uint64_t selector_profile_qpc() noexcept
     QueryPerformanceCounter(&value);
     return static_cast<std::uint64_t>(
         value.QuadPart);
+}
+
+std::uint64_t selector_profile_thread_cycles() noexcept
+{
+    ULONG64 value = 0u;
+    if (!QueryThreadCycleTime(
+            GetCurrentThread(),
+            &value))
+        return 0u;
+    return static_cast<std::uint64_t>(value);
 }
 
 void selector_profile_add(
@@ -273,6 +289,35 @@ void selector_profile_log(
     reshade::log::message(
         reshade::log::level::info,
         line);
+
+    char cpu_line[512]{};
+    const auto bridge_cycle_total =
+        g_selector_profile_pointlight_bridge_cycles.ticks.load(
+            std::memory_order_relaxed);
+    const auto bridge_cycle_max =
+        g_selector_profile_pointlight_bridge_cycles.max_ticks.load(
+            std::memory_order_relaxed);
+    std::snprintf(
+        cpu_line,
+        sizeof(cpu_line),
+        "[DSRRL PERF R53] POINTLIGHT_GATE sample=1/%u n=%llu bridge_cycles_avg=%.1f bridge_cycles_max=%llu gate=hit:%llu miss:%llu wall_max_us=%.3f",
+        k_selector_profile_sample_period,
+        static_cast<unsigned long long>(samples),
+        static_cast<double>(bridge_cycle_total) /
+            static_cast<double>(samples),
+        static_cast<unsigned long long>(bridge_cycle_max),
+        static_cast<unsigned long long>(
+            g_selector_profile_pointlight_handoff_hit.load(
+                std::memory_order_relaxed)),
+        static_cast<unsigned long long>(
+            g_selector_profile_pointlight_handoff_miss.load(
+                std::memory_order_relaxed)),
+        ticks_us(
+            g_selector_profile_pointlight_bridge.max_ticks.load(
+                std::memory_order_relaxed)));
+    reshade::log::message(
+        reshade::log::level::info,
+        cpu_line);
 }
 
 void selector_profile_finish(
@@ -317,6 +362,17 @@ void selector_profile_finish(
     selector_profile_add(
         g_selector_profile_pointlight_bridge,
         sample.pointlight_bridge_ticks);
+    selector_profile_add(
+        g_selector_profile_pointlight_bridge_cycles,
+        sample.pointlight_bridge_cycles);
+    if (sample.pointlight_handoff_sampled) {
+        (sample.pointlight_handoff_ready
+             ? g_selector_profile_pointlight_handoff_hit
+             : g_selector_profile_pointlight_handoff_miss)
+            .fetch_add(
+                1u,
+                std::memory_order_relaxed);
+    }
     selector_profile_add(
         g_selector_profile_pmetal,
         sample.pmetal_source_ticks);
@@ -367,6 +423,13 @@ void selector_profile_reset() noexcept
     reset_bucket(g_selector_profile_owner_mtd);
     reset_bucket(g_selector_profile_selection_publish);
     reset_bucket(g_selector_profile_pointlight_bridge);
+    reset_bucket(g_selector_profile_pointlight_bridge_cycles);
+    g_selector_profile_pointlight_handoff_hit.store(
+        0u,
+        std::memory_order_relaxed);
+    g_selector_profile_pointlight_handoff_miss.store(
+        0u,
+        std::memory_order_relaxed);
     reset_bucket(g_selector_profile_pmetal);
     reset_bucket(g_selector_profile_runtime_mtd);
     reset_bucket(g_selector_profile_runtime_publish);
@@ -1040,10 +1103,21 @@ bool publish_exact_selector_identity(
         profile != nullptr
             ? selector_profile_begin(*profile)
             : 0u;
-    bool pointlight_spc = false;
-    if (g_state.builder_armed &&
+    const auto pointlight_cycles_begin =
+        profile != nullptr && profile->active
+            ? selector_profile_thread_cycles()
+            : 0u;
+    const bool pointlight_handoff_ready =
+        g_state.builder_armed &&
         clustered_pnts_selector_handoff_ready_bridge(
-            owner) &&
+            owner);
+    if (profile != nullptr && profile->active) {
+        profile->pointlight_handoff_sampled = true;
+        profile->pointlight_handoff_ready =
+            pointlight_handoff_ready;
+    }
+    bool pointlight_spc = false;
+    if (pointlight_handoff_ready &&
         operators::material_response::
             direct_pointlight_material_candidate(
                 identity,
@@ -1062,11 +1136,22 @@ bool publish_exact_selector_identity(
             identity,
             pointlight_spc);
     }
-    if (profile != nullptr)
+    if (profile != nullptr) {
         selector_profile_end_stage(
             *profile,
             pointlight_begin,
             profile->pointlight_bridge_ticks);
+        if (profile->active &&
+            pointlight_cycles_begin != 0u) {
+            const auto pointlight_cycles_end =
+                selector_profile_thread_cycles();
+            if (pointlight_cycles_end >=
+                pointlight_cycles_begin)
+                profile->pointlight_bridge_cycles +=
+                    pointlight_cycles_end -
+                    pointlight_cycles_begin;
+        }
+    }
 
 #ifndef DSRRL_PHYSICAL_CUT_UL_H3_SUBSURFACE
     if (g_selector_upper_lower_enabled.load(
