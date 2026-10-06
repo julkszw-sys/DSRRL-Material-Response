@@ -61,6 +61,157 @@ std::atomic<std::uint64_t> g_present_count{0u};
 thread_local sequence_state g_sequence{};
 thread_local bool g_internal_replay = false;
 
+#ifdef DSRRL_DOF_PROFILE
+constexpr std::uint32_t k_dof_profile_sample_period = 1024u;
+
+enum class dof_profile_path : std::uint8_t {
+    early = 0,
+    idle_scan,
+    begin_sequence,
+    advance_sequence,
+    tonemap,
+    count
+};
+
+std::atomic<std::uint64_t> g_dof_profile_samples{0u};
+std::atomic<std::uint64_t> g_dof_profile_ticks{0u};
+std::atomic<std::uint64_t> g_dof_profile_max_ticks{0u};
+std::array<std::atomic<std::uint64_t>,
+           static_cast<std::size_t>(dof_profile_path::count)>
+    g_dof_profile_paths{};
+thread_local std::uint64_t g_dof_profile_sequence = 0u;
+
+std::uint64_t dof_profile_qpc() noexcept
+{
+    LARGE_INTEGER value{};
+    return QueryPerformanceCounter(&value)
+        ? static_cast<std::uint64_t>(value.QuadPart)
+        : 0u;
+}
+
+void dof_profile_update_max(
+    std::atomic<std::uint64_t> &target,
+    std::uint64_t value) noexcept
+{
+    auto observed =
+        target.load(std::memory_order_relaxed);
+    while (observed < value &&
+           !target.compare_exchange_weak(
+               observed,
+               value,
+               std::memory_order_relaxed,
+               std::memory_order_relaxed)) {
+    }
+}
+
+class dof_profile_scope {
+public:
+    dof_profile_scope() noexcept
+    {
+        const auto seq =
+            ++g_dof_profile_sequence;
+        active_ =
+            (seq & (k_dof_profile_sample_period - 1u)) == 0u;
+        if (active_)
+            start_ = dof_profile_qpc();
+    }
+
+    ~dof_profile_scope() noexcept
+    {
+        if (!active_)
+            return;
+        const auto end =
+            dof_profile_qpc();
+        if (end < start_)
+            return;
+        const auto elapsed = end - start_;
+        g_dof_profile_ticks.fetch_add(
+            elapsed,
+            std::memory_order_relaxed);
+        dof_profile_update_max(
+            g_dof_profile_max_ticks,
+            elapsed);
+        g_dof_profile_samples.fetch_add(
+            1u,
+            std::memory_order_relaxed);
+        g_dof_profile_paths[
+            static_cast<std::size_t>(path_)]
+            .fetch_add(1u, std::memory_order_relaxed);
+    }
+
+    void set_path(dof_profile_path path) noexcept
+    {
+        path_ = path;
+    }
+
+private:
+    bool active_ = false;
+    std::uint64_t start_ = 0u;
+    dof_profile_path path_ = dof_profile_path::early;
+};
+
+void log_dof_profile() noexcept
+{
+    const auto samples =
+        g_dof_profile_samples.load(
+            std::memory_order_relaxed);
+    if (samples == 0u)
+        return;
+
+    LARGE_INTEGER frequency{};
+    if (!QueryPerformanceFrequency(&frequency) ||
+        frequency.QuadPart <= 0)
+        return;
+
+    const auto ticks =
+        g_dof_profile_ticks.load(
+            std::memory_order_relaxed);
+    const auto max_ticks =
+        g_dof_profile_max_ticks.load(
+            std::memory_order_relaxed);
+    const auto avg_us =
+        (static_cast<double>(ticks) * 1000000.0) /
+        (static_cast<double>(frequency.QuadPart) *
+         static_cast<double>(samples));
+    const auto max_us =
+        (static_cast<double>(max_ticks) * 1000000.0) /
+        static_cast<double>(frequency.QuadPart);
+
+    char line[512]{};
+    std::snprintf(
+        line,
+        sizeof(line),
+        "[DSRRL PERF R44] DOF sample=1/%u n=%llu total_us=%.3f max_total_us=%.3f paths=early:%llu scan:%llu begin:%llu advance:%llu tonemap:%llu",
+        k_dof_profile_sample_period,
+        static_cast<unsigned long long>(samples),
+        avg_us,
+        max_us,
+        static_cast<unsigned long long>(
+            g_dof_profile_paths[
+                static_cast<std::size_t>(
+                    dof_profile_path::early)].load()),
+        static_cast<unsigned long long>(
+            g_dof_profile_paths[
+                static_cast<std::size_t>(
+                    dof_profile_path::idle_scan)].load()),
+        static_cast<unsigned long long>(
+            g_dof_profile_paths[
+                static_cast<std::size_t>(
+                    dof_profile_path::begin_sequence)].load()),
+        static_cast<unsigned long long>(
+            g_dof_profile_paths[
+                static_cast<std::size_t>(
+                    dof_profile_path::advance_sequence)].load()),
+        static_cast<unsigned long long>(
+            g_dof_profile_paths[
+                static_cast<std::size_t>(
+                    dof_profile_path::tonemap)].load()));
+    reshade::log::message(
+        reshade::log::level::info,
+        line);
+}
+#endif
+
 bool environment_opt_in() noexcept
 {
 #ifdef DSRRL_DOF_DEFAULT_ON
@@ -622,6 +773,10 @@ bool handle_draw(
     reshade::api::command_list *cmd_list,
     const scheduler_draw_shape &shape) noexcept
 {
+#ifdef DSRRL_DOF_PROFILE
+    dof_profile_scope profile_scope;
+#endif
+
     if (g_internal_replay ||
         !g_opt_in.load(
             std::memory_order_acquire) ||
@@ -630,10 +785,15 @@ bool handle_draw(
         cmd_list == nullptr)
         return false;
 
-    if (inside_exact_tonemap_dof_handoff())
+    if (inside_exact_tonemap_dof_handoff()) {
+#ifdef DSRRL_DOF_PROFILE
+        profile_scope.set_path(
+            dof_profile_path::tonemap);
+#endif
         return handle_tonemap(
             cmd_list,
             shape);
+    }
 
     role selected = role::count;
     const bool exact_role =
@@ -642,12 +802,21 @@ bool handle_draw(
             selected);
 
     if (!g_sequence.active) {
+#ifdef DSRRL_DOF_PROFILE
+        profile_scope.set_path(
+            dof_profile_path::idle_scan);
+#endif
         if (exact_role &&
             selected == role::depth_copy_msaa &&
-            inside_exact_dof_pass01())
+            inside_exact_dof_pass01()) {
+#ifdef DSRRL_DOF_PROFILE
+            profile_scope.set_path(
+                dof_profile_path::begin_sequence);
+#endif
             (void)begin_sequence(
                 cmd_list,
                 shape);
+        }
 
         return false;
     }
@@ -655,6 +824,10 @@ bool handle_draw(
     if (!exact_role)
         return false;
 
+#ifdef DSRRL_DOF_PROFILE
+    profile_scope.set_path(
+        dof_profile_path::advance_sequence);
+#endif
     advance_sequence(
         cmd_list,
         shape,
@@ -764,8 +937,12 @@ void on_present(
     if (g_opt_in.load(
             std::memory_order_acquire) &&
         (present == 1u ||
-         (present % 300u) == 0u))
+         (present % 300u) == 0u)) {
         log_status("LIVE");
+#ifdef DSRRL_DOF_PROFILE
+        log_dof_profile();
+#endif
+    }
 }
 
 } // namespace
