@@ -7553,13 +7553,21 @@ bool AddonInit(
         return true;
     }
 
-    // Render-hot telemetry is opt-in. Production/default execution avoids
-    // synchronized counter RMWs on every draw; set DSRRL_RUNTIME_TELEMETRY=1
-    // for receiver/island census sessions.
+    // Telemetry policy is controlled by the build profile. Active main
+    // enables full runtime + effect telemetry by default, while native-state
+    // verification remains a separate diagnostic-only profile.
     g_hot_telemetry_enabled =
         runtime_hot_telemetry_requested();
     g_effect_telemetry_enabled =
         runtime_effect_telemetry_requested();
+
+#if defined(DSRRL_RUNTIME_TELEMETRY_DEFAULT_ON) && \
+    defined(DSRRL_EFFECT_TELEMETRY_DEFAULT_ON) && \
+    !defined(DSRRL_RUNTIME_VERIFY_STATE_DEFAULT_ON)
+    reshade::log::message(
+        reshade::log::level::info,
+        "[DSRRL TELEMETRY R53] full=ON runtime=ON effect=ON native_state_verify=OFF profile=MAIN_SAFE_FULL");
+#endif
     reset_effect_probe();
     motion_blur_camera_fallback_disable::
         reset();
