@@ -70,9 +70,10 @@ bool environment_opt_in() noexcept
             value,
             static_cast<DWORD>(sizeof(value)));
 
-    return
-        size == 1u &&
-        value[0] == '1';
+    // R48 runtime candidate: DoF is enabled by default. Explicit "0" is an
+    // operator-local emergency kill switch. All other readiness gates remain
+    // exact and fail-open to stock DSR.
+    return !(size == 1u && value[0] == '0');
 }
 
 void set_authored_feature(bool enabled) noexcept
