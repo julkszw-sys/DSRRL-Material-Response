@@ -104,8 +104,17 @@ def main():
             "k_clustered_source_override_preimage",
             "exact source override preimage")
         require(draw_cpp,
-            "pointlight_ptde_source::capture(",
-            "PTDE source donor decode")
+            "k_ptde_drawparam_homolog_row_masks",
+            "exact PTDE DrawParam row coverage")
+        require(draw_cpp,
+            "clustered_source_has_ptde_param(",
+            "PARAM-backed source authority gate")
+        callback_start=draw_cpp.find("void __fastcall clustered_source_override_callback(")
+        callback_end=draw_cpp.find("bool build_clustered_source_override_stub(",callback_start)
+        if callback_start<0 or callback_end<=callback_start:
+            fail("clustered source callback boundaries missing")
+        if "pointlight_ptde_source::capture(" in draw_cpp[callback_start:callback_end]:
+            fail("clustered live callback still executes donor reconstruction")
         require(draw_cpp,
             "Clustered PntS never performs receiver/material authorization.",
             "clustered receiver/material bridge retired")
