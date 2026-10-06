@@ -606,11 +606,11 @@ bool fixed_pointlight_draw_runtime::source_ready() const noexcept
        g_quarantined.load(std::memory_order_acquire))
         return false;
 
-    // Producer-only gate: do not consult the current receiver, owner join,
-    // material identity or shader family here. A legal source is simply the
-    // newest completed 2/4-light producer snapshot that has not yet been
-    // consumed by a fixed receiver.
-    const auto selected=g_producer_snapshot;
+    // Source-first gate: do not consult receiver material identity or shader
+    // response here. The selector has already associated the current draw owner
+    // with an exact producer snapshot; only that owner-matched source may
+    // authorize later PntSS/PntSSSS receiver work.
+    const auto selected=g_draw_snapshot;
     if(!selected ||
        (selected->captured_count!=2u &&
         selected->captured_count!=4u) ||
