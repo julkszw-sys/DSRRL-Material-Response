@@ -3655,18 +3655,18 @@ void log_state(const char *tag) noexcept
         pointlight_source_line,
         sizeof(pointlight_source_line),
         "[DSRRL PL SOURCE] tag=%s "
-        "clustered_hit=%llu apply=%llu donor=%llu/%llu class_reject=%llu cache=%llu/%llu "
+        "clustered_hit=%llu apply=%llu coverage=%llu/%llu class_reject=%llu authority_cache=%llu/%llu "
         "clustered_cat=%llu/%llu/%llu/%llu "
         "fixed_hit=%llu captures=%llu snap2=%llu snap4=%llu fixed_cat=%llu/%llu/%llu/%llu "
         "fixed_selector=%llu/%llu fixed_requests=%llu",
         tag,
         static_cast<unsigned long long>(clustered_pl.source_producer_hits),
         static_cast<unsigned long long>(clustered_pl.source_capture_ok),
-        static_cast<unsigned long long>(clustered_pl.source_donor_accept),
-        static_cast<unsigned long long>(clustered_pl.source_donor_reject),
+        static_cast<unsigned long long>(clustered_pl.source_coverage_accept),
+        static_cast<unsigned long long>(clustered_pl.source_coverage_reject),
         static_cast<unsigned long long>(clustered_pl.source_class_reject),
-        static_cast<unsigned long long>(clustered_pl.source_payload_cache_hit),
-        static_cast<unsigned long long>(clustered_pl.source_payload_cache_miss),
+        static_cast<unsigned long long>(clustered_pl.source_authority_cache_hit),
+        static_cast<unsigned long long>(clustered_pl.source_authority_cache_miss),
         static_cast<unsigned long long>(clustered_pl.source_category0),
         static_cast<unsigned long long>(clustered_pl.source_category1),
         static_cast<unsigned long long>(clustered_pl.source_category2),
@@ -7850,7 +7850,7 @@ bool AddonInit(
     } else if (clustered_pointlight_source_hook) {
         reshade::log::message(
             reshade::log::level::info,
-            "[DSRRL POINTLIGHT R52-SOURCE-FIRST] clustered_source=ACTIVE clustered_receiver=STOCK_DSR material_lookup=OFF route_bit=OFF replacement_ps=OFF");
+            "[DSRRL POINTLIGHT R52-SOURCE-FIRST] clustered_source=ACTIVE values=DRAWPARAM donor=OFF coverage=EXACT_BANK_ROW attenuation=A1_LINEAR_ISLAND clustered_receiver=STOCK_DSR material_lookup=OFF route_bit=OFF replacement_ps=OFF");
     }
 
     // Bloom FX transport is diagnostic-only: it does not authorize Q8,
