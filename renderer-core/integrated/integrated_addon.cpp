@@ -7678,11 +7678,10 @@ bool AddonInit(
 
     const bool clustered_pointlight_hooks =
         k_pointlight_drawtime_runtime_enabled &&
-        flver_hooks &&
         g_clustered_pnts.install();
 
     g_clustered_pointlight_selection_transport_active.store(
-        clustered_pointlight_hooks,
+        false,
         std::memory_order_release);
 
     if (k_pointlight_drawtime_runtime_enabled &&
