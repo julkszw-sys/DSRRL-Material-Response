@@ -1,4 +1,4 @@
-name: R43 PTDE DoF Role+CPU Cycle Diagnostic Build
+name: R43 PTDE DoF Role Census + PointLight R48 Build
 
 on:
   workflow_dispatch:
@@ -59,7 +59,7 @@ jobs:
           -A x64
           -DRESHADE_INCLUDE_DIR="${{ github.workspace }}/_reshade/include"
           -DDSRRL_SOURCE_COMMIT="$env:DSRRL_CHECKOUT_COMMIT"
-          -DDSRRL_BUILD_FLAVOR="pmetal_r43_dof_role_cpu_cycle_diag"
+          -DDSRRL_BUILD_FLAVOR="pmetal_r43_dof_role_census_cpu_r48"
           -DDSRRL_FULL_TELEMETRY_DEFAULT_ON=OFF
           -DDSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG=ON
           -DDSRRL_PMETAL_FULL_PTDE_HEMENV_R3=ON
@@ -87,15 +87,15 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           $addons = @(Get-ChildItem build-fast -Recurse -Filter *.addon64)
           if ($addons.Count -ne 1) { throw "Expected exactly one addon, found $($addons.Count)" }
-          Copy-Item $addons[0].FullName "DSRRL_PMETAL_R43_DOF_ROLE_CPU_CYCLE_DIAG.addon64" -Force
+          Copy-Item $addons[0].FullName "DSRRL_PMETAL_R43_DOF_ROLE_CENSUS_CPU_R48.addon64" -Force
 
       - name: Verify binary identity
         shell: pwsh
         run: |
-          $path = "DSRRL_PMETAL_R43_DOF_ROLE_CPU_CYCLE_DIAG.addon64"
+          $path = "DSRRL_PMETAL_R43_DOF_ROLE_CENSUS_CPU_R48.addon64"
           $ascii = [System.Text.Encoding]::ASCII.GetString([System.IO.File]::ReadAllBytes($path))
           if (-not $ascii.Contains($env:DSRRL_CHECKOUT_COMMIT)) { throw "Missing source commit identity" }
-          if (-not $ascii.Contains("pmetal_r43_dof_role_cpu_cycle_diag")) { throw "Missing R43 DoF/profile build flavor identity" }
+          if (-not $ascii.Contains("pmetal_r43_dof_role_census_cpu_r48")) { throw "Missing R43 DoF/profile build flavor identity" }
           if (-not $ascii.Contains("[DSRRL POINTLIGHT R26] direct_current_native_dispatch=ACTIVE persistent_vtable_hook=OFF recursion_guard=ON")) { throw "Missing inherited R26 direct current-native startup marker" }
           if (-not $ascii.Contains("[DSRRL POINTLIGHT R29] exact_structure_snapshot_cache=ACTIVE cross_draw=ON revalidate=VM+MEMCMP pointer_only_authority=OFF gpu_tls_fast_cache=ON per_draw_resource_mutex=OFF per_draw_com_ref_churn=OFF pipeline_tls_fast_path=ON per_draw_private_data=OFF per_draw_shader_ref_churn=OFF failure_propagation=EXACT")) { throw "Missing inherited R29 fast resource/cache/failure-propagation startup marker" }
           if (-not $ascii.Contains("[DSRRL POINTLIGHT R30] synchronous_core_transaction=ACTIVE exact_clustered_shape_guard=ON global_core_tx_mutex=OFF_FOR_CLUSTERED_DIRECT_NATIVE tls_reentry_guard=ON t18_t19_batch=ON sync_draw_serial_atomic=OFF fallback_general_tx=UNCHANGED")) { throw "Missing inherited R30 lock-free synchronous core transaction marker" }
@@ -122,6 +122,8 @@ jobs:
           if (-not $ascii.Contains("[DSRRL DoF] D3D11 stage-pair registry ACTIVE")) { throw "Missing DoF D3D11 stage-pair routing marker" }
           if (-not $ascii.Contains("msaa_pass01_overlap=")) { throw "Missing DoF pass01 overlap diagnostic marker" }
           if (-not $ascii.Contains("p01_role_mask=0x")) { throw "Missing DoF pass01 role-mask diagnostic marker" }
+          if (-not $ascii.Contains("[DSRRL DoF roles]")) { throw "Missing DoF global role census marker" }
+          if (-not $ascii.Contains("[DSRRL PERF R48] POINTLIGHT_CAPTURE")) { throw "Missing PointLight capture subpath profiler marker" }
           # operator_catalog string may be dead-stripped from the final DLL; validate the
           # active runtime and profiler markers instead of requiring catalog text retention.
           if (-not $ascii.Contains("[DSRRL POINTLIGHT R29] source_capture_fail reason=")) { throw "Missing inherited R29 exact source-capture failure diagnostic marker" }
@@ -134,6 +136,6 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: DSRRL_PMETAL_R43_DOF_ROLE_CPU_CYCLE_DIAG
-          path: DSRRL_PMETAL_R43_DOF_ROLE_CPU_CYCLE_DIAG.addon64
+          name: DSRRL_PMETAL_R43_DOF_ROLE_CENSUS_CPU_R48
+          path: DSRRL_PMETAL_R43_DOF_ROLE_CENSUS_CPU_R48.addon64
           if-no-files-found: error
