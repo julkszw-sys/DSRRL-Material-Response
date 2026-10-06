@@ -12,6 +12,7 @@ on:
       - r42-pmetal-cross-thread-producer-cache
       - r43-pmetal-per-key-freshness-cache
       - r43-live-drawparam-pointlight-dof
+      - fix/r43-param-source-activation-v2
       - main
   pull_request:
     paths:
@@ -103,7 +104,7 @@ jobs:
           -DRESHADE_INCLUDE_DIR="${{ github.workspace }}/_reshade/include"
           -DDSRRL_SOURCE_COMMIT="$env:DSRRL_CHECKOUT_COMMIT"
           -DDSRRL_BUILD_FLAVOR="pmetal_r43_per_key_freshness_cache"
-          -DDSRRL_FULL_TELEMETRY_DEFAULT_ON=ON
+          -DDSRRL_FULL_TELEMETRY_DEFAULT_ON=OFF
           -DDSRRL_DOF_DEFAULT_ON=ON
           -DDSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG=ON
           -DDSRRL_PMETAL_FULL_PTDE_HEMENV_R3=ON
@@ -131,7 +132,7 @@ jobs:
         run: |
           $cache = Get-Content build-fast/CMakeCache.txt -Raw
           if ($cache -notmatch "DSRRL_PHYSICAL_CUT_UL_H3_SUBSURFACE:BOOL=ON") { throw "R43 physical cut is not ON" }
-          if ($cache -notmatch "DSRRL_FULL_TELEMETRY_DEFAULT_ON:BOOL=ON") { throw "Full telemetry is not ON" }
+          if ($cache -notmatch "DSRRL_FULL_TELEMETRY_DEFAULT_ON:BOOL=OFF") { throw "Full hot telemetry must be OFF for source-fix V2" }
           if ($cache -notmatch "DSRRL_DOF_DEFAULT_ON:BOOL=ON") { throw "DoF default-on is not ON" }
           if ($cache -match "DSRRL_DIAGNOSTIC_TELEMETRY_DEFAULT_ON:BOOL=ON") { throw "Native-state diagnostic telemetry must remain OFF" }
 
@@ -153,7 +154,8 @@ jobs:
           if (-not $ascii.Contains("pmetal_r43_per_key_freshness_cache")) { throw "Missing R43 build flavor identity" }
           if (-not $ascii.Contains("[DSRRL POINTLIGHT R43-DRAWPARAM] clustered=SOURCE_ONLY carrier=LIVE_DRAWPARAM_SELECTED_ROW source_cut=0xB7E02 receiver=STOCK_DSR donor_lookup=OFF material_lookup=OFF replacement_shader=OFF dsr_only_gate=10 default_m99=STOCK_DSR")) { throw "Missing R43 Clustered live-DrawParam marker" }
           if (-not $ascii.Contains("[DSRRL DoF R43-DRAWPARAM] carrier=LIVE_SELECTED_DOF_ROWS selector=STOCK_DSR donor_table=ABSENT bank_gate=PTDE_HOMOLOGOUS_10 m15_dual=ON default_m99=STOCK_DSR producer_rva=0x5627E0")) { throw "Missing R43 DoF live-DrawParam marker" }
-          if (-not $ascii.Contains("[DSRRL TELEMETRY R43-PARAM] full=ON runtime=ON effect=ON native_state_verify=OFF")) { throw "Missing R43 full telemetry marker" }
+          if ($ascii.Contains("[DSRRL TELEMETRY R43-PARAM] full=ON runtime=ON effect=ON native_state_verify=OFF")) { throw "Full telemetry marker must be absent in source-fix V2" }
+          if (-not $ascii.Contains("[DSRRL R43 PARAM SOURCE FIX V2] dof_pass01=RETAIL_SOURCE_0x78 support=CTX24B8_0x88_0xC0 dof_mul=U8 clustered_failstage=ONE_SHOT full_hot_telemetry=BUILD_PROFILE")) { throw "Missing R43 PARAM source-fix V2 marker" }
           if (-not $ascii.Contains("[DSRRL PMETAL R41] flver_lifecycle_cache_flush=OFF source_cache_generation=SOURCE_RUNTIME_RESET_ONLY endpoint_cache=EXACT_SOURCE_BASE_COUNT_INDEX_ROW bank_cache=BASE_COUNT_LAYOUT region_cache=VM_WINDOW selector_shadow=EXACT_TLS_SOURCE_PTR_SELECTOR_BETA selector_source=ON envspec=ON material_response=ON")) { throw "Missing R41 P_Metal cache-scope marker" }
           if (-not $ascii.Contains("[DSRRL PMETAL R41] selector_source_shadow_hit=1 exact_source_ptr=ON exact_selector_beta=ON donor_redecode=OFF fail_open_fallback=ON")) { Write-Host "R41 selector-shadow hit marker is intentionally runtime-only" }
           if (-not $ascii.Contains("[DSRRL PMETAL R43] producer_cache=SET256_WAY2 freshness=SOURCE_BASE_COUNT_ROW_SELECTOR_BETA global_semantic_version_gate=OFF selector_try_lock=ON producer_payload_exact=ON fallback_full_decode=ON islands_preserved=ON")) { throw "Missing R43 per-key freshness marker" }
@@ -169,6 +171,6 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: DSRRL_R43_PARAM_POINTLIGHT_DOF_FULL_TELEMETRY
+          name: DSRRL_R43_PARAM_SOURCE_FIX_V2_TELEMETRY_OFF
           path: DSRRL_PMETAL_R43_PER_KEY_FRESHNESS_CACHE.addon64
           if-no-files-found: error
