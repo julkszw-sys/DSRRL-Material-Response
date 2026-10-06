@@ -1653,8 +1653,8 @@ void __fastcall clustered_source_override_callback(
     // so the source object and its vtable are already live. Build a tiny
     // semantic key directly from source identity + bank/lerp selector state.
     // Deliberately exclude world position: movement changes geometry.xyz, not
-    // the selected DrawParam row payload {invRange, RGB, End}. Dynamic source
-    // movement no longer invalidates it.
+    // the selected DrawParam row payload {invRange, RGB, End}.
+    // Dynamic source movement no longer invalidates it.
     void **vtable = nullptr;
     std::memcpy(
         &vtable,
