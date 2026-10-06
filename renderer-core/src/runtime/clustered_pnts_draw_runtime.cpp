@@ -24,6 +24,7 @@
 #include <cstring>
 #include <mutex>
 #include <unordered_map>
+#include <vector>
 
 namespace dsrrl::runtime {
 namespace {
@@ -743,6 +744,13 @@ std::atomic<std::uint64_t> g_mirror_equal{0u};
 std::atomic<std::uint64_t> g_mirror_diff{0u};
 std::atomic<std::uint64_t> g_source_capture_ok{0u};
 std::atomic<std::uint64_t> g_source_capture_fail{0u};
+std::atomic<std::uint64_t> g_source_producer_hits{0u};
+std::atomic<std::uint64_t> g_source_coverage_accept{0u};
+std::atomic<std::uint64_t> g_source_coverage_reject{0u};
+std::atomic<std::uint64_t> g_source_class_reject{0u};
+std::atomic<std::uint64_t> g_source_authority_cache_hit{0u};
+std::atomic<std::uint64_t> g_source_authority_cache_miss{0u};
+std::array<std::atomic<std::uint64_t>,4> g_source_category_hits{};
 std::atomic<std::uint64_t> g_snapshot_publish{0u};
 std::atomic<std::uint64_t> g_selector_seen{0u};
 std::atomic<std::uint64_t> g_owner_join_hit{0u};
@@ -1102,6 +1110,697 @@ bool write_pointlight_code(
             old_protect,
             &ignored) != FALSE;
     return flushed && restored;
+}
+
+
+struct clustered_source_override_hook_v1 {
+    void *target = nullptr;
+    void *stub = nullptr;
+    std::array<std::uint8_t,16> original{};
+    bool patched = false;
+};
+
+// Exact retail DSR producer cut after DSR has computed category gain/q^2.2
+// but immediately before the 48-byte t18 record is written. DrawParam now
+// supplies PTDE-authored values; this hook removes only DSR's source-domain
+// category/pow transform for exact homologous bank+row coverage.
+constexpr std::uintptr_t
+    k_clustered_source_override_rva = 0xB7E02u;
+constexpr std::array<std::uint8_t,16>
+    k_clustered_source_override_preimage = {
+        0x48,0x8B,0x83,0x20,0x03,0x00,0x00,
+        0x48,0x8D,0x0C,0x76,
+        0x0F,0x28,0x44,0x24,0x30
+    };
+
+clustered_source_override_hook_v1
+    g_clustered_source_override_hook{};
+thread_local pointlight_ptde_source::
+    draw_bank_authority_cache
+    g_clustered_source_bank_cache{};
+
+// The special DSRLL DrawParam now owns all PTDE-authored PointLightBank
+// numerics. The addon no longer reconstructs those values from the embedded
+// PTDE donor corpus. Runtime only proves exact bank structure + row coverage,
+// then removes DSR's clustered source-domain q transform analytically.
+constexpr std::array<float,4>
+    k_clustered_source_category_gain = {{
+        1.6f, 3.0f, 3.0f, 3.0f
+    }};
+constexpr float
+    k_clustered_source_inverse_gamma =
+        1.0f / 2.2f;
+
+const pointlight_donors::bank *
+resolve_clustered_bank_authority(
+    std::uintptr_t bank_source,
+    pointlight_ptde_source::access_cache &access,
+    bool &cache_miss) noexcept
+{
+    if (bank_source == 0u)
+        return nullptr;
+
+    std::uintptr_t param = 0u;
+    if (!pointlight_ptde_source::read_cached(
+            bank_source + 0x18u,
+            param,
+            access) ||
+        !pointlight_ptde_source::readable_cached(
+            param,
+            0x330u,
+            access))
+        return nullptr;
+
+    const auto *p =
+        reinterpret_cast<const std::uint8_t *>(
+            param);
+    std::uint16_t count = 0u;
+    std::uint32_t first = 0u;
+    std::memcpy(
+        &count,
+        p + 0x0Au,
+        sizeof(count));
+    std::memcpy(
+        &first,
+        p + 0x34u,
+        sizeof(first));
+
+    for (const auto &entry :
+         g_clustered_source_bank_cache.entries) {
+        if (entry.param == param &&
+            entry.count == count &&
+            entry.first == first &&
+            entry.bank != nullptr)
+            return entry.bank;
+    }
+
+    const auto *bank =
+        pointlight_ptde_source::
+            lookup_persistent_structure_cache(
+                param,
+                count,
+                first);
+
+    if (bank == nullptr) {
+        std::uint64_t signature = 0u;
+        std::uint32_t structure_end = 0u;
+        if (!pointlight_ptde_source::
+                bank_structure_signature(
+                    param,
+                    count,
+                    first,
+                    access,
+                    signature,
+                    &structure_end))
+            return nullptr;
+
+        bank =
+            pointlight_ptde_source::
+                identify_structure(
+                    signature);
+        if (bank == nullptr)
+            return nullptr;
+
+        pointlight_ptde_source::
+            store_persistent_structure_cache(
+                param,
+                count,
+                first,
+                structure_end,
+                bank);
+        cache_miss = true;
+    }
+
+    auto &slot =
+        g_clustered_source_bank_cache.entries[
+            static_cast<std::size_t>(
+                g_clustered_source_bank_cache.victim++) %
+            g_clustered_source_bank_cache.entries.size()];
+    slot = {param, count, first, bank};
+    return bank;
+}
+
+bool clustered_bank_row_has_ptde_param(
+    std::uintptr_t bank_source,
+    std::int32_t selector,
+    pointlight_ptde_source::access_cache &access,
+    bool &cache_miss) noexcept
+{
+    if (selector < 0)
+        return false;
+
+    const auto *bank =
+        resolve_clustered_bank_authority(
+            bank_source,
+            access,
+            cache_miss);
+    if (bank == nullptr)
+        return false;
+
+    const auto *begin =
+        pointlight_donors::banks.data();
+    const auto bank_index =
+        static_cast<std::size_t>(
+            bank - begin);
+    if (bank_index >=
+        pointlight_bank_structure_authority_v1::
+            k_ptde_drawparam_homolog_row_masks.size())
+        return false;
+
+    const auto row =
+        static_cast<std::uint32_t>(
+            selector) & 255u;
+    if (row >= 64u)
+        return false;
+
+    const auto mask =
+        pointlight_bank_structure_authority_v1::
+            k_ptde_drawparam_homolog_row_masks[
+                bank_index];
+    return
+        (mask &
+         (std::uint64_t{1u} << row)) != 0u;
+}
+
+bool clustered_source_has_ptde_param(
+    std::uintptr_t target_address,
+    std::uintptr_t owner,
+    std::uint32_t selector_word0,
+    std::uint32_t selector_word1,
+    bool &cache_miss) noexcept
+{
+    pointlight_ptde_source::access_cache access{};
+
+    if (target_address ==
+        g_base + 0x55BC00u) {
+        std::int32_t selector = -1;
+        std::memcpy(
+            &selector,
+            &selector_word0,
+            sizeof(selector));
+        return
+            clustered_bank_row_has_ptde_param(
+                owner,
+                selector,
+                access,
+                cache_miss);
+    }
+
+    if (target_address !=
+        g_base + 0x55D0B0u)
+        return false;
+
+    std::int16_t selector_a = -1;
+    std::int16_t selector_b = -1;
+    float beta = 0.0f;
+    std::memcpy(
+        &selector_a,
+        &selector_word0,
+        sizeof(selector_a));
+    std::memcpy(
+        &selector_b,
+        reinterpret_cast<const std::uint8_t *>(
+            &selector_word0) +
+            sizeof(selector_a),
+        sizeof(selector_b));
+    std::memcpy(
+        &beta,
+        &selector_word1,
+        sizeof(beta));
+
+    const auto pair =
+        pmetal_selector_policy::select(
+            selector_a,
+            selector_b,
+            beta);
+    if (!pair.valid)
+        return false;
+
+    std::uintptr_t source_a = 0u;
+    if (!pointlight_ptde_source::
+            selected_source(
+                owner,
+                pair.a,
+                source_a,
+                access) ||
+        !clustered_bank_row_has_ptde_param(
+            source_a,
+            pair.a,
+            access,
+            cache_miss))
+        return false;
+
+    if (pair.beta == 0.0f)
+        return true;
+
+    std::uintptr_t source_b = 0u;
+    return
+        pointlight_ptde_source::
+            selected_source(
+                owner,
+                pair.b,
+                source_b,
+                access) &&
+        clustered_bank_row_has_ptde_param(
+            source_b,
+            pair.b,
+            access,
+            cache_miss);
+}
+
+void source_hook_emit_u64(
+    std::vector<std::uint8_t> &out,
+    std::uint64_t value)
+{
+    for (unsigned i = 0u; i < 8u; ++i)
+        out.push_back(
+            static_cast<std::uint8_t>(
+                value >> (i * 8u)));
+}
+
+void source_hook_emit(
+    std::vector<std::uint8_t> &out,
+    std::initializer_list<std::uint8_t> bytes)
+{
+    out.insert(
+        out.end(),
+        bytes.begin(),
+        bytes.end());
+}
+
+void source_hook_store_xmm(
+    std::vector<std::uint8_t> &out,
+    std::uint8_t xmm,
+    std::uint32_t disp)
+{
+    source_hook_emit(
+        out,
+        {0xF3,0x0F,0x7F,
+         static_cast<std::uint8_t>(
+             0x84u | ((xmm & 7u) << 3u)),
+         0x24});
+    for (unsigned i = 0u; i < 4u; ++i)
+        out.push_back(
+            static_cast<std::uint8_t>(
+                disp >> (i * 8u)));
+}
+
+void source_hook_load_xmm(
+    std::vector<std::uint8_t> &out,
+    std::uint8_t xmm,
+    std::uint32_t disp)
+{
+    source_hook_emit(
+        out,
+        {0xF3,0x0F,0x6F,
+         static_cast<std::uint8_t>(
+             0x84u | ((xmm & 7u) << 3u)),
+         0x24});
+    for (unsigned i = 0u; i < 4u; ++i)
+        out.push_back(
+            static_cast<std::uint8_t>(
+                disp >> (i * 8u)));
+}
+
+void __fastcall clustered_source_override_callback(
+    void *source,
+    float *geometry,
+    float *color_end) noexcept
+{
+    if (!g_enabled.load(std::memory_order_relaxed) ||
+        g_quarantined.load(std::memory_order_relaxed) ||
+        source == nullptr ||
+        geometry == nullptr ||
+        color_end == nullptr ||
+        g_base == 0u)
+        return;
+
+    telemetry::hot_count(g_source_producer_hits);
+
+    std::uint8_t source_category = 0xffu;
+    std::memcpy(
+        &source_category,
+        static_cast<const std::uint8_t *>(
+            source) + 0x18u,
+        sizeof(source_category));
+    if (source_category <
+        g_source_category_hits.size())
+        telemetry::hot_count(
+            g_source_category_hits[
+                source_category]);
+    if (source_category >=
+        k_clustered_source_category_gain.size()) {
+        telemetry::hot_count(
+            g_source_coverage_reject);
+        telemetry::hot_count(
+            g_source_capture_fail);
+        return;
+    }
+
+    // Exact source-class authority remains mandatory. The callback runs after
+    // the stock source vfunc and after DSR's category-gain/q^2.2 transform,
+    // immediately before t18 packing.
+    void **vtable = nullptr;
+    std::memcpy(
+        &vtable,
+        source,
+        sizeof(vtable));
+    if (vtable == nullptr)
+        return;
+
+    void *target = nullptr;
+    std::memcpy(
+        &target,
+        vtable + 12u,
+        sizeof(target));
+    const auto target_address =
+        reinterpret_cast<std::uintptr_t>(
+            target);
+    if (target_address !=
+            g_base + 0x55BC00u &&
+        target_address !=
+            g_base + 0x55D0B0u) {
+        telemetry::hot_count(
+            g_source_class_reject);
+        return;
+    }
+
+    std::uintptr_t owner = 0u;
+    std::uint32_t selector_word0 = 0u;
+    std::uint32_t selector_word1 = 0u;
+    std::memcpy(
+        &owner,
+        static_cast<const std::uint8_t *>(
+            source) + 0x50u,
+        sizeof(owner));
+    std::memcpy(
+        &selector_word0,
+        static_cast<const std::uint8_t *>(
+            source) + 0x58u,
+        sizeof(selector_word0));
+    std::memcpy(
+        &selector_word1,
+        static_cast<const std::uint8_t *>(
+            source) + 0x5Cu,
+        sizeof(selector_word1));
+    if (owner == 0u) {
+        telemetry::hot_count(
+            g_source_coverage_reject);
+        telemetry::hot_count(
+            g_source_capture_fail);
+        return;
+    }
+
+    bool authority_cache_miss = false;
+    if (!clustered_source_has_ptde_param(
+            target_address,
+            owner,
+            selector_word0,
+            selector_word1,
+            authority_cache_miss)) {
+        telemetry::hot_count(
+            g_source_coverage_reject);
+        telemetry::hot_count(
+            g_source_capture_fail);
+        return;
+    }
+
+    telemetry::hot_count(
+        g_source_coverage_accept);
+    telemetry::hot_count(
+        authority_cache_miss
+            ? g_source_authority_cache_miss
+            : g_source_authority_cache_hit);
+
+    // DrawParam already contains the exact PTDE q/Begin/End values. At this
+    // cut DSR has changed only RGB source amplitude:
+    //     C_D = S_category * q^2.2
+    // Restore q analytically; keep stock position, PTDE-backed invRange/End,
+    // selection, packing and stock receiver intact. The separate exact A1
+    // PntS attenuation island remains responsible for x^3 -> x.
+    const float gain =
+        k_clustered_source_category_gain[
+            source_category];
+    std::array<float,3> q{};
+    for (std::size_t i = 0u;
+         i < q.size();
+         ++i) {
+        const float value =
+            color_end[i];
+        if (!std::isfinite(value) ||
+            value < 0.0f ||
+            !(gain > 0.0f)) {
+            telemetry::hot_count(
+                g_source_capture_fail);
+            return;
+        }
+
+        const float normalized =
+            value / gain;
+        q[i] =
+            normalized <= 0.0f
+                ? 0.0f
+                : std::pow(
+                    normalized,
+                    k_clustered_source_inverse_gamma);
+        if (!std::isfinite(q[i])) {
+            telemetry::hot_count(
+                g_source_capture_fail);
+            return;
+        }
+    }
+
+    std::memcpy(
+        color_end,
+        q.data(),
+        q.size() * sizeof(float));
+    telemetry::hot_count(
+        g_source_capture_ok);
+}
+
+bool build_clustered_source_override_stub(
+    void *target,
+    void *&stub_out) noexcept
+{
+    stub_out = nullptr;
+    try {
+        std::vector<std::uint8_t> code;
+        code.reserve(320u);
+
+        // Site RSP is 16-byte aligned. Preserve flags, all volatile GPRs and
+        // volatile XMM0..5. XMM6..15 are nonvolatile under Win64 and retain
+        // the retail producer's category/falloff state across the callback.
+        source_hook_emit(code,{0x9C}); // pushfq
+        source_hook_emit(
+            code,
+            {0x48,0x81,0xEC,0x08,0x01,0x00,0x00}); // sub rsp,108h
+
+        source_hook_emit(code,{0x48,0x89,0x44,0x24,0x20}); // rax
+        source_hook_emit(code,{0x9C});
+        source_hook_emit(code,{0x58});
+        source_hook_emit(
+            code,
+            {0x48,0x89,0x84,0x24,0x58,0x00,0x00,0x00});
+        source_hook_emit(code,{0x48,0x89,0x4C,0x24,0x28}); // rcx
+        source_hook_emit(code,{0x48,0x89,0x54,0x24,0x30}); // rdx
+        source_hook_emit(code,{0x4C,0x89,0x44,0x24,0x38}); // r8
+        source_hook_emit(code,{0x4C,0x89,0x4C,0x24,0x40}); // r9
+        source_hook_emit(code,{0x4C,0x89,0x54,0x24,0x48}); // r10
+        source_hook_emit(code,{0x4C,0x89,0x5C,0x24,0x50}); // r11
+
+        for (std::uint8_t i = 0u; i < 6u; ++i)
+            source_hook_store_xmm(
+                code,
+                i,
+                0x60u + 0x10u * i);
+
+        // callback(source=RDI,
+        //          geometry=original_rsp+0x20,
+        //          color_end=original_rsp+0x30)
+        source_hook_emit(code,{0x48,0x8B,0xCF}); // mov rcx,rdi
+        source_hook_emit(
+            code,
+            {0x48,0x8D,0x94,0x24,0x30,0x01,0x00,0x00}); // lea rdx,[rsp+130h]
+        source_hook_emit(
+            code,
+            {0x4C,0x8D,0x84,0x24,0x40,0x01,0x00,0x00}); // lea r8,[rsp+140h]
+        source_hook_emit(code,{0x48,0xB8});
+        source_hook_emit_u64(
+            code,
+            reinterpret_cast<std::uint64_t>(
+                &clustered_source_override_callback));
+        source_hook_emit(code,{0xFF,0xD0}); // call rax
+
+        for (std::uint8_t i = 0u; i < 6u; ++i)
+            source_hook_load_xmm(
+                code,
+                i,
+                0x60u + 0x10u * i);
+
+        source_hook_emit(code,{0x4C,0x8B,0x5C,0x24,0x50});
+        source_hook_emit(code,{0x4C,0x8B,0x54,0x24,0x48});
+        source_hook_emit(code,{0x4C,0x8B,0x4C,0x24,0x40});
+        source_hook_emit(code,{0x4C,0x8B,0x44,0x24,0x38});
+        source_hook_emit(code,{0x48,0x8B,0x54,0x24,0x30});
+        source_hook_emit(code,{0x48,0x8B,0x4C,0x24,0x28});
+        source_hook_emit(
+            code,
+            {0x48,0x8B,0x84,0x24,0x58,0x00,0x00,0x00});
+        source_hook_emit(code,{0x50});
+        source_hook_emit(code,{0x9D});
+        source_hook_emit(code,{0x48,0x8B,0x44,0x24,0x20});
+        source_hook_emit(
+            code,
+            {0x48,0x81,0xC4,0x08,0x01,0x00,0x00});
+        source_hook_emit(code,{0x9D});
+
+        // Replay the exact 16 stolen retail bytes.
+        code.insert(
+            code.end(),
+            k_clustered_source_override_preimage.begin(),
+            k_clustered_source_override_preimage.end());
+
+        // Absolute indirect jump to target+16.
+        source_hook_emit(
+            code,
+            {0xFF,0x25,0x00,0x00,0x00,0x00});
+        source_hook_emit_u64(
+            code,
+            reinterpret_cast<std::uint64_t>(
+                static_cast<std::uint8_t *>(target) +
+                k_clustered_source_override_preimage.size()));
+
+        void *stub =
+            VirtualAlloc(
+                nullptr,
+                code.size(),
+                MEM_COMMIT | MEM_RESERVE,
+                PAGE_EXECUTE_READWRITE);
+        if (stub == nullptr)
+            return false;
+
+        std::memcpy(
+            stub,
+            code.data(),
+            code.size());
+        if (FlushInstructionCache(
+                GetCurrentProcess(),
+                stub,
+                code.size()) == FALSE) {
+            VirtualFree(
+                stub,
+                0u,
+                MEM_RELEASE);
+            return false;
+        }
+
+        stub_out = stub;
+        return true;
+    } catch (...) {
+        return false;
+    }
+}
+
+bool install_clustered_source_override_hook() noexcept
+{
+    auto &hook =
+        g_clustered_source_override_hook;
+    if (hook.patched)
+        return true;
+    if (g_base == 0u)
+        return false;
+
+    auto *target =
+        reinterpret_cast<std::uint8_t *>(
+            g_base +
+            k_clustered_source_override_rva);
+    if (!readable_range(
+            target,
+            k_clustered_source_override_preimage.size()) ||
+        std::memcmp(
+            target,
+            k_clustered_source_override_preimage.data(),
+            k_clustered_source_override_preimage.size()) != 0)
+        return false;
+
+    void *stub = nullptr;
+    if (!build_clustered_source_override_stub(
+            target,
+            stub))
+        return false;
+
+    std::array<
+        std::uint8_t,
+        k_clustered_source_override_preimage.size()> patch{};
+    patch.fill(0x90u);
+    patch[0] = 0xFFu;
+    patch[1] = 0x25u;
+    const std::uint32_t zero = 0u;
+    std::memcpy(
+        patch.data() + 2u,
+        &zero,
+        sizeof(zero));
+    const auto address =
+        reinterpret_cast<std::uint64_t>(
+            stub);
+    std::memcpy(
+        patch.data() + 6u,
+        &address,
+        sizeof(address));
+
+    if (!write_pointlight_code(
+            target,
+            patch.data(),
+            patch.size())) {
+        VirtualFree(
+            stub,
+            0u,
+            MEM_RELEASE);
+        return false;
+    }
+
+    hook.target = target;
+    hook.stub = stub;
+    hook.original =
+        k_clustered_source_override_preimage;
+    hook.patched = true;
+    return true;
+}
+
+bool restore_clustered_source_override_hook() noexcept
+{
+    auto &hook =
+        g_clustered_source_override_hook;
+    bool ok = true;
+
+    if (hook.patched) {
+        ok =
+            hook.target != nullptr &&
+            write_pointlight_code(
+                hook.target,
+                hook.original.data(),
+                hook.original.size()) &&
+            std::memcmp(
+                hook.target,
+                hook.original.data(),
+                hook.original.size()) == 0;
+        if (ok)
+            hook.patched = false;
+    }
+
+    if (ok && hook.stub != nullptr) {
+        ok =
+            VirtualFree(
+                hook.stub,
+                0u,
+                MEM_RELEASE) != FALSE;
+        if (ok)
+            hook.stub = nullptr;
+    }
+
+    if (ok)
+        hook = {};
+    return ok;
 }
 
 void __fastcall pointlight_collection_insert_detour(
@@ -2196,60 +2895,37 @@ bool update_buffer(
 } // namespace
 
 void clustered_pnts_builder_event_bridge(
-    void *draw,
-    void *renderer_context) noexcept
+    void *,
+    void *) noexcept
 {
-    if (g_runtime != nullptr)
-        g_runtime->builder_event(
-            draw,
-            renderer_context);
+    // Source-only clustered lineage: the old draw-builder snapshot path is
+    // intentionally dead. PTDE source substitution happens at the retail
+    // source producer cut before DSR transforms.
 }
 
 void clustered_pnts_selector_event_bridge(
-    void *owner,
-    const void *actual_material) noexcept
+    void *,
+    const void *) noexcept
 {
-    if (g_runtime != nullptr)
-        g_runtime->selector_event(
-            owner,
-            actual_material);
+    // Clustered PntS never performs receiver/material authorization.
 }
 
 bool clustered_pnts_selector_handoff_ready_bridge(
-    void *owner) noexcept
+    void *) noexcept
 {
-    if (g_runtime == nullptr ||
-        !g_enabled.load(std::memory_order_relaxed) ||
-        g_quarantined.load(std::memory_order_relaxed) ||
-        owner == nullptr)
-        return false;
-
-    const auto owner_key =
-        reinterpret_cast<std::uintptr_t>(owner);
-
-    // Exact same-thread producer handoff. This is the same authority gate
-    // selector_event() enforces before any PointLight work can become visible.
-    // Expose it so callers can skip material-candidate lookup and bridge calls
-    // that are guaranteed to fail open.
-    return
-        g_producer_input_tls.valid &&
-        g_producer_input_tls.owner == owner_key;
+    return false;
 }
 
 void clustered_pnts_selector_source_event_bridge() noexcept
 {
-    if (g_runtime != nullptr)
-        g_runtime->selector_source_event();
+    // Dead by construction in source-only clustered mode.
 }
 
 void clustered_pnts_selector_identity_event_bridge(
-    const operators::material_response::material_identity &identity,
-    bool expected_spc) noexcept
+    const operators::material_response::material_identity &,
+    bool) noexcept
 {
-    if (g_runtime != nullptr)
-        g_runtime->selector_identity_event(
-            identity,
-            expected_spc);
+    // Clustered receiver remains stock DSR.
 }
 
 bool clustered_pnts_draw_runtime::install() noexcept
@@ -2258,13 +2934,6 @@ bool clustered_pnts_draw_runtime::install() noexcept
         return g_runtime == this;
     if (g_runtime != nullptr &&
         g_runtime != this)
-        return false;
-
-    const auto flver =
-        flver_identity_transport::status();
-    if (!flver.provenance_ok ||
-        !flver.selector_armed ||
-        !flver.builder_armed)
         return false;
 
     g_base =
@@ -2298,14 +2967,13 @@ bool clustered_pnts_draw_runtime::install() noexcept
     pointlight_ptde_source::
         clear_persistent_structure_cache();
 
-    // R40: exact-byte-guarded mutation hook. It is intentionally installed
-    // only on active-light insertion, which is enough to close pointer-reuse
-    // lifetime hazards: removed nodes cannot be selected, and any reactivation
-    // necessarily passes through this insertion path before reuse.
-    if (!install_pointlight_collection_insert_hook())
+    // Source-only clustered bridge: patch the retail raw-source producer
+    // before DSR category/gamma/falloff transforms. No receiver/material
+    // lookup, first-four reconstruction, sidecar or replacement shader is
+    // involved in clustered PntS anymore.
+    if (!install_clustered_source_override_hook())
         return false;
-    invalidate_source_semantic_generation();
-    g_source_cache_seen_generation = 0u;
+    g_clustered_source_bank_cache = {};
 
     g_runtime = this;
     g_quarantined.store(false);
@@ -2342,31 +3010,36 @@ bool clustered_pnts_draw_runtime::install() noexcept
             reshade::log::level::info,
             "[DSRRL POINTLIGHT R40] source_cache=PERSISTENT_GENERATIONAL_EXACT_STATE invalidation=ACTIVE_COLLECTION_INSERT collection_identity=IN_KEY endpoint_identity=SOURCE_PLUS_PARAM selector_beta=IN_KEY present_reset=OFF spc=ON nospc=ON");
     static std::atomic_bool
-        r51_hotpath_logged{false};
-    if (!r51_hotpath_logged.exchange(
+        r53_param_source_logged{false};
+    if (!r53_param_source_logged.exchange(
             true,
             std::memory_order_relaxed))
         reshade::log::message(
             reshade::log::level::info,
-            "[DSRRL POINTLIGHT R51] resolved_donor_fast_path=ON duplicate_lerp_resolution=OFF bank_structure_full_revalidate=ONCE_PER_PRESENT allocation_guard=EACH_LOOKUP vm_region_windows=4xPER_CATEGORY failopen_original_donor=ON");
+            "[DSRRL POINTLIGHT R53-PARAM-SOURCE] values=DRAWPARAM donor_reconstruction=OFF coverage=EXACT_BANK_STRUCTURE_PLUS_ROW banks=10 m15_1=ON m15=ON q_transform=INVERSE_DSR_CATEGORY_POW attenuation=A1_LINEAR_ISLAND");
     static std::atomic_bool
-        r52_gate_logged{false};
-    if (!r52_gate_logged.exchange(
+        r52_source_first_logged{false};
+    if (!r52_source_first_logged.exchange(
             true,
             std::memory_order_relaxed))
         reshade::log::message(
             reshade::log::level::info,
-            "[DSRRL POINTLIGHT R52] selector_handoff_pre_gate=ON candidate_lookup_skipped_without_exact_producer=ON failopen_equivalence=SELECTOR_EVENT_GATE");
+            "[DSRRL POINTLIGHT R52-SOURCE-FIRST] clustered=SOURCE_ONLY source_cut=0xB7E02 stage=POST_DSR_TRANSFORM_PRE_T18 values=DRAWPARAM donor=OFF coverage=EXACT_BANK_ROW receiver=STOCK_DSR material_lookup=OFF replacement_shader=OFF fixed=SOURCE_BEFORE_RECEIVER");
     return true;
 }
 
 void clustered_pnts_draw_runtime::uninstall() noexcept
 {
     g_enabled.store(false);
-    if (!restore_pointlight_collection_insert_hook())
+    if (!restore_clustered_source_override_hook()) {
         reshade::log::message(
             reshade::log::level::error,
-            "[DSRRL POINTLIGHT R40] collection_insert_hook_restore_fail=1");
+            "[DSRRL POINTLIGHT R52-SOURCE-FIRST] clustered_source_hook_restore_fail=1");
+        g_quarantined.store(
+            true,
+            std::memory_order_relaxed);
+    }
+    g_clustered_source_bank_cache = {};
     g_source_exec_attested.store(
         false,
         std::memory_order_relaxed);
@@ -3305,6 +3978,16 @@ clustered_pnts_draw_runtime::telemetry() const noexcept
         g_mirror_diff.load(),
         g_source_capture_ok.load(),
         g_source_capture_fail.load(),
+        g_source_producer_hits.load(),
+        g_source_coverage_accept.load(),
+        g_source_coverage_reject.load(),
+        g_source_class_reject.load(),
+        g_source_authority_cache_hit.load(),
+        g_source_authority_cache_miss.load(),
+        g_source_category_hits[0].load(),
+        g_source_category_hits[1].load(),
+        g_source_category_hits[2].load(),
+        g_source_category_hits[3].load(),
         g_snapshot_publish.load(),
         g_selector_seen.load(),
         g_owner_join_hit.load(),
@@ -3369,6 +4052,14 @@ void clustered_pnts_draw_runtime::reset() noexcept
     g_mirror_diff.store(0u);
     g_source_capture_ok.store(0u);
     g_source_capture_fail.store(0u);
+    g_source_producer_hits.store(0u);
+    g_source_coverage_accept.store(0u);
+    g_source_coverage_reject.store(0u);
+    g_source_class_reject.store(0u);
+    g_source_authority_cache_hit.store(0u);
+    g_source_authority_cache_miss.store(0u);
+    for (auto &counter : g_source_category_hits)
+        counter.store(0u);
     g_snapshot_publish.store(0u);
     g_selector_seen.store(0u);
     g_owner_join_hit.store(0u);

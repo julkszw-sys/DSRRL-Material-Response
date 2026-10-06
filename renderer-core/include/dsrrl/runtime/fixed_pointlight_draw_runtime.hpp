@@ -18,6 +18,13 @@ struct fixed_pointlight_telemetry {
     std::uint64_t producer_captures = 0;
     std::uint64_t producer_restarts = 0;
     std::uint64_t producer_rejects = 0;
+    std::uint64_t producer_hits = 0;
+    std::uint64_t snapshot2_publish = 0;
+    std::uint64_t snapshot4_publish = 0;
+    std::uint64_t source_category0 = 0;
+    std::uint64_t source_category1 = 0;
+    std::uint64_t source_category2 = 0;
+    std::uint64_t source_category3 = 0;
     std::uint64_t selector_seen = 0;
     std::uint64_t selector_match = 0;
     std::uint64_t selector_stale = 0;
@@ -42,6 +49,10 @@ struct prepared_fixed_pointlight_draw {
 // fixed PointLight runtime is not installed.
 void fixed_pointlight_selector_event_bridge(void *owner) noexcept;
 
+// Cheap non-consuming source-authority gate. Receiver/material work must not
+// start until an exact fresh 2-light/4-light producer snapshot already exists.
+bool fixed_pointlight_source_ready_bridge() noexcept;
+
 class fixed_pointlight_draw_runtime {
 public:
     fixed_pointlight_draw_runtime() noexcept = default;
@@ -50,6 +61,11 @@ public:
     void uninstall() noexcept;
 
     void selector_event(void *owner) noexcept;
+
+    // Non-consuming source authority check. This is intentionally independent
+    // of receiver material identity; it only verifies the already captured
+    // fixed source snapshot for the expected PntSS/PntSSSS light count.
+    bool source_ready() const noexcept;
 
     // expected_count is receiver-derived: PntSS=2, PntSSSS=4.
     bool prepare_t19(

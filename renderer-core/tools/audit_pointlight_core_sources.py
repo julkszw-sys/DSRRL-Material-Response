@@ -45,7 +45,6 @@ def main() -> int:
     required_flver = (
         '#include "dsrrl/runtime/fixed_pointlight_draw_runtime.hpp"',
         "fixed_pointlight_selector_event_bridge(owner);",
-        "clustered_pnts_selector_event_bridge(",
     )
     for token in required_flver:
         if token not in flver_hooks:
@@ -54,6 +53,73 @@ def main() -> int:
                 file=sys.stderr,
             )
             return 1
+
+    # R52 source-first correction: clustered PntS no longer participates in
+    # FLVER material/receiver dispatch. Its only live bridge is the exact
+    # retail pre-transform source hook; the stock DSR receiver remains bound.
+    clustered_draw = (
+        source_dir / "src" / "runtime" / "clustered_pnts_draw_runtime.cpp"
+    ).read_text(encoding="utf-8")
+    for token in (
+        "k_clustered_source_override_rva = 0xB7E02u;",
+        "k_clustered_source_override_preimage",
+        "clustered_source_override_callback(",
+        "clustered_source_has_ptde_param(",
+        "k_ptde_drawparam_homolog_row_masks",
+    ):
+        if token not in clustered_draw:
+            print(
+                f"PointLight runtime audit: clustered source-only invariant missing: {token}",
+                file=sys.stderr,
+            )
+            return 1
+    callback_begin = clustered_draw.find(
+        "void __fastcall clustered_source_override_callback("
+    )
+    callback_end = clustered_draw.find(
+        "bool build_clustered_source_override_stub(",
+        callback_begin,
+    )
+    if callback_begin < 0 or callback_end <= callback_begin:
+        print(
+            "PointLight runtime audit: clustered source callback boundaries missing",
+            file=sys.stderr,
+        )
+        return 1
+    if "pointlight_ptde_source::capture(" in clustered_draw[callback_begin:callback_end]:
+        print(
+            "PointLight runtime audit: live clustered source still reconstructs PTDE donors",
+            file=sys.stderr,
+        )
+        return 1
+
+    if "constexpr bool k_clustered_pointlight_receiver_runtime_enabled = false;" not in integrated:
+        print(
+            "PointLight runtime audit: clustered receiver runtime is not hard-disabled",
+            file=sys.stderr,
+        )
+        return 1
+    publish_begin = flver_hooks.find("bool publish_exact_selector_identity(")
+    publish_end = flver_hooks.find(
+        'extern "C" void dsrrl_clustered_pnts_builder_observer(',
+        publish_begin,
+    )
+    if publish_begin < 0 or publish_end <= publish_begin:
+        print(
+            "PointLight runtime audit: cannot isolate FLVER selector publish body",
+            file=sys.stderr,
+        )
+        return 1
+    publish_body = flver_hooks[publish_begin:publish_end]
+    if (
+        "direct_pointlight_material_candidate(" in publish_body
+        or "clustered_pnts_selector_event_bridge(" in publish_body
+    ):
+        print(
+            "PointLight runtime audit: clustered receiver/material work survived in FLVER selector",
+            file=sys.stderr,
+        )
+        return 1
 
     bridge_begin = upper_lower.find(
         "void upper_lower_selector_event_bridge("

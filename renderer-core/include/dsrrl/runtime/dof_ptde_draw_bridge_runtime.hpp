@@ -3,6 +3,7 @@
 #include <cstdint>
 
 namespace dsrrl::core { class renderer_core; }
+namespace reshade::api { struct command_list; }
 
 namespace dsrrl::runtime::dof {
 
@@ -24,6 +25,21 @@ struct draw_bridge_telemetry {
 bool register_ptde_draw_bridge_runtime(
     core::renderer_core &core) noexcept;
 void unregister_ptde_draw_bridge_runtime() noexcept;
+
+bool handle_draw_event(
+    reshade::api::command_list *cmd_list,
+    std::uint32_t vertex_count,
+    std::uint32_t instance_count,
+    std::uint32_t first_vertex,
+    std::uint32_t first_instance) noexcept;
+
+bool handle_draw_indexed_event(
+    reshade::api::command_list *cmd_list,
+    std::uint32_t index_count,
+    std::uint32_t instance_count,
+    std::uint32_t first_index,
+    std::int32_t vertex_offset,
+    std::uint32_t first_instance) noexcept;
 
 draw_bridge_telemetry ptde_draw_bridge_status() noexcept;
 

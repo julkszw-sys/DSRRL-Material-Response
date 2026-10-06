@@ -44,6 +44,31 @@ require(fixed,'current->raw_q[slot]=value')
 require(fixed,'g_snapshots[owner_key]=current')
 require(fixed,'desc.Usage=D3D11_USAGE_IMMUTABLE')
 require(fixed,'view_desc.Buffer.NumElements=4u')
+require(fixed,'bool fixed_pointlight_draw_runtime::source_ready() const noexcept')
+require(fixed,'const auto selected=g_draw_snapshot;')
+
+# R52 source-first clustered mode retires the old draw-side sidecar/replacement
+# path. Keep the historical implementation source for provenance, but require
+# current activation to happen only at the exact retail source cut.
+if 'constexpr bool k_clustered_pointlight_receiver_runtime_enabled = false;' in integrated:
+    require(clustered,'k_clustered_source_override_rva = 0xB7E02u;')
+    require(clustered,'k_clustered_source_override_preimage')
+    require(clustered,'clustered_source_override_callback(')
+    require(clustered,'k_ptde_drawparam_homolog_row_masks')
+    require(clustered,'clustered_source_has_ptde_param(')
+    require(clustered,'k_clustered_source_inverse_gamma')
+    require(clustered,'Clustered PntS never performs receiver/material authorization.')
+    callback_start=clustered.find('void __fastcall clustered_source_override_callback(')
+    callback_end=clustered.find('bool build_clustered_source_override_stub(',callback_start)
+    if callback_start<0 or callback_end<=callback_start:
+        raise SystemExit('Clustered source callback boundaries missing')
+    if 'pointlight_ptde_source::capture(' in clustered[callback_start:callback_end]:
+        raise SystemExit('R53 clustered live callback regressed to donor reconstruction')
+    require(integrated,'g_clustered_pointlight_selection_transport_active.store(\n        false,')
+    require(integrated,'!g_fixed_pointlight.source_ready()')
+    print('POINTLIGHT_PTDE_SOURCE_PASS: clustered source-only producer uses exact DrawParam bank+row coverage and analytic inverse-q; live donor reconstruction absent; fixed source gate precedes receiver/material work')
+    print('SCOPE: construction/static activation only; runtime/pixel equivalence remains OPEN')
+    raise SystemExit(0)
 
 # Clustered path: exact retail source class is the authority. R36 removed the
 # duplicate Bank/Lerp host pack on donor success: Bank/Lerp read only the

@@ -636,6 +636,9 @@ bool begin_sequence(
     reshade::api::command_list *cmd_list,
     const scheduler_draw_shape &shape) noexcept
 {
+    // Runtime evidence proved that the exact host pass01 scope and retained
+    // DSR DoF role draws are disjoint. Treat pass01 only as the authoritative
+    // source/depth semantic cut and run the PTDE-private prefix independently.
     if (cmd_list == nullptr ||
         !inside_exact_dof_pass01())
         return false;
@@ -660,8 +663,6 @@ bool begin_sequence(
     ++g_first_pass_hits;
     ++g_sequences_started;
 
-    const auto inputs =
-        scheduler_inputs();
     const auto activation =
         activation_context();
 
@@ -674,7 +675,7 @@ bool begin_sequence(
         execute_ptde_pass(
             cmd_list,
             activation,
-            inputs,
+            scheduler_inputs(),
             shape,
             0u);
 
@@ -687,22 +688,27 @@ bool begin_sequence(
         return false;
     }
 
-    g_sequence.next_pass = 1u;
-
-    const auto pass02 =
-        execute_ptde_pass(
-            cmd_list,
-            activation,
-            inputs,
-            shape,
-            1u);
-
-    if (pass02 != result::executed) {
-        fail_sequence(false);
-        return false;
+    // Passes 1..7 are intrinsic to the PTDE private graph. They must not wait
+    // for stock DSR shaders with similar names to execute. The last pass is
+    // deferred only because pass 0x10 has two verified retained variants.
+    for (std::size_t pass_index = 1u;
+         pass_index < 8u;
+         ++pass_index) {
+        g_sequence.next_pass = pass_index;
+        const auto executed =
+            execute_ptde_pass(
+                cmd_list,
+                activation,
+                scheduler_inputs(),
+                shape,
+                pass_index);
+        if (executed != result::executed) {
+            fail_sequence(false);
+            return false;
+        }
     }
 
-    g_sequence.next_pass = 2u;
+    g_sequence.next_pass = 8u;
     return true;
 }
 
@@ -713,53 +719,31 @@ void advance_sequence(
 {
     if (!g_sequence.active ||
         g_sequence.complete ||
-        g_sequence.next_pass < 2u ||
-        g_sequence.next_pass > 8u)
+        g_sequence.next_pass != 8u)
         return;
 
-    const auto pass_index =
-        g_sequence.next_pass;
-
-    if (!expected_role(
-            pass_index,
-            selected)) {
-        if (is_dof_family_role(selected))
-            fail_sequence(false);
+    // Stock DSR is used only to resolve the verified final pass-0x10 branch.
+    if (selected != role::gauss_y_adv &&
+        selected != role::near_rate)
         return;
-    }
 
-    if (!exact_scope_for_expected(
-            pass_index)) {
-        fail_sequence(false);
-        return;
-    }
+    g_sequence.pass10_role = selected;
 
-    if (pass_index == 8u)
-        g_sequence.pass10_role = selected;
-
-    const auto inputs =
-        scheduler_inputs();
     const auto activation =
         activation_context();
 
-    const auto executed =
-        execute_ptde_pass(
+    if (execute_ptde_pass(
             cmd_list,
             activation,
-            inputs,
+            scheduler_inputs(),
             shape,
-            pass_index);
-
-    if (executed != result::executed) {
+            8u) != result::executed) {
         fail_sequence(false);
         return;
     }
 
-    ++g_sequence.next_pass;
-
-    if (g_sequence.next_pass !=
-        operators::dof::ptde_exact_pass_resources.size())
-        return;
+    g_sequence.next_pass =
+        operators::dof::ptde_exact_pass_resources.size();
 
     if (!acquire_terminal(
             activation)) {
@@ -915,6 +899,29 @@ bool handle_draw(
         cmd_list == nullptr)
         return false;
 
+    // Idle hot path: do not query retained-role state, touch role telemetry,
+    // or inspect ToneMap unless the exact host pass01 scope is live. This
+    // keeps enabled-but-inactive DoF essentially free on ordinary draws.
+    if (!g_sequence.active) {
+        const bool pass01_scope =
+            inside_exact_dof_pass01();
+        if (!pass01_scope)
+            return false;
+
+        g_pass01_scope_draws.fetch_add(
+            1u,
+            std::memory_order_relaxed);
+
+#ifdef DSRRL_DOF_PROFILE
+        profile_scope.set_path(
+            dof_profile_path::begin_sequence);
+#endif
+        (void)begin_sequence(
+            cmd_list,
+            shape);
+        return false;
+    }
+
     if (inside_exact_tonemap_dof_handoff()) {
 #ifdef DSRRL_DOF_PROFILE
         profile_scope.set_path(
@@ -930,99 +937,33 @@ bool handle_draw(
         bound_retained_role(
             cmd_list,
             selected);
-    const bool pass01_scope =
-        inside_exact_dof_pass01();
-
-    if (exact_role) {
-        g_exact_role_draws.fetch_add(
-            1u,
-            std::memory_order_relaxed);
-        const auto role_index =
-            static_cast<std::size_t>(selected);
-        if (role_index < g_role_draw_counts.size()) {
-            g_role_draw_counts[role_index].fetch_add(
-                1u,
-                std::memory_order_relaxed);
-            g_role_last_thread[role_index].store(
-                static_cast<std::uint32_t>(
-                    GetCurrentThreadId()),
-                std::memory_order_relaxed);
-        }
-        if (!g_role_timeline_logged.load(
-                std::memory_order_acquire)) {
-            const auto timeline_index =
-                g_frame_role_timeline_count.fetch_add(
-                    1u,
-                    std::memory_order_relaxed);
-            if (timeline_index <
-                g_frame_role_timeline.size())
-                g_frame_role_timeline[timeline_index].store(
-                    static_cast<std::uint8_t>(selected),
-                    std::memory_order_relaxed);
-        }
-        log_role_resources_once(
-            cmd_list,
-            selected);
-        if (selected == role::depth_copy_msaa) {
-            g_depth_msaa_draws.fetch_add(
-                1u,
-                std::memory_order_relaxed);
-            g_depth_msaa_last_thread.store(
-                static_cast<std::uint32_t>(
-                    GetCurrentThreadId()),
-                std::memory_order_relaxed);
-        }
-    }
-    if (pass01_scope) {
-        g_pass01_scope_draws.fetch_add(
-            1u,
-            std::memory_order_relaxed);
-        if (exact_role) {
-            const auto role_index =
-                static_cast<std::uint32_t>(selected);
-            if (role_index < 32u)
-                g_pass01_role_mask.fetch_or(
-                    1u << role_index,
-                    std::memory_order_relaxed);
-        }
-    }
-    if (inside_exact_dof_pass0d() && exact_role) {
-        const auto role_index =
-            static_cast<std::uint32_t>(selected);
-        if (role_index < 32u)
-            g_pass0d_role_mask.fetch_or(
-                1u << role_index,
-                std::memory_order_relaxed);
-    }
-    if (pass01_scope &&
-        exact_role &&
-        selected == role::depth_copy_msaa)
-        g_depth_msaa_pass01_overlap.fetch_add(
-            1u,
-            std::memory_order_relaxed);
-
-    if (!g_sequence.active) {
-#ifdef DSRRL_DOF_PROFILE
-        profile_scope.set_path(
-            dof_profile_path::idle_scan);
-#endif
-        if (exact_role &&
-            selected == role::depth_copy_msaa &&
-            pass01_scope) {
-#ifdef DSRRL_DOF_PROFILE
-            profile_scope.set_path(
-                dof_profile_path::begin_sequence);
-#endif
-            (void)begin_sequence(
-                cmd_list,
-                shape);
-        }
-
-        return false;
-    }
-
     if (!exact_role)
         return false;
+
+    g_exact_role_draws.fetch_add(
+        1u,
+        std::memory_order_relaxed);
+    const auto role_index =
+        static_cast<std::size_t>(selected);
+    if (role_index < g_role_draw_counts.size()) {
+        g_role_draw_counts[role_index].fetch_add(
+            1u,
+            std::memory_order_relaxed);
+        g_role_last_thread[role_index].store(
+            static_cast<std::uint32_t>(
+                GetCurrentThreadId()),
+            std::memory_order_relaxed);
+    }
+
+    if (selected == role::depth_copy_msaa) {
+        g_depth_msaa_draws.fetch_add(
+            1u,
+            std::memory_order_relaxed);
+        g_depth_msaa_last_thread.store(
+            static_cast<std::uint32_t>(
+                GetCurrentThreadId()),
+            std::memory_order_relaxed);
+    }
 
 #ifdef DSRRL_DOF_PROFILE
     profile_scope.set_path(
@@ -1034,46 +975,6 @@ bool handle_draw(
         selected);
 
     return false;
-}
-
-bool on_draw(
-    reshade::api::command_list *cmd_list,
-    std::uint32_t vertex_count,
-    std::uint32_t instance_count,
-    std::uint32_t first_vertex,
-    std::uint32_t first_instance)
-{
-    scheduler_draw_shape shape{};
-    shape.indexed = false;
-    shape.vertex_count = vertex_count;
-    shape.instance_count = instance_count;
-    shape.first_vertex = first_vertex;
-    shape.first_instance = first_instance;
-
-    return handle_draw(
-        cmd_list,
-        shape);
-}
-
-bool on_draw_indexed(
-    reshade::api::command_list *cmd_list,
-    std::uint32_t index_count,
-    std::uint32_t instance_count,
-    std::uint32_t first_index,
-    std::int32_t vertex_offset,
-    std::uint32_t first_instance)
-{
-    scheduler_draw_shape shape{};
-    shape.indexed = true;
-    shape.index_count = index_count;
-    shape.instance_count = instance_count;
-    shape.first_index = first_index;
-    shape.vertex_offset = vertex_offset;
-    shape.first_instance = first_instance;
-
-    return handle_draw(
-        cmd_list,
-        shape);
 }
 
 void log_status(
@@ -1260,6 +1161,40 @@ void on_present(
 
 } // namespace
 
+bool handle_draw_event(
+    reshade::api::command_list *cmd_list,
+    std::uint32_t vertex_count,
+    std::uint32_t instance_count,
+    std::uint32_t first_vertex,
+    std::uint32_t first_instance) noexcept
+{
+    scheduler_draw_shape shape{};
+    shape.indexed = false;
+    shape.vertex_count = vertex_count;
+    shape.instance_count = instance_count;
+    shape.first_vertex = first_vertex;
+    shape.first_instance = first_instance;
+    return handle_draw(cmd_list, shape);
+}
+
+bool handle_draw_indexed_event(
+    reshade::api::command_list *cmd_list,
+    std::uint32_t index_count,
+    std::uint32_t instance_count,
+    std::uint32_t first_index,
+    std::int32_t vertex_offset,
+    std::uint32_t first_instance) noexcept
+{
+    scheduler_draw_shape shape{};
+    shape.indexed = true;
+    shape.index_count = index_count;
+    shape.instance_count = instance_count;
+    shape.first_index = first_index;
+    shape.vertex_offset = vertex_offset;
+    shape.first_instance = first_instance;
+    return handle_draw(cmd_list, shape);
+}
+
 bool register_ptde_draw_bridge_runtime(
     core::renderer_core &core) noexcept
 {
@@ -1298,6 +1233,10 @@ bool register_ptde_draw_bridge_runtime(
     set_authored_feature(false);
     release_sequence();
 
+    reshade::log::message(
+        reshade::log::level::info,
+        "[DSRRL DoF R52] activation_cut=PASS01_SOURCE_DEPTH private_prefix=PASSES_0_7 stock_branch=PASS10_ONLY tonemap=PTDE_TERMINAL_HANDOFF");
+
     if (!g_opt_in.load(
             std::memory_order_acquire)) {
         reshade::log::message(
@@ -1306,12 +1245,6 @@ bool register_ptde_draw_bridge_runtime(
     }
 
     try {
-        reshade::register_event<
-            reshade::addon_event::draw>(
-                on_draw);
-        reshade::register_event<
-            reshade::addon_event::draw_indexed>(
-                on_draw_indexed);
         reshade::register_event<
             reshade::addon_event::present>(
                 on_present);
@@ -1335,12 +1268,6 @@ void unregister_ptde_draw_bridge_runtime() noexcept
         reshade::unregister_event<
             reshade::addon_event::present>(
                 on_present);
-        reshade::unregister_event<
-            reshade::addon_event::draw_indexed>(
-                on_draw_indexed);
-        reshade::unregister_event<
-            reshade::addon_event::draw>(
-                on_draw);
     }
 
     disable_visible_bridge();

@@ -164,6 +164,11 @@ constexpr bool k_pointlight_drawtime_runtime_enabled = false;
 constexpr bool k_pointlight_drawtime_runtime_enabled = true;
 #endif
 
+// R52 source-first correction: clustered PntS is a producer/source bridge only.
+// Its receiver/material/shader replacement path is intentionally disabled;
+// stock DSR consumes the corrected source state.
+constexpr bool k_clustered_pointlight_receiver_runtime_enabled = false;
+
 // R26: persistent Draw-family vtable ownership is runtime-falsified on the
 // DSR/ReShade host. Use one current-native dispatch under the existing
 // transaction + TLS recursion guard instead.
@@ -3645,6 +3650,42 @@ void log_state(const char *tag) noexcept
         reshade::log::level::info,
         clustered_pl_line);
 
+    char pointlight_source_line[1024]{};
+    std::snprintf(
+        pointlight_source_line,
+        sizeof(pointlight_source_line),
+        "[DSRRL PL SOURCE] tag=%s "
+        "clustered_hit=%llu apply=%llu coverage=%llu/%llu class_reject=%llu authority_cache=%llu/%llu "
+        "clustered_cat=%llu/%llu/%llu/%llu "
+        "fixed_hit=%llu captures=%llu snap2=%llu snap4=%llu fixed_cat=%llu/%llu/%llu/%llu "
+        "fixed_selector=%llu/%llu fixed_requests=%llu",
+        tag,
+        static_cast<unsigned long long>(clustered_pl.source_producer_hits),
+        static_cast<unsigned long long>(clustered_pl.source_capture_ok),
+        static_cast<unsigned long long>(clustered_pl.source_coverage_accept),
+        static_cast<unsigned long long>(clustered_pl.source_coverage_reject),
+        static_cast<unsigned long long>(clustered_pl.source_class_reject),
+        static_cast<unsigned long long>(clustered_pl.source_authority_cache_hit),
+        static_cast<unsigned long long>(clustered_pl.source_authority_cache_miss),
+        static_cast<unsigned long long>(clustered_pl.source_category0),
+        static_cast<unsigned long long>(clustered_pl.source_category1),
+        static_cast<unsigned long long>(clustered_pl.source_category2),
+        static_cast<unsigned long long>(clustered_pl.source_category3),
+        static_cast<unsigned long long>(fixed_pl.producer_hits),
+        static_cast<unsigned long long>(fixed_pl.producer_captures),
+        static_cast<unsigned long long>(fixed_pl.snapshot2_publish),
+        static_cast<unsigned long long>(fixed_pl.snapshot4_publish),
+        static_cast<unsigned long long>(fixed_pl.source_category0),
+        static_cast<unsigned long long>(fixed_pl.source_category1),
+        static_cast<unsigned long long>(fixed_pl.source_category2),
+        static_cast<unsigned long long>(fixed_pl.source_category3),
+        static_cast<unsigned long long>(fixed_pl.selector_seen),
+        static_cast<unsigned long long>(fixed_pl.selector_match),
+        static_cast<unsigned long long>(fixed_pl.requests));
+    reshade::log::message(
+        reshade::log::level::info,
+        pointlight_source_line);
+
     // Compact machine-parseable receiver census. Emit one line rather than
     // 24 lines per checkpoint so long runtime captures remain practical.
     char rx_line[4096]{};
@@ -4044,27 +4085,13 @@ void on_init_device(reshade::api::device *device)
     g_mr_draw_runtime.on_init_device(device);
     g_pmetal_envspec.on_init_device(device);
     if (k_pmetal_direct_current_native_dispatch) {
+        // R52 source-first: do not advertise the retired clustered
+        // replacement/sidecar transaction (R26/R30/R33-R36). Clustered PntS
+        // is source-only and stock DSR owns the receiver. P_Metal may still
+        // use the direct-current-native dispatch independently.
         reshade::log::message(
             reshade::log::level::info,
-            "[DSRRL POINTLIGHT R26] direct_current_native_dispatch=ACTIVE persistent_vtable_hook=OFF recursion_guard=ON");
-        reshade::log::message(
-            reshade::log::level::info,
-            "[DSRRL POINTLIGHT R30] synchronous_core_transaction=ACTIVE exact_clustered_shape_guard=ON global_core_tx_mutex=OFF_FOR_CLUSTERED_DIRECT_NATIVE tls_reentry_guard=ON t18_t19_batch=ON sync_draw_serial_atomic=OFF fallback_general_tx=UNCHANGED");
-        reshade::log::message(
-            reshade::log::level::info,
-            "[DSRRL POINTLIGHT R31] direct_source_class=DirectPointLightEntity dsr_vfunc_rva=0x55C570 ptde_homologue=0x00D34D50 carrier=position_invRange_RGB_End authorization=EXACT_ONLY");
-        reshade::log::message(
-            reshade::log::level::info,
-            "[DSRRL POINTLIGHT R33] clustered_spc_protected_failopen=SUPERSEDED_BY_R35_OWNER_AUTH");
-        reshade::log::message(
-            reshade::log::level::info,
-            "[DSRRL POINTLIGHT R34] source_material_split=ACTIVE source_stage=selector_source_event material_stage=selector_identity_event");
-        reshade::log::message(
-            reshade::log::level::info,
-            "[DSRRL POINTLIGHT R35] owner_authorized_spc_hybrid=ACTIVE clustered_nospc_consumes_ptde_source=ON clustered_spc_consumes_ptde_source=ON spc_material_tail=STOCK_DSR_GGX_SCHLICK local_specular_equivalence=OPEN");
-        reshade::log::message(
-            reshade::log::level::info,
-            "[DSRRL POINTLIGHT R36] bank_lerp_native_double_pack=OFF frame_source_cache=TLS_EXACT_STATE_PER_PRESENT donor_miss_stock_fallback=ON");
+            "[DSRRL R52 SOURCE-FIRST] clustered_receiver_transaction=ABSENT clustered_sidecar=ABSENT fixed_receiver=SOURCE_GATED pmetal_direct_dispatch=UNCHANGED");
     } else if (k_pmetal_native_draw_runtime_enabled) {
         if (!g_pmetal_native_draw.install(device)) {
             reshade::log::message(
@@ -4297,7 +4324,8 @@ bool on_create_pipeline(
             }
         }
 
-        if (k_pointlight_drawtime_runtime_enabled) {
+        if (k_pointlight_drawtime_runtime_enabled &&
+            k_clustered_pointlight_receiver_runtime_enabled) {
             clustered_pnts =
                 dsrrl::operators::point_light::
                     materialize_clustered_pnts_direct_ptde(
@@ -4841,6 +4869,7 @@ bool on_create_pipeline(
             subobjects);
 
     if (k_pointlight_drawtime_runtime_enabled &&
+        k_clustered_pointlight_receiver_runtime_enabled &&
         clustered_pnts_candidate) {
         const auto *attested_host =
             find_pixel_shader(
@@ -4943,6 +4972,7 @@ void on_init_pipeline(
             device, subobject_count, subobjects, pipeline);
     const bool clustered_pointlight_init_exact =
         k_pointlight_drawtime_runtime_enabled &&
+        k_clustered_pointlight_receiver_runtime_enabled &&
         g_clustered_pnts_pipeline.on_init_pipeline(
             device, subobject_count, subobjects, pipeline);
     motion_blur_camera_fallback_disable::
@@ -6569,6 +6599,17 @@ bool on_draw(
         return issued;
     }
 
+    // DoF shares the integrated global draw callback. The DoF bridge itself
+    // is fast-idle gated by the exact host pass01 scope and only suppresses
+    // the stock draw for the exact visible ToneMap terminal handoff.
+    if (dsrrl::runtime::dof::handle_draw_event(
+            cmd_list,
+            vertex_count,
+            instance_count,
+            first_vertex,
+            first_instance))
+        return true;
+
     if (g_hot_telemetry_enabled &&
         dsrrl::runtime::bloom_fx_draw_transport::
             active_draw_scope())
@@ -6620,6 +6661,16 @@ bool on_draw(
     const bool fixed_pointlight_bound =
         (route_mask &
          k_route_fixed_pointlight) != 0u;
+
+    // Fixed PntSS/PntSSSS: accept a fresh legal producer snapshot first.
+    // Receiver/material identity is intentionally downstream of this gate.
+    if (fixed_pointlight_bound &&
+        !g_fixed_pointlight.source_ready()) {
+        hot_count(g_fixed_draw_fail_open);
+        dsrrl::runtime::
+            material_owner_selection_clear();
+        return false;
+    }
 
     bool clustered_pointlight_spc = false;
     bool clustered_pointlight_blended = false;
@@ -6998,6 +7049,15 @@ bool on_draw_indexed(
         return issued;
     }
 
+    if (dsrrl::runtime::dof::handle_draw_indexed_event(
+            cmd_list,
+            index_count,
+            instance_count,
+            first_index,
+            vertex_offset,
+            first_instance))
+        return true;
+
     if (g_hot_telemetry_enabled &&
         dsrrl::runtime::bloom_fx_draw_transport::
             active_draw_scope())
@@ -7049,6 +7109,16 @@ bool on_draw_indexed(
     const bool fixed_pointlight_bound =
         (route_mask &
          k_route_fixed_pointlight) != 0u;
+
+    // Fixed PntSS/PntSSSS: accept a fresh legal producer snapshot first.
+    // Receiver/material identity is intentionally downstream of this gate.
+    if (fixed_pointlight_bound &&
+        !g_fixed_pointlight.source_ready()) {
+        hot_count(g_fixed_draw_fail_open);
+        dsrrl::runtime::
+            material_owner_selection_clear();
+        return false;
+    }
 
     bool clustered_pointlight_spc = false;
     bool clustered_pointlight_blended = false;
@@ -7730,7 +7800,7 @@ bool AddonInit(
 
     const bool flver_hooks =
         dsrrl::runtime::flver_identity_transport::install(
-            k_pointlight_drawtime_runtime_enabled,
+            false, // clustered PntS is source-only; no builder/receiver bridge
             upper_lower_enabled,
             hemdir3_enabled);
 
@@ -7762,25 +7832,25 @@ bool AddonInit(
             "] Fixed PointLight transport FAIL-OPEN: raw-q t19 remains unavailable; stock DSR fixed PointLight preserved.");
     }
 
-    const bool clustered_pointlight_hooks =
+    const bool clustered_pointlight_source_hook =
         k_pointlight_drawtime_runtime_enabled &&
-        flver_hooks &&
         g_clustered_pnts.install();
 
+    // Clustered has no draw-side receiver/material transport in this lineage.
     g_clustered_pointlight_selection_transport_active.store(
-        clustered_pointlight_hooks,
+        false,
         std::memory_order_release);
 
     if (k_pointlight_drawtime_runtime_enabled &&
-        !clustered_pointlight_hooks) {
+        !clustered_pointlight_source_hook) {
         reshade::log::message(
             reshade::log::level::warning,
             "[DSRRL CORE+ISLANDS " DSRRL_CORE_ISLANDS_VERSION
-            "] Clustered PntS transport FAIL-OPEN: first-four sidecar remains unavailable; stock DSR clustered PointLight preserved.");
-    } else if (clustered_pointlight_hooks) {
+            "] Clustered PntS SOURCE FAIL-OPEN: stock DSR source+receiver path preserved.");
+    } else if (clustered_pointlight_source_hook) {
         reshade::log::message(
             reshade::log::level::info,
-            "[DSRRL POINTLIGHT R20] selector_authority_cache=ACTIVE source_selection_cache=PER_PRODUCER_SERIAL gpu_payload_dedupe=PER_CONTEXT draw_cpu_traversal=OFF");
+            "[DSRRL POINTLIGHT R52-SOURCE-FIRST] clustered_source=ACTIVE values=DRAWPARAM donor=OFF coverage=EXACT_BANK_ROW attenuation=A1_LINEAR_ISLAND clustered_receiver=STOCK_DSR material_lookup=OFF route_bit=OFF replacement_ps=OFF");
     }
 
     // Bloom FX transport is diagnostic-only: it does not authorize Q8,

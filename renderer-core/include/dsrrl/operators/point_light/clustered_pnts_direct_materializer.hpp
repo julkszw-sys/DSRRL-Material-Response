@@ -18,6 +18,16 @@ enum class clustered_pnts_direct_materialize_result : std::uint8_t {
     fail_final_sha
 };
 
+inline constexpr std::uint32_t
+    k_clustered_pnts_attenuation_plan_count_v1 = 36u;
+
+struct clustered_pnts_attenuation_plan_v1 {
+    std::uint32_t plan_index = 0xffffffffu;
+    std::size_t host_size = 0u;
+    std::uint32_t representative_shader_index = 0u;
+    bool ready = false;
+};
+
 struct clustered_pnts_direct_materialize_outcome {
     clustered_pnts_direct_materialize_result result =
         clustered_pnts_direct_materialize_result::pass_not_candidate;
@@ -71,6 +81,23 @@ clustered_pnts_required_composed_shader_owners(
 bool migrate_clustered_pnts_legacy_b12_words(
     std::vector<std::uint32_t> &words,
     bool spc) noexcept;
+
+// Exact original-host attestation for the narrow PntS attenuation island.
+// This identifies one of the 36 certified clustered HemEnv/HemEnvLerp bodies
+// without enabling the historical full PTDE receiver replacement.
+bool identify_clustered_pnts_attenuation_plan_v1(
+    const std::uint8_t *source,
+    std::size_t size,
+    clustered_pnts_attenuation_plan_v1 &plan) noexcept;
+
+// Apply only the two certified cubic->linear attenuation token rewrites to an
+// arbitrary same-layout DXBC descendant (for example after A1 composition).
+// Every non-attenuation instruction/chunk remains the current host descendant.
+bool materialize_clustered_pnts_attenuation_only_v1(
+    const clustered_pnts_attenuation_plan_v1 &plan,
+    const std::uint8_t *source,
+    std::size_t size,
+    std::vector<std::uint8_t> &output) noexcept;
 
 clustered_pnts_direct_materialize_outcome
 materialize_clustered_pnts_direct_ptde(

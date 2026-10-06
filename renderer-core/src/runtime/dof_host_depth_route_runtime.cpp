@@ -468,6 +468,64 @@ bool validate_depth_srv(
         desc.SampleDesc.Quality == 0u;
 }
 
+bool acquire_scene_without_cache_drift(
+    ID3D11DeviceContext *context,
+    std::uint32_t source_resource,
+    ID3D11ShaderResourceView **out) noexcept
+{
+    if (out == nullptr)
+        return false;
+    *out = nullptr;
+
+    if (context == nullptr ||
+        source_resource == 0u ||
+        g_pass01_render_context == nullptr ||
+        g_base == 0u)
+        return false;
+
+    // Retail srv_bind indexes current resource IDs at
+    // render_context + 0xD4 + slot*4. Slot 0 is therefore +0xD4.
+    std::uint32_t previous_resource = 0u;
+    if (!process_memory::safe_read_bytes(
+            static_cast<const std::uint8_t *>(
+                g_pass01_render_context) + 0xD4u,
+            &previous_resource,
+            sizeof(previous_resource)))
+        return false;
+
+    const auto bind =
+        reinterpret_cast<srv_bind_fn>(
+            g_base + k_rva_srv_bind);
+
+    bind(
+        g_pass01_render_context,
+        0u,
+        source_resource);
+
+    ID3D11ShaderResourceView *srv = nullptr;
+    context->PSGetShaderResources(
+        0u,
+        1u,
+        &srv);
+
+    bind(
+        g_pass01_render_context,
+        0u,
+        previous_resource);
+
+    if (srv == nullptr)
+        return false;
+
+    if (!validate_scene_srv(srv)) {
+        srv->Release();
+        ++g_abi_reject;
+        return false;
+    }
+
+    *out = srv;
+    return true;
+}
+
 bool acquire_support_without_cache_drift(
     ID3D11DeviceContext *context,
     std::uint32_t support_resource,
@@ -618,18 +676,26 @@ bool capture_host_dof_inputs(
     else
         ++g_mode_alternate;
 
-    ID3D11ShaderResourceView *source = nullptr;
-    context->PSGetShaderResources(
-        0u,
-        1u,
-        &source);
-
-    if (source == nullptr ||
-        !validate_scene_srv(source)) {
-        if (source != nullptr)
-            source->Release();
+    // pass_desc+0x0C is the exact host source resource ID for this
+    // ImageProcessDof_Flat pass. Do not infer scene color from the currently
+    // bound retained-shader t0: runtime proved that r0 t0 is the depth SRV.
+    std::uint32_t source_resource = 0u;
+    if (!process_memory::safe_read_bytes(
+            static_cast<const std::uint8_t *>(
+                g_pass01_desc) + 0x0Cu,
+            &source_resource,
+            sizeof(source_resource)) ||
+        source_resource == 0u) {
         ++g_source_capture_fail;
-        ++g_abi_reject;
+        return false;
+    }
+
+    ID3D11ShaderResourceView *source = nullptr;
+    if (!acquire_scene_without_cache_drift(
+            context,
+            source_resource,
+            &source)) {
+        ++g_source_capture_fail;
         return false;
     }
 

@@ -549,6 +549,145 @@ bool migrate_clustered_pnts_legacy_b12_words(
         spc);
 }
 
+bool identify_clustered_pnts_attenuation_plan_v1(
+    const std::uint8_t *source,
+    std::size_t size,
+    clustered_pnts_attenuation_plan_v1 &plan) noexcept
+{
+    plan = {};
+    if (source == nullptr || size == 0u ||
+        !legacy_plan::dxbc::checksum_container_valid(source, size))
+        return false;
+
+    core::sha256_digest digest{};
+    const auto *matched = find_plan(source, size, digest);
+    if (matched == nullptr)
+        return false;
+
+    const auto *begin = generated::k_clustered_pnts_plans_v1.data();
+    const auto *end = begin + generated::k_clustered_pnts_plans_v1.size();
+    if (matched < begin || matched >= end)
+        return false;
+
+    std::uint32_t attenuation_a = 0u;
+    std::uint32_t attenuation_b = 0u;
+    for (std::uint32_t i = 0u; i < matched->op_count; ++i) {
+        const auto &op =
+            generated::k_clustered_pnts_journal_ops_v1[
+                matched->first_op + i];
+        if (op.old_count != 1u || op.new_count != 1u)
+            continue;
+        const auto old_token =
+            generated::k_clustered_pnts_journal_tokens_v1[op.old_offset];
+        const auto new_token =
+            generated::k_clustered_pnts_journal_tokens_v1[op.new_offset];
+        if (old_token == 0x07000038u &&
+            new_token == 0x07000033u)
+            ++attenuation_a;
+        else if (old_token == 0x07002038u &&
+                 new_token == 0x07002034u)
+            ++attenuation_b;
+    }
+
+    if (attenuation_a != 1u || attenuation_b != 1u)
+        return false;
+
+    plan.plan_index =
+        static_cast<std::uint32_t>(matched - begin);
+    plan.host_size = size;
+    plan.representative_shader_index =
+        matched->representative_shader_index;
+    plan.ready = true;
+    return true;
+}
+
+bool materialize_clustered_pnts_attenuation_only_v1(
+    const clustered_pnts_attenuation_plan_v1 &plan,
+    const std::uint8_t *source,
+    std::size_t size,
+    std::vector<std::uint8_t> &output) noexcept
+{
+    output.clear();
+    if (!plan.ready ||
+        plan.plan_index >= generated::k_clustered_pnts_plans_v1.size() ||
+        source == nullptr ||
+        size == 0u ||
+        size != plan.host_size ||
+        !legacy_plan::dxbc::checksum_container_valid(source, size))
+        return false;
+
+    const auto &matched =
+        generated::k_clustered_pnts_plans_v1[plan.plan_index];
+
+    std::vector<chunk> chunks;
+    std::vector<std::uint32_t> words;
+    std::size_t code_index = 0u;
+    if (!parse_dxbc(
+            source,
+            size,
+            chunks,
+            code_index,
+            words))
+        return false;
+
+    std::uint32_t attenuation_a = 0u;
+    std::uint32_t attenuation_b = 0u;
+    for (std::uint32_t i = 0u; i < matched.op_count; ++i) {
+        const auto &op =
+            generated::k_clustered_pnts_journal_ops_v1[
+                matched.first_op + i];
+        if (op.old_count != 1u || op.new_count != 1u)
+            continue;
+
+        const auto old_token =
+            generated::k_clustered_pnts_journal_tokens_v1[op.old_offset];
+        const auto new_token =
+            generated::k_clustered_pnts_journal_tokens_v1[op.new_offset];
+        bool attenuation = false;
+        if (old_token == 0x07000038u &&
+            new_token == 0x07000033u) {
+            ++attenuation_a;
+            attenuation = true;
+        } else if (old_token == 0x07002038u &&
+                   new_token == 0x07002034u) {
+            ++attenuation_b;
+            attenuation = true;
+        }
+
+        if (!attenuation)
+            continue;
+        if (op.start >= words.size())
+            return false;
+
+        const auto current = words[op.start];
+        if (current != old_token && current != new_token)
+            return false;
+        words[op.start] = new_token;
+    }
+
+    if (attenuation_a != 1u || attenuation_b != 1u)
+        return false;
+
+    // Keep every current chunk, including RDEF. This is a two-word in-place
+    // operator patch composed over the current host descendant, not the old
+    // full clustered replacement.
+    if (!rebuild(
+            source,
+            size,
+            std::move(chunks),
+            words,
+            output) ||
+        output.size() != size ||
+        !legacy_plan::dxbc::checksum_container_valid(
+            output.data(),
+            output.size())) {
+        output.clear();
+        return false;
+    }
+
+    return true;
+}
+
 clustered_pnts_direct_materialize_outcome
 materialize_clustered_pnts_direct_ptde(
     const std::uint8_t *source,
