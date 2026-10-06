@@ -1,4 +1,4 @@
-name: R43 PTDE DoF + PointLight R52 Producer Gate Build
+name: R43 PTDE DoF + PointLight R53 Cycle Attribution Build
 
 on:
   workflow_dispatch:
@@ -59,7 +59,7 @@ jobs:
           -A x64
           -DRESHADE_INCLUDE_DIR="${{ github.workspace }}/_reshade/include"
           -DDSRRL_SOURCE_COMMIT="$env:DSRRL_CHECKOUT_COMMIT"
-          -DDSRRL_BUILD_FLAVOR="pmetal_r43_dof_pointlight_r52_producer_gate"
+          -DDSRRL_BUILD_FLAVOR="pmetal_r43_dof_pointlight_r53_cycle_attribution"
           -DDSRRL_FULL_TELEMETRY_DEFAULT_ON=OFF
           -DDSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG=ON
           -DDSRRL_PMETAL_FULL_PTDE_HEMENV_R3=ON
@@ -87,15 +87,15 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           $addons = @(Get-ChildItem build-fast -Recurse -Filter *.addon64)
           if ($addons.Count -ne 1) { throw "Expected exactly one addon, found $($addons.Count)" }
-          Copy-Item $addons[0].FullName "DSRRL_PMETAL_R43_DOF_POINTLIGHT_R52_PRODUCER_GATE.addon64" -Force
+          Copy-Item $addons[0].FullName "DSRRL_PMETAL_R43_DOF_POINTLIGHT_R53_CYCLE_ATTRIBUTION.addon64" -Force
 
       - name: Verify binary identity
         shell: pwsh
         run: |
-          $path = "DSRRL_PMETAL_R43_DOF_POINTLIGHT_R52_PRODUCER_GATE.addon64"
+          $path = "DSRRL_PMETAL_R43_DOF_POINTLIGHT_R53_CYCLE_ATTRIBUTION.addon64"
           $ascii = [System.Text.Encoding]::ASCII.GetString([System.IO.File]::ReadAllBytes($path))
           if (-not $ascii.Contains($env:DSRRL_CHECKOUT_COMMIT)) { throw "Missing source commit identity" }
-          if (-not $ascii.Contains("pmetal_r43_dof_pointlight_r52_producer_gate")) { throw "Missing R43 DoF/profile build flavor identity" }
+          if (-not $ascii.Contains("pmetal_r43_dof_pointlight_r53_cycle_attribution")) { throw "Missing R43 DoF/profile build flavor identity" }
           if (-not $ascii.Contains("[DSRRL POINTLIGHT R26] direct_current_native_dispatch=ACTIVE persistent_vtable_hook=OFF recursion_guard=ON")) { throw "Missing inherited R26 direct current-native startup marker" }
           if (-not $ascii.Contains("[DSRRL POINTLIGHT R29] exact_structure_snapshot_cache=ACTIVE cross_draw=ON revalidate=VM+MEMCMP pointer_only_authority=OFF gpu_tls_fast_cache=ON per_draw_resource_mutex=OFF per_draw_com_ref_churn=OFF pipeline_tls_fast_path=ON per_draw_private_data=OFF per_draw_shader_ref_churn=OFF failure_propagation=EXACT")) { throw "Missing inherited R29 fast resource/cache/failure-propagation startup marker" }
           if (-not $ascii.Contains("[DSRRL POINTLIGHT R30] synchronous_core_transaction=ACTIVE exact_clustered_shape_guard=ON global_core_tx_mutex=OFF_FOR_CLUSTERED_DIRECT_NATIVE tls_reentry_guard=ON t18_t19_batch=ON sync_draw_serial_atomic=OFF fallback_general_tx=UNCHANGED")) { throw "Missing inherited R30 lock-free synchronous core transaction marker" }
@@ -115,6 +115,7 @@ jobs:
           if (-not $ascii.Contains("[DSRRL POINTLIGHT R40] generational_source_cache_hit=1 exact_state_snapshot=ON invalidation=ACTIVE_COLLECTION_INSERT")) { Write-Host "R40 runtime cache-hit marker is intentionally runtime-only" }
           if (-not $ascii.Contains("[DSRRL POINTLIGHT R51] resolved_donor_fast_path=ON duplicate_lerp_resolution=OFF bank_structure_full_revalidate=ONCE_PER_PRESENT allocation_guard=EACH_LOOKUP vm_region_windows=4xPER_CATEGORY failopen_original_donor=ON")) { throw "Missing R51 PointLight hot-path fix marker" }
           if (-not $ascii.Contains("[DSRRL POINTLIGHT R52] selector_handoff_pre_gate=ON candidate_lookup_skipped_without_exact_producer=ON failopen_equivalence=SELECTOR_EVENT_GATE")) { throw "Missing R52 producer pre-gate marker" }
+          if (-not $ascii.Contains("[DSRRL PERF R53] POINTLIGHT_GATE")) { throw "Missing R53 PointLight CPU-cycle attribution marker" }
           if (-not $ascii.Contains("[DSRRL POINTLIGHT R38] frame_selection_cache_hit=1 exact_input=ON bucket_heads=ON source_revalidation=ON")) { Write-Host "R38 runtime hit marker is intentionally runtime-only" }
           if (-not $ascii.Contains("[DSRRL PERF R47] POINTLIGHT_PREP")) { throw "Missing PointLight thread-cycle profiler marker" }
           if (-not $ascii.Contains("[DSRRL PERF R32] POINTLIGHT_TX")) { throw "Missing PointLight transaction CPU profiler marker" }
@@ -140,6 +141,6 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: DSRRL_PMETAL_R43_DOF_POINTLIGHT_R52_PRODUCER_GATE
-          path: DSRRL_PMETAL_R43_DOF_POINTLIGHT_R52_PRODUCER_GATE.addon64
+          name: DSRRL_PMETAL_R43_DOF_POINTLIGHT_R53_CYCLE_ATTRIBUTION
+          path: DSRRL_PMETAL_R43_DOF_POINTLIGHT_R53_CYCLE_ATTRIBUTION.addon64
           if-no-files-found: error
