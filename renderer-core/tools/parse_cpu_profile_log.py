@@ -67,10 +67,11 @@ def main() -> int:
 
     rows: list[dict] = []
 
-    line = latest.get("selector_r45") or latest.get("selector_r32")
-    if line:
-        p = sample_period(line)
-        n = plain_n(line)
+    selector_line = latest.get("selector_r45") or latest.get("selector_r32")
+    line = selector_line
+    if selector_line:
+        p = sample_period(selector_line)
+        n = plain_n(selector_line)
         stage_keys = [
             ("FLVER_PREFIX", "prefix_us"),
             ("FLVER_RESOLVE", "resolve_us"),
@@ -83,7 +84,7 @@ def main() -> int:
             ("FLVER_RUNTIME_MTD", "runtime_mtd_us"),
             ("FLVER_RUNTIME_PUBLISH", "runtime_publish_us"),
         ]
-        accounted = number(line, "accounted_us")
+        accounted = number(selector_line, "accounted_us")
         if accounted is None:
             values = [number(line, key) for _, key in stage_keys]
             accounted = sum(v for v in values if v is not None)
@@ -102,12 +103,12 @@ def main() -> int:
 
     line = latest.get("pointlight_tx")
     if line:
-        add(rows, "POINTLIGHT_TRANSACTION", number(line, "total_us"),
+        add(rows, "POINTLIGHT_TRANSACTION", number(selector_line, "total_us"),
             plain_n(line), sample_period(line))
 
     line = latest.get("dof")
     if line:
-        add(rows, "DOF_DRAW_CALLBACK", number(line, "total_us"),
+        add(rows, "DOF_DRAW_CALLBACK", number(selector_line, "total_us"),
             plain_n(line), sample_period(line))
 
     rows.sort(
@@ -122,12 +123,12 @@ def main() -> int:
             "rows": rows,
             "selector_wall_envelope": (
                 {
-                    "avg_wall_us": number(line, "total_wall_us") or number(line, "total_us"),
-                    "max_wall_us": number(line, "max_total_wall_us") or number(line, "max_total_us"),
-                    "unaccounted_wall_us": number(line, "unaccounted_wall_us"),
+                    "avg_wall_us": number(selector_line, "total_wall_us") or number(selector_line, "total_us"),
+                    "max_wall_us": number(selector_line, "max_total_wall_us") or number(selector_line, "max_total_us"),
+                    "unaccounted_wall_us": number(selector_line, "unaccounted_wall_us"),
                     "note": "Wall envelope is scheduler/preemption-sensitive and is excluded from CPU ranking.",
                 }
-                if line else None
+                if selector_line else None
             ),
             "markers_found": sorted(latest),
         }, indent=2))
@@ -139,10 +140,10 @@ def main() -> int:
 
     print("DSRRL CPU HOTSPOT RANKING")
     print("NOTE: sampled/extrapolated; nested substages are not additive.")
-    if line:
-        wall = number(line, "total_wall_us") or number(line, "total_us")
-        max_wall = number(line, "max_total_wall_us") or number(line, "max_total_us")
-        unaccounted = number(line, "unaccounted_wall_us")
+    if selector_line:
+        wall = number(selector_line, "total_wall_us") or number(selector_line, "total_us")
+        max_wall = number(selector_line, "max_total_wall_us") or number(selector_line, "max_total_us")
+        unaccounted = number(selector_line, "unaccounted_wall_us")
         if wall is not None:
             suffix = (
                 f", unaccounted={unaccounted:.3f} us"
