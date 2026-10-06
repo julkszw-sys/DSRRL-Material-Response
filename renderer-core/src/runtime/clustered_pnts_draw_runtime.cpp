@@ -2215,6 +2215,27 @@ void clustered_pnts_selector_event_bridge(
             actual_material);
 }
 
+bool clustered_pnts_selector_handoff_ready_bridge(
+    void *owner) noexcept
+{
+    if (g_runtime == nullptr ||
+        !g_enabled.load(std::memory_order_relaxed) ||
+        g_quarantined.load(std::memory_order_relaxed) ||
+        owner == nullptr)
+        return false;
+
+    const auto owner_key =
+        reinterpret_cast<std::uintptr_t>(owner);
+
+    // Exact same-thread producer handoff. This is the same authority gate
+    // selector_event() enforces before any PointLight work can become visible.
+    // Expose it so callers can skip material-candidate lookup and bridge calls
+    // that are guaranteed to fail open.
+    return
+        g_producer_input_tls.valid &&
+        g_producer_input_tls.owner == owner_key;
+}
+
 void clustered_pnts_selector_source_event_bridge() noexcept
 {
     if (g_runtime != nullptr)
@@ -2328,6 +2349,14 @@ bool clustered_pnts_draw_runtime::install() noexcept
         reshade::log::message(
             reshade::log::level::info,
             "[DSRRL POINTLIGHT R51] resolved_donor_fast_path=ON duplicate_lerp_resolution=OFF bank_structure_full_revalidate=ONCE_PER_PRESENT allocation_guard=EACH_LOOKUP vm_region_windows=4xPER_CATEGORY failopen_original_donor=ON");
+    static std::atomic_bool
+        r52_gate_logged{false};
+    if (!r52_gate_logged.exchange(
+            true,
+            std::memory_order_relaxed))
+        reshade::log::message(
+            reshade::log::level::info,
+            "[DSRRL POINTLIGHT R52] selector_handoff_pre_gate=ON candidate_lookup_skipped_without_exact_producer=ON failopen_equivalence=SELECTOR_EVENT_GATE");
     return true;
 }
 
