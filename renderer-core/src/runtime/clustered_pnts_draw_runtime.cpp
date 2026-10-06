@@ -1132,6 +1132,66 @@ thread_local pointlight_ptde_source::
     draw_bank_authority_cache
     g_clustered_source_bank_cache{};
 
+struct clustered_source_payload_key_v1 {
+    const void *source = nullptr;
+    std::uintptr_t target = 0u;
+    std::uintptr_t owner = 0u;
+    std::uint32_t selector_word0 = 0u;
+    std::uint32_t selector_word1 = 0u;
+    std::uint64_t semantic_generation = 0u;
+};
+
+struct clustered_source_payload_cache_entry_v1 {
+    clustered_source_payload_key_v1 key{};
+    std::array<float,5> payload{};
+    bool valid = false;
+};
+
+constexpr std::size_t k_clustered_source_payload_cache_entries = 256u;
+static_assert(
+    (k_clustered_source_payload_cache_entries &
+     (k_clustered_source_payload_cache_entries - 1u)) == 0u);
+
+thread_local std::array<
+    clustered_source_payload_cache_entry_v1,
+    k_clustered_source_payload_cache_entries>
+    g_clustered_source_payload_cache{};
+
+std::size_t clustered_source_payload_cache_index(
+    const clustered_source_payload_key_v1 &key) noexcept
+{
+    std::uint64_t h =
+        static_cast<std::uint64_t>(
+            reinterpret_cast<std::uintptr_t>(
+                key.source)) >> 4u;
+    const auto mix = [&h](std::uint64_t v) noexcept {
+        h ^= v +
+             0x9e3779b97f4a7c15ull +
+             (h << 6u) +
+             (h >> 2u);
+    };
+    mix(static_cast<std::uint64_t>(key.target));
+    mix(static_cast<std::uint64_t>(key.owner));
+    mix(static_cast<std::uint64_t>(key.selector_word0));
+    mix(static_cast<std::uint64_t>(key.selector_word1));
+    mix(key.semantic_generation);
+    return static_cast<std::size_t>(
+        h & (k_clustered_source_payload_cache_entries - 1u));
+}
+
+bool same_clustered_source_payload_key(
+    const clustered_source_payload_key_v1 &a,
+    const clustered_source_payload_key_v1 &b) noexcept
+{
+    return
+        a.source == b.source &&
+        a.target == b.target &&
+        a.owner == b.owner &&
+        a.selector_word0 == b.selector_word0 &&
+        a.selector_word1 == b.selector_word1 &&
+        a.semantic_generation == b.semantic_generation;
+}
+
 void source_hook_emit_u64(
     std::vector<std::uint8_t> &out,
     std::uint64_t value)
@@ -1199,40 +1259,115 @@ void __fastcall clustered_source_override_callback(
         g_base == 0u)
         return;
 
-    std::array<float,8> candidate{};
+    // This callback executes inside the exact attested retail source producer,
+    // so the source object and its vtable are already live. Build a tiny
+    // semantic key directly from source identity + bank/lerp selector state.
+    // Deliberately exclude world position: motion changes geometry.xyz, not
+    // the PTDE Bank/Lerp payload {invRange, RGB, End}.
+    void **vtable = nullptr;
     std::memcpy(
-        candidate.data(),
-        geometry,
-        4u * sizeof(float));
-    std::memcpy(
-        candidate.data() + 4u,
-        color_end,
-        4u * sizeof(float));
-
-    // Exact Bank/LerpBank donors only. Direct/SFX/unknown source classes
-    // remain byte-for-byte stock DSR.
-    if (!pointlight_ptde_source::capture(
-            source,
-            g_base,
-            candidate,
-            g_clustered_source_bank_cache))
+        &vtable,
+        source,
+        sizeof(vtable));
+    if (vtable == nullptr)
         return;
 
-    for (std::size_t i = 3u; i < candidate.size(); ++i)
-        if (!std::isfinite(candidate[i]))
+    void *target = nullptr;
+    std::memcpy(
+        &target,
+        vtable + 12u,
+        sizeof(target));
+    const auto target_address =
+        reinterpret_cast<std::uintptr_t>(
+            target);
+    if (target_address != g_base + 0x55BC00u &&
+        target_address != g_base + 0x55D0B0u)
+        return;
+
+    clustered_source_payload_key_v1 key{};
+    key.source = source;
+    key.target = target_address;
+    std::memcpy(
+        &key.owner,
+        static_cast<const std::uint8_t *>(
+            source) + 0x50u,
+        sizeof(key.owner));
+    std::memcpy(
+        &key.selector_word0,
+        static_cast<const std::uint8_t *>(
+            source) + 0x58u,
+        sizeof(key.selector_word0));
+    std::memcpy(
+        &key.selector_word1,
+        static_cast<const std::uint8_t *>(
+            source) + 0x5Cu,
+        sizeof(key.selector_word1));
+    key.semantic_generation =
+        g_source_semantic_generation.load(
+            std::memory_order_acquire);
+
+    if (key.owner == 0u)
+        return;
+
+    const auto cache_index =
+        clustered_source_payload_cache_index(
+            key);
+    auto &cached =
+        g_clustered_source_payload_cache[
+            cache_index];
+
+    std::array<float,5> payload{};
+    if (cached.valid &&
+        same_clustered_source_payload_key(
+            cached.key,
+            key)) {
+        payload = cached.payload;
+    } else {
+        std::array<float,8> candidate{};
+        std::memcpy(
+            candidate.data(),
+            geometry,
+            4u * sizeof(float));
+        std::memcpy(
+            candidate.data() + 4u,
+            color_end,
+            4u * sizeof(float));
+
+        // Heavy Bank/Lerp donor reconstruction runs only when semantic source
+        // state changes. Dynamic source movement no longer invalidates it.
+        if (!pointlight_ptde_source::capture(
+                source,
+                g_base,
+                candidate,
+                g_clustered_source_bank_cache))
             return;
-    if (!(candidate[3] > 0.0f) ||
-        !(candidate[7] > 0.0f))
-        return;
+
+        for (std::size_t i = 3u;
+             i < candidate.size();
+             ++i)
+            if (!std::isfinite(candidate[i]))
+                return;
+        if (!(candidate[3] > 0.0f) ||
+            !(candidate[7] > 0.0f))
+            return;
+
+        for (std::size_t i = 0u;
+             i < payload.size();
+             ++i)
+            payload[i] =
+                candidate[3u + i];
+
+        cached.key = key;
+        cached.payload = payload;
+        cached.valid = true;
+    }
 
     // Preserve stock DSR position.xyz and all category metadata/falloff-mode
-    // lanes. Replace only the source carrier that PTDE owns: invRange,
-    // source RGB and End. The following retail instructions write this result
-    // into stock t18, and the original DSR receiver consumes it unchanged.
-    geometry[3] = candidate[3];
+    // lanes. Replace only the source carrier that PTDE owns.
+    geometry[3] = payload[0];
     std::memcpy(
         color_end,
-        candidate.data() + 4u,
+        payload.data() + 1u,
         4u * sizeof(float));
 
     telemetry::hot_count(
@@ -2701,6 +2836,7 @@ void clustered_pnts_draw_runtime::uninstall() noexcept
             std::memory_order_relaxed);
     }
     g_clustered_source_bank_cache = {};
+    g_clustered_source_payload_cache = {};
     g_source_exec_attested.store(
         false,
         std::memory_order_relaxed);
