@@ -112,8 +112,11 @@ def main():
         "if (k_pointlight_drawtime_runtime_enabled &&\n        clustered_pnts_candidate)",
         "PointLight post-A1 registration bypass")
     require(flver_cpp,
-        "if (g_state.builder_armed &&\n        operators::material_response::\n            direct_pointlight_material_candidate(",
-        "clustered selector bridge is gated by exact PointLight material authority")
+        "clustered_pnts_selector_handoff_ready_bridge(\n            owner)",
+        "clustered selector bridge is pre-gated by exact same-thread producer handoff")
+    require(flver_cpp,
+        "direct_pointlight_material_candidate(\n                identity,\n                pointlight_spc)",
+        "clustered selector bridge remains gated by exact PointLight material authority")
     require(flver_cpp,
         "clustered_pnts_selector_event_bridge(\n            owner,\n            actual_material);",
         "clustered selector bridge receives exact material only after PointLight prefilter")
