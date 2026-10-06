@@ -1170,7 +1170,8 @@ clustered_live_source_result classify_clustered_source_bank(
             cache,
             signature,
             nullptr,
-            &signature_failure)) {
+            &signature_failure,
+            false)) {
         using failure =
             pointlight_ptde_source::
                 bank_structure_signature_failure;
@@ -1299,12 +1300,22 @@ clustered_live_source_result read_clustered_live_drawparam_row(
     };
     static_assert(sizeof(live_row_v1) == 16u);
 
+    std::uint32_t row_offset = 0u;
+    const auto row_offset_address =
+        param + 0x34u +
+        static_cast<std::uintptr_t>(row_id) * 12u;
+    if (!pointlight_ptde_source::read_cached(
+            row_offset_address,
+            row_offset,
+            cache) ||
+        row_offset < 0x30u ||
+        row_offset > 0x100000u)
+        return clustered_live_source_result::invalid_row_read;
+
     live_row_v1 row{};
     const auto row_address =
         param +
-        static_cast<std::uintptr_t>(first) +
-        static_cast<std::uintptr_t>(row_id) *
-            sizeof(live_row_v1);
+        static_cast<std::uintptr_t>(row_offset);
     if (!pointlight_ptde_source::read_cached(
             row_address,
             row,
