@@ -29,6 +29,8 @@ struct host_depth_route_telemetry {
     std::uint64_t support_capture_ok = 0u;
     std::uint64_t support_capture_fail = 0u;
     std::uint64_t abi_reject = 0u;
+    std::uint32_t pass01_last_thread = 0u;
+    std::uint32_t pass0d_last_thread = 0u;
     bool pass01_hook_ready = false;
     bool pass0d_hook_ready = false;
 };
