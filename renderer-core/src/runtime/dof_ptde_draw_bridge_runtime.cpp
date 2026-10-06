@@ -899,6 +899,29 @@ bool handle_draw(
         cmd_list == nullptr)
         return false;
 
+    // Idle hot path: do not query retained-role state, touch role telemetry,
+    // or inspect ToneMap unless the exact host pass01 scope is live. This
+    // keeps enabled-but-inactive DoF essentially free on ordinary draws.
+    if (!g_sequence.active) {
+        const bool pass01_scope =
+            inside_exact_dof_pass01();
+        if (!pass01_scope)
+            return false;
+
+        g_pass01_scope_draws.fetch_add(
+            1u,
+            std::memory_order_relaxed);
+
+#ifdef DSRRL_DOF_PROFILE
+        profile_scope.set_path(
+            dof_profile_path::begin_sequence);
+#endif
+        (void)begin_sequence(
+            cmd_list,
+            shape);
+        return false;
+    }
+
     if (inside_exact_tonemap_dof_handoff()) {
 #ifdef DSRRL_DOF_PROFILE
         profile_scope.set_path(
@@ -914,97 +937,33 @@ bool handle_draw(
         bound_retained_role(
             cmd_list,
             selected);
-    const bool pass01_scope =
-        inside_exact_dof_pass01();
-
-    if (exact_role) {
-        g_exact_role_draws.fetch_add(
-            1u,
-            std::memory_order_relaxed);
-        const auto role_index =
-            static_cast<std::size_t>(selected);
-        if (role_index < g_role_draw_counts.size()) {
-            g_role_draw_counts[role_index].fetch_add(
-                1u,
-                std::memory_order_relaxed);
-            g_role_last_thread[role_index].store(
-                static_cast<std::uint32_t>(
-                    GetCurrentThreadId()),
-                std::memory_order_relaxed);
-        }
-        if (!g_role_timeline_logged.load(
-                std::memory_order_acquire)) {
-            const auto timeline_index =
-                g_frame_role_timeline_count.fetch_add(
-                    1u,
-                    std::memory_order_relaxed);
-            if (timeline_index <
-                g_frame_role_timeline.size())
-                g_frame_role_timeline[timeline_index].store(
-                    static_cast<std::uint8_t>(selected),
-                    std::memory_order_relaxed);
-        }
-        log_role_resources_once(
-            cmd_list,
-            selected);
-        if (selected == role::depth_copy_msaa) {
-            g_depth_msaa_draws.fetch_add(
-                1u,
-                std::memory_order_relaxed);
-            g_depth_msaa_last_thread.store(
-                static_cast<std::uint32_t>(
-                    GetCurrentThreadId()),
-                std::memory_order_relaxed);
-        }
-    }
-    if (pass01_scope) {
-        g_pass01_scope_draws.fetch_add(
-            1u,
-            std::memory_order_relaxed);
-        if (exact_role) {
-            const auto role_index =
-                static_cast<std::uint32_t>(selected);
-            if (role_index < 32u)
-                g_pass01_role_mask.fetch_or(
-                    1u << role_index,
-                    std::memory_order_relaxed);
-        }
-    }
-    if (inside_exact_dof_pass0d() && exact_role) {
-        const auto role_index =
-            static_cast<std::uint32_t>(selected);
-        if (role_index < 32u)
-            g_pass0d_role_mask.fetch_or(
-                1u << role_index,
-                std::memory_order_relaxed);
-    }
-    if (pass01_scope &&
-        exact_role &&
-        selected == role::depth_copy_msaa)
-        g_depth_msaa_pass01_overlap.fetch_add(
-            1u,
-            std::memory_order_relaxed);
-
-    if (!g_sequence.active) {
-#ifdef DSRRL_DOF_PROFILE
-        profile_scope.set_path(
-            dof_profile_path::idle_scan);
-#endif
-        if (pass01_scope) {
-#ifdef DSRRL_DOF_PROFILE
-            profile_scope.set_path(
-                dof_profile_path::begin_sequence);
-#endif
-            (void)begin_sequence(
-                cmd_list,
-                shape);
-        }
-
-        return false;
-    }
-
     if (!exact_role)
         return false;
+
+    g_exact_role_draws.fetch_add(
+        1u,
+        std::memory_order_relaxed);
+    const auto role_index =
+        static_cast<std::size_t>(selected);
+    if (role_index < g_role_draw_counts.size()) {
+        g_role_draw_counts[role_index].fetch_add(
+            1u,
+            std::memory_order_relaxed);
+        g_role_last_thread[role_index].store(
+            static_cast<std::uint32_t>(
+                GetCurrentThreadId()),
+            std::memory_order_relaxed);
+    }
+
+    if (selected == role::depth_copy_msaa) {
+        g_depth_msaa_draws.fetch_add(
+            1u,
+            std::memory_order_relaxed);
+        g_depth_msaa_last_thread.store(
+            static_cast<std::uint32_t>(
+                GetCurrentThreadId()),
+            std::memory_order_relaxed);
+    }
 
 #ifdef DSRRL_DOF_PROFILE
     profile_scope.set_path(
@@ -1016,46 +975,6 @@ bool handle_draw(
         selected);
 
     return false;
-}
-
-bool on_draw(
-    reshade::api::command_list *cmd_list,
-    std::uint32_t vertex_count,
-    std::uint32_t instance_count,
-    std::uint32_t first_vertex,
-    std::uint32_t first_instance)
-{
-    scheduler_draw_shape shape{};
-    shape.indexed = false;
-    shape.vertex_count = vertex_count;
-    shape.instance_count = instance_count;
-    shape.first_vertex = first_vertex;
-    shape.first_instance = first_instance;
-
-    return handle_draw(
-        cmd_list,
-        shape);
-}
-
-bool on_draw_indexed(
-    reshade::api::command_list *cmd_list,
-    std::uint32_t index_count,
-    std::uint32_t instance_count,
-    std::uint32_t first_index,
-    std::int32_t vertex_offset,
-    std::uint32_t first_instance)
-{
-    scheduler_draw_shape shape{};
-    shape.indexed = true;
-    shape.index_count = index_count;
-    shape.instance_count = instance_count;
-    shape.first_index = first_index;
-    shape.vertex_offset = vertex_offset;
-    shape.first_instance = first_instance;
-
-    return handle_draw(
-        cmd_list,
-        shape);
 }
 
 void log_status(
@@ -1242,6 +1161,40 @@ void on_present(
 
 } // namespace
 
+bool handle_draw_event(
+    reshade::api::command_list *cmd_list,
+    std::uint32_t vertex_count,
+    std::uint32_t instance_count,
+    std::uint32_t first_vertex,
+    std::uint32_t first_instance) noexcept
+{
+    scheduler_draw_shape shape{};
+    shape.indexed = false;
+    shape.vertex_count = vertex_count;
+    shape.instance_count = instance_count;
+    shape.first_vertex = first_vertex;
+    shape.first_instance = first_instance;
+    return handle_draw(cmd_list, shape);
+}
+
+bool handle_draw_indexed_event(
+    reshade::api::command_list *cmd_list,
+    std::uint32_t index_count,
+    std::uint32_t instance_count,
+    std::uint32_t first_index,
+    std::int32_t vertex_offset,
+    std::uint32_t first_instance) noexcept
+{
+    scheduler_draw_shape shape{};
+    shape.indexed = true;
+    shape.index_count = index_count;
+    shape.instance_count = instance_count;
+    shape.first_index = first_index;
+    shape.vertex_offset = vertex_offset;
+    shape.first_instance = first_instance;
+    return handle_draw(cmd_list, shape);
+}
+
 bool register_ptde_draw_bridge_runtime(
     core::renderer_core &core) noexcept
 {
@@ -1293,12 +1246,6 @@ bool register_ptde_draw_bridge_runtime(
 
     try {
         reshade::register_event<
-            reshade::addon_event::draw>(
-                on_draw);
-        reshade::register_event<
-            reshade::addon_event::draw_indexed>(
-                on_draw_indexed);
-        reshade::register_event<
             reshade::addon_event::present>(
                 on_present);
 
@@ -1321,12 +1268,6 @@ void unregister_ptde_draw_bridge_runtime() noexcept
         reshade::unregister_event<
             reshade::addon_event::present>(
                 on_present);
-        reshade::unregister_event<
-            reshade::addon_event::draw_indexed>(
-                on_draw_indexed);
-        reshade::unregister_event<
-            reshade::addon_event::draw>(
-                on_draw);
     }
 
     disable_visible_bridge();
