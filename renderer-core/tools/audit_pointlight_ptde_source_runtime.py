@@ -44,6 +44,23 @@ require(fixed,'current->raw_q[slot]=value')
 require(fixed,'g_snapshots[owner_key]=current')
 require(fixed,'desc.Usage=D3D11_USAGE_IMMUTABLE')
 require(fixed,'view_desc.Buffer.NumElements=4u')
+require(fixed,'bool fixed_pointlight_draw_runtime::source_ready() const noexcept')
+require(fixed,'const auto selected=g_producer_snapshot;')
+
+# R52 source-first clustered mode retires the old draw-side sidecar/replacement
+# path. Keep the historical implementation source for provenance, but require
+# current activation to happen only at the exact retail source cut.
+if 'constexpr bool k_clustered_pointlight_receiver_runtime_enabled = false;' in integrated:
+    require(clustered,'k_clustered_source_override_rva = 0xB7D25u;')
+    require(clustered,'k_clustered_source_override_preimage')
+    require(clustered,'clustered_source_override_callback(')
+    require(clustered,'pointlight_ptde_source::capture(')
+    require(clustered,'Clustered PntS never performs receiver/material authorization.')
+    require(integrated,'g_clustered_pointlight_selection_transport_active.store(\n        false,')
+    require(integrated,'!g_fixed_pointlight.source_ready()')
+    print('POINTLIGHT_PTDE_SOURCE_PASS: clustered source-only producer cut active; clustered receiver/material path retired; fixed source gate precedes receiver/material work')
+    print('SCOPE: construction/static activation only; runtime/pixel equivalence remains OPEN')
+    raise SystemExit(0)
 
 # Clustered path: exact retail source class is the authority. R36 removed the
 # duplicate Bank/Lerp host pack on donor success: Bank/Lerp read only the
