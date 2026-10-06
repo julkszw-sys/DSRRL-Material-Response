@@ -42,6 +42,7 @@ def main():
     pmetal_source=(root/"src/runtime/pmetal_env_source_runtime.cpp").read_text(encoding="utf-8")
     clustered=(root/"src/runtime/clustered_pnts_draw_runtime.cpp").read_text(encoding="utf-8")
     dof_draw=(root/"src/runtime/dof_ptde_draw_bridge_runtime.cpp").read_text(encoding="utf-8")
+    dof_depth=(root/"src/runtime/dof_host_depth_route_runtime.cpp").read_text(encoding="utf-8")
     resources=(root/"src/runtime/material_resource_draw_runtime.cpp").read_text(encoding="utf-8")
     hemdir3_mode=(root/"src/runtime/hemdir3_mode_transport.cpp").read_text(encoding="utf-8")
     draw_tx=(root/"src/runtime/draw_state_transaction.cpp").read_text(encoding="utf-8")
