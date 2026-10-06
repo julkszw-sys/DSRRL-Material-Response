@@ -837,6 +837,10 @@ void log_source_capture_failure_once(
     void *node,
     const void *target) noexcept
 {
+    if ((g_source_capture_reason_mask.load(
+             std::memory_order_relaxed) & bit) != 0u)
+        return;
+
     const auto previous =
         g_source_capture_reason_mask.fetch_or(
             bit,
@@ -1529,6 +1533,19 @@ void __fastcall clustered_source_override_callback(
     if (target_address != g_base + 0x55BC00u &&
         target_address != g_base + 0x55D0B0u) {
         telemetry::hot_count(g_source_class_reject);
+        if (target_address == g_base + 0x55C570u) {
+            log_source_capture_failure_once(
+                1u << 8,
+                "source_class_direct_stock_dsr",
+                source,
+                target);
+        } else {
+            log_source_capture_failure_once(
+                1u << 9,
+                "source_class_other_stock_dsr",
+                source,
+                target);
+        }
         return;
     }
 
@@ -1613,6 +1630,41 @@ void __fastcall clustered_source_override_callback(
             } else {
                 telemetry::hot_count(
                     g_source_capture_fail);
+                std::uint32_t bit = 1u << 23;
+                const char *reason = "live_drawparam_unknown";
+                switch (live_result) {
+                case clustered_live_source_result::invalid_node_or_base:
+                    bit = 1u << 10; reason = "live_node_or_base"; break;
+                case clustered_live_source_result::invalid_vtable:
+                    bit = 1u << 11; reason = "live_vtable"; break;
+                case clustered_live_source_result::invalid_owner:
+                    bit = 1u << 12; reason = "live_owner"; break;
+                case clustered_live_source_result::invalid_selector:
+                    bit = 1u << 13; reason = "live_selector"; break;
+                case clustered_live_source_result::invalid_selector_policy:
+                    bit = 1u << 14; reason = "live_selector_policy"; break;
+                case clustered_live_source_result::invalid_selected_source:
+                    bit = 1u << 15; reason = "live_selected_source"; break;
+                case clustered_live_source_result::invalid_param:
+                    bit = 1u << 16; reason = "live_param"; break;
+                case clustered_live_source_result::invalid_count_or_row:
+                    bit = 1u << 17; reason = "live_count_or_row"; break;
+                case clustered_live_source_result::invalid_bank_structure:
+                    bit = 1u << 18; reason = "live_bank_structure"; break;
+                case clustered_live_source_result::invalid_row_read:
+                    bit = 1u << 19; reason = "live_row_read"; break;
+                case clustered_live_source_result::invalid_row_numeric:
+                    bit = 1u << 20; reason = "live_row_numeric"; break;
+                case clustered_live_source_result::invalid_mix:
+                    bit = 1u << 21; reason = "live_mix"; break;
+                default:
+                    break;
+                }
+                log_source_capture_failure_once(
+                    bit,
+                    reason,
+                    source,
+                    target);
             }
             return;
         }
