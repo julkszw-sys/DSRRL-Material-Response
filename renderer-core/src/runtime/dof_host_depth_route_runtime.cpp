@@ -338,9 +338,16 @@ bool classify_first_pass01(
     support_resource = 0u;
 
     if (g_pass01_depth == 0u ||
-        g_pass01_desc == nullptr)
+        g_pass01_desc == nullptr ||
+        g_pass01_render_context == nullptr)
         return false;
 
+    // Exact retail ImageProcessDof_Flat pass01 routing at 0x455960:
+    //   original source = [pass_desc + 0x0C]
+    //   authoritative source = [image_state + 0x78]
+    //   support t1 = [image_state + 0x88] normally, or +0xC0 when
+    //                render_context[0x24B8] selects the alternate support.
+    // Do not require unrelated +0x250/+0x230 resources: retail pass01 does not.
     std::uint32_t original_source = 0u;
     if (!process_memory::safe_read_bytes(
             static_cast<const std::uint8_t *>(
@@ -354,34 +361,37 @@ bool classify_first_pass01(
     if (!read_image_state(image_state))
         return false;
 
-    std::uint32_t primary_source = 0u;
-    std::uint32_t alternate_source = 0u;
-    std::uint32_t primary_support = 0u;
-    std::uint32_t alternate_support = 0u;
-
+    std::uint32_t retail_source = 0u;
     if (!read_resource_id(
-            image_state, 0x78u, primary_source) ||
-        !read_resource_id(
-            image_state, 0x250u, alternate_source) ||
-        !read_resource_id(
-            image_state, 0x88u, primary_support) ||
-        !read_resource_id(
-            image_state, 0x230u, alternate_support))
+            image_state,
+            0x78u,
+            retail_source) ||
+        original_source != retail_source)
         return false;
 
-    if (original_source == primary_source) {
-        mode = operators::dof::flat_mode::primary;
-        support_resource = primary_support;
-        return true;
-    }
+    std::uint8_t alternate_support = 0u;
+    if (!process_memory::safe_read_bytes(
+            static_cast<const std::uint8_t *>(
+                g_pass01_render_context) + 0x24B8u,
+            &alternate_support,
+            sizeof(alternate_support)))
+        return false;
 
-    if (original_source == alternate_source) {
-        mode = operators::dof::flat_mode::alternate;
-        support_resource = alternate_support;
-        return true;
-    }
+    const std::size_t support_offset =
+        alternate_support != 0u
+            ? 0xC0u
+            : 0x88u;
+    if (!read_resource_id(
+            image_state,
+            support_offset,
+            support_resource))
+        return false;
 
-    return false;
+    mode =
+        alternate_support != 0u
+            ? operators::dof::flat_mode::alternate
+            : operators::dof::flat_mode::primary;
+    return true;
 }
 
 bool validate_scene_srv(
