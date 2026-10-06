@@ -10,6 +10,7 @@
 #include "dsrrl/core/renderer_core.hpp"
 #include "dsrrl/runtime/dof_process_memory.hpp"
 
+#include <reshade.hpp>
 #include <Windows.h>
 
 #include <array>
@@ -18,6 +19,7 @@
 #include <cstdint>
 #include <cstring>
 #include <cmath>
+#include <cstdio>
 
 namespace dsrrl::runtime::dof {
 namespace {
@@ -89,6 +91,7 @@ std::atomic<std::uint64_t> g_calls{0};
 std::atomic<std::uint64_t> g_matches{0};
 std::atomic<std::uint64_t> g_misses{0};
 std::atomic<std::uint64_t> g_applied{0};
+std::atomic<bool> g_first_applied_state_logged{false};
 
 struct cached_bank {
     const std::uint8_t *param = nullptr;
@@ -356,6 +359,12 @@ void __fastcall hook_producer(
     if(!out)
         return;
 
+    std::array<float,7> stock_state{};
+    std::memcpy(
+        stock_state.data(),
+        out,
+        sizeof(stock_state));
+
     // Stock DSR owns source and row selection. Read the exact live DrawParam
     // records selected by DSR; do not remap them through an embedded donor table.
     decoded_state a{},b{};
@@ -375,6 +384,54 @@ void __fastcall hook_producer(
     if(!blend_live_rows(a,b,beta,state)){
         ++g_misses;
         return;
+    }
+
+    if(!g_first_applied_state_logged.exchange(
+           true,
+           std::memory_order_acq_rel)){
+        const std::array<float,7> live_state={
+            state.far_begin,
+            state.far_end,
+            state.far_mul,
+            state.near_begin,
+            state.near_end,
+            state.near_mul,
+            state.dispersion_sq
+        };
+        float max_abs_delta=0.0f;
+        for(std::size_t i=0u;i<live_state.size();++i){
+            const float delta=
+                std::fabs(live_state[i]-stock_state[i]);
+            if(delta>max_abs_delta)
+                max_abs_delta=delta;
+        }
+
+        char line[768]{};
+        std::snprintf(
+            line,
+            sizeof(line),
+            "[DSRRL DoF AUTHORED] first_apply sel=%u/%u beta=%.9g stock={%.9g,%.9g,%.9g,%.9g,%.9g,%.9g,%.9g} live={%.9g,%.9g,%.9g,%.9g,%.9g,%.9g,%.9g} max_abs_delta=%.9g",
+            static_cast<unsigned>(selector_a),
+            static_cast<unsigned>(selector_b),
+            static_cast<double>(beta),
+            static_cast<double>(stock_state[0]),
+            static_cast<double>(stock_state[1]),
+            static_cast<double>(stock_state[2]),
+            static_cast<double>(stock_state[3]),
+            static_cast<double>(stock_state[4]),
+            static_cast<double>(stock_state[5]),
+            static_cast<double>(stock_state[6]),
+            static_cast<double>(live_state[0]),
+            static_cast<double>(live_state[1]),
+            static_cast<double>(live_state[2]),
+            static_cast<double>(live_state[3]),
+            static_cast<double>(live_state[4]),
+            static_cast<double>(live_state[5]),
+            static_cast<double>(live_state[6]),
+            static_cast<double>(max_abs_delta));
+        reshade::log::message(
+            reshade::log::level::info,
+            line);
     }
 
     copy_state(out,state);
@@ -464,6 +521,9 @@ bool register_authored_state_runtime(core::renderer_core &core) noexcept
     g_matches.store(0);
     g_misses.store(0);
     g_applied.store(0);
+    g_first_applied_state_logged.store(
+        false,
+        std::memory_order_release);
 
     if(!g_base || !patch_entry()){
         restore();
