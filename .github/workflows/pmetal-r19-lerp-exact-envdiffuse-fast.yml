@@ -114,7 +114,7 @@ jobs:
           if (-not $ascii.Contains("[DSRRL PMETAL R43] producer_per_key_cache_hit=1 exact_key=SOURCE_BASE_COUNT_ROW_SELECTOR_BETA exact_payload=ON global_publish_mutex=SKIPPED")) { Write-Host "R42 producer cross-thread hit marker is intentionally runtime-only" }
           if (-not $ascii.Contains("[DSRRL POINTLIGHT R40] generational_source_cache_hit=1 exact_state_snapshot=ON invalidation=ACTIVE_COLLECTION_INSERT")) { Write-Host "R40 runtime cache-hit marker is intentionally runtime-only" }
           if (-not $ascii.Contains("[DSRRL POINTLIGHT R38] frame_selection_cache_hit=1 exact_input=ON bucket_heads=ON source_revalidation=ON")) { Write-Host "R38 runtime hit marker is intentionally runtime-only" }
-          if (-not $ascii.Contains("[DSRRL PERF R32] POINTLIGHT_PREP")) { throw "Missing PointLight CPU profiler marker" }
+          if (-not $ascii.Contains("[DSRRL PERF R46] POINTLIGHT_PREP")) { throw "Missing PointLight bucket profiler marker" }
           if (-not $ascii.Contains("[DSRRL PERF R32] POINTLIGHT_TX")) { throw "Missing PointLight transaction CPU profiler marker" }
           if (-not $ascii.Contains("[DSRRL PERF R45] SELECTOR")) { throw "Missing FLVER accounted CPU profiler marker" }
           if (-not $ascii.Contains("[DSRRL PERF R44] DOF")) { throw "Missing DoF CPU profiler marker" }
