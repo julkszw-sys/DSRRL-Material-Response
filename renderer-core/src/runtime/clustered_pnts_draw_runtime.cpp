@@ -1113,18 +1113,17 @@ struct clustered_source_override_hook_v1 {
     bool patched = false;
 };
 
-// Exact retail DSR source-producer cut. The raw 8-float source state has
-// already been produced on the stack, but DSR has not yet read q.rgb or
-// applied category gain / q^2.2 / attenuation metadata. This is therefore
-// source-side only: stock DSR continues all producer transforms and every
-// clustered receiver remains untouched.
+// Exact retail DSR producer cut after DSR has computed category gain/q^2.2
+// but immediately before the 48-byte t18 record is written. Replacing the
+// stack-local source lanes here gives stock DSR receivers the PTDE source
+// signal without receiver/material lookup and without inverse-pow work.
 constexpr std::uintptr_t
-    k_clustered_source_override_rva = 0xB7D25u;
+    k_clustered_source_override_rva = 0xB7E02u;
 constexpr std::array<std::uint8_t,16>
     k_clustered_source_override_preimage = {
-        0xF3,0x0F,0x10,0x44,0x24,0x38,
-        0x48,0x0F,0xBE,0xC0,
-        0xF3,0x44,0x0F,0x10,0x0C,0x81
+        0x48,0x8B,0x83,0x20,0x03,0x00,0x00,
+        0x48,0x8D,0x0C,0x76,
+        0x0F,0x28,0x44,0x24,0x30
     };
 
 clustered_source_override_hook_v1
@@ -1189,25 +1188,29 @@ void source_hook_load_xmm(
 
 void __fastcall clustered_source_override_callback(
     void *source,
-    float *raw,
-    std::uint32_t) noexcept
+    float *geometry,
+    float *color_end) noexcept
 {
     if (!g_enabled.load(std::memory_order_relaxed) ||
         g_quarantined.load(std::memory_order_relaxed) ||
         source == nullptr ||
-        raw == nullptr ||
+        geometry == nullptr ||
+        color_end == nullptr ||
         g_base == 0u)
         return;
 
     std::array<float,8> candidate{};
     std::memcpy(
         candidate.data(),
-        raw,
-        sizeof(candidate));
+        geometry,
+        4u * sizeof(float));
+    std::memcpy(
+        candidate.data() + 4u,
+        color_end,
+        4u * sizeof(float));
 
-    // Only exact Bank/LerpBank donor authority may replace the raw source.
-    // Direct/SFX/unknown classes fail open byte-for-byte to the stock raw
-    // payload already present on the retail stack.
+    // Exact Bank/LerpBank donors only. Direct/SFX/unknown source classes
+    // remain byte-for-byte stock DSR.
     if (!pointlight_ptde_source::capture(
             source,
             g_base,
@@ -1222,12 +1225,16 @@ void __fastcall clustered_source_override_callback(
         !(candidate[7] > 0.0f))
         return;
 
-    // Preserve DSR world position xyz. Replace only invRange/raw-q/End before
-    // stock DSR applies category gain, q^2.2 and its native receiver contract.
+    // Preserve stock DSR position.xyz and all category metadata/falloff-mode
+    // lanes. Replace only the source carrier that PTDE owns: invRange,
+    // source RGB and End. The following retail instructions write this result
+    // into stock t18, and the original DSR receiver consumes it unchanged.
+    geometry[3] = candidate[3];
     std::memcpy(
-        raw + 3u,
-        candidate.data() + 3u,
-        5u * sizeof(float));
+        color_end,
+        candidate.data() + 4u,
+        4u * sizeof(float));
+
     telemetry::hot_count(
         g_source_capture_ok);
 }
@@ -1242,8 +1249,8 @@ bool build_clustered_source_override_stub(
         code.reserve(320u);
 
         // Site RSP is 16-byte aligned. Preserve flags, all volatile GPRs and
-        // volatile XMM0..5 because xmm1 already carries the retail pow exponent
-        // constant at this cut.
+        // volatile XMM0..5. XMM6..15 are nonvolatile under Win64 and retain
+        // the retail producer's category/falloff state across the callback.
         source_hook_emit(code,{0x9C}); // pushfq
         source_hook_emit(
             code,
@@ -1268,12 +1275,16 @@ bool build_clustered_source_override_stub(
                 i,
                 0x60u + 0x10u * i);
 
-        // callback(source=RDI, raw=original_rsp+0x20, dense_index=ESI)
+        // callback(source=RDI,
+        //          geometry=original_rsp+0x20,
+        //          color_end=original_rsp+0x30)
         source_hook_emit(code,{0x48,0x8B,0xCF}); // mov rcx,rdi
         source_hook_emit(
             code,
             {0x48,0x8D,0x94,0x24,0x30,0x01,0x00,0x00}); // lea rdx,[rsp+130h]
-        source_hook_emit(code,{0x44,0x8B,0xC6}); // mov r8d,esi
+        source_hook_emit(
+            code,
+            {0x4C,0x8D,0x84,0x24,0x40,0x01,0x00,0x00}); // lea r8,[rsp+140h]
         source_hook_emit(code,{0x48,0xB8});
         source_hook_emit_u64(
             code,
@@ -2674,7 +2685,7 @@ bool clustered_pnts_draw_runtime::install() noexcept
             std::memory_order_relaxed))
         reshade::log::message(
             reshade::log::level::info,
-            "[DSRRL POINTLIGHT R52-SOURCE-FIRST] clustered=SOURCE_ONLY raw_cut=0xB7D25 receiver=STOCK_DSR material_lookup=OFF replacement_shader=OFF fixed=SOURCE_BEFORE_RECEIVER");
+            "[DSRRL POINTLIGHT R52-SOURCE-FIRST] clustered=SOURCE_ONLY source_cut=0xB7E02 stage=POST_DSR_TRANSFORM_PRE_T18 receiver=STOCK_DSR material_lookup=OFF replacement_shader=OFF fixed=SOURCE_BEFORE_RECEIVER");
     return true;
 }
 
