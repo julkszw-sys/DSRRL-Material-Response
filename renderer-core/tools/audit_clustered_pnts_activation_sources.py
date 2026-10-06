@@ -84,6 +84,48 @@ def main():
     transaction=(root/"src/runtime/draw_state_transaction.cpp").read_text(encoding="utf-8")
     native_draw=(root/"src/runtime/pmetal_native_draw_bridge.cpp").read_text(encoding="utf-8")
 
+    # R52 source-first lineage deliberately retires the clustered receiver
+    # island. Historical direct-replacement journals remain provenance only;
+    # activation is now an exact producer/source hook followed by stock DSR.
+    if "constexpr bool k_clustered_pointlight_receiver_runtime_enabled = false;" in integrated:
+        require(integrated,
+            "flver_identity_transport::install(\n            false, // clustered PntS is source-only; no builder/receiver bridge",
+            "clustered FLVER builder detour disabled")
+        require(integrated,
+            "g_clustered_pointlight_selection_transport_active.store(\n        false,",
+            "clustered draw-side selector transport disabled")
+        require(integrated,
+            "k_clustered_pointlight_receiver_runtime_enabled &&\n        g_clustered_pnts_pipeline.on_init_pipeline(",
+            "clustered replacement pipeline compile-time-disabled")
+        require(draw_cpp,
+            "k_clustered_source_override_rva = 0xB7D25u;",
+            "exact source override patch site")
+        require(draw_cpp,
+            "k_clustered_source_override_preimage",
+            "exact source override preimage")
+        require(draw_cpp,
+            "pointlight_ptde_source::capture(",
+            "PTDE source donor decode")
+        require(draw_cpp,
+            "Clustered PntS never performs receiver/material authorization.",
+            "clustered receiver/material bridge retired")
+        require(draw_cpp,
+            "Dead by construction in source-only clustered mode.",
+            "clustered selector source bridge retired")
+        publish_start=flver_cpp.find("bool publish_exact_selector_identity(")
+        publish_end=flver_cpp.find('extern "C" void dsrrl_clustered_pnts_builder_observer(',publish_start)
+        if publish_start<0 or publish_end<0:
+            fail("FLVER selector publish boundaries missing")
+        publish_body=flver_cpp[publish_start:publish_end]
+        if "direct_pointlight_material_candidate(" in publish_body:
+            fail("clustered material candidate lookup still executes in selector")
+        if "clustered_pnts_selector_event_bridge(" in publish_body:
+            fail("clustered receiver bridge still executes in selector")
+        print("Clustered PntS source-first activation audit: PASS")
+        print("  clustered=source-only receiver=stock-DSR material-lookup=OFF builder-detour=OFF")
+        print("  fixed=separate source-first receiver-after-source path")
+        return 0
+
     material_router=json.loads((root/"data/census/ptde_mtd_envspec_router_v1.json").read_text(encoding="utf-8"))
     material_records=material_router.get("records",[])
     nospc_materials=[
