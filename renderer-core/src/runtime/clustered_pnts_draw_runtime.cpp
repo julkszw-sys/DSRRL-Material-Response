@@ -297,8 +297,12 @@ pointlight_cycle_bucket g_prof_select_cycles{};
 pointlight_cycle_bucket g_prof_capture_cycles{};
 pointlight_cycle_bucket g_prof_capture_preamble_cycles{};
 pointlight_cycle_bucket g_prof_capture_semantic_cycles{};
+pointlight_cycle_bucket g_prof_capture_semantic_bank_cycles{};
+pointlight_cycle_bucket g_prof_capture_semantic_lerp_cycles{};
 pointlight_cycle_bucket g_prof_capture_cache_cycles{};
 pointlight_cycle_bucket g_prof_capture_donor_cycles{};
+pointlight_cycle_bucket g_prof_capture_donor_bank_cycles{};
+pointlight_cycle_bucket g_prof_capture_donor_direct_cycles{};
 std::atomic<std::uint64_t> g_prof_capture_cache_hits{0u};
 std::atomic<std::uint64_t> g_prof_capture_cache_misses{0u};
 std::atomic<std::uint64_t> g_prof_capture_bank_calls{0u};
@@ -482,11 +486,23 @@ void maybe_log_pointlight_prepare_profile() noexcept
     std::snprintf(
         detail,
         sizeof(detail),
-        "[DSRRL PERF R48] POINTLIGHT_CAPTURE preamble_cycles=%.1f semantic_cycles=%.1f cache_cycles=%.1f donor_cycles=%.1f hit=%llu miss=%llu bank=%llu direct=%llu n=pre:%llu sem:%llu cache:%llu donor:%llu",
+        "[DSRRL PERF R49] POINTLIGHT_CAPTURE preamble_cycles=%.1f preamble_max=%llu semantic_cycles=%.1f semantic_max=%llu semantic_bank_cycles=%.1f semantic_bank_max=%llu semantic_lerp_cycles=%.1f semantic_lerp_max=%llu cache_cycles=%.1f cache_max=%llu donor_cycles=%.1f donor_max=%llu donor_bank_cycles=%.1f donor_bank_max=%llu donor_direct_cycles=%.1f donor_direct_max=%llu hit=%llu miss=%llu bank=%llu direct=%llu n=pre:%llu sem:%llu sem_bank:%llu sem_lerp:%llu cache:%llu donor:%llu donor_bank:%llu donor_direct:%llu",
         prof_avg_cycles(g_prof_capture_preamble_cycles),
+        static_cast<unsigned long long>(g_prof_capture_preamble_cycles.max_cycles.load(std::memory_order_relaxed)),
         prof_avg_cycles(g_prof_capture_semantic_cycles),
+        static_cast<unsigned long long>(g_prof_capture_semantic_cycles.max_cycles.load(std::memory_order_relaxed)),
+        prof_avg_cycles(g_prof_capture_semantic_bank_cycles),
+        static_cast<unsigned long long>(g_prof_capture_semantic_bank_cycles.max_cycles.load(std::memory_order_relaxed)),
+        prof_avg_cycles(g_prof_capture_semantic_lerp_cycles),
+        static_cast<unsigned long long>(g_prof_capture_semantic_lerp_cycles.max_cycles.load(std::memory_order_relaxed)),
         prof_avg_cycles(g_prof_capture_cache_cycles),
+        static_cast<unsigned long long>(g_prof_capture_cache_cycles.max_cycles.load(std::memory_order_relaxed)),
         prof_avg_cycles(g_prof_capture_donor_cycles),
+        static_cast<unsigned long long>(g_prof_capture_donor_cycles.max_cycles.load(std::memory_order_relaxed)),
+        prof_avg_cycles(g_prof_capture_donor_bank_cycles),
+        static_cast<unsigned long long>(g_prof_capture_donor_bank_cycles.max_cycles.load(std::memory_order_relaxed)),
+        prof_avg_cycles(g_prof_capture_donor_direct_cycles),
+        static_cast<unsigned long long>(g_prof_capture_donor_direct_cycles.max_cycles.load(std::memory_order_relaxed)),
         static_cast<unsigned long long>(
             g_prof_capture_cache_hits.load(
                 std::memory_order_relaxed)),
@@ -506,10 +522,22 @@ void maybe_log_pointlight_prepare_profile() noexcept
             g_prof_capture_semantic_cycles.samples.load(
                 std::memory_order_relaxed)),
         static_cast<unsigned long long>(
+            g_prof_capture_semantic_bank_cycles.samples.load(
+                std::memory_order_relaxed)),
+        static_cast<unsigned long long>(
+            g_prof_capture_semantic_lerp_cycles.samples.load(
+                std::memory_order_relaxed)),
+        static_cast<unsigned long long>(
             g_prof_capture_cache_cycles.samples.load(
                 std::memory_order_relaxed)),
         static_cast<unsigned long long>(
             g_prof_capture_donor_cycles.samples.load(
+                std::memory_order_relaxed)),
+        static_cast<unsigned long long>(
+            g_prof_capture_donor_bank_cycles.samples.load(
+                std::memory_order_relaxed)),
+        static_cast<unsigned long long>(
+            g_prof_capture_donor_direct_cycles.samples.load(
                 std::memory_order_relaxed)));
     reshade::log::message(
         reshade::log::level::info,
@@ -1720,10 +1748,18 @@ bool capture_source(
 #ifdef DSRRL_POINTLIGHT_PROFILE
         if (prof_detail) {
             const auto now = prof_thread_cycles();
-            if (now >= prof_stage_cycles)
+            if (now >= prof_stage_cycles) {
+                const auto delta =
+                    now - prof_stage_cycles;
                 prof_cycle_add(
                     g_prof_capture_semantic_cycles,
-                    now - prof_stage_cycles);
+                    delta);
+                prof_cycle_add(
+                    bank_source
+                        ? g_prof_capture_semantic_bank_cycles
+                        : g_prof_capture_semantic_lerp_cycles,
+                    delta);
+            }
             prof_stage_cycles = now;
         }
 #endif
@@ -1835,10 +1871,18 @@ bool capture_source(
 #ifdef DSRRL_POINTLIGHT_PROFILE
     if (prof_detail) {
         const auto now = prof_thread_cycles();
-        if (now >= prof_stage_cycles)
+        if (now >= prof_stage_cycles) {
+            const auto delta =
+                now - prof_stage_cycles;
             prof_cycle_add(
                 g_prof_capture_donor_cycles,
-                now - prof_stage_cycles);
+                delta);
+            prof_cycle_add(
+                (bank_source || lerp_bank_source)
+                    ? g_prof_capture_donor_bank_cycles
+                    : g_prof_capture_donor_direct_cycles,
+                delta);
+        }
     }
 #endif
 
