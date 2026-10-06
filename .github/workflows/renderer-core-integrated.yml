@@ -200,9 +200,34 @@ jobs:
           -DRESHADE_INCLUDE_DIR="${{ github.workspace }}/_reshade/include"
           -DDSRRL_SOURCE_COMMIT="$env:DSRRL_CHECKOUT_COMMIT"
           -DDSRRL_BUILD_FLAVOR="$env:DSRRL_SOURCE_REF_KIND"
+          -DDSRRL_FULL_TELEMETRY_DEFAULT_ON=ON
+
+      - name: Verify active main telemetry profile
+        shell: pwsh
+        run: |
+          $cache = Get-Content build-integrated/CMakeCache.txt -Raw
+          if ($cache -notmatch "DSRRL_FULL_TELEMETRY_DEFAULT_ON:BOOL=ON") {
+            throw "Active Core+Islands build must enable full telemetry"
+          }
+          if ($cache -notmatch "DSRRL_DIAGNOSTIC_TELEMETRY_DEFAULT_ON:BOOL=OFF") {
+            throw "Active Core+Islands build unexpectedly enables native-state diagnostic telemetry"
+          }
 
       - name: Build Core+Islands addon
         run: cmake --build build-integrated --config Release
+
+      - name: Verify active main telemetry binary marker
+        shell: pwsh
+        run: |
+          $addons = @(Get-ChildItem build-integrated -Recurse -Filter *.addon64)
+          if ($addons.Count -ne 1) {
+            throw "Expected exactly one active main addon, found $($addons.Count)"
+          }
+          $ascii = [System.Text.Encoding]::ASCII.GetString(
+            [System.IO.File]::ReadAllBytes($addons[0].FullName))
+          if (-not $ascii.Contains("[DSRRL TELEMETRY R53] full=ON runtime=ON effect=ON native_state_verify=OFF profile=MAIN_SAFE_FULL")) {
+            throw "Active main addon does not contain the full telemetry identity marker"
+          }
 
       - name: Run PointLight source and clustered unit tests
         shell: pwsh
