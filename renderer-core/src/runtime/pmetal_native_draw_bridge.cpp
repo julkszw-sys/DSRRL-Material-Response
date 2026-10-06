@@ -100,37 +100,6 @@ std::atomic_bool g_native_arm_reject_logged{false};
 std::atomic_bool g_vtable_rearm_logged{false};
 std::atomic_bool g_vtable_conflict_logged{false};
 
-std::atomic_bool g_image_entry_envspec{false};
-std::atomic_bool g_image_entry_material_response{false};
-std::atomic_bool g_image_entry_pointlight{false};
-std::atomic_bool g_image_entry_local_specular{false};
-
-void record_image_entry_owners(
-    const draw_tx_mutation &mutation) noexcept
-{
-    const auto owners = mutation.owners;
-    if ((owners & core::operator_bit(
-            core::operator_id::env_spec)) != 0u)
-        g_image_entry_envspec.store(
-            true,
-            std::memory_order_relaxed);
-    if ((owners & core::operator_bit(
-            core::operator_id::material_response)) != 0u)
-        g_image_entry_material_response.store(
-            true,
-            std::memory_order_relaxed);
-    if ((owners & core::operator_bit(
-            core::operator_id::point_light)) != 0u)
-        g_image_entry_pointlight.store(
-            true,
-            std::memory_order_relaxed);
-    if ((owners & core::operator_bit(
-            core::operator_id::local_specular_legacy)) != 0u)
-        g_image_entry_local_specular.store(
-            true,
-            std::memory_order_relaxed);
-}
-
 void retain_mutation(
     draw_tx_mutation &mutation) noexcept
 {
@@ -1931,8 +1900,6 @@ pmetal_native_draw_bridge::draw_hook(
         context,
         vertex_count,
         start_vertex);
-    record_image_entry_owners(
-        pending.mutation);
 
     if (!restore_state(
             context,
@@ -2036,8 +2003,6 @@ pmetal_native_draw_bridge::draw_indexed_hook(
         index_count,
         start_index,
         base_vertex);
-    record_image_entry_owners(
-        pending.mutation);
 
     if (!restore_state(
             context,
@@ -2146,8 +2111,6 @@ pmetal_native_draw_bridge::draw_instanced_hook(
         instance_count,
         start_vertex,
         start_instance);
-    record_image_entry_owners(
-        pending.mutation);
 
     if (!restore_state(
             context,
@@ -2259,8 +2222,6 @@ pmetal_native_draw_bridge::draw_indexed_instanced_hook(
         start_index,
         base_vertex,
         start_instance);
-    record_image_entry_owners(
-        pending.mutation);
 
     if (!restore_state(
             context,
@@ -2321,14 +2282,6 @@ pmetal_native_draw_bridge::telemetry() const noexcept
         impl_->hook_active.load(
             std::memory_order_relaxed),
         impl_->quarantined.load(
-            std::memory_order_relaxed),
-        g_image_entry_envspec.load(
-            std::memory_order_relaxed),
-        g_image_entry_material_response.load(
-            std::memory_order_relaxed),
-        g_image_entry_pointlight.load(
-            std::memory_order_relaxed),
-        g_image_entry_local_specular.load(
             std::memory_order_relaxed)
     };
 }
@@ -2351,18 +2304,6 @@ void pmetal_native_draw_bridge::reset_telemetry() noexcept
         false,
         std::memory_order_relaxed);
     g_vtable_conflict_logged.store(
-        false,
-        std::memory_order_relaxed);
-    g_image_entry_envspec.store(
-        false,
-        std::memory_order_relaxed);
-    g_image_entry_material_response.store(
-        false,
-        std::memory_order_relaxed);
-    g_image_entry_pointlight.store(
-        false,
-        std::memory_order_relaxed);
-    g_image_entry_local_specular.store(
         false,
         std::memory_order_relaxed);
 
