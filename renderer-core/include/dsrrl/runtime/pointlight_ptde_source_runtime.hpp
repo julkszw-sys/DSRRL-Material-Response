@@ -426,7 +426,8 @@ inline bool bank_structure_signature(
     access_cache &cache,
     std::uint64_t &signature,
     std::uint32_t *structure_end_out = nullptr,
-    bank_structure_signature_failure *failure_out = nullptr) noexcept {
+    bank_structure_signature_failure *failure_out = nullptr,
+    bool require_contiguous_rows = true) noexcept {
     if (failure_out != nullptr)
         *failure_out = bank_structure_signature_failure::none;
 
@@ -472,11 +473,30 @@ inline bool bank_structure_signature(
                     bank_structure_signature_failure::row_id;
             return false;
         }
-        if (row_offset != first + 16u * i) {
-            if (failure_out != nullptr)
-                *failure_out =
-                    bank_structure_signature_failure::row_offset;
-            return false;
+        if (require_contiguous_rows) {
+            if (row_offset != first + 16u * i) {
+                if (failure_out != nullptr)
+                    *failure_out =
+                        bank_structure_signature_failure::row_offset;
+                return false;
+            }
+        } else {
+            // Retail DSR resolves each selected PointLight row through the
+            // per-entry offset table at param+0x34+12*i (0x14055DB79..84).
+            // Do not require the serialized/offline contiguous-row layout on
+            // this runtime representation; retain fail-open readability and
+            // bounded-offset checks instead.
+            if (row_offset < 0x30u ||
+                row_offset > 0x100000u ||
+                !readable_cached(
+                    param + row_offset,
+                    16u,
+                    cache)) {
+                if (failure_out != nullptr)
+                    *failure_out =
+                        bank_structure_signature_failure::row_offset;
+                return false;
+            }
         }
         if (name_offset < table_end ||
             name_offset > 0x100000u) {
