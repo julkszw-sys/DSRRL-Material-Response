@@ -114,8 +114,9 @@ jobs:
           $ascii = [System.Text.Encoding]::ASCII.GetString([System.IO.File]::ReadAllBytes($path))
           if (-not $ascii.Contains($env:DSRRL_CHECKOUT_COMMIT)) { throw "Missing source commit identity" }
           if (-not $ascii.Contains("r52_integrated_runtime")) { throw "Missing R52 integrated runtime build flavor identity" }
-          if (-not $ascii.Contains("[DSRRL POINTLIGHT R52-SOURCE-FIRST] clustered=SOURCE_ONLY source_cut=0xB7E02 stage=POST_DSR_TRANSFORM_PRE_T18 receiver=STOCK_DSR material_lookup=OFF replacement_shader=OFF fixed=SOURCE_BEFORE_RECEIVER")) { throw "Missing clustered source-only activation marker" }
+          if (-not $ascii.Contains("[DSRRL POINTLIGHT R52-SOURCE-FIRST] clustered=SOURCE_ONLY source_cut=0xB7E02 stage=POST_DSR_TRANSFORM_PRE_T18 values=DRAWPARAM donor=OFF coverage=EXACT_BANK_ROW receiver=STOCK_DSR material_lookup=OFF replacement_shader=OFF fixed=SOURCE_BEFORE_RECEIVER")) { throw "Missing clustered source-only activation marker" }
           if (-not $ascii.Contains("[DSRRL PL SOURCE]")) { throw "Missing source-first PointLight telemetry marker" }
+          if (-not $ascii.Contains("[DSRRL POINTLIGHT R53-PARAM-SOURCE] values=DRAWPARAM donor_reconstruction=OFF coverage=EXACT_BANK_STRUCTURE_PLUS_ROW banks=10 m15_1=ON m15=ON q_transform=INVERSE_DSR_CATEGORY_POW attenuation=A1_LINEAR_ISLAND")) { throw "Missing donor-free PARAM source marker" }
           if (-not $ascii.Contains("[DSRRL R52 SOURCE-FIRST] clustered_receiver_transaction=ABSENT clustered_sidecar=ABSENT fixed_receiver=SOURCE_GATED pmetal_direct_dispatch=UNCHANGED")) { throw "Missing source-first architecture marker" }
           if ($ascii.Contains("[DSRRL POINTLIGHT R34] source_material_split=ACTIVE")) { throw "Retired clustered source/material selector path survived" }
           if ($ascii.Contains("[DSRRL POINTLIGHT R35] owner_authorized_spc_hybrid=ACTIVE")) { throw "Retired clustered receiver hybrid survived" }
