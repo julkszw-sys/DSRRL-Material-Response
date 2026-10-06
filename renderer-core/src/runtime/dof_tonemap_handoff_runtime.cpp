@@ -7,7 +7,8 @@
 
 #include "dsrrl/runtime/dof_tonemap_handoff_runtime.hpp"
 
-#include "dsrrl/operators/dof/dof_island.hpp"\n#include "dsrrl/runtime/dof_process_memory.hpp"
+#include "dsrrl/operators/dof/dof_island.hpp"
+#include "dsrrl/runtime/dof_process_memory.hpp"
 
 #include <Windows.h>
 
