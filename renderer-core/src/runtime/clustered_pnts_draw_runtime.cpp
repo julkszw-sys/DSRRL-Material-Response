@@ -1753,7 +1753,7 @@ void __fastcall clustered_source_override_callback(
             } else {
                 telemetry::hot_count(
                     g_source_capture_fail);
-                std::uint32_t bit = 1u << 23;
+                std::uint64_t bit = 1ull << 23;
                 const char *reason = "live_drawparam_unknown";
                 switch (live_result) {
                 case clustered_live_source_result::invalid_node_or_base:
