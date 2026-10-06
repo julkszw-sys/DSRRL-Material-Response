@@ -471,12 +471,11 @@ void fixed_pointlight_selector_event_bridge(void *owner) noexcept
         g_runtime->selector_event(owner);
 }
 
-bool fixed_pointlight_source_ready_bridge(
-    std::uint8_t expected_count) noexcept
+bool fixed_pointlight_source_ready_bridge() noexcept
 {
     return
         g_runtime != nullptr &&
-        g_runtime->source_ready(expected_count);
+        g_runtime->source_ready();
 }
 
 bool fixed_pointlight_draw_runtime::install() noexcept
@@ -601,26 +600,28 @@ void fixed_pointlight_draw_runtime::selector_event(void *owner) noexcept
     telemetry::hot_count(g_selector_match);
 }
 
-bool fixed_pointlight_draw_runtime::source_ready(
-    std::uint8_t expected_count) const noexcept
+bool fixed_pointlight_draw_runtime::source_ready() const noexcept
 {
     if(!g_enabled.load(std::memory_order_acquire) ||
-       g_quarantined.load(std::memory_order_acquire) ||
-       !g_draw_snapshot ||
-       (expected_count!=2u && expected_count!=4u))
+       g_quarantined.load(std::memory_order_acquire))
         return false;
 
-    const auto selected=g_draw_snapshot;
-    const auto expected_mask=
-        static_cast<std::uint8_t>(
-            (1u<<expected_count)-1u);
-
-    if(selected->captured_count!=expected_count ||
-       selected->valid_mask!=expected_mask ||
+    // Producer-only gate: do not consult the current receiver, owner join,
+    // material identity or shader family here. A legal source is simply the
+    // newest completed 2/4-light producer snapshot that has not yet been
+    // consumed by a fixed receiver.
+    const auto selected=g_producer_snapshot;
+    if(!selected ||
+       (selected->captured_count!=2u &&
+        selected->captured_count!=4u) ||
        !selected->owner_consumed_serial)
         return false;
 
-    if(selected->consumed.load(
+    const auto expected_mask=
+        static_cast<std::uint8_t>(
+            (1u<<selected->captured_count)-1u);
+    if(selected->valid_mask!=expected_mask ||
+       selected->consumed.load(
             std::memory_order_acquire))
         return false;
 
