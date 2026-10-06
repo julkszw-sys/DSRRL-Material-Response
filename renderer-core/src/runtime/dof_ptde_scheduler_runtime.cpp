@@ -189,6 +189,174 @@ bool materialize_pair(
     return coherent;
 }
 
+std::uint32_t retained_stage_mask(
+    const reshade::api::shader_desc &shader,
+    bool vertex) noexcept
+{
+    if (shader.code == nullptr || shader.code_size == 0u)
+        return 0u;
+
+    const auto digest = digest_of(shader);
+    std::uint32_t mask = 0u;
+    for (const auto &entry :
+         operators::dof::retained_pipeline_signatures) {
+        const auto bit =
+            1u << static_cast<std::uint32_t>(entry.role);
+        const bool match =
+            vertex
+                ? (entry.vertex_size == shader.code_size &&
+                   entry.vertex_sha256 == digest)
+                : (entry.pixel_size == shader.code_size &&
+                   entry.pixel_sha256 == digest);
+        if (match)
+            mask |= bit;
+    }
+    return mask;
+}
+
+bool accept_device_locked(
+    ID3D11Device *native) noexcept
+{
+    if (native == nullptr)
+        return false;
+
+    if (g_device == nullptr) {
+        g_device = native;
+        g_device->AddRef();
+        return true;
+    }
+
+    if (g_device != native) {
+        g_quarantined.store(true);
+        return false;
+    }
+    return true;
+}
+
+bool materialize_vertex_stage(
+    reshade::api::device *device,
+    const reshade::api::shader_desc &vs) noexcept
+{
+    const auto mask =
+        retained_stage_mask(vs, true);
+    if (device == nullptr ||
+        mask == 0u ||
+        vs.code == nullptr ||
+        vs.code_size == 0u)
+        return false;
+
+    auto *native =
+        reinterpret_cast<ID3D11Device *>(
+            device->get_native());
+    if (native == nullptr)
+        return false;
+
+    ID3D11VertexShader *vertex = nullptr;
+    if (FAILED(native->CreateVertexShader(
+            vs.code,
+            vs.code_size,
+            nullptr,
+            &vertex)) ||
+        vertex == nullptr)
+        return false;
+
+    bool admitted = false;
+    {
+        std::lock_guard<std::mutex> lock(g_mutex);
+        if (!accept_device_locked(native)) {
+            vertex->Release();
+            return false;
+        }
+
+        for (std::size_t i = 0u;
+             i < static_cast<std::size_t>(role::count);
+             ++i) {
+            const auto bit = 1u << static_cast<std::uint32_t>(i);
+            if ((mask & bit) == 0u)
+                continue;
+
+            auto &slot = g_pairs[i];
+            const bool was_ready =
+                slot.vertex != nullptr &&
+                slot.pixel != nullptr;
+            if (slot.vertex == nullptr) {
+                vertex->AddRef();
+                slot.vertex = vertex;
+                admitted = true;
+            }
+            if (!was_ready &&
+                slot.vertex != nullptr &&
+                slot.pixel != nullptr)
+                ++g_exact_shader_pairs;
+        }
+    }
+
+    vertex->Release();
+    return admitted;
+}
+
+bool materialize_pixel_stage(
+    reshade::api::device *device,
+    const reshade::api::shader_desc &ps) noexcept
+{
+    const auto mask =
+        retained_stage_mask(ps, false);
+    if (device == nullptr ||
+        mask == 0u ||
+        ps.code == nullptr ||
+        ps.code_size == 0u)
+        return false;
+
+    auto *native =
+        reinterpret_cast<ID3D11Device *>(
+            device->get_native());
+    if (native == nullptr)
+        return false;
+
+    ID3D11PixelShader *pixel = nullptr;
+    if (FAILED(native->CreatePixelShader(
+            ps.code,
+            ps.code_size,
+            nullptr,
+            &pixel)) ||
+        pixel == nullptr)
+        return false;
+
+    bool admitted = false;
+    {
+        std::lock_guard<std::mutex> lock(g_mutex);
+        if (!accept_device_locked(native)) {
+            pixel->Release();
+            return false;
+        }
+
+        for (std::size_t i = 0u;
+             i < static_cast<std::size_t>(role::count);
+             ++i) {
+            const auto bit = 1u << static_cast<std::uint32_t>(i);
+            if ((mask & bit) == 0u)
+                continue;
+
+            auto &slot = g_pairs[i];
+            const bool was_ready =
+                slot.vertex != nullptr &&
+                slot.pixel != nullptr;
+            if (slot.pixel == nullptr) {
+                pixel->AddRef();
+                slot.pixel = pixel;
+                admitted = true;
+            }
+            if (!was_ready &&
+                slot.vertex != nullptr &&
+                slot.pixel != nullptr)
+                ++g_exact_shader_pairs;
+        }
+    }
+
+    pixel->Release();
+    return admitted;
+}
+
 bool materialize_embedded_plain_rate(
     reshade::api::device *device) noexcept
 {
@@ -196,6 +364,16 @@ bool materialize_embedded_plain_rate(
         device->get_api() !=
             reshade::api::device_api::d3d11)
         return false;
+
+    {
+        std::lock_guard<std::mutex> lock(g_mutex);
+        const auto &plain =
+            g_pairs[static_cast<std::size_t>(
+                role::dof_rate_plain)];
+        if (plain.vertex != nullptr &&
+            plain.pixel != nullptr)
+            return true;
+    }
 
     reshade::api::shader_desc vs{};
     vs.code =
@@ -248,35 +426,27 @@ void on_init_pipeline(
         return;
     }
 
-    const auto *vs = find_shader(
-        reshade::api::pipeline_subobject_type::vertex_shader,
-        subobject_count,
-        subobjects);
-    const auto *ps = find_shader(
-        reshade::api::pipeline_subobject_type::pixel_shader,
-        subobject_count,
-        subobjects);
+    if (const auto *vs = find_shader(
+            reshade::api::pipeline_subobject_type::vertex_shader,
+            subobject_count,
+            subobjects);
+        vs != nullptr &&
+        vs->code != nullptr &&
+        vs->code_size != 0u)
+        (void)materialize_vertex_stage(
+            device,
+            *vs);
 
-    if (vs == nullptr || ps == nullptr ||
-        vs->code == nullptr || ps->code == nullptr ||
-        vs->code_size == 0u || ps->code_size == 0u)
-        return;
-
-    const auto *signature =
-        operators::dof::find_retained_pipeline(
-            digest_of(*vs),
-            vs->code_size,
-            digest_of(*ps),
-            ps->code_size);
-
-    if (signature == nullptr)
-        return;
-
-    (void)materialize_pair(
-        device,
-        signature->role,
-        *vs,
-        *ps);
+    if (const auto *ps = find_shader(
+            reshade::api::pipeline_subobject_type::pixel_shader,
+            subobject_count,
+            subobjects);
+        ps != nullptr &&
+        ps->code != nullptr &&
+        ps->code_size != 0u)
+        (void)materialize_pixel_stage(
+            device,
+            *ps);
 }
 
 void on_destroy_device(
