@@ -44,8 +44,7 @@ void fixed_pointlight_selector_event_bridge(void *owner) noexcept;
 
 // Cheap non-consuming source-authority gate. Receiver/material work must not
 // start until an exact fresh 2-light/4-light producer snapshot already exists.
-bool fixed_pointlight_source_ready_bridge(
-    std::uint8_t expected_count) noexcept;
+bool fixed_pointlight_source_ready_bridge() noexcept;
 
 class fixed_pointlight_draw_runtime {
 public:
@@ -59,8 +58,7 @@ public:
     // Non-consuming source authority check. This is intentionally independent
     // of receiver material identity; it only verifies the already captured
     // fixed source snapshot for the expected PntSS/PntSSSS light count.
-    bool source_ready(
-        std::uint8_t expected_count) const noexcept;
+    bool source_ready() const noexcept;
 
     // expected_count is receiver-derived: PntSS=2, PntSSSS=4.
     bool prepare_t19(
