@@ -7,7 +7,8 @@ import re
 from pathlib import Path
 
 MARKERS = {
-    "selector": "[DSRRL PERF R32] SELECTOR",
+    "selector_r45": "[DSRRL PERF R45] SELECTOR",
+    "selector_r32": "[DSRRL PERF R32] SELECTOR",
     "pointlight_prep": "[DSRRL PERF R32] POINTLIGHT_PREP",
     "pointlight_tx": "[DSRRL PERF R32] POINTLIGHT_TX",
     "dof": "[DSRRL PERF R44] DOF",
@@ -66,17 +67,30 @@ def main() -> int:
 
     rows: list[dict] = []
 
-    line = latest.get("selector")
+    line = latest.get("selector_r45") or latest.get("selector_r32")
     if line:
         p = sample_period(line)
         n = plain_n(line)
-        add(rows, "FLVER_SELECTOR_TOTAL", number(line, "total_us"), n, p)
-        add(rows, "FLVER_PMETAL_SOURCE", number(line, "pmetal_source_us"), n, p,
-            "FLVER_SELECTOR_TOTAL")
-        add(rows, "FLVER_OWNER_MTD", number(line, "owner_mtd_us"), n, p,
-            "FLVER_SELECTOR_TOTAL")
-        add(rows, "FLVER_RESOLVE", number(line, "resolve_us"), n, p,
-            "FLVER_SELECTOR_TOTAL")
+        stage_keys = [
+            ("FLVER_PREFIX", "prefix_us"),
+            ("FLVER_RESOLVE", "resolve_us"),
+            ("FLVER_CACHE_LOOKUP", "cache_lookup_us"),
+            ("FLVER_CACHE_PUBLISH", "cache_publish_us"),
+            ("FLVER_OWNER_LOOKUP", "owner_lookup_us"),
+            ("FLVER_OWNER_MTD", "owner_mtd_us"),
+            ("FLVER_SELECTION_PUBLISH", "selection_publish_us"),
+            ("FLVER_PMETAL_SOURCE", "pmetal_source_us"),
+            ("FLVER_RUNTIME_MTD", "runtime_mtd_us"),
+            ("FLVER_RUNTIME_PUBLISH", "runtime_publish_us"),
+        ]
+        accounted = number(line, "accounted_us")
+        if accounted is None:
+            values = [number(line, key) for _, key in stage_keys]
+            accounted = sum(v for v in values if v is not None)
+        add(rows, "FLVER_SELECTOR_ACCOUNTED", accounted, n, p)
+        for component, key in stage_keys:
+            add(rows, component, number(line, key), n, p,
+                "FLVER_SELECTOR_ACCOUNTED")
 
     line = latest.get("pointlight_prep")
     if line:
@@ -106,6 +120,15 @@ def main() -> int:
                 "Estimated CPU totals extrapolate sampled calls. Substages with "
                 "overlap_parent are nested and must not be summed with their parent."),
             "rows": rows,
+            "selector_wall_envelope": (
+                {
+                    "avg_wall_us": number(line, "total_wall_us") or number(line, "total_us"),
+                    "max_wall_us": number(line, "max_total_wall_us") or number(line, "max_total_us"),
+                    "unaccounted_wall_us": number(line, "unaccounted_wall_us"),
+                    "note": "Wall envelope is scheduler/preemption-sensitive and is excluded from CPU ranking.",
+                }
+                if line else None
+            ),
             "markers_found": sorted(latest),
         }, indent=2))
         return 0
@@ -116,6 +139,17 @@ def main() -> int:
 
     print("DSRRL CPU HOTSPOT RANKING")
     print("NOTE: sampled/extrapolated; nested substages are not additive.")
+    if line:
+        wall = number(line, "total_wall_us") or number(line, "total_us")
+        max_wall = number(line, "max_total_wall_us") or number(line, "max_total_us")
+        unaccounted = number(line, "unaccounted_wall_us")
+        if wall is not None:
+            suffix = (
+                f", unaccounted={unaccounted:.3f} us"
+                if unaccounted is not None else "")
+            print(
+                f"Selector outer wall envelope: avg={wall:.3f} us "
+                f"max={max_wall:.3f} us{suffix}; excluded from CPU ranking.")
     print(f"{'#':>2}  {'component':<28} {'avg_us':>10} {'est_calls':>12} {'est_cpu_ms':>12}  overlap")
     for i, row in enumerate(rows, 1):
         overlap = row["overlap_parent"] or "-"
