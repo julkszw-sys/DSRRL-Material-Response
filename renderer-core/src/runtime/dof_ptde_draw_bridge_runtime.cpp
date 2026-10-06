@@ -63,6 +63,9 @@ thread_local bool g_internal_replay = false;
 
 bool environment_opt_in() noexcept
 {
+#ifdef DSRRL_DOF_DEFAULT_ON
+    return true;
+#else
     char value[8]{};
     const DWORD size =
         GetEnvironmentVariableA(
@@ -73,6 +76,7 @@ bool environment_opt_in() noexcept
     return
         size == 1u &&
         value[0] == '1';
+#endif
 }
 
 void set_authored_feature(bool enabled) noexcept
