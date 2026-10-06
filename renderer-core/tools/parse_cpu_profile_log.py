@@ -103,12 +103,12 @@ def main() -> int:
 
     line = latest.get("pointlight_tx")
     if line:
-        add(rows, "POINTLIGHT_TRANSACTION", number(selector_line, "total_us"),
+        add(rows, "POINTLIGHT_TRANSACTION", number(line, "total_us"),
             plain_n(line), sample_period(line))
 
     line = latest.get("dof")
     if line:
-        add(rows, "DOF_DRAW_CALLBACK", number(selector_line, "total_us"),
+        add(rows, "DOF_DRAW_CALLBACK", number(line, "total_us"),
             plain_n(line), sample_period(line))
 
     rows.sort(
