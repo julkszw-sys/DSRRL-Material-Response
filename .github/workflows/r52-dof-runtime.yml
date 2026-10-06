@@ -1,4 +1,4 @@
-name: R52 DoF Runtime Build
+name: R52 Integrated Runtime Build
 
 on:
   workflow_dispatch:
@@ -28,12 +28,17 @@ on:
       - "renderer-core/include/dsrrl/runtime/pointlight_ptde_source_runtime.hpp"
       - "renderer-core/src/operators/env_spec/pmetal_rgba_lerp_materializer.cpp"
       - ".github/workflows/pmetal-r19-lerp-exact-envdiffuse-fast.yml"
+      - "renderer-core/src/runtime/dof_ptde_draw_bridge_runtime.cpp"
+      - "renderer-core/src/runtime/dof_ptde_scheduler_runtime.cpp"
+      - "renderer-core/src/runtime/dof_host_depth_route_runtime.cpp"
+      - "renderer-core/src/runtime/dof_tonemap_handoff_runtime.cpp"
+      - ".github/workflows/r52-dof-runtime.yml"
 
 permissions:
   contents: read
 
 concurrency:
-  group: r52-dof-runtime-${{ github.head_ref || github.ref_name }}
+  group: r52-integrated-runtime-${{ github.head_ref || github.ref_name }}
   cancel-in-progress: true
 
 jobs:
@@ -57,7 +62,7 @@ jobs:
           ref: 3645e3025d1d98a90e318278858931f034d5d1f6
           path: _reshade
 
-      - name: Configure R43 + PTDE DoF + sampled CPU profilers
+      - name: Configure R52 integrated runtime
         shell: pwsh
         run: >
           cmake
@@ -66,7 +71,7 @@ jobs:
           -A x64
           -DRESHADE_INCLUDE_DIR="${{ github.workspace }}/_reshade/include"
           -DDSRRL_SOURCE_COMMIT="$env:DSRRL_CHECKOUT_COMMIT"
-          -DDSRRL_BUILD_FLAVOR="r52_dof_runtime"
+          -DDSRRL_BUILD_FLAVOR="r52_integrated_runtime"
           -DDSRRL_FULL_TELEMETRY_DEFAULT_ON=OFF
           -DDSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG=ON
           -DDSRRL_PMETAL_FULL_PTDE_HEMENV_R3=ON
@@ -87,6 +92,12 @@ jobs:
           -DDSRRL_FLVER_SELECTOR_PROFILE=OFF
           -DDSRRL_POINTLIGHT_PROFILE=OFF
 
+      - name: Audit integrated runtime architecture
+        shell: pwsh
+        run: |
+          python renderer-core/tools/audit_active_islands_hotpath.py --source-dir renderer-core
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
       - name: Build runtime
         shell: pwsh
         run: |
@@ -94,15 +105,15 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           $addons = @(Get-ChildItem build-fast -Recurse -Filter *.addon64)
           if ($addons.Count -ne 1) { throw "Expected exactly one addon, found $($addons.Count)" }
-          Copy-Item $addons[0].FullName "DSRRL_R52_DOF_RUNTIME.addon64" -Force
+          Copy-Item $addons[0].FullName "DSRRL_R52_INTEGRATED_RUNTIME.addon64" -Force
 
       - name: Verify binary identity
         shell: pwsh
         run: |
-          $path = "DSRRL_R52_DOF_RUNTIME.addon64"
+          $path = "DSRRL_R52_INTEGRATED_RUNTIME.addon64"
           $ascii = [System.Text.Encoding]::ASCII.GetString([System.IO.File]::ReadAllBytes($path))
           if (-not $ascii.Contains($env:DSRRL_CHECKOUT_COMMIT)) { throw "Missing source commit identity" }
-          if (-not $ascii.Contains("r52_dof_runtime")) { throw "Missing R52 source-first build flavor identity" }
+          if (-not $ascii.Contains("r52_integrated_runtime")) { throw "Missing R52 integrated runtime build flavor identity" }
           if (-not $ascii.Contains("[DSRRL POINTLIGHT R52-SOURCE-FIRST] clustered=SOURCE_ONLY source_cut=0xB7E02 stage=POST_DSR_TRANSFORM_PRE_T18 receiver=STOCK_DSR material_lookup=OFF replacement_shader=OFF fixed=SOURCE_BEFORE_RECEIVER")) { throw "Missing clustered source-only activation marker" }
           if (-not $ascii.Contains("[DSRRL R52 SOURCE-FIRST] clustered_receiver_transaction=ABSENT clustered_sidecar=ABSENT fixed_receiver=SOURCE_GATED pmetal_direct_dispatch=UNCHANGED")) { throw "Missing source-first architecture marker" }
           if ($ascii.Contains("[DSRRL POINTLIGHT R34] source_material_split=ACTIVE")) { throw "Retired clustered source/material selector path survived" }
@@ -117,6 +128,6 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: DSRRL_R52_DOF_RUNTIME
-          path: DSRRL_R52_DOF_RUNTIME.addon64
+          name: DSRRL_R52_INTEGRATED_RUNTIME
+          path: DSRRL_R52_INTEGRATED_RUNTIME.addon64
           if-no-files-found: error
