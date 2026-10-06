@@ -7562,7 +7562,7 @@ void log_r48_perf_and_image_entry(
         dof_bridge.visible_handoffs != 0u &&
         dof_bridge.sequences_completed != 0u &&
         dof_scheduler.execute_ok != 0u &&
-        dof_tonemap.hits != 0u &&
+        dof_tonemap.dof_source_hits != 0u &&
         dof_bridge.restore_failures == 0u &&
         !dof_bridge.quarantined;
 
@@ -7597,7 +7597,7 @@ void log_r48_perf_and_image_entry(
         static_cast<unsigned long long>(
             dof_bridge.visible_handoffs),
         static_cast<unsigned long long>(
-            dof_tonemap.hits),
+            dof_tonemap.dof_source_hits),
         static_cast<unsigned long long>(
             dof_bridge.tonemap_fallbacks),
         static_cast<unsigned long long>(
