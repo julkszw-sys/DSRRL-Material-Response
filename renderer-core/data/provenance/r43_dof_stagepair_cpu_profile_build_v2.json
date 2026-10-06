@@ -1,0 +1,67 @@
+{
+  "schema": "dsrrl.r43_dof_stagepair_cpu_profile_build_v2",
+  "purpose": "R43 diagnostic lineage with PTDE DoF activated through exact D3D11 per-stage identity composition and sampled CPU profiling.",
+  "base": {
+    "commit": "410e4591da9172ffb15e766754b4345286f04691",
+    "build_flavor": "pmetal_r43_per_key_freshness_cache"
+  },
+  "dof_port": {
+    "source_commit": "302089ddd05cf4a489d75d71362d8cbd21ee4abb",
+    "operator": "post.dof_ptde",
+    "activation": "default_on_for_this_diagnostic_build",
+    "fail_open": "stock_dsr_dof",
+    "graph": "native_core_7_resource_9_pass_private_island"
+  },
+  "runtime_falsifier": {
+    "build_head": "a68730a643a1d1d2a32f9778e794bccb8c1c5bbb",
+    "log_sha256": "72546ecd71d863b2ca5fcc40c3d5b724d6e6f3a5c7078f5101557ab5bffc8127",
+    "result": "DoF optin live but exact_pipeline_hits=0 seen_mask=0x0 armed=0 visible=0",
+    "cause": "302089 preflight and scheduler required VS+PS in one init_pipeline callback, but pinned ReShade D3D11 emits stage-local init/bind events"
+  },
+  "stage_pair_fix": {
+    "reshade_commit": "3645e3025d1d98a90e318278858931f034d5d1f6",
+    "identity": "exact retained VPO SHA256+size AND FPO SHA256+size",
+    "preflight": "separate VS/PS handle registries; draw-time unique role intersection",
+    "scheduler": "materialize retained replay VS/PS independently from stage-local init events",
+    "ambiguity_policy": "fail_open",
+    "startup_marker": "[DSRRL DoF] D3D11 stage-pair registry ACTIVE"
+  },
+  "cpu_profiling": {
+    "flver_selector": {
+      "compile_flag": "DSRRL_FLVER_SELECTOR_PROFILE",
+      "sample_period": 1024,
+      "log_prefix": "[DSRRL PERF R45] SELECTOR",
+      "ranking_metric": "accounted_us",
+      "outer_wall_metric": "total_wall_us",
+      "outer_wall_policy": "scheduler/preemption-sensitive; excluded from CPU ranking"
+    },
+    "pointlight_prepare": {
+      "compile_flag": "DSRRL_POINTLIGHT_PROFILE",
+      "sample_period": 128,
+      "log_prefix": "[DSRRL PERF R32] POINTLIGHT_PREP"
+    },
+    "pointlight_transaction": {
+      "compile_flag": "DSRRL_POINTLIGHT_PROFILE",
+      "sample_period": 128,
+      "log_prefix": "[DSRRL PERF R32] POINTLIGHT_TX"
+    },
+    "dof_draw_callback": {
+      "compile_flag": "DSRRL_DOF_PROFILE",
+      "sample_period": 1024,
+      "log_prefix": "[DSRRL PERF R44] DOF"
+    },
+    "parser": "renderer-core/tools/parse_cpu_profile_log.py"
+  },
+  "preserved_r43_constraints": {
+    "physical_cut_ul_h3_subsurface": true,
+    "full_hot_telemetry_default_on": false,
+    "upper_lower_inherited": false,
+    "atmosphere_inherited": false
+  },
+  "validation_scope": {
+    "construction": "pending_ci",
+    "runtime_liveness": "pending_new_runtime",
+    "bridge_activation": "pending_new_runtime",
+    "pixel_behavior": "not_inferred"
+  }
+}
