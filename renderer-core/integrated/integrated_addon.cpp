@@ -233,6 +233,81 @@ dsrrl::runtime::pmetal_native_draw_bridge
 
 thread_local bool g_raw_draw_replay_recursing = false;
 
+bool dof_opt_in_requested() noexcept
+{
+#ifdef DSRRL_DOF_DEFAULT_ON
+    return true;
+#else
+    char value[8]{};
+    const DWORD size =
+        GetEnvironmentVariableA(
+            "DSRRL_EXPERIMENTAL_PTDE_DOF",
+            value,
+            static_cast<DWORD>(sizeof(value)));
+    return size == 1u && value[0] == '1';
+#endif
+}
+
+void unregister_dof_runtime() noexcept
+{
+    dsrrl::runtime::dof::unregister_ptde_draw_bridge_runtime();
+    dsrrl::runtime::dof::unregister_authored_state_runtime();
+    dsrrl::runtime::dof::unregister_tonemap_handoff_scope_runtime();
+    dsrrl::runtime::dof::unregister_host_depth_route_runtime();
+    dsrrl::runtime::dof::unregister_ptde_scheduler_runtime();
+    dsrrl::runtime::dof::unregister_private_resource_runtime();
+    dsrrl::runtime::dof::unregister_preflight_runtime();
+    (void)g_core.features().set(
+        dsrrl::core::operator_id::post_dof_ptde,
+        false);
+}
+
+bool register_dof_runtime() noexcept
+{
+    (void)g_core.features().set(
+        dsrrl::core::operator_id::post_dof_ptde,
+        false);
+
+    if (!dof_opt_in_requested())
+        return true;
+
+    if (!k_drawtime_islands_runtime_enabled ||
+        !k_draw_callbacks_runtime_enabled ||
+        !k_draw_replay_runtime_enabled)
+        return false;
+
+    const bool preflight =
+        dsrrl::runtime::dof::register_preflight_runtime();
+    const bool resources =
+        preflight &&
+        dsrrl::runtime::dof::register_private_resource_runtime();
+    const bool scheduler =
+        resources &&
+        dsrrl::runtime::dof::register_ptde_scheduler_runtime();
+    const bool host =
+        scheduler &&
+        dsrrl::runtime::dof::register_host_depth_route_runtime();
+    const bool tone =
+        host &&
+        dsrrl::runtime::dof::register_tonemap_handoff_scope_runtime();
+    const bool authored =
+        tone &&
+        dsrrl::runtime::dof::register_authored_state_runtime(g_core);
+    const bool bridge =
+        authored &&
+        dsrrl::runtime::dof::register_ptde_draw_bridge_runtime(g_core);
+
+    if (!bridge) {
+        unregister_dof_runtime();
+        return false;
+    }
+
+    reshade::log::message(
+        reshade::log::level::info,
+        "[DSRRL DoF R43-DRAWPARAM] carrier=LIVE_SELECTED_DOF_ROWS selector=STOCK_DSR donor_table=ABSENT bank_gate=PTDE_HOMOLOGOUS_10 m15_dual=ON default_m99=STOCK_DSR producer_rva=0x5627E0");
+    return true;
+}
+
 std::atomic<std::uint64_t> g_present_count{0};
 std::atomic<std::uint64_t> g_mr_draw_eval{0};
 std::atomic<std::uint64_t> g_mr_would_activate{0};
