@@ -9,7 +9,8 @@ from pathlib import Path
 MARKERS = {
     "selector_r45": "[DSRRL PERF R45] SELECTOR",
     "selector_r32": "[DSRRL PERF R32] SELECTOR",
-    "pointlight_prep": "[DSRRL PERF R32] POINTLIGHT_PREP",
+    "pointlight_prep_r46": "[DSRRL PERF R46] POINTLIGHT_PREP",
+    "pointlight_prep_r32": "[DSRRL PERF R32] POINTLIGHT_PREP",
     "pointlight_tx": "[DSRRL PERF R32] POINTLIGHT_TX",
     "dof": "[DSRRL PERF R44] DOF",
 }
@@ -93,13 +94,37 @@ def main() -> int:
             add(rows, component, number(line, key), n, p,
                 "FLVER_SELECTOR_ACCOUNTED")
 
-    line = latest.get("pointlight_prep")
+    line = latest.get("pointlight_prep_r46") or latest.get("pointlight_prep_r32")
+    pointlight_wall_envelope = None
     if line:
         p = sample_period(line)
-        add(rows, "POINTLIGHT_PRODUCER", number(line, "producer_us"),
-            tagged_n(line, "prod"), p)
-        add(rows, "POINTLIGHT_PREPARE", number(line, "prepare_us"),
-            tagged_n(line, "prep"), p)
+        if "POINTLIGHT_PREP sample=1/" in line and "producer_wall_us=" in line:
+            pointlight_wall_envelope = {
+                "avg_wall_us": number(line, "producer_wall_us"),
+                "max_wall_us": number(line, "producer_wall_max_us"),
+                "note": "Outer producer QPC wall envelope; excluded from CPU ranking."
+            }
+            add(rows, "POINTLIGHT_SELECT", number(line, "select_us"),
+                tagged_n(line, "select"), p, "POINTLIGHT_PRODUCER_WALL")
+            add(rows, "POINTLIGHT_CAPTURE_SOURCES",
+                number(line, "capture_sources_us"),
+                tagged_n(line, "capture"), p, "POINTLIGHT_PRODUCER_WALL")
+            add(rows, "POINTLIGHT_SIDECAR_BUILD",
+                number(line, "sidecar_build_us"),
+                tagged_n(line, "build"), p)
+            add(rows, "POINTLIGHT_AUTHORITY", number(line, "authority_us"),
+                tagged_n(line, "auth"), p)
+            add(rows, "POINTLIGHT_PREPARE", number(line, "prepare_us"),
+                tagged_n(line, "prep"), p)
+            add(rows, "POINTLIGHT_GPU_CACHE", number(line, "gpu_cache_us"),
+                tagged_n(line, "gpu"), p)
+            add(rows, "POINTLIGHT_UPLOAD", number(line, "upload_us"),
+                tagged_n(line, "upload"), p)
+        else:
+            add(rows, "POINTLIGHT_PRODUCER_WALL", number(line, "producer_us"),
+                tagged_n(line, "prod"), p)
+            add(rows, "POINTLIGHT_PREPARE", number(line, "prepare_us"),
+                tagged_n(line, "prep"), p)
 
     line = latest.get("pointlight_tx")
     if line:
@@ -121,6 +146,7 @@ def main() -> int:
                 "Estimated CPU totals extrapolate sampled calls. Substages with "
                 "overlap_parent are nested and must not be summed with their parent."),
             "rows": rows,
+            "pointlight_wall_envelope": pointlight_wall_envelope,
             "selector_wall_envelope": (
                 {
                     "avg_wall_us": number(selector_line, "total_wall_us") or number(selector_line, "total_us"),
