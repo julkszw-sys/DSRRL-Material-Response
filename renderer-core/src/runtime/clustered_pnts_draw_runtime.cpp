@@ -745,11 +745,11 @@ std::atomic<std::uint64_t> g_mirror_diff{0u};
 std::atomic<std::uint64_t> g_source_capture_ok{0u};
 std::atomic<std::uint64_t> g_source_capture_fail{0u};
 std::atomic<std::uint64_t> g_source_producer_hits{0u};
-std::atomic<std::uint64_t> g_source_donor_accept{0u};
-std::atomic<std::uint64_t> g_source_donor_reject{0u};
+std::atomic<std::uint64_t> g_source_coverage_accept{0u};
+std::atomic<std::uint64_t> g_source_coverage_reject{0u};
 std::atomic<std::uint64_t> g_source_class_reject{0u};
-std::atomic<std::uint64_t> g_source_payload_cache_hit{0u};
-std::atomic<std::uint64_t> g_source_payload_cache_miss{0u};
+std::atomic<std::uint64_t> g_source_authority_cache_hit{0u};
+std::atomic<std::uint64_t> g_source_authority_cache_miss{0u};
 std::array<std::atomic<std::uint64_t>,4> g_source_category_hits{};
 std::atomic<std::uint64_t> g_snapshot_publish{0u};
 std::atomic<std::uint64_t> g_selector_seen{0u};
@@ -1121,9 +1121,9 @@ struct clustered_source_override_hook_v1 {
 };
 
 // Exact retail DSR producer cut after DSR has computed category gain/q^2.2
-// but immediately before the 48-byte t18 record is written. Replacing the
-// stack-local source lanes here gives stock DSR receivers the PTDE source
-// signal without receiver/material lookup and without inverse-pow work.
+// but immediately before the 48-byte t18 record is written. DrawParam now
+// supplies PTDE-authored values; this hook removes only DSR's source-domain
+// category/pow transform for exact homologous bank+row coverage.
 constexpr std::uintptr_t
     k_clustered_source_override_rva = 0xB7E02u;
 constexpr std::array<std::uint8_t,16>
@@ -1139,64 +1139,233 @@ thread_local pointlight_ptde_source::
     draw_bank_authority_cache
     g_clustered_source_bank_cache{};
 
-struct clustered_source_payload_key_v1 {
-    const void *source = nullptr;
-    std::uintptr_t target = 0u;
-    std::uintptr_t owner = 0u;
-    std::uint32_t selector_word0 = 0u;
-    std::uint32_t selector_word1 = 0u;
-    std::uint64_t semantic_generation = 0u;
-};
+// The special DSRLL DrawParam now owns all PTDE-authored PointLightBank
+// numerics. The addon no longer reconstructs those values from the embedded
+// PTDE donor corpus. Runtime only proves exact bank structure + row coverage,
+// then removes DSR's clustered source-domain q transform analytically.
+constexpr std::array<float,4>
+    k_clustered_source_category_gain = {{
+        1.6f, 3.0f, 3.0f, 3.0f
+    }};
+constexpr float
+    k_clustered_source_inverse_gamma =
+        1.0f / 2.2f;
 
-struct clustered_source_payload_cache_entry_v1 {
-    clustered_source_payload_key_v1 key{};
-    std::array<float,5> payload{};
-    bool valid = false;
-};
-
-constexpr std::size_t k_clustered_source_payload_cache_entries = 256u;
-static_assert(
-    (k_clustered_source_payload_cache_entries &
-     (k_clustered_source_payload_cache_entries - 1u)) == 0u);
-
-thread_local std::array<
-    clustered_source_payload_cache_entry_v1,
-    k_clustered_source_payload_cache_entries>
-    g_clustered_source_payload_cache{};
-
-std::size_t clustered_source_payload_cache_index(
-    const clustered_source_payload_key_v1 &key) noexcept
+const pointlight_donors::bank *
+resolve_clustered_bank_authority(
+    std::uintptr_t bank_source,
+    pointlight_ptde_source::access_cache &access,
+    bool &cache_miss) noexcept
 {
-    std::uint64_t h =
-        static_cast<std::uint64_t>(
-            reinterpret_cast<std::uintptr_t>(
-                key.source)) >> 4u;
-    const auto mix = [&h](std::uint64_t v) noexcept {
-        h ^= v +
-             0x9e3779b97f4a7c15ull +
-             (h << 6u) +
-             (h >> 2u);
-    };
-    mix(static_cast<std::uint64_t>(key.target));
-    mix(static_cast<std::uint64_t>(key.owner));
-    mix(static_cast<std::uint64_t>(key.selector_word0));
-    mix(static_cast<std::uint64_t>(key.selector_word1));
-    mix(key.semantic_generation);
-    return static_cast<std::size_t>(
-        h & (k_clustered_source_payload_cache_entries - 1u));
+    if (bank_source == 0u)
+        return nullptr;
+
+    std::uintptr_t param = 0u;
+    if (!pointlight_ptde_source::read_cached(
+            bank_source + 0x18u,
+            param,
+            access) ||
+        !pointlight_ptde_source::readable_cached(
+            param,
+            0x330u,
+            access))
+        return nullptr;
+
+    const auto *p =
+        reinterpret_cast<const std::uint8_t *>(
+            param);
+    std::uint16_t count = 0u;
+    std::uint32_t first = 0u;
+    std::memcpy(
+        &count,
+        p + 0x0Au,
+        sizeof(count));
+    std::memcpy(
+        &first,
+        p + 0x34u,
+        sizeof(first));
+
+    for (const auto &entry :
+         g_clustered_source_bank_cache.entries) {
+        if (entry.param == param &&
+            entry.count == count &&
+            entry.first == first &&
+            entry.bank != nullptr)
+            return entry.bank;
+    }
+
+    const auto *bank =
+        pointlight_ptde_source::
+            lookup_persistent_structure_cache(
+                param,
+                count,
+                first);
+
+    if (bank == nullptr) {
+        std::uint64_t signature = 0u;
+        std::uint32_t structure_end = 0u;
+        if (!pointlight_ptde_source::
+                bank_structure_signature(
+                    param,
+                    count,
+                    first,
+                    access,
+                    signature,
+                    &structure_end))
+            return nullptr;
+
+        bank =
+            pointlight_ptde_source::
+                identify_structure(
+                    signature);
+        if (bank == nullptr)
+            return nullptr;
+
+        pointlight_ptde_source::
+            store_persistent_structure_cache(
+                param,
+                count,
+                first,
+                structure_end,
+                bank);
+        cache_miss = true;
+    }
+
+    auto &slot =
+        g_clustered_source_bank_cache.entries[
+            static_cast<std::size_t>(
+                g_clustered_source_bank_cache.victim++) %
+            g_clustered_source_bank_cache.entries.size()];
+    slot = {param, count, first, bank};
+    return bank;
 }
 
-bool same_clustered_source_payload_key(
-    const clustered_source_payload_key_v1 &a,
-    const clustered_source_payload_key_v1 &b) noexcept
+bool clustered_bank_row_has_ptde_param(
+    std::uintptr_t bank_source,
+    std::int32_t selector,
+    pointlight_ptde_source::access_cache &access,
+    bool &cache_miss) noexcept
 {
+    if (selector < 0)
+        return false;
+
+    const auto *bank =
+        resolve_clustered_bank_authority(
+            bank_source,
+            access,
+            cache_miss);
+    if (bank == nullptr)
+        return false;
+
+    const auto *begin =
+        pointlight_donors::banks.data();
+    const auto bank_index =
+        static_cast<std::size_t>(
+            bank - begin);
+    if (bank_index >=
+        pointlight_bank_structure_authority_v1::
+            k_ptde_drawparam_homolog_row_masks.size())
+        return false;
+
+    const auto row =
+        static_cast<std::uint32_t>(
+            selector) & 255u;
+    if (row >= 64u)
+        return false;
+
+    const auto mask =
+        pointlight_bank_structure_authority_v1::
+            k_ptde_drawparam_homolog_row_masks[
+                bank_index];
     return
-        a.source == b.source &&
-        a.target == b.target &&
-        a.owner == b.owner &&
-        a.selector_word0 == b.selector_word0 &&
-        a.selector_word1 == b.selector_word1 &&
-        a.semantic_generation == b.semantic_generation;
+        (mask &
+         (std::uint64_t{1u} << row)) != 0u;
+}
+
+bool clustered_source_has_ptde_param(
+    std::uintptr_t target_address,
+    std::uintptr_t owner,
+    std::uint32_t selector_word0,
+    std::uint32_t selector_word1,
+    bool &cache_miss) noexcept
+{
+    pointlight_ptde_source::access_cache access{};
+
+    if (target_address ==
+        g_base + 0x55BC00u) {
+        std::int32_t selector = -1;
+        std::memcpy(
+            &selector,
+            &selector_word0,
+            sizeof(selector));
+        return
+            clustered_bank_row_has_ptde_param(
+                owner,
+                selector,
+                access,
+                cache_miss);
+    }
+
+    if (target_address !=
+        g_base + 0x55D0B0u)
+        return false;
+
+    std::int16_t selector_a = -1;
+    std::int16_t selector_b = -1;
+    float beta = 0.0f;
+    std::memcpy(
+        &selector_a,
+        &selector_word0,
+        sizeof(selector_a));
+    std::memcpy(
+        &selector_b,
+        reinterpret_cast<const std::uint8_t *>(
+            &selector_word0) +
+            sizeof(selector_a),
+        sizeof(selector_b));
+    std::memcpy(
+        &beta,
+        &selector_word1,
+        sizeof(beta));
+
+    const auto pair =
+        pmetal_selector_policy::select(
+            selector_a,
+            selector_b,
+            beta);
+    if (!pair.valid)
+        return false;
+
+    std::uintptr_t source_a = 0u;
+    if (!pointlight_ptde_source::
+            selected_source(
+                owner,
+                pair.a,
+                source_a,
+                access) ||
+        !clustered_bank_row_has_ptde_param(
+            source_a,
+            pair.a,
+            access,
+            cache_miss))
+        return false;
+
+    if (pair.beta == 0.0f)
+        return true;
+
+    std::uintptr_t source_b = 0u;
+    return
+        pointlight_ptde_source::
+            selected_source(
+                owner,
+                pair.b,
+                source_b,
+                access) &&
+        clustered_bank_row_has_ptde_param(
+            source_b,
+            pair.b,
+            access,
+            cache_miss);
 }
 
 void source_hook_emit_u64(
@@ -1267,20 +1436,30 @@ void __fastcall clustered_source_override_callback(
         return;
 
     telemetry::hot_count(g_source_producer_hits);
+
     std::uint8_t source_category = 0xffu;
     std::memcpy(
         &source_category,
-        static_cast<const std::uint8_t *>(source) + 0x18u,
+        static_cast<const std::uint8_t *>(
+            source) + 0x18u,
         sizeof(source_category));
-    if (source_category < g_source_category_hits.size())
+    if (source_category <
+        g_source_category_hits.size())
         telemetry::hot_count(
-            g_source_category_hits[source_category]);
+            g_source_category_hits[
+                source_category]);
+    if (source_category >=
+        k_clustered_source_category_gain.size()) {
+        telemetry::hot_count(
+            g_source_coverage_reject);
+        telemetry::hot_count(
+            g_source_capture_fail);
+        return;
+    }
 
-    // This callback executes inside the exact attested retail source producer,
-    // so the source object and its vtable are already live. Build a tiny
-    // semantic key directly from source identity + bank/lerp selector state.
-    // Deliberately exclude world position: motion changes geometry.xyz, not
-    // the PTDE Bank/Lerp payload {invRange, RGB, End}.
+    // Exact source-class authority remains mandatory. The callback runs after
+    // the stock source vfunc and after DSR's category-gain/q^2.2 transform,
+    // immediately before t18 packing.
     void **vtable = nullptr;
     std::memcpy(
         &vtable,
@@ -1297,109 +1476,104 @@ void __fastcall clustered_source_override_callback(
     const auto target_address =
         reinterpret_cast<std::uintptr_t>(
             target);
-    if (target_address != g_base + 0x55BC00u &&
-        target_address != g_base + 0x55D0B0u) {
-        telemetry::hot_count(g_source_class_reject);
+    if (target_address !=
+            g_base + 0x55BC00u &&
+        target_address !=
+            g_base + 0x55D0B0u) {
+        telemetry::hot_count(
+            g_source_class_reject);
         return;
     }
 
-    clustered_source_payload_key_v1 key{};
-    key.source = source;
-    key.target = target_address;
+    std::uintptr_t owner = 0u;
+    std::uint32_t selector_word0 = 0u;
+    std::uint32_t selector_word1 = 0u;
     std::memcpy(
-        &key.owner,
+        &owner,
         static_cast<const std::uint8_t *>(
             source) + 0x50u,
-        sizeof(key.owner));
+        sizeof(owner));
     std::memcpy(
-        &key.selector_word0,
+        &selector_word0,
         static_cast<const std::uint8_t *>(
             source) + 0x58u,
-        sizeof(key.selector_word0));
+        sizeof(selector_word0));
     std::memcpy(
-        &key.selector_word1,
+        &selector_word1,
         static_cast<const std::uint8_t *>(
             source) + 0x5Cu,
-        sizeof(key.selector_word1));
-    key.semantic_generation =
-        g_source_semantic_generation.load(
-            std::memory_order_acquire);
-
-    if (key.owner == 0u)
+        sizeof(selector_word1));
+    if (owner == 0u) {
+        telemetry::hot_count(
+            g_source_coverage_reject);
+        telemetry::hot_count(
+            g_source_capture_fail);
         return;
+    }
 
-    const auto cache_index =
-        clustered_source_payload_cache_index(
-            key);
-    auto &cached =
-        g_clustered_source_payload_cache[
-            cache_index];
-
-    std::array<float,5> payload{};
-    if (cached.valid &&
-        same_clustered_source_payload_key(
-            cached.key,
-            key)) {
+    bool authority_cache_miss = false;
+    if (!clustered_source_has_ptde_param(
+            target_address,
+            owner,
+            selector_word0,
+            selector_word1,
+            authority_cache_miss)) {
         telemetry::hot_count(
-            g_source_payload_cache_hit);
-        payload = cached.payload;
-    } else {
+            g_source_coverage_reject);
         telemetry::hot_count(
-            g_source_payload_cache_miss);
-        std::array<float,8> candidate{};
-        std::memcpy(
-            candidate.data(),
-            geometry,
-            4u * sizeof(float));
-        std::memcpy(
-            candidate.data() + 4u,
-            color_end,
-            4u * sizeof(float));
+            g_source_capture_fail);
+        return;
+    }
 
-        // Heavy Bank/Lerp donor reconstruction runs only when semantic source
-        // state changes. Dynamic source movement no longer invalidates it.
-        if (!pointlight_ptde_source::capture(
-                source,
-                g_base,
-                candidate,
-                g_clustered_source_bank_cache)) {
-            telemetry::hot_count(
-                g_source_donor_reject);
+    telemetry::hot_count(
+        g_source_coverage_accept);
+    telemetry::hot_count(
+        authority_cache_miss
+            ? g_source_authority_cache_miss
+            : g_source_authority_cache_hit);
+
+    // DrawParam already contains the exact PTDE q/Begin/End values. At this
+    // cut DSR has changed only RGB source amplitude:
+    //     C_D = S_category * q^2.2
+    // Restore q analytically; keep stock position, PTDE-backed invRange/End,
+    // selection, packing and stock receiver intact. The separate exact A1
+    // PntS attenuation island remains responsible for x^3 -> x.
+    const float gain =
+        k_clustered_source_category_gain[
+            source_category];
+    std::array<float,3> q{};
+    for (std::size_t i = 0u;
+         i < q.size();
+         ++i) {
+        const float value =
+            color_end[i];
+        if (!std::isfinite(value) ||
+            value < 0.0f ||
+            !(gain > 0.0f)) {
             telemetry::hot_count(
                 g_source_capture_fail);
             return;
         }
-        telemetry::hot_count(
-            g_source_donor_accept);
 
-        for (std::size_t i = 3u;
-             i < candidate.size();
-             ++i)
-            if (!std::isfinite(candidate[i]))
-                return;
-        if (!(candidate[3] > 0.0f) ||
-            !(candidate[7] > 0.0f))
+        const float normalized =
+            value / gain;
+        q[i] =
+            normalized <= 0.0f
+                ? 0.0f
+                : std::pow(
+                    normalized,
+                    k_clustered_source_inverse_gamma);
+        if (!std::isfinite(q[i])) {
+            telemetry::hot_count(
+                g_source_capture_fail);
             return;
-
-        for (std::size_t i = 0u;
-             i < payload.size();
-             ++i)
-            payload[i] =
-                candidate[3u + i];
-
-        cached.key = key;
-        cached.payload = payload;
-        cached.valid = true;
+        }
     }
 
-    // Preserve stock DSR position.xyz and all category metadata/falloff-mode
-    // lanes. Replace only the source carrier that PTDE owns.
-    geometry[3] = payload[0];
     std::memcpy(
         color_end,
-        payload.data() + 1u,
-        4u * sizeof(float));
-
+        q.data(),
+        q.size() * sizeof(float));
     telemetry::hot_count(
         g_source_capture_ok);
 }
@@ -2836,13 +3010,13 @@ bool clustered_pnts_draw_runtime::install() noexcept
             reshade::log::level::info,
             "[DSRRL POINTLIGHT R40] source_cache=PERSISTENT_GENERATIONAL_EXACT_STATE invalidation=ACTIVE_COLLECTION_INSERT collection_identity=IN_KEY endpoint_identity=SOURCE_PLUS_PARAM selector_beta=IN_KEY present_reset=OFF spc=ON nospc=ON");
     static std::atomic_bool
-        r51_hotpath_logged{false};
-    if (!r51_hotpath_logged.exchange(
+        r53_param_source_logged{false};
+    if (!r53_param_source_logged.exchange(
             true,
             std::memory_order_relaxed))
         reshade::log::message(
             reshade::log::level::info,
-            "[DSRRL POINTLIGHT R51] resolved_donor_fast_path=ON duplicate_lerp_resolution=OFF bank_structure_full_revalidate=ONCE_PER_PRESENT allocation_guard=EACH_LOOKUP vm_region_windows=4xPER_CATEGORY failopen_original_donor=ON");
+            "[DSRRL POINTLIGHT R53-PARAM-SOURCE] values=DRAWPARAM donor_reconstruction=OFF coverage=EXACT_BANK_STRUCTURE_PLUS_ROW banks=10 m15_1=ON m15=ON q_transform=INVERSE_DSR_CATEGORY_POW attenuation=A1_LINEAR_ISLAND");
     static std::atomic_bool
         r52_source_first_logged{false};
     if (!r52_source_first_logged.exchange(
@@ -2850,7 +3024,7 @@ bool clustered_pnts_draw_runtime::install() noexcept
             std::memory_order_relaxed))
         reshade::log::message(
             reshade::log::level::info,
-            "[DSRRL POINTLIGHT R52-SOURCE-FIRST] clustered=SOURCE_ONLY source_cut=0xB7E02 stage=POST_DSR_TRANSFORM_PRE_T18 receiver=STOCK_DSR material_lookup=OFF replacement_shader=OFF fixed=SOURCE_BEFORE_RECEIVER");
+            "[DSRRL POINTLIGHT R52-SOURCE-FIRST] clustered=SOURCE_ONLY source_cut=0xB7E02 stage=POST_DSR_TRANSFORM_PRE_T18 values=DRAWPARAM donor=OFF coverage=EXACT_BANK_ROW receiver=STOCK_DSR material_lookup=OFF replacement_shader=OFF fixed=SOURCE_BEFORE_RECEIVER");
     return true;
 }
 
@@ -2866,7 +3040,6 @@ void clustered_pnts_draw_runtime::uninstall() noexcept
             std::memory_order_relaxed);
     }
     g_clustered_source_bank_cache = {};
-    g_clustered_source_payload_cache = {};
     g_source_exec_attested.store(
         false,
         std::memory_order_relaxed);
@@ -3806,11 +3979,11 @@ clustered_pnts_draw_runtime::telemetry() const noexcept
         g_source_capture_ok.load(),
         g_source_capture_fail.load(),
         g_source_producer_hits.load(),
-        g_source_donor_accept.load(),
-        g_source_donor_reject.load(),
+        g_source_coverage_accept.load(),
+        g_source_coverage_reject.load(),
         g_source_class_reject.load(),
-        g_source_payload_cache_hit.load(),
-        g_source_payload_cache_miss.load(),
+        g_source_authority_cache_hit.load(),
+        g_source_authority_cache_miss.load(),
         g_source_category_hits[0].load(),
         g_source_category_hits[1].load(),
         g_source_category_hits[2].load(),
@@ -3880,11 +4053,11 @@ void clustered_pnts_draw_runtime::reset() noexcept
     g_source_capture_ok.store(0u);
     g_source_capture_fail.store(0u);
     g_source_producer_hits.store(0u);
-    g_source_donor_accept.store(0u);
-    g_source_donor_reject.store(0u);
+    g_source_coverage_accept.store(0u);
+    g_source_coverage_reject.store(0u);
     g_source_class_reject.store(0u);
-    g_source_payload_cache_hit.store(0u);
-    g_source_payload_cache_miss.store(0u);
+    g_source_authority_cache_hit.store(0u);
+    g_source_authority_cache_miss.store(0u);
     for (auto &counter : g_source_category_hits)
         counter.store(0u);
     g_snapshot_publish.store(0u);
