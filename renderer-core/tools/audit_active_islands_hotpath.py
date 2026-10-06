@@ -113,7 +113,7 @@ def main():
         "g_clustered_pointlight_selection_transport_active.store(\n        false,",
         "clustered draw-selection transport disabled")
     require(clustered,
-        "k_clustered_source_override_rva = 0xB7D25u;",
+        "k_clustered_source_override_rva = 0xB7E02u;",
         "clustered source-only retail producer cut")
     require(clustered,
         "k_clustered_source_override_preimage",
