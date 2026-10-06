@@ -1006,9 +1006,7 @@ bool handle_draw(
         profile_scope.set_path(
             dof_profile_path::idle_scan);
 #endif
-        if (exact_role &&
-            selected == role::depth_copy_msaa &&
-            pass01_scope) {
+        if (pass01_scope) {
 #ifdef DSRRL_DOF_PROFILE
             profile_scope.set_path(
                 dof_profile_path::begin_sequence);
