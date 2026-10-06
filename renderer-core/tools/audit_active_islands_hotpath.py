@@ -191,8 +191,8 @@ def main():
         "dsrrl::runtime::dof::handle_draw_indexed_event(",
         "DoF indexed path uses integrated draw dispatcher")
     require(clustered,
-        "Dynamic source movement no longer invalidates it.",
-        "clustered source payload cache excludes position from semantic invalidation")
+        "clustered_source_has_ptde_param(",
+        "clustered source uses PARAM-backed exact bank+row authority")
     require(dof_depth,
         "g_pass01_render_context) + 0xD4u",
         "DoF exact host scene slot0 resource restore")
