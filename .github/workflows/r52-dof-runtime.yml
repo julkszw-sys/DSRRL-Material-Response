@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
   push:
     branches:
-      - r43-dof-cpu-profile
+      - r52-pointlight-source-first-stock-clustered
   pull_request:
     paths:
       - "renderer-core/integrated/**"
