@@ -18,6 +18,13 @@ struct fixed_pointlight_telemetry {
     std::uint64_t producer_captures = 0;
     std::uint64_t producer_restarts = 0;
     std::uint64_t producer_rejects = 0;
+    std::uint64_t producer_hits = 0;
+    std::uint64_t snapshot2_publish = 0;
+    std::uint64_t snapshot4_publish = 0;
+    std::uint64_t source_category0 = 0;
+    std::uint64_t source_category1 = 0;
+    std::uint64_t source_category2 = 0;
+    std::uint64_t source_category3 = 0;
     std::uint64_t selector_seen = 0;
     std::uint64_t selector_match = 0;
     std::uint64_t selector_stale = 0;
