@@ -69,6 +69,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw "HEAD is not descended from corrected source-only PointLight head 25893b07" }
           git merge-base --is-ancestor 091c63518d9099270e5d7cd8feb7c4c84666dbbb HEAD
           if ($LASTEXITCODE -eq 0) { throw "Forbidden generic-main lineage 091c635 detected" }
+          $global:LASTEXITCODE = 0
           Write-Host "R52_CORRECT_BASE_LINEAGE_PASS"
 
       - name: Checkout pinned ReShade API
