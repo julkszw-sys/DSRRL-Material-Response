@@ -174,23 +174,22 @@ def main():
     if "pmetal_env_source_cache_invalidate();" in flver_cpp:
         fail("R41 regression: FLVER lifecycle globally invalidates P_Metal LightBank source cache")
 
-    material_body=function_body(
-        clustered,
-        "void clustered_pnts_draw_runtime::selector_identity_event(",
-        "bool clustered_pnts_draw_runtime::current_draw_authority(")
-    require(material_body,
-        "build_clustered_sidecar_v1(",
-        "PointLight material stage owns carrier materialization")
-    require(material_body,
-        "source_cache.producer_serial != input.serial",
-        "PointLight material stage joins an already-produced source carrier")
-    if "select_first_four_exact(" in material_body or "capture_source(" in material_body:
-        fail("PointLight material-response stage regressed to source reconstruction")
-    require(flver_cpp,
-        "clustered_pnts_selector_event_bridge(\n            owner,\n            actual_material);",
-        "clustered Spc keeps cheap selector association for deterministic stale-authority clearing")
-    if "if(g_state.builder_armed)\n  clustered_pnts_selector_event_bridge(" in flver_cpp:
-        fail("clustered selector regressed to unconditional builder-armed dispatch")
+    # Clustered receiver/material sidecar code is historical provenance only
+    # in the R52 source-first lineage. The live FLVER selector must not enter it.
+    require(clustered,
+        "Clustered PntS never performs receiver/material authorization.",
+        "clustered receiver/material bridge retired")
+    publish_start=flver_cpp.find("bool publish_exact_selector_identity(")
+    publish_end=flver_cpp.find(
+        'extern "C" void dsrrl_clustered_pnts_builder_observer(',
+        publish_start)
+    if publish_start < 0 or publish_end <= publish_start:
+        fail("cannot isolate FLVER selector publish body")
+    publish_body=flver_cpp[publish_start:publish_end]
+    if "direct_pointlight_material_candidate(" in publish_body:
+        fail("clustered material candidate lookup survived in FLVER selector")
+    if "clustered_pnts_selector_event_bridge(" in publish_body:
+        fail("clustered receiver bridge survived in FLVER selector")
     require(flver_cpp,
         "fixed_pointlight_selector_event_bridge(owner);",
         "fixed selector bridge dispatches directly at the FLVER semantic cut")
