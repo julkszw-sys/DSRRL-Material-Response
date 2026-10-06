@@ -9,6 +9,7 @@ from pathlib import Path
 MARKERS = {
     "selector_r45": "[DSRRL PERF R45] SELECTOR",
     "selector_r32": "[DSRRL PERF R32] SELECTOR",
+    "pointlight_prep_r47": "[DSRRL PERF R47] POINTLIGHT_PREP",
     "pointlight_prep_r46": "[DSRRL PERF R46] POINTLIGHT_PREP",
     "pointlight_prep_r32": "[DSRRL PERF R32] POINTLIGHT_PREP",
     "pointlight_tx": "[DSRRL PERF R32] POINTLIGHT_TX",
@@ -94,7 +95,7 @@ def main() -> int:
             add(rows, component, number(line, key), n, p,
                 "FLVER_SELECTOR_ACCOUNTED")
 
-    line = latest.get("pointlight_prep_r46") or latest.get("pointlight_prep_r32")
+    line = latest.get("pointlight_prep_r47") or latest.get("pointlight_prep_r46") or latest.get("pointlight_prep_r32")
     pointlight_wall_envelope = None
     if line:
         p = sample_period(line)
@@ -102,7 +103,11 @@ def main() -> int:
             pointlight_wall_envelope = {
                 "avg_wall_us": number(line, "producer_wall_us"),
                 "max_wall_us": number(line, "producer_wall_max_us"),
-                "note": "Outer producer QPC wall envelope; excluded from CPU ranking."
+                "select_avg_cycles": number(line, "select_cycles"),
+                "select_max_cycles": number(line, "select_cycles_max"),
+                "capture_avg_cycles": number(line, "capture_cycles"),
+                "capture_max_cycles": number(line, "capture_cycles_max"),
+                "note": "Outer QPC wall is scheduler-sensitive. R47 thread-cycle counters are the preferred CPU ranking signal for select/capture."
             }
             add(rows, "POINTLIGHT_SELECT", number(line, "select_us"),
                 tagged_n(line, "select"), p, "POINTLIGHT_PRODUCER_WALL")
