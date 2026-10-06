@@ -134,6 +134,8 @@ inline constexpr std::array<
      draw_transaction_mode::draw_required,
      draw_mutation_shader | draw_mutation_constant_buffer,
      draw_mutation_shader | draw_mutation_constant_buffer, true, true, true},
+    // DoF owns its private resource graph; it must not enter the generic
+    // draw-state mutation transaction used by material/lighting islands.
     {operator_id::post_dof_ptde, draw_transaction_mode::blocked,
      draw_mutation_none, draw_mutation_none, true, false, false},
 }};
