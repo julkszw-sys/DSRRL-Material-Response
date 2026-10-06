@@ -1036,37 +1036,11 @@ bool publish_exact_selector_identity(
     if (!selection_ok)
         return false;
 
-    const auto pointlight_begin =
-        profile != nullptr
-            ? selector_profile_begin(*profile)
-            : 0u;
-    bool pointlight_spc = false;
-    if (g_state.builder_armed &&
-        clustered_pnts_selector_handoff_ready_bridge(
-            owner) &&
-        operators::material_response::
-            direct_pointlight_material_candidate(
-                identity,
-                pointlight_spc)) {
-        // R35 owner-authorized hybrid: source/carrier production stays
-        // independent from material response, but both NoSpc and Spc now
-        // consume the exact PTDE PointLight source. For Spc this intentionally
-        // feeds the PTDE source/attenuation carrier into the surviving DSR
-        // local-specular tail. That path is explicitly HYBRID and must not be
-        // described as PTDE-equivalent local-specular behavior.
-        clustered_pnts_selector_event_bridge(
-            owner,
-            actual_material);
-        clustered_pnts_selector_source_event_bridge();
-        clustered_pnts_selector_identity_event_bridge(
-            identity,
-            pointlight_spc);
-    }
-    if (profile != nullptr)
-        selector_profile_end_stage(
-            *profile,
-            pointlight_begin,
-            profile->pointlight_bridge_ticks);
+    // R52 source-first correction: clustered PntS is handled entirely at
+    // the retail source-producer cut. Do not query PointLight material
+    // candidates, join clustered draw state, or authorize a clustered
+    // receiver here. Fixed PointLight source association remains the cheap
+    // producer-only bridge at selector entry above.
 
 #ifndef DSRRL_PHYSICAL_CUT_UL_H3_SUBSURFACE
     if (g_selector_upper_lower_enabled.load(
