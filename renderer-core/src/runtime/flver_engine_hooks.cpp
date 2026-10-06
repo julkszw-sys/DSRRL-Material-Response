@@ -217,15 +217,36 @@ void selector_profile_log(
                 static_cast<double>(frequency.QuadPart);
         };
 
-    char line[1536]{};
+    const auto total_ticks =
+        g_selector_profile_total.ticks.load(
+            std::memory_order_relaxed);
+    const auto accounted_ticks =
+        g_selector_profile_prefix.ticks.load(std::memory_order_relaxed) +
+        g_selector_profile_resolve_material.ticks.load(std::memory_order_relaxed) +
+        g_selector_profile_final_cache.ticks.load(std::memory_order_relaxed) +
+        g_selector_profile_cache_publish.ticks.load(std::memory_order_relaxed) +
+        g_selector_profile_owner_lookup.ticks.load(std::memory_order_relaxed) +
+        g_selector_profile_owner_mtd.ticks.load(std::memory_order_relaxed) +
+        g_selector_profile_selection_publish.ticks.load(std::memory_order_relaxed) +
+        g_selector_profile_pmetal.ticks.load(std::memory_order_relaxed) +
+        g_selector_profile_runtime_mtd.ticks.load(std::memory_order_relaxed) +
+        g_selector_profile_runtime_publish.ticks.load(std::memory_order_relaxed);
+    const auto unaccounted_ticks =
+        total_ticks > accounted_ticks
+            ? total_ticks - accounted_ticks
+            : 0u;
+
+    char line[1664]{};
     std::snprintf(
         line,
         sizeof(line),
-        "[DSRRL PERF R32] SELECTOR sample=1/%u n=%llu total_us=%.3f max_total_us=%.3f prefix_us=%.3f resolve_us=%.3f cache_lookup_us=%.3f cache_publish_us=%.3f owner_lookup_us=%.3f owner_mtd_us=%.3f selection_publish_us=%.3f pmetal_source_us=%.3f runtime_mtd_us=%.3f runtime_publish_us=%.3f paths=cache:%llu owner:%llu runtime:%llu fail:%llu early:%llu support=parse:%llu mtd:%llu destroy:%llu",
+        "[DSRRL PERF R45] SELECTOR sample=1/%u n=%llu total_wall_us=%.3f max_total_wall_us=%.3f accounted_us=%.3f unaccounted_wall_us=%.3f prefix_us=%.3f resolve_us=%.3f cache_lookup_us=%.3f cache_publish_us=%.3f owner_lookup_us=%.3f owner_mtd_us=%.3f selection_publish_us=%.3f pmetal_source_us=%.3f runtime_mtd_us=%.3f runtime_publish_us=%.3f paths=cache:%llu owner:%llu runtime:%llu fail:%llu early:%llu support=parse:%llu mtd:%llu destroy:%llu",
         k_selector_profile_sample_period,
         static_cast<unsigned long long>(samples),
-        avg_us(g_selector_profile_total.ticks.load(std::memory_order_relaxed)),
+        avg_us(total_ticks),
         ticks_us(g_selector_profile_total.max_ticks.load(std::memory_order_relaxed)),
+        avg_us(accounted_ticks),
+        avg_us(unaccounted_ticks),
         avg_us(g_selector_profile_prefix.ticks.load(std::memory_order_relaxed)),
         avg_us(g_selector_profile_resolve_material.ticks.load(std::memory_order_relaxed)),
         avg_us(g_selector_profile_final_cache.ticks.load(std::memory_order_relaxed)),
