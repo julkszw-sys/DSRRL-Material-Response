@@ -9,7 +9,6 @@
 
 #include "dsrrl/core/renderer_core.hpp"
 #include "dsrrl/runtime/dof_process_memory.hpp"
-#include "dsrrl/operators/dof/ptde_dofbank_embedded.hpp"
 
 #include <Windows.h>
 
@@ -18,11 +17,45 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <cmath>
 
 namespace dsrrl::runtime::dof {
 namespace {
 
-using dsrrl::operators::dof::ptde_bank::decoded_state;
+struct decoded_state {
+    float far_begin = 0.0f;
+    float far_end = 0.0f;
+    float far_mul = 0.0f;
+    float near_begin = 0.0f;
+    float near_end = 0.0f;
+    float near_mul = 0.0f;
+    float dispersion_sq = 0.0f;
+};
+
+struct live_dof_row_v1 {
+    float far_begin = 0.0f;
+    float far_end = 0.0f;
+    std::int32_t far_mul = 0;
+    float near_begin = 0.0f;
+    float near_end = 0.0f;
+    std::int32_t near_mul = 0;
+    float dispersion_sq = 0.0f;
+};
+static_assert(sizeof(live_dof_row_v1) == 28u);
+
+// Narrow routing authority only. No PTDE DoF payload lives in the binary.
+constexpr std::array<std::uint64_t,10> k_ptde_homologous_dofbank_signatures = {{
+    0x96ff83e97066616fULL, // m10_DofBank.param
+    0x4369cfd16580100bULL, // m11_DofBank.param
+    0xcf06079b3d769e22ULL, // m12_DofBank.param
+    0x8495ff3b666052a9ULL, // m13_DofBank.param
+    0x5cefc2fa3d4e63d2ULL, // m14_DofBank.param
+    0x23e4ac6187d0387bULL, // m15_1_DofBank.param
+    0xc8c2fbb1f61b4915ULL, // m15_DofBank.param
+    0x5b8ca0a616a3898bULL, // m16_DofBank.param
+    0x6e971c759010210dULL, // m17_DofBank.param
+    0x600fa9b5f6e6446dULL, // m18_DofBank.param
+}};
 
 constexpr std::uintptr_t k_rva_dofbank_blend = 0x5627E0u;
 constexpr std::uintptr_t k_rva_security_cookie = 0x1AAB820u;
@@ -57,7 +90,7 @@ std::atomic<std::uint64_t> g_applied{0};
 
 struct cached_bank {
     const std::uint8_t *param = nullptr;
-    int slot = -1;
+    bool authorized = false;
 };
 thread_local std::array<cached_bank,4> g_bank_cache{};
 thread_local std::size_t g_bank_cache_cursor = 0u;
@@ -162,25 +195,133 @@ bool structural_signature(
     return true;
 }
 
-int resolve_area_slot(void *source) noexcept
+bool bank_authorized(void *source,const std::uint8_t *&param) noexcept
 {
-    const std::uint8_t *param=nullptr;
+    param=nullptr;
     if(!read_param_base(source,param))
-        return -1;
+        return false;
 
     for(const auto &cached:g_bank_cache)
         if(cached.param==param)
-            return cached.slot;
+            return cached.authorized;
 
-    std::uint64_t signature=0;
-    const int slot=
-        structural_signature(param,signature) ?
-        dsrrl::operators::dof::ptde_bank::area_slot_from_signature(signature) :
-        -1;
+    std::uint64_t signature=0u;
+    bool authorized=false;
+    if(structural_signature(param,signature)){
+        for(const auto candidate:k_ptde_homologous_dofbank_signatures){
+            if(candidate==signature){
+                authorized=true;
+                break;
+            }
+        }
+    }
 
-    g_bank_cache[g_bank_cache_cursor]={param,slot};
+    g_bank_cache[g_bank_cache_cursor]={param,authorized};
     g_bank_cache_cursor=(g_bank_cache_cursor+1u)%g_bank_cache.size();
-    return slot;
+    return authorized;
+}
+
+bool read_selected_live_row(
+    void *source,
+    std::uint32_t selector,
+    decoded_state &out) noexcept
+{
+    const std::uint8_t *param=nullptr;
+    if(selector>=64u || !bank_authorized(source,param) || !param)
+        return false;
+
+    std::uint32_t data_offset=0u;
+    bool found=false;
+
+    {
+        const auto *entry=
+            param+0x30u+static_cast<std::size_t>(selector)*12u;
+        std::uint32_t id=0u;
+        if(process_memory::safe_read_bytes(entry,&id,sizeof(id)) &&
+           process_memory::safe_read_bytes(
+               entry+4u,&data_offset,sizeof(data_offset)) &&
+           id==selector)
+            found=true;
+    }
+
+    if(!found){
+        for(std::uint32_t i=0u;i<64u;++i){
+            const auto *entry=
+                param+0x30u+static_cast<std::size_t>(i)*12u;
+            std::uint32_t id=0u,offset=0u;
+            if(!process_memory::safe_read_bytes(entry,&id,sizeof(id)) ||
+               !process_memory::safe_read_bytes(
+                   entry+4u,&offset,sizeof(offset)))
+                return false;
+            if(id==selector){
+                data_offset=offset;
+                found=true;
+                break;
+            }
+        }
+    }
+
+    if(!found || data_offset<0x330u || data_offset>0x100000u)
+        return false;
+
+    live_dof_row_v1 row{};
+    if(!process_memory::safe_read_bytes(
+           param+data_offset,
+           &row,
+           sizeof(row)))
+        return false;
+
+    out={
+        row.far_begin,
+        row.far_end,
+        static_cast<float>(row.far_mul),
+        row.near_begin,
+        row.near_end,
+        static_cast<float>(row.near_mul),
+        row.dispersion_sq
+    };
+
+    return
+        std::isfinite(out.far_begin) &&
+        std::isfinite(out.far_end) &&
+        std::isfinite(out.far_mul) &&
+        std::isfinite(out.near_begin) &&
+        std::isfinite(out.near_end) &&
+        std::isfinite(out.near_mul) &&
+        std::isfinite(out.dispersion_sq);
+}
+
+bool blend_live_rows(
+    const decoded_state &a,
+    const decoded_state &b,
+    float beta,
+    decoded_state &out) noexcept
+{
+    if(!std::isfinite(beta))
+        return false;
+
+    const auto lerp=[beta](float x,float y) noexcept {
+        return x+(y-x)*beta;
+    };
+
+    out={
+        lerp(a.far_begin,b.far_begin),
+        lerp(a.far_end,b.far_end),
+        lerp(a.far_mul,b.far_mul),
+        lerp(a.near_begin,b.near_begin),
+        lerp(a.near_end,b.near_end),
+        lerp(a.near_mul,b.near_mul),
+        lerp(a.dispersion_sq,b.dispersion_sq)
+    };
+
+    return
+        std::isfinite(out.far_begin) &&
+        std::isfinite(out.far_end) &&
+        std::isfinite(out.far_mul) &&
+        std::isfinite(out.near_begin) &&
+        std::isfinite(out.near_end) &&
+        std::isfinite(out.near_mul) &&
+        std::isfinite(out.dispersion_sq);
 }
 
 void copy_state(float *out,const decoded_state &state) noexcept
@@ -213,29 +354,26 @@ void __fastcall hook_producer(
     if(!out)
         return;
 
-    const int area_a=resolve_area_slot(source_a);
-    const int area_b=resolve_area_slot(source_b);
-    if(area_a<0 || area_b<0 || selector_a>=64u || selector_b>=64u){
+    // Stock DSR owns source and row selection. Read the exact live DrawParam
+    // records selected by DSR; do not remap them through an embedded donor table.
+    decoded_state a{},b{};
+    if(!read_selected_live_row(source_a,selector_a,a) ||
+       !read_selected_live_row(source_b,selector_b,b)){
         ++g_misses;
         return;
     }
 
     ++g_matches;
 
-    // Authored PTDE state is embedded and route-verified at this point, but
-    // visible mutation remains tied to the DoF island feature gate. The
-    // current manifest keeps post_dof_ptde hard-blocked until the resource
-    // graph/output cut is closed, so this hook is observational today.
     if(!g_core ||
        !g_core->features().enabled(core::operator_id::post_dof_ptde))
         return;
 
     decoded_state state{};
-    if(!dsrrl::operators::dof::ptde_bank::blend(
-           static_cast<std::size_t>(area_a),selector_a,
-           static_cast<std::size_t>(area_b),selector_b,
-           beta,state))
+    if(!blend_live_rows(a,b,beta,state)){
+        ++g_misses;
         return;
+    }
 
     copy_state(out,state);
     ++g_applied;
