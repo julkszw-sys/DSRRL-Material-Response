@@ -89,6 +89,7 @@ struct selector_profile_sample {
     std::uint64_t owner_lookup_ticks = 0u;
     std::uint64_t owner_mtd_enrich_ticks = 0u;
     std::uint64_t selection_publish_ticks = 0u;
+    std::uint64_t pointlight_bridge_ticks = 0u;
     std::uint64_t pmetal_source_ticks = 0u;
     std::uint64_t runtime_mtd_lookup_ticks = 0u;
     std::uint64_t runtime_publish_ticks = 0u;
@@ -115,6 +116,7 @@ selector_profile_bucket g_selector_profile_cache_publish{};
 selector_profile_bucket g_selector_profile_owner_lookup{};
 selector_profile_bucket g_selector_profile_owner_mtd{};
 selector_profile_bucket g_selector_profile_selection_publish{};
+selector_profile_bucket g_selector_profile_pointlight_bridge{};
 selector_profile_bucket g_selector_profile_pmetal{};
 selector_profile_bucket g_selector_profile_runtime_mtd{};
 selector_profile_bucket g_selector_profile_runtime_publish{};
@@ -228,6 +230,7 @@ void selector_profile_log(
         g_selector_profile_owner_lookup.ticks.load(std::memory_order_relaxed) +
         g_selector_profile_owner_mtd.ticks.load(std::memory_order_relaxed) +
         g_selector_profile_selection_publish.ticks.load(std::memory_order_relaxed) +
+        g_selector_profile_pointlight_bridge.ticks.load(std::memory_order_relaxed) +
         g_selector_profile_pmetal.ticks.load(std::memory_order_relaxed) +
         g_selector_profile_runtime_mtd.ticks.load(std::memory_order_relaxed) +
         g_selector_profile_runtime_publish.ticks.load(std::memory_order_relaxed);
@@ -240,7 +243,7 @@ void selector_profile_log(
     std::snprintf(
         line,
         sizeof(line),
-        "[DSRRL PERF R45] SELECTOR sample=1/%u n=%llu total_wall_us=%.3f max_total_wall_us=%.3f accounted_us=%.3f unaccounted_wall_us=%.3f prefix_us=%.3f resolve_us=%.3f cache_lookup_us=%.3f cache_publish_us=%.3f owner_lookup_us=%.3f owner_mtd_us=%.3f selection_publish_us=%.3f pmetal_source_us=%.3f runtime_mtd_us=%.3f runtime_publish_us=%.3f paths=cache:%llu owner:%llu runtime:%llu fail:%llu early:%llu support=parse:%llu mtd:%llu destroy:%llu",
+        "[DSRRL PERF R50] SELECTOR sample=1/%u n=%llu total_wall_us=%.3f max_total_wall_us=%.3f accounted_us=%.3f unaccounted_wall_us=%.3f prefix_us=%.3f resolve_us=%.3f cache_lookup_us=%.3f cache_publish_us=%.3f owner_lookup_us=%.3f owner_mtd_us=%.3f selection_publish_us=%.3f pointlight_bridge_us=%.3f pointlight_bridge_max_us=%.3f pmetal_source_us=%.3f runtime_mtd_us=%.3f runtime_publish_us=%.3f paths=cache:%llu owner:%llu runtime:%llu fail:%llu early:%llu support=parse:%llu mtd:%llu destroy:%llu",
         k_selector_profile_sample_period,
         static_cast<unsigned long long>(samples),
         avg_us(total_ticks),
@@ -254,6 +257,8 @@ void selector_profile_log(
         avg_us(g_selector_profile_owner_lookup.ticks.load(std::memory_order_relaxed)),
         avg_us(g_selector_profile_owner_mtd.ticks.load(std::memory_order_relaxed)),
         avg_us(g_selector_profile_selection_publish.ticks.load(std::memory_order_relaxed)),
+        avg_us(g_selector_profile_pointlight_bridge.ticks.load(std::memory_order_relaxed)),
+        ticks_us(g_selector_profile_pointlight_bridge.max_ticks.load(std::memory_order_relaxed)),
         avg_us(g_selector_profile_pmetal.ticks.load(std::memory_order_relaxed)),
         avg_us(g_selector_profile_runtime_mtd.ticks.load(std::memory_order_relaxed)),
         avg_us(g_selector_profile_runtime_publish.ticks.load(std::memory_order_relaxed)),
@@ -310,6 +315,9 @@ void selector_profile_finish(
         g_selector_profile_selection_publish,
         sample.selection_publish_ticks);
     selector_profile_add(
+        g_selector_profile_pointlight_bridge,
+        sample.pointlight_bridge_ticks);
+    selector_profile_add(
         g_selector_profile_pmetal,
         sample.pmetal_source_ticks);
     selector_profile_add(
@@ -358,6 +366,7 @@ void selector_profile_reset() noexcept
     reset_bucket(g_selector_profile_owner_lookup);
     reset_bucket(g_selector_profile_owner_mtd);
     reset_bucket(g_selector_profile_selection_publish);
+    reset_bucket(g_selector_profile_pointlight_bridge);
     reset_bucket(g_selector_profile_pmetal);
     reset_bucket(g_selector_profile_runtime_mtd);
     reset_bucket(g_selector_profile_runtime_publish);
@@ -1027,6 +1036,10 @@ bool publish_exact_selector_identity(
     if (!selection_ok)
         return false;
 
+    const auto pointlight_begin =
+        profile != nullptr
+            ? selector_profile_begin(*profile)
+            : 0u;
     bool pointlight_spc = false;
     if (g_state.builder_armed &&
         operators::material_response::
@@ -1047,6 +1060,11 @@ bool publish_exact_selector_identity(
             identity,
             pointlight_spc);
     }
+    if (profile != nullptr)
+        selector_profile_end_stage(
+            *profile,
+            pointlight_begin,
+            profile->pointlight_bridge_ticks);
 
 #ifndef DSRRL_PHYSICAL_CUT_UL_H3_SUBSURFACE
     if (g_selector_upper_lower_enabled.load(
