@@ -7748,7 +7748,8 @@ bool AddonInit(
 
     const bool flver_hooks =
         dsrrl::runtime::flver_identity_transport::install(
-            k_pointlight_drawtime_runtime_enabled,
+            k_pointlight_drawtime_runtime_enabled &&
+                k_clustered_pointlight_receiver_runtime_enabled,
             upper_lower_enabled,
             hemdir3_enabled);
 
