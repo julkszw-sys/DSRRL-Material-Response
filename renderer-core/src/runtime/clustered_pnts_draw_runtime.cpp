@@ -374,12 +374,14 @@ void maybe_log_pointlight_prepare_profile() noexcept
     std::snprintf(
         line,
         sizeof(line),
-        "[DSRRL PERF R32] POINTLIGHT_PREP sample=1/%u producer_us=%.3f producer_max_us=%.3f select_us=%.3f capture_sources_us=%.3f sidecar_build_us=%.3f authority_us=%.3f prepare_us=%.3f prepare_max_us=%.3f gpu_cache_us=%.3f upload_us=%.3f n=prod:%llu auth:%llu prep:%llu",
+        "[DSRRL PERF R46] POINTLIGHT_PREP sample=1/%u producer_wall_us=%.3f producer_wall_max_us=%.3f select_us=%.3f select_max_us=%.3f capture_sources_us=%.3f capture_sources_max_us=%.3f sidecar_build_us=%.3f authority_us=%.3f prepare_us=%.3f prepare_max_us=%.3f gpu_cache_us=%.3f upload_us=%.3f n=prod:%llu select:%llu capture:%llu build:%llu auth:%llu prep:%llu gpu:%llu upload:%llu",
         k_pointlight_profile_sample_period,
         prof_avg_us(g_prof_producer),
         prof_max_us(g_prof_producer),
         prof_avg_us(g_prof_select),
+        prof_max_us(g_prof_select),
         prof_avg_us(g_prof_capture),
+        prof_max_us(g_prof_capture),
         prof_avg_us(g_prof_sidecar_build),
         prof_avg_us(g_prof_authority),
         prof_avg_us(g_prof_prepare),
@@ -390,9 +392,24 @@ void maybe_log_pointlight_prepare_profile() noexcept
             g_prof_producer.samples.load(
                 std::memory_order_relaxed)),
         static_cast<unsigned long long>(
+            g_prof_select.samples.load(
+                std::memory_order_relaxed)),
+        static_cast<unsigned long long>(
+            g_prof_capture.samples.load(
+                std::memory_order_relaxed)),
+        static_cast<unsigned long long>(
+            g_prof_sidecar_build.samples.load(
+                std::memory_order_relaxed)),
+        static_cast<unsigned long long>(
             g_prof_authority.samples.load(
                 std::memory_order_relaxed)),
-        static_cast<unsigned long long>(samples));
+        static_cast<unsigned long long>(samples),
+        static_cast<unsigned long long>(
+            g_prof_gpu_cache.samples.load(
+                std::memory_order_relaxed)),
+        static_cast<unsigned long long>(
+            g_prof_upload.samples.load(
+                std::memory_order_relaxed)));
     reshade::log::message(
         reshade::log::level::info,
         line);
