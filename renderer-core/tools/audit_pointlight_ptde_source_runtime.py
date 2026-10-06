@@ -51,7 +51,7 @@ require(fixed,'const auto selected=g_draw_snapshot;')
 # path. Keep the historical implementation source for provenance, but require
 # current activation to happen only at the exact retail source cut.
 if 'constexpr bool k_clustered_pointlight_receiver_runtime_enabled = false;' in integrated:
-    require(clustered,'k_clustered_source_override_rva = 0xB7D25u;')
+    require(clustered,'k_clustered_source_override_rva = 0xB7E02u;')
     require(clustered,'k_clustered_source_override_preimage')
     require(clustered,'clustered_source_override_callback(')
     require(clustered,'pointlight_ptde_source::capture(')
