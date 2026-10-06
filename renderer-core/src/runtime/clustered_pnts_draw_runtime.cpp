@@ -279,6 +279,12 @@ struct pointlight_profile_bucket {
     std::atomic<std::uint64_t> max_ticks{0u};
 };
 
+struct pointlight_cycle_bucket {
+    std::atomic<std::uint64_t> samples{0u};
+    std::atomic<std::uint64_t> cycles{0u};
+    std::atomic<std::uint64_t> max_cycles{0u};
+};
+
 pointlight_profile_bucket g_prof_producer{};
 pointlight_profile_bucket g_prof_select{};
 pointlight_profile_bucket g_prof_capture{};
@@ -287,6 +293,8 @@ pointlight_profile_bucket g_prof_authority{};
 pointlight_profile_bucket g_prof_prepare{};
 pointlight_profile_bucket g_prof_gpu_cache{};
 pointlight_profile_bucket g_prof_upload{};
+pointlight_cycle_bucket g_prof_select_cycles{};
+pointlight_cycle_bucket g_prof_capture_cycles{};
 
 thread_local std::uint32_t g_prof_producer_seq = 0u;
 thread_local std::uint32_t g_prof_sidecar_seq = 0u;
@@ -298,6 +306,45 @@ std::uint64_t prof_qpc() noexcept
     LARGE_INTEGER v{};
     QueryPerformanceCounter(&v);
     return static_cast<std::uint64_t>(v.QuadPart);
+}
+
+std::uint64_t prof_thread_cycles() noexcept
+{
+    ULONG64 value = 0u;
+    return QueryThreadCycleTime(
+        GetCurrentThread(),
+        &value)
+        ? static_cast<std::uint64_t>(value)
+        : 0u;
+}
+
+void prof_cycle_add(
+    pointlight_cycle_bucket &bucket,
+    std::uint64_t cycles) noexcept
+{
+    bucket.samples.fetch_add(1u, std::memory_order_relaxed);
+    bucket.cycles.fetch_add(cycles, std::memory_order_relaxed);
+    auto observed =
+        bucket.max_cycles.load(std::memory_order_relaxed);
+    while (observed < cycles &&
+           !bucket.max_cycles.compare_exchange_weak(
+               observed,
+               cycles,
+               std::memory_order_relaxed,
+               std::memory_order_relaxed)) {
+    }
+}
+
+double prof_avg_cycles(
+    const pointlight_cycle_bucket &bucket) noexcept
+{
+    const auto samples =
+        bucket.samples.load(std::memory_order_relaxed);
+    if (samples == 0u)
+        return 0.0;
+    return static_cast<double>(
+        bucket.cycles.load(std::memory_order_relaxed)) /
+        static_cast<double>(samples);
 }
 
 std::uint64_t prof_freq() noexcept
@@ -374,14 +421,22 @@ void maybe_log_pointlight_prepare_profile() noexcept
     std::snprintf(
         line,
         sizeof(line),
-        "[DSRRL PERF R46] POINTLIGHT_PREP sample=1/%u producer_wall_us=%.3f producer_wall_max_us=%.3f select_us=%.3f select_max_us=%.3f capture_sources_us=%.3f capture_sources_max_us=%.3f sidecar_build_us=%.3f authority_us=%.3f prepare_us=%.3f prepare_max_us=%.3f gpu_cache_us=%.3f upload_us=%.3f n=prod:%llu select:%llu capture:%llu build:%llu auth:%llu prep:%llu gpu:%llu upload:%llu",
+        "[DSRRL PERF R47] POINTLIGHT_PREP sample=1/%u producer_wall_us=%.3f producer_wall_max_us=%.3f select_us=%.3f select_max_us=%.3f select_cycles=%.1f select_cycles_max=%llu capture_sources_us=%.3f capture_sources_max_us=%.3f capture_cycles=%.1f capture_cycles_max=%llu sidecar_build_us=%.3f authority_us=%.3f prepare_us=%.3f prepare_max_us=%.3f gpu_cache_us=%.3f upload_us=%.3f n=prod:%llu select:%llu capture:%llu build:%llu auth:%llu prep:%llu gpu:%llu upload:%llu",
         k_pointlight_profile_sample_period,
         prof_avg_us(g_prof_producer),
         prof_max_us(g_prof_producer),
         prof_avg_us(g_prof_select),
         prof_max_us(g_prof_select),
+        prof_avg_cycles(g_prof_select_cycles),
+        static_cast<unsigned long long>(
+            g_prof_select_cycles.max_cycles.load(
+                std::memory_order_relaxed)),
         prof_avg_us(g_prof_capture),
         prof_max_us(g_prof_capture),
+        prof_avg_cycles(g_prof_capture_cycles),
+        static_cast<unsigned long long>(
+            g_prof_capture_cycles.max_cycles.load(
+                std::memory_order_relaxed)),
         prof_avg_us(g_prof_sidecar_build),
         prof_avg_us(g_prof_authority),
         prof_avg_us(g_prof_prepare),
@@ -2271,6 +2326,8 @@ void clustered_pnts_draw_runtime::selector_source_event() noexcept
 #ifdef DSRRL_POINTLIGHT_PROFILE
         const auto prof_select_start =
             prof_active ? prof_qpc() : 0u;
+        const auto prof_select_cycle_start =
+            prof_active ? prof_thread_cycles() : 0u;
 #endif
         // R38: many material draws in one presented frame repeat the exact
         // same PointLight selection query. Producer serial is intentionally
@@ -2354,10 +2411,17 @@ void clustered_pnts_draw_runtime::selector_source_event() noexcept
             }
         }
 #ifdef DSRRL_POINTLIGHT_PROFILE
-        if (prof_active)
+        if (prof_active) {
             prof_add(
                 g_prof_select,
                 prof_qpc() - prof_select_start);
+            const auto end_cycles =
+                prof_thread_cycles();
+            if (end_cycles >= prof_select_cycle_start)
+                prof_cycle_add(
+                    g_prof_select_cycles,
+                    end_cycles - prof_select_cycle_start);
+        }
 #endif
         if (!selection_ready) {
             source_cache.failure =
@@ -2460,6 +2524,8 @@ void clustered_pnts_draw_runtime::selector_source_event() noexcept
 #ifdef DSRRL_POINTLIGHT_PROFILE
             const auto prof_capture_start =
                 prof_active ? prof_qpc() : 0u;
+            const auto prof_capture_cycle_start =
+                prof_active ? prof_thread_cycles() : 0u;
 #endif
             for (std::uint8_t i = 0u;
                  i < selected_count;
@@ -2488,10 +2554,17 @@ void clustered_pnts_draw_runtime::selector_source_event() noexcept
             }
             source_cache.ready = true;
 #ifdef DSRRL_POINTLIGHT_PROFILE
-            if (prof_active)
+            if (prof_active) {
                 prof_add(
                     g_prof_capture,
                     prof_qpc() - prof_capture_start);
+                const auto end_cycles =
+                    prof_thread_cycles();
+                if (end_cycles >= prof_capture_cycle_start)
+                    prof_cycle_add(
+                        g_prof_capture_cycles,
+                        end_cycles - prof_capture_cycle_start);
+            }
 #endif
         }
     }
