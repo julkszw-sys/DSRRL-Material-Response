@@ -7894,6 +7894,15 @@ bool AddonInit(
             "[DSRRL PMETAL ENVSPEC] exact selector carrier + narrow retail LightBank single/blend PTDE source fallback ACTIVE; visible U/L remains stock/off.");
     }
 
+    const bool dof_runtime_ready =
+        register_dof_runtime();
+    if (!dof_runtime_ready &&
+        dof_runtime_enabled()) {
+        reshade::log::message(
+            reshade::log::level::warning,
+            "[DSRRL DoF] R48 runtime unavailable in this launch; stock DSR DoF remains active.");
+    }
+
     publish_active_dynamic_draw_routes();
 
     {
@@ -7957,6 +7966,7 @@ void AddonUninit(
         return;
     }
 
+    unregister_dof_runtime();
     unregister_events();
     log_state("PRE_UNLOAD");
     log_effect_matrix("PRE_UNLOAD");
