@@ -76,6 +76,7 @@ jobs:
           -DDSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE=ON
           -DDSRRL_PHYSICAL_CUT_UL_H3_SUBSURFACE=ON
           -DDSRRL_DOF_DEFAULT_ON=ON
+          -DDSRRL_DOF_PROFILE=ON
           -DDSRRL_FLVER_SELECTOR_PROFILE=ON
           -DDSRRL_POINTLIGHT_PROFILE=ON
 
@@ -116,6 +117,7 @@ jobs:
           if (-not $ascii.Contains("[DSRRL PERF R32] POINTLIGHT_PREP")) { throw "Missing PointLight CPU profiler marker" }
           if (-not $ascii.Contains("[DSRRL PERF R32] POINTLIGHT_TX")) { throw "Missing PointLight transaction CPU profiler marker" }
           if (-not $ascii.Contains("[DSRRL PERF R32] SELECTOR")) { throw "Missing FLVER selector CPU profiler marker" }
+          if (-not $ascii.Contains("[DSRRL PERF R44] DOF")) { throw "Missing DoF CPU profiler marker" }
           if (-not $ascii.Contains("[DSRRL DoF] PTDE private island READY")) { throw "Missing active PTDE DoF island marker" }
           if (-not $ascii.Contains("post.dof_ptde")) { throw "Missing PTDE DoF operator catalog identity" }
           if (-not $ascii.Contains("[DSRRL POINTLIGHT R29] source_capture_fail reason=")) { throw "Missing inherited R29 exact source-capture failure diagnostic marker" }
