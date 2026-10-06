@@ -61,6 +61,7 @@ jobs:
           $allowed = @(
             '^renderer-core/CMakeLists\.txt$',
             '^renderer-core/include/dsrrl/core/types\.hpp$',
+            '^renderer-core/include/dsrrl/core/draw_transaction_policy\.hpp$',
             '^renderer-core/integrated/CMakeLists\.txt$',
             '^renderer-core/integrated/integrated_addon\.cpp$',
             '^renderer-core/include/dsrrl/runtime/clustered_pnts_draw_runtime\.hpp$',
