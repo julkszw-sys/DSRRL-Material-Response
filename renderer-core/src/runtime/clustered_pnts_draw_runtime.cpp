@@ -744,6 +744,13 @@ std::atomic<std::uint64_t> g_mirror_equal{0u};
 std::atomic<std::uint64_t> g_mirror_diff{0u};
 std::atomic<std::uint64_t> g_source_capture_ok{0u};
 std::atomic<std::uint64_t> g_source_capture_fail{0u};
+std::atomic<std::uint64_t> g_source_producer_hits{0u};
+std::atomic<std::uint64_t> g_source_donor_accept{0u};
+std::atomic<std::uint64_t> g_source_donor_reject{0u};
+std::atomic<std::uint64_t> g_source_class_reject{0u};
+std::atomic<std::uint64_t> g_source_payload_cache_hit{0u};
+std::atomic<std::uint64_t> g_source_payload_cache_miss{0u};
+std::array<std::atomic<std::uint64_t>,4> g_source_category_hits{};
 std::atomic<std::uint64_t> g_snapshot_publish{0u};
 std::atomic<std::uint64_t> g_selector_seen{0u};
 std::atomic<std::uint64_t> g_owner_join_hit{0u};
@@ -1259,6 +1266,16 @@ void __fastcall clustered_source_override_callback(
         g_base == 0u)
         return;
 
+    telemetry::hot_count(g_source_producer_hits);
+    std::uint8_t source_category = 0xffu;
+    std::memcpy(
+        &source_category,
+        static_cast<const std::uint8_t *>(source) + 0x18u,
+        sizeof(source_category));
+    if (source_category < g_source_category_hits.size())
+        telemetry::hot_count(
+            g_source_category_hits[source_category]);
+
     // This callback executes inside the exact attested retail source producer,
     // so the source object and its vtable are already live. Build a tiny
     // semantic key directly from source identity + bank/lerp selector state.
@@ -1281,8 +1298,10 @@ void __fastcall clustered_source_override_callback(
         reinterpret_cast<std::uintptr_t>(
             target);
     if (target_address != g_base + 0x55BC00u &&
-        target_address != g_base + 0x55D0B0u)
+        target_address != g_base + 0x55D0B0u) {
+        telemetry::hot_count(g_source_class_reject);
         return;
+    }
 
     clustered_source_payload_key_v1 key{};
     key.source = source;
@@ -1321,8 +1340,12 @@ void __fastcall clustered_source_override_callback(
         same_clustered_source_payload_key(
             cached.key,
             key)) {
+        telemetry::hot_count(
+            g_source_payload_cache_hit);
         payload = cached.payload;
     } else {
+        telemetry::hot_count(
+            g_source_payload_cache_miss);
         std::array<float,8> candidate{};
         std::memcpy(
             candidate.data(),
@@ -1339,8 +1362,15 @@ void __fastcall clustered_source_override_callback(
                 source,
                 g_base,
                 candidate,
-                g_clustered_source_bank_cache))
+                g_clustered_source_bank_cache)) {
+            telemetry::hot_count(
+                g_source_donor_reject);
+            telemetry::hot_count(
+                g_source_capture_fail);
             return;
+        }
+        telemetry::hot_count(
+            g_source_donor_accept);
 
         for (std::size_t i = 3u;
              i < candidate.size();
@@ -3775,6 +3805,16 @@ clustered_pnts_draw_runtime::telemetry() const noexcept
         g_mirror_diff.load(),
         g_source_capture_ok.load(),
         g_source_capture_fail.load(),
+        g_source_producer_hits.load(),
+        g_source_donor_accept.load(),
+        g_source_donor_reject.load(),
+        g_source_class_reject.load(),
+        g_source_payload_cache_hit.load(),
+        g_source_payload_cache_miss.load(),
+        g_source_category_hits[0].load(),
+        g_source_category_hits[1].load(),
+        g_source_category_hits[2].load(),
+        g_source_category_hits[3].load(),
         g_snapshot_publish.load(),
         g_selector_seen.load(),
         g_owner_join_hit.load(),
@@ -3839,6 +3879,14 @@ void clustered_pnts_draw_runtime::reset() noexcept
     g_mirror_diff.store(0u);
     g_source_capture_ok.store(0u);
     g_source_capture_fail.store(0u);
+    g_source_producer_hits.store(0u);
+    g_source_donor_accept.store(0u);
+    g_source_donor_reject.store(0u);
+    g_source_class_reject.store(0u);
+    g_source_payload_cache_hit.store(0u);
+    g_source_payload_cache_miss.store(0u);
+    for (auto &counter : g_source_category_hits)
+        counter.store(0u);
     g_snapshot_publish.store(0u);
     g_selector_seen.store(0u);
     g_owner_join_hit.store(0u);
