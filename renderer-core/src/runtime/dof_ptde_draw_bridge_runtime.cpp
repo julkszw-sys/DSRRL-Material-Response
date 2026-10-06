@@ -1306,12 +1306,18 @@ bool register_ptde_draw_bridge_runtime(
     }
 
     try {
+#ifdef DSRRL_DOF_DRAW_EVENT_AB_DISABLE
+        reshade::log::message(
+            reshade::log::level::info,
+            "[DSRRL DoF R54] global_draw_events=DISABLED_AB preflight=ON host_hooks=ON present=ON visible_bridge=INACTIVE_STOCK_DSR");
+#else
         reshade::register_event<
             reshade::addon_event::draw>(
                 on_draw);
         reshade::register_event<
             reshade::addon_event::draw_indexed>(
                 on_draw_indexed);
+#endif
         reshade::register_event<
             reshade::addon_event::present>(
                 on_present);
@@ -1335,12 +1341,14 @@ void unregister_ptde_draw_bridge_runtime() noexcept
         reshade::unregister_event<
             reshade::addon_event::present>(
                 on_present);
+#ifndef DSRRL_DOF_DRAW_EVENT_AB_DISABLE
         reshade::unregister_event<
             reshade::addon_event::draw_indexed>(
                 on_draw_indexed);
         reshade::unregister_event<
             reshade::addon_event::draw>(
                 on_draw);
+#endif
     }
 
     disable_visible_bridge();
