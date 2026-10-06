@@ -64,7 +64,8 @@ def main() -> int:
         "k_clustered_source_override_rva = 0xB7E02u;",
         "k_clustered_source_override_preimage",
         "clustered_source_override_callback(",
-        "pointlight_ptde_source::capture(",
+        "clustered_source_has_ptde_param(",
+        "k_ptde_drawparam_homolog_row_masks",
     ):
         if token not in clustered_draw:
             print(
@@ -72,6 +73,26 @@ def main() -> int:
                 file=sys.stderr,
             )
             return 1
+    callback_begin = clustered_draw.find(
+        "void __fastcall clustered_source_override_callback("
+    )
+    callback_end = clustered_draw.find(
+        "bool build_clustered_source_override_stub(",
+        callback_begin,
+    )
+    if callback_begin < 0 or callback_end <= callback_begin:
+        print(
+            "PointLight runtime audit: clustered source callback boundaries missing",
+            file=sys.stderr,
+        )
+        return 1
+    if "pointlight_ptde_source::capture(" in clustered_draw[callback_begin:callback_end]:
+        print(
+            "PointLight runtime audit: live clustered source still reconstructs PTDE donors",
+            file=sys.stderr,
+        )
+        return 1
+
     if "constexpr bool k_clustered_pointlight_receiver_runtime_enabled = false;" not in integrated:
         print(
             "PointLight runtime audit: clustered receiver runtime is not hard-disabled",
