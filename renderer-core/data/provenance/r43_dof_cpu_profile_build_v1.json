@@ -1,0 +1,37 @@
+{
+  "schema": "dsrrl.r43_dof_cpu_profile_build_v1",
+  "purpose": "Diagnostic R43 lineage with active PTDE DoF island and low-overhead CPU hotspot profiling.",
+  "base": {
+    "commit": "410e4591da9172ffb15e766754b4345286f04691",
+    "build_flavor": "pmetal_r43_per_key_freshness_cache",
+    "artifact_sha256": "79e4be50a640d9776fe86fe8f14e38366ebfff49170e560faf2cc1644244d39e"
+  },
+  "dof_port": {
+    "source_commit": "302089ddd05cf4a489d75d71362d8cbd21ee4abb",
+    "operator": "post.dof_ptde",
+    "activation": "default_on_for_this_diagnostic_build",
+    "fail_open": "stock_dsr_dof",
+    "construction": "native_core_7_resource_9_pass_private_island"
+  },
+  "cpu_profiling": {
+    "flver_selector": {
+      "compile_flag": "DSRRL_FLVER_SELECTOR_PROFILE",
+      "sample_period": 1024,
+      "log_prefix": "[DSRRL PERF R32] SELECTOR"
+    },
+    "pointlight_prepare": {
+      "compile_flag": "DSRRL_POINTLIGHT_PROFILE",
+      "sample_period": 128,
+      "log_prefix": "[DSRRL PERF R32] POINTLIGHT_PREP"
+    },
+    "pointlight_transaction": {
+      "compile_flag": "DSRRL_POINTLIGHT_PROFILE",
+      "sample_period": 128,
+      "log_prefix": "[DSRRL PERF R32] POINTLIGHT_TX"
+    }
+  },
+  "preserved_r43_constraints": {
+    "physical_cut_ul_h3_subsurface": true,
+    "full_hot_telemetry_default_on": false
+  }
+}
