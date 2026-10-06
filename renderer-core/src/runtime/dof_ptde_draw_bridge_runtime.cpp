@@ -21,6 +21,7 @@
 #include <Windows.h>
 #include <d3d11.h>
 
+#include <algorithm>
 #include <array>
 #include <atomic>
 #include <cstddef>
