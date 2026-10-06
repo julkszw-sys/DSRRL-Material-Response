@@ -1280,6 +1280,10 @@ bool register_ptde_draw_bridge_runtime(
     set_authored_feature(false);
     release_sequence();
 
+    reshade::log::message(
+        reshade::log::level::info,
+        "[DSRRL DoF R52] activation_cut=PASS01_SOURCE_DEPTH private_prefix=PASSES_0_7 stock_branch=PASS10_ONLY tonemap=PTDE_TERMINAL_HANDOFF");
+
     if (!g_opt_in.load(
             std::memory_order_acquire)) {
         reshade::log::message(
