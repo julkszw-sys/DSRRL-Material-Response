@@ -793,7 +793,7 @@ bool register_ptde_draw_bridge_runtime(
             std::memory_order_acquire)) {
         reshade::log::message(
             reshade::log::level::info,
-            "DSRRL DoF: experimental PTDE bridge OFF. Set DSRRL_EXPERIMENTAL_PTDE_DOF=1 before launch to run the guarded private island.");
+            "DSRRL DoF: PTDE bridge disabled by DSRRL_EXPERIMENTAL_PTDE_DOF=0; stock DSR DoF preserved.");
     }
 
     try {
