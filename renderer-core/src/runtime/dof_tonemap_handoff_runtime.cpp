@@ -7,7 +7,7 @@
 
 #include "dsrrl/runtime/dof_tonemap_handoff_runtime.hpp"
 
-#include "dsrrl/runtime/dof_process_memory.hpp"
+#include "dsrrl/operators/dof/dof_island.hpp"\n#include "dsrrl/runtime/dof_process_memory.hpp"
 
 #include <Windows.h>
 
@@ -21,25 +21,28 @@
 namespace dsrrl::runtime::dof {
 namespace {
 
-constexpr std::uintptr_t k_rva_tonemap_pass13 = 0x00457E50u;
+constexpr std::uintptr_t k_rva_tonemap_pass13 =
+    operators::dof::dsr_active_output_cut.tonemap_pass13_executor_rva;
 constexpr std::uintptr_t k_rva_image_state_global = 0x01C6D598u;
-constexpr std::size_t k_stolen = 16u;
+// Retail pass 0x13 dispatches to 0x1404572A0. The first 14 bytes end
+// exactly on an instruction boundary and are sufficient for the absolute
+// jump patch; resume at +0x0E before the stack-frame allocation.
+constexpr std::size_t k_stolen = 14u;
 
 constexpr std::array<std::uint8_t, k_stolen> k_expected = {{
-    0x40,0x53,
+    0x48,0x8B,0xC4,
+    0x48,0x89,0x58,0x20,
     0x55,
     0x56,
     0x57,
     0x41,0x56,
-    0x41,0x57,
-    0x48,0x81,0xEC,0x88,0x00,0x00,0x00
+    0x41,0x57
 }};
 
 using pass13_fn = void(__fastcall *)(
     void *,
     void *,
-    void *,
-    std::uint32_t);
+    void *);
 
 std::mutex g_mutex;
 std::uintptr_t g_base = 0u;
@@ -93,8 +96,7 @@ bool write_bytes(
 void __fastcall hook_pass13(
     void *node,
     void *render_context,
-    void *pass_desc,
-    std::uint32_t variant) noexcept
+    void *pass_desc) noexcept
 {
     ++g_calls;
 
@@ -108,8 +110,7 @@ void __fastcall hook_pass13(
         g_original(
             node,
             render_context,
-            pass_desc,
-            variant);
+            pass_desc);
 
     g_depth = previous_depth;
     g_pass_desc = previous_desc;
