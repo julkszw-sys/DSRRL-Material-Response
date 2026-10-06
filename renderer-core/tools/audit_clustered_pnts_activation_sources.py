@@ -98,7 +98,7 @@ def main():
             "k_clustered_pointlight_receiver_runtime_enabled &&\n        g_clustered_pnts_pipeline.on_init_pipeline(",
             "clustered replacement pipeline compile-time-disabled")
         require(draw_cpp,
-            "k_clustered_source_override_rva = 0xB7D25u;",
+            "k_clustered_source_override_rva = 0xB7E02u;",
             "exact source override patch site")
         require(draw_cpp,
             "k_clustered_source_override_preimage",
