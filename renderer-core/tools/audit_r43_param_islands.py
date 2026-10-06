@@ -24,7 +24,7 @@ def main():
         "constexpr bool k_clustered_pointlight_receiver_runtime_enabled = false;",
         "clustered receiver retirement")
     require(integrated,
-        "k_pointlight_drawtime_runtime_enabled &&\n                k_clustered_pointlight_receiver_runtime_enabled",
+        "flver_identity_transport::install(\n            false, // clustered PntS is source-only; no builder/receiver bridge",
         "clustered FLVER builder disabled")
     require(cluster,"k_clustered_source_override_rva = 0xB7E02u",
         "clustered exact source cut")
