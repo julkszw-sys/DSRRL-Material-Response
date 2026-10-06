@@ -16,6 +16,7 @@ on:
       - "renderer-core/tests/a1_create_time_materializer_tests.cpp"
       - "renderer-core/tools/verify_a1_terminal_sat_semantic_scope.py"
       - "renderer-core/tools/audit_clustered_pnts_activation_sources.py"
+      - "renderer-core/tools/audit_dof_live_drawparam_source.py"
       - "renderer-core/tools/audit_specrgb_equipment_scope.py"
       - "renderer-core/tools/audit_pmetal_envspec_reference_transport.py"
       - "renderer-core/tests/pmetal_selector_policy_tests.cpp"
@@ -61,6 +62,7 @@ on:
       - "renderer-core/tests/material_owner_producer_tests.cpp"
       - "renderer-core/tools/generate_dsr_mtd_identity_supplement.py"
       - "renderer-core/tools/audit_clustered_pnts_activation_sources.py"
+      - "renderer-core/tools/audit_dof_live_drawparam_source.py"
       - "renderer-core/tools/audit_specrgb_equipment_scope.py"
       - "renderer-core/tools/audit_pmetal_envspec_reference_transport.py"
       - "renderer-core/tests/pmetal_selector_policy_tests.cpp"
@@ -178,6 +180,9 @@ jobs:
 
       - name: Audit PointLight PTDE authored source transport
         run: python renderer-core/tools/audit_pointlight_ptde_source_runtime.py --source-dir renderer-core
+
+      - name: Audit DoF live DrawParam authored source transport
+        run: python renderer-core/tools/audit_dof_live_drawparam_source.py --source-dir renderer-core
 
       - name: Audit P_Metal EnvSpec reference transport
         shell: bash
