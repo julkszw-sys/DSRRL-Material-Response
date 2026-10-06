@@ -29,6 +29,8 @@ on:
       - "renderer-core/include/dsrrl/runtime/pointlight_ptde_source_runtime.hpp"
       - "renderer-core/src/operators/env_spec/pmetal_rgba_lerp_materializer.cpp"
       - ".github/workflows/pmetal-r19-lerp-exact-envdiffuse-fast.yml"
+      - "renderer-core/src/runtime/dof_authored_state_runtime.cpp"
+      - "renderer-core/tools/audit_dof_live_drawparam_source.py"
       - "renderer-core/src/runtime/dof_ptde_draw_bridge_runtime.cpp"
       - "renderer-core/src/runtime/dof_ptde_scheduler_runtime.cpp"
       - "renderer-core/src/runtime/dof_host_depth_route_runtime.cpp"
@@ -98,6 +100,8 @@ jobs:
         run: |
           python renderer-core/tools/audit_active_islands_hotpath.py --source-dir renderer-core
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python renderer-core/tools/audit_dof_live_drawparam_source.py --source-dir renderer-core
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Build runtime
         shell: pwsh
@@ -122,6 +126,7 @@ jobs:
           if ($ascii.Contains("[DSRRL POINTLIGHT R34] source_material_split=ACTIVE")) { throw "Retired clustered source/material selector path survived" }
           if ($ascii.Contains("[DSRRL POINTLIGHT R35] owner_authorized_spc_hybrid=ACTIVE")) { throw "Retired clustered receiver hybrid survived" }
           if (-not $ascii.Contains("[DSRRL PMETAL R43] producer_cache=SET256_WAY2 freshness=SOURCE_BASE_COUNT_ROW_SELECTOR_BETA global_semantic_version_gate=OFF selector_try_lock=ON producer_payload_exact=ON fallback_full_decode=ON islands_preserved=ON")) { throw "Missing inherited R43 P_Metal marker" }
+          if (-not $ascii.Contains("[DSRRL DoF R53-DRAWPARAM] carrier=LIVE_SELECTED_DOF_ROWS selector=STOCK_DSR donor_table=ABSENT bank_gate=PTDE_HOMOLOGOUS_10 m15_dual=ON default_m99=STOCK_DSR producer_rva=0x5627E0")) { throw "Missing live-DrawParam DoF source marker" }
           if (-not $ascii.Contains("[DSRRL DoF] PTDE private island READY")) { throw "Missing active PTDE DoF island marker" }
           if (-not $ascii.Contains("[DSRRL DoF R52] activation_cut=PASS01_SOURCE_DEPTH private_prefix=PASSES_0_7 stock_branch=PASS10_ONLY tonemap=PTDE_TERMINAL_HANDOFF")) { throw "Missing R52 DoF semantic-cut identity marker" }
           if ($ascii.Contains("[DSRRL PERF R44] DOF")) { throw "DoF CPU profiler must be absent from runtime build" }
