@@ -3655,15 +3655,17 @@ void log_state(const char *tag) noexcept
         pointlight_source_line,
         sizeof(pointlight_source_line),
         "[DSRRL PL SOURCE] tag=%s "
-        "clustered_hit=%llu apply=%llu donor=%llu/%llu class_reject=%llu cache=%llu/%llu "
+        "clustered_hit=%llu apply=%llu row_bridge=%llu stock=%llu dsr_only=%llu unclassified=%llu class_reject=%llu cache=%llu/%llu "
         "clustered_cat=%llu/%llu/%llu/%llu "
         "fixed_hit=%llu captures=%llu snap2=%llu snap4=%llu fixed_cat=%llu/%llu/%llu/%llu "
         "fixed_selector=%llu/%llu fixed_requests=%llu",
         tag,
         static_cast<unsigned long long>(clustered_pl.source_producer_hits),
         static_cast<unsigned long long>(clustered_pl.source_capture_ok),
-        static_cast<unsigned long long>(clustered_pl.source_donor_accept),
-        static_cast<unsigned long long>(clustered_pl.source_donor_reject),
+        static_cast<unsigned long long>(clustered_pl.source_row_bridge),
+        static_cast<unsigned long long>(clustered_pl.source_row_stock_dsr),
+        static_cast<unsigned long long>(clustered_pl.source_dsr_only_fail_open),
+        static_cast<unsigned long long>(clustered_pl.source_unclassified_bank_fail_open),
         static_cast<unsigned long long>(clustered_pl.source_class_reject),
         static_cast<unsigned long long>(clustered_pl.source_payload_cache_hit),
         static_cast<unsigned long long>(clustered_pl.source_payload_cache_miss),

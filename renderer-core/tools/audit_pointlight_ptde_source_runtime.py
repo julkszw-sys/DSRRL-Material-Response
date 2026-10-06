@@ -54,11 +54,17 @@ if 'constexpr bool k_clustered_pointlight_receiver_runtime_enabled = false;' in 
     require(clustered,'k_clustered_source_override_rva = 0xB7E02u;')
     require(clustered,'k_clustered_source_override_preimage')
     require(clustered,'clustered_source_override_callback(')
-    require(clustered,'pointlight_ptde_source::capture(')
+    require(clustered,'capture_clustered_live_drawparam_source(')
+    require(clustered,'g_source_dsr_only_fail_open')
+    require(clustered,'g_source_unclassified_bank_fail_open')
+    require(clustered,'donor_lookup=OFF')
+    source_callback=clustered[clustered.index('void __fastcall clustered_source_override_callback('):clustered.index('bool build_clustered_source_override_stub(')]
+    if 'pointlight_ptde_source::capture(' in source_callback:
+        raise SystemExit('R52 clustered source callback regressed to embedded donor lookup')
     require(clustered,'Clustered PntS never performs receiver/material authorization.')
     require(integrated,'g_clustered_pointlight_selection_transport_active.store(\n        false,')
     require(integrated,'!g_fixed_pointlight.source_ready()')
-    print('POINTLIGHT_PTDE_SOURCE_PASS: clustered source-only producer cut active; clustered receiver/material path retired; fixed source gate precedes receiver/material work')
+    print('POINTLIGHT_PTDE_SOURCE_PASS: clustered source-only producer cut consumes live DrawParam rows; 10 DSR-only gameplay rows plus default/m99 fail open; donor/material/receiver lookup retired')
     print('SCOPE: construction/static activation only; runtime/pixel equivalence remains OPEN')
     raise SystemExit(0)
 

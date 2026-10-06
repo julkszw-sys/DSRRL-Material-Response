@@ -1,4 +1,5 @@
 #include "dsrrl/runtime/pointlight_ptde_source_runtime.hpp"
+#include "dsrrl/runtime/clustered_pointlight_source_gate.hpp"
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
 #endif
@@ -745,8 +746,10 @@ std::atomic<std::uint64_t> g_mirror_diff{0u};
 std::atomic<std::uint64_t> g_source_capture_ok{0u};
 std::atomic<std::uint64_t> g_source_capture_fail{0u};
 std::atomic<std::uint64_t> g_source_producer_hits{0u};
-std::atomic<std::uint64_t> g_source_donor_accept{0u};
-std::atomic<std::uint64_t> g_source_donor_reject{0u};
+std::atomic<std::uint64_t> g_source_row_bridge{0u};
+std::atomic<std::uint64_t> g_source_row_stock_dsr{0u};
+std::atomic<std::uint64_t> g_source_dsr_only_fail_open{0u};
+std::atomic<std::uint64_t> g_source_unclassified_bank_fail_open{0u};
 std::atomic<std::uint64_t> g_source_class_reject{0u};
 std::atomic<std::uint64_t> g_source_payload_cache_hit{0u};
 std::atomic<std::uint64_t> g_source_payload_cache_miss{0u};
@@ -1135,9 +1138,6 @@ constexpr std::array<std::uint8_t,16>
 
 clustered_source_override_hook_v1
     g_clustered_source_override_hook{};
-thread_local pointlight_ptde_source::
-    draw_bank_authority_cache
-    g_clustered_source_bank_cache{};
 
 struct clustered_source_payload_key_v1 {
     const void *source = nullptr;
@@ -1197,6 +1197,379 @@ bool same_clustered_source_payload_key(
         a.selector_word0 == b.selector_word0 &&
         a.selector_word1 == b.selector_word1 &&
         a.semantic_generation == b.semantic_generation;
+}
+
+
+enum class clustered_live_source_result : std::uint8_t {
+    applied = 0,
+    stock_dsr_dsr_only_row,
+    stock_dsr_unclassified_bank,
+    invalid
+};
+
+struct clustered_source_bank_identity_cache_entry_v1 {
+    std::uintptr_t param = 0u;
+    std::uint16_t count = 0u;
+    std::uint32_t first = 0u;
+    std::uint32_t guard_name_offset = 0u;
+    std::uint64_t guard_name_word = 0u;
+    clustered_pointlight_source_gate::gameplay_bank bank =
+        clustered_pointlight_source_gate::gameplay_bank::unknown;
+    bool known_non_ptde = false;
+    bool valid = false;
+};
+
+constexpr std::size_t k_clustered_source_bank_identity_cache_entries = 16u;
+thread_local std::array<
+    clustered_source_bank_identity_cache_entry_v1,
+    k_clustered_source_bank_identity_cache_entries>
+    g_clustered_source_bank_identity_cache{};
+thread_local std::uint8_t
+    g_clustered_source_bank_identity_cache_victim = 0u;
+
+bool clustered_source_bank_guard(
+    std::uintptr_t param,
+    pointlight_ptde_source::access_cache &cache,
+    std::uint32_t &name_offset,
+    std::uint64_t &name_word) noexcept
+{
+    name_offset = 0u;
+    name_word = 0u;
+    if (!pointlight_ptde_source::read_cached(
+            param + 0x38u,
+            name_offset,
+            cache) ||
+        name_offset < 0x330u)
+        return false;
+
+    return pointlight_ptde_source::read_cached(
+        param + name_offset,
+        name_word,
+        cache);
+}
+
+bool classify_clustered_source_bank(
+    std::uintptr_t param,
+    std::uint16_t count,
+    std::uint32_t first,
+    pointlight_ptde_source::access_cache &cache,
+    clustered_pointlight_source_gate::gameplay_bank &bank,
+    bool &known_non_ptde) noexcept
+{
+    using namespace clustered_pointlight_source_gate;
+    bank = gameplay_bank::unknown;
+    known_non_ptde = false;
+
+    std::uint32_t guard_name_offset = 0u;
+    std::uint64_t guard_name_word = 0u;
+    if (!clustered_source_bank_guard(
+            param,
+            cache,
+            guard_name_offset,
+            guard_name_word))
+        return false;
+
+    for (const auto &entry :
+         g_clustered_source_bank_identity_cache) {
+        if (entry.valid &&
+            entry.param == param &&
+            entry.count == count &&
+            entry.first == first &&
+            entry.guard_name_offset == guard_name_offset &&
+            entry.guard_name_word == guard_name_word) {
+            bank = entry.bank;
+            known_non_ptde = entry.known_non_ptde;
+            return true;
+        }
+    }
+
+    std::uint64_t signature = 0u;
+    if (!pointlight_ptde_source::bank_structure_signature(
+            param,
+            count,
+            first,
+            cache,
+            signature,
+            nullptr))
+        return false;
+
+    bank = gameplay_bank_from_structure_signature(
+        signature);
+    known_non_ptde =
+        known_non_ptde_structure(signature);
+
+    auto &slot =
+        g_clustered_source_bank_identity_cache[
+            static_cast<std::size_t>(
+                g_clustered_source_bank_identity_cache_victim++) %
+            g_clustered_source_bank_identity_cache.size()];
+    slot = {};
+    slot.param = param;
+    slot.count = count;
+    slot.first = first;
+    slot.guard_name_offset = guard_name_offset;
+    slot.guard_name_word = guard_name_word;
+    slot.bank = bank;
+    slot.known_non_ptde = known_non_ptde;
+    slot.valid = true;
+    return true;
+}
+
+clustered_live_source_result read_clustered_live_drawparam_row(
+    std::uintptr_t source,
+    std::int32_t selector,
+    pointlight_ptde_source::signal &out,
+    pointlight_ptde_source::access_cache &cache) noexcept
+{
+    using namespace clustered_pointlight_source_gate;
+
+    if (selector < 0 || source == 0u)
+        return clustered_live_source_result::invalid;
+
+    std::uintptr_t param = 0u;
+    if (!pointlight_ptde_source::read_cached(
+            source + 0x18u,
+            param,
+            cache) ||
+        param == 0u ||
+        !pointlight_ptde_source::readable_cached(
+            param,
+            0x330u,
+            cache))
+        return clustered_live_source_result::invalid;
+
+    std::uint16_t count = 0u;
+    std::uint32_t first = 0u;
+    if (!pointlight_ptde_source::read_cached(
+            param + 0x0Au,
+            count,
+            cache) ||
+        !pointlight_ptde_source::read_cached(
+            param + 0x34u,
+            first,
+            cache))
+        return clustered_live_source_result::invalid;
+
+    const auto row_id =
+        static_cast<std::uint32_t>(selector) & 0xFFu;
+    if (count != 64u || row_id >= count)
+        return clustered_live_source_result::invalid;
+
+    gameplay_bank bank = gameplay_bank::unknown;
+    bool known_non_ptde = false;
+    if (!classify_clustered_source_bank(
+            param,
+            count,
+            first,
+            cache,
+            bank,
+            known_non_ptde))
+        return clustered_live_source_result::invalid;
+
+    if (known_non_ptde ||
+        bank == gameplay_bank::unknown)
+        return clustered_live_source_result::
+            stock_dsr_unclassified_bank;
+
+    if (dsr_only_semantic_row(bank, row_id))
+        return clustered_live_source_result::
+            stock_dsr_dsr_only_row;
+
+    struct live_row_v1 {
+        std::uint32_t begin_bits = 0u;
+        std::uint32_t end_bits = 0u;
+        std::int16_t r = 0;
+        std::int16_t g = 0;
+        std::int16_t b = 0;
+        std::int16_t intensity = 0;
+    };
+    static_assert(sizeof(live_row_v1) == 16u);
+
+    live_row_v1 row{};
+    const auto row_address =
+        param +
+        static_cast<std::uintptr_t>(first) +
+        static_cast<std::uintptr_t>(row_id) *
+            sizeof(live_row_v1);
+    if (!pointlight_ptde_source::read_cached(
+            row_address,
+            row,
+            cache))
+        return clustered_live_source_result::invalid;
+
+    std::memcpy(
+        &out.begin,
+        &row.begin_bits,
+        sizeof(out.begin));
+    std::memcpy(
+        &out.end,
+        &row.end_bits,
+        sizeof(out.end));
+
+    const float intensity =
+        static_cast<float>(row.intensity) * 0.01f;
+    out.q = {
+        static_cast<float>(row.r) *
+            intensity / 255.0f,
+        static_cast<float>(row.g) *
+            intensity / 255.0f,
+        static_cast<float>(row.b) *
+            intensity / 255.0f
+    };
+
+    if (!std::isfinite(out.begin) ||
+        !std::isfinite(out.end) ||
+        !std::isfinite(out.q[0]) ||
+        !std::isfinite(out.q[1]) ||
+        !std::isfinite(out.q[2]) ||
+        !(out.end > out.begin) ||
+        !(out.end > 0.0f))
+        return clustered_live_source_result::invalid;
+
+    return clustered_live_source_result::applied;
+}
+
+clustered_live_source_result capture_clustered_live_drawparam_source(
+    void *node,
+    std::uintptr_t base,
+    std::array<float,8> &raw) noexcept
+{
+    if (node == nullptr || base == 0u)
+        return clustered_live_source_result::invalid;
+
+    const auto n =
+        reinterpret_cast<std::uintptr_t>(node);
+    pointlight_ptde_source::access_cache cache{};
+
+    std::uintptr_t vtable = 0u;
+    std::uintptr_t fn = 0u;
+    std::uintptr_t owner = 0u;
+    if (!pointlight_ptde_source::read_cached(
+            n,
+            vtable,
+            cache) ||
+        !pointlight_ptde_source::read_cached(
+            vtable + 0x60u,
+            fn,
+            cache) ||
+        !pointlight_ptde_source::read_cached(
+            n + 0x50u,
+            owner,
+            cache) ||
+        owner == 0u)
+        return clustered_live_source_result::invalid;
+
+    pointlight_ptde_source::signal a{}, b{}, result{};
+
+    if (fn == base + 0x55BC00u) {
+        std::int32_t selector = -1;
+        if (!pointlight_ptde_source::read_cached(
+                n + 0x58u,
+                selector,
+                cache))
+            return clustered_live_source_result::invalid;
+
+        const auto row_result =
+            read_clustered_live_drawparam_row(
+                owner,
+                selector,
+                a,
+                cache);
+        if (row_result !=
+            clustered_live_source_result::applied)
+            return row_result;
+
+        if (!pointlight_ptde_source::mix(
+                a,
+                a,
+                0.0f,
+                result))
+            return clustered_live_source_result::invalid;
+    } else if (fn == base + 0x55D0B0u) {
+        std::int16_t selector_a = -1;
+        std::int16_t selector_b = -1;
+        float beta = 0.0f;
+        if (!pointlight_ptde_source::read_cached(
+                n + 0x58u,
+                selector_a,
+                cache) ||
+            !pointlight_ptde_source::read_cached(
+                n + 0x5Au,
+                selector_b,
+                cache) ||
+            !pointlight_ptde_source::read_cached(
+                n + 0x5Cu,
+                beta,
+                cache))
+            return clustered_live_source_result::invalid;
+
+        const auto pair =
+            pmetal_selector_policy::select(
+                selector_a,
+                selector_b,
+                beta);
+        if (!pair.valid)
+            return clustered_live_source_result::invalid;
+
+        std::uintptr_t source_a = 0u;
+        if (!pointlight_ptde_source::selected_source(
+                owner,
+                pair.a,
+                source_a,
+                cache))
+            return clustered_live_source_result::invalid;
+
+        const auto row_a =
+            read_clustered_live_drawparam_row(
+                source_a,
+                pair.a,
+                a,
+                cache);
+        if (row_a !=
+            clustered_live_source_result::applied)
+            return row_a;
+
+        b = a;
+        if (pair.beta != 0.0f) {
+            std::uintptr_t source_b = 0u;
+            if (!pointlight_ptde_source::selected_source(
+                    owner,
+                    pair.b,
+                    source_b,
+                    cache))
+                return clustered_live_source_result::invalid;
+
+            const auto row_b =
+                read_clustered_live_drawparam_row(
+                    source_b,
+                    pair.b,
+                    b,
+                    cache);
+            if (row_b !=
+                clustered_live_source_result::applied)
+                return row_b;
+        }
+
+        if (!pointlight_ptde_source::mix(
+                a,
+                b,
+                pair.beta,
+                result))
+            return clustered_live_source_result::invalid;
+    } else {
+        return clustered_live_source_result::invalid;
+    }
+
+    raw[3] = 1.0f / (result.end - result.begin);
+    raw[4] = result.q[0];
+    raw[5] = result.q[1];
+    raw[6] = result.q[2];
+    raw[7] = result.end;
+
+    return std::isfinite(raw[3]) &&
+           raw[3] > 0.0f
+        ? clustered_live_source_result::applied
+        : clustered_live_source_result::invalid;
 }
 
 void source_hook_emit_u64(
@@ -1356,21 +1729,39 @@ void __fastcall clustered_source_override_callback(
             color_end,
             4u * sizeof(float));
 
-        // Heavy Bank/Lerp donor reconstruction runs only when semantic source
-        // state changes. Dynamic source movement no longer invalidates it.
-        if (!pointlight_ptde_source::capture(
+        // R52 source-only architecture: consume the exact row already
+        // selected by stock DSR from the currently loaded DrawParam. The mod
+        // supplies PTDE values in those homologous gameplay rows, so runtime
+        // needs no donor table and no material/receiver identity. Rows that
+        // are DSR-only, or banks without PTDE authority (default/m99), fail
+        // open before any source carrier is changed.
+        const auto live_result =
+            capture_clustered_live_drawparam_source(
                 source,
                 g_base,
-                candidate,
-                g_clustered_source_bank_cache)) {
+                candidate);
+        if (live_result !=
+            clustered_live_source_result::applied) {
             telemetry::hot_count(
-                g_source_donor_reject);
-            telemetry::hot_count(
-                g_source_capture_fail);
+                g_source_row_stock_dsr);
+            if (live_result ==
+                clustered_live_source_result::
+                    stock_dsr_dsr_only_row) {
+                telemetry::hot_count(
+                    g_source_dsr_only_fail_open);
+            } else if (live_result ==
+                clustered_live_source_result::
+                    stock_dsr_unclassified_bank) {
+                telemetry::hot_count(
+                    g_source_unclassified_bank_fail_open);
+            } else {
+                telemetry::hot_count(
+                    g_source_capture_fail);
+            }
             return;
         }
         telemetry::hot_count(
-            g_source_donor_accept);
+            g_source_row_bridge);
 
         for (std::size_t i = 3u;
              i < candidate.size();
@@ -2799,7 +3190,8 @@ bool clustered_pnts_draw_runtime::install() noexcept
     // involved in clustered PntS anymore.
     if (!install_clustered_source_override_hook())
         return false;
-    g_clustered_source_bank_cache = {};
+    g_clustered_source_bank_identity_cache = {};
+    g_clustered_source_bank_identity_cache_victim = 0u;
 
     g_runtime = this;
     g_quarantined.store(false);
@@ -2842,7 +3234,7 @@ bool clustered_pnts_draw_runtime::install() noexcept
             std::memory_order_relaxed))
         reshade::log::message(
             reshade::log::level::info,
-            "[DSRRL POINTLIGHT R51] resolved_donor_fast_path=ON duplicate_lerp_resolution=OFF bank_structure_full_revalidate=ONCE_PER_PRESENT allocation_guard=EACH_LOOKUP vm_region_windows=4xPER_CATEGORY failopen_original_donor=ON");
+            "[DSRRL POINTLIGHT R52-DRAWPARAM] carrier=LIVE_SELECTED_ROW donor_lookup=OFF material_lookup=OFF receiver_lookup=OFF gameplay_bank_gate=EXACT_STRUCTURE dsr_only_rows=10 default_m99=STOCK_DSR");
     static std::atomic_bool
         r52_source_first_logged{false};
     if (!r52_source_first_logged.exchange(
@@ -2850,7 +3242,7 @@ bool clustered_pnts_draw_runtime::install() noexcept
             std::memory_order_relaxed))
         reshade::log::message(
             reshade::log::level::info,
-            "[DSRRL POINTLIGHT R52-SOURCE-FIRST] clustered=SOURCE_ONLY source_cut=0xB7E02 stage=POST_DSR_TRANSFORM_PRE_T18 receiver=STOCK_DSR material_lookup=OFF replacement_shader=OFF fixed=SOURCE_BEFORE_RECEIVER");
+            "[DSRRL POINTLIGHT R52-SOURCE-FIRST] clustered=SOURCE_ONLY source_cut=0xB7E02 stage=POST_DSR_TRANSFORM_PRE_T18 carrier=LIVE_DRAWPARAM_SELECTED_ROW receiver=STOCK_DSR material_lookup=OFF donor_lookup=OFF replacement_shader=OFF dsr_only_gate=10 default_m99=STOCK_DSR fixed=SOURCE_BEFORE_RECEIVER");
     return true;
 }
 
@@ -2865,7 +3257,8 @@ void clustered_pnts_draw_runtime::uninstall() noexcept
             true,
             std::memory_order_relaxed);
     }
-    g_clustered_source_bank_cache = {};
+    g_clustered_source_bank_identity_cache = {};
+    g_clustered_source_bank_identity_cache_victim = 0u;
     g_clustered_source_payload_cache = {};
     g_source_exec_attested.store(
         false,
@@ -3806,8 +4199,10 @@ clustered_pnts_draw_runtime::telemetry() const noexcept
         g_source_capture_ok.load(),
         g_source_capture_fail.load(),
         g_source_producer_hits.load(),
-        g_source_donor_accept.load(),
-        g_source_donor_reject.load(),
+        g_source_row_bridge.load(),
+        g_source_row_stock_dsr.load(),
+        g_source_dsr_only_fail_open.load(),
+        g_source_unclassified_bank_fail_open.load(),
         g_source_class_reject.load(),
         g_source_payload_cache_hit.load(),
         g_source_payload_cache_miss.load(),
@@ -3880,8 +4275,10 @@ void clustered_pnts_draw_runtime::reset() noexcept
     g_source_capture_ok.store(0u);
     g_source_capture_fail.store(0u);
     g_source_producer_hits.store(0u);
-    g_source_donor_accept.store(0u);
-    g_source_donor_reject.store(0u);
+    g_source_row_bridge.store(0u);
+    g_source_row_stock_dsr.store(0u);
+    g_source_dsr_only_fail_open.store(0u);
+    g_source_unclassified_bank_fail_open.store(0u);
     g_source_class_reject.store(0u);
     g_source_payload_cache_hit.store(0u);
     g_source_payload_cache_miss.store(0u);

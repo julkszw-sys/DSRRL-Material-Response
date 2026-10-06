@@ -104,8 +104,21 @@ def main():
             "k_clustered_source_override_preimage",
             "exact source override preimage")
         require(draw_cpp,
-            "pointlight_ptde_source::capture(",
-            "PTDE source donor decode")
+            "capture_clustered_live_drawparam_source(",
+            "live DrawParam source decode")
+        require(draw_cpp,
+            "g_source_dsr_only_fail_open",
+            "DSR-only semantic row fail-open telemetry")
+        require(draw_cpp,
+            "g_source_unclassified_bank_fail_open",
+            "default/m99 fail-open telemetry")
+        callback_start=draw_cpp.find("void __fastcall clustered_source_override_callback(")
+        callback_end=draw_cpp.find("bool build_clustered_source_override_stub(",callback_start)
+        if callback_start<0 or callback_end<0:
+            fail("clustered source callback boundaries missing")
+        callback_body=draw_cpp[callback_start:callback_end]
+        if "pointlight_ptde_source::capture(" in callback_body:
+            fail("clustered source callback still performs embedded donor lookup")
         require(draw_cpp,
             "Clustered PntS never performs receiver/material authorization.",
             "clustered receiver/material bridge retired")
@@ -122,7 +135,7 @@ def main():
         if "clustered_pnts_selector_event_bridge(" in publish_body:
             fail("clustered receiver bridge still executes in selector")
         print("Clustered PntS source-first activation audit: PASS")
-        print("  clustered=source-only receiver=stock-DSR material-lookup=OFF builder-detour=OFF")
+        print("  clustered=source-only receiver=stock-DSR material-lookup=OFF donor-lookup=OFF drawparam=live-selected-row dsr-only-gate=10 default-m99=stock-DSR builder-detour=OFF")
         print("  fixed=separate source-first receiver-after-source path")
         return 0
 

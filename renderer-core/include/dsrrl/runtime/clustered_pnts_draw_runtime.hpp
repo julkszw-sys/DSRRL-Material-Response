@@ -28,8 +28,10 @@ struct clustered_pnts_telemetry {
     // R52 source-only producer telemetry. These counters are independent of
     // the retired clustered receiver/material path.
     std::uint64_t source_producer_hits = 0;
-    std::uint64_t source_donor_accept = 0;
-    std::uint64_t source_donor_reject = 0;
+    std::uint64_t source_row_bridge = 0;
+    std::uint64_t source_row_stock_dsr = 0;
+    std::uint64_t source_dsr_only_fail_open = 0;
+    std::uint64_t source_unclassified_bank_fail_open = 0;
     std::uint64_t source_class_reject = 0;
     std::uint64_t source_payload_cache_hit = 0;
     std::uint64_t source_payload_cache_miss = 0;
