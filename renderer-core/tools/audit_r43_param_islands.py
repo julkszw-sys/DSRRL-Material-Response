@@ -18,6 +18,7 @@ def main():
     integrated=(root/"integrated/integrated_addon.cpp").read_text(encoding="utf-8")
     cluster=(root/"src/runtime/clustered_pnts_draw_runtime.cpp").read_text(encoding="utf-8")
     dof=(root/"src/runtime/dof_authored_state_runtime.cpp").read_text(encoding="utf-8")
+    dof_host=(root/"src/runtime/dof_host_depth_route_runtime.cpp").read_text(encoding="utf-8")
     cmake=(root/"integrated/CMakeLists.txt").read_text(encoding="utf-8")
 
     require(integrated,
@@ -59,8 +60,24 @@ def main():
         if needle in dof:
             fail("DoF authored runtime still uses donor machinery: "+needle)
 
+    require(dof_host,"0x24B8u",
+        "DoF retail PASS01 support selector")
+    require(dof_host,"0xC0u",
+        "DoF alternate support resource")
+    require(dof_host,"0x88u",
+        "DoF primary support resource")
+    if "0x250u" in dof_host or "0x230u" in dof_host:
+        fail("DoF PASS01 classifier regressed to unrelated +0x250/+0x230 resources")
+    require(dof,"std::uint8_t far_mul = 0u;",
+        "DoF live far multiplier byte")
+    require(dof,"std::uint8_t near_mul = 0u;",
+        "DoF live near multiplier byte")
+    require(cluster,"live_bank_structure",
+        "Clustered one-shot source failure stage")
     require(integrated,"[DSRRL DoF R43-DRAWPARAM]",
         "DoF live DrawParam marker")
+    require(integrated,"[DSRRL R43 PARAM SOURCE FIX V2]",
+        "R43 PARAM source fix marker")
     require(integrated,"[DSRRL TELEMETRY R43-PARAM]",
         "full telemetry marker")
     require(cmake,"DSRRL_DOF_DEFAULT_ON","DoF build option")
