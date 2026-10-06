@@ -61,7 +61,7 @@ def main() -> int:
         source_dir / "src" / "runtime" / "clustered_pnts_draw_runtime.cpp"
     ).read_text(encoding="utf-8")
     for token in (
-        "k_clustered_source_override_rva = 0xB7D25u;",
+        "k_clustered_source_override_rva = 0xB7E02u;",
         "k_clustered_source_override_preimage",
         "clustered_source_override_callback(",
         "pointlight_ptde_source::capture(",
