@@ -7983,6 +7983,9 @@ bool AddonInit(
 
     reshade::log::message(
         reshade::log::level::info,
+        "[DSRRL BASE R53] required_base=275cc1dd pointlight_parent=25893b07 generic_main_091c=FORBIDDEN");
+    reshade::log::message(
+        reshade::log::level::info,
         "[DSRRL DoF R53-DRAWPARAM] carrier=LIVE_SELECTED_DOF_ROWS selector=STOCK_DSR donor_table=ABSENT bank_gate=PTDE_HOMOLOGOUS_10 m15_dual=ON default_m99=STOCK_DSR producer_rva=0x5627E0");
 
     const bool dof_runtime_ready =
