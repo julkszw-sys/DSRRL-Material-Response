@@ -2319,7 +2319,7 @@ void reset() noexcept
 
 } // namespace motion_blur_camera_fallback_disable
 
-bool apply_r44_spc_rowaware_create_patch(
+bool apply_r44_rowaware_create_patch(
     std::uint32_t subobject_count,
     const reshade::api::pipeline_subobject *subobjects) noexcept
 {
@@ -2343,7 +2343,8 @@ bool apply_r44_spc_rowaware_create_patch(
         std::vector<std::uint8_t> replacement;
         const auto outcome =
             dsrrl::operators::point_light::
-                materialize_clustered_pnts_spc_attenuation_only(
+                materialize_clustered_pnts_rowaware_attenuation(
+                    g_core.features(),
                     static_cast<const std::uint8_t *>(
                         pixel_shader->code),
                     pixel_shader->code_size,
@@ -2351,11 +2352,10 @@ bool apply_r44_spc_rowaware_create_patch(
 
         using result =
             dsrrl::operators::point_light::
-                clustered_pnts_spc_attenuation_result;
+                clustered_pnts_rowaware_attenuation_result;
 
         if (outcome.result != result::applied) {
             if (outcome.result != result::pass_not_candidate &&
-                outcome.result != result::pass_nospc_owned_by_a1 &&
                 outcome.result != result::pass_unknown_exact_sha) {
                 ++g_r44_spc_create_fail_open;
                 if (!g_r44_spc_create_fail_logged.exchange(
@@ -2419,7 +2419,7 @@ bool apply_r44_spc_rowaware_create_patch(
             reshade::log::message(
                 reshade::log::level::info,
                 "[DSRRL POINTLIGHT R44-CONSUMER] "
-                "family=SPC_HEMENVLERP_PNTS "
+                "family=PHN_HEMENVLERP_PNTS_ALL36 "
                 "replacement=CREATE_TIME "
                 "attenuation=ROWAWARE_X3_OR_X "
                 "marker=t18+0x28 "
@@ -4963,9 +4963,11 @@ bool on_create_pipeline(
 
     // R44 PointLight create-time consumer runs only after all other
     // source-identity materializers have inspected the untouched stock PS.
-    // It owns only the 24 exact Spc HemEnvLerpPntS hosts left stock by A1.
+    // It owns attenuation for all 36 exact HemEnvLerpPntS hosts. On the 12
+    // NoSpc A1 hosts it preserves every enabled non-attenuation A1 island
+    // before installing the per-light row-aware attenuation carrier.
     const bool r44_pointlight_changed =
-        apply_r44_spc_rowaware_create_patch(
+        apply_r44_rowaware_create_patch(
             subobject_count,
             subobjects);
 
