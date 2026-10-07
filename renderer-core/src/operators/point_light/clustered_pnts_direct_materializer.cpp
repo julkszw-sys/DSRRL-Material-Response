@@ -835,22 +835,65 @@ materialize_clustered_pnts_marker_attenuation(
     std::size_t square = 0u;
     std::size_t cubic = 0u;
     std::size_t dcl_temps = 0u;
-    if (!find_unique_instruction_sequence(
+
+    auto a1_square = identity.square_mul;
+    auto a1_cubic = identity.cubic_mul_sat;
+    a1_square[0u] = 0x07000033u; // A1 MIN(x,x)
+    a1_cubic[0u] = 0x07002034u;  // A1 MAX_SAT(x,tmp)
+
+    std::size_t stock_square = 0u;
+    std::size_t stock_cubic = 0u;
+    std::size_t linear_square = 0u;
+    std::size_t linear_cubic = 0u;
+    const bool stock_pair =
+        find_unique_instruction_sequence(
+            words,
+            identity.square_mul,
+            stock_square) &&
+        find_unique_instruction_sequence(
+            words,
+            identity.cubic_mul_sat,
+            stock_cubic);
+    const bool a1_linear_pair =
+        find_unique_instruction_sequence(
+            words,
+            a1_square,
+            linear_square) &&
+        find_unique_instruction_sequence(
+            words,
+            a1_cubic,
+            linear_cubic);
+
+    if (stock_pair == a1_linear_pair ||
+        !find_unique_instruction_sequence(
             words,
             identity.t18_offset32_load,
             t18_load) ||
-        !find_unique_instruction_sequence(
-            words,
-            identity.square_mul,
-            square) ||
-        !find_unique_instruction_sequence(
-            words,
-            identity.cubic_mul_sat,
-            cubic) ||
         !find_unique_dcl_temps(
             words,
-            dcl_temps) ||
-        !(dcl_temps < t18_load &&
+            dcl_temps)) {
+        outcome.result =
+            clustered_pnts_marker_attenuation_result::
+                fail_post_a1_pattern;
+        return outcome;
+    }
+
+    if (stock_pair) {
+        square = stock_square;
+        cubic = stock_cubic;
+    } else {
+        square = linear_square;
+        cubic = linear_cubic;
+
+        // A1's global attenuation island is exact SAT(x), but R44 needs a
+        // per-light decision so rare DSR-only rows can remain x^3. Restore
+        // the two original MUL opcodes first; the marker MOVC below selects
+        // the PTDE linear value only for producer-marked lights.
+        words[square] = identity.square_mul[0u];
+        words[cubic] = identity.cubic_mul_sat[0u];
+    }
+
+    if (!(dcl_temps < t18_load &&
           t18_load < square &&
           square < cubic) ||
         cubic + 7u > words.size() ||
