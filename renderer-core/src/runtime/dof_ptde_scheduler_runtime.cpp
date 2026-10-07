@@ -882,6 +882,18 @@ bool run_pass(
         }
     }
 
+    // PTDE pass00 is FRPG_Fil_Dof_DofRate. Its ctor carries +0x68 as
+    // raw arg6, but the handler binds that resource to sampler stage1 and
+    // the shader consumes only s1. Do not positional-map raw arg6 to t0.
+    if (sources_ok && pass.pass == 0x00u) {
+        if (srvs[1] != nullptr) {
+            srvs[1]->Release();
+            srvs[1] = nullptr;
+        }
+        srvs[1] = srvs[0];
+        srvs[0] = nullptr;
+    }
+
     if (!sources_ok) {
         release_srvs(srvs);
         release_pair(shader);
