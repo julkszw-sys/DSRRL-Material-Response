@@ -22,6 +22,7 @@ namespace {
 namespace hashing = operators::legacy_plan::hashing;
 using role = operators::dof::retained_shader_role;
 using surface_role = operators::dof::ptde_surface_role;
+using source_kind = operators::dof::cheap_source_kind;
 
 struct native_pair {
     ID3D11VertexShader *vertex = nullptr;
@@ -41,7 +42,12 @@ struct saved_state {
         D3D11_SIMULTANEOUS_RENDER_TARGET_COUNT> rtvs{};
     ID3D11DepthStencilView *dsv = nullptr;
 
-    std::array<ID3D11ShaderResourceView *, 5> srvs{};
+    std::array<ID3D11ShaderResourceView *, 6> srvs{};
+    std::array<ID3D11SamplerState *, 6> samplers{};
+
+    ID3D11BlendState *blend = nullptr;
+    std::array<FLOAT, 4> blend_factor{};
+    UINT sample_mask = 0xffffffffu;
 
     std::array<D3D11_VIEWPORT,
         D3D11_VIEWPORT_AND_SCISSORRECT_OBJECT_COUNT_PER_PIPELINE> viewports{};
@@ -463,29 +469,6 @@ void on_destroy_device(
         release_pairs_locked();
 }
 
-role role_for_pass(std::uint8_t pass) noexcept
-{
-    switch (pass) {
-    case 0x00u:
-        return role::dof_rate_plain;
-    case 0x01u:
-    case 0x02u:
-        return role::downsample;
-    case 0x03u:
-        return role::near_rate;
-    case 0x0Du:
-        return role::unfocus_3x3;
-    case 0x0Eu:
-        return role::unfocus_near_rate_3x3;
-    case 0x0Fu:
-        return role::blur_upsample;
-    case 0x10u:
-        return role::dof_composite;
-    default:
-        return role::count;
-    }
-}
-
 bool pair_ready_locked(role selected) noexcept
 {
     if (selected == role::count)
@@ -547,39 +530,33 @@ void release_pair(native_pair &pair) noexcept
 }
 
 const operators::dof::ptde_surface_pair_desc *
-surface_for_target(std::uint16_t offset) noexcept
+surface_for_role(surface_role role_value) noexcept
 {
-    for (const auto &entry :
-         operators::dof::ptde_fixed_surface_pairs)
-        if (entry.target_offset == offset)
-            return &entry;
-    return nullptr;
+    return operators::dof::find_ptde_surface(role_value);
 }
 
-const operators::dof::ptde_surface_pair_desc *
-surface_for_srv(std::uint16_t offset) noexcept
-{
-    for (const auto &entry :
-         operators::dof::ptde_fixed_surface_pairs)
-        if (entry.srv_offset == offset)
-            return &entry;
-    return nullptr;
-}
-
-bool resolve_srv(
-    std::uint16_t offset,
+bool resolve_source(
+    source_kind source,
     const scheduler_external_inputs &inputs,
     ID3D11ShaderResourceView **out) noexcept
 {
     if (out == nullptr)
         return false;
-
     *out = nullptr;
 
-    if (offset == 0u)
+    if (source == source_kind::none)
         return true;
 
-    if (offset == 0x0068u) {
+    if (source == source_kind::scene) {
+        if (!inputs.scene_source_verified ||
+            inputs.scene_source_t0 == nullptr)
+            return false;
+        inputs.scene_source_t0->AddRef();
+        *out = inputs.scene_source_t0;
+        return true;
+    }
+
+    if (source == source_kind::depth) {
         if (!inputs.depth_support_verified ||
             inputs.depth_support_t1 == nullptr)
             return false;
@@ -588,18 +565,34 @@ bool resolve_srv(
         return true;
     }
 
-    const auto *surface =
-        surface_for_srv(offset);
-    if (surface == nullptr)
+    surface_role role_value = surface_role::count;
+    switch (source) {
+    case source_kind::half_rate:
+        role_value = surface_role::half_rate;
+        break;
+    case source_kind::half_rate_result:
+        role_value = surface_role::half_rate_result;
+        break;
+    case source_kind::half_blur:
+        role_value = surface_role::half_blur;
+        break;
+    case source_kind::quarter_ping:
+        role_value = surface_role::quarter_ping;
+        break;
+    case source_kind::quarter_pong:
+        role_value = surface_role::quarter_pong;
+        break;
+    default:
         return false;
+    }
 
     return acquire_private_shader_resource(
-        surface->role,
+        role_value,
         out);
 }
 
 void release_srvs(
-    std::array<ID3D11ShaderResourceView *, 5> &srvs) noexcept
+    std::array<ID3D11ShaderResourceView *, 6> &srvs) noexcept
 {
     for (auto *&srv : srvs) {
         if (srv != nullptr)
@@ -639,6 +632,16 @@ bool capture_state(
         0u,
         static_cast<UINT>(state.srvs.size()),
         state.srvs.data());
+
+    context->PSGetSamplers(
+        0u,
+        static_cast<UINT>(state.samplers.size()),
+        state.samplers.data());
+
+    context->OMGetBlendState(
+        &state.blend,
+        state.blend_factor.data(),
+        &state.sample_mask);
 
     state.viewport_count =
         static_cast<UINT>(state.viewports.size());
@@ -681,6 +684,13 @@ void release_state(saved_state &state) noexcept
         if (srv != nullptr)
             srv->Release();
 
+    for (auto *sampler : state.samplers)
+        if (sampler != nullptr)
+            sampler->Release();
+
+    if (state.blend != nullptr)
+        state.blend->Release();
+
     if (state.pixel != nullptr)
         state.pixel->Release();
     if (state.vertex != nullptr)
@@ -711,6 +721,16 @@ void restore_state(
         0u,
         static_cast<UINT>(state.srvs.size()),
         state.srvs.data());
+
+    context->PSSetSamplers(
+        0u,
+        static_cast<UINT>(state.samplers.size()),
+        state.samplers.data());
+
+    context->OMSetBlendState(
+        state.blend,
+        state.blend_factor.data(),
+        state.sample_mask);
 
     context->RSSetViewports(
         state.viewport_count,
@@ -756,7 +776,7 @@ bool verify_state(
     if (dsv != nullptr)
         dsv->Release();
 
-    std::array<ID3D11ShaderResourceView *, 5> srvs{};
+    std::array<ID3D11ShaderResourceView *, 6> srvs{};
     context->PSGetShaderResources(
         0u,
         static_cast<UINT>(srvs.size()),
@@ -766,6 +786,34 @@ bool verify_state(
         if (srvs[i] != nullptr)
             srvs[i]->Release();
     }
+
+    std::array<ID3D11SamplerState *, 6> samplers{};
+    context->PSGetSamplers(
+        0u,
+        static_cast<UINT>(samplers.size()),
+        samplers.data());
+    for (std::size_t i = 0u; i < samplers.size(); ++i) {
+        ok = ok && samplers[i] == state.samplers[i];
+        if (samplers[i] != nullptr)
+            samplers[i]->Release();
+    }
+
+    ID3D11BlendState *blend = nullptr;
+    std::array<FLOAT, 4> blend_factor{};
+    UINT sample_mask = 0u;
+    context->OMGetBlendState(
+        &blend,
+        blend_factor.data(),
+        &sample_mask);
+    ok = ok &&
+        blend == state.blend &&
+        sample_mask == state.sample_mask &&
+        std::memcmp(
+            blend_factor.data(),
+            state.blend_factor.data(),
+            sizeof(FLOAT) * blend_factor.size()) == 0;
+    if (blend != nullptr)
+        blend->Release();
 
     UINT viewport_count =
         static_cast<UINT>(state.viewports.size());
@@ -781,6 +829,21 @@ bool verify_state(
             viewports.data(),
             state.viewports.data(),
             sizeof(D3D11_VIEWPORT) * viewport_count) == 0;
+
+    UINT scissor_count =
+        static_cast<UINT>(state.scissors.size());
+    std::array<D3D11_RECT,
+        D3D11_VIEWPORT_AND_SCISSORRECT_OBJECT_COUNT_PER_PIPELINE> scissors{};
+    context->RSGetScissorRects(
+        &scissor_count,
+        scissors.data());
+
+    ok = ok && scissor_count == state.scissor_count;
+    if (ok && scissor_count != 0u)
+        ok = std::memcmp(
+            scissors.data(),
+            state.scissors.data(),
+            sizeof(D3D11_RECT) * scissor_count) == 0;
 
     return ok;
 }
@@ -835,15 +898,20 @@ bool issue_draw(
 
 bool run_pass(
     ID3D11DeviceContext *context,
-    const operators::dof::ptde_pass_resource_contract &pass,
+    const operators::dof::cheap_half_seed_pass_contract &pass,
     const scheduler_external_inputs &inputs,
     const scheduler_draw_shape &shape) noexcept
 {
-    if (context == nullptr)
+    if (context == nullptr ||
+        !inputs.pass_state_verified ||
+        inputs.color_sampler == nullptr ||
+        inputs.depth_sampler == nullptr ||
+        inputs.alpha_write_blend == nullptr ||
+        inputs.rgb_write_blend == nullptr)
         return false;
 
     const auto *target =
-        surface_for_target(pass.target_offset);
+        surface_for_role(pass.target);
     if (target == nullptr)
         return false;
 
@@ -856,42 +924,22 @@ bool run_pass(
 
     native_pair shader{};
     if (!acquire_pair(
-            role_for_pass(pass.pass),
+            pass.shader,
             shader)) {
         rtv->Release();
         return false;
     }
 
-    std::array<ID3D11ShaderResourceView *, 5> srvs{};
-    const std::array<std::uint16_t, 5> source_offsets = {{
-        pass.arg6_source,
-        pass.arg7_source,
-        pass.arg8_source,
-        pass.arg9_source,
-        pass.arg10_source
-    }};
-
+    std::array<ID3D11ShaderResourceView *, 6> srvs{};
     bool sources_ok = true;
-    for (std::size_t i = 0u; i < source_offsets.size(); ++i) {
-        if (!resolve_srv(
-                source_offsets[i],
+    for (std::size_t i = 0u; i < pass.sources.size(); ++i) {
+        if (!resolve_source(
+                pass.sources[i],
                 inputs,
                 &srvs[i])) {
             sources_ok = false;
             break;
         }
-    }
-
-    // PTDE pass00 is FRPG_Fil_Dof_DofRate. Its ctor carries +0x68 as
-    // raw arg6, but the handler binds that resource to sampler stage1 and
-    // the shader consumes only s1. Do not positional-map raw arg6 to t0.
-    if (sources_ok && pass.pass == 0x00u) {
-        if (srvs[1] != nullptr) {
-            srvs[1]->Release();
-            srvs[1] = nullptr;
-        }
-        srvs[1] = srvs[0];
-        srvs[0] = nullptr;
     }
 
     if (!sources_ok) {
@@ -901,7 +949,7 @@ bool run_pass(
         return false;
     }
 
-    const std::array<ID3D11ShaderResourceView *, 5> null_srvs{};
+    const std::array<ID3D11ShaderResourceView *, 6> null_srvs{};
     context->PSSetShaderResources(
         0u,
         static_cast<UINT>(null_srvs.size()),
@@ -911,6 +959,26 @@ bool run_pass(
         1u,
         &rtv,
         nullptr);
+
+    if (!pass.inherit_host_om) {
+        ID3D11BlendState *write_state =
+            inputs.rgba_write_blend;
+        if (pass.rt0_write_mask == 0x08u)
+            write_state = inputs.alpha_write_blend;
+        else if (pass.rt0_write_mask == 0x07u)
+            write_state = inputs.rgb_write_blend;
+        else if (pass.rt0_write_mask != 0x0Fu) {
+            release_srvs(srvs);
+            release_pair(shader);
+            rtv->Release();
+            return false;
+        }
+
+        context->OMSetBlendState(
+            write_state,
+            inputs.blend_factor.data(),
+            inputs.sample_mask);
+    }
 
     D3D11_VIEWPORT viewport{};
     viewport.TopLeftX = 0.0f;
@@ -932,6 +1000,16 @@ bool run_pass(
         static_cast<LONG>(target->raster.height);
     context->RSSetScissorRects(1u, &scissor);
 
+    std::array<ID3D11SamplerState *, 6> samplers{};
+    for (std::size_t i = 0u; i < pass.sources.size(); ++i) {
+        if (pass.sources[i] == source_kind::none)
+            continue;
+        samplers[i] =
+            pass.sources[i] == source_kind::depth
+                ? inputs.depth_sampler
+                : inputs.color_sampler;
+    }
+
     context->VSSetShader(
         shader.vertex,
         nullptr,
@@ -940,7 +1018,10 @@ bool run_pass(
         shader.pixel,
         nullptr,
         0u);
-
+    context->PSSetSamplers(
+        0u,
+        static_cast<UINT>(samplers.size()),
+        samplers.data());
     context->PSSetShaderResources(
         0u,
         static_cast<UINT>(srvs.size()),
@@ -1049,23 +1130,22 @@ scheduler_result execute_ptde_pass(
 
     if (g_quarantined.load() ||
         cmd_list == nullptr ||
-        pass_index >= operators::dof::ptde_exact_pass_resources.size() ||
+        pass_index >= operators::dof::cheap_half_seed_passes.size() ||
         !operators::dof::evaluate_activation(activation).active) {
         ++g_execute_fail;
         return scheduler_result::not_ready;
     }
 
     const auto &pass =
-        operators::dof::ptde_exact_pass_resources[pass_index];
-    const role selected =
-        role_for_pass(pass.pass);
+        operators::dof::cheap_half_seed_passes[pass_index];
+    const role selected = pass.shader;
 
     if (selected == role::count ||
-        ((pass.pass == 0x00u ||
-          pass.pass == 0x03u ||
-          pass.pass == 0x10u) &&
-         (!inputs.depth_support_verified ||
-          inputs.depth_support_t1 == nullptr))) {
+        !inputs.scene_source_verified ||
+        inputs.scene_source_t0 == nullptr ||
+        !inputs.depth_support_verified ||
+        inputs.depth_support_t1 == nullptr ||
+        !inputs.pass_state_verified) {
         ++g_execute_fail;
         return scheduler_result::input_rejected;
     }
@@ -1148,10 +1228,13 @@ scheduler_result execute_ptde_graph(
     if (g_quarantined.load() ||
         cmd_list == nullptr ||
         !operators::dof::evaluate_activation(activation).active ||
-        !inputs.scene_history_q8_verified ||
-        inputs.scene_history_q8 == nullptr ||
+        activation.carrier !=
+            operators::dof::carrier_mode::native_rate_half_seed ||
+        !inputs.scene_source_verified ||
+        inputs.scene_source_t0 == nullptr ||
         !inputs.depth_support_verified ||
         inputs.depth_support_t1 == nullptr ||
+        !inputs.pass_state_verified ||
         !ptde_scheduler_execution_set_ready(inputs)) {
         ++g_execute_fail;
         return scheduler_result::not_ready;
@@ -1179,18 +1262,10 @@ scheduler_result execute_ptde_graph(
         return scheduler_result::state_capture_failed;
     }
 
-    bool pass_ok = true;
-    for (const auto &pass :
-         operators::dof::ptde_exact_pass_resources) {
-        if (!run_pass(
-                context,
-                pass,
-                inputs,
-                shape)) {
-            pass_ok = false;
-            break;
-        }
-    }
+    // The production half-seed terminal must execute inside the authentic
+    // retained DSR FRPG_Fil_Dof draw. A single-shot call cannot prove that
+    // terminal scope, so this API deliberately fails open.
+    bool pass_ok = false;
 
     if (pass_ok) {
         pass_ok =
