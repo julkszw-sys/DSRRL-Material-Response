@@ -76,6 +76,40 @@ std::atomic_bool g_runtime_mtd_cache_hit{false};
 std::atomic_bool g_runtime_mtd_selection_published{false};
 std::atomic<std::uint64_t> g_owner_consumed{0};
 
+#ifdef DSRRL_LAUNCH_FINGERPRINT
+std::atomic<std::uint64_t> g_launch_parse_events{0u};
+std::atomic<std::uint64_t> g_launch_mtd_events{0u};
+std::atomic<std::uint64_t> g_launch_destroy_events{0u};
+std::atomic<std::uint64_t> g_launch_selector_events{0u};
+std::atomic<std::uint32_t> g_launch_first_parse_tid{0u};
+std::atomic<std::uint32_t> g_launch_first_mtd_tid{0u};
+std::atomic<std::uint32_t> g_launch_first_destroy_tid{0u};
+std::atomic<std::uint32_t> g_launch_first_selector_tid{0u};
+std::atomic<std::uint64_t> g_launch_first_parse_qpc{0u};
+std::atomic<std::uint64_t> g_launch_first_mtd_qpc{0u};
+std::atomic<std::uint64_t> g_launch_first_destroy_qpc{0u};
+std::atomic<std::uint64_t> g_launch_first_selector_qpc{0u};
+
+void launch_fingerprint_note(
+    std::atomic<std::uint64_t> &count,
+    std::atomic<std::uint32_t> &first_tid,
+    std::atomic<std::uint64_t> &first_qpc) noexcept
+{
+    const auto previous =
+        count.fetch_add(1u, std::memory_order_relaxed);
+    if (previous != 0u)
+        return;
+    first_tid.store(
+        static_cast<std::uint32_t>(GetCurrentThreadId()),
+        std::memory_order_relaxed);
+    LARGE_INTEGER qpc{};
+    if (QueryPerformanceCounter(&qpc))
+        first_qpc.store(
+            static_cast<std::uint64_t>(qpc.QuadPart),
+            std::memory_order_relaxed);
+}
+#endif
+
 std::atomic_bool g_selector_upper_lower_enabled{true};
 std::atomic_bool g_selector_hemdir3_enabled{true};
 
@@ -925,6 +959,12 @@ bool exe_ok(){
  if(h)BCryptDestroyHash(h);BCryptCloseAlgorithmProvider(a,0);if(!ok)return false;static constexpr char x[]="0123456789abcdef";std::string s(64,'0');for(std::size_t i=0;i<32;++i){s[2*i]=x[d[i]>>4];s[2*i+1]=x[d[i]&15];}return s==k_sha;
 }
 void __fastcall parse_entry(void*m,const void*r) noexcept {
+#ifdef DSRRL_LAUNCH_FINGERPRINT
+ launch_fingerprint_note(
+     g_launch_parse_events,
+     g_launch_first_parse_tid,
+     g_launch_first_parse_qpc);
+#endif
 #ifdef DSRRL_FLVER_SELECTOR_PROFILE
  g_selector_profile_parse_events.fetch_add(
      1u,
@@ -949,6 +989,12 @@ void __fastcall parse_entry(void*m,const void*r) noexcept {
  if(g_po)g_po(m,r);
 }
 void __fastcall destroy_entry(void*m) noexcept {
+#ifdef DSRRL_LAUNCH_FINGERPRINT
+ launch_fingerprint_note(
+     g_launch_destroy_events,
+     g_launch_first_destroy_tid,
+     g_launch_first_destroy_qpc);
+#endif
 #ifdef DSRRL_FLVER_SELECTOR_PROFILE
  g_selector_profile_destroy_events.fetch_add(
      1u,
@@ -967,6 +1013,12 @@ void __fastcall mtd_entry(
     std::uint32_t len,
     const wchar_t *semantic_key) noexcept
 {
+#ifdef DSRRL_LAUNCH_FINGERPRINT
+ launch_fingerprint_note(
+     g_launch_mtd_events,
+     g_launch_first_mtd_tid,
+     g_launch_first_mtd_qpc);
+#endif
 #ifdef DSRRL_FLVER_SELECTOR_PROFILE
  g_selector_profile_mtd_events.fetch_add(
      1u,
@@ -1063,6 +1115,12 @@ extern "C" void dsrrl_flver_selector_observer(
     std::uint32_t incoming_mode,
     const void *selector_stack) noexcept
 {
+#ifdef DSRRL_LAUNCH_FINGERPRINT
+ launch_fingerprint_note(
+     g_launch_selector_events,
+     g_launch_first_selector_tid,
+     g_launch_first_selector_qpc);
+#endif
  selector_profile_sample profile{};
 #ifdef DSRRL_FLVER_SELECTOR_PROFILE
  const auto profile_sequence =
@@ -1517,6 +1575,25 @@ selector_profile_telemetry selector_profile_stats() noexcept
     out.destroy_events =
         g_selector_profile_destroy_events.load(
             std::memory_order_relaxed);
+#endif
+    return out;
+}
+launch_fingerprint_telemetry launch_fingerprint_stats() noexcept
+{
+    launch_fingerprint_telemetry out{};
+#ifdef DSRRL_LAUNCH_FINGERPRINT
+    out.parse_events = g_launch_parse_events.load(std::memory_order_relaxed);
+    out.mtd_events = g_launch_mtd_events.load(std::memory_order_relaxed);
+    out.destroy_events = g_launch_destroy_events.load(std::memory_order_relaxed);
+    out.selector_events = g_launch_selector_events.load(std::memory_order_relaxed);
+    out.first_parse_tid = g_launch_first_parse_tid.load(std::memory_order_relaxed);
+    out.first_mtd_tid = g_launch_first_mtd_tid.load(std::memory_order_relaxed);
+    out.first_destroy_tid = g_launch_first_destroy_tid.load(std::memory_order_relaxed);
+    out.first_selector_tid = g_launch_first_selector_tid.load(std::memory_order_relaxed);
+    out.first_parse_qpc = g_launch_first_parse_qpc.load(std::memory_order_relaxed);
+    out.first_mtd_qpc = g_launch_first_mtd_qpc.load(std::memory_order_relaxed);
+    out.first_destroy_qpc = g_launch_first_destroy_qpc.load(std::memory_order_relaxed);
+    out.first_selector_qpc = g_launch_first_selector_qpc.load(std::memory_order_relaxed);
 #endif
     return out;
 }
