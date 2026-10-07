@@ -127,6 +127,50 @@ std::atomic<std::uint64_t> g_selector_profile_parse_events{0u};
 std::atomic<std::uint64_t> g_selector_profile_mtd_events{0u};
 std::atomic<std::uint64_t> g_selector_profile_destroy_events{0u};
 
+selector_profile_bucket g_support_parse_total{};
+selector_profile_bucket g_support_parse_addon{};
+selector_profile_bucket g_support_parse_original{};
+selector_profile_bucket g_support_mtd_total{};
+selector_profile_bucket g_support_mtd_addon{};
+selector_profile_bucket g_support_mtd_original{};
+selector_profile_bucket g_support_destroy_total{};
+selector_profile_bucket g_support_destroy_addon{};
+selector_profile_bucket g_support_destroy_original{};
+
+std::atomic<std::uint32_t> g_support_parse_first_tid{0u};
+std::atomic<std::uint32_t> g_support_parse_last_tid{0u};
+std::atomic<std::uint64_t> g_support_parse_tid_switches{0u};
+std::atomic<std::uint32_t> g_support_mtd_first_tid{0u};
+std::atomic<std::uint32_t> g_support_mtd_last_tid{0u};
+std::atomic<std::uint64_t> g_support_mtd_tid_switches{0u};
+std::atomic<std::uint32_t> g_support_destroy_first_tid{0u};
+std::atomic<std::uint32_t> g_support_destroy_last_tid{0u};
+std::atomic<std::uint64_t> g_support_destroy_tid_switches{0u};
+
+void support_profile_note_tid(
+    std::atomic<std::uint32_t> &first,
+    std::atomic<std::uint32_t> &last,
+    std::atomic<std::uint64_t> &switches) noexcept
+{
+    const auto tid =
+        static_cast<std::uint32_t>(
+            GetCurrentThreadId());
+    std::uint32_t expected = 0u;
+    (void)first.compare_exchange_strong(
+        expected,
+        tid,
+        std::memory_order_relaxed,
+        std::memory_order_relaxed);
+    const auto previous =
+        last.exchange(
+            tid,
+            std::memory_order_relaxed);
+    if (previous != 0u && previous != tid)
+        switches.fetch_add(
+            1u,
+            std::memory_order_relaxed);
+}
+
 std::uint64_t selector_profile_qpc() noexcept
 {
     LARGE_INTEGER value{};
@@ -217,11 +261,11 @@ void selector_profile_log(
                 static_cast<double>(frequency.QuadPart);
         };
 
-    char line[1536]{};
+    char line[2304]{};
     std::snprintf(
         line,
         sizeof(line),
-        "[DSRRL PERF R32] SELECTOR sample=1/%u n=%llu total_us=%.3f max_total_us=%.3f prefix_us=%.3f resolve_us=%.3f cache_lookup_us=%.3f cache_publish_us=%.3f owner_lookup_us=%.3f owner_mtd_us=%.3f selection_publish_us=%.3f pmetal_source_us=%.3f runtime_mtd_us=%.3f runtime_publish_us=%.3f paths=cache:%llu owner:%llu runtime:%llu fail:%llu early:%llu support=parse:%llu mtd:%llu destroy:%llu",
+        "[DSRRL PERF R47] SELECTOR sample=1/%u n=%llu total_us=%.3f max_total_us=%.3f prefix_us=%.3f resolve_us=%.3f cache_lookup_us=%.3f cache_publish_us=%.3f owner_lookup_us=%.3f owner_mtd_us=%.3f selection_publish_us=%.3f pmetal_source_us=%.3f runtime_mtd_us=%.3f runtime_publish_us=%.3f paths=cache:%llu owner:%llu runtime:%llu fail:%llu early:%llu support=parse:%llu mtd:%llu destroy:%llu support_us=parse_total:%.3f parse_addon:%.3f parse_orig:%.3f mtd_total:%.3f mtd_addon:%.3f mtd_orig:%.3f destroy_total:%.3f destroy_addon:%.3f destroy_orig:%.3f support_tid=parse:%u>%u/%llu mtd:%u>%u/%llu destroy:%u>%u/%llu",
         k_selector_profile_sample_period,
         static_cast<unsigned long long>(samples),
         avg_us(g_selector_profile_total.ticks.load(std::memory_order_relaxed)),
@@ -243,7 +287,25 @@ void selector_profile_log(
         static_cast<unsigned long long>(g_selector_profile_early_path.load(std::memory_order_relaxed)),
         static_cast<unsigned long long>(g_selector_profile_parse_events.load(std::memory_order_relaxed)),
         static_cast<unsigned long long>(g_selector_profile_mtd_events.load(std::memory_order_relaxed)),
-        static_cast<unsigned long long>(g_selector_profile_destroy_events.load(std::memory_order_relaxed)));
+        static_cast<unsigned long long>(g_selector_profile_destroy_events.load(std::memory_order_relaxed)),
+        ticks_us(g_support_parse_total.ticks.load(std::memory_order_relaxed)),
+        ticks_us(g_support_parse_addon.ticks.load(std::memory_order_relaxed)),
+        ticks_us(g_support_parse_original.ticks.load(std::memory_order_relaxed)),
+        ticks_us(g_support_mtd_total.ticks.load(std::memory_order_relaxed)),
+        ticks_us(g_support_mtd_addon.ticks.load(std::memory_order_relaxed)),
+        ticks_us(g_support_mtd_original.ticks.load(std::memory_order_relaxed)),
+        ticks_us(g_support_destroy_total.ticks.load(std::memory_order_relaxed)),
+        ticks_us(g_support_destroy_addon.ticks.load(std::memory_order_relaxed)),
+        ticks_us(g_support_destroy_original.ticks.load(std::memory_order_relaxed)),
+        static_cast<unsigned>(g_support_parse_first_tid.load(std::memory_order_relaxed)),
+        static_cast<unsigned>(g_support_parse_last_tid.load(std::memory_order_relaxed)),
+        static_cast<unsigned long long>(g_support_parse_tid_switches.load(std::memory_order_relaxed)),
+        static_cast<unsigned>(g_support_mtd_first_tid.load(std::memory_order_relaxed)),
+        static_cast<unsigned>(g_support_mtd_last_tid.load(std::memory_order_relaxed)),
+        static_cast<unsigned long long>(g_support_mtd_tid_switches.load(std::memory_order_relaxed)),
+        static_cast<unsigned>(g_support_destroy_first_tid.load(std::memory_order_relaxed)),
+        static_cast<unsigned>(g_support_destroy_last_tid.load(std::memory_order_relaxed)),
+        static_cast<unsigned long long>(g_support_destroy_tid_switches.load(std::memory_order_relaxed)));
     reshade::log::message(
         reshade::log::level::info,
         line);
@@ -340,6 +402,24 @@ void selector_profile_reset() noexcept
     reset_bucket(g_selector_profile_pmetal);
     reset_bucket(g_selector_profile_runtime_mtd);
     reset_bucket(g_selector_profile_runtime_publish);
+    reset_bucket(g_support_parse_total);
+    reset_bucket(g_support_parse_addon);
+    reset_bucket(g_support_parse_original);
+    reset_bucket(g_support_mtd_total);
+    reset_bucket(g_support_mtd_addon);
+    reset_bucket(g_support_mtd_original);
+    reset_bucket(g_support_destroy_total);
+    reset_bucket(g_support_destroy_addon);
+    reset_bucket(g_support_destroy_original);
+    g_support_parse_first_tid.store(0u, std::memory_order_relaxed);
+    g_support_parse_last_tid.store(0u, std::memory_order_relaxed);
+    g_support_parse_tid_switches.store(0u, std::memory_order_relaxed);
+    g_support_mtd_first_tid.store(0u, std::memory_order_relaxed);
+    g_support_mtd_last_tid.store(0u, std::memory_order_relaxed);
+    g_support_mtd_tid_switches.store(0u, std::memory_order_relaxed);
+    g_support_destroy_first_tid.store(0u, std::memory_order_relaxed);
+    g_support_destroy_last_tid.store(0u, std::memory_order_relaxed);
+    g_support_destroy_tid_switches.store(0u, std::memory_order_relaxed);
     g_selector_profile_cache_path.store(
         0u,
         std::memory_order_relaxed);
@@ -926,9 +1006,15 @@ bool exe_ok(){
 }
 void __fastcall parse_entry(void*m,const void*r) noexcept {
 #ifdef DSRRL_FLVER_SELECTOR_PROFILE
+ const auto support_total_begin = selector_profile_qpc();
+ support_profile_note_tid(
+     g_support_parse_first_tid,
+     g_support_parse_last_tid,
+     g_support_parse_tid_switches);
  g_selector_profile_parse_events.fetch_add(
      1u,
      std::memory_order_relaxed);
+ const auto support_addon_begin = selector_profile_qpc();
 #endif
  // R41: FLVER object streaming is not a LightBank source mutation. Keep
  // FLVER identity invalidation local to the FLVER registry and preserve the
@@ -946,20 +1032,58 @@ void __fastcall parse_entry(void*m,const void*r) noexcept {
      range_ok(r,static_cast<std::size_t>(n)))
    (void)flver_identity_observe_parse(m,r,static_cast<std::size_t>(n));
  }
+#ifdef DSRRL_FLVER_SELECTOR_PROFILE
+ const auto support_addon_end = selector_profile_qpc();
+ selector_profile_add(
+     g_support_parse_addon,
+     support_addon_end - support_addon_begin);
+ const auto support_original_begin = support_addon_end;
+#endif
  if(g_po)g_po(m,r);
+#ifdef DSRRL_FLVER_SELECTOR_PROFILE
+ const auto support_end = selector_profile_qpc();
+ selector_profile_add(
+     g_support_parse_original,
+     support_end - support_original_begin);
+ selector_profile_add(
+     g_support_parse_total,
+     support_end - support_total_begin);
+#endif
 }
 void __fastcall destroy_entry(void*m) noexcept {
 #ifdef DSRRL_FLVER_SELECTOR_PROFILE
+ const auto support_total_begin = selector_profile_qpc();
+ support_profile_note_tid(
+     g_support_destroy_first_tid,
+     g_support_destroy_last_tid,
+     g_support_destroy_tid_switches);
  g_selector_profile_destroy_events.fetch_add(
      1u,
      std::memory_order_relaxed);
+ const auto support_addon_begin = selector_profile_qpc();
 #endif
  // R41: model destruction invalidates FLVER ownership only. It must not flush
  // process-wide/TLS LightBank source caches for unrelated surviving models.
  // Any later FLVER handle reuse is still fail-open in the FLVER identity
  // registry; P_Metal source reuse requires its own exact source/base/row key.
  flver_identity_observe_destroy(m);
+#ifdef DSRRL_FLVER_SELECTOR_PROFILE
+ const auto support_addon_end = selector_profile_qpc();
+ selector_profile_add(
+     g_support_destroy_addon,
+     support_addon_end - support_addon_begin);
+ const auto support_original_begin = support_addon_end;
+#endif
  if(g_do)g_do(m);
+#ifdef DSRRL_FLVER_SELECTOR_PROFILE
+ const auto support_end = selector_profile_qpc();
+ selector_profile_add(
+     g_support_destroy_original,
+     support_end - support_original_begin);
+ selector_profile_add(
+     g_support_destroy_total,
+     support_end - support_total_begin);
+#endif
 }
 void __fastcall mtd_entry(
     void *material,
@@ -968,12 +1092,34 @@ void __fastcall mtd_entry(
     const wchar_t *semantic_key) noexcept
 {
 #ifdef DSRRL_FLVER_SELECTOR_PROFILE
+ const auto support_total_begin = selector_profile_qpc();
+ support_profile_note_tid(
+     g_support_mtd_first_tid,
+     g_support_mtd_last_tid,
+     g_support_mtd_tid_switches);
  g_selector_profile_mtd_events.fetch_add(
      1u,
      std::memory_order_relaxed);
+ const auto support_addon_begin = selector_profile_qpc();
 #endif
  observe_exact_runtime_mtd(material,raw,len,semantic_key);
+#ifdef DSRRL_FLVER_SELECTOR_PROFILE
+ const auto support_addon_end = selector_profile_qpc();
+ selector_profile_add(
+     g_support_mtd_addon,
+     support_addon_end - support_addon_begin);
+ const auto support_original_begin = support_addon_end;
+#endif
  if(g_mo)g_mo(material,raw,len,semantic_key);
+#ifdef DSRRL_FLVER_SELECTOR_PROFILE
+ const auto support_end = selector_profile_qpc();
+ selector_profile_add(
+     g_support_mtd_original,
+     support_end - support_original_begin);
+ selector_profile_add(
+     g_support_mtd_total,
+     support_end - support_total_begin);
+#endif
 }
 
 bool publish_exact_selector_identity(
