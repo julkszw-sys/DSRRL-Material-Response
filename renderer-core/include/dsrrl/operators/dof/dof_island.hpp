@@ -15,7 +15,7 @@ enum class flat_mode : std::uint8_t {
 enum class carrier_mode : std::uint8_t {
     unknown = 0,
     exact_q8_history,
-    native_rate_half_seed
+    native_rate_ptde_seed
 };
 
 enum class bridge_reason : std::uint8_t {
@@ -28,7 +28,7 @@ enum class bridge_reason : std::uint8_t {
     unresolved_ptde_dofbank_route,
     unknown_carrier,
     missing_q8_scene_history,
-    missing_half_seed_adapter,
+    missing_ptde_seed_adapter,
     missing_pass_state_transaction,
     missing_retained_pipeline_set,
     missing_private_depth_sidecar,
@@ -65,7 +65,7 @@ struct activation_context {
     bool ptde_dofbank_payload_ready = false;
     bool ptde_dofbank_route_verified = false;
     bool q8_scene_history_ready = false;
-    bool half_seed_adapter_ready = false;
+    bool ptde_seed_adapter_ready = false;
     bool pass_state_transaction_ready = false;
     bool retained_flat_pipeline_set_ready = false;
     bool private_depth_sidecar_ready = false;

@@ -147,10 +147,11 @@ constexpr bool ptde_exact_pass_resource_graph_is_structurally_closed() noexcept
         terminal.arg11_flag == 1u;
 }
 
-enum class cheap_source_kind : std::uint8_t {
+enum class production_source_kind : std::uint8_t {
     none = 0,
     scene,
     depth,
+    full_prefix,
     half_rate,
     half_rate_result,
     half_blur,
@@ -158,97 +159,133 @@ enum class cheap_source_kind : std::uint8_t {
     quarter_pong
 };
 
-struct cheap_half_seed_pass_contract {
+struct production_seed_pass_contract {
     std::uint8_t logical_pass = 0u;
     retained_shader_role shader = retained_shader_role::count;
     ptde_surface_role target = ptde_surface_role::half_rate;
-    std::array<cheap_source_kind, 6> sources{};
+    std::array<production_source_kind, 6> sources{};
     std::uint8_t rt0_write_mask = 0x0Fu;
     bool inherit_host_om = false;
 };
 
-inline constexpr std::array<cheap_half_seed_pass_contract, 9>
-cheap_half_seed_passes = {{
+inline constexpr std::array<production_seed_pass_contract, 10>
+production_seed_passes = {{
+    // Synthetic pre-pass: materialize only scene RGB into PTDE's fixed
+    // 1024x720 BGRA8 first-stage carrier.
+    {0xFFu, retained_shader_role::downsample,
+        ptde_surface_role::full_prefix,
+        {production_source_kind::scene, production_source_kind::none,
+         production_source_kind::none, production_source_kind::none,
+         production_source_kind::none, production_source_kind::none},
+        0x07u, false},
+
+    // PTDE pass00 at PTDE raster: write DofRate into alpha only.
     {0x00u, retained_shader_role::dof_rate_plain,
-        ptde_surface_role::half_rate,
-        {cheap_source_kind::none, cheap_source_kind::depth,
-         cheap_source_kind::none, cheap_source_kind::none,
-         cheap_source_kind::none, cheap_source_kind::none},
+        ptde_surface_role::full_prefix,
+        {production_source_kind::none, production_source_kind::depth,
+         production_source_kind::none, production_source_kind::none,
+         production_source_kind::none, production_source_kind::none},
         0x08u, false},
+
+    // PTDE pass02: first resolution reduction occurs only here.
     {0x02u, retained_shader_role::downsample,
         ptde_surface_role::half_rate,
-        {cheap_source_kind::scene, cheap_source_kind::none,
-         cheap_source_kind::none, cheap_source_kind::none,
-         cheap_source_kind::none, cheap_source_kind::none},
-        0x07u, false},
+        {production_source_kind::full_prefix, production_source_kind::none,
+         production_source_kind::none, production_source_kind::none,
+         production_source_kind::none, production_source_kind::none},
+        0x0Fu, false},
+
     {0x0Du, retained_shader_role::unfocus_3x3,
         ptde_surface_role::half_rate_result,
-        {cheap_source_kind::half_rate, cheap_source_kind::none,
-         cheap_source_kind::none, cheap_source_kind::none,
-         cheap_source_kind::none, cheap_source_kind::none},
+        {production_source_kind::half_rate, production_source_kind::none,
+         production_source_kind::none, production_source_kind::none,
+         production_source_kind::none, production_source_kind::none},
         0x0Fu, false},
     {0x01u, retained_shader_role::downsample,
         ptde_surface_role::quarter_pong,
-        {cheap_source_kind::half_rate, cheap_source_kind::none,
-         cheap_source_kind::none, cheap_source_kind::none,
-         cheap_source_kind::none, cheap_source_kind::none},
+        {production_source_kind::half_rate, production_source_kind::none,
+         production_source_kind::none, production_source_kind::none,
+         production_source_kind::none, production_source_kind::none},
         0x0Fu, false},
     {0x0Du, retained_shader_role::unfocus_3x3,
         ptde_surface_role::quarter_ping,
-        {cheap_source_kind::quarter_pong, cheap_source_kind::none,
-         cheap_source_kind::none, cheap_source_kind::none,
-         cheap_source_kind::none, cheap_source_kind::none},
+        {production_source_kind::quarter_pong, production_source_kind::none,
+         production_source_kind::none, production_source_kind::none,
+         production_source_kind::none, production_source_kind::none},
         0x0Fu, false},
     {0x0Fu, retained_shader_role::blur_upsample,
         ptde_surface_role::half_blur,
-        {cheap_source_kind::quarter_ping, cheap_source_kind::none,
-         cheap_source_kind::none, cheap_source_kind::none,
-         cheap_source_kind::none, cheap_source_kind::none},
+        {production_source_kind::quarter_ping, production_source_kind::none,
+         production_source_kind::none, production_source_kind::none,
+         production_source_kind::none, production_source_kind::none},
         0x0Fu, false},
+
+    // Retained DSR NearRate consumes only depth at t1. RGB in quarter_pong
+    // survives from pass01 because this pass commits alpha only.
     {0x03u, retained_shader_role::near_rate,
         ptde_surface_role::quarter_pong,
-        {cheap_source_kind::quarter_ping, cheap_source_kind::depth,
-         cheap_source_kind::none, cheap_source_kind::none,
-         cheap_source_kind::none, cheap_source_kind::none},
+        {production_source_kind::none, production_source_kind::depth,
+         production_source_kind::none, production_source_kind::none,
+         production_source_kind::none, production_source_kind::none},
         0x08u, false},
     {0x0Eu, retained_shader_role::unfocus_near_rate_3x3,
         ptde_surface_role::quarter_ping,
-        {cheap_source_kind::quarter_pong, cheap_source_kind::none,
-         cheap_source_kind::none, cheap_source_kind::none,
-         cheap_source_kind::none, cheap_source_kind::none},
+        {production_source_kind::quarter_pong, production_source_kind::none,
+         production_source_kind::none, production_source_kind::none,
+         production_source_kind::none, production_source_kind::none},
         0x08u, false},
+
+    // Retained DSR terminal computes full-resolution rate from native t5.
     {0x10u, retained_shader_role::dof_composite,
         ptde_surface_role::full_terminal,
-        {cheap_source_kind::scene, cheap_source_kind::half_rate,
-         cheap_source_kind::half_rate_result, cheap_source_kind::half_blur,
-         cheap_source_kind::quarter_ping, cheap_source_kind::depth},
+        {production_source_kind::scene, production_source_kind::half_rate,
+         production_source_kind::half_rate_result, production_source_kind::half_blur,
+         production_source_kind::quarter_ping, production_source_kind::depth},
         0x0Fu, true}
 }};
 
-constexpr bool cheap_half_seed_graph_is_structurally_closed() noexcept
+constexpr bool production_seed_graph_is_structurally_closed() noexcept
 {
-    if (cheap_half_seed_passes.size() != 9u)
+    if (production_seed_passes.size() != 10u)
         return false;
 
-    if (cheap_half_seed_passes[0].target != ptde_surface_role::half_rate ||
-        cheap_half_seed_passes[0].shader != retained_shader_role::dof_rate_plain ||
-        cheap_half_seed_passes[0].rt0_write_mask != 0x08u ||
-        cheap_half_seed_passes[1].target != ptde_surface_role::half_rate ||
-        cheap_half_seed_passes[1].shader != retained_shader_role::downsample ||
-        cheap_half_seed_passes[1].rt0_write_mask != 0x07u)
+    const auto &scene_seed = production_seed_passes[0];
+    const auto &rate_seed = production_seed_passes[1];
+    const auto &first_downsample = production_seed_passes[2];
+
+    if (scene_seed.target != ptde_surface_role::full_prefix ||
+        scene_seed.shader != retained_shader_role::downsample ||
+        scene_seed.sources[0] != production_source_kind::scene ||
+        scene_seed.rt0_write_mask != 0x07u ||
+        rate_seed.logical_pass != 0x00u ||
+        rate_seed.target != ptde_surface_role::full_prefix ||
+        rate_seed.shader != retained_shader_role::dof_rate_plain ||
+        rate_seed.sources[1] != production_source_kind::depth ||
+        rate_seed.rt0_write_mask != 0x08u ||
+        first_downsample.logical_pass != 0x02u ||
+        first_downsample.target != ptde_surface_role::half_rate ||
+        first_downsample.sources[0] != production_source_kind::full_prefix)
         return false;
 
-    const auto &terminal = cheap_half_seed_passes.back();
+    const auto *prefix =
+        find_ptde_surface(ptde_surface_role::full_prefix);
+    if (prefix == nullptr ||
+        prefix->raster.width != 1024u ||
+        prefix->raster.height != 720u ||
+        prefix->raster.format != legacy_format::a8r8g8b8)
+        return false;
+
+    const auto &terminal = production_seed_passes.back();
     return
         terminal.logical_pass == 0x10u &&
         terminal.shader == retained_shader_role::dof_composite &&
         terminal.target == ptde_surface_role::full_terminal &&
-        terminal.sources[0] == cheap_source_kind::scene &&
-        terminal.sources[1] == cheap_source_kind::half_rate &&
-        terminal.sources[2] == cheap_source_kind::half_rate_result &&
-        terminal.sources[3] == cheap_source_kind::half_blur &&
-        terminal.sources[4] == cheap_source_kind::quarter_ping &&
-        terminal.sources[5] == cheap_source_kind::depth &&
+        terminal.sources[0] == production_source_kind::scene &&
+        terminal.sources[1] == production_source_kind::half_rate &&
+        terminal.sources[2] == production_source_kind::half_rate_result &&
+        terminal.sources[3] == production_source_kind::half_blur &&
+        terminal.sources[4] == production_source_kind::quarter_ping &&
+        terminal.sources[5] == production_source_kind::depth &&
         terminal.inherit_host_om;
 }
 
@@ -304,8 +341,8 @@ static_assert(ptde_fixed_surface_set_is_exact(),
     "PTDE DoF private set must remain 2x full + 3x half + 2x quarter BGRA8.");
 static_assert(ptde_exact_pass_resource_graph_is_structurally_closed(),
     "PTDE DoF ctor resource graph drifted.");
-static_assert(cheap_half_seed_graph_is_structurally_closed(),
-    "Cheap DoF half-seed graph drifted.");
+static_assert(production_seed_graph_is_structurally_closed(),
+    "Production DoF seed graph must preserve the PTDE 1024x720 first raster.");
 static_assert(plain_dofrate_switch_is_exact(),
     "DSR DoF plain-rate switch contract drifted.");
 

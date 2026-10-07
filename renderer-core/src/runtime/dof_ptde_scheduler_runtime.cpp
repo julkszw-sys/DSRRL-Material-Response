@@ -22,7 +22,7 @@ namespace {
 namespace hashing = operators::legacy_plan::hashing;
 using role = operators::dof::retained_shader_role;
 using surface_role = operators::dof::ptde_surface_role;
-using source_kind = operators::dof::cheap_source_kind;
+using source_kind = operators::dof::production_source_kind;
 
 struct native_pair {
     ID3D11VertexShader *vertex = nullptr;
@@ -567,6 +567,9 @@ bool resolve_source(
 
     surface_role role_value = surface_role::count;
     switch (source) {
+    case source_kind::full_prefix:
+        role_value = surface_role::full_prefix;
+        break;
     case source_kind::half_rate:
         role_value = surface_role::half_rate;
         break;
@@ -898,7 +901,7 @@ bool issue_draw(
 
 bool run_pass(
     ID3D11DeviceContext *context,
-    const operators::dof::cheap_half_seed_pass_contract &pass,
+    const operators::dof::production_seed_pass_contract &pass,
     const scheduler_external_inputs &inputs,
     const scheduler_draw_shape &shape) noexcept
 {
@@ -1130,14 +1133,14 @@ scheduler_result execute_ptde_pass(
 
     if (g_quarantined.load() ||
         cmd_list == nullptr ||
-        pass_index >= operators::dof::cheap_half_seed_passes.size() ||
+        pass_index >= operators::dof::production_seed_passes.size() ||
         !operators::dof::evaluate_activation(activation).active) {
         ++g_execute_fail;
         return scheduler_result::not_ready;
     }
 
     const auto &pass =
-        operators::dof::cheap_half_seed_passes[pass_index];
+        operators::dof::production_seed_passes[pass_index];
     const role selected = pass.shader;
 
     if (selected == role::count ||
@@ -1229,7 +1232,7 @@ scheduler_result execute_ptde_graph(
         cmd_list == nullptr ||
         !operators::dof::evaluate_activation(activation).active ||
         activation.carrier !=
-            operators::dof::carrier_mode::native_rate_half_seed ||
+            operators::dof::carrier_mode::native_rate_ptde_seed ||
         !inputs.scene_source_verified ||
         inputs.scene_source_t0 == nullptr ||
         !inputs.depth_support_verified ||

@@ -339,8 +339,9 @@ bool capture_pass_state(
     else
         default_blend_desc(base_desc);
 
-    if (base_desc.RenderTarget[0].RenderTargetWriteMask !=
-        D3D11_COLOR_WRITE_ENABLE_ALL) {
+    if (base_desc.RenderTarget[0].BlendEnable != FALSE ||
+        base_desc.RenderTarget[0].RenderTargetWriteMask !=
+            D3D11_COLOR_WRITE_ENABLE_ALL) {
         if (base_blend != nullptr)
             base_blend->Release();
         samplers[0]->Release();
@@ -621,11 +622,11 @@ activation_context() noexcept
     activation.mode =
         g_sequence.host.mode;
     activation.carrier =
-        operators::dof::carrier_mode::native_rate_half_seed;
+        operators::dof::carrier_mode::native_rate_ptde_seed;
 
     activation.graph_complete =
         operators::dof::
-            cheap_half_seed_graph_is_structurally_closed();
+            production_seed_graph_is_structurally_closed();
 
     activation.ptde_dofbank_payload_ready =
         authored.hook_ready;
@@ -634,7 +635,7 @@ activation_context() noexcept
         authored.route_matches != 0u;
 
     activation.q8_scene_history_ready = false;
-    activation.half_seed_adapter_ready =
+    activation.ptde_seed_adapter_ready =
         g_sequence.host.ready &&
         g_sequence.host.source_68 != nullptr &&
         g_sequence.host.dofrate_support_t1 != nullptr &&
@@ -660,52 +661,6 @@ activation_context() noexcept
 
     activation.writes = {};
     return activation;
-}
-
-bool expected_role(
-    std::size_t pass_index,
-    role selected) noexcept
-{
-    switch (pass_index) {
-    case 2u:
-    case 4u:
-        return selected == role::dof_rate_cb;
-    case 3u:
-        return selected == role::depth_copy_msaa;
-    case 5u:
-        return selected == role::gauss_x;
-    case 6u:
-        return selected ==
-            role::depth_copy_single_fragment;
-    case 7u:
-        return selected == role::downsample;
-    case 8u:
-        return selected == role::dof_composite;
-    default:
-        return false;
-    }
-}
-
-bool exact_scope_for_expected(
-    std::size_t pass_index) noexcept
-{
-    switch (pass_index) {
-    case 2u:
-    case 4u:
-        return inside_exact_dof_pass0d();
-    case 3u:
-        return inside_exact_dof_pass01();
-    case 5u:
-    case 6u:
-    case 7u:
-    case 8u:
-        // These suffix shaders are accepted only after the exact first
-        // Dof_Flat pass01 and the two exact pass0D scopes have advanced the
-        // same thread-local sequence to the corresponding next slot.
-        return g_sequence.active;
-    default:
-        return false;
-    }
 }
 
 bool is_dof_family_role(role selected) noexcept
@@ -855,6 +810,20 @@ bool begin_sequence(
     const auto activation =
         activation_context();
 
+    // Synthetic scene seed: one retained SAMPLE into fixed 1024x720
+    // BGRA8 writes RGB only. No DofBank/pass00 state is required.
+    if (execute_ptde_pass(
+            cmd_list,
+            activation,
+            scheduler_inputs(),
+            shape,
+            0u) != result::executed) {
+        fail_sequence(false);
+        return false;
+    }
+
+    // PTDE pass00 DofRate executes at the same 1024x720 raster and writes
+    // alpha only into the seeded RGB target.
     if (!push_host_pass00_state()) {
         fail_sequence(true);
         return false;
@@ -866,7 +835,7 @@ bool begin_sequence(
             activation,
             scheduler_inputs(),
             shape,
-            0u);
+            1u);
 
     const bool state_restored =
         pop_host_pass00_state();
@@ -877,12 +846,11 @@ bool begin_sequence(
         return false;
     }
 
-    // Cheap production graph: pass0 writes half-rate alpha, pass1 writes
-    // half-resolution RGB only, passes2..7 reproduce the PTDE blur/rate
-    // topology. Terminal pass8 is deferred to the authentic retained DSR
-    // FRPG_Fil_Dof scope so its host CB/OM state remains authoritative.
-    for (std::size_t pass_index = 1u;
-         pass_index < 8u;
+    // Pass2 is the first 1024x720 -> 512x360 reduction. Passes3..8 preserve
+    // the PTDE half/quarter blur-rate topology. Terminal pass9 is deferred to
+    // the authentic retained DSR FRPG_Fil_Dof scope.
+    for (std::size_t pass_index = 2u;
+         pass_index < 9u;
          ++pass_index) {
         g_sequence.next_pass = pass_index;
         const auto executed =
@@ -898,7 +866,7 @@ bool begin_sequence(
         }
     }
 
-    g_sequence.next_pass = 8u;
+    g_sequence.next_pass = 9u;
     return true;
 }
 
@@ -909,7 +877,7 @@ void advance_sequence(
 {
     if (!g_sequence.active ||
         g_sequence.complete ||
-        g_sequence.next_pass != 8u)
+        g_sequence.next_pass != 9u)
         return;
 
     // Execute the private terminal only inside the authentic retained DSR
@@ -926,13 +894,13 @@ void advance_sequence(
             activation,
             scheduler_inputs(),
             shape,
-            8u) != result::executed) {
+            9u) != result::executed) {
         fail_sequence(false);
         return;
     }
 
     g_sequence.next_pass =
-        operators::dof::cheap_half_seed_passes.size();
+        operators::dof::production_seed_passes.size();
 
     if (!acquire_terminal(
             activation)) {
@@ -1019,7 +987,7 @@ bool handle_tonemap(
         !g_sequence.complete ||
         g_sequence.terminal == nullptr) {
         if (g_sequence.active &&
-            g_sequence.next_pass == 8u)
+            g_sequence.next_pass == 9u)
             ++g_missing_host_pass10;
 
         ++g_tonemap_fallbacks;
@@ -1424,7 +1392,7 @@ bool register_ptde_draw_bridge_runtime(
 
     reshade::log::message(
         reshade::log::level::info,
-        "[DSRRL DoF R53] carrier=NATIVE_RATE_HALF_SEED fullres_copy=0 private_prefix=HALF_QUARTER stock_branch=PASS10_ONLY tonemap=PTDE_TERMINAL_HANDOFF");
+        "[DSRRL DoF R54] carrier=NATIVE_RATE_PTDE_SEED seed=1024x720 seed_history=SNAPSHOT_ONLY private_prefix=1024_512_256 stock_branch=PASS10_ONLY tonemap=PTDE_TERMINAL_HANDOFF");
 
     if (!g_opt_in.load(
             std::memory_order_acquire)) {

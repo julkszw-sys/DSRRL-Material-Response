@@ -35,9 +35,9 @@ activation_decision evaluate_activation(const activation_context &context) noexc
         !context.q8_scene_history_ready)
         return {false, bridge_reason::missing_q8_scene_history};
 
-    if (context.carrier == carrier_mode::native_rate_half_seed &&
-        !context.half_seed_adapter_ready)
-        return {false, bridge_reason::missing_half_seed_adapter};
+    if (context.carrier == carrier_mode::native_rate_ptde_seed &&
+        !context.ptde_seed_adapter_ready)
+        return {false, bridge_reason::missing_ptde_seed_adapter};
 
     if (!context.pass_state_transaction_ready)
         return {false, bridge_reason::missing_pass_state_transaction};
