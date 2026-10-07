@@ -549,6 +549,180 @@ bool migrate_clustered_pnts_legacy_b12_words(
         spc);
 }
 
+clustered_pnts_spc_attenuation_outcome
+materialize_clustered_pnts_spc_attenuation_only(
+    const std::uint8_t *source,
+    std::size_t size,
+    std::vector<std::uint8_t> &output) noexcept
+{
+    clustered_pnts_spc_attenuation_outcome outcome{};
+    output.clear();
+
+    if (source == nullptr || size == 0u) {
+        outcome.result =
+            clustered_pnts_spc_attenuation_result::
+                pass_not_candidate;
+        return outcome;
+    }
+
+    if (!candidate_size(size)) {
+        outcome.result =
+            clustered_pnts_spc_attenuation_result::
+                pass_not_candidate;
+        return outcome;
+    }
+
+    if (!legacy_plan::dxbc::checksum_container_valid(
+            source,
+            size)) {
+        outcome.result =
+            clustered_pnts_spc_attenuation_result::
+                fail_invalid_dxbc;
+        return outcome;
+    }
+
+    core::sha256_digest host_digest{};
+    const auto *plan =
+        find_plan(
+            source,
+            size,
+            host_digest);
+    if (plan == nullptr) {
+        outcome.result =
+            clustered_pnts_spc_attenuation_result::
+                pass_unknown_exact_sha;
+        return outcome;
+    }
+
+    outcome.host_sha256 = host_digest;
+    outcome.host_size = size;
+    outcome.representative_shader_index =
+        plan->representative_shader_index;
+
+    // The 12 NoSpc PntS plans are already owned by the create-time A1
+    // composition (legacy mask bit 0x4). R44A closes only the 24 Spc plans
+    // that were left on stock cubic attenuation in the R43 source-only line.
+    if (!plan->spc) {
+        outcome.result =
+            clustered_pnts_spc_attenuation_result::
+                pass_nospc_owned_by_a1;
+        return outcome;
+    }
+
+    std::vector<chunk> chunks;
+    std::vector<std::uint32_t> words;
+    std::size_t code_index = 0u;
+    if (!parse_dxbc(
+            source,
+            size,
+            chunks,
+            code_index,
+            words)) {
+        outcome.result =
+            clustered_pnts_spc_attenuation_result::
+                fail_invalid_dxbc;
+        return outcome;
+    }
+    (void)code_index;
+
+    const generated::clustered_pnts_journal_op_v1 *square_op = nullptr;
+    const generated::clustered_pnts_journal_op_v1 *terminal_op = nullptr;
+
+    for (std::uint32_t i = 0u; i < plan->op_count; ++i) {
+        const auto &op =
+            generated::k_clustered_pnts_journal_ops_v1[
+                plan->first_op + i];
+
+        if (op.old_count != 1u ||
+            op.new_count != 1u ||
+            op.old_offset >=
+                generated::k_clustered_pnts_journal_tokens_v1.size() ||
+            op.new_offset >=
+                generated::k_clustered_pnts_journal_tokens_v1.size())
+            continue;
+
+        const auto old_token =
+            generated::k_clustered_pnts_journal_tokens_v1[
+                op.old_offset];
+        const auto new_token =
+            generated::k_clustered_pnts_journal_tokens_v1[
+                op.new_offset];
+
+        if (old_token == 0x07000038u &&
+            new_token == 0x07000033u) {
+            if (square_op != nullptr) {
+                outcome.result =
+                    clustered_pnts_spc_attenuation_result::
+                        fail_patch_precondition;
+                return outcome;
+            }
+            square_op = &op;
+        } else if (
+            old_token == 0x07002038u &&
+            new_token == 0x07002034u) {
+            if (terminal_op != nullptr) {
+                outcome.result =
+                    clustered_pnts_spc_attenuation_result::
+                        fail_patch_precondition;
+                return outcome;
+            }
+            terminal_op = &op;
+        }
+    }
+
+    if (square_op == nullptr ||
+        terminal_op == nullptr ||
+        square_op->start >= words.size() ||
+        terminal_op->start >= words.size() ||
+        words[square_op->start] != 0x07000038u ||
+        words[terminal_op->start] != 0x07002038u) {
+        outcome.result =
+            clustered_pnts_spc_attenuation_result::
+                fail_patch_precondition;
+        return outcome;
+    }
+
+    // Certified 72-body transform, restricted here to the missing Spc half:
+    //   tmp = x*x; A = SAT(x*tmp)  ->  tmp = min(x,x); A = SAT(max(x,tmp))
+    // which is exactly SAT(x). Both substitutions preserve instruction length,
+    // operands, register allocation, RDEF and resource ABI.
+    words[square_op->start] = 0x07000033u;
+    words[terminal_op->start] = 0x07002034u;
+
+    if (!rebuild(
+            source,
+            size,
+            std::move(chunks),
+            words,
+            output)) {
+        output.clear();
+        outcome.result =
+            clustered_pnts_spc_attenuation_result::
+                fail_rebuild;
+        return outcome;
+    }
+
+    if (output.size() != size ||
+        !legacy_plan::dxbc::checksum_container_valid(
+            output.data(),
+            output.size())) {
+        output.clear();
+        outcome.result =
+            clustered_pnts_spc_attenuation_result::
+                fail_final;
+        return outcome;
+    }
+
+    outcome.replacement_sha256 =
+        hashing::sha256(
+            output.data(),
+            output.size());
+    outcome.replacement_size = output.size();
+    outcome.result =
+        clustered_pnts_spc_attenuation_result::applied;
+    return outcome;
+}
+
 clustered_pnts_direct_materialize_outcome
 materialize_clustered_pnts_direct_ptde(
     const std::uint8_t *source,
