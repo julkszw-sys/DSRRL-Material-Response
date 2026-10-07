@@ -1,0 +1,117 @@
+name: R45 Main Selector Profiler
+
+on:
+  push:
+    branches:
+      - audit/main-selector-profile-r45
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  windows-addon:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Verify exact main source baseline
+        shell: pwsh
+        run: |
+          $expected = "fa2a2af00b57b0f1d38f8433731837f4406878d3"
+          $parent = (git rev-parse HEAD^).Trim()
+          if ($parent -ne $expected) { throw "Profiler branch is not exact main plus workflow-only commit: parent=$parent expected=$expected" }
+          $changed = @(git diff --name-only "$expected..HEAD")
+          if ($changed.Count -ne 1 -or $changed[0] -ne ".github/workflows/r45-main-selector-profiler.yml") {
+            throw "Profiler branch contains non-workflow source changes: $($changed -join ', ')"
+          }
+          "DSRRL_CHECKOUT_COMMIT=$expected" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Checkout pinned ReShade API
+        uses: actions/checkout@v4
+        with:
+          repository: crosire/reshade
+          ref: 3645e3025d1d98a90e318278858931f034d5d1f6
+          path: _reshade
+
+      - name: Configure exact main visual profile plus sampled selector profiler
+        shell: pwsh
+        run: >
+          cmake
+          -S renderer-core/integrated
+          -B build-prof
+          -A x64
+          -DRESHADE_INCLUDE_DIR="${{ github.workspace }}/_reshade/include"
+          -DDSRRL_SOURCE_COMMIT="$env:DSRRL_CHECKOUT_COMMIT"
+          -DDSRRL_BUILD_FLAVOR="main_selector_profile_r45"
+          -DDSRRL_FULL_TELEMETRY_DEFAULT_ON=OFF
+          -DDSRRL_DOF_DEFAULT_ON=ON
+          -DDSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG=ON
+          -DDSRRL_PMETAL_FULL_PTDE_HEMENV_R3=ON
+          -DDSRRL_PMETAL_FULL_PTDE_HEMENV_R4=ON
+          -DDSRRL_PMETAL_FULL_PTDE_HEMENV_R5=ON
+          -DDSRRL_PMETAL_FULL_PTDE_HEMENV_R6=ON
+          -DDSRRL_PMETAL_FULL_PTDE_HEMENV_R7_SHADOW=ON
+          -DDSRRL_PMETAL_FULL_PTDE_HEMENV_R8_PRE_AB=ON
+          -DDSRRL_PMETAL_FULL_PTDE_HEMENV_R11_COMMON_MERGE=ON
+          -DDSRRL_PMETAL_FULL_PTDE_HEMENV_R15_PTDE_LIVEOUT_PAIR=ON
+          -DDSRRL_PMETAL_FULL_PTDE_HEMENV_R16_LEGACY_DIFFUSE_SPLIT=ON
+          -DDSRRL_PMETAL_FULL_PTDE_HEMENV_R17_PTDE_DIFFUSE_MATERIAL=ON
+          -DDSRRL_PMETAL_R19_LERP_MATERIALWORKFLOW=ON
+          -DDSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE=ON
+          -DDSRRL_PHYSICAL_CUT_UL_H3_SUBSURFACE=ON
+          -DDSRRL_FLVER_SELECTOR_PROFILE=ON
+
+      - name: Verify profile contract
+        shell: pwsh
+        run: |
+          $cache = Get-Content build-prof/CMakeCache.txt -Raw
+          foreach ($required in @(
+            "DSRRL_FLVER_SELECTOR_PROFILE:BOOL=ON",
+            "DSRRL_FULL_TELEMETRY_DEFAULT_ON:BOOL=OFF",
+            "DSRRL_DOF_DEFAULT_ON:BOOL=ON",
+            "DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG:BOOL=ON",
+            "DSRRL_PMETAL_FULL_PTDE_HEMENV_R17_PTDE_DIFFUSE_MATERIAL:BOOL=ON",
+            "DSRRL_PMETAL_R19_LERP_MATERIALWORKFLOW:BOOL=ON",
+            "DSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE:BOOL=ON",
+            "DSRRL_PHYSICAL_CUT_UL_H3_SUBSURFACE:BOOL=ON"
+          )) {
+            if ($cache -notmatch [regex]::Escape($required)) { throw "Missing profiler/main flag: $required" }
+          }
+
+      - name: Build profiler addon
+        shell: pwsh
+        run: |
+          cmake --build build-prof --config Release --target dsrrl_renderer_core_integrated
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $addons = @(Get-ChildItem build-prof -Recurse -Filter *.addon64)
+          if ($addons.Count -ne 1) { throw "Expected exactly one addon, found $($addons.Count)" }
+          Copy-Item $addons[0].FullName "DSRRL_MAIN_SELECTOR_PROFILE_R45.addon64" -Force
+
+      - name: Verify binary identity
+        shell: pwsh
+        run: |
+          $path = "DSRRL_MAIN_SELECTOR_PROFILE_R45.addon64"
+          $ascii = [System.Text.Encoding]::ASCII.GetString([System.IO.File]::ReadAllBytes($path))
+          foreach ($required in @(
+            "fa2a2af00b57b0f1d38f8433731837f4406878d3",
+            "main_selector_profile_r45",
+            "[DSRRL PERF R32] SELECTOR",
+            "[DSRRL PMETAL R19 LERP]",
+            "[DSRRL PMETAL R7 SHADOW]",
+            "[DSRRL PMETAL R3 SPEC ATTEST]",
+            "[DSRRL POINTLIGHT R43-DRAWPARAM]",
+            "[DSRRL DoF R43-DRAWPARAM]"
+          )) {
+            if (-not $ascii.Contains($required)) { throw "Missing required main/profiler marker: $required" }
+          }
+          $sha = (Get-FileHash $path -Algorithm SHA256).Hash.ToLowerInvariant()
+          Write-Host "R45_SELECTOR_PROFILE_SHA256=$sha"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: DSRRL_MAIN_SELECTOR_PROFILE_R45
+          path: DSRRL_MAIN_SELECTOR_PROFILE_R45.addon64
+          if-no-files-found: error
