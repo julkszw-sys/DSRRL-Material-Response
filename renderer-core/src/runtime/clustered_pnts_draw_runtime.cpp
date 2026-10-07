@@ -3241,8 +3241,7 @@ void clustered_pnts_draw_runtime::uninstall() noexcept
         g_quarantined.store(true, std::memory_order_relaxed);
     }
     g_clustered_source_bank_identity_cache = {};
-    g_clustered_source_bank_identity_cache_victim = 0u;
-    g_clustered_source_payload_cache = {};
+g_clustered_source_payload_cache = {};
     g_source_exec_attested.store(
         false,
         std::memory_order_relaxed);
