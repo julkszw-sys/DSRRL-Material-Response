@@ -121,7 +121,7 @@ def main():
         "g_source_dsr_only_fail_open",
         "clustered DSR-only row fail-open")
     callback_start=clustered.find(
-        "void __fastcall clustered_source_override_callback(")
+        "float __fastcall clustered_source_override_callback(")
     callback_end=clustered.find(
         "bool build_clustered_source_override_stub(",
         callback_start)
