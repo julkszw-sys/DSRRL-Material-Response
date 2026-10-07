@@ -37,11 +37,6 @@ using result = scheduler_result;
 struct pass_state_carriers {
     ID3D11SamplerState *color_sampler = nullptr;
     ID3D11SamplerState *depth_sampler = nullptr;
-    ID3D11BlendState *rgba_write_blend = nullptr;
-    ID3D11BlendState *alpha_write_blend = nullptr;
-    ID3D11BlendState *rgb_write_blend = nullptr;
-    std::array<float, 4> blend_factor{};
-    UINT sample_mask = 0xffffffffu;
     bool ready = false;
 };
 
@@ -272,12 +267,6 @@ void set_authored_feature(bool enabled) noexcept
 void release_pass_state(
     pass_state_carriers &state) noexcept
 {
-    if (state.rgb_write_blend != nullptr)
-        state.rgb_write_blend->Release();
-    if (state.alpha_write_blend != nullptr)
-        state.alpha_write_blend->Release();
-    if (state.rgba_write_blend != nullptr)
-        state.rgba_write_blend->Release();
     if (state.depth_sampler != nullptr)
         state.depth_sampler->Release();
     if (state.color_sampler != nullptr)
@@ -325,6 +314,9 @@ bool capture_pass_state(
         return false;
     }
 
+    // Production prefix is opaque postprocess. Accept only the authentic
+    // host cut when it is also opaque/full-write; private write-mask states
+    // themselves are cached once per D3D11 device by the scheduler.
     ID3D11BlendState *base_blend = nullptr;
     std::array<FLOAT, 4> blend_factor{};
     UINT sample_mask = 0xffffffffu;
@@ -339,56 +331,15 @@ bool capture_pass_state(
     else
         default_blend_desc(base_desc);
 
-    if (base_desc.RenderTarget[0].BlendEnable != FALSE ||
-        base_desc.RenderTarget[0].RenderTargetWriteMask !=
-            D3D11_COLOR_WRITE_ENABLE_ALL) {
-        if (base_blend != nullptr)
-            base_blend->Release();
-        samplers[0]->Release();
-        samplers[1]->Release();
-        return false;
-    }
+    const bool opaque_full_write =
+        base_desc.RenderTarget[0].BlendEnable == FALSE &&
+        base_desc.RenderTarget[0].RenderTargetWriteMask ==
+            D3D11_COLOR_WRITE_ENABLE_ALL;
 
-    ID3D11Device *device = nullptr;
-    context->GetDevice(&device);
-    if (device == nullptr) {
-        if (base_blend != nullptr)
-            base_blend->Release();
-        samplers[0]->Release();
-        samplers[1]->Release();
-        return false;
-    }
+    if (base_blend != nullptr)
+        base_blend->Release();
 
-    D3D11_BLEND_DESC alpha_desc = base_desc;
-    alpha_desc.RenderTarget[0].RenderTargetWriteMask =
-        D3D11_COLOR_WRITE_ENABLE_ALPHA;
-
-    D3D11_BLEND_DESC rgb_desc = base_desc;
-    rgb_desc.RenderTarget[0].RenderTargetWriteMask =
-        D3D11_COLOR_WRITE_ENABLE_RED |
-        D3D11_COLOR_WRITE_ENABLE_GREEN |
-        D3D11_COLOR_WRITE_ENABLE_BLUE;
-
-    ID3D11BlendState *alpha = nullptr;
-    ID3D11BlendState *rgb = nullptr;
-    HRESULT hr = device->CreateBlendState(
-        &alpha_desc,
-        &alpha);
-    if (SUCCEEDED(hr))
-        hr = device->CreateBlendState(
-            &rgb_desc,
-            &rgb);
-    device->Release();
-
-    if (FAILED(hr) ||
-        alpha == nullptr ||
-        rgb == nullptr) {
-        if (rgb != nullptr)
-            rgb->Release();
-        if (alpha != nullptr)
-            alpha->Release();
-        if (base_blend != nullptr)
-            base_blend->Release();
+    if (!opaque_full_write) {
         samplers[0]->Release();
         samplers[1]->Release();
         return false;
@@ -396,16 +347,6 @@ bool capture_pass_state(
 
     out.color_sampler = samplers[0];
     out.depth_sampler = samplers[1];
-    out.rgba_write_blend = base_blend;
-    out.alpha_write_blend = alpha;
-    out.rgb_write_blend = rgb;
-    out.blend_factor = {
-        blend_factor[0],
-        blend_factor[1],
-        blend_factor[2],
-        blend_factor[3]
-    };
-    out.sample_mask = sample_mask;
     out.ready = true;
     return true;
 }
@@ -573,16 +514,6 @@ scheduler_inputs() noexcept
         g_sequence.pass_state.color_sampler;
     inputs.depth_sampler =
         g_sequence.pass_state.depth_sampler;
-    inputs.rgba_write_blend =
-        g_sequence.pass_state.rgba_write_blend;
-    inputs.alpha_write_blend =
-        g_sequence.pass_state.alpha_write_blend;
-    inputs.rgb_write_blend =
-        g_sequence.pass_state.rgb_write_blend;
-    inputs.blend_factor =
-        g_sequence.pass_state.blend_factor;
-    inputs.sample_mask =
-        g_sequence.pass_state.sample_mask;
 
     inputs.scene_source_verified =
         g_sequence.host.ready &&
@@ -593,9 +524,7 @@ scheduler_inputs() noexcept
     inputs.pass_state_verified =
         g_sequence.pass_state.ready &&
         inputs.color_sampler != nullptr &&
-        inputs.depth_sampler != nullptr &&
-        inputs.alpha_write_blend != nullptr &&
-        inputs.rgb_write_blend != nullptr;
+        inputs.depth_sampler != nullptr;
     return inputs;
 }
 

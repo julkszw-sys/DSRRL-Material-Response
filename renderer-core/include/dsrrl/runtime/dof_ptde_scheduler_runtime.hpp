@@ -6,7 +6,6 @@
 #include <cstddef>
 #include <cstdint>
 
-struct ID3D11BlendState;
 struct ID3D11SamplerState;
 struct ID3D11ShaderResourceView;
 
@@ -22,12 +21,6 @@ struct scheduler_external_inputs {
 
     ID3D11SamplerState *color_sampler = nullptr;
     ID3D11SamplerState *depth_sampler = nullptr;
-
-    ID3D11BlendState *rgba_write_blend = nullptr;
-    ID3D11BlendState *alpha_write_blend = nullptr;
-    ID3D11BlendState *rgb_write_blend = nullptr;
-    std::array<float, 4> blend_factor{};
-    std::uint32_t sample_mask = 0xffffffffu;
 
     bool scene_source_verified = false;
     bool depth_support_verified = false;

@@ -64,6 +64,8 @@ std::mutex g_mutex;
 ID3D11Device *g_device = nullptr;
 std::array<native_pair,
     static_cast<std::size_t>(role::count)> g_pairs{};
+ID3D11BlendState *g_alpha_write_blend = nullptr;
+ID3D11BlendState *g_rgb_write_blend = nullptr;
 
 std::atomic<std::uint64_t> g_init_pipeline_events{0u};
 std::atomic<std::uint64_t> g_exact_shader_pairs{0u};
@@ -118,6 +120,15 @@ void release_pairs_locked() noexcept
             pair.vertex->Release();
             pair.vertex = nullptr;
         }
+    }
+
+    if (g_rgb_write_blend != nullptr) {
+        g_rgb_write_blend->Release();
+        g_rgb_write_blend = nullptr;
+    }
+    if (g_alpha_write_blend != nullptr) {
+        g_alpha_write_blend->Release();
+        g_alpha_write_blend = nullptr;
     }
 
     if (g_device != nullptr) {
@@ -236,6 +247,105 @@ bool accept_device_locked(
         g_quarantined.store(true);
         return false;
     }
+    return true;
+}
+
+bool materialize_write_masks(
+    reshade::api::device *device) noexcept
+{
+    if (device == nullptr ||
+        device->get_api() !=
+            reshade::api::device_api::d3d11)
+        return false;
+
+    auto *native =
+        reinterpret_cast<ID3D11Device *>(
+            device->get_native());
+    if (native == nullptr)
+        return false;
+
+    std::lock_guard<std::mutex> lock(g_mutex);
+    if (!accept_device_locked(native))
+        return false;
+
+    if (g_alpha_write_blend != nullptr &&
+        g_rgb_write_blend != nullptr)
+        return true;
+
+    D3D11_BLEND_DESC desc{};
+    desc.AlphaToCoverageEnable = FALSE;
+    desc.IndependentBlendEnable = FALSE;
+    desc.RenderTarget[0].BlendEnable = FALSE;
+    desc.RenderTarget[0].SrcBlend = D3D11_BLEND_ONE;
+    desc.RenderTarget[0].DestBlend = D3D11_BLEND_ZERO;
+    desc.RenderTarget[0].BlendOp = D3D11_BLEND_OP_ADD;
+    desc.RenderTarget[0].SrcBlendAlpha = D3D11_BLEND_ONE;
+    desc.RenderTarget[0].DestBlendAlpha = D3D11_BLEND_ZERO;
+    desc.RenderTarget[0].BlendOpAlpha = D3D11_BLEND_OP_ADD;
+
+    ID3D11BlendState *alpha = nullptr;
+    ID3D11BlendState *rgb = nullptr;
+
+    desc.RenderTarget[0].RenderTargetWriteMask =
+        D3D11_COLOR_WRITE_ENABLE_ALPHA;
+    HRESULT hr =
+        native->CreateBlendState(
+            &desc,
+            &alpha);
+
+    if (SUCCEEDED(hr)) {
+        desc.RenderTarget[0].RenderTargetWriteMask =
+            D3D11_COLOR_WRITE_ENABLE_RED |
+            D3D11_COLOR_WRITE_ENABLE_GREEN |
+            D3D11_COLOR_WRITE_ENABLE_BLUE;
+        hr =
+            native->CreateBlendState(
+                &desc,
+                &rgb);
+    }
+
+    if (FAILED(hr) ||
+        alpha == nullptr ||
+        rgb == nullptr) {
+        if (rgb != nullptr)
+            rgb->Release();
+        if (alpha != nullptr)
+            alpha->Release();
+        return false;
+    }
+
+    g_alpha_write_blend = alpha;
+    g_rgb_write_blend = rgb;
+    return true;
+}
+
+bool acquire_write_mask_state(
+    std::uint8_t mask,
+    ID3D11BlendState **out) noexcept
+{
+    if (out == nullptr)
+        return false;
+
+    *out = nullptr;
+
+    if (mask == 0x0Fu)
+        return true;
+
+    std::lock_guard<std::mutex> lock(g_mutex);
+
+    ID3D11BlendState *state = nullptr;
+    if (mask == 0x08u)
+        state = g_alpha_write_blend;
+    else if (mask == 0x07u)
+        state = g_rgb_write_blend;
+    else
+        return false;
+
+    if (state == nullptr)
+        return false;
+
+    state->AddRef();
+    *out = state;
     return true;
 }
 
@@ -407,6 +517,8 @@ void on_init_device(
         return;
 
     if (!materialize_embedded_plain_rate(
+            device) ||
+        !materialize_write_masks(
             device))
         g_quarantined.store(true);
 }
@@ -427,6 +539,8 @@ void on_init_pipeline(
         return;
 
     if (!materialize_embedded_plain_rate(
+            device) ||
+        !materialize_write_masks(
             device)) {
         g_quarantined.store(true);
         return;
@@ -497,7 +611,9 @@ bool execution_set_ready_locked(
         if (!pair_ready_locked(selected))
             return false;
 
-    return true;
+    return
+        g_alpha_write_blend != nullptr &&
+        g_rgb_write_blend != nullptr;
 }
 
 bool acquire_pair(
@@ -908,9 +1024,7 @@ bool run_pass(
     if (context == nullptr ||
         !inputs.pass_state_verified ||
         inputs.color_sampler == nullptr ||
-        inputs.depth_sampler == nullptr ||
-        inputs.alpha_write_blend == nullptr ||
-        inputs.rgb_write_blend == nullptr)
+        inputs.depth_sampler == nullptr)
         return false;
 
     const auto *target =
@@ -964,13 +1078,10 @@ bool run_pass(
         nullptr);
 
     if (!pass.inherit_host_om) {
-        ID3D11BlendState *write_state =
-            inputs.rgba_write_blend;
-        if (pass.rt0_write_mask == 0x08u)
-            write_state = inputs.alpha_write_blend;
-        else if (pass.rt0_write_mask == 0x07u)
-            write_state = inputs.rgb_write_blend;
-        else if (pass.rt0_write_mask != 0x0Fu) {
+        ID3D11BlendState *write_state = nullptr;
+        if (!acquire_write_mask_state(
+                pass.rt0_write_mask,
+                &write_state)) {
             release_srvs(srvs);
             release_pair(shader);
             rtv->Release();
@@ -979,8 +1090,11 @@ bool run_pass(
 
         context->OMSetBlendState(
             write_state,
-            inputs.blend_factor.data(),
-            inputs.sample_mask);
+            nullptr,
+            0xffffffffu);
+
+        if (write_state != nullptr)
+            write_state->Release();
     }
 
     D3D11_VIEWPORT viewport{};
