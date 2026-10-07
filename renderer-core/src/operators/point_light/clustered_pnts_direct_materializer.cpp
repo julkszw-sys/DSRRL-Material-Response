@@ -423,6 +423,149 @@ bool migrate_legacy_pointlight_b12_to_current(
         c102_post==(spc ? 1u : 0u);
 }
 
+
+bool find_marker_attenuation_journal_starts(
+    const generated::clustered_pnts_plan_v1 &plan,
+    std::uint32_t &square_start,
+    std::uint32_t &cubic_start) noexcept
+{
+    square_start = 0u;
+    cubic_start = 0u;
+    std::uint32_t square_hits = 0u;
+    std::uint32_t cubic_hits = 0u;
+
+    for (std::uint32_t i = 0u; i < plan.op_count; ++i) {
+        const auto &op =
+            generated::k_clustered_pnts_journal_ops_v1[
+                plan.first_op + i];
+        if (op.old_count != 1u ||
+            op.new_count != 1u ||
+            op.old_offset >=
+                generated::k_clustered_pnts_journal_tokens_v1.size() ||
+            op.new_offset >=
+                generated::k_clustered_pnts_journal_tokens_v1.size())
+            continue;
+
+        const auto old_token =
+            generated::k_clustered_pnts_journal_tokens_v1[
+                op.old_offset];
+        const auto new_token =
+            generated::k_clustered_pnts_journal_tokens_v1[
+                op.new_offset];
+
+        if (old_token == 0x07000038u &&
+            new_token == 0x07000033u) {
+            square_start = op.start;
+            ++square_hits;
+        } else if (
+            old_token == 0x07002038u &&
+            new_token == 0x07002034u) {
+            cubic_start = op.start;
+            ++cubic_hits;
+        }
+    }
+
+    return
+        square_hits == 1u &&
+        cubic_hits == 1u &&
+        cubic_start == square_start + 7u;
+}
+
+template <std::size_t N>
+bool find_unique_instruction_sequence(
+    const std::vector<std::uint32_t> &words,
+    const std::array<std::uint32_t,N> &sequence,
+    std::size_t &position) noexcept
+{
+    position = 0u;
+    std::uint32_t hits = 0u;
+    std::size_t i = 2u;
+
+    while (i < words.size()) {
+        const auto length =
+            static_cast<std::size_t>(
+                (words[i] >> 24u) & 0x7fu);
+        if (length == 0u ||
+            length > words.size() - i)
+            return false;
+
+        if (length == N &&
+            std::equal(
+                sequence.begin(),
+                sequence.end(),
+                words.begin() +
+                    static_cast<std::ptrdiff_t>(i))) {
+            position = i;
+            ++hits;
+        }
+
+        i += length;
+    }
+
+    return i == words.size() && hits == 1u;
+}
+
+bool find_unique_t18_offset32_load(
+    const std::vector<std::uint32_t> &words,
+    std::size_t &position) noexcept
+{
+    position = 0u;
+    std::uint32_t hits = 0u;
+    std::size_t i = 2u;
+
+    while (i < words.size()) {
+        const auto token = words[i];
+        const auto length =
+            static_cast<std::size_t>(
+                (token >> 24u) & 0x7fu);
+        if (length == 0u ||
+            length > words.size() - i)
+            return false;
+
+        if ((token & 0x7ffu) == 0x0a7u &&
+            length == 11u &&
+            words[i + 7u] == 0x00004001u &&
+            words[i + 8u] == 0x00000020u &&
+            words[i + 10u] == 18u) {
+            position = i;
+            ++hits;
+        }
+
+        i += length;
+    }
+
+    return i == words.size() && hits == 1u;
+}
+
+bool find_unique_dcl_temps(
+    const std::vector<std::uint32_t> &words,
+    std::size_t &position) noexcept
+{
+    position = 0u;
+    std::uint32_t hits = 0u;
+    std::size_t i = 2u;
+
+    while (i < words.size()) {
+        const auto token = words[i];
+        const auto length =
+            static_cast<std::size_t>(
+                (token >> 24u) & 0x7fu);
+        if (length == 0u ||
+            length > words.size() - i)
+            return false;
+
+        if ((token & 0x7ffu) == 0x068u &&
+            length == 2u) {
+            position = i;
+            ++hits;
+        }
+
+        i += length;
+    }
+
+    return i == words.size() && hits == 1u;
+}
+
 bool strip_rdef(std::vector<chunk> &chunks) noexcept
 {
     const auto before = chunks.size();
@@ -547,6 +690,276 @@ bool migrate_clustered_pnts_legacy_b12_words(
     return migrate_legacy_pointlight_b12_to_current(
         words,
         spc);
+}
+
+
+clustered_pnts_marker_attenuation_result
+identify_clustered_pnts_marker_attenuation(
+    const std::uint8_t *source,
+    std::size_t size,
+    clustered_pnts_marker_attenuation_identity &identity) noexcept
+{
+    identity = {};
+
+    if (source == nullptr || size == 0u)
+        return clustered_pnts_marker_attenuation_result::
+            pass_not_candidate;
+
+    if (!candidate_size(size))
+        return clustered_pnts_marker_attenuation_result::
+            pass_not_candidate;
+
+    if (!legacy_plan::dxbc::checksum_container_valid(
+            source,
+            size))
+        return clustered_pnts_marker_attenuation_result::
+            fail_invalid_dxbc;
+
+    core::sha256_digest digest{};
+    const auto *plan =
+        find_plan(source, size, digest);
+    if (plan == nullptr)
+        return clustered_pnts_marker_attenuation_result::
+            pass_unknown_exact_sha;
+
+    std::vector<chunk> chunks;
+    std::vector<std::uint32_t> words;
+    std::size_t code_index = 0u;
+    if (!parse_dxbc(
+            source,
+            size,
+            chunks,
+            code_index,
+            words))
+        return clustered_pnts_marker_attenuation_result::
+            fail_invalid_dxbc;
+
+    std::uint32_t square_start = 0u;
+    std::uint32_t cubic_start = 0u;
+    if (!find_marker_attenuation_journal_starts(
+            *plan,
+            square_start,
+            cubic_start) ||
+        square_start + 7u > words.size() ||
+        cubic_start + 7u > words.size() ||
+        words[square_start] != 0x07000038u ||
+        words[cubic_start] != 0x07002038u)
+        return clustered_pnts_marker_attenuation_result::
+            fail_identity_precondition;
+
+    std::size_t t18_load = 0u;
+    if (!find_unique_t18_offset32_load(
+            words,
+            t18_load) ||
+        t18_load + 11u > words.size() ||
+        !(t18_load < square_start &&
+          square_start < cubic_start))
+        return clustered_pnts_marker_attenuation_result::
+            fail_identity_precondition;
+
+    std::copy_n(
+        words.begin() +
+            static_cast<std::ptrdiff_t>(t18_load),
+        identity.t18_offset32_load.size(),
+        identity.t18_offset32_load.begin());
+    std::copy_n(
+        words.begin() +
+            static_cast<std::ptrdiff_t>(square_start),
+        identity.square_mul.size(),
+        identity.square_mul.begin());
+    std::copy_n(
+        words.begin() +
+            static_cast<std::ptrdiff_t>(cubic_start),
+        identity.cubic_mul_sat.size(),
+        identity.cubic_mul_sat.begin());
+
+    identity.host_sha256 = digest;
+    identity.host_size = size;
+    identity.representative_shader_index =
+        plan->representative_shader_index;
+    identity.spc = plan->spc;
+    identity.exact = true;
+
+    return clustered_pnts_marker_attenuation_result::applied;
+}
+
+clustered_pnts_marker_attenuation_outcome
+materialize_clustered_pnts_marker_attenuation(
+    const clustered_pnts_marker_attenuation_identity &identity,
+    const std::uint8_t *post_a1_source,
+    std::size_t post_a1_size,
+    std::vector<std::uint8_t> &output) noexcept
+{
+    clustered_pnts_marker_attenuation_outcome outcome{};
+    output.clear();
+
+    outcome.host_sha256 = identity.host_sha256;
+    outcome.host_size = identity.host_size;
+    outcome.representative_shader_index =
+        identity.representative_shader_index;
+
+    if (!identity.exact ||
+        post_a1_source == nullptr ||
+        post_a1_size == 0u) {
+        outcome.result =
+            clustered_pnts_marker_attenuation_result::
+                fail_identity_precondition;
+        return outcome;
+    }
+
+    if (!legacy_plan::dxbc::checksum_container_valid(
+            post_a1_source,
+            post_a1_size)) {
+        outcome.result =
+            clustered_pnts_marker_attenuation_result::
+                fail_invalid_dxbc;
+        return outcome;
+    }
+
+    std::vector<chunk> chunks;
+    std::vector<std::uint32_t> words;
+    std::size_t code_index = 0u;
+    if (!parse_dxbc(
+            post_a1_source,
+            post_a1_size,
+            chunks,
+            code_index,
+            words)) {
+        outcome.result =
+            clustered_pnts_marker_attenuation_result::
+                fail_invalid_dxbc;
+        return outcome;
+    }
+
+    std::size_t t18_load = 0u;
+    std::size_t square = 0u;
+    std::size_t cubic = 0u;
+    std::size_t dcl_temps = 0u;
+    if (!find_unique_instruction_sequence(
+            words,
+            identity.t18_offset32_load,
+            t18_load) ||
+        !find_unique_instruction_sequence(
+            words,
+            identity.square_mul,
+            square) ||
+        !find_unique_instruction_sequence(
+            words,
+            identity.cubic_mul_sat,
+            cubic) ||
+        !find_unique_dcl_temps(
+            words,
+            dcl_temps) ||
+        !(dcl_temps < t18_load &&
+          t18_load < square &&
+          square < cubic) ||
+        cubic + 7u > words.size() ||
+        dcl_temps + 1u >= words.size()) {
+        outcome.result =
+            clustered_pnts_marker_attenuation_result::
+                fail_post_a1_pattern;
+        return outcome;
+    }
+
+    const auto new_temp = words[dcl_temps + 1u];
+    if (new_temp == 0u ||
+        new_temp >= 0x0000ffffu ||
+        identity.t18_offset32_load[7u] != 0x00004001u ||
+        identity.t18_offset32_load[8u] != 0x00000020u ||
+        identity.t18_offset32_load[10u] != 18u ||
+        identity.cubic_mul_sat[1u] == 0u ||
+        identity.cubic_mul_sat[3u] == 0u) {
+        outcome.result =
+            clustered_pnts_marker_attenuation_result::
+                fail_post_a1_pattern;
+        return outcome;
+    }
+
+    // Reserve one fresh temp. The exact PntS bodies use one unique dcl_temps.
+    words[dcl_temps + 1u] = new_temp + 1u;
+
+    // Preserve x in the stock destination. Compute SAT(x^3) into rN.y instead.
+    const auto original_dest_token =
+        words[cubic + 1u];
+    const auto original_dest_index =
+        words[cubic + 2u];
+    const auto linear_source_token =
+        words[cubic + 3u];
+    const auto linear_source_index =
+        words[cubic + 4u];
+
+    words[cubic + 1u] = 0x00100022u; // rN.y destination
+    words[cubic + 2u] = new_temp;
+
+    auto marker_load = identity.t18_offset32_load;
+    marker_load[3u] = 0x00100012u; // rN.x destination
+    marker_load[4u] = new_temp;
+    marker_load[8u] = 0x00000028u; // t18 + 0x28 marker
+
+    const std::array<std::uint32_t,9> select = {{
+        0x09002037u,             // movc_sat
+        original_dest_token,
+        original_dest_index,
+        0x0010000au, new_temp,   // marker rN.x
+        linear_source_token,
+        linear_source_index,     // PTDE: x
+        0x0010001au, new_temp    // stock DSR: SAT(x^3) in rN.y
+    }};
+
+    try {
+        words.insert(
+            words.begin() +
+                static_cast<std::ptrdiff_t>(cubic + 7u),
+            select.begin(),
+            select.end());
+        words.insert(
+            words.begin() +
+                static_cast<std::ptrdiff_t>(t18_load),
+            marker_load.begin(),
+            marker_load.end());
+    } catch (...) {
+        outcome.result =
+            clustered_pnts_marker_attenuation_result::
+                fail_rebuild;
+        return outcome;
+    }
+
+    if (words.size() >
+            std::numeric_limits<std::uint32_t>::max()) {
+        outcome.result =
+            clustered_pnts_marker_attenuation_result::
+                fail_rebuild;
+        return outcome;
+    }
+    words[1u] =
+        static_cast<std::uint32_t>(
+            words.size());
+
+    if (!rebuild(
+            post_a1_source,
+            post_a1_size,
+            std::move(chunks),
+            words,
+            output) ||
+        output.empty() ||
+        !legacy_plan::dxbc::checksum_container_valid(
+            output.data(),
+            output.size())) {
+        output.clear();
+        outcome.result =
+            clustered_pnts_marker_attenuation_result::
+                fail_rebuild;
+        return outcome;
+    }
+
+    outcome.replacement_sha256 =
+        hashing::sha256(
+            output.data(),
+            output.size());
+    outcome.replacement_size = output.size();
+    outcome.result =
+        clustered_pnts_marker_attenuation_result::applied;
+    return outcome;
 }
 
 clustered_pnts_direct_materialize_outcome
