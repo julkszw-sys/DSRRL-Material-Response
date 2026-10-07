@@ -1074,12 +1074,118 @@ enum class clustered_live_source_result : std::uint8_t {
     invalid_mix
 };
 
+struct live_row_v1 {
+    std::uint32_t begin_bits = 0u;
+    std::uint32_t end_bits = 0u;
+    std::int16_t r = 0;
+    std::int16_t g = 0;
+    std::int16_t b = 0;
+    std::int16_t intensity = 0;
+};
+static_assert(sizeof(live_row_v1) == 16u);
+
+constexpr bool same_live_row(
+    const live_row_v1 &a,
+    const live_row_v1 &b) noexcept
+{
+    return
+        a.begin_bits == b.begin_bits &&
+        a.end_bits == b.end_bits &&
+        a.r == b.r &&
+        a.g == b.g &&
+        a.b == b.b &&
+        a.intensity == b.intensity;
+}
+
+struct clustered_source_bank_fingerprint_v1 {
+    clustered_pointlight_source_gate::gameplay_bank bank =
+        clustered_pointlight_source_gate::gameplay_bank::unknown;
+    bool known_non_ptde = false;
+    live_row_v1 row0{};
+    live_row_v1 row5{};
+};
+
+// R43 lightweight bank authority.
+//
+// The active PARAM carrier makes all ten gameplay PointLightBank row0/row5
+// payloads exact PTDE values; default/m99 remain exact stock DSR.  Direct
+// audit of the supplied PTDE + vanilla DSR references proves the pair
+// (row0,row5) uniquely identifies all twelve current PointLightBank
+// structures.  Runtime therefore needs two 16-byte sentinel reads, not a
+// 64-row/name traversal.  The ten rare DSR-only gameplay rows are gated
+// afterwards by exact bank + row ID.
+//
+// This table is identity only. It is not a donor source and does not replace
+// live DrawParam row payloads.
+inline constexpr std::array<
+    clustered_source_bank_fingerprint_v1, 12>
+    k_clustered_source_bank_fingerprints = {{
+    {clustered_pointlight_source_gate::gameplay_bank::m10, false,
+        {0x00000000u,0x40A00000u,255,230,200,100},
+        {0x3F000000u,0x40000000u,255,255,255,100}},
+    {clustered_pointlight_source_gate::gameplay_bank::m11, false,
+        {0x40000000u,0x40800000u,255,220,150,200},
+        {0x3F000000u,0x40000000u,255,255,255,100}},
+    {clustered_pointlight_source_gate::gameplay_bank::m12, false,
+        {0x00000000u,0x40600000u,255,255,255,150},
+        {0x00000000u,0x41000000u,129,124,155,580}},
+    {clustered_pointlight_source_gate::gameplay_bank::m13, false,
+        {0x40000000u,0x41300000u,215,165,125,150},
+        {0x40000000u,0x41900000u,220,220,200,200}},
+    {clustered_pointlight_source_gate::gameplay_bank::m14, false,
+        {0x00000000u,0x41200000u,255,155,125,150},
+        {0x40000000u,0x40A00000u,165,185,180,20}},
+    {clustered_pointlight_source_gate::gameplay_bank::m15_1, false,
+        {0x40000000u,0x40800000u,255,220,150,200},
+        {0x3F000000u,0x40C00000u,205,200,200,0}},
+    {clustered_pointlight_source_gate::gameplay_bank::m15, false,
+        {0x40000000u,0x40800000u,255,220,150,200},
+        {0x3F000000u,0x40F00000u,255,230,160,50}},
+    {clustered_pointlight_source_gate::gameplay_bank::m16, false,
+        {0x40000000u,0x40A00000u,80,140,255,160},
+        {0x3F000000u,0x40000000u,255,255,255,100}},
+    {clustered_pointlight_source_gate::gameplay_bank::m17, false,
+        {0x3F333332u,0x40400000u,255,230,180,70},
+        {0x00000000u,0x00000000u,0,0,0,0}},
+    {clustered_pointlight_source_gate::gameplay_bank::m18, false,
+        {0x3F800000u,0x40E00000u,255,255,250,300},
+        {0x40000000u,0x40A00000u,255,150,100,300}},
+    {clustered_pointlight_source_gate::gameplay_bank::unknown, true,
+        {0x40C00000u,0x41400000u,255,128,128,100},
+        {0x3F000000u,0x40000000u,255,255,255,100}},
+    {clustered_pointlight_source_gate::gameplay_bank::unknown, true,
+        {0x00000000u,0x41200000u,255,255,255,150},
+        {0x3F000000u,0x40000000u,255,255,255,100}}
+}};
+
+constexpr bool clustered_source_bank_fingerprints_unique() noexcept
+{
+    for (std::size_t i = 0u;
+         i < k_clustered_source_bank_fingerprints.size();
+         ++i)
+        for (std::size_t j = i + 1u;
+             j < k_clustered_source_bank_fingerprints.size();
+             ++j)
+            if (same_live_row(
+                    k_clustered_source_bank_fingerprints[i].row0,
+                    k_clustered_source_bank_fingerprints[j].row0) &&
+                same_live_row(
+                    k_clustered_source_bank_fingerprints[i].row5,
+                    k_clustered_source_bank_fingerprints[j].row5))
+                return false;
+    return true;
+}
+static_assert(
+    clustered_source_bank_fingerprints_unique(),
+    "R43 PointLight row0+row5 bank fingerprints must remain unique.");
+
 struct clustered_source_bank_identity_cache_entry_v1 {
     std::uintptr_t param = 0u;
     std::uint16_t count = 0u;
-    std::uint32_t first = 0u;
-    std::uint32_t guard_name_offset = 0u;
-    std::uint64_t guard_name_word = 0u;
+    std::uint32_t row0_offset = 0u;
+    std::uint32_t row5_offset = 0u;
+    live_row_v1 row0{};
+    live_row_v1 row5{};
     clustered_pointlight_source_gate::gameplay_bank bank =
         clustered_pointlight_source_gate::gameplay_bank::unknown;
     bool known_non_ptde = false;
@@ -1087,194 +1193,20 @@ struct clustered_source_bank_identity_cache_entry_v1 {
 };
 
 constexpr std::size_t k_clustered_source_bank_identity_cache_entries = 16u;
+static_assert(
+    (k_clustered_source_bank_identity_cache_entries &
+     (k_clustered_source_bank_identity_cache_entries - 1u)) == 0u);
 thread_local std::array<
     clustered_source_bank_identity_cache_entry_v1,
     k_clustered_source_bank_identity_cache_entries>
     g_clustered_source_bank_identity_cache{};
-thread_local std::uint8_t
-    g_clustered_source_bank_identity_cache_victim = 0u;
 
-clustered_live_source_result clustered_source_bank_guard(
-    std::uintptr_t param,
-    pointlight_ptde_source::access_cache &cache,
-    std::uint32_t &name_offset,
-    std::uint64_t &name_word) noexcept
+std::size_t clustered_source_bank_identity_cache_index(
+    std::uintptr_t param) noexcept
 {
-    name_offset = 0u;
-    name_word = 0u;
-    if (!pointlight_ptde_source::read_cached(
-            param + 0x38u,
-            name_offset,
-            cache))
-        return clustered_live_source_result::
-            bank_guard_name_offset_read_fail;
-    if (name_offset < 0x330u)
-        return clustered_live_source_result::
-            bank_guard_name_offset_range_fail;
-    if (!pointlight_ptde_source::read_cached(
-            param + name_offset,
-            name_word,
-            cache))
-        return clustered_live_source_result::
-            bank_guard_name_word_read_fail;
-    return clustered_live_source_result::applied;
-}
-
-enum class clustered_bank_signature_failure : std::uint8_t {
-    none = 0u,
-    header_range,
-    table_read,
-    row_id,
-    row_offset,
-    name_offset,
-    name_read,
-    name_unterminated
-};
-
-bool clustered_bank_structure_signature(
-    std::uintptr_t param,
-    std::uint16_t count,
-    std::uint32_t first,
-    pointlight_ptde_source::access_cache &cache,
-    std::uint64_t &signature,
-    clustered_bank_signature_failure &failure) noexcept
-{
-    failure = clustered_bank_signature_failure::none;
-    if (count != 64u ||
-        first < 0x30u ||
-        first > 0x100000u) {
-        failure = clustered_bank_signature_failure::header_range;
-        return false;
-    }
-
-    constexpr std::uint32_t table_end =
-        0x30u + 64u * 12u;
-    if (!pointlight_ptde_source::readable_cached(
-            param,
-            table_end,
-            cache)) {
-        failure = clustered_bank_signature_failure::table_read;
-        return false;
-    }
-
-    std::uint64_t hash = 0xcbf29ce484222325ULL;
-    pointlight_ptde_source::structure_hash_byte(
-        hash,
-        static_cast<std::uint8_t>(count & 0xffu));
-    pointlight_ptde_source::structure_hash_byte(
-        hash,
-        static_cast<std::uint8_t>((count >> 8u) & 0xffu));
-
-    for (std::uint32_t i = 0u; i < count; ++i) {
-        const auto entry =
-            param + 0x30u +
-            static_cast<std::uintptr_t>(i) * 12u;
-        std::uint32_t id = 0u;
-        std::uint32_t row_offset = 0u;
-        std::uint32_t name_offset = 0u;
-        std::memcpy(
-            &id,
-            reinterpret_cast<const void *>(entry),
-            sizeof(id));
-        std::memcpy(
-            &row_offset,
-            reinterpret_cast<const void *>(entry + 4u),
-            sizeof(row_offset));
-        std::memcpy(
-            &name_offset,
-            reinterpret_cast<const void *>(entry + 8u),
-            sizeof(name_offset));
-
-        if (id != i) {
-            failure = clustered_bank_signature_failure::row_id;
-            return false;
-        }
-
-        // Retail 0x14055DB79..84 resolves a selected row by loading the
-        // per-entry offset at param+0x34+12*i, then adding param. Runtime
-        // identity must validate that representation instead of imposing the
-        // offline serialized invariant row_offset == first + 16*i.
-        if (row_offset < 0x30u ||
-            row_offset > 0x100000u ||
-            !pointlight_ptde_source::readable_cached(
-                param + row_offset,
-                16u,
-                cache)) {
-            failure = clustered_bank_signature_failure::row_offset;
-            return false;
-        }
-
-        if (name_offset < table_end ||
-            name_offset > 0x100000u) {
-            failure = clustered_bank_signature_failure::name_offset;
-            return false;
-        }
-
-        for (unsigned shift = 0u; shift < 32u; shift += 8u)
-            pointlight_ptde_source::structure_hash_byte(
-                hash,
-                static_cast<std::uint8_t>(
-                    (id >> shift) & 0xffu));
-
-        const auto name_address = param + name_offset;
-        const auto direct_bytes =
-            pointlight_ptde_source::readable_cached_prefix(
-                name_address,
-                256u,
-                cache);
-        if (direct_bytes == 0u) {
-            failure = clustered_bank_signature_failure::name_read;
-            return false;
-        }
-
-        bool terminated = false;
-        const auto *name =
-            reinterpret_cast<const std::uint8_t *>(
-                name_address);
-        std::uint32_t consumed = 0u;
-        for (; consumed < direct_bytes; ++consumed) {
-            const auto value = name[consumed];
-            pointlight_ptde_source::structure_hash_byte(
-                hash,
-                value);
-            if (value == 0u) {
-                terminated = true;
-                break;
-            }
-        }
-
-        if (!terminated) {
-            for (std::uint32_t j = consumed;
-                 j < 256u;
-                 ++j) {
-                std::uint8_t value = 0u;
-                if (!pointlight_ptde_source::read_cached(
-                        name_address + j,
-                        value,
-                        cache)) {
-                    failure =
-                        clustered_bank_signature_failure::name_read;
-                    return false;
-                }
-                pointlight_ptde_source::structure_hash_byte(
-                    hash,
-                    value);
-                if (value == 0u) {
-                    terminated = true;
-                    break;
-                }
-            }
-        }
-
-        if (!terminated) {
-            failure =
-                clustered_bank_signature_failure::name_unterminated;
-            return false;
-        }
-    }
-
-    signature = hash;
-    return true;
+    return static_cast<std::size_t>(
+        (param >> 4u) &
+        (k_clustered_source_bank_identity_cache_entries - 1u));
 }
 
 clustered_live_source_result classify_clustered_source_bank(
@@ -1289,90 +1221,86 @@ clustered_live_source_result classify_clustered_source_bank(
     bank = gameplay_bank::unknown;
     known_non_ptde = false;
 
-    std::uint32_t guard_name_offset = 0u;
-    std::uint64_t guard_name_word = 0u;
-    const auto guard_result =
-        clustered_source_bank_guard(
-            param,
-            cache,
-            guard_name_offset,
-            guard_name_word);
-    if (guard_result !=
-        clustered_live_source_result::applied)
-        return guard_result;
+    constexpr std::uint32_t table_end =
+        0x30u + 64u * 12u;
+    if (count != 64u ||
+        first < table_end ||
+        first > 0x100000u)
+        return clustered_live_source_result::
+            bank_signature_header_range_fail;
 
-    for (const auto &entry :
-         g_clustered_source_bank_identity_cache) {
-        if (entry.valid &&
-            entry.param == param &&
-            entry.count == count &&
-            entry.first == first &&
-            entry.guard_name_offset == guard_name_offset &&
-            entry.guard_name_word == guard_name_word) {
-            bank = entry.bank;
-            known_non_ptde = entry.known_non_ptde;
-            return clustered_live_source_result::applied;
-        }
-    }
+    std::uint32_t row5_offset = 0u;
+    if (!pointlight_ptde_source::read_cached(
+            param + 0x34u + 5u * 12u,
+            row5_offset,
+            cache))
+        return clustered_live_source_result::
+            bank_signature_table_read_fail;
 
-    std::uint64_t signature = 0u;
-    clustered_bank_signature_failure signature_failure =
-        clustered_bank_signature_failure::none;
-    if (!clustered_bank_structure_signature(
-            param,
-            count,
-            first,
-            cache,
-            signature,
-            signature_failure)) {
-        switch (signature_failure) {
-        case clustered_bank_signature_failure::header_range:
-            return clustered_live_source_result::
-                bank_signature_header_range_fail;
-        case clustered_bank_signature_failure::table_read:
-            return clustered_live_source_result::
-                bank_signature_table_read_fail;
-        case clustered_bank_signature_failure::row_id:
-            return clustered_live_source_result::
-                bank_signature_row_id_fail;
-        case clustered_bank_signature_failure::row_offset:
-            return clustered_live_source_result::
-                bank_signature_row_offset_fail;
-        case clustered_bank_signature_failure::name_offset:
-            return clustered_live_source_result::
-                bank_signature_name_offset_fail;
-        case clustered_bank_signature_failure::name_read:
-            return clustered_live_source_result::
-                bank_signature_name_read_fail;
-        case clustered_bank_signature_failure::name_unterminated:
-            return clustered_live_source_result::
-                bank_signature_name_unterminated;
-        default:
-            return clustered_live_source_result::
-                bank_signature_header_range_fail;
-        }
-    }
+    if (row5_offset < table_end ||
+        row5_offset > 0x100000u)
+        return clustered_live_source_result::
+            bank_signature_row_offset_fail;
 
-    bank = gameplay_bank_from_structure_signature(
-        signature);
-    known_non_ptde =
-        known_non_ptde_structure(signature);
+    live_row_v1 row0{};
+    live_row_v1 row5{};
+    if (!pointlight_ptde_source::read_cached(
+            param + first,
+            row0,
+            cache) ||
+        !pointlight_ptde_source::read_cached(
+            param + row5_offset,
+            row5,
+            cache))
+        return clustered_live_source_result::
+            bank_signature_row_offset_fail;
 
-    auto &slot =
+    auto &cached =
         g_clustered_source_bank_identity_cache[
-            static_cast<std::size_t>(
-                g_clustered_source_bank_identity_cache_victim++) %
-            g_clustered_source_bank_identity_cache.size()];
-    slot = {};
-    slot.param = param;
-    slot.count = count;
-    slot.first = first;
-    slot.guard_name_offset = guard_name_offset;
-    slot.guard_name_word = guard_name_word;
-    slot.bank = bank;
-    slot.known_non_ptde = known_non_ptde;
-    slot.valid = true;
-    return clustered_live_source_result::applied;
+            clustered_source_bank_identity_cache_index(
+                param)];
+    if (cached.valid &&
+        cached.param == param &&
+        cached.count == count &&
+        cached.row0_offset == first &&
+        cached.row5_offset == row5_offset &&
+        same_live_row(cached.row0, row0) &&
+        same_live_row(cached.row5, row5)) {
+        bank = cached.bank;
+        known_non_ptde = cached.known_non_ptde;
+        return clustered_live_source_result::applied;
+    }
+
+    for (const auto &fingerprint :
+         k_clustered_source_bank_fingerprints) {
+        if (!same_live_row(
+                fingerprint.row0,
+                row0) ||
+            !same_live_row(
+                fingerprint.row5,
+                row5))
+            continue;
+
+        bank = fingerprint.bank;
+        known_non_ptde =
+            fingerprint.known_non_ptde;
+
+        cached = {};
+        cached.param = param;
+        cached.count = count;
+        cached.row0_offset = first;
+        cached.row5_offset = row5_offset;
+        cached.row0 = row0;
+        cached.row5 = row5;
+        cached.bank = bank;
+        cached.known_non_ptde =
+            known_non_ptde;
+        cached.valid = true;
+        return clustered_live_source_result::applied;
+    }
+
+    return clustered_live_source_result::
+        stock_dsr_signature_complete_unknown;
 }
 
 clustered_live_source_result read_clustered_live_drawparam_row(
@@ -1439,16 +1367,6 @@ clustered_live_source_result read_clustered_live_drawparam_row(
     if (dsr_only_semantic_row(bank, row_id))
         return clustered_live_source_result::
             stock_dsr_dsr_only_row;
-
-    struct live_row_v1 {
-        std::uint32_t begin_bits = 0u;
-        std::uint32_t end_bits = 0u;
-        std::int16_t r = 0;
-        std::int16_t g = 0;
-        std::int16_t b = 0;
-        std::int16_t intensity = 0;
-    };
-    static_assert(sizeof(live_row_v1) == 16u);
 
     std::uint32_t row_offset = 0u;
     const auto row_offset_address =
@@ -3273,7 +3191,6 @@ bool clustered_pnts_draw_runtime::install() noexcept
     if (!install_clustered_source_override_hook())
         return false;
     g_clustered_source_bank_identity_cache = {};
-    g_clustered_source_bank_identity_cache_victim = 0u;
     g_clustered_source_payload_cache = {};
 
     g_runtime = this;
@@ -3293,7 +3210,7 @@ bool clustered_pnts_draw_runtime::install() noexcept
             std::memory_order_relaxed))
         reshade::log::message(
             reshade::log::level::info,
-            "[DSRRL POINTLIGHT R37] bank_structure_revalidate=TABLE_PLUS_NAMES_ONLY dynamic_row_payload_excluded=ON allocation_guard=ON exact_structure_identity=ON vm_region_cache=TLS_PER_PRESENT selector_capture_reuse=ON source_exec_attest=INSTALL_ONCE frame_source_cache=R36_UNCHANGED");
+            "[DSRRL POINTLIGHT R43-GATE] bank_identity=ROW0_ROW5_EXACT_PAYLOAD fingerprint_reads=2x16B full_name_scan=OFF dsr_only_gate=10 default_m99=STOCK_DSR cache=DIRECT16");
     static std::atomic_bool
         frame_selection_cache_logged{false};
     if (!frame_selection_cache_logged.exchange(
