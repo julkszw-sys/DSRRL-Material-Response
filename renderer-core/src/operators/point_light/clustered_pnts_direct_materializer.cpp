@@ -1,6 +1,7 @@
 #include "dsrrl/operators/point_light/clustered_pnts_direct_materializer.hpp"
 
 #include "dsrrl/operators/legacy_plan/dxbc_checksum.hpp"
+#include "dsrrl/operators/legacy_plan/a1_create_time_materializer.hpp"
 #include "dsrrl/operators/legacy_plan/sha256_bytes.hpp"
 #include "dsrrl/operators/point_light/generated_clustered_pnts_direct_v1.hpp"
 
@@ -549,25 +550,26 @@ bool migrate_clustered_pnts_legacy_b12_words(
         spc);
 }
 
-clustered_pnts_spc_attenuation_outcome
-materialize_clustered_pnts_spc_attenuation_only(
+clustered_pnts_rowaware_attenuation_outcome
+materialize_clustered_pnts_rowaware_attenuation(
+    const core::feature_registry &features,
     const std::uint8_t *source,
     std::size_t size,
     std::vector<std::uint8_t> &output) noexcept
 {
-    clustered_pnts_spc_attenuation_outcome outcome{};
+    clustered_pnts_rowaware_attenuation_outcome outcome{};
     output.clear();
 
     if (source == nullptr || size == 0u) {
         outcome.result =
-            clustered_pnts_spc_attenuation_result::
+            clustered_pnts_rowaware_attenuation_result::
                 pass_not_candidate;
         return outcome;
     }
 
     if (!candidate_size(size)) {
         outcome.result =
-            clustered_pnts_spc_attenuation_result::
+            clustered_pnts_rowaware_attenuation_result::
                 pass_not_candidate;
         return outcome;
     }
@@ -576,7 +578,7 @@ materialize_clustered_pnts_spc_attenuation_only(
             source,
             size)) {
         outcome.result =
-            clustered_pnts_spc_attenuation_result::
+            clustered_pnts_rowaware_attenuation_result::
                 fail_invalid_dxbc;
         return outcome;
     }
@@ -589,7 +591,7 @@ materialize_clustered_pnts_spc_attenuation_only(
             host_digest);
     if (plan == nullptr) {
         outcome.result =
-            clustered_pnts_spc_attenuation_result::
+            clustered_pnts_rowaware_attenuation_result::
                 pass_unknown_exact_sha;
         return outcome;
     }
@@ -599,26 +601,91 @@ materialize_clustered_pnts_spc_attenuation_only(
     outcome.representative_shader_index =
         plan->representative_shader_index;
 
-    // The 12 NoSpc plans are composed by the existing A1 create-time path.
-    // R44 owns only the 24 Spc hosts that R43 intentionally left stock.
+    // The 12 NoSpc hosts are also exact A1 plans. Preserve every enabled
+    // non-attenuation A1 island first, but deliberately leave the stock cubic
+    // attenuation words untouched. The row-aware marker patch below then owns
+    // attenuation for all 36 exact PntS hosts. This is what makes the ten
+    // DSR-only PointLight rows genuinely stock on NoSpc receivers too.
+    std::vector<std::uint8_t> composed_basis;
+    const std::uint8_t *basis = source;
+
     if (!plan->spc) {
-        outcome.result =
-            clustered_pnts_spc_attenuation_result::
-                pass_nospc_owned_by_a1;
-        return outcome;
+        const auto *a1_plan =
+            legacy_plan::find_a1_plan_by_exact_digest(
+                size,
+                host_digest);
+        if (a1_plan == nullptr) {
+            outcome.result =
+                clustered_pnts_rowaware_attenuation_result::
+                    fail_patch_precondition;
+            return outcome;
+        }
+
+        core::feature_registry filtered_features;
+        constexpr std::array<core::operator_id,4> preserve_owners{{
+            core::operator_id::terminal_sat_rgb,
+            core::operator_id::diffuse_material_domain,
+            core::operator_id::envspec_nospc_delete,
+            core::operator_id::fixed_postfog_identity
+        }};
+        for (const auto owner : preserve_owners) {
+            if (!filtered_features.set(
+                    owner,
+                    features.enabled(owner))) {
+                outcome.result =
+                    clustered_pnts_rowaware_attenuation_result::
+                        fail_patch_precondition;
+                return outcome;
+            }
+        }
+        if (!filtered_features.set(
+                core::operator_id::pointlight_pnts_attenuation,
+                false)) {
+            outcome.result =
+                clustered_pnts_rowaware_attenuation_result::
+                    fail_patch_precondition;
+            return outcome;
+        }
+
+        const auto a1 =
+            legacy_plan::materialize_verified_a1_plan(
+                filtered_features,
+                *a1_plan,
+                source,
+                size,
+                composed_basis);
+
+        using a1_result =
+            legacy_plan::a1_create_time_result;
+        if (a1.result == a1_result::applied) {
+            if (composed_basis.size() != size) {
+                outcome.result =
+                    clustered_pnts_rowaware_attenuation_result::
+                        fail_rebuild;
+                return outcome;
+            }
+            basis = composed_basis.data();
+        } else if (
+            a1.result !=
+                a1_result::pass_through_no_enabled_owner) {
+            outcome.result =
+                clustered_pnts_rowaware_attenuation_result::
+                    fail_patch_precondition;
+            return outcome;
+        }
     }
 
     std::vector<chunk> chunks;
     std::vector<std::uint32_t> words;
     std::size_t code_index = 0u;
     if (!parse_dxbc(
-            source,
+            basis,
             size,
             chunks,
             code_index,
             words)) {
         outcome.result =
-            clustered_pnts_spc_attenuation_result::
+            clustered_pnts_rowaware_attenuation_result::
                 fail_invalid_dxbc;
         return outcome;
     }
@@ -651,7 +718,7 @@ materialize_clustered_pnts_spc_attenuation_only(
             new_token == 0x07000033u) {
             if (square_op != nullptr) {
                 outcome.result =
-                    clustered_pnts_spc_attenuation_result::
+                    clustered_pnts_rowaware_attenuation_result::
                         fail_patch_precondition;
                 return outcome;
             }
@@ -661,7 +728,7 @@ materialize_clustered_pnts_spc_attenuation_only(
             new_token == 0x07002034u) {
             if (terminal_op != nullptr) {
                 outcome.result =
-                    clustered_pnts_spc_attenuation_result::
+                    clustered_pnts_rowaware_attenuation_result::
                         fail_patch_precondition;
                 return outcome;
             }
@@ -676,7 +743,7 @@ materialize_clustered_pnts_spc_attenuation_only(
         words[square_op->start] != 0x07000038u ||
         words[terminal_op->start] != 0x07002038u) {
         outcome.result =
-            clustered_pnts_spc_attenuation_result::
+            clustered_pnts_rowaware_attenuation_result::
                 fail_patch_precondition;
         return outcome;
     }
@@ -694,7 +761,7 @@ materialize_clustered_pnts_spc_attenuation_only(
         const auto opcode = token & 0x7FFu;
         if (length == 0u || pos + length > words.size()) {
             outcome.result =
-                clustered_pnts_spc_attenuation_result::
+                clustered_pnts_rowaware_attenuation_result::
                     fail_patch_precondition;
             return outcome;
         }
@@ -702,7 +769,7 @@ materialize_clustered_pnts_spc_attenuation_only(
         if (opcode == 104u && length == 2u) {
             if (temp_decl != static_cast<std::size_t>(-1)) {
                 outcome.result =
-                    clustered_pnts_spc_attenuation_result::
+                    clustered_pnts_rowaware_attenuation_result::
                         fail_patch_precondition;
                 return outcome;
             }
@@ -716,7 +783,7 @@ materialize_clustered_pnts_spc_attenuation_only(
             words[pos + 10u] == 18u) {
             if (t18_load20 != static_cast<std::size_t>(-1)) {
                 outcome.result =
-                    clustered_pnts_spc_attenuation_result::
+                    clustered_pnts_rowaware_attenuation_result::
                         fail_patch_precondition;
                 return outcome;
             }
@@ -731,7 +798,7 @@ materialize_clustered_pnts_spc_attenuation_only(
         t18_load20 + 11u > square_op->start ||
         words[temp_decl + 1u] >= 0x1000u) {
         outcome.result =
-            clustered_pnts_spc_attenuation_result::
+            clustered_pnts_rowaware_attenuation_result::
                 fail_patch_precondition;
         return outcome;
     }
@@ -758,7 +825,7 @@ materialize_clustered_pnts_spc_attenuation_only(
     case 0x0010003Au: expected_dst_token = 0x00100082u; break;
     default:
         outcome.result =
-            clustered_pnts_spc_attenuation_result::
+            clustered_pnts_rowaware_attenuation_result::
                 fail_patch_precondition;
         return outcome;
     }
@@ -766,7 +833,7 @@ materialize_clustered_pnts_spc_attenuation_only(
     if (dst_token != expected_dst_token ||
         dst_reg != x_reg) {
         outcome.result =
-            clustered_pnts_spc_attenuation_result::
+            clustered_pnts_rowaware_attenuation_result::
                 fail_patch_precondition;
         return outcome;
     }
@@ -822,7 +889,7 @@ materialize_clustered_pnts_spc_attenuation_only(
         }
     } catch (...) {
         outcome.result =
-            clustered_pnts_spc_attenuation_result::
+            clustered_pnts_rowaware_attenuation_result::
                 fail_rebuild;
         return outcome;
     }
@@ -831,7 +898,7 @@ materialize_clustered_pnts_spc_attenuation_only(
         patched.size() >
             std::numeric_limits<std::uint32_t>::max()) {
         outcome.result =
-            clustered_pnts_spc_attenuation_result::
+            clustered_pnts_rowaware_attenuation_result::
                 fail_patch_precondition;
         return outcome;
     }
@@ -840,14 +907,14 @@ materialize_clustered_pnts_spc_attenuation_only(
         static_cast<std::uint32_t>(patched.size());
 
     if (!rebuild(
-            source,
+            basis,
             size,
             std::move(chunks),
             patched,
             output)) {
         output.clear();
         outcome.result =
-            clustered_pnts_spc_attenuation_result::
+            clustered_pnts_rowaware_attenuation_result::
                 fail_rebuild;
         return outcome;
     }
@@ -858,7 +925,7 @@ materialize_clustered_pnts_spc_attenuation_only(
             output.size())) {
         output.clear();
         outcome.result =
-            clustered_pnts_spc_attenuation_result::
+            clustered_pnts_rowaware_attenuation_result::
                 fail_final;
         return outcome;
     }
@@ -869,7 +936,7 @@ materialize_clustered_pnts_spc_attenuation_only(
             output.size());
     outcome.replacement_size = output.size();
     outcome.result =
-        clustered_pnts_spc_attenuation_result::applied;
+        clustered_pnts_rowaware_attenuation_result::applied;
     return outcome;
 }
 
