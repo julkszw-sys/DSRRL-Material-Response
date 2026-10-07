@@ -1619,13 +1619,25 @@ void source_hook_load_xmm(
 void __fastcall clustered_source_override_callback(
     void *source,
     float *geometry,
-    float *color_end) noexcept
+    float *color_end,
+    float *t18_record) noexcept
 {
+    // R44 per-light carrier lives in retail-unused t18 padding. Always clear
+    // it first so every direct/foreign/DSR-only/fail-open source stays stock.
+    if (t18_record != nullptr) {
+        constexpr float stock_dsr_marker = 0.0f;
+        std::memcpy(
+            t18_record + 10u,
+            &stock_dsr_marker,
+            sizeof(stock_dsr_marker));
+    }
+
     if (!g_enabled.load(std::memory_order_relaxed) ||
         g_quarantined.load(std::memory_order_relaxed) ||
         source == nullptr ||
         geometry == nullptr ||
         color_end == nullptr ||
+        t18_record == nullptr ||
         g_base == 0u)
         return;
 
@@ -1860,6 +1872,12 @@ void __fastcall clustered_source_override_callback(
         payload.data() + 1u,
         4u * sizeof(float));
 
+    constexpr float ptde_marker = 1.0f;
+    std::memcpy(
+        t18_record + 10u,
+        &ptde_marker,
+        sizeof(ptde_marker));
+
     telemetry::hot_count(
         g_source_capture_ok);
 }
@@ -1902,7 +1920,8 @@ bool build_clustered_source_override_stub(
 
         // callback(source=RDI,
         //          geometry=original_rsp+0x20,
-        //          color_end=original_rsp+0x30)
+        //          color_end=original_rsp+0x30,
+        //          t18_record=[RBX+0x320] + 48*RSI)
         source_hook_emit(code,{0x48,0x8B,0xCF}); // mov rcx,rdi
         source_hook_emit(
             code,
@@ -1910,6 +1929,18 @@ bool build_clustered_source_override_stub(
         source_hook_emit(
             code,
             {0x4C,0x8D,0x84,0x24,0x40,0x01,0x00,0x00}); // lea r8,[rsp+140h]
+        source_hook_emit(
+            code,
+            {0x4C,0x8B,0x8B,0x20,0x03,0x00,0x00}); // mov r9,[rbx+320h]
+        source_hook_emit(
+            code,
+            {0x48,0x8D,0x04,0x76}); // lea rax,[rsi+rsi*2]
+        source_hook_emit(
+            code,
+            {0x48,0xC1,0xE0,0x04}); // shl rax,4 => 48*rsi
+        source_hook_emit(
+            code,
+            {0x49,0x01,0xC1}); // add r9,rax
         source_hook_emit(code,{0x48,0xB8});
         source_hook_emit_u64(
             code,
@@ -3162,7 +3193,7 @@ bool clustered_pnts_draw_runtime::install() noexcept
             std::memory_order_relaxed))
         reshade::log::message(
             reshade::log::level::info,
-            "[DSRRL POINTLIGHT R43-GATE] bank_identity=ROW0_EXACT_PAYLOAD hot_fingerprint_read=16B cold_extra_read=0B full_name_scan=OFF dsr_only_gate=10 default_m99=STOCK_DSR cache=DIRECT16");
+            "[DSRRL POINTLIGHT R44-GATE] bank_identity=ROW0_EXACT_PAYLOAD hot_fingerprint_read=16B cold_extra_read=0B full_name_scan=OFF dsr_only_gate=10 default_m99=STOCK_DSR cache=DIRECT16 per_light_marker=t18+0x28 PTDE=1 STOCK=0");
     static std::atomic_bool
         frame_selection_cache_logged{false};
     if (!frame_selection_cache_logged.exchange(
@@ -3178,7 +3209,7 @@ bool clustered_pnts_draw_runtime::install() noexcept
             std::memory_order_relaxed)) {
         reshade::log::message(
             reshade::log::level::info,
-            "[DSRRL POINTLIGHT R43-DRAWPARAM] clustered=SOURCE_ONLY carrier=LIVE_DRAWPARAM_SELECTED_ROW source_cut=0xB7E02 receiver=STOCK_DSR donor_lookup=OFF material_lookup=OFF replacement_shader=OFF dsr_only_gate=10 default_m99=STOCK_DSR");
+            "[DSRRL POINTLIGHT R44-DRAWPARAM] clustered=SOURCE_PLUS_MARKER_ATTENUATION carrier=LIVE_DRAWPARAM_SELECTED_ROW source_cut=0xB7E02 marker=t18+0x28 attenuation_receiver=CREATE_TIME_MARKER_GATED material_receiver=STOCK_DSR full_ptde_receiver=OFF donor_lookup=OFF material_lookup=OFF dsr_only_gate=10 default_m99=STOCK_DSR");
     }
     return true;
 }

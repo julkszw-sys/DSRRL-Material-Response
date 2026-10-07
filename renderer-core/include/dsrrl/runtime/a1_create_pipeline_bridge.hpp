@@ -60,6 +60,16 @@ public:
         std::uint32_t subobject_count,
         const reshade::api::pipeline_subobject *subobjects) noexcept;
 
+    // Compose a second create-time shader-only island onto a code blob
+    // already owned by A1 while preserving the exact A1 pipeline metadata.
+    // Returns false when the current PS was not materialized by A1.
+    bool compose_external_create_time_patch(
+        std::uint32_t subobject_count,
+        const reshade::api::pipeline_subobject *subobjects,
+        const operators::legacy_plan::hashing::sha256_digest
+            &output_sha256,
+        std::vector<std::uint8_t> replacement) noexcept;
+
     void on_init_pipeline(
         reshade::api::device *device,
         reshade::api::pipeline_layout layout,

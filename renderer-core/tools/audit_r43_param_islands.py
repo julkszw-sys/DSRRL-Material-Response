@@ -17,6 +17,8 @@ def main():
 
     integrated=(root/"integrated/integrated_addon.cpp").read_text(encoding="utf-8")
     cluster=(root/"src/runtime/clustered_pnts_draw_runtime.cpp").read_text(encoding="utf-8")
+    clustered_materializer=(root/"src/operators/point_light/clustered_pnts_direct_materializer.cpp").read_text(encoding="utf-8")
+    a1_bridge=(root/"src/runtime/a1_create_pipeline_bridge.cpp").read_text(encoding="utf-8")
     dof=(root/"src/runtime/dof_authored_state_runtime.cpp").read_text(encoding="utf-8")
     dof_host=(root/"src/runtime/dof_host_depth_route_runtime.cpp").read_text(encoding="utf-8")
     dof_handoff=(root/"src/runtime/dof_tonemap_handoff_runtime.cpp").read_text(encoding="utf-8")
@@ -99,6 +101,27 @@ def main():
     require(cluster,
         "dsr_only_semantic_row(bank, row_id)",
         "Clustered ten-row DSR-only gate")
+    require(cluster,
+        "per_light_marker=t18+0x28 PTDE=1 STOCK=0",
+        "Clustered per-light PTDE/stock marker")
+    require(clustered_materializer,
+        "materialize_clustered_pnts_marker_attenuation(",
+        "Clustered marker-aware create-time attenuation materializer")
+    require(clustered_materializer,
+        "0x09002037u",
+        "Clustered marker MOVC_SAT")
+    require(clustered_materializer,
+        "0x00000028u",
+        "Clustered t18+0x28 marker read")
+    require(a1_bridge,
+        "compose_external_create_time_patch(",
+        "A1-safe create-time PointLight composition")
+    require(integrated,
+        "attenuation_receiver=CREATE_TIME_MARKER_GATED",
+        "Clustered marker-aware attenuation activation marker")
+    require(integrated,
+        "full_ptde_receiver=OFF",
+        "Clustered full receiver remains disabled")
     for forbidden in (
         "clustered_source_bank_guard(",
         "clustered_bank_structure_signature(",
@@ -119,7 +142,7 @@ def main():
     require(cmake,"DSRRL_PHYSICAL_CUT_UL_H3_SUBSURFACE",
         "R43 physical-cut option preserved")
 
-    print("R43_PARAM_ISLANDS_PASS: exact R43 base + Clustered live PointLightBank source + DoF live DoFBank + stock receivers + donor-free authored rows")
+    print("R43_PARAM_ISLANDS_PASS: exact R43 base + row0-gated live PointLightBank source + R44 per-light create-time PntS attenuation + DoF live DoFBank")
 
 if __name__=="__main__":
     main()

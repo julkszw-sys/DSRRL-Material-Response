@@ -179,6 +179,7 @@ constexpr bool k_pmetal_direct_current_native_dispatch = true;
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <memory>
 #include <mutex>
 #include <shared_mutex>
 #include <unordered_map>
@@ -222,6 +223,20 @@ dsrrl::runtime::clustered_pnts_draw_runtime
     g_clustered_pnts;
 dsrrl::runtime::clustered_pnts_pipeline_runtime
     g_clustered_pnts_pipeline;
+
+// R44 attenuation bridge is create-time only. A1-owned composites are retained
+// by g_a1_bridge; Spc/non-A1 replacements are retained here for shader_desc
+// lifetime. No draw-time lookup, replay or state transaction is introduced.
+std::mutex g_clustered_marker_create_mutex;
+std::vector<
+    std::shared_ptr<const std::vector<std::uint8_t>>>
+    g_clustered_marker_create_storage;
+std::atomic<std::uint64_t>
+    g_clustered_marker_identity_hits{0};
+std::atomic<std::uint64_t>
+    g_clustered_marker_materialized{0};
+std::atomic<std::uint64_t>
+    g_clustered_marker_fail_open{0};
 dsrrl::runtime::pmetal_envspec_draw_runtime
     g_pmetal_envspec(
         g_core,
@@ -1251,6 +1266,99 @@ const reshade::api::shader_desc *find_pixel_shader(
     }
 
     return nullptr;
+}
+
+reshade::api::shader_desc *find_mutable_pixel_shader(
+    std::uint32_t subobject_count,
+    const reshade::api::pipeline_subobject *subobjects) noexcept
+{
+    return const_cast<reshade::api::shader_desc *>(
+        find_pixel_shader(
+            subobject_count,
+            subobjects));
+}
+
+bool apply_clustered_marker_attenuation_create_time(
+    std::uint32_t subobject_count,
+    const reshade::api::pipeline_subobject *subobjects,
+    const dsrrl::operators::point_light::
+        clustered_pnts_marker_attenuation_identity &identity,
+    bool a1_changed) noexcept
+{
+    auto *pixel_shader =
+        find_mutable_pixel_shader(
+            subobject_count,
+            subobjects);
+    if (pixel_shader == nullptr ||
+        pixel_shader->code == nullptr ||
+        pixel_shader->code_size == 0u)
+        return false;
+
+    std::vector<std::uint8_t> output;
+    const auto outcome =
+        dsrrl::operators::point_light::
+            materialize_clustered_pnts_marker_attenuation(
+                identity,
+                static_cast<const std::uint8_t *>(
+                    pixel_shader->code),
+                pixel_shader->code_size,
+                output);
+
+    using marker_result =
+        dsrrl::operators::point_light::
+            clustered_pnts_marker_attenuation_result;
+    if (outcome.result != marker_result::applied) {
+        ++g_clustered_marker_fail_open;
+        return false;
+    }
+
+    if (a1_changed) {
+        if (!g_a1_bridge.compose_external_create_time_patch(
+                subobject_count,
+                subobjects,
+                outcome.replacement_sha256,
+                std::move(output))) {
+            ++g_clustered_marker_fail_open;
+            return false;
+        }
+    } else {
+        try {
+            auto bytes =
+                std::make_shared<
+                    std::vector<std::uint8_t>>(
+                        std::move(output));
+            if (bytes->empty()) {
+                ++g_clustered_marker_fail_open;
+                return false;
+            }
+
+            {
+                std::lock_guard<std::mutex> lock(
+                    g_clustered_marker_create_mutex);
+                g_clustered_marker_create_storage.push_back(
+                    bytes);
+            }
+
+            pixel_shader->code = bytes->data();
+            pixel_shader->code_size = bytes->size();
+        } catch (...) {
+            ++g_clustered_marker_fail_open;
+            return false;
+        }
+    }
+
+    ++g_clustered_marker_materialized;
+    static std::atomic_bool first_logged{false};
+    if (!first_logged.exchange(
+            true,
+            std::memory_order_relaxed)) {
+        reshade::log::message(
+            reshade::log::level::info,
+            "[DSRRL POINTLIGHT R44] create_time_attenuation=ACTIVE "
+            "carrier=t18+0x28 ptde=SAT(x) stock=SAT(x^3) "
+            "draw_replay=OFF");
+    }
+    return true;
 }
 
 const reshade::api::shader_desc *find_vertex_shader(
@@ -4250,6 +4358,10 @@ bool on_create_pipeline(
         clustered_pnts_direct_materialize_outcome clustered_pnts{};
     std::vector<std::uint8_t> clustered_pnts_payload;
     bool clustered_pnts_candidate = false;
+    dsrrl::operators::point_light::
+        clustered_pnts_marker_attenuation_identity
+            clustered_marker_identity{};
+    bool clustered_marker_identity_ready = false;
 
     if (pixel_shader != nullptr &&
         pixel_shader->code != nullptr &&
@@ -4257,6 +4369,22 @@ bool on_create_pipeline(
         const auto *source =
             static_cast<const std::uint8_t *>(
                 pixel_shader->code);
+
+        if (k_pointlight_drawtime_runtime_enabled) {
+            const auto marker_identity_result =
+                dsrrl::operators::point_light::
+                    identify_clustered_pnts_marker_attenuation(
+                        source,
+                        pixel_shader->code_size,
+                        clustered_marker_identity);
+            clustered_marker_identity_ready =
+                marker_identity_result ==
+                dsrrl::operators::point_light::
+                    clustered_pnts_marker_attenuation_result::
+                        applied;
+            if (clustered_marker_identity_ready)
+                ++g_clustered_marker_identity_hits;
+        }
 
         // Close the Subsurface creation-order gap at the source receiver
         // itself. For the three exact Subsurf shaders, reconstruct the
@@ -4840,6 +4968,15 @@ bool on_create_pipeline(
             subobject_count,
             subobjects);
 
+    const bool clustered_marker_changed =
+        k_pointlight_drawtime_runtime_enabled &&
+        clustered_marker_identity_ready &&
+        apply_clustered_marker_attenuation_create_time(
+            subobject_count,
+            subobjects,
+            clustered_marker_identity,
+            a1_changed);
+
     if (k_pointlight_drawtime_runtime_enabled &&
         k_clustered_pointlight_receiver_runtime_enabled &&
         clustered_pnts_candidate) {
@@ -4926,7 +5063,10 @@ bool on_create_pipeline(
     (void)ul_replacement_ready;
     (void)h3_identity_ready;
     (void)h3_replacement_ready;
-    return a1_changed || motion_blur_changed;
+    return
+        a1_changed ||
+        clustered_marker_changed ||
+        motion_blur_changed;
 }
 
 void on_init_pipeline(
@@ -7803,7 +7943,7 @@ bool AddonInit(
     } else if (clustered_pointlight_hooks) {
         reshade::log::message(
             reshade::log::level::info,
-            "[DSRRL R43 DRAWPARAM] clustered_source=ACTIVE receiver=STOCK_DSR donor_lookup=OFF material_lookup=OFF replacement_shader=OFF");
+            "[DSRRL POINTLIGHT R44] clustered_source=ACTIVE source_carrier=LIVE_DRAWPARAM_SELECTED_ROW attenuation_receiver=CREATE_TIME_MARKER_GATED material_receiver=STOCK_DSR full_ptde_receiver=OFF donor_lookup=OFF material_lookup=OFF");
     }
 
     // Bloom FX transport is diagnostic-only: it does not authorize Q8,
@@ -8053,6 +8193,11 @@ void AddonUninit(
     g_fixed_pointlight_pipeline.reset();
     g_clustered_pnts.reset();
     g_clustered_pnts_pipeline.reset();
+    {
+        std::lock_guard<std::mutex> lock(
+            g_clustered_marker_create_mutex);
+        g_clustered_marker_create_storage.clear();
+    }
     g_mr_draw_runtime.reset();
     g_draw_transactions.reset();
     g_a1_bridge.reset();
