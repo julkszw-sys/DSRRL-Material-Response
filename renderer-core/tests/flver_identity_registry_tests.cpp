@@ -26,6 +26,18 @@ int main()
     assert(dsrrl::runtime::flver_identity_lookup(container,second));
     assert(first==second);
 
+    // Guard the actual SHA-256 algorithm, not just internal consistency.
+    // A single corrupted K constant changes every owner digest while the old
+    // self-consistency assertions still pass, silently disabling all exact
+    // FLVER-owner routes.
+    constexpr std::array<std::uint8_t,32> expected_sha = {
+        0x4eu,0x6cu,0x01u,0xedu,0x04u,0xf0u,0xd6u,0xbdu,
+        0xd1u,0x0cu,0x24u,0x32u,0x54u,0x39u,0x29u,0xb8u,
+        0x24u,0x57u,0x9fu,0x36u,0x35u,0xebu,0xc8u,0x18u,
+        0xc5u,0x28u,0xa9u,0xceu,0x5eu,0xe9u,0x9du,0xf2u
+    };
+    assert(first==expected_sha);
+
     dsrrl::runtime::actual_material_owner_observation owner{};
     owner.material.semantic_name_hash = 0x1234u;
     assert(dsrrl::runtime::flver_identity_enrich_owner(container, 7u, owner));
