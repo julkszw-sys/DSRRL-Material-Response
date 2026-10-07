@@ -34,9 +34,15 @@ namespace {
 using role = operators::dof::retained_shader_role;
 using result = scheduler_result;
 
+struct pass_state_carriers {
+    ID3D11SamplerState *color_sampler = nullptr;
+    ID3D11SamplerState *depth_sampler = nullptr;
+    bool ready = false;
+};
+
 struct sequence_state {
     host_dof_inputs host{};
-    role pass10_role = role::count;
+    pass_state_carriers pass_state{};
     std::size_t next_pass = 0u;
     ID3D11ShaderResourceView *terminal = nullptr;
     bool active = false;
@@ -201,7 +207,7 @@ void log_dof_profile() noexcept
     std::snprintf(
         line,
         sizeof(line),
-        "[DSRRL PERF R44] DOF sample=1/%u n=%llu total_us=%.3f max_total_us=%.3f paths=early:%llu scan:%llu begin:%llu advance:%llu tonemap:%llu",
+        "[DSRRL DoF PERF] DOF sample=1/%u n=%llu total_us=%.3f max_total_us=%.3f paths=early:%llu scan:%llu begin:%llu advance:%llu tonemap:%llu",
         k_dof_profile_sample_period,
         static_cast<unsigned long long>(samples),
         avg_us,
@@ -258,6 +264,67 @@ void set_authored_feature(bool enabled) noexcept
             enabled);
 }
 
+void release_pass_state(
+    pass_state_carriers &state) noexcept
+{
+    if (state.depth_sampler != nullptr)
+        state.depth_sampler->Release();
+    if (state.color_sampler != nullptr)
+        state.color_sampler->Release();
+    state = {};
+}
+
+void default_blend_desc(
+    D3D11_BLEND_DESC &desc) noexcept
+{
+    desc = {};
+    desc.AlphaToCoverageEnable = FALSE;
+    desc.IndependentBlendEnable = FALSE;
+    for (auto &rt : desc.RenderTarget) {
+        rt.BlendEnable = FALSE;
+        rt.SrcBlend = D3D11_BLEND_ONE;
+        rt.DestBlend = D3D11_BLEND_ZERO;
+        rt.BlendOp = D3D11_BLEND_OP_ADD;
+        rt.SrcBlendAlpha = D3D11_BLEND_ONE;
+        rt.DestBlendAlpha = D3D11_BLEND_ZERO;
+        rt.BlendOpAlpha = D3D11_BLEND_OP_ADD;
+        rt.RenderTargetWriteMask = D3D11_COLOR_WRITE_ENABLE_ALL;
+    }
+}
+
+bool capture_pass_state(
+    ID3D11DeviceContext *context,
+    pass_state_carriers &out) noexcept
+{
+    release_pass_state(out);
+    if (context == nullptr)
+        return false;
+
+    std::array<ID3D11SamplerState *, 2> samplers{};
+    context->PSGetSamplers(
+        0u,
+        static_cast<UINT>(samplers.size()),
+        samplers.data());
+
+    if (samplers[0] == nullptr ||
+        samplers[1] == nullptr) {
+        for (auto *sampler : samplers)
+            if (sampler != nullptr)
+                sampler->Release();
+        return false;
+    }
+
+    // The private prefix owns its no-blend/write-mask state explicitly and
+    // the scheduler restores the exact host OM state after every synthetic
+    // draw. Do not over-constrain activation on the host pass01 blend state:
+    // pass01 is the authenticated source/sampler cut, not the private OM
+    // authority. Terminal pass10 still inherits the authentic host OM state.
+    out.color_sampler = samplers[0];
+    out.depth_sampler = samplers[1];
+    out.ready = true;
+    return true;
+}
+
 void release_sequence() noexcept
 {
     if (g_sequence.terminal != nullptr) {
@@ -267,6 +334,8 @@ void release_sequence() noexcept
 
     release_host_dof_inputs(
         g_sequence.host);
+    release_pass_state(
+        g_sequence.pass_state);
 
     g_sequence = {};
 }
@@ -410,24 +479,26 @@ scheduler_external_inputs
 scheduler_inputs() noexcept
 {
     scheduler_external_inputs inputs{};
-    inputs.source_68 =
+    inputs.scene_source_t0 =
         g_sequence.host.source_68;
-    inputs.dofrate_support_t1 =
+    inputs.depth_support_t1 =
         g_sequence.host.dofrate_support_t1;
-    inputs.pass00_role =
-        g_sequence.host.pass00_fragment0
-            ? role::depth_copy_fragment0
-            : role::depth_copy;
-    inputs.pass10_role =
-        g_sequence.pass10_role;
-    inputs.source_68_verified =
+
+    inputs.color_sampler =
+        g_sequence.pass_state.color_sampler;
+    inputs.depth_sampler =
+        g_sequence.pass_state.depth_sampler;
+
+    inputs.scene_source_verified =
         g_sequence.host.ready &&
-        inputs.source_68 != nullptr;
-    inputs.dofrate_support_verified =
+        inputs.scene_source_t0 != nullptr;
+    inputs.depth_support_verified =
         g_sequence.host.ready &&
-        inputs.dofrate_support_t1 != nullptr;
-    inputs.pass_role_routing_verified =
-        g_sequence.host.ready;
+        inputs.depth_support_t1 != nullptr;
+    inputs.pass_state_verified =
+        g_sequence.pass_state.ready &&
+        inputs.color_sampler != nullptr &&
+        inputs.depth_sampler != nullptr;
     return inputs;
 }
 
@@ -453,16 +524,28 @@ activation_context() noexcept
         g_sequence.host.ready;
     activation.mode =
         g_sequence.host.mode;
+    activation.carrier =
+        operators::dof::carrier_mode::native_rate_ptde_seed;
 
     activation.graph_complete =
         operators::dof::
-            ptde_exact_pass_resource_graph_is_structurally_closed();
+            production_seed_graph_is_structurally_closed();
 
     activation.ptde_dofbank_payload_ready =
         authored.hook_ready;
     activation.ptde_dofbank_route_verified =
         authored.hook_ready &&
         authored.route_matches != 0u;
+
+    activation.q8_scene_history_ready = false;
+    activation.ptde_seed_adapter_ready =
+        g_sequence.host.ready &&
+        g_sequence.host.source_68 != nullptr &&
+        g_sequence.host.dofrate_support_t1 != nullptr &&
+        g_sequence.pass_state.ready;
+
+    activation.pass_state_transaction_ready =
+        g_sequence.pass_state.ready;
 
     activation.retained_flat_pipeline_set_ready =
         preflight.active_flat_set_seen;
@@ -481,54 +564,6 @@ activation_context() noexcept
 
     activation.writes = {};
     return activation;
-}
-
-bool expected_role(
-    std::size_t pass_index,
-    role selected) noexcept
-{
-    switch (pass_index) {
-    case 2u:
-    case 4u:
-        return selected == role::dof_rate_cb;
-    case 3u:
-        return selected == role::depth_copy_msaa;
-    case 5u:
-        return selected == role::gauss_x;
-    case 6u:
-        return selected ==
-            role::depth_copy_single_fragment;
-    case 7u:
-        return selected == role::downsample;
-    case 8u:
-        return
-            selected == role::gauss_y_adv ||
-            selected == role::near_rate;
-    default:
-        return false;
-    }
-}
-
-bool exact_scope_for_expected(
-    std::size_t pass_index) noexcept
-{
-    switch (pass_index) {
-    case 2u:
-    case 4u:
-        return inside_exact_dof_pass0d();
-    case 3u:
-        return inside_exact_dof_pass01();
-    case 5u:
-    case 6u:
-    case 7u:
-    case 8u:
-        // These suffix shaders are accepted only after the exact first
-        // Dof_Flat pass01 and the two exact pass0D scopes have advanced the
-        // same thread-local sequence to the corresponding next slot.
-        return g_sequence.active;
-    default:
-        return false;
-    }
 }
 
 bool is_dof_family_role(role selected) noexcept
@@ -550,6 +585,8 @@ bool is_dof_family_role(role selected) noexcept
     case role::gauss_y:
     case role::gauss_y_adv:
     case role::near_rate:
+    case role::unfocus_3x3:
+    case role::unfocus_near_rate_3x3:
         return true;
     default:
         return false;
@@ -655,9 +692,19 @@ bool begin_sequence(
             captured))
         return false;
 
+    pass_state_carriers captured_state{};
+    if (!capture_pass_state(
+            context,
+            captured_state)) {
+        release_host_dof_inputs(captured);
+        return false;
+    }
+
     release_sequence();
     g_sequence.host = captured;
     captured = {};
+    g_sequence.pass_state = captured_state;
+    captured_state = {};
     g_sequence.active = true;
     g_sequence.next_pass = 0u;
     ++g_first_pass_hits;
@@ -666,6 +713,20 @@ bool begin_sequence(
     const auto activation =
         activation_context();
 
+    // Synthetic scene seed: one retained SAMPLE into fixed 1024x720
+    // BGRA8 writes RGB only. No DofBank/pass00 state is required.
+    if (execute_ptde_pass(
+            cmd_list,
+            activation,
+            scheduler_inputs(),
+            shape,
+            0u) != result::executed) {
+        fail_sequence(false);
+        return false;
+    }
+
+    // PTDE pass00 DofRate executes at the same 1024x720 raster and writes
+    // alpha only into the seeded RGB target.
     if (!push_host_pass00_state()) {
         fail_sequence(true);
         return false;
@@ -677,7 +738,7 @@ bool begin_sequence(
             activation,
             scheduler_inputs(),
             shape,
-            0u);
+            1u);
 
     const bool state_restored =
         pop_host_pass00_state();
@@ -688,11 +749,11 @@ bool begin_sequence(
         return false;
     }
 
-    // Passes 1..7 are intrinsic to the PTDE private graph. They must not wait
-    // for stock DSR shaders with similar names to execute. The last pass is
-    // deferred only because pass 0x10 has two verified retained variants.
-    for (std::size_t pass_index = 1u;
-         pass_index < 8u;
+    // Pass2 is the first 1024x720 -> 512x360 reduction. Passes3..8 preserve
+    // the PTDE half/quarter blur-rate topology. Terminal pass9 is deferred to
+    // the authentic retained DSR FRPG_Fil_Dof scope.
+    for (std::size_t pass_index = 2u;
+         pass_index < 9u;
          ++pass_index) {
         g_sequence.next_pass = pass_index;
         const auto executed =
@@ -708,7 +769,7 @@ bool begin_sequence(
         }
     }
 
-    g_sequence.next_pass = 8u;
+    g_sequence.next_pass = 9u;
     return true;
 }
 
@@ -719,15 +780,14 @@ void advance_sequence(
 {
     if (!g_sequence.active ||
         g_sequence.complete ||
-        g_sequence.next_pass != 8u)
+        g_sequence.next_pass != 9u)
         return;
 
-    // Stock DSR is used only to resolve the verified final pass-0x10 branch.
-    if (selected != role::gauss_y_adv &&
-        selected != role::near_rate)
+    // Execute the private terminal only inside the authentic retained DSR
+    // FRPG_Fil_Dof draw. This preserves the host terminal CB/sampler/t5/OM
+    // state as the carrier while private PTDE t0..t4 + target are substituted.
+    if (selected != role::dof_composite)
         return;
-
-    g_sequence.pass10_role = selected;
 
     const auto activation =
         activation_context();
@@ -737,13 +797,13 @@ void advance_sequence(
             activation,
             scheduler_inputs(),
             shape,
-            8u) != result::executed) {
+            9u) != result::executed) {
         fail_sequence(false);
         return;
     }
 
     g_sequence.next_pass =
-        operators::dof::ptde_exact_pass_resources.size();
+        operators::dof::production_seed_passes.size();
 
     if (!acquire_terminal(
             activation)) {
@@ -830,7 +890,7 @@ bool handle_tonemap(
         !g_sequence.complete ||
         g_sequence.terminal == nullptr) {
         if (g_sequence.active &&
-            g_sequence.next_pass == 8u)
+            g_sequence.next_pass == 9u)
             ++g_missing_host_pass10;
 
         ++g_tonemap_fallbacks;
@@ -1235,7 +1295,7 @@ bool register_ptde_draw_bridge_runtime(
 
     reshade::log::message(
         reshade::log::level::info,
-        "[DSRRL DoF R52] activation_cut=PASS01_SOURCE_DEPTH private_prefix=PASSES_0_7 stock_branch=PASS10_ONLY tonemap=PTDE_TERMINAL_HANDOFF");
+        "[DSRRL DoF PTDE1024] carrier=NATIVE_RATE_PTDE_SEED seed=1024x720 seed_history=SNAPSHOT_ONLY private_prefix=1024_512_256 stock_branch=PASS10_ONLY tonemap=PTDE_TERMINAL_HANDOFF");
 
     if (!g_opt_in.load(
             std::memory_order_acquire)) {

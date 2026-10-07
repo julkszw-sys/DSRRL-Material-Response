@@ -2,9 +2,11 @@
 
 #include "dsrrl/operators/dof/dof_island.hpp"
 
+#include <array>
 #include <cstddef>
 #include <cstdint>
 
+struct ID3D11SamplerState;
 struct ID3D11ShaderResourceView;
 
 namespace reshade::api {
@@ -14,17 +16,15 @@ struct command_list;
 namespace dsrrl::runtime::dof {
 
 struct scheduler_external_inputs {
-    ID3D11ShaderResourceView *source_68 = nullptr;
-    ID3D11ShaderResourceView *dofrate_support_t1 = nullptr;
+    ID3D11ShaderResourceView *scene_source_t0 = nullptr;
+    ID3D11ShaderResourceView *depth_support_t1 = nullptr;
 
-    operators::dof::retained_shader_role pass00_role =
-        operators::dof::retained_shader_role::count;
-    operators::dof::retained_shader_role pass10_role =
-        operators::dof::retained_shader_role::count;
+    ID3D11SamplerState *color_sampler = nullptr;
+    ID3D11SamplerState *depth_sampler = nullptr;
 
-    bool source_68_verified = false;
-    bool dofrate_support_verified = false;
-    bool pass_role_routing_verified = false;
+    bool scene_source_verified = false;
+    bool depth_support_verified = false;
+    bool pass_state_verified = false;
 };
 
 struct scheduler_draw_shape {
