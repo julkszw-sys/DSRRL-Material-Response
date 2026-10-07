@@ -226,6 +226,10 @@ option(
     "Diagnostic: low-overhead sampled FLVER selector/support interaction profiler"
     OFF)
 option(
+    DSRRL_LAUNCH_FINGERPRINT
+    "Diagnostic: minimal launch-state counters and first-event markers"
+    OFF)
+option(
     DSRRL_POINTLIGHT_PROFILE
     "Diagnostic: low-overhead sampled clustered PointLight producer/transaction profiler"
     OFF)
@@ -971,6 +975,13 @@ if(DSRRL_FLVER_SELECTOR_PROFILE)
         dsrrl_renderer_core_integrated
         PRIVATE
         DSRRL_FLVER_SELECTOR_PROFILE)
+endif()
+
+if(DSRRL_LAUNCH_FINGERPRINT)
+    target_compile_definitions(
+        dsrrl_renderer_core_integrated
+        PRIVATE
+        DSRRL_LAUNCH_FINGERPRINT)
 endif()
 
 if(DSRRL_POINTLIGHT_PROFILE)
