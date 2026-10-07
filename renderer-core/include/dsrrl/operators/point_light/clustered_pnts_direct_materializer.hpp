@@ -1,6 +1,7 @@
 #pragma once
 
 #include "dsrrl/core/types.hpp"
+#include "dsrrl/core/feature_registry.hpp"
 
 #include <cstddef>
 #include <cstdint>
@@ -8,10 +9,9 @@
 
 namespace dsrrl::operators::point_light {
 
-enum class clustered_pnts_spc_attenuation_result : std::uint8_t {
+enum class clustered_pnts_rowaware_attenuation_result : std::uint8_t {
     applied = 0,
     pass_not_candidate,
-    pass_nospc_owned_by_a1,
     pass_unknown_exact_sha,
     fail_invalid_dxbc,
     fail_patch_precondition,
@@ -19,9 +19,9 @@ enum class clustered_pnts_spc_attenuation_result : std::uint8_t {
     fail_final
 };
 
-struct clustered_pnts_spc_attenuation_outcome {
-    clustered_pnts_spc_attenuation_result result =
-        clustered_pnts_spc_attenuation_result::pass_not_candidate;
+struct clustered_pnts_rowaware_attenuation_outcome {
+    clustered_pnts_rowaware_attenuation_result result =
+        clustered_pnts_rowaware_attenuation_result::pass_not_candidate;
     core::sha256_digest host_sha256{};
     core::sha256_digest replacement_sha256{};
     std::size_t host_size = 0u;
@@ -93,8 +93,9 @@ bool migrate_clustered_pnts_legacy_b12_words(
     std::vector<std::uint32_t> &words,
     bool spc) noexcept;
 
-clustered_pnts_spc_attenuation_outcome
-materialize_clustered_pnts_spc_attenuation_only(
+clustered_pnts_rowaware_attenuation_outcome
+materialize_clustered_pnts_rowaware_attenuation(
+    const core::feature_registry &features,
     const std::uint8_t *source,
     std::size_t size,
     std::vector<std::uint8_t> &output) noexcept;
