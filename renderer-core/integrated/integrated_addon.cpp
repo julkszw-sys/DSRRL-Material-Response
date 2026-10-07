@@ -412,6 +412,180 @@ std::atomic<std::uint64_t> g_clustered_draw_restore_fail{0};
 bool g_hot_telemetry_enabled = false;
 bool g_effect_telemetry_enabled = false;
 
+#ifdef DSRRL_DRAW_PATH_PROFILE
+constexpr std::uint64_t k_draw_profile_sample_period = 1024u;
+
+enum class draw_profile_path : std::uint8_t {
+    unset = 0,
+    route_zero,
+    static_only,
+    identity_fail,
+    identity_reject,
+    prepare_fail,
+    neutral_noop,
+    native_arm,
+    dispatch,
+    count
+};
+
+std::atomic<std::uint64_t> g_draw_profile_samples{0u};
+std::atomic<std::uint64_t> g_draw_profile_total_ticks{0u};
+std::atomic<std::uint64_t> g_draw_profile_route_ticks{0u};
+std::atomic<std::uint64_t> g_draw_profile_identity_ticks{0u};
+std::atomic<std::uint64_t> g_draw_profile_prepare_ticks{0u};
+std::atomic<std::uint64_t> g_draw_profile_dispatch_ticks{0u};
+std::atomic<std::uint64_t> g_draw_profile_tail_ticks{0u};
+std::atomic<std::uint64_t> g_draw_profile_max_ticks{0u};
+std::array<std::atomic<std::uint64_t>,
+           static_cast<std::size_t>(draw_profile_path::count)>
+    g_draw_profile_paths{};
+thread_local std::uint64_t g_draw_profile_sequence = 0u;
+
+std::uint64_t draw_profile_qpc() noexcept
+{
+    LARGE_INTEGER value{};
+    return QueryPerformanceCounter(&value)
+        ? static_cast<std::uint64_t>(value.QuadPart)
+        : 0u;
+}
+
+void draw_profile_update_max(std::uint64_t value) noexcept
+{
+    auto observed =
+        g_draw_profile_max_ticks.load(std::memory_order_relaxed);
+    while (observed < value &&
+           !g_draw_profile_max_ticks.compare_exchange_weak(
+               observed,
+               value,
+               std::memory_order_relaxed,
+               std::memory_order_relaxed)) {
+    }
+}
+
+class draw_profile_scope {
+public:
+    draw_profile_scope() noexcept
+    {
+        const auto seq = ++g_draw_profile_sequence;
+        active_ =
+            (seq & (k_draw_profile_sample_period - 1u)) == 0u;
+        if (active_) {
+            start_ = draw_profile_qpc();
+            last_ = start_;
+        }
+    }
+
+    ~draw_profile_scope() noexcept
+    {
+        if (!active_)
+            return;
+        const auto end = draw_profile_qpc();
+        if (end < last_ || end < start_)
+            return;
+        g_draw_profile_tail_ticks.fetch_add(
+            end - last_, std::memory_order_relaxed);
+        const auto total = end - start_;
+        g_draw_profile_total_ticks.fetch_add(
+            total, std::memory_order_relaxed);
+        draw_profile_update_max(total);
+        g_draw_profile_samples.fetch_add(
+            1u, std::memory_order_relaxed);
+        g_draw_profile_paths[
+            static_cast<std::size_t>(path_)]
+            .fetch_add(1u, std::memory_order_relaxed);
+    }
+
+    void route_done() noexcept
+    {
+        checkpoint(g_draw_profile_route_ticks);
+    }
+
+    void identity_done() noexcept
+    {
+        checkpoint(g_draw_profile_identity_ticks);
+    }
+
+    void prepare_done() noexcept
+    {
+        checkpoint(g_draw_profile_prepare_ticks);
+    }
+
+    void dispatch_done() noexcept
+    {
+        checkpoint(g_draw_profile_dispatch_ticks);
+    }
+
+    void set_path(draw_profile_path path) noexcept
+    {
+        path_ = path;
+    }
+
+private:
+    void checkpoint(std::atomic<std::uint64_t> &target) noexcept
+    {
+        if (!active_)
+            return;
+        const auto now = draw_profile_qpc();
+        if (now < last_)
+            return;
+        target.fetch_add(
+            now - last_, std::memory_order_relaxed);
+        last_ = now;
+    }
+
+    bool active_ = false;
+    std::uint64_t start_ = 0u;
+    std::uint64_t last_ = 0u;
+    draw_profile_path path_ = draw_profile_path::unset;
+};
+
+void log_draw_profile() noexcept
+{
+    const auto samples =
+        g_draw_profile_samples.load(std::memory_order_relaxed);
+    if (samples == 0u)
+        return;
+
+    LARGE_INTEGER frequency{};
+    if (!QueryPerformanceFrequency(&frequency) ||
+        frequency.QuadPart <= 0)
+        return;
+
+    const auto to_us = [&](std::uint64_t ticks) noexcept {
+        return
+            (static_cast<double>(ticks) * 1000000.0) /
+            (static_cast<double>(frequency.QuadPart) *
+             static_cast<double>(samples));
+    };
+
+    char line[1024]{};
+    std::snprintf(
+        line,
+        sizeof(line),
+        "[DSRRL PERF R46] DRAW sample=1/1024 n=%llu total_us=%.3f max_total_us=%.3f route_us=%.3f identity_us=%.3f prepare_us=%.3f dispatch_us=%.3f tail_us=%.3f paths=zero:%llu static:%llu idfail:%llu idreject:%llu prepfail:%llu neutral:%llu native:%llu dispatch:%llu",
+        static_cast<unsigned long long>(samples),
+        to_us(g_draw_profile_total_ticks.load(std::memory_order_relaxed)),
+        (static_cast<double>(
+            g_draw_profile_max_ticks.load(std::memory_order_relaxed)) *
+         1000000.0) /
+            static_cast<double>(frequency.QuadPart),
+        to_us(g_draw_profile_route_ticks.load(std::memory_order_relaxed)),
+        to_us(g_draw_profile_identity_ticks.load(std::memory_order_relaxed)),
+        to_us(g_draw_profile_prepare_ticks.load(std::memory_order_relaxed)),
+        to_us(g_draw_profile_dispatch_ticks.load(std::memory_order_relaxed)),
+        to_us(g_draw_profile_tail_ticks.load(std::memory_order_relaxed)),
+        static_cast<unsigned long long>(g_draw_profile_paths[static_cast<std::size_t>(draw_profile_path::route_zero)].load(std::memory_order_relaxed)),
+        static_cast<unsigned long long>(g_draw_profile_paths[static_cast<std::size_t>(draw_profile_path::static_only)].load(std::memory_order_relaxed)),
+        static_cast<unsigned long long>(g_draw_profile_paths[static_cast<std::size_t>(draw_profile_path::identity_fail)].load(std::memory_order_relaxed)),
+        static_cast<unsigned long long>(g_draw_profile_paths[static_cast<std::size_t>(draw_profile_path::identity_reject)].load(std::memory_order_relaxed)),
+        static_cast<unsigned long long>(g_draw_profile_paths[static_cast<std::size_t>(draw_profile_path::prepare_fail)].load(std::memory_order_relaxed)),
+        static_cast<unsigned long long>(g_draw_profile_paths[static_cast<std::size_t>(draw_profile_path::neutral_noop)].load(std::memory_order_relaxed)),
+        static_cast<unsigned long long>(g_draw_profile_paths[static_cast<std::size_t>(draw_profile_path::native_arm)].load(std::memory_order_relaxed)),
+        static_cast<unsigned long long>(g_draw_profile_paths[static_cast<std::size_t>(draw_profile_path::dispatch)].load(std::memory_order_relaxed)));
+    reshade::log::message(reshade::log::level::info, line);
+}
+#endif
+
 bool runtime_hot_telemetry_requested() noexcept
 {
     return dsrrl::runtime::telemetry::
@@ -6579,6 +6753,10 @@ bool on_draw(
             first_instance))
         return true;
 
+#ifdef DSRRL_DRAW_PATH_PROFILE
+    draw_profile_scope draw_profile{};
+#endif
+
     if (g_hot_telemetry_enabled &&
         dsrrl::runtime::bloom_fx_draw_transport::
             active_draw_scope())
@@ -6591,8 +6769,14 @@ bool on_draw(
         active_integrated_draw_route(
             integrated_draw_route_bound(
                 cmd_list));
+#ifdef DSRRL_DRAW_PATH_PROFILE
+    draw_profile.route_done();
+#endif
 
     if (route_mask == 0u) {
+#ifdef DSRRL_DRAW_PATH_PROFILE
+        draw_profile.set_path(draw_profile_path::route_zero);
+#endif
         hot_count(g_draw_fast_skip);
         dsrrl::runtime::
             material_owner_selection_clear();
@@ -6614,6 +6798,9 @@ bool on_draw(
     // already executes the replacement shader and there is nothing to join,
     // snapshot, replay or restore here.
     if ((route_mask & k_dynamic_draw_route_mask) == 0u) {
+#ifdef DSRRL_DRAW_PATH_PROFILE
+        draw_profile.set_path(draw_profile_path::static_only);
+#endif
         hot_count(g_draw_fast_skip);
         dsrrl::runtime::
             material_owner_selection_clear();
@@ -6700,7 +6887,13 @@ bool on_draw(
                 material,
                 decision);
 
+#ifdef DSRRL_DRAW_PATH_PROFILE
+    draw_profile.identity_done();
+#endif
     if (!draw_identity_ready) {
+#ifdef DSRRL_DRAW_PATH_PROFILE
+        draw_profile.set_path(draw_profile_path::identity_fail);
+#endif
         mark_effect_probe_mask(
             route_candidates,
             effect_probe_stage::fail_open);
@@ -6715,8 +6908,12 @@ bool on_draw(
     // AddRef/Release'ing the replacement for all of those draws created a
     // large reject-only hot path.
     if (direct_pointlight_route &&
-        !decision.active)
+        !decision.active) {
+#ifdef DSRRL_DRAW_PATH_PROFILE
+        draw_profile.set_path(draw_profile_path::identity_reject);
+#endif
         return false;
+    }
 
     const auto effect_candidates =
         candidate_effect_mask(
@@ -6763,6 +6960,10 @@ bool on_draw(
             material,
             decision,
             prepared)) {
+#ifdef DSRRL_DRAW_PATH_PROFILE
+        draw_profile.prepare_done();
+        draw_profile.set_path(draw_profile_path::prepare_fail);
+#endif
         mark_effect_probe_mask(
             effect_candidates,
             effect_probe_stage::fail_open,
@@ -6771,8 +6972,20 @@ bool on_draw(
         return false;
     }
 
+#ifdef DSRRL_DRAW_PATH_PROFILE
+    draw_profile.prepare_done();
+#endif
+#ifdef DSRRL_DRAW_PATH_PROFILE
+    draw_profile.prepare_done();
+#endif
     if (prepared.clustered_neutral_noop &&
         prepared.batch.island_count == 0u) {
+#ifdef DSRRL_DRAW_PATH_PROFILE
+        draw_profile.set_path(draw_profile_path::neutral_noop);
+#endif
+#ifdef DSRRL_DRAW_PATH_PROFILE
+        draw_profile.set_path(draw_profile_path::neutral_noop);
+#endif
         release_prepared_island_batch(prepared);
         return false;
     }
@@ -6800,6 +7013,9 @@ bool on_draw(
             instance_count,
             first_vertex,
             first_instance)) {
+#ifdef DSRRL_DRAW_PATH_PROFILE
+        draw_profile.set_path(draw_profile_path::native_arm);
+#endif
         release_prepared_island_batch(
             prepared);
         // Return false so ReShade continues into its single original
@@ -6891,6 +7107,11 @@ bool on_draw(
             instance_count,
             first_vertex,
             first_instance);
+
+#ifdef DSRRL_DRAW_PATH_PROFILE
+    draw_profile.dispatch_done();
+    draw_profile.set_path(draw_profile_path::dispatch);
+#endif
 
     if (direct_current_native)
         g_raw_draw_replay_recursing = false;
@@ -7017,6 +7238,10 @@ bool on_draw_indexed(
             first_instance))
         return true;
 
+#ifdef DSRRL_DRAW_PATH_PROFILE
+    draw_profile_scope draw_profile{};
+#endif
+
     if (g_hot_telemetry_enabled &&
         dsrrl::runtime::bloom_fx_draw_transport::
             active_draw_scope())
@@ -7029,8 +7254,14 @@ bool on_draw_indexed(
         active_integrated_draw_route(
             integrated_draw_route_bound(
                 cmd_list));
+#ifdef DSRRL_DRAW_PATH_PROFILE
+    draw_profile.route_done();
+#endif
 
     if (route_mask == 0u) {
+#ifdef DSRRL_DRAW_PATH_PROFILE
+        draw_profile.set_path(draw_profile_path::route_zero);
+#endif
         hot_count(g_draw_fast_skip);
         dsrrl::runtime::
             material_owner_selection_clear();
@@ -7052,6 +7283,9 @@ bool on_draw_indexed(
     // already executes the replacement shader and there is nothing to join,
     // snapshot, replay or restore here.
     if ((route_mask & k_dynamic_draw_route_mask) == 0u) {
+#ifdef DSRRL_DRAW_PATH_PROFILE
+        draw_profile.set_path(draw_profile_path::static_only);
+#endif
         hot_count(g_draw_fast_skip);
         dsrrl::runtime::
             material_owner_selection_clear();
@@ -7120,7 +7354,13 @@ bool on_draw_indexed(
                 material,
                 decision);
 
+#ifdef DSRRL_DRAW_PATH_PROFILE
+    draw_profile.identity_done();
+#endif
     if (!draw_identity_ready) {
+#ifdef DSRRL_DRAW_PATH_PROFILE
+        draw_profile.set_path(draw_profile_path::identity_fail);
+#endif
         mark_effect_probe_mask(
             route_candidates,
             effect_probe_stage::fail_open);
@@ -7135,8 +7375,12 @@ bool on_draw_indexed(
     // AddRef/Release'ing the replacement for all of those draws created a
     // large reject-only hot path.
     if (direct_pointlight_route &&
-        !decision.active)
+        !decision.active) {
+#ifdef DSRRL_DRAW_PATH_PROFILE
+        draw_profile.set_path(draw_profile_path::identity_reject);
+#endif
         return false;
+    }
 
     const auto effect_candidates =
         candidate_effect_mask(
@@ -7183,6 +7427,10 @@ bool on_draw_indexed(
             material,
             decision,
             prepared)) {
+#ifdef DSRRL_DRAW_PATH_PROFILE
+        draw_profile.prepare_done();
+        draw_profile.set_path(draw_profile_path::prepare_fail);
+#endif
         mark_effect_probe_mask(
             effect_candidates,
             effect_probe_stage::fail_open,
@@ -7221,6 +7469,9 @@ bool on_draw_indexed(
             first_index,
             vertex_offset,
             first_instance)) {
+#ifdef DSRRL_DRAW_PATH_PROFILE
+        draw_profile.set_path(draw_profile_path::native_arm);
+#endif
         release_prepared_island_batch(
             prepared);
         // Return false so ReShade executes exactly one original
@@ -7265,6 +7516,11 @@ bool on_draw_indexed(
             first_index,
             vertex_offset,
             first_instance);
+
+#ifdef DSRRL_DRAW_PATH_PROFILE
+    draw_profile.dispatch_done();
+    draw_profile.set_path(draw_profile_path::dispatch);
+#endif
 
     if (direct_current_native)
         g_raw_draw_replay_recursing = false;
@@ -7363,6 +7619,10 @@ void on_present(
             1u,
             std::memory_order_relaxed) + 1u;
     g_clustered_pnts.frame_event(present);
+#ifdef DSRRL_DRAW_PATH_PROFILE
+    if (present == 1u || (present % 300u) == 0u)
+        log_draw_profile();
+#endif
     if (present == 1u ||
         (g_hot_telemetry_enabled &&
          (present % 300u) == 0u)) {
