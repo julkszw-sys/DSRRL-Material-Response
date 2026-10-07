@@ -36,7 +36,6 @@ using result = scheduler_result;
 
 struct sequence_state {
     host_dof_inputs host{};
-    role pass10_role = role::count;
     std::size_t next_pass = 0u;
     ID3D11ShaderResourceView *terminal = nullptr;
     bool active = false;
@@ -502,9 +501,7 @@ bool expected_role(
     case 7u:
         return selected == role::downsample;
     case 8u:
-        return
-            selected == role::gauss_y_adv ||
-            selected == role::near_rate;
+        return selected == role::dof_composite;
     default:
         return false;
     }
@@ -725,12 +722,11 @@ void advance_sequence(
         g_sequence.next_pass != 8u)
         return;
 
-    // Stock DSR is used only to resolve the verified final pass-0x10 branch.
-    if (selected != role::gauss_y_adv &&
-        selected != role::near_rate)
+    // Execute the private terminal only inside the authentic retained DSR
+    // FRPG_Fil_Dof draw. This preserves the host terminal CB/sampler/t5/OM
+    // state as the carrier while private PTDE t0..t4 + target are substituted.
+    if (selected != role::dof_composite)
         return;
-
-    g_sequence.pass10_role = selected;
 
     const auto activation =
         activation_context();
