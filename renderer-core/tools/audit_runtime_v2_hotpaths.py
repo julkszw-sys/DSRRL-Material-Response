@@ -49,6 +49,10 @@ require(exact_selector_body, "same_hook_selector_identity(", "R43 exact selector
 require(exact_selector_body, "hook_producer_cache_lookup(", "R43 exact selector cross-thread producer cache join")
 forbid(exact_selector_body, "g_hook_source_semantic_version", "R43 exact selector join must not use process-global semantic freshness")
 
+selector_cache_lookup = flver.split("bool selector_identity_cache_lookup(", 1)[1].split("void selector_identity_cache_publish(", 1)[0]
+require(selector_cache_lookup, "flver_identity_cache_epoch_survives(", "R44 selector cache exact-model lifetime validation")
+forbid(selector_cache_lookup, "flver_identity_epoch(", "R44 selector lookup must not reject positives on unrelated global FLVER epoch churn")
+
 selector = flver.split('extern "C" void dsrrl_flver_selector_observer', 1)[1].split('bool install(', 1)[0]
 require(selector, "g_selector_hemdir3_enabled.load", "HemDir3 selector gate")
 require(selector, "g_selector_upper_lower_enabled.load", "UpperLower selector gate")
