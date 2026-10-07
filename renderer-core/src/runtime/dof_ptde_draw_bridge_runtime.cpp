@@ -12,6 +12,7 @@
 #include "dsrrl/runtime/dof_authored_state_runtime.hpp"
 #include "dsrrl/runtime/dof_host_depth_route_runtime.hpp"
 #include "dsrrl/runtime/dof_preflight.hpp"
+#include "dsrrl/runtime/dof_process_memory.hpp"
 #include "dsrrl/runtime/dof_private_resource_runtime.hpp"
 #include "dsrrl/runtime/dof_ptde_scheduler_runtime.hpp"
 #include "dsrrl/runtime/dof_tonemap_handoff_runtime.hpp"
@@ -1161,6 +1162,30 @@ void on_present(
 
     const auto present =
         ++g_present_count;
+
+    if (present == 1u ||
+        (present % 300u) == 0u) {
+        const auto memory_profile =
+            process_memory::safe_read_profile();
+
+        char perf_line[384]{};
+        std::snprintf(
+            perf_line,
+            sizeof(perf_line),
+            "[DSRRL PERF E474 FASTSLOW] safe_read_sample=1/%u samples=%llu vq=%llu fail=%llu bytes=%llu",
+            process_memory::k_safe_read_profile_sample_period,
+            static_cast<unsigned long long>(
+                memory_profile.sampled_calls),
+            static_cast<unsigned long long>(
+                memory_profile.sampled_virtual_queries),
+            static_cast<unsigned long long>(
+                memory_profile.sampled_failures),
+            static_cast<unsigned long long>(
+                memory_profile.sampled_bytes));
+        reshade::log::message(
+            reshade::log::level::info,
+            perf_line);
+    }
 
     if (!g_role_timeline_logged.load(
             std::memory_order_acquire)) {
