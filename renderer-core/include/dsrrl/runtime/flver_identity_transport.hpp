@@ -79,4 +79,21 @@ struct selector_profile_telemetry {
 
 selector_profile_telemetry selector_profile_stats() noexcept;
 
+struct launch_fingerprint_telemetry {
+    std::uint64_t parse_events = 0u;
+    std::uint64_t mtd_events = 0u;
+    std::uint64_t destroy_events = 0u;
+    std::uint64_t selector_events = 0u;
+    std::uint32_t first_parse_tid = 0u;
+    std::uint32_t first_mtd_tid = 0u;
+    std::uint32_t first_destroy_tid = 0u;
+    std::uint32_t first_selector_tid = 0u;
+    std::uint64_t first_parse_qpc = 0u;
+    std::uint64_t first_mtd_qpc = 0u;
+    std::uint64_t first_destroy_qpc = 0u;
+    std::uint64_t first_selector_qpc = 0u;
+};
+
+launch_fingerprint_telemetry launch_fingerprint_stats() noexcept;
+
 } // namespace dsrrl::runtime::flver_identity_transport
