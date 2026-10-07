@@ -691,6 +691,98 @@ materialize_clustered_pnts_rowaware_attenuation(
     }
     (void)code_index;
 
+    // The direct-PTDE journal proves that every PntS receiver owns three
+    // independent static shader operators. R44 already restored row-aware
+    // attenuation. The NoSpc 12 receive diffuse-domain + terminal SAT through
+    // the filtered A1 composition above. Spc 24 are not A1 hosts, so restore
+    // those two exact same-length PTDE operators here before inserting the
+    // row-aware attenuation carrier:
+    //   DSR abs(Z)^2.2 -> PTDE linear Z
+    //   final separate RGB MOV -> MOV_SAT
+    // This does not touch c101/c102, F0, roughness or the DSR specular tail.
+    if (plan->spc) {
+        const generated::clustered_pnts_journal_op_v1 *diffuse_op = nullptr;
+        const generated::clustered_pnts_journal_op_v1 *sat_op = nullptr;
+
+        for (std::uint32_t i = 0u; i < plan->op_count; ++i) {
+            const auto &op =
+                generated::k_clustered_pnts_journal_ops_v1[
+                    plan->first_op + i];
+
+            if (op.old_offset >
+                    generated::k_clustered_pnts_journal_tokens_v1.size() ||
+                op.old_count >
+                    generated::k_clustered_pnts_journal_tokens_v1.size() -
+                        op.old_offset ||
+                op.new_offset >
+                    generated::k_clustered_pnts_journal_tokens_v1.size() ||
+                op.new_count >
+                    generated::k_clustered_pnts_journal_tokens_v1.size() -
+                        op.new_offset) {
+                outcome.result =
+                    clustered_pnts_rowaware_attenuation_result::
+                        fail_patch_precondition;
+                return outcome;
+            }
+
+            const auto token_at =
+                [](std::uint32_t offset) noexcept {
+                    return generated::
+                        k_clustered_pnts_journal_tokens_v1[offset];
+                };
+
+            if (op.old_count == 3u &&
+                op.new_count == 3u &&
+                token_at(op.old_offset + 0u) == 0x400ccccdu &&
+                token_at(op.old_offset + 1u) == 0x400ccccdu &&
+                token_at(op.old_offset + 2u) == 0x400ccccdu &&
+                token_at(op.new_offset + 0u) == 0x3f800000u &&
+                token_at(op.new_offset + 1u) == 0x3f800000u &&
+                token_at(op.new_offset + 2u) == 0x3f800000u) {
+                if (diffuse_op != nullptr) {
+                    outcome.result =
+                        clustered_pnts_rowaware_attenuation_result::
+                            fail_patch_precondition;
+                    return outcome;
+                }
+                diffuse_op = &op;
+                continue;
+            }
+
+            if (op.old_count == 1u &&
+                op.new_count == 1u &&
+                token_at(op.old_offset) == 0x05000036u &&
+                token_at(op.new_offset) == 0x05002036u) {
+                if (sat_op != nullptr) {
+                    outcome.result =
+                        clustered_pnts_rowaware_attenuation_result::
+                            fail_patch_precondition;
+                    return outcome;
+                }
+                sat_op = &op;
+            }
+        }
+
+        if (diffuse_op == nullptr ||
+            sat_op == nullptr ||
+            diffuse_op->start + 3u > words.size() ||
+            sat_op->start >= words.size() ||
+            words[diffuse_op->start + 0u] != 0x400ccccdu ||
+            words[diffuse_op->start + 1u] != 0x400ccccdu ||
+            words[diffuse_op->start + 2u] != 0x400ccccdu ||
+            words[sat_op->start] != 0x05000036u) {
+            outcome.result =
+                clustered_pnts_rowaware_attenuation_result::
+                    fail_patch_precondition;
+            return outcome;
+        }
+
+        words[diffuse_op->start + 0u] = 0x3f800000u;
+        words[diffuse_op->start + 1u] = 0x3f800000u;
+        words[diffuse_op->start + 2u] = 0x3f800000u;
+        words[sat_op->start] = 0x05002036u;
+    }
+
     const generated::clustered_pnts_journal_op_v1 *square_op = nullptr;
     const generated::clustered_pnts_journal_op_v1 *terminal_op = nullptr;
 
