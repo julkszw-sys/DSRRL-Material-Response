@@ -1221,8 +1221,6 @@ clustered_live_source_result classify_clustered_source_bank(
     bank = gameplay_bank::unknown;
     known_non_ptde = false;
 
-    constexpr std::uint32_t table_end =
-        0x30u + 64u * 12u;
     if (count != 64u ||
         first < 0x30u ||
         first > 0x100000u)
