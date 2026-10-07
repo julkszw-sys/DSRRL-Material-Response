@@ -231,6 +231,11 @@ option(
     OFF)
 
 option(
+    DSRRL_DRAW_PATH_PROFILE
+    "Diagnostic: low-overhead sampled integrated draw-path CPU profiler"
+    OFF)
+
+option(
     DSRRL_DOF_DEFAULT_ON
     "Activate the verified PTDE DoF island without requiring an environment opt-in"
     OFF)
@@ -992,6 +997,13 @@ if(DSRRL_DOF_PROFILE)
         dsrrl_renderer_core_integrated
         PRIVATE
         DSRRL_DOF_PROFILE)
+endif()
+
+if(DSRRL_DRAW_PATH_PROFILE)
+    target_compile_definitions(
+        dsrrl_renderer_core_integrated
+        PRIVATE
+        DSRRL_DRAW_PATH_PROFILE)
 endif()
 
 if(MSVC)
