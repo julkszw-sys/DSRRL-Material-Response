@@ -1334,6 +1334,7 @@ scheduler_result execute_ptde_graph(
     const scheduler_draw_shape &shape,
     ID3D11ShaderResourceView **terminal_output) noexcept
 {
+    (void)shape;
     ++g_execute_requests;
 
     if (terminal_output == nullptr) {

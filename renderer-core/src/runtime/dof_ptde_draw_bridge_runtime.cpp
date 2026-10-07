@@ -207,7 +207,7 @@ void log_dof_profile() noexcept
     std::snprintf(
         line,
         sizeof(line),
-        "[DSRRL PERF R44] DOF sample=1/%u n=%llu total_us=%.3f max_total_us=%.3f paths=early:%llu scan:%llu begin:%llu advance:%llu tonemap:%llu",
+        "[DSRRL DoF PERF] DOF sample=1/%u n=%llu total_us=%.3f max_total_us=%.3f paths=early:%llu scan:%llu begin:%llu advance:%llu tonemap:%llu",
         k_dof_profile_sample_period,
         static_cast<unsigned long long>(samples),
         avg_us,
@@ -1321,7 +1321,7 @@ bool register_ptde_draw_bridge_runtime(
 
     reshade::log::message(
         reshade::log::level::info,
-        "[DSRRL DoF R54] carrier=NATIVE_RATE_PTDE_SEED seed=1024x720 seed_history=SNAPSHOT_ONLY private_prefix=1024_512_256 stock_branch=PASS10_ONLY tonemap=PTDE_TERMINAL_HANDOFF");
+        "[DSRRL DoF PTDE1024] carrier=NATIVE_RATE_PTDE_SEED seed=1024x720 seed_history=SNAPSHOT_ONLY private_prefix=1024_512_256 stock_branch=PASS10_ONLY tonemap=PTDE_TERMINAL_HANDOFF");
 
     if (!g_opt_in.load(
             std::memory_order_acquire)) {
