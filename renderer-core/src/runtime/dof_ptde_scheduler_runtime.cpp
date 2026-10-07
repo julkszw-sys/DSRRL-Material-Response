@@ -1335,6 +1335,7 @@ scheduler_result execute_ptde_graph(
     ID3D11ShaderResourceView **terminal_output) noexcept
 {
     ++g_execute_requests;
+    (void)shape;
 
     if (terminal_output == nullptr) {
         ++g_execute_fail;
