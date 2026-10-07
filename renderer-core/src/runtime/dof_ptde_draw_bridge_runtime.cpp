@@ -410,24 +410,17 @@ scheduler_external_inputs
 scheduler_inputs() noexcept
 {
     scheduler_external_inputs inputs{};
-    inputs.source_68 =
-        g_sequence.host.source_68;
-    inputs.dofrate_support_t1 =
+    // Exact Q8 scene history is intentionally not sourced from the host
+    // R11 scene. The shared history-preserving sidecar is not authorized yet,
+    // so this remains null/false and the bridge fails open.
+    inputs.scene_history_q8 = nullptr;
+    inputs.scene_history_q8_verified = false;
+
+    inputs.depth_support_t1 =
         g_sequence.host.dofrate_support_t1;
-    inputs.pass00_role =
-        g_sequence.host.pass00_fragment0
-            ? role::depth_copy_fragment0
-            : role::depth_copy;
-    inputs.pass10_role =
-        g_sequence.pass10_role;
-    inputs.source_68_verified =
+    inputs.depth_support_verified =
         g_sequence.host.ready &&
-        inputs.source_68 != nullptr;
-    inputs.dofrate_support_verified =
-        g_sequence.host.ready &&
-        inputs.dofrate_support_t1 != nullptr;
-    inputs.pass_role_routing_verified =
-        g_sequence.host.ready;
+        inputs.depth_support_t1 != nullptr;
     return inputs;
 }
 
@@ -463,6 +456,14 @@ activation_context() noexcept
     activation.ptde_dofbank_route_verified =
         authored.hook_ready &&
         authored.route_matches != 0u;
+
+    // Canonical rev11808 requires an authenticated history-preserving Q8
+    // scene carrier. The existing Bloom sidecar has no authorized writer, so
+    // DoF must remain fail-open until that carrier becomes consumable.
+    activation.q8_scene_history_ready = false;
+
+    // Sampler + COLORWRITE transaction is still pending construction.
+    activation.pass_state_transaction_ready = false;
 
     activation.retained_flat_pipeline_set_ready =
         preflight.active_flat_set_seen;
@@ -550,6 +551,8 @@ bool is_dof_family_role(role selected) noexcept
     case role::gauss_y:
     case role::gauss_y_adv:
     case role::near_rate:
+    case role::unfocus_3x3:
+    case role::unfocus_near_rate_3x3:
         return true;
     default:
         return false;

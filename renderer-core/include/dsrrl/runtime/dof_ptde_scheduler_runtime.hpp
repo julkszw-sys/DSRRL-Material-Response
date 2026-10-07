@@ -14,17 +14,16 @@ struct command_list;
 namespace dsrrl::runtime::dof {
 
 struct scheduler_external_inputs {
-    ID3D11ShaderResourceView *source_68 = nullptr;
-    ID3D11ShaderResourceView *dofrate_support_t1 = nullptr;
+    // Exact PTDE +0x5C/+0x60 scene-history carrier. This must be a
+    // history-preserving 1024x720 BGRA8/Q8 sidecar, never a late R11 copy.
+    ID3D11ShaderResourceView *scene_history_q8 = nullptr;
 
-    operators::dof::retained_shader_role pass00_role =
-        operators::dof::retained_shader_role::count;
-    operators::dof::retained_shader_role pass10_role =
-        operators::dof::retained_shader_role::count;
+    // Native DSR depth/support representation used as the narrow adapter for
+    // PTDE +0x68/+0x8C/+0x9C and terminal retained Dof t5.
+    ID3D11ShaderResourceView *depth_support_t1 = nullptr;
 
-    bool source_68_verified = false;
-    bool dofrate_support_verified = false;
-    bool pass_role_routing_verified = false;
+    bool scene_history_q8_verified = false;
+    bool depth_support_verified = false;
 };
 
 struct scheduler_draw_shape {

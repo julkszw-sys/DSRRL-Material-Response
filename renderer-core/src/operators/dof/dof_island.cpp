@@ -28,6 +28,12 @@ activation_decision evaluate_activation(const activation_context &context) noexc
     if (!context.ptde_dofbank_route_verified)
         return {false, bridge_reason::unresolved_ptde_dofbank_route};
 
+    if (!context.q8_scene_history_ready)
+        return {false, bridge_reason::missing_q8_scene_history};
+
+    if (!context.pass_state_transaction_ready)
+        return {false, bridge_reason::missing_pass_state_transaction};
+
     if (!context.retained_flat_pipeline_set_ready)
         return {false, bridge_reason::missing_retained_pipeline_set};
 

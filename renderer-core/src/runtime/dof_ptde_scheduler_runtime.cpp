@@ -463,40 +463,24 @@ void on_destroy_device(
         release_pairs_locked();
 }
 
-bool allowed_pass00_role(role value) noexcept
-{
-    return
-        value == role::depth_copy ||
-        value == role::depth_copy_fragment0;
-}
-
-bool allowed_pass10_role(role value) noexcept
-{
-    return
-        value == role::gauss_y_adv ||
-        value == role::near_rate;
-}
-
-role role_for_pass(
-    std::uint8_t pass,
-    const scheduler_external_inputs &inputs) noexcept
+role role_for_pass(std::uint8_t pass) noexcept
 {
     switch (pass) {
     case 0x00u:
-        return inputs.pass00_role;
+        return role::dof_rate_plain;
     case 0x01u:
     case 0x02u:
-        return role::depth_copy_msaa;
-    case 0x03u:
-        return role::depth_copy_single_fragment;
-    case 0x0Du:
-        return role::dof_rate_plain;
-    case 0x0Eu:
         return role::downsample;
+    case 0x03u:
+        return role::near_rate;
+    case 0x0Du:
+        return role::unfocus_3x3;
+    case 0x0Eu:
+        return role::unfocus_near_rate_3x3;
     case 0x0Fu:
-        return role::gauss_x;
+        return role::blur_upsample;
     case 0x10u:
-        return inputs.pass10_role;
+        return role::dof_composite;
     default:
         return role::count;
     }
@@ -514,21 +498,16 @@ bool pair_ready_locked(role selected) noexcept
 }
 
 bool execution_set_ready_locked(
-    const scheduler_external_inputs &inputs) noexcept
+    const scheduler_external_inputs &) noexcept
 {
-    if (!inputs.pass_role_routing_verified ||
-        !allowed_pass00_role(inputs.pass00_role) ||
-        !allowed_pass10_role(inputs.pass10_role))
-        return false;
-
     const std::array<role, 7> required = {{
-        inputs.pass00_role,
-        role::depth_copy_msaa,
-        role::depth_copy_single_fragment,
         role::dof_rate_plain,
         role::downsample,
-        role::gauss_x,
-        inputs.pass10_role
+        role::unfocus_3x3,
+        role::blur_upsample,
+        role::near_rate,
+        role::unfocus_near_rate_3x3,
+        role::dof_composite
     }};
 
     for (const auto selected : required)
@@ -601,11 +580,11 @@ bool resolve_srv(
         return true;
 
     if (offset == 0x0068u) {
-        if (!inputs.source_68_verified ||
-            inputs.source_68 == nullptr)
+        if (!inputs.depth_support_verified ||
+            inputs.depth_support_t1 == nullptr)
             return false;
-        inputs.source_68->AddRef();
-        *out = inputs.source_68;
+        inputs.depth_support_t1->AddRef();
+        *out = inputs.depth_support_t1;
         return true;
     }
 
@@ -877,7 +856,7 @@ bool run_pass(
 
     native_pair shader{};
     if (!acquire_pair(
-            role_for_pass(pass.pass, inputs),
+            role_for_pass(pass.pass),
             shader)) {
         rtv->Release();
         return false;
@@ -900,19 +879,6 @@ bool run_pass(
                 &srvs[i])) {
             sources_ok = false;
             break;
-        }
-    }
-
-    if (sources_ok &&
-        pass.pass == 0x0Du) {
-        if (!inputs.dofrate_support_verified ||
-            inputs.dofrate_support_t1 == nullptr) {
-            sources_ok = false;
-        } else {
-            if (srvs[1] != nullptr)
-                srvs[1]->Release();
-            inputs.dofrate_support_t1->AddRef();
-            srvs[1] = inputs.dofrate_support_t1;
         }
     }
 
@@ -1080,21 +1046,14 @@ scheduler_result execute_ptde_pass(
     const auto &pass =
         operators::dof::ptde_exact_pass_resources[pass_index];
     const role selected =
-        role_for_pass(pass.pass, inputs);
+        role_for_pass(pass.pass);
 
     if (selected == role::count ||
-        (pass.pass == 0x00u &&
-         (!inputs.pass_role_routing_verified ||
-          !allowed_pass00_role(inputs.pass00_role))) ||
-        (pass.pass == 0x10u &&
-         (!inputs.pass_role_routing_verified ||
-          !allowed_pass10_role(inputs.pass10_role))) ||
-        ((pass.pass == 0x00u || pass.pass == 0x03u) &&
-         (!inputs.source_68_verified ||
-          inputs.source_68 == nullptr)) ||
-        (pass.pass == 0x0Du &&
-         (!inputs.dofrate_support_verified ||
-          inputs.dofrate_support_t1 == nullptr))) {
+        ((pass.pass == 0x00u ||
+          pass.pass == 0x03u ||
+          pass.pass == 0x10u) &&
+         (!inputs.depth_support_verified ||
+          inputs.depth_support_t1 == nullptr))) {
         ++g_execute_fail;
         return scheduler_result::input_rejected;
     }
@@ -1177,11 +1136,10 @@ scheduler_result execute_ptde_graph(
     if (g_quarantined.load() ||
         cmd_list == nullptr ||
         !operators::dof::evaluate_activation(activation).active ||
-        !inputs.source_68_verified ||
-        inputs.source_68 == nullptr ||
-        !inputs.dofrate_support_verified ||
-        inputs.dofrate_support_t1 == nullptr ||
-        !inputs.pass_role_routing_verified ||
+        !inputs.scene_history_q8_verified ||
+        inputs.scene_history_q8 == nullptr ||
+        !inputs.depth_support_verified ||
+        inputs.depth_support_t1 == nullptr ||
         !ptde_scheduler_execution_set_ready(inputs)) {
         ++g_execute_fail;
         return scheduler_result::not_ready;
@@ -1266,15 +1224,13 @@ scheduler_telemetry ptde_scheduler_status() noexcept
     {
         std::lock_guard<std::mutex> lock(g_mutex);
         ready =
-            pair_ready_locked(role::depth_copy) &&
-            pair_ready_locked(role::depth_copy_fragment0) &&
-            pair_ready_locked(role::depth_copy_msaa) &&
-            pair_ready_locked(role::depth_copy_single_fragment) &&
             pair_ready_locked(role::dof_rate_plain) &&
             pair_ready_locked(role::downsample) &&
-            pair_ready_locked(role::gauss_x) &&
-            pair_ready_locked(role::gauss_y_adv) &&
-            pair_ready_locked(role::near_rate);
+            pair_ready_locked(role::unfocus_3x3) &&
+            pair_ready_locked(role::blur_upsample) &&
+            pair_ready_locked(role::near_rate) &&
+            pair_ready_locked(role::unfocus_near_rate_3x3) &&
+            pair_ready_locked(role::dof_composite);
     }
 
     return {

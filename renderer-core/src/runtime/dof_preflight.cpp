@@ -63,13 +63,12 @@ bool seen(role value, std::uint32_t mask) noexcept
 bool active_flat_set_seen(std::uint32_t mask) noexcept
 {
     return
-        seen(role::depth_copy_msaa, mask) &&
-        seen(role::depth_copy_single_fragment, mask) &&
-        seen(role::dof_rate_cb, mask) &&
         seen(role::downsample, mask) &&
-        seen(role::gauss_x, mask) &&
-        (seen(role::gauss_y_adv, mask) ||
-         seen(role::near_rate, mask));
+        seen(role::unfocus_3x3, mask) &&
+        seen(role::blur_upsample, mask) &&
+        seen(role::near_rate, mask) &&
+        seen(role::unfocus_near_rate_3x3, mask) &&
+        seen(role::dof_composite, mask);
 }
 
 
