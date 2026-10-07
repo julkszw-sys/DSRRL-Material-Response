@@ -40,7 +40,14 @@ require(pmetal_source, "hook_producer_cache_lookup(", "R43 cross-thread producer
 require(pmetal_source, "std::try_to_lock", "R43 selector cache lookup must not wait")
 require(pmetal_source, "[DSRRL PMETAL R43] producer_cache=SET256_WAY2", "R43 startup attestation")
 require(pmetal_source, "[DSRRL PMETAL R43] selector_per_key_cache_hit=1", "R43 selector per-key hit attestation")
-require(pmetal_source, "[DSRRL PMETAL R42] producer_cross_thread_cache_hit=1", "R43 producer per-key hit attestation")
+exact_selector_start = pmetal_source.find("bool latest_hook_source_exact_selector(")
+exact_selector_end = pmetal_source.find("bool latest_hook_source(", exact_selector_start)
+if min(exact_selector_start, exact_selector_end) < 0:
+    raise RuntimeError("R43 exact-selector producer-cache boundary missing")
+exact_selector_body = pmetal_source[exact_selector_start:exact_selector_end]
+require(exact_selector_body, "same_hook_selector_identity(", "R43 exact selector TLS identity gate")
+require(exact_selector_body, "hook_producer_cache_lookup(", "R43 exact selector cross-thread producer cache join")
+forbid(exact_selector_body, "g_hook_source_semantic_version", "R43 exact selector join must not use process-global semantic freshness")
 
 selector = flver.split('extern "C" void dsrrl_flver_selector_observer', 1)[1].split('bool install(', 1)[0]
 require(selector, "g_selector_hemdir3_enabled.load", "HemDir3 selector gate")
