@@ -2,9 +2,12 @@
 
 #include "dsrrl/operators/dof/dof_island.hpp"
 
+#include <array>
 #include <cstddef>
 #include <cstdint>
 
+struct ID3D11BlendState;
+struct ID3D11SamplerState;
 struct ID3D11ShaderResourceView;
 
 namespace reshade::api {
@@ -14,16 +17,21 @@ struct command_list;
 namespace dsrrl::runtime::dof {
 
 struct scheduler_external_inputs {
-    // Exact PTDE +0x5C/+0x60 scene-history carrier. This must be a
-    // history-preserving 1024x720 BGRA8/Q8 sidecar, never a late R11 copy.
-    ID3D11ShaderResourceView *scene_history_q8 = nullptr;
-
-    // Native DSR depth/support representation used as the narrow adapter for
-    // PTDE +0x68/+0x8C/+0x9C and terminal retained Dof t5.
+    ID3D11ShaderResourceView *scene_source_t0 = nullptr;
     ID3D11ShaderResourceView *depth_support_t1 = nullptr;
 
-    bool scene_history_q8_verified = false;
+    ID3D11SamplerState *color_sampler = nullptr;
+    ID3D11SamplerState *depth_sampler = nullptr;
+
+    ID3D11BlendState *rgba_write_blend = nullptr;
+    ID3D11BlendState *alpha_write_blend = nullptr;
+    ID3D11BlendState *rgb_write_blend = nullptr;
+    std::array<float, 4> blend_factor{};
+    std::uint32_t sample_mask = 0xffffffffu;
+
+    bool scene_source_verified = false;
     bool depth_support_verified = false;
+    bool pass_state_verified = false;
 };
 
 struct scheduler_draw_shape {
