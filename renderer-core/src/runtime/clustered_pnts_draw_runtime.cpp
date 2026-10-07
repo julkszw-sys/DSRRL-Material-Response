@@ -1616,7 +1616,7 @@ void source_hook_load_xmm(
                 disp >> (i * 8u)));
 }
 
-void __fastcall clustered_source_override_callback(
+float __fastcall clustered_source_override_callback(
     void *source,
     float *geometry,
     float *color_end,
@@ -1637,7 +1637,7 @@ void __fastcall clustered_source_override_callback(
         color_end == nullptr ||
         ptde_marker == nullptr ||
         g_base == 0u)
-        return;
+        return 0.0f;
 
     telemetry::hot_count(g_source_producer_hits);
     std::uint8_t source_category = 0xffu;
@@ -1661,7 +1661,7 @@ void __fastcall clustered_source_override_callback(
         source,
         sizeof(vtable));
     if (vtable == nullptr)
-        return;
+        return 0.0f;
 
     void *target = nullptr;
     std::memcpy(
@@ -1687,7 +1687,7 @@ void __fastcall clustered_source_override_callback(
                 source,
                 target);
         }
-        return;
+        return 0.0f;
     }
 
     clustered_source_payload_key_v1 key{};
@@ -1713,7 +1713,7 @@ void __fastcall clustered_source_override_callback(
             std::memory_order_acquire);
 
     if (key.owner == 0u)
-        return;
+        return 0.0f;
 
     const auto cache_index =
         clustered_source_payload_cache_index(
@@ -1837,7 +1837,7 @@ void __fastcall clustered_source_override_callback(
                     source,
                     target);
             }
-            return;
+            return 0.0f;
         }
         telemetry::hot_count(
             g_source_row_bridge);
@@ -1846,10 +1846,10 @@ void __fastcall clustered_source_override_callback(
              i < candidate.size();
              ++i)
             if (!std::isfinite(candidate[i]))
-                return;
+                return 0.0f;
         if (!(candidate[3] > 0.0f) ||
             !(candidate[7] > 0.0f))
-            return;
+            return 0.0f;
 
         for (std::size_t i = 0u;
              i < payload.size();
@@ -1877,6 +1877,7 @@ void __fastcall clustered_source_override_callback(
 
     telemetry::hot_count(
         g_source_capture_ok);
+    return 1.0f;
 }
 
 bool build_clustered_source_override_stub(
@@ -1886,7 +1887,7 @@ bool build_clustered_source_override_stub(
     stub_out = nullptr;
     try {
         std::vector<std::uint8_t> code;
-        code.reserve(320u);
+        code.reserve(352u);
 
         // Site RSP is 16-byte aligned. Preserve flags, all volatile GPRs and
         // volatile XMM0..5. XMM6..15 are nonvolatile under Win64 and retain
@@ -1949,6 +1950,31 @@ bool build_clustered_source_override_stub(
             reinterpret_cast<std::uint64_t>(
                 &clustered_source_override_callback));
         source_hook_emit(code,{0xFF,0xD0}); // call rax
+
+        // R44 row-aware carrier: the callback returns 1.0f only when the
+        // selected live DrawParam row has PTDE authority. Direct sources,
+        // the 10 DSR-only semantic rows, default/m99 and every fail-open
+        // return 0.0f. The retail record stride is 48 bytes and retail writes
+        // only +0x00..+0x27, so +0x28 is a free per-light carrier consumed
+        // only by the exact R44 PntS replacement shader.
+        //
+        //   record = [rbx+0x320] + 48*rsi
+        //   record+0x28 = PTDE attenuation authority (0.0f / 1.0f)
+        //
+        // RBX/RSI are Win64 nonvolatile registers and therefore still hold
+        // the retail producer state across the callback.
+        source_hook_emit(
+            code,
+            {0x48,0x8B,0x83,0x20,0x03,0x00,0x00}); // mov rax,[rbx+320h]
+        source_hook_emit(
+            code,
+            {0x48,0x8D,0x0C,0x76}); // lea rcx,[rsi+rsi*2]
+        source_hook_emit(
+            code,
+            {0x48,0x03,0xC9}); // add rcx,rcx => 6*rsi
+        source_hook_emit(
+            code,
+            {0xF3,0x0F,0x11,0x44,0xC8,0x28}); // movss [rax+rcx*8+28h],xmm0
 
         for (std::uint8_t i = 0u; i < 6u; ++i)
             source_hook_load_xmm(
