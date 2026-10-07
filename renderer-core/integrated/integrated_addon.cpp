@@ -2031,119 +2031,6 @@ bool on_create_compute_pipeline(
 }
 
 
-bool apply_r44_spc_rowaware_create_patch(
-    std::uint32_t subobject_count,
-    const reshade::api::pipeline_subobject *subobjects) noexcept
-{
-    if (!k_pointlight_drawtime_runtime_enabled ||
-        !g_core.features().enabled(
-            dsrrl::core::operator_id::
-                pointlight_pnts_attenuation))
-        return false;
-
-    auto *pixel_shader =
-        const_cast<reshade::api::shader_desc *>(
-            find_pixel_shader(
-                subobject_count,
-                subobjects));
-    if (pixel_shader == nullptr ||
-        pixel_shader->code == nullptr ||
-        pixel_shader->code_size == 0u)
-        return false;
-
-    try {
-        std::vector<std::uint8_t> replacement;
-        const auto outcome =
-            dsrrl::operators::point_light::
-                materialize_clustered_pnts_spc_attenuation_only(
-                    static_cast<const std::uint8_t *>(
-                        pixel_shader->code),
-                    pixel_shader->code_size,
-                    replacement);
-
-        using result =
-            dsrrl::operators::point_light::
-                clustered_pnts_spc_attenuation_result;
-
-        if (outcome.result != result::applied) {
-            if (outcome.result != result::pass_not_candidate &&
-                outcome.result != result::pass_nospc_owned_by_a1 &&
-                outcome.result != result::pass_unknown_exact_sha) {
-                ++g_r44_spc_create_fail_open;
-                if (!g_r44_spc_create_fail_logged.exchange(
-                        true,
-                        std::memory_order_relaxed)) {
-                    reshade::log::message(
-                        reshade::log::level::warning,
-                        "[DSRRL POINTLIGHT R44-CONSUMER] "
-                        "create_patch=FAIL_OPEN stock_dsr=ON");
-                }
-            }
-            return false;
-        }
-
-        if (replacement.empty() ||
-            replacement.size() !=
-                outcome.replacement_size)
-            return false;
-
-        std::shared_ptr<std::vector<std::uint8_t>> record;
-        {
-            std::lock_guard<std::mutex> lock(
-                g_r44_spc_create_mutex);
-            const auto found =
-                g_r44_spc_create_cache.find(
-                    outcome.representative_shader_index);
-            if (found !=
-                g_r44_spc_create_cache.end()) {
-                record = found->second;
-                if (record == nullptr ||
-                    record->size() != replacement.size() ||
-                    std::memcmp(
-                        record->data(),
-                        replacement.data(),
-                        replacement.size()) != 0) {
-                    ++g_r44_spc_create_fail_open;
-                    return false;
-                }
-            } else {
-                record =
-                    std::make_shared<
-                        std::vector<std::uint8_t>>(
-                            std::move(replacement));
-                g_r44_spc_create_cache.emplace(
-                    outcome.representative_shader_index,
-                    record);
-            }
-        }
-
-        if (record == nullptr ||
-            record->empty())
-            return false;
-
-        pixel_shader->code = record->data();
-        pixel_shader->code_size = record->size();
-        ++g_r44_spc_create_applied;
-
-        if (!g_r44_spc_create_logged.exchange(
-                true,
-                std::memory_order_relaxed)) {
-            reshade::log::message(
-                reshade::log::level::info,
-                "[DSRRL POINTLIGHT R44-CONSUMER] "
-                "family=SPC_HEMENVLERP_PNTS "
-                "replacement=CREATE_TIME "
-                "attenuation=ROWAWARE_X3_OR_X "
-                "marker=t18+0x28 "
-                "draw_replay=OFF");
-        }
-
-        return true;
-    } catch (...) {
-        ++g_r44_spc_create_fail_open;
-        return false;
-    }
-}
 
 bool on_create_pipeline(
     std::uint32_t subobject_count,
@@ -2431,6 +2318,121 @@ void reset() noexcept
 }
 
 } // namespace motion_blur_camera_fallback_disable
+
+bool apply_r44_spc_rowaware_create_patch(
+    std::uint32_t subobject_count,
+    const reshade::api::pipeline_subobject *subobjects) noexcept
+{
+    if (!k_pointlight_drawtime_runtime_enabled ||
+        !g_core.features().enabled(
+            dsrrl::core::operator_id::
+                pointlight_pnts_attenuation))
+        return false;
+
+    auto *pixel_shader =
+        const_cast<reshade::api::shader_desc *>(
+            find_pixel_shader(
+                subobject_count,
+                subobjects));
+    if (pixel_shader == nullptr ||
+        pixel_shader->code == nullptr ||
+        pixel_shader->code_size == 0u)
+        return false;
+
+    try {
+        std::vector<std::uint8_t> replacement;
+        const auto outcome =
+            dsrrl::operators::point_light::
+                materialize_clustered_pnts_spc_attenuation_only(
+                    static_cast<const std::uint8_t *>(
+                        pixel_shader->code),
+                    pixel_shader->code_size,
+                    replacement);
+
+        using result =
+            dsrrl::operators::point_light::
+                clustered_pnts_spc_attenuation_result;
+
+        if (outcome.result != result::applied) {
+            if (outcome.result != result::pass_not_candidate &&
+                outcome.result != result::pass_nospc_owned_by_a1 &&
+                outcome.result != result::pass_unknown_exact_sha) {
+                ++g_r44_spc_create_fail_open;
+                if (!g_r44_spc_create_fail_logged.exchange(
+                        true,
+                        std::memory_order_relaxed)) {
+                    reshade::log::message(
+                        reshade::log::level::warning,
+                        "[DSRRL POINTLIGHT R44-CONSUMER] "
+                        "create_patch=FAIL_OPEN stock_dsr=ON");
+                }
+            }
+            return false;
+        }
+
+        if (replacement.empty() ||
+            replacement.size() !=
+                outcome.replacement_size)
+            return false;
+
+        std::shared_ptr<std::vector<std::uint8_t>> record;
+        {
+            std::lock_guard<std::mutex> lock(
+                g_r44_spc_create_mutex);
+            const auto found =
+                g_r44_spc_create_cache.find(
+                    outcome.representative_shader_index);
+            if (found !=
+                g_r44_spc_create_cache.end()) {
+                record = found->second;
+                if (record == nullptr ||
+                    record->size() != replacement.size() ||
+                    std::memcmp(
+                        record->data(),
+                        replacement.data(),
+                        replacement.size()) != 0) {
+                    ++g_r44_spc_create_fail_open;
+                    return false;
+                }
+            } else {
+                record =
+                    std::make_shared<
+                        std::vector<std::uint8_t>>(
+                            std::move(replacement));
+                g_r44_spc_create_cache.emplace(
+                    outcome.representative_shader_index,
+                    record);
+            }
+        }
+
+        if (record == nullptr ||
+            record->empty())
+            return false;
+
+        pixel_shader->code = record->data();
+        pixel_shader->code_size = record->size();
+        ++g_r44_spc_create_applied;
+
+        if (!g_r44_spc_create_logged.exchange(
+                true,
+                std::memory_order_relaxed)) {
+            reshade::log::message(
+                reshade::log::level::info,
+                "[DSRRL POINTLIGHT R44-CONSUMER] "
+                "family=SPC_HEMENVLERP_PNTS "
+                "replacement=CREATE_TIME "
+                "attenuation=ROWAWARE_X3_OR_X "
+                "marker=t18+0x28 "
+                "draw_replay=OFF");
+        }
+
+        return true;
+    } catch (...) {
+        ++g_r44_spc_create_fail_open;
+        return false;
+    }
+}
+
 
 const char *pointlight_decision_reason_name(
     dsrrl::operators::material_response::decision_reason reason) noexcept
