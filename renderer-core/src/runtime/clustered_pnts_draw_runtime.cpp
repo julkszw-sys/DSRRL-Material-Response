@@ -1102,60 +1102,44 @@ struct clustered_source_bank_fingerprint_v1 {
         clustered_pointlight_source_gate::gameplay_bank::unknown;
     bool known_non_ptde = false;
     live_row_v1 row0{};
-    live_row_v1 row5{};
 };
 
 // R43 lightweight bank authority.
 //
-// The active PARAM carrier makes all ten gameplay PointLightBank row0/row5
-// payloads exact PTDE values; default/m99 remain exact stock DSR.  Direct
-// audit of the supplied PTDE + vanilla DSR references proves the pair
-// (row0,row5) uniquely identifies all twelve current PointLightBank
-// structures.  Runtime therefore needs two 16-byte sentinel reads, not a
-// 64-row/name traversal.  The ten rare DSR-only gameplay rows are gated
-// afterwards by exact bank + row ID.
+// Under the current PARAM carrier, one exact 16-byte row0 payload is sufficient
+// to determine every gate outcome. m11/m15_1/m15 intentionally share the same
+// row0 payload, but all three are fully bridged and have no DSR-only semantic
+// rows, so they are represented by the m11 gate class. m10/m12/m17/m18 have
+// distinct row0 payloads and retain their sparse DSR-only row exceptions.
+// default and m99 also have distinct row0 payloads and fail open to stock DSR.
+// Unknown row0 identities fail open.
 //
-// This table is identity only. It is not a donor source and does not replace
-// live DrawParam row payloads.
+// This table is gate identity only. It is not a donor source and does not
+// replace live DrawParam row payloads.
 inline constexpr std::array<
-    clustered_source_bank_fingerprint_v1, 12>
+    clustered_source_bank_fingerprint_v1, 10>
     k_clustered_source_bank_fingerprints = {{
     {clustered_pointlight_source_gate::gameplay_bank::m10, false,
-        {0x00000000u,0x40A00000u,255,230,200,100},
-        {0x3F000000u,0x40000000u,255,255,255,100}},
+        {0x00000000u,0x40A00000u,255,230,200,100}},
+    // Shared full-bridge gate class for m11 / m15_1 / m15.
     {clustered_pointlight_source_gate::gameplay_bank::m11, false,
-        {0x40000000u,0x40800000u,255,220,150,200},
-        {0x3F000000u,0x40000000u,255,255,255,100}},
+        {0x40000000u,0x40800000u,255,220,150,200}},
     {clustered_pointlight_source_gate::gameplay_bank::m12, false,
-        {0x00000000u,0x40600000u,255,255,255,150},
-        {0x00000000u,0x41000000u,129,124,155,580}},
+        {0x00000000u,0x40600000u,255,255,255,150}},
     {clustered_pointlight_source_gate::gameplay_bank::m13, false,
-        {0x40000000u,0x41300000u,215,165,125,150},
-        {0x40000000u,0x41900000u,220,220,200,200}},
+        {0x40000000u,0x41300000u,215,165,125,150}},
     {clustered_pointlight_source_gate::gameplay_bank::m14, false,
-        {0x00000000u,0x41200000u,255,155,125,150},
-        {0x40000000u,0x40A00000u,165,185,180,20}},
-    {clustered_pointlight_source_gate::gameplay_bank::m15_1, false,
-        {0x40000000u,0x40800000u,255,220,150,200},
-        {0x3F000000u,0x40C00000u,205,200,200,0}},
-    {clustered_pointlight_source_gate::gameplay_bank::m15, false,
-        {0x40000000u,0x40800000u,255,220,150,200},
-        {0x3F000000u,0x40F00000u,255,230,160,50}},
+        {0x00000000u,0x41200000u,255,155,125,150}},
     {clustered_pointlight_source_gate::gameplay_bank::m16, false,
-        {0x40000000u,0x40A00000u,80,140,255,160},
-        {0x3F000000u,0x40000000u,255,255,255,100}},
+        {0x40000000u,0x40A00000u,80,140,255,160}},
     {clustered_pointlight_source_gate::gameplay_bank::m17, false,
-        {0x3F333332u,0x40400000u,255,230,180,70},
-        {0x00000000u,0x00000000u,0,0,0,0}},
+        {0x3F333332u,0x40400000u,255,230,180,70}},
     {clustered_pointlight_source_gate::gameplay_bank::m18, false,
-        {0x3F800000u,0x40E00000u,255,255,250,300},
-        {0x40000000u,0x40A00000u,255,150,100,300}},
+        {0x3F800000u,0x40E00000u,255,255,250,300}},
     {clustered_pointlight_source_gate::gameplay_bank::unknown, true,
-        {0x40C00000u,0x41400000u,255,128,128,100},
-        {0x3F000000u,0x40000000u,255,255,255,100}},
+        {0x40C00000u,0x41400000u,255,128,128,100}}, // default
     {clustered_pointlight_source_gate::gameplay_bank::unknown, true,
-        {0x00000000u,0x41200000u,255,255,255,150},
-        {0x3F000000u,0x40000000u,255,255,255,100}}
+        {0x00000000u,0x41200000u,255,255,255,150}}  // m99
 }};
 
 constexpr bool clustered_source_bank_fingerprints_unique() noexcept
@@ -1168,24 +1152,19 @@ constexpr bool clustered_source_bank_fingerprints_unique() noexcept
              ++j)
             if (same_live_row(
                     k_clustered_source_bank_fingerprints[i].row0,
-                    k_clustered_source_bank_fingerprints[j].row0) &&
-                same_live_row(
-                    k_clustered_source_bank_fingerprints[i].row5,
-                    k_clustered_source_bank_fingerprints[j].row5))
+                    k_clustered_source_bank_fingerprints[j].row0))
                 return false;
     return true;
 }
 static_assert(
     clustered_source_bank_fingerprints_unique(),
-    "R43 PointLight row0+row5 bank fingerprints must remain unique.");
+    "R43 PointLight row0 gate fingerprints must remain unique.");
 
 struct clustered_source_bank_identity_cache_entry_v1 {
     std::uintptr_t param = 0u;
     std::uint16_t count = 0u;
     std::uint32_t row0_offset = 0u;
-    std::uint32_t row5_offset = 0u;
     live_row_v1 row0{};
-    live_row_v1 row5{};
     clustered_pointlight_source_gate::gameplay_bank bank =
         clustered_pointlight_source_gate::gameplay_bank::unknown;
     bool known_non_ptde = false;
@@ -1239,11 +1218,6 @@ clustered_live_source_result classify_clustered_source_bank(
         g_clustered_source_bank_identity_cache[
             clustered_source_bank_identity_cache_index(
                 param)];
-
-    // Hot path: row0 alone distinguishes every behaviorally distinct gate
-    // class (m10/m12/m17/m18/default/m99).  m11/m15_1/m15 intentionally
-    // share row0, but all three are fully bridged, so that collision cannot
-    // change a gate decision.  row5 is cold-path only.
     if (cached.valid &&
         cached.param == param &&
         cached.count == count &&
@@ -1254,34 +1228,11 @@ clustered_live_source_result classify_clustered_source_bank(
         return clustered_live_source_result::applied;
     }
 
-    std::uint32_t row5_offset = 0u;
-    if (!pointlight_ptde_source::read_cached(
-            param + 0x34u + 5u * 12u,
-            row5_offset,
-            cache))
-        return clustered_live_source_result::
-            bank_signature_table_read_fail;
-    if (row5_offset < 0x30u ||
-        row5_offset > 0x100000u)
-        return clustered_live_source_result::
-            bank_signature_row_offset_fail;
-
-    live_row_v1 row5{};
-    if (!pointlight_ptde_source::read_cached(
-            param + row5_offset,
-            row5,
-            cache))
-        return clustered_live_source_result::
-            bank_signature_row_offset_fail;
-
     for (const auto &fingerprint :
          k_clustered_source_bank_fingerprints) {
         if (!same_live_row(
                 fingerprint.row0,
-                row0) ||
-            !same_live_row(
-                fingerprint.row5,
-                row5))
+                row0))
             continue;
 
         bank = fingerprint.bank;
@@ -1292,9 +1243,7 @@ clustered_live_source_result classify_clustered_source_bank(
         cached.param = param;
         cached.count = count;
         cached.row0_offset = first;
-        cached.row5_offset = row5_offset;
         cached.row0 = row0;
-        cached.row5 = row5;
         cached.bank = bank;
         cached.known_non_ptde =
             known_non_ptde;
@@ -3213,7 +3162,7 @@ bool clustered_pnts_draw_runtime::install() noexcept
             std::memory_order_relaxed))
         reshade::log::message(
             reshade::log::level::info,
-            "[DSRRL POINTLIGHT R43-GATE] bank_identity=ROW0_HOT_ROW5_COLD_EXACT_PAYLOAD hot_fingerprint_read=16B full_name_scan=OFF dsr_only_gate=10 default_m99=STOCK_DSR cache=DIRECT16");
+            "[DSRRL POINTLIGHT R43-GATE] bank_identity=ROW0_EXACT_PAYLOAD hot_fingerprint_read=16B cold_extra_read=0B full_name_scan=OFF dsr_only_gate=10 default_m99=STOCK_DSR cache=DIRECT16");
     static std::atomic_bool
         frame_selection_cache_logged{false};
     if (!frame_selection_cache_logged.exchange(
