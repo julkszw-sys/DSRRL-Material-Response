@@ -1229,28 +1229,10 @@ clustered_live_source_result classify_clustered_source_bank(
         return clustered_live_source_result::
             bank_signature_header_range_fail;
 
-    std::uint32_t row5_offset = 0u;
-    if (!pointlight_ptde_source::read_cached(
-            param + 0x34u + 5u * 12u,
-            row5_offset,
-            cache))
-        return clustered_live_source_result::
-            bank_signature_table_read_fail;
-
-    if (row5_offset < table_end ||
-        row5_offset > 0x100000u)
-        return clustered_live_source_result::
-            bank_signature_row_offset_fail;
-
     live_row_v1 row0{};
-    live_row_v1 row5{};
     if (!pointlight_ptde_source::read_cached(
             param + first,
             row0,
-            cache) ||
-        !pointlight_ptde_source::read_cached(
-            param + row5_offset,
-            row5,
             cache))
         return clustered_live_source_result::
             bank_signature_row_offset_fail;
@@ -1259,17 +1241,40 @@ clustered_live_source_result classify_clustered_source_bank(
         g_clustered_source_bank_identity_cache[
             clustered_source_bank_identity_cache_index(
                 param)];
+
+    // Hot path: row0 alone distinguishes every behaviorally distinct gate
+    // class (m10/m12/m17/m18/default/m99).  m11/m15_1/m15 intentionally
+    // share row0, but all three are fully bridged, so that collision cannot
+    // change a gate decision.  row5 is cold-path only.
     if (cached.valid &&
         cached.param == param &&
         cached.count == count &&
         cached.row0_offset == first &&
-        cached.row5_offset == row5_offset &&
-        same_live_row(cached.row0, row0) &&
-        same_live_row(cached.row5, row5)) {
+        same_live_row(cached.row0, row0)) {
         bank = cached.bank;
         known_non_ptde = cached.known_non_ptde;
         return clustered_live_source_result::applied;
     }
+
+    std::uint32_t row5_offset = 0u;
+    if (!pointlight_ptde_source::read_cached(
+            param + 0x34u + 5u * 12u,
+            row5_offset,
+            cache))
+        return clustered_live_source_result::
+            bank_signature_table_read_fail;
+    if (row5_offset < table_end ||
+        row5_offset > 0x100000u)
+        return clustered_live_source_result::
+            bank_signature_row_offset_fail;
+
+    live_row_v1 row5{};
+    if (!pointlight_ptde_source::read_cached(
+            param + row5_offset,
+            row5,
+            cache))
+        return clustered_live_source_result::
+            bank_signature_row_offset_fail;
 
     for (const auto &fingerprint :
          k_clustered_source_bank_fingerprints) {
@@ -3210,7 +3215,7 @@ bool clustered_pnts_draw_runtime::install() noexcept
             std::memory_order_relaxed))
         reshade::log::message(
             reshade::log::level::info,
-            "[DSRRL POINTLIGHT R43-GATE] bank_identity=ROW0_ROW5_EXACT_PAYLOAD fingerprint_reads=2x16B full_name_scan=OFF dsr_only_gate=10 default_m99=STOCK_DSR cache=DIRECT16");
+            "[DSRRL POINTLIGHT R43-GATE] bank_identity=ROW0_HOT_ROW5_COLD_EXACT_PAYLOAD hot_fingerprint_read=16B full_name_scan=OFF dsr_only_gate=10 default_m99=STOCK_DSR cache=DIRECT16");
     static std::atomic_bool
         frame_selection_cache_logged{false};
     if (!frame_selection_cache_logged.exchange(
