@@ -35,10 +35,15 @@ def main():
         "clustered live DrawParam source")
     require(cluster,"g_source_dsr_only_fail_open",
         "clustered DSR-only source gate")
-    cb0=cluster.find("void __fastcall clustered_source_override_callback(")
+    cb0=cluster.find("float __fastcall clustered_source_override_callback(")
+    if cb0 < 0:
+        cb0=cluster.find("void __fastcall clustered_source_override_callback(")
     cb1=cluster.find("bool build_clustered_source_override_stub(",cb0)
     if cb0<0 or cb1<0:
         fail("clustered source callback boundaries missing")
+    if "float __fastcall clustered_source_override_callback(" in cluster:
+        require(cluster, "record+0x28 = PTDE attenuation authority",
+            "R44 per-light attenuation marker carrier")
     cb=cluster[cb0:cb1]
     if "pointlight_ptde_source::capture(" in cb:
         fail("clustered active callback still uses embedded donor lookup")
