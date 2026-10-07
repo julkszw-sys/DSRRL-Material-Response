@@ -14,7 +14,7 @@ struct tonemap_handoff_telemetry {
 bool register_tonemap_handoff_scope_runtime() noexcept;
 void unregister_tonemap_handoff_scope_runtime() noexcept;
 
-// True only inside the exact HDR/ToneMap executor at RVA 0x457E50 and only
+// True only inside the exact HDR/ToneMap pass0x13 executor at RVA 0x4572A0 and only
 // when its primary descriptor resource equals ImageState+0x104, the confirmed
 // DoF output alias consumed by ToneMap pass 0x13.
 bool inside_exact_tonemap_dof_handoff() noexcept;
