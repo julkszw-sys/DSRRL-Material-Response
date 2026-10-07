@@ -28,8 +28,16 @@ activation_decision evaluate_activation(const activation_context &context) noexc
     if (!context.ptde_dofbank_route_verified)
         return {false, bridge_reason::unresolved_ptde_dofbank_route};
 
-    if (!context.q8_scene_history_ready)
+    if (context.carrier == carrier_mode::unknown)
+        return {false, bridge_reason::unknown_carrier};
+
+    if (context.carrier == carrier_mode::exact_q8_history &&
+        !context.q8_scene_history_ready)
         return {false, bridge_reason::missing_q8_scene_history};
+
+    if (context.carrier == carrier_mode::native_rate_half_seed &&
+        !context.half_seed_adapter_ready)
+        return {false, bridge_reason::missing_half_seed_adapter};
 
     if (!context.pass_state_transaction_ready)
         return {false, bridge_reason::missing_pass_state_transaction};
