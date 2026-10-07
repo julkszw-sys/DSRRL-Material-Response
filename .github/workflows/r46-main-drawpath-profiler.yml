@@ -1,9 +1,9 @@
-name: R46 Main Draw-Path Profiler
+name: R47 Main Launch-State Profiler
 
 on:
   push:
     branches:
-      - audit/main-drawpath-profile-r46
+      - audit/main-launch-state-profile-r47
   workflow_dispatch:
 
 permissions:
@@ -56,11 +56,11 @@ jobs:
           -A x64
           -DRESHADE_INCLUDE_DIR="${{ github.workspace }}/_reshade/include"
           -DDSRRL_SOURCE_COMMIT="$env:DSRRL_CHECKOUT_COMMIT"
-          -DDSRRL_BUILD_FLAVOR="main_drawpath_profile_r46_dof_off"
+          -DDSRRL_BUILD_FLAVOR="main_launch_state_profile_r47_dof_off"
           -DDSRRL_FULL_TELEMETRY_DEFAULT_ON=OFF
           -DDSRRL_DOF_DEFAULT_ON=OFF
           -DDSRRL_DOF_PROFILE=OFF
-          -DDSRRL_FLVER_SELECTOR_PROFILE=OFF
+          -DDSRRL_FLVER_SELECTOR_PROFILE=ON
           -DDSRRL_POINTLIGHT_PROFILE=OFF
           -DDSRRL_DRAW_PATH_PROFILE=ON
           -DDSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG=ON
@@ -84,6 +84,7 @@ jobs:
           $cache = Get-Content build-prof/CMakeCache.txt -Raw
           foreach ($required in @(
             "DSRRL_DRAW_PATH_PROFILE:BOOL=ON",
+            "DSRRL_FLVER_SELECTOR_PROFILE:BOOL=ON",
             "DSRRL_DOF_DEFAULT_ON:BOOL=OFF",
             "DSRRL_FULL_TELEMETRY_DEFAULT_ON:BOOL=OFF",
             "DSRRL_PMETAL_FULL_PTDE_HEMENV_R17_PTDE_DIFFUSE_MATERIAL:BOOL=ON",
@@ -101,7 +102,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           $addons = @(Get-ChildItem build-prof -Recurse -Filter *.addon64)
           if ($addons.Count -ne 1) { throw "Expected exactly one addon, found $($addons.Count)" }
-          Copy-Item $addons[0].FullName "DSRRL_MAIN_DRAWPATH_PROFILE_R46.addon64" -Force
+          Copy-Item $addons[0].FullName "DSRRL_MAIN_LAUNCH_STATE_PROFILE_R47.addon64" -Force
 
       - name: Verify profiler binary
         shell: pwsh
@@ -109,7 +110,9 @@ jobs:
           $path = "DSRRL_MAIN_DRAWPATH_PROFILE_R46.addon64"
           $ascii = [System.Text.Encoding]::ASCII.GetString([System.IO.File]::ReadAllBytes($path))
           foreach ($required in @(
-            "main_drawpath_profile_r46_dof_off",
+            "main_launch_state_profile_r47_dof_off",
+            "[DSRRL PERF R47] SELECTOR",
+            "support_us=parse_total",
             "[DSRRL PERF R46] DRAW",
             "[DSRRL PMETAL R19 LERP]",
             "[DSRRL PMETAL R7 SHADOW]",
@@ -122,10 +125,10 @@ jobs:
             Write-Host "DoF implementation remains linked but runtime default is OFF by compile profile."
           }
           $sha = (Get-FileHash $path -Algorithm SHA256).Hash.ToLowerInvariant()
-          Write-Host "R46_DRAWPATH_PROFILE_SHA256=$sha"
+          Write-Host "R47_LAUNCH_STATE_PROFILE_SHA256=$sha"
 
       - uses: actions/upload-artifact@v4
         with:
-          name: DSRRL_MAIN_DRAWPATH_PROFILE_R46
-          path: DSRRL_MAIN_DRAWPATH_PROFILE_R46.addon64
+          name: DSRRL_MAIN_LAUNCH_STATE_PROFILE_R47
+          path: DSRRL_MAIN_LAUNCH_STATE_PROFILE_R47.addon64
           if-no-files-found: error
