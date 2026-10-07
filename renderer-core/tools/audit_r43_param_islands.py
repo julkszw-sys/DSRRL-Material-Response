@@ -37,7 +37,7 @@ def main():
         "clustered DSR-only source gate")
     cb0=cluster.find("float __fastcall clustered_source_override_callback(")
     if cb0 < 0:
-        cb0=cluster.find("void __fastcall clustered_source_override_callback(")
+        cb0=cluster.find("float __fastcall clustered_source_override_callback(")
     cb1=cluster.find("bool build_clustered_source_override_stub(",cb0)
     if cb0<0 or cb1<0:
         fail("clustered source callback boundaries missing")
@@ -47,6 +47,12 @@ def main():
     cb=cluster[cb0:cb1]
     if "pointlight_ptde_source::capture(" in cb:
         fail("clustered active callback still uses embedded donor lookup")
+    require(cluster,
+        "record+0x28 = PTDE attenuation authority",
+        "R44 row-aware t18 marker")
+    require(cluster,
+        "{0xF3,0x0F,0x11,0x44,0xC8,0x28}",
+        "R44 single marker store")
     for needle in (
         "evaluate_direct_pointlight_material_identity(",
         "build_clustered_sidecar_v1(",
@@ -124,7 +130,7 @@ def main():
     require(cmake,"DSRRL_PHYSICAL_CUT_UL_H3_SUBSURFACE",
         "R43 physical-cut option preserved")
 
-    print("R43_PARAM_ISLANDS_PASS: exact R43 base + Clustered live PointLightBank source + DoF live DoFBank + stock receivers + donor-free authored rows")
+    print("R43_PARAM_ISLANDS_PASS: exact R43 base + Clustered live PointLightBank source + R44 row-aware Spc attenuation carrier + DoF live DoFBank + donor-free authored rows")
 
 if __name__=="__main__":
     main()
