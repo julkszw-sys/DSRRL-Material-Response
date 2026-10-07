@@ -38,4 +38,13 @@ flver_identity_telemetry flver_identity_stats() noexcept;
 // identities; replacement/destruction of an existing model advances it.
 std::uint64_t flver_identity_epoch() noexcept;
 
+// Validate a cached positive selector identity against FLVER lifetime changes
+// for this exact selector container. Unrelated model destruction/replacement
+// may advance the global epoch without invalidating this model; same-model
+// invalidation, reset, journal overflow or a concurrent writer fail closed.
+bool flver_identity_cache_epoch_survives(
+    const void *selector_container,
+    std::uint64_t cached_epoch,
+    std::uint64_t &current_epoch) noexcept;
+
 } // namespace dsrrl::runtime
