@@ -3209,7 +3209,7 @@ bool clustered_pnts_draw_runtime::install() noexcept
             std::memory_order_relaxed)) {
         reshade::log::message(
             reshade::log::level::info,
-            "[DSRRL POINTLIGHT R43-DRAWPARAM] clustered=SOURCE_ONLY carrier=LIVE_DRAWPARAM_SELECTED_ROW source_cut=0xB7E02 receiver=STOCK_DSR donor_lookup=OFF material_lookup=OFF replacement_shader=OFF dsr_only_gate=10 default_m99=STOCK_DSR");
+            "[DSRRL POINTLIGHT R44-DRAWPARAM] clustered=SOURCE_PLUS_MARKER_ATTENUATION carrier=LIVE_DRAWPARAM_SELECTED_ROW source_cut=0xB7E02 marker=t18+0x28 attenuation_receiver=CREATE_TIME_MARKER_GATED material_receiver=STOCK_DSR full_ptde_receiver=OFF donor_lookup=OFF material_lookup=OFF dsr_only_gate=10 default_m99=STOCK_DSR");
     }
     return true;
 }
