@@ -12,6 +12,12 @@ enum class flat_mode : std::uint8_t {
     alternate
 };
 
+enum class carrier_mode : std::uint8_t {
+    unknown = 0,
+    exact_q8_history,
+    native_rate_ptde_seed
+};
+
 enum class bridge_reason : std::uint8_t {
     ready = 0,
     disabled,
@@ -20,6 +26,10 @@ enum class bridge_reason : std::uint8_t {
     incomplete_graph,
     missing_ptde_dofbank_payload,
     unresolved_ptde_dofbank_route,
+    unknown_carrier,
+    missing_q8_scene_history,
+    missing_ptde_seed_adapter,
+    missing_pass_state_transaction,
     missing_retained_pipeline_set,
     missing_private_depth_sidecar,
     missing_plain_dofrate,
@@ -50,9 +60,13 @@ struct activation_context {
     bool enabled = false;
     bool exact_imageprocess_dof_flat = false;
     flat_mode mode = flat_mode::unknown;
+    carrier_mode carrier = carrier_mode::unknown;
     bool graph_complete = false;
     bool ptde_dofbank_payload_ready = false;
     bool ptde_dofbank_route_verified = false;
+    bool q8_scene_history_ready = false;
+    bool ptde_seed_adapter_ready = false;
+    bool pass_state_transaction_ready = false;
     bool retained_flat_pipeline_set_ready = false;
     bool private_depth_sidecar_ready = false;
     bool retained_plain_dofrate_ready = false;
@@ -98,6 +112,8 @@ enum class retained_shader_role : std::uint8_t {
     gauss_y,
     gauss_y_adv,
     near_rate,
+    unfocus_3x3,
+    unfocus_near_rate_3x3,
     count
 };
 
@@ -147,7 +163,7 @@ struct retained_pipeline_signature {
 
 inline constexpr std::uint32_t retained_pixel_runtime_id_base = 0x0DB4u;
 
-inline constexpr std::array<retained_pipeline_signature, 16>
+inline constexpr std::array<retained_pipeline_signature, 18>
 retained_pipeline_signatures = {{
     {retained_shader_role::depth_copy, "FRPG_Fil_DepthCopy",
      0x0DE7u, 5u, 51u, 804u,
@@ -228,7 +244,17 @@ retained_pipeline_signatures = {{
      0x0DF6u, 18u, 66u, 804u,
      digest_from_hex("6045a062806520145f2f40571ba53c5b1bdd1d638a465cb7a86a42ebc841d6af"),
      4708u,
-     digest_from_hex("7a2ae795170976d5544bc48abf14831cef1791a81cb4313e20618de4ae3ef763")}
+     digest_from_hex("7a2ae795170976d5544bc48abf14831cef1791a81cb4313e20618de4ae3ef763")},
+    {retained_shader_role::unfocus_3x3, "FRPG_Fil_Dof_Unfocus3x3",
+     0x0DF9u, 21u, 69u, 4812u,
+     digest_from_hex("ed813ce909cd5b1b88239a5d5eb86cb22f28ec1bfe3c3eab3c2fb012be97b359"),
+     1340u,
+     digest_from_hex("391ce962719d9a186eb41d24e44581931ba3009a24d9b9a633ac152e7e7f0206")},
+    {retained_shader_role::unfocus_near_rate_3x3, "FRPG_Fil_Dof_UnfocusNearRate3x3",
+     0x0DFAu, 22u, 70u, 4812u,
+     digest_from_hex("ed813ce909cd5b1b88239a5d5eb86cb22f28ec1bfe3c3eab3c2fb012be97b359"),
+     1044u,
+     digest_from_hex("017dd7e1b9b92d1f5d3c3ccffe3517f7e3e583cef97540dc90fe30958829de35")}
 }};
 
 constexpr const retained_pipeline_signature *find_retained_pipeline(
@@ -252,6 +278,9 @@ struct flat_pass_shader_route {
     retained_shader_role alternate = retained_shader_role::count;
 };
 
+// Stock DSR pass-number/shader baseline only. This table is diagnostic and
+// must not be used as PTDE program-slot authority; direct PTDE registry RE is
+// represented separately by the production/exact resource contracts.
 inline constexpr std::array<flat_pass_shader_route, 8>
 dsr_flat_retained_routes = {{
     {0x00u, retained_shader_role::depth_copy,
@@ -282,11 +311,6 @@ constexpr bool retained_runtime_id_sequence_is_contiguous() noexcept
             retained_pixel_runtime_id_base + entry.pixel_binder_index)
             return false;
     return true;
-}
-
-constexpr bool flat_pass_0x10_is_output_composite() noexcept
-{
-    return false;
 }
 
 // Active DSR DoF handoff: Flat output target +0xF8 is sampled through
