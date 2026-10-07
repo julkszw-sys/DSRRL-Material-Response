@@ -1,0 +1,131 @@
+name: R46 Main Draw-Path Profiler
+
+on:
+  push:
+    branches:
+      - audit/main-drawpath-profile-r46
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  windows-addon:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Verify diagnostic ancestry
+        shell: pwsh
+        run: |
+          $base = "fa2a2af00b57b0f1d38f8433731837f4406878d3"
+          git merge-base --is-ancestor $base HEAD
+          if ($LASTEXITCODE -ne 0) { throw "Profiler is not descended from exact main $base" }
+          $global:LASTEXITCODE = 0
+          $allowed = @(
+            '^renderer-core/integrated/CMakeLists\.txt$',
+            '^renderer-core/integrated/integrated_addon\.cpp$',
+            '^\.github/workflows/r46-main-drawpath-profiler\.yml$'
+          )
+          $changed = @(git diff --name-only "$base..HEAD")
+          foreach ($file in $changed) {
+            $ok = $false
+            foreach ($pattern in $allowed) {
+              if ($file -match $pattern) { $ok = $true; break }
+            }
+            if (-not $ok) { throw "Unexpected diagnostic delta: $file" }
+          }
+          $head = (git rev-parse HEAD).Trim()
+          "DSRRL_CHECKOUT_COMMIT=$head" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Checkout pinned ReShade API
+        uses: actions/checkout@v4
+        with:
+          repository: crosire/reshade
+          ref: 3645e3025d1d98a90e318278858931f034d5d1f6
+          path: _reshade
+
+      - name: Configure main visual profile minus DoF plus draw profiler
+        shell: pwsh
+        run: >
+          cmake
+          -S renderer-core/integrated
+          -B build-prof
+          -A x64
+          -DRESHADE_INCLUDE_DIR="${{ github.workspace }}/_reshade/include"
+          -DDSRRL_SOURCE_COMMIT="$env:DSRRL_CHECKOUT_COMMIT"
+          -DDSRRL_BUILD_FLAVOR="main_drawpath_profile_r46_dof_off"
+          -DDSRRL_FULL_TELEMETRY_DEFAULT_ON=OFF
+          -DDSRRL_DOF_DEFAULT_ON=OFF
+          -DDSRRL_DOF_PROFILE=OFF
+          -DDSRRL_FLVER_SELECTOR_PROFILE=OFF
+          -DDSRRL_POINTLIGHT_PROFILE=OFF
+          -DDSRRL_DRAW_PATH_PROFILE=ON
+          -DDSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG=ON
+          -DDSRRL_PMETAL_FULL_PTDE_HEMENV_R3=ON
+          -DDSRRL_PMETAL_FULL_PTDE_HEMENV_R4=ON
+          -DDSRRL_PMETAL_FULL_PTDE_HEMENV_R5=ON
+          -DDSRRL_PMETAL_FULL_PTDE_HEMENV_R6=ON
+          -DDSRRL_PMETAL_FULL_PTDE_HEMENV_R7_SHADOW=ON
+          -DDSRRL_PMETAL_FULL_PTDE_HEMENV_R8_PRE_AB=ON
+          -DDSRRL_PMETAL_FULL_PTDE_HEMENV_R11_COMMON_MERGE=ON
+          -DDSRRL_PMETAL_FULL_PTDE_HEMENV_R15_PTDE_LIVEOUT_PAIR=ON
+          -DDSRRL_PMETAL_FULL_PTDE_HEMENV_R16_LEGACY_DIFFUSE_SPLIT=ON
+          -DDSRRL_PMETAL_FULL_PTDE_HEMENV_R17_PTDE_DIFFUSE_MATERIAL=ON
+          -DDSRRL_PMETAL_R19_LERP_MATERIALWORKFLOW=ON
+          -DDSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE=ON
+          -DDSRRL_PHYSICAL_CUT_UL_H3_SUBSURFACE=ON
+
+      - name: Verify diagnostic profile
+        shell: pwsh
+        run: |
+          $cache = Get-Content build-prof/CMakeCache.txt -Raw
+          foreach ($required in @(
+            "DSRRL_DRAW_PATH_PROFILE:BOOL=ON",
+            "DSRRL_DOF_DEFAULT_ON:BOOL=OFF",
+            "DSRRL_FULL_TELEMETRY_DEFAULT_ON:BOOL=OFF",
+            "DSRRL_PMETAL_FULL_PTDE_HEMENV_R17_PTDE_DIFFUSE_MATERIAL:BOOL=ON",
+            "DSRRL_PMETAL_R19_LERP_MATERIALWORKFLOW:BOOL=ON",
+            "DSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE:BOOL=ON",
+            "DSRRL_PHYSICAL_CUT_UL_H3_SUBSURFACE:BOOL=ON"
+          )) {
+            if ($cache -notmatch [regex]::Escape($required)) { throw "Missing diagnostic flag: $required" }
+          }
+
+      - name: Build profiler addon
+        shell: pwsh
+        run: |
+          cmake --build build-prof --config Release --target dsrrl_renderer_core_integrated
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $addons = @(Get-ChildItem build-prof -Recurse -Filter *.addon64)
+          if ($addons.Count -ne 1) { throw "Expected exactly one addon, found $($addons.Count)" }
+          Copy-Item $addons[0].FullName "DSRRL_MAIN_DRAWPATH_PROFILE_R46.addon64" -Force
+
+      - name: Verify profiler binary
+        shell: pwsh
+        run: |
+          $path = "DSRRL_MAIN_DRAWPATH_PROFILE_R46.addon64"
+          $ascii = [System.Text.Encoding]::ASCII.GetString([System.IO.File]::ReadAllBytes($path))
+          foreach ($required in @(
+            "main_drawpath_profile_r46_dof_off",
+            "[DSRRL PERF R46] DRAW",
+            "[DSRRL PMETAL R19 LERP]",
+            "[DSRRL PMETAL R7 SHADOW]",
+            "[DSRRL PMETAL R3 SPEC ATTEST]",
+            "[DSRRL POINTLIGHT R43-DRAWPARAM]"
+          )) {
+            if (-not $ascii.Contains($required)) { throw "Missing profiler/main marker: $required" }
+          }
+          if ($ascii.Contains("[DSRRL DoF R43-DRAWPARAM]")) {
+            Write-Host "DoF implementation remains linked but runtime default is OFF by compile profile."
+          }
+          $sha = (Get-FileHash $path -Algorithm SHA256).Hash.ToLowerInvariant()
+          Write-Host "R46_DRAWPATH_PROFILE_SHA256=$sha"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: DSRRL_MAIN_DRAWPATH_PROFILE_R46
+          path: DSRRL_MAIN_DRAWPATH_PROFILE_R46.addon64
+          if-no-files-found: error
