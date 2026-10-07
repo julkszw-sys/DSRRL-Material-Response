@@ -7363,6 +7363,35 @@ void on_present(
             1u,
             std::memory_order_relaxed) + 1u;
     g_clustered_pnts.frame_event(present);
+#ifdef DSRRL_LAUNCH_FINGERPRINT
+    if (present == 1u || (present % 300u) == 0u) {
+        const auto fp =
+            dsrrl::runtime::flver_identity_transport::
+                launch_fingerprint_stats();
+        char line[768]{};
+        std::snprintf(
+            line,
+            sizeof(line),
+            "[DSRRL PERF R48] LAUNCH present=%llu present_tid=%lu support=parse:%llu mtd:%llu destroy:%llu selector:%llu first_tid=parse:%u mtd:%u destroy:%u selector:%u first_qpc=parse:%llu mtd:%llu destroy:%llu selector:%llu",
+            static_cast<unsigned long long>(present),
+            static_cast<unsigned long>(GetCurrentThreadId()),
+            static_cast<unsigned long long>(fp.parse_events),
+            static_cast<unsigned long long>(fp.mtd_events),
+            static_cast<unsigned long long>(fp.destroy_events),
+            static_cast<unsigned long long>(fp.selector_events),
+            static_cast<unsigned>(fp.first_parse_tid),
+            static_cast<unsigned>(fp.first_mtd_tid),
+            static_cast<unsigned>(fp.first_destroy_tid),
+            static_cast<unsigned>(fp.first_selector_tid),
+            static_cast<unsigned long long>(fp.first_parse_qpc),
+            static_cast<unsigned long long>(fp.first_mtd_qpc),
+            static_cast<unsigned long long>(fp.first_destroy_qpc),
+            static_cast<unsigned long long>(fp.first_selector_qpc));
+        reshade::log::message(
+            reshade::log::level::info,
+            line);
+    }
+#endif
     if (present == 1u ||
         (g_hot_telemetry_enabled &&
          (present % 300u) == 0u)) {
