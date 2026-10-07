@@ -5059,6 +5059,9 @@ void on_bind_pipeline(
     reshade::api::pipeline_stage stages,
     reshade::api::pipeline pipeline)
 {
+    if (dsrrl::runtime::dof::internal_replay_active())
+        return;
+
     const bool pixel_stage_bound =
         (static_cast<std::uint32_t>(stages) &
          static_cast<std::uint32_t>(
@@ -6548,6 +6551,9 @@ bool on_draw(
     std::uint32_t first_vertex,
     std::uint32_t first_instance)
 {
+    if (dsrrl::runtime::dof::internal_replay_active())
+        return false;
+
     if (g_raw_draw_replay_recursing)
         return false;
 
@@ -6984,6 +6990,9 @@ bool on_draw_indexed(
     std::int32_t vertex_offset,
     std::uint32_t first_instance)
 {
+    if (dsrrl::runtime::dof::internal_replay_active())
+        return false;
+
     if (g_raw_draw_replay_recursing)
         return false;
 
@@ -7384,6 +7393,9 @@ void on_push_descriptors(
     std::uint32_t param_index,
     const reshade::api::descriptor_table_update &update)
 {
+    if (dsrrl::runtime::dof::internal_replay_active())
+        return;
+
     dsrrl::runtime::pixel_srv_shadow_on_push_descriptors(
         cmd_list,
         stages,

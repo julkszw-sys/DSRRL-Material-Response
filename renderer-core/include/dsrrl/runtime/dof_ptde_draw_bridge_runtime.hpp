@@ -26,6 +26,11 @@ bool register_ptde_draw_bridge_runtime(
     core::renderer_core &core) noexcept;
 void unregister_ptde_draw_bridge_runtime() noexcept;
 
+// True only while the DoF island is issuing synthetic D3D11 work.
+// Other renderer islands must fail open during this scope so private DoF
+// draws/binds cannot mutate shared route/material/resource observations.
+bool internal_replay_active() noexcept;
+
 bool handle_draw_event(
     reshade::api::command_list *cmd_list,
     std::uint32_t vertex_count,
