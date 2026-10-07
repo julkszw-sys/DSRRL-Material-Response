@@ -278,6 +278,9 @@ struct flat_pass_shader_route {
     retained_shader_role alternate = retained_shader_role::count;
 };
 
+// Stock DSR pass-number/shader baseline only. This table is diagnostic and
+// must not be used as PTDE program-slot authority; direct PTDE registry RE is
+// represented separately by the production/exact resource contracts.
 inline constexpr std::array<flat_pass_shader_route, 8>
 dsr_flat_retained_routes = {{
     {0x00u, retained_shader_role::depth_copy,
@@ -308,11 +311,6 @@ constexpr bool retained_runtime_id_sequence_is_contiguous() noexcept
             retained_pixel_runtime_id_base + entry.pixel_binder_index)
             return false;
     return true;
-}
-
-constexpr bool flat_pass_0x10_is_output_composite() noexcept
-{
-    return false;
 }
 
 // Active DSR DoF handoff: Flat output target +0xF8 is sampled through

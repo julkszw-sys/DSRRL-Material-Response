@@ -289,61 +289,11 @@ constexpr bool production_seed_graph_is_structurally_closed() noexcept
         terminal.inherit_host_om;
 }
 
-struct plain_dofrate_switch_contract {
-    std::uintptr_t instruction_rva = 0u;
-    std::array<std::uint8_t, 5> expected_cb_selector{};
-    std::array<std::uint8_t, 5> replacement_plain_selector{};
-    std::uint32_t stock_runtime_shader_id = 0u;
-    std::uint32_t ptde_bridge_runtime_shader_id = 0u;
-};
-
-// DSR ImageProcessDof_Flat pass 0x0D executor:
-//   mov edx, 0xDF0   ; retained DofRate_CB
-// Exact PTDE bridge uses retained plain DofRate (0xDEF), whose rate algebra
-// is preserved while its t1 frontend is ordinary Texture2D like PTDE.
-inline constexpr plain_dofrate_switch_contract
-dsr_plain_dofrate_switch = {
-    0x00456489u,
-    {0xBAu, 0xF0u, 0x0Du, 0x00u, 0x00u},
-    {0xBAu, 0xEFu, 0x0Du, 0x00u, 0x00u},
-    dsr_dofrate_cb_runtime_shader_id,
-    dsr_dofrate_plain_runtime_shader_id
-};
-
-template<std::size_t N>
-constexpr bool byte_array_equal(
-    const std::array<std::uint8_t, N> &a,
-    const std::array<std::uint8_t, N> &b) noexcept
-{
-    for (std::size_t i = 0u; i < N; ++i)
-        if (a[i] != b[i])
-            return false;
-    return true;
-}
-
-constexpr bool plain_dofrate_switch_is_exact() noexcept
-{
-    return
-        dsr_plain_dofrate_switch.instruction_rva == 0x00456489u &&
-        dsr_plain_dofrate_switch.stock_runtime_shader_id == 0x0DF0u &&
-        dsr_plain_dofrate_switch.ptde_bridge_runtime_shader_id == 0x0DEFu &&
-        byte_array_equal(
-            dsr_plain_dofrate_switch.expected_cb_selector,
-            std::array<std::uint8_t, 5>{
-                0xBAu, 0xF0u, 0x0Du, 0x00u, 0x00u}) &&
-        byte_array_equal(
-            dsr_plain_dofrate_switch.replacement_plain_selector,
-            std::array<std::uint8_t, 5>{
-                0xBAu, 0xEFu, 0x0Du, 0x00u, 0x00u});
-}
-
 static_assert(ptde_fixed_surface_set_is_exact(),
     "PTDE DoF private set must remain 2x full + 3x half + 2x quarter BGRA8.");
 static_assert(ptde_exact_pass_resource_graph_is_structurally_closed(),
     "PTDE DoF ctor resource graph drifted.");
 static_assert(production_seed_graph_is_structurally_closed(),
     "Production DoF seed graph must preserve the PTDE 1024x720 first raster.");
-static_assert(plain_dofrate_switch_is_exact(),
-    "DSR DoF plain-rate switch contract drifted.");
 
 } // namespace dsrrl::operators::dof
