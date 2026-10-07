@@ -572,8 +572,16 @@ int main()
 
     CHECK(draw_required_count == 15u);
     CHECK(create_time_safe_count == 5u);
-    CHECK(blocked_count == 3u);
+    CHECK(blocked_count == 4u);
     CHECK(host_preserve_count == 2u);
+
+    const auto dof_contract =
+        core::find_operator_contract(core::operator_id::post_dof_ptde);
+    CHECK(dof_contract.has_value());
+    CHECK(dof_contract->default_state == core::port_state::partial);
+    CHECK(dof_contract->carrier == core::carrier_kind::composite);
+    CHECK(core::draw_policy(core::operator_id::post_dof_ptde).mode ==
+          core::draw_transaction_mode::blocked);
 
     CHECK(core::requires_draw_transaction(
         core::operator_id::material_response));
