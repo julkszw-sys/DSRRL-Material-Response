@@ -40,7 +40,7 @@ def main():
     require(draw,"g_source_unclassified_bank_fail_open",
         "unclassified/default/m99 fail-open")
 
-    a=draw.find("void __fastcall clustered_source_override_callback(")
+    a=draw.find("float __fastcall clustered_source_override_callback(")
     b=draw.find("bool build_clustered_source_override_stub(",a)
     if a<0 or b<=a:
         fail("source callback boundaries missing")
