@@ -505,7 +505,7 @@ bool find_unique_instruction_sequence(
     return i == words.size() && hits == 1u;
 }
 
-bool find_unique_t18_offset32_load(
+bool find_unique_t18_offset0_load(
     const std::vector<std::uint32_t> &words,
     std::size_t &position) noexcept
 {
@@ -525,7 +525,7 @@ bool find_unique_t18_offset32_load(
         if ((token & 0x7ffu) == 0x0a7u &&
             length == 11u &&
             words[i + 7u] == 0x00004001u &&
-            words[i + 8u] == 0x00000020u &&
+            words[i + 8u] == 0x00000000u &&
             words[i + 10u] == 18u) {
             position = i;
             ++hits;
@@ -748,7 +748,7 @@ identify_clustered_pnts_marker_attenuation(
             fail_identity_precondition;
 
     std::size_t t18_load = 0u;
-    if (!find_unique_t18_offset32_load(
+    if (!find_unique_t18_offset0_load(
             words,
             t18_load) ||
         t18_load + 11u > words.size() ||
@@ -760,8 +760,8 @@ identify_clustered_pnts_marker_attenuation(
     std::copy_n(
         words.begin() +
             static_cast<std::ptrdiff_t>(t18_load),
-        identity.t18_offset32_load.size(),
-        identity.t18_offset32_load.begin());
+        identity.t18_offset0_load.size(),
+        identity.t18_offset0_load.begin());
     std::copy_n(
         words.begin() +
             static_cast<std::ptrdiff_t>(square_start),
@@ -867,7 +867,7 @@ materialize_clustered_pnts_marker_attenuation(
     if (stock_pair == a1_linear_pair ||
         !find_unique_instruction_sequence(
             words,
-            identity.t18_offset32_load,
+            identity.t18_offset0_load,
             t18_load) ||
         !find_unique_dcl_temps(
             words,
@@ -907,9 +907,9 @@ materialize_clustered_pnts_marker_attenuation(
     const auto new_temp = words[dcl_temps + 1u];
     if (new_temp == 0u ||
         new_temp >= 0x0000ffffu ||
-        identity.t18_offset32_load[7u] != 0x00004001u ||
-        identity.t18_offset32_load[8u] != 0x00000020u ||
-        identity.t18_offset32_load[10u] != 18u ||
+        identity.t18_offset0_load[7u] != 0x00004001u ||
+        identity.t18_offset0_load[8u] != 0x00000000u ||
+        identity.t18_offset0_load[10u] != 18u ||
         identity.cubic_mul_sat[1u] == 0u ||
         identity.cubic_mul_sat[3u] == 0u) {
         outcome.result =
@@ -934,7 +934,7 @@ materialize_clustered_pnts_marker_attenuation(
     words[cubic + 1u] = 0x00100022u; // rN.y destination
     words[cubic + 2u] = new_temp;
 
-    auto marker_load = identity.t18_offset32_load;
+    auto marker_load = identity.t18_offset0_load;
     marker_load[3u] = 0x00100012u; // rN.x destination
     marker_load[4u] = new_temp;
     marker_load[8u] = 0x00000028u; // t18 + 0x28 marker
