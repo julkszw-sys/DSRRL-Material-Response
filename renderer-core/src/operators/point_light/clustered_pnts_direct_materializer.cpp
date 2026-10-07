@@ -599,9 +599,8 @@ materialize_clustered_pnts_spc_attenuation_only(
     outcome.representative_shader_index =
         plan->representative_shader_index;
 
-    // The 12 NoSpc PntS plans are already owned by the create-time A1
-    // composition (legacy mask bit 0x4). R44A closes only the 24 Spc plans
-    // that were left on stock cubic attenuation in the R43 source-only line.
+    // The 12 NoSpc plans are composed by the existing A1 create-time path.
+    // R44 owns only the 24 Spc hosts that R43 intentionally left stock.
     if (!plan->spc) {
         outcome.result =
             clustered_pnts_spc_attenuation_result::
@@ -673,7 +672,7 @@ materialize_clustered_pnts_spc_attenuation_only(
     if (square_op == nullptr ||
         terminal_op == nullptr ||
         square_op->start >= words.size() ||
-        terminal_op->start >= words.size() ||
+        terminal_op->start + 7u > words.size() ||
         words[square_op->start] != 0x07000038u ||
         words[terminal_op->start] != 0x07002038u) {
         outcome.result =
@@ -682,18 +681,169 @@ materialize_clustered_pnts_spc_attenuation_only(
         return outcome;
     }
 
-    // Certified 72-body transform, restricted here to the missing Spc half:
-    //   tmp = x*x; A = SAT(x*tmp)  ->  tmp = min(x,x); A = SAT(max(x,tmp))
-    // which is exactly SAT(x). Both substitutions preserve instruction length,
-    // operands, register allocation, RDEF and resource ABI.
-    words[square_op->start] = 0x07000033u;
-    words[terminal_op->start] = 0x07002034u;
+    // Locate the exact t18 +0x20 structured load already present in the
+    // attested stock host and the single dcl_temps declaration. The new
+    // marker load clones this ABI exactly and changes only destination and
+    // byte offset to the producer-owned padding lane t18+0x28.
+    std::size_t temp_decl = static_cast<std::size_t>(-1);
+    std::size_t t18_load20 = static_cast<std::size_t>(-1);
+    for (std::size_t pos = 2u; pos < words.size();) {
+        const auto token = words[pos];
+        const auto length =
+            static_cast<std::size_t>((token >> 24u) & 0x7Fu);
+        const auto opcode = token & 0x7FFu;
+        if (length == 0u || pos + length > words.size()) {
+            outcome.result =
+                clustered_pnts_spc_attenuation_result::
+                    fail_patch_precondition;
+            return outcome;
+        }
+
+        if (opcode == 104u && length == 2u) {
+            if (temp_decl != static_cast<std::size_t>(-1)) {
+                outcome.result =
+                    clustered_pnts_spc_attenuation_result::
+                        fail_patch_precondition;
+                return outcome;
+            }
+            temp_decl = pos;
+        }
+
+        if (opcode == 167u &&
+            length == 11u &&
+            words[pos + 8u] == 0x00000020u &&
+            words[pos + 9u] == 0x00107006u &&
+            words[pos + 10u] == 18u) {
+            if (t18_load20 != static_cast<std::size_t>(-1)) {
+                outcome.result =
+                    clustered_pnts_spc_attenuation_result::
+                        fail_patch_precondition;
+                return outcome;
+            }
+            t18_load20 = pos;
+        }
+
+        pos += length;
+    }
+
+    if (temp_decl == static_cast<std::size_t>(-1) ||
+        t18_load20 == static_cast<std::size_t>(-1) ||
+        t18_load20 + 11u > square_op->start ||
+        words[temp_decl + 1u] >= 0x1000u) {
+        outcome.result =
+            clustered_pnts_spc_attenuation_result::
+                fail_patch_precondition;
+        return outcome;
+    }
+
+    const std::uint32_t scratch_reg =
+        words[temp_decl + 1u];
+    words[temp_decl + 1u] = scratch_reg + 1u;
+
+    // The cubic terminal is in-place in every exact journal host:
+    //   mul_sat dst, dst, square
+    // Verify destination component/register against its first source so the
+    // post-op can safely read the freshly written cubic value.
+    const auto terminal = terminal_op->start;
+    const auto dst_token = words[terminal + 1u];
+    const auto dst_reg = words[terminal + 2u];
+    const auto x_token = words[terminal + 3u];
+    const auto x_reg = words[terminal + 4u];
+
+    std::uint32_t expected_dst_token = 0u;
+    switch (x_token) {
+    case 0x0010000Au: expected_dst_token = 0x00100012u; break;
+    case 0x0010001Au: expected_dst_token = 0x00100022u; break;
+    case 0x0010002Au: expected_dst_token = 0x00100042u; break;
+    case 0x0010003Au: expected_dst_token = 0x00100082u; break;
+    default:
+        outcome.result =
+            clustered_pnts_spc_attenuation_result::
+                fail_patch_precondition;
+        return outcome;
+    }
+
+    if (dst_token != expected_dst_token ||
+        dst_reg != x_reg) {
+        outcome.result =
+            clustered_pnts_spc_attenuation_result::
+                fail_patch_precondition;
+        return outcome;
+    }
+
+    std::array<std::uint32_t,11> marker_load{};
+    for (std::size_t i = 0u; i < marker_load.size(); ++i)
+        marker_load[i] = words[t18_load20 + i];
+
+    marker_load[3] = 0x00100012u; // scratch.x
+    marker_load[4] = scratch_reg;
+    marker_load[8] = 0x00000028u; // t18 record padding marker
+
+    // Preserve the stock cubic result, then select PTDE linear attenuation
+    // without a dynamic branch:
+    //   linear_candidate = marker * x
+    //   A = SAT(max(x^3, linear_candidate))
+    // marker=0.0 => exact stock x^3
+    // marker=1.0 => exact PTDE x for x in [0,1].
+    const std::array<std::uint32_t,14> rowaware_post{{
+        0x07000038u,
+        0x00100012u, scratch_reg,
+        0x0010000Au, scratch_reg,
+        x_token, x_reg,
+        0x07002034u,
+        dst_token, dst_reg,
+        x_token, x_reg,
+        0x0010000Au, scratch_reg
+    }};
+
+    const auto marker_insert = t18_load20 + 11u;
+    const auto post_insert = terminal + 7u;
+
+    std::vector<std::uint32_t> patched;
+    try {
+        patched.reserve(words.size() +
+                        marker_load.size() +
+                        rowaware_post.size());
+        for (std::size_t i = 0u; i <= words.size(); ++i) {
+            if (i == marker_insert)
+                patched.insert(
+                    patched.end(),
+                    marker_load.begin(),
+                    marker_load.end());
+
+            if (i == post_insert)
+                patched.insert(
+                    patched.end(),
+                    rowaware_post.begin(),
+                    rowaware_post.end());
+
+            if (i < words.size())
+                patched.push_back(words[i]);
+        }
+    } catch (...) {
+        outcome.result =
+            clustered_pnts_spc_attenuation_result::
+                fail_rebuild;
+        return outcome;
+    }
+
+    if (patched.size() != words.size() + 25u ||
+        patched.size() >
+            std::numeric_limits<std::uint32_t>::max()) {
+        outcome.result =
+            clustered_pnts_spc_attenuation_result::
+                fail_patch_precondition;
+        return outcome;
+    }
+
+    patched[1] =
+        static_cast<std::uint32_t>(patched.size());
 
     if (!rebuild(
             source,
             size,
             std::move(chunks),
-            words,
+            patched,
             output)) {
         output.clear();
         outcome.result =
@@ -702,7 +852,7 @@ materialize_clustered_pnts_spc_attenuation_only(
         return outcome;
     }
 
-    if (output.size() != size ||
+    if (output.size() != size + 100u ||
         !legacy_plan::dxbc::checksum_container_valid(
             output.data(),
             output.size())) {
