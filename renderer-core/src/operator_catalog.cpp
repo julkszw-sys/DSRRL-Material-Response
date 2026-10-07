@@ -31,6 +31,7 @@ constexpr std::array<operator_contract, operator_count> k_catalog = {{
     {operator_id::dsr_sfx_inverse_tonemap, "dsr.sfxpbl.inverse_tonemap", "renderer.dsr.sfxpbl.dedicated_inverse_tonemap_operator_v1", "DSR dedicated SfxPBL inverse-tonemap", canonical_status::confirmed, port_state::stock_host, carrier_kind::host_preserve, require_none, true},
     {operator_id::pmetal_black_safe_source, "surface.pmetal_black_safe_source", "project.materialization.pmetal_envspec_v13_ptde_donor_ab_v1", "P_Metal V13 black-safe source", canonical_status::confirmed, port_state::off, carrier_kind::hybrid, require_receiver | require_material | require_resource | require_producer | require_consumer, true},
     {operator_id::pmetal_black_safe_v10, "surface.pmetal_black_safe_v10", "project.runtime.pmetal_blackspot_v10_paired_lerp_fix_v1", "P_Metal V10 black-safe paired Lerp", canonical_status::confirmed, port_state::active_candidate, carrier_kind::shader, require_receiver | require_material | require_consumer, true},
+    {operator_id::post_dof_ptde, "post.dof_ptde", "renderer.dof.302089dd_ptde_pass_shader_route_mismatch_v1", "PTDE DoF postprocess reconstruction", canonical_status::confirmed, port_state::partial, carrier_kind::composite, require_receiver | require_resource | require_producer | require_consumer | require_graph, true},
 }};
 static_assert(k_catalog.size() == operator_count, "Every operator_id must have one catalog contract.");
 
