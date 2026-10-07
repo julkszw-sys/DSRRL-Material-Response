@@ -1224,7 +1224,7 @@ clustered_live_source_result classify_clustered_source_bank(
     constexpr std::uint32_t table_end =
         0x30u + 64u * 12u;
     if (count != 64u ||
-        first < table_end ||
+        first < 0x30u ||
         first > 0x100000u)
         return clustered_live_source_result::
             bank_signature_header_range_fail;
@@ -1263,7 +1263,7 @@ clustered_live_source_result classify_clustered_source_bank(
             cache))
         return clustered_live_source_result::
             bank_signature_table_read_fail;
-    if (row5_offset < table_end ||
+    if (row5_offset < 0x30u ||
         row5_offset > 0x100000u)
         return clustered_live_source_result::
             bank_signature_row_offset_fail;
