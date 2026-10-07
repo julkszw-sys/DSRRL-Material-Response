@@ -1550,13 +1550,28 @@ clustered_live_source_result capture_clustered_live_drawparam_source(
         return clustered_live_source_result::invalid_vtable;
     }
 
+    // 0xB7E02 is already downstream of DSR's source-domain q^2.2
+    // transform. Stock clustered HemEnv then applies the shared 1/2.2 root
+    // after local-light accumulation. Writing raw PTDE q here therefore puts
+    // the signal in the wrong domain and compresses strong sources / alters
+    // chroma. Publish the DSR pre-root preimage q^2.2 instead. Category gain
+    // is intentionally not reintroduced: the PTDE source coordinate has no
+    // DSR-only category multiplier.
+    if (result.q[0] < 0.0f ||
+        result.q[1] < 0.0f ||
+        result.q[2] < 0.0f)
+        return clustered_live_source_result::invalid_row_numeric;
+
     raw[3] = 1.0f / (result.end - result.begin);
-    raw[4] = result.q[0];
-    raw[5] = result.q[1];
-    raw[6] = result.q[2];
+    raw[4] = std::pow(result.q[0], 2.2f);
+    raw[5] = std::pow(result.q[1], 2.2f);
+    raw[6] = std::pow(result.q[2], 2.2f);
     raw[7] = result.end;
 
     return std::isfinite(raw[3]) &&
+           std::isfinite(raw[4]) &&
+           std::isfinite(raw[5]) &&
+           std::isfinite(raw[6]) &&
            raw[3] > 0.0f
         ? clustered_live_source_result::applied
         : clustered_live_source_result::invalid_row_numeric;
