@@ -89,7 +89,7 @@ struct clustered_pnts_marker_attenuation_identity {
     std::size_t host_size = 0u;
     std::uint32_t representative_shader_index = 0u;
     bool spc = false;
-    std::array<std::uint32_t,11> t18_offset32_load{};
+    std::array<std::uint32_t,11> t18_offset0_load{};
     std::array<std::uint32_t,7> square_mul{};
     std::array<std::uint32_t,7> cubic_mul_sat{};
     bool exact = false;
