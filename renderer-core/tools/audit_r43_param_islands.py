@@ -85,7 +85,7 @@ def main():
     if "0x00457E50u" in dof_handoff:
         fail("DoF handoff regressed to pass 0x1C/0x1D executor 0x457E50")
     require(cluster,
-        "bank_identity=ROW0_HOT_ROW5_COLD_EXACT_PAYLOAD",
+        "bank_identity=ROW0_EXACT_PAYLOAD",
         "Clustered lightweight bank gate marker")
     require(cluster,
         "k_clustered_source_bank_fingerprints",
