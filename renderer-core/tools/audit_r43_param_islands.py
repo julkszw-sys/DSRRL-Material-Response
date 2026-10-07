@@ -84,21 +84,28 @@ def main():
         "DoF pass13 instruction-boundary hook size")
     if "0x00457E50u" in dof_handoff:
         fail("DoF handoff regressed to pass 0x1C/0x1D executor 0x457E50")
-    for needle in (
-        "bank_guard_name_offset_read_fail",
-        "bank_guard_name_offset_range_fail",
-        "bank_guard_name_word_read_fail",
-        "signature_header_range_fail",
-        "signature_table_read_fail",
-        "signature_row_id_fail",
-        "signature_row_offset_fail",
-        "signature_name_offset_fail",
-        "signature_name_read_fail",
-        "signature_name_unterminated",
-        "signature_complete_but_unknown",
+    require(cluster,
+        "bank_identity=ROW0_HOT_ROW5_COLD_EXACT_PAYLOAD",
+        "Clustered lightweight bank gate marker")
+    require(cluster,
+        "k_clustered_source_bank_fingerprints",
+        "Clustered exact sparse bank fingerprints")
+    require(cluster,
+        "clustered_source_bank_identity_cache_index(",
+        "Clustered direct bank-identity cache")
+    require(cluster,
+        "stock_dsr_signature_complete_unknown",
+        "Clustered unknown-bank fail-open")
+    require(cluster,
+        "dsr_only_semantic_row(bank, row_id)",
+        "Clustered ten-row DSR-only gate")
+    for forbidden in (
+        "clustered_source_bank_guard(",
+        "clustered_bank_structure_signature(",
+        "bank_structure_revalidate=TABLE_PLUS_NAMES_ONLY",
     ):
-        require(cluster,needle,
-            "Clustered split bank-structure failure stage")
+        if forbidden in cluster:
+            fail("Clustered lightweight bank gate regressed to full structure/name scan: "+forbidden)
     require(integrated,"[DSRRL DoF R43-DRAWPARAM]",
         "DoF live DrawParam marker")
     require(integrated,"[DSRRL DoF R43-HANDOFF] pass=0x13 executor_rva=0x4572A0 source=pass_desc+0x0C alias=image_state+0x104",
