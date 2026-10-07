@@ -224,7 +224,7 @@ option(
 option(
     DSRRL_FLVER_SELECTOR_PROFILE
     "Diagnostic: low-overhead sampled FLVER selector/support interaction profiler"
-    OFF)
+    ON)
 option(
     DSRRL_POINTLIGHT_PROFILE
     "Diagnostic: low-overhead sampled clustered PointLight producer/transaction profiler"

@@ -87,6 +87,21 @@ std::atomic<std::uint32_t> g_role_resource_logged_mask{0u};
 thread_local sequence_state g_sequence{};
 thread_local bool g_internal_replay = false;
 
+struct internal_replay_scope {
+    bool previous = false;
+
+    internal_replay_scope() noexcept
+        : previous(g_internal_replay)
+    {
+        g_internal_replay = true;
+    }
+
+    ~internal_replay_scope() noexcept
+    {
+        g_internal_replay = previous;
+    }
+};
+
 #ifdef DSRRL_DOF_PROFILE
 constexpr std::uint32_t k_dof_profile_sample_period = 1024u;
 
@@ -669,6 +684,22 @@ bool acquire_terminal(
     return true;
 }
 
+result execute_private_ptde_pass(
+    reshade::api::command_list *cmd_list,
+    const operators::dof::activation_context &activation,
+    const scheduler_external_inputs &inputs,
+    const scheduler_draw_shape &shape,
+    std::size_t pass_index) noexcept
+{
+    internal_replay_scope replay_scope{};
+    return execute_ptde_pass(
+        cmd_list,
+        activation,
+        inputs,
+        shape,
+        pass_index);
+}
+
 bool begin_sequence(
     reshade::api::command_list *cmd_list,
     const scheduler_draw_shape &shape) noexcept
@@ -715,7 +746,7 @@ bool begin_sequence(
 
     // Synthetic scene seed: one retained SAMPLE into fixed 1024x720
     // BGRA8 writes RGB only. No DofBank/pass00 state is required.
-    if (execute_ptde_pass(
+    if (execute_private_ptde_pass(
             cmd_list,
             activation,
             scheduler_inputs(),
@@ -733,7 +764,7 @@ bool begin_sequence(
     }
 
     const auto pass00 =
-        execute_ptde_pass(
+        execute_private_ptde_pass(
             cmd_list,
             activation,
             scheduler_inputs(),
@@ -757,7 +788,7 @@ bool begin_sequence(
          ++pass_index) {
         g_sequence.next_pass = pass_index;
         const auto executed =
-            execute_ptde_pass(
+            execute_private_ptde_pass(
                 cmd_list,
                 activation,
                 scheduler_inputs(),
@@ -792,7 +823,7 @@ void advance_sequence(
     const auto activation =
         activation_context();
 
-    if (execute_ptde_pass(
+    if (execute_private_ptde_pass(
             cmd_list,
             activation,
             scheduler_inputs(),
@@ -842,12 +873,11 @@ bool visible_tonemap_handoff(
         1u,
         &terminal);
 
-    g_internal_replay = true;
+    internal_replay_scope replay_scope{};
     const bool drawn =
         issue_native_draw(
             context,
             shape);
-    g_internal_replay = false;
 
     context->PSSetShaderResources(
         0u,
@@ -1220,6 +1250,11 @@ void on_present(
 }
 
 } // namespace
+
+bool internal_replay_active() noexcept
+{
+    return g_internal_replay;
+}
 
 bool handle_draw_event(
     reshade::api::command_list *cmd_list,
