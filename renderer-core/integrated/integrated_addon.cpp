@@ -2361,10 +2361,19 @@ bool apply_r44_rowaware_create_patch(
                 if (!g_r44_spc_create_fail_logged.exchange(
                         true,
                         std::memory_order_relaxed)) {
+                    char line[320]{};
+                    std::snprintf(
+                        line,
+                        sizeof(line),
+                        "[DSRRL POINTLIGHT R45-CONSUMER] create_patch=FAIL_OPEN stock_dsr=ON result=%u shader_index=%u host_size=%llu",
+                        static_cast<unsigned>(outcome.result),
+                        static_cast<unsigned>(
+                            outcome.representative_shader_index),
+                        static_cast<unsigned long long>(
+                            outcome.host_size));
                     reshade::log::message(
                         reshade::log::level::warning,
-                        "[DSRRL POINTLIGHT R44-CONSUMER] "
-                        "create_patch=FAIL_OPEN stock_dsr=ON");
+                        line);
                 }
             }
             return false;
@@ -2418,11 +2427,14 @@ bool apply_r44_rowaware_create_patch(
                 std::memory_order_relaxed)) {
             reshade::log::message(
                 reshade::log::level::info,
-                "[DSRRL POINTLIGHT R44-CONSUMER] "
+                "[DSRRL POINTLIGHT R45-CONSUMER] "
                 "family=PHN_HEMENVLERP_PNTS_ALL36 "
                 "replacement=CREATE_TIME "
                 "attenuation=ROWAWARE_X3_OR_X "
+                "spc_diffuse_domain=PTDE_LINEAR_Z "
+                "terminal_rgb=PTDE_SAT "
                 "marker=t18+0x28 "
+                "specular_tail=STOCK_DSR "
                 "draw_replay=OFF");
         }
 
