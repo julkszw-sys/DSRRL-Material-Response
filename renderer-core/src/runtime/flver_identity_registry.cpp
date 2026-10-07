@@ -442,4 +442,28 @@ std::uint64_t flver_identity_epoch() noexcept
         std::memory_order_acquire);
 }
 
+bool flver_identity_cache_epoch_survives(
+    const void *selector_container,
+    std::uint64_t cached_epoch,
+    std::uint64_t &current_epoch) noexcept
+{
+    current_epoch = 0u;
+    if (selector_container == nullptr)
+        return false;
+
+    const auto address =
+        reinterpret_cast<std::uintptr_t>(
+            selector_container);
+    if (address < k_container_offset)
+        return false;
+
+    const auto *model =
+        reinterpret_cast<const void *>(
+            address - k_container_offset);
+    return cached_epoch_survives_for_model(
+        model,
+        cached_epoch,
+        current_epoch);
+}
+
 } // namespace dsrrl::runtime
