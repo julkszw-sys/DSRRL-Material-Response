@@ -314,37 +314,11 @@ bool capture_pass_state(
         return false;
     }
 
-    // Production prefix is opaque postprocess. Accept only the authentic
-    // host cut when it is also opaque/full-write; private write-mask states
-    // themselves are cached once per D3D11 device by the scheduler.
-    ID3D11BlendState *base_blend = nullptr;
-    std::array<FLOAT, 4> blend_factor{};
-    UINT sample_mask = 0xffffffffu;
-    context->OMGetBlendState(
-        &base_blend,
-        blend_factor.data(),
-        &sample_mask);
-
-    D3D11_BLEND_DESC base_desc{};
-    if (base_blend != nullptr)
-        base_blend->GetDesc(&base_desc);
-    else
-        default_blend_desc(base_desc);
-
-    const bool opaque_full_write =
-        base_desc.RenderTarget[0].BlendEnable == FALSE &&
-        base_desc.RenderTarget[0].RenderTargetWriteMask ==
-            D3D11_COLOR_WRITE_ENABLE_ALL;
-
-    if (base_blend != nullptr)
-        base_blend->Release();
-
-    if (!opaque_full_write) {
-        samplers[0]->Release();
-        samplers[1]->Release();
-        return false;
-    }
-
+    // The private prefix owns its no-blend/write-mask state explicitly and
+    // the scheduler restores the exact host OM state after every synthetic
+    // draw. Do not over-constrain activation on the host pass01 blend state:
+    // pass01 is the authenticated source/sampler cut, not the private OM
+    // authority. Terminal pass10 still inherits the authentic host OM state.
     out.color_sampler = samplers[0];
     out.depth_sampler = samplers[1];
     out.ready = true;
