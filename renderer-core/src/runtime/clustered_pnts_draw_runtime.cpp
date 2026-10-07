@@ -1873,7 +1873,7 @@ void __fastcall clustered_source_override_callback(
     // Marker is published only after the exact live PTDE row has survived
     // every source validation and the carrier payload has been committed.
     // 1 = use PTDE PointLight local operator; 0 = preserve stock DSR.
-    *ptde_marker = 1u;
+    *ptde_marker = 0x3F800000u; // IEEE-754 1.0f
 
     telemetry::hot_count(
         g_source_capture_ok);
