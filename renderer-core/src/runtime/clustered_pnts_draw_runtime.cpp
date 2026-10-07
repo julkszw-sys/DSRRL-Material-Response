@@ -1619,13 +1619,23 @@ void source_hook_load_xmm(
 void __fastcall clustered_source_override_callback(
     void *source,
     float *geometry,
-    float *color_end) noexcept
+    float *color_end,
+    std::uint32_t *ptde_marker) noexcept
 {
+    // R44 row-aware consumer carrier. Retail writes only t18 +0x00..+0x24
+    // for the 48-byte record at this producer cut, so +0x28 is reserved for
+    // the bridge marker. Clear first on every producer visit so every
+    // fail-open path remains stock DSR even when the backing t18 allocation
+    // is recycled from a previously bridged light.
+    if (ptde_marker != nullptr)
+        *ptde_marker = 0u;
+
     if (!g_enabled.load(std::memory_order_relaxed) ||
         g_quarantined.load(std::memory_order_relaxed) ||
         source == nullptr ||
         geometry == nullptr ||
         color_end == nullptr ||
+        ptde_marker == nullptr ||
         g_base == 0u)
         return;
 
@@ -1860,6 +1870,11 @@ void __fastcall clustered_source_override_callback(
         payload.data() + 1u,
         4u * sizeof(float));
 
+    // Marker is published only after the exact live PTDE row has survived
+    // every source validation and the carrier payload has been committed.
+    // 1 = use PTDE PointLight local operator; 0 = preserve stock DSR.
+    *ptde_marker = 1u;
+
     telemetry::hot_count(
         g_source_capture_ok);
 }
@@ -1902,7 +1917,8 @@ bool build_clustered_source_override_stub(
 
         // callback(source=RDI,
         //          geometry=original_rsp+0x20,
-        //          color_end=original_rsp+0x30)
+        //          color_end=original_rsp+0x30,
+        //          ptde_marker=t18_record+0x28)
         source_hook_emit(code,{0x48,0x8B,0xCF}); // mov rcx,rdi
         source_hook_emit(
             code,
@@ -1910,6 +1926,23 @@ bool build_clustered_source_override_stub(
         source_hook_emit(
             code,
             {0x4C,0x8D,0x84,0x24,0x40,0x01,0x00,0x00}); // lea r8,[rsp+140h]
+
+        // Retail immediately writes this same 48-byte t18 record after the
+        // callback. Compute its unused +0x28 lane from RBX+0x320 and RSI.
+        // rax is volatile and already preserved by the stub.
+        source_hook_emit(
+            code,
+            {0x4C,0x8B,0x8B,0x20,0x03,0x00,0x00}); // mov r9,[rbx+320h]
+        source_hook_emit(
+            code,
+            {0x48,0x8D,0x04,0x76}); // lea rax,[rsi+rsi*2]
+        source_hook_emit(
+            code,
+            {0x48,0x01,0xC0}); // add rax,rax => 6*rsi
+        source_hook_emit(
+            code,
+            {0x4D,0x8D,0x4C,0xC1,0x28}); // lea r9,[r9+rax*8+28h]
+
         source_hook_emit(code,{0x48,0xB8});
         source_hook_emit_u64(
             code,
