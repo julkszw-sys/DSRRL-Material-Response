@@ -33,11 +33,44 @@ int main()
     assert(owner.material_slot == 7u);
     assert(owner.material_slot_valid);
 
+    // Regression: a selector may run before its FLVER parser/support hook.
+    // A cached negative verdict must become visible as a positive identity as
+    // soon as the parser publishes the model, without waiting for a later
+    // destruction/replacement epoch change.
+    alignas(16) std::array<std::uint8_t,0x100> late_model{};
+    const void *late_model_key=late_model.data();
+    const void *late_container=late_model.data()+0x88u;
+    std::array<std::uint8_t,32> late_sha{};
+    assert(!dsrrl::runtime::flver_identity_lookup(late_container,late_sha));
+    assert(dsrrl::runtime::flver_identity_observe_parse(
+        late_model_key,raw.data(),raw.size()));
+    assert(dsrrl::runtime::flver_identity_lookup(late_container,late_sha));
+    assert(late_sha==first);
+
+    // Destruction of another live FLVER must not change the authoritative
+    // identity of this model. The registry implementation may keep the hot
+    // positive verdict lock-free when the invalidation journal proves that
+    // the mutation belongs to a different model.
+    alignas(16) std::array<std::uint8_t,0x100> other_model{};
+    const void *other_model_key=other_model.data();
+    const void *other_container=other_model.data()+0x88u;
+    std::array<std::uint8_t,32> other_sha{};
+    assert(dsrrl::runtime::flver_identity_observe_parse(
+        other_model_key,raw.data(),raw.size()));
+    assert(dsrrl::runtime::flver_identity_lookup(other_container,other_sha));
+    dsrrl::runtime::flver_identity_observe_destroy(other_model_key);
+    std::array<std::uint8_t,32> after_other_destroy{};
+    assert(dsrrl::runtime::flver_identity_lookup(
+        container,after_other_destroy));
+    assert(after_other_destroy==first);
+
     dsrrl::runtime::flver_identity_observe_destroy(model_key);
     std::array<std::uint8_t,32> stale{};
     assert(!dsrrl::runtime::flver_identity_lookup(container,stale));
     assert(!dsrrl::runtime::flver_identity_enrich_owner(container, 7u, owner));
     assert(!owner.material_slot_valid);
+
+    dsrrl::runtime::flver_identity_observe_destroy(late_model_key);
 
     raw[0]='X';
     assert(!dsrrl::runtime::flver_identity_observe_parse(model_key,raw.data(),raw.size()));
@@ -49,10 +82,10 @@ int main()
         model_key,raw.data(),static_cast<std::size_t>(0x40u)+oversized_length));
 
     const auto t=dsrrl::runtime::flver_identity_stats();
-    assert(t.inserts>=1u);
-    assert(t.hits>=2u);
-    assert(t.misses>=1u);
-    assert(t.erases>=1u);
+    assert(t.inserts>=3u);
+    assert(t.hits>=5u);
+    assert(t.misses>=2u);
+    assert(t.erases>=3u);
     assert(t.invalid_raw>=1u);
     return 0;
 }
