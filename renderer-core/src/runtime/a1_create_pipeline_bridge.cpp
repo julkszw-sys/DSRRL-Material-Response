@@ -398,6 +398,97 @@ bool a1_create_pipeline_bridge::on_create_pipeline(
     }
 }
 
+bool a1_create_pipeline_bridge::compose_external_create_time_patch(
+    std::uint32_t subobject_count,
+    const reshade::api::pipeline_subobject *subobjects,
+    const operators::legacy_plan::hashing::sha256_digest
+        &output_sha256,
+    std::vector<std::uint8_t> replacement) noexcept
+{
+    try {
+        auto *pixel_shader =
+            find_mutable_pixel_shader(
+                subobject_count,
+                subobjects);
+        if (pixel_shader == nullptr ||
+            pixel_shader->code == nullptr ||
+            pixel_shader->code_size == 0u ||
+            replacement.empty())
+            return false;
+
+        if (operators::legacy_plan::hashing::sha256(
+                replacement.data(),
+                replacement.size()) !=
+            output_sha256)
+            return false;
+
+        std::shared_ptr<
+            const replacement_record> parent;
+        {
+            std::lock_guard<std::mutex> lock(mutex_);
+            const auto found =
+                code_records_.find(
+                    pixel_shader->code);
+            if (found == code_records_.end() ||
+                found->second == nullptr)
+                return false;
+            parent = found->second;
+        }
+
+        auto mutable_bytes =
+            std::make_shared<
+                std::vector<std::uint8_t>>(
+                    std::move(replacement));
+        auto mutable_record =
+            std::make_shared<replacement_record>();
+        mutable_record->bytes = mutable_bytes;
+        mutable_record->output_sha256 =
+            output_sha256;
+        mutable_record->plan_index =
+            parent->plan_index;
+        mutable_record->selected_ops =
+            parent->selected_ops;
+        mutable_record->selected_owners =
+            parent->selected_owners;
+        mutable_record->full_plan_materialized =
+            parent->full_plan_materialized;
+        mutable_record->receiver_id =
+            parent->receiver_id;
+
+        const std::shared_ptr<
+            const replacement_record> record =
+                mutable_record;
+
+        {
+            std::lock_guard<std::mutex> lock(mutex_);
+            const auto [it, inserted] =
+                code_records_.emplace(
+                    record->bytes->data(),
+                    record);
+            if (!inserted) {
+                if (it->second == nullptr ||
+                    it->second->output_sha256 !=
+                        output_sha256 ||
+                    it->second->bytes == nullptr ||
+                    it->second->bytes->size() !=
+                        record->bytes->size()) {
+                    quarantined_.store(true);
+                    return false;
+                }
+            }
+        }
+
+        pixel_shader->code =
+            record->bytes->data();
+        pixel_shader->code_size =
+            record->bytes->size();
+        return true;
+    } catch (...) {
+        ++fail_open_;
+        return false;
+    }
+}
+
 void a1_create_pipeline_bridge::on_init_pipeline(
     reshade::api::device *device,
     reshade::api::pipeline_layout,
