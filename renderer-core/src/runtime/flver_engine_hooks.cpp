@@ -127,6 +127,23 @@ std::atomic<std::uint64_t> g_selector_profile_parse_events{0u};
 std::atomic<std::uint64_t> g_selector_profile_mtd_events{0u};
 std::atomic<std::uint64_t> g_selector_profile_destroy_events{0u};
 
+constexpr std::uint32_t k_support_profile_sample_period = 256u;
+static_assert(
+    (k_support_profile_sample_period &
+     (k_support_profile_sample_period - 1u)) == 0u);
+thread_local std::uint32_t g_support_profile_parse_counter = 0u;
+thread_local std::uint32_t g_support_profile_mtd_counter = 0u;
+thread_local std::uint32_t g_support_profile_destroy_counter = 0u;
+std::atomic<std::uint64_t> g_support_profile_parse_samples{0u};
+std::atomic<std::uint64_t> g_support_profile_mtd_samples{0u};
+std::atomic<std::uint64_t> g_support_profile_destroy_samples{0u};
+selector_profile_bucket g_support_profile_parse{};
+selector_profile_bucket g_support_profile_mtd{};
+selector_profile_bucket g_support_profile_destroy{};
+std::atomic<std::uint32_t> g_support_profile_parse_tid{0u};
+std::atomic<std::uint32_t> g_support_profile_mtd_tid{0u};
+std::atomic<std::uint32_t> g_support_profile_destroy_tid{0u};
+
 std::uint64_t selector_profile_qpc() noexcept
 {
     LARGE_INTEGER value{};
@@ -247,6 +264,58 @@ void selector_profile_log(
     reshade::log::message(
         reshade::log::level::info,
         line);
+
+    const auto support_avg_us =
+        [frequency](
+            std::uint64_t ticks,
+            std::uint64_t sample_count) noexcept {
+            if (sample_count == 0u)
+                return 0.0;
+            return
+                (static_cast<double>(ticks) * 1000000.0) /
+                (static_cast<double>(frequency.QuadPart) *
+                 static_cast<double>(sample_count));
+        };
+    const auto parse_samples =
+        g_support_profile_parse_samples.load(std::memory_order_relaxed);
+    const auto mtd_samples =
+        g_support_profile_mtd_samples.load(std::memory_order_relaxed);
+    const auto destroy_samples =
+        g_support_profile_destroy_samples.load(std::memory_order_relaxed);
+
+    char support_line[768]{};
+    std::snprintf(
+        support_line,
+        sizeof(support_line),
+        "[DSRRL PERF E474 SUPPORT] sample=1/%u parse=n:%llu avg_us:%.3f max_us:%.3f tid:%u mtd=n:%llu avg_us:%.3f max_us:%.3f tid:%u destroy=n:%llu avg_us:%.3f max_us:%.3f tid:%u",
+        k_support_profile_sample_period,
+        static_cast<unsigned long long>(parse_samples),
+        support_avg_us(
+            g_support_profile_parse.ticks.load(std::memory_order_relaxed),
+            parse_samples),
+        ticks_us(
+            g_support_profile_parse.max_ticks.load(std::memory_order_relaxed)),
+        static_cast<unsigned>(
+            g_support_profile_parse_tid.load(std::memory_order_relaxed)),
+        static_cast<unsigned long long>(mtd_samples),
+        support_avg_us(
+            g_support_profile_mtd.ticks.load(std::memory_order_relaxed),
+            mtd_samples),
+        ticks_us(
+            g_support_profile_mtd.max_ticks.load(std::memory_order_relaxed)),
+        static_cast<unsigned>(
+            g_support_profile_mtd_tid.load(std::memory_order_relaxed)),
+        static_cast<unsigned long long>(destroy_samples),
+        support_avg_us(
+            g_support_profile_destroy.ticks.load(std::memory_order_relaxed),
+            destroy_samples),
+        ticks_us(
+            g_support_profile_destroy.max_ticks.load(std::memory_order_relaxed)),
+        static_cast<unsigned>(
+            g_support_profile_destroy_tid.load(std::memory_order_relaxed)));
+    reshade::log::message(
+        reshade::log::level::info,
+        support_line);
 }
 
 void selector_profile_finish(
@@ -364,6 +433,15 @@ void selector_profile_reset() noexcept
     g_selector_profile_destroy_events.store(
         0u,
         std::memory_order_relaxed);
+    g_support_profile_parse_samples.store(0u,std::memory_order_relaxed);
+    g_support_profile_mtd_samples.store(0u,std::memory_order_relaxed);
+    g_support_profile_destroy_samples.store(0u,std::memory_order_relaxed);
+    reset_bucket(g_support_profile_parse);
+    reset_bucket(g_support_profile_mtd);
+    reset_bucket(g_support_profile_destroy);
+    g_support_profile_parse_tid.store(0u,std::memory_order_relaxed);
+    g_support_profile_mtd_tid.store(0u,std::memory_order_relaxed);
+    g_support_profile_destroy_tid.store(0u,std::memory_order_relaxed);
 }
 #else
 enum class selector_profile_path : std::uint8_t {
@@ -929,6 +1007,11 @@ void __fastcall parse_entry(void*m,const void*r) noexcept {
  g_selector_profile_parse_events.fetch_add(
      1u,
      std::memory_order_relaxed);
+ const auto support_sequence=++g_support_profile_parse_counter;
+ const bool support_sample=
+     (support_sequence&(k_support_profile_sample_period-1u))==0u;
+ const auto support_begin=
+     support_sample?selector_profile_qpc():0u;
 #endif
  // R41: FLVER object streaming is not a LightBank source mutation. Keep
  // FLVER identity invalidation local to the FLVER registry and preserve the
@@ -947,12 +1030,29 @@ void __fastcall parse_entry(void*m,const void*r) noexcept {
    (void)flver_identity_observe_parse(m,r,static_cast<std::size_t>(n));
  }
  if(g_po)g_po(m,r);
+#ifdef DSRRL_FLVER_SELECTOR_PROFILE
+ if(support_sample){
+  selector_profile_add(
+      g_support_profile_parse,
+      selector_profile_qpc()-support_begin);
+  g_support_profile_parse_samples.fetch_add(
+      1u,std::memory_order_relaxed);
+  g_support_profile_parse_tid.store(
+      static_cast<std::uint32_t>(GetCurrentThreadId()),
+      std::memory_order_relaxed);
+ }
+#endif
 }
 void __fastcall destroy_entry(void*m) noexcept {
 #ifdef DSRRL_FLVER_SELECTOR_PROFILE
  g_selector_profile_destroy_events.fetch_add(
      1u,
      std::memory_order_relaxed);
+ const auto support_sequence=++g_support_profile_destroy_counter;
+ const bool support_sample=
+     (support_sequence&(k_support_profile_sample_period-1u))==0u;
+ const auto support_begin=
+     support_sample?selector_profile_qpc():0u;
 #endif
  // R41: model destruction invalidates FLVER ownership only. It must not flush
  // process-wide/TLS LightBank source caches for unrelated surviving models.
@@ -960,6 +1060,18 @@ void __fastcall destroy_entry(void*m) noexcept {
  // registry; P_Metal source reuse requires its own exact source/base/row key.
  flver_identity_observe_destroy(m);
  if(g_do)g_do(m);
+#ifdef DSRRL_FLVER_SELECTOR_PROFILE
+ if(support_sample){
+  selector_profile_add(
+      g_support_profile_destroy,
+      selector_profile_qpc()-support_begin);
+  g_support_profile_destroy_samples.fetch_add(
+      1u,std::memory_order_relaxed);
+  g_support_profile_destroy_tid.store(
+      static_cast<std::uint32_t>(GetCurrentThreadId()),
+      std::memory_order_relaxed);
+ }
+#endif
 }
 void __fastcall mtd_entry(
     void *material,
@@ -971,9 +1083,26 @@ void __fastcall mtd_entry(
  g_selector_profile_mtd_events.fetch_add(
      1u,
      std::memory_order_relaxed);
+ const auto support_sequence=++g_support_profile_mtd_counter;
+ const bool support_sample=
+     (support_sequence&(k_support_profile_sample_period-1u))==0u;
+ const auto support_begin=
+     support_sample?selector_profile_qpc():0u;
 #endif
  observe_exact_runtime_mtd(material,raw,len,semantic_key);
  if(g_mo)g_mo(material,raw,len,semantic_key);
+#ifdef DSRRL_FLVER_SELECTOR_PROFILE
+ if(support_sample){
+  selector_profile_add(
+      g_support_profile_mtd,
+      selector_profile_qpc()-support_begin);
+  g_support_profile_mtd_samples.fetch_add(
+      1u,std::memory_order_relaxed);
+  g_support_profile_mtd_tid.store(
+      static_cast<std::uint32_t>(GetCurrentThreadId()),
+      std::memory_order_relaxed);
+ }
+#endif
 }
 
 bool publish_exact_selector_identity(
