@@ -86,7 +86,7 @@ def main() -> int:
             return 1
 
     callback_begin = clustered_draw.find(
-        "void __fastcall clustered_source_override_callback("
+        "float __fastcall clustered_source_override_callback("
     )
     callback_end = clustered_draw.find(
         "bool build_clustered_source_override_stub(",
