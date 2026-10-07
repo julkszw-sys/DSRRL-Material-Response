@@ -8,6 +8,27 @@
 
 namespace dsrrl::operators::point_light {
 
+enum class clustered_pnts_spc_attenuation_result : std::uint8_t {
+    applied = 0,
+    pass_not_candidate,
+    pass_nospc_owned_by_a1,
+    pass_unknown_exact_sha,
+    fail_invalid_dxbc,
+    fail_patch_precondition,
+    fail_rebuild,
+    fail_final
+};
+
+struct clustered_pnts_spc_attenuation_outcome {
+    clustered_pnts_spc_attenuation_result result =
+        clustered_pnts_spc_attenuation_result::pass_not_candidate;
+    core::sha256_digest host_sha256{};
+    core::sha256_digest replacement_sha256{};
+    std::size_t host_size = 0u;
+    std::size_t replacement_size = 0u;
+    std::uint32_t representative_shader_index = 0u;
+};
+
 enum class clustered_pnts_direct_materialize_result : std::uint8_t {
     applied = 0,
     pass_not_candidate,
@@ -71,6 +92,12 @@ clustered_pnts_required_composed_shader_owners(
 bool migrate_clustered_pnts_legacy_b12_words(
     std::vector<std::uint32_t> &words,
     bool spc) noexcept;
+
+clustered_pnts_spc_attenuation_outcome
+materialize_clustered_pnts_spc_attenuation_only(
+    const std::uint8_t *source,
+    std::size_t size,
+    std::vector<std::uint8_t> &output) noexcept;
 
 clustered_pnts_direct_materialize_outcome
 materialize_clustered_pnts_direct_ptde(
