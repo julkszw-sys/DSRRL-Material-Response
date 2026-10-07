@@ -830,6 +830,52 @@ bool make_frame_selection_key(
 }
 
 std::atomic<std::uint64_t> g_source_capture_reason_mask{0u};
+std::atomic_bool g_source_first_ptde_apply_logged{false};
+
+void log_source_first_ptde_apply_once(
+    void *node,
+    const void *target,
+    std::uint8_t source_category,
+    const std::array<float,8> &candidate) noexcept
+{
+    if (g_source_first_ptde_apply_logged.load(
+            std::memory_order_relaxed))
+        return;
+    if (g_source_first_ptde_apply_logged.exchange(
+            true,
+            std::memory_order_relaxed))
+        return;
+
+    std::uint32_t source_id = 0u;
+    if (node != nullptr &&
+        readable_range(node, 0x14u)) {
+        const auto *bytes =
+            static_cast<const std::uint8_t *>(node);
+        std::memcpy(
+            &source_id,
+            bytes + 0x10u,
+            sizeof(source_id));
+    }
+
+    char line[512]{};
+    std::snprintf(
+        line,
+        sizeof(line),
+        "[DSRRL POINTLIGHT R45-SOURCE] first_ptde_row_apply marker=1 source_id=%u category=%u target=%016llx inv_range=%.9g rgb=%.9g,%.9g,%.9g end=%.9g",
+        static_cast<unsigned>(source_id),
+        static_cast<unsigned>(source_category),
+        static_cast<unsigned long long>(
+            reinterpret_cast<std::uintptr_t>(
+                target)),
+        candidate[3],
+        candidate[4],
+        candidate[5],
+        candidate[6],
+        candidate[7]);
+    reshade::log::message(
+        reshade::log::level::info,
+        line);
+}
 
 void log_source_capture_failure_once(
     std::uint64_t bit,
@@ -1844,6 +1890,16 @@ float __fastcall clustered_source_override_callback(
         if (!(candidate[3] > 0.0f) ||
             !(candidate[7] > 0.0f))
             return 0.0f;
+
+        // Cold path only: one atomic/log for the first exact PTDE-authority
+        // row that survives all source validation. Cache hits incur no new
+        // work. This proves that marker=1 is actually produced, independently
+        // of create-time shader materialization.
+        log_source_first_ptde_apply_once(
+            source,
+            target,
+            source_category,
+            candidate);
 
         for (std::size_t i = 0u;
              i < payload.size();
@@ -4258,6 +4314,9 @@ void clustered_pnts_draw_runtime::reset() noexcept
     g_gpu_fast_miss.store(0u);
     g_source_capture_reason_mask.store(
         0u,
+        std::memory_order_relaxed);
+    g_source_first_ptde_apply_logged.store(
+        false,
         std::memory_order_relaxed);
     g_quarantined.store(false);
 }
