@@ -34,8 +34,20 @@ namespace {
 using role = operators::dof::retained_shader_role;
 using result = scheduler_result;
 
+struct pass_state_carriers {
+    ID3D11SamplerState *color_sampler = nullptr;
+    ID3D11SamplerState *depth_sampler = nullptr;
+    ID3D11BlendState *rgba_write_blend = nullptr;
+    ID3D11BlendState *alpha_write_blend = nullptr;
+    ID3D11BlendState *rgb_write_blend = nullptr;
+    std::array<float, 4> blend_factor{};
+    UINT sample_mask = 0xffffffffu;
+    bool ready = false;
+};
+
 struct sequence_state {
     host_dof_inputs host{};
+    pass_state_carriers pass_state{};
     std::size_t next_pass = 0u;
     ID3D11ShaderResourceView *terminal = nullptr;
     bool active = false;
@@ -257,6 +269,146 @@ void set_authored_feature(bool enabled) noexcept
             enabled);
 }
 
+void release_pass_state(
+    pass_state_carriers &state) noexcept
+{
+    if (state.rgb_write_blend != nullptr)
+        state.rgb_write_blend->Release();
+    if (state.alpha_write_blend != nullptr)
+        state.alpha_write_blend->Release();
+    if (state.rgba_write_blend != nullptr)
+        state.rgba_write_blend->Release();
+    if (state.depth_sampler != nullptr)
+        state.depth_sampler->Release();
+    if (state.color_sampler != nullptr)
+        state.color_sampler->Release();
+    state = {};
+}
+
+void default_blend_desc(
+    D3D11_BLEND_DESC &desc) noexcept
+{
+    desc = {};
+    desc.AlphaToCoverageEnable = FALSE;
+    desc.IndependentBlendEnable = FALSE;
+    for (auto &rt : desc.RenderTarget) {
+        rt.BlendEnable = FALSE;
+        rt.SrcBlend = D3D11_BLEND_ONE;
+        rt.DestBlend = D3D11_BLEND_ZERO;
+        rt.BlendOp = D3D11_BLEND_OP_ADD;
+        rt.SrcBlendAlpha = D3D11_BLEND_ONE;
+        rt.DestBlendAlpha = D3D11_BLEND_ZERO;
+        rt.BlendOpAlpha = D3D11_BLEND_OP_ADD;
+        rt.RenderTargetWriteMask = D3D11_COLOR_WRITE_ENABLE_ALL;
+    }
+}
+
+bool capture_pass_state(
+    ID3D11DeviceContext *context,
+    pass_state_carriers &out) noexcept
+{
+    release_pass_state(out);
+    if (context == nullptr)
+        return false;
+
+    std::array<ID3D11SamplerState *, 2> samplers{};
+    context->PSGetSamplers(
+        0u,
+        static_cast<UINT>(samplers.size()),
+        samplers.data());
+
+    if (samplers[0] == nullptr ||
+        samplers[1] == nullptr) {
+        for (auto *sampler : samplers)
+            if (sampler != nullptr)
+                sampler->Release();
+        return false;
+    }
+
+    ID3D11BlendState *base_blend = nullptr;
+    std::array<FLOAT, 4> blend_factor{};
+    UINT sample_mask = 0xffffffffu;
+    context->OMGetBlendState(
+        &base_blend,
+        blend_factor.data(),
+        &sample_mask);
+
+    D3D11_BLEND_DESC base_desc{};
+    if (base_blend != nullptr)
+        base_blend->GetDesc(&base_desc);
+    else
+        default_blend_desc(base_desc);
+
+    if (base_desc.RenderTarget[0].RenderTargetWriteMask !=
+        D3D11_COLOR_WRITE_ENABLE_ALL) {
+        if (base_blend != nullptr)
+            base_blend->Release();
+        samplers[0]->Release();
+        samplers[1]->Release();
+        return false;
+    }
+
+    ID3D11Device *device = nullptr;
+    context->GetDevice(&device);
+    if (device == nullptr) {
+        if (base_blend != nullptr)
+            base_blend->Release();
+        samplers[0]->Release();
+        samplers[1]->Release();
+        return false;
+    }
+
+    D3D11_BLEND_DESC alpha_desc = base_desc;
+    alpha_desc.RenderTarget[0].RenderTargetWriteMask =
+        D3D11_COLOR_WRITE_ENABLE_ALPHA;
+
+    D3D11_BLEND_DESC rgb_desc = base_desc;
+    rgb_desc.RenderTarget[0].RenderTargetWriteMask =
+        D3D11_COLOR_WRITE_ENABLE_RED |
+        D3D11_COLOR_WRITE_ENABLE_GREEN |
+        D3D11_COLOR_WRITE_ENABLE_BLUE;
+
+    ID3D11BlendState *alpha = nullptr;
+    ID3D11BlendState *rgb = nullptr;
+    HRESULT hr = device->CreateBlendState(
+        &alpha_desc,
+        &alpha);
+    if (SUCCEEDED(hr))
+        hr = device->CreateBlendState(
+            &rgb_desc,
+            &rgb);
+    device->Release();
+
+    if (FAILED(hr) ||
+        alpha == nullptr ||
+        rgb == nullptr) {
+        if (rgb != nullptr)
+            rgb->Release();
+        if (alpha != nullptr)
+            alpha->Release();
+        if (base_blend != nullptr)
+            base_blend->Release();
+        samplers[0]->Release();
+        samplers[1]->Release();
+        return false;
+    }
+
+    out.color_sampler = samplers[0];
+    out.depth_sampler = samplers[1];
+    out.rgba_write_blend = base_blend;
+    out.alpha_write_blend = alpha;
+    out.rgb_write_blend = rgb;
+    out.blend_factor = {
+        blend_factor[0],
+        blend_factor[1],
+        blend_factor[2],
+        blend_factor[3]
+    };
+    out.sample_mask = sample_mask;
+    out.ready = true;
+    return true;
+}
+
 void release_sequence() noexcept
 {
     if (g_sequence.terminal != nullptr) {
@@ -266,6 +418,8 @@ void release_sequence() noexcept
 
     release_host_dof_inputs(
         g_sequence.host);
+    release_pass_state(
+        g_sequence.pass_state);
 
     g_sequence = {};
 }
@@ -409,17 +563,38 @@ scheduler_external_inputs
 scheduler_inputs() noexcept
 {
     scheduler_external_inputs inputs{};
-    // Exact Q8 scene history is intentionally not sourced from the host
-    // R11 scene. The shared history-preserving sidecar is not authorized yet,
-    // so this remains null/false and the bridge fails open.
-    inputs.scene_history_q8 = nullptr;
-    inputs.scene_history_q8_verified = false;
-
+    inputs.scene_source_t0 =
+        g_sequence.host.source_68;
     inputs.depth_support_t1 =
         g_sequence.host.dofrate_support_t1;
+
+    inputs.color_sampler =
+        g_sequence.pass_state.color_sampler;
+    inputs.depth_sampler =
+        g_sequence.pass_state.depth_sampler;
+    inputs.rgba_write_blend =
+        g_sequence.pass_state.rgba_write_blend;
+    inputs.alpha_write_blend =
+        g_sequence.pass_state.alpha_write_blend;
+    inputs.rgb_write_blend =
+        g_sequence.pass_state.rgb_write_blend;
+    inputs.blend_factor =
+        g_sequence.pass_state.blend_factor;
+    inputs.sample_mask =
+        g_sequence.pass_state.sample_mask;
+
+    inputs.scene_source_verified =
+        g_sequence.host.ready &&
+        inputs.scene_source_t0 != nullptr;
     inputs.depth_support_verified =
         g_sequence.host.ready &&
         inputs.depth_support_t1 != nullptr;
+    inputs.pass_state_verified =
+        g_sequence.pass_state.ready &&
+        inputs.color_sampler != nullptr &&
+        inputs.depth_sampler != nullptr &&
+        inputs.alpha_write_blend != nullptr &&
+        inputs.rgb_write_blend != nullptr;
     return inputs;
 }
 
@@ -445,10 +620,12 @@ activation_context() noexcept
         g_sequence.host.ready;
     activation.mode =
         g_sequence.host.mode;
+    activation.carrier =
+        operators::dof::carrier_mode::native_rate_half_seed;
 
     activation.graph_complete =
         operators::dof::
-            ptde_exact_pass_resource_graph_is_structurally_closed();
+            cheap_half_seed_graph_is_structurally_closed();
 
     activation.ptde_dofbank_payload_ready =
         authored.hook_ready;
@@ -456,13 +633,15 @@ activation_context() noexcept
         authored.hook_ready &&
         authored.route_matches != 0u;
 
-    // Canonical rev11808 requires an authenticated history-preserving Q8
-    // scene carrier. The existing Bloom sidecar has no authorized writer, so
-    // DoF must remain fail-open until that carrier becomes consumable.
     activation.q8_scene_history_ready = false;
+    activation.half_seed_adapter_ready =
+        g_sequence.host.ready &&
+        g_sequence.host.source_68 != nullptr &&
+        g_sequence.host.dofrate_support_t1 != nullptr &&
+        g_sequence.pass_state.ready;
 
-    // Sampler + COLORWRITE transaction is still pending construction.
-    activation.pass_state_transaction_ready = false;
+    activation.pass_state_transaction_ready =
+        g_sequence.pass_state.ready;
 
     activation.retained_flat_pipeline_set_ready =
         preflight.active_flat_set_seen;
@@ -655,9 +834,19 @@ bool begin_sequence(
             captured))
         return false;
 
+    pass_state_carriers captured_state{};
+    if (!capture_pass_state(
+            context,
+            captured_state)) {
+        release_host_dof_inputs(captured);
+        return false;
+    }
+
     release_sequence();
     g_sequence.host = captured;
     captured = {};
+    g_sequence.pass_state = captured_state;
+    captured_state = {};
     g_sequence.active = true;
     g_sequence.next_pass = 0u;
     ++g_first_pass_hits;
@@ -688,9 +877,10 @@ bool begin_sequence(
         return false;
     }
 
-    // Passes 1..7 are intrinsic to the PTDE private graph. They must not wait
-    // for stock DSR shaders with similar names to execute. The last pass is
-    // deferred only because pass 0x10 has two verified retained variants.
+    // Cheap production graph: pass0 writes half-rate alpha, pass1 writes
+    // half-resolution RGB only, passes2..7 reproduce the PTDE blur/rate
+    // topology. Terminal pass8 is deferred to the authentic retained DSR
+    // FRPG_Fil_Dof scope so its host CB/OM state remains authoritative.
     for (std::size_t pass_index = 1u;
          pass_index < 8u;
          ++pass_index) {
@@ -742,7 +932,7 @@ void advance_sequence(
     }
 
     g_sequence.next_pass =
-        operators::dof::ptde_exact_pass_resources.size();
+        operators::dof::cheap_half_seed_passes.size();
 
     if (!acquire_terminal(
             activation)) {
@@ -1234,7 +1424,7 @@ bool register_ptde_draw_bridge_runtime(
 
     reshade::log::message(
         reshade::log::level::info,
-        "[DSRRL DoF R52] activation_cut=PASS01_SOURCE_DEPTH private_prefix=PASSES_0_7 stock_branch=PASS10_ONLY tonemap=PTDE_TERMINAL_HANDOFF");
+        "[DSRRL DoF R53] carrier=NATIVE_RATE_HALF_SEED fullres_copy=0 private_prefix=HALF_QUARTER stock_branch=PASS10_ONLY tonemap=PTDE_TERMINAL_HANDOFF");
 
     if (!g_opt_in.load(
             std::memory_order_acquire)) {
