@@ -975,6 +975,12 @@ std::unordered_map<std::uint64_t,std::uint8_t>
 std::atomic<std::uint64_t>
     g_integrated_draw_route_epoch{1u};
 
+constexpr std::uint32_t k_integrated_route_profile_sample_period = 1024u;
+std::atomic<std::uint64_t> g_integrated_route_profile_samples{0u};
+std::atomic<std::uint64_t> g_integrated_route_profile_cache_hits{0u};
+std::atomic<std::uint64_t> g_integrated_route_profile_shared_lookups{0u};
+thread_local std::uint32_t g_integrated_route_profile_sequence = 0u;
+
 struct integrated_pipeline_route_cache_entry {
     std::uint64_t pipeline_handle = 0u;
     std::uint64_t epoch = 0u;
@@ -1085,6 +1091,16 @@ std::uint8_t observe_integrated_draw_route_bind(
             ? g_integrated_draw_route_tls.mask
             : 0u;
 
+    const auto profile_sequence =
+        ++g_integrated_route_profile_sequence;
+    const bool profile_sample =
+        (profile_sequence &
+         (k_integrated_route_profile_sample_period - 1u)) == 0u;
+    if (profile_sample)
+        g_integrated_route_profile_samples.fetch_add(
+            1u,
+            std::memory_order_relaxed);
+
     std::uint8_t mask = 0u;
     const auto epoch =
         g_integrated_draw_route_epoch.load(
@@ -1100,7 +1116,15 @@ std::uint8_t observe_integrated_draw_route_bind(
         g_integrated_draw_route_epoch.load(
             std::memory_order_acquire) == epoch) {
         mask = cached.mask;
+        if (profile_sample)
+            g_integrated_route_profile_cache_hits.fetch_add(
+                1u,
+                std::memory_order_relaxed);
     } else {
+        if (profile_sample)
+            g_integrated_route_profile_shared_lookups.fetch_add(
+                1u,
+                std::memory_order_relaxed);
         try {
             std::shared_lock<std::shared_mutex> lock(
                 g_integrated_draw_route_mutex);
@@ -7363,6 +7387,37 @@ void on_present(
             1u,
             std::memory_order_relaxed) + 1u;
     g_clustered_pnts.frame_event(present);
+
+    if (present == 1u ||
+        (present % 300u) == 0u) {
+        const auto route_samples =
+            g_integrated_route_profile_samples.load(
+                std::memory_order_relaxed);
+        const auto route_hits =
+            g_integrated_route_profile_cache_hits.load(
+                std::memory_order_relaxed);
+        const auto route_shared =
+            g_integrated_route_profile_shared_lookups.load(
+                std::memory_order_relaxed);
+        const auto route_epoch =
+            g_integrated_draw_route_epoch.load(
+                std::memory_order_relaxed);
+
+        char perf_line[384]{};
+        std::snprintf(
+            perf_line,
+            sizeof(perf_line),
+            "[DSRRL PERF E474 FASTSLOW] route_sample=1/%u samples=%llu cache=%llu shared=%llu epoch=%llu",
+            k_integrated_route_profile_sample_period,
+            static_cast<unsigned long long>(route_samples),
+            static_cast<unsigned long long>(route_hits),
+            static_cast<unsigned long long>(route_shared),
+            static_cast<unsigned long long>(route_epoch));
+        reshade::log::message(
+            reshade::log::level::info,
+            perf_line);
+    }
+
     if (present == 1u ||
         (g_hot_telemetry_enabled &&
          (present % 300u) == 0u)) {
