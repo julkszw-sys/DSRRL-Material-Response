@@ -58,13 +58,28 @@ int main()
     assert(dsrrl::runtime::flver_identity_observe_parse(
         other_model_key,raw.data(),raw.size()));
     assert(dsrrl::runtime::flver_identity_lookup(other_container,other_sha));
+    const auto cached_epoch_before_other_destroy =
+        dsrrl::runtime::flver_identity_epoch();
     dsrrl::runtime::flver_identity_observe_destroy(other_model_key);
+    std::uint64_t epoch_after_other_destroy = 0u;
+    assert(dsrrl::runtime::flver_identity_cache_epoch_survives(
+        container,
+        cached_epoch_before_other_destroy,
+        epoch_after_other_destroy));
+    assert(epoch_after_other_destroy > cached_epoch_before_other_destroy);
     std::array<std::uint8_t,32> after_other_destroy{};
     assert(dsrrl::runtime::flver_identity_lookup(
         container,after_other_destroy));
     assert(after_other_destroy==first);
 
+    const auto cached_epoch_before_self_destroy =
+        epoch_after_other_destroy;
     dsrrl::runtime::flver_identity_observe_destroy(model_key);
+    std::uint64_t epoch_after_self_destroy = 0u;
+    assert(!dsrrl::runtime::flver_identity_cache_epoch_survives(
+        container,
+        cached_epoch_before_self_destroy,
+        epoch_after_self_destroy));
     std::array<std::uint8_t,32> stale{};
     assert(!dsrrl::runtime::flver_identity_lookup(container,stale));
     assert(!dsrrl::runtime::flver_identity_enrich_owner(container, 7u, owner));
