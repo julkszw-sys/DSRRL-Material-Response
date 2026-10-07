@@ -13,6 +13,7 @@ on:
       - r43-pmetal-per-key-freshness-cache
       - r43-live-drawparam-pointlight-dof
       - fix/r43-param-source-activation-v2
+      - pointlight/r44-marker-attenuation-consumer
       - main
   pull_request:
     paths:
