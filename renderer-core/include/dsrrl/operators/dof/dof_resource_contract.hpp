@@ -147,6 +147,111 @@ constexpr bool ptde_exact_pass_resource_graph_is_structurally_closed() noexcept
         terminal.arg11_flag == 1u;
 }
 
+enum class cheap_source_kind : std::uint8_t {
+    none = 0,
+    scene,
+    depth,
+    half_rate,
+    half_rate_result,
+    half_blur,
+    quarter_ping,
+    quarter_pong
+};
+
+struct cheap_half_seed_pass_contract {
+    std::uint8_t logical_pass = 0u;
+    retained_shader_role shader = retained_shader_role::count;
+    ptde_surface_role target = ptde_surface_role::half_rate;
+    std::array<cheap_source_kind, 6> sources{};
+    std::uint8_t rt0_write_mask = 0x0Fu;
+    bool inherit_host_om = false;
+};
+
+inline constexpr std::array<cheap_half_seed_pass_contract, 9>
+cheap_half_seed_passes = {{
+    {0x00u, retained_shader_role::dof_rate_plain,
+        ptde_surface_role::half_rate,
+        {cheap_source_kind::none, cheap_source_kind::depth,
+         cheap_source_kind::none, cheap_source_kind::none,
+         cheap_source_kind::none, cheap_source_kind::none},
+        0x08u, false},
+    {0x02u, retained_shader_role::downsample,
+        ptde_surface_role::half_rate,
+        {cheap_source_kind::scene, cheap_source_kind::none,
+         cheap_source_kind::none, cheap_source_kind::none,
+         cheap_source_kind::none, cheap_source_kind::none},
+        0x07u, false},
+    {0x0Du, retained_shader_role::unfocus_3x3,
+        ptde_surface_role::half_rate_result,
+        {cheap_source_kind::half_rate, cheap_source_kind::none,
+         cheap_source_kind::none, cheap_source_kind::none,
+         cheap_source_kind::none, cheap_source_kind::none},
+        0x0Fu, false},
+    {0x01u, retained_shader_role::downsample,
+        ptde_surface_role::quarter_pong,
+        {cheap_source_kind::half_rate, cheap_source_kind::none,
+         cheap_source_kind::none, cheap_source_kind::none,
+         cheap_source_kind::none, cheap_source_kind::none},
+        0x0Fu, false},
+    {0x0Du, retained_shader_role::unfocus_3x3,
+        ptde_surface_role::quarter_ping,
+        {cheap_source_kind::quarter_pong, cheap_source_kind::none,
+         cheap_source_kind::none, cheap_source_kind::none,
+         cheap_source_kind::none, cheap_source_kind::none},
+        0x0Fu, false},
+    {0x0Fu, retained_shader_role::blur_upsample,
+        ptde_surface_role::half_blur,
+        {cheap_source_kind::quarter_ping, cheap_source_kind::none,
+         cheap_source_kind::none, cheap_source_kind::none,
+         cheap_source_kind::none, cheap_source_kind::none},
+        0x0Fu, false},
+    {0x03u, retained_shader_role::near_rate,
+        ptde_surface_role::quarter_pong,
+        {cheap_source_kind::quarter_ping, cheap_source_kind::depth,
+         cheap_source_kind::none, cheap_source_kind::none,
+         cheap_source_kind::none, cheap_source_kind::none},
+        0x08u, false},
+    {0x0Eu, retained_shader_role::unfocus_near_rate_3x3,
+        ptde_surface_role::quarter_ping,
+        {cheap_source_kind::quarter_pong, cheap_source_kind::none,
+         cheap_source_kind::none, cheap_source_kind::none,
+         cheap_source_kind::none, cheap_source_kind::none},
+        0x08u, false},
+    {0x10u, retained_shader_role::dof_composite,
+        ptde_surface_role::full_terminal,
+        {cheap_source_kind::scene, cheap_source_kind::half_rate,
+         cheap_source_kind::half_rate_result, cheap_source_kind::half_blur,
+         cheap_source_kind::quarter_ping, cheap_source_kind::depth},
+        0x0Fu, true}
+}};
+
+constexpr bool cheap_half_seed_graph_is_structurally_closed() noexcept
+{
+    if (cheap_half_seed_passes.size() != 9u)
+        return false;
+
+    if (cheap_half_seed_passes[0].target != ptde_surface_role::half_rate ||
+        cheap_half_seed_passes[0].shader != retained_shader_role::dof_rate_plain ||
+        cheap_half_seed_passes[0].rt0_write_mask != 0x08u ||
+        cheap_half_seed_passes[1].target != ptde_surface_role::half_rate ||
+        cheap_half_seed_passes[1].shader != retained_shader_role::downsample ||
+        cheap_half_seed_passes[1].rt0_write_mask != 0x07u)
+        return false;
+
+    const auto &terminal = cheap_half_seed_passes.back();
+    return
+        terminal.logical_pass == 0x10u &&
+        terminal.shader == retained_shader_role::dof_composite &&
+        terminal.target == ptde_surface_role::full_terminal &&
+        terminal.sources[0] == cheap_source_kind::scene &&
+        terminal.sources[1] == cheap_source_kind::half_rate &&
+        terminal.sources[2] == cheap_source_kind::half_rate_result &&
+        terminal.sources[3] == cheap_source_kind::half_blur &&
+        terminal.sources[4] == cheap_source_kind::quarter_ping &&
+        terminal.sources[5] == cheap_source_kind::depth &&
+        terminal.inherit_host_om;
+}
+
 struct plain_dofrate_switch_contract {
     std::uintptr_t instruction_rva = 0u;
     std::array<std::uint8_t, 5> expected_cb_selector{};
@@ -199,6 +304,8 @@ static_assert(ptde_fixed_surface_set_is_exact(),
     "PTDE DoF private set must remain 2x full + 3x half + 2x quarter BGRA8.");
 static_assert(ptde_exact_pass_resource_graph_is_structurally_closed(),
     "PTDE DoF ctor resource graph drifted.");
+static_assert(cheap_half_seed_graph_is_structurally_closed(),
+    "Cheap DoF half-seed graph drifted.");
 static_assert(plain_dofrate_switch_is_exact(),
     "DSR DoF plain-rate switch contract drifted.");
 
