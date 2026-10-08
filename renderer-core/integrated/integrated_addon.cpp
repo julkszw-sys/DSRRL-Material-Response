@@ -3950,7 +3950,7 @@ void on_init_device(reshade::api::device *device)
         g_bloom_scene_sidecar.on_init_device(device);
     g_mr_draw_runtime.on_init_device(device);
     g_pmetal_envspec.on_init_device(device);
-    if (k_pmetal_direct_current_native_dispatch) {
+    if (k_pmetal_direct_current_native_dispatch && k_pointlight_drawtime_runtime_enabled) {
         reshade::log::message(
             reshade::log::level::info,
             "[DSRRL POINTLIGHT R26] direct_current_native_dispatch=ACTIVE persistent_vtable_hook=OFF recursion_guard=ON");
@@ -7657,6 +7657,11 @@ bool AddonInit(
         fixed_pointlight_hooks,
         std::memory_order_release);
 
+#if defined(DSRRL_PHYSICAL_CUT_POINTLIGHT_ALL)
+    reshade::log::message(
+        reshade::log::level::info,
+        "[DSRRL PHYSICAL CUT POINTLIGHT] fixed_r40=PHYSICALLY_CUT clustered_spc=PHYSICALLY_CUT clustered_nospc=PHYSICALLY_CUT stock_dsr=ON");
+#endif
     if (!k_pointlight_drawtime_runtime_enabled) {
         reshade::log::message(
             reshade::log::level::info,
