@@ -21,7 +21,9 @@ struct producer_record {
 
 thread_local producer_record g_record{};
 
-constexpr std::size_t k_sync_slot_count = 256u;
+// R44 keyed-rendezvous diagnostic: preserve exact producer entries across
+// unrelated selector attempts; reduce direct-mapped collision pressure.
+constexpr std::size_t k_sync_slot_count = 4096u;
 static_assert(
     (k_sync_slot_count & (k_sync_slot_count - 1u)) == 0u);
 
@@ -171,14 +173,29 @@ void pmetal_producer_state_begin(
     const auto key = material_key(material);
     auto &slot = sync_slot_for(key);
 
-    // Invalidate before source resolution. If this exact selector fails later,
-    // consumers cannot resurrect the previous source for the same material.
+    // This bucket may currently belong to a different verified material.
+    // A selector ATTEMPT for that other material is not evidence that the
+    // previous producer state has expired. Do not evict it until a successfully
+    // decoded producer replaces the slot. R43 previously invalidated *every*
+    // hash-bucket occupant on begin(), including unrelated P_Metal armor.
+    if (slot.material_key.load(
+            std::memory_order_acquire) != key)
+        return;
+
+    std::lock_guard<std::mutex> lock(slot.mutex);
+    // Hashes are lookup indices, never material authority. Validate the
+    // complete FLVER+MTD+slot+semantic tuple under the producer mutex.
+    if (slot.material_key.load(
+            std::memory_order_relaxed) != key ||
+        !slot.record.valid ||
+        !same_material(slot.record.material, material))
+        return;
+
+    // An attempted new selection for THIS exact material invalidates any
+    // older payload. If donor resolution fails, the consumer fails open.
     slot.valid.store(
         false,
         std::memory_order_release);
-    slot.material_key.store(
-        key,
-        std::memory_order_relaxed);
     slot.epoch.store(
         epoch,
         std::memory_order_relaxed);
