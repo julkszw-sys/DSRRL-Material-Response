@@ -681,6 +681,10 @@ void hook_producer_cache_publish_exact(
 
 std::atomic_bool g_hook_restore_failed{false};
 
+#if defined(DSRRL_PMETAL_SELECTOR_DECODE_FRONTIER_DIAG)
+thread_local std::uint32_t g_selector_last_read_decode_stage = 0u;
+#endif
+
 enum hook_decode_stage : std::uint32_t {
     hook_decode_none = 0u,
     hook_decode_source_invalid = 1u,
@@ -703,6 +707,9 @@ void record_hook_decode(
     std::uint64_t signature) noexcept
 {
     g_hook_decode_stage.store(stage,std::memory_order_relaxed);
+#if defined(DSRRL_PMETAL_SELECTOR_DECODE_FRONTIER_DIAG)
+    g_selector_last_read_decode_stage = stage;
+#endif
     g_hook_decode_version.store(version,std::memory_order_relaxed);
     g_hook_decode_count.store(count,std::memory_order_relaxed);
     g_hook_decode_index.store(index,std::memory_order_relaxed);
@@ -2428,6 +2435,79 @@ std::atomic<std::uint64_t> g_publish{0u};
 std::atomic<std::uint64_t> g_consumer_ok{0u};
 std::atomic<std::uint64_t> g_consumer_fail{0u};
 std::atomic<std::uint64_t> g_decode_fail{0u};
+#if defined(DSRRL_PMETAL_SELECTOR_DECODE_FRONTIER_DIAG)
+// Observational only. Never authorizes a stale material source or changes
+// the selector, bank/row, sidecar, CB or consumer state.
+enum selector_decode_miss_category : std::uint32_t {
+    selector_source_a_read = 0u,
+    selector_source_b_read = 1u,
+    selector_envdiffuse_a = 2u,
+    selector_envdiffuse_b = 3u,
+    selector_endpoint_invalid = 4u,
+    selector_manager_invalid = 5u,
+    selector_source_pointer_invalid = 6u,
+    selector_table_invalid = 7u,
+    selector_miss_category_count = 8u
+};
+std::array<std::atomic<std::uint64_t>,selector_miss_category_count>
+    g_selector_miss_categories{};
+std::array<std::atomic<std::uint64_t>,10u>
+    g_selector_source_read_stages{};
+std::atomic<std::uint64_t> g_selector_miss_count{0u};
+std::atomic<std::uint64_t> g_selector_authenticated_begin{0u};
+std::atomic<std::uint64_t> g_selector_shadow_publish{0u};
+std::atomic<std::uint64_t> g_selector_fallback_publish{0u};
+void record_selector_decode_miss(
+    selector_decode_miss_category category,
+    std::uint32_t read_stage = 0u,
+    std::uint64_t bank = 0u,
+    std::uint32_t row = 0u) noexcept
+{
+    const auto cat = static_cast<std::size_t>(category);
+    g_selector_miss_categories[cat].fetch_add(
+        1u,std::memory_order_relaxed);
+    if ((category == selector_source_a_read ||
+         category == selector_source_b_read) &&
+        read_stage < g_selector_source_read_stages.size())
+        g_selector_source_read_stages[read_stage].fetch_add(
+            1u,std::memory_order_relaxed);
+    const auto n =
+        g_selector_miss_count.fetch_add(
+            1u,std::memory_order_relaxed) + 1u;
+    if (n != 1u && (n & 2047u) != 0u)
+        return;
+    char line[1000]{};
+    std::snprintf(
+        line,sizeof(line),
+        "[DSRRL PMETAL SELECTOR DECODE FRONTIER] failures=%llu begin=%llu shadow_pub=%llu fallback_pub=%llu read_a=%llu read_b=%llu donor_a=%llu donor_b=%llu endpoint=%llu manager=%llu sourceptr=%llu table=%llu readstage_1to9=%llu,%llu,%llu,%llu,%llu,%llu,%llu,%llu,%llu latest_category=%u latest_read_stage=%u bank=%016llx row=%u",
+        static_cast<unsigned long long>(n),
+        static_cast<unsigned long long>(g_selector_authenticated_begin.load()),
+        static_cast<unsigned long long>(g_selector_shadow_publish.load()),
+        static_cast<unsigned long long>(g_selector_fallback_publish.load()),
+        static_cast<unsigned long long>(g_selector_miss_categories[0].load()),
+        static_cast<unsigned long long>(g_selector_miss_categories[1].load()),
+        static_cast<unsigned long long>(g_selector_miss_categories[2].load()),
+        static_cast<unsigned long long>(g_selector_miss_categories[3].load()),
+        static_cast<unsigned long long>(g_selector_miss_categories[4].load()),
+        static_cast<unsigned long long>(g_selector_miss_categories[5].load()),
+        static_cast<unsigned long long>(g_selector_miss_categories[6].load()),
+        static_cast<unsigned long long>(g_selector_miss_categories[7].load()),
+        static_cast<unsigned long long>(g_selector_source_read_stages[1].load()),
+        static_cast<unsigned long long>(g_selector_source_read_stages[2].load()),
+        static_cast<unsigned long long>(g_selector_source_read_stages[3].load()),
+        static_cast<unsigned long long>(g_selector_source_read_stages[4].load()),
+        static_cast<unsigned long long>(g_selector_source_read_stages[5].load()),
+        static_cast<unsigned long long>(g_selector_source_read_stages[6].load()),
+        static_cast<unsigned long long>(g_selector_source_read_stages[7].load()),
+        static_cast<unsigned long long>(g_selector_source_read_stages[8].load()),
+        static_cast<unsigned long long>(g_selector_source_read_stages[9].load()),
+        static_cast<unsigned>(category),
+        static_cast<unsigned>(read_stage),
+        static_cast<unsigned long long>(bank),
+        static_cast<unsigned>(row));
+    reshade::log::message(reshade::log::level::info,line);
+}
+#endif
 std::atomic<std::uint64_t> g_steady_seen{0u};
 std::atomic<std::uint64_t> g_blend_seen{0u};
 
@@ -2673,6 +2753,10 @@ void pmetal_env_source_selector_event(
     pmetal_producer_state_begin(
         material,
         epoch);
+#if defined(DSRRL_PMETAL_SELECTOR_DECODE_FRONTIER_DIAG)
+    g_selector_authenticated_begin.fetch_add(
+        1u,std::memory_order_relaxed);
+#endif
 
     if (telemetry::effect_enabled())
         g_descriptor_gate_ok.store(
@@ -2687,8 +2771,12 @@ void pmetal_env_source_selector_event(
                 raw_b),
             beta);
 
-    if (!endpoints.valid)
+    if (!endpoints.valid) {
+#if defined(DSRRL_PMETAL_SELECTOR_DECODE_FRONTIER_DIAG)
+        record_selector_decode_miss(selector_endpoint_invalid);
+#endif
         return;
+    }
 
     if (telemetry::effect_enabled())
         g_endpoint_gate_ok.store(
@@ -2707,8 +2795,12 @@ void pmetal_env_source_selector_event(
         !safe_read(
             wrapper + 0x40u,
             manager) ||
-        manager == nullptr)
+        manager == nullptr) {
+#if defined(DSRRL_PMETAL_SELECTOR_DECODE_FRONTIER_DIAG)
+        record_selector_decode_miss(selector_manager_invalid);
+#endif
         return;
+    }
 
     if (telemetry::effect_enabled())
         g_manager_gate_ok.store(
@@ -2761,8 +2853,13 @@ void pmetal_env_source_selector_event(
 
     if (!lookup_valid ||
         source_a == nullptr ||
-        source_b == nullptr)
+        source_b == nullptr) {
+#if defined(DSRRL_PMETAL_SELECTOR_DECODE_FRONTIER_DIAG)
+        record_selector_decode_miss(
+            lookup_valid ? selector_source_pointer_invalid : selector_table_invalid);
+#endif
         return;
+    }
 
     pmetal_envspec_source next{};
 #if defined(DSRRL_PMETAL_SPEC_CUT_TRACE) && defined(DSRRL_PMETAL_PARENT_SEMANTIC_JOIN_DIAG)
@@ -2791,6 +2888,10 @@ void pmetal_env_source_selector_event(
             material,
             next,
             epoch);
+#if defined(DSRRL_PMETAL_SELECTOR_DECODE_FRONTIER_DIAG)
+        g_selector_shadow_publish.fetch_add(
+            1u,std::memory_order_relaxed);
+#endif
 
         static std::atomic_bool
             selector_shadow_hit_logged{false};
@@ -2848,6 +2949,11 @@ void pmetal_env_source_selector_event(
             a,
             next.bank_signature_a,
             next.row_id_a)) {
+#if defined(DSRRL_PMETAL_SELECTOR_DECODE_FRONTIER_DIAG)
+        record_selector_decode_miss(
+            selector_source_a_read,
+            g_selector_last_read_decode_stage);
+#endif
         telemetry::hot_count(
             g_decode_fail);
         return;
@@ -2870,6 +2976,11 @@ void pmetal_env_source_selector_event(
                    b,
                    next.bank_signature_b,
                    next.row_id_b)) {
+#if defined(DSRRL_PMETAL_SELECTOR_DECODE_FRONTIER_DIAG)
+        record_selector_decode_miss(
+            selector_source_b_read,
+            g_selector_last_read_decode_stage);
+#endif
         telemetry::hot_count(
             g_decode_fail);
         return;
@@ -2896,14 +3007,24 @@ void pmetal_env_source_selector_event(
 #if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG)
     f4 envdiffuse_a{};
     f4 envdiffuse_b{};
-    if (!exact_envdiffuse_endpoint(
-            next.bank_signature_a,
-            next.row_id_a,
-            envdiffuse_a) ||
-        !exact_envdiffuse_endpoint(
+    const bool donor_a_valid = exact_envdiffuse_endpoint(
+        next.bank_signature_a,
+        next.row_id_a,
+        envdiffuse_a);
+    const bool donor_b_valid =
+        donor_a_valid &&
+        exact_envdiffuse_endpoint(
             next.bank_signature_b,
             next.row_id_b,
-            envdiffuse_b)) {
+            envdiffuse_b);
+    if (!donor_a_valid || !donor_b_valid) {
+#if defined(DSRRL_PMETAL_SELECTOR_DECODE_FRONTIER_DIAG)
+        record_selector_decode_miss(
+            donor_a_valid ? selector_envdiffuse_b : selector_envdiffuse_a,
+            0u,
+            donor_a_valid ? next.bank_signature_b : next.bank_signature_a,
+            donor_a_valid ? next.row_id_b : next.row_id_a);
+#endif
         telemetry::hot_count(
             g_decode_fail);
         return;
@@ -2927,6 +3048,10 @@ void pmetal_env_source_selector_event(
         material,
         next,
         epoch);
+#if defined(DSRRL_PMETAL_SELECTOR_DECODE_FRONTIER_DIAG)
+    g_selector_fallback_publish.fetch_add(
+        1u,std::memory_order_relaxed);
+#endif
 
 #if defined(DSRRL_PMETAL_PARENT_SEMANTIC_JOIN_DIAG)
     if (!parent_verified) {
