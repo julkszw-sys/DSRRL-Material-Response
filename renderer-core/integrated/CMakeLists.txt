@@ -243,6 +243,9 @@ option(
     DSRRL_RESOURCE_EPOCH_SHARD_SYNC
     "Experimental: invalidate companion SRV TLS by 256 key buckets instead of process-global epoch"
     OFF)
+option(DSRRL_COMPANION_TLS_4WAY
+    "Experimental: 64 sets x4 ways instead of direct-mapped TLS; same 256 total entries"
+    OFF)
 
 option(
     DSRRL_POINTLIGHT_PROFILE
@@ -727,6 +730,14 @@ if(DSRRL_RESOURCE_EPOCH_SHARD_SYNC)
     target_compile_definitions(
         dsrrl_renderer_core_integrated
         PRIVATE DSRRL_RESOURCE_EPOCH_SHARD_SYNC)
+endif()
+if(DSRRL_COMPANION_TLS_4WAY)
+    if(NOT DSRRL_RESOURCE_EPOCH_SHARD_SYNC)
+        message(FATAL_ERROR "Four-way TLS requires keyed epoch synchronization")
+    endif()
+    target_compile_definitions(
+        dsrrl_renderer_core_integrated
+        PRIVATE DSRRL_COMPANION_TLS_4WAY)
 endif()
 
 if(DSRRL_DIAGNOSTIC_TELEMETRY_DEFAULT_ON)
