@@ -97,7 +97,7 @@ jobs:
       - name: Native FLVER negative-cache regression test
         shell: pwsh
         run: |
-          cmake --build build-fast --config Release --target dsrrl_renderer_flver_identity_tests
+          cmake --build build-fast/renderer-core-lib --config Release --target dsrrl_renderer_flver_identity_tests
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           ctest --test-dir build-fast/renderer-core-lib -C Release -R "^dsrrl_renderer_flver_identity_tests$" --output-on-failure
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
