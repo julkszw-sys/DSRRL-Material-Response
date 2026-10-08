@@ -2544,13 +2544,6 @@ bool observe_pointlight_draw_identity(
                 out_material,
                 requires_specular);
 
-#if defined(DSRRL_MR_CLOTH_TRACE)
-    if (!direct_pointlight_receiver)
-        trace_mr_cloth(
-            receiver_id, out_material, out_decision,
-            out_decision.active ? 2u : 1u);
-#endif
-
     if (out_decision.active) {
         hot_count(g_mr_would_activate);
         if (!g_pointlight_active_logged.exchange(
@@ -2925,6 +2918,13 @@ bool observe_draw_identity(
                     out_material,
                     true);
     }
+
+#if defined(DSRRL_MR_CLOTH_TRACE)
+    if (!direct_pointlight_receiver)
+        trace_mr_cloth(
+            receiver_id, out_material, out_decision,
+            out_decision.active ? 2u : 1u);
+#endif
 
     if (out_decision.active) {
         hot_count(g_mr_would_activate);
