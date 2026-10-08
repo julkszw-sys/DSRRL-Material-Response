@@ -143,12 +143,13 @@ int main()
         runtime::pmetal_producer_state_clear();
 
         runtime::pmetal_envspec_source retained{};
-        assert(runtime::pmetal_producer_state_latest(
-            material,
-            100u,
-            retained));
-        assert(retained.beta == 0.75f);
-        assert(retained.row_id_a == 1u);
+        if (!runtime::pmetal_producer_state_latest(
+                material,
+                100u,
+                retained) ||
+            retained.beta != 0.75f ||
+            retained.row_id_a != 1u)
+            return 10;
     }
 
     // Even after unrelated collisions, a failed new selector for the SAME
@@ -158,10 +159,11 @@ int main()
         100u);
     runtime::pmetal_producer_state_clear();
     runtime::pmetal_envspec_source revoked{};
-    assert(!runtime::pmetal_producer_state_latest(
-        material,
-        100u,
-        revoked));
+    if (runtime::pmetal_producer_state_latest(
+            material,
+            100u,
+            revoked))
+        return 11;
 
     return 0;
 }
