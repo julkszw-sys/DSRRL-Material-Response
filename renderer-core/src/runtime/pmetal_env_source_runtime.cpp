@@ -7,6 +7,9 @@
 
 #include "dsrrl/runtime/pmetal_env_source_runtime.hpp"
 #include "dsrrl/runtime/pmetal_producer_state.hpp"
+#if defined(DSRRL_PMETAL_EXACT_DSR_ROW64_HYBRID)
+#include "dsrrl/runtime/pmetal_dsr_only_lightbank_fallback.hpp"
+#endif
 #include "dsrrl/runtime/pmetal_selector_policy.hpp"
 #include "dsrrl/runtime/runtime_hot_telemetry.hpp"
 #include "dsrrl/operators/material_response/mtd_semantic_census.hpp"
@@ -324,6 +327,22 @@ bool load_exact_envdiffuse_donor() noexcept
     }
 }
 
+#if defined(DSRRL_PMETAL_EXACT_DSR_ROW64_HYBRID)
+f4 dsr_only_hybrid_rgbm(
+    const std::array<std::uint16_t,4> &rgbm) noexcept
+{
+    const float scale = static_cast<float>(rgbm[3]) * 0.01f;
+    return {
+        static_cast<float>(rgbm[0]) / 255.0f * scale,
+        static_cast<float>(rgbm[1]) / 255.0f * scale,
+        static_cast<float>(rgbm[2]) / 255.0f * scale,
+        0.0f
+    };
+}
+std::atomic<std::uint64_t> g_dsr_only_row64_spec_reads{0u};
+std::atomic<std::uint64_t> g_dsr_only_row64_diffuse_reads{0u};
+#endif
+
 bool exact_envdiffuse_endpoint(
     std::uint64_t signature,
     std::uint32_t row_id,
@@ -337,8 +356,36 @@ bool exact_envdiffuse_endpoint(
          g_exact_envdiffuse_banks) {
         if (bank.signature != signature)
             continue;
-        if (row_id >= bank.count)
+        if (row_id >= bank.count) {
+#if defined(DSRRL_PMETAL_EXACT_DSR_ROW64_HYBRID)
+            // The PTDE donor has 64 rows in m14/s14/m18, while
+            // exact live DSR bank identity authenticates a 65th row.
+            // Only the three explicitly recovered extra rows qualify.
+            if (bank.count == 64u) {
+                const auto *host =
+                    pmetal_dsr_only_lightbank_fallback::find(
+                        signature,row_id);
+                if (host != nullptr) {
+                    out = dsr_only_hybrid_rgbm(
+                        host->dsr_envdiffuse_rgbm);
+                    const auto n =
+                        g_dsr_only_row64_diffuse_reads.fetch_add(
+                            1u,std::memory_order_relaxed) + 1u;
+                    if (n == 1u) {
+                        char line[280]{};
+                        std::snprintf(line,sizeof(line),
+                            "[DSRRL PMETAL ROW64 HYBRID] lane=EnvDiffuse origin=DSR_ONLY_RAW_RGBM bank=%016llx row=%u common_rows=PTDE verified=EXACT_BANK",
+                            static_cast<unsigned long long>(signature),
+                            static_cast<unsigned>(row_id));
+                        reshade::log::message(
+                            reshade::log::level::info,line);
+                    }
+                    return true;
+                }
+            }
+#endif
             return false;
+        }
 
         const auto &row =
             g_exact_envdiffuse_rows[
@@ -1659,6 +1706,34 @@ bool read_exact_source(
 
     const auto *row = pmetal_env_source_authority::find_row(*bank,row_id);
     if (row == nullptr) {
+#if defined(DSRRL_PMETAL_EXACT_DSR_ROW64_HYBRID)
+        // Exact DSR bank-layout identity was established by resolve_bank().
+        // Never use a host row for any PTDE-homologous ID (0..63) or
+        // non-whitelisted bank; preserve the regular fail-open otherwise.
+        const auto *host =
+            bank->live_count == 65u && bank->count == 64u && count == 65u
+            ? pmetal_dsr_only_lightbank_fallback::find(signature,row_id)
+            : nullptr;
+        if (host != nullptr) {
+            out = dsr_only_hybrid_rgbm(host->dsr_envspec_rgbm);
+            endpoint_cache_publish(
+                source,base,count,index,row_id,out,signature);
+            record_hook_decode(
+                hook_decode_ok,version_u32,count_u32,index,row_id,signature);
+            const auto n =
+                g_dsr_only_row64_spec_reads.fetch_add(
+                    1u,std::memory_order_relaxed) + 1u;
+            if (n == 1u) {
+                char line[280]{};
+                std::snprintf(line,sizeof(line),
+                    "[DSRRL PMETAL ROW64 HYBRID] lane=EnvSpec origin=DSR_ONLY_RAW_RGBM bank=%016llx row=%u common_rows=PTDE verified=EXACT_DSR_LAYOUT",
+                    static_cast<unsigned long long>(signature),
+                    static_cast<unsigned>(row_id));
+                reshade::log::message(reshade::log::level::info,line);
+            }
+            return true;
+        }
+#endif
         record_hook_decode(hook_decode_row_unknown,version_u32,count_u32,index,row_id,signature);
         return false;
     }
