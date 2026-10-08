@@ -94,13 +94,21 @@ jobs:
           if ($addons.Count -ne 1) { throw "Expected exactly one addon, found $($addons.Count)" }
           Copy-Item $addons[0].FullName "DSRRL_R43_RELEASE_AUDIT_HARDENING_02.addon64" -Force
 
+      - name: Native FLVER negative-cache regression test
+        shell: pwsh
+        run: |
+          cmake --build build-fast --config Release --target dsrrl_renderer_flver_identity_tests
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          ctest --test-dir build-fast/renderer-core-lib -C Release -R "^dsrrl_renderer_flver_identity_tests$" --output-on-failure
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
       - name: Verify binary identity
         shell: pwsh
         run: |
           $path = "DSRRL_R43_RELEASE_AUDIT_HARDENING_02.addon64"
           $ascii = [System.Text.Encoding]::ASCII.GetString([System.IO.File]::ReadAllBytes($path))
           if (-not $ascii.Contains($env:DSRRL_CHECKOUT_COMMIT)) { throw "Missing source commit identity" }
-          if (-not $ascii.Contains("pmetal_r43_release_prep_cleanup_01")) { throw "Missing R43 build flavor identity" }
+          if (-not $ascii.Contains("pmetal_r43_release_audit_hardening_02")) { throw "Missing R43 build flavor identity" }
           if (-not $ascii.Contains("[DSRRL PMETAL R41] flver_lifecycle_cache_flush=OFF source_cache_generation=SOURCE_RUNTIME_RESET_ONLY endpoint_cache=EXACT_SOURCE_BASE_COUNT_INDEX_ROW bank_cache=BASE_COUNT_LAYOUT region_cache=VM_WINDOW selector_shadow=EXACT_TLS_SOURCE_PTR_SELECTOR_BETA selector_source=ON envspec=ON material_response=ON")) { throw "Missing R41 P_Metal cache-scope marker" }
           if (-not $ascii.Contains("[DSRRL PMETAL R41] selector_source_shadow_hit=1 exact_source_ptr=ON exact_selector_beta=ON donor_redecode=OFF fail_open_fallback=ON")) { Write-Host "R41 selector-shadow hit marker is intentionally runtime-only" }
           if (-not $ascii.Contains("[DSRRL PMETAL R43] producer_cache=SET256_WAY2 freshness=SOURCE_BASE_COUNT_ROW_SELECTOR_BETA global_semantic_version_gate=OFF selector_try_lock=ON producer_payload_exact=ON fallback_full_decode=ON islands_preserved=ON")) { throw "Missing R43 per-key freshness marker" }

@@ -80,12 +80,16 @@ std::array<std::uint8_t,32> digest(const void *p,std::size_t n) noexcept {sha256
 std::mutex g_mutex;
 std::unordered_map<const void*,std::array<std::uint8_t,32>> g_by_model;
 std::atomic<std::uint64_t> g_epoch{1u};
+// New model registrations invalidate only cached negative owner verdicts.
+// Existing positive SHA owner rows remain stable and lock-free.
+std::atomic<std::uint64_t> g_insert_generation{1u};
 
 struct lookup_tls_cache_entry {
     const void *model = nullptr;
     std::uint64_t epoch = 0u;
     std::array<std::uint8_t,32> sha{};
     bool present = false;
+    std::uint64_t miss_generation = 0u;
 };
 
 // Selector order interleaves many FLVER owners in one frame. A single-entry
@@ -140,7 +144,10 @@ lookup_tls_cache_entry *lookup_tls_cache_hit(
         auto &entry =
             g_lookup_cache[base + way];
         if (entry.model == model &&
-            entry.epoch == epoch)
+            entry.epoch == epoch &&
+            (entry.present ||
+             entry.miss_generation ==
+                 g_insert_generation.load(std::memory_order_acquire)))
             return &entry;
     }
 
@@ -191,11 +198,11 @@ bool flver_identity_observe_parse(const void *model,const void *raw,std::size_t 
         const auto found =
             g_by_model.find(model);
         if (found == g_by_model.end()) {
-            // Loading an unrelated FLVER cannot invalidate cached identities
-            // for already-live models. Pointer reuse is covered by the
-            // destructor path, which advances the global epoch before a new
-            // object at that address can become authoritative.
+            // Positive owner caches for other models stay valid; only
+            // cached misses must retry after a new FLVER appears.
             g_by_model.emplace(model, sha);
+            g_insert_generation.fetch_add(
+                1u, std::memory_order_release);
         } else if (found->second != sha) {
             found->second = sha;
             g_epoch.fetch_add(
@@ -270,7 +277,8 @@ bool flver_identity_lookup(const void *selector_container,std::array<std::uint8_
             g_epoch.load(
                 std::memory_order_relaxed),
             {},
-            false
+            false,
+            g_insert_generation.load(std::memory_order_relaxed)
         };
         telemetry::hot_count(g_misses);
         return false;
@@ -282,7 +290,8 @@ bool flver_identity_lookup(const void *selector_container,std::array<std::uint8_
         g_epoch.load(
             std::memory_order_relaxed),
         sha256,
-        true
+        true,
+        0u
     };
     telemetry::hot_count(g_hits);
     return true;

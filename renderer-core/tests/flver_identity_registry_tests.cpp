@@ -19,9 +19,22 @@ int main()
     const void *model_key=model.data();
     const void *container=model.data()+0x88u;
 
-    assert(dsrrl::runtime::flver_identity_observe_parse(model_key,raw.data(),raw.size()));
+    // A selector miss can precede parsing the same FLVER. Re-registration
+    // must invalidate that negative cache even when global positive-owner
+    // epochs are intentionally preserved.
+    std::array<std::uint8_t,32> missing{};
+    if (dsrrl::runtime::flver_identity_lookup(container, missing))
+        return 101;
+    if (dsrrl::runtime::flver_identity_lookup(container, missing))
+        return 102;
+    if (!dsrrl::runtime::flver_identity_observe_parse(
+            model_key, raw.data(), raw.size()))
+        return 103;
 
     std::array<std::uint8_t,32> first{},second{};
+    if (!dsrrl::runtime::flver_identity_lookup(container, first))
+        return 104;
+
     assert(dsrrl::runtime::flver_identity_lookup(container,first));
     assert(dsrrl::runtime::flver_identity_lookup(container,second));
     assert(first==second);

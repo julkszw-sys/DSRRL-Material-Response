@@ -32,3 +32,7 @@ Three `draw_state_transaction.cpp` entry points call `PSGetShader` with a local 
 
 ## Validation progression
 Native/marker/source static checks first. Then test ReShade load/unload, shader identity, COM resource reload, device reset, consecutive map transitions, stable+HemEnvLerp receiver activation, fail-open for missing texture, release-vs-#228 CPU frametimes with shader/model workload matched, and PTDE-visible pixels. Do not widen the bridge or modify stock DSR PointLight without separate evidence.
+
+## Additional confirmed source finding: FLVER cached misses
+
+A selector lookup can miss before the host FLVER parse callback. The old TLS negative entry used the global epoch and was never invalidated by first registration of its model. Added a separate insert generation checked only on negative cache hits; new inserts invalidate cached misses, while positive owner records do not suffer global invalidation. Added a Release-mode native regression test for miss, cached miss, parse, then success. Correctness source finding CONFIRMED; runtime effect and pixel behavior NOT TESTED.

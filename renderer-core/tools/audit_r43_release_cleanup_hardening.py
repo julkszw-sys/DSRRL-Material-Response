@@ -17,6 +17,7 @@ def require(condition, description):
 transaction = (ROOT / "src/runtime/draw_state_transaction.cpp").read_text(encoding="utf-8")
 resources = (ROOT / "src/runtime/material_resource_draw_runtime.cpp").read_text(encoding="utf-8")
 source = (ROOT / "src/runtime/pmetal_env_source_runtime.cpp").read_text(encoding="utf-8")
+flver = (ROOT / "src/runtime/flver_identity_registry.cpp").read_text(encoding="utf-8")
 envspec = (ROOT / "src/runtime/pmetal_envspec_draw_runtime.cpp").read_text(encoding="utf-8")
 cmake = (ROOT / "integrated/CMakeLists.txt").read_text(encoding="utf-8")
 
@@ -50,6 +51,14 @@ require(
     and "DSRRL_PHYSICAL_CUT_UL_H3_SUBSURFACE" in cmake
     and "DSRRL_RELEASE_CLEANUP" in cmake,
     "release-prep physical-cut and diagnostic restrictions retained",
+)
+
+require(
+    "g_insert_generation" in flver
+    and "entry.miss_generation ==" in flver
+    and "g_insert_generation.fetch_add(" in flver
+    and "g_epoch.fetch_add(" in flver,
+    "new FLVER insert invalidates negative TLS verdict without positive owner flush",
 )
 
 print("R43_RELEASE_AUDIT_SOURCE_PASS")
