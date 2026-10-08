@@ -1,4 +1,4 @@
-name: P_Metal R43 Per-Key Freshness Cache Build
+name: P_Metal R43 RC1 PointLight Physical Cut Runtime
 
 on:
   workflow_dispatch:
@@ -11,6 +11,7 @@ on:
       - r41-active-islands-pmetal-cache-scope
       - r42-pmetal-cross-thread-producer-cache
       - r43-pmetal-per-key-freshness-cache
+      - r43-rc1-pointlight-physical-cut
   pull_request:
     paths:
       - "renderer-core/integrated/**"
@@ -32,7 +33,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: pmetal-r43-per-key-freshness-${{ github.head_ref || github.ref_name }}
+  group: pmetal-r43-plcut-${{ github.head_ref || github.ref_name }}
   cancel-in-progress: true
 
 jobs:
@@ -56,7 +57,7 @@ jobs:
           ref: 3645e3025d1d98a90e318278858931f034d5d1f6
           path: _reshade
 
-      - name: Configure R43 per-key PMetal freshness cache
+      - name: Configure R43 RC1 P_Metal with both PointLight islands physically cut
         shell: pwsh
         run: >
           cmake
@@ -65,7 +66,7 @@ jobs:
           -A x64
           -DRESHADE_INCLUDE_DIR="${{ github.workspace }}/_reshade/include"
           -DDSRRL_SOURCE_COMMIT="$env:DSRRL_CHECKOUT_COMMIT"
-          -DDSRRL_BUILD_FLAVOR="pmetal_r43_per_key_freshness_cache"
+          -DDSRRL_BUILD_FLAVOR="pmetal_r43_rc1_pointlight_cut"
           -DDSRRL_FULL_TELEMETRY_DEFAULT_ON=OFF
           -DDSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG=ON
           -DDSRRL_PMETAL_FULL_PTDE_HEMENV_R3=ON
@@ -81,6 +82,7 @@ jobs:
           -DDSRRL_PMETAL_R19_LERP_MATERIALWORKFLOW=ON
           -DDSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE=ON
           -DDSRRL_PHYSICAL_CUT_UL_H3_SUBSURFACE=ON
+          -DDSRRL_PHYSICAL_CUT_POINTLIGHT_ALL=ON
 
       - name: Build runtime
         shell: pwsh
@@ -89,37 +91,23 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           $addons = @(Get-ChildItem build-fast -Recurse -Filter *.addon64)
           if ($addons.Count -ne 1) { throw "Expected exactly one addon, found $($addons.Count)" }
-          Copy-Item $addons[0].FullName "DSRRL_PMETAL_R43_PER_KEY_FRESHNESS_CACHE.addon64" -Force
+          Copy-Item $addons[0].FullName "DSRRL_PMETAL_R43_RC1_POINTLIGHT_CUT.addon64" -Force
 
       - name: Verify binary identity
         shell: pwsh
         run: |
-          $path = "DSRRL_PMETAL_R43_PER_KEY_FRESHNESS_CACHE.addon64"
+          $path = "DSRRL_PMETAL_R43_RC1_POINTLIGHT_CUT.addon64"
           $ascii = [System.Text.Encoding]::ASCII.GetString([System.IO.File]::ReadAllBytes($path))
           if (-not $ascii.Contains($env:DSRRL_CHECKOUT_COMMIT)) { throw "Missing source commit identity" }
-          if (-not $ascii.Contains("pmetal_r43_per_key_freshness_cache")) { throw "Missing R43 build flavor identity" }
-          if (-not $ascii.Contains("[DSRRL POINTLIGHT R26] direct_current_native_dispatch=ACTIVE persistent_vtable_hook=OFF recursion_guard=ON")) { throw "Missing inherited R26 direct current-native startup marker" }
-          if (-not $ascii.Contains("[DSRRL POINTLIGHT R29] exact_structure_snapshot_cache=ACTIVE cross_draw=ON revalidate=VM+MEMCMP pointer_only_authority=OFF gpu_tls_fast_cache=ON per_draw_resource_mutex=OFF per_draw_com_ref_churn=OFF pipeline_tls_fast_path=ON per_draw_private_data=OFF per_draw_shader_ref_churn=OFF failure_propagation=EXACT")) { throw "Missing inherited R29 fast resource/cache/failure-propagation startup marker" }
-          if (-not $ascii.Contains("[DSRRL POINTLIGHT R30] synchronous_core_transaction=ACTIVE exact_clustered_shape_guard=ON global_core_tx_mutex=OFF_FOR_CLUSTERED_DIRECT_NATIVE tls_reentry_guard=ON t18_t19_batch=ON sync_draw_serial_atomic=OFF fallback_general_tx=UNCHANGED")) { throw "Missing inherited R30 lock-free synchronous core transaction marker" }
-          if (-not $ascii.Contains("[DSRRL POINTLIGHT R31] direct_source_class=DirectPointLightEntity dsr_vfunc_rva=0x55C570 ptde_homologue=0x00D34D50 carrier=position_invRange_RGB_End authorization=EXACT_ONLY")) { throw "Missing R31 exact DirectPointLightEntity attestation marker" }
-          if (-not $ascii.Contains("[DSRRL POINTLIGHT R33] clustered_spc_protected_failopen=SUPERSEDED_BY_R35_OWNER_AUTH")) { throw "Missing R33 supersession marker" }
-          if (-not $ascii.Contains("[DSRRL POINTLIGHT R34] source_material_split=ACTIVE source_stage=selector_source_event material_stage=selector_identity_event")) { throw "Missing inherited R34 source/material split marker" }
-          if (-not $ascii.Contains("[DSRRL POINTLIGHT R35] owner_authorized_spc_hybrid=ACTIVE clustered_nospc_consumes_ptde_source=ON clustered_spc_consumes_ptde_source=ON spc_material_tail=STOCK_DSR_GGX_SCHLICK local_specular_equivalence=OPEN")) { throw "Missing R35 owner-authorized Spc hybrid marker" }
-          if (-not $ascii.Contains("[DSRRL POINTLIGHT R36] bank_lerp_native_double_pack=OFF frame_source_cache=TLS_EXACT_STATE_PER_PRESENT donor_miss_stock_fallback=ON")) { throw "Missing R36 PointLight source-cache marker" }
-          if (-not $ascii.Contains("[DSRRL POINTLIGHT R37] bank_structure_revalidate=TABLE_PLUS_NAMES_ONLY dynamic_row_payload_excluded=ON allocation_guard=ON exact_structure_identity=ON vm_region_cache=TLS_PER_PRESENT selector_capture_reuse=ON source_exec_attest=INSTALL_ONCE frame_source_cache=R36_UNCHANGED")) { throw "Missing inherited R37 structural-cache marker" }
-          if (-not $ascii.Contains("[DSRRL POINTLIGHT R38] frame_selection_cache=DIRECT128_EXACT_INPUT_PLUS_BUCKET_HEADS source_cache=DIRECT128_EXACT_STATE cache_scope=TLS_PER_PRESENT source_revalidation=ON")) { throw "Missing inherited R38 cache marker" }
-          if (-not $ascii.Contains("[DSRRL POINTLIGHT R40] source_cache=PERSISTENT_GENERATIONAL_EXACT_STATE invalidation=ACTIVE_COLLECTION_INSERT collection_identity=IN_KEY endpoint_identity=SOURCE_PLUS_PARAM selector_beta=IN_KEY present_reset=OFF spc=ON nospc=ON")) { throw "Missing R40 generational source-cache marker" }
+          if (-not $ascii.Contains("pmetal_r43_rc1_pointlight_cut")) { throw "Missing R43 build flavor identity" }
           if (-not $ascii.Contains("[DSRRL PMETAL R41] flver_lifecycle_cache_flush=OFF source_cache_generation=SOURCE_RUNTIME_RESET_ONLY endpoint_cache=EXACT_SOURCE_BASE_COUNT_INDEX_ROW bank_cache=BASE_COUNT_LAYOUT region_cache=VM_WINDOW selector_shadow=EXACT_TLS_SOURCE_PTR_SELECTOR_BETA selector_source=ON envspec=ON material_response=ON")) { throw "Missing R41 P_Metal cache-scope marker" }
           if (-not $ascii.Contains("[DSRRL PMETAL R41] selector_source_shadow_hit=1 exact_source_ptr=ON exact_selector_beta=ON donor_redecode=OFF fail_open_fallback=ON")) { Write-Host "R41 selector-shadow hit marker is intentionally runtime-only" }
           if (-not $ascii.Contains("[DSRRL PMETAL R43] producer_cache=SET256_WAY2 freshness=SOURCE_BASE_COUNT_ROW_SELECTOR_BETA global_semantic_version_gate=OFF selector_try_lock=ON producer_payload_exact=ON fallback_full_decode=ON islands_preserved=ON")) { throw "Missing R43 per-key freshness marker" }
           if (-not $ascii.Contains("[DSRRL PMETAL R43] selector_per_key_cache_hit=1 exact_key=SOURCE_BASE_COUNT_ROW_SELECTOR_BETA global_semantic_version=IGNORED donor_redecode=OFF lock_wait=OFF")) { Write-Host "R43 selector per-key hit marker is intentionally runtime-only" }
           if (-not $ascii.Contains("[DSRRL PMETAL R43] producer_per_key_cache_hit=1 exact_key=SOURCE_BASE_COUNT_ROW_SELECTOR_BETA exact_payload=ON global_publish_mutex=SKIPPED")) { Write-Host "R42 producer cross-thread hit marker is intentionally runtime-only" }
-          if (-not $ascii.Contains("[DSRRL POINTLIGHT R40] generational_source_cache_hit=1 exact_state_snapshot=ON invalidation=ACTIVE_COLLECTION_INSERT")) { Write-Host "R40 runtime cache-hit marker is intentionally runtime-only" }
-          if (-not $ascii.Contains("[DSRRL POINTLIGHT R38] frame_selection_cache_hit=1 exact_input=ON bucket_heads=ON source_revalidation=ON")) { Write-Host "R38 runtime hit marker is intentionally runtime-only" }
-          if ($ascii.Contains("[DSRRL PERF R32] POINTLIGHT_PREP")) { throw "R43 production candidate unexpectedly contains PointLight profiler marker" }
-          if ($ascii.Contains("[DSRRL PERF R32] SELECTOR")) { throw "R43 production candidate unexpectedly contains FLVER selector profiler marker" }
-          if (-not $ascii.Contains("[DSRRL POINTLIGHT R29] source_capture_fail reason=")) { throw "Missing inherited R29 exact source-capture failure diagnostic marker" }
-          if (-not $ascii.Contains("[DSRRL POINTLIGHT APPLY] stage=direct_current_native_applied")) { throw "Missing R30 direct current-native apply marker" }
+          if (-not $ascii.Contains("[DSRRL PHYSICAL CUT POINTLIGHT] fixed_r40=PHYSICALLY_CUT clustered_spc=PHYSICALLY_CUT clustered_nospc=PHYSICALLY_CUT stock_dsr=ON")) { throw "PointLight physical-cut startup marker missing" }
+          if ($ascii.Contains("[DSRRL POINTLIGHT R40] source_cache=PERSISTENT_GENERATIONAL_EXACT_STATE")) { throw "R40 real PointLight source runtime leaked into physically cut addon" }
+          if ($ascii.Contains("[DSRRL POINTLIGHT R35] owner_authorized_spc_hybrid=ACTIVE")) { throw "Clustered PointLight Spc hybrid ACTIVE marker leaked into cut addon" }
           if (-not $ascii.Contains("[DSRRL PMETAL R19 LERP]")) { throw "Missing exact R19 Lerp EnvDiffuse runtime marker" }
           if (-not $ascii.Contains("[DSRRL PMETAL R7 SHADOW]")) { throw "Missing cumulative R7 shadow marker" }
           if (-not $ascii.Contains("[DSRRL PMETAL R3 SPEC ATTEST]")) { throw "Missing exact SpecRGB SHA attestation marker" }
@@ -128,6 +116,6 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: DSRRL_PMETAL_R43_PER_KEY_FRESHNESS_CACHE
-          path: DSRRL_PMETAL_R43_PER_KEY_FRESHNESS_CACHE.addon64
+          name: DSRRL_PMETAL_R43_RC1_POINTLIGHT_CUT
+          path: DSRRL_PMETAL_R43_RC1_POINTLIGHT_CUT.addon64
           if-no-files-found: error
