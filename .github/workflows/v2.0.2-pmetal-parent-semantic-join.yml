@@ -26,7 +26,11 @@ jobs:
           path: _reshade
       - name: Source audit
         shell: pwsh
-        run: python renderer-core/tools/audit_r43_release_cleanup_hardening.py
+        run: |
+          python renderer-core/tools/audit_r43_release_cleanup_hardening.py
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python renderer-core/tools/audit_pmetal_parent_semantic_join.py
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Configure exact R43 release with profiler
         shell: pwsh
         run: >
