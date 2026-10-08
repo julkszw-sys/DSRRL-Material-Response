@@ -1148,7 +1148,7 @@ bool pmetal_envspec_draw_runtime::prepare(
         telemetry::hot_count(
             srv_shadow_fallbacks_);
 
-    const bool material_ready =
+    bool material_ready =
         shadow_material_ready
             ? material_resources_.
                   prepare_draw_requests_bound(
@@ -1167,8 +1167,70 @@ bool pmetal_envspec_draw_runtime::prepare(
                       true,
                       prepared.material_resources);
 
+    // Shadow is only a fast carrier; exact live D3D11 stock texture binding
+    // is authoritative. Recheck only on a failed shadow-sourced request.
+    bool shadow_diverged = false;
+    bool live_retry_recovered = false;
+    if (shadow_material_ready &&
+        (!material_ready || !prepared.material_resources.spec_rgb)) {
+        ID3D11ShaderResourceView *live[3]{};
+        context->PSGetShaderResources(0u, 3u, live);
+        shadow_diverged =
+            live[0] != shadow_material[0] ||
+            live[1] != shadow_material[1] ||
+            live[2] != shadow_material[2];
+
+        if (shadow_diverged) {
+            material_resources_.release_prepared_draw(
+                prepared.material_resources);
+            material_ready = material_resources_.prepare_draw_requests_bound(
+                live, decision.receiver_id, query, true, true,
+                prepared.material_resources);
+            live_retry_recovered =
+                material_ready && prepared.material_resources.spec_rgb;
+            if (live_retry_recovered) {
+                static std::atomic_bool recovery_logged{false};
+                if (!recovery_logged.exchange(
+                        true, std::memory_order_relaxed)) {
+                    reshade::log::message(
+                        reshade::log::level::info,
+                        "[DSRRL PMETAL SPEC GATE] live_t1_shadow_recovered=1 exact_material_and_sidecar=PASS");
+                }
+            }
+        }
+        for (auto *&view : live)
+            if (view != nullptr) { view->Release(); view = nullptr; }
+    }
+
     if (!material_ready ||
         !prepared.material_resources.spec_rgb) {
+        static std::atomic_bool spec_frontier_logged{false};
+        if (!spec_frontier_logged.exchange(
+                true, std::memory_order_relaxed)) {
+            const auto probe =
+                material_resources_.probe_exact_specular_companion(context);
+            const auto semantic = mr::classify_mtd_semantic(
+                query, mr::mtd_semantic_operator::spec_rgb);
+            char line[640]{};
+            std::snprintf(
+                line, sizeof(line),
+                "[DSRRL PMETAL SPEC GATE] rejected rx=%u ready=%u req=%u shadow=%u diverged=%u recovered=%u t1=%u cache=%u hash=%016llx allowed=%u companion=%u semantic=%u owner=%u",
+                static_cast<unsigned>(decision.receiver_id),
+                material_ready ? 1u : 0u,
+                prepared.material_resources.spec_rgb ? 1u : 0u,
+                shadow_material_ready ? 1u : 0u,
+                shadow_diverged ? 1u : 0u,
+                live_retry_recovered ? 1u : 0u,
+                probe.stock_bound ? 1u : 0u,
+                probe.snapshot_resolved ? 1u : 0u,
+                static_cast<unsigned long long>(probe.logical_hash),
+                probe.logical_hash_allowed ? 1u : 0u,
+                probe.companion_ready ? 1u : 0u,
+                static_cast<unsigned>(semantic.state),
+                material.owner_tuple_exact ? 1u : 0u);
+            reshade::log::message(reshade::log::level::info, line);
+        }
+
         if (shader != nullptr)
             shader->Release();
         env_resources_.release(
