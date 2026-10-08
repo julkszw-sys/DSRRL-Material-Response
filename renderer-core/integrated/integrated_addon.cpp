@@ -2232,6 +2232,93 @@ const char *pointlight_decision_reason_name(
     }
 }
 
+#if defined(DSRRL_MR_MATERIAL_TRACE)
+// v2.0.2 location-local MR diagnostic: no shader, CB, resource or feature
+// modification. Only diagnostic fingerprints are cached per-thread; all
+// source material authority and stock fail-open policies remain untouched.
+// Capped log lines avoid turning observation into a new draw-time hotspot.
+thread_local std::array<std::uint64_t, 256u> g_mr_material_seen{};
+std::atomic<std::uint32_t> g_mr_material_logged{0u};
+constexpr std::uint32_t k_mr_material_log_limit = 512u;
+
+void trace_mr_material(
+    std::uint32_t receiver,
+    const dsrrl::operators::material_response::material_identity &material,
+    const dsrrl::operators::material_response::decision &decision,
+    std::uint8_t stage) noexcept
+{
+    if (receiver < 24u || receiver > 47u)
+        return;
+
+    // Include stage, decision reason and material identity in the diagnostic
+    // fingerprint. Hash entropy here is for log dedup only, NEVER authority.
+    std::uint64_t fingerprint = material.semantic_name_hash ^
+        (material.material_family_hash << 1u) ^
+        (static_cast<std::uint64_t>(receiver) * 0x9e3779b185ebca87ull) ^
+        (static_cast<std::uint64_t>(decision.route_index) << 24u) ^
+        (static_cast<std::uint64_t>(material.material_slot) << 40u) ^
+        (static_cast<std::uint64_t>(stage) << 56u) ^
+        (static_cast<std::uint64_t>(decision.reason) << 48u);
+    fingerprint ^= fingerprint >> 27u;
+    fingerprint *= 0x94d049bb133111ebull;
+    if (fingerprint == 0u)
+        fingerprint = 1u;
+
+    auto &seen = g_mr_material_seen[
+        static_cast<std::size_t>(fingerprint) &
+        (g_mr_material_seen.size() - 1u)];
+    if (seen == fingerprint)
+        return;
+    seen = fingerprint;
+
+    const auto ticket = g_mr_material_logged.fetch_add(
+        1u, std::memory_order_relaxed);
+    if (ticket >= k_mr_material_log_limit)
+        return;
+
+    const char *stage_name =
+        stage == 1u ? "decision_reject" :
+        stage == 2u ? "decision_active" :
+        stage == 4u ? "draw_issued" : "owner_missing";
+    const char *carrier = material.actual_material_exact
+        ? "runtime_mtd"
+        : material.owner_tuple_exact ? "flver_owner" : "unverified";
+
+    char line[900]{};
+    std::snprintf(line,sizeof(line),
+        "[DSRRL MR MATERIAL] stage=%s rx=%u route=%u "
+        "reason=%s(%u) ops=%08x carrier=%s mat_valid=%u "
+        "owner_exact=%u mtd_exact=%u slot=%u slot_valid=%u "
+        "semantic=%016llx family=%016llx mtd_sha0=%02x%02x%02x%02x "
+        "flver_sha0=%02x%02x%02x%02x "
+        "c100=%.6f,%.6f,%.6f c101=%.6f ptde_spec_power=%.6f spec_verified=%u envspec=%u",
+        stage_name, receiver, decision.route_index,
+        pointlight_decision_reason_name(decision.reason),
+        static_cast<unsigned>(decision.reason),
+        decision.certified_operations, carrier,
+        material.valid ? 1u : 0u,
+        material.owner_tuple_exact ? 1u : 0u,
+        material.actual_material_exact ? 1u : 0u,
+        material.material_slot,
+        material.material_slot_valid ? 1u : 0u,
+        static_cast<unsigned long long>(material.semantic_name_hash),
+        static_cast<unsigned long long>(material.material_family_hash),
+        static_cast<unsigned>(material.raw_mtd_sha256[0]),
+        static_cast<unsigned>(material.raw_mtd_sha256[1]),
+        static_cast<unsigned>(material.raw_mtd_sha256[2]),
+        static_cast<unsigned>(material.raw_mtd_sha256[3]),
+        static_cast<unsigned>(material.flver_sha256[0]),
+        static_cast<unsigned>(material.flver_sha256[1]),
+        static_cast<unsigned>(material.flver_sha256[2]),
+        static_cast<unsigned>(material.flver_sha256[3]),
+        decision.c100[0], decision.c100[1], decision.c100[2],
+        decision.c101, decision.ptde_specular_power,
+        decision.ptde_specular_power_verified ? 1u : 0u,
+        static_cast<unsigned>(decision.envspec));
+    reshade::log::message(reshade::log::level::info,line);
+}
+#endif
+
 void log_pointlight_gate_once(
     std::uint32_t bit,
     const char *stage,
@@ -2745,6 +2832,10 @@ bool observe_draw_identity(
     }
 
     if (!owner_ok) {
+#if defined(DSRRL_MR_MATERIAL_TRACE)
+        if (rx != nullptr)
+            trace_mr_material(receiver_id, out_material, out_decision, 8u);
+#endif
         hot_count(g_draw_receiver_only);
         hot_count(g_mr_fail_open);
         if (rx != nullptr)
@@ -2848,6 +2939,13 @@ bool observe_draw_identity(
                     out_material,
                     true);
     }
+
+#if defined(DSRRL_MR_MATERIAL_TRACE)
+    if (!direct_pointlight_receiver)
+        trace_mr_material(
+            receiver_id, out_material, out_decision,
+            out_decision.active ? 2u : 1u);
+#endif
 
     if (out_decision.active) {
         hot_count(g_mr_would_activate);
@@ -6842,6 +6940,10 @@ bool on_draw(
     if (mr_in_batch) {
         g_mr_draw_runtime.account_dispatch_result(
             dispatch.transaction);
+#if defined(DSRRL_MR_MATERIAL_TRACE)
+        if (dsrrl::runtime::draw_tx_issued(dispatch.transaction))
+            trace_mr_material(receiver_id, material, decision, 4u);
+#endif
         if (dsrrl::runtime::draw_tx_issued(
                 dispatch.transaction) &&
             !g_mr_once_draw_issued.exchange(true)) {
@@ -7207,6 +7309,10 @@ bool on_draw_indexed(
     if (mr_in_batch) {
         g_mr_draw_runtime.account_dispatch_result(
             dispatch.transaction);
+#if defined(DSRRL_MR_MATERIAL_TRACE)
+        if (dsrrl::runtime::draw_tx_issued(dispatch.transaction))
+            trace_mr_material(receiver_id, material, decision, 4u);
+#endif
         if (dsrrl::runtime::draw_tx_issued(
                 dispatch.transaction) &&
             !g_mr_once_draw_issued.exchange(true)) {

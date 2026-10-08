@@ -246,6 +246,9 @@ option(
 option(DSRRL_COMPANION_TLS_4WAY
     "Experimental: 64 sets x4 ways instead of direct-mapped TLS; same 256 total entries"
     OFF)
+option(DSRRL_MR_MATERIAL_TRACE
+    "Diagnostic: bounded material MTD/receiver decision and draw outcome census for localized lighting mismatches"
+    OFF)
 
 option(
     DSRRL_POINTLIGHT_PROFILE
@@ -738,6 +741,11 @@ if(DSRRL_COMPANION_TLS_4WAY)
     target_compile_definitions(
         dsrrl_renderer_core_integrated
         PRIVATE DSRRL_COMPANION_TLS_4WAY)
+endif()
+if(DSRRL_MR_MATERIAL_TRACE)
+    target_compile_definitions(
+        dsrrl_renderer_core_integrated
+        PRIVATE DSRRL_MR_MATERIAL_TRACE)
 endif()
 
 if(DSRRL_DIAGNOSTIC_TELEMETRY_DEFAULT_ON)
