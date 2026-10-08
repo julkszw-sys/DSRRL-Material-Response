@@ -234,6 +234,10 @@ option(
     DSRRL_STUTTER_PROFILE
     "Record bounded QPC timing for R43 streaming stutter, no renderer feature changes"
     OFF)
+option(
+    DSRRL_STUTTER_HITCH_TRACE
+    "Opt-in: correlate worst Present gaps to completed FLVER, DDS, MTD and registry hook spans by thread"
+    OFF)
 
 option(
     DSRRL_POINTLIGHT_PROFILE
@@ -705,6 +709,13 @@ endif()
 if(DSRRL_STUTTER_PROFILE)
     target_compile_definitions(dsrrl_renderer_core PRIVATE DSRRL_STUTTER_PROFILE)
     target_compile_definitions(dsrrl_renderer_core_integrated PRIVATE DSRRL_STUTTER_PROFILE)
+endif()
+if(DSRRL_STUTTER_HITCH_TRACE)
+    if(NOT DSRRL_STUTTER_PROFILE)
+        message(FATAL_ERROR "DSRRL_STUTTER_HITCH_TRACE requires DSRRL_STUTTER_PROFILE")
+    endif()
+    target_compile_definitions(dsrrl_renderer_core PRIVATE DSRRL_STUTTER_HITCH_TRACE)
+    target_compile_definitions(dsrrl_renderer_core_integrated PRIVATE DSRRL_STUTTER_HITCH_TRACE)
 endif()
 
 if(DSRRL_DIAGNOSTIC_TELEMETRY_DEFAULT_ON)
