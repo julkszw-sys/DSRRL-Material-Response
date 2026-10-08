@@ -2963,17 +2963,14 @@ bool pmetal_env_source_runtime::latest(
         return true;
     }
 
-    // Narrow fallback carrier recovered from the attested retail LightBank
-    // single/blend packers (V13 semantic cut). It is consumed only by an
-    // already-authenticated exact P_Metal draw. The retail packer is a state
-    // producer: retain its latest generation until the next exact source
-    // update, matching the validated V13 lifetime without exposing it to U/L.
-    if (latest_hook_source(out)) {
-        telemetry::hot_count(
-            g_consumer_ok);
-        return true;
-    }
-
+    // R44 keyed-rendezvous: producer lookup alone is material authority.
+    // The last same-thread/global packer snapshot is NOT tied to this exact
+    // FLVER/slot. Camera-driven draw ordering changed its LightBank row while
+    // the stationary owner's probe/SpecRGB remained constant in owner logs.
+    // Do not put that value into the PTDE island. The enlarged/guarded
+    // producer-state cache now retains independently verified material
+    // producers across unrelated selector attempts. If this precise material
+    // never published one, leave the entire P_Metal draw stock DSR.
     telemetry::hot_count(
         g_consumer_fail);
     return false;
