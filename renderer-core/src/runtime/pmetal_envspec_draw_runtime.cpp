@@ -1216,8 +1216,127 @@ bool pmetal_envspec_draw_runtime::prepare(
             if (view != nullptr) { view->Release(); view = nullptr; }
     }
 
+#if defined(DSRRL_PMETAL_SPEC_CUT_TRACE)
+    // Receiver-first diagnostic of the same FLVER material slot across
+    // successive views. Samples 200 ms, but emits immediately on changes
+    // to pass/fail, probe A/B or selector beta. Read-only, never gate authority.
+    auto trace_spec_cut = [&](bool spec_ok) noexcept {
+        struct state {
+            std::uint64_t owner_key = 0;
+            std::uint64_t last_ms = 0;
+            std::uint32_t beta_bits = 0;
+            std::uint16_t probe_a = 0;
+            std::uint16_t probe_b = 0;
+            std::uint8_t stage = 0;
+        };
+        static thread_local std::array<state,128u> previous{};
+        static std::atomic<std::uint32_t> emitted{0u};
+        constexpr std::uint32_t max_lines = 1024u;
+
+        std::uint64_t owner_key = 14695981039346656037ull;
+        for (std::size_t i = 0; i < 16u; ++i)
+            owner_key = (owner_key ^
+                static_cast<std::uint64_t>(material.flver_sha256[i])) *
+                1099511628211ull;
+        owner_key ^= static_cast<std::uint64_t>(
+            material.material_slot) << 16u;
+        owner_key ^= static_cast<std::uint64_t>(
+            decision.receiver_id) << 32u;
+        owner_key ^= static_cast<std::uint64_t>(
+            static_cast<unsigned>(family)) << 48u;
+        if (owner_key == 0u)
+            owner_key = 1u;
+
+        std::uint32_t beta_bits = 0u;
+        static_assert(sizeof(beta_bits) == sizeof(source.beta));
+        std::memcpy(&beta_bits, &source.beta, sizeof(beta_bits));
+        const std::uint64_t tick = GetTickCount64();
+        auto &entry = previous[static_cast<std::size_t>(
+            (owner_key ^ (owner_key >> 32u)) & 127u)];
+        const std::uint8_t stage = spec_ok ? 2u : 1u;
+        const bool changed = entry.owner_key != owner_key ||
+            entry.stage != stage ||
+            entry.probe_a != prepared.env_resources.probe_a ||
+            entry.probe_b != prepared.env_resources.probe_b ||
+            entry.beta_bits != beta_bits;
+        if (!changed && tick - entry.last_ms < 200u)
+            return;
+        entry = {owner_key, tick, beta_bits,
+            prepared.env_resources.probe_a,
+            prepared.env_resources.probe_b, stage};
+
+        if (emitted.fetch_add(1u, std::memory_order_relaxed) >=
+            max_lines)
+            return;
+
+        // Native D3D state is read only after the sampling decision.
+        // PSGetShaderResources AddRefs its outputs; release every view.
+        ID3D11ShaderResourceView *env_live[3]{};
+        context->PSGetShaderResources(12u, 3u, env_live);
+        const auto spec =
+            material_resources_.probe_exact_specular_companion(context);
+        const auto view_a = reinterpret_cast<std::uintptr_t>(env_live[0]);
+        const auto view_b = reinterpret_cast<std::uintptr_t>(env_live[2]);
+        for (auto *&view : env_live)
+            if (view != nullptr) { view->Release(); view = nullptr; }
+
+        char line[1100]{};
+        std::snprintf(
+            line, sizeof(line),
+            "[DSRRL PMETAL SPEC TRANSITION] ms=%llu state=%s "
+            "rx=%u family=%u route=%u owner_sha0=%02x%02x%02x%02x "
+            "slot=%u flver_owner=%016llx t1=%016llx "
+            "registry=%u ambiguous=%u epoch=%llu snap=%u "
+            "hash=%016llx allowed=%u companion=%u quarantine=%u "
+            "prep=%u req=%u shadow=%u shadow_diverged=%u "
+            "probeA=%u probeB=%u t12=%016llx t14=%016llx "
+            "bankA=%016llx rowA=%u bankB=%016llx rowB=%u "
+            "source_serial=%llu beta=%.9g c101=%.9g",
+            static_cast<unsigned long long>(tick),
+            spec_ok ? "PTDE_PREPARED" : "STOCK_FAILOPEN",
+            static_cast<unsigned>(decision.receiver_id),
+            static_cast<unsigned>(family),
+            static_cast<unsigned>(decision.route_index),
+            static_cast<unsigned>(material.flver_sha256[0]),
+            static_cast<unsigned>(material.flver_sha256[1]),
+            static_cast<unsigned>(material.flver_sha256[2]),
+            static_cast<unsigned>(material.flver_sha256[3]),
+            static_cast<unsigned>(material.material_slot),
+            static_cast<unsigned long long>(
+                material.flver_identity_hash),
+            static_cast<unsigned long long>(spec.stock_view_key),
+            spec.registered_view ? 1u : 0u,
+            spec.ambiguous_view ? 1u : 0u,
+            static_cast<unsigned long long>(spec.view_epoch),
+            spec.snapshot_resolved ? 1u : 0u,
+            static_cast<unsigned long long>(spec.logical_hash),
+            spec.logical_hash_allowed ? 1u : 0u,
+            spec.companion_ready ? 1u : 0u,
+            spec.quarantined ? 1u : 0u,
+            material_ready ? 1u : 0u,
+            prepared.material_resources.spec_rgb ? 1u : 0u,
+            shadow_material_ready ? 1u : 0u,
+            shadow_diverged ? 1u : 0u,
+            static_cast<unsigned>(prepared.env_resources.probe_a),
+            static_cast<unsigned>(prepared.env_resources.probe_b),
+            static_cast<unsigned long long>(view_a),
+            static_cast<unsigned long long>(view_b),
+            static_cast<unsigned long long>(source.bank_signature_a),
+            static_cast<unsigned>(source.row_id_a),
+            static_cast<unsigned long long>(source.bank_signature_b),
+            static_cast<unsigned>(source.row_id_b),
+            static_cast<unsigned long long>(source.serial),
+            static_cast<double>(source.beta),
+            static_cast<double>(decision.c101));
+        reshade::log::message(reshade::log::level::info, line);
+    };
+#endif
+
     if (!material_ready ||
         !prepared.material_resources.spec_rgb) {
+#if defined(DSRRL_PMETAL_SPEC_CUT_TRACE)
+        trace_spec_cut(false);
+#endif
 #if !defined(DSRRL_RELEASE_CLEANUP)
         static std::atomic_bool spec_frontier_logged{false};
         if (!spec_frontier_logged.exchange(
@@ -2105,6 +2224,9 @@ bool pmetal_envspec_draw_runtime::prepare(
     }
 #endif
 
+#if defined(DSRRL_PMETAL_SPEC_CUT_TRACE)
+    trace_spec_cut(true);
+#endif
     if (family ==
         pmetal_envspec_receiver_family::
             hemenvlerp)
