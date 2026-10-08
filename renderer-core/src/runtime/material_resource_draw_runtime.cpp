@@ -2,6 +2,7 @@
 #include "dsrrl/runtime/texture_identity_transport.hpp"
 #include "dsrrl/runtime/runtime_hot_telemetry.hpp"
 #include "dsrrl/runtime/stutter_profiler.hpp"
+#include "dsrrl/runtime/resource_view_epoch.hpp"
 #include "dsrrl/operators/resource_bridges/spec_rgb_bridge.hpp"
 #include "dsrrl/operators/resource_bridges/fixed_pointlight_spec_rgb_bridge.hpp"
 #include "dsrrl/operators/resource_bridges/diffuse_bridge.hpp"
@@ -124,7 +125,9 @@ std::unordered_map<std::uint64_t, companion_set> g_cache;
 // identity is not resolvable at draw time. Keep the handle quarantined until
 // its resource-view lifetime ends instead of allowing last-writer-wins identity.
 std::unordered_map<std::uint64_t, ID3D11Device *> g_ambiguous_view_device;
+#if !defined(DSRRL_RESOURCE_EPOCH_SHARD_SYNC)
 std::atomic<std::uint64_t> g_cache_epoch{1u};
+#endif
 thread_local bool g_internal_create = false;
 
 struct companion_tls_entry {
@@ -192,6 +195,62 @@ std::size_t companion_tls_index(
         ((key >> 4u) ^ (key >> 13u) ^ (key >> 23u)) &
         (k_companion_tls_slots - 1u));
 }
+
+#if defined(DSRRL_RESOURCE_EPOCH_SHARD_SYNC)
+resource_view_epoch<k_companion_tls_slots> g_view_epochs{};
+#endif
+
+std::uint64_t companion_epoch(std::uint64_t key) noexcept
+{
+#if defined(DSRRL_RESOURCE_EPOCH_SHARD_SYNC)
+    return g_view_epochs.current(key);
+#else
+    (void)key;
+    return g_cache_epoch.load(std::memory_order_acquire);
+#endif
+}
+
+void invalidate_companion_epoch(std::uint64_t key) noexcept
+{
+#if defined(DSRRL_RESOURCE_EPOCH_SHARD_SYNC)
+    g_view_epochs.invalidate(key);
+#else
+    (void)key;
+    g_cache_epoch.fetch_add(1u, std::memory_order_release);
+#endif
+}
+
+void invalidate_all_companion_epochs() noexcept
+{
+#if defined(DSRRL_RESOURCE_EPOCH_SHARD_SYNC)
+    g_view_epochs.invalidate_all();
+#else
+    g_cache_epoch.fetch_add(1u, std::memory_order_release);
+#endif
+}
+
+#if defined(DSRRL_STUTTER_PROFILE)
+// Sampled on all draw threads, flushed only every 128 decisions to avoid
+// turning contention diagnostics into a new shared cache-line bottleneck.
+// Remainders are thread-local; 5s log estimates have a <=127/thread error.
+std::atomic<std::uint64_t> g_companion_tls_hit_samples{0u};
+std::atomic<std::uint64_t> g_companion_tls_mutex_samples{0u};
+thread_local std::uint32_t g_companion_tls_hit_local = 0u;
+thread_local std::uint32_t g_companion_tls_mutex_local = 0u;
+
+void profile_companion_snapshot(bool tls_hit) noexcept
+{
+    auto &local = tls_hit
+        ? g_companion_tls_hit_local : g_companion_tls_mutex_local;
+    if (++local == 128u) {
+        auto &total = tls_hit
+            ? g_companion_tls_hit_samples : g_companion_tls_mutex_samples;
+        total.fetch_add(128u, std::memory_order_relaxed);
+        local = 0u;
+    }
+}
+#endif
+
 
 std::atomic<std::uint64_t> g_named_views{0};
 std::atomic<std::uint64_t> g_sidecar_ready{0};
@@ -319,9 +378,7 @@ void release_cache() noexcept
 
     {
         std::lock_guard<std::mutex> lock(g_mutex);
-        g_cache_epoch.fetch_add(
-            1u,
-            std::memory_order_release);
+        invalidate_all_companion_epochs();
         dead.swap(g_cache);
         g_ambiguous_view_device.clear();
     }
@@ -364,9 +421,7 @@ void release_cache_for_device(
         }
 
         if (changed)
-            g_cache_epoch.fetch_add(
-                1u,
-                std::memory_order_release);
+            invalidate_all_companion_epochs();
     }
 
     for (auto &set : dead)
@@ -926,9 +981,7 @@ bool snapshot_companion_cached(
         static_cast<std::uint64_t>(
             reinterpret_cast<std::uintptr_t>(
                 stock));
-    const auto epoch =
-        g_cache_epoch.load(
-            std::memory_order_acquire);
+    const auto epoch = companion_epoch(key);
     auto &cached =
         g_companion_tls[
             companion_tls_index(key)];
@@ -963,9 +1016,16 @@ bool snapshot_companion_cached(
         };
 
     if (cached.key == key &&
-        cached.epoch == epoch)
+        cached.epoch == epoch) {
+#if defined(DSRRL_STUTTER_PROFILE)
+        profile_companion_snapshot(true);
+#endif
         return publish_from_cache();
+    }
 
+#if defined(DSRRL_STUTTER_PROFILE)
+    profile_companion_snapshot(false);
+#endif
     std::uint64_t logical_hash = 0u;
     ID3D11ShaderResourceView *spec = nullptr;
     ID3D11ShaderResourceView *diff = nullptr;
@@ -977,9 +1037,7 @@ bool snapshot_companion_cached(
         std::lock_guard<std::mutex> lock(
             g_mutex);
 
-        snapshot_epoch =
-            g_cache_epoch.load(
-                std::memory_order_relaxed);
+        snapshot_epoch = companion_epoch(key);
 
         if (g_ambiguous_view_device.find(key) ==
                 g_ambiguous_view_device.end()) {
@@ -1261,9 +1319,7 @@ void on_init_resource_view(
                 accepted = true;
             }
 
-            g_cache_epoch.fetch_add(
-                1u,
-                std::memory_order_release);
+            invalidate_companion_epoch(key);
         }
     }
 
@@ -1311,9 +1367,7 @@ void on_destroy_resource_view(
         }
 
         if (changed)
-            g_cache_epoch.fetch_add(
-                1u,
-                std::memory_order_release);
+            invalidate_companion_epoch(key);
     }
 
     if (found)
@@ -1393,6 +1447,16 @@ void on_stutter_present(
     }
 
     reshade::log::message(reshade::log::level::info, message);
+    char sync_line[256]{};
+    const auto sync_written = std::snprintf(
+        sync_line, sizeof(sync_line),
+        "[DSRRL SYNC R43] sampled_companion_tls_hit=%llu sampled_companion_mutex_fallback=%llu sample_batch=128",
+        static_cast<unsigned long long>(
+            g_companion_tls_hit_samples.exchange(0u, std::memory_order_relaxed)),
+        static_cast<unsigned long long>(
+            g_companion_tls_mutex_samples.exchange(0u, std::memory_order_relaxed)));
+    if (sync_written > 0)
+        reshade::log::message(reshade::log::level::info, sync_line);
 #if defined(DSRRL_STUTTER_HITCH_TRACE)
     const auto hitches = stutter_profile::take_hitch_window();
     for (std::size_t i = 0u; i < hitches.count; ++i) {
@@ -1491,6 +1555,13 @@ register_events() noexcept
     reshade::register_event<reshade::addon_event::present>(on_stutter_present);
     reshade::log::message(reshade::log::level::info,
         "[DSRRL STUTTER R43] bounded QPC profiling active; no feature gates changed");
+#if defined(DSRRL_RESOURCE_EPOCH_SHARD_SYNC)
+    reshade::log::message(reshade::log::level::info,
+        "[DSRRL SYNC R43] companion SRV TLS epochs=KEY_BUCKET_256, fail-open and per-view lifetime preserved");
+#else
+    reshade::log::message(reshade::log::level::info,
+        "[DSRRL SYNC R43] companion SRV TLS epochs=GLOBAL_BASELINE, fail-open and per-view lifetime preserved");
+#endif
 #if defined(DSRRL_STUTTER_HITCH_TRACE)
     reshade::log::message(reshade::log::level::info,
         "[DSRRL HITCH FRAME] exact R43 same-operator per-Present QPC buckets active");
