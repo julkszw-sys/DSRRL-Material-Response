@@ -80,7 +80,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           $addons = @(Get-ChildItem build-prof -Recurse -Filter *.addon64)
           if ($addons.Count -ne 1) { throw "Expected one addon, got $($addons.Count)" }
-          Copy-Item $addons[0].FullName "DSRRL_v2.0.2_PMETAL_EXACT_ROW64_HYBRID.addon64"
+          Copy-Item $addons[0].FullName "DSRRL_v2.0.2_PMETAL_NATIVE_SELECTOR_TRACE.addon64"
       - name: P_Metal producer collision/revocation native regression
         shell: pwsh
         run: |
@@ -124,7 +124,7 @@ jobs:
       - name: Verify v2.0.2 full MR diagnostic identity
         shell: pwsh
         run: |
-          $path = "DSRRL_v2.0.2_PMETAL_EXACT_ROW64_HYBRID.addon64"
+          $path = "DSRRL_v2.0.2_PMETAL_NATIVE_SELECTOR_TRACE.addon64"
           $bytes = [System.IO.File]::ReadAllBytes($path)
           $ascii = [System.Text.Encoding]::ASCII.GetString($bytes)
           if (-not $ascii.Contains($env:DSRRL_CHECKOUT_COMMIT)) { throw "Wrong source" }
@@ -167,7 +167,7 @@ jobs:
       - name: Generate build provenance and diagnostic ZIP
         shell: pwsh
         run: |
-          $bin = "DSRRL_v2.0.2_PMETAL_EXACT_ROW64_HYBRID.addon64"
+          $bin = "DSRRL_v2.0.2_PMETAL_NATIVE_SELECTOR_TRACE.addon64"
           $sha = (Get-FileHash $bin -Algorithm SHA256).Hash.ToLowerInvariant()
           "$sha  $bin" | Set-Content -Encoding ascii SHA256SUMS.txt
           $prov = [ordered]@{
@@ -192,21 +192,21 @@ jobs:
             runtime_liveness = "NOT_TESTED_ON_OWNER"
             pixel_equivalence = "OPEN"
           }
-          $prov | ConvertTo-Json -Depth 5 | Set-Content -Encoding utf8 DSRRL_v2.0.2_PMETAL_EXACT_ROW64_HYBRID_PROVENANCE.json
+          $prov | ConvertTo-Json -Depth 5 | Set-Content -Encoding utf8 DSRRL_v2.0.2_PMETAL_NATIVE_SELECTOR_TRACE_PROVENANCE.json
           New-Item -ItemType Directory -Path diag-stage -Force | Out-Null
-          Copy-Item $bin,SHA256SUMS.txt,DSRRL_v2.0.2_PMETAL_EXACT_ROW64_HYBRID_PROVENANCE.json diag-stage/
+          Copy-Item $bin,SHA256SUMS.txt,DSRRL_v2.0.2_PMETAL_NATIVE_SELECTOR_TRACE_PROVENANCE.json diag-stage/
           Copy-Item diagnostics/v2.0.2/README_PMETAL_SPEC_TRANSITIONS.md diag-stage/README_PMETAL_SPEC_TRANSITIONS.md
-          Compress-Archive -Path diag-stage/* -DestinationPath DSRRL_v2.0.2_PMETAL_EXACT_ROW64_HYBRID.zip
-          Expand-Archive DSRRL_v2.0.2_PMETAL_EXACT_ROW64_HYBRID.zip diag-check -Force
+          Compress-Archive -Path diag-stage/* -DestinationPath DSRRL_v2.0.2_PMETAL_NATIVE_SELECTOR_TRACE.zip
+          Expand-Archive DSRRL_v2.0.2_PMETAL_NATIVE_SELECTOR_TRACE.zip diag-check -Force
           $addons = @(Get-ChildItem diag-check -Recurse -Filter *.addon64)
           if ($addons.Count -ne 1) { throw "Expected exactly one addon in diagnostic ZIP" }
           if ((Get-FileHash $addons[0].FullName).Hash -ne (Get-FileHash $bin).Hash) { throw "ZIP SHA mismatch" }
       - uses: actions/upload-artifact@v4
         with:
-          name: DSRRL_v2.0.2_PMETAL_EXACT_ROW64_HYBRID
+          name: DSRRL_v2.0.2_PMETAL_NATIVE_SELECTOR_TRACE
           path: |
-            DSRRL_v2.0.2_PMETAL_EXACT_ROW64_HYBRID.addon64
-            DSRRL_v2.0.2_PMETAL_EXACT_ROW64_HYBRID.zip
-            DSRRL_v2.0.2_PMETAL_EXACT_ROW64_HYBRID_PROVENANCE.json
+            DSRRL_v2.0.2_PMETAL_NATIVE_SELECTOR_TRACE.addon64
+            DSRRL_v2.0.2_PMETAL_NATIVE_SELECTOR_TRACE.zip
+            DSRRL_v2.0.2_PMETAL_NATIVE_SELECTOR_TRACE_PROVENANCE.json
             SHA256SUMS.txt
           if-no-files-found: error
