@@ -1,0 +1,41 @@
+name: DSRRL PTDE sidecar pinned routing pack (data only)
+on:
+  workflow_dispatch:
+  push:
+    branches: [ptde-sidecar-extract-routepack-v1]
+jobs:
+  routepack:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify and package exact addon carrier tables
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import hashlib,json,pathlib,shutil
+          expected={
+            "spec_routes_v12.tsv":"ca9825ea04f82ae5449aad58a42e4d84cf6b34eded15eef3a6afdfe715e15c95",
+            "diffuse_routes_v12.tsv":"977a38a3a28228a81a836c238282b34fd718428a98cb5e5008f56892e537bbd9",
+            "normal_routes_v12.tsv":"8f81a5da4d65db85a1a99846a5c918709933eafc0cb9c4e3cf5400bee7f91380",
+          }
+          out=pathlib.Path("route_tables");out.mkdir()
+          for name,sha in expected.items():
+              src=pathlib.Path("renderer-core/data/provenance")/name
+              data=src.read_text(encoding="utf-8")
+              lines=[line for line in data.splitlines() if line and not line.startswith("#")]
+              h=hashlib.sha256(("\n".join(lines)+"\n").encode()).hexdigest()
+              assert h==sha,(name,h,sha)
+              shutil.copyfile(src,out/name)
+          (out/"routing_manifest.json").write_text(json.dumps({
+              "schema":"dsrrl.ptde.sidecar.routepack.v1",
+              "addon_source_commit":"f2704ce1f10ae44c6b474a45e94de0b05f7698ac",
+              "route_canonical_sha256":expected,
+              "notes":"Metadata only. NOT PTDE textures. Export only hashes/names accepted by release addon. Do not ship world SpecRGB."
+          },indent=2))
+          print("PINNED_ROUTE_DATA_PASS")
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: DSRRL_PTDE_SIDECAR_ROUTE_TABLES_V12
+          path: route_tables/
+          if-no-files-found: error
