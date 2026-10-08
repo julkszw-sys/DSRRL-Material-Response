@@ -1,4 +1,4 @@
-name: DSRRL v2.0.1 Streaming Stutter Diagnostics
+name: DSRRL v2.0.1 Stutter Same-Source Profile ON OFF
 on:
   workflow_dispatch:
   push:
@@ -8,6 +8,10 @@ permissions:
 jobs:
   build:
     runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        profile: [ON, OFF]
     steps:
       - uses: actions/checkout@v4
       - name: Exact source identity
@@ -31,7 +35,7 @@ jobs:
           -DDSRRL_SOURCE_COMMIT="$env:DSRRL_CHECKOUT_COMMIT"
           -DDSRRL_BUILD_FLAVOR="v2_0_1_stutter_profiler_r43"
           -DDSRRL_RELEASE_CLEANUP=ON
-          -DDSRRL_STUTTER_PROFILE=ON
+          -DDSRRL_STUTTER_PROFILE=${{ matrix.profile }}
           -DDSRRL_FULL_TELEMETRY_DEFAULT_ON=OFF
           -DDSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG=ON
           -DDSRRL_PMETAL_FULL_PTDE_HEMENV_R3=ON
@@ -55,7 +59,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           $addons = @(Get-ChildItem build-prof -Recurse -Filter *.addon64)
           if ($addons.Count -ne 1) { throw "Expected one addon, got $($addons.Count)" }
-          Copy-Item $addons[0].FullName "DSRRL_v2.0.1_STUTTER_DIAGNOSTIC.addon64"
+          Copy-Item $addons[0].FullName "DSRRL_v2.0.1_STUTTER_${{ matrix.profile }}.addon64"
       - name: FLVER native cache regression test
         shell: pwsh
         run: |
@@ -70,11 +74,12 @@ jobs:
           $bytes = [System.IO.File]::ReadAllBytes($path)
           $ascii = [System.Text.Encoding]::ASCII.GetString($bytes)
           if (-not $ascii.Contains($env:DSRRL_CHECKOUT_COMMIT)) { throw "Wrong source" }
-          if (-not $ascii.Contains("[DSRRL STUTTER R43]")) { throw "Profiler not built" }
+          if ('${{ matrix.profile }}' -eq 'ON' -and -not $ascii.Contains("[DSRRL STUTTER R43]")) { throw "Profiler not built" }
+          if ('${{ matrix.profile }}' -eq 'OFF' -and $ascii.Contains("[DSRRL STUTTER R43]")) { throw "Profiler must be absent in OFF control" }
           if (-not $ascii.Contains("[DSRRL PHYSICAL CUT POINTLIGHT]")) { throw "Unexpected PointLight lineage" }
           Get-FileHash $path -Algorithm SHA256 | Format-List
       - uses: actions/upload-artifact@v4
         with:
-          name: DSRRL_v2.0.1_STUTTER_DIAGNOSTIC
+          name: DSRRL_v2.0.1_STUTTER_${{ matrix.profile }}
           path: DSRRL_v2.0.1_STUTTER_DIAGNOSTIC.addon64
           if-no-files-found: error
