@@ -182,24 +182,30 @@ void release_sidecar_pool(
 {
     // Removal is done under g_mutex, COM Release outside it. A Release can
     // trigger an ordinary ReShade resource callback and re-enter this runtime.
-    std::vector<ID3D11ShaderResourceView *> dead;
-    {
-        std::lock_guard<std::mutex> lock(g_mutex);
-        for (auto it = g_sidecar_pool.begin();
-             it != g_sidecar_pool.end();) {
-            if (device == nullptr ||
-                std::get<0>(it->first) ==
-                    reinterpret_cast<std::uintptr_t>(device)) {
-                dead.push_back(it->second.view);
-                it = g_sidecar_pool.erase(it);
-            } else {
-                ++it;
+    // One entry is detached at a time, avoiding allocations in this
+    // noexcept teardown path and avoiding any COM Release under g_mutex.
+    for (;;) {
+        ID3D11ShaderResourceView *detached = nullptr;
+        bool removed = false;
+        {
+            std::lock_guard<std::mutex> lock(g_mutex);
+            for (auto it = g_sidecar_pool.begin();
+                 it != g_sidecar_pool.end(); ++it) {
+                if (device == nullptr ||
+                    std::get<0>(it->first) ==
+                        reinterpret_cast<std::uintptr_t>(device)) {
+                    detached = it->second.view;
+                    g_sidecar_pool.erase(it);
+                    removed = true;
+                    break;
+                }
             }
         }
+        if (!removed)
+            break;
+        if (detached != nullptr)
+            detached->Release();
     }
-    for (auto *view : dead)
-        if (view != nullptr)
-            view->Release();
 }
 #endif
 
@@ -1007,13 +1013,16 @@ load_result safe_load_sidecar(
             loaded.view != nullptr &&
             stamps_equal(before, file_stamp(path))) {
             ID3D11ShaderResourceView *replaced = nullptr;
-            {
+            try {
                 std::lock_guard<std::mutex> lock(g_mutex);
                 auto &entry = g_sidecar_pool[key];
                 replaced = entry.view;
                 entry.view = loaded.view;
                 entry.file = before;
                 loaded.view->AddRef(); // One separate pool-owned ref.
+            } catch (...) {
+                // An allocation failure must not discard a successfully
+                // materialized per-view DDS or change original fail-open.
             }
             if (replaced != nullptr)
                 replaced->Release(); // Never Release under g_mutex.
