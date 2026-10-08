@@ -433,7 +433,8 @@ bool source_raster_for_pass(
             continue;
 
         const auto *surface =
-            surface_for_role(source_role);
+            operators::dof::find_ptde_surface(
+                source_role);
         if (surface == nullptr ||
             surface->raster.width == 0u ||
             surface->raster.height == 0u)
