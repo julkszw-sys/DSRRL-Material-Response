@@ -2519,10 +2519,6 @@ bool observe_pointlight_draw_identity(
         hot_count(g_draw_owner_hits);
 
     if (!owner_ok) {
-#if defined(DSRRL_MR_MATERIAL_TRACE)
-        if (rx != nullptr)
-            trace_mr_material(receiver_id, out_material, out_decision, 8u);
-#endif
         hot_count(g_draw_receiver_only);
         hot_count(g_mr_fail_open);
         log_pointlight_gate_once(
@@ -2836,6 +2832,10 @@ bool observe_draw_identity(
     }
 
     if (!owner_ok) {
+#if defined(DSRRL_MR_MATERIAL_TRACE)
+        if (rx != nullptr)
+            trace_mr_material(receiver_id, out_material, out_decision, 8u);
+#endif
         hot_count(g_draw_receiver_only);
         hot_count(g_mr_fail_open);
         if (rx != nullptr)
