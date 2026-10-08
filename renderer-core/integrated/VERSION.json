@@ -1,10 +1,10 @@
 {
   "schema": "dsrrl.core_islands.version.v1",
   "product_line": "DSRRL Core+Islands",
-  "version": "2.0.0-dev",
-  "artifact_stem": "DSRRL_Core_Islands_2_0_0_dev",
-  "branch": "main",
-  "status": "ACTIVE_DEVELOPMENT",
+  "version": "2.0.2",
+  "artifact_stem": "DSRRL_Restored_Lighting_v2_0_2",
+  "branch": "release/v2.0.2-sync-on-4way",
+  "status": "RELEASE",
   "architecture": "renderer-core+operator-islands+single-addon",
   "legacy_monolith": {
     "product_line": "DSRRL Material Response Monolith",
