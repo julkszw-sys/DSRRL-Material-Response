@@ -249,6 +249,9 @@ option(DSRRL_COMPANION_TLS_4WAY
 option(DSRRL_MR_MATERIAL_TRACE
     "Diagnostic: bounded material MTD/receiver decision and draw outcome census for localized lighting mismatches"
     OFF)
+option(DSRRL_PMETAL_SPEC_CUT_TRACE
+    "Diagnostic: per-owner sampled P_Metal SpecRGB t1 registry and PTDE/stock transition trace"
+    OFF)
 
 option(
     DSRRL_POINTLIGHT_PROFILE
@@ -746,6 +749,11 @@ if(DSRRL_MR_MATERIAL_TRACE)
     target_compile_definitions(
         dsrrl_renderer_core_integrated
         PRIVATE DSRRL_MR_MATERIAL_TRACE)
+endif()
+if(DSRRL_PMETAL_SPEC_CUT_TRACE)
+    target_compile_definitions(
+        dsrrl_renderer_core_integrated
+        PRIVATE DSRRL_PMETAL_SPEC_CUT_TRACE)
 endif()
 
 if(DSRRL_DIAGNOSTIC_TELEMETRY_DEFAULT_ON)
