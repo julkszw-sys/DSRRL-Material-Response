@@ -129,5 +129,41 @@ int main()
         optional_hash_bridge));
     assert(optional_hash_bridge.beta == 0.75f);
 
+    // Regression: a camera-dependent traversal can invoke selectors for many
+    // *other* materials before our armor's deferred draw consumes its exact
+    // source. Selector begin() with a different full identity must not evict
+    // the previously published material through a hash-bucket collision.
+    // Deliberately visit far more distinct keys than available cache slots.
+    for (std::uint32_t i = 0u; i < 16384u; ++i) {
+        auto other = material;
+        other.material_slot = 100u + i;
+        runtime::pmetal_producer_state_begin(
+            other,
+            100u);
+        runtime::pmetal_producer_state_clear();
+
+        runtime::pmetal_envspec_source retained{};
+        if (!runtime::pmetal_producer_state_latest(
+                material,
+                100u,
+                retained) ||
+            retained.beta != 0.75f ||
+            retained.row_id_a != 1u)
+            return 10;
+    }
+
+    // Even after unrelated collisions, a failed new selector for the SAME
+    // exact armor slot must revoke the old source (fail open, never stale).
+    runtime::pmetal_producer_state_begin(
+        material,
+        100u);
+    runtime::pmetal_producer_state_clear();
+    runtime::pmetal_envspec_source revoked{};
+    if (runtime::pmetal_producer_state_latest(
+            material,
+            100u,
+            revoked))
+        return 11;
+
     return 0;
 }
