@@ -33,7 +33,7 @@ jobs:
           cmake -S renderer-core/integrated -B build-prof -A x64
           -DRESHADE_INCLUDE_DIR="${{ github.workspace }}/_reshade/include"
           -DDSRRL_SOURCE_COMMIT="$env:DSRRL_CHECKOUT_COMMIT"
-          -DDSRRL_BUILD_FLAVOR="v2_0_2_full_mr_cloth_diagnostic_sync_on_tls4way"
+          -DDSRRL_BUILD_FLAVOR="v2_0_2_full_mr_local_light_diagnostic_sync_on_tls4way"
           -DDSRRL_RELEASE_CLEANUP=OFF
           -DDSRRL_STUTTER_PROFILE=ON
           -DDSRRL_STUTTER_HITCH_TRACE=ON
@@ -41,7 +41,7 @@ jobs:
           -DDSRRL_COMPANION_TLS_4WAY=${{ matrix.ways }}
           -DDSRRL_FULL_TELEMETRY_DEFAULT_ON=OFF
           -DDSRRL_DIAGNOSTIC_TELEMETRY_DEFAULT_ON=ON
-          -DDSRRL_MR_CLOTH_TRACE=ON
+          -DDSRRL_MR_MATERIAL_TRACE=ON
           -DDSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG=ON
           -DDSRRL_PMETAL_FULL_PTDE_HEMENV_R3=ON
           -DDSRRL_PMETAL_FULL_PTDE_HEMENV_R4=ON
@@ -100,9 +100,9 @@ jobs:
           if ($ascii.Contains("mode=1WAY_256SETS_256TOTAL_SYNC_ON")) { throw "Wrong TLS associativity" }
           if (-not $ascii.Contains("[DSRRL PHYSICAL CUT POINTLIGHT]")) { throw "Unexpected PointLight lineage" }
           if (-not $ascii.Contains("sampled_companion_tls_hit")) { throw "TLS profiler missing" }
-          if (-not $ascii.Contains("[DSRRL MR CLOTH]")) { throw "Cloth MTD tracer missing" }
+          if (-not $ascii.Contains("[DSRRL MR MATERIAL]")) { throw "Full MTD route tracer missing" }
           if ($ascii.Contains("[DSRRL DDS SRV POOL]")) { throw "DDS pool leaked into release" }
-          if (-not $ascii.Contains("v2_0_2_full_mr_cloth_diagnostic_sync_on_tls4way")) { throw "Missing diagnostic flavor" }
+          if (-not $ascii.Contains("v2_0_2_full_mr_local_light_diagnostic_sync_on_tls4way")) { throw "Missing diagnostic flavor" }
           if (-not $ascii.Contains("2.0.2")) { throw "Missing version" }
           Get-FileHash $path -Algorithm SHA256 | Format-List
       - name: Verify complete diagnostic flag profile
@@ -114,7 +114,7 @@ jobs:
             "DSRRL_STUTTER_PROFILE:BOOL=ON",
             "DSRRL_STUTTER_HITCH_TRACE:BOOL=ON",
             "DSRRL_DIAGNOSTIC_TELEMETRY_DEFAULT_ON:BOOL=ON",
-            "DSRRL_MR_CLOTH_TRACE:BOOL=ON",
+            "DSRRL_MR_MATERIAL_TRACE:BOOL=ON",
             "DSRRL_RESOURCE_EPOCH_SHARD_SYNC:BOOL=ON",
             "DSRRL_COMPANION_TLS_4WAY:BOOL=ON",
             "DSRRL_PHYSICAL_CUT_UL_H3_SUBSURFACE:BOOL=ON",
@@ -131,7 +131,7 @@ jobs:
           "$sha  $bin" | Set-Content -Encoding ascii SHA256SUMS.txt
           $prov = [ordered]@{
             version = "2.0.2"
-            flavor = "FULL_MR_CLOTH_DIAGNOSTIC"
+            flavor = "FULL_MR_LOCAL_LIGHT_DIAGNOSTIC"
             release_parent_source = "b19a273f15872999a631e3feaa0a0dd6aea35e89"
             source_commit = $env:DSRRL_CHECKOUT_COMMIT
             addon = $bin
@@ -146,7 +146,7 @@ jobs:
             frame_hitch_trace = "ON"
             full_telemetry = "ON"
             native_state_verify = "ON"
-            roughcloth_route_trace = "BOUNDED"
+            material_route_trace = "BOUNDED_ALL_MATERIALS"
             ptde_sidecars = "NOT_INCLUDED"
             runtime_liveness = "NOT_TESTED_ON_OWNER"
             pixel_equivalence = "OPEN"
