@@ -8,6 +8,12 @@
 #include <cstdint>
 
 #if defined(DSRRL_STUTTER_PROFILE) && defined(_WIN32)
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
 #include <Windows.h>
 #endif
 
@@ -52,7 +58,7 @@ struct frame_snapshot {
 };
 
 #if defined(DSRRL_STUTTER_PROFILE) && defined(_WIN32)
-struct alignas(64) counter {
+struct counter {
     std::atomic<std::uint64_t> calls{0};
     std::atomic<std::uint64_t> total_ticks{0};
     std::atomic<std::uint64_t> max_ticks{0};
