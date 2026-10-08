@@ -1,4 +1,4 @@
-name: DSRRL v2.0.2 PMetal Exact DSR Row64 Hybrid
+name: DSRRL v2.0.2 PMetal Native Selector Transition Trace
 on:
   workflow_dispatch:
   push:
@@ -43,7 +43,7 @@ jobs:
           cmake -S renderer-core/integrated -B build-prof -A x64
           -DRESHADE_INCLUDE_DIR="${{ github.workspace }}/_reshade/include"
           -DDSRRL_SOURCE_COMMIT="$env:DSRRL_CHECKOUT_COMMIT"
-          -DDSRRL_BUILD_FLAVOR="v2_0_2_pmetal_exact_dsr_row64_hybrid"
+          -DDSRRL_BUILD_FLAVOR="v2_0_2_pmetal_native_selector_transition_trace"
           -DDSRRL_RELEASE_CLEANUP=OFF
           -DDSRRL_STUTTER_PROFILE=ON
           -DDSRRL_STUTTER_HITCH_TRACE=ON
@@ -137,7 +137,7 @@ jobs:
           if (-not $ascii.Contains("sampled_companion_tls_hit")) { throw "TLS profiler missing" }
           if (-not $ascii.Contains("[DSRRL PMETAL SPEC TRANSITION]")) { throw "Spec gate transition tracer missing" }
           if ($ascii.Contains("[DSRRL DDS SRV POOL]")) { throw "DDS pool leaked into release" }
-          if (-not $ascii.Contains("v2_0_2_pmetal_exact_dsr_row64_hybrid")) { throw "Missing diagnostic flavor" }
+          if (-not $ascii.Contains("v2_0_2_pmetal_native_selector_transition_trace")) { throw "Missing diagnostic flavor" }
           if (-not $ascii.Contains("2.0.2")) { throw "Missing version" }
           Get-FileHash $path -Algorithm SHA256 | Format-List
       - name: Verify complete diagnostic flag profile
