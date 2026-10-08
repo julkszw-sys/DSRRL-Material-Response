@@ -1393,6 +1393,42 @@ void on_stutter_present(
     }
 
     reshade::log::message(reshade::log::level::info, message);
+#if defined(DSRRL_STUTTER_HITCH_TRACE)
+    const auto hitches = stutter_profile::take_hitch_window();
+    for (std::size_t i = 0u; i < hitches.count; ++i) {
+        const auto &h = hitches.frames[i];
+        const double to_ms = 1000.0 / frequency;
+        const auto &sha = h.stages[0u];
+        const auto &dds = h.stages[1u];
+        const auto &mtd = h.stages[2u];
+        const auto &registry = h.stages[3u];
+        char detail[768]{};
+        const auto count = std::snprintf(
+            detail, sizeof(detail),
+            "[DSRRL HITCH FRAME] qpc_begin=%llu qpc_end=%llu gap_ms=%.3f "
+            "flver_sha=calls:%llu,all_ms:%.3f,present_ms:%.3f "
+            "dds=calls:%llu,all_ms:%.3f,present_ms:%.3f "
+            "mtd=calls:%llu,all_ms:%.3f,present_ms:%.3f "
+            "flver_registry=calls:%llu,all_ms:%.3f,present_ms:%.3f",
+            static_cast<unsigned long long>(h.begin_ticks),
+            static_cast<unsigned long long>(h.end_ticks),
+            static_cast<double>(h.end_ticks - h.begin_ticks) * to_ms,
+            static_cast<unsigned long long>(sha.calls),
+            static_cast<double>(sha.ticks_all) * to_ms,
+            static_cast<double>(sha.ticks_present_thread) * to_ms,
+            static_cast<unsigned long long>(dds.calls),
+            static_cast<double>(dds.ticks_all) * to_ms,
+            static_cast<double>(dds.ticks_present_thread) * to_ms,
+            static_cast<unsigned long long>(mtd.calls),
+            static_cast<double>(mtd.ticks_all) * to_ms,
+            static_cast<double>(mtd.ticks_present_thread) * to_ms,
+            static_cast<unsigned long long>(registry.calls),
+            static_cast<double>(registry.ticks_all) * to_ms,
+            static_cast<double>(registry.ticks_present_thread) * to_ms);
+        if (count > 0)
+            reshade::log::message(reshade::log::level::info, detail);
+    }
+#endif
 }
 #endif
 
@@ -1455,6 +1491,10 @@ register_events() noexcept
     reshade::register_event<reshade::addon_event::present>(on_stutter_present);
     reshade::log::message(reshade::log::level::info,
         "[DSRRL STUTTER R43] bounded QPC profiling active; no feature gates changed");
+#if defined(DSRRL_STUTTER_HITCH_TRACE)
+    reshade::log::message(reshade::log::level::info,
+        "[DSRRL HITCH FRAME] exact R43 same-operator per-Present QPC buckets active");
+#endif
 #endif
 
     reshade::register_event<
