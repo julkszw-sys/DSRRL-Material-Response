@@ -72,6 +72,53 @@ inline std::atomic<std::uint64_t> present_max{0};
 inline std::atomic<std::uint64_t> present_over_100ms{0};
 inline std::atomic<std::uint64_t> report_deadline{0};
 
+#if defined(DSRRL_STUTTER_HITCH_TRACE)
+// Lightweight per-Present attribution. Only four streaming-related stages get
+// extra counters; the 100k+/s draw selector is deliberately excluded.
+// No hook-side I/O, allocation, waiting, thread sleeps, or pipeline changes.
+inline constexpr std::size_t hitch_stage_count = 4u;
+inline constexpr std::size_t hitch_top_capacity = 8u;
+struct hitch_counter {
+    std::atomic<std::uint64_t> calls{0};
+    std::atomic<std::uint64_t> ticks_all{0};
+    std::atomic<std::uint64_t> ticks_present_thread{0};
+};
+struct hitch_stage_snapshot {
+    std::uint64_t calls = 0;
+    std::uint64_t ticks_all = 0;
+    std::uint64_t ticks_present_thread = 0;
+};
+struct hitch_frame_snapshot {
+    std::uint64_t begin_ticks = 0;
+    std::uint64_t end_ticks = 0;
+    std::array<hitch_stage_snapshot,hitch_stage_count> stages{};
+};
+struct hitch_window {
+    std::size_t count = 0u;
+    std::array<hitch_frame_snapshot,hitch_top_capacity> frames{};
+};
+inline std::array<hitch_counter,hitch_stage_count> hitch_counters{};
+inline std::atomic<DWORD> present_thread_id{0u};
+// The last two objects are accessed only from the ReShade Present callback.
+inline hitch_window worst_hitches{};
+
+inline std::size_t hitch_index(stage id) noexcept {
+    switch (id) {
+    case stage::flver_digest: return 0u;
+    case stage::sidecar_load: return 1u;
+    case stage::mtd_observe: return 2u;
+    case stage::flver_registry: return 3u;
+    default: return hitch_stage_count;
+    }
+}
+inline hitch_window take_hitch_window() noexcept {
+    const auto result = worst_hitches;
+    worst_hitches = {};
+    return result;
+}
+#endif
+
+
 inline std::uint64_t ticks() noexcept {
     LARGE_INTEGER value{};
     (void)QueryPerformanceCounter(&value);
@@ -105,6 +152,18 @@ inline void record(stage id, std::uint64_t elapsed_ticks) noexcept {
     update_max(c.max_ticks, elapsed_ticks);
     if (elapsed_ticks >= frequency() / 10u)
         c.over_100ms.fetch_add(1u, std::memory_order_relaxed);
+#if defined(DSRRL_STUTTER_HITCH_TRACE)
+    const auto index = hitch_index(id);
+    if (index < hitch_stage_count) {
+        auto &frame = hitch_counters[index];
+        frame.calls.fetch_add(1u, std::memory_order_relaxed);
+        frame.ticks_all.fetch_add(elapsed_ticks, std::memory_order_relaxed);
+        if (GetCurrentThreadId() ==
+                present_thread_id.load(std::memory_order_relaxed))
+            frame.ticks_present_thread.fetch_add(
+                elapsed_ticks, std::memory_order_relaxed);
+    }
+#endif
 }
 
 struct scope {
@@ -120,6 +179,44 @@ inline bool on_present_due() noexcept {
     const auto now = ticks();
     const auto previous =
         present_previous.exchange(now, std::memory_order_relaxed);
+#if defined(DSRRL_STUTTER_HITCH_TRACE)
+    // Snapshot per-frame work before recording the current Present thread.
+    // Concurrent worker completions can straddle this boundary; these are
+    // approximate timestamp buckets, never proof of blocking causality.
+    hitch_frame_snapshot candidate{};
+    candidate.begin_ticks = previous;
+    candidate.end_ticks = now;
+    present_thread_id.store(GetCurrentThreadId(), std::memory_order_relaxed);
+    for (std::size_t i = 0u; i < hitch_stage_count; ++i) {
+        auto &counter = hitch_counters[i];
+        auto &out = candidate.stages[i];
+        out.calls = counter.calls.exchange(0u, std::memory_order_relaxed);
+        out.ticks_all = counter.ticks_all.exchange(0u, std::memory_order_relaxed);
+        out.ticks_present_thread =
+            counter.ticks_present_thread.exchange(
+                0u, std::memory_order_relaxed);
+    }
+    if (previous != 0u && now >= previous &&
+            now - previous >= frequency() / 40u) {
+        // Keep the eight largest gaps, without allocation or sorting.
+        // Only the Present callback touches worst_hitches.
+        if (worst_hitches.count < hitch_top_capacity) {
+            worst_hitches.frames[worst_hitches.count++] = candidate;
+        } else {
+            std::size_t smallest = 0u;
+            for (std::size_t i = 1u; i < hitch_top_capacity; ++i) {
+                const auto &x = worst_hitches.frames[i];
+                const auto &y = worst_hitches.frames[smallest];
+                if (x.end_ticks - x.begin_ticks <
+                        y.end_ticks - y.begin_ticks)
+                    smallest = i;
+            }
+            const auto &prior = worst_hitches.frames[smallest];
+            if (now - previous > prior.end_ticks - prior.begin_ticks)
+                worst_hitches.frames[smallest] = candidate;
+        }
+    }
+#endif
     if (previous != 0 && now >= previous) {
         const auto elapsed = now - previous;
         present_frames.fetch_add(1u, std::memory_order_relaxed);
