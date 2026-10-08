@@ -2,7 +2,7 @@ name: DSRRL v2.0.2 PMetal Exact DSR Row64 Hybrid
 on:
   workflow_dispatch:
   push:
-    branches: [diagnostics/pmetal-dsr-only-lightbank-profile-fallback]
+    branches: [diagnostics/pmetal-native-selector-transition-trace]
 permissions:
   contents: read
 jobs:
