@@ -762,6 +762,12 @@ endif()
 if(DSRRL_PMETAL_SELECTOR_DECODE_FRONTIER_DIAG)
     target_compile_definitions(dsrrl_renderer_core_integrated PRIVATE DSRRL_PMETAL_SELECTOR_DECODE_FRONTIER_DIAG)
 endif()
+if(DSRRL_PMETAL_EXACT_DSR_ROW64_HYBRID)
+    if(NOT DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG)
+        message(FATAL_ERROR "DSR-only row64 hybrid requires full exact PTDE HemEnv mode")
+    endif()
+    target_compile_definitions(dsrrl_renderer_core_integrated PRIVATE DSRRL_PMETAL_EXACT_DSR_ROW64_HYBRID)
+endif()
 if(DSRRL_PMETAL_SPEC_CUT_TRACE)
     target_compile_definitions(
         dsrrl_renderer_core_integrated
