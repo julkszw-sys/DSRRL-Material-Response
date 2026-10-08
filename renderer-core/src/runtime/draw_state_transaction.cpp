@@ -518,6 +518,20 @@ void draw_state_transaction_runtime::release_state(
     state = {};
 }
 
+// D3D11 PSGetShader AddRefs each returned class instance. On a
+// failed/oversized capture the local array is not transferred to state,
+// so release every acquired entry before taking the fail-open exit.
+void release_unadopted_ps_classes(
+    std::array<ID3D11ClassInstance *, draw_tx_max_class_instances> &classes) noexcept
+{
+    for (auto *&instance : classes) {
+        if (instance != nullptr) {
+            instance->Release();
+            instance = nullptr;
+        }
+    }
+}
+
 bool draw_state_transaction_runtime::begin(
     reshade::api::command_list *cmd_list,
     const draw_tx_mutation &mutation,
@@ -564,6 +578,7 @@ bool draw_state_transaction_runtime::begin(
 
         if (state.old_shader == nullptr ||
             class_count > classes.size()) {
+            release_unadopted_ps_classes(classes);
             release_state(state);
             telemetry::hot_count(begin_fail_);
             return false;
@@ -1393,6 +1408,7 @@ bool draw_state_transaction_runtime::capture_only(
             &class_count);
         if (state.old_shader == nullptr ||
             class_count > classes.size()) {
+            release_unadopted_ps_classes(classes);
             release_state(state);
             return false;
         }
@@ -1485,6 +1501,7 @@ bool draw_state_transaction_runtime::native_mutate_restore_only(
             &class_count);
         if (state.old_shader == nullptr ||
             class_count > classes.size()) {
+            release_unadopted_ps_classes(classes);
             release_state(state);
             return false;
         }

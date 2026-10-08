@@ -1,10 +1,11 @@
-name: DSRRL R43 Release-Prep Cleanup (not pixel RC)
+name: DSRRL R43 Release-Prep Hardening v2 (not pixel RC)
 
 on:
   workflow_dispatch:
   push:
     branches:
       - r43-rc1-release-prep-cleanup-01
+      - r43-code-audit-02
   pull_request:
     paths:
       - "renderer-core/integrated/**"
@@ -26,7 +27,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: dsrrl-r43-release-prep-${{ github.head_ref || github.ref_name }}
+  group: dsrrl-r43-audit2-${{ github.head_ref || github.ref_name }}
   cancel-in-progress: true
 
 jobs:
@@ -50,6 +51,12 @@ jobs:
           ref: 3645e3025d1d98a90e318278858931f034d5d1f6
           path: _reshade
 
+      - name: Static source hardening regression audit
+        shell: pwsh
+        run: |
+          python renderer-core/tools/audit_r43_release_cleanup_hardening.py
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
       - name: Configure R43 release-prep physically cut islands
         shell: pwsh
         run: >
@@ -59,7 +66,7 @@ jobs:
           -A x64
           -DRESHADE_INCLUDE_DIR="${{ github.workspace }}/_reshade/include"
           -DDSRRL_SOURCE_COMMIT="$env:DSRRL_CHECKOUT_COMMIT"
-          -DDSRRL_BUILD_FLAVOR="pmetal_r43_release_prep_cleanup_01"
+          -DDSRRL_BUILD_FLAVOR="pmetal_r43_release_audit_hardening_02"
           -DDSRRL_FULL_TELEMETRY_DEFAULT_ON=OFF
           -DDSRRL_RELEASE_CLEANUP=ON
           -DDSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG=ON
@@ -85,12 +92,12 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           $addons = @(Get-ChildItem build-fast -Recurse -Filter *.addon64)
           if ($addons.Count -ne 1) { throw "Expected exactly one addon, found $($addons.Count)" }
-          Copy-Item $addons[0].FullName "DSRRL_R43_RELEASE_PREP_CLEANUP_01.addon64" -Force
+          Copy-Item $addons[0].FullName "DSRRL_R43_RELEASE_AUDIT_HARDENING_02.addon64" -Force
 
       - name: Verify binary identity
         shell: pwsh
         run: |
-          $path = "DSRRL_R43_RELEASE_PREP_CLEANUP_01.addon64"
+          $path = "DSRRL_R43_RELEASE_AUDIT_HARDENING_02.addon64"
           $ascii = [System.Text.Encoding]::ASCII.GetString([System.IO.File]::ReadAllBytes($path))
           if (-not $ascii.Contains($env:DSRRL_CHECKOUT_COMMIT)) { throw "Missing source commit identity" }
           if (-not $ascii.Contains("pmetal_r43_release_prep_cleanup_01")) { throw "Missing R43 build flavor identity" }
@@ -114,7 +121,7 @@ jobs:
       - name: Write reproducible release-prep provenance
         shell: pwsh
         run: |
-          $bin = "DSRRL_R43_RELEASE_PREP_CLEANUP_01.addon64"
+          $bin = "DSRRL_R43_RELEASE_AUDIT_HARDENING_02.addon64"
           $sha = (Get-FileHash $bin -Algorithm SHA256).Hash.ToLowerInvariant()
           $data = [ordered]@{
             schema = "dsrrl.release_prep.provenance.v1"
@@ -123,7 +130,8 @@ jobs:
             reshade_source_commit = "3645e3025d1d98a90e318278858931f034d5d1f6"
             configuration = "Release"
             profile = "DSRRL_RELEASE_CLEANUP=ON"
-            parent_build_id = 227
+            hardening = "DDS_512MiB_CAP_PATH_EXCEPTION_FAILOPEN_PSGETSHADER_COM_REF_CLEANUP_SOURCE_HOT_COUNTERS_STRIPPED"
+            parent_build_id = 228
             pointlight = "PHYSICALLY_CUT_STOCK_DSR"
             upper_lower_hemdir3_subsurface = "PHYSICALLY_CUT_STOCK_DSR"
             material_response = "ON"
@@ -140,8 +148,8 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: DSRRL_R43_RELEASE_PREP_CLEANUP_01
+          name: DSRRL_R43_RELEASE_AUDIT_HARDENING_02
           path: |
-            DSRRL_R43_RELEASE_PREP_CLEANUP_01.addon64
+            DSRRL_R43_RELEASE_AUDIT_HARDENING_02.addon64
             DSRRL_R43_RELEASE_PREP_PROVENANCE.json
           if-no-files-found: error

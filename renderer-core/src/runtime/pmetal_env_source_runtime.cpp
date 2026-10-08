@@ -1951,9 +1951,11 @@ void publish_hook_source(
         hook_producer_cache_publish_exact(
             selector_identity,
             g_hook_source_tls);
-        g_hook_publish.fetch_add(
+        #if !defined(DSRRL_RELEASE_CLEANUP)
+g_hook_publish.fetch_add(
             1u,
             std::memory_order_relaxed);
+#endif
         return;
     }
 
@@ -1975,9 +1977,11 @@ void publish_hook_source(
         hook_producer_cache_publish_exact(
             selector_identity,
             g_hook_source_tls);
-        g_hook_publish.fetch_add(
+        #if !defined(DSRRL_RELEASE_CLEANUP)
+g_hook_publish.fetch_add(
             1u,
             std::memory_order_relaxed);
+#endif
 
         static std::atomic_bool
             producer_cross_thread_hit_logged{
@@ -2043,9 +2047,11 @@ void publish_hook_source(
         selector_identity,
         g_hook_source_tls);
 
-    g_hook_publish.fetch_add(
+    #if !defined(DSRRL_RELEASE_CLEANUP)
+g_hook_publish.fetch_add(
         1u,
         std::memory_order_relaxed);
+#endif
 }
 
 bool latest_hook_source_exact_selector(
@@ -2078,9 +2084,11 @@ bool latest_hook_source_exact_selector(
             g_hook_selector_identity_tls,
             query)) {
         out = g_hook_source_tls.source;
-        g_hook_consume.fetch_add(
+        #if !defined(DSRRL_RELEASE_CLEANUP)
+g_hook_consume.fetch_add(
             1u,
             std::memory_order_relaxed);
+#endif
         return true;
     }
 
@@ -2093,9 +2101,11 @@ bool latest_hook_source_exact_selector(
     out = cached.source;
     g_hook_source_tls = cached;
     g_hook_selector_identity_tls = query;
-    g_hook_consume.fetch_add(
+    #if !defined(DSRRL_RELEASE_CLEANUP)
+g_hook_consume.fetch_add(
         1u,
         std::memory_order_relaxed);
+#endif
 
     static std::atomic_bool
         selector_cross_thread_hit_logged{
@@ -2118,9 +2128,11 @@ bool latest_hook_source(
     if (g_hook_source_tls.valid) {
         out =
             g_hook_source_tls.source;
-        g_hook_consume.fetch_add(
+        #if !defined(DSRRL_RELEASE_CLEANUP)
+g_hook_consume.fetch_add(
             1u,
             std::memory_order_relaxed);
+#endif
         return true;
     }
 
@@ -2132,9 +2144,11 @@ bool latest_hook_source(
 
     out =
         g_hook_source_global.source;
-    g_hook_consume.fetch_add(
+    #if !defined(DSRRL_RELEASE_CLEANUP)
+g_hook_consume.fetch_add(
         1u,
         std::memory_order_relaxed);
+#endif
     return true;
 }
 
@@ -2155,9 +2169,11 @@ void __fastcall envspec_single_hook_entry(
     float *host_out,
     int selector) noexcept
 {
-    g_hook_single_seen.fetch_add(
+    #if !defined(DSRRL_RELEASE_CLEANUP)
+g_hook_single_seen.fetch_add(
         1u,
         std::memory_order_relaxed);
+#endif
 
     f4 donor{};
     std::uint64_t bank = 0u;
@@ -2221,9 +2237,11 @@ void __fastcall envspec_blend_hook_entry(
     int selector_b,
     float beta) noexcept
 {
-    g_hook_blend_seen.fetch_add(
+    #if !defined(DSRRL_RELEASE_CLEANUP)
+g_hook_blend_seen.fetch_add(
         1u,
         std::memory_order_relaxed);
+#endif
 
     const auto endpoints =
         pmetal_selector_policy::select(

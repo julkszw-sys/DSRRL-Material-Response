@@ -482,6 +482,17 @@ load_result load_dds(
                 load_status::unsupported
             };
 
+        // A 16384x16384 BC7 2D texture with its complete mip chain
+        // is below 512 MiB. Reject oversized/corrupted sidecar files
+        // BEFORE allocating their full contents in an init-view callback.
+        constexpr std::streamoff k_max_sidecar_file_bytes =
+            512ll * 1024ll * 1024ll;
+        if (end > k_max_sidecar_file_bytes)
+            return {
+                nullptr,
+                load_status::unsupported
+            };
+
         const auto size =
             static_cast<std::size_t>(end);
 
@@ -860,6 +871,26 @@ load_result load_dds(
     }
 }
 
+load_result safe_load_sidecar(
+    ID3D11Device *device,
+    asset_class cls,
+    const std::wstring &logical_name,
+    std::uint64_t hash) noexcept
+{
+    // Path construction may allocate/throw even when the DDS loader itself
+    // is noexcept. ReShade's resource-view callback must fail open instead
+    // of propagating a C++ exception into the host D3D11 call.
+    try {
+        return load_dds(
+            device,
+            sidecar_path(cls, logical_name),
+            cls,
+            hash);
+    } catch (...) {
+        return {nullptr, load_status::unsupported};
+    }
+}
+
 void account_load(
     load_status status) noexcept
 {
@@ -1148,12 +1179,10 @@ void on_init_resource_view(
 
     if (spec_member) {
         const auto loaded =
-            load_dds(
+            safe_load_sidecar(
                 native_device,
-                sidecar_path(
-                    asset_class::specular,
-                    logical_name),
                 asset_class::specular,
+                logical_name,
                 logical_hash);
         account_load(loaded.status);
         set.specular = loaded.view;
@@ -1163,12 +1192,10 @@ void on_init_resource_view(
         diffuse_target_hash_allowed_v12(
             logical_hash)) {
         const auto loaded =
-            load_dds(
+            safe_load_sidecar(
                 native_device,
-                sidecar_path(
-                    asset_class::diffuse,
-                    logical_name),
                 asset_class::diffuse,
+                logical_name,
                 logical_hash);
         account_load(loaded.status);
         set.diffuse = loaded.view;
@@ -1178,12 +1205,10 @@ void on_init_resource_view(
         normal_target_hash_allowed_v12(
             logical_hash)) {
         const auto loaded =
-            load_dds(
+            safe_load_sidecar(
                 native_device,
-                sidecar_path(
-                    asset_class::normal,
-                    logical_name),
                 asset_class::normal,
+                logical_name,
                 logical_hash);
         account_load(loaded.status);
         set.normal = loaded.view;
