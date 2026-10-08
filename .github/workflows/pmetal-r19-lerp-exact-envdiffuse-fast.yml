@@ -1,4 +1,4 @@
-name: P_Metal R43 RC1 PointLight Physical Cut Runtime
+name: P_Metal R43 RC1 SpecRGB Exact Live Fallback
 
 on:
   workflow_dispatch:
@@ -12,6 +12,7 @@ on:
       - r42-pmetal-cross-thread-producer-cache
       - r43-pmetal-per-key-freshness-cache
       - r43-rc1-pointlight-physical-cut
+      - r43-rc1-pointlightcut-pmetal-spec-rx34-gate
   pull_request:
     paths:
       - "renderer-core/integrated/**"
@@ -33,7 +34,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: pmetal-r43-plcut-${{ github.head_ref || github.ref_name }}
+  group: pmetal-r43-specgate-${{ github.head_ref || github.ref_name }}
   cancel-in-progress: true
 
 jobs:
@@ -57,7 +58,7 @@ jobs:
           ref: 3645e3025d1d98a90e318278858931f034d5d1f6
           path: _reshade
 
-      - name: Configure R43 RC1 P_Metal with both PointLight islands physically cut
+      - name: Configure R43 RC1 P_Metal with exact live SpecRGB retry and PointLight cut
         shell: pwsh
         run: >
           cmake
@@ -66,7 +67,7 @@ jobs:
           -A x64
           -DRESHADE_INCLUDE_DIR="${{ github.workspace }}/_reshade/include"
           -DDSRRL_SOURCE_COMMIT="$env:DSRRL_CHECKOUT_COMMIT"
-          -DDSRRL_BUILD_FLAVOR="pmetal_r43_rc1_pointlight_cut"
+          -DDSRRL_BUILD_FLAVOR="pmetal_r43_rc1_pointlight_cut_specgate"
           -DDSRRL_FULL_TELEMETRY_DEFAULT_ON=OFF
           -DDSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG=ON
           -DDSRRL_PMETAL_FULL_PTDE_HEMENV_R3=ON
@@ -91,20 +92,22 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           $addons = @(Get-ChildItem build-fast -Recurse -Filter *.addon64)
           if ($addons.Count -ne 1) { throw "Expected exactly one addon, found $($addons.Count)" }
-          Copy-Item $addons[0].FullName "DSRRL_PMETAL_R43_RC1_POINTLIGHT_CUT.addon64" -Force
+          Copy-Item $addons[0].FullName "DSRRL_PMETAL_R43_RC1_POINTLIGHT_CUT_SPECGATE.addon64" -Force
 
       - name: Verify binary identity
         shell: pwsh
         run: |
-          $path = "DSRRL_PMETAL_R43_RC1_POINTLIGHT_CUT.addon64"
+          $path = "DSRRL_PMETAL_R43_RC1_POINTLIGHT_CUT_SPECGATE.addon64"
           $ascii = [System.Text.Encoding]::ASCII.GetString([System.IO.File]::ReadAllBytes($path))
           if (-not $ascii.Contains($env:DSRRL_CHECKOUT_COMMIT)) { throw "Missing source commit identity" }
-          if (-not $ascii.Contains("pmetal_r43_rc1_pointlight_cut")) { throw "Missing R43 build flavor identity" }
+          if (-not $ascii.Contains("pmetal_r43_rc1_pointlight_cut_specgate")) { throw "Missing R43 build flavor identity" }
           if (-not $ascii.Contains("[DSRRL PMETAL R41] flver_lifecycle_cache_flush=OFF source_cache_generation=SOURCE_RUNTIME_RESET_ONLY endpoint_cache=EXACT_SOURCE_BASE_COUNT_INDEX_ROW bank_cache=BASE_COUNT_LAYOUT region_cache=VM_WINDOW selector_shadow=EXACT_TLS_SOURCE_PTR_SELECTOR_BETA selector_source=ON envspec=ON material_response=ON")) { throw "Missing R41 P_Metal cache-scope marker" }
           if (-not $ascii.Contains("[DSRRL PMETAL R41] selector_source_shadow_hit=1 exact_source_ptr=ON exact_selector_beta=ON donor_redecode=OFF fail_open_fallback=ON")) { Write-Host "R41 selector-shadow hit marker is intentionally runtime-only" }
           if (-not $ascii.Contains("[DSRRL PMETAL R43] producer_cache=SET256_WAY2 freshness=SOURCE_BASE_COUNT_ROW_SELECTOR_BETA global_semantic_version_gate=OFF selector_try_lock=ON producer_payload_exact=ON fallback_full_decode=ON islands_preserved=ON")) { throw "Missing R43 per-key freshness marker" }
           if (-not $ascii.Contains("[DSRRL PMETAL R43] selector_per_key_cache_hit=1 exact_key=SOURCE_BASE_COUNT_ROW_SELECTOR_BETA global_semantic_version=IGNORED donor_redecode=OFF lock_wait=OFF")) { Write-Host "R43 selector per-key hit marker is intentionally runtime-only" }
           if (-not $ascii.Contains("[DSRRL PMETAL R43] producer_per_key_cache_hit=1 exact_key=SOURCE_BASE_COUNT_ROW_SELECTOR_BETA exact_payload=ON global_publish_mutex=SKIPPED")) { Write-Host "R42 producer cross-thread hit marker is intentionally runtime-only" }
+          if (-not $ascii.Contains("[DSRRL PMETAL SPEC GATE] rejected rx=")) { throw "Missing new SpecRGB exact gate reject frontier" }
+          if (-not $ascii.Contains("[DSRRL PMETAL SPEC GATE] live_t1_shadow_recovered=1")) { throw "Missing exact live t1 recovery diagnostic" }
           if (-not $ascii.Contains("[DSRRL PHYSICAL CUT POINTLIGHT] fixed_r40=PHYSICALLY_CUT clustered_spc=PHYSICALLY_CUT clustered_nospc=PHYSICALLY_CUT stock_dsr=ON")) { throw "PointLight physical-cut startup marker missing" }
           if ($ascii.Contains("[DSRRL POINTLIGHT R40] source_cache=PERSISTENT_GENERATIONAL_EXACT_STATE")) { throw "R40 real PointLight source runtime leaked into physically cut addon" }
           if ($ascii.Contains("[DSRRL POINTLIGHT R35] owner_authorized_spc_hybrid=ACTIVE")) { throw "Clustered PointLight Spc hybrid ACTIVE marker leaked into cut addon" }
@@ -116,6 +119,6 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: DSRRL_PMETAL_R43_RC1_POINTLIGHT_CUT
-          path: DSRRL_PMETAL_R43_RC1_POINTLIGHT_CUT.addon64
+          name: DSRRL_PMETAL_R43_RC1_POINTLIGHT_CUT_SPECGATE
+          path: DSRRL_PMETAL_R43_RC1_POINTLIGHT_CUT_SPECGATE.addon64
           if-no-files-found: error
