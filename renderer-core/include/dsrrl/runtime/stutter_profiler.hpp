@@ -31,6 +31,8 @@ enum class stage : std::size_t {
     resource_view_init,
     sidecar_load,
     d3d_texture_create,
+    sidecar_pool_hit,
+    sidecar_pool_miss,
     count
 };
 
@@ -41,7 +43,8 @@ inline constexpr std::array<const char *,stage_count> stage_names{{
     "FLVER_PARSE", "FLVER_SHA256", "FLVER_REGISTRY",
     "FLVER_LOOKUP_FALLBACK", "FLVER_DESTROY",
     "MTD_OBSERVE", "SELECTOR", "PMETAL_SELECTOR",
-    "RESOURCE_VIEW_INIT", "DDS_LOAD", "CREATE_TEXTURE2D"
+    "RESOURCE_VIEW_INIT", "DDS_LOAD", "CREATE_TEXTURE2D",
+    "DDS_POOL_HIT", "DDS_POOL_MISS"
 }};
 
 struct snapshot {

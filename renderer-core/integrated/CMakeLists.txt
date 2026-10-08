@@ -236,6 +236,11 @@ option(
     OFF)
 
 option(
+    DSRRL_SIDECAR_RESOURCE_POOL
+    "Experimental: reuse exact content-attested PTDE sidecar SRVs across stock view lifetimes; no operator changes"
+    OFF)
+
+option(
     DSRRL_POINTLIGHT_PROFILE
     "Diagnostic: low-overhead sampled clustered PointLight producer/transaction profiler"
     OFF)
@@ -705,6 +710,12 @@ endif()
 if(DSRRL_STUTTER_PROFILE)
     target_compile_definitions(dsrrl_renderer_core PRIVATE DSRRL_STUTTER_PROFILE)
     target_compile_definitions(dsrrl_renderer_core_integrated PRIVATE DSRRL_STUTTER_PROFILE)
+endif()
+
+if(DSRRL_SIDECAR_RESOURCE_POOL)
+    target_compile_definitions(
+        dsrrl_renderer_core_integrated
+        PRIVATE DSRRL_SIDECAR_RESOURCE_POOL)
 endif()
 
 if(DSRRL_DIAGNOSTIC_TELEMETRY_DEFAULT_ON)
