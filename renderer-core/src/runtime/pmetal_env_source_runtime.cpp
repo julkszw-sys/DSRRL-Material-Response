@@ -2996,10 +2996,17 @@ bool pmetal_env_source_runtime::latest(
         return false;
     }
 
+#if defined(DSRRL_PMETAL_LOOKUP_REJECTION_FRONTIER_DIAG)
+    pmetal_producer_lookup_reason lookup_reason = pmetal_producer_lookup_reason::no_material_bucket;
+#endif
     if (pmetal_producer_state_latest(
             material,
             epoch,
-            out)) {
+            out
+#if defined(DSRRL_PMETAL_LOOKUP_REJECTION_FRONTIER_DIAG)
+            , &lookup_reason
+#endif
+            )) {
 #if defined(DSRRL_PMETAL_SPEC_CUT_TRACE)
         if (out.diagnostic_origin != 4u)
             out.diagnostic_origin = 1u;
@@ -3008,6 +3015,33 @@ bool pmetal_env_source_runtime::latest(
             g_consumer_ok);
         return true;
     }
+
+#if defined(DSRRL_PMETAL_LOOKUP_REJECTION_FRONTIER_DIAG)
+    static std::array<std::atomic<std::uint64_t>,7u> misses_by_reason{};
+    static std::atomic<std::uint64_t> all_misses{0u};
+    const auto reason_index = static_cast<std::size_t>(lookup_reason);
+    if (reason_index < misses_by_reason.size())
+        misses_by_reason[reason_index].fetch_add(1u,std::memory_order_relaxed);
+    const auto n = all_misses.fetch_add(1u,std::memory_order_relaxed) + 1u;
+    if (n == 1u || (n & 4095u) == 0u) {
+        char line[400]{};
+        std::snprintf(line,sizeof(line),
+            "[DSRRL PMETAL LOOKUP FRONTIER] misses=%llu no_bucket=%llu wrong_bucket=%llu revoked=%llu epoch=%llu identity=%llu latest_reason=%u sha0=%02x%02x%02x%02x slot=%u",
+            static_cast<unsigned long long>(n),
+            static_cast<unsigned long long>(misses_by_reason[2].load()),
+            static_cast<unsigned long long>(misses_by_reason[3].load()),
+            static_cast<unsigned long long>(misses_by_reason[4].load()),
+            static_cast<unsigned long long>(misses_by_reason[5].load()),
+            static_cast<unsigned long long>(misses_by_reason[6].load()),
+            static_cast<unsigned>(reason_index),
+            static_cast<unsigned>(material.flver_sha256[0]),
+            static_cast<unsigned>(material.flver_sha256[1]),
+            static_cast<unsigned>(material.flver_sha256[2]),
+            static_cast<unsigned>(material.flver_sha256[3]),
+            static_cast<unsigned>(material.material_slot));
+        reshade::log::message(reshade::log::level::info,line);
+    }
+#endif
 
     // R44 keyed-rendezvous: producer lookup alone is material authority.
     // The last same-thread/global packer snapshot is NOT tied to this exact

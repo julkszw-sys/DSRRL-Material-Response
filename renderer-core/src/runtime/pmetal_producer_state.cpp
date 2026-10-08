@@ -266,48 +266,66 @@ void pmetal_producer_state_publish(
 bool pmetal_producer_state_latest(
     const operators::material_response::material_identity &material,
     std::uint64_t epoch,
-    pmetal_envspec_source &out) noexcept
+    pmetal_envspec_source &out,
+    pmetal_producer_lookup_reason *diagnostic_reason) noexcept
 {
     out = {};
+    const auto set_reason =
+        [diagnostic_reason](
+            pmetal_producer_lookup_reason reason) noexcept {
+            if (diagnostic_reason != nullptr)
+                *diagnostic_reason = reason;
+        };
 
-    // Fast path: selector and draw share a thread.
     if (g_record.valid &&
         g_record.epoch == epoch &&
         same_material(g_record.material, material)) {
         out = g_record.source;
+        set_reason(pmetal_producer_lookup_reason::tls_hit);
         return true;
     }
 
-    // Exact synchronized fallback for deferred/immediate command-list thread
-    // handoff. The material key is only an index/filter; positive authority is
-    // still the complete material identity under the slot mutex.
+    // This is only a typed observation frontier. Existing exact authority
+    // remains the matching material identity, epoch and synchronized record.
     const auto key = material_key(material);
     auto &slot = sync_slot_for(key);
-
-    if (!slot.valid.load(
-            std::memory_order_acquire) ||
-        slot.material_key.load(
-            std::memory_order_relaxed) != key ||
-        slot.epoch.load(
-            std::memory_order_relaxed) != epoch)
+    const auto observed_key =
+        slot.material_key.load(std::memory_order_acquire);
+    if (observed_key != key) {
+        set_reason(
+            observed_key == 0u
+                ? pmetal_producer_lookup_reason::no_material_bucket
+                : pmetal_producer_lookup_reason::wrong_material_bucket);
         return false;
+    }
+
+    if (!slot.valid.load(std::memory_order_acquire)) {
+        set_reason(pmetal_producer_lookup_reason::source_revoked);
+        return false;
+    }
+
+    if (slot.epoch.load(std::memory_order_relaxed) != epoch) {
+        set_reason(pmetal_producer_lookup_reason::epoch_mismatch);
+        return false;
+    }
 
     std::lock_guard<std::mutex> lock(slot.mutex);
 
-    if (!slot.valid.load(
-            std::memory_order_relaxed) ||
-        slot.material_key.load(
-            std::memory_order_relaxed) != key ||
-        slot.epoch.load(
-            std::memory_order_relaxed) != epoch ||
+    if (!slot.valid.load(std::memory_order_relaxed)) {
+        set_reason(pmetal_producer_lookup_reason::source_revoked);
+        return false;
+    }
+    if (slot.material_key.load(std::memory_order_relaxed) != key ||
+        slot.epoch.load(std::memory_order_relaxed) != epoch ||
         !slot.record.valid ||
         slot.record.epoch != epoch ||
-        !same_material(
-            slot.record.material,
-            material))
+        !same_material(slot.record.material, material)) {
+        set_reason(pmetal_producer_lookup_reason::record_identity_mismatch);
         return false;
+    }
 
     out = slot.record.source;
+    set_reason(pmetal_producer_lookup_reason::synchronized_hit);
     return true;
 }
 
