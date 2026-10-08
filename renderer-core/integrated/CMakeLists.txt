@@ -147,6 +147,11 @@ option(
     OFF)
 
 option(
+    DSRRL_PHYSICAL_CUT_POINTLIGHT_ALL
+    "Physically remove fixed R40 and clustered PntS/Spc PointLight runtime producer/pipeline/draw units; preserve stock DSR PointLight"
+    OFF)
+
+option(
     DSRRL_POINTLIGHT_DRAWTIME_BYPASS
     "Diagnostic: disable PointLight producer hooks, runtime pipeline binding and draw-time carrier/replay while preserving all non-PointLight runtime paths"
     OFF)
@@ -563,10 +568,6 @@ add_library(
     "${DSRRL_RENDERER_CORE_ROOT}/src/runtime/pixel_srv_shadow.cpp"
     "${DSRRL_RENDERER_CORE_ROOT}/src/runtime/hemenvlerp_pipeline_registry.cpp"
     "${DSRRL_RENDERER_CORE_ROOT}/src/runtime/subsurface_pipeline_registry.cpp"
-    "${DSRRL_RENDERER_CORE_ROOT}/src/runtime/fixed_pointlight_draw_runtime.cpp"
-    "${DSRRL_RENDERER_CORE_ROOT}/src/runtime/clustered_pnts_draw_runtime.cpp"
-    "${DSRRL_RENDERER_CORE_ROOT}/src/runtime/clustered_pnts_pipeline_runtime.cpp"
-    "${DSRRL_RENDERER_CORE_ROOT}/src/runtime/fixed_pointlight_pipeline_runtime.cpp"
     "${DSRRL_RENDERER_CORE_ROOT}/src/runtime/upper_lower_pipeline_registry.cpp"
     "${DSRRL_RENDERER_CORE_ROOT}/src/runtime/hemdir3_mode_transport.cpp"
     "${DSRRL_RENDERER_CORE_ROOT}/src/runtime/hemdir3_pipeline_registry.cpp"
@@ -580,6 +581,29 @@ add_library(
     "${DSRRL_RENDERER_CORE_ROOT}/src/operators/env_spec/pmetal_rgba_lerp_materializer.cpp"
     "${DSRRL_RENDERER_CORE_ROOT}/src/operators/lightbank/hemdir3_b13_materializer.cpp"
     "${DSRRL_RENDERER_CORE_ROOT}/src/operators/lightbank/upper_lower_hemenv_materializer.cpp")
+
+# Compile exactly one PointLight ABI carrier: real runtime sources or an inert
+# fail-open linker surface. The physical-cut branch never compiles real R40/
+# clustered Spc PointLight producer, shaders, callbacks, resource or draw units.
+if(DSRRL_PHYSICAL_CUT_POINTLIGHT_ALL)
+    target_sources(
+        dsrrl_renderer_core_integrated
+        PRIVATE
+        "${DSRRL_RENDERER_CORE_ROOT}/src/runtime/pointlight_physical_cut_noop.cpp")
+    target_compile_definitions(
+        dsrrl_renderer_core_integrated
+        PRIVATE
+        DSRRL_PHYSICAL_CUT_POINTLIGHT_ALL
+        DSRRL_POINTLIGHT_DRAWTIME_BYPASS)
+else()
+    target_sources(
+        dsrrl_renderer_core_integrated
+        PRIVATE
+        "${DSRRL_RENDERER_CORE_ROOT}/src/runtime/fixed_pointlight_draw_runtime.cpp"
+        "${DSRRL_RENDERER_CORE_ROOT}/src/runtime/clustered_pnts_draw_runtime.cpp"
+        "${DSRRL_RENDERER_CORE_ROOT}/src/runtime/clustered_pnts_pipeline_runtime.cpp"
+        "${DSRRL_RENDERER_CORE_ROOT}/src/runtime/fixed_pointlight_pipeline_runtime.cpp")
+endif()
 
 if(NOT DSRRL_PHYSICAL_CUT_UL_H3_SUBSURFACE)
     target_sources(
