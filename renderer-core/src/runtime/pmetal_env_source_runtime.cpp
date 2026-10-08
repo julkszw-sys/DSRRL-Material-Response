@@ -2569,12 +2569,6 @@ void pmetal_env_source_selector_event(
         g_selector_epoch.load(
             std::memory_order_relaxed);
 
-    // This exact material now owns the next synchronized source publication.
-    // Invalidate any older selector fallback before downstream decode.
-    pmetal_producer_state_begin(
-        material,
-        epoch);
-
     if (telemetry::effect_enabled())
         g_selector_exact_seen.store(
             true,
@@ -2669,6 +2663,16 @@ void pmetal_env_source_selector_event(
     if (descriptor_owner != owner ||
         character > 1u)
         return;
+
+    // An unverified selector callback is not an authoritative material
+    // transition. Revoke the previous exact producer only AFTER proving
+    // that the native descriptor belongs to this FLVER/MTD/slot's owner.
+    // Subsequent endpoint/LightBank/sidecar decode failures still leave the
+    // material revoked, so the consumer fails open instead of using stale
+    // PTDE lighting.
+    pmetal_producer_state_begin(
+        material,
+        epoch);
 
     if (telemetry::effect_enabled())
         g_descriptor_gate_ok.store(
