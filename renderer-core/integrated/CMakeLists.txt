@@ -240,6 +240,11 @@ option(
     OFF)
 
 option(
+    DSRRL_RESOURCE_EPOCH_SHARD_SYNC
+    "Experimental: invalidate companion SRV TLS by 256 key buckets instead of process-global epoch"
+    OFF)
+
+option(
     DSRRL_POINTLIGHT_PROFILE
     "Diagnostic: low-overhead sampled clustered PointLight producer/transaction profiler"
     OFF)
@@ -716,6 +721,12 @@ if(DSRRL_STUTTER_HITCH_TRACE)
     endif()
     target_compile_definitions(dsrrl_renderer_core PRIVATE DSRRL_STUTTER_HITCH_TRACE)
     target_compile_definitions(dsrrl_renderer_core_integrated PRIVATE DSRRL_STUTTER_HITCH_TRACE)
+endif()
+
+if(DSRRL_RESOURCE_EPOCH_SHARD_SYNC)
+    target_compile_definitions(
+        dsrrl_renderer_core_integrated
+        PRIVATE DSRRL_RESOURCE_EPOCH_SHARD_SYNC)
 endif()
 
 if(DSRRL_DIAGNOSTIC_TELEMETRY_DEFAULT_ON)
