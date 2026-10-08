@@ -1575,6 +1575,7 @@ register_events() noexcept
     reshade::register_event<reshade::addon_event::present>(on_stutter_present);
     reshade::log::message(reshade::log::level::info,
         "[DSRRL STUTTER R43] bounded QPC profiling active; no feature gates changed");
+#endif
 #if defined(DSRRL_RESOURCE_EPOCH_SHARD_SYNC)
     reshade::log::message(reshade::log::level::info,
         "[DSRRL SYNC R43] companion SRV TLS epochs=KEY_BUCKET_256, fail-open and per-view lifetime preserved");
@@ -1592,7 +1593,6 @@ register_events() noexcept
 #if defined(DSRRL_STUTTER_HITCH_TRACE)
     reshade::log::message(reshade::log::level::info,
         "[DSRRL HITCH FRAME] exact R43 same-operator per-Present QPC buckets active");
-#endif
 #endif
 
     reshade::register_event<
