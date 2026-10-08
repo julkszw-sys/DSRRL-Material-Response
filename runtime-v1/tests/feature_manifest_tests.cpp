@@ -51,7 +51,7 @@ int main()
 
     CHECK(current==13u);
     CHECK(future_candidate==0u);
-    CHECK(future_partial==6u);
+    CHECK(future_partial==7u);
     CHECK(blocked==2u);
     CHECK(diagnostic==1u);
     CHECK(host==2u);
@@ -81,6 +81,8 @@ int main()
     CHECK(runtime_feature_requires_detailed_readiness(core::operator_id::point_light));
     CHECK(runtime_feature_requires_detailed_readiness(core::operator_id::local_specular_legacy));
     CHECK(runtime_feature_requires_detailed_readiness(core::operator_id::faceeye_shadow_legacy));
+    CHECK(runtime_feature_requires_detailed_readiness(core::operator_id::post_dof_ptde));
+    CHECK(!runtime_feature_boot_enabled(core::operator_id::post_dof_ptde));
 
     CHECK(runtime_feature_is_hard_blocked(core::operator_id::post_bloom));
     CHECK(runtime_feature_is_hard_blocked(core::operator_id::post_hdr));

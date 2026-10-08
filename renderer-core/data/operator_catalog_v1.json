@@ -632,6 +632,27 @@
       "default_port_state": "ACTIVE",
       "fail_open_behavior": "PRESERVE_PRIOR_CORE_ROUTE",
       "operator_id": "pmetal_black_safe_v10"
+    },
+    {
+      "status": "HIGH CONFIDENCE",
+      "metadata": {
+        "carrier": "COMPOSITE",
+        "production_seed_raster": "1024x720",
+        "downstream_rasters": ["512x360", "256x180"],
+        "fixed_raster_vpo_cb_transaction": true,
+        "exact_q8_history": false,
+        "runtime": "OPEN",
+        "pixel_behavior": "OPEN"
+      },
+      "description": "Dedicated PTDE-visible DoF postprocess island on the exact clean R43 host. Uses the recovered fixed-raster graph and retained homologous DSR carriers with an explicit private gVC_ScreenSize.zw transaction. Exact Q8 scene-history equivalence remains a separate residual.",
+      "display_name": "PTDE DoF private postprocess island",
+      "operator_key": "post.dof_ptde",
+      "canonical_key": "renderer.dof.production_seed_minimum_ptde_raster_v1",
+      "operator_class": "POSTPROCESS",
+      "canonical_revision": 11852,
+      "default_port_state": "PARTIAL",
+      "fail_open_behavior": "STOCK_DSR",
+      "operator_id": "post_dof_ptde"
     }
   ]
 }
