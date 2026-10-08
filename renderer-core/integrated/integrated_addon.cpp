@@ -2232,6 +2232,76 @@ const char *pointlight_decision_reason_name(
     }
 }
 
+#if defined(DSRRL_MR_CLOTH_TRACE)
+// Diagnostic-only, bounded once per (MTD family, receiver, stage). This
+// observes the existing decision/draw without changing material authority,
+// shader selection, textures, constant buffers or fail-open.
+std::array<std::atomic<std::uint8_t>, 4u * 24u> g_mr_cloth_trace_seen{};
+
+void trace_mr_cloth(
+    std::uint32_t receiver,
+    const dsrrl::operators::material_response::material_identity &material,
+    const dsrrl::operators::material_response::decision &decision,
+    std::uint8_t stage) noexcept
+{
+    if (receiver < 24u || receiver > 47u ||
+        !material.valid || material.semantic_name_hash == 0u)
+        return;
+
+    namespace mr = dsrrl::operators::material_response;
+    static constexpr const char *names[] = {
+        "P_RoughCloth[DSB].mtd",
+        "P_RoughCloth[DSB]_Edge.mtd",
+        "C_RoughCloth[DSB].mtd",
+        "C_RoughCloth[DSB]_Edge.mtd"
+    };
+    static const std::array<std::uint64_t, 4u> hashes = {
+        mr::mtd_semantic_hash(names[0]), mr::mtd_semantic_hash(names[1]),
+        mr::mtd_semantic_hash(names[2]), mr::mtd_semantic_hash(names[3])
+    };
+
+    std::size_t kind = hashes.size();
+    for (std::size_t i = 0u; i < hashes.size(); ++i)
+        if (hashes[i] == material.semantic_name_hash) {
+            kind = i;
+            break;
+        }
+    if (kind == hashes.size())
+        return;
+
+    const auto slot = kind * 24u + (receiver - 24u);
+    if ((g_mr_cloth_trace_seen[slot].fetch_or(
+            stage, std::memory_order_relaxed) & stage) != 0u)
+        return;
+
+    const char *stage_name = stage == 1u ? "decision_reject" :
+        stage == 2u ? "decision_active" : "draw_issued";
+    char line[760]{};
+    std::snprintf(
+        line, sizeof(line),
+        "[DSRRL MR CLOTH] stage=%s mtd=%s rx=%u route=%u "
+        "reason=%s(%u) ops=%08x owner_exact=%u mtd_exact=%u "
+        "flver_slot=%u slot_valid=%u semantic=%016llx family=%016llx "
+        "mtd_sha0=%02x%02x%02x%02x c100=%.6f,%.6f,%.6f",
+        stage_name, names[kind], receiver, decision.route_index,
+        pointlight_decision_reason_name(decision.reason),
+        static_cast<unsigned>(decision.reason),
+        decision.certified_operations,
+        material.owner_tuple_exact ? 1u : 0u,
+        material.actual_material_exact ? 1u : 0u,
+        material.material_slot,
+        material.material_slot_valid ? 1u : 0u,
+        static_cast<unsigned long long>(material.semantic_name_hash),
+        static_cast<unsigned long long>(material.material_family_hash),
+        static_cast<unsigned>(material.raw_mtd_sha256[0]),
+        static_cast<unsigned>(material.raw_mtd_sha256[1]),
+        static_cast<unsigned>(material.raw_mtd_sha256[2]),
+        static_cast<unsigned>(material.raw_mtd_sha256[3]),
+        decision.c100[0], decision.c100[1], decision.c100[2]);
+    reshade::log::message(reshade::log::level::info, line);
+}
+#endif
+
 void log_pointlight_gate_once(
     std::uint32_t bit,
     const char *stage,
@@ -2473,6 +2543,13 @@ bool observe_pointlight_draw_identity(
             evaluate_direct_pointlight_material(
                 out_material,
                 requires_specular);
+
+#if defined(DSRRL_MR_CLOTH_TRACE)
+    if (!direct_pointlight_receiver)
+        trace_mr_cloth(
+            receiver_id, out_material, out_decision,
+            out_decision.active ? 2u : 1u);
+#endif
 
     if (out_decision.active) {
         hot_count(g_mr_would_activate);
@@ -6842,6 +6919,10 @@ bool on_draw(
     if (mr_in_batch) {
         g_mr_draw_runtime.account_dispatch_result(
             dispatch.transaction);
+#if defined(DSRRL_MR_CLOTH_TRACE)
+        if (dsrrl::runtime::draw_tx_issued(dispatch.transaction))
+            trace_mr_cloth(receiver_id, material, decision, 4u);
+#endif
         if (dsrrl::runtime::draw_tx_issued(
                 dispatch.transaction) &&
             !g_mr_once_draw_issued.exchange(true)) {
@@ -7207,6 +7288,10 @@ bool on_draw_indexed(
     if (mr_in_batch) {
         g_mr_draw_runtime.account_dispatch_result(
             dispatch.transaction);
+#if defined(DSRRL_MR_CLOTH_TRACE)
+        if (dsrrl::runtime::draw_tx_issued(dispatch.transaction))
+            trace_mr_cloth(receiver_id, material, decision, 4u);
+#endif
         if (dsrrl::runtime::draw_tx_issued(
                 dispatch.transaction) &&
             !g_mr_once_draw_issued.exchange(true)) {
