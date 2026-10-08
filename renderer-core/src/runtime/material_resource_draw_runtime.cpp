@@ -3,6 +3,7 @@
 #include "dsrrl/runtime/runtime_hot_telemetry.hpp"
 #include "dsrrl/runtime/stutter_profiler.hpp"
 #include "dsrrl/runtime/resource_view_epoch.hpp"
+#include "dsrrl/runtime/companion_tls_way_selector.hpp"
 #include "dsrrl/operators/resource_bridges/spec_rgb_bridge.hpp"
 #include "dsrrl/operators/resource_bridges/fixed_pointlight_spec_rgb_bridge.hpp"
 #include "dsrrl/operators/resource_bridges/diffuse_bridge.hpp"
@@ -195,6 +196,25 @@ std::size_t companion_tls_index(
         ((key >> 4u) ^ (key >> 13u) ^ (key >> 23u)) &
         (k_companion_tls_slots - 1u));
 }
+
+#if defined(DSRRL_COMPANION_TLS_4WAY)
+using companion_way_policy = companion_tls_way_selector<
+    k_companion_tls_slots, 4u>;
+thread_local std::array<
+    std::uint8_t,
+    companion_way_policy::sets> g_companion_tls_victims{};
+
+std::size_t companion_tls_slot(std::uint64_t key) noexcept
+{
+    return companion_way_policy::choose(
+        g_companion_tls, g_companion_tls_victims, key);
+}
+#else
+std::size_t companion_tls_slot(std::uint64_t key) noexcept
+{
+    return companion_tls_index(key);
+}
+#endif
 
 #if defined(DSRRL_RESOURCE_EPOCH_SHARD_SYNC)
 resource_view_epoch<k_companion_tls_slots> g_view_epochs{};
@@ -984,7 +1004,7 @@ bool snapshot_companion_cached(
     const auto epoch = companion_epoch(key);
     auto &cached =
         g_companion_tls[
-            companion_tls_index(key)];
+            companion_tls_slot(key)];
 
     auto publish_from_cache =
         [&]() noexcept {
@@ -1558,6 +1578,13 @@ register_events() noexcept
 #if defined(DSRRL_RESOURCE_EPOCH_SHARD_SYNC)
     reshade::log::message(reshade::log::level::info,
         "[DSRRL SYNC R43] companion SRV TLS epochs=KEY_BUCKET_256, fail-open and per-view lifetime preserved");
+#if defined(DSRRL_COMPANION_TLS_4WAY)
+    reshade::log::message(reshade::log::level::info,
+        "[DSRRL TLS WAY] mode=4WAY_64SETS_256TOTAL_SYNC_ON");
+#else
+    reshade::log::message(reshade::log::level::info,
+        "[DSRRL TLS WAY] mode=1WAY_256SETS_256TOTAL_SYNC_ON");
+#endif
 #else
     reshade::log::message(reshade::log::level::info,
         "[DSRRL SYNC R43] companion SRV TLS epochs=GLOBAL_BASELINE, fail-open and per-view lifetime preserved");
