@@ -2232,61 +2232,71 @@ const char *pointlight_decision_reason_name(
     }
 }
 
-#if defined(DSRRL_MR_CLOTH_TRACE)
-// Diagnostic-only, bounded once per (MTD family, receiver, stage). This
-// observes the existing decision/draw without changing material authority,
-// shader selection, textures, constant buffers or fail-open.
-std::array<std::atomic<std::uint8_t>, 4u * 24u> g_mr_cloth_trace_seen{};
+#if defined(DSRRL_MR_MATERIAL_TRACE)
+// v2.0.2 location-local MR diagnostic: no shader, CB, resource or feature
+// modification. Only diagnostic fingerprints are cached per-thread; all
+// source material authority and stock fail-open policies remain untouched.
+// Capped log lines avoid turning observation into a new draw-time hotspot.
+thread_local std::array<std::uint64_t, 256u> g_mr_material_seen{};
+std::atomic<std::uint32_t> g_mr_material_logged{0u};
+constexpr std::uint32_t k_mr_material_log_limit = 512u;
 
-void trace_mr_cloth(
+void trace_mr_material(
     std::uint32_t receiver,
     const dsrrl::operators::material_response::material_identity &material,
     const dsrrl::operators::material_response::decision &decision,
     std::uint8_t stage) noexcept
 {
-    if (receiver < 24u || receiver > 47u ||
-        !material.valid || material.semantic_name_hash == 0u)
+    if (receiver < 24u || receiver > 47u)
         return;
 
-    namespace mr = dsrrl::operators::material_response;
-    static constexpr const char *names[] = {
-        "P_RoughCloth[DSB].mtd",
-        "P_RoughCloth[DSB]_Edge.mtd",
-        "C_RoughCloth[DSB].mtd",
-        "C_RoughCloth[DSB]_Edge.mtd"
-    };
-    static const std::array<std::uint64_t, 4u> hashes = {
-        mr::mtd_semantic_hash(names[0]), mr::mtd_semantic_hash(names[1]),
-        mr::mtd_semantic_hash(names[2]), mr::mtd_semantic_hash(names[3])
-    };
+    // Include stage, decision reason and material identity in the diagnostic
+    // fingerprint. Hash entropy here is for log dedup only, NEVER authority.
+    std::uint64_t fingerprint = material.semantic_name_hash ^
+        (material.material_family_hash << 1u) ^
+        (static_cast<std::uint64_t>(receiver) * 0x9e3779b185ebca87ull) ^
+        (static_cast<std::uint64_t>(decision.route_index) << 24u) ^
+        (static_cast<std::uint64_t>(material.material_slot) << 40u) ^
+        (static_cast<std::uint64_t>(stage) << 56u) ^
+        (static_cast<std::uint64_t>(decision.reason) << 48u);
+    fingerprint ^= fingerprint >> 27u;
+    fingerprint *= 0x94d049bb133111ebull;
+    if (fingerprint == 0u)
+        fingerprint = 1u;
 
-    std::size_t kind = hashes.size();
-    for (std::size_t i = 0u; i < hashes.size(); ++i)
-        if (hashes[i] == material.semantic_name_hash) {
-            kind = i;
-            break;
-        }
-    if (kind == hashes.size())
+    auto &seen = g_mr_material_seen[
+        static_cast<std::size_t>(fingerprint) &
+        (g_mr_material_seen.size() - 1u)];
+    if (seen == fingerprint)
+        return;
+    seen = fingerprint;
+
+    const auto ticket = g_mr_material_logged.fetch_add(
+        1u, std::memory_order_relaxed);
+    if (ticket >= k_mr_material_log_limit)
         return;
 
-    const auto slot = kind * 24u + (receiver - 24u);
-    if ((g_mr_cloth_trace_seen[slot].fetch_or(
-            stage, std::memory_order_relaxed) & stage) != 0u)
-        return;
+    const char *stage_name =
+        stage == 1u ? "decision_reject" :
+        stage == 2u ? "decision_active" :
+        stage == 4u ? "draw_issued" : "owner_missing";
+    const char *carrier = material.actual_material_exact
+        ? "runtime_mtd"
+        : material.owner_tuple_exact ? "flver_owner" : "unverified";
 
-    const char *stage_name = stage == 1u ? "decision_reject" :
-        stage == 2u ? "decision_active" : "draw_issued";
-    char line[760]{};
-    std::snprintf(
-        line, sizeof(line),
-        "[DSRRL MR CLOTH] stage=%s mtd=%s rx=%u route=%u "
-        "reason=%s(%u) ops=%08x owner_exact=%u mtd_exact=%u "
-        "flver_slot=%u slot_valid=%u semantic=%016llx family=%016llx "
-        "mtd_sha0=%02x%02x%02x%02x c100=%.6f,%.6f,%.6f",
-        stage_name, names[kind], receiver, decision.route_index,
+    char line[900]{};
+    std::snprintf(line,sizeof(line),
+        "[DSRRL MR MATERIAL] stage=%s rx=%u route=%u "
+        "reason=%s(%u) ops=%08x carrier=%s mat_valid=%u "
+        "owner_exact=%u mtd_exact=%u slot=%u slot_valid=%u "
+        "semantic=%016llx family=%016llx mtd_sha0=%02x%02x%02x%02x "
+        "flver_sha0=%02x%02x%02x%02x "
+        "c100=%.6f,%.6f,%.6f c101=%.6f ptde_spec_power=%.6f spec_verified=%u envspec=%u",
+        stage_name, receiver, decision.route_index,
         pointlight_decision_reason_name(decision.reason),
         static_cast<unsigned>(decision.reason),
-        decision.certified_operations,
+        decision.certified_operations, carrier,
+        material.valid ? 1u : 0u,
         material.owner_tuple_exact ? 1u : 0u,
         material.actual_material_exact ? 1u : 0u,
         material.material_slot,
@@ -2297,8 +2307,15 @@ void trace_mr_cloth(
         static_cast<unsigned>(material.raw_mtd_sha256[1]),
         static_cast<unsigned>(material.raw_mtd_sha256[2]),
         static_cast<unsigned>(material.raw_mtd_sha256[3]),
-        decision.c100[0], decision.c100[1], decision.c100[2]);
-    reshade::log::message(reshade::log::level::info, line);
+        static_cast<unsigned>(material.flver_sha256[0]),
+        static_cast<unsigned>(material.flver_sha256[1]),
+        static_cast<unsigned>(material.flver_sha256[2]),
+        static_cast<unsigned>(material.flver_sha256[3]),
+        decision.c100[0], decision.c100[1], decision.c100[2],
+        decision.c101, decision.ptde_specular_power,
+        decision.ptde_specular_power_verified ? 1u : 0u,
+        static_cast<unsigned>(decision.envspec));
+    reshade::log::message(reshade::log::level::info,line);
 }
 #endif
 
@@ -2502,6 +2519,10 @@ bool observe_pointlight_draw_identity(
         hot_count(g_draw_owner_hits);
 
     if (!owner_ok) {
+#if defined(DSRRL_MR_MATERIAL_TRACE)
+        if (rx != nullptr)
+            trace_mr_material(receiver_id, out_material, out_decision, 8u);
+#endif
         hot_count(g_draw_receiver_only);
         hot_count(g_mr_fail_open);
         log_pointlight_gate_once(
@@ -2919,9 +2940,9 @@ bool observe_draw_identity(
                     true);
     }
 
-#if defined(DSRRL_MR_CLOTH_TRACE)
+#if defined(DSRRL_MR_MATERIAL_TRACE)
     if (!direct_pointlight_receiver)
-        trace_mr_cloth(
+        trace_mr_material(
             receiver_id, out_material, out_decision,
             out_decision.active ? 2u : 1u);
 #endif
@@ -6919,9 +6940,9 @@ bool on_draw(
     if (mr_in_batch) {
         g_mr_draw_runtime.account_dispatch_result(
             dispatch.transaction);
-#if defined(DSRRL_MR_CLOTH_TRACE)
+#if defined(DSRRL_MR_MATERIAL_TRACE)
         if (dsrrl::runtime::draw_tx_issued(dispatch.transaction))
-            trace_mr_cloth(receiver_id, material, decision, 4u);
+            trace_mr_material(receiver_id, material, decision, 4u);
 #endif
         if (dsrrl::runtime::draw_tx_issued(
                 dispatch.transaction) &&
@@ -7288,9 +7309,9 @@ bool on_draw_indexed(
     if (mr_in_batch) {
         g_mr_draw_runtime.account_dispatch_result(
             dispatch.transaction);
-#if defined(DSRRL_MR_CLOTH_TRACE)
+#if defined(DSRRL_MR_MATERIAL_TRACE)
         if (dsrrl::runtime::draw_tx_issued(dispatch.transaction))
-            trace_mr_cloth(receiver_id, material, decision, 4u);
+            trace_mr_material(receiver_id, material, decision, 4u);
 #endif
         if (dsrrl::runtime::draw_tx_issued(
                 dispatch.transaction) &&
