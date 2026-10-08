@@ -230,6 +230,15 @@ option(
     "Diagnostic: low-overhead sampled clustered PointLight producer/transaction profiler"
     OFF)
 
+option(
+    DSRRL_DOF_DEFAULT_ON
+    "Activate the clean-R43 PTDE DoF island without requiring an environment opt-in"
+    ON)
+option(
+    DSRRL_DOF_PROFILE
+    "Diagnostic: low-overhead sampled PTDE DoF draw-path CPU profiler"
+    OFF)
+
 set(
     RESHADE_INCLUDE_DIR
     ""
@@ -269,6 +278,26 @@ set(
     DSRRL_CORE_GENERATED_ENVSPEC
     "${DSRRL_CORE_GENERATED_ROOT}/dsrrl/operators/env_spec")
 file(MAKE_DIRECTORY "${DSRRL_CORE_GENERATED_ENVSPEC}")
+
+set(
+    DSRRL_DOF_PLAIN_PAYLOAD
+    "${DSRRL_RENDERER_CORE_ROOT}/data/provenance/dof_plain_rate_exact_payload_v1.json")
+set(
+    DSRRL_DOF_PLAIN_EMBEDDED_HEADER
+    "${DSRRL_CORE_GENERATED_ROOT}/dof_plain_rate_embedded.hpp")
+add_custom_command(
+    OUTPUT "${DSRRL_DOF_PLAIN_EMBEDDED_HEADER}"
+    COMMAND "${Python3_EXECUTABLE}"
+            "${DSRRL_RENDERER_CORE_ROOT}/tools/generate_dof_plain_rate_embedded.py"
+            --payload "${DSRRL_DOF_PLAIN_PAYLOAD}"
+            --out "${DSRRL_DOF_PLAIN_EMBEDDED_HEADER}"
+    DEPENDS
+        "${DSRRL_RENDERER_CORE_ROOT}/tools/generate_dof_plain_rate_embedded.py"
+        "${DSRRL_DOF_PLAIN_PAYLOAD}"
+    VERBATIM)
+add_custom_target(
+    dsrrl_core_dof_plain_rate_embedded
+    DEPENDS "${DSRRL_DOF_PLAIN_EMBEDDED_HEADER}")
 
 add_custom_command(
     OUTPUT "${DSRRL_CORE_GENERATED_RUNTIME}/generated_spec_routes_v12.hpp"
@@ -570,6 +599,13 @@ add_library(
     "${DSRRL_RENDERER_CORE_ROOT}/src/runtime/upper_lower_pipeline_registry.cpp"
     "${DSRRL_RENDERER_CORE_ROOT}/src/runtime/hemdir3_mode_transport.cpp"
     "${DSRRL_RENDERER_CORE_ROOT}/src/runtime/hemdir3_pipeline_registry.cpp"
+    "${DSRRL_RENDERER_CORE_ROOT}/src/runtime/dof_preflight.cpp"
+    "${DSRRL_RENDERER_CORE_ROOT}/src/runtime/dof_authored_state_runtime.cpp"
+    "${DSRRL_RENDERER_CORE_ROOT}/src/runtime/dof_private_resource_runtime.cpp"
+    "${DSRRL_RENDERER_CORE_ROOT}/src/runtime/dof_ptde_scheduler_runtime.cpp"
+    "${DSRRL_RENDERER_CORE_ROOT}/src/runtime/dof_host_depth_route_runtime.cpp"
+    "${DSRRL_RENDERER_CORE_ROOT}/src/runtime/dof_tonemap_handoff_runtime.cpp"
+    "${DSRRL_RENDERER_CORE_ROOT}/src/runtime/dof_ptde_draw_bridge_runtime.cpp"
     "${DSRRL_RENDERER_CORE_ROOT}/src/runtime/draw_state_transaction.cpp"
     "${DSRRL_RENDERER_CORE_ROOT}/src/runtime/island_draw_adapter.cpp"
     "${DSRRL_RENDERER_CORE_ROOT}/src/runtime/material_response_draw_transaction.cpp"
@@ -599,7 +635,8 @@ add_dependencies(
     dsrrl_core_upper_lower_authority
     dsrrl_core_pmetal_env_source_authority
     dsrrl_core_material_response_diffuse_v1_authority
-    dsrrl_core_pmetal_envspec_hemenvlerp_authority)
+    dsrrl_core_pmetal_envspec_hemenvlerp_authority
+    dsrrl_core_dof_plain_rate_embedded)
 
 target_include_directories(
     dsrrl_renderer_core_integrated
@@ -941,6 +978,20 @@ if(DSRRL_POINTLIGHT_PROFILE)
         dsrrl_renderer_core_integrated
         PRIVATE
         DSRRL_POINTLIGHT_PROFILE)
+endif()
+
+if(DSRRL_DOF_DEFAULT_ON)
+    target_compile_definitions(
+        dsrrl_renderer_core_integrated
+        PRIVATE
+        DSRRL_DOF_DEFAULT_ON)
+endif()
+
+if(DSRRL_DOF_PROFILE)
+    target_compile_definitions(
+        dsrrl_renderer_core_integrated
+        PRIVATE
+        DSRRL_DOF_PROFILE)
 endif()
 
 if(MSVC)

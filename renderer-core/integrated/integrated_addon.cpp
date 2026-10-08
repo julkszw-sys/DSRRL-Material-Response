@@ -23,6 +23,13 @@
 #include "dsrrl/runtime/upper_lower_hemenv_draw_runtime.hpp"
 #include "dsrrl/runtime/hemdir3_mode_transport.hpp"
 #include "dsrrl/runtime/hemdir3_pipeline_registry.hpp"
+#include "dsrrl/runtime/dof_preflight.hpp"
+#include "dsrrl/runtime/dof_authored_state_runtime.hpp"
+#include "dsrrl/runtime/dof_private_resource_runtime.hpp"
+#include "dsrrl/runtime/dof_ptde_scheduler_runtime.hpp"
+#include "dsrrl/runtime/dof_host_depth_route_runtime.hpp"
+#include "dsrrl/runtime/dof_tonemap_handoff_runtime.hpp"
+#include "dsrrl/runtime/dof_ptde_draw_bridge_runtime.hpp"
 #include "dsrrl/runtime/hemdir3_draw_runtime.hpp"
 #include "dsrrl/runtime/fixed_pointlight_draw_runtime.hpp"
 #include "dsrrl/runtime/fixed_pointlight_pipeline_runtime.hpp"
@@ -221,6 +228,81 @@ dsrrl::runtime::pmetal_native_draw_bridge
     g_pmetal_native_draw;
 
 thread_local bool g_raw_draw_replay_recursing = false;
+
+bool dof_opt_in_requested() noexcept
+{
+#ifdef DSRRL_DOF_DEFAULT_ON
+    return true;
+#else
+    char value[8]{};
+    const DWORD size =
+        GetEnvironmentVariableA(
+            "DSRRL_EXPERIMENTAL_PTDE_DOF",
+            value,
+            static_cast<DWORD>(sizeof(value)));
+    return size == 1u && value[0] == '1';
+#endif
+}
+
+void unregister_dof_runtime() noexcept
+{
+    dsrrl::runtime::dof::unregister_ptde_draw_bridge_runtime();
+    dsrrl::runtime::dof::unregister_authored_state_runtime();
+    dsrrl::runtime::dof::unregister_tonemap_handoff_scope_runtime();
+    dsrrl::runtime::dof::unregister_host_depth_route_runtime();
+    dsrrl::runtime::dof::unregister_ptde_scheduler_runtime();
+    dsrrl::runtime::dof::unregister_private_resource_runtime();
+    dsrrl::runtime::dof::unregister_preflight_runtime();
+    (void)g_core.features().set(
+        dsrrl::core::operator_id::post_dof_ptde,
+        false);
+}
+
+bool register_dof_runtime() noexcept
+{
+    (void)g_core.features().set(
+        dsrrl::core::operator_id::post_dof_ptde,
+        false);
+
+    if (!dof_opt_in_requested())
+        return true;
+
+    if (!k_drawtime_islands_runtime_enabled ||
+        !k_draw_callbacks_runtime_enabled ||
+        !k_draw_replay_runtime_enabled)
+        return false;
+
+    const bool preflight =
+        dsrrl::runtime::dof::register_preflight_runtime();
+    const bool resources =
+        preflight &&
+        dsrrl::runtime::dof::register_private_resource_runtime();
+    const bool scheduler =
+        resources &&
+        dsrrl::runtime::dof::register_ptde_scheduler_runtime();
+    const bool host =
+        scheduler &&
+        dsrrl::runtime::dof::register_host_depth_route_runtime();
+    const bool tone =
+        host &&
+        dsrrl::runtime::dof::register_tonemap_handoff_scope_runtime();
+    const bool authored =
+        tone &&
+        dsrrl::runtime::dof::register_authored_state_runtime(g_core);
+    const bool bridge =
+        authored &&
+        dsrrl::runtime::dof::register_ptde_draw_bridge_runtime(g_core);
+
+    if (!bridge) {
+        unregister_dof_runtime();
+        return false;
+    }
+
+    reshade::log::message(
+        reshade::log::level::info,
+        "[DSRRL DoF CLEAN-R43] base=410e459 fixed_raster=1024_512_256 vpo_screen_cb=PRIVATE_PTDE transaction=FULL_RESTORE");
+    return true;
+}
 
 std::atomic<std::uint64_t> g_present_count{0};
 std::atomic<std::uint64_t> g_mr_draw_eval{0};
@@ -2049,6 +2131,9 @@ void on_bind_pipeline(
     reshade::api::pipeline_stage stages,
     reshade::api::pipeline pipeline) noexcept
 {
+    if (dsrrl::runtime::dof::internal_replay_active())
+        return;
+
     if (pipeline.handle == 0u)
         return;
 
@@ -6453,6 +6538,9 @@ bool on_draw(
     std::uint32_t first_vertex,
     std::uint32_t first_instance)
 {
+    if (dsrrl::runtime::dof::internal_replay_active())
+        return false;
+
     if (g_raw_draw_replay_recursing)
         return false;
 
@@ -6475,6 +6563,14 @@ bool on_draw(
         g_raw_draw_replay_recursing = false;
         return issued;
     }
+
+    if (dsrrl::runtime::dof::handle_draw_event(
+            cmd_list,
+            vertex_count,
+            instance_count,
+            first_vertex,
+            first_instance))
+        return true;
 
     if (g_hot_telemetry_enabled &&
         dsrrl::runtime::bloom_fx_draw_transport::
@@ -6881,6 +6977,9 @@ bool on_draw_indexed(
     std::int32_t vertex_offset,
     std::uint32_t first_instance)
 {
+    if (dsrrl::runtime::dof::internal_replay_active())
+        return false;
+
     if (g_raw_draw_replay_recursing)
         return false;
 
@@ -6904,6 +7003,15 @@ bool on_draw_indexed(
         g_raw_draw_replay_recursing = false;
         return issued;
     }
+
+    if (dsrrl::runtime::dof::handle_draw_indexed_event(
+            cmd_list,
+            index_count,
+            instance_count,
+            first_index,
+            vertex_offset,
+            first_instance))
+        return true;
 
     if (g_hot_telemetry_enabled &&
         dsrrl::runtime::bloom_fx_draw_transport::
@@ -7272,6 +7380,9 @@ void on_push_descriptors(
     std::uint32_t param_index,
     const reshade::api::descriptor_table_update &update)
 {
+    if (dsrrl::runtime::dof::internal_replay_active())
+        return;
+
     dsrrl::runtime::pixel_srv_shadow_on_push_descriptors(
         cmd_list,
         stages,
@@ -7809,6 +7920,14 @@ bool AddonInit(
             "[DSRRL PMETAL ENVSPEC] exact selector carrier + narrow retail LightBank single/blend PTDE source fallback ACTIVE; visible U/L remains stock/off.");
     }
 
+    const bool dof_runtime_ready =
+        register_dof_runtime();
+    if (!dof_runtime_ready && dof_opt_in_requested()) {
+        reshade::log::message(
+            reshade::log::level::warning,
+            "[DSRRL DoF CLEAN-R43] activation=FAIL_OPEN stock_dsr=ON");
+    }
+
     publish_active_dynamic_draw_routes();
 
     {
@@ -7872,6 +7991,7 @@ void AddonUninit(
         return;
     }
 
+    unregister_dof_runtime();
     unregister_events();
     log_state("PRE_UNLOAD");
     log_effect_matrix("PRE_UNLOAD");

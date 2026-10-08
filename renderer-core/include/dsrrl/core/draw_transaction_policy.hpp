@@ -134,6 +134,8 @@ inline constexpr std::array<
      draw_transaction_mode::draw_required,
      draw_mutation_shader | draw_mutation_constant_buffer,
      draw_mutation_shader | draw_mutation_constant_buffer, true, true, true},
+    {operator_id::post_dof_ptde, draw_transaction_mode::blocked,
+     draw_mutation_none, draw_mutation_none, true, false, false},
 }};
 
 constexpr const draw_transaction_policy &draw_policy(

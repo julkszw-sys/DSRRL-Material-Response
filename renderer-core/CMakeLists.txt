@@ -208,6 +208,7 @@ add_library(dsrrl_renderer_core STATIC
     src/operators/env_spec/no_spc_envspec_delete.cpp
     src/operators/surface/terminal_sat_rgb_patch.cpp
     src/operators/surface/faceeye_shadow.cpp
+    src/operators/dof/dof_island.cpp
     src/operators/point_light/pnts_attenuation.cpp
     src/operators/point_light/clustered_sidecar.cpp
     src/operators/point_light/clustered_pnts_direct_materializer.cpp
