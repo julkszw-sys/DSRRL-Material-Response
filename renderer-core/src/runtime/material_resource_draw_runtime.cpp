@@ -31,8 +31,11 @@
 #include <cstring>
 #include <filesystem>
 #include <fstream>
+#include <map>
 #include <mutex>
 #include <string>
+#include <tuple>
+#include <system_error>
 #include <unordered_map>
 #include <vector>
 
@@ -126,6 +129,80 @@ std::unordered_map<std::uint64_t, companion_set> g_cache;
 std::unordered_map<std::uint64_t, ID3D11Device *> g_ambiguous_view_device;
 std::atomic<std::uint64_t> g_cache_epoch{1u};
 thread_local bool g_internal_create = false;
+
+// This is a resource cache, not an authorization or texture-name cache.
+// Each reused SRV was previously produced by load_dds(), which performs the
+// exact PTDE SHA attestation required for special equipment assets.
+// The key includes the full logical identity, native device and asset class;
+// file metadata is checked before reuse and changed assets are loaded again.
+// Only successful sidecars are pooled: missing/unsupported content still
+// follows the original fail-open path on every new stock view.
+#if defined(DSRRL_SIDECAR_RESOURCE_POOL)
+struct sidecar_file_stamp {
+    std::uintmax_t bytes = 0u;
+    std::filesystem::file_time_type modified{};
+    bool valid = false;
+};
+
+bool stamps_equal(
+    const sidecar_file_stamp &a,
+    const sidecar_file_stamp &b) noexcept
+{
+    return a.valid && b.valid &&
+        a.bytes == b.bytes &&
+        a.modified == b.modified;
+}
+
+sidecar_file_stamp file_stamp(
+    const std::filesystem::path &path) noexcept
+{
+    std::error_code ec;
+    if (!std::filesystem::is_regular_file(path, ec) || ec)
+        return {};
+    const auto bytes = std::filesystem::file_size(path, ec);
+    if (ec)
+        return {};
+    const auto modified = std::filesystem::last_write_time(path, ec);
+    if (ec)
+        return {};
+    return {bytes, modified, true};
+}
+
+using sidecar_pool_key =
+    std::tuple<std::uintptr_t, asset_class, std::wstring>;
+struct sidecar_pool_value {
+    // This pool owns exactly one COM reference per successfully cached SRV.
+    ID3D11ShaderResourceView *view = nullptr;
+    sidecar_file_stamp file{};
+};
+std::map<sidecar_pool_key, sidecar_pool_value> g_sidecar_pool;
+
+void release_sidecar_pool(
+    ID3D11Device *device) noexcept
+{
+    // Removal is done under g_mutex, COM Release outside it. A Release can
+    // trigger an ordinary ReShade resource callback and re-enter this runtime.
+    std::vector<ID3D11ShaderResourceView *> dead;
+    {
+        std::lock_guard<std::mutex> lock(g_mutex);
+        for (auto it = g_sidecar_pool.begin();
+             it != g_sidecar_pool.end();) {
+            if (device == nullptr ||
+                std::get<0>(it->first) ==
+                    reinterpret_cast<std::uintptr_t>(device)) {
+                dead.push_back(it->second.view);
+                it = g_sidecar_pool.erase(it);
+            } else {
+                ++it;
+            }
+        }
+    }
+    for (auto *view : dead)
+        if (view != nullptr)
+            view->Release();
+}
+#endif
+
 
 struct companion_tls_entry {
     std::uint64_t key = 0u;
@@ -328,6 +405,9 @@ void release_cache() noexcept
 
     for (auto &entry : dead)
         release_set(entry.second);
+#if defined(DSRRL_SIDECAR_RESOURCE_POOL)
+    release_sidecar_pool(nullptr);
+#endif
 }
 
 void release_cache_for_device(
@@ -371,6 +451,9 @@ void release_cache_for_device(
 
     for (auto &set : dead)
         release_set(set);
+#if defined(DSRRL_SIDECAR_RESOURCE_POOL)
+    release_sidecar_pool(device);
+#endif
 }
 
 std::filesystem::path process_dir()
@@ -886,11 +969,57 @@ load_result safe_load_sidecar(
     // is noexcept. ReShade's resource-view callback must fail open instead
     // of propagating a C++ exception into the host D3D11 call.
     try {
-        return load_dds(
-            device,
-            sidecar_path(cls, logical_name),
+        const auto path = sidecar_path(cls, logical_name);
+#if defined(DSRRL_SIDECAR_RESOURCE_POOL)
+        const auto before = file_stamp(path);
+        const sidecar_pool_key key{
+            reinterpret_cast<std::uintptr_t>(device),
             cls,
-            hash);
+            logical_name
+        };
+
+        if (before.valid) {
+            std::lock_guard<std::mutex> lock(g_mutex);
+            const auto cached = g_sidecar_pool.find(key);
+            if (cached != g_sidecar_pool.end() &&
+                cached->second.view != nullptr &&
+                stamps_equal(cached->second.file, before)) {
+                auto *view = cached->second.view;
+                view->AddRef(); // Caller receives its own lifetime reference.
+#if defined(DSRRL_STUTTER_PROFILE)
+                stutter_profile::record(
+                    stutter_profile::stage::sidecar_pool_hit, 0u);
+#endif
+                return {view, load_status::ready};
+            }
+        }
+#if defined(DSRRL_STUTTER_PROFILE)
+        stutter_profile::record(
+            stutter_profile::stage::sidecar_pool_miss, 0u);
+#endif
+#endif
+        auto loaded = load_dds(device, path, cls, hash);
+#if defined(DSRRL_SIDECAR_RESOURCE_POOL)
+        // Never cache a negative verdict or unauthenticated resource.
+        // If bytes changed during load, use the normal per-view result
+        // without poisoning the shared pool.
+        if (loaded.status == load_status::ready &&
+            loaded.view != nullptr &&
+            stamps_equal(before, file_stamp(path))) {
+            ID3D11ShaderResourceView *replaced = nullptr;
+            {
+                std::lock_guard<std::mutex> lock(g_mutex);
+                auto &entry = g_sidecar_pool[key];
+                replaced = entry.view;
+                entry.view = loaded.view;
+                entry.file = before;
+                loaded.view->AddRef(); // One separate pool-owned ref.
+            }
+            if (replaced != nullptr)
+                replaced->Release(); // Never Release under g_mutex.
+        }
+#endif
+        return loaded;
     } catch (...) {
         return {nullptr, load_status::unsupported};
     }
