@@ -2701,6 +2701,120 @@ void pmetal_env_source_selector_clear() noexcept
     pmetal_producer_state_clear();
 }
 
+#if defined(DSRRL_PMETAL_NATIVE_SELECTOR_TRANSITION_DIAG)
+namespace {
+struct pmetal_native_profile_snapshot {
+    std::mutex mutex;
+    bool valid = false;
+    std::array<std::uint8_t,32> flver{};
+    std::array<std::uint8_t,32> mtd{};
+    std::uint32_t slot = 0u;
+    std::uint64_t bank_a = 0u, bank_b = 0u;
+    std::uint32_t row_a = 0u, row_b = 0u;
+    std::int16_t selector_a = 0, selector_b = 0;
+    float beta = 0.0f;
+};
+std::array<pmetal_native_profile_snapshot,256> g_profile_trace_slots{};
+std::atomic<std::uint64_t> g_profile_trace_changes{0u};
+
+void observe_native_pmetal_profile_transition(
+    const operators::material_response::material_identity &material,
+    const pmetal_envspec_source &source,
+    const pmetal_selector_policy::endpoints &selected,
+    std::uint8_t character,
+    bool shadow) noexcept
+{
+    // Diagnostic only. Do not influence producer authority or GPU carrier.
+    std::uint64_t h = 0xcbf29ce484222325ULL;
+    for (const auto x : material.flver_sha256) {
+        h ^= x; h *= 0x100000001b3ULL;
+    }
+    for (const auto x : material.raw_mtd_sha256) {
+        h ^= x; h *= 0x100000001b3ULL;
+    }
+    h ^= material.material_slot;
+    h *= 0x100000001b3ULL;
+    const auto index = static_cast<std::size_t>(
+        (h ^ (h >> 32u)) & 255u);
+    auto &entry = g_profile_trace_slots[index];
+    bool emit = false;
+    bool had_previous = false;
+    std::uint64_t old_bank = 0u;
+    std::uint32_t old_row = 0u;
+    std::int16_t old_selector = 0;
+    {
+        std::lock_guard<std::mutex> lock(entry.mutex);
+        const bool same_identity =
+            entry.valid &&
+            entry.flver == material.flver_sha256 &&
+            entry.mtd == material.raw_mtd_sha256 &&
+            entry.slot == material.material_slot;
+        had_previous = same_identity;
+        if (same_identity) {
+            old_bank = entry.bank_a;
+            old_row = entry.row_a;
+            old_selector = entry.selector_a;
+        }
+        const bool native_profile_changed =
+            !same_identity ||
+            entry.bank_a != source.bank_signature_a ||
+            entry.bank_b != source.bank_signature_b ||
+            entry.row_a != source.row_id_a ||
+            entry.row_b != source.row_id_b ||
+            entry.selector_a != selected.a ||
+            entry.selector_b != selected.b;
+        const bool blend_boundary =
+            same_identity &&
+            ((entry.beta == 0.0f) != (source.beta == 0.0f));
+        emit = native_profile_changed || blend_boundary;
+        entry.valid = true;
+        entry.flver = material.flver_sha256;
+        entry.mtd = material.raw_mtd_sha256;
+        entry.slot = material.material_slot;
+        entry.bank_a = source.bank_signature_a;
+        entry.bank_b = source.bank_signature_b;
+        entry.row_a = source.row_id_a;
+        entry.row_b = source.row_id_b;
+        entry.selector_a = selected.a;
+        entry.selector_b = selected.b;
+        entry.beta = source.beta;
+    }
+    if (!emit ||
+        g_profile_trace_changes.fetch_add(
+            1u,std::memory_order_relaxed) >= 384u)
+        return;
+    const auto area_a =
+        (static_cast<std::uint16_t>(selected.a) >> 8u) & 0x7fu;
+    const auto area_b =
+        (static_cast<std::uint16_t>(selected.b) >> 8u) & 0x7fu;
+    char line[660]{};
+    std::snprintf(line,sizeof(line),
+        "[DSRRL PMETAL NATIVE PROFILE CHANGE] flver0=%02x%02x%02x%02x slot=%u owner_mat=EXACT prev=%d:%016llx:%u now=%016llx:%u b=%016llx:%u selector=%d/%d previous_selector=%d area=%u/%u character=%u beta=%.7f shadow=%u native_descriptor=AUTHENTICATED",
+        static_cast<unsigned>(material.flver_sha256[0]),
+        static_cast<unsigned>(material.flver_sha256[1]),
+        static_cast<unsigned>(material.flver_sha256[2]),
+        static_cast<unsigned>(material.flver_sha256[3]),
+        static_cast<unsigned>(material.material_slot),
+        had_previous ? 1 : 0,
+        static_cast<unsigned long long>(old_bank),
+        static_cast<unsigned>(old_row),
+        static_cast<unsigned long long>(source.bank_signature_a),
+        static_cast<unsigned>(source.row_id_a),
+        static_cast<unsigned long long>(source.bank_signature_b),
+        static_cast<unsigned>(source.row_id_b),
+        static_cast<int>(selected.a),
+        static_cast<int>(selected.b),
+        static_cast<int>(old_selector),
+        static_cast<unsigned>(area_a),
+        static_cast<unsigned>(area_b),
+        static_cast<unsigned>(character),
+        static_cast<double>(source.beta),
+        shadow ? 1u : 0u);
+    reshade::log::message(reshade::log::level::info,line);
+}
+} // namespace
+#endif
+
 void pmetal_env_source_selector_event(
     void *owner,
     void *return_address,
@@ -2959,6 +3073,10 @@ void pmetal_env_source_selector_event(
         next.diagnostic_origin = parent_verified ? 1u : 4u;
 #endif
         next.serial = epoch;
+#if defined(DSRRL_PMETAL_NATIVE_SELECTOR_TRANSITION_DIAG)
+        observe_native_pmetal_profile_transition(
+            material,next,endpoints,character,true);
+#endif
         pmetal_producer_state_publish(
             material,
             next,
@@ -3118,6 +3236,10 @@ void pmetal_env_source_selector_event(
 #endif
 
     next.serial = epoch;
+#if defined(DSRRL_PMETAL_NATIVE_SELECTOR_TRANSITION_DIAG)
+    observe_native_pmetal_profile_transition(
+        material,next,endpoints,character,false);
+#endif
 
     pmetal_producer_state_publish(
         material,
