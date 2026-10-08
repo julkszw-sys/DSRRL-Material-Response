@@ -229,6 +229,29 @@ void invalidate_all_companion_epochs() noexcept
 #endif
 }
 
+#if defined(DSRRL_STUTTER_PROFILE)
+// Sampled on all draw threads, flushed only every 128 decisions to avoid
+// turning contention diagnostics into a new shared cache-line bottleneck.
+// Remainders are thread-local; 5s log estimates have a <=127/thread error.
+std::atomic<std::uint64_t> g_companion_tls_hit_samples{0u};
+std::atomic<std::uint64_t> g_companion_tls_mutex_samples{0u};
+thread_local std::uint32_t g_companion_tls_hit_local = 0u;
+thread_local std::uint32_t g_companion_tls_mutex_local = 0u;
+
+void profile_companion_snapshot(bool tls_hit) noexcept
+{
+    auto &local = tls_hit
+        ? g_companion_tls_hit_local : g_companion_tls_mutex_local;
+    if (++local == 128u) {
+        auto &total = tls_hit
+            ? g_companion_tls_hit_samples : g_companion_tls_mutex_samples;
+        total.fetch_add(128u, std::memory_order_relaxed);
+        local = 0u;
+    }
+}
+#endif
+
+
 std::atomic<std::uint64_t> g_named_views{0};
 std::atomic<std::uint64_t> g_sidecar_ready{0};
 std::atomic<std::uint64_t> g_sidecar_missing{0};
@@ -993,9 +1016,16 @@ bool snapshot_companion_cached(
         };
 
     if (cached.key == key &&
-        cached.epoch == epoch)
+        cached.epoch == epoch) {
+#if defined(DSRRL_STUTTER_PROFILE)
+        profile_companion_snapshot(true);
+#endif
         return publish_from_cache();
+    }
 
+#if defined(DSRRL_STUTTER_PROFILE)
+    profile_companion_snapshot(false);
+#endif
     std::uint64_t logical_hash = 0u;
     ID3D11ShaderResourceView *spec = nullptr;
     ID3D11ShaderResourceView *diff = nullptr;
@@ -1417,6 +1447,16 @@ void on_stutter_present(
     }
 
     reshade::log::message(reshade::log::level::info, message);
+    char sync_line[256]{};
+    const auto sync_written = std::snprintf(
+        sync_line, sizeof(sync_line),
+        "[DSRRL SYNC R43] sampled_companion_tls_hit=%llu sampled_companion_mutex_fallback=%llu sample_batch=128",
+        static_cast<unsigned long long>(
+            g_companion_tls_hit_samples.exchange(0u, std::memory_order_relaxed)),
+        static_cast<unsigned long long>(
+            g_companion_tls_mutex_samples.exchange(0u, std::memory_order_relaxed)));
+    if (sync_written > 0)
+        reshade::log::message(reshade::log::level::info, sync_line);
 #if defined(DSRRL_STUTTER_HITCH_TRACE)
     const auto hitches = stutter_profile::take_hitch_window();
     for (std::size_t i = 0u; i < hitches.count; ++i) {
