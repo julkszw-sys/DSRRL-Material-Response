@@ -1,6 +1,7 @@
 #include "dsrrl/runtime/material_resource_draw_runtime.hpp"
 #include "dsrrl/runtime/texture_identity_transport.hpp"
 #include "dsrrl/runtime/runtime_hot_telemetry.hpp"
+#include "dsrrl/runtime/stutter_profiler.hpp"
 #include "dsrrl/operators/resource_bridges/spec_rgb_bridge.hpp"
 #include "dsrrl/operators/resource_bridges/fixed_pointlight_spec_rgb_bridge.hpp"
 #include "dsrrl/operators/resource_bridges/diffuse_bridge.hpp"
@@ -827,11 +828,14 @@ load_result load_dds(
 
         g_internal_create = true;
 
-        const HRESULT create_texture =
-            device->CreateTexture2D(
+        HRESULT create_texture = E_FAIL;
+        {
+            stutter_profile::scope gpu_time(stutter_profile::stage::d3d_texture_create);
+            create_texture = device->CreateTexture2D(
                 &desc,
                 initial.data(),
                 &texture);
+        }
 
         HRESULT create_view = E_FAIL;
         if (SUCCEEDED(create_texture) &&
@@ -877,6 +881,7 @@ load_result safe_load_sidecar(
     const std::wstring &logical_name,
     std::uint64_t hash) noexcept
 {
+    stutter_profile::scope dds_time(stutter_profile::stage::sidecar_load);
     // Path construction may allocate/throw even when the DDS loader itself
     // is noexcept. ReShade's resource-view callback must fail open instead
     // of propagating a C++ exception into the host D3D11 call.
@@ -1125,6 +1130,7 @@ void on_init_resource_view(
         view.handle == 0u)
         return;
 
+    stutter_profile::scope view_time(stutter_profile::stage::resource_view_init);
     const wchar_t *logical_name_raw = nullptr;
     std::size_t logical_name_length = 0u;
     if (!texture_identity_transport::snapshot_raw(
@@ -1330,6 +1336,66 @@ void on_destroy_device(
         native);
 }
 
+#if defined(DSRRL_STUTTER_PROFILE)
+// Once per five seconds, emit one bounded aggregate line. The instrumented
+// FLVER/MTD/sidecar hooks only update atomics; they never write to disk.
+void on_stutter_present(
+    reshade::api::command_queue *,
+    reshade::api::swapchain *,
+    const reshade::api::rect *,
+    const reshade::api::rect *,
+    std::uint32_t,
+    const reshade::api::rect *)
+{
+    if (!stutter_profile::on_present_due())
+        return;
+
+    const auto frame = stutter_profile::take_frame_snapshot();
+    const auto frequency =
+        static_cast<double>(stutter_profile::frequency());
+    char message[2048]{};
+    const auto written = std::snprintf(
+        message,
+        sizeof(message),
+        "[DSRRL STUTTER R43] window=5s present_frames=%llu present_max_ms=%.3f present_over100ms=%llu stages=name:calls:total_ms:max_ms:over100ms",
+        static_cast<unsigned long long>(frame.frames),
+        static_cast<double>(frame.max_ticks) * 1000.0 / frequency,
+        static_cast<unsigned long long>(frame.over_100ms));
+    if (written <= 0)
+        return;
+    std::size_t used =
+        std::min(static_cast<std::size_t>(written), sizeof(message) - 1u);
+
+    for (std::size_t index = 0u;
+         index < stutter_profile::stage_count && used < sizeof(message) - 1u;
+         ++index) {
+        const auto stage =
+            static_cast<stutter_profile::stage>(index);
+        const auto sample =
+            stutter_profile::take_stage_snapshot(stage);
+        if (sample.calls == 0u)
+            continue;
+
+        const auto result = std::snprintf(
+            message + used,
+            sizeof(message) - used,
+            " %s:%llu:%.3f:%.3f:%llu",
+            stutter_profile::stage_names[index],
+            static_cast<unsigned long long>(sample.calls),
+            static_cast<double>(sample.total_ticks) * 1000.0 / frequency,
+            static_cast<double>(sample.max_ticks) * 1000.0 / frequency,
+            static_cast<unsigned long long>(sample.over_100ms));
+        if (result <= 0)
+            break;
+        used += std::min(
+            static_cast<std::size_t>(result),
+            sizeof(message) - 1u - used);
+    }
+
+    reshade::log::message(reshade::log::level::info, message);
+}
+#endif
+
 bool append_retained_request(
     prepared_material_resource_draw &prepared,
     const island_draw_adapter_request &request,
@@ -1385,6 +1451,12 @@ register_events() noexcept
     g_hot_telemetry_enabled =
         runtime_hot_telemetry_requested();
 
+#if defined(DSRRL_STUTTER_PROFILE)
+    reshade::register_event<reshade::addon_event::present>(on_stutter_present);
+    reshade::log::message(reshade::log::level::info,
+        "[DSRRL STUTTER R43] bounded QPC profiling active; no feature gates changed");
+#endif
+
     reshade::register_event<
         reshade::addon_event::init_resource_view>(
             on_init_resource_view);
@@ -1405,6 +1477,10 @@ unregister_events() noexcept
 {
     if (g_core != &core_)
         return;
+
+#if defined(DSRRL_STUTTER_PROFILE)
+    reshade::unregister_event<reshade::addon_event::present>(on_stutter_present);
+#endif
 
     reshade::unregister_event<
         reshade::addon_event::destroy_device>(

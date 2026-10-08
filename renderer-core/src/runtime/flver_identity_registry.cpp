@@ -1,5 +1,6 @@
 #include "dsrrl/runtime/flver_identity_registry.hpp"
 #include "dsrrl/runtime/runtime_hot_telemetry.hpp"
+#include "dsrrl/runtime/stutter_profiler.hpp"
 
 #include <algorithm>
 #include <array>
@@ -185,6 +186,7 @@ std::atomic<std::uint64_t> g_tls_hits{0},g_mutex_fallbacks{0};
 } // namespace
 
 bool flver_identity_observe_parse(const void *model,const void *raw,std::size_t readable_bytes) noexcept {
+    stutter_profile::scope parse_time(stutter_profile::stage::flver_parse);
     if(!model||!raw||readable_bytes<0x18u){++g_invalid;return false;}
     const auto *bytes=static_cast<const std::uint8_t*>(raw);
     constexpr std::array<std::uint8_t,6> magic={'F','L','V','E','R',0};
@@ -192,8 +194,12 @@ bool flver_identity_observe_parse(const void *model,const void *raw,std::size_t 
     std::uint32_t data_offset=0,data_length=0;std::memcpy(&data_offset,bytes+0x0c,4);std::memcpy(&data_length,bytes+0x10,4);
     const std::uint64_t total=static_cast<std::uint64_t>(data_offset)+data_length;
     if(data_offset<0x40u||total<data_offset||total>k_max_flver_bytes||total>readable_bytes){++g_invalid;return false;}
-    const auto sha=digest(raw,static_cast<std::size_t>(total));
+    const auto sha=[&]() noexcept {
+        stutter_profile::scope hash_time(stutter_profile::stage::flver_digest);
+        return digest(raw,static_cast<std::size_t>(total));
+    }();
     try {
+        stutter_profile::scope registry_time(stutter_profile::stage::flver_registry);
         std::lock_guard<std::mutex> lock(g_mutex);
         const auto found =
             g_by_model.find(model);
@@ -217,6 +223,7 @@ bool flver_identity_observe_parse(const void *model,const void *raw,std::size_t 
     return true;
 }
 void flver_identity_observe_destroy(const void *model) noexcept {
+    stutter_profile::scope destroy_time(stutter_profile::stage::flver_destroy);
     if (!model) {
         return;
     }
@@ -267,6 +274,7 @@ bool flver_identity_lookup(const void *selector_container,std::array<std::uint8_
     }
 
     telemetry::hot_count(g_mutex_fallbacks);
+    stutter_profile::scope fallback_time(stutter_profile::stage::flver_lookup_fallback);
     std::lock_guard<std::mutex> lock(g_mutex);
     auto &cached =
         lookup_tls_cache_slot(model);

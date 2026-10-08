@@ -8,6 +8,7 @@
 #include "dsrrl/runtime/flver_identity_registry.hpp"
 #include "dsrrl/runtime/exact_material_cache.hpp"
 #include "dsrrl/runtime/runtime_hot_telemetry.hpp"
+#include "dsrrl/runtime/stutter_profiler.hpp"
 #include "dsrrl/runtime/material_owner_selection.hpp"
 #include "dsrrl/runtime/material_owner_producer.hpp"
 #ifndef DSRRL_PHYSICAL_CUT_UL_H3_SUBSURFACE
@@ -747,6 +748,7 @@ void observe_exact_runtime_mtd(
     std::uint32_t len,
     const wchar_t *semantic_key) noexcept
 {
+    stutter_profile::scope mtd_time(stutter_profile::stage::mtd_observe);
  (void)semantic_key;
  if(material==nullptr)return;
 
@@ -1042,6 +1044,7 @@ bool publish_exact_selector_identity(
             profile != nullptr
                 ? selector_profile_begin(*profile)
                 : 0u;
+        stutter_profile::scope pmetal_time(stutter_profile::stage::pmetal_selector);
         pmetal_env_source_selector_event(
             owner,
             ret,
@@ -1080,6 +1083,7 @@ extern "C" void dsrrl_flver_selector_observer(
     std::uint32_t incoming_mode,
     const void *selector_stack) noexcept
 {
+ stutter_profile::scope selector_time(stutter_profile::stage::selector);
  selector_profile_sample profile{};
 #ifdef DSRRL_FLVER_SELECTOR_PROFILE
  const auto profile_sequence =

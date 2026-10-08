@@ -231,6 +231,11 @@ option(
     "Diagnostic: low-overhead sampled FLVER selector/support interaction profiler"
     OFF)
 option(
+    DSRRL_STUTTER_PROFILE
+    "Record bounded QPC timing for R43 streaming stutter, no renderer feature changes"
+    OFF)
+
+option(
     DSRRL_POINTLIGHT_PROFILE
     "Diagnostic: low-overhead sampled clustered PointLight producer/transaction profiler"
     OFF)
@@ -695,6 +700,11 @@ if(DSRRL_RELEASE_CLEANUP)
         dsrrl_renderer_core_integrated
         PRIVATE
         $<$<COMPILE_LANGUAGE:CXX>:DSRRL_RELEASE_CLEANUP>)
+endif()
+
+if(DSRRL_STUTTER_PROFILE)
+    target_compile_definitions(dsrrl_renderer_core PRIVATE DSRRL_STUTTER_PROFILE)
+    target_compile_definitions(dsrrl_renderer_core_integrated PRIVATE DSRRL_STUTTER_PROFILE)
 endif()
 
 if(DSRRL_DIAGNOSTIC_TELEMETRY_DEFAULT_ON)
