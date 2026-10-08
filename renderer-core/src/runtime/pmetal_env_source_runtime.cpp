@@ -2128,6 +2128,9 @@ bool latest_hook_source(
     if (g_hook_source_tls.valid) {
         out =
             g_hook_source_tls.source;
+#if defined(DSRRL_PMETAL_SPEC_CUT_TRACE)
+        out.diagnostic_origin = 2u;
+#endif
         #if !defined(DSRRL_RELEASE_CLEANUP)
 g_hook_consume.fetch_add(
             1u,
@@ -2144,6 +2147,9 @@ g_hook_consume.fetch_add(
 
     out =
         g_hook_source_global.source;
+#if defined(DSRRL_PMETAL_SPEC_CUT_TRACE)
+    out.diagnostic_origin = 3u;
+#endif
     #if !defined(DSRRL_RELEASE_CLEANUP)
 g_hook_consume.fetch_add(
         1u,
@@ -2949,6 +2955,9 @@ bool pmetal_env_source_runtime::latest(
             material,
             epoch,
             out)) {
+#if defined(DSRRL_PMETAL_SPEC_CUT_TRACE)
+        out.diagnostic_origin = 1u;
+#endif
         telemetry::hot_count(
             g_consumer_ok);
         return true;

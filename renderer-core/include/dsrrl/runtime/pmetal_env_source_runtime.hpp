@@ -30,6 +30,12 @@ struct pmetal_envspec_source {
     // producer payload/material identity changes, so upload consumers can
     // skip redundant GPU writes without draw-time reclassification.
     std::uint64_t generation = 0u;
+#if defined(DSRRL_PMETAL_SPEC_CUT_TRACE)
+    // Observation only. 1=exact per-material selector producer,
+    // 2=last EnvSpec packer on this thread, 3=last global packer.
+    // Never used to authorize a bridge or choose a GPU value.
+    std::uint8_t diagnostic_origin = 0u;
+#endif
 };
 
 struct pmetal_env_source_runtime_telemetry {

@@ -42,6 +42,12 @@ struct specular_companion_probe {
     std::uint64_t logical_hash = 0;
     bool logical_hash_allowed = false;
     bool companion_ready = false;
+    // Observation only: never used as route authority. Populated only in the
+    // opt-in P_Metal SpecRGB transport diagnostic build.
+    std::uintptr_t stock_view_key = 0;
+    bool registered_view = false;
+    bool ambiguous_view = false;
+    std::uint64_t view_epoch = 0;
 
     bool ready() const noexcept
     {

@@ -1656,6 +1656,12 @@ probe_exact_specular_companion(
     out.stock_bound = stock != nullptr;
     if (!out.stock_bound)
         return out;
+#if defined(DSRRL_PMETAL_SPEC_CUT_TRACE)
+    const auto view_key = static_cast<std::uint64_t>(
+        reinterpret_cast<std::uintptr_t>(stock));
+    out.stock_view_key = static_cast<std::uintptr_t>(view_key);
+    out.view_epoch = companion_epoch(view_key);
+#endif
 
     ID3D11ShaderResourceView *companion = nullptr;
     out.snapshot_resolved =
@@ -1666,6 +1672,17 @@ probe_exact_specular_companion(
             companion,
             true);
 
+#if defined(DSRRL_PMETAL_SPEC_CUT_TRACE)
+    // Classify an unresolved live view as unregistered vs quarantined.
+    // The lock is diagnostic only and cannot make the view authoritative.
+    {
+        std::lock_guard<std::mutex> lock(g_mutex);
+        out.registered_view = g_cache.find(view_key) != g_cache.end();
+        out.ambiguous_view =
+            g_ambiguous_view_device.find(view_key) !=
+            g_ambiguous_view_device.end();
+    }
+#endif
     release_view(stock);
 
     out.logical_hash_allowed =
