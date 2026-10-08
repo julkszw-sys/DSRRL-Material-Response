@@ -52,8 +52,10 @@ std::atomic_bool g_native_envdiffuse_logged{false};
 std::atomic_bool g_envdiffuse_consumer_logged{false};
 std::atomic_bool g_source_frontier_logged{false};
 std::atomic_bool g_shadow_r7_logged{false};
+#if !defined(DSRRL_RELEASE_CLEANUP)
 std::atomic<std::uint32_t> g_prepare_stage_log_mask{0u};
 std::atomic<std::uint32_t> g_value_cut_log_mask{0u};
+#endif
 
 void log_prepare_stage_once(
     std::uint32_t bit,
@@ -62,6 +64,13 @@ void log_prepare_stage_once(
     const mr::decision &decision,
     pmetal_envspec_receiver_family family) noexcept
 {
+#if defined(DSRRL_RELEASE_CLEANUP)
+    (void)bit;
+    (void)stage;
+    (void)material;
+    (void)decision;
+    (void)family;
+#else
     const auto observed =
         g_prepare_stage_log_mask.load(
             std::memory_order_relaxed);
@@ -92,6 +101,7 @@ void log_prepare_stage_once(
     reshade::log::message(
         reshade::log::level::info,
         line);
+#endif
 }
 
 #if defined(DSRRL_PMETAL_FORCE_PTDE_PACKEDGI)
@@ -1170,7 +1180,9 @@ bool pmetal_envspec_draw_runtime::prepare(
     // Shadow is only a fast carrier; exact live D3D11 stock texture binding
     // is authoritative. Recheck only on a failed shadow-sourced request.
     bool shadow_diverged = false;
+#if !defined(DSRRL_RELEASE_CLEANUP)
     bool live_retry_recovered = false;
+#endif
     if (shadow_material_ready &&
         (!material_ready || !prepared.material_resources.spec_rgb)) {
         ID3D11ShaderResourceView *live[3]{};
@@ -1186,6 +1198,7 @@ bool pmetal_envspec_draw_runtime::prepare(
             material_ready = material_resources_.prepare_draw_requests_bound(
                 live, decision.receiver_id, query, true, true,
                 prepared.material_resources);
+#if !defined(DSRRL_RELEASE_CLEANUP)
             live_retry_recovered =
                 material_ready && prepared.material_resources.spec_rgb;
             if (live_retry_recovered) {
@@ -1197,6 +1210,7 @@ bool pmetal_envspec_draw_runtime::prepare(
                         "[DSRRL PMETAL SPEC GATE] live_t1_shadow_recovered=1 exact_material_and_sidecar=PASS");
                 }
             }
+#endif
         }
         for (auto *&view : live)
             if (view != nullptr) { view->Release(); view = nullptr; }
@@ -1204,6 +1218,7 @@ bool pmetal_envspec_draw_runtime::prepare(
 
     if (!material_ready ||
         !prepared.material_resources.spec_rgb) {
+#if !defined(DSRRL_RELEASE_CLEANUP)
         static std::atomic_bool spec_frontier_logged{false};
         if (!spec_frontier_logged.exchange(
                 true, std::memory_order_relaxed)) {
@@ -1230,6 +1245,7 @@ bool pmetal_envspec_draw_runtime::prepare(
                 material.owner_tuple_exact ? 1u : 0u);
             reshade::log::message(reshade::log::level::info, line);
         }
+#endif
 
         if (shader != nullptr)
             shader->Release();
@@ -1995,6 +2011,7 @@ bool pmetal_envspec_draw_runtime::prepare(
         decision,
         family);
 
+#if !defined(DSRRL_RELEASE_CLEANUP)
     // Pixel-fail diagnostic for the owner-reported white P_Metal phenotype.
     // Log exactly once per stable receiver and only after the entire island is
     // request-ready, so every value below belongs to an actually executable
@@ -2086,6 +2103,7 @@ bool pmetal_envspec_draw_runtime::prepare(
                 line);
         }
     }
+#endif
 
     if (family ==
         pmetal_envspec_receiver_family::
@@ -2201,8 +2219,10 @@ void pmetal_envspec_draw_runtime::reset() noexcept
     g_envdiffuse_consumer_logged.store(false);
     g_source_frontier_logged.store(false);
     g_shadow_r7_logged.store(false);
+#if !defined(DSRRL_RELEASE_CLEANUP)
     g_prepare_stage_log_mask.store(0u);
     g_value_cut_log_mask.store(0u);
+#endif
     quarantined_.store(false);
 }
 

@@ -235,6 +235,44 @@ option(
     "Diagnostic: low-overhead sampled clustered PointLight producer/transaction profiler"
     OFF)
 
+# Release-preparation profile deliberately makes no claims about PTDE pixel
+# equivalence. It only removes heavyweight one-shot operator diagnostics and
+# rejects build-time bisect configurations which cannot be shipped safely.
+option(
+    DSRRL_RELEASE_CLEANUP
+    "Strip P_Metal per-draw diagnostic probes/logging; enforce physically cut fail-open island set"
+    OFF)
+
+if(DSRRL_RELEASE_CLEANUP)
+    if(NOT DSRRL_PHYSICAL_CUT_POINTLIGHT_ALL OR
+       NOT DSRRL_PHYSICAL_CUT_UL_H3_SUBSURFACE)
+        message(FATAL_ERROR
+            "Release cleanup requires PointLight and UL/H3/Subsurface physically cut")
+    endif()
+
+    if(DSRRL_DIAGNOSTIC_TELEMETRY_DEFAULT_ON OR
+       DSRRL_FULL_TELEMETRY_DEFAULT_ON OR
+       DSRRL_EFFECT_TELEMETRY_DEFAULT_ON_ONLY OR
+       DSRRL_PMETAL_SRV_SHADOW_EXPERIMENT OR
+       DSRRL_FLVER_SELECTOR_PROFILE OR
+       DSRRL_POINTLIGHT_PROFILE OR
+       DSRRL_DRAWTIME_ISLANDS_BYPASS OR
+       DSRRL_DRAW_CALLBACKS_BYPASS OR
+       DSRRL_DRAW_REPLAY_BYPASS OR
+       DSRRL_EMPTY_DRAW_CALLBACK_BISECT OR
+       DSRRL_STATE_TRANSACTION_ONLY_BISECT OR
+       DSRRL_RAW_DRAW_REPLAY_BISECT OR
+       DSRRL_STATE_CAPTURE_ONLY_BISECT OR
+       DSRRL_NATIVE_STATE_MUTATE_RESTORE_ONLY_BISECT OR
+       DSRRL_CORE_TRANSACTION_ONLY_BISECT OR
+       DSRRL_RAW_NATIVE_DRAW_REENTRY_MIN_BISECT OR
+       DSRRL_ADDON_LOADED_ONLY_BISECT OR
+       DSRRL_DRAW_CALLBACK_ONLY_BISECT)
+        message(FATAL_ERROR
+            "Release cleanup rejects all diagnostic telemetry defaults, SRV shadow experiments, profilers and draw bisects")
+    endif()
+endif()
+
 set(
     RESHADE_INCLUDE_DIR
     ""
@@ -651,6 +689,13 @@ target_compile_definitions(
     $<$<COMPILE_LANGUAGE:CXX>:DSRRL_CORE_ISLANDS_PRODUCT_LINE="DSRRL_Core_Islands">
     $<$<COMPILE_LANGUAGE:CXX>:DSRRL_SOURCE_COMMIT="${DSRRL_SOURCE_COMMIT}">
     $<$<COMPILE_LANGUAGE:CXX>:DSRRL_BUILD_FLAVOR="${DSRRL_BUILD_FLAVOR}">)
+
+if(DSRRL_RELEASE_CLEANUP)
+    target_compile_definitions(
+        dsrrl_renderer_core_integrated
+        PRIVATE
+        $<$<COMPILE_LANGUAGE:CXX>:DSRRL_RELEASE_CLEANUP>)
+endif()
 
 if(DSRRL_DIAGNOSTIC_TELEMETRY_DEFAULT_ON)
     target_compile_definitions(

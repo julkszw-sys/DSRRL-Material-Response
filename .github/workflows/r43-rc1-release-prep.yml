@@ -1,0 +1,147 @@
+name: DSRRL R43 Release-Prep Cleanup (not pixel RC)
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - r43-rc1-release-prep-cleanup-01
+  pull_request:
+    paths:
+      - "renderer-core/integrated/**"
+      - "renderer-core/include/dsrrl/runtime/pmetal_native_draw_bridge.hpp"
+      - "renderer-core/src/runtime/pmetal_native_draw_bridge.cpp"
+      - "renderer-core/include/dsrrl/runtime/pmetal_envspec_draw_runtime.hpp"
+      - "renderer-core/src/runtime/pmetal_envspec_draw_runtime.cpp"
+      - "renderer-core/src/runtime/clustered_pnts_draw_runtime.cpp"
+      - "renderer-core/include/dsrrl/runtime/clustered_pnts_draw_runtime.hpp"
+      - "renderer-core/include/dsrrl/runtime/draw_state_transaction.hpp"
+      - "renderer-core/src/runtime/draw_state_transaction.cpp"
+      - "renderer-core/src/runtime/clustered_pnts_pipeline_runtime.cpp"
+      - "renderer-core/include/dsrrl/runtime/clustered_pnts_pipeline_runtime.hpp"
+      - "renderer-core/include/dsrrl/runtime/pointlight_ptde_source_runtime.hpp"
+      - "renderer-core/src/operators/env_spec/pmetal_rgba_lerp_materializer.cpp"
+      - ".github/workflows/pmetal-r19-lerp-exact-envdiffuse-fast.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dsrrl-r43-release-prep-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: true
+
+jobs:
+  windows-addon:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - name: Resolve exact source commit
+        shell: pwsh
+        run: |
+          $commit = (git rev-parse HEAD).Trim()
+          "DSRRL_CHECKOUT_COMMIT=$commit" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Checkout pinned ReShade API
+        uses: actions/checkout@v4
+        with:
+          repository: crosire/reshade
+          ref: 3645e3025d1d98a90e318278858931f034d5d1f6
+          path: _reshade
+
+      - name: Configure R43 release-prep physically cut islands
+        shell: pwsh
+        run: >
+          cmake
+          -S renderer-core/integrated
+          -B build-fast
+          -A x64
+          -DRESHADE_INCLUDE_DIR="${{ github.workspace }}/_reshade/include"
+          -DDSRRL_SOURCE_COMMIT="$env:DSRRL_CHECKOUT_COMMIT"
+          -DDSRRL_BUILD_FLAVOR="pmetal_r43_release_prep_cleanup_01"
+          -DDSRRL_FULL_TELEMETRY_DEFAULT_ON=OFF
+          -DDSRRL_RELEASE_CLEANUP=ON
+          -DDSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG=ON
+          -DDSRRL_PMETAL_FULL_PTDE_HEMENV_R3=ON
+          -DDSRRL_PMETAL_FULL_PTDE_HEMENV_R4=ON
+          -DDSRRL_PMETAL_FULL_PTDE_HEMENV_R5=ON
+          -DDSRRL_PMETAL_FULL_PTDE_HEMENV_R6=ON
+          -DDSRRL_PMETAL_FULL_PTDE_HEMENV_R7_SHADOW=ON
+          -DDSRRL_PMETAL_FULL_PTDE_HEMENV_R8_PRE_AB=ON
+          -DDSRRL_PMETAL_FULL_PTDE_HEMENV_R11_COMMON_MERGE=ON
+          -DDSRRL_PMETAL_FULL_PTDE_HEMENV_R15_PTDE_LIVEOUT_PAIR=ON
+          -DDSRRL_PMETAL_FULL_PTDE_HEMENV_R16_LEGACY_DIFFUSE_SPLIT=ON
+          -DDSRRL_PMETAL_FULL_PTDE_HEMENV_R17_PTDE_DIFFUSE_MATERIAL=ON
+          -DDSRRL_PMETAL_R19_LERP_MATERIALWORKFLOW=ON
+          -DDSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE=ON
+          -DDSRRL_PHYSICAL_CUT_UL_H3_SUBSURFACE=ON
+          -DDSRRL_PHYSICAL_CUT_POINTLIGHT_ALL=ON
+
+      - name: Build runtime
+        shell: pwsh
+        run: |
+          cmake --build build-fast --config Release --target dsrrl_renderer_core_integrated
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $addons = @(Get-ChildItem build-fast -Recurse -Filter *.addon64)
+          if ($addons.Count -ne 1) { throw "Expected exactly one addon, found $($addons.Count)" }
+          Copy-Item $addons[0].FullName "DSRRL_R43_RELEASE_PREP_CLEANUP_01.addon64" -Force
+
+      - name: Verify binary identity
+        shell: pwsh
+        run: |
+          $path = "DSRRL_R43_RELEASE_PREP_CLEANUP_01.addon64"
+          $ascii = [System.Text.Encoding]::ASCII.GetString([System.IO.File]::ReadAllBytes($path))
+          if (-not $ascii.Contains($env:DSRRL_CHECKOUT_COMMIT)) { throw "Missing source commit identity" }
+          if (-not $ascii.Contains("pmetal_r43_rc1_pointlight_cut_specgate")) { throw "Missing R43 build flavor identity" }
+          if (-not $ascii.Contains("[DSRRL PMETAL R41] flver_lifecycle_cache_flush=OFF source_cache_generation=SOURCE_RUNTIME_RESET_ONLY endpoint_cache=EXACT_SOURCE_BASE_COUNT_INDEX_ROW bank_cache=BASE_COUNT_LAYOUT region_cache=VM_WINDOW selector_shadow=EXACT_TLS_SOURCE_PTR_SELECTOR_BETA selector_source=ON envspec=ON material_response=ON")) { throw "Missing R41 P_Metal cache-scope marker" }
+          if (-not $ascii.Contains("[DSRRL PMETAL R41] selector_source_shadow_hit=1 exact_source_ptr=ON exact_selector_beta=ON donor_redecode=OFF fail_open_fallback=ON")) { Write-Host "R41 selector-shadow hit marker is intentionally runtime-only" }
+          if (-not $ascii.Contains("[DSRRL PMETAL R43] producer_cache=SET256_WAY2 freshness=SOURCE_BASE_COUNT_ROW_SELECTOR_BETA global_semantic_version_gate=OFF selector_try_lock=ON producer_payload_exact=ON fallback_full_decode=ON islands_preserved=ON")) { throw "Missing R43 per-key freshness marker" }
+          if (-not $ascii.Contains("[DSRRL PMETAL R43] selector_per_key_cache_hit=1 exact_key=SOURCE_BASE_COUNT_ROW_SELECTOR_BETA global_semantic_version=IGNORED donor_redecode=OFF lock_wait=OFF")) { Write-Host "R43 selector per-key hit marker is intentionally runtime-only" }
+          if (-not $ascii.Contains("[DSRRL PMETAL R43] producer_per_key_cache_hit=1 exact_key=SOURCE_BASE_COUNT_ROW_SELECTOR_BETA exact_payload=ON global_publish_mutex=SKIPPED")) { Write-Host "R42 producer cross-thread hit marker is intentionally runtime-only" }
+          if (-not $ascii.Contains("[DSRRL PHYSICAL CUT POINTLIGHT] fixed_r40=PHYSICALLY_CUT clustered_spc=PHYSICALLY_CUT clustered_nospc=PHYSICALLY_CUT stock_dsr=ON")) { throw "PointLight physical-cut startup marker missing" }
+          if ($ascii.Contains("[DSRRL POINTLIGHT R40] source_cache=PERSISTENT_GENERATIONAL_EXACT_STATE")) { throw "R40 real PointLight source runtime leaked into physically cut addon" }
+          if ($ascii.Contains("[DSRRL POINTLIGHT R35] owner_authorized_spc_hybrid=ACTIVE")) { throw "Clustered PointLight Spc hybrid ACTIVE marker leaked into cut addon" }
+          if (-not $ascii.Contains("[DSRRL PMETAL R19 LERP]")) { throw "Missing exact R19 Lerp EnvDiffuse runtime marker" }
+          if (-not $ascii.Contains("[DSRRL PMETAL R7 SHADOW]")) { throw "Missing cumulative R7 shadow marker" }
+          if (-not $ascii.Contains("[DSRRL PMETAL R3 SPEC ATTEST]")) { throw "Missing exact SpecRGB SHA attestation marker" }
+          if ($ascii.Contains("[DSRRL PMETAL SPEC GATE]")) { throw "Diagnostic SpecRGB gate log leaked into release-prep binary" }
+          if ($ascii.Contains("[DSRRL PMETAL VALUE CUT]")) { throw "Diagnostic P_Metal value-cut log leaked into release-prep binary" }
+          if ($ascii.Contains("[DSRRL ENVSPEC APPLY]")) { throw "Diagnostic EnvSpec stage log leaked into release-prep binary" }
+          $hash = (Get-FileHash $path -Algorithm SHA256).Hash.ToLowerInvariant()
+          Write-Host "ADDON_SHA256=$hash"
+
+      - name: Write reproducible release-prep provenance
+        shell: pwsh
+        run: |
+          $bin = "DSRRL_R43_RELEASE_PREP_CLEANUP_01.addon64"
+          $sha = (Get-FileHash $bin -Algorithm SHA256).Hash.ToLowerInvariant()
+          $data = [ordered]@{
+            schema = "dsrrl.release_prep.provenance.v1"
+            status = "CONSTRUCTION_ONLY_NOT_RELEASE"
+            source_commit = $env:DSRRL_CHECKOUT_COMMIT
+            reshade_source_commit = "3645e3025d1d98a90e318278858931f034d5d1f6"
+            configuration = "Release"
+            profile = "DSRRL_RELEASE_CLEANUP=ON"
+            parent_build_id = 227
+            pointlight = "PHYSICALLY_CUT_STOCK_DSR"
+            upper_lower_hemdir3_subsurface = "PHYSICALLY_CUT_STOCK_DSR"
+            material_response = "ON"
+            pmetal_envspec = "ON_EXACT_RESOURCE_FAILOPEN"
+            runtime_liveness = "NOT_TESTED"
+            pixel_equivalence = "OPEN"
+            unresolved_asset = "wp_a_1535_s PTDE SpecRGB absent; stock DSR fail-open"
+            addon = $bin
+            addon_sha256 = $sha
+            addon_bytes = (Get-Item $bin).Length
+          }
+          $data | ConvertTo-Json -Depth 4 | Set-Content -Encoding utf8 "DSRRL_R43_RELEASE_PREP_PROVENANCE.json"
+          Write-Host "SOURCE_COMPLETE_PROVENANCE=$env:DSRRL_CHECKOUT_COMMIT addon_sha256=$sha"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: DSRRL_R43_RELEASE_PREP_CLEANUP_01
+          path: |
+            DSRRL_R43_RELEASE_PREP_CLEANUP_01.addon64
+            DSRRL_R43_RELEASE_PREP_PROVENANCE.json
+          if-no-files-found: error
