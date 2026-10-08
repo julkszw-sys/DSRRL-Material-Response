@@ -1227,23 +1227,35 @@ bool pmetal_envspec_draw_runtime::prepare(
             std::uint32_t beta_bits = 0;
             std::uint16_t probe_a = 0;
             std::uint16_t probe_b = 0;
+            std::uint32_t row_a = 0;
+            std::uint32_t row_b = 0;
+            std::uint8_t origin = 0;
             std::uint8_t stage = 0;
         };
-        static thread_local std::array<state,128u> previous{};
+        // Increased sets + slot-inclusive FNV hash prevent unrelated
+        // materials from evicting each other each frame. Hard cap remains.
+        static thread_local std::array<state,512u> previous{};
         static std::atomic<std::uint32_t> emitted{0u};
-        constexpr std::uint32_t max_lines = 1024u;
+        constexpr std::uint32_t max_lines = 4096u;
 
         std::uint64_t owner_key = 14695981039346656037ull;
         for (std::size_t i = 0; i < 16u; ++i)
             owner_key = (owner_key ^
                 static_cast<std::uint64_t>(material.flver_sha256[i])) *
                 1099511628211ull;
-        owner_key ^= static_cast<std::uint64_t>(
-            material.material_slot) << 16u;
-        owner_key ^= static_cast<std::uint64_t>(
-            decision.receiver_id) << 32u;
-        owner_key ^= static_cast<std::uint64_t>(
-            static_cast<unsigned>(family)) << 48u;
+        // FNV mixing ensures material slot influences the low index bits.
+        // Previously the <<16 slot never affected index &127 and caused
+        // per-frame cache conflict/log flooding among one FLVER's slots.
+        owner_key = (owner_key ^
+            static_cast<std::uint64_t>(material.material_slot)) *
+            1099511628211ull;
+        owner_key = (owner_key ^
+            static_cast<std::uint64_t>(decision.receiver_id)) *
+            1099511628211ull;
+        owner_key = (owner_key ^
+            static_cast<std::uint64_t>(
+                static_cast<unsigned>(family))) *
+            1099511628211ull;
         if (owner_key == 0u)
             owner_key = 1u;
 
@@ -1252,18 +1264,24 @@ bool pmetal_envspec_draw_runtime::prepare(
         std::memcpy(&beta_bits, &source.beta, sizeof(beta_bits));
         const std::uint64_t tick = GetTickCount64();
         auto &entry = previous[static_cast<std::size_t>(
-            (owner_key ^ (owner_key >> 32u)) & 127u)];
+            (owner_key ^ (owner_key >> 32u) ^ (owner_key >> 17u)) &
+            (previous.size() - 1u))];
         const std::uint8_t stage = spec_ok ? 2u : 1u;
         const bool changed = entry.owner_key != owner_key ||
             entry.stage != stage ||
             entry.probe_a != prepared.env_resources.probe_a ||
             entry.probe_b != prepared.env_resources.probe_b ||
+            entry.row_a != source.row_id_a ||
+            entry.row_b != source.row_id_b ||
+            entry.origin != source.diagnostic_origin ||
             entry.beta_bits != beta_bits;
-        if (!changed && tick - entry.last_ms < 200u)
+        if (!changed && tick - entry.last_ms < 500u)
             return;
         entry = {owner_key, tick, beta_bits,
             prepared.env_resources.probe_a,
-            prepared.env_resources.probe_b, stage};
+            prepared.env_resources.probe_b,
+            source.row_id_a, source.row_id_b,
+            source.diagnostic_origin, stage};
 
         if (emitted.fetch_add(1u, std::memory_order_relaxed) >=
             max_lines)
@@ -1280,7 +1298,7 @@ bool pmetal_envspec_draw_runtime::prepare(
         for (auto *&view : env_live)
             if (view != nullptr) { view->Release(); view = nullptr; }
 
-        char line[1100]{};
+        char line[1400]{};
         std::snprintf(
             line, sizeof(line),
             "[DSRRL PMETAL SPEC TRANSITION] ms=%llu state=%s "
@@ -1291,7 +1309,9 @@ bool pmetal_envspec_draw_runtime::prepare(
             "prep=%u req=%u shadow=%u shadow_diverged=%u "
             "probeA=%u probeB=%u t12=%016llx t14=%016llx "
             "bankA=%016llx rowA=%u bankB=%016llx rowB=%u "
-            "source_serial=%llu beta=%.9g c101=%.9g",
+            "source_serial=%llu beta=%.9g c101=%.9g "
+            "source_origin=%u srcA=%.8g,%.8g,%.8g "
+            "envdiffuseA=%.8g,%.8g,%.8g",
             static_cast<unsigned long long>(tick),
             spec_ok ? "PTDE_PREPARED" : "STOCK_FAILOPEN",
             static_cast<unsigned>(decision.receiver_id),
@@ -1327,7 +1347,14 @@ bool pmetal_envspec_draw_runtime::prepare(
             static_cast<unsigned>(source.row_id_b),
             static_cast<unsigned long long>(source.serial),
             static_cast<double>(source.beta),
-            static_cast<double>(decision.c101));
+            static_cast<double>(decision.c101),
+            static_cast<unsigned>(source.diagnostic_origin),
+            static_cast<double>(source.a[0]),
+            static_cast<double>(source.a[1]),
+            static_cast<double>(source.a[2]),
+            static_cast<double>(source.envdiffuse_a[0]),
+            static_cast<double>(source.envdiffuse_a[1]),
+            static_cast<double>(source.envdiffuse_a[2]));
         reshade::log::message(reshade::log::level::info, line);
     };
 #endif
