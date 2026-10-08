@@ -2996,10 +2996,17 @@ bool pmetal_env_source_runtime::latest(
         return false;
     }
 
+#if defined(DSRRL_PMETAL_LOOKUP_REJECTION_FRONTIER_DIAG)
+    pmetal_producer_lookup_reason lookup_reason = pmetal_producer_lookup_reason::no_material_bucket;
+#endif
     if (pmetal_producer_state_latest(
             material,
             epoch,
-            out)) {
+            out
+#if defined(DSRRL_PMETAL_LOOKUP_REJECTION_FRONTIER_DIAG)
+            , &lookup_reason
+#endif
+            )) {
 #if defined(DSRRL_PMETAL_SPEC_CUT_TRACE)
         if (out.diagnostic_origin != 4u)
             out.diagnostic_origin = 1u;
