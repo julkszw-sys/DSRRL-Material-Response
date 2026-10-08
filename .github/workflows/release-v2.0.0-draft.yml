@@ -1,0 +1,76 @@
+name: Prepare DSRRL Release v2.0.0 draft (exact owner-verified binary)
+on:
+  push:
+    branches:
+      - release/v2.0.0-prep
+    paths:
+      - .github/workflows/release-v2.0.0-draft.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  prepare-draft:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Verify immutable renderer source lineage
+        run: |
+          set -euo pipefail
+          git diff --exit-code f2704ce1f10ae44c6b474a45e94de0b05f7698ac HEAD -- renderer-core
+          test -f releases/v2.0.0/RELEASE_MANIFEST.json
+          test -f releases/v2.0.0/RELEASE_NOTES.md
+      - name: Download the original, owner-validated R43 build 229
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p staging
+          gh run download 37721493541 --repo julkszw-sys/DSRRL-Material-Response --name DSRRL_R43_RELEASE_AUDIT_HARDENING_02 --dir staging
+          test -f staging/DSRRL_R43_RELEASE_AUDIT_HARDENING_02.addon64
+          test -f staging/DSRRL_R43_RELEASE_PREP_PROVENANCE.json
+          test "$(stat -c%s staging/DSRRL_R43_RELEASE_AUDIT_HARDENING_02.addon64)" = "1839616"
+          printf '%s  %s\n' "37809b9d18fdbd690c7d4e6ad028692f15203d8f95b608a5c4fef4cda94ecd81" "staging/DSRRL_R43_RELEASE_AUDIT_HARDENING_02.addon64" | sha256sum --check
+          grep -Fq 'f2704ce1f10ae44c6b474a45e94de0b05f7698ac' staging/DSRRL_R43_RELEASE_PREP_PROVENANCE.json
+      - name: Assemble reproducible public core distribution
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          cp staging/DSRRL_R43_RELEASE_AUDIT_HARDENING_02.addon64 dist/DSRRL_v2.0.0.addon64
+          cp staging/DSRRL_R43_RELEASE_PREP_PROVENANCE.json dist/BUILD_PROVENANCE_CI.json
+          cp releases/v2.0.0/RELEASE_NOTES.md dist/
+          cp releases/v2.0.0/RELEASE_MANIFEST.json dist/
+          cp releases/v2.0.0/INSTALL.md dist/
+          cp releases/v2.0.0/SHA256SUMS.txt dist/
+          (cd dist && sha256sum --check SHA256SUMS.txt)
+          (cd dist && zip -q -9 -X ../DSRRL_v2.0.0_CORE.zip ./*)
+          unzip -tq DSRRL_v2.0.0_CORE.zip
+          test "$(unzip -Z1 DSRRL_v2.0.0_CORE.zip | grep -c '\.addon64$')" = "1"
+          sha256sum DSRRL_v2.0.0_CORE.zip
+      - name: Publish draft release only (NOT public)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if gh release view v2.0.0 --repo julkszw-sys/DSRRL-Material-Response >/dev/null 2>&1; then
+            echo 'v2.0.0 already exists; refusing to overwrite tag or assets'
+            exit 1
+          fi
+          gh release create v2.0.0 \
+            dist/DSRRL_v2.0.0.addon64 \
+            DSRRL_v2.0.0_CORE.zip \
+            --repo julkszw-sys/DSRRL-Material-Response \
+            --target f2704ce1f10ae44c6b474a45e94de0b05f7698ac \
+            --title "Release v2.0.0" \
+            --notes-file releases/v2.0.0/RELEASE_NOTES.md \
+            --draft
+      - name: Confirm draft and immutable tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh release view v2.0.0 --repo julkszw-sys/DSRRL-Material-Response --json isDraft,tagName,targetCommitish --jq '.isDraft == true and .tagName == "v2.0.0" and .targetCommitish == "f2704ce1f10ae44c6b474a45e94de0b05f7698ac"' | grep -Fx true
