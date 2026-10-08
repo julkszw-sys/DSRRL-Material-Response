@@ -1,0 +1,40 @@
+{
+  "schema": "dsrrl.release.v2.0.0.provenance.v1",
+  "release_name": "Release v2.0.0",
+  "release_tag": "v2.0.0",
+  "release_version": "2.0.0",
+  "binary_internal_id": "2.0.0-dev (preserved; byte-identical to owner-tested build)",
+  "source_repository": "julkszw-sys/DSRRL-Material-Response",
+  "source_commit": "f2704ce1f10ae44c6b474a45e94de0b05f7698ac",
+  "exact_original_ci_workflow_run": 37721493541,
+  "exact_original_ci_artifact_id": 11525443333,
+  "addon_name": "DSRRL_v2.0.0.addon64",
+  "addon_sha256": "37809b9d18fdbd690c7d4e6ad028692f15203d8f95b608a5c4fef4cda94ecd81",
+  "addon_size_bytes": 1839616,
+  "runtime_validation": "OWNER_VERIFIED_WORKING_AFTER_ROLLBACK",
+  "pixel_equivalence": "NOT_UNIVERSALLY_VERIFIED",
+  "material_response": "ON",
+  "pmetal_envspec": "ON_EXACT_RESOURCE_FAILOPEN",
+  "pointlight": "PHYSICALLY_CUT_STOCK_DSR",
+  "upper_lower_hemdir3_subsurface": "PHYSICALLY_CUT_STOCK_DSR",
+  "sidecar_distribution": "Retail PTDE data excluded from public GitHub release; user provides extracted DDS/EnvSpec with lawful assets",
+  "excluded_patch": {
+    "pr": 273,
+    "commit": "2e7180ec767e67bc3a7c0bd45be3bc0d44008505",
+    "status": "FALSIFIED_BY_OWNER_RUNTIME_AB_AND_REVERTED"
+  },
+  "packedgi": {
+    "DSRRL/EnvSpec/PackedGI/PMETAL_PTDE_ENVDIFFUSE_DONOR_V1.bin": {
+      "bytes": 15296,
+      "sha256": "29d3715aae54e7ae2fe66dcd0c016f5e345ccc6fd5af9477985d4d720f6faf92"
+    },
+    "DSRRL/EnvSpec/PackedGI/PTDE_GI_ENVDIFFUSE_PACK_RGBA.bin": {
+      "bytes": 8404992,
+      "sha256": "5ab4a471fedbbc95d8dceb55ed0f4648582a824b4290bec03e6134d7cb81cd8c"
+    },
+    "DSRRL/EnvSpec/PackedGI/PTDE_GI_ENVSPEC_PACK_RGBA.bin": {
+      "bytes": 33619968,
+      "sha256": "c16c3fd75bcf34f3cc075da6da1ad10c9440ee4a3ca580fe7f74d07a2ce4eac3"
+    }
+  }
+}
