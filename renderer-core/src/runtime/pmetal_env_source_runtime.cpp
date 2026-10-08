@@ -2609,17 +2609,29 @@ void pmetal_env_source_selector_event(
             ? 0x170u
             : 0xF0u;
 
-    if (!safe_read(
+    // The parent return address is an implementation-specific call-stack
+    // fingerprint, not an intrinsic LightBank semantic input. Previously it
+    // discarded virtually every exact owner P_Metal selector while the retail
+    // LightBank packer was demonstrably active (owner R44 runtime).
+    const bool parent_verified =
+        safe_read(
             static_cast<const std::uint8_t *>(
                 selector_stack) +
                 parent_offset,
-            parent_return) ||
-        parent_return !=
+            parent_return) &&
+        parent_return ==
             g_source_base +
-                k_parent_return)
+                k_parent_return;
+#if !defined(DSRRL_PMETAL_PARENT_SEMANTIC_JOIN_DIAG)
+    if (!parent_verified)
         return;
-
-    if (telemetry::effect_enabled())
+#endif
+    // In the diagnostic alternate branch every subsequent structural gate
+    // still applies: RVA allowlist, exact FLVER/MTD/slot, descriptor_owner==
+    // native owner, character<=1, valid endpoints, manager table, exact
+    // source/selector, bank signature, row and PTDE sidecar lookup. No
+    // unqualified latest hook snapshot becomes authorized.
+    if (parent_verified && telemetry::effect_enabled())
         g_parent_gate_ok.store(
             true,
             std::memory_order_relaxed);
@@ -2749,6 +2761,11 @@ void pmetal_env_source_selector_event(
         return;
 
     pmetal_envspec_source next{};
+#if defined(DSRRL_PMETAL_SPEC_CUT_TRACE) && defined(DSRRL_PMETAL_PARENT_SEMANTIC_JOIN_DIAG)
+    // 4=selector-sourced LightBank with full owner/endpoint/sidecar
+    // authentication; only the legacy parent stack fingerprint differs.
+    next.diagnostic_origin = parent_verified ? 1u : 4u;
+#endif
 
     // R41 producer-driven shadow join. The native EnvSpec single/blend packer
     // already resolved this exact LightBank source before the material selector
@@ -2762,6 +2779,9 @@ void pmetal_env_source_selector_event(
             endpoints.b,
             endpoints.beta,
             next)) {
+#if defined(DSRRL_PMETAL_SPEC_CUT_TRACE) && defined(DSRRL_PMETAL_PARENT_SEMANTIC_JOIN_DIAG)
+        next.diagnostic_origin = parent_verified ? 1u : 4u;
+#endif
         next.serial = epoch;
         pmetal_producer_state_publish(
             material,
@@ -2904,6 +2924,31 @@ void pmetal_env_source_selector_event(
         next,
         epoch);
 
+#if defined(DSRRL_PMETAL_PARENT_SEMANTIC_JOIN_DIAG)
+    if (!parent_verified) {
+        static std::atomic_bool semantic_join_logged{false};
+        if (!semantic_join_logged.exchange(
+                true,
+                std::memory_order_relaxed)) {
+            char line[384]{};
+            std::snprintf(
+                line,sizeof(line),
+                "[DSRRL PMETAL PARENT SEMANTIC JOIN] exact_owner=1 exact_mtd=1 descriptor_owner=1 endpoint=1 manager=1 bank_row=1 envdiffuse_sidecar=1 parent_return_mismatch=1 rva=%llx flver_sha0=%02x%02x%02x%02x slot=%u row=%u bank=%016llx",
+                static_cast<unsigned long long>(rva),
+                static_cast<unsigned>(material.flver_sha256[0]),
+                static_cast<unsigned>(material.flver_sha256[1]),
+                static_cast<unsigned>(material.flver_sha256[2]),
+                static_cast<unsigned>(material.flver_sha256[3]),
+                static_cast<unsigned>(material.material_slot),
+                static_cast<unsigned>(next.row_id_a),
+                static_cast<unsigned long long>(
+                    next.bank_signature_a));
+            reshade::log::message(
+                reshade::log::level::info,
+                line);
+        }
+    }
+#endif
     if (telemetry::effect_enabled())
         g_last_publish_tid.store(
             static_cast<std::uint32_t>(
@@ -2956,7 +3001,8 @@ bool pmetal_env_source_runtime::latest(
             epoch,
             out)) {
 #if defined(DSRRL_PMETAL_SPEC_CUT_TRACE)
-        out.diagnostic_origin = 1u;
+        if (out.diagnostic_origin != 4u)
+            out.diagnostic_origin = 1u;
 #endif
         telemetry::hot_count(
             g_consumer_ok);

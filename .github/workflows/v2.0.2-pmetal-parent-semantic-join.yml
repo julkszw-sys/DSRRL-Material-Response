@@ -1,0 +1,198 @@
+name: DSRRL v2.0.2 PMetal Parent Semantic Join Diagnostic
+on:
+  workflow_dispatch:
+  push:
+    branches: [diagnostics/v2.0.2-pmetal-parent-semantic-join-01]
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        ways: [ON]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Exact source identity
+        shell: pwsh
+        run: |
+          $commit = (git rev-parse HEAD).Trim()
+          "DSRRL_CHECKOUT_COMMIT=$commit" | Out-File $env:GITHUB_ENV -Encoding utf8 -Append
+      - uses: actions/checkout@v4
+        with:
+          repository: crosire/reshade
+          ref: 3645e3025d1d98a90e318278858931f034d5d1f6
+          path: _reshade
+      - name: Source audit
+        shell: pwsh
+        run: |
+          python renderer-core/tools/audit_r43_release_cleanup_hardening.py
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python renderer-core/tools/audit_pmetal_parent_semantic_join.py
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Configure exact R43 release with profiler
+        shell: pwsh
+        run: >
+          cmake -S renderer-core/integrated -B build-prof -A x64
+          -DRESHADE_INCLUDE_DIR="${{ github.workspace }}/_reshade/include"
+          -DDSRRL_SOURCE_COMMIT="$env:DSRRL_CHECKOUT_COMMIT"
+          -DDSRRL_BUILD_FLAVOR="v2_0_2_parent_semantic_join_sync_on_tls4way"
+          -DDSRRL_RELEASE_CLEANUP=OFF
+          -DDSRRL_STUTTER_PROFILE=ON
+          -DDSRRL_STUTTER_HITCH_TRACE=ON
+          -DDSRRL_RESOURCE_EPOCH_SHARD_SYNC=ON
+          -DDSRRL_COMPANION_TLS_4WAY=${{ matrix.ways }}
+          -DDSRRL_FULL_TELEMETRY_DEFAULT_ON=OFF
+          -DDSRRL_DIAGNOSTIC_TELEMETRY_DEFAULT_ON=ON
+          -DDSRRL_MR_MATERIAL_TRACE=OFF
+          -DDSRRL_PMETAL_SPEC_CUT_TRACE=ON
+          -DDSRRL_PMETAL_PARENT_SEMANTIC_JOIN_DIAG=ON
+          -DDSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG=ON
+          -DDSRRL_PMETAL_FULL_PTDE_HEMENV_R3=ON
+          -DDSRRL_PMETAL_FULL_PTDE_HEMENV_R4=ON
+          -DDSRRL_PMETAL_FULL_PTDE_HEMENV_R5=ON
+          -DDSRRL_PMETAL_FULL_PTDE_HEMENV_R6=ON
+          -DDSRRL_PMETAL_FULL_PTDE_HEMENV_R7_SHADOW=ON
+          -DDSRRL_PMETAL_FULL_PTDE_HEMENV_R8_PRE_AB=ON
+          -DDSRRL_PMETAL_FULL_PTDE_HEMENV_R11_COMMON_MERGE=ON
+          -DDSRRL_PMETAL_FULL_PTDE_HEMENV_R15_PTDE_LIVEOUT_PAIR=ON
+          -DDSRRL_PMETAL_FULL_PTDE_HEMENV_R16_LEGACY_DIFFUSE_SPLIT=ON
+          -DDSRRL_PMETAL_FULL_PTDE_HEMENV_R17_PTDE_DIFFUSE_MATERIAL=ON
+          -DDSRRL_PMETAL_R19_LERP_MATERIALWORKFLOW=ON
+          -DDSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE=ON
+          -DDSRRL_PHYSICAL_CUT_UL_H3_SUBSURFACE=ON
+          -DDSRRL_PHYSICAL_CUT_POINTLIGHT_ALL=ON
+      - name: Build addon
+        shell: pwsh
+        run: |
+          cmake --build build-prof --config Release --target dsrrl_renderer_core_integrated
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $addons = @(Get-ChildItem build-prof -Recurse -Filter *.addon64)
+          if ($addons.Count -ne 1) { throw "Expected one addon, got $($addons.Count)" }
+          Copy-Item $addons[0].FullName "DSRRL_v2.0.2_PMETAL_PARENT_SEMANTIC_JOIN.addon64"
+      - name: P_Metal producer collision/revocation native regression
+        shell: pwsh
+        run: |
+          cmake --build build-prof/renderer-core-lib --config Release --target dsrrl_pmetal_producer_state_tests
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          ctest --test-dir build-prof/renderer-core-lib -C Release -R "^dsrrl_pmetal_producer_state_tests$" --output-on-failure
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: R44 material authority structural check
+        shell: pwsh
+        run: |
+          $source = Get-Content renderer-core/src/runtime/pmetal_env_source_runtime.cpp -Raw
+          $tail = ($source -split 'bool pmetal_env_source_runtime::latest\(', 2)[1]
+          if (-not $tail) { throw "Missing visible source lookup" }
+          $tail = ($tail -split 'pmetal_env_source_runtime_telemetry', 2)[0]
+          if ($tail.Contains('latest_hook_source(out)')) { throw "Unkeyed fallback on visible P_Metal" }
+          if (-not $tail.Contains('pmetal_producer_state_latest(')) { throw "Missing exact producer" }
+          $cache = Get-Content renderer-core/src/runtime/pmetal_producer_state.cpp -Raw
+          if (-not $cache.Contains('k_sync_slot_count = 4096u;')) { throw "Insufficient keyed cache" }
+          if (-not $cache.Contains('!same_material(slot.record.material, material)')) { throw "Unkeyed invalidation" }
+      - name: FLVER native cache regression test
+        shell: pwsh
+        run: |
+          cmake --build build-prof/renderer-core-lib --config Release --target dsrrl_renderer_flver_identity_tests
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          ctest --test-dir build-prof/renderer-core-lib -C Release -R "^dsrrl_renderer_flver_identity_tests$" --output-on-failure
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Resource view synchronization regression test
+        shell: pwsh
+        run: |
+          cmake --build build-prof/renderer-core-lib --config Release --target dsrrl_renderer_resource_view_epoch_tests
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          ctest --test-dir build-prof/renderer-core-lib -C Release -R "^dsrrl_renderer_resource_view_epoch_tests$" --output-on-failure
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Companion TLS associativity native regression test
+        shell: pwsh
+        run: |
+          cmake --build build-prof/renderer-core-lib --config Release --target dsrrl_renderer_companion_tls_way_tests
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          ctest --test-dir build-prof/renderer-core-lib -C Release -R "^dsrrl_renderer_companion_tls_way_tests$" --output-on-failure
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Verify v2.0.2 full MR diagnostic identity
+        shell: pwsh
+        run: |
+          $path = "DSRRL_v2.0.2_PMETAL_PARENT_SEMANTIC_JOIN.addon64"
+          $bytes = [System.IO.File]::ReadAllBytes($path)
+          $ascii = [System.Text.Encoding]::ASCII.GetString($bytes)
+          if (-not $ascii.Contains($env:DSRRL_CHECKOUT_COMMIT)) { throw "Wrong source" }
+          if (-not $ascii.Contains("[DSRRL STUTTER R43]")) { throw "Stutter profiler missing" }
+          if (-not $ascii.Contains("[DSRRL HITCH FRAME]")) { throw "Hitch profiler missing" }
+          if (-not $ascii.Contains("epochs=KEY_BUCKET_256")) { throw "SYNC ON marker missing" }
+          if (-not $ascii.Contains("mode=4WAY_64SETS_256TOTAL_SYNC_ON")) { throw "Four-way TLS marker missing" }
+          if ($ascii.Contains("mode=1WAY_256SETS_256TOTAL_SYNC_ON")) { throw "Wrong TLS associativity" }
+          if (-not $ascii.Contains("[DSRRL PHYSICAL CUT POINTLIGHT]")) { throw "Unexpected PointLight lineage" }
+          if (-not $ascii.Contains("sampled_companion_tls_hit")) { throw "TLS profiler missing" }
+          if (-not $ascii.Contains("[DSRRL PMETAL SPEC TRANSITION]")) { throw "Spec gate transition tracer missing" }
+          if ($ascii.Contains("[DSRRL DDS SRV POOL]")) { throw "DDS pool leaked into release" }
+          if (-not $ascii.Contains("v2_0_2_parent_semantic_join_sync_on_tls4way")) { throw "Missing diagnostic flavor" }
+          if (-not $ascii.Contains("2.0.2")) { throw "Missing version" }
+          Get-FileHash $path -Algorithm SHA256 | Format-List
+      - name: Verify complete diagnostic flag profile
+        shell: pwsh
+        run: |
+          $cache = Get-Content build-prof/CMakeCache.txt -Raw
+          $required = @(
+            "DSRRL_RELEASE_CLEANUP:BOOL=OFF",
+            "DSRRL_STUTTER_PROFILE:BOOL=ON",
+            "DSRRL_STUTTER_HITCH_TRACE:BOOL=ON",
+            "DSRRL_DIAGNOSTIC_TELEMETRY_DEFAULT_ON:BOOL=ON",
+            "DSRRL_MR_MATERIAL_TRACE:BOOL=OFF",
+            "DSRRL_PMETAL_SPEC_CUT_TRACE:BOOL=ON",
+            "DSRRL_PMETAL_PARENT_SEMANTIC_JOIN_DIAG:BOOL=ON",
+            "DSRRL_RESOURCE_EPOCH_SHARD_SYNC:BOOL=ON",
+            "DSRRL_COMPANION_TLS_4WAY:BOOL=ON",
+            "DSRRL_PHYSICAL_CUT_UL_H3_SUBSURFACE:BOOL=ON",
+            "DSRRL_PHYSICAL_CUT_POINTLIGHT_ALL:BOOL=ON"
+          )
+          foreach ($line in $required) {
+            if (-not $cache.Contains($line)) { throw "Wrong diagnostic build setting: $line" }
+          }
+      - name: Generate build provenance and diagnostic ZIP
+        shell: pwsh
+        run: |
+          $bin = "DSRRL_v2.0.2_PMETAL_PARENT_SEMANTIC_JOIN.addon64"
+          $sha = (Get-FileHash $bin -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$sha  $bin" | Set-Content -Encoding ascii SHA256SUMS.txt
+          $prov = [ordered]@{
+            version = "2.0.2"
+            flavor = "PMETAL_PARENT_SEMANTIC_JOIN_DIAGNOSTIC"
+            release_parent_source = "b19a273f15872999a631e3feaa0a0dd6aea35e89"
+            source_commit = $env:DSRRL_CHECKOUT_COMMIT
+            addon = $bin
+            addon_sha256 = $sha
+            addon_bytes = (Get-Item $bin).Length
+            windows_build = "Release-x64"
+            reshade_commit = "3645e3025d1d98a90e318278858931f034d5d1f6"
+            material_response = "R43_unchanged"
+            synchronization = "KEY_BUCKET_256_ON"
+            tls = "4WAY_64SETS_256TOTAL"
+            stutter_profile = "ON"
+            frame_hitch_trace = "ON"
+            full_telemetry = "ON"
+            native_state_verify = "ON"
+            spec_transition_trace = "BOUNDED_SAME_OWNER_PASS_FAIL_EVERY_200MS"
+            ptde_sidecars = "NOT_INCLUDED"
+            runtime_liveness = "NOT_TESTED_ON_OWNER"
+            pixel_equivalence = "OPEN"
+          }
+          $prov | ConvertTo-Json -Depth 5 | Set-Content -Encoding utf8 DSRRL_v2.0.2_PMETAL_PARENT_SEMANTIC_JOIN_PROVENANCE.json
+          New-Item -ItemType Directory -Path diag-stage -Force | Out-Null
+          Copy-Item $bin,SHA256SUMS.txt,DSRRL_v2.0.2_PMETAL_PARENT_SEMANTIC_JOIN_PROVENANCE.json diag-stage/
+          Copy-Item diagnostics/v2.0.2/README_PMETAL_SPEC_TRANSITIONS.md diag-stage/README_PMETAL_SPEC_TRANSITIONS.md
+          Compress-Archive -Path diag-stage/* -DestinationPath DSRRL_v2.0.2_PMETAL_PARENT_SEMANTIC_JOIN.zip
+          Expand-Archive DSRRL_v2.0.2_PMETAL_PARENT_SEMANTIC_JOIN.zip diag-check -Force
+          $addons = @(Get-ChildItem diag-check -Recurse -Filter *.addon64)
+          if ($addons.Count -ne 1) { throw "Expected exactly one addon in diagnostic ZIP" }
+          if ((Get-FileHash $addons[0].FullName).Hash -ne (Get-FileHash $bin).Hash) { throw "ZIP SHA mismatch" }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: DSRRL_v2.0.2_PMETAL_PARENT_SEMANTIC_JOIN
+          path: |
+            DSRRL_v2.0.2_PMETAL_PARENT_SEMANTIC_JOIN.addon64
+            DSRRL_v2.0.2_PMETAL_PARENT_SEMANTIC_JOIN.zip
+            DSRRL_v2.0.2_PMETAL_PARENT_SEMANTIC_JOIN_PROVENANCE.json
+            SHA256SUMS.txt
+          if-no-files-found: error
