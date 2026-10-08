@@ -165,5 +165,35 @@ int main()
             revoked))
         return 11;
 
+    // Release-mode assertions: diagnostic classification is observational.
+    // It must not turn an invalidated source into a successful source lookup.
+    runtime::pmetal_producer_lookup_reason reason{};
+    runtime::pmetal_envspec_source diagnostic{};
+    if (runtime::pmetal_producer_state_latest(
+            material,100u,diagnostic,&reason) ||
+        reason != runtime::pmetal_producer_lookup_reason::source_revoked)
+        return 12;
+
+    runtime::pmetal_producer_state_publish(
+        material,source,100u);
+    runtime::pmetal_producer_state_clear();
+    if (!runtime::pmetal_producer_state_latest(
+            material,100u,diagnostic,&reason) ||
+        reason != runtime::pmetal_producer_lookup_reason::synchronized_hit)
+        return 13;
+
+    if (runtime::pmetal_producer_state_latest(
+            material,101u,diagnostic,&reason) ||
+        reason != runtime::pmetal_producer_lookup_reason::epoch_mismatch)
+        return 14;
+
+    auto unrelated = material;
+    unrelated.material_slot = 100000u;
+    if (runtime::pmetal_producer_state_latest(
+            unrelated,100u,diagnostic,&reason) ||
+        (reason != runtime::pmetal_producer_lookup_reason::no_material_bucket &&
+         reason != runtime::pmetal_producer_lookup_reason::wrong_material_bucket))
+        return 15;
+
     return 0;
 }
