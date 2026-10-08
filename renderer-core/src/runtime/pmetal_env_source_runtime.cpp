@@ -2954,17 +2954,13 @@ bool pmetal_env_source_runtime::latest(
         return true;
     }
 
-    // Narrow fallback carrier recovered from the attested retail LightBank
-    // single/blend packers (V13 semantic cut). It is consumed only by an
-    // already-authenticated exact P_Metal draw. The retail packer is a state
-    // producer: retain its latest generation until the next exact source
-    // update, matching the validated V13 lifetime without exposing it to U/L.
-    if (latest_hook_source(out)) {
-        telemetry::hot_count(
-            g_consumer_ok);
-        return true;
-    }
-
+    // R44: no unkeyed "latest hook source" fallback is legal on the visible
+    // path. The retail V13 source hooks may populate the exact selector shadow,
+    // but a visible EnvSpec consumer must receive state already joined to this
+    // exact material/selector epoch. Otherwise fail open to stock DSR.
+    //
+    // This restores the earlier equipment/P_Metal guard against cross-material
+    // A/B inheritance: source freshness alone is not material authority.
     telemetry::hot_count(
         g_consumer_fail);
     return false;
