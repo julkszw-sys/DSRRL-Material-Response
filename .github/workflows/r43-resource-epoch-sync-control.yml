@@ -1,0 +1,96 @@
+name: DSRRL R43 Resource Epoch Sync Control
+on:
+  workflow_dispatch:
+  push:
+    branches: [performance/r43-resource-epoch-shard-sync-01]
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        sync: [ON, OFF]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Exact source identity
+        shell: pwsh
+        run: |
+          $commit = (git rev-parse HEAD).Trim()
+          "DSRRL_CHECKOUT_COMMIT=$commit" | Out-File $env:GITHUB_ENV -Encoding utf8 -Append
+      - uses: actions/checkout@v4
+        with:
+          repository: crosire/reshade
+          ref: 3645e3025d1d98a90e318278858931f034d5d1f6
+          path: _reshade
+      - name: Source audit
+        shell: pwsh
+        run: python renderer-core/tools/audit_r43_release_cleanup_hardening.py
+      - name: Configure exact R43 release with profiler
+        shell: pwsh
+        run: >
+          cmake -S renderer-core/integrated -B build-prof -A x64
+          -DRESHADE_INCLUDE_DIR="${{ github.workspace }}/_reshade/include"
+          -DDSRRL_SOURCE_COMMIT="$env:DSRRL_CHECKOUT_COMMIT"
+          -DDSRRL_BUILD_FLAVOR="v2_0_1_stutter_profiler_r43"
+          -DDSRRL_RELEASE_CLEANUP=ON
+          -DDSRRL_STUTTER_PROFILE=ON
+          -DDSRRL_STUTTER_HITCH_TRACE=ON
+          -DDSRRL_RESOURCE_EPOCH_SHARD_SYNC=${{ matrix.sync }}
+          -DDSRRL_FULL_TELEMETRY_DEFAULT_ON=OFF
+          -DDSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG=ON
+          -DDSRRL_PMETAL_FULL_PTDE_HEMENV_R3=ON
+          -DDSRRL_PMETAL_FULL_PTDE_HEMENV_R4=ON
+          -DDSRRL_PMETAL_FULL_PTDE_HEMENV_R5=ON
+          -DDSRRL_PMETAL_FULL_PTDE_HEMENV_R6=ON
+          -DDSRRL_PMETAL_FULL_PTDE_HEMENV_R7_SHADOW=ON
+          -DDSRRL_PMETAL_FULL_PTDE_HEMENV_R8_PRE_AB=ON
+          -DDSRRL_PMETAL_FULL_PTDE_HEMENV_R11_COMMON_MERGE=ON
+          -DDSRRL_PMETAL_FULL_PTDE_HEMENV_R15_PTDE_LIVEOUT_PAIR=ON
+          -DDSRRL_PMETAL_FULL_PTDE_HEMENV_R16_LEGACY_DIFFUSE_SPLIT=ON
+          -DDSRRL_PMETAL_FULL_PTDE_HEMENV_R17_PTDE_DIFFUSE_MATERIAL=ON
+          -DDSRRL_PMETAL_R19_LERP_MATERIALWORKFLOW=ON
+          -DDSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE=ON
+          -DDSRRL_PHYSICAL_CUT_UL_H3_SUBSURFACE=ON
+          -DDSRRL_PHYSICAL_CUT_POINTLIGHT_ALL=ON
+      - name: Build addon
+        shell: pwsh
+        run: |
+          cmake --build build-prof --config Release --target dsrrl_renderer_core_integrated
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $addons = @(Get-ChildItem build-prof -Recurse -Filter *.addon64)
+          if ($addons.Count -ne 1) { throw "Expected one addon, got $($addons.Count)" }
+          Copy-Item $addons[0].FullName "DSRRL_R43_SYNC_${{ matrix.sync }}.addon64"
+      - name: FLVER native cache regression test
+        shell: pwsh
+        run: |
+          cmake --build build-prof/renderer-core-lib --config Release --target dsrrl_renderer_flver_identity_tests
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          ctest --test-dir build-prof/renderer-core-lib -C Release -R "^dsrrl_renderer_flver_identity_tests$" --output-on-failure
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Resource view synchronization regression test
+        shell: pwsh
+        run: |
+          cmake --build build-prof/renderer-core-lib --config Release --target dsrrl_renderer_resource_view_epoch_tests
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          ctest --test-dir build-prof/renderer-core-lib -C Release -R "^dsrrl_renderer_resource_view_epoch_tests$" --output-on-failure
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Verify source and profiler identity
+        shell: pwsh
+        run: |
+          $path = "DSRRL_R43_SYNC_${{ matrix.sync }}.addon64"
+          $bytes = [System.IO.File]::ReadAllBytes($path)
+          $ascii = [System.Text.Encoding]::ASCII.GetString($bytes)
+          if (-not $ascii.Contains($env:DSRRL_CHECKOUT_COMMIT)) { throw "Wrong source" }
+          if (-not $ascii.Contains("[DSRRL STUTTER R43]")) { throw "Profiler not built" }
+          if (-not $ascii.Contains("[DSRRL HITCH FRAME]")) { throw "Hitch attribution marker absent" }
+          if ('${{ matrix.sync }}' -eq 'ON' -and -not $ascii.Contains("epochs=KEY_BUCKET_256")) { throw "Sharded sync marker missing" }
+          if ('${{ matrix.sync }}' -eq 'OFF' -and -not $ascii.Contains("epochs=GLOBAL_BASELINE")) { throw "Global sync marker missing" }
+          if (-not $ascii.Contains("[DSRRL PHYSICAL CUT POINTLIGHT]")) { throw "Unexpected PointLight lineage" }
+          Get-FileHash $path -Algorithm SHA256 | Format-List
+      - uses: actions/upload-artifact@v4
+        with:
+          name: DSRRL_R43_SYNC_${{ matrix.sync }}
+          path: DSRRL_R43_SYNC_${{ matrix.sync }}.addon64
+          if-no-files-found: error
