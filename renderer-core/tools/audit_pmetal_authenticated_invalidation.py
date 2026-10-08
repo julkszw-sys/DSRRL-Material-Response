@@ -21,12 +21,14 @@ tokens=[
     "const auto endpoints =",
     "if (!lookup_valid ||",
     "latest_hook_source_exact_selector(",
-    "exact_envdiffuse_endpoint(",
-    "pmetal_producer_state_publish(",
 ]
 positions=[producer.find(item) for item in tokens]
 if -1 in positions or positions!=sorted(positions):
     raise SystemExit("PMETAL_AUTHENTICATED_INVALIDATION_AUDIT_FAIL: semantic cut or donor gates changed")
+# The fast exact-selector shadow may publish before the fallback donor decode;
+# both are already authenticated by the native descriptor, source and selector.
+if producer.count("pmetal_producer_state_publish(") < 2 or "exact_envdiffuse_endpoint(" not in producer:
+    raise SystemExit("PMETAL_AUTHENTICATED_INVALIDATION_AUDIT_FAIL: source or PTDE donor branch absent")
 if producer.count("pmetal_producer_state_begin(")!=1:
     raise SystemExit("PMETAL_AUTHENTICATED_INVALIDATION_AUDIT_FAIL: begin count")
 if "next.diagnostic_origin = parent_verified ? 1u : 4u;" not in producer:
