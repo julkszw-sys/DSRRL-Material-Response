@@ -1594,6 +1594,10 @@ register_events() noexcept
     reshade::log::message(reshade::log::level::info,
         "[DSRRL STUTTER R43] bounded QPC profiling active; no feature gates changed");
 #endif
+#if defined(DSRRL_SIDECAR_RESOURCE_POOL)
+    reshade::log::message(reshade::log::level::info,
+        "[DSRRL DDS SRV POOL] exact per-device sidecar SRV reuse active; operator policy unchanged");
+#endif
 
     reshade::register_event<
         reshade::addon_event::init_resource_view>(
