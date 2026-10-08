@@ -233,7 +233,7 @@ option(
 option(
     DSRRL_DOF_DEFAULT_ON
     "Activate the verified PTDE DoF island without requiring an environment opt-in"
-    ON)
+    OFF)
 option(
     DSRRL_DOF_PROFILE
     "Diagnostic: low-overhead sampled PTDE DoF draw-path CPU profiler"
