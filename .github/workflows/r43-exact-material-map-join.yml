@@ -1,4 +1,4 @@
-name: P_Metal R43 Material Map Source Join
+name: R43 P_Metal Hybrid Selector and DSR Donors
 
 on:
   workflow_dispatch:
@@ -78,6 +78,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           python renderer-core/tools/apply_r43_dsr_common_lightbank.py
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python renderer-core/tools/apply_r43_hybrid_marker.py
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Configure R43 per-key PMetal freshness cache
         shell: pwsh
@@ -88,7 +90,8 @@ jobs:
           -A x64
           -DRESHADE_INCLUDE_DIR="${{ github.workspace }}/_reshade/include"
           -DDSRRL_SOURCE_COMMIT="$env:DSRRL_CHECKOUT_COMMIT"
-          -DDSRRL_BUILD_FLAVOR="pmetal_r43_exact_material_map_join"\n          -DDSRRL_PMETAL_R43_MAP_SOURCE_JOIN=ON
+          -DDSRRL_BUILD_FLAVOR="r43_selector_dsr_donor_hybrid"
+          -DDSRRL_PMETAL_R43_MAP_SOURCE_JOIN=ON
           -DDSRRL_FULL_TELEMETRY_DEFAULT_ON=OFF
           -DDSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG=ON
           -DDSRRL_PMETAL_FULL_PTDE_HEMENV_R3=ON
@@ -120,15 +123,16 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           $addons = @(Get-ChildItem build-fast -Recurse -Filter *.addon64)
           if ($addons.Count -ne 1) { throw "Expected exactly one addon, found $($addons.Count)" }
-          Copy-Item $addons[0].FullName "DSRRL_PMETAL_R43_EXACT_MATERIAL_MAP_JOIN.addon64" -Force
+          Copy-Item $addons[0].FullName "DSRRL_2.0.2_R43_SELECTOR_DSR_DONORS.addon64" -Force
 
       - name: Verify binary identity
         shell: pwsh
         run: |
-          $path = "DSRRL_PMETAL_R43_EXACT_MATERIAL_MAP_JOIN.addon64"
+          $path = "DSRRL_2.0.2_R43_SELECTOR_DSR_DONORS.addon64"
           $ascii = [System.Text.Encoding]::ASCII.GetString([System.IO.File]::ReadAllBytes($path))
           if (-not $ascii.Contains($env:DSRRL_CHECKOUT_COMMIT)) { throw "Missing source commit identity" }
-          if (-not $ascii.Contains("pmetal_r43_exact_material_map_join")) { throw "Missing R43 build flavor identity" }
+          if (-not $ascii.Contains("r43_selector_dsr_donor_hybrid")) { throw "Missing R43 build flavor identity" }
+          if (-not $ascii.Contains("[DSRRL PMETAL R43 DSR HYBRID] source=PTDE_OR_NATIVE_DSR exact_bank_m99_default=ON extra_rows_m14_s14_m18_64=ON map_material_join=ON unchanged_PointLight=ON")) { throw "Hybrid P_Metal donor operator is not compiled" }
           if (-not $ascii.Contains("[DSRRL POINTLIGHT R26] direct_current_native_dispatch=ACTIVE persistent_vtable_hook=OFF recursion_guard=ON")) { throw "Missing inherited R26 direct current-native startup marker" }
           if (-not $ascii.Contains("[DSRRL POINTLIGHT R29] exact_structure_snapshot_cache=ACTIVE cross_draw=ON revalidate=VM+MEMCMP pointer_only_authority=OFF gpu_tls_fast_cache=ON per_draw_resource_mutex=OFF per_draw_com_ref_churn=OFF pipeline_tls_fast_path=ON per_draw_private_data=OFF per_draw_shader_ref_churn=OFF failure_propagation=EXACT")) { throw "Missing inherited R29 fast resource/cache/failure-propagation startup marker" }
           if (-not $ascii.Contains("[DSRRL POINTLIGHT R30] synchronous_core_transaction=ACTIVE exact_clustered_shape_guard=ON global_core_tx_mutex=OFF_FOR_CLUSTERED_DIRECT_NATIVE tls_reentry_guard=ON t18_t19_batch=ON sync_draw_serial_atomic=OFF fallback_general_tx=UNCHANGED")) { throw "Missing inherited R30 lock-free synchronous core transaction marker" }
@@ -159,6 +163,6 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: DSRRL_PMETAL_R43_EXACT_MATERIAL_MAP_JOIN
-          path: DSRRL_PMETAL_R43_EXACT_MATERIAL_MAP_JOIN.addon64
+          name: DSRRL_2.0.2_R43_SELECTOR_DSR_DONORS
+          path: DSRRL_2.0.2_R43_SELECTOR_DSR_DONORS.addon64
           if-no-files-found: error
