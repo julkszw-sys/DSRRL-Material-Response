@@ -93,7 +93,7 @@ assert "try_recover_exact_bound_spec_from_native_name(" in resource
 assert "experimental_material &&" in consumer
 assert "material_resources_.try_recover_exact_bound_spec_from_native_name(" in consumer
 assert "generated::spec_equipment_name_hash_allowed_v12(hash)" in resource
-assert "snapshot_native_exact_debug_name(stock, name)" in resource
+assert "snapshot_native_exact_debug_name(stock, name, &view_label)" in resource
 assert "stock->GetResource(&resource)" in resource
 assert "g_late_native_t1_attempts" in resource
 assert "stock_bound_native_exact_debug_name" in resource
