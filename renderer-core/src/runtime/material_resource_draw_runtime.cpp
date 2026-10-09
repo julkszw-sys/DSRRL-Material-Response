@@ -164,6 +164,29 @@ struct early_view_name {
     }
 };
 thread_local early_view_name g_early_view_name{};
+std::atomic_bool g_early_resource_join_logged{false};
+
+// The same exact loader name can leave TLS before the post-CreateTexture
+// callback. Capture it at ReShade's pre-create event and pair it with the
+// immediate post-create event using the current thread, native device and
+// immutable texture descriptor. Nested/ambiguous pairs fail open.
+struct early_resource_name {
+    ID3D11Device *device = nullptr;
+    reshade::api::resource_type type{};
+    std::uint32_t width = 0u, height = 0u;
+    std::uint16_t depth_or_layers = 0u, levels = 0u, samples = 0u;
+    reshade::api::format format{};
+    std::wstring name{};
+    bool pending = false, ambiguous = false;
+    void clear() noexcept {
+        device = nullptr;
+        name.clear();
+        pending = false;
+        ambiguous = false;
+    }
+};
+thread_local early_resource_name g_early_resource_name{};
+
 
 
 
@@ -1252,9 +1275,54 @@ void inspect_many(
 }
 
 #if defined(DSRRL_EXPERIMENTAL_SPC_MATERIAL_BATCH)
+bool on_create_resource(
+    reshade::api::device *device,
+    reshade::api::resource_desc &desc,
+    reshade::api::subresource_data *,
+    reshade::api::resource_usage)
+{
+    auto &pending = g_early_resource_name;
+    if (pending.pending) {
+        pending.ambiguous = true;
+        return false;
+    }
+    if (g_internal_create || g_quarantined.load() ||
+        device == nullptr ||
+        device->get_api() != reshade::api::device_api::d3d11 ||
+        desc.type != reshade::api::resource_type::texture_2d)
+        return false;
+    const wchar_t *name = nullptr;
+    std::size_t size = 0u;
+    if (!texture_identity_transport::snapshot_raw(name, size) ||
+        name == nullptr || size == 0u)
+        return false;
+    const auto hash = fnv_name(name, size);
+    if (!generated::spec_equipment_name_hash_allowed_v12(hash) &&
+        !exact_subsurface_body_spec_hash(hash) &&
+        !generated::diffuse_name_hash_allowed_v12(hash) &&
+        !generated::normal_name_hash_allowed_v12(hash))
+        return false;
+    try {
+        pending.device =
+            reinterpret_cast<ID3D11Device *>(device->get_native());
+        pending.type = desc.type;
+        pending.width = desc.texture.width;
+        pending.height = desc.texture.height;
+        pending.depth_or_layers = desc.texture.depth_or_layers;
+        pending.levels = desc.texture.levels;
+        pending.samples = desc.texture.samples;
+        pending.format = desc.texture.format;
+        pending.name.assign(name, size);
+        pending.pending = !pending.name.empty();
+    } catch (...) {
+        pending.clear();
+    }
+    return false; // observe only; never edit stock texture descriptors
+}
+
 void on_init_resource(
     reshade::api::device *device,
-    const reshade::api::resource_desc &,
+    const reshade::api::resource_desc &desc,
     const reshade::api::subresource_data *,
     reshade::api::resource_usage,
     reshade::api::resource resource)
@@ -1266,9 +1334,38 @@ void on_init_resource(
         return;
     const wchar_t *raw = nullptr;
     std::size_t size = 0u;
-    if (!texture_identity_transport::snapshot_raw(raw, size) ||
-        raw == nullptr || size == 0u)
+    const bool direct =
+        texture_identity_transport::snapshot_raw(raw, size) &&
+        raw != nullptr && size != 0u;
+    std::wstring early{};
+    bool attested_precreate = false;
+    auto &pending = g_early_resource_name;
+    if (pending.pending) {
+        if (!pending.ambiguous &&
+            pending.device ==
+                reinterpret_cast<ID3D11Device *>(device->get_native()) &&
+            pending.type == desc.type &&
+            pending.width == desc.texture.width &&
+            pending.height == desc.texture.height &&
+            pending.depth_or_layers == desc.texture.depth_or_layers &&
+            pending.levels == desc.texture.levels &&
+            pending.samples == desc.texture.samples &&
+            pending.format == desc.texture.format) {
+            early = std::move(pending.name);
+            attested_precreate = !early.empty();
+        }
+        pending.clear();
+    }
+    if (direct && attested_precreate &&
+        (early.size() != size ||
+         std::char_traits<wchar_t>::compare(
+             early.c_str(), raw, size) != 0))
         return;
+    if (!direct) {
+        if (!attested_precreate) return;
+        raw = early.c_str();
+        size = early.size();
+    }
     const auto hash = fnv_name(raw, size);
     if (!generated::spec_equipment_name_hash_allowed_v12(hash) &&
         !exact_subsurface_body_spec_hash(hash) &&
@@ -1300,6 +1397,11 @@ void on_init_resource(
     } catch (...) {
         // Allocation must never unwind into the D3D11/ReShade callback.
     }
+    if (attested_precreate && !direct &&
+        !g_early_resource_join_logged.exchange(
+            true, std::memory_order_relaxed))
+        reshade::log::message(reshade::log::level::info,
+            "[DSRRL SPC RESOURCE JOIN] source=create_resource_exact_name carrier=pre_post_resource exact_allowlist=1 failopen_preserved=1 pixel=OPEN");
 }
 
 void on_destroy_resource(
@@ -1848,6 +1950,8 @@ register_events() noexcept
 #endif
 
 #if defined(DSRRL_EXPERIMENTAL_SPC_MATERIAL_BATCH)
+    reshade::register_event<reshade::addon_event::create_resource>(
+        on_create_resource);
     reshade::register_event<reshade::addon_event::init_resource>(
         on_init_resource);
     reshade::register_event<reshade::addon_event::destroy_resource>(
@@ -1899,6 +2003,8 @@ unregister_events() noexcept
         on_destroy_resource);
     reshade::unregister_event<reshade::addon_event::init_resource>(
         on_init_resource);
+    reshade::unregister_event<reshade::addon_event::create_resource>(
+        on_create_resource);
 #endif
 
     release_cache();
