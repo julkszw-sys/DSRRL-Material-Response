@@ -1314,9 +1314,21 @@ bool pmetal_envspec_draw_runtime::prepare(
                 : nullptr,
             env_semantics.envspc_slot,
             probe_b_required);
+        const char *reason =
+            !frontier.slot_valid ? "invalid_envspec_slot" :
+            !frontier.device_ready ? "missing_device" :
+            !frontier.pack_ready ? "missing_ptde_pack" :
+            !frontier.sampler_ready ? "missing_ptde_sampler" :
+            !frontier.stock_a_registered ? "stock_probe_a_not_registered" :
+            !frontier.stock_b_registered ? "stock_probe_b_not_registered" :
+            !frontier.probe_a_in_range ? "probe_a_out_of_range" :
+            !frontier.probe_b_in_range ? "probe_b_out_of_range" :
+            !frontier.cube_a_ready ? "ptde_cube_a_not_materialized" :
+            !frontier.cube_b_ready ? "ptde_cube_b_not_materialized" :
+            "resource_prepare_other";
         char line[1300]{};
         std::snprintf(line, sizeof(line),
-            "[DSRRL SPC ONEPASS] stage=probe_reject route=%u rx=%u slot=%u family=%u envslot=%u beta=%.8g need_b=%u shadow_ready=%u shadow12=%u/%u/%u shadow14=%u/%u/%u live12=%u/%u/%u/%u/%u/%u/%u live14=%u/%u/%u/%u/%u/%u/%u shadow_live12_same=%u shadow_live14_same=%u registry_a=%u registry_b=%u probe_a=%u probe_b=%u ordinal_ok=%u/%u ptde_cube_ready=%u/%u device=%u pack=%u sampler=%u slot_valid=%u pixel=OPEN",
+            "[DSRRL SPC ONEPASS] stage=probe_reject route=%u rx=%u slot=%u family=%u envslot=%u beta=%.8g need_b=%u shadow_ready=%u shadow12=%u/%u/%u shadow14=%u/%u/%u live12=%u/%u/%u/%u/%u/%u/%u live14=%u/%u/%u/%u/%u/%u/%u shadow_live12_same=%u shadow_live14_same=%u registry_a=%u registry_b=%u probe_a=%u probe_b=%u ordinal_ok=%u/%u ptde_cube_ready=%u/%u device=%u pack=%u sampler=%u slot_valid=%u reason=%s pixel=OPEN",
             static_cast<unsigned>(decision.route_index),
             static_cast<unsigned>(decision.receiver_id),
             static_cast<unsigned>(material.material_slot),
@@ -1341,7 +1353,8 @@ bool pmetal_envspec_draw_runtime::prepare(
             frontier.device_ready ? 1u : 0u,
             frontier.pack_ready ? 1u : 0u,
             frontier.sampler_ready ? 1u : 0u,
-            frontier.slot_valid ? 1u : 0u);
+            frontier.slot_valid ? 1u : 0u,
+            reason);
         reshade::log::message(reshade::log::level::info, line);
         for (auto *&v : live) if (v) { v->Release(); v=nullptr; }
     }
@@ -1478,9 +1491,18 @@ bool pmetal_envspec_draw_runtime::prepare(
         context->PSGetShaderResources(1u, 1u, &native_t1);
         const auto l1=spc_inspect_srv(native_t1);
         const auto s1=spc_inspect_srv(shadow_material[1]);
+        const char *reason =
+            !p.context_valid ? "no_d3d_context" :
+            p.quarantined ? "resource_quarantined" :
+            !p.stock_bound ? "stock_t1_unbound" :
+            !p.snapshot_resolved ? "stock_t1_logical_lookup_miss" :
+            !p.logical_hash_allowed ? "stock_spec_not_equipment_allowlisted" :
+            !p.companion_ready ? "ptde_spec_companion_unavailable" :
+            !material_ready ? "material_request_prepare_failed" :
+            "spec_semantic_or_adapter_reject";
         char line[940]{};
         std::snprintf(line, sizeof(line),
-            "[DSRRL SPC ONEPASS] stage=spec_reject route=%u rx=%u slot=%u material_ready=%u spec_req=%u diffuse_req=%u normal_req=%u shadow_ready=%u shadow_diverged=%u shadow_t1=%u/%u/%u live_t1=%u/%u/%u/%u/%u/%u/%u shadow_live_t1_same=%u ctx=%u quarantine=%u bound=%u resolved=%u hash=%016llx allowed=%u companion=%u semantic=%u pixel=OPEN",
+            "[DSRRL SPC ONEPASS] stage=spec_reject route=%u rx=%u slot=%u material_ready=%u spec_req=%u diffuse_req=%u normal_req=%u shadow_ready=%u shadow_diverged=%u shadow_t1=%u/%u/%u live_t1=%u/%u/%u/%u/%u/%u/%u shadow_live_t1_same=%u ctx=%u quarantine=%u bound=%u resolved=%u hash=%016llx allowed=%u companion=%u semantic=%u reason=%s pixel=OPEN",
             static_cast<unsigned>(decision.route_index),
             static_cast<unsigned>(decision.receiver_id),
             static_cast<unsigned>(material.material_slot),
@@ -1497,7 +1519,7 @@ bool pmetal_envspec_draw_runtime::prepare(
             p.stock_bound ? 1u : 0u, p.snapshot_resolved ? 1u : 0u,
             static_cast<unsigned long long>(p.logical_hash),
             p.logical_hash_allowed ? 1u : 0u, p.companion_ready ? 1u : 0u,
-            static_cast<unsigned>(sem.state));
+            static_cast<unsigned>(sem.state), reason);
         reshade::log::message(reshade::log::level::info, line);
         if (native_t1) native_t1->Release();
     }
