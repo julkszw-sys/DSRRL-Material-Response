@@ -1381,6 +1381,7 @@ extern "C" void dsrrl_flver_selector_observer(
      profile.owner_lookup_ticks);
 
  bool owner_mtd_ok = false;
+ bool exact_owner_published = false;
  if(owner_lookup_ok){
   telemetry::hot_count(g_owner_sha_hits);
 
@@ -1401,7 +1402,7 @@ extern "C" void dsrrl_flver_selector_observer(
        make_actual_material_identity(
            observation);
 
-   if(publish_exact_selector_identity(
+   if((exact_owner_published = publish_exact_selector_identity(
           owner,
           actual_material,
           ret,
@@ -1409,7 +1410,7 @@ extern "C" void dsrrl_flver_selector_observer(
           r15,
           selector_stack,
           identity,
-          &profile)){
+          &profile))){
     const auto cache_publish_begin =
         selector_profile_begin(profile);
     selector_identity_cache_publish(
@@ -1458,7 +1459,7 @@ extern "C" void dsrrl_flver_selector_observer(
   // triple. The legacy owner MTD producer is incomplete for some otherwise
   // certified SPC profiles. Repair only that provenance join, not the
   // EnvSpec/SpecRGB/shader/CB/material/sidecar consumer gates.
-  if(owner_lookup_ok && !owner_mtd_ok &&
+  if(owner_lookup_ok && !exact_owner_published &&
      observation.material_slot_valid &&
      runtime_material.actual_material_exact &&
      runtime_material.semantic_name_hash != 0u &&
