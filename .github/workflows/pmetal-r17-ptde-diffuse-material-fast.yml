@@ -10,6 +10,7 @@ on:
       - "renderer-core/integrated/**"
       - "renderer-core/src/operators/env_spec/pmetal_rgba_materializer.cpp"
       - "renderer-core/src/runtime/pmetal_envspec_draw_runtime.cpp"
+      - "renderer-core/src/runtime/material_resource_draw_runtime.cpp"
       - ".github/workflows/pmetal-r17-ptde-diffuse-material-fast.yml"
 
 permissions:
@@ -159,6 +160,7 @@ jobs:
           if (-not $ascii.Contains("[DSRRL SPC ONEPASS] stage=probe_reject")) { throw "Missing one-pass probe frontier" }
           if (-not $ascii.Contains("[DSRRL SPC ONEPASS] stage=spec_reject")) { throw "Missing one-pass SpecRGB frontier" }
           if (-not $ascii.Contains("[DSRRL SPC ONEPASS] stage=source_reject")) { throw "Missing one-pass keyed source frontier" }
+          if (-not $ascii.Contains("[DSRRL SPC RESOURCE JOIN]")) { throw "Missing resource-to-SRV exact-name join" }
           Get-FileHash DSRRL_v203_other_metal_exact_DIAG.addon64 -Algorithm SHA256
       - name: Run exact material authority and c100 regressions
         shell: pwsh
