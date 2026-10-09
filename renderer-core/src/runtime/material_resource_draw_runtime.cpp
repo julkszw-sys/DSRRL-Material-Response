@@ -1297,6 +1297,8 @@ void on_init_resource_view(
     const reshade::api::resource_view_desc &,
     reshade::api::resource_view view)
 {
+    // Stock/no-SPC builds do not need the resource-to-view name handoff.
+    (void)resource;
     if (g_internal_create ||
         g_quarantined.load() ||
         device == nullptr ||
