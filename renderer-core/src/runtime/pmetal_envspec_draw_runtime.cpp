@@ -6,6 +6,9 @@
 #endif
 
 #include "dsrrl/runtime/pmetal_envspec_draw_runtime.hpp"
+#if defined(DSRRL_PMETAL_ASYLUM_NATIVE_MAP_CUT)
+#include "dsrrl/runtime/pmetal_native_map_cut.hpp"
+#endif
 #if defined(DSRRL_PMETAL_ASYLUM_DEFERRED_TOPOLOGY_TRACE)
 #include "dsrrl/runtime/pmetal_asylum_cmdlist_trace.hpp"
 #endif
@@ -905,6 +908,70 @@ bool pmetal_envspec_draw_runtime::prepare(
         return false;
     }
     effect_latch(effect_source_ready_);
+#if defined(DSRRL_PMETAL_ASYLUM_NATIVE_MAP_CUT) && defined(DSRRL_PMETAL_ASYLUM_CB_WRITER_TRACE)
+    // Exact per-draw RX33/RX34 native context and CURRENT PS b0.
+    // Register target on first observation; later witnessed native Map/Unmap
+    // is associated by physical context AND exact resource object identity.
+    // A CPU Map receipt is NOT proof of subsequent GPU PS consumption.
+    auto *native_map_ctx=reinterpret_cast<ID3D11DeviceContext *>(
+        static_cast<std::uintptr_t>(cmd_list->get_native()));
+    if (native_map_ctx) {
+        (void)pmetal_native_map_cut::global_observer().install(native_map_ctx);
+        ID3D11Buffer *bound_b0=nullptr;
+        native_map_ctx->PSGetConstantBuffers(0u,1u,&bound_b0);
+        if(bound_b0) {
+            const auto b0_key=reinterpret_cast<std::uintptr_t>(bound_b0);
+            const auto ctx_key=reinterpret_cast<std::uintptr_t>(native_map_ctx);
+            const auto info=pmetal_native_map_cut::global_observer().observe(ctx_key,b0_key);
+            const auto writer=pmetal_native_cb_writer_lookup(b0_key);
+            static std::atomic<std::uint32_t> observations_logged{0};
+            static std::atomic<std::uint64_t> last_emit_ms{0};
+            const auto now=GetTickCount64();
+            auto previous=last_emit_ms.load(std::memory_order_relaxed);
+            if (now>=previous+250u &&
+                last_emit_ms.compare_exchange_strong(previous,now,
+                    std::memory_order_relaxed) &&
+                observations_logged.fetch_add(1u,std::memory_order_relaxed)<180u) {
+                char line[1000]{};
+                std::snprintf(line,sizeof(line),
+                    "[DSRRL PMETAL NATIVE MAP CUT] rx=%u family=%u sha0=%02x%02x%02x%02x slot=%u"
+                    " ctx=%llx ps_b0=%llx src_bank=%016llx row=%u beta=%.6f"
+                    " native_hook=%u registered_vtables=%u"
+                    " exact_buffer_watch=%u map=%llu unmap=%llu write_unmap=%llu"
+                    " last_map_ctx=%llx last_unmap_ctx=%llx map_type=%u"
+                    " map_tid=%u unmap_tid=%u same_ctx=%u complete_pair=%u"
+                    " writer_epoch=%llu writer_method=%u writer_complete=%u"
+                    " pixel=UNVERIFIED gpu_consumer=UNVERIFIED",
+                    decision.receiver_id,
+                    static_cast<unsigned>(family),
+                    static_cast<unsigned>(material.flver_sha256[0]),
+                    static_cast<unsigned>(material.flver_sha256[1]),
+                    static_cast<unsigned>(material.flver_sha256[2]),
+                    static_cast<unsigned>(material.flver_sha256[3]),
+                    static_cast<unsigned>(material.material_slot),
+                    static_cast<unsigned long long>(ctx_key),
+                    static_cast<unsigned long long>(b0_key),
+                    static_cast<unsigned long long>(source.bank_signature_a),
+                    source.row_id_a,source.beta,
+                    info.hook_active?1u:0u,
+                    pmetal_native_map_cut::global_observer().hook_count(),
+                    info.ever_watched?1u:0u,
+                    static_cast<unsigned long long>(info.map_count),
+                    static_cast<unsigned long long>(info.unmap_count),
+                    static_cast<unsigned long long>(info.write_unmap_count),
+                    static_cast<unsigned long long>(info.last_map_ctx),
+                    static_cast<unsigned long long>(info.last_unmap_ctx),
+                    info.last_map_type,info.last_map_tid,info.last_unmap_tid,
+                    info.source_context_match?1u:0u,
+                    info.complete_map_unmap?1u:0u,
+                    static_cast<unsigned long long>(writer.epoch),
+                    static_cast<unsigned>(writer.method),writer.complete?1u:0u);
+                reshade::log::message(reshade::log::level::info,line);
+            }
+            bound_b0->Release();
+        }
+    }
+#endif
 #if defined(DSRRL_PMETAL_ASYLUM_DEFERRED_TOPOLOGY_TRACE)
     // Source candidate in this receiver's recording context; not GPU draw authority.
     const std::uint32_t sha_prefix =
