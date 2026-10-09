@@ -68,6 +68,20 @@ assert "flver_registry_miss" in selector
 assert "flver_owner_mtd_join_miss" in selector
 assert "selector_owner_publish_reject" in selector
 assert "resource_bridge=FAIL_OPEN" in selector
+# Regression: a runtime exact-MTD material only receives an exact FLVER
+# owner if the SAME live selector resolved FLVER SHA + slot and the
+# source-complete offline corpus positively attests the triple.
+assert "dsr_flver_owner_tuple_authenticated(" in selector
+assert "owner_lookup_ok && !exact_owner_published" in selector
+assert "observation.material_slot_valid" in selector
+assert "runtime_material.actual_material_exact" in selector
+assert "runtime_material.semantic_name_hash" in selector
+assert "recovered.flver_sha256 = observation.flver_sha256" in selector
+assert "recovered.material_slot = observation.material_slot" in selector
+assert "is_experimental_ptde_metal_envspec_material(recovered)" in selector
+assert "stage=corpus_recovered_exact" in selector
+assert "No fallback for unrecognized FLVER digests" in selector
+assert "require fresh actual material pointer + corpus join every time" in selector
 assert 'runtime_mtd_only' in selector and 'flver_owner_exact' in selector
 assert "exact_bridge_authority=" in selector and "exact_bridge_authority=" in integrated
 print('Unique MTD and EnvSpec entries:',len(compiled))
