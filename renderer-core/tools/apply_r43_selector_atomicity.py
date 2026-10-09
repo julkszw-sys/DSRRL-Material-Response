@@ -3,7 +3,7 @@
 import hashlib
 from pathlib import Path
 p=Path("renderer-core/src/runtime/pmetal_env_source_runtime.cpp")
-data=p.read_bytes()
+data=p.read_bytes().replace(b'\r\n',b'\n')
 def blobhash(b):return hashlib.sha1(b"blob "+str(len(b)).encode()+b"\0"+b).hexdigest()
 assert blobhash(data)=="c88cb8f85fac64d7072605d7173f09f984a416cf", "source not stable 2.0.2 R43"
 s=data.decode()
