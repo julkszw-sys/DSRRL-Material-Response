@@ -17,7 +17,7 @@ import sys
 TAG = "[DSRRL PMETAL B0 REGHASH]"
 M10 = "4c594553d201d80c"
 M18 = "1ecfd1e617c59071"
-TOKEN = re.compile(r"([a-z_]+)=([^\s]+)")
+TOKEN = re.compile(r"([a-z][a-z0-9_]+)=([^\s]+)")
 
 
 def parse(lines):
