@@ -4,6 +4,7 @@
 #include "dsrrl/operators/lightbank/upper_lower_hemenv_materializer.hpp"
 #include "dsrrl/operators/material_response/material_response_diffuse_v1.hpp"
 #include "dsrrl/operators/resource_bridges/spec_rgb_consumer_materializer.hpp"
+#include "dsrrl/operators/material_response/ptde_workflow_c100.hpp"
 #include "dsrrl/operators/surface/terminal_sat_rgb_patch.hpp"
 #include "dsrrl/operators/surface/phn_scene_encoding.hpp"
 #include "dsrrl/operators/legacy_plan/a1_create_time_materializer.hpp"
@@ -2511,26 +2512,16 @@ bool select_ptde_diffuse_material_factor_r17(
         mad_word == static_cast<std::size_t>(-1))
         return false;
 
-    // mad rMat.xyz, W, rMat.xyz, b12[1].xyz
-    // -> mad rMat.xyz, 0.0, rMat.xyz, b12[1].xyz
-    // -> rMat.xyz = b12[1].xyz
-    //
-    // Scalar register and scalar immediate are both two-DWORD operands, so
-    // the DXBC layout and every downstream instruction offset stay unchanged.
-    words[mad_word + 3u] = 0x00004001u;
-    words[mad_word + 4u] = 0x00000000u;
-
-    return
-        words[mad_word + 1u] == 0x00100072u &&
-        words[mad_word + 2u] == material_register &&
-        words[mad_word + 3u] == 0x00004001u &&
-        words[mad_word + 4u] == 0x00000000u &&
-        words[mad_word + 5u] == 0x00100246u &&
-        words[mad_word + 6u] == material_register &&
-        words[mad_word + 7u] == 0x00208246u &&
-        words[mad_word + 8u] == 12u &&
-        words[mad_word + 9u] == 1u &&
-        diffuse_carrier_register != material_register;
+    // Source and shape have already been authenticated above.
+    // Keep the original exact-output cut, now shared with future consumers.
+    return dsrrl::operators::material_response::
+        apply_ptde_workflow_c100_mad(
+            words,
+            mad_word,
+            material_register,
+            diffuse_carrier_register) ==
+        dsrrl::operators::material_response::
+            workflow_c100_patch_result::applied;
 }
 #endif
 
