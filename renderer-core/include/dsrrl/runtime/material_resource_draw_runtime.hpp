@@ -94,6 +94,13 @@ public:
     bool exact_specular_companion_ready(
         ID3D11DeviceContext *context) noexcept;
 
+    // SPC25 opt-in only: recover the *currently bound native stock t1*
+    // after creation, if it acquired a canonical exact D3D11 debug name
+    // later than init_resource_view. Never derive texture identity from
+    // MTD/FLVER alone or infer it from GPU format/dimensions.
+    bool try_recover_exact_bound_spec_from_native_name(
+        ID3D11DeviceContext *context) noexcept;
+
     bool prepare_draw_requests(
         ID3D11DeviceContext *context,
         std::uint32_t receiver_id,
