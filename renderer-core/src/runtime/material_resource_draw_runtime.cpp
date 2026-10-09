@@ -150,6 +150,9 @@ std::unordered_map<std::uint64_t,ID3D11Device *>
 std::atomic_bool g_attested_resource_view_join_logged{false};
 std::atomic_bool g_early_view_join_logged{false};
 std::atomic_bool g_native_debug_name_join_logged{false};
+std::atomic_bool g_late_native_t1_recovered_logged{false};
+std::unordered_map<std::uint64_t,std::uint8_t> g_late_native_t1_attempts;
+
 
 
 // ReShade create_resource_view is a synchronous, pre-D3D11 creation
@@ -452,6 +455,7 @@ void release_cache() noexcept
 #if defined(DSRRL_EXPERIMENTAL_SPC_MATERIAL_BATCH)
         g_attested_names_by_resource.clear();
         g_ambiguous_named_resource_device.clear();
+        g_late_native_t1_attempts.clear();
 #endif
     }
 
@@ -493,6 +497,9 @@ void release_cache_for_device(
         }
 
 #if defined(DSRRL_EXPERIMENTAL_SPC_MATERIAL_BATCH)
+        // Attempts are cheap negative lookups; a device-lifetime boundary
+        // must never retain any old view-handle tombstones.
+        g_late_native_t1_attempts.clear();
         for (auto it = g_attested_names_by_resource.begin();
              it != g_attested_names_by_resource.end();) {
             if (it->second.device == device)
@@ -1722,7 +1729,9 @@ void on_destroy_resource_view(
         const auto key =
             static_cast<std::uint64_t>(
                 view.handle);
-
+#if defined(DSRRL_EXPERIMENTAL_SPC_MATERIAL_BATCH)
+        g_late_native_t1_attempts.erase(key);
+#endif
         if (g_ambiguous_view_device.erase(key) != 0u)
             changed = true;
 
@@ -2044,6 +2053,127 @@ probe_exact_specular_companion(
 
     release_view(companion);
     return out;
+}
+
+bool material_resource_draw_runtime::
+try_recover_exact_bound_spec_from_native_name(
+    ID3D11DeviceContext *context) noexcept
+{
+#if !defined(DSRRL_EXPERIMENTAL_SPC_MATERIAL_BATCH)
+    (void)context;
+    return false;
+#else
+    if (context == nullptr || g_quarantined.load())
+        return false;
+
+    ID3D11ShaderResourceView *stock = nullptr;
+    context->PSGetShaderResources(1u, 1u, &stock);
+    if (stock == nullptr) return false;
+    const auto key = static_cast<std::uint64_t>(
+        reinterpret_cast<std::uintptr_t>(stock));
+
+    // Limit the experiment to two exact lookups per native view lifetime,
+    // even when hundreds of draws reuse a missing-name stock t1.
+    {
+        std::lock_guard<std::mutex> lock(g_mutex);
+        if (g_ambiguous_view_device.find(key) !=
+                g_ambiguous_view_device.end() ||
+            g_cache.find(key) != g_cache.end()) {
+            stock->Release();
+            return false;
+        }
+        auto &attempts = g_late_native_t1_attempts[key];
+        if (attempts >= 2u) {
+            stock->Release();
+            return false;
+        }
+        ++attempts;
+    }
+
+    std::wstring name{};
+    const bool view_name =
+        snapshot_native_exact_debug_name(stock, name);
+    ID3D11Resource *resource = nullptr;
+    stock->GetResource(&resource);
+    if (resource != nullptr) {
+        std::wstring resource_name{};
+        const bool resource_named =
+            snapshot_native_exact_debug_name(resource, resource_name);
+        resource->Release();
+        if (resource_named) {
+            if (view_name && name != resource_name) {
+                stock->Release();
+                return false; // contradictory exact identities
+            }
+            if (!view_name)
+                name = std::move(resource_name);
+        }
+    }
+
+    if (name.empty()) {
+        stock->Release();
+        return false;
+    }
+    const auto hash = fnv_name(name);
+    if (!generated::spec_equipment_name_hash_allowed_v12(hash)) {
+        stock->Release();
+        return false;
+    }
+    ID3D11Device *device = nullptr;
+    stock->GetDevice(&device);
+    if (device == nullptr) {
+        stock->Release();
+        return false;
+    }
+    stock->Release();
+
+    const auto loaded =
+        safe_load_sidecar(device, asset_class::specular, name, hash);
+    account_load(loaded.status);
+    if (loaded.status != load_status::ready ||
+        loaded.view == nullptr) {
+        release_view(loaded.view);
+        device->Release();
+        return false; // no exact PTDE SpecRGB sidecar, stock fail-open
+    }
+
+    companion_set set{};
+    set.device = device; // owns GetDevice reference
+    set.logical_hash = hash;
+    set.specular = loaded.view; // owns loader reference
+    bool accepted = false;
+    {
+        std::lock_guard<std::mutex> lock(g_mutex);
+        // Another thread or view destruction may have changed ownership
+        // since the negative lookup. Never overwrite or borrow a record.
+        if (g_ambiguous_view_device.find(key) ==
+                g_ambiguous_view_device.end() &&
+            g_cache.find(key) == g_cache.end()) {
+            try {
+                g_cache.emplace(key, set);
+                accepted = true;
+                invalidate_companion_epoch(key);
+            } catch (...) {
+                accepted = false;
+            }
+        }
+    }
+    if (accepted)
+        set = {};
+    else
+        release_set(set);
+
+    if (accepted &&
+        !g_late_native_t1_recovered_logged.exchange(
+            true, std::memory_order_relaxed)) {
+        char line[320]{};
+        std::snprintf(line, sizeof(line),
+            "[DSRRL SPC25 LATE T1] source=stock_bound_native_exact_debug_name hash=%016llx sidecar_ready=1 stock_identity=EXACT runtime=CONSUMER_RETRY pixel=OPEN",
+            static_cast<unsigned long long>(hash));
+        reshade::log::message(reshade::log::level::info,line);
+    }
+    return accepted;
+#endif
 }
 
 bool material_resource_draw_runtime::
