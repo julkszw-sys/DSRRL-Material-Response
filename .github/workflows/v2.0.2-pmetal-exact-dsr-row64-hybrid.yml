@@ -1,8 +1,8 @@
-name: DSRRL v2.0.2 PMetal Exact DSR Row64 Hybrid
+name: DSRRL v2.0.2 PMetal M18 Row64 EnvSpec05 Test
 on:
   workflow_dispatch:
   push:
-    branches: [diagnostics/pmetal-dsr-only-lightbank-profile-fallback]
+    branches: [diagnostics/pmetal-m18-row64-runtime-neighbor-envspec05]
 permissions:
   contents: read
 jobs:
@@ -37,13 +37,17 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           python renderer-core/tools/audit_pmetal_exact_dsr_row64_hybrid.py
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $source = Get-Content renderer-core/src/runtime/pmetal_env_source_runtime.cpp -Raw
+          if (-not $source.Contains("k_m18_runtime_neighbor_hypothesis{255u,255u,255u,50u}")) { throw "Wrong m18/64 EnvSpec experiment RGBM" }
+          if (-not $source.Contains("donor_raw_diffuse=1.5 applied_diffuse=1.5")) { throw "Missing unchanged EnvDiffuse trace" }
+          if (-not $source.Contains("envspec_origin = \"PTDE_RUNTIME_NEIGHBORS_28_35_HYPOTHESIS\"")) { throw "Missing provisional provenance" }
       - name: Configure exact R43 release with profiler
         shell: pwsh
         run: >
           cmake -S renderer-core/integrated -B build-prof -A x64
           -DRESHADE_INCLUDE_DIR="${{ github.workspace }}/_reshade/include"
           -DDSRRL_SOURCE_COMMIT="$env:DSRRL_CHECKOUT_COMMIT"
-          -DDSRRL_BUILD_FLAVOR="v2_0_2_pmetal_exact_dsr_row64_hybrid"
+          -DDSRRL_BUILD_FLAVOR="v2_0_2_pmetal_m18_row64_envspec05_test"
           -DDSRRL_RELEASE_CLEANUP=OFF
           -DDSRRL_STUTTER_PROFILE=ON
           -DDSRRL_STUTTER_HITCH_TRACE=ON
@@ -57,6 +61,7 @@ jobs:
           -DDSRRL_PMETAL_LOOKUP_REJECTION_FRONTIER_DIAG=ON
           -DDSRRL_PMETAL_SELECTOR_DECODE_FRONTIER_DIAG=ON
           -DDSRRL_PMETAL_EXACT_DSR_ROW64_HYBRID=ON
+          -DDSRRL_PMETAL_M18_ROW64_ENVSPEC05_EXPERIMENT=ON
           -DDSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG=ON
           -DDSRRL_PMETAL_FULL_PTDE_HEMENV_R3=ON
           -DDSRRL_PMETAL_FULL_PTDE_HEMENV_R4=ON
@@ -79,7 +84,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           $addons = @(Get-ChildItem build-prof -Recurse -Filter *.addon64)
           if ($addons.Count -ne 1) { throw "Expected one addon, got $($addons.Count)" }
-          Copy-Item $addons[0].FullName "DSRRL_v2.0.2_PMETAL_EXACT_ROW64_HYBRID.addon64"
+          Copy-Item $addons[0].FullName "DSRRL_v2.0.2_PMETAL_M18_ROW64_ENVSPEC05_TEST.addon64"
       - name: P_Metal producer collision/revocation native regression
         shell: pwsh
         run: |
@@ -123,7 +128,7 @@ jobs:
       - name: Verify v2.0.2 full MR diagnostic identity
         shell: pwsh
         run: |
-          $path = "DSRRL_v2.0.2_PMETAL_EXACT_ROW64_HYBRID.addon64"
+          $path = "DSRRL_v2.0.2_PMETAL_M18_ROW64_ENVSPEC05_TEST.addon64"
           $bytes = [System.IO.File]::ReadAllBytes($path)
           $ascii = [System.Text.Encoding]::ASCII.GetString($bytes)
           if (-not $ascii.Contains($env:DSRRL_CHECKOUT_COMMIT)) { throw "Wrong source" }
@@ -135,8 +140,9 @@ jobs:
           if (-not $ascii.Contains("[DSRRL PHYSICAL CUT POINTLIGHT]")) { throw "Unexpected PointLight lineage" }
           if (-not $ascii.Contains("sampled_companion_tls_hit")) { throw "TLS profiler missing" }
           if (-not $ascii.Contains("[DSRRL PMETAL SPEC TRANSITION]")) { throw "Spec gate transition tracer missing" }
+          if (-not $ascii.Contains("[DSRRL PMETAL M18 ROW64 ENVSPEC05 TEST]")) { throw "Missing experimental one-row GPU source path" }
           if ($ascii.Contains("[DSRRL DDS SRV POOL]")) { throw "DDS pool leaked into release" }
-          if (-not $ascii.Contains("v2_0_2_pmetal_exact_dsr_row64_hybrid")) { throw "Missing diagnostic flavor" }
+          if (-not $ascii.Contains("v2_0_2_pmetal_m18_row64_envspec05_test")) { throw "Missing diagnostic flavor" }
           if (-not $ascii.Contains("2.0.2")) { throw "Missing version" }
           Get-FileHash $path -Algorithm SHA256 | Format-List
       - name: Verify complete diagnostic flag profile
@@ -154,6 +160,7 @@ jobs:
             "DSRRL_PMETAL_LOOKUP_REJECTION_FRONTIER_DIAG:BOOL=ON",
             "DSRRL_PMETAL_SELECTOR_DECODE_FRONTIER_DIAG:BOOL=ON",
             "DSRRL_PMETAL_EXACT_DSR_ROW64_HYBRID:BOOL=ON",
+            "DSRRL_PMETAL_M18_ROW64_ENVSPEC05_EXPERIMENT:BOOL=ON",
             "DSRRL_RESOURCE_EPOCH_SHARD_SYNC:BOOL=ON",
             "DSRRL_COMPANION_TLS_4WAY:BOOL=ON",
             "DSRRL_PHYSICAL_CUT_UL_H3_SUBSURFACE:BOOL=ON",
@@ -165,12 +172,12 @@ jobs:
       - name: Generate build provenance and diagnostic ZIP
         shell: pwsh
         run: |
-          $bin = "DSRRL_v2.0.2_PMETAL_EXACT_ROW64_HYBRID.addon64"
+          $bin = "DSRRL_v2.0.2_PMETAL_M18_ROW64_ENVSPEC05_TEST.addon64"
           $sha = (Get-FileHash $bin -Algorithm SHA256).Hash.ToLowerInvariant()
           "$sha  $bin" | Set-Content -Encoding ascii SHA256SUMS.txt
           $prov = [ordered]@{
             version = "2.0.2"
-            flavor = "PMETAL_EXACT_DSR_ROW64_HYBRID"
+            flavor = "PMETAL_M18_ROW64_ENVSPEC05_TEST"
             release_parent_source = "b19a273f15872999a631e3feaa0a0dd6aea35e89"
             source_commit = $env:DSRRL_CHECKOUT_COMMIT
             addon = $bin
@@ -189,22 +196,25 @@ jobs:
             ptde_sidecars = "NOT_INCLUDED"
             runtime_liveness = "NOT_TESTED_ON_OWNER"
             pixel_equivalence = "OPEN"
+            experiment = "m18/64 EnvSpec 0.5 from PTDE runtime-adjacent rows 28 and 35 only; DSR raw 1.5 retained"
+            envdiffuse = "DSR raw 1.5 unchanged"
+            source_truth = "HYPOTHESIS_NOT_CANONICAL_PTDE"
           }
-          $prov | ConvertTo-Json -Depth 5 | Set-Content -Encoding utf8 DSRRL_v2.0.2_PMETAL_EXACT_ROW64_HYBRID_PROVENANCE.json
+          $prov | ConvertTo-Json -Depth 5 | Set-Content -Encoding utf8 DSRRL_v2.0.2_PMETAL_M18_ROW64_ENVSPEC05_TEST_PROVENANCE.json
           New-Item -ItemType Directory -Path diag-stage -Force | Out-Null
-          Copy-Item $bin,SHA256SUMS.txt,DSRRL_v2.0.2_PMETAL_EXACT_ROW64_HYBRID_PROVENANCE.json diag-stage/
+          Copy-Item $bin,SHA256SUMS.txt,DSRRL_v2.0.2_PMETAL_M18_ROW64_ENVSPEC05_TEST_PROVENANCE.json diag-stage/
           Copy-Item diagnostics/v2.0.2/README_PMETAL_SPEC_TRANSITIONS.md diag-stage/README_PMETAL_SPEC_TRANSITIONS.md
-          Compress-Archive -Path diag-stage/* -DestinationPath DSRRL_v2.0.2_PMETAL_EXACT_ROW64_HYBRID.zip
-          Expand-Archive DSRRL_v2.0.2_PMETAL_EXACT_ROW64_HYBRID.zip diag-check -Force
+          Compress-Archive -Path diag-stage/* -DestinationPath DSRRL_v2.0.2_PMETAL_M18_ROW64_ENVSPEC05_TEST.zip
+          Expand-Archive DSRRL_v2.0.2_PMETAL_M18_ROW64_ENVSPEC05_TEST.zip diag-check -Force
           $addons = @(Get-ChildItem diag-check -Recurse -Filter *.addon64)
           if ($addons.Count -ne 1) { throw "Expected exactly one addon in diagnostic ZIP" }
           if ((Get-FileHash $addons[0].FullName).Hash -ne (Get-FileHash $bin).Hash) { throw "ZIP SHA mismatch" }
       - uses: actions/upload-artifact@v4
         with:
-          name: DSRRL_v2.0.2_PMETAL_EXACT_ROW64_HYBRID
+          name: DSRRL_v2.0.2_PMETAL_M18_ROW64_ENVSPEC05_TEST
           path: |
-            DSRRL_v2.0.2_PMETAL_EXACT_ROW64_HYBRID.addon64
-            DSRRL_v2.0.2_PMETAL_EXACT_ROW64_HYBRID.zip
-            DSRRL_v2.0.2_PMETAL_EXACT_ROW64_HYBRID_PROVENANCE.json
+            DSRRL_v2.0.2_PMETAL_M18_ROW64_ENVSPEC05_TEST.addon64
+            DSRRL_v2.0.2_PMETAL_M18_ROW64_ENVSPEC05_TEST.zip
+            DSRRL_v2.0.2_PMETAL_M18_ROW64_ENVSPEC05_TEST_PROVENANCE.json
             SHA256SUMS.txt
           if-no-files-found: error
