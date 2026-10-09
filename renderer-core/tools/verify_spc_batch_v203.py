@@ -12,4 +12,7 @@ compiled = re.findall(pattern, header)
 assert len(compiled) == 25, len(compiled)
 
 assert len({r[2] for r in compiled}) == len(compiled)
-print('Census profile count verified')
+for profile, route, name, sha, gain, slot in compiled:
+    matches = [x for x in routes if x["mtd_name"] == name]
+    assert len(matches) == 1, name
+print('Unique MTD census entries:', len(compiled))
