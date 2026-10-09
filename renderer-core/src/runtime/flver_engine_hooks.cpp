@@ -979,6 +979,63 @@ void __fastcall mtd_entry(
  if(g_mo)g_mo(material,raw,len,semantic_key);
 }
 
+#if defined(DSRRL_EXPERIMENTAL_SPC_MATERIAL_BATCH)
+// Passive census of the exact MaterialResponse MTD roster, including the
+// Lit/Mul/ambiguous profiles deliberately excluded from the SPC operator.
+// Never authorizes a draw or relaxes the FLVER/sidecar/receiver gates.
+std::atomic<std::uint64_t> g_spc_owner_census_mask{0u};
+std::atomic<std::uint64_t> g_spc_runtime_mtd_census_mask{0u};
+
+void log_spc_material_census_once(
+    const operators::material_response::material_identity &identity,
+    bool runtime_mtd_only) noexcept
+{
+    namespace mr = operators::material_response;
+    if (!identity.valid)
+        return;
+    for (std::size_t i = 0u;
+         i < mr::generated::k_material_route_count_v1; ++i) {
+        const auto &r = mr::generated::k_material_routes_v1[i];
+        if (identity.route_index != r.route_index ||
+            identity.semantic_name_hash != mr::mtd_semantic_hash(r.mtd_name))
+            continue;
+        if (std::strstr(r.mtd_name, "Leather") == nullptr &&
+            std::strstr(r.mtd_name, "Cloth") == nullptr &&
+            std::strstr(r.mtd_name, "Wet") == nullptr &&
+            std::strstr(r.mtd_name, "Metal") == nullptr)
+            return;
+        static_assert(mr::generated::k_material_route_count_v1 <= 64u);
+        const auto bit = std::uint64_t{1u} << i;
+        auto &mask = runtime_mtd_only
+            ? g_spc_runtime_mtd_census_mask
+            : g_spc_owner_census_mask;
+        if ((mask.fetch_or(bit, std::memory_order_relaxed) & bit) != 0u)
+            return;
+        bool flver_digest = false;
+        for (const auto byte : identity.flver_sha256)
+            flver_digest |= byte != 0u;
+        const bool sha_match = operators::legacy_plan::hashing::matches_hex(
+            identity.raw_mtd_sha256, r.sha256);
+        const bool exact_authority =
+            match_ptde_metal_envspec_material(identity) != nullptr;
+        char line[496]{};
+        std::snprintf(line, sizeof(line),
+            "[DSRRL SPC CENSUS] stage=%s mtd=%s route=%u family=%s sha=%u flver=%u owner=%u slot_valid=%u slot=%u actual_mtd=%u exact_bridge_authority=%u pixel=OPEN",
+            runtime_mtd_only ? "runtime_mtd_only" : "flver_owner_exact",
+            r.mtd_name, static_cast<unsigned>(identity.route_index),
+            r.material_family, sha_match ? 1u : 0u,
+            flver_digest ? 1u : 0u,
+            identity.owner_tuple_exact ? 1u : 0u,
+            identity.material_slot_valid ? 1u : 0u,
+            static_cast<unsigned>(identity.material_slot),
+            identity.actual_material_exact ? 1u : 0u,
+            exact_authority ? 1u : 0u);
+        reshade::log::message(reshade::log::level::info, line);
+        return;
+    }
+}
+#endif
+
 bool publish_exact_selector_identity(
     void *owner,
     const void *actual_material,
