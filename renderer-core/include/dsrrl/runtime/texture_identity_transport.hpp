@@ -28,4 +28,14 @@ bool snapshot_raw(
     const wchar_t *&logical_name,
     std::size_t &length) noexcept;
 
+// Opt-in SPC25 producer/transport census. No name guesses and no pointer
+// lifetimes are exported; counts alone diagnose the semantic handoff cut.
+struct texture_name_liveness {
+    std::uint64_t hook_calls = 0u;
+    std::uint64_t names_captured = 0u;
+    std::uint64_t names_cleared = 0u;
+    std::uint64_t name_snapshots = 0u;
+};
+texture_name_liveness liveness() noexcept;
+
 } // namespace dsrrl::runtime::texture_identity_transport
