@@ -15,4 +15,7 @@ assert len({r[2] for r in compiled}) == len(compiled)
 for profile, route, name, sha, gain, slot in compiled:
     matches = [x for x in routes if x["mtd_name"] == name]
     assert len(matches) == 1, name
+    assert matches[0]["route_index"] == int(route), name
+    assert matches[0]["sha256"] == sha, name
+    assert float(matches[0]["c101"]) == float(gain), name
 print('Unique MTD census entries:', len(compiled))
