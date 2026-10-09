@@ -23,6 +23,12 @@
 #include <Windows.h>
 #include <d3d11.h>
 
+#if defined(DSRRL_EXPERIMENTAL_SPC_MATERIAL_BATCH)
+// WKPDID_D3DDebugObjectName is declared by the Windows SDK in
+// d3dcommon.h and exported as an external GUID from dxguid.lib.
+#pragma comment(lib, "dxguid.lib")
+#endif
+
 #include <algorithm>
 #include <array>
 #include <atomic>
