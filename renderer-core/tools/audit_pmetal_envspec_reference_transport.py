@@ -96,8 +96,12 @@ for forbidden in [
 # EnvSpec draw still enforces exact material/route/receiver, semantic slot,
 # source, replacement shader, probe, SpecRGB and b12 readiness.
 for needle in [
-    "exact_pmetal_material(",
-    "exact_pmetal_decision(",
+    # Exact-MTD material+MR-decision policy is now one strict predicate.
+    "exact_pmetal_envspec_candidate(",
+    # Newly admitted MTDs must never consume the unkeyed LightBank fallback.
+    "is_experimental_ptde_metal_envspec_material(material)",
+    "source_.latest_exact_material(material, source)",
+    # Only baseline P_Metal retains the historically validated fallback.
     "source_.latest(material, source)",
     "effect_source_ready_",
     "effect_replacement_ready_",
