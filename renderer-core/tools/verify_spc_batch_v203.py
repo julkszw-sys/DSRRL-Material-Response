@@ -22,4 +22,5 @@ for profile, route, name, sha, gain, slot in compiled:
     assert len([e for e in envs if e["mtd_name"] == name]) == 1, name
     env = next(e for e in envs if e["mtd_name"] == name)
     assert env["dsr_mtd_sha256"] == sha, name
+    assert env["envspc_slot"] == int(slot), name
 print('Unique MTD and EnvSpec entries:',len(compiled))
