@@ -53,4 +53,13 @@ assert "match_ptde_metal_envspec_material(material) != nullptr" in producer
 assert "source_.latest_exact_material(material, source)" in consumer
 assert "env_semantics.envspc_slot != match_ptde_metal_envspec_material(material)->envspc_slot" in consumer
 assert "decision.c101 != authority->c101" in consumer
+# The diagnostic must observe both retail selector pathways and real draws.
+# These assertions verify construction only, not live arrival of any route.
+integrated = (ROOT / "integrated/integrated_addon.cpp").read_text()
+assert "log_spc_material_census_once(identity, false)" in selector
+assert "log_spc_material_census_once(runtime_material, true)" in selector
+assert "log_spc_draw_receiver_once(" in integrated
+assert "stage=draw_owner" in integrated
+assert "stage=runtime_mtd_only" in selector
+assert "exact_bridge_authority=" in selector and "exact_bridge_authority=" in integrated
 print('Unique MTD and EnvSpec entries:',len(compiled))
