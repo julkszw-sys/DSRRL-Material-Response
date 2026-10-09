@@ -30,4 +30,8 @@ for profile, route, name, sha, gain, slot in compiled:
     assert env["ptde_spx"].endswith("FRPG_Phn_ColDifSpcBmp.spx"), name
     assert env["dsr_spx"].endswith("FRPG_Phn_ColDifSpcBmp.spx"), name
 assert all(x["material_family"] == "DifSpcBmp" for x in routes if any(x["mtd_name"] == z[2] for z in compiled))
+names = {x[2] for x in compiled}
+assert "S_Metal[DSB]_Edge.mtd" not in names
+assert "P_DullLeather[DSB].mtd" not in names
+assert all("Body" not in name and "body" not in name for name in names)
 print('Unique MTD and EnvSpec entries:',len(compiled))
