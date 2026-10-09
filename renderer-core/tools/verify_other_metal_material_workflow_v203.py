@@ -48,6 +48,9 @@ def main() -> None:
     consumer = (
         ROOT / "src/runtime/pmetal_envspec_draw_runtime.cpp"
     ).read_text(encoding="utf-8")
+    selector_hook = (
+        ROOT / "src/runtime/flver_engine_hooks.cpp"
+    ).read_text(encoding="utf-8")
     cmake = (ROOT / "integrated/CMakeLists.txt").read_text(encoding="utf-8")
     expected = []
 
@@ -111,6 +114,18 @@ def main() -> None:
             "draw consumer missing exact experimental material selection")
     require("source_.latest_exact_material(material, source)" in consumer,
             "draw consumer missing exact source gate")
+    # A MaterialWorkflow consumer that never reaches the native FLVER selector
+    # cannot acquire its exact source. Catch route345-only regressions BEFORE
+    # compiling a diagnostic addon. The baseline path must remain available.
+    require("identity.route_index == 345u" in selector_hook,
+            "baseline route345 selector no longer preserved")
+    require("is_experimental_ptde_metal_envspec_material(identity)" in
+            selector_hook,
+            "experimental MTD was not routed to the real FLVER producer")
+    require("pmetal_env_source_selector_event(" in selector_hook,
+            "native producer hook dispatch missing")
+    require("DSRRL_EXPERIMENTAL_OTHER_METAL_PTDE_ENVSPEC" in selector_hook,
+            "new producer must not be globally enabled")
 
     print(json.dumps({
         "result": "PASS_SOURCE_STATIC_ONLY",
