@@ -90,7 +90,7 @@ void log_other_metal_stage_once(
 // This is a diagnostic-only receiver-stage probe, not a shader/CB/SRV
 // override. It survives RELEASE_CLEANUP=ON and is bounded to one
 // fail-open line per exact metal profile and downstream stage.
-std::atomic<std::uint64_t> g_other_metal_downstream_reject_mask{0u};
+std::atomic<std::uint32_t> g_other_metal_downstream_reject_masks[16]{};
 class other_metal_downstream_gate final {
 public:
     other_metal_downstream_gate(
