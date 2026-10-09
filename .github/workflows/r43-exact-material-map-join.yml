@@ -76,6 +76,8 @@ jobs:
         run: |
           python renderer-core/tools/apply_r43_dsr_only_envdiffuse.py
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python renderer-core/tools/apply_r43_dsr_common_lightbank.py
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Configure R43 per-key PMetal freshness cache
         shell: pwsh
