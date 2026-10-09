@@ -117,11 +117,14 @@ def main() -> None:
     # A MaterialWorkflow consumer that never reaches the native FLVER selector
     # cannot acquire its exact source. Catch route345-only regressions BEFORE
     # compiling a diagnostic addon. The baseline path must remain available.
-    require("identity.route_index == 345u" in selector_hook,
-            "baseline route345 selector no longer preserved")
-    require("is_experimental_ptde_metal_envspec_material(identity)" in
+    require("should_dispatch_ptde_metal_selector_source(identity)" in
             selector_hook,
-            "experimental MTD was not routed to the real FLVER producer")
+            "native FLVER selector does not call the tested MTD dispatcher")
+    require("material.route_index == 345u" in header,
+            "baseline route345 selector no longer preserved")
+    require("return is_experimental_ptde_metal_envspec_material(material)" in
+            header,
+            "experimental MTD no longer reaches the exact source dispatcher")
     require("pmetal_env_source_selector_event(" in selector_hook,
             "native producer hook dispatch missing")
     require("DSRRL_EXPERIMENTAL_OTHER_METAL_PTDE_ENVSPEC" in selector_hook,
