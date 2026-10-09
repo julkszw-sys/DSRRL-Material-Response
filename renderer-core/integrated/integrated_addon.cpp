@@ -10,6 +10,9 @@
 #include "dsrrl/runtime/bloom_scene_sidecar_runtime.hpp"
 #include "dsrrl/runtime/bloom_fx_draw_transport.hpp"
 #include "dsrrl/runtime/pmetal_envspec_draw_runtime.hpp"
+#if defined(DSRRL_PMETAL_ASYLUM_NATIVE_MAP_CUT)
+#include "dsrrl/runtime/pmetal_native_map_cut.hpp"
+#endif
 #if defined(DSRRL_PMETAL_ASYLUM_DEFERRED_TOPOLOGY_TRACE)
 #include "dsrrl/runtime/pmetal_asylum_cmdlist_trace.hpp"
 #endif
@@ -4093,6 +4096,12 @@ void on_init_device(reshade::api::device *device)
 
 void on_destroy_device(reshade::api::device *device)
 {
+#if defined(DSRRL_PMETAL_ASYLUM_NATIVE_MAP_CUT)
+    if(!dsrrl::runtime::pmetal_native_map_cut::global_observer().detach()) {
+        reshade::log::message(reshade::log::level::warning,
+            "[DSRRL PMETAL NATIVE MAP CUT] native vtable hook restore incomplete; retained original targets");
+    }
+#endif
     dsrrl::runtime::pixel_srv_shadow_reset();
 #if defined(DSRRL_PMETAL_ASYLUM_DEFERRED_TOPOLOGY_TRACE)
     dsrrl::runtime::pmetal_asylum_cmdlist_trace::global_observer().clear();
@@ -7441,6 +7450,10 @@ bool cb_writer_on_deferred_update(
 void cb_writer_on_destroy(
     reshade::api::device *,reshade::api::resource resource)
 {
+#if defined(DSRRL_PMETAL_ASYLUM_NATIVE_MAP_CUT)
+    dsrrl::runtime::pmetal_native_map_cut::global_observer().forget(
+        static_cast<std::uintptr_t>(resource.handle));
+#endif
     dsrrl::runtime::pmetal_native_cb_writer_destroy(
         static_cast<std::uintptr_t>(resource.handle));
 }
@@ -7530,6 +7543,9 @@ void register_events()
 
 void unregister_events()
 {
+#if defined(DSRRL_PMETAL_ASYLUM_NATIVE_MAP_CUT)
+    (void)dsrrl::runtime::pmetal_native_map_cut::global_observer().detach();
+#endif
 #if defined(DSRRL_PMETAL_ASYLUM_DEFERRED_TOPOLOGY_TRACE)
     reshade::unregister_event<reshade::addon_event::destroy_command_list>(asylum_cmdlist_destroy);
     reshade::unregister_event<reshade::addon_event::execute_secondary_command_list>(asylum_cmdlist_secondary);
