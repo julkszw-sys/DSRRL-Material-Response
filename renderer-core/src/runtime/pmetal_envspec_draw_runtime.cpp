@@ -814,9 +814,10 @@ bool pmetal_envspec_draw_runtime::prepare(
         telemetry::hot_count(lerp_candidates_);
 
     // Stage zero distinguishes a draw that never reaches EnvSpec from a source miss.
-    const bool spc_exact_candidate = exact_pmetal_envspec_candidate(material, decision);
 #if defined(DSRRL_EXPERIMENTAL_OTHER_METAL_PTDE_ENVSPEC)
     if (spc_onepass_claim(material, 0u)) {
+        const bool spc_exact_candidate =
+            exact_pmetal_envspec_candidate(material, decision);
         char line[400]{};
         std::snprintf(line, sizeof(line),
             "[DSRRL SPC ONEPASS] stage=prepare_candidate route=%u rx=%u slot=%u family=%u candidate=%u owner=%u actual_mtd=%u pixel=OPEN",
@@ -830,7 +831,9 @@ bool pmetal_envspec_draw_runtime::prepare(
         reshade::log::message(reshade::log::level::info, line);
     }
 #endif
-    if (!spc_exact_candidate) {
+    if (!exact_pmetal_envspec_candidate(
+            material,
+            decision)) {
         telemetry::hot_count(material_rejects_);
         effect_fail(
             effect_fail_mask_,
