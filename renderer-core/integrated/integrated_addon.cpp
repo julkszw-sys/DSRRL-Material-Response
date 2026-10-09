@@ -11,6 +11,9 @@
 #include "dsrrl/runtime/bloom_fx_draw_transport.hpp"
 #include "dsrrl/runtime/pmetal_envspec_draw_runtime.hpp"
 #include "dsrrl/runtime/pmetal_native_draw_bridge.hpp"
+#if defined(DSRRL_PMETAL_ASYLUM_CB_WRITER_TRACE)
+#include "dsrrl/runtime/pmetal_native_cb_writer_trace.hpp"
+#endif
 #include "dsrrl/runtime/pixel_srv_shadow.hpp"
 #include "dsrrl/runtime/texture_identity_transport.hpp"
 #include "dsrrl/operators/material_response/mtd_semantic_census.hpp"
@@ -7386,10 +7389,60 @@ void on_push_descriptors(
         update);
 }
 
+#if defined(DSRRL_PMETAL_ASYLUM_CB_WRITER_TRACE)
+void cb_writer_on_map(
+    reshade::api::device *,reshade::api::resource resource,
+    std::uint64_t offset,std::uint64_t size,
+    reshade::api::map_access access,void **data)
+{
+    dsrrl::runtime::pmetal_native_cb_writer_after_map(
+        static_cast<std::uintptr_t>(resource.handle),
+        data == nullptr ? nullptr : *data,offset,size,
+        access != reshade::api::map_access::read_only);
+}
+void cb_writer_on_unmap(
+    reshade::api::device *,reshade::api::resource resource)
+{
+    dsrrl::runtime::pmetal_native_cb_writer_before_unmap(
+        static_cast<std::uintptr_t>(resource.handle));
+}
+bool cb_writer_on_update(
+    reshade::api::device *,const void *data,
+    reshade::api::resource dest,
+    std::uint64_t offset,std::uint64_t size)
+{
+    dsrrl::runtime::pmetal_native_cb_writer_before_update(
+        static_cast<std::uintptr_t>(dest.handle),data,offset,size);
+    return false; // observation only, always execute the game's command
+}
+bool cb_writer_on_deferred_update(
+    reshade::api::command_list *,const void *data,
+    reshade::api::resource dest,
+    std::uint64_t offset,std::uint64_t size)
+{
+    dsrrl::runtime::pmetal_native_cb_writer_before_update(
+        static_cast<std::uintptr_t>(dest.handle),data,offset,size);
+    return false;
+}
+void cb_writer_on_destroy(
+    reshade::api::device *,reshade::api::resource resource)
+{
+    dsrrl::runtime::pmetal_native_cb_writer_destroy(
+        static_cast<std::uintptr_t>(resource.handle));
+}
+#endif
+
 void register_events()
 {
     reshade::register_event<reshade::addon_event::init_device>(on_init_device);
     reshade::register_event<reshade::addon_event::destroy_device>(on_destroy_device);
+#if defined(DSRRL_PMETAL_ASYLUM_CB_WRITER_TRACE)
+    reshade::register_event<reshade::addon_event::map_buffer_region>(cb_writer_on_map);
+    reshade::register_event<reshade::addon_event::unmap_buffer_region>(cb_writer_on_unmap);
+    reshade::register_event<reshade::addon_event::update_buffer_region>(cb_writer_on_update);
+    reshade::register_event<reshade::addon_event::update_buffer_region_command>(cb_writer_on_deferred_update);
+    reshade::register_event<reshade::addon_event::destroy_resource>(cb_writer_on_destroy);
+#endif
     if (k_drawtime_islands_runtime_enabled &&
         k_pmetal_native_draw_runtime_enabled) {
         reshade::register_event<reshade::addon_event::init_command_list>(on_init_command_list);
@@ -7412,6 +7465,14 @@ void register_events()
 
 void unregister_events()
 {
+#if defined(DSRRL_PMETAL_ASYLUM_CB_WRITER_TRACE)
+    reshade::unregister_event<reshade::addon_event::destroy_resource>(cb_writer_on_destroy);
+    reshade::unregister_event<reshade::addon_event::update_buffer_region_command>(cb_writer_on_deferred_update);
+    reshade::unregister_event<reshade::addon_event::update_buffer_region>(cb_writer_on_update);
+    reshade::unregister_event<reshade::addon_event::unmap_buffer_region>(cb_writer_on_unmap);
+    reshade::unregister_event<reshade::addon_event::map_buffer_region>(cb_writer_on_map);
+    dsrrl::runtime::pmetal_native_cb_writer_reset();
+#endif
     if (k_drawtime_islands_runtime_enabled &&
         k_draw_callbacks_runtime_enabled) {
         reshade::unregister_event<reshade::addon_event::present>(on_present);
@@ -7513,6 +7574,9 @@ bool AddonInit(
     g_pmetal_envspec.reset();
     g_pmetal_source.reset();
     g_pmetal_native_draw.reset_telemetry();
+#if defined(DSRRL_PMETAL_ASYLUM_CB_WRITER_TRACE)
+    dsrrl::runtime::pmetal_native_cb_writer_reset();
+#endif
     g_upper_lower.reset();
     g_upper_lower_hemenv.reset();
     g_hemdir3.reset();
