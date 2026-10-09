@@ -1,8 +1,8 @@
 name: DSRRL v2.0.2 PMetal Asylum B0 Register Fingerprints
 on:
   workflow_dispatch:
-  push:
-    branches: [diagnostics/pmetal-asylum-b0-register-fingerprint-join]
+  pull_request:
+    branches: [diagnostics/pmetal-asylum-cb-writer-epoch-trace]
 permissions:
   contents: read
 jobs:
@@ -199,6 +199,7 @@ jobs:
           if (-not $ascii.Contains("[DSRRL PMETAL NATIVE PASS BINDINGS]")) { throw "Native pass CB trace absent in final addon" }
           if (-not $ascii.Contains("[DSRRL PMETAL CB WRITER JOIN]")) { throw "CPU writer trace not linked into final addon" }
           if (-not $ascii.Contains("[DSRRL PMETAL B0 REGHASH]")) { throw "Per-register b0 trace not linked into final addon" }
+          if (-not $ascii.Contains("[DSRRL ASYLUM CMDLIST]")) { throw "Deferred topology diagnostic not linked into final addon" }
           if ($ascii.Contains("[DSRRL PMETAL M18 ROW64 ENVSPEC05 TEST]")) { throw "Experimental EnvSpec override leaked into rollback" }
           if ($ascii.Contains("[DSRRL DDS SRV POOL]")) { throw "DDS pool leaked into release" }
           if (-not $ascii.Contains("v2_0_2_pmetal_asylum_deferred_topology")) { throw "Missing diagnostic flavor" }
@@ -224,6 +225,7 @@ jobs:
             "DSRRL_PMETAL_ASYLUM_NATIVE_PASS_BINDING_TRACE:BOOL=ON",
             "DSRRL_PMETAL_ASYLUM_CB_WRITER_TRACE:BOOL=ON",
             "DSRRL_PMETAL_ASYLUM_CB_REGISTER_TRACE:BOOL=ON",
+            "DSRRL_PMETAL_ASYLUM_DEFERRED_TOPOLOGY_TRACE:BOOL=ON",
             "DSRRL_RESOURCE_EPOCH_SHARD_SYNC:BOOL=ON",
             "DSRRL_COMPANION_TLS_4WAY:BOOL=ON",
             "DSRRL_PHYSICAL_CUT_UL_H3_SUBSURFACE:BOOL=ON",
@@ -240,7 +242,7 @@ jobs:
           "$sha  $bin" | Set-Content -Encoding ascii SHA256SUMS.txt
           $prov = [ordered]@{
             version = "2.0.2"
-            flavor = "PMETAL_ASYLUM_B0_REGHASH"
+            flavor = "PMETAL_ASYLUM_DEFERRED_TOPOLOGY"
             release_parent_source = "b19a273f15872999a631e3feaa0a0dd6aea35e89"
             source_commit = $env:DSRRL_CHECKOUT_COMMIT
             addon = $bin
@@ -260,7 +262,7 @@ jobs:
             runtime_liveness = "NOT_TESTED_ON_OWNER"
             pixel_equivalence = "OPEN"
             source_values = "PR286 unchanged 1246 PTDE common rows and original 3 DSR-only rows"
-            diagnostic = "129x16-byte native b0 CPU writer hashes on bounded material-bank transition samples; no ABI semantics or pixels asserted"
+            diagnostic = "PR292 native b0 register hashes with bounded command-list Finish/Execute topology; SOURCE_CANDIDATE_ONLY, no GPU read or PTDE pixel claims"
             retired_experiment = "PR287 m18/64 EnvSpec0.5 disabled by source provenance"
           }
           $prov | ConvertTo-Json -Depth 5 | Set-Content -Encoding utf8 DSRRL_v2.0.2_PMETAL_ASYLUM_B0_REGHASH_PROVENANCE.json
