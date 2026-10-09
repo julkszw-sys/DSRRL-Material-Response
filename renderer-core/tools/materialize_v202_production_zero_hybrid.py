@@ -22,7 +22,7 @@ assert "latest_hook_source(out)" not in s and "[DSRRL PMETAL ZERO RE]" in s
 
 def consumer_block(text):
     start = text.index("bool pmetal_env_source_runtime::latest(")
-    end = text.index("pmetal_env_source_runtime_telemetry\\n", start)
+    end = text.index("pmetal_env_source_runtime_telemetry\n", start)
     return text[start:end]
 baseline_consumer = consumer_block(original.decode("utf-8"))
 candidate_consumer = consumer_block(s)
