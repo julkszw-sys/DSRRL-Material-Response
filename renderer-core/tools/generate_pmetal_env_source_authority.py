@@ -175,7 +175,7 @@ lines += [
     "}};",
     "constexpr const bank_donor *find_bank(std::uint64_t s) noexcept { for (const auto &b : k_banks) if (b.signature == s) return &b; return nullptr; }",
     "constexpr const bank_donor *find_bank_by_layout(std::uint64_t s, std::uint32_t live_count) noexcept { for (const auto &b : k_banks) if (b.layout_signature == s && b.live_count == live_count) return &b; return nullptr; }",
-    "inline constexpr std::array<donor_row,3> k_dsr_extra = {{{{",
+    "inline constexpr std::array<donor_row,3> k_dsr_extra = {{",
     "donor_row{dsr_only_lightbank_rows_v1::rows[0].id,dsr_only_lightbank_rows_v1::rows[0].r,dsr_only_lightbank_rows_v1::rows[0].g,dsr_only_lightbank_rows_v1::rows[0].b,dsr_only_lightbank_rows_v1::rows[0].m},",
     "donor_row{dsr_only_lightbank_rows_v1::rows[1].id,dsr_only_lightbank_rows_v1::rows[1].r,dsr_only_lightbank_rows_v1::rows[1].g,dsr_only_lightbank_rows_v1::rows[1].b,dsr_only_lightbank_rows_v1::rows[1].m},",
     "donor_row{dsr_only_lightbank_rows_v1::rows[2].id,dsr_only_lightbank_rows_v1::rows[2].r,dsr_only_lightbank_rows_v1::rows[2].g,dsr_only_lightbank_rows_v1::rows[2].b,dsr_only_lightbank_rows_v1::rows[2].m},",
