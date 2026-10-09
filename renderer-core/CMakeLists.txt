@@ -478,6 +478,20 @@ target_include_directories(dsrrl_renderer_ptde_workflow_c100_tests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/include)
 target_compile_features(dsrrl_renderer_ptde_workflow_c100_tests PRIVATE cxx_std_17)
 
+add_executable(dsrrl_renderer_ptde_metal_envspec_baseline_tests
+    tests/ptde_metal_envspec_authority_tests.cpp)
+target_link_libraries(dsrrl_renderer_ptde_metal_envspec_baseline_tests PRIVATE
+    dsrrl_renderer_core)
+target_compile_features(dsrrl_renderer_ptde_metal_envspec_baseline_tests PRIVATE cxx_std_17)
+
+add_executable(dsrrl_renderer_ptde_metal_envspec_experimental_tests
+    tests/ptde_metal_envspec_authority_tests.cpp)
+target_link_libraries(dsrrl_renderer_ptde_metal_envspec_experimental_tests PRIVATE
+    dsrrl_renderer_core)
+target_compile_definitions(dsrrl_renderer_ptde_metal_envspec_experimental_tests PRIVATE
+    DSRRL_EXPERIMENTAL_OTHER_METAL_PTDE_ENVSPEC)
+target_compile_features(dsrrl_renderer_ptde_metal_envspec_experimental_tests PRIVATE cxx_std_17)
+
 if(MSVC)
     target_compile_options(dsrrl_renderer_core_tests PRIVATE /W4 /WX)
     target_compile_options(dsrrl_renderer_material_owner_selection_tests PRIVATE /W4 /WX)
@@ -507,6 +521,8 @@ if(MSVC)
     target_compile_options(dsrrl_renderer_build151_nospc_tests PRIVATE /W4 /WX)
     target_compile_options(dsrrl_renderer_mtd_semantic_census_tests PRIVATE /W4 /WX)
     target_compile_options(dsrrl_renderer_ptde_workflow_c100_tests PRIVATE /W4 /WX)
+    target_compile_options(dsrrl_renderer_ptde_metal_envspec_baseline_tests PRIVATE /W4 /WX)
+    target_compile_options(dsrrl_renderer_ptde_metal_envspec_experimental_tests PRIVATE /W4 /WX)
     target_compile_options(dsrrl_renderer_stable_receiver_pipeline_tests PRIVATE /W4 /WX)
     target_compile_options(dsrrl_renderer_hemenvlerp_pipeline_tests PRIVATE /W4 /WX)
 else()
@@ -538,6 +554,8 @@ else()
     target_compile_options(dsrrl_renderer_build151_nospc_tests PRIVATE -Wall -Wextra -Wpedantic -Werror)
     target_compile_options(dsrrl_renderer_mtd_semantic_census_tests PRIVATE -Wall -Wextra -Wpedantic -Werror)
     target_compile_options(dsrrl_renderer_ptde_workflow_c100_tests PRIVATE -Wall -Wextra -Wpedantic -Werror)
+    target_compile_options(dsrrl_renderer_ptde_metal_envspec_baseline_tests PRIVATE -Wall -Wextra -Wpedantic -Werror)
+    target_compile_options(dsrrl_renderer_ptde_metal_envspec_experimental_tests PRIVATE -Wall -Wextra -Wpedantic -Werror)
     target_compile_options(dsrrl_renderer_stable_receiver_pipeline_tests PRIVATE -Wall -Wextra -Wpedantic -Werror)
     target_compile_options(dsrrl_renderer_hemenvlerp_pipeline_tests PRIVATE -Wall -Wextra -Wpedantic -Werror)
 endif()
@@ -607,6 +625,8 @@ add_test(NAME dsrrl_renderer_postprocess_unblock_tests COMMAND dsrrl_renderer_po
 add_test(NAME dsrrl_renderer_build151_nospc_tests COMMAND dsrrl_renderer_build151_nospc_tests)
 add_test(NAME dsrrl_renderer_mtd_semantic_census_tests COMMAND dsrrl_renderer_mtd_semantic_census_tests)
 add_test(NAME dsrrl_renderer_ptde_workflow_c100_tests COMMAND dsrrl_renderer_ptde_workflow_c100_tests)
+add_test(NAME dsrrl_renderer_ptde_metal_envspec_baseline_tests COMMAND dsrrl_renderer_ptde_metal_envspec_baseline_tests)
+add_test(NAME dsrrl_renderer_ptde_metal_envspec_experimental_tests COMMAND dsrrl_renderer_ptde_metal_envspec_experimental_tests)
 add_test(
     NAME dsrrl_material_response_specular_power_donor_audit
     COMMAND "${Python3_EXECUTABLE}"
