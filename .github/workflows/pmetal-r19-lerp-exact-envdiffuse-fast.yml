@@ -11,6 +11,7 @@ on:
       - r41-active-islands-pmetal-cache-scope
       - r42-pmetal-cross-thread-producer-cache
       - r43-pmetal-per-key-freshness-cache
+      - fix/r43-pmetal-map-provenance
   pull_request:
     paths:
       - "renderer-core/integrated/**"
@@ -56,6 +57,12 @@ jobs:
           ref: 3645e3025d1d98a90e318278858931f034d5d1f6
           path: _reshade
 
+      - name: Materialize exact R43 LightBank to bound-GI map guard
+        shell: pwsh
+        run: |
+          python renderer-core/tools/materialize_r43_pmetal_map_guard.py --check
+          python renderer-core/tools/materialize_r43_pmetal_map_guard.py
+
       - name: Configure R43 per-key PMetal freshness cache
         shell: pwsh
         run: >
@@ -65,7 +72,7 @@ jobs:
           -A x64
           -DRESHADE_INCLUDE_DIR="${{ github.workspace }}/_reshade/include"
           -DDSRRL_SOURCE_COMMIT="$env:DSRRL_CHECKOUT_COMMIT"
-          -DDSRRL_BUILD_FLAVOR="pmetal_r43_per_key_freshness_cache"
+          -DDSRRL_BUILD_FLAVOR="pmetal_r43_map_provenance_guard"
           -DDSRRL_FULL_TELEMETRY_DEFAULT_ON=OFF
           -DDSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG=ON
           -DDSRRL_PMETAL_FULL_PTDE_HEMENV_R3=ON
@@ -89,12 +96,12 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           $addons = @(Get-ChildItem build-fast -Recurse -Filter *.addon64)
           if ($addons.Count -ne 1) { throw "Expected exactly one addon, found $($addons.Count)" }
-          Copy-Item $addons[0].FullName "DSRRL_PMETAL_R43_PER_KEY_FRESHNESS_CACHE.addon64" -Force
+          Copy-Item $addons[0].FullName "DSRRL_PMETAL_R43_MAP_PROVENANCE_GUARD.addon64" -Force
 
       - name: Verify binary identity
         shell: pwsh
         run: |
-          $path = "DSRRL_PMETAL_R43_PER_KEY_FRESHNESS_CACHE.addon64"
+          $path = "DSRRL_PMETAL_R43_MAP_PROVENANCE_GUARD.addon64"
           $ascii = [System.Text.Encoding]::ASCII.GetString([System.IO.File]::ReadAllBytes($path))
           if (-not $ascii.Contains($env:DSRRL_CHECKOUT_COMMIT)) { throw "Missing source commit identity" }
           if (-not $ascii.Contains("pmetal_r43_per_key_freshness_cache")) { throw "Missing R43 build flavor identity" }
@@ -128,6 +135,6 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: DSRRL_PMETAL_R43_PER_KEY_FRESHNESS_CACHE
-          path: DSRRL_PMETAL_R43_PER_KEY_FRESHNESS_CACHE.addon64
+          name: DSRRL_PMETAL_R43_MAP_PROVENANCE_GUARD
+          path: DSRRL_PMETAL_R43_MAP_PROVENANCE_GUARD.addon64
           if-no-files-found: error
