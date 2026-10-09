@@ -1377,12 +1377,13 @@ extern "C" void dsrrl_flver_selector_observer(
      owner_lookup_begin,
      profile.owner_lookup_ticks);
 
+ bool owner_mtd_ok = false;
  if(owner_lookup_ok){
   telemetry::hot_count(g_owner_sha_hits);
 
   const auto owner_mtd_begin =
       selector_profile_begin(profile);
-  const bool owner_mtd_ok =
+  owner_mtd_ok =
       enrich_exact_owner_mtd_identity(
           observation);
   selector_profile_end_stage(
