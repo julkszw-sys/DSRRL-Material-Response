@@ -1,0 +1,33 @@
+name: DSRRL v2.0.2 final-base hybrid
+on:
+  workflow_dispatch:
+  push:
+    branches: [fix/v202-production-zero-dsr-only-direct]
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/checkout@v4
+        with:
+          repository: crosire/reshade
+          ref: 3645e3025d1d98a90e318278858931f034d5d1f6
+          path: _reshade
+      - name: Exact production build
+        shell: pwsh
+        run: ./renderer-core/tools/configure_v202_production_zero_hybrid.ps1
+      - name: Tests and packaging
+        shell: pwsh
+        run: ./renderer-core/tools/verify_v202_production_zero_hybrid.ps1
+      - uses: actions/upload-artifact@v4
+        with:
+          name: DSRRL_v202_FINAL_BASE_ZERO_DSR_HYBRID
+          path: |
+            DSRRL_v202_FINAL_BASE_ZERO_DSR_HYBRID.addon64
+            DSRRL_v202_FINAL_BASE_ZERO_DSR_HYBRID.zip
+            SHA256SUMS.txt
+          if-no-files-found: error
