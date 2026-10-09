@@ -1,0 +1,16 @@
+{
+  "schema": "dsrrl.dev.source_promotion.v1",
+  "distribution_version": "v2.0.3-dev",
+  "status": "DEV",
+  "promoted_source_commit": "6a73033f6275f88487effeb1e34bbbdd7a6a3a88",
+  "stable_base_commit": "b19a273f15872999a631e3feaa0a0dd6aea35e89",
+  "original_actions_run": 37913412011,
+  "original_artifact_id": 11607274698,
+  "binary_sha256": "aa7c44b7cc79e36b386f2a7589432160b59dd739b5c56708aaf3ac0e7eb47c36",
+  "binary_size": 1846784,
+  "binary_bytes_unchanged": true,
+  "owner_visual_baseline_restored": true,
+  "ptde_pixel_equivalence": "OPEN",
+  "original_internal_build_flavor": "v2_0_2_production_zero_dsr_only_hybrid",
+  "stable_v2_0_2_untouched": true
+}

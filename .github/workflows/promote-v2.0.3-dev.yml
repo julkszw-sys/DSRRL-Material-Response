@@ -1,0 +1,105 @@
+name: Publish DSRRL v2.0.3-dev Verified Binary
+on:
+  push:
+    branches: [release/v2.0.3-dev]
+  workflow_dispatch:
+permissions:
+  contents: write
+  actions: read
+jobs:
+  promote:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Require exact owner-verified 2.0.2 restored source and unchanged renderer
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $source = '6a73033f6275f88487effeb1e34bbbdd7a6a3a88'
+          git merge-base --is-ancestor $source HEAD
+          if ($LASTEXITCODE -ne 0) { throw 'Unverified source ancestry' }
+          git diff --exit-code $source HEAD -- renderer-core
+          if ($LASTEXITCODE -ne 0) { throw 'Renderer was modified during promotion' }
+      - name: Retrieve exact already-built, owner-tested binary
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          New-Item -ItemType Directory incoming -Force | Out-Null
+          gh run download 37913412011 --repo julkszw-sys/DSRRL-Material-Response --name DSRRL_v202_FINAL_BASE_ZERO_DSR_HYBRID --dir incoming
+          if ($LASTEXITCODE -ne 0) { throw 'Cannot retrieve tested binary' }
+          $src='incoming/DSRRL_v202_FINAL_BASE_ZERO_DSR_HYBRID.addon64'
+          if (-not (Test-Path $src)) { throw 'Original addon missing from immutable artifact' }
+          $sum=(Get-FileHash $src -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($sum -ne 'aa7c44b7cc79e36b386f2a7589432160b59dd739b5c56708aaf3ac0e7eb47c36') { throw "Wrong addon SHA256: $sum" }
+          if ((Get-Item $src).Length -ne 1846784) { throw 'Original addon byte length mismatch' }
+          $dst='DSRRL_Restored_Lighting_v2.0.3-dev.addon64'
+          Copy-Item $src $dst
+          if ((Get-FileHash $dst -Algorithm SHA256).Hash.ToLowerInvariant() -ne $sum) { throw 'File rename mutated binary' }
+          Write-Host "UNALTERED_OWNER_TESTED_ADDON_SHA256=$sum"
+      - name: Assemble reproducible development prerelease metadata
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $addon='DSRRL_Restored_Lighting_v2.0.3-dev.addon64'
+          $sha=(Get-FileHash $addon -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$sha  $addon" | Set-Content -Encoding ascii SHA256SUMS.txt
+          $prov=[ordered]@{
+            schema='dsrrl.dev.provenance.v1'
+            distribution_version='v2.0.3-dev'
+            distribution_status='DEVELOPMENT_PRERELEASE'
+            source_version='v2.0.2_plus_restored_lightbank_fallback'
+            exact_runtime_source_commit='6a73033f6275f88487effeb1e34bbbdd7a6a3a88'
+            exact_windows_build_run=37913412011
+            exact_windows_build_artifact_id=11607274698
+            original_binary_build_flavor='v2_0_2_production_zero_dsr_only_hybrid'
+            original_binary_filename='DSRRL_v202_FINAL_BASE_ZERO_DSR_HYBRID.addon64'
+            no_runtime_binary_modifications=$true
+            original_user_visual_works=$true
+            ptde_pixel_equivalence='OPEN'
+            addon=$addon
+            addon_sha256=$sha
+            addon_bytes=(Get-Item $addon).Length
+            renderer='DSR_HOST_NO_EXE_DISK_EDITS'
+          }
+          $prov | ConvertTo-Json -Depth 5 | Set-Content -Encoding utf8 DSRRL_v2.0.3-dev_PROVENANCE.json
+          New-Item -ItemType Directory release-stage -Force | Out-Null
+          Copy-Item $addon,SHA256SUMS.txt,DSRRL_v2.0.3-dev_PROVENANCE.json,release/v2.0.3-dev/RELEASE_NOTES.md release-stage/
+          Compress-Archive release-stage/* DSRRL_Restored_Lighting_v2.0.3-dev_CORE.zip
+          New-Item -ItemType Directory release-check -Force | Out-Null
+          Expand-Archive DSRRL_Restored_Lighting_v2.0.3-dev_CORE.zip release-check -Force
+          $addons=@(Get-ChildItem release-check -Recurse -Filter *.addon64)
+          if ($addons.Count -ne 1) { throw 'Dev ZIP must contain exactly one addon' }
+          if ((Get-FileHash $addons[0].FullName).Hash.ToLowerInvariant() -ne $sha) { throw 'Dev ZIP changed binary' }
+          Write-Host "PROMOTED_DEV_SHA256=$sha"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: DSRRL_Restored_Lighting_v2.0.3-dev_RELEASE
+          path: |
+            DSRRL_Restored_Lighting_v2.0.3-dev.addon64
+            DSRRL_Restored_Lighting_v2.0.3-dev_CORE.zip
+            DSRRL_v2.0.3-dev_PROVENANCE.json
+            SHA256SUMS.txt
+          if-no-files-found: error
+      - name: Publish immutable GitHub prerelease without touching stable v2.0.2
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          gh release view v2.0.3-dev --repo julkszw-sys/DSRRL-Material-Response --json tagName 2>$null
+          if ($LASTEXITCODE -eq 0) { throw 'Dev prerelease already exists; never overwrite' }
+          gh release create v2.0.3-dev `
+            "DSRRL_Restored_Lighting_v2.0.3-dev.addon64" `
+            "DSRRL_Restored_Lighting_v2.0.3-dev_CORE.zip" `
+            "DSRRL_v2.0.3-dev_PROVENANCE.json" `
+            SHA256SUMS.txt `
+            --repo julkszw-sys/DSRRL-Material-Response --target 6a73033f6275f88487effeb1e34bbbdd7a6a3a88 --prerelease --latest=false `
+            --title "DSRRL Restored Lighting v2.0.3-dev" --notes-file release/v2.0.3-dev/RELEASE_NOTES.md
+          if ($LASTEXITCODE -ne 0) { throw 'GitHub prerelease publication failed' }
+          $r=gh release view v2.0.3-dev --repo julkszw-sys/DSRRL-Material-Response --json tagName,isPrerelease,assets,url | ConvertFrom-Json
+          if ($r.tagName -ne 'v2.0.3-dev' -or -not $r.isPrerelease -or @($r.assets).Count -ne 4) { throw 'Published metadata invalid' }
+          Write-Host "DEV_PRERELEASE=$($r.url)"
