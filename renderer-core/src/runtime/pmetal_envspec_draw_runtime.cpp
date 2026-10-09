@@ -100,7 +100,8 @@ void log_other_metal_stage_once(
     const char *stage,
     std::uint32_t stage_ordinal,
     const mr::material_identity &material,
-    const mr::decision &decision) noexcept
+    const mr::decision &decision,
+    bool used_unkeyed_hook_fallback) noexcept
 {
     const auto *identity = match_ptde_metal_envspec_material(material);
     if (identity == nullptr ||
@@ -119,12 +120,14 @@ void log_other_metal_stage_once(
     char message[320]{};
     std::snprintf(
         message, sizeof(message),
-        "[DSRRL OTHER METAL PTDE] stage=%s profile=%u route=%u rx=%u slot=%u source_key=EXACT_MATERIAL no_unkeyed_hook_fallback=1 pixel=OPEN",
+        "[DSRRL OTHER METAL PTDE] stage=%s profile=%u route=%u rx=%u slot=%u source_key=%s no_unkeyed_hook_fallback=%u pixel=OPEN",
         stage,
         static_cast<unsigned>(identity->profile),
         static_cast<unsigned>(decision.route_index),
         static_cast<unsigned>(decision.receiver_id),
-        static_cast<unsigned>(material.material_slot));
+        static_cast<unsigned>(material.material_slot),
+        used_unkeyed_hook_fallback ? "LATEST_HOOK_UNKEYED" : "EXACT_MATERIAL",
+        used_unkeyed_hook_fallback ? 0u : 1u);
     reshade::log::message(reshade::log::level::info, message);
 }
 #endif
@@ -1086,7 +1089,8 @@ bool pmetal_envspec_draw_runtime::prepare(
         material, decision, experimental_material);
     if (experimental_material)
         log_other_metal_stage_once(
-            "source_ready", 0u, material, decision);
+            "source_ready", 0u, material, decision,
+            source.unkeyed_hook_fallback);
 #endif
 
 #if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG)
@@ -2294,7 +2298,8 @@ bool pmetal_envspec_draw_runtime::prepare(
 #if defined(DSRRL_EXPERIMENTAL_OTHER_METAL_PTDE_ENVSPEC)
     if (experimental_material)
         log_other_metal_stage_once(
-            "request_ready", 1u, material, decision);
+            "request_ready", 1u, material, decision,
+            source.unkeyed_hook_fallback);
 #endif
 
     if (stable_envdiffuse_consumer_diag &&
