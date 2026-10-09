@@ -10,3 +10,5 @@ header = (ROOT / "include/dsrrl/runtime/ptde_metal_envspec_authority.hpp").read_
 pattern = r'\{ptde_metal_envspec_profile::(\w+),\s*(\d+)u,\s*"([^"]+)",\s*"([0-9a-f]{64})",\s*([\d.]+)f,\s*(\d+)u\}'
 compiled = re.findall(pattern, header)
 assert len(compiled) == 25, len(compiled)
+
+print('Census profile count verified')
