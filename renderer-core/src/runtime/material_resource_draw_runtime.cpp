@@ -142,6 +142,29 @@ std::unordered_map<std::uint64_t,attested_resource_name>
 std::unordered_map<std::uint64_t,ID3D11Device *>
     g_ambiguous_named_resource_device;
 std::atomic_bool g_attested_resource_view_join_logged{false};
+std::atomic_bool g_early_view_join_logged{false};
+
+// ReShade create_resource_view is a synchronous, pre-D3D11 creation
+// callback. A retail name may be live here even when it is gone by
+// init_resource_view. Carry only a verified exact loader name across
+// that specific pre/post callback pair, never across draws or frames.
+struct early_view_name {
+    ID3D11Device *device = nullptr; // borrowed within callback pair only
+    std::uint64_t resource = 0u;
+    reshade::api::resource_usage usage{};
+    std::wstring name{};
+    bool pending = false;
+    bool ambiguous = false;
+    void clear() noexcept {
+        device = nullptr;
+        resource = 0u;
+        name.clear();
+        pending = false;
+        ambiguous = false;
+    }
+};
+thread_local early_view_name g_early_view_name{};
+
 
 
 #endif
@@ -1290,6 +1313,53 @@ void on_destroy_resource(
 }
 #endif
 
+#if defined(DSRRL_EXPERIMENTAL_SPC_MATERIAL_BATCH)
+bool on_create_resource_view(
+    reshade::api::device *device,
+    reshade::api::resource resource,
+    reshade::api::resource_usage usage,
+    reshade::api::resource_view_desc &)
+{
+    auto &pending = g_early_view_name;
+    if (pending.pending) {
+        // Nested pre-create callbacks have no guaranteed unambiguous
+        // pre/post pairing. Drop both rather than borrowing a name.
+        pending.ambiguous = true;
+        return false;
+    }
+    if (g_internal_create || g_quarantined.load() ||
+        device == nullptr ||
+        device->get_api() != reshade::api::device_api::d3d11 ||
+        resource.handle == 0u ||
+        usage != reshade::api::resource_usage::shader_resource)
+        return false;
+    const wchar_t *raw = nullptr;
+    std::size_t length = 0u;
+    if (!texture_identity_transport::snapshot_raw(raw, length) ||
+        raw == nullptr || length == 0u)
+        return false;
+    const auto hash = fnv_name(raw, length);
+    if (!generated::spec_equipment_name_hash_allowed_v12(hash) &&
+        !exact_subsurface_body_spec_hash(hash) &&
+        !generated::diffuse_name_hash_allowed_v12(hash) &&
+        !generated::normal_name_hash_allowed_v12(hash))
+        return false;
+
+    try {
+        pending.device =
+            reinterpret_cast<ID3D11Device *>(device->get_native());
+        pending.resource = resource.handle;
+        pending.usage = usage;
+        pending.name.assign(raw, length);
+        pending.pending = !pending.name.empty();
+    } catch (...) {
+        pending.clear();
+    }
+    // Strictly passive: never alter the original D3D resource descriptor.
+    return false;
+}
+#endif
+
 void on_init_resource_view(
     reshade::api::device *device,
     reshade::api::resource resource,
@@ -1316,6 +1386,20 @@ void on_init_resource_view(
         texture_identity_transport::snapshot_raw(
             logical_name_raw, logical_name_length);
 #if defined(DSRRL_EXPERIMENTAL_SPC_MATERIAL_BATCH)
+    std::wstring early_name{};
+    bool pre_view_attested = false;
+    auto &pre_view = g_early_view_name;
+    if (pre_view.pending) {
+        if (!pre_view.ambiguous &&
+            pre_view.device ==
+                reinterpret_cast<ID3D11Device *>(device->get_native()) &&
+            pre_view.resource == resource.handle &&
+            pre_view.usage == usage) {
+            early_name = std::move(pre_view.name);
+            pre_view_attested = !early_name.empty();
+        }
+        pre_view.clear();
+    }
     std::wstring attested_name{};
     bool resource_handoff = false;
     if (resource.handle != 0u) {
@@ -1333,6 +1417,24 @@ void on_init_resource_view(
             return;
         }
     }
+    auto matches_name = [](
+        const std::wstring &name,
+        const wchar_t *other,
+        std::size_t length) noexcept {
+        return other != nullptr && name.size() == length &&
+            std::char_traits<wchar_t>::compare(
+                name.c_str(), other, length) == 0;
+    };
+    // A discrepancy between any two attested producers invalidates the
+    // association. Do not let an early name overwrite a direct or
+    // resource-lifetime name.
+    if (pre_view_attested && direct_name &&
+        !matches_name(early_name, logical_name_raw, logical_name_length))
+        return;
+    if (pre_view_attested && resource_handoff &&
+        early_name != attested_name)
+        return;
+
     if (resource_handoff && direct_name) {
         // Two independently observed names disagree -> no resource alias.
         if (attested_name.size() != logical_name_length ||
@@ -1343,6 +1445,9 @@ void on_init_resource_view(
     } else if (resource_handoff) {
         logical_name_raw = attested_name.c_str();
         logical_name_length = attested_name.size();
+    } else if (pre_view_attested && !direct_name) {
+        logical_name_raw = early_name.c_str();
+        logical_name_length = early_name.size();
     } else if (!direct_name) {
         return;
     }
@@ -1495,6 +1600,11 @@ void on_init_resource_view(
             true, std::memory_order_relaxed))
         reshade::log::message(reshade::log::level::info,
             "[DSRRL SPC RESOURCE JOIN] source=init_resource_exact_name carrier=resource_to_view exact_allowlist=1 failopen_preserved=1 pixel=OPEN");
+    if (pre_view_attested && !resource_handoff && !direct_name &&
+        accepted && !g_early_view_join_logged.exchange(
+            true, std::memory_order_relaxed))
+        reshade::log::message(reshade::log::level::info,
+            "[DSRRL SPC RESOURCE JOIN] source=create_resource_view_exact_name carrier=pre_post_view exact_allowlist=1 failopen_preserved=1 pixel=OPEN");
 #endif
     ++g_named_views;
 }
@@ -1742,6 +1852,8 @@ register_events() noexcept
         on_init_resource);
     reshade::register_event<reshade::addon_event::destroy_resource>(
         on_destroy_resource);
+    reshade::register_event<reshade::addon_event::create_resource_view>(
+        on_create_resource_view);
 #endif
 
     reshade::register_event<
@@ -1781,6 +1893,8 @@ unregister_events() noexcept
         reshade::addon_event::init_resource_view>(
             on_init_resource_view);
 #if defined(DSRRL_EXPERIMENTAL_SPC_MATERIAL_BATCH)
+    reshade::unregister_event<reshade::addon_event::create_resource_view>(
+        on_create_resource_view);
     reshade::unregister_event<reshade::addon_event::destroy_resource>(
         on_destroy_resource);
     reshade::unregister_event<reshade::addon_event::init_resource>(
