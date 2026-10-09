@@ -37,6 +37,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           python renderer-core/tools/audit_pmetal_exact_dsr_row64_hybrid.py
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python renderer-core/tools/analyze_pmetal_asylum_b0_reghash.py --selftest
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           $source = Get-Content renderer-core/src/runtime/pmetal_env_source_runtime.cpp -Raw
           if ($source.Contains("DSRRL_PMETAL_M18_ROW64_ENVSPEC05_EXPERIMENT")) { throw "Speculative row64 EnvSpec override must not be present" }
           if (-not $source.Contains("[DSRRL PMETAL ASYLUM SELECTOR]")) { throw "Cross-bank selector trace not compiled" }
