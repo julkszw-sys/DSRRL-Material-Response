@@ -84,4 +84,25 @@ assert "No fallback for unrecognized FLVER digests" in selector
 assert "require fresh actual material pointer + corpus join every time" in selector
 assert 'runtime_mtd_only' in selector and 'flver_owner_exact' in selector
 assert "exact_bridge_authority=" in selector and "exact_bridge_authority=" in integrated
+# The same exact native GPU t1 recovery gate is shared by all 25
+# authenticated material profiles; no per-MTD heuristic exception.
+resource = (ROOT / "src/runtime/material_resource_draw_runtime.cpp").read_text()
+api = (ROOT / "include/dsrrl/runtime/material_resource_draw_runtime.hpp").read_text()
+assert "try_recover_exact_bound_spec_from_native_name(" in api
+assert "try_recover_exact_bound_spec_from_native_name(" in resource
+assert "experimental_material &&" in consumer
+assert "material_resources_.try_recover_exact_bound_spec_from_native_name(" in consumer
+assert "generated::spec_equipment_name_hash_allowed_v12(hash)" in resource
+assert "snapshot_native_exact_debug_name(stock, name)" in resource
+assert "stock->GetResource(&resource)" in resource
+assert "g_late_native_t1_attempts" in resource
+assert "stock_bound_native_exact_debug_name" in resource
+assert "material_resources_.prepare_draw_requests(" in consumer
+assert "DSRRL_EXPERIMENTAL_SPC_MATERIAL_BATCH" in consumer
+assert "DSRRL_EXPERIMENTAL_SPC_MATERIAL_BATCH" in resource
+assert "pixel=OPEN" in resource
+# Explicitly verify original V13 remains the first source fallback.
+assert "latest_hook_source(out)" in producer
+assert "out.unkeyed_hook_fallback = true" in producer
+print("Shared exact-stock-t1 late-native recovery: 25/25 SOURCE PASS; runtime/pixel OPEN")
 print('Unique MTD and EnvSpec entries:',len(compiled))
