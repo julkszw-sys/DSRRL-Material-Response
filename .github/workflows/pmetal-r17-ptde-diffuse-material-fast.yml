@@ -164,6 +164,7 @@ jobs:
           if (-not $ascii.Contains("[DSRRL SPC ONEPASS] stage=source_reject")) { throw "Missing one-pass keyed source frontier" }
           if (-not $ascii.Contains("[DSRRL SPC RESOURCE JOIN]")) { throw "Missing resource-to-SRV exact-name join" }
           if (-not $ascii.Contains("source=create_resource_view_exact_name")) { throw "Missing early view provenance" }
+          if (-not $ascii.Contains("source=create_resource_exact_name")) { throw "Missing early resource provenance" }
           if (-not $ascii.Contains("LATEST_HOOK_UNKEYED")) { throw "Missing SPC25 V13 source fallback attribution" }
           Get-FileHash DSRRL_v203_other_metal_exact_DIAG.addon64 -Algorithm SHA256
       - name: Run exact material authority and c100 regressions
