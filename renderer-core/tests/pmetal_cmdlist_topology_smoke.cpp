@@ -1,4 +1,7 @@
 #include "dsrrl/runtime/pmetal_asylum_cmdlist_trace.hpp"
+#ifdef NDEBUG
+#undef NDEBUG // Keep assertions enabled in Windows Release smoke builds.
+#endif
 #include <cassert>
 #include <iostream>
 using namespace dsrrl::runtime::pmetal_asylum_cmdlist_trace;
