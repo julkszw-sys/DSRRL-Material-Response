@@ -11,4 +11,5 @@ pattern = r'\{ptde_metal_envspec_profile::(\w+),\s*(\d+)u,\s*"([^"]+)",\s*"([0-9
 compiled = re.findall(pattern, header)
 assert len(compiled) == 25, len(compiled)
 
+assert len({r[2] for r in compiled}) == len(compiled)
 print('Census profile count verified')
