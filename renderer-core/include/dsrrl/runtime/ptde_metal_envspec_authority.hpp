@@ -94,4 +94,20 @@ inline bool is_experimental_ptde_metal_envspec_material(
            authority->profile != ptde_metal_envspec_profile::pmetal_baseline;
 }
 
+// This decision is executed by the REAL retail FLVER selector hook, not just
+// the later EnvSpec shader consumer. Preserve the original route345 dispatch
+// (the exact MTD check occurs inside its producer), while gating every new
+// route by a complete exact-material match and an explicit opt-in flag.
+inline bool should_dispatch_ptde_metal_selector_source(
+    const operators::material_response::material_identity &material) noexcept
+{
+    if (material.route_index == 345u)
+        return true;
+#if defined(DSRRL_EXPERIMENTAL_OTHER_METAL_PTDE_ENVSPEC)
+    return is_experimental_ptde_metal_envspec_material(material);
+#else
+    return false;
+#endif
+}
+
 } // namespace dsrrl::runtime
