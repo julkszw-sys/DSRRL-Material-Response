@@ -168,6 +168,15 @@ void pmetal_producer_state_begin(
     const operators::material_response::material_identity &material,
     std::uint64_t epoch) noexcept
 {
+    // begin() is a freshness boundary in its own right. The retail selector
+    // currently invokes clear() before begin(), but future exact MTD callers
+    // must not accidentally observe a stale TLS producer between a new
+    // selector attempt and its successful publication. Preserve payload
+    // fields for generation-preserving unchanged-source detection.
+    if (g_record.valid &&
+        same_material(g_record.material, material))
+        g_record.valid = false;
+
     const auto key = material_key(material);
     auto &slot = sync_slot_for(key);
 
