@@ -56,7 +56,36 @@ int main() {
     });
     writer.join();reader.join();
     assert(ok.load());
+    // Whole-bank DSR source is valid *inside* the PTDE bridge. It must
+    // remain separate from m10/m18 map records, and a later m18 update
+    // must supersede it when the native selector changes back.
+    pmetal_envspec_source common99{};
+    common99.bank_signature_a=0x34bdd6493ca1a91aULL;
+    common99.bank_signature_b=common99.bank_signature_a;
+    assert(publish(m,common99,99));
+    unsigned chosen=0u;
+    assert(latest_for_probe(m,18,check,chosen) && chosen==99u);
+    assert(check.bank_signature_a==common99.bank_signature_a);
+    auto next18=m18;next18.beta=0.0f;
+    assert(publish(m,next18,18));
+    assert(latest_for_probe(m,18,check,chosen) && chosen==18u);
+    assert(check.bank_signature_a==next18.bank_signature_a);
+    pmetal_envspec_source native_default{};
+    native_default.bank_signature_a=0x96ece3bed03eed01ULL;
+    native_default.bank_signature_b=native_default.bank_signature_a;
+    assert(publish(m,native_default,100));
+    assert(latest_for_probe(m,18,check,chosen) && chosen==100u);
+    assert(check.bank_signature_a==native_default.bank_signature_a);
+    assert(publish(m,m10,10));
+    assert(latest_for_probe(m,18,check,chosen) && chosen==100u);
+    assert(!latest_for_probe(other,18,check,chosen));
+    auto cross_common=native_default;
+    cross_common.beta=0.5f;
+    cross_common.bank_signature_b=next18.bank_signature_a;
+    assert(!publish(m,cross_common,100));
+    assert(!publish(m,native_default,18));
     invalidate();
+    assert(!latest_for_probe(m,18,check,chosen));
     assert(!latest(m,18,check)); // no stale bank across source generation
     assert(!latest(m,10,check));
     std::cout<<"PASS exact material+map source isolation, cross-area blend refusal, concurrency, reset\n";
