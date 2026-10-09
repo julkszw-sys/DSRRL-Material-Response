@@ -108,6 +108,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw "Not based on exact v2.0.3-dev source" }
       - name: Certify experimental MTD/SPX source authority and strict join
         run: python renderer-core/tools/verify_other_metal_material_workflow_v203.py
+      - name: Certify 25 exact SPC batch MTD SPX and per-profile slot
+        run: python renderer-core/tools/verify_spc_batch_v203.py
       - name: Configure exact MTD-keyed metal diagnostic
         shell: pwsh
         run: >
