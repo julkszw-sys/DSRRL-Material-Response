@@ -1036,6 +1036,57 @@ void log_spc_material_census_once(
 }
 #endif
 
+#if defined(DSRRL_EXPERIMENTAL_SPC_MATERIAL_BATCH)
+// Passive source-side cut-point evidence after a certified MTD-only fallback.
+// The exact FLVER owner remains mandatory for EnvSpec / SpecRGB. Never
+// reconstruct an owner from a material name or reuse another draw's owner.
+std::atomic<std::uint64_t> g_spc_owner_join_cut_mask{0u};
+
+void log_spc_owner_join_cut_once(
+    const operators::material_response::material_identity &identity,
+    bool selector_cache_hit,
+    bool flver_lookup_ok,
+    bool owner_mtd_join_ok) noexcept
+{
+    namespace mr = operators::material_response;
+    if (!identity.valid)
+        return;
+    static_assert(mr::generated::k_material_route_count_v1 <= 64u);
+    for (std::size_t i = 0u;
+         i < mr::generated::k_material_route_count_v1; ++i) {
+        const auto &r = mr::generated::k_material_routes_v1[i];
+        if (identity.route_index != r.route_index ||
+            identity.semantic_name_hash != mr::mtd_semantic_hash(r.mtd_name))
+            continue;
+        if (std::strstr(r.mtd_name, "Leather") == nullptr &&
+            std::strstr(r.mtd_name, "Cloth") == nullptr &&
+            std::strstr(r.mtd_name, "Wet") == nullptr &&
+            std::strstr(r.mtd_name, "Metal") == nullptr)
+            return;
+        const auto bit = std::uint64_t{1u} << i;
+        if ((g_spc_owner_join_cut_mask.fetch_or(
+                 bit, std::memory_order_relaxed) & bit) != 0u)
+            return;
+        const char *cut =
+            !flver_lookup_ok ? "flver_registry_miss" :
+            !owner_mtd_join_ok ? "flver_owner_mtd_join_miss" :
+            "selector_owner_publish_reject";
+        char line[430]{};
+        std::snprintf(
+            line, sizeof(line),
+            "[DSRRL SPC JOIN] stage=owner_join_cut mtd=%s route=%u cut=%s selector_cache_hit=%u flver_lookup=%u owner_mtd_join=%u runtime_mtd_sha=EXACT owner=UNVERIFIED resource_bridge=FAIL_OPEN",
+            r.mtd_name,
+            static_cast<unsigned>(identity.route_index),
+            cut,
+            selector_cache_hit ? 1u : 0u,
+            flver_lookup_ok ? 1u : 0u,
+            owner_mtd_join_ok ? 1u : 0u);
+        reshade::log::message(reshade::log::level::info, line);
+        return;
+    }
+}
+#endif
+
 bool publish_exact_selector_identity(
     void *owner,
     const void *actual_material,
