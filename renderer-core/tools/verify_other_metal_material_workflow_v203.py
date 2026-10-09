@@ -111,9 +111,9 @@ def main() -> None:
     # The original source contains a comment explaining why the historic
     # latest_hook_source() is forbidden for new MTDs. Inspect executable
     # code, not a bare substring that also matches this defensive comment.
-    source_body = re.sub(r"//[^\\n]*", "", source[p:q])
-    source_body = re.sub(r"/\\*[\\s\\S]*?\\*/", "", source_body)
-    require(re.search(r"\\blatest_hook_source\\s*\\(", source_body) is None,
+    source_body = re.sub(r"//[^\n]*", "", source[p:q])
+    source_body = re.sub(r"/\*[\s\S]*?\*/", "", source_body)
+    require(re.search(r"\blatest_hook_source\s*\(", source_body) is None,
             "new materials may not inherit unkeyed latest-hook fallback")
     require("is_experimental_ptde_metal_envspec_material(material)" in consumer,
             "draw consumer missing exact experimental material selection")
