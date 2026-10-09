@@ -18,6 +18,7 @@ for profile, route, name, sha, gain, slot in compiled:
     assert matches[0]["route_index"] == int(route), name
     assert matches[0]["sha256"] == sha, name
     assert float(matches[0]["c101"]) == float(gain), name
+    assert matches[0]["receiver_triplet"] == [33, 34, 35], name
 for profile, route, name, sha, gain, slot in compiled:
     assert len([e for e in envs if e["mtd_name"] == name]) == 1, name
     env = next(e for e in envs if e["mtd_name"] == name)
