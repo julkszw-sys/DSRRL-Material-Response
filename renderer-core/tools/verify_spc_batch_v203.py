@@ -20,6 +20,8 @@ eligible = [
     and not any(word in x["mtd_name"] for word in excluded)
     and x["mtd_name"] != "P_DullLeather[DSB].mtd"
 ]
+assert len(eligible) == 25, len(eligible)
+assert {x["mtd_name"] for x in eligible} == {x[2] for x in compiled}
 for profile, route, name, sha, gain, slot in compiled:
     matches = [x for x in routes if x["mtd_name"] == name]
     assert len(matches) == 1, name
