@@ -1562,7 +1562,7 @@ bool pmetal_envspec_draw_runtime::prepare(
                         1u,std::memory_order_relaxed)+1u;
                 for (std::uint32_t part=0u;part<9u;++part) {
                     const auto first=part*16u;
-                    const auto last=std::min(129u,first+16u);
+                    const auto last=(first+16u<129u?first+16u:129u);
                     char hash_line[850]{};
                     int written=std::snprintf(
                         hash_line,sizeof(hash_line),
