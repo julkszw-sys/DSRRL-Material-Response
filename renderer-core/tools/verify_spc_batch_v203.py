@@ -34,4 +34,10 @@ names = {x[2] for x in compiled}
 assert "S_Metal[DSB]_Edge.mtd" not in names
 assert "P_DullLeather[DSB].mtd" not in names
 assert all("Body" not in name and "body" not in name for name in names)
+selector = (ROOT / "src/runtime/flver_engine_hooks.cpp").read_text()
+producer = (ROOT / "src/runtime/pmetal_env_source_runtime.cpp").read_text()
+consumer = (ROOT / "src/runtime/pmetal_envspec_draw_runtime.cpp").read_text()
+assert "should_dispatch_ptde_metal_selector_source(identity)" in selector
+assert "pmetal_env_source_selector_event(" in selector
+assert "match_ptde_metal_envspec_material(material) != nullptr" in producer
 print('Unique MTD and EnvSpec entries:',len(compiled))
