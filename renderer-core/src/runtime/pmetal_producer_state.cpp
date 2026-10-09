@@ -142,6 +142,21 @@ std::uint64_t source_key(
     hash = fnv_scalar(hash, source.bank_signature_b);
     hash = fnv_scalar(hash, source.row_id_a);
     hash = fnv_scalar(hash, source.row_id_b);
+#if defined(DSRRL_PMETAL_ASYLUM_DRAW_SOURCE_JOIN_TRACE)
+    // R44 lock-free fast re-arm intentionally does not copy the payload.
+    // Include *observational* provenance in the diagnostic cache key to
+    // force the normal locked copy when identical RGBM is published by a
+    // different native caller/thread. No shader/input values are changed.
+    hash = fnv_scalar(hash, source.producer_callsite_rva);
+    hash = fnv_scalar(hash, source.producer_parent_rva);
+    hash = fnv_scalar(hash, source.producer_thread_id);
+    hash = fnv_scalar(hash, source.producer_raw_a);
+    hash = fnv_scalar(hash, source.producer_raw_b);
+    hash = fnv_scalar(hash, source.producer_source_a);
+    hash = fnv_scalar(hash, source.producer_source_b);
+    hash = fnv_scalar(hash, source.producer_parent_verified);
+    hash = fnv_scalar(hash, source.producer_hook_shadow);
+#endif
     return hash;
 }
 

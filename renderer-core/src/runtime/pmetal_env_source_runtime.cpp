@@ -2838,6 +2838,40 @@ void trace_asylum_selector_context(
 } // namespace
 #endif
 
+#if defined(DSRRL_PMETAL_ASYLUM_DRAW_SOURCE_JOIN_TRACE)
+// Stamp AFTER any R41 shadow reuse. This is exact selector-callback metadata,
+// not the earlier global LightBank packer's provenance, and is never used to
+// authorize a source or change its PTDE/DSR value.
+void stamp_asylum_draw_source_join(
+    pmetal_envspec_source &next,
+    std::uintptr_t rva,
+    std::uintptr_t parent_return,
+    bool parent_verified,
+    std::uint16_t raw_a,
+    std::uint16_t raw_b,
+    void *source_a,
+    void *source_b,
+    bool shadow_hit) noexcept
+{
+    next.producer_callsite_rva =
+        static_cast<std::uint32_t>(rva);
+    next.producer_parent_rva =
+        parent_return >= g_source_base
+            ? static_cast<std::uint32_t>(parent_return - g_source_base)
+            : 0u;
+    next.producer_thread_id =
+        static_cast<std::uint32_t>(GetCurrentThreadId());
+    next.producer_raw_a = raw_a;
+    next.producer_raw_b = raw_b;
+    next.producer_source_a =
+        reinterpret_cast<std::uintptr_t>(source_a);
+    next.producer_source_b =
+        reinterpret_cast<std::uintptr_t>(source_b);
+    next.producer_parent_verified = parent_verified;
+    next.producer_hook_shadow = shadow_hit;
+}
+#endif
+
 void pmetal_env_source_selector_event(
     void *owner,
     void *return_address,
@@ -3096,6 +3130,11 @@ void pmetal_env_source_selector_event(
         next.diagnostic_origin = parent_verified ? 1u : 4u;
 #endif
         next.serial = epoch;
+#if defined(DSRRL_PMETAL_ASYLUM_DRAW_SOURCE_JOIN_TRACE)
+        stamp_asylum_draw_source_join(
+            next,rva,parent_return,parent_verified,
+            raw_a,raw_b,source_a,source_b,true);
+#endif
 #if defined(DSRRL_PMETAL_ASYLUM_CROSS_BANK_TRACE)
         trace_asylum_selector_context(
             material,next,raw_a,raw_b,
@@ -3262,6 +3301,11 @@ void pmetal_env_source_selector_event(
 #endif
 
     next.serial = epoch;
+#if defined(DSRRL_PMETAL_ASYLUM_DRAW_SOURCE_JOIN_TRACE)
+    stamp_asylum_draw_source_join(
+        next,rva,parent_return,parent_verified,
+        raw_a,raw_b,source_a,source_b,false);
+#endif
 #if defined(DSRRL_PMETAL_ASYLUM_CROSS_BANK_TRACE)
     trace_asylum_selector_context(
         material,next,raw_a,raw_b,

@@ -1298,7 +1298,7 @@ bool pmetal_envspec_draw_runtime::prepare(
         for (auto *&view : env_live)
             if (view != nullptr) { view->Release(); view = nullptr; }
 
-        char line[1400]{};
+        char line[1840]{};
         std::snprintf(
             line, sizeof(line),
             "[DSRRL PMETAL SPEC TRANSITION] ms=%llu state=%s "
@@ -1355,6 +1355,22 @@ bool pmetal_envspec_draw_runtime::prepare(
             static_cast<double>(source.envdiffuse_a[0]),
             static_cast<double>(source.envdiffuse_a[1]),
             static_cast<double>(source.envdiffuse_a[2]));
+#if defined(DSRRL_PMETAL_ASYLUM_DRAW_SOURCE_JOIN_TRACE)
+        const std::size_t n = std::strlen(line);
+        if (n < sizeof(line))
+            std::snprintf(line+n,sizeof(line)-n,
+                " producer_rva=%x parent_rva=%x publisher_tid=%u consumer_tid=%u raw=%04x/%04x source_ptr=%llx/%llx parent_ok=%u shadow=%u join=EXACT_MATERIAL_ONLY",
+                static_cast<unsigned>(source.producer_callsite_rva),
+                static_cast<unsigned>(source.producer_parent_rva),
+                static_cast<unsigned>(source.producer_thread_id),
+                static_cast<unsigned>(GetCurrentThreadId()),
+                static_cast<unsigned>(source.producer_raw_a),
+                static_cast<unsigned>(source.producer_raw_b),
+                static_cast<unsigned long long>(source.producer_source_a),
+                static_cast<unsigned long long>(source.producer_source_b),
+                source.producer_parent_verified ? 1u : 0u,
+                source.producer_hook_shadow ? 1u : 0u);
+#endif
         reshade::log::message(reshade::log::level::info, line);
     };
 #endif
