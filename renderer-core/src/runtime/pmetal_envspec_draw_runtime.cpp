@@ -1304,9 +1304,16 @@ bool pmetal_envspec_draw_runtime::prepare(
         const auto s14=spc_inspect_srv(shadow_env[2]);
         const auto l12=spc_inspect_srv(live[0]);
         const auto l14=spc_inspect_srv(live[2]);
-        char line[1050]{};
+        const auto frontier = env_resources_.inspect_bound_frontier(
+            shadow_env_ready ? shadow_env[0] : live[0],
+            probe_b_required
+                ? (shadow_env_ready ? shadow_env[2] : live[2])
+                : nullptr,
+            env_semantics.envspc_slot,
+            probe_b_required);
+        char line[1300]{};
         std::snprintf(line, sizeof(line),
-            "[DSRRL SPC ONEPASS] stage=probe_reject route=%u rx=%u slot=%u family=%u envslot=%u beta=%.8g need_b=%u shadow_ready=%u shadow12=%u/%u/%u shadow14=%u/%u/%u live12=%u/%u/%u/%u/%u/%u/%u live14=%u/%u/%u/%u/%u/%u/%u shadow_live12_same=%u shadow_live14_same=%u pixel=OPEN",
+            "[DSRRL SPC ONEPASS] stage=probe_reject route=%u rx=%u slot=%u family=%u envslot=%u beta=%.8g need_b=%u shadow_ready=%u shadow12=%u/%u/%u shadow14=%u/%u/%u live12=%u/%u/%u/%u/%u/%u/%u live14=%u/%u/%u/%u/%u/%u/%u shadow_live12_same=%u shadow_live14_same=%u registry_a=%u registry_b=%u probe_a=%u probe_b=%u ordinal_ok=%u/%u ptde_cube_ready=%u/%u device=%u pack=%u sampler=%u slot_valid=%u pixel=OPEN",
             static_cast<unsigned>(decision.route_index),
             static_cast<unsigned>(decision.receiver_id),
             static_cast<unsigned>(material.material_slot),
@@ -1319,7 +1326,19 @@ bool pmetal_envspec_draw_runtime::prepare(
             l12.bound, l12.dimension, l12.format, l12.w,l12.h,l12.mips,l12.layers,
             l14.bound, l14.dimension, l14.format, l14.w,l14.h,l14.mips,l14.layers,
             shadow_env[0] == live[0] ? 1u : 0u,
-            shadow_env[2] == live[2] ? 1u : 0u);
+            shadow_env[2] == live[2] ? 1u : 0u,
+            frontier.stock_a_registered ? 1u : 0u,
+            frontier.stock_b_registered ? 1u : 0u,
+            static_cast<unsigned>(frontier.probe_a),
+            static_cast<unsigned>(frontier.probe_b),
+            frontier.probe_a_in_range ? 1u : 0u,
+            frontier.probe_b_in_range ? 1u : 0u,
+            frontier.cube_a_ready ? 1u : 0u,
+            frontier.cube_b_ready ? 1u : 0u,
+            frontier.device_ready ? 1u : 0u,
+            frontier.pack_ready ? 1u : 0u,
+            frontier.sampler_ready ? 1u : 0u,
+            frontier.slot_valid ? 1u : 0u);
         reshade::log::message(reshade::log::level::info, line);
         for (auto *&v : live) if (v) { v->Release(); v=nullptr; }
     }
