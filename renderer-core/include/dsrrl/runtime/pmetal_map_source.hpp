@@ -74,7 +74,7 @@ inline void invalidate() noexcept {
 inline bool publish(const material &owner,const pmetal_envspec_source &source,
                     unsigned selector_area) noexcept {
     if(!owner.valid || !owner.owner_tuple_exact || !owner.material_slot_valid ||
-       !owner.actual_material_exact || !source_in_area(source,selector_area))
+       !source_in_area(source,selector_area))
         return false;
     auto &s=groups[fingerprint(owner,selector_area)&255u];
     std::lock_guard<std::mutex> lock(s.mutex);
