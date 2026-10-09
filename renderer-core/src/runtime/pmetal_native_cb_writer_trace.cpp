@@ -162,8 +162,12 @@ void pmetal_native_cb_writer_destroy(
     if(p==0u)return;
     std::lock_guard<std::mutex> guard(g_mutex);
     auto *slot=find_locked(p,false);
-    if(slot!=nullptr)
-        *slot={}; // remove stale identity on COM resource recycling
+    if(slot!=nullptr) {
+        // Keep the probe-chain slot occupied, but revoke its payload.
+        // A future COM object reusing the address will be watched anew.
+        slot->width=0u;
+        slot->last={};
+    }
 }
 void pmetal_native_cb_writer_reset() noexcept {
     std::lock_guard<std::mutex> guard(g_mutex);
