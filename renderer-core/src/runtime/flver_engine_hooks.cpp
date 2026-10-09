@@ -21,6 +21,9 @@
 #include "dsrrl/runtime/fixed_pointlight_draw_runtime.hpp"
 #include "dsrrl/operators/material_response/mtd_semantic_census.hpp"
 #include "dsrrl/operators/material_response/generated_routes_v1.hpp"
+#if defined(DSRRL_EXPERIMENTAL_SPC_MATERIAL_BATCH)
+#include "dsrrl/operators/material_response/generated_dsr_flver_owner_tuples_v1.hpp"
+#endif
 #include "dsrrl/operators/material_response/generated_exact_binding_mr_v1.hpp"
 #include "dsrrl/operators/legacy_plan/sha256_bytes.hpp"
 #include <Windows.h>
@@ -1445,6 +1448,70 @@ extern "C" void dsrrl_flver_selector_observer(
  if(runtime_material_hit){
   telemetry::hot_count(
       g_runtime_material_hits);
+
+#if defined(DSRRL_EXPERIMENTAL_SPC_MATERIAL_BATCH)
+  // Exact alternative owner resolver, never an MTD-only authorization:
+  // the renderer's live FLVER registry must have resolved THIS selector
+  // container and slot; the live parser must have recognized THIS actual
+  // material object's raw MTD SHA; the independent source-complete DSR
+  // FLVER owner corpus must attest their exact (SHA, slot, semantic MTD)
+  // triple. The legacy owner MTD producer is incomplete for some otherwise
+  // certified SPC profiles. Repair only that provenance join, not the
+  // EnvSpec/SpecRGB/shader/CB/material/sidecar consumer gates.
+  if(owner_lookup_ok && !owner_mtd_ok &&
+     observation.material_slot_valid &&
+     runtime_material.actual_material_exact &&
+     runtime_material.semantic_name_hash != 0u &&
+     operators::material_response::generated::
+         dsr_flver_owner_tuple_authenticated(
+             observation.flver_sha256,
+             observation.material_slot,
+             runtime_material.semantic_name_hash)) {
+   auto recovered = runtime_material;
+   recovered.flver_sha256 = observation.flver_sha256;
+   recovered.flver_identity_hash = observation.flver_identity_hash;
+   recovered.material_slot = observation.material_slot;
+   recovered.material_slot_valid = true;
+   recovered.owner_tuple_exact = true;
+   // Only exact opt-in SPC profiles can enter this new bridge. In
+   // particular Lit/Mul/Body, S_Metal alias and ambiguous DullLeather
+   // remain excluded. No fallback for unrecognized FLVER digests.
+   if(is_experimental_ptde_metal_envspec_material(recovered) &&
+      publish_exact_selector_identity(
+          owner, actual_material, ret, r14, r15,
+          selector_stack, recovered, &profile)) {
+    static std::atomic<std::uint64_t> recovered_once{0u};
+    namespace mr = operators::material_response;
+    static_assert(mr::generated::k_material_route_count_v1 <= 64u);
+    for(std::size_t i = 0u;
+        i < mr::generated::k_material_route_count_v1; ++i) {
+     const auto &route = mr::generated::k_material_routes_v1[i];
+     if(route.route_index != recovered.route_index ||
+        mr::mtd_semantic_hash(route.mtd_name) !=
+            recovered.semantic_name_hash)
+      continue;
+     const auto bit = std::uint64_t{1u} << i;
+     if((recovered_once.fetch_or(
+              bit, std::memory_order_relaxed) & bit) == 0u) {
+      char line[480]{};
+      std::snprintf(
+          line, sizeof(line),
+          "[DSRRL SPC JOIN] stage=corpus_recovered_exact mtd=%s route=%u slot=%u flver=1 runtime_raw_mtd=1 corpus_tuple=1 source=OPEN request=OPEN pixel=OPEN",
+          route.mtd_name,
+          static_cast<unsigned>(recovered.route_index),
+          static_cast<unsigned>(recovered.material_slot));
+      reshade::log::message(
+          reshade::log::level::info, line);
+     }
+     break;
+    }
+    // Do not cache this repair at selector-container granularity:
+    // require fresh actual material pointer + corpus join every time.
+    selector_profile_finish(profile, selector_profile_path::owner);
+    return;
+   }
+  }
+#endif
 
   const auto runtime_publish_begin =
       selector_profile_begin(profile);
