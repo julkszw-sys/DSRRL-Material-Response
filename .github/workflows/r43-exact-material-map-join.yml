@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
   push:
     branches:
-      - fix/r43-map-source-join
+      - fix/r43-dsr-only-donor-row-coverage
   pull_request:
     paths:
       - "renderer-core/integrated/**"
