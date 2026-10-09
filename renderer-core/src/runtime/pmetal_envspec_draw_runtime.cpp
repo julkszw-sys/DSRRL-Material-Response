@@ -1543,6 +1543,78 @@ bool pmetal_envspec_draw_runtime::prepare(
                     tick-w1.timestamp_ms:0u));
             reshade::log::message(
                 reshade::log::level::info,writer_line);
+#if defined(DSRRL_PMETAL_ASYLUM_CB_REGISTER_TRACE)
+            // Discrete, bounded 16-byte CPU-upload register *fingerprints*.
+            // These hash positions are NOT an attested shader ABI and
+            // contain no raw GPU data or arbitrary memory reads.
+            static std::atomic<std::uint32_t> m10_register_samples{0u};
+            static std::atomic<std::uint32_t> m18_register_samples{0u};
+            static std::atomic<std::uint32_t> register_sample_id{0u};
+            auto &bank_samples =
+                source.bank_signature_a == k_m10_bank
+                    ? m10_register_samples : m18_register_samples;
+            if (w0.complete && w0.register_count == 129u &&
+                w0.epoch != 0u &&
+                bank_samples.fetch_add(1u,std::memory_order_relaxed)
+                    < 160u) {
+                const auto sample_id =
+                    register_sample_id.fetch_add(
+                        1u,std::memory_order_relaxed)+1u;
+                for (std::uint32_t part=0u;part<9u;++part) {
+                    const auto first=part*16u;
+                    const auto last=std::min(129u,first+16u);
+                    char hash_line[850]{};
+                    int written=std::snprintf(
+                        hash_line,sizeof(hash_line),
+                        "[DSRRL PMETAL B0 REGHASH]"
+                        " sample=%u part=%u first=%u end_exclusive=%u"
+                        " ms=%llu rx=%u slot=%u"
+                        " owner_sha0=%02x%02x%02x%02x"
+                        " bank=%016llx row=%u producer_rva=%x"
+                        " ctx=%llx ps=%llx b0=%llx"
+                        " epoch=%llu whole=%016llx"
+                        " count=129 domain=CPU_MAP_WRITE_ONLY"
+                        " hashes=",
+                        static_cast<unsigned>(sample_id),
+                        static_cast<unsigned>(part),
+                        static_cast<unsigned>(first),
+                        static_cast<unsigned>(last),
+                        static_cast<unsigned long long>(tick),
+                        static_cast<unsigned>(decision.receiver_id),
+                        static_cast<unsigned>(material.material_slot),
+                        static_cast<unsigned>(material.flver_sha256[0]),
+                        static_cast<unsigned>(material.flver_sha256[1]),
+                        static_cast<unsigned>(material.flver_sha256[2]),
+                        static_cast<unsigned>(material.flver_sha256[3]),
+                        static_cast<unsigned long long>(
+                            source.bank_signature_a),
+                        static_cast<unsigned>(source.row_id_a),
+                        static_cast<unsigned>(source.producer_callsite_rva),
+                        static_cast<unsigned long long>(
+                            reinterpret_cast<std::uintptr_t>(context)),
+                        static_cast<unsigned long long>(
+                            reinterpret_cast<std::uintptr_t>(live_ps)),
+                        static_cast<unsigned long long>(watched_handles[0]),
+                        static_cast<unsigned long long>(w0.epoch),
+                        static_cast<unsigned long long>(w0.hash));
+                    for (auto i=first;i<last &&
+                        written > 0 &&
+                        static_cast<std::size_t>(written)+18u
+                            < sizeof(hash_line);++i) {
+                        written+=std::snprintf(
+                            hash_line+written,
+                            sizeof(hash_line)-
+                                static_cast<std::size_t>(written),
+                            "%s%016llx",
+                            i==first?"":",",
+                            static_cast<unsigned long long>(
+                                w0.register_hashes[i]));
+                    }
+                    reshade::log::message(
+                        reshade::log::level::info,hash_line);
+                }
+            }
+#endif
 #endif
         }
 #endif
