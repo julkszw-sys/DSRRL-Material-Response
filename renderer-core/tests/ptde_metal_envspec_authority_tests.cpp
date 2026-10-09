@@ -92,6 +92,13 @@ void expect_valid(
         assert(rt::match_ptde_metal_envspec_material(bad) == nullptr);
     }
 #endif
+#if defined(DSRRL_EXPERIMENTAL_SPC_MATERIAL_BATCH)
+    if (expected >= rt::ptde_metal_envspec_profile::spc_route_0) {
+        bad = x;
+        bad.material_family_hash = mr::mtd_semantic_hash("DifSpcBmp Lit");
+        assert(rt::match_ptde_metal_envspec_material(bad) == nullptr);
+    }
+#endif
     bad = x;
     bad.raw_mtd_sha256[0] ^= 1u;
     assert(rt::match_ptde_metal_envspec_material(bad) == nullptr);
