@@ -11,6 +11,7 @@
 #include <bcrypt.h>
 
 #include <algorithm>
+#include <atomic>
 #include <array>
 #include <cstddef>
 #include <cstdint>
@@ -61,6 +62,12 @@ constexpr std::size_t k_logical_name_capacity = 512u;
 thread_local std::array<wchar_t,k_logical_name_capacity + 1u>
     g_logical_name{};
 thread_local std::size_t g_logical_name_length = 0u;
+#if defined(DSRRL_EXPERIMENTAL_SPC_MATERIAL_BATCH)
+std::atomic<std::uint64_t> g_texture_name_hook_calls{0u};
+std::atomic<std::uint64_t> g_texture_name_complete{0u};
+std::atomic<std::uint64_t> g_texture_name_clears{0u};
+std::atomic<std::uint64_t> g_texture_name_snapshots{0u};
+#endif
 
 bool readable_range(
     const void *ptr,
@@ -370,6 +377,9 @@ bool exe_matches() noexcept
 void capture_name(
     const wchar_t *logical_name) noexcept
 {
+#if defined(DSRRL_EXPERIMENTAL_SPC_MATERIAL_BATCH)
+    g_texture_name_hook_calls.fetch_add(1u, std::memory_order_relaxed);
+#endif
     g_logical_name_length = 0u;
     g_logical_name[0] = L'\0';
 
@@ -442,6 +452,10 @@ void capture_name(
                     L'\0';
                 g_logical_name_length =
                     copied;
+#if defined(DSRRL_EXPERIMENTAL_SPC_MATERIAL_BATCH)
+                if (copied != 0u)
+                    g_texture_name_complete.fetch_add(1u, std::memory_order_relaxed);
+#endif
                 return;
             }
 
@@ -469,6 +483,9 @@ dsrrl_texture_name_observer(
 extern "C" void
 dsrrl_texture_name_clear_observer() noexcept
 {
+#if defined(DSRRL_EXPERIMENTAL_SPC_MATERIAL_BATCH)
+    g_texture_name_clears.fetch_add(1u, std::memory_order_relaxed);
+#endif
     g_logical_name_length = 0u;
     g_logical_name[0] = L'\0';
 }
@@ -572,6 +589,9 @@ bool snapshot_raw(
 
     logical_name = g_logical_name.data();
     length = g_logical_name_length;
+#if defined(DSRRL_EXPERIMENTAL_SPC_MATERIAL_BATCH)
+    g_texture_name_snapshots.fetch_add(1u, std::memory_order_relaxed);
+#endif
     return true;
 }
 
@@ -594,6 +614,22 @@ bool snapshot(
         logical_name.clear();
         return false;
     }
+}
+
+texture_name_liveness liveness() noexcept
+{
+    texture_name_liveness out{};
+#if defined(DSRRL_EXPERIMENTAL_SPC_MATERIAL_BATCH)
+    out.hook_calls =
+        g_texture_name_hook_calls.load(std::memory_order_relaxed);
+    out.names_captured =
+        g_texture_name_complete.load(std::memory_order_relaxed);
+    out.names_cleared =
+        g_texture_name_clears.load(std::memory_order_relaxed);
+    out.name_snapshots =
+        g_texture_name_snapshots.load(std::memory_order_relaxed);
+#endif
+    return out;
 }
 
 } // namespace dsrrl::runtime::texture_identity_transport
