@@ -67,8 +67,21 @@ inline const exact_metal_envspec_authority *match_ptde_metal_envspec_material(
             material.semantic_name_hash ==
                 mr::mtd_semantic_hash(candidate.mtd_name) &&
             hashing::matches_hex(material.raw_mtd_sha256,
-                                 candidate.raw_mtd_sha256))
+                                 candidate.raw_mtd_sha256)) {
+#if defined(DSRRL_EXPERIMENTAL_OTHER_METAL_PTDE_ENVSPEC)
+            if (candidate.profile != ptde_metal_envspec_profile::pmetal_baseline) {
+                // An asserted owner flag is insufficient when the full
+                // source FLVER digest is missing. Require the real digest;
+                // hash-only legacy identity tokens are never authority.
+                bool exact_flver_digest_present = false;
+                for (const auto byte : material.flver_sha256)
+                    exact_flver_digest_present |= byte != 0u;
+                if (!exact_flver_digest_present)
+                    return nullptr;
+            }
+#endif
             return &candidate;
+        }
     }
     return nullptr;
 }
