@@ -54,6 +54,48 @@ constexpr std::uint32_t k_experimental_spc_count = static_cast<std::uint32_t>(pt
 static_assert(k_experimental_spc_count <= 32u);
 std::atomic<std::uint32_t> g_other_metal_stage_log_masks[2]{};
 
+std::atomic<std::uint32_t> g_spc_onepass_masks[4]{};
+bool spc_onepass_claim(const mr::material_identity &mat, unsigned lane) noexcept
+{
+    if (lane >= 4u) return false;
+    const auto *id = match_ptde_metal_envspec_material(mat);
+    if (id == nullptr || id->profile == ptde_metal_envspec_profile::pmetal_baseline)
+        return false;
+    const auto index = static_cast<unsigned>(id->profile) -
+        static_cast<unsigned>(ptde_metal_envspec_profile::pmetal_alp);
+    if (index >= k_experimental_spc_count) return false;
+    const auto bit = 1u << index;
+    return (g_spc_onepass_masks[lane].fetch_or(bit, std::memory_order_relaxed) & bit) == 0u;
+}
+// Passive native SRV/type/descriptor observation. No resource replacement.
+struct spc_srv_desc {
+    unsigned bound=0u, dimension=0u, format=0u, w=0u, h=0u, mips=0u, layers=0u;
+};
+spc_srv_desc spc_inspect_srv(ID3D11ShaderResourceView *view) noexcept
+{
+    spc_srv_desc out{};
+    if (!view) return out;
+    out.bound=1u;
+    D3D11_SHADER_RESOURCE_VIEW_DESC vd{};
+    view->GetDesc(&vd);
+    out.dimension=static_cast<unsigned>(vd.ViewDimension);
+    out.format=static_cast<unsigned>(vd.Format);
+    ID3D11Resource *resource=nullptr;
+    view->GetResource(&resource);
+    if (!resource) return out;
+    ID3D11Texture2D *texture=nullptr;
+    if (SUCCEEDED(resource->QueryInterface(__uuidof(ID3D11Texture2D),
+        reinterpret_cast<void **>(&texture))) && texture != nullptr) {
+        D3D11_TEXTURE2D_DESC d{};
+        texture->GetDesc(&d);
+        out.w=d.Width; out.h=d.Height; out.mips=d.MipLevels; out.layers=d.ArraySize;
+        texture->Release();
+    }
+    resource->Release();
+    return out;
+}
+
+
 void log_other_metal_stage_once(
     const char *stage,
     std::uint32_t stage_ordinal,
@@ -771,9 +813,24 @@ bool pmetal_envspec_draw_runtime::prepare(
             hemenvlerp)
         telemetry::hot_count(lerp_candidates_);
 
-    if (!exact_pmetal_envspec_candidate(
-            material,
-            decision)) {
+    // Stage zero distinguishes a draw that never reaches EnvSpec from a source miss.
+    const bool spc_exact_candidate = exact_pmetal_envspec_candidate(material, decision);
+#if defined(DSRRL_EXPERIMENTAL_OTHER_METAL_PTDE_ENVSPEC)
+    if (spc_onepass_claim(material, 0u)) {
+        char line[400]{};
+        std::snprintf(line, sizeof(line),
+            "[DSRRL SPC ONEPASS] stage=prepare_candidate route=%u rx=%u slot=%u family=%u candidate=%u owner=%u actual_mtd=%u pixel=OPEN",
+            static_cast<unsigned>(decision.route_index),
+            static_cast<unsigned>(decision.receiver_id),
+            static_cast<unsigned>(material.material_slot),
+            static_cast<unsigned>(family),
+            spc_exact_candidate ? 1u : 0u,
+            material.owner_tuple_exact ? 1u : 0u,
+            material.actual_material_exact ? 1u : 0u);
+        reshade::log::message(reshade::log::level::info, line);
+    }
+#endif
+    if (!spc_exact_candidate) {
         telemetry::hot_count(material_rejects_);
         effect_fail(
             effect_fail_mask_,
@@ -863,6 +920,28 @@ bool pmetal_envspec_draw_runtime::prepare(
     const bool exact_source_ready = experimental_material
         ? source_.latest_exact_material(material, source)
         : source_.latest(material, source);
+#if defined(DSRRL_EXPERIMENTAL_OTHER_METAL_PTDE_ENVSPEC)
+    if ((!exact_source_ready || !std::isfinite(source.beta)) &&
+        experimental_material && spc_onepass_claim(material, 1u)) {
+        const auto t=source_.telemetry();
+        char line[520]{};
+        std::snprintf(line, sizeof(line),
+            "[DSRRL SPC ONEPASS] stage=source_reject route=%u rx=%u slot=%u keyed_ready=%u finite_beta=%u selector_active=%u hook_single=%u hook_blend=%u publish=%llu consume_ok=%llu consume_fail=%llu decode_fail=%llu pixel=OPEN",
+            static_cast<unsigned>(decision.route_index),
+            static_cast<unsigned>(decision.receiver_id),
+            static_cast<unsigned>(material.material_slot),
+            exact_source_ready ? 1u : 0u,
+            std::isfinite(source.beta) ? 1u : 0u,
+            t.selector_carrier_active ? 1u : 0u,
+            t.hook_single_armed ? 1u : 0u,
+            t.hook_blend_armed ? 1u : 0u,
+            static_cast<unsigned long long>(t.exact_publish),
+            static_cast<unsigned long long>(t.consumer_ok),
+            static_cast<unsigned long long>(t.consumer_fail),
+            static_cast<unsigned long long>(t.decode_fail));
+        reshade::log::message(reshade::log::level::info, line);
+    }
+#endif
     if (!exact_source_ready || !std::isfinite(source.beta)) {
         telemetry::hot_count(source_rejects_);
         effect_fail(
@@ -1216,6 +1295,35 @@ bool pmetal_envspec_draw_runtime::prepare(
                       probe_b_required,
                       prepared.env_resources);
 
+#if defined(DSRRL_EXPERIMENTAL_OTHER_METAL_PTDE_ENVSPEC)
+    if (!env_resource_ready && experimental_material &&
+        spc_onepass_claim(material, 2u)) {
+        ID3D11ShaderResourceView *live[3]{};
+        context->PSGetShaderResources(12u, 3u, live);
+        const auto s12=spc_inspect_srv(shadow_env[0]);
+        const auto s14=spc_inspect_srv(shadow_env[2]);
+        const auto l12=spc_inspect_srv(live[0]);
+        const auto l14=spc_inspect_srv(live[2]);
+        char line[1050]{};
+        std::snprintf(line, sizeof(line),
+            "[DSRRL SPC ONEPASS] stage=probe_reject route=%u rx=%u slot=%u family=%u envslot=%u beta=%.8g need_b=%u shadow_ready=%u shadow12=%u/%u/%u shadow14=%u/%u/%u live12=%u/%u/%u/%u/%u/%u/%u live14=%u/%u/%u/%u/%u/%u/%u shadow_live12_same=%u shadow_live14_same=%u pixel=OPEN",
+            static_cast<unsigned>(decision.route_index),
+            static_cast<unsigned>(decision.receiver_id),
+            static_cast<unsigned>(material.material_slot),
+            static_cast<unsigned>(family),
+            static_cast<unsigned>(env_semantics.envspc_slot),
+            static_cast<double>(source.beta),
+            probe_b_required ? 1u : 0u, shadow_env_ready ? 1u : 0u,
+            s12.bound, s12.dimension, s12.format,
+            s14.bound, s14.dimension, s14.format,
+            l12.bound, l12.dimension, l12.format, l12.w,l12.h,l12.mips,l12.layers,
+            l14.bound, l14.dimension, l14.format, l14.w,l14.h,l14.mips,l14.layers,
+            shadow_env[0] == live[0] ? 1u : 0u,
+            shadow_env[2] == live[2] ? 1u : 0u);
+        reshade::log::message(reshade::log::level::info, line);
+        for (auto *&v : live) if (v) { v->Release(); v=nullptr; }
+    }
+#endif
     if (!env_resource_ready) {
         if (shader != nullptr)
             shader->Release();
@@ -1338,6 +1446,40 @@ bool pmetal_envspec_draw_runtime::prepare(
             if (view != nullptr) { view->Release(); view = nullptr; }
     }
 
+#if defined(DSRRL_EXPERIMENTAL_OTHER_METAL_PTDE_ENVSPEC)
+    if ((!material_ready || !prepared.material_resources.spec_rgb) &&
+        experimental_material && spc_onepass_claim(material, 3u)) {
+        const auto p=material_resources_.probe_exact_specular_companion(context);
+        const auto sem=mr::classify_mtd_semantic(
+            query, mr::mtd_semantic_operator::spec_rgb);
+        ID3D11ShaderResourceView *native_t1=nullptr;
+        context->PSGetShaderResources(1u, 1u, &native_t1);
+        const auto l1=spc_inspect_srv(native_t1);
+        const auto s1=spc_inspect_srv(shadow_material[1]);
+        char line[940]{};
+        std::snprintf(line, sizeof(line),
+            "[DSRRL SPC ONEPASS] stage=spec_reject route=%u rx=%u slot=%u material_ready=%u spec_req=%u diffuse_req=%u normal_req=%u shadow_ready=%u shadow_diverged=%u shadow_t1=%u/%u/%u live_t1=%u/%u/%u/%u/%u/%u/%u shadow_live_t1_same=%u ctx=%u quarantine=%u bound=%u resolved=%u hash=%016llx allowed=%u companion=%u semantic=%u pixel=OPEN",
+            static_cast<unsigned>(decision.route_index),
+            static_cast<unsigned>(decision.receiver_id),
+            static_cast<unsigned>(material.material_slot),
+            material_ready ? 1u : 0u,
+            prepared.material_resources.spec_rgb ? 1u : 0u,
+            prepared.material_resources.diffuse ? 1u : 0u,
+            prepared.material_resources.normal ? 1u : 0u,
+            shadow_material_ready ? 1u : 0u,
+            shadow_diverged ? 1u : 0u,
+            s1.bound,s1.dimension,s1.format,
+            l1.bound,l1.dimension,l1.format,l1.w,l1.h,l1.mips,l1.layers,
+            shadow_material[1] == native_t1 ? 1u : 0u,
+            p.context_valid ? 1u : 0u, p.quarantined ? 1u : 0u,
+            p.stock_bound ? 1u : 0u, p.snapshot_resolved ? 1u : 0u,
+            static_cast<unsigned long long>(p.logical_hash),
+            p.logical_hash_allowed ? 1u : 0u, p.companion_ready ? 1u : 0u,
+            static_cast<unsigned>(sem.state));
+        reshade::log::message(reshade::log::level::info, line);
+        if (native_t1) native_t1->Release();
+    }
+#endif
     if (!material_ready ||
         !prepared.material_resources.spec_rgb) {
 #if !defined(DSRRL_RELEASE_CLEANUP)
