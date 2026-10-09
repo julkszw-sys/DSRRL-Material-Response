@@ -60,6 +60,14 @@ assert "log_spc_material_census_once(identity, false)" in selector
 assert "log_spc_material_census_once(runtime_material, true)" in selector
 assert "log_spc_draw_receiver_once(" in integrated
 assert "stage=draw_owner" in integrated
+# The runtime-only fallback must identify whether the failed owner join is
+# FLVER registry lookup, corpus MTD join or owner publish. It never
+# authorizes a resource bridge using MTD alone.
+assert "log_spc_owner_join_cut_once(" in selector
+assert "flver_registry_miss" in selector
+assert "flver_owner_mtd_join_miss" in selector
+assert "selector_owner_publish_reject" in selector
+assert "resource_bridge=FAIL_OPEN" in selector
 assert 'runtime_mtd_only' in selector and 'flver_owner_exact' in selector
 assert "exact_bridge_authority=" in selector and "exact_bridge_authority=" in integrated
 print('Unique MTD and EnvSpec entries:',len(compiled))
