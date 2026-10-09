@@ -1043,13 +1043,7 @@ bool publish_exact_selector_identity(
     // not just the shader draw consumer. This is OFF by default; the exact
     // MTD raw SHA+name+owner/slot gate is shared with the EnvSpec consumer.
     // An unmatched route must not publish or reuse a P_Metal LightBank source.
-    const bool pmetal_source_candidate =
-        identity.route_index == 345u
-#if defined(DSRRL_EXPERIMENTAL_OTHER_METAL_PTDE_ENVSPEC)
-        || is_experimental_ptde_metal_envspec_material(identity)
-#endif
-        ;
-    if (pmetal_source_candidate) {
+    if (should_dispatch_ptde_metal_selector_source(identity)) {
         const auto pmetal_begin =
             profile != nullptr
                 ? selector_profile_begin(*profile)
