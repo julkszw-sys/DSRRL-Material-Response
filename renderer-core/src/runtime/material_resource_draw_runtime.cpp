@@ -143,68 +143,7 @@ std::unordered_map<std::uint64_t,ID3D11Device *>
     g_ambiguous_named_resource_device;
 std::atomic_bool g_attested_resource_view_join_logged{false};
 
-void on_init_resource(
-    reshade::api::device *device,
-    const reshade::api::resource_desc &,
-    const reshade::api::subresource_data *,
-    reshade::api::resource_usage,
-    reshade::api::resource resource)
-{
-    if (g_internal_create || g_quarantined.load() ||
-        device == nullptr ||
-        device->get_api() != reshade::api::device_api::d3d11 ||
-        resource.handle == 0u)
-        return;
-    const wchar_t *raw = nullptr;
-    std::size_t size = 0u;
-    if (!texture_identity_transport::snapshot_raw(raw, size) ||
-        raw == nullptr || size == 0u)
-        return;
-    const auto hash = fnv_name(raw, size);
-    if (!generated::spec_equipment_name_hash_allowed_v12(hash) &&
-        !exact_subsurface_body_spec_hash(hash) &&
-        !generated::diffuse_name_hash_allowed_v12(hash) &&
-        !generated::normal_name_hash_allowed_v12(hash))
-        return;
 
-    // Construct before locking. Mismatched identities for the same live
-    // resource are quarantined until the actual destroy_resource callback.
-    try {
-        attested_resource_name current{};
-        current.device = reinterpret_cast<ID3D11Device *>(device->get_native());
-        current.logical_name.assign(raw, size);
-        current.hash = hash;
-        std::lock_guard<std::mutex> lock(g_mutex);
-        if (g_ambiguous_named_resource_device.count(resource.handle))
-            return;
-        const auto it = g_attested_names_by_resource.find(resource.handle);
-        if (it == g_attested_names_by_resource.end()) {
-            g_attested_names_by_resource.emplace(resource.handle,
-                std::move(current));
-        } else if (it->second.device != current.device ||
-                   it->second.hash != current.hash ||
-                   it->second.logical_name != current.logical_name) {
-            g_attested_names_by_resource.erase(it);
-            g_ambiguous_named_resource_device.emplace(
-                resource.handle, current.device);
-        }
-    } catch (...) {
-        // Allocation must never unwind into the D3D11/ReShade callback.
-    }
-}
-
-void on_destroy_resource(
-    reshade::api::device *,
-    reshade::api::resource resource)
-{
-    if (resource.handle == 0u) return;
-    std::lock_guard<std::mutex> lock(g_mutex);
-    g_attested_names_by_resource.erase(resource.handle);
-    g_ambiguous_named_resource_device.erase(resource.handle);
-}
-#endif
-#if !defined(DSRRL_RESOURCE_EPOCH_SHARD_SYNC)
-std::atomic<std::uint64_t> g_cache_epoch{1u};
 #endif
 thread_local bool g_internal_create = false;
 
@@ -1285,6 +1224,71 @@ void inspect_many(
             true);
     }
 }
+
+#if defined(DSRRL_EXPERIMENTAL_SPC_MATERIAL_BATCH)
+void on_init_resource(
+    reshade::api::device *device,
+    const reshade::api::resource_desc &,
+    const reshade::api::subresource_data *,
+    reshade::api::resource_usage,
+    reshade::api::resource resource)
+{
+    if (g_internal_create || g_quarantined.load() ||
+        device == nullptr ||
+        device->get_api() != reshade::api::device_api::d3d11 ||
+        resource.handle == 0u)
+        return;
+    const wchar_t *raw = nullptr;
+    std::size_t size = 0u;
+    if (!texture_identity_transport::snapshot_raw(raw, size) ||
+        raw == nullptr || size == 0u)
+        return;
+    const auto hash = fnv_name(raw, size);
+    if (!generated::spec_equipment_name_hash_allowed_v12(hash) &&
+        !exact_subsurface_body_spec_hash(hash) &&
+        !generated::diffuse_name_hash_allowed_v12(hash) &&
+        !generated::normal_name_hash_allowed_v12(hash))
+        return;
+
+    // Construct before locking. Mismatched identities for the same live
+    // resource are quarantined until the actual destroy_resource callback.
+    try {
+        attested_resource_name current{};
+        current.device = reinterpret_cast<ID3D11Device *>(device->get_native());
+        current.logical_name.assign(raw, size);
+        current.hash = hash;
+        std::lock_guard<std::mutex> lock(g_mutex);
+        if (g_ambiguous_named_resource_device.count(resource.handle))
+            return;
+        const auto it = g_attested_names_by_resource.find(resource.handle);
+        if (it == g_attested_names_by_resource.end()) {
+            g_attested_names_by_resource.emplace(resource.handle,
+                std::move(current));
+        } else if (it->second.device != current.device ||
+                   it->second.hash != current.hash ||
+                   it->second.logical_name != current.logical_name) {
+            g_attested_names_by_resource.erase(it);
+            g_ambiguous_named_resource_device.emplace(
+                resource.handle, current.device);
+        }
+    } catch (...) {
+        // Allocation must never unwind into the D3D11/ReShade callback.
+    }
+}
+
+void on_destroy_resource(
+    reshade::api::device *,
+    reshade::api::resource resource)
+{
+    if (resource.handle == 0u) return;
+    std::lock_guard<std::mutex> lock(g_mutex);
+    g_attested_names_by_resource.erase(resource.handle);
+    g_ambiguous_named_resource_device.erase(resource.handle);
+}
+#endif
+#if !defined(DSRRL_RESOURCE_EPOCH_SHARD_SYNC)
+std::atomic<std::uint64_t> g_cache_epoch{1u};
+#endif
 
 void on_init_resource_view(
     reshade::api::device *device,
