@@ -71,6 +71,12 @@ jobs:
           python renderer-core/tools/apply_r43_map_cmake.py
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
+      - name: Apply exact DSR-only EnvDiffuse donor row overlay
+        shell: pwsh
+        run: |
+          python renderer-core/tools/apply_r43_dsr_only_envdiffuse.py
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
       - name: Configure R43 per-key PMetal freshness cache
         shell: pwsh
         run: >
