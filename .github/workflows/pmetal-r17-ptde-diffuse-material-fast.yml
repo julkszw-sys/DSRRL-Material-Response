@@ -85,3 +85,75 @@ jobs:
           name: DSRRL_PMETAL_R17_PTDE_DIFFUSE_MATERIAL
           path: DSRRL_PMETAL_R17_PTDE_DIFFUSE_MATERIAL.addon64
           if-no-files-found: error
+
+  other-metal-exact-diag:
+    # A new PR cannot authorize production promotion: this is a
+    # non-release opt-in construction check for the additional exact MTDs.
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.ref == 'dev/v203-shared-ptde-workflow-c100-r17'
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      - uses: actions/checkout@v4
+        with:
+          repository: crosire/reshade
+          ref: 3645e3025d1d98a90e318278858931f034d5d1f6
+          path: _reshade
+      - name: Verify original v2.0.3-dev ancestry
+        shell: pwsh
+        run: |
+          git merge-base --is-ancestor 6a73033f6275f88487effeb1e34bbbdd7a6a3a88 HEAD
+          if ($LASTEXITCODE -ne 0) { throw "Not based on exact v2.0.3-dev source" }
+      - name: Configure exact MTD-keyed metal diagnostic
+        shell: pwsh
+        run: >
+          cmake -S renderer-core/integrated -B build-metal -A x64
+          -DRESHADE_INCLUDE_DIR="${{ github.workspace }}/_reshade/include"
+          -DDSRRL_SOURCE_COMMIT="${{ github.event.pull_request.head.sha }}"
+          -DDSRRL_BUILD_FLAVOR="v203_dev_other_metal_mtd_keyed_diagnostic"
+          -DDSRRL_RELEASE_CLEANUP=ON
+          -DDSRRL_RESOURCE_EPOCH_SHARD_SYNC=ON
+          -DDSRRL_COMPANION_TLS_4WAY=ON
+          -DDSRRL_EXPERIMENTAL_OTHER_METAL_PTDE_ENVSPEC=ON
+          -DDSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG=ON
+          -DDSRRL_PMETAL_FULL_PTDE_HEMENV_R3=ON
+          -DDSRRL_PMETAL_FULL_PTDE_HEMENV_R4=ON
+          -DDSRRL_PMETAL_FULL_PTDE_HEMENV_R5=ON
+          -DDSRRL_PMETAL_FULL_PTDE_HEMENV_R6=ON
+          -DDSRRL_PMETAL_FULL_PTDE_HEMENV_R7_SHADOW=ON
+          -DDSRRL_PMETAL_FULL_PTDE_HEMENV_R8_PRE_AB=ON
+          -DDSRRL_PMETAL_FULL_PTDE_HEMENV_R11_COMMON_MERGE=ON
+          -DDSRRL_PMETAL_FULL_PTDE_HEMENV_R15_PTDE_LIVEOUT_PAIR=ON
+          -DDSRRL_PMETAL_FULL_PTDE_HEMENV_R16_LEGACY_DIFFUSE_SPLIT=ON
+          -DDSRRL_PMETAL_FULL_PTDE_HEMENV_R17_PTDE_DIFFUSE_MATERIAL=ON
+          -DDSRRL_PMETAL_R19_LERP_MATERIALWORKFLOW=ON
+          -DDSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE=ON
+          -DDSRRL_PHYSICAL_CUT_UL_H3_SUBSURFACE=ON
+          -DDSRRL_PHYSICAL_CUT_POINTLIGHT_ALL=ON
+      - name: Build one experimental integrated addon
+        shell: pwsh
+        run: |
+          cmake --build build-metal --config Release --target dsrrl_renderer_core_integrated
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $addons = @(Get-ChildItem build-metal -Recurse -Filter *.addon64)
+          if ($addons.Count -ne 1) { throw "Expected exactly one addon, got $($addons.Count)" }
+          Copy-Item $addons[0].FullName DSRRL_v203_other_metal_exact_DIAG.addon64
+          $bytes = [System.IO.File]::ReadAllBytes("DSRRL_v203_other_metal_exact_DIAG.addon64")
+          $ascii = [System.Text.Encoding]::ASCII.GetString($bytes)
+          if (-not $ascii.Contains("${{ github.event.pull_request.head.sha }}")) { throw "Missing source identity" }
+          if (-not $ascii.Contains("v203_dev_other_metal_mtd_keyed_diagnostic")) { throw "Missing diagnostic build identity" }
+          Get-FileHash DSRRL_v203_other_metal_exact_DIAG.addon64 -Algorithm SHA256
+      - name: Run exact material authority and c100 regressions
+        shell: pwsh
+        run: |
+          cmake --build build-metal/renderer-core-lib --config Release --target dsrrl_renderer_ptde_metal_envspec_baseline_tests dsrrl_renderer_ptde_metal_envspec_experimental_tests dsrrl_renderer_ptde_workflow_c100_tests
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          ctest --test-dir build-metal/renderer-core-lib -C Release -R "^dsrrl_renderer_ptde_(metal_envspec|workflow_c100)" --output-on-failure
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: v203-other-metal-exact-diagnostic-not-for-release
+          path: DSRRL_v203_other_metal_exact_DIAG.addon64
+          if-no-files-found: error
+          retention-days: 7
