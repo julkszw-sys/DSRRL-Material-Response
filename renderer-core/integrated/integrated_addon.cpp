@@ -54,6 +54,10 @@
 
 #include <reshade.hpp>
 #include <d3d11.h>
+#include <atomic>
+#include <cstdint>
+#include <cstdio>
+#include <cstring>
 
 #if RESHADE_API_VERSION != 20
 #error DSRRL Core+Islands requires ReShade Add-on API 20
