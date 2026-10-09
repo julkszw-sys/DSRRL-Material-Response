@@ -1461,6 +1461,11 @@ extern "C" void dsrrl_flver_selector_observer(
    // A visible generic MR draw may have only an exact runtime MTD carrier.
    // That is NOT legal authority for PTDE EnvSpec/SpecRGB resources.
    log_spc_material_census_once(runtime_material, true);
+   log_spc_owner_join_cut_once(
+       runtime_material,
+       cache_hit,
+       owner_lookup_ok,
+       owner_mtd_ok);
 #endif
    latch_once(
        g_runtime_mtd_selection_published);
