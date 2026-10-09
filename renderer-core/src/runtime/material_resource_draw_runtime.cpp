@@ -2074,20 +2074,30 @@ try_recover_exact_bound_spec_from_native_name(
 
     // Limit the experiment to two exact lookups per native view lifetime,
     // even when hundreds of draws reuse a missing-name stock t1.
+    bool denied = false;
     {
         std::lock_guard<std::mutex> lock(g_mutex);
         if (g_ambiguous_view_device.find(key) !=
                 g_ambiguous_view_device.end() ||
             g_cache.find(key) != g_cache.end()) {
-            stock->Release();
-            return false;
+            denied = true;
+        } else {
+            try {
+                auto &attempts = g_late_native_t1_attempts[key];
+                if (attempts >= 2u)
+                    denied = true;
+                else
+                    ++attempts;
+            } catch (...) {
+                denied = true;
+            }
         }
-        auto &attempts = g_late_native_t1_attempts[key];
-        if (attempts >= 2u) {
-            stock->Release();
-            return false;
-        }
-        ++attempts;
+    }
+    if (denied) {
+        // Releasing a D3D object under g_mutex can reenter a resource
+        // destruction callback. Release only after leaving the lock.
+        stock->Release();
+        return false;
     }
 
     std::wstring name{};
