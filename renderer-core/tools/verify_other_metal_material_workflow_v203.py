@@ -108,13 +108,30 @@ def main() -> None:
             "exact material-keyed producer/consumer join not present")
     p = source.index("bool pmetal_env_source_runtime::latest_exact_material(")
     q = source.index("bool pmetal_env_source_runtime::latest(", p)
-    # The original source contains a comment explaining why the historic
-    # latest_hook_source() is forbidden for new MTDs. Inspect executable
-    # code, not a bare substring that also matches this defensive comment.
+    # User-requested V13 diagnostic: only a disabled-by-default SPC batch
+    # may reproduce baseline P_Metal's historical unkeyed fallback. In all
+    # normal builds (and for unverified MTDs) the strict producer join remains
+    # authoritative. Inspect executable code, not explanatory comments.
     source_body = re.sub(r"//[^\n]*", "", source[p:q])
     source_body = re.sub(r"/\*[\s\S]*?\*/", "", source_body)
-    require(re.search(r"\blatest_hook_source\s*\(", source_body) is None,
-            "new materials may not inherit unkeyed latest-hook fallback")
+    spc_guard = re.search(
+        r"#if defined\(DSRRL_EXPERIMENTAL_SPC_MATERIAL_BATCH\)"
+        r"([\s\S]*?)#endif", source_body)
+    require(spc_guard is not None, "SPC V13 fallback must have opt-in gate")
+    inside = spc_guard.group(1)
+    outside = source_body.replace(spc_guard.group(0), "")
+    require(re.search(r"\blatest_hook_source\s*\(", outside) is None,
+            "unkeyed V13 fallback escaped the SPC opt-in gate")
+    require(re.search(r"\blatest_hook_source\s*\(", inside) is not None and
+            "is_experimental_ptde_metal_envspec_material(material)" in inside,
+            "SPC fallback must retain authenticated exact material authority")
+    require("out.unkeyed_hook_fallback = true" in inside and
+            "SPC25 V13 FALLBACK" in inside,
+            "unkeyed source provenance must be reported per admitted profile")
+    require(
+        re.search(r"DSRRL_EXPERIMENTAL_SPC_MATERIAL_BATCH\s+"
+                  r"\"[^\"]+\"\s+OFF\)", cmake) is not None,
+        "unkeyed V13 test mode must be disabled by default")
     require("is_experimental_ptde_metal_envspec_material(material)" in consumer,
             "draw consumer missing exact experimental material selection")
     require("source_.latest_exact_material(material, source)" in consumer,
@@ -144,7 +161,7 @@ def main() -> None:
         "envspec_slot": 2,
         "consumers": [33, 34, 35],
         "opt_in_default": "OFF",
-        "unkeyed_hook_fallback": "FORBIDDEN_NEW_MATERIALS",
+        "unkeyed_hook_fallback": "SPC_OPT_IN_ONLY_UNKEYED_V13_EXPERIMENT",
         "native_runtime": "OPEN",
         "ptde_pixel_equivalence": "OPEN",
     }, sort_keys=True))
