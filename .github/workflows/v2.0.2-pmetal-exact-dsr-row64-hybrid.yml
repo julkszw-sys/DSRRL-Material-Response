@@ -40,7 +40,7 @@ jobs:
           $source = Get-Content renderer-core/src/runtime/pmetal_env_source_runtime.cpp -Raw
           if (-not $source.Contains("k_m18_runtime_neighbor_hypothesis{255u,255u,255u,50u}")) { throw "Wrong m18/64 EnvSpec experiment RGBM" }
           if (-not $source.Contains("donor_raw_diffuse=1.5 applied_diffuse=1.5")) { throw "Missing unchanged EnvDiffuse trace" }
-          if (-not $source.Contains("envspec_origin = \"PTDE_RUNTIME_NEIGHBORS_28_35_HYPOTHESIS\"")) { throw "Missing provisional provenance" }
+          if (-not $source.Contains('envspec_origin = "PTDE_RUNTIME_NEIGHBORS_28_35_HYPOTHESIS"')) { throw "Missing provisional provenance" }
       - name: Configure exact R43 release with profiler
         shell: pwsh
         run: >
