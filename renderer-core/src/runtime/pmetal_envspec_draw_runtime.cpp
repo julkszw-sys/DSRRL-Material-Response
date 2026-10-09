@@ -8,6 +8,7 @@
 #include "dsrrl/runtime/pmetal_envspec_draw_runtime.hpp"
 #include "dsrrl/runtime/runtime_hot_telemetry.hpp"
 #include "dsrrl/runtime/pixel_srv_shadow.hpp"
+#include "dsrrl/runtime/ptde_metal_envspec_authority.hpp"
 
 #include "dsrrl/operators/legacy_plan/sha256_bytes.hpp"
 
@@ -24,12 +25,6 @@ namespace {
 
 namespace mr = operators::material_response;
 namespace hashing = operators::legacy_plan::hashing;
-
-constexpr std::uint32_t k_pmetal_route_index = 345u;
-constexpr const char *k_pmetal_name =
-    "P_Metal[DSB].mtd";
-constexpr const char *k_pmetal_sha256 =
-    "ece70f36bd2517d28c8495e276cea537f8b519d6bed981788e79a409ffbf763b";
 
 constexpr std::uint32_t k_effect_fail_feature = 1u << 0u;
 constexpr std::uint32_t k_effect_fail_lerp_feature = 1u << 1u;
@@ -153,36 +148,32 @@ void effect_fail(
     mask.fetch_or(bit, std::memory_order_relaxed);
 }
 
-bool exact_pmetal_material(
-    const mr::material_identity &material) noexcept
-{
-    return
-        material.valid &&
-        material.owner_tuple_exact &&
-        material.material_slot_valid &&
-        material.semantic_name_hash ==
-            mr::mtd_semantic_hash(
-                k_pmetal_name) &&
-        hashing::matches_hex(
-            material.raw_mtd_sha256,
-            k_pmetal_sha256);
-}
-
-bool exact_pmetal_decision(
+// Draw-local identity and compiled receiver are checked independently.
+// The additional three MTDs have the exact PTDE/DSR SPC shader family
+// and EnvSpec slot 2; no shared-shader create-time visible patch is used.
+bool exact_metal_material_and_decision(
+    const mr::material_identity &material,
     const mr::decision &decision) noexcept
 {
-    // EnvSpec owns its own PTDE material consumer. Do not borrow the generic
-    // Material Response specular-operation bit: generic MR is diffuse-only.
-    // Exact P_Metal identity + route/receiver select the verified profile, and
-    // raw c101 is consumed explicitly by the EnvSpec SpecRGB material tail.
-    return
-        decision.active &&
-        decision.route_index ==
-            k_pmetal_route_index &&
-        decision.receiver_id >= 33u &&
-        decision.receiver_id <= 35u &&
-        std::isfinite(decision.c101) &&
-        decision.c101 >= 0.0f;
+    const auto *authority = match_ptde_metal_envspec_material(material);
+    if (authority == nullptr ||
+        !decision.active ||
+        decision.route_index != authority->route_index ||
+        decision.receiver_id < 33u ||
+        decision.receiver_id > 35u ||
+        !std::isfinite(decision.c101) ||
+        decision.c101 < 0.0f)
+        return false;
+
+#if defined(DSRRL_EXPERIMENTAL_OTHER_METAL_PTDE_ENVSPEC)
+    // The experimental variants are an exact c101=2.5 subgroup.
+    // The independent MTD semantic classifier and exact live t1+t10
+    // resource/receiver gates are still mandatory in prepare().
+    if (authority->profile != ptde_metal_envspec_profile::pmetal_baseline &&
+        decision.c101 != authority->c101)
+        return false;
+#endif
+    return true;
 }
 
 mr::mtd_semantic_query make_query(
@@ -218,9 +209,7 @@ bool exact_pmetal_envspec_candidate(
     const operators::material_response::material_identity &material,
     const operators::material_response::decision &decision) noexcept
 {
-    return
-        exact_pmetal_material(material) &&
-        exact_pmetal_decision(decision);
+    return exact_metal_material_and_decision(material, decision);
 }
 
 pmetal_envspec_draw_runtime::
@@ -759,8 +748,16 @@ bool pmetal_envspec_draw_runtime::prepare(
     effect_latch(effect_semantic_ready_);
 
     pmetal_envspec_source source{};
-    if (!source_.latest(material, source) ||
-        !std::isfinite(source.beta)) {
+    // Never let an unkeyed latest-hook LightBank fallback authorize a
+    // different material. Extended profiles require an exact
+    // FLVER+slot+MTD-keyed selector publication, even if the original
+    // P_Metal baseline can retain its historical validated fallback.
+    const bool experimental_material =
+        is_experimental_ptde_metal_envspec_material(material);
+    const bool exact_source_ready = experimental_material
+        ? source_.latest_exact_material(material, source)
+        : source_.latest(material, source);
+    if (!exact_source_ready || !std::isfinite(source.beta)) {
         telemetry::hot_count(source_rejects_);
         effect_fail(
             effect_fail_mask_,
