@@ -114,6 +114,15 @@ jobs:
           $addons = @(Get-ChildItem build-prof -Recurse -Filter *.addon64)
           if ($addons.Count -ne 1) { throw "Expected one addon, got $($addons.Count)" }
           Copy-Item $addons[0].FullName "DSRRL_v2.0.2_PMETAL_ASYLUM_B0_REGHASH.addon64"
+      - name: Windows 1 MiB stack writer registry startup smoke
+        shell: pwsh
+        run: |
+          cmake -S renderer-core/tests/pmetal_cb_reset_stack_smoke -B build-pr292-stack-smoke -A x64
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          cmake --build build-pr292-stack-smoke --config Release
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          ctest --test-dir build-pr292-stack-smoke -C Release --output-on-failure
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: P_Metal producer collision/revocation native regression
         shell: pwsh
         run: |
