@@ -1,0 +1,45 @@
+name: DSRRL v2.0.2 P_Metal Full Telemetry
+on:
+  workflow_dispatch:
+  push:
+    branches: [diag/v202-b19a-zero-hybrid-full-telemetry-20261009]
+permissions:
+  contents: read
+jobs:
+  windows-x64:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Check final v2.0.2 ancestry
+        shell: pwsh
+        run: |
+          git merge-base --is-ancestor b19a273f15872999a631e3feaa0a0dd6aea35e89 HEAD
+          if ($LASTEXITCODE -ne 0) { throw "Not descendant of final release 2.0.2" }
+      - uses: actions/checkout@v4
+        with:
+          repository: crosire/reshade
+          ref: 3645e3025d1d98a90e318278858931f034d5d1f6
+          path: _reshade
+      - name: Configure and build same operators with full telemetry
+        shell: pwsh
+        run: ./renderer-core/tools/configure_v202_zero_hybrid_telemetry.ps1
+      - name: Run native regressions and package
+        shell: pwsh
+        run: ./renderer-core/tools/verify_v202_zero_hybrid_telemetry.ps1
+      - name: Verify telemetry-only CMake flags
+        shell: pwsh
+        run: |
+          $cache = Get-Content build/CMakeCache.txt -Raw
+          foreach ($expect in @("DSRRL_RELEASE_CLEANUP:BOOL=OFF","DSRRL_FULL_TELEMETRY_DEFAULT_ON:BOOL=ON","DSRRL_RESOURCE_EPOCH_SHARD_SYNC:BOOL=ON","DSRRL_COMPANION_TLS_4WAY:BOOL=ON","DSRRL_PHYSICAL_CUT_POINTLIGHT_ALL:BOOL=ON","DSRRL_PHYSICAL_CUT_UL_H3_SUBSURFACE:BOOL=ON")) {
+            if (-not $cache.Contains($expect)) { throw "Missing CMake setting: $expect" }
+          }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: DSRRL_v202_B19A_ZERO_DSR_HYBRID_FULL_TELEMETRY
+          path: |
+            DSRRL_v202_B19A_ZERO_DSR_HYBRID_FULL_TELEMETRY.addon64
+            DSRRL_v202_B19A_ZERO_DSR_HYBRID_FULL_TELEMETRY.zip
+            SHA256SUMS.txt
+          if-no-files-found: error
