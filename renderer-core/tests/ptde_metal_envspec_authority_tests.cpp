@@ -121,6 +121,9 @@ int main()
     expect_valid("P_Metal[DSB]_Edge.mtd",5u,edge_sha,profile::pmetal_edge);
     expect_valid("C_Metal[DSB].mtd",229u,cmetal_sha,profile::cmetal);
 #if defined(DSRRL_EXPERIMENTAL_SPC_MATERIAL_BATCH)
+    expect_valid("P_RoughCloth[DSB].mtd",6u,
+                 "db197a28abd96f55ce54da65dfea74e8788464dd6ae13ca7ceee038c56d281b1",
+                 profile::spc_route_6,0u);
     expect_valid("P_Leather[DSB]_Alp.mtd",0u,
                  "4c728a9b5957a75d0eb82b2b77b800829e1973632c7c0690a7e31a074c85e7fb",
                  profile::spc_route_0,1u);
