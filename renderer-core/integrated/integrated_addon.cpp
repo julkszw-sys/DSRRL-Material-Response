@@ -10,6 +10,9 @@
 #include "dsrrl/runtime/bloom_scene_sidecar_runtime.hpp"
 #include "dsrrl/runtime/bloom_fx_draw_transport.hpp"
 #include "dsrrl/runtime/pmetal_envspec_draw_runtime.hpp"
+#if defined(DSRRL_PMETAL_ASYLUM_DEFERRED_TOPOLOGY_TRACE)
+#include "dsrrl/runtime/pmetal_asylum_cmdlist_trace.hpp"
+#endif
 #include "dsrrl/runtime/pmetal_native_draw_bridge.hpp"
 #if defined(DSRRL_PMETAL_ASYLUM_CB_WRITER_TRACE)
 #include "dsrrl/runtime/pmetal_native_cb_writer_trace.hpp"
@@ -4091,6 +4094,9 @@ void on_init_device(reshade::api::device *device)
 void on_destroy_device(reshade::api::device *device)
 {
     dsrrl::runtime::pixel_srv_shadow_reset();
+#if defined(DSRRL_PMETAL_ASYLUM_DEFERRED_TOPOLOGY_TRACE)
+    dsrrl::runtime::pmetal_asylum_cmdlist_trace::global_observer().clear();
+#endif
 
     if (k_drawtime_islands_runtime_enabled) {
         g_pmetal_native_draw.uninstall();
@@ -7416,12 +7422,20 @@ bool cb_writer_on_update(
     return false; // observation only, always execute the game's command
 }
 bool cb_writer_on_deferred_update(
-    reshade::api::command_list *,const void *data,
+    reshade::api::command_list *cmd_list,const void *data,
     reshade::api::resource dest,
     std::uint64_t offset,std::uint64_t size)
 {
     dsrrl::runtime::pmetal_native_cb_writer_before_update(
         static_cast<std::uintptr_t>(dest.handle),data,offset,size);
+#if defined(DSRRL_PMETAL_ASYLUM_DEFERRED_TOPOLOGY_TRACE)
+    if (cmd_list != nullptr)
+        dsrrl::runtime::pmetal_asylum_cmdlist_trace::global_observer()
+            .observe_deferred_update(
+                reinterpret_cast<std::uintptr_t>(cmd_list),
+                static_cast<std::uintptr_t>(cmd_list->get_native()),
+                offset,size);
+#endif
     return false;
 }
 void cb_writer_on_destroy(
@@ -7432,10 +7446,61 @@ void cb_writer_on_destroy(
 }
 #endif
 
+#if defined(DSRRL_PMETAL_ASYLUM_DEFERRED_TOPOLOGY_TRACE)
+void asylum_cmdlist_close(reshade::api::command_list *cmd) {
+    if (cmd != nullptr) dsrrl::runtime::pmetal_asylum_cmdlist_trace::global_observer()
+        .close(reinterpret_cast<std::uintptr_t>(cmd),
+               static_cast<std::uintptr_t>(cmd->get_native()));
+}
+void asylum_cmdlist_reset(reshade::api::command_list *cmd) {
+    if (cmd != nullptr) dsrrl::runtime::pmetal_asylum_cmdlist_trace::global_observer()
+        .reset_command(reinterpret_cast<std::uintptr_t>(cmd));
+}
+void asylum_cmdlist_destroy(reshade::api::command_list *cmd) {
+    if (cmd != nullptr) dsrrl::runtime::pmetal_asylum_cmdlist_trace::global_observer()
+        .destroy_command(reinterpret_cast<std::uintptr_t>(cmd));
+}
+void asylum_cmdlist_secondary(reshade::api::command_list *first,
+                             reshade::api::command_list *second) {
+    if (first == nullptr || second == nullptr) return;
+    const auto stamp = dsrrl::runtime::pmetal_asylum_cmdlist_trace::global_observer()
+        .secondary(reinterpret_cast<std::uintptr_t>(first),
+                   reinterpret_cast<std::uintptr_t>(second));
+    namespace trace = dsrrl::runtime::pmetal_asylum_cmdlist_trace;
+    if (stamp.phase == trace::stage::none) return;
+    static std::atomic<std::uint32_t> logged{0};
+    if (logged.fetch_add(1u, std::memory_order_relaxed) >= 96u) return;
+    char line[680]{};
+    std::snprintf(line,sizeof(line),
+        "[DSRRL ASYLUM CMDLIST] phase=%s recorded_ctx=%llx native_ctx=%llx"
+        " list=%llx submitted_on=%llx generation=%llu"
+        " candidate_rx33=%u candidate_rx34=%u bank_mask=%u"
+        " last_rx=%u last_owner_sha0=%08x last_slot=%u last_row=%u"
+        " deferred_update_size_b0=%u deferred_update_size_b1=%u"
+        " semantics=SOURCE_CANDIDATE_ONLY gpu_consumption=UNVERIFIED",
+        stamp.phase == trace::stage::after_finish ? "AFTER_FINISH" : "BEFORE_EXECUTE",
+        static_cast<unsigned long long>(stamp.recorded_api),
+        static_cast<unsigned long long>(stamp.recorded_native),
+        static_cast<unsigned long long>(stamp.finished_api),
+        static_cast<unsigned long long>(stamp.execution_api),
+        static_cast<unsigned long long>(stamp.generation),
+        stamp.rx33_candidates,stamp.rx34_candidates,stamp.bank_mask,
+        stamp.rx,stamp.owner_sha_prefix,stamp.slot,stamp.row,
+        stamp.size_matched_b0_updates,stamp.size_matched_b1_updates);
+    reshade::log::message(reshade::log::level::info,line);
+}
+#endif
+
 void register_events()
 {
     reshade::register_event<reshade::addon_event::init_device>(on_init_device);
     reshade::register_event<reshade::addon_event::destroy_device>(on_destroy_device);
+#if defined(DSRRL_PMETAL_ASYLUM_DEFERRED_TOPOLOGY_TRACE)
+    reshade::register_event<reshade::addon_event::close_command_list>(asylum_cmdlist_close);
+    reshade::register_event<reshade::addon_event::reset_command_list>(asylum_cmdlist_reset);
+    reshade::register_event<reshade::addon_event::execute_secondary_command_list>(asylum_cmdlist_secondary);
+    reshade::register_event<reshade::addon_event::destroy_command_list>(asylum_cmdlist_destroy);
+#endif
 #if defined(DSRRL_PMETAL_ASYLUM_CB_WRITER_TRACE)
     reshade::register_event<reshade::addon_event::map_buffer_region>(cb_writer_on_map);
     reshade::register_event<reshade::addon_event::unmap_buffer_region>(cb_writer_on_unmap);
@@ -7465,6 +7530,13 @@ void register_events()
 
 void unregister_events()
 {
+#if defined(DSRRL_PMETAL_ASYLUM_DEFERRED_TOPOLOGY_TRACE)
+    reshade::unregister_event<reshade::addon_event::destroy_command_list>(asylum_cmdlist_destroy);
+    reshade::unregister_event<reshade::addon_event::execute_secondary_command_list>(asylum_cmdlist_secondary);
+    reshade::unregister_event<reshade::addon_event::reset_command_list>(asylum_cmdlist_reset);
+    reshade::unregister_event<reshade::addon_event::close_command_list>(asylum_cmdlist_close);
+    dsrrl::runtime::pmetal_asylum_cmdlist_trace::global_observer().clear();
+#endif
 #if defined(DSRRL_PMETAL_ASYLUM_CB_WRITER_TRACE)
     reshade::unregister_event<reshade::addon_event::destroy_resource>(cb_writer_on_destroy);
     reshade::unregister_event<reshade::addon_event::update_buffer_region_command>(cb_writer_on_deferred_update);
