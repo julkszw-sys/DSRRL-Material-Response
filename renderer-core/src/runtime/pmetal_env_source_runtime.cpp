@@ -2906,12 +2906,26 @@ bool pmetal_env_source_runtime::latest_exact_material(
         match_ptde_metal_envspec_material(material) == nullptr)
         return false;
 
-    // The synchronized source is keyed by exact raw FLVER digest, material
-    // slot, exact MTD SHA/name/route and the live selector epoch. In contrast
-    // to P_Metal's validated V13 path, an unkeyed latest_hook_source()
-    // fallback is intentionally forbidden for newly admitted MTDs.
+    // Both P_Metal and SPC25 first attempt the exact raw FLVER+slot+MTD
+    // producer join for the live selector epoch.
     const auto epoch = g_selector_epoch.load(std::memory_order_relaxed);
-    return pmetal_producer_state_latest(material, epoch, out);
+    if (pmetal_producer_state_latest(material, epoch, out))
+        return true;
+
+#if defined(DSRRL_EXPERIMENTAL_SPC_MATERIAL_BATCH)
+    // Owner-requested SPC25 experiment: reproduce the original P_Metal V13
+    // source fallback WITHOUT inventing a new selector/identity constraint.
+    // This hook is unkeyed and may contain another object's LightBank signal.
+    // Opt-in only, already-exact SPC material only; never generalize to MR.
+    if (is_experimental_ptde_metal_envspec_material(material) &&
+        latest_hook_source(out)) {
+        out.unkeyed_hook_fallback = true;
+        telemetry::hot_count(g_consumer_ok);
+        return true;
+    }
+#endif
+
+    return false;
 }
 
 bool pmetal_env_source_runtime::latest(
