@@ -151,9 +151,9 @@ jobs:
       - name: Run exact material authority and c100 regressions
         shell: pwsh
         run: |
-          cmake --build build-metal/renderer-core-lib --config Release --target dsrrl_renderer_ptde_metal_envspec_baseline_tests dsrrl_renderer_ptde_metal_envspec_experimental_tests dsrrl_renderer_ptde_workflow_c100_tests dsrrl_renderer_ptde_metal_exact_source_join_tests
+          cmake --build build-metal/renderer-core-lib --config Release --target dsrrl_renderer_ptde_metal_envspec_baseline_tests dsrrl_renderer_ptde_metal_envspec_experimental_tests dsrrl_renderer_ptde_spc_material_batch_tests dsrrl_renderer_ptde_workflow_c100_tests dsrrl_renderer_ptde_metal_exact_source_join_tests
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          ctest --test-dir build-metal/renderer-core-lib -C Release -R "^dsrrl_renderer_ptde_(metal_envspec|workflow_c100|metal_exact_source_join)" --output-on-failure
+          ctest --test-dir build-metal/renderer-core-lib -C Release -R "^dsrrl_renderer_ptde_(metal_envspec|spc_material_batch|workflow_c100|metal_exact_source_join)" --output-on-failure
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - uses: actions/upload-artifact@v4
         with:
