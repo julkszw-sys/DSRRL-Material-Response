@@ -40,4 +40,7 @@ consumer = (ROOT / "src/runtime/pmetal_envspec_draw_runtime.cpp").read_text()
 assert "should_dispatch_ptde_metal_selector_source(identity)" in selector
 assert "pmetal_env_source_selector_event(" in selector
 assert "match_ptde_metal_envspec_material(material) != nullptr" in producer
+assert "source_.latest_exact_material(material, source)" in consumer
+assert "env_semantics.envspc_slot != match_ptde_metal_envspec_material(material)->envspc_slot" in consumer
+assert "decision.c101 != authority->c101" in consumer
 print('Unique MTD and EnvSpec entries:',len(compiled))
