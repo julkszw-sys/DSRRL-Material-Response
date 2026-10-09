@@ -145,6 +145,9 @@ std::atomic_bool g_attested_resource_view_join_logged{false};
 
 
 #endif
+#if !defined(DSRRL_RESOURCE_EPOCH_SHARD_SYNC)
+std::atomic<std::uint64_t> g_cache_epoch{1u};
+#endif
 thread_local bool g_internal_create = false;
 
 struct companion_tls_entry {
