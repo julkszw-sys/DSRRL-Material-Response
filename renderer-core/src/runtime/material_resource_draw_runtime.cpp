@@ -2135,8 +2135,9 @@ try_recover_exact_bound_spec_from_native_name(
         stock->Release();
         return false;
     }
-    stock->Release();
-
+    // Retain the exact live stock SRV until after registration is complete.
+    // Releasing it during DDS disk/GPU load could allow handle reuse before
+    // this companion is installed, silently aliasing a different texture.
     auto loaded =
         safe_load_sidecar(device, asset_class::specular, name, hash);
     account_load(loaded.status);
@@ -2144,6 +2145,7 @@ try_recover_exact_bound_spec_from_native_name(
         loaded.view == nullptr) {
         release_view(loaded.view);
         device->Release();
+        stock->Release();
         return false; // no exact PTDE SpecRGB sidecar, stock fail-open
     }
 
@@ -2172,6 +2174,8 @@ try_recover_exact_bound_spec_from_native_name(
         set = {};
     else
         release_set(set);
+    // The native handle was pinned through the whole transaction.
+    stock->Release();
 
     if (accepted &&
         !g_late_native_t1_recovered_logged.exchange(
