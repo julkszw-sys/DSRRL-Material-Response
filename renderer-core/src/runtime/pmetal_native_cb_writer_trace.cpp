@@ -181,7 +181,12 @@ void pmetal_native_cb_writer_destroy(
 }
 void pmetal_native_cb_writer_reset() noexcept {
     std::lock_guard<std::mutex> guard(g_mutex);
-    g_watches={};
+    // PR292: Each watched_cb now stores 129 register hashes. Assigning {}
+    // to the entire 4096-entry array materializes a multi-megabyte temporary
+    // on the Windows 1 MB default thread stack during addon startup.
+    // Clear entries individually with bounded stack use.
+    for (auto &entry : g_watches)
+        entry = {};
     g_next_epoch.store(0u,std::memory_order_relaxed);
     g_mapped={};
 }
