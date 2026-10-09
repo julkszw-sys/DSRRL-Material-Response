@@ -12,7 +12,7 @@ int main() {
     static_assert(probe_area(342)==0);
     material m{};
     m.valid=true;m.owner_tuple_exact=true;
-    m.material_slot_valid=true;m.actual_material_exact=true;
+    m.material_slot_valid=true;m.actual_material_exact=false; // RC1 verified FLVER owner is sufficient
     m.material_slot=1;m.route_index=345;
     m.flver_sha256[0]=0x67;
     m.raw_mtd_sha256[0]=0xec;
