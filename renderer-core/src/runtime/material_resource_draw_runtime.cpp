@@ -151,6 +151,23 @@ std::atomic_bool g_attested_resource_view_join_logged{false};
 std::atomic_bool g_early_view_join_logged{false};
 std::atomic_bool g_native_debug_name_join_logged{false};
 std::atomic_bool g_late_native_t1_recovered_logged{false};
+std::atomic<std::uint32_t> g_late_native_t1_stage_mask{0u};
+void log_late_native_stage_once(
+    std::uint32_t ordinal, const char *stage) noexcept
+{
+    if (ordinal >= 30u || stage == nullptr)
+        return;
+    const auto bit = std::uint32_t{1u} << ordinal;
+    if ((g_late_native_t1_stage_mask.fetch_or(
+            bit, std::memory_order_relaxed) & bit) != 0u)
+        return;
+    char msg[256]{};
+    std::snprintf(msg, sizeof(msg),
+        "[DSRRL SPC25 LATE T1] stage=%s scope=ALL_EXACT_SPC25 pixel=OPEN",
+        stage);
+    reshade::log::message(reshade::log::level::info, msg);
+}
+
 std::unordered_map<std::uint64_t,std::uint8_t> g_late_native_t1_attempts;
 
 
@@ -1333,49 +1350,109 @@ void on_destroy_resource(
 // No suffix stripping, path guessing or BC1/size-based matching.
 bool snapshot_native_exact_debug_name(
     ID3D11DeviceChild *child,
-    std::wstring &out) noexcept
+    std::wstring &out,
+    bool *any_label_present = nullptr) noexcept
 {
     out.clear();
-    if (child == nullptr) return false;
-    char bytes[260]{};
-    UINT count = static_cast<UINT>(sizeof(bytes));
-    if (FAILED(child->GetPrivateData(
-            WKPDID_D3DDebugObjectName, &count, bytes)) ||
-        count == 0u || count >= sizeof(bytes))
+    if (any_label_present != nullptr)
+        *any_label_present = false;
+    if (child == nullptr)
         return false;
-    // Debug label GUID holds 8-bit bytes. Do not accept embedded NUL or
-    // noncanonical punctuation, paths, extensions, or unbounded names.
-    if (bytes[count - 1u] == '\0') --count;
-    if (count < 7u || count >= sizeof(bytes)) return false;
-    wchar_t raw[260]{};
-    for (UINT i = 0u; i < count; ++i) {
-        const unsigned char ch =
-            static_cast<unsigned char>(bytes[i]);
-        if (!((ch >= 'a' && ch <= 'z') ||
-              (ch >= 'A' && ch <= 'Z') ||
-              (ch >= '0' && ch <= '9') ||
-              ch == '_'))
+
+    // The native object may have either documented D3D11 debug-name
+    // representation. Both are just candidate *producers*; only exact
+    // V12 canonical logical texture identities become bridge authority.
+    char ascii_bytes[260]{};
+    UINT ascii_size = static_cast<UINT>(sizeof(ascii_bytes));
+    const HRESULT ascii_result = child->GetPrivateData(
+        WKPDID_D3DDebugObjectName, &ascii_size, ascii_bytes);
+    const bool ascii_present =
+        SUCCEEDED(ascii_result) && ascii_size > 0u;
+    wchar_t wide_chars[260]{};
+    UINT wide_bytes = static_cast<UINT>(sizeof(wide_chars));
+    const HRESULT wide_result = child->GetPrivateData(
+        WKPDID_D3DDebugObjectNameW, &wide_bytes, wide_chars);
+    const bool wide_present =
+        SUCCEEDED(wide_result) && wide_bytes > 0u;
+
+    if (any_label_present != nullptr)
+        *any_label_present = ascii_present || wide_present;
+    if (!ascii_present && !wide_present)
+        return false;
+
+    auto exact_canonical = [](const wchar_t *chars,
+                              std::size_t length) noexcept {
+        if (chars == nullptr || length < 7u ||
+            length >= 260u ||
+            chars[length - 2u] != L'_' ||
+            (chars[length - 1u] != L's' &&
+             chars[length - 1u] != L'S'))
             return false;
-        raw[i] = static_cast<wchar_t>(ch);
+        for (std::size_t i = 0u; i < length; ++i) {
+            const wchar_t ch = chars[i];
+            if (!((ch >= L'a' && ch <= L'z') ||
+                  (ch >= L'A' && ch <= L'Z') ||
+                  (ch >= L'0' && ch <= L'9') ||
+                  ch == L'_'))
+                return false;
+        }
+        const auto hash = fnv_name(chars, length);
+        return generated::spec_equipment_name_hash_allowed_v12(hash) ||
+            exact_subsurface_body_spec_hash(hash) ||
+            generated::diffuse_name_hash_allowed_v12(hash) ||
+            generated::normal_name_hash_allowed_v12(hash);
+    };
+
+    wchar_t ascii_name[260]{};
+    std::size_t ascii_chars = 0u;
+    if (ascii_present) {
+        if (ascii_size >= sizeof(ascii_bytes))
+            return false;
+        ascii_chars = ascii_size;
+        if (ascii_bytes[ascii_chars - 1u] == '\0')
+            --ascii_chars;
+        if (ascii_chars == 0u)
+            return false;
+        for (std::size_t i = 0u; i < ascii_chars; ++i) {
+            const unsigned char ch =
+                static_cast<unsigned char>(ascii_bytes[i]);
+            if (ch > 0x7fu)
+                return false;
+            ascii_name[i] = static_cast<wchar_t>(ch);
+        }
+        if (!exact_canonical(ascii_name, ascii_chars))
+            return false;
     }
-    if (raw[count - 2u] != L'_' ||
-        (raw[count - 1u] != L's' && raw[count - 1u] != L'S'))
-        return false;
-    const auto h = fnv_name(raw, count);
-    if (!generated::spec_equipment_name_hash_allowed_v12(h) &&
-        !exact_subsurface_body_spec_hash(h) &&
-        !generated::diffuse_name_hash_allowed_v12(h) &&
-        !generated::normal_name_hash_allowed_v12(h))
-        return false;
+
+    std::size_t wide_length = 0u;
+    if (wide_present) {
+        if ((wide_bytes % sizeof(wchar_t)) != 0u ||
+            wide_bytes >= sizeof(wide_chars))
+            return false;
+        wide_length = wide_bytes / sizeof(wchar_t);
+        if (wide_length != 0u &&
+            wide_chars[wide_length - 1u] == L'\0')
+            --wide_length;
+        if (!exact_canonical(wide_chars, wide_length))
+            return false;
+    }
+
+    if (ascii_present && wide_present &&
+        (ascii_chars != wide_length ||
+         std::char_traits<wchar_t>::compare(
+             ascii_name, wide_chars, ascii_chars) != 0))
+        return false; // two independently provided names disagree
+
+    const wchar_t *chosen = ascii_present ? ascii_name : wide_chars;
+    const auto count = ascii_present ? ascii_chars : wide_length;
     try {
-        out.assign(raw, count);
-        return true;
+        out.assign(chosen, count);
+        return !out.empty();
     } catch (...) {
         out.clear();
         return false;
     }
 }
-
 bool on_create_resource_view(
     reshade::api::device *device,
     reshade::api::resource resource,
@@ -2101,14 +2178,25 @@ try_recover_exact_bound_spec_from_native_name(
     }
 
     std::wstring name{};
+    bool view_label = false;
     const bool view_name =
-        snapshot_native_exact_debug_name(stock, name);
+        snapshot_native_exact_debug_name(stock, name, &view_label);
     ID3D11Resource *resource = nullptr;
     stock->GetResource(&resource);
     if (resource != nullptr) {
         std::wstring resource_name{};
+        bool resource_label = false;
         const bool resource_named =
-            snapshot_native_exact_debug_name(resource, resource_name);
+            snapshot_native_exact_debug_name(
+                resource, resource_name, &resource_label);
+        if (view_name && resource_named &&
+            name != resource_name)
+            log_late_native_stage_once(
+                3u, "conflicting_native_view_resource_names");
+        if (!view_name && !resource_named &&
+            (view_label || resource_label))
+            log_late_native_stage_once(
+                1u, "native_label_present_not_canonical_allowlisted");
         resource->Release();
         if (resource_named) {
             if (view_name && name != resource_name) {
@@ -2121,6 +2209,12 @@ try_recover_exact_bound_spec_from_native_name(
     }
 
     if (name.empty()) {
+        if (!view_label)
+            log_late_native_stage_once(
+                0u, "stock_t1_missing_exact_native_name");
+        else
+            log_late_native_stage_once(
+                1u, "native_label_present_not_canonical_allowlisted");
         stock->Release();
         return false;
     }
@@ -2143,6 +2237,8 @@ try_recover_exact_bound_spec_from_native_name(
     account_load(loaded.status);
     if (loaded.status != load_status::ready ||
         loaded.view == nullptr) {
+        log_late_native_stage_once(
+            2u, "canonical_name_but_exact_ptde_sidecar_unavailable");
         release_view(loaded.view);
         device->Release();
         stock->Release();
