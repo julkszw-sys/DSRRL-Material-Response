@@ -49,7 +49,7 @@ inline std::uint64_t fingerprint(const material &m,unsigned area) noexcept {
     auto byte=[&](std::uint8_t x){h=(h^x)*0x100000001b3ULL;};
     for(auto b:m.flver_sha256)byte(b);
     for(auto b:m.raw_mtd_sha256)byte(b);
-    auto number=[&](std::uint64_t x){for(int i=0;i<8;++i)byte((x>>(i*8))&255u);};
+    auto number=[&](std::uint64_t x){for(int i=0;i<8;++i)byte(static_cast<std::uint8_t>((x>>(i*8))&255u));};
     number(m.material_slot);number(m.route_index);number(m.semantic_name_hash);
     number(m.material_family_hash);number(area);
     return h;
