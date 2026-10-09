@@ -1715,7 +1715,32 @@ bool read_exact_source(
             ? pmetal_dsr_only_lightbank_fallback::find(signature,row_id)
             : nullptr;
         if (host != nullptr) {
+            // Preserve the original DSR-only donor table as raw provenance.
+            // This is an opt-in, single-field experiment, NOT a confirmed
+            // PTDE reconstruction: runtime adjacent m18/28 and m18/35
+            // both carry PTDE EnvSpec RGBM 255/255/255/50.
+            const char *envspec_origin = "DSR_ONLY_RAW_RGBM";
             out = dsr_only_hybrid_rgbm(host->dsr_envspec_rgbm);
+#if defined(DSRRL_PMETAL_M18_ROW64_ENVSPEC05_EXPERIMENT)
+            if (signature == 0x1ecfd1e617c59071ULL &&
+                row_id == 64u) {
+                constexpr std::array<std::uint16_t,4>
+                    k_m18_runtime_neighbor_hypothesis{255u,255u,255u,50u};
+                static_assert(
+                    k_m18_runtime_neighbor_hypothesis[3] == 50u);
+                out = dsr_only_hybrid_rgbm(
+                    k_m18_runtime_neighbor_hypothesis);
+                envspec_origin = "PTDE_RUNTIME_NEIGHBORS_28_35_HYPOTHESIS";
+                static std::atomic_bool
+                    neighbor_hypothesis_first_hit{false};
+                if (!neighbor_hypothesis_first_hit.exchange(
+                        true,std::memory_order_relaxed)) {
+                    reshade::log::message(
+                        reshade::log::level::info,
+                        "[DSRRL PMETAL M18 ROW64 ENVSPEC05 TEST] source=DSR_ONLY_M18_ROW64 donor_raw_spec=1.5 applied_spec=0.5 donor_raw_diffuse=1.5 applied_diffuse=1.5 PTDE_runtime_neighbors=28,35 neighbor_spec=0.5 pixel=UNVERIFIED");
+                }
+            }
+#endif
             endpoint_cache_publish(
                 source,base,count,index,row_id,out,signature);
             record_hook_decode(
@@ -1726,7 +1751,8 @@ bool read_exact_source(
             if (n == 1u) {
                 char line[280]{};
                 std::snprintf(line,sizeof(line),
-                    "[DSRRL PMETAL ROW64 HYBRID] lane=EnvSpec origin=DSR_ONLY_RAW_RGBM bank=%016llx row=%u common_rows=PTDE verified=EXACT_DSR_LAYOUT",
+                    "[DSRRL PMETAL ROW64 HYBRID] lane=EnvSpec origin=%s bank=%016llx row=%u common_rows=PTDE verified=EXACT_DSR_LAYOUT",
+                    envspec_origin,
                     static_cast<unsigned long long>(signature),
                     static_cast<unsigned>(row_id));
                 reshade::log::message(reshade::log::level::info,line);
