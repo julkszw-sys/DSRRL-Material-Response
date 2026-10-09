@@ -50,6 +50,7 @@ void expect_valid(
     assert(match != nullptr);
     assert(match->route_index == route);
     assert(match->profile == expected);
+    assert(rt::should_dispatch_ptde_metal_selector_source(x));
 
     mr::mtd_semantic_query query{};
     query.material = x;
@@ -72,6 +73,8 @@ void expect_valid(
     auto bad = x;
     bad.valid = false;
     assert(rt::match_ptde_metal_envspec_material(bad) == nullptr);
+    if (expected != rt::ptde_metal_envspec_profile::pmetal_baseline)
+        assert(!rt::should_dispatch_ptde_metal_selector_source(bad));
     bad = x;
     bad.owner_tuple_exact = false;
     assert(rt::match_ptde_metal_envspec_material(bad) == nullptr);
@@ -121,6 +124,12 @@ int main()
 #else
     assert(rt::match_ptde_metal_envspec_material(
         material("P_Metal[DSB]_Alp.mtd",2u,alp_sha)) == nullptr);
+    assert(!rt::should_dispatch_ptde_metal_selector_source(
+        material("P_Metal[DSB]_Alp.mtd",2u,alp_sha)));
+    assert(!rt::should_dispatch_ptde_metal_selector_source(
+        material("P_Metal[DSB]_Edge.mtd",5u,edge_sha)));
+    assert(!rt::should_dispatch_ptde_metal_selector_source(
+        material("C_Metal[DSB].mtd",229u,cmetal_sha)));
     assert(rt::match_ptde_metal_envspec_material(
         material("P_Metal[DSB]_Edge.mtd",5u,edge_sha)) == nullptr);
     assert(rt::match_ptde_metal_envspec_material(
@@ -130,6 +139,8 @@ int main()
     // Same SHA and route, DIFFERENT MTD semantic: never inherit Edge.
     assert(rt::match_ptde_metal_envspec_material(
         material("S_Metal[DSB]_Edge.mtd",5u,edge_sha)) == nullptr);
+    assert(!rt::should_dispatch_ptde_metal_selector_source(
+        material("S_Metal[DSB]_Edge.mtd",5u,edge_sha)));
     // Route345 cannot authorize C_Metal, even if its raw SHA is substituted.
     assert(rt::match_ptde_metal_envspec_material(
         material("C_Metal[DSB].mtd",345u,cmetal_sha)) == nullptr);
