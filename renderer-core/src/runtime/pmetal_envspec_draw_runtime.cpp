@@ -8,6 +8,9 @@
 #include "dsrrl/runtime/pmetal_envspec_draw_runtime.hpp"
 #include "dsrrl/runtime/runtime_hot_telemetry.hpp"
 #include "dsrrl/runtime/pixel_srv_shadow.hpp"
+#if defined(DSRRL_PMETAL_ASYLUM_CB_WRITER_TRACE)
+#include "dsrrl/runtime/pmetal_native_cb_writer_trace.hpp"
+#endif
 
 #include "dsrrl/operators/legacy_plan/sha256_bytes.hpp"
 
@@ -1404,6 +1407,10 @@ bool pmetal_envspec_draw_runtime::prepare(
             context->PSGetShader(&live_ps,nullptr,nullptr);
             ID3D11Buffer *live_cbs[16]{};
             context->PSGetConstantBuffers(0u,16u,live_cbs);
+#if defined(DSRRL_PMETAL_ASYLUM_CB_WRITER_TRACE)
+            pmetal_native_cb_writer_stamp writer_stamps[2]{};
+            std::uintptr_t watched_handles[2]{};
+#endif
 
             ID3D11DeviceContext1 *ctx1 = nullptr;
             const bool cb1_available = SUCCEEDED(
@@ -1450,6 +1457,17 @@ bool pmetal_envspec_draw_runtime::prepare(
                 D3D11_BUFFER_DESC desc{};
                 if (live_cbs[i] != nullptr)
                     live_cbs[i]->GetDesc(&desc);
+#if defined(DSRRL_PMETAL_ASYLUM_CB_WRITER_TRACE)
+                if (i < 2u && live_cbs[i] != nullptr) {
+                    const auto native_buffer =
+                        reinterpret_cast<std::uintptr_t>(live_cbs[i]);
+                    watched_handles[i]=native_buffer;
+                    pmetal_native_cb_writer_watch(
+                        native_buffer,desc.ByteWidth);
+                    writer_stamps[i]=pmetal_native_cb_writer_lookup(
+                        native_buffer);
+                }
+#endif
                 if (pos > 0 &&
                     static_cast<std::size_t>(pos) < sizeof(native_line)) {
                     pos+=std::snprintf(
@@ -1473,6 +1491,59 @@ bool pmetal_envspec_draw_runtime::prepare(
             if (ctx1 != nullptr)ctx1->Release();
             if (live_ps != nullptr)live_ps->Release();
             reshade::log::message(reshade::log::level::info,native_line);
+#if defined(DSRRL_PMETAL_ASYLUM_CB_WRITER_TRACE)
+            // Epoch zero means no CPU-side writer was observed since watch
+            // activation; it is NOT proof of zero/unchanged CB contents.
+            const auto &w0=writer_stamps[0];
+            const auto &w1=writer_stamps[1];
+            char writer_line[780]{};
+            std::snprintf(writer_line,sizeof(writer_line),
+                "[DSRRL PMETAL CB WRITER JOIN]"
+                " ms=%llu rx=%u slot=%u owner_sha0=%02x%02x%02x%02x"
+                " ctx=%llx ps=%llx bank=%016llx row=%u"
+                " producer_rva=%x consumer_tid=%u"
+                " b0=%llx w0_epoch=%llu w0_hash=%016llx w0_tid=%u"
+                " w0_method=%u w0_bytes=%u w0_complete=%u w0_age_ms=%llu"
+                " b1=%llx w1_epoch=%llu w1_hash=%016llx w1_tid=%u"
+                " w1_method=%u w1_bytes=%u w1_complete=%u w1_age_ms=%llu",
+                static_cast<unsigned long long>(tick),
+                static_cast<unsigned>(decision.receiver_id),
+                static_cast<unsigned>(material.material_slot),
+                static_cast<unsigned>(material.flver_sha256[0]),
+                static_cast<unsigned>(material.flver_sha256[1]),
+                static_cast<unsigned>(material.flver_sha256[2]),
+                static_cast<unsigned>(material.flver_sha256[3]),
+                static_cast<unsigned long long>(
+                    reinterpret_cast<std::uintptr_t>(context)),
+                static_cast<unsigned long long>(
+                    reinterpret_cast<std::uintptr_t>(live_ps)),
+                static_cast<unsigned long long>(source.bank_signature_a),
+                static_cast<unsigned>(source.row_id_a),
+                static_cast<unsigned>(source.producer_callsite_rva),
+                static_cast<unsigned>(GetCurrentThreadId()),
+                static_cast<unsigned long long>(watched_handles[0]),
+                static_cast<unsigned long long>(w0.epoch),
+                static_cast<unsigned long long>(w0.hash),
+                static_cast<unsigned>(w0.writer_tid),
+                static_cast<unsigned>(w0.method),
+                static_cast<unsigned>(w0.byte_count),
+                w0.complete?1u:0u,
+                static_cast<unsigned long long>(
+                    w0.epoch!=0u && tick>=w0.timestamp_ms?
+                    tick-w0.timestamp_ms:0u),
+                static_cast<unsigned long long>(watched_handles[1]),
+                static_cast<unsigned long long>(w1.epoch),
+                static_cast<unsigned long long>(w1.hash),
+                static_cast<unsigned>(w1.writer_tid),
+                static_cast<unsigned>(w1.method),
+                static_cast<unsigned>(w1.byte_count),
+                w1.complete?1u:0u,
+                static_cast<unsigned long long>(
+                    w1.epoch!=0u && tick>=w1.timestamp_ms?
+                    tick-w1.timestamp_ms:0u));
+            reshade::log::message(
+                reshade::log::level::info,writer_line);
+#endif
         }
 #endif
     };
