@@ -62,19 +62,32 @@ jobs:
           if (-not $writer.Contains("for (auto &entry : g_watches)")) { throw "PR292 bounded-stack writer registry reset missing" }
           if (-not $writer.Contains("pmetal_native_cb_writer_before_update")) { throw "No UpdateSubresource writer capture" }
           if (-not $integ.Contains("cb_writer_on_deferred_update")) { throw "Deferred update writer callback missing" }
+          if (-not $integ.Contains("asylum_cmdlist_secondary")) { throw "Deferred list phase callback missing" }
+          if (-not $integ.Contains("execute_secondary_command_list")) { throw "ReShade secondary list event registration missing" }
+          $cmake = Get-Content renderer-core/integrated/CMakeLists.txt -Raw
+          if (-not $cmake.Contains("DSRRL_PMETAL_ASYLUM_DEFERRED_TOPOLOGY_TRACE")) { throw "Deferred topology CMake option missing" }
           if ($writer.Contains("CopyResource(") -or $writer.Contains("GetData(")) { throw "Forbidden GPU readback" }
           if (-not $consumer.Contains("PSGetConstantBuffers1(")) { throw "Explicit CB window read missing" }
           if (-not $consumer.Contains("PSGetShader(")) { throw "Native PS read missing" }
           if ($consumer.Contains("m10_to_m18_force")) { throw "Unproven bank override prohibited" }
           if (-not $header.Contains("producer_callsite_rva")) { throw "Immutable exact producer provenance fields absent" }
           if ($consumer.Contains("m10_to_m18_source_override")) { throw "Unproven bank forcing prohibited" }
+      - name: Native deferred command-list lifecycle smoke
+        shell: pwsh
+        run: |
+          cmake -S renderer-core/tests/pmetal_cmdlist_topology_smoke -B build-cmdlist-smoke -A x64
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          cmake --build build-cmdlist-smoke --config Release
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          & "build-cmdlist-smoke/Release/dsrrl_pmetal_cmdlist_topology_smoke.exe"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Configure exact R43 release with profiler
         shell: pwsh
         run: >
           cmake -S renderer-core/integrated -B build-prof -A x64
           -DRESHADE_INCLUDE_DIR="${{ github.workspace }}/_reshade/include"
           -DDSRRL_SOURCE_COMMIT="$env:DSRRL_CHECKOUT_COMMIT"
-          -DDSRRL_BUILD_FLAVOR="v2_0_2_pmetal_asylum_b0_reghash"
+          -DDSRRL_BUILD_FLAVOR="v2_0_2_pmetal_asylum_deferred_topology"
           -DDSRRL_RELEASE_CLEANUP=OFF
           -DDSRRL_STUTTER_PROFILE=ON
           -DDSRRL_STUTTER_HITCH_TRACE=ON
@@ -93,6 +106,7 @@ jobs:
           -DDSRRL_PMETAL_ASYLUM_NATIVE_PASS_BINDING_TRACE=ON
           -DDSRRL_PMETAL_ASYLUM_CB_WRITER_TRACE=ON
           -DDSRRL_PMETAL_ASYLUM_CB_REGISTER_TRACE=ON
+          -DDSRRL_PMETAL_ASYLUM_DEFERRED_TOPOLOGY_TRACE=ON
           -DDSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG=ON
           -DDSRRL_PMETAL_FULL_PTDE_HEMENV_R3=ON
           -DDSRRL_PMETAL_FULL_PTDE_HEMENV_R4=ON
@@ -115,7 +129,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           $addons = @(Get-ChildItem build-prof -Recurse -Filter *.addon64)
           if ($addons.Count -ne 1) { throw "Expected one addon, got $($addons.Count)" }
-          Copy-Item $addons[0].FullName "DSRRL_v2.0.2_PMETAL_ASYLUM_B0_REGHASH.addon64"
+          Copy-Item $addons[0].FullName "DSRRL_v2.0.2_PR292_DEFERRED_TOPOLOGY.addon64"
       - name: Windows 1 MiB stack writer registry startup smoke
         shell: pwsh
         run: |
@@ -168,7 +182,7 @@ jobs:
       - name: Verify v2.0.2 full MR diagnostic identity
         shell: pwsh
         run: |
-          $path = "DSRRL_v2.0.2_PMETAL_ASYLUM_B0_REGHASH.addon64"
+          $path = "DSRRL_v2.0.2_PR292_DEFERRED_TOPOLOGY.addon64"
           $bytes = [System.IO.File]::ReadAllBytes($path)
           $ascii = [System.Text.Encoding]::ASCII.GetString($bytes)
           if (-not $ascii.Contains($env:DSRRL_CHECKOUT_COMMIT)) { throw "Wrong source" }
@@ -187,7 +201,7 @@ jobs:
           if (-not $ascii.Contains("[DSRRL PMETAL B0 REGHASH]")) { throw "Per-register b0 trace not linked into final addon" }
           if ($ascii.Contains("[DSRRL PMETAL M18 ROW64 ENVSPEC05 TEST]")) { throw "Experimental EnvSpec override leaked into rollback" }
           if ($ascii.Contains("[DSRRL DDS SRV POOL]")) { throw "DDS pool leaked into release" }
-          if (-not $ascii.Contains("v2_0_2_pmetal_asylum_b0_reghash")) { throw "Missing diagnostic flavor" }
+          if (-not $ascii.Contains("v2_0_2_pmetal_asylum_deferred_topology")) { throw "Missing diagnostic flavor" }
           if (-not $ascii.Contains("2.0.2")) { throw "Missing version" }
           Get-FileHash $path -Algorithm SHA256 | Format-List
       - name: Verify complete diagnostic flag profile
@@ -221,7 +235,7 @@ jobs:
       - name: Generate build provenance and diagnostic ZIP
         shell: pwsh
         run: |
-          $bin = "DSRRL_v2.0.2_PMETAL_ASYLUM_B0_REGHASH.addon64"
+          $bin = "DSRRL_v2.0.2_PR292_DEFERRED_TOPOLOGY.addon64"
           $sha = (Get-FileHash $bin -Algorithm SHA256).Hash.ToLowerInvariant()
           "$sha  $bin" | Set-Content -Encoding ascii SHA256SUMS.txt
           $prov = [ordered]@{
@@ -262,7 +276,7 @@ jobs:
         with:
           name: DSRRL_v2.0.2_PMETAL_ASYLUM_B0_REGHASH
           path: |
-            DSRRL_v2.0.2_PMETAL_ASYLUM_B0_REGHASH.addon64
+            DSRRL_v2.0.2_PR292_DEFERRED_TOPOLOGY.addon64
             DSRRL_v2.0.2_PMETAL_ASYLUM_B0_REGHASH.zip
             DSRRL_v2.0.2_PMETAL_ASYLUM_B0_REGHASH_PROVENANCE.json
             SHA256SUMS.txt
