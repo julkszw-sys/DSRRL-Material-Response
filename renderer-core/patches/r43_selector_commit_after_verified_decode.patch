@@ -1,0 +1,39 @@
+diff --git a/renderer-core/src/runtime/pmetal_env_source_runtime.cpp b/renderer-core/src/runtime/pmetal_env_source_runtime.cpp
+--- a/renderer-core/src/runtime/pmetal_env_source_runtime.cpp
++++ b/renderer-core/src/runtime/pmetal_env_source_runtime.cpp
+@@ -2531,8 +2531,6 @@ void pmetal_env_source_selector_event(
+     const operators::material_response::
+         material_identity &material) noexcept
+ {
+-    pmetal_producer_state_clear();
+-
+     if (!g_selector_enabled.load(
+             std::memory_order_acquire) ||
+@@ -2544,12 +2542,6 @@ void pmetal_env_source_selector_event(
+         g_selector_epoch.load(
+             std::memory_order_relaxed);
+ 
+-    // This exact material now owns the next synchronized source publication.
+-    // Invalidate any older selector fallback before downstream decode.
+-    pmetal_producer_state_begin(
+-        material,
+-        epoch);
+-
+     if (telemetry::effect_enabled())
+         g_selector_exact_seen.store(
+@@ -2738,6 +2730,8 @@ void pmetal_env_source_selector_event(
+             next)) {
+         next.serial = epoch;
++        pmetal_producer_state_clear();
++        pmetal_producer_state_begin(material,epoch);
+         pmetal_producer_state_publish(
+             material,
+             next,
+@@ -2874,6 +2868,8 @@ void pmetal_env_source_selector_event(
+ #endif
+ 
+     next.serial = epoch;
++    pmetal_producer_state_clear();
++    pmetal_producer_state_begin(material,epoch);
+ 
+     pmetal_producer_state_publish(
