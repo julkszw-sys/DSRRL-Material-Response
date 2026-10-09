@@ -63,6 +63,13 @@ void expect_valid(
     bad = x;
     bad.route_index += 1u;
     assert(rt::match_ptde_metal_envspec_material(bad) == nullptr);
+#if defined(DSRRL_EXPERIMENTAL_OTHER_METAL_PTDE_ENVSPEC)
+    if (expected != rt::ptde_metal_envspec_profile::pmetal_baseline) {
+        bad = x;
+        bad.flver_sha256.fill(0u);
+        assert(rt::match_ptde_metal_envspec_material(bad) == nullptr);
+    }
+#endif
     bad = x;
     bad.raw_mtd_sha256[0] ^= 1u;
     assert(rt::match_ptde_metal_envspec_material(bad) == nullptr);
