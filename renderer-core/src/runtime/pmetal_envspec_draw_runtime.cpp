@@ -119,11 +119,10 @@ public:
             static_cast<std::uint32_t>(authority->profile) -
             static_cast<std::uint32_t>(
                 ptde_metal_envspec_profile::pmetal_alp);
-        if (profile_index >= 3u)
+        if (profile_index >= k_experimental_spc_count)
             return;
-        const std::uint64_t bit =
-            std::uint64_t{1u} << (profile_index * 16u + gate_);
-        if ((g_other_metal_downstream_reject_mask.fetch_or(
+        const std::uint32_t bit = 1u << profile_index;
+        if ((g_other_metal_downstream_reject_masks[gate_].fetch_or(
                  bit, std::memory_order_relaxed) & bit) != 0u)
             return;
         char line[400]{};
