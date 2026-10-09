@@ -151,6 +151,11 @@ std::atomic_bool g_attested_resource_view_join_logged{false};
 std::atomic_bool g_early_view_join_logged{false};
 std::atomic_bool g_native_debug_name_join_logged{false};
 std::atomic_bool g_late_native_t1_recovered_logged{false};
+std::atomic<std::uint64_t> g_name_exact_init_resource{0u};
+std::atomic<std::uint64_t> g_name_exact_create_view{0u};
+std::atomic<std::uint64_t> g_name_exact_init_view{0u};
+std::atomic_bool g_name_producer_cut_logged{false};
+
 std::atomic<std::uint32_t> g_late_native_t1_stage_mask{0u};
 void log_late_native_stage_once(
     std::uint32_t ordinal, const char *stage) noexcept
@@ -1306,6 +1311,8 @@ void on_init_resource(
         !generated::normal_name_hash_allowed_v12(hash))
         return;
 
+    g_name_exact_init_resource.fetch_add(
+        1u, std::memory_order_relaxed);
     // Construct before locking. Mismatched identities for the same live
     // resource are quarantined until the actual destroy_resource callback.
     try {
@@ -1484,6 +1491,8 @@ bool on_create_resource_view(
         !generated::normal_name_hash_allowed_v12(hash))
         return false;
 
+    g_name_exact_create_view.fetch_add(
+        1u, std::memory_order_relaxed);
     try {
         pending.device =
             reinterpret_cast<ID3D11Device *>(device->get_native());
@@ -1655,6 +1664,11 @@ void on_init_resource_view(
         !diffuse_member &&
         !normal_member)
         return;
+#if defined(DSRRL_EXPERIMENTAL_SPC_MATERIAL_BATCH)
+    if (direct_name)
+        g_name_exact_init_view.fetch_add(
+            1u, std::memory_order_relaxed);
+#endif
 
     std::wstring logical_name;
     try {
@@ -2209,6 +2223,26 @@ try_recover_exact_bound_spec_from_native_name(
     }
 
     if (name.empty()) {
+        if (!g_name_producer_cut_logged.exchange(
+                true, std::memory_order_relaxed)) {
+            const auto names = texture_identity_transport::liveness();
+            char msg[512]{};
+            std::snprintf(msg, sizeof(msg),
+                "[DSRRL SPC25 NAME CUT] engine_lookup_calls=%llu utf16_names=%llu engine_scope_clear=%llu snapshot_hits=%llu gpu_init_resource_exact=%llu gpu_create_view_exact=%llu gpu_init_view_direct_exact=%llu joined_views=%llu source_to_srv=UNVERIFIED pixel=OPEN",
+                static_cast<unsigned long long>(names.hook_calls),
+                static_cast<unsigned long long>(names.names_captured),
+                static_cast<unsigned long long>(names.names_cleared),
+                static_cast<unsigned long long>(names.name_snapshots),
+                static_cast<unsigned long long>(
+                    g_name_exact_init_resource.load(std::memory_order_relaxed)),
+                static_cast<unsigned long long>(
+                    g_name_exact_create_view.load(std::memory_order_relaxed)),
+                static_cast<unsigned long long>(
+                    g_name_exact_init_view.load(std::memory_order_relaxed)),
+                static_cast<unsigned long long>(
+                    g_named_views.load(std::memory_order_relaxed)));
+            reshade::log::message(reshade::log::level::info, msg);
+        }
         if (!view_label && !resource_label_seen)
             log_late_native_stage_once(
                 0u, "stock_t1_missing_exact_native_name");
