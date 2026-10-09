@@ -2181,20 +2181,20 @@ try_recover_exact_bound_spec_from_native_name(
     bool view_label = false;
     const bool view_name =
         snapshot_native_exact_debug_name(stock, name, &view_label);
+    bool resource_label_seen = false;
     ID3D11Resource *resource = nullptr;
     stock->GetResource(&resource);
     if (resource != nullptr) {
         std::wstring resource_name{};
-        bool resource_label = false;
         const bool resource_named =
             snapshot_native_exact_debug_name(
-                resource, resource_name, &resource_label);
+                resource, resource_name, &resource_label_seen);
         if (view_name && resource_named &&
             name != resource_name)
             log_late_native_stage_once(
                 3u, "conflicting_native_view_resource_names");
         if (!view_name && !resource_named &&
-            (view_label || resource_label))
+            (view_label || resource_label_seen))
             log_late_native_stage_once(
                 1u, "native_label_present_not_canonical_allowlisted");
         resource->Release();
@@ -2209,7 +2209,7 @@ try_recover_exact_bound_spec_from_native_name(
     }
 
     if (name.empty()) {
-        if (!view_label)
+        if (!view_label && !resource_label_seen)
             log_late_native_stage_once(
                 0u, "stock_t1_missing_exact_native_name");
         else
