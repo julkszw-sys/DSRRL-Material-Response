@@ -128,6 +128,16 @@ int main()
                  "4c728a9b5957a75d0eb82b2b77b800829e1973632c7c0690a7e31a074c85e7fb",
                  profile::spc_route_0,1u);
 #endif
+#if defined(DSRRL_EXPERIMENTAL_SPC_MATERIAL_BATCH)
+    // Exercise every compiled exact MTD, not just one armor sample.
+    for (const auto &entry : rt::k_ptde_metal_envspec_profiles) {
+        if (entry.profile == profile::pmetal_baseline)
+            continue;
+        expect_valid(entry.mtd_name, entry.route_index,
+                     entry.raw_mtd_sha256, entry.profile,
+                     entry.envspc_slot);
+    }
+#endif
     auto x = material("P_Metal[DSB]_Alp.mtd",2u,alp_sha);
     assert(rt::is_experimental_ptde_metal_envspec_material(x));
 #else
