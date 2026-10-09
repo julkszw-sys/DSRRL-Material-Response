@@ -50,7 +50,9 @@ std::atomic_bool g_shadow_r7_logged{false};
 #if defined(DSRRL_EXPERIMENTAL_OTHER_METAL_PTDE_ENVSPEC)
 // Explicit source-ready and request-ready frontiers for each newly admitted
 // MTD. Does NOT label a prepared draw as executed or as PTDE pixel PASS.
-std::atomic<std::uint32_t> g_other_metal_stage_log_mask{0u};
+constexpr std::uint32_t k_experimental_spc_count = static_cast<std::uint32_t>(ptde_metal_envspec_profile::spc_route_359) - static_cast<std::uint32_t>(ptde_metal_envspec_profile::pmetal_alp) + 1u;
+static_assert(k_experimental_spc_count <= 32u);
+std::atomic<std::uint32_t> g_other_metal_stage_log_masks[2]{};
 
 void log_other_metal_stage_once(
     const char *stage,
