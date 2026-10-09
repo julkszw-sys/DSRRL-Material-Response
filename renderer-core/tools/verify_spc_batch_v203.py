@@ -27,5 +27,6 @@ for profile, route, name, sha, gain, slot in compiled:
     assert env["state"] == "PRESENT", name
     assert env["homology_class"] == "HOMOLOGOUS_SPC", name
     assert env["delta_kind"] == "EXACT_SPX", name
+    assert env["ptde_spx"].endswith("FRPG_Phn_ColDifSpcBmp.spx"), name
 assert all(x["material_family"] == "DifSpcBmp" for x in routes if any(x["mtd_name"] == z[2] for z in compiled))
 print('Unique MTD and EnvSpec entries:',len(compiled))
