@@ -1044,6 +1044,36 @@ bool publish_exact_selector_identity(
     // MTD raw SHA+name+owner/slot gate is shared with the EnvSpec consumer.
     // An unmatched route must not publish or reuse a P_Metal LightBank source.
     if (should_dispatch_ptde_metal_selector_source(identity)) {
+#if defined(DSRRL_EXPERIMENTAL_SPC_MATERIAL_BATCH)
+        // One pre-source hit per EXACT opt-in MTD, including failed source
+        // cases. Logging never widens the material or operator authority.
+        if (const auto *spc = match_ptde_metal_envspec_material(identity);
+            spc != nullptr &&
+            spc->profile != ptde_metal_envspec_profile::pmetal_baseline) {
+            static std::atomic<std::uint32_t> once_mask{0u};
+            const auto index =
+                static_cast<std::uint32_t>(spc->profile) -
+                static_cast<std::uint32_t>(
+                    ptde_metal_envspec_profile::pmetal_alp);
+            if (index < 32u) {
+                const auto bit = 1u << index;
+                if ((once_mask.fetch_or(
+                        bit, std::memory_order_relaxed) & bit) == 0u) {
+                    char message[384]{};
+                    std::snprintf(
+                        message, sizeof(message),
+                        "[DSRRL SPC BATCH] stage=selector_exact mtd=%s route=%u slot=%u env_slot=%u c101=%.3f source=OPEN request=OPEN pixel=OPEN",
+                        spc->mtd_name,
+                        static_cast<unsigned>(identity.route_index),
+                        static_cast<unsigned>(identity.material_slot),
+                        static_cast<unsigned>(spc->envspc_slot),
+                        static_cast<double>(spc->c101));
+                    reshade::log::message(
+                        reshade::log::level::info, message);
+                }
+            }
+        }
+#endif
         const auto pmetal_begin =
             profile != nullptr
                 ? selector_profile_begin(*profile)
