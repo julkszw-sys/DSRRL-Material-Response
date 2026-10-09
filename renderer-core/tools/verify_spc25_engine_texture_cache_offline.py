@@ -24,6 +24,21 @@ ANCHORS={
  0x5829c9:"895128",0x5829cc:"488b4908",
  0x5829f9:"488b4930",0x582a09:"48894330",
  0x583bf2:"ff4318",
+ # Independently disassembled, readable CPU-side command writer/reader.
+ # A matching opcode does not by itself prove the decoder's registration.
+ 0x583bc2:"8b732885f67421",
+ 0x583bd1:"4c8bc78bd6e8d5b3ffff",
+ 0x57efb0:"48895c2408574883ec20",
+ 0x57efc3:"ba8d800000",
+ 0x57efc8:"e84347c300",
+ 0x57efe2:"48893a",
+ 0x57efef:"e9bc46c300",
+ 0x11b3710:"443b411044894110895114",
+ 0x11b36d9:"0b5114891048834118fc",
+ 0x57f000:"48895c2408488974241057",
+ 0x57f024:"488b5918498b30",
+ 0x57f04b:"48897718",
+ 0x57f08c:"ba8e800000",
 }
 SAMPLES={
  "utf16_name_cache_lookup":0x518a10,
@@ -61,6 +76,14 @@ def audit(exe):
  call=at(0x583abe,5)
  if call[0]!=0xe8 or 0x583abe+5+struct.unpack_from("<i",call,1)[0]!=0x518a10:
   raise ValueError("Texture name no longer calls verified engine-cache lookup")
+ # Follow only confirmed E8/JMP rel32 edges; a pointer value or equal
+ # numeric opcode is not proof of a D3D11 interface or dispatcher pairing.
+ for src,dst,op in ((0x583bd6,0x57efb0,0xe8),
+                    (0x57efc8,0x11b3710,0xe8),
+                    (0x57efef,0x11b36b0,0xe9)):
+  inst=at(src,5)
+  if inst[0]!=op or src+5+struct.unpack_from("<i",inst,1)[0]!=dst:
+   raise ValueError("Cache command transport xref mismatch: "+hex(src))
  def entropy(b):
   counts=Counter(b)
   return round(-sum((v/len(b))*math.log2(v/len(b)) for v in counts.values()),3)
@@ -73,6 +96,17 @@ def audit(exe):
   "cache_entry_refcount_one":"+0x18",
   "cache_entry_0x28":"integer, not certified native SRV",
   "cache_entry_0x30":"managed pointer, not certified native D3D resource",
+  "source_to_command_transport":{
+    "entry_id_read":"0x140583bc2 reads node+0x28 as integer",
+    "writer_call":"0x140583bd6 -> 0x14057efb0",
+    "writer_opcode":"0x808D at 0x14057efc3",
+    "writer_payload":"0x14057efe2 stores a pointer into aligned message buffer",
+    "message_seal":"0x14057efef -> 0x1411b36b0",
+    "candidate_receiver":"0x14057f000 reads aligned pointer payload and writes managed object+0x18 at 0x14057f04b",
+    "alternate_opcode":"0x808E at 0x14057f08c",
+    "opcode_receiver_registration":"NOT_VERIFIED",
+    "native_d3d11_resource_or_srv":"NOT_VERIFIED"
+  },
   "opaque_on_disk_entropy_512":{
    k:entropy(at(rva,512)) for k,rva in SAMPLES.items()},
   "bridge_status":"FAIL_OPEN: exact engine cache entry to bound native PS t1 SRV not established",
