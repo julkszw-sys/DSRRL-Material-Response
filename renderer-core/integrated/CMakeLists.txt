@@ -252,6 +252,7 @@ option(DSRRL_MR_MATERIAL_TRACE
 option(DSRRL_PMETAL_LOOKUP_REJECTION_FRONTIER_DIAG "Diagnostic exact source miss categories" OFF)
 option(DSRRL_PMETAL_SELECTOR_DECODE_FRONTIER_DIAG "Diagnostic authenticated P_Metal native-source and PTDE EnvDiffuse donor decode failure causes" OFF)
 option(DSRRL_PMETAL_EXACT_DSR_ROW64_HYBRID "Use exact DSR-only LightBank ID64 in otherwise PTDE bridge" OFF)
+option(DSRRL_PMETAL_M18_ROW64_ENVSPEC05_EXPERIMENT "Diagnostic only: apply PTDE runtime-neighbor EnvSpec 0.5 to DSR-only m18/64, preserve EnvDiffuse and all other rows" OFF)
 option(DSRRL_PMETAL_SPEC_CUT_TRACE
     "Diagnostic: per-owner sampled P_Metal SpecRGB t1 registry and PTDE/stock transition trace"
     OFF)
@@ -767,6 +768,12 @@ if(DSRRL_PMETAL_EXACT_DSR_ROW64_HYBRID)
         message(FATAL_ERROR "DSR-only row64 hybrid requires full exact PTDE HemEnv mode")
     endif()
     target_compile_definitions(dsrrl_renderer_core_integrated PRIVATE DSRRL_PMETAL_EXACT_DSR_ROW64_HYBRID)
+endif()
+if(DSRRL_PMETAL_M18_ROW64_ENVSPEC05_EXPERIMENT)
+    if(NOT DSRRL_PMETAL_EXACT_DSR_ROW64_HYBRID OR NOT DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG)
+        message(FATAL_ERROR "m18 row64 EnvSpec 0.5 experiment requires PTDE/DSR-only hybrid and full PTDE HemEnv")
+    endif()
+    target_compile_definitions(dsrrl_renderer_core_integrated PRIVATE DSRRL_PMETAL_M18_ROW64_ENVSPEC05_EXPERIMENT)
 endif()
 if(DSRRL_PMETAL_SPEC_CUT_TRACE)
     target_compile_definitions(
