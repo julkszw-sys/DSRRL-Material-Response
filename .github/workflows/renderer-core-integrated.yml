@@ -270,6 +270,7 @@ jobs:
           $envspecLerpRegistry = Get-Content renderer-core/src/runtime/hemenvlerp_pipeline_registry.cpp -Raw
           $envspecResource = Get-Content renderer-core/src/runtime/envspec_resource_runtime.cpp -Raw
           $envspecRuntime = Get-Content renderer-core/src/runtime/pmetal_envspec_draw_runtime.cpp -Raw
+          $envspecAuthority = Get-Content renderer-core/include/dsrrl/runtime/ptde_metal_envspec_authority.hpp -Raw
           $envspecSidecarVerifier = Get-Content renderer-core/integrated/VERIFY_ENVSPEC_SIDECAR.ps1 -Raw
           $envspecSidecarStager = Get-Content renderer-core/integrated/STAGE_ENVSPEC_SIDECAR.ps1 -Raw
           $pmetalGenerator = Get-Content renderer-core/tools/generate_pmetal_env_source_authority.py -Raw
@@ -644,10 +645,20 @@ jobs:
             if ($envspecResource -notmatch [regex]::Escape($required)) { throw "P_Metal EnvSpec exact probe resource invariant missing: $required" }
           }
 
+          # The baseline is now represented by a dedicated exact MTD
+          # authority table; runtime handles 25 source-verified slot values.
           foreach ($required in @(
-            'k_pmetal_route_index = 345u',
-            'ece70f36bd2517d28c8495e276cea537f8b519d6bed981788e79a409ffbf763b',
-            'envspc_slot != 2u',
+            'ptde_metal_envspec_profile::pmetal_baseline, 345u',
+            'ece70f36bd2517d28c8495e276cea537f8b519d6bed981788e79a409ffbf763b'
+          )) {
+            if ($envspecAuthority -notmatch [regex]::Escape($required)) {
+              throw "Baseline P_Metal exact authority invariant missing: $required"
+            }
+          }
+          foreach ($required in @(
+            'exact_pmetal_envspec_candidate(',
+            'env_semantics.envspc_slot != match_ptde_metal_envspec_material(material)->envspc_slot',
+            'source_.latest_exact_material(material, source)',
             'source_.latest(material, source)',
             'source.beta != 0.0f',
             'blended_receiver_hold_',
