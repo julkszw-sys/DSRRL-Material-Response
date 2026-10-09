@@ -84,6 +84,74 @@ void log_other_metal_stage_once(
     reshade::log::message(reshade::log::level::info, message);
 }
 #endif
+#if defined(DSRRL_EXPERIMENTAL_OTHER_METAL_PTDE_ENVSPEC)
+// This is a diagnostic-only receiver-stage probe, not a shader/CB/SRV
+// override. It survives RELEASE_CLEANUP=ON and is bounded to one
+// fail-open line per exact metal profile and downstream stage.
+std::atomic<std::uint64_t> g_other_metal_downstream_reject_mask{0u};
+class other_metal_downstream_gate final {
+public:
+    other_metal_downstream_gate(
+        const mr::material_identity &material,
+        const mr::decision &decision,
+        bool experimental) noexcept
+        : material_(material),
+          decision_(decision),
+          experimental_(experimental) {}
+
+    other_metal_downstream_gate(
+        const other_metal_downstream_gate &) = delete;
+    other_metal_downstream_gate &operator=(
+        const other_metal_downstream_gate &) = delete;
+
+    ~other_metal_downstream_gate() noexcept
+    {
+        if (!experimental_ || completed_ || gate_ >= 16u)
+            return;
+        const auto *authority =
+            match_ptde_metal_envspec_material(material_);
+        if (authority == nullptr ||
+            authority->profile == ptde_metal_envspec_profile::pmetal_baseline)
+            return;
+        const std::uint32_t profile_index =
+            static_cast<std::uint32_t>(authority->profile) -
+            static_cast<std::uint32_t>(
+                ptde_metal_envspec_profile::pmetal_alp);
+        if (profile_index >= 3u)
+            return;
+        const std::uint64_t bit =
+            std::uint64_t{1u} << (profile_index * 16u + gate_);
+        if ((g_other_metal_downstream_reject_mask.fetch_or(
+                 bit, std::memory_order_relaxed) & bit) != 0u)
+            return;
+        char line[400]{};
+        std::snprintf(
+            line, sizeof(line),
+            "[DSRRL OTHER METAL PTDE] stage=downstream_fail_open gate=%s profile=%u route=%u rx=%u slot=%u source_ready=1 request_ready=0 pixel=OPEN",
+            gate_name_,
+            static_cast<unsigned>(authority->profile),
+            static_cast<unsigned>(decision_.route_index),
+            static_cast<unsigned>(decision_.receiver_id),
+            static_cast<unsigned>(material_.material_slot));
+        reshade::log::message(reshade::log::level::info, line);
+    }
+
+    void next(std::uint32_t gate, const char *name) noexcept
+    {
+        gate_ = gate;
+        gate_name_ = name;
+    }
+
+    void complete() noexcept { completed_ = true; }
+private:
+    const mr::material_identity &material_;
+    const mr::decision &decision_;
+    bool experimental_ = false;
+    bool completed_ = false;
+    std::uint32_t gate_ = 0u;
+    const char *gate_name_ = "receiver_source";
+};
+#endif
 #if !defined(DSRRL_RELEASE_CLEANUP)
 std::atomic<std::uint32_t> g_prepare_stage_log_mask{0u};
 std::atomic<std::uint32_t> g_value_cut_log_mask{0u};
@@ -931,6 +999,8 @@ bool pmetal_envspec_draw_runtime::prepare(
     }
     effect_latch(effect_source_ready_);
 #if defined(DSRRL_EXPERIMENTAL_OTHER_METAL_PTDE_ENVSPEC)
+    other_metal_downstream_gate downstream_gate(
+        material, decision, experimental_material);
     if (experimental_material)
         log_other_metal_stage_once(
             "source_ready", 0u, material, decision);
@@ -1018,6 +1088,9 @@ bool pmetal_envspec_draw_runtime::prepare(
         return false;
     }
     effect_latch(effect_receiver_source_ready_);
+#if defined(DSRRL_EXPERIMENTAL_OTHER_METAL_PTDE_ENVSPEC)
+    downstream_gate.next(1u, "d3d_context");
+#endif
 
     auto *context =
         reinterpret_cast<ID3D11DeviceContext *>(
@@ -1037,6 +1110,9 @@ bool pmetal_envspec_draw_runtime::prepare(
         return false;
     }
 
+#if defined(DSRRL_EXPERIMENTAL_OTHER_METAL_PTDE_ENVSPEC)
+    downstream_gate.next(2u, "replacement_shader");
+#endif
     ID3D11PixelShader *shader = nullptr;
     core::operator_mask composed_owners = 0u;
 
@@ -1098,6 +1174,9 @@ bool pmetal_envspec_draw_runtime::prepare(
     }
 
     effect_latch(effect_replacement_ready_);
+#if defined(DSRRL_EXPERIMENTAL_OTHER_METAL_PTDE_ENVSPEC)
+    downstream_gate.next(3u, "probe_resource");
+#endif
 
     const bool probe_b_required =
         family ==
@@ -1152,6 +1231,9 @@ bool pmetal_envspec_draw_runtime::prepare(
         return false;
     }
     effect_latch(effect_probe_ready_);
+#if defined(DSRRL_EXPERIMENTAL_OTHER_METAL_PTDE_ENVSPEC)
+    downstream_gate.next(4u, "ptde_spec_rgb_sidecar");
+#endif
 
     if (!g_resource_mode_logged.exchange(
             true,
@@ -1329,6 +1411,9 @@ bool pmetal_envspec_draw_runtime::prepare(
     }
 #endif
     effect_latch(effect_spec_rgb_ready_);
+#if defined(DSRRL_EXPERIMENTAL_OTHER_METAL_PTDE_ENVSPEC)
+    downstream_gate.next(5u, "b12_carrier");
+#endif
 #endif
 
     const bool stable_envdiffuse_consumer_diag =
@@ -1589,6 +1674,9 @@ bool pmetal_envspec_draw_runtime::prepare(
     }
 
     effect_latch(effect_b12_ready_);
+#if defined(DSRRL_EXPERIMENTAL_OTHER_METAL_PTDE_ENVSPEC)
+    downstream_gate.next(6u, "envdiffuse_resource");
+#endif
 
 #if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG)
     // Probe identity is inherited from the already-authenticated EnvSpec
@@ -1988,6 +2076,9 @@ bool pmetal_envspec_draw_runtime::prepare(
 #endif
     prepared.request.sampler_count =
         request_sampler_count;
+#if defined(DSRRL_EXPERIMENTAL_OTHER_METAL_PTDE_ENVSPEC)
+    downstream_gate.next(7u, "draw_mutation");
+#endif
 
     draw_tx_mutation verify{};
     if (build_island_draw_mutation(
@@ -2008,6 +2099,9 @@ bool pmetal_envspec_draw_runtime::prepare(
     }
 
     prepared.ready = true;
+#if defined(DSRRL_EXPERIMENTAL_OTHER_METAL_PTDE_ENVSPEC)
+    downstream_gate.complete();
+#endif
     effect_latch(effect_request_ready_);
     telemetry::hot_count(requests_);
 #if defined(DSRRL_EXPERIMENTAL_OTHER_METAL_PTDE_ENVSPEC)
