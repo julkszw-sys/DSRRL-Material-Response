@@ -9,6 +9,10 @@ using namespace dsrrl::runtime::pmetal_selector_policy;
 static void check(bool ok) { if (!ok) std::abort(); }
 int main()
 {
+    check(is_synthetic_zero_descriptor(0x20EB7Fu,0u,0u,0.0f));
+    check(!is_synthetic_zero_descriptor(0x20E019u,0u,0u,0.0f));
+    check(!is_synthetic_zero_descriptor(0x20EB7Fu,0x0820u,0u,0.0f));
+    check(!is_synthetic_zero_descriptor(0x20EB7Fu,0u,0u,0.5f));
     int a = 1, common = 2;
     std::array<std::array<int *,7>,12> banks{};
     std::vector<std::pair<unsigned,unsigned>> calls;
@@ -16,7 +20,9 @@ int main()
         check(area < banks.size() && (type == 5 || type == 6));
         calls.emplace_back(area,type); return banks[area][type];
     };
-    banks[3][6] = &a; banks[11][5] = &common;
+    banks[0][5] = &a; banks[3][6] = &a; banks[11][5] = &common;
+    check(source(0,false,lookup) == &a);
+    calls.clear();
     check(source(0x0312,true,lookup) == &a);
     check(calls.size() == 1 && calls[0] == std::make_pair(3u,6u));
     calls.clear();

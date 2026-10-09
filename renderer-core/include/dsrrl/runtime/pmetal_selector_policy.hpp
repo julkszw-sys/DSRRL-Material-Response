@@ -18,6 +18,16 @@ auto source(std::int16_t selector, bool character, Lookup lookup) noexcept
     return result;
 }
 
+// DSR 0x14020E9D0 non-LightBank FLVER builders synthesize zero
+// selector A/B and beta; return site 0x20EB7F is generic.
+// This checks provenance AND contents: real area0/row0 is legal.
+inline bool is_synthetic_zero_descriptor(
+    std::uintptr_t ret_rva, std::uint16_t raw_a,
+    std::uint16_t raw_b, float beta) noexcept {
+    return ret_rva == 0x20EB7Fu && raw_a == 0u &&
+           raw_b == 0u && beta == 0.0f;
+}
+
 struct endpoints { std::int16_t a, b; float beta; bool valid; };
 inline endpoints select(std::int16_t a, std::int16_t b, float beta) noexcept
 {

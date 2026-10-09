@@ -1,5 +1,6 @@
 #pragma once
 #include "dsrrl/runtime/pointlight_ptde_source.hpp"
+#include "dsrrl/runtime/dsr_only_pointlight_banks_v1.hpp"
 #include "dsrrl/runtime/pmetal_selector_policy.hpp"
 #ifndef NOMINMAX
 #define NOMINMAX
@@ -552,6 +553,17 @@ inline bool donor(
                 param,
                 count,
                 first);
+
+    // Authenticate original DSR-only default/m99 PointLight structures.
+    // Complete 768-byte table identity (including absent native names)
+    // is required, not just the first row or a guessed source class.
+    if(bank==nullptr && count==64u && first==0x330u &&
+       readable_cached(param+0x30u,768u,cache)) {
+        std::uint16_t version=0u;
+        std::memcpy(&version,p+8u,2u);
+        if(version==1u)
+            bank=dsr_only_pointlight_banks_v1::find_table(p+0x30u);
+    }
 
     if(bank==nullptr) {
         std::uint64_t structure_signature=0u;

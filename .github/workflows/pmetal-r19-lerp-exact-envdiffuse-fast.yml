@@ -1,4 +1,4 @@
-name: P_Metal R43 Per-Key Freshness Cache Build
+name: DSRRL 2.0.2 Clean Zero Selector and DSR Hybrid Build
 
 on:
   workflow_dispatch:
@@ -11,6 +11,7 @@ on:
       - r41-active-islands-pmetal-cache-scope
       - r42-pmetal-cross-thread-producer-cache
       - r43-pmetal-per-key-freshness-cache
+      - fix/v202-zero-selector-dsr-only-hybrid-clean
   pull_request:
     paths:
       - "renderer-core/integrated/**"
@@ -56,6 +57,12 @@ jobs:
           ref: 3645e3025d1d98a90e318278858931f034d5d1f6
           path: _reshade
 
+      - name: Materialize verified original DSR-only donor headers
+        shell: pwsh
+        run: |
+          python -c "import zlib,pathlib,hashlib; b=pathlib.Path('renderer-core'); p=b/'include/dsrrl/runtime'; pairs=[('dsr_only_lightbank_rgbm_v1.hpp','dsr_only_lightbank_rgbm_v1.z','c5a3b3731c1dd95601458898f12bb9e7b4711b0dafa0d0a1a59929cd58fb93c2'),('dsr_only_pointlight_banks_v1.hpp','dsr_only_pointlight_banks_v1.z','78f31680cfd0688f28923b42acba3d09d9d61a1f452424fddb5f69c7089ab2c0')]; [(lambda name,packed,expected: (lambda content: ((p/name).write_bytes(content), (_ for _ in ()).throw(RuntimeError('DSR-only donor mismatch')) if hashlib.sha256(content).hexdigest()!=expected else None))(zlib.decompress((b/'data/provenance'/packed).read_bytes())))(*row) for row in pairs]"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
       - name: Configure R43 per-key PMetal freshness cache
         shell: pwsh
         run: >
@@ -65,7 +72,7 @@ jobs:
           -A x64
           -DRESHADE_INCLUDE_DIR="${{ github.workspace }}/_reshade/include"
           -DDSRRL_SOURCE_COMMIT="$env:DSRRL_CHECKOUT_COMMIT"
-          -DDSRRL_BUILD_FLAVOR="pmetal_r43_per_key_freshness_cache"
+          -DDSRRL_BUILD_FLAVOR="v202_clean_zero_dsr_only_hybrid"
           -DDSRRL_FULL_TELEMETRY_DEFAULT_ON=OFF
           -DDSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG=ON
           -DDSRRL_PMETAL_FULL_PTDE_HEMENV_R3=ON
@@ -89,15 +96,23 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           $addons = @(Get-ChildItem build-fast -Recurse -Filter *.addon64)
           if ($addons.Count -ne 1) { throw "Expected exactly one addon, found $($addons.Count)" }
-          Copy-Item $addons[0].FullName "DSRRL_PMETAL_R43_PER_KEY_FRESHNESS_CACHE.addon64" -Force
+          Copy-Item $addons[0].FullName "DSRRL_2_0_2_ZERO_DSR_ONLY_HYBRID.addon64" -Force
+
+      - name: Native source regression tests
+        shell: pwsh
+        run: |
+          cmake --build build-fast/renderer-core-lib --config Release --target dsrrl_pmetal_selector_policy_tests dsrrl_pmetal_producer_state_tests dsrrl_pointlight_ptde_source_tests
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          ctest --test-dir build-fast/renderer-core-lib -C Release -R "^dsrrl_(pmetal_(selector_policy|producer_state)|pointlight_ptde_source)_tests$" --output-on-failure
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Verify binary identity
         shell: pwsh
         run: |
-          $path = "DSRRL_PMETAL_R43_PER_KEY_FRESHNESS_CACHE.addon64"
+          $path = "DSRRL_2_0_2_ZERO_DSR_ONLY_HYBRID.addon64"
           $ascii = [System.Text.Encoding]::ASCII.GetString([System.IO.File]::ReadAllBytes($path))
           if (-not $ascii.Contains($env:DSRRL_CHECKOUT_COMMIT)) { throw "Missing source commit identity" }
-          if (-not $ascii.Contains("pmetal_r43_per_key_freshness_cache")) { throw "Missing R43 build flavor identity" }
+          if (-not $ascii.Contains("v202_clean_zero_dsr_only_hybrid")) { throw "Missing R43 build flavor identity" }
           if (-not $ascii.Contains("[DSRRL POINTLIGHT R26] direct_current_native_dispatch=ACTIVE persistent_vtable_hook=OFF recursion_guard=ON")) { throw "Missing inherited R26 direct current-native startup marker" }
           if (-not $ascii.Contains("[DSRRL POINTLIGHT R29] exact_structure_snapshot_cache=ACTIVE cross_draw=ON revalidate=VM+MEMCMP pointer_only_authority=OFF gpu_tls_fast_cache=ON per_draw_resource_mutex=OFF per_draw_com_ref_churn=OFF pipeline_tls_fast_path=ON per_draw_private_data=OFF per_draw_shader_ref_churn=OFF failure_propagation=EXACT")) { throw "Missing inherited R29 fast resource/cache/failure-propagation startup marker" }
           if (-not $ascii.Contains("[DSRRL POINTLIGHT R30] synchronous_core_transaction=ACTIVE exact_clustered_shape_guard=ON global_core_tx_mutex=OFF_FOR_CLUSTERED_DIRECT_NATIVE tls_reentry_guard=ON t18_t19_batch=ON sync_draw_serial_atomic=OFF fallback_general_tx=UNCHANGED")) { throw "Missing inherited R30 lock-free synchronous core transaction marker" }
@@ -128,6 +143,6 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: DSRRL_PMETAL_R43_PER_KEY_FRESHNESS_CACHE
-          path: DSRRL_PMETAL_R43_PER_KEY_FRESHNESS_CACHE.addon64
+          name: DSRRL_2_0_2_ZERO_DSR_ONLY_HYBRID
+          path: DSRRL_2_0_2_ZERO_DSR_ONLY_HYBRID.addon64
           if-no-files-found: error

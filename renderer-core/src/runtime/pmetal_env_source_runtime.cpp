@@ -12,6 +12,7 @@
 #include "dsrrl/operators/material_response/mtd_semantic_census.hpp"
 #include "dsrrl/operators/legacy_plan/sha256_bytes.hpp"
 #include "dsrrl/runtime/generated_pmetal_env_source_authority.hpp"
+#include "dsrrl/runtime/dsr_only_lightbank_rgbm_v1.hpp"
 
 #include <Windows.h>
 #include <reshade.hpp>
@@ -48,6 +49,23 @@ struct f4 {
     float z = 0.0f;
     float w = 0.0f;
 };
+
+// Exact original DSR-only LightBank endpoints. The PTDE shader/material
+// operator remains active; this only selects the corresponding source RGBM.
+bool exact_dsr_only_endpoint(std::uint64_t bank, std::uint32_t row_id,
+                             bool specular, f4 &out) noexcept
+{
+    out = {};
+    const auto *donor = dsr_only_lightbank_rgbm_v1::find(bank,row_id);
+    if (donor == nullptr) return false;
+    const auto &rgbm = specular ? donor->spec : donor->diffuse;
+    const float gain = static_cast<float>(rgbm.m) * 0.01f;
+    out = {static_cast<float>(rgbm.r)/255.0f*gain,
+           static_cast<float>(rgbm.g)/255.0f*gain,
+           static_cast<float>(rgbm.b)/255.0f*gain,0.0f};
+    return std::isfinite(out.x) && std::isfinite(out.y) &&
+           std::isfinite(out.z);
+}
 
 #if !defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG)
 bool inverse_envdiffuse_endpoint(
@@ -337,8 +355,12 @@ bool exact_envdiffuse_endpoint(
          g_exact_envdiffuse_banks) {
         if (bank.signature != signature)
             continue;
-        if (row_id >= bank.count)
-            return false;
+        if (row_id >= bank.count) {
+            const auto *auth = pmetal_env_source_authority::find_bank(signature);
+            if (auth == nullptr || row_id >= auth->live_count)
+                return false;
+            return exact_dsr_only_endpoint(signature,row_id,false,out);
+        }
 
         const auto &row =
             g_exact_envdiffuse_rows[
@@ -364,7 +386,10 @@ bool exact_envdiffuse_endpoint(
             std::isfinite(out.y) &&
             std::isfinite(out.z);
     }
-    return false;
+    const auto *auth = pmetal_env_source_authority::find_bank(signature);
+    return auth != nullptr && auth->count == 0u &&
+           row_id < auth->live_count &&
+           exact_dsr_only_endpoint(signature,row_id,false,out);
 }
 #endif
 
@@ -1652,17 +1677,18 @@ bool read_exact_source(
 
     const auto *row = pmetal_env_source_authority::find_row(*bank,row_id);
     if (row == nullptr) {
-        record_hook_decode(hook_decode_row_unknown,version_u32,count_u32,index,row_id,signature);
-        return false;
+        // Exact DSR-only row64 or default/m99/s99, never an invented PTDE row.
+        if (row_id >= bank->live_count ||
+            !exact_dsr_only_endpoint(signature,row_id,true,out)) {
+            record_hook_decode(hook_decode_row_unknown,version_u32,count_u32,index,row_id,signature);
+            return false;
+        }
+    } else {
+        const float scale = static_cast<float>(row->m) * 0.01f;
+        out = {static_cast<float>(row->r)/255.0f*scale,
+               static_cast<float>(row->g)/255.0f*scale,
+               static_cast<float>(row->b)/255.0f*scale,0.0f};
     }
-
-    const float scale = static_cast<float>(row->m) * 0.01f;
-    out = {
-        static_cast<float>(row->r) / 255.0f * scale,
-        static_cast<float>(row->g) / 255.0f * scale,
-        static_cast<float>(row->b) / 255.0f * scale,
-        0.0f
-    };
 
     if (!std::isfinite(out.x) || !std::isfinite(out.y) || !std::isfinite(out.z)) {
         record_hook_decode(hook_decode_nonfinite,version_u32,count_u32,index,row_id,signature);
@@ -2531,8 +2557,7 @@ void pmetal_env_source_selector_event(
     const operators::material_response::
         material_identity &material) noexcept
 {
-    pmetal_producer_state_clear();
-
+    // Generic non-LightBank descriptors must not invalidate a real source.
     if (!g_selector_enabled.load(
             std::memory_order_acquire) ||
         !exact_pmetal_material_selection(
@@ -2544,12 +2569,6 @@ void pmetal_env_source_selector_event(
     const auto epoch =
         g_selector_epoch.load(
             std::memory_order_relaxed);
-
-    // This exact material now owns the next synchronized source publication.
-    // Invalidate any older selector fallback before downstream decode.
-    pmetal_producer_state_begin(
-        material,
-        epoch);
 
     if (telemetry::effect_enabled())
         g_selector_exact_seen.store(
@@ -2633,6 +2652,17 @@ void pmetal_env_source_selector_event(
     if (descriptor_owner != owner ||
         character > 1u)
         return;
+
+    // Retail 0x217370/0x217970 synthetic generic selector. Zero has no
+    // authored LightBank authority in this native builder path.
+    if (pmetal_selector_policy::is_synthetic_zero_descriptor(
+            rva,raw_a,raw_b,beta)) {
+        static std::atomic_bool warned{false};
+        if (!warned.exchange(true,std::memory_order_relaxed))
+            reshade::log::message(reshade::log::level::info,
+                "[DSRRL PMETAL ZERO RE] synthetic_generic_builder=REJECTED keyed_source=RETAINED");
+        return;
+    }
 
     if (telemetry::effect_enabled())
         g_descriptor_gate_ok.store(
@@ -2723,6 +2753,11 @@ void pmetal_env_source_selector_event(
         source_a == nullptr ||
         source_b == nullptr)
         return;
+
+    // Only an authenticated material and exact native LightBank source
+    // may supersede the existing synchronized producer.
+    pmetal_producer_state_clear();
+    pmetal_producer_state_begin(material,epoch);
 
     pmetal_envspec_source next{};
 
@@ -2936,17 +2971,8 @@ bool pmetal_env_source_runtime::latest(
         return true;
     }
 
-    // Narrow fallback carrier recovered from the attested retail LightBank
-    // single/blend packers (V13 semantic cut). It is consumed only by an
-    // already-authenticated exact P_Metal draw. The retail packer is a state
-    // producer: retain its latest generation until the next exact source
-    // update, matching the validated V13 lifetime without exposing it to U/L.
-    if (latest_hook_source(out)) {
-        telemetry::hot_count(
-            g_consumer_ok);
-        return true;
-    }
-
+    // Do not borrow process-last hook state across materials, maps or
+    // render passes. Missing exact producer fails open to stock DSR.
     telemetry::hot_count(
         g_consumer_fail);
     return false;
