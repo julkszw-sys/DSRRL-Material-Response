@@ -142,6 +142,11 @@ option(
     OFF)
 
 option(
+    DSRRL_EXPERIMENTAL_SPC_MATERIAL_BATCH
+    "Diagnostic only: 21 more exactly attested DifSpcBmp MTDs (Leather/Cloth/Wet/Metal); requires other-metal and R19, distinct c101/EnvSpec slots, full sidecar gates"
+    OFF)
+
+option(
     DSRRL_PMETAL_R19_LERP_MATERIALWORKFLOW
     "P_Metal R19: exact HemEnvLerp MaterialWorkflow topology port (R15 additive/postmerge gates, R16 diffuse split, R17 direct PTDE c100 producer)"
     OFF)
@@ -950,6 +955,15 @@ if(DSRRL_EXPERIMENTAL_OTHER_METAL_PTDE_ENVSPEC)
     endif()
     target_compile_definitions(dsrrl_renderer_core_integrated PRIVATE
         DSRRL_EXPERIMENTAL_OTHER_METAL_PTDE_ENVSPEC)
+endif()
+
+if(DSRRL_EXPERIMENTAL_SPC_MATERIAL_BATCH)
+    if(NOT DSRRL_EXPERIMENTAL_OTHER_METAL_PTDE_ENVSPEC)
+        message(FATAL_ERROR
+            "SPC material batch requires exact other-metal producer and R15-R19 lineage")
+    endif()
+    target_compile_definitions(dsrrl_renderer_core_integrated PRIVATE
+        DSRRL_EXPERIMENTAL_SPC_MATERIAL_BATCH)
 endif()
 
 if(DSRRL_POINTLIGHT_DRAWTIME_BYPASS)
