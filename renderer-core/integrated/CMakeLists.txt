@@ -137,6 +137,11 @@ option(
     OFF)
 
 option(
+    DSRRL_EXPERIMENTAL_OTHER_METAL_PTDE_ENVSPEC
+    "Diagnostic only: exact MTD-keyed P_Metal Alp/Edge and C_Metal PTDE EnvSpec operator with source-key-only fail-open"
+    OFF)
+
+option(
     DSRRL_PMETAL_R19_LERP_MATERIALWORKFLOW
     "P_Metal R19: exact HemEnvLerp MaterialWorkflow topology port (R15 additive/postmerge gates, R16 diffuse split, R17 direct PTDE c100 producer)"
     OFF)
@@ -934,6 +939,17 @@ if(DSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE)
         dsrrl_renderer_core_integrated
         PRIVATE
         $<$<COMPILE_LANGUAGE:CXX>:DSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE>)
+endif()
+
+if(DSRRL_EXPERIMENTAL_OTHER_METAL_PTDE_ENVSPEC)
+    if(NOT DSRRL_PMETAL_R19_LERP_MATERIALWORKFLOW OR
+       NOT DSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE OR
+       NOT DSRRL_PMETAL_FULL_PTDE_HEMENV_R17_PTDE_DIFFUSE_MATERIAL)
+        message(FATAL_ERROR
+            "Other-metal PTDE EnvSpec requires complete R15/R16/R17/R19 source and consumer lineage")
+    endif()
+    target_compile_definitions(dsrrl_renderer_core_integrated PRIVATE
+        DSRRL_EXPERIMENTAL_OTHER_METAL_PTDE_ENVSPEC)
 endif()
 
 if(DSRRL_POINTLIGHT_DRAWTIME_BYPASS)
