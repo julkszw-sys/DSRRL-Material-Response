@@ -837,7 +837,7 @@ bool pmetal_envspec_draw_runtime::prepare(
             mr::mtd_envspec_router_state::
                 present ||
         !env_semantics.envspc_slot_valid ||
-        env_semantics.envspc_slot != 2u) {
+        env_semantics.envspc_slot != match_ptde_metal_envspec_material(material)->envspc_slot) {
         telemetry::hot_count(semantic_rejects_);
         effect_fail(
             effect_fail_mask_,
