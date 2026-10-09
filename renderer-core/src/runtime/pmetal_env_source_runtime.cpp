@@ -23,6 +23,7 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <cstdio>
 #include <cstring>
 #include <filesystem>
 #include <fstream>
@@ -2920,6 +2921,34 @@ bool pmetal_env_source_runtime::latest_exact_material(
     if (is_experimental_ptde_metal_envspec_material(material) &&
         latest_hook_source(out)) {
         out.unkeyed_hook_fallback = true;
+        // Report each authenticated SPC profile independently, including
+        // cases where source_ready was already logged on an exact earlier draw.
+        const auto *authority = match_ptde_metal_envspec_material(material);
+        if (authority != nullptr) {
+            const auto profile =
+                static_cast<std::uint32_t>(authority->profile);
+            const auto start =
+                static_cast<std::uint32_t>(ptde_metal_envspec_profile::pmetal_alp);
+            const auto index = profile - start;
+            if (profile >= start && index < 32u) {
+                static std::atomic<std::uint32_t> reported{0u};
+                const auto bit = 1u << index;
+                if ((reported.fetch_or(bit, std::memory_order_relaxed) & bit) == 0u) {
+                    char line[380]{};
+                    std::snprintf(line, sizeof(line),
+                        "[DSRRL SPC25 V13 FALLBACK] source=LATEST_HOOK_UNKEYED route=%u slot=%u profile=%u bank_a=%016llx row_a=%u bank_b=%016llx row_b=%u beta=%.7g pixel=OPEN",
+                        static_cast<unsigned>(material.route_index),
+                        static_cast<unsigned>(material.material_slot),
+                        profile,
+                        static_cast<unsigned long long>(out.bank_signature_a),
+                        static_cast<unsigned>(out.row_id_a),
+                        static_cast<unsigned long long>(out.bank_signature_b),
+                        static_cast<unsigned>(out.row_id_b),
+                        static_cast<double>(out.beta));
+                    reshade::log::message(reshade::log::level::info, line);
+                }
+            }
+        }
         telemetry::hot_count(g_consumer_ok);
         return true;
     }
