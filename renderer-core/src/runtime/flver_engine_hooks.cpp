@@ -1095,6 +1095,12 @@ bool publish_exact_selector_identity(
             identity);
 #endif
 
+#if defined(DSRRL_EXPERIMENTAL_SPC_MATERIAL_BATCH)
+    // Before the 25-profile exact producer dispatch, identify ALL relevant
+    // material names reaching an authenticated FLVER+slot selector.
+    log_spc_material_census_once(identity, false);
+#endif
+
     // Route 345 keeps its validated v2.0.3-dev selector behavior.
     // Newly certified metal MTDs must enter the SAME real source producer,
     // not just the shader draw consumer. This is OFF by default; the exact
