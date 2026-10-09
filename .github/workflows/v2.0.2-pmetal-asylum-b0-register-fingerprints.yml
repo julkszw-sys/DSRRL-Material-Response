@@ -56,6 +56,8 @@ jobs:
           $writer = Get-Content renderer-core/src/runtime/pmetal_native_cb_writer_trace.cpp -Raw
           $integ = Get-Content renderer-core/integrated/integrated_addon.cpp -Raw
           if (-not $writer.Contains("pmetal_native_cb_writer_before_unmap")) { throw "No Map-Unmap CPU writer capture" }
+          if ($writer.Contains("g_watches={};") -or $writer.Contains("g_watches = {};")) { throw "PR292 startup stack overflow risk: multi-megabyte array reset forbidden" }
+          if (-not $writer.Contains("for (auto &entry : g_watches)")) { throw "PR292 bounded-stack writer registry reset missing" }
           if (-not $writer.Contains("pmetal_native_cb_writer_before_update")) { throw "No UpdateSubresource writer capture" }
           if (-not $integ.Contains("cb_writer_on_deferred_update")) { throw "Deferred update writer callback missing" }
           if ($writer.Contains("CopyResource(") -or $writer.Contains("GetData(")) { throw "Forbidden GPU readback" }
