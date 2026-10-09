@@ -126,6 +126,83 @@ std::unordered_map<std::uint64_t, companion_set> g_cache;
 // identity is not resolvable at draw time. Keep the handle quarantined until
 // its resource-view lifetime ends instead of allowing last-writer-wins identity.
 std::unordered_map<std::uint64_t, ID3D11Device *> g_ambiguous_view_device;
+
+#if defined(DSRRL_EXPERIMENTAL_SPC_MATERIAL_BATCH)
+// Experimental, exact-name-only resource->SRV handoff. The retail texture
+// name is already validated by the existing inlined name hook. A resource
+// creation can occur within the naming interval while its SRV is created
+// after the clear hook. Never infer identity from dimensions/format/MTD.
+struct attested_resource_name {
+    ID3D11Device *device = nullptr; // borrowed; cleared on destroy_device
+    std::wstring logical_name{};
+    std::uint64_t hash = 0u;
+};
+std::unordered_map<std::uint64_t,attested_resource_name>
+    g_attested_names_by_resource;
+std::unordered_map<std::uint64_t,ID3D11Device *>
+    g_ambiguous_named_resource_device;
+std::atomic_bool g_attested_resource_view_join_logged{false};
+
+void on_init_resource(
+    reshade::api::device *device,
+    const reshade::api::resource_desc &,
+    const reshade::api::subresource_data *,
+    reshade::api::resource_usage,
+    reshade::api::resource resource)
+{
+    if (g_internal_create || g_quarantined.load() ||
+        device == nullptr ||
+        device->get_api() != reshade::api::device_api::d3d11 ||
+        resource.handle == 0u)
+        return;
+    const wchar_t *raw = nullptr;
+    std::size_t size = 0u;
+    if (!texture_identity_transport::snapshot_raw(raw, size) ||
+        raw == nullptr || size == 0u)
+        return;
+    const auto hash = fnv_name(raw, size);
+    if (!generated::spec_equipment_name_hash_allowed_v12(hash) &&
+        !exact_subsurface_body_spec_hash(hash) &&
+        !generated::diffuse_name_hash_allowed_v12(hash) &&
+        !generated::normal_name_hash_allowed_v12(hash))
+        return;
+
+    // Construct before locking. Mismatched identities for the same live
+    // resource are quarantined until the actual destroy_resource callback.
+    try {
+        attested_resource_name current{};
+        current.device = reinterpret_cast<ID3D11Device *>(device->get_native());
+        current.logical_name.assign(raw, size);
+        current.hash = hash;
+        std::lock_guard<std::mutex> lock(g_mutex);
+        if (g_ambiguous_named_resource_device.count(resource.handle))
+            return;
+        const auto it = g_attested_names_by_resource.find(resource.handle);
+        if (it == g_attested_names_by_resource.end()) {
+            g_attested_names_by_resource.emplace(resource.handle,
+                std::move(current));
+        } else if (it->second.device != current.device ||
+                   it->second.hash != current.hash ||
+                   it->second.logical_name != current.logical_name) {
+            g_attested_names_by_resource.erase(it);
+            g_ambiguous_named_resource_device.emplace(
+                resource.handle, current.device);
+        }
+    } catch (...) {
+        // Allocation must never unwind into the D3D11/ReShade callback.
+    }
+}
+
+void on_destroy_resource(
+    reshade::api::device *,
+    reshade::api::resource resource)
+{
+    if (resource.handle == 0u) return;
+    std::lock_guard<std::mutex> lock(g_mutex);
+    g_attested_names_by_resource.erase(resource.handle);
+    g_ambiguous_named_resource_device.erase(resource.handle);
+}
+#endif
 #if !defined(DSRRL_RESOURCE_EPOCH_SHARD_SYNC)
 std::atomic<std::uint64_t> g_cache_epoch{1u};
 #endif
@@ -401,6 +478,10 @@ void release_cache() noexcept
         invalidate_all_companion_epochs();
         dead.swap(g_cache);
         g_ambiguous_view_device.clear();
+#if defined(DSRRL_EXPERIMENTAL_SPC_MATERIAL_BATCH)
+        g_attested_names_by_resource.clear();
+        g_ambiguous_named_resource_device.clear();
+#endif
     }
 
     for (auto &entry : dead)
@@ -440,6 +521,20 @@ void release_cache_for_device(
             }
         }
 
+#if defined(DSRRL_EXPERIMENTAL_SPC_MATERIAL_BATCH)
+        for (auto it = g_attested_names_by_resource.begin();
+             it != g_attested_names_by_resource.end();) {
+            if (it->second.device == device)
+                it = g_attested_names_by_resource.erase(it);
+            else ++it;
+        }
+        for (auto it = g_ambiguous_named_resource_device.begin();
+             it != g_ambiguous_named_resource_device.end();) {
+            if (it->second == device)
+                it = g_ambiguous_named_resource_device.erase(it);
+            else ++it;
+        }
+#endif
         if (changed)
             invalidate_all_companion_epochs();
     }
@@ -1193,7 +1288,7 @@ void inspect_many(
 
 void on_init_resource_view(
     reshade::api::device *device,
-    reshade::api::resource,
+    reshade::api::resource resource,
     reshade::api::resource_usage usage,
     const reshade::api::resource_view_desc &,
     reshade::api::resource_view view)
@@ -1211,10 +1306,44 @@ void on_init_resource_view(
     stutter_profile::scope view_time(stutter_profile::stage::resource_view_init);
     const wchar_t *logical_name_raw = nullptr;
     std::size_t logical_name_length = 0u;
-    if (!texture_identity_transport::snapshot_raw(
-            logical_name_raw,
-            logical_name_length))
+    const bool direct_name =
+        texture_identity_transport::snapshot_raw(
+            logical_name_raw, logical_name_length);
+#if defined(DSRRL_EXPERIMENTAL_SPC_MATERIAL_BATCH)
+    std::wstring attested_name{};
+    bool resource_handoff = false;
+    if (resource.handle != 0u) {
+        try {
+            std::lock_guard<std::mutex> lock(g_mutex);
+            const auto entry =
+                g_attested_names_by_resource.find(resource.handle);
+            if (entry != g_attested_names_by_resource.end() &&
+                entry->second.device ==
+                    reinterpret_cast<ID3D11Device *>(device->get_native())) {
+                attested_name = entry->second.logical_name;
+                resource_handoff = !attested_name.empty();
+            }
+        } catch (...) {
+            return;
+        }
+    }
+    if (resource_handoff && direct_name) {
+        // Two independently observed names disagree -> no resource alias.
+        if (attested_name.size() != logical_name_length ||
+            std::char_traits<wchar_t>::compare(
+                attested_name.c_str(), logical_name_raw,
+                logical_name_length) != 0)
+            return;
+    } else if (resource_handoff) {
+        logical_name_raw = attested_name.c_str();
+        logical_name_length = attested_name.size();
+    } else if (!direct_name) {
         return;
+    }
+#else
+    if (!direct_name)
+        return;
+#endif
 
     const auto logical_hash =
         fnv_name(
@@ -1354,6 +1483,13 @@ void on_init_resource_view(
     if (!accepted)
         release_set(set);
 
+#if defined(DSRRL_EXPERIMENTAL_SPC_MATERIAL_BATCH)
+    if (resource_handoff && !direct_name && accepted &&
+        !g_attested_resource_view_join_logged.exchange(
+            true, std::memory_order_relaxed))
+        reshade::log::message(reshade::log::level::info,
+            "[DSRRL SPC RESOURCE JOIN] source=init_resource_exact_name carrier=resource_to_view exact_allowlist=1 failopen_preserved=1 pixel=OPEN");
+#endif
     ++g_named_views;
 }
 
@@ -1595,6 +1731,13 @@ register_events() noexcept
         "[DSRRL HITCH FRAME] exact R43 same-operator per-Present QPC buckets active");
 #endif
 
+#if defined(DSRRL_EXPERIMENTAL_SPC_MATERIAL_BATCH)
+    reshade::register_event<reshade::addon_event::init_resource>(
+        on_init_resource);
+    reshade::register_event<reshade::addon_event::destroy_resource>(
+        on_destroy_resource);
+#endif
+
     reshade::register_event<
         reshade::addon_event::init_resource_view>(
             on_init_resource_view);
@@ -1631,6 +1774,12 @@ unregister_events() noexcept
     reshade::unregister_event<
         reshade::addon_event::init_resource_view>(
             on_init_resource_view);
+#if defined(DSRRL_EXPERIMENTAL_SPC_MATERIAL_BATCH)
+    reshade::unregister_event<reshade::addon_event::destroy_resource>(
+        on_destroy_resource);
+    reshade::unregister_event<reshade::addon_event::init_resource>(
+        on_init_resource);
+#endif
 
     release_cache();
     g_core = nullptr;
