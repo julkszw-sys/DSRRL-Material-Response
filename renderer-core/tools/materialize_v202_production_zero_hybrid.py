@@ -10,8 +10,9 @@ compressed=root/"data/provenance/dsr_only_lightbank_rgbm_v1.z"
 header=root/"include/dsrrl/runtime/dsr_only_lightbank_rgbm_v1.hpp"
 def gitsha(b):
     return hashlib.sha1(("blob %d\0"%len(b)).encode()+b).hexdigest()
-assert gitsha(target.read_bytes())=="a6904844c97c712027ad79bbcd136066952a7116", "NOT FINAL v2.0.2"
-source=candidate.read_bytes()
+original=target.read_bytes().replace(b'\r\n',b'\n')
+assert gitsha(original)=="a6904844c97c712027ad79bbcd136066952a7116", ("NOT FINAL v2.0.2",gitsha(original))
+source=candidate.read_bytes().replace(b'\r\n',b'\n')
 assert gitsha(source)=="98a4d3576d10cd7387ec52e24daecf7c70602947", "Candidate corrupted"
 s=source.decode()
 regex=r"(?m)^([ \t]*)(g_hook_(?:publish|consume|single_seen|blend_seen)\.fetch_add\(\n[ \t]*1u,\n[ \t]*std::memory_order_relaxed\);)"
