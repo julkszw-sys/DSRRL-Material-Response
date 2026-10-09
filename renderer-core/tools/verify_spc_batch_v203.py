@@ -97,6 +97,9 @@ assert "snapshot_native_exact_debug_name(stock, name)" in resource
 assert "stock->GetResource(&resource)" in resource
 assert "g_late_native_t1_attempts" in resource
 assert "stock_bound_native_exact_debug_name" in resource
+assert "WKPDID_D3DDebugObjectNameW" in resource
+assert "native_label_present_not_canonical_allowlisted" in resource
+assert "stock_t1_missing_exact_native_name" in resource
 assert "material_resources_.prepare_draw_requests(" in consumer
 assert "DSRRL_EXPERIMENTAL_SPC_MATERIAL_BATCH" in consumer
 assert "DSRRL_EXPERIMENTAL_SPC_MATERIAL_BATCH" in resource
