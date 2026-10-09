@@ -103,6 +103,8 @@ public:
     bool install() noexcept;
     void uninstall() noexcept;
     bool latest(const operators::material_response::material_identity &material, pmetal_envspec_source &out) const noexcept;
+    // Exact source-key-only consumption: NO global/unkeyed latest-hook fallback.
+    bool latest_exact_material(const operators::material_response::material_identity &material, pmetal_envspec_source &out) const noexcept;
     pmetal_env_source_runtime_telemetry telemetry() const noexcept;
     void reset() noexcept;
 };
