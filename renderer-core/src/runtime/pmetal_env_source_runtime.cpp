@@ -2701,6 +2701,143 @@ void pmetal_env_source_selector_clear() noexcept
     pmetal_producer_state_clear();
 }
 
+
+#if defined(DSRRL_PMETAL_ASYLUM_CROSS_BANK_TRACE)
+namespace {
+struct asylum_selector_trace_slot {
+    bool valid = false;
+    std::array<std::uint8_t,32> flver{};
+    std::array<std::uint8_t,32> mtd{};
+    std::uint32_t slot = 0u;
+    std::uint64_t bank = 0u;
+    std::uint32_t row = 0u;
+    std::uint16_t selector = 0u;
+    bool parent_verified = false;
+};
+std::mutex g_asylum_selector_trace_mutex{};
+std::array<asylum_selector_trace_slot,256>
+    g_asylum_selector_trace_slots{};
+std::atomic<std::uint32_t> g_asylum_selector_trace_emitted{0u};
+
+// Evidence only: raw native selector and exact bank producer provenance.
+// This observation never alters a source, chooses a donor, or touches a CB.
+void trace_asylum_selector_context(
+    const operators::material_response::material_identity &material,
+    const pmetal_envspec_source &next,
+    std::uint16_t raw_a,
+    std::uint16_t raw_b,
+    std::int16_t selector_a,
+    std::int16_t selector_b,
+    float beta,
+    void *source_a,
+    void *source_b,
+    std::uintptr_t callsite_rva,
+    std::uintptr_t parent_return,
+    bool parent_verified,
+    std::uint8_t character,
+    bool shadow_hit) noexcept
+{
+    constexpr std::uint64_t k_m18 = 0x1ecfd1e617c59071ULL;
+    constexpr std::uint64_t k_m10 = 0x4c594553d201d80cULL;
+    if (next.bank_signature_a != k_m18 &&
+        next.bank_signature_a != k_m10)
+        return;
+    std::uint64_t hash = 0xcbf29ce484222325ULL;
+    for (const auto byte : material.flver_sha256) {
+        hash ^= byte;
+        hash *= 0x100000001b3ULL;
+    }
+    for (const auto byte : material.raw_mtd_sha256) {
+        hash ^= byte;
+        hash *= 0x100000001b3ULL;
+    }
+    hash ^= material.material_slot;
+    hash *= 0x100000001b3ULL;
+    auto &record = g_asylum_selector_trace_slots[
+        static_cast<std::size_t>(hash & 255u)];
+    bool emit = false;
+    bool previous_valid = false;
+    std::uint64_t previous_bank = 0u;
+    std::uint32_t previous_row = 0u;
+    std::uint16_t previous_selector = 0u;
+    bool previous_parent = false;
+    {
+        std::lock_guard<std::mutex> guard(
+            g_asylum_selector_trace_mutex);
+        const bool same_identity =
+            record.valid &&
+            record.flver == material.flver_sha256 &&
+            record.mtd == material.raw_mtd_sha256 &&
+            record.slot == material.material_slot;
+        previous_valid = same_identity;
+        if (same_identity) {
+            previous_bank = record.bank;
+            previous_row = record.row;
+            previous_selector = record.selector;
+            previous_parent = record.parent_verified;
+        }
+        emit =
+            !same_identity ||
+            record.bank != next.bank_signature_a ||
+            record.row != next.row_id_a ||
+            record.selector != raw_a ||
+            record.parent_verified != parent_verified;
+        record.valid = true;
+        record.flver = material.flver_sha256;
+        record.mtd = material.raw_mtd_sha256;
+        record.slot = material.material_slot;
+        record.bank = next.bank_signature_a;
+        record.row = next.row_id_a;
+        record.selector = raw_a;
+        record.parent_verified = parent_verified;
+    }
+    if (!emit ||
+        g_asylum_selector_trace_emitted.fetch_add(
+            1u,std::memory_order_relaxed) >= 512u)
+        return;
+
+    // Native selector policy: high byte selects area, low byte row index.
+    const unsigned area_a =
+        (static_cast<unsigned>(raw_a) >> 8u) & 0x7fu;
+    const unsigned area_b =
+        (static_cast<unsigned>(raw_b) >> 8u) & 0x7fu;
+    char message[850]{};
+    std::snprintf(
+        message,sizeof(message),
+        "[DSRRL PMETAL ASYLUM SELECTOR] owner_flver0=%02x%02x%02x%02x mtd0=%02x%02x slot=%u first=%u prev_bank=%016llx prev_row=%u prev_sel=%04x prev_parent_ok=%u bank=%016llx row=%u bankB=%016llx rowB=%u raw=%04x/%04x chosen=%04x/%04x area=%u/%u beta=%.6f character=%u source=%p/%p callsite_rva=%llx parent_return=%p parent_verified=%u stage=%s",
+        static_cast<unsigned>(material.flver_sha256[0]),
+        static_cast<unsigned>(material.flver_sha256[1]),
+        static_cast<unsigned>(material.flver_sha256[2]),
+        static_cast<unsigned>(material.flver_sha256[3]),
+        static_cast<unsigned>(material.raw_mtd_sha256[0]),
+        static_cast<unsigned>(material.raw_mtd_sha256[1]),
+        static_cast<unsigned>(material.material_slot),
+        previous_valid ? 0u : 1u,
+        static_cast<unsigned long long>(previous_bank),
+        static_cast<unsigned>(previous_row),
+        static_cast<unsigned>(previous_selector),
+        previous_parent ? 1u : 0u,
+        static_cast<unsigned long long>(next.bank_signature_a),
+        static_cast<unsigned>(next.row_id_a),
+        static_cast<unsigned long long>(next.bank_signature_b),
+        static_cast<unsigned>(next.row_id_b),
+        static_cast<unsigned>(raw_a),
+        static_cast<unsigned>(raw_b),
+        static_cast<unsigned>(static_cast<std::uint16_t>(selector_a)),
+        static_cast<unsigned>(static_cast<std::uint16_t>(selector_b)),
+        area_a,area_b,
+        static_cast<double>(beta),
+        static_cast<unsigned>(character),
+        source_a,source_b,
+        static_cast<unsigned long long>(callsite_rva),
+        reinterpret_cast<void *>(parent_return),
+        parent_verified ? 1u : 0u,
+        shadow_hit ? "HOOK_SHADOW" : "EXACT_REDECODE");
+    reshade::log::message(reshade::log::level::info,message);
+}
+} // namespace
+#endif
+
 void pmetal_env_source_selector_event(
     void *owner,
     void *return_address,
@@ -2959,6 +3096,13 @@ void pmetal_env_source_selector_event(
         next.diagnostic_origin = parent_verified ? 1u : 4u;
 #endif
         next.serial = epoch;
+#if defined(DSRRL_PMETAL_ASYLUM_CROSS_BANK_TRACE)
+        trace_asylum_selector_context(
+            material,next,raw_a,raw_b,
+            endpoints.a,endpoints.b,endpoints.beta,
+            source_a,source_b,rva,parent_return,
+            parent_verified,character,true);
+#endif
         pmetal_producer_state_publish(
             material,
             next,
@@ -3118,6 +3262,13 @@ void pmetal_env_source_selector_event(
 #endif
 
     next.serial = epoch;
+#if defined(DSRRL_PMETAL_ASYLUM_CROSS_BANK_TRACE)
+    trace_asylum_selector_context(
+        material,next,raw_a,raw_b,
+        endpoints.a,endpoints.b,endpoints.beta,
+        source_a,source_b,rva,parent_return,
+        parent_verified,character,false);
+#endif
 
     pmetal_producer_state_publish(
         material,
