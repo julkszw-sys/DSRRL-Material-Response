@@ -172,8 +172,14 @@ lines += [
 
 lines += [
     "}};",
-    "constexpr const bank_donor *find_bank(std::uint64_t s) noexcept { for (const auto &b : k_banks) if (b.signature == s) return &b; return nullptr; }",
-    "constexpr const bank_donor *find_bank_by_layout(std::uint64_t s, std::uint32_t live_count) noexcept { for (const auto &b : k_banks) if (b.layout_signature == s && b.live_count == live_count) return &b; return nullptr; }",
+    "// Exact native-layout identities for 3 DSR-only common LightBank banks.",
+    "inline constexpr std::array<bank_donor,3> k_dsr_common = {{",
+    "bank_donor{0x96ece3bed03eed01ULL,0x96ece3bed03eed01ULL,64u,0u,0u}, // default",
+    "bank_donor{0x34bdd6493ca1a91aULL,0x34bdd6493ca1a91aULL,64u,0u,0u}, // m99",
+    "bank_donor{0x91aa11098cee0fe2ULL,0x91aa11098cee0fe2ULL,64u,0u,0u}, // s99",
+    "}};",
+    "constexpr const bank_donor *find_bank(std::uint64_t s) noexcept { for (const auto &b : k_banks) if (b.signature == s) return &b; for (const auto &b : k_dsr_common) if (b.signature == s) return &b; return nullptr; }",
+    "constexpr const bank_donor *find_bank_by_layout(std::uint64_t s, std::uint32_t live_count) noexcept { for (const auto &b : k_banks) if (b.layout_signature == s && b.live_count == live_count) return &b; for (const auto &b : k_dsr_common) if (b.layout_signature == s && b.live_count == live_count) return &b; return nullptr; }",
     "constexpr const donor_row *find_row(const bank_donor &b, std::uint32_t id) noexcept { if (b.first > k_rows.size() || b.count > k_rows.size() - b.first || id >= b.count) return nullptr; const auto &row = k_rows[b.first + id]; return row.id == id ? &row : nullptr; }",
     "} // namespace dsrrl::runtime::pmetal_env_source_authority",
 ]
