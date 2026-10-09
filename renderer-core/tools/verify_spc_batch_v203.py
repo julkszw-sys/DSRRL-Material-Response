@@ -100,6 +100,17 @@ assert "stock_bound_native_exact_debug_name" in resource
 assert "WKPDID_D3DDebugObjectNameW" in resource
 assert "native_label_present_not_canonical_allowlisted" in resource
 assert "stock_t1_missing_exact_native_name" in resource
+identity = (ROOT / "src/runtime/texture_identity_transport.cpp").read_text()
+identity_api = (ROOT / "include/dsrrl/runtime/texture_identity_transport.hpp").read_text()
+assert "texture_name_liveness liveness()" in identity
+assert "texture_name_liveness liveness()" in identity_api
+assert "g_texture_name_hook_calls.fetch_add" in identity
+assert "g_texture_name_complete.fetch_add" in identity
+assert "DSRRL SPC25 NAME CUT" in resource
+assert "g_name_exact_init_resource.fetch_add" in resource
+assert "g_name_exact_create_view.fetch_add" in resource
+assert "g_name_exact_init_view.fetch_add" in resource
+
 assert "material_resources_.prepare_draw_requests(" in consumer
 assert "DSRRL_EXPERIMENTAL_SPC_MATERIAL_BATCH" in consumer
 assert "DSRRL_EXPERIMENTAL_SPC_MATERIAL_BATCH" in resource
