@@ -173,7 +173,7 @@ lines += [
 
 lines += [
     "}};",
-    "inline constexpr std::array<bank_donor,3> k_dsr_common_banks = {{{{",
+    "inline constexpr std::array<bank_donor,3> k_dsr_common_banks = {{",
     "bank_donor{0x96ece3bed03eed01ULL,0x96ece3bed03eed01ULL,64u,0u,0u}, // default_LightBank DSR_ONLY",
     "bank_donor{0x34bdd6493ca1a91aULL,0x34bdd6493ca1a91aULL,64u,0u,0u}, // m99_LightBank DSR_ONLY",
     "bank_donor{0x91aa11098cee0fe2ULL,0x91aa11098cee0fe2ULL,64u,0u,0u}, // s99_LightBank DSR_ONLY",
