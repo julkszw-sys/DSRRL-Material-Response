@@ -30,6 +30,19 @@ struct pmetal_envspec_source {
     // producer payload/material identity changes, so upload consumers can
     // skip redundant GPU writes without draw-time reclassification.
     std::uint64_t generation = 0u;
+#if defined(DSRRL_PMETAL_ASYLUM_DRAW_SOURCE_JOIN_TRACE)
+    // Diagnostic-only, published together with the exact material source.
+    // These fields never authorize/gate a bridge or enter source equality.
+    std::uint32_t producer_callsite_rva = 0u;
+    std::uint32_t producer_parent_rva = 0u;
+    std::uint32_t producer_thread_id = 0u;
+    std::uint16_t producer_raw_a = 0u;
+    std::uint16_t producer_raw_b = 0u;
+    std::uintptr_t producer_source_a = 0u;
+    std::uintptr_t producer_source_b = 0u;
+    bool producer_parent_verified = false;
+    bool producer_hook_shadow = false;
+#endif
 #if defined(DSRRL_PMETAL_SPEC_CUT_TRACE)
     // Observation only. 1=exact per-material selector producer,
     // 2=last EnvSpec packer on this thread, 3=last global packer.
