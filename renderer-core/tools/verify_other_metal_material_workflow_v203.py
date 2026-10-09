@@ -132,7 +132,9 @@ def main() -> None:
             "experimental MTD no longer reaches the exact source dispatcher")
     require("pmetal_env_source_selector_event(" in selector_hook,
             "native producer hook dispatch missing")
-    require("DSRRL_EXPERIMENTAL_OTHER_METAL_PTDE_ENVSPEC" in selector_hook,
+    # The opt-in macro guards the shared dispatch helper, not the hook
+    # call site: keeping one tested predicate is the hardening objective.
+    require("DSRRL_EXPERIMENTAL_OTHER_METAL_PTDE_ENVSPEC" in header,
             "new producer must not be globally enabled")
 
     print(json.dumps({
