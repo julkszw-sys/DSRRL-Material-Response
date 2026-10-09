@@ -19,10 +19,15 @@ jobs:
       - uses: actions/checkout@v4
       - name: Configure native operator tests
         run: cmake -S renderer-core -B build/core -DCMAKE_BUILD_TYPE=Release
-      - name: Build shared PTDE workflow test
-        run: cmake --build build/core --target dsrrl_renderer_ptde_workflow_c100_tests --parallel
-      - name: Verify exact preimage and fail-open
-        run: ctest --test-dir build/core -R "^dsrrl_renderer_ptde_workflow_c100_tests$" --output-on-failure
+      - name: Build shared PTDE workflow, MTD authority and cross-thread source tests
+        run: >
+          cmake --build build/core
+          --target dsrrl_renderer_ptde_workflow_c100_tests
+          dsrrl_renderer_ptde_metal_envspec_baseline_tests
+          dsrrl_renderer_ptde_metal_envspec_experimental_tests
+          dsrrl_renderer_ptde_metal_exact_source_join_tests --parallel
+      - name: Verify exact preimage, MTD authority and cross-thread fail-open
+        run: ctest --test-dir build/core -R "^dsrrl_renderer_ptde_(workflow_c100|metal_envspec|metal_exact_source_join)" --output-on-failure
 
   integrated-v203-native:
     runs-on: windows-latest
@@ -75,9 +80,9 @@ jobs:
       - name: Native regression tests
         shell: pwsh
         run: |
-          cmake --build build-v203/renderer-core-lib --config Release --target dsrrl_renderer_ptde_workflow_c100_tests
+          cmake --build build-v203/renderer-core-lib --config Release --target dsrrl_renderer_ptde_workflow_c100_tests dsrrl_renderer_ptde_metal_exact_source_join_tests
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          ctest --test-dir build-v203/renderer-core-lib -C Release -R "^dsrrl_renderer_ptde_workflow_c100_tests$" --output-on-failure
+          ctest --test-dir build-v203/renderer-core-lib -C Release -R "^dsrrl_renderer_ptde_(workflow_c100|metal_exact_source_join)" --output-on-failure
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Save non-release diagnostic addon
         uses: actions/upload-artifact@v4
