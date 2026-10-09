@@ -18,4 +18,6 @@ for profile, route, name, sha, gain, slot in compiled:
     assert matches[0]["route_index"] == int(route), name
     assert matches[0]["sha256"] == sha, name
     assert float(matches[0]["c101"]) == float(gain), name
-print('Unique MTD census entries:', len(compiled))
+for profile, route, name, sha, gain, slot in compiled:
+    assert len([e for e in envs if e["mtd_name"] == name]) == 1, name
+print('Unique MTD and EnvSpec entries:',len(compiled))
