@@ -106,6 +106,8 @@ jobs:
         run: |
           git merge-base --is-ancestor 6a73033f6275f88487effeb1e34bbbdd7a6a3a88 HEAD
           if ($LASTEXITCODE -ne 0) { throw "Not based on exact v2.0.3-dev source" }
+      - name: Certify experimental MTD/SPX source authority and strict join
+        run: python renderer-core/tools/verify_other_metal_material_workflow_v203.py
       - name: Configure exact MTD-keyed metal diagnostic
         shell: pwsh
         run: >
