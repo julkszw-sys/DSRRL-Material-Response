@@ -2776,6 +2776,11 @@ bool observe_draw_identity(
     }
     if (owner_ok)
         hot_count(g_draw_owner_hits);
+#if defined(DSRRL_EXPERIMENTAL_SPC_MATERIAL_BATCH)
+    if (owner_ok)
+        log_spc_draw_receiver_once(
+            out_material, receiver_id, receiver_ok);
+#endif
 
     if (!receiver_ok) {
         if (owner_ok)
