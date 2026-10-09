@@ -2137,7 +2137,7 @@ try_recover_exact_bound_spec_from_native_name(
     }
     stock->Release();
 
-    const auto loaded =
+    auto loaded =
         safe_load_sidecar(device, asset_class::specular, name, hash);
     account_load(loaded.status);
     if (loaded.status != load_status::ready ||
