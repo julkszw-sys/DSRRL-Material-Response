@@ -45,11 +45,13 @@ new="""    pmetal_envspec_source source{};
     }
     const unsigned draw_map = map_resolved
         ? pmetal_map_source::probe_area(map_probe_a) : 0u;
+    unsigned exact_bank_area=0u;
     const bool map_source_valid =
         draw_map != 0u &&
         (!map_b_required ||
          pmetal_map_source::probe_area(map_probe_b) == draw_map) &&
-        pmetal_map_source::latest(material,draw_map,source);
+        pmetal_map_source::latest_for_probe(
+            material,draw_map,source,exact_bank_area);
     if (!map_source_valid || !std::isfinite(source.beta)) {
 #else
     if (!source_.latest(material, source) ||
@@ -68,7 +70,9 @@ replacement="""#if defined(DSRRL_PMETAL_R43_MAP_SOURCE_JOIN)
         (probe_b_required &&
          pmetal_map_source::probe_area(
              prepared.env_resources.probe_b) != draw_map) ||
-        !pmetal_map_source::source_in_area(source,draw_map)) {
+        !pmetal_map_source::source_in_area(source,exact_bank_area) ||
+        !(exact_bank_area == draw_map || exact_bank_area == 99u ||
+          exact_bank_area == 100u)) {
         if(shader!=nullptr)shader->Release();
         env_resources_.release(prepared.env_resources);
         telemetry::hot_count(probe_rejects_);

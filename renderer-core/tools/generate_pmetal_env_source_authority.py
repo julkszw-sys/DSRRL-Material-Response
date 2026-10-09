@@ -142,6 +142,7 @@ for ordinal, (signature, first, count) in enumerate(banks):
 
 lines = [
     "#pragma once",
+    "#include \"dsrrl/runtime/dsr_only_lightbank_rows_v1.hpp\"",
     "#include <array>",
     "#include <cstddef>",
     "#include <cstdint>",
@@ -172,9 +173,19 @@ lines += [
 
 lines += [
     "}};",
-    "constexpr const bank_donor *find_bank(std::uint64_t s) noexcept { for (const auto &b : k_banks) if (b.signature == s) return &b; return nullptr; }",
-    "constexpr const bank_donor *find_bank_by_layout(std::uint64_t s, std::uint32_t live_count) noexcept { for (const auto &b : k_banks) if (b.layout_signature == s && b.live_count == live_count) return &b; return nullptr; }",
-    "constexpr const donor_row *find_row(const bank_donor &b, std::uint32_t id) noexcept { if (b.first > k_rows.size() || b.count > k_rows.size() - b.first || id >= b.count) return nullptr; const auto &row = k_rows[b.first + id]; return row.id == id ? &row : nullptr; }",
+    "inline constexpr std::array<bank_donor,3> k_dsr_common_banks = {{",
+    "bank_donor{0x96ece3bed03eed01ULL,0x96ece3bed03eed01ULL,64u,0u,0u}, // default_LightBank DSR_ONLY",
+    "bank_donor{0x34bdd6493ca1a91aULL,0x34bdd6493ca1a91aULL,64u,0u,0u}, // m99_LightBank DSR_ONLY",
+    "bank_donor{0x91aa11098cee0fe2ULL,0x91aa11098cee0fe2ULL,64u,0u,0u}, // s99_LightBank DSR_ONLY",
+    "}};",
+    "constexpr const bank_donor *find_bank(std::uint64_t s) noexcept { for (const auto &b : k_banks) if (b.signature == s) return &b; for(const auto &b:k_dsr_common_banks)if(b.signature==s)return &b; return nullptr; }",
+    "constexpr const bank_donor *find_bank_by_layout(std::uint64_t s, std::uint32_t live_count) noexcept { for (const auto &b : k_banks) if (b.layout_signature == s && b.live_count == live_count) return &b; for(const auto &b:k_dsr_common_banks)if(b.layout_signature==s && b.live_count==live_count)return &b; return nullptr; }",
+    "inline constexpr std::array<donor_row,3> k_dsr_extra = {{",
+    "donor_row{dsr_only_lightbank_rows_v1::rows[0].id,dsr_only_lightbank_rows_v1::rows[0].r,dsr_only_lightbank_rows_v1::rows[0].g,dsr_only_lightbank_rows_v1::rows[0].b,dsr_only_lightbank_rows_v1::rows[0].m},",
+    "donor_row{dsr_only_lightbank_rows_v1::rows[1].id,dsr_only_lightbank_rows_v1::rows[1].r,dsr_only_lightbank_rows_v1::rows[1].g,dsr_only_lightbank_rows_v1::rows[1].b,dsr_only_lightbank_rows_v1::rows[1].m},",
+    "donor_row{dsr_only_lightbank_rows_v1::rows[2].id,dsr_only_lightbank_rows_v1::rows[2].r,dsr_only_lightbank_rows_v1::rows[2].g,dsr_only_lightbank_rows_v1::rows[2].b,dsr_only_lightbank_rows_v1::rows[2].m},",
+    "}};",
+    "constexpr const donor_row *find_row(const bank_donor &b, std::uint32_t id) noexcept { if (b.first > k_rows.size() || b.count > k_rows.size() - b.first || id >= b.live_count) return nullptr; if (id >= b.count) { for (std::size_t i=0;i<k_dsr_extra.size();++i) if (dsr_only_lightbank_rows_v1::rows[i].signature==b.signature && k_dsr_extra[i].id==id) return &k_dsr_extra[i]; return nullptr; } const auto &row = k_rows[b.first + id]; return row.id == id ? &row : nullptr; }",
     "} // namespace dsrrl::runtime::pmetal_env_source_authority",
 ]
 

@@ -28,11 +28,16 @@ inline constexpr std::array<bank_info,20> k_banks{{
     {0x1ecfd1e617c59071ULL,18},{0x4bf694db53edacc5ULL,18}
 }};
 constexpr unsigned bank_area(std::uint64_t signature) noexcept {
+    // Exact original DSR-only layouts. These are source classes, not map
+    // numbers: m99/s99 use a common 99-tag, default a 100-tag.
+    if (signature == 0x34bdd6493ca1a91aULL ||
+        signature == 0x91aa11098cee0fe2ULL) return 99u;
+    if (signature == 0x96ece3bed03eed01ULL) return 100u;
     for(auto b:k_banks)if(b.sig==signature)return b.area;
     return 0;
 }
 inline bool source_in_area(const pmetal_envspec_source &src,unsigned area) noexcept {
-    return area>=10 && area<=18 && bank_area(src.bank_signature_a)==area &&
+    return ((area>=10 && area<=18) || area==99u || area==100u) && bank_area(src.bank_signature_a)==area &&
         (src.beta==0.0f || bank_area(src.bank_signature_b)==area);
 }
 inline bool same_material(const material &a,const material &b) noexcept {
@@ -59,6 +64,7 @@ struct entry {
     pmetal_envspec_source source{};
     unsigned area=0;
     std::uint64_t generation=0;
+    std::uint64_t publication=0;
     bool valid=false;
 };
 struct set {
@@ -68,6 +74,7 @@ struct set {
 };
 inline std::array<set,256> groups{};
 inline std::atomic<std::uint64_t> current_generation{1};
+inline std::atomic<std::uint64_t> publication_clock{1};
 inline void invalidate() noexcept {
     current_generation.fetch_add(1u,std::memory_order_acq_rel);
 }
@@ -79,20 +86,24 @@ inline bool publish(const material &owner,const pmetal_envspec_source &source,
     auto &s=groups[fingerprint(owner,selector_area)&255u];
     std::lock_guard<std::mutex> lock(s.mutex);
     const auto generation=current_generation.load(std::memory_order_acquire);
+    const auto publication=publication_clock.fetch_add(1u,std::memory_order_relaxed);
     for(auto &slot:s.ways) {
         if(slot.valid && slot.generation==generation && slot.area==selector_area &&
            same_material(slot.owner,owner)) {
             slot.source=source;
+            slot.publication=publication;
             return true;
         }
     }
     auto &slot=s.ways[s.eviction++%s.ways.size()];
-    slot={owner,source,selector_area,generation,true};
+    slot={owner,source,selector_area,generation,publication,true};
     return true;
 }
-inline bool latest(const material &owner,unsigned area,pmetal_envspec_source &out) noexcept {
+inline bool latest(const material &owner,unsigned area,pmetal_envspec_source &out,
+                   std::uint64_t *stamp=nullptr) noexcept {
     out={};
-    if(!owner.valid || area<10 || area>18)return false;
+    if(stamp!=nullptr)*stamp=0;
+    if(!owner.valid || !((area>=10 && area<=18)||area==99u||area==100u))return false;
     auto &s=groups[fingerprint(owner,area)&255u];
     std::lock_guard<std::mutex> lock(s.mutex);
     const auto generation=current_generation.load(std::memory_order_acquire);
@@ -100,13 +111,40 @@ inline bool latest(const material &owner,unsigned area,pmetal_envspec_source &ou
         if(slot.valid && slot.generation==generation && slot.area==area &&
            same_material(slot.owner,owner) && source_in_area(slot.source,area)) {
             out=slot.source;
+            if(stamp!=nullptr)*stamp=slot.publication;
             return true;
         }
     }
     return false;
 }
+// An m99/default authored source is a whole-bank DSR donor, not a
+// different area GI probe. Select the most recently verified source
+// belonging to THIS material, with allowed classes {bound GI map, m99,
+// default}. Never admit a LightBank from another gameplay map.
+inline bool latest_for_probe(const material &owner,unsigned bound_map,
+                             pmetal_envspec_source &out,
+                             unsigned &source_area) noexcept {
+    out={};
+    source_area=0u;
+    if(bound_map<10u || bound_map>18u)return false;
+    std::uint64_t best=0;
+    for (auto area : {bound_map,99u,100u}) {
+        pmetal_envspec_source candidate{};
+        std::uint64_t stamp=0;
+        if(!latest(owner,area,candidate,&stamp))continue;
+        if(source_area==0u || stamp>best) {
+            out=candidate;
+            source_area=area;
+            best=stamp;
+        }
+    }
+    return source_area!=0u;
+}
 static_assert(probe_area(70)==10 && probe_area(337)==18);
 static_assert(probe_area(341)==18 && probe_area(342)==0);
 static_assert(bank_area(0x1ecfd1e617c59071ULL)==18);
+static_assert(bank_area(0x34bdd6493ca1a91aULL)==99);
+static_assert(bank_area(0x91aa11098cee0fe2ULL)==99);
+static_assert(bank_area(0x96ece3bed03eed01ULL)==100);
 static_assert(bank_area(0x4c594553d201d80cULL)==10);
 } // namespace dsrrl::runtime::pmetal_map_source

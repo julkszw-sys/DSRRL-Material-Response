@@ -48,11 +48,6 @@ injected="""    // High selector byte chooses the source area. The material/owne
     const unsigned selector_map =
         10u + ((static_cast<unsigned>(
                     static_cast<std::uint16_t>(endpoints.a)) >> 8u) & 0x7fu);
-    const bool map_blend_compatible =
-        endpoints.beta == 0.0f ||
-        (((static_cast<unsigned>(
-             static_cast<std::uint16_t>(endpoints.b)) >> 8u) & 0x7fu)
-         == selector_map - 10u);
     pmetal_envspec_source next{};
 
     // R41 producer-driven shadow join."""
@@ -61,9 +56,11 @@ old="""        next.serial = epoch;
         pmetal_producer_state_clear();"""
 new="""        next.serial = epoch;
 #if defined(DSRRL_PMETAL_R43_MAP_SOURCE_JOIN)
-        if (map_blend_compatible)
+        const unsigned origin = pmetal_map_source::bank_area(next.bank_signature_a);
+        if ((origin == selector_map || origin == 99u || origin == 100u) &&
+            pmetal_map_source::source_in_area(next,origin))
             (void)pmetal_map_source::publish(
-                material,next,selector_map);
+                material,next,origin);
 #endif
         pmetal_producer_state_clear();"""
 replace(old,new)
@@ -71,9 +68,11 @@ old="""    next.serial = epoch;
     pmetal_producer_state_clear();"""
 new="""    next.serial = epoch;
 #if defined(DSRRL_PMETAL_R43_MAP_SOURCE_JOIN)
-    if (map_blend_compatible)
+    const unsigned origin = pmetal_map_source::bank_area(next.bank_signature_a);
+    if ((origin == selector_map || origin == 99u || origin == 100u) &&
+        pmetal_map_source::source_in_area(next,origin))
         (void)pmetal_map_source::publish(
-            material,next,selector_map);
+            material,next,origin);
 #endif
     pmetal_producer_state_clear();"""
 replace(old,new)

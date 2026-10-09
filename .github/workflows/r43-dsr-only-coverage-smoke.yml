@@ -1,0 +1,15 @@
+name: R43 Donor Overlay Smoke
+on:
+  push:
+    branches:
+      - fix/r43-dsr-only-donor-row-coverage
+  workflow_dispatch:
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check original DSR-only rows
+        shell: pwsh
+        run: |
+          python -c "from pathlib import Path; x=Path('renderer-core/include/dsrrl/runtime/dsr_only_lightbank_rows_v1.hpp').read_text(); assert x.count('64u')==3"
