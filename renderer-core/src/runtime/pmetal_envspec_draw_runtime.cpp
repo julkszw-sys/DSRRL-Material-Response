@@ -47,6 +47,43 @@ std::atomic_bool g_native_envdiffuse_logged{false};
 std::atomic_bool g_envdiffuse_consumer_logged{false};
 std::atomic_bool g_source_frontier_logged{false};
 std::atomic_bool g_shadow_r7_logged{false};
+#if defined(DSRRL_EXPERIMENTAL_OTHER_METAL_PTDE_ENVSPEC)
+// Explicit source-ready and request-ready frontiers for each newly admitted
+// MTD. Does NOT label a prepared draw as executed or as PTDE pixel PASS.
+std::atomic<std::uint32_t> g_other_metal_stage_log_mask{0u};
+
+void log_other_metal_stage_once(
+    const char *stage,
+    std::uint32_t stage_ordinal,
+    const mr::material_identity &material,
+    const mr::decision &decision) noexcept
+{
+    const auto *identity = match_ptde_metal_envspec_material(material);
+    if (identity == nullptr ||
+        identity->profile == ptde_metal_envspec_profile::pmetal_baseline ||
+        stage_ordinal > 1u)
+        return;
+    const auto index =
+        static_cast<std::uint32_t>(identity->profile) -
+        static_cast<std::uint32_t>(ptde_metal_envspec_profile::pmetal_alp);
+    if (index >= 3u)
+        return;
+    const auto bit = 1u << (stage_ordinal * 3u + index);
+    if ((g_other_metal_stage_log_mask.fetch_or(
+             bit, std::memory_order_relaxed) & bit) != 0u)
+        return;
+    char message[320]{};
+    std::snprintf(
+        message, sizeof(message),
+        "[DSRRL OTHER METAL PTDE] stage=%s profile=%u route=%u rx=%u slot=%u source_key=EXACT_MATERIAL no_unkeyed_hook_fallback=1 pixel=OPEN",
+        stage,
+        static_cast<unsigned>(identity->profile),
+        static_cast<unsigned>(decision.route_index),
+        static_cast<unsigned>(decision.receiver_id),
+        static_cast<unsigned>(material.material_slot));
+    reshade::log::message(reshade::log::level::info, message);
+}
+#endif
 #if !defined(DSRRL_RELEASE_CLEANUP)
 std::atomic<std::uint32_t> g_prepare_stage_log_mask{0u};
 std::atomic<std::uint32_t> g_value_cut_log_mask{0u};
@@ -893,6 +930,11 @@ bool pmetal_envspec_draw_runtime::prepare(
         return false;
     }
     effect_latch(effect_source_ready_);
+#if defined(DSRRL_EXPERIMENTAL_OTHER_METAL_PTDE_ENVSPEC)
+    if (experimental_material)
+        log_other_metal_stage_once(
+            "source_ready", 0u, material, decision);
+#endif
 
 #if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG)
 #if !defined(DSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE)
@@ -1968,6 +2010,11 @@ bool pmetal_envspec_draw_runtime::prepare(
     prepared.ready = true;
     effect_latch(effect_request_ready_);
     telemetry::hot_count(requests_);
+#if defined(DSRRL_EXPERIMENTAL_OTHER_METAL_PTDE_ENVSPEC)
+    if (experimental_material)
+        log_other_metal_stage_once(
+            "request_ready", 1u, material, decision);
+#endif
 
     if (stable_envdiffuse_consumer_diag &&
         !g_envdiffuse_consumer_logged.exchange(
