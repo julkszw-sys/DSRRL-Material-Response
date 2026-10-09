@@ -32,6 +32,7 @@ mr::material_identity material(
     identity.material_slot = 2u;
     identity.route_index = route;
     identity.semantic_name_hash = mr::mtd_semantic_hash(name);
+    identity.material_family_hash = mr::mtd_semantic_hash("DifSpcBmp");
     identity.flver_sha256[0] = 0xa5u;
     for (std::size_t j = 0u; j < identity.raw_mtd_sha256.size(); ++j)
         identity.raw_mtd_sha256[j] =
@@ -49,6 +50,23 @@ void expect_valid(
     assert(match != nullptr);
     assert(match->route_index == route);
     assert(match->profile == expected);
+
+    mr::mtd_semantic_query query{};
+    query.material = x;
+    query.receiver_id = 33u;
+    query.ownership.flver_sha256 = x.flver_sha256;
+    query.ownership.material_slot = x.material_slot;
+    query.ownership.material_slot_valid = x.material_slot_valid;
+    query.ownership.exact = x.owner_tuple_exact;
+    const auto env = mr::classify_mtd_envspec_semantics(query);
+    assert(env.exact_identity_match);
+    assert(env.presence == mr::ptde_envspec_presence::present);
+    assert(env.router_state == mr::mtd_envspec_router_state::present);
+    assert(env.envspc_slot_valid && env.envspc_slot == 2u);
+    // MTD-based EnvSpec positive routing cannot by itself certify a
+    // resource consumer. This fake test FLVER is NOT an asset-ownership
+    // proof and must never become a SpecRGB authorization token.
+
 
     // All gates must use exact material context, not just a shared shader.
     auto bad = x;
