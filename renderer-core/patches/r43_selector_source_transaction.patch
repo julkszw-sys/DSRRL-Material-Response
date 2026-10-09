@@ -1,0 +1,29 @@
+diff --git a/renderer-core/src/runtime/pmetal_env_source_runtime.cpp b/renderer-core/src/runtime/pmetal_env_source_runtime.cpp
+--- a/renderer-core/src/runtime/pmetal_env_source_runtime.cpp
++++ b/renderer-core/src/runtime/pmetal_env_source_runtime.cpp
+@@ -2543,12 +2543,6 @@ void pmetal_env_source_selector_event(
+     const auto epoch =
+         g_selector_epoch.load(
+             std::memory_order_relaxed);
+-
+-    // This exact material now owns the next synchronized source publication.
+-    // Invalidate any older selector fallback before downstream decode.
+-    pmetal_producer_state_begin(
+-        material,
+-        epoch);
+ 
+     if (telemetry::effect_enabled())
+         g_selector_exact_seen.store(
+@@ -2723,6 +2717,13 @@ void pmetal_env_source_selector_event(
+         source_b == nullptr)
+         return;
+ 
++    // A rejected selector must not invalidate a previously verified source.
++    // Commit only after validating callsite, parent, descriptor and source.
++    pmetal_producer_state_begin(
++        material,
++        epoch);
++
+     pmetal_envspec_source next{};
+ 
+     // R41 producer-driven shadow join.
