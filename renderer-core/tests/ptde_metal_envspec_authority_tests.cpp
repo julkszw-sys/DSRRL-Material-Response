@@ -43,13 +43,14 @@ mr::material_identity material(
 
 void expect_valid(
     const char *name, std::uint32_t route, const char *sha,
-    rt::ptde_metal_envspec_profile expected)
+    rt::ptde_metal_envspec_profile expected, std::uint8_t expected_slot = 2u)
 {
     auto x = material(name, route, sha);
     const auto *match = rt::match_ptde_metal_envspec_material(x);
     assert(match != nullptr);
     assert(match->route_index == route);
     assert(match->profile == expected);
+    assert(match->envspc_slot == expected_slot);
     assert(rt::should_dispatch_ptde_metal_selector_source(x));
 
     mr::mtd_semantic_query query{};
@@ -63,7 +64,7 @@ void expect_valid(
     assert(env.exact_identity_match);
     assert(env.presence == mr::ptde_envspec_presence::present);
     assert(env.router_state == mr::mtd_envspec_router_state::present);
-    assert(env.envspc_slot_valid && env.envspc_slot == 2u);
+    assert(env.envspc_slot_valid && env.envspc_slot == expected_slot);
     // MTD-based EnvSpec positive routing cannot by itself certify a
     // resource consumer. This fake test FLVER is NOT an asset-ownership
     // proof and must never become a SpecRGB authorization token.
