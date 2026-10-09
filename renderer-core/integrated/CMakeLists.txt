@@ -254,6 +254,7 @@ option(DSRRL_PMETAL_SELECTOR_DECODE_FRONTIER_DIAG "Diagnostic authenticated P_Me
 option(DSRRL_PMETAL_EXACT_DSR_ROW64_HYBRID "Use exact DSR-only LightBank ID64 in otherwise PTDE bridge" OFF)
 option(DSRRL_PMETAL_ASYLUM_CROSS_BANK_TRACE "Observe raw selector, native callsite, owner, source and bank m10/m18 changes, no source override" OFF)
 option(DSRRL_PMETAL_ASYLUM_DRAW_SOURCE_JOIN_TRACE "Trace producer callsite metadata as actually consumed by RX33 RX34, diagnostic only" OFF)
+option(DSRRL_PMETAL_ASYLUM_NATIVE_PASS_BINDING_TRACE "Sample native PS and PS constant-buffer bindings at RX33 RX34 before island transaction; never read back GPU contents" OFF)
 option(DSRRL_PMETAL_SPEC_CUT_TRACE
     "Diagnostic: per-owner sampled P_Metal SpecRGB t1 registry and PTDE/stock transition trace"
     OFF)
@@ -781,6 +782,12 @@ if(DSRRL_PMETAL_ASYLUM_DRAW_SOURCE_JOIN_TRACE)
         message(FATAL_ERROR "Consumer provenance requires both exact Asylum selector trace and receiver spec-cut diagnostic")
     endif()
     target_compile_definitions(dsrrl_renderer_core_integrated PRIVATE DSRRL_PMETAL_ASYLUM_DRAW_SOURCE_JOIN_TRACE)
+endif()
+if(DSRRL_PMETAL_ASYLUM_NATIVE_PASS_BINDING_TRACE)
+    if(NOT DSRRL_PMETAL_ASYLUM_DRAW_SOURCE_JOIN_TRACE OR NOT DSRRL_PMETAL_SPEC_CUT_TRACE)
+        message(FATAL_ERROR "Native pass CB binding snapshot requires authenticated producer/receiver material join and sampled spec cut")
+    endif()
+    target_compile_definitions(dsrrl_renderer_core_integrated PRIVATE DSRRL_PMETAL_ASYLUM_NATIVE_PASS_BINDING_TRACE)
 endif()
 if(DSRRL_PMETAL_SPEC_CUT_TRACE)
     target_compile_definitions(
