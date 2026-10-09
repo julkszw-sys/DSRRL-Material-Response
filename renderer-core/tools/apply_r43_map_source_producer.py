@@ -77,14 +77,16 @@ new="""    next.serial = epoch;
 #endif
     pmetal_producer_state_clear();"""
 replace(old,new)
-replace("""    pmetal_env_source_cache_invalidate();
-    pmetal_env_source_selector_clear();
-    clear_hook_source();""",
-"""    pmetal_env_source_cache_invalidate();
+replace("""    g_source_cache_generation.fetch_add(
+        1u,
+        std::memory_order_relaxed);
+}""",
+"""    g_source_cache_generation.fetch_add(
+        1u,
+        std::memory_order_relaxed);
 #if defined(DSRRL_PMETAL_R43_MAP_SOURCE_JOIN)
     pmetal_map_source::invalidate();
 #endif
-    pmetal_env_source_selector_clear();
-    clear_hook_source();""")
+}""")
 p.write_text(s)
 print("PASS R43 map-scoped producer source patch")
