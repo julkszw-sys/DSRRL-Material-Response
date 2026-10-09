@@ -1,5 +1,8 @@
 #include "dsrrl/operators/material_response/ptde_workflow_c100.hpp"
 
+#ifdef NDEBUG
+#undef NDEBUG
+#endif
 #include <cassert>
 #include <cstdint>
 #include <vector>
