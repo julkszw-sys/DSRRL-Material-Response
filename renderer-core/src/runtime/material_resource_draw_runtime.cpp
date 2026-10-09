@@ -1289,9 +1289,6 @@ void on_destroy_resource(
     g_ambiguous_named_resource_device.erase(resource.handle);
 }
 #endif
-#if !defined(DSRRL_RESOURCE_EPOCH_SHARD_SYNC)
-std::atomic<std::uint64_t> g_cache_epoch{1u};
-#endif
 
 void on_init_resource_view(
     reshade::api::device *device,
