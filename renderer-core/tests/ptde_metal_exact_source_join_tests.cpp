@@ -1,6 +1,7 @@
 // No game process or new screen captures are needed. Verify the actual
 // producer transport used by experimental metal EnvSpec draw consumers.
 #include "dsrrl/runtime/pmetal_producer_state.hpp"
+#include "dsrrl/operators/material_response/mtd_semantic_census.hpp"
 
 #ifdef NDEBUG
 #undef NDEBUG
