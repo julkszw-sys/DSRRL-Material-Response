@@ -70,7 +70,7 @@ def main() -> None:
                 f"{name}: two independent raw MTD digests disagree")
         require(mr["material_family"] == "DifSpcBmp",
                 f"{name}: unverified receiver family")
-        require(mr["receiver_triplet"] == "33,34,35",
+        require(mr["receiver_triplet"] == [33, 34, 35],
                 f"{name}: unverified stable receiver triplet")
         require(float(mr["c101"]) == 2.5,
                 f"{name}: original source c101 no longer applies")
