@@ -64,6 +64,7 @@ struct entry {
     pmetal_envspec_source source{};
     unsigned area=0;
     std::uint64_t generation=0;
+    std::uint64_t publication=0;
     bool valid=false;
 };
 struct set {
@@ -73,6 +74,7 @@ struct set {
 };
 inline std::array<set,256> groups{};
 inline std::atomic<std::uint64_t> current_generation{1};
+inline std::atomic<std::uint64_t> publication_clock{1};
 inline void invalidate() noexcept {
     current_generation.fetch_add(1u,std::memory_order_acq_rel);
 }
@@ -84,19 +86,23 @@ inline bool publish(const material &owner,const pmetal_envspec_source &source,
     auto &s=groups[fingerprint(owner,selector_area)&255u];
     std::lock_guard<std::mutex> lock(s.mutex);
     const auto generation=current_generation.load(std::memory_order_acquire);
+    const auto publication=publication_clock.fetch_add(1u,std::memory_order_relaxed);
     for(auto &slot:s.ways) {
         if(slot.valid && slot.generation==generation && slot.area==selector_area &&
            same_material(slot.owner,owner)) {
             slot.source=source;
+            slot.publication=publication;
             return true;
         }
     }
     auto &slot=s.ways[s.eviction++%s.ways.size()];
-    slot={owner,source,selector_area,generation,true};
+    slot={owner,source,selector_area,generation,publication,true};
     return true;
 }
-inline bool latest(const material &owner,unsigned area,pmetal_envspec_source &out) noexcept {
+inline bool latest(const material &owner,unsigned area,pmetal_envspec_source &out,
+                   std::uint64_t *stamp=nullptr) noexcept {
     out={};
+    if(stamp!=nullptr)*stamp=0;
     if(!owner.valid || !((area>=10 && area<=18)||area==99u||area==100u))return false;
     auto &s=groups[fingerprint(owner,area)&255u];
     std::lock_guard<std::mutex> lock(s.mutex);
@@ -105,10 +111,34 @@ inline bool latest(const material &owner,unsigned area,pmetal_envspec_source &ou
         if(slot.valid && slot.generation==generation && slot.area==area &&
            same_material(slot.owner,owner) && source_in_area(slot.source,area)) {
             out=slot.source;
+            if(stamp!=nullptr)*stamp=slot.publication;
             return true;
         }
     }
     return false;
+}
+// An m99/default authored source is a whole-bank DSR donor, not a
+// different area GI probe. Select the most recently verified source
+// belonging to THIS material, with allowed classes {bound GI map, m99,
+// default}. Never admit a LightBank from another gameplay map.
+inline bool latest_for_probe(const material &owner,unsigned bound_map,
+                             pmetal_envspec_source &out,
+                             unsigned &source_area) noexcept {
+    out={};
+    source_area=0u;
+    if(bound_map<10u || bound_map>18u)return false;
+    std::uint64_t best=0;
+    for (auto area : {bound_map,99u,100u}) {
+        pmetal_envspec_source candidate{};
+        std::uint64_t stamp=0;
+        if(!latest(owner,area,candidate,&stamp))continue;
+        if(source_area==0u || stamp>best) {
+            out=candidate;
+            source_area=area;
+            best=stamp;
+        }
+    }
+    return source_area!=0u;
 }
 static_assert(probe_area(70)==10 && probe_area(337)==18);
 static_assert(probe_area(341)==18 && probe_area(342)==0);
