@@ -96,7 +96,7 @@ jobs:
           cmake -S renderer-core/integrated -B build-prof -A x64
           -DRESHADE_INCLUDE_DIR="${{ github.workspace }}/_reshade/include"
           -DDSRRL_SOURCE_COMMIT="$env:DSRRL_CHECKOUT_COMMIT"
-          -DDSRRL_BUILD_FLAVOR="v2_0_2_pmetal_asylum_native_map_cut"
+          -DDSRRL_BUILD_FLAVOR="v2_0_2_pmetal_r10e_atmos_candidate"
           -DDSRRL_RELEASE_CLEANUP=OFF
           -DDSRRL_STUTTER_PROFILE=ON
           -DDSRRL_STUTTER_HITCH_TRACE=ON
@@ -122,6 +122,7 @@ jobs:
           -DDSRRL_PMETAL_FULL_PTDE_HEMENV_R4=ON
           -DDSRRL_PMETAL_FULL_PTDE_HEMENV_R5=ON
           -DDSRRL_PMETAL_FULL_PTDE_HEMENV_R6=ON
+          -DDSRRL_PMETAL_FULL_PTDE_HEMENV_R10E_ATMOS_DOMAIN=ON
           -DDSRRL_PMETAL_FULL_PTDE_HEMENV_R7_SHADOW=ON
           -DDSRRL_PMETAL_FULL_PTDE_HEMENV_R8_PRE_AB=ON
           -DDSRRL_PMETAL_FULL_PTDE_HEMENV_R11_COMMON_MERGE=ON
@@ -139,7 +140,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           $addons = @(Get-ChildItem build-prof -Recurse -Filter *.addon64)
           if ($addons.Count -ne 1) { throw "Expected one addon, got $($addons.Count)" }
-          Copy-Item $addons[0].FullName "DSRRL_v2.0.2_PR292_NATIVE_MAP_CUT.addon64"
+          Copy-Item $addons[0].FullName "DSRRL_v2.0.2_PR292_R10E_ATMOS_CANDIDATE.addon64"
       - name: Windows 1 MiB stack writer registry startup smoke
         shell: pwsh
         run: |
@@ -192,7 +193,7 @@ jobs:
       - name: Verify v2.0.2 full MR diagnostic identity
         shell: pwsh
         run: |
-          $path = "DSRRL_v2.0.2_PR292_NATIVE_MAP_CUT.addon64"
+          $path = "DSRRL_v2.0.2_PR292_R10E_ATMOS_CANDIDATE.addon64"
           $bytes = [System.IO.File]::ReadAllBytes($path)
           $ascii = [System.Text.Encoding]::ASCII.GetString($bytes)
           if (-not $ascii.Contains($env:DSRRL_CHECKOUT_COMMIT)) { throw "Wrong source" }
@@ -213,7 +214,7 @@ jobs:
           if (-not $ascii.Contains("[DSRRL PMETAL NATIVE MAP CUT]")) { throw "Native Map context cut not linked into final addon" }
           if ($ascii.Contains("[DSRRL PMETAL M18 ROW64 ENVSPEC05 TEST]")) { throw "Experimental EnvSpec override leaked into rollback" }
           if ($ascii.Contains("[DSRRL DDS SRV POOL]")) { throw "DDS pool leaked into release" }
-          if (-not $ascii.Contains("v2_0_2_pmetal_asylum_native_map_cut")) { throw "Missing diagnostic flavor" }
+          if (-not $ascii.Contains("v2_0_2_pmetal_r10e_atmos_candidate")) { throw "Missing diagnostic flavor" }
           if (-not $ascii.Contains("2.0.2")) { throw "Missing version" }
           Get-FileHash $path -Algorithm SHA256 | Format-List
       - name: Verify complete diagnostic flag profile
@@ -238,6 +239,7 @@ jobs:
             "DSRRL_PMETAL_ASYLUM_CB_REGISTER_TRACE:BOOL=ON",
             "DSRRL_PMETAL_ASYLUM_DEFERRED_TOPOLOGY_TRACE:BOOL=ON",
             "DSRRL_PMETAL_ASYLUM_NATIVE_MAP_CUT:BOOL=ON",
+            "DSRRL_PMETAL_FULL_PTDE_HEMENV_R10E_ATMOS_DOMAIN:BOOL=ON",
             "DSRRL_RESOURCE_EPOCH_SHARD_SYNC:BOOL=ON",
             "DSRRL_COMPANION_TLS_4WAY:BOOL=ON",
             "DSRRL_PHYSICAL_CUT_UL_H3_SUBSURFACE:BOOL=ON",
@@ -249,7 +251,7 @@ jobs:
       - name: Generate build provenance and diagnostic ZIP
         shell: pwsh
         run: |
-          $bin = "DSRRL_v2.0.2_PR292_NATIVE_MAP_CUT.addon64"
+          $bin = "DSRRL_v2.0.2_PR292_R10E_ATMOS_CANDIDATE.addon64"
           $sha = (Get-FileHash $bin -Algorithm SHA256).Hash.ToLowerInvariant()
           "$sha  $bin" | Set-Content -Encoding ascii SHA256SUMS.txt
           $prov = [ordered]@{
@@ -274,24 +276,24 @@ jobs:
             runtime_liveness = "NOT_TESTED_ON_OWNER"
             pixel_equivalence = "OPEN"
             source_values = "PR286 unchanged 1246 PTDE common rows and original 3 DSR-only rows"
-            diagnostic = "PR292 bounded native D3D11 Map/Unmap to per-RX33/RX34 exact PS b0 buffer/context witness with original COM call-through; no GPU read or PTDE pixel claims"
+            diagnostic = "PR292 exact-preimage RX33/RX34 PTDE Fog/LightScattering R10E shader-domain operator replacement plus previous native b0 map witness; pixel match unverified"
             retired_experiment = "PR287 m18/64 EnvSpec0.5 disabled by source provenance"
           }
-          $prov | ConvertTo-Json -Depth 5 | Set-Content -Encoding utf8 DSRRL_v2.0.2_PR292_NATIVE_MAP_CUT_PROVENANCE.json
+          $prov | ConvertTo-Json -Depth 5 | Set-Content -Encoding utf8 DSRRL_v2.0.2_PR292_R10E_ATMOS_CANDIDATE_PROVENANCE.json
           New-Item -ItemType Directory -Path diag-stage -Force | Out-Null
-          Copy-Item $bin,SHA256SUMS.txt,DSRRL_v2.0.2_PR292_NATIVE_MAP_CUT_PROVENANCE.json diag-stage/
+          Copy-Item $bin,SHA256SUMS.txt,DSRRL_v2.0.2_PR292_R10E_ATMOS_CANDIDATE_PROVENANCE.json diag-stage/
           Copy-Item diagnostics/v2.0.2/README_PMETAL_SPEC_TRANSITIONS.md diag-stage/README_PMETAL_SPEC_TRANSITIONS.md
-          Compress-Archive -Path diag-stage/* -DestinationPath DSRRL_v2.0.2_PR292_NATIVE_MAP_CUT.zip
-          Expand-Archive DSRRL_v2.0.2_PR292_NATIVE_MAP_CUT.zip diag-check -Force
+          Compress-Archive -Path diag-stage/* -DestinationPath DSRRL_v2.0.2_PR292_R10E_ATMOS_CANDIDATE.zip
+          Expand-Archive DSRRL_v2.0.2_PR292_R10E_ATMOS_CANDIDATE.zip diag-check -Force
           $addons = @(Get-ChildItem diag-check -Recurse -Filter *.addon64)
           if ($addons.Count -ne 1) { throw "Expected exactly one addon in diagnostic ZIP" }
           if ((Get-FileHash $addons[0].FullName).Hash -ne (Get-FileHash $bin).Hash) { throw "ZIP SHA mismatch" }
       - uses: actions/upload-artifact@v4
         with:
-          name: DSRRL_v2.0.2_PR292_NATIVE_MAP_CUT
+          name: DSRRL_v2.0.2_PR292_R10E_ATMOS_CANDIDATE
           path: |
-            DSRRL_v2.0.2_PR292_NATIVE_MAP_CUT.addon64
-            DSRRL_v2.0.2_PR292_NATIVE_MAP_CUT.zip
-            DSRRL_v2.0.2_PR292_NATIVE_MAP_CUT_PROVENANCE.json
+            DSRRL_v2.0.2_PR292_R10E_ATMOS_CANDIDATE.addon64
+            DSRRL_v2.0.2_PR292_R10E_ATMOS_CANDIDATE.zip
+            DSRRL_v2.0.2_PR292_R10E_ATMOS_CANDIDATE_PROVENANCE.json
             SHA256SUMS.txt
           if-no-files-found: error
