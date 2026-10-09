@@ -12,6 +12,14 @@ compiled = re.findall(pattern, header)
 assert len(compiled) == 25, len(compiled)
 
 assert len({r[2] for r in compiled}) == len(compiled)
+excluded = ("Body", "body", "FaceGen", "S_Metal")
+eligible = [
+    x for x in routes
+    if x["material_family"] == "DifSpcBmp"
+    and x["receiver_triplet"] == [33, 34, 35]
+    and not any(word in x["mtd_name"] for word in excluded)
+    and x["mtd_name"] != "P_DullLeather[DSB].mtd"
+]
 for profile, route, name, sha, gain, slot in compiled:
     matches = [x for x in routes if x["mtd_name"] == name]
     assert len(matches) == 1, name
