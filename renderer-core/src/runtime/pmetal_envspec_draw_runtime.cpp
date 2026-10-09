@@ -68,10 +68,10 @@ void log_other_metal_stage_once(
     const auto index =
         static_cast<std::uint32_t>(identity->profile) -
         static_cast<std::uint32_t>(ptde_metal_envspec_profile::pmetal_alp);
-    if (index >= 3u)
+    if (index >= k_experimental_spc_count)
         return;
-    const auto bit = 1u << (stage_ordinal * 3u + index);
-    if ((g_other_metal_stage_log_mask.fetch_or(
+    const auto bit = 1u << index;
+    if ((g_other_metal_stage_log_masks[stage_ordinal].fetch_or(
              bit, std::memory_order_relaxed) & bit) != 0u)
         return;
     char message[320]{};
