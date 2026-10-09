@@ -34,6 +34,9 @@ struct pmetal_rgba_materialize_outcome {
     // R6: exact PHN k135->SAT consumer is present. This flag says nothing
     // about producer validity; an unresolved producer uses unity fail-open.
     bool phn_scene_encoding_composed = false;
+    // Operator-local PTDE legacy-domain Fog + LightScattering continuation;
+    // exact RX33/RX34 stock shader bytes are the guard, never global ToneMap.
+    bool atmosphere_domain_composed = false;
     // R7: exact PTDE Csd/Sdw shadow visibility producer is present on
     // stable receivers 33/34. Plain receiver 35 has no such branch.
     bool shadow_visibility_kernel_composed = false;

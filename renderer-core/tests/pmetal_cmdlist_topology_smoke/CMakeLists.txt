@@ -1,0 +1,5 @@
+cmake_minimum_required(VERSION 3.20)
+project(dsrrl_pmetal_cmdlist_topology_smoke LANGUAGES CXX)
+add_executable(dsrrl_pmetal_cmdlist_topology_smoke ../pmetal_cmdlist_topology_smoke.cpp)
+target_compile_features(dsrrl_pmetal_cmdlist_topology_smoke PRIVATE cxx_std_17)
+target_include_directories(dsrrl_pmetal_cmdlist_topology_smoke PRIVATE ../../include)

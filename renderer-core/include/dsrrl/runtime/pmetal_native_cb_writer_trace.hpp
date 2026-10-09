@@ -1,5 +1,8 @@
 #pragma once
 #include <cstdint>
+#if defined(DSRRL_PMETAL_ASYLUM_CB_REGISTER_TRACE)
+#include <array>
+#endif
 
 namespace dsrrl::runtime {
 
@@ -14,6 +17,14 @@ struct pmetal_native_cb_writer_stamp {
     std::uint8_t method = 0u; // 1=Map/Unmap, 2=UpdateSubresource
     bool watched = false;
     bool complete = false;
+#if defined(DSRRL_PMETAL_ASYLUM_CB_REGISTER_TRACE)
+    // Complete 16-byte register hashes for CPU writes only. Fixed ABI:
+    // b0 2064 bytes => c0..c128, b1 48 bytes => c0..c2.
+    // Exact snapshots accompany epoch/hash inside the SAME mutex-protected
+    // stamp. A partial upload NEVER claims a valid register fingerprint.
+    std::array<std::uint64_t,129> register_hashes{};
+    std::uint16_t register_count = 0u;
+#endif
 };
 
 void pmetal_native_cb_writer_watch(

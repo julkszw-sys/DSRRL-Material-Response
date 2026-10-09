@@ -1,0 +1,8 @@
+cmake_minimum_required(VERSION 3.20)
+project(dsrrl_pmetal_native_map_cut_smoke LANGUAGES CXX)
+if(NOT WIN32)
+    message(FATAL_ERROR "Windows D3D11 COM trampoline test only")
+endif()
+add_executable(dsrrl_pmetal_native_map_cut_smoke ../pmetal_native_map_cut_smoke.cpp)
+target_compile_features(dsrrl_pmetal_native_map_cut_smoke PRIVATE cxx_std_17)
+target_include_directories(dsrrl_pmetal_native_map_cut_smoke PRIVATE ../../include)

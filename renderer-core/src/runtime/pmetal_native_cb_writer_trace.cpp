@@ -93,6 +93,16 @@ void publish_write(
     next.method=method;
     next.watched=true;
     next.complete=count==width;
+#if defined(DSRRL_PMETAL_ASYLUM_CB_REGISTER_TRACE)
+    // Hash only fully captured CPU-side float4-sized registers.
+    // The b0/b1 ABI and per-register semantic names remain UNVERIFIED.
+    if (next.complete && (width % 16u) == 0u) {
+        next.register_count=static_cast<std::uint16_t>(width/16u);
+        const auto *bytes=static_cast<const std::uint8_t *>(data);
+        for (std::uint32_t i=0u;i<next.register_count;++i)
+            next.register_hashes[i]=hash_bytes(bytes+i*16u,16u);
+    }
+#endif
     {
         std::lock_guard<std::mutex> guard(g_mutex);
         auto *slot=find_locked(key,false);
@@ -171,7 +181,12 @@ void pmetal_native_cb_writer_destroy(
 }
 void pmetal_native_cb_writer_reset() noexcept {
     std::lock_guard<std::mutex> guard(g_mutex);
-    g_watches={};
+    // PR292: Each watched_cb now stores 129 register hashes. Assigning {}
+    // to the entire 4096-entry array materializes a multi-megabyte temporary
+    // on the Windows 1 MB default thread stack during addon startup.
+    // Clear entries individually with bounded stack use.
+    for (auto &entry : g_watches)
+        entry = {};
     g_next_epoch.store(0u,std::memory_order_relaxed);
     g_mapped={};
 }

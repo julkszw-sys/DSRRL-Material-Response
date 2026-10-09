@@ -106,6 +106,8 @@ option(
     "Cumulative stable P_Metal PTDE HemEnv successor: R3+R4+R5 plus source-gated PHN k135 terminal consumer; atmosphere continuation follows the selected lineage"
     OFF)
 
+option(DSRRL_PMETAL_FULL_PTDE_HEMENV_R10E_ATMOS_DOMAIN "Exact RX33/RX34 PTDE legacy Fog LightScattering shader-domain island; no PTDE gain guess" OFF)
+
 option(
     DSRRL_PMETAL_FULL_PTDE_HEMENV_R7_SHADOW
     "Stable P_Metal Csd/Sdw: replace DSR 3x3 comparison shadow visibility producer with exact PTDE 4x4 packed-depth PCF16 and exact regular stage-7 sampler"
@@ -256,6 +258,9 @@ option(DSRRL_PMETAL_ASYLUM_CROSS_BANK_TRACE "Observe raw selector, native callsi
 option(DSRRL_PMETAL_ASYLUM_DRAW_SOURCE_JOIN_TRACE "Trace producer callsite metadata as actually consumed by RX33 RX34, diagnostic only" OFF)
 option(DSRRL_PMETAL_ASYLUM_NATIVE_PASS_BINDING_TRACE "Sample native PS and PS constant-buffer bindings at RX33 RX34 before island transaction; never read back GPU contents" OFF)
 option(DSRRL_PMETAL_ASYLUM_CB_WRITER_TRACE "Capture CPU Map/Unmap and UpdateSubresource hashes and epochs for exact watched native b0/b1, no GPU readback or mutation" OFF)
+option(DSRRL_PMETAL_ASYLUM_CB_REGISTER_TRACE "Fingerprint all 129 native b0 float4-sized CPU registers on exact complete writes at authentic P_Metal draws; no writer ABI claims" OFF)
+option(DSRRL_PMETAL_ASYLUM_DEFERRED_TOPOLOGY_TRACE "Read-only ReShade D3D11 Finish-versus-Execute command-list provenance, not native GPU draw authority" OFF)
+option(DSRRL_PMETAL_ASYLUM_NATIVE_MAP_CUT "Bounded diagnostic native D3D11 Map/Unmap context-to-b0 witness, no CB/PS mutation" OFF)
 option(DSRRL_PMETAL_SPEC_CUT_TRACE
     "Diagnostic: per-owner sampled P_Metal SpecRGB t1 registry and PTDE/stock transition trace"
     OFF)
@@ -798,6 +803,24 @@ if(DSRRL_PMETAL_ASYLUM_CB_WRITER_TRACE)
         "${DSRRL_RENDERER_CORE_ROOT}/src/runtime/pmetal_native_cb_writer_trace.cpp")
     target_compile_definitions(dsrrl_renderer_core_integrated PRIVATE DSRRL_PMETAL_ASYLUM_CB_WRITER_TRACE)
 endif()
+if(DSRRL_PMETAL_ASYLUM_CB_REGISTER_TRACE)
+    if(NOT DSRRL_PMETAL_ASYLUM_CB_WRITER_TRACE)
+        message(FATAL_ERROR "b0 register fingerprint diagnostic requires exact CPU writer epochs and native PS bindings")
+    endif()
+    target_compile_definitions(dsrrl_renderer_core_integrated PRIVATE DSRRL_PMETAL_ASYLUM_CB_REGISTER_TRACE)
+endif()
+if(DSRRL_PMETAL_ASYLUM_NATIVE_MAP_CUT)
+    if(NOT DSRRL_PMETAL_ASYLUM_DEFERRED_TOPOLOGY_TRACE)
+        message(FATAL_ERROR "Native Map witness requires deferred topology and exact RX33/34 routing")
+    endif()
+    target_compile_definitions(dsrrl_renderer_core_integrated PRIVATE DSRRL_PMETAL_ASYLUM_NATIVE_MAP_CUT)
+endif()
+if(DSRRL_PMETAL_ASYLUM_DEFERRED_TOPOLOGY_TRACE)
+    if(NOT DSRRL_PMETAL_ASYLUM_CB_WRITER_TRACE OR NOT DSRRL_PMETAL_ASYLUM_NATIVE_PASS_BINDING_TRACE)
+        message(FATAL_ERROR "Deferred list diagnostic requires native source/receiver and CPU writer provenance")
+    endif()
+    target_compile_definitions(dsrrl_renderer_core_integrated PRIVATE DSRRL_PMETAL_ASYLUM_DEFERRED_TOPOLOGY_TRACE)
+endif()
 if(DSRRL_PMETAL_SPEC_CUT_TRACE)
     target_compile_definitions(
         dsrrl_renderer_core_integrated
@@ -912,6 +935,13 @@ if(DSRRL_PMETAL_FULL_PTDE_HEMENV_R6)
         dsrrl_renderer_core_integrated
         PRIVATE
         $<$<COMPILE_LANGUAGE:CXX>:DSRRL_PMETAL_FULL_PTDE_HEMENV_R6>)
+endif()
+
+if(DSRRL_PMETAL_FULL_PTDE_HEMENV_R10E_ATMOS_DOMAIN)
+    if(NOT DSRRL_PMETAL_FULL_PTDE_HEMENV_R6)
+        message(FATAL_ERROR "P_Metal atmosphere island requires cumulative PTDE R6 shader consumer")
+    endif()
+    target_compile_definitions(dsrrl_renderer_core_integrated PRIVATE DSRRL_PMETAL_FULL_PTDE_HEMENV_R10E_ATMOS_DOMAIN)
 endif()
 
 if(DSRRL_PMETAL_FULL_PTDE_HEMENV_R7_SHADOW)

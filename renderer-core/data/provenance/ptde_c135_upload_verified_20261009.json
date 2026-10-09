@@ -1,0 +1,23 @@
+{
+  "source_exe_sha256": "88d1eec18eba2542c9c7e5e6903e89f9c075b20be5cd045ce6e568e7b22bea9d",
+  "identity": "PTDE DATA.exe PE32 2012",
+  "producer_class": "ShaderConstant_ToneMapEntity",
+  "vtable_va": "0x011c7790",
+  "virtual_slot": 8,
+  "upload_va": "0x0042b0e0",
+  "register": 135,
+  "source_object_offset": "0x60",
+  "lanes": 4,
+  "constructor_va": "0x00f8fcd0",
+  "constructor_default": [
+    0,
+    0,
+    0,
+    1
+  ],
+  "dynamic_value": "OPEN",
+  "dsr_carrier": "OPEN",
+  "consumer": "SAT((c135.x/c135.y)*preterminal_rgb)",
+  "negative_signature_tests": "PASS_2_OF_2",
+  "status": "CONFIRMED_STATIC_UPLOADER_NOT_PIXEL_FIX"
+}

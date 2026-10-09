@@ -6,6 +6,12 @@
 #endif
 
 #include "dsrrl/runtime/pmetal_envspec_draw_runtime.hpp"
+#if defined(DSRRL_PMETAL_ASYLUM_NATIVE_MAP_CUT)
+#include "dsrrl/runtime/pmetal_native_map_cut.hpp"
+#endif
+#if defined(DSRRL_PMETAL_ASYLUM_DEFERRED_TOPOLOGY_TRACE)
+#include "dsrrl/runtime/pmetal_asylum_cmdlist_trace.hpp"
+#endif
 #include "dsrrl/runtime/runtime_hot_telemetry.hpp"
 #include "dsrrl/runtime/pixel_srv_shadow.hpp"
 #if defined(DSRRL_PMETAL_ASYLUM_CB_WRITER_TRACE)
@@ -426,6 +432,11 @@ register_replacement(
         outcome.receiver_id < 33u ||
         outcome.receiver_id > 35u ||
         outcome.upper_lower_composed ||
+#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_R10E_ATMOS_DOMAIN)
+        !outcome.atmosphere_domain_composed ||
+#else
+        outcome.atmosphere_domain_composed ||
+#endif
 #if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_R7_SHADOW)
         (((outcome.receiver_id == 33u ||
            outcome.receiver_id == 34u) &&
@@ -902,6 +913,84 @@ bool pmetal_envspec_draw_runtime::prepare(
         return false;
     }
     effect_latch(effect_source_ready_);
+#if defined(DSRRL_PMETAL_ASYLUM_NATIVE_MAP_CUT) && defined(DSRRL_PMETAL_ASYLUM_CB_WRITER_TRACE)
+    // Exact per-draw RX33/RX34 native context and CURRENT PS b0.
+    // Register target on first observation; later witnessed native Map/Unmap
+    // is associated by physical context AND exact resource object identity.
+    // A CPU Map receipt is NOT proof of subsequent GPU PS consumption.
+    auto *native_map_ctx=reinterpret_cast<ID3D11DeviceContext *>(
+        static_cast<std::uintptr_t>(cmd_list->get_native()));
+    if (native_map_ctx) {
+        (void)pmetal_native_map_cut::global_observer().install(native_map_ctx);
+        ID3D11Buffer *bound_b0=nullptr;
+        native_map_ctx->PSGetConstantBuffers(0u,1u,&bound_b0);
+        if(bound_b0) {
+            const auto b0_key=reinterpret_cast<std::uintptr_t>(bound_b0);
+            const auto ctx_key=reinterpret_cast<std::uintptr_t>(native_map_ctx);
+            const auto info=pmetal_native_map_cut::global_observer().observe(ctx_key,b0_key);
+            const auto writer=pmetal_native_cb_writer_lookup(b0_key);
+            static std::atomic<std::uint32_t> observations_logged{0};
+            static std::atomic<std::uint64_t> last_emit_ms{0};
+            const auto now=GetTickCount64();
+            auto previous=last_emit_ms.load(std::memory_order_relaxed);
+            if (now>=previous+250u &&
+                last_emit_ms.compare_exchange_strong(previous,now,
+                    std::memory_order_relaxed) &&
+                observations_logged.fetch_add(1u,std::memory_order_relaxed)<180u) {
+                char line[1000]{};
+                std::snprintf(line,sizeof(line),
+                    "[DSRRL PMETAL NATIVE MAP CUT] rx=%u family=%u sha0=%02x%02x%02x%02x slot=%u"
+                    " ctx=%llx ps_b0=%llx src_bank=%016llx row=%u beta=%.6f"
+                    " native_hook=%u registered_vtables=%u"
+                    " exact_buffer_watch=%u map=%llu unmap=%llu write_unmap=%llu"
+                    " last_map_ctx=%llx last_unmap_ctx=%llx map_type=%u"
+                    " map_tid=%u unmap_tid=%u same_ctx=%u complete_pair=%u"
+                    " writer_epoch=%llu writer_method=%u writer_complete=%u"
+                    " pixel=UNVERIFIED gpu_consumer=UNVERIFIED",
+                    decision.receiver_id,
+                    static_cast<unsigned>(family),
+                    static_cast<unsigned>(material.flver_sha256[0]),
+                    static_cast<unsigned>(material.flver_sha256[1]),
+                    static_cast<unsigned>(material.flver_sha256[2]),
+                    static_cast<unsigned>(material.flver_sha256[3]),
+                    static_cast<unsigned>(material.material_slot),
+                    static_cast<unsigned long long>(ctx_key),
+                    static_cast<unsigned long long>(b0_key),
+                    static_cast<unsigned long long>(source.bank_signature_a),
+                    source.row_id_a,source.beta,
+                    info.hook_active?1u:0u,
+                    pmetal_native_map_cut::global_observer().hook_count(),
+                    info.ever_watched?1u:0u,
+                    static_cast<unsigned long long>(info.map_count),
+                    static_cast<unsigned long long>(info.unmap_count),
+                    static_cast<unsigned long long>(info.write_unmap_count),
+                    static_cast<unsigned long long>(info.last_map_ctx),
+                    static_cast<unsigned long long>(info.last_unmap_ctx),
+                    info.last_map_type,info.last_map_tid,info.last_unmap_tid,
+                    info.source_context_match?1u:0u,
+                    info.complete_map_unmap?1u:0u,
+                    static_cast<unsigned long long>(writer.epoch),
+                    static_cast<unsigned>(writer.method),writer.complete?1u:0u);
+                reshade::log::message(reshade::log::level::info,line);
+            }
+            bound_b0->Release();
+        }
+    }
+#endif
+#if defined(DSRRL_PMETAL_ASYLUM_DEFERRED_TOPOLOGY_TRACE)
+    // Source candidate in this receiver's recording context; not GPU draw authority.
+    const std::uint32_t sha_prefix =
+        (std::uint32_t(material.flver_sha256[0]) << 24u) |
+        (std::uint32_t(material.flver_sha256[1]) << 16u) |
+        (std::uint32_t(material.flver_sha256[2]) << 8u) |
+        std::uint32_t(material.flver_sha256[3]);
+    dsrrl::runtime::pmetal_asylum_cmdlist_trace::global_observer()
+        .observe_receiver_candidate(
+            reinterpret_cast<std::uintptr_t>(cmd_list),
+            static_cast<std::uintptr_t>(cmd_list->get_native()),
+            decision.receiver_id, source.bank_signature_a,
+            source.row_id_a, sha_prefix, material.material_slot);
+#endif
 
 #if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG)
 #if !defined(DSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE)
@@ -1543,6 +1632,78 @@ bool pmetal_envspec_draw_runtime::prepare(
                     tick-w1.timestamp_ms:0u));
             reshade::log::message(
                 reshade::log::level::info,writer_line);
+#if defined(DSRRL_PMETAL_ASYLUM_CB_REGISTER_TRACE)
+            // Discrete, bounded 16-byte CPU-upload register *fingerprints*.
+            // These hash positions are NOT an attested shader ABI and
+            // contain no raw GPU data or arbitrary memory reads.
+            static std::atomic<std::uint32_t> m10_register_samples{0u};
+            static std::atomic<std::uint32_t> m18_register_samples{0u};
+            static std::atomic<std::uint32_t> register_sample_id{0u};
+            auto &bank_samples =
+                source.bank_signature_a == k_m10_bank
+                    ? m10_register_samples : m18_register_samples;
+            if (w0.complete && w0.register_count == 129u &&
+                w0.epoch != 0u &&
+                bank_samples.fetch_add(1u,std::memory_order_relaxed)
+                    < 160u) {
+                const auto sample_id =
+                    register_sample_id.fetch_add(
+                        1u,std::memory_order_relaxed)+1u;
+                for (std::uint32_t part=0u;part<9u;++part) {
+                    const auto first=part*16u;
+                    const auto last=(first+16u<129u?first+16u:129u);
+                    char hash_line[850]{};
+                    int written=std::snprintf(
+                        hash_line,sizeof(hash_line),
+                        "[DSRRL PMETAL B0 REGHASH]"
+                        " sample=%u part=%u first=%u end_exclusive=%u"
+                        " ms=%llu rx=%u slot=%u"
+                        " owner_sha0=%02x%02x%02x%02x"
+                        " bank=%016llx row=%u producer_rva=%x"
+                        " ctx=%llx ps=%llx b0=%llx"
+                        " epoch=%llu whole=%016llx"
+                        " count=129 domain=CPU_MAP_WRITE_ONLY"
+                        " hashes=",
+                        static_cast<unsigned>(sample_id),
+                        static_cast<unsigned>(part),
+                        static_cast<unsigned>(first),
+                        static_cast<unsigned>(last),
+                        static_cast<unsigned long long>(tick),
+                        static_cast<unsigned>(decision.receiver_id),
+                        static_cast<unsigned>(material.material_slot),
+                        static_cast<unsigned>(material.flver_sha256[0]),
+                        static_cast<unsigned>(material.flver_sha256[1]),
+                        static_cast<unsigned>(material.flver_sha256[2]),
+                        static_cast<unsigned>(material.flver_sha256[3]),
+                        static_cast<unsigned long long>(
+                            source.bank_signature_a),
+                        static_cast<unsigned>(source.row_id_a),
+                        static_cast<unsigned>(source.producer_callsite_rva),
+                        static_cast<unsigned long long>(
+                            reinterpret_cast<std::uintptr_t>(context)),
+                        static_cast<unsigned long long>(
+                            reinterpret_cast<std::uintptr_t>(live_ps)),
+                        static_cast<unsigned long long>(watched_handles[0]),
+                        static_cast<unsigned long long>(w0.epoch),
+                        static_cast<unsigned long long>(w0.hash));
+                    for (auto i=first;i<last &&
+                        written > 0 &&
+                        static_cast<std::size_t>(written)+18u
+                            < sizeof(hash_line);++i) {
+                        written+=std::snprintf(
+                            hash_line+written,
+                            sizeof(hash_line)-
+                                static_cast<std::size_t>(written),
+                            "%s%016llx",
+                            i==first?"":",",
+                            static_cast<unsigned long long>(
+                                w0.register_hashes[i]));
+                    }
+                    reshade::log::message(
+                        reshade::log::level::info,hash_line);
+                }
+            }
+#endif
 #endif
         }
 #endif

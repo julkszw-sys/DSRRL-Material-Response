@@ -3437,11 +3437,228 @@ bool apply_exact_ptde_shadow_visibility_r7(
 }
 #endif
 
-// P_Metal atmosphere/Fog/LightScattering override is intentionally absent.
-// The historical V4B transform depended on a legacy cb12 FogRGB carrier that
-// is incompatible with the cumulative P_Metal ABI. Per project policy this
-// operator stays stock DSR until explicitly reopened; no latent compile-time
-// switch or alternate FogRGB carrier is retained in this lineage.
+#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_R10E_ATMOS_DOMAIN)
+template <std::size_t N>
+bool r10e_unique_sequence_offset(
+    const std::vector<std::uint32_t> &words,
+    const std::array<std::uint32_t,N> &pattern,
+    std::size_t &offset) noexcept
+{
+    offset = static_cast<std::size_t>(-1);
+    if (words.size() < N)
+        return false;
+
+    for (std::size_t i = 0u;
+         i + N <= words.size();
+         ++i) {
+        if (!std::equal(
+                pattern.begin(),
+                pattern.end(),
+                words.begin() +
+                    static_cast<std::ptrdiff_t>(i)))
+            continue;
+
+        if (offset !=
+                static_cast<std::size_t>(-1))
+            return false;
+
+        offset = i;
+    }
+
+    return
+        offset !=
+            static_cast<std::size_t>(-1);
+}
+
+// Exact stock-DSR stable HemEnv atmosphere-domain sandwich shared by
+// rx33/rx34/rx35. DSR converts the surface to root-domain before Fog, then
+// returns the result through a 2.2 continuation after LightScattering.
+// PTDE keeps the common PHN surface in its legacy domain through both stages.
+// R10E therefore recovers linear/legacy FogRGB from stock cb0[12].rgb,
+// preserves the existing Fog weight + LightScattering kernel, and removes
+// only the nonhomologous post-LightScattering 2.2 continuation.
+//
+// Crucially, this uses the stock DSR Fog carrier cb0[12] directly. It does NOT
+// alias the cumulative P_Metal b12 ABI, whose row0 carries c101/k135.
+constexpr std::array<std::uint32_t,21>
+    k_r10e_stock_prefog{{
+        0x0600002fu,
+        0x00100072u,0x00000001u,
+        0x80100246u,0x00000081u,0x00000001u,
+        0x0a000038u,
+        0x00100072u,0x00000001u,
+        0x00100246u,0x00000001u,
+        0x00004002u,
+        0x3ee8ba2fu,0x3ee8ba2fu,0x3ee8ba2fu,0x00000000u,
+        0x05000019u,
+        0x00100072u,0x00000001u,
+        0x00100246u,0x00000001u
+    }};
+
+constexpr std::array<std::uint32_t,21>
+    k_r10e_ptde_prefog{{
+        0x0600002fu,
+        0x00100072u,0x00000002u,
+        0x00208246u,0x00000000u,0x0000000cu,
+        0x0a000038u,
+        0x00100072u,0x00000002u,
+        0x00100246u,0x00000002u,
+        0x00004002u,
+        0x3ee8ba2fu,0x3ee8ba2fu,0x3ee8ba2fu,0x00000000u,
+        0x05000019u,
+        0x00100072u,0x00000002u,
+        0x00100246u,0x00000002u
+    }};
+
+constexpr std::array<std::uint32_t,9>
+    k_r10e_stock_fog_delta{{
+        0x09000000u,
+        0x00100072u,0x00000002u,
+        0x80100246u,0x00000041u,0x00000001u,
+        0x00208246u,0x00000000u,0x0000000cu
+    }};
+
+constexpr std::array<std::uint32_t,9>
+    k_r10e_ptde_fog_delta{{
+        0x09000000u,
+        0x00100072u,0x00000002u,
+        0x80100246u,0x00000041u,0x00000001u,
+        0x80100246u,0x00000081u,0x00000002u
+    }};
+
+constexpr std::array<std::uint32_t,21>
+    k_r10e_stock_post_ls_pow{{
+        0x0600002fu,
+        0x00100072u,0x00000000u,
+        0x80100246u,0x00000081u,0x00000000u,
+        0x0a000038u,
+        0x00100072u,0x00000000u,
+        0x00100246u,0x00000000u,
+        0x00004002u,
+        0x400ccccdu,0x400ccccdu,0x400ccccdu,0x00000000u,
+        0x05000019u,
+        0x00100072u,0x00000000u,
+        0x00100246u,0x00000000u
+    }};
+
+bool r10e_atmosphere_domain_exact(
+    const std::vector<std::uint32_t> &words) noexcept
+{
+    std::size_t prefog = 0u;
+    std::size_t fog_delta = 0u;
+    std::size_t stock_prefog = 0u;
+    std::size_t stock_fog_delta = 0u;
+    std::size_t stock_post = 0u;
+
+    const bool ptde_prefog =
+        r10e_unique_sequence_offset(
+            words,
+            k_r10e_ptde_prefog,
+            prefog);
+    const bool ptde_fog_delta =
+        r10e_unique_sequence_offset(
+            words,
+            k_r10e_ptde_fog_delta,
+            fog_delta);
+
+    const bool has_stock_prefog =
+        r10e_unique_sequence_offset(
+            words,
+            k_r10e_stock_prefog,
+            stock_prefog);
+    const bool has_stock_fog_delta =
+        r10e_unique_sequence_offset(
+            words,
+            k_r10e_stock_fog_delta,
+            stock_fog_delta);
+    const bool has_stock_post =
+        r10e_unique_sequence_offset(
+            words,
+            k_r10e_stock_post_ls_pow,
+            stock_post);
+
+    return
+        ptde_prefog &&
+        ptde_fog_delta &&
+        prefog < fog_delta &&
+        !has_stock_prefog &&
+        !has_stock_fog_delta &&
+        !has_stock_post;
+}
+
+bool apply_exact_ptde_atmosphere_domain_r10e(
+    std::vector<std::uint8_t> &bytes) noexcept
+{
+    std::vector<chunk> chunks;
+    std::vector<std::uint32_t> words;
+    std::size_t code_index = 0u;
+
+    if (!parse_dxbc(
+            bytes.data(),
+            bytes.size(),
+            chunks,
+            code_index) ||
+        !extract_words(
+            chunks,
+            code_index,
+            words))
+        return false;
+
+    std::size_t prefog = 0u;
+    std::size_t fog_delta = 0u;
+    std::size_t post_ls_pow = 0u;
+
+    if (!r10e_unique_sequence_offset(
+            words,
+            k_r10e_stock_prefog,
+            prefog) ||
+        !r10e_unique_sequence_offset(
+            words,
+            k_r10e_stock_fog_delta,
+            fog_delta) ||
+        !r10e_unique_sequence_offset(
+            words,
+            k_r10e_stock_post_ls_pow,
+            post_ls_pow) ||
+        !(prefog < fog_delta &&
+          fog_delta < post_ls_pow))
+        return false;
+
+    std::copy(
+        k_r10e_ptde_prefog.begin(),
+        k_r10e_ptde_prefog.end(),
+        words.begin() +
+            static_cast<std::ptrdiff_t>(prefog));
+    std::copy(
+        k_r10e_ptde_fog_delta.begin(),
+        k_r10e_ptde_fog_delta.end(),
+        words.begin() +
+            static_cast<std::ptrdiff_t>(fog_delta));
+    std::fill_n(
+        words.begin() +
+            static_cast<std::ptrdiff_t>(
+                post_ls_pow),
+        k_r10e_stock_post_ls_pow.size(),
+        0x0100003au);
+
+    if (!r10e_atmosphere_domain_exact(
+            words))
+        return false;
+
+    std::vector<std::uint8_t> rebuilt;
+    if (!rebuild(
+            bytes.data(),
+            bytes.size(),
+            std::move(chunks),
+            code_index,
+            words,
+            rebuilt))
+        return false;
+
+    bytes = std::move(rebuilt);
+    return true;
+}
+#endif
 
 bool apply_linear_envdiffuse_consumer_diag(
     std::vector<std::uint8_t> &bytes) noexcept
@@ -4579,6 +4796,9 @@ bool final_postcondition(
         s14_decl == 1u &&
         t14_sample == 1u &&
         t9_sample == 0u &&
+#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_R10E_ATMOS_DOMAIN)
+        r10e_atmosphere_domain_exact(words) &&
+#endif
         (!require_terminal_sat ||
 #if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_R6)
          phn_scene_encoding_exact(words)
@@ -4840,6 +5060,16 @@ materialize_pmetal_rgba_receiver(
     }
 #endif
 
+#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_R10E_ATMOS_DOMAIN)
+    // Exact stock PS preimage is independently checked. If another owner has
+    // modified Fog/LS domain instructions, this shader fails open to stock DSR.
+    if (!apply_exact_ptde_atmosphere_domain_r10e(base)) {
+        outcome.result = pmetal_rgba_materialize_result::fail_postcondition;
+        return outcome;
+    }
+    outcome.atmosphere_domain_composed = true;
+#endif
+
 #if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_R7_SHADOW)
     if (!apply_exact_ptde_shadow_visibility_r7(
             base,
@@ -4867,8 +5097,8 @@ materialize_pmetal_rgba_receiver(
     }
 #endif
 
-// Atmosphere/Fog/LightScattering remains stock DSR in R6B. Do not compose
-    // the historical V4B pre-Fog/post-LightScattering transform here.
+// R10E is an exact-scoped PTDE atmosphere island when enabled, otherwise
+    // retain stock DSR Fog/LS domain behavior without hidden compensation.
 
     if (compose_upper_lower) {
         std::vector<std::uint8_t> ul;
