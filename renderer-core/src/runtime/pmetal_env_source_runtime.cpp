@@ -8,6 +8,7 @@
 #include "dsrrl/runtime/pmetal_env_source_runtime.hpp"
 #include "dsrrl/runtime/pmetal_producer_state.hpp"
 #include "dsrrl/runtime/pmetal_selector_policy.hpp"
+#include "dsrrl/runtime/ptde_metal_envspec_authority.hpp"
 #include "dsrrl/runtime/runtime_hot_telemetry.hpp"
 #include "dsrrl/operators/material_response/mtd_semantic_census.hpp"
 #include "dsrrl/operators/legacy_plan/sha256_bytes.hpp"
@@ -31,11 +32,7 @@
 namespace dsrrl::runtime {
 namespace {
 
-constexpr std::uint32_t k_pmetal_material_route = 345u;
-constexpr const char *k_pmetal_material_name =
-    "P_Metal[DSB].mtd";
-constexpr const char *k_pmetal_material_sha256 =
-    "ece70f36bd2517d28c8495e276cea537f8b519d6bed981788e79a409ffbf763b";
+// Canonical exact route/name/SHA records are shared with the consumer.
 
 constexpr std::uintptr_t k_ret_sel_1 = 0x20E019u;
 constexpr std::uintptr_t k_ret_sel_2 = 0x20EB7Fu;
@@ -962,23 +959,10 @@ bool exact_pmetal_material_selection(
     const operators::material_response::
         material_identity &material) noexcept
 {
-    namespace mr =
-        operators::material_response;
-    namespace hashing =
-        operators::legacy_plan::hashing;
-
-    return
-        material.valid &&
-        material.owner_tuple_exact &&
-        material.material_slot_valid &&
-        material.route_index ==
-            k_pmetal_material_route &&
-        material.semantic_name_hash ==
-            mr::mtd_semantic_hash(
-                k_pmetal_material_name) &&
-        hashing::matches_hex(
-            material.raw_mtd_sha256,
-            k_pmetal_material_sha256);
+    // Source publication and shader selection MUST share this exact
+    // (FLVER, slot, MTD SHA, semantic name, route) authority.
+    // Additional equipment metal routes are opt-in at build time.
+    return match_ptde_metal_envspec_material(material) != nullptr;
 }
 
 bool retail_lightbank_record_index(
@@ -2910,6 +2894,24 @@ void pmetal_env_source_selector_event(
         endpoints.beta == 0.0f
             ? g_steady_seen
             : g_blend_seen);
+}
+
+bool pmetal_env_source_runtime::latest_exact_material(
+    const operators::material_response::
+        material_identity &material,
+    pmetal_envspec_source &out) const noexcept
+{
+    out = {};
+    if (!g_selector_enabled.load(std::memory_order_acquire) ||
+        match_ptde_metal_envspec_material(material) == nullptr)
+        return false;
+
+    // The synchronized source is keyed by exact raw FLVER digest, material
+    // slot, exact MTD SHA/name/route and the live selector epoch. In contrast
+    // to P_Metal's validated V13 path, an unkeyed latest_hook_source()
+    // fallback is intentionally forbidden for newly admitted MTDs.
+    const auto epoch = g_selector_epoch.load(std::memory_order_relaxed);
+    return pmetal_producer_state_latest(material, epoch, out);
 }
 
 bool pmetal_env_source_runtime::latest(
