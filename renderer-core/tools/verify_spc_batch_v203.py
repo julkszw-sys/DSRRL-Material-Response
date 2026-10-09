@@ -60,6 +60,6 @@ assert "log_spc_material_census_once(identity, false)" in selector
 assert "log_spc_material_census_once(runtime_material, true)" in selector
 assert "log_spc_draw_receiver_once(" in integrated
 assert "stage=draw_owner" in integrated
-assert "stage=runtime_mtd_only" in selector
+assert 'runtime_mtd_only' in selector and 'flver_owner_exact' in selector
 assert "exact_bridge_authority=" in selector and "exact_bridge_authority=" in integrated
 print('Unique MTD and EnvSpec entries:',len(compiled))
