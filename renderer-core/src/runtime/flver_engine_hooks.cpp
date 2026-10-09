@@ -16,6 +16,7 @@
 #include "dsrrl/runtime/hemdir3_mode_transport.hpp"
 #endif
 #include "dsrrl/runtime/pmetal_env_source_runtime.hpp"
+#include "dsrrl/runtime/ptde_metal_envspec_authority.hpp"
 #include "dsrrl/runtime/clustered_pnts_draw_runtime.hpp"
 #include "dsrrl/runtime/fixed_pointlight_draw_runtime.hpp"
 #include "dsrrl/operators/material_response/mtd_semantic_census.hpp"
@@ -1037,9 +1038,18 @@ bool publish_exact_selector_identity(
             identity);
 #endif
 
-    // Route 345 is necessary but not sufficient. The isolated source runtime
-    // retains exact semantic/raw-MTD validation before donor decode.
-    if (identity.route_index == 345u) {
+    // Route 345 keeps its validated v2.0.3-dev selector behavior.
+    // Newly certified metal MTDs must enter the SAME real source producer,
+    // not just the shader draw consumer. This is OFF by default; the exact
+    // MTD raw SHA+name+owner/slot gate is shared with the EnvSpec consumer.
+    // An unmatched route must not publish or reuse a P_Metal LightBank source.
+    const bool pmetal_source_candidate =
+        identity.route_index == 345u
+#if defined(DSRRL_EXPERIMENTAL_OTHER_METAL_PTDE_ENVSPEC)
+        || is_experimental_ptde_metal_envspec_material(identity)
+#endif
+        ;
+    if (pmetal_source_candidate) {
         const auto pmetal_begin =
             profile != nullptr
                 ? selector_profile_begin(*profile)
