@@ -88,7 +88,7 @@ def main() -> None:
         pattern = (
             rf"\{{ptde_metal_envspec_profile::{re.escape(symbol)},\s*"
             rf"{route}u,\s*\"{re.escape(name)}\",\s*"
-            rf"\"{mr['sha256']}\",\s*2\.5f\}}"
+            rf"\"{mr['sha256']}\",\s*2\.5f,\s*2u\}}"
         )
         require(re.search(pattern, header) is not None,
                 f"{name}: compiled authority does not match source census")
