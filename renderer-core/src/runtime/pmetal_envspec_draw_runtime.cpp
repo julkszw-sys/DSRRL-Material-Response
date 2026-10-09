@@ -1485,6 +1485,32 @@ bool pmetal_envspec_draw_runtime::prepare(
             if (view != nullptr) { view->Release(); view = nullptr; }
     }
 
+#if defined(DSRRL_EXPERIMENTAL_SPC_MATERIAL_BATCH)
+    // Shared remediation for ALL exact SPC25 receiver/material profiles.
+    // A stock t1 can acquire a native D3D11 debug label only after
+    // init_resource_view. This opt-in draw-local retry uses the *current*
+    // bound SRV and requires an exact V12 name plus actual PTDE DDS.
+    // Never use this path to authorize a material without FLVER+slot+MTD,
+    // or to borrow an unrelated LightBank or guessed texture identity.
+    if (experimental_material &&
+        (!material_ready || !prepared.material_resources.spec_rgb) &&
+        material_resources_.try_recover_exact_bound_spec_from_native_name(
+            context)) {
+        material_resources_.release_prepared_draw(
+            prepared.material_resources);
+        material_ready = material_resources_.prepare_draw_requests(
+            context, decision.receiver_id, query, true, true,
+            prepared.material_resources);
+        if (material_ready && prepared.material_resources.spec_rgb) {
+            static std::atomic_bool late_ready_logged{false};
+            if (!late_ready_logged.exchange(
+                    true, std::memory_order_relaxed))
+                reshade::log::message(reshade::log::level::info,
+                    "[DSRRL SPC25 LATE T1] stage=material_request_recovered route_scope=ALL_EXACT_SPC25 runtime=REQUEST_READY_CANDIDATE pixel=OPEN");
+        }
+    }
+#endif
+
 #if defined(DSRRL_EXPERIMENTAL_OTHER_METAL_PTDE_ENVSPEC)
     if ((!material_ready || !prepared.material_resources.spec_rgb) &&
         experimental_material && spc_onepass_claim(material, 3u)) {
