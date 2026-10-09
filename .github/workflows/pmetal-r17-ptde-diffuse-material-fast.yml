@@ -95,6 +95,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0 # git merge-base must see the immutable tag ancestry
       - uses: actions/checkout@v4
         with:
           repository: crosire/reshade
