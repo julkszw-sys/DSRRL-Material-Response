@@ -6,6 +6,9 @@
 #endif
 
 #include "dsrrl/runtime/pmetal_envspec_draw_runtime.hpp"
+#if defined(DSRRL_PMETAL_ASYLUM_DEFERRED_TOPOLOGY_TRACE)
+#include "dsrrl/runtime/pmetal_asylum_cmdlist_trace.hpp"
+#endif
 #include "dsrrl/runtime/runtime_hot_telemetry.hpp"
 #include "dsrrl/runtime/pixel_srv_shadow.hpp"
 #if defined(DSRRL_PMETAL_ASYLUM_CB_WRITER_TRACE)
@@ -902,6 +905,20 @@ bool pmetal_envspec_draw_runtime::prepare(
         return false;
     }
     effect_latch(effect_source_ready_);
+#if defined(DSRRL_PMETAL_ASYLUM_DEFERRED_TOPOLOGY_TRACE)
+    // Source candidate in this receiver's recording context; not GPU draw authority.
+    const std::uint32_t sha_prefix =
+        (std::uint32_t(material.flver_sha256[0]) << 24u) |
+        (std::uint32_t(material.flver_sha256[1]) << 16u) |
+        (std::uint32_t(material.flver_sha256[2]) << 8u) |
+        std::uint32_t(material.flver_sha256[3]);
+    dsrrl::runtime::pmetal_asylum_cmdlist_trace::global_observer()
+        .observe_receiver_candidate(
+            reinterpret_cast<std::uintptr_t>(cmd_list),
+            static_cast<std::uintptr_t>(cmd_list->get_native()),
+            decision.receiver_id, source.bank_signature_a,
+            source.row_id_a, sha_prefix, material.material_slot);
+#endif
 
 #if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG)
 #if !defined(DSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE)
