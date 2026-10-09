@@ -1405,6 +1405,11 @@ extern "C" void dsrrl_flver_selector_observer(
       profile.runtime_publish_ticks);
 
   if(runtime_publish_ok){
+#if defined(DSRRL_EXPERIMENTAL_SPC_MATERIAL_BATCH)
+   // A visible generic MR draw may have only an exact runtime MTD carrier.
+   // That is NOT legal authority for PTDE EnvSpec/SpecRGB resources.
+   log_spc_material_census_once(runtime_material, true);
+#endif
    latch_once(
        g_runtime_mtd_selection_published);
    telemetry::hot_count(
