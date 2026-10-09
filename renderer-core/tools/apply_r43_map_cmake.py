@@ -15,6 +15,11 @@ if(DSRRL_PMETAL_R43_MAP_SOURCE_JOIN)
         dsrrl_renderer_core_integrated PRIVATE
         DSRRL_PMETAL_R43_MAP_SOURCE_JOIN)
 endif()
+add_executable(dsrrl_pmetal_map_source_test
+    "${DSRRL_RENDERER_CORE_ROOT}/tests/pmetal_map_source_test.cpp")
+target_include_directories(dsrrl_pmetal_map_source_test PRIVATE
+    "${DSRRL_RENDERER_CORE_ROOT}/include")
+target_compile_features(dsrrl_pmetal_map_source_test PRIVATE cxx_std_17)
 """
 p.write_text(s)
 print("PASS R43 opt-in P_Metal per-map source flag")
