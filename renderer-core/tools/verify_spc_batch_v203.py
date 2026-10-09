@@ -23,5 +23,6 @@ for profile, route, name, sha, gain, slot in compiled:
     env = next(e for e in envs if e["mtd_name"] == name)
     assert env["dsr_mtd_sha256"] == sha, name
     assert env["envspc_slot"] == int(slot), name
+    assert env["state"] == "PRESENT", name
 assert all(x["material_family"] == "DifSpcBmp" for x in routes if any(x["mtd_name"] == z[2] for z in compiled))
 print('Unique MTD and EnvSpec entries:',len(compiled))
