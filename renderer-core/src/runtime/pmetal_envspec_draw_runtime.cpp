@@ -13,6 +13,9 @@
 
 #include <Windows.h>
 #include <d3d11.h>
+#if defined(DSRRL_PMETAL_ASYLUM_NATIVE_PASS_BINDING_TRACE)
+#include <d3d11_1.h>
+#endif
 
 #include <array>
 #include <cmath>
@@ -1231,6 +1234,9 @@ bool pmetal_envspec_draw_runtime::prepare(
             std::uint32_t row_b = 0;
             std::uint8_t origin = 0;
             std::uint8_t stage = 0;
+#if defined(DSRRL_PMETAL_ASYLUM_NATIVE_PASS_BINDING_TRACE)
+            std::uint64_t native_source_bank = 0u;
+#endif
         };
         // Increased sets + slot-inclusive FNV hash prevent unrelated
         // materials from evicting each other each frame. Hard cap remains.
@@ -1267,6 +1273,11 @@ bool pmetal_envspec_draw_runtime::prepare(
             (owner_key ^ (owner_key >> 32u) ^ (owner_key >> 17u)) &
             (previous.size() - 1u))];
         const std::uint8_t stage = spec_ok ? 2u : 1u;
+#if defined(DSRRL_PMETAL_ASYLUM_NATIVE_PASS_BINDING_TRACE)
+        const bool native_bank_changed =
+            entry.owner_key != owner_key ||
+            entry.native_source_bank != source.bank_signature_a;
+#endif
         const bool changed = entry.owner_key != owner_key ||
             entry.stage != stage ||
             entry.probe_a != prepared.env_resources.probe_a ||
@@ -1281,7 +1292,11 @@ bool pmetal_envspec_draw_runtime::prepare(
             prepared.env_resources.probe_a,
             prepared.env_resources.probe_b,
             source.row_id_a, source.row_id_b,
-            source.diagnostic_origin, stage};
+            source.diagnostic_origin, stage
+#if defined(DSRRL_PMETAL_ASYLUM_NATIVE_PASS_BINDING_TRACE)
+            , source.bank_signature_a
+#endif
+        };
 
         if (emitted.fetch_add(1u, std::memory_order_relaxed) >=
             max_lines)
@@ -1372,6 +1387,94 @@ bool pmetal_envspec_draw_runtime::prepare(
                 source.producer_hook_shadow ? 1u : 0u);
 #endif
         reshade::log::message(reshade::log::level::info, line);
+#if defined(DSRRL_PMETAL_ASYLUM_NATIVE_PASS_BINDING_TRACE)
+        // Read-only pre-transaction D3D state captured at the SAME sampled
+        // RX33/RX34 receiver as the exact producer/material provenance.
+        // A stable PS/CB binding is NOT evidence that its contents are equal.
+        // No Map, GetData, CopyResource, flush, bind, or draw replay occurs.
+        constexpr std::uint64_t k_m10_bank = 0x4c594553d201d80cULL;
+        constexpr std::uint64_t k_m18_bank = 0x1ecfd1e617c59071ULL;
+        static std::atomic<std::uint32_t> native_trace_count{0u};
+        if (native_bank_changed &&
+            (source.bank_signature_a == k_m10_bank ||
+             source.bank_signature_a == k_m18_bank) &&
+            native_trace_count.fetch_add(1u,
+                std::memory_order_relaxed) < 1024u) {
+            ID3D11PixelShader *live_ps = nullptr;
+            context->PSGetShader(&live_ps,nullptr,nullptr);
+            ID3D11Buffer *live_cbs[16]{};
+            context->PSGetConstantBuffers(0u,16u,live_cbs);
+
+            ID3D11DeviceContext1 *ctx1 = nullptr;
+            const bool cb1_available = SUCCEEDED(
+                context->QueryInterface(
+                    __uuidof(ID3D11DeviceContext1),
+                    reinterpret_cast<void **>(&ctx1))) &&
+                ctx1 != nullptr;
+            ID3D11Buffer *window_cbs[16]{};
+            UINT firsts[16]{};
+            UINT counts[16]{};
+            if (cb1_available) {
+                ctx1->PSGetConstantBuffers1(
+                    0u,16u,window_cbs,firsts,counts);
+            }
+            char native_line[1850]{};
+            int pos=std::snprintf(
+                native_line,sizeof(native_line),
+                "[DSRRL PMETAL NATIVE PASS BINDINGS]"
+                " ms=%llu rx=%u slot=%u owner_sha0=%02x%02x%02x%02x"
+                " ctx=%016llx ctx_type=%u ps=%016llx"
+                " bank=%016llx row=%u beta=%.7g"
+                " producer_rva=%x producer_tid=%u consumer_tid=%u"
+                " native_cb1=%u capture=PRE_ISLAND binding_only=1",
+                static_cast<unsigned long long>(tick),
+                static_cast<unsigned>(decision.receiver_id),
+                static_cast<unsigned>(material.material_slot),
+                static_cast<unsigned>(material.flver_sha256[0]),
+                static_cast<unsigned>(material.flver_sha256[1]),
+                static_cast<unsigned>(material.flver_sha256[2]),
+                static_cast<unsigned>(material.flver_sha256[3]),
+                static_cast<unsigned long long>(
+                    reinterpret_cast<std::uintptr_t>(context)),
+                static_cast<unsigned>(context->GetType()),
+                static_cast<unsigned long long>(
+                    reinterpret_cast<std::uintptr_t>(live_ps)),
+                static_cast<unsigned long long>(source.bank_signature_a),
+                static_cast<unsigned>(source.row_id_a),
+                static_cast<double>(source.beta),
+                static_cast<unsigned>(source.producer_callsite_rva),
+                static_cast<unsigned>(source.producer_thread_id),
+                static_cast<unsigned>(GetCurrentThreadId()),
+                cb1_available?1u:0u);
+            for (UINT i=0u;i<16u;++i) {
+                D3D11_BUFFER_DESC desc{};
+                if (live_cbs[i] != nullptr)
+                    live_cbs[i]->GetDesc(&desc);
+                if (pos > 0 &&
+                    static_cast<std::size_t>(pos) < sizeof(native_line)) {
+                    pos+=std::snprintf(
+                        native_line+pos,sizeof(native_line)-
+                            static_cast<std::size_t>(pos),
+                        " b%u=%llx:%u:%u:%u:%u",
+                        static_cast<unsigned>(i),
+                        static_cast<unsigned long long>(
+                            reinterpret_cast<std::uintptr_t>(live_cbs[i])),
+                        static_cast<unsigned>(desc.ByteWidth),
+                        static_cast<unsigned>(cb1_available?firsts[i]:0u),
+                        static_cast<unsigned>(cb1_available?counts[i]:0u),
+                        static_cast<unsigned>(cb1_available &&
+                            live_cbs[i] == window_cbs[i]?1u:0u));
+                }
+                if (live_cbs[i] != nullptr)
+                    live_cbs[i]->Release();
+                if (window_cbs[i] != nullptr)
+                    window_cbs[i]->Release();
+            }
+            if (ctx1 != nullptr)ctx1->Release();
+            if (live_ps != nullptr)live_ps->Release();
+            reshade::log::message(reshade::log::level::info,native_line);
+        }
+#endif
     };
 #endif
 
