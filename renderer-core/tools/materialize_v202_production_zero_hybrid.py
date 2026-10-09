@@ -19,6 +19,18 @@ regex=r"(?m)^([ \t]*)(g_hook_(?:publish|consume|single_seen|blend_seen)\.fetch_a
 s,count=re.subn(regex,lambda m:m[1]+"#if !defined(DSRRL_RELEASE_CLEANUP)\n"+m[2]+"\n"+m[1]+"#endif",s)
 assert count==9, "Production release cleanup rebase incomplete"
 assert "latest_hook_source(out)" not in s and "[DSRRL PMETAL ZERO RE]" in s
+
+def consumer_block(text):
+    start = text.index("bool pmetal_env_source_runtime::latest(")
+    end = text.index("pmetal_env_source_runtime_telemetry\\n", start)
+    return text[start:end]
+baseline_consumer = consumer_block(original.decode("utf-8"))
+candidate_consumer = consumer_block(s)
+assert "if (latest_hook_source(out))" in baseline_consumer
+assert "if (latest_hook_source(out))" not in candidate_consumer
+assert s.count(candidate_consumer) == 1
+s = s.replace(candidate_consumer, baseline_consumer, 1)
+assert consumer_block(s) == baseline_consumer
 assert "exact_dsr_only_endpoint(" in s
 data=zlib.decompress(compressed.read_bytes())
 assert hashlib.sha256(data).hexdigest()=="c5a3b3731c1dd95601458898f12bb9e7b4711b0dafa0d0a1a59929cd58fb93c2"
