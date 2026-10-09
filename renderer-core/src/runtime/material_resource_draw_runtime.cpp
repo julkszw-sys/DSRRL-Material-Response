@@ -143,6 +143,8 @@ std::unordered_map<std::uint64_t,ID3D11Device *>
     g_ambiguous_named_resource_device;
 std::atomic_bool g_attested_resource_view_join_logged{false};
 std::atomic_bool g_early_view_join_logged{false};
+std::atomic_bool g_native_debug_name_join_logged{false};
+
 
 // ReShade create_resource_view is a synchronous, pre-D3D11 creation
 // callback. A retail name may be live here even when it is gone by
@@ -1312,6 +1314,55 @@ void on_destroy_resource(
 #endif
 
 #if defined(DSRRL_EXPERIMENTAL_SPC_MATERIAL_BATCH)
+// Some D3D11 resources carry a native debug object name even after the
+// retail loader's thread-local name has expired. Treat a name as authority
+// only if it is an *exact* canonical basename already allowlisted by V12.
+// No suffix stripping, path guessing or BC1/size-based matching.
+bool snapshot_native_exact_debug_name(
+    ID3D11DeviceChild *child,
+    std::wstring &out) noexcept
+{
+    out.clear();
+    if (child == nullptr) return false;
+    char bytes[260]{};
+    UINT count = static_cast<UINT>(sizeof(bytes));
+    if (FAILED(child->GetPrivateData(
+            WKPDID_D3DDebugObjectName, &count, bytes)) ||
+        count == 0u || count >= sizeof(bytes))
+        return false;
+    // Debug label GUID holds 8-bit bytes. Do not accept embedded NUL or
+    // noncanonical punctuation, paths, extensions, or unbounded names.
+    if (bytes[count - 1u] == '\0') --count;
+    if (count < 7u || count >= sizeof(bytes)) return false;
+    wchar_t raw[260]{};
+    for (UINT i = 0u; i < count; ++i) {
+        const unsigned char ch =
+            static_cast<unsigned char>(bytes[i]);
+        if (!((ch >= 'a' && ch <= 'z') ||
+              (ch >= 'A' && ch <= 'Z') ||
+              (ch >= '0' && ch <= '9') ||
+              ch == '_'))
+            return false;
+        raw[i] = static_cast<wchar_t>(ch);
+    }
+    if (raw[count - 2u] != L'_' ||
+        (raw[count - 1u] != L's' && raw[count - 1u] != L'S'))
+        return false;
+    const auto h = fnv_name(raw, count);
+    if (!generated::spec_equipment_name_hash_allowed_v12(h) &&
+        !exact_subsurface_body_spec_hash(h) &&
+        !generated::diffuse_name_hash_allowed_v12(h) &&
+        !generated::normal_name_hash_allowed_v12(h))
+        return false;
+    try {
+        out.assign(raw, count);
+        return true;
+    } catch (...) {
+        out.clear();
+        return false;
+    }
+}
+
 bool on_create_resource_view(
     reshade::api::device *device,
     reshade::api::resource resource,
@@ -1415,6 +1466,31 @@ void on_init_resource_view(
             return;
         }
     }
+    // This query refers to the very D3D11 SRV/resource supplied by
+    // ReShade in the current init_resource_view callback; no global-name
+    // lookup or last-observed SRV can satisfy it.
+    std::wstring native_debug_name{};
+    bool debug_attested = false;
+    if (resource.handle != 0u) {
+        auto *native_resource = reinterpret_cast<ID3D11Resource *>(
+            static_cast<std::uintptr_t>(resource.handle));
+        debug_attested = snapshot_native_exact_debug_name(
+            native_resource, native_debug_name);
+    }
+    if (view.handle != 0u) {
+        std::wstring view_debug_name{};
+        const bool view_debug = snapshot_native_exact_debug_name(
+            reinterpret_cast<ID3D11ShaderResourceView *>(
+                static_cast<std::uintptr_t>(view.handle)),
+            view_debug_name);
+        if (view_debug && debug_attested &&
+            view_debug_name != native_debug_name)
+            return;
+        if (view_debug && !debug_attested) {
+            native_debug_name = std::move(view_debug_name);
+            debug_attested = true;
+        }
+    }
     auto matches_name = [](
         const std::wstring &name,
         const wchar_t *other,
@@ -1426,6 +1502,15 @@ void on_init_resource_view(
     // A discrepancy between any two attested producers invalidates the
     // association. Do not let an early name overwrite a direct or
     // resource-lifetime name.
+    if (debug_attested && direct_name &&
+        !matches_name(native_debug_name, logical_name_raw, logical_name_length))
+        return;
+    if (debug_attested && pre_view_attested &&
+        native_debug_name != early_name)
+        return;
+    if (debug_attested && resource_handoff &&
+        native_debug_name != attested_name)
+        return;
     if (pre_view_attested && direct_name &&
         !matches_name(early_name, logical_name_raw, logical_name_length))
         return;
@@ -1446,6 +1531,9 @@ void on_init_resource_view(
     } else if (pre_view_attested && !direct_name) {
         logical_name_raw = early_name.c_str();
         logical_name_length = early_name.size();
+    } else if (debug_attested && !direct_name) {
+        logical_name_raw = native_debug_name.c_str();
+        logical_name_length = native_debug_name.size();
     } else if (!direct_name) {
         return;
     }
@@ -1603,6 +1691,12 @@ void on_init_resource_view(
             true, std::memory_order_relaxed))
         reshade::log::message(reshade::log::level::info,
             "[DSRRL SPC RESOURCE JOIN] source=create_resource_view_exact_name carrier=pre_post_view exact_allowlist=1 failopen_preserved=1 pixel=OPEN");
+    if (debug_attested && !resource_handoff && !direct_name &&
+        !pre_view_attested && accepted &&
+        !g_native_debug_name_join_logged.exchange(
+            true, std::memory_order_relaxed))
+        reshade::log::message(reshade::log::level::info,
+            "[DSRRL SPC RESOURCE JOIN] source=stock_d3d11_exact_debug_name carrier=native_resource_or_srv exact_allowlist=1 failopen_preserved=1 pixel=OPEN");
 #endif
     ++g_named_views;
 }
