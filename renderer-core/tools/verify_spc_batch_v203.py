@@ -160,6 +160,13 @@ assert "call qword ptr [g_dsrrl_spc25_writer_target]" in packet_asm
 assert "jmp qword ptr [g_dsrrl_spc25_packet_resume]" in packet_asm
 assert "spc25_packet_source_detour.asm" in integrated_cmake
 assert "spc25_packet_reader_detour.asm" in integrated_cmake
+assert "DSRRL_EXPERIMENTAL_SPC25_DECODER_PROBE" in integrated_cmake
+assert "typed decoder hook is quarantined" in integrated_cmake
+assert "if(MSVC AND DSRRL_EXPERIMENTAL_SPC_MATERIAL_BATCH)" in integrated_cmake
+assert "$<$<COMPILE_LANGUAGE:CXX>:/MP>" in integrated_cmake
+assert "#if defined(DSRRL_EXPERIMENTAL_SPC25_DECODER_PROBE)" in packet_source
+assert "typed decoder QUARANTINED" in packet_source
+
 decoder_asm=(ROOT / "integrated/spc25_packet_reader_detour.asm").read_text()
 assert "k_decoder_rva = 0x57F000u" in packet_source
 assert "k_decoder_resume_rva = 0x57F00Fu" in packet_source
