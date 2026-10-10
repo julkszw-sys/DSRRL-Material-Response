@@ -66,16 +66,25 @@ MATERIAL = [
 
 def process(path: Path, rules, write: bool) -> None:
     text = path.read_text(encoding="utf-8")
-    for before, after in rules:
-        if text.count(after) == 1:
-            continue
-        if text.count(before) != 1:
-            raise RuntimeError(f"Source drift/conflict: {path.name} / {before[:55]!r}")
-        if not write:
-            raise RuntimeError(f"SPC25 lifetime change missing: {path.name} / {before[:55]!r}")
-        text = text.replace(before, after, 1)
     if write:
+        for before, after in rules:
+            if text.count(after) == 1:
+                continue
+            if text.count(before) != 1:
+                raise RuntimeError(
+                    f"Source drift/conflict: {path.name} / {before[:55]!r}")
+            text = text.replace(before, after, 1)
         path.write_text(text, encoding="utf-8", newline="")
+    else:
+        # Rules can compose: a later insertion inside an earlier 'after'
+        # makes forward per-rule membership checks incorrect. Unwind all
+        # insertions in REVERSE order to validate the exact composition.
+        for before, after in reversed(rules):
+            if text.count(after) != 1:
+                raise RuntimeError(
+                    f"SPC25 composed postcondition missing: "
+                    f"{path.name} / {before[:55]!r}")
+            text = text.replace(after, before, 1)
     print(f"SPC25_EPOCH_{'APPLIED' if write else 'VERIFIED'} {path.name}")
 
 def main():
