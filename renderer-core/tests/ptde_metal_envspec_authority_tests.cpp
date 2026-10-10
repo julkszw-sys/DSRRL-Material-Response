@@ -122,7 +122,7 @@ int main()
     // Source-only manifest is a bounded exact-byte fingerprint, not a
     // material-class guess. Every original digest is unique in this subset.
     namespace source=dsrrl::runtime::spc25_stock_source_manifest;
-    assert(source::k_original_dsr_spec.size()==10u);
+    assert(source::k_original_dsr_spec.size()==18u); // 10 P_Metal slot-authorized + 8 source-only
     for(const auto &entry:source::k_original_dsr_spec) {
         source::digest bytes{};
         for(std::size_t i=0;i<bytes.size();++i) {
