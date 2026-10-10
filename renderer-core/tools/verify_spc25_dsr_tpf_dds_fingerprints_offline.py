@@ -124,6 +124,15 @@ def main(source_zip, slots_csv, output):
         for k, rr in by_name.items()
         if len({v["gpu_mip_bytes_sha256"] for v in rr}) > 1
     }
+    # Content equality is not a unique logical identity: two differently
+    # named resources may have bit-identical original compressed mip bytes.
+    digest_to_names = defaultdict(set)
+    for r in all_entries:
+        digest_to_names[r["gpu_mip_bytes_sha256"]].add(r["tpf_name"].casefold())
+    ambiguous_digests = {
+        digest: sorted(names) for digest, names in digest_to_names.items()
+        if len(names) != 1
+    }
     with open(slots_csv, encoding="utf-8-sig", newline="") as f:
         slot_rows = list(csv.DictReader(f))
     exact_matches = []
@@ -132,7 +141,7 @@ def main(source_zip, slots_csv, output):
         for name in ast.literal_eval(slot["g_specular"]):
             candidates = by_name.get(name.casefold(), [])
             hashes = {v["gpu_mip_bytes_sha256"] for v in candidates}
-            if len(hashes) == 1:
+            if len(hashes) == 1 and next(iter(hashes)) not in ambiguous_digests:
                 exact_matches.append({
                     "flver_sha256": slot["flver_sha256"],
                     "material_slot": int(slot["material_slot"]),
@@ -147,6 +156,7 @@ def main(source_zip, slots_csv, output):
         "archives": len(paths), "tpf_states": states,
         "extracted_DDS_entries": len(all_entries), "unique_logical_names": len(by_name),
         "logical_name_content_conflicts": collision_names,
+        "byte_identical_distinct_logical_names": ambiguous_digests,
         "formats": {
             str(dxgi): sum(v["dxgi_format"] == dxgi for v in all_entries)
             for dxgi in (71, 77, 83)
