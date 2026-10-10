@@ -106,7 +106,7 @@ $args = @(
     "-DRESHADE_INCLUDE_DIR=$(Join-Path $reshade 'include')",
     "-DDSRRL_SOURCE_COMMIT=$commit",
     "-DDSRRL_BUILD_FLAVOR=$flavor",
-    '-DCMAKE_CXX_FLAGS=/MP'
+    '-DCMAKE_CXX_FLAGS=/MP /EHsc'
 )
 foreach ($flag in $flags) { $args += "-D$flag=ON" }
 cmake @args
