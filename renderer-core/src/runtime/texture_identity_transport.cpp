@@ -534,7 +534,7 @@ extern "C" void dsrrl_spc25_packet_source_observer(
         if(node_name && length < 512u &&
            readable_range(node_name,(length+1u)*sizeof(wchar_t))) {
             readable = true;
-            equal = node_name[length] == L'\\0' &&
+            equal = node_name[length] == L'\0' &&
                 std::char_traits<wchar_t>::compare(
                     node_name,name,length) == 0;
         }
