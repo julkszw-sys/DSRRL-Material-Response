@@ -1,0 +1,17 @@
+name: v203 Clean Equipment
+on:
+  push:
+    branches: [agent/v203-clean-equipment-no-npc-20261010]
+  workflow_dispatch:
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Verify clean source
+        shell: pwsh
+        run: |
+          git diff --exit-code 6a73033f6275f88487effeb1e34bbbdd7a6a3a88 HEAD -- renderer-core/src/runtime
+          if ($LASTEXITCODE -ne 0) { throw 'Not the original v203 runtime' }
