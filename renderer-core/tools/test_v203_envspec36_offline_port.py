@@ -34,9 +34,15 @@ expected_slots = {
     "P_Metal[DSB].mtd": {2},
 }
 for mtd, slots in expected_slots.items():
-    found = set(int(n) for n in re.findall(
-        re.escape('"' + mtd + '"') + r',[\\s\\S]*?envspec_router_state::present, (\\d+)u',
-        router))
+    # Match one generated two-line MTD record at a time: no cross-record
+    # traversal and no escaped-regex-literal ("\\s") false negatives.
+    matches = re.findall(
+        r'^\s*"' + re.escape(mtd) +
+        r'",[^\n]*\n\s*\{\{[^\n]*?\}\}, envspec_router_state::(\w+), (\d+)u',
+        router, flags=re.MULTILINE)
+    assert matches, (mtd, "no complete raw-MTD router records")
+    assert all(state == "present" for state, _ in matches), (mtd, matches)
+    found = {int(n) for _, n in matches}
     assert found == slots, (mtd, found, slots)
 assert "exact_proven_owner_slot(query)" in gate
 assert 'mtd_semantic_hash("DifSpcBmp")' in gate
