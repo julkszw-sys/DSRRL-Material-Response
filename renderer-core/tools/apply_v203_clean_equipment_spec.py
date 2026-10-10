@@ -43,6 +43,14 @@ PROBE = """
             !t1_seen.exchange(true,std::memory_order_relaxed))
             reshade::log::message(reshade::log::level::info,
                 "[DSRRL V203 EQUIPMENT] stage=stock_t1_exact");
+        static std::atomic_bool t1_missing{false};
+        if (!t1_missing.load(std::memory_order_relaxed) &&
+            v203_equipment::exact_proven_owner_slot(query) &&
+            !v203_equipment::exact_proven_slot_spec_hash(query,h1) &&
+            !t1_missing.exchange(true,std::memory_order_relaxed))
+            reshade::log::message(reshade::log::level::info,
+                "[DSRRL V203 EQUIPMENT] stage=stock_t1_unresolved "
+                "stock_bind=UNCHANGED");
         static std::atomic_bool companion_seen{false};
         if (!companion_seen.load(std::memory_order_relaxed) &&
             companions[1] != nullptr &&
