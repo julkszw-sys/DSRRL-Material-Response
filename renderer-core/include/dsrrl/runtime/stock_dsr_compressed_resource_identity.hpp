@@ -71,10 +71,12 @@ inline std::optional<digest> exact_full_mip_digest(
         const std::uint32_t blocks = (mip_width + 3u) / 4u;
         const std::uint32_t tight_row = blocks * block_size;
 
+        // D3D11 SysMemSlicePitch is unspecified/unused for 2D textures
+        // and may legitimately be zero, unlike row pitch.
         if (src.data == nullptr || src.row_pitch < tight_row ||
-            src.slice_pitch == 0u ||
-            static_cast<std::uint64_t>(src.row_pitch) * rows >
-                src.slice_pitch)
+            (src.slice_pitch != 0u &&
+             static_cast<std::uint64_t>(src.row_pitch) * rows >
+                 src.slice_pitch))
             return std::nullopt;
 
         // Reject implausibly large CPU read requests; not a content-identity
