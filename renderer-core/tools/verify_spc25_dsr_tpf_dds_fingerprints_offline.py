@@ -27,7 +27,7 @@ def dds_fingerprint(blob):
     mips = u32(blob, 28) or 1
     if not (0 < w <= 16384 and 0 < h <= 16384 and 1 <= mips <= 16):
         raise ValueError("Invalid DDS dimensions or mips")
-    fourcc = blob[84:88]
+    fourcc = bytes(blob[84:88])
     if fourcc == b"DX10":
         if len(blob) < 148:
             raise ValueError("Truncated DX10 DDS")
