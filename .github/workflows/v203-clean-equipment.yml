@@ -15,3 +15,22 @@ jobs:
         run: |
           git diff --exit-code 6a73033f6275f88487effeb1e34bbbdd7a6a3a88 HEAD -- renderer-core/src/runtime
           if ($LASTEXITCODE -ne 0) { throw 'Not the original v203 runtime' }
+      - uses: actions/checkout@v4
+        with:
+          repository: crosire/reshade
+          ref: 3645e3025d1d98a90e318278858931f034d5d1f6
+          path: _reshade
+      - name: Build clean equipment-only v203
+        shell: pwsh
+        run: ./renderer-core/tools/configure_v203_clean_equipment.ps1
+      - name: Native regressions and one addon
+        shell: pwsh
+        run: ./renderer-core/tools/verify_v203_clean_equipment.ps1
+      - uses: actions/upload-artifact@v4
+        with:
+          name: DSRRL_v203_CLEAN_EQUIPMENT_SPEC_EXPERIMENT
+          path: |
+            DSRRL_v203_CLEAN_EQUIPMENT_SPEC_EXPERIMENT.addon64
+            DSRRL_v203_CLEAN_EQUIPMENT_SPEC_EXPERIMENT.zip
+            SHA256SUMS.txt
+          if-no-files-found: error
