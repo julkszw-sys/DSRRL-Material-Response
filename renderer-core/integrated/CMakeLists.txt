@@ -977,6 +977,22 @@ if(DSRRL_EXPERIMENTAL_SPC25_DECODER_PROBE)
         "SPC25 typed decoder hook is quarantined: owner runtime crashed before main menu; fail closed until ABI and packet-cursor semantics are independently verified")
 endif()
 
+if(DSRRL_EXPERIMENTAL_SPC25_EQUIPMENT_SPEC_BRIDGE)
+    if(NOT DSRRL_EXPERIMENTAL_SPC_MATERIAL_BATCH)
+        message(FATAL_ERROR "Equipment carrier needs exact SPC25 native epoch")
+    endif()
+    execute_process(
+        COMMAND "${Python3_EXECUTABLE}"
+            "${DSRRL_RENDERER_CORE_ROOT}/tools/apply_spc25_equipment_spec.py"
+        RESULT_VARIABLE SPC25_EQUIPMENT_RESULT
+        ERROR_VARIABLE SPC25_EQUIPMENT_ERROR)
+    if(NOT SPC25_EQUIPMENT_RESULT EQUAL 0)
+        message(FATAL_ERROR
+            "Equipment source recipe missing: ${SPC25_EQUIPMENT_ERROR}")
+    endif()
+    target_compile_definitions(dsrrl_renderer_core_integrated PRIVATE
+        DSRRL_EXPERIMENTAL_SPC25_EQUIPMENT_SPEC_BRIDGE)
+endif()
 if(DSRRL_EXPERIMENTAL_SPC25_C5330_SWAP_TEST)
     # c5330_s is a character/NPC texture, not a certified player
     # equipment member. The project-wide SpecRGB equipment authority
