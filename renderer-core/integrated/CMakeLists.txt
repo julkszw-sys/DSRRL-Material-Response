@@ -147,6 +147,10 @@ option(
     OFF)
 
 option(
+    DSRRL_EXPERIMENTAL_SPC25_EQUIPMENT_SPEC_BRIDGE
+    "Experimental exact equipment-only SpecRGB source identity repair"
+    OFF)
+option(
     DSRRL_EXPERIMENTAL_SPC25_C5330_SWAP_TEST
     "Opt-in exact route14 c5330 test; default OFF"
     OFF)
