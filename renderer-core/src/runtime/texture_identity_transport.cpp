@@ -641,6 +641,14 @@ extern "C" void dsrrl_spc25_packet_source_observer(
         g_cpu_cache_name_equal.fetch_add(1u,std::memory_order_relaxed);
     else
         g_cpu_cache_name_different.fetch_add(1u,std::memory_order_relaxed);
+    char payload_rtti[96]{};
+    std::uint32_t payload_vtable_rva = 0u;
+    const bool rtti_valid = attest_cpu_object_rtti(
+        engine_object,payload_rtti,payload_vtable_rva);
+    if(rtti_valid)
+        g_cpu_rtti_exact.fetch_add(1u,std::memory_order_relaxed);
+    else
+        g_cpu_rtti_unavailable.fetch_add(1u,std::memory_order_relaxed);
     const auto count = g_cpu_packet_name_matches.fetch_add(
         1u,std::memory_order_relaxed)+1u;
     if(count <= 24u || (count & (count-1u)) == 0u) {
@@ -653,9 +661,12 @@ extern "C" void dsrrl_spc25_packet_source_observer(
         std::snprintf(msg,sizeof(msg),
           "[DSRRL SPC25 CPU 808D] stage=writer_input "
           "entry=%p engine_object=%p source_id=%u loader_name=%s "
-          "scope=RETAIL_TLS cache_name=%s srv=UNVERIFIED pixel=OPEN",
+          "scope=RETAIL_TLS cache_name=%s cpu_vtable_rva=%08X "
+          "cpu_rtti=%s source_to_srv=UNVERIFIED pixel=OPEN",
           cache_entry,engine_object,source_id,ascii,
-          !readable ? "UNREADABLE" : (equal ? "EXACT" : "DIFFERENT"));
+          !readable ? "UNREADABLE" : (equal ? "EXACT" : "DIFFERENT"),
+          payload_vtable_rva,
+          rtti_valid ? payload_rtti : "UNVERIFIED");
         reshade::log::message(reshade::log::level::info,msg);
     }
 #else
