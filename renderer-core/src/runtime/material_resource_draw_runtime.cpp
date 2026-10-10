@@ -1823,6 +1823,13 @@ void on_destroy_resource_view(
     reshade::api::resource_view view)
 {
 #if defined(DSRRL_EXPERIMENTAL_SPC_MATERIAL_BATCH)
+    // ReShade D3D11 view.handle is the native SRV pointer in the same
+    // identity domain as PSGetShaderResources. Retire the exact writer
+    // snapshots before the renderer's existing view-epoch invalidation.
+    // No AddRef/Release or late dereference of the destroyed pointer.
+    texture_identity_transport::retire_native_ps_t1(
+        reinterpret_cast<const void *>(
+            static_cast<std::uintptr_t>(view.handle)));
     spc25_physical::drop_view(view.handle);
 #endif
     companion_set dead{};
