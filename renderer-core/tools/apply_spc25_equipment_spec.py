@@ -111,6 +111,10 @@ H="""#if defined(DSRRL_EXPERIMENTAL_SPC25_EQUIPMENT_SPEC_BRIDGE)
     }
 #endif
     // Limit the experiment to two exact lookups"""
+E="#if defined(DSRRL_EXPERIMENTAL_SPC_MATERIAL_BATCH)\n    // Shared remediation for ALL exact SPC25 receiver/material profiles."
+F="#if defined(DSRRL_EXPERIMENTAL_SPC_MATERIAL_BATCH) && \\\n    !defined(DSRRL_EXPERIMENTAL_SPC25_EQUIPMENT_SPEC_BRIDGE)\n    // The equipment test uses only the exact FLVER/slot/spec authority cut.\n    // Shared generic late-t1 recovery must not run ahead of it.\n    // Shared remediation for ALL exact SPC25 receiver/material profiles."
+WRITER_A="    if(count <= 24u || (count & (count-1u)) == 0u) {"
+WRITER_B="#if defined(DSRRL_EXPERIMENTAL_SPC25_EQUIPMENT_SPEC_BRIDGE)\n    // Preserve names past the global first-24 writer log limit: actual\n    // equipment-prefix names only, never infer ownership or SRV authority.\n    const auto lower_ascii = [](wchar_t c) noexcept {\n        return (c >= L'A' && c <= L'Z') ? wchar_t(c+32) : c;\n    };\n    const bool equipment_prefix =\n        length >= 6u && is_exact_tex2d && fields_readable &&\n        name[2] == L'_' && name[length-2u] == L'_' &&\n        lower_ascii(name[length-1u]) == L's' &&\n        ((lower_ascii(name[0])==L'b' && lower_ascii(name[1])==L'd') ||\n         (lower_ascii(name[0])==L'a' && lower_ascii(name[1])==L'm') ||\n         (lower_ascii(name[0])==L'h' && lower_ascii(name[1])==L'd') ||\n         (lower_ascii(name[0])==L'l' && lower_ascii(name[1])==L'g') ||\n         (lower_ascii(name[0])==L'w' && lower_ascii(name[1])==L'p'));\n    static std::atomic<std::uint32_t> equipment_name_observations{0u};\n    const auto equipment_sample = equipment_prefix ?\n        equipment_name_observations.fetch_add(\n            1u,std::memory_order_relaxed)+1u : 0u;\n    const bool sample_equipment_name =\n        equipment_sample && (equipment_sample <= 8u ||\n        ((equipment_sample & (equipment_sample-1u))==0u));\n#else\n    constexpr bool sample_equipment_name = false;\n#endif\n    if(count <= 24u || (count & (count-1u)) == 0u ||\n       sample_equipment_name) {"
 def patch(p,a,b,apply):
  s=p.read_text(encoding="utf-8")
  if s.count(b)==1: pass
@@ -121,5 +125,7 @@ if __name__=="__main__":
  ap=argparse.ArgumentParser();ap.add_argument("--apply",action="store_true");v=ap.parse_args()
  patch(ROOT/"renderer-core/src/runtime/material_resource_draw_runtime.cpp",G,H,v.apply)
  patch(ROOT/"renderer-core/src/runtime/material_resource_draw_runtime.cpp",A,B,v.apply)
+ patch(ROOT/"renderer-core/src/runtime/texture_identity_transport.cpp",WRITER_A,WRITER_B,v.apply)
+ patch(ROOT/"renderer-core/src/runtime/pmetal_envspec_draw_runtime.cpp",E,F,v.apply)
  patch(ROOT/"renderer-core/src/runtime/pmetal_envspec_draw_runtime.cpp",I,J,v.apply)
  patch(ROOT/"renderer-core/src/runtime/pmetal_envspec_draw_runtime.cpp",C,D,v.apply)
