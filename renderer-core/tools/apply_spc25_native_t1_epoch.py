@@ -11,6 +11,7 @@ import argparse
 ROOT = Path(__file__).resolve().parents[2]
 TEX = ROOT / "renderer-core/src/runtime/texture_identity_transport.cpp"
 MAT = ROOT / "renderer-core/src/runtime/material_resource_draw_runtime.cpp"
+PMETAL = ROOT / "renderer-core/src/runtime/pmetal_envspec_draw_runtime.cpp"
 
 TEXTURE = [
  ('#include "dsrrl/runtime/texture_identity_transport.hpp"',
@@ -78,6 +79,11 @@ MATERIAL = [
   "        const bool exact_companion =\n            h1 != 0u &&\n            (generated::spec_equipment_name_hash_allowed_v12(h1) ||\n             experimental_c5330_exact) &&\n            replacement != nullptr;"),
 ]
 
+PMETAL_RULES = [
+ ("material_resources_.try_recover_exact_bound_spec_from_native_name(\n            context)) {",
+  "material_resources_.try_recover_exact_bound_spec_from_native_name(\n            context,\n#if defined(DSRRL_EXPERIMENTAL_SPC25_C5330_SWAP_TEST)\n            material.route_index == 14u &&\n            decision.receiver_id == 34u &&\n            material.material_slot_valid &&\n            material.material_slot == 0u &&\n            material.owner_tuple_exact &&\n            material.actual_material_exact &&\n            material.semantic_name_hash ==\n                mr::mtd_semantic_hash(\"C_RoughCloth[DSB].mtd\")\n#else\n            false\n#endif\n            )) {"),
+]
+
 def process(path: Path, rules, write: bool) -> None:
     text = path.read_text(encoding="utf-8")
     if write:
@@ -107,6 +113,7 @@ def main():
     args = parser.parse_args()
     process(TEX, TEXTURE, args.apply)
     process(MAT, MATERIAL, args.apply)
+    process(PMETAL, PMETAL_RULES, args.apply)
     print("SPC25_EPOCH_DIAGNOSTIC_ONLY: bridge_authority=0 srv_swap=0")
 
 if __name__ == "__main__":
