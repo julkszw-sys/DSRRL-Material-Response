@@ -129,5 +129,34 @@ int main()
         optional_hash_bridge));
     assert(optional_hash_bridge.beta == 0.75f);
 
+    // New regression: begin() without a preceding clear() must revoke
+    // SAME-material TLS authority as well as the synchronized record.
+    // Otherwise latest() returns an old, pre-selector PTDE LightBank source.
+    runtime::pmetal_producer_state_clear();
+    runtime::pmetal_producer_state_begin(material, 100u);
+    runtime::pmetal_producer_state_publish(material, source, 100u);
+    runtime::pmetal_envspec_source before_begin{};
+    assert(runtime::pmetal_producer_state_latest(
+        material, 100u, before_begin));
+    assert(runtime::pmetal_producer_state_valid());
+    const auto previous_generation = before_begin.generation;
+
+    // Deliberately skip selector_clear(): a failed new source selection
+    // must fail open rather than resurrect the old material's TLS source.
+    runtime::pmetal_producer_state_begin(material, 100u);
+    assert(!runtime::pmetal_producer_state_valid());
+    runtime::pmetal_envspec_source after_begin{};
+    assert(!runtime::pmetal_producer_state_latest(
+        material, 100u, after_begin));
+
+    // An identical successful source after this boundary may reuse the
+    // existing generation; invalidation must not erase the source payload.
+    runtime::pmetal_producer_state_publish(material, source, 100u);
+    runtime::pmetal_envspec_source after_publish{};
+    assert(runtime::pmetal_producer_state_latest(
+        material, 100u, after_publish));
+    assert(after_publish.generation == previous_generation);
+    assert(after_publish.beta == 0.75f);
+
     return 0;
 }
