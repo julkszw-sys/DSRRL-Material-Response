@@ -33,6 +33,13 @@ PROBE = """
                 "consumer=UNCHANGED");
         const auto owner_probe =
             v203_equipment::classify_exact_owner_slot(query);
+        static std::atomic_bool owner_auth_missing{false};
+        if (owner_probe ==
+                v203_equipment::owner_slot_probe::authority_missing &&
+            !owner_auth_missing.exchange(true,std::memory_order_relaxed))
+            reshade::log::message(reshade::log::level::info,
+                "[DSRRL V203 EQUIPMENT] stage=owner_authority_missing "
+                "stock_dsr=ON");
         static std::atomic_bool outside_corpus_seen{false};
         if (owner_probe ==
                 v203_equipment::owner_slot_probe::flver_not_in_corpus &&
