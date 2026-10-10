@@ -43,6 +43,14 @@ PROBE = """
             !t1_seen.exchange(true,std::memory_order_relaxed))
             reshade::log::message(reshade::log::level::info,
                 "[DSRRL V203 EQUIPMENT] stage=stock_t1_exact");
+        static std::atomic_bool companion_seen{false};
+        if (!companion_seen.load(std::memory_order_relaxed) &&
+            companions[1] != nullptr &&
+            v203_equipment::exact_proven_slot_spec_hash(query,h1) &&
+            !companion_seen.exchange(true,std::memory_order_relaxed))
+            reshade::log::message(reshade::log::level::info,
+                "[DSRRL V203 EQUIPMENT] stage=ptde_companion_ready "
+                "consumer=UNCHANGED pixel=OPEN");
 
     }
 #endif
