@@ -1097,6 +1097,14 @@ if(DSRRL_POINTLIGHT_PROFILE)
         DSRRL_POINTLIGHT_PROFILE)
 endif()
 
+# SPC25 experimental builds use the existing single-addon target with
+# parallel C++ compiler instances. Keep the pre-existing exact flags,
+# source SHA, CI identity checks and all fail-open safety gates.
+if(MSVC AND DSRRL_EXPERIMENTAL_SPC_MATERIAL_BATCH)
+    target_compile_options(dsrrl_renderer_core_integrated PRIVATE
+        $<$<COMPILE_LANGUAGE:CXX>:/MP>)
+endif()
+
 if(MSVC)
     target_compile_options(
         dsrrl_renderer_core_integrated
