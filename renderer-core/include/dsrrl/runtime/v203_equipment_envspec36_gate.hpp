@@ -28,9 +28,14 @@ inline bool exact_envspec36_material(
     const operators::material_response::material_identity &material) noexcept
 {
     namespace mr = operators::material_response;
+    // The original exact P_Metal island remains the only owner of route 345
+    // and P_Metal[DSB]. Do not broaden its authority with a second gate.
     if (!material.valid || !material.owner_tuple_exact ||
         !material.actual_material_exact ||
         !material.material_slot_valid ||
+        material.route_index == 345u ||
+        material.semantic_name_hash ==
+            mr::mtd_semantic_hash("P_Metal[DSB].mtd") ||
         material.material_family_hash !=
             mr::mtd_semantic_hash("DifSpcBmp"))
         return false;
