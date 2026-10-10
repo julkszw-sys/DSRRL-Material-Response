@@ -38,6 +38,9 @@ struct texture_name_liveness {
     std::uint64_t name_snapshots = 0u;
     std::uint64_t packet_writer_calls = 0u;
     std::uint64_t packet_named_in_scope = 0u;
+    std::uint64_t cache_name_equal = 0u;
+    std::uint64_t cache_name_different = 0u;
+    std::uint64_t cache_name_unreadable = 0u;
 };
 texture_name_liveness liveness() noexcept;
 
