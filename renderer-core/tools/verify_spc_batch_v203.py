@@ -187,6 +187,16 @@ assert "readable_range(fields_address,sizeof(managed_fields))" in packet_source
 assert "p28_texture_snapshot=%p" in packet_source
 assert "p30_srv_snapshot=%p" in packet_source
 assert "tex2d_both_nonnull=%llu" in resource
+assert "struct native_named_source" in packet_source
+assert "std::array<native_named_source,1024u>" in packet_source
+assert "published_srv.store(" in packet_source
+assert "std::memory_order_release" in packet_source
+assert "published_srv.load(std::memory_order_acquire)" in packet_source
+assert "diagnose_native_ps_t1(" in packet_source
+assert "texture_identity_transport::diagnose_native_ps_t1(" in resource
+assert "matching_srv_and_texture=%u" in packet_source
+assert "cross_epoch_lifetime=OPEN reuse_collision=UNVERIFIED" in packet_source
+assert "bridge_authority=0 srv_swap=0 pixel=OPEN" in packet_source
 assert "source_to_srv=UNVERIFIED pixel=OPEN" in packet_source
 assert "typed decoder QUARANTINED" in packet_source
 assert "cpu_rtti_exact=%llu cpu_rtti_unavailable=%llu" in resource
