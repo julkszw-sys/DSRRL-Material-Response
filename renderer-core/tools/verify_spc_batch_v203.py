@@ -197,9 +197,9 @@ assert "texture_identity_transport::diagnose_native_ps_t1(" in resource
 # The consumer comparison must live on the active exact-material draw
 # path, not solely inside dormant late-native-name recovery.
 active_cut = resource.split(
-    "bool material_resource_draw_runtime::\\nprepare_draw_requests(", 1
+    "bool material_resource_draw_runtime::\nprepare_draw_requests(", 1
 )[1].split(
-    "bool material_resource_draw_runtime::\\nprepare_draw_requests_bound(", 1
+    "bool material_resource_draw_runtime::\nprepare_draw_requests_bound(", 1
 )[0]
 assert "stage=active_receiver_prebind" in active_cut
 assert "receiver_id >= 24u && receiver_id <= 35u" in active_cut
