@@ -116,7 +116,7 @@ def main():
     process(TEX, TEXTURE, args.apply)
     process(MAT, MATERIAL, args.apply)
     process(PMETAL, PMETAL_RULES, args.apply)
-    print("SPC25_EPOCH_DIAGNOSTIC_ONLY: bridge_authority=0 srv_swap=0")
+    print("SPC25_EXACT_SOURCE_TEST: c5330 feature opt-in; runtime and pixels OPEN")
 
 if __name__ == "__main__":
     main()
