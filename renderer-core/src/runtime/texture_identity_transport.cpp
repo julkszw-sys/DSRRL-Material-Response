@@ -126,6 +126,17 @@ std::atomic<std::uint64_t> g_native_t1_resource_matches{0u};
 std::atomic<std::uint64_t> g_native_t1_ambiguous{0u};
 std::atomic<std::uint32_t> g_native_t1_match_logs{0u};
 std::atomic<std::uint32_t> g_native_t1_no_match_logs{0u};
+// Non-owning addresses only. Teardown callback tombstones matching writer
+// slots and frees their diagnostic seen-set entries for the NEXT lifetime.
+constexpr std::size_t k_native_t1_seen_capacity = 8192u;
+constexpr std::size_t k_native_t1_seen_mask =
+    k_native_t1_seen_capacity - 1u;
+std::array<std::atomic<std::uintptr_t>,
+           k_native_t1_seen_capacity> g_native_t1_seen{};
+std::atomic<std::uint64_t> g_native_t1_destroy_events{0u};
+std::atomic<std::uint64_t> g_native_t1_writer_retired{0u};
+std::atomic<std::uint64_t> g_native_t1_seen_rearmed{0u};
+std::atomic<std::uint32_t> g_native_t1_retire_logs{0u};
 #endif
 
 bool readable_range(
@@ -987,16 +998,14 @@ bool should_sample_native_ps_t1(const void *native_view) noexcept
     // Diagnostic-only 8192-entry atomic seen set. No reference ownership
     // or lifetime claim; this prevents a 1024-entry scan on every draw.
     // Reused addresses are deliberately not promoted to source authority.
-    constexpr std::size_t k_capacity = 8192u;
-    constexpr std::size_t k_mask = k_capacity - 1u;
-    static std::array<std::atomic<std::uintptr_t>,k_capacity> seen{};
     const auto key = reinterpret_cast<std::uintptr_t>(native_view);
     if (!key)
         return false;
     const auto start = static_cast<std::size_t>(
-        (key >> 4u) ^ (key >> 17u) ^ (key >> 29u)) & k_mask;
+        (key >> 4u) ^ (key >> 17u) ^ (key >> 29u)) &
+        k_native_t1_seen_mask;
     for (std::size_t probe = 0u; probe < 8u; ++probe) {
-        auto &slot = seen[(start + probe) & k_mask];
+        auto &slot = g_native_t1_seen[(start + probe) & k_native_t1_seen_mask];
         auto previous = slot.load(std::memory_order_acquire);
         if (previous == key)
             return false;
@@ -1011,6 +1020,69 @@ bool should_sample_native_ps_t1(const void *native_view) noexcept
 #else
     (void)native_view;
     return false;
+#endif
+}
+
+void retire_native_ps_t1(const void *native_view) noexcept
+{
+#if defined(DSRRL_EXPERIMENTAL_SPC_MATERIAL_BATCH)
+    const auto key = reinterpret_cast<std::uintptr_t>(native_view);
+    if (!key)
+        return;
+    g_native_t1_destroy_events.fetch_add(
+        1u,std::memory_order_relaxed);
+    std::uint32_t retired = 0u;
+    const auto observed = std::min<std::size_t>(
+        static_cast<std::size_t>(
+            g_cpu_packet_writer_calls.load(std::memory_order_acquire)),
+        g_native_named_sources.size());
+    for(std::size_t i = 0u;i < observed;++i) {
+        auto &slot = g_native_named_sources[i];
+        auto expected = key;
+        // Atomic tombstone: a returned native pointer may be reused.
+        // Invalidate all named identities associated with the old SRV.
+        if(slot.published_srv.compare_exchange_strong(
+               expected,0u,std::memory_order_acq_rel,
+               std::memory_order_acquire))
+            ++retired;
+    }
+    const auto start = static_cast<std::size_t>(
+        (key >> 4u) ^ (key >> 17u) ^ (key >> 29u)) &
+        k_native_t1_seen_mask;
+    bool rearmed = false;
+    for(std::size_t probe = 0u; probe < 8u; ++probe) {
+        auto &slot = g_native_t1_seen[
+            (start + probe) & k_native_t1_seen_mask];
+        auto expected = key;
+        if(slot.compare_exchange_strong(
+              expected,0u,std::memory_order_acq_rel,
+              std::memory_order_acquire)) {
+            rearmed = true;
+            break;
+        }
+    }
+    if(retired)
+        g_native_t1_writer_retired.fetch_add(
+            retired,std::memory_order_relaxed);
+    if(rearmed)
+        g_native_t1_seen_rearmed.fetch_add(
+            1u,std::memory_order_relaxed);
+    if(retired &&
+       g_native_t1_retire_logs.fetch_add(
+           1u,std::memory_order_relaxed) < 16u) {
+        char msg[384]{};
+        std::snprintf(msg,sizeof(msg),
+            "[DSRRL SPC25 VIEW LIFETIME] stage=destroy_resource_view "
+            "native_srv=%p writer_snapshots_tombstoned=%u "
+            "new_epoch_sampling_rearmed=%u "
+            "native_view_identity=VALUE_ONLY "
+            "cross_epoch=UNVERIFIED srv_swap=0 pixel=OPEN",
+            native_view,retired,rearmed ? 1u : 0u);
+        reshade::log::message(
+            reshade::log::level::info,msg);
+    }
+#else
+    (void)native_view;
 #endif
 }
 
