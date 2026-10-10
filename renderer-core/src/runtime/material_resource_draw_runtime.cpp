@@ -2410,6 +2410,37 @@ prepare_draw_requests(
         3u,
         views);
 
+#if defined(DSRRL_EXPERIMENTAL_SPC_MATERIAL_BATCH)
+    // This IS the active exact-material draw cut. The previous native-t1
+    // observer lived in try_recover_exact_bound_spec_from_native_name(),
+    // which is not called by the integrated draw path. Sample the stock
+    // t1 already pinned by PSGetShaderResources instead. No SRV swaps.
+    if (receiver_id >= 24u && receiver_id <= 35u) {
+        static std::atomic_bool native_t1_cut_logged{false};
+        if (!native_t1_cut_logged.exchange(
+                true, std::memory_order_relaxed)) {
+            char msg[256]{};
+            std::snprintf(msg, sizeof(msg),
+                "[DSRRL SPC25 DRAW CUT] stage=active_receiver_prebind "
+                "rx=%u exact_owner=1 stock_t1=%u "
+                "diagnostic_only=1 srv_swap=0 pixel=OPEN",
+                receiver_id, views[1] != nullptr ? 1u : 0u);
+            reshade::log::message(reshade::log::level::info, msg);
+        }
+        if (views[1] != nullptr &&
+            texture_identity_transport::should_sample_native_ps_t1(
+                views[1])) {
+            ID3D11Resource *stock_texture = nullptr;
+            views[1]->GetResource(&stock_texture);
+            if (stock_texture != nullptr) {
+                texture_identity_transport::diagnose_native_ps_t1(
+                    views[1], stock_texture);
+                stock_texture->Release();
+            }
+        }
+    }
+#endif
+
     const bool ready =
         prepare_draw_requests_bound(
             views,
