@@ -107,6 +107,20 @@ assert "texture_name_liveness liveness()" in identity_api
 assert "g_texture_name_hook_calls.fetch_add" in identity
 assert "g_texture_name_complete.fetch_add" in identity
 assert "DSRRL SPC25 NAME CUT" in resource
+physical = (ROOT / "include/dsrrl/runtime/spc25_physical_t1_probe.hpp").read_text()
+source_manifest = (ROOT / "include/dsrrl/runtime/spc25_stock_source_manifest.hpp").read_text()
+assert "spc25_physical::init(device,desc,initial_data,resource)" in resource
+assert "spc25_physical::link_view(view.handle,resource.handle)" in resource
+assert "spc25_physical::inspect(stock)" in resource
+assert "spc25_physical::drop_resource(resource.handle)" in resource
+assert "spc25_physical::drop_view(view.handle)" in resource
+assert "spc25_physical::drop_device(native)" in resource
+assert "view->GetResource(&r)" in physical
+assert "current_gpu_bytes=UNVERIFIED srv_swap=0 pixel=OPEN" in physical
+assert "PSSetShaderResources" not in physical
+assert "k_original_dsr_spec" in source_manifest
+assert "WP_A_0106_mailbreaker_s" in source_manifest
+
 assert "g_name_exact_init_resource.fetch_add" in resource
 assert "g_name_exact_create_view.fetch_add" in resource
 assert "g_name_exact_init_view.fetch_add" in resource
