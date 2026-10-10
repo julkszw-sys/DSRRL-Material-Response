@@ -726,6 +726,12 @@ texture_name_liveness liveness() noexcept
         g_cpu_packet_writer_calls.load(std::memory_order_relaxed);
     out.packet_named_in_scope =
         g_cpu_packet_name_matches.load(std::memory_order_relaxed);
+    out.cache_name_equal =
+        g_cpu_cache_name_equal.load(std::memory_order_relaxed);
+    out.cache_name_different =
+        g_cpu_cache_name_different.load(std::memory_order_relaxed);
+    out.cache_name_unreadable =
+        g_cpu_cache_name_unreadable.load(std::memory_order_relaxed);
 #endif
     return out;
 }
