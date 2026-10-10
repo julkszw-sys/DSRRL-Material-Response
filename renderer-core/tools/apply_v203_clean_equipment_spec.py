@@ -21,7 +21,7 @@ NEW = OLD[:-1] + ("\n#if defined(DSRRL_V203_EXACT_EQUIPMENT_SPEC)\n"
        "#endif\n"
        "            ;")
 
-PROBE_ANCHOR = "    const auto h2 = hashes[2];\\n\\n"
+PROBE_ANCHOR = "    const auto h2 = hashes[2];\n\n"
 PROBE = """
 #if defined(DSRRL_V203_EXACT_EQUIPMENT_SPEC)
     if (receiver_id >= 24u && receiver_id <= 35u &&
