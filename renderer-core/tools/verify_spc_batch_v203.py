@@ -120,6 +120,23 @@ assert "current_gpu_bytes=UNVERIFIED srv_swap=0 pixel=OPEN" in physical
 assert "PSSetShaderResources" not in physical
 assert "k_original_dsr_spec" in source_manifest
 assert "WP_A_0106_mailbreaker_s" in source_manifest
+# Previously the 384 MiB session-wide hash budget was exhausted before the
+# late 1024x2048/12/BC1 stock PS-t1 resource. Preserve this observed route
+# as a passive diagnostic lane; other BC traffic has an exact atomic budget.
+assert "budget_bytes.fetch_add" not in physical
+assert "observed_spc25_t1_layout" in physical
+assert "t.width==1024u && t.height==2048u" in physical
+assert "t.levels==12u && fmt==71u" in physical
+assert "budget_bytes.compare_exchange_weak" in physical
+assert "RESOURCE_TOO_LARGE" in physical
+# Additional asset fingerprints are source-only, not proof of material/receiver.
+manifest_rows = re.findall(r'\{"([^"]+)",(\d+),(\d+),(\d+),(\d+),"([0-9a-f]{64})"\}', source_manifest)
+assert len(manifest_rows)==18, len(manifest_rows)
+assert len({r[0].lower() for r in manifest_rows})==18
+assert len({r[5] for r in manifest_rows})==18
+assert "No C_Metal/C_RoughCloth texture is claimed" in source_manifest
+assert "AM_F_9450_L_s" in source_manifest and "WP_A_1700_s" in source_manifest
+assert "return nullptr; // noninjective source digest" in source_manifest
 
 assert "g_name_exact_init_resource.fetch_add" in resource
 assert "g_name_exact_create_view.fetch_add" in resource
