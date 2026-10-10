@@ -9,7 +9,7 @@
 #include "dsrrl/operators/material_response/mtd_semantic_census.hpp"
 #include <cstddef>
 #include <cstdint>
-namespace dsrrl::runtime::spc25_equipment {
+namespace dsrrl::runtime::v203_equipment {
 struct flver_slot_spec_row {
     const char *flver_sha256;
     std::uint32_t slot;
@@ -138,4 +138,4 @@ inline bool exact_proven_slot_spec_hash(
     }
     return false;
 }
-} // namespace dsrrl::runtime::spc25_equipment
+} // namespace dsrrl::runtime::v203_equipment
