@@ -11,6 +11,7 @@ struct hook_status {
     bool name_hook_armed = false;
     bool clear_hook_armed = false;
     bool packet_hook_armed = false;
+    bool decoder_hook_armed = false;
     bool restore_failed = false;
 };
 
@@ -41,6 +42,9 @@ struct texture_name_liveness {
     std::uint64_t cache_name_equal = 0u;
     std::uint64_t cache_name_different = 0u;
     std::uint64_t cache_name_unreadable = 0u;
+    std::uint64_t decode_calls = 0u;
+    std::uint64_t decode_payload_readable = 0u;
+    std::uint64_t decode_writer_pointer_seen = 0u;
 };
 texture_name_liveness liveness() noexcept;
 
