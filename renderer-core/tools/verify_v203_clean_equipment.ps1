@@ -12,7 +12,7 @@ if ($files.Count -ne 1) { throw "Expected one addon" }
 $bin = "DSRRL_v203_CLEAN_EQUIPMENT_SPEC_EXPERIMENT.addon64"
 Copy-Item $files[0].FullName $bin
 $ascii = [Text.Encoding]::ASCII.GetString([IO.File]::ReadAllBytes($bin))
-foreach ($marker in @($sha,"[DSRRL PMETAL ZERO RE]","v203_clean_equipment_slot_spec_optin""epochs=KEY_BUCKET_256","mode=4WAY_64SETS_256TOTAL_SYNC_ON","[DSRRL PHYSICAL CUT POINTLIGHT]")) {
+foreach ($marker in @($sha,"[DSRRL PMETAL ZERO RE]","v203_clean_equipment_slot_spec_optin","epochs=KEY_BUCKET_256","mode=4WAY_64SETS_256TOTAL_SYNC_ON","[DSRRL PHYSICAL CUT POINTLIGHT]")) {
   if (!$ascii.Contains($marker)) { throw "Missing $marker" }
 }
 $hash = (Get-FileHash $bin -Algorithm SHA256).Hash.ToLowerInvariant()
