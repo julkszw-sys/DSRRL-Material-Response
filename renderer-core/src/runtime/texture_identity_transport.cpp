@@ -643,8 +643,8 @@ extern "C" void dsrrl_spc25_packet_decode_observer(
 
 bool install() noexcept
 {
-    if (g_name.patched ||
-        g_clear.patched)
+    if (g_name.patched || g_clear.patched ||
+        g_packet.patched || g_decoder.patched)
         return false;
 
     g_status = {};
@@ -701,8 +701,16 @@ bool install() noexcept
     if(!arm(g_packet))
         goto fail;
     g_status.packet_hook_armed = true;
+    if(!prepare_hook(g_decoder,k_decoder_rva,k_decoder_bytes,
+        reinterpret_cast<void *>(&dsrrl_spc25_packet_decode_hook_entry)))
+        goto fail;
+    g_dsrrl_spc25_reader_resume =
+        reinterpret_cast<void *>(g_base+k_decoder_resume_rva);
+    if(!arm(g_decoder))
+        goto fail;
+    g_status.decoder_hook_armed = true;
     reshade::log::message(reshade::log::level::info,
-       "[DSRRL SPC25 CPU 808D] retail packet source cut armed; "
+       "[DSRRL SPC25 CPU 808D] exact source+typed decoder cuts armed; "
        "CPU-only, no SRV authority or GPU modification");
 #endif
     return true;
@@ -714,20 +722,23 @@ fail:
 
 void uninstall() noexcept
 {
+    const bool decoder_ok = restore(g_decoder);
     const bool packet_ok = restore(g_packet);
     const bool clear_ok = restore(g_clear);
     const bool name_ok = restore(g_name);
 
-    if (!packet_ok || !clear_ok || !name_ok) {
+    if (!decoder_ok || !packet_ok || !clear_ok || !name_ok) {
         g_status.restore_failed = true;
         g_status.name_hook_armed =
             g_name.patched;
         g_status.clear_hook_armed =
             g_clear.patched;
         g_status.packet_hook_armed = g_packet.patched;
+        g_status.decoder_hook_armed = g_decoder.patched;
         return;
     }
 
+    g_dsrrl_spc25_reader_resume = nullptr;
     g_dsrrl_spc25_writer_target = nullptr;
     g_dsrrl_spc25_packet_resume = nullptr;
     g_dsrrl_texture_name_resume = nullptr;
@@ -806,6 +817,11 @@ texture_name_liveness liveness() noexcept
         g_cpu_cache_name_different.load(std::memory_order_relaxed);
     out.cache_name_unreadable =
         g_cpu_cache_name_unreadable.load(std::memory_order_relaxed);
+    out.decode_calls = g_cpu_decode_calls.load(std::memory_order_relaxed);
+    out.decode_payload_readable =
+        g_cpu_decode_payload_readable.load(std::memory_order_relaxed);
+    out.decode_writer_pointer_seen =
+        g_cpu_decode_payload_writer_pointer_seen.load(std::memory_order_relaxed);
 #endif
     return out;
 }
