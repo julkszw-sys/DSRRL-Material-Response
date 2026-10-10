@@ -159,6 +159,21 @@ assert "mov r8d, esi" in packet_asm
 assert "call qword ptr [g_dsrrl_spc25_writer_target]" in packet_asm
 assert "jmp qword ptr [g_dsrrl_spc25_packet_resume]" in packet_asm
 assert "spc25_packet_source_detour.asm" in integrated_cmake
+assert "spc25_packet_reader_detour.asm" in integrated_cmake
+decoder_asm=(ROOT / "integrated/spc25_packet_reader_detour.asm").read_text()
+assert "k_decoder_rva = 0x57F000u" in packet_source
+assert "k_decoder_resume_rva = 0x57F00Fu" in packet_source
+assert "0x57,0x48,0x83,0xEC,0x20" in packet_source
+assert "prepare_hook(g_decoder,k_decoder_rva,k_decoder_bytes" in packet_source
+assert "g_status.decoder_hook_armed = true" in packet_source
+assert "const bool decoder_ok = restore(g_decoder)" in packet_source
+assert "cache_name_equal" in packet_source
+assert "cache_name_exact=%llu" in resource
+assert "decode_writer_ptr_seen=%llu" in resource
+assert "stage=typed_decoder_input" in packet_source
+assert "mov qword ptr [rsp+8], rbx" in decoder_asm
+assert "mov qword ptr [rsp+10h], rsi" in decoder_asm
+assert "jmp qword ptr [g_dsrrl_spc25_reader_resume]" in decoder_asm
 
 assert "g_name_exact_init_resource.fetch_add" in resource
 assert "g_name_exact_create_view.fetch_add" in resource
