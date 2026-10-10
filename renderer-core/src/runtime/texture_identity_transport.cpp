@@ -506,6 +506,40 @@ dsrrl_texture_name_clear_observer() noexcept
     g_logical_name[0] = L'\0';
 }
 
+// Verified CPU-only edge at retail writer call-site: cache-entry (RBX),
+// engine object (RDI), and entry identifier (ESI). This does NOT identify SRV.
+extern "C" void dsrrl_spc25_packet_source_observer(
+    const void *cache_entry, const void *engine_object,
+    std::uint32_t source_id) noexcept
+{
+#if defined(DSRRL_EXPERIMENTAL_SPC_MATERIAL_BATCH)
+    g_cpu_packet_writer_calls.fetch_add(1u, std::memory_order_relaxed);
+    const wchar_t *name = nullptr;
+    std::size_t length = 0u;
+    if(!cache_entry || !engine_object || source_id == 0u ||
+       !snapshot_raw(name, length) || !name || length == 0u)
+        return;
+    const auto count = g_cpu_packet_name_matches.fetch_add(
+        1u,std::memory_order_relaxed)+1u;
+    if(count <= 24u || (count & (count-1u)) == 0u) {
+        char ascii[65]{};
+        for(std::size_t i=0u;i<std::min<std::size_t>(length,64u);++i) {
+            auto ch=static_cast<std::uint32_t>(name[i]);
+            ascii[i]=(ch>=32u && ch<=126u) ? static_cast<char>(ch) : '?';
+        }
+        char msg[512]{};
+        std::snprintf(msg,sizeof(msg),
+          "[DSRRL SPC25 CPU 808D] stage=writer_input "
+          "entry=%p engine_object=%p source_id=%u loader_name=%s "
+          "scope=RETAIL_TLS srv=UNVERIFIED pixel=OPEN",
+          cache_entry,engine_object,source_id,ascii);
+        reshade::log::message(reshade::log::level::info,msg);
+    }
+#else
+    (void)cache_entry;(void)engine_object;(void)source_id;
+#endif
+}
+
 bool install() noexcept
 {
     if (g_name.patched ||
