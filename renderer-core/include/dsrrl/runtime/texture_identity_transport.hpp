@@ -55,4 +55,12 @@ struct texture_name_liveness {
 };
 texture_name_liveness liveness() noexcept;
 
+// Diagnostic-only pointer identity census. Caller already owns/pins the live
+// native D3D11 view and resource; this only compares pointer *values* against
+// previously sampled named DLTexture2D fields, without dereferencing either.
+// A pointer match is NOT a certified lifetime/asset/PS t1 bridge authority.
+void diagnose_native_ps_t1(
+    const void *native_view,
+    const void *native_resource) noexcept;
+
 } // namespace dsrrl::runtime::texture_identity_transport
