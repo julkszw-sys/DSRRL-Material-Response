@@ -144,8 +144,12 @@ inline void inspect(ID3D11ShaderResourceView *view) noexcept {
    view_equal=parent->second==rid;
   }
   if(view_seen && !view_equal)collision=true;
-  if(reports.load()<48u && reported_views.insert(vid).second) {
-   ++reports;log=true;
+  if(reports.load()<48u) {
+   try {
+    if(reported_views.insert(vid).second) {
+     ++reports;log=true;
+    }
+   } catch(...) { /* fail open on allocation; never unwind D3D11 */ }
   }
  }
  if(log) {
