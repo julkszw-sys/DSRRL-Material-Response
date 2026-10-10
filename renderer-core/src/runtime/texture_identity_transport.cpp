@@ -701,6 +701,9 @@ bool install() noexcept
     if(!arm(g_packet))
         goto fail;
     g_status.packet_hook_armed = true;
+    // Startup-crashing typed decoder observer quarantined. The proven
+    // name-cache/packet-writer probes remain active and observational.
+#if defined(DSRRL_EXPERIMENTAL_SPC25_DECODER_PROBE)
     if(!prepare_hook(g_decoder,k_decoder_rva,k_decoder_bytes,
         reinterpret_cast<void *>(&dsrrl_spc25_packet_decode_hook_entry)))
         goto fail;
@@ -709,9 +712,11 @@ bool install() noexcept
     if(!arm(g_decoder))
         goto fail;
     g_status.decoder_hook_armed = true;
+#endif
     reshade::log::message(reshade::log::level::info,
-       "[DSRRL SPC25 CPU 808D] exact source+typed decoder cuts armed; "
-       "CPU-only, no SRV authority or GPU modification");
+       "[DSRRL SPC25 CPU 808D] source packet writer armed; "
+       "typed decoder QUARANTINED; cache-name diagnostic only, "
+       "no SRV authority or GPU modification");
 #endif
     return true;
 
