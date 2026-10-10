@@ -99,3 +99,53 @@ inline void clear() noexcept {
  std::lock_guard<std::mutex> lock(mu);
  resources.clear();ambiguous.clear();reported_views.clear();
 }
+
+inline void inspect(ID3D11ShaderResourceView *view) noexcept {
+ if(!view)return;
+ ID3D11Resource *r=nullptr;
+ view->GetResource(&r);
+ if(!r)return;
+ ID3D11Device *d=nullptr;
+ view->GetDevice(&d);
+ const auto rid=static_cast<std::uint64_t>(
+   reinterpret_cast<std::uintptr_t>(r));
+ const auto vid=static_cast<std::uint64_t>(
+   reinterpret_cast<std::uintptr_t>(view));
+ record rec{};bool found=false,collision=false,log=false;
+ {
+  std::lock_guard<std::mutex> lock(mu);
+  const auto it=resources.find(rid);
+  if(it!=resources.end() && it->second.device==d) {
+   rec=it->second;found=true;
+  }
+  collision=ambiguous.count(rid)!=0;
+  if(reports.load()<48u && reported_views.insert(vid).second) {
+   ++reports;log=true;
+  }
+ }
+ if(log) {
+  D3D11_RESOURCE_DIMENSION kind=D3D11_RESOURCE_DIMENSION_UNKNOWN;
+  r->GetType(&kind);
+  char hex[65]{};
+  if(found && rec.stage[0]=='F') {
+   const char *digits="0123456789abcdef";
+   for(std::size_t i=0;i<32;++i) {
+    hex[i*2]=digits[rec.sha[i]>>4];
+    hex[i*2+1]=digits[rec.sha[i]&15u];
+   }
+  }
+  char msg[720]{};
+  std::snprintf(msg,sizeof(msg),
+   "[DSRRL SPC25 PHYSICAL T1] stage=%s view=0x%llx native_resource=0x%llx native_type=%u create_seen=%u ambiguous=%u stock_initial_sha256=%s source_candidate=%s source_only=1 current_gpu_bytes=UNVERIFIED srv_swap=0 pixel=OPEN",
+   found?rec.stage:"NO_CREATE_RECORD",
+   static_cast<unsigned long long>(vid),
+   static_cast<unsigned long long>(rid),
+   static_cast<unsigned>(kind),found?1u:0u,collision?1u:0u,
+   hex[0]?hex:"NONE",
+   (!collision && rec.source)?rec.source:"NONE");
+  reshade::log::message(reshade::log::level::info,msg);
+ }
+ if(d)d->Release();
+ r->Release();
+}
+} // namespace dsrrl::runtime::spc25_physical
