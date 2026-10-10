@@ -97,6 +97,11 @@ std::atomic<std::uint64_t> g_cpu_cache_name_different{0u};
 std::atomic<std::uint64_t> g_cpu_cache_name_unreadable{0u};
 std::atomic<std::uint64_t> g_cpu_rtti_exact{0u};
 std::atomic<std::uint64_t> g_cpu_rtti_unavailable{0u};
+std::atomic<std::uint64_t> g_cpu_tex2d_cpu_objects{0u};
+std::atomic<std::uint64_t> g_cpu_tex2d_fields_readable{0u};
+std::atomic<std::uint64_t> g_cpu_tex2d_p28_nonnull{0u};
+std::atomic<std::uint64_t> g_cpu_tex2d_p30_nonnull{0u};
+std::atomic<std::uint64_t> g_cpu_tex2d_both_nonnull{0u};
 
 std::atomic<std::uint64_t> g_cpu_decode_calls{0u};
 std::atomic<std::uint64_t> g_cpu_decode_payload_readable{0u};
@@ -660,6 +665,41 @@ extern "C" void dsrrl_spc25_packet_source_observer(
         g_cpu_rtti_exact.fetch_add(1u,std::memory_order_relaxed);
     else
         g_cpu_rtti_unavailable.fetch_add(1u,std::memory_order_relaxed);
+
+    // Exact-host 0x140CE1EC0 calls ID3D11Device::CreateTexture2D
+    // (vtable +0x28) with output at DLTexture2D+0x28. Subsequently
+    // 0x140CE1D80 calls CreateShaderResourceView (vtable +0x38)
+    // with output at +0x30. At this earlier packet-writer instant
+    // these fields may be null or not yet initialized. Read-only CPU
+    // snapshot; never dereference/call/retain COM, match by address, or
+    // give these snapshots any live SRV binding authority.
+    const bool is_exact_tex2d =
+        equal && rtti_valid &&
+        payload_vtable_rva == 0x014AA4A8u &&
+        std::strcmp(payload_rtti,".?AVDLTexture2D@DLGR@@") == 0;
+    std::array<std::uintptr_t,2u> managed_fields{};
+    bool fields_readable = false;
+    if(is_exact_tex2d) {
+        g_cpu_tex2d_cpu_objects.fetch_add(1u,std::memory_order_relaxed);
+        const auto *fields_address =
+            static_cast<const std::uint8_t *>(engine_object)+0x28u;
+        if(readable_range(fields_address,sizeof(managed_fields))) {
+            std::memcpy(managed_fields.data(),fields_address,
+                        sizeof(managed_fields));
+            fields_readable = true;
+            g_cpu_tex2d_fields_readable.fetch_add(
+                1u,std::memory_order_relaxed);
+            if(managed_fields[0])
+                g_cpu_tex2d_p28_nonnull.fetch_add(
+                    1u,std::memory_order_relaxed);
+            if(managed_fields[1])
+                g_cpu_tex2d_p30_nonnull.fetch_add(
+                    1u,std::memory_order_relaxed);
+            if(managed_fields[0] && managed_fields[1])
+                g_cpu_tex2d_both_nonnull.fetch_add(
+                    1u,std::memory_order_relaxed);
+        }
+    }
     const auto count = g_cpu_packet_name_matches.fetch_add(
         1u,std::memory_order_relaxed)+1u;
     if(count <= 24u || (count & (count-1u)) == 0u) {
@@ -668,16 +708,21 @@ extern "C" void dsrrl_spc25_packet_source_observer(
             auto ch=static_cast<std::uint32_t>(name[i]);
             ascii[i]=(ch>=32u && ch<=126u) ? static_cast<char>(ch) : '?';
         }
-        char msg[512]{};
+        char msg[640]{};
         std::snprintf(msg,sizeof(msg),
           "[DSRRL SPC25 CPU 808D] stage=writer_input "
           "entry=%p engine_object=%p source_id=%u loader_name=%s "
           "scope=RETAIL_TLS cache_name=%s cpu_vtable_rva=%08X "
-          "cpu_rtti=%s source_to_srv=UNVERIFIED pixel=OPEN",
+          "cpu_rtti=%s tex2d_fields=%s p28_texture_snapshot=%p "
+          "p30_srv_snapshot=%p source_to_srv=UNVERIFIED pixel=OPEN",
           cache_entry,engine_object,source_id,ascii,
           !readable ? "UNREADABLE" : (equal ? "EXACT" : "DIFFERENT"),
           payload_vtable_rva,
-          rtti_valid ? payload_rtti : "UNVERIFIED");
+          rtti_valid ? payload_rtti : "UNVERIFIED",
+          !is_exact_tex2d ? "NOT_2D" :
+              (fields_readable ? "READABLE" : "UNREADABLE"),
+          reinterpret_cast<const void *>(managed_fields[0]),
+          reinterpret_cast<const void *>(managed_fields[1]));
         reshade::log::message(reshade::log::level::info,msg);
     }
 #else
@@ -924,6 +969,16 @@ texture_name_liveness liveness() noexcept
         g_cpu_rtti_exact.load(std::memory_order_relaxed);
     out.cpu_rtti_unavailable =
         g_cpu_rtti_unavailable.load(std::memory_order_relaxed);
+    out.cpu_tex2d_cpu_objects =
+        g_cpu_tex2d_cpu_objects.load(std::memory_order_relaxed);
+    out.cpu_tex2d_fields_readable =
+        g_cpu_tex2d_fields_readable.load(std::memory_order_relaxed);
+    out.cpu_tex2d_p28_nonnull =
+        g_cpu_tex2d_p28_nonnull.load(std::memory_order_relaxed);
+    out.cpu_tex2d_p30_nonnull =
+        g_cpu_tex2d_p30_nonnull.load(std::memory_order_relaxed);
+    out.cpu_tex2d_both_nonnull =
+        g_cpu_tex2d_both_nonnull.load(std::memory_order_relaxed);
     out.decode_calls = g_cpu_decode_calls.load(std::memory_order_relaxed);
     out.decode_payload_readable =
         g_cpu_decode_payload_readable.load(std::memory_order_relaxed);
