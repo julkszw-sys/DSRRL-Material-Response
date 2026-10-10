@@ -60,7 +60,7 @@ $flags = @(
     'DSRRL_PHYSICAL_CUT_UL_H3_SUBSURFACE',
     'DSRRL_PHYSICAL_CUT_POINTLIGHT_ALL'
 )
-# Mandatory short source audits run before build, never waive fail-open.
+# Apply the exact fail-open SPC25 lifetime recipe before source verification.\npython renderer-core/tools/apply_spc25_native_t1_epoch.py --apply\nif ($LASTEXITCODE -ne 0) { throw 'SPC25 native t1 epoch recipe failed' }\npython renderer-core/tools/apply_spc25_native_t1_epoch.py\nif ($LASTEXITCODE -ne 0) { throw 'SPC25 epoch postcondition failed' }\n# Mandatory short source audits run before build, never waive fail-open.
 python renderer-core/tools/verify_other_metal_material_workflow_v203.py
 if ($LASTEXITCODE -ne 0) { throw 'Exact MTD authority audit failed' }
 python renderer-core/tools/verify_spc_batch_v203.py
