@@ -23,6 +23,6 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - uses: actions/upload-artifact@v4
         with:
-          name: spc25-character-t1-diagnostic-no-swap
+          name: spc25-equipment-spec-t10-experimental
           path: DSRRL_SPC25_EQUIPMENT_SPEC_T10_TEST.addon64
           if-no-files-found: error
