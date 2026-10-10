@@ -2254,7 +2254,7 @@ try_recover_exact_bound_spec_from_native_name(
             const auto names = texture_identity_transport::liveness();
             char msg[768]{};
             std::snprintf(msg, sizeof(msg),
-                "[DSRRL SPC25 NAME CUT] engine_lookup_calls=%llu utf16_names=%llu engine_scope_clear=%llu snapshot_hits=%llu gpu_init_resource_exact=%llu gpu_create_view_exact=%llu gpu_init_view_direct_exact=%llu joined_views=%llu cpu_808d_writer=%llu cpu_808d_named_scope=%llu cache_name_exact=%llu cache_name_different=%llu cache_name_unreadable=%llu decode_calls=%llu decode_payload_readable=%llu decode_writer_ptr_seen=%llu source_to_srv=UNVERIFIED pixel=OPEN",
+                "[DSRRL SPC25 NAME CUT] engine_lookup_calls=%llu utf16_names=%llu engine_scope_clear=%llu snapshot_hits=%llu gpu_init_resource_exact=%llu gpu_create_view_exact=%llu gpu_init_view_direct_exact=%llu joined_views=%llu cpu_808d_writer=%llu cpu_808d_named_scope=%llu cache_name_exact=%llu cache_name_different=%llu cache_name_unreadable=%llu cpu_rtti_exact=%llu cpu_rtti_unavailable=%llu decode_calls=%llu decode_payload_readable=%llu decode_writer_ptr_seen=%llu source_to_srv=UNVERIFIED pixel=OPEN",
                 static_cast<unsigned long long>(names.hook_calls),
                 static_cast<unsigned long long>(names.names_captured),
                 static_cast<unsigned long long>(names.names_cleared),
@@ -2272,6 +2272,8 @@ try_recover_exact_bound_spec_from_native_name(
                 static_cast<unsigned long long>(names.cache_name_equal),
                 static_cast<unsigned long long>(names.cache_name_different),
                 static_cast<unsigned long long>(names.cache_name_unreadable),
+                static_cast<unsigned long long>(names.cpu_rtti_exact),
+                static_cast<unsigned long long>(names.cpu_rtti_unavailable),
                 static_cast<unsigned long long>(names.decode_calls),
                 static_cast<unsigned long long>(names.decode_payload_readable),
                 static_cast<unsigned long long>(names.decode_writer_pointer_seen));
