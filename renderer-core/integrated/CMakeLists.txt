@@ -993,6 +993,14 @@ if(DSRRL_EXPERIMENTAL_SPC_MATERIAL_BATCH)
     endif()
     target_compile_definitions(dsrrl_renderer_core_integrated PRIVATE
         DSRRL_EXPERIMENTAL_SPC_MATERIAL_BATCH)
+    # The generated, project-owned physical-cut source contains known
+    # constexpr/boolean guard expressions. Suppress C4127 solely for
+    # this experimental addon target; retain /WX for all other warnings
+    # and do not modify the core library or independent operator source.
+    if(MSVC)
+        target_compile_options(dsrrl_renderer_core_integrated PRIVATE
+            $<$<COMPILE_LANGUAGE:CXX>:/wd4127>)
+    endif()
 endif()
 
 if(DSRRL_POINTLIGHT_DRAWTIME_BYPASS)
