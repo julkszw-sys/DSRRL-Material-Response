@@ -9,6 +9,9 @@
 #include "dsrrl/operators/resource_bridges/diffuse_bridge.hpp"
 #include "dsrrl/operators/resource_bridges/normal_bridge.hpp"
 #include "dsrrl/runtime/generated_spec_routes_v12.hpp"
+#if defined(DSRRL_V203_EXACT_EQUIPMENT_SPEC)
+#include "dsrrl/runtime/v203_equipment_flver_slot_spec_manifest.hpp"
+#endif
 #include "dsrrl/runtime/generated_diffuse_routes_v12.hpp"
 #include "dsrrl/runtime/generated_normal_routes_v12.hpp"
 #include "dsrrl/operators/legacy_plan/sha256_bytes.hpp"
