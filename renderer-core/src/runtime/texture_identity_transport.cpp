@@ -95,6 +95,9 @@ std::atomic<std::uint64_t> g_cpu_packet_name_matches{0u};
 std::atomic<std::uint64_t> g_cpu_cache_name_equal{0u};
 std::atomic<std::uint64_t> g_cpu_cache_name_different{0u};
 std::atomic<std::uint64_t> g_cpu_cache_name_unreadable{0u};
+std::atomic<std::uint64_t> g_cpu_rtti_exact{0u};
+std::atomic<std::uint64_t> g_cpu_rtti_unavailable{0u};
+
 std::atomic<std::uint64_t> g_cpu_decode_calls{0u};
 std::atomic<std::uint64_t> g_cpu_decode_payload_readable{0u};
 std::atomic<std::uint64_t> g_cpu_decode_payload_writer_pointer_seen{0u};
