@@ -115,6 +115,26 @@ inline std::uint64_t logical_spec_hash(const char *name) noexcept {
     }
     return h;
 }
+// Read-only provenance stage independent of the stock t1 name-cache hit.
+// This proves only the FLVER owner, material slot and exact MTD,
+// never authorizes replacement or infers a bound resource.
+inline bool exact_proven_owner_slot(
+    const operators::material_response::mtd_semantic_query &query) noexcept {
+    const auto &m = query.material;
+    if (!m.valid || !m.owner_tuple_exact ||
+        !m.actual_material_exact || !m.material_slot_valid ||
+        !operators::material_response::
+            has_exact_flver_material_ownership(query))
+        return false;
+    for (const auto &r : k_proven_parts_specs) {
+        if (r.slot == m.material_slot &&
+            m.semantic_name_hash ==
+              operators::material_response::mtd_semantic_hash(r.mtd) &&
+            digest_matches(m.flver_sha256,r.flver_sha256))
+            return true;
+    }
+    return false;
+}
 // Domain cut: one exact FLVER SHA, one material slot, matching MTD,
 // and that slot's own g_Specular name (not a merely allowlisted texture).
 // No D3D view identity, unrelated materials or fallback name guessing.
