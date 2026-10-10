@@ -121,7 +121,7 @@ jobs:
       - name: Certify 25 exact SPC batch MTD SPX and per-profile slot
         run: python renderer-core/tools/verify_spc_batch_v203.py
       - name: Validate offline SPC25 RE tools are importable
-        run: python -m py_compile renderer-core/tools/verify_spc25_engine_texture_cache_offline.py renderer-core/tools/verify_spc25_flver_slot_textures_offline.py
+        run: python -m py_compile renderer-core/tools/verify_spc25_engine_texture_cache_offline.py renderer-core/tools/verify_spc25_flver_slot_textures_offline.py renderer-core/tools/verify_spc25_dsr_tpf_dds_fingerprints_offline.py
       - name: Configure exact MTD-keyed metal diagnostic
         shell: pwsh
         run: >
