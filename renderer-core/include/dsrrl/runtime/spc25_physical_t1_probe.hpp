@@ -130,14 +130,20 @@ inline void inspect(ID3D11ShaderResourceView *view) noexcept {
    reinterpret_cast<std::uintptr_t>(r));
  const auto vid=static_cast<std::uint64_t>(
    reinterpret_cast<std::uintptr_t>(view));
- record rec{};bool found=false,collision=false,log=false;
+ record rec{};bool found=false,collision=false,log=false,view_seen=false,view_equal=false;
  {
   std::lock_guard<std::mutex> lock(mu);
   const auto it=resources.find(rid);
   if(it!=resources.end() && it->second.device==d) {
    rec=it->second;found=true;
   }
-  collision=ambiguous.count(rid)!=0;
+  collision=ambiguous.count(rid)!=0 || conflicting_views.count(vid)!=0;
+  const auto parent=view_parents.find(vid);
+  if(parent!=view_parents.end()) {
+   view_seen=true;
+   view_equal=parent->second==rid;
+  }
+  if(view_seen && !view_equal)collision=true;
   if(reports.load()<48u && reported_views.insert(vid).second) {
    ++reports;log=true;
   }
@@ -155,11 +161,11 @@ inline void inspect(ID3D11ShaderResourceView *view) noexcept {
   }
   char msg[720]{};
   std::snprintf(msg,sizeof(msg),
-   "[DSRRL SPC25 PHYSICAL T1] stage=%s view=0x%llx native_resource=0x%llx native_type=%u create_seen=%u ambiguous=%u stock_initial_sha256=%s source_candidate=%s source_only=1 current_gpu_bytes=UNVERIFIED srv_swap=0 pixel=OPEN",
+   "[DSRRL SPC25 PHYSICAL T1] stage=%s view=0x%llx native_resource=0x%llx native_type=%u create_seen=%u view_registered=%u srv_resource_equal=%u ambiguous=%u stock_initial_sha256=%s source_candidate=%s source_only=1 current_gpu_bytes=UNVERIFIED srv_swap=0 pixel=OPEN",
    found?rec.stage:"NO_CREATE_RECORD",
    static_cast<unsigned long long>(vid),
    static_cast<unsigned long long>(rid),
-   static_cast<unsigned>(kind),found?1u:0u,collision?1u:0u,
+   static_cast<unsigned>(kind),found?1u:0u,view_seen?1u:0u,view_equal?1u:0u,collision?1u:0u,
    hex[0]?hex:"NONE",
    (!collision && rec.source)?rec.source:"NONE");
   reshade::log::message(reshade::log::level::info,msg);
