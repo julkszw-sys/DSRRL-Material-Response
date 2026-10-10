@@ -43,6 +43,19 @@ D="""#if defined(DSRRL_EXPERIMENTAL_SPC25_EQUIPMENT_SPEC_BRIDGE)
     }
 #endif
 """ + C
+G="    // Limit the experiment to two exact lookups"
+H="""#if defined(DSRRL_EXPERIMENTAL_SPC25_EQUIPMENT_SPEC_BRIDGE)
+    if (exact_equipment_source_test) {
+        ID3D11Resource *res = nullptr;
+        stock->GetResource(&res);
+        char name[65]{};
+        bool ok = res && texture_identity_transport::
+            resolve_exact_equipment_native_ps_t1(stock,res,name,sizeof(name));
+        if (res) res->Release();
+        if (!ok) { stock->Release(); return false; }
+    }
+#endif
+    // Limit the experiment to two exact lookups"""
 def patch(p,a,b,apply):
  s=p.read_text(encoding="utf-8")
  if s.count(b)==1: pass
@@ -51,5 +64,6 @@ def patch(p,a,b,apply):
  print("EQUIPMENT_"+("APPLIED" if apply else "VERIFIED")+" "+p.name)
 if __name__=="__main__":
  ap=argparse.ArgumentParser();ap.add_argument("--apply",action="store_true");v=ap.parse_args()
+ patch(ROOT/"renderer-core/src/runtime/material_resource_draw_runtime.cpp",G,H,v.apply)
  patch(ROOT/"renderer-core/src/runtime/material_resource_draw_runtime.cpp",A,B,v.apply)
  patch(ROOT/"renderer-core/src/runtime/pmetal_envspec_draw_runtime.cpp",C,D,v.apply)
