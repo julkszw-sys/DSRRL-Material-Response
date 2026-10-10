@@ -38,6 +38,10 @@ $flags = @(
 "-DDSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE=ON",
 "-DDSRRL_PHYSICAL_CUT_UL_H3_SUBSURFACE=ON",
 "-DDSRRL_PHYSICAL_CUT_POINTLIGHT_ALL=ON")
+if ($env:DSRRL_V203_EQUIPMENT_ENVSPEC36 -eq "ON") {
+    $flags += "-DDSRRL_V203_EQUIPMENT_ENVSPEC36_DIAG=ON"
+    Write-Host "DSRRL: exact 36-owner experimental EnvSpec route enabled; pixel=OPEN"
+}
 cmake -S renderer-core/integrated -B build -A x64 @flags
 if ($LASTEXITCODE -ne 0) { throw "CMake production config failed" }
 cmake --build build --config Release --target dsrrl_renderer_core_integrated
