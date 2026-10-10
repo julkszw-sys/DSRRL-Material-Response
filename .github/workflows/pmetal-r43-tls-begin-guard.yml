@@ -1,0 +1,73 @@
+name: P_Metal R43 TLS Freshness Guard (isolated experiment)
+on:
+  push:
+    branches:
+      - agent/pmetal-r43-tls-stale-begin-20261010
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  verify-guard-and-addon:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Debug native source-freshness regression (asserts enabled)
+        shell: pwsh
+        run: |
+          cmake -S renderer-core -B build-pmetal-guard-test -A x64
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          cmake --build build-pmetal-guard-test --config Debug --target dsrrl_pmetal_producer_state_tests
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          ctest --test-dir build-pmetal-guard-test -C Debug -R '^dsrrl_pmetal_producer_state_tests$' --output-on-failure
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Pinned ReShade SDK
+        uses: actions/checkout@v4
+        with:
+          repository: crosire/reshade
+          ref: 3645e3025d1d98a90e318278858931f034d5d1f6
+          path: _reshade
+      - name: Configure exact inherited R43 integrated renderer (experimental flavor)
+        shell: pwsh
+        run: |
+          $sha = (git rev-parse HEAD).Trim()
+          "DSRRL_BUILD_COMMIT=$sha" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          cmake -S renderer-core/integrated -B build-r43-guard -A x64 `
+            -DRESHADE_INCLUDE_DIR="${{ github.workspace }}/_reshade/include" `
+            -DDSRRL_SOURCE_COMMIT="$sha" `
+            -DDSRRL_BUILD_FLAVOR="pmetal_r43_tls_begin_stale_guard_experimental" `
+            -DDSRRL_FULL_TELEMETRY_DEFAULT_ON=OFF `
+            -DDSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG=ON `
+            -DDSRRL_PMETAL_FULL_PTDE_HEMENV_R3=ON `
+            -DDSRRL_PMETAL_FULL_PTDE_HEMENV_R4=ON `
+            -DDSRRL_PMETAL_FULL_PTDE_HEMENV_R5=ON `
+            -DDSRRL_PMETAL_FULL_PTDE_HEMENV_R6=ON `
+            -DDSRRL_PMETAL_FULL_PTDE_HEMENV_R7_SHADOW=ON `
+            -DDSRRL_PMETAL_FULL_PTDE_HEMENV_R8_PRE_AB=ON `
+            -DDSRRL_PMETAL_FULL_PTDE_HEMENV_R11_COMMON_MERGE=ON `
+            -DDSRRL_PMETAL_FULL_PTDE_HEMENV_R15_PTDE_LIVEOUT_PAIR=ON `
+            -DDSRRL_PMETAL_FULL_PTDE_HEMENV_R16_LEGACY_DIFFUSE_SPLIT=ON `
+            -DDSRRL_PMETAL_FULL_PTDE_HEMENV_R17_PTDE_DIFFUSE_MATERIAL=ON `
+            -DDSRRL_PMETAL_R19_LERP_MATERIALWORKFLOW=ON `
+            -DDSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE=ON `
+            -DDSRRL_PHYSICAL_CUT_UL_H3_SUBSURFACE=ON
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Build experimental addon, enforce single output and source identity
+        shell: pwsh
+        run: |
+          cmake --build build-r43-guard --config Release --target dsrrl_renderer_core_integrated --parallel 4
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $addons = @(Get-ChildItem build-r43-guard -Recurse -Filter *.addon64)
+          if ($addons.Count -ne 1) { throw "Expected exactly one addon, found $($addons.Count)" }
+          $out = "DSRRL_PMETAL_R43_TLS_GUARD_EXPERIMENT.addon64"
+          Copy-Item $addons[0].FullName $out -Force
+          $ascii = [System.Text.Encoding]::ASCII.GetString([IO.File]::ReadAllBytes($out))
+          if (-not $ascii.Contains($env:DSRRL_BUILD_COMMIT)) { throw "Embedded source identity absent" }
+          if (-not $ascii.Contains("pmetal_r43_tls_begin_stale_guard_experimental")) { throw "Expected separate build flavor" }
+          if (-not $ascii.Contains("[DSRRL PMETAL R43] producer_cache=SET256_WAY2 freshness=SOURCE_BASE_COUNT_ROW_SELECTOR_BETA")) { throw "Inherited R43 marker absent" }
+          Write-Host "PMETAL_TLS_GUARD_BUILD_PASS"
+          Write-Host "ADDON_SHA256=$((Get-FileHash $out -Algorithm SHA256).Hash.ToLowerInvariant())"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: PMETAL_R43_TLS_GUARD_EXPERIMENT
+          path: DSRRL_PMETAL_R43_TLS_GUARD_EXPERIMENT.addon64
+          if-no-files-found: error
