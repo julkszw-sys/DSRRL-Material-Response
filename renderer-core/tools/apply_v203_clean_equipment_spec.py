@@ -17,7 +17,13 @@ OLD = ("        const bool exact_companion =\n"
        "            replacement != nullptr;")
 NEW = OLD[:-1] + ("\n#if defined(DSRRL_V203_EXACT_EQUIPMENT_SPEC)\n"
        "            && (query.material.route_index == 345u ||\n"
-       "                v203_equipment::exact_proven_slot_spec_hash(query,h1))\n"
+       "#if defined(DSRRL_V203_CONSTEXPR_OWNER_LOOKUP)\n"
+       "                v203_equipment::constexpr_lookup::\n"
+       "                    exact_proven_slot_spec_hash_fast(query,h1)\n"
+       "#else\n"
+       "                v203_equipment::exact_proven_slot_spec_hash(query,h1)\n"
+       "#endif\n"
+       "            )\n"
        "#endif\n"
        "            ;")
 
@@ -50,7 +56,12 @@ ROUTER_PATCH = """#if defined(DSRRL_V203_EQUIPMENT_ENVSPEC36_DIAG)
             receiver_id >= 33u && receiver_id <= 35u &&
             spec_rgb_consumer_ready &&
             v203_equipment::exact_envspec36_material(query.material) &&
+#if defined(DSRRL_V203_CONSTEXPR_OWNER_LOOKUP)
+            v203_equipment::constexpr_lookup::
+                exact_proven_slot_spec_hash_fast(query, h1) &&
+#else
             v203_equipment::exact_proven_slot_spec_hash(query, h1) &&
+#endif
             context_spec.material_specular_consumer_verified;
         const auto decision =
             exact_equipment_envspec_consumer
