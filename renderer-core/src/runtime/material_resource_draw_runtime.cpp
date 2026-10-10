@@ -1,5 +1,8 @@
 #include "dsrrl/runtime/material_resource_draw_runtime.hpp"
 #include "dsrrl/runtime/texture_identity_transport.hpp"
+#if defined(DSRRL_EXPERIMENTAL_SPC_MATERIAL_BATCH)
+#include "dsrrl/runtime/spc25_physical_t1_probe.hpp"
+#endif
 #include "dsrrl/runtime/runtime_hot_telemetry.hpp"
 #include "dsrrl/runtime/stutter_profiler.hpp"
 #include "dsrrl/runtime/resource_view_epoch.hpp"
@@ -1289,8 +1292,8 @@ void inspect_many(
 #if defined(DSRRL_EXPERIMENTAL_SPC_MATERIAL_BATCH)
 void on_init_resource(
     reshade::api::device *device,
-    const reshade::api::resource_desc &,
-    const reshade::api::subresource_data *,
+    const reshade::api::resource_desc &desc,
+    const reshade::api::subresource_data *initial_data,
     reshade::api::resource_usage,
     reshade::api::resource resource)
 {
@@ -1299,6 +1302,9 @@ void on_init_resource(
         device->get_api() != reshade::api::device_api::d3d11 ||
         resource.handle == 0u)
         return;
+    // Independently collect native resource creation data; the CPU cache
+    // logical name may already have left the loader's TLS scope here.
+    spc25_physical::init(device,desc,initial_data,resource);
     const wchar_t *raw = nullptr;
     std::size_t size = 0u;
     if (!texture_identity_transport::snapshot_raw(raw, size) ||
@@ -1347,6 +1353,7 @@ void on_destroy_resource(
     std::lock_guard<std::mutex> lock(g_mutex);
     g_attested_names_by_resource.erase(resource.handle);
     g_ambiguous_named_resource_device.erase(resource.handle);
+    // This is a separate mutex: do not invert lock ordering.
 }
 #endif
 
