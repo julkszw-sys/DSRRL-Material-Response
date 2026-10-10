@@ -100,7 +100,8 @@ public:
     // MTD/FLVER alone or infer it from GPU format/dimensions.
     bool try_recover_exact_bound_spec_from_native_name(
         ID3D11DeviceContext *context,
-        bool exact_c5330_route14_test = false) noexcept;
+        bool exact_c5330_route14_test = false,
+        bool exact_equipment_source_test = false) noexcept;
 
     bool prepare_draw_requests(
         ID3D11DeviceContext *context,
