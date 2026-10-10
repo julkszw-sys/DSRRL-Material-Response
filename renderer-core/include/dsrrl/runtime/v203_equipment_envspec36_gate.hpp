@@ -4,6 +4,9 @@
 // This is NOT a material-family-wide authorization, a PTDE pixel verdict,
 // or permission to feed a DSR PBL/F0 specular tail with PTDE RGB.
 #include "dsrrl/runtime/v203_equipment_flver_slot_spec_manifest.hpp"
+#if defined(DSRRL_V203_CONSTEXPR_OWNER_LOOKUP)
+#include "dsrrl/runtime/v203_equipment_constexpr_lookup.hpp"
+#endif
 #include <cmath>
 
 namespace dsrrl::runtime::v203_equipment {
@@ -41,8 +44,13 @@ inline bool exact_envspec36_material(
         return false;
 
     const auto query = make_envspec36_query(material);
+#if defined(DSRRL_V203_CONSTEXPR_OWNER_LOOKUP)
+    if (!constexpr_lookup::exact_proven_owner_slot_fast(query))
+        return false;
+#else
     if (!exact_proven_owner_slot(query))
         return false;
+#endif
 
     const auto env = mr::classify_mtd_envspec_semantics(query);
     return env.exact_identity_match &&

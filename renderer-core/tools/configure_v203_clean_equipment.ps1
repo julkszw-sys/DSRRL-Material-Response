@@ -48,6 +48,13 @@ if ($env:DSRRL_V203_EQUIPMENT_ENVSPEC36 -eq "ON") {
     $flags += "-DDSRRL_V203_EQUIPMENT_ENVSPEC36_DIAG=ON"
     Write-Host "DSRRL: exact 36-owner experimental EnvSpec route enabled; pixel=OPEN"
 }
+if ($env:DSRRL_V203_CONSTEXPR_OWNER_LOOKUP -eq "ON") {
+    if ($env:DSRRL_V203_EQUIPMENT_ENVSPEC36 -ne "ON") {
+        throw "Constexpr owner lookup requires EnvSpec36 opt-in"
+    }
+    $flags += "-DDSRRL_V203_CONSTEXPR_OWNER_LOOKUP=ON"
+    Write-Host "DSRRL: exact full-SHA constexpr owner lookup EXPERIMENTAL"
+}
 cmake -S renderer-core/integrated -B build -A x64 @flags
 if ($LASTEXITCODE -ne 0) { throw "CMake production config failed" }
 cmake --build build --config Release --target dsrrl_renderer_core_integrated
