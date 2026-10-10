@@ -147,6 +147,10 @@ option(
     OFF)
 
 option(
+    DSRRL_EXPERIMENTAL_SPC25_C5330_SWAP_TEST
+    "Opt-in exact route14 c5330 test; default OFF"
+    OFF)
+option(
     DSRRL_EXPERIMENTAL_SPC_MATERIAL_BATCH
     "Diagnostic only: 21 more exactly attested DifSpcBmp MTDs (Leather/Cloth/Wet/Metal); requires other-metal and R19, distinct c101/EnvSpec slots, full sidecar gates"
     OFF)
@@ -969,6 +973,13 @@ if(DSRRL_EXPERIMENTAL_SPC25_DECODER_PROBE)
         "SPC25 typed decoder hook is quarantined: owner runtime crashed before main menu; fail closed until ABI and packet-cursor semantics are independently verified")
 endif()
 
+if(DSRRL_EXPERIMENTAL_SPC25_C5330_SWAP_TEST)
+    if(NOT DSRRL_EXPERIMENTAL_SPC_MATERIAL_BATCH)
+        message(FATAL_ERROR "c5330 test requires SPC25 exact batch")
+    endif()
+    target_compile_definitions(dsrrl_renderer_core_integrated PRIVATE
+        DSRRL_EXPERIMENTAL_SPC25_C5330_SWAP_TEST)
+endif()
 if(DSRRL_EXPERIMENTAL_SPC_MATERIAL_BATCH)
     # SPC25 native-view epoch instrumentation is mandatory on this
     # diagnostic branch. Never accept an unpatched source as a successful
