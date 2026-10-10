@@ -124,6 +124,14 @@ def audit(exe):
  read_col(0x1665fa0,0x1b13dc0)
  read_name(0x1b137f0,".?AVFrpgTextureEntity@NS_FRPG@@")
  read_name(0x1b13dc0,".?AVTexHdlResCap@NS_FRPG@@")
+ read_col(0x16b4738,0x1b44040)
+ read_col(0x16b52e8,0x1b44530)
+ if read_ptr(0x14a8920)!=0x1416b4738:
+  raise ValueError("DLGR::DLTextureCube vtable locator mismatch")
+ if read_ptr(0x14aa4a0)!=0x1416b52e8:
+  raise ValueError("DLGR::DLTexture2D vtable locator mismatch")
+ read_name(0x1b44040,".?AVDLTextureCube@DLGR@@")
+ read_name(0x1b44530,".?AVDLTexture2D@DLGR@@")
  # 0x57f12b is JE rel8 to opcode 0x808D handler dispatch (0x57f18a).
  branch=at(0x57f12b,2)
  if branch[0]!=0x74 or 0x57f12d+struct.unpack("<b",branch[1:])[0]!=0x57f18a:
