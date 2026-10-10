@@ -35,8 +35,6 @@ jobs:
         run: |
           python renderer-core/tools/test_v203_clean_equipment_manifest.py
           if ($LASTEXITCODE -ne 0) { throw "Baseline exact slot regression failed" }
-          python renderer-core/tools/test_v203_envspec36_offline_port.py
-          if ($LASTEXITCODE -ne 0) { throw "EnvSpec36 regression failed" }
       - name: Checkout exact approved ReShade SDK
         uses: actions/checkout@v4
         with:
@@ -47,6 +45,13 @@ jobs:
         shell: pwsh
         run: |
           ./renderer-core/tools/configure_v203_clean_equipment.ps1
+      - name: Validate opt-in generated material source and consumer isolation
+        shell: pwsh
+        run: |
+          python renderer-core/tools/test_v203_envspec36_offline_port.py
+          if ($LASTEXITCODE -ne 0) { throw "EnvSpec36 regression failed" }
+          python renderer-core/tools/apply_v203_envspec36_generated_source.py
+          if ($LASTEXITCODE -ne 0) { throw "v203 producer source overlay failed verification" }
       - name: Run native tests, audit and package
         shell: pwsh
         run: |
