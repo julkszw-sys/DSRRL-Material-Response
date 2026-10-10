@@ -181,6 +181,14 @@ assert "data_end = 0x1D0AF78u" in packet_source
 assert "within_data(descriptor,16u+sizeof(type_name))" in packet_source
 assert "within_rdata(lrva,24u)" in packet_source
 assert "cpu_vtable_rva=%08X" in packet_source
+assert "payload_vtable_rva == 0x014AA4A8u" in packet_source
+assert "g_cpu_tex2d_fields_readable.fetch_add" in packet_source
+assert "readable_range(fields_address,sizeof(managed_fields))" in packet_source
+assert "p28_texture_snapshot=%p" in packet_source
+assert "p30_srv_snapshot=%p" in packet_source
+assert "tex2d_both_nonnull=%llu" in resource
+assert "source_to_srv=UNVERIFIED pixel=OPEN" in packet_source
+assert "typed decoder QUARANTINED" in packet_source
 assert "cpu_rtti_exact=%llu cpu_rtti_unavailable=%llu" in resource
 assert "cache_name_exact=%llu" in resource
 assert "decode_writer_ptr_seen=%llu" in resource
