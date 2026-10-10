@@ -138,6 +138,28 @@ assert "No C_Metal/C_RoughCloth texture is claimed" in source_manifest
 assert "AM_F_9450_L_s" in source_manifest and "WP_A_1700_s" in source_manifest
 assert "return nullptr; // noninjective source digest" in source_manifest
 
+# SPC25 bounded exact CPU provenance cut is diagnostic only, not a
+# TexHdlResCap/FrpgTextureEntity -> D3D11 resource authority.
+packet_source=(ROOT / "src/runtime/texture_identity_transport.cpp").read_text()
+packet_asm=(ROOT / "integrated/spc25_packet_source_detour.asm").read_text()
+integrated_cmake=(ROOT / "integrated/CMakeLists.txt").read_text()
+assert "k_packet_rva = 0x583BCEu" in packet_source
+assert "k_writer_rva = 0x57EFB0u" in packet_source
+assert "k_packet_resume_rva = 0x583BF2u" in packet_source
+assert "0xE8,0xD5,0xB3,0xFF,0xFF,0xEB,0x15" in packet_source
+assert "prepare_hook(g_packet,k_packet_rva,k_packet_bytes" in packet_source
+assert "g_status.packet_hook_armed = true" in packet_source
+assert "const bool packet_ok = restore(g_packet)" in packet_source
+assert "g_cpu_packet_writer_calls.fetch_add" in packet_source
+assert "source_to_srv=UNVERIFIED" in resource
+assert "cpu_808d_writer=%llu cpu_808d_named_scope=%llu" in resource
+assert "mov rcx, rbx" in packet_asm
+assert "mov rdx, rdi" in packet_asm
+assert "mov r8d, esi" in packet_asm
+assert "call qword ptr [g_dsrrl_spc25_writer_target]" in packet_asm
+assert "jmp qword ptr [g_dsrrl_spc25_packet_resume]" in packet_asm
+assert "spc25_packet_source_detour.asm" in integrated_cmake
+
 assert "g_name_exact_init_resource.fetch_add" in resource
 assert "g_name_exact_create_view.fetch_add" in resource
 assert "g_name_exact_init_view.fetch_add" in resource
