@@ -66,6 +66,12 @@ MATERIAL = [
   "try_recover_exact_bound_spec_from_native_name(\n    ID3D11DeviceContext *context,\n    bool exact_c5330_route14_test) noexcept\n{\n#if !defined(DSRRL_EXPERIMENTAL_SPC_MATERIAL_BATCH)\n    (void)exact_c5330_route14_test;\n    (void)context;"),
  ("    const auto key = static_cast<std::uint64_t>(\n        reinterpret_cast<std::uintptr_t>(stock));\n\n    // Limit the experiment",
   "    const auto key = static_cast<std::uint64_t>(\n        reinterpret_cast<std::uintptr_t>(stock));\n    bool cpu_source_exact = false;\n#if defined(DSRRL_EXPERIMENTAL_SPC25_C5330_SWAP_TEST)\n    if (exact_c5330_route14_test) {\n        ID3D11Resource *res = nullptr;\n        stock->GetResource(&res);\n        if (res != nullptr) {\n            cpu_source_exact =\n                texture_identity_transport::match_exact_c5330_native_ps_t1(\n                    stock, res);\n            res->Release();\n        }\n    }\n#else\n    (void)exact_c5330_route14_test;\n#endif\n\n    // Limit the experiment"),
+ ("                if (attempts >= 2u)\n                    denied = true;",
+  "                if (attempts >= (cpu_source_exact ? 3u : 2u))\n                    denied = true;"),
+ ("    if (name.empty()) {\n        // The actual SRV returned by PSGetShaderResources(1) is pinned.",
+  "#if defined(DSRRL_EXPERIMENTAL_SPC25_C5330_SWAP_TEST)\n    if (cpu_source_exact && name.empty() &&\n        !view_label && !resource_label_seen)\n        name = L\"c5330_s\";\n    if (cpu_source_exact && name != L\"c5330_s\") {\n        stock->Release();\n        return false;\n    }\n#endif\n    if (name.empty()) {\n        // The actual SRV returned by PSGetShaderResources(1) is pinned."),
+ ("    if (!generated::spec_equipment_name_hash_allowed_v12(hash)) {\n        stock->Release();",
+  "    const bool exact_test_source =\n#if defined(DSRRL_EXPERIMENTAL_SPC25_C5330_SWAP_TEST)\n        cpu_source_exact && name == L\"c5330_s\";\n#else\n        false;\n#endif\n    if (!generated::spec_equipment_name_hash_allowed_v12(hash) &&\n        !exact_test_source) {\n        stock->Release();"),
 ]
 
 def process(path: Path, rules, write: bool) -> None:
