@@ -9,6 +9,7 @@ root = Path(__file__).resolve().parents[2]
 read = lambda p: (root / p).read_text(encoding="utf-8")
 prefix = "renderer-core/"
 manifest = read(prefix+"include/dsrrl/runtime/v203_equipment_flver_slot_spec_manifest.hpp")
+router = read(prefix+"include/dsrrl/operators/material_response/generated_envspec_router_v1.hpp")
 gate = read(prefix+"include/dsrrl/runtime/v203_equipment_envspec36_gate.hpp")
 source = read(prefix+"src/runtime/pmetal_env_source_runtime.cpp")
 hook = read(prefix+"src/runtime/flver_engine_hooks.cpp")
@@ -25,6 +26,18 @@ assert len({r[3].lower() for r in rows}) == 18
 assert all(n.lower().startswith(("am_", "bd_", "lg_", "hd_", "wp_")) for *_,n in rows)
 assert all(m in ("P_Metal[DSB].mtd", "P_Leather[DSB].mtd",
                  "P_DullLeather[DSB].mtd") for _,_,m,_ in rows)
+# Exact raw-MTD router already differentiates all three equipment material families.
+# This is offline source authority, not a live draw or PTDE pixel claim.
+expected_slots = {
+    "P_DullLeather[DSB].mtd": {0},
+    "P_Leather[DSB].mtd": {1},
+    "P_Metal[DSB].mtd": {2},
+}
+for mtd, slots in expected_slots.items():
+    found = set(int(n) for n in re.findall(
+        re.escape('"' + mtd + '"') + r',[\\s\\S]*?envspec_router_state::present, (\\d+)u',
+        router))
+    assert found == slots, (mtd, found, slots)
 assert "exact_proven_owner_slot(query)" in gate
 assert 'mtd_semantic_hash("DifSpcBmp")' in gate
 assert "classify_mtd_envspec_semantics(query)" in gate
