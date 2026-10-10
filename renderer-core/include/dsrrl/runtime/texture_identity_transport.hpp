@@ -72,6 +72,15 @@ bool should_sample_native_ps_t1(const void *native_view) noexcept;
 bool should_probe_c5330_ps_t1(
     const void *native_view, std::uint32_t receiver_id) noexcept;
 
+// Source->bound PS-t1 bridge for equipment only. Returns one exact ASCII
+// logical name from the live named DLTexture2D writer, provided the pinned
+// view, resource and current generation all match ONE writer snapshot.
+// Asset authorization and exact FLVER owner+slot must be rechecked by caller.
+// Failure, ambiguity or stale generation returns false and stock DSR wins.
+bool resolve_exact_equipment_native_ps_t1(
+    const void *native_view, const void *native_resource,
+    char *ascii_name, std::size_t capacity) noexcept;
+
 // Exact source/transport witness only. Requires one named c5330_s CPU
 // writer snapshot, identical pinned native view + resource + current
 // generation; ambiguous or stale snapshots fail open. No SRV ownership.
