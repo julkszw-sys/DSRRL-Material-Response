@@ -44,6 +44,11 @@ struct texture_name_liveness {
     std::uint64_t cache_name_unreadable = 0u;
     std::uint64_t cpu_rtti_exact = 0u;
     std::uint64_t cpu_rtti_unavailable = 0u;
+    std::uint64_t cpu_tex2d_cpu_objects = 0u;
+    std::uint64_t cpu_tex2d_fields_readable = 0u;
+    std::uint64_t cpu_tex2d_p28_nonnull = 0u;
+    std::uint64_t cpu_tex2d_p30_nonnull = 0u;
+    std::uint64_t cpu_tex2d_both_nonnull = 0u;
     std::uint64_t decode_calls = 0u;
     std::uint64_t decode_payload_readable = 0u;
     std::uint64_t decode_writer_pointer_seen = 0u;
