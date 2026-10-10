@@ -715,6 +715,25 @@ extern "C" void dsrrl_spc25_packet_source_observer(
             if(managed_fields[0] && managed_fields[1])
                 g_cpu_tex2d_both_nonnull.fetch_add(
                     1u,std::memory_order_relaxed);
+            // Purely observational. Store only nonzero source texture/SRV
+            // pointer values from an exact named, RTTI-verified 2D owner.
+            // Do not retain or invoke these native pointers.
+            if(managed_fields[0] && managed_fields[1] &&
+               writer_seq < g_native_named_sources.size()) {
+                auto &slot = g_native_named_sources[writer_seq];
+                slot.texture = managed_fields[0];
+                slot.source_id = source_id;
+                const auto copy_length = std::min<std::size_t>(length,64u);
+                for(std::size_t i=0u;i<copy_length;++i) {
+                    const auto ch = static_cast<std::uint32_t>(name[i]);
+                    slot.ascii_name[i] =
+                        (ch >= 32u && ch <= 126u) ?
+                        static_cast<char>(ch) : '?';
+                }
+                slot.ascii_name[copy_length] = '\0';
+                slot.published_srv.store(
+                    managed_fields[1],std::memory_order_release);
+            }
         }
     }
     const auto count = g_cpu_packet_name_matches.fetch_add(
