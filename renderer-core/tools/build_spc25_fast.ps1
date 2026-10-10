@@ -131,7 +131,7 @@ if ($addons.Count -ne 1) { throw "Expected one integrated addon; found $($addons
 $output = Join-Path $root 'DSRRL_v203_other_metal_exact_DIAG.addon64'
 Copy-Item $addons[0].FullName $output -Force
 $ascii = [System.Text.Encoding]::ASCII.GetString([System.IO.File]::ReadAllBytes($output))
-foreach ($needle in @($commit, $flavor, '[DSRRL SPC25 CPU 808D]', 'cpu_808d_writer=%llu', '[DSRRL SPC ONEPASS] stage=spec_reject')) {
+foreach ($needle in @($commit, $flavor, '[DSRRL SPC25 CPU 808D]', 'cpu_808d_writer=%llu', '[DSRRL SPC ONEPASS] stage=spec_reject', 'matching_epoch=%u live_epoch=%llu writer_epoch=%llu')) {
     if (-not $ascii.Contains($needle)) { throw "Binary identity/diagnostic marker missing: $needle" }
 }
 $sha = (Get-FileHash $output -Algorithm SHA256).Hash.ToLowerInvariant()
