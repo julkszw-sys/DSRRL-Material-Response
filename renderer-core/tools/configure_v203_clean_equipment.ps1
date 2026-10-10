@@ -6,6 +6,8 @@ python renderer-core/tools/materialize_v202_production_zero_hybrid.py
 if ($LASTEXITCODE -ne 0) { throw "Failed original DSR donor or native source verification" }
 python renderer-core/tools/audit_r43_release_cleanup_hardening.py
 if ($LASTEXITCODE -ne 0) { throw "Production source audit failed" }
+python renderer-core/tools/test_v203_clean_equipment_manifest.py
+if ($LASTEXITCODE -ne 0) { throw "Equipment provenance regression failed" }
 python renderer-core/tools/apply_v203_clean_equipment_spec.py --apply
 if ($LASTEXITCODE -ne 0) { throw "Equipment overlay failed" }
 python renderer-core/tools/apply_v203_clean_equipment_spec.py
