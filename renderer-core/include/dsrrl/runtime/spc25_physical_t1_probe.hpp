@@ -55,9 +55,30 @@ inline void init(reshade::api::device *dev,
      const auto h=(t.height>>i)?(t.height>>i):1u;
      bytes+=static_cast<std::uint64_t>((w+3u)/4u)*((h+3u)/4u)*block;
    }
-   if(bytes>32u*1024u*1024u ||
-      budget_bytes.fetch_add(bytes)>384u*1024u*1024u) {
-     rec.stage="BUDGET_EXCEEDED";
+   // The original 384 MiB *session-wide* hashing allowance was exhausted
+   // before later exact SPC25 draws. Keep that allowance for general BC textures,
+   // but reserve the observed 1024x2048/12/BC1 physical-t1 diagnostic path.
+   // This is an opt-in, source-only probe: no SRV/texture replacement.
+   const bool observed_spc25_t1_layout =
+       t.width==1024u && t.height==2048u &&
+       t.levels==12u && fmt==71u;
+   constexpr std::uint64_t max_resource_bytes=32ull*1024ull*1024ull;
+   constexpr std::uint64_t general_budget_bytes=384ull*1024ull*1024ull;
+   bool admitted=bytes<=max_resource_bytes;
+   if(admitted && !observed_spc25_t1_layout) {
+     auto used=budget_bytes.load(std::memory_order_relaxed);
+     while(used<=general_budget_bytes &&
+           bytes<=general_budget_bytes-used) {
+       if(budget_bytes.compare_exchange_weak(
+              used,used+bytes,std::memory_order_relaxed,
+              std::memory_order_relaxed))break;
+     }
+     admitted=(used<=general_budget_bytes &&
+               bytes<=general_budget_bytes-used);
+   }
+   if(!admitted) {
+     rec.stage=bytes>max_resource_bytes
+         ? "RESOURCE_TOO_LARGE" : "BUDGET_EXCEEDED";
    } else {
      const stock_dsr_compressed_identity::texture2d_descriptor desc{
        t.width,t.height,t.levels,1u,1u,fmt,true};
