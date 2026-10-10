@@ -130,7 +130,7 @@ if ($FullTests) {
 }
 $addons = @(Get-ChildItem $build -Recurse -Filter '*.addon64' -File)
 if ($addons.Count -ne 1) { throw "Expected one integrated addon; found $($addons.Count)" }
-$output = Join-Path $root 'DSRRL_v203_other_metal_exact_DIAG.addon64'
+$output = Join-Path $root 'DSRRL_SPC25_C5330_T10_TEST.addon64'
 Copy-Item $addons[0].FullName $output -Force
 $ascii = [System.Text.Encoding]::ASCII.GetString([System.IO.File]::ReadAllBytes($output))
 foreach ($needle in @($commit, $flavor, '[DSRRL SPC25 CPU 808D]', 'cpu_808d_writer=%llu', '[DSRRL SPC ONEPASS] stage=spec_reject', 'matching_epoch=%u live_epoch=%llu writer_epoch=%llu')) {
