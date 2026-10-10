@@ -40,7 +40,7 @@ int main() {
     dsrrl::runtime::native_ps_t1_lifetime::registry<32> crowded;
     for (std::uintptr_t i = 0; i < 16u; ++i)
         CHECK(crowded.init(1, 0x10000u + i, 0x30000u + i) != 0u);
-    CHECK(crowded.init(1, 0x20000u, 0x40000u) == 0u);
+    CHECK(crowded.init(1, 0x10200u, 0x40000u) == 0u);
     for (std::uintptr_t i = 0; i < 16u; ++i)
         CHECK(crowded.current(0x10000u + i, 0x30000u + i));
     crowded.destroy(1, 0x10000u);
@@ -48,6 +48,6 @@ int main() {
     // It must be poisoned, never treated as a new valid epoch.
     CHECK(crowded.init(1, 0x10003u, 0x30003u) == 0u);
     CHECK(!crowded.current(0x10003u, 0x30003u));
-    CHECK(crowded.init(1, 0x20000u, 0x40000u) != 0u);
-    CHECK(crowded.current(0x20000u, 0x40000u));
+    CHECK(crowded.init(1, 0x10200u, 0x40000u) != 0u);
+    CHECK(crowded.current(0x10200u, 0x40000u));
 }
