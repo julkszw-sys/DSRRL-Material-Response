@@ -2976,6 +2976,15 @@ bool pmetal_env_source_runtime::latest(
     // already-authenticated exact P_Metal draw. The retail packer is a state
     // producer: retain its latest generation until the next exact source
     // update, matching the validated V13 lifetime without exposing it to U/L.
+#if defined(DSRRL_V203_EQUIPMENT_ENVSPEC36_DIAG)
+    // R43 latest_hook_source() is process-global. It remains unchanged for
+    // original P_Metal, but cannot authorize another material's A/B source.
+    // Non-P_Metal draws need an exact, matching producer_state transaction.
+    if (!exact_pmetal_material_selection(material)) {
+        telemetry::hot_count(g_consumer_fail);
+        return false;
+    }
+#endif
     if (latest_hook_source(out)) {
         telemetry::hot_count(
             g_consumer_ok);
