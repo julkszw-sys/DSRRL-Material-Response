@@ -210,7 +210,15 @@ assert "texture_identity_transport::diagnose_native_ps_t1(" in active_cut
 assert "stock_texture->Release();" in active_cut
 assert "g_quarantined.load()" in active_cut
 assert "should_sample_native_ps_t1(" in packet_source
-assert "std::array<std::atomic<std::uintptr_t>,k_capacity> seen{}" in packet_source
+assert "k_native_t1_seen_capacity = 8192u" in packet_source
+assert "g_native_t1_seen[(start + probe) & k_native_t1_seen_mask]" in packet_source
+assert "retire_native_ps_t1(const void *native_view)" in packet_source
+assert "writer_snapshots_tombstoned=%u" in packet_source
+assert "slot.published_srv.compare_exchange_strong(" in packet_source
+assert "texture_identity_transport::retire_native_ps_t1(" in resource
+assert "void on_destroy_resource_view(" in resource
+assert "g_native_t1_seen_rearmed.fetch_add(" in packet_source
+assert "cross_epoch=UNVERIFIED srv_swap=0 pixel=OPEN" in packet_source
 assert "bridge_authority=0 srv_swap=0 pixel=OPEN" in packet_source
 assert "matching_srv_and_texture=%u" in packet_source
 assert "cross_epoch_lifetime=OPEN reuse_collision=UNVERIFIED" in packet_source
