@@ -115,6 +115,39 @@ inline std::uint64_t logical_spec_hash(const char *name) noexcept {
     }
     return h;
 }
+// Negative provenance stages are diagnostics only; none authorizes t10.
+enum class owner_slot_probe : std::uint8_t {
+    authority_missing = 0,
+    flver_not_in_corpus,
+    slot_not_in_corpus,
+    mtd_not_in_corpus,
+    exact
+};
+inline owner_slot_probe classify_exact_owner_slot(
+    const operators::material_response::mtd_semantic_query &query) noexcept {
+    const auto &m = query.material;
+    if (!m.valid || !m.owner_tuple_exact ||
+        !m.actual_material_exact || !m.material_slot_valid ||
+        !operators::material_response::
+            has_exact_flver_material_ownership(query))
+        return owner_slot_probe::authority_missing;
+    bool sha_found = false;
+    bool slot_found = false;
+    for (const auto &r : k_proven_parts_specs) {
+        if (!digest_matches(m.flver_sha256,r.flver_sha256))
+            continue;
+        sha_found = true;
+        if (r.slot != m.material_slot)
+            continue;
+        slot_found = true;
+        if (m.semantic_name_hash ==
+              operators::material_response::mtd_semantic_hash(r.mtd))
+            return owner_slot_probe::exact;
+    }
+    return !sha_found ? owner_slot_probe::flver_not_in_corpus
+         : !slot_found ? owner_slot_probe::slot_not_in_corpus
+                       : owner_slot_probe::mtd_not_in_corpus;
+}
 // Read-only provenance stage independent of the stock t1 name-cache hit.
 // This proves only the FLVER owner, material slot and exact MTD,
 // never authorizes replacement or infers a bound resource.
