@@ -72,6 +72,12 @@ bool should_sample_native_ps_t1(const void *native_view) noexcept;
 bool should_probe_c5330_ps_t1(
     const void *native_view, std::uint32_t receiver_id) noexcept;
 
+// Exact source/transport witness only. Requires one named c5330_s CPU
+// writer snapshot, identical pinned native view + resource + current
+// generation; ambiguous or stale snapshots fail open. No SRV ownership.
+bool match_exact_c5330_native_ps_t1(
+    const void *native_view, const void *native_resource) noexcept;
+
 void diagnose_native_ps_t1(
     const void *native_view,
     const void *native_resource) noexcept;
