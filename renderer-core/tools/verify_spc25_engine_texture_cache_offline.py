@@ -53,6 +53,21 @@ ANCHORS={
  0x57ee74:"488b41184885c0",
  0x57f030:"488d4b08e8f74f7400",
  0xcc4030:"83c8fff00fc101c3",
+  # Exact DLGR::DLTexture2D upload: D3D11 Device::CreateTexture2D
+  # virtual slot 0x28 writes +0x28, CreateShaderResourceView virtual
+  # slot 0x38 consumes +0x28 and writes +0x30. Pointer lifetime and
+  # live receiver binding still require separate runtime identity.
+  0xce1a50:"48837928000f95c0c3",
+  0xce1b38:"488b4b30",
+  0xce1b63:"ff5010",
+  0xce1b6a:"488b4b28",
+  0xce1b7a:"ff5010",
+  0xce1c37:"e884020000",
+  0xce1c44:"498b174c8d4330488bcd",
+  0xce1c4e:"e82d010000",
+  0xce1d80:"48895c2408488974241057",
+  0xce1e01:"488bcfff5038",
+  0xce1f7e:"498bcaff5028",
 }
 SAMPLES={
  "utf16_name_cache_lookup":0x518a10,
@@ -104,6 +119,12 @@ def audit(exe):
  pjump=at(0x583bdb,2)
  if pjump[0]!=0xeb or 0x583bdd+struct.unpack("<b",pjump[1:])[0]!=0x583bf2:
   raise ValueError("Original 808D writer callsite branch changed")
+ # Verify exact code branches from owner-upload source construction into
+ # the two D3D11-ABI consumers; opcode bytes alone are not destination proof.
+ for src,dst in ((0xce1c37,0xce1ec0),(0xce1c4e,0xce1d80)):
+  inst=at(src,5)
+  if inst[0]!=0xe8 or src+5+struct.unpack_from("<i",inst,1)[0]!=dst:
+   raise ValueError("DLTexture2D D3D11-ABI create call mismatch "+hex(src))
  # RTTI + vtable independently identify the cache-node producer class
  # and the typed opcode consumer without mistaking CPU objects for ID3D11.
  def read_ptr(rva):
