@@ -177,12 +177,23 @@ bool attest_cpu_object_rtti(
     vtable_rva = 0u;
     if (!engine_object || !g_base)
         return false;
+    // PE32+ owner EXE: COL/vftable in .rdata, TypeDescriptor in .data.
+    // The previous .rdata-only check rejected every valid DLGR type.
     constexpr std::uintptr_t rdata_begin = 0x129D000u;
     constexpr std::uintptr_t rdata_end = 0x1A24C00u;
-    const auto within = [](std::uintptr_t rva, std::size_t bytes) noexcept {
-        return rva >= rdata_begin &&
-               rva < rdata_end &&
-               bytes <= rdata_end - rva;
+    constexpr std::uintptr_t data_begin = 0x1A25000u;
+    constexpr std::uintptr_t data_end = 0x1D0AF78u;
+    const auto within = [](std::uintptr_t rva, std::size_t bytes,
+                           std::uintptr_t begin, std::uintptr_t end) noexcept {
+        return rva >= begin && rva < end && bytes <= end-rva;
+    };
+    const auto within_rdata = [&](std::uintptr_t rva,
+                                   std::size_t bytes) noexcept {
+        return within(rva, bytes, rdata_begin, rdata_end);
+    };
+    const auto within_data = [&](std::uintptr_t rva,
+                                  std::size_t bytes) noexcept {
+        return within(rva, bytes, data_begin, data_end);
     };
     std::uintptr_t vtable = 0u;
     if (!readable_range(engine_object, sizeof(vtable)))
@@ -191,7 +202,7 @@ bool attest_cpu_object_rtti(
     if (vtable < g_base || vtable - g_base < sizeof(vtable))
         return false;
     const auto vrva = vtable - g_base;
-    if (!within(vrva - sizeof(vtable), sizeof(vtable) * 2u))
+    if (!within_rdata(vrva - sizeof(vtable), sizeof(vtable) * 2u))
         return false;
     vtable_rva = static_cast<std::uint32_t>(vrva);
     std::uintptr_t locator = 0u;
@@ -203,7 +214,7 @@ bool attest_cpu_object_rtti(
     if (locator < g_base)
         return false;
     const auto lrva = locator - g_base;
-    if (!within(lrva,24u) ||
+    if (!within_rdata(lrva,24u) ||
         !readable_range(reinterpret_cast<const void *>(locator),24u))
         return false;
     std::array<std::uint32_t,6u> col{};
@@ -212,7 +223,7 @@ bool attest_cpu_object_rtti(
     if (col[0] != 1u || col[5] != lrva)
         return false;
     const auto descriptor = static_cast<std::uintptr_t>(col[3]);
-    if (!within(descriptor,16u+sizeof(type_name)))
+    if (!within_data(descriptor,16u+sizeof(type_name)))
         return false;
     const auto *decorated = reinterpret_cast<const char *>(
         g_base+descriptor+16u);
