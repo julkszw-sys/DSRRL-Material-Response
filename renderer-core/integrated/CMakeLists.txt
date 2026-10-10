@@ -147,6 +147,10 @@ option(
     OFF)
 
 option(
+    DSRRL_EXPERIMENTAL_SPC25_C5330_SWAP_TEST
+    "Opt-in exact route14 c5330 test; default OFF"
+    OFF)
+option(
     DSRRL_EXPERIMENTAL_SPC_MATERIAL_BATCH
     "Diagnostic only: 21 more exactly attested DifSpcBmp MTDs (Leather/Cloth/Wet/Metal); requires other-metal and R19, distinct c101/EnvSpec slots, full sidecar gates"
     OFF)
@@ -969,13 +973,47 @@ if(DSRRL_EXPERIMENTAL_SPC25_DECODER_PROBE)
         "SPC25 typed decoder hook is quarantined: owner runtime crashed before main menu; fail closed until ABI and packet-cursor semantics are independently verified")
 endif()
 
+if(DSRRL_EXPERIMENTAL_SPC25_C5330_SWAP_TEST)
+    # c5330_s is a character/NPC texture, not a certified player
+    # equipment member. The project-wide SpecRGB equipment authority
+    # forbids activating an equipment sidecar bridge for this source.
+    message(FATAL_ERROR
+        "SPC25 c5330_s swap REJECTED: character/NPC asset lacks exact "
+        "equipment FLVER/material/slot/SpecRGB authority. "
+        "Use existing equipment-only SpecRGB carrier instead.")
+endif()
 if(DSRRL_EXPERIMENTAL_SPC_MATERIAL_BATCH)
+    # SPC25 native-view epoch instrumentation is mandatory on this
+    # diagnostic branch. Never accept an unpatched source as a successful
+    # SPC25 build merely because the experimental compile flag is ON.
+    execute_process(
+        COMMAND "${Python3_EXECUTABLE}"
+            "${DSRRL_RENDERER_CORE_ROOT}/tools/apply_spc25_native_t1_epoch.py"
+        WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}/../.."
+        RESULT_VARIABLE DSRRL_SPC25_EPOCH_CHECK_RESULT
+        OUTPUT_VARIABLE DSRRL_SPC25_EPOCH_CHECK_OUTPUT
+        ERROR_VARIABLE DSRRL_SPC25_EPOCH_CHECK_ERROR)
+    if(NOT DSRRL_SPC25_EPOCH_CHECK_RESULT EQUAL 0)
+        message(FATAL_ERROR
+            "SPC25 source generation patch missing, dirty or drifted. "
+            "Run renderer-core/tools/apply_spc25_native_t1_epoch.py --apply first. "
+            "${DSRRL_SPC25_EPOCH_CHECK_ERROR}")
+    endif()
+    message(STATUS "SPC25 generation-qualified diagnostic source verified")
     if(NOT DSRRL_EXPERIMENTAL_OTHER_METAL_PTDE_ENVSPEC)
         message(FATAL_ERROR
             "SPC material batch requires exact other-metal producer and R15-R19 lineage")
     endif()
     target_compile_definitions(dsrrl_renderer_core_integrated PRIVATE
         DSRRL_EXPERIMENTAL_SPC_MATERIAL_BATCH)
+    # The generated, project-owned physical-cut source contains known
+    # constexpr/boolean guard expressions. Suppress C4127 solely for
+    # this experimental addon target; retain /WX for all other warnings
+    # and do not modify the core library or independent operator source.
+    if(MSVC)
+        target_compile_options(dsrrl_renderer_core_integrated PRIVATE
+            $<$<COMPILE_LANGUAGE:CXX>:/wd4127>)
+    endif()
 endif()
 
 if(DSRRL_POINTLIGHT_DRAWTIME_BYPASS)

@@ -65,6 +65,19 @@ texture_name_liveness liveness() noexcept;
 // This suppresses repeated COM GetResource and 1024-slot scans.
 bool should_sample_native_ps_t1(const void *native_view) noexcept;
 
+// Targeted diagnostic only: observe the known c5330_s native SRV on
+// eligible exact-material receivers even when the view's first-sample
+// budget has already been consumed. Logs bounded coverage and requests an
+// occasional exact pinned resource/epoch comparison. Never authorizes binds.
+bool should_probe_c5330_ps_t1(
+    const void *native_view, std::uint32_t receiver_id) noexcept;
+
+// Exact source/transport witness only. Requires one named c5330_s CPU
+// writer snapshot, identical pinned native view + resource + current
+// generation; ambiguous or stale snapshots fail open. No SRV ownership.
+bool match_exact_c5330_native_ps_t1(
+    const void *native_view, const void *native_resource) noexcept;
+
 void diagnose_native_ps_t1(
     const void *native_view,
     const void *native_resource) noexcept;

@@ -1,0 +1,27 @@
+name: SPC25 Native Epoch Diagnostic
+on:
+  push:
+    branches:
+      - agent/spc25-t1-epoch-guard-20261010
+    paths:
+      - "renderer-core/**"
+      - ".github/workflows/spc25-native-epoch.yml"
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  native-epoch-addon:
+    runs-on: windows-2022
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build and verify one SPC25 epoch diagnostic addon
+        shell: pwsh
+        run: |
+          ./renderer-core/tools/build_spc25_fast.ps1 -Jobs 4 -FullTests
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: spc25-character-t1-diagnostic-no-swap
+          path: DSRRL_SPC25_CHARACTER_T1_DIAG.addon64
+          if-no-files-found: error

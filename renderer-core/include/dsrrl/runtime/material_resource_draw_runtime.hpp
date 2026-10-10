@@ -99,7 +99,8 @@ public:
     // later than init_resource_view. Never derive texture identity from
     // MTD/FLVER alone or infer it from GPU format/dimensions.
     bool try_recover_exact_bound_spec_from_native_name(
-        ID3D11DeviceContext *context) noexcept;
+        ID3D11DeviceContext *context,
+        bool exact_c5330_route14_test = false) noexcept;
 
     bool prepare_draw_requests(
         ID3D11DeviceContext *context,

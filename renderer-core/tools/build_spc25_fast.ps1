@@ -37,7 +37,7 @@ $build = Join-Path $root 'build-spc25-fast'
 if ($Clean -and (Test-Path $build)) {
     Remove-Item $build -Recurse -Force
 }
-$flavor = 'v203_dev_other_metal_mtd_keyed_diagnostic'
+$flavor = 'v203_spc25_character_texture_diagnostic_no_swap'
 $flags = @(
     'DSRRL_RELEASE_CLEANUP',
     'DSRRL_RESOURCE_EPOCH_SHARD_SYNC',
@@ -60,6 +60,38 @@ $flags = @(
     'DSRRL_PHYSICAL_CUT_UL_H3_SUBSURFACE',
     'DSRRL_PHYSICAL_CUT_POINTLIGHT_ALL'
 )
+# Apply the exact fail-open SPC25 lifetime recipe before source verification.
+python renderer-core/tools/apply_spc25_native_t1_epoch.py --apply
+if ($LASTEXITCODE -ne 0) { throw 'SPC25 native t1 epoch recipe failed' }
+python renderer-core/tools/apply_spc25_native_t1_epoch.py
+if ($LASTEXITCODE -ne 0) { throw 'SPC25 epoch postcondition failed' }
+# The recipe may alter exactly two runtime sources.  A dirty worktree or
+# unexpected modification must never be silently packaged as this lineage.
+$changedPaths = @(git diff --name-only)
+$allowedPaths = @(
+    'renderer-core/src/runtime/texture_identity_transport.cpp',
+    'renderer-core/src/runtime/material_resource_draw_runtime.cpp',
+    'renderer-core/src/runtime/pmetal_envspec_draw_runtime.cpp'
+)
+$unexpectedPaths = @($changedPaths | Where-Object { $_ -notin $allowedPaths })
+if ($LASTEXITCODE -ne 0 -or $unexpectedPaths.Count -ne 0) {
+    throw "Unexpected SPC25 source mutation: $($unexpectedPaths -join ', ')"
+}
+foreach ($requiredPath in $allowedPaths) {
+    if ($changedPaths -notcontains $requiredPath) {
+        throw "Expected SPC25 patched source missing: $requiredPath"
+    }
+    $digest = (Get-FileHash $requiredPath -Algorithm SHA256).Hash.ToLowerInvariant()
+    Write-Host "SPC25_PATCHED_SOURCE $requiredPath sha256=$digest"
+}
+# Isolated native x64 generation/collision regression; fail before touching the addon build.
+$epochBuild = Join-Path $root 'build-spc25-native-t1-epoch'
+cmake -S renderer-core/tests/spc25_native_t1_epoch -B $epochBuild -G 'Visual Studio 17 2022' -A x64
+if ($LASTEXITCODE -ne 0) { throw 'SPC25 epoch regression configure failed' }
+cmake --build $epochBuild --config Release --target spc25_native_t1_epoch_test --parallel $Jobs
+if ($LASTEXITCODE -ne 0) { throw 'SPC25 epoch regression native compile failed' }
+ctest --test-dir $epochBuild -C Release --output-on-failure
+if ($LASTEXITCODE -ne 0) { throw 'SPC25 epoch regression test failed' }
 # Mandatory short source audits run before build, never waive fail-open.
 python renderer-core/tools/verify_other_metal_material_workflow_v203.py
 if ($LASTEXITCODE -ne 0) { throw 'Exact MTD authority audit failed' }
@@ -75,7 +107,7 @@ $args = @(
     "-DRESHADE_INCLUDE_DIR=$(Join-Path $reshade 'include')",
     "-DDSRRL_SOURCE_COMMIT=$commit",
     "-DDSRRL_BUILD_FLAVOR=$flavor",
-    '-DCMAKE_CXX_FLAGS=/MP'
+    '-DCMAKE_CXX_FLAGS=/MP /EHsc'
 )
 foreach ($flag in $flags) { $args += "-D$flag=ON" }
 cmake @args
@@ -97,10 +129,10 @@ if ($FullTests) {
 }
 $addons = @(Get-ChildItem $build -Recurse -Filter '*.addon64' -File)
 if ($addons.Count -ne 1) { throw "Expected one integrated addon; found $($addons.Count)" }
-$output = Join-Path $root 'DSRRL_v203_other_metal_exact_DIAG.addon64'
+$output = Join-Path $root 'DSRRL_SPC25_CHARACTER_T1_DIAG.addon64'
 Copy-Item $addons[0].FullName $output -Force
 $ascii = [System.Text.Encoding]::ASCII.GetString([System.IO.File]::ReadAllBytes($output))
-foreach ($needle in @($commit, $flavor, '[DSRRL SPC25 CPU 808D]', 'cpu_808d_writer=%llu', '[DSRRL SPC ONEPASS] stage=spec_reject')) {
+foreach ($needle in @($commit, $flavor, '[DSRRL SPC25 CPU 808D]', 'cpu_808d_writer=%llu', '[DSRRL SPC ONEPASS] stage=spec_reject', 'matching_epoch=%u live_epoch=%llu writer_epoch=%llu')) {
     if (-not $ascii.Contains($needle)) { throw "Binary identity/diagnostic marker missing: $needle" }
 }
 $sha = (Get-FileHash $output -Algorithm SHA256).Hash.ToLowerInvariant()
