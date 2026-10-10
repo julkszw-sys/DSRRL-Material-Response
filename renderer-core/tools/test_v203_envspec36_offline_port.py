@@ -23,6 +23,15 @@ rows = re.findall(r'\{ "([a-f0-9]{64})", (\d+)u, "([^"]+)", "([^"]+)" \},',manif
 assert len(rows) == 36 and len(set(rows)) == 36
 assert len({r[0] for r in rows}) == 21
 assert len({r[3].lower() for r in rows}) == 18
+counts = {mtd:sum(1 for _,_,m,_ in rows if m==mtd)
+          for mtd in ("P_DullLeather[DSB].mtd", "P_Leather[DSB].mtd",
+                      "P_Metal[DSB].mtd")}
+assert counts == {"P_DullLeather[DSB].mtd":12, "P_Leather[DSB].mtd":12,
+                  "P_Metal[DSB].mtd":12}
+# Extend exactly 24 nonmetal tuples; 12 P_Metal tuples retain original island.
+assert 'material.route_index == 345u' in gate
+assert 'mtd_semantic_hash("P_Metal[DSB].mtd")' in gate
+
 assert all(n.lower().startswith(("am_", "bd_", "lg_", "hd_", "wp_")) for *_,n in rows)
 assert all(m in ("P_Metal[DSB].mtd", "P_Leather[DSB].mtd",
                  "P_DullLeather[DSB].mtd") for _,_,m,_ in rows)
@@ -85,6 +94,6 @@ assert "a SpecRGB consumer" in integration
 assert integration.count("                false,\n                prepared.resources);") >= 1
 # Reject the invalid NPC/character test target as an equipment mapping.
 assert "c5330_s" not in manifest
-print("V203_ENVSPEC36_OFFLINE_PORT_PASS rows=36 flver=21 names=18")
+print("V203_ENVSPEC36_OFFLINE_PORT_PASS manifest_rows=36 leather_rows=24 metal_rows=12 metal_unchanged=1")
 print("V203_ENVSPEC36_NONPMETAL_UNKEYED_FALLBACK=DISABLED")
 print("V203_ENVSPEC36_CONSTRUCTION_ONLY runtime=OPEN pixel=OPEN")
