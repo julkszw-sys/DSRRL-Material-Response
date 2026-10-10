@@ -37,13 +37,14 @@ $build = Join-Path $root 'build-spc25-fast'
 if ($Clean -and (Test-Path $build)) {
     Remove-Item $build -Recurse -Force
 }
-$flavor = 'v203_dev_other_metal_mtd_keyed_diagnostic'
+$flavor = 'v203_spc25_c5330_route14_rx34_t10_test'
 $flags = @(
     'DSRRL_RELEASE_CLEANUP',
     'DSRRL_RESOURCE_EPOCH_SHARD_SYNC',
     'DSRRL_COMPANION_TLS_4WAY',
     'DSRRL_EXPERIMENTAL_OTHER_METAL_PTDE_ENVSPEC',
     'DSRRL_EXPERIMENTAL_SPC_MATERIAL_BATCH',
+    'DSRRL_EXPERIMENTAL_SPC25_C5330_SWAP_TEST',
     'DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG',
     'DSRRL_PMETAL_FULL_PTDE_HEMENV_R3',
     'DSRRL_PMETAL_FULL_PTDE_HEMENV_R4',
@@ -70,7 +71,8 @@ if ($LASTEXITCODE -ne 0) { throw 'SPC25 epoch postcondition failed' }
 $changedPaths = @(git diff --name-only)
 $allowedPaths = @(
     'renderer-core/src/runtime/texture_identity_transport.cpp',
-    'renderer-core/src/runtime/material_resource_draw_runtime.cpp'
+    'renderer-core/src/runtime/material_resource_draw_runtime.cpp',
+    'renderer-core/src/runtime/pmetal_envspec_draw_runtime.cpp'
 )
 $unexpectedPaths = @($changedPaths | Where-Object { $_ -notin $allowedPaths })
 if ($LASTEXITCODE -ne 0 -or $unexpectedPaths.Count -ne 0) {
