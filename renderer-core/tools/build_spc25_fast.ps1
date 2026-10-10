@@ -37,13 +37,14 @@ $build = Join-Path $root 'build-spc25-fast'
 if ($Clean -and (Test-Path $build)) {
     Remove-Item $build -Recurse -Force
 }
-$flavor = 'v203_spc25_character_texture_diagnostic_no_swap'
+$flavor = 'v203_spc25_equipment_exact_t10_optin'
 $flags = @(
     'DSRRL_RELEASE_CLEANUP',
     'DSRRL_RESOURCE_EPOCH_SHARD_SYNC',
     'DSRRL_COMPANION_TLS_4WAY',
     'DSRRL_EXPERIMENTAL_OTHER_METAL_PTDE_ENVSPEC',
     'DSRRL_EXPERIMENTAL_SPC_MATERIAL_BATCH',
+    'DSRRL_EXPERIMENTAL_SPC25_EQUIPMENT_SPEC_BRIDGE',
     'DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG',
     'DSRRL_PMETAL_FULL_PTDE_HEMENV_R3',
     'DSRRL_PMETAL_FULL_PTDE_HEMENV_R4',
@@ -65,6 +66,10 @@ python renderer-core/tools/apply_spc25_native_t1_epoch.py --apply
 if ($LASTEXITCODE -ne 0) { throw 'SPC25 native t1 epoch recipe failed' }
 python renderer-core/tools/apply_spc25_native_t1_epoch.py
 if ($LASTEXITCODE -ne 0) { throw 'SPC25 epoch postcondition failed' }
+python renderer-core/tools/apply_spc25_equipment_spec.py --apply
+if ($LASTEXITCODE -ne 0) { throw 'Equipment patch failed' }
+python renderer-core/tools/apply_spc25_equipment_spec.py
+if ($LASTEXITCODE -ne 0) { throw 'Equipment patch verification failed' }
 # The recipe may alter exactly two runtime sources.  A dirty worktree or
 # unexpected modification must never be silently packaged as this lineage.
 $changedPaths = @(git diff --name-only)
