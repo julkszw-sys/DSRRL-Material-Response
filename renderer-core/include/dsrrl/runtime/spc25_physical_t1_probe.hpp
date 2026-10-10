@@ -151,6 +151,18 @@ inline void inspect(ID3D11ShaderResourceView *view) noexcept {
  if(log) {
   D3D11_RESOURCE_DIMENSION kind=D3D11_RESOURCE_DIMENSION_UNKNOWN;
   r->GetType(&kind);
+  D3D11_TEXTURE2D_DESC live{};
+  if(kind==D3D11_RESOURCE_DIMENSION_TEXTURE2D) {
+   ID3D11Texture2D *t=nullptr;
+   if(SUCCEEDED(r->QueryInterface(
+     __uuidof(ID3D11Texture2D),reinterpret_cast<void **>(&t))) && t) {
+    t->GetDesc(&live);t->Release();
+   }
+  }
+  const bool exact_layout=found &&
+   live.Width==rec.width && live.Height==rec.height &&
+   live.MipLevels==rec.mips &&
+   static_cast<std::uint32_t>(live.Format)==rec.format;
   char hex[65]{};
   if(found && rec.stage[0]=='F') {
    const char *digits="0123456789abcdef";
@@ -161,13 +173,15 @@ inline void inspect(ID3D11ShaderResourceView *view) noexcept {
   }
   char msg[720]{};
   std::snprintf(msg,sizeof(msg),
-   "[DSRRL SPC25 PHYSICAL T1] stage=%s view=0x%llx native_resource=0x%llx native_type=%u create_seen=%u view_registered=%u srv_resource_equal=%u ambiguous=%u stock_initial_sha256=%s source_candidate=%s source_only=1 current_gpu_bytes=UNVERIFIED srv_swap=0 pixel=OPEN",
+   "[DSRRL SPC25 PHYSICAL T1] stage=%s view=0x%llx native_resource=0x%llx native_type=%u live_whmf=%ux%u/%u/%u create_seen=%u view_registered=%u srv_resource_equal=%u ambiguous=%u desc_equal=%u stock_initial_sha256=%s source_candidate=%s source_only=1 current_gpu_bytes=UNVERIFIED srv_swap=0 pixel=OPEN",
    found?rec.stage:"NO_CREATE_RECORD",
    static_cast<unsigned long long>(vid),
    static_cast<unsigned long long>(rid),
-   static_cast<unsigned>(kind),found?1u:0u,view_seen?1u:0u,view_equal?1u:0u,collision?1u:0u,
+   static_cast<unsigned>(kind),live.Width,live.Height,live.MipLevels,
+   static_cast<unsigned>(live.Format),found?1u:0u,
+   view_seen?1u:0u,view_equal?1u:0u,collision?1u:0u,exact_layout?1u:0u,
    hex[0]?hex:"NONE",
-   (!collision && rec.source)?rec.source:"NONE");
+   (!collision && exact_layout && rec.source)?rec.source:"NONE");
   reshade::log::message(reshade::log::level::info,msg);
  }
  if(d)d->Release();
