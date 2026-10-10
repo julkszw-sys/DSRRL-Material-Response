@@ -970,6 +970,23 @@ if(DSRRL_EXPERIMENTAL_SPC25_DECODER_PROBE)
 endif()
 
 if(DSRRL_EXPERIMENTAL_SPC_MATERIAL_BATCH)
+    # SPC25 native-view epoch instrumentation is mandatory on this
+    # diagnostic branch. Never accept an unpatched source as a successful
+    # SPC25 build merely because the experimental compile flag is ON.
+    execute_process(
+        COMMAND "${Python3_EXECUTABLE}"
+            "${DSRRL_RENDERER_CORE_ROOT}/tools/apply_spc25_native_t1_epoch.py"
+        WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}/../.."
+        RESULT_VARIABLE DSRRL_SPC25_EPOCH_CHECK_RESULT
+        OUTPUT_VARIABLE DSRRL_SPC25_EPOCH_CHECK_OUTPUT
+        ERROR_VARIABLE DSRRL_SPC25_EPOCH_CHECK_ERROR)
+    if(NOT DSRRL_SPC25_EPOCH_CHECK_RESULT EQUAL 0)
+        message(FATAL_ERROR
+            "SPC25 source generation patch missing, dirty or drifted. "
+            "Run renderer-core/tools/apply_spc25_native_t1_epoch.py --apply first. "
+            "${DSRRL_SPC25_EPOCH_CHECK_ERROR}")
+    endif()
+    message(STATUS "SPC25 generation-qualified diagnostic source verified")
     if(NOT DSRRL_EXPERIMENTAL_OTHER_METAL_PTDE_ENVSPEC)
         message(FATAL_ERROR
             "SPC material batch requires exact other-metal producer and R15-R19 lineage")
