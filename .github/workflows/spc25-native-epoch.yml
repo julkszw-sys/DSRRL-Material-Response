@@ -24,5 +24,5 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: spc25-character-t1-diagnostic-no-swap
-          path: DSRRL_SPC25_CHARACTER_T1_DIAG.addon64
+          path: DSRRL_SPC25_EQUIPMENT_SPEC_T10_TEST.addon64
           if-no-files-found: error
