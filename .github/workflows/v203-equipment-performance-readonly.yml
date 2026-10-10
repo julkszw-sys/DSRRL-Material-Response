@@ -1,0 +1,38 @@
+name: v203 Equipment Perf Lerp Readonly Audit
+
+on:
+  push:
+    branches:
+      - agent/v203-perf-lerp-envdiffuse-audit-20261011
+  workflow_dispatch:
+
+jobs:
+  offline-source-evidence:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Enforce zero renderer code and resource mutations relative to PR300
+        shell: bash
+        run: |
+          set -euo pipefail
+          git merge-base --is-ancestor 6381743f5e5f82c75bd7e5b7ea6d0f7675e62eea HEAD
+          if git diff --name-only 6381743f5e5f82c75bd7e5b7ea6d0f7675e62eea HEAD -- renderer-core/src renderer-core/include renderer-core/integrated renderer-core/data renderer-core/shaders | grep .; then
+            echo "FATAL: performance audit touched a renderer or sidecar source" >&2
+            exit 1
+          fi
+      - name: Run structural, exact-owner, R19 Lerp and sidecar audit
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 renderer-core/tools/test_v203_clean_equipment_manifest.py
+          python3 renderer-core/tools/audit_v203_equipment_perf_lerp_source.py --json-out v203_equipment_perf_lerp_source_audit.json
+      - name: Preserve immutable audit results
+        uses: actions/upload-artifact@v4
+        with:
+          name: V203_PR300_PERF_LERP_M10_ENVDIFFUSE_SOURCE_ONLY
+          path: |
+            v203_equipment_perf_lerp_source_audit.json
+            renderer-core/docs/v203_PR300_PERF_LERP_M10_ENVDIFFUSE_OFFLINE_AUDIT_20261011.md
+          if-no-files-found: error
