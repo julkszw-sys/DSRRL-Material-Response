@@ -9,6 +9,8 @@ option casemap:none
 EXTERN dsrrl_spc25_packet_source_observer:PROC
 EXTERN g_dsrrl_spc25_writer_target:QWORD
 EXTERN g_dsrrl_spc25_packet_resume:QWORD
+EXTERN dsrrl_spc25_packet_decode_observer:PROC
+EXTERN g_dsrrl_spc25_reader_resume:QWORD
 
 .code
 PUBLIC dsrrl_spc25_packet_source_hook_entry
