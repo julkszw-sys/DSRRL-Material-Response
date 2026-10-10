@@ -24,6 +24,20 @@ Verified examples:
 
 **Independent negative to MTD-only mapping:** `WP_A_0905_s` also belongs to `P_Leather[DSB]` in FLVER material slots 0 and 1 of the same archive. `WP_A_0106_mailbreaker_s` belongs to `P_Metal`, `P_Leather` and `P_DullLeather` in its FLVER records. More generally 15 SpecRGB basenames in this partial corpus are referenced by two or more distinct MTDs. Thus material class is not a unique GPU resource identity and material-global stock→PTDE SpecRGB substitution remains forbidden.
 
+## Extended source coverage: CHRBND (2026-10-10)
+
+A second pass over the **same pinned owner ZIP** also included 40 `DSR/chr/*.chrbnd.dcx` files (previously the parts-only figure of 111 archives and 2 profiles was accurate *only for parts*). All 40 decoded as exact FLVER2 and passed the same structural parser, bringing the combined evidence to **151 parts/chr BND files, 158 FLVER2 models, 244 material slots**, and **58 exact SPC-roster material slots covering 12 of 25 distinct MTD profiles** (13 absent). 129 models have non-empty complete texture arrays; 29 are valid with zero texture descriptors. All counts concern source asset identity only, never GPU identity.
+
+Crucially, `DSR/chr/c2550.chrbnd.dcx`, exact FLVER SHA256 prefix `4d89f8ce32fb837d`, supplies the previously missing source identities:
+
+- `C_Metal[DSB].mtd`: slot 3 → `g_Specular=c2550_s`; slot 6 → `c2550_WP_A_1502_s`.
+- `C_Metal[DSB]_Edge.mtd`: slot 1 → `g_Specular=c2550_s`; slot 5 → `c2550_WP_A_0700_s`.
+- A distinct FLVER `c5353.chrbnd.dcx` slot 1 uses `C_Metal[DSB].mtd` with `g_Specular=c5351_s`.
+
+The same MTD can map to **multiple source logical textures**, and `c2550_s` is shared across `C_Metal` and `C_Metal_Edge`, showing why both **MTD-only** and global **one-texture-per-MTD** routing are invalid.
+
+The 12 covered profiles and 13 absent profiles are recorded in the generated CSV/JSON. Notably **`C_RoughCloth[DSB].mtd` remains absent from this partial archive**, even though it was encountered in owner runtime. That is an evidence coverage gap, not an invalid profile.
+
 ## New CPU intermediate operator
 
 The **exact retail EXE** proves more than the original engine UTF16 name hash-map lookup (RVA `0x518A10`) and cache node offsets:
@@ -42,7 +56,7 @@ Twenty-one exact opcode anchors beyond the original 18 CPU cache anchors, four d
 3. Only after step 2, load the existing PTDE SpecRGB sidecar and redirect **only** the targeted operator. Preserve DSR PBL roughness/alpha and all unrelated shader families; fail-open and invalidate on native resource/view destruction, rebind and conflict.
 4. Validate distinct CONSTRUCTION, COMPATIBILITY, RUNTIME, BRIDGE ACTIVATION and PTDE PIXEL statuses. CI/asset equality does not establish pixel equality.
 
-**Current decision:** do not promote or enable a guessed GPU identity bridge; existing V13 single-addon renderer/runtime untouched. Static asset material identity is **CONFIRMED for the listed two MTD profiles**; CPU packet writer and handler-local typed decoder **CONFIRMED**, external handler registration, exact native GPU SRV and PTDE pixels **OPEN**.
+**Current decision:** do not promote or enable a guessed GPU identity bridge; existing V13 single-addon renderer/runtime untouched. Static asset material identity is **CONFIRMED for 12 of 25 distinct MTD profiles in parts + chr files**; CPU packet writer and handler-local typed decoder **CONFIRMED**, external handler registration, exact native GPU SRV and PTDE pixels **OPEN**.
 
 Run read-only local asset audit:
 
