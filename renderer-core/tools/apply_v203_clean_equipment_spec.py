@@ -36,6 +36,32 @@ CONSUMER_GATE = """#if defined(DSRRL_V203_EQUIPMENT_ENVSPEC36_DIAG)
 #endif
 """
 
+ROUTER_ANCHOR = """        const auto decision =
+            operators::resource_bridges::
+                evaluate_spec_rgb_route(
+                    context_spec,
+                    query);"""
+ROUTER_PATCH = """#if defined(DSRRL_V203_EQUIPMENT_ENVSPEC36_DIAG)
+        // Dedicated EnvSpec-owned PTDE t10 shader island is not the generic
+        // MR SpecRGB/PBL consumer. The 36-owner FLVER+slot+MTD+gSpec predicate
+        // and exact raw-MTD EnvSpec=USE replace ONLY that generic census bit.
+        // All other routes retain evaluate_spec_rgb_route(context, query).
+        const bool exact_equipment_envspec_consumer =
+            receiver_id >= 33u && receiver_id <= 35u &&
+            spec_rgb_consumer_ready &&
+            v203_equipment::exact_envspec36_material(query.material) &&
+            v203_equipment::exact_proven_slot_spec_hash(query, h1) &&
+            context_spec.material_specular_consumer_verified;
+        const auto decision =
+            exact_equipment_envspec_consumer
+                ? operators::resource_bridges::
+                      evaluate_spec_rgb_route(context_spec)
+                : operators::resource_bridges::
+                      evaluate_spec_rgb_route(context_spec, query);
+#else
+""" + ROUTER_ANCHOR + """
+#endif"""
+
 PROBE_ANCHOR = "    const auto h2 = hashes[2];\n\n"
 PROBE = """
 #if defined(DSRRL_V203_EXACT_EQUIPMENT_SPEC)
@@ -117,9 +143,11 @@ def run(write: bool):
     assert "SPC25" not in source
     assert source.count(PROBE_ANCHOR) == 1
     assert source.count(CONSUMER_ANCHOR) == 1
+    assert source.count(ROUTER_ANCHOR) == 1
     patched = source.replace(HEADER, NEW_HEADER, 1).replace(OLD, NEW, 1)
     patched = patched.replace(PROBE_ANCHOR, PROBE_ANCHOR + PROBE, 1)
     patched = patched.replace(CONSUMER_ANCHOR, CONSUMER_GATE + CONSUMER_ANCHOR, 1)
+    patched = patched.replace(ROUTER_ANCHOR, ROUTER_PATCH, 1)
     path = ROOT / TARGET
     current = path.read_text(encoding="utf-8").replace("\r\n", "\n")
     if write:
