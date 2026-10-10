@@ -909,6 +909,10 @@ texture_name_liveness liveness() noexcept
         g_cpu_cache_name_different.load(std::memory_order_relaxed);
     out.cache_name_unreadable =
         g_cpu_cache_name_unreadable.load(std::memory_order_relaxed);
+    out.cpu_rtti_exact =
+        g_cpu_rtti_exact.load(std::memory_order_relaxed);
+    out.cpu_rtti_unavailable =
+        g_cpu_rtti_unavailable.load(std::memory_order_relaxed);
     out.decode_calls = g_cpu_decode_calls.load(std::memory_order_relaxed);
     out.decode_payload_readable =
         g_cpu_decode_payload_readable.load(std::memory_order_relaxed);
