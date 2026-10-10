@@ -6,6 +6,9 @@
 #endif
 
 #include "dsrrl/runtime/pmetal_envspec_draw_runtime.hpp"
+#if defined(DSRRL_V203_EQUIPMENT_ENVSPEC36_DIAG)
+#include "dsrrl/runtime/v203_equipment_envspec36_gate.hpp"
+#endif
 #include "dsrrl/runtime/runtime_hot_telemetry.hpp"
 #include "dsrrl/runtime/pixel_srv_shadow.hpp"
 
@@ -218,9 +221,16 @@ bool exact_pmetal_envspec_candidate(
     const operators::material_response::material_identity &material,
     const operators::material_response::decision &decision) noexcept
 {
-    return
-        exact_pmetal_material(material) &&
-        exact_pmetal_decision(decision);
+    if (exact_pmetal_material(material) &&
+        exact_pmetal_decision(decision))
+        return true;
+#if defined(DSRRL_V203_EQUIPMENT_ENVSPEC36_DIAG)
+    // Reuse the existing HemEnv/HemEnvLerp operator only on 36 proven
+    // FLVER+slot+MTD owners with EnvSpec=PRESENT, never by receiver alone.
+    return v203_equipment::exact_envspec36_draw(material, decision);
+#else
+    return false;
+#endif
 }
 
 pmetal_envspec_draw_runtime::
@@ -743,7 +753,15 @@ bool pmetal_envspec_draw_runtime::prepare(
             mr::mtd_envspec_router_state::
                 present ||
         !env_semantics.envspc_slot_valid ||
-        env_semantics.envspc_slot != 2u) {
+        (
+#if defined(DSRRL_V203_EQUIPMENT_ENVSPEC36_DIAG)
+            (exact_pmetal_material(material) &&
+             env_semantics.envspc_slot != 2u) ||
+            env_semantics.envspc_slot >= 4u
+#else
+            env_semantics.envspc_slot != 2u
+#endif
+        )) {
         telemetry::hot_count(semantic_rejects_);
         effect_fail(
             effect_fail_mask_,
