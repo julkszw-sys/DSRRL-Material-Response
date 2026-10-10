@@ -103,4 +103,39 @@ inline bool exact_proven_slot_spec(
     }
     return false;
 }
+
+inline std::uint64_t logical_spec_hash(const char *name) noexcept {
+    std::uint64_t h = 14695981039346656037ull;
+    if (!name) return h;
+    for (; *name; ++name) {
+        std::uint32_t c = static_cast<unsigned char>(*name);
+        if (c >= 'A' && c <= 'Z') c += 32u;
+        h ^= static_cast<std::uint64_t>(c);
+        h *= 1099511628211ull;
+    }
+    return h;
+}
+// Domain cut: one exact FLVER SHA, one material slot, matching MTD,
+// and that slot's own g_Specular name (not a merely allowlisted texture).
+// No D3D view identity, unrelated materials or fallback name guessing.
+inline bool exact_proven_slot_spec_hash(
+    const operators::material_response::mtd_semantic_query &query,
+    std::uint64_t stock_logical_spec_hash) noexcept {
+    const auto &m = query.material;
+    if (!stock_logical_spec_hash || !m.valid ||
+        !m.owner_tuple_exact || !m.actual_material_exact ||
+        !m.material_slot_valid ||
+        !operators::material_response::
+            has_exact_flver_material_ownership(query))
+        return false;
+    for (const auto &r : k_proven_parts_specs) {
+        if (r.slot == m.material_slot &&
+            m.semantic_name_hash ==
+              operators::material_response::mtd_semantic_hash(r.mtd) &&
+            logical_spec_hash(r.spec) == stock_logical_spec_hash &&
+            digest_matches(m.flver_sha256,r.flver_sha256))
+            return true;
+    }
+    return false;
+}
 } // namespace dsrrl::runtime::spc25_equipment
