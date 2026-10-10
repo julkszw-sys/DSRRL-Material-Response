@@ -109,6 +109,23 @@ std::atomic<std::uint64_t> g_cpu_decode_payload_writer_pointer_seen{0u};
 // Diagnostic-only bounded pointer census; the absence of a certified
 // lifetime link forbids using these entries as a resource/asset authority.
 std::array<std::atomic<std::uintptr_t>,1024> g_cpu_writer_pointers{};
+// One-time CPU writer snapshot indexed by monotonically increasing writer_seq.
+// Snapshot slots are never rewritten within a run; published_srv release
+// enables concurrent acquire-only reader without a lock or COM calls.
+// Non-owning addresses can be reused: equality is observation, not authority.
+struct native_named_source {
+    std::atomic<std::uintptr_t> published_srv{0u};
+    std::uintptr_t texture = 0u;
+    std::uint32_t source_id = 0u;
+    std::array<char,65u> ascii_name{};
+};
+std::array<native_named_source,1024u> g_native_named_sources{};
+std::atomic<std::uint64_t> g_native_t1_checks{0u};
+std::atomic<std::uint64_t> g_native_t1_srv_matches{0u};
+std::atomic<std::uint64_t> g_native_t1_resource_matches{0u};
+std::atomic<std::uint64_t> g_native_t1_ambiguous{0u};
+std::atomic<std::uint32_t> g_native_t1_match_logs{0u};
+std::atomic<std::uint32_t> g_native_t1_no_match_logs{0u};
 #endif
 
 bool readable_range(
