@@ -3,6 +3,7 @@ on:
   push:
     branches:
       - agent/spc25-t1-epoch-guard-20261010
+      - agent/spc25-equipment-t1-spec-20261010
     paths:
       - "renderer-core/**"
       - ".github/workflows/spc25-native-epoch.yml"
