@@ -68,4 +68,10 @@ void diagnose_native_ps_t1(
     const void *native_view,
     const void *native_resource) noexcept;
 
+// ReShade destroy_resource_view event, native D3D11 view value only.
+// Tombstones any recorded writer ownership for that view and rearms
+// one-shot sampling if a later lifetime reuses its address. Never
+// claims epoch equivalence until runtime destroy/recreate is attested.
+void retire_native_ps_t1(const void *native_view) noexcept;
+
 } // namespace dsrrl::runtime::texture_identity_transport
