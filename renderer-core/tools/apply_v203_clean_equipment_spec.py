@@ -37,6 +37,13 @@ PROBE = """
             !matched.exchange(true,std::memory_order_relaxed))
             reshade::log::message(reshade::log::level::info,
                 "[DSRRL V203 EQUIPMENT] stage=flver_slot_mtd_exact");
+        static std::atomic_bool t1_seen{false};
+        if (!t1_seen.load(std::memory_order_relaxed) &&
+            v203_equipment::exact_proven_slot_spec_hash(query,h1) &&
+            !t1_seen.exchange(true,std::memory_order_relaxed))
+            reshade::log::message(reshade::log::level::info,
+                "[DSRRL V203 EQUIPMENT] stage=stock_t1_exact");
+
     }
 #endif
 """
