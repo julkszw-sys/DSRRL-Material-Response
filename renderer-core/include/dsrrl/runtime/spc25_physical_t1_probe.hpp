@@ -22,6 +22,8 @@ struct record {
 inline std::mutex mu;
 inline std::unordered_map<std::uint64_t,record> resources;
 inline std::unordered_set<std::uint64_t> ambiguous;
+inline std::unordered_map<std::uint64_t,std::uint64_t> view_parents;
+inline std::unordered_set<std::uint64_t> conflicting_views;
 inline std::unordered_set<std::uint64_t> reported_views;
 inline std::atomic<std::uint32_t> reports{0u};
 inline std::atomic<std::uint64_t> total_hashed{0u};
@@ -83,21 +85,38 @@ inline void init(reshade::api::device *dev,
 inline void drop_resource(std::uint64_t r) noexcept {
  std::lock_guard<std::mutex> lock(mu);
  resources.erase(r);ambiguous.erase(r);
+ for(auto it=view_parents.begin();it!=view_parents.end();)
+   if(it->second==r)it=view_parents.erase(it);
+   else ++it;
+}
+inline void link_view(std::uint64_t v,std::uint64_t r) noexcept {
+ if(!v || !r)return;
+ try {
+  std::lock_guard<std::mutex> lock(mu);
+  if(conflicting_views.count(v))return;
+  const auto item=view_parents.emplace(v,r);
+  if(!item.second && item.first->second!=r) {
+    view_parents.erase(item.first);
+    conflicting_views.insert(v);
+  }
+ } catch(...) { }
 }
 inline void drop_view(std::uint64_t v) noexcept {
  std::lock_guard<std::mutex> lock(mu);
  reported_views.erase(v);
+ view_parents.erase(v);
+ conflicting_views.erase(v);
 }
 inline void drop_device(ID3D11Device *d) noexcept {
  std::lock_guard<std::mutex> lock(mu);
  for(auto it=resources.begin();it!=resources.end();)
    if(it->second.device==d)it=resources.erase(it);
    else ++it;
- ambiguous.clear();reported_views.clear();
+ ambiguous.clear();reported_views.clear();view_parents.clear();conflicting_views.clear();
 }
 inline void clear() noexcept {
  std::lock_guard<std::mutex> lock(mu);
- resources.clear();ambiguous.clear();reported_views.clear();
+ resources.clear();ambiguous.clear();reported_views.clear();view_parents.clear();conflicting_views.clear();
 }
 
 inline void inspect(ID3D11ShaderResourceView *view) noexcept {
