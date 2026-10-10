@@ -587,6 +587,60 @@ extern "C" void dsrrl_spc25_packet_source_observer(
 #endif
 }
 
+extern "C" void dsrrl_spc25_packet_decode_observer(
+    const void *entity, const void *cursor_slot) noexcept
+{
+#if defined(DSRRL_EXPERIMENTAL_SPC_MATERIAL_BATCH)
+    const auto seq = g_cpu_decode_calls.fetch_add(
+        1u, std::memory_order_relaxed) + 1u;
+    std::uintptr_t cursor = 0u;
+    std::uintptr_t payload = 0u;
+    bool readable = false;
+    if(entity != nullptr && readable_range(cursor_slot,sizeof(cursor))) {
+        std::memcpy(&cursor,cursor_slot,sizeof(cursor));
+        if(cursor <= (UINTPTR_MAX - 15u)) {
+            const auto address = (cursor+7u) & ~std::uintptr_t{7u};
+            if(readable_range(reinterpret_cast<const void *>(address),
+                              sizeof(payload))) {
+                std::memcpy(&payload,reinterpret_cast<const void *>(address),
+                            sizeof(payload));
+                readable = true;
+                g_cpu_decode_payload_readable.fetch_add(
+                    1u,std::memory_order_relaxed);
+            }
+        }
+    }
+    bool writer_pointer_seen = false;
+    if(readable && payload != 0u) {
+        const auto max = std::min<std::uint64_t>(
+            g_cpu_packet_writer_calls.load(std::memory_order_acquire),
+            g_cpu_writer_pointers.size());
+        for(std::uint64_t i=0u;i<max;++i) {
+            if(g_cpu_writer_pointers[static_cast<std::size_t>(i)].load(
+                   std::memory_order_acquire) == payload) {
+                writer_pointer_seen = true;
+                break;
+            }
+        }
+        if(writer_pointer_seen)
+            g_cpu_decode_payload_writer_pointer_seen.fetch_add(
+                1u,std::memory_order_relaxed);
+    }
+    if(seq <= 24u || (seq & (seq-1u)) == 0u) {
+        char msg[320]{};
+        std::snprintf(msg,sizeof(msg),
+            "[DSRRL SPC25 CPU 808D] stage=typed_decoder_input "
+            "entity=%p payload=%p cursor_valid=%u "
+            "writer_pointer_seen=%u lifetime=UNVERIFIED srv=UNVERIFIED pixel=OPEN",
+            entity,reinterpret_cast<const void *>(payload),
+            readable ? 1u : 0u, writer_pointer_seen ? 1u : 0u);
+        reshade::log::message(reshade::log::level::info,msg);
+    }
+#else
+    (void)entity; (void)cursor_slot;
+#endif
+}
+
 bool install() noexcept
 {
     if (g_name.patched ||
