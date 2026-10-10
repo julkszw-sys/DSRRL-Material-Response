@@ -65,6 +65,14 @@ python renderer-core/tools/apply_spc25_native_t1_epoch.py --apply
 if ($LASTEXITCODE -ne 0) { throw 'SPC25 native t1 epoch recipe failed' }
 python renderer-core/tools/apply_spc25_native_t1_epoch.py
 if ($LASTEXITCODE -ne 0) { throw 'SPC25 epoch postcondition failed' }
+# Isolated native x64 generation/collision regression; fail before touching the addon build.
+$epochBuild = Join-Path $root 'build-spc25-native-t1-epoch'
+cmake -S renderer-core/tests/spc25_native_t1_epoch -B $epochBuild -G 'Visual Studio 17 2022' -A x64
+if ($LASTEXITCODE -ne 0) { throw 'SPC25 epoch regression configure failed' }
+cmake --build $epochBuild --config Release --target spc25_native_t1_epoch_test --parallel $Jobs
+if ($LASTEXITCODE -ne 0) { throw 'SPC25 epoch regression native compile failed' }
+ctest --test-dir $epochBuild -C Release --output-on-failure
+if ($LASTEXITCODE -ne 0) { throw 'SPC25 epoch regression test failed' }
 # Mandatory short source audits run before build, never waive fail-open.
 python renderer-core/tools/verify_other_metal_material_workflow_v203.py
 if ($LASTEXITCODE -ne 0) { throw 'Exact MTD authority audit failed' }
