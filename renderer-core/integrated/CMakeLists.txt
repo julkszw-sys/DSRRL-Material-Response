@@ -72,6 +72,11 @@ option(
     OFF)
 
 option(
+    DSRRL_V203_CONSTEXPR_OWNER_LOOKUP
+    "Experimentally predecode exact 36-equipment full-SHA and material/spec hashes at compile time; default unchanged"
+    OFF)
+
+option(
     DSRRL_V203_EQUIPMENT_ENVSPEC36_DIAG
     "Experimental exact 36-FLVER equipment EnvSpec source/consumer port; separate from generic MR and disabled for releases"
     OFF)
@@ -780,6 +785,16 @@ if(DSRRL_PMETAL_V13_NATIVE_DSR_NO_TAIL_DIAG)
         dsrrl_renderer_core_integrated
         PRIVATE
         $<$<COMPILE_LANGUAGE:CXX>:DSRRL_PMETAL_V13_NATIVE_DSR_NO_TAIL_DIAG>)
+endif()
+
+if(DSRRL_V203_CONSTEXPR_OWNER_LOOKUP)
+    if(NOT DSRRL_V203_EQUIPMENT_ENVSPEC36_DIAG)
+        message(FATAL_ERROR "Fast exact-owner specialization requires the isolated v203 equipment EnvSpec36 diagnostic")
+    endif()
+    target_compile_definitions(
+        dsrrl_renderer_core_integrated
+        PRIVATE
+        $<$<COMPILE_LANGUAGE:CXX>:DSRRL_V203_CONSTEXPR_OWNER_LOOKUP>)
 endif()
 
 if(DSRRL_V203_EQUIPMENT_ENVSPEC36_DIAG)
