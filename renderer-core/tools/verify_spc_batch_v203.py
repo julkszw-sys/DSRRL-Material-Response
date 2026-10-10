@@ -194,6 +194,24 @@ assert "std::memory_order_release" in packet_source
 assert "published_srv.load(std::memory_order_acquire)" in packet_source
 assert "diagnose_native_ps_t1(" in packet_source
 assert "texture_identity_transport::diagnose_native_ps_t1(" in resource
+# The consumer comparison must live on the active exact-material draw
+# path, not solely inside dormant late-native-name recovery.
+active_cut = resource.split(
+    "bool material_resource_draw_runtime::\\nprepare_draw_requests(", 1
+)[1].split(
+    "bool material_resource_draw_runtime::\\nprepare_draw_requests_bound(", 1
+)[0]
+assert "stage=active_receiver_prebind" in active_cut
+assert "receiver_id >= 24u && receiver_id <= 35u" in active_cut
+assert "should_sample_native_ps_t1(" in active_cut
+assert "PSGetShaderResources(" in active_cut
+assert "GetResource(&stock_texture)" in active_cut
+assert "texture_identity_transport::diagnose_native_ps_t1(" in active_cut
+assert "stock_texture->Release();" in active_cut
+assert "g_quarantined.load()" in active_cut
+assert "should_sample_native_ps_t1(" in packet_source
+assert "std::array<std::atomic<std::uintptr_t>,k_capacity> seen{}" in packet_source
+assert "bridge_authority=0 srv_swap=0 pixel=OPEN" in packet_source
 assert "matching_srv_and_texture=%u" in packet_source
 assert "cross_epoch_lifetime=OPEN reuse_collision=UNVERIFIED" in packet_source
 assert "bridge_authority=0 srv_swap=0 pixel=OPEN" in packet_source
