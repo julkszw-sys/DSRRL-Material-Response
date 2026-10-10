@@ -979,6 +979,41 @@ bool snapshot(
     }
 }
 
+bool should_sample_native_ps_t1(const void *native_view) noexcept
+{
+#if defined(DSRRL_EXPERIMENTAL_SPC_MATERIAL_BATCH)
+    if (!native_view)
+        return false;
+    // Diagnostic-only 8192-entry atomic seen set. No reference ownership
+    // or lifetime claim; this prevents a 1024-entry scan on every draw.
+    // Reused addresses are deliberately not promoted to source authority.
+    constexpr std::size_t k_capacity = 8192u;
+    constexpr std::size_t k_mask = k_capacity - 1u;
+    static std::array<std::atomic<std::uintptr_t>,k_capacity> seen{};
+    const auto key = reinterpret_cast<std::uintptr_t>(native_view);
+    if (!key)
+        return false;
+    const auto start = static_cast<std::size_t>(
+        (key >> 4u) ^ (key >> 17u) ^ (key >> 29u)) & k_mask;
+    for (std::size_t probe = 0u; probe < 8u; ++probe) {
+        auto &slot = seen[(start + probe) & k_mask];
+        auto previous = slot.load(std::memory_order_acquire);
+        if (previous == key)
+            return false;
+        if (!previous && slot.compare_exchange_strong(
+                previous, key, std::memory_order_acq_rel,
+                std::memory_order_acquire))
+            return true;
+        if (previous == key)
+            return false;
+    }
+    return false; // Capacity/collision: fail-open, never guess a match.
+#else
+    (void)native_view;
+    return false;
+#endif
+}
+
 void diagnose_native_ps_t1(
     const void *native_view,
     const void *native_resource) noexcept
