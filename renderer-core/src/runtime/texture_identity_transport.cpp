@@ -589,6 +589,21 @@ bool install() noexcept
 
     g_status.name_hook_armed = true;
     g_status.clear_hook_armed = true;
+#if defined(DSRRL_EXPERIMENTAL_SPC_MATERIAL_BATCH)
+    if(!prepare_hook(g_packet,k_packet_rva,k_packet_bytes,
+        reinterpret_cast<void *>(&dsrrl_spc25_packet_source_hook_entry)))
+        goto fail;
+    g_dsrrl_spc25_writer_target =
+        reinterpret_cast<void *>(g_base+k_writer_rva);
+    g_dsrrl_spc25_packet_resume =
+        reinterpret_cast<void *>(g_base+k_packet_resume_rva);
+    if(!arm(g_packet))
+        goto fail;
+    g_status.packet_hook_armed = true;
+    reshade::log::message(reshade::log::level::info,
+       "[DSRRL SPC25 CPU 808D] retail packet source cut armed; "
+       "CPU-only, no SRV authority or GPU modification");
+#endif
     return true;
 
 fail:
@@ -598,20 +613,22 @@ fail:
 
 void uninstall() noexcept
 {
-    const bool clear_ok =
-        restore(g_clear);
-    const bool name_ok =
-        restore(g_name);
+    const bool packet_ok = restore(g_packet);
+    const bool clear_ok = restore(g_clear);
+    const bool name_ok = restore(g_name);
 
-    if (!clear_ok || !name_ok) {
+    if (!packet_ok || !clear_ok || !name_ok) {
         g_status.restore_failed = true;
         g_status.name_hook_armed =
             g_name.patched;
         g_status.clear_hook_armed =
             g_clear.patched;
+        g_status.packet_hook_armed = g_packet.patched;
         return;
     }
 
+    g_dsrrl_spc25_writer_target = nullptr;
+    g_dsrrl_spc25_packet_resume = nullptr;
     g_dsrrl_texture_name_resume = nullptr;
     g_dsrrl_texture_name_clear_resume = nullptr;
     g_logical_name_length = 0u;
@@ -678,6 +695,10 @@ texture_name_liveness liveness() noexcept
         g_texture_name_clears.load(std::memory_order_relaxed);
     out.name_snapshots =
         g_texture_name_snapshots.load(std::memory_order_relaxed);
+    out.packet_writer_calls =
+        g_cpu_packet_writer_calls.load(std::memory_order_relaxed);
+    out.packet_named_in_scope =
+        g_cpu_packet_name_matches.load(std::memory_order_relaxed);
 #endif
     return out;
 }
