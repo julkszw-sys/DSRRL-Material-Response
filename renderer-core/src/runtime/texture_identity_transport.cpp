@@ -164,6 +164,79 @@ bool readable_range(
     return true;
 }
 
+// Diagnostic only: resolve the *type* of the exact CPU object passed to
+// retail 0x808D. The authenticated EXE .rdata boundaries are RVA
+// 0x129D000..0x1A24C00; the runtime base is ASLR-adjusted. Do not
+// inspect its members or cast this managed object to a native D3D interface.
+bool attest_cpu_object_rtti(
+    const void *engine_object,
+    char (&type_name)[96],
+    std::uint32_t &vtable_rva) noexcept
+{
+    type_name[0] = 0;
+    vtable_rva = 0u;
+    if (!engine_object || !g_base)
+        return false;
+    constexpr std::uintptr_t rdata_begin = 0x129D000u;
+    constexpr std::uintptr_t rdata_end = 0x1A24C00u;
+    const auto within = [](std::uintptr_t rva, std::size_t bytes) noexcept {
+        return rva >= rdata_begin &&
+               rva < rdata_end &&
+               bytes <= rdata_end - rva;
+    };
+    std::uintptr_t vtable = 0u;
+    if (!readable_range(engine_object, sizeof(vtable)))
+        return false;
+    std::memcpy(&vtable, engine_object, sizeof(vtable));
+    if (vtable < g_base || vtable - g_base < sizeof(vtable))
+        return false;
+    const auto vrva = vtable - g_base;
+    if (!within(vrva - sizeof(vtable), sizeof(vtable) * 2u))
+        return false;
+    vtable_rva = static_cast<std::uint32_t>(vrva);
+    std::uintptr_t locator = 0u;
+    const auto *locator_field = reinterpret_cast<const void *>(
+        vtable - sizeof(vtable));
+    if (!readable_range(locator_field,sizeof(locator)))
+        return false;
+    std::memcpy(&locator,locator_field,sizeof(locator));
+    if (locator < g_base)
+        return false;
+    const auto lrva = locator - g_base;
+    if (!within(lrva,24u) ||
+        !readable_range(reinterpret_cast<const void *>(locator),24u))
+        return false;
+    std::array<std::uint32_t,6u> col{};
+    std::memcpy(col.data(),reinterpret_cast<const void *>(locator),24u);
+    // PE32+ MSVC RTTI complete-object locator, self-relative signature 1.
+    if (col[0] != 1u || col[5] != lrva)
+        return false;
+    const auto descriptor = static_cast<std::uintptr_t>(col[3]);
+    if (!within(descriptor,16u+sizeof(type_name)))
+        return false;
+    const auto *decorated = reinterpret_cast<const char *>(
+        g_base+descriptor+16u);
+    if (!readable_range(decorated,sizeof(type_name)))
+        return false;
+    if (std::memcmp(decorated,".?AV",4u) != 0 &&
+        std::memcmp(decorated,".?AU",4u) != 0)
+        return false;
+    for (std::size_t i=0u;i<sizeof(type_name);++i) {
+        const unsigned char ch =
+            static_cast<unsigned char>(decorated[i]);
+        if (!ch) {
+            if (i < 6u) return false;
+            type_name[i] = 0;
+            return true;
+        }
+        if (ch < 33u || ch > 126u)
+            return false;
+        type_name[i] = static_cast<char>(ch);
+    }
+    type_name[0] = 0;
+    return false;
+}
+
 bool write_bytes(
     void *dst,
     const void *src,
