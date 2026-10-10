@@ -81,6 +81,8 @@ MATERIAL = [
   "        const bool exact_companion =\n            h1 != 0u &&\n            (generated::spec_equipment_name_hash_allowed_v12(h1) ||\n             experimental_c5330_exact) &&\n            replacement != nullptr;"),
  ("                prepared.spec_rgb = true;\n                hot_count(g_spec_requests);\n                replacement = nullptr;",
   "                prepared.spec_rgb = true;\n                hot_count(g_spec_requests);\n#if defined(DSRRL_EXPERIMENTAL_SPC25_C5330_SWAP_TEST)\n                if (experimental_c5330_exact) {\n                    static std::atomic_bool was_logged{false};\n                    if (!was_logged.exchange(true))\n                        reshade::log::message(\n                            reshade::log::level::info,\n                            \"[DSRRL SPC25 C5330 TEST] stage=t10_request_ready \"\n                            \"route=14 rx=34 slot=0 stock_t1_preserved=1 \"\n                            \"ptde_sidecar_loaded=1 gpu_apply=OPEN pixel=OPEN\");\n                }\n#endif\n                replacement = nullptr;"),
+ ("    bool exact_c5330_route14_test) noexcept\n{\n#if !defined(DSRRL_EXPERIMENTAL_SPC_MATERIAL_BATCH)",
+  "    bool exact_c5330_route14_test,\n    bool exact_equipment_source_test) noexcept\n{\n#if !defined(DSRRL_EXPERIMENTAL_SPC_MATERIAL_BATCH)\n    (void)exact_equipment_source_test;"),
 ]
 
 PMETAL_RULES = [
