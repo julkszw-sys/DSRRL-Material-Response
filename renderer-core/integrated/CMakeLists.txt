@@ -618,6 +618,7 @@ add_library(
     "${DSRRL_INTEGRATED_ADDON_SOURCE}"
     flver_identity_detour.asm
     texture_identity_detour.asm
+    spc25_packet_source_detour.asm
     hemdir3_mode_detour.asm
     "${DSRRL_RENDERER_CORE_ROOT}/src/runtime/a1_create_pipeline_bridge.cpp"
     "${DSRRL_RENDERER_CORE_ROOT}/src/runtime/flver_engine_hooks.cpp"
