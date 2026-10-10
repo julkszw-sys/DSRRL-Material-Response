@@ -67,6 +67,17 @@ assert "DSRRL_PHYSICAL_CUT_POINTLIGHT_ALL" in cmake
 assert "DSRRL_PHYSICAL_CUT_UL_H3_SUBSURFACE" in cmake
 assert "DSRRL_V203_EQUIPMENT_ENVSPEC36" in recipe
 assert "CONSUMER_GATE" in overlay
+# The resource router has TWO overloads. Legacy (context,query) demands the
+# old generic spec_rgb census bit, which can be absent for exact EnvSpec MTD.
+# A strict 36-owner, rx33..35, current-gSpec branch must use the isolated
+# context-only overload; every other material remains on the census overload.
+assert 'ROUTER_ANCHOR' in overlay and 'ROUTER_PATCH' in overlay
+assert 'exact_equipment_envspec_consumer' in overlay
+assert 'exact_proven_slot_spec_hash(query, h1)' in overlay
+assert 'receiver_id >= 33u && receiver_id <= 35u' in overlay
+assert 'evaluate_spec_rgb_route(context_spec)' in overlay
+assert 'evaluate_spec_rgb_route(context_spec, query)' in overlay
+
 assert "mtd_semantic_operator::env_spec" in overlay
 assert "exact_envspec36_material(query.material)" in overlay
 # Ordinary MR remains stock-PBL without an authorized SpecRGB island.
