@@ -1536,6 +1536,11 @@ void on_init_resource_view(
         return;
 
     stutter_profile::scope view_time(stutter_profile::stage::resource_view_init);
+#if defined(DSRRL_EXPERIMENTAL_SPC_MATERIAL_BATCH)
+    // Raw ReShade view/resource handles are authoritative D3D11 objects.
+    // Track before the name lookup, which may be missing on the retail host.
+    spc25_physical::link_view(view.handle,resource.handle);
+#endif
     const wchar_t *logical_name_raw = nullptr;
     std::size_t logical_name_length = 0u;
     const bool direct_name =
