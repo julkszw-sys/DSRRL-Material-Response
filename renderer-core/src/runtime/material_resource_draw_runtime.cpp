@@ -2119,6 +2119,9 @@ unregister_events() noexcept
 #endif
 
     release_cache();
+#if defined(DSRRL_EXPERIMENTAL_SPC_MATERIAL_BATCH)
+    spc25_physical::clear();
+#endif
     g_core = nullptr;
 }
 
