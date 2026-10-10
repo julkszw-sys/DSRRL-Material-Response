@@ -6,6 +6,9 @@
 #endif
 
 #include "dsrrl/runtime/pmetal_env_source_runtime.hpp"
+#if defined(DSRRL_V203_EQUIPMENT_ENVSPEC36_DIAG)
+#include "dsrrl/runtime/v203_equipment_envspec36_gate.hpp"
+#endif
 #include "dsrrl/runtime/pmetal_producer_state.hpp"
 #include "dsrrl/runtime/pmetal_selector_policy.hpp"
 #include "dsrrl/runtime/runtime_hot_telemetry.hpp"
@@ -979,6 +982,20 @@ bool exact_pmetal_material_selection(
         hashing::matches_hex(
             material.raw_mtd_sha256,
             k_pmetal_material_sha256);
+}
+
+// Keep legacy P_Metal producer selection byte-for-byte when the experimental
+// equipment EnvSpec36 option is off. Never enable a material-family blanket.
+inline bool exact_envspec_source_material_selection(
+    const operators::material_response::material_identity &material) noexcept
+{
+    if (exact_pmetal_material_selection(material))
+        return true;
+#if defined(DSRRL_V203_EQUIPMENT_ENVSPEC36_DIAG)
+    return v203_equipment::exact_envspec36_material(material);
+#else
+    return false;
+#endif
 }
 
 bool retail_lightbank_record_index(
@@ -2553,7 +2570,7 @@ void pmetal_env_source_selector_event(
 
     if (!g_selector_enabled.load(
             std::memory_order_acquire) ||
-        !exact_pmetal_material_selection(
+        !exact_envspec_source_material_selection(
             material) ||
         owner == nullptr ||
         return_address == nullptr)
@@ -2938,7 +2955,7 @@ bool pmetal_env_source_runtime::latest(
 
     if (!g_selector_enabled.load(
             std::memory_order_acquire) ||
-        !exact_pmetal_material_selection(
+        !exact_envspec_source_material_selection(
             material)) {
         telemetry::hot_count(
             g_consumer_fail);
