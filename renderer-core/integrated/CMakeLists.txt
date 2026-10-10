@@ -964,6 +964,11 @@ if(DSRRL_EXPERIMENTAL_OTHER_METAL_PTDE_ENVSPEC)
         DSRRL_EXPERIMENTAL_OTHER_METAL_PTDE_ENVSPEC)
 endif()
 
+if(DSRRL_EXPERIMENTAL_SPC25_DECODER_PROBE)
+    message(FATAL_ERROR
+        "SPC25 typed decoder hook is quarantined: owner runtime crashed before main menu; fail closed until ABI and packet-cursor semantics are independently verified")
+endif()
+
 if(DSRRL_EXPERIMENTAL_SPC_MATERIAL_BATCH)
     if(NOT DSRRL_EXPERIMENTAL_OTHER_METAL_PTDE_ENVSPEC)
         message(FATAL_ERROR
