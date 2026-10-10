@@ -25,7 +25,7 @@ B=A+"""
 #else
         (void)exact_equipment_source_test;
 #endif"""
-C="#if defined(DSRRL_EXPERIMENTAL_OTHER_METAL_PTDE_ENVSPEC)\\n    if ((!material_ready || !prepared.material_resources.spec_rgb) &&\\n        experimental_material && spc_onepass_claim(material, 3u)) {"
+C="#if defined(DSRRL_EXPERIMENTAL_OTHER_METAL_PTDE_ENVSPEC)\n    if ((!material_ready || !prepared.material_resources.spec_rgb) &&\n        experimental_material && spc_onepass_claim(material, 3u)) {"
 D="""#if defined(DSRRL_EXPERIMENTAL_SPC25_EQUIPMENT_SPEC_BRIDGE)
     if (experimental_material &&
         decision.receiver_id >= 33u && decision.receiver_id <= 35u &&
