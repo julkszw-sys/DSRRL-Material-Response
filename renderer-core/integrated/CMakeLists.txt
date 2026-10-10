@@ -72,6 +72,11 @@ option(
     OFF)
 
 option(
+    DSRRL_V203_EQUIPMENT_ENVSPEC36_DIAG
+    "Experimental exact 36-FLVER equipment EnvSpec source/consumer port; separate from generic MR and disabled for releases"
+    OFF)
+
+option(
     DSRRL_PMETAL_V13_NATIVE_DSR_MATERIAL_MOD_DIAG
     "Diagnostic: PR203 V13/native-DSR EnvSpec plus only PTDE SpecRGB*c101*COLOR0 modulation on the EnvSpec accumulator before the preserved common merge; stable HemEnv + paired HemEnvLerp"
     OFF)
@@ -775,6 +780,19 @@ if(DSRRL_PMETAL_V13_NATIVE_DSR_NO_TAIL_DIAG)
         dsrrl_renderer_core_integrated
         PRIVATE
         $<$<COMPILE_LANGUAGE:CXX>:DSRRL_PMETAL_V13_NATIVE_DSR_NO_TAIL_DIAG>)
+endif()
+
+if(DSRRL_V203_EQUIPMENT_ENVSPEC36_DIAG)
+    if(NOT DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG OR
+       NOT DSRRL_PHYSICAL_CUT_UL_H3_SUBSURFACE OR
+       NOT DSRRL_PHYSICAL_CUT_POINTLIGHT_ALL)
+        message(FATAL_ERROR
+            "Equipment EnvSpec36 must use the isolated v203 PTDE HemEnv build with UL/HemDir3/Subsurface and PointLight physically cut")
+    endif()
+    target_compile_definitions(
+        dsrrl_renderer_core_integrated
+        PRIVATE
+        $<$<COMPILE_LANGUAGE:CXX>:DSRRL_V203_EQUIPMENT_ENVSPEC36_DIAG>)
 endif()
 
 if(DSRRL_PMETAL_V13_NATIVE_DSR_MATERIAL_MOD_DIAG)
