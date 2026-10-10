@@ -2221,6 +2221,12 @@ try_recover_exact_bound_spec_from_native_name(
     ID3D11Resource *resource = nullptr;
     stock->GetResource(&resource);
     if (resource != nullptr) {
+        // CPU writer name->DLTexture2D->native COM address versus the
+        // receiver's ACTUAL PSGetShaderResources(1) SRV and GetResource.
+        // Pointer-value comparison only: no swaps, casts, or lifetime
+        // authority. Original stock objects remain pinned in this scope.
+        texture_identity_transport::diagnose_native_ps_t1(
+            stock, resource);
         std::wstring resource_name{};
         const bool resource_named =
             snapshot_native_exact_debug_name(
