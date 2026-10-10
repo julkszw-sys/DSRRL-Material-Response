@@ -1,0 +1,1 @@
+SPC25 lifetime epoch diagnostic. No SRV replacement.
