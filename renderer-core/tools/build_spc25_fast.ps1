@@ -37,14 +37,13 @@ $build = Join-Path $root 'build-spc25-fast'
 if ($Clean -and (Test-Path $build)) {
     Remove-Item $build -Recurse -Force
 }
-$flavor = 'v203_spc25_c5330_route14_rx34_t10_test'
+$flavor = 'v203_spc25_character_texture_diagnostic_no_swap'
 $flags = @(
     'DSRRL_RELEASE_CLEANUP',
     'DSRRL_RESOURCE_EPOCH_SHARD_SYNC',
     'DSRRL_COMPANION_TLS_4WAY',
     'DSRRL_EXPERIMENTAL_OTHER_METAL_PTDE_ENVSPEC',
     'DSRRL_EXPERIMENTAL_SPC_MATERIAL_BATCH',
-    'DSRRL_EXPERIMENTAL_SPC25_C5330_SWAP_TEST',
     'DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG',
     'DSRRL_PMETAL_FULL_PTDE_HEMENV_R3',
     'DSRRL_PMETAL_FULL_PTDE_HEMENV_R4',
@@ -130,7 +129,7 @@ if ($FullTests) {
 }
 $addons = @(Get-ChildItem $build -Recurse -Filter '*.addon64' -File)
 if ($addons.Count -ne 1) { throw "Expected one integrated addon; found $($addons.Count)" }
-$output = Join-Path $root 'DSRRL_SPC25_C5330_T10_TEST.addon64'
+$output = Join-Path $root 'DSRRL_SPC25_CHARACTER_T1_DIAG.addon64'
 Copy-Item $addons[0].FullName $output -Force
 $ascii = [System.Text.Encoding]::ASCII.GetString([System.IO.File]::ReadAllBytes($output))
 foreach ($needle in @($commit, $flavor, '[DSRRL SPC25 CPU 808D]', 'cpu_808d_writer=%llu', '[DSRRL SPC ONEPASS] stage=spec_reject', 'matching_epoch=%u live_epoch=%llu writer_epoch=%llu')) {
