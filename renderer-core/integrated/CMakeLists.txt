@@ -142,6 +142,11 @@ option(
     OFF)
 
 option(
+    DSRRL_EXPERIMENTAL_SPC25_DECODER_PROBE
+    "Opt-in only: typed 808D decoder diagnostic; disabled after startup crash in first runtime"
+    OFF)
+
+option(
     DSRRL_EXPERIMENTAL_SPC_MATERIAL_BATCH
     "Diagnostic only: 21 more exactly attested DifSpcBmp MTDs (Leather/Cloth/Wet/Metal); requires other-metal and R19, distinct c101/EnvSpec slots, full sidecar gates"
     OFF)
