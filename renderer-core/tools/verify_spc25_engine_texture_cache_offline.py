@@ -103,7 +103,7 @@ def audit(exe):
   if (sig,off,cd,td,self_rva)!=(1,0,0,type_rva,rva):
    raise ValueError("Unexpected MSVC RTTI COL: "+hex(rva))
  def read_name(rva,expected):
-  payload=expected.encode("ascii")+b"\\x00"
+  payload=expected.encode("ascii")+bytes([0])
   if at(rva+16,len(payload))!=payload:
    raise ValueError("Unexpected MSVC RTTI name: "+hex(rva))
  if read_ptr(0x137fae0)!=0x141665798 or read_ptr(0x137fb08)!=0x14057f110:
