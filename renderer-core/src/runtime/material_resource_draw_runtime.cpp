@@ -2254,7 +2254,7 @@ try_recover_exact_bound_spec_from_native_name(
             const auto names = texture_identity_transport::liveness();
             char msg[512]{};
             std::snprintf(msg, sizeof(msg),
-                "[DSRRL SPC25 NAME CUT] engine_lookup_calls=%llu utf16_names=%llu engine_scope_clear=%llu snapshot_hits=%llu gpu_init_resource_exact=%llu gpu_create_view_exact=%llu gpu_init_view_direct_exact=%llu joined_views=%llu cpu_808d_writer=%llu cpu_808d_named_scope=%llu source_to_srv=UNVERIFIED pixel=OPEN",
+                "[DSRRL SPC25 NAME CUT] engine_lookup_calls=%llu utf16_names=%llu engine_scope_clear=%llu snapshot_hits=%llu gpu_init_resource_exact=%llu gpu_create_view_exact=%llu gpu_init_view_direct_exact=%llu joined_views=%llu cpu_808d_writer=%llu cpu_808d_named_scope=%llu cache_name_exact=%llu cache_name_different=%llu cache_name_unreadable=%llu source_to_srv=UNVERIFIED pixel=OPEN",
                 static_cast<unsigned long long>(names.hook_calls),
                 static_cast<unsigned long long>(names.names_captured),
                 static_cast<unsigned long long>(names.names_cleared),
@@ -2268,7 +2268,10 @@ try_recover_exact_bound_spec_from_native_name(
                 static_cast<unsigned long long>(
                     g_named_views.load(std::memory_order_relaxed)),
                 static_cast<unsigned long long>(names.packet_writer_calls),
-                static_cast<unsigned long long>(names.packet_named_in_scope));
+                static_cast<unsigned long long>(names.packet_named_in_scope),
+                static_cast<unsigned long long>(names.cache_name_equal),
+                static_cast<unsigned long long>(names.cache_name_different),
+                static_cast<unsigned long long>(names.cache_name_unreadable));
             reshade::log::message(reshade::log::level::info, msg);
         }
         if (!view_label && !resource_label_seen)
