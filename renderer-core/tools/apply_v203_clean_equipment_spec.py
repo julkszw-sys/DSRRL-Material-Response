@@ -21,6 +21,19 @@ NEW = OLD[:-1] + ("\n#if defined(DSRRL_V203_EXACT_EQUIPMENT_SPEC)\n"
        "#endif\n"
        "            ;")
 
+PROBE_ANCHOR = "    const auto h2 = hashes[2];\\n\\n"
+PROBE = """
+#if defined(DSRRL_V203_EXACT_EQUIPMENT_SPEC)
+    if (receiver_id >= 24u && receiver_id <= 35u &&
+        query.material.route_index != 345u) {
+        static std::atomic_bool reached{false};
+        if (!reached.exchange(true, std::memory_order_relaxed))
+            reshade::log::message(reshade::log::level::info,
+                "[DSRRL V203 EQUIPMENT] stage=mr_resource_entry "
+                "consumer=UNCHANGED");
+    }
+#endif
+"""
 def run(write: bool):
     source = subprocess.check_output(
         ["git", "show", BASE + ":" + TARGET], cwd=ROOT
@@ -28,7 +41,9 @@ def run(write: bool):
     assert source.count(HEADER) == 1
     assert source.count(OLD) == 1
     assert "SPC25" not in source
+    assert source.count(PROBE_ANCHOR) == 1
     patched = source.replace(HEADER, NEW_HEADER, 1).replace(OLD, NEW, 1)
+    patched = patched.replace(PROBE_ANCHOR, PROBE_ANCHOR + PROBE, 1)
     path = ROOT / TARGET
     current = path.read_text(encoding="utf-8").replace("\r\n", "\n")
     if write:
