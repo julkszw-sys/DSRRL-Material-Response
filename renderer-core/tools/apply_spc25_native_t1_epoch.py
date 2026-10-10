@@ -27,6 +27,14 @@ TEXTURE = [
   '        "matching_epoch=%u live_epoch=%llu writer_epoch=%llu "\n        "cross_epoch_lifetime=OPEN reuse_collision=UNVERIFIED "\n        "bridge_authority=0 srv_swap=0 pixel=OPEN",'),
  ('        first ? first->source_id : 0u);',
   '        first ? first->source_id : 0u,\n        epoch_matches,\n        static_cast<unsigned long long>(live_epoch.epoch),\n        static_cast<unsigned long long>(first ? first->epoch : 0u));'),
+ ("    const auto writer_seq = g_cpu_packet_writer_calls.fetch_add(\n        1u, std::memory_order_relaxed);\n",
+  "    const auto writer_seq = g_cpu_packet_writer_calls.fetch_add(\n        1u, std::memory_order_relaxed);\n    // The owner may rotate armor after the 1024th snapshot. Report\n    // truncation exactly once instead of misreporting late sources absent.\n    if (writer_seq == g_native_named_sources.size())\n        reshade::log::message(reshade::log::level::warning,\n            \"[DSRRL SPC25 COVERAGE] stage=writer_snapshot_capacity \"\n            \"writer_capacity=1024 late_cpu_writer_source_unobservable=1 \"\n            \"diagnostic_only=1 srv_swap=0 pixel=OPEN\");\n"),
+ ("    if(retired &&\n       g_native_t1_retire_logs.fetch_add(\n           1u,std::memory_order_relaxed) < 16u) {",
+  "    const auto retire_index = retired ?\n        g_native_t1_retire_logs.fetch_add(\n            1u,std::memory_order_relaxed) + 1u : 0u;\n    // Preserve late unload/reload evidence without unbounded logging.\n    if (retired && (retire_index <= 16u ||\n        (retire_index <= 8192u &&\n         (retire_index & (retire_index - 1u)) == 0u))) {"),
+ ("    const bool should_log = matches\n        ? g_native_t1_match_logs.fetch_add(\n              1u,std::memory_order_relaxed) < 32u\n        : g_native_t1_no_match_logs.fetch_add(\n              1u,std::memory_order_relaxed) < 8u;\n    if (!should_log)\n        return;",
+  "    const auto sample_index = matches ?\n        g_native_t1_match_logs.fetch_add(\n            1u,std::memory_order_relaxed) + 1u :\n        g_native_t1_no_match_logs.fetch_add(\n            1u,std::memory_order_relaxed) + 1u;\n    // First N + powers-of-two telemetry persists across armor rotations\n    // and map reload. Always record exact target c5330_s if encountered.\n    const bool target_c5330 = first &&\n        std::strcmp(first->ascii_name.data(),\"c5330_s\") == 0;\n    const bool should_log = target_c5330 ||\n        sample_index <= (matches ? 32u : 8u) ||\n        (sample_index <= 8192u &&\n         (sample_index & (sample_index - 1u)) == 0u);\n    if (!should_log)\n        return;"),
+ ("    if(count <= 24u || (count & (count-1u)) == 0u) {",
+  "    const bool is_c5330 = length == 7u &&\n        std::char_traits<wchar_t>::compare(name,L\"c5330_s\",7u) == 0;\n    // Always expose exact targeted CPU source, even past early log budget.\n    if(count <= 24u || (count & (count-1u)) == 0u || is_c5330) {"),
 ]
 
 MATERIAL = [
