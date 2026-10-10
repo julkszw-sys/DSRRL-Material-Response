@@ -83,6 +83,9 @@ std::atomic<std::uint64_t> g_texture_name_clears{0u};
 std::atomic<std::uint64_t> g_texture_name_snapshots{0u};
 std::atomic<std::uint64_t> g_cpu_packet_writer_calls{0u};
 std::atomic<std::uint64_t> g_cpu_packet_name_matches{0u};
+std::atomic<std::uint64_t> g_cpu_cache_name_equal{0u};
+std::atomic<std::uint64_t> g_cpu_cache_name_different{0u};
+std::atomic<std::uint64_t> g_cpu_cache_name_unreadable{0u};
 #endif
 
 bool readable_range(
@@ -519,6 +522,29 @@ extern "C" void dsrrl_spc25_packet_source_observer(
     if(!cache_entry || !engine_object || source_id == 0u ||
        !snapshot_raw(name, length) || !name || length == 0u)
         return;
+    // The retail 0x140518A70 lookup compares the UTF16 pointer at
+    // TexHdlResCap cache-entry+0x08. Attest the exact node's name
+    // independently; a live TLS snapshot alone was not an equality proof.
+    bool readable = false;
+    bool equal = false;
+    const auto *name_field = reinterpret_cast<const wchar_t *const *>(
+        static_cast<const std::uint8_t *>(cache_entry) + 8u);
+    if(readable_range(name_field,sizeof(*name_field))) {
+        const auto *node_name = *name_field;
+        if(node_name && length < 512u &&
+           readable_range(node_name,(length+1u)*sizeof(wchar_t))) {
+            readable = true;
+            equal = node_name[length] == L'\\0' &&
+                std::char_traits<wchar_t>::compare(
+                    node_name,name,length) == 0;
+        }
+    }
+    if(!readable)
+        g_cpu_cache_name_unreadable.fetch_add(1u,std::memory_order_relaxed);
+    else if(equal)
+        g_cpu_cache_name_equal.fetch_add(1u,std::memory_order_relaxed);
+    else
+        g_cpu_cache_name_different.fetch_add(1u,std::memory_order_relaxed);
     const auto count = g_cpu_packet_name_matches.fetch_add(
         1u,std::memory_order_relaxed)+1u;
     if(count <= 24u || (count & (count-1u)) == 0u) {
@@ -531,8 +557,9 @@ extern "C" void dsrrl_spc25_packet_source_observer(
         std::snprintf(msg,sizeof(msg),
           "[DSRRL SPC25 CPU 808D] stage=writer_input "
           "entry=%p engine_object=%p source_id=%u loader_name=%s "
-          "scope=RETAIL_TLS srv=UNVERIFIED pixel=OPEN",
-          cache_entry,engine_object,source_id,ascii);
+          "scope=RETAIL_TLS cache_name=%s srv=UNVERIFIED pixel=OPEN",
+          cache_entry,engine_object,source_id,ascii,
+          !readable ? "UNREADABLE" : (equal ? "EXACT" : "DIFFERENT"));
         reshade::log::message(reshade::log::level::info,msg);
     }
 #else
