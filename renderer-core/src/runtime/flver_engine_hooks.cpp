@@ -938,9 +938,18 @@ bool publish_exact_selector_identity(
             identity);
 #endif
 
-    // Route 345 is necessary but not sufficient. The isolated source runtime
-    // retains exact semantic/raw-MTD validation before donor decode.
+    // The source runtime retains exact semantic/raw-MTD/owner validation
+    // before donor decode. Production remains P_Metal-only; the equipment-wide
+    // diagnostic also admits exact DifSpcBmp equipment so cloth/leather can
+    // publish the same draw-local EnvSpec A/B source without borrowing state
+    // from another material.
+#if defined(DSRRL_EQUIPMENT_WIDE_PTDE_SURFACE_RUNTIME)
+    if (identity.material_family_hash ==
+        dsrrl::operators::material_response::
+            mtd_semantic_hash("DifSpcBmp")) {
+#else
     if (identity.route_index == 345u) {
+#endif
         const auto pmetal_begin =
             profile != nullptr
                 ? selector_profile_begin(*profile)

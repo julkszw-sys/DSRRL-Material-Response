@@ -485,6 +485,52 @@ bool exact_pmetal_material_selection(
             k_pmetal_material_sha256);
 }
 
+bool exact_envspec_source_material_selection(
+    const operators::material_response::
+        material_identity &material) noexcept
+{
+#if defined(DSRRL_EQUIPMENT_WIDE_PTDE_SURFACE_RUNTIME)
+    namespace mr =
+        operators::material_response;
+
+    if (!material.valid ||
+        !material.owner_tuple_exact ||
+        !material.material_slot_valid ||
+        !material.actual_material_exact ||
+        material.material_family_hash !=
+            mr::mtd_semantic_hash("DifSpcBmp"))
+        return false;
+
+    mr::mtd_semantic_query query{};
+    query.material = material;
+    query.ownership.flver_sha256 =
+        material.flver_sha256;
+    query.ownership.flver_identity_hash =
+        material.flver_identity_hash;
+    query.ownership.material_slot =
+        material.material_slot;
+    query.ownership.material_slot_valid =
+        material.material_slot_valid;
+    query.ownership.exact =
+        material.owner_tuple_exact;
+
+    const auto env =
+        mr::classify_mtd_envspec_semantics(
+            query);
+
+    return
+        env.exact_identity_match &&
+        env.presence ==
+            mr::ptde_envspec_presence::present &&
+        env.router_state ==
+            mr::mtd_envspec_router_state::present &&
+        env.envspc_slot_valid &&
+        env.envspc_slot < 4u;
+#else
+    return exact_pmetal_material_selection(material);
+#endif
+}
+
 bool retail_lightbank_record_index(
     std::int32_t selector,
     std::uint32_t &index) noexcept
@@ -1735,7 +1781,7 @@ void pmetal_env_source_selector_event(
 
     if (!g_selector_enabled.load(
             std::memory_order_acquire) ||
-        !exact_pmetal_material_selection(
+        !exact_envspec_source_material_selection(
             material) ||
         owner == nullptr ||
         return_address == nullptr)
@@ -2027,7 +2073,7 @@ bool pmetal_env_source_runtime::latest(
 
     if (!g_selector_enabled.load(
             std::memory_order_acquire) ||
-        !exact_pmetal_material_selection(
+        !exact_envspec_source_material_selection(
             material)) {
         telemetry::hot_count(
             g_consumer_fail);

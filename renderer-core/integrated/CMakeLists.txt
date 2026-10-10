@@ -77,6 +77,11 @@ option(
     OFF)
 
 option(
+    DSRRL_EQUIPMENT_WIDE_PTDE_SURFACE_RUNTIME
+    "Diagnostic runtime: extend the PR204 native-DSR V13 material-mod EnvSpec island from exact P_Metal to exact owned DifSpcBmp equipment with present PTDE EnvSpec + exact PTDE SpecRGB companion; keep unknown/nonhomologous routes fail-open"
+    OFF)
+
+option(
     DSRRL_POINTLIGHT_DRAWTIME_BYPASS
     "Diagnostic: disable PointLight producer hooks, runtime pipeline binding and draw-time carrier/replay while preserving all non-PointLight runtime paths"
     OFF)
@@ -596,6 +601,14 @@ if(DSRRL_PMETAL_V13_NATIVE_DSR_MATERIAL_MOD_DIAG)
         dsrrl_renderer_core_integrated
         PRIVATE
         $<$<COMPILE_LANGUAGE:CXX>:DSRRL_PMETAL_V13_NATIVE_DSR_MATERIAL_MOD_DIAG>)
+endif()
+
+if(DSRRL_EQUIPMENT_WIDE_PTDE_SURFACE_RUNTIME)
+    target_compile_definitions(
+        dsrrl_renderer_core_integrated
+        PRIVATE
+        $<$<COMPILE_LANGUAGE:CXX>:DSRRL_PMETAL_V13_NATIVE_DSR_MATERIAL_MOD_DIAG>
+        $<$<COMPILE_LANGUAGE:CXX>:DSRRL_EQUIPMENT_WIDE_PTDE_SURFACE_RUNTIME>)
 endif()
 
 if(DSRRL_POINTLIGHT_DRAWTIME_BYPASS)
