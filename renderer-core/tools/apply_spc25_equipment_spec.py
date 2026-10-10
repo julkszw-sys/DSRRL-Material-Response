@@ -1,2 +1,36 @@
 #!/usr/bin/env python3
-"""Apply and verify the SPC25 equipment-only SpecRGB source route."""
+from pathlib import Path
+import argparse
+ROOT=Path(__file__).resolve().parents[2]
+A="        const bool resource_named =\n            snapshot_native_exact_debug_name(\n                resource, resource_name, &resource_label_seen);"
+B=A+"""
+#if defined(DSRRL_EXPERIMENTAL_SPC25_EQUIPMENT_SPEC_BRIDGE)
+        if (exact_equipment_source_test && !view_name &&
+            !resource_named && !view_label && !resource_label_seen) {
+            std::array<char,65u> buf{};
+            if (texture_identity_transport::
+                resolve_exact_equipment_native_ps_t1(
+                    stock,resource,buf.data(),buf.size())) {
+                try {
+                    for(char c:buf) {
+                        if(!c) break;
+                        name.push_back(static_cast<wchar_t>(
+                            static_cast<unsigned char>(c)));
+                    }
+                } catch(...) { name.clear(); }
+                if(!generated::spec_equipment_name_hash_allowed_v12(
+                    fnv_name(name))) name.clear();
+            }
+        }
+#else
+        (void)exact_equipment_source_test;
+#endif"""
+def patch(p,a,b,apply):
+ s=p.read_text(encoding="utf-8")
+ if s.count(b)==1: pass
+ elif apply and s.count(a)==1: p.write_text(s.replace(a,b,1),encoding="utf-8",newline="")
+ else: raise RuntimeError("equipment patch drift "+str(p))
+ print("EQUIPMENT_"+("APPLIED" if apply else "VERIFIED")+" "+p.name)
+if __name__=="__main__":
+ ap=argparse.ArgumentParser();ap.add_argument("--apply",action="store_true");v=ap.parse_args()
+ patch(ROOT/"renderer-core/src/runtime/material_resource_draw_runtime.cpp",A,B,v.apply)
