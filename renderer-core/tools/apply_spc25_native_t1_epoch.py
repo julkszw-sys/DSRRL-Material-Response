@@ -102,6 +102,18 @@ def process(path: Path, rules, write: bool) -> None:
             text = text.replace(before, after, 1)
         path.write_text(text, encoding="utf-8", newline="")
     else:
+        # The opt-in equipment recipe composes on top of base SPC25.
+        # Undo its exact additions IN MEMORY before verifying the base.
+        # The equipment recipe is verified independently by CMake/CI.
+        if path in (MAT, PMETAL):
+            import apply_spc25_equipment_spec as equipment
+            if path == MAT and text.count(equipment.B) == 1:
+                if text.count(equipment.H) != 1:
+                    raise RuntimeError("Equipment source composition incomplete")
+                text = text.replace(equipment.B, equipment.A, 1)
+                text = text.replace(equipment.H, equipment.G, 1)
+            if path == PMETAL and text.count(equipment.D) == 1:
+                text = text.replace(equipment.D, equipment.C, 1)
         # Rules can compose: a later insertion inside an earlier 'after'
         # makes forward per-rule membership checks incorrect. Unwind all
         # insertions in REVERSE order to validate the exact composition.
