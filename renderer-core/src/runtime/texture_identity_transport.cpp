@@ -979,6 +979,74 @@ bool snapshot(
     }
 }
 
+void diagnose_native_ps_t1(
+    const void *native_view,
+    const void *native_resource) noexcept
+{
+#if defined(DSRRL_EXPERIMENTAL_SPC_MATERIAL_BATCH)
+    if (!native_view || !native_resource)
+        return;
+    const auto native_srv =
+        reinterpret_cast<std::uintptr_t>(native_view);
+    const auto native_tex =
+        reinterpret_cast<std::uintptr_t>(native_resource);
+    const auto observed = std::min<std::size_t>(
+        static_cast<std::size_t>(
+            g_cpu_packet_writer_calls.load(std::memory_order_acquire)),
+        g_native_named_sources.size());
+    std::uint32_t matches = 0u;
+    std::uint32_t full_matches = 0u;
+    const native_named_source *first = nullptr;
+    for(std::size_t i=0u;i<observed;++i) {
+        const auto &slot = g_native_named_sources[i];
+        if (slot.published_srv.load(std::memory_order_acquire)
+                != native_srv)
+            continue;
+        ++matches;
+        if(!first)
+            first = &slot;
+        if(slot.texture == native_tex)
+            ++full_matches;
+    }
+    g_native_t1_checks.fetch_add(1u,std::memory_order_relaxed);
+    if(matches) {
+        g_native_t1_srv_matches.fetch_add(1u,std::memory_order_relaxed);
+        if(full_matches == 1u && matches == 1u)
+            g_native_t1_resource_matches.fetch_add(
+                1u,std::memory_order_relaxed);
+        if(matches != 1u || full_matches != 1u)
+            g_native_t1_ambiguous.fetch_add(
+                1u,std::memory_order_relaxed);
+    }
+    // Rate-limit both categories independently so early PS t1 misses
+    // cannot suppress logging of a later exact pointer-value match.
+    const bool should_log = matches
+        ? g_native_t1_match_logs.fetch_add(
+              1u,std::memory_order_relaxed) < 32u
+        : g_native_t1_no_match_logs.fetch_add(
+              1u,std::memory_order_relaxed) < 8u;
+    if (!should_log)
+        return;
+    char msg[640]{};
+    std::snprintf(msg,sizeof(msg),
+        "[DSRRL SPC25 NATIVE T1] stage=cpu_srv_pointer_compare "
+        "native_srv=%p native_texture=%p writer_slots=%llu "
+        "matching_srv=%u matching_srv_and_texture=%u "
+        "source_name=%s source_id=%u "
+        "cross_epoch_lifetime=OPEN reuse_collision=UNVERIFIED "
+        "bridge_authority=0 srv_swap=0 pixel=OPEN",
+        native_view,native_resource,
+        static_cast<unsigned long long>(observed),
+        matches,full_matches,
+        first ? first->ascii_name.data() : "NONE",
+        first ? first->source_id : 0u);
+    reshade::log::message(reshade::log::level::info,msg);
+#else
+    (void)native_view;
+    (void)native_resource;
+#endif
+}
+
 texture_name_liveness liveness() noexcept
 {
     texture_name_liveness out{};
