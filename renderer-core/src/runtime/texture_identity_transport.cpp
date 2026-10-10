@@ -27,9 +27,11 @@
 extern "C" void dsrrl_texture_name_hook_entry();
 extern "C" void dsrrl_texture_name_clear_hook_entry();
 extern "C" void dsrrl_spc25_packet_source_hook_entry();
+extern "C" void dsrrl_spc25_packet_decode_hook_entry();
 extern "C" {
 void *g_dsrrl_spc25_writer_target = nullptr;
 void *g_dsrrl_spc25_packet_resume = nullptr;
+void *g_dsrrl_spc25_reader_resume = nullptr;
 }
 
 extern "C" {
@@ -48,6 +50,13 @@ constexpr std::uintptr_t k_clear_rva = 0x583E81u;
 constexpr std::uintptr_t k_packet_rva = 0x583BCEu;
 constexpr std::uintptr_t k_writer_rva = 0x57EFB0u;
 constexpr std::uintptr_t k_packet_resume_rva = 0x583BF2u;
+constexpr std::uintptr_t k_decoder_rva = 0x57F000u;
+constexpr std::uintptr_t k_decoder_resume_rva = 0x57F00Fu;
+constexpr std::array<std::uint8_t,15> k_decoder_bytes = {
+    0x48,0x89,0x5C,0x24,0x08,
+    0x48,0x89,0x74,0x24,0x10,
+    0x57,0x48,0x83,0xEC,0x20
+};
 constexpr std::array<std::uint8_t,15> k_packet_bytes = {
     0x48,0x8B,0xC8,0x4C,0x8B,0xC7,0x8B,0xD6,
     0xE8,0xD5,0xB3,0xFF,0xFF,0xEB,0x15
@@ -70,7 +79,7 @@ struct hook {
 };
 
 std::uintptr_t g_base = 0;
-hook g_name{}, g_clear{}, g_packet{};
+hook g_name{}, g_clear{}, g_packet{}, g_decoder{};
 hook_status g_status{};
 constexpr std::size_t k_logical_name_capacity = 512u;
 thread_local std::array<wchar_t,k_logical_name_capacity + 1u>
@@ -86,6 +95,12 @@ std::atomic<std::uint64_t> g_cpu_packet_name_matches{0u};
 std::atomic<std::uint64_t> g_cpu_cache_name_equal{0u};
 std::atomic<std::uint64_t> g_cpu_cache_name_different{0u};
 std::atomic<std::uint64_t> g_cpu_cache_name_unreadable{0u};
+std::atomic<std::uint64_t> g_cpu_decode_calls{0u};
+std::atomic<std::uint64_t> g_cpu_decode_payload_readable{0u};
+std::atomic<std::uint64_t> g_cpu_decode_payload_writer_pointer_seen{0u};
+// Diagnostic-only bounded pointer census; the absence of a certified
+// lifetime link forbids using these entries as a resource/asset authority.
+std::array<std::atomic<std::uintptr_t>,1024> g_cpu_writer_pointers{};
 #endif
 
 bool readable_range(
