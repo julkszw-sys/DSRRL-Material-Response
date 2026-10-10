@@ -25,6 +25,24 @@ B=A+"""
 #else
         (void)exact_equipment_source_test;
 #endif"""
+C="#if defined(DSRRL_EXPERIMENTAL_OTHER_METAL_PTDE_ENVSPEC)\\n    if ((!material_ready || !prepared.material_resources.spec_rgb) &&\\n        experimental_material && spc_onepass_claim(material, 3u)) {"
+D="""#if defined(DSRRL_EXPERIMENTAL_SPC25_EQUIPMENT_SPEC_BRIDGE)
+    if (experimental_material &&
+        decision.receiver_id >= 33u && decision.receiver_id <= 35u &&
+        material.owner_tuple_exact && material.actual_material_exact &&
+        material.material_slot_valid &&
+        mr::has_exact_flver_material_ownership(query) &&
+        (!material_ready || !prepared.material_resources.spec_rgb) &&
+        material_resources_.try_recover_exact_bound_spec_from_native_name(
+            context,false,true)) {
+        material_resources_.release_prepared_draw(
+            prepared.material_resources);
+        material_ready = material_resources_.prepare_draw_requests(
+            context,decision.receiver_id,query,true,true,
+            prepared.material_resources);
+    }
+#endif
+""" + C
 def patch(p,a,b,apply):
  s=p.read_text(encoding="utf-8")
  if s.count(b)==1: pass
@@ -34,3 +52,4 @@ def patch(p,a,b,apply):
 if __name__=="__main__":
  ap=argparse.ArgumentParser();ap.add_argument("--apply",action="store_true");v=ap.parse_args()
  patch(ROOT/"renderer-core/src/runtime/material_resource_draw_runtime.cpp",A,B,v.apply)
+ patch(ROOT/"renderer-core/src/runtime/pmetal_envspec_draw_runtime.cpp",C,D,v.apply)
