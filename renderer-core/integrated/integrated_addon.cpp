@@ -10,10 +10,12 @@
 #include "dsrrl/runtime/bloom_scene_sidecar_runtime.hpp"
 #include "dsrrl/runtime/bloom_fx_draw_transport.hpp"
 #include "dsrrl/runtime/pmetal_envspec_draw_runtime.hpp"
+#include "dsrrl/runtime/ptde_metal_envspec_authority.hpp"
 #include "dsrrl/runtime/pmetal_native_draw_bridge.hpp"
 #include "dsrrl/runtime/pixel_srv_shadow.hpp"
 #include "dsrrl/runtime/texture_identity_transport.hpp"
 #include "dsrrl/operators/material_response/mtd_semantic_census.hpp"
+#include "dsrrl/operators/material_response/generated_routes_v1.hpp"
 #include "dsrrl/runtime/stable_receiver_pipeline_registry.hpp"
 #include "dsrrl/runtime/hemenvlerp_pipeline_registry.hpp"
 #include "dsrrl/runtime/subsurface_pipeline_registry.hpp"
@@ -52,6 +54,10 @@
 
 #include <reshade.hpp>
 #include <d3d11.h>
+#include <atomic>
+#include <cstdint>
+#include <cstdio>
+#include <cstring>
 
 #if RESHADE_API_VERSION != 20
 #error DSRRL Core+Islands requires ReShade Add-on API 20
@@ -2505,6 +2511,52 @@ bool observe_pointlight_draw_identity(
     return true;
 }
 
+#if defined(DSRRL_EXPERIMENTAL_SPC_MATERIAL_BATCH)
+// Read-only draw-side census, independent of the source selector callback.
+// A selector hit never proves the material reached an SPC receiver.
+std::atomic<std::uint64_t> g_spc_draw_receiver_census[2]{};
+void log_spc_draw_receiver_once(
+    const dsrrl::operators::material_response::material_identity &identity,
+    std::uint32_t receiver_id,
+    bool receiver_valid) noexcept
+{
+    namespace mr = dsrrl::operators::material_response;
+    if (!identity.valid)
+        return;
+    static_assert(mr::generated::k_material_route_count_v1 <= 64u);
+    for (std::size_t i = 0;
+         i < mr::generated::k_material_route_count_v1; ++i) {
+        const auto &seed = mr::generated::k_material_routes_v1[i];
+        if (seed.route_index != identity.route_index ||
+            mr::mtd_semantic_hash(seed.mtd_name) != identity.semantic_name_hash)
+            continue;
+        if (std::strstr(seed.mtd_name, "Leather") == nullptr &&
+            std::strstr(seed.mtd_name, "Cloth") == nullptr &&
+            std::strstr(seed.mtd_name, "Metal") == nullptr &&
+            std::strstr(seed.mtd_name, "Wet") == nullptr)
+            return;
+        auto &mask = g_spc_draw_receiver_census[receiver_valid ? 1 : 0];
+        const auto bit = std::uint64_t{1u} << i;
+        if ((mask.fetch_or(bit, std::memory_order_relaxed) & bit) != 0u)
+            return;
+        const auto *author = dsrrl::runtime::
+            match_ptde_metal_envspec_material(identity);
+        char line[432]{};
+        std::snprintf(line, sizeof(line),
+            "[DSRRL SPC CENSUS] stage=draw_owner mtd=%s route=%u rx=%u receiver_ok=%u owner=%u slot=%u exact_bridge_authority=%u pixel=OPEN",
+            seed.mtd_name,
+            static_cast<unsigned>(identity.route_index),
+            static_cast<unsigned>(receiver_id),
+            receiver_valid ? 1u : 0u,
+            identity.owner_tuple_exact ? 1u : 0u,
+            static_cast<unsigned>(identity.material_slot),
+            author != nullptr ? 1u : 0u);
+        reshade::log::message(reshade::log::level::info, line);
+        return;
+    }
+}
+#endif
+
 bool observe_draw_identity(
     reshade::api::command_list *cmd_list,
     std::uint8_t route_mask,
@@ -2728,6 +2780,11 @@ bool observe_draw_identity(
     }
     if (owner_ok)
         hot_count(g_draw_owner_hits);
+#if defined(DSRRL_EXPERIMENTAL_SPC_MATERIAL_BATCH)
+    if (owner_ok)
+        log_spc_draw_receiver_once(
+            out_material, receiver_id, receiver_ok);
+#endif
 
     if (!receiver_ok) {
         if (owner_ok)

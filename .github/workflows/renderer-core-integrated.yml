@@ -118,8 +118,22 @@ jobs:
         run: |
           $v = Get-Content renderer-core/integrated/VERSION.json -Raw | ConvertFrom-Json
           if ($v.product_line -ne "DSRRL Core+Islands") { throw "Wrong product line: $($v.product_line)" }
-          if ($v.version -ne "2.0.0-dev") { throw "Unexpected active Core+Islands version: $($v.version)" }
-          if ($v.branch -ne "main" -or $v.status -ne "ACTIVE_DEVELOPMENT") { throw "VERSION.json does not identify active main development" }
+          # This PR inherits the frozen 2.0.2 release manifest from its
+          # exact v2.0.3-dev ancestor. Preserve the manifest as source truth:
+          # do not downgrade it merely to appease a legacy 2.0.0-dev check.
+          $validDevelopment = (
+            $v.version -eq "2.0.0-dev" -and
+            $v.branch -eq "main" -and
+            $v.status -eq "ACTIVE_DEVELOPMENT"
+          )
+          $validRelease = (
+            $v.version -eq "2.0.2" -and
+            $v.branch -eq "release/v2.0.2-sync-on-4way" -and
+            $v.status -eq "RELEASE"
+          )
+          if (-not ($validDevelopment -or $validRelease)) {
+            throw "Unrecognized Core+Islands version/branch/status authority: $($v.version) / $($v.branch) / $($v.status)"
+          }
           if ($v.legacy_monolith.version -ne "1.45" -or $v.legacy_monolith.status -ne "FROZEN_LEGACY" -or $v.legacy_monolith.development -ne $false) {
             throw "Legacy monolith separation invariant failed"
           }
@@ -256,6 +270,7 @@ jobs:
           $envspecLerpRegistry = Get-Content renderer-core/src/runtime/hemenvlerp_pipeline_registry.cpp -Raw
           $envspecResource = Get-Content renderer-core/src/runtime/envspec_resource_runtime.cpp -Raw
           $envspecRuntime = Get-Content renderer-core/src/runtime/pmetal_envspec_draw_runtime.cpp -Raw
+          $envspecAuthority = Get-Content renderer-core/include/dsrrl/runtime/ptde_metal_envspec_authority.hpp -Raw
           $envspecSidecarVerifier = Get-Content renderer-core/integrated/VERIFY_ENVSPEC_SIDECAR.ps1 -Raw
           $envspecSidecarStager = Get-Content renderer-core/integrated/STAGE_ENVSPEC_SIDECAR.ps1 -Raw
           $pmetalGenerator = Get-Content renderer-core/tools/generate_pmetal_env_source_authority.py -Raw
@@ -630,10 +645,20 @@ jobs:
             if ($envspecResource -notmatch [regex]::Escape($required)) { throw "P_Metal EnvSpec exact probe resource invariant missing: $required" }
           }
 
+          # The baseline is now represented by a dedicated exact MTD
+          # authority table; runtime handles 25 source-verified slot values.
           foreach ($required in @(
-            'k_pmetal_route_index = 345u',
-            'ece70f36bd2517d28c8495e276cea537f8b519d6bed981788e79a409ffbf763b',
-            'envspc_slot != 2u',
+            'ptde_metal_envspec_profile::pmetal_baseline, 345u',
+            'ece70f36bd2517d28c8495e276cea537f8b519d6bed981788e79a409ffbf763b'
+          )) {
+            if ($envspecAuthority -notmatch [regex]::Escape($required)) {
+              throw "Baseline P_Metal exact authority invariant missing: $required"
+            }
+          }
+          foreach ($required in @(
+            'exact_pmetal_envspec_candidate(',
+            'env_semantics.envspc_slot != match_ptde_metal_envspec_material(material)->envspc_slot',
+            'source_.latest_exact_material(material, source)',
             'source_.latest(material, source)',
             'source.beta != 0.0f',
             'blended_receiver_hold_',

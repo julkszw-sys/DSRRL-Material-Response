@@ -27,6 +27,24 @@ struct envspec_resource_telemetry {
     bool sampler_ready = false;
 };
 
+// Passive exact probe topology snapshot for one-shot SPC diagnostics.
+// A/B register and materialized-cube bits describe the input to the strict
+// consumer gate; they do not authorize an unregistered resource.
+struct envspec_probe_frontier {
+    bool device_ready = false;
+    bool pack_ready = false;
+    bool sampler_ready = false;
+    bool slot_valid = false;
+    bool stock_a_registered = false;
+    bool stock_b_registered = false;
+    bool probe_a_in_range = false;
+    bool probe_b_in_range = false;
+    bool cube_a_ready = false;
+    bool cube_b_ready = false;
+    std::uint16_t probe_a = 0;
+    std::uint16_t probe_b = 0;
+};
+
 struct prepared_envspec_resources {
     ID3D11ShaderResourceView *ptde_a = nullptr;
     ID3D11ShaderResourceView *ptde_b = nullptr;
@@ -68,6 +86,12 @@ public:
         std::uint8_t slot,
         bool probe_b_required,
         prepared_envspec_resources &prepared) noexcept;
+
+    envspec_probe_frontier inspect_bound_frontier(
+        ID3D11ShaderResourceView *stock_a,
+        ID3D11ShaderResourceView *stock_b,
+        std::uint8_t slot,
+        bool probe_b_required) const noexcept;
 
     // Runtime v2 fast path. Consumes already-tracked stock SRV bindings and
     // avoids D3D11 PSGetShaderResources on every qualifying draw.

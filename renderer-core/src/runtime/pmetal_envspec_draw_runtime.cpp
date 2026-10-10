@@ -8,6 +8,7 @@
 #include "dsrrl/runtime/pmetal_envspec_draw_runtime.hpp"
 #include "dsrrl/runtime/runtime_hot_telemetry.hpp"
 #include "dsrrl/runtime/pixel_srv_shadow.hpp"
+#include "dsrrl/runtime/ptde_metal_envspec_authority.hpp"
 
 #include "dsrrl/operators/legacy_plan/sha256_bytes.hpp"
 
@@ -24,12 +25,6 @@ namespace {
 
 namespace mr = operators::material_response;
 namespace hashing = operators::legacy_plan::hashing;
-
-constexpr std::uint32_t k_pmetal_route_index = 345u;
-constexpr const char *k_pmetal_name =
-    "P_Metal[DSB].mtd";
-constexpr const char *k_pmetal_sha256 =
-    "ece70f36bd2517d28c8495e276cea537f8b519d6bed981788e79a409ffbf763b";
 
 constexpr std::uint32_t k_effect_fail_feature = 1u << 0u;
 constexpr std::uint32_t k_effect_fail_lerp_feature = 1u << 1u;
@@ -52,6 +47,157 @@ std::atomic_bool g_native_envdiffuse_logged{false};
 std::atomic_bool g_envdiffuse_consumer_logged{false};
 std::atomic_bool g_source_frontier_logged{false};
 std::atomic_bool g_shadow_r7_logged{false};
+#if defined(DSRRL_EXPERIMENTAL_OTHER_METAL_PTDE_ENVSPEC)
+// Explicit source-ready and request-ready frontiers for each newly admitted
+// MTD. Does NOT label a prepared draw as executed or as PTDE pixel PASS.
+constexpr std::uint32_t k_experimental_spc_count = static_cast<std::uint32_t>(ptde_metal_envspec_profile::spc_route_359) - static_cast<std::uint32_t>(ptde_metal_envspec_profile::pmetal_alp) + 1u;
+static_assert(k_experimental_spc_count <= 32u);
+std::atomic<std::uint32_t> g_other_metal_stage_log_masks[2]{};
+
+std::atomic<std::uint32_t> g_spc_onepass_masks[4]{};
+bool spc_onepass_claim(const mr::material_identity &mat, unsigned lane) noexcept
+{
+    if (lane >= 4u) return false;
+    const auto *id = match_ptde_metal_envspec_material(mat);
+    if (id == nullptr || id->profile == ptde_metal_envspec_profile::pmetal_baseline)
+        return false;
+    const auto index = static_cast<unsigned>(id->profile) -
+        static_cast<unsigned>(ptde_metal_envspec_profile::pmetal_alp);
+    if (index >= k_experimental_spc_count) return false;
+    const auto bit = 1u << index;
+    return (g_spc_onepass_masks[lane].fetch_or(bit, std::memory_order_relaxed) & bit) == 0u;
+}
+// Passive native SRV/type/descriptor observation. No resource replacement.
+struct spc_srv_desc {
+    unsigned bound=0u, dimension=0u, format=0u, w=0u, h=0u, mips=0u, layers=0u;
+};
+spc_srv_desc spc_inspect_srv(ID3D11ShaderResourceView *view) noexcept
+{
+    spc_srv_desc out{};
+    if (!view) return out;
+    out.bound=1u;
+    D3D11_SHADER_RESOURCE_VIEW_DESC vd{};
+    view->GetDesc(&vd);
+    out.dimension=static_cast<unsigned>(vd.ViewDimension);
+    out.format=static_cast<unsigned>(vd.Format);
+    ID3D11Resource *resource=nullptr;
+    view->GetResource(&resource);
+    if (!resource) return out;
+    ID3D11Texture2D *texture=nullptr;
+    if (SUCCEEDED(resource->QueryInterface(__uuidof(ID3D11Texture2D),
+        reinterpret_cast<void **>(&texture))) && texture != nullptr) {
+        D3D11_TEXTURE2D_DESC d{};
+        texture->GetDesc(&d);
+        out.w=d.Width; out.h=d.Height; out.mips=d.MipLevels; out.layers=d.ArraySize;
+        texture->Release();
+    }
+    resource->Release();
+    return out;
+}
+
+
+void log_other_metal_stage_once(
+    const char *stage,
+    std::uint32_t stage_ordinal,
+    const mr::material_identity &material,
+    const mr::decision &decision,
+    bool used_unkeyed_hook_fallback) noexcept
+{
+    const auto *identity = match_ptde_metal_envspec_material(material);
+    if (identity == nullptr ||
+        identity->profile == ptde_metal_envspec_profile::pmetal_baseline ||
+        stage_ordinal > 1u)
+        return;
+    const auto index =
+        static_cast<std::uint32_t>(identity->profile) -
+        static_cast<std::uint32_t>(ptde_metal_envspec_profile::pmetal_alp);
+    if (index >= k_experimental_spc_count)
+        return;
+    const auto bit = 1u << index;
+    if ((g_other_metal_stage_log_masks[stage_ordinal].fetch_or(
+             bit, std::memory_order_relaxed) & bit) != 0u)
+        return;
+    char message[320]{};
+    std::snprintf(
+        message, sizeof(message),
+        "[DSRRL OTHER METAL PTDE] stage=%s profile=%u route=%u rx=%u slot=%u source_key=%s no_unkeyed_hook_fallback=%u pixel=OPEN",
+        stage,
+        static_cast<unsigned>(identity->profile),
+        static_cast<unsigned>(decision.route_index),
+        static_cast<unsigned>(decision.receiver_id),
+        static_cast<unsigned>(material.material_slot),
+        used_unkeyed_hook_fallback ? "LATEST_HOOK_UNKEYED" : "EXACT_MATERIAL",
+        used_unkeyed_hook_fallback ? 0u : 1u);
+    reshade::log::message(reshade::log::level::info, message);
+}
+#endif
+#if defined(DSRRL_EXPERIMENTAL_OTHER_METAL_PTDE_ENVSPEC)
+// This is a diagnostic-only receiver-stage probe, not a shader/CB/SRV
+// override. It survives RELEASE_CLEANUP=ON and is bounded to one
+// fail-open line per exact metal profile and downstream stage.
+std::atomic<std::uint32_t> g_other_metal_downstream_reject_masks[16]{};
+class other_metal_downstream_gate final {
+public:
+    other_metal_downstream_gate(
+        const mr::material_identity &material,
+        const mr::decision &decision,
+        bool experimental) noexcept
+        : material_(material),
+          decision_(decision),
+          experimental_(experimental) {}
+
+    other_metal_downstream_gate(
+        const other_metal_downstream_gate &) = delete;
+    other_metal_downstream_gate &operator=(
+        const other_metal_downstream_gate &) = delete;
+
+    ~other_metal_downstream_gate() noexcept
+    {
+        if (!experimental_ || completed_ || gate_ >= 16u)
+            return;
+        const auto *authority =
+            match_ptde_metal_envspec_material(material_);
+        if (authority == nullptr ||
+            authority->profile == ptde_metal_envspec_profile::pmetal_baseline)
+            return;
+        const std::uint32_t profile_index =
+            static_cast<std::uint32_t>(authority->profile) -
+            static_cast<std::uint32_t>(
+                ptde_metal_envspec_profile::pmetal_alp);
+        if (profile_index >= k_experimental_spc_count)
+            return;
+        const std::uint32_t bit = 1u << profile_index;
+        if ((g_other_metal_downstream_reject_masks[gate_].fetch_or(
+                 bit, std::memory_order_relaxed) & bit) != 0u)
+            return;
+        char line[400]{};
+        std::snprintf(
+            line, sizeof(line),
+            "[DSRRL OTHER METAL PTDE] stage=downstream_fail_open gate=%s profile=%u route=%u rx=%u slot=%u source_ready=1 request_ready=0 pixel=OPEN",
+            gate_name_,
+            static_cast<unsigned>(authority->profile),
+            static_cast<unsigned>(decision_.route_index),
+            static_cast<unsigned>(decision_.receiver_id),
+            static_cast<unsigned>(material_.material_slot));
+        reshade::log::message(reshade::log::level::info, line);
+    }
+
+    void next(std::uint32_t gate, const char *name) noexcept
+    {
+        gate_ = gate;
+        gate_name_ = name;
+    }
+
+    void complete() noexcept { completed_ = true; }
+private:
+    const mr::material_identity &material_;
+    const mr::decision &decision_;
+    bool experimental_ = false;
+    bool completed_ = false;
+    std::uint32_t gate_ = 0u;
+    const char *gate_name_ = "receiver_source";
+};
+#endif
 #if !defined(DSRRL_RELEASE_CLEANUP)
 std::atomic<std::uint32_t> g_prepare_stage_log_mask{0u};
 std::atomic<std::uint32_t> g_value_cut_log_mask{0u};
@@ -153,36 +299,32 @@ void effect_fail(
     mask.fetch_or(bit, std::memory_order_relaxed);
 }
 
-bool exact_pmetal_material(
-    const mr::material_identity &material) noexcept
-{
-    return
-        material.valid &&
-        material.owner_tuple_exact &&
-        material.material_slot_valid &&
-        material.semantic_name_hash ==
-            mr::mtd_semantic_hash(
-                k_pmetal_name) &&
-        hashing::matches_hex(
-            material.raw_mtd_sha256,
-            k_pmetal_sha256);
-}
-
-bool exact_pmetal_decision(
+// Draw-local identity and compiled receiver are checked independently.
+// The additional three MTDs have the exact PTDE/DSR SPC shader family
+// and EnvSpec slot 2; no shared-shader create-time visible patch is used.
+bool exact_metal_material_and_decision(
+    const mr::material_identity &material,
     const mr::decision &decision) noexcept
 {
-    // EnvSpec owns its own PTDE material consumer. Do not borrow the generic
-    // Material Response specular-operation bit: generic MR is diffuse-only.
-    // Exact P_Metal identity + route/receiver select the verified profile, and
-    // raw c101 is consumed explicitly by the EnvSpec SpecRGB material tail.
-    return
-        decision.active &&
-        decision.route_index ==
-            k_pmetal_route_index &&
-        decision.receiver_id >= 33u &&
-        decision.receiver_id <= 35u &&
-        std::isfinite(decision.c101) &&
-        decision.c101 >= 0.0f;
+    const auto *authority = match_ptde_metal_envspec_material(material);
+    if (authority == nullptr ||
+        !decision.active ||
+        decision.route_index != authority->route_index ||
+        decision.receiver_id < 33u ||
+        decision.receiver_id > 35u ||
+        !std::isfinite(decision.c101) ||
+        decision.c101 < 0.0f)
+        return false;
+
+#if defined(DSRRL_EXPERIMENTAL_OTHER_METAL_PTDE_ENVSPEC)
+    // The experimental variants are an exact c101=2.5 subgroup.
+    // The independent MTD semantic classifier and exact live t1+t10
+    // resource/receiver gates are still mandatory in prepare().
+    if (authority->profile != ptde_metal_envspec_profile::pmetal_baseline &&
+        decision.c101 != authority->c101)
+        return false;
+#endif
+    return true;
 }
 
 mr::mtd_semantic_query make_query(
@@ -218,9 +360,7 @@ bool exact_pmetal_envspec_candidate(
     const operators::material_response::material_identity &material,
     const operators::material_response::decision &decision) noexcept
 {
-    return
-        exact_pmetal_material(material) &&
-        exact_pmetal_decision(decision);
+    return exact_metal_material_and_decision(material, decision);
 }
 
 pmetal_envspec_draw_runtime::
@@ -676,6 +816,24 @@ bool pmetal_envspec_draw_runtime::prepare(
             hemenvlerp)
         telemetry::hot_count(lerp_candidates_);
 
+    // Stage zero distinguishes a draw that never reaches EnvSpec from a source miss.
+#if defined(DSRRL_EXPERIMENTAL_OTHER_METAL_PTDE_ENVSPEC)
+    if (spc_onepass_claim(material, 0u)) {
+        const bool spc_exact_candidate =
+            exact_pmetal_envspec_candidate(material, decision);
+        char line[400]{};
+        std::snprintf(line, sizeof(line),
+            "[DSRRL SPC ONEPASS] stage=prepare_candidate route=%u rx=%u slot=%u family=%u candidate=%u owner=%u actual_mtd=%u pixel=OPEN",
+            static_cast<unsigned>(decision.route_index),
+            static_cast<unsigned>(decision.receiver_id),
+            static_cast<unsigned>(material.material_slot),
+            static_cast<unsigned>(family),
+            spc_exact_candidate ? 1u : 0u,
+            material.owner_tuple_exact ? 1u : 0u,
+            material.actual_material_exact ? 1u : 0u);
+        reshade::log::message(reshade::log::level::info, line);
+    }
+#endif
     if (!exact_pmetal_envspec_candidate(
             material,
             decision)) {
@@ -743,7 +901,7 @@ bool pmetal_envspec_draw_runtime::prepare(
             mr::mtd_envspec_router_state::
                 present ||
         !env_semantics.envspc_slot_valid ||
-        env_semantics.envspc_slot != 2u) {
+        env_semantics.envspc_slot != match_ptde_metal_envspec_material(material)->envspc_slot) {
         telemetry::hot_count(semantic_rejects_);
         effect_fail(
             effect_fail_mask_,
@@ -759,8 +917,38 @@ bool pmetal_envspec_draw_runtime::prepare(
     effect_latch(effect_semantic_ready_);
 
     pmetal_envspec_source source{};
-    if (!source_.latest(material, source) ||
-        !std::isfinite(source.beta)) {
+    // Never let an unkeyed latest-hook LightBank fallback authorize a
+    // different material. Extended profiles require an exact
+    // FLVER+slot+MTD-keyed selector publication, even if the original
+    // P_Metal baseline can retain its historical validated fallback.
+    const bool experimental_material =
+        is_experimental_ptde_metal_envspec_material(material);
+    const bool exact_source_ready = experimental_material
+        ? source_.latest_exact_material(material, source)
+        : source_.latest(material, source);
+#if defined(DSRRL_EXPERIMENTAL_OTHER_METAL_PTDE_ENVSPEC)
+    if ((!exact_source_ready || !std::isfinite(source.beta)) &&
+        experimental_material && spc_onepass_claim(material, 1u)) {
+        const auto t=source_.telemetry();
+        char line[520]{};
+        std::snprintf(line, sizeof(line),
+            "[DSRRL SPC ONEPASS] stage=source_reject route=%u rx=%u slot=%u keyed_ready=%u finite_beta=%u selector_active=%u hook_single=%u hook_blend=%u publish=%llu consume_ok=%llu consume_fail=%llu decode_fail=%llu pixel=OPEN",
+            static_cast<unsigned>(decision.route_index),
+            static_cast<unsigned>(decision.receiver_id),
+            static_cast<unsigned>(material.material_slot),
+            exact_source_ready ? 1u : 0u,
+            std::isfinite(source.beta) ? 1u : 0u,
+            t.selector_carrier_active ? 1u : 0u,
+            t.hook_single_armed ? 1u : 0u,
+            t.hook_blend_armed ? 1u : 0u,
+            static_cast<unsigned long long>(t.exact_publish),
+            static_cast<unsigned long long>(t.consumer_ok),
+            static_cast<unsigned long long>(t.consumer_fail),
+            static_cast<unsigned long long>(t.decode_fail));
+        reshade::log::message(reshade::log::level::info, line);
+    }
+#endif
+    if (!exact_source_ready || !std::isfinite(source.beta)) {
         telemetry::hot_count(source_rejects_);
         effect_fail(
             effect_fail_mask_,
@@ -896,6 +1084,14 @@ bool pmetal_envspec_draw_runtime::prepare(
         return false;
     }
     effect_latch(effect_source_ready_);
+#if defined(DSRRL_EXPERIMENTAL_OTHER_METAL_PTDE_ENVSPEC)
+    other_metal_downstream_gate downstream_gate(
+        material, decision, experimental_material);
+    if (experimental_material)
+        log_other_metal_stage_once(
+            "source_ready", 0u, material, decision,
+            source.unkeyed_hook_fallback);
+#endif
 
 #if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG)
 #if !defined(DSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE)
@@ -979,6 +1175,9 @@ bool pmetal_envspec_draw_runtime::prepare(
         return false;
     }
     effect_latch(effect_receiver_source_ready_);
+#if defined(DSRRL_EXPERIMENTAL_OTHER_METAL_PTDE_ENVSPEC)
+    downstream_gate.next(1u, "d3d_context");
+#endif
 
     auto *context =
         reinterpret_cast<ID3D11DeviceContext *>(
@@ -998,6 +1197,9 @@ bool pmetal_envspec_draw_runtime::prepare(
         return false;
     }
 
+#if defined(DSRRL_EXPERIMENTAL_OTHER_METAL_PTDE_ENVSPEC)
+    downstream_gate.next(2u, "replacement_shader");
+#endif
     ID3D11PixelShader *shader = nullptr;
     core::operator_mask composed_owners = 0u;
 
@@ -1059,6 +1261,9 @@ bool pmetal_envspec_draw_runtime::prepare(
     }
 
     effect_latch(effect_replacement_ready_);
+#if defined(DSRRL_EXPERIMENTAL_OTHER_METAL_PTDE_ENVSPEC)
+    downstream_gate.next(3u, "probe_resource");
+#endif
 
     const bool probe_b_required =
         family ==
@@ -1097,6 +1302,67 @@ bool pmetal_envspec_draw_runtime::prepare(
                       probe_b_required,
                       prepared.env_resources);
 
+#if defined(DSRRL_EXPERIMENTAL_OTHER_METAL_PTDE_ENVSPEC)
+    if (!env_resource_ready && experimental_material &&
+        spc_onepass_claim(material, 2u)) {
+        ID3D11ShaderResourceView *live[3]{};
+        context->PSGetShaderResources(12u, 3u, live);
+        const auto s12=spc_inspect_srv(shadow_env[0]);
+        const auto s14=spc_inspect_srv(shadow_env[2]);
+        const auto l12=spc_inspect_srv(live[0]);
+        const auto l14=spc_inspect_srv(live[2]);
+        const auto frontier = env_resources_.inspect_bound_frontier(
+            shadow_env_ready ? shadow_env[0] : live[0],
+            probe_b_required
+                ? (shadow_env_ready ? shadow_env[2] : live[2])
+                : nullptr,
+            env_semantics.envspc_slot,
+            probe_b_required);
+        const char *reason =
+            !frontier.slot_valid ? "invalid_envspec_slot" :
+            !frontier.device_ready ? "missing_device" :
+            !frontier.pack_ready ? "missing_ptde_pack" :
+            !frontier.sampler_ready ? "missing_ptde_sampler" :
+            !frontier.stock_a_registered ? "stock_probe_a_not_registered" :
+            !frontier.stock_b_registered ? "stock_probe_b_not_registered" :
+            !frontier.probe_a_in_range ? "probe_a_out_of_range" :
+            !frontier.probe_b_in_range ? "probe_b_out_of_range" :
+            !frontier.cube_a_ready ? "ptde_cube_a_not_materialized" :
+            !frontier.cube_b_ready ? "ptde_cube_b_not_materialized" :
+            "resource_prepare_other";
+        char line[1300]{};
+        std::snprintf(line, sizeof(line),
+            "[DSRRL SPC ONEPASS] stage=probe_reject route=%u rx=%u slot=%u family=%u envslot=%u beta=%.8g need_b=%u shadow_ready=%u shadow12=%u/%u/%u shadow14=%u/%u/%u live12=%u/%u/%u/%u/%u/%u/%u live14=%u/%u/%u/%u/%u/%u/%u shadow_live12_same=%u shadow_live14_same=%u registry_a=%u registry_b=%u probe_a=%u probe_b=%u ordinal_ok=%u/%u ptde_cube_ready=%u/%u device=%u pack=%u sampler=%u slot_valid=%u reason=%s pixel=OPEN",
+            static_cast<unsigned>(decision.route_index),
+            static_cast<unsigned>(decision.receiver_id),
+            static_cast<unsigned>(material.material_slot),
+            static_cast<unsigned>(family),
+            static_cast<unsigned>(env_semantics.envspc_slot),
+            static_cast<double>(source.beta),
+            probe_b_required ? 1u : 0u, shadow_env_ready ? 1u : 0u,
+            s12.bound, s12.dimension, s12.format,
+            s14.bound, s14.dimension, s14.format,
+            l12.bound, l12.dimension, l12.format, l12.w,l12.h,l12.mips,l12.layers,
+            l14.bound, l14.dimension, l14.format, l14.w,l14.h,l14.mips,l14.layers,
+            shadow_env[0] == live[0] ? 1u : 0u,
+            shadow_env[2] == live[2] ? 1u : 0u,
+            frontier.stock_a_registered ? 1u : 0u,
+            frontier.stock_b_registered ? 1u : 0u,
+            static_cast<unsigned>(frontier.probe_a),
+            static_cast<unsigned>(frontier.probe_b),
+            frontier.probe_a_in_range ? 1u : 0u,
+            frontier.probe_b_in_range ? 1u : 0u,
+            frontier.cube_a_ready ? 1u : 0u,
+            frontier.cube_b_ready ? 1u : 0u,
+            frontier.device_ready ? 1u : 0u,
+            frontier.pack_ready ? 1u : 0u,
+            frontier.sampler_ready ? 1u : 0u,
+            frontier.slot_valid ? 1u : 0u,
+            reason);
+        reshade::log::message(reshade::log::level::info, line);
+        for (auto *&v : live) if (v) { v->Release(); v=nullptr; }
+    }
+#endif
     if (!env_resource_ready) {
         if (shader != nullptr)
             shader->Release();
@@ -1113,6 +1379,9 @@ bool pmetal_envspec_draw_runtime::prepare(
         return false;
     }
     effect_latch(effect_probe_ready_);
+#if defined(DSRRL_EXPERIMENTAL_OTHER_METAL_PTDE_ENVSPEC)
+    downstream_gate.next(4u, "ptde_spec_rgb_sidecar");
+#endif
 
     if (!g_resource_mode_logged.exchange(
             true,
@@ -1216,6 +1485,75 @@ bool pmetal_envspec_draw_runtime::prepare(
             if (view != nullptr) { view->Release(); view = nullptr; }
     }
 
+#if defined(DSRRL_EXPERIMENTAL_SPC_MATERIAL_BATCH)
+    // Shared remediation for ALL exact SPC25 receiver/material profiles.
+    // A stock t1 can acquire a native D3D11 debug label only after
+    // init_resource_view. This opt-in draw-local retry uses the *current*
+    // bound SRV and requires an exact V12 name plus actual PTDE DDS.
+    // Never use this path to authorize a material without FLVER+slot+MTD,
+    // or to borrow an unrelated LightBank or guessed texture identity.
+    if (experimental_material &&
+        (!material_ready || !prepared.material_resources.spec_rgb) &&
+        material_resources_.try_recover_exact_bound_spec_from_native_name(
+            context)) {
+        material_resources_.release_prepared_draw(
+            prepared.material_resources);
+        material_ready = material_resources_.prepare_draw_requests(
+            context, decision.receiver_id, query, true, true,
+            prepared.material_resources);
+        if (material_ready && prepared.material_resources.spec_rgb) {
+            static std::atomic_bool late_ready_logged{false};
+            if (!late_ready_logged.exchange(
+                    true, std::memory_order_relaxed))
+                reshade::log::message(reshade::log::level::info,
+                    "[DSRRL SPC25 LATE T1] stage=material_request_recovered route_scope=ALL_EXACT_SPC25 runtime=REQUEST_READY_CANDIDATE pixel=OPEN");
+        }
+    }
+#endif
+
+#if defined(DSRRL_EXPERIMENTAL_OTHER_METAL_PTDE_ENVSPEC)
+    if ((!material_ready || !prepared.material_resources.spec_rgb) &&
+        experimental_material && spc_onepass_claim(material, 3u)) {
+        const auto p=material_resources_.probe_exact_specular_companion(context);
+        const auto sem=mr::classify_mtd_semantic(
+            query, mr::mtd_semantic_operator::spec_rgb);
+        ID3D11ShaderResourceView *native_t1=nullptr;
+        context->PSGetShaderResources(1u, 1u, &native_t1);
+        const auto l1=spc_inspect_srv(native_t1);
+        const auto s1=spc_inspect_srv(shadow_material[1]);
+        const char *reason =
+            !p.context_valid ? "no_d3d_context" :
+            p.quarantined ? "resource_quarantined" :
+            !p.stock_bound ? "stock_t1_unbound" :
+            !p.snapshot_resolved ? "stock_t1_logical_lookup_miss" :
+            !p.logical_hash_allowed ? "stock_spec_not_equipment_allowlisted" :
+            !p.companion_ready ? "ptde_spec_companion_unavailable" :
+            !material_ready ? "material_request_prepare_failed" :
+            "spec_semantic_or_adapter_reject";
+        char line[940]{};
+        std::snprintf(line, sizeof(line),
+            "[DSRRL SPC ONEPASS] stage=spec_reject route=%u rx=%u slot=%u material_ready=%u spec_req=%u diffuse_req=%u normal_req=%u shadow_ready=%u shadow_diverged=%u shadow_t1=%u/%u/%u live_t1=%u/%u/%u/%u/%u/%u/%u shadow_live_t1_same=%u ctx=%u quarantine=%u bound=%u resolved=%u hash=%016llx allowed=%u companion=%u semantic=%u reason=%s pixel=OPEN",
+            static_cast<unsigned>(decision.route_index),
+            static_cast<unsigned>(decision.receiver_id),
+            static_cast<unsigned>(material.material_slot),
+            material_ready ? 1u : 0u,
+            prepared.material_resources.spec_rgb ? 1u : 0u,
+            prepared.material_resources.diffuse ? 1u : 0u,
+            prepared.material_resources.normal ? 1u : 0u,
+            shadow_material_ready ? 1u : 0u,
+            shadow_diverged ? 1u : 0u,
+            s1.bound,s1.dimension,s1.format,
+            l1.bound,l1.dimension,l1.format,l1.w,l1.h,l1.mips,l1.layers,
+            shadow_material[1] == native_t1 ? 1u : 0u,
+            p.context_valid ? 1u : 0u, p.quarantined ? 1u : 0u,
+            p.stock_bound ? 1u : 0u, p.snapshot_resolved ? 1u : 0u,
+            static_cast<unsigned long long>(p.logical_hash),
+            p.logical_hash_allowed ? 1u : 0u, p.companion_ready ? 1u : 0u,
+            static_cast<unsigned>(sem.state), reason);
+        reshade::log::message(reshade::log::level::info, line);
+        if (native_t1) native_t1->Release();
+    }
+#endif
     if (!material_ready ||
         !prepared.material_resources.spec_rgb) {
 #if !defined(DSRRL_RELEASE_CLEANUP)
@@ -1290,6 +1628,9 @@ bool pmetal_envspec_draw_runtime::prepare(
     }
 #endif
     effect_latch(effect_spec_rgb_ready_);
+#if defined(DSRRL_EXPERIMENTAL_OTHER_METAL_PTDE_ENVSPEC)
+    downstream_gate.next(5u, "b12_carrier");
+#endif
 #endif
 
     const bool stable_envdiffuse_consumer_diag =
@@ -1550,6 +1891,9 @@ bool pmetal_envspec_draw_runtime::prepare(
     }
 
     effect_latch(effect_b12_ready_);
+#if defined(DSRRL_EXPERIMENTAL_OTHER_METAL_PTDE_ENVSPEC)
+    downstream_gate.next(6u, "envdiffuse_resource");
+#endif
 
 #if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG)
     // Probe identity is inherited from the already-authenticated EnvSpec
@@ -1949,6 +2293,9 @@ bool pmetal_envspec_draw_runtime::prepare(
 #endif
     prepared.request.sampler_count =
         request_sampler_count;
+#if defined(DSRRL_EXPERIMENTAL_OTHER_METAL_PTDE_ENVSPEC)
+    downstream_gate.next(7u, "draw_mutation");
+#endif
 
     draw_tx_mutation verify{};
     if (build_island_draw_mutation(
@@ -1969,8 +2316,17 @@ bool pmetal_envspec_draw_runtime::prepare(
     }
 
     prepared.ready = true;
+#if defined(DSRRL_EXPERIMENTAL_OTHER_METAL_PTDE_ENVSPEC)
+    downstream_gate.complete();
+#endif
     effect_latch(effect_request_ready_);
     telemetry::hot_count(requests_);
+#if defined(DSRRL_EXPERIMENTAL_OTHER_METAL_PTDE_ENVSPEC)
+    if (experimental_material)
+        log_other_metal_stage_once(
+            "request_ready", 1u, material, decision,
+            source.unkeyed_hook_fallback);
+#endif
 
     if (stable_envdiffuse_consumer_diag &&
         !g_envdiffuse_consumer_logged.exchange(

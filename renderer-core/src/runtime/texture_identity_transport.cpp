@@ -8,14 +8,17 @@
 #include "dsrrl/runtime/texture_identity_transport.hpp"
 
 #include <Windows.h>
+#include <reshade.hpp>
 #include <bcrypt.h>
 
 #include <algorithm>
+#include <atomic>
 #include <array>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
 #include <fstream>
+#include <cstdio>
 #include <string>
 #include <vector>
 
@@ -23,6 +26,13 @@
 
 extern "C" void dsrrl_texture_name_hook_entry();
 extern "C" void dsrrl_texture_name_clear_hook_entry();
+extern "C" void dsrrl_spc25_packet_source_hook_entry();
+extern "C" void dsrrl_spc25_packet_decode_hook_entry();
+extern "C" {
+void *g_dsrrl_spc25_writer_target = nullptr;
+void *g_dsrrl_spc25_packet_resume = nullptr;
+void *g_dsrrl_spc25_reader_resume = nullptr;
+}
 
 extern "C" {
 void *g_dsrrl_texture_name_resume = nullptr;
@@ -37,6 +47,20 @@ constexpr char k_exe_sha256[] =
 
 constexpr std::uintptr_t k_name_rva = 0x583AA6u;
 constexpr std::uintptr_t k_clear_rva = 0x583E81u;
+constexpr std::uintptr_t k_packet_rva = 0x583BCEu;
+constexpr std::uintptr_t k_writer_rva = 0x57EFB0u;
+constexpr std::uintptr_t k_packet_resume_rva = 0x583BF2u;
+constexpr std::uintptr_t k_decoder_rva = 0x57F000u;
+constexpr std::uintptr_t k_decoder_resume_rva = 0x57F00Fu;
+constexpr std::array<std::uint8_t,15> k_decoder_bytes = {
+    0x48,0x89,0x5C,0x24,0x08,
+    0x48,0x89,0x74,0x24,0x10,
+    0x57,0x48,0x83,0xEC,0x20
+};
+constexpr std::array<std::uint8_t,15> k_packet_bytes = {
+    0x48,0x8B,0xC8,0x4C,0x8B,0xC7,0x8B,0xD6,
+    0xE8,0xD5,0xB3,0xFF,0xFF,0xEB,0x15
+};
 
 constexpr std::array<std::uint8_t,14> k_name_bytes = {
     0x4C,0x8D,0x75,0xE7,0x48,0x83,0x7D,0xFF,0x08,0x4C,0x0F,0x43,0x75,0xE7
@@ -55,12 +79,65 @@ struct hook {
 };
 
 std::uintptr_t g_base = 0;
-hook g_name{}, g_clear{};
+hook g_name{}, g_clear{}, g_packet{}, g_decoder{};
 hook_status g_status{};
 constexpr std::size_t k_logical_name_capacity = 512u;
 thread_local std::array<wchar_t,k_logical_name_capacity + 1u>
     g_logical_name{};
 thread_local std::size_t g_logical_name_length = 0u;
+#if defined(DSRRL_EXPERIMENTAL_SPC_MATERIAL_BATCH)
+std::atomic<std::uint64_t> g_texture_name_hook_calls{0u};
+std::atomic<std::uint64_t> g_texture_name_complete{0u};
+std::atomic<std::uint64_t> g_texture_name_clears{0u};
+std::atomic<std::uint64_t> g_texture_name_snapshots{0u};
+std::atomic<std::uint64_t> g_cpu_packet_writer_calls{0u};
+std::atomic<std::uint64_t> g_cpu_packet_name_matches{0u};
+std::atomic<std::uint64_t> g_cpu_cache_name_equal{0u};
+std::atomic<std::uint64_t> g_cpu_cache_name_different{0u};
+std::atomic<std::uint64_t> g_cpu_cache_name_unreadable{0u};
+std::atomic<std::uint64_t> g_cpu_rtti_exact{0u};
+std::atomic<std::uint64_t> g_cpu_rtti_unavailable{0u};
+std::atomic<std::uint64_t> g_cpu_tex2d_cpu_objects{0u};
+std::atomic<std::uint64_t> g_cpu_tex2d_fields_readable{0u};
+std::atomic<std::uint64_t> g_cpu_tex2d_p28_nonnull{0u};
+std::atomic<std::uint64_t> g_cpu_tex2d_p30_nonnull{0u};
+std::atomic<std::uint64_t> g_cpu_tex2d_both_nonnull{0u};
+
+std::atomic<std::uint64_t> g_cpu_decode_calls{0u};
+std::atomic<std::uint64_t> g_cpu_decode_payload_readable{0u};
+std::atomic<std::uint64_t> g_cpu_decode_payload_writer_pointer_seen{0u};
+// Diagnostic-only bounded pointer census; the absence of a certified
+// lifetime link forbids using these entries as a resource/asset authority.
+std::array<std::atomic<std::uintptr_t>,1024> g_cpu_writer_pointers{};
+// One-time CPU writer snapshot indexed by monotonically increasing writer_seq.
+// Snapshot slots are never rewritten within a run; published_srv release
+// enables concurrent acquire-only reader without a lock or COM calls.
+// Non-owning addresses can be reused: equality is observation, not authority.
+struct native_named_source {
+    std::atomic<std::uintptr_t> published_srv{0u};
+    std::uintptr_t texture = 0u;
+    std::uint32_t source_id = 0u;
+    std::array<char,65u> ascii_name{};
+};
+std::array<native_named_source,1024u> g_native_named_sources{};
+std::atomic<std::uint64_t> g_native_t1_checks{0u};
+std::atomic<std::uint64_t> g_native_t1_srv_matches{0u};
+std::atomic<std::uint64_t> g_native_t1_resource_matches{0u};
+std::atomic<std::uint64_t> g_native_t1_ambiguous{0u};
+std::atomic<std::uint32_t> g_native_t1_match_logs{0u};
+std::atomic<std::uint32_t> g_native_t1_no_match_logs{0u};
+// Non-owning addresses only. Teardown callback tombstones matching writer
+// slots and frees their diagnostic seen-set entries for the NEXT lifetime.
+constexpr std::size_t k_native_t1_seen_capacity = 8192u;
+constexpr std::size_t k_native_t1_seen_mask =
+    k_native_t1_seen_capacity - 1u;
+std::array<std::atomic<std::uintptr_t>,
+           k_native_t1_seen_capacity> g_native_t1_seen{};
+std::atomic<std::uint64_t> g_native_t1_destroy_events{0u};
+std::atomic<std::uint64_t> g_native_t1_writer_retired{0u};
+std::atomic<std::uint64_t> g_native_t1_seen_rearmed{0u};
+std::atomic<std::uint32_t> g_native_t1_retire_logs{0u};
+#endif
 
 bool readable_range(
     const void *ptr,
@@ -118,6 +195,90 @@ bool readable_range(
     }
 
     return true;
+}
+
+// Diagnostic only: resolve the *type* of the exact CPU object passed to
+// retail 0x808D. The authenticated EXE .rdata boundaries are RVA
+// 0x129D000..0x1A24C00; the runtime base is ASLR-adjusted. Do not
+// inspect its members or cast this managed object to a native D3D interface.
+bool attest_cpu_object_rtti(
+    const void *engine_object,
+    char (&type_name)[96],
+    std::uint32_t &vtable_rva) noexcept
+{
+    type_name[0] = 0;
+    vtable_rva = 0u;
+    if (!engine_object || !g_base)
+        return false;
+    // PE32+ owner EXE: COL/vftable in .rdata, TypeDescriptor in .data.
+    // The previous .rdata-only check rejected every valid DLGR type.
+    constexpr std::uintptr_t rdata_begin = 0x129D000u;
+    constexpr std::uintptr_t rdata_end = 0x1A24C00u;
+    constexpr std::uintptr_t data_begin = 0x1A25000u;
+    constexpr std::uintptr_t data_end = 0x1D0AF78u;
+    const auto within = [](std::uintptr_t rva, std::size_t bytes,
+                           std::uintptr_t begin, std::uintptr_t end) noexcept {
+        return rva >= begin && rva < end && bytes <= end-rva;
+    };
+    const auto within_rdata = [&](std::uintptr_t rva,
+                                   std::size_t bytes) noexcept {
+        return within(rva, bytes, rdata_begin, rdata_end);
+    };
+    const auto within_data = [&](std::uintptr_t rva,
+                                  std::size_t bytes) noexcept {
+        return within(rva, bytes, data_begin, data_end);
+    };
+    std::uintptr_t vtable = 0u;
+    if (!readable_range(engine_object, sizeof(vtable)))
+        return false;
+    std::memcpy(&vtable, engine_object, sizeof(vtable));
+    if (vtable < g_base || vtable - g_base < sizeof(vtable))
+        return false;
+    const auto vrva = vtable - g_base;
+    if (!within_rdata(vrva - sizeof(vtable), sizeof(vtable) * 2u))
+        return false;
+    vtable_rva = static_cast<std::uint32_t>(vrva);
+    std::uintptr_t locator = 0u;
+    const auto *locator_field = reinterpret_cast<const void *>(
+        vtable - sizeof(vtable));
+    if (!readable_range(locator_field,sizeof(locator)))
+        return false;
+    std::memcpy(&locator,locator_field,sizeof(locator));
+    if (locator < g_base)
+        return false;
+    const auto lrva = locator - g_base;
+    if (!within_rdata(lrva,24u) ||
+        !readable_range(reinterpret_cast<const void *>(locator),24u))
+        return false;
+    std::array<std::uint32_t,6u> col{};
+    std::memcpy(col.data(),reinterpret_cast<const void *>(locator),24u);
+    // PE32+ MSVC RTTI complete-object locator, self-relative signature 1.
+    if (col[0] != 1u || col[5] != lrva)
+        return false;
+    const auto descriptor = static_cast<std::uintptr_t>(col[3]);
+    if (!within_data(descriptor,16u+sizeof(type_name)))
+        return false;
+    const auto *decorated = reinterpret_cast<const char *>(
+        g_base+descriptor+16u);
+    if (!readable_range(decorated,sizeof(type_name)))
+        return false;
+    if (std::memcmp(decorated,".?AV",4u) != 0 &&
+        std::memcmp(decorated,".?AU",4u) != 0)
+        return false;
+    for (std::size_t i=0u;i<sizeof(type_name);++i) {
+        const unsigned char ch =
+            static_cast<unsigned char>(decorated[i]);
+        if (!ch) {
+            if (i < 6u) return false;
+            type_name[i] = 0;
+            return true;
+        }
+        if (ch < 33u || ch > 126u)
+            return false;
+        type_name[i] = static_cast<char>(ch);
+    }
+    type_name[0] = 0;
+    return false;
 }
 
 bool write_bytes(
@@ -370,6 +531,9 @@ bool exe_matches() noexcept
 void capture_name(
     const wchar_t *logical_name) noexcept
 {
+#if defined(DSRRL_EXPERIMENTAL_SPC_MATERIAL_BATCH)
+    g_texture_name_hook_calls.fetch_add(1u, std::memory_order_relaxed);
+#endif
     g_logical_name_length = 0u;
     g_logical_name[0] = L'\0';
 
@@ -442,6 +606,10 @@ void capture_name(
                     L'\0';
                 g_logical_name_length =
                     copied;
+#if defined(DSRRL_EXPERIMENTAL_SPC_MATERIAL_BATCH)
+                if (copied != 0u)
+                    g_texture_name_complete.fetch_add(1u, std::memory_order_relaxed);
+#endif
                 return;
             }
 
@@ -469,14 +637,204 @@ dsrrl_texture_name_observer(
 extern "C" void
 dsrrl_texture_name_clear_observer() noexcept
 {
+#if defined(DSRRL_EXPERIMENTAL_SPC_MATERIAL_BATCH)
+    g_texture_name_clears.fetch_add(1u, std::memory_order_relaxed);
+#endif
     g_logical_name_length = 0u;
     g_logical_name[0] = L'\0';
 }
 
+// Verified CPU-only edge at retail writer call-site: cache-entry (RBX),
+// engine object (RDI), and entry identifier (ESI). This does NOT identify SRV.
+extern "C" void dsrrl_spc25_packet_source_observer(
+    const void *cache_entry, const void *engine_object,
+    std::uint32_t source_id) noexcept
+{
+#if defined(DSRRL_EXPERIMENTAL_SPC_MATERIAL_BATCH)
+    const auto writer_seq = g_cpu_packet_writer_calls.fetch_add(
+        1u, std::memory_order_relaxed);
+    if(writer_seq < g_cpu_writer_pointers.size())
+        g_cpu_writer_pointers[writer_seq].store(
+            reinterpret_cast<std::uintptr_t>(engine_object),
+            std::memory_order_release);
+    const wchar_t *name = nullptr;
+    std::size_t length = 0u;
+    if(!cache_entry || !engine_object || source_id == 0u ||
+       !snapshot_raw(name, length) || !name || length == 0u)
+        return;
+    // The retail 0x140518A70 lookup compares the UTF16 pointer at
+    // TexHdlResCap cache-entry+0x08. Attest the exact node's name
+    // independently; a live TLS snapshot alone was not an equality proof.
+    bool readable = false;
+    bool equal = false;
+    const auto *name_field = reinterpret_cast<const wchar_t *const *>(
+        static_cast<const std::uint8_t *>(cache_entry) + 8u);
+    if(readable_range(name_field,sizeof(*name_field))) {
+        const auto *node_name = *name_field;
+        if(node_name && length < 512u &&
+           readable_range(node_name,(length+1u)*sizeof(wchar_t))) {
+            readable = true;
+            equal = node_name[length] == L'\0' &&
+                std::char_traits<wchar_t>::compare(
+                    node_name,name,length) == 0;
+        }
+    }
+    if(!readable)
+        g_cpu_cache_name_unreadable.fetch_add(1u,std::memory_order_relaxed);
+    else if(equal)
+        g_cpu_cache_name_equal.fetch_add(1u,std::memory_order_relaxed);
+    else
+        g_cpu_cache_name_different.fetch_add(1u,std::memory_order_relaxed);
+    char payload_rtti[96]{};
+    std::uint32_t payload_vtable_rva = 0u;
+    const bool rtti_valid = attest_cpu_object_rtti(
+        engine_object,payload_rtti,payload_vtable_rva);
+    if(rtti_valid)
+        g_cpu_rtti_exact.fetch_add(1u,std::memory_order_relaxed);
+    else
+        g_cpu_rtti_unavailable.fetch_add(1u,std::memory_order_relaxed);
+
+    // Exact-host 0x140CE1EC0 calls ID3D11Device::CreateTexture2D
+    // (vtable +0x28) with output at DLTexture2D+0x28. Subsequently
+    // 0x140CE1D80 calls CreateShaderResourceView (vtable +0x38)
+    // with output at +0x30. At this earlier packet-writer instant
+    // these fields may be null or not yet initialized. Read-only CPU
+    // snapshot; never dereference/call/retain COM, match by address, or
+    // give these snapshots any live SRV binding authority.
+    const bool is_exact_tex2d =
+        equal && rtti_valid &&
+        payload_vtable_rva == 0x014AA4A8u &&
+        std::strcmp(payload_rtti,".?AVDLTexture2D@DLGR@@") == 0;
+    std::array<std::uintptr_t,2u> managed_fields{};
+    bool fields_readable = false;
+    if(is_exact_tex2d) {
+        g_cpu_tex2d_cpu_objects.fetch_add(1u,std::memory_order_relaxed);
+        const auto *fields_address =
+            static_cast<const std::uint8_t *>(engine_object)+0x28u;
+        if(readable_range(fields_address,sizeof(managed_fields))) {
+            std::memcpy(managed_fields.data(),fields_address,
+                        sizeof(managed_fields));
+            fields_readable = true;
+            g_cpu_tex2d_fields_readable.fetch_add(
+                1u,std::memory_order_relaxed);
+            if(managed_fields[0])
+                g_cpu_tex2d_p28_nonnull.fetch_add(
+                    1u,std::memory_order_relaxed);
+            if(managed_fields[1])
+                g_cpu_tex2d_p30_nonnull.fetch_add(
+                    1u,std::memory_order_relaxed);
+            if(managed_fields[0] && managed_fields[1])
+                g_cpu_tex2d_both_nonnull.fetch_add(
+                    1u,std::memory_order_relaxed);
+            // Purely observational. Store only nonzero source texture/SRV
+            // pointer values from an exact named, RTTI-verified 2D owner.
+            // Do not retain or invoke these native pointers.
+            if(managed_fields[0] && managed_fields[1] &&
+               writer_seq < g_native_named_sources.size()) {
+                auto &slot = g_native_named_sources[writer_seq];
+                slot.texture = managed_fields[0];
+                slot.source_id = source_id;
+                const auto copy_length = std::min<std::size_t>(length,64u);
+                for(std::size_t i=0u;i<copy_length;++i) {
+                    const auto ch = static_cast<std::uint32_t>(name[i]);
+                    slot.ascii_name[i] =
+                        (ch >= 32u && ch <= 126u) ?
+                        static_cast<char>(ch) : '?';
+                }
+                slot.ascii_name[copy_length] = '\0';
+                slot.published_srv.store(
+                    managed_fields[1],std::memory_order_release);
+            }
+        }
+    }
+    const auto count = g_cpu_packet_name_matches.fetch_add(
+        1u,std::memory_order_relaxed)+1u;
+    if(count <= 24u || (count & (count-1u)) == 0u) {
+        char ascii[65]{};
+        for(std::size_t i=0u;i<std::min<std::size_t>(length,64u);++i) {
+            auto ch=static_cast<std::uint32_t>(name[i]);
+            ascii[i]=(ch>=32u && ch<=126u) ? static_cast<char>(ch) : '?';
+        }
+        char msg[640]{};
+        std::snprintf(msg,sizeof(msg),
+          "[DSRRL SPC25 CPU 808D] stage=writer_input "
+          "entry=%p engine_object=%p source_id=%u loader_name=%s "
+          "scope=RETAIL_TLS cache_name=%s cpu_vtable_rva=%08X "
+          "cpu_rtti=%s tex2d_fields=%s p28_texture_snapshot=%p "
+          "p30_srv_snapshot=%p source_to_srv=UNVERIFIED pixel=OPEN",
+          cache_entry,engine_object,source_id,ascii,
+          !readable ? "UNREADABLE" : (equal ? "EXACT" : "DIFFERENT"),
+          payload_vtable_rva,
+          rtti_valid ? payload_rtti : "UNVERIFIED",
+          !is_exact_tex2d ? "NOT_2D" :
+              (fields_readable ? "READABLE" : "UNREADABLE"),
+          reinterpret_cast<const void *>(managed_fields[0]),
+          reinterpret_cast<const void *>(managed_fields[1]));
+        reshade::log::message(reshade::log::level::info,msg);
+    }
+#else
+    (void)cache_entry;(void)engine_object;(void)source_id;
+#endif
+}
+
+extern "C" void dsrrl_spc25_packet_decode_observer(
+    const void *entity, const void *cursor_slot) noexcept
+{
+#if defined(DSRRL_EXPERIMENTAL_SPC_MATERIAL_BATCH)
+    const auto seq = g_cpu_decode_calls.fetch_add(
+        1u, std::memory_order_relaxed) + 1u;
+    std::uintptr_t cursor = 0u;
+    std::uintptr_t payload = 0u;
+    bool readable = false;
+    if(entity != nullptr && readable_range(cursor_slot,sizeof(cursor))) {
+        std::memcpy(&cursor,cursor_slot,sizeof(cursor));
+        if(cursor <= (UINTPTR_MAX - 15u)) {
+            const auto address = (cursor+7u) & ~std::uintptr_t{7u};
+            if(readable_range(reinterpret_cast<const void *>(address),
+                              sizeof(payload))) {
+                std::memcpy(&payload,reinterpret_cast<const void *>(address),
+                            sizeof(payload));
+                readable = true;
+                g_cpu_decode_payload_readable.fetch_add(
+                    1u,std::memory_order_relaxed);
+            }
+        }
+    }
+    bool writer_pointer_seen = false;
+    if(readable && payload != 0u) {
+        const auto max = std::min<std::uint64_t>(
+            g_cpu_packet_writer_calls.load(std::memory_order_acquire),
+            g_cpu_writer_pointers.size());
+        for(std::uint64_t i=0u;i<max;++i) {
+            if(g_cpu_writer_pointers[static_cast<std::size_t>(i)].load(
+                   std::memory_order_acquire) == payload) {
+                writer_pointer_seen = true;
+                break;
+            }
+        }
+        if(writer_pointer_seen)
+            g_cpu_decode_payload_writer_pointer_seen.fetch_add(
+                1u,std::memory_order_relaxed);
+    }
+    if(seq <= 24u || (seq & (seq-1u)) == 0u) {
+        char msg[320]{};
+        std::snprintf(msg,sizeof(msg),
+            "[DSRRL SPC25 CPU 808D] stage=typed_decoder_input "
+            "entity=%p payload=%p cursor_valid=%u "
+            "writer_pointer_seen=%u lifetime=UNVERIFIED srv=UNVERIFIED pixel=OPEN",
+            entity,reinterpret_cast<const void *>(payload),
+            readable ? 1u : 0u, writer_pointer_seen ? 1u : 0u);
+        reshade::log::message(reshade::log::level::info,msg);
+    }
+#else
+    (void)entity; (void)cursor_slot;
+#endif
+}
+
 bool install() noexcept
 {
-    if (g_name.patched ||
-        g_clear.patched)
+    if (g_name.patched || g_clear.patched ||
+        g_packet.patched || g_decoder.patched)
         return false;
 
     g_status = {};
@@ -522,6 +880,34 @@ bool install() noexcept
 
     g_status.name_hook_armed = true;
     g_status.clear_hook_armed = true;
+#if defined(DSRRL_EXPERIMENTAL_SPC_MATERIAL_BATCH)
+    if(!prepare_hook(g_packet,k_packet_rva,k_packet_bytes,
+        reinterpret_cast<void *>(&dsrrl_spc25_packet_source_hook_entry)))
+        goto fail;
+    g_dsrrl_spc25_writer_target =
+        reinterpret_cast<void *>(g_base+k_writer_rva);
+    g_dsrrl_spc25_packet_resume =
+        reinterpret_cast<void *>(g_base+k_packet_resume_rva);
+    if(!arm(g_packet))
+        goto fail;
+    g_status.packet_hook_armed = true;
+    // Startup-crashing typed decoder observer quarantined. The proven
+    // name-cache/packet-writer probes remain active and observational.
+#if defined(DSRRL_EXPERIMENTAL_SPC25_DECODER_PROBE)
+    if(!prepare_hook(g_decoder,k_decoder_rva,k_decoder_bytes,
+        reinterpret_cast<void *>(&dsrrl_spc25_packet_decode_hook_entry)))
+        goto fail;
+    g_dsrrl_spc25_reader_resume =
+        reinterpret_cast<void *>(g_base+k_decoder_resume_rva);
+    if(!arm(g_decoder))
+        goto fail;
+    g_status.decoder_hook_armed = true;
+#endif
+    reshade::log::message(reshade::log::level::info,
+       "[DSRRL SPC25 CPU 808D] source packet writer armed; "
+       "typed decoder QUARANTINED; cache-name diagnostic only, "
+       "no SRV authority or GPU modification");
+#endif
     return true;
 
 fail:
@@ -531,20 +917,25 @@ fail:
 
 void uninstall() noexcept
 {
-    const bool clear_ok =
-        restore(g_clear);
-    const bool name_ok =
-        restore(g_name);
+    const bool decoder_ok = restore(g_decoder);
+    const bool packet_ok = restore(g_packet);
+    const bool clear_ok = restore(g_clear);
+    const bool name_ok = restore(g_name);
 
-    if (!clear_ok || !name_ok) {
+    if (!decoder_ok || !packet_ok || !clear_ok || !name_ok) {
         g_status.restore_failed = true;
         g_status.name_hook_armed =
             g_name.patched;
         g_status.clear_hook_armed =
             g_clear.patched;
+        g_status.packet_hook_armed = g_packet.patched;
+        g_status.decoder_hook_armed = g_decoder.patched;
         return;
     }
 
+    g_dsrrl_spc25_reader_resume = nullptr;
+    g_dsrrl_spc25_writer_target = nullptr;
+    g_dsrrl_spc25_packet_resume = nullptr;
     g_dsrrl_texture_name_resume = nullptr;
     g_dsrrl_texture_name_clear_resume = nullptr;
     g_logical_name_length = 0u;
@@ -572,6 +963,9 @@ bool snapshot_raw(
 
     logical_name = g_logical_name.data();
     length = g_logical_name_length;
+#if defined(DSRRL_EXPERIMENTAL_SPC_MATERIAL_BATCH)
+    g_texture_name_snapshots.fetch_add(1u, std::memory_order_relaxed);
+#endif
     return true;
 }
 
@@ -594,6 +988,215 @@ bool snapshot(
         logical_name.clear();
         return false;
     }
+}
+
+bool should_sample_native_ps_t1(const void *native_view) noexcept
+{
+#if defined(DSRRL_EXPERIMENTAL_SPC_MATERIAL_BATCH)
+    if (!native_view)
+        return false;
+    // Diagnostic-only 8192-entry atomic seen set. No reference ownership
+    // or lifetime claim; this prevents a 1024-entry scan on every draw.
+    // Reused addresses are deliberately not promoted to source authority.
+    const auto key = reinterpret_cast<std::uintptr_t>(native_view);
+    if (!key)
+        return false;
+    const auto start = static_cast<std::size_t>(
+        (key >> 4u) ^ (key >> 17u) ^ (key >> 29u)) &
+        k_native_t1_seen_mask;
+    for (std::size_t probe = 0u; probe < 8u; ++probe) {
+        auto &slot = g_native_t1_seen[(start + probe) & k_native_t1_seen_mask];
+        auto previous = slot.load(std::memory_order_acquire);
+        if (previous == key)
+            return false;
+        if (!previous && slot.compare_exchange_strong(
+                previous, key, std::memory_order_acq_rel,
+                std::memory_order_acquire))
+            return true;
+        if (previous == key)
+            return false;
+    }
+    return false; // Capacity/collision: fail-open, never guess a match.
+#else
+    (void)native_view;
+    return false;
+#endif
+}
+
+void retire_native_ps_t1(const void *native_view) noexcept
+{
+#if defined(DSRRL_EXPERIMENTAL_SPC_MATERIAL_BATCH)
+    const auto key = reinterpret_cast<std::uintptr_t>(native_view);
+    if (!key)
+        return;
+    g_native_t1_destroy_events.fetch_add(
+        1u,std::memory_order_relaxed);
+    std::uint32_t retired = 0u;
+    const auto observed = std::min<std::size_t>(
+        static_cast<std::size_t>(
+            g_cpu_packet_writer_calls.load(std::memory_order_acquire)),
+        g_native_named_sources.size());
+    for(std::size_t i = 0u;i < observed;++i) {
+        auto &slot = g_native_named_sources[i];
+        auto expected = key;
+        // Atomic tombstone: a returned native pointer may be reused.
+        // Invalidate all named identities associated with the old SRV.
+        if(slot.published_srv.compare_exchange_strong(
+               expected,0u,std::memory_order_acq_rel,
+               std::memory_order_acquire))
+            ++retired;
+    }
+    const auto start = static_cast<std::size_t>(
+        (key >> 4u) ^ (key >> 17u) ^ (key >> 29u)) &
+        k_native_t1_seen_mask;
+    bool rearmed = false;
+    for(std::size_t probe = 0u; probe < 8u; ++probe) {
+        auto &slot = g_native_t1_seen[
+            (start + probe) & k_native_t1_seen_mask];
+        auto expected = key;
+        if(slot.compare_exchange_strong(
+              expected,0u,std::memory_order_acq_rel,
+              std::memory_order_acquire)) {
+            rearmed = true;
+            break;
+        }
+    }
+    if(retired)
+        g_native_t1_writer_retired.fetch_add(
+            retired,std::memory_order_relaxed);
+    if(rearmed)
+        g_native_t1_seen_rearmed.fetch_add(
+            1u,std::memory_order_relaxed);
+    if(retired &&
+       g_native_t1_retire_logs.fetch_add(
+           1u,std::memory_order_relaxed) < 16u) {
+        char msg[384]{};
+        std::snprintf(msg,sizeof(msg),
+            "[DSRRL SPC25 VIEW LIFETIME] stage=destroy_resource_view "
+            "native_srv=%p writer_snapshots_tombstoned=%u "
+            "new_epoch_sampling_rearmed=%u "
+            "native_view_identity=VALUE_ONLY "
+            "cross_epoch=UNVERIFIED srv_swap=0 pixel=OPEN",
+            native_view,retired,rearmed ? 1u : 0u);
+        reshade::log::message(
+            reshade::log::level::info,msg);
+    }
+#else
+    (void)native_view;
+#endif
+}
+
+void diagnose_native_ps_t1(
+    const void *native_view,
+    const void *native_resource) noexcept
+{
+#if defined(DSRRL_EXPERIMENTAL_SPC_MATERIAL_BATCH)
+    if (!native_view || !native_resource)
+        return;
+    const auto native_srv =
+        reinterpret_cast<std::uintptr_t>(native_view);
+    const auto native_tex =
+        reinterpret_cast<std::uintptr_t>(native_resource);
+    const auto observed = std::min<std::size_t>(
+        static_cast<std::size_t>(
+            g_cpu_packet_writer_calls.load(std::memory_order_acquire)),
+        g_native_named_sources.size());
+    std::uint32_t matches = 0u;
+    std::uint32_t full_matches = 0u;
+    const native_named_source *first = nullptr;
+    for(std::size_t i=0u;i<observed;++i) {
+        const auto &slot = g_native_named_sources[i];
+        if (slot.published_srv.load(std::memory_order_acquire)
+                != native_srv)
+            continue;
+        ++matches;
+        if(!first)
+            first = &slot;
+        if(slot.texture == native_tex)
+            ++full_matches;
+    }
+    g_native_t1_checks.fetch_add(1u,std::memory_order_relaxed);
+    if(matches) {
+        g_native_t1_srv_matches.fetch_add(1u,std::memory_order_relaxed);
+        if(full_matches == 1u && matches == 1u)
+            g_native_t1_resource_matches.fetch_add(
+                1u,std::memory_order_relaxed);
+        if(matches != 1u || full_matches != 1u)
+            g_native_t1_ambiguous.fetch_add(
+                1u,std::memory_order_relaxed);
+    }
+    // Rate-limit both categories independently so early PS t1 misses
+    // cannot suppress logging of a later exact pointer-value match.
+    const bool should_log = matches
+        ? g_native_t1_match_logs.fetch_add(
+              1u,std::memory_order_relaxed) < 32u
+        : g_native_t1_no_match_logs.fetch_add(
+              1u,std::memory_order_relaxed) < 8u;
+    if (!should_log)
+        return;
+    char msg[640]{};
+    std::snprintf(msg,sizeof(msg),
+        "[DSRRL SPC25 NATIVE T1] stage=cpu_srv_pointer_compare "
+        "native_srv=%p native_texture=%p writer_slots=%llu "
+        "matching_srv=%u matching_srv_and_texture=%u "
+        "source_name=%s source_id=%u "
+        "cross_epoch_lifetime=OPEN reuse_collision=UNVERIFIED "
+        "bridge_authority=0 srv_swap=0 pixel=OPEN",
+        native_view,native_resource,
+        static_cast<unsigned long long>(observed),
+        matches,full_matches,
+        first ? first->ascii_name.data() : "NONE",
+        first ? first->source_id : 0u);
+    reshade::log::message(reshade::log::level::info,msg);
+#else
+    (void)native_view;
+    (void)native_resource;
+#endif
+}
+
+texture_name_liveness liveness() noexcept
+{
+    texture_name_liveness out{};
+#if defined(DSRRL_EXPERIMENTAL_SPC_MATERIAL_BATCH)
+    out.hook_calls =
+        g_texture_name_hook_calls.load(std::memory_order_relaxed);
+    out.names_captured =
+        g_texture_name_complete.load(std::memory_order_relaxed);
+    out.names_cleared =
+        g_texture_name_clears.load(std::memory_order_relaxed);
+    out.name_snapshots =
+        g_texture_name_snapshots.load(std::memory_order_relaxed);
+    out.packet_writer_calls =
+        g_cpu_packet_writer_calls.load(std::memory_order_relaxed);
+    out.packet_named_in_scope =
+        g_cpu_packet_name_matches.load(std::memory_order_relaxed);
+    out.cache_name_equal =
+        g_cpu_cache_name_equal.load(std::memory_order_relaxed);
+    out.cache_name_different =
+        g_cpu_cache_name_different.load(std::memory_order_relaxed);
+    out.cache_name_unreadable =
+        g_cpu_cache_name_unreadable.load(std::memory_order_relaxed);
+    out.cpu_rtti_exact =
+        g_cpu_rtti_exact.load(std::memory_order_relaxed);
+    out.cpu_rtti_unavailable =
+        g_cpu_rtti_unavailable.load(std::memory_order_relaxed);
+    out.cpu_tex2d_cpu_objects =
+        g_cpu_tex2d_cpu_objects.load(std::memory_order_relaxed);
+    out.cpu_tex2d_fields_readable =
+        g_cpu_tex2d_fields_readable.load(std::memory_order_relaxed);
+    out.cpu_tex2d_p28_nonnull =
+        g_cpu_tex2d_p28_nonnull.load(std::memory_order_relaxed);
+    out.cpu_tex2d_p30_nonnull =
+        g_cpu_tex2d_p30_nonnull.load(std::memory_order_relaxed);
+    out.cpu_tex2d_both_nonnull =
+        g_cpu_tex2d_both_nonnull.load(std::memory_order_relaxed);
+    out.decode_calls = g_cpu_decode_calls.load(std::memory_order_relaxed);
+    out.decode_payload_readable =
+        g_cpu_decode_payload_readable.load(std::memory_order_relaxed);
+    out.decode_writer_pointer_seen =
+        g_cpu_decode_payload_writer_pointer_seen.load(std::memory_order_relaxed);
+#endif
+    return out;
 }
 
 } // namespace dsrrl::runtime::texture_identity_transport

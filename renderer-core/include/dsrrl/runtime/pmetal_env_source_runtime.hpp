@@ -30,6 +30,9 @@ struct pmetal_envspec_source {
     // producer payload/material identity changes, so upload consumers can
     // skip redundant GPU writes without draw-time reclassification.
     std::uint64_t generation = 0u;
+    // Diagnostic provenance only: unkeyed V13 hook snapshot was consumed by
+    // an opt-in SPC material. Never treat this flag as material authorization.
+    bool unkeyed_hook_fallback = false;
 };
 
 struct pmetal_env_source_runtime_telemetry {
@@ -103,6 +106,10 @@ public:
     bool install() noexcept;
     void uninstall() noexcept;
     bool latest(const operators::material_response::material_identity &material, pmetal_envspec_source &out) const noexcept;
+    // Exact producer first. SPC opt-in can additionally consume the same
+    // unkeyed V13 latest_hook_source() used by baseline P_Metal.
+    // The fallback is diagnostic and may inherit another source.
+    bool latest_exact_material(const operators::material_response::material_identity &material, pmetal_envspec_source &out) const noexcept;
     pmetal_env_source_runtime_telemetry telemetry() const noexcept;
     void reset() noexcept;
 };

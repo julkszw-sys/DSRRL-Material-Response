@@ -1,0 +1,93 @@
+name: v2.0.3-dev PTDE Workflow Port Stage 1
+
+on:
+  push:
+    branches:
+      - dev/v203-shared-ptde-workflow-c100-r17
+    paths:
+      - "renderer-core/**"
+      - ".github/workflows/v203-ptde-workflow-port.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  shared-c100-regression:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure native operator tests
+        run: cmake -S renderer-core -B build/core -DCMAKE_BUILD_TYPE=Release
+      - name: Build shared PTDE workflow, MTD authority and cross-thread source tests
+        run: >
+          cmake --build build/core
+          --target dsrrl_renderer_ptde_workflow_c100_tests
+          dsrrl_renderer_ptde_metal_envspec_baseline_tests
+          dsrrl_renderer_ptde_metal_envspec_experimental_tests
+          dsrrl_renderer_ptde_metal_exact_source_join_tests --parallel
+      - name: Verify exact preimage, MTD authority and cross-thread fail-open
+        run: ctest --test-dir build/core -R "^dsrrl_renderer_ptde_(workflow_c100|metal_envspec|metal_exact_source_join)" --output-on-failure
+
+  integrated-v203-native:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: crosire/reshade
+          ref: 3645e3025d1d98a90e318278858931f034d5d1f6
+          path: _reshade
+      - name: Audit retained R43 safety invariants
+        run: python renderer-core/tools/audit_r43_release_cleanup_hardening.py
+      - name: Configure exact v2.0.3-dev descendant
+        shell: pwsh
+        run: >
+          cmake -S renderer-core/integrated -B build-v203 -A x64
+          -DRESHADE_INCLUDE_DIR="${{ github.workspace }}/_reshade/include"
+          -DDSRRL_SOURCE_COMMIT="${{ github.sha }}"
+          -DDSRRL_BUILD_FLAVOR="v2_0_3_dev_ptde_workflow_c100_stage1"
+          -DDSRRL_RELEASE_CLEANUP=ON
+          -DDSRRL_RESOURCE_EPOCH_SHARD_SYNC=ON
+          -DDSRRL_COMPANION_TLS_4WAY=ON
+          -DDSRRL_STUTTER_PROFILE=OFF
+          -DDSRRL_STUTTER_HITCH_TRACE=OFF
+          -DDSRRL_FULL_TELEMETRY_DEFAULT_ON=OFF
+          -DDSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG=ON
+          -DDSRRL_PMETAL_FULL_PTDE_HEMENV_R3=ON
+          -DDSRRL_PMETAL_FULL_PTDE_HEMENV_R4=ON
+          -DDSRRL_PMETAL_FULL_PTDE_HEMENV_R5=ON
+          -DDSRRL_PMETAL_FULL_PTDE_HEMENV_R6=ON
+          -DDSRRL_PMETAL_FULL_PTDE_HEMENV_R7_SHADOW=ON
+          -DDSRRL_PMETAL_FULL_PTDE_HEMENV_R8_PRE_AB=ON
+          -DDSRRL_PMETAL_FULL_PTDE_HEMENV_R11_COMMON_MERGE=ON
+          -DDSRRL_PMETAL_FULL_PTDE_HEMENV_R15_PTDE_LIVEOUT_PAIR=ON
+          -DDSRRL_PMETAL_FULL_PTDE_HEMENV_R16_LEGACY_DIFFUSE_SPLIT=ON
+          -DDSRRL_PMETAL_FULL_PTDE_HEMENV_R17_PTDE_DIFFUSE_MATERIAL=ON
+          -DDSRRL_PMETAL_R19_LERP_MATERIALWORKFLOW=ON
+          -DDSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE=ON
+          -DDSRRL_PHYSICAL_CUT_UL_H3_SUBSURFACE=ON
+          -DDSRRL_PHYSICAL_CUT_POINTLIGHT_ALL=ON
+      - name: Build one integrated addon
+        shell: pwsh
+        run: |
+          cmake --build build-v203 --config Release --target dsrrl_renderer_core_integrated
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $addons = @(Get-ChildItem build-v203 -Recurse -Filter *.addon64)
+          if ($addons.Count -ne 1) { throw "Expected one addon, got $($addons.Count)" }
+          Copy-Item $addons[0].FullName DSRRL_v203_dev_workflow_stage1.addon64
+          Get-FileHash DSRRL_v203_dev_workflow_stage1.addon64 -Algorithm SHA256
+      - name: Native regression tests
+        shell: pwsh
+        run: |
+          cmake --build build-v203/renderer-core-lib --config Release --target dsrrl_renderer_ptde_workflow_c100_tests dsrrl_renderer_ptde_metal_exact_source_join_tests
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          ctest --test-dir build-v203/renderer-core-lib -C Release -R "^dsrrl_renderer_ptde_(workflow_c100|metal_exact_source_join)" --output-on-failure
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Save non-release diagnostic addon
+        uses: actions/upload-artifact@v4
+        with:
+          name: v203-dev-workflow-c100-stage1
+          path: DSRRL_v203_dev_workflow_stage1.addon64
+          if-no-files-found: error
+          retention-days: 10

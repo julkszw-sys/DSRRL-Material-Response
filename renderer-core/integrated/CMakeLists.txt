@@ -137,6 +137,21 @@ option(
     OFF)
 
 option(
+    DSRRL_EXPERIMENTAL_OTHER_METAL_PTDE_ENVSPEC
+    "Diagnostic only: exact MTD-keyed P_Metal Alp/Edge and C_Metal PTDE EnvSpec operator with source-key-only fail-open"
+    OFF)
+
+option(
+    DSRRL_EXPERIMENTAL_SPC25_DECODER_PROBE
+    "Opt-in only: typed 808D decoder diagnostic; disabled after startup crash in first runtime"
+    OFF)
+
+option(
+    DSRRL_EXPERIMENTAL_SPC_MATERIAL_BATCH
+    "Diagnostic only: 21 more exactly attested DifSpcBmp MTDs (Leather/Cloth/Wet/Metal); requires other-metal and R19, distinct c101/EnvSpec slots, full sidecar gates"
+    OFF)
+
+option(
     DSRRL_PMETAL_R19_LERP_MATERIALWORKFLOW
     "P_Metal R19: exact HemEnvLerp MaterialWorkflow topology port (R15 additive/postmerge gates, R16 diffuse split, R17 direct PTDE c100 producer)"
     OFF)
@@ -608,6 +623,8 @@ add_library(
     "${DSRRL_INTEGRATED_ADDON_SOURCE}"
     flver_identity_detour.asm
     texture_identity_detour.asm
+    spc25_packet_source_detour.asm
+    spc25_packet_reader_detour.asm
     hemdir3_mode_detour.asm
     "${DSRRL_RENDERER_CORE_ROOT}/src/runtime/a1_create_pipeline_bridge.cpp"
     "${DSRRL_RENDERER_CORE_ROOT}/src/runtime/flver_engine_hooks.cpp"
@@ -936,6 +953,31 @@ if(DSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE)
         $<$<COMPILE_LANGUAGE:CXX>:DSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE>)
 endif()
 
+if(DSRRL_EXPERIMENTAL_OTHER_METAL_PTDE_ENVSPEC)
+    if(NOT DSRRL_PMETAL_R19_LERP_MATERIALWORKFLOW OR
+       NOT DSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE OR
+       NOT DSRRL_PMETAL_FULL_PTDE_HEMENV_R17_PTDE_DIFFUSE_MATERIAL)
+        message(FATAL_ERROR
+            "Other-metal PTDE EnvSpec requires complete R15/R16/R17/R19 source and consumer lineage")
+    endif()
+    target_compile_definitions(dsrrl_renderer_core_integrated PRIVATE
+        DSRRL_EXPERIMENTAL_OTHER_METAL_PTDE_ENVSPEC)
+endif()
+
+if(DSRRL_EXPERIMENTAL_SPC25_DECODER_PROBE)
+    message(FATAL_ERROR
+        "SPC25 typed decoder hook is quarantined: owner runtime crashed before main menu; fail closed until ABI and packet-cursor semantics are independently verified")
+endif()
+
+if(DSRRL_EXPERIMENTAL_SPC_MATERIAL_BATCH)
+    if(NOT DSRRL_EXPERIMENTAL_OTHER_METAL_PTDE_ENVSPEC)
+        message(FATAL_ERROR
+            "SPC material batch requires exact other-metal producer and R15-R19 lineage")
+    endif()
+    target_compile_definitions(dsrrl_renderer_core_integrated PRIVATE
+        DSRRL_EXPERIMENTAL_SPC_MATERIAL_BATCH)
+endif()
+
 if(DSRRL_POINTLIGHT_DRAWTIME_BYPASS)
     target_compile_definitions(
         dsrrl_renderer_core_integrated
@@ -1053,6 +1095,14 @@ if(DSRRL_POINTLIGHT_PROFILE)
         dsrrl_renderer_core_integrated
         PRIVATE
         DSRRL_POINTLIGHT_PROFILE)
+endif()
+
+# SPC25 experimental builds use the existing single-addon target with
+# parallel C++ compiler instances. Keep the pre-existing exact flags,
+# source SHA, CI identity checks and all fail-open safety gates.
+if(MSVC AND DSRRL_EXPERIMENTAL_SPC_MATERIAL_BATCH)
+    target_compile_options(dsrrl_renderer_core_integrated PRIVATE
+        $<$<COMPILE_LANGUAGE:CXX>:/MP>)
 endif()
 
 if(MSVC)

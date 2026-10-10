@@ -1,5 +1,8 @@
 #include "dsrrl/runtime/material_resource_draw_runtime.hpp"
 #include "dsrrl/runtime/texture_identity_transport.hpp"
+#if defined(DSRRL_EXPERIMENTAL_SPC_MATERIAL_BATCH)
+#include "dsrrl/runtime/spc25_physical_t1_probe.hpp"
+#endif
 #include "dsrrl/runtime/runtime_hot_telemetry.hpp"
 #include "dsrrl/runtime/stutter_profiler.hpp"
 #include "dsrrl/runtime/resource_view_epoch.hpp"
@@ -22,6 +25,12 @@
 
 #include <Windows.h>
 #include <d3d11.h>
+
+#if defined(DSRRL_EXPERIMENTAL_SPC_MATERIAL_BATCH)
+// WKPDID_D3DDebugObjectName is declared by the Windows SDK in
+// d3dcommon.h and exported as an external GUID from dxguid.lib.
+#pragma comment(lib, "dxguid.lib")
+#endif
 
 #include <algorithm>
 #include <array>
@@ -126,6 +135,73 @@ std::unordered_map<std::uint64_t, companion_set> g_cache;
 // identity is not resolvable at draw time. Keep the handle quarantined until
 // its resource-view lifetime ends instead of allowing last-writer-wins identity.
 std::unordered_map<std::uint64_t, ID3D11Device *> g_ambiguous_view_device;
+
+#if defined(DSRRL_EXPERIMENTAL_SPC_MATERIAL_BATCH)
+// Experimental, exact-name-only resource->SRV handoff. The retail texture
+// name is already validated by the existing inlined name hook. A resource
+// creation can occur within the naming interval while its SRV is created
+// after the clear hook. Never infer identity from dimensions/format/MTD.
+struct attested_resource_name {
+    ID3D11Device *device = nullptr; // borrowed; cleared on destroy_device
+    std::wstring logical_name{};
+    std::uint64_t hash = 0u;
+};
+std::unordered_map<std::uint64_t,attested_resource_name>
+    g_attested_names_by_resource;
+std::unordered_map<std::uint64_t,ID3D11Device *>
+    g_ambiguous_named_resource_device;
+std::atomic_bool g_attested_resource_view_join_logged{false};
+std::atomic_bool g_early_view_join_logged{false};
+std::atomic_bool g_native_debug_name_join_logged{false};
+std::atomic_bool g_late_native_t1_recovered_logged{false};
+std::atomic<std::uint64_t> g_name_exact_init_resource{0u};
+std::atomic<std::uint64_t> g_name_exact_create_view{0u};
+std::atomic<std::uint64_t> g_name_exact_init_view{0u};
+std::atomic_bool g_name_producer_cut_logged{false};
+
+std::atomic<std::uint32_t> g_late_native_t1_stage_mask{0u};
+void log_late_native_stage_once(
+    std::uint32_t ordinal, const char *stage) noexcept
+{
+    if (ordinal >= 30u || stage == nullptr)
+        return;
+    const auto bit = std::uint32_t{1u} << ordinal;
+    if ((g_late_native_t1_stage_mask.fetch_or(
+            bit, std::memory_order_relaxed) & bit) != 0u)
+        return;
+    char msg[256]{};
+    std::snprintf(msg, sizeof(msg),
+        "[DSRRL SPC25 LATE T1] stage=%s scope=ALL_EXACT_SPC25 pixel=OPEN",
+        stage);
+    reshade::log::message(reshade::log::level::info, msg);
+}
+
+std::unordered_map<std::uint64_t,std::uint8_t> g_late_native_t1_attempts;
+
+
+
+// ReShade create_resource_view is a synchronous, pre-D3D11 creation
+// callback. A retail name may be live here even when it is gone by
+// init_resource_view. Carry only a verified exact loader name across
+// that specific pre/post callback pair, never across draws or frames.
+struct early_view_name {
+    ID3D11Device *device = nullptr; // borrowed within callback pair only
+    std::uint64_t resource = 0u;
+    reshade::api::resource_usage usage{};
+    std::wstring name{};
+    bool pending = false;
+    bool ambiguous = false;
+    void clear() noexcept {
+        device = nullptr;
+        resource = 0u;
+        name.clear();
+        pending = false;
+        ambiguous = false;
+    }
+};
+thread_local early_view_name g_early_view_name{};
+
+#endif
 #if !defined(DSRRL_RESOURCE_EPOCH_SHARD_SYNC)
 std::atomic<std::uint64_t> g_cache_epoch{1u};
 #endif
@@ -401,6 +477,11 @@ void release_cache() noexcept
         invalidate_all_companion_epochs();
         dead.swap(g_cache);
         g_ambiguous_view_device.clear();
+#if defined(DSRRL_EXPERIMENTAL_SPC_MATERIAL_BATCH)
+        g_attested_names_by_resource.clear();
+        g_ambiguous_named_resource_device.clear();
+        g_late_native_t1_attempts.clear();
+#endif
     }
 
     for (auto &entry : dead)
@@ -440,6 +521,23 @@ void release_cache_for_device(
             }
         }
 
+#if defined(DSRRL_EXPERIMENTAL_SPC_MATERIAL_BATCH)
+        // Attempts are cheap negative lookups; a device-lifetime boundary
+        // must never retain any old view-handle tombstones.
+        g_late_native_t1_attempts.clear();
+        for (auto it = g_attested_names_by_resource.begin();
+             it != g_attested_names_by_resource.end();) {
+            if (it->second.device == device)
+                it = g_attested_names_by_resource.erase(it);
+            else ++it;
+        }
+        for (auto it = g_ambiguous_named_resource_device.begin();
+             it != g_ambiguous_named_resource_device.end();) {
+            if (it->second == device)
+                it = g_ambiguous_named_resource_device.erase(it);
+            else ++it;
+        }
+#endif
         if (changed)
             invalidate_all_companion_epochs();
     }
@@ -1191,13 +1289,242 @@ void inspect_many(
     }
 }
 
+#if defined(DSRRL_EXPERIMENTAL_SPC_MATERIAL_BATCH)
+void on_init_resource(
+    reshade::api::device *device,
+    const reshade::api::resource_desc &desc,
+    const reshade::api::subresource_data *initial_data,
+    reshade::api::resource_usage,
+    reshade::api::resource resource)
+{
+    if (g_internal_create || g_quarantined.load() ||
+        device == nullptr ||
+        device->get_api() != reshade::api::device_api::d3d11 ||
+        resource.handle == 0u)
+        return;
+    // Independently collect native resource creation data; the CPU cache
+    // logical name may already have left the loader's TLS scope here.
+    spc25_physical::init(device,desc,initial_data,resource);
+    const wchar_t *raw = nullptr;
+    std::size_t size = 0u;
+    if (!texture_identity_transport::snapshot_raw(raw, size) ||
+        raw == nullptr || size == 0u)
+        return;
+    const auto hash = fnv_name(raw, size);
+    if (!generated::spec_equipment_name_hash_allowed_v12(hash) &&
+        !exact_subsurface_body_spec_hash(hash) &&
+        !generated::diffuse_name_hash_allowed_v12(hash) &&
+        !generated::normal_name_hash_allowed_v12(hash))
+        return;
+
+    g_name_exact_init_resource.fetch_add(
+        1u, std::memory_order_relaxed);
+    // Construct before locking. Mismatched identities for the same live
+    // resource are quarantined until the actual destroy_resource callback.
+    try {
+        attested_resource_name current{};
+        current.device = reinterpret_cast<ID3D11Device *>(device->get_native());
+        current.logical_name.assign(raw, size);
+        current.hash = hash;
+        std::lock_guard<std::mutex> lock(g_mutex);
+        if (g_ambiguous_named_resource_device.count(resource.handle))
+            return;
+        const auto it = g_attested_names_by_resource.find(resource.handle);
+        if (it == g_attested_names_by_resource.end()) {
+            g_attested_names_by_resource.emplace(resource.handle,
+                std::move(current));
+        } else if (it->second.device != current.device ||
+                   it->second.hash != current.hash ||
+                   it->second.logical_name != current.logical_name) {
+            g_attested_names_by_resource.erase(it);
+            g_ambiguous_named_resource_device.emplace(
+                resource.handle, current.device);
+        }
+    } catch (...) {
+        // Allocation must never unwind into the D3D11/ReShade callback.
+    }
+}
+
+void on_destroy_resource(
+    reshade::api::device *,
+    reshade::api::resource resource)
+{
+    if (resource.handle == 0u) return;
+    spc25_physical::drop_resource(resource.handle);
+    std::lock_guard<std::mutex> lock(g_mutex);
+    g_attested_names_by_resource.erase(resource.handle);
+    g_ambiguous_named_resource_device.erase(resource.handle);
+    // This is a separate mutex: do not invert lock ordering.
+}
+#endif
+
+#if defined(DSRRL_EXPERIMENTAL_SPC_MATERIAL_BATCH)
+// Some D3D11 resources carry a native debug object name even after the
+// retail loader's thread-local name has expired. Treat a name as authority
+// only if it is an *exact* canonical basename already allowlisted by V12.
+// No suffix stripping, path guessing or BC1/size-based matching.
+bool snapshot_native_exact_debug_name(
+    ID3D11DeviceChild *child,
+    std::wstring &out,
+    bool *any_label_present = nullptr) noexcept
+{
+    out.clear();
+    if (any_label_present != nullptr)
+        *any_label_present = false;
+    if (child == nullptr)
+        return false;
+
+    // The native object may have either documented D3D11 debug-name
+    // representation. Both are just candidate *producers*; only exact
+    // V12 canonical logical texture identities become bridge authority.
+    char ascii_bytes[260]{};
+    UINT ascii_size = static_cast<UINT>(sizeof(ascii_bytes));
+    const HRESULT ascii_result = child->GetPrivateData(
+        WKPDID_D3DDebugObjectName, &ascii_size, ascii_bytes);
+    const bool ascii_present =
+        SUCCEEDED(ascii_result) && ascii_size > 0u;
+    wchar_t wide_chars[260]{};
+    UINT wide_bytes = static_cast<UINT>(sizeof(wide_chars));
+    const HRESULT wide_result = child->GetPrivateData(
+        WKPDID_D3DDebugObjectNameW, &wide_bytes, wide_chars);
+    const bool wide_present =
+        SUCCEEDED(wide_result) && wide_bytes > 0u;
+
+    if (any_label_present != nullptr)
+        *any_label_present = ascii_present || wide_present;
+    if (!ascii_present && !wide_present)
+        return false;
+
+    auto exact_canonical = [](const wchar_t *chars,
+                              std::size_t length) noexcept {
+        if (chars == nullptr || length < 7u ||
+            length >= 260u ||
+            chars[length - 2u] != L'_' ||
+            (chars[length - 1u] != L's' &&
+             chars[length - 1u] != L'S'))
+            return false;
+        for (std::size_t i = 0u; i < length; ++i) {
+            const wchar_t ch = chars[i];
+            if (!((ch >= L'a' && ch <= L'z') ||
+                  (ch >= L'A' && ch <= L'Z') ||
+                  (ch >= L'0' && ch <= L'9') ||
+                  ch == L'_'))
+                return false;
+        }
+        const auto hash = fnv_name(chars, length);
+        return generated::spec_equipment_name_hash_allowed_v12(hash) ||
+            exact_subsurface_body_spec_hash(hash) ||
+            generated::diffuse_name_hash_allowed_v12(hash) ||
+            generated::normal_name_hash_allowed_v12(hash);
+    };
+
+    wchar_t ascii_name[260]{};
+    std::size_t ascii_chars = 0u;
+    if (ascii_present) {
+        if (ascii_size >= sizeof(ascii_bytes))
+            return false;
+        ascii_chars = ascii_size;
+        if (ascii_bytes[ascii_chars - 1u] == '\0')
+            --ascii_chars;
+        if (ascii_chars == 0u)
+            return false;
+        for (std::size_t i = 0u; i < ascii_chars; ++i) {
+            const unsigned char ch =
+                static_cast<unsigned char>(ascii_bytes[i]);
+            if (ch > 0x7fu)
+                return false;
+            ascii_name[i] = static_cast<wchar_t>(ch);
+        }
+        if (!exact_canonical(ascii_name, ascii_chars))
+            return false;
+    }
+
+    std::size_t wide_length = 0u;
+    if (wide_present) {
+        if ((wide_bytes % sizeof(wchar_t)) != 0u ||
+            wide_bytes >= sizeof(wide_chars))
+            return false;
+        wide_length = wide_bytes / sizeof(wchar_t);
+        if (wide_length != 0u &&
+            wide_chars[wide_length - 1u] == L'\0')
+            --wide_length;
+        if (!exact_canonical(wide_chars, wide_length))
+            return false;
+    }
+
+    if (ascii_present && wide_present &&
+        (ascii_chars != wide_length ||
+         std::char_traits<wchar_t>::compare(
+             ascii_name, wide_chars, ascii_chars) != 0))
+        return false; // two independently provided names disagree
+
+    const wchar_t *chosen = ascii_present ? ascii_name : wide_chars;
+    const auto count = ascii_present ? ascii_chars : wide_length;
+    try {
+        out.assign(chosen, count);
+        return !out.empty();
+    } catch (...) {
+        out.clear();
+        return false;
+    }
+}
+bool on_create_resource_view(
+    reshade::api::device *device,
+    reshade::api::resource resource,
+    reshade::api::resource_usage usage,
+    reshade::api::resource_view_desc &)
+{
+    auto &pending = g_early_view_name;
+    if (pending.pending) {
+        // Nested pre-create callbacks have no guaranteed unambiguous
+        // pre/post pairing. Drop both rather than borrowing a name.
+        pending.ambiguous = true;
+        return false;
+    }
+    if (g_internal_create || g_quarantined.load() ||
+        device == nullptr ||
+        device->get_api() != reshade::api::device_api::d3d11 ||
+        resource.handle == 0u ||
+        usage != reshade::api::resource_usage::shader_resource)
+        return false;
+    const wchar_t *raw = nullptr;
+    std::size_t length = 0u;
+    if (!texture_identity_transport::snapshot_raw(raw, length) ||
+        raw == nullptr || length == 0u)
+        return false;
+    const auto hash = fnv_name(raw, length);
+    if (!generated::spec_equipment_name_hash_allowed_v12(hash) &&
+        !exact_subsurface_body_spec_hash(hash) &&
+        !generated::diffuse_name_hash_allowed_v12(hash) &&
+        !generated::normal_name_hash_allowed_v12(hash))
+        return false;
+
+    g_name_exact_create_view.fetch_add(
+        1u, std::memory_order_relaxed);
+    try {
+        pending.device =
+            reinterpret_cast<ID3D11Device *>(device->get_native());
+        pending.resource = resource.handle;
+        pending.usage = usage;
+        pending.name.assign(raw, length);
+        pending.pending = !pending.name.empty();
+    } catch (...) {
+        pending.clear();
+    }
+    // Strictly passive: never alter the original D3D resource descriptor.
+    return false;
+}
+#endif
+
 void on_init_resource_view(
     reshade::api::device *device,
-    reshade::api::resource,
+    reshade::api::resource resource,
     reshade::api::resource_usage usage,
     const reshade::api::resource_view_desc &,
     reshade::api::resource_view view)
 {
+    // Stock/no-SPC builds do not need the resource-to-view name handoff.
+    (void)resource;
     if (g_internal_create ||
         g_quarantined.load() ||
         device == nullptr ||
@@ -1209,12 +1536,123 @@ void on_init_resource_view(
         return;
 
     stutter_profile::scope view_time(stutter_profile::stage::resource_view_init);
+#if defined(DSRRL_EXPERIMENTAL_SPC_MATERIAL_BATCH)
+    // Raw ReShade view/resource handles are authoritative D3D11 objects.
+    // Track before the name lookup, which may be missing on the retail host.
+    spc25_physical::link_view(view.handle,resource.handle);
+#endif
     const wchar_t *logical_name_raw = nullptr;
     std::size_t logical_name_length = 0u;
-    if (!texture_identity_transport::snapshot_raw(
-            logical_name_raw,
-            logical_name_length))
+    const bool direct_name =
+        texture_identity_transport::snapshot_raw(
+            logical_name_raw, logical_name_length);
+#if defined(DSRRL_EXPERIMENTAL_SPC_MATERIAL_BATCH)
+    std::wstring early_name{};
+    bool pre_view_attested = false;
+    auto &pre_view = g_early_view_name;
+    if (pre_view.pending) {
+        if (!pre_view.ambiguous &&
+            pre_view.device ==
+                reinterpret_cast<ID3D11Device *>(device->get_native()) &&
+            pre_view.resource == resource.handle &&
+            pre_view.usage == usage) {
+            early_name = std::move(pre_view.name);
+            pre_view_attested = !early_name.empty();
+        }
+        pre_view.clear();
+    }
+    std::wstring attested_name{};
+    bool resource_handoff = false;
+    if (resource.handle != 0u) {
+        try {
+            std::lock_guard<std::mutex> lock(g_mutex);
+            const auto entry =
+                g_attested_names_by_resource.find(resource.handle);
+            if (entry != g_attested_names_by_resource.end() &&
+                entry->second.device ==
+                    reinterpret_cast<ID3D11Device *>(device->get_native())) {
+                attested_name = entry->second.logical_name;
+                resource_handoff = !attested_name.empty();
+            }
+        } catch (...) {
+            return;
+        }
+    }
+    // This query refers to the very D3D11 SRV/resource supplied by
+    // ReShade in the current init_resource_view callback; no global-name
+    // lookup or last-observed SRV can satisfy it.
+    std::wstring native_debug_name{};
+    bool debug_attested = false;
+    if (resource.handle != 0u) {
+        auto *native_resource = reinterpret_cast<ID3D11Resource *>(
+            static_cast<std::uintptr_t>(resource.handle));
+        debug_attested = snapshot_native_exact_debug_name(
+            native_resource, native_debug_name);
+    }
+    if (view.handle != 0u) {
+        std::wstring view_debug_name{};
+        const bool view_debug = snapshot_native_exact_debug_name(
+            reinterpret_cast<ID3D11ShaderResourceView *>(
+                static_cast<std::uintptr_t>(view.handle)),
+            view_debug_name);
+        if (view_debug && debug_attested &&
+            view_debug_name != native_debug_name)
+            return;
+        if (view_debug && !debug_attested) {
+            native_debug_name = std::move(view_debug_name);
+            debug_attested = true;
+        }
+    }
+    auto matches_name = [](
+        const std::wstring &name,
+        const wchar_t *other,
+        std::size_t length) noexcept {
+        return other != nullptr && name.size() == length &&
+            std::char_traits<wchar_t>::compare(
+                name.c_str(), other, length) == 0;
+    };
+    // A discrepancy between any two attested producers invalidates the
+    // association. Do not let an early name overwrite a direct or
+    // resource-lifetime name.
+    if (debug_attested && direct_name &&
+        !matches_name(native_debug_name, logical_name_raw, logical_name_length))
         return;
+    if (debug_attested && pre_view_attested &&
+        native_debug_name != early_name)
+        return;
+    if (debug_attested && resource_handoff &&
+        native_debug_name != attested_name)
+        return;
+    if (pre_view_attested && direct_name &&
+        !matches_name(early_name, logical_name_raw, logical_name_length))
+        return;
+    if (pre_view_attested && resource_handoff &&
+        early_name != attested_name)
+        return;
+
+    if (resource_handoff && direct_name) {
+        // Two independently observed names disagree -> no resource alias.
+        if (attested_name.size() != logical_name_length ||
+            std::char_traits<wchar_t>::compare(
+                attested_name.c_str(), logical_name_raw,
+                logical_name_length) != 0)
+            return;
+    } else if (resource_handoff) {
+        logical_name_raw = attested_name.c_str();
+        logical_name_length = attested_name.size();
+    } else if (pre_view_attested && !direct_name) {
+        logical_name_raw = early_name.c_str();
+        logical_name_length = early_name.size();
+    } else if (debug_attested && !direct_name) {
+        logical_name_raw = native_debug_name.c_str();
+        logical_name_length = native_debug_name.size();
+    } else if (!direct_name) {
+        return;
+    }
+#else
+    if (!direct_name)
+        return;
+#endif
 
     const auto logical_hash =
         fnv_name(
@@ -1239,6 +1677,11 @@ void on_init_resource_view(
         !diffuse_member &&
         !normal_member)
         return;
+#if defined(DSRRL_EXPERIMENTAL_SPC_MATERIAL_BATCH)
+    if (direct_name)
+        g_name_exact_init_view.fetch_add(
+            1u, std::memory_order_relaxed);
+#endif
 
     std::wstring logical_name;
     try {
@@ -1354,6 +1797,24 @@ void on_init_resource_view(
     if (!accepted)
         release_set(set);
 
+#if defined(DSRRL_EXPERIMENTAL_SPC_MATERIAL_BATCH)
+    if (resource_handoff && !direct_name && accepted &&
+        !g_attested_resource_view_join_logged.exchange(
+            true, std::memory_order_relaxed))
+        reshade::log::message(reshade::log::level::info,
+            "[DSRRL SPC RESOURCE JOIN] source=init_resource_exact_name carrier=resource_to_view exact_allowlist=1 failopen_preserved=1 pixel=OPEN");
+    if (pre_view_attested && !resource_handoff && !direct_name &&
+        accepted && !g_early_view_join_logged.exchange(
+            true, std::memory_order_relaxed))
+        reshade::log::message(reshade::log::level::info,
+            "[DSRRL SPC RESOURCE JOIN] source=create_resource_view_exact_name carrier=pre_post_view exact_allowlist=1 failopen_preserved=1 pixel=OPEN");
+    if (debug_attested && !resource_handoff && !direct_name &&
+        !pre_view_attested && accepted &&
+        !g_native_debug_name_join_logged.exchange(
+            true, std::memory_order_relaxed))
+        reshade::log::message(reshade::log::level::info,
+            "[DSRRL SPC RESOURCE JOIN] source=stock_d3d11_exact_debug_name carrier=native_resource_or_srv exact_allowlist=1 failopen_preserved=1 pixel=OPEN");
+#endif
     ++g_named_views;
 }
 
@@ -1361,6 +1822,16 @@ void on_destroy_resource_view(
     reshade::api::device *,
     reshade::api::resource_view view)
 {
+#if defined(DSRRL_EXPERIMENTAL_SPC_MATERIAL_BATCH)
+    // ReShade D3D11 view.handle is the native SRV pointer in the same
+    // identity domain as PSGetShaderResources. Retire the exact writer
+    // snapshots before the renderer's existing view-epoch invalidation.
+    // No AddRef/Release or late dereference of the destroyed pointer.
+    texture_identity_transport::retire_native_ps_t1(
+        reinterpret_cast<const void *>(
+            static_cast<std::uintptr_t>(view.handle)));
+    spc25_physical::drop_view(view.handle);
+#endif
     companion_set dead{};
     bool found = false;
     bool changed = false;
@@ -1372,7 +1843,9 @@ void on_destroy_resource_view(
         const auto key =
             static_cast<std::uint64_t>(
                 view.handle);
-
+#if defined(DSRRL_EXPERIMENTAL_SPC_MATERIAL_BATCH)
+        g_late_native_t1_attempts.erase(key);
+#endif
         if (g_ambiguous_view_device.erase(key) != 0u)
             changed = true;
 
@@ -1406,6 +1879,9 @@ void on_destroy_device(
         reinterpret_cast<ID3D11Device *>(
             device->get_native());
 
+#if defined(DSRRL_EXPERIMENTAL_SPC_MATERIAL_BATCH)
+    spc25_physical::drop_device(native);
+#endif
     release_cache_for_device(
         native);
 }
@@ -1595,6 +2071,15 @@ register_events() noexcept
         "[DSRRL HITCH FRAME] exact R43 same-operator per-Present QPC buckets active");
 #endif
 
+#if defined(DSRRL_EXPERIMENTAL_SPC_MATERIAL_BATCH)
+    reshade::register_event<reshade::addon_event::init_resource>(
+        on_init_resource);
+    reshade::register_event<reshade::addon_event::destroy_resource>(
+        on_destroy_resource);
+    reshade::register_event<reshade::addon_event::create_resource_view>(
+        on_create_resource_view);
+#endif
+
     reshade::register_event<
         reshade::addon_event::init_resource_view>(
             on_init_resource_view);
@@ -1631,8 +2116,19 @@ unregister_events() noexcept
     reshade::unregister_event<
         reshade::addon_event::init_resource_view>(
             on_init_resource_view);
+#if defined(DSRRL_EXPERIMENTAL_SPC_MATERIAL_BATCH)
+    reshade::unregister_event<reshade::addon_event::create_resource_view>(
+        on_create_resource_view);
+    reshade::unregister_event<reshade::addon_event::destroy_resource>(
+        on_destroy_resource);
+    reshade::unregister_event<reshade::addon_event::init_resource>(
+        on_init_resource);
+#endif
 
     release_cache();
+#if defined(DSRRL_EXPERIMENTAL_SPC_MATERIAL_BATCH)
+    spc25_physical::clear();
+#endif
     g_core = nullptr;
 }
 
@@ -1680,6 +2176,205 @@ probe_exact_specular_companion(
 }
 
 bool material_resource_draw_runtime::
+try_recover_exact_bound_spec_from_native_name(
+    ID3D11DeviceContext *context) noexcept
+{
+#if !defined(DSRRL_EXPERIMENTAL_SPC_MATERIAL_BATCH)
+    (void)context;
+    return false;
+#else
+    if (context == nullptr || g_quarantined.load())
+        return false;
+
+    ID3D11ShaderResourceView *stock = nullptr;
+    context->PSGetShaderResources(1u, 1u, &stock);
+    if (stock == nullptr) return false;
+    const auto key = static_cast<std::uint64_t>(
+        reinterpret_cast<std::uintptr_t>(stock));
+
+    // Limit the experiment to two exact lookups per native view lifetime,
+    // even when hundreds of draws reuse a missing-name stock t1.
+    bool denied = false;
+    {
+        std::lock_guard<std::mutex> lock(g_mutex);
+        if (g_ambiguous_view_device.find(key) !=
+                g_ambiguous_view_device.end() ||
+            g_cache.find(key) != g_cache.end()) {
+            denied = true;
+        } else {
+            try {
+                auto &attempts = g_late_native_t1_attempts[key];
+                if (attempts >= 2u)
+                    denied = true;
+                else
+                    ++attempts;
+            } catch (...) {
+                denied = true;
+            }
+        }
+    }
+    if (denied) {
+        // Releasing a D3D object under g_mutex can reenter a resource
+        // destruction callback. Release only after leaving the lock.
+        stock->Release();
+        return false;
+    }
+
+    std::wstring name{};
+    bool view_label = false;
+    const bool view_name =
+        snapshot_native_exact_debug_name(stock, name, &view_label);
+    bool resource_label_seen = false;
+    ID3D11Resource *resource = nullptr;
+    stock->GetResource(&resource);
+    if (resource != nullptr) {
+        // CPU writer name->DLTexture2D->native COM address versus the
+        // receiver's ACTUAL PSGetShaderResources(1) SRV and GetResource.
+        // Pointer-value comparison only: no swaps, casts, or lifetime
+        // authority. Original stock objects remain pinned in this scope.
+        texture_identity_transport::diagnose_native_ps_t1(
+            stock, resource);
+        std::wstring resource_name{};
+        const bool resource_named =
+            snapshot_native_exact_debug_name(
+                resource, resource_name, &resource_label_seen);
+        if (view_name && resource_named &&
+            name != resource_name)
+            log_late_native_stage_once(
+                3u, "conflicting_native_view_resource_names");
+        if (!view_name && !resource_named &&
+            (view_label || resource_label_seen))
+            log_late_native_stage_once(
+                1u, "native_label_present_not_canonical_allowlisted");
+        resource->Release();
+        if (resource_named) {
+            if (view_name && name != resource_name) {
+                stock->Release();
+                return false; // contradictory exact identities
+            }
+            if (!view_name)
+                name = std::move(resource_name);
+        }
+    }
+
+    if (name.empty()) {
+        // The actual SRV returned by PSGetShaderResources(1) is pinned.
+        // GetResource gives native resource identity independent of MTD
+        // guesses or missing retail debug object names. Never swap here.
+        spc25_physical::inspect(stock);
+        if (!g_name_producer_cut_logged.exchange(
+                true, std::memory_order_relaxed)) {
+            const auto names = texture_identity_transport::liveness();
+            char msg[1152]{};
+            std::snprintf(msg, sizeof(msg),
+                "[DSRRL SPC25 NAME CUT] engine_lookup_calls=%llu utf16_names=%llu engine_scope_clear=%llu snapshot_hits=%llu gpu_init_resource_exact=%llu gpu_create_view_exact=%llu gpu_init_view_direct_exact=%llu joined_views=%llu cpu_808d_writer=%llu cpu_808d_named_scope=%llu cache_name_exact=%llu cache_name_different=%llu cache_name_unreadable=%llu cpu_rtti_exact=%llu cpu_rtti_unavailable=%llu tex2d_cpu=%llu tex2d_fields_readable=%llu tex2d_p28_texture_nonnull=%llu tex2d_p30_srv_nonnull=%llu tex2d_both_nonnull=%llu decode_calls=%llu decode_payload_readable=%llu decode_writer_ptr_seen=%llu source_to_srv=UNVERIFIED pixel=OPEN",
+                static_cast<unsigned long long>(names.hook_calls),
+                static_cast<unsigned long long>(names.names_captured),
+                static_cast<unsigned long long>(names.names_cleared),
+                static_cast<unsigned long long>(names.name_snapshots),
+                static_cast<unsigned long long>(
+                    g_name_exact_init_resource.load(std::memory_order_relaxed)),
+                static_cast<unsigned long long>(
+                    g_name_exact_create_view.load(std::memory_order_relaxed)),
+                static_cast<unsigned long long>(
+                    g_name_exact_init_view.load(std::memory_order_relaxed)),
+                static_cast<unsigned long long>(
+                    g_named_views.load(std::memory_order_relaxed)),
+                static_cast<unsigned long long>(names.packet_writer_calls),
+                static_cast<unsigned long long>(names.packet_named_in_scope),
+                static_cast<unsigned long long>(names.cache_name_equal),
+                static_cast<unsigned long long>(names.cache_name_different),
+                static_cast<unsigned long long>(names.cache_name_unreadable),
+                static_cast<unsigned long long>(names.cpu_rtti_exact),
+                static_cast<unsigned long long>(names.cpu_rtti_unavailable),
+                static_cast<unsigned long long>(names.cpu_tex2d_cpu_objects),
+                static_cast<unsigned long long>(names.cpu_tex2d_fields_readable),
+                static_cast<unsigned long long>(names.cpu_tex2d_p28_nonnull),
+                static_cast<unsigned long long>(names.cpu_tex2d_p30_nonnull),
+                static_cast<unsigned long long>(names.cpu_tex2d_both_nonnull),
+                static_cast<unsigned long long>(names.decode_calls),
+                static_cast<unsigned long long>(names.decode_payload_readable),
+                static_cast<unsigned long long>(names.decode_writer_pointer_seen));
+            reshade::log::message(reshade::log::level::info, msg);
+        }
+        if (!view_label && !resource_label_seen)
+            log_late_native_stage_once(
+                0u, "stock_t1_missing_exact_native_name");
+        else
+            log_late_native_stage_once(
+                1u, "native_label_present_not_canonical_allowlisted");
+        stock->Release();
+        return false;
+    }
+    const auto hash = fnv_name(name);
+    if (!generated::spec_equipment_name_hash_allowed_v12(hash)) {
+        stock->Release();
+        return false;
+    }
+    ID3D11Device *device = nullptr;
+    stock->GetDevice(&device);
+    if (device == nullptr) {
+        stock->Release();
+        return false;
+    }
+    // Retain the exact live stock SRV until after registration is complete.
+    // Releasing it during DDS disk/GPU load could allow handle reuse before
+    // this companion is installed, silently aliasing a different texture.
+    auto loaded =
+        safe_load_sidecar(device, asset_class::specular, name, hash);
+    account_load(loaded.status);
+    if (loaded.status != load_status::ready ||
+        loaded.view == nullptr) {
+        log_late_native_stage_once(
+            2u, "canonical_name_but_exact_ptde_sidecar_unavailable");
+        release_view(loaded.view);
+        device->Release();
+        stock->Release();
+        return false; // no exact PTDE SpecRGB sidecar, stock fail-open
+    }
+
+    companion_set set{};
+    set.device = device; // owns GetDevice reference
+    set.logical_hash = hash;
+    set.specular = loaded.view; // owns loader reference
+    bool accepted = false;
+    {
+        std::lock_guard<std::mutex> lock(g_mutex);
+        // Another thread or view destruction may have changed ownership
+        // since the negative lookup. Never overwrite or borrow a record.
+        if (g_ambiguous_view_device.find(key) ==
+                g_ambiguous_view_device.end() &&
+            g_cache.find(key) == g_cache.end()) {
+            try {
+                g_cache.emplace(key, set);
+                accepted = true;
+                invalidate_companion_epoch(key);
+            } catch (...) {
+                accepted = false;
+            }
+        }
+    }
+    if (accepted)
+        set = {};
+    else
+        release_set(set);
+    // The native handle was pinned through the whole transaction.
+    stock->Release();
+
+    if (accepted &&
+        !g_late_native_t1_recovered_logged.exchange(
+            true, std::memory_order_relaxed)) {
+        char line[320]{};
+        std::snprintf(line, sizeof(line),
+            "[DSRRL SPC25 LATE T1] source=stock_bound_native_exact_debug_name hash=%016llx sidecar_ready=1 stock_identity=EXACT runtime=CONSUMER_RETRY pixel=OPEN",
+            static_cast<unsigned long long>(hash));
+        reshade::log::message(reshade::log::level::info,line);
+    }
+    return accepted;
+#endif
+}
+
+bool material_resource_draw_runtime::
 exact_specular_companion_ready(
     ID3D11DeviceContext *context) noexcept
 {
@@ -1721,6 +2416,37 @@ prepare_draw_requests(
         0u,
         3u,
         views);
+
+#if defined(DSRRL_EXPERIMENTAL_SPC_MATERIAL_BATCH)
+    // This IS the active exact-material draw cut. The previous native-t1
+    // observer lived in try_recover_exact_bound_spec_from_native_name(),
+    // which is not called by the integrated draw path. Sample the stock
+    // t1 already pinned by PSGetShaderResources instead. No SRV swaps.
+    if (receiver_id >= 24u && receiver_id <= 35u) {
+        static std::atomic_bool native_t1_cut_logged{false};
+        if (!native_t1_cut_logged.exchange(
+                true, std::memory_order_relaxed)) {
+            char msg[256]{};
+            std::snprintf(msg, sizeof(msg),
+                "[DSRRL SPC25 DRAW CUT] stage=active_receiver_prebind "
+                "rx=%u exact_owner=1 stock_t1=%u "
+                "diagnostic_only=1 srv_swap=0 pixel=OPEN",
+                receiver_id, views[1] != nullptr ? 1u : 0u);
+            reshade::log::message(reshade::log::level::info, msg);
+        }
+        if (views[1] != nullptr &&
+            texture_identity_transport::should_sample_native_ps_t1(
+                views[1])) {
+            ID3D11Resource *stock_texture = nullptr;
+            views[1]->GetResource(&stock_texture);
+            if (stock_texture != nullptr) {
+                texture_identity_transport::diagnose_native_ps_t1(
+                    views[1], stock_texture);
+                stock_texture->Release();
+            }
+        }
+    }
+#endif
 
     const bool ready =
         prepare_draw_requests_bound(
@@ -2780,6 +3506,9 @@ void material_resource_draw_runtime::
 reset() noexcept
 {
     release_cache();
+#if defined(DSRRL_EXPERIMENTAL_SPC_MATERIAL_BATCH)
+    spc25_physical::clear();
+#endif
 
     g_named_views.store(0u);
     g_sidecar_ready.store(0u);

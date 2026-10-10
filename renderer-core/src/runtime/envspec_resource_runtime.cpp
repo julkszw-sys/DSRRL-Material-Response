@@ -1434,6 +1434,58 @@ bool envspec_resource_runtime::prepare(
     return ready;
 }
 
+envspec_probe_frontier envspec_resource_runtime::inspect_bound_frontier(
+    ID3D11ShaderResourceView *stock_a,
+    ID3D11ShaderResourceView *stock_b,
+    std::uint8_t slot,
+    bool probe_b_required) const noexcept
+{
+    envspec_probe_frontier out{};
+    std::lock_guard<std::mutex> lock(g_mutex);
+    out.device_ready = g_device != nullptr;
+    out.pack_ready = g_pack_ready;
+    out.sampler_ready = g_sampler_ready && g_sampler.handle != 0u;
+    out.slot_valid = slot < k_ptde_slots;
+
+    const auto inspect_native = [](ID3D11ShaderResourceView *view,
+        std::uint16_t &probe, bool &registered) noexcept {
+        if (view == nullptr) return;
+        const auto found = g_resource_by_view.find(
+            static_cast<std::uint64_t>(
+                reinterpret_cast<std::uintptr_t>(view)));
+        if (found == g_resource_by_view.end()) return;
+        registered = true;
+        probe = found->second.probe_ordinal;
+    };
+    inspect_native(stock_a, out.probe_a, out.stock_a_registered);
+    if (probe_b_required)
+        inspect_native(stock_b, out.probe_b, out.stock_b_registered);
+    else {
+        out.probe_b = out.probe_a;
+        out.stock_b_registered = out.stock_a_registered;
+    }
+    out.probe_a_in_range = out.stock_a_registered &&
+        out.probe_a < env::k_legacy_envspec_probe_count;
+    out.probe_b_in_range = out.stock_b_registered &&
+        out.probe_b < env::k_legacy_envspec_probe_count;
+    if (!out.slot_valid) return out;
+    if (out.probe_a_in_range) {
+        const auto key = static_cast<std::uint32_t>(out.probe_a) *
+            k_ptde_slots + slot;
+        const auto found = g_ptde_cubes.find(key);
+        out.cube_a_ready = found != g_ptde_cubes.end() &&
+            found->second.view.handle != 0u;
+    }
+    if (out.probe_b_in_range) {
+        const auto key = static_cast<std::uint32_t>(out.probe_b) *
+            k_ptde_slots + slot;
+        const auto found = g_ptde_cubes.find(key);
+        out.cube_b_ready = found != g_ptde_cubes.end() &&
+            found->second.view.handle != 0u;
+    }
+    return out;
+}
+
 bool envspec_resource_runtime::prepare_bound(
     ID3D11ShaderResourceView *stock_a,
     ID3D11ShaderResourceView *stock_b,

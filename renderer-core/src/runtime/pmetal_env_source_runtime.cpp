@@ -8,6 +8,7 @@
 #include "dsrrl/runtime/pmetal_env_source_runtime.hpp"
 #include "dsrrl/runtime/pmetal_producer_state.hpp"
 #include "dsrrl/runtime/pmetal_selector_policy.hpp"
+#include "dsrrl/runtime/ptde_metal_envspec_authority.hpp"
 #include "dsrrl/runtime/runtime_hot_telemetry.hpp"
 #include "dsrrl/operators/material_response/mtd_semantic_census.hpp"
 #include "dsrrl/operators/legacy_plan/sha256_bytes.hpp"
@@ -22,6 +23,7 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <cstdio>
 #include <cstring>
 #include <filesystem>
 #include <fstream>
@@ -31,11 +33,7 @@
 namespace dsrrl::runtime {
 namespace {
 
-constexpr std::uint32_t k_pmetal_material_route = 345u;
-constexpr const char *k_pmetal_material_name =
-    "P_Metal[DSB].mtd";
-constexpr const char *k_pmetal_material_sha256 =
-    "ece70f36bd2517d28c8495e276cea537f8b519d6bed981788e79a409ffbf763b";
+// Canonical exact route/name/SHA records are shared with the consumer.
 
 constexpr std::uintptr_t k_ret_sel_1 = 0x20E019u;
 constexpr std::uintptr_t k_ret_sel_2 = 0x20EB7Fu;
@@ -962,23 +960,10 @@ bool exact_pmetal_material_selection(
     const operators::material_response::
         material_identity &material) noexcept
 {
-    namespace mr =
-        operators::material_response;
-    namespace hashing =
-        operators::legacy_plan::hashing;
-
-    return
-        material.valid &&
-        material.owner_tuple_exact &&
-        material.material_slot_valid &&
-        material.route_index ==
-            k_pmetal_material_route &&
-        material.semantic_name_hash ==
-            mr::mtd_semantic_hash(
-                k_pmetal_material_name) &&
-        hashing::matches_hex(
-            material.raw_mtd_sha256,
-            k_pmetal_material_sha256);
+    // Source publication and shader selection MUST share this exact
+    // (FLVER, slot, MTD SHA, semantic name, route) authority.
+    // Additional equipment metal routes are opt-in at build time.
+    return match_ptde_metal_envspec_material(material) != nullptr;
 }
 
 bool retail_lightbank_record_index(
@@ -2910,6 +2895,66 @@ void pmetal_env_source_selector_event(
         endpoints.beta == 0.0f
             ? g_steady_seen
             : g_blend_seen);
+}
+
+bool pmetal_env_source_runtime::latest_exact_material(
+    const operators::material_response::
+        material_identity &material,
+    pmetal_envspec_source &out) const noexcept
+{
+    out = {};
+    if (!g_selector_enabled.load(std::memory_order_acquire) ||
+        match_ptde_metal_envspec_material(material) == nullptr)
+        return false;
+
+    // Both P_Metal and SPC25 first attempt the exact raw FLVER+slot+MTD
+    // producer join for the live selector epoch.
+    const auto epoch = g_selector_epoch.load(std::memory_order_relaxed);
+    if (pmetal_producer_state_latest(material, epoch, out))
+        return true;
+
+#if defined(DSRRL_EXPERIMENTAL_SPC_MATERIAL_BATCH)
+    // Owner-requested SPC25 experiment: reproduce the original P_Metal V13
+    // source fallback WITHOUT inventing a new selector/identity constraint.
+    // This hook is unkeyed and may contain another object's LightBank signal.
+    // Opt-in only, already-exact SPC material only; never generalize to MR.
+    if (is_experimental_ptde_metal_envspec_material(material) &&
+        latest_hook_source(out)) {
+        out.unkeyed_hook_fallback = true;
+        // Report each authenticated SPC profile independently, including
+        // cases where source_ready was already logged on an exact earlier draw.
+        const auto *authority = match_ptde_metal_envspec_material(material);
+        if (authority != nullptr) {
+            const auto profile =
+                static_cast<std::uint32_t>(authority->profile);
+            const auto start =
+                static_cast<std::uint32_t>(ptde_metal_envspec_profile::pmetal_alp);
+            const auto index = profile - start;
+            if (profile >= start && index < 32u) {
+                static std::atomic<std::uint32_t> reported{0u};
+                const auto bit = 1u << index;
+                if ((reported.fetch_or(bit, std::memory_order_relaxed) & bit) == 0u) {
+                    char line[380]{};
+                    std::snprintf(line, sizeof(line),
+                        "[DSRRL SPC25 V13 FALLBACK] source=LATEST_HOOK_UNKEYED route=%u slot=%u profile=%u bank_a=%016llx row_a=%u bank_b=%016llx row_b=%u beta=%.7g pixel=OPEN",
+                        static_cast<unsigned>(material.route_index),
+                        static_cast<unsigned>(material.material_slot),
+                        profile,
+                        static_cast<unsigned long long>(out.bank_signature_a),
+                        static_cast<unsigned>(out.row_id_a),
+                        static_cast<unsigned long long>(out.bank_signature_b),
+                        static_cast<unsigned>(out.row_id_b),
+                        static_cast<double>(out.beta));
+                    reshade::log::message(reshade::log::level::info, line);
+                }
+            }
+        }
+        telemetry::hot_count(g_consumer_ok);
+        return true;
+    }
+#endif
+
+    return false;
 }
 
 bool pmetal_env_source_runtime::latest(

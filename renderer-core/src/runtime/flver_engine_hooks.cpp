@@ -16,10 +16,14 @@
 #include "dsrrl/runtime/hemdir3_mode_transport.hpp"
 #endif
 #include "dsrrl/runtime/pmetal_env_source_runtime.hpp"
+#include "dsrrl/runtime/ptde_metal_envspec_authority.hpp"
 #include "dsrrl/runtime/clustered_pnts_draw_runtime.hpp"
 #include "dsrrl/runtime/fixed_pointlight_draw_runtime.hpp"
 #include "dsrrl/operators/material_response/mtd_semantic_census.hpp"
 #include "dsrrl/operators/material_response/generated_routes_v1.hpp"
+#if defined(DSRRL_EXPERIMENTAL_SPC_MATERIAL_BATCH)
+#include "dsrrl/operators/material_response/generated_dsr_flver_owner_tuples_v1.hpp"
+#endif
 #include "dsrrl/operators/material_response/generated_exact_binding_mr_v1.hpp"
 #include "dsrrl/operators/legacy_plan/sha256_bytes.hpp"
 #include <Windows.h>
@@ -978,6 +982,114 @@ void __fastcall mtd_entry(
  if(g_mo)g_mo(material,raw,len,semantic_key);
 }
 
+#if defined(DSRRL_EXPERIMENTAL_SPC_MATERIAL_BATCH)
+// Passive census of the exact MaterialResponse MTD roster, including the
+// Lit/Mul/ambiguous profiles deliberately excluded from the SPC operator.
+// Never authorizes a draw or relaxes the FLVER/sidecar/receiver gates.
+std::atomic<std::uint64_t> g_spc_owner_census_mask{0u};
+std::atomic<std::uint64_t> g_spc_runtime_mtd_census_mask{0u};
+
+void log_spc_material_census_once(
+    const operators::material_response::material_identity &identity,
+    bool runtime_mtd_only) noexcept
+{
+    namespace mr = operators::material_response;
+    if (!identity.valid)
+        return;
+    for (std::size_t i = 0u;
+         i < mr::generated::k_material_route_count_v1; ++i) {
+        const auto &r = mr::generated::k_material_routes_v1[i];
+        if (identity.route_index != r.route_index ||
+            identity.semantic_name_hash != mr::mtd_semantic_hash(r.mtd_name))
+            continue;
+        if (std::strstr(r.mtd_name, "Leather") == nullptr &&
+            std::strstr(r.mtd_name, "Cloth") == nullptr &&
+            std::strstr(r.mtd_name, "Wet") == nullptr &&
+            std::strstr(r.mtd_name, "Metal") == nullptr)
+            return;
+        static_assert(mr::generated::k_material_route_count_v1 <= 64u);
+        const auto bit = std::uint64_t{1u} << i;
+        auto &mask = runtime_mtd_only
+            ? g_spc_runtime_mtd_census_mask
+            : g_spc_owner_census_mask;
+        if ((mask.fetch_or(bit, std::memory_order_relaxed) & bit) != 0u)
+            return;
+        bool flver_digest = false;
+        for (const auto byte : identity.flver_sha256)
+            flver_digest |= byte != 0u;
+        const bool sha_match = operators::legacy_plan::hashing::matches_hex(
+            identity.raw_mtd_sha256, r.sha256);
+        const bool exact_authority =
+            match_ptde_metal_envspec_material(identity) != nullptr;
+        char line[496]{};
+        std::snprintf(line, sizeof(line),
+            "[DSRRL SPC CENSUS] stage=%s mtd=%s route=%u family=%s sha=%u flver=%u owner=%u slot_valid=%u slot=%u actual_mtd=%u exact_bridge_authority=%u pixel=OPEN",
+            runtime_mtd_only ? "runtime_mtd_only" : "flver_owner_exact",
+            r.mtd_name, static_cast<unsigned>(identity.route_index),
+            r.material_family, sha_match ? 1u : 0u,
+            flver_digest ? 1u : 0u,
+            identity.owner_tuple_exact ? 1u : 0u,
+            identity.material_slot_valid ? 1u : 0u,
+            static_cast<unsigned>(identity.material_slot),
+            identity.actual_material_exact ? 1u : 0u,
+            exact_authority ? 1u : 0u);
+        reshade::log::message(reshade::log::level::info, line);
+        return;
+    }
+}
+#endif
+
+#if defined(DSRRL_EXPERIMENTAL_SPC_MATERIAL_BATCH)
+// Passive source-side cut-point evidence after a certified MTD-only fallback.
+// The exact FLVER owner remains mandatory for EnvSpec / SpecRGB. Never
+// reconstruct an owner from a material name or reuse another draw's owner.
+std::atomic<std::uint64_t> g_spc_owner_join_cut_mask{0u};
+
+void log_spc_owner_join_cut_once(
+    const operators::material_response::material_identity &identity,
+    bool selector_cache_hit,
+    bool flver_lookup_ok,
+    bool owner_mtd_join_ok) noexcept
+{
+    namespace mr = operators::material_response;
+    if (!identity.valid)
+        return;
+    static_assert(mr::generated::k_material_route_count_v1 <= 64u);
+    for (std::size_t i = 0u;
+         i < mr::generated::k_material_route_count_v1; ++i) {
+        const auto &r = mr::generated::k_material_routes_v1[i];
+        if (identity.route_index != r.route_index ||
+            identity.semantic_name_hash != mr::mtd_semantic_hash(r.mtd_name))
+            continue;
+        if (std::strstr(r.mtd_name, "Leather") == nullptr &&
+            std::strstr(r.mtd_name, "Cloth") == nullptr &&
+            std::strstr(r.mtd_name, "Wet") == nullptr &&
+            std::strstr(r.mtd_name, "Metal") == nullptr)
+            return;
+        const auto bit = std::uint64_t{1u} << i;
+        if ((g_spc_owner_join_cut_mask.fetch_or(
+                 bit, std::memory_order_relaxed) & bit) != 0u)
+            return;
+        const char *cut =
+            !flver_lookup_ok ? "flver_registry_miss" :
+            !owner_mtd_join_ok ? "flver_owner_mtd_join_miss" :
+            "selector_owner_publish_reject";
+        char line[430]{};
+        std::snprintf(
+            line, sizeof(line),
+            "[DSRRL SPC JOIN] stage=owner_join_cut mtd=%s route=%u cut=%s selector_cache_hit=%u flver_lookup=%u owner_mtd_join=%u runtime_mtd_sha=EXACT owner=UNVERIFIED resource_bridge=FAIL_OPEN",
+            r.mtd_name,
+            static_cast<unsigned>(identity.route_index),
+            cut,
+            selector_cache_hit ? 1u : 0u,
+            flver_lookup_ok ? 1u : 0u,
+            owner_mtd_join_ok ? 1u : 0u);
+        reshade::log::message(reshade::log::level::info, line);
+        return;
+    }
+}
+#endif
+
 bool publish_exact_selector_identity(
     void *owner,
     const void *actual_material,
@@ -1037,9 +1149,48 @@ bool publish_exact_selector_identity(
             identity);
 #endif
 
-    // Route 345 is necessary but not sufficient. The isolated source runtime
-    // retains exact semantic/raw-MTD validation before donor decode.
-    if (identity.route_index == 345u) {
+#if defined(DSRRL_EXPERIMENTAL_SPC_MATERIAL_BATCH)
+    // Before the 25-profile exact producer dispatch, identify ALL relevant
+    // material names reaching an authenticated FLVER+slot selector.
+    log_spc_material_census_once(identity, false);
+#endif
+
+    // Route 345 keeps its validated v2.0.3-dev selector behavior.
+    // Newly certified metal MTDs must enter the SAME real source producer,
+    // not just the shader draw consumer. This is OFF by default; the exact
+    // MTD raw SHA+name+owner/slot gate is shared with the EnvSpec consumer.
+    // An unmatched route must not publish or reuse a P_Metal LightBank source.
+    if (should_dispatch_ptde_metal_selector_source(identity)) {
+#if defined(DSRRL_EXPERIMENTAL_SPC_MATERIAL_BATCH)
+        // One pre-source hit per EXACT opt-in MTD, including failed source
+        // cases. Logging never widens the material or operator authority.
+        if (const auto *spc = match_ptde_metal_envspec_material(identity);
+            spc != nullptr &&
+            spc->profile != ptde_metal_envspec_profile::pmetal_baseline) {
+            static std::atomic<std::uint32_t> once_mask{0u};
+            const auto index =
+                static_cast<std::uint32_t>(spc->profile) -
+                static_cast<std::uint32_t>(
+                    ptde_metal_envspec_profile::pmetal_alp);
+            if (index < 32u) {
+                const auto bit = 1u << index;
+                if ((once_mask.fetch_or(
+                        bit, std::memory_order_relaxed) & bit) == 0u) {
+                    char message[384]{};
+                    std::snprintf(
+                        message, sizeof(message),
+                        "[DSRRL SPC BATCH] stage=selector_exact mtd=%s route=%u slot=%u env_slot=%u c101=%.3f source=OPEN request=OPEN pixel=OPEN",
+                        spc->mtd_name,
+                        static_cast<unsigned>(identity.route_index),
+                        static_cast<unsigned>(identity.material_slot),
+                        static_cast<unsigned>(spc->envspc_slot),
+                        static_cast<double>(spc->c101));
+                    reshade::log::message(
+                        reshade::log::level::info, message);
+                }
+            }
+        }
+#endif
         const auto pmetal_begin =
             profile != nullptr
                 ? selector_profile_begin(*profile)
@@ -1229,12 +1380,14 @@ extern "C" void dsrrl_flver_selector_observer(
      owner_lookup_begin,
      profile.owner_lookup_ticks);
 
+ bool owner_mtd_ok = false;
+ bool exact_owner_published = false;
  if(owner_lookup_ok){
   telemetry::hot_count(g_owner_sha_hits);
 
   const auto owner_mtd_begin =
       selector_profile_begin(profile);
-  const bool owner_mtd_ok =
+  owner_mtd_ok =
       enrich_exact_owner_mtd_identity(
           observation);
   selector_profile_end_stage(
@@ -1249,7 +1402,7 @@ extern "C" void dsrrl_flver_selector_observer(
        make_actual_material_identity(
            observation);
 
-   if(publish_exact_selector_identity(
+   if((exact_owner_published = publish_exact_selector_identity(
           owner,
           actual_material,
           ret,
@@ -1257,7 +1410,7 @@ extern "C" void dsrrl_flver_selector_observer(
           r15,
           selector_stack,
           identity,
-          &profile)){
+          &profile))){
     const auto cache_publish_begin =
         selector_profile_begin(profile);
     selector_identity_cache_publish(
@@ -1297,6 +1450,70 @@ extern "C" void dsrrl_flver_selector_observer(
   telemetry::hot_count(
       g_runtime_material_hits);
 
+#if defined(DSRRL_EXPERIMENTAL_SPC_MATERIAL_BATCH)
+  // Exact alternative owner resolver, never an MTD-only authorization:
+  // the renderer's live FLVER registry must have resolved THIS selector
+  // container and slot; the live parser must have recognized THIS actual
+  // material object's raw MTD SHA; the independent source-complete DSR
+  // FLVER owner corpus must attest their exact (SHA, slot, semantic MTD)
+  // triple. The legacy owner MTD producer is incomplete for some otherwise
+  // certified SPC profiles. Repair only that provenance join, not the
+  // EnvSpec/SpecRGB/shader/CB/material/sidecar consumer gates.
+  if(owner_lookup_ok && !exact_owner_published &&
+     observation.material_slot_valid &&
+     runtime_material.actual_material_exact &&
+     runtime_material.semantic_name_hash != 0u &&
+     operators::material_response::generated::
+         dsr_flver_owner_tuple_authenticated(
+             observation.flver_sha256,
+             observation.material_slot,
+             runtime_material.semantic_name_hash)) {
+   auto recovered = runtime_material;
+   recovered.flver_sha256 = observation.flver_sha256;
+   recovered.flver_identity_hash = observation.flver_identity_hash;
+   recovered.material_slot = observation.material_slot;
+   recovered.material_slot_valid = true;
+   recovered.owner_tuple_exact = true;
+   // Only exact opt-in SPC profiles can enter this new bridge. In
+   // particular Lit/Mul/Body, S_Metal alias and ambiguous DullLeather
+   // remain excluded. No fallback for unrecognized FLVER digests.
+   if(is_experimental_ptde_metal_envspec_material(recovered) &&
+      publish_exact_selector_identity(
+          owner, actual_material, ret, r14, r15,
+          selector_stack, recovered, &profile)) {
+    static std::atomic<std::uint64_t> recovered_once{0u};
+    namespace mr = operators::material_response;
+    static_assert(mr::generated::k_material_route_count_v1 <= 64u);
+    for(std::size_t i = 0u;
+        i < mr::generated::k_material_route_count_v1; ++i) {
+     const auto &route = mr::generated::k_material_routes_v1[i];
+     if(route.route_index != recovered.route_index ||
+        mr::mtd_semantic_hash(route.mtd_name) !=
+            recovered.semantic_name_hash)
+      continue;
+     const auto bit = std::uint64_t{1u} << i;
+     if((recovered_once.fetch_or(
+              bit, std::memory_order_relaxed) & bit) == 0u) {
+      char line[480]{};
+      std::snprintf(
+          line, sizeof(line),
+          "[DSRRL SPC JOIN] stage=corpus_recovered_exact mtd=%s route=%u slot=%u flver=1 runtime_raw_mtd=1 corpus_tuple=1 source=OPEN request=OPEN pixel=OPEN",
+          route.mtd_name,
+          static_cast<unsigned>(recovered.route_index),
+          static_cast<unsigned>(recovered.material_slot));
+      reshade::log::message(
+          reshade::log::level::info, line);
+     }
+     break;
+    }
+    // Do not cache this repair at selector-container granularity:
+    // require fresh actual material pointer + corpus join every time.
+    selector_profile_finish(profile, selector_profile_path::owner);
+    return;
+   }
+  }
+#endif
+
   const auto runtime_publish_begin =
       selector_profile_begin(profile);
   const bool runtime_publish_ok =
@@ -1308,6 +1525,16 @@ extern "C" void dsrrl_flver_selector_observer(
       profile.runtime_publish_ticks);
 
   if(runtime_publish_ok){
+#if defined(DSRRL_EXPERIMENTAL_SPC_MATERIAL_BATCH)
+   // A visible generic MR draw may have only an exact runtime MTD carrier.
+   // That is NOT legal authority for PTDE EnvSpec/SpecRGB resources.
+   log_spc_material_census_once(runtime_material, true);
+   log_spc_owner_join_cut_once(
+       runtime_material,
+       cache_hit,
+       owner_lookup_ok,
+       owner_mtd_ok);
+#endif
    latch_once(
        g_runtime_mtd_selection_published);
    telemetry::hot_count(
