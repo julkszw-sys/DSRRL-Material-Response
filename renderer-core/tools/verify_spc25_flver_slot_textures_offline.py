@@ -75,7 +75,7 @@ def run(archive,roster):
     rows=[];files=models=withtex=0
     with zipfile.ZipFile(archive) as z:
         for name in z.namelist():
-            if not(name.startswith("DSR/parts/") and name.endswith(".partsbnd.dcx")):continue
+            if not((name.startswith("DSR/parts/") and name.endswith(".partsbnd.dcx")) or (name.startswith("DSR/chr/") and name.endswith(".chrbnd.dcx"))):continue
             files+=1;b=z.read(name)
             if b[:4]!=b"DCX\0" or b[0x24:0x2c]!=b"DCP\0DFLT":
                 raise ValueError("unexpected DCX "+name)
@@ -97,9 +97,9 @@ def run(archive,roster):
     cross={name:values for name,values in byname.items()
            if len({x[2] for x in values})>1}
     seen={r["mtd"] for r in exact}
-    return dict(source_proof="EXACT_FLVER_MATERIAL_TO_TEXTURE_ONLY",
+    return dict(source_proof="EXACT_FLVER_MATERIAL_TO_TEXTURE_ONLY_NOT_GPU_SRV",
       native_d3d11_srv_identity="OPEN",ptde_pixels="OPEN",
-      archive_sha256=sha,partsbnds=files,flver2_models=models,
+      archive_sha256=sha,part_or_chr_bnds=files,flver2_models=models,
       flver_with_textures=withtex,flver_no_textures=models-withtex,
       material_slots=len(rows),spc25_matching_slots=len(exact),
       spc25_profiles_covered=sorted(seen),
