@@ -119,7 +119,7 @@ out={
     "unique_logical_spec_names":len({x[3] for x in rows}),
     "raw_mtd_router_records":325,
     "source_pinned_git_blob_sha1":git_blob,
-    "m10_row0":"existing synthetic-zero source guard inherited; never ban true row0",
+    "m10_row0":"source guard inherited; return RVA+zero payload is not sufficient standalone proof of native builder class; true area0 row0 must remain legal",
     "lerp":"R19 paired shader/registration and beta-t11-t13 structural wiring present; nonmetal runtime and pixel open",
     "envdiffuse":"existing P_Metal canonical probe-ordinal A/B pack reused; cold and steady costs separate; nonmetal runtime open",
     "performance_status":"unmeasured on target machine; historical launch-dependent regression cannot be assigned to this bridge",
