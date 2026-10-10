@@ -22,6 +22,6 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - uses: actions/upload-artifact@v4
         with:
-          name: spc25-c5330-t10-test-nonrelease
-          path: DSRRL_SPC25_C5330_T10_TEST.addon64
+          name: spc25-character-t1-diagnostic-no-swap
+          path: DSRRL_SPC25_CHARACTER_T1_DIAG.addon64
           if-no-files-found: error
