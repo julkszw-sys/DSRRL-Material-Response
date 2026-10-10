@@ -10,6 +10,7 @@ struct hook_status {
     bool provenance_ok = false;
     bool name_hook_armed = false;
     bool clear_hook_armed = false;
+    bool packet_hook_armed = false;
     bool restore_failed = false;
 };
 
@@ -35,6 +36,8 @@ struct texture_name_liveness {
     std::uint64_t names_captured = 0u;
     std::uint64_t names_cleared = 0u;
     std::uint64_t name_snapshots = 0u;
+    std::uint64_t packet_writer_calls = 0u;
+    std::uint64_t packet_named_in_scope = 0u;
 };
 texture_name_liveness liveness() noexcept;
 
