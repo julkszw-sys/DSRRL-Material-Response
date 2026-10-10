@@ -122,6 +122,8 @@ jobs:
         run: python renderer-core/tools/verify_spc_batch_v203.py
       - name: Validate offline SPC25 RE tools are importable
         run: python -m py_compile renderer-core/tools/verify_spc25_engine_texture_cache_offline.py renderer-core/tools/verify_spc25_flver_slot_textures_offline.py renderer-core/tools/verify_spc25_dsr_tpf_dds_fingerprints_offline.py
+      - name: Test original DSR compressed DDS/TPF exact identity and reject corrupt sources
+        run: python renderer-core/tools/test_spc25_dsr_tpf_fingerprints.py
       - name: Configure exact MTD-keyed metal diagnostic
         shell: pwsh
         run: >
