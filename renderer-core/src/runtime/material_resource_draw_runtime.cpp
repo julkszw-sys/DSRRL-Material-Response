@@ -1350,6 +1350,7 @@ void on_destroy_resource(
     reshade::api::resource resource)
 {
     if (resource.handle == 0u) return;
+    spc25_physical::drop_resource(resource.handle);
     std::lock_guard<std::mutex> lock(g_mutex);
     g_attested_names_by_resource.erase(resource.handle);
     g_ambiguous_named_resource_device.erase(resource.handle);
@@ -1816,6 +1817,9 @@ void on_destroy_resource_view(
     reshade::api::device *,
     reshade::api::resource_view view)
 {
+#if defined(DSRRL_EXPERIMENTAL_SPC_MATERIAL_BATCH)
+    spc25_physical::drop_view(view.handle);
+#endif
     companion_set dead{};
     bool found = false;
     bool changed = false;
@@ -1863,6 +1867,9 @@ void on_destroy_device(
         reinterpret_cast<ID3D11Device *>(
             device->get_native());
 
+#if defined(DSRRL_EXPERIMENTAL_SPC_MATERIAL_BATCH)
+    spc25_physical::drop_device(native);
+#endif
     release_cache_for_device(
         native);
 }
@@ -2230,6 +2237,10 @@ try_recover_exact_bound_spec_from_native_name(
     }
 
     if (name.empty()) {
+        // The actual SRV returned by PSGetShaderResources(1) is pinned.
+        // GetResource gives native resource identity independent of MTD
+        // guesses or missing retail debug object names. Never swap here.
+        spc25_physical::inspect(stock);
         if (!g_name_producer_cut_logged.exchange(
                 true, std::memory_order_relaxed)) {
             const auto names = texture_identity_transport::liveness();
@@ -3428,6 +3439,9 @@ void material_resource_draw_runtime::
 reset() noexcept
 {
     release_cache();
+#if defined(DSRRL_EXPERIMENTAL_SPC_MATERIAL_BATCH)
+    spc25_physical::clear();
+#endif
 
     g_named_views.store(0u);
     g_sidecar_ready.store(0u);
