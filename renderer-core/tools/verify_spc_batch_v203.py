@@ -175,6 +175,13 @@ assert "prepare_hook(g_decoder,k_decoder_rva,k_decoder_bytes" in packet_source
 assert "g_status.decoder_hook_armed = true" in packet_source
 assert "const bool decoder_ok = restore(g_decoder)" in packet_source
 assert "cache_name_equal" in packet_source
+assert "attest_cpu_object_rtti(" in packet_source
+assert "data_begin = 0x1A25000u" in packet_source
+assert "data_end = 0x1D0AF78u" in packet_source
+assert "within_data(descriptor,16u+sizeof(type_name))" in packet_source
+assert "within_rdata(lrva,24u)" in packet_source
+assert "cpu_vtable_rva=%08X" in packet_source
+assert "cpu_rtti_exact=%llu cpu_rtti_unavailable=%llu" in resource
 assert "cache_name_exact=%llu" in resource
 assert "decode_writer_ptr_seen=%llu" in resource
 assert "stage=typed_decoder_input" in packet_source
