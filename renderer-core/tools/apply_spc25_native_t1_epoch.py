@@ -33,11 +33,11 @@ MATERIAL = [
  ('#include "dsrrl/runtime/spc25_physical_t1_probe.hpp"',
   '#include "dsrrl/runtime/spc25_physical_t1_probe.hpp"\n#include "dsrrl/runtime/native_ps_t1_view_lifetime.hpp"'),
  ('    spc25_physical::link_view(view.handle,resource.handle);',
-  '    spc25_physical::link_view(view.handle,resource.handle);\n    native_ps_t1_lifetime::instance().init(\n        reinterpret_cast<std::uintptr_t>(device->get_native()),\n        static_cast<std::uintptr_t>(view.handle),\n        static_cast<std::uintptr_t>(resource.handle));'),
+  '    spc25_physical::link_view(view.handle,resource.handle);\n    native_ps_t1_lifetime::instance().init(\n        static_cast<std::uintptr_t>(device->get_native()),\n        static_cast<std::uintptr_t>(view.handle),\n        static_cast<std::uintptr_t>(resource.handle));'),
  ('void on_destroy_resource_view(\n    reshade::api::device *,',
   'void on_destroy_resource_view(\n    reshade::api::device *device,'),
  ('    texture_identity_transport::retire_native_ps_t1(\n',
-  '    if (device && device->get_api() == reshade::api::device_api::d3d11)\n        native_ps_t1_lifetime::instance().destroy(\n            reinterpret_cast<std::uintptr_t>(device->get_native()),\n            static_cast<std::uintptr_t>(view.handle));\n    texture_identity_transport::retire_native_ps_t1(\n'),
+  '    if (device && device->get_api() == reshade::api::device_api::d3d11)\n        native_ps_t1_lifetime::instance().destroy(\n            static_cast<std::uintptr_t>(device->get_native()),\n            static_cast<std::uintptr_t>(view.handle));\n    texture_identity_transport::retire_native_ps_t1(\n'),
  ('    spc25_physical::drop_device(native);',
   '    native_ps_t1_lifetime::instance().destroy_device(\n        reinterpret_cast<std::uintptr_t>(native));\n    spc25_physical::drop_device(native);'),
 ]
