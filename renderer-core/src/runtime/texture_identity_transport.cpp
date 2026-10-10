@@ -8,6 +8,7 @@
 #include "dsrrl/runtime/texture_identity_transport.hpp"
 
 #include <Windows.h>
+#include <reshade.hpp>
 #include <bcrypt.h>
 
 #include <algorithm>
@@ -17,6 +18,7 @@
 #include <cstdint>
 #include <cstring>
 #include <fstream>
+#include <cstdio>
 #include <string>
 #include <vector>
 
@@ -24,6 +26,11 @@
 
 extern "C" void dsrrl_texture_name_hook_entry();
 extern "C" void dsrrl_texture_name_clear_hook_entry();
+extern "C" void dsrrl_spc25_packet_source_hook_entry();
+extern "C" {
+void *g_dsrrl_spc25_writer_target = nullptr;
+void *g_dsrrl_spc25_packet_resume = nullptr;
+}
 
 extern "C" {
 void *g_dsrrl_texture_name_resume = nullptr;
@@ -38,6 +45,13 @@ constexpr char k_exe_sha256[] =
 
 constexpr std::uintptr_t k_name_rva = 0x583AA6u;
 constexpr std::uintptr_t k_clear_rva = 0x583E81u;
+constexpr std::uintptr_t k_packet_rva = 0x583BCEu;
+constexpr std::uintptr_t k_writer_rva = 0x57EFB0u;
+constexpr std::uintptr_t k_packet_resume_rva = 0x583BF2u;
+constexpr std::array<std::uint8_t,15> k_packet_bytes = {
+    0x48,0x8B,0xC8,0x4C,0x8B,0xC7,0x8B,0xD6,
+    0xE8,0xD5,0xB3,0xFF,0xFF,0xEB,0x15
+};
 
 constexpr std::array<std::uint8_t,14> k_name_bytes = {
     0x4C,0x8D,0x75,0xE7,0x48,0x83,0x7D,0xFF,0x08,0x4C,0x0F,0x43,0x75,0xE7
@@ -56,7 +70,7 @@ struct hook {
 };
 
 std::uintptr_t g_base = 0;
-hook g_name{}, g_clear{};
+hook g_name{}, g_clear{}, g_packet{};
 hook_status g_status{};
 constexpr std::size_t k_logical_name_capacity = 512u;
 thread_local std::array<wchar_t,k_logical_name_capacity + 1u>
@@ -67,6 +81,8 @@ std::atomic<std::uint64_t> g_texture_name_hook_calls{0u};
 std::atomic<std::uint64_t> g_texture_name_complete{0u};
 std::atomic<std::uint64_t> g_texture_name_clears{0u};
 std::atomic<std::uint64_t> g_texture_name_snapshots{0u};
+std::atomic<std::uint64_t> g_cpu_packet_writer_calls{0u};
+std::atomic<std::uint64_t> g_cpu_packet_name_matches{0u};
 #endif
 
 bool readable_range(
