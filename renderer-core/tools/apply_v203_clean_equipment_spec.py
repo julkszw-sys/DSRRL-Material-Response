@@ -23,7 +23,7 @@ NEW = OLD[:-1] + ("\n#if defined(DSRRL_V203_EXACT_EQUIPMENT_SPEC)\n"
 
 # For eligible 36-tuples the certified EnvSpec island (not generic MR)
 # consumes PTDE SpecRGB. Other materials preserve the old SpecRGB classifier.
-CONSUMER_ANCHOR = "        context_spec.exact_name_ptde_companion_verified =\\n"
+CONSUMER_ANCHOR = "        context_spec.exact_name_ptde_companion_verified =\n"
 CONSUMER_GATE = """#if defined(DSRRL_V203_EQUIPMENT_ENVSPEC36_DIAG)
         if (v203_equipment::exact_envspec36_material(query.material)) {
             context_spec.material_specular_consumer_verified =
