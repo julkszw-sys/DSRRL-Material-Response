@@ -65,6 +65,24 @@ python renderer-core/tools/apply_spc25_native_t1_epoch.py --apply
 if ($LASTEXITCODE -ne 0) { throw 'SPC25 native t1 epoch recipe failed' }
 python renderer-core/tools/apply_spc25_native_t1_epoch.py
 if ($LASTEXITCODE -ne 0) { throw 'SPC25 epoch postcondition failed' }
+# The recipe may alter exactly two runtime sources.  A dirty worktree or
+# unexpected modification must never be silently packaged as this lineage.
+$changedPaths = @(git diff --name-only)
+$allowedPaths = @(
+    'renderer-core/src/runtime/texture_identity_transport.cpp',
+    'renderer-core/src/runtime/material_resource_draw_runtime.cpp'
+)
+$unexpectedPaths = @($changedPaths | Where-Object { $_ -notin $allowedPaths })
+if ($LASTEXITCODE -ne 0 -or $unexpectedPaths.Count -ne 0) {
+    throw "Unexpected SPC25 source mutation: $($unexpectedPaths -join ', ')"
+}
+foreach ($requiredPath in $allowedPaths) {
+    if ($changedPaths -notcontains $requiredPath) {
+        throw "Expected SPC25 patched source missing: $requiredPath"
+    }
+    $digest = (Get-FileHash $requiredPath -Algorithm SHA256).Hash.ToLowerInvariant()
+    Write-Host "SPC25_PATCHED_SOURCE $requiredPath sha256=$digest"
+}
 # Isolated native x64 generation/collision regression; fail before touching the addon build.
 $epochBuild = Join-Path $root 'build-spc25-native-t1-epoch'
 cmake -S renderer-core/tests/spc25_native_t1_epoch -B $epochBuild -G 'Visual Studio 17 2022' -A x64
