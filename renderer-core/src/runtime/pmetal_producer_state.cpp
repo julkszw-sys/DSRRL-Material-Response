@@ -168,6 +168,14 @@ void pmetal_producer_state_begin(
     const operators::material_response::material_identity &material,
     std::uint64_t epoch) noexcept
 {
+    // A new exact selector attempt is a freshness boundary even if a caller
+    // omitted selector_clear(). Without this guard a stale same-material TLS
+    // record could bypass the synchronized slot invalidation in latest().
+    // Keep the payload and epoch for unchanged-source generation continuity.
+    if (g_record.valid &&
+        same_material(g_record.material, material))
+        g_record.valid = false;
+
     const auto key = material_key(material);
     auto &slot = sync_slot_for(key);
 
