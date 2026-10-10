@@ -1,0 +1,72 @@
+name: v203 Equipment EnvSpec36 Offline Bridge
+
+on:
+  push:
+    branches:
+      - agent/v203-equipment-envspec36-offline-20261010
+  workflow_dispatch:
+
+jobs:
+  experimental-single-addon:
+    runs-on: windows-latest
+    env:
+      DSRRL_V203_EQUIPMENT_ENVSPEC36: 'ON'
+    steps:
+      - name: Checkout source-complete v203 lineage
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Protect original selector, PMetal, PointLight and DoF source lineage
+        shell: pwsh
+        run: |
+          git merge-base --is-ancestor 76a1be8fca0e92cedca0678fc61098dfc2380344 HEAD
+          if ($LASTEXITCODE -ne 0) { throw "Not a PR299 descendant" }
+          $changed = @(git diff --name-only 76a1be8fca0e92cedca0678fc61098dfc2380344 HEAD -- renderer-core/src/runtime)
+          $allowed = @(
+            "renderer-core/src/runtime/flver_engine_hooks.cpp",
+            "renderer-core/src/runtime/pmetal_env_source_runtime.cpp",
+            "renderer-core/src/runtime/pmetal_envspec_draw_runtime.cpp"
+          )
+          foreach ($f in $changed) {
+            if ($f -notin $allowed) { throw "Cross-operator source changed: $f" }
+          }
+      - name: Offline exact-owner and consumer static regression
+        shell: pwsh
+        run: |
+          python renderer-core/tools/test_v203_clean_equipment_manifest.py
+          if ($LASTEXITCODE -ne 0) { throw "Baseline exact slot regression failed" }
+      - name: Checkout exact approved ReShade SDK
+        uses: actions/checkout@v4
+        with:
+          repository: crosire/reshade
+          ref: 3645e3025d1d98a90e318278858931f034d5d1f6
+          path: _reshade
+      - name: Build single opt-in experimental addon
+        shell: pwsh
+        run: |
+          ./renderer-core/tools/configure_v203_clean_equipment.ps1
+      - name: Validate opt-in generated material source and consumer isolation
+        shell: pwsh
+        run: |
+          python renderer-core/tools/test_v203_envspec36_offline_port.py
+          if ($LASTEXITCODE -ne 0) { throw "EnvSpec36 regression failed" }
+          python renderer-core/tools/apply_v203_envspec36_generated_source.py
+          if ($LASTEXITCODE -ne 0) { throw "v203 producer source overlay failed verification" }
+      - name: Run native tests, audit and package
+        shell: pwsh
+        run: |
+          ./renderer-core/tools/verify_v203_clean_equipment.ps1
+      - name: Recheck deterministic shader resource overlay
+        shell: pwsh
+        run: |
+          python renderer-core/tools/apply_v203_clean_equipment_spec.py
+          if ($LASTEXITCODE -ne 0) { throw "Expected exact source overlay" }
+      - name: Upload diagnostic binary with exact source lineage
+        uses: actions/upload-artifact@v4
+        with:
+          name: DSRRL_v203_EQUIPMENT_ENVSPEC36_DIAGNOSTIC_NOT_FOR_RELEASE
+          path: |
+            DSRRL_v203_CLEAN_EQUIPMENT_SPEC_EXPERIMENT.addon64
+            DSRRL_v203_CLEAN_EQUIPMENT_SPEC_EXPERIMENT.zip
+            SHA256SUMS.txt
+          if-no-files-found: error

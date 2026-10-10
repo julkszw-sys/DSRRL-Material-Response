@@ -6,6 +6,12 @@ python renderer-core/tools/materialize_v202_production_zero_hybrid.py
 if ($LASTEXITCODE -ne 0) { throw "Failed original DSR donor or native source verification" }
 python renderer-core/tools/audit_r43_release_cleanup_hardening.py
 if ($LASTEXITCODE -ne 0) { throw "Production source audit failed" }
+if ($env:DSRRL_V203_EQUIPMENT_ENVSPEC36 -eq "ON") {
+    python renderer-core/tools/apply_v203_envspec36_generated_source.py --apply
+    if ($LASTEXITCODE -ne 0) { throw "Pinned v203 diagnostic source overlay failed" }
+    python renderer-core/tools/apply_v203_envspec36_generated_source.py
+    if ($LASTEXITCODE -ne 0) { throw "v203 diagnostic source overlay drift" }
+}
 python renderer-core/tools/test_v203_clean_equipment_manifest.py
 if ($LASTEXITCODE -ne 0) { throw "Equipment provenance regression failed" }
 python renderer-core/tools/apply_v203_clean_equipment_spec.py --apply
@@ -38,6 +44,10 @@ $flags = @(
 "-DDSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE=ON",
 "-DDSRRL_PHYSICAL_CUT_UL_H3_SUBSURFACE=ON",
 "-DDSRRL_PHYSICAL_CUT_POINTLIGHT_ALL=ON")
+if ($env:DSRRL_V203_EQUIPMENT_ENVSPEC36 -eq "ON") {
+    $flags += "-DDSRRL_V203_EQUIPMENT_ENVSPEC36_DIAG=ON"
+    Write-Host "DSRRL: exact 36-owner experimental EnvSpec route enabled; pixel=OPEN"
+}
 cmake -S renderer-core/integrated -B build -A x64 @flags
 if ($LASTEXITCODE -ne 0) { throw "CMake production config failed" }
 cmake --build build --config Release --target dsrrl_renderer_core_integrated

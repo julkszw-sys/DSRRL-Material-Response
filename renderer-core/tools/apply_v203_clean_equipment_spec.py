@@ -8,7 +8,7 @@ ROOT = Path(__file__).resolve().parents[2]
 BASE = "6a73033f6275f88487effeb1e34bbbdd7a6a3a88"
 TARGET = "renderer-core/src/runtime/material_resource_draw_runtime.cpp"
 HEADER = '#include "dsrrl/runtime/generated_spec_routes_v12.hpp"'
-NEW_HEADER = HEADER + '\n#if defined(DSRRL_V203_EXACT_EQUIPMENT_SPEC)\n#include "dsrrl/runtime/v203_equipment_flver_slot_spec_manifest.hpp"\n#endif'
+NEW_HEADER = HEADER + '\n#if defined(DSRRL_V203_EXACT_EQUIPMENT_SPEC)\n#include "dsrrl/runtime/v203_equipment_flver_slot_spec_manifest.hpp"\n#endif\n#if defined(DSRRL_V203_EQUIPMENT_ENVSPEC36_DIAG)\n#include "dsrrl/runtime/v203_equipment_envspec36_gate.hpp"\n#endif'
 OLD = ("        const bool exact_companion =\n"
        "            h1 != 0u &&\n"
        "            generated::\n"
@@ -20,6 +20,47 @@ NEW = OLD[:-1] + ("\n#if defined(DSRRL_V203_EXACT_EQUIPMENT_SPEC)\n"
        "                v203_equipment::exact_proven_slot_spec_hash(query,h1))\n"
        "#endif\n"
        "            ;")
+
+# For eligible 36-tuples the certified EnvSpec island (not generic MR)
+# consumes PTDE SpecRGB. Other materials preserve the old SpecRGB classifier.
+CONSUMER_ANCHOR = "        context_spec.exact_name_ptde_companion_verified =\n"
+CONSUMER_GATE = """#if defined(DSRRL_V203_EQUIPMENT_ENVSPEC36_DIAG)
+        if (v203_equipment::exact_envspec36_material(query.material)) {
+            context_spec.material_specular_consumer_verified =
+                operators::material_response::classify_mtd_semantic(
+                    query,
+                    operators::material_response::
+                        mtd_semantic_operator::env_spec).state ==
+                operators::material_response::mtd_semantic_state::use;
+        }
+#endif
+"""
+
+ROUTER_ANCHOR = """        const auto decision =
+            operators::resource_bridges::
+                evaluate_spec_rgb_route(
+                    context_spec,
+                    query);"""
+ROUTER_PATCH = """#if defined(DSRRL_V203_EQUIPMENT_ENVSPEC36_DIAG)
+        // Dedicated EnvSpec-owned PTDE t10 shader island is not the generic
+        // MR SpecRGB/PBL consumer. The 36-owner FLVER+slot+MTD+gSpec predicate
+        // and exact raw-MTD EnvSpec=USE replace ONLY that generic census bit.
+        // All other routes retain evaluate_spec_rgb_route(context, query).
+        const bool exact_equipment_envspec_consumer =
+            receiver_id >= 33u && receiver_id <= 35u &&
+            spec_rgb_consumer_ready &&
+            v203_equipment::exact_envspec36_material(query.material) &&
+            v203_equipment::exact_proven_slot_spec_hash(query, h1) &&
+            context_spec.material_specular_consumer_verified;
+        const auto decision =
+            exact_equipment_envspec_consumer
+                ? operators::resource_bridges::
+                      evaluate_spec_rgb_route(context_spec)
+                : operators::resource_bridges::
+                      evaluate_spec_rgb_route(context_spec, query);
+#else
+""" + ROUTER_ANCHOR + """
+#endif"""
 
 PROBE_ANCHOR = "    const auto h2 = hashes[2];\n\n"
 PROBE = """
@@ -101,8 +142,12 @@ def run(write: bool):
     assert source.count(OLD) == 1
     assert "SPC25" not in source
     assert source.count(PROBE_ANCHOR) == 1
+    assert source.count(CONSUMER_ANCHOR) == 1
+    assert source.count(ROUTER_ANCHOR) == 1
     patched = source.replace(HEADER, NEW_HEADER, 1).replace(OLD, NEW, 1)
     patched = patched.replace(PROBE_ANCHOR, PROBE_ANCHOR + PROBE, 1)
+    patched = patched.replace(CONSUMER_ANCHOR, CONSUMER_GATE + CONSUMER_ANCHOR, 1)
+    patched = patched.replace(ROUTER_ANCHOR, ROUTER_PATCH, 1)
     path = ROOT / TARGET
     current = path.read_text(encoding="utf-8").replace("\r\n", "\n")
     if write:
