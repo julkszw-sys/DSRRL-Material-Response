@@ -1,5 +1,6 @@
 #include "dsrrl/runtime/ptde_metal_envspec_authority.hpp"
 #include "dsrrl/runtime/stock_dsr_compressed_resource_identity.hpp"
+#include "dsrrl/runtime/spc25_stock_source_manifest.hpp"
 
 #ifdef NDEBUG
 #undef NDEBUG
@@ -118,6 +119,26 @@ int main()
     const bc::texture2d_descriptor d{4u,4u,1u,1u,1u,71u,true};
     const bc::mip_initial_data a[]={{original,8u,8u}};
     const bc::mip_initial_data b[]={{pitched,12u,12u}};
+    // Source-only manifest is a bounded exact-byte fingerprint, not a
+    // material-class guess. Every original digest is unique in this subset.
+    namespace source=dsrrl::runtime::spc25_stock_source_manifest;
+    assert(source::k_original_dsr_spec.size()==10u);
+    for(const auto &entry:source::k_original_dsr_spec) {
+        source::digest bytes{};
+        for(std::size_t i=0;i<bytes.size();++i) {
+            auto nibble=[](char c)->std::uint8_t {
+                return c>='0' && c<='9' ? c-'0' : c-'a'+10;
+            };
+            bytes[i]=static_cast<std::uint8_t>(
+                (nibble(entry.sha256[2*i])<<4)|
+                nibble(entry.sha256[2*i+1]));
+        }
+        assert(source::unique_exact(entry.width,entry.height,
+            entry.mips,entry.dxgi,bytes)==&entry);
+        bytes[0]^=1u;
+        assert(source::unique_exact(entry.width,entry.height,
+            entry.mips,entry.dxgi,bytes)==nullptr);
+    }
     const auto original_hash=bc::exact_full_mip_digest(d,a,1u);
     const auto pitched_hash=bc::exact_full_mip_digest(d,b,1u);
     assert(original_hash.has_value() && pitched_hash.has_value());
