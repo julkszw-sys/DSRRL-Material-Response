@@ -531,7 +531,12 @@ extern "C" void dsrrl_spc25_packet_source_observer(
     std::uint32_t source_id) noexcept
 {
 #if defined(DSRRL_EXPERIMENTAL_SPC_MATERIAL_BATCH)
-    g_cpu_packet_writer_calls.fetch_add(1u, std::memory_order_relaxed);
+    const auto writer_seq = g_cpu_packet_writer_calls.fetch_add(
+        1u, std::memory_order_relaxed);
+    if(writer_seq < g_cpu_writer_pointers.size())
+        g_cpu_writer_pointers[writer_seq].store(
+            reinterpret_cast<std::uintptr_t>(engine_object),
+            std::memory_order_release);
     const wchar_t *name = nullptr;
     std::size_t length = 0u;
     if(!cache_entry || !engine_object || source_id == 0u ||
