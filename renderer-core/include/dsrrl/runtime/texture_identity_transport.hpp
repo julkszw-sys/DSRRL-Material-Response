@@ -59,9 +59,10 @@ texture_name_liveness liveness() noexcept;
 // native D3D11 view and resource; this only compares pointer *values* against
 // previously sampled named DLTexture2D fields, without dereferencing either.
 // A pointer match is NOT a certified lifetime/asset/PS t1 bridge authority.
-// Sample each distinct native view address at most once during this bounded
-// diagnostic run. Address reuse is NOT distinguished: temporal equality OPEN.
-// This only suppresses excessive COM GetResource and 1024-slot scans.
+// Sample each distinct live native view address at most once until the
+// ReShade destruction callback tombstones it and rearms that address.
+// Unobserved callback/lifetime gaps remain possible: cross-epoch OPEN.
+// This suppresses repeated COM GetResource and 1024-slot scans.
 bool should_sample_native_ps_t1(const void *native_view) noexcept;
 
 void diagnose_native_ps_t1(
