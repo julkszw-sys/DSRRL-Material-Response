@@ -31,6 +31,29 @@ PROBE = """
             reshade::log::message(reshade::log::level::info,
                 "[DSRRL V203 EQUIPMENT] stage=mr_resource_entry "
                 "consumer=UNCHANGED");
+        const auto owner_probe =
+            v203_equipment::classify_exact_owner_slot(query);
+        static std::atomic_bool outside_corpus_seen{false};
+        if (owner_probe ==
+                v203_equipment::owner_slot_probe::flver_not_in_corpus &&
+            !outside_corpus_seen.exchange(true,std::memory_order_relaxed))
+            reshade::log::message(reshade::log::level::info,
+                "[DSRRL V203 EQUIPMENT] stage=flver_not_in_corpus "
+                "stock_dsr=ON");
+        static std::atomic_bool slot_miss_seen{false};
+        if (owner_probe ==
+                v203_equipment::owner_slot_probe::slot_not_in_corpus &&
+            !slot_miss_seen.exchange(true,std::memory_order_relaxed))
+            reshade::log::message(reshade::log::level::info,
+                "[DSRRL V203 EQUIPMENT] stage=slot_not_in_corpus "
+                "stock_dsr=ON");
+        static std::atomic_bool mtd_miss_seen{false};
+        if (owner_probe ==
+                v203_equipment::owner_slot_probe::mtd_not_in_corpus &&
+            !mtd_miss_seen.exchange(true,std::memory_order_relaxed))
+            reshade::log::message(reshade::log::level::info,
+                "[DSRRL V203 EQUIPMENT] stage=mtd_not_in_corpus "
+                "stock_dsr=ON");
         static std::atomic_bool matched{false};
         if (!matched.load(std::memory_order_relaxed) &&
             v203_equipment::exact_proven_owner_slot(query) &&
